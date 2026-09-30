@@ -248,6 +248,7 @@ import { acoesDoSelo, type CampanhaDoSelo } from "./selo-da-campanha.ts";
 import { acaoDoSeloNaConversa, blocoDoSeloParaOEstrategista, type PedidoDoSeloNaConversa } from "./selo-na-conversa.ts";
 import { falaDoSelo, type IntencaoDoSelo } from "../_shared/selo-da-campanha.ts";
 import { acaoDaConversaDaCampanha, CAMPOS_DA_CAMPANHA_NA_CONVERSA, type CampanhaAtual, camposDaCampanhaNaConversa, mudancasDaCampanha, patchParaVoltar } from "./campanha-na-conversa.ts";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 /**
  * Tempo limite de cada chamada de texto do calendário: propor temas e detalhar o
@@ -275,6 +276,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  ...PREFLIGHT_CACHE,
 };
 
 const json = (body: unknown, status = 200) =>

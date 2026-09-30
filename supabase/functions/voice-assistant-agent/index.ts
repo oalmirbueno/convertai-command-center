@@ -10,7 +10,7 @@
 //    em `contracts` e baixa o PDF pra extrair texto, sem o usuário precisar
 //    arrastar nada.
 
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { corsHeaders as corsDoSupabase } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   fetchAiChatCompletion,
@@ -67,11 +67,13 @@ import {
   reverterItemDoLancador,
 } from "./acoes-do-lancador.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
-import { registrarFalha } from "../_shared/falha-registrada.ts";
+import { registrarFalha, registrarSeFalhar } from "../_shared/falha-registrada.ts";
 // Frente AG3 (29/09): aprende com o dono (Jev decide se é regra), obedece e devolve "Aprendi"/"Segui".
 import { blocoDasRegras, esquecerRegra, type RegraAtiva, regrasDoAgente, regrasSeguidas } from "../_shared/aprender-com-o-dono.ts";
 import { aprenderNoServidor, guardarNoServidor } from "../_shared/aprender-no-servidor.ts";
 import { blocoDoHistorico, historicoSeguro, linhaDeHoje } from "./conversa-do-lancador.ts";
+// O navegador guarda a resposta do preflight (OPTIONS) em vez de perguntar de novo a cada chamada.
+const corsHeaders = { ...corsDoSupabase, "Access-Control-Max-Age": "7200" };
 
 const SYSTEM_PROMPT = `Você é o ACELERIQ OS — agente operacional sênior da agência AcelerIQ, dentro do Performance OS.
 
@@ -728,7 +730,7 @@ async function acaoGuardadaDoLancador(
     if (body.acao === "desfazer_acao_agente") {
       const r = await desfazerAcaoGuardada(guardada, (x) => reverterItemDoLancador(supabase, clientId, x, {}), { userId });
       if (guardada.mensagem.conversa_id) {
-        await supabase.from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Aceleriq: desfeito (${r.voltaram} ${r.voltaram === 1 ? "item voltou" : "itens voltaram"}).` }).then(() => undefined, () => undefined);
+        await Promise.resolve(supabase.from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Aceleriq: desfeito (${r.voltaram} ${r.voltaram === 1 ? "item voltou" : "itens voltaram"}).` })).then(...registrarSeFalhar("voice-assistant-agent: mensagem de sistema nao gravada", { client_id: clientId }));
       }
       await auditLog({
         correlationId: crypto.randomUUID(), toolName: "aceleriq_desfazer_acao_do_agente", origin: "painel:voice-assistant-agent",
@@ -746,7 +748,7 @@ async function acaoGuardadaDoLancador(
     const feitos = r.resultados.filter((x) => x.ok).length;
     const falhas = r.resultados.length - feitos;
     if (r.terminou && r.anexo.executada_em && guardada.mensagem.conversa_id) {
-      await supabase.from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Aceleriq: ${textoDoResultado(r.anexo.resultados || [])}${r.anexo.parada_em ? " (parado no meio)" : ""}.` }).then(() => undefined, () => undefined);
+      await Promise.resolve(supabase.from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Aceleriq: ${textoDoResultado(r.anexo.resultados || [])}${r.anexo.parada_em ? " (parado no meio)" : ""}.` })).then(...registrarSeFalhar("voice-assistant-agent: mensagem de sistema nao gravada", { client_id: clientId }));
     }
     await auditLog({
       correlationId: crypto.randomUUID(), toolName: "aceleriq_executar_acao_do_agente", origin: "painel:voice-assistant-agent",

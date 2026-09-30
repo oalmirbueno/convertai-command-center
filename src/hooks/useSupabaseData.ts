@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { PROFILE_SAFE_SELECT } from "@/lib/profileFields";
 import { useArquivosAoVivo } from "@/hooks/useArquivosAoVivo";
+import { intervaloDosAvisos } from "@/lib/avisos/canalDosAvisos";
 
 const CLIENT_SAFE_FILE_SELECT = `
   id,
@@ -166,8 +167,8 @@ export function useNotifications() {
     },
     enabled: !!user,
     // O aviso novo chega pelo canal em tempo real (useAvisosEmTempoReal);
-    // o intervalo é só a rede de segurança.
-    refetchInterval: 30000,
+    // o intervalo é só a rede de segurança: 30 s sem o canal, 5 min com ele.
+    refetchInterval: () => intervaloDosAvisos(),
   });
 }
 

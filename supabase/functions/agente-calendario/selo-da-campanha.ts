@@ -36,7 +36,8 @@ import {
   type ModeloIa,
   type Qualidade,
 } from "../_shared/ia-motor.ts";
-import { decodificar, logoLimpa } from "../_shared/imagem-local.ts";
+// FN-01: imagem-local.ts carrega só quando o selo abre uma imagem (não na partida da função).
+import { decodificar, logoLimpa } from "../_shared/imagem-sob-demanda.ts";
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
 import { jevPerguntar, type PerguntaJev } from "../_shared/jev.ts";
 import { fontesDaMarca, kitComMarca, type MarcaDoCliente, resolverMarca } from "../_shared/marca.ts";

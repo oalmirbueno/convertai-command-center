@@ -72,7 +72,11 @@ describe("o que vai para o navegador", () => {
     const fonte = ler("src/lib/mesa/cachePersistido.ts");
     expect(fonte).toContain('export const CHAVE_DO_CACHE = "aceleriq-cache-v1";');
     expect(fonte).toContain("const carimbo = () => `${VERSAO}:${donoDaSessao()}`;");
-    expect(fonte).toContain("serialize: (cliente) => JSON.stringify({ ...cliente, buster: carimbo() })");
+    // EX-01 (30/09): o guardado é montado por partes, com o carimbo lido na
+    // hora de gravar (o mesmo conteúdo de JSON.stringify({ ...cliente, buster });
+    // ver src/test/cache-persistido-leve.test.ts).
+    expect(fonte).toContain("const buster = carimbo();");
+    expect(fonte).toContain("const cabeca = JSON.stringify({ buster, timestamp: cliente.timestamp });");
     expect(app).toContain("<LimpezaDoCacheAoTrocarDeUsuario />");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { readFileSync } from "node:fs";
 
@@ -23,6 +23,13 @@ const linha = {
 };
 
 const sugerir = vi.fn();
+// Kit estável entre renders (o hook real devolve o mesmo objeto do cache); semKit liga o caso sem logo.
+const kits = vi.hoisted(() => ({
+  semKit: false,
+  comKit: { data: { client_id: "c", paleta: [{ nome: "Verde", hex: "#0a7", papel: "primaria" }] } },
+  vazio: { data: null },
+  marcas: { data: [] as unknown[] },
+}));
 
 vi.mock("@/lib/mockups/api", async () => {
   const { normalizarMockup } = await vi.importActual<typeof import("@/lib/mockups/catalogo")>("@/lib/mockups/catalogo");
@@ -32,6 +39,7 @@ vi.mock("@/lib/mockups/api", async () => {
     lerAplicacoes: vi.fn(async () => []),
     urlAssinada: vi.fn(async () => "blob:thumb"),
     carregarImagem: vi.fn(),
+    liberarCamadas: vi.fn(),
     sugerirMockups: (...a: unknown[]) => sugerir(...a),
     salvarAplicacao: vi.fn(),
     enviarParaArquivos: vi.fn(),
@@ -45,10 +53,12 @@ vi.mock("@/lib/mockups/renderizar", () => ({
   renderizarMockup: vi.fn(() => new Promise(() => {})),
   slotDaCena: vi.fn(),
 }));
-vi.mock("@/components/mesa/contextoDoCliente", () => ({ useKitDoCliente: () => ({ data: { client_id: "c", paleta: [{ nome: "Verde", hex: "#0a7", papel: "primaria" }] } }) }));
-vi.mock("@/lib/mesa/marcas", () => ({ useMarcasDoCliente: () => ({ data: [] }) }));
+vi.mock("@/components/mesa/contextoDoCliente", () => ({ useKitDoCliente: () => (kits.semKit ? kits.vazio : kits.comKit) }));
+vi.mock("@/lib/mesa/marcas", () => ({ useMarcasDoCliente: () => kits.marcas }));
 
 import EstudioDeMockups from "@/components/mesa-identidade/EstudioDeMockups";
+import { liberarCamadas } from "@/lib/mockups/api";
+import { paraBlob, renderizarMockup } from "@/lib/mockups/renderizar";
 
 function montar() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -93,6 +103,44 @@ describe("estúdio de mockups na tela", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Sugerir mockups/ }));
     expect(await screen.findByText(/Sem sugestão agora: typesafe_529/)).toBeTruthy();
   });
+
+  it("sem kit e sem logo, o lote monta cada mockup uma vez e termina (CT-02)", async () => {
+    // Antes: logos.data undefined + `|| []` = lista nova a cada render; o efeito do lote
+    // recomeçava a cada setProntos e remontava o 1º mockup sem parar ("Montando" para sempre).
+    kits.semKit = true;
+    const montarMockup = vi.mocked(renderizarMockup);
+    montarMockup.mockReset();
+    montarMockup.mockImplementation(async () => ({ canvas: {} as HTMLCanvasElement, escolhas: [], webgl: false }));
+    vi.mocked(paraBlob).mockResolvedValue(new Blob(["x"], { type: "image/jpeg" }));
+    vi.mocked(liberarCamadas).mockClear();
+    const url = URL as unknown as { createObjectURL?: unknown; revokeObjectURL?: unknown };
+    const antes = { criar: url.createObjectURL, revogar: url.revokeObjectURL };
+    url.createObjectURL = vi.fn(() => "blob:previa");
+    url.revokeObjectURL = vi.fn();
+    try {
+      const tela = montar();
+      fireEvent.click(await screen.findByRole("button", { name: "Escolher à mão" }));
+      // ~3 s em fatias (o lote espera 250 ms antes de começar e cada volta é assíncrona).
+      for (let i = 0; i < 60; i++) {
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 50));
+        });
+      }
+      expect(montarMockup).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText("Montando")).toBeNull();
+      expect(screen.getByText("O kit desta marca está sem logo: os mockups saem só com as cores.")).toBeTruthy();
+      // Ao sair do estúdio, as camadas de trabalho do mockup montado são soltas (CT-03).
+      tela.unmount();
+      expect(liberarCamadas).toHaveBeenCalledWith(expect.objectContaining({ base: "t/b.jpg", mapa: "t/m.png" }));
+      expect(url.revokeObjectURL).toHaveBeenCalledWith("blob:previa");
+    } finally {
+      url.createObjectURL = antes.criar;
+      url.revokeObjectURL = antes.revogar;
+      kits.semKit = false;
+      montarMockup.mockReset();
+      montarMockup.mockImplementation(() => new Promise(() => {}));
+    }
+  }, 30000);
 
   it("o código segue o piso de compatibilidade (sem gap em flex, sem aspect-ratio)", () => {
     for (const arq of ["src/components/mesa-identidade/EstudioDeMockups.tsx", "src/components/mesa-identidade/EditorDeCena.tsx"]) {

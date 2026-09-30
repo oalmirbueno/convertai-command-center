@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useClients } from "@/hooks/useSupabaseData";
-import { useCronometro } from "@/components/cronometro/CronometroProvider";
+import { useClienteDoCronometro } from "@/components/cronometro/CronometroProvider";
 import { chaveDoLugar, comClienteNoLugar, lerLugares, lugarAnterior, lugarAtual, registrarLugar, type Lugar } from "@/lib/navegacao/lugares";
 
 /**
@@ -39,7 +39,7 @@ const BOTAO =
 export default function VoltarParaOndeEstava() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { cliente: clienteEmFoco } = useCronometro();
+  const clienteEmFoco = useClienteDoCronometro();
   const { data: clientes } = useClients();
   const [lista, setLista] = useState<Lugar[]>(() => ler());
   const ultimo = useRef<string>("");

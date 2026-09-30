@@ -36,7 +36,7 @@
 // Segurança: só equipe autenticada; leitura e escrita com o JWT dela. O
 // cliente de serviço só chama avisar_equipe_do_cliente (backend) e o motor.
 
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { corsHeaders as corsDoSupabase } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { gravarNoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import { recortarDossie } from "../_shared/dossie-recortado.ts";
@@ -51,6 +51,8 @@ import { extrairMemoriaDoRitual } from "./memoria.ts";
 import { chaveDaPromessa, reforcarPromessas } from "./reforco.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// O navegador guarda a resposta do preflight (OPTIONS) em vez de perguntar de novo a cada chamada.
+const corsHeaders = { ...corsDoSupabase, "Access-Control-Max-Age": "7200" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

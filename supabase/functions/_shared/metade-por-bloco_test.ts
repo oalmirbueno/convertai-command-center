@@ -3,9 +3,9 @@
  * tem de dar a mesma média de área que reduzirPorArea na razão exata 2, sem
  * escurecer a borda transparente; o atalho só divide enquanto sobra o dobro.
  *
- *   deno test --allow-net=deno.land supabase/functions/_shared/metade-por-bloco_test.ts
+ *   deno test supabase/functions/_shared/metade-por-bloco_test.ts
  */
-import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
+import { Image } from "./imagescript.ts";
 import { metadePorBloco, reduzirPorArea, reduzirPorAreaRapido } from "./imagem-local.ts";
 
 function assert(cond: unknown, msg: string) {

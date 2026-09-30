@@ -370,7 +370,7 @@ async function passoMockups(r: Rodada): Promise<ResultadoDoPasso> {
   const antes = comoAntes([inteira("mockups", { itens: arr(r.dados.mockups) })]);
   const logo = r.logo;
   if (!logo || !logo.previa_png) throw new Error("Falta a prévia da logo principal.");
-  const [{ lerCatalogoDeMockups, sugerirMockups }, { candidatosDaSugestao }, { carregarLogos, paraBlob, renderizarMockup }] = await mockups();
+  const [{ lerCatalogoDeMockups, liberarCamadas, sugerirMockups }, { candidatosDaSugestao }, { carregarLogos, paraBlob, renderizarMockup }] = await mockups();
   const cat = await lerCatalogoDeMockups();
   if (cat.semBanco || !cat.itens.length) return { resumo: "O catálogo de mockups está vazio", custo: 0, antes: null, perguntas: [], pulado: true };
   const candidatos = candidatosDaSugestao(cat.itens, [], 40);
@@ -396,8 +396,13 @@ async function passoMockups(r: Rodada): Promise<ResultadoDoPasso> {
   const escolhas = { fundo: c.primaria, segunda: c.clara, escala: 0.6, assinatura: assinatura && titulo ? { texto: assinatura, familia: titulo } : null };
   const itens: Array<{ titulo: string; imagem: string }> = [];
   for (const m of escolhidos) {
-    const feito = await renderizarMockup(m, "alta", logos, escolhas);
-    const png = await paraBlob(feito.canvas, "image/png");
+    let png: Blob;
+    try {
+      png = await paraBlob((await renderizarMockup(m, "alta", logos, escolhas)).canvas, "image/png");
+    } finally {
+      // Camadas em alta (~98 MB por mockup na GPU) soltas depois do PNG.
+      liberarCamadas(m.caminhos.alta);
+    }
     const arquivo = new File([png], `${m.nome || "mockup"}.png`, { type: "image/png" });
     const caminho = await enviarImagemDeApoio(r.ctx.clientId, r.projeto.id, arquivo, "mockups");
     itens.push({ titulo: String(m.nome || "Mockup").slice(0, 120), imagem: caminho });

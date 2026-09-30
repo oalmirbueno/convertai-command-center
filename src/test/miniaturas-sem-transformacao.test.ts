@@ -36,7 +36,7 @@ import {
   urlLeve,
   urlsLevesEmLote,
 } from "@/lib/miniaturas";
-import { resolveFileUrl } from "@/lib/fileUrls";
+import { __zerarUrlsAssinadasParaTeste, resolveFileUrl } from "@/lib/fileUrls";
 
 const RAIZ = join(__dirname, "..", "..");
 
@@ -129,6 +129,7 @@ describe("caminhos das cópias", () => {
 describe("URL leve: miniatura quando existe, original quando não", () => {
   beforeEach(() => {
     __zerarMiniaturasParaTeste();
+    __zerarUrlsAssinadasParaTeste();
     assinarVarias.mockReset();
     assinarUma.mockReset();
     enviar.mockReset();
@@ -206,6 +207,66 @@ describe("URL leve: miniatura quando existe, original quando não", () => {
     expect(await resolveFileUrl({ fileUrl: "files://c9/f.jpg", miniatura: true })).toBe("https://x/f-mini");
     expect(await resolveFileUrl({ fileUrl: "files://c9/f.jpg" })).toBe("https://x/f-original");
     expect(assinarUma.mock.calls[0]).toEqual(["files", "c9/f.jpg", 3600]);
+  });
+
+  it("URL assinada do original fica guardada: pedidos iguais, em sequência ou juntos, assinam uma vez só (EX-10)", async () => {
+    assinarUma.mockResolvedValue({ data: { signedUrl: "https://x/f-original?token=1" }, error: null });
+    const juntos = await Promise.all([resolveFileUrl({ fileUrl: "files://c9/f.pdf" }), resolveFileUrl({ storageBucket: "files", storagePath: "c9/f.pdf", fileUrl: "files://c9/f.pdf" })]);
+    const depois = await resolveFileUrl({ fileUrl: "files://c9/f.pdf" });
+    expect(juntos).toEqual(["https://x/f-original?token=1", "https://x/f-original?token=1"]);
+    expect(depois).toBe("https://x/f-original?token=1");
+    expect(assinarUma).toHaveBeenCalledTimes(1);
+  });
+
+  it("erro na assinatura não fica guardado: a próxima tentativa assina de novo", async () => {
+    assinarUma.mockResolvedValueOnce({ data: null, error: new Error("sem permissão") });
+    await expect(resolveFileUrl({ fileUrl: "files://c9/g.pdf" })).rejects.toThrow("sem permissão");
+    assinarUma.mockResolvedValueOnce({ data: { signedUrl: "https://x/g" }, error: null });
+    expect(await resolveFileUrl({ fileUrl: "files://c9/g.pdf" })).toBe("https://x/g");
+    expect(assinarUma).toHaveBeenCalledTimes(2);
+  });
+
+  it("validade diferente é outra URL; ao sair, nada fica guardado", async () => {
+    assinarUma.mockImplementation((_b: string, caminho: string, expira: number) => Promise.resolve({ data: { signedUrl: `https://x/${caminho}?e=${expira}` }, error: null }));
+    expect(await resolveFileUrl({ fileUrl: "files://c9/h.png" })).toBe("https://x/c9/h.png?e=3600");
+    expect(await resolveFileUrl({ fileUrl: "files://c9/h.png", expiresIn: 600 })).toBe("https://x/c9/h.png?e=600");
+    expect(assinarUma).toHaveBeenCalledTimes(2);
+    __zerarUrlsAssinadasParaTeste();
+    await resolveFileUrl({ fileUrl: "files://c9/h.png" });
+    expect(assinarUma).toHaveBeenCalledTimes(3);
+  });
+
+  it("assinatura que termina depois de sair não fica guardada para a próxima pessoa", async () => {
+    let liberar: (v: unknown) => void = () => undefined;
+    assinarUma.mockImplementationOnce(() => new Promise((r) => (liberar = r)));
+    const primeira = resolveFileUrl({ fileUrl: "files://c9/j.png" });
+    __zerarUrlsAssinadasParaTeste();
+    liberar({ data: { signedUrl: "https://x/j-de-quem-saiu" }, error: null });
+    expect(await primeira).toBe("https://x/j-de-quem-saiu");
+    assinarUma.mockResolvedValueOnce({ data: { signedUrl: "https://x/j-nova" }, error: null });
+    expect(await resolveFileUrl({ fileUrl: "files://c9/j.png" })).toBe("https://x/j-nova");
+    expect(assinarUma).toHaveBeenCalledTimes(2);
+  });
+
+  it("validade curta (até 5 min) não fica guardada", async () => {
+    assinarUma.mockResolvedValue({ data: { signedUrl: "https://x/k" }, error: null });
+    await resolveFileUrl({ fileUrl: "files://c9/k.png", expiresIn: 300 });
+    await resolveFileUrl({ fileUrl: "files://c9/k.png", expiresIn: 300 });
+    expect(assinarUma).toHaveBeenCalledTimes(2);
+  });
+
+  it("URL guardada vence antes do token: com 3600 s, fica no máximo 40 min", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-30T12:00:00Z"));
+    assinarUma.mockResolvedValue({ data: { signedUrl: "https://x/i" }, error: null });
+    await resolveFileUrl({ fileUrl: "files://c9/i.png" });
+    vi.setSystemTime(new Date("2026-09-30T12:39:00Z"));
+    await resolveFileUrl({ fileUrl: "files://c9/i.png" });
+    expect(assinarUma).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(new Date("2026-09-30T12:41:00Z"));
+    await resolveFileUrl({ fileUrl: "files://c9/i.png" });
+    expect(assinarUma).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
   });
 
   it("cópias em segundo plano só com a equipe ligada", async () => {

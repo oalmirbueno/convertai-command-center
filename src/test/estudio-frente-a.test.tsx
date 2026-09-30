@@ -294,7 +294,9 @@ describe("2. logo sem caixa branca, gerada junto com a arte em todos os modos (2
     expect(corpoDe("baixarLogoReduzida")).toContain("reduzidaSemTransformacao(servico(), bucket, caminho, 1024, 1024, { copiaSoEmPng: true, maxBytes: MAX_BYTES_IMAGEM })");
     expect(corpoDe("baixarLogoReduzida")).not.toContain("transform:");
     // A caixa da logo vai para dentro do recorte central quando a arte volta em 2:3.
-    expect(imagemLocal).toContain("export function caixaNoQuadroCentral(");
+    // FN-01 (30/09): a conta mora em imagem-cabecalho.ts (sem pixel) e imagem-local.ts reexporta.
+    expect(ler("supabase/functions/_shared/imagem-cabecalho.ts")).toContain("export function caixaNoQuadroCentral(");
+    expect(imagemLocal).toMatch(/export \{[^}]*\bcaixaNoQuadroCentral,[^}]*\} from "\.\/imagem-cabecalho\.ts";/);
   });
 });
 

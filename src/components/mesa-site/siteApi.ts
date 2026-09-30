@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { chamarFuncao } from "@/lib/mesa/api";
@@ -144,25 +144,91 @@ export function useEventos(trabalho: TrabalhoDoMotor | null, vivo = true) {
 /**
  * Escuta o banco (Realtime) e relê a chave em 300 ms. Sem a tabela na
  * publicação, o canal só não recebe nada e o intervalo segue valendo.
+ *
+ * Um canal por tabela e filtro, dividido por quem está aberto (EX-08, 30/09).
+ * A lateral do agente e a etapa aberta pedem o mesmo filtro; com um canal
+ * por montagem, o Realtime devolvia o canal que já existia com o mesmo nome,
+ * e a etapa que saía fechava o canal das duas: depois da primeira troca de
+ * etapa, a mesa ficava sem tempo real e só andava pelo intervalo. Agora o
+ * canal só fecha quando a última tela que o usa fecha.
  */
+type CanalAoVivo = {
+  usos: number;
+  canal: ReturnType<typeof supabase.channel> | null;
+  chaves: Map<string, number>;
+  clientes: Set<QueryClient>;
+  espera: ReturnType<typeof setTimeout> | null;
+};
+const canaisAoVivo = new Map<string, CanalAoVivo>();
+let canaisCriados = 0;
+
+function relerAoVivo(topico: string) {
+  const a = canaisAoVivo.get(topico);
+  if (!a) return;
+  if (a.espera) clearTimeout(a.espera);
+  a.espera = setTimeout(() => {
+    a.espera = null;
+    a.clientes.forEach((qc) => a.chaves.forEach((_, chave) => void qc.invalidateQueries({ queryKey: JSON.parse(chave) })));
+  }, 300);
+}
+
+function abrirAoVivo(tabela: string, filtro: string, chaveTexto: string, qc: QueryClient): string {
+  const topico = `mesa-site:${tabela}:${filtro}`;
+  let a = canaisAoVivo.get(topico);
+  if (!a) {
+    a = { usos: 0, canal: null, chaves: new Map(), clientes: new Set(), espera: null };
+    canaisAoVivo.set(topico, a);
+    // Nome novo a cada abertura: um canal que ainda está fechando (a tela
+    // saiu e voltou logo) não é devolvido no lugar do novo.
+    canaisCriados += 1;
+    try {
+      let primeira = true;
+      a.canal = supabase
+        .channel(`${topico}:${canaisCriados}`)
+        .on("postgres_changes" as any, { event: "*", schema: "public", table: tabela, filter: filtro }, () => relerAoVivo(topico))
+        .subscribe((status: string) => {
+          // Reconectou depois de cair: o que mudou no meio tempo entra agora.
+          if (status === "SUBSCRIBED") {
+            if (!primeira) relerAoVivo(topico);
+            primeira = false;
+          }
+        });
+    } catch {
+      a.canal = null;
+    }
+  }
+  a.usos += 1;
+  a.chaves.set(chaveTexto, (a.chaves.get(chaveTexto) || 0) + 1);
+  a.clientes.add(qc);
+  return topico;
+}
+
+function fecharAoVivo(topico: string, chaveTexto: string) {
+  const a = canaisAoVivo.get(topico);
+  if (!a) return;
+  a.usos -= 1;
+  const n = (a.chaves.get(chaveTexto) || 0) - 1;
+  if (n > 0) a.chaves.set(chaveTexto, n);
+  else a.chaves.delete(chaveTexto);
+  if (a.usos > 0) return;
+  if (a.espera) clearTimeout(a.espera);
+  canaisAoVivo.delete(topico);
+  if (a.canal) void supabase.removeChannel(a.canal);
+}
+
 function useAoVivo(tabela: string, filtro: string | null, chave: unknown[]) {
   const qc = useQueryClient();
   const chaveTexto = JSON.stringify(chave);
   useEffect(() => {
     if (!filtro) return;
-    let espera: ReturnType<typeof setTimeout> | null = null;
-    const canal = supabase
-      .channel(`mesa-site:${tabela}:${filtro}`)
-      .on("postgres_changes" as any, { event: "*", schema: "public", table: tabela, filter: filtro }, () => {
-        if (espera) clearTimeout(espera);
-        espera = setTimeout(() => void qc.invalidateQueries({ queryKey: JSON.parse(chaveTexto) }), 300);
-      })
-      .subscribe();
-    return () => {
-      if (espera) clearTimeout(espera);
-      void supabase.removeChannel(canal);
-    };
+    const topico = abrirAoVivo(tabela, filtro, chaveTexto, qc);
+    return () => fecharAoVivo(topico, chaveTexto);
   }, [tabela, filtro, chaveTexto, qc]);
+}
+
+/** Só para teste: quantos canais ao vivo da Mesa Site estão abertos. */
+export function canaisAoVivoDaMesaSite(): number {
+  return canaisAoVivo.size;
 }
 
 /** O site foi montado depois da última mudança de SEO ou integrações? */

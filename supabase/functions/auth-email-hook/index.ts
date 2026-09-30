@@ -16,6 +16,7 @@ import {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
+  'Access-Control-Max-Age': '7200',
   'Access-Control-Allow-Headers':
     'authorization, x-client-info, apikey, content-type, webhook-id, webhook-signature, webhook-timestamp, x-lovable-signature, x-lovable-timestamp, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
@@ -92,6 +93,7 @@ const SAMPLE_DATA: Record<string, object> = {
 async function handlePreview(req: Request): Promise<Response> {
   const previewCorsHeaders = {
     'Access-Control-Allow-Origin': '*',
+    'Access-Control-Max-Age': '7200',
     'Access-Control-Allow-Headers': 'authorization, content-type',
   }
 

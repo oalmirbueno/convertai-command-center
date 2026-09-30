@@ -6,12 +6,13 @@
  * quadrado vira 9x8 em tons de cinza e cada bit compara um pixel com o
  * vizinho (vinculo.dHashDeCinzas). Falha ao decodificar = null, nunca erro.
  */
-import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
-import { dimensoesDoCabecalho } from "../_shared/imagem-local.ts";
+import { dimensoesDoCabecalho, imagescript } from "../_shared/imagem-sob-demanda.ts";
 import { dHashDeCinzas } from "./vinculo.ts";
 
 export async function impressaoDaImagem(bytes: Uint8Array): Promise<string | null> {
   try {
+    // FN-01: o imagescript só carrega aqui, na primeira imagem aberta (não na partida da função).
+    const { Image } = await imagescript();
     const img = await Image.decode(bytes);
     const lado = Math.min(img.width, img.height);
     if (lado < 8) return null;

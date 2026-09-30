@@ -6,7 +6,8 @@
  * transition_editorial_publication, archive_editorial_post), com o JWT de
  * quem chamou: as regras do banco valem (acesso, aprovação, quem pode
  * agendar) e cada evento fica com o autor certo. A leitura é pela chave de
- * serviço (a função já conferiu o acesso ao cliente).
+ * serviço (a função já conferiu o acesso ao cliente), menos as conexões das
+ * contas, que só quem chamou lê (ver conexoesDasContas).
  *
  * Publicação: nada aqui publica. O post fica "planejado" com a data
  * confirmada; o ciclo do banco (promotor + motor do Instagram, um minuto)
@@ -148,8 +149,31 @@ export async function postAtualDaPeca(db: SupabaseClient, t: Pick<TrabalhoParaAg
   return escolhido ? await lerPostDaAgenda(db, escolhido.id) : null;
 }
 
-/** Conta do Instagram ligada ao projeto (a primeira conectada). */
-export async function contaDoProjeto(db: SupabaseClient, projectId: string, clientId: string): Promise<(ContaDoProjeto & { automatica: boolean }) | null> {
+/**
+ * Conexões das contas (external_account_connections) lidas com o JWT de quem
+ * chamou. A tabela nega tudo ao service_role de propósito (migration
+ * 20260731175633_meta_oauth_foundation.sql) e a RLS can_access_client vale
+ * para quem chamou, que a ação já conferiu. Pela chave de serviço a leitura
+ * dava "permission denied" (42501) calada e a entrega saía sempre "manual"
+ * (achado E06, 30/09). Falha fica no log e segue sem conexões (manual), como
+ * antes: a entrega não trava por isso.
+ */
+type ConexaoDaConta = { external_account_id: string; connection_status: string | null; automation_enabled: boolean | null; expires_at?: string | null };
+
+async function conexoesDasContas(leitor: SupabaseClient, ids: string[], colunas: string, onde: string): Promise<ConexaoDaConta[]> {
+  const { data, error } = await leitor
+    .from("external_account_connections")
+    .select(colunas)
+    .in("external_account_id", ids);
+  if (error) {
+    registrarFalha(`estudio-arte: conexões da conta não lidas (${onde})`, error, { ids });
+    return [];
+  }
+  return (data as unknown as ConexaoDaConta[] | null) ?? [];
+}
+
+/** Conta do Instagram ligada ao projeto (a primeira conectada). `leitorDasConexoes`: o cliente com o JWT de quem chamou. */
+export async function contaDoProjeto(db: SupabaseClient, leitorDasConexoes: SupabaseClient, projectId: string, clientId: string): Promise<(ContaDoProjeto & { automatica: boolean }) | null> {
   const { data: links } = await db
     .from("project_external_accounts")
     .select("external_account_id")
@@ -157,7 +181,7 @@ export async function contaDoProjeto(db: SupabaseClient, projectId: string, clie
     .eq("client_id", clientId);
   const ids = ((links as { external_account_id: string }[] | null) ?? []).map((l) => l.external_account_id);
   if (!ids.length) return null;
-  const [contasRes, conexoesRes] = await Promise.all([
+  const [contasRes, conexoes] = await Promise.all([
     db.from("external_accounts")
       .select("id, platform, status, created_at")
       .in("id", ids)
@@ -165,13 +189,11 @@ export async function contaDoProjeto(db: SupabaseClient, projectId: string, clie
       .eq("platform", "instagram")
       .eq("status", "active")
       .order("created_at", { ascending: true }),
-    db.from("external_account_connections")
-      .select("external_account_id, connection_status, automation_enabled")
-      .in("external_account_id", ids),
+    conexoesDasContas(leitorDasConexoes, ids, "external_account_id, connection_status, automation_enabled", "conta do projeto"),
   ]);
   const contas = (contasRes.data as { id: string; platform: string }[] | null) ?? [];
   const conexao: Record<string, { connection_status: string | null; automation_enabled: boolean | null }> = {};
-  for (const c of (conexoesRes.data as { external_account_id: string; connection_status: string | null; automation_enabled: boolean | null }[] | null) ?? []) {
+  for (const c of conexoes) {
     conexao[c.external_account_id] = c;
   }
   if (!contas.length) return null;
@@ -246,7 +268,7 @@ export async function sincronizarPecaNaAgenda(
   const [raiz, existente, conta] = await Promise.all([
     lerArquivo(ctx.db, t.file_ids[0]),
     postAtualDaPeca(ctx.db, t),
-    contaDoProjeto(ctx.db, item.project_id, t.client_id),
+    contaDoProjeto(ctx.db, ctx.doChamador, item.project_id, t.client_id),
   ]);
   if (!raiz) throw new ErroDaAgenda(409, "arquivo_inexistente", "O arquivo da entrega não existe mais em Arquivos.");
   const arquivoAtual = existente?.primary_file_id && existente.primary_file_id !== raiz.id ? await lerArquivo(ctx.db, existente.primary_file_id) : null;
@@ -371,7 +393,7 @@ export async function confirmarDataDaPeca(
   // Aprovada: vai com as lâminas na ordem para o caminho aprovado congelar e agendar.
   let entrega: { delivery_mode: "manual" | "automatic"; asset_file_ids: string[] } | null = null;
   if (aprovado) {
-    const conta = pub.external_account_id ? await contaPorId(ctx.db, pub.external_account_id) : null;
+    const conta = pub.external_account_id ? await contaPorId(ctx.doChamador, pub.external_account_id) : null;
     entrega = { delivery_mode: conta?.automatica ? "automatic" : "manual", asset_file_ids: t.file_ids.slice() };
   }
   const { error } = await ctx.doChamador.rpc("save_editorial_post", {
@@ -382,13 +404,9 @@ export async function confirmarDataDaPeca(
   return { post_id: post.id, publicacao_id: pub.id, quando, status: aprovado ? "scheduled" : "planned" };
 }
 
-async function contaPorId(db: SupabaseClient, id: string): Promise<{ automatica: boolean } | null> {
-  const { data } = await db
-    .from("external_account_connections")
-    .select("connection_status, automation_enabled")
-    .eq("external_account_id", id)
-    .maybeSingle();
-  const c = data as { connection_status: string | null; automation_enabled: boolean | null } | null;
+/** `leitorDasConexoes`: o cliente com o JWT de quem chamou (ver conexoesDasContas). */
+async function contaPorId(leitorDasConexoes: SupabaseClient, id: string): Promise<{ automatica: boolean } | null> {
+  const [c] = await conexoesDasContas(leitorDasConexoes, [id], "external_account_id, connection_status, automation_enabled", "conta da publicação");
   return { automatica: !!c && c.connection_status === "connected" && c.automation_enabled === true };
 }
 
@@ -446,6 +464,8 @@ const PLATAFORMAS_DA_PECA = ["instagram", "facebook"];
 export async function perfisDaPeca(
   db: SupabaseClient,
   t: Pick<TrabalhoParaAgenda, "client_id" | "task_id" | "post_id">,
+  /** O cliente com o JWT de quem chamou, para as conexões (ver conexoesDasContas). */
+  leitorDasConexoes: SupabaseClient = db,
 ): Promise<{ projectId: string | null; perfis: PerfilDaPeca[]; post: PostExistente | null }> {
   const post = await postAtualDaPeca(db, t);
   let projectId = post?.project_id || null;
@@ -461,7 +481,7 @@ export async function perfisDaPeca(
     .eq("client_id", t.client_id);
   const ids = ((links as { external_account_id: string }[] | null) ?? []).map((l) => l.external_account_id);
   if (!ids.length) return { projectId, perfis: [], post };
-  const [contasRes, conexoesRes] = await Promise.all([
+  const [contasRes, conexoes] = await Promise.all([
     db.from("external_accounts")
       .select("id, platform, status, display_name, handle, created_at")
       .in("id", ids)
@@ -469,13 +489,10 @@ export async function perfisDaPeca(
       .in("platform", PLATAFORMAS_DA_PECA)
       .eq("status", "active")
       .order("created_at", { ascending: true }),
-    db.from("external_account_connections")
-      .select("external_account_id, connection_status, automation_enabled, expires_at")
-      .in("external_account_id", ids),
+    conexoesDasContas(leitorDasConexoes, ids, "external_account_id, connection_status, automation_enabled, expires_at", "perfis da peça"),
   ]);
-  type Conexao = { external_account_id: string; connection_status: string | null; automation_enabled: boolean | null; expires_at: string | null };
-  const conexao: Record<string, Conexao> = {};
-  for (const c of (conexoesRes.data as Conexao[] | null) ?? []) conexao[c.external_account_id] = c;
+  const conexao: Record<string, ConexaoDaConta> = {};
+  for (const c of conexoes) conexao[c.external_account_id] = c;
   const vivas = new Set((post?.publications || []).filter((p) => p.status !== "cancelled").map((p) => p.external_account_id || ""));
   type Conta = { id: string; platform: string; display_name: string | null; handle: string | null };
   const perfis: PerfilDaPeca[] = ((contasRes.data as Conta[] | null) ?? []).map((c) => {
@@ -516,7 +533,7 @@ async function confirmarComPerfis(
   pedido: { quando: string | null; agoraMesmo?: boolean; mutationId: string; perfis: string[] },
   agora: Date,
 ): Promise<ResultadoDaData | null> {
-  const { perfis, post } = await perfisDaPeca(ctx.db, t);
+  const { perfis, post } = await perfisDaPeca(ctx.db, t, ctx.doChamador);
   if (!post) throw new ErroDaAgenda(409, "fora_da_agenda", "Esta peça ainda não está na Agenda. Use Levar para a Agenda.");
   const ids = perfisValidos(pedido.perfis, perfis);
   if (!ids.length) {

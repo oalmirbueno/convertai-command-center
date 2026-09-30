@@ -35,6 +35,12 @@ export function ordenarLaminasDoCarrossel<T extends Slide>(parent: T, children: 
   ) as unknown as T[];
 }
 
+/** A lâmina em texto: o que importa para mostrar e baixar, sem depender do objeto. */
+function assinaturaDaLamina(f?: Slide | null): string {
+  if (!f) return "";
+  return [f.id || "", f.file_url || "", f.storage_bucket || "", f.storage_path || "", f.mime_type || "", f.extension || "", f.file_name || "", f.created_at || ""].join("|");
+}
+
 /**
  * Robust carousel preview. Always fetches sibling slides directly from the DB
  * so a parent's children never go missing (previous versions relied on a
@@ -50,6 +56,13 @@ export default function CarouselSlider({
   const [children, setChildren] = useState<Slide[]>(initialChildren || []);
   const [idx, setIdx] = useState(0);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Quem chama costuma montar `parent` e `initialChildren` de novo a cada
+  // desenho (a Agenda relê a cada 15 e 30 s). Comparar pelo conteúdo, e não
+  // pelo objeto, evita voltar sozinho para a 1ª lâmina e assinar e baixar
+  // todas as lâminas de novo a cada releitura.
+  const chavePai = assinaturaDaLamina(parent);
+  const chaveFilhas = initialChildren === undefined ? null : initialChildren.map(assinaturaDaLamina).join("\n");
 
   useEffect(() => {
     let alive = true;
@@ -70,16 +83,34 @@ export default function CarouselSlider({
       if (data && data.length) setChildren(data);
     })();
     return () => { alive = false; };
-  }, [initialChildren, parent?.id]);
+  // Lê o initialChildren atual; só recarrega quando o conteúdo muda de verdade.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveFilhas, parent?.id]);
 
-  const files = useMemo(() => ordenarLaminasDoCarrossel<Slide>(parent, children), [children, parent]);
+  // Com initialChildren, usa as filhas que chegaram agora (sem um desenho com
+  // a capa nova e as filhas antigas enquanto o efeito acima não roda).
+  const filhas = initialChildren !== undefined ? initialChildren : children;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const files = useMemo(() => ordenarLaminasDoCarrossel<Slide>(parent, filhas), [children, chavePai, chaveFilhas]);
+  const chaveArquivos = files.map(assinaturaDaLamina).join("\n");
 
+  // Mesmo bucket/caminho e 3600 s da prévia visível: as duas recebem a mesma
+  // URL assinada e o navegador baixa o original uma vez só (E05, 30/09).
   useEffect(() => {
-    prefetchImages(files.map((f) => f.file_url).filter(Boolean));
-    setIdx(0);
-  }, [files, parent?.id]);
+    prefetchImages(files.filter((f) => !!f.file_url).map((f) => ({ fileUrl: f.file_url, storageBucket: f.storage_bucket, storagePath: f.storage_path })));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveArquivos]);
 
-  const current = files[idx];
+  // Volta para a 1ª lâmina só quando o carrossel muda (outro carrossel,
+  // lâmina nova ou removida, arquivo trocado), e não a cada desenho.
+  useEffect(() => {
+    setIdx(0);
+  }, [chaveArquivos]);
+
+  // Lâmina removida: no desenho entre a mudança e a volta para a 1ª, o
+  // índice pode passar do fim; a prévia não some por isso.
+  const aberta = Math.min(idx, Math.max(0, files.length - 1));
+  const current = files[aberta];
   if (!current) return null;
   if (files.length === 1) {
     return (
@@ -148,7 +179,7 @@ export default function CarouselSlider({
         type="button"
         aria-label="Anterior"
         className="absolute left-2 top-1/2 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background/80 p-0 opacity-80 shadow-md transition-all hover:bg-background hover:opacity-100"
-        onClick={(e) => { e.stopPropagation(); setIdx((idx - 1 + files.length) % files.length); }}
+        onClick={(e) => { e.stopPropagation(); setIdx((aberta - 1 + files.length) % files.length); }}
       >
         <ChevronLeft className="w-4 h-4" />
       </button>
@@ -156,7 +187,7 @@ export default function CarouselSlider({
         type="button"
         aria-label="Próximo"
         className="absolute right-2 top-1/2 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background/80 p-0 opacity-80 shadow-md transition-all hover:bg-background hover:opacity-100"
-        onClick={(e) => { e.stopPropagation(); setIdx((idx + 1) % files.length); }}
+        onClick={(e) => { e.stopPropagation(); setIdx((aberta + 1) % files.length); }}
       >
         <ChevronRight className="w-4 h-4" />
       </button>
@@ -165,12 +196,12 @@ export default function CarouselSlider({
           <span
             key={i}
             aria-hidden="true"
-            className={`w-2 h-2 rounded-full transition-colors ${i === idx ? "bg-primary" : "bg-muted-foreground/40"}`}
+            className={`w-2 h-2 rounded-full transition-colors ${i === aberta ? "bg-primary" : "bg-muted-foreground/40"}`}
           />
         ))}
       </div>
       <span className="absolute z-10 top-2 right-2 bg-background/80 text-[10px] px-2 py-0.5 rounded-md text-muted-foreground">
-        {idx + 1}/{files.length}
+        {aberta + 1}/{files.length}
       </span>
       <div className="mt-3 flex gap-2 overflow-x-auto pb-1 scrollbar-hidden">
         {files.map((file, i) => (
@@ -180,7 +211,7 @@ export default function CarouselSlider({
             aria-label={`Abrir item ${i + 1}`}
             onClick={(e) => { e.stopPropagation(); setIdx(i); }}
             className={`relative flex w-24 h-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-secondary transition-all ${
-              i === idx ? "border-primary ring-1 ring-primary/50" : "border-border hover:border-primary/40"
+              i === aberta ? "border-primary ring-1 ring-primary/50" : "border-border hover:border-primary/40"
             }`}
           >
             <SlideThumb slide={file} />

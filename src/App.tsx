@@ -20,6 +20,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ConfirmDialogProvider } from "@/components/shared/confirmDialog";
 import AppLayout from "@/components/AppLayout";
 import RouteErrorBoundary from "@/components/RouteErrorBoundary";
+import { rotaPublicaPorToken } from "@/lib/preCargaDoBoot";
 import { CronometroProvider } from "@/components/cronometro/CronometroProvider";
 import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
 
@@ -242,8 +243,16 @@ function ProfileErrorScreen() {
 
 export function AppRoutes() {
   const { user, profile, loading, profileError } = useAuth();
-  if (loading) return <LoadingScreen />;
-  if (user && !profile && profileError) return <ProfileErrorScreen />;
+  const { pathname } = useLocation();
+  // Link público por token (contrato, briefing, proposta...) não precisa de
+  // login: abre sem esperar a sessão, que com o token vencido podia segurar a
+  // logo até 8 s. A árvore abaixo é a MESMA com loading verdadeiro ou falso,
+  // então a página não remonta quando o login responde e nada do que foi
+  // digitado se perde. /login, /oauth/consent e /primeiro-acesso ficam na
+  // trava: leem o loading.
+  const publica = rotaPublicaPorToken(pathname);
+  if (loading && !publica) return <LoadingScreen />;
+  if (!publica && user && !profile && profileError) return <ProfileErrorScreen />;
 
   return (
     <Suspense fallback={<LoadingScreen />}>

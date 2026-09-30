@@ -4,9 +4,9 @@
  * o anexo achatado tem o fundo cinza-escuro com a logo inteira por cima, em
  * poucos milissegundos (limite de 2 s de CPU por chamada).
  *
- *   deno test --allow-net=deno.land supabase/functions/_shared/logo-contraste_test.ts
+ *   deno test supabase/functions/_shared/logo-contraste_test.ts
  */
-import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
+import { Image } from "./imagescript.ts";
 import { analisarLogo, logoSobreContraste } from "./imagem-local.ts";
 
 function assert(cond: unknown, msg: string) {

@@ -11,13 +11,15 @@
 // Segurança: só admin. A leitura do ciclo usa service role depois da checagem
 // de papel, porque o resumo cobre a carteira inteira.
 
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { corsHeaders as corsDoSupabase } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   bridgeStatusPublic,
   proposeUpdate,
   SecondBrainError,
 } from "../_shared/second-brain-github.ts";
+// O navegador guarda a resposta do preflight (OPTIONS) em vez de perguntar de novo a cada chamada.
+const corsHeaders = { ...corsDoSupabase, "Access-Control-Max-Age": "7200" };
 
 const AREA_LABEL: Record<string, string> = {
   social: "Social Media",

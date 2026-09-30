@@ -5,17 +5,24 @@ import { openFile, downloadFile } from "@/lib/fileActions";
 import ExtractedFramesPreview from "@/components/shared/ExtractedFramesPreview";
 import { mediaKindFromFile, resolveFileUrl, storageRefFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
 
+type ImagemParaPreCarregar = string | { fileUrl: string; storageBucket?: string | null; storagePath?: string | null };
+
 /**
  * Prefetch images into browser cache so carousel navigation is instantaneous.
  * Call with the full sibling URL list when a preview modal opens.
+ * Pass the same bucket/path the visible preview uses (and the same 3600 s):
+ * resolveFileUrl then hands both the same signed URL, and the browser reuses
+ * the download instead of fetching the original twice (E05, 30/09).
  */
-export function prefetchImages(urls: string[]) {
+export function prefetchImages(itens: ImagemParaPreCarregar[]) {
   if (typeof window === "undefined") return;
-  urls.forEach((u) => {
+  itens.forEach((item) => {
+    const alvo = typeof item === "string" ? { fileUrl: item } : item;
+    const u = alvo && alvo.fileUrl;
     if (!u) return;
     const ext = u.split("?")[0].split("#")[0].split(".").pop()?.toLowerCase() || "";
     if (!["jpg", "jpeg", "png", "gif", "webp", "avif", "svg"].includes(ext)) return;
-    void resolveFileUrl({ fileUrl: u })
+    void resolveFileUrl({ fileUrl: u, storageBucket: alvo.storageBucket, storagePath: alvo.storagePath, expiresIn: 3600 })
       .then((resolvedUrl) => {
         if (!resolvedUrl) return;
         const img = new Image();

@@ -31,7 +31,6 @@
  */
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
 import { chamarTexto, cobrarJev, estimarComModelo, IaMotorErro, modeloDoPapel, type ModeloIa } from "../_shared/ia-motor.ts";
 import { type DadosDaAgencia, DadosDaAgenciaIncompletos, exigirDadosDaAgencia, lerLogoDaAgencia, nomeDaAgencia } from "../_shared/dados-da-agencia.ts";
 import { JevErro, jevPerguntar, notaScore } from "../_shared/jev.ts";
@@ -41,7 +40,8 @@ import { erroQueSobe, registrarFalha } from "../_shared/falha-registrada.ts";
 import { marcasDoCliente, resolverMarca } from "../_shared/marca.ts";
 import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
-import { decodificar, dimensoesDoCabecalho } from "../_shared/imagem-local.ts";
+// FN-01: o imagescript só carrega quando uma imagem é aberta (não na partida da função).
+import { dimensoesDoCabecalho, jpegSobreBranco } from "../_shared/imagem-sob-demanda.ts";
 import { ehImagemDoPdf, type ImagemDoPdf, imagemParaPdf } from "../_shared/pdf-base.ts";
 import {
   candidatosAProva,
@@ -65,11 +65,13 @@ import { coletarEventos } from "./eventos.ts";
 import { coletarDaLinha, identidadeDaCapa, type LinhaComRascunho, rascunhoDaLinha, vistaDoRascunho } from "./rascunho.ts";
 import { lerAgendas, respostaDoCron, salvarAgenda } from "./agenda.ts";
 import { DEFINICOES_DE_DOCUMENTO, normalizarRascunho, numerosDoRascunho, provasDoRascunho, secoesDoRascunho } from "../_shared/documento-modelos.ts";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  ...PREFLIGHT_CACHE,
 };
 
 const json = (body: unknown, status = 200) =>
@@ -247,9 +249,7 @@ async function logoDaAgencia(dados: DadosDaAgencia, avisos: string[]): Promise<I
       avisos.push("A logo da agência não abre aqui (SVG ou grande demais); o PDF saiu com a logo padrão. Envie um PNG ou JPEG menor em Dados da agência.");
       return null;
     }
-    const aberta = await decodificar(lida.bytes);
-    const fundo = new Image(aberta.width, aberta.height).fill(0xffffffff).composite(aberta, 0, 0);
-    const jpeg = imagemParaPdf(await fundo.encodeJPEG(90));
+    const jpeg = imagemParaPdf(await jpegSobreBranco(lida.bytes, 90));
     return ehImagemDoPdf(jpeg) ? jpeg : null;
   } catch (e) {
     registrarFalha("documentos: logo da agência não lida", e);
@@ -378,9 +378,7 @@ async function imagemDaProva(p: Prova, avisos: string[]): Promise<ImagemDoPdf | 
     let img = imagemParaPdf(r.bytes);
     if (!ehImagemDoPdf(img)) {
       // PNG com transparência ou WebP: fundo branco e JPEG (a cópia já é leve, abrir é barato).
-      const aberta = await decodificar(r.bytes);
-      const fundo = new Image(aberta.width, aberta.height).fill(0xffffffff).composite(aberta, 0, 0);
-      img = imagemParaPdf(await fundo.encodeJPEG(82));
+      img = imagemParaPdf(await jpegSobreBranco(r.bytes, 82));
     }
     return ehImagemDoPdf(img) ? img : undefined;
   } catch (e) {

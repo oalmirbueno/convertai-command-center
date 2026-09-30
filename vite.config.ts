@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { readFileSync } from "fs";
 import { chunkPara, PISO_DE_TAMANHO } from "./config/chunk-strategy";
+import { pluginPedacosSemCiclo } from "./config/pedacos-sem-ciclo";
 import { pluginCsp } from "./config/csp";
 import { buildRevision } from "./config/build-revision";
 
@@ -147,6 +148,9 @@ export default defineConfig(({ command, mode }) => {
     plugins: [
       react(),
       pluginCsp(),
+      // Build falha se dois pedaços se importarem em círculo: no navegador
+      // isso vira tela de erro na abertura (config/pedacos-sem-ciclo.ts).
+      pluginPedacosSemCiclo(),
       {
         name: "aceleriq-emit-version",
         apply: "build" as const,

@@ -292,8 +292,11 @@ describe("Estúdio Ads: post (social) inalterado", () => {
     expect(corpoDe("quadroDoCard")).toMatch(
       /return \{\s*formato: null,\s*post,\s*largura: LARGURA_LAMINA,\s*altura: ALTURA_LAMINA,\s*tamanho: TAMANHO_GERADOR,\s*final: \{ largura: LARGURA_FINAL, altura: ALTURA_FINAL \},\s*proporcao: "4:5",\s*fixo: false,/,
     );
-    expect(imagemLocal).toContain("export const LARGURA_LAMINA = 1088;");
-    expect(imagemLocal).toContain("export const ALTURA_LAMINA = 1360;");
+    // FN-01 (30/09): as medidas da lâmina moram em imagem-cabecalho.ts (sem pixel) e imagem-local.ts reexporta.
+    const cabecalho = ler("supabase/functions/_shared/imagem-cabecalho.ts");
+    expect(cabecalho).toContain("export const LARGURA_LAMINA = 1088;");
+    expect(cabecalho).toContain("export const ALTURA_LAMINA = 1360;");
+    expect(imagemLocal).toMatch(/export \{[^}]*\bALTURA_LAMINA,[^}]*\bLARGURA_LAMINA,[^}]*\} from "\.\/imagem-cabecalho\.ts";/);
     expect(estudio).toContain("const LARGURA_FINAL = 1080;");
     expect(estudio).toContain("const ALTURA_FINAL = 1350;");
   });

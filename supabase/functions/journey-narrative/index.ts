@@ -7,13 +7,17 @@
 // Segurança: o próprio cliente pode pedir o dele; equipe pode pedir de quem
 // atende. Os dados são lidos com o JWT do chamador (RLS decide o alcance).
 
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { corsHeaders as corsDoSupabase } from "npm:@supabase/supabase-js@2/cors";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   DEFAULT_LOVABLE_MODEL_CHAIN,
   requestAiChatCompletion,
   resolveAiProviderChain,
 } from "../_shared/ai-provider.ts";
+
+// FN-02: mesmas listas do supabase-js, com o cache do pré-voo.
+const corsHeaders = { ...corsDoSupabase, ...PREFLIGHT_CACHE };
 
 const PRIMARY_MODEL_CHAIN = ["gpt-4o-mini"];
 const LOVABLE_COMPAT_MODEL_CHAIN = DEFAULT_LOVABLE_MODEL_CHAIN;

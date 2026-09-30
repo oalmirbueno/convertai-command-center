@@ -15,12 +15,17 @@ import type { IdDaPeca, ParametrosDaPeca } from "../../../../lib/editor/motion/c
 
 export const VERDE_ACELERIQ = "#00FF66";
 
-/** Fontes livres (OFL) servidas pelo painel em /editor/fontes e copiadas pelo worker. */
+/**
+ * Fontes livres (OFL) servidas pelo painel em /editor/fontes e copiadas pelo
+ * worker (a pasta inteira). Em WOFF2, as mesmas letras dos .ttf ao lado, com
+ * 67% menos peso (1,15 MB viravam download ao abrir o player). Os .ttf ficam:
+ * o HyperFrames e os pedidos já gravados usam esses nomes.
+ */
 export const FONTES_DO_MOTION: { familia: string; arquivo: string; peso: string }[] = [
-  { familia: "Montserrat", arquivo: "editor/fontes/Montserrat-Variable.ttf", peso: "100 900" },
-  { familia: "Anton", arquivo: "editor/fontes/Anton-Regular.ttf", peso: "400" },
-  { familia: "Caveat", arquivo: "editor/fontes/Caveat-Variable.ttf", peso: "400 700" },
-  { familia: "Figtree", arquivo: "editor/fontes/Figtree-Variable.ttf", peso: "300 900" },
+  { familia: "Montserrat", arquivo: "editor/fontes/Montserrat-Variable.woff2", peso: "100 900" },
+  { familia: "Anton", arquivo: "editor/fontes/Anton-Regular.woff2", peso: "400" },
+  { familia: "Caveat", arquivo: "editor/fontes/Caveat-Variable.woff2", peso: "400 700" },
+  { familia: "Figtree", arquivo: "editor/fontes/Figtree-Variable.woff2", peso: "300 900" },
 ];
 
 const SANS = "Montserrat, Outfit, Inter, sans-serif";
@@ -40,7 +45,7 @@ export function CarregarFontes({ url }: { url: (caminho: string) => string }) {
     const F = (window as unknown as { FontFace: new (f: string, s: string, d?: Record<string, string>) => { load: () => Promise<unknown> } }).FontFace;
     Promise.all(
       FONTES_DO_MOTION.map((f) =>
-        new F(f.familia, `url(${url(f.arquivo)})`, { weight: f.peso })
+        new F(f.familia, `url(${url(f.arquivo)}) format('woff2')`, { weight: f.peso })
           .load()
           .then((ff) => (document as unknown as { fonts: { add: (x: unknown) => void } }).fonts.add(ff))
           .catch(() => null),

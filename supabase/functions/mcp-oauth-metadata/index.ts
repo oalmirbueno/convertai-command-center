@@ -10,6 +10,7 @@ import { ALL_SCOPES } from '../_shared/mcp-tools.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
+  'Access-Control-Max-Age': '7200',
   'Access-Control-Allow-Headers': 'authorization, content-type, mcp-protocol-version, Mcp-Protocol-Version, mcp-session-id, Mcp-Session-Id, accept',
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
   'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id, Link',

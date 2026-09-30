@@ -64,6 +64,12 @@ type Gl = WebGLRenderingContext;
 export interface Compositor {
   /** Desenha o mockup no canvas de destino (tamanho do destino = tamanho das camadas). */
   desenhar(camadas: CamadasCarregadas, designs: Array<HTMLCanvasElement | null>, destino: HTMLCanvasElement): void;
+  /**
+   * Solta o que o compositor guardou desta imagem (textura na GPU ou pixels lidos).
+   * A entrada sai do cache junto com a textura: a mesma imagem desenhada de novo
+   * sobe outra textura (nunca uma apagada, que sairia preta).
+   */
+  liberar(img: object): void;
   webgl: boolean;
   ladoMaximo: number;
 }
@@ -116,6 +122,13 @@ function criarWebgl(): Compositor | null {
   } catch {
     return null;
   }
+  // Contexto perdido (GPU sem memória, aba em segundo plano no celular): o próximo
+  // compositor() cria outro em vez de desenhar preto para sempre.
+  let perdido = false;
+  tela.addEventListener("webglcontextlost", () => {
+    perdido = true;
+    if (unico === este) unico = null;
+  });
   const buf = g.createBuffer();
   g.bindBuffer(g.ARRAY_BUFFER, buf);
   g.bufferData(g.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), g.STATIC_DRAW);
@@ -140,9 +153,15 @@ function criarWebgl(): Compositor | null {
     return t;
   };
 
-  return {
+  const este: Compositor = {
     webgl: true,
     ladoMaximo,
+    liberar(img) {
+      const t = cache.get(img);
+      if (!t) return;
+      cache.delete(img);
+      if (!perdido) g.deleteTexture(t);
+    },
     desenhar(c, designs, destino) {
       tela.width = c.largura;
       tela.height = c.altura;
@@ -202,6 +221,7 @@ function criarWebgl(): Compositor | null {
       if (dctx) dctx.drawImage(tela, 0, 0);
     },
   };
+  return este;
 }
 
 const pixelsCache = new WeakMap<object, Uint8ClampedArray>();
@@ -225,6 +245,9 @@ function criarCanvas2d(): Compositor {
   return {
     webgl: false,
     ladoMaximo: 4096,
+    liberar(img) {
+      pixelsCache.delete(img);
+    },
     desenhar(c, designs, destino) {
       const { largura: w, altura: h } = c;
       const ds: Array<ImagemRGBA | null> = designs.map((d) => {
@@ -250,4 +273,13 @@ let unico: Compositor | null = null;
 export function compositor(): Compositor {
   if (!unico) unico = criarWebgl() || criarCanvas2d();
   return unico;
+}
+
+/**
+ * Solta a textura (ou os pixels) de uma imagem que saiu do cache de camadas.
+ * Não cria o compositor só para isso: sem compositor, não há nada guardado.
+ */
+export function liberarDoCompositor(img: object): void {
+  pixelsCache.delete(img);
+  if (unico) unico.liberar(img);
 }

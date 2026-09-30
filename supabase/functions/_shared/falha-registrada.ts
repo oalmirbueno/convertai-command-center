@@ -78,3 +78,25 @@ export function nuloComLogOuSobe(onde: string, extra: Record<string, unknown> = 
     return null;
   };
 }
+
+/**
+ * Para a escrita no banco que não bloqueia a resposta (mensagem de sistema na
+ * conversa, soltar trava, zerar um campo derivado). O supabase-js não rejeita
+ * em erro de banco: devolve `{ error }`. Quem usa `.then(() => undefined, () => undefined)`
+ * perde a falha sem rastro. Estes dois callbacks leem o `{ error }` e a
+ * rejeição, registram com `registrarFalha` e nunca lançam.
+ *
+ * Uso: `await Promise.resolve(db.from("t").update(x).eq("id", id)).then(...registrarSeFalhar("onde", { client_id }))`.
+ * Tolerante: resposta sem `error` (banco falso dos testes) passa calada.
+ */
+export function registrarSeFalhar(onde: string, extra: Record<string, unknown> = {}): [(r: unknown) => void, (e: unknown) => void] {
+  return [
+    (r: unknown) => {
+      const erro = r && typeof r === "object" ? (r as { error?: unknown }).error : null;
+      if (erro) registrarFalha(onde, erro, extra);
+    },
+    (e: unknown) => {
+      registrarFalha(onde, e, extra);
+    },
+  ];
+}

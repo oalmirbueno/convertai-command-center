@@ -420,7 +420,9 @@ export default function Workspace() {
     enabled: isStaff && (scope === "global" || !!clientId),
     staleTime: 30_000,
     refetchInterval: 30_000,
-    refetchIntervalInBackground: true,
+    // Aba escondida não consulta o banco; ao voltar, relê na hora se já passou do prazo.
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
 
@@ -448,7 +450,9 @@ export default function Workspace() {
     enabled: isStaff && (scope === "global" || !!clientId),
     staleTime: 30_000,
     refetchInterval: 30_000,
-    refetchIntervalInBackground: true,
+    // Aba escondida não consulta o banco; ao voltar, relê na hora se já passou do prazo.
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const allFolders = useMemo(
@@ -541,7 +545,9 @@ export default function Workspace() {
     enabled: isStaff && scope === "client" && !!clientId,
     staleTime: 10_000,
     refetchInterval: 30_000,
-    refetchIntervalInBackground: true,
+    // Aba escondida não consulta o banco; ao voltar, relê na hora se já passou do prazo.
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   // Group carousel children by parent for fast preview rendering

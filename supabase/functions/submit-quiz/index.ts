@@ -8,6 +8,7 @@ import {
 import { resolvePublicAppUrl } from "../_shared/public-url.ts";
 import { comOrigemDoPainel } from "../_shared/origem-do-painel.ts";
 import { emailDoLeadValido, ERRO_EMAIL_INVALIDO } from "./email-do-lead.ts";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 const MAX_REQUEST_BYTES = 64 * 1024;
 const TOKEN_PATTERN = /^[a-f0-9]{64}$/;
@@ -19,6 +20,7 @@ const cors = {
     "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Vary": "Origin",
+  ...PREFLIGHT_CACHE,
 };
 
 const OPS_SECRET = Deno.env.get("OPS_WEBHOOK_SECRET")?.trim() ?? "";

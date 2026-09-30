@@ -17,7 +17,10 @@
  *    transformação falhava.
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { dimensoesDoCabecalho, mimeDaImagem, reduzirParaCaber } from "./imagem-local.ts";
+// FN-01 (30/09): o cabeçalho é lido sem carregar nada; imagem-local.ts (com o
+// imagescript) só carrega quando alguma imagem precisa mesmo ser reduzida aqui.
+import { dimensoesDoCabecalho, mimeDaImagem } from "./imagem-cabecalho.ts";
+import { reduzirParaCaber } from "./imagem-sob-demanda.ts";
 
 export const SUFIXO_MINIATURA = ".mini.jpg";
 export const SUFIXO_MEDIA = ".media.jpg";

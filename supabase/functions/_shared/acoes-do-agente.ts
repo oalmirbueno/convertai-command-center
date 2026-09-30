@@ -32,6 +32,8 @@
  * Sem import de Deno nem de npm: a tela e os testes (vitest) leem o mesmo arquivo.
  */
 
+import { registrarFalha } from "./falha-registrada.ts";
+
 export const TIPO_DA_ACAO = "acao_agente";
 
 /** Máximo de alvos listados para o agente e de itens num pedido só. */
@@ -447,6 +449,12 @@ export async function executarItemAItem(
         if (r.aviso) out.motivo = r.aviso;
         return out;
       } catch (e) {
+        // FN-09 (30/09): nenhum erro engolido. Recusa de regra (4xx) vai como aviso; o resto, como falha.
+        // Só ref, operação e id do alvo: nada do título nem do conteúdo.
+        const status = e && typeof e === "object" ? Number((e as { status?: unknown }).status) : NaN;
+        const extra = { ref: it.ref, operacao: it.operacao, alvo_id: it.alvo_id };
+        if (status >= 400 && status < 500) console.warn("acoes-do-agente: item recusado", { ...extra, motivo: motivoDoErro(e) });
+        else registrarFalha("acoes-do-agente: item falhou", e, extra);
         return { ...base, ok: false, motivo: motivoDoErro(e) };
       }
     }));

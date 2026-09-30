@@ -29,7 +29,8 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { chamarImagem, garantirSaldo, IaMotorErro, modeloPadrao } from "../_shared/ia-motor.ts";
 import { caminhoDaMiniatura, MAX_PIXELS_REDUCAO_NA_FUNCAO, reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
-import { reduzirParaCaber } from "../_shared/imagem-local.ts";
+// FN-01: imagem-local.ts carrega só quando uma imagem é reduzida aqui (não na partida da função).
+import { reduzirParaCaber } from "../_shared/imagem-sob-demanda.ts";
 import {
   catalogoEmUso,
   chavesQueFaltam,

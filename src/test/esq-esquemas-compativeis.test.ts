@@ -184,13 +184,18 @@ describe("contrato: cada esquema que as funções mandam ao motor cabe na Anthro
   });
 
   it("os que passavam de 16 uniões (visto na QA) agora cabem", () => {
-    const porRotulo = (trecho: string) => todos().find((e) => e.rotulo.indexOf(trecho) >= 0) as EsquemaColetado;
+    // Pelo arquivo e pelo nome do esquema, sem o número da linha: qualquer
+    // import novo no topo da função mudava a linha e quebrava o teste.
+    const porRotulo = (trecho: string) => {
+      const [arquivo, nome] = trecho.split(" ");
+      return todos().find((e) => e.rotulo.indexOf(`${arquivo}:`) === 0 && e.rotulo.split(" ")[1] === nome) as EsquemaColetado;
+    };
     for (const [trecho, antes] of [
       ["agente-contexto/index.ts", 31],
-      ["mesa-foto/index.ts:3853 ESQUEMA_AGENTE", 32],
-      ["mesa-ads/index.ts:1983 ESQUEMA_FICHA", 20],
-      ["mesa-ads/index.ts:4278 ESQUEMA_OFERTA_CONVERSA", 21],
-      ["mesa-ads/index.ts:1864 ESQUEMA_SUGESTAO", 17],
+      ["mesa-foto/index.ts ESQUEMA_AGENTE", 32],
+      ["mesa-ads/index.ts ESQUEMA_FICHA", 20],
+      ["mesa-ads/index.ts ESQUEMA_OFERTA_CONVERSA", 21],
+      ["mesa-ads/index.ts ESQUEMA_SUGESTAO", 17],
     ] as Array<[string, number]>) {
       const e = trecho === "agente-contexto/index.ts" ? todos().find((x) => x.rotulo.indexOf("ESQUEMA_CONVERSA_DO_PLANO") >= 0) : porRotulo(trecho);
       expect(e, trecho).toBeTruthy();

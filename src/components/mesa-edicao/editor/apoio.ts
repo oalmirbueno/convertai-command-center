@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueries } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { ProjetoDeEdicao } from "../../../../supabase/functions/_shared/projeto-de-edicao";
 
@@ -9,6 +9,57 @@ import type { ProjetoDeEdicao } from "../../../../supabase/functions/_shared/pro
  * para a linha do tempo não redesenhar 25 vezes por segundo) e a checagem de
  * navegador.
  */
+
+// ------------------------------------------------------------------ URLs das fontes
+//
+// Cada fonte tem a própria consulta (bucket:caminho). Antes, uma chave só
+// juntava todas: somar, tirar ou desfazer uma fonte reassinava todas, todas as
+// URLs mudavam, o Player recarregava os vídeos e o cache de quadros não servia
+// mais. Os pedidos que chegam juntos continuam indo numa chamada por bucket.
+
+type Espera = { resolver: (url: string | null) => void };
+const lotes = new Map<string, Map<string, Espera[]>>();
+let loteAgendado = false;
+
+async function assinarLote(bucket: string, pedidos: Map<string, Espera[]>) {
+  const caminhos = Array.from(pedidos.keys());
+  const achadas: Record<string, string> = {};
+  try {
+    const { data } = await supabase.storage.from(bucket).createSignedUrls(caminhos, 3600);
+    ((data || []) as { path: string | null; signedUrl: string; error: string | null }[]).forEach((d) => {
+      if (!d.path || !d.signedUrl || d.error) return;
+      achadas[d.path] = d.signedUrl;
+    });
+  } catch {
+    /* sem URL: a fonte fica sem prévia, como antes */
+  }
+  pedidos.forEach((esperas, caminho) => esperas.forEach((e) => e.resolver(Object.prototype.hasOwnProperty.call(achadas, caminho) ? achadas[caminho] : null)));
+}
+
+function enviarLotes() {
+  loteAgendado = false;
+  const agora = Array.from(lotes.entries());
+  lotes.clear();
+  agora.forEach(([bucket, pedidos]) => void assinarLote(bucket, pedidos));
+}
+
+/** Uma URL assinada; os pedidos do mesmo instante vão juntos, um por bucket. */
+export function assinarFonte(bucket: string, caminho: string): Promise<string | null> {
+  return new Promise((resolver) => {
+    let doBucket = lotes.get(bucket);
+    if (!doBucket) {
+      doBucket = new Map();
+      lotes.set(bucket, doBucket);
+    }
+    const esperas = doBucket.get(caminho) || [];
+    esperas.push({ resolver });
+    doBucket.set(caminho, esperas);
+    if (!loteAgendado) {
+      loteAgendado = true;
+      void Promise.resolve().then(enviarLotes);
+    }
+  });
+}
 
 export function useUrlsDasFontes(projeto: ProjetoDeEdicao, extras: { storage_bucket: string | null; storage_path: string | null }[] = []): Record<string, string> {
   const pares = useMemo(() => {
@@ -20,30 +71,31 @@ export function useUrlsDasFontes(projeto: ProjetoDeEdicao, extras: { storage_buc
     extras.forEach((x) => x.storage_path && lista.push({ chave: `@${x.storage_path}`, bucket: x.storage_bucket || "mesa", caminho: x.storage_path }));
     return lista.sort((a, b) => (a.chave < b.chave ? -1 : 1));
   }, [projeto.fontes, extras]);
-  const chave = pares.map((p) => `${p.bucket}:${p.caminho}`).join("|");
-  const q = useQuery({
-    queryKey: ["mesa-edicao", "editor", "urls", chave],
-    enabled: pares.length > 0,
-    staleTime: 45 * 60_000,
-    gcTime: 55 * 60_000,
-    refetchOnWindowFocus: false,
-    queryFn: async () => {
-      const saida: Record<string, string> = {};
-      const porBucket: Record<string, { chave: string; caminho: string }[]> = {};
-      pares.forEach((p) => (porBucket[p.bucket] = (porBucket[p.bucket] || []).concat([{ chave: p.chave, caminho: p.caminho }])));
-      for (const bucket of Object.keys(porBucket)) {
-        const lista = porBucket[bucket];
-        const { data } = await supabase.storage.from(bucket).createSignedUrls(
-          lista.map((x) => x.caminho),
-          3600,
-        );
-        ((data || []) as { path: string | null; signedUrl: string; error: string | null }[]).forEach((d) => {
-          if (!d.path || !d.signedUrl || d.error) return;
-          lista.filter((x) => x.caminho === d.path).forEach((x) => (saida[x.chave] = d.signedUrl));
-        });
-      }
-      return saida;
-    },
+  // Uma consulta por arquivo (duas fontes no mesmo arquivo dividem a mesma).
+  const arquivos = useMemo(() => {
+    const vistos: Record<string, true> = {};
+    const lista: { bucket: string; caminho: string; id: string }[] = [];
+    pares.forEach((p) => {
+      const id = `${p.bucket}:${p.caminho}`;
+      if (vistos[id]) return;
+      vistos[id] = true;
+      lista.push({ bucket: p.bucket, caminho: p.caminho, id });
+    });
+    return lista;
+  }, [pares]);
+  const consultas = useQueries({
+    queries: arquivos.map((a) => ({
+      queryKey: ["mesa-edicao", "editor", "url", a.bucket, a.caminho],
+      staleTime: 45 * 60_000,
+      gcTime: 55 * 60_000,
+      refetchOnWindowFocus: false,
+      queryFn: () => assinarFonte(a.bucket, a.caminho),
+    })),
+  });
+  const porArquivo: Record<string, string> = {};
+  arquivos.forEach((a, i) => {
+    const url = consultas[i] && consultas[i].data;
+    if (url) porArquivo[a.id] = url;
   });
   // Frente EDT: sons e letras da biblioteca moram no próprio painel (bucket "publico"), sem assinatura.
   const publicas = useMemo(() => {
@@ -54,7 +106,25 @@ export function useUrlsDasFontes(projeto: ProjetoDeEdicao, extras: { storage_buc
     });
     return saida;
   }, [projeto.fontes]);
-  return useMemo(() => ({ ...(q.data || {}), ...publicas }), [q.data, publicas]);
+  const saida: Record<string, string> = {};
+  pares.forEach((p) => {
+    const url = porArquivo[`${p.bucket}:${p.caminho}`];
+    if (url) saida[p.chave] = url;
+  });
+  Object.keys(publicas).forEach((k) => (saida[k] = publicas[k]));
+  // Mesmo objeto enquanto nenhuma URL mudar de fato: quem depende dele
+  // (Player, linha do tempo, painéis) não redesenha nem recarrega à toa.
+  const anterior = useRef<Record<string, string>>(saida);
+  if (!mesmasUrls(anterior.current, saida)) anterior.current = saida;
+  return anterior.current;
+}
+
+function mesmasUrls(a: Record<string, string>, b: Record<string, string>): boolean {
+  if (a === b) return true;
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  for (let i = 0; i < ka.length; i++) if (a[ka[i]] !== b[ka[i]]) return false;
+  return true;
 }
 
 /** Fonte que mora no próprio painel (public/editor): sons da biblioteca. */

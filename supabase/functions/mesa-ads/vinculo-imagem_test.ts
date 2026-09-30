@@ -4,9 +4,9 @@
  * Confere o orçamento: uma imagem aberta por vez, o que passa volta PENDENTE,
  * imagem grande demais nem abre, e a mesma impressão de antes para a mesma imagem.
  *
- *   deno test --allow-net=deno.land supabase/functions/mesa-ads/vinculo-imagem_test.ts
+ *   deno test --allow-read supabase/functions/mesa-ads/vinculo-imagem_test.ts
  */
-import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
+import { Image } from "../_shared/imagescript.ts";
 import {
   impressaoDaImagem,
   impressaoNoOrcamento,

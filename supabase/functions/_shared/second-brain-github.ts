@@ -103,9 +103,21 @@ function loadConfig(): Config {
 
 // Resolve the effective branch: use configured branch if it exists; otherwise
 // fall back to the repo's default_branch. Cached per cold start.
+// FN-10 (30/09): quem chama em paralelo reaproveita a mesma consulta em voo
+// (antes, 3 leituras juntas faziam 3 consultas). Falha não fica guardada: a
+// próxima chamada tenta de novo, como antes.
 let RESOLVED_BRANCH: string | null = null;
-async function resolveBranch(cfg: Config): Promise<string> {
-  if (RESOLVED_BRANCH) return RESOLVED_BRANCH;
+let BRANCH_EM_VOO: Promise<string> | null = null;
+function resolveBranch(cfg: Config): Promise<string> {
+  if (RESOLVED_BRANCH) return Promise.resolve(RESOLVED_BRANCH);
+  if (!BRANCH_EM_VOO) {
+    BRANCH_EM_VOO = consultarBranch(cfg).finally(() => {
+      BRANCH_EM_VOO = null;
+    });
+  }
+  return BRANCH_EM_VOO;
+}
+async function consultarBranch(cfg: Config): Promise<string> {
   const b = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/branches/${encodeURIComponent(cfg.branch)}`);
   if (b.status === 200) { RESOLVED_BRANCH = cfg.branch; return RESOLVED_BRANCH; }
   const meta = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}`);
@@ -419,6 +431,95 @@ export async function listRecentCommits(limit = 10, pathFilter?: string): Promis
       url: String(c.html_url ?? ''),
     };
   });
+}
+
+/**
+ * FN-10 (30/09/2026): pulso, commits e inbox do painel numa leitura só.
+ *
+ * O second-brain-pulse fazia 7 chamadas ao GitHub a cada 15 s (a branch 3
+ * vezes em paralelo, a pasta do inbox 2 vezes e os commits 2 vezes). Aqui são
+ * 3: a branch (uma vez) e, em paralelo, os commits (o primeiro é o head) e a
+ * pasta do inbox. O formato de cada parte é o mesmo de getBridgePulse,
+ * listRecentCommits e listInboxPending, que seguem iguais para o MCP.
+ *
+ * Erros, como antes: branch ou commits que não respondem (rede, 401, 403,
+ * 429, prazo) sobem e o painel mostra bridge_unavailable; resposta de erro
+ * nos commits deixa head nulo e a lista vazia; qualquer falha no inbox deixa
+ * o inbox vazio.
+ */
+export async function lerPulsoCompleto(limit: number, force = false): Promise<{
+  pulse: BridgePulse;
+  commits: RecentCommit[];
+  inbox: Array<{ path: string; sha: string; size: number }>;
+}> {
+  const now = Date.now();
+  if (!force && PULSE_CACHE && now - PULSE_CACHE.at < PULSE_TTL_MS) {
+    // Como antes: o pulso guardado vale; commits e inbox que falham ficam vazios.
+    const guardado = PULSE_CACHE.value;
+    const partes = await lerCommitsEInbox(limit, true).catch(() => null);
+    return { pulse: { ...guardado, cached: true }, commits: partes?.commits ?? [], inbox: partes?.inbox ?? [] };
+  }
+  if (!bridgeStatusPublic().configured) {
+    const value: BridgePulse = {
+      configured: false, branch: null, head: null, inbox_pending: 0,
+      fetched_at: new Date().toISOString(), cached: false, latency_ms: 0,
+    };
+    PULSE_CACHE = { at: now, value };
+    return { pulse: value, commits: [], inbox: [] };
+  }
+  const started = now;
+  const { branch, primeiro, commits, arquivos, inbox } = await lerCommitsEInbox(limit, false);
+  let head: BridgePulse['head'] = null;
+  if (primeiro) {
+    const sha = String(primeiro.sha ?? '');
+    head = {
+      sha,
+      short: sha.slice(0, 7),
+      message: String(primeiro.commit?.message ?? '').split('\n')[0].slice(0, 200),
+      author: primeiro.commit?.author?.name ?? primeiro.author?.login ?? null,
+      committed_at: String(primeiro.commit?.author?.date ?? primeiro.commit?.committer?.date ?? new Date().toISOString()),
+    };
+  }
+  const value: BridgePulse = {
+    configured: true, branch, head, inbox_pending: arquivos.slice(0, 50).length,
+    fetched_at: new Date().toISOString(), cached: false, latency_ms: Date.now() - started,
+  };
+  PULSE_CACHE = { at: now, value };
+  return { pulse: value, commits, inbox };
+}
+
+/** Branch (uma consulta), commits e pasta do inbox em paralelo. `tolerante`: commits que falham viram lista vazia. */
+async function lerCommitsEInbox(limit: number, tolerante: boolean) {
+  const cfg = loadConfig();
+  const branch = await resolveBranch(cfg);
+  const inboxPath = INBOX_PREFIX.replace(/\/$/, '');
+  const [commitsRes, inboxRes] = await Promise.all([
+    gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/commits`, {
+      query: { sha: branch, per_page: String(Math.min(Math.max(limit, 1), 30)) },
+    }).catch((e) => {
+      if (tolerante) return null;
+      throw e;
+    }),
+    gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(inboxPath)}`, { query: { ref: branch } })
+      .catch(() => null),
+  ]);
+  const listaDeCommits: any[] = commitsRes && commitsRes.status < 400 && Array.isArray(commitsRes.body) ? commitsRes.body : [];
+  const commits: RecentCommit[] = listaDeCommits.map((c: any) => {
+    const sha = String(c.sha ?? '');
+    return {
+      sha,
+      short: sha.slice(0, 7),
+      message: String(c.commit?.message ?? '').split('\n')[0].slice(0, 240),
+      author: c.commit?.author?.name ?? c.author?.login ?? null,
+      committed_at: String(c.commit?.author?.date ?? new Date().toISOString()),
+      url: String(c.html_url ?? ''),
+    };
+  });
+  const arquivos: any[] = inboxRes && inboxRes.status < 400 && Array.isArray(inboxRes.body)
+    ? inboxRes.body.filter((e: any) => e.type === 'file' && String(e.name).toLowerCase().endsWith('.md'))
+    : [];
+  const inbox = arquivos.slice(0, limit).map((e: any) => ({ path: e.path as string, sha: e.sha as string, size: e.size as number }));
+  return { branch, primeiro: listaDeCommits[0] ?? null, commits, arquivos, inbox };
 }
 
 

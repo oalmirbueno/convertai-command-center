@@ -209,9 +209,13 @@ export default function Login() {
 
   return (
     <div className="dark flex min-h-screen w-full overflow-x-hidden bg-background text-foreground">
-      {/* Foto do consultor: só no computador, ao lado do formulário. */}
+      {/* Foto do consultor: só no computador, ao lado do formulário. O
+          loading="lazy" faz o celular (coluna escondida) não baixar a foto;
+          ele vem ANTES do src, senão Firefox e Safari já começam a baixar. */}
       <div className="relative hidden min-w-0 flex-1 overflow-hidden lg:block" aria-hidden="true">
         <img
+          loading="lazy"
+          decoding="async"
           src={consultantHero}
           alt=""
           draggable={false}

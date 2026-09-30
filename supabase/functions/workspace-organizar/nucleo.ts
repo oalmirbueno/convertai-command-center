@@ -8,7 +8,8 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { chamarTexto, cobrarJev, custoJev, estimarComModelo, IaMotorErro, type ImagemEntrada, modeloPadrao, type ModeloIa } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar } from "../_shared/jev.ts";
-import { dimensoesDoCabecalho, mimeDaImagem } from "../_shared/imagem-local.ts";
+// FN-01: só o cabeçalho; o imagescript não carrega na partida da função.
+import { dimensoesDoCabecalho, mimeDaImagem } from "../_shared/imagem-cabecalho.ts";
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import type { BancoDoWorkspace, NoDoIndice } from "./aplicar.ts";

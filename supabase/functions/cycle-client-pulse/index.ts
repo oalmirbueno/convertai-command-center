@@ -11,8 +11,12 @@
 // chamou, que a pessoa pode acessar aquele cliente. Nenhum dado de outro
 // cliente sai daqui, e nomes de etapa interna nunca são devolvidos crus.
 
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { corsHeaders as corsDoSupabase } from "npm:@supabase/supabase-js@2/cors";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+
+// FN-02: mesmas listas do supabase-js, com o cache do pré-voo.
+const corsHeaders = { ...corsDoSupabase, ...PREFLIGHT_CACHE };
 
 // O que cada etapa significa para quem contratou o serviço. É a tradução do
 // bastidor: fala do resultado, não do processo interno.

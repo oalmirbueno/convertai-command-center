@@ -129,11 +129,13 @@ import { AVISO_RESPOSTA_NAO_GUARDADA, ErroDaConversa, gravarPedidoAntes, gravarR
 import { anexoDasRegrasSeguidas, blocoDasRegras, esquemaComAprendizado, REGRA_DO_APRENDIZADO_NO_PROMPT, regraDoModelo, regrasSeguidasDoModelo } from "../_shared/aprendizado-do-pedido.ts";
 import { aprenderComOPedido, lerRegrasDoDono } from "../_shared/aprendizado-nos-agentes.ts";
 import { acaoDaAnalise, analiseDoModelo, ANALISES_DO_PERFIL, PROPRIEDADE_DA_ANALISE, REGRA_DA_ANALISE_NO_PROMPT } from "./analises-na-conversa.ts";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  ...PREFLIGHT_CACHE,
 };
 
 const json = (body: unknown, status = 200) =>

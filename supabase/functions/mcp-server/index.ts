@@ -437,6 +437,13 @@ Deno.serve(async (req) => {
   }
 
   const message = validated.request;
+  // FN-12 (30/09): ping é público e responde {} com ou sem credencial. Sem validar a chave no
+  // banco a cada ping (o Hermes pinga uns 2.300 por dia); a resposta é a mesma de antes.
+  if (message.method === "ping") {
+    const pong = await dispatch(message, { ok: true, ctx: publicAuthContext() });
+    if (!pong) return new Response(null, { status: 202, headers: corsHeaders });
+    return prefersSse(req) ? sseResponse(pong) : jsonResponse(pong);
+  }
   const auth = await authenticate(req);
 
   // Discovery methods are public. A missing bearer on tools/call returns the

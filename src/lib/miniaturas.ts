@@ -1,4 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
+// Endereço do worker já montado pelo Vite (worker clássico, sem import.meta: o Safari 11.0 não tem).
+import urlDoWorkerDasCopias from "./miniaturas.worker.ts?worker&url";
 
 /**
  * Miniaturas sem a transformação de imagem do Storage.
@@ -196,6 +198,123 @@ function comFundoBranco(c: HTMLCanvasElement): HTMLCanvasElement {
 
 export type CopiasReduzidas = { mini: Blob; media: Blob | null; largura: number; altura: number };
 
+// ------------------------------------------------------------ fora do fio principal
+
+/**
+ * Onde o navegador tem Worker, createImageBitmap e OffscreenCanvas com
+ * convertToBlob (Chrome 69+, Firefox 105+, Safari 16.4+), a decodificação e a
+ * redução vão para src/lib/miniaturas.worker.ts (EX-13, 30/09): a foto grande
+ * deixa de segurar a tela. O resultado é o mesmo desenho; em qualquer falha,
+ * tempo esgotado ou tamanho diferente do <img>, segue pelo caminho de sempre
+ * (Safari 11 e Chrome 64 vão sempre por ele).
+ */
+const PRAZO_DO_WORKER_MS = 20_000;
+type RespostaDoWorker = { id: number; mini?: Blob; media?: Blob | null; erro?: string };
+let workerDasCopias: Worker | null = null;
+let workerQuebrado = false;
+let proximoPedido = 1;
+const esperandoWorker = new Map<number, (r: RespostaDoWorker | null) => void>();
+
+export function temCopiasNoWorker(): boolean {
+  try {
+    return (
+      !workerQuebrado &&
+      typeof Worker !== "undefined" &&
+      typeof createImageBitmap === "function" &&
+      typeof OffscreenCanvas !== "undefined" &&
+      typeof (OffscreenCanvas.prototype as { convertToBlob?: unknown }).convertToBlob === "function"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function soltarTodosDoWorker() {
+  esperandoWorker.forEach((responder) => responder(null));
+  esperandoWorker.clear();
+}
+
+function worker(): Worker | null {
+  if (workerDasCopias) return workerDasCopias;
+  if (!temCopiasNoWorker()) return null;
+  try {
+    const w = new Worker(urlDoWorkerDasCopias);
+    w.onmessage = (e: MessageEvent<RespostaDoWorker>) => {
+      const r = e.data;
+      const responder = r && esperandoWorker.get(r.id);
+      if (!responder) return;
+      esperandoWorker.delete(r.id);
+      responder(r);
+    };
+    // Worker que não carrega (navegador sem suporte ao arquivo): o resto da
+    // sessão vai pelo caminho de sempre.
+    w.onerror = () => {
+      workerQuebrado = true;
+      workerDasCopias = null;
+      try {
+        w.terminate();
+      } catch {
+        /* nada */
+      }
+      soltarTodosDoWorker();
+    };
+    workerDasCopias = w;
+    return w;
+  } catch {
+    workerQuebrado = true;
+    return null;
+  }
+}
+
+async function copiasNoWorker(arquivo: Blob, fonte: Fonte): Promise<CopiasReduzidas | null> {
+  const w = worker();
+  if (!w) return null;
+  const id = proximoPedido++;
+  const resposta = await new Promise<RespostaDoWorker | null>((resolve) => {
+    const prazo = setTimeout(() => {
+      esperandoWorker.delete(id);
+      resolve(null);
+    }, PRAZO_DO_WORKER_MS);
+    esperandoWorker.set(id, (r) => {
+      clearTimeout(prazo);
+      resolve(r);
+    });
+    try {
+      w.postMessage({
+        id,
+        blob: arquivo,
+        largura: fonte.largura,
+        altura: fonte.altura,
+        alvoMini: tamanhoQueCabe(fonte.largura, fonte.altura, LADO_MINIATURA),
+        alvoMedia: Math.max(fonte.largura, fonte.altura) > LADO_MEDIA ? tamanhoQueCabe(fonte.largura, fonte.altura, LADO_MEDIA) : null,
+        checarTransparencia: /png|webp|avif/i.test(arquivo.type || "png"),
+        qualidadeMini: QUALIDADE_MINIATURA,
+        qualidadeMedia: QUALIDADE_MEDIA,
+      });
+    } catch {
+      clearTimeout(prazo);
+      esperandoWorker.delete(id);
+      resolve(null);
+    }
+  });
+  if (!resposta || resposta.erro || !resposta.mini) return null;
+  return { mini: resposta.mini, media: resposta.media || null, largura: fonte.largura, altura: fonte.altura };
+}
+
+/** Só para teste: esquece o worker e os pedidos. */
+export function __zerarWorkerDasCopiasParaTeste() {
+  if (workerDasCopias) {
+    try {
+      workerDasCopias.terminate();
+    } catch {
+      /* nada */
+    }
+  }
+  workerDasCopias = null;
+  workerQuebrado = false;
+  esperandoWorker.clear();
+}
+
 /**
  * Cópias leves de uma imagem: miniatura (640 px) sempre e média (2048 px) só
  * quando o original passa de 2048 px. JPEG para foto; PNG quando a imagem tem
@@ -206,7 +325,10 @@ export async function prepararCopias(arquivo: Blob): Promise<CopiasReduzidas | n
   if (typeof document === "undefined" || !arquivo || arquivo.size > MAX_BYTES_PARA_COPIA) return null;
   let fonte: Fonte | null = null;
   try {
+    // O <img> só carrega (sem desenhar): dá o tamanho, com a orientação que a tela mostra.
     fonte = await abrirImagem(arquivo);
+    const doWorker = await copiasNoWorker(arquivo, fonte);
+    if (doWorker) return doWorker;
     const miniTela = desenharReduzida(fonte, LADO_MINIATURA);
     const transparente = /png|webp|avif/i.test(arquivo.type || "png") && temTransparencia(miniTela);
     const tipo = transparente ? "image/png" : "image/jpeg";
@@ -289,6 +411,35 @@ function esquecerUrl(bucket: string, caminho: string) {
   cacheDeUrls.delete(chave(bucket, caminho));
 }
 
+/** Esquece todas as URLs leves guardadas. */
+export function esquecerUrlsLeves() {
+  cacheDeUrls.clear();
+}
+
+/**
+ * Dono das URLs guardadas na aba (as leves daqui e as dos originais em
+ * fileUrls.ts). Quando o usuário muda (sair, entrar com outra conta), nada
+ * assinado antes passa adiante: as leves saem aqui e a geração nova avisa o
+ * fileUrls.ts, que esquece as dele no próximo pedido. Mora aqui (e não em
+ * fileUrls.ts) porque o AuthContext já importa este arquivo: importar o
+ * fileUrls.ts na abertura puxava ~60 KB para o pedaço inicial (build 30/09).
+ */
+let donoDasUrls: string | null | undefined;
+let geracao = 0;
+
+export function definirDonoDasUrls(userId: string | null) {
+  if (donoDasUrls !== undefined && donoDasUrls !== userId) {
+    cacheDeUrls.clear();
+    geracao += 1;
+  }
+  donoDasUrls = userId;
+}
+
+/** Muda sempre que o dono das URLs muda (fileUrls.ts compara antes de reaproveitar). */
+export function geracaoDasUrls(): number {
+  return geracao;
+}
+
 type LinhaAssinada = { path: string | null; signedUrl?: string | null; error?: string | null };
 
 /**
@@ -368,6 +519,19 @@ export function definirAutoMiniaturas(ligado: boolean, admin = false) {
 const pastaDe = (bucket: string, caminho: string) => `${bucket}/${caminho.split("/")[0] || ""}`;
 
 /**
+ * Pastas que a RLS do Storage só deixa ler no navegador (sem INSERT para
+ * ninguém): a biblioteca e as referências globais do bucket mesa. A cópia
+ * seria recusada depois de baixar e decodificar o original, em toda sessão
+ * (achado E10, 30/09: "new row violates row-level security" nos logs).
+ */
+const PASTAS_SO_LEITURA: Record<string, string[]> = { mesa: ["biblioteca", "globais"] };
+
+function pastaSoLeitura(bucket: string, caminho: string): boolean {
+  const lista = PASTAS_SO_LEITURA[bucket];
+  return !!lista && lista.indexOf(caminho.split("/")[0] || "") >= 0;
+}
+
+/**
  * Imagem mostrada sem miniatura: entra na fila para ganhar as cópias. Uma por
  * vez, com pausa entre elas; pasta sem permissão de gravação sai da fila na
  * primeira recusa.
@@ -375,6 +539,7 @@ const pastaDe = (bucket: string, caminho: string) => `${bucket}/${caminho.split(
 export function agendarMiniatura(bucket: string, caminho: string, urlOriginal: string) {
   if (!autoLigado || typeof window === "undefined") return;
   if (BUCKETS_COM_COPIA.indexOf(bucket) < 0 || !podeTerMiniatura(caminho)) return;
+  if (pastaSoLeitura(bucket, caminho)) return;
   const k = chave(bucket, caminho);
   if (tentados.has(k) || pastasSemPermissao.has(pastaDe(bucket, caminho))) return;
   if (fila.length >= MAX_NA_FILA || feitosNaSessao >= MAX_POR_SESSAO) return;
@@ -399,8 +564,15 @@ async function processarFila() {
       if (pastasSemPermissao.has(pastaDe(item.bucket, item.caminho))) continue;
       feitosNaSessao++;
       try {
-        const resposta = await fetch(item.url);
+        const controle = typeof AbortController !== "undefined" ? new AbortController() : null;
+        const resposta = await fetch(item.url, controle ? { signal: controle.signal } : undefined);
         if (!resposta.ok) continue;
+        // Acima do teto nem baixa o resto (antes baixava inteiro para depois recusar).
+        const tamanho = Number((resposta.headers && resposta.headers.get("content-length")) || 0);
+        if (tamanho > MAX_BYTES_PARA_COPIA) {
+          if (controle) controle.abort();
+          continue;
+        }
         const blob = await resposta.blob();
         const copias = await prepararCopias(blob);
         if (!copias) continue;
@@ -440,4 +612,5 @@ export function __zerarMiniaturasParaTeste() {
   processando = false;
   feitosNaSessao = 0;
   cacheDeUrls.clear();
+  donoDasUrls = undefined;
 }

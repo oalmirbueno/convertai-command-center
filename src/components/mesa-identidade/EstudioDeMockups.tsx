@@ -6,8 +6,8 @@ import { botao, Carregando, EstadoDeErro, EstadoVazio, Etapas, JanelaDoCelular, 
 import { type KitDoContexto } from "@/components/mesa/contextoDoCliente";
 import { useKitDaMarca } from "@/components/mesa/kitDaMesa";
 import { textoDoErro } from "@/lib/mesa/api";
-import { CATEGORIAS, candidatosDaSugestao, rotuloDaCategoria, type MockupDoCatalogo, type TexturaDoCatalogo } from "@/lib/mockups/catalogo";
-import { arquivarAplicacao, carregarImagem, copiaParaBrandbook, enviarParaArquivos, lerAplicacoes, lerCatalogoDeMockups, lerTexturas, salvarAplicacao, sugerirMockups, urlAssinada, type SugestaoDoJev } from "@/lib/mockups/api";
+import { CATEGORIAS, candidatosDaSugestao, rotuloDaCategoria, type ConjuntoDeCamadas, type MockupDoCatalogo, type TexturaDoCatalogo } from "@/lib/mockups/catalogo";
+import { arquivarAplicacao, carregarImagem, copiaParaBrandbook, enviarParaArquivos, lerAplicacoes, lerCatalogoDeMockups, lerTexturas, liberarCamadas, salvarAplicacao, sugerirMockups, urlAssinada, type SugestaoDoJev } from "@/lib/mockups/api";
 import type { Ponto } from "@/lib/mockups/homografia";
 import { ESCALA_POR_PAPEL, type EscolhasDoDesign, type LogoCarregada } from "@/lib/mockups/designDoSlot";
 import { carregarLogos, comporCena, paraBlob, renderizarMockup } from "@/lib/mockups/renderizar";
@@ -152,7 +152,7 @@ export default function EstudioDeMockups({
     [cores, ajustes, texturaImg.data, tipografia && tipografia.familia, tipografia && tipografia.texto, comAssinatura, fontePronta],
   );
 
-  const itens = catalogo.data ? catalogo.data.itens : [];
+  const itens = useMemo(() => (catalogo.data ? catalogo.data.itens : []), [catalogo.data]);
   const porId = useMemo(() => {
     const m: Record<string, MockupDoCatalogo> = {};
     itens.forEach((i) => (m[i.id] = i));
@@ -168,7 +168,12 @@ export default function EstudioDeMockups({
 
   const listaParaAplicar = useMemo(() => aplicar.filter((id) => !!porId[id]), [aplicar, porId]);
   const versao = useRef(0);
-  const logosProntas: LogoCarregada[] = logos.data || [];
+  // Lista estável: sem logo (kit sem logo, projeto sem logo ou erro na leitura), `|| []`
+  // criava uma lista nova a cada render e o efeito do lote recomeçava sem parar (CT-02).
+  const logosProntas: LogoCarregada[] = useMemo(() => logos.data || [], [logos.data]);
+  // Camadas de trabalho já montadas, por mockup: soltas quando o mockup sai do lote e ao
+  // sair do estúdio (cada mockup pesa ~22 MB na GPU; antes ficavam até fechar a aba).
+  const camadasEmUso = useRef<Record<string, ConjuntoDeCamadas>>({});
   useEffect(() => {
     if (etapa !== "aplicar" || !listaParaAplicar.length || logos.isLoading) return;
     const minha = ++versao.current;
@@ -177,6 +182,7 @@ export default function EstudioDeMockups({
       for (const id of listaParaAplicar) {
         if (versao.current !== minha) return;
         const m = porId[id];
+        camadasEmUso.current[id] = m.caminhos.trabalho;
         try {
           const r = await renderizarMockup(m, "trabalho", logosProntas, escolhas);
           const blob = await paraBlob(r.canvas, "image/jpeg", 0.86);
@@ -197,11 +203,30 @@ export default function EstudioDeMockups({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [etapa, listaParaAplicar.join(","), escolhas, logosProntas]);
 
+  // Mockup que saiu do lote solta as camadas de trabalho (a prévia pronta, em JPEG, fica).
+  useEffect(() => {
+    const naLista: Record<string, true> = {};
+    listaParaAplicar.forEach((id) => (naLista[id] = true));
+    Object.keys(camadasEmUso.current).forEach((id) => {
+      if (naLista[id]) return;
+      liberarCamadas(camadasEmUso.current[id]);
+      delete camadasEmUso.current[id];
+    });
+  }, [listaParaAplicar]);
+
+  // Ao sair: para o lote em andamento, revoga as prévias e solta as camadas.
+  // As prévias vêm da ref (o `prontos` do primeiro render era sempre vazio).
+  const prontosAtuais = useRef(prontos);
+  prontosAtuais.current = prontos;
   useEffect(
     () => () => {
-      Object.keys(prontos).forEach((k) => URL.revokeObjectURL(prontos[k].url));
+      ++versao.current;
+      const atuais = prontosAtuais.current;
+      Object.keys(atuais).forEach((k) => URL.revokeObjectURL(atuais[k].url));
+      const emUso = camadasEmUso.current;
+      Object.keys(emUso).forEach((id) => liberarCamadas(emUso[id]));
+      camadasEmUso.current = {};
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -290,6 +315,9 @@ export default function EstudioDeMockups({
       setTimeout(() => URL.revokeObjectURL(a.href), 30_000);
     } catch (e) {
       toast.error(textoDoErro(e, "Não foi possível exportar o PNG."));
+    } finally {
+      // As camadas em alta (~98 MB por mockup) só servem à exportação: soltas logo depois.
+      liberarCamadas(m.caminhos.alta);
     }
   };
 
@@ -305,7 +333,11 @@ export default function EstudioDeMockups({
         if (e.origem === "catalogo") {
           const m = porId[e.id];
           if (!m) throw new Error("Mockup fora do catálogo");
-          png = await paraBlob((await renderizarMockup(m, "alta", logosProntas, escolhas)).canvas, "image/png");
+          try {
+            png = await paraBlob((await renderizarMockup(m, "alta", logosProntas, escolhas)).canvas, "image/png");
+          } finally {
+            liberarCamadas(m.caminhos.alta);
+          }
         } else if (e.imagem) {
           png = e.imagem;
         } else if (e.cena) {

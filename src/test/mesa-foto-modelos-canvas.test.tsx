@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createElement as h } from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { configure, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,6 +14,12 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
  * canvas_gerar, canvas_conferir e os alvos novos de estimar), que a frente do
  * servidor escreve em paralelo. Função, Storage e tabelas são simulados.
  */
+
+// Tela pesada (React Flow): com a CPU disputada a aba Canvas passa de 1 s
+// em "Abrindo o canvas". Mais prazo para as esperas e para o teste inteiro
+// (o vitest encerraria em 5 s antes de o waitFor desistir).
+configure({ asyncUtilTimeout: 8000 });
+vi.setConfig({ testTimeout: 20000 });
 
 const mock = vi.hoisted(() => ({
   invoke: vi.fn(),

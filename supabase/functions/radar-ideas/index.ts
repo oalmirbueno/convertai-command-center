@@ -10,7 +10,7 @@
 // do chamador (RLS aplicado). A leitura comercial (oferta/faixa) volta num
 // campo separado que o frontend só mostra para a equipe.
 
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { corsHeaders as corsDoSupabase } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   requestAiChatCompletion,
@@ -20,6 +20,8 @@ import {
 import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import type { BancoDoCerebro } from "../_shared/cerebro-do-cliente.ts";
 import { recortarDossie } from "../_shared/dossie-recortado.ts";
+// O navegador guarda a resposta do preflight (OPTIONS) em vez de perguntar de novo a cada chamada.
+const corsHeaders = { ...corsDoSupabase, "Access-Control-Max-Age": "7200" };
 
 // Modelos com busca na web embutida primeiro; sem busca como reserva.
 const PRIMARY_MODEL_CHAIN = ["gpt-4o-mini-search-preview", "gpt-4o-mini"];

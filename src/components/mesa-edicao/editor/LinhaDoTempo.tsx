@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Eye, EyeOff, Film, Image as IconeImagem, Minus, Plus, Volume2, VolumeX } from "lucide-react";
 import { botao, juntar, texto } from "@/components/sistema/estilos";
 import { duracaoDoClipe, ROTULO_DA_TRILHA, type ClipeDoProjeto, type ProjetoDeEdicao, type TipoDeTrilha, type TrilhaDoProjeto } from "../../../../supabase/functions/_shared/projeto-de-edicao";
@@ -57,7 +57,9 @@ const Miniatura = memo(function Miniatura({ url, tempo, largura }: { url: string
   const [falhou, setFalhou] = useState(false);
   useEffect(() => {
     let vivo = true;
-    void extrairQuadro(url, tempo, { largura: 120, qualidade: 0.5 }).then((q) => {
+    // Saiu da tela (zoom, aparar, rolagem) antes da vez dela na fila: o pedido
+    // nem começa (não baixa o vídeo à toa) e nada vai para o cache.
+    void extrairQuadro(url, tempo, { largura: 120, qualidade: 0.5, cancelado: () => !vivo }).then((q) => {
       if (!vivo) return;
       if (q) setSrc(q.dataUrl);
       else setFalhou(true);
@@ -80,9 +82,7 @@ function Cursor({ relogio, px }: { relogio: Relogio; px: number }) {
 
 function Regua({ px, largura, relogio, marcadores, aoBuscar }: { px: number; largura: number; relogio: Relogio; marcadores: { tempo_s: number; rotulo: string }[]; aoBuscar: (s: number) => void }) {
   const passo = passoDaRegua(px);
-  const marcas: number[] = [];
   const total = largura / px;
-  for (let s = 0; s <= total + passo; s += passo) marcas.push(Math.round(s * 1000) / 1000);
   const arrastando = useRef(false);
   const ref = useRef<HTMLDivElement | null>(null);
   const buscar = (clientX: number) => {
@@ -91,8 +91,10 @@ function Regua({ px, largura, relogio, marcadores, aoBuscar }: { px: number; lar
     const r = el.getBoundingClientRect();
     aoBuscar(Math.max(0, (clientX - r.left) / px));
   };
+  const buscarRef = useRef(buscar);
+  buscarRef.current = buscar;
   useEffect(() => {
-    const mover = (e: MouseEvent) => arrastando.current && buscar(e.clientX);
+    const mover = (e: MouseEvent) => arrastando.current && buscarRef.current(e.clientX);
     const soltar = () => (arrastando.current = false);
     window.addEventListener("mousemove", mover);
     window.addEventListener("mouseup", soltar);
@@ -100,7 +102,16 @@ function Regua({ px, largura, relogio, marcadores, aoBuscar }: { px: number; lar
       window.removeEventListener("mousemove", mover);
       window.removeEventListener("mouseup", soltar);
     };
-  });
+  }, []);
+  const marcasJsx = useMemo(() => {
+    const marcas: number[] = [];
+    for (let s = 0; s <= total + passo; s += passo) marcas.push(Math.round(s * 1000) / 1000);
+    return marcas.map((s) => (
+      <span key={s} className="absolute top-0 h-full border-l border-border/70 pl-1 text-[10px] leading-[24px] text-muted-foreground tabular-nums" style={{ left: s * px }}>
+        {passo < 1 ? tempoFino(s).replace(/,00$/, "") : tempoCurto(s)}
+      </span>
+    ));
+  }, [total, passo, px]);
   return (
     <div className="sticky top-0 z-30 flex bg-background" style={{ height: ALTURA_DA_REGUA }}>
       <div className="sticky left-0 z-30 shrink-0 border-b border-r border-border bg-background" style={{ width: LARGURA_DO_CABECALHO }} />
@@ -120,11 +131,7 @@ function Regua({ px, largura, relogio, marcadores, aoBuscar }: { px: number; lar
         aria-valuenow={Math.round(relogio.get())}
         tabIndex={-1}
       >
-        {marcas.map((s) => (
-          <span key={s} className="absolute top-0 h-full border-l border-border/70 pl-1 text-[10px] leading-[24px] text-muted-foreground tabular-nums" style={{ left: s * px }}>
-            {passo < 1 ? tempoFino(s).replace(/,00$/, "") : tempoCurto(s)}
-          </span>
-        ))}
+        {marcasJsx}
         {marcadores.map((m, k) => (
           <span key={`m${k}`} title={m.rotulo} className="absolute bottom-0 h-2 w-2 -translate-x-1/2 rotate-45 bg-amber-400" style={{ left: m.tempo_s * px }} />
         ))}
@@ -133,7 +140,7 @@ function Regua({ px, largura, relogio, marcadores, aoBuscar }: { px: number; lar
   );
 }
 
-function CabecalhoDaTrilha({ t, onOps }: { t: TrilhaDoProjeto; onOps: (ops: Operacao[], rotulo: string) => void }) {
+const CabecalhoDaTrilha = memo(function CabecalhoDaTrilha({ t, onOps }: { t: TrilhaDoProjeto; onOps: (ops: Operacao[], rotulo: string) => void }) {
   const som = t.tipo === "video" || t.tipo === "audio";
   return (
     <div className="sticky left-0 z-10 flex shrink-0 items-center border-b border-r border-border bg-background px-1.5" style={{ width: LARGURA_DO_CABECALHO, height: ALTURA[t.tipo] }}>
@@ -150,7 +157,93 @@ function CabecalhoDaTrilha({ t, onOps }: { t: TrilhaDoProjeto; onOps: (ops: Oper
       </button>
     </div>
   );
-}
+});
+
+type Comecar = (e: { clientX: number; clientY: number; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean }, tipo: Arrasto["tipo"], c: ClipeDoProjeto, t: TrilhaDoProjeto) => void;
+
+/**
+ * Um clipe na faixa. Com memo: durante o arrasto só o clipe arrastado
+ * redesenha (antes, cada movimento do mouse redesenhava todos os clipes).
+ */
+const ClipeNaFaixa = memo(function ClipeNaFaixa({ projeto, t, c, ativo, a, px, fps, url, apelido, comecar }: { projeto: ProjetoDeEdicao; t: TrilhaDoProjeto; c: ClipeDoProjeto; ativo: boolean; a: Arrasto | null; px: number; fps: number; url: string | null; apelido: string | undefined; comecar: Comecar }) {
+  let esquerda = c.inicio_s * px;
+  let w = Math.max(2, duracaoDoClipe(c) * px);
+  if (a && a.tipo === "mover") esquerda += a.dx;
+  if (a && a.tipo === "inicio") {
+    esquerda += a.dx;
+    w -= a.dx;
+  }
+  if (a && a.tipo === "fim") w += a.dx;
+  const fonte = c.fonte ? projeto.fontes[c.fonte] : null;
+  const visual = (t.tipo === "video" || t.tipo === "sobreposicao") && url && fonte;
+  const n = visual && px >= 12 ? Math.max(1, Math.min(6, Math.floor(w / 90))) : 0;
+  const rotulo = rotuloDoClipe(projeto, c);
+  return (
+    <div
+      className={juntar("group absolute top-1 bottom-1 overflow-hidden rounded border text-left", COR[t.tipo], ativo && "ring-2 ring-primary", a && "z-20 opacity-90 shadow-lg")}
+      style={{ left: esquerda, width: Math.max(2, w), transform: a && a.tipo === "mover" ? `translateY(${a.dy}px)` : undefined, cursor: "grab" }}
+      title={`${apelido} · ${rotulo} · ${tempoFino(c.inicio_s)} a ${tempoFino(fimDoClipe(c))}`}
+      data-clipe={c.id}
+      data-apelido={apelido}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        comecar(e, "mover", c, t);
+      }}
+      onTouchStart={(e) => {
+        e.stopPropagation();
+        if (e.touches.length) comecar(e.touches[0], "mover", c, t);
+      }}
+    >
+      {n > 0 && fonte && url && (
+        <span className="pointer-events-none absolute inset-0 flex">
+          {Array.from({ length: n }).map((_, k) => {
+            const fonteT = fonte.midia === "imagem" ? 0 : c.entrada_s + ((c.saida_s - c.entrada_s) * (k + 0.5)) / n;
+            return fonte.midia === "imagem" ? (
+              <img key={k} src={url} alt="" className="h-full shrink-0 object-cover" style={{ width: w / n }} draggable={false} />
+            ) : (
+              <Miniatura key={k} url={url} tempo={tempoDoQuadro(fonteT, fps)} largura={w / n} />
+            );
+          })}
+        </span>
+      )}
+      <span className={juntar("pointer-events-none relative block truncate px-1.5 text-[11px] font-medium leading-5", n > 0 ? "bg-black/45 text-white" : "text-foreground")}>
+        {fonte && fonte.midia === "imagem" && <IconeImagem className="mr-1 inline h-3 w-3" />}
+        <span className="mr-1 opacity-70">{apelido}</span>
+        {rotulo}
+        {c.velocidade !== 1 ? ` · ${c.velocidade}x` : ""}
+        {c.comparar ? " · antes e depois" : ""}
+      </span>
+      {c.zoom && <span className="pointer-events-none absolute bottom-0.5 right-1 rounded bg-black/50 px-1 text-[9.5px] text-white">zoom {c.zoom.para}</span>}
+      <span
+        className="absolute bottom-0 left-0 top-0 w-1.5 cursor-ew-resize bg-white/0 hover:bg-white/40"
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          comecar(e, "inicio", c, t);
+        }}
+        onTouchStart={(e) => {
+          e.stopPropagation();
+          if (e.touches.length) comecar(e.touches[0], "inicio", c, t);
+        }}
+        aria-hidden="true"
+      />
+      <span
+        className="absolute bottom-0 right-0 top-0 w-1.5 cursor-ew-resize bg-white/0 hover:bg-white/40"
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          comecar(e, "fim", c, t);
+        }}
+        onTouchStart={(e) => {
+          e.stopPropagation();
+          if (e.touches.length) comecar(e.touches[0], "fim", c, t);
+        }}
+        aria-hidden="true"
+      />
+    </div>
+  );
+});
 
 export default function LinhaDoTempo({
   projeto,
@@ -231,6 +324,8 @@ export default function LinhaDoTempo({
     else onOps([{ op: "aparar", clipe: a.id, lado: "fim", tempo_s: ima(a.fim0 + d, a.id) }], `Aparar ${apelidos.porId[a.id] || ""}`);
   };
 
+  const terminarRef = useRef(terminar);
+  terminarRef.current = terminar;
   useEffect(() => {
     const mover = (x: number, y: number) => {
       const a = arrastoRef.current;
@@ -239,13 +334,13 @@ export default function LinhaDoTempo({
       const dy = y - a.y0;
       const n = { ...a, dx, dy, moveu: a.moveu || Math.abs(dx) > 3 || Math.abs(dy) > 6 };
       arrastoRef.current = n;
-      setArrasto(n);
+      if (n.moveu) setArrasto(n);
     };
     const soltar = (y: number) => {
       const a = arrastoRef.current;
       arrastoRef.current = null;
       setArrasto(null);
-      if (a) terminar(a, y);
+      if (a) terminarRef.current(a, y);
     };
     const mm = (e: MouseEvent) => mover(e.clientX, e.clientY);
     const mu = (e: MouseEvent) => soltar(e.clientY);
@@ -269,7 +364,7 @@ export default function LinhaDoTempo({
       window.removeEventListener("touchmove", tm);
       window.removeEventListener("touchend", te);
     };
-  });
+  }, []);
 
   // Ctrl + roda: zoom em volta do ponteiro.
   useEffect(() => {
@@ -304,11 +399,11 @@ export default function LinhaDoTempo({
     [relogio, px],
   );
 
-  const comecar = (e: { clientX: number; clientY: number; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean }, tipo: Arrasto["tipo"], c: ClipeDoProjeto, t: TrilhaDoProjeto) => {
+  const comecar = useCallback<Comecar>((e, tipo, c, t) => {
     const a: Arrasto = { tipo, id: c.id, trilha: t.id, x0: e.clientX, y0: e.clientY, inicio0: c.inicio_s, fim0: fimDoClipe(c), dx: 0, dy: 0, moveu: false, somar: !!(e.ctrlKey || e.metaKey || e.shiftKey) };
     arrastoRef.current = a;
     setArrasto(a);
-  };
+  }, []);
 
   const zoom = (fator: number) => setPx(Math.round(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, px * fator)) * 100) / 100);
   const encaixar = () => {
@@ -352,89 +447,21 @@ export default function LinhaDoTempo({
                   onSelecionar([]);
                 }}
               >
-                {t.clipes.map((c) => {
-                  const ativo = selecao.indexOf(c.id) >= 0;
-                  const a = arrasto && arrasto.id === c.id && arrasto.moveu ? arrasto : null;
-                  let esquerda = c.inicio_s * px;
-                  let w = Math.max(2, duracaoDoClipe(c) * px);
-                  if (a && a.tipo === "mover") esquerda += a.dx;
-                  if (a && a.tipo === "inicio") {
-                    esquerda += a.dx;
-                    w -= a.dx;
-                  }
-                  if (a && a.tipo === "fim") w += a.dx;
-                  const fonte = c.fonte ? projeto.fontes[c.fonte] : null;
-                  const url = c.fonte ? urls[c.fonte] : null;
-                  const visual = (t.tipo === "video" || t.tipo === "sobreposicao") && url && fonte;
-                  const n = visual && px >= 12 ? Math.max(1, Math.min(6, Math.floor(w / 90))) : 0;
-                  const rotulo = rotuloDoClipe(projeto, c);
-                  return (
-                    <div
-                      key={c.id}
-                      className={juntar("group absolute top-1 bottom-1 overflow-hidden rounded border text-left", COR[t.tipo], ativo && "ring-2 ring-primary", a && "z-20 opacity-90 shadow-lg")}
-                      style={{ left: esquerda, width: Math.max(2, w), transform: a && a.tipo === "mover" ? `translateY(${a.dy}px)` : undefined, cursor: "grab" }}
-                      title={`${apelidos.porId[c.id]} · ${rotulo} · ${tempoFino(c.inicio_s)} a ${tempoFino(fimDoClipe(c))}`}
-                      data-clipe={c.id}
-                      data-apelido={apelidos.porId[c.id]}
-                      onMouseDown={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        comecar(e, "mover", c, t);
-                      }}
-                      onTouchStart={(e) => {
-                        e.stopPropagation();
-                        if (e.touches.length) comecar(e.touches[0], "mover", c, t);
-                      }}
-                    >
-                      {n > 0 && fonte && url && (
-                        <span className="pointer-events-none absolute inset-0 flex">
-                          {Array.from({ length: n }).map((_, k) => {
-                            const fonteT = fonte.midia === "imagem" ? 0 : c.entrada_s + ((c.saida_s - c.entrada_s) * (k + 0.5)) / n;
-                            return fonte.midia === "imagem" ? (
-                              <img key={k} src={url} alt="" className="h-full shrink-0 object-cover" style={{ width: w / n }} draggable={false} />
-                            ) : (
-                              <Miniatura key={k} url={url} tempo={tempoDoQuadro(fonteT, fps)} largura={w / n} />
-                            );
-                          })}
-                        </span>
-                      )}
-                      <span className={juntar("pointer-events-none relative block truncate px-1.5 text-[11px] font-medium leading-5", n > 0 ? "bg-black/45 text-white" : "text-foreground")}>
-                        {fonte && fonte.midia === "imagem" && <IconeImagem className="mr-1 inline h-3 w-3" />}
-                        <span className="mr-1 opacity-70">{apelidos.porId[c.id]}</span>
-                        {rotulo}
-                        {c.velocidade !== 1 ? ` · ${c.velocidade}x` : ""}
-                        {c.comparar ? " · antes e depois" : ""}
-                      </span>
-                      {c.zoom && <span className="pointer-events-none absolute bottom-0.5 right-1 rounded bg-black/50 px-1 text-[9.5px] text-white">zoom {c.zoom.para}</span>}
-                      <span
-                        className="absolute bottom-0 left-0 top-0 w-1.5 cursor-ew-resize bg-white/0 hover:bg-white/40"
-                        onMouseDown={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          comecar(e, "inicio", c, t);
-                        }}
-                        onTouchStart={(e) => {
-                          e.stopPropagation();
-                          if (e.touches.length) comecar(e.touches[0], "inicio", c, t);
-                        }}
-                        aria-hidden="true"
-                      />
-                      <span
-                        className="absolute bottom-0 right-0 top-0 w-1.5 cursor-ew-resize bg-white/0 hover:bg-white/40"
-                        onMouseDown={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          comecar(e, "fim", c, t);
-                        }}
-                        onTouchStart={(e) => {
-                          e.stopPropagation();
-                          if (e.touches.length) comecar(e.touches[0], "fim", c, t);
-                        }}
-                        aria-hidden="true"
-                      />
-                    </div>
-                  );
-                })}
+                {t.clipes.map((c) => (
+                  <ClipeNaFaixa
+                    key={c.id}
+                    projeto={projeto}
+                    t={t}
+                    c={c}
+                    ativo={selecao.indexOf(c.id) >= 0}
+                    a={arrasto && arrasto.id === c.id && arrasto.moveu ? arrasto : null}
+                    px={px}
+                    fps={fps}
+                    url={c.fonte ? urls[c.fonte] || null : null}
+                    apelido={apelidos.porId[c.id]}
+                    comecar={comecar}
+                  />
+                ))}
               </div>
             </div>
           ))}

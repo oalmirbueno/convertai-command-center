@@ -4,11 +4,13 @@ import { hashDosBytes, nomeDoArquivoDoContrato } from "../_shared/contrato-model
 import { type EventoNoCarimbo, gerarPdfDoContrato } from "../_shared/pdf-contrato.ts";
 // Frente CON2 (30/09): mais de um signatário do cliente e testemunhas, cada um com o próprio link.
 import { fecharComSignatarios, lerSignatariosDoContrato } from "../_shared/contrato-assinaturas.ts";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+  ...PREFLIGHT_CACHE,
 };
 
 const json = (data: any, status = 200) =>

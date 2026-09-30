@@ -90,6 +90,7 @@ import { ACOES_LONGAS_DA_BASE, baseInicialDoSite, estimarDaBase, rotasDaBase } f
 import { itensDaBaseDeDesign, regrasDoMapa } from "../_shared/uiux/base-completa.ts";
 import { anexoDaBaseCitada, blocoDaBaseDeDesign, CAMPO_BASE_CITADA, conhecimentoDaBaseDeDesign, TETO_DO_BLOCO_DO_DIRETOR } from "../_shared/uiux/citar.ts";
 import { direcaoParaOAgente, lerBaseDeDesign } from "../_shared/uiux/consultas.ts";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 /** Versão de antes (SIT2): o erro vai para o log e volta como aviso, sem travar a mudança. */
 async function versaoAntes(s: LinhaDoSite, motivo: string, userId: string): Promise<string | null> {
@@ -106,6 +107,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  ...PREFLIGHT_CACHE,
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 

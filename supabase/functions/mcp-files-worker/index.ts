@@ -19,6 +19,8 @@ import {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const BUCKET = 'mcp-files';
+// FN-11 (30/09): o cron mcp-files-worker-drain só chama quando há job com attempts < 3
+// (migration 20260930292000). Mudou este teto? Mude a condição do cron junto.
 const MAX_ATTEMPTS = Number(Deno.env.get('MCP_FILE_MAX_ATTEMPTS') ?? 3);
 const MAX_BATCH = Number(Deno.env.get('MCP_FILE_WORKER_BATCH') ?? 5);
 const CHUNK_CHARS = Number(Deno.env.get('MCP_FILE_CHUNK_CHARS') ?? 1800);
@@ -31,6 +33,7 @@ const OCR_PROVIDERS = resolveAiProviderChain({
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
+  'Access-Control-Max-Age': '7200',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Content-Type': 'application/json',
 };

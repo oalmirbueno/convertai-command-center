@@ -26,7 +26,7 @@
 // Tudo é lido e gravado com o JWT de quem pediu (RLS). Trabalho longo
 // responde com fôlego (_shared/resposta-com-folego.ts) para não cair no 504.
 
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { corsHeaders as corsDoSupabase } from "npm:@supabase/supabase-js@2/cors";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { type EscolhaDoModelo, escolhaDoModelo, escreverComModeloDaCentral } from "../_shared/modelo-da-central.ts";
 import { estadoRealComoTexto, lerEstadoReal } from "../_shared/estado-real-do-cliente.ts";
@@ -56,6 +56,8 @@ import { registrarFalha } from "../_shared/falha-registrada.ts";
 // Frente AG3 (29/09): aprende com as respostas do dono, obedece as regras e devolve "Aprendi"/"Segui".
 import { anexosDoAprendizado, blocoDasRegras, esquecerRegra, type RegraAtiva, regrasDoAgente, regrasSeguidas } from "../_shared/aprender-com-o-dono.ts";
 import { aprenderNoServidor, guardarNoServidor } from "../_shared/aprender-no-servidor.ts";
+// O navegador guarda a resposta do preflight (OPTIONS) em vez de perguntar de novo a cada chamada.
+const corsHeaders = { ...corsDoSupabase, "Access-Control-Max-Age": "7200" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Mesmos rótulos de SERVICE_LABELS (src/lib/cycleDefs.ts).

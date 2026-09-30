@@ -1,4 +1,4 @@
-import { MotionConfig, motion, type Variants } from "framer-motion";
+import { LazyMotion, MotionConfig, domAnimation, m, type Variants } from "framer-motion";
 import { type ReactNode } from "react";
 
 /* ─── Shared animation variants ───
@@ -44,7 +44,18 @@ export const slideRight: Variants = {
   },
 };
 
-/* ─── Wrapper components for cleaner JSX ─── */
+/* ─── Wrapper components for cleaner JSX ───
+ * Versão leve do framer-motion (LazyMotion + m.div, só as animações de DOM):
+ * a completa trazia arrastar e layout, cerca de 14 KB comprimidos a mais na
+ * home do cliente, para um fade de entrada.
+ *
+ * Duas regras para não quebrar:
+ * - Nenhum `motion.*` do framer-motion no painel. Um único uso volta a
+ *   carregar o pacote inteiro (src/test/framer-motion-leve.test.ts confere).
+ * - Todo `m.*` precisa de um <LazyMotion> acima. FadeUp e FadeScale vivem
+ *   dentro do StaggerContainer, que já traz o dele; usados fora dele e dentro
+ *   de um pai animado, ficariam parados em opacity 0.
+ */
 
 export function StaggerContainer({
   children,
@@ -54,16 +65,18 @@ export function StaggerContainer({
   className?: string;
 }) {
   return (
-    <MotionConfig reducedMotion="user">
-      <motion.div
-        variants={staggerContainer}
-        initial="hidden"
-        animate="show"
-        className={className}
-      >
-        {children}
-      </motion.div>
-    </MotionConfig>
+    <LazyMotion features={domAnimation}>
+      <MotionConfig reducedMotion="user">
+        <m.div
+          variants={staggerContainer}
+          initial="hidden"
+          animate="show"
+          className={className}
+        >
+          {children}
+        </m.div>
+      </MotionConfig>
+    </LazyMotion>
   );
 }
 
@@ -75,9 +88,9 @@ export function FadeUp({
   className?: string;
 }) {
   return (
-    <motion.div variants={fadeUp} className={className}>
+    <m.div variants={fadeUp} className={className}>
       {children}
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -89,8 +102,8 @@ export function FadeScale({
   className?: string;
 }) {
   return (
-    <motion.div variants={fadeScale} className={className}>
+    <m.div variants={fadeScale} className={className}>
       {children}
-    </motion.div>
+    </m.div>
   );
 }

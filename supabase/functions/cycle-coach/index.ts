@@ -10,7 +10,7 @@
 // Segurança: leitura com o JWT do chamador (RLS decide o alcance; a tabela do
 // ciclo é da equipe). Nada é gravado.
 
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { corsHeaders as corsDoSupabase } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
 // Frente AG (26/09): o coach sabe onde cada coisa fica no painel (bloco mínimo, sem inflar o custo).
 import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
@@ -20,6 +20,8 @@ import {
   resolveAiProviderChain,
 } from "../_shared/ai-provider.ts";
 import { recortarDossie } from "../_shared/dossie-recortado.ts";
+// O navegador guarda a resposta do preflight (OPTIONS) em vez de perguntar de novo a cada chamada.
+const corsHeaders = { ...corsDoSupabase, "Access-Control-Max-Age": "7200" };
 
 const PRIMARY_MODEL_CHAIN = ["gpt-4o-mini"];
 /** Janela da agenda que o coach conta (próximos 7 dias e últimos 7 no ar). */

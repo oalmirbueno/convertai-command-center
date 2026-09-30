@@ -25,6 +25,9 @@ describe("workspace and files synchronization", () => {
     expect(query).toContain("if (error) throw error");
     expect(query).toContain("refetchInterval: 30_000");
     expect(query).not.toContain("placeholderData");
+    // EX-06 (30/09): aba escondida não consulta o banco; ao voltar, relê.
+    expect(workspace).not.toContain("refetchIntervalInBackground: true");
+    expect(workspace.match(/refetchIntervalInBackground: false,\s*refetchOnWindowFocus: true,/g)?.length).toBe(3);
     expect(workspace).toContain("Workspace disponível; sincronização com Arquivos temporariamente indisponível.");
   });
 

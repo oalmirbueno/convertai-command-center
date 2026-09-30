@@ -2,7 +2,7 @@ import { createElement as h } from "react";
 import { configure, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Mesa Proposta, frente PRO2, na tela: os 3 pacotes no Investimento (o
@@ -76,6 +76,16 @@ function montar(endereco: string) {
 
 const chamadasDe = (acao: string) => mock.invoke.mock.calls.filter((c) => c[1] && c[1].body && c[1].body.acao === acao);
 
+// As etapas abrem por import sob demanda: aquecer antes para o teste não depender da ordem.
+beforeAll(async () => {
+  await Promise.all([
+    import("@/components/mesa-proposta/EtapaContexto"),
+    import("@/components/mesa-proposta/EtapaRascunho"),
+    import("@/components/mesa-proposta/EtapaEnvio"),
+    import("@/components/mesa-proposta/AgenteDaProposta"),
+  ]);
+}, 60000);
+
 beforeEach(() => {
   mock.invoke.mockReset();
   mock.rpc.mockReset();
@@ -120,7 +130,8 @@ describe("Mesa Proposta, PRO2 na tela", () => {
   it("Envio: proposta vista há dias sem resposta mostra o follow-up com a mensagem pronta; Já mandei registra", async () => {
     mock.tabelas.propostas = [linha({ status: "vista", token: "d".repeat(64), enviada_em: diasAtras(5), vista_em: diasAtras(3) })];
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=envio&proposta=${PROPOSTA}`);
-    fireEvent.click(await screen.findByRole("button", { name: /Preparar mensagem/ }));
+    // findByText na primeira espera: varre a árvore ~9x mais rápido que findByRole (a etapa abre sob carga).
+    fireEvent.click(await screen.findByText("Preparar mensagem"));
     expect(await screen.findByDisplayValue("Oi, Joana. Ficou alguma dúvida?")).toBeTruthy();
     expect(screen.getAllByRole("link", { name: /Abrir no WhatsApp/ }).some((a) => (a.getAttribute("href") || "").indexOf("5541999999999") >= 0)).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Já mandei" }));

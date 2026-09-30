@@ -75,7 +75,8 @@ import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marc
 // Frente MC (29/09): a regra única de herança e a logo achada no que já existe.
 import { linhaDaMarca, projetoDaMarcaAberta } from "../_shared/heranca-da-marca.ts";
 import { type ArquivoLeve, candidatosDaMarca, escolhaDaLogo, type NoDoWorkspaceLeve, perguntaDaLogo } from "./logo-da-marca.ts";
-import { dimensoesDoCabecalho } from "../_shared/imagem-local.ts";
+// FN-01: só o cabeçalho; o imagescript não carrega na partida da função.
+import { dimensoesDoCabecalho } from "../_shared/imagem-cabecalho.ts";
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
 // Frente LR (29/09): leitura das referências em lotes, sem falha em silêncio.
 import { camposDaLeitura, defeitoDaImagem, lerEmLotes, PRAZO_DA_LEITURA_MS, type ResultadoDaLeitura, textoDoMotivo } from "./leitura-em-lotes.ts";
@@ -156,12 +157,13 @@ import { organizarPorTipo } from "./organizar-por-tipo.ts";
 import { blocoDoMapaDoPainel, caminhoDaResposta, destinoNaResposta, pedeParaAbrir, pedeParaLevar } from "../_shared/mapa-do-painel.ts";
 import { acaoDoKitNaConversa, MAX_ITENS_DO_KIT, REGRAS_DO_KIT_NA_CONVERSA } from "./kit-na-conversa.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
-import { registrarFalha } from "../_shared/falha-registrada.ts";
+import { registrarFalha, registrarSeFalhar } from "../_shared/falha-registrada.ts";
 // Frente AG1 (29/09): a mensagem nunca some (pedido gravado antes da IA) e o agente aprende com cada pedido.
 import { AVISO_RESPOSTA_NAO_GUARDADA, ErroDaConversa, gravarPedidoAntes, gravarResposta, historicoParaOModelo, hojeParaOAgente, soltarPedido } from "../_shared/conversa-segura.ts";
 import { anexoDasRegrasSeguidas, esquemaComAprendizado, REGRA_DO_APRENDIZADO_NO_PROMPT, regraDoModelo, regrasSeguidasDoModelo, blocoDasRegras } from "../_shared/aprendizado-do-pedido.ts";
 import { aprenderComOPedido, lerRegrasDoDono } from "../_shared/aprendizado-nos-agentes.ts";
 import { OPERACOES_COM_CUSTO_DO_CONTEXTO } from "./acoes-do-contexto.ts";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 /**
  * Frente H (25/09): voz de marca, posicionamento, objeções e identidade
@@ -175,6 +177,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  ...PREFLIGHT_CACHE,
 };
 
 const json = (body: unknown, status = 200) =>
@@ -1687,11 +1690,12 @@ async function definirLogo(ch: Chamador, corpo: Record<string, unknown>) {
   if (error) throw new ErroContexto(503, "kit_nao_gravado", "A logo foi copiada, mas o kit não foi atualizado.");
   // Clara ou escura era da logo anterior: zera, e a tela grava o da nova logo logo depois
   // (ContextoLogos, lida no navegador). Sem a coluna no banco (T-logo-tom.sql), só segue.
-  await servico()
-    .from("cliente_kit_marca")
-    .update({ [alternativa ? "logo_alt_tom" : "logo_tom"]: null })
-    .eq("client_id", clientId)
-    .then(() => undefined, () => undefined);
+  await Promise.resolve(
+    servico()
+      .from("cliente_kit_marca")
+      .update({ [alternativa ? "logo_alt_tom" : "logo_tom"]: null })
+      .eq("client_id", clientId),
+  ).then(...registrarSeFalhar("agente-contexto: tom da logo nao zerado", { client_id: clientId }));
   return json({ kit: await lerKit(clientId), caminho: destino });
 }
 
@@ -1866,7 +1870,7 @@ async function desfazerItemDoContexto(clientId: string, r: ResultadoDoItem) {
     const alternativa = d.alternativa === true;
     const { error } = await db.from("cliente_kit_marca").update({ [alternativa ? "logo_alt_path" : "logo_path"]: (d.caminho as string | null) ?? null, atualizado_em: new Date().toISOString() }).eq("client_id", clientId);
     if (error) throw new Error("Não foi possível voltar a logo de antes.");
-    await db.from("cliente_kit_marca").update({ [alternativa ? "logo_alt_tom" : "logo_tom"]: null }).eq("client_id", clientId).then(() => undefined, () => undefined);
+    await Promise.resolve(db.from("cliente_kit_marca").update({ [alternativa ? "logo_alt_tom" : "logo_tom"]: null }).eq("client_id", clientId)).then(...registrarSeFalhar("agente-contexto: tom da logo nao zerado", { client_id: clientId }));
     return;
   }
   if (r.operacao === "arquivar_referencia") {
@@ -1934,7 +1938,7 @@ async function executarAcaoDoContexto(ch: Chamador, corpo: Record<string, unknow
   const feitos = r.resultados.filter((x) => x.ok).length;
   const falhas = r.resultados.length - feitos;
   if (r.terminou && r.anexo.executada_em && guardada.mensagem.conversa_id) {
-    await servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Contexto: ${textoDoResultado(r.anexo.resultados || [])}${r.anexo.parada_em ? " (parado no meio)" : ""}.` }).then(() => undefined, () => undefined);
+    await Promise.resolve(servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Contexto: ${textoDoResultado(r.anexo.resultados || [])}${r.anexo.parada_em ? " (parado no meio)" : ""}.` })).then(...registrarSeFalhar("agente-contexto: mensagem de sistema nao gravada", { client_id: clientId }));
   }
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "contexto_acao_do_agente", origin: "mesa:agente-contexto",
@@ -1961,7 +1965,7 @@ async function desfazerAcaoDoContexto(ch: Chamador, corpo: Record<string, unknow
     throw comoErroDoContexto(e);
   }
   if (guardada.mensagem.conversa_id) {
-    await servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Contexto: ação desfeita (${r.voltaram} ${r.voltaram === 1 ? "item voltou" : "itens voltaram"}).` }).then(() => undefined, () => undefined);
+    await Promise.resolve(servico().from("agente_mensagens").insert({ conversa_id: guardada.mensagem.conversa_id, client_id: clientId, papel: "sistema", conteudo: `Contexto: ação desfeita (${r.voltaram} ${r.voltaram === 1 ? "item voltou" : "itens voltaram"}).` })).then(...registrarSeFalhar("agente-contexto: mensagem de sistema nao gravada", { client_id: clientId }));
   }
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "contexto_desfazer_acao_do_agente", origin: "mesa:agente-contexto",
@@ -2532,6 +2536,14 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   desfazer_acao_agente: desfazerAcaoDoContexto,
 };
 
+/**
+ * FN-06 (30/09): ações que esperam a IA por mais tempo respondem com fôlego (como conversar), para o
+ * relógio de 150 s da plataforma não cortar com 504 sem motivo na tela. montar espera a IA (até 120 s)
+ * junto com a leitura das referências (até 100 s); importar_brand_book lê o PDF e as páginas pela IA.
+ * ler (a aba abrindo, teto curto) e sugerir_kit_da_marca (Jev, 20 s) seguem como estão.
+ */
+const COM_FOLEGO = new Set(["montar", "importar_brand_book"]);
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return erro(405, "metodo_nao_permitido", "Use POST.");
@@ -2549,6 +2561,10 @@ Deno.serve(async (req) => {
   const acao = String(corpo.acao ?? "");
   const executar = ACOES[acao];
   if (!executar) return erro(400, "acao_desconhecida", "Ação desconhecida.", { aceitas: Object.keys(ACOES) });
+  if (COM_FOLEGO.has(acao)) {
+    const quem = ch;
+    return respostaComFolego(() => executar(quem, corpo).catch((e) => respostaDoErro(e, acao)), corsHeaders);
+  }
   try {
     return await executar(ch, corpo);
   } catch (e) {

@@ -11,11 +11,13 @@ import { ErroDaAcao } from "../_shared/acoes-do-agente.ts";
 import { lerMarcaCompleta, type MarcaDoCliente } from "../_shared/marca.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { ehEtapaDaIdentidade, ehModoDoProjeto, type EtapaDaIdentidade, type ModoDoProjeto } from "../_shared/identidade-etapas.ts";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  ...PREFLIGHT_CACHE,
 };
 
 export const json = (body: unknown, status = 200) =>

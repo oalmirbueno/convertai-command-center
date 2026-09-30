@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { urlLeve } from "@/lib/miniaturas";
+import { esquecerUrlsLeves, geracaoDasUrls, urlLeve } from "@/lib/miniaturas";
 
 type ResolveInput = {
   fileUrl?: string | null;
@@ -71,23 +71,73 @@ export function isDirectFileUrl(value?: string | null) {
   return /^https?:\/\//i.test(value) || value.startsWith("blob:") || value.startsWith("data:");
 }
 
+/**
+ * URLs assinadas dos originais, guardadas como promessa (achado E05, 30/09).
+ * Sem isso, a pré-carga do carrossel e a prévia visível assinavam o mesmo
+ * arquivo cada uma com um token (outra URL) e o navegador baixava o original
+ * duas vezes; as lâminas de um carrossel chegaram a 101 assinaturas num dia.
+ * Guardar a promessa faz quem pede no mesmo instante dividir uma assinatura
+ * só e receber a mesma URL, que o navegador reaproveita. Mesma regra de
+ * urlLeve: até 40 min e sempre com folga de 5 min antes de a URL vencer.
+ * Falha não fica guardada (o "Tentar novamente" assina de novo).
+ */
+const CACHE_DAS_ASSINADAS_MS = 40 * 60_000;
+const urlsAssinadas = new Map<string, { promessa: Promise<string>; ate: number }>();
+/** Geração do dono das URLs (definirDonoDasUrls em miniaturas.ts, chamado pelo AuthContext). */
+let geracaoVista = 0;
+
+/** Esquece as URLs assinadas guardadas (originais e miniaturas). */
+export function esquecerUrlsAssinadas() {
+  urlsAssinadas.clear();
+  esquecerUrlsLeves();
+}
+
+/** Só para testes: zera as URLs guardadas. */
+export function __zerarUrlsAssinadasParaTeste() {
+  urlsAssinadas.clear();
+}
+
 export async function resolveFileUrl(input: UseResolvedInput): Promise<string> {
   const ref = storageRefFromFile(input);
   if (ref && input.miniatura) {
     return (await urlLeve(ref.bucket, ref.path, input.expiresIn || 3600)).url;
   }
   if (ref) {
-    const { data, error } = await supabase.storage.from(ref.bucket).createSignedUrl(
-      ref.path,
-      input.expiresIn || 3600,
-    );
-    if (error || !data?.signedUrl) {
-      throw error || new Error("URL indisponível");
-    }
-    return data.signedUrl;
+    return assinarComCache(ref.bucket, ref.path, input.expiresIn || 3600);
   }
   if (isDirectFileUrl(input.fileUrl)) return input.fileUrl!;
   return input.fileUrl || "";
+}
+
+// Fica entre resolveFileUrl e useResolvedFileUrl: o contrato de segurança
+// (file-approval-security-contract.test.ts) confere aqui que a falha ao
+// assinar lança erro e nunca cai no link direto.
+async function assinarOriginal(bucket: string, path: string, expiresIn: number): Promise<string> {
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn);
+  if (error || !data?.signedUrl) {
+    throw error || new Error("URL indisponível");
+  }
+  return data.signedUrl;
+}
+
+function assinarComCache(bucket: string, path: string, expiresIn: number): Promise<string> {
+  if (expiresIn <= 300) return assinarOriginal(bucket, path, expiresIn);
+  // Outro usuário na aba: nada assinado antes passa adiante.
+  const geracao = geracaoDasUrls();
+  if (geracao !== geracaoVista) {
+    urlsAssinadas.clear();
+    geracaoVista = geracao;
+  }
+  const chave = `${bucket}|${path}|${expiresIn}`;
+  const agora = Date.now();
+  const guardada = urlsAssinadas.get(chave);
+  if (guardada && guardada.ate > agora) return guardada.promessa;
+  const promessa = assinarOriginal(bucket, path, expiresIn).catch((erro) => {
+    if (urlsAssinadas.get(chave)?.promessa === promessa) urlsAssinadas.delete(chave);
+    throw erro;
+  });
+  urlsAssinadas.set(chave, { promessa, ate: agora + Math.min(CACHE_DAS_ASSINADAS_MS, (expiresIn - 300) * 1000) });
+  return promessa;
 }
 
 export function useResolvedFileUrl(input: UseResolvedInput) {

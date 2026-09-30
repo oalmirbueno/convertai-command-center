@@ -7,11 +7,13 @@ import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import {
   bridgeStatus,
-  getBridgePulse,
-  listInboxPending,
-  listRecentCommits,
+  lerPulsoCompleto,
   SecondBrainError,
 } from '../_shared/second-brain-github.ts';
+import { PREFLIGHT_CACHE } from '../_shared/cors.ts';
+
+// FN-02: o navegador guarda o pré-voo (o widget lê a cada 15 s).
+const cors = { ...corsHeaders, ...PREFLIGHT_CACHE };
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -19,7 +21,7 @@ const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    headers: { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
   });
 }
 
@@ -37,7 +39,7 @@ async function requireAdmin(req: Request): Promise<{ userId: string } | Response
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'GET') return json(405, { error: 'method_not_allowed' });
 
   const gate = await requireAdmin(req);
@@ -60,11 +62,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const [pulse, commits, inbox] = await Promise.all([
-      getBridgePulse(force),
-      listRecentCommits(limit).catch(() => []),
-      listInboxPending(limit).catch(() => []),
-    ]);
+    // FN-10: 3 chamadas ao GitHub por leitura (eram 7); mesma resposta.
+    const { pulse, commits, inbox } = await lerPulsoCompleto(limit, force);
     return json(200, {
       configured: true,
       status,

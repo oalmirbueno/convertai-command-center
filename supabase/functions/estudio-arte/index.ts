@@ -423,6 +423,8 @@ import {
   usoDoAcervo,
   usoPedidoNaConversa,
 } from "./modulos/uso-da-foto.ts";
+// FN-01 (30/09): mesmas funções de imagem-local.ts, carregadas só na primeira
+// imagem aberta (a partida da função e o OPTIONS não pagam a carga).
 import {
   acabamentoDaLamina,
   ampliar,
@@ -452,8 +454,8 @@ import {
   tamanhoDoTrecho,
   telaDoTrecho,
   recortarNaProporcao,
-} from "../_shared/imagem-local.ts";
-import { aplicarSelo, caixaNoQuadroCentral } from "../_shared/imagem-local.ts";
+} from "../_shared/imagem-sob-demanda.ts";
+import { aplicarSelo, caixaNoQuadroCentral } from "../_shared/imagem-sob-demanda.ts";
 import { areaLivreParaOSelo, caixaDoSelo, type CaixaDoSelo } from "../_shared/selo-da-campanha.ts";
 import {
   caminhoDaMedia,
@@ -566,11 +568,13 @@ import { aplicarPosicao, blocoDoArranjoDividido, planoDePosicoes, posicaoGravada
 import { erroQueSobe, nuloComLog, registrarFalha } from "../_shared/falha-registrada.ts";
 import { defeitoDaImagem } from "../_shared/defeito-da-imagem.ts";
 import { abrirImagemDaPrancha, camposDaFalhaDaPrancha, type FalhaDaPrancha, lerPranchaComMotivo, MOTIVOS_DO_ARQUIVO } from "./leitura-da-prancha.ts";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  ...PREFLIGHT_CACHE,
 };
 
 const json = (body: unknown, status = 200) =>

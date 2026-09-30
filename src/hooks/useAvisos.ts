@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { canalDosAvisosVivo, intervaloDosAvisos, marcarCanalDosAvisos } from "@/lib/avisos/canalDosAvisos";
 
 /**
  * O sino (frente N, 27/09).
@@ -33,7 +34,8 @@ export function useContagemDeNaoLidas() {
       return typeof count === "number" && Number.isFinite(count) ? count : 0;
     },
     enabled: !!user,
-    refetchInterval: 30000,
+    // 30 s sem o canal; 5 min com ele de pé (src/lib/avisos/canalDosAvisos.ts).
+    refetchInterval: () => intervaloDosAvisos(),
   });
 }
 
@@ -59,8 +61,9 @@ export function useAvisosNaoLidos(ativo: boolean) {
 
 /**
  * Tempo real: aviso novo (ou rajada agrupada) chega pelo canal do banco e o
- * sino recarrega em meio segundo. O intervalo de 30 s fica como rede, caso
- * o canal caia.
+ * sino recarrega em meio segundo. O intervalo fica como rede: 5 min com o
+ * canal de pé, 30 s quando ele cai (ao cair, relê na hora; ao voltar, traz o
+ * que chegou enquanto estava fora).
  */
 export function useAvisosEmTempoReal() {
   const { user } = useAuth();
@@ -68,14 +71,17 @@ export function useAvisosEmTempoReal() {
   const userId = user?.id;
   useEffect(() => {
     if (!userId) return;
+    let ativo = true;
     let espera: ReturnType<typeof setTimeout> | null = null;
     const recarregar = () => {
+      if (!ativo) return;
       if (espera) clearTimeout(espera);
       espera = setTimeout(() => {
         espera = null;
         queryClient.invalidateQueries({ queryKey: [CHAVE_DOS_AVISOS] });
       }, 500);
     };
+    let conectou = false;
     let canal: ReturnType<typeof supabase.channel> | null = null;
     try {
       canal = supabase
@@ -85,12 +91,29 @@ export function useAvisosEmTempoReal() {
           { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
           recarregar,
         )
-        .subscribe();
+        // Apagar com filtro nunca chega. Sem filtro chega só com o id (a RLS
+        // continua valendo): a limpeza dos alertas resolvidos aparece na hora.
+        .on("postgres_changes", { event: "DELETE", schema: "public", table: "notifications" }, recarregar)
+        .subscribe((status: string) => {
+          if (!ativo) return;
+          if (status === "SUBSCRIBED") {
+            marcarCanalDosAvisos(true);
+            if (conectou) recarregar();
+            conectou = true;
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+            const estava = canalDosAvisosVivo();
+            marcarCanalDosAvisos(false);
+            if (estava) recarregar();
+          }
+        });
     } catch {
       canal = null;
+      marcarCanalDosAvisos(false);
     }
     return () => {
+      ativo = false;
       if (espera) clearTimeout(espera);
+      marcarCanalDosAvisos(false);
       if (canal) supabase.removeChannel(canal);
     };
   }, [userId, queryClient]);

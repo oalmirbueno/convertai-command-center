@@ -104,6 +104,7 @@ import { lerMapaDeBatidas } from "./modulos/batidas-da-trilha.ts";
 import { kitDaIdentidade } from "./modulos/motion-da-identidade.ts";
 import { situacaoDoWorker } from "../_shared/render-do-editor.ts";
 import { blocoDasAcoesDoMotion, caminhoDoMotion, ESQUEMA_DAS_ACOES_DO_MOTION, type ListasDoMotion, normalizarAcoesDoMotion, regrasDoMotion } from "./acoes-do-motion.ts";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
 
@@ -111,6 +112,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  ...PREFLIGHT_CACHE,
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 

@@ -12,11 +12,11 @@
  */
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { marcasDoCliente, resolverMarca, type MarcaDoCliente } from "../_shared/marca.ts";
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
-import { decodificar } from "../_shared/imagem-local.ts";
+// FN-01: o imagescript só carrega quando uma imagem é aberta (não na partida da função).
+import { jpegSobreBranco } from "../_shared/imagem-sob-demanda.ts";
 import { ehImagemDoPdf, type ImagemDoPdf, imagemParaPdf } from "../_shared/pdf-base.ts";
 import { candidatosAProva, FONTES, type PedidoDeRegistro } from "./modulos/registro-de-entrega.ts";
 import {
@@ -136,9 +136,7 @@ export async function identidadeDaCapa(s: SupabaseClient, clientId: string, marc
     if (ehImagemDoPdf(direta)) return { logo: direta, cor };
     if (!((r.largura || 0) * (r.altura || 0) <= MAX_PIXELS_DA_LOGO) || !r.largura) return { logo: null, cor };
     // PNG com transparência ou WebP: fundo branco e JPEG.
-    const aberta = await decodificar(r.bytes);
-    const fundo = new Image(aberta.width, aberta.height).fill(0xffffffff).composite(aberta, 0, 0);
-    const jpeg = imagemParaPdf(await fundo.encodeJPEG(90));
+    const jpeg = imagemParaPdf(await jpegSobreBranco(r.bytes, 90));
     return { logo: ehImagemDoPdf(jpeg) ? jpeg : null, cor };
   } catch (e) {
     registrarFalha("documentos: logo do cliente não abriu para a capa", e, { client_id: clientId });

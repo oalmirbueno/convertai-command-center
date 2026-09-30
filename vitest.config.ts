@@ -8,6 +8,9 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
+    // Acima do prazo das esperas (5 s em src/test/setup.ts): a espera que falha
+    // mostra o DOM em vez de virar "Test timed out".
+    testTimeout: 15000,
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     env: {
       VITE_SUPABASE_URL: "https://ci-placeholder.supabase.co",

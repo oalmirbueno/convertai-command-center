@@ -29,6 +29,7 @@ import {
   type RegraDaOperacao,
   regraDasAcoes,
 } from "../_shared/acoes-do-agente.ts";
+import { registrarSeFalhar } from "../_shared/falha-registrada.ts";
 import { caminhoNaArea } from "../_shared/mapa-do-painel.ts";
 
 export const AGENTE_DO_LANCADOR = "aceleriq";
@@ -384,7 +385,7 @@ export async function reverterItemDoLancador(
     const { error } = await db.from("agente_memoria").update({ ativa: false }).eq("id", id).eq("client_id", clientId);
     if (error) throw new Error("Não foi possível tirar a nota do cérebro.");
     const antigas = Array.isArray(d.substituidos) ? (d.substituidos as unknown[]).map(String).filter((x) => UUID.test(x)) : [];
-    if (antigas.length) await Promise.resolve(db.from("agente_memoria").update({ ativa: true, substituida_por: null }).in("id", antigas).eq("client_id", clientId)).then(() => undefined, () => undefined);
+    if (antigas.length) await Promise.resolve(db.from("agente_memoria").update({ ativa: true, substituida_por: null }).in("id", antigas).eq("client_id", clientId)).then(...registrarSeFalhar("voice-assistant-agent: notas substituidas nao reativadas", { client_id: clientId, ids: antigas.length }));
     return;
   }
   const tarefaId = String(d.tarefa_id || "");

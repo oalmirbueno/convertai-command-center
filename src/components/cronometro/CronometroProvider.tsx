@@ -204,6 +204,17 @@ export function useCronometro(): Instantaneo {
   return useSyncExternalStore(assinar, ler, instantaneoInativo);
 }
 
+const semCliente = () => null;
+
+/** Só o cliente em foco: não redesenha a cada segundo do relógio (o Voltar do topo). */
+export function useClienteDoCronometro(): string | null {
+  const ctx = useContext(ContextoDoCronometro);
+  const motor = ctx ? ctx.motor : null;
+  const assinar = useMemo(() => (motor ? (ouvinte: () => void) => motor.assinar(ouvinte) : semAssinatura), [motor]);
+  const ler = useMemo(() => (motor ? () => motor.clienteEmFoco() : semCliente), [motor]);
+  return useSyncExternalStore(assinar, ler, semCliente);
+}
+
 /**
  * A tela diz em que cliente a pessoa está trabalhando quando isso não está no
  * endereço. `null` = nenhum (a tela continua contando pelo endereço, se houver).

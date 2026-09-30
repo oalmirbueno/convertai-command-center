@@ -1,12 +1,14 @@
 import * as React from 'npm:react@18.3.1'
 import { renderAsync } from 'npm:@react-email/components@0.0.22'
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
+import { corsHeaders as corsDoSupabase } from 'npm:@supabase/supabase-js@2/cors'
 import { TEMPLATES } from '../_shared/transactional-email-templates/registry.ts'
 import {
   EMAIL_FROM_DOMAIN,
   EMAIL_SITE_NAME,
 } from '../_shared/email-config.ts'
+// O navegador guarda a resposta do preflight (OPTIONS) em vez de perguntar de novo a cada chamada.
+const corsHeaders = { ...corsDoSupabase, 'Access-Control-Max-Age': '7200' }
 
 const FROM_LOCAL_PART = "notify"
 

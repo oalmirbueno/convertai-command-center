@@ -9,13 +9,15 @@
 // itens acionáveis, já no contexto daquele cliente. Rápido de propósito:
 // poucos itens, frases curtas, sem enfeite.
 
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { corsHeaders as corsDoSupabase } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   DEFAULT_LOVABLE_MODEL_CHAIN,
   requestAiChatCompletion,
   resolveAiProviderChain,
 } from "../_shared/ai-provider.ts";
+// O navegador guarda a resposta do preflight (OPTIONS) em vez de perguntar de novo a cada chamada.
+const corsHeaders = { ...corsDoSupabase, "Access-Control-Max-Age": "7200" };
 
 const PRIMARY_MODEL_CHAIN = ["gpt-4o-mini"];
 

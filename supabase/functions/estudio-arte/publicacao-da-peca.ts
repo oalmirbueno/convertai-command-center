@@ -94,7 +94,8 @@ export function acoesDaPublicacaoDaPeca(d: DepsDaPublicacao) {
   async function publicacaoPerfis(ch: Chamador, corpo: Record<string, unknown>) {
     const t = await trabalhoSocial(ch, corpo);
     try {
-      const r = await perfisDaPeca(d.servico(), t);
+      // Conexões com o JWT de quem chamou: o service_role não lê external_account_connections (E06).
+      const r = await perfisDaPeca(d.servico(), t, ch.doChamador);
       return d.json({ trabalho_id: t.id, project_id: r.projectId, perfis: r.perfis });
     } catch (e) {
       return comoErro(e);

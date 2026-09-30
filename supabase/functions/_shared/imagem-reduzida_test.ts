@@ -4,9 +4,9 @@
  * pixels, o recorte na proporção e a ordem cópia do painel → original, e que
  * nenhum download leva opção de transformação.
  *
- *   deno test --allow-net=deno.land supabase/functions/_shared/imagem-reduzida_test.ts
+ *   deno test supabase/functions/_shared/imagem-reduzida_test.ts
  */
-import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
+import { Image } from "./imagescript.ts";
 import { recortarNaProporcao, reduzirParaCaber, reduzirPorArea } from "./imagem-local.ts";
 import { reduzidaSemTransformacao } from "./imagem-reduzida.ts";
 

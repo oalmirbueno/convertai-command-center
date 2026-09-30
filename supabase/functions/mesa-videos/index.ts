@@ -168,6 +168,7 @@ import {
   templateSalvar,
 } from "./diretor.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 /** Direção de edição do pacote (motor mesa_videos.direcao_de_edicao em motores.ts). */
 const CONHECIMENTO_DA_EDICAO = conhecimentoEdicao("pacote").texto;
@@ -176,6 +177,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  ...PREFLIGHT_CACHE,
 };
 
 const json = (body: unknown, status = 200) =>

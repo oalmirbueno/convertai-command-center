@@ -281,6 +281,7 @@ import {
   qualidadeDaMeta,
   videoDaMeta,
 } from "./gerenciador.ts";
+import { leituraGravadaRecente } from "./guarda-do-gerenciador.ts";
 import { montarRelatorioDeAnuncios, type MetricasParaRelatorio } from "./relatorio-ads.ts";
 import { type CandidatoDaOrdem, candidatosDaOrdem, citadosNaMensagem, decidirOrdem, type EscolhaDeAlvo, pareceOrdemDireta, perguntasDaOrdem, trechoParaBuscarNaMeta } from "./ordem-direta.ts";
 import { configDaLinha, type DepsDaRodada, type LinhaDaRotina, type RegistroDaRotina, retratoDaContaAoVivo, rodarRotina } from "./rotina-rodada.ts";
@@ -372,15 +373,17 @@ import {
   sinaisDaOferta,
 } from "./melhores-criativos.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
-import { registrarFalha } from "../_shared/falha-registrada.ts";
+import { registrarFalha, registrarSeFalhar } from "../_shared/falha-registrada.ts";
 // Frente AG3 (29/09): o tráfego aprende com o dono (Jev decide se é regra), obedece e devolve "Aprendi"/"Segui".
 import { anexosDoAprendizado, blocoDasRegras, esquecerRegra, type RegraAtiva, regrasDoAgente, regrasSeguidas } from "../_shared/aprender-com-o-dono.ts";
 import { aprenderNoServidor, guardarNoServidor } from "../_shared/aprender-no-servidor.ts";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  ...PREFLIGHT_CACHE,
 };
 
 const json = (body: unknown, status = 200) =>
@@ -8120,7 +8123,7 @@ async function mandarAoDossie(servico: SupabaseClient, clientId: string, criadoP
     created_by: criadoPor,
   });
   if (error) console.error("[mesa-ads] dossie: movimento nao gravado", { code: error.code });
-  await servico.rpc("dossie_enfileirar", { _client_id: clientId, _motivo: "mesa_ads_trafego" }).then(() => undefined, () => undefined);
+  await Promise.resolve(servico.rpc("dossie_enfileirar", { _client_id: clientId, _motivo: "mesa_ads_trafego" })).then(...registrarSeFalhar("mesa-ads: dossie_enfileirar falhou", { client_id: clientId }));
 }
 
 /** Aviso para quem cuida do cliente (um fato, um aviso; avisar_equipe_do_cliente, SQL N-01). */
@@ -8401,7 +8404,8 @@ async function travarRodada(servico: SupabaseClient, clientId: string): Promise<
 }
 
 async function soltarRodada(servico: SupabaseClient, clientId: string) {
-  await servico.from("ads_rotina").update({ rodando_desde: null }).eq("client_id", clientId).then(() => undefined, () => undefined);
+  // Não lança: a trava se solta sozinha em 10 min (pegarRodada); a falha vai para o log.
+  await Promise.resolve(servico.from("ads_rotina").update({ rodando_desde: null }).eq("client_id", clientId)).then(...registrarSeFalhar("mesa-ads: trava da rodada nao solta", { client_id: clientId }));
 }
 
 /** As dependências reais da rodada (banco, Meta, Jev, avisos, dossiê). `ator` = quem ligou a rotina. */
@@ -8605,6 +8609,17 @@ const CAMPOS_DOS_ANUNCIOS = "id,name,campaign_id,adset_id,status,effective_statu
 
 const tabelaDoGerenciadorAusente = (e: { code?: string; message?: string } | null | undefined) =>
   !!e && (e.code === "42P01" || e.code === "PGRST205" || e.code === "PGRST204" || /ads_gerenciador/.test(String(e.message ?? "")));
+
+/**
+ * FN-04 (30/09): cada pedido sobe uma instância nova da função, então as guardas em memória acima quase
+ * nunca valem. Esta pergunta ao banco se há leitura gravada do cliente dentro da janela. Consulta que
+ * falha segue como antes (responde "não") e vai para o log, menos quando a tabela ainda não existe.
+ */
+async function leituraRecenteNoBanco(servico: SupabaseClient, clientId: string, janelaMs: number, soForcadas = false): Promise<boolean> {
+  const r = await leituraGravadaRecente(servico, clientId, janelaMs, Date.now(), soForcadas);
+  if (r.erro && !tabelaDoGerenciadorAusente(r.erro)) console.error("[mesa-ads] guarda do gerenciador sem leitura do banco", { code: r.erro.code ?? null });
+  return r.recente;
+}
 
 type EstruturaDaConta = {
   conta: ContaNoGerenciador;
@@ -8853,6 +8868,8 @@ async function lerGerenciador(servico: SupabaseClient, clientId: string, periodo
 async function gravarLeituraDoGerenciador(servico: SupabaseClient, clientId: string, userId: string, l: Awaited<ReturnType<typeof lerGerenciador>>, forcada: boolean): Promise<string | null> {
   const agora = Date.now();
   if (!forcada && agora - (gravadasDoGerenciador.get(clientId) ?? 0) < GRAVAR_LEITURA_A_CADA_MS) return null;
+  // FN-04: a regra "uma a cada 10 min" vale entre instâncias pela última linha gravada (forçada ou não).
+  if (!forcada && (await leituraRecenteNoBanco(servico, clientId, GRAVAR_LEITURA_A_CADA_MS))) return null;
   gravadasDoGerenciador.set(clientId, agora);
   const { error } = await servico.from("ads_gerenciador_leituras").insert({
     client_id: clientId,
@@ -8895,7 +8912,12 @@ async function gerenciadorLer(servico: SupabaseClient, chamador: Chamador, corpo
   let forcada = false;
   const inicioDoPedido = Date.now();
   // "forcar" também vale (nome usado no teste real), igual a "ao_vivo".
-  if ((corpo.ao_vivo === true || corpo.forcar === true) && Date.now() - (forcadasDoGerenciador.get(clientId) ?? 0) >= RELEITURA_FORCADA_MIN_MS) {
+  // FN-04: o limite de 15 s do forçado vale entre instâncias pela última leitura forçada gravada.
+  if (
+    (corpo.ao_vivo === true || corpo.forcar === true) &&
+    Date.now() - (forcadasDoGerenciador.get(clientId) ?? 0) >= RELEITURA_FORCADA_MIN_MS &&
+    !(await leituraRecenteNoBanco(servico, clientId, RELEITURA_FORCADA_MIN_MS, true))
+  ) {
     forcadasDoGerenciador.set(clientId, Date.now());
     leiturasDoGerenciador.esquecer(`${clientId}:`);
     forcada = true;

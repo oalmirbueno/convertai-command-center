@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { LazyMotion, domAnimation, m, AnimatePresence } from "framer-motion";
 import { Mic, MicOff, Sparkles, X, Paperclip, Loader2, CheckCircle2, AlertCircle, FileText, ArrowRight, Edit3, Undo2, Brain, MessageSquare } from "lucide-react";
 import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
@@ -1373,9 +1373,10 @@ export default function VoiceAssistant({
     && !files.length && !systemDocs.length && !systemDocsLoading && !fileReading;
 
   return (
+    <LazyMotion features={domAnimation}>
     <AnimatePresence>
       {open && (
-        <motion.section
+        <m.section
           role="dialog"
           aria-label="Aceleriq, agente com voz e IA"
           data-painel-aceleriq=""
@@ -2123,8 +2124,9 @@ export default function VoiceAssistant({
                   </div>
                 )}
               </div>
-        </motion.section>
+        </m.section>
       )}
     </AnimatePresence>
+    </LazyMotion>
   );
 }

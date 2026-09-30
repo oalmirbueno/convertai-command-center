@@ -17,7 +17,7 @@
 import type { AcaoDoAgente, ItemDaAcaoDoAgente, ResultadoDoItem } from "../_shared/acoes-do-agente.ts";
 import { pastaDoBrandBook } from "./modulos/identidade-visual.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
-import { registrarFalha } from "../_shared/falha-registrada.ts";
+import { registrarFalha, registrarSeFalhar } from "../_shared/falha-registrada.ts";
 
 // deno-lint-ignore no-explicit-any
 export type ServicoDoPlano = { from: (tabela: string) => any };
@@ -265,7 +265,7 @@ export async function executarItemDoPlano(
       const coluna = alternativa ? "logo_alt_path" : "logo_path";
       await gravarKit(db, clientId, { [coluna]: caminho }, deps);
       // Clara ou escura era da logo anterior: zera (sem a coluna, só segue).
-      await Promise.resolve(db.from("cliente_kit_marca").update({ [alternativa ? "logo_alt_tom" : "logo_tom"]: null }).eq("client_id", clientId)).then(() => undefined, () => undefined);
+      await Promise.resolve(db.from("cliente_kit_marca").update({ [alternativa ? "logo_alt_tom" : "logo_tom"]: null }).eq("client_id", clientId)).then(...registrarSeFalhar("agente-contexto: tom da logo nao zerado", { client_id: clientId }));
       return { desfazer: { alternativa, caminho: kit ? (kit as Record<string, unknown>)[coluna] ?? null : null } };
     }
     default:
@@ -325,7 +325,7 @@ export async function reverterItemDoPlano(db: ServicoDoPlano, clientId: string, 
     case "kit_logo": {
       const alternativa = d.alternativa === true;
       await gravarKit(db, clientId, { [alternativa ? "logo_alt_path" : "logo_path"]: (d.caminho as string | null) ?? null }, deps);
-      await Promise.resolve(db.from("cliente_kit_marca").update({ [alternativa ? "logo_alt_tom" : "logo_tom"]: null }).eq("client_id", clientId)).then(() => undefined, () => undefined);
+      await Promise.resolve(db.from("cliente_kit_marca").update({ [alternativa ? "logo_alt_tom" : "logo_tom"]: null }).eq("client_id", clientId)).then(...registrarSeFalhar("agente-contexto: tom da logo nao zerado", { client_id: clientId }));
       return;
     }
   }

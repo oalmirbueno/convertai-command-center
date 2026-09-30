@@ -108,7 +108,7 @@ const cliente = (extra: Omit<Partial<ClienteDaFila>, "meses"> & { meses?: MesSim
 
 const resposta = (clientes: ClienteDaFila[], acesso = true): RespostaDaFila => ({ versao: 1, hoje: HOJE, acesso_conhecido: acesso, clientes, origem: "banco" });
 
-beforeAll(() => {
+beforeAll(async () => {
   if (typeof (globalThis as any).ResizeObserver === "undefined") {
     (globalThis as any).ResizeObserver = class {
       observe() {}
@@ -116,7 +116,10 @@ beforeAll(() => {
       disconnect() {}
     };
   }
-});
+  // PainelDeCustos é lazy na página: carregar o módulo aqui tira a transformação
+  // a frio de dentro do prazo do findByRole (o teste fica estável sob carga).
+  await import("@/components/mesa/PainelDeCustos");
+}, 60000);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -421,7 +424,7 @@ describe("Mesa: fila na entrada e botões no topo", () => {
     expect(screen.getByTestId("endereco").textContent).toContain("painel=prioridades");
 
     fireEvent.click(screen.getByRole("button", { name: "Custos de produção" }));
-    expect(await screen.findByRole("heading", { name: "Custos de produção" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Custos de produção" }, { timeout: 8000 })).toBeTruthy();
     expect(screen.getByTestId("endereco").textContent).toContain("painel=custos");
     // Começa filtrado no cliente aberto.
     expect((screen.getByRole("combobox", { name: "Cliente" }) as HTMLSelectElement).value).toBe(A);

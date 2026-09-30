@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { FileText, Sparkles } from "lucide-react";
-import { NotesPreview } from "@/components/workspace/StudioPanel";
+import { NotesPreview } from "@/components/workspace/NotesPreview";
 import { Carregando, EstadoVazio, Painel, etiqueta, juntar, texto } from "@/components/sistema";
 
 interface Props { projectId: string }

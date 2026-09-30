@@ -302,11 +302,13 @@ import { blocoDaIdentificacaoNoPedido, kitsComIdentificacao, legendaDaReferencia
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  ...PREFLIGHT_CACHE,
 };
 
 const json = (body: unknown, status = 200) =>
@@ -4431,6 +4433,17 @@ const comoErroDaFoto = (e: unknown) => (e instanceof ErroDaAcao ? new ErroHttp(e
  * JWT de quem confirmou) e devolve o corpo. Erro vira exceção com a frase da
  * própria ação (saldo, autorização, arquivo), que vai para o item da lista.
  */
+/**
+ * Erro de uma ação chamada por dentro (diretor): a mesma frase de antes, mais o status e o código que a
+ * ação respondeu (FN-05 e FN-09, 30/09). O código fica em `codigoDaAcao` (não em `codigo`), para não
+ * mudar como falha-registrada trata saldo, cota e chave.
+ */
+class ErroDaAcaoInterna extends Error {
+  constructor(mensagem: string, public status: number, public codigoDaAcao: string | null) {
+    super(mensagem);
+  }
+}
+
 async function chamarAcaoInterna(acao: string, ch: Chamador, corpo: Record<string, unknown>): Promise<Record<string, unknown>> {
   const fn = ACOES[acao];
   if (!fn) throw new Error(`Ação desconhecida: ${acao}.`);
@@ -4442,7 +4455,11 @@ async function chamarAcaoInterna(acao: string, ch: Chamador, corpo: Record<strin
   }
   const corpoDaResposta = await r.json().catch(() => ({})) as Record<string, unknown>;
   if (!r.ok || typeof corpoDaResposta.error === "string") {
-    throw new Error(String(corpoDaResposta.mensagem || corpoDaResposta.error || "Não foi possível."));
+    throw new ErroDaAcaoInterna(
+      String(corpoDaResposta.mensagem || corpoDaResposta.error || "Não foi possível."),
+      r.status,
+      typeof corpoDaResposta.error === "string" ? corpoDaResposta.error : null,
+    );
   }
   return corpoDaResposta;
 }
@@ -4484,6 +4501,8 @@ const DIRETOR = acoesDoDiretor(FERRAMENTAS, {
       correlationId: crypto.randomUUID(), toolName: e.toolName, origin: "mesa:mesa-foto",
       keyId: `mesa:mesa-foto:${e.ch.userId}`, scopes: ["files:write"],
       input: e.input, success: e.success, statusCode: 200, durationMs: e.durationMs, resultRef: e.resultRef,
+      // FN-09: a falha do item vai para a auditoria (auditLog limpa a mensagem); a resposta HTTP segue 200.
+      errorCode: e.errorCode ?? null, errorMessage: e.errorMessage ?? null,
     }),
 });
 

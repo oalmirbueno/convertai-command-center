@@ -3,6 +3,7 @@ import { EMAIL_APP_URL as PORTAL_URL } from "../_shared/email-config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Max-Age": "7200",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };

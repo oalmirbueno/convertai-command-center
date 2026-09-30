@@ -12,8 +12,9 @@
  *   editor aberta no complemento das áreas e devolverOriginalForaDasAreas).
  */
 
-import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
-import { cobrir, decodificar, devolverOriginalForaDasAreas, mascara } from "../_shared/imagem-local.ts";
+import type { Image } from "../_shared/imagescript.ts";
+// FN-01: imagem-local.ts carrega só quando uma foto é aberta (não na partida da função).
+import { cobrir, decodificar, devolverOriginalForaDasAreas, imagescript, mascara } from "../_shared/imagem-sob-demanda.ts";
 import { type Area, complementoDasAreas } from "./calculos.ts";
 
 const tamanhoDe = (t: string) => {
@@ -108,6 +109,7 @@ export async function comporSobreBranco(recorte: Uint8Array, sombra = true): Pro
   const caixa = caixaDoAssunto(img);
   if (!caixa) throw new Error("recorte_vazio");
   const W = img.width, H = img.height;
+  const { Image } = await imagescript();
   const saida = new Image(W, H);
   saida.fill(0xffffffff);
   if (sombra) {

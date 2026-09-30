@@ -2,8 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { supabase } from "@/integrations/supabase/client";
 import { notifyOpsProfile } from "@/lib/opsSync";
 import { notifyAdmin } from "@/lib/notifyHelpers";
-import { safeSessionStorage } from "@/lib/safeStorage";
-import { definirAutoMiniaturas } from "@/lib/miniaturas";
+import { safeSessionStorage, safeStorage } from "@/lib/safeStorage";
+import { definirAutoMiniaturas, definirDonoDasUrls } from "@/lib/miniaturas";
 import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import type { AuthError, User } from "@supabase/supabase-js";
 
@@ -164,6 +164,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // recomeçava como se o painel tivesse reiniciado (24/09/2026).
       // Equipe grava as miniaturas que faltam das imagens que abre (cota de transformação, 26/09).
       definirAutoMiniaturas(next.role !== "client", next.role === "admin");
+      // Dica do papel para o próximo boot baixar a tela certa junto com o login
+      // (src/lib/preCargaDoBoot.ts). Só escolhe o download; a tela continua
+      // decidida por este perfil, vindo do servidor.
+      safeStorage.set(`aceleriq:papel:${next.id}`, next.role);
       const igual = !!profileRef.current && JSON.stringify(profileRef.current) === JSON.stringify(next);
       if (!igual) {
         profileRef.current = next;
@@ -271,6 +275,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (event === "SIGNED_OUT") {
         sessaoRespondeu.current = true;
         definirAutoMiniaturas(false);
+        // Nenhuma URL assinada nesta sessão passa para a próxima (miniaturas.ts e fileUrls.ts).
+        definirDonoDasUrls(null);
         setUser(null);
         setProfile(null);
         profileRef.current = null;
@@ -282,6 +288,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // e sem papel quando a renovação da abertura passava de 8 s, e a
         // /mesa caía no /dashboard.
         sessaoRespondeu.current = true;
+        definirDonoDasUrls(session.user.id);
         // Mesmo usuário (só o token renovou ou a aba voltou ao foco): mantém o
         // objeto para as telas não recomeçarem.
         setUser((anterior) =>
@@ -372,6 +379,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     await supabase.auth.signOut();
     definirAutoMiniaturas(false);
+    definirDonoDasUrls(null);
     setUser(null);
     setProfile(null);
     profileRef.current = null;

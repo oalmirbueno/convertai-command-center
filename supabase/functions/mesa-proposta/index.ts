@@ -128,6 +128,7 @@ import { avisosDaRevisao, type ConferenciaDoDado, lerConferencia, PERGUNTAS_DA_R
 // Frente PRO3 (30/09): proposta de upsell (o que o cliente já tem e os resultados reais).
 import { blocoJaTem, materialDoUpsell, NOME_DO_MATERIAL_DO_UPSELL, TITULO_DO_PROXIMO_PASSO, type UpsellDaProposta } from "./modulos/proposta-upsell.ts";
 import { retratoDoCliente } from "./upsell.ts";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
 
@@ -135,6 +136,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  ...PREFLIGHT_CACHE,
 };
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });

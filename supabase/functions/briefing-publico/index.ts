@@ -30,6 +30,7 @@ import { transcrever } from "./transcrever.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Max-Age": "7200",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-briefing-token, x-briefing-acao, x-briefing-campo, x-briefing-categoria, x-briefing-nome, x-briefing-pedido, x-briefing-duracao",
   "Access-Control-Allow-Methods": "POST, OPTIONS",

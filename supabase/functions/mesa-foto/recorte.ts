@@ -16,8 +16,9 @@
  * local (ver docs/mesa-foto/CLONES.md, seção "Tirar fundo").
  */
 
-import type { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
-import { type Alinhamento, cobrir, decodificar, IDENTIDADE } from "../_shared/imagem-local.ts";
+import type { Image } from "../_shared/imagescript.ts";
+// FN-01: imagem-local.ts carrega só quando uma foto é aberta (não na partida da função).
+import { type Alinhamento, cobrir, decodificar, IDENTIDADE } from "../_shared/imagem-sob-demanda.ts";
 
 /**
  * Lado maior da foto no "Tirar fundo": decodificar JPEG é o passo mais caro

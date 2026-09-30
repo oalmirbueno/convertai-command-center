@@ -441,6 +441,11 @@ export class MotorDoCronometro {
     };
   }
 
+  /** Só o cliente em foco (igual a instantaneo().cliente), sem ler a posse no navegador. */
+  clienteEmFoco(): string | null {
+    return this.ctx.ativo ? this.ctx.cliente : null;
+  }
+
   trechoAberto(): Trecho | null {
     return this.trecho ? { ...this.trecho } : null;
   }

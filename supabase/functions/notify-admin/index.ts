@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { resolvePublicAppUrl } from "../_shared/public-url.ts";
 import { comOrigemDoPainel } from "../_shared/origem-do-painel.ts";
 import { notificationReadRows, notificationWriteResponse, type NotificationRow } from "./modulos/notification-write-response.ts";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 const MAX_REQUEST_BYTES = 16 * 1024;
 const APP_ORIGIN = new URL(resolvePublicAppUrl()).origin;
@@ -14,6 +15,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Vary": "Origin",
+  ...PREFLIGHT_CACHE,
 };
 
 // Origem conferida (e o CORS acertado) pelo embrulho: painel, www, prévia do

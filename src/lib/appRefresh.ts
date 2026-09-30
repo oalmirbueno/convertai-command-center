@@ -237,14 +237,30 @@ async function fetchLatestBuildId(): Promise<string | null> {
 }
 
 /**
+ * O vigia já sabe que saiu versão nova (e espera a pessoa voltar à aba para
+ * recarregar). Mora no módulo para a recuperação de pedaço usar também.
+ */
+let updatePending = false;
+
+/**
+ * Um pedaço da versão anterior não baixou e a recarga para a versão nova já
+ * está a caminho. Nesse meio tempo a tela aberta quebra (o import devolve
+ * nada), e a barreira de erro da rota usa isto para mostrar "Atualizando o
+ * painel" no lugar de "Algo travou nesta tela" com um erro técnico.
+ */
+let atualizandoVersao = false;
+
+export function atualizandoPorVersao(): boolean {
+  return atualizandoVersao;
+}
+
+/**
  * Vigia de versão: compara o carimbo do app carregado com o publicado.
  * Atualiza na abertura e sempre que a pessoa volta para o painel (o momento
  * clássico do PWA que ficou dias em segundo plano).
  */
 export function startVersionWatch() {
   if (BUILD_ID === "dev") return;
-
-  let updatePending = false;
 
   const check = async (reloadNow: boolean) => {
     const latest = await fetchLatestBuildId();
@@ -265,23 +281,45 @@ export function startVersionWatch() {
   window.setInterval(() => void check(false), 4 * 60_000);
 }
 
-/** Escuta TODAS as formas que um pedaço antigo tem de falhar, em todo navegador. */
-export function installChunkErrorRecovery() {
-  window.addEventListener("vite:preloadError", (event) => {
+/**
+ * Escuta TODAS as formas que um pedaço antigo tem de falhar, em todo navegador.
+ * Devolve a função que desliga as escutas (usada nos testes).
+ */
+export function installChunkErrorRecovery(): () => void {
+  // Depois de uma publicação, a hospedagem apaga os arquivos da anterior e o
+  // primeiro clique de quem está com o painel aberto pede um pedaço que sumiu.
+  // A recarga é a mesma de antes; o que muda é a tela enquanto ela sai:
+  // "Atualizando o painel" em vez de "Algo travou" (ver RouteErrorBoundary).
+  // Se o vigia já sabia da versão nova, a recarga é a de ATUALIZAÇÃO, que não
+  // gasta as tentativas de emergência.
+  const aoFalharPreCarga = (event: Event) => {
     event.preventDefault();
-    hardRefresh();
-  });
+    atualizandoVersao = true;
+    const recarregou = (updatePending && updateReload()) || hardRefresh();
+    // Sem rede ou sem tentativas: a recarga não sai e a tela de erro manual
+    // continua aparecendo como antes.
+    if (!recarregou) atualizandoVersao = false;
+  };
 
-  window.addEventListener("error", (event) => {
+  const aoErro = (event: ErrorEvent) => {
     if (isStrictChunkError(event?.message)) hardRefresh();
-  });
+  };
 
   // Safari/iOS reporta import dinâmico quebrado como promise rejeitada.
-  window.addEventListener("unhandledrejection", (event) => {
-    const reason = (event as PromiseRejectionEvent).reason;
+  const aoRejeitar = (event: PromiseRejectionEvent) => {
+    const reason = event.reason;
     if (isStrictChunkError(reason)) {
       event.preventDefault();
       hardRefresh();
     }
-  });
+  };
+
+  window.addEventListener("vite:preloadError", aoFalharPreCarga);
+  window.addEventListener("error", aoErro);
+  window.addEventListener("unhandledrejection", aoRejeitar);
+  return () => {
+    window.removeEventListener("vite:preloadError", aoFalharPreCarga);
+    window.removeEventListener("error", aoErro);
+    window.removeEventListener("unhandledrejection", aoRejeitar);
+  };
 }

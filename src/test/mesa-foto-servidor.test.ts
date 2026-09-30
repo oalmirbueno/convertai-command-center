@@ -633,7 +633,8 @@ describe("função mesa-foto (contrato pelo código)", () => {
       "mascaraProtegendo(", '"recorte_ou_area_necessaria"', '"fundo_nao_veio_transparente"', "tamanhoFixo: true", "derivada_de: imagem.id",
     ]) expect(p, trecho).toContain(trecho);
     expect(imagemFonte).toContain("devolverOriginalForaDasAreas(original, gerado, complementoDasAreas(protegidas)");
-    expect(imagemFonte).toContain('from "../_shared/imagem-local.ts"');
+    // FN-01 (30/09): as mesmas funções de imagem-local.ts, carregadas sob demanda (não na partida da função).
+    expect(imagemFonte).toContain('from "../_shared/imagem-sob-demanda.ts"');
   });
 
   it("aprovar cria a derivada no acervo com linhagem; enviar usa create_file_record e a revisão da agência", () => {
@@ -1822,7 +1823,8 @@ describe("clones: autorização e regras duras", () => {
 describe("tirar fundo: pixels originais com o alfa alinhado", () => {
   it("o recorte usa só o alfa do gerador, alinhado, na foto original, e erra explícito quando não serve", () => {
     const r = ler("supabase/functions/mesa-foto/recorte.ts");
-    expect(r).toContain('from "../_shared/imagem-local.ts"');
+    // FN-01 (30/09): as mesmas funções de imagem-local.ts, carregadas sob demanda (não na partida da função).
+    expect(r).toContain('from "../_shared/imagem-sob-demanda.ts"');
     expect(r).toContain("ob[i + 3] = final;");
     expect(r).not.toMatch(/ob\[i\] = |ob\[i \+ 1\] = |ob\[i \+ 2\] = /);
     expect(r).toContain("export const LADO_DO_RECORTE = 1600;");

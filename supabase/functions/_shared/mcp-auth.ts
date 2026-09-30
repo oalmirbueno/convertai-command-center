@@ -361,6 +361,44 @@ async function dataScopeForUser(
   };
 }
 
+// Escopo de dados de uma chave de API que não tem o escopo 'admin'.
+//
+// API keys are owned by the user who created them. A legacy key with no owner
+// is authenticated but receives an empty, fail-closed data scope instead of
+// inheriting service_role visibility.
+//
+// Frente PERF-banco (B05): a RPC validate_api_key_for_audience já devolve o
+// dono (created_by) e se ele é admin (owner_is_admin), lidos na mesma
+// transação da validação. Antes o código relia created_by em api_keys e depois
+// user_roles: 3 idas ao banco em série em toda chamada do Hermes (cerca de
+// 4.100 por dia cada, ~80 ms cada). Agora:
+//   * dono admin: escopo irrestrito direto (mesmo resultado de
+//     dataScopeForUser para um admin), sem nenhuma leitura extra;
+//   * dono da equipe: segue lendo papéis e atribuições (precisa delas);
+//   * sem dono: escopo vazio (fail closed), sem leitura extra;
+//   * RPC antiga, sem a coluna created_by: mantém a leitura de antes.
+export async function dataScopeForApiKeyRow(row: {
+  id?: unknown;
+  created_by?: unknown;
+  owner_is_admin?: unknown;
+}): Promise<ClientDataScope> {
+  let ownerId: string | null;
+  if (row.created_by === undefined) {
+    const { data: keyOwner } = await admin()
+      .from('api_keys')
+      .select('created_by')
+      .eq('id', row.id)
+      .maybeSingle();
+    ownerId = keyOwner?.created_by ? String(keyOwner.created_by) : null;
+  } else {
+    ownerId = typeof row.created_by === 'string' && row.created_by ? row.created_by : null;
+  }
+  if (ownerId && row.owner_is_admin === true) {
+    return { unrestricted: true, clientIds: [], principalUserId: ownerId, source: 'api_key' };
+  }
+  return dataScopeForUser(ownerId, 'api_key');
+}
+
 export function canAccessClient(ctx: AuthContext, clientId: string): boolean {
   return dataScopeAllowsClient(ctx.dataScope, clientId);
 }
@@ -394,18 +432,7 @@ export async function authenticate(req: Request): Promise<AuthResult> {
           source: 'api_key',
         };
       } else {
-        // API keys are owned by the user who created them. A legacy key with
-        // no owner is authenticated but receives an empty, fail-closed data
-        // scope instead of inheriting service_role visibility.
-        const { data: keyOwner } = await admin()
-          .from('api_keys')
-          .select('created_by')
-          .eq('id', row.id)
-          .maybeSingle();
-        dataScope = await dataScopeForUser(
-          keyOwner?.created_by ? String(keyOwner.created_by) : null,
-          'api_key',
-        );
+        dataScope = await dataScopeForApiKeyRow(row);
       }
       return {
         ok: true,

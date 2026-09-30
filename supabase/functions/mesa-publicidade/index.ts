@@ -117,6 +117,7 @@ import { estimarComModelo } from "../_shared/ia-motor.ts";
 import { AVISO_SEM_REGISTRO, blocoDaReferencia, gravarTroca, referenciaDoPedido } from "../_shared/conversa-das-mesas.ts";
 import { anexoDasRegrasSeguidas, aprenderDoPedido, type Aprendido, CAMPOS_DO_APRENDIZADO, regrasDaMesa, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
 import { alvosDaPublicidade, type CustosDaPublicidade, itensDaReferenciaDaPublicidade, respostaPromete } from "./acoes-da-publicidade.ts";
+import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 /** Cérebro e dossiê do cliente para o agente (cache curto; padrão do diretor de fotografia). */
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
@@ -125,6 +126,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  ...PREFLIGHT_CACHE,
 };
 
 const json = (body: unknown, status = 200) =>

@@ -270,6 +270,8 @@ export type DadosDaImagem = {
   selecionada: boolean;
   pessoa_real: boolean;
   leitura: string | null;
+  /** FN-05: arquivo JPEG (sem alfa), então nunca é recorte. Só o código lê (não vai ao modelo). */
+  jpeg?: boolean;
 };
 export type AlvoDaImagem = Alvo & { dados: DadosDaImagem };
 export type AlvoDoClone = Alvo & { dados: { status: string; autorizacao_ok: boolean; motivo: string | null; reais: string[]; aberto: boolean } };
@@ -392,6 +394,7 @@ export function montarPacote(e: EntradaDoPacote): PacoteDoDiretor {
         selecionada: foco.imagem_ids.indexOf(i.id) >= 0,
         pessoa_real: tags.indexOf("pessoa_real_autorizada") >= 0,
         leitura: textoDaLeitura ? umaLinha(textoDaLeitura, 400) : null,
+        jpeg: ehArquivoJpeg(i.storage_path),
       },
     };
   });
@@ -1107,6 +1110,10 @@ export function normalizarGeracoesDoDiretor(
       } else if (!cenario && !livre) {
         recusar(alvo, operacao, "Diga o cenário da variação (superfície, fundo, luz).");
         continue;
+      } else if (d.jpeg) {
+        // FN-05: sem clone, a variação vai ao Preparar em novo cenário, que recusa foto sem recorte.
+        recusar(alvo, operacao, FRASE_DO_RECORTE_OU_AREA);
+        continue;
       }
     } else if (operacao === "melhorar_foto") {
       if (ehReferenciaDaInternet({ tags: (d.tags as string[]) || [], origem: String(d.origem || "") })) {
@@ -1124,6 +1131,11 @@ export function normalizarGeracoesDoDiretor(
       }
       if (modoPedido === "cenario" && !cenario && !livre) {
         recusar(alvo, operacao, "Diga o cenário novo (superfície, fundo, luz).");
+        continue;
+      }
+      if (modoPedido === "cenario" && d.jpeg) {
+        // FN-05: a execução recusaria cada foto com esta mesma frase; o cartão já avisa antes do Confirmar.
+        recusar(alvo, operacao, FRASE_DO_RECORTE_OU_AREA);
         continue;
       }
     } else if (operacao === "gerar_do_prompt") {
@@ -1311,6 +1323,49 @@ export function resultadoDoItem(acao: AcaoDoAgente, ref: string): ResultadoDoIte
 
 export function itensPendentes(acao: AcaoDoAgente): ItemDaAcaoDoAgente[] {
   return acao.itens.filter((i) => !resultadoDoItem(acao, i.ref));
+}
+
+// ------------------------------------------------------------------ novo cenário sem recorte (FN-05, 30/09)
+//
+// 29/09: 2 cartões de 4 fotos confirmados e as 8 falharam uma a uma com a
+// mesma frase (a foto não tinha recorte nem área marcada), cada uma com
+// pré-voo e partida da função. A mesma foto dá sempre a mesma recusa (409,
+// antes de qualquer cobrança), então a proposta já recusa a foto que com
+// certeza não é recorte (arquivo JPEG) e, na execução, a primeira recusa
+// vale para os outros itens da mesma foto e da mesma rota.
+
+/** Código e frase da recusa do Preparar em novo cenário (iguais aos de mesa-foto/index.ts, conferidos no teste). */
+export const CODIGO_DO_RECORTE_OU_AREA = "recorte_ou_area_necessaria";
+export const FRASE_DO_RECORTE_OU_AREA = "Para novo cenário preservando o assunto, faça antes o fundo transparente desta foto ou marque a área do assunto.";
+
+/** Arquivo JPEG pelo nome (JPEG não tem alfa: nunca é recorte). */
+export function ehArquivoJpeg(caminho: unknown): boolean {
+  return /\.jpe?g$/i.test(String(caminho || ""));
+}
+
+/** O pedido vai ao Preparar em novo cenário preservando o assunto (variação sem clone ou melhorar em modo cenário)? */
+export function pedeNovoCenario(pd: PedidoDaGeracao | null): boolean {
+  if (!pd) return false;
+  if (pd.operacao === "variar_imagem") return !pd.clone_id;
+  return pd.operacao === "melhorar_foto" && pd.modo === "cenario";
+}
+
+/**
+ * A recusa "recorte ou área" de um item vale para os outros itens pendentes
+ * da mesma foto que também pedem novo cenário: grava neles o mesmo resultado
+ * (não feito, mesma frase). Itens de outra foto ou de outra operação seguem.
+ */
+export function comRecusaNosIrmaos(acao: AcaoDoAgente, falhou: ResultadoDoItem, userId: string, agora = new Date().toISOString()): AcaoDoAgente {
+  const origem = pedidoDoItem(acao, falhou.ref);
+  if (falhou.ok || !pedeNovoCenario(origem) || !origem) return acao;
+  let saida = acao;
+  for (const it of itensPendentes(acao)) {
+    if (it.ref === falhou.ref || emAndamento(acao, it.ref)) continue;
+    const pd = pedidoDoItem(acao, it.ref);
+    if (!pd || pd.alvo_id !== origem.alvo_id || !pedeNovoCenario(pd)) continue;
+    saida = comResultadoDoItem(saida, { ref: it.ref, alvo_id: it.alvo_id, titulo: it.titulo, operacao: it.operacao, ok: false, motivo: falhou.motivo }, userId, agora);
+  }
+  return saida;
 }
 
 export function emAndamento(acao: AcaoDoAgente, ref: string, agora = Date.now(), janela = JANELA_DO_ANDAMENTO_MS): boolean {

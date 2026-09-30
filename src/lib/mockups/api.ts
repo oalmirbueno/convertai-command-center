@@ -8,7 +8,7 @@ import { chamarFuncao } from "@/lib/mesa/api";
 import { createFileRecord, confirmStoredObject } from "@/lib/fileRecordActions";
 import { requestFileAgencyReview } from "@/lib/fileApprovalActions";
 import { normalizarMockup, normalizarTextura, ordenarNaSequencia, type ConjuntoDeCamadas, type MockupDoCatalogo, type TexturaDoCatalogo } from "./catalogo";
-import type { CamadasCarregadas } from "./webgl";
+import { liberarDoCompositor, type CamadasCarregadas } from "./webgl";
 
 export const BUCKET_MOCKUPS = "mockups";
 const db = supabase as any;
@@ -63,9 +63,12 @@ export function urlAssinada(caminho: string, bucket = BUCKET_MOCKUPS): Promise<s
 
 /**
  * Baixa a imagem e abre por URL local (blob): o canvas não fica "sujo" e o WebGL pode ler.
- * Fica na memória da página enquanto ela estiver aberta.
+ * Fica na memória até alguém soltar (`esquecerImagem` / `liberarCamadas`): as camadas de um
+ * mockup pesam de 4 MB (trabalho) a 20 MB (alta) cada uma na GPU.
  */
 const imagens = new Map<string, Promise<HTMLImageElement>>();
+/** URL local (blob) de cada imagem aberta, para revogar quando ela sair do cache. */
+const urlLocal = new WeakMap<HTMLImageElement, string>();
 export function carregarImagem(caminho: string, bucket = BUCKET_MOCKUPS): Promise<HTMLImageElement> {
   const chave = `${bucket}:${caminho}`;
   const ja = imagens.get(chave);
@@ -76,14 +79,53 @@ export function carregarImagem(caminho: string, bucket = BUCKET_MOCKUPS): Promis
     const url = URL.createObjectURL(data);
     return await new Promise<HTMLImageElement>((resolve, reject) => {
       const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("Imagem não abriu"));
+      img.onload = () => {
+        urlLocal.set(img, url);
+        resolve(img);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("Imagem não abriu"));
+      };
       img.src = url;
     });
   })();
-  p.catch(() => imagens.delete(chave));
+  p.catch(() => {
+    if (imagens.get(chave) === p) imagens.delete(chave);
+  });
   imagens.set(chave, p);
   return p;
+}
+
+/**
+ * Tira a imagem do cache: revoga o URL local e solta a textura (ou os pixels) do
+ * compositor. Quem pedir de novo baixa de novo. Nada muda na tela: o que já foi
+ * desenhado continua no canvas ou no JPEG da prévia.
+ */
+export function esquecerImagem(caminho: string, bucket = BUCKET_MOCKUPS): void {
+  const chave = `${bucket}:${caminho}`;
+  const p = imagens.get(chave);
+  if (!p) return;
+  imagens.delete(chave);
+  p.then(
+    (img) => {
+      const url = urlLocal.get(img);
+      urlLocal.delete(img);
+      if (url) URL.revokeObjectURL(url);
+      liberarDoCompositor(img);
+    },
+    () => undefined, // falhou ao abrir: não há textura nem URL guardado
+  );
+}
+
+/** Solta as 5 camadas de um mockup (bucket mockups). Logos, texturas e cenas ficam. */
+export function liberarCamadas(conjunto: ConjuntoDeCamadas | null | undefined): void {
+  if (!conjunto) return;
+  esquecerImagem(conjunto.base);
+  esquecerImagem(conjunto.vazio);
+  esquecerImagem(conjunto.ganho);
+  esquecerImagem(conjunto.uv);
+  esquecerImagem(conjunto.mapa);
 }
 
 export async function carregarCamadas(conjunto: ConjuntoDeCamadas, largura: number, altura: number): Promise<CamadasCarregadas> {

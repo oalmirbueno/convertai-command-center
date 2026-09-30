@@ -1,4 +1,6 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { JEV_TIMEOUT_MS } from "../_shared/jev.ts";
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 /**
  * O que e aquele arquivo? Julgamento tipado com TypeSafe (modelo Jev).
@@ -22,6 +24,7 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Max-Age": "7200",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
@@ -116,8 +119,14 @@ async function julgarLote(chave: string, arquivos: Arquivo[]) {
     method: "POST",
     headers: { "Authorization": `Bearer ${chave}`, "Content-Type": "application/json" },
     body: JSON.stringify({ state, model: MODELO, questions }),
+    // FN-13 (30/09): com prazo, como _shared/jev.ts. O TypeSafe travado não prende a função até o
+    // limite da plataforma nem deixa a rodada seguinte do cron se sobrepor a esta.
+    signal: AbortSignal.timeout(JEV_TIMEOUT_MS),
   });
-  if (!res.ok) throw new Error(`typesafe_${res.status}`);
+  if (!res.ok) {
+    await res.body?.cancel().catch(() => {});
+    throw new Error(`typesafe_${res.status}`);
+  }
   const data = await res.json() as { answers?: Record<string, { choice?: string; confidence?: number; probabilities?: Record<string, number> }> };
   return arquivos.map((f, i) => {
     const a = data.answers?.[`tipo_${i}`];
@@ -173,7 +182,7 @@ Deno.serve(async (req) => {
     try {
       julgamentos = await julgarLote(chave, lote);
     } catch (err) {
-      console.error("materiais-classificar: typesafe falhou", { error: err instanceof Error ? err.message : "unknown" });
+      registrarFalha("materiais-classificar: typesafe falhou", err);
       return json({ ok: false, error: "typesafe_indisponivel", classificados, incertos }, 502);
     }
     let falhasDoLote = 0;

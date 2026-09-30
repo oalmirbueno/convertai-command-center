@@ -16,7 +16,7 @@
  * Só aceita a chave de serviço (chamada entre funções). Buckets: os do painel.
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
+import { Image } from "../_shared/imagescript.ts";
 import { dimensoesDoCabecalho, metadePorBloco, mimeDaImagem, reduzirPorAreaRapido } from "../_shared/imagem-local.ts";
 import { caminhoDaMedia, caminhoDaMiniatura, LADO_MEDIA, LADO_MINIATURA } from "../_shared/imagem-reduzida.ts";
 

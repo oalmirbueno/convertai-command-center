@@ -7,6 +7,7 @@ import { fetchPublicText } from "../_shared/public-http.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
+  "Access-Control-Max-Age": "7200",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 const MAX_REQUEST_BYTES = 64 * 1024;

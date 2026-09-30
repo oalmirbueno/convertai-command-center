@@ -86,11 +86,20 @@ import {
   lerEnsaioPedido,
   lerFotosDoKit,
   lerNomeDoKit,
+  CODIGO_DO_RECORTE_OU_AREA,
+  comRecusaNosIrmaos,
+  FRASE_DO_RECORTE_OU_AREA,
 } from "./diretor-agentico.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 type Json = Record<string, unknown>;
+
+/** Código da ação chamada por dentro (chamar de DepsDoDiretor), quando a ação respondeu com um. */
+const codigoDaAcaoInterna = (e: unknown): string | null => {
+  const c = e && typeof e === "object" ? (e as { codigoDaAcao?: unknown }).codigoDaAcao : null;
+  return typeof c === "string" && c ? c : null;
+};
 
 export type DepsDoDiretor = {
   /** Chama uma ação da Mesa Foto que já existe (mesmo handler da tela) e devolve o corpo; erro vira exceção com a frase da ação. */
@@ -100,7 +109,17 @@ export type DepsDoDiretor = {
   /** Leitura por visão com o modelo de leitura do catálogo (paga, uma vez por imagem). */
   lerPorVisao: (ch: Chamador, clientId: string, img: ImagemBruta) => Promise<{ bruto: unknown; custo_usd: number }>;
   kitsDoCliente: (clientId: string) => Promise<KitBruto[]>;
-  auditar: (entrada: { ch: Chamador; toolName: string; input: Json; success: boolean; durationMs: number; resultRef: string }) => Promise<void>;
+  auditar: (entrada: {
+    ch: Chamador;
+    toolName: string;
+    input: Json;
+    success: boolean;
+    durationMs: number;
+    resultRef: string;
+    /** FN-09: sem sucesso, o código e o motivo vão para a auditoria (antes ficavam nulos). */
+    errorCode?: string | null;
+    errorMessage?: string | null;
+  }) => Promise<void>;
 };
 
 const CAMPOS_DA_IMAGEM = "id, nome, pasta, tags, ativa, aprovada, origem, gerada, modo, kit_id, descricao, criado_em, storage_bucket, storage_path";
@@ -793,10 +812,24 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
     if (emAndamento(g.acao, ref)) throw new ErroDeRegra(409, "item_em_andamento", "Esta foto já está sendo gerada. Espere terminar.");
     await g.gravar(marcarAndamento(g.acao, ref));
     const marcaId = typeof corpo.marca_id === "string" && UUID.test(corpo.marca_id) ? corpo.marca_id : null;
-    const [resultado] = await executarItemAItem([item], (it) => executarGeracao(ch, clientId, g.acao, it, marcaId), 1);
+    // FN-05: guarda o código da recusa (executarItemAItem só conserva o motivo).
+    const falha = { codigo: null as string | null };
+    const [resultado] = await executarItemAItem([item], async (it) => {
+      try {
+        return await executarGeracao(ch, clientId, g.acao, it, marcaId);
+      } catch (e) {
+        falha.codigo = codigoDaAcaoInterna(e);
+        throw e;
+      }
+    }, 1);
     // Relê antes de gravar: outra aba pode ter cancelado no meio.
     const atual = await guardadaDoDiretor(ch, corpo, AGENTE_DE_GERACAO);
-    let anexo = await atual.gravar(comResultadoDoItem(atual.acao, resultado, ch.userId));
+    let comResultado = comResultadoDoItem(atual.acao, resultado, ch.userId);
+    // FN-05: a mesma foto sem recorte nem área dá a mesma recusa nos outros itens dela (nada foi cobrado).
+    if (!resultado.ok && (falha.codigo === CODIGO_DO_RECORTE_OU_AREA || resultado.motivo === FRASE_DO_RECORTE_OU_AREA)) {
+      comResultado = comRecusaNosIrmaos(comResultado, resultado, ch.userId);
+    }
+    let anexo = await atual.gravar(comResultado);
     esquecer(clientId);
     // Frente MF: terminou a lista. As fotos novas entram no post da Agenda pedido e o caminho fica pronto.
     if (anexo.executada_em && !anexo.caminho) anexo = await fecharGeracao(ch, clientId, atual, anexo);
@@ -809,6 +842,8 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
       success: resultado.ok,
       durationMs: Date.now() - inicio,
       resultRef: g.mensagem.id,
+      errorCode: resultado.ok ? null : falha.codigo || "item_falhou",
+      errorMessage: resultado.ok ? null : resultado.motivo || null,
     });
     return f.json({ anexo, resultado, custo_usd: custo });
   }
@@ -847,6 +882,7 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
     const feita = await executarDireto(acao, (item) => executarSemCusto(ch, clientId, item, estado), { userId: ch.userId, lote: 1 });
     esquecer(clientId);
     const falhas = (feita.resultados || []).filter((r) => !r.ok).length;
+    const primeiraFalha = (feita.resultados || []).find((r) => !r.ok);
     await d.auditar({
       ch,
       toolName: "foto_acao_do_diretor_na_hora",
@@ -854,6 +890,8 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
       success: falhas === 0,
       durationMs: Date.now() - inicio,
       resultRef: opcoes.chave,
+      errorCode: primeiraFalha ? "item_falhou" : null,
+      errorMessage: primeiraFalha ? primeiraFalha.motivo || null : null,
     });
     return { ...feita, caminho: caminhoDaAcaoDoDiretor(feita, clientId, opcoes.abrirSozinho) };
   }
@@ -887,6 +925,7 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
     if (caminho) r = { ...r, anexo: await g.gravar({ ...r.anexo, caminho }) };
     const feitos = r.resultados.filter((x) => x.ok).length;
     const falhas = r.resultados.length - feitos;
+    const primeiraFalha = r.resultados.find((x) => !x.ok);
     await avisarNaConversa(g, `Diretor: ${textoDoResultado(r.resultados)}.`);
     await d.auditar({
       ch,
@@ -895,6 +934,8 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
       success: falhas === 0,
       durationMs: Date.now() - inicio,
       resultRef: g.mensagem.id,
+      errorCode: primeiraFalha ? "item_falhou" : null,
+      errorMessage: primeiraFalha ? primeiraFalha.motivo || null : null,
     });
     return f.json({ anexo: r.anexo, feitos, falhas, canvas_id: estado.canvas ? estado.canvas.id : null });
   }

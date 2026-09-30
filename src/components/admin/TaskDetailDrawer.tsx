@@ -9,8 +9,6 @@ import { notifyOpsTaskUpdated } from "@/lib/opsTaskSync";
 import { excluirTarefa } from "@/lib/taskDelete";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { toast } from "sonner";
-// @ts-ignore
-import JSZip from "jszip";
 import {
   X, Loader2, Pencil, Save, Trash2, Paperclip, Upload,
   FileText, Image, Film, Download,
@@ -618,6 +616,11 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     if (imageAttachments.length === 0) return;
     setDownloadingZip(true);
     try {
+      // A biblioteca de zip (cerca de 30 KB comprimidos) baixa só no clique:
+      // importada no topo, o Kanban e a Execução a baixavam ao abrir. Dentro
+      // do try, uma falha de rede cai no mesmo aviso "Erro ao gerar ZIP".
+      const mod: any = await import("jszip");
+      const JSZip = mod.default || mod;
       const zip = new JSZip();
       const folder = zip.folder(title.replace(/[^a-zA-Z0-9À-ÿ\s]/g, "").trim() || "carrossel");
       for (let i = 0; i < imageAttachments.length; i++) {

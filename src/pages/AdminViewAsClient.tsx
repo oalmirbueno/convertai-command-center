@@ -1,16 +1,8 @@
-import { useContext, useEffect, useState } from "react";
+import { lazy, Suspense, useContext, useEffect, useState } from "react";
 import { useSearchParams, useNavigate, UNSAFE_NavigationContext } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useClients } from "@/hooks/useSupabaseData";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
-import ClientDashboard from "@/pages/ClientDashboard";
-import ClientApprovals from "@/pages/ClientApprovals";
-import ClientJourneyUpdates from "@/pages/ClientJourneyUpdates";
-import ClientDocuments from "@/pages/ClientDocuments";
-import ClientReports from "@/pages/ClientReports";
-import ClientFinanceiro from "@/pages/ClientFinanceiro";
-import ClientRequests from "@/pages/ClientRequests";
-import EditorialCalendar from "@/pages/EditorialCalendar";
 import {
   ArrowLeft, Eye, LayoutDashboard, CheckSquare, CalendarDays,
   FileText, BarChart3, DollarSign, ShoppingBag, KeyRound, Users,
@@ -28,9 +20,32 @@ import {
   lista,
   texto,
 } from "@/components/sistema";
-import ClientVaultPage from "@/pages/ClientVaultPage";
 import type { UserProfile } from "@/contexts/AuthContext";
 import { PROFILE_SAFE_SELECT } from "@/lib/profileFields";
+
+// Cada aba do portal baixa só quando abre. São os mesmos import() do App.tsx,
+// então o arquivo é o mesmo e fica no mesmo cache. Antes, as 9 páginas vinham
+// de uma vez (cerca de 570 KB comprimidos) para mostrar uma só.
+const carregarAba = {
+  dashboard: () => import("@/pages/ClientDashboard"),
+  "onde-estamos": () => import("@/pages/ClientJourneyUpdates"),
+  aprovacoes: () => import("@/pages/ClientApprovals"),
+  calendario: () => import("@/pages/EditorialCalendar"),
+  documentos: () => import("@/pages/ClientDocuments"),
+  relatorios: () => import("@/pages/ClientReports"),
+  pedidos: () => import("@/pages/ClientRequests"),
+  cofre: () => import("@/pages/ClientVaultPage"),
+  financeiro: () => import("@/pages/ClientFinanceiro"),
+} as const;
+const ClientDashboard = lazy(carregarAba.dashboard);
+const ClientJourneyUpdates = lazy(carregarAba["onde-estamos"]);
+const ClientApprovals = lazy(carregarAba.aprovacoes);
+const EditorialCalendar = lazy(carregarAba.calendario);
+const ClientDocuments = lazy(carregarAba.documentos);
+const ClientReports = lazy(carregarAba.relatorios);
+const ClientRequests = lazy(carregarAba.pedidos);
+const ClientVaultPage = lazy(carregarAba.cofre);
+const ClientFinanceiro = lazy(carregarAba.financeiro);
 
 const clientTabs = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -88,6 +103,14 @@ export default function AdminViewAsClient() {
   const activeTab = clientTabs.some((tab) => tab.id === tabParam)
     ? tabParam
     : "dashboard";
+  // Baixa a aba aberta junto com o perfil do cliente, sem esperar um pelo
+  // outro. Sem cliente escolhido a tela é só a lista: nada a baixar. Uma falha
+  // aqui é ignorada de propósito: o lazy() tenta de novo e, se falhar, o erro
+  // vai para o RouteErrorBoundary como hoje.
+  useEffect(() => {
+    if (!clientId) return;
+    carregarAba[activeTab as keyof typeof carregarAba]().catch(() => undefined);
+  }, [activeTab, clientId]);
   const { data: clients, isLoading: loadingClients } = useClients();
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -319,7 +342,10 @@ export default function AdminViewAsClient() {
 
         {/* Tab content */}
         <div className="min-w-0">
-          {renderTabContent()}
+          {/* A chave troca a aba na hora, mesmo dentro da transição do roteador. */}
+          <Suspense key={activeTab} fallback={<Carregando forma="aba" rotulo="Abrindo a área do cliente" />}>
+            {renderTabContent()}
+          </Suspense>
         </div>
       </div>
     </ImpersonationProvider>

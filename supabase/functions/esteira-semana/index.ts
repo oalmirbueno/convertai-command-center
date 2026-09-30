@@ -14,7 +14,7 @@
 // historia recente e nos fatos; nada de passo generico que serviria para
 // qualquer cliente.
 
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { corsHeaders as corsDoSupabase } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { recortarDossie } from "../_shared/dossie-recortado.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
@@ -25,6 +25,8 @@ import { type FeitoAntes, feitosComoTexto, filtrarJaFeitos, lerFeitosAntes } fro
 import { jevPerguntar } from "../_shared/jev.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// O navegador guarda a resposta do preflight (OPTIONS) em vez de perguntar de novo a cada chamada.
+const corsHeaders = { ...corsDoSupabase, "Access-Control-Max-Age": "7200" };
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {

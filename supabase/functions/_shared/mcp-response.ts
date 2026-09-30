@@ -3,6 +3,7 @@
 
 export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
+  'Access-Control-Max-Age': '7200',
   'Access-Control-Allow-Headers':
     'authorization, x-client-info, apikey, content-type, mcp-protocol-version, Mcp-Protocol-Version, mcp-session-id, Mcp-Session-Id, accept',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
