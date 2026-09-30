@@ -1753,6 +1753,14 @@
       "remote_name": "mesa_identidade_completar",
       "remote_statements_sha256": "fab02532f3527723a897ecc3c458caf1cb1466cd5785b010ae2dd3f87010a3dd",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930210000",
+      "path": "supabase/migrations/20260930210000_propostas_em_clientes.sql",
+      "local_sha256": "73beaaedb4bfb243302665f641818a0595f6706a7ca0d252d36d2080e41f23a0",
+      "remote_name": "propostas_em_clientes",
+      "remote_statements_sha256": "ab41a8f597dd9b5639b8ff2a262103f4bd48366bdc0ca45c76ea84c789c2f733",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
