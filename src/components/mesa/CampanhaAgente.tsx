@@ -68,15 +68,15 @@ function Bolha({ papel, children }: { papel: "usuario" | "agente"; children: Rea
 export default function CampanhaAgente({
   campanha,
   rascunho = null,
-  naGaveta = false,
+  naJanela = false,
   className = "",
   onAndamento,
 }: {
   campanha: Campanha;
   /** Texto que outra parte da tela manda para o campo (ex.: "Ajustar conteúdos"). */
   rascunho?: RascunhoParaOAgente | null;
-  /** Dentro da gaveta: o cabeçalho deixa lugar para o botão de fechar. */
-  naGaveta?: boolean;
+  /** Dentro da janela central: o título e o Fechar são os da janela, sem cabeçalho próprio. */
+  naJanela?: boolean;
   className?: string;
   /** Avisa quando um pedido começa e termina (o botão da gaveta mostra o andamento). */
   onAndamento?: (andando: boolean) => void;
@@ -154,15 +154,17 @@ export default function CampanhaAgente({
 
   return (
     <div className={`flex min-h-0 min-w-0 flex-col bg-card ${className}`}>
-      <div className={`flex shrink-0 items-center border-b border-border py-3 pl-4 ${naGaveta ? "pr-14" : "pr-4"}`}>
-        <span className="mr-2.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
-          <Sparkles className="h-3.5 w-3.5 text-primary" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13.5px] font-semibold">Agente da campanha</span>
-          <span className="block truncate text-[11px] text-muted-foreground">{campanha.nome}</span>
-        </span>
-      </div>
+      {!naJanela && (
+        <div className="flex shrink-0 items-center border-b border-border py-3 pl-4 pr-4">
+          <span className="mr-2.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13.5px] font-semibold">Agente da campanha</span>
+            <span className="block truncate text-[11px] text-muted-foreground">{campanha.nome}</span>
+          </span>
+        </div>
+      )}
 
       <div ref={listaRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3" aria-live="polite" aria-label="Conversa com o agente da campanha">
         {conversa.isLoading && (

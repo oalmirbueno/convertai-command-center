@@ -31,13 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { Textarea } from "@/components/ui/textarea";
 import CarouselSlider from "@/components/shared/CarouselSlider";
 import { PublicacaoDaMesaNaAgenda } from "@/components/mesa/PublicacaoDaPeca";
@@ -1000,33 +994,30 @@ export default function EditorialDetailSheet({
 
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent
-          side="bottom"
-          className="inset-x-0 bottom-0 top-auto mx-auto flex h-[92dvh] w-full max-w-4xl flex-col gap-0 overflow-hidden rounded-t-lg border border-border p-0 sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:h-auto sm:h-[88dvh] sm:max-h-[88dvh] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg data-[state=open]:animate-in data-[state=closed]:animate-out"
-        >
-          <SheetHeader className="shrink-0 border-b border-border bg-card px-5 py-4 text-left sm:px-7 sm:py-5">
-            <div className="flex items-start justify-between gap-4 pr-8">
-              <div className="min-w-0">
-                <SheetTitle className="truncate text-[15px] sm:text-[20px]" title={post.post.title}>{post.post.title}</SheetTitle>
-                <SheetDescription className="mt-1 truncate text-[12px]">
-                  {clientName} · {projectName}
-                </SheetDescription>
-              </div>
-              <Badge
-                variant="outline"
-                className="shrink-0"
-                style={{
-                  borderColor: `${aggregateConfig.color}55`,
-                  backgroundColor: `${aggregateConfig.color}18`,
-                  color: aggregateConfig.color,
-                }}
-              >
-                {aggregateConfig.label}
-              </Badge>
-            </div>
-          </SheetHeader>
-
+      {/* Janela central (30/09, dono: "qualquer pop-up abrir no centro e não
+          na lateral"): no celular ocupa a tela; o corpo rola e o pé fica parado. */}
+      <JanelaCentral
+        aberta={open}
+        onMudar={onOpenChange}
+        largura="xl"
+        corpo="fixo"
+        semEspaco
+        titulo={<span title={post.post.title}>{post.post.title}</span>}
+        descricao={`${clientName} · ${projectName}`}
+        acoes={
+          <Badge
+            variant="outline"
+            className="shrink-0"
+            style={{
+              borderColor: `${aggregateConfig.color}55`,
+              backgroundColor: `${aggregateConfig.color}18`,
+              color: aggregateConfig.color,
+            }}
+          >
+            {aggregateConfig.label}
+          </Badge>
+        }
+      >
           <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
             {/* Frente EA: post que veio de uma entrega do Estúdio mostra a
                 publicação da peça e o mesmo "Publicar em" da Entrega. */}
@@ -1705,7 +1696,7 @@ export default function EditorialDetailSheet({
           </div>
 
           {(editable || canCreateRevision || (canPublish && !isImpersonating)) && (
-            <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t border-border bg-background py-4">
+            <div className="flex shrink-0 flex-wrap items-center justify-between border-t border-border bg-card px-5 py-3 sm:px-7 [&>*+*]:ml-2">
               {canPublish && !isImpersonating && (
                 <Button
                   type="button"
@@ -1743,8 +1734,7 @@ export default function EditorialDetailSheet({
               </div>
             </div>
           )}
-        </SheetContent>
-      </Sheet>
+      </JanelaCentral>
 
       <Dialog open={!!actionTarget && !!action} onOpenChange={closeAction}>
         <DialogContent>

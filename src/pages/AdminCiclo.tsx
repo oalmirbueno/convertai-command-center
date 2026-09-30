@@ -45,7 +45,7 @@ import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import ClientCycleSheet from "@/components/ciclo/ClientCycleSheet";
-import { AjudaRecolhida, Carregando, EstadoVazio, Secao, SeletorCompacto, etiqueta, juntar, superficie, texto } from "@/components/sistema";
+import { AjudaRecolhida, Carregando, EstadoVazio, JanelaCentral, Secao, SeletorCompacto, etiqueta, juntar, superficie, texto } from "@/components/sistema";
 import {
   CYCLES, FRENTES_DA_SEMANA, HISTORY_WEEKS, ONBOARDING_STEPS, type CycleArea,
 } from "@/lib/cycleDefs";
@@ -2140,20 +2140,20 @@ export default function AdminCiclo() {
       />
 
       {/* O dia: o que foi feito, na ordem em que aconteceu */}
-      <Sheet open={!!dayKey} onOpenChange={(open) => !open && setDayKey(null)}>
-        <SheetContent
-          side="bottom"
-          className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-xl p-0 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5"
-        >
-          <SheetHeader className="px-4">
-            <SheetTitle className="pr-8 text-left text-base capitalize">
-              {dayKey &&
-                new Date(`${dayKey}T12:00:00`).toLocaleDateString("pt-BR", {
-                  weekday: "long", day: "2-digit", month: "long",
-                })}
-            </SheetTitle>
-          </SheetHeader>
-          <div className="mt-3 space-y-1.5 px-4">
+      <JanelaCentral
+        aberta={!!dayKey}
+        onFechar={() => setDayKey(null)}
+        largura="md"
+        titulo={
+          <span className="capitalize">
+            {dayKey &&
+              new Date(`${dayKey}T12:00:00`).toLocaleDateString("pt-BR", {
+                weekday: "long", day: "2-digit", month: "long",
+              })}
+          </span>
+        }
+      >
+          <div className="space-y-1.5">
             {dayList.length === 0 && (
               <p className="py-6 text-center text-[12.5px] text-muted-foreground">
                 Nenhuma etapa marcada neste dia.
@@ -2194,10 +2194,10 @@ export default function AdminCiclo() {
               </p>
             )}
           </div>
-        </SheetContent>
-      </Sheet>
+      </JanelaCentral>
 
-      {/* Menu do painel */}
+      {/* Menu do painel: navegação lateral do Ciclo no celular. Fica gaveta de
+          propósito (é menu, não pop-up); exceção listada no SISTEMA.md 4.4. */}
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <SheetContent side="left" className="flex w-[280px] flex-col gap-0 overflow-y-auto p-0 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
           <SheetHeader className="border-b border-border px-4 pb-3 pt-5">
@@ -2259,18 +2259,14 @@ export default function AdminCiclo() {
       </Sheet>
 
       {/* Histórico da carteira */}
-      <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
-        <SheetContent
-          side="bottom"
-          className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-xl p-0 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5"
-        >
-          <SheetHeader className="px-4">
-            <SheetTitle className="pr-8 text-left text-base">Histórico · {cycle.label}</SheetTitle>
-            <SheetDescription className="sr-only">
-              Evolução das últimas semanas da carteira.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="mt-4 space-y-4 px-4">
+      <JanelaCentral
+        aberta={historyOpen}
+        onMudar={setHistoryOpen}
+        largura="md"
+        titulo={`Histórico · ${cycle.label}`}
+        descricaoOculta="Evolução das últimas semanas da carteira."
+      >
+          <div className="space-y-4">
             <div className="flex items-end gap-1.5">
               {timeline.map((week) => {
                 const selected = week.offset === weekOffset;
@@ -2325,28 +2321,23 @@ export default function AdminCiclo() {
               </div>
             </div>
           </div>
-        </SheetContent>
-      </Sheet>
+      </JanelaCentral>
 
       {/* Legenda */}
-      <Sheet open={legendOpen} onOpenChange={setLegendOpen}>
-        <SheetContent
-          side="bottom"
-          className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-xl p-0 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5"
-        >
-          <SheetHeader className="px-4">
-            <SheetTitle className="pr-8 text-left text-base">O ciclo · {cycle.label}</SheetTitle>
-            <SheetDescription className="sr-only">
-              Como o ciclo da semana é montado.
-            </SheetDescription>
-          </SheetHeader>
-          <p className="mt-2 px-4 text-[12px] leading-relaxed text-muted-foreground">
+      <JanelaCentral
+        aberta={legendOpen}
+        onMudar={setLegendOpen}
+        largura="md"
+        titulo={`O ciclo · ${cycle.label}`}
+        descricaoOculta="Como o ciclo da semana é montado."
+      >
+          <p className="text-[12px] leading-relaxed text-muted-foreground">
             Três etapas são fixas, porque acontecem toda semana: criar o
             conteúdo, atualizar o painel e agendar. As outras três mudam a cada
             semana e são diferentes para cada cliente, para o checklist não
             virar rotina automática. Abra um cliente para ver as etapas dele.
           </p>
-          <ol className="mt-4 space-y-2 px-4">
+          <ol className="mt-4 space-y-2">
             {stepsForWeek(
               area,
               activeClients[0]?.id || "exemplo",
@@ -2372,10 +2363,10 @@ export default function AdminCiclo() {
               </li>
             ))}
           </ol>
-          <p className={juntar(texto.rotulo, "mt-4 px-4")}>
+          <p className={juntar(texto.rotulo, "mt-4")}>
             Onboarding · etapas 7 a 10
           </p>
-          <ol className="mt-2 space-y-2 px-4">
+          <ol className="mt-2 space-y-2">
             {ONBOARDING_STEPS.map((step, index) => (
               <li key={step} className="flex items-start gap-2.5 text-[12.5px] leading-relaxed text-foreground">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-info/15 text-[11px] font-bold tabular-nums text-info">
@@ -2385,13 +2376,12 @@ export default function AdminCiclo() {
               </li>
             ))}
           </ol>
-          <p className="mt-3 px-4 text-[11px] leading-relaxed text-muted-foreground">
+          <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
             Cada frente mostra apenas os clientes com aquele serviço no
             cadastro. Toque no nome do cliente para ver a evolução dele, e num
             dia da semana para ver o que foi feito naquele dia.
           </p>
-        </SheetContent>
-      </Sheet>
+      </JanelaCentral>
     </div>
   );
 }

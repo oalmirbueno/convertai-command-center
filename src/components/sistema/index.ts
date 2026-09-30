@@ -23,6 +23,7 @@ export { default as CampoDeBusca } from "./CampoDeBusca";
 export { default as BotaoComIcone, RotuloLargo } from "./BotaoComIcone";
 export { useReservaFlutuante } from "./useReservaFlutuante";
 export { default as JanelaDoCelular } from "./JanelaDoCelular";
+export { default as JanelaCentral, LARGURAS_DA_JANELA, type LarguraDaJanela, type PropsDaJanelaCentral } from "./JanelaCentral";
 export { default as BarraDeControles } from "./BarraDeControles";
 export { default as MenuMais, type ItemDoMenu } from "./MenuMais";
 export { default as GradeDeSecoes } from "./GradeDeSecoes";

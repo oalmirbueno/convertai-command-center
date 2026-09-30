@@ -2,10 +2,10 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import { botao, juntar } from "@/components/sistema/estilos";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
+import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { supabase } from "@/integrations/supabase/client";
 import { dataCurta, textoDoErro } from "@/lib/mesa/api";
 import { filtrarPorMarca } from "@/lib/mesa/marcas";
@@ -140,12 +140,16 @@ export default function ArquivadosDaFaixa({ onMudou }: { onMudou: () => void }) 
       >
         <Archive className="mr-1 h-3.5 w-3.5" /> Arquivados
       </button>
-      <Sheet open={aberto} onOpenChange={setAberto}>
-        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md" aria-describedby={undefined}>
-          <div className="shrink-0 border-b border-border px-4 py-3">
-            <SheetTitle className="text-[15px] font-semibold">Pautas arquivadas</SheetTitle>
-            <p className="mt-0.5 text-[12px] text-muted-foreground">Restaurar volta a pauta para a faixa e o mês. Apagar de vez não dá para desfazer.</p>
-          </div>
+      <JanelaCentral
+        aberta={aberto}
+        onMudar={setAberto}
+        largura="md"
+        corpo="fixo"
+        semEspaco
+        icone={<Archive className="h-4 w-4" />}
+        titulo="Pautas arquivadas"
+        ajuda="Restaurar volta a pauta para a faixa e o mês. Apagar de vez não dá para desfazer."
+      >
           <RegiaoRolavel modo="sempre" classeDeFora="min-h-0 flex-1" className="p-3" sobre="cartao" rotulo="Pautas arquivadas">
             {lista.isLoading && <p className="flex items-center text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Lendo os arquivados…</p>}
             {lista.isError && <p className="rounded-md bg-destructive/10 p-2.5 text-[12.5px]">{textoDoErro(lista.error)}</p>}
@@ -169,8 +173,7 @@ export default function ArquivadosDaFaixa({ onMudou }: { onMudou: () => void }) 
               ))}
             </ul>
           </RegiaoRolavel>
-        </SheetContent>
-      </Sheet>
+      </JanelaCentral>
     </>
   );
 }

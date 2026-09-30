@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Check, ChevronRight, ExternalLink, FileSearch, Loader2, MoreHorizontal, Pause, Play, PlayCircle, RefreshCw, Sparkles, Undo2, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
+import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { botao, campo, foco, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { brl, decimal, inteiro, porcento, type AnuncioAoVivo } from "./adsApi";
@@ -550,16 +551,6 @@ function PainelDoAnuncio({
   const q = useQuery({ queryKey: chaveDoAnuncioAberto(clientId, n.id, periodo), queryFn: () => lerAnuncioAberto(clientId, n.id, periodo), staleTime: 60_000, retry: false });
   const [acao, setAcao] = useState<{ tipo: AcaoDoGerenciador | null } | null>(null);
   const [textoTodo, setTextoTodo] = useState(false);
-  const fechar = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (fechar.current) fechar.current.focus();
-    const tecla = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onFechar();
-    };
-    window.addEventListener("keydown", tecla);
-    return () => window.removeEventListener("keydown", tecla);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [n.id]);
 
   const a = q.data || null;
   const m = n.metricas;
@@ -580,30 +571,30 @@ function PainelDoAnuncio({
   const links = a ? a.links : null;
 
   return (
-    <aside
-      role="dialog"
-      aria-modal="false"
-      aria-label={`Anúncio ${n.nome}`}
-      className="fixed bottom-0 right-0 top-0 z-50 flex w-full flex-col border-l border-border bg-background shadow-2xl sm:w-[440px]"
+    // Janela central (30/09, dono: "qualquer pop-up abrir no centro e não na
+    // lateral"). Esc, foco e Fechar são os da janela.
+    <JanelaCentral
+      aberta
+      onFechar={onFechar}
+      largura="lg"
+      corpo="fixo"
+      semEspaco
+      rotulo={`Anúncio ${n.nome}`}
+      rotuloDoFechar="Fechar o anúncio"
       data-painel-do-anuncio={n.id}
-    >
-      <div className="flex min-w-0 items-start border-b border-border px-4 py-3">
-        <span className={juntar("mr-2 mt-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full", COR_DO_NIVEL.anuncio.ponto)} aria-hidden="true" />
-        <div className="min-w-0 flex-1">
-          <p className={juntar("text-[11px] font-medium", COR_DO_NIVEL.anuncio.texto)}>Anúncio</p>
-          <h3 className="truncate text-[15px] font-semibold leading-5" title={n.nome}>{n.nome}</h3>
-          <div className="mt-1 flex min-w-0 flex-wrap items-center">
-            <span className="mr-2">
-              <SeloDaEntrega n={n} />
-            </span>
-            {mini && <SeloDoSinal sinal={mini.sinal} />}
-          </div>
+      icone={<span className={juntar("inline-block h-2.5 w-2.5 rounded-full", COR_DO_NIVEL.anuncio.ponto)} />}
+      titulo={<span title={n.nome}>{n.nome}</span>}
+      abaixoDoTitulo={
+        <div className="flex min-w-0 flex-wrap items-center">
+          <span className={juntar("mr-2 text-[11px] font-medium", COR_DO_NIVEL.anuncio.texto)}>Anúncio</span>
+          <span className="mr-2">
+            <SeloDaEntrega n={n} />
+          </span>
+          {mini && <SeloDoSinal sinal={mini.sinal} />}
         </div>
-        <button ref={fechar} type="button" className={juntar(botao.icone, "-mr-1 ml-2")} onClick={onFechar} aria-label="Fechar o anúncio">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-      <RegiaoRolavel modo="sempre" rotulo="Detalhes do anúncio" className="min-h-0 flex-1 overflow-y-auto">
+      }
+    >
+      <RegiaoRolavel modo="sempre" sobre="cartao" rotulo="Detalhes do anúncio" className="min-h-0 flex-1 overflow-y-auto">
         <div className="min-w-0 space-y-4 px-4 py-4">
           {/* O criativo: vídeo quando a Meta dá a fonte; senão a imagem (a da ficha, em boa resolução, primeiro). */}
           <section aria-label="Criativo" className="min-w-0">
@@ -744,7 +735,7 @@ function PainelDoAnuncio({
           </section>
         </div>
       </RegiaoRolavel>
-    </aside>
+    </JanelaCentral>
   );
 }
 

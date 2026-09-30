@@ -3,10 +3,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Megaphone, Plus, Sparkles, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
 import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { juntar, superficie, texto } from "@/components/sistema/estilos";
 import { AvisoDeErro } from "./Custo";
 import { ImagemDaMesa, useMarcaDaMesa, useMesa } from "./MesaContexto";
@@ -330,8 +330,8 @@ export default function AbaCampanhas({
       key={escolhida.id}
       campanha={escolhida}
       rascunho={rascunho}
-      naGaveta={!agenteFixo}
-      className="h-full"
+      naJanela={!agenteFixo}
+      className="h-full flex-1"
     />
   ) : null;
 
@@ -392,19 +392,22 @@ export default function AbaCampanhas({
             {andando ? <Loader2 className="mr-1.5 h-4 w-4 shrink-0 animate-spin" /> : <Sparkles className="mr-1.5 h-4 w-4 shrink-0" />}
             <span className="truncate">Agente da campanha</span>
           </button>
-          <Sheet
-            open={gaveta}
-            onOpenChange={(v) => {
+          <JanelaCentral
+            aberta={gaveta}
+            onMudar={(v) => {
               setGaveta(v);
-              // O texto levado ao agente vale uma vez: reabrir a gaveta não preenche de novo.
+              // O texto levado ao agente vale uma vez: reabrir a janela não preenche de novo.
               if (!v) setRascunho(null);
             }}
+            largura="lg"
+            corpo="fixo"
+            semEspaco
+            icone={<Sparkles className="h-4 w-4 text-primary" />}
+            titulo="Agente da campanha"
+            descricao={escolhida ? escolhida.nome : undefined}
           >
-            <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md" aria-describedby={undefined}>
-              <SheetTitle className="sr-only">Agente da campanha</SheetTitle>
-              {agente}
-            </SheetContent>
-          </Sheet>
+            {agente}
+          </JanelaCentral>
         </>
       )}
     </>

@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Archive, BookOpen, Pencil, Plus, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import FaixaDeNumeros from "@/components/sistema/FaixaDeNumeros";
+import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { botao, campo, campoTexto, etiqueta, juntar, lista, texto } from "@/components/sistema/estilos";
 import { lerValor, reais } from "../../../supabase/functions/_shared/proposta-modelo";
 import {
@@ -24,8 +24,9 @@ import {
 import { CHAVES, chamarBiblioteca, useHoraTecnica, useProvas, useServicos } from "./propostaApi";
 
 /**
- * Biblioteca comercial da agência (frente PRO2), numa gaveta aberta pela
- * Mesa Proposta: os serviços com preço, unidade, horas e entregáveis (viram
+ * Biblioteca comercial da agência (frente PRO2), numa janela central aberta
+ * pela Mesa Proposta (30/09, dono: "biblioteca abrir no padrão central e não
+ * na lateral"): os serviços com preço, unidade, horas e entregáveis (viram
  * item da proposta com um clique), os cases e depoimentos com a autorização
  * registrada (só o autorizado entra na proposta) e os parâmetros da hora
  * técnica (custos do Financeiro, horas produtivas, impostos e margem).
@@ -415,34 +416,36 @@ function HoraTecnica() {
 
 export default function BibliotecaDaAgencia({ aberta, onAberta, aba, onAba }: { aberta: boolean; onAberta: (v: boolean) => void; aba: AbaDaBiblioteca; onAba: (a: AbaDaBiblioteca) => void }) {
   return (
-    <Sheet open={aberta} onOpenChange={onAberta}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl" data-biblioteca-da-agencia="">
-        <SheetHeader className="text-left">
-          <SheetTitle className="flex min-w-0 items-center truncate">
-            <BookOpen className="mr-2 h-4 w-4 shrink-0" /> Biblioteca comercial
-          </SheetTitle>
-          <SheetDescription className="truncate">Serviços, provas e hora técnica da agência</SheetDescription>
-        </SheetHeader>
-        <div className="mt-4 flex flex-wrap border-b border-border" role="tablist" aria-label="Partes da biblioteca">
+    <JanelaCentral
+      aberta={aberta}
+      onMudar={onAberta}
+      largura="xl"
+      icone={<BookOpen className="h-4 w-4" />}
+      titulo="Biblioteca comercial"
+      descricao="Serviços, provas e hora técnica da agência"
+      data-biblioteca-da-agencia=""
+      abaixoDoTitulo={
+        <div className="flex flex-wrap" role="tablist" aria-label="Partes da biblioteca">
           {ABAS.map((a) => (
             <button
               key={a.valor}
               type="button"
               role="tab"
               aria-selected={aba === a.valor}
-              className={juntar("toque-compacto mr-4 -mb-px border-b-2 pb-2 text-[13px] font-medium", aba === a.valor ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
+              className={juntar("toque-compacto mr-4 border-b-2 pb-1.5 text-[13px] font-medium", aba === a.valor ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
               onClick={() => onAba(a.valor)}
             >
               {a.rotulo}
             </button>
           ))}
         </div>
-        <div className="mt-4" role="tabpanel">
-          {aba === "servicos" && <Servicos />}
-          {aba === "provas" && <Provas />}
-          {aba === "hora" && <HoraTecnica />}
-        </div>
-      </SheetContent>
-    </Sheet>
+      }
+    >
+      <div className="min-w-0" role="tabpanel">
+        {aba === "servicos" && <Servicos />}
+        {aba === "provas" && <Provas />}
+        {aba === "hora" && <HoraTecnica />}
+      </div>
+    </JanelaCentral>
   );
 }

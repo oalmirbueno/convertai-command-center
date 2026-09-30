@@ -10,7 +10,6 @@ import { useEsteira, type ClienteDaEsteira } from "@/hooks/useEsteira";
 import { itensDaFrente } from "@/lib/esteira/esteiraMontar";
 import { ocultarCliente } from "@/lib/esteira/esteiraAcoes";
 import { addDays, localIso, mondayOf, weekLabel } from "@/lib/cycleWeek";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import EsteiraClientSheet from "@/components/esteira/EsteiraClientSheet";
 import EsteiraItemRow from "@/components/esteira/EsteiraItemRow";
 import { useCentralReviewPendentes } from "@/hooks/useCentralReviewPendentes";
@@ -23,6 +22,7 @@ import {
   EstadoDeErro,
   EstadoVazio,
   Etapas,
+  JanelaCentral,
   botao,
   etiqueta,
   foco,
@@ -309,13 +309,8 @@ export default function AdminEsteira() {
       <EsteiraClientSheet cliente={detalhe} frente={frente} weekStart={weekStart} canWrite={canWrite} canReview={profile?.role === "admin"} aberta={detalhe !== null} onFechar={() => setDetalheId(null)} onMudou={recarregarAposAcao} />
 
       {/* Por onde começar: a carteira ordenada pela urgência real, com o
-          motivo de cada posição. Toca no cliente e abre a gaveta dele. */}
-      <Sheet open={comecarAberto} onOpenChange={setComecarAberto}>
-        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto overscroll-contain rounded-t-xl px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5 sm:mx-auto sm:max-w-lg sm:px-6">
-          <SheetHeader className="space-y-0 pr-10 text-left">
-            <SheetTitle className={texto.tituloSecao}>Por onde começar em {rotuloDaFrente}</SheetTitle>
-            <SheetDescription className={texto.auxiliar}>Pela urgência real de cada cliente.</SheetDescription>
-          </SheetHeader>
+          motivo de cada posição. Toca no cliente e abre a janela dele. */}
+      <JanelaCentral aberta={comecarAberto} onMudar={setComecarAberto} largura="md" titulo={`Por onde começar em ${rotuloDaFrente}`} descricao="Pela urgência real de cada cliente">
           {(() => {
             const fila = visiveis
               .map((c) => {
@@ -329,10 +324,10 @@ export default function AdminEsteira() {
               })
               .filter((x) => x.its.length > 0 || x.rituaisFaltando > 0)
               .sort((a, b) => b.peso - a.peso || a.c.nome.localeCompare(b.c.nome));
-            if (fila.length === 0) return <EstadoVazio compacto className="mt-4" titulo="Tudo em dia nesta frente." descricao="Nada para começar." />;
+            if (fila.length === 0) return <EstadoVazio compacto titulo="Tudo em dia nesta frente." descricao="Nada para começar." />;
             const top = fila[0];
             return (
-              <div className="mt-3">
+              <div>
                 <p className={juntar(superficie.poco, "px-3 py-2 text-[13px] leading-5")}>
                   Comece por <span className="font-semibold">{top.c.nome}</span>: {top.urg.length ? `${top.urg.length} urgente${top.urg.length === 1 ? "" : "s"}` : top.att.length ? `${top.att.length} de atenção` : "o que pede a semana"}{top.primeiros[0] ? `. Primeiro: ${top.primeiros[0].titulo}, ${top.primeiros[0].passo.toLowerCase()}.` : "."}
                 </p>
@@ -359,16 +354,16 @@ export default function AdminEsteira() {
               </div>
             );
           })()}
-        </SheetContent>
-      </Sheet>
+      </JanelaCentral>
 
-      <Sheet open={quemEntraAberto} onOpenChange={setQuemEntraAberto}>
-        <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto overscroll-contain rounded-t-xl px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5 sm:mx-auto sm:max-w-lg sm:px-6">
-          <SheetHeader className="space-y-0 pr-10 text-left">
-            <SheetTitle className={texto.tituloSecao}>Quem entra em {rotuloDaFrente}</SheetTitle>
-            <SheetDescription className={texto.auxiliar}>{ocultos.length === 0 ? "Ninguém oculto nesta frente." : plural(ocultos.length, "oculto", "ocultos")}</SheetDescription>
-          </SheetHeader>
-          <ul className="mt-3 divide-y divide-border">
+      <JanelaCentral
+        aberta={quemEntraAberto}
+        onMudar={setQuemEntraAberto}
+        largura="md"
+        titulo={`Quem entra em ${rotuloDaFrente}`}
+        descricao={ocultos.length === 0 ? "Ninguém oculto nesta frente" : plural(ocultos.length, "oculto", "ocultos")}
+      >
+          <ul className="divide-y divide-border">
             {clientes.filter((c) => c.tipo !== "one_off").map((c) => {
               const temServico = c.fatos.servicos[frente];
               const oculto = c.fatos.oculto.areas.includes(frente);
@@ -383,8 +378,7 @@ export default function AdminEsteira() {
               );
             })}
           </ul>
-        </SheetContent>
-      </Sheet>
+      </JanelaCentral>
     </div>
   );
 }

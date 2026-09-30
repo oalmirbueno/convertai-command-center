@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Minus, RefreshCw, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import type { ClienteDaEsteira } from "@/hooks/useEsteira";
@@ -17,7 +16,7 @@ import EsteiraItemRow from "./EsteiraItemRow";
 import MetasDeSeguidores from "./MetasDeSeguidores";
 import TrafegoPlataformas, { PlataformaNaoConfigurada } from "./TrafegoPlataformas";
 import TrafegoVendas from "./TrafegoVendas";
-import { Carregando, EstadoVazio, RegiaoRolavel, Secao as SecaoDoSistema, botao, campoTexto, juntar, superficie, texto } from "@/components/sistema";
+import { Carregando, EstadoVazio, JanelaCentral, RegiaoRolavel, Secao as SecaoDoSistema, botao, campoTexto, juntar, superficie, texto } from "@/components/sistema";
 
 const GRUPOS: Array<{ fontes: Fonte[]; titulo: string }> = [
   { fontes: ["onboarding"], titulo: "Entrada do cliente" },
@@ -209,23 +208,21 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
   // Recolher (dono, 28/09): cada bloco da folha lembra se está aberto, por cliente.
   const chave = (bloco: string) => `ciclo:folha:${bloco}:${cliente.id}`;
 
-  // Sistema de design: a folha é uma janela. Cabeçalho parado, corpo rolando
-  // por dentro (RegiaoRolavel "sempre", com a posição lembrada por cliente),
-  // seções separadas por divisória, sem caixa dentro de caixa.
+  // Sistema de design: a folha é uma janela central (30/09, dono: "qualquer
+  // pop-up abrir no centro"). Cabeçalho parado, corpo rolando por dentro
+  // (RegiaoRolavel "sempre", com a posição lembrada por cliente), seções
+  // separadas por divisória, sem caixa dentro de caixa.
   return (
-    <Sheet open={aberta} onOpenChange={(v) => { if (!v) onFechar(); }}>
-      <SheetContent side="bottom" className="flex max-h-[92vh] flex-col gap-0 rounded-t-xl p-0 sm:mx-auto sm:max-w-2xl [&>button]:right-3 [&>button]:top-[1.35rem] [&>button]:h-9 [&>button]:w-9 [&>button]:opacity-100 sm:[&>button]:right-5">
-        <div className="shrink-0 px-4 pb-3 pt-2.5 sm:px-6">
-          <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-border" aria-hidden />
-          <SheetHeader className="space-y-0 pr-12 text-left">
-            <SheetTitle className={juntar(texto.tituloPagina, "truncate")}>{cliente.nome}</SheetTitle>
-            <SheetDescription className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
-              {e.onboardingCompleto ? "Em operação" : "Entrada em andamento"} · {e.resumo.urgentes} urgente{e.resumo.urgentes === 1 ? "" : "s"} · {e.resumo.atencao} de atenção · {feitosNaSemana} feito{feitosNaSemana === 1 ? "" : "s"}
-            </SheetDescription>
-          </SheetHeader>
-        </div>
-
-        <RegiaoRolavel modo="sempre" memoria={`ciclo:folha:${cliente.id}:${frente}`} className="border-t border-border px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4 sm:px-6">
+    <JanelaCentral
+      aberta={aberta}
+      onFechar={onFechar}
+      largura="lg"
+      corpo="fixo"
+      semEspaco
+      titulo={cliente.nome}
+      descricao={`${e.onboardingCompleto ? "Em operação" : "Entrada em andamento"} · ${e.resumo.urgentes} urgente${e.resumo.urgentes === 1 ? "" : "s"} · ${e.resumo.atencao} de atenção · ${feitosNaSemana} feito${feitosNaSemana === 1 ? "" : "s"}`}
+    >
+        <RegiaoRolavel modo="sempre" sobre="cartao" memoria={`ciclo:folha:${cliente.id}:${frente}`} className="px-4 pb-5 pt-4 sm:px-5">
           <div className="space-y-5">
             {/* Pelo dossiê: foco, o que foi feito, o que vem */}
             <SecaoDoSistema
@@ -428,7 +425,6 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
             )}
           </div>
         </RegiaoRolavel>
-      </SheetContent>
-    </Sheet>
+    </JanelaCentral>
   );
 }

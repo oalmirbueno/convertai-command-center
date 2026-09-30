@@ -103,7 +103,7 @@ function buildFixture(appliedForward = 0) {
 // Timeout proprio: os its montam pacotes reais no filesystem e, com a suite
 // inteira em paralelo, o padrao de 5s estoura por CARGA — nao por regressao.
 // O falso-vermelho recorrente custava um cheque manual a cada rodada.
-describe("production migration view", { timeout: 30000 }, () => {
+describe("production migration view", { timeout: 120000 }, () => { // 30/09: com 218+ migrations o teste passa de 30 s com a máquina carregada
   it("parses quoted RFC-style CSV and the Supabase statement boundaries", () => {
     expect(parseCsv(
       '\uFEFF"first","comma,value","escaped ""quote"""\r\n'

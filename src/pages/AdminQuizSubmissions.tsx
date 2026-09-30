@@ -9,9 +9,6 @@ import {
   Mail, Phone, Building2, ArrowDownToLine, Hash, Lock, MoreHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
-} from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   CabecalhoDePagina,
@@ -20,6 +17,7 @@ import {
   EstadoDeErro,
   EstadoVazio,
   FaixaDeNumeros,
+  JanelaCentral,
   RegiaoRolavel,
   SeletorCompacto,
   botao,
@@ -531,25 +529,42 @@ function SubmissionDrawer({
   ];
 
   return (
-    <Sheet open={!!submission} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="flex w-full flex-col p-0 sm:max-w-xl">
-        <SheetHeader className="shrink-0 border-b border-border px-5 pb-4 pt-5 text-left">
-          <SheetTitle className={juntar(texto.tituloPagina, "pr-10")}>
-            {s.lead_name || "Sem nome"}
-          </SheetTitle>
-          <SheetDescription className="text-[12.5px]">
-            {s.lead_company || "-"} ·{" "}
-            {s.submitted_at
-              ? `submetido em ${format(new Date(s.submitted_at), "dd MMM yyyy · HH:mm", { locale: ptBR })}`
-              : `em andamento · última atividade ${
-                  (s.updated_at ?? s.created_at)
-                    ? format(new Date((s.updated_at ?? s.created_at) as string), "dd MMM yyyy · HH:mm", { locale: ptBR })
-                    : "-"
-                }`}
-          </SheetDescription>
-        </SheetHeader>
-
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
+    <JanelaCentral
+      aberta={!!submission}
+      onFechar={onClose}
+      largura="lg"
+      titulo={s.lead_name || "Sem nome"}
+      descricao={
+        <>
+          {s.lead_company || "-"} ·{" "}
+          {s.submitted_at
+            ? `submetido em ${format(new Date(s.submitted_at), "dd MMM yyyy · HH:mm", { locale: ptBR })}`
+            : `em andamento · última atividade ${
+                (s.updated_at ?? s.created_at)
+                  ? format(new Date((s.updated_at ?? s.created_at) as string), "dd MMM yyyy · HH:mm", { locale: ptBR })
+                  : "-"
+              }`}
+        </>
+      }
+      rodape={
+        <>
+          <button type="button" className={botao.secundario} onClick={() => onCopyOps(s)}>
+            <ArrowDownToLine className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Copiar JSON pro Ops
+          </button>
+          <button
+            type="button"
+            className={botao.primario}
+            disabled={s.status === "processed" || updating}
+            onClick={() => onMarkProcessed(s)}
+          >
+            {updating
+              ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
+            {s.status === "processed" ? "Já processado" : "Marcar como processado"}
+          </button>
+        </>
+      }
+    >
           {/* Resumo e contato */}
           <dl className="divide-y divide-border border-b border-border">
             <div className="flex min-w-0 items-center py-2">
@@ -598,26 +613,6 @@ function SubmissionDrawer({
               </section>
             ))}
           </div>
-        </div>
-
-        {/* Ações */}
-        <div className="flex shrink-0 flex-wrap items-center justify-end border-t border-border px-5 py-3 [&>*+*]:ml-2">
-          <button type="button" className={botao.secundario} onClick={() => onCopyOps(s)}>
-            <ArrowDownToLine className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Copiar JSON pro Ops
-          </button>
-          <button
-            type="button"
-            className={botao.primario}
-            disabled={s.status === "processed" || updating}
-            onClick={() => onMarkProcessed(s)}
-          >
-            {updating
-              ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-              : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
-            {s.status === "processed" ? "Já processado" : "Marcar como processado"}
-          </button>
-        </div>
-      </SheetContent>
-    </Sheet>
+    </JanelaCentral>
   );
 }

@@ -201,6 +201,35 @@ gosto do jeito que tá; a única coisa é ser menos poluído".
   colunas (nunca por cima do conteúdo). A escolha fica guardada por área (`memoria`). No celular nada muda
   (botão flutuante e gaveta).
 
+### 4.4 Pop-up e biblioteca abrem no centro, nunca na lateral (30/09, pedido do dono)
+
+"Biblioteca abrir no padrão central e não na lateral, e qualquer pop-up assim abrir tudo no centro e não na
+lateral."
+
+- **Todo pop-up é `JanelaCentral`** (`src/components/sistema/JanelaCentral.tsx`): biblioteca, ficha, detalhe,
+  lista de apoio, configuração, agente aberto por botão. No meio da tela a partir de 640 px; no celular ocupa
+  a tela inteira (centralizada, sem subir de lado).
+- Larguras: `sm` 440, `md` 560, `lg` 720, `xl` 960 e `tela` (quase a tela toda: biblioteca grande, editor).
+- Cabeçalho fixo com título numa linha, "?" (`ajuda`) e Fechar; `descricao` é só estado curto; faixa extra
+  (abas, progresso, filtro) em `abaixoDoTitulo`. Rodapé opcional com as ações.
+- **Uma rolagem**: o corpo rola (`corpo="rola"`, altura até 88% da janela). Quando quem está dentro já rola
+  sozinho (conversa de agente, `RegiaoRolavel` com memória), `corpo="fixo"`: a janela ganha altura definida e
+  o corpo não rola. Nunca `h-[calc(100vh…)]`: a altura sai de `vh` com `dvh` por cima (`supports-[height:1dvh]`)
+  e, no celular, de `fixed inset-0`.
+- Foco preso dentro, Esc fecha, o foco volta para quem abriu (Radix Dialog). O aviso (Desfazer) continua
+  clicável com a janela aberta.
+- **Proibido em `src/`**: `Sheet`/`SheetContent` (qualquer `side`), `Drawer` do vaul e painel `fixed right-0`/
+  `left-0` que abre por cima. O teste de contrato `src/test/janela-central.test.tsx` falha se aparecer um fora
+  da lista fechada de exceções.
+- **Exceções (não são pop-up)**: o agente fixo na lateral das mesas (`AreaDeTrabalho`, `PainelDoAgente`) e a
+  gaveta dele no celular; o menu de navegação lateral do Ciclo no celular (`AdminCiclo.tsx`, a única
+  `SheetContent`); o menu do app no celular (`AppLayout`, que já abre embaixo da barra); `Popover`,
+  `DropdownMenu`, `Tooltip` e o "?" ancorados no botão; a paleta do Canvas da Mesa Foto (encosta na paleta
+  para não cobrir as fotos); a lista de conversas dentro do Studio. Os primitivos `ui/sheet.tsx`,
+  `ui/drawer.tsx` e `ui/sidebar.tsx` ficam só como definição.
+- `JanelaDoCelular` (sobe de baixo no celular, no meio de 640 px para cima) continua para janelas curtas de
+  ação; tela nova prefere a `JanelaCentral`.
+
 ## 5. Texto: menos, sempre
 
 Dono, 28/09: "esse negócio de explicando, coloca um ponto de interrogação e já era".
@@ -371,6 +400,7 @@ Sem `dvh/svh` como única medida. Sem ResizeObserver obrigatório (MutationObser
 | `CampoDeBusca` | `valor`, `onMudar`, `placeholder`, `rotulo` (aria-label), `className?` (lupa, campo de 36 px, "Limpar busca") |
 | `CampoDeEscolha` | `rotulo`, `children` (pílulas, segmentado), `className?`: rótulo em cima de controle que não é campo de texto |
 | `BotaoComIcone` / `RotuloLargo` | `icone`, `rotulo` (some abaixo de 640 px; vira o aria-label), `variante?: keyof botao`, `onClick?`, `disabled?`, `type?`, `aria-label?`, `title?` / `children` |
+| `JanelaCentral` | `aberta`, `onMudar?`, `onFechar?`, `titulo`, `icone?`, `descricao?` (estado), `descricaoOculta?`, `ajuda?` (o "?"), `rotuloDaAjuda?`, `acoes?`, `abaixoDoTitulo?`, `rodape?`, `largura?: "sm" \| "md" \| "lg" \| "xl" \| "tela"`, `corpo?: "rola" \| "fixo"`, `semEspaco?`, `classeDoCorpo?`, `rotulo?` (nome para leitor de tela), `rotuloDoFechar?`, `refDoCorpo?`, `aoAbrirFoco?`, `fecharNoFundo?`, `className?`, `data-*`. Todo pop-up (4.4): centro a partir de 640 px, tela inteira no celular, uma rolagem, Esc e foco do Radix |
 | `JanelaDoCelular` | `aberta`, `titulo`, `onFechar`, `rodape?` (ações fixas), `larga?` (520 px), `rotuloDoFundo?`, `classeDoCorpo?`, `children`. Nasce no body (por cima da barra de baixo), sobe de baixo no celular, Esc fecha |
 | `useReservaFlutuante` | `(ativo, altura = 72)`: enquanto um botão flutua sobre o conteúdo (abaixo de 1024 px), reserva essa altura no fim da página |
 | `CampoDeFormulario` | `rotulo`, `apoio?`, `erro?`, `ajuda?`, `obrigatorio?`, `largo?`, `children` (o controle) |
@@ -425,6 +455,7 @@ Rodar em **375, 768, 1280x720, 1366x768, 1440 e 1920**:
 23. Nenhum subtítulo ou parágrafo explicativo à vista: tudo no "?"; na tela só título e estado (seção 5).
 24. Nenhum espaço sobrando embaixo nem área cortada, na tela normal e na tela cheia (seção 8).
 25. A catraca passa: `npx vitest run src/test/padrao-visual-catraca.test.ts` (ver abaixo).
+26. Nenhum pop-up na lateral: biblioteca, ficha e detalhe abrem na `JanelaCentral` (4.4); no celular, tela inteira.
 
 **Catraca do padrão visual** (`src/test/padrao-visual-catraca.test.ts`, frente L0, 28/09): conta no código
 inteiro (`src/**/*.tsx`, sem `ui/` e sem testes) o que o padrão tira e **falha se algum número subir**. Cada lote

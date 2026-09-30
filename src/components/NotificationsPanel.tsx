@@ -2,9 +2,8 @@ import { useState } from "react";
 import { useNotifications } from "@/hooks/useSupabaseData";
 import { useAvisosNaoLidos, useContagemDeNaoLidas, marcarTodasComoLidas } from "@/hooks/useAvisos";
 import { useAuth } from "@/contexts/AuthContext";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
-  AlertTriangle, ArrowLeft, BarChart3, Bell, Bot, Briefcase, CheckCircle, CreditCard, FileArchive,
+  AlertTriangle, BarChart3, Bell, Bot, Briefcase, CheckCircle, CreditCard, FileArchive,
   FolderOpen, Instagram, ListChecks, Package,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,7 +14,7 @@ import { toast } from "sonner";
 import { estadoDosAvisos, pedirPermissaoDeAvisos, type EstadoDoAviso } from "@/lib/avisosDoNavegador";
 import { categoriaDoAviso, rotuloDoLink } from "@/lib/avisos/rotulos";
 import TesteDeAvisos from "@/components/avisos/TesteDeAvisos";
-import { AjudaRecolhida, SeletorCompacto, botao, juntar, texto } from "@/components/sistema";
+import { AjudaRecolhida, JanelaCentral, SeletorCompacto, botao, juntar, texto } from "@/components/sistema";
 
 function getNotifIcon(type: string) {
   switch (categoriaDoAviso(type)) {
@@ -138,31 +137,19 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
   const groups = groupNotifications(displayNotifs);
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="w-full sm:w-[370px] sm:max-w-[370px] bg-card border-l border-border p-0 flex flex-col [&>button.absolute]:hidden"
-        style={{
-          paddingTop: "env(safe-area-inset-top)",
-          paddingBottom: "env(safe-area-inset-bottom)",
-        }}
-      >
-        <SheetHeader className="px-4 pt-3 pb-3 shrink-0 border-b border-border/60">
-          <div className="flex items-center gap-2 min-w-0">
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground"
-              aria-label="Fechar notificações"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-            <SheetTitle className={juntar(texto.tituloSecao, "truncate")}>Notificações</SheetTitle>
-          </div>
-        </SheetHeader>
-
-        {/* Filtro (segmentado do sistema, sem pílulas verdes) e "marcar todas" na mesma linha */}
-        <div className="px-5 pb-3 pt-3 space-y-3 shrink-0">
+    // Janela central (30/09, dono: "qualquer pop-up abrir no centro e não na
+    // lateral"): o filtro fica no cabeçalho fixo e só a lista rola.
+    <JanelaCentral
+      aberta={open}
+      onMudar={onOpenChange}
+      largura="md"
+      icone={<Bell className="h-4 w-4" />}
+      titulo="Notificações"
+      rotuloDoFechar="Fechar notificações"
+      semEspaco
+      abaixoDoTitulo={
+        // Filtro (segmentado do sistema, sem pílulas verdes) e "marcar todas" na mesma linha.
+        <div className="space-y-3">
           <div className="flex min-w-0 items-center">
             <SeletorCompacto
               rotulo="Filtrar notificações"
@@ -211,9 +198,10 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
           )}
           {eAdmin && <TesteDeAvisos idsNoSino={listaCarregada.map((n: any) => n.id)} />}
         </div>
-
-        {/* Notifications list */}
-        <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+      }
+    >
+        {/* Lista: a única rolagem da janela */}
+        <div className="pb-2">
           {groups.length === 0 ? (
             <p className="py-8 text-center text-[13px] text-muted-foreground">Nenhuma notificação.</p>
           ) : (
@@ -254,7 +242,6 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
             ))
           )}
         </div>
-      </SheetContent>
-    </Sheet>
+    </JanelaCentral>
   );
 }

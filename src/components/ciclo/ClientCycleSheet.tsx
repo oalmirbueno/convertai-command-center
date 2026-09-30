@@ -7,11 +7,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  Sheet, SheetContent, SheetDescription, SheetTitle,
-} from "@/components/ui/sheet";
 import EtapasDaEntrega from "@/components/ciclo/EtapasDaEntrega";
-import { RegiaoRolavel } from "@/components/sistema";
+import { JanelaCentral, RegiaoRolavel } from "@/components/sistema";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import {
   CYCLES, DICA_DA_ETAPA, FRENTES_DA_SEMANA, HISTORY_WEEKS, ONBOARDING_STEPS,
@@ -699,60 +696,62 @@ export default function ClientCycleSheet({
   };
 
   return (
-    <Sheet open={open} onOpenChange={(next) => !next && onClose()}>
-      <SheetContent
-        side="right"
-        className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md"
-      >
+    // Janela central (30/09, dono: "qualquer pop-up abrir no centro e não na
+    // lateral"). O cabeçalho parado leva o estado e a barra das etapas.
+    <JanelaCentral
+      aberta={open}
+      onFechar={onClose}
+      largura="lg"
+      corpo="fixo"
+      semEspaco
+      titulo={clientName}
+      descricaoOculta={`Etapas da semana, contexto e ferramentas de ${clientName}.`}
+      abaixoDoTitulo={
+        client ? (
+          <>
+          <div className="flex flex-wrap items-center text-[11px] text-muted-foreground [&>*+*]:ml-2">
+            <span className="font-semibold text-foreground">
+              {doneSteps.length}/{clientTotal} etapas
+            </span>
+            <span>·</span>
+            <span>{cycle.label}</span>
+            {monthsSince(client.created_at) && (
+              <>
+                <span>·</span>
+                <span>{monthsSince(client.created_at)}</span>
+              </>
+            )}
+            <span>·</span>
+            <span title={PHASE_PURPOSE[fase]} className="font-semibold text-primary">
+              {PHASE_LABELS[fase]}
+            </span>
+            {client.plan_name && (
+              <>
+                <span>·</span>
+                <span>{client.plan_name}</span>
+              </>
+            )}
+          </div>
+          <div className="mt-2 flex h-1.5 [&>*+*]:ml-[3px]">
+            {Array.from({ length: clientTotal }, (_, index) => (
+              <span
+                key={index}
+                className={`flex-1 rounded-full ${
+                  fechada(index + 1)
+                    ? index + 1 > totalSteps ? "bg-info" : "bg-primary"
+                    : "bg-secondary"
+                }`}
+              />
+            ))}
+          </div>
+          </>
+        ) : null
+      }
+    >
         {client && (
           <>
-            {/* Cabeçalho fixo, com respiro para a barra de status do aparelho */}
-            <div className="shrink-0 border-b border-border px-4 pb-3 pt-[max(1.5rem,calc(env(safe-area-inset-top)+0.75rem))]">
-              <SheetTitle className="pr-12 text-left text-[17px] font-bold leading-tight text-foreground">
-                {clientName}
-              </SheetTitle>
-              <SheetDescription className="sr-only">
-                Etapas da semana, contexto e ferramentas de {clientName}.
-              </SheetDescription>
-              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-                <span className="font-semibold text-foreground">
-                  {doneSteps.length}/{clientTotal} etapas
-                </span>
-                <span>·</span>
-                <span>{cycle.label}</span>
-                {monthsSince(client.created_at) && (
-                  <>
-                    <span>·</span>
-                    <span>{monthsSince(client.created_at)}</span>
-                  </>
-                )}
-                <span>·</span>
-                <span title={PHASE_PURPOSE[fase]} className="font-semibold text-primary">
-                  {PHASE_LABELS[fase]}
-                </span>
-                {client.plan_name && (
-                  <>
-                    <span>·</span>
-                    <span>{client.plan_name}</span>
-                  </>
-                )}
-              </div>
-              <div className="mt-2 flex h-1.5 gap-[3px]">
-                {Array.from({ length: clientTotal }, (_, index) => (
-                  <span
-                    key={index}
-                    className={`flex-1 rounded-full ${
-                      fechada(index + 1)
-                        ? index + 1 > totalSteps ? "bg-info" : "bg-primary"
-                        : "bg-secondary"
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
-
             {/* Corpo rolável */}
-            <RegiaoRolavel modo="sempre" memoria={`ciclo-antigo:folha:${client.id}:${area}`} className="px-4 py-4">
+            <RegiaoRolavel modo="sempre" sobre="cartao" memoria={`ciclo-antigo:folha:${client.id}:${area}`} className="px-4 py-4 sm:px-5">
               {/* A situação REAL, antes de qualquer ferramenta: quem abriu a
                   folha veio saber como este cliente está. Lista completa —
                   o card de fora mostra só as duas piores. Vazia, diz "em
@@ -1633,7 +1632,6 @@ export default function ClientCycleSheet({
             </RegiaoRolavel>
           </>
         )}
-      </SheetContent>
-    </Sheet>
+    </JanelaCentral>
   );
 }

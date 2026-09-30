@@ -6,8 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
+import JanelaCentral from "@/components/sistema/JanelaCentral";
 import {
   chamarFuncao,
   modeloNovo,
@@ -183,14 +183,16 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
   };
 
   return (
-    <Sheet open={aberto} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
-        <SheetHeader className="text-left">
-          <SheetTitle className="flex items-center"><Sparkles className="mr-2 h-4 w-4" /> Modelos de IA</SheetTitle>
-          <SheetDescription>O catálogo chega sozinho dos provedores. Ligue o que a equipe pode usar e escolha o padrão de cada papel.</SheetDescription>
-        </SheetHeader>
-
-        <div className="mt-4 flex flex-wrap items-center">
+    <JanelaCentral
+      aberta={aberto}
+      onMudar={onOpenChange}
+      largura="xl"
+      icone={<Sparkles className="h-4 w-4" />}
+      titulo="Modelos de IA"
+      ajuda="O catálogo chega sozinho dos provedores. Ligue o que a equipe pode usar e escolha o padrão de cada papel."
+      descricaoOculta="O catálogo chega sozinho dos provedores. Ligue o que a equipe pode usar e escolha o padrão de cada papel."
+    >
+        <div className="flex flex-wrap items-center">
           <Button type="button" size="sm" variant="outline" className="mr-2" onClick={() => void sincronizar()} disabled={sincronizando}>
             {sincronizando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
             Buscar modelos novos agora
@@ -317,7 +319,6 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
             Mostrar mais ({filtrados.length - limite})
           </Button>
         )}
-      </SheetContent>
-    </Sheet>
+    </JanelaCentral>
   );
 }
