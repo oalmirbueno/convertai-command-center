@@ -10,7 +10,10 @@
   "scripts": {
     "iniciar": "node --env-file-if-exists=.env worker.ts",
     "uma-vez": "node --env-file-if-exists=.env worker.ts --uma-vez",
-    "teste-local": "node --env-file-if-exists=.env teste-ponta-a-ponta.ts"
+    "teste-local": "node --env-file-if-exists=.env teste-ponta-a-ponta.ts",
+    "provar-skills": "node --env-file-if-exists=.env scripts/provar-skills.ts",
+    "uiux:instalar": "node scripts/instalar-ui-ux-pro-max.mjs",
+    "uiux:conferir": "node scripts/instalar-ui-ux-pro-max.mjs --conferir"
   },
   "dependencies": {
     "@opencode-ai/sdk": "1.18.33",

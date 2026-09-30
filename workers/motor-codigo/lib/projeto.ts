@@ -4,8 +4,8 @@
  * o commit) e recebe o pacote do cliente (.aceleriq/pacote.json, src/marca.css,
  * logo e imagens em public/, anexos em referencias/).
  */
-import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { PROJETO_VALIDO } from "../../../supabase/functions/_shared/motor-codigo.ts";
 import type { Fila } from "./fila.ts";
 import { rodar } from "./processos.ts";
@@ -45,11 +45,22 @@ export function pastaDoProjeto(raiz: string, projeto: string): string {
   return join(raiz, projeto);
 }
 
+/**
+ * O que nunca sai do modelo para um projeto: dependências, build, cache do
+ * Python e a prova de consulta ou o design system de quem rodou a busca na
+ * pasta do modelo (a prova é de cada projeto).
+ */
+export function copiaDoModelo(origem: string): boolean {
+  if (/[\\/](node_modules|dist|dist-ssr|__pycache__)([\\/]|$)/.test(origem) || /\.pyc$/i.test(origem)) return false;
+  const rel = relative(MODELO_DO_SITE, origem).split("\\").join("/");
+  return !/^(\.aceleriq\/uiux-log\.jsonl|\.aceleriq\/ux|design-system|\.opencode\/(node_modules|package\.json|\.gitignore))(\/|$)/.test(rel);
+}
+
 /** Cria o projeto do modelo (primeira vez) e deixa o git pronto. */
 export async function garantirProjeto(pasta: string): Promise<boolean> {
   if (existsSync(join(pasta, ".git"))) return false;
   mkdirSync(pasta, { recursive: true });
-  cpSync(MODELO_DO_SITE, pasta, { recursive: true, filter: (origem) => !/[\\/](node_modules|dist|dist-ssr)([\\/]|$)/.test(origem) });
+  cpSync(MODELO_DO_SITE, pasta, { recursive: true, filter: copiaDoModelo });
   mkdirSync(join(pasta, "public", "marca"), { recursive: true });
   mkdirSync(join(pasta, "public", "imagens"), { recursive: true });
   await git(pasta, ["init", "-q", "-b", "main"]);
@@ -63,12 +74,12 @@ export async function garantirProjeto(pasta: string): Promise<boolean> {
  * com uma casca mais velha ganha a nova no próximo trabalho, num commit
  * próprio; as seções (src/secoes) e o tema continuam do projeto.
  */
-export type CascaDoModelo = { versao: number; arquivos: string[] };
+export type CascaDoModelo = { versao: number; arquivos: string[]; pastas?: string[] };
 
 export function lerCasca(pasta: string): CascaDoModelo | null {
   try {
     const c = JSON.parse(readFileSync(join(pasta, ".aceleriq", "casca.json"), "utf8")) as CascaDoModelo;
-    return c && typeof c.versao === "number" && Array.isArray(c.arquivos) ? c : null;
+    return c && typeof c.versao === "number" && Array.isArray(c.arquivos) && (c.pastas === undefined || Array.isArray(c.pastas)) ? c : null;
   } catch {
     return null;
   }
@@ -76,6 +87,12 @@ export function lerCasca(pasta: string): CascaDoModelo | null {
 
 /** Arquivo da casca é caminho relativo simples (nada de .. nem absoluto). */
 export const arquivoDaCascaValido = (a: string) => typeof a === "string" && !!a && !/\.\./.test(a) && !/^[\\/]/.test(a) && !/^[a-z]:/i.test(a) && a.indexOf("src/secoes/") !== 0;
+
+/**
+ * Pasta da casca (v3, frente UIM): só `.opencode/skills` e subpastas. A casca
+ * APAGA e recopia a pasta inteira, então nada do projeto pode morar ali.
+ */
+export const pastaDaCascaValida = (p: string) => typeof p === "string" && /^\.opencode\/skills(\/[a-z0-9][a-z0-9._-]*)*$/i.test(p) && !/\.\./.test(p);
 
 export async function atualizarCasca(pasta: string): Promise<number | null> {
   const doModelo = lerCasca(MODELO_DO_SITE);
@@ -87,6 +104,15 @@ export async function atualizarCasca(pasta: string): Promise<number | null> {
     if (!existsSync(origem)) continue;
     mkdirSync(dirname(join(pasta, a)), { recursive: true });
     cpSync(origem, join(pasta, a));
+  }
+  // Pastas inteiras (as skills da casa): apaga e recopia, sem o cache do Python.
+  for (const p of (doModelo.pastas || []).filter(pastaDaCascaValida)) {
+    const origem = join(MODELO_DO_SITE, p);
+    if (!existsSync(origem)) continue;
+    const destino = join(pasta, p);
+    rmSync(destino, { recursive: true, force: true });
+    mkdirSync(dirname(destino), { recursive: true });
+    cpSync(origem, destino, { recursive: true, filter: copiaDoModelo });
   }
   mkdirSync(join(pasta, ".aceleriq"), { recursive: true });
   writeFileSync(join(pasta, ".aceleriq", "casca.json"), JSON.stringify(doModelo, null, 2));

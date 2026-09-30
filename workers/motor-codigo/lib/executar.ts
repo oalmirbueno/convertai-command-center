@@ -16,6 +16,7 @@ import { garantirPrevia } from "./previa.ts";
 import { rodarPassada, subirOpencode } from "./opencode.ts";
 import { abrirMedidor, type Medidor } from "./medidor.ts";
 import { ziparProjeto } from "./zip.ts";
+import { type ConsultaDaSecao, consultaDaSecao, eventoDaConsulta, lerLogDaBase, lerProvaDeUx, resumoDaBaseNaEntrega, totalDaBase } from "./prova-da-base.ts";
 
 /** A primeira linha útil do erro de build, sem as cores do terminal. */
 export function resumoDoBuild(log: string): string {
@@ -104,6 +105,8 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
         const passos = t.tipo === "construir" ? ((pedido.secoes as string[]) || []) : [String(pedido.secao || "")];
         const feitas: string[] = [];
         const falhas: Array<{ secao: string; motivo: string }> = [];
+        // UIM: prova de que a passada consultou a base de design e conferiu o checklist de UX (aviso, não trava).
+        const consultas: ConsultaDaSecao[] = [];
         for (const secao of passos) {
           if (await deveParar()) {
             estadoFinal = "parado";
@@ -111,6 +114,8 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
           }
           await avisar({ tipo: "passo", resumo: `${t.tipo === "construir" ? "Construindo" : "Ajustando"} ${rotuloDaSecao(secao)}` });
           const antesDaSecao = await commitAtual(pasta);
+          const linhasDoLog = lerLogDaBase(pasta).length;
+          const inicioDaPassada = Date.now();
           const texto = promptDaSecao(pacote as unknown as PacoteDoSite, secao, t.tipo === "ajustar" ? t.instrucao : t.instrucao && !/^Construir /.test(t.instrucao) ? t.instrucao : null);
           const r = await rodarPassada(servidor, {
             titulo: `${t.tipo} ${secao}`,
@@ -124,6 +129,12 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
             deveParar,
             custoReal,
           });
+          if (r.motivo !== "parado") {
+            // Lido antes do commit: se a seção quebrar o build e voltar, a prova da passada já foi contada.
+            const consulta = consultaDaSecao(secao, lerLogDaBase(pasta).slice(linhasDoLog), lerProvaDeUx(pasta, secao, inicioDaPassada));
+            consultas.push(consulta);
+            await avisar(eventoDaConsulta(consulta, rotuloDaSecao(secao)));
+          }
           gasto.tabela += r.custo.custo_usd;
           gasto.custo = Math.max(gasto.tabela, medidor ? medidor.total() : 0);
           gasto.tokensEntrada += r.custo.tokens_entrada;
@@ -160,6 +171,7 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
         }
         resultado.secoes = feitas;
         if (falhas.length) resultado.secoes_desfeitas = falhas;
+        if (consultas.length) resultado.base_de_design = totalDaBase(consultas);
       } finally {
         servidor.fechar();
         if (medidor) {
@@ -264,7 +276,7 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
     dados: {
       custo_usd: gasto.custo,
       estado: estadoFinal,
-      entrega: { tipo: t.tipo, projeto: t.projeto, commit: commitFinal, secoes: resultado.secoes || [], avisos_de_revisao: Array.isArray(resultado.qa) ? (resultado.qa as unknown[]).length : null, build_ok: resultado.build ? (resultado.build as { ok?: boolean }).ok !== false : null, publicado: resultado.deploy_url || null },
+      entrega: { tipo: t.tipo, projeto: t.projeto, commit: commitFinal, secoes: resultado.secoes || [], avisos_de_revisao: Array.isArray(resultado.qa) ? (resultado.qa as unknown[]).length : null, build_ok: resultado.build ? (resultado.build as { ok?: boolean }).ok !== false : null, publicado: resultado.deploy_url || null, base_de_design: resumoDaBaseNaEntrega(resultado.base_de_design) },
     },
   });
   return { estado: estadoFinal, custo: gasto.custo };
