@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { ErroDaMesa, mensagemDoCodigo } from "@/lib/mesa/api";
+import { corpoComMarca } from "@/lib/mesa/marcas";
 import { novoIdDoArquivo } from "@/components/mesa-videos/videosApi";
 
 /**
@@ -13,7 +14,8 @@ import { novoIdDoArquivo } from "@/components/mesa-videos/videosApi";
 export const BUCKET_DO_EDITOR = "mesa";
 
 export async function chamarEditorVideo<T = any>(corpo: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke("editor-video", { body: corpo });
+  // Frente SYNC: a marca aberta vai junto (contexto, regras e aprendizado da marca certa).
+  const { data, error } = await supabase.functions.invoke("editor-video", { body: corpoComMarca("editor-video", corpo) });
   if (error) {
     const ctx = (error as any).context;
     let det: Record<string, unknown> | null = null;

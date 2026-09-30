@@ -16,7 +16,8 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { carregarModelo, chamarImagem, cobrarJev, estimarComModelo, IaMotorErro, modeloPadrao, type ModeloIa } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar } from "../_shared/jev.ts";
-import { lerContextoDaMarca, resolverMarca } from "../_shared/marca.ts";
+import { lerContextoCompletoDaMarca } from "../_shared/contexto-completo-da-marca.ts";
+import { contextoDaEstrategia } from "../_shared/contexto-completo-regras.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import {
@@ -101,24 +102,21 @@ async function garantirAcesso(ch: Chamador, clientId: unknown): Promise<string> 
 
 /** Contexto do cliente para a marca aberta (a outra marca nunca herda da principal: _shared/marca.ts). */
 async function clienteParaSugestao(clientId: string, marcaId: unknown): Promise<{ cliente: ClienteParaSugestao; cores: string[] }> {
-  const db = servico();
-  const marca = await resolverMarca(db, clientId, { marca_id: marcaId });
-  const ctx = (await lerContextoDaMarca(db, clientId, marca)) as Record<string, unknown>;
-  const { data: perfil } = await db.from("profiles").select("full_name, company_name").eq("id", clientId).maybeSingle();
-  const p = (perfil || {}) as { full_name?: string | null; company_name?: string | null };
-  const { data: kit } = await db.from("cliente_kit_marca").select("paleta, estilo").eq("client_id", clientId).maybeSingle();
-  const paleta = (marca && !marca.principal ? marca.paleta : (kit as { paleta?: unknown } | null)?.paleta) as Array<{ hex?: string }> | null;
-  const estilo = marca && !marca.principal ? marca.estilo : ((kit as { estilo?: string | null } | null)?.estilo ?? null);
+  // Frente SYNC: a fonte única do contexto da marca (herança, kit, contexto e a estratégia aprovada na Mesa Identidade).
+  const p = await lerContextoCompletoDaMarca(servico(), clientId, typeof marcaId === "string" && UUID.test(marcaId) ? marcaId : null, { area: "identidade" });
+  if (p.avisos.length) registrarFalha("mesa-mockups: contexto da marca incompleto", p.avisos.join(", "), { client_id: clientId });
+  const ctx = p.contexto;
   const texto = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
+  const daEstrategia = p.estrategia ? contextoDaEstrategia(p.estrategia.estrategia, { nomeDaMarca: p.marca ? p.marca.nome : p.nomeCliente }) : {};
   return {
     cliente: {
-      nome: (marca && marca.nome) || p.company_name || p.full_name || "Cliente",
-      negocio: texto(ctx.negocio, 400),
-      publico: texto(ctx.publico, 300),
-      oferta: texto(ctx.oferta, 300),
-      estilo: texto(estilo, 300),
+      nome: (p.marca && p.marca.nome) || p.nomeCliente || "Cliente",
+      negocio: texto(ctx.negocio, 400) || texto(daEstrategia.posicionamento, 400),
+      publico: texto(ctx.publico, 300) || texto(daEstrategia.publico, 300),
+      oferta: texto(ctx.oferta, 300) || texto(daEstrategia.oferta, 300),
+      estilo: texto(p.kit ? p.kit.estilo : null, 300),
     },
-    cores: (Array.isArray(paleta) ? paleta : []).map((c) => String(c?.hex || "")).filter((h) => /^#?[0-9a-f]{6}$/i.test(h)).map((h) => (h[0] === "#" ? h : `#${h}`)),
+    cores: (p.kit ? p.kit.paleta : []).map((c) => (/#[0-9a-f]{6}\b/i.exec(c) || [""])[0]).filter(Boolean),
   };
 }
 

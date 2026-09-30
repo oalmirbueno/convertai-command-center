@@ -21,6 +21,9 @@ import { auditLog } from "../_shared/mcp-audit.ts";
 import { type AcaoDoAgente, TIPO_DA_ACAO } from "../_shared/acoes-do-agente.ts";
 import { brandbookDoProjeto, brandbookPublico, coresDoBrandbook, type DadosDoBrandbook, ehModelo, imagensDoBrandbook, lacunasDoBrandbook, type ModeloDoBrandbook, normalizarBrandbook, tokenPublico } from "../_shared/brandbook.ts";
 import { gerarPdfDoBrandbook, nomeDoArquivoDoBrandbook, prepararImagens } from "../_shared/pdf-identidade.ts";
+// Frente SYNC: a estratégia aprovada e a tagline também viram sugestão para o contexto da marca (Confirmar e Desfazer campo a campo).
+import { aplicarNoContexto, contextoDaEstrategia, estrategiaAprovada, mudancasNoContexto, reverterNoContexto } from "../_shared/contexto-completo-regras.ts";
+import { esquecerContextoCompleto } from "../_shared/contexto-completo-da-marca.ts";
 import {
   baixarDoBucket,
   type Chamador,
@@ -249,7 +252,7 @@ export async function brandbookRevogar(ch: Chamador, corpo: Record<string, unkno
 
 // ------------------------------------------------------------------ kit da marca
 
-export const OPERACOES_DO_KIT = ["kit_paleta", "kit_tipografia", "kit_logo"] as const;
+export const OPERACOES_DO_KIT = ["kit_paleta", "kit_tipografia", "kit_logo", "kit_contexto"] as const;
 
 type AlvoDoKit = { tabela: "cliente_kit_marca" } | { tabela: "cliente_marcas"; marcaId: string };
 
@@ -304,6 +307,16 @@ export async function aplicarNoKit(clientId: string, marcaId: string | null, ope
     await gravarKit(clientId, alvo, { [coluna]: caminho, [alternativa ? "logo_alt_file_id" : "logo_file_id"]: null }, userId);
     return { campo: coluna, antes: alternativa ? kit.logo_alt_path : kit.logo_path };
   }
+  if (operacao === "kit_contexto") {
+    // Frente SYNC: só os campos que mudam; o "antes" de cada um fica para o Desfazer.
+    const campos = carga.campos && typeof carga.campos === "object" ? (carga.campos as Record<string, unknown>) : {};
+    const mudam = mudancasNoContexto(kit.contexto, campos);
+    if (!Object.keys(mudam).length) return { campo: "contexto.campos", antes: {} };
+    const r = aplicarNoContexto(kit.contexto, mudam);
+    await gravarKit(clientId, alvo, { contexto: r.contexto }, userId);
+    esquecerContextoCompleto(clientId);
+    return { campo: "contexto.campos", antes: r.antes };
+  }
   throw new Error("Operação do kit desconhecida.");
 }
 
@@ -320,6 +333,14 @@ export async function reverterNoKit(clientId: string, marcaId: string | null, de
     if (desfazer.antes == null) delete contexto.tipografia;
     else contexto.tipografia = desfazer.antes;
     await gravarKit(clientId, alvo, { contexto }, userId);
+    return;
+  }
+  if (campo === "contexto.campos") {
+    const antes = desfazer.antes && typeof desfazer.antes === "object" ? (desfazer.antes as Record<string, unknown>) : {};
+    if (!Object.keys(antes).length) return;
+    const kit = await lerKit(clientId, alvo);
+    await gravarKit(clientId, alvo, { contexto: reverterNoContexto(kit.contexto, antes) }, userId);
+    esquecerContextoCompleto(clientId);
     return;
   }
   throw new Error("Sem o que desfazer no kit.");
@@ -349,6 +370,21 @@ export function propostaDoKit(projeto: LinhaDoProjeto, dados: DadosDoBrandbook, 
   if (secundaria && secundaria.previa_png) {
     itens.push({ ref: "k4", alvo_id: projeto.id, titulo: "Logo alternativa", detalhe: "Prévia PNG do logotipo secundário", operacao: "kit_logo", rotulo: "levar ao kit", para: null });
     cargas["kit_logo:k4"] = { caminho: secundaria.previa_png, alternativa: true };
+  }
+  // Frente SYNC: estratégia (público, oferta, diferenciais, tom, posicionamento) e tagline viram contexto da marca.
+  const dadosDoProjeto = (projeto.dados || {}) as Record<string, unknown>;
+  const naming = dadosDoProjeto.naming && typeof dadosDoProjeto.naming === "object" ? (dadosDoProjeto.naming as Record<string, unknown>) : {};
+  const doContexto = contextoDaEstrategia(dadosDoProjeto.estrategia, { nomeDaMarca: projeto.titulo });
+  if (Object.keys(doContexto).length) {
+    const rotulos: Record<string, string> = { negocio: "negócio", publico: "público", oferta: "oferta", diferenciais: "diferenciais", tom_de_voz: "tom de voz", posicionamento: "posicionamento" };
+    const aprovada = estrategiaAprovada(projeto.concluidas);
+    itens.push({ ref: "k5", alvo_id: projeto.id, titulo: `Contexto da marca (estratégia${aprovada ? " aprovada" : " em construção"})`, detalhe: Object.keys(doContexto).map((k) => rotulos[k] || k).join(", "), operacao: "kit_contexto", rotulo: "levar ao contexto", para: null });
+    cargas["kit_contexto:k5"] = { campos: doContexto };
+  }
+  const tagline = typeof naming.slogan === "string" ? naming.slogan.trim() : "";
+  if (tagline) {
+    itens.push({ ref: "k6", alvo_id: projeto.id, titulo: "Tagline", detalhe: tagline.slice(0, 140), operacao: "kit_contexto", rotulo: "levar ao contexto", para: null });
+    cargas["kit_contexto:k6"] = { campos: { tagline: tagline.slice(0, 140) } };
   }
   if (!itens.length) return null;
   return {

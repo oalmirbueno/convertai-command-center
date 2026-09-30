@@ -21,6 +21,8 @@ import { executorVivo } from "../_shared/motor-codigo.ts";
 import { criarTrabalho, ErroDoMotor, eventosDoTrabalho, executorDoMotor, lerTrabalho, orcar, pararTrabalho, trabalhosDoProjeto } from "../_shared/motor-fila.ts";
 import { type LinhaDoSite, montarPacoteDoSite } from "../_shared/pacote-do-site.ts";
 import { resolverMarca } from "../_shared/marca.ts";
+import { regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
+import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 
@@ -102,7 +104,14 @@ async function pedir(ch: Chamador, c: Record<string, unknown>) {
   const site = await lerSite(clientId, idDe(c.site_id, "site_id"));
   const marca = await resolverMarca(servico(), clientId, { marca_id: site.marca_id });
   const secoes = Array.isArray(c.secoes) ? (c.secoes as string[]) : undefined;
-  const { pacote, arquivos } = await montarPacoteDoSite(servico(), site, marca, secoes);
+  // Frente SYNC: o agente do worker também lê as regras ensinadas na Mesa Site e o contexto completo da marca
+  // (estratégia aprovada com tom e tagline, briefing mais novo, decisões do conselho e cérebro).
+  const [{ pacote, arquivos }, regras, contextoDaMarca] = await Promise.all([
+    montarPacoteDoSite(servico(), site, marca, secoes),
+    regrasDaMesa(servico(), { clientId, mesa: "site", marcaId: site.marca_id }),
+    contextoCompletoParaPrompt(servico(), clientId, marca, { area: "site", partes: ["estrategia", "briefing", "decisoes", "cerebro"], semTitulo: true, teto: 6000 })
+      .then((x) => x.bloco, (e) => (registrarFalha("motor-codigo: contexto completo não lido", e), "")),
+  ]);
   const { trabalho, orcamento } = await criarTrabalho(servico(), {
     clientId,
     marcaId: site.marca_id,
@@ -111,7 +120,12 @@ async function pedir(ch: Chamador, c: Record<string, unknown>) {
     referencia: { tipo: "site", id: site.id },
     pedidoBruto: c,
     modeloId: typeof c.modelo_id === "string" && c.modelo_id ? c.modelo_id : site.modelo,
-    pacote: { ...pacote, arquivos } as unknown as Record<string, unknown>,
+    pacote: {
+      ...pacote,
+      arquivos,
+      regras_da_equipe: regras.regras.map((r) => `${r.tipo === "evitar" ? "EVITAR" : "PREFERIR"}: ${r.texto}`),
+      contexto_da_marca: contextoDaMarca || null,
+    } as unknown as Record<string, unknown>,
     userId: ch.userId,
   });
   await auditLog({

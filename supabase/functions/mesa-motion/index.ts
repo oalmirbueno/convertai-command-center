@@ -34,7 +34,7 @@ import { logosDaMarca } from "../_shared/heranca-da-marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
-import { blocoDoContextoDoCliente, criarContextoDoAgente } from "../_shared/contexto-do-agente.ts";
+import { blocoDoContextoDoCliente, criarContextoDoAgente, PARTES_COM_O_CONTEXTO } from "../_shared/contexto-do-agente.ts";
 import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { AVISO_SEM_REGISTRO, blocoDaReferencia, gravarTroca, type ItemReferivel, referenciaDoPedido } from "../_shared/conversa-das-mesas.ts";
@@ -929,7 +929,8 @@ async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
   ]);
   if (!modelo) throw new ErroHttp(409, "sem_modelo", "Nenhum modelo de texto ativo para o papel motion.");
   if (historico.error) registrarFalha("mesa-motion: histórico não lido", historico.error, { conversa_id: conversaId });
-  const contexto = await CONTEXTO_DO_AGENTE.ler(servico(), f.client_id, ["arte", "copy", "geral"]).catch((e) => (registrarFalha("mesa-motion: contexto do agente", e), ""));
+  // Frente SYNC: contexto completo da marca do filme (a outra marca só lê o dela): negócio, estratégia com tom e tagline, briefing, dossiê, decisões e cérebro.
+  const contexto = await CONTEXTO_DO_AGENTE.ler(servico(), f.client_id, ["arte", "copy", "geral"], { marca: kit.marca || f.marca_id, partes: PARTES_COM_O_CONTEXTO, area: "video" }).catch((e) => (registrarFalha("mesa-motion: contexto do agente", e), ""));
   const anteriores = (((historico.data as { papel: string; conteudo: string }[] | null) ?? []).slice().reverse())
     .filter((m) => m.papel === "usuario" || m.papel === "agente")
     .map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: m.conteudo.slice(0, 4000) }));
@@ -956,7 +957,7 @@ async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
   const j = obj(saida.json);
   let resposta = limpo(j.resposta, 4000) || "Pronto.";
   const sugestoes = (Array.isArray(j.sugestoes) ? j.sugestoes : []).map((x) => limpo(x, 140)).filter(Boolean).slice(0, 3);
-  const aprendendo = aprenderDoPedido(servico(), { clientId: f.client_id, mesa: "motion", pedido: mensagem, regraSugerida: j.regra_aprendida, marcaId: f.marca_id, userId: ch.userId, ultimaResposta: ultima ? ultima.conteudo : null });
+  const aprendendo = aprenderDoPedido(servico(), { clientId: f.client_id, mesa: "motion", pedido: mensagem, regraSugerida: j.regra_aprendida, marcaId: kit.marca ? kit.marca.id : f.marca_id, userId: ch.userId, ultimaResposta: ultima ? ultima.conteudo : null });
   let acao = normalizarAcoesDoMotion(j.acoes, l, f.client_id, await custosDoAgente(modelo));
   if (acao) acao = comCaminho(acao, caminhoDoMotion(f.client_id, f.id, acao));
   // Ordem clara e sem custo (escolher storyboard, trocar peça, pedir still ou amostra): faz na hora, com Desfazer.

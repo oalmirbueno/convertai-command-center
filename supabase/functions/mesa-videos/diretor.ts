@@ -29,6 +29,7 @@ import { blocoDaMarca, lerContextoDaMarca, lerDossieDaMarca, marcaDoPedido, marc
 import { chamarTexto, cobrarJev, IaMotorErro } from "../_shared/ia-motor.ts";
 import { jevPerguntar } from "../_shared/jev.ts";
 import { lerContextoConsolidado, lerDossie } from "../_shared/contexto-cliente.ts";
+import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import { caminhoDaMiniatura, reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
 import { leituraParaAVisao } from "../_shared/video-armazenar.ts";
 import { type AcaoDoAgente, comCaminho, executarDireto, type ItemDaAcaoDoAgente, podeExecutarDireto, type ResultadoDoItem } from "../_shared/acoes-do-agente.ts";
@@ -98,7 +99,10 @@ async function contextoDoCliente(b: BaseDaFuncao, clientId: string, marcaId: unk
     (marca ? lerDossieDaMarca(db, clientId, marca, 4000) : lerDossie(db, clientId, 4000)).catch((e) => (registrarFalha("mesa-videos: lerDossie falhou", e), null)),
   ]);
   const nome = marca && !marca.principal ? marca.nome : perfil ? perfil.company_name || perfil.full_name || "" : "";
-  return [nome ? `Cliente: ${nome}` : "", marca ? blocoDaMarca(marca, await marcasDoCliente(db, clientId)) : "", Object.keys(contexto || {}).length ? `Contexto consolidado: ${JSON.stringify(contexto).slice(0, 3000)}` : "", dossie ? `Dossiê:\n${dossie}` : ""].filter(Boolean).join("\n\n") || "sem contexto registrado";
+  // Frente SYNC: o que faltava do contexto completo da marca (kit, estratégia aprovada com tom e tagline, briefing, decisões e cérebro).
+  const completo = await contextoCompletoParaPrompt(db, clientId, marca || (typeof marcaId === "string" ? marcaId : null), { area: "video", partes: ["kit", "estrategia", "briefing", "decisoes", "cerebro"], semTitulo: true, teto: 5000 })
+    .then((c) => c.bloco, (e) => (registrarFalha("mesa-videos: contexto completo não lido", e), ""));
+  return [nome ? `Cliente: ${nome}` : "", marca ? blocoDaMarca(marca, await marcasDoCliente(db, clientId)) : "", Object.keys(contexto || {}).length ? `Contexto consolidado: ${JSON.stringify(contexto).slice(0, 3000)}` : "", dossie ? `Dossiê:\n${dossie}` : "", completo].filter(Boolean).join("\n\n") || "sem contexto registrado";
 }
 
 /** Grava o projeto (trava otimista pela versão). Sem a tabela: devolve o projeto sem id e avisa (com o motivo no log). */
@@ -290,7 +294,7 @@ export async function diretorConversar(b: BaseDaFuncao, corpo: Record<string, un
         throw e;
       },
     ),
-    aprenderDoPedido(b.servico(), { clientId, mesa: "video", pedido: texto, regraSugerida: bruto.regra_aprendida, userId: b.userId, ultimaResposta: conversa.ultimaResposta }),
+    aprenderDoPedido(b.servico(), { clientId, mesa: "video", pedido: texto, regraSugerida: bruto.regra_aprendida, marcaId: typeof corpo.marca_id === "string" ? corpo.marca_id : null, userId: b.userId, ultimaResposta: conversa.ultimaResposta }),
   ]);
   const g = gravacao;
   if (g.conflito) avisos.unshift("O projeto foi mudado em outra tela: as mudanças desta resposta não entraram. Abra de novo e peça outra vez.");

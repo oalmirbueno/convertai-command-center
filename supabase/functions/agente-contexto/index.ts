@@ -61,6 +61,7 @@ import {
   blocoDaMarca,
   colunasComMarca,
   contasDaMarcaDoCliente,
+  filtrarReferenciasDaMarca,
   fontesDaMarca,
   kitComMarca,
   lerDossieDaMarca,
@@ -70,6 +71,7 @@ import {
   marcaParaGravar,
   marcasDoCliente,
 } from "../_shared/marca.ts";
+import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 // Frente MC (29/09): a regra única de herança e a logo achada no que já existe.
 import { linhaDaMarca, projetoDaMarcaAberta } from "../_shared/heranca-da-marca.ts";
 import { type ArquivoLeve, candidatosDaMarca, escolhaDaLogo, type NoDoWorkspaceLeve, perguntaDaLogo } from "./logo-da-marca.ts";
@@ -1317,16 +1319,21 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const marcaDaConversa = await marcaDoPedido(db, clientId, corpo).catch((e) => (registrarFalha("agente-contexto: marca da conversa falhou", e), null));
   const soLeitura = ehOutraMarca(marcaDaConversa);
 
+  // Frente SYNC: o que faltava do contexto completo da marca (estratégia aprovada, briefing mais novo, dossiê, decisões do conselho, cérebro filtrado e Instagram).
+  const completoP = contextoCompletoParaPrompt(db, clientId, marcaDaConversa, { area: "geral", partes: ["estrategia", "briefing", "dossie", "decisoes", "cerebro", "instagram"], teto: 6000 })
+    .then((c) => c.bloco, (e) => (registrarFalha("agente-contexto: contexto completo não lido", e), ""));
   const [kit, nome, linhas, fontes, memoria, refs, situacao, regras] = await Promise.all([
     lerKitDaMarca(clientId, marcaDaConversa),
     nomeDoCliente(clientId),
     historicoDaConversa(conversaId),
     db.from("cliente_fontes").select("nome, papel, origem").eq("client_id", clientId),
     db.from("agente_memoria").select("agente, tipo, texto").eq("client_id", clientId).eq("ativa", true).order("criado_em", { ascending: false }).limit(30),
-    db.from("cliente_referencias").select("papel, leitura, tags").eq("client_id", clientId).eq("ativa", true).not("leitura", "is", null).limit(12),
+    // Frente SYNC: só as referências da marca aberta (a CME não lê as da Acerbi).
+    filtrarReferenciasDaMarca(db.from("cliente_referencias").select("papel, leitura, tags").eq("client_id", clientId).eq("ativa", true).not("leitura", "is", null), marcaDaConversa).limit(12),
     situacaoDoCliente(clientId),
     lerRegrasDoDono(db, clientId, { areas: ["geral", "arte", "copy", "conta"], marcaId: corpo.marca_id }),
   ]);
+  const completoDaMarca = await completoP;
   const anteriores = historicoParaOModelo(linhas, { excluir: pedido.id, max: 16, maxChars: 2500 });
 
   // Pedido de mexer em logo, referência, foto, arquivo, leitura ou montagem: as listas entram no prompt (com apelidos, nunca id).
@@ -1362,12 +1369,13 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
       CONHECIMENTO_DO_CONTEXTO,
       blocoDasRegras(regras),
       `CONTEXTO ATUAL (JSON):\n${JSON.stringify(estado)}`,
+      completoDaMarca,
       dadosDasAcoes
         ? blocoDasAcoesDoContexto(dadosDasAcoes)
         : "- acoes: sempre null nesta mensagem (para ler referências pendentes, montar o contexto de novo ou mexer em logo, referências, fotos e arquivos, a equipe pede e a lista vem na próxima).",
       REGRA_DO_APRENDIZADO_NO_PROMPT,
       blocoDoMapaDoPainel("contexto"),
-    ].join("\n\n"),
+    ].filter(Boolean).join("\n\n"),
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem }],
     esquemaJson: ESQUEMA_CONVERSA,
     maxTokensSaida: 4000,

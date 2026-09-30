@@ -38,7 +38,7 @@ import { fotoDaMarca, lerMarcaParaDirecaoDaMarca, type MarcaDoCliente, resolverM
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
-import { blocoDoContextoDoCliente, criarContextoDoAgente } from "../_shared/contexto-do-agente.ts";
+import { blocoDoContextoDoCliente, criarContextoDoAgente, PARTES_COM_O_CONTEXTO } from "../_shared/contexto-do-agente.ts";
 import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { AVISO_SEM_REGISTRO, blocoDaReferencia, gravarTroca, type ItemReferivel, referenciaDoPedido } from "../_shared/conversa-das-mesas.ts";
@@ -804,7 +804,8 @@ async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
   if (historico.error) registrarFalha("mesa-site: histórico não lido", historico.error, { conversa_id: conversaId });
   const [direcao, contexto, custos, imagensDoAnexo] = await Promise.all([
     lerMarcaParaDirecaoDaMarca(servico(), s.client_id, marca),
-    CONTEXTO_DO_AGENTE.ler(servico(), s.client_id, ["arte", "copy", "geral"]).catch((e) => (registrarFalha("mesa-site: contexto do agente", e), "")),
+    // Frente SYNC: contexto completo da marca do site (negócio, estratégia aprovada com tom e tagline, briefing, dossiê, decisões e cérebro).
+    CONTEXTO_DO_AGENTE.ler(servico(), s.client_id, ["arte", "copy", "geral"], { marca: marca || s.marca_id, partes: PARTES_COM_O_CONTEXTO, area: "site" }).catch((e) => (registrarFalha("mesa-site: contexto do agente", e), "")),
     custosDoAgente(s, modelo),
     Promise.all(anexos.filter((a) => a.mime.indexOf("image/") === 0).slice(0, 3).map((a) => bytesDoStorage(a.bucket, a.path))),
   ]);
@@ -892,13 +893,16 @@ async function trabalhoDoAgente(ch: Chamador, s: LinhaDoSite, pedido: Record<str
   const marca = await marcaDoSite(s);
   const { pacote, arquivos } = await montarPacoteDoSite(servico(), s, marca);
   const regras = await regrasDaMesa(servico(), { clientId: s.client_id, mesa: "site", marcaId: s.marca_id });
+  // Frente SYNC: o agente do motor lê também o contexto completo da marca (estratégia com tom e tagline, briefing, decisões e cérebro).
+  const contextoDaMarca = await CONTEXTO_DO_AGENTE.ler(servico(), s.client_id, ["arte", "copy", "geral"], { marca: marca || s.marca_id, partes: ["estrategia", "briefing", "decisoes", "cerebro"], area: "site", teto: 6000 })
+    .catch((e) => (registrarFalha("mesa-site: contexto do motor", e), ""));
   const extras = anexos.map((a, i) => ({ bucket: a.bucket, path: a.path, destino: `referencias/anexo-${i + 1}-${a.nome.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 60)}` }));
   const motor = await modeloDoMotor(servico(), s.modelo);
   const est = estimarTrabalho(motor, pedido.tipo === "construir" ? "construir" : pedido.tipo === "ajustar" ? "ajustar" : "revisar", 1);
   const { trabalho } = await criarTrabalho(servico(), {
     clientId: s.client_id, marcaId: s.marca_id, mesa: "site", projeto: s.projeto, referencia: { tipo: "site", id: s.id },
     pedidoBruto: { teto_usd: est.teto_sugerido_usd, ...pedido }, modeloId: motor ? motor.id : null,
-    pacote: { ...pacote, arquivos: [...arquivos, ...extras], regras_da_equipe: regras.regras.map((r) => `${r.tipo === "evitar" ? "EVITAR" : "PREFERIR"}: ${r.texto}`) } as unknown as Record<string, unknown>,
+    pacote: { ...pacote, arquivos: [...arquivos, ...extras], regras_da_equipe: regras.regras.map((r) => `${r.tipo === "evitar" ? "EVITAR" : "PREFERIR"}: ${r.texto}`), contexto_da_marca: contextoDaMarca || null } as unknown as Record<string, unknown>,
     userId: ch.userId,
   });
   return trabalho;

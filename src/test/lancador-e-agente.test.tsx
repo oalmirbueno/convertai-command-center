@@ -327,7 +327,9 @@ describe("o agente continua com tudo o que fazia", () => {
   });
 
   it("o servidor junta o pré-contexto (dossiê e memória pela leitura que já existe) e responde no modo conversa", () => {
-    expect(servidor).toContain('import { contextoParaAgente, type AreaDoCerebro } from "../_shared/cerebro-do-cliente.ts";');
+    // Frente SYNC (30/09): a leitura agora é o contexto completo da marca (dossiê, cérebro, estratégia, briefing e decisões).
+    expect(servidor).toContain('import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";');
+    expect(servidor).toContain("contextoCompletoParaPrompt(supabase as never, clientId, null, {");
     expect(servidor).toContain('if (body.modo === "conversa")');
     expect(servidor).toContain("lerPreContexto(supabase, body.clientId || null, servico, tela)");
     expect(servidor).toContain("preContexto +");

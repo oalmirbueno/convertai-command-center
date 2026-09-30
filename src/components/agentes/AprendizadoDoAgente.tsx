@@ -26,6 +26,8 @@ export interface Aprendido {
   situacao: "criado" | "reforcado" | "substituiu" | null;
   reforcos: number | null;
   esquecido_em?: string | null;
+  /** Frente SYNC: a regra vale em todas as mesas (o dono disse "em todas", "em tudo"). */
+  alcance?: "todas";
 }
 
 export interface RegrasSeguidas {
@@ -46,6 +48,7 @@ export function aprendidoDosAnexos(anexos: unknown): Aprendido | null {
     situacao: a.situacao === "reforcado" || a.situacao === "substituiu" || a.situacao === "criado" ? a.situacao : null,
     reforcos: typeof a.reforcos === "number" ? a.reforcos : null,
     esquecido_em: typeof a.esquecido_em === "string" ? a.esquecido_em : null,
+    ...(a.alcance === "todas" ? { alcance: "todas" as const } : {}),
   };
 }
 
@@ -128,6 +131,7 @@ export default function AprendizadoDoAgente({
             <span className="font-medium text-foreground">{aprendido.id ? "Aprendi:" : "Guardar como regra?"}</span>{" "}
             <span className={aprendido.esquecido_em ? "line-through" : undefined}>{aprendido.texto}</span>
             {aprendido.situacao === "reforcado" && !aprendido.esquecido_em && <span> (já sabia; reforcei{aprendido.reforcos ? `, ${aprendido.reforcos} vezes` : ""})</span>}
+            {aprendido.alcance === "todas" && !aprendido.esquecido_em && <span> (vale em todas as mesas)</span>}
             {aprendido.esquecido_em && <span> (esquecido)</span>}
           </span>
           {aprendido.id && !aprendido.esquecido_em && onEsquecer && (

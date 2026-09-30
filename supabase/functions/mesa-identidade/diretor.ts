@@ -27,7 +27,7 @@ import {
   textoDoResultado,
 } from "../_shared/acoes-do-agente.ts";
 import { blocoDoMapaDoPainel, caminhoDaResposta, destinoNaResposta, pedeParaAbrir, pedeParaLevar } from "../_shared/mapa-do-painel.ts";
-import { blocoDoContextoDoCliente, criarContextoDoAgente } from "../_shared/contexto-do-agente.ts";
+import { blocoDoContextoDoCliente, criarContextoDoAgente, TODAS_AS_PARTES } from "../_shared/contexto-do-agente.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { AVISO_SEM_REGISTRO, gravarTroca } from "../_shared/conversa-das-mesas.ts";
 import { anexoDasRegrasSeguidas, aprenderDoPedido, CAMPOS_DO_APRENDIZADO, regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
@@ -173,7 +173,8 @@ export async function agenteConversar(ch: Chamador, corpo: Record<string, unknow
     modeloDoPapel("identidade", corpo.modelo_id),
     servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO),
     nomeDaMarca(clientId, marcaId),
-    CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["arte", "copy", "geral"]).catch((e) => (registrarFalha("mesa-identidade: contexto do agente não lido", e), "")),
+    // Frente SYNC: o contexto completo da marca do projeto (kit, contexto, estratégia aprovada, briefing, dossiê, decisões e cérebro), pela herança.
+    CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["arte", "copy", "geral"], { marca: marcaId, partes: TODAS_AS_PARTES, area: "identidade" }).catch((e) => (registrarFalha("mesa-identidade: contexto do agente não lido", e), "")),
     regrasDaMesa(servico(), { clientId, mesa: "identidade", marcaId }),
     regrasDaMesa(servico(), { clientId, mesa: "naming", marcaId }),
     estadoDoProjeto(ch, projeto),
@@ -406,7 +407,9 @@ export async function executarItem(ch: Chamador, clientId: string, item: ItemDaA
     }
     case "kit_paleta":
     case "kit_tipografia":
-    case "kit_logo": {
+    case "kit_logo":
+    // Frente SYNC: estratégia e tagline levadas ao contexto da marca (mesmo Confirmar e Desfazer do kit).
+    case "kit_contexto": {
       // Itens da sugestão do kit (kit_sugerir): a carga mora na própria proposta.
       const contexto = (acao && acao.contexto) || {};
       const carga = ((contexto as Record<string, unknown>).dados as Record<string, Record<string, unknown>> | undefined)?.[`${item.operacao}:${item.ref}`];

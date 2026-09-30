@@ -112,6 +112,7 @@ import {
   projetosDoClienteNaMarca,
   resolverMarca,
 } from "../_shared/marca.ts";
+import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 // Frente MC (29/09): conta, dossiê, números e agenda da marca aberta (a CME não lê o @ nem os números da Acerbi).
 import { projetoDaMarcaAberta } from "../_shared/heranca-da-marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
@@ -837,6 +838,8 @@ type Contexto = {
   memoriaEditorial?: MemoriaEditorial | null;
   /** Frente MF: formato do perfil do cliente (fotos, artes ou alternar). */
   formatoDoPerfil?: string | null;
+  /** Frente SYNC: estratégia aprovada da marca (tom e tagline), briefing mais novo e decisões do conselho (contexto completo da marca). */
+  contextoCompleto?: string | null;
 };
 
 /**
@@ -1034,6 +1037,9 @@ async function montarContexto(
   const cerebroP = resumoDoCerebro(servico, clientId, ["calendario", "campanha", "copy"], { limite: 2000, manter: (f) => !mesDoPlano(f.texto) });
   // Frente MF: o formato do perfil (sem a coluna, "artes": o de sempre).
   const perfilP = lerFormatoDoPerfil(servico, clientId);
+  // Frente SYNC: o que faltava do contexto completo da marca (estratégia aprovada com tom e tagline, briefing mais novo e decisões do conselho).
+  const completoP = contextoCompletoParaPrompt(servico, clientId, marca, { area: "calendario", partes: ["estrategia", "briefing", "decisoes"], semTitulo: true, teto: 5000 })
+    .then((c) => c.bloco || null, (e) => (registrarFalha("agente-calendario: contexto completo não lido", e), null));
   const [
     perfil,
     conta,
@@ -1170,6 +1176,7 @@ async function montarContexto(
     mcp: (await mcpP).texto,
     memoriaEditorial: await memoriaEditorialP,
     formatoDoPerfil: await perfilP,
+    contextoCompleto: await completoP,
   };
 }
 
@@ -1202,6 +1209,8 @@ function contextoEmTexto(ctx: Contexto, p: { inicio: string; fim: string; parame
     // Frente H: o resumo do cérebro no lugar da lista crua; a lista só volta se o cérebro não respondeu.
     ...(ctx.cerebro === null ? { memoria_do_estrategista: ctx.memoria } : { cerebro_do_cliente: ctx.cerebro || null }),
     planos_combinados_com_a_equipe: ctx.planos,
+    // Frente SYNC: estratégia aprovada (tom e tagline valem em todo texto), briefing mais novo e decisões do conselho.
+    ...(ctx.contextoCompleto ? { estrategia_briefing_e_decisoes_da_marca: enxuto ? ctx.contextoCompleto.slice(0, 2500) : ctx.contextoCompleto } : {}),
     // Frente MF: só fotos ou alternar (só artes fica fora: o pedido segue como sempre).
     ...(textoDoPerfilParaOPlano((ctx.formatoDoPerfil || "artes") as "fotos" | "artes" | "alternar") ? { formato_do_perfil: textoDoPerfilParaOPlano((ctx.formatoDoPerfil || "artes") as "fotos" | "artes" | "alternar") } : {}),
   };

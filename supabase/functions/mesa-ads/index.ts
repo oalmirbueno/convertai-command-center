@@ -131,7 +131,8 @@ import { direcaoDoRoteiro, resumoDaComposicao, type BlocoTexto, type CardDirecao
 import { lerContextoConsolidado, lerDocumentosDeMarca, lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
 import { recortarDossie } from "../_shared/dossie-recortado.ts";
 import { campanhaDaMarca, contextoComMarca, lerMarcaParaDirecaoDaMarca, type MarcaDoCliente, marcaDoPedido, marcaParaGravar, marcasDoCliente } from "../_shared/marca.ts";
-import { projetoDaMarcaAberta } from "../_shared/heranca-da-marca.ts";
+import { linhaDaMarca, projetoDaMarcaAberta } from "../_shared/heranca-da-marca.ts";
+import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import {
   AGENTE_DO_CANAL,
@@ -1181,6 +1182,9 @@ async function montarContextoAds(
   const outraMarca = marcaEscolhida && !marcaEscolhida.principal ? marcaEscolhida : null;
   const marcasDasAds = marcaEscolhida ? await marcasDoCliente(servico, clientId) : [];
   const doProjetoDaMarca = marcaEscolhida ? (p: string | null) => projetoDaMarcaAberta(p, marcaEscolhida, marcasDasAds) : null;
+  // Frente SYNC: o que faltava do contexto completo da marca (estratégia aprovada com tom e tagline, decisões do conselho e o Instagram da marca).
+  const completoP = contextoCompletoParaPrompt(servico, clientId, marcaEscolhida, { area: "ads", partes: ["estrategia", "decisoes", "instagram"], semTitulo: true, teto: 3500 })
+    .then((c) => c.bloco || null, (e) => (registrarFalha("mesa-ads: contexto completo não lido", e), null));
   const [marca, consolidado, dossie, anuncios, diarias, aprendizados, memoria, campanhasQ, briefQ, documentos] = await Promise.all([
     lerMarcaParaDirecaoDaMarca(servico, clientId, marcaEscolhida),
     lerContextoConsolidado(servico, clientId).then((c) => contextoComMarca(c, marcaEscolhida)),
@@ -1201,8 +1205,9 @@ async function montarContextoAds(
     servico.from("mesa_campanhas").select("nome, objetivo, conceito, periodo_inicio, periodo_fim, status, identidade")
       .eq("client_id", clientId).neq("status", "encerrada").order("criado_em", { ascending: false }).limit(24),
     // Brief respondido pelo cliente (formulário): produtos, preços e diferenciais costumam estar aqui.
-    servico.from("briefings").select("responses, submitted, created_at").eq("client_id", clientId)
-      .order("created_at", { ascending: false }).limit(3),
+    // Frente SYNC: com a marca de cada briefing (a CME não lê o da Acerbi; filtro logo abaixo).
+    servico.from("briefings").select("responses, submitted, created_at, marca_id").eq("client_id", clientId)
+      .order("created_at", { ascending: false }).limit(6),
     lerDocumentosDeMarca(servico, clientId, 6000, doProjetoDaMarca).catch((e) => (registrarFalha("mesa-ads: lerDocumentosDeMarca falhou", e), [])),
   ]);
   const campanhas = ((campanhasQ.data as (CampanhaDoMes & { identidade?: unknown })[] | null) ?? [])
@@ -1211,7 +1216,8 @@ async function montarContextoAds(
     .filter((c) => (!c.periodo_fim || c.periodo_fim >= inicioDoMes) && (!c.periodo_inicio || c.periodo_inicio <= fimDoMes))
     .slice(0, 8)
     .map((c) => ({ ...c, conceito: c.conceito ? String(c.conceito).slice(0, 600) : null }));
-  const briefs = (briefQ.data as { responses: unknown; submitted: boolean | null; created_at: string }[] | null) ?? [];
+  const briefs = ((briefQ.data as { responses: unknown; submitted: boolean | null; created_at: string; marca_id?: string | null }[] | null) ?? [])
+    .filter((b) => linhaDaMarca(b.marca_id ?? null, marcaEscolhida));
   const briefLinha = briefs.find((b) => b.submitted) ?? briefs[0] ?? null;
   const brief = briefLinha ? resumoDoBrief(briefLinha.responses) : null;
   const totalConta = somarMetricas(diarias);
@@ -1252,6 +1258,7 @@ async function montarContextoAds(
       ...(await cerebroP.then((c) => (c.falhou ? { memoria_do_estrategista_ads: memoria.data ?? [] } : { cerebro_do_cliente: c.texto || null }))),
       campanhas_do_mes: campanhas,
       brief_do_cliente: brief,
+      estrategia_e_decisoes_da_marca: await completoP,
       documentos_do_cliente: (documentos as { nome: string; texto: string }[]).map((x) => ({ nome: x.nome, texto: x.texto })),
       conta_ultimos_90_dias: {
         gasto: totalConta.gasto,

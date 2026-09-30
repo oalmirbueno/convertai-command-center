@@ -63,6 +63,7 @@ import { lerContextoConsolidado, lerDossie } from "../_shared/contexto-cliente.t
 // Frente MC (29/09): contexto, dossiê, pilares e números da marca aberta (a CME não lê a Acerbi).
 import { contasDaMarcaDoCliente, lerContextoDaMarca, lerDossieDaMarca, type MarcaDoCliente, marcaDoPedido, marcaParaGravar, projetoNaMarca } from "../_shared/marca.ts";
 import { linhaDaMarca } from "../_shared/heranca-da-marca.ts";
+import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import { conhecimentoCalendarioPara } from "../_shared/conhecimento-dos-agentes.ts";
 import {
   type AcaoDoAgente,
@@ -729,6 +730,9 @@ async function marcaDoCorpo(clientId: string, corpo: Record<string, unknown> | n
 }
 
 async function contextoDoCliente(clientId: string, marca: MarcaDoCliente | null = null): Promise<ContextoDoCliente> {
+  // Frente SYNC: o que faltava do contexto completo da marca (kit pela herança, estratégia aprovada, briefing, decisões do conselho e o Instagram da marca).
+  const completoP = contextoCompletoParaPrompt(servico(), clientId, marca, { area: "calendario", partes: ["kit", "estrategia", "briefing", "decisoes", "instagram"], semTitulo: true, teto: 3500 })
+    .then((c) => c.bloco, (e) => (registrarFalha("perfis-instagram: contexto completo não lido", e), ""));
   const [perfilRes, consolidado, dossie, cerebro, propostasBrutas] = await Promise.all([
     servico().from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle(),
     (marca ? lerContextoDaMarca(servico(), clientId, marca) : lerContextoConsolidado(servico(), clientId)).catch((e) => (registrarFalha("perfis-instagram: lerContextoConsolidado falhou", e), ({}))),
@@ -767,6 +771,7 @@ async function contextoDoCliente(clientId: string, marca: MarcaDoCliente | null 
     estado.diferenciais.length ? `Diferenciais: ${estado.diferenciais.join("; ")}` : "",
     dossie ? `DOSSIÊ (resumo):\n${dossie}` : "",
     (cerebro as { texto?: string }).texto || "",
+    await completoP,
   ].filter(Boolean).join("\n");
   return { nome, texto, estado, pilares: pilaresParaAPergunta(pilares) };
 }

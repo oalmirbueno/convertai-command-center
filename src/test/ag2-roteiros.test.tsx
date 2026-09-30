@@ -208,7 +208,8 @@ describe("a função mesa-roteiros", () => {
     expect(conversa).toContain("itensDaReferencia(mensagem, l.roteiros, ordenados, l.pecas, hojeDoPedido, aberto ? aberto.id : null, comentarios)");
     expect(conversa).toContain("referenciaDoPedido(mensagem, ref.itens,");
     expect(conversa).toContain("blocoDaReferencia(referencia.r, referencia.itens)");
-    expect(conversa).toContain('regrasDaMesa(servico(), { clientId, mesa: "roteiro" })');
+    // Frente SYNC (30/09): as regras e o aprendizado seguem a marca aberta na tela.
+    expect(conversa).toContain('regrasDaMesa(servico(), { clientId, mesa: "roteiro", marcaId: marcaDaConversa })');
     expect(conversa).toContain("${extras}`,");
     expect(conversa).toContain("lido && lido.client_id === clientId ? lido : null");
   });

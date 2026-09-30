@@ -9,6 +9,7 @@ import { useMarcaDaMesa } from "./MesaContexto";
 import {
   type AprendizadoNaTela,
   aprendizadosDaMarca,
+  aprendizadosDaMesa,
   aprendizadosDoPainel,
   chaveDoTexto,
   dataCurtaDoAprendizado,
@@ -16,6 +17,7 @@ import {
   type FonteDoAprendizado,
   gruposDosAprendizados,
   type LinhaDaMemoria,
+  mesasDosAprendizados,
   ROTULO_DA_AREA,
   ROTULO_DA_FONTE,
 } from "./aprendizadosDoPainel";
@@ -30,6 +32,11 @@ import {
  * 29/09 (dono: "todos eles têm que aprender com cada ajuste"): agrupado por
  * agente (quem segue a regra), com a área, o "não fazer" marcado, a marca
  * (filtro quando o cliente tem Acerbi e CME), e o texto editável na hora.
+ *
+ * 30/09 (frente SYNC, "aprende e evolui também, mesma lógica"): o seletor de
+ * mesa lista TODAS as mesas que aprendem (lista única do servidor), com
+ * quantas regras cada uma tem; a regra levada a todas as mesas aparece em
+ * todas e diz isso na linha.
  */
 
 const COLUNAS = "id, agente, tipo, texto, origem, ativa, criado_em, categoria, fonte, reforcos, reforcado_em, area, motivo, referencia_id, evidencia";
@@ -99,6 +106,7 @@ function LinhaDoAprendizado({
     a.origem || ROTULO_DA_FONTE[a.fonte],
     a.area ? ROTULO_DA_AREA[a.area] || a.area : "",
     nomeDaMarca || "",
+    a.todasAsMesas ? "todas as mesas" : "",
     a.forca > 1 ? `${a.forca}x` : "",
     a.data ? dataCurtaDoAprendizado(a.data) : "",
   ].filter(Boolean);
@@ -202,13 +210,16 @@ export default function ContextoAprendizados({
   const { marcas } = useMarcaDaMesa();
   const [filtroLocal, setFiltroLocal] = useState<FiltroDosAprendizados>("todos");
   const [marcaDoFiltro, setMarcaDoFiltro] = useState<string>("todas");
+  const [mesaDoFiltro, setMesaDoFiltro] = useState<string>("todas");
   const controlado = filtroDeFora !== undefined && !!onFiltro;
   const filtro = controlado ? filtroDeFora! : filtroLocal;
   const setFiltro = controlado ? onFiltro! : setFiltroLocal;
   const [ocupado, setOcupado] = useState<string | null>(null);
   const idsDasMarcas = marcas.map((m) => m.id);
   const nomeDaMarca = (id: string | null) => (id ? (marcas.find((m) => m.id === id) || { nome: null as string | null }).nome : null);
-  const lista = aprendizadosDaMarca(aprendizadosDoPainel(consulta.data, filtro), marcaDoFiltro, idsDasMarcas);
+  const daMarca = aprendizadosDaMarca(aprendizadosDoPainel(consulta.data, filtro), marcaDoFiltro, idsDasMarcas);
+  const mesas = mesasDosAprendizados(daMarca);
+  const lista = aprendizadosDaMesa(daMarca, mesaDoFiltro);
   const grupos = gruposDosAprendizados(lista);
   const atualizar = () => {
     void queryClient.invalidateQueries({ queryKey: chaveDosAprendizados(clientId) });
@@ -275,31 +286,38 @@ export default function ContextoAprendizados({
   const temMarcas = marcas.length > 1;
   return (
     <div className="min-w-0">
-      {(!controlado || temMarcas) && (
-        <div className="flex min-w-0 flex-wrap items-center">
-          {!controlado && <SeletorDaOrigem valor={filtro} onEscolher={setFiltro} />}
-          {temMarcas && (
-            <span className={juntar(!controlado && "ml-2")}>
-              <SeletorCompacto
-                rotulo="Marca"
-                opcoes={[{ valor: "todas", rotulo: "Todas as marcas" }].concat(marcas.map((m) => ({ valor: m.id, rotulo: m.nome })))}
-                valor={marcaDoFiltro}
-                onEscolher={setMarcaDoFiltro}
-                listaQuandoNaoCabe
-              />
-            </span>
-          )}
-        </div>
-      )}
+      <div className="flex min-w-0 flex-wrap items-center">
+        {!controlado && <SeletorDaOrigem valor={filtro} onEscolher={setFiltro} />}
+        <span className={juntar(!controlado && "ml-2")} data-seletor-da-mesa="">
+          <SeletorCompacto
+            rotulo="Mesa"
+            opcoes={[{ valor: "todas", rotulo: "Todas as mesas" }].concat(mesas.map((m) => ({ valor: m.valor, rotulo: `${m.rotulo} (${m.total})` })))}
+            valor={mesaDoFiltro}
+            onEscolher={setMesaDoFiltro}
+            listaQuandoNaoCabe
+          />
+        </span>
+        {temMarcas && (
+          <span className="ml-2">
+            <SeletorCompacto
+              rotulo="Marca"
+              opcoes={[{ valor: "todas", rotulo: "Todas as marcas" }].concat(marcas.map((m) => ({ valor: m.id, rotulo: m.nome })))}
+              valor={marcaDoFiltro}
+              onEscolher={setMarcaDoFiltro}
+              listaQuandoNaoCabe
+            />
+          </span>
+        )}
+      </div>
       {lista.length === 0 ? (
         <EstadoVazio
           compacto
           titulo="Nada aqui ainda"
           descricao="Cada entrega, ajuste, pedido aos agentes e número real ensina o painel."
-          className={controlado && !temMarcas ? "" : "mt-3"}
+          className="mt-3"
         />
       ) : (
-        <div className={juntar("space-y-3", (!controlado || temMarcas) && "mt-2")}>
+        <div className="mt-2 space-y-3">
           {grupos.map((g) => (
             <section key={g.agente} className="min-w-0" aria-label={g.rotulo}>
               <h4 className="text-[12px] font-medium text-muted-foreground">

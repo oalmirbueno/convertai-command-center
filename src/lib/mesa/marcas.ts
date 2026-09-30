@@ -221,6 +221,9 @@ const FUNCOES_COM_MARCA = [
   "mesa-motion",
   // Frente PIA (30/09): o Preencher com IA lê contexto, briefing, dossiê e arquivos da marca aberta.
   "preencher-ia",
+  // Frente SYNC (30/09): o editor de vídeo e o estúdio de mockups leem o contexto completo da marca aberta.
+  "editor-video",
+  "mesa-mockups",
 ];
 
 /**

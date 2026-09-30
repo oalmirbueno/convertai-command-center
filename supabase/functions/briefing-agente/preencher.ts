@@ -16,6 +16,7 @@
 import { chamarTexto, estimarComModelo, garantirSaldo, modeloDoPapel, type ModeloIa } from "../_shared/ia-motor.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { contasDaMarcaDoCliente, lerContextoDaMarca, resolverMarca } from "../_shared/marca.ts";
+import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import { urlPublica } from "../_shared/referencias-do-site.ts";
 import { camposDoModelo, chaveDoOutro, estadoDoLink, modeloDoLink, type Respostas } from "../_shared/briefing-modelos.ts";
 import { anexosDoBriefing } from "../_shared/briefing-decupar.ts";
@@ -125,7 +126,10 @@ async function contextoDoPainel(clientId: string, marcaId: string | null): Promi
     const t = typeof v === "string" ? v : Array.isArray(v) ? v.map(String).join("; ") : "";
     if (t.trim()) linhas.push(`${k}: ${t.trim().slice(0, 900)}`);
   });
-  return linhas.join("\n");
+  // Frente SYNC: com o contexto vêm a estratégia aprovada (tom e tagline), o dossiê e as decisões do conselho da marca.
+  const completo = await contextoCompletoParaPrompt(db, clientId, marca, { area: "geral", partes: ["estrategia", "dossie", "decisoes"], semTitulo: true, teto: 3000 })
+    .then((x) => x.bloco, (e) => (registrarFalha("briefing-agente: contexto completo não lido", e), ""));
+  return [linhas.join("\n"), completo].filter(Boolean).join("\n\n");
 }
 
 async function juntarMaterial(b: LinhaDoBriefing, corpo: Record<string, unknown>, fontes: Fontes) {

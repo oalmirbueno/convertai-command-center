@@ -94,6 +94,7 @@ import { JevErro, jevPerguntar, probabilidadeNoul } from "../_shared/jev.ts";
 import { lerContextoConsolidado, lerDocumentosDeMarca, lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
 import { contextoComMarca, lerMarcaParaDirecaoDaMarca, marcaDoPedido, marcasDoCliente, resolverMarca } from "../_shared/marca.ts";
 import { projetoDaMarcaAberta } from "../_shared/heranca-da-marca.ts";
+import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 // Frente AG (26/09): o diretor de fotografia conhece o painel inteiro.
@@ -1125,6 +1126,9 @@ async function contextoDoCliente(clientId: string, campanhaId?: unknown, marcaId
   const outraMarca = marcaEscolhida && !marcaEscolhida.principal ? marcaEscolhida : null;
   const marcasDaFoto = marcaEscolhida ? await marcasDoCliente(servico(), clientId) : [];
   const doProjetoDaMarca = marcaEscolhida ? (p: string | null) => projetoDaMarcaAberta(p, marcaEscolhida, marcasDaFoto) : null;
+  // Frente SYNC: o que faltava do contexto completo da marca (estratégia aprovada com tom e tagline, briefing mais novo, decisões do conselho e Instagram).
+  const completoP = contextoCompletoParaPrompt(servico(), clientId, marcaEscolhida, { area: "foto", partes: ["estrategia", "briefing", "decisoes", "instagram"], semTitulo: true, teto: 4000 })
+    .then((c) => c.bloco || null, (e) => (registrarFalha("mesa-foto: contexto completo não lido", e), null));
   const [marca, consolidado, dossie, documentos, briefing, plano, memoria, campanhas] = await Promise.all([
     lerMarcaParaDirecaoDaMarca(servico(), clientId, marcaEscolhida),
     lerContextoConsolidado(servico(), clientId).then((c) => contextoComMarca(c, marcaEscolhida)),
@@ -1166,6 +1170,7 @@ async function contextoDoCliente(clientId: string, campanhaId?: unknown, marcaId
       campanha_escolhida: escolhida ? campanhaParaOContexto(escolhida, "escolhida") : null,
       campanha_do_mes: doMes ? campanhaParaOContexto(doMes, "do_mes") : null,
       outras_campanhas_ativas: listaDeCampanhas.filter((c) => c.status !== "encerrada" && c !== escolhida && c !== doMes).slice(0, 5).map((c) => c.nome),
+      contexto_completo_da_marca: await completoP,
     },
     campanha: escolhida ? { id: escolhida.id, nome: escolhida.nome, papel: "escolhida" } : doMes ? { id: doMes.id, nome: doMes.nome, papel: "do_mes" } : null,
   };

@@ -199,6 +199,7 @@ import {
   VERSAO_DA_PRANCHA,
 } from "../_shared/prancha-de-referencias.ts";
 import { caminhoDoArquivo, lerContextoConsolidado, sincronizarAcervo, sincronizarReferencias } from "../_shared/contexto-cliente.ts";
+import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import {
   type AlvoDaMarca,
   colunasComMarca,
@@ -8219,14 +8220,20 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     // Sem o prompt global ativo a conversa ainda ajuda: a base de conhecimento vale.
     promptDoDiretor(t.client_id).catch((e) => (registrarFalha("estudio-arte: prompt do diretor não lido (conversa)", e, { trabalho_id: t.id }), "")),
     idsDasReferencias.length ? referenciasPorId(t.client_id, idsDasReferencias) : Promise.resolve([] as Referencia[]),
-    servico()
-      .from("cliente_referencias")
-      .select("id, papel, leitura, tags")
-      .eq("client_id", t.client_id)
-      .eq("ativa", true)
-      .not("leitura", "is", null)
-      .order("criado_em", { ascending: false })
-      .limit(8),
+    // Frente SYNC: só as referências da marca do trabalho (a CME não conversa com as da Acerbi).
+    marcaDoTrabalhoP.then((m) =>
+      filtrarReferenciasDaMarca(
+        servico()
+          .from("cliente_referencias")
+          .select("id, papel, leitura, tags")
+          .eq("client_id", t.client_id)
+          .eq("ativa", true)
+          .not("leitura", "is", null),
+        m,
+      )
+        .order("criado_em", { ascending: false })
+        .limit(8)
+    ),
     t.direcao.campanha_id ? lerCampanha(t.client_id, t.direcao.campanha_id) : Promise.resolve(null),
     t.task_id ? lerItemDaAgenda(t.task_id).catch(nuloComLog("estudio-arte: item da agenda não lido (conversa)", { trabalho_id: t.id })) : Promise.resolve(null),
     conversaExistente
@@ -8286,6 +8293,10 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
 
   // Frente H: o diretor conversa sabendo o que o cliente já ensinou (cérebro) e o dossiê atual.
   const doDiretor = await cerebroEDossieDoDiretor(t.client_id, memoria, t.tipo).catch((e) => (registrarFalha("estudio-arte: cérebro do diretor não lido (conversa)", e, { trabalho_id: t.id }), { texto: "", usouCerebro: false }));
+  // Frente SYNC: o que faltava do contexto completo da marca do trabalho (negócio, público e oferta, estratégia aprovada com tom e tagline, briefing, decisões do conselho e Instagram).
+  const completoDaMarca = await marcaDoTrabalhoP
+    .then((m) => contextoCompletoParaPrompt(servico() as never, t.client_id, m, { area: "arte", partes: ["contexto", "estrategia", "briefing", "decisoes", "instagram"], teto: 4000 }))
+    .then((c) => c.bloco, (e) => (registrarFalha("estudio-arte: contexto completo da marca não lido (conversa)", e, { trabalho_id: t.id }), ""));
   const contexto = {
     tipo: ehAds(t) ? "criativo de anúncio (Mesa Ads)" : "post da agenda",
     texto_pode_mudar: textoPodeMudar,
@@ -8373,6 +8384,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     // Frente F (anti-bug AB2): o mapa do painel só na conversa, nunca no prompt de imagem.
     blocoDoMapaDoPainel("estudio"),
     doDiretor.texto,
+    completoDaMarca,
     // Frente RO, fase 2: as regras que a equipe ensinou (EVITAR primeiro, com prioridade).
     regras.bloco,
   ].filter(Boolean).join("\n\n");

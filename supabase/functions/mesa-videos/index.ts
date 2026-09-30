@@ -1132,7 +1132,7 @@ async function agenteAgir(ch: Chamador, corpo: Record<string, unknown>) {
   const [ent, aprendido] = await Promise.all([
     entenderPedido(ch, clientId, mesa, texto),
     // Aprendizado: "nunca mande X", "não gostei de Y" viram regra da mesa (nunca bloqueia).
-    aprenderDoPedido(servico(), { clientId, mesa: mesa === "edicao" ? "edicao" : "video", pedido: texto, userId: ch.userId, ultimaResposta: corpo.ultima_resposta ? String(corpo.ultima_resposta) : null }),
+    aprenderDoPedido(servico(), { clientId, mesa: mesa === "edicao" ? "edicao" : "video", pedido: texto, marcaId: typeof corpo.marca_id === "string" ? corpo.marca_id : null, userId: ch.userId, ultimaResposta: corpo.ultima_resposta ? String(corpo.ultima_resposta) : null }),
   ]);
   const anexos = aprendido ? [aprendido] : [];
   const base = { ...ent, anexos };

@@ -74,6 +74,7 @@ import {
   projetosDaMarca,
   resolverMarca,
 } from "../_shared/marca.ts";
+import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import { anexoDoCaminho } from "../_shared/acoes-do-agente.ts";
 import { blocoDoMapaDoPainel, caminhoNaArea } from "../_shared/mapa-do-painel.ts";
 import {
@@ -1078,6 +1079,9 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>): Promise<
     throw e;
   }
   const chave = chaveDaConta(c.conta);
+  // Frente SYNC: o que faltava do contexto completo da marca (estratégia aprovada com tom e tagline, briefing, decisões do conselho e cérebro).
+  const completoP = contextoCompletoParaPrompt(servico(), c.clientId, c.marca, { area: "calendario", partes: ["estrategia", "briefing", "decisoes", "cerebro"], semTitulo: true, teto: 4500 })
+    .then((x) => x.bloco, (e) => (registrarFalha("mesa-instagram: contexto completo não lido", e), ""));
   const [perfil, negocio, kit, grade, paginas, capas, historico, plano, regras] = await Promise.all([
     previaDoPerfil(c.clientId, c.conta, !!c.marcas.length),
     negocioDoCliente(c.clientId, true, c.marca),
@@ -1099,6 +1103,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>): Promise<
     `KIT: cores ${kit.paleta.map((x) => x.hex + (x.papel ? ` ${x.papel}` : "")).join(", ") || "sem paleta"}; estilo ${kit.estilo || "-"}; logo ${logo ? "anexada como imagem (use o que ela mostra: formas, símbolo, cores)" : kit.logo ? "existe, mas não abriu agora" : "não"}.`,
     `DESTAQUES COM CAPA JÁ GERADA: ${capas.map((x) => String(x.nome)).join(", ") || "nenhum"}.`,
     `OUTRAS CONTAS: Instagram ${c.contas.map((x) => `@${x.username}`).join(", ") || "nenhum"}; páginas do Facebook ${paginas.map((p) => p.nome).join(", ") || "nenhuma"}.`,
+    await completoP,
   ].filter(Boolean).join("\n");
   const sistema = [
     "Você é o agente das redes do cliente, na aba Redes da Mesa da Aceleriq (Instagram e páginas do Facebook). Ajuda a equipe com bio, nome, destaques, grade, métricas e outras redes, e FAZ o que o painel permite (ações abaixo). Responda curto e específico, com os dados do cliente (nomes, números, cores); nada genérico.",

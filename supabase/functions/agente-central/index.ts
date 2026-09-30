@@ -37,6 +37,7 @@ import { METODO_ACELERA } from "../_shared/metodo-acelera.ts";
 // Frente AG (26/09): mapa mínimo do painel, só com os nomes (roda em lote; a leitura pode chegar ao cliente, então sem rota).
 import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import { recortarDossie } from "../_shared/dossie-recortado.ts";
+import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import { lerContextoDoRitual } from "../ritual-writer/contexto.ts";
 import { conferirRepeticao, escreverRitual, extractJson, RITUAL_BRIEF } from "../ritual-writer/escritor.ts";
 import { extrairMemoriaDoRitual } from "../ritual-writer/memoria.ts";
@@ -196,6 +197,9 @@ const regrasNosFatos = (regras: RegraAtiva[]) =>
   regras.length ? `REGRAS QUE O DONO ENSINOU PARA ESTE CLIENTE (obrigatórias; EVITAR manda):\n${regras.map((r) => `- ${r.categoria === "evitar" ? "Evitar" : "Preferir"}: ${r.texto}`).join("\n")}` : "";
 
 async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, ritual: string, escolha: EscolhaDoModelo): Promise<Response> {
+  // Frente SYNC: o que faltava do contexto completo (negócio, estratégia aprovada, briefing mais novo e decisões do conselho), da marca principal.
+  const completoP = contextoCompletoParaPrompt(db, clientId, null, { area: "geral", partes: ["contexto", "estrategia", "briefing", "decisoes"], semTitulo: true, teto: 4000 })
+    .then((c) => c.bloco, (e) => (registrarFalha("agente-central: contexto completo não lido", e), ""));
   const [perfil, dossie, contexto, estado, regras] = await Promise.all([
     perfilDe(db, clientId),
     lerDossie(db, clientId),
@@ -214,6 +218,7 @@ async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, r
     `MEMÓRIA, MUDANÇAS, PENDÊNCIAS, NÚMEROS, CÉREBRO E MÉTODO:\n${contexto.texto}`,
     estado ? estadoRealComoTexto(estado, { ritual, limite: 5000 }) : "",
     dossie ? `DOSSIÊ GERAL ATUAL v${dossie.version}:\n${recortarDossie(dossie.content, LIMITE_DOSSIE_PREPARAR)}` : "DOSSIÊ GERAL: não existe ainda.",
+    await completoP,
   ].filter(Boolean).join("\n\n"), clientId, uid, escolha);
   if (!r.dados) return json({ error: `A IA não respondeu agora (${r.erro}). Tente este cliente de novo.`, ia_erro: r.erro }, 502);
   const leitura = normalizarLeitura(r.dados.leitura);

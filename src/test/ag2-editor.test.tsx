@@ -353,7 +353,8 @@ describe("tela do agente editor", () => {
 describe("editor-video: ligações do servidor", () => {
   const f = ler("supabase/functions/editor-video/index.ts");
   it("regras ensinadas e referência do pedido vão no sistema de TODO passo; Jev só no passo 1 e em paralelo", () => {
-    expect(f).toContain('regrasDaMesa(servico(), { clientId, mesa: "edicao" })');
+    // Frente SYNC (30/09): as regras seguem a marca aberta na tela.
+    expect(f).toContain('regrasDaMesa(servico(), { clientId, mesa: "edicao", marcaId })');
     expect(f).toContain("const sistemaCompleto = sistemaDoPasso(sistema, regras.bloco, blocoDaReferencia(ref, itens));");
     expect(f).toContain("sistema: sistemaCompleto,");
     expect(f).toMatch(/const \[gasto, regras, refDoPasso1\] = await Promise\.all\(/);

@@ -3,7 +3,14 @@
  * cliente guardou (public.agente_memoria) com a origem legível para a equipe:
  * entrega, ajuste, reprovação, números reais ou a própria equipe. Puro: a
  * tela e o Vitest usam o mesmo arquivo. Sem travessão.
+ *
+ * Frente SYNC (30/09): as mesas vêm da lista única do servidor
+ * (supabase/functions/_shared/mesas-que-aprendem.ts). A tela lista TODAS as
+ * mesas que aprendem (com quantas regras cada uma tem, zero também) e marca
+ * a regra que o dono levou a todas as mesas.
  */
+
+import { MARCA_DE_TODAS_AS_MESAS, MESAS_DO_APRENDIZADO, mesaDaFonte } from "../../../supabase/functions/_shared/mesas-que-aprendem";
 
 export type LinhaDaMemoria = {
   id: string;
@@ -26,7 +33,7 @@ export type LinhaDaMemoria = {
 };
 
 /** Fontes das regras que o dono ensinou pedindo a um agente (esta frente, as mesas de mídia e a Central). */
-const FONTES_DE_PEDIDO = ["mesa_foto", "mesa_videos", "mesa_edicao", "mesa_publicidade", "mesa_roteiros", "estilo", "estudio_aprendizado", "mesa_identidade", "mesa_naming", "mesa_site"];
+const FONTES_DE_PEDIDO = MESAS_DO_APRENDIZADO.map((m) => m.fonte).filter((f) => f !== "conselho");
 const ehFonteDePedido = (f: unknown) => typeof f === "string" && (f.indexOf("agente_") === 0 || f.indexOf("aprendeu:") === 0 || FONTES_DE_PEDIDO.indexOf(f) >= 0);
 
 /** 29/09: "pedido" = regra que o dono ensinou pedindo a um agente (fonte agente_*), com Esquecer na conversa. */
@@ -101,6 +108,8 @@ export const ROTULO_DA_ORIGEM: Record<string, string> = {
   "aprendeu:workspace": "agente do Workspace",
   "aprendeu:trafego": "agente de tráfego",
 };
+// Frente SYNC: toda mesa da lista única tem nome (Contratos, Proposta, Motion, Conselho, Mockups e as que vierem).
+for (const m of MESAS_DO_APRENDIZADO) if (!ROTULO_DA_ORIGEM[m.fonte]) ROTULO_DA_ORIGEM[m.fonte] = m.rotulo;
 
 /** A marca da regra: "marca:<id>" na evidência (mesas de mídia) ou referencia_id (agentes da Mesa do cliente). */
 export function marcaDoAprendizado(l: Pick<LinhaDaMemoria, "referencia_id" | "evidencia">): string | null {
@@ -123,6 +132,9 @@ export type AprendizadoNaTela = {
   evitar: boolean;
   marca: string | null;
   origem: string | null;
+  /** Frente SYNC: a mesa que aprendeu (nome curto da lista única) e se o dono levou a regra a todas as mesas. */
+  mesa: string | null;
+  todasAsMesas: boolean;
 };
 
 /** O plano do mês combinado com o agente tem tela própria: fica fora desta lista. */
@@ -147,6 +159,8 @@ export function aprendizadosDoPainel(linhas: LinhaDaMemoria[] | null | undefined
       evitar: l.categoria === "evitar" || l.categoria === "reprovado" || (!l.categoria && l.tipo === "evitar"),
       marca: marcaDoAprendizado(l),
       origem: l.fonte && ROTULO_DA_ORIGEM[String(l.fonte)] ? ROTULO_DA_ORIGEM[String(l.fonte)] : null,
+      mesa: mesaDaFonte(l.fonte),
+      todasAsMesas: String(l.evidencia || "").indexOf(MARCA_DE_TODAS_AS_MESAS) >= 0,
     }))
     .filter((a) => filtro === "todos" || a.fonte === filtro)
     .sort((a, b) => b.forca - a.forca || String(b.data || "").localeCompare(String(a.data || "")));
@@ -205,4 +219,28 @@ export function chaveDoTexto(texto: string): string {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 160);
+}
+
+/**
+ * Frente SYNC: TODAS as mesas que aprendem, na ordem da lista única, com
+ * quantas regras ativas cada uma tem (zero também: a tela mostra a mesa que
+ * ainda não aprendeu nada). A regra levada a todas as mesas conta em cada uma.
+ */
+export function mesasDosAprendizados(lista: AprendizadoNaTela[]): Array<{ valor: string; rotulo: string; total: number }> {
+  const vistas: string[] = [];
+  const saida: Array<{ valor: string; rotulo: string; total: number }> = [];
+  const gerais = lista.filter((a) => a.todasAsMesas).length;
+  for (const m of MESAS_DO_APRENDIZADO) {
+    if (vistas.indexOf(m.rotulo) >= 0) continue;
+    vistas.push(m.rotulo);
+    const proprias = lista.filter((a) => a.mesa === m.rotulo && !a.todasAsMesas).length;
+    saida.push({ valor: m.rotulo, rotulo: m.rotulo, total: proprias + gerais });
+  }
+  return saida;
+}
+
+/** Filtro por mesa: as regras que ela aprendeu e as que valem em todas as mesas. "todas": sem filtro. */
+export function aprendizadosDaMesa(lista: AprendizadoNaTela[], mesa: string | "todas"): AprendizadoNaTela[] {
+  if (!mesa || mesa === "todas") return lista;
+  return lista.filter((a) => a.mesa === mesa || a.todasAsMesas);
 }

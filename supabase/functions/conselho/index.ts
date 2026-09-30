@@ -39,6 +39,9 @@ import { erroQueSobe, registrarFalha } from "../_shared/falha-registrada.ts";
 import { gravarTroca } from "../_shared/conversa-das-mesas.ts";
 import { MODOS, modoDe, type ModoDoConselho } from "../_shared/conselho-presets.ts";
 import { arquivarElenco, ataEmPdf, type CtxDoConselho, elencos, pautaComAnexos, salvarElenco } from "./extras.ts";
+// Frente SYNC: a decisão do dono entra no cérebro (todo agente lê) e a conversa do conselho aprende como as mesas.
+import { aprenderDoPedido, regrasDaMesa, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
+import { decisaoDoConselhoNoCerebro, desfazerDecisaoNoCerebro } from "../_shared/sincronia-entre-mesas.ts";
 import {
   avancarSessao,
   catalogoDosEspecialistas,
@@ -356,8 +359,9 @@ async function retratoDoCliente(clientId: string, marcaId: unknown, referencia: 
   const outra = marca && !marca.principal ? marca : null;
   const [consolidado, cerebro, dossieDaMarca, decisoes] = await Promise.all([
     (marca ? lerContextoDaMarca(db, clientId, marca) : lerContextoConsolidado(db, clientId)).catch((e) => (registrarFalha("conselho: contexto consolidado falhou", e), {})),
-    // Regra da herança: outra marca nunca herda o cérebro e o dossiê do cliente.
-    outra ? Promise.resolve("") : CONTEXTO_DO_AGENTE.ler(db, clientId, ["geral", "campanha", "copy", "arte"], { cerebro: 1500, dossie: 2500 }),
+    // Regra da herança: outra marca nunca herda o cérebro e o dossiê do cliente (o leitor completo já filtra pela marca).
+    // Frente SYNC: entram também a estratégia aprovada, o briefing mais novo e o Instagram da marca.
+    CONTEXTO_DO_AGENTE.ler(db, clientId, ["geral", "campanha", "copy", "arte"], { cerebro: 1500, dossie: 2500, marca: marca, partes: outra ? ["cerebro", "estrategia", "briefing", "instagram"] : ["cerebro", "dossie", "estrategia", "briefing", "instagram"] }),
     outra && outra.project_id
       ? db.from("client_dossiers").select("summary").eq("client_id", clientId).eq("is_current", true).eq("project_id", outra.project_id).order("effective_at", { ascending: false }).limit(1)
       : Promise.resolve({ data: [] as unknown[], error: null }),
@@ -549,9 +553,12 @@ async function perguntar(ch: Chamador, corpo: Record<string, unknown>) {
   if (error || !nova) throw erroDoBanco(error, "a pergunta não foi gravada");
   const fala = falaDaLinha(nova as Record<string, unknown>);
   const p = pedidoDaConversa(sessao, falas, especialista, pergunta);
+  // Frente SYNC: o conselho obedece as regras ensinadas (as dele e as que valem em todas as mesas). Resposta em texto: sem apelidos.
+  const regras = await regrasDaMesa(servico(), { clientId: sessao.client_id, mesa: "conselho", marcaId: sessao.marca_id });
+  const blocoDasRegras = regras.bloco ? `\n\n${regras.bloco.replace(/\nQuando uma regra mudar[^\n]*$/, "")}` : "";
   try {
     const r = await chamarTexto({
-      clientId: sessao.client_id, tarefa: TAREFA, agente: AGENTE, modeloId, sistema: p.sistema, mensagens: [{ papel: "usuario", conteudo: p.mensagem }],
+      clientId: sessao.client_id, tarefa: TAREFA, agente: AGENTE, modeloId, sistema: p.sistema + blocoDasRegras, mensagens: [{ papel: "usuario", conteudo: p.mensagem }],
       raciocinio: raciocinioPara(modelos.get(modeloId)), referencia: { tipo: "conselho_fala", id: fala.id }, criadoPor: ch.userId,
     });
     const agora = new Date().toISOString();
@@ -561,9 +568,12 @@ async function perguntar(ch: Chamador, corpo: Record<string, unknown>) {
     if (e2) registrarFalha("conselho: resposta não gravada", e2, { fala_id: fala.id });
     const { error: e3 } = await servico().from("conselho_sessoes").update({ custo_usd: Math.round((sessao.custo_usd + r.custoUsd) * 1e6) / 1e6, atualizado_em: agora }).eq("id", sessao.id);
     if (e3) registrarFalha("conselho: custo da conversa não somado", e3, { sessao_id: sessao.id });
-    const avisoDaConversa = await gravarNaConversa(ch, sessao, pergunta, especialista, r.texto, r.usoId || null);
+    // Frente SYNC: o que a pergunta ensina vira regra (o Jev decide se vale para sempre), como nas mesas.
+    const aprendido = await aprenderDoPedido(servico(), { clientId: sessao.client_id, mesa: "conselho", pedido: pergunta, marcaId: sessao.marca_id, userId: ch.userId, ultimaResposta: r.texto });
+    const avisoDaConversa = await gravarNaConversa(ch, sessao, pergunta, especialista, r.texto, r.usoId || null, aprendido ? [aprendido] : []);
     return json({
       fala: feita ? falaDaLinha(feita as Record<string, unknown>) : { ...fala, status: "feita", texto: r.texto },
+      aprendido,
       custo_usd: r.custoUsd,
       saldo_usd: r.saldoUsd,
       aviso: e2 ? "A resposta chegou, mas não ficou guardada na sessão." : avisoDaConversa,
@@ -582,7 +592,7 @@ async function perguntar(ch: Chamador, corpo: Record<string, unknown>) {
  * derruba a resposta: a fala já está guardada na sessão; a falha vai para o
  * log e volta como aviso.
  */
-async function gravarNaConversa(ch: Chamador, sessao: SessaoDoConselho, pergunta: string, especialista: string, resposta: string, usoId: string | null): Promise<string | null> {
+async function gravarNaConversa(ch: Chamador, sessao: SessaoDoConselho, pergunta: string, especialista: string, resposta: string, usoId: string | null, anexos: unknown[] = []): Promise<string | null> {
   try {
     const db = servico();
     const { data: achada, error } = await db.from("agente_conversas").select("id").eq("client_id", sessao.client_id).eq("agente", AGENTE).eq("referencia_tipo", "conselho_sessao").eq("referencia_id", sessao.id).limit(1);
@@ -597,7 +607,7 @@ async function gravarNaConversa(ch: Chamador, sessao: SessaoDoConselho, pergunta
       conversaId,
       clientId: sessao.client_id,
       usuario: { conteudo: `Para ${nomeDoEspecialista(especialista)}: ${pergunta}` },
-      agente: { conteudo: `${nomeDoEspecialista(especialista)}: ${resposta}`, uso_id: usoId },
+      agente: { conteudo: `${nomeDoEspecialista(especialista)}: ${resposta}`, uso_id: usoId, anexos },
       onde: "conselho",
     });
     return troca.erro ? "A resposta ficou na sessão, mas não na conversa do agente." : null;
@@ -703,12 +713,21 @@ async function decidir(ch: Chamador, corpo: Record<string, unknown>) {
   const memoriaId = String((memoria as { id: string }).id);
   const { data, error: e2 } = await servico().from("conselho_sessoes").update({ decisao, ata, memoria_id: memoriaId, atualizado_em: agora }).eq("id", sessao.id).select(CAMPOS_DA_SESSAO).single();
   if (e2) throw erroDoBanco(e2, "a decisão não foi gravada na sessão");
+  // Frente SYNC: a decisão vira aprendizado do cérebro (área geral), que todo agente e toda mesa leem.
+  const noCerebro = await decisaoDoConselhoNoCerebro(servico(), { clientId: sessao.client_id, sessaoId: sessao.id, tema: sessao.tema, resumo, marcaId: sessao.marca_id, userId: ch.userId });
   CONTEXTO_DO_AGENTE.esquecer(sessao.client_id);
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "conselho_decidir", origin: "mesa:conselho", keyId: `mesa:conselho:${ch.userId}`, scopes: ["mesa:write"],
     input: { client_id: sessao.client_id, sessao_id: sessao.id, escolha: decisao.escolha, especialista: decisao.especialista }, success: true, statusCode: 200, durationMs: 0, resultRef: memoriaId,
   });
-  return json({ sessao: sessaoDaLinha(data as Record<string, unknown>), ata, memoria_id: memoriaId, prova: `Guardado no cérebro do cliente como decisão (${memoriaId.slice(0, 8)}).` });
+  return json({
+    sessao: sessaoDaLinha(data as Record<string, unknown>),
+    ata,
+    memoria_id: memoriaId,
+    cerebro_id: noCerebro.id,
+    prova: `Guardado no cérebro do cliente como decisão (${memoriaId.slice(0, 8)})${noCerebro.gravada ? "; todos os agentes passam a seguir" : ""}.`,
+    aviso: noCerebro.gravada ? null : "A decisão ficou na ata e na memória do projeto, mas não entrou no cérebro dos agentes. Tente decidir de novo mais tarde.",
+  });
 }
 
 async function desfazerDecisao(ch: Chamador, corpo: Record<string, unknown>) {
@@ -735,12 +754,14 @@ async function desfazerDecisao(ch: Chamador, corpo: Record<string, unknown>) {
   const ata = montarAta({ ...sessao, decisao }, falas, { cliente, modelos });
   const { data, error } = await servico().from("conselho_sessoes").update({ decisao, ata, atualizado_em: agora }).eq("id", sessao.id).select(CAMPOS_DA_SESSAO).single();
   if (error) throw erroDoBanco(error, "desfazer não gravado");
+  // Frente SYNC: a linha do cérebro também sai (ativa=false; o histórico fica).
+  const fora = await desfazerDecisaoNoCerebro(servico(), { clientId: sessao.client_id, sessaoId: sessao.id });
   CONTEXTO_DO_AGENTE.esquecer(sessao.client_id);
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "conselho_desfazer_decisao", origin: "mesa:conselho", keyId: `mesa:conselho:${ch.userId}`, scopes: ["mesa:write"],
     input: { client_id: sessao.client_id, sessao_id: sessao.id }, success: true, statusCode: 200, durationMs: 0, resultRef: sessao.memoria_id || sessao.id,
   });
-  return json({ sessao: sessaoDaLinha(data as Record<string, unknown>) });
+  return json({ sessao: sessaoDaLinha(data as Record<string, unknown>), aviso: fora.ok ? null : "A decisão foi desfeita na ata, mas ainda está no cérebro dos agentes: tire em Contexto, O que o painel aprendeu." });
 }
 
 async function ata(ch: Chamador, corpo: Record<string, unknown>) {
@@ -785,6 +806,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   salvar_elenco: (ch, corpo) => salvarElenco(ctxDe(ch), corpo),
   arquivar_elenco: (ch, corpo) => arquivarElenco(ctxDe(ch), corpo),
   ata_pdf: (ch, corpo) => ataEmPdf(ctxDe(ch), corpo),
+  // Frente SYNC: "Esquecer" e "Guardar como regra" do que a conversa do conselho aprendeu.
+  ...rotasDoAprendizado({ mesa: "conselho", servico, garantirAcesso: (ch, clientId) => garantirAcesso(ch as Chamador, clientId), json }),
 };
 
 /** Ações que podem passar de 150 s: a resposta começa na hora. */

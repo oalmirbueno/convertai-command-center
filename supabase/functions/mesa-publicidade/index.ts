@@ -61,7 +61,7 @@ import {
 } from "../_shared/acoes-do-agente.ts";
 // Frente AG (26/09): mapa do painel, contexto do cliente com cache e "ele já vai fazendo".
 import { blocoDoMapaDoPainel, caminhoDaResposta, destinoNaResposta, pedeParaAbrir, pedeParaLevar } from "../_shared/mapa-do-painel.ts";
-import { blocoDoContextoDoCliente, criarContextoDoAgente } from "../_shared/contexto-do-agente.ts";
+import { blocoDoContextoDoCliente, criarContextoDoAgente, PARTES_COM_O_CONTEXTO } from "../_shared/contexto-do-agente.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import {
   conhecimentoPublicidade,
@@ -1034,7 +1034,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const [hist, modelo, contextoDoCliente, regras, referencia] = await Promise.all([
     historicoP,
     modeloDeTexto(corpo.modelo_id),
-    CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["campanha", "copy", "arte"]).catch((e) => (registrarFalha("mesa-publicidade: contexto do agente não lido", e), "")),
+    // Frente SYNC: o contexto completo da marca da campanha (ou da aberta na tela): estratégia, briefing, dossiê, decisões e cérebro pela herança.
+    CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["campanha", "copy", "arte"], { marca: (campanha && campanha.marca_id) || (typeof corpo.marca_id === "string" ? corpo.marca_id : null), partes: PARTES_COM_O_CONTEXTO }).catch((e) => (registrarFalha("mesa-publicidade: contexto do agente não lido", e), "")),
     // Frente AG2: as regras que a equipe ensinou (EVITAR primeiro). Nunca lança.
     regrasDaMesa(servico(), { clientId, mesa: "publicidade", marcaId: campanha ? campanha.marca_id : null }),
     referenciaP.catch((e) => (registrarFalha("mesa-publicidade: referência do pedido", e), { r: null, itens: [] })),

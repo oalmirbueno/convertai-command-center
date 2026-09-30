@@ -28,6 +28,7 @@ import { chamarTexto, estimarComModelo, garantirSaldo, IaMotorErro, modeloDoPape
 import { lerContextoConsolidado } from "../_shared/contexto-cliente.ts";
 import { lerContextoDaMarca, lerDossieDaMarca, type MarcaDoCliente, type MarcaLeve, marcasDoCliente, resolverMarca } from "../_shared/marca.ts";
 import { projetoDaMarcaAberta } from "../_shared/heranca-da-marca.ts";
+import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import { linhasDoBriefing, limparSegredos } from "../_shared/pacote-externo.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
@@ -301,7 +302,13 @@ async function lerFontes(
   const quer = (f: FonteDoPreenchimento) => fontes.indexOf(f) >= 0;
   const [contexto, briefing, dossie, arquivos, conversa] = await Promise.all([
     quer("contexto")
-      ? passo("o contexto da marca", async () => textoDoContexto(marca ? await lerContextoDaMarca(servico(), clientId, marca) : await lerContextoConsolidado(servico(), clientId)))
+      ? passo("o contexto da marca", async () => {
+        const base = textoDoContexto(marca ? await lerContextoDaMarca(servico(), clientId, marca) : await lerContextoConsolidado(servico(), clientId));
+        // Frente SYNC: com o contexto vêm a estratégia aprovada (tom e tagline), as decisões do conselho e o cérebro da marca.
+        const completo = await contextoCompletoParaPrompt(servico(), clientId, marca, { area: "geral", partes: ["estrategia", "decisoes", "cerebro"], semTitulo: true, teto: 3000 })
+          .then((c) => limparSegredos(c.bloco), (e) => (registrarFalha("preencher-ia: contexto completo não lido", e, { client_id: clientId }), ""));
+        return [base, completo].filter(Boolean).join("\n\n");
+      })
       : undefined,
     quer("briefing") ? passo("o briefing", () => lerBriefing(clientId, marca)) : undefined,
     quer("dossie") ? passo("o dossiê", () => lerDossieDaMarca(servico(), clientId, marca, 5000)) : undefined,

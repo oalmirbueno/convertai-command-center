@@ -63,6 +63,7 @@ import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import { lerIndiceDasEntregas, sugestoesDasEntregas } from "../_shared/aprendizado-das-entregas.ts";
 import { descricaoEmTexto } from "../_shared/aprendizado-continuo.ts";
 import { etiquetaDaMarca, filtrarReferenciasDaMarca, fotoDaMarca, kitComMarca, lerContextoDaMarca, marcaDoPedido, marcaParaGravar } from "../_shared/marca.ts";
+import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import {
   type AcaoDoAgente,
   acaoGuardadaNaMensagem,
@@ -586,6 +587,9 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const anexos = lerAnexos(corpo.anexos);
   if (!mensagem && !anexos.length) throw new ErroHttp(400, "mensagem_vazia", "Escreva a mensagem ou anexe as referências.");
   const conversaId = await conversaDoAgente(ch, p, corpo.conversa_id, corpo.nova_conversa === true);
+  // Frente SYNC: o que faltava do contexto completo da marca (kit pela herança, estratégia aprovada, briefing, dossiê e decisões do conselho).
+  const completoP = contextoCompletoParaPrompt(servico(), p.clientId, p.marca, { area: "arte", partes: ["kit", "estrategia", "briefing", "dossie", "decisoes"], teto: 5000 })
+    .then((c) => c.bloco, (e) => (registrarFalha("agente-estilo: contexto completo não lido", e), ""));
   // Frente AG2: tudo o que é lido sai junto (paleta do kit, regras ensinadas e as peças abertas no Estúdio entraram aqui).
   const [modelo, historico, cliente, estiloAntes, contexto, cerebro, doCliente, paleta, ensinadas, pecasLidas] = await Promise.all([
     modeloPorPapel("diretor_arte"),
@@ -656,6 +660,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     ...(tpl ? tpl.dados : {}),
   };
   const cerebroTexto = (cerebro as { texto?: string }).texto || "";
+  const completoDaMarca = await completoP;
   const saida = await chamarTexto({
     clientId: p.clientId,
     tarefa: "estudio",
@@ -663,7 +668,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
     pesquisaWeb: PEDE_PESQUISA.test(textoDoPedido),
-    sistema: `${SISTEMA_DO_ESTILO}\n\n${CONHECIMENTO_DO_ESTILO}\n\n${blocoDoMapaDoPainel("estilo")}\n\n${cerebroTexto ? `${cerebroTexto}\n\n` : ""}${ensinadas.bloco ? `${ensinadas.bloco}\n\n` : ""}DADOS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${blocoDosAlvosDoEstilo(alvos)}${tpl ? tpl.texto : ""}${blocoDaReferencia(referencia, itensReferiveis)}`,
+    sistema: `${SISTEMA_DO_ESTILO}\n\n${CONHECIMENTO_DO_ESTILO}\n\n${blocoDoMapaDoPainel("estilo")}\n\n${cerebroTexto ? `${cerebroTexto}\n\n` : ""}${completoDaMarca ? `${completoDaMarca}\n\n` : ""}${ensinadas.bloco ? `${ensinadas.bloco}\n\n` : ""}DADOS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${blocoDosAlvosDoEstilo(alvos)}${tpl ? tpl.texto : ""}${blocoDaReferencia(referencia, itensReferiveis)}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: textoDoPedido }],
     esquemaJson: tpl ? esquemaComTemplates(ESQUEMA_DO_AGENTE_DE_ESTILO) : ESQUEMA_DO_AGENTE_DE_ESTILO,
     maxTokensSaida: 4_000,

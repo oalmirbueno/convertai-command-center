@@ -68,7 +68,7 @@ import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { AVISO_SEM_REGISTRO, gravarTroca } from "../_shared/conversa-das-mesas.ts";
 import { anexoDasRegrasSeguidas, aprenderDoPedido, CAMPOS_DO_APRENDIZADO, regrasDaMesa, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
 import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
-import { blocoDoContextoDoCliente, criarContextoDoAgente } from "../_shared/contexto-do-agente.ts";
+import { blocoDoContextoDoCliente, criarContextoDoAgente, PARTES_COM_O_CONTEXTO } from "../_shared/contexto-do-agente.ts";
 import {
   agenciaDoRegistro,
   type ClausulaAlterada,
@@ -920,7 +920,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     modeloDoAgente(corpo.modelo_id),
     servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO),
     nomeDoCliente(clientId),
-    CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["geral", "conta"]).catch((e) => (registrarFalha("contratos: contexto do agente não lido", e), "")),
+    // Frente SYNC: contrato é do cliente inteiro (regra da herança): sem marca pedida, vale a principal; com marca_id, a dela.
+    CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["geral", "conta"], { marca: typeof corpo.marca_id === "string" && corpo.marca_id ? corpo.marca_id : null, partes: PARTES_COM_O_CONTEXTO, area: "contrato" }).catch((e) => (registrarFalha("contratos: contexto do agente não lido", e), "")),
     regrasDaMesa(servico(), { clientId, mesa: "contrato" }),
     julgarPedido(mensagem, !!sit.aberto, clientId, ch.userId, conversaId),
     selecionarContratos((campos) => servico().from("contracts").select(campos).eq("client_id", clientId).is("arquivado_em", null).order("created_at", { ascending: false }).limit(20)),

@@ -111,7 +111,7 @@ import {
 // Frente AG (26/09): editar sem IA, aprovar e marcar gravado; mapa do painel; contexto do cliente; "ele já vai fazendo".
 import { conteudoEditado, lerEdicaoDeTexto, OPERACOES_DE_EDICAO, regrasDeEdicao } from "./acoes-de-edicao.ts";
 import { blocoDoMapaDoPainel, caminhoDaResposta, destinoNaResposta, pedeParaAbrir, pedeParaLevar } from "../_shared/mapa-do-painel.ts";
-import { blocoDoContextoDoCliente, criarContextoDoAgente } from "../_shared/contexto-do-agente.ts";
+import { blocoDoContextoDoCliente, criarContextoDoAgente, PARTES_COM_O_CONTEXTO } from "../_shared/contexto-do-agente.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { anexosComCaminho, comCaminho, executarDireto, podeExecutarDireto } from "../_shared/acoes-do-agente.ts";
 // Frente AG (27/09): o "Ir para" de cada ação e resposta, e a sequência em passos com Parar.
@@ -1127,15 +1127,17 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     return referenciaDoPedido(mensagem, ref.itens, { agente: "roteirista da Mesa Roteiros", ultimaResposta: ultima ? ultima.conteudo : null, selecionados: ref.selecionados })
       .then((r) => ({ r, itens: ref.itens }));
   });
+  // Frente SYNC: a marca aberta na tela (marca_id vem pela casca) vale no contexto, nas regras e no que aprende.
+  const marcaDaConversa = typeof corpo.marca_id === "string" && corpo.marca_id ? corpo.marca_id : null;
   const [modelo, historico, listas, cliente, contextoDoCliente, regras, referencia] = await Promise.all([
     modeloDeTexto(corpo.modelo_id),
     historicoP,
     listasP,
     nomeDoCliente(clientId),
     // Frente AG: cérebro e dossiê do cliente (cache curto; sem leitura, segue vazio).
-    CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["copy", "campanha", "geral"]).catch((e) => (registrarFalha("mesa-roteiros: contexto do agente não lido", e), "")),
+    CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["copy", "campanha", "geral"], { marca: marcaDaConversa, partes: PARTES_COM_O_CONTEXTO }).catch((e) => (registrarFalha("mesa-roteiros: contexto do agente não lido", e), "")),
     // Frente AG2: as regras que a equipe ensinou (EVITAR primeiro). Nunca lança.
-    regrasDaMesa(servico(), { clientId, mesa: "roteiro" }),
+    regrasDaMesa(servico(), { clientId, mesa: "roteiro", marcaId: marcaDaConversa }),
     referenciaP.catch((e) => (registrarFalha("mesa-roteiros: referência do pedido", e), { r: null, itens: [] })),
   ]);
   if (historico.error) registrarFalha("mesa-roteiros: histórico da conversa não lido", historico.error, { conversa_id: conversaId });
@@ -1172,7 +1174,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   let resposta = limpo(j.resposta, 4000) || "Pronto.";
   const sugestoes = (Array.isArray(j.sugestoes) ? j.sugestoes : []).map((s) => limpo(s, 140)).filter(Boolean).slice(0, 3);
   // Frente AG2: o que o pedido ensinou vira regra (o Jev decide se vale para sempre); roda junto com a ação.
-  const aprendendo = aprenderDoPedido(servico(), { clientId, mesa: "roteiro", pedido: mensagem, regraSugerida: j.regra_aprendida, userId: ch.userId, ultimaResposta: ultimaResposta ? ultimaResposta.conteudo : null });
+  const aprendendo = aprenderDoPedido(servico(), { clientId, mesa: "roteiro", pedido: mensagem, regraSugerida: j.regra_aprendida, marcaId: marcaDaConversa, userId: ch.userId, ultimaResposta: ultimaResposta ? ultimaResposta.conteudo : null });
   let acao = normalizarAcoesDosRoteiros(j.acoes, roteirosOrdenados, listas.pecas, clientId, custoDaGeracao(modelo), undefined, comentarios);
   // "Faz e me leva" (27/09): o cartão leva o caminho; com o pedido de ir junto, abre sozinho ao terminar.
   let levar = pedeParaLevar(mensagem);

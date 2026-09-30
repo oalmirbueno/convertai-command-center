@@ -727,8 +727,10 @@ function ConversaComOConselho({
     setErro(null);
     setTextoDoCampo("");
     try {
-      const r = await chamarConselho<{ aviso?: string | null }>({ acao: "perguntar", sessao_id: sessao.id, especialista: quem, pergunta, novo_teto_usd: novoTeto });
+      const r = await chamarConselho<{ aviso?: string | null; aprendido?: { id?: string | null; texto?: string } | null }>({ acao: "perguntar", sessao_id: sessao.id, especialista: quem, pergunta, novo_teto_usd: novoTeto });
       if (r && r.aviso) toast.warning(r.aviso);
+      // Frente SYNC: o conselho aprende como as mesas; a regra fica em Contexto, O que o painel aprendeu (com Esquecer).
+      if (r && r.aprendido && r.aprendido.id && r.aprendido.texto) toast.success("Aprendi", { description: r.aprendido.texto });
       onRelido();
     } catch (e) {
       // A mensagem que falhou volta ao campo.

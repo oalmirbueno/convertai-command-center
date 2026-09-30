@@ -65,7 +65,8 @@ export async function dadosParaProposta(p: LinhaDoProjeto): Promise<{ nome: stri
   const [nome, contexto, dossie] = await Promise.all([
     nomeDaMarca(p.client_id, p.marca_id),
     (marca ? lerContextoDaMarca(servico(), p.client_id, marca) : lerContextoConsolidado(servico(), p.client_id)).catch((e) => (registrarFalha("mesa-identidade: contexto da proposta", e), {} as Record<string, unknown>)),
-    principal ? CONTEXTO_DO_AGENTE.ler(servico(), p.client_id, ["arte", "copy", "geral"]).catch((e) => (registrarFalha("mesa-identidade: dossiê da proposta", e), "")) : Promise.resolve(""),
+    // Frente SYNC: o leitor segue a herança (a outra marca só lê o dela), então vale para qualquer marca.
+    CONTEXTO_DO_AGENTE.ler(servico(), p.client_id, ["arte", "copy", "geral"], { marca: marca || p.marca_id }).catch((e) => (registrarFalha("mesa-identidade: dossiê da proposta", e), "")),
   ]);
   const naming = (p.dados.naming as Record<string, unknown>) || {};
   const briefing = (p.dados.briefing as Record<string, unknown>) || {};

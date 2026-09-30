@@ -32,60 +32,15 @@ import { jevPerguntar, type RespostaJev } from "./jev.ts";
 import { registrarFalha } from "./falha-registrada.ts";
 import { AGENTE_DA_AREA, type AreaDoCerebro, type BancoDoCerebro, type JulgarAprendizado } from "./cerebro-do-cliente.ts";
 import { gravarNoCerebro } from "./cerebro-nas-mesas.ts";
+import { AREA_DA_MESA, FONTE_DA_MESA, MARCA_DE_TODAS_AS_MESAS, type MesaQueAprende, NOME_DA_MESA, pedidoValeParaTodas } from "./mesas-que-aprendem.ts";
 
 // Frente RO (29/09): o Estúdio (diretor de arte e o Ajustar da lâmina) aprende pelo mesmo caminho.
 // Frentes CON, IDV, PRO e SIT (30/09): contratos, diretor de marca (identidade e naming), estrategista comercial e diretor de site.
 // Frente MOT (30/09): o diretor de motion (Mesa Motion).
-export const MESAS_QUE_APRENDEM = ["foto", "video", "edicao", "publicidade", "roteiro", "estilo", "estudio", "contrato", "identidade", "naming", "proposta", "site", "motion"] as const;
-export type MesaQueAprende = (typeof MESAS_QUE_APRENDEM)[number];
-
-export const AREA_DA_MESA: Record<MesaQueAprende, AreaDoCerebro> = {
-  foto: "foto",
-  video: "arte",
-  edicao: "arte",
-  publicidade: "campanha",
-  roteiro: "copy",
-  estilo: "arte",
-  estudio: "arte",
-  contrato: "geral",
-  identidade: "arte",
-  naming: "copy",
-  proposta: "copy",
-  site: "arte",
-  motion: "arte",
-};
-
-export const FONTE_DA_MESA: Record<MesaQueAprende, string> = {
-  foto: "mesa_foto",
-  video: "mesa_videos",
-  edicao: "mesa_edicao",
-  publicidade: "mesa_publicidade",
-  roteiro: "mesa_roteiros",
-  estilo: "estilo",
-  estudio: "estudio_aprendizado",
-  contrato: "mesa_contratos",
-  identidade: "mesa_identidade",
-  naming: "mesa_naming",
-  proposta: "mesa_proposta",
-  site: "mesa_site",
-  motion: "mesa_motion",
-};
-
-const NOME_DA_MESA: Record<MesaQueAprende, string> = {
-  foto: "Mesa Foto (diretor de fotografia)",
-  video: "Mesa Vídeos (diretor de vídeo)",
-  edicao: "Mesa Edição (editor de vídeo)",
-  publicidade: "Mesa Publicidade (diretor de campanha)",
-  roteiro: "Mesa Roteiros (roteirista)",
-  estilo: "Estilo do cliente (diretor de arte)",
-  estudio: "Estúdio (diretor de arte das lâminas e o Ajustar)",
-  contrato: "Contratos (agente de contratos)",
-  identidade: "Mesa Identidade (diretor de marca)",
-  naming: "Mesa Identidade (criador de nomes)",
-  proposta: "Mesa Proposta (estrategista comercial)",
-  site: "Mesa Site (diretor de site)",
-  motion: "Mesa Motion (diretor de motion)",
-};
+// Frente SYNC (30/09): a lista, a área, a fonte e o nome de cada mesa moram em mesas-que-aprendem.ts (puro),
+// o mesmo arquivo que a tela "O que o painel aprendeu" lê. A regra que o dono diz valer "em todas as mesas"
+// vai para a área geral com a marca "alcance:todas" e passa a valer em todas.
+export { AREA_DA_MESA, FONTE_DA_MESA, MESAS_QUE_APRENDEM, type MesaQueAprende } from "./mesas-que-aprendem.ts";
 
 const FONTES_DAS_MESAS = new Set(Object.values(FONTE_DA_MESA));
 
@@ -107,21 +62,29 @@ export function pareceEnsino(texto: unknown): boolean {
 export type DecisaoDoEnsino = "preferencia_duradoura" | "so_desta_vez" | "incerto";
 export type TipoDaRegra = "evitar" | "preferencia";
 
+/** Onde a regra vale: só na mesa que aprendeu (padrão) ou em todas as mesas (o dono disse "em todas", "em tudo"). */
+export type AlcanceDaRegra = "mesa" | "todas";
+
 export type JulgamentoDoEnsino = {
   decisao: DecisaoDoEnsino;
   tipo: TipoDaRegra;
   probabilidade: number | null;
   fonte: "jev" | "regra";
+  /** Frente SYNC: só vem quando a regra vale em todas as mesas (ausente = só nesta mesa). */
+  alcance?: AlcanceDaRegra;
 };
 
 export const LIMIAR_DO_DURADOURO = 0.6;
+/** Certeza mínima do Jev para levar a regra a todas as mesas (na dúvida, fica só nesta). */
+export const LIMIAR_DE_TODAS_AS_MESAS = 0.7;
 
 /** Regra de reserva sem Jev: palavra de "para sempre" decide; "não gostei" sozinho fica incerto. */
 export function julgamentoPorPalavras(texto: string): JulgamentoDoEnsino {
   const t = String(texto || "").toLowerCase();
   const sempre = /\b(nunca|jamais|sempre|toda vez|todas as vezes|da pr[oó]xima|de agora em diante|a partir de agora|daqui pra frente|n[aã]o quero mais|pare de|para de|chega de|aprenda|aprende|lembre|guarde|anote)\b/.test(t);
   const nega = /\b(n[aã]o|nunca|jamais|evite|evita|pare|para de|chega|detestei|odiei|odeio|errou|errad|reprov|menos)\b/.test(t);
-  return { decisao: sempre ? "preferencia_duradoura" : "incerto", tipo: nega ? "evitar" : "preferencia", probabilidade: null, fonte: "regra" };
+  const j: JulgamentoDoEnsino = { decisao: sempre ? "preferencia_duradoura" : "incerto", tipo: nega ? "evitar" : "preferencia", probabilidade: null, fonte: "regra" };
+  return pedidoValeParaTodas(t) ? { ...j, alcance: "todas" } : j;
 }
 
 function probDe(r: RespostaJev | undefined, op: string): number | null {
@@ -141,7 +104,11 @@ export function lerJulgamento(respostas: Record<string, RespostaJev>): Julgament
   // Duradoura com pouca certeza vira incerta: a tela pergunta em vez de gravar.
   const decisao: DecisaoDoEnsino = escolha === "preferencia_duradoura" && p !== null && p < LIMIAR_DO_DURADOURO ? "incerto" : escolha;
   const tipo: TipoDaRegra = t && t.choice === "evitar" ? "evitar" : "preferencia";
-  return { decisao, tipo, probabilidade: p, fonte: "jev" };
+  const j: JulgamentoDoEnsino = { decisao, tipo, probabilidade: p, fonte: "jev" };
+  // Frente SYNC: "em todas as mesas" com certeza leva a regra à área geral (vale em todas).
+  const a = respostas.alcance;
+  const pa = a && a.choice === "todas_as_mesas" ? probDe(a, "todas_as_mesas") : null;
+  return pa !== null && pa >= LIMIAR_DE_TODAS_AS_MESAS ? { ...j, alcance: "todas" } : j;
 }
 
 /** Pergunta ao Jev: duradoura ou de uma vez só, e evitar ou preferência (uma chamada, duas perguntas em paralelo). */
@@ -178,6 +145,15 @@ export async function julgarEnsino(
               preferencia: "pede um jeito de fazer, um gosto ou um padrão a seguir",
             },
           },
+          alcance: {
+            type: "choice",
+            instructions:
+              "Se isso virar regra, ela vale só nesta mesa do painel (este tipo de trabalho: foto, vídeo, roteiro, site...) ou em TODAS as mesas e agentes do cliente (a equipe disse \"em todas\", \"em tudo\", \"em qualquer peça\", ou é um padrão da marca que vale para qualquer trabalho)?",
+            criteria: {
+              esta_mesa: "vale para este tipo de trabalho (a mesa de agora); na dúvida, esta",
+              todas_as_mesas: "vale em qualquer trabalho do cliente, em todas as mesas (dito com clareza ou padrão geral da marca)",
+            },
+          },
         },
       },
       { chave: opcoes.chave, fetchImpl: opcoes.fetchImpl, timeoutMs: opcoes.timeoutMs ?? 6_000 },
@@ -201,6 +177,8 @@ export type Aprendido = {
   reforcos: number | null;
   mesa: MesaQueAprende;
   esquecido_em?: string | null;
+  /** Frente SYNC: "todas" quando a regra vale em todas as mesas (ausente = só nesta). */
+  alcance?: AlcanceDaRegra;
 };
 
 /** Texto curto e acionável da regra: o que o modelo sugeriu, senão o próprio pedido. */
@@ -262,9 +240,10 @@ export async function aprenderDoPedido(
     const texto = textoDaRegra(p.regraSugerida, p.motivo || p.pedido, j.tipo);
     if (texto.length < 3) return null;
     if (j.decisao === "incerto") {
-      return { tipo: TIPO_DO_ANEXO_APRENDI, id: null, texto, categoria: j.tipo, decisao: "incerto", situacao: null, reforcos: null, mesa: p.mesa };
+      const incerto: Aprendido = { tipo: TIPO_DO_ANEXO_APRENDI, id: null, texto, categoria: j.tipo, decisao: "incerto", situacao: null, reforcos: null, mesa: p.mesa };
+      return j.alcance === "todas" ? { ...incerto, alcance: "todas" } : incerto;
     }
-    return await guardarRegra(db, { clientId: p.clientId, mesa: p.mesa, texto, tipo: j.tipo, marcaId: p.marcaId, userId: p.userId, pedido: p.pedido || p.motivo || "" }, opcoes);
+    return await guardarRegra(db, { clientId: p.clientId, mesa: p.mesa, texto, tipo: j.tipo, marcaId: p.marcaId, userId: p.userId, pedido: p.pedido || p.motivo || "", alcance: j.alcance }, opcoes);
   } catch (e) {
     registrarFalha(`aprendizado ${p.mesa}: não registrado`, e, { client_id: p.clientId });
     return null;
@@ -274,19 +253,22 @@ export async function aprenderDoPedido(
 /** Grava (ou reforça) uma regra dita pela equipe. Também serve o botão "Guardar como regra". Nunca lança. */
 export async function guardarRegra(
   db: BancoDoCerebro,
-  p: { clientId: string; mesa: MesaQueAprende; texto: string; tipo: TipoDaRegra; marcaId?: string | null; userId?: string | null; pedido?: string | null },
+  p: { clientId: string; mesa: MesaQueAprende; texto: string; tipo: TipoDaRegra; marcaId?: string | null; userId?: string | null; pedido?: string | null; alcance?: AlcanceDaRegra },
   opcoes: { julgarDuplicidade?: JulgarAprendizado | null } = {},
 ): Promise<Aprendido | null> {
   const texto = String(p.texto || "").replace(/\s+/g, " ").trim().slice(0, 300);
   if (texto.length < 3) return null;
-  const area = AREA_DA_MESA[p.mesa];
+  // Frente SYNC: a regra que vale em todas as mesas mora na área geral, com a marca "alcance:todas".
+  const todas = p.alcance === "todas";
+  const area = todas ? "geral" : AREA_DA_MESA[p.mesa];
+  const pedido = p.pedido ? `pedido: "${String(p.pedido).slice(0, 240)}"` : null;
   const g = await gravarNoCerebro(db, {
     client_id: p.clientId,
     area,
     categoria: p.tipo,
     texto,
     motivo: null,
-    evidencia: evidenciaDaMarca(p.marcaId, p.pedido ? `pedido: "${String(p.pedido).slice(0, 240)}"` : null),
+    evidencia: evidenciaDaMarca(p.marcaId, todas ? [MARCA_DE_TODAS_AS_MESAS, pedido].filter(Boolean).join("; ") : pedido),
     fonte: FONTE_DA_MESA[p.mesa],
     criado_por: p.userId ?? null,
     agente: AGENTE_DA_AREA[area],
@@ -295,7 +277,8 @@ export async function guardarRegra(
     registrarFalha(`aprendizado ${p.mesa}: regra não gravada`, g.erro || "sem id", { client_id: p.clientId });
     return null;
   }
-  return { tipo: TIPO_DO_ANEXO_APRENDI, id: g.id, texto, categoria: p.tipo, decisao: "preferencia_duradoura", situacao: g.situacao, reforcos: g.reforcos, mesa: p.mesa };
+  const aprendido: Aprendido = { tipo: TIPO_DO_ANEXO_APRENDI, id: g.id, texto, categoria: p.tipo, decisao: "preferencia_duradoura", situacao: g.situacao, reforcos: g.reforcos, mesa: p.mesa };
+  return todas ? { ...aprendido, alcance: "todas" } : aprendido;
 }
 
 /** "Esquecer": a regra sai (ativa=false; o histórico fica). Só do cliente dado. Nunca lança. */
@@ -320,8 +303,9 @@ export const MAX_REGRAS_NO_PROMPT = 20;
 /**
  * As regras que valem para a mesa (EVITAR primeiro, depois as mais pedidas),
  * com apelido g1..gN. Área da mesa + geral; regra de OUTRA mesa AG2 da mesma
- * área não entra (a regra do vídeo não manda no estilo); regra de outra marca
- * do cliente não entra. Nunca lança.
+ * área não entra (a regra do vídeo não manda no estilo), a não ser que o dono
+ * a tenha levado a todas as mesas (área geral com "alcance:todas", frente
+ * SYNC); regra de outra marca do cliente não entra. Nunca lança.
  */
 export async function regrasDaMesa(
   db: BancoDoCerebro,
@@ -345,7 +329,7 @@ export async function regrasDaMesa(
       const a = typeof l.area === "string" ? l.area : null;
       if (a && a !== area && a !== "geral") return false;
       const fonte = typeof l.fonte === "string" ? l.fonte : "";
-      if (FONTES_DAS_MESAS.has(fonte) && fonte !== minha) return false;
+      if (FONTES_DAS_MESAS.has(fonte) && fonte !== minha && !(a === "geral" && String(l.evidencia || "").indexOf(MARCA_DE_TODAS_AS_MESAS) >= 0)) return false;
       // Memória da entrega e categorias que não são regra não entram.
       if (l.categoria && ["evitar", "reprovado", "preferencia", "ajuste"].indexOf(String(l.categoria)) < 0) return false;
       // Regra de uma marca não vale na outra marca do mesmo cliente (sem marca na tela, vale).
@@ -431,7 +415,7 @@ export async function marcarEsquecidoNaMensagem(db: BancoDoCerebro, p: { clientI
 /**
  * As duas rotas que toda mesa AG2 espalha em ACOES:
  * - aprendizado_esquecer { client_id, id, mensagem_id? } → { ok }
- * - aprendizado_guardar { client_id, texto, tipo, marca_id?, mensagem_id? } → { aprendido } ("Guardar como regra" do incerto)
+ * - aprendizado_guardar { client_id, texto, tipo, marca_id?, mensagem_id?, alcance? } → { aprendido } ("Guardar como regra" do incerto; alcance "todas" vale em todas as mesas)
  * `garantirAcesso` é o da função (lança 403/404 no padrão dela).
  */
 export function rotasDoAprendizado(d: {
@@ -457,7 +441,8 @@ export function rotasDoAprendizado(d: {
       if (!clientId) return d.json({ erro: "client_id é obrigatório." }, 400);
       await d.garantirAcesso(ch, clientId);
       const tipo: TipoDaRegra = corpo.tipo === "evitar" ? "evitar" : "preferencia";
-      const a = await guardarRegra(d.servico(), { clientId, mesa: d.mesa, texto: String(corpo.texto || ""), tipo, marcaId: uuid(corpo.marca_id), userId: ch.userId, pedido: null });
+      const alcance: AlcanceDaRegra | undefined = corpo.alcance === "todas" ? "todas" : undefined;
+      const a = await guardarRegra(d.servico(), { clientId, mesa: d.mesa, texto: String(corpo.texto || ""), tipo, marcaId: uuid(corpo.marca_id), userId: ch.userId, pedido: null, alcance });
       if (!a) return d.json({ erro: "A regra não foi guardada." }, 500);
       // A mensagem que tinha o "incerto" passa a mostrar a regra guardada.
       const mensagemId = uuid(corpo.mensagem_id);

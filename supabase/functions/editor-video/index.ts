@@ -94,6 +94,8 @@ import { ESQUEMA_DA_RECEITA, normalizarReceita, sistemaDaReceita } from "./recei
 import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import { AVISO_SEM_REGISTRO, blocoDaReferencia, gravarTroca, pedidoAponta, referenciaDoPedido } from "../_shared/conversa-das-mesas.ts";
 import { anexoDasRegrasSeguidas, aprenderDoPedido, CAMPOS_DO_APRENDIZADO, regrasDaMesa, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
+// Frente SYNC: o editor também lê o contexto completo da marca aberta (antes só o projeto que a tela mandava).
+import { blocoDoContextoDoCliente, criarContextoDoAgente, PARTES_COM_O_CONTEXTO } from "../_shared/contexto-do-agente.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { rotasDoRender } from "./render.ts";
@@ -118,6 +120,8 @@ const REF_ALINHAMENTO = "editor_alinhamento";
 const REF_AGENTE = "editor_agente";
 const REF_VISAO = "editor_visao";
 const REF_RECEITA = "editor_receita";
+/** Frente SYNC: contexto completo da marca com cache curto (cada passo do agente não relê o banco). */
+const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
 
 class ErroHttp extends Error {
   status: number;
@@ -438,18 +442,24 @@ async function agentePasso(ch: Chamador, corpo: Record<string, unknown>) {
   const conversa = String(corpo.conversa || "").slice(-MAX_CONVERSA_CHARS);
   const itens = itensDoCorpo(corpo.itens_referencia);
   const selecionados = (Array.isArray(corpo.selecionados) ? corpo.selecionados : []).map((x) => String(x || "")).filter((r) => APELIDO_DE_CLIPE.test(r)).slice(0, 12);
+  // Frente SYNC: a marca aberta (marca_id vem pela tela) vale no contexto, nas regras e no que aprende.
+  const marcaId = typeof corpo.marca_id === "string" && UUID.test(corpo.marca_id) ? corpo.marca_id : null;
+  const contextoDaMarcaP = CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["arte", "copy", "geral"], { marca: marcaId, partes: PARTES_COM_O_CONTEXTO.concat(["kit"]), area: "video" })
+    .catch((e) => (registrarFalha("editor-video: contexto da marca não lido", e), ""));
   // AG2: o que já é lido vai em paralelo (gasto da sessão, regras ensinadas e, no passo 1, "essa/o segundo/todos" pelo Jev).
   const [gasto, regras, refDoPasso1] = await Promise.all([
     gastoDaReferencia(clientId, REF_AGENTE, referencia),
-    regrasDaMesa(servico(), { clientId, mesa: "edicao" }),
+    regrasDaMesa(servico(), { clientId, mesa: "edicao", marcaId }),
     passo === 1 && itens.length && pedidoAponta(pedido) ? referenciaDoPedido(pedido, itens, { agente: "editor_video", ultimaResposta: ultimaFalaDoAgente(conversa), selecionados }) : Promise.resolve(null),
   ]);
   const ref = passo === 1 ? refDoPasso1 : referenciaDoCorpo(corpo.referencia, itens);
   const parar = motivoParaParar({ passo, ferramentasUsadas: usadas, gastoUsd: gasto, tetoUsd: teto });
   if (parar) return json({ passo: { plano: "", chamadas: [], resposta: parar, terminou: true, recusadas: [], opcoes: [] }, custo_usd: 0, gasto_usd: gasto, parou: true });
   const m = await carregarModelo(modeloId, "texto");
+  // Frente SYNC: o contexto completo da marca vai junto do projeto (a tela manda o projeto; o painel, a marca).
+  const contextoDaMarca = await contextoDaMarcaP;
   const mensagens: MensagemMotor[] = [
-    { papel: "usuario", conteudo: `Pedido do dono: ${pedido}\n\n${conversa ? `Conversa até aqui (mais antiga primeiro):\n${conversa}\n\n` : ""}Projeto agora:\n${contexto}` },
+    { papel: "usuario", conteudo: `Pedido do dono: ${pedido}\n\n${conversa ? `Conversa até aqui (mais antiga primeiro):\n${conversa}\n\n` : ""}Projeto agora:\n${contexto}${contextoDaMarca ? `\n\n${blocoDoContextoDoCliente(contextoDaMarca)}` : ""}` },
     ...historicoValido(corpo.historico),
   ];
   // AB2 (F): o agente de edição sabe onde cada coisa fica no painel (só na conversa, nunca na visão nem na receita).
@@ -480,7 +490,7 @@ async function agentePasso(ch: Chamador, corpo: Record<string, unknown>) {
       // Aprender: depois do principal e sem nunca travar o passo (aprenderDoPedido não lança).
       const regraSugerida = typeof j.regra_aprendida === "string" && j.regra_aprendida.trim() ? j.regra_aprendida : null;
       const aprendido = passo === 1 || (regraSugerida && corpo.ja_aprendeu !== true)
-        ? await aprenderDoPedido(servico(), { clientId, mesa: "edicao", pedido, regraSugerida, userId: ch.userId, ultimaResposta: ultimaFalaDoAgente(conversa) })
+        ? await aprenderDoPedido(servico(), { clientId, mesa: "edicao", pedido, regraSugerida, marcaId, userId: ch.userId, ultimaResposta: ultimaFalaDoAgente(conversa) })
         : null;
       await auditar(ch, "editor_agente_passo", { client_id: clientId, passo, chamadas: lido.chamadas.length, modelo_id: r.modeloId }, true);
       return json({

@@ -17,7 +17,9 @@ import {
   resolveAiProviderChain,
   type AiProvider,
 } from "../_shared/ai-provider.ts";
-import { contextoParaAgente, type AreaDoCerebro } from "../_shared/cerebro-do-cliente.ts";
+import { type AreaDoCerebro } from "../_shared/cerebro-do-cliente.ts";
+import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
+import { areaDoBloco, PARTES_COM_O_CONTEXTO } from "../_shared/contexto-do-agente.ts";
 // Frente AG (26/09): o Aceleriq conhece o painel inteiro e já vai fazendo (contrato comum das ações).
 import {
   acaoGuardadaNaMensagem,
@@ -280,8 +282,10 @@ async function lerPreContexto(
     Promise.resolve(
       supabase.from("profiles").select("company_name, full_name, services_config, client_type").eq("id", clientId).maybeSingle(),
     ).catch((e) => (registrarFalha("voice-assistant-agent: leitura do banco falhou", e), ({ data: null }))),
-    contextoParaAgente(supabase as never, clientId, s.areas[0], { areas: s.areas, limiteCerebro: 1200, limiteDossie: 2500 })
-      .catch((e) => (registrarFalha("voice-assistant-agent: contextoParaAgente falhou", e), ({ texto: "" }))),
+    // Frente SYNC: o contexto completo da marca (principal do cliente): negócio, estratégia aprovada, briefing, dossiê, decisões do conselho e cérebro.
+    contextoCompletoParaPrompt(supabase as never, clientId, null, { area: areaDoBloco(s.areas), areasDoCerebro: s.areas, limiteCerebro: 1200, teto: 4000, partes: PARTES_COM_O_CONTEXTO, semTitulo: true })
+      .then((c) => ({ texto: c.bloco }))
+      .catch((e) => (registrarFalha("voice-assistant-agent: contexto completo falhou", e), ({ texto: "" }))),
     Promise.resolve(
       supabase.from("projects").select("id, name, status, progress, deadline, project_type")
         .eq("client_id", clientId).is("deleted_at", null).not("status", "in", "(done,completed,cancelled)")
@@ -510,16 +514,16 @@ async function loadAllClientDocs(
   } catch {}
 
   try {
-    // 3) Briefings (texto puro)
+    // 3) Briefings (texto puro). Frente SYNC: as colunas são responses e submitted (answers e status não existem; a leitura falhava calada).
     const { data: brs } = await supabase
       .from("briefings")
-      .select("answers, status, created_at")
+      .select("responses, submitted, created_at")
       .eq("client_id", clientId)
       .order("created_at", { ascending: false })
       .limit(2);
     for (const b of brs || []) {
       if (docs.length >= MAX_DOCS) break;
-      const text = typeof b.answers === "string" ? b.answers : JSON.stringify(b.answers || {}, null, 2);
+      const text = typeof b.responses === "string" ? b.responses : JSON.stringify(b.responses || {}, null, 2);
       if (text && text.length > 50) {
         docs.push({ fileName: `briefing-${(b.created_at || "").slice(0, 10)}.json`, text: text.slice(0, 12000), source: "briefing" });
       }

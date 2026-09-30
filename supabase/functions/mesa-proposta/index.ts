@@ -69,7 +69,8 @@ import {
   textoDoResultado,
 } from "../_shared/acoes-do-agente.ts";
 import { blocoDoMapaDoPainel, caminhoDaResposta, destinoNaResposta, pedeParaAbrir, pedeParaLevar } from "../_shared/mapa-do-painel.ts";
-import { blocoDoContextoDoCliente, criarContextoDoAgente } from "../_shared/contexto-do-agente.ts";
+import { blocoDoContextoDoCliente, criarContextoDoAgente, PARTES_COM_O_CONTEXTO, PARTES_COMPLEMENTARES } from "../_shared/contexto-do-agente.ts";
+import { linhaDaMarca } from "../_shared/heranca-da-marca.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { AVISO_SEM_REGISTRO, gravarTroca } from "../_shared/conversa-das-mesas.ts";
@@ -781,16 +782,19 @@ type ContextoDaGeracao = { dados: Record<string, unknown>; origem: string; clien
 /** Tudo o que o estrategista lê: cliente, marca, briefing, lead, itens, reunião, arquivos e o cérebro do painel. */
 async function contextoDaGeracao(linha: LinhaDaProposta, fontes?: FonteDoPreenchimento[]): Promise<ContextoDaGeracao> {
   const db = servico();
-  const [cliente, marca, briefing, lead, cerebro] = await Promise.all([
+  const [cliente, marca, briefings, lead, cerebro] = await Promise.all([
     nomeDoCliente(linha.client_id),
     resolverMarca(db, linha.client_id, { marca_id: linha.marca_id }).catch((e) => (registrarFalha("mesa-proposta: marca não lida", e), null)),
-    db.from("briefings").select("responses, created_at").eq("client_id", linha.client_id).eq("submitted", true).order("created_at", { ascending: false }).limit(1)
-      .then((r) => (r.error ? (registrarFalha("mesa-proposta: briefing não lido", r.error), null) : ((r.data as Array<{ responses: unknown }> | null) || [])[0] || null)),
+    // Frente SYNC: o briefing mais novo DA MARCA da proposta (a CME não lê o da Acerbi).
+    db.from("briefings").select("responses, created_at, marca_id").eq("client_id", linha.client_id).eq("submitted", true).order("created_at", { ascending: false }).limit(6)
+      .then((r) => (r.error ? (registrarFalha("mesa-proposta: briefing não lido", r.error), [] as Array<{ responses: unknown; marca_id?: string | null }>) : ((r.data as Array<{ responses: unknown; marca_id?: string | null }> | null) || []))),
     linha.lead_id
       ? db.from("commercial_leads").select("name, company, origin, notes, qualificacao, next_action, stage").eq("id", linha.lead_id).maybeSingle().then((r) => (r.error ? (registrarFalha("mesa-proposta: lead não lido", r.error), null) : r.data))
       : Promise.resolve(null),
-    CONTEXTO_DO_AGENTE.ler(db, linha.client_id, ["copy", "campanha", "geral"]).catch((e) => (registrarFalha("mesa-proposta: cérebro não lido", e), "")),
+    // Frente SYNC: estratégia aprovada (tom e tagline), dossiê, decisões e cérebro da marca da proposta (o briefing já vem acima).
+    CONTEXTO_DO_AGENTE.ler(db, linha.client_id, ["copy", "campanha", "geral"], { marca: linha.marca_id, partes: PARTES_COMPLEMENTARES.filter((p) => p !== "briefing"), area: "comercial" }).catch((e) => (registrarFalha("mesa-proposta: cérebro não lido", e), "")),
   ]);
+  const briefing = briefings.filter((b) => linhaDaMarca(b.marca_id, marca))[0] || null;
   const contextoMarca = await lerContextoDaMarca(db, linha.client_id, marca).catch((e) => (registrarFalha("mesa-proposta: contexto da marca não lido", e), {}));
   const reuniao = materialDaReuniao(linha.contexto);
   const itens = linha.itens.map((i) => ({ nome: i.nome, descricao: i.descricao, quantidade: i.quantidade, recorrencia: i.recorrencia }));
@@ -1141,11 +1145,13 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const anexados = materiaisDoCorpo(corpo.arquivos);
   if (linha && anexados.length && linha.status !== "aceita") linha = await gravar(ch, linha, { contexto: comMateriais(linha.contexto, anexados) }, "manual", `arquivos da conversa: ${anexados.map((a) => a.nome).join(", ")}`);
   const conversaId = await conversaDoAgente(ch, clientId, corpo.conversa_id, corpo.nova_conversa === true);
-  const [modelo, historico, ctx, regras] = await Promise.all([
+  const [modelo, historico, ctx, regras, semProposta] = await Promise.all([
     modeloDeTexto(corpo.modelo_id),
     servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO),
     linha ? contextoDaGeracao(linha) : Promise.resolve(null),
     regrasDaMesa(servico(), { clientId, mesa: "proposta", marcaId: linha ? linha.marca_id : null }),
+    // Frente SYNC: sem proposta aberta, o estrategista ainda conhece a marca aberta (contexto completo).
+    linha ? Promise.resolve("") : CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["copy", "campanha", "geral"], { marca: typeof corpo.marca_id === "string" && corpo.marca_id ? corpo.marca_id : null, partes: PARTES_COM_O_CONTEXTO, area: "comercial" }).catch((e) => (registrarFalha("mesa-proposta: contexto sem proposta", e), "")),
   ]);
   if (historico.error) registrarFalha("mesa-proposta: histórico da conversa não lido", historico.error, { conversa_id: conversaId });
   const hoje = hojeEmSaoPaulo();
@@ -1169,7 +1175,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: AGENTE,
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
-    sistema: `${SISTEMA_AGENTE}\n\nDADOS DESTA CONVERSA (hoje ${hoje}):\n${JSON.stringify(dados).slice(0, 60_000)}\n${blocoAcoes}\n\n${blocoDoMapaDoPainel("proposta")}${ctx && ctx.blocoCliente ? `\n\n${ctx.blocoCliente}` : ""}${regras.bloco ? `\n\n${regras.bloco}` : ""}`,
+    sistema: `${SISTEMA_AGENTE}\n\nDADOS DESTA CONVERSA (hoje ${hoje}):\n${JSON.stringify(dados).slice(0, 60_000)}\n${blocoAcoes}\n\n${blocoDoMapaDoPainel("proposta")}${ctx && ctx.blocoCliente ? `\n\n${ctx.blocoCliente}` : semProposta ? `\n\n${blocoDoContextoDoCliente(semProposta)}` : ""}${regras.bloco ? `\n\n${regras.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: anexados.length ? `${mensagem}\n\n(Anexei: ${anexados.map((a) => a.nome).join(", ")}. Já estão no material da proposta.)` : mensagem }],
     esquemaJson: ESQUEMA_AGENTE,
     maxTokensSaida: 3_000,
@@ -1179,7 +1185,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const j = (saida.json || {}) as Record<string, unknown>;
   let resposta = textoLimpo(j.resposta, 4000) || "Pronto.";
   const sugestoes = (Array.isArray(j.sugestoes) ? j.sugestoes : []).map((s) => textoLimpo(s, 140)).filter(Boolean).slice(0, 3);
-  const aprendendo = aprenderDoPedido(servico(), { clientId, mesa: "proposta", pedido: mensagem, regraSugerida: j.regra_aprendida, userId: ch.userId, ultimaResposta: ultimaResposta ? ultimaResposta.conteudo : null });
+  const aprendendo = aprenderDoPedido(servico(), { clientId, mesa: "proposta", pedido: mensagem, regraSugerida: j.regra_aprendida, marcaId: linha ? linha.marca_id : typeof corpo.marca_id === "string" ? corpo.marca_id : null, userId: ch.userId, ultimaResposta: ultimaResposta ? ultimaResposta.conteudo : null });
   let acao: AcaoDoAgente | null = linha ? normalizarAcoesDaProposta(j.acoes, paraAcao(linha), mensagem, custoDe(modelo, TAMANHO_DA_GERACAO), custoDe(modelo, TAMANHO_DA_PESQUISA, 5), undefined, { resumo: custoDe(modelo, TAMANHOS_DA_EVOLUCAO.resumo), pacotes: 0.01 }) : null;
   let levar = pedeParaLevar(mensagem);
   if (acao && linha) acao = comCaminho(acao, caminhoDaProposta(clientId, linha.id, acao, { abrirSozinho: levar }));
