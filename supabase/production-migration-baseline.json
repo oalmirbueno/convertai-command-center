@@ -1665,6 +1665,22 @@
       "remote_name": "proposta_comercial_evolucao",
       "remote_statements_sha256": "3c7cdbe4e7e7ded8cf38a3b9a6f59dd292e18d6dbf4c82962ca605fcca8592df",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930160000",
+      "path": "supabase/migrations/20260930160000_mesa_site_evolucao.sql",
+      "local_sha256": "148bef29faff204951b928639e116221ac9d2a29c0c1e44b0da4d7e3de2c4d99",
+      "remote_name": "mesa_site_evolucao",
+      "remote_statements_sha256": "d84741151ba3913816312679541153973f1a850d77b2eec6121b6f5795204e46",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930180000",
+      "path": "supabase/migrations/20260930180000_mesa_motion.sql",
+      "local_sha256": "10817d404c61c4bd1d6fd0609f09c20a4892b560de86107603671cb992de2ce4",
+      "remote_name": "mesa_motion",
+      "remote_statements_sha256": "ad211e80611e5a81b1039b3ccd638d0336fb190e1f7460c4993906ca053e36a1",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
