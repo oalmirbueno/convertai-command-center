@@ -80,6 +80,8 @@ import {
   resolucaoParaModelo,
   urlDosEndpointsDeImagem,
 } from "./capacidades-imagem.ts";
+import { corpoAnthropic, corpoOpenAi, corpoOpenRouter, type FonteDaWeb, fontesDaAnthropic, fontesDaOpenAi, fontesDoOpenRouter } from "./corpo-dos-provedores.ts";
+import { ehApelidoDoOpenRouter, type ModeloOpenRouterBruto, niveisDeRaciocinio, type RecursosDoModelo, recursosDoOpenRouter } from "./recursos-dos-modelos.ts";
 
 export {
   aceitaResolucao,
@@ -121,8 +123,8 @@ export const PAPEIS_DAS_MESAS_NOVAS: PapelDasMesasNovas[] = [
   "motion",
   "documento",
 ];
-export type Tarefa = "calendario" | "estudio" | "conversa" | "leitura_referencia" | "verificacao" | "contexto" | "ads" | PapelDasMesasNovas;
-export type Agente = "estrategista" | "diretor_arte" | "gerador_imagem" | "leitor" | "jev" | "contexto" | "estrategista_ads" | PapelDasMesasNovas;
+export type Tarefa = "calendario" | "estudio" | "conversa" | "leitura_referencia" | "verificacao" | "contexto" | "ads" | "computador" | PapelDasMesasNovas;
+export type Agente = "estrategista" | "diretor_arte" | "gerador_imagem" | "leitor" | "jev" | "contexto" | "estrategista_ads" | "computador" | PapelDasMesasNovas;
 
 export type ModeloIa = {
   id: string;
@@ -153,6 +155,13 @@ export type ModeloIa = {
    * valem as famílias conhecidas.
    */
   capacidades?: CapacidadesImagem | null;
+  /**
+   * Modelos de texto: ferramentas, JSON, visão, raciocínio obrigatório e
+   * padrão, preço da busca web e da escrita de cache, saída máxima e data de
+   * lançamento (recursos-dos-modelos.ts; migration 20260930220000). Sem a
+   * coluna ainda: null, e o motor usa as regras de antes.
+   */
+  recursos?: Partial<RecursosDoModelo> | null;
 };
 
 export type ImagemEntrada = { bytes: Uint8Array; mime: string; nome?: string };
@@ -169,7 +178,18 @@ export type EntradaTexto = {
   mensagens: MensagemMotor[];
   raciocinio?: string;
   pesquisaWeb?: boolean;
+  /**
+   * Busca web só nestes domínios (allowed_domains na Anthropic e no OpenRouter,
+   * filters.allowed_domains na OpenAI). Vazio: a web toda.
+   */
+  dominiosWeb?: string[];
   esquemaJson?: EsquemaJson;
+  /**
+   * Cache do prompt nos modelos Claude (direto e pelo OpenRouter). Padrão:
+   * liga sozinho com sistema grande (corpo-dos-provedores.ts, usarCache);
+   * "1h" para trabalho longo; false desliga.
+   */
+  cachePrompt?: boolean | "1h";
   referencia?: ReferenciaUso;
   criadoPor?: string | null;
   maxTokensSaida?: number;
@@ -190,6 +210,8 @@ export type SaidaTexto = {
   modeloId: string;
   /** Aviso para a tela quando o motor atendeu por outro caminho (a funcao de borda devolve como reserva_usada). */
   reservaUsada?: ReservaUsada;
+  /** Páginas que a busca web do provedor citou (só com pesquisaWeb): a tela mostra como fonte. */
+  fontes?: FonteDaWeb[];
 };
 
 export type EntradaImagem = {
@@ -709,14 +731,6 @@ async function buscar(provedor: Provedor, url: string, init: RequestInit, timeou
   }
 }
 
-function nomeEsquema(e: EsquemaJson): { nome: string; schema: Record<string, unknown> } {
-  const talvez = e as { nome?: string; schema?: unknown };
-  if (talvez.schema && typeof talvez.schema === "object") {
-    return { nome: (talvez.nome || "resposta").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64), schema: talvez.schema as Record<string, unknown> };
-  }
-  return { nome: "resposta", schema: e as Record<string, unknown> };
-}
-
 function lerJson(texto: string): unknown {
   const limpo = texto.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   try {
@@ -768,6 +782,9 @@ type UsoTokens = {
   entrada: number;
   saida: number;
   cache: number;
+  /** Parte da entrada escrita no cache (5 min e 1 h): 1,25x e 2x a entrada, ou o preço publicado. */
+  cacheEscrita?: number;
+  cacheEscrita1h?: number;
   /** Parte da entrada que e imagem (so modelos de imagem). */
   entradaImagem?: number;
   imagens?: number;
@@ -788,7 +805,7 @@ export function custoPelaTabela(m: ModeloIa, u: UsoTokens): number {
   const pe = num(m.preco_entrada_1m);
   const ps = num(m.preco_saida_1m);
   const pc = m.preco_cache_1m == null ? pe : num(m.preco_cache_1m);
-  const busca = num(u.buscasWeb) * CUSTO_BUSCA_WEB_USD[m.provedor];
+  const busca = num(u.buscasWeb) * custoDaBuscaWeb(m);
   if (m.tipo === "imagem") {
     const pImgEntrada = m.preco_imagem && m.preco_imagem.entrada_imagem_1m != null ? num(m.preco_imagem.entrada_imagem_1m) : pe;
     const entradaImagem = Math.min(num(u.entradaImagem), num(u.entrada));
@@ -802,7 +819,19 @@ export function custoPelaTabela(m: ModeloIa, u: UsoTokens): number {
     return arred(custoEntrada + entradasPorImagem + num(u.imagens ?? 1) * porImagem);
   }
   const cache = Math.min(num(u.cache), num(u.entrada));
-  return arred(((num(u.entrada) - cache) * pe + cache * pc + num(u.saida) * ps) / 1_000_000 + busca);
+  const escrita = Math.min(num(u.cacheEscrita), num(u.entrada) - cache);
+  const escrita1h = Math.min(num(u.cacheEscrita1h), num(u.entrada) - cache - escrita);
+  const r = m.recursos || {};
+  const pw = r.cache_escrita_1m != null ? num(r.cache_escrita_1m) : pe * 1.25;
+  const pw1h = r.cache_escrita_1h_1m != null ? num(r.cache_escrita_1h_1m) : pe * 2;
+  const cheia = num(u.entrada) - cache - escrita - escrita1h;
+  return arred((cheia * pe + cache * pc + escrita * pw + escrita1h * pw1h + num(u.saida) * ps) / 1_000_000 + busca);
+}
+
+/** US$ por busca web: o preço publicado do modelo (recursos.busca_web_usd) ou o do provedor. */
+export function custoDaBuscaWeb(m: Pick<ModeloIa, "provedor" | "recursos">): number {
+  const publicado = m.recursos && m.recursos.busca_web_usd;
+  return typeof publicado === "number" && Number.isFinite(publicado) && publicado >= 0 ? publicado : CUSTO_BUSCA_WEB_USD[m.provedor];
 }
 
 /** Estimativa pela tabela do catalogo, sem chamar provedor. */
@@ -961,32 +990,19 @@ type RespostaProvedorTexto = {
   texto: string;
   entrada: number;
   saida: number;
+  /** Entrada lida do cache. */
   cache: number;
+  /** Entrada escrita no cache de 5 min e de 1 h (Anthropic; custa mais que a entrada). */
+  cacheEscrita: number;
+  cacheEscrita1h: number;
   buscasWeb: number;
   custoProvedor: number | null;
+  /** Páginas citadas pela busca web do provedor (citação e fonte). */
+  fontes: FonteDaWeb[];
 };
 
 async function textoOpenAi(m: ModeloIa, chave: string, e: EntradaTexto): Promise<RespostaProvedorTexto> {
-  const input = e.mensagens.map((msg) => {
-    if (msg.papel === "agente") return { role: "assistant", content: msg.conteudo };
-    if (!msg.imagens?.length) return { role: "user", content: msg.conteudo };
-    return {
-      role: "user",
-      content: [
-        { type: "input_text", text: msg.conteudo },
-        ...msg.imagens.map((img) => ({ type: "input_image", image_url: dataUrl(img) })),
-      ],
-    };
-  });
-  const corpo: Record<string, unknown> = { model: m.modelo_api, instructions: e.sistema, input, store: false };
-  if (e.raciocinio) corpo.reasoning = { effort: e.raciocinio };
-  if (e.pesquisaWeb) corpo.tools = [{ type: "web_search" }];
-  if (e.esquemaJson) {
-    const { nome, schema } = nomeEsquema(e.esquemaJson);
-    corpo.text = { format: { type: "json_schema", name: nome, schema, strict: true } };
-  }
-  if (e.maxTokensSaida) corpo.max_output_tokens = e.maxTokensSaida;
-
+  const corpo = corpoOpenAi(m.modelo_api, e);
   const res = await buscar("openai", "https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { "Authorization": `Bearer ${chave}`, "Content-Type": "application/json" },
@@ -1015,67 +1031,69 @@ async function textoOpenAi(m: ModeloIa, chave: string, e: EntradaTexto): Promise
     entrada: num(data.usage?.input_tokens),
     saida: num(data.usage?.output_tokens),
     cache: num(data.usage?.input_tokens_details?.cached_tokens),
+    cacheEscrita: 0,
+    cacheEscrita1h: 0,
     buscasWeb: buscas,
     custoProvedor: null,
+    fontes: e.pesquisaWeb ? fontesDaOpenAi(data as Parameters<typeof fontesDaOpenAi>[0]) : [],
   };
 }
 
-async function textoAnthropic(m: ModeloIa, chave: string, e: EntradaTexto): Promise<RespostaProvedorTexto> {
-  const messages = e.mensagens.map((msg) => {
-    if (msg.papel === "agente") return { role: "assistant", content: msg.conteudo };
-    if (!msg.imagens?.length) return { role: "user", content: msg.conteudo };
-    return {
-      role: "user",
-      content: [
-        ...msg.imagens.map((img) => ({ type: "image", source: { type: "base64", media_type: img.mime, data: paraBase64(img.bytes) } })),
-        { type: "text", text: msg.conteudo },
-      ],
-    };
-  });
-  const corpo: Record<string, unknown> = {
-    model: m.modelo_api,
-    max_tokens: e.maxTokensSaida ?? 16_000,
-    system: e.sistema,
-    messages,
+type RespostaAnthropic = {
+  stop_reason?: string;
+  content?: Array<{ type?: string; text?: string; citations?: Array<{ url?: string; title?: string; cited_text?: string }>; content?: unknown }>;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+    cache_creation?: { ephemeral_5m_input_tokens?: number; ephemeral_1h_input_tokens?: number };
+    server_tool_use?: { web_search_requests?: number };
   };
-  const outputConfig: Record<string, unknown> = {};
-  if (e.raciocinio) {
-    corpo.thinking = { type: "adaptive" };
-    outputConfig.effort = e.raciocinio;
-  }
-  if (e.esquemaJson) outputConfig.format = { type: "json_schema", schema: nomeEsquema(e.esquemaJson).schema };
-  if (Object.keys(outputConfig).length) corpo.output_config = outputConfig;
-  if (e.pesquisaWeb) corpo.tools = [{ type: "web_search_20260209", name: "web_search", max_uses: 5 }];
+};
 
-  const res = await buscar("anthropic", "https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "x-api-key": chave, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
-    body: JSON.stringify(corpo),
-  }, e.timeoutMs ?? TIMEOUT_TEXTO_MS);
-  const data = await res.json() as {
-    stop_reason?: string;
-    content?: Array<{ type?: string; text?: string }>;
-    usage?: {
-      input_tokens?: number;
-      output_tokens?: number;
-      cache_read_input_tokens?: number;
-      cache_creation_input_tokens?: number;
-      server_tool_use?: { web_search_requests?: number };
-    };
-  };
-  if (data.stop_reason === "refusal") throw new IaMotorErro("provedor_recusou", "O modelo recusou o pedido.", { provedor: "anthropic" });
-  const texto = (data.content ?? []).filter((b) => b.type === "text" && b.text).map((b) => b.text).join("");
-  const u = data.usage ?? {};
-  // input_tokens da Anthropic nao inclui cache. O motor nao usa cache_control,
-  // entao escrita de cache (1,25x) nao deve aparecer; se aparecer, entra como entrada cheia.
-  const cache = num(u.cache_read_input_tokens);
+/** Rodadas extras quando a busca web devolve pause_turn (o servidor parou no meio do laço dele). */
+const MAX_CONTINUACOES_ANTHROPIC = 2;
+
+async function textoAnthropic(m: ModeloIa, chave: string, e: EntradaTexto): Promise<RespostaProvedorTexto> {
+  const corpo = corpoAnthropic(m.modelo_api, e);
+  const blocos: NonNullable<RespostaAnthropic["content"]> = [];
+  const soma = { entrada: 0, saida: 0, cache: 0, escrita: 0, escrita1h: 0, buscas: 0 };
+  for (let rodada = 0; rodada <= MAX_CONTINUACOES_ANTHROPIC; rodada++) {
+    const res = await buscar("anthropic", "https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": chave, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+      body: JSON.stringify(corpo),
+    }, e.timeoutMs ?? TIMEOUT_TEXTO_MS);
+    const data = await res.json() as RespostaAnthropic;
+    if (data.stop_reason === "refusal") throw new IaMotorErro("provedor_recusou", "O modelo recusou o pedido.", { provedor: "anthropic" });
+    const u = data.usage ?? {};
+    // input_tokens da Anthropic nao inclui o cache: a entrada total soma leitura e escrita.
+    const escrita = num(u.cache_creation_input_tokens);
+    const escrita1h = Math.min(num(u.cache_creation?.ephemeral_1h_input_tokens), escrita);
+    const leitura = num(u.cache_read_input_tokens);
+    soma.entrada += num(u.input_tokens) + escrita + leitura;
+    soma.saida += num(u.output_tokens);
+    soma.cache += leitura;
+    soma.escrita += escrita - escrita1h;
+    soma.escrita1h += escrita1h;
+    soma.buscas += num(u.server_tool_use?.web_search_requests);
+    for (const b of data.content ?? []) blocos.push(b);
+    if (data.stop_reason !== "pause_turn") break;
+    // pause_turn: devolve o que veio e pede para continuar (o servidor retoma a busca).
+    corpo.messages = (corpo.messages as unknown[]).concat([{ role: "assistant", content: data.content ?? [] }]);
+  }
+  const texto = blocos.filter((b) => b.type === "text" && b.text).map((b) => b.text).join("");
   return {
     texto,
-    entrada: num(u.input_tokens) + num(u.cache_creation_input_tokens) + cache,
-    saida: num(u.output_tokens),
-    cache,
-    buscasWeb: num(u.server_tool_use?.web_search_requests),
+    entrada: soma.entrada,
+    saida: soma.saida,
+    cache: soma.cache,
+    cacheEscrita: soma.escrita,
+    cacheEscrita1h: soma.escrita1h,
+    buscasWeb: soma.buscas,
     custoProvedor: null,
+    fontes: e.pesquisaWeb ? fontesDaAnthropic(blocos) : [],
   };
 }
 
@@ -1092,32 +1110,12 @@ type UsoOpenRouter = {
   prompt_tokens?: number;
   completion_tokens?: number;
   cost?: number;
-  prompt_tokens_details?: { cached_tokens?: number };
+  prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
+  server_tool_use?: { web_search_requests?: number };
 };
 
 async function textoOpenRouter(m: ModeloIa, chave: string, e: EntradaTexto): Promise<RespostaProvedorTexto> {
-  const messages: unknown[] = [{ role: "system", content: e.sistema }];
-  for (const msg of e.mensagens) {
-    if (msg.papel === "agente") { messages.push({ role: "assistant", content: msg.conteudo }); continue; }
-    if (!msg.imagens?.length) { messages.push({ role: "user", content: msg.conteudo }); continue; }
-    messages.push({
-      role: "user",
-      content: [
-        { type: "text", text: msg.conteudo },
-        ...msg.imagens.map((img) => ({ type: "image_url", image_url: { url: dataUrl(img) } })),
-      ],
-    });
-  }
-  // O OpenRouter ja devolve usage.cost em toda resposta (usage.include foi aposentado).
-  const corpo: Record<string, unknown> = { model: m.modelo_api, messages };
-  if (e.raciocinio) corpo.reasoning = { effort: e.raciocinio };
-  if (e.pesquisaWeb) corpo.plugins = [{ id: "web" }];
-  if (e.esquemaJson) {
-    const { nome, schema } = nomeEsquema(e.esquemaJson);
-    corpo.response_format = { type: "json_schema", json_schema: { name: nome, strict: true, schema } };
-  }
-  if (e.maxTokensSaida) corpo.max_tokens = e.maxTokensSaida;
-
+  const corpo = corpoOpenRouter(m.modelo_api, e);
   const res = await buscar("openrouter", "https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: cabecalhosOpenRouter(chave),
@@ -1130,8 +1128,11 @@ async function textoOpenRouter(m: ModeloIa, chave: string, e: EntradaTexto): Pro
     entrada: num(u.prompt_tokens),
     saida: num(u.completion_tokens),
     cache: num(u.prompt_tokens_details?.cached_tokens),
-    buscasWeb: 0,
+    cacheEscrita: num(u.prompt_tokens_details?.cache_write_tokens),
+    cacheEscrita1h: 0,
+    buscasWeb: num(u.server_tool_use?.web_search_requests),
     custoProvedor: typeof u.cost === "number" && Number.isFinite(u.cost) ? u.cost : null,
+    fontes: e.pesquisaWeb ? fontesDoOpenRouter(data as Parameters<typeof fontesDoOpenRouter>[0]) : [],
   };
 }
 
@@ -1194,7 +1195,7 @@ export async function chamarTexto(e: EntradaTexto): Promise<SaidaTexto> {
   const custoFonte: "provedor" | "tabela" = r.custoProvedor != null ? "provedor" : "tabela";
   const custoUsd = r.custoProvedor != null
     ? arred(r.custoProvedor)
-    : custoPelaTabela(m, { entrada: r.entrada, saida: r.saida, cache: r.cache, buscasWeb: r.buscasWeb });
+    : custoPelaTabela(m, { entrada: r.entrada, saida: r.saida, cache: r.cache, cacheEscrita: r.cacheEscrita, cacheEscrita1h: r.cacheEscrita1h, buscasWeb: r.buscasWeb });
 
   // Registra antes de validar o conteudo: a chamada ja custou.
   const { usoId, saldoUsd } = await registrarUso({
@@ -1217,6 +1218,7 @@ export async function chamarTexto(e: EntradaTexto): Promise<SaidaTexto> {
   if (!r.texto.trim()) throw new IaMotorErro("resposta_vazia", "O modelo nao devolveu texto.", { uso_id: usoId });
   const saida: SaidaTexto = { texto: r.texto, usoId, custoUsd, saldoUsd, modeloId: m.id };
   if (reserva) saida.reservaUsada = reserva;
+  if (r.fontes.length) saida.fontes = r.fontes;
   if (e.esquemaJson) saida.json = lerJson(r.texto);
   return saida;
 }
@@ -1583,7 +1585,6 @@ export async function listarModelosDoProvedor(provedor: Provedor): Promise<strin
 
 // ------------------------------------------------- catalogo do OpenRouter
 
-const ORDEM_RACIOCINIO = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
 /** Tokens de uma imagem 1K do Gemini, para a estimativa previa (o custo real vem em usage.cost). */
 const TOKENS_IMAGEM_ESTIMADOS = 1_290;
 export const OPENROUTER_MODELOS_URL = "https://openrouter.ai/api/v1/models";
@@ -1603,17 +1604,11 @@ export type LinhaCatalogo = {
   fonte_preco: string;
   /** Só modelos de imagem (lista de imagens do OpenRouter); texto: null. */
   capacidades: CapacidadesImagem | null;
+  /** Só modelos de texto: ferramentas, JSON, visão, raciocínio, cache, busca e lançamento. */
+  recursos?: RecursosDoModelo | null;
 };
 
-type ModeloOpenRouter = {
-  id?: string;
-  name?: string;
-  context_length?: number;
-  architecture?: { input_modalities?: string[]; output_modalities?: string[] };
-  pricing?: Record<string, unknown>;
-  supported_parameters?: string[];
-  reasoning?: { supported_efforts?: string[] };
-};
+type ModeloOpenRouter = ModeloOpenRouterBruto;
 
 /** Preco por token (texto do OpenRouter) para preco por 1 milhao. */
 function por1m(v: unknown): number | null {
@@ -1626,11 +1621,13 @@ function por1m(v: unknown): number | null {
 /**
  * Converte um modelo da lista publica do OpenRouter em linha do catalogo.
  * Ficam de fora: variantes com ":" (batch, free), roteadores do proprio
- * OpenRouter, preco negativo ou ausente e modelos que falam audio.
+ * OpenRouter, apelidos "~.../...-latest" (apontam para outro modelo e mudam
+ * sozinhos), preco negativo ou ausente e modelos que falam audio.
  */
 export function converterModeloOpenRouter(o: ModeloOpenRouter, hoje: string): LinhaCatalogo | null {
   const slug = String(o.id ?? "").trim();
   if (!slug || slug.includes(":") || slug.startsWith("openrouter/")) return null;
+  if (ehApelidoDoOpenRouter(o)) return null;
   const saida = o.architecture?.output_modalities ?? [];
   const entrada = o.architecture?.input_modalities ?? [];
   if (saida.includes("audio")) return null;
@@ -1641,13 +1638,7 @@ export function converterModeloOpenRouter(o: ModeloOpenRouter, hoje: string): Li
   const ps = por1m(p.completion);
   if (pe == null || ps == null) return null;
 
-  let raciocinio: string[] = [];
-  const esforcos = o.reasoning?.supported_efforts;
-  if (Array.isArray(esforcos) && esforcos.length) {
-    raciocinio = ORDEM_RACIOCINIO.filter((n) => esforcos.includes(n));
-  } else if ((o.supported_parameters ?? []).includes("reasoning_effort")) {
-    raciocinio = ["low", "medium", "high"];
-  }
+  const raciocinio: string[] = niveisDeRaciocinio(o);
 
   let precoImagem: Record<string, number> | null = null;
   const saidaImagem = por1m(p.image_output);
@@ -1674,6 +1665,7 @@ export function converterModeloOpenRouter(o: ModeloOpenRouter, hoje: string): Li
     modalidades: { entrada, saida },
     fonte_preco: `${OPENROUTER_MODELOS_URL} e https://openrouter.ai/${slug} (sincronizado ${hoje})`,
     capacidades: null,
+    recursos: tipo === "texto" ? recursosDoOpenRouter(o) : null,
   };
 }
 
@@ -1744,7 +1736,7 @@ async function listarModelosDeImagemOpenRouter(hoje: string): Promise<LinhaCatal
   const lista = ((await comUmaNovaTentativa(() => obterJson(OPENROUTER_IMAGENS_URL))) as { data?: ModeloDeImagemOpenRouter[] }).data ?? [];
   const alvos = lista.filter((o) => {
     const slug = String(o.id ?? "");
-    return slug && !slug.includes(":") && !/^openai\/gpt-image/.test(slug) && (o.architecture?.output_modalities ?? []).includes("image");
+    return slug && !slug.includes(":") && !slug.startsWith("~") && !/^openai\/gpt-image/.test(slug) && (o.architecture?.output_modalities ?? []).includes("image");
   });
   const linhas: LinhaCatalogo[] = [];
   let proximo = 0;

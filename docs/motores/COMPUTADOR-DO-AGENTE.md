@@ -194,3 +194,47 @@ Estados: `aguardando_dono` → `aprovada` → `executando` → `feita` ou `falho
 | Receita: preencher formulário | https://cua.ai/docs/how-to-guides/recipes/fill-a-form-from-a-local-file.md |
 | Gravar trajetória | https://cua.ai/docs/how-to-guides/driver/record-and-render-a-trajectory.md |
 | Preço | https://cua.ai/pricing |
+
+## 8. Navegador do agente: computer use pela API (frente MOD, 30/09/2026)
+
+O caminho que ficou mais seguro não foi o desktop (Cua), e sim um **navegador isolado**: um Chromium headless por tarefa, no worker da agência (`workers/computador`, a mesma máquina do worker de render). O desktop da seção 6 continua desligado.
+
+### O que está ligado e o que está desligado
+
+| Caso | Onde pede | Como roda | Estado |
+|---|---|---|---|
+| Capturar a tela inteira de um site de referência | Mesa Site › Referências, em cada endereço | roteiro fixo, sem modelo: abre, rola até o fim, captura computador e celular | **ligado** (custo zero de modelo) |
+| Conferir se um post publicado está no ar | Agenda e Entrega › Publicação da Mesa › "Conferir no ar" | roteiro fixo: abre o link, lê status, og:title e o aviso de "não disponível" | **ligado** |
+| Coletar dados públicos de concorrentes | Mesa Proposta › bloco Mercado | computer use do Claude (`computer_toolset_20260801`, Sonnet 5.5, esforço médio) | **pronto e desligado**: falta o teste de ponta a ponta com a API real e a leitura das provas pelo dono; página de terceiro pode tentar mandar no agente. Liga com `COMPUTADOR_COM_MODELO_LIGADO=1` na função e no worker, mais `ANTHROPIC_API_KEY` na máquina |
+
+### Travas (conferidas três vezes: na função, no banco e no worker)
+
+1. **Confirmar do dono.** A tarefa nasce `aguardando_dono`. Só o admin confirma (`computador-do-agente`, ação `decidir`), e as travas são conferidas de novo no Confirmar. O worker só pega tarefa com `aprovado_por` e `aprovado_em` (RPC `computador_tarefa_pegar`).
+2. **Lista de domínios.** A URL inicial entra na lista; extras só se forem domínios públicos (sem IP, localhost ou rede interna; no máximo 10). Navegação fora da lista é barrada dentro da página (link e `window.open`) e na rede.
+3. **Nada de senha, pagamento ou login de cliente.** O pedido que fala em login, senha, pagamento ou em agir no site é recusado. Endereço de login, conta, cadastro ou checkout é recusado. Página com campo de senha, código ou cartão faz o worker parar, com o print de onde parou. O modelo não digita credencial, e-mail nem texto longo. Clique em campo de senha, envio de arquivo ou download é recusado.
+4. **Só leitura.** Formulário não envia (bloqueado na página e na rede); POST, PUT e DELETE são bloqueados; download cancelado; janela nova fechada.
+5. **Prova.** Um print por passo no Storage (`mesa/<cliente>/computador/<tarefa>/passo-NN.png`), visto na janela "Provas" (link de 10 minutos).
+6. **Teto.** Passos (6, 4 e 25 por caso; máximo 60) e custo (US$ 0 nos fixos; US$ 1 na coleta; máximo 5). A RPC de passo devolve `teto` e a tarefa fecha com o que já tinha.
+7. **Parar.** O dono ou quem pediu, a qualquer momento (`parar`). O worker vê no passo seguinte, e a conclusão não sobrescreve a parada (tudo com o token da trava).
+8. **Uma tentativa por Confirmar** (sem laço de correção). Worker que cai no meio: a trava vence em 10 minutos e a tarefa vira "falhou" com o motivo. Aprovada e esquecida por mais de um dia sai da fila.
+
+### Peças
+
+- Regras puras: `supabase/functions/_shared/computador-do-agente.ts` (seção "Navegador do agente").
+- Função: `supabase/functions/computador-do-agente` (`estado`, `pedir`, `decidir`, `parar`, `provas`), `verify_jwt = true`.
+- Banco: `20260930220200_navegador_do_agente.sql` (colunas, `computador_executores`, RPCs só da service_role, `ia_usos` aceita `computador`).
+- Worker: `workers/computador` (`npm run worker`; testes com Chromium de verdade e com o SQL num Postgres em memória: `npm run teste`).
+- Tela: `src/components/agentes/NavegadorDoAgente.tsx` (pedido, Confirmar, Parar e provas, tudo em janela central).
+
+### Como ligar o worker
+
+```
+cd workers/computador
+npm install
+npm run navegador        (baixa o Chromium do Playwright, uma vez)
+$env:SUPABASE_URL = "https://jjjtkowvxemvituvywvf.supabase.co"
+$env:SUPABASE_SERVICE_ROLE_KEY = "<cole aqui, nunca em arquivo>"
+npm run worker
+```
+
+Fontes da API: [computer use da Anthropic](https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool) (toolset GA, recomendações de segurança: VM ou contêiner dedicado, lista de domínios, nenhum dado sensível, humano confirma o que tem consequência), [computer use da OpenAI](https://developers.openai.com/api/docs/guides/tools-computer-use) (ferramenta `computer` nos GPT-6; navegador isolado, lista de sites, limites de passos, tempo e custo).

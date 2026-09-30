@@ -152,9 +152,15 @@ describe("motor de modelos: chaves e privacidade", () => {
   });
 
   it("usa as APIs certas de cada provedor", () => {
-    expect(motor).toContain('corpo.tools = [{ type: "web_search" }];');
-    expect(motor).toContain("corpo.reasoning = { effort: e.raciocinio };");
-    expect(motor).toContain('corpo.text = { format: { type: "json_schema", name: nome, schema, strict: true } };');
+    // Frente MOD (30/09): o corpo de texto de cada provedor mora em corpo-dos-provedores.ts (puro e testado
+    // montando o corpo de verdade em src/test/mod-modelos-e-navegador.test.ts).
+    const corpos = ler("supabase/functions/_shared/corpo-dos-provedores.ts");
+    expect(corpos).toContain('const busca: Record<string, unknown> = { type: "web_search", user_location: LOCAL_DA_BUSCA, search_context_size: "medium" };');
+    expect(corpos).toContain("corpo.reasoning = { effort: e.raciocinio };");
+    expect(corpos).toContain('corpo.text = { format: { type: "json_schema", name: nome, schema, strict: true } };');
+    expect(motor).toContain("const corpo = corpoOpenAi(m.modelo_api, e);");
+    expect(motor).toContain("const corpo = corpoAnthropic(m.modelo_api, e);");
+    expect(motor).toContain("const corpo = corpoOpenRouter(m.modelo_api, e);");
     expect(motor).toContain('form.append("image[]"');
     expect(motor).toContain('modalities: ["image", "text"]');
     expect(motor).toContain('"anthropic-version": "2023-06-01"');

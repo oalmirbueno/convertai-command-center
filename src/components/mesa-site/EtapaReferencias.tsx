@@ -13,6 +13,8 @@ import { rotuloDoAtributo } from "../../../supabase/functions/_shared/site-metod
 import { PreencherComIA } from "@/components/sistema";
 import { chamarSite, type LinhaDoSite, useGuardarSite } from "./siteApi";
 import { listaDoValor } from "./CampoComIA";
+// Frente MOD (30/09): o navegador do agente captura a tela inteira da referência (com o Confirmar do dono).
+import { BotaoDoNavegador, TarefasDoNavegador } from "@/components/agentes/NavegadorDoAgente";
 
 type Foto = { id: string; storage_bucket: string; storage_path: string; nome: string };
 
@@ -177,6 +179,7 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
                   <span className={juntar(texto.corpo, "block truncate")}>{r.nome}</span>
                   <span className={juntar(texto.auxiliar, "block truncate")}>{r.lida_em ? (r.leitura && r.leitura.titulo) || "lida" : "ainda não lida"}</span>
                 </span>
+                {r.tipo === "url" && r.url && <BotaoDoNavegador caso="captura_site" clientId={clientId} origem="mesa_site" url={String(r.url)} rotulo="Capturar a tela inteira" compacto />}
                 <button type="button" className={botao.icone} aria-label={`Arquivar ${r.nome}`} onClick={() => void rodar("Não foi possível arquivar", () => chamarSite("referencia_arquivar", { site_id: site.id, referencia_id: r.id }))}>
                   <Archive className="h-4 w-4" />
                 </button>
@@ -185,6 +188,8 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
           </ul>
         )}
       </Secao>
+
+      <TarefasDoNavegador clientId={clientId} origem="mesa_site" titulo="Capturas de tela inteira" />
 
       {verAcervo && (
         <Secao titulo="Acervo da marca" descricao={fotos.data ? `${fotos.data.fotos.length} fotos` : undefined} recolher="mesa-site:referencias:acervo">
