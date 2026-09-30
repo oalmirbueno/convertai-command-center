@@ -345,6 +345,8 @@ export interface ResultadoDoAgente {
   /** Anexos do aprendizado (Aprendi / Segui), como vieram do servidor. */
   aprendido: unknown | null;
   seguidas: unknown | null;
+  /** Frente SPP: "Método: ..." (anexo metodo_usado do servidor). */
+  metodo: unknown | null;
   /** Último uso registrado (liga a mensagem ao gasto). */
   uso_id: string | null;
   /** Frente EDT: cartões pagos preparados (custo antes) e pedidos já na fila do worker. */
@@ -361,6 +363,7 @@ interface RespostaDoServidor {
   referencia?: unknown;
   aprendido?: unknown;
   regras_seguidas?: unknown;
+  metodo_usado?: unknown;
 }
 
 /** Erro no primeiro passo (nada foi feito): quem chamou devolve o pedido ao campo. */
@@ -395,6 +398,7 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
   let opcoes: string[] = [];
   let aprendido: unknown = null;
   let seguidas: unknown = null;
+  let metodo: unknown = null;
   let usoId: string | null = null;
   const saidas: SaidaDoAgente[] = [];
   const naFila: NonNullable<ResultadoDaFerramenta["naFila"]>[] = [];
@@ -436,6 +440,7 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
     if (r && r.referencia && !referencia) referencia = r.referencia;
     if (r && r.aprendido) aprendido = r.aprendido;
     if (r && r.regras_seguidas) seguidas = r.regras_seguidas;
+    if (r && r.metodo_usado) metodo = r.metodo_usado;
     const p = (r && r.passo) as RespostaDoPasso | undefined;
     if (!p) {
       log.push({ tipo: "aviso", texto: `O passo ${passo} voltou vazio. Parei aqui.` });
@@ -497,7 +502,7 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
     log.push({ tipo: "aviso", texto: `Parou no limite de ${MAX_PASSOS} passos sem o agente dizer que terminou. Confira o que já saiu.` });
   }
   if (resposta) log.push({ tipo: "resposta", texto: resposta });
-  return { operacoes, resultado: trabalho, log, resposta, gasto_usd: gasto, passos: passo, ferramentas: usadas, falhas, recusadas, parado, exportar, opcoes, aprendido, seguidas, uso_id: usoId, saidas, naFila };
+  return { operacoes, resultado: trabalho, log, resposta, gasto_usd: gasto, passos: passo, ferramentas: usadas, falhas, recusadas, parado, exportar, opcoes, aprendido, seguidas, metodo, uso_id: usoId, saidas, naFila };
 }
 
 /** Pedido que é só exportar/renderizar (regra fixa, sem modelo e sem custo): vira o cartão direto. */

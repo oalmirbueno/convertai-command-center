@@ -22,6 +22,21 @@
  *   MOTOR_PREVIA_MINUTOS prévia parada desliga depois disso (padrão 60)
  *   MOTOR_PRAZO_MIN      prazo de cada passada do agente (padrão 15)
  *   VERCEL_TOKEN, VERCEL_TEAM_ID   publicação (desligada sem elas)
+ *   SUPERPOWERS_MODO     nativo (padrão) ou plugin: como as skills do Superpowers
+ *                        (vendor/superpowers, v6.4.2) entram no opencode; o plugin
+ *                        que não sobe em 45 s cai sozinho para o nativo. O modo plugin
+ *                        NÃO serve com a pasta global do opencode isolada (trava com ela
+ *                        vazia): use só em máquina sem configuração pessoal (sandbox)
+ *
+ * Segurança: o opencode, o build, a prévia, o npm e o git do projeto rodam com
+ * o ambiente por lista de permissão (sem SUPABASE_*, VERCEL_* nem MOTOR_*; o
+ * opencode recebe só a chave do provedor do trabalho). A edição da casca e do
+ * que roda na máquina é negada ao agente, e o motor repõe a casca se mudar.
+ *
+ * Superpoderes (SPM): o agente sobe isolado do que é pessoal desta máquina
+ * (sem ~/.claude/skills, ~/.agents/skills e ~/.claude/CLAUDE.md). Prova sem
+ * gasto: `npm run teste-superpoderes`. Atualizar a cópia fixada: `npm run
+ * atualizar-superpowers -- --tag vX.Y.Z --clone <clone limpo>` (nunca main).
  */
 import { hostname } from "node:os";
 import { join } from "node:path";
@@ -32,7 +47,7 @@ import { desligarTodas, limparPrevias, temCloudflared } from "./lib/previa.ts";
 import { temChave } from "./lib/opencode.ts";
 import { esperar } from "./lib/processos.ts";
 
-const VERSAO = "motor-codigo 0.1.0 (opencode 1.18.33)";
+const VERSAO = "motor-codigo 0.2.0 (opencode 1.18.33, superpowers v6.4.2)";
 
 export function configDoAmbiente() {
   return {

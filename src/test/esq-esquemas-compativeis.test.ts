@@ -184,20 +184,19 @@ describe("contrato: cada esquema que as funções mandam ao motor cabe na Anthro
   });
 
   it("os que passavam de 16 uniões (visto na QA) agora cabem", () => {
-    // Pelo arquivo e pelo nome do esquema, sem o número da linha: qualquer
-    // import novo no topo da função mudava a linha e quebrava o teste.
-    const porRotulo = (trecho: string) => {
-      const [arquivo, nome] = trecho.split(" ");
-      return todos().find((e) => e.rotulo.indexOf(`${arquivo}:`) === 0 && e.rotulo.split(" ")[1] === nome) as EsquemaColetado;
-    };
+    // Pelo arquivo e pelo nome do esquema, não pela linha (SPP 30/09: outra frente que mexe no arquivo desloca a
+    // linha). O mesmo esquema com o metodos_usados da frente SPP (NOME_COM_METODO) tem as mesmas uniões.
+    const porNome = (arquivo: string, nome: string) =>
+      todos().find((e) => e.arquivo === arquivo && (e.expressao === nome || e.expressao === `${nome}_COM_METODO`)) as EsquemaColetado;
     for (const [trecho, antes] of [
-      ["agente-contexto/index.ts", 31],
+      ["agente-contexto/index.ts ESQUEMA_CONVERSA_DO_PLANO", 31],
       ["mesa-foto/index.ts ESQUEMA_AGENTE", 32],
       ["mesa-ads/index.ts ESQUEMA_FICHA", 20],
       ["mesa-ads/index.ts ESQUEMA_OFERTA_CONVERSA", 21],
       ["mesa-ads/index.ts ESQUEMA_SUGESTAO", 17],
     ] as Array<[string, number]>) {
-      const e = trecho === "agente-contexto/index.ts" ? todos().find((x) => x.rotulo.indexOf("ESQUEMA_CONVERSA_DO_PLANO") >= 0) : porRotulo(trecho);
+      const [arquivo, nome] = trecho.split(" ");
+      const e = porNome(arquivo, nome);
       expect(e, trecho).toBeTruthy();
       const c = converterParaAnthropic((e as EsquemaColetado).esquema);
       expect(c.antes.unioes.length, trecho).toBe(antes);

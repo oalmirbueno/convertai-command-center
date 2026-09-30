@@ -4,24 +4,47 @@
  * o commit) e recebe o pacote do cliente (.aceleriq/pacote.json, src/marca.css,
  * logo e imagens em public/, anexos em referencias/).
  */
-import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { PROJETO_VALIDO } from "../../../supabase/functions/_shared/motor-codigo.ts";
 import { ajustarAoDestaque, apoioDaPaleta, type ApoioDaPaleta, coresDoSite, type PapelDoApoio, variaveisDoApoio } from "../../../supabase/functions/_shared/uiux/apoio-da-paleta.ts";
 import type { Fila } from "./fila.ts";
+import { ambienteSemSegredos } from "./config-opencode.ts";
+import type { ConferenciaDaSecao } from "./marcas-da-resposta.ts";
 import { rodar } from "./processos.ts";
+// A conferência da seção roda com o conferir.mjs do MODELO (nunca a cópia do projeto, que o agente alcança).
+import { conferirSecao, paginasProntas } from "../modelo-site/scripts/conferir.mjs";
 
 // UIM: um `2>nul` do agente no bash do Git cria o arquivo "nul", que quebra o git add do commit.
 import { apagarArquivosReservados } from "./nomes-reservados.ts";
 
 export const MODELO_DO_SITE = resolve(import.meta.dirname, "..", "modelo-site");
+export type { ConferenciaDaSecao };
 
 export type ArquivoDoPacote = { bucket: string; path: string; destino: string };
 
-const GIT_AUTOR = ["-c", "user.name=Motor Aceleriq", "-c", "user.email=motor@aceleriq.local", "-c", "core.autocrlf=false", "-c", "commit.gpgsign=false"];
+/**
+ * O git do motor não roda hook nem fsmonitor do projeto (o .git/config e os
+ * hooks ficam dentro da pasta do site) e roda sem os segredos do worker.
+ */
+const GIT_AUTOR = [
+  "-c",
+  "user.name=Motor Aceleriq",
+  "-c",
+  "user.email=motor@aceleriq.local",
+  "-c",
+  "core.autocrlf=false",
+  "-c",
+  "commit.gpgsign=false",
+  "-c",
+  `core.hooksPath=${join(tmpdir(), "aceleriq-motor-sem-hooks")}`,
+  "-c",
+  "core.fsmonitor=false",
+];
 
 export async function git(pasta: string, args: string[]): Promise<string> {
-  const r = await rodar("git", [...GIT_AUTOR, ...args], { cwd: pasta, prazoMs: 120_000 });
+  const r = await rodar("git", [...GIT_AUTOR, ...args], { cwd: pasta, prazoMs: 120_000, env: ambienteSemSegredos() });
   if (r.codigo !== 0) throw new Error(`git ${args[0]}: ${(r.erro || r.saida).trim().slice(0, 300)}`);
   return r.saida.trim();
 }
@@ -96,6 +119,7 @@ export function lerCasca(pasta: string): CascaDoModelo | null {
 export const arquivoDaCascaValido = (a: string) => typeof a === "string" && !!a && !/\.\./.test(a) && !/^[\\/]/.test(a) && !/^[a-z]:/i.test(a) && a.indexOf("src/secoes/") !== 0;
 
 export async function atualizarCasca(pasta: string): Promise<number | null> {
+  // Projeto numa casca mais velha ganha a nova inteira (o reporCasca cuida da mesma versão).
   const doModelo = lerCasca(MODELO_DO_SITE);
   if (!doModelo) return null;
   const doProjeto = lerCasca(pasta);
@@ -110,6 +134,95 @@ export async function atualizarCasca(pasta: string): Promise<number | null> {
   writeFileSync(join(pasta, ".aceleriq", "casca.json"), JSON.stringify(doModelo, null, 2));
   await commitar(pasta, `Casca da casa v${doModelo.versao}`);
   return doModelo.versao;
+}
+
+/**
+ * Repõe a casca da casa (SPM): com o projeto na MESMA versão do modelo, todo
+ * arquivo da casca que não bate com o do modelo volta ao original, a lista da
+ * casca também, e os scripts do package.json voltam aos do modelo (é o que
+ * `npm run checar` e `npm run build` rodam). A edição desses arquivos já é
+ * negada ao agente; isto pega o que escapou (e o projeto que ficou com a
+ * casca de outra frente na mesma versão). Não faz commit: devolve o que repôs.
+ */
+export function reporCasca(pasta: string): string[] {
+  const doModelo = lerCasca(MODELO_DO_SITE);
+  const doProjeto = lerCasca(pasta);
+  if (!doModelo || !doProjeto || doProjeto.versao !== doModelo.versao) return [];
+  const repostos: string[] = [];
+  for (const a of doModelo.arquivos.filter(arquivoDaCascaValido)) {
+    const origem = join(MODELO_DO_SITE, a);
+    if (!existsSync(origem)) continue;
+    const destino = join(pasta, a);
+    const original = readFileSync(origem);
+    if (existsSync(destino) && readFileSync(destino).equals(original)) continue;
+    mkdirSync(dirname(destino), { recursive: true });
+    writeFileSync(destino, original);
+    repostos.push(a);
+  }
+  if (JSON.stringify(doProjeto) !== JSON.stringify(doModelo)) {
+    writeFileSync(join(pasta, ".aceleriq", "casca.json"), JSON.stringify(doModelo, null, 2));
+    repostos.push(".aceleriq/casca.json");
+  }
+  try {
+    const pj = join(pasta, "package.json");
+    const doSite = JSON.parse(readFileSync(pj, "utf8")) as { scripts?: unknown };
+    const scripts = (JSON.parse(readFileSync(join(MODELO_DO_SITE, "package.json"), "utf8")) as { scripts?: unknown }).scripts;
+    if (JSON.stringify(doSite.scripts) !== JSON.stringify(scripts)) {
+      doSite.scripts = scripts;
+      writeFileSync(pj, `${JSON.stringify(doSite, null, 2)}\n`);
+      repostos.push("package.json (scripts)");
+    }
+  } catch {
+    /* package.json ilegível: o build falha e a tela mostra */
+  }
+  return repostos;
+}
+
+
+/**
+ * A conferência da seção (`conferir --secao <id>`) nas páginas prontas do
+ * projeto, com o código do modelo: é a prova de verdade da passada. A PROVA
+ * que o agente escreve passa a ser só a declarada.
+ */
+export function conferirSecaoDoProjeto(pasta: string, secao: string): ConferenciaDaSecao {
+  try {
+    const paginas = (paginasProntas(join(pasta, "dist")) as string[]).map((c) => ({ caminho: c, nome: relative(pasta, c).split(sep).join("/") }));
+    const r = conferirSecao(paginas, secao) as { problemas: string[]; onde: { pagina: string; caracteres?: number; imagens?: number } | null };
+    return { rodou: true, ok: r.problemas.length === 0, problemas: r.problemas.slice(0, 3), onde: r.onde || null };
+  } catch (e) {
+    return { rodou: false, ok: false, problemas: [], onde: null, motivo: `a conferência não rodou: ${e instanceof Error ? e.message.slice(0, 160) : "erro"}` };
+  }
+}
+
+/**
+ * Configuração do opencode que um agente possa ter plantado no site: o
+ * opencode.json da raiz e o que houver em .opencode/ fora de skills/
+ * (plugins, ferramentas, agentes, comandos e a configuração da pasta).
+ * Plugin e ferramenta rodam como código na subida; skill só vale se a
+ * permissão liberar. Apaga e devolve o que apagou.
+ */
+export function limparConfiguracaoDoSite(pasta: string): string[] {
+  const apagados: string[] = [];
+  const apagar = (rel: string) => {
+    try {
+      rmSync(join(pasta, rel), { recursive: true, force: true });
+      apagados.push(rel);
+    } catch {
+      /* some na próxima */
+    }
+  };
+  for (const n of ["opencode.json", "opencode.jsonc"]) if (existsSync(join(pasta, n))) apagar(n);
+  const dentro = join(pasta, ".opencode");
+  if (existsSync(dentro)) {
+    let nomes: string[] = [];
+    try {
+      nomes = readdirSync(dentro);
+    } catch {
+      nomes = [];
+    }
+    for (const n of nomes) if (n !== "skills") apagar(`.opencode/${n}`);
+  }
+  return apagados;
 }
 
 /** O que um trabalho mudou (git diff --numstat), para a tela comparar versões. */
@@ -199,7 +312,8 @@ export async function escreverPacote(pasta: string, pacote: Record<string, unkno
 const PRAZO_DA_INSTALACAO_MS = 25 * 60_000;
 
 async function npmInstall(pasta: string): Promise<void> {
-  const r = await rodar("npm", ["install", "--no-audit", "--no-fund", "--loglevel=error", "--prefer-offline"], { cwd: pasta, prazoMs: PRAZO_DA_INSTALACAO_MS });
+  // Sem os segredos do worker: os scripts de instalação rodam código de fora.
+  const r = await rodar("npm", ["install", "--no-audit", "--no-fund", "--loglevel=error", "--prefer-offline"], { cwd: pasta, prazoMs: PRAZO_DA_INSTALACAO_MS, env: ambienteSemSegredos() });
   if (r.codigo !== 0) throw new Error(`npm install${r.estourou ? " passou do prazo" : ""}: ${(r.erro || r.saida).trim().slice(-400)}`);
 }
 
@@ -235,6 +349,7 @@ export async function instalarSePrecisar(pasta: string): Promise<"base" | "propr
 }
 
 export async function construirSite(pasta: string): Promise<{ ok: boolean; log: string }> {
-  const r = await rodar("npm", ["run", "build"], { cwd: pasta, prazoMs: 5 * 60_000 });
+  // O build roda as seções que o agente escreveu (pré-render): sem os segredos do worker.
+  const r = await rodar("npm", ["run", "build"], { cwd: pasta, prazoMs: 5 * 60_000, env: ambienteSemSegredos() });
   return { ok: r.codigo === 0, log: `${r.saida}\n${r.erro}`.trim().slice(-2000) };
 }

@@ -20,6 +20,8 @@ import {
   resolveAiProviderChain,
 } from "../_shared/ai-provider.ts";
 import { recortarDossie } from "../_shared/dossie-recortado.ts";
+// Frente SPP (30/09): o coach com o método da casa (só a prova; o código escolhe).
+import { registrarMetodoSemUso, superpoderesPara } from "../_shared/superpoderes.ts";
 // O navegador guarda a resposta do preflight (OPTIONS) em vez de perguntar de novo a cada chamada.
 const corsHeaders = { ...corsDoSupabase, "Access-Control-Max-Age": "7200" };
 
@@ -293,17 +295,20 @@ Deno.serve(async (req) => {
           primaryModels: PRIMARY_MODEL_CHAIN,
           lovableModels: DEFAULT_LOVABLE_MODEL_CHAIN,
         });
+        const metodoDoCoach = await superpoderesPara(db, { agente: "rituais.coach" });
         const { response, provider } = await requestAiChatCompletion(providers, {
           messages: [
             { role: "system", content: `${SYSTEM_PROMPT}${String.fromCharCode(10, 10)}${blocoDoMapaDoPainel("ciclo", { nivel: "minimo" })}` },
             { role: "user", content: `FATOS DA SEMANA (checklist real):\n${facts}` },
           ],
           temperature: 0.4,
-        });
+        }, fetch, metodoDoCoach);
         if (!response.ok) {
           console.warn(`[coach] cadeia esgotada, último: ${provider.label} HTTP ${response.status}`);
           return null;
         }
+        // Frente SPP (revisão 30/09): a cadeia antiga não grava em ia_usos; o método conta pelo registro sem uso (a carteira toda, sem cliente).
+        void registrarMetodoSemUso(db, { metodo: metodoDoCoach, clientId: null });
         const completion = await response.json();
         const parsed = extractJson(completion?.choices?.[0]?.message?.content || "");
         return String(parsed?.coach || "").trim() || null;

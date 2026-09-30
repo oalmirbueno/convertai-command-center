@@ -224,10 +224,30 @@ export async function fetchAiChatCompletion(
   });
 }
 
+/**
+ * Frente SPP (30/09): o método da casa (superpoderes-catalogo.ts) na cadeia
+ * antiga. Junta o texto no fim da primeira mensagem de sistema (ou abre uma no
+ * começo); sem método, o payload sai igual. Mesma regra de juntarMetodoAoSistema.
+ */
+export function payloadComMetodo(
+  payload: AiChatCompletionPayload,
+  metodo?: { texto: string } | null,
+): AiChatCompletionPayload {
+  const texto = metodo && typeof metodo.texto === "string" ? metodo.texto.trim() : "";
+  if (!texto) return payload;
+  const mensagens = Array.isArray(payload.messages) ? payload.messages as Array<Record<string, unknown>> : [];
+  const i = mensagens.findIndex((m) => m && m.role === "system" && typeof m.content === "string");
+  const novas = mensagens.slice();
+  if (i >= 0) novas[i] = { ...novas[i], content: `${novas[i].content as string}\n\n${texto}` };
+  else novas.unshift({ role: "system", content: texto });
+  return { ...payload, messages: novas };
+}
+
 export async function requestAiChatCompletion(
   providers: readonly AiProvider[],
   payload: AiChatCompletionPayload | AiChatCompletionPayloadFactory,
   fetcher: FetchLike = fetch,
+  metodo?: { texto: string } | null,
 ): Promise<AiChatCompletionResult> {
   if (providers.length === 0) {
     throw new Error(
@@ -241,9 +261,10 @@ export async function requestAiChatCompletion(
 
   for (let index = 0; index < providers.length; index += 1) {
     const provider = providers[index];
-    const providerPayload = typeof payload === "function"
-      ? payload(provider)
-      : payload;
+    const providerPayload = payloadComMetodo(
+      typeof payload === "function" ? payload(provider) : payload,
+      metodo,
+    );
 
     try {
       const response = await fetchAiChatCompletion(

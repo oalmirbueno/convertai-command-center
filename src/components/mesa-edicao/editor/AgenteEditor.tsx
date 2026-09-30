@@ -643,7 +643,7 @@ export default function AgenteEditor({
         if (!r.resposta) itens.push({ tipo: "aviso", texto: "Nada mudou na linha do tempo. Use um atalho abaixo ou diga o que mudar (ex.: corta os silêncios)." });
         else if (respostaPromete(r.resposta)) itens.push({ tipo: "aviso", texto: "Nada mudou ainda: o agente só prometeu. Peça de novo ou use um atalho." });
       }
-      const anexos = [r.aprendido, r.seguidas].filter(Boolean) as unknown[];
+      const anexos = [r.aprendido, r.seguidas, r.metodo].filter(Boolean) as unknown[];
       // Mensagens padrão (frente EDT): o cartão é o "O que mudei"; aqui vai o custo do pedido.
       const aGerar = r.saidas.reduce((x, s) => x + (s.custo_usd || 0), 0);
       anexos.push({ tipo: TIPO_DO_PADRAO, forma: "custo", pedido_usd: r.gasto_usd, conversa_usd: antes + r.gasto_usd, gerar_usd: r.saidas.length ? aGerar : null });

@@ -10,7 +10,10 @@
   "scripts": {
     "iniciar": "node --env-file-if-exists=.env worker.ts",
     "uma-vez": "node --env-file-if-exists=.env worker.ts --uma-vez",
-    "teste-local": "node --env-file-if-exists=.env teste-ponta-a-ponta.ts"
+    "teste-local": "node --env-file-if-exists=.env teste-ponta-a-ponta.ts",
+    "teste-superpoderes": "node teste-superpoderes.ts",
+    "teste-superpoderes-pago": "node --env-file-if-exists=.env teste-superpoderes.ts --pago",
+    "atualizar-superpowers": "node scripts/atualizar-superpowers.mjs"
   },
   "dependencies": {
     "@opencode-ai/sdk": "1.18.33",

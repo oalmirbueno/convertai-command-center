@@ -15,6 +15,8 @@
 
 import { chamarTexto, estimarComModelo, garantirSaldo, modeloDoPapel, type ModeloIa } from "../_shared/ia-motor.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) no preenchimento do briefing (a prova: sem fonte, fica vazio).
+import { superpoderesPara } from "../_shared/superpoderes.ts";
 import { contasDaMarcaDoCliente, lerContextoDaMarca, resolverMarca } from "../_shared/marca.ts";
 import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import { urlPublica } from "../_shared/referencias-do-site.ts";
@@ -195,6 +197,7 @@ export async function preencherComIa(ch: Chamador, corpo: Record<string, unknown
     raciocinio: ["low", "minimal", "medium"].find((r) => (m.raciocinio ?? []).includes(r)),
     esquemaJson: { nome: pedido.esquema.nome, schema: pedido.esquema.schema },
     maxTokensSaida: t.saida,
+    metodo: await superpoderesPara(servico(), { agente: "briefing.preencher" }),
     referencia: { tipo: "briefing", id: b.id },
     criadoPor: ch.userId,
   });

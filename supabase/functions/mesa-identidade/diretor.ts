@@ -11,6 +11,8 @@
 
 import { chamarTexto } from "../_shared/ia-motor.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) no diretor de marca.
+import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import {
   type AcaoDoAgente,
@@ -158,11 +160,15 @@ async function estadoDoProjeto(ch: Chamador, p: LinhaDoProjeto | null) {
   return { dados, alvos };
 }
 
+const ESQUEMA_DO_DIRETOR_COM_METODO = comMetodosUsados(ESQUEMA_DO_DIRETOR);
+
 export async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
   const mensagem = limpo(corpo.mensagem, 4000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva a mensagem para o diretor de marca.");
+  // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
+  const spP = superpoderesPara(servico(), { agente: "identidade.diretor", pedido: mensagem });
   const conversaId = await conversaDoAgente(ch, clientId, corpo.conversa_id, corpo.nova_conversa === true);
   const projetoId = idOuNulo(corpo.projeto_id, "projeto_id");
   const lido = projetoId ? await lerProjeto(ch, projetoId).catch((e) => (registrarFalha("mesa-identidade: projeto do agente", e), null)) : null;
@@ -196,10 +202,11 @@ export async function agenteConversar(ch: Chamador, corpo: Record<string, unknow
     raciocinio: raciocinioPara(modelo),
     sistema: `${SISTEMA_DO_DIRETOR}\n\nDADOS DESTA CONVERSA (hoje ${hoje}; marca ${nome}):\n${JSON.stringify(estado.dados)}\n${blocoDasAcoesDoDiretor(estado.alvos)}\n\n${blocoDoMapaDoPainel("identidade")}${contextoDoCliente ? `\n\n${blocoDoContextoDoCliente(contextoDoCliente, nome)}` : ""}${blocoDasRegras ? `\n\n${blocoDasRegras}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem }],
-    esquemaJson: ESQUEMA_DO_DIRETOR,
+    esquemaJson: ESQUEMA_DO_DIRETOR_COM_METODO,
     maxTokensSaida: TAMANHO_DA_CONVERSA.saida * 2,
     referencia: { tipo: REF_CONVERSA, id: conversaId },
     criadoPor: ch.userId,
+    metodo: await spP,
   });
   const j = (saida.json || {}) as Record<string, unknown>;
   let resposta = limpo(j.resposta, 4000) || "Pronto.";
@@ -248,11 +255,15 @@ export async function agenteConversar(ch: Chamador, corpo: Record<string, unknow
   if (!acao && respostaPromete(resposta) && resposta.indexOf("?") < 0) {
     resposta = `${resposta} Ainda não montei a lista: diga o que fazer e eu preparo o cartão.`;
   }
+  // Frente SPP: "pronto" sem ação feita ganha o aviso (sem refazer); o método vira a linha "Método:".
+  const fechado = await fecharComMetodo(servico(), { usoId: saida.usoId, metodo: await spP, resposta, declarados: j.metodos_usados, acaoFeita: !!(acao && acao.executada_em), resultados: acao ? acao.resultados : null });
+  resposta = fechado.resposta;
   const aprendido = await aprendendo;
   const seguidas = anexoDasRegrasSeguidas(j.regras_seguidas, regras);
   const anexos = anexosComCaminho(acao ? [acao] : [], caminhoDaResposta(resposta, clientId, { abrirSozinho: pedeParaAbrir(mensagem) || pedeParaLevar(mensagem) }));
   if (aprendido) anexos.push(aprendido);
   if (seguidas) anexos.push(seguidas);
+  if (fechado.anexo) anexos.push(fechado.anexo);
   const troca = await gravarTroca(servico(), {
     conversaId,
     clientId,

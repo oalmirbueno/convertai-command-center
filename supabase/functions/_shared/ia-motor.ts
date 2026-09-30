@@ -82,6 +82,8 @@ import {
   resolucaoParaModelo,
   urlDosEndpointsDeImagem,
 } from "./capacidades-imagem.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) entra no fim do sistema, fora dos tetos que existem.
+import { juntarMetodoAoSistema, type MetodoInjetado } from "./superpoderes-catalogo.ts";
 
 export {
   aceitaResolucao,
@@ -181,6 +183,14 @@ export type EntradaTexto = {
    * com fôlego (resposta-com-folego.ts) para a plataforma não cortar em 150 s.
    */
   timeoutMs?: number;
+  /**
+   * Frente SPP (30/09): o método da casa (superpoderes-catalogo.ts), montado por
+   * superpoderesPara. Vai no fim do sistema nos 3 provedores e na estimativa, e o
+   * uso registra quais métodos foram. Sem ele, o sistema sai byte a byte igual.
+   * Proibido no gerador de imagem, nos leitores, nas conferências, no diretor e
+   * nas variações da Mesa Foto e na escreverCena (motores.ts: SEM_METODO_DE_PROPOSITO).
+   */
+  metodo?: MetodoInjetado | null;
 };
 
 export type SaidaTexto = {
@@ -885,7 +895,35 @@ type RegistroUso = {
   referencia?: ReferenciaUso;
   criadoPor?: string | null;
   chave: ChaveResolvida;
+  /** Frente SPP: o método da casa que foi junto (gravado depois, sem esperar). */
+  metodo?: MetodoInjetado | null;
 };
+
+/**
+ * Frente SPP (30/09): grava no uso quais métodos da casa foram, a fonte da
+ * escolha, o agente e a versão (RPC so backend). Nao espera: o uso ja foi
+ * registrado e cobrado; erro vai para o log com ids.
+ */
+function marcarMetodoDoUso(usoId: string, m: MetodoInjetado) {
+  if (!usoId) return;
+  const p = Promise.resolve()
+    .then(() => clienteServico().rpc("ia_uso_marcar_metodo", {
+      _uso_id: usoId,
+      _metodos: m.ids,
+      _fonte: m.fonte,
+      _prova: null,
+      _agente: m.agente ?? null,
+      _versao: m.versao,
+    }))
+    .then((r) => {
+      if (r.error) console.error("ia-motor: metodo nao gravado no uso", { uso_id: usoId, erro: r.error.message });
+    })
+    .catch((err) => {
+      console.error("ia-motor: metodo nao gravado no uso", { uso_id: usoId, erro: err instanceof Error ? err.message : "desconhecido" });
+    });
+  const er = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+  if (er && typeof er.waitUntil === "function") er.waitUntil(p);
+}
 
 /** Grava o uso e debita a carteira pela RPC (so backend). Tenta duas vezes. */
 export async function registrarUso(r: RegistroUso): Promise<{ usoId: string; saldoUsd: number }> {
@@ -913,7 +951,9 @@ export async function registrarUso(r: RegistroUso): Promise<{ usoId: string; sal
     const { data, error } = await clienteServico().rpc("ia_registrar_uso", params);
     if (!error) {
       const linha = (Array.isArray(data) ? data[0] : data) as { uso_id?: string; saldo_usd?: unknown } | null;
-      return { usoId: String(linha?.uso_id ?? ""), saldoUsd: arred(num(linha?.saldo_usd)) };
+      const usoId = String(linha?.uso_id ?? "");
+      if (r.metodo) marcarMetodoDoUso(usoId, r.metodo);
+      return { usoId, saldoUsd: arred(num(linha?.saldo_usd)) };
     }
     ultimoErro = error.message;
   }
@@ -981,6 +1021,11 @@ export async function cobrarJev(
 
 // --------------------------------------------------------------------- texto
 
+/** O sistema que vai ao provedor: o do agente e, no fim, o método da casa (frente SPP). */
+function sistemaCompleto(e: EntradaTexto): string {
+  return juntarMetodoAoSistema(e.sistema, e.metodo);
+}
+
 type RespostaProvedorTexto = {
   texto: string;
   entrada: number;
@@ -1002,7 +1047,7 @@ async function textoOpenAi(m: ModeloIa, chave: string, e: EntradaTexto): Promise
       ],
     };
   });
-  const corpo: Record<string, unknown> = { model: m.modelo_api, instructions: e.sistema, input, store: false };
+  const corpo: Record<string, unknown> = { model: m.modelo_api, instructions: sistemaCompleto(e), input, store: false };
   if (e.raciocinio) corpo.reasoning = { effort: e.raciocinio };
   if (e.pesquisaWeb) corpo.tools = [{ type: "web_search" }];
   if (e.esquemaJson) {
@@ -1059,7 +1104,7 @@ async function textoAnthropic(m: ModeloIa, chave: string, e: EntradaTexto): Prom
   const corpo: Record<string, unknown> = {
     model: m.modelo_api,
     max_tokens: tetoDeSaidaNoProvedor(m, e.maxTokensSaida, e.raciocinio) ?? 16_000,
-    system: e.sistema,
+    system: sistemaCompleto(e),
     messages,
   };
   const outputConfig: Record<string, unknown> = {};
@@ -1120,7 +1165,7 @@ type UsoOpenRouter = {
 };
 
 async function textoOpenRouter(m: ModeloIa, chave: string, e: EntradaTexto): Promise<RespostaProvedorTexto> {
-  const messages: unknown[] = [{ role: "system", content: e.sistema }];
+  const messages: unknown[] = [{ role: "system", content: sistemaCompleto(e) }];
   for (const msg of e.mensagens) {
     if (msg.papel === "agente") { messages.push({ role: "assistant", content: msg.conteudo }); continue; }
     if (!msg.imagens?.length) { messages.push({ role: "user", content: msg.conteudo }); continue; }
@@ -1168,7 +1213,7 @@ function validarRaciocinio(m: ModeloIa, raciocinio?: string) {
 }
 
 function estimarEntradaTexto(e: EntradaTexto): number {
-  const caracteres = e.sistema.length + e.mensagens.reduce((s, msg) => s + msg.conteudo.length, 0);
+  const caracteres = sistemaCompleto(e).length + e.mensagens.reduce((s, msg) => s + msg.conteudo.length, 0);
   const imagens = e.mensagens.reduce((s, msg) => s + (msg.imagens?.length ?? 0), 0);
   return Math.ceil(caracteres / 3.5) + imagens * TOKENS_POR_IMAGEM_ENTRADA + (e.pesquisaWeb ? TOKENS_BUSCA_WEB_ESTIMADOS : 0);
 }
@@ -1236,6 +1281,7 @@ export async function chamarTexto(e: EntradaTexto): Promise<SaidaTexto> {
     referencia: e.referencia,
     criadoPor: e.criadoPor,
     chave,
+    metodo: e.metodo,
   });
 
   if (!r.texto.trim()) throw new IaMotorErro("resposta_vazia", "O modelo nao devolveu texto.", { uso_id: usoId });

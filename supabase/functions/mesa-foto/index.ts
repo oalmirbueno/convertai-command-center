@@ -302,6 +302,10 @@ import { blocoDaIdentificacaoNoPedido, kitsComIdentificacao, legendaDaReferencia
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) no agente da Mesa Foto e no plano da campanha
+// (revisão 30/09). Diretor, variações, leitores e conferências ficam só com a técnica
+// (motores.ts: SEM_METODO_DE_PROPOSITO).
+import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 const corsHeaders = {
@@ -2508,6 +2512,8 @@ async function campanhaPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
     modeloId: diretor.id,
     raciocinio: raciocinioPara(diretor),
     sistema: `${SISTEMA_CAMPANHA}${regrasEnsinadas.bloco ? `\n\n${regrasEnsinadas.bloco}` : ""}`,
+    // Frente SPP (revisão 30/09): o plano da campanha recebe o método (aceite e prova, escolhidos pelo código).
+    metodo: await superpoderesPara(servico(), { agente: "foto.campanha", momento: "gerar" }),
     mensagens: [{
       papel: "usuario",
       conteudo: `Planeje a campanha com estes dados reais:\n${JSON.stringify(dados)}${legenda ? `\n${legenda}` : ""}`,
@@ -3723,11 +3729,15 @@ async function anexosDaConversa(clientId: string, bruto: unknown): Promise<{ ima
   return { imagens: imagens.filter((x): x is ImagemEntrada => !!x), registro: alvos.map((a) => a.registro), doAcervo };
 }
 
+const ESQUEMA_AGENTE_COM_METODO = comMetodosUsados(ESQUEMA_AGENTE);
+
 async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
   const mensagem = limpo(corpo.mensagem, 4000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva a mensagem para o diretor de fotografia.");
+  // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (sem laço em foto; nunca lança).
+  const spP = superpoderesPara(servico(), { agente: "foto.agente", pedido: mensagem });
   let ensaio: LinhaEnsaio | null = null;
   if (corpo.ensaio_id != null && corpo.ensaio_id !== "") {
     ensaio = await ensaioComAcesso(ch, idDe(corpo.ensaio_id, "ensaio_id"));
@@ -3852,9 +3862,10 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     raciocinio: raciocinioPara(diretor),
     sistema: `${SISTEMA_AGENTE}\n\n${blocoDoMapaDoPainel("foto")}\n\nDADOS REAIS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${preparo.bloco}\n${REGRA_DO_PEDIDO_DE_FAZER}${blocoDaReferencia(referencia, listaDaTela.itens)}${regras.bloco ? `\n${regras.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
-    esquemaJson: ESQUEMA_AGENTE,
+    esquemaJson: ESQUEMA_AGENTE_COM_METODO,
     maxTokensSaida: 12_000,
     timeoutMs: TIMEOUT_TEXTO_FOTO_MS,
+    metodo: await spP,
     referencia: { tipo: ensaio ? REF_ENSAIO : kit ? REF_KIT : REF_CONVERSA, id: ensaio?.id ?? kit?.id ?? conversaId },
     criadoPor: ch.userId,
   });
@@ -3930,6 +3941,9 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
       if (!opcoes.length) opcoes = opcoesDoPacote(pacote);
     }
   }
+  // Frente SPP: "pronto" sem nada feito agora ganha o aviso (sem refazer; foto nunca entra em laço).
+  const fechado = await fecharComMetodo(servico(), { usoId: saida.usoId, metodo: await spP, resposta, declarados: r.metodos_usados, acaoFeita: vaiDireto || (sozinha && ordemClara) });
+  resposta = fechado.resposta;
   // Caminho da resposta: a área onde a equipe continua (o apelido vira id aqui; o modelo nunca vê id).
   const caminhoDaMensagem = caminhoDaResposta(r.ir_para, r.ir_para_ref, pacote, levar && !vaiDireto && !geracao);
   const seguidas = anexoDasRegrasSeguidas(r.regras_seguidas, regras.regras);
@@ -3940,6 +3954,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     if (opcoes.length) lista.push({ tipo: "opcoes_do_diretor", pergunta: pergunta || null, opcoes });
     if (aprendido) lista.push(aprendido);
     if (seguidas) lista.push(seguidas);
+    if (fechado.anexo) lista.push(fechado.anexo);
     return anexosComCaminho(lista, caminhoDaMensagem);
   };
   // AG2: grava ANTES de fazer na hora (a prova e o Desfazer moram na mensagem); o erro nunca é engolido.
@@ -3991,6 +4006,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     promessa_sem_acao: prometeuSemAcao,
     aprendido: aprendido || null,
     regras_seguidas: seguidas,
+    // Frente SPP: "Método: ..." (os superpoderes que o diretor seguiu nesta resposta).
+    metodo_usado: fechado.anexo,
     // O que o diretor já conhecia nesta mensagem (a tela mostra no cabeçalho).
     contexto_do_diretor: { resumo: pacote.resumo, foco_rotulo: pacote.foco_rotulo, leituras_feitas: preparo.lidas },
     custo_usd: arred6((Number(saida.custoUsd) || 0) + preparo.custoLeituras),

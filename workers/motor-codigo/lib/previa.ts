@@ -5,6 +5,7 @@
  * diz isso. Uma prévia por projeto, desligada depois de um tempo parada.
  */
 import type { ChildProcess } from "node:child_process";
+import { ambienteSemSegredos } from "./config-opencode.ts";
 import { esperarNaSaida, matar, portaLivre, rodar, subir } from "./processos.ts";
 
 type Previa = { porta: number; url: string; local: string; publica: boolean; vite: ChildProcess; tunel: ChildProcess | null; usadaEm: number };
@@ -46,7 +47,8 @@ export async function garantirPrevia(projeto: string, pasta: string): Promise<{ 
   if (atual) desligarPrevia(projeto);
   const tunel = await temCloudflared();
   const porta = await portaLivre();
-  const vite = subir("npx", ["vite", "--port", String(porta), "--strictPort"], { cwd: pasta, env: { ...process.env, MOTOR_TUNEL: tunel ? "1" : "0", NO_COLOR: "1" } });
+  // O Vite roda o código do site: sem os segredos do worker (lista de permissão), só o que ele precisa.
+  const vite = subir("npx", ["vite", "--port", String(porta), "--strictPort"], { cwd: pasta, env: ambienteSemSegredos(process.env, { MOTOR_TUNEL: tunel ? "1" : "0", NO_COLOR: "1" }) });
   const local = `http://127.0.0.1:${porta}`;
   if (!(await responde(local, 60_000, () => viva(vite.processo)))) {
     matar(vite.processo);

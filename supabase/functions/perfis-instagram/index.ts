@@ -124,6 +124,8 @@ import {
 } from "./modulos/perfis-instagram.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) na conversa dos perfis. A leitura dos posts fica sem.
+import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 // Frente AG1 (29/09): a mensagem nunca some, as análises rodam pela conversa e o agente aprende com cada pedido.
 import { AVISO_RESPOSTA_NAO_GUARDADA, ErroDaConversa, gravarPedidoAntes, gravarResposta, historicoParaOModelo, hojeParaOAgente, soltarPedido } from "../_shared/conversa-segura.ts";
 import { anexoDasRegrasSeguidas, blocoDasRegras, esquemaComAprendizado, REGRA_DO_APRENDIZADO_NO_PROMPT, regraDoModelo, regrasSeguidasDoModelo } from "../_shared/aprendizado-do-pedido.ts";
@@ -1274,6 +1276,8 @@ async function escreverPautas(perfil: Perfil, ctx: ContextoDoCliente, posts: Pos
     modeloId: modelo.id,
     raciocinio: raciocinioBaixo(modelo),
     sistema: `${pedido.sistema}\n\n${CONHECIMENTO_DO_PLANO_IGUAL}`,
+    // Frente SPP (revisão 30/09): o método da casa no plano igual e nas ideias (aceite e prova, escolhidos pelo código).
+    metodo: await superpoderesPara(servico(), { agente: "perfis.plano", momento: "gerar" }),
     mensagens: [{ papel: "usuario", conteudo: `DADOS DO CLIENTE:\n${ctx.texto}\n\nDADOS DO PERFIL:\n${blocoDoPerfil(perfil, posts)}\n\n${pedido.instrucao}` }],
     esquemaJson: ESQUEMA_DO_PLANO,
     maxTokensSaida: 700 * pedido.quantas + 600,
@@ -1536,6 +1540,8 @@ async function proporEstilo(ch: Chamador, corpo: Record<string, unknown>) {
   return json({ conversa_id: conversaId, mensagem_id: mensagemId || null, resposta: texto, anexos: [acao], custo_usd: 0 });
 }
 
+const ESQUEMA_DA_CONVERSA_COM_METODO = comMetodosUsados(ESQUEMA_DA_CONVERSA);
+
 async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const inicio = Date.now();
   const clientId = String(corpo.client_id ?? "");
@@ -1552,6 +1558,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     if (e instanceof ErroDaConversa) throw new ErroHttp(e.status, e.codigo, e.message);
     throw e;
   }
+  // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
+  const spP = superpoderesPara(servico(), { agente: "perfis.conversa", pedido: mensagem });
   const [posts, ctx, historico, modelo, regras] = await Promise.all([
     postsDoPerfil(perfil.id, 40).then(comApelidosDosPosts),
     marcaDoCorpo(clientId, corpo).then((m) => contextoDoCliente(clientId, m)),
@@ -1589,17 +1597,20 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
         ...anteriores,
         { papel: "usuario", conteudo: mensagem },
       ],
-      esquemaJson: ESQUEMA_DA_CONVERSA,
+      esquemaJson: ESQUEMA_DA_CONVERSA_COM_METODO,
       maxTokensSaida: 2000,
       referencia: { tipo: REF_CONVERSA, id: perfil.id },
       criadoPor: ch.userId,
+      metodo: await spP,
     });
   } catch (e) {
     await soltarPedido(servico(), pedido.id, clientId);
     throw e;
   }
   const j = (r.json ?? {}) as Record<string, unknown>;
-  const texto = limpo(j.resposta, 3000) || "Não entendi. Pode dizer de outro jeito?";
+  // Frente SPP: aqui tudo é proposta com Confirmar; "pronto" sem ação ganha o aviso (sem refazer).
+  const fechado = await fecharComMetodo(servico(), { usoId: r.usoId, metodo: await spP, resposta: limpo(j.resposta, 3000) || "Não entendi. Pode dizer de outro jeito?", declarados: j.metodos_usados, acaoFeita: false });
+  const texto = fechado.resposta;
   const escolhidos = posts.filter((p) => alvos.some((a) => a.id === p.id));
   const acao = j.acoes ? propostaDeEstilo(perfil, escolhidos, "", j.acoes) : null;
   // 29/09: ler, comparar, ideias e plano igual também pela conversa (cartão com custo e Confirmar).
@@ -1621,6 +1632,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   if (aprendizado.anexo) anexos.push(aprendizado.anexo);
   const seguidas = anexoDasRegrasSeguidas(regrasSeguidasDoModelo(j.seguiu, regras));
   if (seguidas) anexos.push(seguidas);
+  if (fechado.anexo) anexos.push(fechado.anexo);
   const mensagemId = await gravarResposta(servico(), { conversa_id: conversaId, client_id: clientId, conteudo: texto, anexos, uso_id: r.usoId, depoisDe: pedido.criado_em });
   await registrarRodada({ clientId, perfilId: perfil.id, tipo: "conversa", status: "ok", custo: r.custoUsd, criadoPor: ch.userId, inicio });
   return json({

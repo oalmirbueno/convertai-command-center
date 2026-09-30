@@ -68,6 +68,8 @@ import { MAX_BYTES_DO_PROJETO, tamanhoDoProjeto } from "../_shared/projeto-de-ed
 import { type BaseDaFuncao, catalogo, enviarGeracao, motorPronto } from "./geracao.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) na conversa do diretor de vídeo. A leitura dos quadros fica sem.
+import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 // Frente AG2 (29/09): conversa guardada, "essa/a segunda/todos", ordem clara e aprendizado.
 import { AVISO_SEM_REGISTRO, blocoDaReferencia, gravarTroca, type ItemReferivel, referenciaDoPedido } from "../_shared/conversa-das-mesas.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
@@ -239,6 +241,8 @@ export async function diretorConversar(b: BaseDaFuncao, corpo: Record<string, un
   const kit = kitPorId(atual.kit_id);
   const itens = planosReferiveis(atual);
   const selecionados = (Array.isArray(corpo.selecionados) ? (corpo.selecionados as unknown[]) : []).map((x) => String(x).toLowerCase()).filter((x) => itens.some((i) => i.ref === x));
+  // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
+  const spP = superpoderesPara(b.servico(), { agente: "videos.diretor", pedido: texto });
   // Tudo o que é lido corre junto (contexto, regras ensinadas, catálogo, conversa + referência, andamento).
   const [contexto, regras, cat, conversa, andamento] = await Promise.all([
     contextoDoCliente(b, clientId, corpo.marca_id),
@@ -271,10 +275,11 @@ export async function diretorConversar(b: BaseDaFuncao, corpo: Record<string, un
       pesquisaWeb: fase === "pesquisa" || /pesquis|regi[aã]o|local|lugar|cidade|[ée]poca/i.test(texto),
       sistema,
       mensagens: conversa.historico.concat([{ papel: "usuario", conteudo: `PROJETO ATUAL (JSON):\n${projetoParaOModelo(atual)}\n\nPEDIDO DA EQUIPE:\n${texto}` }]),
-      esquemaJson: esquemaComAprendizado(),
+      esquemaJson: comMetodosUsados(esquemaComAprendizado()),
       maxTokensSaida: 16000,
       timeoutMs: 300_000,
       criadoPor: b.userId,
+      metodo: await spP,
     });
   } catch (e) {
     if (e instanceof IaMotorErro) throw b.erro(e.status, e.codigo, e.message, e.detalhes);
@@ -314,8 +319,11 @@ export async function diretorConversar(b: BaseDaFuncao, corpo: Record<string, un
   }
   // Nada de promessa sem cartão: a resposta diz com clareza que nada foi preparado.
   if (!acao && prometeSemAcao(resposta)) resposta = `${resposta}\n\nNenhum cartão foi preparado nesta resposta. Peça de novo dizendo os planos (ex.: "gera p1 e p2").`;
+  // Frente SPP: "pronto" sem o projeto gravado nem ação feita ganha o aviso (sem refazer); o método vira a linha "Método:".
+  const fechado = await fecharComMetodo(b.servico(), { usoId: saida.usoId, metodo: await spP, resposta, declarados: bruto.metodos_usados, acaoFeita: g.gravado && !g.conflito });
+  resposta = fechado.resposta;
   const seguidas = anexoDasRegrasSeguidas(bruto.regras_seguidas, regras.regras);
-  const anexosDa = (a: AcaoDoAgente | null): unknown[] => [a, aprendido, seguidas].filter(Boolean);
+  const anexosDa = (a: AcaoDoAgente | null): unknown[] => [a, aprendido, seguidas, fechado.anexo].filter(Boolean);
   // A conversa mora no projeto gravado (o id nasce no primeiro pedido).
   const conversaId = conversa.conversaId || (g.projeto.id ? await conversaDoProjeto(b, clientId, g.projeto.id, true) : null);
   const troca = conversaId
@@ -351,7 +359,7 @@ export async function diretorConversar(b: BaseDaFuncao, corpo: Record<string, un
     usuario_mensagem_id: troca.usuarioId,
     conversa_id: conversaId,
     acao,
-    anexos: [aprendido, seguidas].filter(Boolean),
+    anexos: [aprendido, seguidas, fechado.anexo].filter(Boolean),
     referencia: conversa.referencia ? { refs: conversa.referencia.refs, incerta: conversa.referencia.incerta } : null,
     ...(avisoRegistro ? { aviso_registro: avisoRegistro } : {}),
     // Compatível com a tela antiga: o editor agora vem como ação (cartão ou feito na hora).

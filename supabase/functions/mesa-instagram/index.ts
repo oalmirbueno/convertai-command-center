@@ -125,6 +125,8 @@ import {
 } from "./modulos/instagram-do-cliente.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) no agente das redes e, desde a revisão de 30/09, na bio, no nome e nos destaques.
+import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 // Frente AG1 (29/09): a mensagem nunca some, o agente age (grade, capas, bio) e aprende com cada pedido.
 import type { ImagemEntrada } from "../_shared/ia-motor.ts";
 import { defeitoDaImagem } from "../_shared/defeito-da-imagem.ts";
@@ -970,7 +972,8 @@ async function bio(ch: Chamador, corpo: Record<string, unknown>): Promise<Respon
   let escolha: { bio: ReturnType<typeof lerEscolha> | null; nome: ReturnType<typeof lerEscolha> | null } = { bio: null, nome: null };
   let modeloUsado: string | null = null;
   if (!veredito.boa || veredito.nome_pode_melhorar || forcar) {
-    const modelo = await modeloDeTexto(corpo.modelo_id);
+    // Frente SPP (revisão 30/09): bio, nome e destaques recebem o método (aceite e prova, escolhidos pelo código), junto com o modelo.
+    const [modelo, spGeracao] = await Promise.all([modeloDeTexto(corpo.modelo_id), superpoderesPara(servico(), { agente: "instagram.geracao", momento: "gerar" })]);
     modeloUsado = modelo.id;
     const dados = [
       `NEGÓCIO: ${JSON.stringify(estado.negocio)}`,
@@ -986,6 +989,7 @@ async function bio(ch: Chamador, corpo: Record<string, unknown>): Promise<Respon
       modeloId: modelo.id,
       raciocinio: raciocinioBaixo(modelo),
       sistema: SISTEMA_DAS_SUGESTOES,
+      metodo: spGeracao,
       mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${dados}` }],
       esquemaJson: ESQUEMA_DAS_SUGESTOES as unknown as Record<string, unknown>,
       maxTokensSaida: 1400,
@@ -1067,6 +1071,8 @@ async function imagemDaLogo(logo: { bucket: string; caminho: string } | null): P
   }
 }
 
+const ESQUEMA_DA_CONVERSA_COM_METODO = comMetodosUsados(ESQUEMA_DA_CONVERSA);
+
 async function conversar(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
   const c = await abrir(ch, corpo);
   const mensagem = limparTexto(corpo.mensagem, 2000);
@@ -1084,6 +1090,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>): Promise<
   // Frente SYNC: o que faltava do contexto completo da marca (estratégia aprovada com tom e tagline, briefing, decisões do conselho e cérebro).
   const completoP = contextoCompletoParaPrompt(servico(), c.clientId, c.marca, { area: "calendario", partes: ["estrategia", "briefing", "decisoes", "cerebro"], semTitulo: true, teto: 4500 })
     .then((x) => x.bloco, (e) => (registrarFalha("mesa-instagram: contexto completo não lido", e), ""));
+  // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
+  const spP = superpoderesPara(servico(), { agente: "instagram.agente", pedido: mensagem });
   const [perfil, negocio, kit, grade, paginas, capas, historico, plano, regras] = await Promise.all([
     previaDoPerfil(c.clientId, c.conta, !!c.marcas.length),
     negocioDoCliente(c.clientId, true, c.marca),
@@ -1136,17 +1144,18 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>): Promise<
       raciocinio: raciocinioBaixo(modelo),
       sistema,
       mensagens,
-      esquemaJson: ESQUEMA_DA_CONVERSA,
+      esquemaJson: ESQUEMA_DA_CONVERSA_COM_METODO,
       maxTokensSaida: 3000,
       referencia: { tipo: REF_CONVERSA, id: c.clientId },
       criadoPor: ch.userId,
+      metodo: await spP,
     });
   } catch (e) {
     await soltarPedido(servico(), pedido.id, c.clientId);
     throw e;
   }
   const j = (r.json ?? {}) as Record<string, unknown>;
-  const resposta = limparTexto(j.resposta, 3000) || "Não consegui responder agora. Tente de novo com outras palavras.";
+  let resposta = limparTexto(j.resposta, 3000) || "Não consegui responder agora. Tente de novo com outras palavras.";
   const destaques = destaquesLimpos(j.destaques);
   const bloco = typeof j.bloco === "string" ? j.bloco : "nenhum";
   const caminho = caminhoDoAgente(c.clientId, destaques.length ? "destaques" : bloco, resposta);
@@ -1166,6 +1175,10 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>): Promise<
     if (capasPropostas) anexos.push({ ...capasPropostas, contexto: { ...(capasPropostas.contexto || {}), ...contextoDaAcao } });
   }
   if (j.analisar_bio === true) anexos.push({ ...acaoDaBio(perfil.username), contexto: contextoDaAcao });
+  // Frente SPP: "pronto" sem ação feita ganha o aviso (sem refazer); o método vira a linha "Método:".
+  const feitas = anexos.filter((a) => !!a && typeof a === "object" && !!(a as { executada_em?: unknown }).executada_em) as Array<{ resultados?: unknown[] }>;
+  const fechado = await fecharComMetodo(servico(), { usoId: r.usoId, metodo: await spP, resposta, declarados: j.metodos_usados, acaoFeita: feitas.length > 0, resultados: feitas.length ? feitas[0].resultados : null });
+  resposta = fechado.resposta;
 
   // Aprender com o pedido (Jev) e dizer as regras seguidas.
   const aprendizado = await aprenderComOPedido(servico(), {
@@ -1176,6 +1189,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>): Promise<
   if (aprendizado.anexo) anexos.push(aprendizado.anexo);
   const seguidas = anexoDasRegrasSeguidas(regrasSeguidasDoModelo(j.seguiu, regras));
   if (seguidas) anexos.push(seguidas);
+  if (fechado.anexo) anexos.push(fechado.anexo);
   const anexoCaminho = anexoDoCaminho(caminho);
   if (anexoCaminho) anexos.push(anexoCaminho);
   const mensagemId = await gravarResposta(servico(), { conversa_id: conversaId, client_id: c.clientId, conteudo: resposta, anexos, uso_id: r.usoId, depoisDe: pedido.criado_em });
@@ -1483,7 +1497,8 @@ async function sugerirDestaques(ch: Chamador, corpo: Record<string, unknown>): P
   let custo = 0;
   let proprios: ReturnType<typeof propostasDaMarca> = [];
   if (comIa) {
-    const modelo = await modeloDeTexto(corpo.modelo_id);
+    // Frente SPP (revisão 30/09): bio, nome e destaques recebem o método (aceite e prova, escolhidos pelo código), junto com o modelo.
+    const [modelo, spGeracao] = await Promise.all([modeloDeTexto(corpo.modelo_id), superpoderesPara(servico(), { agente: "instagram.geracao", momento: "gerar" })]);
     const dados = [
       `MARCA: ${JSON.stringify(estado.negocio)}`,
       `PERFIL: ${JSON.stringify(estado.perfil)}`,
@@ -1500,6 +1515,7 @@ async function sugerirDestaques(ch: Chamador, corpo: Record<string, unknown>): P
       modeloId: modelo.id,
       raciocinio: raciocinioBaixo(modelo),
       sistema: SISTEMA_DOS_DESTAQUES,
+      metodo: spGeracao,
       mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${dados}` }],
       esquemaJson: ESQUEMA_DOS_DESTAQUES as unknown as Record<string, unknown>,
       maxTokensSaida: 1400,

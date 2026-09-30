@@ -98,6 +98,8 @@ import { anexoDasRegrasSeguidas, aprenderDoPedido, CAMPOS_DO_APRENDIZADO, regras
 import { blocoDoContextoDoCliente, criarContextoDoAgente, PARTES_COM_O_CONTEXTO } from "../_shared/contexto-do-agente.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) no agente editor. A receita e a visão ficam sem.
+import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 import { rotasDoRender } from "./render.ts";
 import { rotasDoElemento } from "./elemento.ts";
 import { frasesDoCorpo, sugerirAnimacoes } from "./animacoes.ts";
@@ -423,6 +425,8 @@ const ESQUEMA_DO_PASSO_COM_APRENDIZADO = {
   },
 };
 
+const ESQUEMA_DO_PASSO_COM_APRENDIZADO_COM_METODO = comMetodosUsados(ESQUEMA_DO_PASSO_COM_APRENDIZADO);
+
 /** Última fala do agente na conversa curta que a tela mandou ("Agente: ..."). */
 function ultimaFalaDoAgente(conversa: string): string | null {
   const linhas = conversa.split("\n").filter((l) => l.indexOf("Agente: ") === 0);
@@ -448,6 +452,8 @@ async function agentePasso(ch: Chamador, corpo: Record<string, unknown>) {
   const marcaId = typeof corpo.marca_id === "string" && UUID.test(corpo.marca_id) ? corpo.marca_id : null;
   const contextoDaMarcaP = CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["arte", "copy", "geral"], { marca: marcaId, partes: PARTES_COM_O_CONTEXTO.concat(["kit"]), area: "video" })
     .catch((e) => (registrarFalha("editor-video: contexto da marca não lido", e), ""));
+  // Frente SPP: o Jev escolhe o método da casa em paralelo (o mesmo pedido em todos os passos: cache de 5 min; nunca lança).
+  const spP = superpoderesPara(servico(), { agente: "edicao.agente", pedido, ultimaResposta: ultimaFalaDoAgente(conversa) });
   // AG2: o que já é lido vai em paralelo (gasto da sessão, regras ensinadas e, no passo 1, "essa/o segundo/todos" pelo Jev).
   const [gasto, regras, refDoPasso1] = await Promise.all([
     gastoDaReferencia(clientId, REF_AGENTE, referencia),
@@ -468,7 +474,8 @@ async function agentePasso(ch: Chamador, corpo: Record<string, unknown>) {
   const sistema = `${sistemaDoAgente()}\n\n${blocoDoMapaDoPainel("edicao")}`;
   // AG2: as regras que a equipe ensinou (EVITAR primeiro) e a referência do pedido vão no sistema, em todo passo.
   const sistemaCompleto = sistemaDoPasso(sistema, regras.bloco, blocoDaReferencia(ref, itens));
-  const estimativa = estimarComModelo(m, { tokensEntrada: Math.ceil((sistemaCompleto.length + mensagens.reduce((s, x) => s + x.conteudo.length, 0)) / 3.5), tokensSaida: 4000 });
+  const sp = await spP;
+  const estimativa = estimarComModelo(m, { tokensEntrada: Math.ceil((sistemaCompleto.length + (sp ? sp.tamanho + 2 : 0) + mensagens.reduce((s, x) => s + x.conteudo.length, 0)) / 3.5), tokensSaida: 4000 });
   if (gasto + estimativa > teto) {
     return json({ passo: { plano: "", chamadas: [], resposta: `O próximo passo passaria do teto de US$ ${teto.toFixed(2)}. Aumente o teto ou simplifique o pedido.`, terminou: true, recusadas: [], opcoes: [] }, custo_usd: 0, gasto_usd: gasto, parou: true });
   }
@@ -482,9 +489,10 @@ async function agentePasso(ch: Chamador, corpo: Record<string, unknown>) {
         sistema: sistemaCompleto,
         mensagens,
         raciocinio,
-        esquemaJson: ESQUEMA_DO_PASSO_COM_APRENDIZADO,
+        esquemaJson: ESQUEMA_DO_PASSO_COM_APRENDIZADO_COM_METODO,
         referencia: { tipo: REF_AGENTE, id: referencia },
         criadoPor: ch.userId,
+        metodo: sp,
       });
       const lido = lerPasso(r.json, Math.max(0, MAX_FERRAMENTAS - usadas));
       const j = r.json && typeof r.json === "object" ? (r.json as Record<string, unknown>) : {};
@@ -495,8 +503,11 @@ async function agentePasso(ch: Chamador, corpo: Record<string, unknown>) {
         ? await aprenderDoPedido(servico(), { clientId, mesa: "edicao", pedido, regraSugerida, marcaId, userId: ch.userId, ultimaResposta: ultimaFalaDoAgente(conversa) })
         : null;
       await auditar(ch, "editor_agente_passo", { client_id: clientId, passo, chamadas: lido.chamadas.length, modelo_id: r.modeloId }, true);
+      // Frente SPP: "pronto" sem ferramenta usada nem pedida ganha o aviso (sem refazer); o método vira a linha "Método:".
+      const fechado = await fecharComMetodo(servico(), { usoId: r.usoId, metodo: sp, resposta: lido.resposta, declarados: j.metodos_usados, acaoFeita: usadas + lido.chamadas.length > 0 });
       return json({
-        passo: lido,
+        passo: fechado.resposta === lido.resposta ? lido : { ...lido, resposta: fechado.resposta },
+        metodo_usado: fechado.anexo,
         custo_usd: r.custoUsd,
         gasto_usd: Math.round((gasto + r.custoUsd) * 10000) / 10000,
         saldo_usd: r.saldoUsd,

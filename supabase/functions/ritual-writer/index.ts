@@ -51,6 +51,8 @@ import { extrairMemoriaDoRitual } from "./memoria.ts";
 import { chaveDaPromessa, reforcarPromessas } from "./reforco.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (revisão 30/09): o método da casa (prova) no escritor dos rituais.
+import { registrarMetodoSemUso, superpoderesPara } from "../_shared/superpoderes.ts";
 // O navegador guarda a resposta do preflight (OPTIONS) em vez de perguntar de novo a cada chamada.
 const corsHeaders = { ...corsDoSupabase, "Access-Control-Max-Age": "7200" };
 
@@ -144,6 +146,8 @@ Deno.serve(async (req) => {
       try {
         // Memória, estado real e julgamentos montados no servidor. Falha aqui nunca derruba o ritual.
         const agora = new Date();
+        // Frente SPP: o método do escritor (escolhido pelo código) corre junto com as leituras; nunca lança.
+        const metodoDoRitualP = superpoderesPara(admin, { agente: "rituais.escritor" });
         const contexto = clientId
           ? await lerContextoDoRitual(db, clientId, { ritual, excluirReportId: reportId, agora }).catch((e) => {
             console.warn(`[ritual] contexto falhou: ${e instanceof Error ? e.message : String(e)}`);
@@ -201,6 +205,7 @@ Deno.serve(async (req) => {
           })
           : "";
 
+        const metodoDoRitual = await metodoDoRitualP;
         const escrito = await escreverRitual({
           ritual, clientName, contactName, facts,
           continuidade: contexto?.texto,
@@ -210,7 +215,10 @@ Deno.serve(async (req) => {
           clientId: clientId || undefined,
           criadoPor: usuarioId,
           escolha,
+          metodo: metodoDoRitual,
         });
+        // Escrito pela reserva (sem linha em ia_usos): o método ainda conta no "Uso em 30 dias".
+        if (escrito && !escrito.uso_id) void registrarMetodoSemUso(admin, { metodo: metodoDoRitual, clientId: clientId || null });
         if (!escrito) return jsonResponse({ title: null, body: null, source: "fallback" });
         const nextSteps = escrito.next_steps;
 

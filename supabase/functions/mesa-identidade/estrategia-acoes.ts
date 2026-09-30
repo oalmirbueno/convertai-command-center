@@ -22,6 +22,8 @@ import { lerContextoDaMarca } from "../_shared/marca.ts";
 import { lerContextoConsolidado } from "../_shared/contexto-cliente.ts";
 import { criarContextoDoAgente } from "../_shared/contexto-do-agente.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) nas gerações da identidade (o código escolhe).
+import { superpoderesPara } from "../_shared/superpoderes.ts";
 import { regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
 import { TAMANHOS_DA_IDENTIDADE } from "../_shared/identidade-etapas.ts";
 import { ESQUEMA_DA_ESTRATEGIA, type Estrategia, juntarProposta, normalizarEstrategia, declaracaoDePosicionamento, ARQUETIPOS } from "../_shared/estrategia-de-marca.ts";
@@ -119,6 +121,7 @@ export async function gerarEstrategia(ch: Chamador, p: LinhaDoProjeto, opcoes: {
     sistema: regras.bloco ? `${SISTEMA_DA_ESTRATEGIA}\n\n${regras.bloco}` : SISTEMA_DA_ESTRATEGIA,
     mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify({ ...base.dados, arquetipos: ARQUETIPOS.map((a) => ({ id: a.valor, nome: a.rotulo, desejo: a.desejo })), pedido_da_equipe: opcoes.instrucao || null })}` }],
     esquemaJson: ESQUEMA_DA_ESTRATEGIA,
+    metodo: await superpoderesPara(servico(), { agente: "identidade.acoes", momento: "gerar" }),
     maxTokensSaida: TAMANHOS_DA_IDENTIDADE.estrategia.saida,
     referencia: { tipo: "idv_projeto", id: p.id },
     criadoPor: ch.userId,
@@ -217,6 +220,7 @@ export async function gerarPaletas(ch: Chamador, p: LinhaDoProjeto, opcoes: { mo
     sistema: regras.bloco ? `${SISTEMA_DAS_PALETAS}\n\n${regras.bloco}` : SISTEMA_DAS_PALETAS,
     mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify({ marca: base.nome, briefing: base.dados.briefing, estrategia: base.dados.estrategia_atual, pesquisa: base.dados.pesquisa, caminho_escolhido: escolhido ? { nome: escolhido.nome, ideia: escolhido.ideia, paleta: escolhido.paleta } : null, pedido_da_equipe: opcoes.pedido || null })}` }],
     esquemaJson: ESQUEMA_DAS_PALETAS,
+    metodo: await superpoderesPara(servico(), { agente: "identidade.acoes", momento: "gerar" }),
     maxTokensSaida: TAMANHOS_DA_IDENTIDADE.paletas.saida,
     referencia: { tipo: "idv_projeto", id: p.id },
     criadoPor: ch.userId,
@@ -267,6 +271,7 @@ export async function gerarFontes(ch: Chamador, p: LinhaDoProjeto, opcoes: { mod
     sistema: SISTEMA_DAS_FONTES,
     mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify({ marca: base.nome, briefing: base.dados.briefing, estrategia: base.dados.estrategia_atual, catalogo: FONTES_DO_CATALOGO.map((f) => `${f.familia} (${f.categoria})`), pares_de_exemplo: PARES_DE_FONTES.slice(0, 8).map((x) => `${x.titulo} + ${x.texto}`) })}` }],
     esquemaJson: ESQUEMA_DAS_FONTES,
+    metodo: await superpoderesPara(servico(), { agente: "identidade.acoes", momento: "gerar" }),
     maxTokensSaida: TAMANHOS_DA_IDENTIDADE.fontes.saida,
     referencia: { tipo: "idv_projeto", id: p.id },
     criadoPor: ch.userId,
@@ -332,6 +337,7 @@ export async function gerarSlogans(ch: Chamador, p: LinhaDoProjeto, opcoes: { mo
     sistema: regras.bloco ? `${SISTEMA_DOS_SLOGANS}\n\n${regras.bloco}` : SISTEMA_DOS_SLOGANS,
     mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify({ quantidade: quantos, marca: base.nome, briefing: base.dados.briefing, estrategia: base.dados.estrategia_atual, pesquisa: base.dados.pesquisa, pedido_da_equipe: opcoes.pedido || null })}` }],
     esquemaJson: ESQUEMA_DOS_SLOGANS,
+    metodo: await superpoderesPara(servico(), { agente: "identidade.acoes", momento: "gerar" }),
     maxTokensSaida: TAMANHOS_DA_IDENTIDADE.slogans.saida,
     referencia: { tipo: "idv_projeto", id: p.id },
     criadoPor: ch.userId,

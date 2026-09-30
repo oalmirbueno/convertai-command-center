@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { textoDoErro } from "@/lib/mesa/api";
 import { marcaAtual } from "@/lib/mesa/marcas";
+import MetodoDoAgente, { metodoUsadoDosAnexos } from "./MetodoDoAgente";
 import {
   aprendizadoDosAnexos,
   fraseDoAprendizado,
@@ -52,7 +53,9 @@ export default function AprendizadoNaConversa({ anexos, clientId }: { anexos: un
   const seguidas = regrasSeguidasDosAnexos(anexos);
   const ativas = useRegrasAtivas(clientId, !!aprendizado);
   const [ocupado, setOcupado] = useState(false);
-  if (!aprendizado && !seguidas.length) return null;
+  // Frente SPP: a linha "Método:" também nas conversas da Mesa do cliente, do Mês, das Redes e dos Perfis.
+  const metodo = metodoUsadoDosAnexos(anexos);
+  if (!aprendizado && !seguidas.length && !metodo) return null;
 
   const atualizar = () => {
     void queryClient.invalidateQueries({ queryKey: chaveDasRegrasAtivas(clientId) });
@@ -116,6 +119,7 @@ export default function AprendizadoNaConversa({ anexos, clientId }: { anexos: un
           <span className="min-w-0 [overflow-wrap:anywhere]">Segui: {seguidas.map((r) => r.texto).join("; ")}</span>
         </p>
       )}
+      {metodo && <MetodoDoAgente anexos={anexos} />}
     </div>
   );
 }

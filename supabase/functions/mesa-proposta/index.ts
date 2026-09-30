@@ -73,6 +73,8 @@ import { blocoDoContextoDoCliente, criarContextoDoAgente, PARTES_COM_O_CONTEXTO,
 import { linhaDaMarca } from "../_shared/heranca-da-marca.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) no estrategista comercial (escrever e evolução) e no agente.
+import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 import { AVISO_SEM_REGISTRO, gravarTroca } from "../_shared/conversa-das-mesas.ts";
 import { anexoDasRegrasSeguidas, aprenderDoPedido, CAMPOS_DO_APRENDIZADO, regrasDaMesa, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
 import { resolvePublicAppUrl } from "../_shared/public-url.ts";
@@ -891,7 +893,12 @@ async function escrever(ch: Chamador, linha: LinhaDaProposta, p: { modeloId?: un
   // Antes de gastar IA: a proposta sai com o nome, o contato e a logo da agência.
   const agencia = await exigirDadosDaAgencia(servico(), "proposta");
   const modelo = await modeloDeTexto(p.modeloId);
-  const [ctx, regras] = await Promise.all([contextoDaGeracao(linha, p.fontes), regrasDaMesa(servico(), { clientId: linha.client_id, mesa: "proposta", marcaId: linha.marca_id })]);
+  const [ctx, regras, sp] = await Promise.all([
+    contextoDaGeracao(linha, p.fontes),
+    regrasDaMesa(servico(), { clientId: linha.client_id, mesa: "proposta", marcaId: linha.marca_id }),
+    // Frente SPP: o código escolhe o método (gerar a proposta ou reescrever um bloco). Nunca lança.
+    superpoderesPara(servico(), { agente: "proposta.escrever", momento: p.somente ? "ajustar" : "gerar" }),
+  ]);
   const hoje = hojeEmSaoPaulo();
   const pedido = [p.tarefaTexto, p.orientacao ? `ORIENTAÇÃO DA EQUIPE: ${p.orientacao}` : ""].filter(Boolean).join("\n");
   const saida = await chamarTexto({
@@ -906,6 +913,7 @@ async function escrever(ch: Chamador, linha: LinhaDaProposta, p: { modeloId?: un
     esquemaJson: ESQUEMA_DA_GERACAO,
     maxTokensSaida: 9_000,
     timeoutMs: 240_000,
+    metodo: sp,
     referencia: { tipo: REF_PROPOSTA, id: linha.id },
     criadoPor: ch.userId,
   });
@@ -1166,11 +1174,15 @@ async function conversaDoAgente(ch: Chamador, clientId: string, conversaId: unkn
 
 const paraAcao = (l: LinhaDaProposta): PropostaParaAcao => ({ id: l.id, titulo: l.titulo, numero: l.numero, status: l.status, validade_ate: l.validade_ate, blocos: l.conteudo.blocos, itens: l.itens });
 
+const ESQUEMA_AGENTE_COM_METODO = comMetodosUsados(ESQUEMA_AGENTE);
+
 async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
   const mensagem = textoLimpo(corpo.mensagem, 4000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva a mensagem para o estrategista.");
+  // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
+  const spP = superpoderesPara(servico(), { agente: "proposta.agente", pedido: mensagem });
   let linha = corpo.proposta_id ? await lerLinha(ch, corpo.proposta_id) : null;
   if (linha && linha.client_id !== clientId) linha = null;
   // Arquivos anexados na conversa viram material da proposta (o agente lê nesta e nas próximas).
@@ -1209,10 +1221,11 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     raciocinio: raciocinioPara(modelo),
     sistema: `${SISTEMA_AGENTE}\n\nDADOS DESTA CONVERSA (hoje ${hoje}):\n${JSON.stringify(dados).slice(0, 60_000)}\n${blocoAcoes}\n\n${blocoDoMapaDoPainel("proposta")}${ctx && ctx.blocoCliente ? `\n\n${ctx.blocoCliente}` : semProposta ? `\n\n${blocoDoContextoDoCliente(semProposta)}` : ""}${regras.bloco ? `\n\n${regras.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: anexados.length ? `${mensagem}\n\n(Anexei: ${anexados.map((a) => a.nome).join(", ")}. Já estão no material da proposta.)` : mensagem }],
-    esquemaJson: ESQUEMA_AGENTE,
+    esquemaJson: ESQUEMA_AGENTE_COM_METODO,
     maxTokensSaida: 3_000,
     referencia: { tipo: REF_CONVERSA, id: conversaId },
     criadoPor: ch.userId,
+    metodo: await spP,
   });
   const j = (saida.json || {}) as Record<string, unknown>;
   let resposta = textoLimpo(j.resposta, 4000) || "Pronto.";
@@ -1235,11 +1248,15 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     }
   }
   if (!acao && respostaPromete(resposta) && resposta.indexOf("?") < 0) resposta = `${resposta} Ainda não montei a lista: diga o que quer e eu preparo o cartão.`;
+  // Frente SPP: "pronto" sem ação feita ganha o aviso (sem refazer); o método vira a linha "Método:".
+  const fechado = await fecharComMetodo(servico(), { usoId: saida.usoId, metodo: await spP, resposta, declarados: j.metodos_usados, acaoFeita: !!(acao && acao.executada_em), resultados: acao ? acao.resultados : null });
+  resposta = fechado.resposta;
   const aprendido = await aprendendo;
   const seguidas = anexoDasRegrasSeguidas(j.regras_seguidas, regras.regras);
   const anexos = anexosComCaminho(acao ? [acao] : [], caminhoDaResposta(resposta, clientId, { abrirSozinho: pedeParaAbrir(mensagem) || pedeParaLevar(mensagem) }));
   if (aprendido) anexos.push(aprendido);
   if (seguidas) anexos.push(seguidas);
+  if (fechado.anexo) anexos.push(fechado.anexo);
   const troca = await gravarTroca(servico(), { conversaId, clientId, usuario: { conteudo: mensagem, anexos: [] }, agente: { conteudo: resposta, anexos, uso_id: saida.usoId || null }, onde: "mesa-proposta" });
   const feitaNaHora = acao && acao.executada_em ? ` O que já foi feito na hora: ${textoDoResultado(acao.resultados || [])}. Sem o registro, o Desfazer não aparece aqui: volte uma versão no Rascunho se precisar.` : "";
   return json({

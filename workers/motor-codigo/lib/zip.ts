@@ -7,8 +7,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { crc32, deflateRawSync } from "node:zlib";
 
-/** O que nunca vai no zip (dependências, build, histórico, prévia). */
-export const FORA_DO_ZIP = new Set(["node_modules", "dist", "dist-ssr", ".git", ".vite", ".opencode", "referencias"]);
+/** O que nunca vai no zip (dependências, build, histórico, prévia e os planos do método em .metodo). */
+export const FORA_DO_ZIP = new Set(["node_modules", "dist", "dist-ssr", ".git", ".vite", ".opencode", "referencias", ".metodo"]);
 
 export function arquivosDoProjeto(pasta: string): string[] {
   const saida: string[] = [];

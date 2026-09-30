@@ -21,7 +21,18 @@ Você é o agente de código da Mesa Site da Aceleriq. Este projeto é o site de
 7. **Celular primeiro.** Nada de rolagem lateral; toque de 44 px; teste mental em 375 px.
 8. **Movimento** pelos tokens de `src/lib/movimento.ts` e pelos componentes de `src/lib/`. Respeite `prefers-reduced-motion` com `useMovimentoReduzido()` (daqui, nunca o `useReducedMotion` do Motion: quebra a pré-renderização). Nunca use `useScroll` com faixa fora de [0, 1]. Animação só começa no navegador (efeito), nunca no render do servidor.
 9. **Português do Brasil, sem travessão, sem emoji.**
-10. Ao terminar a seção, rode `npm run checar` e corrija só o que o comando apontar na sua seção.
+10. Ao terminar a seção, rode `npm run checar` uma vez e corrija só o que o comando apontar na sua seção.
+
+## Método (Superpowers, obra/superpowers v6.4.2, licença MIT)
+As skills do Superpowers liberadas para este trabalho estão na ferramenta `skill` e a abertura `using-superpowers` já está carregada. Este AGENTS.md vence as skills quando discordarem.
+1. **Sem brainstorming e sem pergunta.** O desenho do site já foi aprovado pela equipe na Mesa Site (`.aceleriq/pacote.json`), então brainstorming e executing-plans não valem aqui. Cada passada é uma mudança pequena. Dúvida que muda o resultado: termine a resposta com `PRECISA DE RESPOSTA: <pergunta>` e siga pelo caminho mais conservador. Não use o visual companion nem a ferramenta de pergunta (não há ninguém na tela durante a passada).
+2. **writing-plans.** Antes do código, faça um plano curto em `.metodo/<id-da-seção>.md` (a ferramenta de escrita cria a pasta sozinha): a intenção em até 3 linhas, os arquivos que vai tocar e de 3 a 8 passos, cada um com o resultado esperado. A pasta `.metodo/` fica fora do git e do zip. Não faça commit: o motor commita.
+3. **test-driven-development, onde couber.** O teste da seção é `node scripts/conferir.mjs --secao <id>`. RED: rode ANTES de escrever e sem build (tem de falhar; sem `dist/` já é a falha). Não rode `npm run build` nem `npm run checar` só para o RED. GREEN: depois de escrever, rode `npm run checar` uma vez e o conferir da seção de novo (tem de passar). O elemento raiz da seção leva `data-secao="<id>"`. Não crie outro tipo de teste nem instale dependência.
+4. **verification-before-completion.** Não diga pronto sem rodar, nesta passada, `npm run checar` e `node scripts/conferir.mjs --secao <id>` até o fim e ler a saída. Termine a resposta com `PROVA:` e as últimas linhas das duas saídas. O motor roda a mesma conferência depois do build dele: prova declarada que não bate vira aviso na tela.
+5. **systematic-debugging.** Build ou conferência falhou: leia o erro inteiro, ache a causa na sua seção e corrija uma coisa por vez. Depois de 3 tentativas sem passar, pare e explique o que já sabe e o que falta (o motor desfaz a seção que quebrar o build).
+6. **receiving-code-review.** No "ajustar", o pedido da equipe é a revisão recebida: repita em uma frase o que vai mudar, confira no código e mude só isso. A revisão do painel ("revisar") não passa por você: o motor roda as regras fixas depois do build.
+7. **Decisões.** Toda escolha que o pacote não decidia vira uma linha `DECIDI: o quê, porque` no fim da resposta: a equipe vê no painel.
+8. **Fora deste projeto:** brainstorming, executing-plans, requesting-code-review, using-git-worktrees, finishing-a-development-branch, subagent-driven-development, dispatching-parallel-agents, writing-skills e diagnosing-superpowers. Estão bloqueadas aqui.
 
 ## Páginas (sites novos)
 - O id da seção é o que está em `pacote.paginas[].secoes` (na página inicial é o tipo, ex. `hero`; nas outras, `<página>-<tipo>`, ex. `sobre-equipe`). O componente é `src/secoes/<Id em PascalCase>.tsx` e o registro em `src/secoes/index.ts` usa exatamente esse id.
@@ -130,5 +141,5 @@ O preset do pacote (`estilo.preset_rotulo`) define a estética; a paleta é semp
 
 ## Estrutura
 - `src/secoes/index.ts`: `SECOES` com o id e o componente de cada seção (a ordem de cada página vem do pacote).
-- Casca da casa (o motor atualiza sozinho; não mexa): `AGENTS.md`, `index.html`, `scripts/*`, `src/App.tsx`, `src/main.tsx`, `src/entry-server.tsx`, `src/lib/pacote.ts`, `src/lib/integracoes.tsx`, `src/lib/movimento.ts`, `src/lib/Revelar.tsx`, `src/lib/rolagem.ts`.
+- Casca da casa (o motor atualiza sozinho, repõe o original se mudar e nega a edição): `AGENTS.md`, `.gitignore`, `index.html`, `vite.config.ts`, `scripts/*`, `src/App.tsx`, `src/main.tsx`, `src/entry-server.tsx`, `src/lib/pacote.ts`, `src/lib/integracoes.tsx`, `src/lib/movimento.ts`, `src/lib/Revelar.tsx`, `src/lib/rolagem.ts`, `src/lib/Grafico.tsx`. Também não se edita o que roda na máquina ou é do motor: `package.json`, `.aceleriq/` (menos `.aceleriq/ux/`, a sua prova de UX), `.git/`, `.opencode/`, `src/marca.css` e `public/marca/`.
 - `src/entry-server.tsx` e `scripts/prerender.mjs`: pré-render para SEO (o HTML de cada página sai pronto).

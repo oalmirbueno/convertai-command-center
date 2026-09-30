@@ -148,6 +148,8 @@ import {
 } from "./templates.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) no agente de estilo.
+import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 const corsHeaders = {
@@ -592,6 +594,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   // Frente SYNC: o que faltava do contexto completo da marca (kit pela herança, estratégia aprovada, briefing, dossiê e decisões do conselho).
   const completoP = contextoCompletoParaPrompt(servico(), p.clientId, p.marca, { area: "arte", partes: ["kit", "estrategia", "briefing", "dossie", "decisoes"], teto: 5000 })
     .then((c) => c.bloco, (e) => (registrarFalha("agente-estilo: contexto completo não lido", e), ""));
+  // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
+  const spP = superpoderesPara(servico(), { agente: "estilo.agente", pedido: mensagem || `Mandei ${anexos.length} referências para o estilo deste cliente.` });
   // Frente AG2: tudo o que é lido sai junto (paleta do kit, regras ensinadas e as peças abertas no Estúdio entraram aqui).
   const [modelo, historico, cliente, estiloAntes, contexto, cerebro, doCliente, paleta, ensinadas, pecasLidas] = await Promise.all([
     modeloPorPapel("diretor_arte"),
@@ -672,10 +676,12 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     pesquisaWeb: PEDE_PESQUISA.test(textoDoPedido),
     sistema: `${SISTEMA_DO_ESTILO}\n\n${CONHECIMENTO_DO_ESTILO}\n\n${blocoDoMapaDoPainel("estilo")}\n\n${cerebroTexto ? `${cerebroTexto}\n\n` : ""}${completoDaMarca ? `${completoDaMarca}\n\n` : ""}${ensinadas.bloco ? `${ensinadas.bloco}\n\n` : ""}DADOS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${blocoDosAlvosDoEstilo(alvos)}${tpl ? tpl.texto : ""}${blocoDaReferencia(referencia, itensReferiveis)}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: textoDoPedido }],
-    esquemaJson: tpl ? esquemaComTemplates(ESQUEMA_DO_AGENTE_DE_ESTILO) : ESQUEMA_DO_AGENTE_DE_ESTILO,
+    // O ternário fica por fora (revisão 30/09): o contrato dos esquemas (esq-esquemas-compativeis) avalia cada ramo.
+    esquemaJson: tpl ? comMetodosUsados(esquemaComTemplates(ESQUEMA_DO_AGENTE_DE_ESTILO)) : comMetodosUsados(ESQUEMA_DO_AGENTE_DE_ESTILO),
     maxTokensSaida: 4_000,
     referencia: { tipo: "agente_conversa", id: conversaId },
     criadoPor: ch.userId,
+    metodo: await spP,
   });
   const j = (saida.json || {}) as Record<string, unknown>;
   let resposta = limpo(j.resposta, 4000) || "Pronto.";
@@ -735,6 +741,10 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   if (aprendido) anexosDoAgente.push(aprendido);
   const seguidas = anexoDasRegrasSeguidas(j.regras_seguidas, ensinadas.regras as RegraDaMesa[]);
   if (seguidas) anexosDoAgente.push(seguidas);
+  // Frente SPP: "pronto" sem ação feita ganha o aviso (sem refazer); o método vira a linha "Método:".
+  const fechado = await fecharComMetodo(servico(), { usoId: saida.usoId, metodo: await spP, resposta, declarados: j.metodos_usados, acaoFeita: !!(acao && acao.executada_em), resultados: acao ? acao.resultados : null });
+  resposta = fechado.resposta;
+  if (fechado.anexo) anexosDoAgente.push(fechado.anexo);
   // Frente AG (27/09): cada cartão leva o "Ir para"; sem cartão, a área que a resposta citou.
   const comCaminhos = anexosComCaminho(
     caminhoNasAcoes(anexosDoAgente, (a) => caminhoDoEstilo(p.clientId, a), { abrirSozinho: levar }),

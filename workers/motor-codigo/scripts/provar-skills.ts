@@ -36,7 +36,7 @@ import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { ambienteDoOpencode, BUSCADOR_DA_UIUX, COMANDOS_LIBERADOS, configDoOpencode, ferramentaLigada, PASTA_CASA_DO_OPENCODE, SKILL_DA_UIUX, SKILLS_DA_CASA, temChave } from "../lib/config-opencode.ts";
+import { ambienteDoOpencode, BUSCADOR_DA_UIUX, COMANDOS_LIBERADOS, configDoOpencode, ferramentaLigada, PASTA_CASA_DO_OPENCODE, SKILL_DA_UIUX, SKILLS_DA_CASA, SKILLS_DO_SUPERPOWERS, temChave } from "../lib/config-opencode.ts";
 import { commitar, garantirProjeto, git } from "../lib/projeto.ts";
 import { lerConsultaGravada, masterDoProjeto, prepararDesignSystem } from "../lib/design-system.ts";
 import { acharPython, buscar } from "../modelo-site/scripts/uiux.mjs";
@@ -147,8 +147,9 @@ async function etapaA(modelo: ModeloDoMotor) {
   guardar("a1-debug-skill.json", skills.saida);
   const achadas = json<Array<{ name: string; location?: string }>>(skills.saida) || [];
   const lista = achadas.map((s) => s.name).sort();
-  const esperada = [...SKILLS_DA_CASA, "customize-opencode"].sort();
-  checar("A1 debug skill: só as skills da casa e a embutida", JSON.stringify(lista) === JSON.stringify(esperada), { lista, esperada });
+  // Integração com a SPM: no modo nativo entram também as 15 do superpowers vendorizado (a permissão decide o que vale).
+  const esperada = [...SKILLS_DA_CASA, ...SKILLS_DO_SUPERPOWERS, "customize-opencode"].sort();
+  checar("A1 debug skill: só as skills da casa, as do superpowers e a embutida", JSON.stringify(lista) === JSON.stringify(esperada), { lista, esperada });
   const daUiux = achadas.find((s) => s.name === "ui-ux-pro-max");
   const local = daUiux && daUiux.location ? resolve(daUiux.location).toLowerCase() : "";
   checar("A1 a ui-ux-pro-max vem do worker (vendor), não do projeto", !!local && local.indexOf(SKILL_DA_UIUX.toLowerCase()) === 0, daUiux ? daUiux.location : null);

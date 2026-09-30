@@ -10,6 +10,8 @@ import { carregarModelo, chamarImagem, chamarTexto, estimarComModelo, modeloPadr
 import { lerContextoDaMarca } from "../_shared/marca.ts";
 import { lerContextoConsolidado } from "../_shared/contexto-cliente.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) nas gerações da identidade (o código escolhe).
+import { superpoderesPara } from "../_shared/superpoderes.ts";
 import { regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { concluirEtapa, ehEtapaDaIdentidade, ehModoDoProjeto, etapaAtual, reabrirEtapa, TAMANHOS_DA_IDENTIDADE } from "../_shared/identidade-etapas.ts";
@@ -253,6 +255,7 @@ export async function pesquisaIa(ch: Chamador, corpo: Record<string, unknown>) {
     sistema: SISTEMA_DA_PESQUISA,
     mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify({ marca: nome, modo: p.modo, briefing: p.dados.briefing || {}, pedido: limpo(corpo.pedido, 800) || null })}` }],
     esquemaJson: ESQUEMA_DA_PESQUISA,
+    metodo: await superpoderesPara(servico(), { agente: "identidade.acoes", momento: "gerar" }),
     maxTokensSaida: TAMANHO_DA_PESQUISA.saida,
     referencia: { tipo: "idv_projeto", id: p.id },
     criadoPor: ch.userId,
@@ -389,6 +392,7 @@ export async function gerarCaminhos(ch: Chamador, p: LinhaDoProjeto, quantos: nu
 ${regras.bloco}` : SISTEMA_DO_CONCEITO,
     mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify({ quantidade: quantos, marca: naming.nome || nome, modo: p.modo, briefing: p.dados.briefing || {}, estrategia: p.dados.estrategia || null, pesquisa: resumoDaPesquisa(p.dados.pesquisa), pedido_da_equipe: pedido || null })}` }],
     esquemaJson: ESQUEMA_DO_CONCEITO,
+    metodo: await superpoderesPara(servico(), { agente: "identidade.acoes", momento: "gerar" }),
     maxTokensSaida: TAMANHO_DO_CONCEITO.saida,
     referencia: { tipo: "idv_projeto", id: p.id },
     criadoPor: ch.userId,

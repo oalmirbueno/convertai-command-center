@@ -566,6 +566,8 @@ import {
 import { aplicarPosicao, blocoDoArranjoDividido, planoDePosicoes, posicaoGravada, zonaExtraDoTexto } from "./posicao-na-serie.ts";
 // Frente FS (29/09): nenhuma falha termina em silêncio (log com motivo; saldo, cota e chave sobem; aviso onde muda o resultado).
 import { erroQueSobe, nuloComLog, registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) na direção e na conversa do diretor. Nunca no gerador nem na legenda.
+import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 import { defeitoDaImagem } from "../_shared/defeito-da-imagem.ts";
 import { abrirImagemDaPrancha, camposDaFalhaDaPrancha, type FalhaDaPrancha, lerPranchaComMotivo, MOTIVOS_DO_ARQUIVO } from "./leitura-da-prancha.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
@@ -3390,6 +3392,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       }],
       esquemaJson: ESQUEMA_DIRECAO,
       maxTokensSaida: 12_000,
+      metodo: await superpoderesPara(servico(), { agente: "estudio.direcao", momento: existente ? "ajustar" : "gerar" }),
       // Chamada longa (diretor com a base de conhecimento inteira): 5 min antes de desistir.
       timeoutMs: 300_000,
       referencia: { tipo: "estudio_trabalho", id: trabalhoId },
@@ -8208,6 +8211,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const entendimentoP = entenderOPedido(t, mensagem, laminasParaEntender, emFoco, ch.userId);
   const marcaDoTrabalhoP = marcaDe(t.client_id, t).catch(nuloComLog("estudio-arte: marca do trabalho não lida (conversa)", { trabalho_id: t.id }));
   const regrasP = marcaDoTrabalhoP.then((m) => regrasDaMesa(servico() as never, { clientId: t.client_id, mesa: "estudio", marcaId: m ? m.id : null }));
+  // Frente SPP: o Jev escolhe o método da casa do diretor em paralelo com as leituras (nunca lança).
+  const spP = superpoderesPara(servico(), { agente: "estudio.conversa", pedido: mensagem });
   const anexosLidosP = anexosDaConversa.length ? abrirAnexos(t, anexosDaConversa) : Promise.resolve([] as ImagemEntrada[]);
   // Recusa (arquivo quebrado) só é lida mais adiante: marcada como tratada para o Deno não derrubar a função antes.
   anexosLidosP.catch(() => undefined);
@@ -8412,6 +8417,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens }],
     esquemaJson: ESQUEMA_CONVERSA_QUE_APRENDE,
     maxTokensSaida: 6_000,
+    metodo: await spP,
     timeoutMs: 300_000,
     referencia: { tipo: REFERENCIA_DA_CONVERSA, id: t.id },
     criadoPor: ch.userId,
@@ -8451,7 +8457,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
       ...(foto && foto !== SEM_FOTO ? { rotulos: { foto_acervo: rotuloDoValor[foto] || "foto do acervo" } } : {}),
     };
   });
-  const resposta = limparTexto(bruto.resposta, 4000);
+  let resposta = limparTexto(bruto.resposta, 4000);
   const memoriaNova = limparTexto(bruto.memoria, 400);
   // Organizar e executar (reordenar, formato, trocar texto, arquivar versões, refazer...).
   const acaoProposta = comCaminhoDoDiretor(normalizarAcoesDoDiretor(bruto.acoes, t as unknown as TrabalhoParaAcoes), t, mensagem);
@@ -8464,6 +8470,9 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   }
   // Frente RO, fase 2: numa ordem clara, o que não custa é feito agora (com Desfazer); o que custa vira o plano.
   const execucao = await executarOQueNaoCusta(ch, t, { mudancas, acaoProposta, entendimento, perguntar: !!pergunta });
+  // Frente SPP: "pronto" sem nada feito agora ganha o aviso (sem refazer); o método vira a linha "Método:".
+  const fechado = await fecharComMetodo(servico(), { usoId: r.usoId, metodo: await spP, resposta, declarados: bruto.metodos_usados, acaoFeita: !!execucao.feitoAgora });
+  if (resposta) resposta = fechado.resposta;
   // Frente RO, fase 2 (aprender): o pedido ensina? Duradoura vira regra no cérebro (reforça se já existe).
   const marcaDoTrabalho = await marcaDoTrabalhoP;
   const aprendido = await aprenderDoPedido(servico() as never, {
@@ -8491,6 +8500,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
         ...(pergunta ? [pergunta] : []),
         ...(aprendido ? [aprendido] : []),
         ...(segui ? [segui] : []),
+        ...(fechado.anexo ? [fechado.anexo] : []),
         { tipo: "entendimento", pedido: entendimento.tipo, claro: entendimento.claro, alvo: entendimento.alvo, confianca: entendimento.confianca, por: entendimento.por },
         ...imagensDaMensagem,
       ], resposta, t.client_id, mensagem),
@@ -8523,14 +8533,14 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
 }
 
 /** Frente RO, fase 2: o esquema da conversa com os campos do aprendizado (regra aprendida e regras seguidas). */
-const ESQUEMA_CONVERSA_QUE_APRENDE = {
+const ESQUEMA_CONVERSA_QUE_APRENDE = comMetodosUsados({
   ...ESQUEMA_CONVERSA,
   schema: {
     ...ESQUEMA_CONVERSA.schema,
     required: [...ESQUEMA_CONVERSA.schema.required, "regra_aprendida", "regras_seguidas"],
     properties: { ...ESQUEMA_CONVERSA.schema.properties, ...CAMPOS_DO_APRENDIZADO },
   },
-};
+});
 
 /**
  * Frente RO, fase 2: o Jev entende o pedido (ordem clara, opinião ou ambíguo;
@@ -8843,12 +8853,14 @@ async function refinarTexto(ch: Chamador, corpo: Record<string, unknown>) {
   const objetivos = objetivosDoRefino(corpo.objetivos);
   const framework = frameworkPorId(texto(corpo.framework, 40).toLowerCase());
   const pedido = texto(corpo.pedido, 600);
-  const [diretor, contexto, cerebro, marcaDoTexto, perfil] = await Promise.all([
+  const [diretor, contexto, cerebro, marcaDoTexto, perfil, spRefino] = await Promise.all([
     modeloDoPapel("diretor_arte"),
     lerContextoConsolidado(servico(), t.client_id).catch(nuloComLog("estudio-arte: contexto do cliente não lido", { trabalho_id: t.id })),
     resumoDoCerebro(servico(), t.client_id, ["copy", "arte", "campanha"], { limite: 14, titulo: "O QUE ESTE CLIENTE JÁ ENSINOU (cérebro do cliente)" }),
     marcaDe(t.client_id, t),
     servico().from("profiles").select("company_name, full_name").eq("id", t.client_id).maybeSingle(),
+    // Frente SPP (revisão 30/09): o refino é ajuste pedido pela equipe (receber e prova, escolhidos pelo código). Nunca lança.
+    superpoderesPara(servico(), { agente: "estudio.refino", momento: "ajustar" }),
   ]);
   const p = perfil.data as { company_name: string | null; full_name: string | null } | null;
   const r = await chamarTexto({
@@ -8858,6 +8870,7 @@ async function refinarTexto(ch: Chamador, corpo: Record<string, unknown>) {
     modeloId: diretor.id,
     raciocinio: raciocinioPara(diretor, ["low", "medium"]),
     sistema: `${INSTRUCOES_REFINO}\n\n${baseDoRefino()}`,
+    metodo: spRefino,
     mensagens: [{
       papel: "usuario",
       conteudo: JSON.stringify({

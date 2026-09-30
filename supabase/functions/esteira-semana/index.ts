@@ -25,6 +25,8 @@ import { type FeitoAntes, feitosComoTexto, filtrarJaFeitos, lerFeitosAntes } fro
 import { jevPerguntar } from "../_shared/jev.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): a esteira com o método da casa (só a prova; o código escolhe).
+import { registrarMetodoSemUso, superpoderesPara } from "../_shared/superpoderes.ts";
 // O navegador guarda a resposta do preflight (OPTIONS) em vez de perguntar de novo a cada chamada.
 const corsHeaders = { ...corsDoSupabase, "Access-Control-Max-Age": "7200" };
 
@@ -304,7 +306,10 @@ Deno.serve(async (req) => {
     let modeloUsado: string | null = null;
     let reserva: string | null = null;
     try {
-      const escrito = await escreverComModeloDaCentral({ clientId, sistema: SYSTEM_PROMPT, usuario: fatos, escolha, temperatura: 0.3, criadoPor: userData.user.id });
+      const metodoDaEsteira = await superpoderesPara(db, { agente: "rituais.esteira" });
+      const escrito = await escreverComModeloDaCentral({ clientId, sistema: SYSTEM_PROMPT, usuario: fatos, escolha, temperatura: 0.3, criadoPor: userData.user.id, metodo: metodoDaEsteira });
+      // Frente SPP (revisão 30/09): escrito pela reserva (sem linha em ia_usos), o método ainda conta no "Uso em 30 dias".
+      if (escrito && !escrito.usoId) void registrarMetodoSemUso(db, { metodo: metodoDaEsteira, clientId });
       const parsed = escrito ? extractJson(escrito.texto) : null;
       if (escrito) { modeloUsado = escrito.rotulo; reserva = escrito.reserva; }
       if (parsed) {

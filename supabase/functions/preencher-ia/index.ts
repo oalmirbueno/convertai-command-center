@@ -39,6 +39,8 @@ import { lerBaseDaMarca, lerBaseDeDesign } from "../_shared/uiux/consultas.ts";
 import { linhasDoBriefing, limparSegredos } from "../_shared/pacote-externo.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) no Preencher com IA (a prova: campo sem base volta vazio).
+import { superpoderesPara } from "../_shared/superpoderes.ts";
 import {
   type CampoParaPreencher,
   camposAPreencher,
@@ -435,6 +437,7 @@ async function acaoPreencher(ch: Chamador, corpo: Record<string, unknown>): Prom
     pesquisaWeb: web,
     criadoPor: ch.userId,
     maxTokensSaida: tetoDeSaida(alvo),
+    metodo: await superpoderesPara(servico(), { agente: "preencher.campos" }),
   });
 
   const limpa = limparResposta(saida.json, { papel, mapa: esquema.mapa, fontes: lidas, instrucao, contexto, web, substituir, regrasDaBase });

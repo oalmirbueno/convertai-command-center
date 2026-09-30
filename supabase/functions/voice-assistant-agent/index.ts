@@ -67,6 +67,9 @@ import {
   reverterItemDoLancador,
 } from "./acoes-do-lancador.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+// Frente SPP (30/09): o método da casa (superpoderes) no assistente geral, com o teto do agente rápido (1.200).
+import { fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
+import { juntarMetodoAoSistema } from "../_shared/superpoderes-catalogo.ts";
 import { registrarFalha, registrarSeFalhar } from "../_shared/falha-registrada.ts";
 // Frente AG3 (29/09): aprende com o dono (Jev decide se é regra), obedece e devolve "Aprendi"/"Segui".
 import { blocoDasRegras, esquecerRegra, type RegraAtiva, regrasDoAgente, regrasSeguidas } from "../_shared/aprender-com-o-dono.ts";
@@ -897,6 +900,8 @@ Deno.serve(async (req) => {
       }
       // A pergunta livre também ensina ("nunca me mande resumo longo"); a pronta (atalho) não.
       const ehLivre = !PERGUNTAS_PRONTAS[chave];
+      // Frente SPP: o Jev escolhe o método da casa em paralelo com o pré-contexto (nunca lança).
+      const spP = superpoderesPara(supabase, { agente: "assistente.lancador", pedido: pergunta });
       const [pre, regras] = await Promise.all([lerPreContexto(supabase, body.clientId || null, servico, tela), regrasLidas]);
       const aprendizado = ehLivre
         ? aprenderNoServidor(supabase, { texto: pergunta, agente: "geral", clientId: body.clientId || null, donoId: userData.user.id, cliente: pre.clienteNome, contexto: historico.map((x) => x.texto).join(" | ") })
@@ -915,8 +920,10 @@ Deno.serve(async (req) => {
       const erros: string[] = [];
       // O mapa do painel entra na conversa: "onde faço isso?" sai com a área certa e o link.
       const sistemaDaConversa = `${PROMPT_DA_CONVERSA}\n\n${blocoDoMapaDoPainel(AGENTE_DO_LANCADOR)}${blocoDasRegras(regras)}`;
+      const sp = await spP;
+      const sistemaComMetodo = juntarMetodoAoSistema(sistemaDaConversa, sp);
       for (const provider of providers) {
-        const r = await callModel(provider, sistemaDaConversa, pedidoDaConversa);
+        const r = await callModel(provider, sistemaComMetodo, pedidoDaConversa);
         if (!r.ok) { erros.push(`${provider.label}: ${r.status}`); continue; }
         let j: any = null;
         try { j = JSON.parse(r.content); } catch {
@@ -926,9 +933,11 @@ Deno.serve(async (req) => {
         if (j && typeof j.resposta === "string" && j.resposta.trim()) {
           const passos = Array.isArray(j.passos) ? j.passos.map((p: unknown) => String(p)).filter(Boolean).slice(0, 5) : [];
           const irPara = destinoNaResposta(`${j.resposta} ${passos.join(" ")}`, body.clientId || null);
+          // Frente SPP: a conversa não executa nada; "pronto" ganha o aviso (sem refazer) e o método vira a linha "Método:".
+          const fechado = await fecharComMetodo(supabase, { usoId: null, metodo: sp, resposta: j.resposta.trim(), declarados: j.metodos_usados, acaoFeita: false, clientId: body.clientId || null });
           return new Response(JSON.stringify({
-            resposta: j.resposta.trim(), passos, ir_para: irPara ? { ...irPara, direto: false } : null, _model: provider.model,
-            aprendi: await aprendizado, segui: regrasSeguidas(j.regras_seguidas, regras),
+            resposta: fechado.resposta, passos, ir_para: irPara ? { ...irPara, direto: false } : null, _model: provider.model,
+            aprendi: await aprendizado, segui: regrasSeguidas(j.regras_seguidas, regras), metodo: fechado.anexo,
           }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -978,6 +987,9 @@ Deno.serve(async (req) => {
     // Frente AG: pedido explícito com texto (botão Analisar) liga as ações e o
     // caminho para as outras áreas. A análise automática (silenciosa) nunca faz nada.
     const agir = body.agir === true && body.text.trim().length > 0;
+    // Frente SPP: o método da casa só no pedido explícito (agir); a análise automática e silenciosa fica sem.
+    // Revisão 30/09: o Jev do método corre junto com o pré-contexto (antes esperava sozinho, até 3,5 s, depois dele).
+    const spAgirP = agir ? superpoderesPara(supabase, { agente: "assistente.lancador", pedido: body.text }) : Promise.resolve(null);
     const [preContexto, dadosDoLancador] = await Promise.all([
       body.clientId || body.servico || tela
         ? lerPreContexto(supabase, body.clientId || null, servico, tela).then((p) => p.texto)
@@ -992,6 +1004,7 @@ Deno.serve(async (req) => {
       ? aprenderNoServidor(supabase, { texto: body.text, agente: "geral", clientId: body.clientId || null, donoId: userData.user.id, cliente: dadosDoLancador ? dadosDoLancador.cliente.nome : null, contexto: historico.map((x) => x.texto).join(" | ") })
       : Promise.resolve(null);
     const regras = await regrasLidas;
+    const spAgir = await spAgirP;
 
     const userPrompt =
       `${hojeTexto}${agir ? blocoDoHistorico(historico) : ""}\n\n` +
@@ -1002,7 +1015,7 @@ Deno.serve(async (req) => {
       attachmentBlock +
       `\n\nRetorne APENAS o JSON conforme schema, sem markdown.`;
     // O mapa do painel e a regra das ações só entram no pedido explícito (custo por mensagem).
-    const sistema = (agir ? `${SYSTEM_PROMPT}\n\n${REGRA_DO_LANCADOR}\n\n${blocoDoMapaDoPainel(AGENTE_DO_LANCADOR)}` : SYSTEM_PROMPT) + blocoDasRegras(regras);
+    const sistema = juntarMetodoAoSistema((agir ? `${SYSTEM_PROMPT}\n\n${REGRA_DO_LANCADOR}\n\n${blocoDoMapaDoPainel(AGENTE_DO_LANCADOR)}` : SYSTEM_PROMPT) + blocoDasRegras(regras), spAgir);
 
     // Fallback degradado se não há provider configurado.
     if (!providers.length) {
@@ -1089,6 +1102,13 @@ Deno.serve(async (req) => {
           ? r.acao.executada_em ? `Feito: ${r.acao.resumo}` : r.acao.resumo
           : r.destino ? `Isso é na ${r.destino.nome}. Abro para você?` : "";
       }
+      // Frente SPP: "feito" só com a ação executada (só aviso, sem refazer); o método vira a linha "Método:".
+      if (parsed.resposta) {
+        const fechado = await fecharComMetodo(supabase, { usoId: null, metodo: spAgir, resposta: parsed.resposta, declarados: parsed.metodos_usados, acaoFeita: !!(r.acao && r.acao.executada_em), resultados: r.acao ? r.acao.resultados : null, clientId: body.clientId || null });
+        parsed.resposta = fechado.resposta;
+        parsed.metodo = fechado.anexo;
+      }
+      delete parsed.metodos_usados;
       // A ação do cartão substitui as intenções que a tela faria sozinha (nada roda duas vezes).
       const k = String(parsed.intent?.kind || "unknown");
       if ((r.acao && ["unknown", "acao", "create_task", "update_task_status"].indexOf(k) >= 0) || (!r.acao && r.destino && (k === "unknown" || k === "acao"))) {

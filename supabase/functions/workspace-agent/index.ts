@@ -11,6 +11,8 @@ import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import { blocoDoContextoDoCliente, criarContextoDoAgente } from "../_shared/contexto-do-agente.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) no agente do Workspace, pela cadeia ai-provider.
+import { anexoDoMetodo, fecharComMetodo, type MetodoInjetado, superpoderesPara } from "../_shared/superpoderes.ts";
 // Frente AG3 (29/09): o agente do Workspace age (pastas e arquivos, com Desfazer), aprende com o dono e obedece.
 import {
   type AcaoDoAgente,
@@ -476,6 +478,8 @@ Regras absolutas:
     const aprendizadoP = safeClientId && temSinalDeAprendizado(message)
       ? aprenderNoServidor(admin, { texto: String(display_message || message).slice(0, 3000), agente: "workspace", clientId: safeClientId, donoId: user.id, cliente: context?.client_name || null })
       : Promise.resolve(null);
+    // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
+    const spP = superpoderesPara(admin, { agente: "workspace.agente", pedido: String(display_message || message).slice(0, 3000) });
 
     // ─── Frente AG3: organizar o Workspace (criar pasta, renomear, mover, arquivar) vira ação real ───
     if (safeClientId && pareceOrganizar(message)) {
@@ -484,7 +488,7 @@ Regras absolutas:
         return await responderComAcao({
           admin, userId: user.id, threadId: thread_id, threadTitle: thread.title, clientId: safeClientId,
           clientName: context?.client_name || "", mensagem: String(display_message || message), pedidoClaro: julgado.ordem, hoje,
-          regras: await regrasP, aprendizado: aprendizadoP,
+          regras: await regrasP, aprendizado: aprendizadoP, metodo: spP,
         });
       }
     }
@@ -822,12 +826,13 @@ Regras:
 
     let aiRes: Response | null = null;
     let lastStatus = 0; let lastText = "";
+    const sp = await spP;
     try {
       const { response } = await requestAiChatCompletion(providers, (provider) => {
         const payload: Record<string, unknown> = { messages, stream: true };
         if (!/^gpt-5/i.test(provider.model)) payload.temperature = 0.55;
         return payload;
-      });
+      }, fetch, sp);
       if (response.ok && response.body) {
         aiRes = response;
       } else {
@@ -850,6 +855,8 @@ Regras:
 
     // Frente AG3: "Aprendi" deste pedido (o Jev já respondeu enquanto o contexto era lido) vai no cabeçalho e na mensagem.
     const aprendizado = anexosDoAprendizado(await aprendizadoP, null);
+    // Frente SPP: a linha "Método:" já vai no cabeçalho (os métodos que entraram); a prova é conferida no fim do stream.
+    const metodoNoCabecalho = anexoDoMetodo(sp, undefined, null);
 
     // Proxy do stream + captura para persistir
     let full = "";
@@ -889,6 +896,17 @@ Regras:
                 if (delta) { full += delta; controller.enqueue(encoder.encode(delta)); }
               } catch { /* ignore parse */ }
             }
+          }
+          // Frente SPP: o stream não executa nada; "pronto" ou "salvei" ganha o aviso no fim (sem refazer).
+          if (full.trim()) {
+            const fechado = await fecharComMetodo(admin, { usoId: null, metodo: sp, resposta: full, declarados: undefined, acaoFeita: false, clientId: safeClientId });
+            const base = full.trim();
+            if (fechado.resposta.length > base.length && fechado.resposta.indexOf(base) === 0) {
+              const extra = fechado.resposta.slice(base.length);
+              full = `${base}${extra}`;
+              controller.enqueue(encoder.encode(extra));
+            }
+            if (fechado.anexo) aprendizado.push(fechado.anexo);
           }
           // persiste assistente (antes de fechar: quem recarrega logo depois já acha a resposta)
           await gravarResposta(false);
@@ -943,7 +961,7 @@ Regras:
       headers: {
         ...cors,
         "Access-Control-Expose-Headers": "X-Persona-Used, X-Persona-Name, X-Orq-Extra, X-Orq-Reason, X-Web-Queries, X-Aprendizado",
-        ...(aprendizado.length ? { "X-Aprendizado": encodeURIComponent(JSON.stringify(aprendizado)).slice(0, 6000) } : {}),
+        ...(aprendizado.length || metodoNoCabecalho ? { "X-Aprendizado": encodeURIComponent(JSON.stringify(metodoNoCabecalho ? [...aprendizado, metodoNoCabecalho] : aprendizado)).slice(0, 6000) } : {}),
         "Content-Type": "text/plain; charset=utf-8",
         "X-Accel-Buffering": "no",
         "X-Orq-Extra": orq.needs_extra_agent ? "1" : "0",
@@ -982,6 +1000,8 @@ async function responderComAcao(o: {
   hoje: string;
   regras: RegraAtiva[];
   aprendizado: Promise<Awaited<ReturnType<typeof aprenderNoServidor>>>;
+  /** Frente SPP: o método da casa desta mensagem (nunca rejeita). */
+  metodo: Promise<MetodoInjetado | null>;
 }): Promise<Response> {
   const { admin } = o;
   const [nosR, historicoR] = await Promise.all([
@@ -998,6 +1018,7 @@ async function responderComAcao(o: {
   const providers = resolveAiProviderChain({ primaryModels: ["gpt-5-mini", "gpt-4.1"], lovableModels: ["google/gemini-2.5-flash", "openai/gpt-5-mini"] });
   if (!providers.length) return json({ error: "Nenhum provedor de IA configurado" }, 500);
   let bruto: Record<string, unknown> | null = null;
+  const sp = await o.metodo;
   try {
     const { response } = await requestAiChatCompletion(providers, (provider) => ({
       messages: [
@@ -1006,7 +1027,7 @@ async function responderComAcao(o: {
       ],
       ...(/^gpt-5/i.test(provider.model) ? {} : { temperature: 0.1 }),
       response_format: { type: "json_object" },
-    }));
+    }), fetch, sp);
     if (response.ok) {
       const j = await response.json();
       const texto = String(j?.choices?.[0]?.message?.content || "{}");
@@ -1028,7 +1049,18 @@ async function responderComAcao(o: {
     acao = await executarDireto(acao, (item) => executarItemDoWorkspace(admin, o.clientId, item, { userId: o.userId }), { userId: o.userId });
   }
   const aprendizado = anexosDoAprendizado(await o.aprendizado, regrasSeguidas(bruto.regras_seguidas, o.regras));
-  const resposta = String(bruto.resposta || (acao ? (acao.executada_em ? `Feito: ${textoDoResultado(acao.resultados || [])}.` : `${acao.resumo} Está pronto para confirmar.`) : "Certo.")).slice(0, 2000);
+  // Frente SPP: "feito" só com a ação executada (só aviso, sem refazer); o método vira a linha "Método:".
+  const fechado = await fecharComMetodo(admin, {
+    usoId: null,
+    metodo: sp,
+    resposta: String(bruto.resposta || (acao ? (acao.executada_em ? `Feito: ${textoDoResultado(acao.resultados || [])}.` : `${acao.resumo} Está pronto para confirmar.`) : "Certo.")).slice(0, 2000),
+    declarados: bruto.metodos_usados,
+    acaoFeita: !!(acao && acao.executada_em),
+    resultados: acao ? acao.resultados : null,
+    clientId: o.clientId,
+  });
+  const resposta = fechado.resposta;
+  if (fechado.anexo) aprendizado.push(fechado.anexo);
   const { data: gravada, error } = await admin.from("workspace_agent_messages")
     .insert({ thread_id: o.threadId, role: "assistant", content: resposta, meta: { anexos: [...(acao ? [acao] : []), ...aprendizado] } })
     .select("id").single();

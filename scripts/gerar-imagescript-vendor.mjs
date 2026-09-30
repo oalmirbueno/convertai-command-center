@@ -70,6 +70,10 @@ export const ORIGINAIS = {
 
 export const WASM = ["svg", "gif", "png", "font", "jpeg", "tiff", "zlib"];
 
+/** Formatos que nenhuma função usa: o .wasm fica FORA do pacote (svg 1,4 MB e tiff 254 KB em base64
+ * empurravam o estudio-arte acima dos 5 MB de deploy do Supabase). Usar um deles dá erro claro. */
+export const FORA_DO_PACOTE = ["svg", "tiff"];
+
 const BLOCO_DO_FETCH =
   "{\n  const path = new URL(import.meta.url.replace('.js', '.wasm'));\n" +
   "  wasm_mod = new WebAssembly.Module(await ('file:' === path.protocol ? Deno.readFile(path) : fetch(path).then(r => r.arrayBuffer())));\n}\n";
@@ -92,6 +96,20 @@ export function carregadorSemFetch(nome, original) {
 
 /** Módulo com o .wasm em base64 (uma linha) e a leitura dos bytes. */
 export function moduloDoWasm(nome, bytes) {
+  if (FORA_DO_PACOTE.includes(nome)) {
+    return (
+      `// ${nome}.wasm do imagescript@1.3.0 fica fora desta cópia (nenhuma função usa; ver FORA_DO_PACOTE em
+` +
+      `// scripts/gerar-imagescript-vendor.mjs). SHA-256 do original: ${sha256(bytes)} (${bytes.length} bytes).
+` +
+      `export function bytesDoWasm() {
+` +
+      `  throw new Error("imagescript: o formato ${nome} não está incluído na cópia local (scripts/gerar-imagescript-vendor.mjs)");
+` +
+      `}
+`
+    );
+  }
   return (
     `// ${nome}.wasm do imagescript@1.3.0 (MIT), em base64. Gerado por scripts/gerar-imagescript-vendor.mjs.\n` +
     `// SHA-256 do .wasm: ${sha256(bytes)} (${bytes.length} bytes).\n` +

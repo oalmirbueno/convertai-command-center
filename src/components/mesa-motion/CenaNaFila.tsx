@@ -2,7 +2,7 @@ import { Loader2, Square } from "lucide-react";
 import { botao, juntar, texto } from "@/components/sistema/estilos";
 import { ROTULO_DA_ETAPA, type EtapaDoRender } from "../../../supabase/functions/_shared/render-do-editor";
 import { chaveDoPedido, type ModoDoPedidoDaCena, renderDaCena } from "../../../supabase/functions/_shared/motion-metodo";
-import type { CenaDoFilme, FormatoDoMotion } from "../../../supabase/functions/_shared/cena-hf";
+import { provaDoRender, type CenaDoFilme, type FormatoDoMotion } from "../../../supabase/functions/_shared/cena-hf";
 import { erroDaChave, type FilaDoFilme, type Filme, pedidoAtivoDaChave } from "./motionApi";
 
 /**
@@ -35,6 +35,8 @@ export default function CenaNaFila({
   const pronto = renderDaCena(filme, cena, modo, formato);
   const url = pronto && pronto.saida_path ? links[pronto.saida_path] : null;
   const folha = pronto && pronto.folha_path ? links[pronto.folha_path] : null;
+  // SPM: a prova da cena é a do worker (lint e check do HyperFrames), ao lado do still ou do render.
+  const prova = pronto ? provaDoRender(pronto.check) : null;
   const deitado = formato === "16:9";
   return (
     <div className="min-w-0" data-cena-na-fila={`${modo}:${formato}`}>
@@ -43,6 +45,7 @@ export default function CenaNaFila({
         <video src={url} controls playsInline loop className={juntar("block rounded-md border border-border bg-muted", deitado ? "w-full max-w-[420px]" : "w-full max-w-[220px]")} />
       )}
       {folha && !compacta && <img src={folha} alt="Folha de contato em tamanho de celular" className="mt-2 block w-full max-w-[560px] rounded-md" />}
+      {prova && <p className={juntar(texto.auxiliar, "mt-1")} data-prova-da-cena="">{prova}</p>}
       {pronto && !pronto.em_dia && <p className={juntar(texto.auxiliar, "mt-1 text-warning")}>A cena mudou depois deste {modo === "still" ? "still" : "render"}.</p>}
       {ativo && (
         <p className={juntar(texto.auxiliar, "mt-1 flex items-center")}>

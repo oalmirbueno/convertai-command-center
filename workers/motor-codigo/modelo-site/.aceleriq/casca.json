@@ -1,8 +1,10 @@
 {
-  "versao": 3,
+  "versao": 4,
   "arquivos": [
     "AGENTS.md",
+    ".gitignore",
     "index.html",
+    "vite.config.ts",
     "scripts/prerender.mjs",
     "scripts/seo.mjs",
     "scripts/conferir.mjs",

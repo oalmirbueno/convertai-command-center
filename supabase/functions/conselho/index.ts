@@ -36,6 +36,8 @@ import { criarContextoDoAgente } from "../_shared/contexto-do-agente.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { erroQueSobe, registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) nos especialistas e na síntese do conselho.
+import { superpoderesPara } from "../_shared/superpoderes.ts";
 import { gravarTroca } from "../_shared/conversa-das-mesas.ts";
 import { MODOS, modoDe, type ModoDoConselho } from "./modulos/conselho-presets.ts";
 import { arquivarElenco, ataEmPdf, type CtxDoConselho, elencos, pautaComAnexos, salvarElenco } from "./extras.ts";
@@ -280,6 +282,10 @@ function dependencias(ch: Chamador, modelos: Map<string, ModeloIa>, sessaoDoJev:
         esquemaJson: p.esquema || undefined,
         referencia: { tipo: "conselho_fala", id: p.fala.id },
         criadoPor: ch.userId,
+        // A síntese junta frentes e revisa ("Decidi" e "O que não julguei"); cada especialista, parecer com prova.
+        metodo: await superpoderesPara(servico(), p.etapa === "consolidacao"
+          ? { agente: "conselho.sintese", momento: "lote" }
+          : { agente: "conselho.especialista", momento: p.etapa === "critica" || p.etapa === "revisao" ? "revisar" : "gerar" }),
       });
       return { json: r.json, texto: r.texto, custoUsd: r.custoUsd, usoId: r.usoId };
     },
@@ -561,6 +567,7 @@ async function perguntar(ch: Chamador, corpo: Record<string, unknown>) {
     const r = await chamarTexto({
       clientId: sessao.client_id, tarefa: TAREFA, agente: AGENTE, modeloId, sistema: p.sistema + blocoDasRegras, mensagens: [{ papel: "usuario", conteudo: p.mensagem }],
       raciocinio: raciocinioPara(modelos.get(modeloId)), referencia: { tipo: "conselho_fala", id: fala.id }, criadoPor: ch.userId,
+      metodo: await superpoderesPara(servico(), { agente: "conselho.especialista", momento: "revisar" }),
     });
     const agora = new Date().toISOString();
     const { data: feita, error: e2 } = await servico().from("conselho_falas").update({

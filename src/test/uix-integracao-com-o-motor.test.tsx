@@ -90,12 +90,13 @@ describe("uma integração só com o motor", () => {
     for (const k of Object.keys(b)) expect(tipo, k).toMatch(new RegExp(`\\n\\s+${k}\\??:`));
   });
 
-  it("uma casca v3 com a união das listas (embrulho da busca, Grafico, seo e o pacote com a base)", () => {
+  it("uma casca v4 com a união das listas (embrulho da busca, Grafico, seo, o pacote com a base e, do superpowers, .gitignore e vite.config)", () => {
     const casca = lerCasca(MODELO_DO_SITE)!;
-    expect(casca.versao).toBe(3);
-    expect(casca.arquivos).toEqual(expect.arrayContaining(["scripts/uiux.mjs", "src/lib/Grafico.tsx", "scripts/seo.mjs", "scripts/prerender.mjs", "src/lib/pacote.ts"]));
+    // Integração UIM + SPM (30/09): as duas frentes subiram para a v3 com listas diferentes; a união é a v4.
+    expect(casca.versao).toBe(4);
+    expect(casca.arquivos).toEqual(expect.arrayContaining(["scripts/uiux.mjs", "src/lib/Grafico.tsx", "scripts/seo.mjs", "scripts/prerender.mjs", "src/lib/pacote.ts", ".gitignore", "vite.config.ts"]));
     expect(casca.arquivos.filter((a, i, l) => l.indexOf(a) !== i)).toEqual([]);
-    // A casca das mesas não sobe outra versão por conta própria: é a mesma v3 do motor.
+    // A casca das mesas não sobe outra versão por conta própria: é a mesma do motor.
     expect(ler("workers/motor-codigo/modelo-site/.aceleriq/casca.json").match(/"versao"/g) || []).toHaveLength(1);
   });
 });

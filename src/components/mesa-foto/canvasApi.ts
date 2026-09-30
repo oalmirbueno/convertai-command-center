@@ -95,7 +95,12 @@ export interface HistoriaDoCanvas {
 export interface MensagemDoAgente {
   papel: "usuario" | "agente";
   texto: string;
+  /** Frente SPP (revisão 30/09): o anexo "Método:" da resposta do agente (metodo_usado). */
+  metodo?: unknown;
 }
+
+/** O anexo do método só quando tem a forma que o servidor grava (a tela confere de novo ao mostrar). */
+const metodoDoAnexo = (v: unknown): unknown => (v && typeof v === "object" && (v as { tipo?: unknown }).tipo === "metodo_usado" ? v : null);
 
 export interface DadosDoNo {
   /** Nome guardado no cartão (produto de outro cliente, pessoa real). */
@@ -420,7 +425,11 @@ function normalizarDados(tipo: TipoDeNo, v: any): DadosDoNo {
   if (tipo === "agente") {
     saida.pedido = texto(d.pedido);
     saida.mensagens = (Array.isArray(d.mensagens) ? d.mensagens : [])
-      .map((m: any) => ({ papel: (m && m.papel === "agente" ? "agente" : "usuario") as MensagemDoAgente["papel"], texto: texto(m && m.texto) }))
+      .map((m: any) => {
+        const papel = (m && m.papel === "agente" ? "agente" : "usuario") as MensagemDoAgente["papel"];
+        const metodo = papel === "agente" ? metodoDoAnexo(m && m.metodo) : null;
+        return { papel, texto: texto(m && m.texto), ...(metodo ? { metodo } : {}) };
+      })
       .filter((m: MensagemDoAgente) => !!m.texto)
       .slice(-24);
   }
@@ -1072,6 +1081,8 @@ export interface RespostaDoAgenteDoCanvas {
   kit_id: string | null;
   modelo_id: string | null;
   custo_usd: number | null;
+  /** Frente SPP: a linha "Método:" desta resposta (vem só quando o servidor manda). */
+  metodo?: unknown;
 }
 
 export function normalizarRespostaDoAgente(data: any): RespostaDoAgenteDoCanvas {
@@ -1088,6 +1099,7 @@ export function normalizarRespostaDoAgente(data: any): RespostaDoAgenteDoCanvas 
     kit_id: ou(d.kit_id),
     modelo_id: ou(d.modelo_id),
     custo_usd: d.custo_usd === undefined || d.custo_usd === null ? null : numero(d.custo_usd),
+    ...(metodoDoAnexo(d.metodo) ? { metodo: d.metodo } : {}),
   };
 }
 
@@ -1113,7 +1125,7 @@ export function aplicarRespostaDoAgente(c: Canvas, agenteId: string, mensagem: s
   if (!agente) return c;
   const conversa = (agente.dados.mensagens || [])
     .concat(mensagem.trim() ? [{ papel: "usuario" as const, texto: mensagem.trim() }] : [])
-    .concat([{ papel: "agente" as const, texto: r.resposta }])
+    .concat([{ papel: "agente" as const, texto: r.resposta, ...(r.metodo ? { metodo: r.metodo } : {}) }])
     .slice(-24);
   let novo = mudarDados(c, agenteId, { mensagens: conversa, pedido: r.pedido || agente.dados.pedido || "" });
   c.ligacoes

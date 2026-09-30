@@ -162,10 +162,10 @@ interface AcaoDoServidor {
   aprendizado?: unknown[];
 }
 
-/** Frente AG3: os anexos "Aprendi" e "Segui" que a função devolveu (formato comum das mesas). */
+/** Frente AG3: os anexos "Aprendi" e "Segui" que a função devolveu (formato comum das mesas); frente SPP: e o "Método". */
 function anexosDoAprendizado(d: unknown): unknown[] {
-  const x = (d || {}) as { aprendi?: unknown; segui?: unknown };
-  return [x.aprendi, x.segui].filter((a) => a && typeof a === "object");
+  const x = (d || {}) as { aprendi?: unknown; segui?: unknown; metodo?: unknown };
+  return [x.aprendi, x.segui, x.metodo].filter((a) => a && typeof a === "object");
 }
 
 /** Classes do painel: gaveta em tela cheia no celular, coluna fixa à direita no computador (abaixo da barra do topo). */

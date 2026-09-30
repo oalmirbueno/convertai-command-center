@@ -240,6 +240,8 @@ import {
 } from "./diagnostico.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) nas conversas e nas gerações do Mês e das campanhas.
+import { comMetodosUsados, fecharComMetodo, type Momento, superpoderesPara } from "../_shared/superpoderes.ts";
 // Frente AG1 (29/09): o agente aprende com cada pedido (regra duradoura pelo Jev) e diz as regras que seguiu.
 import { anexoDasRegrasSeguidas, blocoDasRegras, esquemaComAprendizado, REGRA_DO_APRENDIZADO_NO_PROMPT, regraDoModelo, regrasSeguidasDoModelo } from "../_shared/aprendizado-do-pedido.ts";
 import { aprenderComOPedido, lerRegrasDoDono } from "../_shared/aprendizado-nos-agentes.ts";
@@ -1281,6 +1283,15 @@ function sistemaDoCalendario(ctx: Pick<Contexto, "prompt">, momento: MomentoDoCa
   return `${ctx.prompt}\n\n${CONHECIMENTO_DO_CALENDARIO[momento]}\n${REGRAS_DE_SAIDA}`;
 }
 
+/**
+ * Frente SPP (30/09): o método da casa nas gerações do Mês e das campanhas (o
+ * código escolhe: critério de aceite e prova). Nunca lança; a chave da mesa
+ * fica em cache de 60 s, então não soma espera.
+ */
+function metodoDaGeracao(servico: SupabaseClient, momento: Momento = "gerar") {
+  return superpoderesPara(servico, { agente: "calendario.gerar", momento });
+}
+
 /** Frentes do propor_temas em paralelo: uma por fase, com a parte de temas de cada uma. */
 const FRENTES_DE_TEMAS: Array<{ fase: "1" | "2" | "3"; parte: number }> = [
   { fase: "1", parte: 0.3 },
@@ -1561,6 +1572,7 @@ async function pesquisaDoMes(
       modeloId: e.modeloId,
       timeoutMs: TIMEOUT_CALENDARIO_MS,
       sistema: sistemaDoCalendario(e.ctx, "diagnostico"),
+      metodo: await metodoDaGeracao(servico),
       mensagens: [{ papel: "usuario", conteudo: `${e.contexto}\n\n${pedido}` }],
       raciocinio: e.raciocinio,
       pesquisaWeb: true,
@@ -1785,6 +1797,7 @@ ${blocoEditorial}`;
       modeloId: modelo.id,
       timeoutMs: TIMEOUT_CALENDARIO_MS,
       sistema: sistemaDoCalendario(ctx, "temas"),
+      metodo: await metodoDaGeracao(servico),
       mensagens: [{ papel: "usuario", conteudo: instrucaoDa(f, k === 0) }],
       raciocinio,
       pesquisaWeb: true,
@@ -2023,6 +2036,7 @@ Regras dos itens:
       modeloId: modelo.id,
       timeoutMs: TIMEOUT_CALENDARIO_MS,
       sistema: sistemaDoCalendario(ctx, "mes"),
+      metodo: await metodoDaGeracao(servico),
       mensagens: [{ papel: "usuario", conteudo: pedido }],
       raciocinio,
       esquemaJson: ESQUEMA_ITENS,
@@ -2105,6 +2119,8 @@ async function conversar(servico: SupabaseClient, chamador: Chamador, corpo: Rec
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva o ajuste que você quer na proposta.");
 
   const uteis = diasUteisDaProposta(p);
+  // Frente SPP: o Jev escolhe o método da casa em paralelo com a leitura do contexto (nunca lança).
+  const spP = superpoderesPara(servico, { agente: "calendario.conversa", pedido: mensagem });
   const ctx = await montarContexto(servico, p.client_id, p.periodo_inicio, p.periodo_fim, await marcaDaChamada(servico, p.client_id, corpo, p.project_id));
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id ?? p.parametros.modelo, corpo.raciocinio ?? p.parametros.raciocinio);
   const conversaId = await garantirConversa(servico, p, chamador.userId);
@@ -2147,6 +2163,7 @@ Datas só de segunda a sexta entre ${p.periodo_inicio} e ${p.periodo_fim}. Forma
     esquemaJson: ESQUEMA_CONVERSA,
     referencia: { tipo: REF_TIPO, id: p.id },
     criadoPor: chamador.userId,
+    metodo: await spP,
   });
 
   const r = (saida.json ?? {}) as Record<string, unknown>;
@@ -2213,12 +2230,15 @@ Datas só de segunda a sexta entre ${p.periodo_inicio} e ${p.periodo_fim}. Forma
   }
 
   const atualizada = Object.keys(campos).length ? await salvarProposta(servico, p, campos) : p;
-  const resposta = [texto(r.resposta, 4000) || "Ajuste aplicado.", ...ajustes].join("\n");
+  // Frente SPP: a prova confere se o que a resposta diz feito foi mesmo aplicado (só aviso).
+  const fechado = await fecharComMetodo(servico, { usoId: saida.usoId, metodo: await spP, resposta: [texto(r.resposta, 4000) || "Ajuste aplicado.", ...ajustes].join("\n"), declarados: undefined, acaoFeita: Object.keys(campos).length > 0 });
+  const resposta = fechado.resposta;
+  // Revisão 30/09: o anexo "Método:" vai gravado com a mensagem do agente e na resposta (a conversa da proposta mostra).
   await registrarMensagens(servico, conversaId, p.client_id, [
     { papel: "usuario", conteudo: mensagem },
-    { papel: "agente", conteudo: resposta, uso_id: saida.usoId },
+    { papel: "agente", conteudo: resposta, uso_id: saida.usoId, anexos: fechado.anexo ? [fechado.anexo] : undefined },
   ]);
-  return json({ proposta: atualizada, resposta, custo_usd: Math.round((saida.custoUsd + custoJev) * 1e6) / 1e6, saldo_usd: saida.saldoUsd, reserva_usada: saida.reservaUsada ?? null });
+  return json({ proposta: atualizada, resposta, metodo: fechado.anexo, custo_usd: Math.round((saida.custoUsd + custoJev) * 1e6) / 1e6, saldo_usd: saida.saldoUsd, reserva_usada: saida.reservaUsada ?? null });
 }
 
 // ------------------------------------------------------------ gravar
@@ -2689,6 +2709,7 @@ Regras dos itens:
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
     sistema: sistemaDoCalendario(ctx, "mes"),
+    metodo: await metodoDaGeracao(servico),
     mensagens: [{ papel: "usuario", conteudo: pedido }],
     raciocinio,
     esquemaJson: ESQUEMA_ITENS,
@@ -3519,6 +3540,7 @@ ${REGRAS_DOS_ITENS}`;
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
     sistema: sistemaDoCalendario(ctx, "mes"),
+    metodo: await metodoDaGeracao(servico),
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
     raciocinio,
     esquemaJson: ESQUEMA_PEDIDO,
@@ -3664,6 +3686,7 @@ ${REGRAS_DOS_ITENS}`;
     modeloId: rapido.modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
     sistema: sistemaDoCalendario(ctx, "mes"),
+    metodo: await metodoDaGeracao(servico),
     mensagens: [{ papel: "usuario", conteudo: pedido }],
     raciocinio: rapido.raciocinio,
     esquemaJson: ESQUEMA_RAPIDO,
@@ -3867,6 +3890,7 @@ ${REGRAS_DOS_ITENS}`;
     modeloId: escolhido.modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
     sistema: sistemaDoCalendario(ctx, "mes"),
+    metodo: await metodoDaGeracao(servico),
     mensagens: [{ papel: "usuario", conteudo: pedido }],
     raciocinio: escolhido.raciocinio,
     esquemaJson: ESQUEMA_ITENS,
@@ -4021,6 +4045,7 @@ ${REGRAS_DOS_ITENS}`;
       modeloId: modelo.id,
       timeoutMs: TIMEOUT_CALENDARIO_MS,
       sistema: sistemaDoCalendario(ctx, "campanha"),
+      metodo: await metodoDaGeracao(servico),
       mensagens: [{ papel: "usuario", conteudo: pedido }],
       raciocinio,
       esquemaJson: ESQUEMA_ITENS,
@@ -4172,6 +4197,7 @@ Nada de assunto político, tragédia ou polêmica que exponha a marca. Nunca inv
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
     sistema: sistemaDoCalendario(ctx, "mes"),
+    metodo: await metodoDaGeracao(servico),
     mensagens: [{ papel: "usuario", conteudo: pedido }],
     raciocinio,
     pesquisaWeb: true,
@@ -4380,6 +4406,7 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
     sistema: sistemaDoCalendario(ctx, "campanha"),
+    metodo: await metodoDaGeracao(servico),
     mensagens: [{ papel: "usuario", conteudo: pedido, imagens: imagensDaChamada.length ? imagensDaChamada : undefined }],
     raciocinio,
     esquemaJson: ESQUEMA_CAMPANHA,
@@ -4523,6 +4550,7 @@ async function campanhaAjustar(servico: SupabaseClient, chamador: Chamador, corp
     mensagens: [{ papel: "usuario", conteudo: `CAMPANHA ATUAL:\n${JSON.stringify(resumoDaCampanha(c))}\n\nPEDIDO: ${mensagem}\n\nDevolva a campanha completa atualizada (nome, objetivo, conceito, identidade, briefing) e em resposta o que mudou.` }],
     raciocinio,
     esquemaJson: ESQUEMA_AJUSTE_CAMPANHA,
+    metodo: await metodoDaGeracao(servico, "ajustar"),
     referencia: { tipo: "mesa_campanha", id: c.id },
     criadoPor: chamador.userId,
   });
@@ -4605,6 +4633,8 @@ async function conversaDaCampanha(servico: SupabaseClient, c: Campanha, userId: 
  * conteúdos da proposta ligada (muda, acrescenta ou tira). Conteúdo já gravado
  * na agenda não muda por aqui: a resposta diz para ajustar no Estúdio.
  */
+const ESQUEMA_CONVERSA_CAMPANHA_COM_METODO = comMetodosUsados(ESQUEMA_CONVERSA_CAMPANHA);
+
 async function campanhaConversar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const c = await carregarCampanha(servico, corpo.campanha_id);
   await exigirAcessoAoCliente(chamador, c.client_id);
@@ -4624,6 +4654,8 @@ async function campanhaConversar(servico: SupabaseClient, chamador: Chamador, co
   // Com o que já está na agenda protegido item a item, a conversa pode mudar e acrescentar o resto.
   const podeMudarItens = !!proposta && proposta.status !== "descartada";
 
+  // Frente SPP: o método da casa da conversa da campanha, escolhido pelo Jev em paralelo (nunca lança).
+  const spCampanhaP = superpoderesPara(servico, { agente: "calendario.conversa", pedido: mensagem });
   const [ctx, anexos, conversaId, fotosDaCamp] = await Promise.all([
     montarContexto(servico, c.client_id, inicio, fim, marcaDaChamada(servico, c.client_id, corpo)),
     baixarAnexos(servico, c.client_id, corpo.anexos),
@@ -4675,9 +4707,10 @@ ${REGRAS_DOS_ITENS}`;
     sistema: sistemaDoCalendario(ctx, "campanha", "conversa"),
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
     raciocinio,
-    esquemaJson: ESQUEMA_CONVERSA_CAMPANHA,
+    esquemaJson: ESQUEMA_CONVERSA_CAMPANHA_COM_METODO,
     referencia: { tipo: REF_CAMPANHA, id: c.id },
     criadoPor: chamador.userId,
+    metodo: await spCampanhaP,
   });
   const r = (s.json ?? {}) as Record<string, unknown>;
 
@@ -4755,13 +4788,22 @@ ${REGRAS_DOS_ITENS}`;
   });
   const anexoSeguidas = anexoDasRegrasSeguidas(regrasSeguidasDoModelo(r.seguiu, regras));
 
-  const resposta = respostaComAvisos(texto(r.resposta, 2000) || (feita ? feita.resumo : doSelo.acao ? doSelo.acao.resumo : "Nada mudou na campanha."), [anexos.aviso, avisoDasRecusas, doSelo.aviso]);
+  const fechadoDaCampanha = await fecharComMetodo(servico, {
+    usoId: s.usoId,
+    metodo: await spCampanhaP,
+    resposta: respostaComAvisos(texto(r.resposta, 2000) || (feita ? feita.resumo : doSelo.acao ? doSelo.acao.resumo : "Nada mudou na campanha."), [anexos.aviso, avisoDasRecusas, doSelo.aviso]),
+    declarados: r.metodos_usados,
+    acaoFeita: !!feita || !!(doSelo.acao && (doSelo.acao as { executada_em?: unknown }).executada_em),
+    resultados: feita ? feita.resultados : null,
+  });
+  const resposta = fechadoDaCampanha.resposta;
   const anexosDoAgente: unknown[] = [];
   if (conteudosMudaram && propostaFinal) anexosDoAgente.push({ proposta_id: propostaFinal.id });
   if (feita) anexosDoAgente.push(feita);
   if (doSelo.acao) anexosDoAgente.push(doSelo.acao);
   if (aprendizado.anexo) anexosDoAgente.push(aprendizado.anexo);
   if (anexoSeguidas) anexosDoAgente.push(anexoSeguidas);
+  if (fechadoDaCampanha.anexo) anexosDoAgente.push(fechadoDaCampanha.anexo);
   await registrarMensagens(servico, conversaId, c.client_id, [
     { papel: "usuario", conteudo: mensagem, anexos: anexos.caminhos.map((x) => ({ caminho: x })) },
     { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: anexosDoAgente },
@@ -4964,6 +5006,7 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
     mensagens: [{ papel: "usuario", conteudo: pedido, imagens }],
     raciocinio,
     esquemaJson: { nome: "plano_de_imagens", schema: ESQUEMA_PLANO_IMAGENS },
+    metodo: await metodoDaGeracao(servico),
     referencia: { tipo: REF_CAMPANHA, id: c.id },
     criadoPor: chamador.userId,
   });
@@ -5599,6 +5642,8 @@ export function fraseDaTroca(acao: AcaoComAlvo | null): string {
  * (criar_conteudos) e a troca do público do contexto chegam como cartões:
  * nada muda sem a equipe confirmar.
  */
+const ESQUEMA_PLANEJAMENTO_COM_METODO = comMetodosUsados(ESQUEMA_PLANEJAMENTO);
+
 async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
@@ -5609,6 +5654,8 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
   const inicio = `${mes}-01`;
   const fim = fimDoMes(mes);
   const hoje = hojeSaoPaulo();
+  // Frente SPP: o Jev escolhe o método da casa do Agente do Mês em paralelo com as leituras (nunca lança).
+  const spMesP = superpoderesPara(servico, { agente: "calendario.conversa", pedido: mensagem });
   const mesDeHoje = hoje.slice(0, 7);
   const arquivos = normalizarArquivos(corpo.arquivos);
 
@@ -5752,9 +5799,10 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     raciocinio,
     // Lista longa de conteúdos (criar_conteudos, editar_textos) cabe inteira na resposta.
     maxTokensSaida: 48_000,
-    esquemaJson: ESQUEMA_PLANEJAMENTO,
+    esquemaJson: ESQUEMA_PLANEJAMENTO_COM_METODO,
     referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId },
     criadoPor: chamador.userId,
+    metodo: await spMesP,
   });
   const r = (s.json ?? {}) as Record<string, unknown>;
 
@@ -5802,7 +5850,15 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
 
   // Imagem anexada que ficou de fora (anti-bug 26/09, AB2): a equipe lê o aviso na resposta.
   // Frente AM: com "Qual delas?" ou a troca preparada pelo painel, a fala diz o que fazer no cartão.
-  const resposta = respostaComAvisos(respostaComAvisos(texto(r.resposta, 6000) || "Anotado.", [imagens.aviso]), [fraseDaTroca(acaoNaAgenda)]);
+  // Frente SPP: tudo aqui é proposta com Confirmar; "pronto" sem ação ganha o aviso e o método vira a linha "Método:".
+  const fechadoDoMes = await fecharComMetodo(servico, {
+    usoId: s.usoId,
+    metodo: await spMesP,
+    resposta: respostaComAvisos(respostaComAvisos(texto(r.resposta, 6000) || "Anotado.", [imagens.aviso]), [fraseDaTroca(acaoNaAgenda)]),
+    declarados: r.metodos_usados,
+    acaoFeita: false,
+  });
+  const resposta = fechadoDoMes.resposta;
   const anexosDaResposta: Record<string, unknown>[] = planos.map((p) => ({ tipo: "plano", mes: p.mes }));
   if (mudanca) anexosDaResposta.push(mudanca);
   // 29/09: o pedido do dono vai junto: o refazer em lotes usa as palavras dele como orientação
@@ -5837,6 +5893,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   if (aprendizado.anexo) anexosDaResposta.push(aprendizado.anexo as unknown as Record<string, unknown>);
   const anexoSeguidas = anexoDasRegrasSeguidas(regrasSeguidasDoModelo(r.seguiu, regras));
   if (anexoSeguidas) anexosDaResposta.push(anexoSeguidas as unknown as Record<string, unknown>);
+  if (fechadoDoMes.anexo) anexosDaResposta.push(fechadoDoMes.anexo as unknown as Record<string, unknown>);
 
   const caminhoDaLeitura = await guardarLeitura(servico, clientId, arquivos.lidos);
   await registrarMensagens(servico, conversaId, clientId, [

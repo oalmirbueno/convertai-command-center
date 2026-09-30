@@ -15,7 +15,7 @@ importar de deno.land levou de 3,4 a 5,2 s (7 downloads); esta cópia, de 54 a 2
 - Todo o JS é o original, byte a byte (SHA-256 conferido contra o `deno.lock` do repositório).
 - Só os 7 carregadores `utils/wasm/{svg,gif,png,font,jpeg,tiff,zlib}.js` mudaram: o bloco que fazia
   `fetch(import.meta.url...)` saiu, e o `.wasm` vem de `./<nome>.wasm.js` (base64) e é compilado
-  na primeira vez que aquele formato é usado. Quem só lê JPEG e PNG não compila SVG, fonte, TIFF nem GIF.
+  na primeira vez que aquele formato é usado. Quem só lê JPEG e PNG não compila SVG, fonte, TIFF nem GIF. SVG e TIFF ficam fora da cópia (nenhuma função usa; o pacote do estudio-arte passava dos 5 MB de deploy): usar um deles dá erro claro.
 - `utils/wasm/base64.js` é nosso: base64 para bytes com `atob`.
 - Os bytes de saída são os mesmos do original (JPEG 85, PNG, decodificação e redução conferidos em
   `supabase/functions/_shared/imagescript_test.ts`).

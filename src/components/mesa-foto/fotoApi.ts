@@ -2259,7 +2259,7 @@ export async function conversarComDiretor(p: {
     caminho: caminhoSeguro(data && data.caminho),
     opcoes: normalizarOpcoesDoDiretor(data && data.opcoes),
     aviso_registro: textoOuNulo(data && data.aviso_registro),
-    anexos: [data && data.aprendido, data && data.regras_seguidas].filter((a) => !!a && typeof a === "object"),
+    anexos: [data && data.aprendido, data && data.regras_seguidas, data && data.metodo_usado].filter((a) => !!a && typeof a === "object"),
     contexto_do_diretor:
       data && data.contexto_do_diretor && typeof data.contexto_do_diretor === "object"
         ? { resumo: texto(data.contexto_do_diretor.resumo), foco_rotulo: texto(data.contexto_do_diretor.foco_rotulo), leituras_feitas: Number(data.contexto_do_diretor.leituras_feitas) || 0 }

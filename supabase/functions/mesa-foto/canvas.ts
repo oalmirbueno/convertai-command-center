@@ -127,6 +127,8 @@ import { garantirPermitido, identidadesDaVista, NIVEIS_PELE, personaUsavel } fro
 import { FORMATOS, type Formato, TAMANHO_DO_FORMATO } from "./receitas.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (revisão 30/09): o agente do Canvas conversa com a equipe e recebe o método da casa (a conferência do canvas não).
+import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 
 export const REF_CANVAS = "foto_canvas";
 /** Padrão do Canvas (pesquisa, seção 4.3): GPT Image 2.5 Sunburst em qualidade alta. */
@@ -1050,6 +1052,13 @@ Nunca peça pessoa parecida com alguém real, nunca menor de idade, nunca sexual
     const mensagem = limpo(corpo.mensagem, 4000);
     if (!mensagem && tarefa === "conversar") throw new ErroDeRegra(400, "mensagem_vazia", "Escreva a mensagem para o agente.");
     if (mensagem) garantirPermitido(mensagem);
+    const pedidoPadrao = tarefa === "ambiente"
+      ? "Descreva um ambiente realista para este cliente e esta foto."
+      : tarefa === "montar"
+      ? "Monte o quadro pelo contexto do cliente: escolha o modelo pronto, o produto, a pessoa, o ambiente e escreva o pedido."
+      : mensagem;
+    // Frente SPP: o Jev escolhe o método (entender, receber, causa e prova; sem laço de correção) junto com as leituras. Nunca lança.
+    const spP = superpoderesPara(db(), { agente: "foto.canvas", pedido: mensagem || pedidoPadrao });
     let saida: NoCanvas | null = null;
     try {
       saida = escolherSaida(c, lerPedidoDoCanvas(corpo).no_saida_id);
@@ -1124,26 +1133,25 @@ Nunca peça pessoa parecida com alguém real, nunca menor de idade, nunca sexual
         },
       },
     };
-    const pedidoPadrao = tarefa === "ambiente"
-      ? "Descreva um ambiente realista para este cliente e esta foto."
-      : tarefa === "montar"
-      ? "Monte o quadro pelo contexto do cliente: escolha o modelo pronto, o produto, a pessoa, o ambiente e escreva o pedido."
-      : mensagem;
     const lido = await chamarTexto({
       clientId: c.client_id,
       tarefa: "estudio",
       agente: "diretor_arte",
       modeloId: modelo.id,
       sistema: `${SISTEMA_AGENTE_CANVAS}\n\n${blocoDoMapaDoPainel("foto", { nivel: "minimo" })}\n\nDADOS REAIS:\n${JSON.stringify(dados)}`,
+      metodo: await spP,
       mensagens: [...historicoDoAgente(corpo.historico), { papel: "usuario", conteudo: mensagem || pedidoPadrao, imagens: foto ? [foto] : undefined }],
-      esquemaJson: esquema,
+      esquemaJson: comMetodosUsados(esquema),
       maxTokensSaida: 4_000,
       timeoutMs: 300_000,
       referencia: { tipo: REF_CANVAS, id: c.id },
       criadoPor: ch.userId,
     });
     const r = respostaDoAgente(lido.json, { kits: kits.map((k) => k.id), modelos: personas.map((p) => p.id), modelosProntos: CHAVES_DOS_MODELOS_PRONTOS, formatos });
-    return f.json({ ...r, tarefa, no_saida_id: saida ? saida.id : null, custo_usd: arred6(lido.custoUsd), saldo_usd: lido.saldoUsd });
+    // A conversa não grava o canvas (a tela aplica o pedido): "pronto" ganha o aviso, sem refazer; a linha "Método:" vai na resposta.
+    const declarados = lido.json && typeof lido.json === "object" ? (lido.json as { metodos_usados?: unknown }).metodos_usados : undefined;
+    const fechado = await fecharComMetodo(db(), { usoId: lido.usoId, metodo: await spP, resposta: r.resposta, declarados, acaoFeita: false, clientId: c.client_id });
+    return f.json({ ...r, resposta: fechado.resposta, metodo: fechado.anexo, tarefa, no_saida_id: saida ? saida.id : null, custo_usd: arred6(lido.custoUsd), saldo_usd: lido.saldoUsd });
   }
 
   /** estimar { acao_alvo: 'canvas_gerar', canvas_id, no_saida_id?, modelo_imagem_id?, qualidade?, resolucao?, motores? } */

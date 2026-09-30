@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ORIGINAIS, WASM } from "../../scripts/gerar-imagescript-vendor.mjs";
+import { FORA_DO_PACOTE, ORIGINAIS, WASM } from "../../scripts/gerar-imagescript-vendor.mjs";
 import { PREFLIGHT_CACHE } from "../../supabase/functions/_shared/cors";
 import { leituraGravadaRecente } from "../../supabase/functions/mesa-ads/guarda-do-gerenciador";
 import {
@@ -152,6 +152,13 @@ describe("FN-08: imagescript local, sem downloads", () => {
     }
     for (const nome of WASM as string[]) {
       const modulo = readFileSync(join(RAIZ, VENDOR, "utils", "wasm", `${nome}.wasm.js`), "utf8");
+      if ((FORA_DO_PACOTE as string[]).includes(nome)) {
+        // Fora do pacote (nenhuma função usa; o estudio-arte passava dos 5 MB de deploy): cita o original e falha claro.
+        expect(modulo, nome).toContain(`SHA-256 do original: ${(ORIGINAIS as Record<string, string>)[`utils/wasm/${nome}.wasm`]}`);
+        expect(modulo, nome).toContain("throw new Error(");
+        expect(modulo, nome).not.toContain("const B64");
+        continue;
+      }
       const b64 = /const B64 = "([A-Za-z0-9+/=]+)";/.exec(modulo);
       expect(b64, nome).not.toBeNull();
       expect(sha(Buffer.from((b64 as RegExpExecArray)[1], "base64")), nome).toBe((ORIGINAIS as Record<string, string>)[`utils/wasm/${nome}.wasm`]);

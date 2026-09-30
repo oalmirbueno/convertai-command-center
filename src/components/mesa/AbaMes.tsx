@@ -24,6 +24,8 @@ import {
   type ParteDaEstimativa,
 } from "@/lib/mesa/api";
 import AgendaDoMes from "./AgendaDoMes";
+// Frente SPP (revisão 30/09): a linha "Método:" embaixo da resposta do estrategista.
+import MetodoDoAgente from "@/components/agentes/MetodoDoAgente";
 // Frente MF (27/09): formato do perfil (só fotos, só artes, alternar) e o item de fotos abrindo na Mesa Foto.
 import SeletorDoPerfil from "@/components/mesa-foto/SeletorDoPerfil";
 import { ehPostDeFotos, linkDoPostNaMesaFoto } from "../../../supabase/functions/_shared/post-de-fotos";
@@ -143,6 +145,8 @@ interface Mensagem {
   papel: "usuario" | "agente" | "sistema";
   conteudo: string;
   criado_em: string;
+  /** Frente SPP (revisão 30/09): o anexo "Método:" gravado com a resposta do estrategista. */
+  anexos?: unknown[] | null;
 }
 
 const idDaProposta = (d: any): string | null => d?.proposta?.id || d?.proposta_id || d?.id || null;
@@ -259,7 +263,7 @@ function ConversaDoMes({ proposta, modeloId, onAtualizou }: { proposta: Proposta
     queryFn: async (): Promise<Mensagem[]> => {
       const { data, error } = await (supabase as any)
         .from("agente_mensagens")
-        .select("id, papel, conteudo, criado_em")
+        .select("id, papel, conteudo, criado_em, anexos")
         .eq("conversa_id", proposta.conversa_id)
         .order("criado_em", { ascending: true });
       if (error) throw error;
@@ -283,7 +287,7 @@ function ConversaDoMes({ proposta, modeloId, onAtualizou }: { proposta: Proposta
         const agora = new Date().toISOString();
         setLocais((l) => l.concat([
           { id: `u-${agora}`, papel: "usuario", conteudo: msg, criado_em: agora },
-          { id: `a-${agora}`, papel: "agente", conteudo: String(data?.resposta || "Proposta ajustada."), criado_em: agora },
+          { id: `a-${agora}`, papel: "agente", conteudo: String(data?.resposta || "Proposta ajustada."), criado_em: agora, anexos: data?.metodo ? [data.metodo] : [] },
         ]));
       }
       avisarCustoReal("Estrategista respondeu", data, mesa.atualizarCusto);
@@ -312,6 +316,7 @@ function ConversaDoMes({ proposta, modeloId, onAtualizou }: { proposta: Proposta
         {lista.map((m) => (
           <div key={m.id} className={juntar(conversa.balao, m.papel === "usuario" ? conversa.doUsuario : conversa.doAgente)}>
             <p className="whitespace-pre-wrap">{m.conteudo}</p>
+            {m.papel === "agente" && <MetodoDoAgente anexos={m.anexos} />}
           </div>
         ))}
       </div>

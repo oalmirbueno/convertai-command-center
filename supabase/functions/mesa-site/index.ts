@@ -41,6 +41,8 @@ import { fotoDaMarca, lerMarcaParaDirecaoDaMarca, type MarcaDoCliente, resolverM
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) no diretor de site e nas gerações de conteúdo. A leitura fica sem.
+import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 import { blocoDoContextoDoCliente, criarContextoDoAgente, PARTES_COM_O_CONTEXTO } from "../_shared/contexto-do-agente.ts";
 import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
@@ -537,6 +539,7 @@ async function gerarConteudo(ch: Chamador, s: LinhaDoSite, modeloId: unknown, pe
     mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify(dados)}` }],
     esquemaJson: ESQUEMA_DO_CONTEUDO,
     maxTokensSaida: 9_000,
+    metodo: await superpoderesPara(servico(), { agente: "site.geracao", momento: s.conteudo ? "ajustar" : "gerar" }),
     referencia: { tipo: "site", id: s.id },
     criadoPor: ch.userId,
   });
@@ -812,10 +815,14 @@ function anexosDaConversa(bruto: unknown, clientId: string): Array<{ bucket: str
     .map((a) => ({ bucket: "mesa", path: String(a.path), nome: limpo(a.nome, 120) || String(a.path).split("/").pop() || "anexo", mime: limpo(a.mime, 60) || "application/octet-stream" }));
 }
 
+const ESQUEMA_DO_AGENTE_COM_METODO = comMetodosUsados(ESQUEMA_DO_AGENTE);
+
 async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
   const s = await lerSite(ch, c.site_id);
   const mensagem = limpo(c.mensagem, 4000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva a mensagem para o diretor de site.");
+  // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
+  const spP = superpoderesPara(servico(), { agente: "site.agente", pedido: mensagem });
   const anexos = anexosDaConversa(c.anexos, s.client_id);
   const conversaId = await conversaDoAgente(ch, s, c.conversa_id, c.nova_conversa === true);
   const [modelo, historico, l, marca, regras] = await Promise.all([
@@ -863,10 +870,11 @@ async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
     modeloId: modelo.id,
     sistema: `${SISTEMA_DO_AGENTE}\n\n${CONHECIMENTO_DA_BASE}\n\nDADOS:\n${JSON.stringify(dados)}${blocoDaBase ? `\n\n${blocoDaBase}` : ""}\n${blocoDasAcoesDoSite(l.listas)}\n\n${blocoDoMapaDoPainel("site")}${contexto ? `\n\n${blocoDoContextoDoCliente(contexto, direcao.nomeCliente)}` : ""}${blocoDaReferencia(referencia, itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem, imagens: imagensDoAnexo.filter((x): x is ImagemEntrada => !!x) }],
-    esquemaJson: ESQUEMA_DO_AGENTE,
+    esquemaJson: ESQUEMA_DO_AGENTE_COM_METODO,
     maxTokensSaida: 3_000,
     referencia: { tipo: REF_CONVERSA, id: conversaId },
     criadoPor: ch.userId,
+    metodo: await spP,
   });
   const j = obj(saida.json);
   let resposta = limpo(j.resposta, 4000) || "Pronto.";
@@ -882,6 +890,9 @@ async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
   if (!acao && /\b(vou|irei|j[aá] vou)\s+(mudar|gerar|construir|ajustar|trocar|refazer|publicar)/i.test(resposta) && resposta.indexOf("?") < 0) {
     resposta = `${resposta} Ainda não montei a lista: diga qual seção e o que mudar, e eu preparo o cartão com o custo.`;
   }
+  // Frente SPP: "pronto" sem ação feita ganha o aviso (sem refazer); o método vira a linha "Método:".
+  const fechado = await fecharComMetodo(servico(), { usoId: saida.usoId, metodo: await spP, resposta, declarados: j.metodos_usados, acaoFeita: !!(acao && acao.executada_em), resultados: acao ? acao.resultados : null });
+  resposta = fechado.resposta;
   const aprendido = await aprendendo;
   const seguidas = anexoDasRegrasSeguidas(j.regras_seguidas, regras.regras);
   const daBase = anexoDaBaseCitada(j.base_citada, itensDaBase);
@@ -889,6 +900,7 @@ async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
   if (aprendido) anexosDaResposta.push(aprendido);
   if (seguidas) anexosDaResposta.push(seguidas);
   if (daBase) anexosDaResposta.push(daBase);
+  if (fechado.anexo) anexosDaResposta.push(fechado.anexo);
   const troca = await gravarTroca(servico(), {
     conversaId,
     clientId: s.client_id,

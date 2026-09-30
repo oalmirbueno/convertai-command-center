@@ -22,6 +22,8 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { chamarTexto, cobrarJev, type ModeloIa } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar } from "../_shared/jev.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): headlines, tom e resumo com o método da casa (critério de aceite, revisão e prova).
+import { superpoderesPara } from "../_shared/superpoderes.ts";
 import type { ItemDaAcaoDoAgente } from "../_shared/acoes-do-agente.ts";
 import {
   blocoDoTipo,
@@ -247,6 +249,7 @@ export function criarAcoesDaEvolucao<C extends ChamadorMinimo, L extends LinhaMi
       mensagens: [{ papel: "usuario", conteudo: `Escreva 3 headlines para a capa.${textoLimpo(corpo.orientacao, 300) ? ` Orientação: ${textoLimpo(corpo.orientacao, 300)}` : ""}` }],
       esquemaJson: ESQUEMA_DAS_HEADLINES,
       maxTokensSaida: 800,
+      metodo: await superpoderesPara(d.servico(), { agente: "proposta.escrever", momento: "gerar" }),
       referencia: { tipo: d.referencia, id: linha.id },
       criadoPor: ch.userId,
     });
@@ -276,6 +279,7 @@ export function criarAcoesDaEvolucao<C extends ChamadorMinimo, L extends LinhaMi
       mensagens: [{ papel: "usuario", conteudo: `Reescreva no tom da marca o bloco "${ROTULO_DO_BLOCO[tipo]}". Hoje ele está assim: ${JSON.stringify(atuais)}` }],
       esquemaJson: esquemaDoTom(campos),
       maxTokensSaida: 2_500,
+      metodo: await superpoderesPara(d.servico(), { agente: "proposta.escrever", momento: "ajustar" }),
       referencia: { tipo: d.referencia, id: linha.id },
       criadoPor: ch.userId,
     });
@@ -304,6 +308,7 @@ export function criarAcoesDaEvolucao<C extends ChamadorMinimo, L extends LinhaMi
       mensagens: [{ papel: "usuario", conteudo: `MATERIAL DA REUNIÃO:\n${material}` }],
       esquemaJson: ESQUEMA_DO_RESUMO,
       maxTokensSaida: 2_000,
+      metodo: await superpoderesPara(d.servico(), { agente: "proposta.escrever", momento: "gerar" }),
       referencia: { tipo: d.referencia, id: linha.id },
       criadoPor: ch.userId,
     });

@@ -24,6 +24,8 @@ import {
   requestAiChatCompletion,
   resolveAiProviderChain,
 } from "./ai-provider.ts";
+// Frente SPP (30/09): o método da casa entra no fim do sistema, no motor e na cadeia antiga (reserva).
+import { juntarMetodoAoSistema, type MetodoInjetado } from "./superpoderes-catalogo.ts";
 
 export const MODELO_PADRAO_DA_CENTRAL = "openrouter:openai/gpt-6-luna";
 export const RACIOCINIO_PADRAO_DA_CENTRAL = "max";
@@ -58,6 +60,8 @@ export function rotuloDoModelo(id: string): string {
 
 export interface PedidoDeEscrita {
   clientId: string;
+  /** Frente SPP (30/09): o método da casa (superpoderes-catalogo.ts); vai no fim do sistema no motor e na reserva. */
+  metodo?: MetodoInjetado | null;
   sistema: string;
   usuario: string;
   escolha?: EscolhaDoModelo;
@@ -78,6 +82,12 @@ export interface TextoEscrito {
   /** Aviso para a tela quando não foi o modelo escolhido. */
   reserva: string | null;
   usage?: unknown;
+  /**
+   * Frente SPP (30/09): o uso registrado em ia_usos pelo motor; null na
+   * reserva (a cadeia antiga não registra), e aí quem chama registra o método
+   * pelo registrarMetodoSemUso (ou pelo fecharComMetodo sem usoId).
+   */
+  usoId?: string | null;
 }
 
 /** O motor, injetável para teste. Em produção vem de ia-motor.ts (import dinâmico). */
@@ -89,7 +99,8 @@ export type ChamadaDoMotor = (e: {
   usuario: string;
   criadoPor?: string | null;
   referencia?: { tipo: string; id: string };
-}) => Promise<{ texto: string; modeloId: string; custoUsd: number }>;
+  metodo?: MetodoInjetado | null;
+}) => Promise<{ texto: string; modeloId: string; custoUsd: number; usoId?: string | null }>;
 
 export type ChamadaLegada = (sistema: string, usuario: string, temperatura: number) => Promise<{ texto: string; modelo: string; usage: unknown } | null>;
 
@@ -107,8 +118,9 @@ async function motorDeVerdade(e: Parameters<ChamadaDoMotor>[0]) {
     criadoPor: e.criadoPor ?? null,
     referencia: e.referencia,
     timeoutMs: TEMPO_DO_MOTOR_MS,
+    metodo: e.metodo ?? null,
   });
-  return { texto: saida.texto, modeloId: saida.modeloId, custoUsd: saida.custoUsd };
+  return { texto: saida.texto, modeloId: saida.modeloId, custoUsd: saida.custoUsd, usoId: saida.usoId || null };
 }
 
 async function legadoDeVerdade(sistema: string, usuario: string, temperatura: number) {
@@ -166,9 +178,10 @@ export async function escreverComModeloDaCentral(
         usuario: p.usuario,
         criadoPor: p.criadoPor,
         referencia: p.referencia,
+        ...(p.metodo ? { metodo: p.metodo } : {}),
       });
       if (r.texto.trim()) {
-        return { texto: r.texto, modelo: r.modeloId, rotulo: rotuloDoModelo(r.modeloId), raciocinio: escolha.raciocinio, custoUsd: r.custoUsd, reserva: null };
+        return { texto: r.texto, modelo: r.modeloId, rotulo: rotuloDoModelo(r.modeloId), raciocinio: escolha.raciocinio, custoUsd: r.custoUsd, reserva: null, usoId: r.usoId ?? null };
       }
       reserva = `${rotuloDoModelo(escolha.modelo)} não devolveu texto; escrito com o GPT-4.1.`;
     } catch (e) {
@@ -178,10 +191,10 @@ export async function escreverComModeloDaCentral(
   }
 
   // Frente FS: a reserva que também falha fica no log com o motivo (antes: null em silêncio).
-  const antigo = await legado(p.sistema, p.usuario, temperatura).catch((e) => {
+  const antigo = await legado(juntarMetodoAoSistema(p.sistema, p.metodo), p.usuario, temperatura).catch((e) => {
     console.error("[modelo-da-central] reserva (GPT-4.1) falhou", { motivo: motivoLegivel(e), antes: reserva });
     return null;
   });
   if (!antigo || !antigo.texto.trim()) return null;
-  return { texto: antigo.texto, modelo: antigo.modelo, rotulo: antigo.modelo, raciocinio: null, custoUsd: null, reserva, usage: antigo.usage };
+  return { texto: antigo.texto, modelo: antigo.modelo, rotulo: antigo.modelo, raciocinio: null, custoUsd: null, reserva, usage: antigo.usage, usoId: null };
 }

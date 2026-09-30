@@ -40,8 +40,18 @@ import { conhecimentoPublicidade } from "./conhecimento-publicidade.ts";
 import { conhecimentoRoteiros } from "./conhecimento-roteiros.ts";
 import { conhecimentoEstilo } from "./conhecimento-estilo.ts";
 import { conhecimentoDaBaseDeDesign } from "./uiux/citar.ts";
+import {
+  AGENTES_COM_SUPERPODERES,
+  type IdDoMetodo,
+  LICENCA_DO_SUPERPOWERS,
+  SKILL_DE_ORIGEM,
+  SKILLS_DO_SUPERPOWERS,
+  type SkillDoSuperpowers,
+  URL_DO_SUPERPOWERS,
+  VERSAO_DOS_SUPERPODERES,
+} from "./superpoderes-catalogo.ts";
 
-export const VERSAO_DOS_MOTORES = `2026-09-25.1 (repositórios ${VERSAO_CONHECIMENTO_REPOSITORIOS})`;
+export const VERSAO_DOS_MOTORES = `2026-09-30.1 (repositórios ${VERSAO_CONHECIMENTO_REPOSITORIOS}; superpoderes ${VERSAO_DOS_SUPERPODERES})`;
 
 // ------------------------------------------------------------------ fontes
 
@@ -300,6 +310,17 @@ export const FONTES: Record<string, Fonte> = {
     estado: "integrado",
     nota: "Mesa Site (Direção: estilos da base, padrão, par, variantes, paleta de apoio; Revisão: regras de UX), Mesa Identidade (paleta do setor e pares) e Preencher com IA (fonte base). O diretor de site cita a base (base_citada).",
   },
+  // Frente SPP (30/09): o método da casa em todos os agentes (superpoderes-catalogo.ts e superpoderes.ts).
+  superpowers: {
+    id: "superpowers",
+    tipo: "pacote_de_skills",
+    nome: "obra/superpowers",
+    url: URL_DO_SUPERPOWERS,
+    licenca: LICENCA_DO_SUPERPOWERS,
+    uso: "método resumido em português (superpoderes-catalogo.ts); no motor de código, as skills originais v6.4.2 vendorizadas",
+    estado: "integrado",
+    nota: "Blocos sp_* em todos os agentes de conversa e geração; skills originais no worker do motor de código; escritor de cenas com o método próprio. Aviso da licença em docs/licencas/superpowers-MIT.txt.",
+  },
 };
 
 // ------------------------------------------------------------------ origem de cada bloco
@@ -388,6 +409,16 @@ export const ORIGEM_DOS_BLOCOS: Record<string, { modulo: string; fontes: string[
   tendencia_do_nicho: { modulo: "conhecimento-estilo.ts", fontes: ["pesquisa_estilo"], skills: [] },
   // uiux/citar.ts (frente UXM, 30/09)
   base_de_design: { modulo: "uiux/citar.ts", fontes: ["ui_ux_pro_max"], skills: [] },
+  // superpoderes-catalogo.ts (frente SPP, 30/09): o método da casa, adaptado de obra/superpowers (MIT).
+  sp_abertura: { modulo: "superpoderes-catalogo.ts", fontes: ["superpowers"], skills: ["using-superpowers"] },
+  sp_entender: { modulo: "superpoderes-catalogo.ts", fontes: ["superpowers"], skills: SKILL_DE_ORIGEM.entender },
+  sp_plano: { modulo: "superpoderes-catalogo.ts", fontes: ["superpowers"], skills: SKILL_DE_ORIGEM.plano },
+  sp_prova: { modulo: "superpoderes-catalogo.ts", fontes: ["superpowers"], skills: SKILL_DE_ORIGEM.prova },
+  sp_causa: { modulo: "superpoderes-catalogo.ts", fontes: ["superpowers"], skills: SKILL_DE_ORIGEM.causa },
+  sp_receber: { modulo: "superpoderes-catalogo.ts", fontes: ["superpowers"], skills: SKILL_DE_ORIGEM.receber },
+  sp_revisor: { modulo: "superpoderes-catalogo.ts", fontes: ["superpowers"], skills: SKILL_DE_ORIGEM.revisor },
+  sp_aceite: { modulo: "superpoderes-catalogo.ts", fontes: ["superpowers"], skills: SKILL_DE_ORIGEM.aceite },
+  sp_frentes: { modulo: "superpoderes-catalogo.ts", fontes: ["superpowers"], skills: SKILL_DE_ORIGEM.frentes },
 };
 
 /** O checklist de criativo do objetivo entra com id checklist_<objetivo> e vem dos especialistas. */
@@ -462,6 +493,233 @@ export const SKILLS_MARKETINGSKILLS: Record<string, SkillMapeada> = {
   "site-architecture": { estado: "coberto", blocos: [], nota: "A Mesa Site edita o mapa do site (tipos, páginas e as 25 seções da biblioteca em site-biblioteca.ts) e os padrões de landing da base UI UX Pro Max (site-variantes.ts)." },
   signup: { estado: "nao_se_aplica", blocos: [], nota: "Cadastro de software." },
   sms: { estado: "nao_se_aplica", blocos: [], nota: "SMS; o canal do painel é WhatsApp e e-mail." },
+};
+
+// ------------------------------------------------------------------ skills do superpowers
+
+/**
+ * As 15 skills de obra/superpowers v6.4.2 e o que cada uma virou no painel
+ * (seção 6 do desenho p9). O teste exige exatamente 15, como no marketingskills.
+ */
+export const SKILLS_SUPERPOWERS: Record<string, SkillDoSuperpowers> = SKILLS_DO_SUPERPOWERS;
+
+// ------------------------------------------------------------------ superpoderes de cada agente
+
+export type LigacaoDoMetodo = { arquivo: string; trechos: string[] };
+
+export type SuperpoderesDoAgente = {
+  /** Id do agente em AGENTES_COM_SUPERPODERES (superpoderes-catalogo.ts). */
+  id: string;
+  funcao: string;
+  escolha: "jev" | "codigo";
+  /** Métodos possíveis (a prova sempre). */
+  metodos: IdDoMetodo[];
+  /** Onde a ligação está (superpoderesPara e o metodo na chamada) e, quando o agente mora em mais de um arquivo, os outros. */
+  ligacao: LigacaoDoMetodo;
+  mais?: LigacaoDoMetodo[];
+};
+
+const F = (funcao: string, arquivo = "index.ts") => `supabase/functions/${funcao}/${arquivo}`;
+
+/**
+ * Onde cada agente recebe o método da casa (tabela 4.6 do desenho). É a prova
+ * de "todas as mesas": o teste cobra que os trechos existem no código de cada
+ * função, inclusive das que hoje estão fora de MOTORES (Redes, Vídeos, Edição,
+ * Proposta, Contratos, Identidade, Site, Motion, Briefing, Documento,
+ * Preencher, Workspace, Assistente geral, Central, Conselho e rituais).
+ */
+const LIGACOES_DOS_SUPERPODERES: Record<string, { ligacao: LigacaoDoMetodo; mais?: LigacaoDoMetodo[] }> = {
+  "contexto.conversa": { ligacao: { arquivo: F("agente-contexto"), trechos: ['superpoderesPara(db, { agente: "contexto.conversa"', "metodo: sp,", "declarados: o.metodos_usados"] } },
+  // Revisão 30/09: o montar (motor "contexto" do índice), no cliente e na marca.
+  "contexto.montar": { ligacao: { arquivo: F("agente-contexto"), trechos: ['metodo: await superpoderesPara(db, { agente: "contexto.montar", momento: "gerar" }),'] } },
+  "contexto.plano": { ligacao: { arquivo: F("agente-contexto"), trechos: ['superpoderesPara(db, { agente: "contexto.plano"', "metodo: spPlano,", "fechadoDoPlano.anexo"] } },
+  "calendario.conversa": { ligacao: { arquivo: F("agente-calendario"), trechos: ['superpoderesPara(servico, { agente: "calendario.conversa"', "metodo: await spP,", "metodo: await spCampanhaP,", "metodo: await spMesP,"] } },
+  "calendario.gerar": { ligacao: { arquivo: F("agente-calendario"), trechos: ['superpoderesPara(servico, { agente: "calendario.gerar", momento })', "metodo: await metodoDaGeracao(servico),"] } },
+  "estudio.conversa": { ligacao: { arquivo: F("estudio-arte"), trechos: ['superpoderesPara(servico(), { agente: "estudio.conversa"', "metodo: await spP,", "fechado.anexo ? [fechado.anexo]"] } },
+  "estudio.direcao": { ligacao: { arquivo: F("estudio-arte"), trechos: ['metodo: await superpoderesPara(servico(), { agente: "estudio.direcao"'] } },
+  "estudio.refino": { ligacao: { arquivo: F("estudio-arte"), trechos: ['superpoderesPara(servico(), { agente: "estudio.refino", momento: "ajustar" })', "metodo: spRefino,"] } },
+  "estilo.agente": { ligacao: { arquivo: F("agente-estilo"), trechos: ['superpoderesPara(servico(), { agente: "estilo.agente"', "metodo: await spP,"] } },
+  "instagram.agente": { ligacao: { arquivo: F("mesa-instagram"), trechos: ['superpoderesPara(servico(), { agente: "instagram.agente"', "metodo: await spP,"] } },
+  "instagram.geracao": { ligacao: { arquivo: F("mesa-instagram"), trechos: ['superpoderesPara(servico(), { agente: "instagram.geracao", momento: "gerar" })', "sistema: SISTEMA_DAS_SUGESTOES,\n      metodo: spGeracao,", "sistema: SISTEMA_DOS_DESTAQUES,\n      metodo: spGeracao,"] } },
+  "perfis.conversa": { ligacao: { arquivo: F("perfis-instagram"), trechos: ['superpoderesPara(servico(), { agente: "perfis.conversa"', "metodo: await spP,"] } },
+  "perfis.plano": { ligacao: { arquivo: F("perfis-instagram"), trechos: ['metodo: await superpoderesPara(servico(), { agente: "perfis.plano", momento: "gerar" }),'] } },
+  "ads.plano": { ligacao: { arquivo: F("mesa-ads"), trechos: ['superpoderesPara(servico, { agente: "ads.plano"', "metodo: await spPlanoP,"] } },
+  "ads.oferta": { ligacao: { arquivo: F("mesa-ads"), trechos: ['superpoderesPara(servico, { agente: "ads.oferta"', "metodo: await spOfertaP,"] } },
+  "ads.senior": { ligacao: { arquivo: F("mesa-ads"), trechos: ['superpoderesPara(servico, { agente: "ads.senior"', "metodo: await spSeniorP,"] } },
+  "ads.estrategista": { ligacao: { arquivo: F("mesa-ads"), trechos: ['superpoderesPara(servico, { agente: "ads.estrategista", momento })', 'metodo: await metodoDoEstrategista(servico, "gerar"),', 'metodo: await metodoDoEstrategista(clienteServico(), "lote"),'] } },
+  "foto.agente": { ligacao: { arquivo: F("mesa-foto"), trechos: ['superpoderesPara(servico(), { agente: "foto.agente"', "metodo: await spP,"] } },
+  "foto.campanha": { ligacao: { arquivo: F("mesa-foto"), trechos: ['metodo: await superpoderesPara(servico(), { agente: "foto.campanha", momento: "gerar" }),'] } },
+  "foto.canvas": { ligacao: { arquivo: F("mesa-foto", "canvas.ts"), trechos: ['superpoderesPara(db(), { agente: "foto.canvas"', "metodo: await spP,", "comMetodosUsados(esquema),", "metodo: fechado.anexo"] } },
+  "videos.diretor": { ligacao: { arquivo: F("mesa-videos", "diretor.ts"), trechos: ['superpoderesPara(b.servico(), { agente: "videos.diretor"', "metodo: await spP,"] } },
+  "edicao.agente": { ligacao: { arquivo: F("editor-video"), trechos: ['superpoderesPara(servico(), { agente: "edicao.agente"', "metodo: sp,", "metodo_usado: fechado.anexo"] } },
+  "publicidade.diretor": { ligacao: { arquivo: F("mesa-publicidade"), trechos: ['metodo: await superpoderesPara(servico(), { agente: "publicidade.diretor"'] } },
+  "publicidade.agente": { ligacao: { arquivo: F("mesa-publicidade"), trechos: ['superpoderesPara(servico(), { agente: "publicidade.agente"', "metodo: await spP,"] } },
+  "roteiros.roteirista": { ligacao: { arquivo: F("mesa-roteiros"), trechos: ['superpoderesPara(servico(), { agente: "roteiros.roteirista"', "metodo: sp,"] } },
+  "roteiros.agente": { ligacao: { arquivo: F("mesa-roteiros"), trechos: ['agente: "roteiros.agente"', "metodo: sp,", "fecharComMetodo(servico(), { usoId: saida.usoId, metodo: sp,"] } },
+  "proposta.escrever": {
+    ligacao: { arquivo: F("mesa-proposta"), trechos: ['superpoderesPara(servico(), { agente: "proposta.escrever"', "metodo: sp,"] },
+    mais: [{ arquivo: F("mesa-proposta", "evolucao.ts"), trechos: ['metodo: await superpoderesPara(d.servico(), { agente: "proposta.escrever"'] }],
+  },
+  "proposta.agente": { ligacao: { arquivo: F("mesa-proposta"), trechos: ['superpoderesPara(servico(), { agente: "proposta.agente"', "metodo: await spP,"] } },
+  "contratos.agente": { ligacao: { arquivo: F("contratos"), trechos: ['superpoderesPara(servico(), { agente: "contratos.agente"', "metodo: await spP,"] } },
+  "identidade.diretor": { ligacao: { arquivo: F("mesa-identidade", "diretor.ts"), trechos: ['superpoderesPara(servico(), { agente: "identidade.diretor"', "metodo: await spP,"] } },
+  "identidade.acoes": {
+    ligacao: { arquivo: F("mesa-identidade", "estrategia-acoes.ts"), trechos: ['metodo: await superpoderesPara(servico(), { agente: "identidade.acoes"'] },
+    mais: [
+      { arquivo: F("mesa-identidade", "naming-acoes.ts"), trechos: ['metodo: await superpoderesPara(servico(), { agente: "identidade.acoes"'] },
+      { arquivo: F("mesa-identidade", "projeto-acoes.ts"), trechos: ['metodo: await superpoderesPara(servico(), { agente: "identidade.acoes"'] },
+    ],
+  },
+  "site.agente": { ligacao: { arquivo: F("mesa-site"), trechos: ['superpoderesPara(servico(), { agente: "site.agente"', "metodo: await spP,"] } },
+  "site.geracao": {
+    ligacao: { arquivo: F("mesa-site"), trechos: ['metodo: await superpoderesPara(servico(), { agente: "site.geracao"'] },
+    mais: [{ arquivo: F("mesa-site", "estrutura.ts"), trechos: ['metodo: await superpoderesPara(ctx.servico(), { agente: "site.geracao"'] }],
+  },
+  "motion.agente": { ligacao: { arquivo: F("mesa-motion"), trechos: ['superpoderesPara(servico(), { agente: "motion.agente"', "metodo: await spP,"] } },
+  "motion.geracao": { ligacao: { arquivo: F("mesa-motion"), trechos: ['metodo: await superpoderesPara(servico(), { agente: "motion.geracao"'] } },
+  "briefing.preencher": { ligacao: { arquivo: F("briefing-agente", "preencher.ts"), trechos: ['metodo: await superpoderesPara(servico(), { agente: "briefing.preencher" })'] } },
+  "preencher.campos": { ligacao: { arquivo: F("preencher-ia"), trechos: ['metodo: await superpoderesPara(servico(), { agente: "preencher.campos" })'] } },
+  "documentos.registro": { ligacao: { arquivo: F("documentos"), trechos: ['metodo: await superpoderesPara(servico(), { agente: "documentos.registro" })'] } },
+  "conselho.especialista": { ligacao: { arquivo: F("conselho"), trechos: ['agente: "conselho.especialista"', "metodo: await superpoderesPara(servico(),"] } },
+  "conselho.sintese": { ligacao: { arquivo: F("conselho"), trechos: ['{ agente: "conselho.sintese", momento: "lote" }'] } },
+  // Cadeia antiga (ai-provider): sem usoId, o fecharComMetodo grava o método no registro sem uso, com o cliente.
+  "workspace.agente": { ligacao: { arquivo: F("workspace-agent"), trechos: ['superpoderesPara(admin, { agente: "workspace.agente"', "}, fetch, sp);", "}), fetch, sp);", "acaoFeita: false, clientId: safeClientId });", "clientId: o.clientId,"] } },
+  // Revisão 30/09: o Jev do método corre junto com o pré-contexto (spAgirP criado antes do Promise.all).
+  "assistente.lancador": { ligacao: { arquivo: F("voice-assistant-agent"), trechos: ['const spAgirP = agir ? superpoderesPara(supabase, { agente: "assistente.lancador"', "juntarMetodoAoSistema(sistemaDaConversa, sp)", "spAgir);", "clientId: body.clientId || null });"] } },
+  "central.agente": {
+    // Revisão 30/09: o método fecha a resposta (prova com a ação feita e a linha "Método:" junto do "Segui").
+    ligacao: { arquivo: F("agente-central"), trechos: ['superpoderesPara(db, { agente: "central.agente"', "escolha, await spP);", "escolha, spAplicar);", "fecharComMetodo(servicoDoMetodo(), {", "comAnexoDoMetodo(anexosDoAprendizado("] },
+    mais: [{ arquivo: "supabase/functions/_shared/modelo-da-central.ts", trechos: ["metodo: e.metodo ?? null,", "juntarMetodoAoSistema(p.sistema, p.metodo)", "usoId: r.usoId ?? null"] }],
+  },
+  "rituais.escritor": {
+    ligacao: { arquivo: F("ritual-writer"), trechos: ['superpoderesPara(admin, { agente: "rituais.escritor" })', "metodo: metodoDoRitual,", "registrarMetodoSemUso(admin, { metodo: metodoDoRitual"] },
+    mais: [
+      { arquivo: F("ritual-writer", "escritor.ts"), trechos: ["metodo: p.metodo ?? null,", "metodo: p.metodo ?? null });"] },
+      { arquivo: F("agente-central"), trechos: ['superpoderesPara(db, { agente: "rituais.escritor" })', "escolha, metodo: metodoDoRitual,", "registrarMetodoDoRitual(metodoDoRitual, escrito, clientId);"] },
+    ],
+  },
+  // Revisão 30/09: a cadeia antiga e a reserva não geram linha em ia_usos; o método conta pelo registro sem uso.
+  "rituais.esteira": { ligacao: { arquivo: F("esteira-semana"), trechos: ['superpoderesPara(db, { agente: "rituais.esteira" })', "metodo: metodoDaEsteira", "registrarMetodoSemUso(db, { metodo: metodoDaEsteira"] } },
+  "rituais.coach": { ligacao: { arquivo: F("cycle-coach"), trechos: ['superpoderesPara(db, { agente: "rituais.coach" })', "}, fetch, metodoDoCoach);", "registrarMetodoSemUso(db, { metodo: metodoDoCoach"] } },
+  "rituais.radar": { ligacao: { arquivo: F("radar-ideas"), trechos: ['superpoderesPara(db, { agente: "rituais.radar" })', "fetch,\n      metodoDoRadar,\n", "registrarMetodoSemUso(db, { metodo: metodoDoRadar"] } },
+};
+
+export const SUPERPODERES_DOS_AGENTES: readonly SuperpoderesDoAgente[] = AGENTES_COM_SUPERPODERES.map((a) => {
+  const l = LIGACOES_DOS_SUPERPODERES[a.id] || { ligacao: { arquivo: "", trechos: [] } };
+  return { id: a.id, funcao: a.funcao, escolha: a.escolha, metodos: a.metodos.slice(), ligacao: l.ligacao, ...(l.mais ? { mais: l.mais } : {}) };
+});
+
+/** Quem de propósito NÃO recebe o método da casa (o teste cobra; ninguém "conserta" achando que é esquecimento). */
+export const SEM_METODO_DE_PROPOSITO: Record<string, string> = {
+  "estudio.gerador": "Texto ao gerador de imagem (direcao-arte.ts, promptDaLamina e promptDoReplicar, a instrução de edição do ajuste da lâmina e a cena que adapta a referência à copy): o gerador entende posição, escala e cor, não método de trabalho.",
+  "estudio.legenda": "Legenda do Estúdio: texto curto com teto próprio e o prompt do diretor; o método vai na direção, no refino e na conversa.",
+  "estudio.enxugar": "Enxugar o texto da lâmina no limite (miolo e geração): corte com teto próprio, sem peça nova; o método vai na direção.",
+  "estudio.conferencias": "Conferências do Estúdio por visão (rosto da pessoa real e leitura da peça gerada): julgam o que a imagem mostra, sem método de trabalho.",
+  "mesa_foto.diretor_e_variacoes": "Diretor, book, variações e sugestões de variação do clone da Mesa Foto recebem só a técnica da foto (o teste de motores exige).",
+  "mesa_foto.leitores_e_conferencias": "Leitores, kits, clones, personas e conferências da Mesa Foto (a conferência do Canvas também): descrever, sugerir elenco e conferir foto, sem método. O agente do Canvas conversa com a equipe e recebe o método (foto.canvas).",
+  leituras: "Leituras por visão e de acervo (referências, perfis, quadros do vídeo, selo, logo, página do site, brand book, pranchas e carrosséis do estilo, lote do Workspace), o resumo e a comparação dos perfis (só números e fatos) e o significado dos nomes em outros idiomas: só extração.",
+  "contexto.pedido_externo": "Pedido para colar num LLM externo (pacote externo da Mesa do cliente): é texto para outro modelo seguir, e o método da casa não vale fora do painel.",
+  "estilo.templates": "Combinação de templates do Estilo: o Jev escolhe o melhor de cada fonte, a redação só junta o que foi escolhido e o resultado vira cartão para Confirmar; não é peça nova.",
+  "videos.pacote_de_edicao": "Pacote para editar da Mesa Vídeos: montado em código, sem IA; o conhecimento vai para o arquivo direcao.md, não para um prompt.",
+  "motion.cena": "escreverCena da Mesa Motion: o escritor de cenas tem o método próprio (frente SPM, _shared/cena-hf.ts) e a prova é o lint e o check do worker.",
+  mcp: "O MCP não tem prompt próprio: as ações de mesa passam pela ponte e chamam as funções acima, que já levam o método.",
+  jev: "O Jev (julgamento) não é modelo de texto: pergunta tipada, sem sistema; o método não se aplica.",
+};
+
+/**
+ * Cada chamada a chamarTexto (ou escreverComModeloDaCentral) das funções que
+ * NÃO passa `metodo`, pelo caminho da função onde ela mora
+ * ("arquivo#funcao/propriedade"), com a entrada de SEM_METODO_DE_PROPOSITO que
+ * diz o porquê (revisão de 30/09). O teste varre o código: chamada nova sem
+ * `metodo` e fora desta lista reprova, e entrada que não tem mais chamada
+ * também. Quem repassa o pedido inteiro (`...pedido`) leva o `metodo` de quem
+ * chama e não entra aqui.
+ */
+export const CHAMADAS_SEM_METODO: Record<string, string> = {
+  "agente-calendario/selo-da-campanha.ts#classificarReferencia": "leituras",
+  "agente-calendario/selo-da-campanha.ts#lerTextoDoSelo": "leituras",
+  "agente-contexto/index.ts#acervoClassificar": "leituras",
+  "agente-contexto/index.ts#importarBrandBook": "leituras",
+  "agente-contexto/index.ts#lerComOLeitor/lerLote": "leituras",
+  "agente-contexto/index.ts#pacoteExterno": "contexto.pedido_externo",
+  "agente-estilo/index.ts#lerReferencias": "leituras",
+  "agente-estilo/templates.ts#combinarInterno": "estilo.templates",
+  "agente-estilo/templates.ts#laminasDoPrint": "leituras",
+  "agente-estilo/templates.ts#lerSequencia": "leituras",
+  "editor-video/index.ts#receitaLer/respostaComFolego": "leituras",
+  "editor-video/index.ts#visaoDescrever/respostaComFolego": "leituras",
+  "estudio-arte/aprendizado-no-estudio.ts#lerVisaoDaEntrega": "leituras",
+  "estudio-arte/index.ts#ajustarCard": "estudio.gerador",
+  "estudio-arte/index.ts#conferirRosto": "estudio.conferencias",
+  "estudio-arte/index.ts#depsDaAdaptacao/escreverCena": "estudio.gerador",
+  "estudio-arte/index.ts#depsDaAdaptacao/lerPorVisao": "leituras",
+  "estudio-arte/index.ts#legenda": "estudio.legenda",
+  "estudio-arte/index.ts#leituraDaLogo": "leituras",
+  "estudio-arte/index.ts#lerPrancha": "leituras",
+  "estudio-arte/index.ts#lerReferencia": "leituras",
+  "estudio-arte/index.ts#marcarPessoasNasFotos": "leituras",
+  "estudio-arte/index.ts#moldeDaReferencia": "leituras",
+  "estudio-arte/index.ts#prepararItem/enxugarMiolo": "estudio.enxugar",
+  "estudio-arte/index.ts#textoDaLaminaNaGeracao/escrever": "estudio.enxugar",
+  "estudio-arte/index.ts#verificar": "estudio.conferencias",
+  "mesa-ads/index.ts#referenciaLer": "leituras",
+  "mesa-foto/book.ts#bookDiretor": "mesa_foto.diretor_e_variacoes",
+  "mesa-foto/canvas.ts#canvasConferir": "mesa_foto.leitores_e_conferencias",
+  "mesa-foto/clones.ts#cloneConferir": "mesa_foto.leitores_e_conferencias",
+  "mesa-foto/clones.ts#cloneVariacoesSugerir": "mesa_foto.diretor_e_variacoes",
+  "mesa-foto/clones.ts#lerExpressaoPorVisao": "mesa_foto.leitores_e_conferencias",
+  "mesa-foto/index.ts#acervoLerFoto": "mesa_foto.leitores_e_conferencias",
+  "mesa-foto/index.ts#ensaioPlanejar": "mesa_foto.diretor_e_variacoes",
+  "mesa-foto/index.ts#kitSugerir": "mesa_foto.leitores_e_conferencias",
+  "mesa-foto/index.ts#leituraPorVisao": "mesa_foto.leitores_e_conferencias",
+  "mesa-foto/index.ts#produtoIdentificar": "mesa_foto.leitores_e_conferencias",
+  "mesa-foto/index.ts#variacoesPlanejar": "mesa_foto.diretor_e_variacoes",
+  "mesa-foto/index.ts#versaoConferir": "mesa_foto.leitores_e_conferencias",
+  "mesa-foto/modelos.ts#modeloConferir": "mesa_foto.leitores_e_conferencias",
+  "mesa-foto/modelos.ts#modeloSugerir": "mesa_foto.leitores_e_conferencias",
+  "mesa-identidade/completar-acoes.ts#lerLogoComVisao": "leituras",
+  "mesa-identidade/naming-v2-acoes.ts#namingIdiomas": "leituras",
+  "mesa-motion/index.ts#escreverCena": "motion.cena",
+  "mesa-site/index.ts#referenciasLer": "leituras",
+  "mesa-videos/diretor.ts#diretorAvaliar": "leituras",
+  "perfis-instagram/index.ts#comparar": "leituras",
+  "perfis-instagram/index.ts#gerarResumo": "leituras",
+  "perfis-instagram/index.ts#lerPostsDoPerfil": "leituras",
+  "workspace-organizar/nucleo.ts#lerNoCliente/lerLote": "leituras",
+};
+
+/**
+ * Cada motor do índice (MOTORES) e quem leva o método por ele: um agente de
+ * AGENTES_COM_SUPERPODERES da mesma função ou uma entrada de
+ * SEM_METODO_DE_PROPOSITO (revisão de 30/09: antes o teste cobrava só a
+ * função, e o "montar contexto" passava pela conversa).
+ */
+export const METODO_DOS_MOTORES: Record<string, string[]> = {
+  "estudio.direcao": ["estudio.direcao", "estudio.conversa"],
+  "estudio.legenda": ["estudio.legenda"],
+  "calendario.mes": ["calendario.gerar", "calendario.conversa"],
+  "calendario.temas": ["calendario.gerar"],
+  "calendario.diagnostico": ["calendario.gerar"],
+  "calendario.campanha": ["calendario.gerar", "calendario.conversa"],
+  "mesa_ads.angulos": ["ads.estrategista", "ads.plano"],
+  "mesa_ads.copy": ["ads.estrategista"],
+  "mesa_ads.pacote": ["ads.estrategista"],
+  "mesa_ads.oferta": ["ads.estrategista", "ads.oferta"],
+  "mesa_ads.conta": ["ads.estrategista"],
+  "mesa_ads.senior": ["ads.senior"],
+  "mesa_foto.agente": ["foto.agente", "foto.campanha"],
+  "mesa_foto.diretor": ["mesa_foto.diretor_e_variacoes"],
+  contexto: ["contexto.montar", "contexto.conversa"],
+  "contexto.plano": ["contexto.plano"],
+  "mesa_videos.direcao_de_edicao": ["videos.pacote_de_edicao"],
+  "mesa_publicidade.diretor": ["publicidade.diretor"],
+  "mesa_publicidade.agente": ["publicidade.agente"],
+  "mesa_roteiros.roteirista": ["roteiros.roteirista"],
+  "mesa_roteiros.agente": ["roteiros.agente"],
+  "estilo.agente": ["estilo.agente"],
+  "perfis.plano": ["perfis.plano"],
+  // Integração UXM + SPP (30/09): o diretor de site com a base de design é o agente do site, que já leva o método.
+  "mesa_site.direcao": ["site.agente"],
 };
 
 // ------------------------------------------------------------------ motores
@@ -944,7 +1202,28 @@ export function ferramentasDoMotor(id: string): string[] {
   return motor(id)?.ferramentas?.slice() ?? [];
 }
 
-/** Motores alcançados por uma fonte. */
+const BLOCO_DO_METODO: Record<IdDoMetodo, string> = {
+  entender: "sp_entender",
+  plano: "sp_plano",
+  prova: "sp_prova",
+  causa: "sp_causa",
+  receber: "sp_receber",
+  revisor: "sp_revisor",
+  aceite: "sp_aceite",
+  frentes: "sp_frentes",
+};
+
+/** Blocos sp_* que um agente pode receber (a abertura sempre). */
+export function blocosDoMetodoDoAgente(id: string): string[] {
+  const a = SUPERPODERES_DOS_AGENTES.find((x) => x.id === id);
+  return a ? ["sp_abertura"].concat(a.metodos.map((m) => BLOCO_DO_METODO[m])) : [];
+}
+
+/** Motores alcançados por uma fonte (os do índice e, desde a frente SPP, os agentes com o método da casa). */
 export function motoresDaFonte(fonte: string): string[] {
-  return MOTORES.filter((m) => m.promete.some((b) => (origemDoBloco(b)?.fontes ?? []).includes(fonte))).map((m) => m.id);
+  const doIndice = MOTORES.filter((m) => m.promete.some((b) => (origemDoBloco(b)?.fontes ?? []).includes(fonte))).map((m) => m.id);
+  const doMetodo = SUPERPODERES_DOS_AGENTES
+    .filter((a) => blocosDoMetodoDoAgente(a.id).some((b) => (origemDoBloco(b)?.fontes ?? []).includes(fonte)))
+    .map((a) => `superpoderes.${a.id}`);
+  return doIndice.concat(doMetodo);
 }

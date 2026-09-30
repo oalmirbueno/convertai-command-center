@@ -17,6 +17,8 @@ import { jevPerguntar, probabilidadeNoul } from "../_shared/jev.ts";
 import { BRIEF_POR_RITUAL, blocoDeComunicacao, expressoesDeRobo, semTravessao, TOM_DE_GENTE } from "../_shared/comunicacao-com-cliente.ts";
 import { type EscolhaDoModelo, escreverComModeloDaCentral, type TextoEscrito } from "../_shared/modelo-da-central.ts";
 import { type ResultadoDaRepeticao, type RitualParaComparar, verificarRepeticao } from "./memoria.ts";
+// Frente SPP (revisão 30/09): o método da casa (prova) também no escritor dos rituais (agente rituais.escritor).
+import type { MetodoInjetado } from "../_shared/superpoderes-catalogo.ts";
 
 // A cadeia antiga continua exportada: é a reserva do motor e o agente da
 // Central ainda a usa como caminho de reserva nas perguntas.
@@ -175,6 +177,8 @@ export interface PedidoDoRitual {
   clientId?: string;
   criadoPor?: string | null;
   escolha?: EscolhaDoModelo;
+  /** Frente SPP: o método da casa (superpoderesPara com o agente rituais.escritor); vai no fim do sistema. */
+  metodo?: MetodoInjetado | null;
 }
 
 export interface RitualEscrito {
@@ -193,6 +197,8 @@ export interface RitualEscrito {
   /** Expressões de molde que escaparam (aviso, nunca correção). */
   robo: string[];
   usage: unknown;
+  /** Frente SPP: o uso em ia_usos (null na reserva; aí quem chama registra o método sem uso). */
+  uso_id?: string | null;
 }
 
 /** A mensagem de usuário que o escritor recebe, na ordem que decide o texto. */
@@ -247,10 +253,11 @@ export async function escreverRitual(
       escolha: p.escolha,
       temperatura: p.textoAtual ? 0.35 : 0.55,
       criadoPor: p.criadoPor ?? null,
+      metodo: p.metodo ?? null,
     });
   } else {
     // Sem cliente não há carteira: só a cadeia antiga.
-    saida = await escrever({ clientId: "", sistema: SYSTEM_PROMPT, usuario, escolha: { modelo: "legado:gpt-4.1", raciocinio: "max" }, temperatura: p.textoAtual ? 0.35 : 0.55 });
+    saida = await escrever({ clientId: "", sistema: SYSTEM_PROMPT, usuario, escolha: { modelo: "legado:gpt-4.1", raciocinio: "max" }, temperatura: p.textoAtual ? 0.35 : 0.55, metodo: p.metodo ?? null });
   }
   if (!saida) {
     console.warn("[ritual] nenhum modelo respondeu");
@@ -272,6 +279,7 @@ export async function escreverRitual(
     custo_usd: saida.custoUsd,
     robo: expressoesDeRobo(lido.body),
     usage: saida.usage ?? null,
+    uso_id: saida.usoId ?? null,
   };
 }
 

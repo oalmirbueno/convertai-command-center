@@ -75,7 +75,10 @@ describe("permissões do opencode: a última regra que casa vence", () => {
     expect(c.permission.skill["*"]).toBe("deny");
     SKILLS_DA_CASA.forEach((s) => expect(c.permission.skill[s]).toBe("allow"));
     expect(c.permission.webfetch).toBe("deny");
-    expect(c.permission.external_directory).toBe("deny");
+    // Integração com a SPM: pasta de fora negada com "*" primeiro; só os anexos das skills do superpowers liberados.
+    expect(Object.keys(c.permission.external_directory)[0]).toBe("*");
+    expect(acaoDoPedido(c.permission.external_directory, join(tmpdir(), "*"))).toBe("deny");
+    expect(acaoDoPedido(c.permission.external_directory, join(SKILL_DA_UIUX, "scripts", "*"))).toBe("deny");
     expect(c.permission.question).toBe("deny");
     expect(c.permission.task).toBe("deny");
     expect(c.watcher.ignore).toContain("design-system/**");
@@ -142,12 +145,17 @@ describe("contrato único com a frente superpowers", () => {
 
   it("com a lista por tipo do superpowers, as skills do tipo e as da casa ficam liberadas juntas, com \"*\" primeiro", () => {
     const doSuperpowers = { construir: ["using-superpowers", "brainstorming", "verification-before-completion"], ajustar: ["using-superpowers"], revisar: [] };
-    const r = permitidasDoTrabalho("construir", doSuperpowers);
+    // Integração com a SPM: o segundo parâmetro são skills extras; a lista por tipo vem no terceiro (padrão SKILLS_POR_TRABALHO).
+    const r = permitidasDoTrabalho("construir", [], doSuperpowers);
     expect(Object.keys(r)[0]).toBe("*");
     ["using-superpowers", "brainstorming", "verification-before-completion", "ui-ux-pro-max"].forEach((s) => expect(acaoDoPedido(r, s)).toBe("allow"));
     expect(acaoDoPedido(r, "using-git-worktrees")).toBe("deny");
-    expect(acaoDoPedido(permitidasDoTrabalho("revisar", doSuperpowers), "ui-ux-pro-max")).toBe("allow");
-    expect(acaoDoPedido(permitidasDoTrabalho("zip", doSuperpowers), "brainstorming")).toBe("deny");
+    expect(acaoDoPedido(permitidasDoTrabalho("revisar", [], doSuperpowers), "ui-ux-pro-max")).toBe("allow");
+    expect(acaoDoPedido(permitidasDoTrabalho("zip", [], doSuperpowers), "brainstorming")).toBe("deny");
+    // A lista de verdade do superpowers: brainstorming fica de fora do construir, a ui-ux-pro-max em todo tipo.
+    expect(acaoDoPedido(permitidasDoTrabalho("construir"), "brainstorming")).toBe("deny");
+    expect(acaoDoPedido(permitidasDoTrabalho("construir"), "writing-plans")).toBe("allow");
+    expect(acaoDoPedido(permitidasDoTrabalho("revisar"), "ui-ux-pro-max")).toBe("allow");
     expect(ferramentaLigada(r)).toBe(true);
   });
 
@@ -168,12 +176,15 @@ describe("contrato único com a frente superpowers", () => {
   it("um ambiente só: isolado, com XDG_CONFIG_HOME do worker, o buscador da skill e os plugins padrão desligados no modo plugin", () => {
     const base = { PATH: "/usr/bin", OPENROUTER_API_KEY: "chave-falsa-de-teste-123", OPENCODE_PERMISSION: '{"bash":"allow"}', OPENCODE_CONFIG_DIR: "C:/Users/x/.cfg", opencode_config: "/x.json", XDG_CONFIG_HOME: "/home/x/.config", OPENCODE_GIT_BASH_PATH: "C:/Git/bin/bash.exe" };
     const config = configDoOpencode(MODELO_FALSO);
-    const env = ambienteDoOpencode(config, "nativo", base);
+    // Integração com a SPM: o terceiro parâmetro são as opções da subida (provedor, pasta de config); sem elas,
+    // vale o provedor da configuração e a pasta casa do worker.
+    const env = ambienteDoOpencode(config, "nativo", {}, base);
     Object.keys(AMBIENTE_ISOLADO).forEach((k) => expect(env[k]).toBe("1"));
     expect(env.OPENCODE_DISABLE_EXTERNAL_SKILLS).toBe("1");
     expect(env.OPENCODE_DISABLE_CLAUDE_CODE).toBe("1");
     expect(env.OPENCODE_DISABLE_DEFAULT_PLUGINS).toBeUndefined();
-    expect(ambienteDoOpencode(config, "plugin", base).OPENCODE_DISABLE_DEFAULT_PLUGINS).toBe("1");
+    expect(ambienteDoOpencode(config, "plugin", {}, base).OPENCODE_DISABLE_DEFAULT_PLUGINS).toBe("1");
+    expect(ambienteDoOpencode(config, "nativo", { pastaDeConfig: "C:/tmp/vazia" }, base).XDG_CONFIG_HOME).toBe("C:/tmp/vazia");
     expect(env.XDG_CONFIG_HOME).toBe(PASTA_CASA_DO_OPENCODE);
     expect(relative(resolve(raiz, "workers/motor-codigo"), env.XDG_CONFIG_HOME).indexOf("..")).not.toBe(0);
     expect(env.UIUX_BUSCADOR).toBe(BUSCADOR_DA_UIUX);
@@ -190,7 +201,10 @@ describe("contrato único com a frente superpowers", () => {
     // A pasta do worker fica fora do git; o opencode.ts usa o ambiente e não define outro.
     expect(ler("workers/motor-codigo/.gitignore")).toMatch(/^\.opencode-casa\/$/m);
     const opencode = ler("workers/motor-codigo/lib/opencode.ts");
-    expect(opencode).toMatch(/env: ambienteDoOpencode\(configDoOpencode\(m, medidorUrl, \{ tipo: opcoes\.tipo \}\), "nativo"\)/);
+    // Integração com a SPM: a subida monta a config do tipo e do modo e usa o ambiente único
+    // (no nativo, com uma pasta de config vazia por subida).
+    expect(opencode).toMatch(/const config = configDoOpencode\(m, medidorUrl, \{ tipo, modo \}\)/);
+    expect(opencode).toMatch(/const env = ambienteDoOpencode\(config, modo, \{ provedor: modeloParaOpencode\(m\)\.providerID, pastaDeConfig \}\)/);
     expect(opencode).not.toMatch(/function ambienteDoOpencode/);
   });
 });

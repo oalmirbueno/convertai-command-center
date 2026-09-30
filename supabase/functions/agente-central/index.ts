@@ -53,6 +53,8 @@ import {
 } from "./regras.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) na leitura da semana e nas respostas do dono.
+import { type AnexoDoMetodo, fecharComMetodo, type MetodoInjetado, registrarMetodoSemUso, superpoderesPara } from "../_shared/superpoderes.ts";
 // Frente AG3 (29/09): aprende com as respostas do dono, obedece as regras e devolve "Aprendi"/"Segui".
 import { anexosDoAprendizado, blocoDasRegras, esquecerRegra, type RegraAtiva, regrasDoAgente, regrasSeguidas } from "../_shared/aprender-com-o-dono.ts";
 import { aprenderNoServidor, guardarNoServidor } from "../_shared/aprender-no-servidor.ts";
@@ -101,22 +103,46 @@ export const LIMITE_FATOS = 9000;
 // padrão) pelo motor das mesas; a cadeia antiga fica só de reserva, uma vez.
 // Frente FS (29/09): sem resposta ou com JSON inválido, o motivo vai no log e na resposta (ia_erro), no
 // padrão do ritual_erro da frente LR. Antes o JSON inválido virava null em silêncio.
-type RespostaDaIA = { dados: Record<string, unknown>; modelo: string; erro: null } | { dados: null; modelo: null; erro: string };
+// Frente SPP (revisão 30/09): usoId do motor (null na reserva), para o método fechar a resposta.
+type RespostaDaIA = { dados: Record<string, unknown>; modelo: string; erro: null; usoId: string | null } | { dados: null; modelo: null; erro: string };
 
-async function perguntarIA(sistema: string, usuario: string, clientId: string, uid: string, escolha: EscolhaDoModelo): Promise<RespostaDaIA> {
-  const r = await escreverComModeloDaCentral({ clientId, sistema, usuario, escolha, temperatura: 0.3, criadoPor: uid });
+async function perguntarIA(sistema: string, usuario: string, clientId: string, uid: string, escolha: EscolhaDoModelo, metodo: MetodoInjetado | null = null): Promise<RespostaDaIA> {
+  const r = await escreverComModeloDaCentral({ clientId, sistema, usuario, escolha, temperatura: 0.3, criadoPor: uid, metodo });
   if (!r) {
     const erro = "nenhum modelo respondeu (nem o escolhido nem o de reserva)";
     console.error("[agente-central] IA sem resposta", { clientId, erro });
     return { dados: null, modelo: null, erro };
   }
   try {
-    return { dados: extractJson(r.texto), modelo: r.rotulo, erro: null };
+    return { dados: extractJson(r.texto), modelo: r.rotulo, erro: null, usoId: r.usoId ?? null };
   } catch (e) {
     const erro = `a IA (${r.rotulo}) devolveu uma resposta sem JSON válido: ${String((e as Error)?.message ?? e).slice(0, 200)}`;
     console.error("[agente-central] JSON inválido da IA", { clientId, modelo: r.rotulo, erro, inicio: r.texto.slice(0, 160) });
     return { dados: null, modelo: null, erro };
   }
+}
+
+let servicoDoMetodoCache: SupabaseClient | null = null;
+/**
+ * Frente SPP (revisão 30/09): o registro do método (prova no ia_usos e o
+ * registro sem uso) é escrita do servidor; o resto da Central segue com o
+ * banco de quem pediu (RLS).
+ */
+function servicoDoMetodo(): SupabaseClient {
+  if (!servicoDoMetodoCache) {
+    servicoDoMetodoCache = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } });
+  }
+  return servicoDoMetodoCache;
+}
+
+/** Anexos da resposta: "Aprendi" e "Segui" do dono e, com o método, a linha "Método:". */
+function comAnexoDoMetodo(anexos: unknown[], anexo: AnexoDoMetodo | null): unknown[] {
+  return anexo ? anexos.concat([anexo]) : anexos;
+}
+
+/** O ritual escrito pela reserva (sem linha em ia_usos) ainda conta no "Uso em 30 dias". */
+function registrarMetodoDoRitual(metodo: MetodoInjetado | null, escrito: { uso_id?: string | null } | null, clientId: string) {
+  if (metodo && escrito && !escrito.uso_id) void registrarMetodoSemUso(servicoDoMetodo(), { metodo, clientId });
 }
 
 type Dossie = { id: string; version: number; content: string; summary: string | null; metadata: Record<string, unknown> } | null;
@@ -202,6 +228,8 @@ async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, r
   // Frente SYNC: o que faltava do contexto completo (negócio, estratégia aprovada, briefing mais novo e decisões do conselho), da marca principal.
   const completoP = contextoCompletoParaPrompt(db, clientId, null, { area: "geral", partes: ["contexto", "estrategia", "briefing", "decisoes"], semTitulo: true, teto: 4000 })
     .then((c) => c.bloco, (e) => (registrarFalha("agente-central: contexto completo não lido", e), ""));
+  // Frente SPP: a leitura da semana é um lote de frentes (plano, frentes e prova); o código escolhe.
+  const spP = superpoderesPara(db, { agente: "central.agente", momento: "lote" });
   const [perfil, dossie, contexto, estado, regras] = await Promise.all([
     perfilDe(db, clientId),
     lerDossie(db, clientId),
@@ -221,7 +249,7 @@ async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, r
     estado ? estadoRealComoTexto(estado, { ritual, limite: 5000 }) : "",
     dossie ? `DOSSIÊ GERAL ATUAL v${dossie.version}:\n${recortarDossie(dossie.content, LIMITE_DOSSIE_PREPARAR)}` : "DOSSIÊ GERAL: não existe ainda.",
     await completoP,
-  ].filter(Boolean).join("\n\n"), clientId, uid, escolha);
+  ].filter(Boolean).join("\n\n"), clientId, uid, escolha, await spP);
   if (!r.dados) return json({ error: `A IA não respondeu agora (${r.erro}). Tente este cliente de novo.`, ia_erro: r.erro }, 502);
   const leitura = normalizarLeitura(r.dados.leitura);
   if (!leitura.fase.nome) leitura.fase = { nome: fase.nome, motivo: contexto.motivoDaFase, proximo_degrau: fase.sinalDeAvanco };
@@ -243,12 +271,22 @@ async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, r
     dossieAviso = "Cliente sem dossiê geral: a leitura fica só aqui até a equipe criar o dossiê.";
   }
 
+  // Frente SPP (revisão 30/09): o método fecha a leitura. A ação feita é o dossiê gravado; a linha "Método:" vai junto do "Segui".
+  const fechado = await fecharComMetodo(servicoDoMetodo(), {
+    usoId: r.usoId,
+    metodo: await spP,
+    resposta: leitura.onde_estamos,
+    declarados: r.dados.metodos_usados,
+    acaoFeita: !!dossie && versao !== dossie.version,
+    clientId,
+  });
+
   return json({
     client_id: clientId, nome: n.nome, contato: n.contato,
     fase: contexto.fase, motivo_da_fase: contexto.motivoDaFase,
     leitura, perguntas, dossie_versao: versao, dossie_aviso: dossieAviso,
     contagem: contexto.contagem, modelo: r.modelo,
-    aprendizado: anexosDoAprendizado(null, regrasSeguidas(r.dados.regras_seguidas, regras)),
+    aprendizado: comAnexoDoMetodo(anexosDoAprendizado(null, regrasSeguidas(r.dados.regras_seguidas, regras)), fechado.anexo),
   });
 }
 
@@ -266,21 +304,28 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
   let aprendizados: Array<{ texto: string; area: AreaDoCerebro; categoria: "preferencia" | "evitar" | "aprendizado" }> = [];
   // Frente FS: a IA que não organizou as respostas tem motivo na resposta (as respostas entram como o dono escreveu).
   let iaErro: string | null = null;
-  const regras = await regrasDaCentral(db, clientId);
   // Frente AG3: o que o dono respondeu também ensina ("nunca prometa prazo para este cliente"). Corre junto.
   const textoDoDono = [...respostas.filter((x) => x.resposta).map((x) => x.resposta), contextoExtra].filter(Boolean).join("\n");
+  // Frente SPP (revisão 30/09): o Jev escolhe o método pelo que o dono respondeu, junto com a leitura das regras
+  // (antes esperava sozinho, até 3,5 s, antes do modelo). Nunca lança.
+  const spAplicarP = temResposta ? superpoderesPara(db, { agente: "central.agente", pedido: textoDoDono || contextoExtra }) : Promise.resolve(null);
+  const regras = await regrasDaCentral(db, clientId);
   const aprendizado = textoDoDono
     ? aprenderNoServidor(db as never, { texto: textoDoDono, agente: "central", clientId, donoId: uid, contexto: respostas.map((x) => x.pergunta).join(" | ") })
     : Promise.resolve(null);
   let seguidas: ReturnType<typeof regrasSeguidas> = null;
+  // O que o modelo respondeu, para o método fechar depois das gravações (a prova é a ação feita de verdade).
+  let respostaDoModelo: { usoId: string | null; declarados: unknown } | null = null;
   if (temResposta) {
+    const spAplicar = await spAplicarP;
     const r = await perguntarIA(`${SISTEMA_APLICAR}${blocoDasRegras(regras)}`, [
       `LEITURA DA SEMANA:\n${JSON.stringify(leituraAntes)}`,
       `PERGUNTAS E RESPOSTAS DO DONO:\n${respostas.map((x) => `- ${x.pergunta}\n  Resposta: ${x.resposta || "(sem resposta)"}`).join("\n")}`,
       contextoExtra ? `CONTEXTO EXTRA DO DONO:\n${contextoExtra}` : "",
-    ].filter(Boolean).join("\n\n"), clientId, uid, escolha);
+    ].filter(Boolean).join("\n\n"), clientId, uid, escolha, spAplicar);
     if (!r.dados) iaErro = r.erro;
     if (r.dados) seguidas = regrasSeguidas(r.dados.regras_seguidas, regras);
+    if (r.dados) respostaDoModelo = { usoId: r.usoId, declarados: r.dados.metodos_usados };
     if (r.dados) {
       const nova = normalizarLeitura(r.dados.leitura);
       if (nova.onde_estamos) leitura = nova;
@@ -320,6 +365,7 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
   }
 
   // 2) Diário: as respostas são decisão do dono, com quem aprovou.
+  let diarioGravado = false;
   if (temResposta) {
     const { error } = await db.from("project_memory").insert({
       client_id: clientId,
@@ -335,6 +381,7 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
       created_by: uid,
     });
     if (error) console.warn(`[agente-central] diário não gravado: ${error.message}`);
+    else diarioGravado = true;
   }
 
   // 3) Cérebro: o que vale para as próximas semanas (sem duplicar; o Jev julga).
@@ -350,12 +397,26 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
   // 4) Avanços automáticos do dossiê em dia (melhor esforço).
   await db.rpc("dossie_registrar_avancos", { _client_id: clientId }).then(() => null, () => null);
 
-  // 5) O ritual, com a memória do servidor e o dossiê novo.
-  const [perfil, dossieNovo, contexto, estadoAplicar] = await Promise.all([
+  // Frente SPP (revisão 30/09): o método fecha a resposta do dono com a ação feita de verdade (dossiê, diário ou
+  // cérebro gravados); a linha "Método:" vai junto do "Aprendi" e do "Segui".
+  const fechado = respostaDoModelo
+    ? await fecharComMetodo(servicoDoMetodo(), {
+      usoId: respostaDoModelo.usoId,
+      metodo: await spAplicarP,
+      resposta: [leitura.onde_estamos, ...confirmacoes].filter(Boolean).join("\n"),
+      declarados: respostaDoModelo.declarados,
+      acaoFeita: (!!dossie && versao !== dossie.version) || diarioGravado || cerebro.some((c) => !c.erro),
+      clientId,
+    })
+    : { anexo: null };
+
+  // 5) O ritual, com a memória do servidor e o dossiê novo (e o método do escritor dos rituais).
+  const [perfil, dossieNovo, contexto, estadoAplicar, metodoDoRitual] = await Promise.all([
     perfilDe(db, clientId),
     lerDossie(db, clientId),
     lerContextoDoRitual(db, clientId, { ritual, limite: LIMITE_CONTEXTO_PREPARAR }),
     lerEstadoReal(db, clientId).catch((e) => (registrarFalha("agente-central: lerEstadoReal falhou", e), null)),
+    RITUAL_BRIEF[ritual] ? superpoderesPara(db, { agente: "rituais.escritor" }) : Promise.resolve(null),
   ]);
   const n = nomes(perfil);
   const fatos = fatosDoAgente({
@@ -371,13 +432,14 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
     ? await escreverRitual({
       ritual, clientName: n.nome, contactName: n.contato, facts: fatosNoLimite, continuidade: contexto.texto,
       estado: estadoAplicar ? estadoRealComoTexto(estadoAplicar, { ritual }) : "",
-      clientId, criadoPor: uid, escolha,
+      clientId, criadoPor: uid, escolha, metodo: metodoDoRitual,
     }).catch((e) => {
       ritualErro = String((e as Error)?.message ?? e ?? "falha desconhecida").slice(0, 300);
       console.error("agente-central: ritual não escrito", { clientId, ritual, erro: ritualErro });
       return null;
     })
     : null;
+  registrarMetodoDoRitual(metodoDoRitual, escrito, clientId);
   // Frente AG3: o escritor que volta sem texto (nenhum modelo ou JSON sem corpo) também tem motivo (antes: null calado).
   if (!escrito && RITUAL_BRIEF[ritual] && !ritualErro) {
     ritualErro = "o modelo não devolveu um ritual com texto (nenhum modelo respondeu ou a resposta veio sem corpo)";
@@ -400,7 +462,7 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
       : null,
     ritual_erro: ritualErro,
     ia_erro: iaErro,
-    aprendizado: anexosDoAprendizado(await aprendizado, seguidas),
+    aprendizado: comAnexoDoMetodo(anexosDoAprendizado(await aprendizado, seguidas), fechado.anexo),
   });
 }
 
@@ -415,12 +477,14 @@ async function acaoReescrever(db: SupabaseClient, uid: string, clientId: string,
   if (!RITUAL_BRIEF[ritual]) return json({ error: "Ritual desconhecido." }, 400);
   const instrucao = String(body.instrucao ?? "").trim().slice(0, 1500);
   const anterior = String(body.anterior ?? "").trim().slice(0, 4000);
-  const [perfil, dossie, contexto, estado, regras] = await Promise.all([
+  const [perfil, dossie, contexto, estado, regras, metodoDoRitual] = await Promise.all([
     perfilDe(db, clientId),
     lerDossie(db, clientId),
     lerContextoDoRitual(db, clientId, { ritual, limite: LIMITE_CONTEXTO_PREPARAR }),
     lerEstadoReal(db, clientId).catch((e) => (registrarFalha("agente-central: lerEstadoReal falhou", e), null)),
     regrasDaCentral(db, clientId),
+    // Frente SPP (revisão 30/09): o método do escritor dos rituais, junto com as leituras.
+    superpoderesPara(db, { agente: "rituais.escritor" }),
   ]);
   const aprendizado = instrucao
     ? aprenderNoServidor(db as never, { texto: instrucao, agente: "central", clientId, donoId: uid, contexto: "reescrever o ritual" })
@@ -438,11 +502,12 @@ async function acaoReescrever(db: SupabaseClient, uid: string, clientId: string,
   let ritualErro: string | null = null;
   const escrito = await escreverRitual({
     ritual, clientName: n.nome, contactName: n.contato, facts: recortarDossie(fatos, LIMITE_FATOS), continuidade: contexto.texto,
-    estado: estado ? estadoRealComoTexto(estado, { ritual }) : "", clientId, criadoPor: uid, escolha,
+    estado: estado ? estadoRealComoTexto(estado, { ritual }) : "", clientId, criadoPor: uid, escolha, metodo: metodoDoRitual,
   }).catch((e) => {
     ritualErro = String((e as Error)?.message ?? e ?? "falha desconhecida").slice(0, 300);
     return null;
   });
+  registrarMetodoDoRitual(metodoDoRitual, escrito, clientId);
   if (!escrito && !ritualErro) ritualErro = "o modelo não devolveu um ritual com texto";
   if (ritualErro) console.error("agente-central: ritual não reescrito", { clientId, ritual, erro: ritualErro });
   const repeticao = escrito

@@ -1,0 +1,405 @@
+{
+  "pacote": "obra/superpowers",
+  "origem": "https://github.com/obra/superpowers",
+  "licenca": "MIT (Copyright (c) 2025 Jesse Vincent); a LICENSE original fica em vendor/superpowers/LICENSE",
+  "tag": "v6.4.2",
+  "commit": "8ca22dba9a94f28898bbce59f2537ff4d87c747d",
+  "arvore": "a29cb0f1f5600c82888f61eb6832025b3d9d3677",
+  "data": "2026-09-25T11:06:27-07:00",
+  "como_atualizar": "node scripts/atualizar-superpowers.mjs --tag <vX.Y.Z> --clone <clone limpo> [--aplicar]; nunca main",
+  "skills": [
+    {
+      "nome": "brainstorming",
+      "arquivo": "skills/brainstorming/SKILL.md",
+      "sha256": "a32d2255354775aa124855aa7100cf276bea096fff4ebb3a0edf57be216e6c72"
+    },
+    {
+      "nome": "diagnosing-superpowers",
+      "arquivo": "skills/diagnosing-superpowers/SKILL.md",
+      "sha256": "5a652f8132cc901eb5ca61f89157839f87a2f20aed037fc7a2b51051bc37cd19"
+    },
+    {
+      "nome": "dispatching-parallel-agents",
+      "arquivo": "skills/dispatching-parallel-agents/SKILL.md",
+      "sha256": "1968923066f3b707eb01d1992cdf4c42284c3855f70253b9cd5000ff45fca13c"
+    },
+    {
+      "nome": "executing-plans",
+      "arquivo": "skills/executing-plans/SKILL.md",
+      "sha256": "f38e8f2ddcf079f65493adc713c1fed78421dfaf5f4dbf6b3a6b2b1d95466e71"
+    },
+    {
+      "nome": "finishing-a-development-branch",
+      "arquivo": "skills/finishing-a-development-branch/SKILL.md",
+      "sha256": "8db5a922b242dd4e1bf824cb91c13b3e8d8e8a86d6ceaf7f0774eb9cce909d65"
+    },
+    {
+      "nome": "receiving-code-review",
+      "arquivo": "skills/receiving-code-review/SKILL.md",
+      "sha256": "091df1629510af1b92fc4abd6f96732ebedb4cb2c0f3457e8f2740b0504a2438"
+    },
+    {
+      "nome": "requesting-code-review",
+      "arquivo": "skills/requesting-code-review/SKILL.md",
+      "sha256": "cfcee1b06774e7c0517f1e09be1a11f2d5680257072723e709ddbcf7e08b795a"
+    },
+    {
+      "nome": "subagent-driven-development",
+      "arquivo": "skills/subagent-driven-development/SKILL.md",
+      "sha256": "8dde5589ee083fb4999106d116f01c8fdaf3116a8a9813fdedeb80329de49046"
+    },
+    {
+      "nome": "systematic-debugging",
+      "arquivo": "skills/systematic-debugging/SKILL.md",
+      "sha256": "808fc5717aa88ad65efff312b11c186294d3e6ee301afb584e2f86599b137787"
+    },
+    {
+      "nome": "test-driven-development",
+      "arquivo": "skills/test-driven-development/SKILL.md",
+      "sha256": "64b03fce4aee5a97a93160cea8111f3ba13a17b7c001db4bd5836d67fd10705d"
+    },
+    {
+      "nome": "using-git-worktrees",
+      "arquivo": "skills/using-git-worktrees/SKILL.md",
+      "sha256": "8cfb86f121269e8f7f12361e6795c4f6738828340e28964c9229d365666c9edd"
+    },
+    {
+      "nome": "using-superpowers",
+      "arquivo": "skills/using-superpowers/SKILL.md",
+      "sha256": "82c5c8866ad7f5dd4440ce66bd7806ba48a2f13771beae5cf112e53f08fe36ba"
+    },
+    {
+      "nome": "verification-before-completion",
+      "arquivo": "skills/verification-before-completion/SKILL.md",
+      "sha256": "2befe7fc55bcadaa3d97dd9e8efeb633d2561c0ebe74c5a8b17c4d9e7e4520b3"
+    },
+    {
+      "nome": "writing-plans",
+      "arquivo": "skills/writing-plans/SKILL.md",
+      "sha256": "a6c67c1900064347c2a329990dd3c555657c51c3ec53b259a08aa01a2c26139a"
+    },
+    {
+      "nome": "writing-skills",
+      "arquivo": "skills/writing-skills/SKILL.md",
+      "sha256": "bbdfe742f853562e643a3d40d64476359d47881e39cef80a189283fa26d11ab9"
+    }
+  ],
+  "executaveis": [
+    {
+      "arquivo": ".hermes-plugin/__init__.py",
+      "sha256": "7fd93899e39371d56ba1e32660548673afa78f3a4a8bd306f93fbb418afa6f3c"
+    },
+    {
+      "arquivo": ".opencode/plugins/superpowers.js",
+      "sha256": "c979fe5a9fd6fddc9bc9730b34b25989f9d53939eed7d594c4564f6e47495f26"
+    },
+    {
+      "arquivo": ".pi/extensions/superpowers.ts",
+      "sha256": "39c27000c047f8a1399a76e032e4cd239d7bdb0be168a121f46a2ac719deaae0"
+    },
+    {
+      "arquivo": "hooks/hooks-cursor.json",
+      "sha256": "53d8ceb3ff5d8bb1c4f283f238cc868b8c1af22e40a3ac30f6d6e4173effefbd"
+    },
+    {
+      "arquivo": "hooks/hooks.json",
+      "sha256": "47fd72cc8bedf31c72702b35b4ed7bab670294d658c4ce518330337525a3798b"
+    },
+    {
+      "arquivo": "hooks/run-hook.cmd",
+      "sha256": "d3d9c6199678dab2858e60509dde5e7414f13c2a2b5e48a38b1d368b6e1d6abb"
+    },
+    {
+      "arquivo": "hooks/session-start",
+      "sha256": "5e92229e49d7cff5e0355ab84b0bceb0d27d53c565b33210132ce6e413ee9665"
+    },
+    {
+      "arquivo": "index.js",
+      "sha256": "f0132fd5339befeb99ba903b1619fd9530969e5b4a1ea8cecf0b0a7f0213a099"
+    },
+    {
+      "arquivo": "scripts/bump-version.sh",
+      "sha256": "fc96339dad5f54ffcef3393b28542dbe93ec168573c012d9c599603009e80006"
+    },
+    {
+      "arquivo": "scripts/lint-shell.sh",
+      "sha256": "aa34cc2dad4b130231bcf21fdd18f3f91e8fd7ab80d88a82a13e1395f32756f8"
+    },
+    {
+      "arquivo": "scripts/package-codex-plugin.sh",
+      "sha256": "2541617b86519273428d12d18a5f7ec852ac39cfdec74622c01ce71a504bb80d"
+    },
+    {
+      "arquivo": "scripts/sync-to-codex-plugin.sh",
+      "sha256": "d24c3a579f5d6759f08f8c1c9a7772caa6e937dcc124f1aae5fe0ffd1177ee24"
+    },
+    {
+      "arquivo": "skills/brainstorming/scripts/frame-template.html",
+      "sha256": "6a8a4e58bd6a44b904e2e3c57de774481d909204597e1498de53f1b2fecc4c4e"
+    },
+    {
+      "arquivo": "skills/brainstorming/scripts/helper.js",
+      "sha256": "43c6d69954a46ec34a2a262bcc62a9a7e83e839c739f199cb72646d397c686e3"
+    },
+    {
+      "arquivo": "skills/brainstorming/scripts/server.cjs",
+      "sha256": "2d2961ea8d11f56c5f4c3a1a68d22709efa5d7601a2246d8c880774e7e9e8412"
+    },
+    {
+      "arquivo": "skills/brainstorming/scripts/start-server.sh",
+      "sha256": "a4e5ae84275bcaacd2f84345afeabe59cf7b00ba080e123da7cc1fb226f12847"
+    },
+    {
+      "arquivo": "skills/brainstorming/scripts/stop-server.sh",
+      "sha256": "0b5ccbbd57f62d3ed88993f7940b5ee0e5c0fc9b21c550c623da4f6292e47daf"
+    },
+    {
+      "arquivo": "skills/executing-plans/scripts/task-done",
+      "sha256": "f704dc216e0602f95c601b9ee1113c9a55cc1c5f6e4d149dddfba0fd3ad1c314"
+    },
+    {
+      "arquivo": "skills/executing-plans/scripts/task-start",
+      "sha256": "f833693c8fce3700fc9f841562d80f8015cd40f652c168a3405ac3e46947a1fe"
+    },
+    {
+      "arquivo": "skills/subagent-driven-development/scripts/review-package",
+      "sha256": "f9275175b2276b1d5fdb1bae0bedaadd2a950659b7c6f311ea37ff85e1861b1f"
+    },
+    {
+      "arquivo": "skills/subagent-driven-development/scripts/sdd-workspace",
+      "sha256": "75ca46c756ba4209ca36e0d3d65567257ceb33bc7a6775b9dad946707cb3bd7b"
+    },
+    {
+      "arquivo": "skills/subagent-driven-development/scripts/task-brief",
+      "sha256": "cc563538e09abf719b34ddf4b2fa7a65cf3b301729039dbfa923cb060f729146"
+    },
+    {
+      "arquivo": "skills/systematic-debugging/condition-based-waiting-example.ts",
+      "sha256": "40ae5ebe497fdf310200e43fe986552546d0a22837c0d39e855db1cfd33eb88e"
+    },
+    {
+      "arquivo": "skills/systematic-debugging/find-polluter.sh",
+      "sha256": "dd7b8f13c4cc2a24b33ff87b18da9248f3e1c80a085c3316224f69ff0fa5c43c"
+    },
+    {
+      "arquivo": "skills/writing-skills/render-graphs.js",
+      "sha256": "c7f412cc629461c4d10287e668731874c0497707023e3e3f74a5355eb2cee196"
+    },
+    {
+      "arquivo": "tests/antigravity/run-tests.sh",
+      "sha256": "76355b01132d4f27cc5545c15926eb0c3614d38db2b5d6988a2d818918d9eaf1"
+    },
+    {
+      "arquivo": "tests/antigravity/test-antigravity-tools.sh",
+      "sha256": "8114d937d2ff960262e5d281a7e1ea2f95eb05ceb1690ac91b0db059e0c83799"
+    },
+    {
+      "arquivo": "tests/brainstorm-server/auth.test.js",
+      "sha256": "8efa43628b582973dcc543c0768e91066cf9834292e2e724657c6801b63df062"
+    },
+    {
+      "arquivo": "tests/brainstorm-server/branding.test.js",
+      "sha256": "b116f645b46130a3a58867493863a1398cf5426375d695203c858c95eb5e8d02"
+    },
+    {
+      "arquivo": "tests/brainstorm-server/browser-launcher.test.js",
+      "sha256": "ffb9ccecf27968b9359049ff96b50725669b1f86863f88b583b9aa0c3aa37c94"
+    },
+    {
+      "arquivo": "tests/brainstorm-server/helper.test.js",
+      "sha256": "9917fc944e8c5594430ba2600035ff5fd8212119b9cae2d62c75f5725de94061"
+    },
+    {
+      "arquivo": "tests/brainstorm-server/lifecycle.test.js",
+      "sha256": "8146fc31bd814dec0e497da6dc1c9423e4352e0fb1c3cdebd1b9db42a2ac8d8e"
+    },
+    {
+      "arquivo": "tests/brainstorm-server/server.test.js",
+      "sha256": "fd1cc628222a6fcc657461b84f85f3b50d5a9709056dc9232241f9cb4182593a"
+    },
+    {
+      "arquivo": "tests/brainstorm-server/start-server.test.sh",
+      "sha256": "fb0c928e206fbd6a0fe77e750198d71ae0c331e361b13e9a8b8742cdb22302b5"
+    },
+    {
+      "arquivo": "tests/brainstorm-server/stop-server.test.sh",
+      "sha256": "35e150e95f0e97d50470f2c0a30bc7c9c8c5cb7721c53dcff887b430067490db"
+    },
+    {
+      "arquivo": "tests/brainstorm-server/windows-lifecycle.test.sh",
+      "sha256": "7dc8e09edfe0a4cc34550fdb0e5ae5117758991d490756971be51c88e4f5908d"
+    },
+    {
+      "arquivo": "tests/brainstorm-server/ws-protocol.test.js",
+      "sha256": "abd0a10eaffe4e30a9918c79c7692775db36c8a3e132e04d52ec06d6cddaa132"
+    },
+    {
+      "arquivo": "tests/claude-code/analyze-token-usage.py",
+      "sha256": "b3b124b975086e66540dca1328d7b6b75416450b0c93fc246f0d7d148fc2394c"
+    },
+    {
+      "arquivo": "tests/claude-code/run-skill-tests.sh",
+      "sha256": "a7bffa447f489be5a9507114027ddcdb94409eba3156df88c9338307710502a4"
+    },
+    {
+      "arquivo": "tests/claude-code/test-executing-plans-scripts.sh",
+      "sha256": "65629962e5fea4144310d42025ed7c39db5954b1f6add0ebf6a29b3b8f00b2d7"
+    },
+    {
+      "arquivo": "tests/claude-code/test-helpers.sh",
+      "sha256": "b06a890c9d371195d8f256b1227607dd32ad28831658be1033756cc8dbcd86a7"
+    },
+    {
+      "arquivo": "tests/claude-code/test-sdd-workspace.sh",
+      "sha256": "81697baaa96698f0ace309c746c2b68ff5db94905ea277c842067cc807dd57be"
+    },
+    {
+      "arquivo": "tests/claude-code/test-subagent-driven-development-integration.sh",
+      "sha256": "0794d17e3cc5d8a64c07a6c181538e1142819b86382d171f677510cfe6a3f722"
+    },
+    {
+      "arquivo": "tests/claude-code/test-subagent-driven-development.sh",
+      "sha256": "37e9a1fbb20f9f6ca2e7eb62f16b4b04c90da2874ec48ec3d2cc5c73ed99155d"
+    },
+    {
+      "arquivo": "tests/claude-code/test-worktree-native-preference.sh",
+      "sha256": "1c0a94fb097ad33186bb7ea2b0321b11d8ba92ed8c6ef61464a2246eec33acf6"
+    },
+    {
+      "arquivo": "tests/claude-code/test-worktree-path-policy.sh",
+      "sha256": "3498f973a9cf288f2959b7a02fc3acea09ee11650b46d689aef81b394f8ab85c"
+    },
+    {
+      "arquivo": "tests/codex-plugin-sync/test-sync-to-codex-plugin.sh",
+      "sha256": "0fe708303673f20089c611060714cfb86de3fc620f9e6b7820e85c4fbc46fb74"
+    },
+    {
+      "arquivo": "tests/codex/test-marketplace-manifest.sh",
+      "sha256": "9c5afb24318bd959606f5063f444042e08e6fc2c6ff8c4988760476021e4ec90"
+    },
+    {
+      "arquivo": "tests/codex/test-package-codex-plugin.sh",
+      "sha256": "bbf76d50eac33b60d73318946bc1418a6e6c6d52cdd918f39c7b18b8eaa0b0f4"
+    },
+    {
+      "arquivo": "tests/devin/test-devin-plugin.sh",
+      "sha256": "e156be13b2e902449ef8bd1836b9dc60a7fc5f2f670896f4faf621d9a1f3a6e4"
+    },
+    {
+      "arquivo": "tests/diagnosing-superpowers/test-skill-structure.sh",
+      "sha256": "35baf007e9a744621c6d374200cfac3b597a5b969bbf824178975257f239854b"
+    },
+    {
+      "arquivo": "tests/explicit-skill-requests/run-all.sh",
+      "sha256": "b657ef562b6ce3d02b3422eb5ab8571be5545525249088034ab36c27343b95cc"
+    },
+    {
+      "arquivo": "tests/explicit-skill-requests/run-extended-multiturn-test.sh",
+      "sha256": "1004578e3ef68d6fda8646c9257d27dd4ca30c4c1bdc986a50fbcb929ea0934d"
+    },
+    {
+      "arquivo": "tests/explicit-skill-requests/run-haiku-test.sh",
+      "sha256": "27b92722271fd25dfcad9b04e8c45b81e2a51a51005c3bcf13dd9d5a70567d01"
+    },
+    {
+      "arquivo": "tests/explicit-skill-requests/run-multiturn-test.sh",
+      "sha256": "dc22f0b1ed0d367811ecf046c942430d15e87f4b8b2b4cc8260d60e00bee6ecb"
+    },
+    {
+      "arquivo": "tests/explicit-skill-requests/run-test.sh",
+      "sha256": "841f1d014f231c84f441cc6b91f388cc3e9e788012e6d36f5e78406c1f4c9b49"
+    },
+    {
+      "arquivo": "tests/hermes/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "arquivo": "tests/hermes/conftest.py",
+      "sha256": "daac0d99bc1848c35cf1aa85694d0dc752628acb876f552f65c15972942dd2f9"
+    },
+    {
+      "arquivo": "tests/hermes/test_bootstrap.py",
+      "sha256": "a4aaeb394779f3d22106866bfe67723301a5cf317dfad7a1386994eddd7a3031"
+    },
+    {
+      "arquivo": "tests/hermes/test_plugin.py",
+      "sha256": "a159fbee0e56b0ff320a85642b5b38f703ba64382d1e3de0200889598af8dfa2"
+    },
+    {
+      "arquivo": "tests/hooks/test-session-start.sh",
+      "sha256": "427f5464b635504ab2dc1f2bde9aa0bce348e13be451985e541099219130e92f"
+    },
+    {
+      "arquivo": "tests/kimi/run-tests.sh",
+      "sha256": "fb53a9ce91ae119146764ef2d55c63a5d20b86198e2ee08759fbae8194177ff0"
+    },
+    {
+      "arquivo": "tests/kimi/test-plugin-manifest.sh",
+      "sha256": "d7ca4db2e67c8611d3d1fe1fbf28fe41a33b187155563f1a553212df04250aaa"
+    },
+    {
+      "arquivo": "tests/opencode/run-tests.sh",
+      "sha256": "b2f2067cfefa61aec22da47686dcc7b60e4de16bca439d1f3e4631d71ad78054"
+    },
+    {
+      "arquivo": "tests/opencode/setup.sh",
+      "sha256": "0e8600fa5e56d7613f41d19732601397d2c18087a71da2801cc53443756a6348"
+    },
+    {
+      "arquivo": "tests/opencode/test-bootstrap-caching.mjs",
+      "sha256": "7966d45d3bfa281679c917c03704824ae9752f2e624173b598baaea961bebafa"
+    },
+    {
+      "arquivo": "tests/opencode/test-bootstrap-caching.sh",
+      "sha256": "b13d826fdae77feaf922f4009f544d0ad51ce722258dee997b252f76af70330a"
+    },
+    {
+      "arquivo": "tests/opencode/test-plugin-loading.sh",
+      "sha256": "41389f92e160766cfb27bfd15849e3ef546427444f88d241506915044209bed0"
+    },
+    {
+      "arquivo": "tests/opencode/test-priority.sh",
+      "sha256": "123a82b72f22a5a0d1be2c6cfb898bf4d8d772ee4c7ba2f4540562a1b62a0902"
+    },
+    {
+      "arquivo": "tests/opencode/test-session-bootstrap.mjs",
+      "sha256": "843f69300ee5f93f5ec9a8cedf7467427cc254f91a6d21e4b4ddc15f849c3aa1"
+    },
+    {
+      "arquivo": "tests/opencode/test-session-bootstrap.sh",
+      "sha256": "8dd9605232ac6030f052ab0102fcea6109dfe6a44e74a2bbe15fd6eb450fe7db"
+    },
+    {
+      "arquivo": "tests/opencode/test-skill-registration.mjs",
+      "sha256": "779ba75046c2860096e232b5efa298c2073b459234e7279d87510e10fdeacd79"
+    },
+    {
+      "arquivo": "tests/opencode/test-skill-registration.sh",
+      "sha256": "0d01ec62a39b3d996ca8c3160a93e7d5f0bc3591941a8ee6d48f65dd61eddd28"
+    },
+    {
+      "arquivo": "tests/opencode/test-tools.sh",
+      "sha256": "ae8bfae51fd2d25b9659177ec257c0551bc521d7f9e7c60c34110497b501e182"
+    },
+    {
+      "arquivo": "tests/pi/test-pi-extension.mjs",
+      "sha256": "0f84e8fe4190575e907a109e3b2540a21832ddac4f1bdb76f1074489f4f605c6"
+    },
+    {
+      "arquivo": "tests/shell-lint/test-lint-shell.sh",
+      "sha256": "e777907226ed8614fe1cbc06afd538e223e4081c368757b26a5f77dfb4355b40"
+    },
+    {
+      "arquivo": "tests/systematic-debugging/test-find-polluter.sh",
+      "sha256": "7c5ae1adb7c6e292b73eccba6ba442501c442aefe8c883a94c9fdd809d592cea"
+    },
+    {
+      "arquivo": "tests/version-bump/test-bump-version.sh",
+      "sha256": "5ee6381b450985934877a6fb3da71f769559f413419c616158cd6b79ff582ff1"
+    },
+    {
+      "arquivo": "tests/writing-skills/test-render-graphs.sh",
+      "sha256": "c977fb34ec6614400673cc3d73e9979eb5428d35e1413c50ab4b1cef47eb7b3b"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Bot, Link2, Loader2, Send, Sparkles } from "lucide-react";
 import { BotaoComCusto, EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
@@ -17,6 +17,8 @@ import {
 } from "../canvasApi";
 import { BOTAO, CAMPO, ROTULO, type Fontes } from "./comum";
 import { AjudaRecolhida, CompositorDoAgente, MensagensDoAgente } from "@/components/sistema";
+// Frente SPP (revisão 30/09): a linha "Método:" embaixo da resposta do agente do Canvas.
+import MetodoDoAgente from "@/components/agentes/MetodoDoAgente";
 
 /**
  * Conversa com o Agente (a bolinha do quadro). Dono, 25/09: "uma bolinha onde
@@ -115,13 +117,15 @@ export function ChatDoAgente({
       <MensagensDoAgente ref={conversa} rotulo="Conversa com o agente" className="nowheel nopan nodrag !space-y-2 !p-2.5">
         {mensagens.length === 0 && <p className="text-[12.5px] leading-snug text-zinc-500">Diga o que você quer: "ela segurando o produto na praia, pegada natural".</p>}
         {mensagens.map((msg, i) => (
+          <Fragment key={i}>
           <p
-            key={i}
             className={`max-w-[92%] whitespace-pre-wrap rounded-xl px-3 py-2 text-[13px] leading-[1.5] [overflow-wrap:anywhere] ${msg.papel === "usuario" ? "ml-auto bg-emerald-500/20 text-emerald-50" : "bg-white/[0.07] text-zinc-100"}`}
             data-mensagem={msg.papel}
           >
             {msg.texto}
           </p>
+          {msg.papel === "agente" && msg.metodo ? <MetodoDoAgente anexos={[msg.metodo]} /> : null}
+          </Fragment>
         ))}
         {enviando && (
           <p className="inline-flex items-center rounded-xl bg-white/[0.07] px-3 py-2 text-[13px] text-zinc-300">

@@ -7,7 +7,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, relative, sep } from "node:path";
-import { criarLimitador, type EventoResumido, type ModeloDoMotor } from "../../../supabase/functions/_shared/motor-codigo.ts";
+import { criarLimitador, type EventoResumido, type ModeloDoMotor, TIPOS_QUE_GASTAM } from "../../../supabase/functions/_shared/motor-codigo.ts";
 import { type PacoteDoSite, promptDaSecao, revisarHtml, rotuloDaSecao } from "../../../supabase/functions/_shared/site-metodo.ts";
 import { criarApiDaVercel, garantirProjeto as garantirProjetoVercel, ligarDominio, publicarArquivos, vercelLigada } from "../../../supabase/functions/_shared/publicacao-vercel.ts";
 // UIM: a base de design (skill ui-ux-pro-max): design system gerado pelo motor e prova de consulta por seção.
@@ -16,9 +16,13 @@ import { ajustarPromptDaBase, prepararDesignSystem } from "./design-system.ts";
 import { BUSCADOR_DA_UIUX } from "./config-opencode.ts";
 import { buscar as buscarNaBase } from "../modelo-site/scripts/uiux.mjs";
 import type { Fila, LinhaDaFila } from "./fila.ts";
-import { arquivosMudados, atualizarCasca, commitar, commitAtual, construirSite, escreverPacote, garantirProjeto, instalarSePrecisar, pastaDoProjeto, voltarCommits } from "./projeto.ts";
+import { arquivosMudados, atualizarCasca, commitar, commitAtual, type ConferenciaDaSecao, conferirSecaoDoProjeto, construirSite, escreverPacote, garantirProjeto, instalarSePrecisar, pastaDoProjeto, reporCasca, voltarCommits } from "./projeto.ts";
 import { garantirPrevia } from "./previa.ts";
 import { rodarPassada, subirOpencode } from "./opencode.ts";
+import { SKILLS_POR_TRABALHO, VERSAO_DO_SUPERPOWERS } from "./config-opencode.ts";
+import { eventosDasMarcas } from "./marcas-da-resposta.ts";
+
+export { eventosDasMarcas, lerMarcasDaResposta, prontoSemProva } from "./marcas-da-resposta.ts";
 import { abrirMedidor, type Medidor } from "./medidor.ts";
 import { ziparProjeto } from "./zip.ts";
 import { revisaoDeUx } from "./revisao-ux.ts";
@@ -66,6 +70,12 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
     if (t.tipo !== "zip" && t.tipo !== "desfazer") {
       const casca = await atualizarCasca(pasta);
       if (casca) await avisar({ tipo: "passo", resumo: `Casca da casa atualizada (v${casca})` });
+      // SPM: a casca na mesma versão volta ao original (o agente não edita; o build do motor roda o que está aqui).
+      const repostos = reporCasca(pasta);
+      if (repostos.length) {
+        await commitar(pasta, "Casca da casa reposta");
+        await avisar({ tipo: "passo", resumo: `Casca da casa reposta: ${repostos.slice(0, 4).join(", ")}` });
+      }
     }
     const anterior = await commitAtual(pasta);
     commitInicial = anterior;
@@ -91,7 +101,8 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
       }
     }
 
-    if (t.tipo === "construir" || t.tipo === "ajustar") {
+    // Só construir e ajustar passam pelo modelo (TIPOS_QUE_GASTAM); o teste amarra SKILLS_POR_TRABALHO a eles.
+    if (TIPOS_QUE_GASTAM.indexOf(t.tipo as (typeof TIPOS_QUE_GASTAM)[number]) >= 0) {
       if (!modelo) throw new Error("trabalho sem modelo");
       const avisos = await escreverPacote(pasta, pacote, fila);
       for (const a of avisos) await avisar({ tipo: "aviso", resumo: a });
@@ -107,7 +118,10 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
         await avisar({ tipo: "previa", resumo: pv.publica ? "Prévia ao vivo aberta" : "Prévia só nesta máquina", dados: { url: pv.url, publica: pv.publica, aviso: pv.aviso } });
       }
       medidor = modelo.provedor === "openrouter" ? await abrirMedidor() : null;
-      const servidor = await subirOpencode(pasta, modelo, medidor ? medidor.url : null);
+      // SPM: o tipo decide as skills liberadas; plugin que não sobe vira aviso e o trabalho segue no nativo.
+      const servidor = await subirOpencode(pasta, modelo, medidor ? medidor.url : null, { tipo: t.tipo, aoFalhar: (msg) => avisar({ tipo: "aviso", resumo: msg }) });
+      await avisar({ tipo: "passo", resumo: `Superpowers ${VERSAO_DO_SUPERPOWERS.tag} no modo ${servidor.modo} (${(SKILLS_POR_TRABALHO[t.tipo] || []).length} skills liberadas)` });
+      if (servidor.limpos.length) await avisar({ tipo: "aviso", resumo: `Configuração do opencode achada no site e apagada antes de subir: ${servidor.limpos.slice(0, 4).join(", ")}` });
       const custoReal = medidor ? medidor.total : undefined;
       try {
         const passos = t.tipo === "construir" ? ((pedido.secoes as string[]) || []) : [String(pedido.secao || "")];
@@ -149,7 +163,11 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
             consultas.push(consulta);
             await avisar(eventoDaConsulta(consulta, rotuloDaSecao(secao)));
           }
+          // SPM: se a passada mexeu na casca, ela volta antes do commit e do build do motor.
+          const mexidos = reporCasca(pasta);
+          if (mexidos.length) await avisar({ tipo: "aviso", resumo: `A passada de ${rotuloDaSecao(secao)} mexeu na casca da casa (${mexidos.slice(0, 3).join(", ")}); o motor repôs o original` });
           let c = await commitar(pasta, `${t.tipo === "construir" ? "Seção" : "Ajuste"}: ${rotuloDaSecao(secao)}`);
+          let conferencia: ConferenciaDaSecao = { rodou: false, ok: false, problemas: [], onde: null, motivo: "nada mudou no código nesta passada" };
           if (c.novo) {
             // O site tem de continuar construindo. Seção que quebra o build volta (Desfazer do passo),
             // com o motivo à vista; não há laço de correção: a equipe pede de novo.
@@ -159,10 +177,21 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
               c = await voltarCommits(pasta, antesDaSecao, c.commit);
               await avisar({ tipo: "aviso", resumo: `A seção ${rotuloDaSecao(secao)} quebrou o build e foi desfeita: ${motivoDoBuild}` });
               falhas.push({ secao, motivo: motivoDoBuild });
+              conferencia = { ...conferencia, motivo: "o build falhou e a seção foi desfeita" };
             } else {
               await avisar({ tipo: "commit", resumo: `Commit da seção ${rotuloDaSecao(secao)}`, dados: { commit: c.commit, custo_usd: gasto.custo } });
               feitas.push(secao);
+              // SPM: a prova de verdade é a conferência que o MOTOR roda no build dele, com o conferir.mjs do modelo.
+              conferencia = conferirSecaoDoProjeto(pasta, secao);
             }
+          }
+          // SPM: PROVA declarada, a conferência do motor, DECIDI e PRECISA DE RESPOSTA viram eventos
+          // (direto, fora do limitador, para não se juntarem). Prova que não bate vira aviso; nada é refeito.
+          const marcas = eventosDasMarcas(r.marcas, { secao, rotulo: rotuloDaSecao(secao), motivo: r.motivo, conferencia });
+          if (marcas.length) {
+            const pendente = limitador.soltar(Date.now() + 1000);
+            if (pendente) await fila.evento(t, pendente);
+            for (const ev of marcas) await fila.evento(t, ev);
           }
           await fila.atualizar(t.id, { commit: c.commit });
           if (r.motivo === "teto") {

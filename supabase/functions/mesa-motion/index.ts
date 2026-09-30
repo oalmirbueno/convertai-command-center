@@ -34,6 +34,9 @@ import { logosDaMarca } from "../_shared/heranca-da-marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) no agente e nas gerações de brand e storyboards.
+// A escreverCena NÃO recebe: o escritor de cenas tem o método próprio (frente SPM, _shared/cena-hf.ts).
+import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 import { blocoDoContextoDoCliente, criarContextoDoAgente, PARTES_COM_O_CONTEXTO } from "../_shared/contexto-do-agente.ts";
 import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
@@ -59,6 +62,7 @@ import {
   coresDaMarca,
   dadosDaCenaSobMedida,
   ehFormato,
+  escritaAnteriorDaTela,
   ESQUEMA_DA_CENA,
   fontesDaCena,
   type FormatoDoMotion,
@@ -66,7 +70,9 @@ import {
   type MarcaDaCena,
   montarDocumento,
   PECAS_DO_KIT,
+  separarFalhaAnterior,
   SISTEMA_DA_CENA,
+  tokensDeEntradaDaCena,
 } from "../_shared/cena-hf.ts";
 import {
   assinaturaDaCena,
@@ -465,6 +471,7 @@ async function gerarBrand(ch: Chamador, f: LinhaDoFilme, modeloId: unknown, pedi
     mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify({ ...d.dados, pedido_da_equipe: pedido || null })}` }],
     esquemaJson: ESQUEMA_DO_BRAND,
     maxTokensSaida: 5_000,
+    metodo: await superpoderesPara(servico(), { agente: "motion.geracao", momento: f.brand && f.brand.essencia ? "ajustar" : "gerar" }),
     referencia: { tipo: "motion_filme", id: f.id },
     criadoPor: ch.userId,
   });
@@ -496,6 +503,7 @@ async function gerarStoryboards(ch: Chamador, f: LinhaDoFilme, modeloId: unknown
     mensagens: [{ papel: "usuario", conteudo: `BRAND.md:\n${md}\n\nDADOS:\n${JSON.stringify({ tipo: f.tipo, entrevista: f.entrevista, DURACAO_ALVO: d.dados.DURACAO_ALVO, PROVAS: f.brand.provas, PECAS: pecas, ACERVO: acervo.data || [], pedido_da_equipe: pedido || null })}` }],
     esquemaJson: esquemaDosStoryboards(f.tipo),
     maxTokensSaida: 9_000,
+    metodo: await superpoderesPara(servico(), { agente: "motion.geracao", momento: "gerar" }),
     referencia: { tipo: "motion_filme", id: f.id },
     criadoPor: ch.userId,
   });
@@ -548,14 +556,17 @@ function tetoDaCena(v: unknown): number {
 }
 
 /** O modelo escreve UMA cena (sem laço): a conferência recusa e a equipe decide. */
-async function escreverCena(ch: Chamador, f: LinhaDoFilme, cenaId: string, p: { modeloId?: unknown; pedido?: string; teto?: unknown }) {
+async function escreverCena(ch: Chamador, f: LinhaDoFilme, cenaId: string, p: { modeloId?: unknown; pedido?: string; teto?: unknown; escritaAnterior?: unknown }) {
   const i = f.cenas.findIndex((x) => x.id === cenaId);
   if (i < 0) throw new ErroHttp(404, "cena_inexistente", "Cena não encontrada neste filme.");
   const cena = f.cenas[i];
   if (cena.tipo_plano !== "hf") throw new ErroHttp(409, "plano_de_video", "Esta cena é um plano de vídeo; escreva só cena em código.");
   const modelo = await modeloDoPedido(f, p.modeloId);
   const teto = tetoDaCena(p.teto);
-  const estimativa = estimarComModelo(modelo, { tokensEntrada: TAMANHOS_DO_MOTION.cena.entrada, tokensSaida: TAMANHOS_DO_MOTION.cena.saida });
+  // Reescrever com a causa: a escrita que falhou vai junto (a recusada vem da tela; a do render está na cena).
+  const comCausa = !!separarFalhaAnterior(p.pedido).falha;
+  const escritaAnterior = comCausa ? escritaAnteriorDaTela(p.escritaAnterior) || cena.escrita : null;
+  const estimativa = estimarComModelo(modelo, { tokensEntrada: tokensDeEntradaDaCena(TAMANHOS_DO_MOTION.cena.entrada, !!escritaAnterior), tokensSaida: TAMANHOS_DO_MOTION.cena.saida });
   if (estimativa > teto) throw new ErroHttp(409, "acima_do_teto", `Escrever esta cena custa uns US$ ${estimativa.toFixed(2)}, acima do teto de US$ ${teto.toFixed(2)} por cena. Aumente o teto ou troque o modelo.`, { estimativa_usd: estimativa, teto_usd: teto });
   const kit = await kitDoFilme(f);
   const imagens = Array.isArray(cena.params.imagens) ? (cena.params.imagens as string[]) : [];
@@ -567,7 +578,7 @@ async function escreverCena(ch: Chamador, f: LinhaDoFilme, cenaId: string, p: { 
     agente: PAPEL,
     modeloId: modelo.id,
     sistema: `${SISTEMA_DA_CENA}${regras.bloco ? `\n\n${regras.bloco}` : ""}`,
-    mensagens: [{ papel: "usuario", conteudo: dadosDaCenaSobMedida({ cena, marca: kit.cena, formato: f.formatos[0] || "9:16", provas: f.brand.provas, brand_md: md, imagens, pedido: p.pedido || null }) }],
+    mensagens: [{ papel: "usuario", conteudo: dadosDaCenaSobMedida({ cena, marca: kit.cena, formato: f.formatos[0] || "9:16", provas: f.brand.provas, brand_md: md, imagens, pedido: p.pedido || null, escrita_anterior: escritaAnterior }) }],
     esquemaJson: ESQUEMA_DA_CENA,
     maxTokensSaida: 7_000,
     referencia: { tipo: "motion_filme", id: f.id },
@@ -586,7 +597,9 @@ async function escreverCena(ch: Chamador, f: LinhaDoFilme, cenaId: string, p: { 
   }
   if (problemas.length) {
     const filme = await somarCusto(f, saida.custoUsd);
-    return { filme, anterior: null, recusada: problemas, custo: saida.custoUsd, saldo: saida.saldoUsd };
+    // A escrita recusada volta para a tela: o "Reescrever com a causa" manda ela junto.
+    const recusadaEscrita = escrita ? escritaAnteriorDaTela(escrita) : null;
+    return { filme, anterior: null, recusada: problemas, escrita_recusada: recusadaEscrita, custo: saida.custoUsd, saldo: saida.saldoUsd };
   }
   const cenas = f.cenas.slice();
   const anterior = cena;
@@ -597,8 +610,8 @@ async function escreverCena(ch: Chamador, f: LinhaDoFilme, cenaId: string, p: { 
 
 async function cenaEscrever(ch: Chamador, c: Record<string, unknown>) {
   const f = await lerFilme(ch, c.filme_id);
-  const r = await escreverCena(ch, f, String(c.cena_id || ""), { modeloId: c.modelo_id, pedido: limpo(c.pedido, 900), teto: c.teto_usd });
-  return json({ filme: r.filme, recusada: r.recusada, custo_usd: r.custo, saldo_usd: r.saldo, ...(r.acima_do_teto ? { aviso: "O custo real passou do teto desta cena." } : {}) });
+  const r = await escreverCena(ch, f, String(c.cena_id || ""), { modeloId: c.modelo_id, pedido: limpo(c.pedido, 900), teto: c.teto_usd, escritaAnterior: c.escrita_anterior });
+  return json({ filme: r.filme, recusada: r.recusada, escrita_recusada: r.escrita_recusada || null, custo_usd: r.custo, saldo_usd: r.saldo, ...(r.acima_do_teto ? { aviso: "O custo real passou do teto desta cena." } : {}) });
 }
 
 // ------------------------------------------------------------------ fila (cenas e batidas)
@@ -918,10 +931,14 @@ async function custosDoAgente(modelo: ModeloIa) {
   return { brand: est(TAMANHOS_DO_MOTION.brand), storyboards: est(TAMANHOS_DO_MOTION.storyboards), cena: est(TAMANHOS_DO_MOTION.cena), critica: 0.001 };
 }
 
+const ESQUEMA_DO_AGENTE_COM_METODO = comMetodosUsados(ESQUEMA_DO_AGENTE);
+
 async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
   const f = await sincronizarRenders(await lerFilme(ch, c.filme_id));
   const mensagem = limpo(c.mensagem, 4000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva a mensagem para o diretor de motion.");
+  // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
+  const spP = superpoderesPara(servico(), { agente: "motion.agente", pedido: mensagem });
   const conversaId = await conversaDoAgente(ch, f, c.conversa_id, c.nova_conversa === true);
   const [modelo, historico, kit, regras] = await Promise.all([
     modeloDoPapel(PAPEL, typeof c.modelo_id === "string" && c.modelo_id ? c.modelo_id : f.modelo),
@@ -951,10 +968,11 @@ async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
     modeloId: modelo.id,
     sistema: `${SISTEMA_DO_AGENTE}\n\nDADOS:\n${JSON.stringify(dados)}\n${blocoDasAcoesDoMotion(l)}\n\n${blocoDoMapaDoPainel("motion")}${contexto ? `\n\n${blocoDoContextoDoCliente(contexto, kit.nome)}` : ""}${blocoDaReferencia(referencia, itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem }],
-    esquemaJson: ESQUEMA_DO_AGENTE,
+    esquemaJson: ESQUEMA_DO_AGENTE_COM_METODO,
     maxTokensSaida: 3_000,
     referencia: { tipo: REF_CONVERSA, id: conversaId },
     criadoPor: ch.userId,
+    metodo: await spP,
   });
   const j = obj(saida.json);
   let resposta = limpo(j.resposta, 4000) || "Pronto.";
@@ -970,11 +988,15 @@ async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
   if (!acao && /\b(vou|irei|j[aá] vou)\s+(gerar|renderizar|escrever|montar|trocar|refazer|criticar)/i.test(resposta) && resposta.indexOf("?") < 0) {
     resposta = `${resposta} Ainda não montei a lista: diga a cena e o que fazer, e eu preparo o cartão com o custo.`;
   }
+  // Frente SPP: "pronto" sem ação feita ganha o aviso (sem refazer); o método vira a linha "Método:".
+  const fechado = await fecharComMetodo(servico(), { usoId: saida.usoId, metodo: await spP, resposta, declarados: j.metodos_usados, acaoFeita: !!(acao && acao.executada_em), resultados: acao ? acao.resultados : null });
+  resposta = fechado.resposta;
   const aprendido = await aprendendo;
   const seguidas = anexoDasRegrasSeguidas(j.regras_seguidas, regras.regras);
   const anexosDaResposta = anexosComCaminho(acao ? [acao] : [], null);
   if (aprendido) anexosDaResposta.push(aprendido);
   if (seguidas) anexosDaResposta.push(seguidas);
+  if (fechado.anexo) anexosDaResposta.push(fechado.anexo);
   const troca = await gravarTroca(servico(), { conversaId, clientId: f.client_id, usuario: { conteudo: mensagem, anexos: [] }, agente: { conteudo: resposta, anexos: anexosDaResposta, uso_id: saida.usoId || null }, onde: "mesa-motion" });
   return json({
     conversa_id: conversaId,

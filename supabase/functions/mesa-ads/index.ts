@@ -373,6 +373,8 @@ import {
   sinaisDaOferta,
 } from "./melhores-criativos.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+// Frente SPP (30/09): o método da casa (superpoderes) no estrategista, no plano, na oferta e no sênior. Nunca no leitor.
+import { comMetodosUsados, fecharComMetodo, type Momento, superpoderesPara } from "../_shared/superpoderes.ts";
 import { registrarFalha, registrarSeFalhar } from "../_shared/falha-registrada.ts";
 // Frente AG3 (29/09): o tráfego aprende com o dono (Jev decide se é regra), obedece e devolve "Aprendi"/"Segui".
 import { anexosDoAprendizado, blocoDasRegras, esquecerRegra, type RegraAtiva, regrasDoAgente, regrasSeguidas } from "../_shared/aprender-com-o-dono.ts";
@@ -1301,6 +1303,15 @@ const REGRAS_DA_EXECUCAO = `REGRAS DESTA EXECUÇÃO NO PAINEL:
  * A base inteira continua primeiro (prefixo fixo) e vale sobre eles; com o
  * objetivo, o checklist de criativo dele vai no fim do bloco.
  */
+/**
+ * Frente SPP (30/09): o método da casa nas gerações do estrategista (ângulos,
+ * copy, pacote, oferta, conta). O código escolhe: critério de aceite e prova;
+ * no pacote, também o plano. Nunca lança; a chave da mesa fica em cache.
+ */
+function metodoDoEstrategista(servico: SupabaseClient, momento: Momento = "gerar") {
+  return superpoderesPara(servico, { agente: "ads.estrategista", momento });
+}
+
 function sistemaDoEstrategista(tarefa?: TarefaAds, objetivo?: unknown): string {
   const extra = tarefa ? conhecimentoAdsPara(tarefa, { objetivo }).texto : "";
   return extra
@@ -1862,6 +1873,7 @@ TAREFA: proponha o briefing de performance deste cliente para anúncios na Meta.
     agente: AGENTE,
     modeloId: modelo.id,
     sistema: sistemaDoEstrategista("oferta"),
+    metodo: await metodoDoEstrategista(servico, "gerar"),
     mensagens: [{ papel: "usuario", conteudo: pedido }],
     raciocinio,
     esquemaJson: ESQUEMA_SUGESTAO,
@@ -2540,6 +2552,7 @@ ${modo === "variar_vencedor" ? "- MODO VARIAR VENCEDOR: mantenha o mecanismo e a
       agente: AGENTE,
       modeloId: modelo.id,
       sistema: sistemaDoEstrategista("angulos", objetivo),
+      metodo: await metodoDoEstrategista(servico, "gerar"),
       mensagens: [{ papel: "usuario", conteudo: instrucao }],
       raciocinio,
       esquemaJson: ESQUEMA_PLANO,
@@ -2607,6 +2620,7 @@ ${modo === "variar_vencedor" ? "- MODO VARIAR VENCEDOR: mantenha o mecanismo e a
         agente: AGENTE,
         modeloId: modelo.id,
         sistema: sistemaDoEstrategista("angulos", objetivo),
+        metodo: await metodoDoEstrategista(servico, "ajustar"),
         mensagens: [{
           papel: "usuario",
           conteudo: `BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
@@ -2723,12 +2737,16 @@ TAREFA: reescreva SOMENTE os ângulos reprovados, mantendo o mesmo id, corrigind
 }
 
 /** plano_conversar { plano_id, mensagem, anexos?, modelo_id?, raciocinio? } -> { plano, resposta, conversa_id, custo_usd, saldo_usd, jev_erro } */
+const ESQUEMA_CONVERSA_PLANO_COM_METODO = comMetodosUsados(ESQUEMA_CONVERSA_PLANO);
+
 async function planoConversar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const p = await carregarPlano(servico, corpo.plano_id);
   await exigirAcessoAoCliente(chamador, p.client_id);
   const mensagem = texto(corpo.mensagem, 4000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva o que você quer no plano.");
   const podeMudar = p.status !== "concluido";
+  // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
+  const spPlanoP = superpoderesPara(servico, { agente: "ads.plano", pedido: mensagem });
 
   const [briefing, ctx, refs, anexos] = await Promise.all([
     carregarBriefing(servico, p.client_id, p.briefing_id ?? undefined).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
@@ -2785,9 +2803,10 @@ Aplique o pedido. Devolva:
       sistema: sistemaDoEstrategista("angulos", p.estrutura.objetivo) + mapaDoPainelNaConversa() + blocoDasRegras(regrasDoPlano),
       mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
       raciocinio,
-      esquemaJson: ESQUEMA_CONVERSA_PLANO,
+      esquemaJson: ESQUEMA_CONVERSA_PLANO_COM_METODO,
       referencia: { tipo: REF_PLANO, id: p.id },
       criadoPor: chamador.userId,
+      metodo: await spPlanoP,
     });
   } catch (err) {
     // Frente AG3: a mensagem do dono não some quando o modelo falha (antes só era gravada depois da resposta).
@@ -2839,11 +2858,13 @@ Aplique o pedido. Devolva:
   const total = await somarCustoDoPlano(servico, p.id, p.client_id, custo);
   if (total != null) plano.custo_usd = total;
 
-  const resposta = texto(r.resposta, 2000) || "Plano atualizado.";
+  // Frente SPP: a prova confere se o que a resposta diz feito foi aplicado no plano (só aviso).
+  const fechadoDoPlano = await fecharComMetodo(servico, { usoId: s.usoId, metodo: await spPlanoP, resposta: texto(r.resposta, 2000) || "Plano atualizado.", declarados: r.metodos_usados, acaoFeita: Object.keys(campos).length > 0 });
+  const resposta = fechadoDoPlano.resposta;
   const aprendizado = anexosDoAprendizado(await aprendizadoDoPlano, regrasSeguidas(r.regras_seguidas, regrasDoPlano));
   await registrarMensagens(servico, conversaId, p.client_id, [
     { papel: "usuario", conteudo: mensagem, anexos: anexos.caminhos.map((x) => ({ caminho: x })) },
-    { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: aprendizado },
+    { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: fechadoDoPlano.anexo ? [...aprendizado, fechadoDoPlano.anexo] : aprendizado },
   ]);
   return json({ plano, resposta, conversa_id: conversaId, custo_usd: custo, saldo_usd: s.saldoUsd, jev_erro: jevErro, aprendizado });
 }
@@ -2934,6 +2955,7 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
       agente: AGENTE,
       modeloId: modelo.id,
       sistema: sistemaDoEstrategista("copy", objetivo),
+      metodo: await metodoDoEstrategista(servico, "gerar"),
       mensagens: [{ papel: "usuario", conteudo: pedido }],
       raciocinio,
       esquemaJson: ESQUEMA_COPIES,
@@ -3130,6 +3152,7 @@ async function copyVariar(servico: SupabaseClient, chamador: Chamador, corpo: Re
     agente: AGENTE,
     modeloId: modelo.id,
     sistema: sistemaDoEstrategista("copy", objetivoPorId(plano?.estrutura?.objetivo) ?? objetivoPorId((briefing?.objetivo ?? {}).acao)),
+    metodo: await metodoDoEstrategista(servico, "gerar"),
     mensagens: [{
       papel: "usuario",
       conteudo: `BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
@@ -3272,6 +3295,7 @@ async function aprendizadoRegistrar(servico: SupabaseClient, chamador: Chamador,
       agente: AGENTE,
       modeloId: modelo.id,
       sistema: sistemaDoEstrategista("conta"),
+      metodo: await metodoDoEstrategista(servico, "gerar"),
       mensagens: [{
         papel: "usuario",
         conteudo: `Registre o aprendizado deste criativo em até 4 frases, exatamente no formato: "No projeto X, para a oferta Y, no período Z, a execução A apresentou [resultado] em comparação com B, sob [condições]. Ainda não sabemos [incerteza]. O próximo teste mudará [componente]."
@@ -4194,6 +4218,8 @@ function normalizarIdeia(bruto: unknown) {
  * O Jev confere cada oferta nova ANTES de responder; a que vier com alerta de
  * política é reescrita uma vez e conferida de novo.
  */
+const ESQUEMA_OFERTA_CONVERSA_COM_METODO = comMetodosUsados(ESQUEMA_OFERTA_CONVERSA);
+
 async function ofertaConversar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
@@ -4220,6 +4246,8 @@ async function ofertaConversar(servico: SupabaseClient, chamador: Chamador, corp
     conversaNova = true;
   }
 
+  // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
+  const spOfertaP = superpoderesPara(servico, { agente: "ads.oferta", pedido: mensagem });
   const [emFoco, briefing, ctx, anexos, { data: ofertasAtuais }, { data: historico }] = await Promise.all([
     corpo.oferta_id ? carregarOferta(servico, clientId, corpo.oferta_id) : Promise.resolve(null),
     carregarBriefing(servico, clientId).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null)),
@@ -4278,9 +4306,10 @@ Responda como o estrategista de ofertas da agência. Devolva:
       sistema: sistemaDoEstrategista("oferta") + mapaDoPainelNaConversa() + blocoDasRegras(regrasDaOferta),
       mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
       raciocinio,
-      esquemaJson: ESQUEMA_OFERTA_CONVERSA,
+      esquemaJson: ESQUEMA_OFERTA_CONVERSA_COM_METODO,
       referencia: { tipo: REF_OFERTA, id: conversaId },
       criadoPor: chamador.userId,
+      metodo: await spOfertaP,
     });
   } catch (err) {
     // Frente AG3: antes a conversa nova era apagada e a mensagem do dono sumia. Agora fica, com o motivo.
@@ -4317,6 +4346,7 @@ Responda como o estrategista de ofertas da agência. Devolva:
         agente: AGENTE,
         modeloId: modelo.id,
         sistema: sistemaDoEstrategista("oferta"),
+        metodo: await metodoDoEstrategista(servico, "ajustar"),
         mensagens: [{
           papel: "usuario",
           conteudo: `BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
@@ -4382,9 +4412,12 @@ Devolva cada oferta com o mesmo indice.`,
     if (error || !data) throw new ErroHttp(503, "ofertas_nao_salvas", "As ofertas foram escritas, mas não foram salvas.", { uso_id: s.usoId, custo_usd: arred6(custo) });
     criadas = (data as LinhaOferta[]).map(ofertaDaLinha);
   }
-  const resposta = texto(r.resposta, 4000) || (criadas.length ? "Ofertas criadas." : "Certo.");
+  // Frente SPP: "criei" só com as ofertas gravadas de fato (só aviso, sem refazer).
+  const fechadoDaOferta = await fecharComMetodo(servico, { usoId: s.usoId, metodo: await spOfertaP, resposta: texto(r.resposta, 4000) || (criadas.length ? "Ofertas criadas." : "Certo."), declarados: r.metodos_usados, acaoFeita: criadas.length > 0 });
+  const resposta = fechadoDaOferta.resposta;
   const comAlerta = criadas.filter((o) => o.jev?.alerta_politica).map((o) => o.nome);
-  const aprendizado = anexosDoAprendizado(await aprendizadoDaOferta, regrasSeguidas(r.regras_seguidas, regrasDaOferta));
+  const aprendizadoSemMetodo = anexosDoAprendizado(await aprendizadoDaOferta, regrasSeguidas(r.regras_seguidas, regrasDaOferta));
+  const aprendizado = fechadoDaOferta.anexo ? [...aprendizadoSemMetodo, fechadoDaOferta.anexo] : aprendizadoSemMetodo;
   await registrarMensagens(servico, conversaId, clientId, [
     { papel: "usuario", conteudo: mensagem, anexos: anexos.caminhos.map((x) => ({ caminho: x })) },
     {
@@ -4775,6 +4808,7 @@ async function contaAnalisar(servico: SupabaseClient, chamador: Chamador, corpo:
     agente: AGENTE,
     modeloId: modelo.id,
     sistema: sistemaDoEstrategista("conta"),
+    metodo: await metodoDoEstrategista(servico, "gerar"),
     mensagens: [{
       papel: "usuario",
       conteudo: `BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
@@ -4937,6 +4971,7 @@ async function evolucao(servico: SupabaseClient, chamador: Chamador, corpo: Reco
         agente: AGENTE,
         modeloId: modelo.id,
         sistema: sistemaDoEstrategista("conta"),
+        metodo: await metodoDoEstrategista(servico, "gerar"),
         mensagens: [{
           papel: "usuario",
           conteudo: `LEITURA DE EVOLUÇÃO DO CLIENTE (calculada pelo painel; os grupos e os números são DEFINITIVOS, não mude nenhum):
@@ -5008,6 +5043,7 @@ async function bibliotecaDoNicho(servico: SupabaseClient, chamador: Chamador, co
     agente: AGENTE,
     modeloId: modelo.id,
     sistema: sistemaDoEstrategista("angulos"),
+    metodo: await metodoDoEstrategista(servico, "gerar"),
     mensagens: [{
       papel: "usuario",
       conteudo: `DADOS REAIS DO CLIENTE: ${JSON.stringify(ctx.dados)}
@@ -5174,6 +5210,7 @@ async function gerarPacoteDoCriativo(
     agente: AGENTE,
     modeloId: modelo.id,
     sistema: sistemaDoEstrategista("pacote", ctx.objetivo),
+    metodo: await metodoDoEstrategista(clienteServico(), "lote"),
     mensagens: [{
       papel: "usuario",
       conteudo: `BRIEFING: ${JSON.stringify(resumoDoBriefing(ctx.briefing))}
@@ -5230,6 +5267,7 @@ TAREFA: escreva o pacote completo de copy deste criativo para o gestor de tráfe
           agente: AGENTE,
           modeloId: modelo.id,
           sistema: sistemaDoEstrategista("copy", ctx.objetivo),
+          metodo: await metodoDoEstrategista(clienteServico(), "ajustar"),
           mensagens: [{
             papel: "usuario",
             conteudo: `BRIEFING: ${JSON.stringify(resumoDoBriefing(ctx.briefing))}
@@ -6244,6 +6282,8 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   await andamento.passo("lendo", "Lendo a conta, os criativos e o que já foi feito");
   // Frente AG3: aprende com o pedido (Jev decide se é regra) enquanto lê a conta.
   const aprendizadoDaConta = aprenderNoServidor(servico as never, { texto: mensagem, agente: "trafego", clientId, donoId: chamador.userId, contexto: "conversa da conta de anúncios" });
+  // Frente SPP: o Jev escolhe o método da casa do sênior em paralelo com a leitura da conta (nunca lança).
+  const spSeniorP = superpoderesPara(servico, { agente: "ads.senior", pedido: mensagem });
   const [c, historico, modeloBase, criativosDaMesa, rotina, feito, citados, recentes, regrasEnsinadas] = await Promise.all([
     contextoDoAgenteSenior(servico, clientId, corpo),
     mensagensDoAgenteSenior(servico, conversaId, HISTORICO_DO_AGENTE_SENIOR),
@@ -6308,6 +6348,7 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     esquemaJson: ESQUEMA_AGENTE_SENIOR,
     referencia: { tipo: REF_CLIENTE, id: clientId },
     criadoPor: chamador.userId,
+    metodo: await spSeniorP,
   }, modeloEscolhido, chamador, andamento);
   if (!("s" in tentativa)) {
     // O modelo não respondeu nem na segunda tentativa: diz na conversa o que não deu, sem travar e sem mexer na conta.
@@ -6341,11 +6382,15 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     : null;
   const numeros = numerosVistos(c.conta);
   const aprendizado = anexosDoAprendizado(await aprendizadoDaConta, regrasSeguidas(bruto.regras_seguidas, regrasEnsinadas));
+  // Frente SPP: "pausei", "ativei" só com o item feito e conferido na Meta (só aviso, sem refazer).
+  const autos = acoes ? acoes.itens.filter((i) => i.auto && i.resultado).map((i) => i.resultado as unknown) : [];
+  const fechadoDoSenior = await fecharComMetodo(servico, { usoId: s.usoId, metodo: await spSeniorP, resposta: markdown || estrategia.resposta || "Sem resposta.", declarados: undefined, acaoFeita: autos.length > 0, resultados: autos });
+  if (fechadoDoSenior.anexo) aprendizado.push(fechadoDoSenior.anexo as unknown as (typeof aprendizado)[number]);
   const gravou = await registrarMensagens(servico, conversaId, clientId, [
     {
       id: mensagemId,
       papel: "agente",
-      conteudo: markdown || estrategia.resposta || "Sem resposta.",
+      conteudo: fechadoDoSenior.resposta,
       uso_id: s.usoId,
       anexos: [
         { tipo: "estrategia", estrategia, numeros, periodo: c.conta.periodo, plano_id: plano?.id ?? null, biblioteca: biblioteca ? { consultada: biblioteca.consultada, motivo: biblioteca.motivo, total: biblioteca.anuncios.length } : null },
@@ -7585,6 +7630,7 @@ async function kitRecepcaoGerar(servico: SupabaseClient, chamador: Chamador, cor
     agente: AGENTE,
     modeloId: modeloEscolhido.modelo.id,
     sistema: sistemaDoEstrategista("oferta", angulo.objetivo),
+    metodo: await metodoDoEstrategista(servico, "gerar"),
     mensagens: [{ papel: "usuario", conteudo: pedidoDoKit(angulo, briefing, ofertaCurta, cliente) }],
     raciocinio: modeloEscolhido.raciocinio,
     esquemaJson: ESQUEMA_KIT_RECEPCAO,

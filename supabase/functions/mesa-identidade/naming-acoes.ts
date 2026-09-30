@@ -18,6 +18,8 @@ import { jevPerguntar, type PerguntaJev } from "../_shared/jev.ts";
 import { lerContextoDaMarca } from "../_shared/marca.ts";
 import { lerContextoConsolidado } from "../_shared/contexto-cliente.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) nas gerações da identidade (o código escolhe).
+import { superpoderesPara } from "../_shared/superpoderes.ts";
 import { regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
 import { TAMANHOS_DA_IDENTIDADE } from "../_shared/identidade-etapas.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
@@ -250,6 +252,7 @@ export async function gerarRodada(
 ${regras.bloco}` : SISTEMA_DO_NAMING,
     mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify(dados)}` }],
     esquemaJson: ESQUEMA_DOS_NOMES,
+    metodo: await superpoderesPara(servico(), { agente: "identidade.acoes", momento: "gerar" }),
     maxTokensSaida: TAMANHO_DO_NAMING.saida,
     referencia: { tipo: "idv_naming", id: p.projetoId || p.campanhaId || p.clientId },
     criadoPor: ch.userId,

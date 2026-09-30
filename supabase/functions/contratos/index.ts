@@ -50,6 +50,8 @@ import { jevPerguntar } from "../_shared/jev.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) no agente de contratos.
+import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 import {
   type AcaoDoAgente,
   acaoGuardadaNaMensagem,
@@ -909,11 +911,15 @@ async function situacaoDoCliente(ch: Chamador, clientId: string, contractId: unk
   };
 }
 
+const ESQUEMA_AGENTE_COM_METODO = comMetodosUsados(ESQUEMA_AGENTE);
+
 async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
   const mensagem = limpo(corpo.mensagem, 4000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva a mensagem para o agente.");
+  // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
+  const spP = superpoderesPara(servico(), { agente: "contratos.agente", pedido: mensagem });
   const conversaId = await conversaDoAgente(ch, clientId, corpo.conversa_id, corpo.nova_conversa === true);
   const sit = await situacaoDoCliente(ch, clientId, corpo.contract_id);
   const [modelo, historico, cliente, contextoDoCliente, regras, julgamento, lista] = await Promise.all([
@@ -992,10 +998,11 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     raciocinio: raciocinioPara(modelo),
     sistema: `${SISTEMA_AGENTE}\n\nDADOS (hoje ${hoje}):\n${JSON.stringify(dados)}\n${blocoDosAlvosDoContrato(alvos)}\n\n${blocoDoMapaDoPainel("contratos", { nivel: "minimo" })}${contextoDoCliente ? `\n\n${blocoDoContextoDoCliente(contextoDoCliente, cliente)}` : ""}${regras.bloco ? `\n\n${regras.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem }],
-    esquemaJson: ESQUEMA_AGENTE,
+    esquemaJson: ESQUEMA_AGENTE_COM_METODO,
     maxTokensSaida: 3_000,
     referencia: { tipo: REF_CONVERSA, id: conversaId },
     criadoPor: ch.userId,
+    metodo: await spP,
   });
   const j = (saida.json || {}) as Record<string, unknown>;
   let resposta = limpo(j.resposta, 4000) || "Pronto.";
@@ -1036,11 +1043,15 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   if (!acao && /\b(vou|irei) (criar|gerar|preencher|mudar|alterar|incluir)\b/i.test(resposta) && resposta.indexOf("?") < 0) {
     resposta = `${resposta} Ainda não montei a lista: diga o que falta e eu preparo o cartão.`;
   }
+  // Frente SPP: "criei", "preenchi" só com a ação feita (só aviso, sem refazer); o método vira a linha "Método:".
+  const fechado = await fecharComMetodo(servico(), { usoId: saida.usoId, metodo: await spP, resposta, declarados: j.metodos_usados, acaoFeita: !!(acao && acao.executada_em), resultados: acao ? acao.resultados : null });
+  resposta = fechado.resposta;
   const aprendido = await aprendendo;
   const seguidas = anexoDasRegrasSeguidas(j.regras_seguidas, regras.regras);
   const anexos = anexosComCaminho(acao ? [acao] : [], null);
   if (aprendido) anexos.push(aprendido);
   if (seguidas) anexos.push(seguidas);
+  if (fechado.anexo) anexos.push(fechado.anexo);
   const troca = await gravarTroca(servico(), { conversaId, clientId, usuario: { conteudo: mensagem, anexos: [] }, agente: { conteudo: resposta, anexos, uso_id: saida.usoId || null }, onde: "contratos" });
   const feita = acao && acao.executada_em ? ` O que já foi feito: ${textoDoResultado(acao.resultados || [])}.` : "";
   return json({

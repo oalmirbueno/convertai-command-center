@@ -412,13 +412,14 @@ describe("aprendizado: o diretor aprende, obedece e devolve", () => {
     const r1 = corpoDe(await diretorConversar(b, { client_id: CLIENTE, projeto: projetoPronto(), texto: "nunca use drone nos planos", fase: "roteiro" }));
     expect(tabelas.agente_memoria).toEqual([expect.objectContaining({ client_id: CLIENTE, texto: "Não usar plano de drone", tipo: "evitar", fonte: "mesa_videos" })]);
     expect(r1.anexos[0]).toEqual(expect.objectContaining({ tipo: "aprendizado_do_agente", texto: "Não usar plano de drone", mesa: "video" }));
-    expect(tabelas.agente_mensagens.find((m) => m.id === r1.mensagem_id)!.anexos).toEqual([expect.objectContaining({ tipo: "aprendizado_do_agente" })]);
+    // Frente SPP (30/09): o método da casa entra junto como a linha "Método:" (o modelo falso não declara, vale o injetado).
+    expect(tabelas.agente_mensagens.find((m) => m.id === r1.mensagem_id)!.anexos).toEqual([expect.objectContaining({ tipo: "aprendizado_do_agente" }), expect.objectContaining({ tipo: "metodo_usado", fonte: "injetado" })]);
     // Obedecer: o bloco das regras vai para o sistema do modelo (EVITAR com apelido g1).
     jev.respostas = {};
     modelo.json = respostaDoModelo({ resposta: "Roteiro sem drone.", regras_seguidas: ["g1", "g9"] });
     const r2 = corpoDe(await diretorConversar(b, { client_id: CLIENTE, projeto: r1.projeto, texto: "monta o roteiro", fase: "roteiro" }));
     expect(String(modelo.chamadas[1].sistema)).toMatch(/EVITAR:\n- g1: Não usar plano de drone/);
-    expect(r2.anexos).toEqual([expect.objectContaining({ tipo: "regras_seguidas", regras: [expect.objectContaining({ texto: "Não usar plano de drone" })] })]);
+    expect(r2.anexos).toEqual([expect.objectContaining({ tipo: "regras_seguidas", regras: [expect.objectContaining({ texto: "Não usar plano de drone" })] }), expect.objectContaining({ tipo: "metodo_usado" })]);
     // O esquema pede os campos do aprendizado.
     const esquema = modelo.chamadas[1].esquemaJson.schema as { required: string[] };
     expect(esquema.required).toEqual(expect.arrayContaining(["regra_aprendida", "regras_seguidas"]));

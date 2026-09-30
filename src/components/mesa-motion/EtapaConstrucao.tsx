@@ -1,18 +1,18 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Code2, Film, Loader2, Play, Sparkles } from "lucide-react";
+import { ArrowRight, Code2, Film, Loader2, Play, RotateCcw, Sparkles } from "lucide-react";
 import { useMesa } from "@/components/mesa/MesaContexto";
-import { useAvisarErro } from "@/components/mesa/Custo";
+import { EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
 import Painel from "@/components/sistema/Painel";
 import { botao, campo, campoTexto, juntar, texto } from "@/components/sistema/estilos";
 import { usd } from "@/lib/mesa/api";
 import { chamarMesaVideos } from "@/components/mesa-videos/videosApi";
-import { pecaPorId } from "../../../supabase/functions/_shared/cena-hf";
-import { TETO_PADRAO_DA_CENA_USD, type CenaDaLinha } from "../../../supabase/functions/_shared/motion-metodo";
+import { causaDoRender, pecaPorId, pedidoComACausa, tokensDeEntradaDaCena } from "../../../supabase/functions/_shared/cena-hf";
+import { TAMANHOS_DO_MOTION, TETO_PADRAO_DA_CENA_USD, type CenaDaLinha } from "../../../supabase/functions/_shared/motion-metodo";
 import { ComFilme, ModeloDaAcao, useModeloDaAcao } from "./FilmeAberto";
 import CenaNaFila from "./CenaNaFila";
-import { chamarMotion, CHAVES, type Filme, uidDoClique, useFilaDoFilme, useGuardarFilme } from "./motionApi";
+import { chamarMotion, CHAVES, type FilaDoFilme, type Filme, uidDoClique, useFilaDoFilme, useGuardarFilme } from "./motionApi";
 import { useAcoesDaCena } from "./useAcoesDaCena";
 import type { IrPara } from "@/components/mesa-videos/MesaDeVideo";
 
@@ -24,7 +24,16 @@ import type { IrPara } from "@/components/mesa-videos/MesaDeVideo";
  * plano e Confirmar) ou escolhido do acervo real do cliente.
  */
 
-function EscreverCena({ filme, cena }: { filme: Filme; cena: CenaDaLinha }) {
+type EscritaRecusada = { html: string; css: string; js: string };
+
+/** A causa do último render desta cena, quando ele falhou no lint ou no check do worker. */
+function causaDoUltimoRender(fila: FilaDoFilme | undefined, cenaId: string): string | null {
+  if (!fila) return null;
+  const ultimo = fila.pedidos.find((p) => p.tipo === "cena_hf" && p.entrada && p.entrada.cena_id === cenaId);
+  return ultimo && ultimo.estado === "erro" ? causaDoRender(ultimo.erro_mensagem) : null;
+}
+
+function EscreverCena({ filme, cena, fila }: { filme: Filme; cena: CenaDaLinha; fila?: FilaDoFilme }) {
   const { atualizarCusto } = useMesa();
   const guardar = useGuardarFilme();
   const avisarErro = useAvisarErro();
@@ -32,13 +41,27 @@ function EscreverCena({ filme, cena }: { filme: Filme; cena: CenaDaLinha }) {
   const [pedido, setPedido] = useState(cena.ideia || "");
   const [teto, setTeto] = useState(TETO_PADRAO_DA_CENA_USD);
   const [indo, setIndo] = useState(false);
-  const [resultado, setResultado] = useState<{ custo: number; recusada: string[] | null } | null>(null);
-  const escrever = async () => {
+  const [resultado, setResultado] = useState<{ custo: number; recusada: string[] | null; escrita: EscritaRecusada | null } | null>(null);
+  // SPM: reescrever com a causa (recusa da conferência ou lint do worker). Sob pedido e com o custo à vista; nunca em laço.
+  // A escrita que falhou vai junto: a recusada volta da função e a do render já está guardada na cena.
+  const causaDoLint = cena.modo === "sob_medida" ? causaDoUltimoRender(fila, cena.id) : null;
+  const daRecusa = !!(resultado && resultado.recusada && resultado.recusada.length);
+  const causas = daRecusa && resultado ? resultado.recusada : causaDoLint ? [causaDoLint] : null;
+  const escrever = async (comCausa?: string[]) => {
     setIndo(true);
     try {
-      const d = await chamarMotion<{ filme: Filme; recusada: string[] | null; custo_usd: number }>("cena_escrever", { filme_id: filme.id, cena_id: cena.id, modelo_id: modelo ? modelo.id : undefined, pedido: pedido.trim() || undefined, teto_usd: teto });
+      const texto = comCausa ? pedidoComACausa(pedido, comCausa) : pedido.trim();
+      const anterior = comCausa && daRecusa && resultado ? resultado.escrita : null;
+      const d = await chamarMotion<{ filme: Filme; recusada: string[] | null; escrita_recusada?: EscritaRecusada | null; custo_usd: number }>("cena_escrever", {
+        filme_id: filme.id,
+        cena_id: cena.id,
+        modelo_id: modelo ? modelo.id : undefined,
+        pedido: texto || undefined,
+        teto_usd: teto,
+        ...(anterior ? { escrita_anterior: anterior } : {}),
+      });
       guardar(d.filme);
-      setResultado({ custo: d.custo_usd, recusada: d.recusada });
+      setResultado({ custo: d.custo_usd, recusada: d.recusada, escrita: d.escrita_recusada || null });
       atualizarCusto();
     } catch (e) {
       avisarErro(e, "A cena não foi escrita");
@@ -59,7 +82,19 @@ function EscreverCena({ filme, cena }: { filme: Filme; cena: CenaDaLinha }) {
           {indo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Code2 className="mr-1 h-3.5 w-3.5" />}
           Escrever sob medida
         </button>
+        {causas && (
+          <button type="button" className={juntar(botao.secundario, "mb-2 ml-2")} onClick={() => void escrever(causas)} disabled={indo} title="Manda ao modelo a causa da falha e a escrita que falhou, para corrigir sem refazer do zero" data-reescrever-com-causa={cena.id}>
+            <RotateCcw className="mr-1 h-3.5 w-3.5" />
+            Reescrever com a causa
+          </button>
+        )}
+        {causas && modelo && (
+          <span className="mb-2 ml-2" data-custo-da-reescrita={cena.id}>
+            <EstimativaInline partes={[{ modeloId: modelo.id, tipo: "texto", tokensEntrada: tokensDeEntradaDaCena(TAMANHOS_DO_MOTION.cena.entrada, true), tokensSaida: TAMANHOS_DO_MOTION.cena.saida }]} />
+          </span>
+        )}
       </div>
+      {causaDoLint && !(resultado && resultado.recusada) && <p className={juntar(texto.auxiliar, "text-warning")}>{`Último render falhou no ${causaDoLint}`}</p>}
       {resultado && <p className={texto.auxiliar}>Custo: {usd(resultado.custo)}.</p>}
       {resultado && resultado.recusada && (
         <ul className="space-y-1" role="alert">
@@ -196,7 +231,7 @@ function Conteudo({ filme, links, irPara }: { filme: Filme; links: Record<string
                 ))}
               </div>
               <Secao titulo="Escrever sob medida" nivel={3} recolher={`mesa-motion:escrever:${c.id}`} recolhidaDeInicio ajuda="O modelo escreve só o miolo (HTML, CSS e GSAP); o invólucro, as cores, as fontes e a logo são do código. A conferência recusa rede, relógio, sorteio e laço infinito.">
-                <EscreverCena filme={filme} cena={c} />
+                <EscreverCena filme={filme} cena={c} fila={fila.data} />
               </Secao>
             </div>
           )}

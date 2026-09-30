@@ -409,6 +409,28 @@ export function resultadosDaSaida(v: unknown): Record<string, unknown>[] {
 }
 
 /**
+ * O anexo "Método:" (metodo_usado, _shared/superpoderes.ts) guardado na
+ * mensagem do agente do Canvas, só com os campos conhecidos. Qualquer outra
+ * coisa some (frente SPP, revisão 30/09).
+ */
+export function metodoDaMensagem(v: unknown): Record<string, unknown> | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  if (o.tipo !== "metodo_usado") return null;
+  const ids = (Array.isArray(o.ids) ? o.ids : []).map((x) => String(x || "")).filter((x) => /^[a-z]{1,12}$/.test(x)).slice(0, 8);
+  const prova = o.prova === "ok" || o.prova === "faltou" ? o.prova : "nao_se_aplica";
+  if (!ids.length && prova !== "faltou") return null;
+  return {
+    tipo: "metodo_usado",
+    ids,
+    fonte: o.fonte === "injetado" ? "injetado" : "declarado",
+    caminho: typeof o.caminho === "string" ? o.caminho.slice(0, 20) : null,
+    prova,
+    versao: typeof o.versao === "string" ? o.versao.slice(0, 80) : null,
+  };
+}
+
+/**
  * Dados de cada tipo de nó, só com os campos conhecidos. Aceita também a forma
  * da tela (estilo com imagem_id, biblioteca_id e texto no singular; ambiente
  * com a lista) e grava sempre a forma da função.
@@ -471,7 +493,10 @@ export function dadosDoNo(tipo: TipoDeNo, bruto: unknown): Record<string, unknow
       const mensagens = (Array.isArray(d.mensagens) ? d.mensagens : [])
         .map((m) => {
           const o = (m && typeof m === "object" ? m : {}) as Record<string, unknown>;
-          return { papel: o.papel === "agente" ? "agente" : "usuario", texto: limpo(o.texto, 2000) };
+          const papel = o.papel === "agente" ? "agente" : "usuario";
+          // Frente SPP (revisão 30/09): a linha "Método:" da resposta do agente fica guardada com ela.
+          const metodo = papel === "agente" ? metodoDaMensagem(o.metodo) : null;
+          return { papel, texto: limpo(o.texto, 2000), ...(metodo ? { metodo } : {}) };
         })
         .filter((m) => m.texto)
         .slice(-MAX_MENSAGENS_DO_AGENTE);

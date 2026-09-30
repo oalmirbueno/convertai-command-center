@@ -13,6 +13,8 @@ import { chamarTexto, cobrarJev, custoJev, estimarComModelo, modeloDoPapel, mode
 import { jevPerguntar } from "../_shared/jev.ts";
 import { lerContextoDaMarca, type MarcaDoCliente } from "../_shared/marca.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) no texto de cada seção (o código escolhe).
+import { superpoderesPara } from "../_shared/superpoderes.ts";
 import { regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
 import { copyEscolhida, imagensDoSite, type LinhaDoSite } from "../_shared/pacote-do-site.ts";
 import { type DnaDoSite, dnaManual, rotuloDaSecao } from "../_shared/site-metodo.ts";
@@ -249,6 +251,7 @@ async function secaoCopyGerar(ctx: ContextoDaEstrutura, ch: ChamadorDaEstrutura,
     mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify(dados)}` }],
     esquemaJson: ESQUEMA_DA_SECAO,
     maxTokensSaida: 3_000,
+    metodo: await superpoderesPara(ctx.servico(), { agente: "site.geracao", momento: copy && copy.secoes.some((x) => x.id === uid) ? "ajustar" : "gerar" }),
     referencia: { tipo: "site", id: s.id },
     criadoPor: ch.userId,
   });

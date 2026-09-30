@@ -20,6 +20,8 @@ import {
 import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import type { BancoDoCerebro } from "../_shared/cerebro-do-cliente.ts";
 import { recortarDossie } from "../_shared/dossie-recortado.ts";
+// Frente SPP (30/09): o radar com o método da casa (só a prova; o código escolhe).
+import { registrarMetodoSemUso, superpoderesPara } from "../_shared/superpoderes.ts";
 // O navegador guarda a resposta do preflight (OPTIONS) em vez de perguntar de novo a cada chamada.
 const corsHeaders = { ...corsDoSupabase, "Access-Control-Max-Age": "7200" };
 
@@ -332,6 +334,7 @@ Deno.serve(async (req) => {
       lovableModels: LOVABLE_COMPAT_MODEL_CHAIN,
     });
 
+    const metodoDoRadar = await superpoderesPara(db, { agente: "rituais.radar" });
     const { response, provider } = await requestAiChatCompletion(
       providers,
       (candidate: AiProvider) => ({
@@ -344,6 +347,8 @@ Deno.serve(async (req) => {
           ? { web_search_options: {} }
           : { temperature: 0.7 }),
       }),
+      fetch,
+      metodoDoRadar,
     );
 
     if (!response.ok) {
@@ -354,6 +359,8 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Frente SPP (revisão 30/09): a cadeia antiga não grava em ia_usos; o método conta pelo registro sem uso.
+    void registrarMetodoSemUso(db, { metodo: metodoDoRadar, clientId });
     const completion = await response.json();
     const content = completion?.choices?.[0]?.message?.content || "";
     const parsed = extractJson(content) as { ideas?: unknown[] };

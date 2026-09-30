@@ -157,6 +157,8 @@ import { organizarPorTipo } from "./organizar-por-tipo.ts";
 import { blocoDoMapaDoPainel, caminhoDaResposta, destinoNaResposta, pedeParaAbrir, pedeParaLevar } from "../_shared/mapa-do-painel.ts";
 import { acaoDoKitNaConversa, MAX_ITENS_DO_KIT, REGRAS_DO_KIT_NA_CONVERSA } from "./kit-na-conversa.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
+// Frente SPP (30/09): o método da casa (superpoderes) na conversa e no plano do cliente.
+import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 import { registrarFalha, registrarSeFalhar } from "../_shared/falha-registrada.ts";
 // Frente AG1 (29/09): a mensagem nunca some (pedido gravado antes da IA) e o agente aprende com cada pedido.
 import { AVISO_RESPOSTA_NAO_GUARDADA, ErroDaConversa, gravarPedidoAntes, gravarResposta, historicoParaOModelo, hojeParaOAgente, soltarPedido } from "../_shared/conversa-segura.ts";
@@ -819,6 +821,8 @@ async function montar(ch: Chamador, corpo: Record<string, unknown>) {
     modeloId: leitor.id,
     raciocinio: raciocinioPara(leitor, ["medium", "low"]),
     sistema: `${SISTEMA_CONTEXTO}\n\n${CONHECIMENTO_DO_CONTEXTO}`,
+    // Frente SPP (30/09): o método da casa no montar (aceite e prova, escolhidos pelo código).
+    metodo: await superpoderesPara(db, { agente: "contexto.montar", momento: "gerar" }),
     mensagens: [{
       papel: "usuario",
       conteudo: [
@@ -962,6 +966,8 @@ async function montarDaMarca(ch: Chamador, clientId: string, marca: MarcaDoClien
     modeloId: leitor.id,
     raciocinio: raciocinioPara(leitor, ["medium", "low"]),
     sistema: `${SISTEMA_CONTEXTO}\n\n${CONHECIMENTO_DO_CONTEXTO}`,
+    // Frente SPP (30/09): o método da casa no montar (aceite e prova, escolhidos pelo código).
+    metodo: await superpoderesPara(db, { agente: "contexto.montar", momento: "gerar" }),
     mensagens: [{
       papel: "usuario",
       conteudo: [
@@ -1309,6 +1315,8 @@ async function gravarPedidoDoContexto(conversaId: string, clientId: string, mens
   }
 }
 
+const ESQUEMA_CONVERSA_COM_METODO = comMetodosUsados(ESQUEMA_CONVERSA);
+
 async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = texto(corpo.client_id, 64);
   await garantirAcesso(ch, clientId);
@@ -1321,6 +1329,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   // Frente MC: com outra marca aberta, o agente enxerga o kit DELA e não grava no kit do cliente.
   const marcaDaConversa = await marcaDoPedido(db, clientId, corpo).catch((e) => (registrarFalha("agente-contexto: marca da conversa falhou", e), null));
   const soLeitura = ehOutraMarca(marcaDaConversa);
+  // Frente SPP: o Jev escolhe o método da casa em paralelo com a leitura do contexto (nunca lança).
+  const spP = superpoderesPara(db, { agente: "contexto.conversa", pedido: mensagem });
 
   // Frente SYNC: o que faltava do contexto completo da marca (estratégia aprovada, briefing mais novo, dossiê, decisões do conselho, cérebro filtrado e Instagram).
   const completoP = contextoCompletoParaPrompt(db, clientId, marcaDaConversa, { area: "geral", partes: ["estrategia", "briefing", "dossie", "decisoes", "cerebro", "instagram"], teto: 6000 })
@@ -1344,6 +1354,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   // Papel próprio do agente de contexto no catálogo (padrão barato); sem ele, o de leitura.
   const estrategista = await modeloDoContexto();
   const hoje = hojeParaOAgente();
+  const sp = await spP;
   const estado = {
     cliente: nome,
     kit: {
@@ -1380,11 +1391,12 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
       blocoDoMapaDoPainel("contexto"),
     ].filter(Boolean).join("\n\n"),
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem }],
-    esquemaJson: ESQUEMA_CONVERSA,
+    esquemaJson: ESQUEMA_CONVERSA_COM_METODO,
     maxTokensSaida: 4000,
     timeoutMs: 100_000,
     referencia: { tipo: REF_TIPO, id: clientId },
     criadoPor: ch.userId,
+    metodo: sp,
   }).catch(comPedidoSolto<Awaited<ReturnType<typeof chamarTexto>>>(pedido.id, clientId));
   const o = (r.json ?? {}) as Record<string, any>;
   // Frente AG: kit, contexto e memória que a equipe ensinou viram uma ação JÁ FEITA, com Desfazer
@@ -1414,9 +1426,12 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const respostaBase = texto(o.resposta, 4000) || (acaoProposta ? "A lista está pronta para você confirmar." : kitFeito ? "Feito. Está no cartão, com Desfazer." : "Não consegui entender o pedido. Pode dizer de outro jeito?");
   // Frente MC: com outra marca aberta, a conversa não grava no kit do cliente e diz onde mudar.
   const pediuMudarKit = soLeitura && !!(o.estilo || o.regras || o.paleta || o.contexto);
-  const resposta = pediuMudarKit && marcaDaConversa
+  let resposta = pediuMudarKit && marcaDaConversa
     ? `${respostaBase}\n\nCom a ${marcaDaConversa.nome} aberta, eu não gravo no kit do cliente. Para mudar o kit da ${marcaDaConversa.nome}, use Contexto, Editar em detalhe, Marca (ou Montar contexto da ${marcaDaConversa.nome}).`
     : respostaBase;
+  // Frente SPP: "pronto" sem ação feita ganha o aviso (sem refazer); o método vira a linha "Método:".
+  const fechado = await fecharComMetodo(db, { usoId: r.usoId, metodo: sp, resposta, declarados: o.metodos_usados, acaoFeita: !!kitFeito, resultados: kitFeito ? kitFeito.resultados : null });
+  resposta = fechado.resposta;
   // Frente AG (27/09): cada cartão leva o "Ir para" (kit na aba Contexto, foto no acervo, arquivo no Workspace);
   // sem cartão, a área que a resposta citou. "Faz e me leva" abre sozinho ao terminar.
   const anexosDaResposta = anexosComCaminho(
@@ -1426,6 +1441,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   if (aprendizado.anexo) anexosDaResposta.push(aprendizado.anexo);
   const anexoSeguidas = anexoDasRegrasSeguidas(seguidas);
   if (anexoSeguidas) anexosDaResposta.push(anexoSeguidas);
+  if (fechado.anexo) anexosDaResposta.push(fechado.anexo);
   // 29/09: o pedido já está gravado; a resposta vem depois dele (com uma segunda tentativa).
   const mensagemId = await gravarResposta(db, { conversa_id: conversaId, client_id: clientId, conteudo: resposta, anexos: anexosDaResposta, uso_id: r.usoId || null, depoisDe: pedido.criado_em });
 
@@ -2097,6 +2113,8 @@ function dependenciasDoExecutor(ch: Chamador, clientId: string): DependenciasDoE
   };
 }
 
+const ESQUEMA_CONVERSA_DO_PLANO_COM_METODO = comMetodosUsados(ESQUEMA_CONVERSA_DO_PLANO);
+
 async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
   const clientId = texto(corpo.client_id, 64);
   await garantirAcesso(ch, clientId);
@@ -2107,6 +2125,8 @@ async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): P
   // 29/09: o pedido é gravado antes da IA; se a IA falhar, ele sai e o texto volta ao campo.
   const pedido = await gravarPedidoDoContexto(conversaId, clientId, mensagem);
 
+  // Frente SPP: o método da casa do agente do cliente, escolhido pelo Jev em paralelo (nunca lança).
+  const spPlanoP = superpoderesPara(db, { agente: "contexto.plano", pedido: mensagem });
   const kit = await lerKit(clientId);
   const contexto = ((kit?.contexto ?? {}) as Record<string, unknown>);
   const [nome, linhas, plano, fase, briefing, dossie, regras] = await Promise.all([
@@ -2148,6 +2168,7 @@ async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): P
     dadosDasAcoes ? blocoDasAcoesDoContexto(dadosDasAcoes) : "- acoes: sempre null nesta mensagem.",
   ].join("\n\n");
   const pesquisaWeb = pedeCaminho(mensagem);
+  const spPlano = await spPlanoP;
   const chamar = (mensagens: Array<{ papel: "usuario" | "agente"; conteudo: string }>) =>
     chamarTexto({
       clientId,
@@ -2157,12 +2178,13 @@ async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): P
       raciocinio: raciocinioPara(modelo, ["medium", "low"]),
       sistema,
       mensagens,
-      esquemaJson: ESQUEMA_CONVERSA_DO_PLANO,
+      esquemaJson: ESQUEMA_CONVERSA_DO_PLANO_COM_METODO,
       maxTokensSaida: 9000,
       pesquisaWeb,
       timeoutMs: 110_000,
       referencia: { tipo: REF_TIPO, id: clientId },
       criadoPor: ch.userId,
+      metodo: spPlano,
     });
 
   const mensagens = [
@@ -2194,7 +2216,15 @@ async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): P
   const acaoDosArquivos = dadosDasAcoes ? normalizarAcoesDoContexto(o.acoes, dadosDasAcoes, clientId) : null;
   // Frente AG (27/09): o plano e os arquivos levam o "Ir para" (Kanban com o projeto e a tarefa, aba Contexto...).
   const anexos = caminhoNasAcoes([acaoDoPlano, acaoDosArquivos].filter(Boolean) as AcaoDoAgente[], (a) => caminhoDoContexto(clientId, a), { abrirSozinho: pedeParaLevar(mensagem) }) as AcaoDoAgente[];
-  const resposta = texto(o.resposta, 5000) || (anexos.length ? "A lista está pronta para você confirmar." : "Não consegui montar a resposta. Pode dizer de outro jeito?");
+  // Frente SPP: o plano é proposta (nada feito agora); "pronto" sem ação ganha o aviso e o método vira a linha "Método:".
+  const fechadoDoPlano = await fecharComMetodo(db, {
+    usoId: r.usoId,
+    metodo: spPlano,
+    resposta: texto(o.resposta, 5000) || (anexos.length ? "A lista está pronta para você confirmar." : "Não consegui montar a resposta. Pode dizer de outro jeito?"),
+    declarados: o.metodos_usados,
+    acaoFeita: false,
+  });
+  const resposta = fechadoDoPlano.resposta;
   // Aprender com o pedido (Jev) e dizer quais regras do dono foram seguidas.
   const aprendizado = await aprenderComOPedido(db, {
     clientId, mensagem, regra: regraDoModelo(o.regra), agente: "contexto (plano do cliente)", areas: ["geral", "campanha", "calendario", "conta"], areaPadrao: "geral",
@@ -2206,6 +2236,7 @@ async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): P
   if (aprendizado.anexo) todosOsAnexos.push(aprendizado.anexo);
   const anexoSeguidas = anexoDasRegrasSeguidas(seguidas);
   if (anexoSeguidas) todosOsAnexos.push(anexoSeguidas);
+  if (fechadoDoPlano.anexo) todosOsAnexos.push(fechadoDoPlano.anexo);
   // O pedido já está gravado; a resposta vem depois dele (com uma segunda tentativa).
   const mensagemId = await gravarResposta(db, { conversa_id: conversaId, client_id: clientId, conteudo: resposta, anexos: todosOsAnexos, uso_id: r.usoId || null, depoisDe: pedido.criado_em });
   return json({

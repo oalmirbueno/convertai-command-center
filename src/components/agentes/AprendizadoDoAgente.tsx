@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { BookmarkPlus, Check, GraduationCap, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { textoDoErro } from "@/lib/mesa/api";
+import MetodoDoAgente, { metodoUsadoDosAnexos } from "./MetodoDoAgente";
 
 /**
  * "Aprendi: …" e "Segui: …" embaixo da resposta do agente (frente AG2,
@@ -11,6 +12,8 @@ import { textoDoErro } from "@/lib/mesa/api";
  * - `aprendizado_do_agente` sem id (incerto): o agente não sabe se vale para
  *   sempre; "Guardar como regra" grava.
  * - `regras_seguidas`: as regras ensinadas que mudaram esta resposta.
+ * - `metodo_usado` (frente SPP, 30/09): "Método: brainstorm, plano,
+ *   verificação", os superpoderes que o agente seguiu (MetodoDoAgente.tsx).
  * Uma linha cada, sem caixa. Não depende da mesa: quem usa passa as chamadas.
  */
 
@@ -83,7 +86,8 @@ export default function AprendizadoDoAgente({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chave]);
 
-  if (!aprendido && !seguidas) return null;
+  const metodo = metodoUsadoDosAnexos(anexos);
+  if (!aprendido && !seguidas && !metodo) return null;
 
   const esquecer = async () => {
     if (!aprendido || !aprendido.id || !onEsquecer || ocupado) return;
@@ -148,6 +152,7 @@ export default function AprendizadoDoAgente({
           )}
         </p>
       )}
+      {metodo && <MetodoDoAgente anexos={anexos} />}
     </div>
   );
 }

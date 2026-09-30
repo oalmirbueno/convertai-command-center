@@ -55,9 +55,28 @@ describe("CSS da marca e configuração do opencode", () => {
     expect(c.provider.openrouter.options).toEqual({ apiKey: "{env:OPENROUTER_API_KEY}", baseURL: "http://127.0.0.1:9/api/v1" });
     expect(c.provider.openrouter.models["deepseek/deepseek-v4-flash"].cost).toEqual({ input: 0.0763, output: 0.1526, cache_read: 0.01526 });
     expect(c.permission.webfetch).toBe("deny");
-    expect(c.permission.external_directory).toBe("deny");
+    // SPM (revisão): pasta de fora negada, com "*" primeiro; só as skills do vendor liberadas (anexos das skills).
+    expect(c.permission.external_directory["*"]).toBe("deny");
+    expect(Object.keys(c.permission.external_directory)[0]).toBe("*");
     expect(c.permission.bash["*"]).toBe("deny");
     expect(c.permission.bash["npm run checar"]).toBe("allow");
     expect(JSON.stringify(c)).not.toMatch(/sk-or-/);
+    // SPM (30/09): "*" negado vem PRIMEIRO (a última regra que casa vence; com ele no fim o bash sumia),
+    // o conferir da seção liberado, sem pergunta nem subagente, e as skills do construir por padrão.
+    expect(Object.keys(c.permission.bash)[0]).toBe("*");
+    expect(c.permission.bash["node scripts/conferir.mjs*"]).toBe("allow");
+    expect(c.permission.question).toBe("deny");
+    expect(c.permission.task).toBe("deny");
+    expect(c.permission.skill["*"]).toBe("deny");
+    expect(c.permission.skill["writing-plans"]).toBe("allow");
+    // Revisão da SPM: o pacote aprovado é o desenho; brainstorming não entra no construir.
+    expect(c.permission.skill.brainstorming).toBeUndefined();
+    expect(c.permission.skill["using-git-worktrees"]).toBeUndefined();
+    // A edição é liberada, menos a casca e o que roda na máquina.
+    expect(c.permission.edit["*"]).toBe("allow");
+    expect(c.permission.edit["package.json"]).toBe("deny");
+    expect(c.permission.edit["scripts/*"]).toBe("deny");
+    // Integração UIM + SPM: a skill da casa (ui-ux-pro-max) e as skills do superpowers vendorizado.
+    expect(c.skills.paths.length).toBe(2);
   });
 });

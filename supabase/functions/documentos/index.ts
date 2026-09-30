@@ -37,6 +37,7 @@ import { JevErro, jevPerguntar, notaScore } from "../_shared/jev.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { erroQueSobe, registrarFalha } from "../_shared/falha-registrada.ts";
+import { superpoderesPara } from "../_shared/superpoderes.ts";
 import { marcasDoCliente, resolverMarca } from "../_shared/marca.ts";
 import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
@@ -459,15 +460,14 @@ async function gerarRegistro(ch: Chamador, corpo: Record<string, unknown>) {
   if (!daEquipe) {
     try {
       const saida = await chamarTexto({
-        clientId,
-        tarefa: TAREFA,
-        agente: AGENTE,
+        clientId, tarefa: TAREFA, agente: AGENTE,
         modeloId: modelo.id,
         raciocinio: raciocinioPara(modelo),
         sistema: SISTEMA_DO_DOCUMENTO,
         mensagens: [{ papel: "usuario", conteudo: `Redija o registro desta entrega com o que está em DADOS.\n\nDADOS:\n${JSON.stringify(estado)}${tomDaMarca ? `\n\nTOM E CONTEXTO DA MARCA (só para o jeito de escrever; fato, número e nome vêm só de DADOS):\n${tomDaMarca}` : ""}` }],
         esquemaJson: ESQUEMA_DOS_TEXTOS,
         maxTokensSaida: 2_500,
+        metodo: await superpoderesPara(servico(), { agente: "documentos.registro" }),
         referencia: { tipo: "documento_entrega", id: linha.id },
         criadoPor: ch.userId,
       });

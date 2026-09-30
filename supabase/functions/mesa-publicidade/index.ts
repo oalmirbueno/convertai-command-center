@@ -111,6 +111,8 @@ import {
 } from "./acoes-da-publicidade.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente SPP (30/09): o método da casa (superpoderes) no diretor de campanha e no agente.
+import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 // Frente AG2 (29/09): conversa gravada sem perder a mensagem, "essa direção/a segunda tomada/todas" pelo Jev,
 // custo no cartão, revisão pela conversa e o aprendizado (regras que a equipe ensina).
 import { estimarComModelo } from "../_shared/ia-motor.ts";
@@ -522,6 +524,7 @@ async function proporTerritorios(ch: Chamador, e: Estado, pedido: string | null,
     mensagens: [{ papel: "usuario", conteudo: `Proponha os três territórios com estes dados reais:\n${JSON.stringify(dados)}` }],
     esquemaJson: ESQUEMA_TERRITORIOS,
     maxTokensSaida: 9_000,
+    metodo: await superpoderesPara(servico(), { agente: "publicidade.diretor", momento: c.territorios.length ? "ajustar" : "gerar" }),
     timeoutMs: TIMEOUT_TEXTO_MS,
     referencia: c.id ? { tipo: REF_CAMPANHA, id: c.id } : undefined,
     criadoPor: ch.userId,
@@ -1008,11 +1011,15 @@ function sistemaDoAgente(c: CampanhaDePublicidade | null, comAcoes: boolean): st
   ].join(NL);
 }
 
+const ESQUEMA_DO_AGENTE_COM_METODO = comMetodosUsados(ESQUEMA_DO_AGENTE);
+
 async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
   const mensagem = limpo(corpo.mensagem, 4000, true);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva o que precisa.");
+  // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
+  const spP = superpoderesPara(servico(), { agente: "publicidade.agente", pedido: mensagem });
   let c: CampanhaDePublicidade | null = null;
   if (corpo.campanha_id) {
     c = await lerCampanha(ch, idDe(corpo.campanha_id, "campanha_id"));
@@ -1055,11 +1062,12 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     // Frente AG: cérebro e dossiê do cliente (cache curto) no fim do sistema.
     sistema: sistemaDoAgente(c, comAcoes) + (contextoDoCliente ? `\n\n${blocoDoContextoDoCliente(contextoDoCliente)}` : "") + extras,
     mensagens: [...historico, { papel: "usuario", conteudo: mensagem }],
-    esquemaJson: ESQUEMA_DO_AGENTE,
+    esquemaJson: ESQUEMA_DO_AGENTE_COM_METODO,
     maxTokensSaida: 4_000,
     timeoutMs: TIMEOUT_TEXTO_MS,
     referencia: campanha && campanha.id ? { tipo: REF_CAMPANHA, id: campanha.id } : undefined,
     criadoPor: ch.userId,
+    metodo: await spP,
   });
   const r = (saida.json ?? {}) as Record<string, unknown>;
   let resposta = limpo(r.resposta, 6000, true) || "Não consegui responder agora.";
@@ -1090,12 +1098,16 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   if (!acao && respostaPromete(resposta) && resposta.indexOf("?") < 0) {
     resposta = `${resposta} ${campanha && campanha.id ? "Ainda não montei a lista: diga o que fazer (ex.: qual território ou foto) e eu preparo o cartão." : "Abra ou salve uma campanha para eu montar a lista."}`;
   }
+  // Frente SPP: "pronto" sem ação feita ganha o aviso (sem refazer); o método vira a linha "Método:".
+  const fechado = await fecharComMetodo(servico(), { usoId: saida.usoId, metodo: await spP, resposta, declarados: r.metodos_usados, acaoFeita: !!(acao && acao.executada_em), resultados: acao ? acao.resultados : null });
+  resposta = fechado.resposta;
   const aprendido = await aprendendo;
   const seguidas = anexoDasRegrasSeguidas(r.regras_seguidas, regras.regras);
   // Resposta sem ação que cita outra área: o botão "Abrir <área>" fica guardado na mensagem.
   const anexosDaResposta = anexosComCaminho(acao ? [acao] : [], caminhoDaResposta(resposta, clientId, { abrirSozinho: pedeParaAbrir(mensagem) || pedeParaLevar(mensagem) }));
   if (aprendido) anexosDaResposta.push(aprendido);
   if (seguidas) anexosDaResposta.push(seguidas);
+  if (fechado.anexo) anexosDaResposta.push(fechado.anexo);
   // Frente AG2: grava as duas linhas sem perder a mensagem (antes: o erro do insert era ignorado, o cartão
   // sumia e uma ação já feita na hora perdia a prova e o Desfazer).
   const troca = await gravarTroca(servico(), {
