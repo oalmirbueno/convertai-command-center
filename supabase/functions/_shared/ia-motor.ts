@@ -61,6 +61,7 @@
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { tetoDeSaidaNoProvedor } from "./teto-de-saida.ts";
+import { esquemaNoProvedor, LIMITE_DE_OPCIONAIS, LIMITE_DE_UNIOES, respostaNoFormatoOriginal } from "./esquema-compativel.ts";
 import {
   capacidadesDaListaDeImagens,
   type CapacidadesImagem,
@@ -718,6 +719,28 @@ function nomeEsquema(e: EsquemaJson): { nome: string; schema: Record<string, unk
   return { nome: "resposta", schema: e as Record<string, unknown> };
 }
 
+/**
+ * Esquema na forma que o provedor aceita (ESQ 30/09). Modelo da Anthropic,
+ * direto ou anthropic/* no OpenRouter: sem enum com null, sem minimum e
+ * maximum e, acima de 16 uniões, com o vazio no lugar do null
+ * (esquema-compativel.ts). OpenAI e os outros modelos do OpenRouter: o
+ * esquema original, sem mudança nenhuma. O que ainda ficar fora das regras
+ * vai para o log (o provedor devolve 400 e a tela mostra).
+ */
+function esquemaDoProvedor(m: ModeloIa, e: EsquemaJson): EsquemaJson {
+  const { esquema, conversao } = esquemaNoProvedor(m, e);
+  if (conversao && (conversao.depois.problemas.length || conversao.depois.unioes.length > LIMITE_DE_UNIOES || conversao.depois.opcionais.length > LIMITE_DE_OPCIONAIS)) {
+    console.warn("[ia-motor] esquema fora das regras da Anthropic mesmo convertido", {
+      esquema: nomeEsquema(e).nome,
+      modelo: m.id,
+      unioes: conversao.depois.unioes.length,
+      opcionais: conversao.depois.opcionais.length,
+      problemas: conversao.depois.problemas.slice(0, 5),
+    });
+  }
+  return esquema as EsquemaJson;
+}
+
 function lerJson(texto: string): unknown {
   const limpo = texto.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   try {
@@ -1044,7 +1067,7 @@ async function textoAnthropic(m: ModeloIa, chave: string, e: EntradaTexto): Prom
     corpo.thinking = { type: "adaptive" };
     outputConfig.effort = e.raciocinio;
   }
-  if (e.esquemaJson) outputConfig.format = { type: "json_schema", schema: nomeEsquema(e.esquemaJson).schema };
+  if (e.esquemaJson) outputConfig.format = { type: "json_schema", schema: nomeEsquema(esquemaDoProvedor(m, e.esquemaJson)).schema };
   if (Object.keys(outputConfig).length) corpo.output_config = outputConfig;
   if (e.pesquisaWeb) corpo.tools = [{ type: "web_search_20260209", name: "web_search", max_uses: 5 }];
 
@@ -1114,7 +1137,7 @@ async function textoOpenRouter(m: ModeloIa, chave: string, e: EntradaTexto): Pro
   if (e.raciocinio) corpo.reasoning = { effort: e.raciocinio };
   if (e.pesquisaWeb) corpo.plugins = [{ id: "web" }];
   if (e.esquemaJson) {
-    const { nome, schema } = nomeEsquema(e.esquemaJson);
+    const { nome, schema } = nomeEsquema(esquemaDoProvedor(m, e.esquemaJson));
     corpo.response_format = { type: "json_schema", json_schema: { name: nome, strict: true, schema } };
   }
   if (e.maxTokensSaida) corpo.max_tokens = tetoDeSaidaNoProvedor(m, e.maxTokensSaida, e.raciocinio);
@@ -1218,7 +1241,8 @@ export async function chamarTexto(e: EntradaTexto): Promise<SaidaTexto> {
   if (!r.texto.trim()) throw new IaMotorErro("resposta_vazia", "O modelo nao devolveu texto.", { uso_id: usoId });
   const saida: SaidaTexto = { texto: r.texto, usoId, custoUsd, saldoUsd, modeloId: m.id };
   if (reserva) saida.reservaUsada = reserva;
-  if (e.esquemaJson) saida.json = lerJson(r.texto);
+  // Resposta de modelo da Anthropic volta à forma do esquema original (vazio da conversão vira null de novo).
+  if (e.esquemaJson) saida.json = respostaNoFormatoOriginal(m, e.esquemaJson, lerJson(r.texto));
   return saida;
 }
 
