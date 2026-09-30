@@ -15,6 +15,8 @@
  */
 
 import { acharNoMapa, type EstiloDoSite, type MapaDoSite, presetDeEstilo, presetDeMotion, secaoDaBiblioteca, ehSecaoDaBiblioteca } from "./site-biblioteca.ts";
+import type { BaseNoPacote } from "./uiux/base-completa.ts";
+import { REGRAS_DA_SECAO, REGRAS_DO_AGENTE } from "./uiux/mapeamentos.ts";
 
 /** As formas do Jev (as mesmas de jev.ts, repetidas aqui porque a tela importa este arquivo e jev.ts usa Deno). */
 type PerguntaJev =
@@ -389,6 +391,10 @@ export type PacoteDoSite = {
   integracoes?: Record<string, unknown> | null;
   seo?: Record<string, unknown> | null;
   regras_da_equipe?: string[];
+  /** UXM: a base UI UX Pro Max escolhida para o site (estilo, padrão, variantes, apoio da paleta, regras de UX, gráfico). */
+  base_de_design?: BaseNoPacote | null;
+  /** UXM: endereço css2 do Google Fonts (display=swap) das fontes do pacote; o pré-render põe o link no HTML. */
+  fontes_url?: string | null;
 };
 
 /** Instrução de integração para as seções que usam o formulário, o mapa ou o WhatsApp (componentes da casa). */
@@ -430,14 +436,28 @@ export function promptDaSecao(p: PacoteDoSite, secao: string, extra?: string | n
     : (tipo === "hero" || tipo === "hero_dividido") && p.copy
       ? "Use headline, subtitulo e cta de pacote.copy."
       : "Use só o que está no pacote; o que faltar vira texto neutro e curto, sem número inventado.";
+  const bd = p.base_de_design || null;
+  const variante = bd && bd.variantes ? bd.variantes[secao] : null;
+  const daVariante = variante ? ` Variante: ${variante.rotulo} (base ${variante.origem}): ${variante.padrao}${variante.cta ? ` CTA: ${variante.cta}.` : ""}` : "";
+  const daSecao = REGRAS_DO_AGENTE.concat(REGRAS_DA_SECAO[tipo] || []).map((n) => `uupm:ux:${n}`);
+  const regrasDaSecao = bd && bd.regras_ux ? bd.regras_ux.filter((r) => daSecao.indexOf(r.id) >= 0 && (r.severidade === "critica" || r.severidade === "alta" || (REGRAS_DA_SECAO[tipo] || []).some((n) => r.id === `uupm:ux:${n}`))).slice(0, 6) : [];
+  // O estilo da base inteiro no bloco 3 (efeitos, variáveis e checklist do próprio estilo), não só o nome: é o que o diferencia do preset.
+  const e = bd && bd.estilo ? bd.estilo : null;
+  const daBase = e
+    ? ` Estilo da base: ${e.rotulo} (${e.nome}); efeitos: ${e.efeitos}.${e.variaveis ? ` Variáveis do estilo (medidas, raios, sombras; cor e fonte vêm do pacote): ${e.variaveis}.` : ""}${e.checklist ? ` Checklist do estilo: ${e.checklist}.` : ""} A paleta e as fontes do pacote vencem o que a base ou a busca devolverem.`
+    : "";
   const blocos = [
     `1. O QUÊ: a seção "${lib ? lib.rotulo : rotuloDaSecao(secao)}" (id ${secao}) ${onde} do ${peca} de ${p.cliente}.${lib ? ` ${lib.descricao.charAt(0).toUpperCase()}${lib.descricao.slice(1)}.` : ""}`,
-    `2. ESTRUTURA: leia .aceleriq/pacote.json. Crie ou ajuste src/secoes/${nomeDoComponente(secao)}.tsx e registre em src/secoes/index.ts (id "${secao}"). ${texto}${lib ? ` Padrão da biblioteca: ${lib.padrao}` : ""}${lib && lib.so_real ? " Só com dado real do pacote: sem o dado, a seção mostra o método ou fica de fora (avise na resposta)." : ""}${instrucaoDasIntegracoes(lib ? lib.integra : undefined, p)}`,
-    `3. ESTILO E DNA: ${dna}.${preset} Paleta da marca em src/tema.css (variáveis), nunca cor solta. Logo e fotos reais só pelos arquivos de public/ citados no pacote.`,
+    `2. ESTRUTURA: leia .aceleriq/pacote.json. Crie ou ajuste src/secoes/${nomeDoComponente(secao)}.tsx e registre em src/secoes/index.ts (id "${secao}"). ${texto}${lib ? ` Padrão da biblioteca: ${lib.padrao}` : ""}${daVariante}${lib && lib.so_real ? " Só com dado real do pacote: sem o dado, a seção mostra o método ou fica de fora (avise na resposta)." : ""}${instrucaoDasIntegracoes(lib ? lib.integra : undefined, p)}`,
+    `3. ESTILO E DNA: ${dna}.${preset}${daBase} Paleta da marca em src/tema.css (variáveis), nunca cor solta. Logo e fotos reais só pelos arquivos de public/ citados no pacote.`,
     `4. MOVIMENTO: ${mov}.${motion} Use os tokens de src/lib/movimento.ts, respeite prefers-reduced-motion e não use useReducedMotion nem useScroll fora de [0,1].`,
     "5. STACK: Vite + React + Tailwind + Motion; GSAP ScrollTrigger/SplitText e Lenis só onde o movimento pedir. Nada de biblioteca fora do AGENTS.md.",
     `6. REFERÊNCIA DE NÍVEL: ${nivel}. Premium, com respiro, hierarquia clara e contraste AA.`,
   ];
+  if (bd) {
+    const lista = regrasDaSecao.map((r) => `${r.id} ${r.titulo}`).join("; ");
+    blocos.push(`BASE DE DESIGN: se o projeto tiver a skill ui-ux-pro-max, consulte-a antes (a busca usa "${bd.consulta || "a consulta do pacote"}").${lista ? ` Confira nesta seção: ${lista}.` : ""} Deixe a prova em .aceleriq/ux/${secao}.json com as regras conferidas e as pendentes.`);
+  }
   if (extra) blocos.push(`PEDIDO DA EQUIPE PARA ESTA SEÇÃO: ${txt(extra, 1500)}`);
   blocos.push("Ao terminar, rode `npm run checar` e corrija só o que o comando apontar nesta seção. Não mexa nas outras seções.");
   return blocos.join("\n");

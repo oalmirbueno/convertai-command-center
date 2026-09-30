@@ -11,6 +11,7 @@ import { ehAberto, type TrabalhoDoMotor } from "../../../supabase/functions/_sha
 import type { AvisoDeQa } from "../../../supabase/functions/_shared/site-metodo";
 import { CHAVES, chamarMotor, type LinhaDoSite, useTrabalhos } from "./siteApi";
 import ChecklistDeLancamento, { useChecklistDoSite } from "./ChecklistDeLancamento";
+import ChecklistDeUx, { useChecklistDeUx } from "./ChecklistDeUx";
 
 const AREAS: Array<{ id: AvisoDeQa["area"]; rotulo: string }> = [
   { id: "acessibilidade", rotulo: "Acessibilidade" },
@@ -36,7 +37,9 @@ export default function EtapaRevisao({ site, onIrPara }: { site: LinhaDoSite; on
   const [pedindo, setPedindo] = useState(false);
   const qa = ultimo && Array.isArray(ultimo.resultado.qa) ? (ultimo.resultado.qa as AvisoDeQa[]) : [];
   const build = ultimo ? (ultimo.resultado.build as { ok?: boolean; log?: string } | undefined) : undefined;
-  const checklist = useChecklistDoSite(site, trabalhos);
+  // UXM: as regras de UX da base (sob demanda); as críticas e altas pendentes pesam no checklist como item não obrigatório.
+  const ux = useChecklistDeUx(site, trabalhos);
+  const checklist = useChecklistDoSite(site, trabalhos, ux.graves);
 
   const revisar = async () => {
     setPedindo(true);
@@ -98,6 +101,7 @@ export default function EtapaRevisao({ site, onIrPara }: { site: LinhaDoSite; on
             );
           })}
       </Secao>
+      <ChecklistDeUx site={site} itens={ux.itens} onIrPara={onIrPara} />
     </div>
   );
 }

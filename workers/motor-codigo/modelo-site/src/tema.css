@@ -9,6 +9,13 @@
   --color-superficie: var(--cor-superficie);
   --font-titulo: var(--fonte-titulo);
   --font-texto: var(--fonte-texto);
+  /* Apoio da paleta (a marca manda, a base completa; contraste conferido pelo motor). */
+  --color-borda: var(--cor-borda, var(--cor-suave));
+  --color-anel: var(--cor-anel, var(--cor-destaque));
+  --color-erro: var(--cor-erro, #b91c1c);
+  --color-sobre-destaque: var(--cor-sobre-destaque, var(--cor-fundo));
+  --color-destaque-texto: var(--cor-destaque-texto, var(--cor-destaque));
+  --color-texto-suave: var(--cor-texto-suave, var(--cor-suave));
 }
 
 body {
@@ -18,7 +25,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--cor-destaque);
+  outline: 2px solid var(--cor-anel, var(--cor-destaque));
   outline-offset: 3px;
 }
 

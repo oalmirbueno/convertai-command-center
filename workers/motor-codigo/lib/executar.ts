@@ -17,6 +17,7 @@ import { rodarPassada, subirOpencode } from "./opencode.ts";
 import { abrirMedidor, type Medidor } from "./medidor.ts";
 import { ziparProjeto } from "./zip.ts";
 import { type ConsultaDaSecao, consultaDaSecao, eventoDaConsulta, lerLogDaBase, lerProvaDeUx, resumoDaBaseNaEntrega, totalDaBase } from "./prova-da-base.ts";
+import { revisaoDeUx } from "./revisao-ux.ts";
 
 /** A primeira linha útil do erro de build, sem as cores do terminal. */
 export function resumoDoBuild(log: string): string {
@@ -205,6 +206,19 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
         resultado.qa = qa;
         resultado.build = { ok: true };
         await avisar({ tipo: "passo", resumo: qa.length ? `Revisão: ${qa.length} aviso(s)` : "Revisão sem avisos" });
+        // UXM: as regras de UX da base conferidas por código em TODAS as páginas do dist e a prova que o agente
+        // deixou, pelo mesmo leitor do evento da passada (só seções do mapa, só a prova fresca). Aviso, nunca trava.
+        try {
+          const ux = await revisaoDeUx(pasta);
+          resultado.ux = ux.avisos;
+          resultado.ux_paginas = ux.paginas;
+          resultado.ux_agente = ux.agente;
+          const paginas = ux.paginas.length > 1 ? ` em ${ux.paginas.length} páginas` : "";
+          await avisar({ tipo: "passo", resumo: ux.avisos.length ? `UX${paginas}: ${ux.avisos.length} regra(s) da base para olhar` : `UX${paginas}: regras de código em dia` });
+        } catch (e) {
+          resultado.ux_erro = e instanceof Error ? e.message.slice(0, 200) : "revisão de UX indisponível";
+          await avisar({ tipo: "aviso", resumo: `A revisão de UX não rodou: ${resultado.ux_erro}` });
+        }
       }
       if (t.tipo === "publicar") {
         if (!b.ok) throw new Error("o build falhou; nada foi publicado");

@@ -23,6 +23,9 @@ import {
   type TipoDeSite,
   ehTipoDeSite,
 } from "../../../supabase/functions/_shared/site-biblioteca";
+import { mapaDoPadrao, variantesDaSecao } from "../../../supabase/functions/_shared/site-variantes";
+import { lerBaseDeDesign } from "../../../supabase/functions/_shared/uiux/consultas";
+import { carregarBaseDaTela, CREDITO_DA_BASE } from "@/lib/uiux/carregar";
 import { chamarSite, type LinhaDoSite, useSalvarSite } from "./siteApi";
 
 const OPCOES_DA_BIBLIOTECA = BIBLIOTECA_DE_SECOES.filter((s) => !s.global);
@@ -62,6 +65,8 @@ export default function EditorDoMapa({ site }: { site: LinhaDoSite }) {
   const salvo = useMemo(() => mapaDoSite(site), [site]);
   const [mapa, setMapa] = useState<MapaDoSite>(salvo);
   const [previa, setPrevia] = useState<{ incluidas: Array<{ id: string; prob: number }>; custo: number; aviso: string | null } | null>(null);
+  const [doPadrao, setDoPadrao] = useState<string | null>(null);
+  const padraoDaBase = lerBaseDeDesign(site.direcao ? site.direcao.base_de_design : null).padrao;
   const [ocupado, setOcupado] = useState<string | null>(null);
 
   useEffect(() => {
@@ -118,11 +123,53 @@ export default function EditorDoMapa({ site }: { site: LinhaDoSite }) {
     }
   };
 
+  /** UXM: a ordem do padrão da base entra na página inicial (prévia até salvar), com as variantes ligadas. */
+  const aplicarPadrao = async () => {
+    if (!padraoDaBase) return;
+    setOcupado("padrao");
+    try {
+      const b = await carregarBaseDaTela();
+      const p = b.base.padroes.filter((x) => x.id === padraoDaBase.id)[0];
+      if (!p) throw new Error("O padrão escolhido não está na base.");
+      const r = mapaDoPadrao(mapa, p);
+      setMapa(r.mapa);
+      setPrevia(null);
+      const partes = [
+        r.entraram.length ? `entraram ${r.entraram.map((t) => (secaoDaBiblioteca(t) || { rotulo: t }).rotulo).join(", ")}` : "nenhuma seção nova",
+        r.so_real.length ? `só com dado real: ${r.so_real.map((t) => (secaoDaBiblioteca(t) || { rotulo: t }).rotulo).join(", ")}` : "",
+        r.sem_equivalente.length ? `sem peça na biblioteca: ${r.sem_equivalente.join(", ")}` : "",
+      ].filter(Boolean);
+      setDoPadrao(`Ordem de ${padraoDaBase.rotulo || padraoDaBase.id}: ${partes.join("; ")}. Salve o mapa para gravar.`);
+    } catch (e) {
+      avisarErro(e, "A ordem do padrão não entrou");
+    } finally {
+      setOcupado(null);
+    }
+  };
+
+  const trocarVariante = (uid: string, variante: string) =>
+    setMapa((m) => ({
+      ...m,
+      fonte: "manual",
+      paginas: m.paginas.map((p) => ({
+        ...p,
+        secoes: p.secoes.map((x) => {
+          if (x.uid !== uid) return x;
+          if (!variante) {
+            const { variante: _sem, ...resto } = x;
+            return resto;
+          }
+          return { ...x, variante };
+        }),
+      })),
+    }));
+
   const salvar = async () => {
     setOcupado("salvar");
     try {
       await salvarSite("mapa_salvar", { site_id: site.id, tipo: mapa.tipo, mapa });
       setPrevia(null);
+      setDoPadrao(null);
     } catch (e) {
       avisarErro(e, "O mapa não foi salvo");
     } finally {
@@ -150,6 +197,23 @@ export default function EditorDoMapa({ site }: { site: LinhaDoSite }) {
       }
     >
       <SeletorCompacto rotulo="Tipo de site" opcoes={TIPOS_DE_SITE.map((t) => ({ valor: t.id, rotulo: t.rotulo, descricao: t.descricao }))} valor={mapa.tipo} onEscolher={trocarTipo} listaQuandoNaoCabe />
+      {padraoDaBase && (
+        <div className="flex min-w-0 flex-wrap items-center" data-padrao-da-base={padraoDaBase.id}>
+          <span className={juntar(texto.rotulo, "mr-2")}>Padrão da base</span>
+          <span className={juntar(texto.corpo, "mr-2 min-w-0 truncate")} title={CREDITO_DA_BASE}>
+            {padraoDaBase.rotulo || padraoDaBase.id}
+          </span>
+          <button type="button" className={botao.discreto} disabled={!!ocupado} onClick={() => void aplicarPadrao()} data-aplicar-ordem-do-padrao="">
+            {ocupado === "padrao" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+            Aplicar a ordem do padrão
+          </button>
+        </div>
+      )}
+      {doPadrao && (
+        <p className={juntar(texto.auxiliar, "whitespace-normal")} data-previa-do-padrao="">
+          {doPadrao}
+        </p>
+      )}
       {previa && (
         <p className={juntar(texto.auxiliar, "whitespace-normal")} data-previa-do-mapa="">
           {previa.aviso ||
@@ -190,6 +254,22 @@ export default function EditorDoMapa({ site }: { site: LinhaDoSite }) {
                     </span>
                   </span>
                   {lib && lib.so_real && <span className={juntar(etiqueta, "mr-2 bg-muted")}>só real</span>}
+                  {variantesDaSecao(s.tipo).length > 0 && (
+                    <select
+                      value={s.variante || ""}
+                      onChange={(e) => trocarVariante(s.uid, e.target.value)}
+                      className={juntar(campo, "mr-1 h-8 w-auto max-w-[160px] text-[12px]")}
+                      aria-label={`Variante de ${lib ? lib.rotulo : s.tipo}`}
+                      data-variante-da-secao={s.uid}
+                    >
+                      <option value="">Variante</option>
+                      {variantesDaSecao(s.tipo).map((v) => (
+                        <option key={v.id} value={v.id} title={v.padrao}>
+                          {v.rotulo}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <SeletorDaBiblioteca rotulo="Trocar por" valor="" onEscolher={(tipo) => setMapa((m) => trocarSecaoNoMapa(m, s.uid, tipo))} />
                   <button type="button" className={juntar(botao.icone, "ml-1")} aria-label={`Subir ${lib ? lib.rotulo : s.tipo}`} disabled={i === 0} onClick={() => mover(p.id, i, -1)}>
                     <ArrowUp className="h-4 w-4" />

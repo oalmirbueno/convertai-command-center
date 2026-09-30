@@ -114,16 +114,28 @@ export function fonteDoCatalogo(familia: string): FonteDoCatalogo | null {
   return FONTES_DO_CATALOGO.filter((x) => x.familia.toLowerCase() === f)[0] || null;
 }
 
-/** Endereço do CSS do Google Fonts (css2, display=swap) para as famílias pedidas. */
-export function urlDoGoogleFonts(familias: Array<{ familia: string; pesos?: number[] }>): string | null {
+/** Família conhecida fora do catálogo da casa (UXM: as FONTES_DA_BASE da UI UX Pro Max, todas OFL ou Apache), com os pesos reais. */
+export type FonteConhecida = { familia: string; pesos: number[] };
+
+/**
+ * Endereço do CSS do Google Fonts (css2, display=swap) para as famílias
+ * pedidas. `extras` acrescenta famílias conhecidas (com os pesos delas);
+ * `somenteConhecidas` deixa de fora o que não está no catálogo nem nos extras
+ * (o site do cliente não pede família que o Google pode não ter).
+ */
+export function urlDoGoogleFonts(familias: Array<{ familia: string; pesos?: number[] }>, opcoes: { extras?: FonteConhecida[]; somenteConhecidas?: boolean } = {}): string | null {
   const partes: string[] = [];
   const vistas: string[] = [];
   for (const f of familias) {
     const nome = familiaSegura(f.familia);
     if (!nome || vistas.indexOf(nome.toLowerCase()) >= 0) continue;
+    const extra = (opcoes.extras || []).filter((x) => x.familia.toLowerCase() === nome.toLowerCase())[0] || null;
+    const doCatalogo: { pesos: number[] } | null = fonteDoCatalogo(nome) || (extra && extra.pesos.length ? { pesos: extra.pesos } : null);
+    if (opcoes.somenteConhecidas && !doCatalogo) continue;
     vistas.push(nome.toLowerCase());
-    const doCatalogo = fonteDoCatalogo(nome);
-    const pedidos = (f.pesos && f.pesos.length ? f.pesos : doCatalogo ? doCatalogo.pesos : [400, 700]).filter((p) => p >= 100 && p <= 900 && p % 100 === 0);
+    // Família da base tem muitos pesos: sem pedido, só os de texto e título (400, 600, 700) que ela tem.
+    const padrao = fonteDoCatalogo(nome) ? doCatalogo!.pesos : extra ? [400, 600, 700] : doCatalogo ? doCatalogo.pesos : [400, 700];
+    const pedidos = (f.pesos && f.pesos.length ? f.pesos : padrao).filter((p) => p >= 100 && p <= 900 && p % 100 === 0);
     const disponiveis = doCatalogo ? pedidos.filter((p) => doCatalogo.pesos.indexOf(p) >= 0) : pedidos;
     const pesos = (disponiveis.length ? disponiveis : doCatalogo ? [doCatalogo.pesos[0]] : [400]).slice().sort((a, b) => a - b).filter((p, i, l) => l.indexOf(p) === i);
     partes.push(`family=${nome.replace(/ /g, "+")}:wght@${pesos.join(";")}`);
