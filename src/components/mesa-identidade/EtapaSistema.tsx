@@ -12,7 +12,9 @@ import { SLOTS_DE_LOGO, USOS_INCORRETOS_PADRAO, type LogoDoBrandbook, type SlotD
 import { enviarImagemDeApoio, enviarLogo, motivoParaRecusarLogo, paletaDaLogo } from "./arquivosDaMarca";
 import { CabecalhoDaEtapa, contextoParaPreencher, ImagemInteira, Pastilha, useProjetoDaMesa } from "./Comuns";
 import GeradorDePaleta, { ContrasteDaPaleta } from "./PaletaDaMarca";
-import { GrafismosGerados, TipografiaDaMarca } from "./TipoEGrafismos";
+import { GrafismosGerados, TipografiaDaMarca, type TipoDoSistema } from "./TipoEGrafismos";
+import PaletaDoSetor from "./PaletaDoSetor";
+import ParesDaBase from "./ParesDaBase";
 
 type Cor = { nome: string; papel: PapelDaCor; hex: string };
 type Tipo = { familia: string; uso: "titulo" | "texto" | "apoio"; pesos: string; licenca: string; alternativa: string };
@@ -107,6 +109,11 @@ export default function EtapaSistema() {
       avisarErro(e, "Não foi salvo");
     }
   };
+  /** Troca as famílias do sistema com Desfazer (pares da casa, sugestão do diretor e pares da base). */
+  const usarTipos = (novos: TipoDoSistema[], origem: string) =>
+    void trocarComDesfazer("tipografia", tiposParaSalvar(novos), tiposParaSalvar(tipos), `Tipografia trocada (${origem})`, (v) =>
+      setTipos((v as Array<Record<string, any>>).map((t) => ({ familia: t.familia || "", uso: t.uso || "texto", pesos: Array.isArray(t.pesos) ? t.pesos.join(", ") : "", licenca: t.licenca || "", alternativa: t.alternativa || "" }))),
+    );
   const tiposParaSalvar = (l: Tipo[]) => l.filter((t) => t.familia.trim()).map((t) => ({ familia: t.familia.trim(), uso: t.uso, pesos: t.pesos.split(/[,;]+/).map((x) => x.trim()).filter(Boolean), licenca: t.licenca.trim(), alternativa: t.alternativa.trim() }));
 
   // ---------------------------------------------------------------- logos
@@ -269,6 +276,7 @@ export default function EtapaSistema() {
           cores={cores}
           onUsar={(novas, origem) => void trocarComDesfazer("cores", novas, cores.filter((c) => normalizarHex(c.hex)).map((c) => ({ ...c, hex: normalizarHex(c.hex) })), `Paleta trocada (${origem})`, (v) => setCores(v as Cor[]))}
         />
+        <PaletaDoSetor cores={cores} />
       </Secao>
 
       <Secao
@@ -316,14 +324,8 @@ export default function EtapaSistema() {
         <button type="button" className={botao.discreto} disabled={tipos.length >= 4} onClick={() => setTipos(tipos.concat([{ familia: "", uso: tipos.length ? "texto" : "titulo", pesos: "", licenca: "", alternativa: "" }]))}>
           <Plus className="mr-1.5 h-4 w-4" /> Família
         </button>
-        <TipografiaDaMarca
-          tipos={tipos}
-          onUsar={(novos, origem) =>
-            void trocarComDesfazer("tipografia", tiposParaSalvar(novos), tiposParaSalvar(tipos), `Tipografia trocada (${origem})`, (v) =>
-              setTipos((v as Array<Record<string, any>>).map((t) => ({ familia: t.familia || "", uso: t.uso || "texto", pesos: Array.isArray(t.pesos) ? t.pesos.join(", ") : "", licenca: t.licenca || "", alternativa: t.alternativa || "" }))),
-            )
-          }
-        />
+        <TipografiaDaMarca tipos={tipos} onUsar={usarTipos} />
+        <ParesDaBase tipos={tipos} onUsar={usarTipos} />
       </Secao>
 
       <Secao

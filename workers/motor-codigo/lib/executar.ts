@@ -10,12 +10,18 @@ import { join, relative, sep } from "node:path";
 import { criarLimitador, type EventoResumido, type ModeloDoMotor } from "../../../supabase/functions/_shared/motor-codigo.ts";
 import { type PacoteDoSite, promptDaSecao, revisarHtml, rotuloDaSecao } from "../../../supabase/functions/_shared/site-metodo.ts";
 import { criarApiDaVercel, garantirProjeto as garantirProjetoVercel, ligarDominio, publicarArquivos, vercelLigada } from "../../../supabase/functions/_shared/publicacao-vercel.ts";
+// UIM: a base de design (skill ui-ux-pro-max): design system gerado pelo motor e prova de consulta por seção.
+import { type ConsultaDaSecao, consultaDaSecao, eventoDaConsulta, lerLogDaBase, lerProvaDeUx, resumoDaBaseNaEntrega, totalDaBase } from "./prova-da-base.ts";
+import { ajustarPromptDaBase, prepararDesignSystem } from "./design-system.ts";
+import { BUSCADOR_DA_UIUX } from "./config-opencode.ts";
+import { buscar as buscarNaBase } from "../modelo-site/scripts/uiux.mjs";
 import type { Fila, LinhaDaFila } from "./fila.ts";
 import { arquivosMudados, atualizarCasca, commitar, commitAtual, construirSite, escreverPacote, garantirProjeto, instalarSePrecisar, pastaDoProjeto, voltarCommits } from "./projeto.ts";
 import { garantirPrevia } from "./previa.ts";
 import { rodarPassada, subirOpencode } from "./opencode.ts";
 import { abrirMedidor, type Medidor } from "./medidor.ts";
 import { ziparProjeto } from "./zip.ts";
+import { revisaoDeUx } from "./revisao-ux.ts";
 
 /** A primeira linha útil do erro de build, sem as cores do terminal. */
 export function resumoDoBuild(log: string): string {
@@ -91,6 +97,9 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
       for (const a of avisos) await avisar({ tipo: "aviso", resumo: a });
       const base = await commitar(pasta, "Pacote do cliente");
       if (base.novo) await avisar({ tipo: "commit", resumo: "Pacote do cliente no projeto", dados: { commit: base.commit } });
+      // UIM: o design system da base segue a consulta do pacote (refeito quando a Direção muda; some sem consulta).
+      const designSystem = await prepararDesignSystem(pasta, pacote, { buscar: buscarNaBase, commitar, buscador: BUSCADOR_DA_UIUX });
+      if (designSystem.evento) await avisar(designSystem.evento);
       if (await instalarSePrecisar(pasta)) await avisar({ tipo: "passo", resumo: "Dependências instaladas" });
       if (cfg.comPrevia) {
         const pv = await garantirPrevia(t.projeto, pasta);
@@ -104,6 +113,8 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
         const passos = t.tipo === "construir" ? ((pedido.secoes as string[]) || []) : [String(pedido.secao || "")];
         const feitas: string[] = [];
         const falhas: Array<{ secao: string; motivo: string }> = [];
+        // UIM: prova de que a passada consultou a base de design e conferiu o checklist de UX (aviso, não trava).
+        const consultas: ConsultaDaSecao[] = [];
         for (const secao of passos) {
           if (await deveParar()) {
             estadoFinal = "parado";
@@ -111,7 +122,9 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
           }
           await avisar({ tipo: "passo", resumo: `${t.tipo === "construir" ? "Construindo" : "Ajustando"} ${rotuloDaSecao(secao)}` });
           const antesDaSecao = await commitAtual(pasta);
-          const texto = promptDaSecao(pacote as unknown as PacoteDoSite, secao, t.tipo === "ajustar" ? t.instrucao : t.instrucao && !/^Construir /.test(t.instrucao) ? t.instrucao : null);
+          const linhasDoLog = lerLogDaBase(pasta).length;
+          const inicioDaPassada = Date.now();
+          const texto = ajustarPromptDaBase(promptDaSecao(pacote as unknown as PacoteDoSite, secao, t.tipo === "ajustar" ? t.instrucao : t.instrucao && !/^Construir /.test(t.instrucao) ? t.instrucao : null), pacote, designSystem.master);
           const r = await rodarPassada(servidor, {
             titulo: `${t.tipo} ${secao}`,
             pedido: texto,
@@ -130,6 +143,12 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
           gasto.tokensSaida += r.custo.tokens_saida;
           gasto.tokensCache += r.custo.tokens_cache;
           await fila.atualizar(t.id, { custo_usd: Math.round(gasto.custo * 1e6) / 1e6 });
+          if (r.motivo !== "parado") {
+            // Lido antes do commit: se a seção quebrar o build e voltar, a prova da passada já foi contada.
+            const consulta = consultaDaSecao(secao, lerLogDaBase(pasta).slice(linhasDoLog), lerProvaDeUx(pasta, secao, inicioDaPassada));
+            consultas.push(consulta);
+            await avisar(eventoDaConsulta(consulta, rotuloDaSecao(secao)));
+          }
           let c = await commitar(pasta, `${t.tipo === "construir" ? "Seção" : "Ajuste"}: ${rotuloDaSecao(secao)}`);
           if (c.novo) {
             // O site tem de continuar construindo. Seção que quebra o build volta (Desfazer do passo),
@@ -160,6 +179,7 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
         }
         resultado.secoes = feitas;
         if (falhas.length) resultado.secoes_desfeitas = falhas;
+        if (consultas.length) resultado.base_de_design = totalDaBase(consultas);
       } finally {
         servidor.fechar();
         if (medidor) {
@@ -193,6 +213,19 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
         resultado.qa = qa;
         resultado.build = { ok: true };
         await avisar({ tipo: "passo", resumo: qa.length ? `Revisão: ${qa.length} aviso(s)` : "Revisão sem avisos" });
+        // UXM: as regras de UX da base conferidas por código em TODAS as páginas do dist e a prova que o agente
+        // deixou, pelo mesmo leitor do evento da passada (só seções do mapa, só a prova fresca). Aviso, nunca trava.
+        try {
+          const ux = await revisaoDeUx(pasta);
+          resultado.ux = ux.avisos;
+          resultado.ux_paginas = ux.paginas;
+          resultado.ux_agente = ux.agente;
+          const paginas = ux.paginas.length > 1 ? ` em ${ux.paginas.length} páginas` : "";
+          await avisar({ tipo: "passo", resumo: ux.avisos.length ? `UX${paginas}: ${ux.avisos.length} regra(s) da base para olhar` : `UX${paginas}: regras de código em dia` });
+        } catch (e) {
+          resultado.ux_erro = e instanceof Error ? e.message.slice(0, 200) : "revisão de UX indisponível";
+          await avisar({ tipo: "aviso", resumo: `A revisão de UX não rodou: ${resultado.ux_erro}` });
+        }
       }
       if (t.tipo === "publicar") {
         if (!b.ok) throw new Error("o build falhou; nada foi publicado");
@@ -264,7 +297,7 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
     dados: {
       custo_usd: gasto.custo,
       estado: estadoFinal,
-      entrega: { tipo: t.tipo, projeto: t.projeto, commit: commitFinal, secoes: resultado.secoes || [], avisos_de_revisao: Array.isArray(resultado.qa) ? (resultado.qa as unknown[]).length : null, build_ok: resultado.build ? (resultado.build as { ok?: boolean }).ok !== false : null, publicado: resultado.deploy_url || null },
+      entrega: { tipo: t.tipo, projeto: t.projeto, commit: commitFinal, secoes: resultado.secoes || [], avisos_de_revisao: Array.isArray(resultado.qa) ? (resultado.qa as unknown[]).length : null, build_ok: resultado.build ? (resultado.build as { ok?: boolean }).ok !== false : null, publicado: resultado.deploy_url || null, base_de_design: resumoDaBaseNaEntrega(resultado.base_de_design) },
     },
   });
   return { estado: estadoFinal, custo: gasto.custo };

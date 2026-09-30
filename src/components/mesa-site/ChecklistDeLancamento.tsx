@@ -12,8 +12,8 @@ import { CHAVES, chamarSite, type LinhaDoSite, montadoDepoisDasMudancas, secoesC
 
 const ROTULO_DA_ETAPA: Record<string, string> = { briefing: "Briefing", direcao: "Direção", conteudo: "Conteúdo", imagens: "Imagens", integracoes: "Integrações e SEO", construcao: "Construção", revisao: "Revisão", publicacao: "Publicação" };
 
-/** O checklist do site (puro sobre o que a tela já tem). */
-export function useChecklistDoSite(site: LinhaDoSite, trabalhos: TrabalhoDoMotor[]): ItemDoChecklist[] {
+/** O checklist do site (puro sobre o que a tela já tem). UXM: `pendenciasDeUx` (críticas e altas) vira um item não obrigatório. */
+export function useChecklistDoSite(site: LinhaDoSite, trabalhos: TrabalhoDoMotor[], pendenciasDeUx?: number | null): ItemDoChecklist[] {
   const kit = useKitDaMesa();
   const publicacao = useQuery({ queryKey: CHAVES.publicacao(site.id), queryFn: () => chamarSite<{ dominio: string | null; estado: string }>("publicacao_estado", { site_id: site.id }) });
   return useMemo(() => {
@@ -51,8 +51,9 @@ export function useChecklistDoSite(site: LinhaDoSite, trabalhos: TrabalhoDoMotor
       dominio: publicacao.data ? publicacao.data.dominio : null,
       dominioVerificado: !!publicacao.data && publicacao.data.estado === "verificado",
       construidoDepoisDasMudancas: montadoDepoisDasMudancas(site, trabalhos),
+      pendenciasDeUx: pendenciasDeUx === undefined ? null : pendenciasDeUx,
     });
-  }, [site, trabalhos, publicacao.data, kit.data]);
+  }, [site, trabalhos, publicacao.data, kit.data, pendenciasDeUx]);
 }
 
 /**

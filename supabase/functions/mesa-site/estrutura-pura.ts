@@ -10,16 +10,23 @@ const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object"
 const semTravessao = (s: string) => s.replace(/\s*[—–]\s*/g, ", ");
 const txt = (v: unknown, max: number) => semTravessao(String(v ?? "").replace(/\s+/g, " ").trim()).slice(0, max);
 
-/** Estilo novo e, quando o preset muda, o DNA dele (nicho, cores e leitura das referências ficam). */
-export function camposDoEstilo(s: LinhaDoSite, pedido: { preset?: unknown; motion?: unknown; aplicarDna?: boolean }): Record<string, unknown> {
+/**
+ * Estilo novo e, quando o preset muda, o DNA dele (nicho, cores e leitura das
+ * referências ficam). UXM: `atributos` são os do estilo da base UI UX Pro Max
+ * (PRESET_DO_ESTILO[...].dna): vencem os do preset e entram mesmo quando o
+ * preset ligado é o mesmo (14 estilos caem no mesmo preset); a pessoa troca o
+ * preset depois e o DNA do preset volta.
+ */
+export function camposDoEstilo(s: LinhaDoSite, pedido: { preset?: unknown; motion?: unknown; aplicarDna?: boolean; atributos?: string[] }): Record<string, unknown> {
   const atual = normalizarEstilo(s.estilo || {});
   const estilo = normalizarEstilo({ preset: pedido.preset !== undefined ? pedido.preset : atual.preset, motion: pedido.motion !== undefined ? pedido.motion : atual.motion });
   const campos: Record<string, unknown> = { estilo, pacote_mudou_em: new Date().toISOString() };
   const p = presetDeEstilo(estilo.preset);
-  if (p && pedido.aplicarDna !== false && estilo.preset !== atual.preset) {
+  const doEstiloDaBase = Array.isArray(pedido.atributos) && pedido.atributos.length ? pedido.atributos : null;
+  if (p && pedido.aplicarDna !== false && (estilo.preset !== atual.preset || doEstiloDaBase)) {
     const antes = s.dna && Array.isArray((s.dna as { atributos?: unknown }).atributos) ? (s.dna as unknown as DnaDoSite) : null;
     const primeiroMotion = presetDeMotion(estilo.motion[0]);
-    campos.dna = dnaManual({ atributos: p.atributos, movimento: primeiroMotion ? primeiroMotion.base : p.movimento, nivel: p.nivel, nicho: antes ? antes.nicho : obj(s.direcao).nicho }, antes);
+    campos.dna = dnaManual({ atributos: doEstiloDaBase || p.atributos, movimento: primeiroMotion ? primeiroMotion.base : p.movimento, nivel: p.nivel, nicho: antes ? antes.nicho : obj(s.direcao).nicho }, antes);
   }
   return campos;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { chunkPara, PISO_DE_TAMANHO } from "../../config/chunk-strategy";
 
@@ -63,6 +63,44 @@ describe("o que só uma tela usa continua sob demanda", () => {
 
   it("código do próprio painel nunca é agrupado à mão", () => {
     expect(chunkPara("/projeto/src/pages/AdminCiclo.tsx")).toBeUndefined();
+    expect(chunkPara("/projeto/src/components/mesa/contextoDoCliente.ts")).toBeUndefined();
+    expect(chunkPara("/projeto/src/components/mesa-site/EstilosDaBase.tsx")).toBeUndefined();
+    // O código leve da base (sem dado) fica solto: com nome, a abertura cresceu mais (build de 2026-09-30).
+    expect(chunkPara("/projeto/supabase/functions/_shared/uiux/consultas.ts")).toBeUndefined();
+    expect(chunkPara("/projeto/supabase/functions/_shared/uiux/checklist-de-ux.ts")).toBeUndefined();
+  });
+
+  it("a base de design da tela ganha pedaço com nome próprio, e o piso não gruda nada nela", () => {
+    // Solta, ela virava destino do piso: contextoDoCliente e o kit da marca foram
+    // parar dentro dela, 67 pedaços passaram a importá-la de forma fixa e a
+    // pré-carga ociosa baixava a base (medido no build de 2026-09-30).
+    expect(chunkPara("/projeto/src/lib/uiux/dados/indice-leve.ts")).toBe("base-uiux");
+    expect(chunkPara("C:\\projeto\\src\\lib\\uiux\\dados\\indice-leve.ts")).toBe("base-uiux");
+    expect(chunkPara("/projeto/supabase/functions/_shared/uiux/pt.ts")).toBe("base-uiux-pt");
+    expect(chunkPara("/projeto/supabase/functions/_shared/uiux/dados/ux.ts")).toBe("base-uiux-regras");
+    // A base completa (servidor) nunca é agrupada à mão para a tela.
+    expect(chunkPara("/projeto/supabase/functions/_shared/uiux/dados/estilos.ts")).toBeUndefined();
+  });
+
+  it("os arquivos da base que ganham nome não importam nada de valor (senão os vizinhos iriam junto)", () => {
+    for (const f of ["src/lib/uiux/dados/indice-leve.ts", "supabase/functions/_shared/uiux/pt.ts", "supabase/functions/_shared/uiux/dados/ux.ts"]) {
+      const importacoes = readFileSync(caminho(f), "utf8").split(/\r?\n/).filter((l) => /^import\b/.test(l));
+      expect(importacoes.filter((l) => !/^import type\b/.test(l)), f).toEqual([]);
+    }
+  });
+});
+
+describe("o build pronto (só quando há um dist/ com a base)", () => {
+  const assets = caminho("dist", "assets");
+  const temBuild = existsSync(assets) && readdirSync(assets).some((n) => /^base-uiux-/.test(n));
+
+  it.skipIf(!temBuild)("nenhum pedaço importa a base de forma fixa: ela só chega por import dinâmico", () => {
+    // Fixo: import"./base-uiux-X.js" ou import{a as b}from"./base-uiux-X.js". Dinâmico: import("./base-uiux-X.js").
+    const fixo = /import\s*(?:[\w$*{}\s,]*from\s*)?["']\.\/base-uiux-[^"']+["']/;
+    const fixos = readdirSync(assets)
+      .filter((n) => /\.js$/.test(n))
+      .filter((n) => fixo.test(readFileSync(resolve(assets, n), "utf8")));
+    expect(fixos).toEqual([]);
   });
 });
 

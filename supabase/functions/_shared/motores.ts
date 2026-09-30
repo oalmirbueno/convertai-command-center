@@ -39,6 +39,7 @@ import { conhecimentoEdicao } from "../mesa-videos/modulos/conhecimento-edicao.t
 import { conhecimentoPublicidade } from "./conhecimento-publicidade.ts";
 import { conhecimentoRoteiros } from "./conhecimento-roteiros.ts";
 import { conhecimentoEstilo } from "./conhecimento-estilo.ts";
+import { conhecimentoDaBaseDeDesign } from "./uiux/citar.ts";
 
 export const VERSAO_DOS_MOTORES = `2026-09-25.1 (repositórios ${VERSAO_CONHECIMENTO_REPOSITORIOS})`;
 
@@ -288,6 +289,17 @@ export const FONTES: Record<string, Fonte> = {
     estado: "integrado",
     nota: "docs/estudio/ESTILO-DO-CLIENTE.md. Agente de estilo (agente-estilo).",
   },
+  // Frente UXM (30/09): base de inteligência de design da Mesa Site e da Mesa Identidade.
+  ui_ux_pro_max: {
+    id: "ui_ux_pro_max",
+    tipo: "repositorio",
+    nome: "nextlevelbuilder/ui-ux-pro-max-skill (npm ui-ux-pro-max-cli 2.15.0)",
+    url: "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill",
+    licenca: "MIT (Next Level Builder); o pacote npm não traz o LICENSE, o texto vem do repositório (workers/motor-codigo/vendor/ui-ux-pro-max/LICENSE)",
+    uso: "dado importado com aviso MIT (styles, products, colors, ui-reasoning, typography, landing, ux-guidelines, charts, google-fonts) em _shared/uiux/dados, gerado por scripts/uiux/importar-base.mjs; textos da tela e dos agentes são nossos (uiux/pt.ts e citar.ts)",
+    estado: "integrado",
+    nota: "Mesa Site (Direção: estilos da base, padrão, par, variantes, paleta de apoio; Revisão: regras de UX), Mesa Identidade (paleta do setor e pares) e Preencher com IA (fonte base). O diretor de site cita a base (base_citada).",
+  },
 };
 
 // ------------------------------------------------------------------ origem de cada bloco
@@ -374,6 +386,8 @@ export const ORIGEM_DOS_BLOCOS: Record<string, { modulo: string; fontes: string[
   estilo_que_a_ia_segue: { modulo: "conhecimento-estilo.ts", fontes: ["pesquisa_estilo"], skills: [] },
   aprender_com_o_cliente: { modulo: "conhecimento-estilo.ts", fontes: ["pesquisa_estilo"], skills: [] },
   tendencia_do_nicho: { modulo: "conhecimento-estilo.ts", fontes: ["pesquisa_estilo"], skills: [] },
+  // uiux/citar.ts (frente UXM, 30/09)
+  base_de_design: { modulo: "uiux/citar.ts", fontes: ["ui_ux_pro_max"], skills: [] },
 };
 
 /** O checklist de criativo do objetivo entra com id checklist_<objetivo> e vem dos especialistas. */
@@ -444,8 +458,8 @@ export const SKILLS_MARKETINGSKILLS: Record<string, SkillMapeada> = {
   referrals: { estado: "nao_se_aplica", blocos: [], nota: "Programa de indicação." },
   revops: { estado: "nao_se_aplica", blocos: [], nota: "Operação de receita." },
   "sales-enablement": { estado: "nao_se_aplica", blocos: [], nota: "Material de vendas." },
-  schema: { estado: "nao_se_aplica", blocos: [], nota: "Dados estruturados de site." },
-  "site-architecture": { estado: "nao_se_aplica", blocos: [], nota: "Mapa de site." },
+  schema: { estado: "coberto", blocos: [], nota: "A Mesa Site monta os dados estruturados do negócio no pacote (schemaDoNegocio em site-lancamento.ts) e a revisão confere o JSON-LD." },
+  "site-architecture": { estado: "coberto", blocos: [], nota: "A Mesa Site edita o mapa do site (tipos, páginas e as 25 seções da biblioteca em site-biblioteca.ts) e os padrões de landing da base UI UX Pro Max (site-variantes.ts)." },
   signup: { estado: "nao_se_aplica", blocos: [], nota: "Cadastro de software." },
   sms: { estado: "nao_se_aplica", blocos: [], nota: "SMS; o canal do painel é WhatsApp e e-mail." },
 };
@@ -703,6 +717,19 @@ export const MOTORES: readonly Motor[] = [
     bases: ["perfis-instagram: SISTEMA_DO_PLANO_IGUAL e SISTEMA_DAS_IDEIAS (regras da saída e anti-cópia)", "perfis-instagram.ts: números em código e a conferência de cópia do Jev"],
     montar: () => conhecimentoCalendarioPara("temas"),
     promete: ["calendario_editorial", "mistura_do_mes", "datas_e_oportunidades", "ganchos_por_tipo", "alcance_e_conversao", "estrategia_de_conteudo", "formulas_de_titulo", "cta_principios", "voz_de_marca", "anti_generico"],
+  },
+  // Frente UXM (30/09): o diretor de site recebe o método da base UI UX Pro Max e o bloco BASE DA DIREÇÃO (apelidos b1..bN).
+  {
+    id: "mesa_site.direcao",
+    nome: "Mesa Site: diretor de site (base de design UI UX Pro Max na direção e na revisão)",
+    funcao: "mesa-site",
+    ligacao: {
+      arquivo: "supabase/functions/mesa-site/index.ts",
+      trechos: ["const CONHECIMENTO_DA_BASE = conhecimentoDaBaseDeDesign().texto;", "sistema: `${SISTEMA_DO_AGENTE}\\n\\n${CONHECIMENTO_DA_BASE}", "blocoDaBaseDeDesign({ papel: PAPEL, itens: itensDaBase"],
+    },
+    bases: ["mesa-site: SISTEMA_DO_AGENTE e o contrato comum das ações (acoes-do-site.ts)", "uiux/jev-da-base.ts: o Jev escolhe produto, estilo, padrão, par e preset (perguntasDaBase em mesa-site/base-de-design.ts)"],
+    montar: () => conhecimentoDaBaseDeDesign(),
+    promete: ["base_de_design"],
   },
 ];
 

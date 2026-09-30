@@ -24,7 +24,28 @@
 /** Menor que isto e o Rollup gruda o pedaço no vizinho em vez de criar arquivo. */
 export const PISO_DE_TAMANHO = 20_000;
 
+/**
+ * A base UI UX Pro Max na tela (frente UXM) só chega por import dinâmico
+ * (src/lib/uiux/carregar.ts), quando a pessoa abre um painel da base. Solta,
+ * o piso de tamanho a usava como destino e grudava nela módulos que muitas
+ * telas usam (contexto do cliente, kit da marca): 67 pedaços passaram a
+ * importar o índice de forma fixa e a pré-carga ociosa baixava a base
+ * (medido no build de 2026-09-30). Com nome próprio, o pedaço fica só com a
+ * base e ninguém gruda nele. Os três arquivos não importam nada de valor, então
+ * nenhum vizinho vem junto.
+ *
+ * O código leve da base (mapeamentos, consultas, checklist, sem dado) continua
+ * solto de propósito: com nome próprio (medido no mesmo dia) o piso mandou um
+ * fragmento vizinho para a abertura e ela cresceu mais do que solto.
+ */
+const BASE_DE_DESIGN_NA_TELA: Array<[RegExp, string]> = [
+  [/[\\/]src[\\/]lib[\\/]uiux[\\/]dados[\\/]indice-leve\.ts$/, "base-uiux"],
+  [/[\\/]_shared[\\/]uiux[\\/]pt\.ts$/, "base-uiux-pt"],
+  [/[\\/]_shared[\\/]uiux[\\/]dados[\\/]ux\.ts$/, "base-uiux-regras"],
+];
+
 export function chunkPara(id: string): string | undefined {
+  for (const [casa, nome] of BASE_DE_DESIGN_NA_TELA) if (casa.test(id)) return nome;
   if (!id.includes("node_modules")) return undefined;
 
   // O React precisa ficar inteiro em um único pedaço: dividido, duas cópias do

@@ -10,6 +10,7 @@ import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao"
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
+import BaseCitada from "./BaseCitada";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
@@ -272,6 +273,7 @@ export default function AgenteDoSite({ site, rascunho, onRascunho, onIrPara }: {
                   onGuardar={(texto, tipo) => chamarFuncao("mesa-site", { acao: "aprendizado_guardar", client_id: clientId, texto, tipo, mensagem_id: m.id || undefined })}
                 />
               )}
+              {m.papel === "agente" && <BaseCitada anexos={m.anexos} />}
               {m.papel === "agente" && <CaminhoDaMensagem anexos={m.anexos} recente={!!m.nova} />}
               {m.id &&
                 acoes.map((a) => (

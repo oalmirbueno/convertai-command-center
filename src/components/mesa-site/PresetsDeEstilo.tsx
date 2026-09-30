@@ -1,52 +1,44 @@
 import { useEffect, useState } from "react";
 import { Check, Loader2, Sparkles } from "lucide-react";
+import { toast } from "sonner";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { useKitDaMesa } from "@/components/mesa/kitDaMesa";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import { usd } from "@/lib/mesa/api";
-import { normalizarEstilo, PRESETS_DE_ESTILO, PRESETS_DE_MOTION, type PresetDeEstilo } from "../../../supabase/functions/_shared/site-biblioteca";
+import { CREDITO_DA_BASE } from "@/lib/uiux/carregar";
+import EscolhaDoProduto from "@/components/uiux/EscolhaDoProduto";
+import { normalizarEstilo, PRESETS_DE_ESTILO, PRESETS_DE_MOTION } from "../../../supabase/functions/_shared/site-biblioteca";
 import { rotuloDoAtributo } from "../../../supabase/functions/_shared/site-metodo";
+import { lerBaseDeDesign } from "../../../supabase/functions/_shared/uiux/consultas";
+import { TOKENS_DA_BASE, TOKENS_DO_RERANK } from "../../../supabase/functions/_shared/uiux/jev-da-base";
 import { chamarSite, type LinhaDoSite, useSalvarSite } from "./siteApi";
-import { CUSTO_DO_JEV } from "./EditorDoMapa";
+import { destaqueDaMarca, PreviaDoPreset } from "./PreviaDoPreset";
+import EstilosDaBase from "./EstilosDaBase";
+import SugestaoDaBase, { type EscolhasDaSugestao, type RespostaDaSugestao } from "./SugestaoDaBase";
 
-const FONTE: Record<PresetDeEstilo["previa"]["titulo"], string> = {
-  serifada: "Georgia, 'Times New Roman', serif",
-  sans: "ui-sans-serif, system-ui, sans-serif",
-  mono: "ui-monospace, 'SFMono-Regular', monospace",
-};
+export { PreviaDoPreset } from "./PreviaDoPreset";
 
-/** Cor de destaque da marca (a do papel primário, ou a primeira). */
-function destaqueDaMarca(paleta: Array<{ hex?: string | null; papel?: string | null }> | null | undefined, reserva: string): string {
-  const cores = (paleta || []).filter((c) => typeof c.hex === "string" && /^#[0-9a-f]{6}$/i.test(String(c.hex)));
-  const primaria = cores.find((c) => /prim|destaque/i.test(String(c.papel || "")));
-  return String((primaria || cores[0] || { hex: reserva }).hex);
-}
+/** Jev da base: as listas completas (~18 mil tokens) e o refino (~3,5 mil) a US$ 0,042 por milhão. */
+export const CUSTO_DA_BASE = ((TOKENS_DA_BASE + TOKENS_DO_RERANK) * 0.042) / 1e6;
 
-/** Miniatura do preset: fundo, título e destaque da marca (a paleta do site é sempre a da marca). */
-export function PreviaDoPreset({ p, destaque, nome }: { p: PresetDeEstilo; destaque: string; nome: string }) {
-  const v = p.previa;
-  return (
-    <div className="relative h-24 overflow-hidden rounded-md" style={{ background: v.fundo, color: v.texto }} aria-hidden="true">
-      <div className="absolute left-3 top-3 right-3">
-        <div className="truncate text-[20px] leading-6" style={{ fontFamily: FONTE[v.titulo], fontWeight: v.peso, letterSpacing: v.titulo === "serifada" ? "-0.02em" : "-0.01em" }}>
-          {nome}
-        </div>
-        <div className="mt-1.5 h-1.5 w-3/4 rounded-sm" style={{ background: v.texto, opacity: 0.25 }} />
-        <div className="mt-1 h-1.5 w-1/2 rounded-sm" style={{ background: v.texto, opacity: 0.15 }} />
-      </div>
-      <div className="absolute bottom-3 left-3 h-5 w-20" style={{ background: destaque, borderRadius: v.raio }} />
-      <div className="absolute bottom-3 right-3 h-8 w-14" style={{ background: v.apoio, borderRadius: v.raio }} />
-    </div>
-  );
-}
+const ABAS = [
+  { valor: "casa", rotulo: "Presets da casa" },
+  { valor: "base", rotulo: "Estilos da base" },
+];
 
 /**
- * Presets de estilo (DNA) com prévia e presets de movimento dentro do kit
- * livre (SIT2). Escolher o preset troca o DNA dele (atributos, movimento e
- * nível); nicho, cores e leitura das referências ficam. "Sugerir com o Jev"
- * escolhe numa lista fechada pela marca e pelas referências, sem gravar.
+ * Estilo do site (SIT2 + UXM). Duas abas: os 11 presets da casa (intocados:
+ * trocam o DNA e mostram a prévia na cor de destaque da marca) e os 50
+ * estilos da base UI UX Pro Max (carregados sob demanda). Escolher um estilo
+ * da base grava base_de_design.estilo e aplica o preset da casa ligado a ele;
+ * dá para trocar o preset depois sem perder o estilo da base. A linha "Tipo de
+ * produto" mostra o produto da marca (do Jev ou da equipe) e troca pela lista
+ * com busca. "Sugerir" pede ao Jev produto, estilo, padrão, par e preset numa
+ * ida só, com a prévia antes de aplicar e o Desfazer depois.
  */
 export default function PresetsDeEstilo({ site }: { site: LinhaDoSite }) {
   const { clientId } = useMesa();
@@ -55,10 +47,14 @@ export default function PresetsDeEstilo({ site }: { site: LinhaDoSite }) {
   const salvarSite = useSalvarSite(clientId, marca ? marca.id : null);
   const avisarErro = useAvisarErro();
   const salvo = normalizarEstilo(site.estilo || {});
+  const base = lerBaseDeDesign(site.direcao ? site.direcao.base_de_design : null);
   const [preset, setPreset] = useState<string | null>(salvo.preset);
   const [motion, setMotion] = useState<string[]>(salvo.motion);
-  const [sugerido, setSugerido] = useState<{ id: string | null; prob: number | null; custo: number } | null>(null);
+  const [aba, setAba] = useEstadoDaTela<string>(`mesa-site:estilo:aba:${clientId}`, "casa", { validar: (v): v is string => v === "casa" || v === "base" });
   const [ocupado, setOcupado] = useState<string | null>(null);
+  const [produtoAberto, setProdutoAberto] = useState(false);
+  const [sugestao, setSugestao] = useState<RespostaDaSugestao | null>(null);
+  const [janela, setJanela] = useState(false);
   const reserva = site.dna && Array.isArray(site.dna.cores_das_referencias) && site.dna.cores_das_referencias[0] ? String(site.dna.cores_das_referencias[0]) : "#00D52B";
   const destaque = destaqueDaMarca((kit.data && (kit.data as { paleta?: Array<{ hex?: string; papel?: string }> }).paleta) || (marca ? marca.paleta : null), reserva);
   const nome = (marca && marca.nome) || site.nome;
@@ -67,21 +63,98 @@ export default function PresetsDeEstilo({ site }: { site: LinhaDoSite }) {
     const e = normalizarEstilo(site.estilo || {});
     setPreset(e.preset);
     setMotion(e.motion);
-    // Ao abrir outro site ou quando o estilo salvo muda (o diretor de site também escolhe).
+    // Ao abrir outro site ou quando o estilo salvo muda (o diretor de site e a base também escolhem).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [site.id, JSON.stringify(site.estilo || null)]);
 
   const mudou = preset !== salvo.preset || motion.join(",") !== salvo.motion.join(",");
 
+  /** Grava na base com o Desfazer (volta base, estilo e DNA de antes). */
+  const gravarNaBase = async (corpo: Record<string, unknown>, frase: string, depois?: () => Promise<unknown>) => {
+    const d = await salvarSite<{ site?: LinhaDoSite; anterior?: Record<string, unknown> }>("base_salvar", { site_id: site.id, ...corpo });
+    if (depois) await depois();
+    const anterior = d && d.anterior;
+    toast.success(frase, {
+      duration: 10_000,
+      action: anterior
+        ? {
+            label: "Desfazer",
+            onClick: () => {
+              salvarSite("base_salvar", { site_id: site.id, restaurar: anterior }).catch((e) => avisarErro(e, "Não foi possível desfazer"));
+            },
+          }
+        : undefined,
+    });
+  };
+
   const sugerir = async () => {
     setOcupado("jev");
+    setSugestao(null);
+    setJanela(true);
     try {
-      const d = await chamarSite<{ preset: string | null; probabilidades: Record<string, number>; aviso: string | null; custo_usd: number }>("preset_sugerir", { site_id: site.id });
-      setSugerido({ id: d.preset, prob: d.preset && d.probabilidades ? d.probabilidades[d.preset] ?? null : null, custo: d.custo_usd || 0 });
-      if (d.preset) setPreset(d.preset);
-      if (d.aviso) avisarErro(new Error(d.aviso), "Sugestão do Jev");
+      const d = await chamarSite<RespostaDaSugestao>("base_sugerir", { site_id: site.id });
+      setSugestao(d);
     } catch (e) {
+      setJanela(false);
       avisarErro(e, "O Jev não sugeriu");
+    } finally {
+      setOcupado(null);
+    }
+  };
+
+  const recalcular = async (produto: string) => {
+    setOcupado("recalcular");
+    try {
+      const d = await chamarSite<RespostaDaSugestao>("base_recalcular", { site_id: site.id, produto, probabilidades: sugestao ? sugestao.probabilidades || {} : {} });
+      setSugestao((s) => ({ ...(s || {}), ...d, probabilidades: s ? s.probabilidades : {}, aviso: s ? s.aviso : null, custo_usd: s ? s.custo_usd : 0 }) as RespostaDaSugestao);
+    } catch (e) {
+      avisarErro(e, "A sugestão não foi refeita");
+    } finally {
+      setOcupado(null);
+    }
+  };
+
+  const aplicarSugestao = async (e: EscolhasDaSugestao, marcados: Record<keyof EscolhasDaSugestao, boolean>) => {
+    setOcupado("aplicar");
+    try {
+      const corpo: Record<string, unknown> = { origem: sugestao && !sugestao.sem_jev ? "jev" : "equipe", aplicar_preset: !marcados.preset, sugestao: { probabilidades: sugestao ? sugestao.probabilidades || {} : {} } };
+      if (marcados.produto && e.produto) corpo.produto = e.produto;
+      if (marcados.estilo && e.estilo) corpo.estilo = e.estilo;
+      if (marcados.padrao && e.padrao) corpo.padrao = e.padrao;
+      if (marcados.par && e.par) corpo.par = e.par;
+      const presetDoJev = marcados.preset && e.preset ? e.preset : null;
+      await gravarNaBase(corpo, "Base de design aplicada", presetDoJev ? () => salvarSite("estilo_salvar", { site_id: site.id, preset: presetDoJev, motion, aplicar_dna: true }) : undefined);
+      setJanela(false);
+      setSugestao(null);
+    } catch (err) {
+      avisarErro(err, "A base não foi aplicada");
+    } finally {
+      setOcupado(null);
+    }
+  };
+
+  const escolherProduto = async (no: string) => {
+    setProdutoAberto(false);
+    if (janela) {
+      await recalcular(no);
+      return;
+    }
+    setOcupado("produto");
+    try {
+      await gravarNaBase({ produto: no, origem: "equipe" }, "Tipo de produto trocado");
+    } catch (e) {
+      avisarErro(e, "O tipo de produto não foi salvo");
+    } finally {
+      setOcupado(null);
+    }
+  };
+
+  const escolherEstiloDaBase = async (id: string) => {
+    setOcupado("estilo-base");
+    try {
+      await gravarNaBase({ estilo: id, origem: "equipe", aplicar_preset: true }, "Estilo da base aplicado (com o preset da casa ligado)");
+    } catch (e) {
+      avisarErro(e, "O estilo da base não foi salvo");
     } finally {
       setOcupado(null);
     }
@@ -91,7 +164,6 @@ export default function PresetsDeEstilo({ site }: { site: LinhaDoSite }) {
     setOcupado("salvar");
     try {
       await salvarSite("estilo_salvar", { site_id: site.id, preset, motion, aplicar_dna: true });
-      setSugerido(null);
     } catch (e) {
       avisarErro(e, "O estilo não foi salvo");
     } finally {
@@ -101,18 +173,20 @@ export default function PresetsDeEstilo({ site }: { site: LinhaDoSite }) {
 
   const alternarMotion = (id: string) => setMotion((l) => (l.indexOf(id) >= 0 ? l.filter((x) => x !== id) : l.length >= 3 ? l : l.concat([id])));
   const escolhido = PRESETS_DE_ESTILO.find((p) => p.id === preset) || null;
+  const produtoRotulo = base.produto ? base.produto.rotulo || `produto ${base.produto.id}` : null;
+  const resumo = [escolhido ? escolhido.rotulo : "Sem preset", base.estilo ? `base: ${base.estilo.rotulo || base.estilo.id}` : "", mudou ? "não salvo" : ""].filter(Boolean).join(" · ");
 
   return (
     <Secao
       titulo="Estilo"
-      descricao={escolhido ? `${escolhido.rotulo}${mudou ? " · não salvo" : ""}` : "Sem preset"}
-      ajuda="Onze estéticas nomeadas, com prévia na cor de destaque da marca. O preset troca o DNA (atributos, movimento e nível de referência); a paleta do site continua a da marca. Os presets de movimento usam só o kit livre (Motion, GSAP com ScrollTrigger e SplitText, Lenis e CSS) e respeitam o movimento reduzido. Até 3 presets de movimento."
+      descricao={resumo}
+      ajuda={`Duas fontes de estilo: os 11 presets da casa (DNA, movimento e nível, com prévia na cor de destaque da marca) e os 50 estilos da base UI UX Pro Max. O estilo da base aplica o preset da casa mais próximo; a paleta, as fontes e a logo são sempre as da marca. Sugerir pede ao Jev tipo de produto, estilo, padrão de página, par de fontes e preset numa ida só. Os presets de movimento usam só o kit livre e respeitam o movimento reduzido (até 3). ${CREDITO_DA_BASE}`}
       recolher="mesa-site:direcao:estilo"
       acao={
         <>
-          <button type="button" className={juntar(botao.secundario, "mr-2")} disabled={!!ocupado} onClick={() => void sugerir()} title={`Custo do Jev: ~${usd(CUSTO_DO_JEV)}`} data-sugerir-preset="">
+          <button type="button" className={juntar(botao.secundario, "mr-2")} disabled={!!ocupado} onClick={() => void sugerir()} title={`Custo do Jev: ~${usd(CUSTO_DA_BASE)}`} data-sugerir-base="">
             {ocupado === "jev" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
-            Sugerir com o Jev
+            Sugerir
           </button>
           <button type="button" className={botao.primario} disabled={!!ocupado || !mudou} onClick={() => void salvar()} data-salvar-estilo="">
             {ocupado === "salvar" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
@@ -121,34 +195,43 @@ export default function PresetsDeEstilo({ site }: { site: LinhaDoSite }) {
         </>
       }
     >
-      {sugerido && (
-        <p className={texto.auxiliar}>
-          {sugerido.id ? `O Jev sugeriu ${(PRESETS_DE_ESTILO.find((p) => p.id === sugerido.id) || { rotulo: sugerido.id }).rotulo}${sugerido.prob !== null ? ` (${Math.round(sugerido.prob * 100)}%)` : ""}; salve para aplicar.` : "O Jev não escolheu."} Custo {usd(sugerido.custo)}.
-        </p>
-      )}
-      <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4" role="radiogroup" aria-label="Presets de estilo" data-presets-de-estilo="">
-        {PRESETS_DE_ESTILO.map((p) => {
-          const ligado = p.id === preset;
-          return (
-            <button
-              key={p.id}
-              type="button"
-              role="radio"
-              aria-checked={ligado}
-              onClick={() => setPreset(ligado ? null : p.id)}
-              title={`${p.descricao}. DNA: ${p.atributos.map(rotuloDoAtributo).join(", ")}`}
-              className={juntar("min-w-0 rounded-md p-1 text-left transition-colors", ligado ? "bg-primary/10 ring-2 ring-primary" : "hover:bg-muted")}
-              data-preset={p.id}
-            >
-              <PreviaDoPreset p={p} destaque={destaque} nome={nome} />
-              <span className="mt-1.5 flex min-w-0 items-center px-1">
-                <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate font-medium")}>{p.rotulo}</span>
-                {ligado ? <Check className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" /> : <span className={juntar(etiqueta, "bg-muted")}>{p.modo}</span>}
-              </span>
-            </button>
-          );
-        })}
+      <div className="flex min-w-0 flex-wrap items-center" data-tipo-de-produto={base.produto ? base.produto.id : ""}>
+        <span className={juntar(texto.rotulo, "mr-2")}>Tipo de produto</span>
+        <span className={juntar(texto.corpo, "mr-2 min-w-0 truncate")}>{produtoRotulo || "não escolhido"}</span>
+        {base.produto && <span className={juntar(etiqueta, "mr-2 bg-muted")}>{base.produto.origem === "jev" ? "do Jev" : "da equipe"}</span>}
+        <button type="button" className={botao.discreto} disabled={!!ocupado} onClick={() => setProdutoAberto(true)} data-trocar-produto="">
+          {ocupado === "produto" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+          {base.produto ? "Trocar" : "Escolher"}
+        </button>
       </div>
+      <SeletorCompacto rotulo="Fonte do estilo" opcoes={ABAS} valor={aba} onEscolher={setAba} />
+      {aba === "base" ? (
+        <EstilosDaBase destaque={destaque} nome={nome} produtoNo={base.produto ? base.produto.id : null} escolhido={base.estilo ? base.estilo.id : null} ocupado={ocupado === "estilo-base"} onEscolher={(id) => void escolherEstiloDaBase(id)} />
+      ) : (
+        <div className="grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4" role="radiogroup" aria-label="Presets de estilo" data-presets-de-estilo="">
+          {PRESETS_DE_ESTILO.map((p) => {
+            const ligado = p.id === preset;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                role="radio"
+                aria-checked={ligado}
+                onClick={() => setPreset(ligado ? null : p.id)}
+                title={`${p.descricao}. DNA: ${p.atributos.map(rotuloDoAtributo).join(", ")}`}
+                className={juntar("min-w-0 rounded-md p-1 text-left transition-colors", ligado ? "bg-primary/10 ring-2 ring-primary" : "hover:bg-muted")}
+                data-preset={p.id}
+              >
+                <PreviaDoPreset p={p} destaque={destaque} nome={nome} />
+                <span className="mt-1.5 flex min-w-0 items-center px-1">
+                  <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate font-medium")}>{p.rotulo}</span>
+                  {ligado ? <Check className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" /> : <span className={juntar(etiqueta, "bg-muted")}>{p.modo}</span>}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className="min-w-0 border-t border-border pt-3">
         <span className={juntar(texto.rotulo, "mb-1.5 block")}>Movimento (kit livre)</span>
         <div className="flex flex-wrap" role="group" aria-label="Presets de movimento">
@@ -169,6 +252,25 @@ export default function PresetsDeEstilo({ site }: { site: LinhaDoSite }) {
           })}
         </div>
       </div>
+      <EscolhaDoProduto
+        aberta={produtoAberto}
+        onFechar={() => setProdutoAberto(false)}
+        atual={base.produto ? base.produto.id : null}
+        sugeridos={sugestao ? sugestao.sugestao.produto.top : []}
+        onEscolher={(no) => void escolherProduto(no)}
+      />
+      <SugestaoDaBase
+        aberta={janela}
+        onFechar={() => {
+          setJanela(false);
+          setSugestao(null);
+        }}
+        resposta={sugestao}
+        aplicando={ocupado === "aplicar"}
+        recalculando={ocupado === "recalcular"}
+        onTrocarProduto={() => setProdutoAberto(true)}
+        onAplicar={(e, m) => void aplicarSugestao(e, m)}
+      />
     </Secao>
   );
 }

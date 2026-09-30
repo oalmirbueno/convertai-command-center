@@ -316,6 +316,8 @@ export type EstadoParaChecklist = {
   dominio: string | null;
   dominioVerificado: boolean;
   construidoDepoisDasMudancas: boolean;
+  /** UXM: regras de UX críticas ou altas que falharam ou faltam conferir (base UI UX Pro Max). Sem o número, não pesa. */
+  pendenciasDeUx?: number | null;
 };
 
 /**
@@ -348,6 +350,11 @@ export function checklistDeLancamento(e: EstadoParaChecklist): ItemDoChecklist[]
     { id: "dominio", rotulo: "Domínio configurado", ok: !!e.dominio, etapa: "publicacao", obrigatorio: false },
     { id: "dns", rotulo: "DNS verificado", ok: e.dominioVerificado, etapa: "publicacao", obrigatorio: false },
   ];
+  // UXM: só entra quando a tela calculou as regras de UX da base (não obrigatório: a conferência é só aviso).
+  if (typeof e.pendenciasDeUx === "number") {
+    const qa = itens.map((i) => i.id).indexOf("qa");
+    itens.splice(qa + 1, 0, { id: "ux", rotulo: "Sem pendência crítica ou alta de UX", ok: e.pendenciasDeUx === 0, etapa: "revisao", detalhe: e.pendenciasDeUx ? `${e.pendenciasDeUx} pendência(s)` : undefined, obrigatorio: false });
+  }
   return itens;
 }
 

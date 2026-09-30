@@ -1,0 +1,41 @@
+UI UX Pro Max (base de inteligência de design) no painel Aceleriq
+
+Origem: https://github.com/nextlevelbuilder/ui-ux-pro-max-skill
+Versão fixa: pacote npm ui-ux-pro-max-cli 2.15.0
+Integridade do pacote: sha512-D0J/C40xrzzi5si6ZLtRGbEE5v3QjL7d4wJNnasmP3yfDSrGiuqVCdwQiqCNnIkbqOuVoA/uonR2o1WKXh3urw==
+gitHead: a38d04c3d5c298c851dbe5e6ee1965ee3de42cb5
+
+O que o painel usa: os dados de styles.csv, products.csv, colors.csv,
+ui-reasoning.csv, typography.csv, landing.csv, ux-guidelines.csv, charts.csv,
+google-fonts.csv e google-font-licenses.json da mesma cópia que o motor de
+código usa (workers/motor-codigo/vendor/ui-ux-pro-max/data), convertidos em
+arquivos TS pelo scripts/uiux/importar-base.mjs: só as colunas que o servidor
+usa em supabase/functions/_shared/uiux/dados e o índice leve da tela em
+src/lib/uiux/dados.
+Os textos em português da tela e dos agentes são do painel. As fontes dos
+pares são do Google Fonts, todas com licença OFL ou Apache 2.0.
+
+O pacote npm 2.15.0 não traz o arquivo LICENSE; o texto abaixo é o do
+repositório (igual ao de workers/motor-codigo/vendor/ui-ux-pro-max/LICENSE).
+
+MIT License
+
+Copyright (c) 2024 Next Level Builder
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

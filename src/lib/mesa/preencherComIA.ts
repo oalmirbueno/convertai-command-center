@@ -14,8 +14,12 @@ import type {
 
 export type { CampoParaPreencher, FonteDoPreenchimento, ResultadoDoPreenchimento, TipoDoCampo };
 
-export const FONTES_DO_PREENCHIMENTO: FonteDoPreenchimento[] = ["contexto", "briefing", "dossie", "arquivos", "conversa", "web"];
+export const FONTES_DO_PREENCHIMENTO: FonteDoPreenchimento[] = ["contexto", "briefing", "dossie", "arquivos", "conversa", "web", "base"];
 export const FONTES_PADRAO: FonteDoPreenchimento[] = ["contexto", "briefing", "dossie"];
+/** UXM: a base de design (UI UX Pro Max) vale para o site e a identidade, e lá entra por padrão. */
+export const PAPEIS_COM_BASE = ["site", "identidade"];
+export const fontesDoPapel = (papel: string): FonteDoPreenchimento[] => FONTES_DO_PREENCHIMENTO.filter((f) => f !== "base" || PAPEIS_COM_BASE.indexOf(papel) >= 0);
+export const fontesPadraoDoPapel = (papel: string): FonteDoPreenchimento[] => (PAPEIS_COM_BASE.indexOf(papel) >= 0 ? FONTES_PADRAO.concat(["base"]) : FONTES_PADRAO.slice());
 
 export const ROTULO_DA_FONTE: Record<FonteDoPreenchimento, string> = {
   contexto: "Contexto",
@@ -24,6 +28,7 @@ export const ROTULO_DA_FONTE: Record<FonteDoPreenchimento, string> = {
   arquivos: "Arquivos",
   conversa: "Conversa",
   web: "Web",
+  base: "Base de design",
 };
 
 export type EstimativaDoPreenchimento = {

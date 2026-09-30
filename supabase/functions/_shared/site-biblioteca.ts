@@ -105,7 +105,8 @@ export const ROTULO_DA_CATEGORIA: Record<CategoriaDaSecao, string> = {
 
 // ------------------------------------------------------------------ mapa do site
 
-export type SecaoNoMapa = { uid: string; tipo: string; nota?: string };
+/** UXM: `variante` = id de uma variante da seção (site-variantes.ts); opcional, mapas antigos continuam valendo. */
+export type SecaoNoMapa = { uid: string; tipo: string; nota?: string; variante?: string };
 export type PaginaDoMapa = { id: string; slug: string; titulo: string; secoes: SecaoNoMapa[] };
 export type MapaDoSite = { tipo: TipoDeSite; paginas: PaginaDoMapa[]; globais: string[]; fonte: "padrao" | "jev" | "manual" };
 
@@ -113,6 +114,7 @@ export const MAX_PAGINAS = 6;
 export const MAX_SECOES_POR_PAGINA = 14;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const UID = /^[a-z0-9][a-z0-9_-]{0,47}$/;
+const VARIANTE = /^[a-z0-9][a-z0-9-]{1,59}$/;
 
 /** Mapa padrão de cada tipo (o ponto de partida; a equipe e o Jev ajustam). */
 const PADRAO_POR_TIPO: Record<TipoDeSite, { globais: string[]; paginas: Array<{ id: string; slug: string; titulo: string; secoes: string[] }> }> = {
@@ -217,7 +219,9 @@ export function normalizarMapa(bruto: unknown, tipoPadrao: TipoDeSite = "landing
         usados.add(uid);
       } else uid = uidDaSecao(pagina, tipoDaSecao, usados);
       const nota = umaLinha(x.nota, 200);
-      secoes.push(nota ? { uid, tipo: tipoDaSecao, nota } : { uid, tipo: tipoDaSecao });
+      const nova: SecaoNoMapa = nota ? { uid, tipo: tipoDaSecao, nota } : { uid, tipo: tipoDaSecao };
+      if (typeof x.variante === "string" && VARIANTE.test(x.variante)) nova.variante = x.variante;
+      secoes.push(nova);
     }
     paginas.push({ id, slug, titulo, secoes });
   });

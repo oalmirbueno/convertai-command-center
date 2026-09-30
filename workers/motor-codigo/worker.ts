@@ -15,6 +15,8 @@
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   a fila e o Storage (service_role)
  *   OPENROUTER_API_KEY                        modelos pelo OpenRouter (opcional: ANTHROPIC_API_KEY, OPENAI_API_KEY)
  *   MOTOR_PASTA          onde ficam os projetos (padrão C:\AI\motor-codigo\projetos)
+ *   UIUX_PYTHON          Python 3.8+ da busca da base de design (opcional: o worker acha sozinho;
+ *                        a skill ui-ux-pro-max fica em vendor/ui-ux-pro-max, fora dos projetos)
  *   MOTOR_EXECUTOR       nome deste worker (padrão o nome da máquina)
  *   MOTOR_TUNEL=nao      desliga o túnel (a prévia fica só nesta máquina)
  *   MOTOR_PREVIA_MINUTOS prévia parada desliga depois disso (padrão 60)
@@ -25,6 +27,7 @@ import { hostname } from "node:os";
 import { join } from "node:path";
 import { filaSupabase, type Fila } from "./lib/fila.ts";
 import { executarTrabalho } from "./lib/executar.ts";
+import { acharPython } from "./modelo-site/scripts/uiux.mjs";
 import { desligarTodas, limparPrevias, temCloudflared } from "./lib/previa.ts";
 import { temChave } from "./lib/opencode.ts";
 import { esperar } from "./lib/processos.ts";
@@ -40,8 +43,25 @@ export function configDoAmbiente() {
   };
 }
 
-async function capacidades() {
+/**
+ * Python da busca da base de design (skill ui-ux-pro-max): acha uma vez na
+ * partida e deixa em UIUX_PYTHON, que o opencode e o `node scripts/uiux.mjs`
+ * herdam. Sem Python, avisa uma vez e o motor segue só com o pacote.
+ * Depois de um git pull com mudança no worker, reinicie (Ctrl+C e npm run iniciar).
+ */
+export function prepararPythonDaBase(): string | null {
+  const python = acharPython(process.env) as string | null;
+  if (python) process.env.UIUX_PYTHON = python;
+  else {
+    delete process.env.UIUX_PYTHON;
+    console.warn("[motor] sem Python 3.8+ nesta máquina: a busca da base de design (ui-ux-pro-max 2.15.0) fica desligada e o agente segue só com o pacote.");
+  }
+  return python;
+}
+
+async function capacidades(python: string | null = null) {
   return {
+    uiux: !!python,
     tunel: await temCloudflared(),
     openrouter: temChave("openrouter"),
     anthropic: temChave("anthropic"),
@@ -52,8 +72,9 @@ async function capacidades() {
 
 export async function laco(fila: Fila, opcoes: { umaVez?: boolean } = {}) {
   const cfg = configDoAmbiente();
-  const caps = await capacidades();
-  console.log(`[motor] ${VERSAO} · executor ${cfg.executor} · fila ${fila.nome} · projetos em ${cfg.pastaProjetos} · túnel ${caps.tunel ? "sim" : "não"}`);
+  const python = prepararPythonDaBase();
+  const caps = await capacidades(python);
+  console.log(`[motor] ${VERSAO} · executor ${cfg.executor} · fila ${fila.nome} · projetos em ${cfg.pastaProjetos} · túnel ${caps.tunel ? "sim" : "não"} · base de design ${python ? "com Python" : "sem Python"}`);
   let parar = false;
   process.on("SIGINT", () => {
     parar = true;

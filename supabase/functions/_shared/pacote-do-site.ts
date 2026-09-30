@@ -12,6 +12,14 @@ import { kitComMarca, lerContextoDaMarca, lerMarcaParaDirecaoDaMarca, type Marca
 import { coresValidas, type DnaDoSite, estiloDoPacote, type OpcaoDeCopy, type PacoteDoSite } from "./site-metodo.ts";
 import { mapaDoSite, normalizarEstilo, secoesDoMapa } from "./site-biblioteca.ts";
 import { integracoesDoPacote, normalizarIntegracoes, normalizarSeo, robotsTxt, schemaDoNegocio, urlDoSite } from "./site-lancamento.ts";
+import { variantesDoMapa } from "./site-variantes.ts";
+import { lerBaseDeDesign, lerSerieReal } from "./uiux/consultas.ts";
+import { BASE_COMPLETA, apoioDoProduto, pacoteDaBaseDeDesign } from "./uiux/base-completa.ts";
+import { coresDoSite } from "./uiux/apoio-da-paleta.ts";
+import { fontesDoSite, urlDasFontesDoSite } from "./uiux/fontes-do-site.ts";
+
+/** UXM (lacunas 4.1 e 4.2): as fontes do site moram em uiux/fontes-do-site.ts (sem banco). */
+export { fontesDoSite, urlDasFontesDoSite };
 
 /** Arquivo do Storage que o worker copia para dentro do projeto. */
 export type ArquivoDoPacote = { bucket: string; path: string; destino: string };
@@ -43,6 +51,8 @@ export type LinhaDoSite = {
   criado_em: string;
   atualizado_em: string;
 };
+
+const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 
 export type ImagemDoSite = { id: string; slot: string; origem: "gerada" | "real"; bucket: string; path: string; alt: string; custo_usd?: number; escolhida?: boolean; secao?: string | null };
 
@@ -115,6 +125,22 @@ export async function montarPacoteDoSite(db: SupabaseClient, site: LinhaDoSite, 
   const nomeDoCliente = direcaoDaMarca.nomeCliente || site.nome;
   const env = (globalThis as unknown as { Deno?: { env: { get(k: string): string | undefined } } }).Deno;
   const base = env ? String(env.env.get("SUPABASE_URL") || "").replace(/\/$/, "") : "";
+  // UXM: a base de design da marca do site (produto, estilo, padrão, par), o apoio da paleta, as variantes do mapa e o gráfico.
+  const baseDeDesign = lerBaseDeDesign(obj(site.direcao).base_de_design);
+  const temBase = !!(baseDeDesign.produto || baseDeDesign.estilo || baseDeDesign.padrao || baseDeDesign.par);
+  const parDaBase = baseDeDesign.par ? BASE_COMPLETA.pares.filter((x) => x.no === baseDeDesign.par!.id)[0] || null : null;
+  const fontesEscolhidas = fontesDoSite(direcaoDaMarca.fontes, direcaoDaMarca.tipografiaCitada, parDaBase ? { titulo: parDaBase.titulo, texto: parDaBase.texto } : null);
+  const paleta = direcaoDaMarca.paleta
+    .filter((p) => coresValidas([p.hex]).length)
+    .map((p) => ({ hex: coresValidas([p.hex])[0], nome: p.nome, papel: p.papel }))
+    .slice(0, 8);
+  const estilo = estiloDoPacote(normalizarEstilo(site.estilo || {}));
+  const doSite = coresDoSite({ paleta, dna, estilo });
+  // Uma regra só para o destaque: o apoio sai do MESMO destaque que o worker põe em --cor-destaque.
+  const apoio = apoioDoProduto(paleta, baseDeDesign.produto ? baseDeDesign.produto.id : null, { fundo: doSite.fundo, texto: doSite.texto, destaque: doSite.destaque });
+  const tipos = mapa.paginas.reduce((l: string[], p) => l.concat(p.secoes.map((x) => x.tipo)), mapa.globais.slice());
+  // Sem escolha da base, o pacote ainda leva as regras de UX do mapa e as variantes (o apoio da paleta o motor calcula da marca).
+  const base_de_design = pacoteDaBaseDeDesign(temBase ? baseDeDesign : null, { tipos, variantes: variantesDoMapa(mapa), apoio: temBase ? apoio : null, kitTemFontes: direcaoDaMarca.fontes.length > 0, serie: lerSerieReal(obj(site.conteudo).serie_real) });
   const pacote: PacoteDoSite = {
     cliente: nomeDoCliente,
     marca: {
@@ -125,11 +151,9 @@ export async function montarPacoteDoSite(db: SupabaseClient, site: LinhaDoSite, 
       tom: direcaoDaMarca.tomDeVoz || undefined,
       diferenciais: Array.isArray(c.diferenciais) ? (c.diferenciais as unknown[]).map((d) => String(d).slice(0, 240)).slice(0, 8) : undefined,
     },
-    paleta: direcaoDaMarca.paleta
-      .filter((p) => coresValidas([p.hex]).length)
-      .map((p) => ({ hex: coresValidas([p.hex])[0], nome: p.nome, papel: p.papel }))
-      .slice(0, 8),
-    fontes: direcaoDaMarca.fontes.slice(0, 4),
+    paleta,
+    fontes: fontesEscolhidas.fontes,
+    fontes_url: urlDasFontesDoSite(fontesEscolhidas.fontes),
     dna,
     direcao: {
       nicho: typeof site.direcao.nicho === "string" ? site.direcao.nicho : undefined,
@@ -147,7 +171,7 @@ export async function montarPacoteDoSite(db: SupabaseClient, site: LinhaDoSite, 
     mapa,
     paginas: mapa.paginas.map((p) => ({ id: p.id, slug: p.slug, titulo: p.titulo, secoes: p.secoes.map((x) => x.uid) })),
     globais: mapa.globais,
-    estilo: estiloDoPacote(normalizarEstilo(site.estilo || {})),
+    estilo,
     integracoes: integracoesDoPacote(integracoes, base ? `${base}/functions/v1/site-formulario` : null),
     seo: {
       titulo: seo.titulo || (copy ? copy.seo.titulo : "") || nomeDoCliente,
@@ -159,6 +183,7 @@ export async function montarPacoteDoSite(db: SupabaseClient, site: LinhaDoSite, 
       robots: robotsTxt(seo.indexar, url),
       schema: schemaDoNegocio(seo, { url, logo, imagem: og, nomePadrao: nomeDoCliente }),
     },
+    base_de_design,
   };
   return { pacote, arquivos };
 }

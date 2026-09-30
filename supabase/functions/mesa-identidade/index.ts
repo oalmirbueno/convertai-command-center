@@ -34,6 +34,8 @@
  * - slogans_gerar { projeto_id, modelo_id?, quantos?, pedido? } -> { projeto, slogans } ; slogan_escolher { projeto_id, slogan_id?, texto? }
  * Naming (IDV2): naming_idiomas { rodada_id, modelo_id? } ; naming_votacao_abrir | naming_votacao_fechar | naming_votos { rodada_id }
  * - naming_votar { rodada_id, votos: [{ candidato_id, nota }], comentario? } (voto da equipe)
+ * Base UI UX Pro Max (UXM, base-acoes.ts): base_sugerir_marca { projeto_id } (Jev) · paleta_do_setor { projeto_id, produto }
+ *   pares_da_base { projeto_id, produto? } · base_salvar_marca { projeto_id, produto?, par?, paleta_setor? } · base_proposta { projeto_id, tipo, produto?, par? }
  * Moodboard: moodboard_web { projeto_id, busca, pagina? } -> { itens } (Openverse, sem custo)
  * Completar marca existente (IDV3; modo "completar" no projeto_criar, com nome):
  * - logo_ler { projeto_id, modelo_id? } -> { projeto, leitura } (visão, custo antes pelo estimar com acao_alvo "leitura")
@@ -88,6 +90,7 @@ import { agenteConversar, agenteHistorico, conversaDoAgente, desfazerAcao, execu
 import { estimativaDaProposta, estrategiaPropor, fontesPropor, paletasPropor, sloganEscolher, slogansGerar } from "./estrategia-acoes.ts";
 import { moodboardWeb, namingIdiomas, namingVotacaoAbrir, namingVotacaoFechar, namingVotar, namingVotos } from "./naming-v2-acoes.ts";
 import { completarRegistrar, estimativaDaLeitura, logoLer, videoRegistrar } from "./completar-acoes.ts";
+import { ACOES_LONGAS_DA_BASE_DA_MARCA, ROTAS_DA_BASE_DA_MARCA } from "./base-acoes.ts";
 
 async function estimar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
@@ -151,10 +154,12 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   // "Esquecer" e "Guardar como regra" do aprendizado (sem IA). As duas mesas (identidade e naming) têm a mesma rota:
   // guardar vai para a identidade; esquecer serve a qualquer regra do cliente.
   ...rotasDoAprendizado({ mesa: "identidade", servico, garantirAcesso: (ch, clientId) => garantirAcesso(ch as Chamador, clientId), json }),
+  // UXM: base UI UX Pro Max (produto, paleta do setor, pares da base), por marca, em dados.sistema.base_de_design.
+  ...ROTAS_DA_BASE_DA_MARCA,
 };
 
 /** Ações que podem passar de 150 s (IA, rede, PDF com imagens): a resposta começa na hora. */
-const ACOES_LONGAS = new Set(["pesquisa_ia", "conceito_gerar", "conceito_imagem", "naming_gerar", "naming_conferir", "naming_pdf_compartilhar", "brandbook_compartilhar", "brandbook_publicar", "agente_conversar", "executar_acao_agente", "estrategia_propor", "paletas_propor", "fontes_propor", "slogans_gerar", "naming_idiomas", "logo_ler"]);
+const ACOES_LONGAS = new Set(["pesquisa_ia", "conceito_gerar", "conceito_imagem", "naming_gerar", "naming_conferir", "naming_pdf_compartilhar", "brandbook_compartilhar", "brandbook_publicar", "agente_conversar", "executar_acao_agente", "estrategia_propor", "paletas_propor", "fontes_propor", "slogans_gerar", "naming_idiomas", "logo_ler", ...ACOES_LONGAS_DA_BASE_DA_MARCA]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

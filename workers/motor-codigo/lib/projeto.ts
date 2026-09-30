@@ -7,8 +7,12 @@
 import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { PROJETO_VALIDO } from "../../../supabase/functions/_shared/motor-codigo.ts";
+import { ajustarAoDestaque, apoioDaPaleta, type ApoioDaPaleta, coresDoSite, type PapelDoApoio, variaveisDoApoio } from "../../../supabase/functions/_shared/uiux/apoio-da-paleta.ts";
 import type { Fila } from "./fila.ts";
 import { rodar } from "./processos.ts";
+
+// UIM: um `2>nul` do agente no bash do Git cria o arquivo "nul", que quebra o git add do commit.
+import { apagarArquivosReservados } from "./nomes-reservados.ts";
 
 export const MODELO_DO_SITE = resolve(import.meta.dirname, "..", "modelo-site");
 
@@ -26,6 +30,7 @@ export const commitAtual = (pasta: string) => git(pasta, ["rev-parse", "HEAD"]);
 
 /** Commit do que mudou; sem mudança, devolve o commit atual (null = nada novo). */
 export async function commitar(pasta: string, mensagem: string): Promise<{ commit: string; novo: boolean }> {
+  apagarArquivosReservados(pasta);
   await git(pasta, ["add", "-A"]);
   const status = await git(pasta, ["status", "--porcelain"]);
   if (!status) return { commit: await commitAtual(pasta), novo: false };
@@ -45,11 +50,24 @@ export function pastaDoProjeto(raiz: string, projeto: string): string {
   return join(raiz, projeto);
 }
 
+/**
+ * O que nunca sai do modelo para um projeto: dependências, build, cache do
+ * Python, qualquer pasta .opencode (as skills moram no worker; uma .opencode
+ * no projeto faz o opencode instalar pacotes do npm ali) e o que a base de
+ * design gera (design system, consulta gravada, log e prova de UX são de
+ * cada projeto).
+ */
+export function copiaDoModelo(origem: string): boolean {
+  if (/[\\/](node_modules|dist|dist-ssr|__pycache__|\.opencode)([\\/]|$)/.test(origem) || /\.pyc$/i.test(origem)) return false;
+  const rel = origem.slice(MODELO_DO_SITE.length).split("\\").join("/").replace(/^\/+/, "");
+  return !/^(design-system|\.aceleriq\/ux|\.aceleriq\/uiux-[a-z]+\.jsonl?)(\/|$)/.test(rel);
+}
+
 /** Cria o projeto do modelo (primeira vez) e deixa o git pronto. */
 export async function garantirProjeto(pasta: string): Promise<boolean> {
   if (existsSync(join(pasta, ".git"))) return false;
   mkdirSync(pasta, { recursive: true });
-  cpSync(MODELO_DO_SITE, pasta, { recursive: true, filter: (origem) => !/[\\/](node_modules|dist|dist-ssr)([\\/]|$)/.test(origem) });
+  cpSync(MODELO_DO_SITE, pasta, { recursive: true, filter: copiaDoModelo });
   mkdirSync(join(pasta, "public", "marca"), { recursive: true });
   mkdirSync(join(pasta, "public", "imagens"), { recursive: true });
   await git(pasta, ["init", "-q", "-b", "main"]);
@@ -107,48 +125,53 @@ export async function arquivosMudados(pasta: string, de: string, ate: string): P
     .slice(0, 40);
 }
 
-const hex = (v: unknown) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : null);
-
-/** Luminância relativa (WCAG) para escolher texto claro ou escuro sobre o fundo. */
-function luminancia(h: string): number {
-  const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
-  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-}
-
 /**
  * src/marca.css a partir da paleta e das fontes do pacote: destaque = a cor
  * de papel primário (ou a primeira); fundo = a de papel fundo (ou a mais
- * escura se o DNA pede quase preto; senão a mais clara); texto pelo contraste.
+ * escura se o DNA pede quase preto; senão a mais clara); texto pelo contraste
+ * (coresDoSite, com a luminância da Identidade). UXM: o apoio da paleta
+ * (pacote.base_de_design.apoio, a marca manda e a base completa) acrescenta
+ * borda, anel de foco, erro, texto sobre o destaque, destaque para texto e
+ * texto suave, todos com contraste conferido por código (lacuna 4.3).
  */
 export function cssDaMarca(pacote: Record<string, unknown>): string {
-  const paleta = (Array.isArray(pacote.paleta) ? pacote.paleta : []) as Array<{ hex?: string; papel?: string }>;
-  const cores = paleta.map((p) => ({ hex: hex(p.hex), papel: String(p.papel || "").toLowerCase() })).filter((p): p is { hex: string; papel: string } => !!p.hex);
-  const dna = pacote.dna && typeof pacote.dna === "object" ? ((pacote.dna as { atributos?: Array<{ id: string }> }).atributos || []).map((a) => a.id) : [];
-  // SIT2: o preset de estilo diz claro ou escuro; sem preset, o DNA e a paleta decidem (como antes).
-  const modo = pacote.estilo && typeof pacote.estilo === "object" ? (pacote.estilo as { modo?: unknown }).modo : null;
-  const escuro = modo === "escuro" || (modo !== "claro" && (dna.indexOf("quase_preto") >= 0 || (dna.indexOf("claro_editorial") < 0 && cores.some((c) => /fundo/.test(c.papel) && luminancia(c.hex) < 0.2))));
-  const destaque = (cores.find((c) => /prim|destaque/.test(c.papel)) || cores[0] || { hex: "#00d52b" }).hex;
-  const ordenadas = cores.slice().sort((a, b) => luminancia(a.hex) - luminancia(b.hex));
-  const fundo = escuro ? (ordenadas[0] && luminancia(ordenadas[0].hex) < 0.2 ? ordenadas[0].hex : "#0b0b0c") : ordenadas.length && luminancia(ordenadas[ordenadas.length - 1].hex) > 0.8 ? ordenadas[ordenadas.length - 1].hex : "#fafaf7";
-  const claro = luminancia(fundo) > 0.4;
+  const { destaque, fundo, texto } = coresDoSite({ paleta: pacote.paleta, dna: pacote.dna, estilo: pacote.estilo });
+  const claro = texto === "#111111";
   const fontes = (Array.isArray(pacote.fontes) ? pacote.fontes : []) as Array<{ nome?: string; papel?: string }>;
   const fonte = (papel: RegExp) => {
     const f = fontes.find((x) => papel.test(String(x.papel || "")));
     return f && f.nome ? `"${String(f.nome).replace(/"/g, "")}", ` : "";
   };
+  const extras = variaveisDoApoio(apoioDoPacote(pacote, destaque, fundo, texto));
   return [
-    "/* Gerado pelo motor a partir de pacote.paleta e pacote.fontes. Não edite à mão. */",
+    "/* Gerado pelo motor a partir de pacote.paleta, pacote.fontes e pacote.base_de_design.apoio. Não edite à mão. */",
     ":root {",
     `  --cor-destaque: ${destaque};`,
     `  --cor-fundo: ${fundo};`,
-    `  --cor-texto: ${claro ? "#111111" : "#f5f5f3"};`,
+    `  --cor-texto: ${texto};`,
     `  --cor-suave: ${claro ? "#5c5c5c" : "#a3a3a3"};`,
     `  --cor-superficie: ${claro ? "#ffffff" : "#18181a"};`,
+    ...Object.keys(extras).map((k) => `  ${k}: ${extras[k]};`),
     `  --fonte-titulo: ${fonte(/tit|display|head/i)}ui-sans-serif, system-ui, sans-serif;`,
     `  --fonte-texto: ${fonte(/texto|corpo|body/i)}ui-sans-serif, system-ui, sans-serif;`,
     "}",
     "",
   ].join("\n");
+}
+
+/**
+ * O apoio do pacote quando ele foi calculado para este fundo; senão, o da
+ * marca sem a base (mesmas conferências). Nos dois casos, texto sobre o
+ * destaque, destaque para texto e anel saem do MESMO destaque do
+ * --cor-destaque (uma regra só; pacote antigo com outro destaque é refeito).
+ */
+export function apoioDoPacote(pacote: Record<string, unknown>, destaque: string, fundo: string, texto: string): ApoioDaPaleta {
+  const bd = pacote.base_de_design && typeof pacote.base_de_design === "object" ? (pacote.base_de_design as { apoio?: unknown }) : null;
+  const lista = bd && Array.isArray(bd.apoio) ? (bd.apoio as Array<{ papel?: string; hex?: string; origem?: string }>) : [];
+  const papeis = lista.filter((x) => x && typeof x.hex === "string" && /^#[0-9a-f]{6}$/i.test(x.hex) && typeof x.papel === "string").map((x) => ({ papel: x.papel as PapelDoApoio, hex: String(x.hex), origem: String(x.origem || "") }));
+  const doFundo = papeis.filter((x) => x.papel === "fundo")[0];
+  if (papeis.length && doFundo && doFundo.hex.toLowerCase() === fundo.toLowerCase()) return ajustarAoDestaque({ papeis, avisos: [], citacao: null }, destaque, fundo, texto);
+  return apoioDaPaleta({ marca: (Array.isArray(pacote.paleta) ? pacote.paleta : []) as Array<{ hex?: string; papel?: string }>, fundo, texto, destaque });
 }
 
 /** Escreve o pacote e baixa os arquivos (logo, fotos reais, imagens, anexos). Devolve os avisos. */
