@@ -14,6 +14,7 @@ import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarc
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
 import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import CascaDaMesa from "@/components/sistema/CascaDaMesa";
+import BotaoDoConselho from "@/components/conselho/BotaoDoConselho";
 import Etapas from "@/components/sistema/Etapas";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
@@ -297,6 +298,16 @@ export default function MesaPublicidade() {
       }
       acoes={
         clientId ? (
+          <>
+          <BotaoDoConselho
+            clientId={clientId}
+            origem="mesa-publicidade"
+            tema={`Campanha${nomeDoCliente ? ` de ${nomeDoCliente}` : ""}`}
+            contexto={"A campanha aberta na mesa: objetivo, mensagem, peças e como medir."}
+            onUsar={(t) => setRascunhoDoAgente(t)}
+            rotuloDoUsar="Levar para o agente da campanha"
+          />
+          <span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-border" />
           <CustoCompacto
             saldoUsd={saldoUsd}
             consumo={consumo.data || null}
@@ -308,6 +319,7 @@ export default function MesaPublicidade() {
             onChaves={abrirChaves}
             onModelos={abrirModelos}
           />
+          </>
         ) : null
       }
       abaixo={

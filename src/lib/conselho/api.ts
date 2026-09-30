@@ -30,6 +30,9 @@ export interface CatalogoDoConselho {
   criterios: string[];
   limites: { min_especialistas: number; max_especialistas: number; min_rodadas: number; max_rodadas: number; teto_maximo_usd: number };
   modelo_padrao: string | null;
+  /** Frente BRF2: presets por tema e os modos (vêm do servidor, já filtrados pela origem). */
+  presets?: PresetDoConselho[];
+  modos?: Array<{ id: ModoDoConselho; rotulo: string; rodadas: number | null }>;
 }
 
 export interface MembroDoConselho {
@@ -211,7 +214,7 @@ export function lerCatalogoDoConselho(origem: string): Promise<CatalogoDoConselh
   return chamarConselho<CatalogoDoConselho>({ acao: "catalogo", origem });
 }
 
-export function estimarConselho(p: { clientId: string; origem: string; especialistas: string[]; modelos: Record<string, string>; rodadas: number }) {
+export function estimarConselho(p: { clientId: string; origem: string; especialistas: string[]; modelos: Record<string, string>; rodadas: number; modo?: ModoDoConselho }) {
   return chamarConselho<{ estimativa: EstimativaDaSessao; teto_sugerido_usd: number }>({
     acao: "estimar",
     client_id: p.clientId,
@@ -219,6 +222,7 @@ export function estimarConselho(p: { clientId: string; origem: string; especiali
     especialistas: p.especialistas,
     modelos: p.modelos,
     rodadas: p.rodadas,
+    modo: p.modo || "padrao",
   });
 }
 
@@ -233,6 +237,9 @@ export interface PedidoDeConvocacao {
   modelos: Record<string, string>;
   rodadas: number;
   teto_usd: number;
+  modo?: ModoDoConselho;
+  criterios?: string[];
+  pauta?: { itens: string[]; anexos: string[] } | null;
 }
 
 export function convocarConselho(p: PedidoDeConvocacao) {
@@ -248,6 +255,9 @@ export function convocarConselho(p: PedidoDeConvocacao) {
     modelos: p.modelos,
     rodadas: p.rodadas,
     teto_usd: p.teto_usd,
+    modo: p.modo || "padrao",
+    criterios: p.criterios && p.criterios.length ? p.criterios : undefined,
+    pauta: p.pauta || undefined,
   });
 }
 
@@ -370,4 +380,65 @@ export function useSessaoDoConselho(sessaoId: string | null) {
   }, [s]);
 
   return { sessao, falas };
+}
+
+// ------------------------------------------------------------------ frente BRF2: presets, modos, elencos e ata em PDF
+
+export type ModoDoConselho = "rapido" | "padrao" | "profundo";
+
+export interface PresetDoConselho {
+  id: "marca" | "campanha" | "proposta" | "site" | "crise";
+  nome: string;
+  especialistas: string[];
+  criterios: string[];
+  modo: ModoDoConselho;
+  rodadas: number;
+  tema: string;
+  pergunta: string;
+}
+
+export interface ElencoSalvo {
+  id: string;
+  client_id: string | null;
+  nome: string;
+  preset: PresetDoConselho["id"] | null;
+  especialistas: string[];
+  modelos: Record<string, string>;
+  criterios: string[];
+  rodadas: number;
+  modo: ModoDoConselho;
+  criado_em: string;
+}
+
+export const ROTULO_DO_MODO: Record<ModoDoConselho, string> = { rapido: "Rápido", padrao: "Padrão", profundo: "Profundo" };
+
+/** Rodadas de cada modo (mesmo que o servidor: rápido 2, profundo 4, padrão o escolhido). */
+export const rodadasDoModo = (modo: ModoDoConselho, escolhidas: number) => (modo === "rapido" ? 2 : modo === "profundo" ? 4 : escolhidas);
+
+export function listarElencos(clientId: string) {
+  return chamarConselho<{ elencos: ElencoSalvo[] }>({ acao: "elencos", client_id: clientId }).then((r) => r.elencos || []);
+}
+
+export function salvarElenco(p: { clientId: string; nome: string; especialistas: string[]; modelos: Record<string, string>; criterios: string[]; rodadas: number; modo: ModoDoConselho; preset?: string | null; daAgencia?: boolean }) {
+  return chamarConselho<{ elenco: ElencoSalvo }>({
+    acao: "salvar_elenco",
+    client_id: p.clientId,
+    nome: p.nome,
+    especialistas: p.especialistas,
+    modelos: p.modelos,
+    criterios: p.criterios,
+    rodadas: p.rodadas,
+    modo: p.modo,
+    preset: p.preset || null,
+    da_agencia: !!p.daAgencia,
+  }).then((r) => r.elenco);
+}
+
+export function arquivarElenco(elencoId: string) {
+  return chamarConselho<{ elenco: ElencoSalvo }>({ acao: "arquivar_elenco", elenco_id: elencoId });
+}
+
+/** A ata em PDF (pdf-base), guardada em Arquivos; volta o link assinado de 1 hora. */
+export function ataEmPdf(sessaoId: string) {
+  return chamarConselho<{ file_id: string; url: string | null; nome_do_arquivo: string; ja_existia: boolean }>({ acao: "ata_pdf", sessao_id: sessaoId });
 }

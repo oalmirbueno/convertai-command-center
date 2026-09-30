@@ -17,6 +17,9 @@
  *   (a ata vai para o cérebro do cliente como decisão, com o gancho do documento de entrega)
  * - desfazer_decisao { sessao_id } -> { sessao } (a memória fica marcada como desfeita, não some)
  * - ata { sessao_id } -> { ata, nome_do_arquivo } (sem IA)
+ * Frente BRF2 (extras.ts e _shared/conselho-presets.ts): presets por tema e modos no catálogo;
+ * estimar e convocar aceitam modo (rapido, padrao, profundo) e pauta { itens, anexos[] };
+ * elencos, salvar_elenco, arquivar_elenco; ata_pdf { sessao_id } (PDF pelo pdf-base em Arquivos).
  *
  * Regras: rodadas fixas e custo antes, com teto; nada de laço; um passo por
  * invocação (no máximo 3 falas em paralelo); Jev para ranquear e medir o
@@ -34,6 +37,8 @@ import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { erroQueSobe, registrarFalha } from "../_shared/falha-registrada.ts";
 import { gravarTroca } from "../_shared/conversa-das-mesas.ts";
+import { MODOS, modoDe, type ModoDoConselho } from "../_shared/conselho-presets.ts";
+import { arquivarElenco, ataEmPdf, type CtxDoConselho, elencos, pautaComAnexos, salvarElenco } from "./extras.ts";
 import {
   avancarSessao,
   catalogoDosEspecialistas,
@@ -75,7 +80,7 @@ const TAREFA = PAPEL;
 const AGENTE = PAPEL;
 const TRAVA_SEGUNDOS = 300;
 const CAMPOS_DA_SESSAO =
-  "id, client_id, marca_id, origem, referencia, tema, pergunta, contexto, contexto_cliente, criterios, especialistas, rodadas, rodadas_extras, rodada_atual, etapa, status, teto_usd, estimativa_usd, custo_usd, resultado, decisao, ata, memoria_id, erro_codigo, erro_mensagem, aviso, criado_por, criado_em, concluido_em";
+  "id, client_id, marca_id, origem, referencia, tema, pergunta, contexto, contexto_cliente, criterios, especialistas, rodadas, rodadas_extras, rodada_atual, etapa, status, teto_usd, estimativa_usd, custo_usd, resultado, decisao, ata, memoria_id, erro_codigo, erro_mensagem, aviso, criado_por, criado_em, concluido_em, modo, pauta, ata_file_id";
 const CAMPOS_DA_FALA =
   "id, sessao_id, client_id, rodada, etapa, especialista, papel, modelo_id, pedido, status, conteudo, texto, notas, custo_usd, tentativas, erro_codigo, erro_mensagem, criado_em";
 
@@ -224,7 +229,7 @@ function precoPelaTabela(mapa: Map<string, ModeloIa>) {
 }
 
 /** Raciocínio baixo quando o modelo aceita (custo previsível); sem níveis, nenhum. */
-const raciocinioPara = (m: ModeloIa | undefined) => (m ? ["low", "minimal", "medium"].find((r) => (m.raciocinio ?? []).includes(r)) : undefined);
+const raciocinioPara = (m: ModeloIa | undefined, modo: ModoDoConselho = "padrao") => (m ? MODOS[modo].raciocinio.find((r) => (m.raciocinio ?? []).includes(r)) : undefined);
 
 // ------------------------------------------------------------------ dependências do núcleo
 
@@ -266,7 +271,8 @@ function dependencias(ch: Chamador, modelos: Map<string, ModeloIa>, sessaoDoJev:
         modeloId: p.modeloId,
         sistema: p.sistema,
         mensagens: [{ papel: "usuario", conteudo: p.mensagem }],
-        raciocinio: raciocinioPara(m),
+        raciocinio: raciocinioPara(m, p.sessao.modo),
+        maxTokensSaida: p.etapa === "conversa" ? undefined : MODOS[p.sessao.modo || "padrao"].maxSaida,
         esquemaJson: p.esquema || undefined,
         referencia: { tipo: "conselho_fala", id: p.fala.id },
         criadoPor: ch.userId,
@@ -445,9 +451,10 @@ async function prepararEstimativa(corpo: Record<string, unknown>) {
     modeloPadrao,
     rodadas: Number(corpo.rodadas),
     teto_usd: LIMITES.TETO_MAXIMO_USD,
+    modo: modoDe(corpo.modo),
   });
   const modelos = await modelosDe(v.membros.map((m) => m.modelo_id));
-  const estimativa = estimarSessao(v.membros, planoDasEtapas(v.rodadas), precoPelaTabela(modelos), v.membros[0].modelo_id);
+  const estimativa = estimarSessao(v.membros, planoDasEtapas(v.rodadas), precoPelaTabela(modelos), v.membros[0].modelo_id, 1, v.modo);
   return { v, modelos, estimativa, modeloPadrao };
 }
 
@@ -484,6 +491,8 @@ async function convocar(ch: Chamador, corpo: Record<string, unknown>) {
     rodadas: Number(corpo.rodadas),
     teto_usd: Number(corpo.teto_usd),
     criterios: Array.isArray(corpo.criterios) ? (corpo.criterios as unknown[]).map(String) : null,
+    modo: modoDe(corpo.modo),
+    pauta: await pautaComAnexos(servico(), clientId, corpo.pauta),
     criadoPor: ch.userId,
   });
   await auditLog({
@@ -743,6 +752,22 @@ async function ata(ch: Chamador, corpo: Record<string, unknown>) {
   return json({ ata: md, nome_do_arquivo: nome, especialistas: sessao.especialistas.map((m) => ({ id: m.id, nome: nomeDoEspecialista(m.id) })) });
 }
 
+
+/** O que os módulos da frente BRF2 (extras.ts) usam daqui. */
+function ctxDe(ch: Chamador): CtxDoConselho {
+  return {
+    userId: ch.userId,
+    servico: servico(),
+    doChamador: ch.doChamador,
+    garantirAcesso: (clientId) => garantirAcesso(ch, clientId),
+    lerSessao: (id) => lerSessao(ch, id),
+    lerFalas,
+    nomeDoCliente,
+    rotulosDosModelos,
+    json,
+    erro: (status, codigo, mensagem) => new ErroHttp(status, codigo, mensagem),
+  };
+}
 // ------------------------------------------------------------------ rotas
 
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
@@ -756,10 +781,14 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   decidir,
   desfazer_decisao: desfazerDecisao,
   ata,
+  elencos: (ch, corpo) => elencos(ctxDe(ch), corpo),
+  salvar_elenco: (ch, corpo) => salvarElenco(ctxDe(ch), corpo),
+  arquivar_elenco: (ch, corpo) => arquivarElenco(ctxDe(ch), corpo),
+  ata_pdf: (ch, corpo) => ataEmPdf(ctxDe(ch), corpo),
 };
 
 /** Ações que podem passar de 150 s: a resposta começa na hora. */
-const ACOES_LONGAS = new Set(["perguntar", "convocar", "nova_rodada"]);
+const ACOES_LONGAS = new Set(["perguntar", "convocar", "nova_rodada", "ata_pdf"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

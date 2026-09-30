@@ -188,3 +188,40 @@ export type LinhaDaDecupagem = {
   aplicada_em: string | null;
   desfeita_em: string | null;
 };
+
+// ------------------------------------------------------------------ frente BRF2
+
+/**
+ * Resposta por áudio: manda o áudio gravado e recebe o texto (o áudio não
+ * fica guardado). Erro vira ErroDoBriefing com a frase para o cliente.
+ */
+export async function transcreverAudio(token: string, audio: Blob, campo: string, segundos: number): Promise<{ texto: string; segundos: number }> {
+  const r = await chamarPublico(token, "transcrever", {
+    body: audio,
+    headers: {
+      "content-type": audio.type || "audio/webm",
+      "x-briefing-campo": campo,
+      "x-briefing-duracao": String(Math.max(1, Math.round(segundos))),
+    },
+  });
+  return { texto: String(r?.texto || ""), segundos: Number(r?.segundos) || segundos };
+}
+
+export type PreviaDoPreenchimento = {
+  valores: Record<string, unknown>;
+  fontes: string[];
+  avisos: string[];
+  rotulos: Record<string, string>;
+  atuais: Record<string, unknown>;
+  custo_usd: number;
+  saldo_usd: number | null;
+  modelo_id: string;
+  reserva_usada?: string | null;
+};
+
+export type PreviaDaExportacao = {
+  destino: { tipo: "kit" } | { tipo: "marca"; marca_id: string; marca_nome: string };
+  sugestoes: SugestaoDoContexto[];
+  memoria: { titulo: string; previa: string; caracteres: number };
+  exportado: { em: string; aplicadas: Aplicada[]; memoria_id: string | null } | null;
+};

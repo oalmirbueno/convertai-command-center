@@ -26,9 +26,12 @@ import {
   alturaDe,
   CORES,
   caixaAlta,
+  type Cor,
+  DIR,
   dois,
   DocumentoPdf,
   ESQ,
+  hex,
   type ImagemDoPdf,
   MESES,
   MIOLO,
@@ -125,6 +128,11 @@ export type RegistroDeEntrega = {
   codigo: string;
   avisos: string[];
   eventos_ids: string[];
+  /** Seções escritas pela equipe (modelo do documento, frente BRF2), na ordem. */
+  secoes?: Array<{ titulo: string; texto: string }>;
+  /** Modelo do documento (mensal, projeto, campanha, site, identidade) e o rótulo da capa. */
+  modelo?: string | null;
+  rotulo_da_capa?: string | null;
 };
 
 // ------------------------------------------------------------------ referência e período
@@ -408,10 +416,28 @@ export type EntradaDoRegistro = {
  * Monta o documento só com eventos reais. O texto do agente passa pela
  * conferência; sem texto aproveitável, o resumo sai por código.
  */
-export function montarRegistro(entrada: EntradaDoRegistro, eventos: EventoReal[], numeros: NumeroReal[], textosDoAgente: TextosDoAgente | null, provas: Prova[], avisosDeAntes: string[] = []): RegistroDeEntrega {
+export function montarRegistro(
+  entrada: EntradaDoRegistro,
+  eventos: EventoReal[],
+  numeros: NumeroReal[],
+  textosDoAgente: TextosDoAgente | null,
+  provas: Prova[],
+  avisosDeAntes: string[] = [],
+  opcoes: { textoDaEquipe?: boolean } = {},
+): RegistroDeEntrega {
   if (!eventos.length) throw new Error("Sem eventos reais não há documento.");
   const extras = [entrada.numero, entrada.versao];
-  const { textos, avisos } = conferirTextos(textosDoAgente, eventos, numeros, extras);
+  const conferido = conferirTextos(textosDoAgente, eventos, numeros, extras);
+  // Texto escrito pela equipe (rascunho, frente BRF2): a conferência vira só aviso; o texto fica como ela escreveu.
+  const daEquipe = !!opcoes.textoDaEquipe && !!textosDoAgente;
+  const textos: TextosDoAgente = daEquipe
+    ? {
+        resumo: semTravessao(String(textosDoAgente!.resumo || "")).slice(0, 1800),
+        itens: conferido.textos.itens,
+        proximos: (textosDoAgente!.proximos || []).map((p) => semTravessao(String(p || "")).slice(0, 240)).filter(Boolean).slice(0, 6),
+      }
+    : conferido.textos;
+  const avisos = daEquipe ? conferido.avisos.map((a) => `Texto da equipe, confira: ${a}`) : conferido.avisos;
   const fraseDe: Record<string, string> = {};
   textos.itens.forEach((i) => (fraseDe[i.id] = i.frase));
   const paraItem = (e: EventoReal): ItemFeito => ({ evento_id: e.id, titulo: e.titulo, detalhe: e.detalhe || "", quando: e.quando, link: e.link || null, frase: fraseDe[e.id] || null });
@@ -513,14 +539,22 @@ function numeroDoDocumento(r: RegistroDeEntrega) {
   return `Nº ${("000" + r.numero).slice(-4)}${r.versao > 1 ? `  /  versão ${r.versao}` : ""}`;
 }
 
-function capa(d: DocumentoPdf, r: RegistroDeEntrega) {
+/** Cor da capa: a primária do cliente quando válida (#rrggbb); senão o verde da agência. */
+export function corDaCapa(corDoCliente: string | null | undefined): Cor {
+  return corDoCliente && /^#[0-9a-f]{6}$/i.test(corDoCliente) ? hex(corDoCliente) : CORES.verde;
+}
+
+function capa(d: DocumentoPdf, r: RegistroDeEntrega, identidade: { logo?: ImagemDoPdf | null; cor?: string | null } = {}) {
   const p = new Pagina("REGISTRO DA ENTREGA");
   d.paginas.push(p);
-  p.retangulo(0, 0, 4, ALTURA, CORES.verde);
+  // Capa com a identidade do cliente (frente BRF2): faixa na cor dele e a logo real, pelo código.
+  const cor = corDaCapa(identidade.cor);
+  p.retangulo(0, 0, identidade.cor ? 10 : 4, ALTURA, cor);
   p.logoOuPropria(d.logoPropria, 205.6, 35, 184);
+  if (identidade.logo) p.imagem(identidade.logo, DIR - 110, 92, 110, 44, "conter");
   const quando = r.data.slice(0, 10);
   const mes = /^(\d{4})-(\d{2})/.exec(quando);
-  rotuloEmCima(p, ESQ, 118, `Registro da entrega  /  ${mes ? `${caixaAlta(MESES[Number(mes[2]) - 1])} ${mes[1]}` : ""}`);
+  rotuloEmCima(p, ESQ, 118, `${r.rotulo_da_capa || "Registro da entrega"}  /  ${mes ? `${caixaAlta(MESES[Number(mes[2]) - 1])} ${mes[1]}` : ""}`);
   const linhasTitulo = quebrarLinhas(r.titulo, "F2", 30, MIOLO);
   linhasTitulo.slice(0, 3).forEach((l, i) => p.texto(ESQ, 162 + i * 34, l, "F2", 30, CORES.tinta));
   let y = 162 + (Math.min(3, linhasTitulo.length) - 1) * 34 + 26;
@@ -552,6 +586,7 @@ function capa(d: DocumentoPdf, r: RegistroDeEntrega) {
   rotuloEmCima(p, ESQ, y, "Neste documento");
   y += 28;
   const secoes: Array<[string, string]> = [["Resumo", "O que entregamos, em poucas linhas"]];
+  (r.secoes || []).slice(0, 3).forEach((x) => secoes.push([x.titulo.slice(0, 60), "Nossa leitura, escrita pela equipe"]));
   if (r.numeros.length) secoes.push(["Números", "Só os que existem, com a fonte"]);
   secoes.push(["O que foi feito", `${feitos} ${feitos === 1 ? "item" : "itens"}, com data`]);
   if (r.provas.length) secoes.push(["Provas", "Imagens reais das entregas"]);
@@ -596,6 +631,29 @@ function paginaDeResumo(d: DocumentoPdf, r: RegistroDeEntrega) {
       d.y += altura + 10;
     }
   }
+}
+
+/** Seções do modelo escritas pela equipe (objetivo, destaques, como usar...). Texto nunca é cortado. */
+function paginasDasSecoes(d: DocumentoPdf, r: RegistroDeEntrega) {
+  const lista = (r.secoes || []).filter((x) => x && x.texto && x.texto.trim());
+  if (!lista.length) return;
+  const secao = "EM DETALHE";
+  d.nova(secao);
+  tituloDeSecao(d, "Em detalhe", "Nossa leitura da entrega");
+  lista.forEach((x) => {
+    d.garantir(46, secao);
+    rotuloEmCima(d.atual(), ESQ, d.y, x.titulo.slice(0, 70));
+    d.y += 16;
+    String(x.texto).split(/\n+/).map((t) => t.trim()).filter(Boolean).forEach((par) => {
+      for (const l of quebrarLinhas(par, "F1", 10.6, MIOLO)) {
+        d.garantir(14.4, secao);
+        d.atual().texto(ESQ, d.y, l, "F1", 10.6, CORES.tinta);
+        d.y += 14.4;
+      }
+      d.y += 5;
+    });
+    d.y += 12;
+  });
 }
 
 function paginasDoQueFoiFeito(d: DocumentoPdf, r: RegistroDeEntrega) {
@@ -718,10 +776,15 @@ function paginaFinal(d: DocumentoPdf, r: RegistroDeEntrega, agencia: string | nu
  * evento), já leve. `opcoes.logo`: a logo da agência (dados da agência) no
  * lugar da padrão; `opcoes.agencia`: o nome dela na linha de fechamento.
  */
-export function gerarPdfDoRegistro(r: RegistroDeEntrega, imagens: Record<string, ImagemDoPdf | undefined> = {}, opcoes: { logo?: ImagemDoPdf | null; agencia?: string | null } = {}): Uint8Array {
+export function gerarPdfDoRegistro(
+  r: RegistroDeEntrega,
+  imagens: Record<string, ImagemDoPdf | undefined> = {},
+  opcoes: { logo?: ImagemDoPdf | null; agencia?: string | null; logoDoCliente?: ImagemDoPdf | null; corDoCliente?: string | null } = {},
+): Uint8Array {
   const d = new DocumentoPdf(r.marca && r.marca !== r.cliente ? `${r.cliente} / ${r.marca}` : r.cliente, false, SECAO_DIREITA, opcoes.logo || null);
-  capa(d, r);
+  capa(d, r, { logo: opcoes.logoDoCliente || null, cor: opcoes.corDoCliente || null });
   paginaDeResumo(d, r);
+  paginasDasSecoes(d, r);
   paginasDoQueFoiFeito(d, r);
   paginasDeProvas(d, r, imagens);
   paginaFinal(d, r, opcoes.agencia || null);

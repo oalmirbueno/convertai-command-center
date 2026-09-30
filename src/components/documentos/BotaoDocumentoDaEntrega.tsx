@@ -20,12 +20,15 @@ export default function BotaoDocumentoDaEntrega({
   variante = "secundario",
   className,
   onGerado,
+  antesDeGerar,
 }: {
   pedido: PedidoDoDocumento | null;
   rotulo?: string;
   variante?: "secundario" | "discreto" | "primario";
   className?: string;
   onGerado?: (r: ResultadoDaGeracao) => void;
+  /** Antes de estimar (ex.: salvar o rascunho); false para. */
+  antesDeGerar?: () => Promise<boolean>;
 }) {
   const confirmar = useConfirm();
   const navigate = useNavigate();
@@ -34,10 +37,11 @@ export default function BotaoDocumentoDaEntrega({
 
   const gerar = async () => {
     if (!pedido || ocupado) return;
+    if (antesDeGerar && !(await antesDeGerar())) return;
     setOcupado("estimando");
     let estimativa: number | null = null;
     try {
-      estimativa = (await estimarDocumento(pedido.clientId)).estimativa_usd;
+      estimativa = (await estimarDocumento(pedido.clientId, { documentoId: pedido.documentoId, usarRascunho: pedido.usarRascunho })).estimativa_usd;
     } catch (e) {
       setOcupado("");
       toast.error(textoDoErro(e, "Não foi possível calcular o custo do documento."));
@@ -46,7 +50,9 @@ export default function BotaoDocumentoDaEntrega({
     setOcupado("");
     const ok = await confirmar({
       title: "Gerar o documento da entrega?",
-      description: `O PDF sai só com o que está registrado no painel (publicações, aprovações, artes, relatórios), com as provas. Fica em Arquivos, na pasta Entregas, e nada vai ao cliente agora. Custo estimado: ${usd(estimativa)}.`,
+      description: pedido.usarRascunho
+        ? `O PDF sai com o texto, as provas e os números do rascunho da equipe, só com o que está registrado no painel. Fica em Arquivos, na pasta Entregas, e nada vai ao cliente agora. ${estimativa ? `Custo estimado: ${usd(estimativa)}.` : "Sem custo de IA."}`
+        : `O PDF sai só com o que está registrado no painel (publicações, aprovações, artes, relatórios), com as provas. Fica em Arquivos, na pasta Entregas, e nada vai ao cliente agora. Custo estimado: ${usd(estimativa)}.`,
       confirmLabel: "Confirmar",
     });
     if (!ok) return;

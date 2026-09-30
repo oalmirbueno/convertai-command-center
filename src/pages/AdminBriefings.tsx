@@ -7,48 +7,82 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { ArrowLeft, FileText, Link2, Loader2 } from "lucide-react";
+import { ArrowLeft, BellRing, Columns2, FileText, Link2, Loader2 } from "lucide-react";
 import GerarLinkDoBriefing from "@/components/briefing/GerarLinkDoBriefing";
 import LeituraDoBriefing, { type LinhaDoBriefingNoPainel, nomeDoBriefing } from "@/components/briefing/LeituraDoBriefing";
+import ComparacaoDeBriefings from "@/components/briefing/ComparacaoDeBriefings";
+import EditorDeModelos from "@/components/briefing/EditorDeModelos";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AreaDeTrabalho, CabecalhoDePagina, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, RegiaoRolavel, botao, campo, etiqueta, juntar, lista, texto } from "@/components/sistema";
-import { estadoDoLink, modeloDeFabrica } from "../../supabase/functions/_shared/briefing-modelos";
+import {
+  AreaDeTrabalho,
+  CabecalhoDePagina,
+  CampoDeFormulario,
+  Carregando,
+  EstadoDeErro,
+  EstadoVazio,
+  FaixaDeNumeros,
+  RegiaoRolavel,
+  SeletorCompacto,
+  botao,
+  campo,
+  etiqueta,
+  juntar,
+  lista,
+  texto,
+} from "@/components/sistema";
+import { modeloDeFabrica, progressoDoBriefing } from "../../supabase/functions/_shared/briefing-modelos";
+import { contagemDoPainel, precisaDeLembrete, situacaoNoPainel, type SituacaoNoPainel } from "../../supabase/functions/_shared/briefing-editor";
 
 /**
- * Briefings (frente BRF, 30/09/2026): todos os links, de todos os modelos,
- * com o estado de cada um (aguardando, recebido, expirado, reabertura
- * pedida). Abrir um leva à leitura (/briefings?briefing=<id>), que é também o
- * link do aviso que a equipe recebe quando o briefing chega. "Novo link" gera
- * o link com o modelo escolhido; ?client=<id> filtra e já vem no novo link.
+ * Briefings (frente BRF, 30/09/2026; painel e modelos na frente BRF2): todos
+ * os links, de todos os modelos, com o painel do dia (pendentes, vencendo,
+ * recebidos no mês, pedidos de reabertura), o andamento de cada link, quem
+ * pede lembrete e a comparação de dois briefings. Abrir um leva à leitura
+ * (/briefings?briefing=<id>), que é também o link do aviso que a equipe
+ * recebe. A aba Modelos é o editor das perguntas (versão nova a cada salvar).
  */
 
-type Filtro = "todos" | "aguardando" | "recebidos" | "reabrir";
+type Filtro = "todos" | "pendentes" | "vencendo" | "recebidos" | "reabrir";
 const FILTROS: Array<{ valor: Filtro; rotulo: string }> = [
   { valor: "todos", rotulo: "Todos" },
-  { valor: "aguardando", rotulo: "Aguardando" },
+  { valor: "pendentes", rotulo: "Pendentes" },
+  { valor: "vencendo", rotulo: "Vencendo" },
   { valor: "recebidos", rotulo: "Recebidos" },
   { valor: "reabrir", rotulo: "Reabrir" },
 ];
 
 const CAMPOS_DA_LISTA =
-  "id, token, client_id, project_id, marca_id, modelo, titulo, responses, submitted, expira_em, enviado_em, envios, reabertura_pedida_em, reabertura_motivo, arquivado_em, arquivo_pdf_id, created_at, client:profiles!briefings_client_id_fkey(full_name, company_name)";
+  "id, token, client_id, project_id, marca_id, modelo, titulo, responses, submitted, expira_em, enviado_em, envios, reabertura_pedida_em, reabertura_motivo, rascunho_salvo_em, arquivado_em, arquivo_pdf_id, created_at, client:profiles!briefings_client_id_fkey(full_name, company_name)";
 
-function estadoDaLinha(b: LinhaDoBriefingNoPainel): { rotulo: string; classe: string } {
-  if (b.submitted && b.reabertura_pedida_em) return { rotulo: "Reabrir", classe: "bg-amber-500/15 text-amber-700 dark:text-amber-300" };
-  const e = estadoDoLink(b);
-  if (e === "enviado") return { rotulo: "Recebido", classe: "bg-primary/15 text-primary" };
-  if (e === "expirado") return { rotulo: "Expirado", classe: "bg-muted text-muted-foreground" };
-  return { rotulo: "Aguardando", classe: "bg-muted text-foreground" };
+type LinhaDaLista = LinhaDoBriefingNoPainel & { rascunho_salvo_em?: string | null; lembretes?: number | null; ultimo_lembrete_em?: string | null };
+
+const ETIQUETA: Record<SituacaoNoPainel, { rotulo: string; classe: string }> = {
+  reabrir: { rotulo: "Reabrir", classe: "bg-amber-500/15 text-amber-700 dark:text-amber-300" },
+  recebido: { rotulo: "Recebido", classe: "bg-primary/15 text-primary" },
+  expirado: { rotulo: "Expirado", classe: "bg-muted text-muted-foreground" },
+  vencendo: { rotulo: "Vencendo", classe: "bg-amber-500/15 text-amber-700 dark:text-amber-300" },
+  pendente: { rotulo: "Aguardando", classe: "bg-muted text-foreground" },
+};
+
+function passaNoFiltro(f: Filtro, s: SituacaoNoPainel): boolean {
+  if (f === "todos") return true;
+  if (f === "pendentes") return s === "pendente" || s === "vencendo";
+  if (f === "vencendo") return s === "vencendo";
+  if (f === "recebidos") return s === "recebido";
+  return s === "reabrir";
 }
 
 export default function AdminBriefings() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const queryClient = useQueryClient();
   const { data: clients } = useClients();
   const [params, setParams] = useSearchParams();
   const abertoId = params.get("briefing") || params.get("id");
   const clienteDaUrl = params.get("client");
+  const aba = params.get("aba") === "modelos" ? "modelos" : "links";
+  const comparar = (params.get("comparar") || "").split(",").filter(Boolean);
   const [filtro, setFiltro] = useState<Filtro>("todos");
+  const [selecionados, setSelecionados] = useState<string[]>([]);
   const [novoLink, setNovoLink] = useState(false);
   const [generateBriefing, setGenerateBriefing] = useState<LinhaDoBriefingNoPainel | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -61,32 +95,43 @@ export default function AdminBriefings() {
       if (clienteDaUrl) q = q.eq("client_id", clienteDaUrl);
       const { data, error } = await q;
       if (error) throw error;
-      return (data as unknown as LinhaDoBriefingNoPainel[]) || [];
+      const linhas = (data as unknown as LinhaDaLista[]) || [];
+      // Lembretes (frente BRF2): leitura à parte e tolerante (sem a migração, a lista segue igual).
+      const abertos = linhas.filter((b) => !b.submitted).map((b) => b.id).slice(0, 200);
+      if (abertos.length) {
+        const { data: lem, error: e2 } = await supabase.from("briefings").select("id, lembretes, ultimo_lembrete_em" as any).in("id", abertos);
+        if (e2) console.warn("[briefings] lembretes indisponíveis:", e2.message);
+        const porId: Record<string, { lembretes: number | null; ultimo_lembrete_em: string | null }> = {};
+        ((lem as unknown as Array<{ id: string; lembretes: number | null; ultimo_lembrete_em: string | null }>) || []).forEach((x) => (porId[x.id] = x));
+        linhas.forEach((b) => {
+          if (porId[b.id]) Object.assign(b, porId[b.id]);
+        });
+      }
+      return linhas;
     },
     enabled: !!user,
   });
 
-  const todos = briefings || [];
-  const filtrados = useMemo(
-    () =>
-      todos.filter((b) => {
-        if (filtro === "todos") return true;
-        if (filtro === "reabrir") return !!b.submitted && !!b.reabertura_pedida_em;
-        if (filtro === "recebidos") return !!b.submitted;
-        return !b.submitted;
-      }),
-    [todos, filtro],
-  );
-  const contagem = (f: Filtro) =>
-    f === "todos" ? todos.length : f === "reabrir" ? todos.filter((b) => b.submitted && b.reabertura_pedida_em).length : f === "recebidos" ? todos.filter((b) => b.submitted).length : todos.filter((b) => !b.submitted).length;
+  const todos = useMemo(() => briefings || [], [briefings]);
+  const agora = new Date();
+  const contagem = useMemo(() => contagemDoPainel(todos), [todos]);
+  const filtrados = useMemo(() => todos.filter((b) => passaNoFiltro(filtro, situacaoNoPainel(b))), [todos, filtro]);
+  const quantos = (f: Filtro) => todos.filter((b) => passaNoFiltro(f, situacaoNoPainel(b))).length;
 
-  const abrir = (id: string | null) => {
+  const mudarParams = (mexer: (p: URLSearchParams) => void) => {
     const p = new URLSearchParams(params);
-    p.delete("id");
-    if (id) p.set("briefing", id);
-    else p.delete("briefing");
+    mexer(p);
     setParams(p);
   };
+  const abrir = (id: string | null, lembrete = false) =>
+    mudarParams((p) => {
+      p.delete("id");
+      p.delete("comparar");
+      if (id) p.set("briefing", id);
+      else p.delete("briefing");
+      if (lembrete) p.set("lembrete", "1");
+      else p.delete("lembrete");
+    });
 
   const handleGenerate = async () => {
     if (!generateBriefing || !genClientId) {
@@ -154,6 +199,18 @@ export default function AdminBriefings() {
     </Dialog>
   );
 
+  if (comparar.length === 2) {
+    return (
+      <div className="min-w-0 animate-fade-in">
+        <button type="button" onClick={() => mudarParams((p) => p.delete("comparar"))} className={juntar(botao.discreto, "-ml-2 mb-3 h-8 px-2 text-[12px]")}>
+          <ArrowLeft className="mr-1 h-4 w-4" aria-hidden="true" />
+          Briefings
+        </button>
+        <ComparacaoDeBriefings ids={[comparar[0], comparar[1]]} onVoltar={() => mudarParams((p) => p.delete("comparar"))} />
+      </div>
+    );
+  }
+
   if (abertoId) {
     return (
       <div className="min-w-0 animate-fade-in">
@@ -161,7 +218,7 @@ export default function AdminBriefings() {
           <ArrowLeft className="mr-1 h-4 w-4" aria-hidden="true" />
           Briefings
         </button>
-        <LeituraDoBriefing briefingId={abertoId} onGerarProjeto={(b) => { setGenerateBriefing(b); setGenClientId(b.client_id || ""); }} />
+        <LeituraDoBriefing briefingId={abertoId} abrirLembrete={params.get("lembrete") === "1"} onGerarProjeto={(b) => { setGenerateBriefing(b); setGenClientId(b.client_id || ""); }} />
         {dialogoDoProjeto}
       </div>
     );
@@ -172,68 +229,127 @@ export default function AdminBriefings() {
       <CabecalhoDePagina
         titulo="Briefings"
         descricao={isLoading ? undefined : `${todos.length} ${todos.length === 1 ? "link" : "links"}`}
-        ajuda="Os links de briefing de todos os modelos (diagnóstico, site, landing, identidade, naming, redes e vídeo), com o estado de cada um. Abra um para ler as respostas, os pontos principais e confirmar as sugestões para o contexto."
+        ajuda="Os links de briefing de todos os modelos, com o estado de cada um. Pendentes pedem lembrete quando param; a mensagem pronta fica na leitura. Marque dois para comparar. Na aba Modelos, o admin muda as perguntas e salva uma versão nova (os links já gerados seguem com a deles)."
         acoes={
-          <button type="button" onClick={() => setNovoLink(true)} className={botao.primario}>
-            <Link2 className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
-            <span className="hidden sm:inline">Novo link</span>
-          </button>
+          <div className="flex min-w-0 flex-wrap items-center justify-end [&>*]:m-0.5">
+            <SeletorCompacto
+              rotulo="Aba"
+              valor={aba}
+              onEscolher={(v) => mudarParams((p) => (v === "modelos" ? p.set("aba", "modelos") : p.delete("aba")))}
+              opcoes={[
+                { valor: "links", rotulo: "Links" },
+                { valor: "modelos", rotulo: "Modelos" },
+              ]}
+            />
+            {aba === "links" && selecionados.length === 2 && (
+              <button type="button" onClick={() => mudarParams((p) => p.set("comparar", selecionados.join(",")))} className={botao.secundario}>
+                <Columns2 className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                <span className="hidden sm:inline">Comparar</span>
+              </button>
+            )}
+            {aba === "links" && (
+              <button type="button" onClick={() => setNovoLink(true)} className={botao.primario}>
+                <Link2 className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                <span className="hidden sm:inline">Novo link</span>
+              </button>
+            )}
+          </div>
         }
       />
 
-      <div role="tablist" aria-label="Filtrar briefings" className="-mx-1 mt-4 flex flex-wrap">
-        {FILTROS.map((f) => (
-          <button
-            key={f.valor}
-            type="button"
-            role="tab"
-            aria-selected={filtro === f.valor}
-            onClick={() => setFiltro(f.valor)}
-            className={juntar(botao.barra, "m-1", filtro === f.valor && "bg-muted text-foreground")}
-          >
-            {f.rotulo}
-            <span className="ml-1.5 tabular-nums text-muted-foreground">{contagem(f.valor)}</span>
-          </button>
-        ))}
-      </div>
+      {aba === "modelos" ? (
+        <div className="mt-4 min-w-0">
+          <EditorDeModelos podeSalvar={profile?.role === "admin"} />
+        </div>
+      ) : (
+        <>
+          {!isLoading && !isError && (
+            <FaixaDeNumeros
+              className="mt-4"
+              rotulo="Painel dos briefings"
+              tamanho="compacto"
+              itens={[
+                { rotulo: "Pendentes", valor: contagem.pendentes, aoClicar: () => setFiltro("pendentes") },
+                { rotulo: "Vencendo", valor: contagem.vencendo, ponto: contagem.vencendo ? "alerta" : undefined, aoClicar: () => setFiltro("vencendo"), apoio: "em até 5 dias" },
+                { rotulo: "Recebidos", valor: contagem.recebidos30, aoClicar: () => setFiltro("recebidos"), apoio: "últimos 30 dias" },
+                { rotulo: "Reabrir", valor: contagem.reabrir, ponto: contagem.reabrir ? "alerta" : undefined, aoClicar: () => setFiltro("reabrir") },
+              ]}
+            />
+          )}
 
-      <AreaDeTrabalho principalRolavel={false} className="mt-3">
-        {isLoading ? (
-          <Carregando linhas={4} rotulo="Carregando briefings" />
-        ) : isError ? (
-          <EstadoDeErro
-            titulo="Não foi possível carregar os briefings."
-            acao={<button type="button" onClick={() => void refetch()} disabled={isFetching} className={juntar(botao.secundario, "h-8 text-[12px]")}>Tentar de novo</button>}
-          />
-        ) : filtrados.length === 0 ? (
-          <EstadoVazio icone={<FileText className="h-5 w-5" />} titulo="Nenhum briefing aqui." descricao="Gere um link em Novo link, na ficha do cliente ou no botão Briefing das mesas." />
-        ) : (
-          <RegiaoRolavel rotulo="Briefings" memoria="briefings:lista">
-            <ul className={juntar(lista.aberta, lista.divisoria)}>
-              {filtrados.map((b) => {
-                const est = estadoDaLinha(b);
-                const m = modeloDeFabrica(b.modelo);
-                const quando = b.submitted ? b.enviado_em || b.created_at : b.created_at;
-                return (
-                  <li key={b.id}>
-                    <button type="button" onClick={() => abrir(b.id)} className={juntar(lista.linha, "w-full text-left")} aria-label={`Abrir briefing de ${nomeDoBriefing(b)}`}>
-                      <span className="mr-3 min-w-0 flex-1">
-                        <span className="flex min-w-0 items-center">
-                          <span className="min-w-0 truncate text-[13px] font-medium text-foreground">{nomeDoBriefing(b)}</span>
-                          <span className={juntar(etiqueta, "ml-2 shrink-0", est.classe)}>{est.rotulo}</span>
-                        </span>
-                        <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
-                          {b.titulo || m.nome} · {quando ? format(new Date(quando), "dd/MM/yyyy 'às' HH:mm") : ""}
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </RegiaoRolavel>
-        )}
-      </AreaDeTrabalho>
+          <div role="tablist" aria-label="Filtrar briefings" className="-mx-1 mt-4 flex flex-wrap">
+            {FILTROS.map((f) => (
+              <button
+                key={f.valor}
+                type="button"
+                role="tab"
+                aria-selected={filtro === f.valor}
+                onClick={() => setFiltro(f.valor)}
+                className={juntar(botao.barra, "m-1", filtro === f.valor && "bg-muted text-foreground")}
+              >
+                {f.rotulo}
+                <span className="ml-1.5 tabular-nums text-muted-foreground">{quantos(f.valor)}</span>
+              </button>
+            ))}
+          </div>
+
+          <AreaDeTrabalho principalRolavel={false} className="mt-3">
+            {isLoading ? (
+              <Carregando linhas={4} rotulo="Carregando briefings" />
+            ) : isError ? (
+              <EstadoDeErro
+                titulo="Não foi possível carregar os briefings."
+                acao={<button type="button" onClick={() => void refetch()} disabled={isFetching} className={juntar(botao.secundario, "h-8 text-[12px]")}>Tentar de novo</button>}
+              />
+            ) : filtrados.length === 0 ? (
+              <EstadoVazio icone={<FileText className="h-5 w-5" />} titulo="Nenhum briefing aqui." descricao="Gere um link em Novo link, na ficha do cliente ou no botão Briefing das mesas." />
+            ) : (
+              <RegiaoRolavel rotulo="Briefings" memoria="briefings:lista">
+                <ul className={juntar(lista.aberta, lista.divisoria)}>
+                  {filtrados.map((b) => {
+                    const s = situacaoNoPainel(b, agora);
+                    const est = ETIQUETA[s];
+                    const m = modeloDeFabrica(b.modelo);
+                    const quando = b.submitted ? b.enviado_em || b.created_at : b.created_at;
+                    const p = progressoDoBriefing(m, (b.responses || {}) as Record<string, unknown>);
+                    const lembrar = precisaDeLembrete(b, agora);
+                    const marcado = selecionados.indexOf(b.id) >= 0;
+                    return (
+                      <li key={b.id} className={juntar(lista.linha, "py-1.5")}>
+                        <input
+                          type="checkbox"
+                          checked={marcado}
+                          disabled={!marcado && selecionados.length >= 2}
+                          onChange={() => setSelecionados((l) => (marcado ? l.filter((x) => x !== b.id) : l.concat(b.id).slice(-2)))}
+                          className="mr-3 h-4 w-4 shrink-0 accent-primary"
+                          aria-label={`Marcar ${nomeDoBriefing(b)} para comparar`}
+                        />
+                        <button type="button" onClick={() => abrir(b.id)} className="min-w-0 flex-1 py-1 text-left" aria-label={`Abrir briefing de ${nomeDoBriefing(b)}`}>
+                          <span className="flex min-w-0 items-center">
+                            <span className="min-w-0 truncate text-[13px] font-medium text-foreground">{nomeDoBriefing(b)}</span>
+                            <span className={juntar(etiqueta, "ml-2 shrink-0", est.classe)}>{est.rotulo}</span>
+                          </span>
+                          <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
+                            {b.titulo || m.nome} · {quando ? format(new Date(quando), "dd/MM/yyyy") : ""}
+                            {!b.submitted ? ` · ${p.respondidos} de ${p.total}` : ""}
+                            {b.lembretes ? ` · ${b.lembretes} ${b.lembretes === 1 ? "lembrete" : "lembretes"}` : ""}
+                          </span>
+                        </button>
+                        {lembrar && (
+                          <button type="button" onClick={() => abrir(b.id, true)} className={juntar(botao.barra, "ml-2 text-amber-700 dark:text-amber-300")} aria-label={`Lembrar ${nomeDoBriefing(b)}`}>
+                            <BellRing className="h-4 w-4" aria-hidden="true" />
+                            <span className="ml-1.5 hidden sm:inline">Lembrar</span>
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </RegiaoRolavel>
+            )}
+          </AreaDeTrabalho>
+        </>
+      )}
 
       <GerarLinkDoBriefing
         open={novoLink}

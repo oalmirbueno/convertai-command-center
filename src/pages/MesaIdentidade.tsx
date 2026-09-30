@@ -15,6 +15,7 @@ import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
 import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import CascaDaMesa from "@/components/sistema/CascaDaMesa";
+import BotaoDoConselho from "@/components/conselho/BotaoDoConselho";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 import Etapas from "@/components/sistema/Etapas";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
@@ -294,6 +295,16 @@ export default function MesaIdentidade() {
       }
       acoes={
         clientId ? (
+          <>
+          <BotaoDoConselho
+            clientId={clientId}
+            origem="mesa-identidade"
+            tema={`Identidade${nomeDoCliente ? ` de ${nomeDoCliente}` : ""}`}
+            contexto={"A identidade visual aberta na mesa: conceito, naming, logo e guideline."}
+            onUsar={(t) => setRascunhoDoAgente(t)}
+            rotuloDoUsar="Levar para o diretor de marca"
+          />
+          <span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-border" />
           <CustoCompacto
             saldoUsd={saldoUsd}
             consumo={consumo.data || null}
@@ -311,6 +322,7 @@ export default function MesaIdentidade() {
               setModelosAbertos(true);
             }}
           />
+          </>
         ) : null
       }
     >

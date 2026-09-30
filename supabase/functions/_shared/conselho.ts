@@ -52,8 +52,9 @@ import { SISTEMA_VISUAL_DE_SOCIAL, TENDENCIA_DO_NICHO } from "./conhecimento-est
 import { CONHECIMENTO_TRAFEGO } from "./conhecimento-trafego.ts";
 import { INTELIGENCIA_EDITORIAL, TECNICAS_EDITORIAIS } from "./conhecimento-roteiros.ts";
 import { TERRITORIOS_CRIATIVOS, VERDADE_DO_PRODUTO } from "./conhecimento-publicidade.ts";
+import { MODOS, MODOS_DO_CONSELHO, modoDe, type ModoDoConselho, type PautaDoConselho, pautaDaLinha, PRESETS, PRESETS_DO_CONSELHO, rodadasDoModo, textoDaPauta } from "./conselho-presets.ts";
 
-export const VERSAO_DO_CONSELHO = "2026-09-30.1";
+export const VERSAO_DO_CONSELHO = "2026-09-30.2";
 
 // ------------------------------------------------------------------ limites
 
@@ -82,7 +83,15 @@ export const LIMITES = {
 export const JEV_ESTIMADO_USD = 0.002;
 
 /** Tokens estimados por fala, por etapa (n = quantos especialistas). Reserva inclui o raciocínio baixo. */
-export function tamanhoDaFala(etapa: EtapaOuConversa | "moderador", n: number): { entrada: number; saida: number } {
+export function tamanhoDaFala(etapa: EtapaOuConversa | "moderador", n: number, modo: ModoDoConselho = "padrao"): { entrada: number; saida: number } {
+  const base = tamanhoBase(etapa, n);
+  if (modo === "padrao" || etapa === "conversa") return base;
+  // Modo rápido pede menos (resposta curta, sem raciocínio estendido); profundo, mais.
+  const f = MODOS[modo].fator;
+  return { entrada: Math.round(base.entrada * (modo === "rapido" ? 0.8 : 1.1)), saida: Math.min(MODOS[modo].maxSaida, Math.round(base.saida * f)) };
+}
+
+function tamanhoBase(etapa: EtapaOuConversa | "moderador", n: number): { entrada: number; saida: number } {
   const k = Math.max(1, Math.min(LIMITES.MAX_ESPECIALISTAS, Math.round(Number(n) || 1)));
   switch (etapa) {
     case "propostas":
@@ -174,6 +183,10 @@ export type SessaoDoConselho = {
   rodada_atual: number;
   etapa: EtapaDoConselho | "fim";
   status: StatusDaSessao;
+  /** Rápido (1 rodada e a síntese), padrão ou profundo (frente BRF2). */
+  modo: ModoDoConselho;
+  /** Itens e anexos da pauta (frente BRF2). */
+  pauta: PautaDoConselho;
   teto_usd: number;
   estimativa_usd: number;
   custo_usd: number;
@@ -273,6 +286,14 @@ const CETICO_DO_CONSELHO = `CÉTICO (advogado do diabo)
 - Pergunte "e se não funcionar?": qual o plano B e qual o sinal para parar.
 - Desconfie de ideia genérica que serviria para qualquer concorrente.
 - Crítica sempre com uma saída concreta; ceticismo sem proposta não ajuda o conselho.`;
+
+const CRISE_DO_CONSELHO = `GESTÃO DE CRISE (reputação)
+- Primeiro os fatos: o que aconteceu, quem foi afetado, o que é da marca e o que não é. Sem fato confirmado, a resposta diz o que está sendo apurado.
+- Rápido e coerente: uma primeira resposta curta nas primeiras horas, a mesma versão em todos os canais.
+- Tom humano: reconhecer quem foi afetado antes de explicar; nunca ironia, nunca culpar o cliente final.
+- Canal certo: responder onde o assunto está (comentário, direct, story, nota no site) e levar o caso individual para o privado.
+- Não prometer o que a marca não controla (prazo de terceiro, resultado de plataforma).
+- Plano das 48 horas: quem responde, o que acompanhar, quando atualizar e o sinal de que a crise passou.`;
 
 export const ESPECIALISTAS: Especialista[] = [
   {
@@ -389,6 +410,14 @@ export const ESPECIALISTAS: Especialista[] = [
     ],
   },
   {
+    id: "gestao_crise",
+    nome: "Gestão de crise",
+    area: "Reputação",
+    visao: "confiança do público, rapidez com coerência e o que dizer em cada canal quando algo dá errado",
+    criterio: "a resposta protege a confiança sem prometer o que a marca não controla",
+    blocos: () => [b("crise", CRISE_DO_CONSELHO, 5), b("voz_de_marca", VOZ_DE_MARCA, 3), b("honestidade", REGRAS_DE_HONESTIDADE, 2)],
+  },
+  {
     id: "juridico",
     nome: "Jurídico",
     area: "Contrato",
@@ -468,6 +497,13 @@ export function catalogoDosEspecialistas(origem: string) {
       max_rodadas: LIMITES.MAX_RODADAS,
       teto_maximo_usd: LIMITES.TETO_MAXIMO_USD,
     },
+    // Frente BRF2: presets por tema (só com quem pode entrar nesta origem) e os modos.
+    presets: PRESETS.map((id) => {
+      const p = PRESETS_DO_CONSELHO[id];
+      const permitidos = especialistasDaOrigem(origem).map((e) => e.id);
+      return { id: p.id, nome: p.nome, especialistas: p.especialistas.filter((x) => permitidos.indexOf(x) >= 0), criterios: p.criterios, modo: p.modo, rodadas: p.rodadas, tema: p.tema, pergunta: p.pergunta };
+    }),
+    modos: MODOS_DO_CONSELHO.map((m) => ({ id: m, rotulo: MODOS[m].rotulo, rodadas: MODOS[m].rodadas })),
   };
 }
 
@@ -507,6 +543,7 @@ export function estimarSessao(
   precoDaFala: (modeloId: string, tokens: { entrada: number; saida: number }) => number,
   modeloDoModerador: string,
   aPartirDaRodada = 1,
+  modo: ModoDoConselho = "padrao",
 ): EstimativaDaSessao {
   const n = membros.length;
   const por_rodada: EstimativaDaSessao["por_rodada"] = [];
@@ -515,10 +552,10 @@ export function estimarSessao(
     if (rodada < aPartirDaRodada) return;
     let usd = 0;
     if (etapa === "consolidacao") {
-      usd = precoDaFala(modeloDoModerador, tamanhoDaFala("moderador", n)) + JEV_ESTIMADO_USD;
+      usd = precoDaFala(modeloDoModerador, tamanhoDaFala("moderador", n, modo)) + JEV_ESTIMADO_USD;
     } else {
       membros.forEach((m) => {
-        usd += precoDaFala(m.modelo_id, tamanhoDaFala(etapa, n));
+        usd += precoDaFala(m.modelo_id, tamanhoDaFala(etapa, n, modo));
       });
     }
     por_rodada.push({ rodada, etapa, usd: arred(usd) });
@@ -547,6 +584,10 @@ export type EntradaDoConselho = {
   teto_usd: number;
   criterios?: string[] | null;
   criadoPor?: string | null;
+  /** Rápido, padrão ou profundo (padrão quando não vem). */
+  modo?: ModoDoConselho | string | null;
+  /** Itens e anexos da pauta, já com o trecho de cada arquivo (a função lê do banco). */
+  pauta?: PautaDoConselho | null;
 };
 
 const limpo = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\u2014|\u2013/g, ",").trim().slice(0, max) : "");
@@ -561,8 +602,10 @@ export function validarConvocacao(e: EntradaDoConselho): {
   membros: MembroDoConselho[];
   rodadas: number;
   teto: number;
+  modo: ModoDoConselho;
 } {
   const origem = /^[a-z0-9_-]{2,40}$/.test(String(e.origem || "")) ? String(e.origem) : "painel";
+  const modo = modoDe(e.modo);
   const tema = limpo(e.tema, LIMITES.TEMA);
   const pergunta = limpo(e.pergunta, LIMITES.PERGUNTA);
   if (tema.length < 3) throw new ErroDoConselho(400, "tema_vazio", "Diga o tema da sessão.");
@@ -588,7 +631,8 @@ export function validarConvocacao(e: EntradaDoConselho): {
     if (!modelo) throw new ErroDoConselho(409, "sem_modelo", "O catálogo não tem modelo padrão ativo para o conselho.");
     return { id, nome: esp.nome, modelo_id: modelo };
   });
-  const rodadas = Math.round(Number(e.rodadas));
+  // O modo fixa as rodadas (rápido 2: propostas e síntese; profundo 4); no padrão vale o pedido.
+  const rodadas = rodadasDoModo(modo, Number(e.rodadas));
   if (!(rodadas >= LIMITES.MIN_RODADAS && rodadas <= LIMITES.MAX_RODADAS)) {
     throw new ErroDoConselho(400, "rodadas_invalidas", `O conselho roda de ${LIMITES.MIN_RODADAS} a ${LIMITES.MAX_RODADAS} rodadas.`);
   }
@@ -604,6 +648,7 @@ export function validarConvocacao(e: EntradaDoConselho): {
     membros,
     rodadas,
     teto: arred(teto),
+    modo,
   };
 }
 
@@ -653,7 +698,7 @@ const agoraDe = (d: DependenciasDoConselho) => (d.agora ? d.agora() : new Date()
 export async function convocar(deps: DependenciasDoConselho, e: EntradaDoConselho): Promise<{ sessao: SessaoDoConselho; falas: FalaDoConselho[]; estimativa: EstimativaDaSessao }> {
   const v = validarConvocacao(e);
   const etapas = planoDasEtapas(v.rodadas);
-  const estimativa = estimarSessao(v.membros, etapas, deps.precoDaFala, v.membros[0].modelo_id);
+  const estimativa = estimarSessao(v.membros, etapas, deps.precoDaFala, v.membros[0].modelo_id, 1, v.modo);
   if (v.teto < estimativa.total_usd) {
     throw new ErroDoConselho(400, "teto_abaixo_da_estimativa", `O teto (US$ ${v.teto.toFixed(2)}) está abaixo do custo estimado (US$ ${estimativa.total_usd.toFixed(4)}). Suba o teto ou tire um especialista ou uma rodada.`, {
       estimativa_usd: estimativa.total_usd,
@@ -675,6 +720,8 @@ export async function convocar(deps: DependenciasDoConselho, e: EntradaDoConselh
     rodada_atual: 1,
     etapa: "propostas",
     status: "fila",
+    modo: v.modo,
+    pauta: pautaDaLinha(e.pauta || null),
     teto_usd: v.teto,
     estimativa_usd: estimativa.total_usd,
     custo_usd: 0,
@@ -728,6 +775,7 @@ function blocoDeDados(sessao: SessaoDoConselho): string {
     `PERGUNTA: ${sessao.pergunta}`,
     sessao.contexto ? `CONTEXTO DA MESA:\n${sessao.contexto}` : "",
     sessao.contexto_cliente ? `RETRATO DO CLIENTE:\n${sessao.contexto_cliente}` : "",
+    textoDaPauta(sessao.pauta),
     `CRITÉRIOS DA SESSÃO (nota de 1 a 10 em cada): ${sessao.criterios.join("; ")}.`,
   ];
   return `DADOS\n${partes.filter(Boolean).join("\n\n")}`;
@@ -779,12 +827,14 @@ function textoDaProposta(f: FalaDoConselho, max = 1800): string {
 export function mensagemDaEtapa(sessao: SessaoDoConselho, especialista: string, etapa: EtapaDoConselho, falas: FalaDoConselho[], rodada: number): string {
   const total = planoDasEtapas(sessao.rodadas, sessao.rodadas_extras).length;
   const dados = blocoDeDados(sessao);
+  const doModo = MODOS[sessao.modo || "padrao"].instrucao;
   if (etapa === "propostas") {
     return [
       `RODADA ${rodada} DE ${total}: PROPOSTA INDEPENDENTE. Você ainda não viu a opinião de nenhum outro membro do conselho, e nenhum deles vê a sua agora.`,
       "Traga a SUA melhor resposta para a pergunta, pela sua especialidade: título, a ideia (até 10 frases), por quê, como executar (passos curtos), riscos e o que precisa ser confirmado.",
+      doModo,
       dados,
-    ].join("\n\n");
+    ].filter(Boolean).join("\n\n");
   }
   const finais = versoesFinais(falas, rodada - 1);
   const autores = Object.keys(finais);
@@ -796,6 +846,7 @@ export function mensagemDaEtapa(sessao: SessaoDoConselho, especialista: string, 
     return [
       `RODADA ${rodada} DE ${total}: CRÍTICA CRUZADA. As propostas dos outros membros estão abaixo, sem o nome de quem escreveu.`,
       `Avalie CADA uma (${outras.map((a) => ap[a]).join(", ")}) com nota inteira de 1 a 10 em cada critério da sessão, o ponto mais forte e o mais fraco. Diga qual você prefere (preferida) e um comentário geral. Seja justo e específico: nota alta só para o que é de fato acima da média.`,
+      doModo,
       dados,
       `PROPOSTAS PARA AVALIAR\n${lista}`,
       minha,
@@ -820,6 +871,7 @@ export function mensagemDaEtapa(sessao: SessaoDoConselho, especialista: string, 
   return [
     `RODADA ${rodada} DE ${total}: REVISÃO. Revise a SUA proposta com as críticas que ela recebeu. Mantenha o que é forte, corrija o que as críticas mostraram com razão e incorpore o melhor das outras quando melhorar a sua (diga de quem veio).`,
     "Em mudou, diga o que mudou e por quê. Em mantenho_discordancia, diga no que você continua discordando do conselho (ou deixe vazio).",
+    doModo,
     dados,
     finais[especialista] ? `SUA PROPOSTA ATUAL\n${textoDaProposta(finais[especialista])}` : "",
     `CRÍTICAS QUE ELA RECEBEU\n${recebidas || "(nenhuma crítica registrada)"}`,
@@ -1245,7 +1297,7 @@ export async function avancarSessao(deps: DependenciasDoConselho, sessao: Sessao
     let reserva = 0;
     const vaoFalar: FalaDoConselho[] = [];
     for (const f of agora) {
-      const est = deps.precoDaFala(f.modelo_id || sessao.especialistas[0].modelo_id, tamanhoDaFala(etapa, n));
+      const est = deps.precoDaFala(f.modelo_id || sessao.especialistas[0].modelo_id, tamanhoDaFala(etapa, n, sessao.modo));
       if (custo + reserva + est > Number(sessao.teto_usd) + 1e-9) break;
       reserva += est;
       vaoFalar.push(f);
@@ -1344,7 +1396,7 @@ export async function avancarSessao(deps: DependenciasDoConselho, sessao: Sessao
   }
   let redacao: ReturnType<typeof normalizarModerador> | null = null;
   if (fala && fala.status !== "feita") {
-    const est = deps.precoDaFala(fala.modelo_id || sessao.especialistas[0].modelo_id, tamanhoDaFala("moderador", sessao.especialistas.length));
+    const est = deps.precoDaFala(fala.modelo_id || sessao.especialistas[0].modelo_id, tamanhoDaFala("moderador", sessao.especialistas.length, sessao.modo));
     if (custo + est > Number(sessao.teto_usd) + 1e-9) {
       await deps.banco.atualizarFala(fala.id, { status: "pulada", erro_codigo: "teto", erro_mensagem: "Parou no teto de custo da sessão.", atualizado_em: agoraDe(deps) });
       aviso = [aviso, "O teto de custo não deixou o moderador escrever: o resultado mostra só o ranking e as divergências."].filter(Boolean).join(" ");
@@ -1444,7 +1496,7 @@ export function planejarNovaRodada(sessao: SessaoDoConselho, falas: FalaDoConsel
   const finais = versoesFinais(falas, 99);
   const vivos = sessao.especialistas.map((m) => m.id).filter((id) => !!finais[id]);
   const membros = sessao.especialistas.filter((m) => vivos.indexOf(m.id) >= 0);
-  const estimativa = estimarSessao(membros, etapas, precoDaFala, sessao.especialistas[0].modelo_id, sessao.rodada_atual + 1);
+  const estimativa = estimarSessao(membros, etapas, precoDaFala, sessao.especialistas[0].modelo_id, sessao.rodada_atual + 1, sessao.modo);
   return { etapas, estimativa, vivos };
 }
 
@@ -1496,6 +1548,9 @@ export function montarAta(sessao: SessaoDoConselho, falas: FalaDoConselho[], ext
   l.push(`- Membros: ${sessao.especialistas.map((m) => `${m.nome} (${(extras.modelos && extras.modelos[m.modelo_id]) || m.modelo_id})`).join("; ")}`);
   l.push(`- Critérios: ${sessao.criterios.join("; ")}`);
   l.push(`- Rodadas: ${etapas.length} (${etapas.map((e) => NOME_DA_ETAPA[e]).join(", ")})`);
+  l.push(`- Modo: ${MODOS[sessao.modo || "padrao"].rotulo}`);
+  if (sessao.pauta && sessao.pauta.itens.length) l.push(`- Pauta: ${sessao.pauta.itens.join("; ")}`);
+  if (sessao.pauta && sessao.pauta.anexos.length) l.push(`- Anexos da pauta: ${sessao.pauta.anexos.map((a) => a.nome).join("; ")}`);
   l.push(`- Custo: ${usdTexto(sessao.custo_usd)} de um teto de ${usdTexto(sessao.teto_usd)}`);
   if (sessao.status !== "concluida") l.push(`- Situação: ${sessao.status}${sessao.aviso ? `. ${sessao.aviso}` : ""}${sessao.erro_mensagem ? `. ${sessao.erro_mensagem}` : ""}`);
   etapas.forEach((etapa, i) => {
@@ -1645,6 +1700,8 @@ export function sessaoDaLinha(l: Record<string, unknown>): SessaoDoConselho {
     rodada_atual: num(l.rodada_atual) || 1,
     etapa: (String(l.etapa || "propostas") as SessaoDoConselho["etapa"]),
     status: (String(l.status || "fila") as StatusDaSessao),
+    modo: modoDe(l.modo),
+    pauta: pautaDaLinha(l.pauta),
     teto_usd: num(l.teto_usd),
     estimativa_usd: num(l.estimativa_usd),
     custo_usd: num(l.custo_usd),

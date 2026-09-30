@@ -8,9 +8,12 @@ import { useClients, useProjects } from "@/hooks/useSupabaseData";
 import { appPublicUrl } from "@/lib/publicUrl";
 import { AjudaRecolhida, CampoDeFormulario, GrupoDeCampos, botao, campo, juntar, superficie, texto } from "@/components/sistema";
 import { type LinkGerado, chamarAgenteDoBriefing, textoDoErroDoBriefing } from "@/lib/briefing/api";
+import PerguntasExtras from "./PerguntasExtras";
 import {
+  type CampoDoBriefing,
   type SlugDoModelo,
   MODELOS_DE_FABRICA,
+  camposDoModelo,
   SLUGS_DE_BRIEFING,
   VALIDADE_PADRAO_DIAS,
   linkDoWhatsApp,
@@ -79,6 +82,7 @@ export default function GerarLinkDoBriefing({
   const [gerando, setGerando] = useState(false);
   const [gerado, setGerado] = useState<LinkGerado | null>(null);
   const [copiado, setCopiado] = useState<"link" | "grupo" | null>(null);
+  const [extras, setExtras] = useState<CampoDoBriefing[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -89,6 +93,7 @@ export default function GerarLinkDoBriefing({
     setValidade(VALIDADE_PADRAO_DIAS);
     setGerado(null);
     setCopiado(null);
+    setExtras([]);
   }, [open, clienteFixo, modeloInicial, marcaInicial, projetoInicial]);
 
   const { data: marcas } = useQuery({
@@ -122,6 +127,7 @@ export default function GerarLinkDoBriefing({
         marca_id: marcaId || null,
         project_id: projectId || null,
         validade_dias: validade,
+        extras,
       });
       setGerado(r);
       aoGerar?.(r);
@@ -194,6 +200,7 @@ export default function GerarLinkDoBriefing({
                   {VALIDADES.map((d) => <option key={d} value={d}>{d} dias</option>)}
                 </select>
               </CampoDeFormulario>
+              <PerguntasExtras extras={extras} onMudar={setExtras} chavesDoModelo={camposDoModelo(MODELOS_DE_FABRICA[modelo]).map((c) => c.key)} />
             </GrupoDeCampos>
           ) : (
             <div className="min-w-0 space-y-4">

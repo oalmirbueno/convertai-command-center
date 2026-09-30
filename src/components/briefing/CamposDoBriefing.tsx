@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Check, ImagePlus, Loader2, Paperclip, Pencil, Plus, Trash2, X } from "lucide-react";
 import { CampoDeFormulario, botao, foco, juntar, superficie, texto } from "@/components/sistema";
+import RespostaPorAudio from "./RespostaPorAudio";
 import { campoPublico, campoTextoPublico } from "@/components/publico/CascaPublica";
 import {
   type AnexoDoBriefing,
@@ -40,6 +41,8 @@ export type PropsDoCampo = {
   onMudar: AoMudar;
   onAnexar: AoAnexar;
   onRemoverAnexo: (anexo: AnexoDoBriefing) => void;
+  /** Resposta por áudio (frente BRF2): grava, transcreve e junta ao campo. Sem ela, o botão não aparece. */
+  onTranscrever?: (campo: CampoDoBriefing, audio: Blob, segundos: number) => Promise<void>;
 };
 
 function Rotulo({ t }: { t: string }) {
@@ -114,14 +117,20 @@ function Controle(p: PropsDoCampo & { id: string }) {
 
 // ------------------------------------------------------------------ texto
 
-function Texto({ campo, respostas, onMudar, somenteLeitura, id, longo }: PropsDoCampo & { id: string; longo?: boolean }) {
+function Texto({ campo, respostas, onMudar, somenteLeitura, id, longo, onTranscrever }: PropsDoCampo & { id: string; longo?: boolean }) {
   const v = typeof respostas[campo.key] === "string" ? (respostas[campo.key] as string) : "";
   const mudar = (novo: string) => {
     if (campo.maxChars && novo.length > campo.maxChars) return;
     onMudar(campo.key, novo);
   };
   if (longo) {
-    return <textarea id={id} value={v} readOnly={somenteLeitura} onChange={(e) => mudar(e.target.value)} placeholder={campo.placeholder} rows={4} className={juntar(campoTextoPublico, "resize-y")} />;
+    // Pergunta aberta: dá para responder por áudio (grava, transcreve e junta ao que já estava escrito).
+    return (
+      <div className="min-w-0">
+        <textarea id={id} value={v} readOnly={somenteLeitura} onChange={(e) => mudar(e.target.value)} placeholder={campo.placeholder} rows={4} className={juntar(campoTextoPublico, "resize-y")} />
+        {onTranscrever && !somenteLeitura && <RespostaPorAudio onTranscrever={(a, s) => onTranscrever(campo, a, s)} />}
+      </div>
+    );
   }
   return <input id={id} type="text" value={v} readOnly={somenteLeitura} onChange={(e) => mudar(e.target.value)} placeholder={campo.placeholder} className={campoPublico} />;
 }

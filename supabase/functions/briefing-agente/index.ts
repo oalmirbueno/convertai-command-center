@@ -1,13 +1,13 @@
 /**
- * briefing-agente: o lado da equipe do briefing (frente BRF, 30/09/2026).
- * POST { acao, ... }, só equipe com acesso ao cliente (is_staff +
- * can_access_client). Erro sai como { error, mensagem }.
+ * briefing-agente: o lado da equipe do briefing (frente BRF, 30/09/2026;
+ * ampliado na frente BRF2). POST { acao, ... }, só equipe com acesso ao
+ * cliente (is_staff + can_access_client). Erro sai como { error, mensagem }.
  *
  * Link:
  * - modelos {} -> { modelos: [{ slug, nome, titulo, versao, minutos }] } (os vigentes: banco ou fábrica)
- * - gerar_link { client_id, modelo, marca_id?, project_id?, validade_dias?, titulo? }
+ * - gerar_link { client_id, modelo, marca_id?, project_id?, validade_dias?, titulo?, extras? }
  *   -> { briefing: { id, token, expira_em, modelo }, caminho, cliente, telefone }
- *   (grava a cópia do modelo e o dado já sabido do cliente para confirmar)
+ *   (grava a cópia do modelo, as perguntas extras do projeto e o dado já sabido do cliente para confirmar)
  * - reabrir { briefing_id, dias? } -> { briefing } (o cliente volta a editar; a validade estica)
  * - validade { briefing_id, dias } -> { briefing }
  * - arquivar { briefing_id, arquivar } -> { briefing }
@@ -17,24 +17,28 @@
  * - desfazer { decupagem_id } -> { voltaram, mantidos, destino }
  * Leitura:
  * - exportar_pdf { briefing_id } -> { file_id, ja_existia } (Arquivos > Documentos operacionais, só equipe)
+ * Frente BRF2 (módulos editor.ts, preencher.ts e exportar.ts):
+ * - versoes_do_modelo { slug } / salvar_modelo { slug, conteudo, nota? } (só admin: versão nova)
+ * - perguntas_extras { briefing_id, extras[] } (link ainda aberto)
+ * - registrar_lembrete { briefing_id } (a equipe mandou a mensagem pronta)
+ * - estimar_preenchimento / preencher_ia { briefing_id, modelo_id?, reuniao?, conversa?, fontes, substituir? } (prévia, nada gravado)
+ * - aplicar_respostas { briefing_id, valores } / desfazer_preenchimento { briefing_id }
+ * - exportar_contexto { briefing_id, confirmar?, sugestoes?, memoria? } / desfazer_exportacao { briefing_id }
  *
  * Toda ação que muda algo deixa um registro (mcp_audit_log) com o resumo e a
  * prova: é o gancho do "documento de entrega" (frente DOC). Nada vai para o
  * cliente daqui: o link é copiado e enviado pela equipe.
  */
 
-import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { auditLog } from "../_shared/mcp-audit.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
-import { contasDaMarcaDoCliente, marcasDoCliente } from "../_shared/marca.ts";
+import { marcasDoCliente } from "../_shared/marca.ts";
 import {
   camposDoModelo,
   campoVisivel,
   type DadosSabidos,
   ehSlugDeBriefing,
   estadoDoLink,
-  type LinhaDeModelo,
   modeloDoLink,
   modeloVigente,
   prefillDoModelo,
@@ -43,6 +47,7 @@ import {
   VALIDADE_MAXIMA_DIAS,
   VALIDADE_PADRAO_DIAS,
 } from "../_shared/briefing-modelos.ts";
+import { modeloComExtras, normalizarExtras } from "../_shared/briefing-editor.ts";
 import { porCategoria, type ItemDecupado } from "../_shared/briefing-decupagem.ts";
 import {
   anexosDoBriefing,
@@ -54,144 +59,48 @@ import {
   type LinhaDaDecupagem,
 } from "../_shared/briefing-decupar.ts";
 import { gerarPdfDoBriefing, nomeDoArquivoDoBriefing } from "../_shared/pdf-briefing.ts";
+import { IaMotorErro } from "../_shared/ia-motor.ts";
+import {
+  type Chamador,
+  corsHeaders,
+  dadosSabidos,
+  ErroHttp,
+  garantirAcesso,
+  idDe,
+  identificar,
+  json,
+  lerBriefing,
+  limpo,
+  linhasDeModelos,
+  nomeDoCliente,
+  registrar,
+  servico,
+} from "./base.ts";
+import { perguntasExtras, registrarLembrete, salvarModelo, versoesDoModelo } from "./editor.ts";
+import { aplicarRespostas, desfazerPreenchimento, estimarPreenchimento, preencherComIa } from "./preencher.ts";
+import { desfazerExportacao, exportarContexto } from "./exportar.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+const MENSAGEM_MOTOR: Record<string, { status: number; mensagem: string }> = {
+  saldo_insuficiente: { status: 402, mensagem: "Saldo insuficiente na carteira de IA deste cliente. Peça a recarga a um admin ou gestor." },
+  cota_da_chave_esgotada: { status: 402, mensagem: "A cota do mês da chave de IA deste cliente acabou." },
+  cliente_sem_chave: { status: 403, mensagem: "Este cliente não tem chave de IA própria e o uso da chave da agência está desligado para ele." },
+  provedor_sem_chave: { status: 503, mensagem: "O provedor deste modelo está sem chave de API configurada." },
 };
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const CAMPOS_DO_BRIEFING =
-  "id, token, client_id, project_id, marca_id, modelo, modelo_versao, modelo_conteudo, prefill, titulo, responses, submitted, expira_em, enviado_em, envios, reabertura_pedida_em, reabertura_motivo, reaberto_em, arquivado_em, arquivo_pdf_id, created_at";
-
-class ErroHttp extends Error {
-  constructor(public status: number, public codigo: string, mensagem: string) {
-    super(mensagem);
-  }
-}
 
 function respostaDeErro(err: unknown): Response {
-  if (err instanceof ErroHttp) return json({ error: err.codigo, mensagem: err.message }, err.status);
+  if (err instanceof ErroHttp) return json({ error: err.codigo, mensagem: err.message, ...err.extra }, err.status);
   if (err instanceof ErroDaDecupagem) return json({ error: err.codigo, mensagem: err.message }, err.status);
+  if (err instanceof IaMotorErro) {
+    const conhecido = MENSAGEM_MOTOR[err.codigo];
+    return json({ ...err.paraJson(), mensagem: conhecido?.mensagem ?? err.message }, conhecido?.status ?? (err.status >= 400 ? err.status : 500));
+  }
   const motivo = registrarFalha("briefing-agente: erro inesperado", err);
   return json({ error: "erro_interno", mensagem: `Falha inesperada no briefing: ${motivo}` }, 500);
 }
 
-// ------------------------------------------------------------------ banco e acesso
-
-type Chamador = { userId: string; doChamador: SupabaseClient };
-
-let servicoCache: SupabaseClient | null = null;
-function servico(): SupabaseClient {
-  if (!servicoCache) {
-    servicoCache = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } });
-  }
-  return servicoCache;
-}
-
-async function identificar(req: Request): Promise<Chamador> {
-  const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
-  if (!token) throw new ErroHttp(401, "sessao_expirada", "Sessão expirada. Entre de novo no painel.");
-  const { data: user } = await servico().auth.getUser(token);
-  const userId = user?.user?.id;
-  if (!userId) throw new ErroHttp(401, "sessao_expirada", "Sessão expirada. Entre de novo no painel.");
-  const { data: staff, error } = await servico().rpc("is_staff", { _user_id: userId });
-  if (error) throw new ErroHttp(503, "autorizacao_indisponivel", "Não foi possível conferir a permissão agora.");
-  if (staff !== true) throw new ErroHttp(403, "somente_equipe", "Somente a equipe gera e lê briefings.");
-  const doChamador = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  return { userId, doChamador };
-}
-
-async function garantirAcesso(ch: Chamador, clientId: string | null) {
-  if (!clientId || !UUID.test(clientId)) throw new ErroHttp(400, "client_id_invalido", "Escolha o cliente.");
-  const { data, error } = await ch.doChamador.rpc("can_access_client", { _client_id: clientId });
-  if (error) throw new ErroHttp(503, "autorizacao_indisponivel", "Não foi possível conferir o acesso ao cliente agora.");
-  if (data !== true) throw new ErroHttp(403, "sem_acesso_ao_cliente", "Você não tem acesso a este cliente.");
-}
-
-const idDe = (v: unknown, nome: string): string => {
-  const s = String(v ?? "").trim();
-  if (!UUID.test(s)) throw new ErroHttp(400, `${nome}_invalido`, `${nome} precisa ser um UUID.`);
-  return s;
-};
-const limpo = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const dias = (v: unknown, padrao: number) => Math.max(1, Math.min(VALIDADE_MAXIMA_DIAS, Math.floor(Number(v) || padrao)));
 
-type LinhaDoBriefing = {
-  id: string;
-  token: string;
-  client_id: string | null;
-  project_id: string | null;
-  marca_id: string | null;
-  modelo: string | null;
-  modelo_versao: number | null;
-  modelo_conteudo: unknown;
-  prefill: Record<string, unknown> | null;
-  titulo: string | null;
-  responses: Record<string, unknown> | null;
-  submitted: boolean | null;
-  expira_em: string | null;
-  enviado_em: string | null;
-  envios: number | null;
-  reabertura_pedida_em: string | null;
-  arquivado_em: string | null;
-  arquivo_pdf_id: string | null;
-  created_at: string;
-};
-
-async function lerBriefing(ch: Chamador, briefingId: unknown): Promise<LinhaDoBriefing> {
-  const id = idDe(briefingId, "briefing_id");
-  const { data, error } = await servico().from("briefings").select(CAMPOS_DO_BRIEFING).eq("id", id).maybeSingle();
-  if (error) throw new ErroHttp(503, "briefing_indisponivel", "Não foi possível ler o briefing.");
-  if (!data) throw new ErroHttp(404, "briefing_inexistente", "Briefing não encontrado.");
-  const b = data as LinhaDoBriefing;
-  // Briefing antigo sem cliente: só admin mexe (is_staff já conferido; can_access_client pede cliente).
-  if (b.client_id) await garantirAcesso(ch, b.client_id);
-  else {
-    const { data: admin } = await servico().rpc("has_role", { _user_id: ch.userId, _role: "admin" });
-    if (admin !== true) throw new ErroHttp(403, "somente_admin", "Briefing sem cliente: só um admin mexe nele.");
-  }
-  return b;
-}
-
-async function nomeDoCliente(clientId: string | null): Promise<{ nome: string; telefone: string | null }> {
-  if (!clientId) return { nome: "Cliente", telefone: null };
-  const { data } = await servico().from("profiles").select("company_name, full_name, phone").eq("id", clientId).maybeSingle();
-  const p = data as { company_name?: string | null; full_name?: string | null; phone?: string | null } | null;
-  return { nome: (p && (p.company_name || p.full_name)) || "Cliente", telefone: p?.phone ?? null };
-}
-
-async function registrar(ch: Chamador, toolName: string, input: Record<string, unknown>, resultRef: string | null) {
-  await auditLog({
-    correlationId: crypto.randomUUID(),
-    toolName,
-    origin: "mesa:briefing-agente",
-    keyId: `mesa:briefing-agente:${ch.userId}`,
-    scopes: ["briefings:write"],
-    input,
-    success: true,
-    statusCode: 200,
-    durationMs: 0,
-    resultRef: resultRef ?? undefined,
-  });
-}
-
 // ------------------------------------------------------------------ modelos e link
-
-async function linhasDeModelos(): Promise<LinhaDeModelo[]> {
-  const { data, error } = await servico().from("briefing_modelos").select("slug, versao, conteudo, ativo").eq("ativo", true);
-  if (error) {
-    // Sem a tabela (migração pendente) ou fora do ar: valem os de fábrica, com o motivo no log.
-    registrarFalha("briefing-agente: modelos do banco não lidos", error);
-    return [];
-  }
-  return (data as LinhaDeModelo[] | null) ?? [];
-}
 
 async function modelos() {
   const linhas = await linhasDeModelos();
@@ -201,44 +110,6 @@ async function modelos() {
       return { slug: m.slug, nome: m.nome, titulo: m.titulo, versao: m.versao, minutos: m.minutos };
     }),
   });
-}
-
-async function dadosSabidos(clientId: string, marcaId: string | null): Promise<DadosSabidos> {
-  const dados: DadosSabidos = {};
-  const [perfil, kit, marcas] = await Promise.all([
-    servico().from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle(),
-    servico().from("cliente_kit_marca").select("contexto").eq("client_id", clientId).maybeSingle(),
-    marcasDoCliente(servico(), clientId).catch((e) => (registrarFalha("briefing-agente: marcas não lidas", e), [])),
-  ]);
-  const p = perfil.data as { company_name?: string | null; full_name?: string | null } | null;
-  const marca = marcaId ? marcas.find((m) => m.id === marcaId) ?? null : null;
-  const outraMarca = !!marca && !marca.principal;
-  dados.empresa = (outraMarca ? marca!.nome : p?.company_name || p?.full_name) || undefined;
-
-  // Contexto: a outra marca só com o dela (regra de herança); a principal e o cliente com o do kit.
-  let contexto: Record<string, unknown> = {};
-  if (outraMarca) {
-    const { data } = await servico().from("cliente_marcas").select("contexto").eq("id", marca!.id).eq("client_id", clientId).maybeSingle();
-    contexto = ((data as { contexto?: Record<string, unknown> } | null)?.contexto) || {};
-  } else {
-    contexto = ((kit.data as { contexto?: Record<string, unknown> } | null)?.contexto) || {};
-  }
-  const texto = (v: unknown) => (typeof v === "string" ? v.trim() : "");
-  dados.negocio = texto(contexto.negocio) || undefined;
-  dados.publico = texto(contexto.publico) || undefined;
-  dados.oferta = texto(contexto.oferta) || undefined;
-  if (Array.isArray(contexto.diferenciais)) dados.diferenciais = (contexto.diferenciais as unknown[]).map(String).join("; ") || undefined;
-  dados.site = texto(contexto.site) || undefined;
-
-  // Instagram: a conta da marca (ou do cliente, sem marca).
-  const { data: contas } = await servico().from("external_accounts").select("id, platform, handle").eq("client_id", clientId).eq("platform", "instagram");
-  let lista = ((contas as Array<{ id: string; handle: string | null }> | null) ?? []).filter((c) => c.handle);
-  if (marca) {
-    const ids = await contasDaMarcaDoCliente(servico(), clientId, marca);
-    if (ids) lista = lista.filter((c) => ids.indexOf(c.id) >= 0);
-  }
-  if (lista[0]?.handle) dados.instagram = lista[0].handle.indexOf("@") === 0 ? lista[0].handle : `@${lista[0].handle}`;
-  return dados;
 }
 
 async function gerarLink(ch: Chamador, corpo: Record<string, unknown>) {
@@ -256,7 +127,8 @@ async function gerarLink(ch: Chamador, corpo: Record<string, unknown>) {
     const { data } = await servico().from("projects").select("id").eq("id", projetoPedido).eq("client_id", clientId).maybeSingle();
     if (!data) throw new ErroHttp(400, "projeto_de_outro_cliente", "Este projeto não é deste cliente.");
   }
-  const modelo = modeloVigente(slug, await linhasDeModelos());
+  // Perguntas extras deste projeto (frente BRF2): um bloco no fim da cópia do modelo do link.
+  const modelo = modeloComExtras(modeloVigente(slug, await linhasDeModelos()), normalizarExtras(corpo.extras));
   const prefill = prefillDoModelo(modelo, await dadosSabidos(clientId, marcaPedida).catch((e) => {
     registrarFalha("briefing-agente: dado já sabido não lido", e, { client_id: clientId });
     return {} as DadosSabidos;
@@ -456,10 +328,20 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   aplicar,
   desfazer,
   exportar_pdf: exportarPdf,
+  versoes_do_modelo: versoesDoModelo,
+  salvar_modelo: salvarModelo,
+  perguntas_extras: perguntasExtras,
+  registrar_lembrete: registrarLembrete,
+  estimar_preenchimento: estimarPreenchimento,
+  preencher_ia: preencherComIa,
+  aplicar_respostas: aplicarRespostas,
+  desfazer_preenchimento: desfazerPreenchimento,
+  exportar_contexto: exportarContexto,
+  desfazer_exportacao: desfazerExportacao,
 };
 
-/** Ações que podem demorar (Jev, PDF): a resposta começa na hora. */
-const ACOES_LONGAS = new Set(["decupar", "exportar_pdf"]);
+/** Ações que podem demorar (Jev, IA, PDF, site): a resposta começa na hora. */
+const ACOES_LONGAS = new Set(["decupar", "exportar_pdf", "preencher_ia"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

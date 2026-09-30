@@ -1,4 +1,5 @@
 import { chamarFuncao } from "@/lib/mesa/api";
+import type { DefinicaoDoModelo, ModeloDeDocumento, RascunhoDoDocumento } from "../../../supabase/functions/_shared/documento-modelos";
 
 /**
  * Gancho do Registro da entrega (Frente DOC, 29/09/2026) para qualquer mesa
@@ -21,6 +22,9 @@ export type PedidoDoDocumento = {
   titulo?: string | null;
   /** Resumo curto da mesa (a equipe confere; não vai ao cliente sem passar pela conferência). */
   resumo?: string | null;
+  /** Frente BRF2: gerar com o rascunho da equipe (texto, provas escolhidas, números com fonte). */
+  usarRascunho?: boolean;
+  documentoId?: string | null;
   /** Ids de arquivos (files) do cliente que provam a entrega. */
   provas?: string[];
 };
@@ -58,6 +62,12 @@ export type DocumentoDaEntrega = {
   resumo?: string | null;
   codigo?: string | null;
   arquivo?: ArquivoDoDocumento | null;
+  // Frente BRF2
+  modelo?: string | null;
+  tem_rascunho?: boolean;
+  rascunho_em?: string | null;
+  origem_rascunho?: "equipe" | "agenda" | null;
+  mensagem_envio?: string | null;
 };
 
 export type ResultadoDaGeracao = {
@@ -77,6 +87,8 @@ const corpoDoPedido = (p: PedidoDoDocumento) => {
   if (p.titulo) corpo.titulo = p.titulo;
   if (p.resumo) corpo.resumo = p.resumo;
   if (p.provas && p.provas.length) corpo.provas = p.provas.slice(0, 24);
+  if (p.usarRascunho) corpo.usar_rascunho = true;
+  if (p.documentoId) corpo.documento_id = p.documentoId;
   return corpo;
 };
 
@@ -104,8 +116,8 @@ export async function registrarEntregaSemTravar(p: PedidoDoDocumento): Promise<{
   }
 }
 
-export async function estimarDocumento(clientId: string): Promise<{ estimativa_usd: number; modelo_id: string }> {
-  return await chamarFuncao("documentos", { acao: "estimar", client_id: clientId });
+export async function estimarDocumento(clientId: string, opcoes: { documentoId?: string | null; usarRascunho?: boolean } = {}): Promise<{ estimativa_usd: number; modelo_id: string; texto_da_equipe?: boolean }> {
+  return await chamarFuncao("documentos", { acao: "estimar", client_id: clientId, ...(opcoes.usarRascunho && opcoes.documentoId ? { usar_rascunho: true, documento_id: opcoes.documentoId } : {}) });
 }
 
 /** Gera o PDF (custa IA): só depois do Confirmar com o custo na tela. */
@@ -119,8 +131,8 @@ export async function listarDocumentos(clientId: string): Promise<DocumentoDaEnt
 }
 
 /** Manda ao cliente pelo fluxo de aprovação que já existe. Só depois do Confirmar. */
-export async function liberarDocumento(documentoId: string, modo: "approval" | "client_shared"): Promise<DocumentoDaEntrega> {
-  const r = await chamarFuncao<{ documento: DocumentoDaEntrega }>("documentos", { acao: "liberar", documento_id: documentoId, modo, confirmado: true });
+export async function liberarDocumento(documentoId: string, modo: "approval" | "client_shared", mensagem?: string | null): Promise<DocumentoDaEntrega> {
+  const r = await chamarFuncao<{ documento: DocumentoDaEntrega }>("documentos", { acao: "liberar", documento_id: documentoId, modo, confirmado: true, ...(mensagem ? { mensagem } : {}) });
   return r.documento;
 }
 
@@ -162,4 +174,43 @@ export function ehRegistroDeEntrega(f: { tags?: string[] | null; folder?: string
 export function tituloDoRegistro(f: { description?: string | null; file_name?: string | null }): string {
   const m = /^(.+?)\. Registro da entrega nº (\d+)/.exec(String(f.description || ""));
   return m ? `${m[1]} (nº ${m[2].padStart(4, "0")})` : String(f.file_name || "Registro da entrega");
+}
+
+// ------------------------------------------------------------------ frente BRF2: rascunho e agenda
+
+export type EventoNaTela = { id: string; grupo: string; quando: string; titulo: string; detalhe: string | null; link: string | null };
+export type CandidatoNaTela = { id: string; titulo: string; legenda: string; quando: string; forte: boolean; imagem: { bucket: string; caminho: string } | null };
+export type NumeroNaTela = { rotulo: string; valor: number; fonte: string; formato?: "inteiro" | "percentual" };
+
+export type VistaDoRascunho = {
+  documento: DocumentoDaEntrega;
+  rascunho: RascunhoDoDocumento;
+  eventos: EventoNaTela[];
+  candidatos: CandidatoNaTela[];
+  numeros: NumeroNaTela[];
+  avisos: string[];
+  modelos: Record<ModeloDeDocumento, DefinicaoDoModelo>;
+};
+
+/** O rascunho do documento (sem IA): o salvo, ou o primeiro montado só com o que aconteceu. */
+export async function lerRascunho(alvo: { documentoId: string; modelo?: ModeloDeDocumento } | (PedidoDoDocumento & { modelo?: ModeloDeDocumento })): Promise<VistaDoRascunho> {
+  const corpo: Record<string, unknown> = "documentoId" in alvo && !("clientId" in alvo) ? { documento_id: alvo.documentoId } : corpoDoPedido(alvo as PedidoDoDocumento);
+  if (alvo.modelo) corpo.modelo = alvo.modelo;
+  return await chamarFuncao<VistaDoRascunho>("documentos", { acao: "rascunho", ...corpo });
+}
+
+export async function salvarRascunho(documentoId: string, rascunho: RascunhoDoDocumento): Promise<{ documento: DocumentoDaEntrega; rascunho: RascunhoDoDocumento }> {
+  return await chamarFuncao("documentos", { acao: "salvar_rascunho", documento_id: documentoId, rascunho });
+}
+
+export type AgendaDeDocumentos = { id: string; client_id: string; marca_id: string | null; ligada: boolean; dia: number; modelo: ModeloDeDocumento; ultimo_mes: string | null; ultima_execucao_em: string | null; ultimo_erro: string | null };
+
+export async function lerAgendas(clientId: string): Promise<AgendaDeDocumentos[]> {
+  const r = await chamarFuncao<{ agendas: AgendaDeDocumentos[] }>("documentos", { acao: "agenda_ler", client_id: clientId });
+  return r.agendas || [];
+}
+
+export async function salvarAgenda(p: { clientId: string; marcaId?: string | null; ligada: boolean; dia: number; modelo: ModeloDeDocumento }): Promise<AgendaDeDocumentos> {
+  const r = await chamarFuncao<{ agenda: AgendaDeDocumentos }>("documentos", { acao: "agenda_salvar", client_id: p.clientId, marca_id: p.marcaId || null, ligada: p.ligada, dia: p.dia, modelo: p.modelo });
+  return r.agenda;
 }

@@ -30,6 +30,7 @@ import {
   pedirReabertura,
   removerAnexo,
   salvarParcial,
+  transcreverAudio,
   textoDoErroDoBriefing,
 } from "@/lib/briefing/api";
 import {
@@ -43,6 +44,7 @@ import {
   modeloDoLink,
   progressoDoBriefing,
 } from "../../supabase/functions/_shared/briefing-modelos";
+import { juntarTranscricao } from "../../supabase/functions/_shared/briefing-audio";
 
 /**
  * Página pública do briefing (/briefing/:token), frente BRF (30/09/2026).
@@ -314,6 +316,23 @@ export default function BriefingPublic() {
     }
   }, [token]);
 
+  // ---------------------------------------------------------------- áudio (frente BRF2)
+  const transcrever = useCallback(async (campo: CampoDoBriefing, audio: Blob, segundos: number) => {
+    try {
+      const r = await transcreverAudio(token, audio, campo.key, segundos);
+      const atual = typeof respostasRef.current[campo.key] === "string" ? (respostasRef.current[campo.key] as string) : "";
+      let novo = juntarTranscricao(atual, r.texto, true);
+      if (campo.maxChars && novo.length > campo.maxChars) {
+        novo = novo.slice(0, campo.maxChars);
+        toast.info("A transcrição passou do limite desta pergunta e foi cortada. Confira o final.");
+      }
+      mudar(campo.key, novo);
+    } catch (e) {
+      console.error("[briefing] transcrição falhou:", e);
+      throw new Error(textoDoErroDoBriefing(e, "Não foi possível transcrever. Escreva a resposta ou tente de novo."));
+    }
+  }, [token, mudar]);
+
   // ---------------------------------------------------------------- enviar
   const faltando = useMemo(() => faltandoNoBriefing(modelo, respostas, anexos), [modelo, respostas, anexos]);
   const progresso = useMemo(() => progressoDoBriefing(modelo, respostas, anexos), [modelo, respostas, anexos]);
@@ -507,6 +526,7 @@ export default function BriefingPublic() {
                     onMudar={mudar}
                     onAnexar={anexar}
                     onRemoverAnexo={(a) => void tirarAnexo(a)}
+                    onTranscrever={dados?.tem_cliente ? transcrever : undefined}
                   />
                 ))}
               </GrupoDeCampos>

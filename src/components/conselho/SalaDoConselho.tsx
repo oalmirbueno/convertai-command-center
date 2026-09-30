@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Check, Download, Loader2, MessageSquare, Plus, Send, Square, Undo2, Users } from "lucide-react";
+import { ArrowLeft, Check, Download, FileText, Loader2, MessageSquare, Plus, Send, Square, Undo2, Users } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { BalaoDaConversa, CabecalhoDoAgente, CompositorDoAgente, MensagensDoAgente } from "@/components/sistema/PainelDoAgente";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
@@ -13,6 +13,7 @@ import { botao, campo, campoTexto, conversa, juntar, lista, superficie, texto } 
 import { useCatalogo } from "@/components/mesa/MesaContexto";
 import { dataEHora, ErroDaMesa, nomeDoModelo, textoDoErro, usd } from "@/lib/mesa/api";
 import {
+  ataEmPdf,
   chamarConselho,
   type FalaDoConselho,
   mediasRecebidas,
@@ -131,6 +132,7 @@ function SessaoAberta({
   const catalogo = useCatalogo();
   const [parando, setParando] = useState(false);
   const [baixando, setBaixando] = useState(false);
+  const [gerandoPdf, setGerandoPdf] = useState(false);
   const [conversaCom, setConversaCom] = useState<string>("");
 
   const s = consulta.data;
@@ -192,6 +194,21 @@ function SessaoAberta({
     }
   };
 
+  // Frente BRF2: a ata em PDF (pdf-base), guardada em Arquivos; o link abre no clique do aviso.
+  const pdfDaAta = async () => {
+    setGerandoPdf(true);
+    try {
+      const r = await ataEmPdf(s.id);
+      toast.success(r.ja_existia ? "Esta ata já estava em Arquivos." : "Ata em PDF salva em Arquivos, Documentos operacionais.", {
+        action: r.url ? { label: "Abrir", onClick: () => window.open(r.url as string, "_blank", "noopener") } : undefined,
+      });
+    } catch (e) {
+      toast.error(textoDoErro(e, "Não foi possível gerar o PDF da ata."));
+    } finally {
+      setGerandoPdf(false);
+    }
+  };
+
   const etapas = planoDasEtapas(s.rodadas, s.rodadas_extras);
   const ativo = sessaoAtiva(s);
   const linha = `${NOME_DO_STATUS[s.status]} · rodada ${Math.min(s.rodada_atual, etapas.length)} de ${etapas.length} · ${usd(s.custo_usd)} de ${usd(s.teto_usd)}`;
@@ -210,6 +227,9 @@ function SessaoAberta({
             </button>
             <button type="button" className={botao.icone} onClick={() => void baixarAta()} disabled={baixando} aria-label="Baixar a ata" title="Baixar a ata">
               {baixando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
+            </button>
+            <button type="button" className={botao.icone} onClick={() => void pdfDaAta()} disabled={gerandoPdf} aria-label="Ata em PDF" title="Ata em PDF (vai para Arquivos)">
+              {gerandoPdf ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileText className="h-4 w-4" aria-hidden="true" />}
             </button>
             {ativo && (
               <button type="button" className={juntar(botao.discreto, "h-8")} onClick={() => void parar()} disabled={parando} aria-label="Parar o conselho">

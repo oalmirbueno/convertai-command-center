@@ -14,6 +14,7 @@ import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
 import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import CascaDaMesa from "@/components/sistema/CascaDaMesa";
+import BotaoDoConselho from "@/components/conselho/BotaoDoConselho";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 import Etapas from "@/components/sistema/Etapas";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
@@ -216,6 +217,16 @@ export default function MesaSite() {
       }
       acoes={
         clientId ? (
+          <>
+          <BotaoDoConselho
+            clientId={clientId}
+            origem="mesa-site"
+            tema={`Site${nomeDoCliente ? ` de ${nomeDoCliente}` : ""}`}
+            contexto={"O site aberto na mesa: estrutura, mensagem da primeira dobra e ação principal."}
+            onUsar={(t) => setRascunhoDoAgente(t)}
+            rotuloDoUsar="Levar para o agente do site"
+          />
+          <span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-border" />
           <CustoCompacto
             saldoUsd={saldoUsd}
             consumo={consumo.data || null}
@@ -233,6 +244,7 @@ export default function MesaSite() {
               setModelosAbertos(true);
             }}
           />
+          </>
         ) : null
       }
     >

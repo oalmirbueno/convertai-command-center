@@ -14,6 +14,7 @@ import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
 import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import CascaDaMesa from "@/components/sistema/CascaDaMesa";
+import BotaoDoConselho from "@/components/conselho/BotaoDoConselho";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 import Etapas from "@/components/sistema/Etapas";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
@@ -271,6 +272,16 @@ export default function MesaProposta() {
       etapas={clientId ? <Etapas rotulo="Etapas da Mesa Proposta" numerar itens={ETAPAS_DA_MESA_PROPOSTA.map((e) => ({ valor: e.valor, rotulo: e.rotulo }))} valor={etapa} onEscolher={(v) => mudar({ etapa: v })} /> : null}
       acoes={
         clientId ? (
+          <>
+          <BotaoDoConselho
+            clientId={clientId}
+            origem="mesa-proposta"
+            tema={`Proposta${nomeDoCliente ? ` de ${nomeDoCliente}` : ""}`}
+            contexto={"A proposta comercial aberta na mesa: escopo, preço, argumento e objeções."}
+            onUsar={(t) => setRascunhoDoAgente(t)}
+            rotuloDoUsar="Levar para o estrategista comercial"
+          />
+          <span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-border" />
           <CustoCompacto
             saldoUsd={saldoUsd}
             consumo={consumo.data || null}
@@ -288,6 +299,7 @@ export default function MesaProposta() {
               setModelosAbertos(true);
             }}
           />
+          </>
         ) : null
       }
     >

@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, Eye, Send, Share2 } from "lucide-react";
+import { Archive, Eye, FilePlus2, MessageCircle, PenLine, Send, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
@@ -20,6 +22,10 @@ import {
   type DocumentoDaEntrega,
 } from "@/lib/documentos/registrarEntrega";
 import BotaoDocumentoDaEntrega from "./BotaoDocumentoDaEntrega";
+import EditorDoDocumento from "./EditorDoDocumento";
+import NovoDocumento from "./NovoDocumento";
+import EnvioDoDocumento from "./EnvioDoDocumento";
+import AgendaDeDocumentos from "./AgendaDeDocumentos";
 
 const dataCurta = (iso?: string | null) => {
   if (!iso) return "";
@@ -48,8 +54,32 @@ export default function DocumentosDaEntrega({ clientId, className }: { clientId:
   const consulta = useQuery({ queryKey: chave, queryFn: () => listarDocumentos(clientId), enabled: !!clientId, staleTime: 30_000 });
   const docs = consulta.data || [];
   const recarregar = () => void queryClient.invalidateQueries({ queryKey: chave });
+  // Frente BRF2: rascunho editável, documento novo por modelo, envio com mensagem pronta e agenda mensal.
+  const [params, setParams] = useSearchParams();
+  const [editor, setEditor] = useState<Parameters<typeof EditorDoDocumento>[0]["alvo"]>(null);
+  const [novo, setNovo] = useState(false);
+  const [envio, setEnvio] = useState<DocumentoDaEntrega | null>(null);
+  const perfil = useQuery({
+    queryKey: ["documentos-cliente", clientId],
+    enabled: !!clientId,
+    staleTime: 10 * 60_000,
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("company_name, full_name, phone").eq("id", clientId).maybeSingle();
+      const p = data as { company_name?: string | null; full_name?: string | null; phone?: string | null } | null;
+      return { nome: (p && (p.company_name || p.full_name)) || "", telefone: (p && p.phone) || null };
+    },
+  });
+  // O aviso do rascunho mensal abre direto o documento (?documento=<id>).
+  const documentoDaUrl = params.get("documento");
+  useEffect(() => {
+    if (!documentoDaUrl) return;
+    setEditor({ documentoId: documentoDaUrl, clientId });
+    const p = new URLSearchParams(params);
+    p.delete("documento");
+    setParams(p, { replace: true });
+  }, [documentoDaUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const liberar = async (d: DocumentoDaEntrega, modo: "approval" | "client_shared"): Promise<boolean> => {
+  const liberar = async (d: DocumentoDaEntrega, modo: "approval" | "client_shared", mensagem?: string): Promise<boolean> => {
     const ok = await confirmar({
       title: modo === "approval" ? "Enviar para a aprovação do cliente?" : "Disponibilizar no portal do cliente?",
       description: modo === "approval"
@@ -60,7 +90,7 @@ export default function DocumentosDaEntrega({ clientId, className }: { clientId:
     if (!ok) return false;
     setOcupado(d.id);
     try {
-      await liberarDocumento(d.id, modo);
+      await liberarDocumento(d.id, modo, mensagem);
       toast.success(modo === "approval" ? "Enviado para a aprovação do cliente." : "Disponível no portal do cliente.");
       recarregar();
       return true;
@@ -93,7 +123,13 @@ export default function DocumentosDaEntrega({ clientId, className }: { clientId:
       className={className}
       titulo="Documentos da entrega"
       descricao={consulta.isLoading ? "Carregando" : docs.length ? `${docs.length} ${docs.length === 1 ? "documento" : "documentos"}` : "Nenhum ainda"}
-      ajuda="O registro de cada entrega grande (mês de pautas, projeto concluído): o que foi feito, com as provas e os números reais, montado só com o que está no painel. Gerar fica só para a equipe; mandar ao cliente pede Confirmar."
+      ajuda="O registro de cada entrega grande (mês de pautas, projeto concluído): o que foi feito, com as provas e os números reais, montado só com o que está no painel. Edite o rascunho (modelo, texto por seção, provas na ordem, números com fonte), gere o PDF e mande com a mensagem pronta. Gerar fica só para a equipe; mandar ao cliente pede Confirmar."
+      acao={
+        <button type="button" onClick={() => setNovo(true)} className={botao.barra}>
+          <FilePlus2 className="h-4 w-4" aria-hidden="true" />
+          <span className="ml-1.5">Novo</span>
+        </button>
+      }
     >
       {consulta.isError ? (
         <EstadoDeErro titulo="Não foi possível ler os documentos." descricao={textoDoErro(consulta.error)} acao={<button type="button" className={botao.secundario} onClick={recarregar}>Tentar de novo</button>} />
@@ -123,6 +159,8 @@ export default function DocumentosDaEntrega({ clientId, className }: { clientId:
                 className="ml-1"
                 rotulo={`Mais ações de ${d.titulo || "documento"}`}
                 itens={[
+                  { rotulo: d.tem_rascunho ? "Editar o rascunho" : "Abrir o rascunho", icone: <PenLine className="h-4 w-4" />, aoEscolher: () => setEditor({ documentoId: d.id, clientId: d.client_id }) },
+                  d.file_id && d.status === "gerado" && { rotulo: "Mandar com mensagem", icone: <MessageCircle className="h-4 w-4" />, aoEscolher: () => setEnvio(d) },
                   d.file_id && d.status === "gerado" && { rotulo: "Enviar para aprovação", icone: <Send className="h-4 w-4" />, aoEscolher: () => void liberar(d, "approval") },
                   d.file_id && d.status === "gerado" && { rotulo: "Disponibilizar no portal", icone: <Share2 className="h-4 w-4" />, aoEscolher: () => void liberar(d, "client_shared") },
                   { rotulo: ocupado === d.id ? "Aguarde" : "Arquivar", icone: <Archive className="h-4 w-4" />, aoEscolher: () => void arquivar(d), perigo: true },
@@ -179,6 +217,19 @@ export default function DocumentosDaEntrega({ clientId, className }: { clientId:
           )}
         </DialogContent>
       </Dialog>
+
+      <AgendaDeDocumentos clientId={clientId} />
+      <NovoDocumento
+        aberto={novo}
+        onFechar={() => setNovo(false)}
+        clientId={clientId}
+        onComecar={(p) => {
+          setNovo(false);
+          setEditor(p);
+        }}
+      />
+      <EditorDoDocumento aberto={!!editor} alvo={editor} onFechar={() => { setEditor(null); recarregar(); }} />
+      <EnvioDoDocumento documento={envio} cliente={perfil.data ? perfil.data.nome : ""} telefone={perfil.data ? perfil.data.telefone : null} onFechar={() => setEnvio(null)} onLiberar={liberar} />
     </Secao>
   );
 }

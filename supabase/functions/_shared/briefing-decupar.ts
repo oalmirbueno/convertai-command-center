@@ -90,7 +90,7 @@ export async function destinoDoBriefing(db: SupabaseClient, clientId: string, ma
   return { destino: { tipo: "kit" }, contexto: obj((data as { contexto?: unknown } | null)?.contexto) };
 }
 
-async function lerContextoDoDestino(db: SupabaseClient, clientId: string, destino: DestinoDoContexto): Promise<Record<string, unknown>> {
+export async function lerContextoDoDestino(db: SupabaseClient, clientId: string, destino: DestinoDoContexto): Promise<Record<string, unknown>> {
   if (destino.tipo === "marca") {
     const { data, error } = await db.from("cliente_marcas").select("contexto").eq("id", destino.marca_id).eq("client_id", clientId).maybeSingle();
     if (error || !data) throw new ErroDaDecupagem(503, "marca_indisponivel", "Não foi possível ler o contexto da marca.");
@@ -101,7 +101,7 @@ async function lerContextoDoDestino(db: SupabaseClient, clientId: string, destin
   return obj((data as { contexto?: unknown } | null)?.contexto);
 }
 
-async function gravarContexto(db: SupabaseClient, clientId: string, destino: DestinoDoContexto, contexto: Record<string, unknown>, userId: string) {
+export async function gravarContexto(db: SupabaseClient, clientId: string, destino: DestinoDoContexto, contexto: Record<string, unknown>, userId: string) {
   const agora = new Date().toISOString();
   if (destino.tipo === "marca") {
     const { error } = await db.from("cliente_marcas").update({ contexto, atualizado_por: userId, atualizado_em: agora }).eq("id", destino.marca_id).eq("client_id", clientId);

@@ -21,6 +21,10 @@
  * - liberar { documento_id, modo: approval|client_shared, confirmado: true } -> { documento }
  *   (fluxo de aprovação que já existe: admin_release_file_now, com a sessão de quem confirmou)
  * - arquivar { documento_id, arquivar } -> { documento } (apagar = arquivar)
+ * Frente BRF2 (rascunho.ts e agenda.ts): rascunho / salvar_rascunho (texto de cada seção, provas
+ * escolhidas e na ordem, números com fonte, capa com a identidade do cliente; gerar_registro com
+ * usar_rascunho usa o texto da equipe e não chama IA), agenda_ler / agenda_salvar e agenda_cron
+ * (x-cron-secret: monta o rascunho do mês anterior, sem IA, e avisa a equipe).
  *
  * Tamanho da mesa-roteiros, sem render nem Chromium: o PDF é gerado em
  * milissegundos pelo gerador próprio. Sem travessão.
@@ -57,6 +61,9 @@ import {
   type TextosDoAgente,
 } from "../_shared/registro-de-entrega.ts";
 import { coletarEventos } from "./eventos.ts";
+import { coletarDaLinha, identidadeDaCapa, type LinhaComRascunho, rascunhoDaLinha, vistaDoRascunho } from "./rascunho.ts";
+import { lerAgendas, respostaDoCron, salvarAgenda } from "./agenda.ts";
+import { DEFINICOES_DE_DOCUMENTO, normalizarRascunho, numerosDoRascunho, provasDoRascunho, secoesDoRascunho } from "../_shared/documento-modelos.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -69,7 +76,7 @@ const json = (body: unknown, status = 200) =>
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TABELA = "documentos_entrega";
-const CAMPOS = "id, client_id, marca_id, tipo, referencia, titulo, numero, versao, status, file_id, conteudo, gancho, avisos, custo_usd, pedido_por, gerado_por, gerado_em, liberado_por, liberado_em, arquivado_em, criado_em, atualizado_em";
+const CAMPOS = "id, client_id, marca_id, tipo, referencia, titulo, numero, versao, status, file_id, conteudo, gancho, avisos, custo_usd, pedido_por, gerado_por, gerado_em, liberado_por, liberado_em, arquivado_em, criado_em, atualizado_em, modelo, rascunho, rascunho_em, origem_rascunho, mensagem_envio";
 /** Papel da frente BASE: vale em ia_usos.tarefa e ia_usos.agente. */
 const TAREFA = "documento" as const;
 const AGENTE = "documento" as const;
@@ -94,6 +101,8 @@ type LinhaDoDocumento = {
   avisos: string[];
   custo_usd: number;
   arquivado_em: string | null;
+  modelo?: string | null;
+  rascunho?: unknown;
 };
 
 // ------------------------------------------------------------------ erros
@@ -254,7 +263,66 @@ const custoEstimado = (m: ModeloIa) => estimarComModelo(m, { tokensEntrada: TAMA
 async function estimar(_ch: Chamador, corpo: Record<string, unknown>) {
   await garantirAcesso(_ch, String(corpo.client_id ?? ""));
   const m = await modeloDoDocumento(corpo.modelo_id);
+  // Com o rascunho da equipe (texto escrito e provas escolhidas), o gerar não chama modelo nem Jev.
+  if (corpo.usar_rascunho === true && UUID.test(String(corpo.documento_id || ""))) {
+    const linha = await lerDocumento(_ch, corpo.documento_id);
+    const r = linha.rascunho ? normalizarRascunho(linha.rascunho) : null;
+    if (r) return json({ estimativa_usd: (r.resumo.trim() ? 0 : custoEstimado(m)) + (r.provas.some((p) => p.incluir) ? 0 : 0.002), modelo_id: m.id, custo_usd: 0, texto_da_equipe: !!r.resumo.trim() });
+  }
   return json({ estimativa_usd: custoEstimado(m), modelo_id: m.id, custo_usd: 0 });
+}
+
+// ------------------------------------------------------------------ rascunho e agenda (frente BRF2)
+
+async function rascunho(ch: Chamador, corpo: Record<string, unknown>) {
+  let linha: LinhaDoDocumento;
+  if (corpo.documento_id) linha = await lerDocumento(ch, corpo.documento_id);
+  else {
+    const pedido = lerPedidoDeRegistro(corpo);
+    if ("erro" in pedido) throw new ErroHttp(400, "pedido_invalido", pedido.erro);
+    await garantirAcesso(ch, pedido.client_id);
+    linha = await linhaDaEntrega(ch, pedido);
+  }
+  let coletado;
+  try {
+    coletado = await coletarDaLinha(servico(), linha as unknown as LinhaComRascunho);
+  } catch (e) {
+    const m = e instanceof Error ? e.message : "";
+    if (m === "projeto_inexistente" || m === "projeto_de_outra_marca") throw new ErroHttp(409, m, "Este projeto não é desta marca ou deste cliente.");
+    throw e;
+  }
+  const r = rascunhoDaLinha(linha as unknown as LinhaComRascunho, coletado.coleta, corpo.modelo);
+  return json({ documento: semConteudo(linha), rascunho: r, ...vistaDoRascunho(coletado.coleta), custo_usd: 0 });
+}
+
+async function salvarRascunho(ch: Chamador, corpo: Record<string, unknown>) {
+  const linha = await lerDocumento(ch, corpo.documento_id);
+  if (linha.arquivado_em) throw new ErroHttp(409, "documento_arquivado", "Este documento está arquivado.");
+  const r = normalizarRascunho(corpo.rascunho);
+  const agora = new Date().toISOString();
+  const { data, error } = await servico().from(TABELA).update({ rascunho: r, modelo: r.modelo, titulo: r.titulo || linha.titulo, rascunho_em: agora, rascunho_por: ch.userId, origem_rascunho: "equipe", atualizado_em: agora }).eq("id", linha.id).select(CAMPOS).single();
+  if (error) throw erroDoBanco(error, "salvar rascunho");
+  return json({ documento: semConteudo(data as LinhaDoDocumento), rascunho: r, custo_usd: 0 });
+}
+
+async function agendaLer(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await garantirAcesso(ch, clientId);
+  try {
+    return json({ agendas: await lerAgendas(servico(), clientId), custo_usd: 0 });
+  } catch (e) {
+    throw erroDoBanco(e as { code?: string; message?: string }, "ler agenda");
+  }
+}
+
+async function agendaSalvar(ch: Chamador, corpo: Record<string, unknown>) {
+  await garantirAcesso(ch, String(corpo.client_id ?? ""));
+  try {
+    return json({ agenda: await salvarAgenda(servico(), ch.userId, corpo), custo_usd: 0 });
+  } catch (e) {
+    if (e instanceof Error && !("code" in e)) throw new ErroHttp(400, "agenda_invalida", e.message);
+    throw erroDoBanco(e as { code?: string; message?: string }, "salvar agenda");
+  }
 }
 
 // ------------------------------------------------------------------ gancho (sem custo)
@@ -267,7 +335,7 @@ async function registrarEntrega(ch: Chamador, corpo: Record<string, unknown>) {
   return json({ documento: semConteudo(linha), custo_usd: 0 });
 }
 
-const semConteudo = (l: LinhaDoDocumento) => ({ ...l, conteudo: undefined });
+const semConteudo = (l: LinhaDoDocumento) => ({ ...l, conteudo: undefined, rascunho: undefined, tem_rascunho: !!l.rascunho });
 
 // ------------------------------------------------------------------ gerar
 
@@ -372,57 +440,76 @@ async function gerarRegistro(ch: Chamador, corpo: Record<string, unknown>) {
   if (!coleta.eventos.length) {
     throw new ErroHttp(409, "sem_eventos", "Não há nada registrado no painel para esta entrega. O documento só mostra o que aconteceu de verdade.", { avisos: coleta.avisos });
   }
-  const titulo = pedido.titulo || linha.titulo || coleta.titulo;
+  // Rascunho da equipe (frente BRF2): texto, provas na ordem e números com fonte vencem o automático.
+  const rasc = corpo.usar_rascunho === true && linha.rascunho ? normalizarRascunho(linha.rascunho) : null;
+  const titulo = pedido.titulo || (rasc && rasc.titulo) || linha.titulo || coleta.titulo;
   const avisos = coleta.avisos.slice();
   if (linha.gancho && typeof linha.gancho.resumo === "string" && linha.gancho.resumo) avisos.push(`Resumo mandado pela mesa (só para a equipe conferir): ${String(linha.gancho.resumo).slice(0, 300)}`);
+  const doRascunho = rasc ? numerosDoRascunho(coleta.numeros, rasc) : null;
+  const numeros = doRascunho ? doRascunho.numeros : coleta.numeros;
+  if (doRascunho) doRascunho.avisos.forEach((a) => avisos.push(a));
 
-  // O agente redige; a conferência por código tira o que não tem base.
-  let textos: TextosDoAgente | null = null;
+  // O agente redige (sem texto da equipe); a conferência por código tira o que não tem base.
+  const daEquipe = !!rasc && !!rasc.resumo.trim();
+  let textos: TextosDoAgente | null = daEquipe ? { resumo: rasc!.resumo, itens: [], proximos: rasc!.proximos } : null;
   let custo = 0;
   let saldo: number | null = null;
-  const estado = estadoParaOAgente({ titulo, cliente, marca: marca ? marca.nome : null, tipo: pedido.tipo, periodo: coleta.periodo }, coleta.eventos, coleta.numeros);
-  try {
-    const saida = await chamarTexto({
-      clientId,
-      tarefa: TAREFA,
-      agente: AGENTE,
-      modeloId: modelo.id,
-      raciocinio: raciocinioPara(modelo),
-      sistema: SISTEMA_DO_DOCUMENTO,
-      mensagens: [{ papel: "usuario", conteudo: `Redija o registro desta entrega com o que está em DADOS.\n\nDADOS:\n${JSON.stringify(estado)}` }],
-      esquemaJson: ESQUEMA_DOS_TEXTOS,
-      maxTokensSaida: 2_500,
-      referencia: { tipo: "documento_entrega", id: linha.id },
-      criadoPor: ch.userId,
-    });
-    textos = lerTextosDoAgente(saida.json);
-    custo += saida.custoUsd;
-    saldo = saida.saldoUsd;
-  } catch (e) {
-    if (erroQueSobe(e) || (e instanceof IaMotorErro && MENSAGEM_MOTOR[e.codigo])) throw e;
-    registrarFalha("documentos: o agente não redigiu", e, { documento_id: linha.id });
-    avisos.push("O agente não respondeu; o resumo saiu por código, só com as contagens reais.");
+  const estado = estadoParaOAgente({ titulo, cliente, marca: marca ? marca.nome : null, tipo: pedido.tipo, periodo: coleta.periodo }, coleta.eventos, numeros);
+  if (!daEquipe) {
+    try {
+      const saida = await chamarTexto({
+        clientId,
+        tarefa: TAREFA,
+        agente: AGENTE,
+        modeloId: modelo.id,
+        raciocinio: raciocinioPara(modelo),
+        sistema: SISTEMA_DO_DOCUMENTO,
+        mensagens: [{ papel: "usuario", conteudo: `Redija o registro desta entrega com o que está em DADOS.\n\nDADOS:\n${JSON.stringify(estado)}` }],
+        esquemaJson: ESQUEMA_DOS_TEXTOS,
+        maxTokensSaida: 2_500,
+        referencia: { tipo: "documento_entrega", id: linha.id },
+        criadoPor: ch.userId,
+      });
+      textos = lerTextosDoAgente(saida.json);
+      custo += saida.custoUsd;
+      saldo = saida.saldoUsd;
+    } catch (e) {
+      if (erroQueSobe(e) || (e instanceof IaMotorErro && MENSAGEM_MOTOR[e.codigo])) throw e;
+      registrarFalha("documentos: o agente não redigiu", e, { documento_id: linha.id });
+      avisos.push("O agente não respondeu; o resumo saiu por código, só com as contagens reais.");
+    }
   }
 
-  const candidatos = candidatosAProva(coleta.eventos);
-  const notas = await notasDasProvas(clientId, titulo, candidatos, ch, linha.id, avisos);
-  const provas = escolherProvas(candidatos, notas, MAX_PROVAS);
+  const candidatos = candidatosAProva(coleta.eventos, 40);
+  const escolhidasPelaEquipe = !!rasc && rasc.provas.some((p) => p.incluir);
+  const provas = escolhidasPelaEquipe ? provasDoRascunho(candidatos, rasc!, MAX_PROVAS) : escolherProvas(candidatos.slice(0, 12), await notasDasProvas(clientId, titulo, candidatos.slice(0, 12), ch, linha.id, avisos), MAX_PROVAS);
 
   const numero = linha.numero || (await proximoNumero(clientId));
   const versao = (linha.versao || 0) + 1;
   const registro = montarRegistro(
     { numero, versao, tipo: pedido.tipo, referencia: pedido.referencia, titulo, cliente, marca: marca ? marca.nome : null, data: new Date().toISOString(), periodo: coleta.periodo },
     coleta.eventos,
-    coleta.numeros,
+    numeros,
     textos,
     provas,
     avisos,
+    { textoDaEquipe: daEquipe },
   );
+  if (rasc) {
+    registro.secoes = secoesDoRascunho(rasc);
+    registro.modelo = rasc.modelo;
+    registro.rotulo_da_capa = DEFINICOES_DE_DOCUMENTO[rasc.modelo].capa;
+  }
 
   const imagens: Record<string, ImagemDoPdf | undefined> = {};
-  const [lidas, logo] = await Promise.all([Promise.all(registro.provas.map((p) => imagemDaProva(p, registro.avisos))), logoDaAgencia(agencia, registro.avisos)]);
+  const usarIdentidade = !rasc || rasc.capa.identidade_do_cliente;
+  const [lidas, logo, capa] = await Promise.all([
+    Promise.all(registro.provas.map((p) => imagemDaProva(p, registro.avisos))),
+    logoDaAgencia(agencia, registro.avisos),
+    usarIdentidade ? identidadeDaCapa(s, clientId, marca, registro.avisos) : Promise.resolve({ logo: null, cor: null }),
+  ]);
   registro.provas.forEach((p, i) => (imagens[p.evento_id] = lidas[i]));
-  const bytes = gerarPdfDoRegistro(registro, imagens, { logo, agencia: nomeDaAgencia(agencia) });
+  const bytes = gerarPdfDoRegistro(registro, imagens, { logo, agencia: nomeDaAgencia(agencia), logoDoCliente: capa.logo, corDoCliente: capa.cor });
   const nome = nomeDoArquivoDoRegistro(registro);
 
   // Arquivos: pasta entregas, mesmo caminho do PDF da Mesa Roteiros.
@@ -477,6 +564,7 @@ async function gerarRegistro(ch: Chamador, corpo: Record<string, unknown>) {
     versao,
     titulo,
     marca_id: marca ? marca.id : linha.marca_id,
+    modelo: rasc ? rasc.modelo : linha.modelo ?? null,
     status: "gerado",
     file_id: fileId,
     conteudo,
@@ -544,7 +632,7 @@ async function liberar(ch: Chamador, corpo: Record<string, unknown>) {
     const soAdmin = /somente admin|manager/i.test(error.message || "");
     throw new ErroHttp(soAdmin ? 403 : 409, soAdmin ? "somente_admin_ou_gestor" : "liberacao_falhou", soAdmin ? "Só admin ou gestor manda ao cliente. Peça a um deles para confirmar." : `Não foi possível mandar ao cliente: ${error.message}`);
   }
-  const { data, error: e } = await servico().from(TABELA).update({ status: modo === "approval" ? "em_aprovacao" : "no_portal", liberado_por: ch.userId, liberado_em: new Date().toISOString(), atualizado_em: new Date().toISOString() }).eq("id", linha.id).select(CAMPOS).single();
+  const { data, error: e } = await servico().from(TABELA).update({ status: modo === "approval" ? "em_aprovacao" : "no_portal", liberado_por: ch.userId, liberado_em: new Date().toISOString(), atualizado_em: new Date().toISOString(), ...(typeof corpo.mensagem === "string" && corpo.mensagem.trim() ? { mensagem_envio: corpo.mensagem.trim().slice(0, 2000) } : {}) }).eq("id", linha.id).select(CAMPOS).single();
   if (e) throw erroDoBanco(e, "marcar liberação");
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "documento_entrega_liberar", origin: "mesa:documentos", keyId: `mesa:documentos:${ch.userId}`, scopes: ["files:write"],
@@ -570,14 +658,20 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   listar,
   liberar,
   arquivar,
+  rascunho,
+  salvar_rascunho: salvarRascunho,
+  agenda_ler: agendaLer,
+  agenda_salvar: agendaSalvar,
 };
 
 /** Ações que podem passar de 150 s (IA, imagens, envio de arquivo): a resposta começa na hora. */
-const ACOES_LONGAS = new Set(["gerar_registro"]);
+const ACOES_LONGAS = new Set(["gerar_registro", "rascunho"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "metodo_nao_permitido", mensagem: "Use POST." }, 405);
+  const doCron = await respostaDoCron(req, json);
+  if (doCron) return doCron;
   try {
     const chamador = await identificar(req);
     let corpo: Record<string, unknown> = {};

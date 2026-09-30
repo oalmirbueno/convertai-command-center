@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Loader2, Users } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, Paperclip, Save, Users } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { useCatalogo } from "@/components/mesa/MesaContexto";
 import { SeletorDeModelo } from "@/components/mesa/Seletores";
 import Secao from "@/components/sistema/Secao";
@@ -12,20 +14,35 @@ import { botao, campo, campoTexto, juntar, lista, texto } from "@/components/sis
 import { dataEHora, modeloDoPapel, textoDoErro, usd } from "@/lib/mesa/api";
 import {
   convocarConselho,
+  type ElencoSalvo,
   estimarConselho,
   lerCatalogoDoConselho,
+  listarElencos,
+  type ModoDoConselho,
   NOME_DO_NIVEL,
   NOME_DO_STATUS,
+  type PresetDoConselho,
+  ROTULO_DO_MODO,
+  rodadasDoModo,
+  salvarElenco,
   type SessaoDoConselho,
   useSessoesDoConselho,
 } from "@/lib/conselho/api";
 
 /**
- * Convocar o conselho (frente CNS, 30/09): tema e pergunta (o tema vem da
- * mesa de onde a Sala abriu), quem entra, o modelo de cada um, o número FIXO
- * de rodadas e o teto de custo. O custo estimado aparece antes, sem IA; o
- * teto sugerido é a estimativa com folga, e a pessoa pode mudar.
+ * Convocar o conselho (frente CNS, 30/09; ampliado na frente BRF2): tema e
+ * pergunta (o tema vem da mesa de onde a Sala abriu), um preset por tema
+ * (marca, campanha, proposta, site, crise) ou um elenco salvo, quem entra, o
+ * modelo de cada um (ou todos com o mesmo), o modo (rápido: 1 rodada e a
+ * síntese, barato; padrão; profundo: as 4 rodadas com mais espaço), a pauta
+ * com anexos do cliente e o teto de custo. O custo estimado aparece antes,
+ * sem IA; o teto sugerido é a estimativa com folga, e a pessoa pode mudar.
  */
+
+const MAX_ANEXOS = 5;
+
+type ArquivoDaPauta = { id: string; file_name: string; folder: string | null; created_at: string };
+
 export default function ConvocarConselho({
   clientId,
   origem,
@@ -41,6 +58,7 @@ export default function ConvocarConselho({
   referencia?: Record<string, unknown> | null;
   onAbrir: (sessaoId: string) => void;
 }) {
+  const qc = useQueryClient();
   const catalogoDoConselho = useQuery({
     queryKey: ["conselho", "catalogo", origem],
     queryFn: () => lerCatalogoDoConselho(origem),
@@ -48,6 +66,7 @@ export default function ConvocarConselho({
   });
   const catalogoDeModelos = useCatalogo();
   const sessoes = useSessoesDoConselho(clientId);
+  const elencos = useQuery({ queryKey: ["conselho", "elencos", clientId], queryFn: () => listarElencos(clientId), staleTime: 60_000 });
 
   const chave = `conselho:${origem}:${clientId}`;
   // Tema e contexto vêm da tela de onde a Sala abriu (sempre os de agora); a pergunta é rascunho e fica guardada.
@@ -57,10 +76,29 @@ export default function ConvocarConselho({
   const [escolhidos, setEscolhidos] = useState<string[] | null>(null);
   const [modelos, setModelos] = useState<Record<string, string>>({});
   const [rodadas, setRodadas] = useState("4");
+  const [modo, setModo] = useState<ModoDoConselho>("padrao");
+  const [criterios, setCriterios] = useState<string[]>([]);
+  const [preset, setPreset] = useState<PresetDoConselho["id"] | null>(null);
+  const [pautaTexto, setPautaTexto] = useState("");
+  const [anexos, setAnexos] = useState<string[]>([]);
+  const [busca, setBusca] = useState("");
+  const [nomeDoElenco, setNomeDoElenco] = useState("");
+  const [daAgencia, setDaAgencia] = useState(false);
+  const [salvandoElenco, setSalvandoElenco] = useState(false);
   const [teto, setTeto] = useState<string>("");
   const [tetoMexido, setTetoMexido] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  const arquivos = useQuery({
+    queryKey: ["conselho", "arquivos-da-pauta", clientId],
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<ArquivoDaPauta[]> => {
+      const { data, error } = await supabase.from("files").select("id, file_name, folder, created_at").eq("client_id", clientId).is("archived_at" as any, null).order("created_at", { ascending: false }).limit(60);
+      if (error) throw error;
+      return (data as unknown as ArquivoDaPauta[]) || [];
+    },
+  });
 
   const cat = catalogoDoConselho.data;
   // O elenco sugerido pela origem até a pessoa mexer.
@@ -76,14 +114,16 @@ export default function ConvocarConselho({
     });
     return r;
   }, [ids, modelos, padraoDoModelo, catalogoDeModelos.data]);
+  const todosIguais = ids.length > 0 && ids.every((id) => modelosEfetivos[id] === modelosEfetivos[ids[0]]);
+  const rodadasEfetivas = rodadasDoModo(modo, Number(rodadas));
 
   const min = cat ? cat.limites.min_especialistas : 2;
   const max = cat ? cat.limites.max_especialistas : 6;
   const podeEstimar = !!cat && ids.length >= min && ids.length <= max && ids.every((id) => !!modelosEfetivos[id]);
   const estimativa = useQuery({
-    queryKey: ["conselho", "estimar", clientId, origem, ids.join(","), JSON.stringify(modelosEfetivos), rodadas],
+    queryKey: ["conselho", "estimar", clientId, origem, ids.join(","), JSON.stringify(modelosEfetivos), rodadasEfetivas, modo],
     enabled: podeEstimar,
-    queryFn: () => estimarConselho({ clientId, origem, especialistas: ids, modelos: modelosEfetivos, rodadas: Number(rodadas) }),
+    queryFn: () => estimarConselho({ clientId, origem, especialistas: ids, modelos: modelosEfetivos, rodadas: rodadasEfetivas, modo }),
     staleTime: 60_000,
   });
   const total = estimativa.data ? estimativa.data.estimativa.total_usd : null;
@@ -101,9 +141,43 @@ export default function ConvocarConselho({
     setEscolhidos(atual);
   };
 
+  const usarPreset = (p: PresetDoConselho) => {
+    setPreset(p.id);
+    setEscolhidos(p.especialistas.slice(0, max));
+    setCriterios(p.criterios);
+    setModo(p.modo);
+    setRodadas(String(p.rodadas));
+    if (!pergunta.trim()) setPergunta(p.pergunta);
+    if (!tema.trim() || tema === temaInicial) setTema(`${p.tema}${temaInicial ? `: ${temaInicial}` : ""}`.slice(0, 300));
+  };
+
+  const usarElenco = (e: ElencoSalvo) => {
+    setPreset(e.preset);
+    setEscolhidos(e.especialistas.slice(0, max));
+    setModelos(e.modelos || {});
+    setCriterios(e.criterios || []);
+    setModo(e.modo);
+    setRodadas(String(e.rodadas));
+  };
+
+  const guardarElenco = async () => {
+    setSalvandoElenco(true);
+    try {
+      await salvarElenco({ clientId, nome: nomeDoElenco.trim(), especialistas: ids, modelos: modelosEfetivos, criterios, rodadas: rodadasEfetivas, modo, preset, daAgencia });
+      toast.success(daAgencia ? "Elenco salvo para a agência toda." : "Elenco salvo para este cliente.");
+      setNomeDoElenco("");
+      void qc.invalidateQueries({ queryKey: ["conselho", "elencos", clientId] });
+    } catch (e) {
+      toast.error(textoDoErro(e, "Não foi possível salvar o elenco."));
+    } finally {
+      setSalvandoElenco(false);
+    }
+  };
+
   const tetoNumero = Number(String(teto).replace(",", "."));
   const tetoBaixo = total !== null && isFinite(tetoNumero) && tetoNumero < total;
   const pronto = podeEstimar && tema.trim().length >= 3 && pergunta.trim().length >= 3 && total !== null && isFinite(tetoNumero) && tetoNumero > 0 && !tetoBaixo;
+  const itensDaPauta = pautaTexto.split("\n").map((x) => x.trim()).filter((x) => x.length >= 2).slice(0, 8);
 
   const convocar = async () => {
     if (!pronto || enviando) return;
@@ -119,8 +193,11 @@ export default function ConvocarConselho({
         contexto: contexto.trim(),
         especialistas: ids,
         modelos: modelosEfetivos,
-        rodadas: Number(rodadas),
+        rodadas: rodadasEfetivas,
         teto_usd: tetoNumero,
+        modo,
+        criterios,
+        pauta: itensDaPauta.length || anexos.length ? { itens: itensDaPauta, anexos } : null,
       });
       setPergunta("");
       void sessoes.refetch();
@@ -139,15 +216,36 @@ export default function ConvocarConselho({
   }
 
   const anteriores = (sessoes.data || []) as SessaoDoConselho[];
+  const listaDeElencos = elencos.data || [];
+  const arquivosFiltrados = (arquivos.data || []).filter((a) => !busca.trim() || a.file_name.toLowerCase().indexOf(busca.trim().toLowerCase()) >= 0).slice(0, 12);
 
   return (
     <div className="min-w-0 space-y-6" data-convocar-conselho="">
       <Secao
         titulo="Convocar"
         recolher={false}
-        ajuda="Cada especialista responde sozinho, depois critica os outros com nota de 1 a 10, revisa e o Jev mede o consenso. O número de rodadas é fixo e o custo nunca passa do teto."
+        ajuda="Cada especialista responde sozinho, depois critica os outros com nota de 1 a 10, revisa e o Jev mede o consenso. Rápido: 1 rodada de propostas e a síntese do moderador (barato). Profundo: as 4 rodadas, com mais espaço. O número de rodadas é fixo e o custo nunca passa do teto."
       >
         <div className="min-w-0 space-y-4">
+          {cat.presets && cat.presets.length > 0 && (
+            <div className="min-w-0">
+              <span className={texto.rotulo}>Começar por um tema</span>
+              <div className="-m-1 mt-1 flex flex-wrap" role="group" aria-label="Presets do conselho">
+                {cat.presets.map((p) => (
+                  <button key={p.id} type="button" aria-pressed={preset === p.id} onClick={() => usarPreset(p)} className={juntar(botao.barra, "m-1 border border-border", preset === p.id && "border-primary bg-primary/10 text-foreground")} data-preset={p.id}>
+                    {p.nome}
+                  </button>
+                ))}
+                {listaDeElencos.length > 0 && (
+                  <select className={juntar(campo, "m-1 h-8 w-auto")} value="" onChange={(e) => { const x = listaDeElencos.find((l) => l.id === e.target.value); if (x) usarElenco(x); }} aria-label="Elenco salvo">
+                    <option value="">Elenco salvo...</option>
+                    {listaDeElencos.map((l) => <option key={l.id} value={l.id}>{l.nome}{l.client_id ? "" : " (agência)"}</option>)}
+                  </select>
+                )}
+              </div>
+            </div>
+          )}
+
           <GrupoDeCampos colunas={1}>
             <CampoDeFormulario rotulo="Tema">
               <input className={campo} value={tema} maxLength={300} onChange={(e) => setTema(e.target.value)} aria-label="Tema" />
@@ -199,35 +297,62 @@ export default function ConvocarConselho({
           </div>
 
           {ids.length > 0 && (
-            <GrupoDeCampos colunas={3}>
-              {ids.map((id) => {
-                const e = cat.especialistas.find((x) => x.id === id);
-                return (
-                  <SeletorDeModelo
-                    key={id}
-                    catalogo={catalogoDeModelos.data || []}
-                    tipo="texto"
-                    rotulo={e ? e.nome : id}
-                    valor={modelosEfetivos[id] || ""}
-                    onChange={(m) => setModelos((x) => ({ ...x, [id]: m }))}
-                  />
-                );
-              })}
-            </GrupoDeCampos>
+            <div className="min-w-0 space-y-3">
+              <div className="sm:max-w-[360px]">
+                <SeletorDeModelo
+                  catalogo={catalogoDeModelos.data || []}
+                  tipo="texto"
+                  rotulo="Todos com o mesmo modelo"
+                  valor={todosIguais ? modelosEfetivos[ids[0]] || "" : ""}
+                  onChange={(m) => {
+                    const r: Record<string, string> = {};
+                    ids.forEach((id) => (r[id] = m));
+                    setModelos(r);
+                  }}
+                />
+              </div>
+              <GrupoDeCampos colunas={3}>
+                {ids.map((id) => {
+                  const e = cat.especialistas.find((x) => x.id === id);
+                  return (
+                    <SeletorDeModelo
+                      key={id}
+                      catalogo={catalogoDeModelos.data || []}
+                      tipo="texto"
+                      rotulo={e ? e.nome : id}
+                      valor={modelosEfetivos[id] || ""}
+                      onChange={(m) => setModelos((x) => ({ ...x, [id]: m }))}
+                    />
+                  );
+                })}
+              </GrupoDeCampos>
+            </div>
           )}
 
-          <div className="grid min-w-0 grid-cols-1 items-end gap-4 sm:grid-cols-2">
-            <CampoDeFormulario rotulo="Rodadas" ajuda="2: propostas e consolidação. 3: com crítica cruzada. 4: com crítica e revisão.">
+          <div className="grid min-w-0 grid-cols-1 items-end gap-4 sm:grid-cols-3">
+            <CampoDeFormulario rotulo="Modo" ajuda="Rápido: 1 rodada de propostas e a síntese do moderador, respostas curtas. Padrão: você escolhe as rodadas. Profundo: as 4 rodadas, com mais espaço e raciocínio.">
               <SeletorCompacto
-                rotulo="Rodadas"
-                valor={rodadas}
-                onEscolher={setRodadas}
-                opcoes={[
-                  { valor: "2", rotulo: "2" },
-                  { valor: "3", rotulo: "3" },
-                  { valor: "4", rotulo: "4" },
-                ]}
+                rotulo="Modo"
+                valor={modo}
+                onEscolher={(v) => setModo(v as ModoDoConselho)}
+                opcoes={(["rapido", "padrao", "profundo"] as ModoDoConselho[]).map((m) => ({ valor: m, rotulo: ROTULO_DO_MODO[m] }))}
               />
+            </CampoDeFormulario>
+            <CampoDeFormulario rotulo="Rodadas" ajuda="2: propostas e consolidação. 3: com crítica cruzada. 4: com crítica e revisão.">
+              {modo === "padrao" ? (
+                <SeletorCompacto
+                  rotulo="Rodadas"
+                  valor={rodadas}
+                  onEscolher={setRodadas}
+                  opcoes={[
+                    { valor: "2", rotulo: "2" },
+                    { valor: "3", rotulo: "3" },
+                    { valor: "4", rotulo: "4" },
+                  ]}
+                />
+              ) : (
+                <p className={juntar(texto.corpo, "flex h-9 items-center")}>{rodadasEfetivas} pelo modo</p>
+              )}
             </CampoDeFormulario>
             <CampoDeFormulario rotulo="Teto (US$)" erro={tetoBaixo ? `Abaixo do custo estimado (${usd(total)}).` : undefined}>
               <input
@@ -243,6 +368,39 @@ export default function ConvocarConselho({
             </CampoDeFormulario>
           </div>
 
+          <Secao titulo="Pauta e anexos" nivel={3} descricao={itensDaPauta.length || anexos.length ? `${itensDaPauta.length} itens · ${anexos.length} anexos` : "opcional"} recolher={`conselho:pauta:${clientId}`} recolhidaDeInicio>
+            <div className="min-w-0 space-y-3">
+              <CampoDeFormulario rotulo="Itens da pauta" apoio="Um por linha. O conselho precisa cobrir cada um.">
+                <textarea className={campoTexto} value={pautaTexto} rows={3} maxLength={1600} onChange={(e) => setPautaTexto(e.target.value)} aria-label="Itens da pauta" />
+              </CampoDeFormulario>
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center justify-between">
+                  <span className={texto.rotulo}>Anexos do cliente</span>
+                  <span className={texto.auxiliar}>{anexos.length} de {MAX_ANEXOS}</span>
+                </div>
+                <input className={juntar(campo, "mt-1")} value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar arquivo" aria-label="Buscar arquivo para a pauta" />
+                {arquivos.isError ? (
+                  <p className={juntar(texto.auxiliar, "mt-1 text-destructive")}>{textoDoErro(arquivos.error, "Os arquivos não abriram.")}</p>
+                ) : (
+                  <ul className={juntar(lista.aberta, lista.divisoria, "mt-1")}>
+                    {arquivosFiltrados.map((a) => {
+                      const marcado = anexos.indexOf(a.id) >= 0;
+                      return (
+                        <li key={a.id} className={juntar(lista.linha, "py-1.5")}>
+                          <input type="checkbox" id={`pauta-${a.id}`} className="mr-3 h-4 w-4 shrink-0 accent-primary" checked={marcado} disabled={!marcado && anexos.length >= MAX_ANEXOS} onChange={() => setAnexos((l) => (marcado ? l.filter((x) => x !== a.id) : l.concat(a.id)))} />
+                          <label htmlFor={`pauta-${a.id}`} className="flex min-w-0 flex-1 cursor-pointer items-center">
+                            <Paperclip className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                            <span className="min-w-0 truncate text-[13px] text-foreground">{a.file_name}</span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </Secao>
+
           {erro && <p className="text-[13px] text-destructive" role="alert">{erro}</p>}
 
           <div className="flex min-w-0 flex-wrap items-center justify-end">
@@ -252,6 +410,18 @@ export default function ConvocarConselho({
             <button type="button" className={botao.primario} disabled={!pronto || enviando} onClick={() => void convocar()}>
               {enviando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : <Users className="mr-2 h-4 w-4" aria-hidden="true" />}
               Convocar o conselho
+            </button>
+          </div>
+
+          <div className="flex min-w-0 flex-wrap items-center justify-end border-t border-border pt-3 [&>*]:mt-1">
+            <input className={juntar(campo, "mr-2 h-8 sm:w-56")} value={nomeDoElenco} maxLength={80} onChange={(e) => setNomeDoElenco(e.target.value)} placeholder="Nome do elenco" aria-label="Nome do elenco para salvar" />
+            <label className="mr-2 inline-flex items-center text-[12px] text-muted-foreground">
+              <input type="checkbox" className="mr-1.5 h-4 w-4 accent-primary" checked={daAgencia} onChange={(e) => setDaAgencia(e.target.checked)} />
+              Para a agência toda
+            </label>
+            <button type="button" className={juntar(botao.secundario, "h-8")} disabled={nomeDoElenco.trim().length < 2 || ids.length < min || salvandoElenco} onClick={() => void guardarElenco()}>
+              {salvandoElenco ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="mr-1.5 h-4 w-4" aria-hidden="true" />}
+              Salvar elenco
             </button>
           </div>
         </div>

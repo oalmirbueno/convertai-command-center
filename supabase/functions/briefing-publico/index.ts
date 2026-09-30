@@ -11,6 +11,8 @@
  *   x-briefing-nome, x-briefing-pedido) -> { anexo } (vai para Arquivos do cliente)
  * - remover_anexo { anexo_id } -> { ok } (arquiva a ligação; o arquivo fica em Arquivos para a equipe)
  * - decupar -> { status } (depois do envio; idempotente por envio)
+ * - transcrever (corpo = bytes do áudio; x-briefing-campo, x-briefing-duracao) -> { texto, segundos }
+ *   (frente BRF2: resposta por áudio; ver transcrever.ts)
  *
  * Ler, salvar parcial, enviar e pedir reabertura são RPCs do banco
  * (briefing_public_get/save/submit/pedir_reabertura), que não passam aqui.
@@ -24,11 +26,12 @@ import { ANEXO_MAX_BYTES, EXTENSOES_DE_ANEXO, estadoDoLink } from "../_shared/br
 import { decuparBriefing, ErroDaDecupagem } from "../_shared/briefing-decupar.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { lerDadosDaAgencia, nomeDaAgencia } from "../_shared/dados-da-agencia.ts";
+import { transcrever } from "./transcrever.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-briefing-token, x-briefing-acao, x-briefing-campo, x-briefing-categoria, x-briefing-nome, x-briefing-pedido",
+    "authorization, x-client-info, apikey, content-type, x-briefing-token, x-briefing-acao, x-briefing-campo, x-briefing-categoria, x-briefing-nome, x-briefing-pedido, x-briefing-duracao",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -323,6 +326,7 @@ Deno.serve(async (req) => {
     if (acao === "anexar") return await anexar(req, token, b);
     if (acao === "remover_anexo") return await removerAnexo(req, b);
     if (acao === "decupar") return await decupar(b);
+    if (acao === "transcrever") return await transcrever(req, token, b, servico(), json);
     return erro("acao_desconhecida", "Ação desconhecida.", 400);
   } catch (e) {
     registrarFalha("briefing-publico: erro inesperado", e, { acao });

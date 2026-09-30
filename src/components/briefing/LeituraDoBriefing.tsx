@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, FileDown, FolderPlus, Loader2, MessageCircle, PenLine, RefreshCw, RotateCcw, Sparkles, Undo2 } from "lucide-react";
+import { BellRing, Check, Copy, FileDown, FolderPlus, Loader2, MessageCircle, PenLine, RefreshCw, RotateCcw, Sparkles, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { appPublicUrl } from "@/lib/publicUrl";
@@ -18,11 +18,18 @@ import {
   texto,
 } from "@/components/sistema";
 import RespostasEmLeitura from "./RespostasEmLeitura";
+import PreencherBriefingComIA from "./PreencherBriefingComIA";
+import PerguntasExtras from "./PerguntasExtras";
+import LembreteDoBriefing from "./LembreteDoBriefing";
+import ExportarParaContexto from "./ExportarParaContexto";
+import { extrasDoModelo } from "../../../supabase/functions/_shared/briefing-editor";
 import { tamanhoLegivel } from "./CamposDoBriefing";
 import { copiarTexto } from "./GerarLinkDoBriefing";
 import { type LinhaDaDecupagem, chamarAgenteDoBriefing, textoDoErroDoBriefing } from "@/lib/briefing/api";
 import {
   type AnexoDoBriefing,
+  type CampoDoBriefing,
+  camposDoModelo,
   estadoDoLink,
   linkDoWhatsApp,
   mensagemDoLink,
@@ -77,9 +84,25 @@ export function nomeDoBriefing(b: Pick<LinhaDoBriefingNoPainel, "client" | "resp
   return b.client?.company_name || b.client?.full_name || r.empresa || r.companyName || r?.contato?.nome || "Sem vínculo";
 }
 
-export default function LeituraDoBriefing({ briefingId, onGerarProjeto }: { briefingId: string; onGerarProjeto?: (b: LinhaDoBriefingNoPainel) => void }) {
+export default function LeituraDoBriefing({ briefingId, onGerarProjeto, abrirLembrete = false }: { briefingId: string; onGerarProjeto?: (b: LinhaDoBriefingNoPainel) => void; abrirLembrete?: boolean }) {
   const qc = useQueryClient();
   const [ocupado, setOcupado] = useState<string | null>(null);
+  const [lembreteAberto, setLembreteAberto] = useState(abrirLembrete);
+  const [extras, setExtras] = useState<CampoDoBriefing[] | null>(null);
+
+  // Frente BRF2: lembretes, preenchimento com IA e exportação. Leitura à parte e tolerante (sem a
+  // migração 20260930196000 aplicada, a leitura principal segue igual e estas partes ficam vazias).
+  const extrasDoLink = useQuery({
+    queryKey: ["briefing-leitura-brf2", briefingId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("briefings").select("lembretes, ultimo_lembrete_em, preenchido_ia, exportado" as any).eq("id", briefingId).maybeSingle();
+      if (error) {
+        console.warn("[briefing] colunas da frente BRF2 indisponíveis:", error.message);
+        return null;
+      }
+      return data as unknown as { lembretes: number | null; ultimo_lembrete_em: string | null; preenchido_ia: { desfeito_em?: string | null } | null; exportado: unknown } | null;
+    },
+  });
 
   const briefing = useQuery({
     queryKey: ["briefing-leitura", briefingId],
@@ -136,6 +159,7 @@ export default function LeituraDoBriefing({ briefingId, onGerarProjeto }: { brie
     void qc.invalidateQueries({ queryKey: ["briefing-leitura", briefingId] });
     void qc.invalidateQueries({ queryKey: ["briefing-decupagem", briefingId] });
     void qc.invalidateQueries({ queryKey: ["briefings-admin"] });
+    void qc.invalidateQueries({ queryKey: ["briefing-leitura-brf2", briefingId] });
   };
 
   const executar = async (nome: string, fn: () => Promise<void>) => {
@@ -177,6 +201,7 @@ export default function LeituraDoBriefing({ briefingId, onGerarProjeto }: { brie
   }
 
   const estado = estadoDoLink(b);
+  const extrasAtuais = extras ?? extrasDoModelo(modelo);
   const url = appPublicUrl(`/briefing/${b.token}`);
   const nome = nomeDoBriefing(b);
   const mensagem = mensagemDoLink({ cliente: nome, modelo, url, expiraEm: b.submitted ? null : b.expira_em });
@@ -219,6 +244,12 @@ export default function LeituraDoBriefing({ briefingId, onGerarProjeto }: { brie
                 <MessageCircle className="h-4 w-4" aria-hidden="true" />
                 <span className="ml-1.5 hidden sm:inline">WhatsApp</span>
               </a>
+            )}
+            {estado === "aberto" && b.client_id && (
+              <button type="button" onClick={() => setLembreteAberto(true)} className={botao.barra} aria-label="Lembrar o cliente">
+                <BellRing className="h-4 w-4" aria-hidden="true" />
+                <span className="ml-1.5 hidden sm:inline">Lembrar</span>
+              </button>
             )}
             {estado === "aberto" && (
               <a href={url} target="_blank" rel="noopener noreferrer" className={botao.barra} aria-label="Preencher junto com o cliente">
@@ -314,6 +345,37 @@ export default function LeituraDoBriefing({ briefingId, onGerarProjeto }: { brie
             <a href={`/arquivos?client=${b.client_id}`} className={juntar(botao.discreto, "-ml-2 mt-2 h-8 px-2 text-[12px]")}>Abrir em Arquivos</a>
           )}
         </Secao>
+      )}
+
+      {estado === "aberto" && b.client_id && (
+        <PreencherBriefingComIA briefingId={b.id} temDesfazer={!!(extrasDoLink.data && extrasDoLink.data.preenchido_ia && !extrasDoLink.data.preenchido_ia.desfeito_em)} onMudou={recarregar} />
+      )}
+      {estado === "aberto" && (
+        <PerguntasExtras
+          extras={extrasAtuais}
+          onMudar={setExtras}
+          briefingId={b.id}
+          chavesDoModelo={camposDoModelo(modelo).filter((c) => c.key.indexOf("extra_") !== 0).map((c) => c.key)}
+          aoSalvar={recarregar}
+        />
+      )}
+      {b.client_id && Object.keys(respostas).length > 0 && <ExportarParaContexto briefingId={b.id} onMudou={recarregar} />}
+
+      {b.client_id && (
+        <LembreteDoBriefing
+          aberto={lembreteAberto && estado === "aberto"}
+          onFechar={() => setLembreteAberto(false)}
+          briefingId={b.id}
+          token={b.token}
+          cliente={nome}
+          telefone={b.client?.phone}
+          modelo={modelo}
+          expiraEm={b.expira_em}
+          respondidos={progresso.respondidos}
+          total={progresso.total}
+          lembretes={Number(extrasDoLink.data?.lembretes) || 0}
+          onRegistrado={recarregar}
+        />
       )}
     </div>
   );
