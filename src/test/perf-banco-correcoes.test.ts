@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
  * Frente PERF-banco (30/09/2026): o painel ficava lento para a equipe e para
  * o cliente porque as regras de leitura (RLS) rodavam funções por LINHA.
  * useTasks do gerente levava 1,5 s, do design 1,8 s para devolver 0 linhas;
- * social_post_metrics do gerente 1,1 s. As migrations 20260930293000 a
+ * social_post_metrics do gerente 1,1 s. As migrations 20260930296100 a
  * 293700 reescrevem as regras em forma de conjunto (uma vez por consulta),
  * sem mudar quem vê o quê (conferido no banco, só leitura, para todos os
  * usuários: 0 divergências). Estes testes guardam o texto das migrations e a
@@ -17,6 +17,9 @@ const raiz = resolve(__dirname, "../..");
 const ler = (rel: string) => readFileSync(resolve(raiz, rel), "utf8");
 const mig = (nome: string) => ler(`supabase/migrations/${nome}`);
 
+const tarefas = mig("20260930296100_rls_tarefas_em_conjunto.sql");
+const mesas = mig("20260930296200_rls_mesas_em_conjunto.sql");
+const arquivos = mig("20260930296300_rls_arquivos_sem_reler.sql");
 const promotor = mig("20260930293300_promotor_pula_publicacao_ocupada.sql");
 const vista = mig("20260930293400_autopublicacao_vista_so_leitura.sql");
 // B08 (cron do leitor só com fila) ficou numa migration só na regressão de 30/09:
@@ -24,8 +27,7 @@ const vista = mig("20260930293400_autopublicacao_vista_so_leitura.sql");
 const worker = mig("20260930292000_mcp_files_worker_so_com_trabalho.sql");
 const historico = mig("20260930293600_cron_limpa_historico.sql");
 const gatilhos = mig("20260930293700_funcoes_gatilho_fechadas.sql");
-// 30/09: 291000, 293000, 293100 e 293200 (RLS em conjunto) seguradas para decisão do dono: patch build/perf-rls-segurado.patch
-const todas = [promotor, vista, worker, historico, gatilhos];
+const todas = [tarefas, mesas, arquivos, promotor, vista, worker, historico, gatilhos];
 
 /** Tira os comentários de linha: o que sobra é o que o banco executa. */
 const codigo = (sql: string) => sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
@@ -50,9 +52,148 @@ describe("regras de segurança das migrations novas", () => {
   });
 });
 
+describe("B02: tarefas, updates e filhas da tarefa em forma de conjunto", () => {
+  const sql = codigo(tarefas);
+
+  it("cria os quatro ajudantes definer, com search_path vazio e sem anon", () => {
+    for (const f of ["eh_admin_atual()", "clientes_da_equipe_atual()", "projetos_da_equipe()", "projetos_proprios()"]) {
+      expect(sql).toContain(`CREATE OR REPLACE FUNCTION app_private.${f}`);
+      expect(sql).toContain(`REVOKE ALL ON FUNCTION app_private.${f} FROM PUBLIC, anon;`);
+      // Sem este GRANT toda leitura de tasks quebraria para a equipe.
+      expect(sql).toContain(`GRANT EXECUTE ON FUNCTION app_private.${f} TO authenticated, service_role;`);
+    }
+    expect(sql.match(/SECURITY DEFINER\nSET search_path = ''/g)?.length).toBe(4);
+  });
+
+  it("projetos_da_equipe é is_staff + can_access_client em conjunto, com o ::uuid[]", () => {
+    const corpo = sql.slice(sql.indexOf("FUNCTION app_private.projetos_da_equipe()"), sql.indexOf("COMMENT ON FUNCTION app_private.projetos_da_equipe()"));
+    expect(corpo).toContain("WHERE public.is_staff(auth.uid())");
+    expect(corpo).toContain("(SELECT app_private.eh_admin_atual())");
+    expect(corpo).toContain("p.client_id = ANY ((SELECT app_private.clientes_da_equipe_atual())::uuid[])");
+    // Igual a can_staff_access_project: sem filtro de deleted_at.
+    expect(corpo).not.toContain("deleted_at");
+  });
+
+  it("troca só as 7 políticas SELECT, com ALTER POLICY (nome e papéis ficam)", () => {
+    const alteradas = [...sql.matchAll(/ALTER POLICY (\w+) ON public\.(\w+)/g)].map((m) => `${m[2]}.${m[1]}`);
+    expect(alteradas.sort()).toEqual([
+      "milestones.milestones_select",
+      "task_attachments.task_attachments_staff_select",
+      "task_checklist_items.task_checklist_staff_select",
+      "task_comments.task_comments_staff_select",
+      "tasks.tasks_client_schedule_read",
+      "tasks.tasks_staff_select",
+      "updates.updates_secure_select",
+    ]);
+    expect(sql).not.toMatch(/WITH CHECK/);
+  });
+
+  it("o cliente mantém o deleted_at da tarefa e do projeto; updates usa o mesmo dono de user_owns_project", () => {
+    const cliente = sql.slice(sql.indexOf("ALTER POLICY tasks_client_schedule_read"), sql.indexOf("ALTER POLICY updates_secure_select"));
+    expect(cliente).toContain("deleted_at IS NULL");
+    expect(cliente).toContain("project.deleted_at IS NULL");
+    expect(cliente).toContain("(SELECT public.has_role((SELECT auth.uid()), 'client'::public.app_role))");
+    const upd = sql.slice(sql.indexOf("ALTER POLICY updates_secure_select"), sql.indexOf("ALTER POLICY task_comments_staff_select"));
+    expect(upd).toContain("client_visible AND project_id IN (SELECT app_private.projetos_proprios())");
+    const marcos = sql.slice(sql.indexOf("ALTER POLICY milestones_select"));
+    expect(marcos).toContain("public.user_owns_project((SELECT auth.uid()), project_id)");
+  });
+});
+
+// ─── B03: a troca de texto feita no banco, espelhada aqui ────────────────
+
 function literais(trecho: string): string[] {
   return [...trecho.matchAll(/'((?:[^']|'')*)'/g)].map((m) => m[1].replace(/''/g, "'"));
 }
+const bloco = mesas.slice(mesas.indexOf("DO $rls$"), mesas.indexOf("$rls$;"));
+const [UID] = literais(bloco.slice(bloco.indexOf("_uid  CONSTANT"), bloco.indexOf("_role CONSTANT")));
+const [ROLE] = literais(bloco.slice(bloco.indexOf("_role CONSTANT"), bloco.indexOf("_antigos CONSTANT")));
+const ANTIGOS = literais(bloco.slice(bloco.indexOf("_antigos CONSTANT"), bloco.indexOf("_novo CONSTANT")));
+const NOVO = literais(bloco.slice(bloco.indexOf("_novo CONSTANT"), bloco.indexOf("_r record;"))).join("");
+
+/** Mesmos passos do bloco DO da 20260930296200. */
+function transformar(expr: string): string {
+  let e = expr;
+  e = e.split(UID).join("\u0001").split("auth.uid()").join(UID).split("\u0001").join(UID);
+  e = e.split(ROLE).join("\u0002").split("auth.role()").join(ROLE).split("\u0002").join(ROLE);
+  if (!e.includes("(NOT ")) {
+    for (const antigo of ANTIGOS) e = e.split(antigo).join(NOVO);
+  }
+  return e;
+}
+
+describe("B03: is_staff AND can_access_client em forma de conjunto", () => {
+  it("lê as constantes do bloco DO", () => {
+    expect(UID).toBe("( SELECT auth.uid() AS uid)");
+    expect(ROLE).toBe("( SELECT auth.role() AS role)");
+    expect(ANTIGOS).toEqual([
+      "public.is_staff(( SELECT auth.uid() AS uid)) AND public.can_access_client(client_id)",
+      "COALESCE(public.is_staff(( SELECT auth.uid() AS uid)), false) AND public.can_access_client(client_id)",
+    ]);
+  });
+
+  it("a forma nova é can_access_client em conjunto, com o cast ::uuid[] obrigatório", () => {
+    expect(NOVO).toContain("(SELECT public.is_staff((SELECT auth.uid())))");
+    expect(NOVO).toContain("(SELECT app_private.eh_admin_atual())");
+    expect(NOVO).toContain("(client_id = (SELECT auth.uid())) AND (SELECT public.has_role((SELECT auth.uid()), 'client'::public.app_role))");
+    // Sem o cast o Postgres lê ANY(subconsulta) e compara uuid com uuid[].
+    expect(NOVO).toContain("client_id = ANY ((SELECT app_private.clientes_da_equipe_atual())::uuid[])");
+    expect(NOVO).not.toContain("can_access_client");
+    expect(NOVO.split("(").length).toBe(NOVO.split(")").length);
+  });
+
+  it("troca o padrão com auth.uid() solto ou já embrulhado", () => {
+    const solto = "(public.is_staff(auth.uid()) AND public.can_access_client(client_id))";
+    const embrulhado = "(public.is_staff(( SELECT auth.uid() AS uid)) AND public.can_access_client(client_id))";
+    expect(transformar(solto)).toBe(`(${NOVO})`);
+    expect(transformar(embrulhado)).toBe(`(${NOVO})`);
+  });
+
+  it("dentro de expressão maior só troca o trecho, com parênteses próprios", () => {
+    const pedido = "((client_id = auth.uid()) OR (public.is_staff(auth.uid()) AND public.can_access_client(client_id)))";
+    expect(transformar(pedido)).toBe(`((client_id = ${UID}) OR (${NOVO}))`);
+    const relatorio = "(public.is_staff(auth.uid()) AND public.can_access_client(client_id) AND (created_by = auth.uid()))";
+    expect(transformar(relatorio)).toBe(`(${NOVO} AND (created_by = ${UID}))`);
+  });
+
+  it("formato próprio fica como está (só ganha o auth.uid() embrulhado)", () => {
+    const proprio = "(public.is_staff(( SELECT auth.uid() AS uid)) AND ((client_id IS NULL) OR public.can_access_client(client_id)))";
+    expect(transformar(proprio)).toBe(proprio);
+    const comNot = "(NOT (public.is_staff(auth.uid()) AND public.can_access_client(client_id)))";
+    expect(transformar(comNot)).toBe(`(NOT (public.is_staff(${UID}) AND public.can_access_client(client_id)))`);
+  });
+
+  it("auth.uid() e auth.role() viram InitPlan; o que já estava embrulhado não dobra", () => {
+    expect(transformar("(auth.role() = 'service_role'::text)")).toBe(`(${ROLE} = 'service_role'::text)`);
+    expect(transformar(`((user_id = auth.uid()) OR (owner_id = ${UID}))`)).toBe(`((user_id = ${UID}) OR (owner_id = ${UID}))`);
+    const pronto = `(user_id = ${UID})`;
+    expect(transformar(pronto)).toBe(pronto);
+  });
+
+  it("o bloco lê pg_policy só do public, compara antes de alterar e volta o search_path", () => {
+    const sql = codigo(mesas);
+    expect(sql).toContain("WHERE n.nspname = 'public'");
+    expect(sql).not.toContain("realtime");
+    expect(sql).toContain("PERFORM set_config('search_path', '', true);");
+    expect(sql).toContain("PERFORM set_config('search_path', _search_path, true);");
+    expect(sql).toContain("CONTINUE WHEN _novas[1] IS NOT DISTINCT FROM _r.q");
+    expect(sql).toContain("format('ALTER POLICY %I ON %I.%I', _r.polname, _r.nspname, _r.relname)");
+    expect(sql).toContain("IF position('(NOT ' IN _e) = 0 THEN");
+    expect(sql).not.toMatch(/CREATE\s+POLICY/i);
+  });
+});
+
+describe("B04: files sem reler a própria linha", () => {
+  it("mesma regra de can_read_file lendo as colunas, com o pré-filtro do cliente", () => {
+    const sql = codigo(arquivos);
+    expect(sql).toContain("ALTER POLICY files_secure_select ON public.files");
+    expect(sql).toContain("(SELECT public.is_staff((SELECT auth.uid())))");
+    expect(sql).toContain("client_id = ANY ((SELECT app_private.clientes_da_equipe_atual())::uuid[])");
+    expect(sql).toContain("OR (client_id = (SELECT auth.uid()) AND public.can_client_read_file(id))");
+    expect(sql).not.toContain("can_read_file(id)\n");
+    expect(sql).not.toContain("zz_admin_leitura_rapida");
+  });
+});
 
 describe("B06: o promotor pula a publicação ocupada em vez de travar", () => {
   // Reconstrói o corpo do promotor pelas migrations do repositório (criação
