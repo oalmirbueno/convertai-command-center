@@ -36,6 +36,7 @@ export default function CascaDaMesa({
   acoes,
   telaCheia,
   abaixo,
+  caminho,
   etapasEmLinhaPropriaAte = "xl",
   className = "",
   children,
@@ -57,6 +58,11 @@ export default function CascaDaMesa({
   telaCheia: TelaCheiaDaMesa;
   /** Faixa extra dentro do cabeçalho, abaixo da linha principal (ex.: barra do ensaio). */
   abaixo?: ReactNode;
+  /**
+   * No lugar do seletor de mesa, o caminho de volta (frente PRO3: a Mesa
+   * Proposta entra por Clientes e mostra "Clientes › Propostas").
+   */
+  caminho?: ReactNode;
   /** Até qual largura as etapas ficam numa linha própria (mesas com muitas etapas: "2xl"). */
   etapasEmLinhaPropriaAte?: "xl" | "2xl";
   /** Classes extras na raiz (ex.: mais espaço embaixo). */
@@ -71,7 +77,7 @@ export default function CascaDaMesa({
         <div className={juntar(larguraDaMesa, "flex flex-wrap items-center", ate2xl ? "2xl:flex-nowrap" : "xl:flex-nowrap", etapas ? "" : "pb-2")}>
           {/* Onde estou: mesa / cliente / marca. */}
           <div className={juntar("flex w-full min-w-0 items-center sm:w-auto sm:flex-1", ate2xl ? "2xl:flex-none" : "xl:flex-none")} data-casca-identidade="">
-            <SeletorDeMesa atual={mesa} clientId={clientId} marcaId={marcaId} />
+            {caminho || <SeletorDeMesa atual={mesa} clientId={clientId} marcaId={marcaId} />}
             <span aria-hidden="true" className="mx-1 shrink-0 text-[15px] font-light text-muted-foreground/50">
               /
             </span>

@@ -45,6 +45,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-contexto";
 import { useQuery } from "@tanstack/react-query";
+import AreaDePropostas from "@/components/clientes-propostas/AreaDePropostas";
+import { AcoesComerciaisDoCliente } from "@/components/clientes-propostas/PropostasDoCliente";
+import { useCriarProposta } from "@/components/clientes-propostas/propostasDaCarteira";
 
 function getRenewalStatus(dateStr: string | null | undefined) {
   if (!dateStr) return null;
@@ -524,6 +527,9 @@ export default function Clients() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = profile?.role === "admin";
+  // Frente PRO3 (30/09): a proposta mora em Clientes (só admin e gestor, a régua da Mesa Proposta).
+  const podeProposta = profile?.role === "admin" || profile?.role === "manager";
+  const { criar: criarProposta } = useCriarProposta();
   const { data: clients, isLoading, isError, refetch } = useClients();
   // A cara de cada cliente: cadastro, senao Instagram (como em /metricas), senao a logo dos arquivos.
   const clientesParaFoto = useMemo(() => ((clients ?? []) as any[]).map((c) => ({ id: String(c.id), nome: c.company_name || c.full_name, avatar_url: c.avatar_url })), [clients]);
@@ -629,6 +635,10 @@ export default function Clients() {
     ];
     if (isAdmin && !isInternalClient(c)) {
       itens.splice(1, 0, { rotulo: "Cobrança e custo no Financeiro", acao: () => navigate("/financeiro") });
+    }
+    // PRO3: proposta pelo cliente (nova venda ou upsell), sem passar pelo seletor de mesas.
+    if (podeProposta && !isInternalClient(c)) {
+      itens.splice(1, 0, { rotulo: "Proposta de upsell", acao: () => void criarProposta({ clientId: String(c.id), tipo: "upsell" }) }, { rotulo: "Nova proposta", acao: () => void criarProposta({ clientId: String(c.id), tipo: "nova" }) });
     }
     if (c.email) itens.push({ rotulo: "Copiar e-mail", acao: copiar("E-mail", c.email) });
     if (c.phone) itens.push({ rotulo: "Copiar telefone", acao: copiar("Telefone", c.phone) });
@@ -1202,6 +1212,12 @@ export default function Clients() {
             className={`ml-3 h-2 w-2 shrink-0 rounded-full ${statusDot[c.plan_status || "active"] || "bg-muted-foreground"}`}
           />
           {extra?.acao && <span className="ml-2 shrink-0">{extra.acao}</span>}
+          {/* PRO3: upsell e conselho de agentes direto na linha do cliente. */}
+          {podeProposta && !internal && (
+            <span className="ml-2 hidden shrink-0 items-center sm:flex">
+              <AcoesComerciaisDoCliente cliente={{ id: String(c.id), nome: nome || "Cliente", services_config: c.services_config, plan_name: c.plan_name, client_type: c.client_type }} />
+            </span>
+          )}
           <button
             type="button"
             onClick={(e) => abrirMenuNoBotao(e, c)}
@@ -1392,6 +1408,20 @@ export default function Clients() {
               </p>
             )}
           </section>
+        )}
+        {/* PRO3 (30/09, pedido do dono): as propostas moram em Clientes, não no seletor de mesas. */}
+        {podeProposta && (
+          <div className="mb-6">
+            <AreaDePropostas
+              clientes={clientRows.filter((c) => !isInternalClient(c)).map((c) => ({ id: String(c.id), nome: String(c.company_name || c.full_name || "Cliente") }))}
+              nomeDoCliente={(id) => {
+                const c = clientsById.get(id);
+                return c ? String(c.company_name || c.full_name || "Cliente") : "Cliente";
+              }}
+              podeCriarCliente={isAdmin}
+              abrirNaEntrada={searchParams.get("propostas") === "1"}
+            />
+          </div>
         )}
         {isError ? (
           <EstadoDeErro

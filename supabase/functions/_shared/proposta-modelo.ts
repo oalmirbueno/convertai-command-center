@@ -10,7 +10,9 @@
  * solução; entregáveis em página própria; processo; cronograma;
  * investimento (intangíveis e condições, o valor sai dos itens); provas
  * (depois do preço, só cases reais da agência); quem somos; próximos passos
- * e aceite.
+ * e aceite. Frente PRO3 (30/09): o bloco "O que você já tem" (ja_tem), logo
+ * depois da capa, só aparece na proposta de upsell (vazio, a página pública
+ * não desenha); os dados dele vêm do painel, nunca do modelo de IA.
  *
  * Regra de ouro: nada de número inventado. Dado de mercado sem fonte (link e
  * data) sai; concorrente sem fonte sai; frase com número que não está no
@@ -24,6 +26,8 @@
 
 export const TIPOS_DE_BLOCO = [
   "capa",
+  // Frente PRO3 (30/09): na proposta de upsell, o que o cliente já tem vem antes do próximo passo.
+  "ja_tem",
   "desafio",
   "diagnostico",
   "mercado",
@@ -40,6 +44,7 @@ export type TipoDeBloco = (typeof TIPOS_DE_BLOCO)[number];
 
 export const ROTULO_DO_BLOCO: Record<TipoDeBloco, string> = {
   capa: "Capa",
+  ja_tem: "O que você já tem",
   desafio: "O desafio",
   diagnostico: "Diagnóstico",
   mercado: "Mercado",
@@ -56,6 +61,7 @@ export const ROTULO_DO_BLOCO: Record<TipoDeBloco, string> = {
 /** Fundo de cada página: explicação no claro, dinheiro e prova no escuro (p1 §4.2). */
 export const FUNDO_DO_BLOCO: Record<TipoDeBloco, "escuro" | "claro"> = {
   capa: "escuro",
+  ja_tem: "claro",
   desafio: "claro",
   diagnostico: "claro",
   mercado: "claro",
@@ -79,6 +85,8 @@ export type TituloETexto = { titulo: string; texto: string };
 
 export type DadosDoBloco = {
   capa: { headline: string; subtitulo: string; projeto: string };
+  /** Upsell (PRO3): serviços, plano e resultados reais do cliente, lidos do painel (nunca do modelo de IA). */
+  ja_tem: { texto: string; servicos: string[]; plano: string; resultados: TituloETexto[] };
   desafio: { texto: string; palavras_do_cliente: string[]; compromisso: string };
   diagnostico: { achados: Achado[] };
   mercado: { resumo: string; concorrentes: Concorrente[]; dados: DadoDeMercado[]; faixa_de_preco: { texto: string; fonte: FonteDoDado } | null; pesquisado_em: string | null };
@@ -141,8 +149,10 @@ export function normalizarDados<T extends TipoDeBloco>(tipo: T, bruto: unknown):
   switch (tipo) {
     case "capa":
       return r({ headline: textoLimpo(o.headline, 160), subtitulo: textoLimpo(o.subtitulo, 240), projeto: textoLimpo(o.projeto, 120) });
+    case "ja_tem":
+      return r({ texto: textoLimpo(o.texto, 900), servicos: listaDeTextos(o.servicos, 80, 12), plano: textoLimpo(o.plano, 200), resultados: titulosETextos(o.resultados, 6) });
     case "desafio":
-      return r({ texto: textoLimpo(o.texto, 1600), palavras_do_cliente: listaDeTextos(o.palavras_do_cliente, 200, 4), compromisso: textoLimpo(o.compromisso, 400) });
+      return r({ texto: textoLimpo(o.texto, 1600),palavras_do_cliente: listaDeTextos(o.palavras_do_cliente, 200, 4), compromisso: textoLimpo(o.compromisso, 400) });
     case "diagnostico":
       return r({
         achados: (Array.isArray(o.achados) ? o.achados : [])

@@ -47,12 +47,15 @@ const CARTEIRA: ClienteBruto[] = [
 ];
 
 describe("padrão de clientes por mesa", () => {
-  it("Mesa e Mesa Foto: plano mensal ativo; fora avulso, inativo, em pausa e apagado", () => {
-    for (const mesa of ["organica", "foto"] as const) {
+  it("Mesa (e Mesa Edição): plano mensal ativo; fora avulso, inativo, em pausa e apagado", () => {
+    for (const mesa of ["organica", "edicao"] as const) {
       const r = montarClientesDaMesa(mesa, CARTEIRA, []);
       expect(r.visiveis.map((c) => c.nome)).toEqual(["acerbi", "Ótica Visão", "Terra Flor"]);
       expect(r.mostrandoTodos).toBe(false);
     }
+    // PRO3 (adendo do dono, 30/09): na Mesa Foto, mesa de criação, o avulso entra (em pausa e apagado seguem fora).
+    const foto = montarClientesDaMesa("foto", CARTEIRA, []);
+    expect(foto.visiveis.map((c) => c.nome)).toEqual(["acerbi", "Atelier da Rose", "GS Gesso", "Ótica Visão", "Terra Flor"]);
     expect(entraPeloPadrao("organica", CARTEIRA[2])).toEqual({ entra: false, motivo: "Trabalho avulso" });
     expect(entraPeloPadrao("organica", CARTEIRA[3]).motivo).toBe("Sem plano ativo");
     expect(entraPeloPadrao("organica", CARTEIRA[4]).motivo).toBe("Plano em pausa");
@@ -131,12 +134,12 @@ describe("seletor de clientes da mesa", () => {
   });
 
   it("Gerenciar clientes: incluir grava pela RPC, por mesa", async () => {
-    montar(<SeletorDeClientesDaMesa mesa="foto" clientesBrutos={CARTEIRA} valor="" nome="" carregando={false} onEscolher={vi.fn()} />);
+    montar(<SeletorDeClientesDaMesa mesa="edicao" clientesBrutos={CARTEIRA} valor="" nome="" carregando={false} onEscolher={vi.fn()} />);
     fireEvent.click(screen.getByRole("combobox", { name: "Escolher o cliente" }));
     fireEvent.click(await screen.findByRole("button", { name: /Gerenciar clientes/ }));
     const fora = screen.getByRole("list", { name: "Clientes fora da mesa" });
     fireEvent.click(within(fora).getByRole("button", { name: "Incluir GS Gesso" }));
-    await waitFor(() => expect(mock.rpc).toHaveBeenCalledWith("mesa_escolher_cliente", { _mesa: "foto", _client_id: id(3), _modo: "incluir" }));
+    await waitFor(() => expect(mock.rpc).toHaveBeenCalledWith("mesa_escolher_cliente", { _mesa: "edicao", _client_id: id(3), _modo: "incluir" }));
     await waitFor(() => expect(within(screen.getByRole("list", { name: "Clientes na mesa" })).getByText("GS Gesso")).toBeTruthy());
   });
 

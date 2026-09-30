@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Eye, EyeOff, Globe, Palette, Sparkles, Trash2, Wand2 } from "lucide-react";
+import { Eye, EyeOff, Globe, Palette, RefreshCw, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -14,6 +14,7 @@ import { botao, campo, campoTexto, etiqueta, juntar, texto } from "@/components/
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   blocoDoTipo,
+  blocoVazio,
   comBloco,
   dataCurta,
   normalizarConteudo,
@@ -35,6 +36,7 @@ import {
   type TemaDaProposta,
   type VisualDaProposta,
 } from "../../../supabase/functions/_shared/proposta-comercial";
+import { contextoDoUpsell } from "../../../supabase/functions/_shared/proposta-upsell";
 import PropostaDocumento from "./PropostaDocumento";
 import AvisoDaAgencia from "./AvisoDaAgencia";
 import PreviaDoPreenchimento from "./PreviaDoPreenchimento";
@@ -172,6 +174,18 @@ function CamposDoBloco({ b, mudar }: { b: Bloco; mudar: (dados: Record<string, u
   const d = b.dados as Record<string, unknown>;
   const m = (campoMudado: Record<string, unknown>) => mudar({ ...d, ...campoMudado });
   switch (b.tipo) {
+    case "ja_tem": {
+      // PRO3: serviços, plano e resultados vêm do painel ("Reler os dados de hoje"); a pessoa pode tirar ou ajustar.
+      const x = b.dados as DadosDoBloco["ja_tem"];
+      return (
+        <>
+          <Area b={b} chave="ja_tem.texto" rotulo="Abertura" valor={x.texto} onMudar={(v) => m({ texto: v })} />
+          <Area b={b} rotulo="Serviços que já tem" dica="Um por linha" valor={linhas(x.servicos)} onMudar={(v) => m({ servicos: deLinhas(v) })} />
+          <Linha b={b} rotulo="Plano atual" valor={x.plano} onMudar={(v) => m({ plano: v })} />
+          <Area b={b} rotulo="Resultados reais" dica="Título | texto, um por linha (só o que o painel mediu)" valor={pares(x.resultados.map((r) => ({ a: r.titulo, b: r.texto })))} onMudar={(v) => m({ resultados: dePares(v).map((p) => ({ titulo: p.a, texto: p.b })) })} />
+        </>
+      );
+    }
     case "capa": {
       const x = b.dados as DadosDoBloco["capa"];
       return (
@@ -394,6 +408,46 @@ function TomDaMarca({ proposta, b, modeloId, desligado, conteudo, onAplicar }: {
   );
 }
 
+/** PRO3: relê serviços, plano e resultados do cliente (sem IA; grava uma versão nova, com Desfazer pela versão). */
+function RelerORetrato({ proposta, onRelido }: { proposta: Proposta; onRelido: () => void }) {
+  const mesa = useMesa();
+  const qc = useQueryClient();
+  const avisarErro = useAvisarErro();
+  const [ocupado, setOcupado] = useState(false);
+  const reler = async () => {
+    setOcupado(true);
+    const versaoAntes = proposta.versao;
+    try {
+      const d = await chamarProposta<any>("upsell_atualizar", { proposta_id: proposta.id });
+      onRelido();
+      aplicarNaLista(qc, mesa.clientId, d && d.proposta);
+      const avisos: string[] = d && Array.isArray(d.avisos_upsell) ? d.avisos_upsell : [];
+      toast.success("Dados de hoje no bloco.", {
+        description: avisos.length ? avisos.join(" ") : undefined,
+        duration: 10_000,
+        action: {
+          label: "Desfazer",
+          onClick: () => {
+            chamarProposta<any>("versao_restaurar", { proposta_id: proposta.id, versao: versaoAntes })
+              .then((r) => aplicarNaLista(qc, mesa.clientId, r && r.proposta))
+              .catch((e) => avisarErro(e, "Não foi possível desfazer"));
+          },
+        },
+      });
+    } catch (e) {
+      avisarErro(e, "Os dados de hoje não foram lidos");
+    } finally {
+      setOcupado(false);
+    }
+  };
+  return (
+    <button type="button" className={botao.secundario} onClick={() => void reler()} disabled={ocupado} data-reler-retrato="">
+      <RefreshCw className="mr-1.5 h-4 w-4" aria-hidden="true" />
+      {ocupado ? "Lendo..." : "Reler os dados de hoje"}
+    </button>
+  );
+}
+
 function EditorDoBloco({
   b,
   chave,
@@ -401,6 +455,7 @@ function EditorDoBloco({
   onFoco,
   mudar,
   extra,
+  abertoDeInicio = false,
 }: {
   b: Bloco;
   chave: string;
@@ -408,8 +463,10 @@ function EditorDoBloco({
   onFoco: () => void;
   mudar: (m: Partial<Pick<Bloco, "titulo" | "visivel" | "dados">>) => void;
   extra?: ReactNode;
+  /** PRO3: no upsell, "O que você já tem" e o "Próximo passo" começam abertos. */
+  abertoDeInicio?: boolean;
 }) {
-  const [recolhido, setRecolhido] = useRecolhido(chave, true);
+  const [recolhido, setRecolhido] = useRecolhido(chave, !abertoDeInicio);
   const ia = useContext(ContextoDaIa);
   const campos = ia ? ia.campos(b) : [];
   return (
@@ -565,7 +622,8 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
         ? {
             clientId: mesa.clientId,
             marcaId: proposta.marca_id,
-            contexto: `Proposta comercial ${proposta.numero} (${proposta.titulo}). Itens: ${proposta.itens.map((i) => i.nome).join(", ") || "nenhum ainda"}. Regra: nunca invente número, preço, prazo, cliente atendido ou resultado.`.slice(0, 1500),
+            // PRO3: no upsell, o que o cliente já tem e os resultados reais entram no contexto (os números ganham fonte).
+            contexto: `Proposta comercial ${proposta.numero} (${proposta.titulo}). Itens: ${proposta.itens.map((i) => i.nome).join(", ") || "nenhum ainda"}. Regra: nunca invente número, preço, prazo, cliente atendido ou resultado.${proposta.upsell ? ` ${contextoDoUpsell(proposta.upsell, 2300)}` : ""}`.slice(0, 2900),
             desligado: aceita,
             campos: camposDoBloco,
             aplicar: (valores) => {
@@ -689,6 +747,22 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
             )}
           </div>
           <div className="mt-3 flex min-w-0 flex-wrap items-center [&>*]:mb-2 [&>*]:mr-2">
+            {/* PRO3: o estrategista sugere o upsell pelo que o cliente já tem e pelos resultados reais (prévia, modelo e custo antes). */}
+            {proposta.upsell && ia && !aceita && (
+              <span data-sugerir-proximo-passo="">
+                <PreencherComIA
+                  papel="proposta"
+                  clientId={mesa.clientId}
+                  marcaId={proposta.marca_id}
+                  campos={camposDoBloco(blocoDoTipo(atual.conteudo, "solucao")).concat(camposDoBloco(blocoDoTipo(atual.conteudo, "ja_tem")), camposDoBloco(blocoDoTipo(atual.conteudo, "capa")).slice(0, 1))}
+                  contexto={ia.contexto}
+                  fontes={["contexto", "briefing", "dossie", "arquivos"]}
+                  rotulo="Sugerir o próximo passo"
+                  onAplicar={(valores) => ia.aplicar(valores)}
+                  onDesfazer={(anteriores) => ia.aplicar(anteriores)}
+                />
+              </span>
+            )}
             <BotaoComCusto
               rotulo={
                 <>
@@ -748,7 +822,8 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
           <section className="min-w-0" aria-label="Blocos da proposta">
             <h3 className={juntar(texto.tituloSecao, "mb-2")}>Blocos</h3>
             <ul className="min-w-0 space-y-3">
-              {atual.conteudo.blocos.map((b) => (
+              {/* PRO3: "O que você já tem" só no upsell (ou quando alguém já escreveu nele). */}
+              {atual.conteudo.blocos.filter((b) => b.tipo !== "ja_tem" || !!proposta.upsell || !blocoVazio(b)).map((b) => (
                 <EditorDoBloco
                   key={b.tipo}
                   b={b}
@@ -756,9 +831,11 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
                   emFoco={emFoco === b.tipo}
                   onFoco={() => setEmFoco(b.tipo)}
                   mudar={(m) => !aceita && mudarBloco(b.tipo, m)}
+                  abertoDeInicio={!!proposta.upsell && (b.tipo === "ja_tem" || b.tipo === "solucao")}
                   extra={
                     aceita ? null : (
                       <div className="flex min-w-0 flex-wrap [&>*]:mb-2 [&>*]:mr-2">
+                        {b.tipo === "ja_tem" && proposta.upsell && <RelerORetrato proposta={proposta} onRelido={() => esquecer()} />}
                         {b.tipo === "capa" && <TresHeadlines proposta={proposta} modeloId={modeloId} desligado={aceita} onEscolher={(h) => mudarBloco("capa", { dados: { ...(b.dados as DadosDoBloco["capa"]), headline: h } })} />}
                         {camposDoBloco(b).length > 0 && <TomDaMarca proposta={proposta} b={b} modeloId={modeloId} desligado={aceita} conteudo={atual.conteudo} onAplicar={(valores) => ia && ia.aplicar(valores)} />}
                       </div>

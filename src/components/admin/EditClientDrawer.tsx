@@ -2,7 +2,7 @@ import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useConfirm } from "@/components/shared/confirmDialog";
-import { X, Loader2, Trash2, FileText, Camera, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, PackageCheck, FolderOpen, Briefcase, BriefcaseBusiness, Pause, Play } from "lucide-react";
+import { X, Loader2, Trash2, FileText, Camera, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, PackageCheck, FolderOpen, Briefcase, Pause, Play } from "lucide-react";
 import {
   AjudaRecolhida,
   CampoDeFormulario,
@@ -41,6 +41,7 @@ import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import type { FotoDoCliente as Foto } from "@/lib/fotoDoCliente";
 import { todayBR, toBRDateKey } from "@/lib/dateBR";
 import { useFinancePlans } from "@/hooks/useFinanceV2";
+import PropostasDoCliente from "@/components/clientes-propostas/PropostasDoCliente";
 // Frente CON2 (30/09): ficha fiscal do cliente (CNPJ pela Receita), reaproveitada nos contratos.
 const DadosFiscaisDoCliente = lazy(() => import("@/components/contratos/DadosFiscaisDoCliente"));
 
@@ -818,15 +819,16 @@ export default function EditClientDrawer({
                     <PackageCheck className="mr-1.5 h-4 w-4 text-warning" aria-hidden="true" />
                     Aprovações
                   </button>
-                  {/* Frente PRO: a Mesa Proposta com o estrategista comercial (só admin e gestor). */}
-                  {(isAdmin || profile?.role === "manager") && (
-                    <button type="button" onClick={() => openClientOperation(`/mesa-proposta?client=${encodeURIComponent(client.id)}&etapa=contexto`)} className={botao.secundario}>
-                      <BriefcaseBusiness className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" />
-                      Gerar proposta
-                    </button>
-                  )}
                 </div>
               </Secao>
+
+              {/* Frente PRO3 (30/09): as propostas do cliente (histórico, nova, upsell e conselho), só admin e gestor. */}
+              {(isAdmin || profile?.role === "manager") && (
+                <PropostasDoCliente
+                  cliente={{ id: String(client.id), nome: nomeDoCliente || "Cliente", services_config: client.services_config, plan_name: client.plan_name, client_type: client.client_type }}
+                  onAbrir={(caminho) => openClientOperation(caminho)}
+                />
+              )}
 
               {/* Projetos do cliente: criar aqui ou puxar um que ficou solto */}
               <Secao

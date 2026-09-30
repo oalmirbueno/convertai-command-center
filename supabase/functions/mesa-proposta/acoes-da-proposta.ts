@@ -40,7 +40,7 @@ import {
   regraDasAcoes,
 } from "../_shared/acoes-do-agente.ts";
 import { caminhoNaArea } from "../_shared/mapa-do-painel.ts";
-import { type Bloco, diaValido, type ItemDaProposta, lerValor, numeroTemOrigem, reais, ROTULO_DO_BLOCO, textoLimpo } from "../_shared/proposta-modelo.ts";
+import { type Bloco, blocoVazio, diaValido, type ItemDaProposta, lerValor, numeroTemOrigem, reais, ROTULO_DO_BLOCO, textoLimpo } from "../_shared/proposta-modelo.ts";
 import { lerMargem } from "../_shared/proposta-comercial.ts";
 
 export const OPERACOES_DA_PROPOSTA = [
@@ -69,7 +69,8 @@ export type PropostaParaAcao = { id: string; titulo: string; numero: string; sta
 export function alvosDaProposta(p: PropostaParaAcao): Array<AlvoComApelido<AlvoDaProposta>> {
   const proposta = comApelido([{ id: p.id, titulo: `Proposta ${p.numero}: ${p.titulo}`, detalhe: `${p.status}${p.validade_ate ? `, válida até ${p.validade_ate}` : ""}`, dados: { status: p.status } }], "p");
   const blocos = comApelido(
-    p.blocos.map((b) => ({ id: `${p.id}:${b.tipo}`, titulo: `${ROTULO_DO_BLOCO[b.tipo]}${b.titulo !== ROTULO_DO_BLOCO[b.tipo] ? ` (${b.titulo})` : ""}`, detalhe: b.visivel ? "visível" : "oculto", dados: { tipo: b.tipo, visivel: b.visivel, status: p.status } })),
+    // PRO3: "O que você já tem" só entra na lista quando existe (upsell); nas outras, os apelidos ficam como antes.
+    p.blocos.filter((b) => b.tipo !== "ja_tem" || !blocoVazio(b)).map((b) => ({ id: `${p.id}:${b.tipo}`, titulo: `${ROTULO_DO_BLOCO[b.tipo]}${b.titulo !== ROTULO_DO_BLOCO[b.tipo] ? ` (${b.titulo})` : ""}`, detalhe: b.visivel ? "visível" : "oculto", dados: { tipo: b.tipo, visivel: b.visivel, status: p.status } })),
     "b",
   );
   const itens = comApelido(
@@ -190,7 +191,9 @@ export function regrasDaProposta(): Record<string, RegraDaOperacao<AlvoDaPropost
       },
       trava: (alvo) =>
         travaDoStatus(alvo) ||
-        (alvo.dados && (alvo.dados.tipo === "provas" || alvo.dados.tipo === "quem_somos") ? "Provas e quem somos vêm dos dados da agência, não do agente." : null),
+        (alvo.dados && (alvo.dados.tipo === "provas" || alvo.dados.tipo === "quem_somos") ? "Provas e quem somos vêm dos dados da agência, não do agente." : null) ||
+        // PRO3: o que o cliente já tem e os resultados vêm do painel ("Reler os dados de hoje"), nunca do agente.
+        (alvo.dados && alvo.dados.tipo === "ja_tem" ? "O que o cliente já tem vem do painel: use Reler os dados de hoje." : null),
     },
     montar_pacotes: {
       rotulo: "montar os 3 pacotes da",

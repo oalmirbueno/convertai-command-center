@@ -46,16 +46,24 @@ export const MESAS: MesaDoSeletor[] = [
   { valor: "publicidade", rotulo: "Publicidade", titulo: "Abrir a Mesa Publicidade (campanhas de produto)", caminho: "/mesa-publicidade", descricao: "Campanhas de produto com direção de arte", icone: Package },
   { valor: "roteiros", rotulo: "Roteiros", titulo: "Abrir a Mesa Roteiros (roteiros de vídeo para gravar)", caminho: "/mesa-roteiros", descricao: "Roteiros de vídeo para gravar", icone: ScrollText },
   { valor: "identidade", rotulo: "Identidade", titulo: "Abrir a Mesa Identidade (identidade visual, naming e brandbook)", caminho: "/mesa-identidade", descricao: "Identidade visual, naming e brandbook", icone: Palette },
-  // Frente PRO (30/09): proposta comercial do cliente (só admin e gestor abrem a rota).
-  { valor: "proposta", rotulo: "Proposta", titulo: "Abrir a Mesa Proposta (proposta comercial com link e aceite)", caminho: "/mesa-proposta", descricao: "Proposta comercial com link e aceite", icone: BriefcaseBusiness },
   // Frente SIT (30/09): criador de sites com o motor de código.
   { valor: "site", rotulo: "Site", titulo: "Abrir a Mesa Site (site do cliente com prévia e domínio)", caminho: "/mesa-site", descricao: "Site do cliente com prévia ao vivo e domínio", icone: Globe },
   { valor: "motion", rotulo: "Motion", titulo: "Abrir a Mesa Motion (apresentação em motion e filme da marca)", caminho: "/mesa-motion", descricao: "Apresentação em motion e filme cinematográfico da marca", icone: Film },
 ];
 
+/**
+ * Mesas que existem mas ficam FORA do seletor (e do atalho Alt+M e dos
+ * números). Frente PRO3 (30/09), pedido do dono: a Proposta entra por
+ * Clientes (cliente novo ou upsell), não pela troca de mesas. A rota
+ * /mesa-proposta continua; a casca dela mostra "Clientes › Propostas".
+ */
+export const MESAS_FORA_DO_SELETOR: MesaDoSeletor[] = [
+  { valor: "proposta", rotulo: "Proposta", titulo: "Abrir a Mesa Proposta (proposta comercial com link e aceite)", caminho: "/mesa-proposta", descricao: "Proposta comercial com link e aceite", icone: BriefcaseBusiness },
+];
+
 /** Endereço da mesa do cliente; com marca (cliente com Acerbi e CME), a marca vai junto. */
 export const enderecoDaMesa = (mesa: QualMesa, clientId: string, marcaId?: string | null) => {
-  const m = MESAS.find((x) => x.valor === mesa) || MESAS[0];
+  const m = MESAS.find((x) => x.valor === mesa) || MESAS_FORA_DO_SELETOR.find((x) => x.valor === mesa) || MESAS[0];
   if (!clientId) return m.caminho;
   return marcaId ? `${m.caminho}?client=${clientId}&marca=${marcaId}` : `${m.caminho}?client=${clientId}`;
 };

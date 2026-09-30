@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowLeft, Building2, Check, ChevronsUpDown, Loader2, RotateCcw, Search, Settings2 } from "lucide-react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { ArrowLeft, Building2, Check, ChevronsUpDown, Loader2, RotateCcw, Search, Settings2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/contexts/AuthContext";
-import { filtrarPorBusca, NOME_DA_MESA, REGRA_DA_MESA, type ClienteBruto, type ClienteDaMesa, type MesaDeClientes } from "./clientesDaMesa";
+import { ehMesaDeCriacao, filtrarPorBusca, NOME_DA_MESA, REGRA_DA_MESA, type ClienteBruto, type ClienteDaMesa, type MesaDeClientes } from "./clientesDaMesa";
 import { useClientesDaMesa } from "./useClientesDaMesa";
+
+// PRO3: a janela do cliente avulso só baixa no primeiro clique (nada pesado na abertura da mesa).
+const NovoClienteRapido = lazy(() => import("@/components/clientes/NovoClienteRapido"));
 
 /**
  * Seletor de cliente das mesas (Mesa, Mesa Ads, Mesa Foto). Mostra só os
@@ -16,6 +19,12 @@ import { useClientesDaMesa } from "./useClientesDaMesa";
  * O cliente aberto pelo endereço continua abrindo mesmo fora da mesa (vindo de
  * outra mesa pela troca rápida, por exemplo): ele aparece na lista com a nota
  * "fora desta mesa".
+ *
+ * Frente PRO3 (30/09): nas mesas de criação por projeto (clientesDaMesa.ts,
+ * MESAS_DE_CRIACAO) o pé da lista tem "+ Cliente avulso" (só admin: o
+ * cadastro passa pela função manage-team, que é do admin). Abre a janela
+ * central NovoClienteRapido; criou, a mesa já abre nesse cliente. Cliente
+ * avulso ou sem plano aparece com a marca "Avulso".
  */
 export default function SeletorDeClientesDaMesa({
   mesa,
@@ -35,6 +44,9 @@ export default function SeletorDeClientesDaMesa({
   const { profile } = useAuth();
   const role = (profile && profile.role) || "";
   const podeGerenciar = role === "admin" || role === "manager";
+  const podeCriarAvulso = role === "admin" && ehMesaDeCriacao(mesa);
+  const [novoAberto, setNovoAberto] = useState(false);
+  const [novoUsado, setNovoUsado] = useState(false);
   const { todos, visiveis, mostrandoTodos, definir } = useClientesDaMesa(mesa, clientesBrutos);
 
   const [aberto, setAberto] = useState(false);
@@ -232,6 +244,11 @@ export default function SeletorDeClientesDaMesa({
                       className={`flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[13px] ${i === ativo ? "bg-muted text-foreground" : "text-foreground/90"}`}
                     >
                       <span className="min-w-0 flex-1 truncate">{c.nome}</span>
+                      {c.avulso && ehMesaDeCriacao(mesa) && (
+                        <span aria-hidden="true" className="ml-2 inline-flex h-5 shrink-0 items-center rounded bg-muted px-1.5 text-[11px] font-medium leading-none text-muted-foreground" data-marca-avulso="">
+                          Avulso
+                        </span>
+                      )}
                       {foraDaMesa && (
                         <span aria-hidden="true" className="ml-2 shrink-0 text-[10.5px] text-muted-foreground">
                           fora desta mesa
@@ -243,6 +260,23 @@ export default function SeletorDeClientesDaMesa({
                 );
               })}
             </ul>
+            {podeCriarAvulso && (
+              <div className="border-t border-border px-1 py-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAberto(false);
+                    setNovoUsado(true);
+                    setNovoAberto(true);
+                  }}
+                  className="flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left text-[13px] text-primary hover:bg-muted"
+                  data-novo-cliente-avulso={mesa}
+                >
+                  <UserPlus className="mr-2 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  Cliente avulso
+                </button>
+              </div>
+            )}
             {(mostrandoTodos || podeGerenciar) && (
               <div className="flex min-w-0 items-center border-t border-border px-2 py-1.5">
                 <p className="min-w-0 flex-1 truncate text-[10.5px] text-muted-foreground">
@@ -265,6 +299,16 @@ export default function SeletorDeClientesDaMesa({
           </>
         )}
       </PopoverContent>
+      {novoUsado && (
+        <Suspense fallback={null}>
+          <NovoClienteRapido
+            aberto={novoAberto}
+            onAberto={setNovoAberto}
+            titulo={`Cliente avulso na ${NOME_DA_MESA[mesa]}`}
+            onCriado={(c) => onEscolher(c.id)}
+          />
+        </Suspense>
+      )}
     </Popover>
   );
 }

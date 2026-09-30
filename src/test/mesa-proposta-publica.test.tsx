@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PropostaPublica from "@/pages/PropostaPublica";
 import { conteudoDoModelo, comBloco, MODELO_PADRAO_ACELERIQ } from "../../supabase/functions/_shared/proposta-modelo";
-import { MESAS } from "@/components/mesa-foto/TrocaDeMesas";
+import { MESAS, MESAS_FORA_DO_SELETOR, enderecoDaMesa } from "@/components/mesa-foto/TrocaDeMesas";
 import { MESAS_DO_PAINEL, cargasDaMesa } from "@/lib/mesa/preCarga";
 import { rotuloDoLugar } from "@/lib/navegacao/lugares";
 import { entraPeloPadrao } from "@/components/mesa/clientesDaMesa";
@@ -180,7 +180,10 @@ describe("banco: RPCs por token e RLS", () => {
 
 describe("a mesa no painel", () => {
   it("está na lista de mesas, na pré-carga (fora da ociosa), no mapa, no aprendizado e fora dos lugares", () => {
-    expect(MESAS.some((m) => m.valor === "proposta" && m.caminho === "/mesa-proposta")).toBe(true);
+    // PRO3 (30/09): a Proposta saiu do seletor de mesas; a rota continua e entra por Clientes.
+    expect(MESAS.some((m) => m.valor === "proposta")).toBe(false);
+    expect(MESAS_FORA_DO_SELETOR.some((m) => m.valor === "proposta" && m.caminho === "/mesa-proposta")).toBe(true);
+    expect(enderecoDaMesa("proposta", "22222222-2222-4222-8222-222222222222")).toBe("/mesa-proposta?client=22222222-2222-4222-8222-222222222222");
     expect(Object.keys(MESAS_DO_PAINEL["/mesa-proposta"].etapas)).toEqual(["contexto", "rascunho", "revisao", "envio"]);
     expect(cargasDaMesa("/mesa-proposta", "?client=22222222-2222-4222-8222-222222222222").map(([k]) => k)).toEqual(["pagina/mesa-proposta", "mesa-proposta/contexto", "mesa-proposta/agente"]);
     const pre = ler("src/lib/mesa/preCarga.ts");
@@ -200,7 +203,9 @@ describe("a mesa no painel", () => {
     const cfg = ler("supabase/config.toml");
     expect(cfg).toMatch(/\[functions\.mesa-proposta\]\s+verify_jwt = true/);
     expect(cfg).toMatch(/\[functions\.proposta-publica\]\s+verify_jwt = false/);
-    expect(ler("src/components/admin/EditClientDrawer.tsx")).toContain("/mesa-proposta?client=");
+    // PRO3: a ficha abre a proposta pela seção Propostas (o endereço sai de propostasDaCarteira).
+    expect(ler("src/components/admin/EditClientDrawer.tsx")).toContain("<PropostasDoCliente");
+    expect(ler("src/components/clientes-propostas/propostasDaCarteira.ts")).toContain("/mesa-proposta?client=");
     expect(ler("src/pages/AdminComercial.tsx")).toContain("/mesa-proposta?lead=");
   });
 

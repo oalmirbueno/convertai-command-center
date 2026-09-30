@@ -760,6 +760,10 @@ export function camposDoBloco(b: Bloco): CampoDoBloco[] {
   const d = b.dados as Record<string, any>;
   const pares = (lista: Array<Record<string, string>>, a: string, c: string) => (lista || []).map((x) => (x[c] ? `${x[a]} | ${x[c]}` : x[a]));
   switch (b.tipo) {
+    case "ja_tem":
+      // PRO3: só o texto de abertura; serviços, plano e resultados vêm do painel. Proposta sem retrato (cliente novo): nada.
+      if (!(d.servicos || []).length && !d.plano && !(d.resultados || []).length) return [];
+      return [{ chave: "ja_tem.texto", rotulo: "Abertura", tipo: "texto_longo", valorAtual: d.texto, dica: `Duas frases sobre o caminho feito com o cliente até aqui. Número só dos resultados listados no bloco. ${SEM_NUMERO}`, maximo: 900 }];
     case "capa":
       return [
         { chave: "capa.headline", rotulo: "Headline", tipo: "texto", valorAtual: d.headline, dica: `Benefício para o cliente, até 12 palavras. ${SEM_NUMERO}`, maximo: 160 },

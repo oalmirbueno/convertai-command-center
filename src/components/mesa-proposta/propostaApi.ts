@@ -33,6 +33,7 @@ import {
   type ServicoDaBiblioteca,
   type VisualDaProposta,
 } from "../../../supabase/functions/_shared/proposta-comercial";
+import { lerUpsell, type UpsellDaProposta } from "../../../supabase/functions/_shared/proposta-upsell";
 
 /**
  * Mesa Proposta: a ponte da tela com a função mesa-proposta e as tabelas
@@ -94,6 +95,9 @@ export interface Proposta {
   pacote_aceito: string | null;
   pagamento_aceito: string | null;
   ultimo_followup_em: string | null;
+  /** Frente PRO3: "upsell" (cliente da casa, com o retrato em contexto.upsell) ou "nova". */
+  tipo: "nova" | "upsell";
+  upsell: UpsellDaProposta | null;
 }
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -114,6 +118,7 @@ export function normalizarProposta(d: unknown): Proposta | null {
   const validade = diaValido(o.validade_ate);
   const status = ehStatus(o.status) ? o.status : "rascunho";
   const contexto = (o.contexto && typeof o.contexto === "object" ? o.contexto : {}) as Proposta["contexto"];
+  const upsell = lerUpsell(o.contexto);
   const hoje = hojeEmSaoPaulo();
   return {
     id: o.id,
@@ -149,6 +154,8 @@ export function normalizarProposta(d: unknown): Proposta | null {
     pacote_aceito: (o.pacote_aceito as string) || null,
     pagamento_aceito: (o.pagamento_aceito as string) || null,
     ultimo_followup_em: (o.ultimo_followup_em as string) || null,
+    tipo: upsell || o.tipo === "upsell" ? "upsell" : "nova",
+    upsell,
   };
 }
 

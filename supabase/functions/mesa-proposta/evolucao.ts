@@ -169,7 +169,8 @@ export function criarAcoesDaEvolucao<C extends ChamadorMinimo, L extends LinhaMi
       conteudo: normalizarConteudo(conteudo),
       itens: linha.itens,
       validade_ate: somarDias(hoje, dias),
-      contexto: outroCliente ? {} : { notas: linha.contexto.notas || "", transcricao: linha.contexto.transcricao || "", materiais: linha.contexto.materiais || [] },
+      // PRO3: no mesmo cliente a cópia de um upsell continua upsell (o retrato vai junto).
+      contexto: outroCliente ? {} : { notas: linha.contexto.notas || "", transcricao: linha.contexto.transcricao || "", materiais: linha.contexto.materiais || [], ...(linha.contexto.upsell ? { upsell: linha.contexto.upsell } : {}) },
       logo_cliente_path: outroCliente ? await d.logoDoCliente(destino, null) : linha.logo_cliente_path,
       criado_por: ch.userId,
       pacotes: linha.pacotes,

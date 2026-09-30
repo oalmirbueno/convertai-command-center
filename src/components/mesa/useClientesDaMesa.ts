@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  ehMesaDeCriacao,
   modoParaGravar,
   montarClientesDaMesa,
   normalizarEscolhas,
@@ -34,7 +35,29 @@ export function useClientesDaMesa(mesa: MesaDeClientes, brutos: ClienteBruto[] |
     },
   });
   const escolhas = useMemo(() => (escolhasQ.isError ? [] : escolhasQ.data || []), [escolhasQ.isError, escolhasQ.data]);
-  const montado = useMemo(() => montarClientesDaMesa(mesa, brutos, escolhas), [mesa, brutos, escolhas]);
+  // PRO3: nas mesas de criação o lead ganho no Comercial (won_client_id) entra. Leitura leve; sem acesso, vale só o padrão.
+  const convertidosQ = useQuery({
+    queryKey: ["mesa", "leads-convertidos"],
+    enabled: ehMesaDeCriacao(mesa),
+    staleTime: 5 * 60_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+    queryFn: async (): Promise<Record<string, true>> => {
+      try {
+        const { data, error } = await (supabase as any).from("commercial_leads").select("won_client_id");
+        if (error) return {};
+        const saida: Record<string, true> = {};
+        ((data || []) as Array<{ won_client_id?: string | null }>).forEach((l) => {
+          if (l && l.won_client_id) saida[String(l.won_client_id)] = true;
+        });
+        return saida;
+      } catch {
+        return {};
+      }
+    },
+  });
+  const convertidos = convertidosQ.data || null;
+  const montado = useMemo(() => montarClientesDaMesa(mesa, brutos, escolhas, convertidos), [mesa, brutos, escolhas, convertidos]);
 
   /** Põe ou tira o cliente da mesa. Devolve a mensagem de erro, ou null quando gravou. */
   const definir = useCallback(

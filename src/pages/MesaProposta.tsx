@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BriefcaseBusiness } from "lucide-react";
+import { BriefcaseBusiness, ChevronRight, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -21,12 +21,14 @@ import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { botao, juntar, superficie } from "@/components/sistema/estilos";
+import { botao, foco, juntar, superficie } from "@/components/sistema/estilos";
 import { usePropostas } from "@/components/mesa-proposta/propostaApi";
 
 /**
  * Mesa Proposta (/mesa-proposta, só admin e gestor), frente PRO (30/09).
- * Entra por Clientes -> cliente -> Gerar proposta, ou pelo lead do Comercial
+ * Entra por Clientes (área Propostas: Nova proposta para cliente novo ou
+ * lead, e Proposta de upsell no cliente da casa; frente PRO3, 30/09: fora do
+ * seletor de mesas, a casca mostra "Clientes › Propostas"), ou pelo lead do Comercial
  * (?lead=). Mesma casca das outras mesas; o estrategista comercial fica fixo
  * ao lado (no celular, a gaveta do botão de baixo).
  * Endereço: /mesa-proposta?client=<id>&etapa=contexto|rascunho|revisao|envio&proposta=<id>&lead=<id>
@@ -74,6 +76,24 @@ function gravarOnde(clientId: string, etapa: string, nome: string | null) {
   } catch {
     /* armazenamento indisponível: abre sempre no Contexto */
   }
+}
+
+const elo = juntar("toque-compacto inline-flex h-9 min-w-0 shrink-0 items-center rounded-md px-2 text-[13px] font-semibold text-foreground transition-colors hover:bg-muted", foco);
+
+/** PRO3: o caminho de volta no lugar do seletor de mesa (a proposta mora em Clientes). */
+export function CaminhoDasPropostas() {
+  return (
+    <nav aria-label="Caminho" className="flex min-w-0 shrink-0 items-center" data-caminho-da-proposta="">
+      <Link to="/clientes" className={elo}>
+        <Users className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        Clientes
+      </Link>
+      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <Link to="/clientes?propostas=1" className={elo}>
+        Propostas
+      </Link>
+    </nav>
+  );
 }
 
 function EsqueletoDoAgente() {
@@ -267,6 +287,7 @@ export default function MesaProposta() {
       titulo="Mesa Proposta"
       clientId={clientId}
       telaCheia={telaCheia}
+      caminho={<CaminhoDasPropostas />}
       marca={clientId && marca ? <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id, proposta: null }, true)} /> : null}
       cliente={<SeletorDeClientesDaMesa mesa="proposta" clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />}
       etapas={clientId ? <Etapas rotulo="Etapas da Mesa Proposta" numerar itens={ETAPAS_DA_MESA_PROPOSTA.map((e) => ({ valor: e.valor, rotulo: e.rotulo }))} valor={etapa} onEscolher={(v) => mudar({ etapa: v })} /> : null}
@@ -278,6 +299,8 @@ export default function MesaProposta() {
             origem="mesa-proposta"
             tema={`Proposta${nomeDoCliente ? ` de ${nomeDoCliente}` : ""}`}
             contexto={"A proposta comercial aberta na mesa: escopo, preço, argumento e objeções."}
+            // PRO3 (adendo do dono): a sessão leva a referência da proposta aberta.
+            referencia={propostaUrl ? { tipo: "proposta", id: propostaUrl } : { tipo: "proposta" }}
             onUsar={(t) => setRascunhoDoAgente(t)}
             rotuloDoUsar="Levar para o estrategista comercial"
           />
@@ -307,7 +330,12 @@ export default function MesaProposta() {
         <EstadoVazio
           icone={<BriefcaseBusiness className="h-5 w-5" />}
           titulo={lead ? `Escolha o cliente da proposta de ${lead.company || lead.name}.` : "Escolha um cliente para abrir a Mesa Proposta."}
-          descricao={lead ? "Lead sem ficha: crie o cliente em Clientes e volte." : "Proposta comercial com link e aceite."}
+          descricao={lead ? "Lead sem ficha: em Clientes › Propostas, Nova proposta cria o cliente na hora." : "Proposta comercial com link e aceite."}
+          acao={
+            <Link to="/clientes?propostas=1" className={botao.secundario}>
+              Ir para Clientes › Propostas
+            </Link>
+          }
         />
       )}
 

@@ -297,6 +297,27 @@ function Investimento({ x, itens, pacotes, pagamento, pacoteEscolhido }: { x: Da
 
 function Conteudo({ b, d, aceite, pacoteEscolhido }: { b: Bloco; d: DadosDoDocumento; aceite?: ReactNode; pacoteEscolhido?: NivelDoPacote | null }) {
   switch (b.tipo) {
+    case "ja_tem": {
+      // PRO3: proposta de upsell. Serviços, plano e resultados vêm do painel (nunca do modelo de IA).
+      const x = b.dados as DadosDoBloco["ja_tem"];
+      return (
+        <>
+          {x.texto ? <p className="pd-corpo">{x.texto}</p> : null}
+          {x.servicos.length ? <Lista itens={x.servicos.map((s) => ({ titulo: s }))} /> : null}
+          {x.plano ? <p className="pd-sub">{x.plano}</p> : null}
+          {x.resultados.length ? (
+            <div className="pd-grade pd-grade-2">
+              {x.resultados.map((r, i) => (
+                <div key={`${r.titulo}-${i}`} className="pd-cartao">
+                  <span className="pd-item-titulo">{r.titulo}</span>
+                  <span className="pd-item-texto">{r.texto}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </>
+      );
+    }
     case "desafio": {
       const x = b.dados as DadosDoBloco["desafio"];
       return (

@@ -446,7 +446,9 @@ export function grupoDaOrigem(origem: string): string {
   if (o.indexOf("contrato") >= 0) return "contrato";
   if (o.indexOf("roteiro") >= 0 || o.indexOf("video") >= 0 || o.indexOf("edicao") >= 0) return "roteiro";
   if (o.indexOf("site") >= 0) return "site";
-  if (o.indexOf("proposta") >= 0) return "proposta";
+  // Frente PRO3 (30/09): o conselho em Clientes. Upsell é conversa de proposta; "cliente" olha a conta inteira.
+  if (o.indexOf("proposta") >= 0 || o.indexOf("upsell") >= 0) return "proposta";
+  if (o === "cliente") return "cliente";
   if (o.indexOf("campanha") >= 0 || o.indexOf("ads") >= 0 || o.indexOf("publicidade") >= 0) return "campanha";
   if (o.indexOf("mes") >= 0) return "mes";
   if (o.indexOf("contexto") >= 0 || o.indexOf("marca") >= 0 || o.indexOf("identidade") >= 0 || o.indexOf("naming") >= 0) return "marca";
@@ -461,6 +463,7 @@ const ELENCO_PADRAO: Record<string, string[]> = {
   campanha: ["performance", "copywriter", "diretor_arte", "comercial", "cetico"],
   proposta: ["comercial", "estrategista_marca", "copywriter", "cetico"],
   contrato: ["juridico", "comercial", "cetico"],
+  cliente: ["estrategista_marca", "performance", "comercial", "cetico"],
   geral: ["estrategista_marca", "copywriter", "especialista_nicho", "cetico"],
 };
 
