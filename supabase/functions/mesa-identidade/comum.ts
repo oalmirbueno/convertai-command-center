@@ -249,7 +249,7 @@ export function dadosComParte(dados: Record<string, unknown>, parte: string, val
 
 // ------------------------------------------------------------------ gancho do documento de entrega
 
-export type TipoDoEvento = "naming_enviado" | "naming_grupo" | "naming_escolhido" | "brandbook_enviado" | "brandbook_publicado" | "brandbook_revogado" | "kit_aplicado" | "projeto_entregue";
+export type TipoDoEvento = "naming_enviado" | "naming_grupo" | "naming_escolhido" | "brandbook_enviado" | "brandbook_publicado" | "brandbook_revogado" | "kit_aplicado" | "projeto_entregue" | "estrategia_montada" | "votacao_aberta" | "votacao_fechada";
 
 /** Registra a entrega com o resumo e as provas (frente DOC lê daqui). Nunca derruba quem chamou. */
 export async function registrarEvento(e: { clientId: string; marcaId?: string | null; projetoId?: string | null; tipo: TipoDoEvento; resumo: string; provas?: Record<string, unknown>; userId: string }) {

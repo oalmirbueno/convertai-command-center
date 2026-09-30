@@ -27,6 +27,10 @@ import { modeloDoPapelNaTela } from "./Comuns";
 
 export const ATALHOS_DO_DIRETOR = [
   { rotulo: "O que falta?", texto: "O que falta para fechar a etapa atual?" },
+  { rotulo: "Montar a estratégia", texto: "Monte a estratégia de marca a partir do briefing e da pesquisa." },
+  { rotulo: "Três paletas", texto: "Proponha 3 paletas para a marca." },
+  { rotulo: "Pares de fonte", texto: "Sugira pares de fonte do Google Fonts para a marca." },
+  { rotulo: "Taglines", texto: "Gere taglines e slogans a partir da estratégia." },
   { rotulo: "Gerar nomes", texto: "Gere uma rodada de nomes com os critérios do briefing." },
   { rotulo: "Três caminhos", texto: "Gere 3 caminhos criativos." },
   { rotulo: "Montar o brandbook", texto: "Monte o brandbook de 24 páginas." },
@@ -35,6 +39,7 @@ export const ATALHOS_DO_DIRETOR = [
 
 const CAPACIDADES = [
   "dizer o que falta em cada etapa e fechar a etapa (na hora)",
+  "montar a estratégia, propor 3 paletas, sugerir pares de fonte e gerar taglines (com custo no cartão e Desfazer)",
   "gerar nomes por técnica e caminhos criativos (com custo no cartão)",
   "escolher nome e caminho (na hora, com Desfazer)",
   "montar o brandbook no modelo pedido (na hora)",
@@ -150,7 +155,7 @@ export default function AgenteDiretorDeMarca({ projetoId, rascunho, onRascunho }
               </button>
             )}
             <AjudaRecolhida rotulo="Como o diretor de marca funciona">
-              Peça o que precisa. Fechar etapa, escolher nome ou caminho e montar o brandbook ele faz na hora, com Desfazer. Gerar nomes e caminhos usa IA e vem num cartão com o custo; enviar para aprovação e levar ao kit também pedem Confirmar. A logo final é sempre o arquivo da equipe. O que você ensinar vira regra; dá para esquecer.
+              Peça o que precisa. Fechar etapa, escolher nome ou caminho e montar o brandbook ele faz na hora, com Desfazer. Gerar nomes e caminhos, montar a estratégia, propor paletas, sugerir fontes e gerar taglines usam IA e vêm num cartão com o custo; enviar para aprovação e levar ao kit também pedem Confirmar. A logo final é sempre o arquivo da equipe. O que você ensinar vira regra; dá para esquecer.
             </AjudaRecolhida>
           </>
         }

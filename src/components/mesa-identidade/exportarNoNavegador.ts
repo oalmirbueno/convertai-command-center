@@ -1,6 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import { coresDoBrandbook, imagensDoBrandbook, logosDoBrandbook, SLOTS_DE_LOGO, type DadosDoBrandbook, type ModeloDoBrandbook } from "../../../supabase/functions/_shared/brandbook";
 import { PERFIS, textoCmyk, textoRgb } from "../../../supabase/functions/_shared/cores-da-marca";
+import { normalizarEstrategia, rotuloDoArquetipo, textoDoEixo, EIXOS_DE_PERSONALIDADE } from "../../../supabase/functions/_shared/estrategia-de-marca";
+import { urlDoGoogleFonts } from "../../../supabase/functions/_shared/tipografia-da-marca";
 
 /**
  * Exportar no navegador (etapa Guideline): o PDF do brandbook (o mesmo
@@ -75,7 +77,7 @@ export function arquivosDasCores(dados: DadosDoBrandbook): Record<string, string
  * enviadas da marca (quando há), o brandbook.json e o PDF. Devolve o que
  * ficou de fora (arquivo que não baixou).
  */
-export async function pacoteDaMarca(e: { clientId: string; marcaId: string | null; dados: DadosDoBrandbook; modelo: ModeloDoBrandbook; versao: number; pdf?: { bytes: Uint8Array; nome: string } | null }): Promise<{ blob: Blob; nome: string; fora: string[] }> {
+export async function pacoteDaMarca(e: { clientId: string; marcaId: string | null; dados: DadosDoBrandbook; modelo: ModeloDoBrandbook; versao: number; pdf?: { bytes: Uint8Array; nome: string } | null; projeto?: Record<string, unknown> | null; paginaWeb?: string | null }): Promise<{ blob: Blob; nome: string; fora: string[] }> {
   const JSZip = (await import("jszip")).default;
   const zip = new JSZip();
   const fora: string[] = [];
@@ -107,8 +109,83 @@ export async function pacoteDaMarca(e: { clientId: string; marcaId: string | nul
   }
   const tipos = e.dados.tipografia.map((t) => `${t.familia}: ${t.uso}${t.pesos.length ? `, pesos ${t.pesos.join(", ")}` : ""}. Licença: ${t.licenca || "a confirmar"}.${t.alternativa ? ` Alternativa: ${t.alternativa}.` : ""}`);
   zip.file("fontes/LEIA.txt", ["Tipografia da marca", ""].concat(tipos, listaDeFontes.length ? ["", "Arquivos enviados no painel:"].concat(listaDeFontes) : ["", "Os arquivos das fontes não estão no painel: baixe no site da família (Google Fonts ou a fundição)."]).join("\n"));
+  // IDV2: grafismos (PNG e o SVG gerado), peças da marca, estratégia e a página web do brandbook.
+  for (let i = 0; i < e.dados.grafismos.length; i++) {
+    const g = e.dados.grafismos[i];
+    const base = `grafismos/${String(i + 1).padStart(2, "0")}-${limpar(g.tipo)}`;
+    if (g.imagem) {
+      const b = await baixarBytes(g.imagem);
+      if (b) zip.file(`${base}.${(/\.([a-z0-9]+)$/i.exec(g.imagem) || ["", "png"])[1]}`, b);
+      else fora.push(g.imagem.split("/").pop() || g.imagem);
+    }
+    if (g.svg) {
+      const v = await baixarBytes(g.svg);
+      if (v) zip.file(`${base}.svg`, v);
+    }
+  }
+  for (const a of e.dados.aplicacoes) {
+    if (!a.imagem) continue;
+    const b = await baixarBytes(a.imagem);
+    if (b) zip.file(`aplicacoes/${limpar(a.tipo)}.${(/\.([a-z0-9]+)$/i.exec(a.imagem) || ["", "png"])[1]}`, b);
+    else fora.push(a.tipo);
+  }
+  const estrategia = e.projeto ? textoDaEstrategia(e.projeto, e.dados.marca.nome) : "";
+  if (estrategia) zip.file("estrategia-da-marca.txt", estrategia);
+  if (e.paginaWeb) zip.file("brandbook.html", e.paginaWeb);
   zip.file("brandbook.json", JSON.stringify({ versao: e.versao, modelo: e.modelo, dados: e.dados }, null, 2));
   if (e.pdf) zip.file(e.pdf.nome, e.pdf.bytes);
   const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
   return { blob, nome: `pacote-da-marca-${limpar(e.dados.marca.nome || "marca")}-v${e.versao}.zip`, fora };
+}
+
+/** A estratégia da marca em texto corrido (vai no pacote: equipe e cliente leem sem o painel). */
+export function textoDaEstrategia(projeto: Record<string, unknown>, marca: string): string {
+  const e = normalizarEstrategia(projeto.estrategia);
+  const l: string[] = [`Estratégia da marca ${marca || ""}`.trim(), ""];
+  const bloco = (titulo: string, linhas: string[]) => {
+    const validas = linhas.filter((x) => x && x.trim());
+    if (!validas.length) return;
+    l.push(titulo, ...validas.map((x) => `  ${x}`), "");
+  };
+  bloco("Propósito", [e.proposito]);
+  bloco("Missão", [e.missao]);
+  bloco("Visão", [e.visao]);
+  bloco("Valores", e.valores.map((v) => (v.descricao ? `${v.nome}: ${v.descricao}` : v.nome)));
+  bloco("Arquétipo", [[rotuloDoArquetipo(e.arquetipo.principal), rotuloDoArquetipo(e.arquetipo.secundario)].filter(Boolean).join(" com "), e.arquetipo.justificativa]);
+  bloco("Personalidade", e.personalidade.tracos.concat(EIXOS_DE_PERSONALIDADE.filter((x) => e.personalidade.eixos[x.valor] !== 0).map((x) => `${x.esquerda} ou ${x.direita}: ${textoDoEixo(x.valor, e.personalidade.eixos[x.valor])}`)));
+  bloco("Posicionamento", [e.posicionamento.declaracao]);
+  bloco("Proposta de valor", [e.proposta_de_valor.promessa].concat(e.proposta_de_valor.ganhos.map((g) => `Ganho: ${g}`), e.proposta_de_valor.alivios.map((a) => `Alivia: ${a}`)));
+  bloco("Público", [e.publico.resumo, e.publico.persona.nome ? `Persona: ${[e.publico.persona.nome, e.publico.persona.idade, e.publico.persona.ocupacao].filter(Boolean).join(", ")}` : ""]);
+  bloco("Tom de voz", [e.tom.atributos.join(", ")].concat(e.tom.fala_assim.map((x) => `Fala assim: ${x}`), e.tom.nao_fala_assim.map((x) => `Não fala assim: ${x}`)));
+  return l.length > 2 ? l.join("\n") : "";
+}
+
+/** Imagens do brandbook como data URL (a página web abre sem login e sem o painel). */
+async function imagensComoDataUrl(dados: DadosDoBrandbook): Promise<Record<string, string>> {
+  const mapa: Record<string, string> = {};
+  for (const c of imagensDoBrandbook(dados)) {
+    const b = await baixarBytes(c);
+    if (!b || b.byteLength > 2_500_000) continue;
+    const tipo = /\.svg$/i.test(c) ? "image/svg+xml" : /\.jpe?g$/i.test(c) ? "image/jpeg" : /\.webp$/i.test(c) ? "image/webp" : "image/png";
+    let binario = "";
+    for (let i = 0; i < b.length; i += 0x8000) binario += String.fromCharCode.apply(null, Array.from(b.subarray(i, i + 0x8000)));
+    mapa[c] = `data:${tipo};base64,${btoa(binario)}`;
+  }
+  return mapa;
+}
+
+/**
+ * A página web do brandbook (IDV2): um arquivo HTML que abre em qualquer
+ * navegador, com as imagens dentro e as fontes do Google Fonts. É o mesmo
+ * desenho da prévia (VisaoDoBrandbook), escrito pelo React em texto.
+ */
+export async function paginaWebDoBrandbook(dados: DadosDoBrandbook, modelo: ModeloDoBrandbook, versao: number): Promise<{ html: string; nome: string }> {
+  const [{ renderToStaticMarkup }, { createElement }, visao] = await Promise.all([import("react-dom/server"), import("react"), import("./VisaoDoBrandbook")]);
+  const mapa = await imagensComoDataUrl(dados);
+  const corpo = renderToStaticMarkup(createElement(visao.default, { dados, modelo, urlDe: (c: string | null | undefined) => (c ? mapa[c] || null : null) }));
+  const fontes = urlDoGoogleFonts(dados.tipografia.map((t) => ({ familia: t.familia, pesos: [400, 700] })));
+  const esc = (x: string) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const titulo = `Manual da marca ${dados.marca.nome || ""}`.trim();
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(titulo)}</title>${fontes ? `<link rel="stylesheet" href="${fontes}">` : ""}<style>body{margin:0;background:#EEF1EE;font-family:Helvetica,Arial,sans-serif}main{max-width:1240px;margin:0 auto;padding:24px 16px}</style></head><body><main>${corpo}<p style="font-size:12px;color:#626D66;text-align:center;margin-top:24px">Versão ${versao}. Feito pela Aceleriq.</p></main></body></html>`;
+  return { html, nome: `brandbook-${limpar(dados.marca.nome || "marca")}-v${versao}.html` };
 }

@@ -36,6 +36,13 @@ export const TECNICAS_DE_NAMING = [
   { valor: "estrangeiro", rotulo: "Outra língua", explica: "Palavra de outra língua com o sentido certo e fácil no Brasil." },
   { valor: "lugar", rotulo: "Lugar ou origem", explica: "Um lugar, uma rua, uma origem que conta a história." },
   { valor: "fundador", rotulo: "Nome próprio", explica: "Nome ou sobrenome de quem fundou, com assinatura." },
+  // Frente IDV2 (30/09): mais técnicas do repertório de naming.
+  { valor: "arbitrario", rotulo: "Palavra arbitrária", explica: "Palavra comum sem ligação com o setor, que vira dona do sentido." },
+  { valor: "aliteracao", rotulo: "Aliteração e rima", explica: "Sons que se repetem e grudam na memória." },
+  { valor: "onomatopeia", rotulo: "Onomatopeia", explica: "O som da coisa ou da sensação virando nome." },
+  { valor: "truncamento", rotulo: "Corte de palavra", explica: "Uma palavra encurtada que ganha força." },
+  { valor: "afixacao", rotulo: "Prefixo ou sufixo", explica: "Uma raiz com prefixo ou sufixo que dá o tom." },
+  { valor: "mitologia", rotulo: "Mito e história", explica: "Figura, lugar ou ideia da mitologia e da história que carrega o valor da marca." },
 ] as const;
 
 export type TecnicaDeNaming = (typeof TECNICAS_DE_NAMING)[number]["valor"];
@@ -147,6 +154,9 @@ export type CandidatoDeNome = {
   /** Nota final (Jev + domínio), 0 a 1. */
   nota: number | null;
   finalista: boolean;
+  /** Teste de pronúncia e de significado em outros idiomas (IDV2): aviso, nunca trava. */
+  idiomas?: LeituraEmIdioma[];
+  risco_idioma?: RiscoDoIdioma;
 };
 
 export function filtrosIniciais(nome: string): FiltrosDoNome {
@@ -428,4 +438,168 @@ export function mensagemDoGrupo(e: { cliente: string; alvo: AlvoDoNaming; finali
 /** Link do WhatsApp sem número (a equipe escolhe o grupo). */
 export function linkDoWhatsapp(texto: string): string {
   return `https://wa.me/?text=${encodeURIComponent(texto)}`;
+}
+
+// ------------------------------------------------------------------ idiomas (IDV2)
+
+export const IDIOMAS_DO_TESTE = [
+  { valor: "en", rotulo: "Inglês" },
+  { valor: "es", rotulo: "Espanhol" },
+  { valor: "fr", rotulo: "Francês" },
+  { valor: "it", rotulo: "Italiano" },
+  { valor: "de", rotulo: "Alemão" },
+] as const;
+
+export type IdiomaDoTeste = (typeof IDIOMAS_DO_TESTE)[number]["valor"];
+export type RiscoDoIdioma = "ok" | "atencao" | "alto" | "nao_avaliado";
+export type LeituraEmIdioma = { idioma: IdiomaDoTeste; pronuncia: string; significado: string };
+
+const IDIOMAS_VALIDOS = IDIOMAS_DO_TESTE.map((i) => i.valor) as string[];
+const linha = (v: unknown, max: number) => String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, max);
+
+/** O que o modelo disse de cada nome em cada idioma, em forma segura (idioma conhecido, texto curto). */
+export function normalizarLeituras(bruto: unknown): Record<string, LeituraEmIdioma[]> {
+  const itens = bruto && typeof bruto === "object" && Array.isArray((bruto as Record<string, unknown>).nomes) ? ((bruto as Record<string, unknown>).nomes as unknown[]) : Array.isArray(bruto) ? bruto : [];
+  const saida: Record<string, LeituraEmIdioma[]> = {};
+  for (const b of itens) {
+    const o = (b && typeof b === "object" ? b : {}) as Record<string, unknown>;
+    const id = String(o.id || "").slice(0, 8);
+    if (!/^n\d{1,2}$/.test(id)) continue;
+    const leituras: LeituraEmIdioma[] = [];
+    for (const l of Array.isArray(o.leituras) ? o.leituras : []) {
+      const x = (l && typeof l === "object" ? l : {}) as Record<string, unknown>;
+      const idioma = String(x.idioma || "");
+      if (IDIOMAS_VALIDOS.indexOf(idioma) < 0 || leituras.some((y) => y.idioma === idioma)) continue;
+      leituras.push({ idioma: idioma as IdiomaDoTeste, pronuncia: linha(x.pronuncia, 80), significado: linha(x.significado, 240) });
+    }
+    if (leituras.length) saida[id] = leituras;
+  }
+  return saida;
+}
+
+/** A pergunta do Jev (Noul) para o risco do nome: o julgamento é do Jev, não do modelo que escreveu as leituras. */
+export function perguntasDoRiscoDeIdioma(candidatos: Array<Pick<CandidatoDeNome, "id" | "nome" | "idiomas">>): Record<string, PerguntaJev> {
+  const q: Record<string, PerguntaJev> = {};
+  for (const c of candidatos) {
+    if (!c.idiomas || !c.idiomas.length) continue;
+    const leituras = c.idiomas.map((l) => `${l.idioma}: ${l.significado || "sem sentido"}${l.pronuncia ? ` (fala-se ${l.pronuncia})` : ""}`).join("; ");
+    q[c.id] = {
+      type: "noul",
+      instructions: `O nome de marca "${c.nome}" tem estas leituras em outros idiomas: ${leituras}. Alguma delas é ofensiva, vulgar, negativa ou constrangedora a ponto de prejudicar a marca nesse idioma?`,
+    };
+  }
+  return q;
+}
+
+/** Probabilidade do Noul vira o aviso: acima de 0,66 alto; acima de 0,33 atenção. */
+export function riscoPelaProbabilidade(p: number | null | undefined): RiscoDoIdioma {
+  if (typeof p !== "number" || !isFinite(p)) return "nao_avaliado";
+  if (p > 0.66) return "alto";
+  if (p > 0.33) return "atencao";
+  return "ok";
+}
+
+export const ROTULO_DO_RISCO: Record<RiscoDoIdioma, string> = { ok: "sem risco visto", atencao: "atenção", alto: "risco alto", nao_avaliado: "não avaliado" };
+
+// ------------------------------------------------------------------ slogan e tagline (IDV2)
+
+export const TIPOS_DE_SLOGAN = [
+  { valor: "tagline", rotulo: "Tagline", explica: "Assinatura curta que acompanha a logo (até 5 palavras)." },
+  { valor: "slogan", rotulo: "Slogan", explica: "Frase de posicionamento para campanhas e site (até 10 palavras)." },
+  { valor: "manifesto", rotulo: "Frase de manifesto", explica: "Frase de abertura do manifesto da marca." },
+] as const;
+
+export type TipoDeSlogan = (typeof TIPOS_DE_SLOGAN)[number]["valor"];
+export type SloganDaMarca = { id: string; texto: string; tipo: TipoDeSlogan; por_que: string; nota: number | null };
+
+/** Slogans do modelo em forma segura: sem aspas, sem repetir, tipo conhecido, id s1..sN. */
+export function normalizarSlogans(bruto: unknown, limite = 12): SloganDaMarca[] {
+  const itens = bruto && typeof bruto === "object" && Array.isArray((bruto as Record<string, unknown>).slogans) ? ((bruto as Record<string, unknown>).slogans as unknown[]) : Array.isArray(bruto) ? bruto : [];
+  const tipos = TIPOS_DE_SLOGAN.map((t) => t.valor) as string[];
+  const saida: SloganDaMarca[] = [];
+  const vistos: string[] = [];
+  for (const b of itens) {
+    const o = (b && typeof b === "object" ? b : {}) as Record<string, unknown>;
+    const texto = linha(o.texto, 140).replace(/["“”]/g, "").trim();
+    const chave = semAcento(texto).toLowerCase().replace(/[^a-z0-9]+/g, "");
+    if (texto.length < 3 || vistos.indexOf(chave) >= 0) continue;
+    vistos.push(chave);
+    saida.push({ id: `s${saida.length + 1}`, texto, tipo: (tipos.indexOf(String(o.tipo)) >= 0 ? o.tipo : "tagline") as TipoDeSlogan, por_que: linha(o.por_que, 300), nota: null });
+    if (saida.length >= limite) break;
+  }
+  return saida;
+}
+
+/** Pergunta do Jev (Score) para ranquear os slogans pela estratégia. */
+export function perguntasDosSlogans(slogans: SloganDaMarca[]): Record<string, PerguntaJev> {
+  const q: Record<string, PerguntaJev> = {};
+  for (const s of slogans) {
+    const papel = s.tipo === "tagline" ? "tagline (assinatura curta da logo)" : s.tipo === "slogan" ? "slogan" : "frase de manifesto";
+    q[s.id] = {
+      type: "score",
+      instructions: `Avalie a frase "${s.texto}" como ${papel} da marca descrita em marca: fidelidade ao posicionamento e ao tom, memória, clareza em português e diferença do que os concorrentes dizem.`,
+      criteria: NIVEIS_DO_NOME,
+    };
+  }
+  return q;
+}
+
+/** Ordena os slogans pela nota do Jev (sem nota no fim, na ordem em que vieram). */
+export function ordenarSlogans(lista: SloganDaMarca[]): SloganDaMarca[] {
+  return lista
+    .map((s, i) => ({ s, i }))
+    .sort((a, b) => (a.s.nota === null && b.s.nota === null ? a.i - b.i : a.s.nota === null ? 1 : b.s.nota === null ? -1 : b.s.nota - a.s.nota || a.i - b.i))
+    .map((x) => x.s);
+}
+
+// ------------------------------------------------------------------ votação (IDV2)
+
+export type VotoDoNome = { candidato_id: string; origem: "equipe" | "cliente"; nota: number };
+export type ResumoDoVoto = { equipe: number | null; n_equipe: number; cliente: number | null; n_cliente: number };
+
+/** Resumo por nome: média e quantidade de votos da equipe e do cliente (nota de 1 a 5). */
+export function resumoDosVotos(votos: VotoDoNome[]): Record<string, ResumoDoVoto> {
+  const somas: Record<string, { se: number; ne: number; sc: number; nc: number }> = {};
+  for (const v of votos) {
+    const nota = Math.round(Number(v.nota));
+    if (!(nota >= 1 && nota <= 5) || !v.candidato_id) continue;
+    const s = somas[v.candidato_id] || (somas[v.candidato_id] = { se: 0, ne: 0, sc: 0, nc: 0 });
+    if (v.origem === "cliente") {
+      s.sc += nota;
+      s.nc += 1;
+    } else {
+      s.se += nota;
+      s.ne += 1;
+    }
+  }
+  const r: Record<string, ResumoDoVoto> = {};
+  for (const k of Object.keys(somas)) {
+    const s = somas[k];
+    r[k] = { equipe: s.ne ? Math.round((s.se / s.ne) * 10) / 10 : null, n_equipe: s.ne, cliente: s.nc ? Math.round((s.sc / s.nc) * 10) / 10 : null, n_cliente: s.nc };
+  }
+  return r;
+}
+
+/** O retrato da votação pública: só nome, justificativa e pronúncia dos finalistas (sem nota, sem domínio). */
+export function retratoDaVotacao(e: { marca: string; alvo: AlvoDoNaming; candidatos: CandidatoDeNome[] }): { marca: string; alvo: string; finalistas: Array<{ id: string; nome: string; justificativa: string; pronuncia: string | null }> } {
+  return {
+    marca: linha(e.marca, 80),
+    alvo: ROTULO_DO_ALVO[e.alvo],
+    finalistas: e.candidatos
+      .filter((c) => c.finalista)
+      .slice(0, LIMITES_DO_NAMING.finalistasMax)
+      .map((c) => ({ id: c.id, nome: c.nome, justificativa: c.justificativa, pronuncia: c.pronuncia })),
+  };
+}
+
+/** Outras redes para conferir o @ (links prontos; o painel não entra em conta de terceiro). */
+export function linksDoArroba(arroba: string | null): Array<{ rede: string; link: string }> {
+  if (!arroba) return [];
+  const a = encodeURIComponent(arroba);
+  return [
+    { rede: "Instagram", link: `https://www.instagram.com/${a}/` },
+    { rede: "TikTok", link: `https://www.tiktok.com/@${a}` },
+    { rede: "YouTube", link: `https://www.youtube.com/@${a}` },
+    { rede: "Facebook", link: `https://www.facebook.com/${a}` },
+  ];
 }

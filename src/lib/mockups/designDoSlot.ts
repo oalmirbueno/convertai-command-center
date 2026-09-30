@@ -30,6 +30,11 @@ export interface EscolhasDoDesign {
   textura?: { imagem: CanvasImageSource; largura: number; altura: number } | null;
   opacidadeTextura?: number;
   desgaste?: number;
+  /**
+   * Assinatura da marca (IDV2): uma linha de texto (slogan ou nome) na fonte do
+   * título, embaixo da logo, só no slot de arte. A fonte já vem carregada.
+   */
+  assinatura?: { texto: string; familia: string } | null;
 }
 
 export interface Caixa {
@@ -135,5 +140,26 @@ export function desenharDesign(slot: SlotDoMockup, logos: LogoCarregada[], escol
     cobrir(lc, escolhas.textura.imagem, escolhas.textura.largura, escolhas.textura.altura, lw, lh);
   }
   ctx.drawImage(camada, Math.round(cx.x), Math.round(cx.y));
+  desenharAssinatura(ctx, slot, escolhas, W, H);
   return { canvas: c, escolha };
+}
+
+/** A linha da assinatura no rodapé da área segura (arte), na cor que contrasta com o fundo. */
+function desenharAssinatura(ctx: CanvasRenderingContext2D, slot: SlotDoMockup, escolhas: EscolhasDoDesign, W: number, H: number) {
+  const a = escolhas.assinatura;
+  if (!a || !a.texto || slot.papel !== "arte") return;
+  const ax = slot.areaSegura[0] * W;
+  const ay = slot.areaSegura[1] * H;
+  const aw = Math.max(1, (slot.areaSegura[2] - slot.areaSegura[0]) * W);
+  const ah = Math.max(1, (slot.areaSegura[3] - slot.areaSegura[1]) * H);
+  const tamanho = Math.max(8, Math.round(Math.min(ah * 0.07, aw * 0.06)));
+  ctx.save();
+  ctx.fillStyle = (lumaDoHex(escolhas.fundo) ?? 0) > 0.55 ? "#111111" : "#ffffff";
+  ctx.font = `600 ${tamanho}px "${a.familia}", Helvetica, Arial, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  let texto = a.texto;
+  while (texto.length > 3 && ctx.measureText(texto).width > aw * 0.9) texto = `${texto.slice(0, -4)}...`;
+  ctx.fillText(texto, ax + aw / 2, ay + ah * 0.94);
+  ctx.restore();
 }

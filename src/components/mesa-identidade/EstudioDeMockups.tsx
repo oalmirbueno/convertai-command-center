@@ -11,6 +11,7 @@ import { arquivarAplicacao, carregarImagem, copiaParaBrandbook, enviarParaArquiv
 import type { Ponto } from "@/lib/mockups/homografia";
 import { ESCALA_POR_PAPEL, type EscolhasDoDesign, type LogoCarregada } from "@/lib/mockups/designDoSlot";
 import { carregarLogos, comporCena, paraBlob, renderizarMockup } from "@/lib/mockups/renderizar";
+import { useFontesGoogle } from "@/lib/identidade/fontesGoogle";
 import EditorDeCena from "./EditorDeCena";
 
 /**
@@ -62,16 +63,31 @@ export default function EstudioDeMockups({
   clientId,
   marcaId: marcaDada,
   onEnviados,
+  coresDaMarca,
+  logosDaMarca,
+  tipografia,
+  etapaInicial = "categorias",
+  chaveDaMemoria,
 }: {
   clientId: string;
   marcaId?: string | null;
   /** Os enviados marcados "Brandbook" (a Etapa Mockups da Mesa Identidade guarda em dados.mockups). */
   onEnviados?: (itens: MockupParaBrandbook[]) => void;
+  /** IDV2: as cores do sistema do projeto (sem elas, as do kit da marca). */
+  coresDaMarca?: string[] | null;
+  /** IDV2: as logos do projeto (prévias PNG no bucket mesa); sem elas, as do kit. */
+  logosDaMarca?: Array<{ id: string; path: string }> | null;
+  /** IDV2: a família do título e a linha da assinatura (slogan ou nome) para a peça de arte. */
+  tipografia?: { familia: string; texto: string } | null;
+  /** IDV2: onde o estúdio abre na primeira vez (depois lembra onde parou). */
+  etapaInicial?: Etapa;
+  /** IDV2: memória por projeto (o estúdio lembra etapa e escolhas de cada projeto). */
+  chaveDaMemoria?: string;
 }) {
   const marcaId: string | null = marcaDada || null;
   const qc = useQueryClient();
-  const chave = `mesa-identidade:mockups:${clientId}:${marcaId || "cliente"}`;
-  const [etapa, setEtapa] = useEstadoDaTela<Etapa>(`${chave}:etapa`, "categorias", { validar: (v) => ETAPAS.indexOf(v as Etapa) >= 0 });
+  const chave = chaveDaMemoria || `mesa-identidade:mockups:${clientId}:${marcaId || "cliente"}`;
+  const [etapa, setEtapa] = useEstadoDaTela<Etapa>(`${chave}:etapa`, etapaInicial, { validar: (v) => ETAPAS.indexOf(v as Etapa) >= 0 });
   const [categorias, setCategorias] = useEstadoDaTela<string[]>(`${chave}:categorias`, ["papelaria", "cartao", "dispositivo", "caneca"], { validar: Array.isArray });
   const [aplicar, setAplicar] = useEstadoDaTela<string[]>(`${chave}:aplicar`, [], { validar: Array.isArray });
   const [ajustes, setAjustes] = useEstadoDaTela<{ fundo: number; segunda: number; textura: string; opacidade: number; desgaste: number; escala: number }>(
@@ -94,17 +110,23 @@ export default function EstudioDeMockups({
 
   // Kit da marca aberta (a marca que não é a principal nunca herda da outra).
   const { kit } = useKitDaMarca(clientId, marcaId);
-  const cores = useMemo(() => coresDoKit(kit), [kit]);
+  const doProjeto = (coresDaMarca || []).map((h) => String(h || "")).filter((h) => /^#[0-9a-fA-F]{6}$/.test(h));
+  const cores = useMemo(() => (doProjeto.length ? (doProjeto.length === 1 ? doProjeto.concat(["#ffffff"]) : doProjeto) : coresDoKit(kit)), [kit, doProjeto.join(",")]);
+  const logosDoProjeto = (logosDaMarca || []).filter((l) => !!l.path);
+  const [comAssinatura, setComAssinatura] = useEstadoDaTela<boolean>(`${chave}:assinatura`, false, { validar: (v) => typeof v === "boolean" });
+  const fontePronta = useFontesGoogle(tipografia ? [{ familia: tipografia.familia, pesos: [600] }] : [], !!tipografia && comAssinatura);
 
   const logos = useQuery({
-    queryKey: ["mockups", "logos", clientId, marcaId, kit && kit.logo_path, kit && kit.logo_file_id, kit && kit.logo_alt_path, kit && kit.logo_alt_file_id],
-    enabled: !!kit,
+    queryKey: logosDoProjeto.length ? ["mockups", "logos-do-projeto", clientId, logosDoProjeto.map((l) => l.path).join("|")] : ["mockups", "logos", clientId, marcaId, kit && kit.logo_path, kit && kit.logo_file_id, kit && kit.logo_alt_path, kit && kit.logo_alt_file_id],
+    enabled: logosDoProjeto.length > 0 || !!kit,
     staleTime: 10 * 60_000,
     queryFn: () =>
-      carregarLogos([
-        { id: "principal", path: kit && kit.logo_path, fileId: kit && kit.logo_file_id, tom: kit && kit.logo_tom },
-        { id: "alternativa", path: kit && kit.logo_alt_path, fileId: kit && kit.logo_alt_file_id, tom: kit && kit.logo_alt_tom },
-      ]),
+      logosDoProjeto.length
+        ? carregarLogos(logosDoProjeto.map((l) => ({ id: l.id, path: l.path, fileId: null, tom: null })))
+        : carregarLogos([
+            { id: "principal", path: kit && kit.logo_path, fileId: kit && kit.logo_file_id, tom: kit && kit.logo_tom },
+            { id: "alternativa", path: kit && kit.logo_alt_path, fileId: kit && kit.logo_alt_file_id, tom: kit && kit.logo_alt_tom },
+          ]),
   });
 
   const texturaEscolhida: TexturaDoCatalogo | null = useMemo(() => (texturas.data || []).find((t) => t.id === ajustes.textura) || null, [texturas.data, ajustes.textura]);
@@ -123,8 +145,11 @@ export default function EstudioDeMockups({
       textura: texturaImg.data ? { imagem: texturaImg.data, largura: texturaImg.data.naturalWidth, altura: texturaImg.data.naturalHeight } : null,
       opacidadeTextura: ajustes.opacidade,
       desgaste: ajustes.desgaste,
+      assinatura: tipografia && comAssinatura && tipografia.texto ? { texto: tipografia.texto, familia: tipografia.familia } : null,
     }),
-    [cores, ajustes, texturaImg.data],
+    // fontePronta: redesenha quando a fonte da marca termina de chegar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cores, ajustes, texturaImg.data, tipografia && tipografia.familia, tipografia && tipografia.texto, comAssinatura, fontePronta],
   );
 
   const itens = catalogo.data ? catalogo.data.itens : [];
@@ -362,7 +387,7 @@ export default function EstudioDeMockups({
 
       {semLogo ? (
         <p className={texto.auxiliar} role="status">
-          O kit desta marca está sem logo: os mockups saem só com as cores.
+          {logosDoProjeto.length ? "A logo do projeto não abriu: os mockups saem só com as cores." : "O kit desta marca está sem logo: os mockups saem só com as cores."}
         </p>
       ) : null}
 
@@ -480,6 +505,12 @@ export default function EstudioDeMockups({
               />
               <span className={texto.auxiliar}>{ajustes.escala === 0 ? `Automático (${Math.round(ESCALA_POR_PAPEL.arte * 100)}%)` : `${Math.round(ajustes.escala * 100)}%`}</span>
             </label>
+            {tipografia && tipografia.texto ? (
+              <label className={juntar(texto.corpo, "flex min-w-0 items-center")} title={`${tipografia.texto} em ${tipografia.familia}`}>
+                <input type="checkbox" className="mr-2 h-4 w-4 accent-primary" checked={comAssinatura} onChange={(e) => setComAssinatura(e.target.checked)} />
+                <span className="min-w-0 truncate">Assinatura na peça ({tipografia.familia})</span>
+              </label>
+            ) : null}
             {texturaEscolhida ? (
               <>
                 <label className="grid min-w-0">

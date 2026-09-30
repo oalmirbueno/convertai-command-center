@@ -3,9 +3,12 @@
  * sequência. Pedido do dono: "estúdio sequencial desde o início, envolvente,
  * organizado e limpo".
  *
- * Início -> Briefing -> Pesquisa -> Naming -> Conceito -> Sistema -> Mockups
- * -> Guideline -> Entrega. O Naming só entra quando a marca é do zero ou
- * quando a equipe pede (rebranding com troca de nome).
+ * Início -> Briefing -> Pesquisa -> Estratégia -> Naming -> Conceito ->
+ * Sistema -> Aplicações (mockups) -> Guideline -> Apresentação -> Entrega.
+ * O Naming só entra quando a marca é do zero ou quando a equipe pede
+ * (rebranding com troca de nome). Estratégia e Apresentação entraram na
+ * frente IDV2 (30/09): projeto antigo que já fechou uma etapa depois delas
+ * conta a nova como feita (ETAPAS_NOVAS), para ninguém voltar no meio.
  *
  * Regras da sequência:
  * - a etapa aberta é a primeira que ainda não foi concluída; as concluídas
@@ -17,15 +20,19 @@
  * Puro: sem Deno, sem banco. A tela, a função e os testes usam o mesmo arquivo.
  */
 
+import { faltaNaEstrategia } from "./estrategia-de-marca.ts";
+
 export const ETAPAS_DA_IDENTIDADE = [
   { valor: "inicio", rotulo: "Início" },
   { valor: "briefing", rotulo: "Briefing" },
   { valor: "pesquisa", rotulo: "Pesquisa" },
+  { valor: "estrategia", rotulo: "Estratégia" },
   { valor: "naming", rotulo: "Naming" },
   { valor: "conceito", rotulo: "Conceito" },
   { valor: "sistema", rotulo: "Sistema" },
-  { valor: "mockups", rotulo: "Mockups" },
+  { valor: "mockups", rotulo: "Aplicações" },
   { valor: "guideline", rotulo: "Guideline" },
+  { valor: "apresentacao", rotulo: "Apresentação" },
   { valor: "entrega", rotulo: "Entrega" },
 ] as const;
 
@@ -40,7 +47,16 @@ export const TAMANHOS_DA_IDENTIDADE = {
   conceito: { entrada: 4_000, saida: 4_500 },
   pesquisa: { entrada: 3_000, saida: 3_000, buscas: 3 },
   conversa: { entrada: 6_000, saida: 1_500 },
+  // Frente IDV2: estratégia inteira, 3 paletas, pares de fonte, taglines e o teste de idiomas.
+  estrategia: { entrada: 8_000, saida: 5_000 },
+  paletas: { entrada: 3_500, saida: 2_500 },
+  fontes: { entrada: 3_000, saida: 1_800 },
+  slogans: { entrada: 3_500, saida: 2_200 },
+  idiomas: { entrada: 2_500, saida: 3_000 },
 } as const;
+
+/** Etapas que entraram depois (IDV2): em projeto antigo, uma etapa posterior já fechada conta a nova como feita. */
+export const ETAPAS_NOVAS: EtapaDaIdentidade[] = ["estrategia", "apresentacao"];
 export type ModoDoProjeto = "zero" | "rebranding";
 
 export const ROTULO_DO_MODO: Record<ModoDoProjeto, string> = {
@@ -78,7 +94,14 @@ export function etapasDoProjeto(p: Pick<ProjetoNaSequencia, "modo" | "com_naming
 
 function concluidasValidas(p: ProjetoNaSequencia): EtapaDaIdentidade[] {
   const lista = etapasDoProjeto(p);
-  return (Array.isArray(p.concluidas) ? p.concluidas : []).filter((e): e is EtapaDaIdentidade => ehEtapaDaIdentidade(e) && lista.indexOf(e) >= 0);
+  const brutas = (Array.isArray(p.concluidas) ? p.concluidas : []).filter((e): e is EtapaDaIdentidade => ehEtapaDaIdentidade(e) && lista.indexOf(e) >= 0);
+  // Projeto de antes da IDV2: a etapa nova que ficou para trás de uma etapa já fechada conta como feita.
+  const implicitas = ETAPAS_NOVAS.filter((nova) => {
+    if (brutas.indexOf(nova) >= 0) return false;
+    const i = lista.indexOf(nova);
+    return i >= 0 && brutas.some((e) => lista.indexOf(e) > i);
+  });
+  return lista.filter((e) => brutas.indexOf(e) >= 0 || implicitas.indexOf(e) >= 0);
 }
 
 /** A etapa em que o projeto está: a primeira ainda não concluída (todas feitas: a Entrega). */
@@ -138,7 +161,8 @@ const lista = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 /** Dados do projeto (idv_projetos.dados), no que as etapas guardam. */
 export type DadosDoProjeto = {
   briefing?: Record<string, unknown>;
-  pesquisa?: { referencias?: unknown[]; resumo?: string | null };
+  pesquisa?: { referencias?: unknown[]; resumo?: string | null; moodboard?: unknown[] };
+  estrategia?: Record<string, unknown>;
   naming?: { rodada_id?: string | null; nome?: string | null };
   conceito?: { caminhos?: unknown[]; escolhido?: string | null };
   sistema?: {
@@ -149,6 +173,8 @@ export type DadosDoProjeto = {
     regras?: Record<string, unknown>;
   };
   guideline?: { brandbook_id?: string | null; modelo?: string | null };
+  aplicacoes?: { itens?: unknown[]; assinatura?: Record<string, unknown> };
+  apresentacao?: { falas?: Record<string, string>; tirados?: string[] };
   entrega?: Record<string, unknown>;
   [k: string]: unknown;
 };
@@ -175,6 +201,8 @@ export function faltaNaEtapa(etapa: EtapaDaIdentidade, dadosBrutos: unknown): st
       if (!lista(p.referencias).length && !tem(p.resumo)) falta.push("Ao menos uma referência ou o resumo da pesquisa");
       return falta;
     }
+    case "estrategia":
+      return faltaNaEstrategia(d.estrategia);
     case "naming": {
       const n = obj(d.naming);
       if (!tem(n.nome)) falta.push("O nome escolhido (entre os finalistas)");
@@ -198,6 +226,9 @@ export function faltaNaEtapa(etapa: EtapaDaIdentidade, dadosBrutos: unknown): st
     }
     case "mockups":
       // A Mesa de mockups (frente MCK) decide o que exige; aqui não trava.
+      return falta;
+    case "apresentacao":
+      // A apresentação é o roteiro do encontro com o cliente: ajuda, não trava a entrega.
       return falta;
     case "guideline": {
       const g = obj(d.guideline);

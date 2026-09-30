@@ -125,9 +125,9 @@ export const AREAS_DO_PAINEL: AreaDoPainel[] = [
     palavras: ["edicao", "editar video", "corte", "takes", "legenda"],
   },
   {
-    chave: "mesa_identidade", nome: "Mesa Identidade", rota: "/mesa-identidade", parametro: "etapa", etapas: ["briefing", "pesquisa", "naming", "conceito", "sistema", "mockups", "guideline", "entrega"], comCliente: true,
+    chave: "mesa_identidade", nome: "Mesa Identidade", rota: "/mesa-identidade", parametro: "etapa", etapas: ["briefing", "pesquisa", "estrategia", "naming", "conceito", "sistema", "mockups", "guideline", "apresentacao", "entrega"], comCliente: true,
     faz: "marca, naming e brandbook", agente: "identidade",
-    palavras: ["identidade visual", "brandbook", "brand book", "manual da marca", "naming", "nome da marca", "rebranding", "guideline"],
+    palavras: ["identidade visual", "brandbook", "brand book", "manual da marca", "naming", "nome da marca", "rebranding", "guideline", "estrategia de marca", "arquetipo", "tagline", "moodboard"],
   },
   // Frente PRO (30/09): proposta comercial do cliente (link público /proposta/:token).
   {

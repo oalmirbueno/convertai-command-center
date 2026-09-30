@@ -71,6 +71,7 @@ const EditorialCalendar = lazy(() => import("@/pages/EditorialCalendar"));
 const ContractPublic = lazy(() => import("@/pages/ContractPublic"));
 // Frente IDV (30/09): página pública do brandbook por link (retrato publicado pela equipe, revogável).
 const BrandbookPublico = lazy(() => import("@/pages/BrandbookPublico"));
+const VotacaoDeNomes = lazy(() => import("@/pages/VotacaoDeNomes"));
 const PropostaPublica = lazy(() => import("@/pages/PropostaPublica"));
 const WorkspaceInboxPublic = lazy(() => import("@/pages/WorkspaceInboxPublic"));
 const OAuthConsent = lazy(() => import("@/pages/OAuthConsent"));
@@ -258,6 +259,7 @@ export function AppRoutes() {
       <Route path="/briefing/:token" element={<BriefingPublic />} />
       <Route path="/contrato/:token" element={<ContractPublic />} />
       <Route path="/marca/:token" element={<BrandbookPublico />} />
+      <Route path="/nomes/:token" element={<VotacaoDeNomes />} />
       <Route path="/proposta/:token" element={<PropostaPublica />} />
       <Route path="/inbox/:token" element={<WorkspaceInboxPublic />} />
       <Route path="/quiz/:token" element={<QuizPublicPage />} />

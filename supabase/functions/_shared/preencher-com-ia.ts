@@ -173,7 +173,9 @@ function propriedadeDoCampo(c: CampoParaPreencher): Record<string, unknown> {
     case "lista":
       return { type: ["array", "null"], items: { type: "string" }, description };
     case "escolha":
-      return { type: ["string", "null"], enum: (c.opcoes || []).concat([null as unknown as string]), description };
+      // anyOf em vez de type [string, null] + enum: a Anthropic (direta e pelo OpenRouter) recusa enum
+      // com tipo em lista ("Enum value ... does not match declared type"), visto em 30/09 no Preencher tudo do site.
+      return { anyOf: [{ type: "string", enum: c.opcoes || [] }, { type: "null" }], description };
     case "objeto": {
       const chaves = chavesDoObjeto(c);
       if (!chaves) return { type: ["string", "null"], description: `${description}. Objeto em texto JSON` };

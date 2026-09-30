@@ -5,6 +5,8 @@
  *
  * - Na hora, com Desfazer (ordem clara e sem custo): concluir etapa, escolher
  *   nome, escolher caminho, montar o brandbook.
+ * - Com Confirmar (IDV2): montar a estratégia, propor 3 paletas, sugerir pares
+ *   de fonte e gerar taglines (IA, custo no cartão; o Desfazer volta o que havia).
  * - Com Confirmar: gerar nomes e gerar caminhos (IA, custo no cartão), enviar
  *   o brandbook para aprovação (vai para Arquivos, sem Desfazer) e levar ao
  *   kit da marca (muda o kit; o Desfazer volta o valor de antes).
@@ -34,6 +36,10 @@ export const OPERACOES_DO_DIRETOR = [
   "montar_brandbook",
   "enviar_para_aprovacao",
   "aplicar_no_kit",
+  "montar_estrategia",
+  "propor_paletas",
+  "sugerir_fontes",
+  "gerar_taglines",
 ] as const;
 
 export type OperacaoDoDiretor = (typeof OPERACOES_DO_DIRETOR)[number];
@@ -70,6 +76,21 @@ export function regrasDoDiretor(): Record<string, RegraDaOperacao<Alvo>> {
       trava: (a) => (a.dados && a.dados.tem_logo === false ? "O brandbook ainda não tem a logo principal (arquivo real)." : null),
     },
     aplicar_no_kit: { rotulo: "levar ao kit da marca", alvos: ["b", "p"] },
+    // IDV2: as quatro ações novas combinam no mesmo projeto (ex.: estratégia e paletas num cartão só).
+    montar_estrategia: { rotulo: "montar a estratégia", alvos: ["p"], combina: true },
+    propor_paletas: {
+      rotulo: "propor 3 paletas",
+      alvos: ["p"],
+      combina: true,
+      para: (v) => String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, 400) || "sem pedido extra",
+    },
+    sugerir_fontes: { rotulo: "sugerir pares de fonte", alvos: ["p"], combina: true },
+    gerar_taglines: {
+      rotulo: "gerar taglines e slogans",
+      alvos: ["p"],
+      combina: true,
+      para: (v) => String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, 400) || "sem pedido extra",
+    },
   };
 }
 
@@ -82,12 +103,16 @@ export const DESCRICOES_DAS_OPERACOES: Record<OperacaoDoDiretor, string> = {
   montar_brandbook: "monta uma versão nova do brandbook do projeto p1 (para: prancha ou paginado).",
   enviar_para_aprovacao: "manda o brandbook b1 em PDF para Arquivos com a revisão da agência (aprovação no painel). Não tem Desfazer.",
   aplicar_no_kit: "leva ao kit da marca a paleta, a tipografia e a logo (prévia PNG) do brandbook b1 (ou do projeto p1).",
+  montar_estrategia: "monta a estratégia de marca do projeto p1 (propósito, missão, visão, valores, arquétipo, personalidade, posicionamento, proposta de valor, persona e tom) a partir do briefing, da pesquisa e do contexto. Usa IA: custo no cartão. Só preenche o que está vazio; o Desfazer volta a de antes.",
+  propor_paletas: "propõe 3 paletas para o projeto p1 (para: o pedido da equipe em uma frase, ou vazio), com contraste conferido. Usa IA: custo no cartão. A paleta do sistema não muda até a equipe escolher.",
+  sugerir_fontes: "sugere 3 pares de fonte do Google Fonts para o projeto p1. Usa IA: custo no cartão.",
+  gerar_taglines: "gera taglines, slogans e frases de manifesto do projeto p1 (para: o pedido da equipe, ou vazio), ranqueadas pelo Jev. Usa IA: custo no cartão.",
 };
 
 export const ESQUEMA_DAS_ACOES_DO_DIRETOR = esquemaDasAcoes(OPERACOES_DO_DIRETOR as unknown as string[]);
 
 /** Operações que usam IA (o cartão mostra o custo antes). */
-export const OPERACOES_COM_IA: OperacaoDoDiretor[] = ["gerar_nomes", "gerar_conceitos"];
+export const OPERACOES_COM_IA: OperacaoDoDiretor[] = ["gerar_nomes", "gerar_conceitos", "montar_estrategia", "propor_paletas", "sugerir_fontes", "gerar_taglines"];
 
 export type AlvosDoDiretor = {
   projeto: Array<AlvoComApelido<Alvo>>;

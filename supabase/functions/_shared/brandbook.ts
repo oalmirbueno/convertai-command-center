@@ -21,10 +21,30 @@
  */
 
 import { type FichaDaCor, fichaDaCor, normalizarHex, type PapelDaCor } from "./cores-da-marca.ts";
+import { estrategiaParaBrandbook } from "./estrategia-de-marca.ts";
 
-export const VERSAO_DO_ESQUEMA = 1;
+/** 2 (IDV2, 30/09): tema visual, posicionamento, promessa, justificativa do arquétipo e o SVG do grafismo. */
+export const VERSAO_DO_ESQUEMA = 2;
 
 export type ModeloDoBrandbook = "prancha" | "paginado";
+
+/**
+ * Modelos visuais (IDV2): a mesma estrutura (prancha ou 24 páginas) com
+ * outra cara. Guardado no JSON (dados.tema), sem mexer no banco.
+ */
+export const TEMAS_DO_BRANDBOOK = [
+  { valor: "classico", rotulo: "Clássico", descricao: "Capa escura, acento da marca e páginas claras. O padrão." },
+  { valor: "editorial", rotulo: "Editorial", descricao: "Muito branco, serifa nos títulos e acento discreto, como revista." },
+  { valor: "escuro", rotulo: "Escuro", descricao: "Tudo em fundo escuro, cores da marca acesas. Bom para tecnologia e noite." },
+  { valor: "minimal", rotulo: "Minimal", descricao: "Preto e branco com a cor da marca só nas amostras. Sóbrio." },
+  { valor: "vibrante", rotulo: "Vibrante", descricao: "Blocos da cor primária nas aberturas. Para marcas jovens e ousadas." },
+] as const;
+
+export type TemaDoBrandbook = (typeof TEMAS_DO_BRANDBOOK)[number]["valor"];
+
+export function ehTema(v: unknown): v is TemaDoBrandbook {
+  return typeof v === "string" && TEMAS_DO_BRANDBOOK.some((t) => t.valor === v);
+}
 
 export type LogoDoBrandbook = {
   /** Caminho no bucket mesa (arquivo original, SVG ou PNG). */
@@ -50,15 +70,16 @@ export const SLOTS_DE_LOGO: Array<{ valor: SlotDeLogo; rotulo: string; varios: b
 ];
 
 export type TipografiaDoBrandbook = { familia: string; pesos: string[]; uso: "titulo" | "texto" | "apoio"; licenca: string; alternativa: string };
-export type GrafismoDoBrandbook = { tipo: "pattern" | "ilustracao" | "fotografia" | "composicao" | "icones" | "outro"; descricao: string; imagem: string | null };
+export type GrafismoDoBrandbook = { tipo: "pattern" | "ilustracao" | "fotografia" | "composicao" | "icones" | "outro"; descricao: string; imagem: string | null; svg?: string | null };
 export type MockupDoBrandbook = { titulo: string; imagem: string | null };
 export type AplicacaoDoBrandbook = { tipo: string; descricao: string; imagem: string | null };
 
 export type DadosDoBrandbook = {
   versao_do_esquema: number;
+  tema: TemaDoBrandbook;
   marca: { nome: string; slogan: string; assinatura: string };
   conceito: { resumo: string; significado_do_logo: string; palavras: string[] };
-  plataforma: { proposito: string; missao: string; visao: string; valores: string[]; personalidade: string[]; arquetipo: string; publico: string };
+  plataforma: { proposito: string; missao: string; visao: string; valores: string[]; personalidade: string[]; arquetipo: string; arquetipo_justificativa: string; publico: string; posicionamento: string; promessa: string };
   tom: { como_fala: string[]; como_nao_fala: string[]; exemplos: Array<{ certo: string; errado: string }> };
   logos: { principal: LogoDoBrandbook | null; secundario: LogoDoBrandbook | null; alternativas: LogoDoBrandbook[]; icone: LogoDoBrandbook[] };
   regras: { protecao_fator: number; reducao_minima_px: number; reducao_minima_mm: number; usos_incorretos: string[] };
@@ -148,6 +169,7 @@ export function normalizarBrandbook(bruto: unknown, clientId?: string | null): D
     .slice(0, 8);
   return {
     versao_do_esquema: VERSAO_DO_ESQUEMA,
+    tema: ehTema(o.tema) ? o.tema : "classico",
     marca: { nome: str(marca.nome, 80), slogan: str(marca.slogan, 160), assinatura: str(marca.assinatura, 160) },
     conceito: { resumo: txt(conceito.resumo, 1500), significado_do_logo: txt(conceito.significado_do_logo, 1500), palavras: strs(conceito.palavras, 8, 40) },
     plataforma: {
@@ -157,7 +179,10 @@ export function normalizarBrandbook(bruto: unknown, clientId?: string | null): D
       valores: strs(plataforma.valores, 8, 80),
       personalidade: strs(plataforma.personalidade, 8, 40),
       arquetipo: str(plataforma.arquetipo, 60),
+      arquetipo_justificativa: txt(plataforma.arquetipo_justificativa, 900),
       publico: txt(plataforma.publico, 800),
+      posicionamento: txt(plataforma.posicionamento, 600),
+      promessa: txt(plataforma.promessa, 400),
     },
     tom: {
       como_fala: strs(tom.como_fala, 8),
@@ -202,7 +227,10 @@ export function normalizarBrandbook(bruto: unknown, clientId?: string | null): D
         const descricao = str(x.descricao, 300);
         const imagem = caminhoSeguro(x.imagem, clientId);
         if (!descricao && !imagem) return null;
-        return { tipo: (TIPOS_GRAFISMO.indexOf(String(x.tipo)) >= 0 ? x.tipo : "outro") as GrafismoDoBrandbook["tipo"], descricao, imagem };
+        const svg = caminhoSeguro(x.svg, clientId);
+        const saida: GrafismoDoBrandbook = { tipo: (TIPOS_GRAFISMO.indexOf(String(x.tipo)) >= 0 ? x.tipo : "outro") as GrafismoDoBrandbook["tipo"], descricao, imagem };
+        if (svg && /\.svg$/i.test(svg)) saida.svg = svg;
+        return saida;
       })
       .filter((g): g is GrafismoDoBrandbook => !!g)
       .slice(0, 6),
@@ -364,23 +392,36 @@ export function brandbookDoProjeto(e: {
   const coresDoSistema = arr(sistema.cores);
   const coresDoKit = arr(obj(e.kit).paleta).map((c) => ({ nome: obj(c).nome, papel: obj(c).papel === "primaria" || obj(c).papel === "secundaria" || obj(c).papel === "destaque" ? obj(c).papel : "secundaria", hex: obj(c).hex }));
   const personalidade = Array.isArray(briefing.personalidade) ? briefing.personalidade : str(briefing.personalidade, 300).split(/[,;]+/);
+  const nomeDaMarca = str(naming.nome, 80) || e.nomeDaMarca;
+  // A estratégia (etapa nova da IDV2) vale mais que o briefing: é a versão trabalhada pela equipe.
+  const est = estrategiaParaBrandbook(d.estrategia, nomeDaMarca);
+  const aplicacoes = arr(obj(d.aplicacoes).itens);
+  const primeiro = (a: unknown, b: unknown) => (Array.isArray(a) ? (a.length ? a : b) : str(a, 2000) ? a : b);
   const bruto = {
-    marca: { nome: str(naming.nome, 80) || e.nomeDaMarca, slogan: str(briefing.slogan, 160), assinatura: "" },
+    tema: obj(d.guideline).tema,
+    marca: { nome: nomeDaMarca, slogan: str(naming.slogan, 160) || str(briefing.slogan, 160), assinatura: "" },
     conceito: {
       resumo: escolhido ? txt(escolhido.ideia, 1500) : "",
       significado_do_logo: txt(sistema.significado_do_logo, 1500),
       palavras: escolhido ? arr(escolhido.palavras) : [],
     },
     plataforma: {
-      proposito: txt(briefing.proposito, 600),
-      missao: txt(briefing.missao, 600),
-      visao: txt(briefing.visao, 600),
-      valores: arr(briefing.valores),
-      personalidade,
-      arquetipo: escolhido ? str(escolhido.arquetipo, 60) : "",
-      publico: txt(briefing.publico, 800),
+      proposito: primeiro(est && est.proposito, txt(briefing.proposito, 600)),
+      missao: primeiro(est && est.missao, txt(briefing.missao, 600)),
+      visao: primeiro(est && est.visao, txt(briefing.visao, 600)),
+      valores: primeiro(est && est.valores, arr(briefing.valores)),
+      personalidade: primeiro(est && est.personalidade, personalidade),
+      arquetipo: primeiro(est && est.arquetipo, escolhido ? str(escolhido.arquetipo, 60) : ""),
+      arquetipo_justificativa: est ? est.arquetipo_justificativa : "",
+      publico: primeiro(est && est.publico, txt(briefing.publico, 800)),
+      posicionamento: est ? est.posicionamento : "",
+      promessa: est ? est.promessa : "",
     },
-    tom: { como_fala: escolhido ? arr(escolhido.tom) : [], como_nao_fala: arr(briefing.evita), exemplos: [] },
+    tom: {
+      como_fala: primeiro(est && est.como_fala, escolhido ? arr(escolhido.tom) : []),
+      como_nao_fala: primeiro(est && est.como_nao_fala, arr(briefing.evita)),
+      exemplos: est ? est.exemplos : [],
+    },
     logos: obj(sistema.logos),
     regras: obj(sistema.regras),
     cores: coresDoSistema.length ? coresDoSistema : coresDoKit,
@@ -388,7 +429,7 @@ export function brandbookDoProjeto(e: {
     tipografia: arr(sistema.tipografia),
     grafismos: arr(sistema.grafismos),
     fotografia: obj(sistema.fotografia),
-    aplicacoes: [],
+    aplicacoes,
     mockups: e.mockups || [],
     arquivos: [],
     creditos: { feito_por: "Aceleriq", contato: "" },
@@ -409,6 +450,7 @@ export function brandbookPublico(d: DadosDoBrandbook, imagens: Record<string, st
     l ? { rotulo: l.rotulo, imagem: img(l.previa_png) || img(l.caminho) } : null;
   return {
     versao_do_esquema: d.versao_do_esquema,
+    tema: d.tema,
     marca: d.marca,
     conceito: d.conceito,
     plataforma: d.plataforma,

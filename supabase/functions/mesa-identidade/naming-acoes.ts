@@ -41,6 +41,7 @@ import {
   type TecnicaDeNaming,
 } from "../_shared/naming.ts";
 import { gerarPdfDoNaming, nomeDoArquivoDoNaming } from "../_shared/pdf-identidade.ts";
+import { normalizarEstrategia } from "../_shared/estrategia-de-marca.ts";
 import {
   type Chamador,
   dadosComParte,
@@ -157,7 +158,7 @@ export async function lerRodada(ch: Chamador, rodadaId: unknown): Promise<LinhaD
   return r;
 }
 
-async function gravarRodada(r: LinhaDaRodada, campos: Record<string, unknown>): Promise<LinhaDaRodada> {
+export async function gravarRodada(r: LinhaDaRodada, campos: Record<string, unknown>): Promise<LinhaDaRodada> {
   const { data, error } = await servico().from("idv_naming_rodadas").update({ ...campos, atualizado_em: new Date().toISOString() }).eq("id", r.id).eq("client_id", r.client_id).select(CAMPOS_DA_RODADA).single();
   if (error) throw erroDoBanco(error, "rodada_nao_gravada", "Não foi possível gravar a rodada de nomes.");
   return normalizarRodada(data) as LinhaDaRodada;
@@ -189,6 +190,8 @@ async function contextoDoNaming(clientId: string, marcaId: string | null, projet
   if (campanhaId && !campanha) throw new ErroHttp(404, "campanha_inexistente", "Esta campanha não é deste cliente.");
   const c = contexto as Record<string, unknown>;
   const briefing = projeto && projeto.dados.briefing && typeof projeto.dados.briefing === "object" ? (projeto.dados.briefing as Record<string, unknown>) : {};
+  // A estratégia (IDV2) orienta o nome: arquétipo, posicionamento e tom.
+  const est = projeto ? normalizarEstrategia(projeto.dados.estrategia) : null;
   const pesquisa = projeto && projeto.dados.pesquisa && typeof projeto.dados.pesquisa === "object" ? (projeto.dados.pesquisa as Record<string, unknown>) : {};
   return {
     nome,
@@ -203,6 +206,9 @@ async function contextoDoNaming(clientId: string, marcaId: string | null, projet
       concorrentes: briefing.concorrentes ?? pesquisa.concorrentes ?? null,
       evita: briefing.evita ?? null,
       campanha: campanha ? { nome: campanha.nome, objetivo: campanha.objetivo, conceito: campanha.conceito, pedido: campanha.pedido } : null,
+      estrategia: est && (est.arquetipo.principal || est.posicionamento.diferencial || est.tom.atributos.length)
+        ? { arquetipo: est.arquetipo.principal || null, posicionamento: est.posicionamento.declaracao || est.posicionamento.diferencial || null, tom: est.tom.atributos, valores: est.valores.map((v) => v.nome) }
+        : null,
     } as Record<string, unknown>,
   };
 }
@@ -379,7 +385,7 @@ export async function namingArquivar(ch: Chamador, corpo: Record<string, unknown
   return json({ rodada: novo, custo_usd: 0 });
 }
 
-function finalistasDa(r: LinhaDaRodada): CandidatoDeNome[] {
+export function finalistasDa(r: LinhaDaRodada): CandidatoDeNome[] {
   const f = r.candidatos.filter((c) => c.finalista);
   if (f.length < LIMITES_DO_NAMING.finalistasMin) throw new ErroHttp(409, "poucos_finalistas", `Marque de ${LIMITES_DO_NAMING.finalistasMin} a ${LIMITES_DO_NAMING.finalistasMax} finalistas antes.`);
   return f;

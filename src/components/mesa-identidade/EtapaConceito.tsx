@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Check, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { useMesa } from "@/components/mesa/MesaContexto";
+import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
+import { PreencherComIA } from "@/components/sistema";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import Painel from "@/components/sistema/Painel";
 import Secao from "@/components/sistema/Secao";
@@ -9,7 +10,7 @@ import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { botao, campo, campoTexto, espaco, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import { textoSobre } from "../../../supabase/functions/_shared/cores-da-marca";
 import { chamarIdentidade, type ProjetoDeIdentidade } from "./identidadeApi";
-import { CabecalhoDaEtapa, ImagemInteira, Pastilha, partesDaImagem, partesDoCusto, useProjetoDaMesa } from "./Comuns";
+import { CabecalhoDaEtapa, contextoParaPreencher, ImagemInteira, Pastilha, partesDaImagem, partesDoCusto, SeletorDoModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
 
 type Caminho = {
   id: string;
@@ -34,7 +35,9 @@ type Caminho = {
  */
 export default function EtapaConceito() {
   const mesa = useMesa();
+  const { marca } = useMarcaDaMesa();
   const { projeto, guardar } = useProjetoDaMesa();
+  const [modeloId, setModeloId] = useModeloDaAcao("identidade");
   const avisarErro = useAvisarErro();
   const conceito = (projeto.dados.conceito || {}) as { caminhos?: Caminho[]; escolhido?: string | null; recomendacao?: { id: string; confianca: number | null; fonte: string } | null };
   const caminhos = Array.isArray(conceito.caminhos) ? conceito.caminhos : [];
@@ -64,8 +67,26 @@ export default function EtapaConceito() {
         ajuda="Os caminhos saem do briefing e da pesquisa, bem diferentes entre si. A recomendação é só um aviso (hoje do Jev; do conselho de agentes quando ele entrar): quem escolhe é a equipe. Gerar de novo substitui os caminhos; o diretor de marca desfaz."
       />
       <Secao titulo="Gerar caminhos" recolher={`mesa-identidade:${projeto.id}:conceito:gerar`} recolhidaDeInicio={caminhos.length > 0}>
-        <div className="grid min-w-0 grid-cols-1 items-end gap-4 md:grid-cols-[minmax(0,1fr)_120px_auto]">
-          <CampoDeFormulario rotulo="Pedido da equipe" apoio="Opcional">
+        <div className="grid min-w-0 grid-cols-1 items-end gap-4 md:grid-cols-[minmax(0,1fr)_120px_auto_auto]">
+          <CampoDeFormulario
+            rotulo={
+              <span className="flex min-w-0 items-center">
+                <span className="mr-1 truncate">Pedido da equipe</span>
+                <PreencherComIA
+                  papel="identidade"
+                  clientId={mesa.clientId}
+                  marcaId={projeto.marca_id || (marca && !marca.principal ? marca.id : null)}
+                  compacto
+                  rotulo="Preencher o pedido com IA"
+                  campos={[{ chave: "pedido", rotulo: "Pedido para os caminhos", tipo: "texto_longo", valorAtual: pedido, dica: "Direção curta para os caminhos criativos, a partir da estratégia e do moodboard (ex.: um sóbrio, um ousado).", maximo: 600 }]}
+                  contexto={contextoParaPreencher(projeto)}
+                  onAplicar={(v) => setPedido(String(v.pedido || ""))}
+                  onDesfazer={(a) => setPedido(String(a.pedido || ""))}
+                />
+              </span>
+            }
+            apoio="Opcional"
+          >
             <textarea className={juntar(campoTexto, "min-h-[60px]")} value={pedido} maxLength={1500} onChange={(e) => setPedido(e.target.value)} placeholder="Ex.: um caminho mais sóbrio, outro mais ousado" />
           </CampoDeFormulario>
           <CampoDeFormulario rotulo="Caminhos">
@@ -74,11 +95,12 @@ export default function EtapaConceito() {
               <option value={3}>3</option>
             </select>
           </CampoDeFormulario>
+          <SeletorDoModelo papel="identidade" valor={modeloId} onEscolher={setModeloId} />
           <BotaoComCusto
             rotulo={caminhos.length ? "Gerar de novo" : "Gerar caminhos"}
             titulo="Caminhos criativos"
-            partes={() => partesDoCusto(mesa.catalogo, "conceito")}
-            executar={() => chamarIdentidade<{ projeto: ProjetoDeIdentidade }>("conceito_gerar", { projeto_id: projeto.id, quantidade: quantos, pedido: pedido.trim() || undefined })}
+            partes={() => partesDoCusto(mesa.catalogo, "conceito", modeloId)}
+            executar={() => chamarIdentidade<{ projeto: ProjetoDeIdentidade }>("conceito_gerar", { projeto_id: projeto.id, quantidade: quantos, pedido: pedido.trim() || undefined, modelo_id: modeloId || undefined })}
             aoConcluir={(d) => guardar(d && d.projeto)}
           />
         </div>

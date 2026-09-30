@@ -72,8 +72,8 @@ describe("Mesa Identidade: etapas em sequência", () => {
   const zero = { modo: "zero" as const, com_naming: false, concluidas: ["inicio"] };
   const rebranding = { modo: "rebranding" as const, com_naming: false, concluidas: ["inicio"] };
 
-  it("nove etapas; naming só na marca do zero ou quando pedido", () => {
-    expect(ETAPAS_DA_IDENTIDADE.map((e) => e.valor)).toEqual(["inicio", "briefing", "pesquisa", "naming", "conceito", "sistema", "mockups", "guideline", "entrega"]);
+  it("onze etapas (IDV2: estratégia e apresentação); naming só na marca do zero ou quando pedido", () => {
+    expect(ETAPAS_DA_IDENTIDADE.map((e) => e.valor)).toEqual(["inicio", "briefing", "pesquisa", "estrategia", "naming", "conceito", "sistema", "mockups", "guideline", "apresentacao", "entrega"]);
     expect(precisaDeNaming(zero)).toBe(true);
     expect(precisaDeNaming(rebranding)).toBe(false);
     expect(precisaDeNaming({ ...rebranding, com_naming: true })).toBe(true);
@@ -87,10 +87,13 @@ describe("Mesa Identidade: etapas em sequência", () => {
     expect(podeAbrir(zero, "pesquisa")).toEqual({ pode: false, motivo: "Conclua Briefing antes." });
     expect(podeAbrir(rebranding, "naming").pode).toBe(false);
     const mais = { ...zero, concluidas: ["inicio", "briefing", "pesquisa"] };
-    expect(etapaAtual(mais)).toBe("naming");
+    expect(etapaAtual(mais)).toBe("estrategia");
     expect(podeAbrir(mais, "briefing").pode).toBe(true);
-    expect(podeAbrir(mais, "conceito").pode).toBe(false);
-    expect(progresso(mais)).toEqual({ feitas: 3, total: 9 });
+    expect(podeAbrir(mais, "naming").pode).toBe(false);
+    expect(progresso(mais)).toEqual({ feitas: 3, total: 11 });
+    const comEstrategia = { ...zero, concluidas: ["inicio", "briefing", "pesquisa", "estrategia"] };
+    expect(etapaAtual(comEstrategia)).toBe("naming");
+    expect(podeAbrir(comEstrategia, "conceito").pode).toBe(false);
   });
 
   it("concluir exige o mínimo da etapa (nada inventado) e devolve a próxima", () => {
@@ -99,9 +102,12 @@ describe("Mesa Identidade: etapas em sequência", () => {
     if (!falha.ok) expect(falha.falta).toEqual(["O que o negócio faz", "Para quem é a marca", "A personalidade da marca (3 a 5 palavras)"]);
     const ok = concluirEtapa(zero, "briefing", { briefing: { negocio: "Padaria", publico: "Bairro", personalidade: ["calorosa"] } });
     expect(ok).toEqual({ ok: true, concluidas: ["inicio", "briefing"], proxima: "pesquisa" });
-    // Rebranding sem naming pula do pesquisa para o conceito.
+    // Depois da pesquisa vem a estratégia (IDV2); rebranding sem naming pula da estratégia para o conceito.
     const r = concluirEtapa({ ...rebranding, concluidas: ["inicio", "briefing"] }, "pesquisa", { pesquisa: { resumo: "x" } });
-    expect(r.ok && r.proxima).toBe("conceito");
+    expect(r.ok && r.proxima).toBe("estrategia");
+    const est = { estrategia: { proposito: "Fazer pão de verdade", arquetipo: { principal: "cuidador" }, posicionamento: { publico: "o bairro", diferencial: "fermentação natural" }, tom: { fala_assim: ["Seu pão sai às 7h."] } } };
+    const r2 = concluirEtapa({ ...rebranding, concluidas: ["inicio", "briefing", "pesquisa"] }, "estrategia", est);
+    expect(r2.ok && r2.proxima).toBe("conceito");
     // Fora da ordem não fecha.
     expect(concluirEtapa(zero, "sistema", {}).ok).toBe(false);
   });

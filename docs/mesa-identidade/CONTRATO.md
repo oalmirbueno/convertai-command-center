@@ -46,3 +46,18 @@ Rota `/mesa-identidade` (admin, gestor e design), função `mesa-identidade`, mi
 - **Brandbook como dado** (`_shared/brandbook.ts`): prancha-resumo vertical ou 24 páginas; JSON versionado (uma linha por versão). CMYK por perfil de papel revestido (`_shared/cores-da-marca.ts`). PDF próprio (`_shared/pdf-identidade.ts`), página pública `/marca/:token` (RPC `idv_brandbook_publico`, revogável) e pacote .zip (logos, cores e fontes).
 - **Kit da marca**: o aprovado vira sugestão com Confirmar e Desfazer (`kit_sugerir`).
 - **Ganchos**: conselho de agentes (`mesa-identidade/conselho-gancho.ts`, hoje o Jev recomenda como aviso), documento de entrega (`idv_eventos`) e estúdio de mockups da frente MCK (`EstudioDeMockups.tsx`).
+
+## A evolução (frente IDV2, 30/09/2026)
+
+Migration `20260930150000_mesa_identidade_v2.sql` (etapas e eventos novos, votação dos nomes).
+
+- **Etapas**: Início, Briefing, Pesquisa (com moodboard), **Estratégia**, Naming, Conceito, Sistema, **Aplicações** (o valor segue `mockups`), Guideline, **Apresentação** e Entrega. Projeto antigo que já fechou uma etapa depois de uma nova conta a nova como feita (`ETAPAS_NOVAS`).
+- **Estratégia** (`_shared/estrategia-de-marca.ts`): propósito, missão, visão, valores, os 12 arquétipos (principal, apoio e justificativa), personalidade em 6 eixos, posicionamento (frase no molde clássico), proposta de valor, público e persona, tom com "fala assim / não fala assim" e exemplos. `estrategia_propor` traz a proposta inteira (não grava; a tela mostra antes x depois e aplica tudo ou campo a campo, com Desfazer).
+- **Preencher com IA** (peça comum da frente PIA) em todo campo e seção: briefing, estratégia, pesquisa, conceito, sistema (significado do logo e fotografia), naming (critérios e pedido), guideline (conteúdo), aplicações (contato) e apresentação (falas). O projeto vai no `contexto` (`contextoParaPreencher`).
+- **Modelo na hora**: `SeletorDoModelo` (padrão do papel, trocável por qualquer modelo de texto do catálogo) em toda ação de IA da mesa; o custo sai do modelo escolhido.
+- **Naming**: 16 técnicas; teste de pronúncia e sentido em 5 idiomas (`naming_idiomas`: o modelo descreve, o Jev Noul avalia o risco, só aviso); links do @ em 4 redes e do INPI; votação da equipe (`naming_votar`) e do cliente por link `/nomes/:token` (RPCs `idv_naming_votacao_publica` e `idv_naming_votar_publico`); slogans e taglines (`slogans_gerar`, ranking do Jev por Score, `slogan_escolher`).
+- **Sistema**: gerador de paleta por harmonia (6), neutras tingidas, escala de apoio e contraste WCAG (`_shared/paleta-da-marca.ts`); 3 paletas do diretor (`paletas_propor`); pares do Google Fonts por personalidade com prévia carregada sob demanda (`_shared/tipografia-da-marca.ts`, `src/lib/identidade/fontesGoogle.ts`) e pares do diretor (`fontes_propor`); padrões em SVG por código (`_shared/grafismos-da-marca.ts`).
+- **Aplicações**: peças de redes e papelaria e assinatura de e-mail em HTML por código (`_shared/aplicacoes-da-marca.ts`); o estúdio de mockups abre com as cores, as logos e a tipografia do projeto e lembra onde parou em cada projeto.
+- **Apresentação** (`_shared/apresentacao-da-marca.ts`): 19 slides do desafio à revelação, com o que falta e a fala; tela cheia e página web exportada.
+- **Brandbook**: 5 modelos visuais (`tema`), estratégia no rascunho, página web (HTML que abre sem o painel) e pacote completo (logos, cores, fontes, grafismos com SVG, peças, estratégia em texto, PDF e a página web).
+- **Diretor de marca**: `montar_estrategia`, `propor_paletas`, `sugerir_fontes` e `gerar_taglines`, sempre com Confirmar, custo no cartão e Desfazer.

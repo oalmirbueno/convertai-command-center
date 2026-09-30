@@ -69,7 +69,7 @@ describe("mapa do painel no sistema de cada agente", () => {
     for (const a of AREAS_DO_PAINEL) expect(b).toContain(`${a.nome} ${a.rota}`);
     expect(b).toContain("[você está aqui]");
     expect(b).toContain("Abro para você?");
-    expect(b.length).toBeLessThan(4400); // 30/09: +Mesa Proposta, Identidade, Site e Contratos no mapa (antes 3600)
+    expect(b.length).toBeLessThan(5000); // 30/09: +Mesa Proposta, Identidade, Site, Contratos e Motion no mapa (antes 3600)
     expect(b).not.toContain("—");
     const minimo = blocoDoMapaDoPainel("central", { nivel: "minimo" });
     expect(minimo.length).toBeLessThan(1300); // 30/09: 4 mesas novas no mapa (antes 1200)

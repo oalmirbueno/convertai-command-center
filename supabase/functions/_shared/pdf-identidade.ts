@@ -519,11 +519,23 @@ export function acentoSobre(fundo: string, cores: FichaDaCor[]): string {
   return luminanciaRelativa(fundo) < 0.2 ? "#FFFFFF" : "#157330";
 }
 
-function temaDa(cores: FichaDaCor[]): Tema {
+/**
+ * Tema visual do brandbook (IDV2) no PDF: o PDF é para imprimir, então as
+ * páginas ficam claras em todos; muda o acento e a capa. Editorial e minimal
+ * usam acento escuro (a cor da marca fica nas amostras); vibrante pinta a
+ * capa com a primária quando ela segura texto branco.
+ */
+function temaDa(cores: FichaDaCor[], tema?: string): Tema {
   const ordenadas = cores.slice().sort((a, b) => luminanciaRelativa(a.hex) - luminanciaRelativa(b.hex));
-  const escura = ordenadas[0] && luminanciaRelativa(ordenadas[0].hex) < 0.06 ? ordenadas[0].hex : "#151B17";
+  let escura = ordenadas[0] && luminanciaRelativa(ordenadas[0].hex) < 0.06 ? ordenadas[0].hex : "#151B17";
   const clara = ordenadas.length && luminanciaRelativa(ordenadas[ordenadas.length - 1].hex) > 0.8 ? ordenadas[ordenadas.length - 1].hex : "#F4F6F4";
-  const acento = acentoSobre("#FFFFFF", cores);
+  let acento = acentoSobre("#FFFFFF", cores);
+  if (tema === "editorial") acento = escura;
+  if (tema === "minimal") acento = "#151B17";
+  if (tema === "vibrante") {
+    const prim = cores.filter((c) => c.papel === "primaria")[0];
+    if (prim && contraste(prim.hex, "#FFFFFF") >= 3) escura = prim.hex;
+  }
   return {
     primaria: cor(acento),
     primariaHex: acento,
@@ -1054,7 +1066,7 @@ function pranchaResumo(d: Documento, t: Tema, dados: DadosDoBrandbook, cores: Fi
 export function gerarPdfDoBrandbook(e: EntradaDoBrandbook): Uint8Array {
   const dados = e.dados;
   const cores = coresDoBrandbook(dados);
-  const t = temaDa(cores);
+  const t = temaDa(cores, dados.tema);
   const data = e.data instanceof Date ? e.data : e.data ? new Date(e.data) : new Date();
   const doc = new Documento(e.imagens || {});
   if (e.modelo === "prancha") pranchaResumo(doc, t, dados, cores);

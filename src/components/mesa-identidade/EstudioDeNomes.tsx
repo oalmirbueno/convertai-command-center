@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AtSign, Check, Copy, Download, ExternalLink, Globe2, Loader2, MessageCircle, RefreshCcw, Search, Send } from "lucide-react";
+import { AtSign, Check, Copy, Download, ExternalLink, Globe2, Languages, Loader2, MessageCircle, RefreshCcw, Search, Send } from "lucide-react";
+import { PreencherComIA } from "@/components/sistema";
 import { toast } from "sonner";
 import { useMesa, useMarcaDaMesa } from "@/components/mesa/MesaContexto";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -10,9 +11,10 @@ import MenuMais from "@/components/sistema/MenuMais";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { Carregando } from "@/components/sistema/Estados";
 import { botao, campo, campoTexto, espaco, etiqueta, foco, juntar, lista, texto } from "@/components/sistema/estilos";
-import { CRITERIOS_PADRAO, LIMITES_DO_NAMING, rotuloDaTecnica, TECNICAS_DE_NAMING, textoDoDominio, type AlvoDoNaming, type CandidatoDeNome, type SituacaoDoDominio } from "../../../supabase/functions/_shared/naming";
+import { CRITERIOS_PADRAO, IDIOMAS_DO_TESTE, LIMITES_DO_NAMING, linksDoArroba, ROTULO_DO_RISCO, rotuloDaTecnica, TECNICAS_DE_NAMING, textoDoDominio, type AlvoDoNaming, type CandidatoDeNome, type SituacaoDoDominio } from "../../../supabase/functions/_shared/naming";
 import { chamarIdentidade, CHAVES, normalizarRodada, useRodadas, useSituacaoDoArquivo, textoDaAprovacao, type RodadaDeNomes } from "./identidadeApi";
-import { Pastilha, partesDoCusto } from "./Comuns";
+import { contextoParaPreencher, Pastilha, partesDoCusto, SeletorDoModelo, useModeloDaAcao, useProjetoOpcional } from "./Comuns";
+import VotacaoDosNomes from "./VotacaoDosNomes";
 import { salvarArquivo } from "./exportarNoNavegador";
 
 const TOM_DO_DOMINIO: Record<SituacaoDoDominio, "bom" | "ruim" | "neutro"> = { livre: "bom", registrado: "ruim", nao_conferido: "neutro" };
@@ -41,6 +43,8 @@ export default function EstudioDeNomes({
 }) {
   const mesa = useMesa();
   const { marca } = useMarcaDaMesa();
+  const projetoDaMesa = useProjetoOpcional();
+  const [modeloId, setModeloId] = useModeloDaAcao("naming");
   const qc = useQueryClient();
   const avisarErro = useAvisarErro();
   const rodadasQ = useRodadas(mesa.clientId, { projetoId, campanhaId });
@@ -106,6 +110,33 @@ export default function EstudioDeNomes({
       salvarArquivo(bytes, nomeDoArquivoDoNaming(mesa.clientName, alvoTexto), "application/pdf");
     });
 
+  // "Preencher com IA" (peça comum) nos critérios e no pedido; na Mesa Identidade leva o que o projeto sabe.
+  const marcaId = projetoDaMesa ? projetoDaMesa.projeto.marca_id : marca && !marca.principal ? marca.id : null;
+  const contextoDoNome = projetoDaMesa ? contextoParaPreencher(projetoDaMesa.projeto, `Alvo: ${alvo === "campanha" ? "nome de campanha" : alvo === "produto" ? "nome de produto" : "nome da marca"}.`) : `Alvo: ${alvo === "campanha" ? "nome de campanha" : alvo === "produto" ? "nome de produto" : "nome da marca"}.`;
+  const preencherNome = (chave: "criterios" | "pedido") => (
+    <PreencherComIA
+      papel="naming"
+      clientId={mesa.clientId}
+      marcaId={marcaId}
+      compacto
+      rotulo={chave === "criterios" ? "Preencher os critérios com IA" : "Preencher o pedido com IA"}
+      campos={[
+        chave === "criterios"
+          ? { chave: "criterios", rotulo: "Critérios do nome", tipo: "lista", valorAtual: criterios.split(/\n+/).map((x) => x.trim()).filter(Boolean), dica: "Critérios para julgar os nomes, ligados ao briefing e à estratégia.", maximo: 6 }
+          : { chave: "pedido", rotulo: "Pedido da equipe", tipo: "texto", valorAtual: pedido, dica: "Direção curta para a geração (tom, raízes, idiomas, o que evitar).", maximo: 400 },
+      ]}
+      contexto={contextoDoNome}
+      onAplicar={(v) => {
+        if (chave === "criterios") setCriterios((Array.isArray(v.criterios) ? (v.criterios as unknown[]).map(String) : String(v.criterios || "").split(/\n+/)).join("\n"));
+        else setPedido(String(v.pedido || ""));
+      }}
+      onDesfazer={(a) => {
+        if (chave === "criterios") setCriterios((Array.isArray(a.criterios) ? (a.criterios as unknown[]).map(String) : []).join("\n"));
+        else setPedido(String(a.pedido || ""));
+      }}
+    />
+  );
+
   const itensDoMenu = rodada
     ? [
         { rotulo: "Conferir domínios de novo", icone: <RefreshCcw className="h-4 w-4" />, aoEscolher: () => void rodar("conferir", async () => guardarRodada((await chamarIdentidade<{ rodada: RodadaDeNomes }>("naming_conferir", { rodada_id: rodada.id })).rodada)) },
@@ -145,10 +176,10 @@ export default function EstudioDeNomes({
           })}
         </div>
         <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_120px]">
-          <CampoDeFormulario rotulo="Critérios" apoio="Um por linha">
+          <CampoDeFormulario rotulo={<span className="flex min-w-0 items-center"><span className="mr-1 truncate">Critérios</span>{preencherNome("criterios")}</span>} apoio="Um por linha">
             <textarea className={juntar(campoTexto, "min-h-[96px]")} value={criterios} maxLength={1200} onChange={(e) => setCriterios(e.target.value)} />
           </CampoDeFormulario>
-          <CampoDeFormulario rotulo="Pedido da equipe" apoio="Opcional">
+          <CampoDeFormulario rotulo={<span className="flex min-w-0 items-center"><span className="mr-1 truncate">Pedido da equipe</span>{preencherNome("pedido")}</span>} apoio="Opcional">
             <textarea className={juntar(campoTexto, "min-h-[96px]")} value={pedido} maxLength={2000} placeholder="Ex.: curto, fácil em inglês e português" onChange={(e) => setPedido(e.target.value)} />
           </CampoDeFormulario>
           <CampoDeFormulario rotulo="Quantos">
@@ -161,12 +192,13 @@ export default function EstudioDeNomes({
             </select>
           </CampoDeFormulario>
         </div>
-        <div className="mt-3 flex justify-end">
+        <div className="mt-3 flex flex-wrap items-center justify-end">
+          <SeletorDoModelo papel="naming" valor={modeloId} onEscolher={setModeloId} />
           <BotaoComCusto
             rotulo="Gerar nomes"
             titulo="Gerar nomes"
             disabled={!tecnicas.length}
-            partes={() => partesDoCusto(mesa.catalogo, "naming")}
+            partes={() => partesDoCusto(mesa.catalogo, "naming", modeloId)}
             executar={() =>
               chamarIdentidade<{ rodada: RodadaDeNomes; aviso_jev: string | null }>("naming_gerar", {
                 client_id: mesa.clientId,
@@ -177,6 +209,7 @@ export default function EstudioDeNomes({
                 quantidade,
                 criterios: criterios.split(/\n+/).map((x) => x.trim()).filter(Boolean),
                 pedido: pedido.trim() || undefined,
+                modelo_id: modeloId || undefined,
               })
             }
             aoConcluir={(d) => {
@@ -216,6 +249,20 @@ export default function EstudioDeNomes({
                   {ocupado === "finalistas" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />} Salvar finalistas
                 </button>
               )}
+              <BotaoComCusto
+                rotulo="Testar idiomas"
+                titulo="Pronúncia e significado em outros idiomas"
+                descricao={`Finalistas em ${IDIOMAS_DO_TESTE.map((i) => i.rotulo.toLowerCase()).join(", ")}; o risco é aviso do Jev`}
+                disabled={mudouFinalistas || finalistas.length < LIMITES_DO_NAMING.finalistasMin}
+                partes={() => partesDoCusto(mesa.catalogo, "idiomas", modeloId)}
+                executar={() => chamarIdentidade<{ rodada: RodadaDeNomes; aviso_jev: string | null }>("naming_idiomas", { rodada_id: rodada.id, modelo_id: modeloId || undefined })}
+                aoConcluir={(d) => {
+                  guardarRodada(d && d.rodada);
+                  if (d && d.aviso_jev) toast.warning(d.aviso_jev);
+                }}
+                variant="ghost"
+                className="m-1 h-8"
+              />
               <MenuMais itens={itensDoMenu} rotulo="Mais ações da rodada" className="m-1" />
             </>
           }
@@ -243,6 +290,8 @@ export default function EstudioDeNomes({
           </ul>
         </Secao>
       )}
+
+      {rodada && !mudouFinalistas && <VotacaoDosNomes rodada={rodada} />}
 
       {rodada && (
         <Secao titulo="Aprovação" divisoria descricao={rodada.arquivo_pdf_id ? textoDaAprovacao(situacao.data) : rodada.enviado_grupo_em ? "Enviado no grupo" : "Ainda não enviado"} recolher={`mesa-identidade:nomes:${rodada.id}:aprovacao`}>
@@ -314,7 +363,35 @@ function LinhaDoNome({ c, finalista, escolhido, onFinalista, onEscolher, escolhe
           <a className={juntar(texto.etiqueta, "m-0.5 inline-flex items-center text-muted-foreground hover:text-foreground")} href={c.filtros.link_inpi} target="_blank" rel="noopener noreferrer">
             <Search className="mr-0.5 h-3 w-3" /> INPI
           </a>
+          {finalista &&
+            linksDoArroba(c.filtros.arroba)
+              .slice(1)
+              .map((l) => (
+                <a key={l.rede} className={juntar(texto.etiqueta, "m-0.5 inline-flex items-center text-muted-foreground hover:text-foreground")} href={l.link} target="_blank" rel="noopener noreferrer">
+                  {l.rede}
+                </a>
+              ))}
+          {c.risco_idioma && (
+            <span className="m-0.5">
+              <Pastilha tom={c.risco_idioma === "alto" ? "ruim" : c.risco_idioma === "atencao" ? "alerta" : c.risco_idioma === "ok" ? "bom" : "neutro"}>
+                <Languages className="mr-1 h-3 w-3" /> {ROTULO_DO_RISCO[c.risco_idioma]}
+              </Pastilha>
+            </span>
+          )}
         </span>
+        {c.idiomas && c.idiomas.length > 0 && (
+          <details className="mt-1 min-w-0" data-idiomas-do-nome={c.id}>
+            <summary className={juntar(texto.etiqueta, "cursor-pointer text-muted-foreground")}>Em outros idiomas</summary>
+            <span className="mt-1 grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-2">
+              {c.idiomas.map((l) => (
+                <span key={l.idioma} className={juntar(texto.auxiliar, "block")}>
+                  <strong className="font-medium text-foreground">{(IDIOMAS_DO_TESTE.filter((i) => i.valor === l.idioma)[0] || { rotulo: l.idioma }).rotulo}</strong>
+                  {l.pronuncia ? ` (${l.pronuncia})` : ""}: {l.significado}
+                </span>
+              ))}
+            </span>
+          </details>
+        )}
       </span>
       {finalista && (
         <button type="button" className={juntar(botao.discreto, "ml-2 h-8 shrink-0")} onClick={onEscolher} disabled={escolhendo || escolhido}>

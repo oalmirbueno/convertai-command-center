@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ImagePlus, Loader2, Pipette, Plus, Save, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { useMesa } from "@/components/mesa/MesaContexto";
+import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
+import { PreencherComIA } from "@/components/sistema";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
@@ -9,11 +10,13 @@ import { botao, campo, campoTexto, espaco, juntar, lista, texto } from "@/compon
 import { fichaDaCor, normalizarHex, PERFIS, ROTULO_DO_PAPEL_DA_COR, textoCmyk, textoRgb, type PapelDaCor } from "../../../supabase/functions/_shared/cores-da-marca";
 import { SLOTS_DE_LOGO, USOS_INCORRETOS_PADRAO, type LogoDoBrandbook, type SlotDeLogo } from "../../../supabase/functions/_shared/brandbook";
 import { enviarImagemDeApoio, enviarLogo, motivoParaRecusarLogo, paletaDaLogo } from "./arquivosDaMarca";
-import { CabecalhoDaEtapa, ImagemInteira, Pastilha, useProjetoDaMesa } from "./Comuns";
+import { CabecalhoDaEtapa, contextoParaPreencher, ImagemInteira, Pastilha, useProjetoDaMesa } from "./Comuns";
+import GeradorDePaleta, { ContrasteDaPaleta } from "./PaletaDaMarca";
+import { GrafismosGerados, TipografiaDaMarca } from "./TipoEGrafismos";
 
 type Cor = { nome: string; papel: PapelDaCor; hex: string };
 type Tipo = { familia: string; uso: "titulo" | "texto" | "apoio"; pesos: string; licenca: string; alternativa: string };
-type Grafismo = { tipo: string; descricao: string; imagem: string | null };
+type Grafismo = { tipo: string; descricao: string; imagem: string | null; svg?: string | null };
 type Logos = { principal: LogoDoBrandbook | null; secundario: LogoDoBrandbook | null; alternativas: LogoDoBrandbook[]; icone: LogoDoBrandbook[] };
 
 const PAPEIS: PapelDaCor[] = ["primaria", "secundaria", "destaque", "neutra"];
@@ -35,9 +38,12 @@ const logosVazias = (): Logos => ({ principal: null, secundario: null, alternati
  */
 export default function EtapaSistema() {
   const mesa = useMesa();
+  const { marca } = useMarcaDaMesa();
   const { projeto, salvarParte } = useProjetoDaMesa();
   const avisarErro = useAvisarErro();
   const sistema = (projeto.dados.sistema || {}) as Record<string, any>;
+  const marcaId = projeto.marca_id || (marca && !marca.principal ? marca.id : null);
+  const nomeDaMarca = (projeto.dados.naming && projeto.dados.naming.nome) || (marca && !marca.principal ? marca.nome : mesa.clientName);
   const conceito = (projeto.dados.conceito || {}) as { caminhos?: any[]; escolhido?: string | null };
   const caminho = (conceito.caminhos || []).filter((c) => c.id === conceito.escolhido)[0] || null;
 
@@ -80,6 +86,28 @@ export default function EtapaSistema() {
       setOcupado(null);
     }
   };
+
+  /** Troca uma parte do sistema e oferece o Desfazer (volta o valor de antes, gravando de novo). */
+  const trocarComDesfazer = async (chave: "cores" | "tipografia", novo: unknown[], antes: unknown[], frase: string, aplicarNaTela: (v: any[]) => void) => {
+    aplicarNaTela(novo as any[]);
+    try {
+      await salvarParte("sistema", { [chave]: novo });
+      toast.success(frase, {
+        duration: 10_000,
+        action: {
+          label: "Desfazer",
+          onClick: () => {
+            aplicarNaTela(antes as any[]);
+            salvarParte("sistema", { [chave]: antes }).catch((e) => avisarErro(e, "Não foi possível desfazer"));
+          },
+        },
+      });
+    } catch (e) {
+      aplicarNaTela(antes as any[]);
+      avisarErro(e, "Não foi salvo");
+    }
+  };
+  const tiposParaSalvar = (l: Tipo[]) => l.filter((t) => t.familia.trim()).map((t) => ({ familia: t.familia.trim(), uso: t.uso, pesos: t.pesos.split(/[,;]+/).map((x) => x.trim()).filter(Boolean), licenca: t.licenca.trim(), alternativa: t.alternativa.trim() }));
 
   // ---------------------------------------------------------------- logos
 
@@ -236,6 +264,11 @@ export default function EtapaSistema() {
         <button type="button" className={juntar(botao.discreto, "mt-2")} disabled={cores.length >= 8} onClick={() => setCores(cores.concat([{ nome: "", papel: cores.length ? "secundaria" : "primaria", hex: "#" }]))}>
           <Plus className="mr-1.5 h-4 w-4" /> Cor
         </button>
+        <ContrasteDaPaleta cores={cores} />
+        <GeradorDePaleta
+          cores={cores}
+          onUsar={(novas, origem) => void trocarComDesfazer("cores", novas, cores.filter((c) => normalizarHex(c.hex)).map((c) => ({ ...c, hex: normalizarHex(c.hex) })), `Paleta trocada (${origem})`, (v) => setCores(v as Cor[]))}
+        />
       </Secao>
 
       <Secao
@@ -283,6 +316,14 @@ export default function EtapaSistema() {
         <button type="button" className={botao.discreto} disabled={tipos.length >= 4} onClick={() => setTipos(tipos.concat([{ familia: "", uso: tipos.length ? "texto" : "titulo", pesos: "", licenca: "", alternativa: "" }]))}>
           <Plus className="mr-1.5 h-4 w-4" /> Família
         </button>
+        <TipografiaDaMarca
+          tipos={tipos}
+          onUsar={(novos, origem) =>
+            void trocarComDesfazer("tipografia", tiposParaSalvar(novos), tiposParaSalvar(tipos), `Tipografia trocada (${origem})`, (v) =>
+              setTipos((v as Array<Record<string, any>>).map((t) => ({ familia: t.familia || "", uso: t.uso || "texto", pesos: Array.isArray(t.pesos) ? t.pesos.join(", ") : "", licenca: t.licenca || "", alternativa: t.alternativa || "" }))),
+            )
+          }
+        />
       </Secao>
 
       <Secao
@@ -332,6 +373,17 @@ export default function EtapaSistema() {
           ))}
         </div>
         {!grafismos.length && <p className={texto.auxiliar}>Pattern, estilo de foto, ilustração e ícones da marca.</p>}
+        <GrafismosGerados
+          cores={cores.map((c) => c.hex)}
+          familia={(tipos.filter((t) => t.uso === "titulo")[0] || tipos[0] || { familia: "Helvetica" }).familia}
+          nome={String(nomeDaMarca || "")}
+          onGuardar={async (g) => {
+            const novos = grafismos.concat([g]).slice(-6);
+            setGrafismos(novos);
+            await salvarParte("sistema", { grafismos: novos });
+            toast.success("Padrão guardado nos ativos");
+          }}
+        />
       </Secao>
 
       <Secao
@@ -339,6 +391,33 @@ export default function EtapaSistema() {
         divisoria
         recolher={`mesa-identidade:${projeto.id}:sistema:regras`}
         acao={
+          <>
+          <PreencherComIA
+            papel="identidade"
+            clientId={mesa.clientId}
+            marcaId={marcaId}
+            campos={[
+              { chave: "significado_do_logo", rotulo: "Significado do logo", tipo: "texto_longo", valorAtual: regras.significado_do_logo, dica: "O conceito da logo ligado à estratégia e ao caminho escolhido; sem inventar história.", maximo: 1500 },
+              { chave: "fotografia.coloracao", rotulo: "Fotografia: coloração e composição", tipo: "texto_longo", valorAtual: foto.coloracao, maximo: 600 },
+              { chave: "fotografia.evitar", rotulo: "Fotografia: o que evitar", tipo: "texto", valorAtual: foto.evitar, maximo: 600 },
+              { chave: "fotografia.ia", rotulo: "Imagem gerada por IA", tipo: "texto", valorAtual: foto.ia, dica: "Regra de uso de imagem de IA na marca.", maximo: 600 },
+            ]}
+            contexto={contextoParaPreencher(projeto, caminho ? `Caminho escolhido: ${caminho.nome}. ${caminho.ideia || ""}` : undefined)}
+            onAplicar={async (v) => {
+              const r2 = { ...regras, significado_do_logo: v.significado_do_logo != null ? String(v.significado_do_logo) : regras.significado_do_logo };
+              const f2 = { ...foto, coloracao: v["fotografia.coloracao"] != null ? String(v["fotografia.coloracao"]) : foto.coloracao, evitar: v["fotografia.evitar"] != null ? String(v["fotografia.evitar"]) : foto.evitar, ia: v["fotografia.ia"] != null ? String(v["fotografia.ia"]) : foto.ia };
+              setRegras(r2);
+              setFoto(f2);
+              await salvarParte("sistema", { significado_do_logo: r2.significado_do_logo.slice(0, 1500), fotografia: f2 });
+            }}
+            onDesfazer={async (a) => {
+              const r2 = { ...regras, significado_do_logo: String(a.significado_do_logo || "") };
+              const f2 = { ...foto, coloracao: String(a["fotografia.coloracao"] || ""), evitar: String(a["fotografia.evitar"] || ""), ia: String(a["fotografia.ia"] || "") };
+              setRegras(r2);
+              setFoto(f2);
+              await salvarParte("sistema", { significado_do_logo: r2.significado_do_logo, fotografia: f2 });
+            }}
+          />
           <button type="button" className={juntar(botao.secundario, "m-1 h-8")} disabled={ocupado === "regras"} onClick={() => void salvar("regras", {
             significado_do_logo: regras.significado_do_logo.trim().slice(0, 1500),
             regras: {
@@ -351,6 +430,7 @@ export default function EtapaSistema() {
           }, "Regras salvas")}>
             <Save className="mr-1.5 h-3.5 w-3.5" /> Salvar
           </button>
+          </>
         }
       >
         <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">

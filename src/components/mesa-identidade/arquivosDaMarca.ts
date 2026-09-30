@@ -97,7 +97,7 @@ export async function enviarLogo(clientId: string, projetoId: string, arquivo: F
 }
 
 /** Imagem de apoio (grafismo, pattern, foto): vira JPEG de até 1600 px (o PDF usa como está). */
-export async function enviarImagemDeApoio(clientId: string, projetoId: string, arquivo: File, pasta: "grafismos" | "aplicacoes" | "mockups"): Promise<string> {
+export async function enviarImagemDeApoio(clientId: string, projetoId: string, arquivo: File, pasta: "grafismos" | "aplicacoes" | "mockups" | "moodboard"): Promise<string> {
   const ext = extensaoDe(arquivo.name);
   if (["png", "jpg", "jpeg", "webp"].indexOf(ext) < 0) throw new Error("Envie a imagem em PNG, JPG ou WEBP.");
   if (arquivo.size > TETO_DO_ARQUIVO) throw new Error("A imagem passou de 10 MB.");
@@ -123,3 +123,40 @@ export async function paletaDaLogo(caminho: string): Promise<string[]> {
     .filter((h) => ["#FFFFFF", "#000000"].indexOf(h) < 0)
     .slice(0, 6);
 }
+
+/**
+ * Arquivo feito na tela (IDV2: padrão gerado, peça da marca): o PNG vai
+ * para o brandbook e o PDF; o SVG (vetor) vai para o pacote. Devolve os
+ * caminhos no bucket mesa, na pasta do projeto.
+ */
+export async function enviarFeitoNaTela(clientId: string, projetoId: string, pasta: "grafismos" | "aplicacoes", nome: string, png: Blob, svg?: string | null): Promise<{ png: string; svg: string | null }> {
+  const base = `${pastaDoProjeto(clientId, projetoId)}/${pasta}/${nome.replace(/[^a-z0-9-]+/gi, "-").slice(0, 40) || "peca"}-${Date.now()}`;
+  const env = await supabase.storage.from("mesa").upload(`${base}.png`, png, { contentType: "image/png", upsert: false });
+  if (env.error) throw env.error;
+  let caminhoSvg: string | null = null;
+  if (svg) {
+    const env2 = await supabase.storage.from("mesa").upload(`${base}.svg`, new Blob([svg], { type: "image/svg+xml" }), { contentType: "image/svg+xml", upsert: false });
+    if (env2.error) throw env2.error;
+    caminhoSvg = `${base}.svg`;
+  }
+  return { png: `${base}.png`, svg: caminhoSvg };
+}
+
+/** Desenha um SVG (texto) num canvas do tamanho pedido e devolve o PNG. */
+export async function pngDoSvg(svg: string, largura: number, altura: number): Promise<Blob> {
+  const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+  try {
+    const img = await abrirImagem(url);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(largura));
+    canvas.height = Math.max(1, Math.round(altura));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("O navegador não conseguiu desenhar a imagem.");
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return await paraBlob(canvas, "image/png");
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+export { paraBlob as blobDoCanvas };

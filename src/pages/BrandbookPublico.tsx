@@ -6,7 +6,7 @@ import CascaPublica from "@/components/publico/CascaPublica";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { juntar, texto } from "@/components/sistema/estilos";
 import VisaoDoBrandbook from "@/components/mesa-identidade/VisaoDoBrandbook";
-import type { DadosDoBrandbook, LogoDoBrandbook, ModeloDoBrandbook } from "../../supabase/functions/_shared/brandbook";
+import { ehTema, type DadosDoBrandbook, type LogoDoBrandbook, type ModeloDoBrandbook } from "../../supabase/functions/_shared/brandbook";
 
 /**
  * Página pública do brandbook (/marca/:token), frente IDV. Sem login: lê só
@@ -37,6 +37,7 @@ export function dadosDoPublico(p: Publico): { dados: DadosDoBrandbook; imagens: 
   const arr = (v: unknown) => (Array.isArray(v) ? v : []);
   const dados: DadosDoBrandbook = {
     versao_do_esquema: Number(p.versao_do_esquema) || 1,
+    tema: ehTema(p.tema) ? p.tema : "classico",
     marca: { nome: String((p.marca && p.marca.nome) || ""), slogan: String((p.marca && p.marca.slogan) || ""), assinatura: "" },
     conceito: { resumo: String((p.conceito && p.conceito.resumo) || ""), significado_do_logo: String((p.conceito && p.conceito.significado_do_logo) || ""), palavras: arr(p.conceito && p.conceito.palavras).map(String) },
     plataforma: {
@@ -46,9 +47,16 @@ export function dadosDoPublico(p: Publico): { dados: DadosDoBrandbook; imagens: 
       valores: arr(p.plataforma && p.plataforma.valores).map(String),
       personalidade: arr(p.plataforma && p.plataforma.personalidade).map(String),
       arquetipo: String((p.plataforma && p.plataforma.arquetipo) || ""),
+      arquetipo_justificativa: String((p.plataforma && p.plataforma.arquetipo_justificativa) || ""),
       publico: String((p.plataforma && p.plataforma.publico) || ""),
+      posicionamento: String((p.plataforma && p.plataforma.posicionamento) || ""),
+      promessa: String((p.plataforma && p.plataforma.promessa) || ""),
     },
-    tom: { como_fala: arr(p.tom && p.tom.como_fala).map(String), como_nao_fala: arr(p.tom && p.tom.como_nao_fala).map(String), exemplos: [] },
+    tom: {
+      como_fala: arr(p.tom && p.tom.como_fala).map(String),
+      como_nao_fala: arr(p.tom && p.tom.como_nao_fala).map(String),
+      exemplos: arr(p.tom && p.tom.exemplos).map((x: any) => ({ certo: String((x && x.certo) || ""), errado: String((x && x.errado) || "") })),
+    },
     logos: {
       principal: logo(p.logos && p.logos.principal),
       secundario: logo(p.logos && p.logos.secundario),

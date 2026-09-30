@@ -66,12 +66,13 @@ import {
 } from "./comum.ts";
 import { concluir, escolherCaminho, estimativaDa, gerarCaminhos, TAMANHO_DA_CONVERSA } from "./projeto-acoes.ts";
 import { escolherNome, estimarNaming, gerarRodada, lerRodada } from "./naming-acoes.ts";
+import { estimativaDaProposta, gerarFontes, gerarPaletas, gerarSlogans, montarEstrategia } from "./estrategia-acoes.ts";
 import { aplicarNoKit, compartilharBrandbook, lerBrandbook, montarBrandbook, propostaDoKit, reverterNoKit } from "./brandbook-acoes.ts";
 
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
 const MAX_HISTORICO = 12;
 
-const SISTEMA_DO_DIRETOR = `Você é o diretor de marca da Mesa Identidade da Aceleriq, uma agência de marketing. Conduz a equipe pelo projeto de identidade visual do cliente aberto, em sequência: Início, Briefing, Pesquisa, Naming (marca do zero ou quando pedido), Conceito (2 ou 3 caminhos), Sistema (logo, paleta, tipografia, grafismos), Mockups, Guideline (brandbook) e Entrega. Português do Brasil, frases curtas, sem travessão.
+const SISTEMA_DO_DIRETOR = `Você é o diretor de marca da Mesa Identidade da Aceleriq, uma agência de marketing. Conduz a equipe pelo projeto de identidade visual do cliente aberto, em sequência: Início, Briefing, Pesquisa (com moodboard), Estratégia (propósito, arquétipo, posicionamento, persona e tom), Naming (marca do zero ou quando pedido, com taglines), Conceito (2 ou 3 caminhos), Sistema (logo, paleta, tipografia, grafismos), Aplicações (peças e mockups), Guideline (brandbook), Apresentação ao cliente e Entrega. Português do Brasil, frases curtas, sem travessão.
 
 REGRAS DA MARCA:
 - A logo final é sempre arquivo real enviado pela equipe (SVG ou PNG). Você nunca desenha nem gera a logo; imagem de IA só inspira.
@@ -200,9 +201,23 @@ export async function agenteConversar(ch: Chamador, corpo: Record<string, unknow
   const brutas = j.acoes && typeof j.acoes === "object" ? ((j.acoes as Record<string, unknown>).itens as Array<Record<string, unknown>> | undefined) || [] : [];
   if (brutas.some((i) => i && i.operacao === "gerar_nomes")) custos.gerar_nomes = (await estimarNaming().catch(() => ({ estimativa_usd: 0 }))).estimativa_usd;
   if (brutas.some((i) => i && i.operacao === "gerar_conceitos")) custos.gerar_conceitos = (await estimativaDa("conceito").catch(() => ({ estimativa_usd: 0 }))).estimativa_usd;
+  // IDV2: as quatro ações novas do diretor, com o custo no cartão.
+  const custoDe = async (alvo: string) => ((await estimativaDaProposta(alvo).catch(() => null)) || { estimativa_usd: 0 }).estimativa_usd;
+  if (brutas.some((i) => i && i.operacao === "montar_estrategia")) custos.montar_estrategia = await custoDe("estrategia");
+  if (brutas.some((i) => i && i.operacao === "propor_paletas")) custos.propor_paletas = await custoDe("paletas");
+  if (brutas.some((i) => i && i.operacao === "sugerir_fontes")) custos.sugerir_fontes = await custoDe("fontes");
+  if (brutas.some((i) => i && i.operacao === "gerar_taglines")) custos.gerar_taglines = await custoDe("slogans");
   let acao = normalizarAcoesDoDiretor(j.acoes, estado.alvos, custos);
   let levar = pedeParaLevar(mensagem);
-  const caminhoDaMesa = (a: AcaoDoAgente, abrir: boolean) => (projeto ? { rotulo: "Abrir o projeto", destino: `/mesa-identidade?client=${clientId}&projeto=${projeto.id}${a.itens.some((i) => i.operacao === "montar_brandbook" || i.operacao === "enviar_para_aprovacao") ? "&etapa=guideline" : ""}`, abrir_sozinho: abrir } : null);
+  const etapaDaAcao = (a: AcaoDoAgente) => {
+    const ops = a.itens.map((i) => i.operacao);
+    if (ops.indexOf("montar_brandbook") >= 0 || ops.indexOf("enviar_para_aprovacao") >= 0) return "&etapa=guideline";
+    if (ops.indexOf("montar_estrategia") >= 0) return "&etapa=estrategia";
+    if (ops.indexOf("propor_paletas") >= 0 || ops.indexOf("sugerir_fontes") >= 0) return "&etapa=sistema";
+    if (ops.indexOf("gerar_taglines") >= 0) return "&etapa=naming";
+    return "";
+  };
+  const caminhoDaMesa = (a: AcaoDoAgente, abrir: boolean) => (projeto ? { rotulo: "Abrir o projeto", destino: `/mesa-identidade?client=${clientId}&projeto=${projeto.id}${etapaDaAcao(a)}`, abrir_sozinho: abrir } : null);
   if (acao) acao = comCaminho(acao, caminhoDaMesa(acao, levar));
   // "Ele já vai fazendo": ordem clara, sem custo e com Desfazer vai direto.
   if (acao && podeExecutarDireto(acao, regrasDoDiretor(), { pedidoClaro: true }).direto) {
@@ -345,6 +360,32 @@ export async function executarItem(ch: Chamador, clientId: string, item: ItemDaA
       await registrarEvento({ clientId, marcaId: p.marca_id, projetoId: p.id, tipo: "kit_aplicado", resumo: `Kit da marca atualizado pela Mesa Identidade (${origem}).`, provas: { itens: proposta.itens.map((i) => i.titulo) }, userId: ch.userId });
       return { desfazer: { tipo: "kit", marca_id: p.marca_id, itens: feitos }, aviso: proposta.itens.map((i) => i.titulo.toLowerCase()).join(", "), custo: 0 };
     }
+    case "montar_estrategia": {
+      const p = await lerProjeto(ch, item.alvo_id);
+      if (p.client_id !== clientId) throw new Error("Projeto de outro cliente.");
+      const r = await montarEstrategia(ch, p);
+      return { desfazer: { tipo: "parte", projeto_id: p.id, parte: "estrategia", inteira: true, antes: r.antes }, aviso: `${r.mudaram.length} campos preenchidos${r.avisos.length ? `; ${r.avisos.slice(0, 2).join("; ")}` : ""}`, custo: r.custo_usd };
+    }
+    case "propor_paletas": {
+      const p = await lerProjeto(ch, item.alvo_id);
+      if (p.client_id !== clientId) throw new Error("Projeto de outro cliente.");
+      const pedido = item.para && item.para !== "sem pedido extra" ? String(item.para) : "";
+      const r = await gerarPaletas(ch, p, { pedido });
+      return { desfazer: { tipo: "parte", projeto_id: p.id, parte: "sistema", chave: "propostas_de_paleta", antes: r.antes }, aviso: r.propostas.map((x) => x.nome).join(", "), custo: r.custo_usd };
+    }
+    case "sugerir_fontes": {
+      const p = await lerProjeto(ch, item.alvo_id);
+      if (p.client_id !== clientId) throw new Error("Projeto de outro cliente.");
+      const r = await gerarFontes(ch, p, {});
+      return { desfazer: { tipo: "parte", projeto_id: p.id, parte: "sistema", chave: "propostas_de_fonte", antes: r.antes }, aviso: r.propostas.map((x) => `${x.titulo} + ${x.texto}`).join("; "), custo: r.custo_usd };
+    }
+    case "gerar_taglines": {
+      const p = await lerProjeto(ch, item.alvo_id);
+      if (p.client_id !== clientId) throw new Error("Projeto de outro cliente.");
+      const pedido = item.para && item.para !== "sem pedido extra" ? String(item.para) : "";
+      const r = await gerarSlogans(ch, p, { pedido });
+      return { desfazer: { tipo: "parte", projeto_id: p.id, parte: "naming", chave: "slogans", antes: r.antes }, aviso: `${r.slogans.length} frases${r.aviso ? `; ${r.aviso}` : ""}`, custo: r.custo_usd };
+    }
     case "kit_paleta":
     case "kit_tipografia":
     case "kit_logo": {
@@ -405,6 +446,16 @@ export async function reverterItem(ch: Chamador, clientId: string, r: ResultadoD
     case "rodada": {
       const { error } = await servico().from("idv_naming_rodadas").update({ status: "arquivado" }).eq("id", String(d.rodada_id)).eq("client_id", clientId);
       if (error) throw new Error("Não foi possível arquivar a rodada.");
+      return;
+    }
+    case "parte": {
+      // IDV2: volta a parte (ou a chave da parte) como estava antes da ação do diretor.
+      const p = await lerProjeto(ch, d.projeto_id);
+      if (p.client_id !== clientId) throw new Error("Projeto de outro cliente.");
+      const parte = String(d.parte || "");
+      if (["estrategia", "sistema", "naming"].indexOf(parte) < 0) throw new Error("Parte do projeto desconhecida.");
+      const valor = d.inteira === true ? ((d.antes as Record<string, unknown>) || {}) : { [String(d.chave || "")]: d.antes ?? null };
+      await gravarProjeto(p, { dados: dadosComParte(p.dados, parte, valor, d.inteira === true) });
       return;
     }
     case "kit": {

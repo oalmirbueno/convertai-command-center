@@ -1,9 +1,10 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { CheckCircle2, Loader2, RotateCcw } from "lucide-react";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
-import { useUrlDaMesa } from "@/components/mesa/MesaContexto";
-import { botao, etiqueta, juntar, texto } from "@/components/sistema/estilos";
-import { modeloDoPapel, type ModeloIa, type ParteDaEstimativa } from "@/lib/mesa/api";
+import { useMesa, useUrlDaMesa } from "@/components/mesa/MesaContexto";
+import { botao, campo, etiqueta, juntar, texto } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { modeloDoPapel, modelosAtivos, nomeDoModelo, precoDoModelo, type ModeloIa, type ParteDaEstimativa } from "@/lib/mesa/api";
 import { faltaNaEtapa, rotuloDaEtapa, TAMANHOS_DA_IDENTIDADE, type EtapaDaIdentidade } from "../../../supabase/functions/_shared/identidade-etapas";
 import type { ProjetoDeIdentidade } from "./identidadeApi";
 
@@ -44,10 +45,54 @@ export function modeloDoPapelNaTela(catalogo: ModeloIa[], papel: "identidade" | 
   return modeloDoPapel(catalogo, papel);
 }
 
-export function partesDoCusto(catalogo: ModeloIa[], alvo: "naming" | "conceito" | "pesquisa" | "conversa"): ParteDaEstimativa[] {
-  const m = modeloDoPapelNaTela(catalogo, alvo === "naming" ? "naming" : "identidade");
+export type AlvoDoCusto = "naming" | "conceito" | "pesquisa" | "conversa" | "estrategia" | "paletas" | "fontes" | "slogans" | "idiomas";
+
+/** O papel que paga cada ação (naming, slogans e idiomas são do criador de nomes). */
+export const papelDoAlvo = (alvo: AlvoDoCusto): "identidade" | "naming" => (alvo === "naming" || alvo === "slogans" || alvo === "idiomas" ? "naming" : "identidade");
+
+export function partesDoCusto(catalogo: ModeloIa[], alvo: AlvoDoCusto, escolhidoId?: string | null, comWeb = false): ParteDaEstimativa[] {
+  const m = modeloDoPapel(catalogo, papelDoAlvo(alvo), escolhidoId || null);
   const t = TAMANHOS_DA_IDENTIDADE[alvo];
-  return [{ modeloId: m ? m.id : null, tipo: "texto", tokensEntrada: t.entrada, tokensSaida: t.saida, ...(alvo === "pesquisa" ? { buscasWeb: TAMANHOS_DA_IDENTIDADE.pesquisa.buscas } : {}) }];
+  const buscas = alvo === "pesquisa" ? TAMANHOS_DA_IDENTIDADE.pesquisa.buscas : comWeb ? 3 : 0;
+  return [{ modeloId: m ? m.id : null, tipo: "texto", tokensEntrada: t.entrada, tokensSaida: t.saida, ...(buscas ? { buscasWeb: buscas } : {}) }];
+}
+
+/**
+ * O modelo escolhido na hora para as ações de IA da mesa (por papel, lembrado
+ * no navegador). Vazio = o padrão do papel (modeloDoPapel).
+ */
+export function useModeloDaAcao(papel: "identidade" | "naming"): [string, (id: string) => void] {
+  const [id, setId] = useEstadoDaTela<string>(`mesa-identidade:modelo:${papel}`, "", { validar: (v) => typeof v === "string" });
+  return [id, (v: string) => setId(v)];
+}
+
+/**
+ * Seletor compacto do modelo da ação: o padrão do papel em primeiro, depois
+ * todo modelo de texto ativo do catálogo (Anthropic, OpenAI e OpenRouter),
+ * com o preço ao lado. O custo aparece no botão da ação.
+ */
+export function SeletorDoModelo({ papel, valor, onEscolher, className = "" }: { papel: "identidade" | "naming"; valor: string; onEscolher: (id: string) => void; className?: string }) {
+  const { catalogo } = useMesa();
+  const padrao = modeloDoPapel(catalogo, papel);
+  const ativos = modelosAtivos(catalogo, "texto");
+  const valido = valor && ativos.some((m) => m.id === valor) ? valor : "";
+  return (
+    <select
+      className={juntar(campo, "m-1 h-8 w-auto max-w-[240px] text-[12px]", className)}
+      value={valido}
+      onChange={(e) => onEscolher(e.target.value)}
+      aria-label="Modelo de IA desta ação"
+      title="Modelo de IA desta ação"
+      data-seletor-de-modelo={papel}
+    >
+      <option value="">{padrao ? `Padrão: ${nomeDoModelo(padrao)}` : "Padrão do papel"}</option>
+      {ativos.map((m) => (
+        <option key={m.id} value={m.id}>
+          {nomeDoModelo(m)} · {precoDoModelo(m)}
+        </option>
+      ))}
+    </select>
+  );
 }
 
 export function partesDaImagem(catalogo: ModeloIa[]): ParteDaEstimativa[] {
@@ -121,4 +166,34 @@ export function ImagemInteira({ caminho, alt, className = "", fundo }: { caminho
 export function Pastilha({ tom = "neutro", children }: { tom?: "neutro" | "bom" | "alerta" | "ruim"; children: ReactNode }) {
   const cor = tom === "bom" ? "bg-primary/10 text-primary" : tom === "alerta" ? "bg-warning/15 text-warning" : tom === "ruim" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground";
   return <span className={juntar(etiqueta, cor)}>{children}</span>;
+}
+
+/**
+ * O que a tela sabe do projeto e o servidor do "Preencher com IA" não lê
+ * (o briefing, a pesquisa e a estratégia moram em idv_projetos.dados): vai no
+ * `contexto` da peça comum, curto (até 2.800 letras).
+ */
+export function contextoParaPreencher(projeto: ProjetoDeIdentidade, extra?: string): string {
+  const d = projeto.dados || {};
+  const linhas: string[] = [`Projeto de identidade: ${projeto.titulo} (${projeto.modo === "zero" ? "marca do zero" : "rebranding"}).`];
+  const nome = d.naming && typeof d.naming.nome === "string" ? d.naming.nome : "";
+  if (nome) linhas.push(`Nome escolhido: ${nome}.`);
+  const b = (d.briefing || {}) as Record<string, unknown>;
+  const partes = Object.keys(b)
+    .filter((k) => k !== "briefing_id" && b[k] != null && String(b[k]).trim())
+    .map((k) => `${k}: ${Array.isArray(b[k]) ? (b[k] as unknown[]).join(", ") : String(b[k])}`);
+  if (partes.length) linhas.push(`Briefing do projeto. ${partes.join(" | ")}`);
+  const p = (d.pesquisa || {}) as Record<string, any>;
+  const resumo = p.resumo || (p.ia && p.ia.resumo) || "";
+  if (resumo) linhas.push(`Pesquisa: ${String(resumo)}`);
+  const mood = Array.isArray(p.moodboard) ? (p.moodboard as Array<Record<string, unknown>>).map((m) => String(m.nota || m.titulo || "")).filter(Boolean) : [];
+  if (mood.length) linhas.push(`Moodboard: ${mood.slice(0, 10).join("; ")}`);
+  const e = (d.estrategia || {}) as Record<string, any>;
+  const pos = e.posicionamento && e.posicionamento.declaracao;
+  if (e.proposito) linhas.push(`Propósito: ${e.proposito}`);
+  if (pos) linhas.push(`Posicionamento: ${pos}`);
+  if (e.arquetipo && e.arquetipo.principal) linhas.push(`Arquétipo: ${e.arquetipo.principal}`);
+  if (e.tom && Array.isArray(e.tom.atributos) && e.tom.atributos.length) linhas.push(`Tom: ${e.tom.atributos.join(", ")}`);
+  if (extra) linhas.push(extra);
+  return linhas.join("\n").slice(0, 2800);
 }

@@ -28,6 +28,13 @@
  * - naming_conferir | naming_finalistas { ids[] } | naming_escolher { candidato_id } | naming_arquivar { arquivar }
  * - naming_pdf_compartilhar { rodada_id } -> { file_id, revisao_solicitada }
  * - naming_mensagem { rodada_id } -> { mensagem, link_whatsapp } ; naming_registrar_grupo { rodada_id }
+ * Estratégia e propostas (IDV2, com IA e custo antes; modelo_id escolhido na tela):
+ * - estrategia_propor { projeto_id, modelo_id?, usar_web?, instrucao? } -> { proposta, fontes, avisos } (não grava)
+ * - paletas_propor | fontes_propor { projeto_id, modelo_id? } -> { projeto, propostas }
+ * - slogans_gerar { projeto_id, modelo_id?, quantos?, pedido? } -> { projeto, slogans } ; slogan_escolher { projeto_id, slogan_id?, texto? }
+ * Naming (IDV2): naming_idiomas { rodada_id, modelo_id? } ; naming_votacao_abrir | naming_votacao_fechar | naming_votos { rodada_id }
+ * - naming_votar { rodada_id, votos: [{ candidato_id, nota }], comentario? } (voto da equipe)
+ * Moodboard: moodboard_web { projeto_id, busca, pagina? } -> { itens } (Openverse, sem custo)
  * Brandbook e kit:
  * - brandbook_montar { projeto_id, modelo } | brandbook_salvar { brandbook_id, dados, modelo?, nota? } | brandbook_listar { projeto_id }
  * - brandbook_compartilhar { brandbook_id } -> { file_id } ; brandbook_publicar / brandbook_revogar { brandbook_id }
@@ -74,11 +81,15 @@ import {
 } from "./naming-acoes.ts";
 import { brandbookCompartilhar, brandbookListar, brandbookMontar, brandbookPublicar, brandbookRevogar, brandbookSalvar, kitSugerir } from "./brandbook-acoes.ts";
 import { agenteConversar, agenteHistorico, conversaDoAgente, desfazerAcao, executarAcao } from "./diretor.ts";
+import { estimativaDaProposta, estrategiaPropor, fontesPropor, paletasPropor, sloganEscolher, slogansGerar } from "./estrategia-acoes.ts";
+import { moodboardWeb, namingIdiomas, namingVotacaoAbrir, namingVotacaoFechar, namingVotar, namingVotos } from "./naming-v2-acoes.ts";
 
 async function estimar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
   const alvo = String(corpo.acao_alvo || "conversa");
+  const proposta = await estimativaDaProposta(alvo, corpo.modelo_id);
+  if (proposta) return json({ ...proposta, custo_usd: 0 });
   if (["naming", "conceito", "pesquisa", "conversa", "imagem"].indexOf(alvo) < 0) return json({ error: "acao_alvo_invalida", mensagem: "Ação a estimar desconhecida." }, 400);
   return json({ ...(await estimativaDa(alvo, corpo.modelo_id)), custo_usd: 0 });
 }
@@ -106,6 +117,17 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   naming_pdf_compartilhar: namingPdfCompartilhar,
   naming_mensagem: namingMensagem,
   naming_registrar_grupo: namingRegistrarGrupo,
+  estrategia_propor: estrategiaPropor,
+  paletas_propor: paletasPropor,
+  fontes_propor: fontesPropor,
+  slogans_gerar: slogansGerar,
+  slogan_escolher: sloganEscolher,
+  naming_idiomas: namingIdiomas,
+  naming_votacao_abrir: namingVotacaoAbrir,
+  naming_votacao_fechar: namingVotacaoFechar,
+  naming_votar: namingVotar,
+  naming_votos: namingVotos,
+  moodboard_web: moodboardWeb,
   brandbook_montar: brandbookMontar,
   brandbook_listar: brandbookListar,
   brandbook_salvar: brandbookSalvar,
@@ -123,7 +145,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
 };
 
 /** Ações que podem passar de 150 s (IA, rede, PDF com imagens): a resposta começa na hora. */
-const ACOES_LONGAS = new Set(["pesquisa_ia", "conceito_gerar", "conceito_imagem", "naming_gerar", "naming_conferir", "naming_pdf_compartilhar", "brandbook_compartilhar", "brandbook_publicar", "agente_conversar", "executar_acao_agente"]);
+const ACOES_LONGAS = new Set(["pesquisa_ia", "conceito_gerar", "conceito_imagem", "naming_gerar", "naming_conferir", "naming_pdf_compartilhar", "brandbook_compartilhar", "brandbook_publicar", "agente_conversar", "executar_acao_agente", "estrategia_propor", "paletas_propor", "fontes_propor", "slogans_gerar", "naming_idiomas"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

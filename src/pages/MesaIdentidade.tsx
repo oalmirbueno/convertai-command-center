@@ -34,9 +34,10 @@ import { ProjetoProvider, type ProjetoDaMesa } from "@/components/mesa-identidad
  *
  * Mesma casca das outras mesas: barra com o seletor de cliente e de marca,
  * as etapas numeradas, a troca de mesas, o saldo e a tela cheia. As etapas
- * seguem a sequência do projeto (Início, Briefing, Pesquisa, Naming quando é
- * marca do zero ou quando pedido, Conceito, Sistema, Mockups, Guideline,
- * Entrega): a próxima abre quando a de antes fecha. O diretor de marca fica
+ * seguem a sequência do projeto (Início, Briefing, Pesquisa, Estratégia,
+ * Naming quando é marca do zero ou quando pedido, Conceito, Sistema,
+ * Aplicações, Guideline, Apresentação, Entrega): a próxima abre quando a de
+ * antes fecha. O diretor de marca fica
  * fixo ao lado (no celular, a gaveta do botão de baixo).
  * Endereço: /mesa-identidade?client=<id>&marca=<id>&projeto=<id>&etapa=<etapa>
  */
@@ -46,6 +47,8 @@ const carregarInicio = () => import("@/components/mesa-identidade/EtapaInicio");
 const EtapaInicio = lazyComPreCarga("mesa-identidade/inicio", carregarInicio);
 const EtapaBriefing = lazyComPreCarga("mesa-identidade/briefing", () => import("@/components/mesa-identidade/EtapaBriefing"));
 const EtapaPesquisa = lazyComPreCarga("mesa-identidade/pesquisa", () => import("@/components/mesa-identidade/EtapaPesquisa"));
+const EtapaEstrategia = lazyComPreCarga("mesa-identidade/estrategia", () => import("@/components/mesa-identidade/EtapaEstrategia"));
+const EtapaApresentacao = lazyComPreCarga("mesa-identidade/apresentacao", () => import("@/components/mesa-identidade/EtapaApresentacao"));
 const EtapaNaming = lazyComPreCarga("mesa-identidade/naming", () => import("@/components/mesa-identidade/EtapaNaming"));
 const EtapaConceito = lazyComPreCarga("mesa-identidade/conceito", () => import("@/components/mesa-identidade/EtapaConceito"));
 const EtapaSistema = lazyComPreCarga("mesa-identidade/sistema", () => import("@/components/mesa-identidade/EtapaSistema"));
@@ -346,11 +349,13 @@ export default function MesaIdentidade() {
                   <ProjetoProvider valor={contextoDoProjeto}>
                     {etapa === "briefing" && <EtapaBriefing />}
                     {etapa === "pesquisa" && <EtapaPesquisa />}
+                    {etapa === "estrategia" && <EtapaEstrategia />}
                     {etapa === "naming" && <EtapaNaming />}
                     {etapa === "conceito" && <EtapaConceito />}
                     {etapa === "sistema" && <EtapaSistema />}
                     {etapa === "mockups" && <EtapaMockups />}
                     {etapa === "guideline" && <EtapaGuideline />}
+                    {etapa === "apresentacao" && <EtapaApresentacao />}
                     {etapa === "entrega" && <EtapaEntrega />}
                   </ProjetoProvider>
                 ) : null}

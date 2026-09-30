@@ -15,6 +15,7 @@ import { auditLog } from "../_shared/mcp-audit.ts";
 import { concluirEtapa, ehEtapaDaIdentidade, etapaAtual, reabrirEtapa, TAMANHOS_DA_IDENTIDADE } from "../_shared/identidade-etapas.ts";
 import { montarBriefingDaIdentidade, respostasDoBriefing } from "../_shared/briefing-da-identidade.ts";
 import { normalizarHex } from "../_shared/cores-da-marca.ts";
+import { ehTema } from "../_shared/brandbook.ts";
 import { recomendar } from "./conselho-gancho.ts";
 import {
   AGENTE,
@@ -44,7 +45,7 @@ export const TAMANHO_DO_CONCEITO = TAMANHOS_DA_IDENTIDADE.conceito;
 export const TAMANHO_DA_PESQUISA = TAMANHOS_DA_IDENTIDADE.pesquisa;
 export const TAMANHO_DA_CONVERSA = TAMANHOS_DA_IDENTIDADE.conversa;
 
-const PARTES_EDITAVEIS = ["briefing", "pesquisa", "conceito", "sistema", "naming", "entrega", "mockups"];
+const PARTES_EDITAVEIS = ["briefing", "pesquisa", "estrategia", "conceito", "sistema", "naming", "entrega", "mockups", "aplicacoes", "apresentacao", "guideline"];
 
 // ------------------------------------------------------------------ projeto
 
@@ -106,6 +107,10 @@ export async function projetoSalvar(ch: Chamador, corpo: Record<string, unknown>
       const antes = Array.isArray(p.dados.mockups) ? (p.dados.mockups as Array<{ titulo: string; imagem: string }>) : [];
       const lista = corpo.substituir === true ? novos : antes.concat(novos.filter((n) => !antes.some((a) => a.imagem === n.imagem)));
       campos.dados = { ...p.dados, mockups: lista.slice(0, 60) };
+    } else if (parte === "guideline") {
+      // Do guideline a tela só escolhe o tema visual; o brandbook_id é da função (montar e salvar versão).
+      if (!ehTema(valor.tema)) throw new ErroHttp(400, "tema_invalido", "Tema do brandbook desconhecido.");
+      campos.dados = dadosComParte(p.dados, "guideline", { tema: valor.tema });
     } else {
       campos.dados = dadosComParte(p.dados, parte, valor, corpo.substituir === true);
     }
@@ -341,6 +346,20 @@ export function normalizarCaminhos(bruto: unknown, quantos: number): CaminhoCria
   });
 }
 
+/** A pesquisa enxuta para o modelo (sem imagem e sem campo interno). */
+export function resumoDaPesquisa(bruta: unknown): Record<string, unknown> {
+  const p = (bruta && typeof bruta === "object" ? bruta : {}) as Record<string, unknown>;
+  const ia = (p.ia && typeof p.ia === "object" ? p.ia : {}) as Record<string, unknown>;
+  const lista = (v: unknown) => (Array.isArray(v) ? v : []);
+  return {
+    resumo: p.resumo || ia.resumo || null,
+    concorrentes: lista(ia.concorrentes).slice(0, 6).map((c) => (c as Record<string, unknown>).nome),
+    cliches: lista(ia.cliches).slice(0, 6),
+    referencias: lista(p.referencias).slice(0, 12).map((r) => ({ titulo: (r as Record<string, unknown>).titulo, nota: (r as Record<string, unknown>).nota })),
+    moodboard: lista(p.moodboard).slice(0, 16).map((m) => ({ titulo: (m as Record<string, unknown>).titulo, nota: (m as Record<string, unknown>).nota })),
+  };
+}
+
 export async function gerarCaminhos(ch: Chamador, p: LinhaDoProjeto, quantos: number, pedido: string, modeloId?: unknown) {
   // O que a equipe ensinou ("nada de gradiente", "evitar verde-limão") entra antes de gerar.
   const [modelo, regras] = await Promise.all([modeloDoPapel("identidade", modeloId), regrasDaMesa(servico(), { clientId: p.client_id, mesa: "identidade", marcaId: p.marca_id })]);
@@ -355,7 +374,7 @@ export async function gerarCaminhos(ch: Chamador, p: LinhaDoProjeto, quantos: nu
     sistema: regras.bloco ? `${SISTEMA_DO_CONCEITO}
 
 ${regras.bloco}` : SISTEMA_DO_CONCEITO,
-    mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify({ quantidade: quantos, marca: naming.nome || nome, modo: p.modo, briefing: p.dados.briefing || {}, pesquisa: p.dados.pesquisa || {}, pedido_da_equipe: pedido || null })}` }],
+    mensagens: [{ papel: "usuario", conteudo: `DADOS:\n${JSON.stringify({ quantidade: quantos, marca: naming.nome || nome, modo: p.modo, briefing: p.dados.briefing || {}, estrategia: p.dados.estrategia || null, pesquisa: resumoDaPesquisa(p.dados.pesquisa), pedido_da_equipe: pedido || null })}` }],
     esquemaJson: ESQUEMA_DO_CONCEITO,
     maxTokensSaida: TAMANHO_DO_CONCEITO.saida,
     referencia: { tipo: "idv_projeto", id: p.id },

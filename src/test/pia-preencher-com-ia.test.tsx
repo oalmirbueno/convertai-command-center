@@ -99,7 +99,8 @@ describe("esquema a partir dos campos", () => {
     expect(v.properties.c2.items).toEqual({ type: "string" });
     expect(v.properties.c2.description).toContain("até 2 itens");
     expect(v.properties.c3.type).toEqual(["number", "null"]);
-    expect(v.properties.c4.enum).toEqual(["Básico", "Completo", null]);
+    // anyOf (a Anthropic recusa enum com tipo em lista): string com as opções ou null.
+    expect(v.properties.c4.anyOf).toEqual([{ type: "string", enum: ["Básico", "Completo"] }, { type: "null" }]);
     expect(v.properties.c5.type).toEqual(["object", "null"]);
     expect(v.properties.c5.required).toEqual(["nome", "cargo"]);
     expect(v.properties.c5.additionalProperties).toBe(false);

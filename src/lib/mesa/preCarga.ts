@@ -189,11 +189,13 @@ export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/me
       inicio: () => import("@/components/mesa-identidade/EtapaInicio"),
       briefing: () => import("@/components/mesa-identidade/EtapaBriefing"),
       pesquisa: () => import("@/components/mesa-identidade/EtapaPesquisa"),
+      estrategia: () => import("@/components/mesa-identidade/EtapaEstrategia"),
       naming: () => import("@/components/mesa-identidade/EtapaNaming"),
       conceito: () => import("@/components/mesa-identidade/EtapaConceito"),
       sistema: () => import("@/components/mesa-identidade/EtapaSistema"),
       mockups: () => import("@/components/mesa-identidade/EtapaMockups"),
       guideline: () => import("@/components/mesa-identidade/EtapaGuideline"),
+      apresentacao: () => import("@/components/mesa-identidade/EtapaApresentacao"),
       entrega: () => import("@/components/mesa-identidade/EtapaEntrega"),
     },
     sempre: {

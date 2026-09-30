@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Download, FileText, Globe2, Link2Off, Loader2, Package, RefreshCcw, Save, Send } from "lucide-react";
+import { Copy, Download, FileCode2, FileText, Globe2, Link2Off, Loader2, Package, RefreshCcw, Save, Send } from "lucide-react";
+import { PreencherComIA, type CampoParaPreencher } from "@/components/sistema";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
@@ -12,10 +13,10 @@ import MenuMais from "@/components/sistema/MenuMais";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { Carregando } from "@/components/sistema/Estados";
 import { botao, campo, campoTexto, espaco, juntar, lista, texto } from "@/components/sistema/estilos";
-import { estadoDoModelo, imagensDoBrandbook, lacunasDoBrandbook, MODELOS_DE_BRANDBOOK, type DadosDoBrandbook, type ModeloDoBrandbook } from "../../../supabase/functions/_shared/brandbook";
+import { estadoDoModelo, imagensDoBrandbook, lacunasDoBrandbook, MODELOS_DE_BRANDBOOK, TEMAS_DO_BRANDBOOK, ehTema, type DadosDoBrandbook, type ModeloDoBrandbook } from "../../../supabase/functions/_shared/brandbook";
 import { chamarIdentidade, CHAVES, textoDaAprovacao, useBrandbooks, useSituacaoDoArquivo, type ProjetoDeIdentidade, type VersaoDoBrandbook } from "./identidadeApi";
-import { CabecalhoDaEtapa, Pastilha, useProjetoDaMesa } from "./Comuns";
-import { pacoteDaMarca, pdfDoBrandbook, salvarArquivo } from "./exportarNoNavegador";
+import { CabecalhoDaEtapa, contextoParaPreencher, Pastilha, useProjetoDaMesa } from "./Comuns";
+import { pacoteDaMarca, paginaWebDoBrandbook, pdfDoBrandbook, salvarArquivo } from "./exportarNoNavegador";
 import VisaoDoBrandbook from "./VisaoDoBrandbook";
 
 /** URLs assinadas (1 hora) de várias imagens do bucket mesa, de uma vez. */
@@ -49,7 +50,7 @@ const linhas = (v: string) => v.split(/\n+/).map((x) => x.trim()).filter(Boolean
 export default function EtapaGuideline() {
   const mesa = useMesa();
   const { marca } = useMarcaDaMesa();
-  const { projeto, guardar } = useProjetoDaMesa();
+  const { projeto, guardar, salvarParte } = useProjetoDaMesa();
   const qc = useQueryClient();
   const avisarErro = useAvisarErro();
   const versoesQ = useBrandbooks(projeto.id);
@@ -100,6 +101,30 @@ export default function EtapaGuideline() {
 
   const mexer = (fn: (d: DadosDoBrandbook) => DadosDoBrandbook) => setRascunho((d) => (d ? fn(d) : d));
 
+  // "Preencher com IA" do conteúdo: entra no rascunho (a versão nova só nasce no Salvar versão).
+  const CAMINHOS: Array<{ chave: string; rotulo: string; tipo: CampoParaPreencher["tipo"]; ler: (d: DadosDoBrandbook) => unknown; gravar: (d: DadosDoBrandbook, v: unknown) => DadosDoBrandbook; dica?: string; maximo?: number }> = [
+    { chave: "marca.slogan", rotulo: "Slogan", tipo: "texto", ler: (d) => d.marca.slogan, gravar: (d, v) => ({ ...d, marca: { ...d.marca, slogan: String(v || "").slice(0, 160) } }), maximo: 160 },
+    { chave: "plataforma.proposito", rotulo: "Propósito", tipo: "texto_longo", ler: (d) => d.plataforma.proposito, gravar: (d, v) => ({ ...d, plataforma: { ...d.plataforma, proposito: String(v || "") } }), maximo: 600 },
+    { chave: "plataforma.missao", rotulo: "Missão", tipo: "texto_longo", ler: (d) => d.plataforma.missao, gravar: (d, v) => ({ ...d, plataforma: { ...d.plataforma, missao: String(v || "") } }), maximo: 600 },
+    { chave: "plataforma.visao", rotulo: "Visão", tipo: "texto_longo", ler: (d) => d.plataforma.visao, gravar: (d, v) => ({ ...d, plataforma: { ...d.plataforma, visao: String(v || "") } }), maximo: 600 },
+    { chave: "plataforma.valores", rotulo: "Valores", tipo: "lista", ler: (d) => d.plataforma.valores, gravar: (d, v) => ({ ...d, plataforma: { ...d.plataforma, valores: Array.isArray(v) ? v.map(String) : linhas(String(v || "")) } }), maximo: 6 },
+    { chave: "plataforma.personalidade", rotulo: "Personalidade", tipo: "lista", ler: (d) => d.plataforma.personalidade, gravar: (d, v) => ({ ...d, plataforma: { ...d.plataforma, personalidade: Array.isArray(v) ? v.map(String) : linhas(String(v || "")) } }), maximo: 6 },
+    { chave: "plataforma.posicionamento", rotulo: "Posicionamento", tipo: "texto_longo", ler: (d) => d.plataforma.posicionamento, gravar: (d, v) => ({ ...d, plataforma: { ...d.plataforma, posicionamento: String(v || "") } }), maximo: 600 },
+    { chave: "plataforma.promessa", rotulo: "Promessa", tipo: "texto", ler: (d) => d.plataforma.promessa, gravar: (d, v) => ({ ...d, plataforma: { ...d.plataforma, promessa: String(v || "") } }), maximo: 400 },
+    { chave: "tom.como_fala", rotulo: "Como a marca fala", tipo: "lista", ler: (d) => d.tom.como_fala, gravar: (d, v) => ({ ...d, tom: { ...d.tom, como_fala: Array.isArray(v) ? v.map(String) : linhas(String(v || "")) } }), maximo: 6 },
+    { chave: "tom.como_nao_fala", rotulo: "Como a marca não fala", tipo: "lista", ler: (d) => d.tom.como_nao_fala, gravar: (d, v) => ({ ...d, tom: { ...d.tom, como_nao_fala: Array.isArray(v) ? v.map(String) : linhas(String(v || "")) } }), maximo: 6 },
+    { chave: "conceito.resumo", rotulo: "A ideia da marca", tipo: "texto_longo", ler: (d) => d.conceito.resumo, gravar: (d, v) => ({ ...d, conceito: { ...d.conceito, resumo: String(v || "") } }), maximo: 1500 },
+    { chave: "conceito.significado_do_logo", rotulo: "Significado do logo", tipo: "texto_longo", ler: (d) => d.conceito.significado_do_logo, gravar: (d, v) => ({ ...d, conceito: { ...d.conceito, significado_do_logo: String(v || "") } }), maximo: 1500 },
+  ];
+  const aplicarNoRascunho = (v: Record<string, unknown>) =>
+    mexer((d) => CAMINHOS.reduce((acc, c) => (Object.prototype.hasOwnProperty.call(v, c.chave) ? c.gravar(acc, v[c.chave]) : acc), d));
+  const trocarTema = (tema: string) => {
+    if (!ehTema(tema)) return;
+    mexer((d) => ({ ...d, tema }));
+    // O tema também fica no projeto: a próxima montagem já nasce com ele.
+    salvarParte("guideline", { tema }).catch((e) => avisarErro(e, "O tema não ficou guardado no projeto"));
+  };
+
   const estado = dados ? estadoDoModelo(modelo, dados) : [];
   const prontas = estado.filter((p) => p.pronta).length;
   const lacunas = dados ? lacunasDoBrandbook(modelo, dados) : [];
@@ -111,13 +136,25 @@ export default function EtapaGuideline() {
         etapa="guideline"
         ajuda="Escolha o modelo: a prancha-resumo (uma página longa, boa para o grupo) ou o brandbook de 24 páginas. O conteúdo sai do projeto e fica como JSON versionado: cada Salvar é uma versão nova. O PDF, o pacote e a página pública usam a versão aberta."
         acoes={
-          <SeletorCompacto
-            rotulo="Modelo do brandbook"
-            valor={modelo}
-            onEscolher={(v) => setModelo(v === "prancha" ? "prancha" : "paginado")}
-            opcoes={MODELOS_DE_BRANDBOOK.map((m) => ({ valor: m.valor, rotulo: m.valor === "prancha" ? "Prancha" : "24 páginas", descricao: m.descricao }))}
-            className="m-1"
-          />
+          <>
+            <SeletorCompacto
+              rotulo="Modelo do brandbook"
+              valor={modelo}
+              onEscolher={(v) => setModelo(v === "prancha" ? "prancha" : "paginado")}
+              opcoes={MODELOS_DE_BRANDBOOK.map((m) => ({ valor: m.valor, rotulo: m.valor === "prancha" ? "Prancha" : "24 páginas", descricao: m.descricao }))}
+              className="m-1"
+            />
+            {dados && (
+              <SeletorCompacto
+                rotulo="Modelo visual"
+                modo="lista"
+                valor={dados.tema}
+                onEscolher={trocarTema}
+                opcoes={TEMAS_DO_BRANDBOOK.map((t) => ({ valor: t.valor, rotulo: t.rotulo, descricao: t.descricao }))}
+                className="m-1"
+              />
+            )}
+          </>
         }
       />
 
@@ -176,9 +213,16 @@ export default function EtapaGuideline() {
               }, "O PDF não saiu")}>
                 {ocupado === "pdf" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Download className="mr-1.5 h-4 w-4" />} Baixar PDF
               </button>
+              <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!!ocupado} onClick={() => void rodar("web", async () => {
+                const r = await paginaWebDoBrandbook(dados, modelo, atual.versao);
+                salvarArquivo(new Blob([r.html], { type: "text/html" }), r.nome, "text/html");
+              }, "A página web não saiu")}>
+                {ocupado === "web" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <FileCode2 className="mr-1.5 h-4 w-4" />} Baixar página web
+              </button>
               <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!!ocupado} onClick={() => void rodar("pacote", async () => {
                 const pdf = await pdfDoBrandbook(dados, modelo, atual.versao).catch(() => null);
-                const r = await pacoteDaMarca({ clientId: mesa.clientId, marcaId: projeto.marca_id || (marca && !marca.principal ? marca.id : null), dados, modelo, versao: atual.versao, pdf: pdf ? { bytes: pdf.bytes, nome: pdf.nome } : null });
+                const web = await paginaWebDoBrandbook(dados, modelo, atual.versao).catch(() => null);
+                const r = await pacoteDaMarca({ clientId: mesa.clientId, marcaId: projeto.marca_id || (marca && !marca.principal ? marca.id : null), dados, modelo, versao: atual.versao, pdf: pdf ? { bytes: pdf.bytes, nome: pdf.nome } : null, projeto: projeto.dados, paginaWeb: web ? web.html : null });
                 salvarArquivo(r.blob, r.nome, "application/zip");
                 if (r.fora.length) toast.warning(`Ficaram fora do pacote: ${r.fora.slice(0, 3).join(", ")}`);
               }, "O pacote não saiu")}>
@@ -209,7 +253,23 @@ export default function EtapaGuideline() {
             </div>
           </Secao>
 
-          <Secao titulo="Conteúdo" divisoria recolher={`mesa-identidade:${projeto.id}:guideline:conteudo`} recolhidaDeInicio>
+          <Secao
+            titulo="Conteúdo"
+            divisoria
+            recolher={`mesa-identidade:${projeto.id}:guideline:conteudo`}
+            recolhidaDeInicio
+            acao={
+              <PreencherComIA
+                papel="identidade"
+                clientId={mesa.clientId}
+                marcaId={projeto.marca_id || (marca && !marca.principal ? marca.id : null)}
+                campos={CAMINHOS.map((c) => ({ chave: c.chave, rotulo: c.rotulo, tipo: c.tipo, valorAtual: c.ler(dados), maximo: c.maximo, dica: c.dica }))}
+                contexto={contextoParaPreencher(projeto)}
+                onAplicar={(v) => aplicarNoRascunho(v)}
+                onDesfazer={(a) => aplicarNoRascunho(a)}
+              />
+            }
+          >
             <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
               <CampoDeFormulario rotulo="Nome da marca">
                 <input className={campo} value={dados.marca.nome} maxLength={80} onChange={(e) => mexer((d) => ({ ...d, marca: { ...d.marca, nome: e.target.value } }))} />
@@ -237,6 +297,15 @@ export default function EtapaGuideline() {
               </CampoDeFormulario>
               <CampoDeFormulario rotulo="Como a marca não fala" apoio="Um por linha">
                 <textarea className={juntar(campoTexto, "min-h-[72px]")} value={dados.tom.como_nao_fala.join("\n")} onChange={(e) => mexer((d) => ({ ...d, tom: { ...d.tom, como_nao_fala: linhas(e.target.value) } }))} />
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Posicionamento" largo>
+                <textarea className={juntar(campoTexto, "min-h-[60px]")} value={dados.plataforma.posicionamento} maxLength={600} onChange={(e) => mexer((d) => ({ ...d, plataforma: { ...d.plataforma, posicionamento: e.target.value } }))} />
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Promessa">
+                <input className={campo} value={dados.plataforma.promessa} maxLength={400} onChange={(e) => mexer((d) => ({ ...d, plataforma: { ...d.plataforma, promessa: e.target.value } }))} />
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Arquétipo">
+                <input className={campo} value={dados.plataforma.arquetipo} maxLength={60} onChange={(e) => mexer((d) => ({ ...d, plataforma: { ...d.plataforma, arquetipo: e.target.value } }))} />
               </CampoDeFormulario>
               <CampoDeFormulario rotulo="A ideia da marca" largo>
                 <textarea className={juntar(campoTexto, "min-h-[72px]")} value={dados.conceito.resumo} maxLength={1500} onChange={(e) => mexer((d) => ({ ...d, conceito: { ...d.conceito, resumo: e.target.value } }))} />

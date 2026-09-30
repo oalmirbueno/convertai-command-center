@@ -10,6 +10,8 @@ import Secao from "@/components/sistema/Secao";
 import { botao, espaco, juntar, lista, texto } from "@/components/sistema/estilos";
 import { chamarIdentidade, CHAVES, textoDaAprovacao, useBrandbooks, useRodadas, useSituacaoDoArquivo } from "./identidadeApi";
 import { CabecalhoDaEtapa, useProjetoDaMesa } from "./Comuns";
+import { faltaNaEtapa } from "../../../supabase/functions/_shared/identidade-etapas";
+import { prontoParaApresentar, roteiroDaApresentacao } from "../../../supabase/functions/_shared/apresentacao-da-marca";
 
 /**
  * Etapa 9, Entrega: onde cada coisa está (brandbook na aprovação, nome
@@ -40,6 +42,12 @@ export default function EtapaEntrega() {
   if (projeto.modo === "zero" || projeto.com_naming) {
     itens.unshift({ feito: !!naming.nome, rotulo: "Nome escolhido", detalhe: naming.nome || (rodada ? "Escolha entre os finalistas" : "Gere na etapa Naming") });
   }
+  // IDV2: a estratégia e a apresentação também contam para a entrega.
+  const faltaNaEstrategia = faltaNaEtapa("estrategia", projeto.dados);
+  itens.unshift({ feito: !faltaNaEstrategia.length, rotulo: "Estratégia da marca", detalhe: faltaNaEstrategia.length ? `Falta: ${faltaNaEstrategia[0].toLowerCase()}` : "Plataforma, arquétipo, posicionamento e tom" });
+  const roteiro = roteiroDaApresentacao(projeto.dados, { comNaming: projeto.modo === "zero" || projeto.com_naming });
+  const apresentacao = prontoParaApresentar(roteiro);
+  itens.push({ feito: apresentacao.pronto, rotulo: "Apresentação ao cliente", detalhe: apresentacao.pronto ? `${roteiro.filter((x) => x.incluido).length} slides prontos` : `Falta: ${apresentacao.faltas[0]}` });
 
   const sugerirKit = async () => {
     setPedindo(true);
