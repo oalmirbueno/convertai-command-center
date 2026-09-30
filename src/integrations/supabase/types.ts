@@ -6560,7 +6560,6 @@ export type Database = {
         Returns: Json
       }
       operator_expire_stale_runs: { Args: never; Returns: number }
-      operator_maintenance_tick: { Args: never; Returns: Json }
       operator_human_action: {
         Args: {
           _link_id: string
