@@ -19,6 +19,9 @@
  * Publicação: publicacao_estado { site_id } · dominio_verificar { site_id } · publicar { site_id, confirmar: true } · zip_pedir { site_id }
  * Agente:     estimar { client_id, alvo, modelo_id?, imagens?, qualidade?, slot? } · agente_conversar · agente_historico
  *             executar_acao_agente · desfazer_acao_agente · aprendizado_esquecer · aprendizado_guardar
+ * UXM (base-de-design.ts): base_sugerir { site_id } (Jev, não grava) · base_recalcular { site_id, produto, probabilidades }
+ *             base_salvar { site_id, produto?, estilo?, padrao?, par?, aplicar_preset?, sugestao?, restaurar? } · ux_marcar { site_id, regra, estado }
+ *             serie_salvar { site_id, serie } (base UI UX Pro Max 2.15.0, por marca, em direcao.base_de_design)
  * SIT2 (estrutura.ts): mapa_gerar { site_id, tipo?, pedido? } (Jev, não grava) · mapa_salvar { site_id, tipo, mapa }
  *             preset_sugerir { site_id } (Jev) · estilo_salvar { site_id, preset?, motion?, aplicar_dna? }
  *             integracoes_salvar { site_id, integracoes } · seo_salvar { site_id, seo }
@@ -83,6 +86,10 @@ import { ACOES_LONGAS_DA_ESTRUTURA, type ContextoDaEstrutura, estimarDaEstrutura
 import { ehTipoDeSite, mapaDoSite, mapaPadrao, normalizarEstilo, secoesDoMapa, slotsDoMapa, secaoDaBiblioteca, slotsQueOGeradorFaz, tipoDoUid } from "../_shared/site-biblioteca.ts";
 import { custoJev } from "../_shared/ia-motor.ts";
 import { guardarVersao } from "./versoes.ts";
+import { ACOES_LONGAS_DA_BASE, baseInicialDoSite, estimarDaBase, rotasDaBase } from "./base-de-design.ts";
+import { itensDaBaseDeDesign, regrasDoMapa } from "../_shared/uiux/base-completa.ts";
+import { anexoDaBaseCitada, blocoDaBaseDeDesign, CAMPO_BASE_CITADA, conhecimentoDaBaseDeDesign, TETO_DO_BLOCO_DO_DIRETOR } from "../_shared/uiux/citar.ts";
+import { direcaoParaOAgente, lerBaseDeDesign } from "../_shared/uiux/consultas.ts";
 
 /** Versão de antes (SIT2): o erro vai para o log e volta como aviso, sem travar a mudança. */
 async function versaoAntes(s: LinhaDoSite, motivo: string, userId: string): Promise<string | null> {
@@ -92,6 +99,8 @@ async function versaoAntes(s: LinhaDoSite, motivo: string, userId: string): Prom
 }
 
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
+/** UXM: o método da base UI UX Pro Max no sistema do diretor de site (índice de motores: mesa_site.direcao). */
+const CONHECIMENTO_DA_BASE = conhecimentoDaBaseDeDesign().texto;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -133,12 +142,13 @@ const ESQUEMA_DO_AGENTE = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["resposta", "sugestoes", "acoes", "regra_aprendida", "regras_seguidas"],
+    required: ["resposta", "sugestoes", "acoes", "regra_aprendida", "regras_seguidas", "base_citada"],
     properties: {
       resposta: { type: "string" },
       sugestoes: { type: "array", items: { type: "string" } },
       acoes: ESQUEMA_DAS_ACOES_DO_SITE,
       ...CAMPOS_DO_APRENDIZADO,
+      ...CAMPO_BASE_CITADA,
     },
   },
 };
@@ -279,7 +289,9 @@ async function siteCriar(ch: Chamador, c: Record<string, unknown>) {
   // SIT2: com o tipo de site, nasce com o mapa padrão do tipo (páginas e seções); sem ele, o de sempre.
   const tipo = ehTipoDeSite(c.tipo) ? c.tipo : null;
   const mapa = tipo ? mapaPadrao(tipo) : null;
-  const linha: Record<string, unknown> = { id, client_id: clientId, marca_id: marca ? marca.id : null, nome, projeto: nomeDoProjeto(nome, id), direcao: { secoes: mapa ? secoesDoMapa(mapa) : SECOES_PADRAO }, criado_por: ch.userId };
+  // UXM: nasce com a base de design do último site da mesma marca (ou o produto da Identidade dessa marca); nunca de outra marca.
+  const baseInicial = await baseInicialDoSite(servico(), clientId, marca ? marca.id : null);
+  const linha: Record<string, unknown> = { id, client_id: clientId, marca_id: marca ? marca.id : null, nome, projeto: nomeDoProjeto(nome, id), direcao: { secoes: mapa ? secoesDoMapa(mapa) : SECOES_PADRAO, ...(baseInicial ? { base_de_design: baseInicial } : {}) }, criado_por: ch.userId };
   if (tipo && mapa) Object.assign(linha, { tipo, mapa });
   const { data, error } = await servico().from("sites").insert(linha).select("*").single();
   if (error && semColuna(error)) throw new ErroHttp(503, "banco_sem_site_completo", AVISO_BANCO_SIT2);
@@ -705,6 +717,8 @@ async function estimar(ch: Chamador, c: Record<string, unknown>) {
   const clientId = idDe(c.client_id, "client_id");
   await garantirAcesso(ch, clientId);
   const alvo = String(c.alvo || "conversa");
+  const daBase = estimarDaBase(alvo);
+  if (daBase) return json({ ...daBase, custo_usd: 0 });
   const daEstrutura = await estimarDaEstrutura(alvo, c);
   if (daEstrutura) return json({ ...daEstrutura, custo_usd: 0 });
   if (alvo === "leitura") {
@@ -829,8 +843,14 @@ async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
   ];
   const referencia = await referenciaDoPedido(mensagem, itens, { agente: "diretor de site da Mesa Site", ultimaResposta: ultima ? ultima.conteudo : null }).catch((e) => (registrarFalha("mesa-site: referência do pedido", e), null));
   const ultimoFeito = l.trabalhos.find((t) => !!t.preview_url);
+  // UXM: a base da direção deste site (produto, estilo, padrão, par e as regras de UX do mapa), com apelidos b1..bN.
+  const mapaDoAgente = mapaDoSite(s);
+  const tiposDoMapa = mapaDoAgente.paginas.reduce((lista: string[], p) => lista.concat(p.secoes.map((x) => x.tipo)), mapaDoAgente.globais.slice());
+  const itensDaBase = itensDaBaseDeDesign(lerBaseDeDesign(obj(s.direcao).base_de_design), { regras: regrasDoMapa(tiposDoMapa).slice(0, 8), comPar: direcao.fontes.length === 0 });
+  const blocoDaBase = blocoDaBaseDeDesign({ papel: PAPEL, itens: itensDaBase, max: TETO_DO_BLOCO_DO_DIRETOR });
   const dados = {
-    site: { nome: s.nome, etapa: s.etapa, dna: s.dna, direcao: s.direcao, copy_escolhida: s.conteudo.escolhida ?? null, previa: ultimoFeito ? ultimoFeito.preview_url : null },
+    // UXM: a direção vai sem a sugestão do Jev e sem as marcações de UX (as escolhas já vão no bloco b1..bN, no teto).
+    site: { nome: s.nome, etapa: s.etapa, dna: s.dna, direcao: direcaoParaOAgente(s.direcao), copy_escolhida: s.conteudo.escolhida ?? null, previa: ultimoFeito ? ultimoFeito.preview_url : null },
     marca: { nome: direcao.nomeCliente, paleta: direcao.paleta, fontes: direcao.fontes, tom: direcao.tomDeVoz, estilo: direcao.estilo },
     anexos: anexos.map((a) => a.nome),
   };
@@ -839,7 +859,7 @@ async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
     tarefa: PAPEL,
     agente: PAPEL,
     modeloId: modelo.id,
-    sistema: `${SISTEMA_DO_AGENTE}\n\nDADOS:\n${JSON.stringify(dados)}\n${blocoDasAcoesDoSite(l.listas)}\n\n${blocoDoMapaDoPainel("site")}${contexto ? `\n\n${blocoDoContextoDoCliente(contexto, direcao.nomeCliente)}` : ""}${blocoDaReferencia(referencia, itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}`,
+    sistema: `${SISTEMA_DO_AGENTE}\n\n${CONHECIMENTO_DA_BASE}\n\nDADOS:\n${JSON.stringify(dados)}${blocoDaBase ? `\n\n${blocoDaBase}` : ""}\n${blocoDasAcoesDoSite(l.listas)}\n\n${blocoDoMapaDoPainel("site")}${contexto ? `\n\n${blocoDoContextoDoCliente(contexto, direcao.nomeCliente)}` : ""}${blocoDaReferencia(referencia, itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem, imagens: imagensDoAnexo.filter((x): x is ImagemEntrada => !!x) }],
     esquemaJson: ESQUEMA_DO_AGENTE,
     maxTokensSaida: 3_000,
@@ -862,9 +882,11 @@ async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
   }
   const aprendido = await aprendendo;
   const seguidas = anexoDasRegrasSeguidas(j.regras_seguidas, regras.regras);
+  const daBase = anexoDaBaseCitada(j.base_citada, itensDaBase);
   const anexosDaResposta = anexosComCaminho(acao ? [acao] : [], null);
   if (aprendido) anexosDaResposta.push(aprendido);
   if (seguidas) anexosDaResposta.push(seguidas);
+  if (daBase) anexosDaResposta.push(daBase);
   const troca = await gravarTroca(servico(), {
     conversaId,
     clientId: s.client_id,
@@ -1093,10 +1115,11 @@ const ACOES: Record<string, (ch: Chamador, c: Record<string, unknown>) => Promis
   desfazer_acao_agente: desfazerAcao,
   ...rotasDoAprendizado({ mesa: "site", servico, garantirAcesso: (ch, clientId) => garantirAcesso(ch as Chamador, clientId), json }),
   ...(rotasDaEstrutura(ESTRUTURA) as Record<string, (ch: Chamador, c: Record<string, unknown>) => Promise<Response>>),
+  ...(rotasDaBase(ESTRUTURA) as Record<string, (ch: Chamador, c: Record<string, unknown>) => Promise<Response>>),
 };
 
 /** IA ou rede: a resposta começa na hora (a plataforma corta em 150 s sem resposta). */
-const ACOES_LONGAS = new Set(["referencias_ler", "conteudo_gerar", "imagem_gerar", "agente_conversar", "executar_acao_agente", "dominio_verificar", ...ACOES_LONGAS_DA_ESTRUTURA]);
+const ACOES_LONGAS = new Set(["referencias_ler", "conteudo_gerar", "imagem_gerar", "agente_conversar", "executar_acao_agente", "dominio_verificar", ...ACOES_LONGAS_DA_ESTRUTURA, ...ACOES_LONGAS_DA_BASE]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

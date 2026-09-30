@@ -11,6 +11,7 @@ import { SeletorDeModelo } from "@/components/mesa/Seletores";
 import { rotuloDaSecao, type OpcaoDeCopy } from "../../../supabase/functions/_shared/site-metodo";
 import { chamarSite, type LinhaDoSite, useGuardarSite } from "./siteApi";
 import CopyPorSecao from "./CopyPorSecao";
+import SerieDoGrafico from "./SerieDoGrafico";
 
 /**
  * Etapa 4: conteúdo pelas fórmulas de copy. Gera 3 opções de conceitos
@@ -134,6 +135,7 @@ export default function EtapaConteudo({ site, onIrPara }: { site: LinhaDoSite; o
       )}
 
       <CopyPorSecao site={site} modeloId={modelo ? modelo.id : null} />
+      <SerieDoGrafico site={site} />
     </div>
   );
 }

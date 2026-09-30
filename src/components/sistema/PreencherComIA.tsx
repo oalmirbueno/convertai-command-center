@@ -9,8 +9,8 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { lerCatalogo, modeloDoPapel, textoDoErro, usd, type Papel } from "@/lib/mesa/api";
 import {
   estimarPreenchimento,
-  FONTES_DO_PREENCHIMENTO,
-  FONTES_PADRAO,
+  fontesDoPapel,
+  fontesPadraoDoPapel,
   preencherComIA,
   ROTULO_DA_FONTE,
   valorParaLer,
@@ -46,8 +46,8 @@ export interface PropsDoPreencherComIA {
   campos: CampoParaPreencher[];
   /** O que a tela sabe e o servidor não (texto curto). */
   contexto?: string;
-  /** Padrão: contexto, briefing, dossie. */
-  fontes?: Array<"contexto" | "briefing" | "dossie" | "arquivos" | "conversa" | "web">;
+  /** Padrão: contexto, briefing, dossie (e "base", a base de design UI UX Pro Max, nos papéis site e identidade). */
+  fontes?: Array<"contexto" | "briefing" | "dossie" | "arquivos" | "conversa" | "web" | "base">;
   /** Padrão "Preencher com IA" / "Preencher tudo". */
   rotulo?: string;
   /** Só o ícone. */
@@ -79,7 +79,7 @@ export function PreencherComIA(props: PropsDoPreencherComIA): JSX.Element {
     validar: ehTexto,
   });
   const [instrucao, setInstrucao] = useEstadoDaTela<string>(`preencher-ia:instrucao:${papel}:${clientId}:${campos.length ? campos[0].chave : ""}`, "", { validar: ehTexto });
-  const [fontes, setFontes] = useState<FonteDoPreenchimento[]>(() => (props.fontes && props.fontes.length ? props.fontes.slice() : FONTES_PADRAO.slice()));
+  const [fontes, setFontes] = useState<FonteDoPreenchimento[]>(() => (props.fontes && props.fontes.length ? props.fontes.slice() : fontesPadraoDoPapel(papel)));
   const [substituir, setSubstituir] = useState(!!props.substituirInicial);
   const [resultado, setResultado] = useState<ResultadoDoPreenchimento | null>(null);
   const [preenchendo, setPreenchendo] = useState(false);
@@ -203,7 +203,7 @@ export function PreencherComIA(props: PropsDoPreencherComIA): JSX.Element {
               <div className="min-w-0">
                 <span className={juntar(texto.rotulo, "mb-1.5 block")}>Fontes</span>
                 <div className="flex flex-wrap">
-                  {FONTES_DO_PREENCHIMENTO.map((f) => {
+                  {fontesDoPapel(papel).map((f) => {
                     const ligada = fontes.indexOf(f) >= 0;
                     return (
                       <button

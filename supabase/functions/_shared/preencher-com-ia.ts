@@ -22,6 +22,13 @@
  *
  * Por padrão só os campos vazios vão ao modelo (`camposAPreencher`); com
  * `substituir`, todos.
+ *
+ * UXM (30/09/2026, mudança de contrato da frente PIA, tudo opcional): a fonte
+ * "base" (UI UX Pro Max 2.15.0) traz regras de DESIGN com apelidos b1..bN; o
+ * esquema ganha a raiz `regras_usadas` (enum dos apelidos mostrados) e a
+ * limpeza descarta apelido inventado e põe em `fontes` o rótulo humano da
+ * regra. A base nunca é fonte de fato do cliente: fica fora da conferência de
+ * número e nome.
  */
 
 export type TipoDoCampo = "texto" | "texto_longo" | "lista" | "numero" | "escolha" | "objeto";
@@ -42,7 +49,7 @@ export interface CampoParaPreencher {
   maximo?: number;
 }
 
-export type FonteDoPreenchimento = "contexto" | "briefing" | "dossie" | "arquivos" | "conversa" | "web";
+export type FonteDoPreenchimento = "contexto" | "briefing" | "dossie" | "arquivos" | "conversa" | "web" | "base";
 
 export interface ResultadoDoPreenchimento {
   valores: Record<string, unknown>;
@@ -50,14 +57,22 @@ export interface ResultadoDoPreenchimento {
   custo_usd: number;
   fontes: string[];
   avisos: string[];
+  /** UXM: as regras da base que o modelo disse que usou (id de citação e rótulo). */
+  regras_usadas?: Array<{ id: string; rotulo: string }>;
 }
+
+/** Regra da base mostrada ao modelo (o apelido b1..bN e o rótulo humano da citação). */
+export type RegraDaBaseNoPedido = { apelido: string; id: string; rotulo: string };
 
 /** Uma fonte lida pelo servidor: o rótulo vai para a tela, o texto vai para o modelo e para a conferência. */
 export type FonteLida = { id: FonteDoPreenchimento; rotulo: string; texto: string };
 
 export const TIPOS_DE_CAMPO: TipoDoCampo[] = ["texto", "texto_longo", "lista", "numero", "escolha", "objeto"];
-export const FONTES_DO_PREENCHIMENTO: FonteDoPreenchimento[] = ["contexto", "briefing", "dossie", "arquivos", "conversa", "web"];
+export const FONTES_DO_PREENCHIMENTO: FonteDoPreenchimento[] = ["contexto", "briefing", "dossie", "arquivos", "conversa", "web", "base"];
 export const FONTES_PADRAO: FonteDoPreenchimento[] = ["contexto", "briefing", "dossie"];
+/** Papéis em que a base de design (UI UX Pro Max) vale e entra por padrão. */
+export const PAPEIS_COM_BASE = ["site", "identidade"];
+export const fontesPadraoDoPapel = (papel: string): FonteDoPreenchimento[] => (PAPEIS_COM_BASE.indexOf(papel) >= 0 ? FONTES_PADRAO.concat(["base"]) : FONTES_PADRAO.slice());
 /** Os 9 papéis das mesas novas (os mesmos de ia-motor.ts e src/lib/mesa/api.ts). Outro papel é recusado. */
 export const PAPEIS_QUE_PREENCHEM = ["proposta", "contrato", "briefing", "conselho", "identidade", "naming", "site", "motion", "documento"] as const;
 export type PapelQuePreenche = (typeof PAPEIS_QUE_PREENCHEM)[number];
@@ -80,6 +95,7 @@ export const TAMANHO_DA_FONTE: Record<FonteDoPreenchimento, number> = {
   arquivos: 5000,
   conversa: 3000,
   web: 0,
+  base: 1500,
 };
 
 export function ehPapelQuePreenche(p: unknown): p is PapelQuePreenche {
@@ -247,7 +263,7 @@ export type MapaDoEsquema = Record<string, CampoParaPreencher>;
  * chaves obrigatórias, additionalProperties false, vazio para "sem base" e
  * nenhum tipo união (limite de 16 da Anthropic, ver propriedadeDoCampo).
  */
-export function esquemaDosCampos(campos: CampoParaPreencher[]): { nome: string; schema: Record<string, unknown>; mapa: MapaDoEsquema } {
+export function esquemaDosCampos(campos: CampoParaPreencher[], opcoes: { apelidos?: string[] } = {}): { nome: string; schema: Record<string, unknown>; mapa: MapaDoEsquema } {
   const mapa: MapaDoEsquema = {};
   const properties: Record<string, unknown> = {};
   const required: string[] = [];
@@ -257,14 +273,19 @@ export function esquemaDosCampos(campos: CampoParaPreencher[]): { nome: string; 
     properties[k] = propriedadeDoCampo(c);
     required.push(k);
   });
+  const apelidos = (opcoes.apelidos || []).filter((a) => /^b\d{1,2}$/.test(a));
+  const raiz: Record<string, unknown> = apelidos.length
+    ? { regras_usadas: { type: "array", items: { type: "string", enum: apelidos }, description: "Apelidos (b1, b2...) das regras da base de design que você seguiu. Vazio quando nenhuma." } }
+    : {};
   return {
     nome: "preenchimento",
     mapa,
     schema: {
       type: "object",
       additionalProperties: false,
-      required: ["valores", "fontes_usadas", "citacoes", "avisos"],
+      required: ["valores", "fontes_usadas", "citacoes", "avisos"].concat(apelidos.length ? ["regras_usadas"] : []),
       properties: {
+        ...raiz,
         valores: { type: "object", additionalProperties: false, required, properties },
         fontes_usadas: { type: "array", items: { type: "string" }, description: "Rótulos das fontes que deram base (como vieram no pedido)" },
         citacoes: {
@@ -313,10 +334,13 @@ export type PedidoDoPreenchimento = {
   instrucao?: string | null;
   web?: boolean;
   substituir?: boolean;
+  /** UXM: as regras da base mostradas (fonte "base"); vazio ou ausente, o esquema fica como antes. */
+  regrasDaBase?: RegraDaBaseNoPedido[];
 };
 
 export function montarPedido(p: PedidoDoPreenchimento): { sistema: string; mensagem: string; esquema: ReturnType<typeof esquemaDosCampos> } {
-  const esquema = esquemaDosCampos(p.campos);
+  const regrasDaBase = p.regrasDaBase || [];
+  const esquema = esquemaDosCampos(p.campos, { apelidos: regrasDaBase.map((r) => r.apelido) });
   const sistema = [
     `Você preenche campos de uma mesa de trabalho da agência Aceleriq (papel: ${p.papel}). Escreva em português do Brasil, direto, sem travessão.`,
     "Regra dura: use só o que está nas fontes do pedido, na instrução e no que a tela sabe" + (p.web ? " e o que achar na pesquisa na web, sempre com a url" : "") + ".",
@@ -324,7 +348,8 @@ export function montarPedido(p: PedidoDoPreenchimento): { sistema: string; mensa
     "Para cada número, data ou nome que usar, ponha em citacoes o trecho literal da fonte (com a url quando vier da web).",
     "Respeite o tipo, as opções e o limite de cada campo. Em fontes_usadas, repita os rótulos das fontes como vieram (### rótulo).",
     p.substituir ? "Campos com valor atual podem ser reescritos; mantenha o que já estava certo." : "Os campos pedidos estão vazios.",
-  ].join("\n");
+    regrasDaBase.length ? "A fonte da base de design (UI UX Pro Max) traz regras de forma e estrutura com apelidos (b1, b2...): use só como regra de design, nunca como fato do cliente, e ponha em regras_usadas o apelido das que seguiu." : "",
+  ].filter(Boolean).join("\n");
 
   const blocos: string[] = [];
   if (p.instrucao && p.instrucao.trim()) blocos.push(`## Instrução da pessoa\n${p.instrucao.trim().slice(0, MAX_INSTRUCAO)}`);
@@ -362,6 +387,7 @@ export const ENTRADA_POR_FONTE: Record<FonteDoPreenchimento, number> = {
   arquivos: 1500,
   conversa: 900,
   web: 10_000,
+  base: 450,
 };
 
 export type PartesDaEstimativa = {
@@ -508,6 +534,8 @@ export type ContextoDaLimpeza = {
   contexto?: string | null;
   web?: boolean;
   substituir?: boolean;
+  /** UXM: as regras da base mostradas ao modelo (apelido e rótulo da citação). */
+  regrasDaBase?: RegraDaBaseNoPedido[];
 };
 
 type Conferencia = { valor: unknown; aviso: string | null };
@@ -639,14 +667,16 @@ function listaDeTextos(v: unknown, max: number): string[] {
  * A resposta do modelo, conferida: só as chaves pedidas, no tipo certo, sem
  * número ou nome fora das fontes. Devolve valores pela chave da tela.
  */
-export function limparResposta(json: unknown, ctx: ContextoDaLimpeza): { valores: Record<string, unknown>; fontes: string[]; avisos: string[] } {
+export function limparResposta(json: unknown, ctx: ContextoDaLimpeza): { valores: Record<string, unknown>; fontes: string[]; avisos: string[]; regras_usadas: Array<{ id: string; rotulo: string }> } {
   const raiz = objetoSimples(json) ? json : {};
   const brutos = objetoSimples(raiz.valores) ? raiz.valores : {};
   const citacoes = Array.isArray(raiz.citacoes) ? raiz.citacoes.filter(objetoSimples) : [];
   const daWeb = ctx.web
     ? citacoes.filter((c) => typeof c.url === "string" && /^https?:\/\//i.test(String(c.url)) && typeof c.trecho === "string")
     : [];
-  const textos = ctx.fontes.map((f) => f.texto).concat([ctx.instrucao || "", ctx.contexto || ""]).concat(daWeb.map((c) => String(c.trecho)));
+  // A base de design é regra de forma, nunca fato do cliente: fica fora da referência de número e nome.
+  const deFato = ctx.fontes.filter((f) => f.id !== "base");
+  const textos = deFato.map((f) => f.texto).concat([ctx.instrucao || "", ctx.contexto || ""]).concat(daWeb.map((c) => String(c.trecho)));
   const nomesEstritos = ctx.papel !== "naming";
   const valores: Record<string, unknown> = {};
   const avisos: string[] = [];
@@ -676,7 +706,7 @@ export function limparResposta(json: unknown, ctx: ContextoDaLimpeza): { valores
   }
 
   // Fontes: só os rótulos que o servidor leu de fato, mais as urls da web citadas.
-  const rotulos = ctx.fontes.filter((f) => f.texto.trim()).map((f) => f.rotulo);
+  const rotulos = deFato.filter((f) => f.texto.trim()).map((f) => f.rotulo);
   const citadas = listaDeTextos(raiz.fontes_usadas, 20).map(normalizarParaComparar);
   let fontes = rotulos.filter((r) => citadas.indexOf(normalizarParaComparar(r)) >= 0);
   if (!fontes.length) fontes = rotulos.slice();
@@ -686,7 +716,11 @@ export function limparResposta(json: unknown, ctx: ContextoDaLimpeza): { valores
     if (fontes.indexOf(url) < 0 && fontes.length < 24) fontes.push(url);
   }
   if (daWeb.length) avisos.push("Dados da web: confira a fonte antes de aplicar.");
-  return { valores, fontes, avisos: avisos.slice(0, 30) };
+  // Regras da base citadas: só apelido que foi mostrado (inventado sai), com o rótulo humano nas fontes.
+  const usados = Array.isArray(raiz.regras_usadas) ? (raiz.regras_usadas as unknown[]).map((x) => String(x == null ? "" : x).trim().toLowerCase()) : [];
+  const regras_usadas = (ctx.regrasDaBase || []).filter((r) => usados.indexOf(r.apelido) >= 0).slice(0, 8).map((r) => ({ id: r.id, rotulo: r.rotulo }));
+  for (const r of regras_usadas) if (fontes.indexOf(r.rotulo) < 0 && fontes.length < 30) fontes.push(r.rotulo);
+  return { valores, fontes, avisos: avisos.slice(0, 30), regras_usadas };
 }
 
 /** Resultado sem IA (nada para preencher). */
