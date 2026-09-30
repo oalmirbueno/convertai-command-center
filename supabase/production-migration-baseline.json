@@ -1681,6 +1681,14 @@
       "remote_name": "mesa_motion",
       "remote_statements_sha256": "ad211e80611e5a81b1039b3ccd638d0336fb190e1f7460c4993906ca053e36a1",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930190000",
+      "path": "supabase/migrations/20260930190000_mesa_identidade_v2.sql",
+      "local_sha256": "b53db0148d677b985d277d5beb2264bcca9e00d751931e4889c6981a1d0d1b10",
+      "remote_name": "mesa_identidade_v2",
+      "remote_statements_sha256": "091c2ab914c7795f42e169c2a7fd4d1ca82397114ea3d3064089e1855e9c2c70",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
