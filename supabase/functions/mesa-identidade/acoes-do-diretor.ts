@@ -7,6 +7,8 @@
  *   nome, escolher caminho, montar o brandbook.
  * - Com Confirmar (IDV2): montar a estratégia, propor 3 paletas, sugerir pares
  *   de fonte e gerar taglines (IA, custo no cartão; o Desfazer volta o que havia).
+ * - Com Confirmar (IDV3): completar a marca existente (leitura da logo por
+ *   visão e estratégia na função; o resto, por código, a mesa retoma sem custo).
  * - Com Confirmar: gerar nomes e gerar caminhos (IA, custo no cartão), enviar
  *   o brandbook para aprovação (vai para Arquivos, sem Desfazer) e levar ao
  *   kit da marca (muda o kit; o Desfazer volta o valor de antes).
@@ -40,6 +42,7 @@ export const OPERACOES_DO_DIRETOR = [
   "propor_paletas",
   "sugerir_fontes",
   "gerar_taglines",
+  "completar_marca",
 ] as const;
 
 export type OperacaoDoDiretor = (typeof OPERACOES_DO_DIRETOR)[number];
@@ -91,6 +94,13 @@ export function regrasDoDiretor(): Record<string, RegraDaOperacao<Alvo>> {
       combina: true,
       para: (v) => String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, 400) || "sem pedido extra",
     },
+    // IDV3: completar a marca existente (só a logo e o nome). Nunca direto: tem custo e mexe em muita coisa.
+    completar_marca: {
+      rotulo: "completar a marca",
+      alvos: ["p"],
+      para: (v) => (String(v == null ? "" : v).trim() === "com web" ? "com web" : "tudo"),
+      trava: (a) => (a.dados && a.dados.tem_logo === false ? "O projeto ainda não tem a logo principal (arquivo real)." : null),
+    },
   };
 }
 
@@ -107,12 +117,13 @@ export const DESCRICOES_DAS_OPERACOES: Record<OperacaoDoDiretor, string> = {
   propor_paletas: "propõe 3 paletas para o projeto p1 (para: o pedido da equipe em uma frase, ou vazio), com contraste conferido. Usa IA: custo no cartão. A paleta do sistema não muda até a equipe escolher.",
   sugerir_fontes: "sugere 3 pares de fonte do Google Fonts para o projeto p1. Usa IA: custo no cartão.",
   gerar_taglines: "gera taglines, slogans e frases de manifesto do projeto p1 (para: o pedido da equipe, ou vazio), ranqueadas pelo Jev. Usa IA: custo no cartão.",
+  completar_marca: "completa a marca existente do projeto p1 (só tem logo e nome): lê a logo (cores por código, forma e fonte parecida por visão) e monta a estratégia e o tom aqui; paleta, versões da logo, grafismos, peças, mockups, brandbook, apresentação e vídeo ficam prontos para a mesa rodar sem custo. Só preenche o que está vazio; nada inventado; a logo nunca é redesenhada (para: tudo ou com web). Usa IA: custo no cartão.",
 };
 
 export const ESQUEMA_DAS_ACOES_DO_DIRETOR = esquemaDasAcoes(OPERACOES_DO_DIRETOR as unknown as string[]);
 
 /** Operações que usam IA (o cartão mostra o custo antes). */
-export const OPERACOES_COM_IA: OperacaoDoDiretor[] = ["gerar_nomes", "gerar_conceitos", "montar_estrategia", "propor_paletas", "sugerir_fontes", "gerar_taglines"];
+export const OPERACOES_COM_IA: OperacaoDoDiretor[] = ["gerar_nomes", "gerar_conceitos", "montar_estrategia", "propor_paletas", "sugerir_fontes", "gerar_taglines", "completar_marca"];
 
 export type AlvosDoDiretor = {
   projeto: Array<AlvoComApelido<Alvo>>;
@@ -123,12 +134,12 @@ export type AlvosDoDiretor = {
 
 /** Os alvos com apelido: p1 (projeto), c1..c3 (caminhos), n1.. (nomes da última rodada), b1 (brandbook atual). */
 export function alvosDoDiretor(e: {
-  projeto: { id: string; titulo: string; etapa: string } | null;
+  projeto: { id: string; titulo: string; etapa: string; tem_logo?: boolean } | null;
   caminhos: Array<{ id: string; nome: string; ideia?: string }>;
   rodada: { id: string; candidatos: Array<{ id: string; nome: string; finalista?: boolean; nota?: number | null }> } | null;
   brandbook: { id: string; versao: number; modelo: string; status: string; tem_logo: boolean } | null;
 }): AlvosDoDiretor {
-  const projeto = e.projeto ? comApelido([{ id: e.projeto.id, titulo: e.projeto.titulo, detalhe: `etapa: ${rotuloDaEtapa(e.projeto.etapa as never)}` }], "p") : [];
+  const projeto = e.projeto ? comApelido([{ id: e.projeto.id, titulo: e.projeto.titulo, detalhe: `etapa: ${rotuloDaEtapa(e.projeto.etapa as never)}`, dados: { tem_logo: e.projeto.tem_logo !== false } }], "p") : [];
   const caminhos = e.projeto ? comApelido(e.caminhos.map((c) => ({ id: `${e.projeto!.id}:${c.id}`, titulo: c.nome, detalhe: (c.ideia || "").slice(0, 140) })), "c") : [];
   const ordenados = e.rodada ? e.rodada.candidatos.slice().sort((a, b) => Number(!!b.finalista) - Number(!!a.finalista)) : [];
   const nomes = e.rodada ? comApelido(ordenados.slice(0, 20).map((c) => ({ id: `${e.rodada!.id}:${c.id}`, titulo: c.nome, detalhe: `${c.finalista ? "finalista" : "candidato"}${typeof c.nota === "number" ? `, nota ${Math.round(c.nota * 100)}` : ""}` })), "n") : [];

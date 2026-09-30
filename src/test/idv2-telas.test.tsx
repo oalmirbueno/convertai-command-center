@@ -49,6 +49,7 @@ vi.mock("@/lib/mockups/api", () => ({
 }));
 
 import { MesaProvider } from "@/components/mesa/MesaContexto";
+import { ConfirmDialogProvider } from "@/components/shared/confirmDialog";
 import { ProjetoProvider, type ProjetoDaMesa } from "@/components/mesa-identidade/Comuns";
 import EtapaPesquisa from "@/components/mesa-identidade/EtapaPesquisa";
 import EtapaSistema from "@/components/mesa-identidade/EtapaSistema";
@@ -92,7 +93,8 @@ function montar(filho: ReactNode) {
     h(MemoryRouter, null,
       h(QueryClientProvider, { client: qc },
         h(MesaProvider, { valor: { clientId: C, clientName: "Forno", userId: null, isAdmin: true, podeRecarregar: true, saldoUsd: 10, catalogo: [], catalogoCarregando: false, atualizarCusto: () => undefined, abrirRecarga: () => undefined, abrirChaves: () => undefined, abrirModelos: () => undefined } },
-          h(ProjetoProvider, { valor }, filho)))),
+          // IDV3: a Entrega ganhou o documento da entrega (frente DOC), que pede o Confirmar do topo do painel.
+          h(ConfirmDialogProvider, null, h(ProjetoProvider, { valor }, filho))))),
   );
 }
 

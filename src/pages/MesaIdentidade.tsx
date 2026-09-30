@@ -41,6 +41,7 @@ import { ProjetoProvider, type ProjetoDaMesa } from "@/components/mesa-identidad
  * antes fecha. O diretor de marca fica
  * fixo ao lado (no celular, a gaveta do botão de baixo).
  * Endereço: /mesa-identidade?client=<id>&marca=<id>&projeto=<id>&etapa=<etapa>
+ * (&completar=1 abre o "Completar tudo" da marca existente, IDV3)
  */
 
 const carregarInicio = () => import("@/components/mesa-identidade/EtapaInicio");
@@ -352,9 +353,10 @@ export default function MesaIdentidade() {
                 ) : !projeto || etapa === "inicio" ? (
                   <EtapaInicio
                     projetoAberto={projeto}
-                    onAbrir={(p, e) => {
+                    contexto={contextoDoProjeto}
+                    onAbrir={(p, e, extra) => {
                       guardarProjeto(queryClient, p);
-                      mudar({ projeto: p.id, etapa: e || etapaAtual(p) });
+                      mudar({ projeto: p.id, etapa: e || etapaAtual(p), ...(extra || {}) });
                     }}
                   />
                 ) : contextoDoProjeto ? (

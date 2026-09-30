@@ -68,11 +68,14 @@ import { concluir, escolherCaminho, estimativaDa, gerarCaminhos, TAMANHO_DA_CONV
 import { escolherNome, estimarNaming, gerarRodada, lerRodada } from "./naming-acoes.ts";
 import { estimativaDaProposta, gerarFontes, gerarPaletas, gerarSlogans, montarEstrategia } from "./estrategia-acoes.ts";
 import { aplicarNoKit, compartilharBrandbook, lerBrandbook, montarBrandbook, propostaDoKit, reverterNoKit } from "./brandbook-acoes.ts";
+import { completarNoServidor, estimativaDoCompletarNoServidor } from "./completar-acoes.ts";
+import { checklistDaMarca, resumoDoChecklist } from "../_shared/completar-marca.ts";
 
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
 const MAX_HISTORICO = 12;
 
 const SISTEMA_DO_DIRETOR = `Você é o diretor de marca da Mesa Identidade da Aceleriq, uma agência de marketing. Conduz a equipe pelo projeto de identidade visual do cliente aberto, em sequência: Início, Briefing, Pesquisa (com moodboard), Estratégia (propósito, arquétipo, posicionamento, persona e tom), Naming (marca do zero ou quando pedido, com taglines), Conceito (2 ou 3 caminhos), Sistema (logo, paleta, tipografia, grafismos), Aplicações (peças e mockups), Guideline (brandbook), Apresentação ao cliente e Entrega. Português do Brasil, frases curtas, sem travessão.
+Marca existente (modo "Completar marca existente"): só tem logo e nome; sem Pesquisa, Naming e Conceito. A ação completar_marca lê a logo e monta a estratégia; o resto a mesa completa por código. Use o checklist de completude (DADOS.completude) para dizer o que falta.
 
 REGRAS DA MARCA:
 - A logo final é sempre arquivo real enviado pela equipe (SVG ou PNG). Você nunca desenha nem gera a logo; imagem de IA só inspira.
@@ -131,8 +134,10 @@ async function estadoDoProjeto(ch: Chamador, p: LinhaDoProjeto | null) {
   const rodada = typeof naming.rodada_id === "string" ? await lerRodada(ch, naming.rodada_id).catch((e) => (registrarFalha("mesa-identidade: rodada do agente", e), null)) : null;
   const bb = typeof guideline.brandbook_id === "string" ? await lerBrandbook(ch, guideline.brandbook_id).then((r) => r.linha).catch((e) => (registrarFalha("mesa-identidade: brandbook do agente", e), null)) : null;
   const atual = etapaAtual(p);
+  const temLogo = !!(((p.dados.sistema as Record<string, unknown>) || {}).logos && (((p.dados.sistema as Record<string, unknown>).logos as Record<string, unknown>).principal));
+  const checklist = checklistDaMarca(p.dados, { brandbook: bb ? { versao: bb.versao, enviado: !!bb.arquivo_pdf_id, aprovado: false } : null }, { comNaming: p.modo === "zero" || p.com_naming, semCaminhos: p.modo === "completar" });
   const alvos = alvosDoDiretor({
-    projeto: { id: p.id, titulo: p.titulo, etapa: atual },
+    projeto: { id: p.id, titulo: p.titulo, etapa: atual, tem_logo: temLogo },
     caminhos,
     rodada: rodada ? { id: rodada.id, candidatos: rodada.candidatos } : null,
     brandbook: bb ? { id: bb.id, versao: bb.versao, modelo: bb.modelo, status: bb.status, tem_logo: !!bb.dados.logos.principal } : null,
@@ -147,6 +152,8 @@ async function estadoDoProjeto(ch: Chamador, p: LinhaDoProjeto | null) {
     nome_escolhido: naming.nome || null,
     nomes: rodada ? rodada.candidatos.slice(0, 12).map((c) => ({ nome: c.nome, tecnica: c.tecnica, finalista: c.finalista, nota: c.nota, com_br: c.filtros.com_br })) : [],
     brandbook: bb ? { versao: bb.versao, modelo: bb.modelo, status: bb.status, lacunas: lacunasDoBrandbook(bb.modelo, bb.dados) } : null,
+    // IDV3: o checklist de completude da marca (o que tem e o que falta).
+    completude: { ...resumoDoChecklist(checklist), faltando: checklist.filter((i) => !i.tem).map((i) => i.rotulo) },
   };
   return { dados, alvos };
 }
@@ -207,6 +214,7 @@ export async function agenteConversar(ch: Chamador, corpo: Record<string, unknow
   if (brutas.some((i) => i && i.operacao === "propor_paletas")) custos.propor_paletas = await custoDe("paletas");
   if (brutas.some((i) => i && i.operacao === "sugerir_fontes")) custos.sugerir_fontes = await custoDe("fontes");
   if (brutas.some((i) => i && i.operacao === "gerar_taglines")) custos.gerar_taglines = await custoDe("slogans");
+  if (brutas.some((i) => i && i.operacao === "completar_marca")) custos.completar_marca = await estimativaDoCompletarNoServidor(projeto).catch(() => 0);
   let acao = normalizarAcoesDoDiretor(j.acoes, estado.alvos, custos);
   let levar = pedeParaLevar(mensagem);
   const etapaDaAcao = (a: AcaoDoAgente) => {
@@ -215,6 +223,7 @@ export async function agenteConversar(ch: Chamador, corpo: Record<string, unknow
     if (ops.indexOf("montar_estrategia") >= 0) return "&etapa=estrategia";
     if (ops.indexOf("propor_paletas") >= 0 || ops.indexOf("sugerir_fontes") >= 0) return "&etapa=sistema";
     if (ops.indexOf("gerar_taglines") >= 0) return "&etapa=naming";
+    if (ops.indexOf("completar_marca") >= 0) return "&etapa=inicio&completar=1";
     return "";
   };
   const caminhoDaMesa = (a: AcaoDoAgente, abrir: boolean) => (projeto ? { rotulo: "Abrir o projeto", destino: `/mesa-identidade?client=${clientId}&projeto=${projeto.id}${etapaDaAcao(a)}`, abrir_sozinho: abrir } : null);
@@ -386,6 +395,15 @@ export async function executarItem(ch: Chamador, clientId: string, item: ItemDaA
       const r = await gerarSlogans(ch, p, { pedido });
       return { desfazer: { tipo: "parte", projeto_id: p.id, parte: "naming", chave: "slogans", antes: r.antes }, aviso: `${r.slogans.length} frases${r.aviso ? `; ${r.aviso}` : ""}`, custo: r.custo_usd };
     }
+    case "completar_marca": {
+      const p = await lerProjeto(ch, item.alvo_id);
+      if (p.client_id !== clientId) throw new Error("Projeto de outro cliente.");
+      const r = await completarNoServidor(ch, p, { usarWeb: item.para === "com web" });
+      const feitos = r.execucao.passos.filter((x) => x.estado === "feito").length;
+      const falhas = r.execucao.passos.filter((x) => x.estado === "falhou").map((x) => x.resumo);
+      const aviso = [`${feitos} passos feitos aqui`, r.pendentes.length ? `na mesa, sem custo: ${r.pendentes.join(", ").toLowerCase()}` : "", falhas.length ? `falhou: ${falhas[0]}` : "", r.avisos[0] || ""].filter(Boolean).join("; ");
+      return { desfazer: { tipo: "completar", projeto_id: p.id, antes: r.antes }, aviso, custo: r.custo_usd };
+    }
     case "kit_paleta":
     case "kit_tipografia":
     case "kit_logo": {
@@ -456,6 +474,19 @@ export async function reverterItem(ch: Chamador, clientId: string, r: ResultadoD
       if (["estrategia", "sistema", "naming"].indexOf(parte) < 0) throw new Error("Parte do projeto desconhecida.");
       const valor = d.inteira === true ? ((d.antes as Record<string, unknown>) || {}) : { [String(d.chave || "")]: d.antes ?? null };
       await gravarProjeto(p, { dados: dadosComParte(p.dados, parte, valor, d.inteira === true) });
+      return;
+    }
+    case "completar": {
+      // IDV3: volta a leitura, a estratégia e a rodada como estavam antes do "completar a marca".
+      const p = await lerProjeto(ch, d.projeto_id);
+      if (p.client_id !== clientId) throw new Error("Projeto de outro cliente.");
+      const antes = (d.antes as Record<string, unknown>) || {};
+      const dados = { ...p.dados };
+      for (const k of ["leitura_da_logo", "estrategia", "completar"]) {
+        if (antes[k] == null) delete dados[k];
+        else dados[k] = antes[k];
+      }
+      await gravarProjeto(p, { dados });
       return;
     }
     case "kit": {

@@ -50,7 +50,7 @@ const tem = (v: unknown): boolean => {
 };
 
 /** O que cada slide precisa ter nos dados do projeto (lista vazia: pronto). */
-export function faltaNoSlide(id: SlideId, dadosBrutos: unknown, comNaming: boolean): string[] {
+export function faltaNoSlide(id: SlideId, dadosBrutos: unknown, comNaming: boolean, semCaminhos = false): string[] {
   const d = obj(dadosBrutos);
   const b = obj(d.briefing);
   const e = normalizarEstrategia(d.estrategia);
@@ -83,6 +83,8 @@ export function faltaNoSlide(id: SlideId, dadosBrutos: unknown, comNaming: boole
     case "nome":
       return comNaming ? precisa(tem(obj(d.naming).nome), "o nome escolhido (Naming)") : [];
     case "conceito":
+      // Marca existente (IDV3, "Completar marca"): não há caminhos criativos; o conceito é o significado da logo.
+      if (semCaminhos) return precisa(!!escolhido || tem(s.significado_do_logo), "o significado da logo (Sistema)");
       return precisa(!!escolhido, "o caminho escolhido (Conceito)");
     case "revelacao":
       return precisa(tem(obj(obj(s.logos).principal).caminho), "a logo principal (Sistema)");
@@ -107,7 +109,7 @@ export function faltaNoSlide(id: SlideId, dadosBrutos: unknown, comNaming: boole
  * conteúdo sai (ex.: sem moodboard, sem o slide de referências); o Naming só
  * entra quando o projeto tem nome novo. A equipe pode tirar qualquer um.
  */
-export function roteiroDaApresentacao(dadosBrutos: unknown, opcoes: { comNaming: boolean }): SlideDoRoteiro[] {
+export function roteiroDaApresentacao(dadosBrutos: unknown, opcoes: { comNaming: boolean; semCaminhos?: boolean }): SlideDoRoteiro[] {
   const d = obj(dadosBrutos);
   const ap = obj(d.apresentacao);
   const falas = obj(ap.falas);
@@ -115,7 +117,7 @@ export function roteiroDaApresentacao(dadosBrutos: unknown, opcoes: { comNaming:
   const saida: SlideDoRoteiro[] = [];
   for (const s of SLIDES_DA_APRESENTACAO) {
     if (s.id === "nome" && !opcoes.comNaming) continue;
-    const falta = faltaNoSlide(s.id, d, opcoes.comNaming);
+    const falta = faltaNoSlide(s.id, d, opcoes.comNaming, opcoes.semCaminhos === true);
     const incluido = tirados.indexOf(s.id) < 0 && (s.sempre || falta.length === 0);
     saida.push({ id: s.id, n: 0, titulo: s.titulo, falta, fala: String(falas[s.id] == null ? "" : falas[s.id]).slice(0, 1500), incluido });
   }

@@ -10,7 +10,7 @@ import { IaMotorErro, modeloDoPapel as modeloDoPapelDaBase, type ModeloIa } from
 import { ErroDaAcao } from "../_shared/acoes-do-agente.ts";
 import { lerMarcaCompleta, type MarcaDoCliente } from "../_shared/marca.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
-import { ehEtapaDaIdentidade, type EtapaDaIdentidade, type ModoDoProjeto } from "../_shared/identidade-etapas.ts";
+import { ehEtapaDaIdentidade, ehModoDoProjeto, type EtapaDaIdentidade, type ModoDoProjeto } from "../_shared/identidade-etapas.ts";
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -196,7 +196,7 @@ export function normalizarProjeto(v: unknown): LinhaDoProjeto | null {
     id: o.id,
     client_id: o.client_id,
     marca_id: typeof o.marca_id === "string" ? o.marca_id : null,
-    modo: o.modo === "rebranding" ? "rebranding" : "zero",
+    modo: ehModoDoProjeto(o.modo) ? o.modo : "zero",
     com_naming: o.com_naming === true,
     titulo: String(o.titulo || "Identidade"),
     etapa: ehEtapaDaIdentidade(o.etapa) ? o.etapa : "briefing",
@@ -249,7 +249,7 @@ export function dadosComParte(dados: Record<string, unknown>, parte: string, val
 
 // ------------------------------------------------------------------ gancho do documento de entrega
 
-export type TipoDoEvento = "naming_enviado" | "naming_grupo" | "naming_escolhido" | "brandbook_enviado" | "brandbook_publicado" | "brandbook_revogado" | "kit_aplicado" | "projeto_entregue" | "estrategia_montada" | "votacao_aberta" | "votacao_fechada";
+export type TipoDoEvento = "naming_enviado" | "naming_grupo" | "naming_escolhido" | "brandbook_enviado" | "brandbook_publicado" | "brandbook_revogado" | "kit_aplicado" | "projeto_entregue" | "estrategia_montada" | "votacao_aberta" | "votacao_fechada" | "marca_completada" | "video_da_marca";
 
 /** Registra a entrega com o resumo e as provas (frente DOC lê daqui). Nunca derruba quem chamou. */
 export async function registrarEvento(e: { clientId: string; marcaId?: string | null; projetoId?: string | null; tipo: TipoDoEvento; resumo: string; provas?: Record<string, unknown>; userId: string }) {

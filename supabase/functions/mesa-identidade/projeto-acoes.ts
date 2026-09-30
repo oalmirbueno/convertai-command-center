@@ -12,7 +12,7 @@ import { lerContextoConsolidado } from "../_shared/contexto-cliente.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
-import { concluirEtapa, ehEtapaDaIdentidade, etapaAtual, reabrirEtapa, TAMANHOS_DA_IDENTIDADE } from "../_shared/identidade-etapas.ts";
+import { concluirEtapa, ehEtapaDaIdentidade, ehModoDoProjeto, etapaAtual, reabrirEtapa, TAMANHOS_DA_IDENTIDADE } from "../_shared/identidade-etapas.ts";
 import { montarBriefingDaIdentidade, respostasDoBriefing } from "../_shared/briefing-da-identidade.ts";
 import { normalizarHex } from "../_shared/cores-da-marca.ts";
 import { ehTema } from "../_shared/brandbook.ts";
@@ -39,13 +39,14 @@ import {
   registrarEvento,
   servico,
   TAREFA,
+  UUID,
 } from "./comum.ts";
 
 export const TAMANHO_DO_CONCEITO = TAMANHOS_DA_IDENTIDADE.conceito;
 export const TAMANHO_DA_PESQUISA = TAMANHOS_DA_IDENTIDADE.pesquisa;
 export const TAMANHO_DA_CONVERSA = TAMANHOS_DA_IDENTIDADE.conversa;
 
-const PARTES_EDITAVEIS = ["briefing", "pesquisa", "estrategia", "conceito", "sistema", "naming", "entrega", "mockups", "aplicacoes", "apresentacao", "guideline"];
+const PARTES_EDITAVEIS = ["briefing", "pesquisa", "estrategia", "conceito", "sistema", "naming", "entrega", "mockups", "aplicacoes", "apresentacao", "guideline", "leitura_da_logo", "completar", "videos"];
 
 // ------------------------------------------------------------------ projeto
 
@@ -67,13 +68,17 @@ export async function projetoCriar(ch: Chamador, corpo: Record<string, unknown>)
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
   const marca = await marcaDoPedido(clientId, corpo.marca_id);
-  const modo = corpo.modo === "rebranding" ? "rebranding" : corpo.modo === "zero" ? "zero" : null;
-  if (!modo) throw new ErroHttp(400, "modo_invalido", "Escolha marca do zero ou rebranding.");
+  const modo = ehModoDoProjeto(corpo.modo) ? corpo.modo : null;
+  if (!modo) throw new ErroHttp(400, "modo_invalido", "Escolha marca do zero, rebranding ou completar marca existente.");
   const nome = await nomeDaMarca(clientId, marca ? marca.id : null);
-  const titulo = limpo(corpo.titulo, 120) || `${modo === "zero" ? "Marca nova" : "Rebranding"}: ${nome}`.slice(0, 120);
+  // IDV3: a marca existente entra com o nome que ela já usa (a logo vem logo depois, arquivo real).
+  const nomeExistente = modo === "completar" ? limpo(corpo.nome, 80) || nome : "";
+  const prefixo = modo === "zero" ? "Marca nova" : modo === "rebranding" ? "Rebranding" : "Marca completa";
+  const titulo = limpo(corpo.titulo, 120) || `${prefixo}: ${nomeExistente || nome}`.slice(0, 120);
+  const dados = modo === "completar" ? { naming: { nome: nomeExistente }, marca_existente: { nome: nomeExistente, desde: new Date().toISOString() } } : {};
   const { data, error } = await servico()
     .from("idv_projetos")
-    .insert({ client_id: clientId, marca_id: marca && !marca.principal ? marca.id : null, modo, com_naming: modo === "zero" || corpo.com_naming === true, titulo, etapa: "briefing", concluidas: ["inicio"], dados: {}, criado_por: ch.userId })
+    .insert({ client_id: clientId, marca_id: marca && !marca.principal ? marca.id : null, modo, com_naming: modo === "zero" || (modo === "rebranding" && corpo.com_naming === true), titulo, etapa: "briefing", concluidas: ["inicio"], dados, criado_por: ch.userId })
     .select(CAMPOS_DO_PROJETO)
     .single();
   if (error) throw erroDoBanco(error, "projeto_nao_criado", "Não foi possível criar o projeto de identidade.");
@@ -107,6 +112,14 @@ export async function projetoSalvar(ch: Chamador, corpo: Record<string, unknown>
       const antes = Array.isArray(p.dados.mockups) ? (p.dados.mockups as Array<{ titulo: string; imagem: string }>) : [];
       const lista = corpo.substituir === true ? novos : antes.concat(novos.filter((n) => !antes.some((a) => a.imagem === n.imagem)));
       campos.dados = { ...p.dados, mockups: lista.slice(0, 60) };
+    } else if (parte === "videos") {
+      // IDV3: a lista de filmes da Mesa Motion (o Desfazer do vídeo volta a lista de antes; entrar, só por video_registrar).
+      const lista = (Array.isArray(valor.lista) ? valor.lista : [])
+        .filter((v: any) => v && typeof v.filme_id === "string" && UUID.test(v.filme_id))
+        .map((v: any) => ({ filme_id: v.filme_id, tipo: v.tipo === "filme_marca" ? "filme_marca" : "apresentacao", nome: String(v.nome || "").slice(0, 120), criado_em: String(v.criado_em || "").slice(0, 40) }));
+      const antes = Array.isArray(p.dados.videos) ? (p.dados.videos as Array<{ filme_id: string }>) : [];
+      // Só tira: filme que não estava na lista não entra por aqui.
+      campos.dados = { ...p.dados, videos: lista.filter((v: { filme_id: string }) => antes.some((a) => a.filme_id === v.filme_id)).slice(-6) };
     } else if (parte === "guideline") {
       // Do guideline a tela só escolhe o tema visual; o brandbook_id é da função (montar e salvar versão).
       if (!ehTema(valor.tema)) throw new ErroHttp(400, "tema_invalido", "Tema do brandbook desconhecido.");

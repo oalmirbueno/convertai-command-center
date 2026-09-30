@@ -35,6 +35,10 @@
  * Naming (IDV2): naming_idiomas { rodada_id, modelo_id? } ; naming_votacao_abrir | naming_votacao_fechar | naming_votos { rodada_id }
  * - naming_votar { rodada_id, votos: [{ candidato_id, nota }], comentario? } (voto da equipe)
  * Moodboard: moodboard_web { projeto_id, busca, pagina? } -> { itens } (Openverse, sem custo)
+ * Completar marca existente (IDV3; modo "completar" no projeto_criar, com nome):
+ * - logo_ler { projeto_id, modelo_id? } -> { projeto, leitura } (visão, custo antes pelo estimar com acao_alvo "leitura")
+ * - video_registrar { projeto_id, filme_id } -> { projeto } (filme criado na Mesa Motion, conferido no banco)
+ * - completar_registrar { projeto_id } -> { projeto } (fim da rodada: evento para o documento de entrega)
  * Brandbook e kit:
  * - brandbook_montar { projeto_id, modelo } | brandbook_salvar { brandbook_id, dados, modelo?, nota? } | brandbook_listar { projeto_id }
  * - brandbook_compartilhar { brandbook_id } -> { file_id } ; brandbook_publicar / brandbook_revogar { brandbook_id }
@@ -83,11 +87,13 @@ import { brandbookCompartilhar, brandbookListar, brandbookMontar, brandbookPubli
 import { agenteConversar, agenteHistorico, conversaDoAgente, desfazerAcao, executarAcao } from "./diretor.ts";
 import { estimativaDaProposta, estrategiaPropor, fontesPropor, paletasPropor, sloganEscolher, slogansGerar } from "./estrategia-acoes.ts";
 import { moodboardWeb, namingIdiomas, namingVotacaoAbrir, namingVotacaoFechar, namingVotar, namingVotos } from "./naming-v2-acoes.ts";
+import { completarRegistrar, estimativaDaLeitura, logoLer, videoRegistrar } from "./completar-acoes.ts";
 
 async function estimar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
   const alvo = String(corpo.acao_alvo || "conversa");
+  if (alvo === "leitura") return json({ ...(await estimativaDaLeitura(corpo.modelo_id)), custo_usd: 0 });
   const proposta = await estimativaDaProposta(alvo, corpo.modelo_id);
   if (proposta) return json({ ...proposta, custo_usd: 0 });
   if (["naming", "conceito", "pesquisa", "conversa", "imagem"].indexOf(alvo) < 0) return json({ error: "acao_alvo_invalida", mensagem: "Ação a estimar desconhecida." }, 400);
@@ -128,6 +134,9 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   naming_votar: namingVotar,
   naming_votos: namingVotos,
   moodboard_web: moodboardWeb,
+  logo_ler: logoLer,
+  video_registrar: videoRegistrar,
+  completar_registrar: completarRegistrar,
   brandbook_montar: brandbookMontar,
   brandbook_listar: brandbookListar,
   brandbook_salvar: brandbookSalvar,
@@ -145,7 +154,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
 };
 
 /** Ações que podem passar de 150 s (IA, rede, PDF com imagens): a resposta começa na hora. */
-const ACOES_LONGAS = new Set(["pesquisa_ia", "conceito_gerar", "conceito_imagem", "naming_gerar", "naming_conferir", "naming_pdf_compartilhar", "brandbook_compartilhar", "brandbook_publicar", "agente_conversar", "executar_acao_agente", "estrategia_propor", "paletas_propor", "fontes_propor", "slogans_gerar", "naming_idiomas"]);
+const ACOES_LONGAS = new Set(["pesquisa_ia", "conceito_gerar", "conceito_imagem", "naming_gerar", "naming_conferir", "naming_pdf_compartilhar", "brandbook_compartilhar", "brandbook_publicar", "agente_conversar", "executar_acao_agente", "estrategia_propor", "paletas_propor", "fontes_propor", "slogans_gerar", "naming_idiomas", "logo_ler"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

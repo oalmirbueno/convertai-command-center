@@ -101,6 +101,7 @@ import {
   TETO_PADRAO_DA_CENA_USD,
 } from "../_shared/motion-metodo.ts";
 import { lerMapaDeBatidas } from "../_shared/batidas-da-trilha.ts";
+import { kitDaIdentidade } from "../_shared/motion-da-identidade.ts";
 import { situacaoDoWorker } from "../_shared/render-do-editor.ts";
 import { blocoDasAcoesDoMotion, caminhoDoMotion, ESQUEMA_DAS_ACOES_DO_MOTION, type ListasDoMotion, normalizarAcoesDoMotion, regrasDoMotion } from "./acoes-do-motion.ts";
 
@@ -246,15 +247,20 @@ async function kitDoFilme(f: LinhaDoFilme): Promise<{ marca: MarcaDoCliente | nu
   const direcao = await lerMarcaParaDirecaoDaMarca(servico(), f.client_id, marca);
   const { data: kit } = await servico().from("cliente_kit_marca").select("logo_path, logo_file_id, logo_alt_path, logo_alt_file_id").eq("client_id", f.client_id).maybeSingle();
   const logos = logosDaMarca(marca, marca, (kit || null) as Record<string, string | null> | null);
-  const logo = logos.logo_path && logos.logo_path.indexOf(`${f.client_id}/`) === 0 ? logos.logo_path : null;
-  const fontes = fontesDaCena(direcao.fontes);
+  // Filme feito pela Mesa Identidade (IDV3): paleta, fontes e logo do projeto valem mais que o kit (o kit só muda depois da aprovação).
+  const daIdentidade = kitDaIdentidade(f.insumos, f.client_id);
+  const logoDoKit = logos.logo_path && logos.logo_path.indexOf(`${f.client_id}/`) === 0 ? logos.logo_path : null;
+  const logo = (daIdentidade && daIdentidade.logo_path) || logoDoKit;
+  const paleta = daIdentidade && daIdentidade.paleta.length ? daIdentidade.paleta : direcao.paleta;
+  const fontesDoFilme = daIdentidade && daIdentidade.fontes.length ? daIdentidade.fontes : direcao.fontes;
+  const fontes = fontesDaCena(fontesDoFilme);
   const tema = f.entrevista.fundo === "claro" ? "claro" : "escuro";
   return {
     marca,
-    cena: { nome: direcao.nomeCliente, cores: coresDaMarca(direcao.paleta, tema), fonte_titulo: fontes.titulo, fonte_texto: fontes.texto, tem_logo: !!logo },
+    cena: { nome: direcao.nomeCliente, cores: coresDaMarca(paleta, tema), fonte_titulo: fontes.titulo, fonte_texto: fontes.texto, tem_logo: !!logo },
     logo_path: logo,
-    paleta: direcao.paleta,
-    fontes: direcao.fontes,
+    paleta,
+    fontes: fontesDoFilme,
     avisos: fontes.avisos,
     nome: direcao.nomeCliente,
     estilo: direcao.estilo,

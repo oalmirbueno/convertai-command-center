@@ -77,7 +77,19 @@ export function arquivosDasCores(dados: DadosDoBrandbook): Record<string, string
  * enviadas da marca (quando há), o brandbook.json e o PDF. Devolve o que
  * ficou de fora (arquivo que não baixou).
  */
-export async function pacoteDaMarca(e: { clientId: string; marcaId: string | null; dados: DadosDoBrandbook; modelo: ModeloDoBrandbook; versao: number; pdf?: { bytes: Uint8Array; nome: string } | null; projeto?: Record<string, unknown> | null; paginaWeb?: string | null }): Promise<{ blob: Blob; nome: string; fora: string[] }> {
+export async function pacoteDaMarca(e: {
+  clientId: string;
+  marcaId: string | null;
+  dados: DadosDoBrandbook;
+  modelo: ModeloDoBrandbook;
+  versao: number;
+  pdf?: { bytes: Uint8Array; nome: string } | null;
+  projeto?: Record<string, unknown> | null;
+  paginaWeb?: string | null;
+  /** IDV3: arquivos a mais (vídeos da marca, mockups) e o índice do pacote (LEIA-PRIMEIRO.txt). */
+  extras?: Array<{ caminho: string; dados: Blob | Uint8Array | string }>;
+  manifesto?: string | null;
+}): Promise<{ blob: Blob; nome: string; fora: string[] }> {
   const JSZip = (await import("jszip")).default;
   const zip = new JSZip();
   const fora: string[] = [];
@@ -134,6 +146,8 @@ export async function pacoteDaMarca(e: { clientId: string; marcaId: string | nul
   if (e.paginaWeb) zip.file("brandbook.html", e.paginaWeb);
   zip.file("brandbook.json", JSON.stringify({ versao: e.versao, modelo: e.modelo, dados: e.dados }, null, 2));
   if (e.pdf) zip.file(e.pdf.nome, e.pdf.bytes);
+  for (const x of e.extras || []) zip.file(x.caminho, x.dados);
+  if (e.manifesto) zip.file("LEIA-PRIMEIRO.txt", e.manifesto);
   const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
   return { blob, nome: `pacote-da-marca-${limpar(e.dados.marca.nome || "marca")}-v${e.versao}.zip`, fora };
 }
@@ -179,13 +193,25 @@ async function imagensComoDataUrl(dados: DadosDoBrandbook): Promise<Record<strin
  * navegador, com as imagens dentro e as fontes do Google Fonts. É o mesmo
  * desenho da prévia (VisaoDoBrandbook), escrito pelo React em texto.
  */
-export async function paginaWebDoBrandbook(dados: DadosDoBrandbook, modelo: ModeloDoBrandbook, versao: number): Promise<{ html: string; nome: string }> {
+export async function paginaWebDoBrandbook(dados: DadosDoBrandbook, modelo: ModeloDoBrandbook, versao: number, videos: Array<{ titulo: string; arquivo: string }> = []): Promise<{ html: string; nome: string }> {
   const [{ renderToStaticMarkup }, { createElement }, visao] = await Promise.all([import("react-dom/server"), import("react"), import("./VisaoDoBrandbook")]);
   const mapa = await imagensComoDataUrl(dados);
   const corpo = renderToStaticMarkup(createElement(visao.default, { dados, modelo, urlDe: (c: string | null | undefined) => (c ? mapa[c] || null : null) }));
   const fontes = urlDoGoogleFonts(dados.tipografia.map((t) => ({ familia: t.familia, pesos: [400, 700] })));
   const esc = (x: string) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const titulo = `Manual da marca ${dados.marca.nome || ""}`.trim();
-  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(titulo)}</title>${fontes ? `<link rel="stylesheet" href="${fontes}">` : ""}<style>body{margin:0;background:#EEF1EE;font-family:Helvetica,Arial,sans-serif}main{max-width:1240px;margin:0 auto;padding:24px 16px}</style></head><body><main>${corpo}<p style="font-size:12px;color:#626D66;text-align:center;margin-top:24px">Versão ${versao}. Feito pela Aceleriq.</p></main></body></html>`;
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(titulo)}</title>${fontes ? `<link rel="stylesheet" href="${fontes}">` : ""}<style>body{margin:0;background:#EEF1EE;font-family:Helvetica,Arial,sans-serif}main{max-width:1240px;margin:0 auto;padding:24px 16px}</style></head><body><main>${corpo}${secaoDeVideos(videos, esc)}<p style="font-size:12px;color:#626D66;text-align:center;margin-top:24px">Versão ${versao}. Feito pela Aceleriq.</p></main></body></html>`;
   return { html, nome: `brandbook-${limpar(dados.marca.nome || "marca")}-v${versao}.html` };
+}
+
+/**
+ * IDV3: os vídeos da marca na página web do pacote. O arquivo vai na pasta
+ * videos/ do mesmo .zip, então o endereço é relativo (abre sem o painel e sem
+ * link que expira).
+ */
+function secaoDeVideos(videos: Array<{ titulo: string; arquivo: string }>, esc: (x: string) => string): string {
+  const validos = videos.filter((v) => /^videos\/[A-Za-z0-9._-]+\.mp4$/.test(v.arquivo));
+  if (!validos.length) return "";
+  const itens = validos.map((v) => `<figure style="margin:0 0 24px"><video controls playsinline preload="metadata" src="${esc(v.arquivo)}" style="width:100%;max-height:70vh;background:#000;border-radius:8px"></video><figcaption style="font-size:13px;color:#626D66;margin-top:8px">${esc(v.titulo)}</figcaption></figure>`).join("");
+  return `<section style="margin-top:32px"><h2 style="font-size:20px;margin:0 0 16px">Vídeos da marca</h2>${itens}</section>`;
 }

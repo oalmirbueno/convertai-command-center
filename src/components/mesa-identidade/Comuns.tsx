@@ -175,9 +175,13 @@ export function Pastilha({ tom = "neutro", children }: { tom?: "neutro" | "bom" 
  */
 export function contextoParaPreencher(projeto: ProjetoDeIdentidade, extra?: string): string {
   const d = projeto.dados || {};
-  const linhas: string[] = [`Projeto de identidade: ${projeto.titulo} (${projeto.modo === "zero" ? "marca do zero" : "rebranding"}).`];
+  const modo = projeto.modo === "zero" ? "marca do zero" : projeto.modo === "completar" ? "marca existente: a logo e o nome já existem e não mudam" : "rebranding";
+  const linhas: string[] = [`Projeto de identidade: ${projeto.titulo} (${modo}).`];
   const nome = d.naming && typeof d.naming.nome === "string" ? d.naming.nome : "";
-  if (nome) linhas.push(`Nome escolhido: ${nome}.`);
+  if (nome) linhas.push(projeto.modo === "completar" ? `Nome da marca: ${nome}.` : `Nome escolhido: ${nome}.`);
+  // IDV3: a leitura da logo (o que a imagem mostra) ajuda o texto a não se descolar da marca real.
+  const lida = d.leitura_da_logo && d.leitura_da_logo.visao ? d.leitura_da_logo.visao : null;
+  if (lida && (lida.forma || lida.estilo)) linhas.push(`Logo: ${[lida.forma, lida.estilo].filter(Boolean).join(" ")}`);
   const b = (d.briefing || {}) as Record<string, unknown>;
   const partes = Object.keys(b)
     .filter((k) => k !== "briefing_id" && b[k] != null && String(b[k]).trim())

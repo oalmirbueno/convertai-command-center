@@ -12,6 +12,8 @@ import { chamarIdentidade, CHAVES, textoDaAprovacao, useBrandbooks, useRodadas, 
 import { CabecalhoDaEtapa, useProjetoDaMesa } from "./Comuns";
 import { faltaNaEtapa } from "../../../supabase/functions/_shared/identidade-etapas";
 import { prontoParaApresentar, roteiroDaApresentacao } from "../../../supabase/functions/_shared/apresentacao-da-marca";
+import VideoDaMarca from "./VideoDaMarca";
+import ResultadoDaMarca from "./ResultadoDaMarca";
 
 /**
  * Etapa 9, Entrega: onde cada coisa está (brandbook na aprovação, nome
@@ -45,9 +47,12 @@ export default function EtapaEntrega() {
   // IDV2: a estratégia e a apresentação também contam para a entrega.
   const faltaNaEstrategia = faltaNaEtapa("estrategia", projeto.dados);
   itens.unshift({ feito: !faltaNaEstrategia.length, rotulo: "Estratégia da marca", detalhe: faltaNaEstrategia.length ? `Falta: ${faltaNaEstrategia[0].toLowerCase()}` : "Plataforma, arquétipo, posicionamento e tom" });
-  const roteiro = roteiroDaApresentacao(projeto.dados, { comNaming: projeto.modo === "zero" || projeto.com_naming });
+  const roteiro = roteiroDaApresentacao(projeto.dados, { comNaming: projeto.modo === "zero" || projeto.com_naming, semCaminhos: projeto.modo === "completar" });
   const apresentacao = prontoParaApresentar(roteiro);
   itens.push({ feito: apresentacao.pronto, rotulo: "Apresentação ao cliente", detalhe: apresentacao.pronto ? `${roteiro.filter((x) => x.incluido).length} slides prontos` : `Falta: ${apresentacao.faltas[0]}` });
+  // IDV3 (adendo do dono): o vídeo da marca feito na Mesa Motion também entra na entrega.
+  const videos = Array.isArray(projeto.dados.videos) ? (projeto.dados.videos as unknown[]) : [];
+  itens.push({ feito: videos.length > 0, rotulo: "Vídeo da marca", detalhe: videos.length ? `${videos.length} na Mesa Motion` : "Opcional: crie abaixo" });
 
   const sugerirKit = async () => {
     setPedindo(true);
@@ -81,6 +86,10 @@ export default function EtapaEntrega() {
           Aprovações do cliente: <Link className="text-primary underline-offset-2 hover:underline" to={`/aprovacoes?client=${clientId}`}>abrir Aprovações</Link>
         </p>
       </Secao>
+
+      <ResultadoDaMarca />
+
+      <VideoDaMarca />
 
       <Secao titulo="Kit da marca" divisoria recolher={false}>
         {!sugestao && (

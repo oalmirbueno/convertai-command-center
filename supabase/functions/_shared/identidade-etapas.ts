@@ -53,16 +53,32 @@ export const TAMANHOS_DA_IDENTIDADE = {
   fontes: { entrada: 3_000, saida: 1_800 },
   slogans: { entrada: 3_500, saida: 2_200 },
   idiomas: { entrada: 2_500, saida: 3_000 },
+  // Frente IDV3: a leitura da logo por visão (uma imagem de até 800 px + o pedido).
+  leitura: { entrada: 2_600, saida: 1_600 },
 } as const;
 
 /** Etapas que entraram depois (IDV2): em projeto antigo, uma etapa posterior já fechada conta a nova como feita. */
 export const ETAPAS_NOVAS: EtapaDaIdentidade[] = ["estrategia", "apresentacao"];
-export type ModoDoProjeto = "zero" | "rebranding";
+/**
+ * "completar" (frente IDV3, 30/09): marca existente que só tem logo e nome.
+ * A logo não muda; o projeto completa o resto (estratégia, sistema,
+ * aplicações, brandbook e apresentação). Sem Pesquisa, Naming e Conceito
+ * (o nome e a logo já existem).
+ */
+export type ModoDoProjeto = "zero" | "rebranding" | "completar";
 
 export const ROTULO_DO_MODO: Record<ModoDoProjeto, string> = {
   zero: "Marca do zero",
   rebranding: "Rebranding",
+  completar: "Completar marca existente",
 };
+
+export function ehModoDoProjeto(v: unknown): v is ModoDoProjeto {
+  return v === "zero" || v === "rebranding" || v === "completar";
+}
+
+/** Etapas que a marca existente não tem (nome e logo já existem). */
+export const ETAPAS_FORA_DO_COMPLETAR: EtapaDaIdentidade[] = ["pesquisa", "naming", "conceito"];
 
 const VALORES = ETAPAS_DA_IDENTIDADE.map((e) => e.valor) as EtapaDaIdentidade[];
 
@@ -82,13 +98,15 @@ export type ProjetoNaSequencia = {
   concluidas: string[];
 };
 
-/** Naming entra na marca do zero sempre; no rebranding, só quando pedido. */
+/** Naming entra na marca do zero sempre; no rebranding, só quando pedido; na marca existente, nunca. */
 export function precisaDeNaming(p: Pick<ProjetoNaSequencia, "modo" | "com_naming">): boolean {
+  if (p.modo === "completar") return false;
   return p.modo === "zero" || p.com_naming === true;
 }
 
 /** As etapas deste projeto, na ordem. */
 export function etapasDoProjeto(p: Pick<ProjetoNaSequencia, "modo" | "com_naming">): EtapaDaIdentidade[] {
+  if (p.modo === "completar") return VALORES.filter((e) => ETAPAS_FORA_DO_COMPLETAR.indexOf(e) < 0);
   return VALORES.filter((e) => e !== "naming" || precisaDeNaming(p));
 }
 
@@ -132,12 +150,16 @@ export function podeAbrir(p: ProjetoNaSequencia, etapa: EtapaDaIdentidade): { po
   if (etapa === "inicio") return { pode: true, motivo: null };
   const lista = etapasDoProjeto(p);
   const i = lista.indexOf(etapa);
-  if (i < 0) return { pode: false, motivo: "Este projeto não tem naming (rebranding sem troca de nome)." };
+  if (i < 0) return { pode: false, motivo: modoDe(p) === "completar" ? "A marca existente já tem nome e logo: esta etapa não entra." : "Este projeto não tem naming (rebranding sem troca de nome)." };
   const feitas = concluidasValidas(p);
   for (let j = 0; j < i; j++) {
     if (feitas.indexOf(lista[j]) < 0) return { pode: false, motivo: `Conclua ${rotuloDaEtapa(lista[j])} antes.` };
   }
   return { pode: true, motivo: null };
+}
+
+function modoDe(p: { modo?: string }): string {
+  return String(p.modo || "");
 }
 
 /** Andamento: quantas etapas do projeto já fecharam. */

@@ -14,6 +14,7 @@ import { urlDoGoogleFonts } from "../../../supabase/functions/_shared/tipografia
 import { imagensDaApresentacao, PalcoDoSlide, SlideDaMarca, type UrlDaImagem } from "./ApresentacaoDaMarca";
 import { CabecalhoDaEtapa, contextoParaPreencher, Pastilha, useProjetoDaMesa } from "./Comuns";
 import { salvarArquivo } from "./exportarNoNavegador";
+import VideoDaMarca from "./VideoDaMarca";
 
 /** Separa "bucket::caminho" (acervo em outro bucket) do caminho do bucket mesa. */
 function partes(chave: string): { bucket: string; caminho: string } | null {
@@ -74,7 +75,9 @@ export default function EtapaApresentacao() {
   const avisarErro = useAvisarErro();
   const d = projeto.dados || {};
   const comNaming = projeto.modo === "zero" || projeto.com_naming;
-  const roteiro = useMemo(() => roteiroDaApresentacao(d, { comNaming }), [JSON.stringify(d), comNaming]);
+  // Marca existente (IDV3): sem caminhos criativos, o slide do conceito usa o significado da logo.
+  const semCaminhos = projeto.modo === "completar";
+  const roteiro = useMemo(() => roteiroDaApresentacao(d, { comNaming, semCaminhos }), [JSON.stringify(d), comNaming, semCaminhos]);
   const incluidos = roteiro.filter((s) => s.incluido);
   const pronto = prontoParaApresentar(roteiro);
   const nome = String((d.naming && d.naming.nome) || (marca && !marca.principal ? marca.nome : mesa.clientName) || "Marca");
@@ -235,6 +238,8 @@ export default function EtapaApresentacao() {
           ))}
         </ul>
       </Secao>
+
+      <VideoDaMarca titulo="Apresentação em vídeo" />
     </div>
   );
 }
