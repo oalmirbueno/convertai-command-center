@@ -9,6 +9,8 @@ import { EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campo, juntar, lista, texto } from "@/components/sistema/estilos";
 import { dataCurta } from "@/lib/mesa/api";
 import { ETAPAS_DO_SITE } from "../../../supabase/functions/_shared/site-metodo";
+import { rotuloDoTipo, TIPOS_DE_SITE } from "../../../supabase/functions/_shared/site-biblioteca";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { CHAVES, chamarSite, type LinhaDoSite, useSites } from "./siteApi";
 
 const rotuloDaEtapa = (e: string) => (ETAPAS_DO_SITE.find((x) => x.valor === e) || { rotulo: e }).rotulo;
@@ -20,6 +22,7 @@ export default function ListaDeSites({ marcaId, onAbrir, icone }: { marcaId: str
   const avisarErro = useAvisarErro();
   const sitesQ = useSites(clientId, marcaId);
   const [nome, setNome] = useState("");
+  const [tipo, setTipo] = useState<string>("institucional");
   const [criando, setCriando] = useState(false);
   const [verArquivados, setVerArquivados] = useState(false);
   const todos = sitesQ.data ? sitesQ.data.lista : [];
@@ -31,7 +34,7 @@ export default function ListaDeSites({ marcaId, onAbrir, icone }: { marcaId: str
     if (!n || criando) return;
     setCriando(true);
     try {
-      const d = await chamarSite<{ site: LinhaDoSite }>("site_criar", { client_id: clientId, nome: n, marca_id: marcaId || undefined });
+      const d = await chamarSite<{ site: LinhaDoSite }>("site_criar", { client_id: clientId, nome: n, tipo, marca_id: marcaId || undefined });
       setNome("");
       void qc.invalidateQueries({ queryKey: CHAVES.sites(clientId, marcaId) });
       onAbrir(d.site.id, "briefing");
@@ -58,6 +61,7 @@ export default function ListaDeSites({ marcaId, onAbrir, icone }: { marcaId: str
         <span className="min-w-0 flex-1">
           <span className={juntar(texto.corpo, "block truncate font-medium")}>{s.nome}</span>
           <span className={juntar(texto.auxiliar, "block truncate")}>
+            {s.tipo ? `${rotuloDoTipo(s.tipo)} · ` : ""}
             {rotuloDaEtapa(s.etapa)} · {dataCurta(s.atualizado_em)}
           </span>
         </span>
@@ -78,7 +82,7 @@ export default function ListaDeSites({ marcaId, onAbrir, icone }: { marcaId: str
       <Secao
         titulo="Sites"
         descricao={sitesQ.data && sitesQ.data.indisponivel ? "Banco sem a Mesa Site" : `${vivos.length} ${vivos.length === 1 ? "site" : "sites"}`}
-        ajuda="Cada site é um projeto de código do cliente (na marca aberta), construído pelo motor de código com prévia ao vivo. Arquivar guarda o site e o código; nada é apagado."
+        ajuda="Cada site é um projeto de código do cliente (na marca aberta), construído pelo motor de código com prévia ao vivo. O tipo (institucional, landing de campanha, portfólio, loja simples ou link na bio) dá o mapa inicial de páginas e seções; dá para trocar na Direção. Arquivar guarda o site e o código; nada é apagado."
         recolher={false}
       >
         <form
@@ -94,6 +98,7 @@ export default function ListaDeSites({ marcaId, onAbrir, icone }: { marcaId: str
             Novo site
           </button>
         </form>
+        <SeletorCompacto rotulo="Tipo do site novo" opcoes={TIPOS_DE_SITE.map((t) => ({ valor: t.id, rotulo: t.rotulo, descricao: t.descricao }))} valor={tipo} onEscolher={setTipo} listaQuandoNaoCabe />
         {sitesQ.data && sitesQ.data.aviso && <p className={texto.auxiliar}>{sitesQ.data.aviso}</p>}
         {!vivos.length && !sitesQ.isLoading && <EstadoVazio compacto icone={<Globe className="h-5 w-5" />} titulo="Nenhum site ainda." descricao="Dê um nome e comece pelo briefing." />}
         {vivos.length > 0 && <ul className={juntar(lista.aberta, lista.divisoria)}>{vivos.map(linha)}</ul>}

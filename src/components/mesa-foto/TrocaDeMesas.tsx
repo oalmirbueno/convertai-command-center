@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { BriefcaseBusiness, CalendarRange, Camera, Clapperboard, Globe, Megaphone, Package, Palette, Scissors, ScrollText, type LucideIcon } from "lucide-react";
+import { BriefcaseBusiness, CalendarRange, Camera, Clapperboard, Film, Globe, Megaphone, Package, Palette, Scissors, ScrollText, type LucideIcon } from "lucide-react";
 import { propsDePreCarga } from "@/lib/mesa/preCarga";
 
 /**
@@ -14,7 +14,7 @@ import { propsDePreCarga } from "@/lib/mesa/preCarga";
  * Mouse em cima (ou foco) já baixa a outra mesa: o clique abre na hora.
  */
 
-export type QualMesa = "mesa" | "ads" | "foto" | "videos" | "publicidade" | "roteiros" | "edicao" | "identidade" | "proposta" | "site";
+export type QualMesa = "mesa" | "ads" | "foto" | "videos" | "publicidade" | "roteiros" | "edicao" | "identidade" | "proposta" | "site" | "motion";
 
 export interface MesaDoSeletor {
   valor: QualMesa;
@@ -50,6 +50,7 @@ export const MESAS: MesaDoSeletor[] = [
   { valor: "proposta", rotulo: "Proposta", titulo: "Abrir a Mesa Proposta (proposta comercial com link e aceite)", caminho: "/mesa-proposta", descricao: "Proposta comercial com link e aceite", icone: BriefcaseBusiness },
   // Frente SIT (30/09): criador de sites com o motor de código.
   { valor: "site", rotulo: "Site", titulo: "Abrir a Mesa Site (site do cliente com prévia e domínio)", caminho: "/mesa-site", descricao: "Site do cliente com prévia ao vivo e domínio", icone: Globe },
+  { valor: "motion", rotulo: "Motion", titulo: "Abrir a Mesa Motion (apresentação em motion e filme da marca)", caminho: "/mesa-motion", descricao: "Apresentação em motion e filme cinematográfico da marca", icone: Film },
 ];
 
 /** Endereço da mesa do cliente; com marca (cliente com Acerbi e CME), a marca vai junto. */

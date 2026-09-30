@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clapperboard, Scissors } from "lucide-react";
+import { Clapperboard, Film, Scissors } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -27,7 +27,8 @@ import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
  * sem o clique da equipe.
  */
 
-export type QualMesaDeVideo = "videos" | "edicao";
+/** Frente MOT (30/09): a Mesa Motion usa a mesma casca. */
+export type QualMesaDeVideo = "videos" | "edicao" | "motion";
 
 export interface EtapaDaMesaDeVideo {
   valor: string;
@@ -254,7 +255,7 @@ export default function MesaDeVideo({
       }
     : null;
 
-  const icone = mesa === "edicao" ? <Scissors className="h-4 w-4" /> : <Clapperboard className="h-4 w-4" />;
+  const icone = mesa === "edicao" ? <Scissors className="h-4 w-4" /> : mesa === "motion" ? <Film className="h-4 w-4" /> : <Clapperboard className="h-4 w-4" />;
 
   return (
     // Casca padrão das mesas (src/components/sistema/CascaDaMesa.tsx).
@@ -293,7 +294,7 @@ export default function MesaDeVideo({
         <MesaProvider valor={valor}>
           <div key={marca ? `${valor.clientId}:${marca.id}` : valor.clientId} className="min-w-0">
             <AreaDeTrabalho
-              memoria={`${mesa === "edicao" ? "mesa-edicao" : "mesa-videos"}-agente`}
+              memoria={`${mesa === "edicao" ? "mesa-edicao" : mesa === "motion" ? "mesa-motion" : "mesa-videos"}-agente`}
               rotuloDaLateral={typeof rotuloDoAgente === "function" ? rotuloDoAgente(etapa) : rotuloDoAgente}
               iconeDaLateral={icone}
               rotuloDoPrincipal={titulo}

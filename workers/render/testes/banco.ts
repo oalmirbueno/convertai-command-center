@@ -40,3 +40,11 @@ export async function bancoComAFila(): Promise<PGlite> {
   return db;
 }
 
+
+/** Frente MOT: a fila da frente EDT + a migration da Mesa Motion (filmes, cena_hf, batidas, portfólio). */
+export async function bancoComOMotion(): Promise<PGlite> {
+  const db = await bancoComAFila();
+  const sql = readFileSync(path.join(RAIZ_DO_REPO, "supabase", "migrations", "20260930180000_mesa_motion.sql"), "utf8").replace(/NOTIFY pgrst[^;]*;/g, "");
+  await db.exec(sql);
+  return db;
+}

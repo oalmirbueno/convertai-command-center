@@ -2,7 +2,8 @@
  * Worker de render da Mesa Edição (frente EDT, 30/09/2026).
  *
  * Roda na máquina da agência e puxa a fila render_pedidos: onda do áudio,
- * amostra de 8 a 15 s e vídeo inteiro. Um pedido por vez. Sem pedido, olha a
+ * amostra de 8 a 15 s e vídeo inteiro; frente MOT: cena HyperFrames (still,
+ * amostra de 5 s ou final com alfa) e batidas da trilha da Mesa Motion. Um pedido por vez. Sem pedido, olha a
  * fila de novo a cada RENDER_INTERVALO_S (padrão 15 s).
  *
  * Ligar (PowerShell, na pasta workers/render, com a chave só na sessão):
@@ -11,7 +12,8 @@
  *   npm run worker
  * Opcionais: RENDER_WORKER_NOME, RENDER_CHROME (Chrome Headless Shell já
  * baixado), RENDER_PASTA, RENDER_INTERVALO_S, RENDER_CONCORRENCIA,
- * RENDER_FFMPEG, RENDER_FFPROBE. "--uma-vez" faz um pedido e sai.
+ * RENDER_FFMPEG, RENDER_FFPROBE, RENDER_HYPERFRAMES e RENDER_GSAP (frente MOT).
+ * "--uma-vez" faz um pedido e sai.
  */
 
 import { randomUUID } from "node:crypto";
@@ -23,7 +25,7 @@ import { armazemSupabase } from "./armazem.ts";
 import { filaSupabase } from "./fila.ts";
 import { umPedido, type Ambiente } from "./trabalho.ts";
 
-export const VERSAO_DO_WORKER = "edt-1.0";
+export const VERSAO_DO_WORKER = "edt-1.0+mot-1.0";
 
 export function lerAmbiente(env: NodeJS.ProcessEnv): { url: string; chave: string; nome: string; pasta: string; intervalo: number; chrome: string | null; concorrencia: number | null } {
   const url = String(env.SUPABASE_URL || env.VITE_SUPABASE_URL || "").trim();

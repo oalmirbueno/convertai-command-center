@@ -18,7 +18,7 @@
  * confunde quem abre a mesa todo dia.
  */
 
-export type MesaDeClientes = "organica" | "ads" | "foto" | "videos" | "publicidade" | "roteiros" | "edicao" | "identidade" | "proposta" | "site";
+export type MesaDeClientes = "organica" | "ads" | "foto" | "videos" | "publicidade" | "roteiros" | "edicao" | "identidade" | "proposta" | "site" | "motion";
 export type ModoDaEscolha = "incluir" | "retirar";
 
 export const NOME_DA_MESA: Record<MesaDeClientes, string> = {
@@ -32,6 +32,7 @@ export const NOME_DA_MESA: Record<MesaDeClientes, string> = {
   identidade: "Mesa Identidade",
   proposta: "Mesa Proposta",
   site: "Mesa Site",
+  motion: "Mesa Motion",
 };
 
 export const REGRA_DA_MESA: Record<MesaDeClientes, string> = {
@@ -45,6 +46,7 @@ export const REGRA_DA_MESA: Record<MesaDeClientes, string> = {
   identidade: "Padrão: clientes com plano ativo, inclusive trabalho avulso (marca costuma ser projeto).",
   proposta: "Padrão: todos os clientes (proposta vale para quem ainda não fechou).",
   site: "Padrão: todos os clientes (site é projeto, não plano).",
+  motion: "Padrão: todo cliente (apresentação e filme da marca são projeto avulso tanto quanto de plano).",
 };
 
 export interface ClienteBruto {
@@ -95,6 +97,8 @@ export function entraPeloPadrao(mesa: MesaDeClientes, c: ClienteBruto): { entra:
   if (mesa === "proposta") return { entra: true, motivo: "Todo cliente" };
   // Frente SIT: site é projeto avulso tanto quanto de plano; todo cliente vivo entra.
   if (mesa === "site") return { entra: true, motivo: "Todo cliente" };
+  // Frente MOT: filme da marca e apresentação são avulsos tanto quanto de plano; todo cliente vivo entra.
+  if (mesa === "motion") return { entra: true, motivo: "Todo cliente" };
   const status = String(c.plan_status || "");
   if (status !== "active") return { entra: false, motivo: status === "standby" ? "Plano em pausa" : "Sem plano ativo" };
   if (c.client_type === "one_off") return { entra: false, motivo: "Trabalho avulso" };

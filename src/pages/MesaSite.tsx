@@ -43,6 +43,7 @@ const carregar = {
   direcao: () => import("@/components/mesa-site/EtapaDirecao"),
   conteudo: () => import("@/components/mesa-site/EtapaConteudo"),
   imagens: () => import("@/components/mesa-site/EtapaImagens"),
+  integracoes: () => import("@/components/mesa-site/EtapaIntegracoes"),
   construcao: () => import("@/components/mesa-site/EtapaConstrucao"),
   revisao: () => import("@/components/mesa-site/EtapaRevisao"),
   publicacao: () => import("@/components/mesa-site/EtapaPublicacao"),
@@ -53,6 +54,7 @@ const EtapaReferencias = lazyComPreCarga("mesa-site/referencias", carregar.refer
 const EtapaDirecao = lazyComPreCarga("mesa-site/direcao", carregar.direcao);
 const EtapaConteudo = lazyComPreCarga("mesa-site/conteudo", carregar.conteudo);
 const EtapaImagens = lazyComPreCarga("mesa-site/imagens", carregar.imagens);
+const EtapaIntegracoes = lazyComPreCarga("mesa-site/integracoes", carregar.integracoes);
 const EtapaConstrucao = lazyComPreCarga("mesa-site/construcao", carregar.construcao);
 const EtapaRevisao = lazyComPreCarga("mesa-site/revisao", carregar.revisao);
 const EtapaPublicacao = lazyComPreCarga("mesa-site/publicacao", carregar.publicacao);
@@ -264,6 +266,7 @@ export default function MesaSite() {
                   {etapa === "direcao" && <EtapaDirecao site={site} onIrPara={irPara} />}
                   {etapa === "conteudo" && <EtapaConteudo site={site} onIrPara={irPara} />}
                   {etapa === "imagens" && <EtapaImagens site={site} onIrPara={irPara} />}
+                  {etapa === "integracoes" && <EtapaIntegracoes site={site} onIrPara={irPara} />}
                   {etapa === "construcao" && <EtapaConstrucao site={site} onIrPara={irPara} />}
                   {etapa === "revisao" && <EtapaRevisao site={site} onIrPara={irPara} />}
                   {etapa === "publicacao" && <EtapaPublicacao site={site} />}

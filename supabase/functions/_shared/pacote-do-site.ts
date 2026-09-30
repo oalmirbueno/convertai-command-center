@@ -9,7 +9,9 @@
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { kitComMarca, lerContextoDaMarca, lerMarcaParaDirecaoDaMarca, type MarcaDoCliente } from "./marca.ts";
-import { coresValidas, type DnaDoSite, type OpcaoDeCopy, type PacoteDoSite, SECOES_PADRAO } from "./site-metodo.ts";
+import { coresValidas, type DnaDoSite, estiloDoPacote, type OpcaoDeCopy, type PacoteDoSite } from "./site-metodo.ts";
+import { mapaDoSite, normalizarEstilo, secoesDoMapa } from "./site-biblioteca.ts";
+import { integracoesDoPacote, normalizarIntegracoes, normalizarSeo, robotsTxt, schemaDoNegocio, urlDoSite } from "./site-lancamento.ts";
 
 /** Arquivo do Storage que o worker copia para dentro do projeto. */
 export type ArquivoDoPacote = { bucket: string; path: string; destino: string };
@@ -31,12 +33,18 @@ export type LinhaDoSite = {
   publicacao: Record<string, unknown>;
   modelo: string | null;
   custo_usd: number;
+  /** SIT2 (migration 20260930160000): podem faltar antes de aplicar. */
+  tipo?: string | null;
+  mapa?: Record<string, unknown> | null;
+  estilo?: Record<string, unknown> | null;
+  integracoes?: Record<string, unknown> | null;
+  seo?: Record<string, unknown> | null;
   arquivado_em: string | null;
   criado_em: string;
   atualizado_em: string;
 };
 
-export type ImagemDoSite = { id: string; slot: string; origem: "gerada" | "real"; bucket: string; path: string; alt: string; custo_usd?: number; escolhida?: boolean };
+export type ImagemDoSite = { id: string; slot: string; origem: "gerada" | "real"; bucket: string; path: string; alt: string; custo_usd?: number; escolhida?: boolean; secao?: string | null };
 
 export function imagensDoSite(lista: unknown): ImagemDoSite[] {
   return (Array.isArray(lista) ? lista : [])
@@ -51,6 +59,7 @@ export function imagensDoSite(lista: unknown): ImagemDoSite[] {
       alt: String(b.alt || "").slice(0, 200),
       custo_usd: Number(b.custo_usd) || 0,
       escolhida: b.escolhida !== false,
+      secao: typeof b.secao === "string" && b.secao ? String(b.secao).slice(0, 48) : null,
     }));
 }
 
@@ -81,18 +90,33 @@ export async function montarPacoteDoSite(db: SupabaseClient, site: LinhaDoSite, 
   }
   const imagens: PacoteDoSite["imagens"] = [];
   const fotos: PacoteDoSite["fotos_reais"] = [];
+  const arquivoDaImagem = new Map<string, string>();
   imagensDoSite(site.imagens)
     .filter((i) => i.escolhida !== false)
     .forEach((img, n) => {
       const arquivo = `/imagens/${img.origem === "real" ? "foto" : img.slot}-${n + 1}.${extensao(img.path)}`;
       arquivos.push({ bucket: img.bucket, path: img.path, destino: `public${arquivo}` });
-      if (img.origem === "real") fotos.push({ arquivo, alt: img.alt });
-      else imagens.push({ slot: img.slot, arquivo, alt: img.alt });
+      arquivoDaImagem.set(img.id, arquivo);
+      if (img.origem === "real") fotos.push({ arquivo, alt: img.alt, secao: img.secao || null });
+      else imagens.push({ slot: img.slot, arquivo, alt: img.alt, secao: img.secao || null });
     });
   const c = contexto as Record<string, unknown>;
   const dna = site.dna && Array.isArray((site.dna as { atributos?: unknown }).atributos) ? (site.dna as unknown as DnaDoSite) : null;
+  const mapa = mapaDoSite(site);
+  const temMapaSalvo = !!(site.mapa && typeof site.mapa === "object" && Array.isArray((site.mapa as { paginas?: unknown }).paginas));
+  const integracoes = normalizarIntegracoes(site.integracoes || {});
+  const seo = normalizarSeo(site.seo || {});
+  const publicacao = site.publicacao && typeof site.publicacao === "object" ? site.publicacao : {};
+  const dominio = typeof publicacao.dominio === "string" ? publicacao.dominio : null;
+  const url = urlDoSite(dominio);
+  const heroi = imagens.find((i) => i.slot === "hero");
+  const og = (seo.og_imagem && arquivoDaImagem.get(seo.og_imagem)) || (heroi ? heroi.arquivo : null) || logo;
+  const copy = copyEscolhida(site.conteudo);
+  const nomeDoCliente = direcaoDaMarca.nomeCliente || site.nome;
+  const env = (globalThis as unknown as { Deno?: { env: { get(k: string): string | undefined } } }).Deno;
+  const base = env ? String(env.env.get("SUPABASE_URL") || "").replace(/\/$/, "") : "";
   const pacote: PacoteDoSite = {
-    cliente: direcaoDaMarca.nomeCliente || site.nome,
+    cliente: nomeDoCliente,
     marca: {
       nome: direcaoDaMarca.nomeCliente,
       negocio: typeof c.negocio === "string" ? c.negocio.slice(0, 1200) : undefined,
@@ -109,15 +133,32 @@ export async function montarPacoteDoSite(db: SupabaseClient, site: LinhaDoSite, 
     dna,
     direcao: {
       nicho: typeof site.direcao.nicho === "string" ? site.direcao.nicho : undefined,
-      peca: typeof site.direcao.peca === "string" ? site.direcao.peca : "site de uma página",
+      peca: typeof site.direcao.peca === "string" ? site.direcao.peca : mapa.paginas.length > 1 ? `site de ${mapa.paginas.length} páginas` : "site de uma página",
       referencia_de_nivel: typeof site.direcao.nivel === "string" ? site.direcao.nivel : undefined,
       observacao: typeof site.direcao.observacao === "string" ? site.direcao.observacao.slice(0, 1500) : undefined,
     },
-    copy: copyEscolhida(site.conteudo),
+    copy,
     imagens,
     fotos_reais: fotos,
     logo,
-    secoes: secoes && secoes.length ? secoes : Array.isArray(site.direcao.secoes) ? (site.direcao.secoes as string[]) : SECOES_PADRAO.slice(),
+    secoes: secoes && secoes.length ? secoes : temMapaSalvo ? secoesDoMapa(mapa) : Array.isArray(site.direcao.secoes) && site.direcao.secoes.length ? (site.direcao.secoes as string[]) : secoesDoMapa(mapa),
+    // SIT2: o template multipágina lê paginas e globais; o agente lê o mapa na fórmula de 6 blocos.
+    tipo: mapa.tipo,
+    mapa,
+    paginas: mapa.paginas.map((p) => ({ id: p.id, slug: p.slug, titulo: p.titulo, secoes: p.secoes.map((x) => x.uid) })),
+    globais: mapa.globais,
+    estilo: estiloDoPacote(normalizarEstilo(site.estilo || {})),
+    integracoes: integracoesDoPacote(integracoes, base ? `${base}/functions/v1/site-formulario` : null),
+    seo: {
+      titulo: seo.titulo || (copy ? copy.seo.titulo : "") || nomeDoCliente,
+      descricao: seo.descricao || (copy ? copy.seo.descricao : ""),
+      palavras: seo.palavras.length ? seo.palavras : copy ? copy.seo.palavras : [],
+      indexar: seo.indexar,
+      url,
+      og_imagem: og,
+      robots: robotsTxt(seo.indexar, url),
+      schema: schemaDoNegocio(seo, { url, logo, imagem: og, nomePadrao: nomeDoCliente }),
+    },
   };
   return { pacote, arquivos };
 }

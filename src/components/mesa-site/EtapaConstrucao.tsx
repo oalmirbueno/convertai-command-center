@@ -11,6 +11,9 @@ import { ehAberto, podeDesfazer, ROTULO_DO_ESTADO, ROTULO_DO_TIPO, type Trabalho
 import { rotuloDaSecao, SECOES_PADRAO } from "../../../supabase/functions/_shared/site-metodo";
 import { CHAVES, chamarMotor, type LinhaDoSite, previaAtual, secoesConstruidas, useEventos, useTrabalhos } from "./siteApi";
 import SeletorDoMotor from "./SeletorDoMotor";
+import PreviaNosAparelhos from "./PreviaNosAparelhos";
+import Versoes from "./Versoes";
+import { mapaDoSite, secoesDoMapa } from "../../../supabase/functions/_shared/site-biblioteca";
 
 const TOM: Record<string, string> = {
   na_fila: "bg-muted text-muted-foreground",
@@ -30,7 +33,8 @@ export function SeloDoTrabalho({ t }: { t: Pick<TrabalhoDoMotor, "estado"> }) {
  * Etapa 6: construção. O motor de código (opencode no worker da agência)
  * constrói uma seção por vez, com commit por passo; a prévia é ao vivo
  * (Vite + túnel). Custo antes (estimativa e teto reservado), Parar a qualquer
- * momento e Desfazer (volta o commit).
+ * momento e Desfazer (volta o commit). SIT2: as seções vêm do mapa, a prévia
+ * troca entre celular, tablet e computador, e as versões comparam e voltam.
  */
 export default function EtapaConstrucao({ site }: { site: LinhaDoSite; onIrPara?: (etapa: string) => void }) {
   const { clientId, atualizarCusto } = useMesa();
@@ -39,7 +43,8 @@ export default function EtapaConstrucao({ site }: { site: LinhaDoSite; onIrPara?
   const trabalhosQ = useTrabalhos(clientId, site.id);
   const trabalhos = trabalhosQ.data ? trabalhosQ.data.trabalhos : [];
   const feitas = secoesConstruidas(trabalhos);
-  const secoesDoSite: string[] = Array.isArray(site.direcao.secoes) && site.direcao.secoes.length ? site.direcao.secoes : SECOES_PADRAO.slice();
+  // SIT2: as seções saem do mapa (páginas na ordem, topo e rodapé globais); site antigo, da direção.
+  const secoesDoSite: string[] = site.mapa && Array.isArray((site.mapa as any).paginas) && (site.mapa as any).paginas.length ? secoesDoMapa(mapaDoSite(site)) : Array.isArray(site.direcao.secoes) && site.direcao.secoes.length ? site.direcao.secoes : SECOES_PADRAO.slice();
   const [escolhidas, setEscolhidas] = useState<string[]>([]);
   const [modelo, setModelo] = useState<string>(site.modelo || "");
   const [teto, setTeto] = useState<string>("");
@@ -146,9 +151,7 @@ export default function EtapaConstrucao({ site }: { site: LinhaDoSite; onIrPara?
           }
         >
           {previa && previa.preview_url ? (
-            <div className={juntar(superficie.painel, "overflow-hidden")} data-previa-do-site="">
-              <iframe title={`Prévia do site ${site.nome}`} src={previa.preview_url} className="block h-[70vh] w-full bg-white" sandbox="allow-scripts allow-same-origin allow-forms" />
-            </div>
+            <PreviaNosAparelhos url={previa.preview_url} titulo={site.nome} />
           ) : (
             <EstadoVazio compacto titulo="A prévia aparece quando o motor começa a construir." />
           )}
@@ -196,6 +199,8 @@ export default function EtapaConstrucao({ site }: { site: LinhaDoSite; onIrPara?
           )}
         </Secao>
       </div>
+
+      <Versoes site={site} trabalhos={trabalhos} />
     </div>
   );
 }

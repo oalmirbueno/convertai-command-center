@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import { chamarFuncao } from "@/lib/mesa/api";
 import { normalizarTrabalho, type TrabalhoDoMotor } from "../../../supabase/functions/_shared/motor-codigo";
 
@@ -27,6 +28,13 @@ export type LinhaDoSite = {
   publicacao: Record<string, any>;
   modelo: string | null;
   custo_usd?: number;
+  /** SIT2 (migration 20260930160000): tipo de site, mapa, estilo, integrações e SEO. */
+  tipo?: string | null;
+  mapa?: Record<string, any> | null;
+  estilo?: Record<string, any> | null;
+  integracoes?: Record<string, any> | null;
+  seo?: Record<string, any> | null;
+  pacote_mudou_em?: string | null;
   arquivado_em: string | null;
   atualizado_em: string;
 };
@@ -39,6 +47,7 @@ export const CHAVES = {
   trabalhos: (siteId: string) => ["mesa-site", "trabalhos", siteId],
   eventos: (trabalhoId: string) => ["mesa-site", "eventos", trabalhoId],
   publicacao: (siteId: string) => ["mesa-site", "publicacao", siteId],
+  versoes: (siteId: string) => ["mesa-site", "versoes", siteId],
 };
 
 export const chamarSite = <T = any>(acao: string, corpo: Record<string, unknown>) => chamarFuncao<T>("mesa-site", { acao, ...corpo });
@@ -68,6 +77,26 @@ export function useGuardarSite(clientId: string, marcaId: string | null) {
   return (site: LinhaDoSite | null | undefined) => {
     if (!site) return;
     qc.setQueryData(CHAVES.sites(clientId, marcaId), (d: any) => (d ? { ...d, lista: [site].concat((d.lista || []).filter((s: LinhaDoSite) => s.id !== site.id)) } : d));
+  };
+}
+
+/**
+ * Salvar com a volta da tela (SIT2): chama a ação, troca a linha na lista e
+ * mostra os avisos (versão não guardada, número inválido). O erro sobe para
+ * quem chamou mostrar e manter o que a pessoa escreveu.
+ */
+export function useSalvarSite(clientId: string, marcaId: string | null) {
+  const guardar = useGuardarSite(clientId, marcaId);
+  const qc = useQueryClient();
+  return async <T extends { site?: LinhaDoSite; avisos?: string[]; aviso_versao?: string | null } = { site?: LinhaDoSite; avisos?: string[]; aviso_versao?: string | null }>(acao: string, corpo: Record<string, unknown>): Promise<T> => {
+    const d = await chamarSite<T>(acao, corpo);
+    if (d && d.site) {
+      guardar(d.site);
+      void qc.invalidateQueries({ queryKey: CHAVES.versoes(d.site.id) });
+    }
+    const avisos = ((d && d.avisos) || []).concat(d && d.aviso_versao ? [d.aviso_versao] : []);
+    if (avisos.length) toast.warning(avisos.join(" "));
+    return d;
   };
 }
 
@@ -132,6 +161,13 @@ function useAoVivo(tabela: string, filtro: string | null, chave: unknown[]) {
       void supabase.removeChannel(canal);
     };
   }, [tabela, filtro, chaveTexto, qc]);
+}
+
+/** O site foi montado depois da última mudança de SEO ou integrações? */
+export function montadoDepoisDasMudancas(site: Pick<LinhaDoSite, "pacote_mudou_em">, trabalhos: Array<{ estado: string; tipo: string; terminado_em: string | null }>): boolean {
+  if (!site.pacote_mudou_em) return true;
+  const ultimo = trabalhos.find((t) => t.estado === "feito" && t.tipo !== "zip" && t.tipo !== "desfazer" && !!t.terminado_em);
+  return !!ultimo && Date.parse(String(ultimo.terminado_em)) >= Date.parse(site.pacote_mudou_em);
 }
 
 /** O último trabalho com prévia (o iframe mostra esta). */

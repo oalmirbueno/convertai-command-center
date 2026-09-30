@@ -35,7 +35,8 @@ import { gravarNoCerebro } from "./cerebro-nas-mesas.ts";
 
 // Frente RO (29/09): o Estúdio (diretor de arte e o Ajustar da lâmina) aprende pelo mesmo caminho.
 // Frentes CON, IDV, PRO e SIT (30/09): contratos, diretor de marca (identidade e naming), estrategista comercial e diretor de site.
-export const MESAS_QUE_APRENDEM = ["foto", "video", "edicao", "publicidade", "roteiro", "estilo", "estudio", "contrato", "identidade", "naming", "proposta", "site"] as const;
+// Frente MOT (30/09): o diretor de motion (Mesa Motion).
+export const MESAS_QUE_APRENDEM = ["foto", "video", "edicao", "publicidade", "roteiro", "estilo", "estudio", "contrato", "identidade", "naming", "proposta", "site", "motion"] as const;
 export type MesaQueAprende = (typeof MESAS_QUE_APRENDEM)[number];
 
 export const AREA_DA_MESA: Record<MesaQueAprende, AreaDoCerebro> = {
@@ -51,6 +52,7 @@ export const AREA_DA_MESA: Record<MesaQueAprende, AreaDoCerebro> = {
   naming: "copy",
   proposta: "copy",
   site: "arte",
+  motion: "arte",
 };
 
 export const FONTE_DA_MESA: Record<MesaQueAprende, string> = {
@@ -66,6 +68,7 @@ export const FONTE_DA_MESA: Record<MesaQueAprende, string> = {
   naming: "mesa_naming",
   proposta: "mesa_proposta",
   site: "mesa_site",
+  motion: "mesa_motion",
 };
 
 const NOME_DA_MESA: Record<MesaQueAprende, string> = {
@@ -81,6 +84,7 @@ const NOME_DA_MESA: Record<MesaQueAprende, string> = {
   naming: "Mesa Identidade (criador de nomes)",
   proposta: "Mesa Proposta (estrategista comercial)",
   site: "Mesa Site (diretor de site)",
+  motion: "Mesa Motion (diretor de motion)",
 };
 
 const FONTES_DAS_MESAS = new Set(Object.values(FONTE_DA_MESA));

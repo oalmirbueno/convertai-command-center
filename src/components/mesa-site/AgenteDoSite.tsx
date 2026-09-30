@@ -30,6 +30,8 @@ export const ATALHOS_DO_DIRETOR = [
   { rotulo: "Construir o que falta", texto: "Construa as seções que ainda não foram construídas." },
   { rotulo: "Revisar", texto: "Revise o site (acessibilidade, celular e SEO)." },
   { rotulo: "Desfazer o último", texto: "Desfaça a última mudança do motor." },
+  { rotulo: "Montar o mapa", texto: "Monte o mapa do site pelo briefing." },
+  { rotulo: "Imagens que faltam", texto: "Gere as imagens que faltam nos slots do mapa." },
 ];
 
 const CAPACIDADES = [
@@ -39,6 +41,10 @@ const CAPACIDADES = [
   "gerar imagem com o GPT Image (nunca logo nem foto real)",
   "revisar acessibilidade, celular e SEO",
   "desfazer o último trabalho (volta o commit)",
+  "montar o mapa do site pelo briefing (o Jev escolhe as seções)",
+  "trocar, acrescentar ou tirar seção da biblioteca (hero, bento, prova social, pricing, FAQ, contato com mapa...)",
+  "escolher o preset de estilo (na hora, com Desfazer)",
+  "gerar as imagens que faltam nos slots do mapa",
   'aprender o que você ensinar ("nunca", "sempre", "não gostei")',
 ];
 
@@ -281,7 +287,8 @@ export default function AgenteDoSite({ site, rascunho, onRascunho, onIrPara }: {
                         reler();
                         const r = resposta && (resposta as any).anexo;
                         const ops = r && Array.isArray(r.itens) ? r.itens.map((x: any) => x.operacao) : [];
-                        if (ops.indexOf("escolher_copy") >= 0 || ops.indexOf("gerar_conteudo") >= 0) {
+                        const mudamOSite = ["escolher_copy", "gerar_conteudo", "gerar_imagem", "montar_mapa", "escolher_preset", "trocar_secao", "adicionar_secao", "remover_secao", "gerar_imagens_dos_slots"];
+                        if (ops.some((o: string) => mudamOSite.indexOf(o) >= 0)) {
                           void chamarFuncao<any>("mesa-site", { acao: "sites_listar", client_id: clientId, marca_id: marca ? marca.id : undefined }).then((d) => guardar((d.sites || []).find((s: LinhaDoSite) => s.id === site.id)));
                         }
                         if ((resposta as any) && (resposta as any).motor) onIrPara("construcao");

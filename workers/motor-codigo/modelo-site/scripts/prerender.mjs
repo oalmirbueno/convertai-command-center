@@ -1,30 +1,31 @@
-// Pré-render para SEO: injeta o HTML da página no dist/index.html e preenche título,
-// descrição e og a partir da copy escolhida (pacote.copy.seo).
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+// Pré-render para SEO (casca da casa): uma página HTML pronta por página do mapa
+// (dist/index.html, dist/<slug>/index.html), com título, descrição, canonical, og,
+// twitter, robots e o schema do negócio (JSON-LD que o painel montou), mais
+// robots.txt e sitemap.xml. O que o SEO diz vem de pacote.seo (Mesa Site); pacote
+// antigo usa pacote.copy.seo.
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { montarPagina, paginasDoPacote, sitemapDoPacote } from "./seo.mjs";
 
 const raiz = resolve(import.meta.dirname, "..");
 const { render } = await import(pathToFileURL(resolve(raiz, "dist-ssr", "entry-server.js")).href);
 const pacote = JSON.parse(readFileSync(resolve(raiz, ".aceleriq", "pacote.json"), "utf8"));
-const esc = (s) => String(s || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-const seo = (pacote.copy && pacote.copy.seo) || {};
-const titulo = seo.titulo || pacote.cliente || "Site";
-const descricao = seo.descricao || (pacote.copy && pacote.copy.subtitulo) || "";
-const hero = (pacote.imagens || []).find((i) => i.slot === "hero");
-const og = hero ? hero.arquivo : pacote.logo || "";
-const destaque = ((pacote.paleta || [])[0] || {}).hex || "#111111";
+const base = readFileSync(resolve(raiz, "dist", "index.html"), "utf8");
 
-let html = readFileSync(resolve(raiz, "dist", "index.html"), "utf8");
-html = html
-  .replace("<!--app-->", render())
-  .replace(/<title>[^<]*<\/title>/, `<title>${esc(titulo)}</title>`)
-  .replace(/(<meta name="description" content=")[^"]*"/, `$1${esc(descricao)}"`)
-  .replace(/(<meta property="og:title" content=")[^"]*"/, `$1${esc(titulo)}"`)
-  .replace(/(<meta property="og:description" content=")[^"]*"/, `$1${esc(descricao)}"`)
-  .replace(/(<meta property="og:image" content=")[^"]*"/, `$1${esc(og)}"`)
-  .replace(/(<meta name="theme-color" content=")[^"]*"/, `$1${esc(destaque)}"`)
-  .replace(/(<link rel="icon" href=")[^"]*"/, `$1${esc(pacote.logo || "/favicon.ico")}"`);
-writeFileSync(resolve(raiz, "dist", "index.html"), html);
+const paginas = paginasDoPacote(pacote);
+for (const p of paginas) {
+  const caminho = p.slug ? `/${p.slug}/` : "/";
+  const html = montarPagina(base, render(caminho), pacote, p);
+  const pasta = p.slug ? resolve(raiz, "dist", p.slug) : resolve(raiz, "dist");
+  mkdirSync(pasta, { recursive: true });
+  writeFileSync(resolve(pasta, "index.html"), html);
+}
+
+const seo = pacote.seo || {};
+writeFileSync(resolve(raiz, "dist", "robots.txt"), seo.robots || "User-agent: *\nAllow: /\n");
+const sitemap = sitemapDoPacote(pacote, new Date().toISOString().slice(0, 10));
+if (sitemap) writeFileSync(resolve(raiz, "dist", "sitemap.xml"), sitemap);
+
 if (existsSync(resolve(raiz, "dist-ssr"))) rmSync(resolve(raiz, "dist-ssr"), { recursive: true, force: true });
-console.log(`pré-render ok: ${titulo}`);
+console.log(`pré-render ok: ${paginas.length} página(s)${sitemap ? " + sitemap" : ""}`);

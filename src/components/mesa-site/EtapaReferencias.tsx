@@ -8,8 +8,11 @@ import Secao from "@/components/sistema/Secao";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campo, etiqueta, juntar, lista, texto } from "@/components/sistema/estilos";
 import { padraoPara, usd } from "@/lib/mesa/api";
+import { SeletorDeModelo } from "@/components/mesa/Seletores";
 import { rotuloDoAtributo } from "../../../supabase/functions/_shared/site-metodo";
+import { PreencherComIA } from "@/components/sistema";
 import { chamarSite, type LinhaDoSite, useGuardarSite } from "./siteApi";
+import { listaDoValor } from "./CampoComIA";
 
 type Foto = { id: string; storage_bucket: string; storage_path: string; nome: string };
 
@@ -30,7 +33,38 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
   const [verAcervo, setVerAcervo] = useState(false);
   const arquivo = useRef<HTMLInputElement | null>(null);
   const refs = (site.referencias || []).filter((r: any) => !r.arquivada);
-  const leitor = padraoPara(catalogo, "leitura");
+  // Modelo na hora (SIT2): o leitor padrão, trocável por qualquer modelo de texto com visão do catálogo.
+  const [leitorId, setLeitorId] = useState<string>(() => {
+    const m = padraoPara(catalogo, "leitura");
+    return m ? m.id : "";
+  });
+  const leitor = catalogo.find((m) => m.id === leitorId && m.ativo) || padraoPara(catalogo, "leitura");
+  const adicionadasPelaIA = useRef<string[]>([]);
+
+  /** Sugestões do ✨ (com a web como fonte): cada endereço entra como referência; o Desfazer arquiva as que entraram. */
+  const aplicarSugestoes = async (valor: unknown) => {
+    const urls = listaDoValor(valor).filter((u) => /^https?:\/\//i.test(u)).slice(0, 6);
+    if (!urls.length) throw new Error("Nenhum endereço válido nas sugestões.");
+    const antes = new Set((site.referencias || []).map((r: any) => r.id));
+    let ultimo: LinhaDoSite | null = null;
+    for (const u of urls) {
+      const d = await chamarSite<{ site: LinhaDoSite }>("referencia_adicionar", { site_id: site.id, tipo: "url", url: u });
+      ultimo = d.site;
+    }
+    if (ultimo) {
+      guardar(ultimo);
+      adicionadasPelaIA.current = (ultimo.referencias || []).map((r: any) => r.id).filter((id: string) => !antes.has(id));
+    }
+  };
+  const desfazerSugestoes = async () => {
+    let ultimo: LinhaDoSite | null = null;
+    for (const id of adicionadasPelaIA.current) {
+      const d = await chamarSite<{ site: LinhaDoSite }>("referencia_arquivar", { site_id: site.id, referencia_id: id });
+      ultimo = d.site;
+    }
+    adicionadasPelaIA.current = [];
+    if (ultimo) guardar(ultimo);
+  };
   const fotos = useQuery({ queryKey: ["mesa-site", "acervo", site.id], enabled: verAcervo, queryFn: () => chamarSite<{ fotos: Foto[] }>("fotos_reais", { site_id: site.id }) });
 
   const rodar = async (rotulo: string, fn: () => Promise<{ site?: LinhaDoSite } | void>) => {
@@ -69,7 +103,7 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
 
   const ler = () =>
     rodar("As referências não foram lidas", async () => {
-      const d = await chamarSite<{ site: LinhaDoSite; falhas: string[]; aviso_jev: string | null; custo_usd: number }>("referencias_ler", { site_id: site.id });
+      const d = await chamarSite<{ site: LinhaDoSite; falhas: string[]; aviso_jev: string | null; custo_usd: number }>("referencias_ler", { site_id: site.id, modelo_id: leitor ? leitor.id : undefined });
       atualizarCusto();
       if (d.aviso_jev || (d.falhas && d.falhas.length)) avisarErro(new Error([d.aviso_jev].concat(d.falhas || []).filter(Boolean).join(" ")), "Leitura com aviso");
       return d;
@@ -83,12 +117,26 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
       <Secao
         titulo="Referências"
         descricao={`${refs.length} de 12`}
-        ajuda="Sites que o cliente admira (URL), prints e fotos do acervo. A página vira texto e a imagem de compartilhamento; prints e fotos vão direto para a visão. Nada é copiado: a leitura só descreve o estilo."
+        ajuda="Sites que o cliente admira (URL), prints e fotos do acervo. A página vira texto e a imagem de compartilhamento; prints e fotos vão direto para a visão. Nada é copiado: a leitura só descreve o estilo. O ✨ sugere sites de referência do mesmo nicho pela web, com a fonte, e só entra o que você aplicar."
         acao={
+          <>
+          <span className="mr-2 inline-flex">
+            <PreencherComIA
+              papel="site"
+              clientId={clientId}
+              marcaId={marca ? marca.id : null}
+              campos={[{ chave: "referencias.sugeridas", rotulo: "Sites de referência", tipo: "lista", maximo: 5, valorAtual: refs.filter((r: any) => r.tipo === "url").map((r: any) => r.url), dica: "endereços https de sites reais e premium do mesmo nicho ou do nível pedido; só endereços que aparecem nas fontes da web, nunca inventados" }]}
+              fontes={["contexto", "briefing", "web"]}
+              rotulo="Sugerir referências"
+              onAplicar={(v) => aplicarSugestoes(v["referencias.sugeridas"])}
+              onDesfazer={() => desfazerSugestoes()}
+            />
+          </span>
           <button type="button" className={botao.primario} disabled={!refs.length || !!ocupado} onClick={() => void ler()} data-ler-referencias="">
             {ocupado === "As referências não foram lidas" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <ScanEye className="mr-1 h-3.5 w-3.5" />}
             Ler as referências
           </button>
+          </>
         }
       >
         <div className="flex min-w-0 flex-wrap items-center">
@@ -114,6 +162,9 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
             <ImagemIcone className="mr-1 h-3.5 w-3.5" />
             Acervo
           </button>
+        </div>
+        <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
+          <SeletorDeModelo catalogo={catalogo} tipo="texto" valor={leitor ? leitor.id : ""} onChange={setLeitorId} rotulo="Leitor das referências" />
         </div>
         <div className="min-w-0 truncate">{leitor && refs.length > 0 && <EstimativaInline partes={[{ modeloId: leitor.id, tipo: "texto", tokensEntrada: 3000 + 1600 * Math.min(6, imagensNaLeitura), tokensSaida: 1600 }]} />}</div>
         {!refs.length && <EstadoVazio compacto titulo="Nenhuma referência ainda." descricao="Cole um endereço ou suba prints." />}

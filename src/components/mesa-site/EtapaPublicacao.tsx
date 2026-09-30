@@ -12,7 +12,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { botao, campo, etiqueta, juntar, lista, texto } from "@/components/sistema/estilos";
 import { dataEHora } from "@/lib/mesa/api";
 import { type CartaoDeDns, REGISTRADORES, ROTULO_DO_DOMINIO, type EstadoDoDominio } from "../../../supabase/functions/_shared/dns-do-site";
-import { CHAVES, chamarSite, type LinhaDoSite, useGuardarSite } from "./siteApi";
+import { CHAVES, chamarSite, type LinhaDoSite, useGuardarSite, useTrabalhos } from "./siteApi";
+import { useChecklistDoSite } from "./ChecklistDeLancamento";
+import { pendentesObrigatorios } from "../../../supabase/functions/_shared/site-lancamento";
 
 type Estado = {
   vercel_ligada: boolean;
@@ -43,6 +45,9 @@ export default function EtapaPublicacao({ site }: { site: LinhaDoSite }) {
   const [registrador, setRegistrador] = useState("registro_br");
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+  const trabalhosQ = useTrabalhos(clientId, site.id);
+  const checklist = useChecklistDoSite(site, trabalhosQ.data ? trabalhosQ.data.trabalhos : []);
+  const pendentes = pendentesObrigatorios(checklist);
 
   useEffect(() => {
     if (!e) return;
@@ -206,11 +211,12 @@ export default function EtapaPublicacao({ site }: { site: LinhaDoSite }) {
             <AlertDialogTitle>Publicar o site?</AlertDialogTitle>
             <AlertDialogDescription>
               O motor faz o build e publica na Vercel{e && e.dominio ? `, ligando ${e.dominio}` : ""}. O site fica público. Dá para publicar de novo depois de cada ajuste.
+              {pendentes.length ? ` Ainda falta no checklist: ${pendentes.map((p) => p.rotulo.toLowerCase()).join("; ")}.` : " O checklist obrigatório está completo."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void publicar()}>Confirmar e publicar</AlertDialogAction>
+            <AlertDialogAction onClick={() => void publicar()}>{pendentes.length ? "Publicar mesmo assim" : "Confirmar e publicar"}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -10,8 +10,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export interface PedidoDoWorker {
   id: string;
   client_id: string;
-  versao_id: string;
-  tipo: "render_final" | "amostra" | "onda";
+  /** Frente MOT: cena HyperFrames e batidas pertencem a um filme (motion_id) e não a uma versão. */
+  versao_id: string | null;
+  motion_id?: string | null;
+  tipo: "render_final" | "amostra" | "onda" | "cena_hf" | "batidas";
   projeto: Record<string, unknown> | null;
   revisao: number | null;
   entrada: Record<string, unknown>;

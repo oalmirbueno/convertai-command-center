@@ -10,6 +10,7 @@ import { dataEHora } from "@/lib/mesa/api";
 import { ehAberto, type TrabalhoDoMotor } from "../../../supabase/functions/_shared/motor-codigo";
 import type { AvisoDeQa } from "../../../supabase/functions/_shared/site-metodo";
 import { CHAVES, chamarMotor, type LinhaDoSite, useTrabalhos } from "./siteApi";
+import ChecklistDeLancamento, { useChecklistDoSite } from "./ChecklistDeLancamento";
 
 const AREAS: Array<{ id: AvisoDeQa["area"]; rotulo: string }> = [
   { id: "acessibilidade", rotulo: "Acessibilidade" },
@@ -20,6 +21,7 @@ const AREAS: Array<{ id: AvisoDeQa["area"]; rotulo: string }> = [
 /**
  * Etapa 7: revisão de acessibilidade, celular e SEO no HTML pré-renderizado.
  * É aviso, nunca trava: a equipe decide se pede ajuste ao diretor de site.
+ * SIT2: o checklist de lançamento vem antes (o que falta e em que etapa).
  */
 export default function EtapaRevisao({ site, onIrPara }: { site: LinhaDoSite; onIrPara: (etapa: string) => void }) {
   const { clientId } = useMesa();
@@ -32,6 +34,7 @@ export default function EtapaRevisao({ site, onIrPara }: { site: LinhaDoSite; on
   const [pedindo, setPedindo] = useState(false);
   const qa = ultimo && Array.isArray(ultimo.resultado.qa) ? (ultimo.resultado.qa as AvisoDeQa[]) : [];
   const build = ultimo ? (ultimo.resultado.build as { ok?: boolean; log?: string } | undefined) : undefined;
+  const checklist = useChecklistDoSite(site, trabalhos);
 
   const revisar = async () => {
     setPedindo(true);
@@ -47,6 +50,7 @@ export default function EtapaRevisao({ site, onIrPara }: { site: LinhaDoSite; on
 
   return (
     <div className="min-w-0 space-y-6" data-etapa-revisao="">
+      <ChecklistDeLancamento itens={checklist} onIrPara={onIrPara} />
       <Secao
         titulo="Revisão"
         descricao={ultimo ? `${qa.length} aviso(s) · ${dataEHora(ultimo.terminado_em || ultimo.criado_em)}` : "Ainda não revisado"}

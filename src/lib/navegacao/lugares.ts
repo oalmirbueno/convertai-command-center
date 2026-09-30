@@ -31,9 +31,23 @@ const ETAPAS_DA_MESA_SITE: Record<string, string> = {
   direcao: "Direção",
   conteudo: "Conteúdo",
   imagens: "Imagens",
+  integracoes: "Integrações e SEO",
   construcao: "Construção",
   revisao: "Revisão",
   publicacao: "Publicação",
+};
+
+/** Frente MOT (30/09): o nome das etapas da Mesa Motion, com acento. */
+const ETAPAS_DA_MESA_MOTION: Record<string, string> = {
+  insumos: "Insumos",
+  entrevista: "Entrevista",
+  brand: "BRAND.md",
+  storyboards: "Storyboards",
+  stills: "Stills",
+  construcao: "Construção",
+  critica: "Crítica",
+  som: "Som",
+  render: "Render e entrega",
 };
 
 const OUTRAS_AREAS: Record<string, string> = {
@@ -123,7 +137,7 @@ export function rotuloDoLugar(pathname: string, search: string): string | null {
   const q = lerBusca(search);
   const sub = subDoLugar(rota, q);
   if (!sub) return base;
-  const nomeSub = rota === "/mesa" ? ABAS_DA_MESA[sub] : rota === "/mesa-ads" ? ETAPAS_DA_MESA_ADS[sub] : rota === "/mesa-site" ? ETAPAS_DA_MESA_SITE[sub] : null;
+  const nomeSub = rota === "/mesa" ? ABAS_DA_MESA[sub] : rota === "/mesa-ads" ? ETAPAS_DA_MESA_ADS[sub] : rota === "/mesa-site" ? ETAPAS_DA_MESA_SITE[sub] : rota === "/mesa-motion" ? ETAPAS_DA_MESA_MOTION[sub] : null;
   return `${base} · ${nomeSub || capitalizar(sub)}`;
 }
 

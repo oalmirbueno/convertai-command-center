@@ -217,6 +217,8 @@ const FUNCOES_COM_MARCA = [
   "mesa-proposta",
   // Frente SIT (30/09): o site nasce na marca aberta (kit, contexto, fotos e logo da marca).
   "mesa-site",
+  // Frente MOT (30/09): o filme nasce na marca aberta (kit, logo, dossiê e contexto da marca).
+  "mesa-motion",
   // Frente PIA (30/09): o Preencher com IA lê contexto, briefing, dossiê e arquivos da marca aberta.
   "preencher-ia",
 ];

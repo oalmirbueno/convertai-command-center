@@ -290,3 +290,61 @@ para a F7 (mesmo worker no Modal).
 - Deploy da `editor-video` (ações novas) e da `mesa-videos` (o `projeto_salvar` normaliza pelo
   `projeto-de-edicao.ts`; sem publicar de novo, `ondas` e `mixagem` somem ao salvar).
 - O worker ligado numa máquina com ffmpeg e Node 22.18+.
+
+---
+
+## 13. Frente MOT (30/09/2026): Mesa Motion e filme da marca
+
+Pedido do dono: "no editor de vídeo, a área de motion e apresentação de empresa" e "um criador de
+vídeos da marca, no final, para apresentação: para entregar ao cliente e usar como material,
+portfólio e case", tudo agêntico e com escolha de modelo na hora. Método de
+plano/p3-referencias.md §2.5 (claude-motion-design e product-film-skill, MIT, só como referência).
+
+### 13.1 Onde está
+
+| Parte | Onde |
+|---|---|
+| Tela | `/mesa-motion` (`src/pages/MesaMotion.tsx`, casca `MesaDeVideo` com `mesa="motion"`), etapas em `src/components/mesa-motion/*`, diretor de motion em `AgenteDoMotion.tsx` |
+| Método (puro) | `_shared/motion-metodo.ts`: 9 etapas, ingredientes da entrevista, BRAND.md e beat sheet, 3 storyboards, cenas, assinatura do render, casar no ritmo, projeto do filme para a Mesa Edição, crítica |
+| Kit e cena (puro) | `_shared/cena-hf.ts`: 10 peças (8 em 2D; carrossel de provas e logo em volume em 3D por CSS), invólucro HyperFrames, conferência da escrita do modelo, prompt da cena sob medida |
+| Batidas (puro) | `_shared/batidas-da-trilha.ts`: andamento, batidas, compassos, drop e energia |
+| Função | `supabase/functions/mesa-motion/` (`index.ts`, `acoes-do-motion.ts`), `verify_jwt = true` |
+| Banco | `20260930180000_mesa_motion.sql`: `motion_filmes`, `portfolio_itens`, `render_pedidos` com `cena_hf` e `batidas` (`motion_id`), `video_arquivos` com `cena` e `still` |
+| Worker | `workers/render/hyperframes.ts` (pedidos `cena_hf` e `batidas`), miniatura no render final (`trabalho.ts`) |
+
+### 13.2 Cena HyperFrames pela fila
+
+- Uma cena por pedido: `still` (quadro herói em PNG), `amostra` (5 s em meia resolução, MP4) ou
+  `final` (WebM VP9 com alfa, em cada formato: 9:16, 1:1, 4:5, 16:9). Chave `cena:modo:formato`,
+  um ativo por chave; still e amostra passam na frente.
+- O worker monta a pasta (documento de `cena-hf.ts`, GSAP local, fontes OFL do painel, logo do kit
+  e provas baixadas da pasta do cliente), roda `hyperframes lint` (erro = falha com a lista, sem
+  nova tentativa) e `check` (layout e contraste vão para a crítica) e faz a saída. Folha de contato
+  em tamanho de celular (4 quadros de 360 px) para a amostra e a final.
+- Cena sob medida: o modelo escolhido escreve só o miolo (html, css e js que recebe `tl`, `D`, `U`);
+  `conferirEscrita` recusa rede, relógio, sorteio, laço infinito, endereço externo, script e a
+  classe `clip`. Uma cena por vez, teto por cena (padrão US$ 0,50, máximo US$ 2) conferido pela
+  estimativa antes; recusa vira aviso e nada é trocado (sem laço).
+- Na Mesa Edição, o `OffthreadVideo` lê `.webm` com `transparent` (a cena com fundo transparente
+  vai por cima de outro vídeo); sobreposição em escala 1 perde o canto arredondado.
+
+### 13.3 Filme e entrega
+
+- Montar: um projeto por formato em `video_versoes` (rascunho, `video_id` fixo por formato): cenas
+  em sequência na trilha de vídeo, música com `papel: "musica"` (sem duck: não há voz), efeitos CC0
+  com o pico no quadro do movimento (0,65 s entre sons). O render final é o `render_final` da frente
+  EDT (-14 LUFS), agora com miniatura (`resultado.miniatura_path`).
+- Filme da marca: storyboard = roteiro de 6 a 10 planos (`gerado`, `real` ou `hf`); o plano gerado
+  usa a Mesa Vídeos (`custo_estimar` e `gerar_video` com `custo_confirmado_usd`) e o vídeo escolhido
+  do acervo entra como plano.
+- Entregar: registra renders, miniatura, LUFS e nota no filme e no registro de ações
+  (`motion_filme_entregue`, que o documento de entrega lê como "Filme da marca entregue");
+  portfólio só com a autorização do cliente (quem, como, quando) em `portfolio_itens`.
+
+### 13.4 Ligar
+
+- SQL `20260930080000` (EDT) e depois `20260930180000` (MOT); deploy da `mesa-motion`.
+- Worker: `npm install` em `workers/render` (traz `hyperframes@0.7.82` e `gsap@3.14.2`; o
+  HyperFrames baixa o Chrome dele na primeira vez) ou `RENDER_HYPERFRAMES` e `RENDER_GSAP` apontando
+  para uma instalação já feita. Teste local: `npm run motion-ponta-a-ponta` (PGlite, Storage local,
+  OPENROUTER_API_KEY e TYPESAFE_API_KEY só na sessão).

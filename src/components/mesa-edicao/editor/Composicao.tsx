@@ -90,7 +90,9 @@ function Midia({ projeto, urls, fonte, entrada_s, velocidade, volume, muda, esti
   if (f.midia === "imagem") return <Img src={url} style={{ ...cheio, ...estilo }} />;
   // No render (worker), o vídeo sai quadro a quadro exato pelo OffthreadVideo; na prévia, o Html5Video.
   if (getRemotionEnvironment().isRendering) {
-    return <OffthreadVideo src={url} trimBefore={Math.max(0, Math.round(entrada_s * projeto.fps))} playbackRate={velocidade} volume={muda ? 0 : volume} muted={muda} style={{ ...cheio, ...estilo }} />;
+    // Frente MOT: a cena da Mesa Motion vem em WebM com alfa; o quadro sai em PNG para a transparência passar.
+    const alfa = /\.webm$/i.test(f.storage_path || "");
+    return <OffthreadVideo src={url} transparent={alfa} trimBefore={Math.max(0, Math.round(entrada_s * projeto.fps))} playbackRate={velocidade} volume={muda ? 0 : volume} muted={muda} style={{ ...cheio, ...estilo }} />;
   }
   return (
     <Html5Video
@@ -138,7 +140,7 @@ function ClipeVisual({ projeto, urls, trilha, c }: { projeto: ProjetoDeEdicao; u
         const esc = estiloNum(c, "escala", 0.4);
         const cx = estiloNum(c, "x", 0.75);
         const cy = estiloNum(c, "y", 0.2);
-        return { position: "absolute", width: `${esc * 100}%`, height: `${esc * 100}%`, left: `${(cx - esc / 2) * 100}%`, top: `${(cy - esc / 2) * 100}%`, overflow: "hidden", borderRadius: projeto.largura * 0.02 };
+        return { position: "absolute", width: `${esc * 100}%`, height: `${esc * 100}%`, left: `${(cx - esc / 2) * 100}%`, top: `${(cy - esc / 2) * 100}%`, overflow: "hidden", borderRadius: esc >= 0.999 ? 0 : projeto.largura * 0.02 };
       })()
     : { position: "absolute", left: 0, top: 0, width: "100%", height: "100%", overflow: "hidden" };
   // Antes e depois gravado pela V-A (antes_depois_para_editor): cada clipe numa trilha, com

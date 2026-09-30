@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Worker de render da Mesa Edição (frente EDT): puxa render_pedidos, baixa do Storage, renderiza com o Remotion, -14 LUFS e sobe o MP4 em partes.",
+  "description": "Worker de render da Mesa Edição (frente EDT): puxa render_pedidos, baixa do Storage, renderiza com o Remotion, -14 LUFS e sobe o MP4 em partes. Frente MOT: cenas HyperFrames (cena_hf) e batidas da trilha.",
   "engines": {
     "node": ">=22.18"
   },
@@ -12,11 +12,14 @@
     "uma-vez": "node principal.ts --uma-vez",
     "teste": "node --test testes/fila.test.ts",
     "ponta-a-ponta": "node testes/ponta-a-ponta.ts",
-    "sons": "node sons/medir-sons.mjs"
+    "sons": "node sons/medir-sons.mjs",
+    "motion-ponta-a-ponta": "node testes/motion-ponta-a-ponta.ts"
   },
   "dependencies": {
     "@remotion/cli": "4.0.529",
     "@supabase/supabase-js": "^2.97.0",
+    "gsap": "3.14.2",
+    "hyperframes": "0.7.82",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "remotion": "4.0.529"

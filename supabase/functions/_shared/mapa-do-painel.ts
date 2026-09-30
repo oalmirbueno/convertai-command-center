@@ -44,7 +44,7 @@ export type ChaveDaArea =
   | "mesa_roteiros"
   | "mesa_videos"
   | "mesa_edicao"
-  | "mesa_identidade" | "mesa_proposta" | "mesa_site"
+  | "mesa_identidade" | "mesa_proposta" | "mesa_site" | "mesa_motion"
   | "financeiro"
   | "cofre"
   | "equipe";
@@ -137,9 +137,15 @@ export const AREAS_DO_PAINEL: AreaDoPainel[] = [
   },
   // Frente SIT (30/09): criador de sites com o motor de código (prévia ao vivo, publicação com domínio).
   {
-    chave: "mesa_site", nome: "Mesa Site", rota: "/mesa-site", parametro: "etapa", etapas: ["briefing", "referencias", "direcao", "conteudo", "imagens", "construcao", "revisao", "publicacao"], comCliente: true,
+    chave: "mesa_site", nome: "Mesa Site", rota: "/mesa-site", parametro: "etapa", etapas: ["briefing", "referencias", "direcao", "conteudo", "imagens", "integracoes", "construcao", "revisao", "publicacao"], comCliente: true,
     faz: "sites", agente: "site",
-    palavras: ["site", "landing", "pagina do site", "dominio", "hero", "secao do site"],
+    palavras: ["site", "landing", "pagina do site", "dominio", "hero", "secao do site", "mapa do site", "seo do site", "formulario do site"],
+  },
+  // Frente MOT (30/09): apresentação em motion e filme cinematográfico da marca (cenas HyperFrames pela fila).
+  {
+    chave: "mesa_motion", nome: "Mesa Motion", rota: "/mesa-motion", parametro: "etapa", etapas: ["insumos", "entrevista", "brand", "storyboards", "stills", "construcao", "critica", "som", "render"], comCliente: true,
+    faz: "apresentação em motion e filme da marca", agente: "motion",
+    palavras: ["motion", "apresentacao da empresa", "filme da marca", "video institucional", "logo animada", "vinheta", "portfolio"],
   },
   { chave: "financeiro", nome: "Financeiro", rota: "/financeiro", comCliente: false, faz: "cobrança e caixa", soPessoa: true, palavras: ["financeiro", "cobranca", "mensalidade", "pagamento", "fatura", "boleto", "caixa"] },
   { chave: "cofre", nome: "Cofre", rota: "/cofre", comCliente: false, faz: "senhas", soPessoa: true, palavras: ["senha", "cofre", "credencial", "acesso salvo"] },
@@ -168,6 +174,7 @@ export const AGENTES_DO_PAINEL: AgenteDoPainel[] = [
   { chave: "edicao", nome: "agente de edição", area: "mesa_edicao", funcao: "editor-video", faz: "takes e edição" },
   { chave: "proposta", nome: "estrategista comercial", area: "mesa_proposta", funcao: "mesa-proposta", faz: "escreve a proposta, pesquisa o mercado, itens e validade" },
   { chave: "site", nome: "diretor de site", area: "mesa_site", funcao: "mesa-site", faz: "constrói e ajusta o site" },
+  { chave: "motion", nome: "diretor de motion", area: "mesa_motion", funcao: "mesa-motion", faz: "BRAND.md, storyboards, cenas em código, crítica, som e render do filme" },
   { chave: "workspace", nome: "agente do workspace", area: "workspace", funcao: "workspace-agent", faz: "documentos" },
   { chave: "contratos", nome: "agente de contratos", area: "contratos", funcao: "contratos", faz: "monta contrato por blocos, preenche variáveis, cláusula só com diferença e Confirmar" },
 ];

@@ -6,7 +6,7 @@ import "./tema.css";
 const raiz = document.getElementById("root")!;
 const arvore = (
   <StrictMode>
-    <App />
+    <App caminho={window.location.pathname} />
   </StrictMode>
 );
 // Pré-renderizado (build): hidrata; na prévia (dev), monta do zero.

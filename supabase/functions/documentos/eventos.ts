@@ -41,6 +41,8 @@ export const ACOES_QUE_O_CLIENTE_ENTENDE: Record<string, string> = {
   estilo_aprovar_teste: "Estilo visual das artes definido",
   mesa_gerar_meses_pelo_agente: "Planejamento de conteúdo montado",
   mesa_ads_ativar_campanha_montada: "Campanha de anúncios ativada",
+  // Frente MOT (30/09): a entrega do filme da marca registrada na Mesa Motion.
+  motion_filme_entregue: "Filme da marca entregue",
 };
 
 const ROTULO_DA_PLATAFORMA: Record<string, string> = {

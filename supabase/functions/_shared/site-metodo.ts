@@ -14,6 +14,8 @@
  * testes importam o mesmo arquivo.
  */
 
+import { acharNoMapa, type EstiloDoSite, type MapaDoSite, presetDeEstilo, presetDeMotion, secaoDaBiblioteca, ehSecaoDaBiblioteca } from "./site-biblioteca.ts";
+
 /** As formas do Jev (as mesmas de jev.ts, repetidas aqui porque a tela importa este arquivo e jev.ts usa Deno). */
 type PerguntaJev =
   | { type: "choice"; instructions: unknown; criteria: Record<string, unknown> }
@@ -27,6 +29,7 @@ export const ETAPAS_DO_SITE = [
   { valor: "direcao", rotulo: "Direção" },
   { valor: "conteudo", rotulo: "Conteúdo" },
   { valor: "imagens", rotulo: "Imagens" },
+  { valor: "integracoes", rotulo: "Integrações e SEO" },
   { valor: "construcao", rotulo: "Construção" },
   { valor: "revisao", rotulo: "Revisão" },
   { valor: "publicacao", rotulo: "Publicação" },
@@ -209,7 +212,37 @@ export const SECOES_DO_SITE = [
 ] as const;
 export type SecaoDoSite = (typeof SECOES_DO_SITE)[number]["id"];
 export const SECOES_PADRAO: SecaoDoSite[] = ["topo", "hero", "servicos", "processo", "diferenciais", "faq", "chamada", "rodape"];
-export const rotuloDaSecao = (id: string) => (SECOES_DO_SITE.find((s) => s.id === id) || { rotulo: id }).rotulo;
+/**
+ * Tipo da seção pelo id: o id da biblioteca; nas outras páginas o id é
+ * "<página>-<tipo>" (hífens no lugar do sublinhado), então lê o fim.
+ */
+export function tipoDaSecaoPeloId(id: string): string | null {
+  const s = String(id || "").toLowerCase();
+  if (ehSecaoDaBiblioteca(s)) return s;
+  const partes = s.split("-");
+  for (let i = 1; i < partes.length; i++) {
+    const cauda = partes.slice(i).join("_");
+    if (ehSecaoDaBiblioteca(cauda)) return cauda;
+  }
+  const n = /^(.*?)-\d+$/.exec(s);
+  return n ? tipoDaSecaoPeloId(n[1]) : null;
+}
+
+/** Rótulo da seção (nome do mercado, da biblioteca), com a página quando não é a inicial. */
+export const rotuloDaSecao = (id: string) => {
+  const legado = SECOES_DO_SITE.find((s) => s.id === id);
+  const tipo = tipoDaSecaoPeloId(id);
+  const lib = tipo ? secaoDaBiblioteca(tipo) : null;
+  if (!lib) return legado ? legado.rotulo : id;
+  if (tipo === id) return legado && id === "prova" ? legado.rotulo : lib.rotulo;
+  const s = String(id);
+  const numero = /-(\d+)$/.exec(s);
+  const semNumero = numero ? s.slice(0, s.length - numero[0].length) : s;
+  const cauda = String(tipo).replace(/_/g, "-");
+  const pagina = semNumero.length > cauda.length && semNumero.slice(semNumero.length - cauda.length) === cauda ? semNumero.slice(0, semNumero.length - cauda.length).replace(/-+$/, "").replace(/-/g, " ") : "";
+  const nome = numero ? `${lib.rotulo} ${numero[1]}` : lib.rotulo;
+  return pagina ? `${nome} (${pagina})` : nome;
+};
 
 // ------------------------------------------------------------------ conteúdo (copy)
 
@@ -343,33 +376,79 @@ export type PacoteDoSite = {
   dna: DnaDoSite | null;
   direcao: { nicho?: string; peca?: string; referencia_de_nivel?: string; observacao?: string };
   copy: OpcaoDeCopy | null;
-  imagens: Array<{ slot: string; arquivo: string; alt: string }>;
-  fotos_reais: Array<{ arquivo: string; alt: string }>;
+  imagens: Array<{ slot: string; arquivo: string; alt: string; secao?: string | null }>;
+  fotos_reais: Array<{ arquivo: string; alt: string; secao?: string | null }>;
   logo: string | null;
   secoes: string[];
+  /** SIT2: tipo de site, mapa (páginas e seções), estilo, integrações e SEO. Pacotes antigos não têm. */
+  tipo?: string;
+  mapa?: MapaDoSite | null;
+  paginas?: Array<{ id: string; slug: string; titulo: string; secoes: string[] }>;
+  globais?: string[];
+  estilo?: (EstiloDoSite & { preset_rotulo?: string | null; preset_descricao?: string | null; modo?: "claro" | "escuro" | null; motion_instrucoes?: string[] }) | null;
+  integracoes?: Record<string, unknown> | null;
+  seo?: Record<string, unknown> | null;
+  regras_da_equipe?: string[];
 };
+
+/** Instrução de integração para as seções que usam o formulário, o mapa ou o WhatsApp (componentes da casa). */
+function instrucaoDasIntegracoes(integra: string[] | undefined, p: PacoteDoSite): string {
+  if (!integra || !integra.length) return "";
+  const i = (p.integracoes || {}) as Record<string, unknown>;
+  const partes: string[] = [];
+  if (integra.indexOf("formulario") >= 0) partes.push(i.formulario ? "use <Formulario /> de src/lib/integracoes (ele já manda para o CRM com anti-spam; não faça outro formulário)" : "o formulário está desligado: mostre o WhatsApp ou o e-mail do pacote, sem formulário falso");
+  if (integra.indexOf("mapa") >= 0 && i.mapa) partes.push("use <Mapa /> de src/lib/integracoes (carrega só com clique ou consentimento)");
+  if (integra.indexOf("whatsapp") >= 0 && i.whatsapp) partes.push("para pedir pelo WhatsApp use linkDoWhatsapp(texto) de src/lib/integracoes");
+  return partes.length ? ` Integrações: ${partes.join("; ")}.` : "";
+}
 
 /**
  * Prompt do agente de código pela fórmula de 6 blocos, para uma seção por
- * vez. O AGENTS.md do projeto traz o método e as regras de licença; aqui vai
- * o pedido da passada.
+ * vez. O AGENTS.md do projeto traz o método, a biblioteca de seções e as
+ * regras de licença; aqui vai o pedido da passada, com a página, o padrão da
+ * seção na biblioteca, o preset de estilo e os presets de movimento.
  */
 export function promptDaSecao(p: PacoteDoSite, secao: string, extra?: string | null): string {
   const dna = p.dna ? p.dna.atributos.map((a) => rotuloDoAtributo(a.id)).join(", ") : "a definir pela marca";
   const mov = p.dna ? (MOVIMENTOS.find((m) => m.id === p.dna!.movimento) || MOVIMENTOS[0]).descricao : MOVIMENTOS[0].descricao;
   const nivel = p.dna ? (NIVEIS.find((n) => n.id === p.dna!.nivel) || NIVEIS[3]).descricao : NIVEIS[3].descricao;
   const copySecao = p.copy ? p.copy.secoes.find((s) => s.id === secao) : null;
+  const noMapa = p.mapa ? acharNoMapa(p.mapa, secao) : null;
+  const tipo = noMapa ? noMapa.tipo : tipoDaSecaoPeloId(secao) || secao;
+  const lib = secaoDaBiblioteca(tipo);
+  const paginas = p.paginas && p.paginas.length ? p.paginas : null;
+  const onde = lib && lib.global
+    ? `do layout (aparece em todas as ${paginas ? paginas.length : 1} página(s))`
+    : noMapa && noMapa.pagina
+      ? `da página "${noMapa.pagina.titulo}" (${noMapa.pagina.slug ? `/${noMapa.pagina.slug}/` : "inicial"})`
+      : "da página inicial";
+  const peca = p.tipo === "bio" ? "página de links" : paginas && paginas.length > 1 ? `site de ${paginas.length} páginas` : "site de uma página";
+  const preset = p.estilo && p.estilo.preset_rotulo ? ` Preset de estilo: ${p.estilo.preset_rotulo} (${p.estilo.preset_descricao || ""}).` : "";
+  const motion = p.estilo && p.estilo.motion_instrucoes && p.estilo.motion_instrucoes.length ? ` Presets de movimento: ${p.estilo.motion_instrucoes.join(" ")}` : "";
+  const texto = copySecao
+    ? `Use o texto de pacote.copy.secoes (id ${secao}) sem inventar dado.`
+    : (tipo === "hero" || tipo === "hero_dividido") && p.copy
+      ? "Use headline, subtitulo e cta de pacote.copy."
+      : "Use só o que está no pacote; o que faltar vira texto neutro e curto, sem número inventado.";
   const blocos = [
-    `1. O QUÊ: a seção "${rotuloDaSecao(secao)}" (id ${secao}) do site de uma página de ${p.cliente}.`,
-    `2. ESTRUTURA: leia .aceleriq/pacote.json. Crie ou ajuste src/secoes/${nomeDoComponente(secao)}.tsx e registre em src/secoes/index.ts na ordem de pacote.secoes. ${copySecao ? "Use o texto de pacote.copy.secoes (id " + secao + ") sem inventar dado." : secao === "hero" && p.copy ? "Use headline, subtitulo e cta de pacote.copy." : "Use só o que está no pacote; o que faltar vira texto neutro e curto, sem número inventado."}`,
-    `3. ESTILO E DNA: ${dna}. Paleta da marca em src/tema.css (variáveis), nunca cor solta. Logo e fotos reais só pelos arquivos de public/ citados no pacote.`,
-    `4. MOVIMENTO: ${mov}. Use os tokens de src/lib/movimento.ts, respeite prefers-reduced-motion e não use useReducedMotion nem useScroll fora de [0,1].`,
+    `1. O QUÊ: a seção "${lib ? lib.rotulo : rotuloDaSecao(secao)}" (id ${secao}) ${onde} do ${peca} de ${p.cliente}.${lib ? ` ${lib.descricao.charAt(0).toUpperCase()}${lib.descricao.slice(1)}.` : ""}`,
+    `2. ESTRUTURA: leia .aceleriq/pacote.json. Crie ou ajuste src/secoes/${nomeDoComponente(secao)}.tsx e registre em src/secoes/index.ts (id "${secao}"). ${texto}${lib ? ` Padrão da biblioteca: ${lib.padrao}` : ""}${lib && lib.so_real ? " Só com dado real do pacote: sem o dado, a seção mostra o método ou fica de fora (avise na resposta)." : ""}${instrucaoDasIntegracoes(lib ? lib.integra : undefined, p)}`,
+    `3. ESTILO E DNA: ${dna}.${preset} Paleta da marca em src/tema.css (variáveis), nunca cor solta. Logo e fotos reais só pelos arquivos de public/ citados no pacote.`,
+    `4. MOVIMENTO: ${mov}.${motion} Use os tokens de src/lib/movimento.ts, respeite prefers-reduced-motion e não use useReducedMotion nem useScroll fora de [0,1].`,
     "5. STACK: Vite + React + Tailwind + Motion; GSAP ScrollTrigger/SplitText e Lenis só onde o movimento pedir. Nada de biblioteca fora do AGENTS.md.",
     `6. REFERÊNCIA DE NÍVEL: ${nivel}. Premium, com respiro, hierarquia clara e contraste AA.`,
   ];
   if (extra) blocos.push(`PEDIDO DA EQUIPE PARA ESTA SEÇÃO: ${txt(extra, 1500)}`);
   blocos.push("Ao terminar, rode `npm run checar` e corrija só o que o comando apontar nesta seção. Não mexa nas outras seções.");
   return blocos.join("\n");
+}
+
+/** Estilo do pacote: o preset e as instruções dos presets de movimento (o agente recebe pronto). */
+export function estiloDoPacote(e: EstiloDoSite | null | undefined): PacoteDoSite["estilo"] {
+  if (!e) return null;
+  const preset = presetDeEstilo(e.preset);
+  const motion = (e.motion || []).map((m) => presetDeMotion(m)).filter((m): m is NonNullable<ReturnType<typeof presetDeMotion>> => !!m);
+  return { ...e, preset_rotulo: preset ? preset.rotulo : null, preset_descricao: preset ? preset.descricao : null, modo: preset ? preset.modo : null, motion_instrucoes: motion.map((m) => `${m.rotulo}: ${m.instrucao}`) };
 }
 
 export const nomeDoComponente = (secao: string) =>
@@ -414,5 +493,17 @@ export function revisarHtml(html: string): AvisoDeQa[] {
   const linksVazios = (h.match(/<a\b[^>]*>\s*(<svg[\s\S]*?<\/svg>)?\s*<\/a>/gi) || []).filter((b) => !/aria-label=/i.test(b)).length;
   if (linksVazios) avisos.push({ area: "acessibilidade", texto: `${linksVazios} link(s) sem nome (texto ou aria-label).` });
   if (!tem(/<div id=["']root["'][^>]*>\s*<[a-z]/i)) avisos.push({ area: "seo", texto: "O conteúdo não veio pré-renderizado (o buscador vê a página vazia)." });
+  // SIT2: dados estruturados que não abrem e rastreio que carrega antes do consentimento (LGPD).
+  const jsonLd = h.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
+  const quebrados = jsonLd.filter((b) => {
+    try {
+      JSON.parse(b.replace(/^<script[^>]*>/i, "").replace(/<\/script>$/i, ""));
+      return false;
+    } catch {
+      return true;
+    }
+  }).length;
+  if (quebrados) avisos.push({ area: "seo", texto: "Os dados estruturados (schema) não abrem: JSON inválido." });
+  if (tem(/<script[^>]+src=["'][^"']*(connect\.facebook\.net|googletagmanager\.com)/i)) avisos.push({ area: "seo", texto: "Pixel ou GA4 carregam antes do aviso de cookies (LGPD): use os componentes de src/lib/integracoes." });
   return avisos;
 }

@@ -186,6 +186,8 @@ export type PedidoDoMotor = {
   secao: string | null;
   teto_usd: number;
   alvo_trabalho_id: string | null;
+  /** SIT2: desfazer = "voltar para a versão do trabalho alvo" (reverte tudo o que veio depois dele). */
+  voltar_para: boolean;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -209,6 +211,7 @@ export function normalizarPedido(bruto: unknown): PedidoDoMotor {
     secao,
     teto_usd: Math.max(0, Math.min(TETO_MAXIMO_USD, arred(num(o.teto_usd)))),
     alvo_trabalho_id: alvo,
+    voltar_para: tipo === "desfazer" && o.voltar_para === true,
   };
 }
 
@@ -437,6 +440,11 @@ export function normalizarTrabalho(b: unknown): TrabalhoDoMotor | null {
 /** Pode desfazer? Só trabalho de código terminado (feito ou parado no meio) com commit. */
 export function podeDesfazer(t: Pick<TrabalhoDoMotor, "estado" | "tipo" | "commit" | "commit_anterior">): boolean {
   return (t.estado === "feito" || t.estado === "parado") && (t.tipo === "construir" || t.tipo === "ajustar") && !!t.commit && !!t.commit_anterior && t.commit !== t.commit_anterior;
+}
+
+/** Pode voltar para a versão deste trabalho? Qualquer trabalho terminado que deixou commit. */
+export function podeVoltarPara(t: Pick<TrabalhoDoMotor, "estado" | "commit">): boolean {
+  return (t.estado === "feito" || t.estado === "parado") && !!t.commit;
 }
 
 /** O executor está vivo? (batida nos últimos 90 s) */

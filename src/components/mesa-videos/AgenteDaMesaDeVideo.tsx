@@ -272,7 +272,8 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
         r = null;
       }
       if (!r) {
-        await executar(intencaoPorPalavras(mesa, t), t);
+        // Frente MOT: a Mesa Motion tem agente próprio; aqui só entram Vídeos e Edição.
+        await executar(intencaoPorPalavras(mesa === "motion" ? "videos" : mesa, t), t);
         return;
       }
       const a = acaoDoAnexo(r.acao);

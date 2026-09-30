@@ -11,7 +11,7 @@ import { criarLimitador, type EventoResumido, type ModeloDoMotor } from "../../.
 import { type PacoteDoSite, promptDaSecao, revisarHtml, rotuloDaSecao } from "../../../supabase/functions/_shared/site-metodo.ts";
 import { criarApiDaVercel, garantirProjeto as garantirProjetoVercel, ligarDominio, publicarArquivos, vercelLigada } from "../../../supabase/functions/_shared/publicacao-vercel.ts";
 import type { Fila, LinhaDaFila } from "./fila.ts";
-import { commitar, commitAtual, construirSite, escreverPacote, garantirProjeto, instalarSePrecisar, pastaDoProjeto, voltarCommits } from "./projeto.ts";
+import { arquivosMudados, atualizarCasca, commitar, commitAtual, construirSite, escreverPacote, garantirProjeto, instalarSePrecisar, pastaDoProjeto, voltarCommits } from "./projeto.ts";
 import { garantirPrevia } from "./previa.ts";
 import { rodarPassada, subirOpencode } from "./opencode.ts";
 import { abrirMedidor, type Medidor } from "./medidor.ts";
@@ -50,20 +50,39 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
   let estadoFinal = "feito";
   let erro: string | null = null;
   const deveParar = async () => (await fila.estado(t.id)) === "parando";
+  let commitInicial: string | null = null;
 
   try {
     await avisar({ tipo: "estado", resumo: "O motor pegou o trabalho" });
     const novo = await garantirProjeto(pasta);
     if (novo) await avisar({ tipo: "passo", resumo: "Projeto criado do modelo da casa" });
+    // SIT2: casca da casa mais nova (multipágina, integrações, SEO) entra antes do trabalho, num commit próprio.
+    if (t.tipo !== "zip" && t.tipo !== "desfazer") {
+      const casca = await atualizarCasca(pasta);
+      if (casca) await avisar({ tipo: "passo", resumo: `Casca da casa atualizada (v${casca})` });
+    }
     const anterior = await commitAtual(pasta);
+    commitInicial = anterior;
     await fila.atualizar(t.id, { commit_anterior: anterior });
 
     if (t.tipo === "desfazer") {
-      const alvo = (pedido.alvo || {}) as { commit?: string; commit_anterior?: string };
-      if (!alvo.commit || !alvo.commit_anterior) throw new Error("o trabalho a desfazer não tem commit");
-      const c = await voltarCommits(pasta, alvo.commit_anterior, alvo.commit);
-      await avisar({ tipo: "commit", resumo: c.novo ? `Desfeito (commit ${c.commit.slice(0, 8)})` : "Nada a desfazer", dados: { commit: c.commit } });
-      await fila.atualizar(t.id, { commit: c.commit });
+      const alvo = (pedido.alvo || {}) as { commit?: string | null; commit_anterior?: string | null; voltar_para?: boolean };
+      if (alvo.voltar_para) {
+        // Voltar para a versão: reverte tudo o que veio depois do commit do trabalho escolhido.
+        if (!alvo.commit_anterior) throw new Error("a versão escolhida não tem commit");
+        if (anterior.indexOf(alvo.commit_anterior) === 0 || alvo.commit_anterior.indexOf(anterior) === 0) {
+          await avisar({ tipo: "passo", resumo: "O código já está nesta versão" });
+        } else {
+          const c = await voltarCommits(pasta, alvo.commit_anterior, anterior);
+          await avisar({ tipo: "commit", resumo: c.novo ? `Voltou para a versão ${alvo.commit_anterior.slice(0, 8)} (commit ${c.commit.slice(0, 8)})` : "Nada a voltar", dados: { commit: c.commit } });
+          await fila.atualizar(t.id, { commit: c.commit });
+        }
+      } else {
+        if (!alvo.commit || !alvo.commit_anterior) throw new Error("o trabalho a desfazer não tem commit");
+        const c = await voltarCommits(pasta, alvo.commit_anterior, alvo.commit);
+        await avisar({ tipo: "commit", resumo: c.novo ? `Desfeito (commit ${c.commit.slice(0, 8)})` : "Nada a desfazer", dados: { commit: c.commit } });
+        await fila.atualizar(t.id, { commit: c.commit });
+      }
     }
 
     if (t.tipo === "construir" || t.tipo === "ajustar") {
@@ -153,6 +172,15 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
       }
     }
 
+    // SIT2: revisar e publicar também levam o pacote novo (SEO e integrações mudam sem passar pelo agente).
+    if ((t.tipo === "revisar" || t.tipo === "publicar") && Object.keys(pacote).length) {
+      const avisos = await escreverPacote(pasta, pacote, fila);
+      for (const a of avisos) await avisar({ tipo: "aviso", resumo: a });
+      const base = await commitar(pasta, "Pacote do cliente");
+      if (base.novo) await avisar({ tipo: "commit", resumo: "Pacote do cliente no projeto (SEO e integrações)", dados: { commit: base.commit } });
+      await fila.atualizar(t.id, { commit: base.commit });
+    }
+
     if (t.tipo === "revisar" || t.tipo === "construir" || t.tipo === "ajustar" || t.tipo === "desfazer" || t.tipo === "publicar") {
       await instalarSePrecisar(pasta);
       const b = await construirSite(pasta);
@@ -202,6 +230,14 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
     }
   }
   resultado.tokens = { entrada: gasto.tokensEntrada, saida: gasto.tokensSaida, cache: gasto.tokensCache };
+  // SIT2: o que este trabalho mudou no código (comparar versões na tela).
+  try {
+    const inicio = commitInicial;
+    const fim = await commitAtual(pasta);
+    if (inicio && fim && inicio !== fim) resultado.arquivos = await arquivosMudados(pasta, inicio, fim);
+  } catch (e) {
+    resultado.arquivos_erro = e instanceof Error ? e.message.slice(0, 200) : "diff indisponível";
+  }
   await fila.atualizar(t.id, {
     estado: estadoFinal,
     custo_usd: Math.round(gasto.custo * 1e6) / 1e6,

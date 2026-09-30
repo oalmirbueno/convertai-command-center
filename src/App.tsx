@@ -12,6 +12,7 @@ import { PaginaMesaRoteiros } from "@/lib/mesa/preCarga";
 import { PaginaMesaIdentidade } from "@/lib/mesa/preCarga";
 import { PaginaMesaProposta } from "@/lib/mesa/preCarga";
 import { PaginaMesaSite } from "@/lib/mesa/preCarga";
+import { PaginaMesaMotion } from "@/lib/mesa/preCarga";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
@@ -89,6 +90,7 @@ const MesaRoteiros = PaginaMesaRoteiros;
 const MesaIdentidade = PaginaMesaIdentidade;
 const MesaProposta = PaginaMesaProposta;
 const MesaSite = PaginaMesaSite;
+const MesaMotion = PaginaMesaMotion;
 
 // Padrões do painel e o cache da Mesa guardado no navegador: ver
 // src/lib/mesa/cachePersistido.ts (o que vai, por quanto tempo e para quem).
@@ -338,6 +340,8 @@ export function AppRoutes() {
         <Route path="/mesa-proposta" element={<>{["admin", "manager"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaProposta /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
         {/* Mesa Site (frente SIT): criador de sites com o motor de código (supabase/functions/mesa-site e motor-codigo; worker em workers/motor-codigo). Mesmos papéis das mesas de criação. */}
         <Route path="/mesa-site" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaSite /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
+        {/* Mesa Motion (frente MOT): apresentação em motion e filme da marca; cenas HyperFrames pela fila (workers/render). Mesmos papéis das mesas de vídeo. */}
+        <Route path="/mesa-motion" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaMotion /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/central" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminExperience /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/onde-estamos" element={<ClientJourneyUpdates />} />
         <Route path="/novidades" element={<Novidades />} />

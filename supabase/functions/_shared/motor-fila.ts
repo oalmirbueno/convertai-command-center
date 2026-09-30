@@ -21,6 +21,7 @@ import {
   normalizarTrabalho,
   type PedidoDoMotor,
   podeDesfazer,
+  podeVoltarPara,
   reservaAberta,
   saldoLivre,
   type TrabalhoDoMotor,
@@ -125,13 +126,19 @@ export async function criarTrabalho(db: SupabaseClient, n: NovoTrabalho): Promis
       livre_usd: o.livre_usd,
     });
   }
-  let commitAlvo: { commit: string | null; commit_anterior: string | null } | null = null;
+  let commitAlvo: { commit: string | null; commit_anterior: string | null; voltar_para?: boolean } | null = null;
   if (o.pedido.tipo === "desfazer" && o.pedido.alvo_trabalho_id) {
     const { data: alvo } = await db.from("motor_trabalhos").select(CAMPOS_DO_TRABALHO).eq("id", o.pedido.alvo_trabalho_id).maybeSingle();
     const t = normalizarTrabalho(alvo);
     if (!t || t.client_id !== n.clientId || t.projeto !== n.projeto) throw new ErroDoMotor(404, "trabalho_inexistente", "Trabalho não encontrado neste site.");
-    if (!podeDesfazer(t)) throw new ErroDoMotor(409, "nao_desfaz", "Este trabalho não tem o que desfazer (sem commit ou ainda rodando).");
-    commitAlvo = { commit: t.commit, commit_anterior: t.commit_anterior };
+    if (o.pedido.voltar_para) {
+      // Voltar para a versão: o código fica como estava no fim deste trabalho (o worker reverte o que veio depois).
+      if (!podeVoltarPara(t)) throw new ErroDoMotor(409, "nao_volta", "Esta versão não tem código guardado (sem commit ou ainda rodando).");
+      commitAlvo = { commit: null, commit_anterior: t.commit, voltar_para: true };
+    } else {
+      if (!podeDesfazer(t)) throw new ErroDoMotor(409, "nao_desfaz", "Este trabalho não tem o que desfazer (sem commit ou ainda rodando).");
+      commitAlvo = { commit: t.commit, commit_anterior: t.commit_anterior };
+    }
   }
   const linha = {
     client_id: n.clientId,

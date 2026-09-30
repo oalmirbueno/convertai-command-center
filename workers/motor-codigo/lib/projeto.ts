@@ -57,6 +57,56 @@ export async function garantirProjeto(pasta: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Casca da casa (SIT2): os arquivos que são do modelo, não do agente (App,
+ * entradas, pré-render, integrações, movimento, AGENTS.md). Projeto criado
+ * com uma casca mais velha ganha a nova no próximo trabalho, num commit
+ * próprio; as seções (src/secoes) e o tema continuam do projeto.
+ */
+export type CascaDoModelo = { versao: number; arquivos: string[] };
+
+export function lerCasca(pasta: string): CascaDoModelo | null {
+  try {
+    const c = JSON.parse(readFileSync(join(pasta, ".aceleriq", "casca.json"), "utf8")) as CascaDoModelo;
+    return c && typeof c.versao === "number" && Array.isArray(c.arquivos) ? c : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Arquivo da casca é caminho relativo simples (nada de .. nem absoluto). */
+export const arquivoDaCascaValido = (a: string) => typeof a === "string" && !!a && !/\.\./.test(a) && !/^[\\/]/.test(a) && !/^[a-z]:/i.test(a) && a.indexOf("src/secoes/") !== 0;
+
+export async function atualizarCasca(pasta: string): Promise<number | null> {
+  const doModelo = lerCasca(MODELO_DO_SITE);
+  if (!doModelo) return null;
+  const doProjeto = lerCasca(pasta);
+  if (doProjeto && doProjeto.versao >= doModelo.versao) return null;
+  for (const a of doModelo.arquivos.filter(arquivoDaCascaValido)) {
+    const origem = join(MODELO_DO_SITE, a);
+    if (!existsSync(origem)) continue;
+    mkdirSync(dirname(join(pasta, a)), { recursive: true });
+    cpSync(origem, join(pasta, a));
+  }
+  mkdirSync(join(pasta, ".aceleriq"), { recursive: true });
+  writeFileSync(join(pasta, ".aceleriq", "casca.json"), JSON.stringify(doModelo, null, 2));
+  await commitar(pasta, `Casca da casa v${doModelo.versao}`);
+  return doModelo.versao;
+}
+
+/** O que um trabalho mudou (git diff --numstat), para a tela comparar versões. */
+export async function arquivosMudados(pasta: string, de: string, ate: string): Promise<Array<{ arquivo: string; mais: number; menos: number }>> {
+  if (!/^[0-9a-f]{7,40}$/i.test(de) || !/^[0-9a-f]{7,40}$/i.test(ate) || de === ate) return [];
+  const saida = await git(pasta, ["diff", "--numstat", de, ate]);
+  return saida
+    .split("\n")
+    .map((l) => l.split("\t"))
+    .filter((p) => p.length >= 3)
+    .map((p) => ({ arquivo: p[2].slice(0, 160), mais: Number(p[0]) || 0, menos: Number(p[1]) || 0 }))
+    .filter((x) => x.arquivo.indexOf(".aceleriq/") !== 0)
+    .slice(0, 40);
+}
+
 const hex = (v: unknown) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : null);
 
 /** Luminância relativa (WCAG) para escolher texto claro ou escuro sobre o fundo. */
@@ -74,7 +124,9 @@ export function cssDaMarca(pacote: Record<string, unknown>): string {
   const paleta = (Array.isArray(pacote.paleta) ? pacote.paleta : []) as Array<{ hex?: string; papel?: string }>;
   const cores = paleta.map((p) => ({ hex: hex(p.hex), papel: String(p.papel || "").toLowerCase() })).filter((p): p is { hex: string; papel: string } => !!p.hex);
   const dna = pacote.dna && typeof pacote.dna === "object" ? ((pacote.dna as { atributos?: Array<{ id: string }> }).atributos || []).map((a) => a.id) : [];
-  const escuro = dna.indexOf("quase_preto") >= 0 || (dna.indexOf("claro_editorial") < 0 && cores.some((c) => /fundo/.test(c.papel) && luminancia(c.hex) < 0.2));
+  // SIT2: o preset de estilo diz claro ou escuro; sem preset, o DNA e a paleta decidem (como antes).
+  const modo = pacote.estilo && typeof pacote.estilo === "object" ? (pacote.estilo as { modo?: unknown }).modo : null;
+  const escuro = modo === "escuro" || (modo !== "claro" && (dna.indexOf("quase_preto") >= 0 || (dna.indexOf("claro_editorial") < 0 && cores.some((c) => /fundo/.test(c.papel) && luminancia(c.hex) < 0.2))));
   const destaque = (cores.find((c) => /prim|destaque/.test(c.papel)) || cores[0] || { hex: "#00d52b" }).hex;
   const ordenadas = cores.slice().sort((a, b) => luminancia(a.hex) - luminancia(b.hex));
   const fundo = escuro ? (ordenadas[0] && luminancia(ordenadas[0].hex) < 0.2 ? ordenadas[0].hex : "#0b0b0c") : ordenadas.length && luminancia(ordenadas[ordenadas.length - 1].hex) > 0.8 ? ordenadas[ordenadas.length - 1].hex : "#fafaf7";

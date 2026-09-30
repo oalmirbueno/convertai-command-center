@@ -14,7 +14,8 @@ import { caminhoDaSaida, fontesUsadas, recortarProjeto } from "../../supabase/fu
 import { ganhoDaTrilhaDb, MIXAGEM_PADRAO } from "../../supabase/functions/_shared/som-do-editor.ts";
 import type { Armazem } from "./armazem.ts";
 import type { Fila, PedidoDoWorker } from "./fila.ts";
-import { amostrasMono, executar, medirLoudness, normalizarLoudness, sondar } from "./midia.ts";
+import { amostrasMono, executar, FFMPEG, medirLoudness, normalizarLoudness, sondar } from "./midia.ts";
+import { trabalharBatidas, trabalharCenaHf } from "./hyperframes.ts";
 
 export const PASTA_DO_WORKER = path.dirname(fileURLToPath(import.meta.url));
 export const RAIZ_DO_REPO = path.resolve(PASTA_DO_WORKER, "..", "..");
@@ -198,12 +199,24 @@ export async function trabalharRender(amb: Ambiente, p: PedidoDoWorker, pasta: s
   const volume = await normalizarLoudness(bruto, final, alvo);
   const sonda = await sondar(final);
   const bytes = (await stat(final)).size;
-  const saida = caminhoDaSaida(p.client_id, p.id, p.tipo);
+  const saida = caminhoDaSaida(p.client_id, p.id, amostra ? "amostra" : "render_final");
   await avisar("subindo", 0.88, true);
   await amb.armazem.subir("mesa", saida, final, "video/mp4", (feito, total) => {
     void avisar("subindo", 0.88 + (feito / Math.max(1, total)) * 0.1).catch(() => null);
   });
-  const titulo = (await amb.fila.tituloDaVersao(p.versao_id)) || String(projeto.titulo || "Vídeo");
+  // Miniatura (frente MOT): um quadro a um terço do vídeo, para a entrega e o portfólio.
+  let miniatura: string | null = null;
+  if (!amostra && sonda.duracao_s) {
+    const jpg = path.join(pasta, "miniatura.jpg");
+    const m = await executar(FFMPEG, ["-y", "-v", "error", "-ss", (sonda.duracao_s / 3).toFixed(2), "-i", final, "-frames:v", "1", "-q:v", "3", jpg]);
+    if (m.codigo === 0) {
+      miniatura = saida.replace(/\.mp4$/, ".jpg");
+      await amb.armazem.subir("mesa", miniatura, jpg, "image/jpeg").catch(() => {
+        miniatura = null;
+      });
+    }
+  }
+  const titulo = (p.versao_id ? await amb.fila.tituloDaVersao(p.versao_id) : null) || String(projeto.titulo || "Vídeo");
   const arquivoId = await amb.fila.registrarArquivo({
     client_id: p.client_id,
     nome: `${titulo}${amostra ? " (amostra)" : " (render)"}`.slice(0, 120),
@@ -221,7 +234,7 @@ export async function trabalharRender(amb: Ambiente, p: PedidoDoWorker, pasta: s
   });
   // Gancho do documento de entrega (frente DOC): o resumo e as provas ficam no resultado do pedido.
   const resumo = `${amostra ? "Amostra" : "Vídeo inteiro"} de ${sonda.duracao_s} s em ${sonda.largura}x${sonda.altura}, ${volume.depois !== null ? `${volume.depois} LUFS` : "sem áudio"}, ${Math.round(bytes / 1024)} KB, revisão ${p.revisao}.`;
-  return { saida, arquivoId, resultado: { resumo, duracao_s: sonda.duracao_s, largura: sonda.largura, altura: sonda.altura, bytes, lufs_antes: volume.antes, lufs_final: volume.depois, voz_lufs: vozLufs, ganhos_db: ganhos } };
+  return { saida, arquivoId, resultado: { resumo, miniatura_path: miniatura, duracao_s: sonda.duracao_s, largura: sonda.largura, altura: sonda.altura, bytes, lufs_antes: volume.antes, lufs_final: volume.depois, voz_lufs: vozLufs, ganhos_db: ganhos } };
 }
 
 // ------------------------------------------------------------------ um pedido
@@ -236,6 +249,19 @@ export async function umPedido(amb: Ambiente, worker: string, versao: string): P
   const log = amb.log || (() => undefined);
   log(`pedido ${p.id} (${p.tipo}) do cliente ${p.client_id.slice(0, 8)}`);
   try {
+    if (p.tipo === "cena_hf" || p.tipo === "batidas") {
+      const apoio = { fila: amb.fila, armazem: amb.armazem, log: amb.log, publico: PUBLICO_DO_PAINEL, pastaDoWorker: PASTA_DO_WORKER };
+      if (p.tipo === "batidas") {
+        const resultado = await trabalharBatidas(apoio, p, pasta, relator(amb, p));
+        await amb.fila.concluir(p.id, amb.token, null, null, resultado);
+        return { id: p.id, tipo: p.tipo, estado: "pronto", detalhe: String(resultado.resumo || "") };
+      }
+      const r = await trabalharCenaHf(apoio, p, pasta, relator(amb, p));
+      const ok = await amb.fila.concluir(p.id, amb.token, r.saida, r.arquivoId, r.resultado);
+      if (!ok) return { id: p.id, tipo: p.tipo, estado: "parado", detalhe: "O pedido não era mais deste worker na hora de concluir." };
+      log(`pronto: ${r.saida}`);
+      return { id: p.id, tipo: p.tipo, estado: "pronto", detalhe: r.saida };
+    }
     if (p.tipo === "onda") {
       const resultado = await trabalharOnda(amb, p, pasta);
       await amb.fila.concluir(p.id, amb.token, null, null, resultado);

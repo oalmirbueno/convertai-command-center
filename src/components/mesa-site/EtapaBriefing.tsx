@@ -5,23 +5,28 @@ import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
 import { Carregando } from "@/components/sistema/Estados";
+import { PreencherComIA } from "@/components/sistema";
 import { botao, campoTexto, juntar, lista, texto } from "@/components/sistema/estilos";
-import { chamarSite, type LinhaDoSite, useGuardarSite } from "./siteApi";
+import { chamarSite, type LinhaDoSite, useSalvarSite } from "./siteApi";
+import CampoComIA, { textoDoValor } from "./CampoComIA";
+import { camposDoBriefing, camposDoSiteInteiro, destinosDosValores, mapaDoTipoAplicado } from "./preencherDoSite";
 
 type Pergunta = { id: string; rotulo: string };
 type Leitura = { encontrado: boolean; briefing_id?: string; titulo?: string | null; respostas: Record<string, unknown>; decupagem: { itens?: Array<{ texto?: string; categoria?: string }>; tom_de_voz?: string | null } | null; perguntas: Pergunta[] };
 
-const textoDe = (v: unknown): string => (Array.isArray(v) ? v.map(textoDe).filter(Boolean).join(", ") : v && typeof v === "object" ? JSON.stringify(v) : String(v ?? "")).slice(0, 600);
+const textoDe = (v: unknown): string => (Array.isArray(v) ? v.map(textoDe).filter(Boolean).join(", ") : v && typeof v === "object" ? JSON.stringify(v) : String(v ?? "")).slice(0, 1500);
 
 /**
  * Etapa 1: o briefing do site. Lê o briefing de site da frente BRF (modelo
  * "site" ou "landing", da marca do site); sem ele, pergunta aqui mesmo. Salvar
- * é sempre parcial.
+ * é sempre parcial. SIT2: cada pergunta tem o ✨ do Preencher com IA, a seção
+ * tem o "Preencher tudo" e o topo tem o "Preencher tudo do site" (briefing,
+ * tipo, direção, SEO, dados do negócio e WhatsApp numa prévia só).
  */
 export default function EtapaBriefing({ site, onIrPara }: { site: LinhaDoSite; onIrPara: (etapa: string) => void }) {
   const { clientId } = useMesa();
   const { marca } = useMarcaDaMesa();
-  const guardar = useGuardarSite(clientId, marca ? marca.id : null);
+  const salvarSite = useSalvarSite(clientId, marca ? marca.id : null);
   const avisarErro = useAvisarErro();
   const leitura = useQuery({ queryKey: ["mesa-site", "briefing", site.id], queryFn: () => chamarSite<Leitura>("briefing_ler", { site_id: site.id }) });
   const salvas = (site.briefing && site.briefing.respostas) || {};
@@ -36,11 +41,14 @@ export default function EtapaBriefing({ site, onIrPara }: { site: LinhaDoSite; o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [site.id]);
 
+  const gravarRespostas = async (novas: Record<string, string>, extra: Record<string, unknown> = {}, seguir = false) => {
+    await salvarSite("site_salvar", { site_id: site.id, briefing: { respostas: novas, ...extra }, etapa: seguir ? "referencias" : undefined });
+  };
+
   const salvar = async (extra: Record<string, unknown> = {}, seguir = false) => {
     setSalvando(true);
     try {
-      const d = await chamarSite<{ site: LinhaDoSite }>("site_salvar", { site_id: site.id, briefing: { respostas, ...extra }, etapa: seguir ? "referencias" : undefined });
-      guardar(d.site);
+      await gravarRespostas(respostas, extra, seguir);
       if (seguir) onIrPara("referencias");
     } catch (e) {
       avisarErro(e, "O briefing não foi salvo");
@@ -49,9 +57,27 @@ export default function EtapaBriefing({ site, onIrPara }: { site: LinhaDoSite; o
     }
   };
 
+  /** Aplica respostas (do ✨ ou do Preencher tudo) e grava na hora; o erro sobe para a peça mostrar. */
+  const aplicarRespostas = async (parciais: Record<string, string>) => {
+    const novas = { ...respostas, ...parciais };
+    setRespostas(novas);
+    await gravarRespostas(novas);
+  };
+
+  /** Preencher tudo do site: cada destino vira a sua ação (briefing, direção, tipo e mapa, SEO, WhatsApp). */
+  const aplicarNoSite = async (valores: Record<string, unknown>) => {
+    const d = destinosDosValores(valores);
+    if (Object.keys(d.briefing).length) await aplicarRespostas(d.briefing);
+    if (Object.keys(d.direcao).length) await salvarSite("site_salvar", { site_id: site.id, direcao: d.direcao });
+    if (d.tipo) await salvarSite("mapa_salvar", { site_id: site.id, tipo: d.tipo, mapa: mapaDoTipoAplicado(site, d.tipo) });
+    if (Object.keys(d.seo).length) await salvarSite("seo_salvar", { site_id: site.id, seo: d.seo });
+    if (d.whatsappMensagem !== null) await salvarSite("integracoes_salvar", { site_id: site.id, integracoes: { whatsapp: { ...((site.integracoes && site.integracoes.whatsapp) || {}), mensagem: d.whatsappMensagem } } });
+  };
+
   if (leitura.isLoading) return <Carregando forma="lista" rotulo="Procurando o briefing do site" />;
   const d = leitura.data;
   const usandoBrf = site.briefing && site.briefing.fonte === "brf" && d && d.briefing_id === site.briefing.briefing_id;
+  const perguntas = (d && d.perguntas) || [];
 
   return (
     <div className="min-w-0 space-y-6" data-etapa-briefing="">
@@ -90,9 +116,32 @@ export default function EtapaBriefing({ site, onIrPara }: { site: LinhaDoSite; o
       <Secao
         titulo={d && d.encontrado ? "Complementar" : "Briefing do site"}
         descricao={d && !d.encontrado ? "Sem briefing de site respondido" : undefined}
-        ajuda="Sem o briefing de site do cliente, responda aqui o essencial. Salvar guarda o que já estiver escrito; dá para voltar depois."
+        ajuda="Sem o briefing de site do cliente, responda aqui o essencial. O ✨ de cada pergunta preenche pelo contexto da marca, pelo dossiê e pelos arquivos, com a prévia antes de gravar. Preencher tudo do site também propõe o tipo de site, a observação da direção, o SEO, os dados do negócio e a mensagem do WhatsApp. Nada de número ou nome que não esteja nas fontes."
         acao={
           <>
+            <span className="mr-2 inline-flex">
+              <PreencherComIA
+                papel="site"
+                clientId={clientId}
+                marcaId={marca ? marca.id : null}
+                campos={camposDoSiteInteiro(site, respostas)}
+                fontes={["contexto", "briefing", "dossie", "arquivos"]}
+                rotulo="Preencher tudo do site"
+                onAplicar={aplicarNoSite}
+                onDesfazer={(anteriores) => aplicarNoSite(anteriores)}
+              />
+            </span>
+            <span className="mr-2 inline-flex">
+              <PreencherComIA
+                papel="site"
+                clientId={clientId}
+                marcaId={marca ? marca.id : null}
+                campos={camposDoBriefing(perguntas, respostas)}
+                rotulo="Preencher o briefing"
+                onAplicar={(v) => aplicarNoSite(v)}
+                onDesfazer={(a) => aplicarNoSite(a)}
+              />
+            </span>
             <button type="button" className={juntar(botao.secundario, "mr-2")} disabled={salvando} onClick={() => void salvar()}>
               {salvando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
               Salvar
@@ -105,17 +154,23 @@ export default function EtapaBriefing({ site, onIrPara }: { site: LinhaDoSite; o
         }
       >
         <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
-          {((d && d.perguntas) || []).map((p) => (
-            <label key={p.id} className="block min-w-0">
-              <span className={juntar(texto.rotulo, "mb-1 block")}>{p.rotulo}</span>
+          {perguntas.map((p) => (
+            <CampoComIA
+              key={p.id}
+              rotulo={p.rotulo}
+              campo={camposDoBriefing([p], respostas)[0]}
+              onAplicar={(v) => aplicarRespostas({ [p.id]: textoDoValor(v) })}
+              onDesfazer={(a) => aplicarRespostas({ [p.id]: textoDoValor(a) })}
+            >
               <textarea
                 value={respostas[p.id] || ""}
                 onChange={(e) => setRespostas((r) => ({ ...r, [p.id]: e.target.value }))}
                 rows={3}
                 maxLength={1500}
+                aria-label={p.rotulo}
                 className={juntar(campoTexto, "min-h-[76px]")}
               />
-            </label>
+            </CampoComIA>
           ))}
         </div>
       </Secao>
