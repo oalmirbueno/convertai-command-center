@@ -1,8 +1,4 @@
 import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { useMesa } from "@/components/mesa/MesaContexto";
-import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { botao, campo, juntar, lista, texto } from "@/components/sistema/estilos";
@@ -17,13 +13,18 @@ import {
   type OpcaoDePagamento,
   type TipoDePagamento,
 } from "../../../supabase/functions/_shared/proposta-comercial";
-import { aplicarNaLista, chamarProposta, type Proposta } from "./propostaApi";
+import type { Proposta } from "./propostaApi";
+import { useSecaoSuja } from "./edicaoDaProposta";
 
 /**
  * Condições de pagamento da proposta (frente PRO2): à vista com desconto,
  * parcelado (com ou sem entrada) e mensal. A página do cliente mostra o valor
  * de cada forma (pelo pacote recomendado, quando há pacotes) e o cliente
  * escolhe no aceite. O valor continua saindo dos itens.
+ *
+ * Frente UXS (30/09): sem Salvar próprio. A seção avisa a barra do pé do
+ * Contexto quando muda (comparando com a base da edição) e o Salvar único
+ * leva o pagamento junto; versão nova só atualiza a seção limpa.
  */
 
 type OpcaoNaTela = { ativo: boolean; desconto: string; parcelas: string; entrada: string; observacao: string };
@@ -44,49 +45,44 @@ function daTela(e: Estado): OpcaoDePagamento[] {
 }
 
 export default function PagamentoDaProposta({ proposta }: { proposta: Proposta }) {
-  const mesa = useMesa();
-  const qc = useQueryClient();
-  const avisarErro = useAvisarErro();
+  // Base da edição: as formas de quando a seção carregou ou foi salva por último.
+  const [base, setBase] = useState<{ versao: number; opcoes: OpcaoDePagamento[] }>(() => ({ versao: proposta.versao, opcoes: proposta.pagamento.opcoes }));
   const [estado, setEstado] = useState<Estado>(() => paraTela(proposta.pagamento.opcoes));
-  const [salvando, setSalvando] = useState(false);
-  useEffect(() => setEstado(paraTela(proposta.pagamento.opcoes)), [proposta.id, proposta.versao]);
 
   const opcoes = daTela(estado);
-  const mudou = JSON.stringify(opcoes) !== JSON.stringify(proposta.pagamento.opcoes);
+  const mudou = JSON.stringify(opcoes) !== JSON.stringify(base.opcoes);
   const pacotes = resumoDosPacotes(proposta.itens, proposta.pacotes);
-  const base = pacotes.length ? (pacotes.find((p) => p.destaque) || pacotes[1]).totais : totaisDosItens(proposta.itens);
+  const totaisDaBase = pacotes.length ? (pacotes.find((p) => p.destaque) || pacotes[1]).totais : totaisDosItens(proposta.itens);
   const m = (t: TipoDePagamento, c: Partial<OpcaoNaTela>) => setEstado((e) => ({ ...e, [t]: { ...e[t], ...c } }));
-
-  const salvar = async () => {
-    setSalvando(true);
-    try {
-      const d = await chamarProposta<any>("salvar", { proposta_id: proposta.id, versao_base: proposta.versao, pagamento: { opcoes } });
-      aplicarNaLista(qc, mesa.clientId, d && d.proposta);
-      toast.success("Formas de pagamento salvas.");
-    } catch (e) {
-      avisarErro(e, "O pagamento não foi salvo");
-    } finally {
-      setSalvando(false);
-    }
+  const recarregar = (p: Proposta) => {
+    setBase({ versao: p.versao, opcoes: p.pagamento.opcoes });
+    setEstado(paraTela(p.pagamento.opcoes));
   };
+  // Versão nova (agente, anexo, outra pessoa): a seção limpa segue o banco; a suja fica com o que a pessoa escolheu.
+  useEffect(() => {
+    if (!mudou && base.versao !== proposta.versao) recarregar(proposta);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proposta.id, proposta.versao, mudou]);
+  useSecaoSuja("pagamento", mudou, {
+    rotulo: "Pagamento",
+    chaves: ["pagamento"],
+    campos: () => ({ pagamento: { opcoes } }),
+    depois: recarregar,
+    descartar: () => recarregar(proposta),
+  });
 
   return (
     <Secao
       titulo="Pagamento"
       divisoria
       descricao={`${opcoes.length ? `${opcoes.length} forma(s)` : "Só o texto das condições"}${mudou ? " · não salvo" : ""}`}
-      ajuda="As formas de pagamento aparecem com o valor calculado na página do cliente, que escolhe uma no aceite. O desconto vale só para o valor único; o mensal segue mensal. Sem nenhuma forma ligada, vale o texto das condições do Rascunho."
+      ajuda="As formas de pagamento aparecem com o valor calculado na página do cliente, que escolhe uma no aceite. O desconto vale só para o valor único; o mensal segue mensal. Sem nenhuma forma ligada, vale o texto das condições do Rascunho. O Salvar fica na barra do pé da etapa."
       acao={
-        <>
-          {!opcoes.length && (
-            <button type="button" className={botao.discreto} onClick={() => setEstado(paraTela(PAGAMENTO_SUGERIDO.opcoes))}>
-              Usar o sugerido
-            </button>
-          )}
-          <button type="button" className={botao.primario} onClick={() => void salvar()} disabled={!mudou || salvando || proposta.status === "aceita"}>
-            {salvando ? "Salvando..." : "Salvar"}
+        !opcoes.length ? (
+          <button type="button" className={botao.discreto} onClick={() => setEstado(paraTela(PAGAMENTO_SUGERIDO.opcoes))}>
+            Usar o sugerido
           </button>
-        </>
+        ) : undefined
       }
     >
       <ul className={juntar(lista.aberta, "space-y-3")} aria-label="Formas de pagamento">
@@ -121,7 +117,7 @@ export default function PagamentoDaProposta({ proposta }: { proposta: Proposta }
                   </CampoDeFormulario>
                 </div>
               )}
-              {op && base.itens > 0 && <p className={juntar(texto.auxiliar, "mt-1 tabular-nums")}>{textoDaOpcao(op, base)}</p>}
+              {op && totaisDaBase.itens > 0 && <p className={juntar(texto.auxiliar, "mt-1 tabular-nums")}>{textoDaOpcao(op, totaisDaBase)}</p>}
             </li>
           );
         })}

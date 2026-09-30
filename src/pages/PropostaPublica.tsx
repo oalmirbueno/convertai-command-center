@@ -37,8 +37,17 @@ import { ehNivel, normalizarPagamento, resumoDosPacotes, textoDaOpcao, type Nive
 const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/proposta-publica`;
 const CHAVE_API = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
 const PASSO_MS = 15_000;
+/** Função lenta: depois disto, a tela oferece "Tentar de novo" (a resposta que chegar depois ainda abre). */
+const ESPERA_MAXIMA_MS = 20_000;
 
-type Fase = "lendo" | "invalido" | "pronto";
+/**
+ * lendo, pronto; invalido = o servidor disse que o link não existe
+ * (error "link_invalido"); falhou = qualquer outra coisa (rede do celular,
+ * função lenta ou fora do ar, 5xx, 401, resposta sem proposta). O 404 do
+ * gateway (função não publicada) é falha nossa, não link ruim: por isso a
+ * decisão é pelo corpo, não só pelo status.
+ */
+type Fase = "lendo" | "invalido" | "falhou" | "pronto";
 
 type Publica = {
   id: string;
@@ -234,21 +243,35 @@ export default function PropostaPublica() {
   const [agencia, setAgencia] = useState<Agencia | null>(null);
   const [aceiteFeito, setAceiteFeito] = useState<{ nome: string; em: string } | null>(null);
   const [pacote, setPacote] = useState<NivelDoPacote | null>(null);
+  // "Tentar de novo" soma aqui e o efeito lê de novo.
+  const [tentativa, setTentativa] = useState(0);
   const segundos = useRef(0);
   const animar = useEntradaSuave(fase === "pronto");
 
   useEffect(() => {
+    // Formato do token conferido antes, sem ir ao servidor.
     if (!/^[0-9a-f]{32,128}$/i.test(token)) {
       setFase("invalido");
       return;
     }
     let vivo = true;
+    setFase("lendo");
+    // Sem AbortController (Safari 11): passado o tempo, oferece tentar de novo; a resposta que chegar depois ainda abre.
+    const relogio = window.setTimeout(() => {
+      if (vivo) setFase((f) => (f === "lendo" ? "falhou" : f));
+    }, ESPERA_MAXIMA_MS);
     fetch(`${FN_URL}?token=${encodeURIComponent(token)}`, { headers: { apikey: CHAVE_API } })
       .then((r) => r.json())
       .then((d) => {
         if (!vivo) return;
-        if (!d || d.error || !d.proposta) {
+        window.clearTimeout(relogio);
+        if (d && d.error === "link_invalido") {
+          setAgencia(d.agencia && typeof d.agencia === "object" ? d.agencia : null);
           setFase("invalido");
+          return;
+        }
+        if (!d || d.error || !d.proposta) {
+          setFase("falhou");
           return;
         }
         setP(d.proposta as Publica);
@@ -256,11 +279,16 @@ export default function PropostaPublica() {
         setAgencia(d.agencia && typeof d.agencia === "object" ? d.agencia : null);
         setFase("pronto");
       })
-      .catch(() => vivo && setFase("invalido"));
+      .catch(() => {
+        if (!vivo) return;
+        window.clearTimeout(relogio);
+        setFase("falhou");
+      });
     return () => {
       vivo = false;
+      window.clearTimeout(relogio);
     };
-  }, [token]);
+  }, [token, tentativa]);
 
   // Rastreio: abertura e tempo de leitura com a página à vista.
   useEffect(() => {
@@ -294,7 +322,28 @@ export default function PropostaPublica() {
     );
   }
 
+  if (fase === "falhou") {
+    // Rede ou servidor: o link pode estar bom. Nada de "peça o link novo" aqui.
+    return (
+      <div className="pd" style={{ minHeight: "100vh" }}>
+        <div className="pd-pagina pd-escuro">
+          <div className="pd-interno">
+            <MarcaAceleriq altura={28} />
+            <h2 className="pd-titulo" style={{ marginTop: 32 }}>
+              Não abriu agora.
+            </h2>
+            <p className="pd-sub">Confira a internet e tente de novo.</p>
+            <button type="button" className="pd-botao" style={{ marginTop: 24 }} onClick={() => setTentativa((n) => n + 1)}>
+              Tentar de novo
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (fase === "invalido" || !p) {
+    const whatsDoLink = agencia ? whatsDaAgencia(agencia.whatsapp) : "";
     return (
       <div className="pd" style={{ minHeight: "100vh" }}>
         <div className="pd-pagina pd-escuro">
@@ -304,6 +353,12 @@ export default function PropostaPublica() {
               Link indisponível
             </h2>
             <p className="pd-sub">A proposta pode ter sido atualizada. Peça o link novo à Aceleriq.</p>
+            {whatsDoLink ? (
+              // Texto fixo: sem token nem dado pessoal no endereço.
+              <a className="pd-botao-secundario" style={{ display: "inline-block", marginTop: 24, textDecoration: "none" }} href={`https://wa.me/${whatsDoLink}?text=${encodeURIComponent("Oi, o link da minha proposta não abriu.")}`} target="_blank" rel="noopener noreferrer">
+                Falar com a Aceleriq
+              </a>
+            ) : null}
           </div>
         </div>
       </div>

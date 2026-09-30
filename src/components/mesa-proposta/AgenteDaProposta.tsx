@@ -16,6 +16,7 @@ import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import { botao, campoTexto, conversa, juntar } from "@/components/sistema/estilos";
 import { CHAVES, relerTudo } from "./propostaApi";
+import { tiraOLink } from "../../../supabase/functions/_shared/proposta-comercial";
 
 /**
  * O estrategista comercial da Mesa Proposta, fixo ao lado das etapas. A
@@ -52,13 +53,19 @@ const CAPACIDADES = [
 type Mensagem = { id: string | null; papel: "usuario" | "agente" | "sistema"; conteudo: string; anexos: unknown[]; custo_usd: number | null; nova?: boolean; aviso?: string | null; local?: string };
 type ArquivoPronto = { id: string; nome: string; tipo: string; texto: string; tamanho: number };
 
+/** Ações do agente que só mexem no contexto (não no que o cliente vê): não tiram o link. */
+const OPERACOES_SO_DE_CONTEXTO = ["resumir_reuniao"];
+
 export default function AgenteDaProposta({
   propostaId,
+  statusDaProposta = null,
   modeloId,
   rascunho,
   onRascunho,
 }: {
   propostaId: string | null;
+  /** Frente UXS: numa proposta enviada, o cartão de Confirmar avisa que a ação tira o link do cliente. */
+  statusDaProposta?: string | null;
   modeloId: string | null;
   rascunho: string;
   onRascunho: (v: string) => void;
@@ -280,11 +287,15 @@ export default function AgenteDaProposta({
                       acao={a}
                       recemFeita={!!m.nova}
                       titulo="O estrategista vai fazer na proposta"
-                      observacao={
+                      observacao={`${
                         typeof a.custo_estimado_usd === "number" && a.custo_estimado_usd > 0
                           ? `Custo estimado: ${usd(a.custo_estimado_usd)} da carteira. Desfazer volta a versão anterior; o gasto não volta.`
                           : "Sem custo. Dá para desfazer."
-                      }
+                      }${
+                        statusDaProposta && !a.executada_em && tiraOLink(statusDaProposta, a.itens.some((i) => OPERACOES_SO_DE_CONTEXTO.indexOf(i.operacao) < 0) ? ["conteudo"] : [])
+                          ? " Confirmar tira o link atual do cliente; depois é só Enviar de novo."
+                          : ""
+                      }`}
                       onPedido={(p) => chamarAcaoDoAgente("mesa-proposta", String(m.id), a.id, p)}
                       onFeito={(p) => {
                         if (p === "descartar") return;

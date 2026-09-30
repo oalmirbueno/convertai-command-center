@@ -1,23 +1,28 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, History, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ExternalLink, History, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
-import { CampoDeFormulario } from "@/components/sistema/Formulario";
-import { EstadoVazio } from "@/components/sistema/Estados";
-import { botao, campo, juntar, lista, texto } from "@/components/sistema/estilos";
-import { conteudoSemNumeroInventado, dataCurta } from "../../../supabase/functions/_shared/proposta-modelo";
+import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
+import { botao, juntar, lista, texto } from "@/components/sistema/estilos";
+import { conteudoSemNumeroInventado, dataCurta, dominio } from "../../../supabase/functions/_shared/proposta-modelo";
 import { aplicarNaLista, chamarProposta, useVersoes, type ConferenciaDoDado, type Proposta } from "./propostaApi";
+import { useConfirmarTirarOLink, useResolverPendencia } from "./navegacaoDaProposta";
 import CompararVersoes from "./CompararVersoes";
 
 /**
  * Etapa 3, Revisão: o que falta (bloqueia o envio ou só avisa), número sem
  * origem no material (aviso, a equipe decide), a conferência de cada dado de
  * mercado contra o trecho da fonte (Jev), a revisão da proposta inteira
- * (Jev hoje; o conselho de agentes da frente CNS entra no mesmo botão), as
- * versões com Restaurar e "salvar como modelo". Tudo é aviso: sem laço.
+ * (Jev hoje; o conselho de agentes da frente CNS entra no mesmo botão) e o
+ * histórico com Comparar e Restaurar. Tudo é aviso: sem laço.
+ *
+ * Frente UXS (30/09): cada pendência tem "Resolver" (leva ao lugar que
+ * conserta); cada fonte do mercado abre em um clique; Versões e Comparar
+ * viraram o Histórico (recolhido); Restaurar tem Desfazer; "Salvar como
+ * modelo" mora no menu do Envio.
  */
 
 const VEREDITO: Record<ConferenciaDoDado["veredito"], string> = {
@@ -42,6 +47,9 @@ const ORIGEM: Record<string, string> = {
   resumo: "resumo da reunião",
 };
 
+const URL_DA_FONTE = /^https?:\/\//i;
+const pequeno = juntar(botao.discreto, "h-8 px-2 text-[12px]");
+
 /** Material do cliente que vale como origem de número (o mesmo critério do servidor, na parte que a tela vê). */
 export function origemNaTela(p: Proposta): string {
   const ctx = p.contexto || {};
@@ -52,17 +60,20 @@ export default function EtapaRevisao({ proposta }: { proposta: Proposta | null }
   const mesa = useMesa();
   const qc = useQueryClient();
   const avisarErro = useAvisarErro();
+  const confirmarTirar = useConfirmarTirarOLink();
+  const resolver = useResolverPendencia(proposta);
   const versoes = useVersoes(proposta ? proposta.id : null);
   const [revisando, setRevisando] = useState(false);
   const [revisao, setRevisao] = useState<{ avisos: string[]; notas: Record<string, number | null> } | null>(null);
-  const [nomeDoModelo, setNomeDoModelo] = useState("");
-  const [padrao, setPadrao] = useState(false);
-  const [salvandoModelo, setSalvandoModelo] = useState(false);
+  const [comparar, setComparar] = useState<number | null>(null);
   const semOrigem = useMemo(() => (proposta ? conteudoSemNumeroInventado(proposta.conteudo, origemNaTela(proposta)).tiradas : []), [proposta]);
 
   if (!proposta) return <EstadoVazio titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma no Contexto." />;
   const conferencia = proposta.contexto.conferencia || [];
   const ultima = revisao || (proposta.contexto.revisao ? { avisos: proposta.contexto.revisao.avisos || [], notas: proposta.contexto.revisao.notas || {} } : null);
+  const listaDeVersoes = versoes.data || [];
+  // A versão escolhida sumiu da lista (restaurou, releu): a comparação zera.
+  const escolhida = comparar !== null && listaDeVersoes.some((v) => v.versao === comparar) ? comparar : null;
 
   const revisar = async () => {
     setRevisando(true);
@@ -78,42 +89,47 @@ export default function EtapaRevisao({ proposta }: { proposta: Proposta | null }
   };
 
   const restaurar = async (v: number) => {
+    // Numa proposta enviada, restaurar tira o link do cliente: pergunta antes.
+    if (!(await confirmarTirar(proposta.status, ["conteudo", "itens"], "Restaurar"))) return;
+    const antes = proposta.versao;
+    const voltouParaRascunho = proposta.status !== "rascunho";
     try {
       const d = await chamarProposta<any>("versao_restaurar", { proposta_id: proposta.id, versao: v });
       aplicarNaLista(qc, mesa.clientId, d && d.proposta);
-      toast.success(`Versão ${v} restaurada. A atual ficou no histórico.`);
+      // Desfazer devolve o texto de antes; o link não volta (a proposta fica em rascunho).
+      toast.success(`Versão ${v} restaurada. A atual ficou no histórico.`, {
+        description: voltouParaRascunho ? "Voltou para rascunho: o link enviado parou de valer." : undefined,
+        duration: 10_000,
+        action: {
+          label: "Desfazer",
+          onClick: () => {
+            chamarProposta<any>("versao_restaurar", { proposta_id: proposta.id, versao: antes })
+              .then((r) => aplicarNaLista(qc, mesa.clientId, r && r.proposta))
+              .catch((e) => avisarErro(e, "Não foi possível desfazer"));
+          },
+        },
+      });
     } catch (e) {
       avisarErro(e, "A versão não foi restaurada");
     }
   };
 
-  const salvarModelo = async () => {
-    setSalvandoModelo(true);
-    try {
-      await chamarProposta("modelo_salvar", { proposta_id: proposta.id, nome: nomeDoModelo.trim(), padrao });
-      void qc.invalidateQueries({ queryKey: ["mesa-proposta", "modelos"] });
-      setNomeDoModelo("");
-      toast.success("Modelo salvo. Ele aparece em Nova proposta.");
-    } catch (e) {
-      avisarErro(e, "O modelo não foi salvo");
-    } finally {
-      setSalvandoModelo(false);
-    }
-  };
-
+  const bloqueiam = proposta.pendencias.filter((p) => p.bloqueia).length;
   return (
     <div className="min-w-0 space-y-6" data-etapa-proposta="revisao">
-      <Secao
-        titulo="O que falta"
-        descricao={proposta.pendencias.length ? `${proposta.pendencias.filter((p) => p.bloqueia).length} bloqueiam o envio` : "Nada pendente"}
-      >
+      <Secao titulo="O que falta" descricao={proposta.pendencias.length ? `${bloqueiam} bloqueiam o envio` : "Nada pendente"}>
         {proposta.pendencias.length ? (
-          <ul className={juntar(lista.aberta, lista.divisoria)}>
+          <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="O que falta">
             {proposta.pendencias.map((p) => (
               <li key={p.chave} className={lista.linha}>
                 <AlertTriangle className={juntar("mr-2 h-4 w-4 shrink-0", p.bloqueia ? "text-destructive" : "text-warning")} aria-hidden="true" />
                 <span className={juntar(texto.corpo, "min-w-0 flex-1")}>{p.texto}</span>
-                {p.bloqueia && <span className={juntar(texto.auxiliar, "ml-3 shrink-0")}>bloqueia</span>}
+                {p.bloqueia && <span className={juntar(texto.auxiliar, "ml-3 hidden shrink-0 sm:inline")}>bloqueia</span>}
+                {resolver && (
+                  <button type="button" className={juntar(pequeno, "ml-2")} onClick={() => resolver(p.chave)} aria-label={`Resolver: ${p.texto}`}>
+                    Resolver
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -145,13 +161,19 @@ export default function EtapaRevisao({ proposta }: { proposta: Proposta | null }
 
       <Secao titulo="Fontes do mercado" divisoria descricao={conferencia.length ? `${conferencia.filter((c) => c.veredito === "confere").length} de ${conferencia.length} conferem` : "Sem dado de mercado"}>
         {conferencia.length ? (
-          <ul className={juntar(lista.aberta, lista.divisoria)}>
+          <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Fontes do mercado">
             {conferencia.map((c, i) => (
               <li key={`${c.url}-${i}`} className={lista.linha}>
                 <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>
                   {c.valor} · {c.rotulo}
                 </span>
                 <span className={juntar(texto.auxiliar, "ml-3 shrink-0", c.veredito === "contradiz" && "text-destructive", c.veredito === "confere" && "text-success")}>{VEREDITO[c.veredito] || c.veredito}</span>
+                {/* A conferência mora no banco: a tela só abre endereço http(s). */}
+                {URL_DA_FONTE.test(c.url || "") && (
+                  <a href={c.url} target="_blank" rel="noopener noreferrer" className={juntar(botao.icone, "ml-1")} aria-label={`Abrir a fonte: ${c.rotulo}`} title={dominio(c.url)}>
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                )}
               </li>
             ))}
           </ul>
@@ -191,44 +213,50 @@ export default function EtapaRevisao({ proposta }: { proposta: Proposta | null }
         )}
       </Secao>
 
-      <Secao titulo="Versões" divisoria descricao={`Atual: ${proposta.versao}`}>
-        {(versoes.data || []).length ? (
-          <ul className={juntar(lista.aberta, lista.divisoria)}>
-            {(versoes.data || []).map((v) => (
-              <li key={v.versao} className={lista.linha}>
-                <History className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                <span className={juntar(texto.corpo, "shrink-0 tabular-nums")}>v{v.versao}</span>
-                <span className={juntar(texto.auxiliar, "ml-3 min-w-0 flex-1 truncate")}>
-                  {ORIGEM[v.origem] || v.origem}
-                  {v.nota ? `: ${v.nota}` : ""}
-                </span>
-                <span className={juntar(texto.auxiliar, "ml-3 hidden shrink-0 sm:inline")}>{dataCurta(v.criado_em.slice(0, 10))}</span>
-                <button type="button" className={juntar(botao.discreto, "ml-2 h-8 px-2 text-[12px]")} onClick={() => void restaurar(v.versao)} disabled={proposta.status === "aceita"}>
-                  Restaurar
-                </button>
-              </li>
-            ))}
-          </ul>
+      <Secao
+        titulo="Histórico"
+        divisoria
+        recolhidaDeInicio
+        descricao={versoes.data ? `Atual: v${proposta.versao} · ${listaDeVersoes.length} anteriores` : `Atual: v${proposta.versao}`}
+        ajuda="Cada gravação guarda a versão de antes. Comparar mostra, logo abaixo da lista, o que mudou daquela versão até a atual, campo a campo e nos itens. Restaurar volta àquela versão (a atual fica no histórico) e tem Desfazer."
+      >
+        {versoes.isLoading ? (
+          <Carregando forma="lista" linhas={3} rotulo="Lendo as versões" />
+        ) : versoes.isError && !versoes.data ? (
+          <EstadoDeErro
+            titulo="As versões não foram lidas agora."
+            acao={
+              <button type="button" className={botao.secundario} onClick={() => void versoes.refetch()}>
+                Tentar de novo
+              </button>
+            }
+          />
+        ) : listaDeVersoes.length ? (
+          <>
+            <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Versões anteriores">
+              {listaDeVersoes.map((v) => (
+                <li key={v.versao} className={juntar(lista.linha, escolhida === v.versao && lista.destaque)}>
+                  <History className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <span className={juntar(texto.corpo, "shrink-0 tabular-nums")}>v{v.versao}</span>
+                  <span className={juntar(texto.auxiliar, "ml-3 min-w-0 flex-1 truncate")}>
+                    {ORIGEM[v.origem] || v.origem}
+                    {v.nota ? `: ${v.nota}` : ""}
+                  </span>
+                  <span className={juntar(texto.auxiliar, "ml-3 hidden shrink-0 sm:inline")}>{dataCurta(v.criado_em.slice(0, 10))}</span>
+                  <button type="button" className={juntar(pequeno, "ml-2")} aria-pressed={escolhida === v.versao} onClick={() => setComparar(escolhida === v.versao ? null : v.versao)} aria-label={`Comparar a v${v.versao} com a atual`}>
+                    Comparar
+                  </button>
+                  <button type="button" className={pequeno} onClick={() => void restaurar(v.versao)} disabled={proposta.status === "aceita"} aria-label={`Restaurar a v${v.versao}`}>
+                    Restaurar
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <CompararVersoes proposta={proposta} versao={escolhida} />
+          </>
         ) : (
           <p className={texto.auxiliar}>Sem versões anteriores.</p>
         )}
-      </Secao>
-
-      <CompararVersoes key={proposta.id} proposta={proposta} versoes={versoes.data || []} />
-
-      <Secao titulo="Salvar como modelo" divisoria ajuda="Guarda a estrutura, o processo, as condições e os próximos passos desta proposta (sem o texto do cliente) para as próximas.">
-        <div className="grid min-w-0 items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-          <CampoDeFormulario rotulo="Nome do modelo">
-            <input value={nomeDoModelo} onChange={(e) => setNomeDoModelo(e.target.value)} maxLength={80} className={campo} placeholder="Ex.: Identidade visual" />
-          </CampoDeFormulario>
-          <label className={juntar(texto.corpo, "inline-flex h-9 items-center")}>
-            <input type="checkbox" className="mr-2" checked={padrao} onChange={(e) => setPadrao(e.target.checked)} />
-            Padrão
-          </label>
-          <button type="button" className={botao.secundario} onClick={() => void salvarModelo()} disabled={nomeDoModelo.trim().length < 3 || salvandoModelo}>
-            {salvandoModelo ? "Salvando..." : "Salvar modelo"}
-          </button>
-        </div>
       </Secao>
     </div>
   );
