@@ -1657,6 +1657,14 @@
       "remote_name": "selo_da_campanha",
       "remote_statements_sha256": "2435a583e9db13f856807ea5c116028c82df5258f3cb70df77ed5395ee6b0a09",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930130000",
+      "path": "supabase/migrations/20260930130000_proposta_comercial_evolucao.sql",
+      "local_sha256": "99105afd202164479e4baf8582299534403ba797f1f874c2bdbb69e56bd80b36",
+      "remote_name": "proposta_comercial_evolucao",
+      "remote_statements_sha256": "3c7cdbe4e7e7ded8cf38a3b9a6f59dd292e18d6dbf4c82962ca605fcca8592df",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
