@@ -504,7 +504,8 @@ export function catalogoDosEspecialistas(origem: string) {
     presets: PRESETS.map((id) => {
       const p = PRESETS_DO_CONSELHO[id];
       const permitidos = especialistasDaOrigem(origem).map((e) => e.id);
-      return { id: p.id, nome: p.nome, especialistas: p.especialistas.filter((x) => permitidos.indexOf(x) >= 0), criterios: p.criterios, modo: p.modo, rodadas: p.rodadas, tema: p.tema, pergunta: p.pergunta };
+      // origem: a Sala aplica sozinha o preset da mesma origem (frente UXS, CNS-01).
+      return { id: p.id, nome: p.nome, origem: p.origem, especialistas: p.especialistas.filter((x) => permitidos.indexOf(x) >= 0), criterios: p.criterios, modo: p.modo, rodadas: p.rodadas, tema: p.tema, pergunta: p.pergunta };
     }),
     modos: MODOS_DO_CONSELHO.map((m) => ({ id: m, rotulo: MODOS[m].rotulo, rodadas: MODOS[m].rodadas })),
   };

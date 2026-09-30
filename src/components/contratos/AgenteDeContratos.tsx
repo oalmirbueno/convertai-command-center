@@ -3,19 +3,22 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle, FileSignature, Loader2, Send } from "lucide-react";
 import { chamarFuncao, lerCatalogo, modeloDoPapel, textoDoErro, usd } from "@/lib/mesa/api";
-import { SeletorDeModelo } from "@/components/mesa/Seletores";
-import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import CartaoDeAcao, { CapacidadesDoAgente, OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import ModeloDoAgente from "@/components/agentes/ModeloDoAgente";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente, type AcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import CampoDoAgente, { focarNoFim } from "@/components/sistema/CampoDoAgente";
+import { BotaoNovaConversa, useNovaConversa } from "@/components/sistema/NovaConversa";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
-import { botao, campoTexto, conversa, juntar, texto } from "@/components/sistema/estilos";
+import { botao, conversa, juntar, texto } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { CHAVES_DOS_CONTRATOS } from "@/lib/contratos/api";
 import { PartesDoDiff } from "./DiffDeTexto";
 import type { ParteDoDiff } from "../../../supabase/functions/_shared/contrato-modelo";
+import { TAMANHOS_DOS_CONTRATOS } from "../../../supabase/functions/_shared/contratos-tamanhos";
 
 /**
  * O agente de contratos, fixo ao lado da lista (frente CON, 30/09). O dono
@@ -23,13 +26,13 @@ import type { ParteDoDiff } from "../../../supabase/functions/_shared/contrato-m
  * rascunho, preenche o que foi dito e pergunta o que falta. Criar, preencher,
  * incluir serviço e voltar cláusula ao modelo vão direto (com Desfazer)
  * quando o pedido é claro. Reescrever cláusula NUNCA vai direto: o cartão
- * mostra a diferença, pede Confirmar e tem Desfazer. Ele não assina, não
- * congela e não envia nada.
+ * mostra a diferença, pede Confirmar e tem Desfazer. Ele não assina e não
+ * envia nada.
  */
 
 export const ATALHOS_DO_AGENTE_DE_CONTRATOS = [
   { rotulo: "Contrato de social", texto: "Contrato de social media: 8 carrosséis e 4 reels por mês no Instagram, R$ 3.500 por mês, 12 meses." },
-  { rotulo: "O que falta?", texto: "O que falta para congelar este contrato?" },
+  { rotulo: "O que falta?", texto: "O que falta para assinar este contrato?" },
   { rotulo: "Site com cessão", texto: "Inclui a criação do site institucional, com cessão dos direitos após o pagamento." },
   { rotulo: "Mudar uma cláusula", texto: "Na cláusula de revisões, deixe claro que ajustes de texto pequenos não contam como rodada." },
   { rotulo: "Puxar pelo CNPJ", texto: "Puxa os dados do cliente pelo CNPJ " },
@@ -40,13 +43,16 @@ export const ATALHOS_DO_AGENTE_DE_CONTRATOS = [
 const CAPACIDADES = [
   "montar o contrato pelos serviços que você descrever",
   "preencher valores, prazos e dados que você disser",
-  "perguntar o que falta para congelar",
+  "perguntar o que falta para assinar",
   "incluir ou tirar serviços",
   "reescrever uma cláusula, sempre com a diferença e Confirmar",
   "puxar os dados do cliente pelo CNPJ (Receita)",
   "criar aditivo de contrato assinado e preparar a renovação",
   "aprender o que você ensinar (\"sempre\", \"nunca\")",
 ];
+
+/** Tamanho de uma mensagem ao agente (a estimativa do chip do modelo). */
+const PARTES_DA_CONVERSA = (modeloId: string) => [{ modeloId, tipo: "texto" as const, tokensEntrada: TAMANHOS_DOS_CONTRATOS.conversa.entrada, tokensSaida: TAMANHOS_DOS_CONTRATOS.conversa.saida }];
 
 type Mensagem = { id: string | null; papel: "usuario" | "agente" | "sistema"; conteudo: string; anexos: unknown[]; custo_usd: number | null; nova?: boolean; aviso?: string | null; local?: string };
 
@@ -70,6 +76,23 @@ export default function AgenteDeContratos({ clientId, contratoId, aoAbrirContrat
   const catalogo = useQuery({ queryKey: ["mesa", "catalogo"], queryFn: lerCatalogo, staleTime: 30 * 60_000 });
   const modelo = modeloDoPapel(catalogo.data || [], "contrato", modeloEscolhido || null);
   const lista = useRef<HTMLDivElement | null>(null);
+  const campo = useRef<HTMLTextAreaElement | null>(null);
+  const novaConversa = useNovaConversa<Mensagem>({
+    chave: `${clientId}:${contratoId || ""}`,
+    enviando,
+    mensagens,
+    conversaId,
+    limpar: () => {
+      setMensagens([]);
+      setConversaId(null);
+      setNova(true);
+    },
+    restaurar: (c) => {
+      setMensagens(c.mensagens);
+      setConversaId(c.conversaId);
+      setNova(false);
+    },
+  });
 
   useEffect(() => {
     let vivo = true;
@@ -142,40 +165,47 @@ export default function AgenteDeContratos({ clientId, contratoId, aoAbrirContrat
         descricao={contratoId ? "Sobre o contrato aberto" : "Sobre os contratos do cliente"}
         acoes={
           <>
-            {mensagens.length > 0 && (
-              <button type="button" className={juntar(botao.discreto, "h-8 px-2 text-[12px]")} onClick={() => { setMensagens([]); setConversaId(null); setNova(true); }}>
-                Nova conversa
-              </button>
-            )}
+            {mensagens.length > 0 && <BotaoNovaConversa onClick={novaConversa} desativado={enviando} />}
             <AjudaRecolhida rotulo="Como o agente de contratos funciona">
-              Explique o serviço do jeito que falaria. Ele escolhe os blocos, cria o rascunho, preenche o que você disse e pergunta o que falta. Mudar o texto de uma cláusula sempre vem num cartão com a diferença e o Confirmar. Assinar, congelar e enviar são com você, na tela.
+              Explique o serviço do jeito que falaria. Ele escolhe os blocos, cria o rascunho, preenche o que você disse e pergunta o que falta. Mudar o texto de uma cláusula sempre vem num cartão com a diferença e o Confirmar. Assinar pela agência e enviar são com você, na tela.
+              <CapacidadesDoAgente capacidades={CAPACIDADES} />
             </AjudaRecolhida>
           </>
-        }
-        topo={
-          <SeletorDeModelo catalogo={catalogo.data || []} tipo="texto" valor={modelo ? modelo.id : ""} onChange={setModeloEscolhido} rotulo="Modelo do agente" disabled={enviando} />
         }
         rotuloDasMensagens="Conversa com o agente de contratos"
         refDasMensagens={lista}
         compositor={
           <>
-            <OQuePossoFazer capacidades={CAPACIDADES} atalhos={ATALHOS_DO_AGENTE_DE_CONTRATOS} onAtalho={(t) => setRascunho(t)} />
-            <textarea
-              value={rascunho}
-              onChange={(e) => setRascunho(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void enviar();
-                }
+            <OQuePossoFazer
+              capacidades={CAPACIDADES}
+              mostrarCapacidades={false}
+              atalhos={ATALHOS_DO_AGENTE_DE_CONTRATOS}
+              onAtalho={(t) => {
+                setRascunho(t);
+                focarNoFim(campo, t);
               }}
-              rows={2}
+            />
+            <CampoDoAgente
+              ref={campo}
+              valor={rascunho}
+              aoMudar={setRascunho}
+              aoEnviar={() => void enviar()}
               maxLength={4000}
               placeholder="Ex.: contrato de site e marca, R$ 12 mil em 3 vezes"
-              className={juntar(campoTexto, "min-h-[60px] resize-none")}
               aria-label="Mensagem ao agente de contratos"
             />
-            <div className="flex min-w-0 items-center justify-end">
+            <div className="flex min-w-0 items-center justify-between">
+              <div className="mr-2 min-w-0">
+                <ModeloDoAgente
+                  catalogo={catalogo.data || []}
+                  modelo={modelo}
+                  escolhido={modeloEscolhido}
+                  onEscolher={setModeloEscolhido}
+                  partes={PARTES_DA_CONVERSA}
+                  carregando={catalogo.isLoading}
+                  disabled={enviando}
+                />
+              </div>
               <button type="button" className={juntar(botao.primario, "h-9")} onClick={() => void enviar()} disabled={enviando || !rascunho.trim()} aria-label="Enviar ao agente">
                 {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </button>

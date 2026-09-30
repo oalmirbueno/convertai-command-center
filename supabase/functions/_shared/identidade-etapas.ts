@@ -167,6 +167,14 @@ export function progresso(p: ProjetoNaSequencia): { feitas: number; total: numbe
   return { feitas: concluidasValidas(p).length, total: etapasDoProjeto(p).length };
 }
 
+/**
+ * A etapa já fechou? Mesma regra do andamento e do podeAbrir (UXS 30/09): em
+ * projeto de antes da IDV2, a etapa nova atrás de uma já fechada conta como feita.
+ */
+export function etapaFeita(p: ProjetoNaSequencia, etapa: EtapaDaIdentidade): boolean {
+  return concluidasValidas(p).indexOf(etapa) >= 0;
+}
+
 // ------------------------------------------------------------------ o mínimo de cada etapa
 
 const tem = (v: unknown): boolean => {
@@ -264,6 +272,53 @@ export function faltaNaEtapa(etapa: EtapaDaIdentidade, dadosBrutos: unknown): st
     }
   }
   return falta;
+}
+
+/**
+ * Para onde leva cada coisa que falta (UXS 30/09): a etapa, o bloco (a seção
+ * com `data-bloco-da-etapa`) e, quando ajuda, o campo (`data-campo`). O texto
+ * de `faltaNaEtapa` não muda: a tela junta o destino por aqui.
+ * `reserva` é o bloco usado quando o primeiro não está na tela.
+ */
+export type DestinoDoQueFalta = { etapa: EtapaDaIdentidade; bloco?: string; reserva?: string; campo?: string };
+
+const DESTINOS_DO_QUE_FALTA: Record<string, { etapa?: EtapaDaIdentidade; bloco: string; reserva?: string; campo?: string }> = {
+  "O que o negócio faz": { bloco: "marca", campo: "negocio" },
+  "Para quem é a marca": { bloco: "marca", campo: "publico" },
+  "A personalidade da marca (3 a 5 palavras)": { bloco: "marca", campo: "personalidade" },
+  "Ao menos uma referência ou o resumo da pesquisa": { bloco: "resumo" },
+  "O propósito ou a missão": { bloco: "plataforma" },
+  "O arquétipo principal": { bloco: "arquetipo" },
+  "O posicionamento (para quem e o diferencial)": { bloco: "posicionamento" },
+  "O tom de voz (como a marca fala)": { bloco: "tom" },
+  "O nome escolhido (entre os finalistas)": { bloco: "nomes", reserva: "gerar-nomes" },
+  "Os caminhos criativos (2 ou 3)": { bloco: "gerar" },
+  "O caminho escolhido": { bloco: "caminhos" },
+  "A logo principal (arquivo SVG ou PNG)": { bloco: "logos", campo: "logo-principal" },
+  "Ao menos 2 cores na paleta": { bloco: "paleta" },
+  "A família tipográfica dos títulos": { bloco: "tipografia" },
+  "Montar o brandbook (escolha o modelo)": { bloco: "montar", reserva: "versao", campo: "montar" },
+  "Enviar o brandbook para aprovação": { etapa: "guideline", bloco: "versao", reserva: "montar", campo: "enviar" },
+};
+
+/** O destino de um texto do que falta (null: o texto não tem lugar conhecido). */
+export function destinoDoQueFalta(etapa: EtapaDaIdentidade, texto: string): DestinoDoQueFalta | null {
+  const d = DESTINOS_DO_QUE_FALTA[texto];
+  if (!d) return null;
+  return { etapa: d.etapa || etapa, bloco: d.bloco, reserva: d.reserva, campo: d.campo };
+}
+
+/**
+ * O que falta com o destino de cada item. Destino em etapa que o projeto não
+ * tem (Naming na marca existente, por exemplo) sai: a tela nunca oferece pulo
+ * para onde não abre.
+ */
+export function faltaComDestino(etapa: EtapaDaIdentidade, dados: unknown, etapasPossiveis?: EtapaDaIdentidade[]): Array<{ texto: string; destino: DestinoDoQueFalta | null }> {
+  return faltaNaEtapa(etapa, dados).map((texto) => {
+    const destino = destinoDoQueFalta(etapa, texto);
+    const pode = !destino || !etapasPossiveis || etapasPossiveis.indexOf(destino.etapa) >= 0;
+    return { texto, destino: pode ? destino : null };
+  });
 }
 
 /**

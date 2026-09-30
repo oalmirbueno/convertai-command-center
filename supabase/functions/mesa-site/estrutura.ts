@@ -40,7 +40,7 @@ import {
   type TipoDeSite,
   trocarSecaoNoMapa,
 } from "../_shared/site-biblioteca.ts";
-import { normalizarIntegracoes, normalizarSeo } from "../_shared/site-lancamento.ts";
+import { avisosDeLigado, avisosDoSeo, normalizarIntegracoes, normalizarSeo } from "../_shared/site-lancamento.ts";
 import { camposParaRestaurar } from "./modulos/site-versoes.ts";
 import { guardarVersao, lerVersao, listarVersoes } from "./versoes.ts";
 import { camposDoEstilo, editarCopy, normalizarOpcoesDaSecao, novaChaveDoFormulario, sujeitoDoSlot } from "./estrutura-pura.ts";
@@ -180,6 +180,8 @@ async function integracoesSalvar(ctx: ContextoDaEstrutura, ch: ChamadorDaEstrutu
   if (w.numero && !novo.whatsapp.numero) avisos.push("O número do WhatsApp não parece válido (use DDD e número).");
   if (obj(obj(c.integracoes).pixel_meta).id && !novo.pixel_meta.id) avisos.push("O ID do pixel precisa ter só números.");
   if (obj(obj(c.integracoes).ga4).id && !novo.ga4.id) avisos.push("O ID do GA4 começa com G- (ex.: G-ABC123XYZ).");
+  // UXS 30/09: pediu ligado e ficou desligado (sem número ou endereço curto) não é mais silêncio.
+  avisos.push(...avisosDeLigado(c.integracoes, novo));
   const r = await mudarComVersao(ctx, ch, s, { integracoes: novo, pacote_mudou_em: new Date().toISOString() }, "integrações");
   return ctx.json({ site: r.site, avisos, aviso_versao: r.aviso_versao, custo_usd: 0 });
 }
@@ -189,8 +191,10 @@ async function seoSalvar(ctx: ContextoDaEstrutura, ch: ChamadorDaEstrutura, c: R
   const atual = obj(s.seo);
   const pedido = obj(c.seo);
   const seo = normalizarSeo({ ...atual, ...pedido, negocio: { ...obj(atual.negocio), ...obj(pedido.negocio) } });
+  // UXS 30/09: a linha recusada (horário, e-mail, telefone, rede sem https) volta como aviso, citada.
+  const avisos = avisosDoSeo(pedido, seo);
   const r = await mudarComVersao(ctx, ch, s, { seo, pacote_mudou_em: new Date().toISOString() }, "SEO");
-  return ctx.json({ site: r.site, aviso_versao: r.aviso_versao, custo_usd: 0 });
+  return ctx.json({ site: r.site, avisos, aviso_versao: r.aviso_versao, custo_usd: 0 });
 }
 
 // ------------------------------------------------------------------ copy por seção

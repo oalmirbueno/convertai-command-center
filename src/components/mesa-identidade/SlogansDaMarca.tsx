@@ -7,20 +7,22 @@ import Secao from "@/components/sistema/Secao";
 import { botao, campo, juntar, lista, texto } from "@/components/sistema/estilos";
 import { TIPOS_DE_SLOGAN, type SloganDaMarca } from "../../../supabase/functions/mesa-identidade/modulos/naming";
 import { chamarIdentidade, type ProjetoDeIdentidade } from "./identidadeApi";
-import { Pastilha, partesDoCusto, SeletorDoModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
+import { Pastilha, partesDoCusto, RotuloComModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
 
 const rotuloDoTipo = (t: string) => (TIPOS_DE_SLOGAN.filter((x) => x.valor === t)[0] || { rotulo: t }).rotulo;
 
 /**
  * Slogan e tagline (IDV2): frases a partir da estratégia (IA, custo antes),
  * ranqueadas pelo Jev contra o posicionamento e o tom. A escolhida vira o
- * slogan do brandbook; dá para escrever a própria.
+ * slogan do brandbook; dá para escrever a própria. UXS 30/09: o modelo é o do
+ * cabeçalho da etapa (o botão mostra o nome) e o pedido opcional fica dentro
+ * da seção, não na linha do título.
  */
 export default function SlogansDaMarca() {
   const mesa = useMesa();
   const { projeto, guardar } = useProjetoDaMesa();
   const avisarErro = useAvisarErro();
-  const [modeloId, setModeloId] = useModeloDaAcao("naming");
+  const [modeloId] = useModeloDaAcao("naming");
   const naming = (projeto.dados.naming || {}) as { slogans?: SloganDaMarca[]; slogan?: string | null; aviso_slogans?: string | null };
   const slogans = Array.isArray(naming.slogans) ? naming.slogans : [];
   const [pedido, setPedido] = useState("");
@@ -49,10 +51,8 @@ export default function SlogansDaMarca() {
       ajuda="As frases saem da estratégia (posicionamento, tom e arquétipo). O ranking é do Jev, só como aviso: quem escolhe é a equipe. A escolhida entra no brandbook e na apresentação."
       acao={
         <>
-          <input className={juntar(campo, "m-1 h-8 w-56 text-[12px]")} value={pedido} maxLength={400} placeholder="Pedido (opcional)" onChange={(e) => setPedido(e.target.value)} aria-label="Pedido para as frases" />
-          <SeletorDoModelo papel="naming" valor={modeloId} onEscolher={setModeloId} />
           <BotaoComCusto
-            rotulo={slogans.length ? "Gerar de novo" : "Gerar frases"}
+            rotulo={<RotuloComModelo rotulo={slogans.length ? "Gerar de novo" : "Gerar frases"} papel="naming" modeloId={modeloId} />}
             titulo="Slogans e taglines"
             partes={() => partesDoCusto(mesa.catalogo, "slogans", modeloId)}
             executar={() => chamarIdentidade<{ projeto: ProjetoDeIdentidade; aviso_jev: string | null }>("slogans_gerar", { projeto_id: projeto.id, modelo_id: modeloId || undefined, pedido: pedido.trim() || undefined })}
@@ -65,6 +65,7 @@ export default function SlogansDaMarca() {
         </>
       }
     >
+      <input className={juntar(campo, "mb-3")} value={pedido} maxLength={400} placeholder="Pedido para as frases (opcional)" onChange={(e) => setPedido(e.target.value)} aria-label="Pedido para as frases" />
       {naming.aviso_slogans && <p className={juntar(texto.auxiliar, "mb-2 text-warning")}>{naming.aviso_slogans}</p>}
       {slogans.length > 0 && (
         <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Frases da marca">

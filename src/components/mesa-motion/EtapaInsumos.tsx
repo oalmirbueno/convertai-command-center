@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, ImagePlus, Loader2, Music, Plus, X } from "lucide-react";
+import { ArrowRight, ImagePlus, Loader2, Music } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { PreencherComIA } from "@/components/sistema";
 import Secao from "@/components/sistema/Secao";
-import { botao, campo, campoTexto, etiqueta, juntar, lista, texto } from "@/components/sistema/estilos";
+import { botao, campoTexto, etiqueta, juntar, lista, texto } from "@/components/sistema/estilos";
 import { LISTA_DE_FORMATOS, type FormatoDoMotion } from "../../../supabase/functions/_shared/cena-hf";
-import { pastaDoFilme } from "../../../supabase/functions/_shared/motion-metodo";
+import { pastaDoFilme, type ProvaReal } from "../../../supabase/functions/_shared/motion-metodo";
 import { ComFilme } from "./FilmeAberto";
+import ListaDeProvas from "./ListaDeProvas";
 import { chamarMotion, CHAVES, type Filme, useGuardarFilme } from "./motionApi";
 import type { IrPara } from "@/components/mesa-videos/MesaDeVideo";
 
@@ -28,6 +29,9 @@ type Insumos = {
   musicas: Array<{ id: string; nome: string; storage_path: string; duracao_s: number | null }>;
 };
 
+/** Insumos guardam até 12 provas (o BRAND.md, até 8). */
+const MAXIMO_DE_PROVAS = 12;
+
 const nomeSeguro = (n: string) => n.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
 
 function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
@@ -36,18 +40,19 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
   const guardar = useGuardarFilme();
   const avisarErro = useAvisarErro();
   const [subindo, setSubindo] = useState(false);
-  const [novaProva, setNovaProva] = useState({ texto: "", fonte: "" });
   const [notas, setNotas] = useState(typeof filme.insumos.notas === "string" ? (filme.insumos.notas as string) : "");
   const q = useQuery({ queryKey: CHAVES.insumos(filme.id), queryFn: () => chamarMotion<Insumos>("insumos_ler", { filme_id: filme.id }), staleTime: 60_000 });
-  const provas = Array.isArray(filme.insumos.provas) ? (filme.insumos.provas as Array<{ texto: string; fonte: string }>) : [];
+  const provas = Array.isArray(filme.insumos.provas) ? (filme.insumos.provas as ProvaReal[]) : [];
   const prints = Array.isArray(filme.insumos.prints) ? (filme.insumos.prints as Array<{ path: string; nome: string }>) : [];
 
-  const salvar = async (campos: Record<string, unknown>) => {
+  const salvar = async (campos: Record<string, unknown>): Promise<boolean> => {
     try {
       const d = await chamarMotion<{ filme: Filme }>("filme_salvar", { filme_id: filme.id, ...campos });
       guardar(d.filme);
+      return true;
     } catch (e) {
       avisarErro(e, "Não foi salvo");
+      return false;
     }
   };
 
@@ -127,35 +132,8 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
         </div>
       </Secao>
 
-      <Secao titulo="Provas reais" descricao={`${provas.length} com fonte`} ajuda="Só o que tem fonte entra no filme como número, depoimento ou prova. Sem fonte, o filme fala do método." recolher="mesa-motion:provas">
-        <ul className={juntar(lista.aberta, lista.divisoria)}>
-          {provas.map((p, i) => (
-            <li key={`${p.texto}-${i}`} className={lista.linha}>
-              <span className={juntar(texto.corpo, "mr-2 min-w-0 flex-1")}>
-                {p.texto} <span className={texto.auxiliar}>({p.fonte})</span>
-              </span>
-              <button type="button" className={botao.icone} aria-label="Tirar a prova" onClick={() => void salvar({ insumos: { provas: provas.filter((_, j) => j !== i) } })}>
-                <X className="h-4 w-4" />
-              </button>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-2 flex min-w-0 flex-wrap items-center">
-          <input className={juntar(campo, "mb-2 mr-2 min-w-[200px] flex-1")} placeholder="O fato (ex.: 120 lojas atendidas)" value={novaProva.texto} maxLength={240} onChange={(e) => setNovaProva({ ...novaProva, texto: e.target.value })} aria-label="Prova" />
-          <input className={juntar(campo, "mb-2 mr-2 min-w-[160px] flex-1")} placeholder="Fonte (relatório, print, contrato)" value={novaProva.fonte} maxLength={160} onChange={(e) => setNovaProva({ ...novaProva, fonte: e.target.value })} aria-label="Fonte da prova" />
-          <button
-            type="button"
-            className={juntar(botao.secundario, "mb-2")}
-            disabled={!novaProva.texto.trim() || !novaProva.fonte.trim()}
-            onClick={() => {
-              void salvar({ insumos: { provas: provas.concat([{ texto: novaProva.texto.trim(), fonte: novaProva.fonte.trim() }]).slice(0, 12) } });
-              setNovaProva({ texto: "", fonte: "" });
-            }}
-          >
-            <Plus className="mr-1 h-3.5 w-3.5" />
-            Pôr a prova
-          </button>
-        </div>
+      <Secao titulo="Provas reais" descricao={`${provas.length} de ${MAXIMO_DE_PROVAS} com fonte`} ajuda="Só o que tem fonte entra no filme como número, depoimento ou prova. Sem fonte, o filme fala do método. Na etapa BRAND.md, 'Usar' leva a prova para o filme sem gerar de novo." recolher="mesa-motion:provas">
+        <ListaDeProvas provas={provas} maximo={MAXIMO_DE_PROVAS} onMudar={(novas) => salvar({ insumos: { provas: novas } })} />
       </Secao>
 
       <Secao titulo="Prints e fotos" descricao={`${prints.length} no filme`} ajuda="Prints do produto, fotos do trabalho e provas em imagem. Ficam na pasta do filme; o worker baixa de lá para a cena." recolher="mesa-motion:prints">
@@ -221,12 +199,12 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
             onAplicar={(v) => {
               const t = String(v.notas || "");
               setNotas(t);
-              return salvar({ insumos: { notas: t } });
+              return salvar({ insumos: { notas: t } }).then(() => undefined);
             }}
             onDesfazer={(a) => {
               const t = String(a.notas || "");
               setNotas(t);
-              return salvar({ insumos: { notas: t } });
+              return salvar({ insumos: { notas: t } }).then(() => undefined);
             }}
           />
         }
@@ -244,5 +222,5 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
 }
 
 export default function EtapaInsumos({ irPara }: { irPara: IrPara }) {
-  return <ComFilme>{(filme) => <Conteudo key={filme.id} filme={filme} irPara={irPara} />}</ComFilme>;
+  return <ComFilme irPara={irPara}>{(filme) => <Conteudo key={filme.id} filme={filme} irPara={irPara} />}</ComFilme>;
 }

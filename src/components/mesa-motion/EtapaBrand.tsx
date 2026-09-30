@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, Download, Loader2, Plus, Sparkles, X } from "lucide-react";
+import { toast } from "sonner";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { PreencherComIA, type CampoParaPreencher } from "@/components/sistema";
 import Secao from "@/components/sistema/Secao";
 import { botao, campo, campoTexto, juntar, lista, texto } from "@/components/sistema/estilos";
 import { usd } from "@/lib/mesa/api";
-import { brandMd, type BeatDoFilme, type BrandDoFilme } from "../../../supabase/functions/_shared/motion-metodo";
+import { brandMd, textoDaProva, type BeatDoFilme, type BrandDoFilme, type ProvaReal } from "../../../supabase/functions/_shared/motion-metodo";
 import { ComFilme, ModeloDaAcao, useModeloDaAcao } from "./FilmeAberto";
+import ListaDeProvas from "./ListaDeProvas";
 import { chamarMotion, type Filme, useGuardarFilme } from "./motionApi";
 import type { IrPara } from "@/components/mesa-videos/MesaDeVideo";
 
@@ -29,6 +31,9 @@ const CAMPOS: Array<{ chave: keyof BrandDoFilme; rotulo: string; longo?: boolean
 
 const MOMENTOS: BeatDoFilme["momento"][] = ["gancho", "tensao", "virada", "promessa", "prova", "marca"];
 
+/** O BRAND.md guarda até 8 provas (lerBrand corta o resto). */
+const MAXIMO_DE_PROVAS = 8;
+
 function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
   const { clientId, atualizarCusto } = useMesa();
   const { marca } = useMarcaDaMesa();
@@ -41,22 +46,28 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
   const [custo, setCusto] = useState<number | null>(null);
   useEffect(() => setB(filme.brand), [filme.brand]);
 
-  const salvar = async (novo: BrandDoFilme) => {
+  const salvar = async (novo: BrandDoFilme): Promise<boolean> => {
     try {
       const d = await chamarMotion<{ filme: Filme }>("filme_salvar", { filme_id: filme.id, brand: novo });
       guardar(d.filme);
+      return true;
     } catch (e) {
       avisarErro(e, "O BRAND.md não foi salvo");
+      return false;
     }
   };
 
   const gerar = async () => {
+    // O que está na tela (com edição ainda não salva) é o que o Desfazer devolve.
+    const antes = b;
+    const tinha = !!(antes.essencia || antes.publico || antes.promessa || antes.tom || antes.evitar || antes.movimento || antes.regras || antes.beats.length || antes.provas.length);
     setGerando(true);
     try {
       const d = await chamarMotion<{ filme: Filme; custo_usd: number }>("brand_gerar", { filme_id: filme.id, modelo_id: modelo ? modelo.id : undefined, pedido: pedido.trim() || undefined });
       guardar(d.filme);
       setCusto(d.custo_usd);
       atualizarCusto();
+      if (tinha) toast.success("BRAND.md novo", { description: "O custo da geração não volta.", duration: 15000, action: { label: "Desfazer", onClick: () => void salvar(antes) } });
     } catch (e) {
       avisarErro(e, "O BRAND.md não foi gerado");
     } finally {
@@ -79,9 +90,12 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
     const novo = { ...b } as Record<string, unknown>;
     Object.keys(v).forEach((k) => (novo[k] = String(v[k] ?? "")));
     setB(novo as unknown as BrandDoFilme);
-    return salvar(novo as unknown as BrandDoFilme);
+    return salvar(novo as unknown as BrandDoFilme).then(() => undefined);
   };
   const total = b.beats.reduce((s, x) => s + x.duracao_s, 0);
+  const provasDosInsumos = (Array.isArray(filme.insumos.provas) ? (filme.insumos.provas as ProvaReal[]) : []).filter((p) => p && p.texto && p.fonte);
+  const faltamNoBrand = provasDosInsumos.filter((p) => !b.provas.some((q) => textoDaProva(q.texto) === textoDaProva(p.texto)));
+  const brandCheio = b.provas.length >= MAXIMO_DE_PROVAS;
 
   return (
     <div className="min-w-0 space-y-6">
@@ -130,19 +144,30 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
         </div>
       </Secao>
 
-      <Secao titulo="Provas com fonte" descricao={`${b.provas.length}`} ajuda="Só estas podem virar número, depoimento ou prova na tela." recolher="mesa-motion:brand-provas">
-        <ul className={juntar(lista.aberta, lista.divisoria)}>
-          {b.provas.map((p, i) => (
-            <li key={`${p.texto}-${i}`} className={lista.linha}>
-              <span className={juntar(texto.corpo, "mr-2 min-w-0 flex-1")}>
-                {p.texto} <span className={texto.auxiliar}>({p.fonte})</span>
-              </span>
-              <button type="button" className={botao.icone} aria-label="Tirar a prova" onClick={() => void salvar({ ...b, provas: b.provas.filter((_, j) => j !== i) })}>
-                <X className="h-4 w-4" />
-              </button>
-            </li>
-          ))}
-        </ul>
+      <Secao
+        titulo="Provas com fonte"
+        descricao={`${b.provas.length} de ${MAXIMO_DE_PROVAS}`}
+        ajuda="Só estas podem virar número, depoimento ou prova na tela. 'Usar' traz uma prova dos Insumos para cá sem gerar de novo: vale para os próximos storyboards e cenas e para a conferência de números. As cenas já escritas não mudam sozinhas."
+        recolher="mesa-motion:brand-provas"
+      >
+        {faltamNoBrand.length > 0 && (
+          <div className="mb-3 min-w-0" data-provas-dos-insumos="">
+            <span className={texto.rotulo}>Das provas de Insumos</span>
+            <ul className={juntar(lista.aberta, "mt-1")}>
+              {faltamNoBrand.map((p, i) => (
+                <li key={`${p.texto}-${i}`} className={lista.linha}>
+                  <span className={juntar(texto.corpo, "mr-2 min-w-0 flex-1")}>
+                    {p.texto} <span className={texto.auxiliar}>({p.fonte})</span>
+                  </span>
+                  <button type="button" className={botao.barra} disabled={brandCheio} title={brandCheio ? `Até ${MAXIMO_DE_PROVAS} provas` : undefined} onClick={() => void salvar({ ...b, provas: b.provas.concat([p]).slice(0, MAXIMO_DE_PROVAS) })}>
+                    Usar
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <ListaDeProvas provas={b.provas} maximo={MAXIMO_DE_PROVAS} onMudar={(novas) => salvar({ ...b, provas: novas })} />
         {!b.provas.length && <p className={texto.auxiliar}>Sem prova com fonte: o filme fala do método, sem número.</p>}
       </Secao>
 
@@ -184,5 +209,5 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
 }
 
 export default function EtapaBrand({ irPara }: { irPara: IrPara }) {
-  return <ComFilme>{(filme) => <Conteudo key={filme.id} filme={filme} irPara={irPara} />}</ComFilme>;
+  return <ComFilme irPara={irPara}>{(filme) => <Conteudo key={filme.id} filme={filme} irPara={irPara} />}</ComFilme>;
 }

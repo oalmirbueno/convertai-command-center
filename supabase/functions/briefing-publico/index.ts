@@ -22,7 +22,7 @@
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { createCountingInboxStream, sanitizeInboxText } from "../_shared/workspace-inbox-policy.ts";
-import { ANEXO_MAX_BYTES, EXTENSOES_DE_ANEXO, estadoDoLink } from "../_shared/briefing-modelos.ts";
+import { ANEXO_MAX_BYTES, EXTENSOES_DE_ANEXO, PASTA_DO_ANEXO, estadoDoLink } from "../_shared/briefing-modelos.ts";
 import { decuparBriefing, ErroDaDecupagem } from "../_shared/briefing-decupar.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { lerDadosDaAgencia, nomeDaAgencia } from "../_shared/dados-da-agencia.ts";
@@ -135,7 +135,6 @@ const MIME: Record<string, string> = {
 };
 
 const TIPO_DO_ARQUIVO: Record<string, string> = { logo: "logo", manual: "documento", fotos: "foto", videos: "video", textos: "documento", referencias: "foto", outros: "documento" };
-const PASTA_DO_ARQUIVO: Record<string, string> = { logo: "identidade", manual: "identidade", fotos: "base", videos: "base", textos: "base", referencias: "base", outros: "base" };
 
 const MOTIVO_DA_RESERVA: Record<string, [number, string]> = {
   inexistente: [404, "Link inválido ou arquivado."],
@@ -246,7 +245,7 @@ async function anexar(req: Request, token: string, b: BriefingDoToken) {
     file_name: nome,
     file_url: `files://${caminho}`,
     file_type: TIPO_DO_ARQUIVO[categoria] ?? "documento",
-    folder: PASTA_DO_ARQUIVO[categoria] ?? "base",
+    folder: PASTA_DO_ANEXO[categoria] ?? "base",
     mime_type: mime,
     extension: ext,
     storage_bucket: "files",

@@ -7,8 +7,10 @@ import { MODELOS_V1 } from "../../supabase/functions/contratos/modulos/contrato-
 
 /**
  * Frente CON (30/09): o contrato aberto na tela. Rascunho com campo faltando
- * não congela; a cláusula só muda depois de ver a diferença e confirmar; o
- * congelado oferece versão nova (o link anterior deixa de valer).
+ * não é assinado; a cláusula só muda depois de ver a diferença e confirmar; o
+ * assinado pela agência oferece versão nova (o link anterior deixa de valer).
+ * UXS (30/09): "Assinar pela agência" no lugar de "Congelar e assinar" e o
+ * Confirmar da cláusula num clique só.
  */
 
 const chamadas: Array<{ acao: string; corpo: Record<string, unknown> }> = [];
@@ -79,22 +81,21 @@ describe("contratos: a tela do contrato", () => {
   it("rascunho com campo faltando: o botão de congelar fica bloqueado e diz o motivo", async () => {
     payload = montarPayload("draft");
     abrir();
-    const botao = await screen.findByRole("button", { name: /Congelar e assinar/ });
+    const botao = await screen.findByRole("button", { name: /Assinar pela agência/ });
     expect((botao as HTMLButtonElement).disabled).toBe(true);
     expect(botao.getAttribute("title")).toContain("Falta preencher");
     expect(document.querySelector("[data-documento-do-contrato]")).toBeTruthy();
   });
 
-  it("cláusula: edita, vê a diferença e só grava ao confirmar", async () => {
+  it("cláusula: o título abre a edição, a diferença aparece e só grava ao confirmar (um clique)", async () => {
     payload = montarPayload("draft");
     abrir();
     fireEvent.click(await screen.findByRole("button", { name: "Cláusulas" }));
-    const editar = await screen.findAllByRole("button", { name: "Editar" });
+    const editar = await screen.findAllByRole("button", { name: /Editar cláusula/ });
     fireEvent.click(editar[0]);
     const campo = screen.getByRole("textbox", { name: /Texto da cláusula/ }) as HTMLTextAreaElement;
     fireEvent.change(campo, { target: { value: `${campo.value} Texto acrescentado pela equipe.` } });
     expect(document.querySelector("[data-diff-da-clausula] [data-entrou]")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Ver e confirmar" }));
     expect(chamadas.some((c) => c.acao === "clausula_alterar")).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: /Confirmar a diferença/ }));
     await waitFor(() => expect(chamadas.some((c) => c.acao === "clausula_alterar")).toBe(true));
@@ -107,6 +108,6 @@ describe("contratos: a tela do contrato", () => {
     abrir();
     expect(await screen.findByRole("button", { name: /Enviar/ })).toBeTruthy();
     expect(screen.getByTitle(`SHA-256 ${"d".repeat(64)}`)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Congelar e assinar/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Assinar pela agência/ })).toBeNull();
   });
 });

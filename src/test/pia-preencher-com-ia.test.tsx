@@ -11,6 +11,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * - limpeza da resposta (número ou nome fora das fontes cai, com aviso);
  * - só os vazios por padrão;
  * - a tela: prévia, aplicar parcial, desfazer e o modelo lembrado por papel.
+ *
+ * Frente UXS (simplificação): instrução e primário com o custo no topo, com
+ * o foco; modelo, fontes e substituir em "Ajustes"; fontes lembradas por
+ * papel e padrão da mesa; o ✨ de campo preenchido já marca substituir;
+ * respiro na estimativa; um "Aplicar" só com um campo; rodapé fixo com
+ * muitos; ponto verde de prévia pronta.
  */
 
 const { estimar, preencher, toastSucesso } = vi.hoisted(() => ({
@@ -51,7 +57,7 @@ import {
   type CampoParaPreencher,
   type FonteLida,
 } from "../../supabase/functions/_shared/preencher-com-ia";
-import { chaveDoModeloLembrado, PreencherComIA, ROTA_DO_MODELO_LEMBRADO } from "@/components/sistema/PreencherComIA";
+import { chaveDasFontesLembradas, chaveDoModeloLembrado, PreencherComIA, ROTA_DO_MODELO_LEMBRADO } from "@/components/sistema/PreencherComIA";
 import { PreencherComIA as DoIndice } from "@/components/sistema";
 import { gravarEstadoDaTela, lerEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 
@@ -370,19 +376,32 @@ class ObservadorFalso {
   disconnect() {}
 }
 
-function montar(props: Partial<Parameters<typeof PreencherComIA>[0]> = {}) {
+const CAMPOS_DA_TELA: CampoParaPreencher[] = [
+  { chave: "capa.headline", rotulo: "Headline", tipo: "texto", valorAtual: "" },
+  { chave: "capa.sub", rotulo: "Subtítulo", tipo: "texto", valorAtual: "Antigo" },
+];
+
+type PropsDaTela = Partial<Parameters<typeof PreencherComIA>[0]>;
+
+function elemento(props: PropsDaTela, onAplicar: ReturnType<typeof vi.fn>, onDesfazer: ReturnType<typeof vi.fn>) {
+  return h(PreencherComIA, { papel: "proposta", clientId: "c-1", campos: CAMPOS_DA_TELA, onAplicar, onDesfazer, ...props });
+}
+
+function montar(props: PropsDaTela = {}) {
   const onAplicar = vi.fn();
   const onDesfazer = vi.fn();
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const campos: CampoParaPreencher[] = [
-    { chave: "capa.headline", rotulo: "Headline", tipo: "texto", valorAtual: "" },
-    { chave: "capa.sub", rotulo: "Subtítulo", tipo: "texto", valorAtual: "Antigo" },
-  ];
-  render(
-    h(QueryClientProvider, { client: qc }, h(PreencherComIA, { papel: "proposta", clientId: "c-1", campos, onAplicar, onDesfazer, ...props })),
-  );
-  return { onAplicar, onDesfazer };
+  const r = render(h(QueryClientProvider, { client: qc }, elemento(props, onAplicar, onDesfazer)));
+  const trocar = (novas: PropsDaTela) => r.rerender(h(QueryClientProvider, { client: qc }, elemento({ ...props, ...novas }, onAplicar, onDesfazer)));
+  return { onAplicar, onDesfazer, trocar, desmontar: r.unmount };
 }
+
+const painel = () => document.querySelector("[data-preencher-ia-painel]") as HTMLElement;
+const primario = () => within(painel()).getByRole("button", { name: /^Preencher/ });
+// Sob carga (a suíte inteira), o catálogo e a estimativa podem passar de 1 s.
+const pronto = () => waitFor(() => expect(primario()).toHaveAttribute("aria-disabled", "false"), { timeout: 8000 });
+const abrirAjustes = () => fireEvent.click(within(painel()).getByRole("button", { name: /^Ajustes/ }));
+const esperar = (ms: number) => act(() => new Promise<void>((r) => setTimeout(r, ms)));
 
 describe("a tela do Preencher com IA", () => {
   beforeEach(() => {
@@ -408,11 +427,25 @@ describe("a tela do Preencher com IA", () => {
     expect(b.textContent).toBe("");
   });
 
+  it("no topo, a instrução e o primário com o custo dentro, já com o foco; modelo, fontes e substituir em Ajustes", async () => {
+    montar();
+    fireEvent.click(screen.getByRole("button", { name: "Preencher tudo" }));
+    await screen.findByText("Custo estimado: US$ 0,0123");
+    expect(primario().textContent).toBe("Preencher · US$ 0,0123");
+    await waitFor(() => expect(document.activeElement).toBe(primario()));
+    expect(within(painel()).queryByRole("combobox", { name: "Modelo" })).toBeNull();
+    expect(within(painel()).getByRole("button", { name: /^Ajustes/ }).textContent).toContain("m-a · Contexto, Briefing, Dossiê");
+    abrirAjustes();
+    expect(within(painel()).getByRole("combobox", { name: "Modelo" })).toBeTruthy();
+    expect(within(painel()).getByRole("button", { name: "Arquivos" })).toHaveAttribute("aria-pressed", "false");
+    expect((within(painel()).getByLabelText("Substituir o que já tem") as HTMLInputElement).checked).toBe(false);
+  });
+
   it("mostra a prévia, aplica só um campo e o Desfazer devolve o valor anterior", async () => {
     const { onAplicar, onDesfazer } = montar();
     fireEvent.click(screen.getByRole("button", { name: "Preencher tudo" }));
-    await screen.findByText(/Custo estimado/);
-    fireEvent.click(screen.getByRole("button", { name: "Preencher" }));
+    await pronto();
+    fireEvent.click(primario());
     const previa = await screen.findByRole("list", { name: "Prévia do preenchimento" });
     expect(within(previa).getByText("Pão quente no Bacacheri")).toBeTruthy();
     expect(within(previa).getByText("Antigo")).toBeTruthy();
@@ -423,9 +456,10 @@ describe("a tela do Preencher com IA", () => {
     fireEvent.click(screen.getByRole("button", { name: "Aplicar Subtítulo" }));
     await waitFor(() => expect(onAplicar).toHaveBeenCalledTimes(1));
     expect(onAplicar.mock.calls[0][0]).toEqual({ "capa.sub": "Desde cedo" });
-    // O outro campo continua na prévia.
+    // O outro campo continua na prévia, agora com um "Aplicar" só (sem o "Aplicar tudo" repetido).
     await waitFor(() => expect(screen.queryByRole("button", { name: "Aplicar Subtítulo" })).toBeNull());
-    expect(screen.getByRole("button", { name: "Aplicar Headline" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Aplicar Headline" }).textContent).toBe("Aplicar");
+    expect(screen.queryByRole("button", { name: "Aplicar tudo" })).toBeNull();
 
     const [frase, opcoes] = toastSucesso.mock.calls[0];
     expect(frase).toBe("Subtítulo preenchido");
@@ -436,13 +470,14 @@ describe("a tela do Preencher com IA", () => {
     expect(onDesfazer).toHaveBeenCalledWith({ "capa.sub": "Antigo" });
   });
 
-  it("erro fica visível e a instrução não se perde", async () => {
+  it("erro fica visível e a instrução não se perde (Ctrl+Enter na instrução preenche)", async () => {
     preencher.mockRejectedValueOnce(new Error("Saldo insuficiente"));
     montar();
     fireEvent.click(screen.getByRole("button", { name: "Preencher tudo" }));
     const campo = await screen.findByPlaceholderText(/tom mais direto/);
+    await pronto();
     fireEvent.change(campo, { target: { value: "foco em família" } });
-    fireEvent.click(screen.getByRole("button", { name: "Preencher" }));
+    fireEvent.keyDown(campo, { key: "Enter", ctrlKey: true });
     expect((await screen.findByRole("alert")).textContent).toContain("Saldo insuficiente");
     expect((screen.getByPlaceholderText(/tom mais direto/) as HTMLTextAreaElement).value).toBe("foco em família");
     expect(preencher.mock.calls[0][0].instrucao).toBe("foco em família");
@@ -452,27 +487,174 @@ describe("a tela do Preencher com IA", () => {
     gravarEstadoDaTela(chaveDoModeloLembrado("proposta"), "m-b", ROTA_DO_MODELO_LEMBRADO);
     montar();
     fireEvent.click(screen.getByRole("button", { name: "Preencher tudo" }));
+    await pronto();
+    abrirAjustes();
     const seletor = (await screen.findByRole("combobox", { name: "Modelo" })) as HTMLSelectElement;
     await waitFor(() => expect(seletor.value).toBe("m-b"));
     fireEvent.change(seletor, { target: { value: "m-a" } });
     expect(lerEstadoDaTela(chaveDoModeloLembrado("proposta"), "", undefined, ROTA_DO_MODELO_LEMBRADO)).toBe("m-a");
-    fireEvent.click(screen.getByRole("button", { name: "Preencher" }));
+    await pronto();
+    fireEvent.click(primario());
     await waitFor(() => expect(preencher).toHaveBeenCalled());
     expect(preencher.mock.calls[0][0].modeloId).toBe("m-a");
   });
 
-  it("sem nada vazio, avisa para marcar substituir e não chama a IA", async () => {
-    estimar.mockResolvedValue({ partes: [], custo_usd: 0, modelo_id: "m-a", modelo_nome: "m-a", campos_a_preencher: 0 });
+  it("sem nada vazio: não chama a IA; 'Refazer os campos preenchidos' só marca a caixa e o custo recalcula", async () => {
+    estimar.mockImplementation(async (p: { substituir: boolean }) => ({ partes: [], custo_usd: p.substituir ? 0.02 : 0, modelo_id: "m-a", modelo_nome: "m-a", campos_a_preencher: p.substituir ? 2 : 0 }));
     montar();
     fireEvent.click(screen.getByRole("button", { name: "Preencher tudo" }));
-    await screen.findByText(/Substituir o que já tem\" para refazer/);
-    expect((screen.getByRole("button", { name: "Preencher" }) as HTMLButtonElement).disabled).toBe(true);
+    await screen.findByText("Todos os campos já estão preenchidos.");
+    expect(primario()).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(primario());
+    expect(preencher).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Refazer os campos preenchidos" }));
+    await waitFor(() => expect(estimar).toHaveBeenLastCalledWith(expect.objectContaining({ substituir: true })));
+    await screen.findByText("Custo estimado: US$ 0,02");
+    expect(preencher).not.toHaveBeenCalled();
+    abrirAjustes();
+    expect((within(painel()).getByLabelText("Substituir o que já tem") as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("enquanto a estimativa carrega, o primário não dispara (clique nem Ctrl+Enter)", async () => {
+    estimar.mockImplementation(() => new Promise(() => undefined));
+    montar();
+    fireEvent.click(screen.getByRole("button", { name: "Preencher tudo" }));
+    await waitFor(() => expect(primario().textContent).toBe("Preencher · calculando..."));
+    expect(primario()).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(primario());
+    fireEvent.keyDown(screen.getByPlaceholderText(/tom mais direto/), { key: "Enter", metaKey: true });
+    expect(preencher).not.toHaveBeenCalled();
+  });
+
+  it("o ✨ de um campo já preenchido abre com 'substituir' marcado", async () => {
+    montar({ campos: [{ chave: "a", rotulo: "A", tipo: "texto", valorAtual: "Já tem" }] });
+    fireEvent.click(screen.getByRole("button", { name: "Preencher com IA" }));
+    await waitFor(() => expect(estimar).toHaveBeenCalled());
+    expect(estimar.mock.calls[0][0]).toMatchObject({ substituir: true });
+    expect(within(painel()).getByRole("button", { name: /^Ajustes/ }).textContent).toContain("substitui o que já tem");
+  });
+
+  it("o 'Preencher tudo' de uma seção toda preenchida abre sem 'substituir'", async () => {
+    montar({ campos: [{ chave: "a", rotulo: "A", tipo: "texto", valorAtual: "Um" }, { chave: "b", rotulo: "B", tipo: "texto", valorAtual: "Dois" }] });
+    fireEvent.click(screen.getByRole("button", { name: "Preencher tudo" }));
+    await waitFor(() => expect(estimar).toHaveBeenCalled());
+    expect(estimar.mock.calls[0][0]).toMatchObject({ substituir: false });
+  });
+
+  it("campo vazio na montagem e preenchido depois: ao abrir, vem marcado", async () => {
+    const { trocar } = montar({ campos: [{ chave: "a", rotulo: "A", tipo: "texto", valorAtual: "" }] });
+    trocar({ campos: [{ chave: "a", rotulo: "A", tipo: "texto", valorAtual: "Escrito agora" }] });
+    fireEvent.click(screen.getByRole("button", { name: "Preencher com IA" }));
+    await waitFor(() => expect(estimar).toHaveBeenCalled());
+    expect(estimar.mock.calls[0][0]).toMatchObject({ substituir: true });
+  });
+
+  it("prévia vazia: 'Voltar e trocar as fontes' volta ao formulário sem chamar a IA e sem mexer nas fontes", async () => {
+    preencher.mockResolvedValueOnce({ valores: {}, modelo_id: "m-a", custo_usd: 0.004, fontes: [], avisos: ["Briefing: vazio."] });
+    montar();
+    fireEvent.click(screen.getByRole("button", { name: "Preencher tudo" }));
+    await pronto();
+    fireEvent.click(primario());
+    await screen.findByText(/Nada para aplicar/);
+    expect(screen.getByText("Briefing: vazio.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Voltar e trocar as fontes" }));
+    expect(await screen.findByPlaceholderText(/tom mais direto/)).toBeTruthy();
+    expect(preencher).toHaveBeenCalledTimes(1);
+    expect(estimar.mock.calls[estimar.mock.calls.length - 1][0].fontes).toEqual(["contexto", "briefing", "dossie"]);
+  });
+
+  it("fontes lembradas por papel e padrão da mesa: com web e sem web não se misturam", async () => {
+    const primeiro = montar({ papel: "identidade", fontes: ["contexto", "web"] });
+    fireEvent.click(screen.getByRole("button", { name: "Preencher tudo" }));
+    await pronto();
+    abrirAjustes();
+    fireEvent.click(within(painel()).getByRole("button", { name: "Arquivos" }));
+    const comWeb = chaveDasFontesLembradas("identidade", ["contexto", "web"]);
+    expect(lerEstadoDaTela(comWeb, null, undefined, ROTA_DO_MODELO_LEMBRADO)).toEqual(["contexto", "web", "arquivos"]);
+    // UXM: na identidade (e no site) a base de design entra no padrão da mesa.
+    expect(lerEstadoDaTela(chaveDasFontesLembradas("identidade", ["contexto", "briefing", "dossie", "base"]), null, undefined, ROTA_DO_MODELO_LEMBRADO)).toBeNull();
+    primeiro.desmontar();
+    estimar.mockClear();
+    const segundo = montar({ papel: "identidade" });
+    fireEvent.click(screen.getByRole("button", { name: "Preencher tudo" }));
+    await waitFor(() => expect(estimar).toHaveBeenCalled());
+    expect(estimar.mock.calls[0][0].fontes).toEqual(["contexto", "briefing", "dossie", "base"]);
+    segundo.desmontar();
+    estimar.mockClear();
+    // Mesmo padrão em outra ordem: mesma preferência.
+    montar({ papel: "identidade", fontes: ["web", "contexto"] });
+    fireEvent.click(screen.getByRole("button", { name: "Preencher tudo" }));
+    await waitFor(() => expect(estimar).toHaveBeenCalled());
+    expect(estimar.mock.calls[0][0].fontes).toEqual(["contexto", "web", "arquivos"]);
+  });
+
+  it("três cliques rápidos nas fontes viram uma chamada só ao estimar", async () => {
+    montar();
+    fireEvent.click(screen.getByRole("button", { name: "Preencher tudo" }));
+    await pronto();
+    abrirAjustes();
+    await esperar(350);
+    estimar.mockClear();
+    fireEvent.click(within(painel()).getByRole("button", { name: "Arquivos" }));
+    fireEvent.click(within(painel()).getByRole("button", { name: "Conversa" }));
+    fireEvent.click(within(painel()).getByRole("button", { name: "Web" }));
+    expect(within(painel()).getByText("~US$ 0,0123 · recalculando")).toBeTruthy();
+    await esperar(700);
+    expect(estimar).toHaveBeenCalledTimes(1);
+    expect(estimar.mock.calls[0][0].fontes).toEqual(["contexto", "briefing", "dossie", "arquivos", "conversa", "web"]);
+  });
+
+  it("muitos campos na prévia: rodapé fixo com 'Aplicar tudo' e popover mais largo; o 'antes' abre ao tocar", async () => {
+    const quatro: CampoParaPreencher[] = ["a", "b", "c", "d"].map((k) => ({ chave: k, rotulo: k.toUpperCase(), tipo: "texto" as const, valorAtual: k === "a" ? "Texto anterior bem comprido" : "" }));
+    preencher.mockResolvedValueOnce({ valores: { a: "1", b: "2", c: "3", d: "4" }, modelo_id: "m-a", custo_usd: 0.01, fontes: [], avisos: [] });
+    montar({ campos: quatro });
+    fireEvent.click(screen.getByRole("button", { name: "Preencher tudo" }));
+    await pronto();
+    fireEvent.click(primario());
+    const rodape = (await screen.findByRole("button", { name: "Aplicar tudo" })).closest("[data-rodape-da-previa]");
+    expect(rodape).toBeTruthy();
+    expect(painel().parentElement!.className).toContain("w-[520px]");
+    expect(screen.getByRole("button", { name: "Aplicar A" })).toBeTruthy();
+    const antes = screen.getByRole("button", { name: "Texto anterior bem comprido" });
+    expect(antes).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(antes);
+    expect(antes).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("um campo na prévia: um 'Aplicar' só, com o nome do campo", async () => {
+    preencher.mockResolvedValueOnce({ valores: { a: "Novo" }, modelo_id: "m-a", custo_usd: 0.01, fontes: [], avisos: [] });
+    montar({ campos: [{ chave: "a", rotulo: "Headline", tipo: "texto", valorAtual: "" }] });
+    fireEvent.click(screen.getByRole("button", { name: "Preencher com IA" }));
+    await pronto();
+    fireEvent.click(primario());
+    const aplicar = await screen.findByRole("button", { name: "Aplicar Headline" });
+    expect(aplicar.textContent).toBe("Aplicar");
+    expect(within(painel()).getAllByRole("button", { name: /^Aplicar/ })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Aplicar tudo" })).toBeNull();
+  });
+
+  it("prévia pronta com o popover fechado: ponto verde e o nome diz", async () => {
+    montar();
+    const gatilho = screen.getByRole("button", { name: "Preencher tudo" });
+    fireEvent.click(gatilho);
+    await pronto();
+    fireEvent.click(primario());
+    await screen.findByRole("list", { name: "Prévia do preenchimento" });
+    fireEvent.click(gatilho);
+    await waitFor(() => expect(gatilho.getAttribute("aria-label")).toBe("Preencher tudo, prévia pronta"));
+    expect(gatilho.querySelector("[data-previa-pronta]")).toBeTruthy();
+    fireEvent.click(gatilho);
+    expect(await screen.findByRole("list", { name: "Prévia do preenchimento" })).toBeTruthy();
+    expect(gatilho.getAttribute("aria-label")).toBe("Preencher tudo");
   });
 
   it("substituirInicial abre com \"Substituir o que já tem\" marcado e o estimar já pede substituir", async () => {
     // QA 30/09: "Sugerir texto da cláusula" (Contratos) sempre tem texto e ficava travado.
     montar({ substituirInicial: true });
     fireEvent.click(screen.getByRole("button", { name: "Preencher tudo" }));
+    // Frente UXS: a caixa mora em "Ajustes" (o resumo já diz); abrir para conferir.
+    await waitFor(() => expect(within(painel()).getByRole("button", { name: /^Ajustes/ }).textContent).toContain("substitui o que já tem"));
+    abrirAjustes();
     const caixa = (await screen.findByRole("checkbox")) as HTMLInputElement;
     expect(caixa.checked).toBe(true);
     await waitFor(() => expect(estimar).toHaveBeenCalled());

@@ -1,20 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Globe, Loader2, Paperclip, Send, Square, X } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
+import { useAvisarErro } from "@/components/mesa/Custo";
 import { Ditado } from "@/components/mesa/Ditado";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { chamarFuncao, modeloDoPapel, usd } from "@/lib/mesa/api";
-import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import CartaoDeAcao, { CapacidadesDoAgente, OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import ModeloDoAgente from "@/components/agentes/ModeloDoAgente";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import BaseCitada from "./BaseCitada";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import CampoDoAgente, { focarNoFim } from "@/components/sistema/CampoDoAgente";
+import { BotaoNovaConversa, useNovaConversa } from "@/components/sistema/NovaConversa";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
-import { botao, campoTexto, conversa, etiqueta, juntar } from "@/components/sistema/estilos";
+import { botao, conversa, etiqueta, juntar } from "@/components/sistema/estilos";
 import { ehAberto, ROTULO_DO_ESTADO } from "../../../supabase/functions/_shared/motor-codigo";
 import { CHAVES, chamarMotor, type LinhaDoSite, useGuardarSite, useTrabalhos } from "./siteApi";
 
@@ -50,6 +55,13 @@ const CAPACIDADES = [
 ];
 
 type Anexo = { path: string; nome: string; mime: string };
+
+/** Anexos por mensagem (prints, fotos, PDF). */
+const MAX_ANEXOS = 6;
+/** O pedido que vai quando a mensagem é só o anexo. */
+const TEXTO_SO_DE_ANEXOS = "Veja as referências anexas.";
+/** Tamanho de uma mensagem ao diretor (a estimativa do chip do modelo). */
+const PARTES_DA_CONVERSA = (modeloId: string) => [{ modeloId, tipo: "texto" as const, tokensEntrada: 9000, tokensSaida: 2500 }];
 type Mensagem = { id: string | null; papel: "usuario" | "agente" | "sistema"; conteudo: string; anexos: unknown[]; custo_usd: number | null; nova?: boolean; aviso?: string | null; local?: string };
 
 const nomeSeguro = (n: string) => n.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
@@ -66,10 +78,12 @@ function trabalhosDaMensagem(anexos: unknown[]): string[] {
 }
 
 export default function AgenteDoSite({ site, rascunho, onRascunho, onIrPara }: { site: LinhaDoSite; rascunho: string; onRascunho: (v: string) => void; onIrPara: (etapa: string) => void }) {
-  const { clientId, atualizarCusto, catalogo } = useMesa();
+  const { clientId, atualizarCusto, catalogo, catalogoCarregando } = useMesa();
   const { marca } = useMarcaDaMesa();
   const guardar = useGuardarSite(clientId, marca ? marca.id : null);
-  const modelo = modeloDoPapel(catalogo, "site");
+  // Modelo do agente escolhido na hora (vazio = o padrão do papel "site", como antes).
+  const [modeloEscolhido, setModeloEscolhido] = useEstadoDaTela<string>("mesa-site:agente:modelo", "", { validar: (v) => typeof v === "string" });
+  const modelo = modeloDoPapel(catalogo, "site", modeloEscolhido || null);
   const qc = useQueryClient();
   const avisarErro = useAvisarErro();
   const trabalhosQ = useTrabalhos(clientId, site.id);
@@ -83,6 +97,23 @@ export default function AgenteDoSite({ site, rascunho, onRascunho, onIrPara }: {
   const [subindo, setSubindo] = useState(false);
   const listaRef = useRef<HTMLDivElement | null>(null);
   const arquivo = useRef<HTMLInputElement | null>(null);
+  const campo = useRef<HTMLTextAreaElement | null>(null);
+  const novaConversa = useNovaConversa<Mensagem>({
+    chave: `${clientId}:${site.id}`,
+    enviando,
+    mensagens,
+    conversaId,
+    limpar: () => {
+      setMensagens([]);
+      setConversaId(null);
+      setNova(true);
+    },
+    restaurar: (c) => {
+      setMensagens(c.mensagens);
+      setConversaId(c.conversaId);
+      setNova(false);
+    },
+  });
 
   useEffect(() => {
     let vivo = true;
@@ -110,10 +141,18 @@ export default function AgenteDoSite({ site, rascunho, onRascunho, onIrPara }: {
 
   const anexar = async (files: FileList | null) => {
     if (!files || !files.length) return;
+    // Até 6 por mensagem: o que passar não sobe, e a tela diz quantos ficaram de fora (nada some calado).
+    const cabem = Math.max(0, MAX_ANEXOS - anexos.length);
+    const fora = files.length - cabem;
+    if (fora > 0) toast.message(`Até ${MAX_ANEXOS} anexos por mensagem: ${fora} ${fora === 1 ? "ficou" : "ficaram"} de fora.`);
+    if (!cabem) {
+      if (arquivo.current) arquivo.current.value = "";
+      return;
+    }
     setSubindo(true);
     try {
       const novos: Anexo[] = [];
-      for (const f of Array.from(files).slice(0, 6 - anexos.length)) {
+      for (const f of Array.from(files).slice(0, cabem)) {
         const path = `${clientId}/site/${site.id}/conversa/${Date.now().toString(36)}-${nomeSeguro(f.name)}`;
         const { error } = await supabase.storage.from("mesa").upload(path, f, { contentType: f.type || "application/octet-stream", upsert: false });
         if (error) throw error;
@@ -136,15 +175,26 @@ export default function AgenteDoSite({ site, rascunho, onRascunho, onIrPara }: {
 
   const enviar = async () => {
     const m = rascunho.trim();
-    if (!m || enviando) return;
+    // Só o anexo também vai (um print de referência); o print que ainda sobe espera.
+    if ((!m && !anexos.length) || enviando || subindo) return;
+    const texto = m || TEXTO_SO_DE_ANEXOS;
     const local = `local-${Date.now()}`;
     const indo = anexos;
     setEnviando(true);
-    setMensagens((l) => l.concat([{ id: null, papel: "usuario", conteudo: m, anexos: [], custo_usd: null, local }]));
+    setMensagens((l) => l.concat([{ id: null, papel: "usuario", conteudo: indo.length ? `${texto}\n(${indo.map((a) => a.nome).join(", ")})` : texto, anexos: [], custo_usd: null, local }]));
     onRascunho("");
     setAnexos([]);
     try {
-      const d = await chamarFuncao<any>("mesa-site", { acao: "agente_conversar", site_id: site.id, mensagem: m, conversa_id: conversaId || undefined, nova_conversa: nova || undefined, anexos: indo });
+      const d = await chamarFuncao<any>("mesa-site", {
+        acao: "agente_conversar",
+        site_id: site.id,
+        mensagem: texto,
+        conversa_id: conversaId || undefined,
+        nova_conversa: nova || undefined,
+        anexos: indo,
+        // Só o escolhido vai: sem escolha, a função usa o padrão do papel (como antes).
+        modelo_id: modeloEscolhido && modelo && modelo.id === modeloEscolhido ? modelo.id : undefined,
+      });
       setNova(false);
       setConversaId(d && d.conversa_id ? String(d.conversa_id) : conversaId);
       if (d && acoesDaMensagem(Array.isArray(d.anexos) ? d.anexos : []).some((a) => !!a.executada_em)) reler();
@@ -178,21 +228,10 @@ export default function AgenteDoSite({ site, rascunho, onRascunho, onIrPara }: {
         descricao={site.nome}
         acoes={
           <>
-            {mensagens.length > 0 && (
-              <button
-                type="button"
-                className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}
-                onClick={() => {
-                  setMensagens([]);
-                  setConversaId(null);
-                  setNova(true);
-                }}
-              >
-                Nova conversa
-              </button>
-            )}
+            {mensagens.length > 0 && <BotaoNovaConversa onClick={novaConversa} desativado={enviando} />}
             <AjudaRecolhida rotulo="Como o diretor de site funciona">
               Peça em palavras simples e mande prints ou fotos de referência. Escolher a opção de conteúdo ele faz na hora, com Desfazer. Mudar ou construir seção, gerar conteúdo ou imagem vêm num cartão com o custo; depois de confirmar, o motor de código faz, com prévia ao vivo e o botão Parar. O que você ensinar vira regra.
+              <CapacidadesDoAgente capacidades={CAPACIDADES} />
             </AjudaRecolhida>
           </>
         }
@@ -200,7 +239,15 @@ export default function AgenteDoSite({ site, rascunho, onRascunho, onIrPara }: {
         refDasMensagens={listaRef}
         compositor={
           <>
-            <OQuePossoFazer capacidades={CAPACIDADES} atalhos={ATALHOS_DO_DIRETOR} onAtalho={(t) => onRascunho(t)} />
+            <OQuePossoFazer
+              capacidades={CAPACIDADES}
+              mostrarCapacidades={false}
+              atalhos={ATALHOS_DO_DIRETOR}
+              onAtalho={(t) => {
+                onRascunho(t);
+                focarNoFim(campo, t);
+              }}
+            />
             {anexos.length > 0 && (
               <div className="flex flex-wrap" data-anexos="">
                 {anexos.map((a) => (
@@ -213,30 +260,26 @@ export default function AgenteDoSite({ site, rascunho, onRascunho, onIrPara }: {
                 ))}
               </div>
             )}
-            <textarea
-              value={rascunho}
-              onChange={(e) => onRascunho(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void enviar();
-                }
-              }}
-              rows={2}
+            <CampoDoAgente
+              ref={campo}
+              valor={rascunho}
+              aoMudar={onRascunho}
+              aoEnviar={() => void enviar()}
               maxLength={4000}
               placeholder="Ex.: o hero está fraco, deixa o título maior e o botão verde"
-              className={juntar(campoTexto, "min-h-[60px] resize-none")}
               aria-label="Mensagem ao diretor de site"
             />
             <div className="flex min-w-0 items-center justify-between">
-              <div className="mr-2 min-w-0 truncate">{modelo && <EstimativaInline partes={[{ modeloId: modelo.id, tipo: "texto", tokensEntrada: 9000, tokensSaida: 2500 }]} />}</div>
+              <div className="mr-2 min-w-0">
+                <ModeloDoAgente catalogo={catalogo} modelo={modelo} escolhido={modeloEscolhido} onEscolher={setModeloEscolhido} partes={PARTES_DA_CONVERSA} carregando={catalogoCarregando} disabled={enviando} />
+              </div>
               <div className="ml-auto flex min-w-0 items-center">
                 <input ref={arquivo} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={(e) => void anexar(e.target.files)} />
-                <button type="button" className={juntar(botao.icone, "mr-1")} aria-label="Anexar arquivo" disabled={subindo || anexos.length >= 6} onClick={() => arquivo.current && arquivo.current.click()}>
+                <button type="button" className={juntar(botao.icone, "mr-1")} aria-label="Anexar arquivo" disabled={subindo || anexos.length >= MAX_ANEXOS} onClick={() => arquivo.current && arquivo.current.click()}>
                   {subindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
                 </button>
                 <Ditado valor={rascunho} onChange={onRascunho} disabled={enviando} className="mr-1.5 min-w-0" />
-                <button type="button" className={juntar(botao.primario, "h-9")} onClick={() => void enviar()} disabled={enviando || !rascunho.trim()} aria-label="Enviar ao diretor de site">
+                <button type="button" className={juntar(botao.primario, "h-9")} onClick={() => void enviar()} disabled={enviando || subindo || (!rascunho.trim() && !anexos.length)} aria-label="Enviar ao diretor de site">
                   {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </button>
               </div>

@@ -11,14 +11,16 @@ import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { botao, campo, campoTexto, etiqueta, juntar, texto } from "@/components/sistema/estilos";
-import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { gravarEstadoDaTela, useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   blocoDoTipo,
   blocoVazio,
   comBloco,
   dataCurta,
+  ehTipoDeBloco,
   normalizarConteudo,
   ROTULO_DO_BLOCO,
+  ROTULO_DO_STATUS,
   type Bloco,
   type ConteudoDaProposta,
   type DadosDoBloco,
@@ -32,6 +34,7 @@ import {
   normalizarVisual,
   provaPodeEntrar,
   TEMAS_DA_PROPOSTA,
+  tiraOLink,
   type CampoDoBloco,
   type TemaDaProposta,
   type VisualDaProposta,
@@ -40,7 +43,10 @@ import { contextoDoUpsell } from "../../../supabase/functions/mesa-proposta/modu
 import PropostaDocumento from "./PropostaDocumento";
 import AvisoDaAgencia from "./AvisoDaAgencia";
 import PreviaDoPreenchimento from "./PreviaDoPreenchimento";
+import AnexosDaProposta from "./AnexosDaProposta";
 import { aplicarNaLista, chamarProposta, useProvas, type Proposta } from "./propostaApi";
+import { AvisoDeMudanca, BarraDoSalvar, useRascunhoComBase, type SecaoSuja } from "./edicaoDaProposta";
+import { rolarAte, useConfirmarTirarOLink, useFocoDeChegada } from "./navegacaoDaProposta";
 
 /**
  * Etapa 2, Rascunho: gerar com o estrategista (custo antes, pesquisa de
@@ -55,6 +61,12 @@ import { aplicarNaLista, chamarProposta, useProvas, type Proposta } from "./prop
  * cada bloco e em cada campo (peça comum da frente PIA), 3 headlines para a
  * capa, reescrever um bloco no tom da marca e o modelo visual da proposta.
  * Nada é gravado sem a pessoa ver; tudo tem Desfazer.
+ *
+ * Frente UXS (30/09): um Salvar só, na barra do pé, que leva os blocos e o
+ * modelo visual juntos. O rascunho fica no navegador pela proposta (sem a
+ * versão na chave): versão nova não apaga o que foi digitado, e a linha "A
+ * proposta mudou" aparece só se o texto mudou no banco. Os anexos moram aqui,
+ * embaixo do Modelo visual. Numa proposta enviada, gravar pergunta antes.
  */
 
 const linhas = (v: string[]) => v.join("\n");
@@ -413,8 +425,11 @@ function RelerORetrato({ proposta, onRelido }: { proposta: Proposta; onRelido: (
   const mesa = useMesa();
   const qc = useQueryClient();
   const avisarErro = useAvisarErro();
+  const confirmarTirar = useConfirmarTirarOLink();
   const [ocupado, setOcupado] = useState(false);
   const reler = async () => {
+    // Reler grava o bloco: numa proposta enviada, tira o link do cliente.
+    if (!(await confirmarTirar(proposta.status, ["conteudo"], "Reler"))) return;
     setOcupado(true);
     const versaoAntes = proposta.versao;
     try {
@@ -513,37 +528,15 @@ function EditorDoBloco({
   );
 }
 
-/** Modelo visual da proposta: tema e as cores do cliente. */
-function ModeloVisual({ proposta, visual, onVisual }: { proposta: Proposta; visual: VisualDaProposta; onVisual: (v: VisualDaProposta) => void }) {
-  const mesa = useMesa();
-  const qc = useQueryClient();
-  const avisarErro = useAvisarErro();
-  const [salvando, setSalvando] = useState(false);
-  const mudou = JSON.stringify(visual) !== JSON.stringify(proposta.visual);
-  const salvar = async () => {
-    setSalvando(true);
-    try {
-      const d = await chamarProposta<any>("salvar", { proposta_id: proposta.id, versao_base: proposta.versao, visual });
-      aplicarNaLista(qc, mesa.clientId, d && d.proposta);
-      toast.success("Modelo visual salvo.");
-    } catch (e) {
-      avisarErro(e, "O modelo visual não foi salvo");
-    } finally {
-      setSalvando(false);
-    }
-  };
+/** Modelo visual da proposta: tema e as cores do cliente (o Salvar é o da barra do pé). */
+function ModeloVisual({ visual, mudou, onVisual }: { visual: VisualDaProposta; mudou: boolean; onVisual: (v: VisualDaProposta) => void }) {
   return (
     <Secao
       titulo="Modelo visual"
       divisoria
       recolhidaDeInicio
       descricao={`${(TEMAS_DA_PROPOSTA.find((t) => t.id === visual.tema) || TEMAS_DA_PROPOSTA[0]).nome}${mudou ? " · não salvo" : ""}`}
-      ajuda="Escolha como a proposta aparece para o cliente e veja na prévia ao lado. Cores do cliente usa a paleta da marca aberta na capa e nos destaques; a logo do cliente entra na capa pelo código."
-      acao={
-        <button type="button" className={botao.primario} onClick={() => void salvar()} disabled={!mudou || salvando || proposta.status === "aceita"}>
-          {salvando ? "Salvando..." : "Salvar"}
-        </button>
-      }
+      ajuda="Escolha como a proposta aparece para o cliente e veja na prévia ao lado. Cores do cliente usa a paleta da marca aberta na capa e nos destaques; a logo do cliente entra na capa pelo código. O Salvar fica na barra do pé da etapa, junto com os blocos."
     >
       <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Modelos visuais">
         {TEMAS_DA_PROPOSTA.map((t) => {
@@ -578,36 +571,75 @@ function ModeloVisual({ proposta, visual, onVisual }: { proposta: Proposta; visu
   );
 }
 
+
+type TextoDoRascunho = { titulo: string; conteudo: ConteudoDaProposta } | null;
+const rascunhoValido = (v: unknown) => !!v && typeof v === "object" && "conteudo" in (v as Record<string, unknown>);
+const rascunhoCanonico = (v: TextoDoRascunho) => (v ? { titulo: v.titulo || "", conteudo: normalizarConteudo(v.conteudo) } : null);
+
 export default function EtapaRascunho({ proposta, modeloId, onModelo }: { proposta: Proposta | null; modeloId: string; onModelo: (id: string) => void }) {
   const mesa = useMesa();
   const qc = useQueryClient();
   const avisarErro = useAvisarErro();
+  const confirmarTirar = useConfirmarTirarOLink();
   const [pesquisar, setPesquisar] = useEstadoDaTela<boolean>("mesa-proposta:pesquisar", true, { validar: (v) => typeof v === "boolean" });
   const [fontes, setFontes] = useEstadoDaTela<FonteDoRascunho[]>("mesa-proposta:fontes", ["reuniao", "briefing", "contexto"], { validar: (v) => Array.isArray(v) });
   const [site, setSite] = useEstadoDaTela<string>(`mesa-proposta:site:${mesa.clientId}`, "", { validar: (v) => typeof v === "string" });
-  const chave = proposta ? `mesa-proposta:rascunho:${proposta.id}:${proposta.versao}` : "mesa-proposta:rascunho:nenhuma";
-  const [rascunho, setRascunho, esquecer] = useEstadoDaTela<{ titulo: string; conteudo: ConteudoDaProposta } | null>(chave, null, { esperaMs: 400 });
-  const [emFoco, setEmFoco] = useState<TipoDeBloco | null>(null);
-  const [salvando, setSalvando] = useState(false);
+  // UXS: o rascunho fica pela proposta (sem a versão na chave) e compara com a base da edição.
+  const doBanco = useMemo<TextoDoRascunho>(() => (proposta ? { titulo: proposta.titulo, conteudo: proposta.conteudo } : null), [proposta]);
+  const rascunho = useRascunhoComBase<TextoDoRascunho>({
+    chave: proposta ? `mesa-proposta:rascunho:${proposta.id}` : "mesa-proposta:rascunho:nenhuma",
+    chaveAntiga: proposta ? `mesa-proposta:rascunho:${proposta.id}:${proposta.versao}` : null,
+    doBanco,
+    versao: proposta ? proposta.versao : 0,
+    valido: rascunhoValido,
+    canonico: rascunhoCanonico,
+  });
+  const setRascunho = rascunho.mudar;
+  const esquecer = rascunho.esquecer;
+  // O Desfazer do Preencher com IA chega depois: usa sempre o "mudar" mais novo.
+  const mudarRef = useRef(setRascunho);
+  mudarRef.current = setRascunho;
+
+  // Chegou pelo "Resolver" da Revisão ou do Envio: o bloco já abre, em foco, e a tela rola até ele.
+  const focoDeChegada = useFocoDeChegada();
+  const blocoDeChegada: TipoDeBloco | null = focoDeChegada && ehTipoDeBloco(focoDeChegada) ? focoDeChegada : null;
+  useState(() => {
+    if (blocoDeChegada) gravarEstadoDaTela(`mesa-proposta:bloco:${mesa.clientId}:${blocoDeChegada}`, false);
+    return null;
+  });
+  const [emFoco, setEmFoco] = useState<TipoDeBloco | null>(blocoDeChegada);
+  useEffect(() => {
+    if (blocoDeChegada) rolarAte(`[data-editor-do-bloco="${blocoDeChegada}"]`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [previaIa, setPreviaIa] = useState<{ proposto: ConteudoDaProposta; avisos: string[] } | null>(null);
   const [aplicando, setAplicando] = useState(false);
+  // Modelo visual: também compara com a base da edição (versão nova só atualiza quando não há escolha pendente).
+  const [visualBase, setVisualBase] = useState<{ versao: number; visual: VisualDaProposta }>(() => ({ versao: proposta ? proposta.versao : 0, visual: proposta ? proposta.visual : normalizarVisual({}) }));
   const [visual, setVisual] = useState<VisualDaProposta>(() => (proposta ? proposta.visual : normalizarVisual({})));
+  const mudouVisual = JSON.stringify(visual) !== JSON.stringify(visualBase.visual);
   const previa = useRef<HTMLDivElement | null>(null);
 
   const atual = useMemo(() => {
     if (!proposta) return null;
-    if (rascunho && rascunho.conteudo) return { titulo: rascunho.titulo || proposta.titulo, conteudo: normalizarConteudo(rascunho.conteudo) };
+    const v = rascunho.valor;
+    if (v && v.conteudo) return { titulo: v.titulo || proposta.titulo, conteudo: normalizarConteudo(v.conteudo) };
     return { titulo: proposta.titulo, conteudo: proposta.conteudo };
-  }, [proposta, rascunho]);
-  const mudou = !!proposta && !!atual && (atual.titulo !== proposta.titulo || JSON.stringify(atual.conteudo) !== JSON.stringify(proposta.conteudo));
+  }, [proposta, rascunho.valor]);
+  const mudou = !!proposta && rascunho.sujo;
   // O Desfazer do Preencher com IA chega depois: lê sempre o rascunho mais novo.
   const atualRef = useRef(atual);
   atualRef.current = atual;
 
+  const recarregarVisual = (p: Proposta) => {
+    setVisual(p.visual);
+    setVisualBase({ versao: p.versao, visual: p.visual });
+  };
   useEffect(() => {
-    if (proposta) setVisual(proposta.visual);
+    if (proposta && !mudouVisual && visualBase.versao !== proposta.versao) recarregarVisual(proposta);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [proposta ? proposta.id : "", proposta ? proposta.versao : 0]);
+  }, [proposta ? proposta.id : "", proposta ? proposta.versao : 0, mudouVisual]);
 
   useEffect(() => {
     if (!emFoco || !previa.current) return;
@@ -636,7 +668,7 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
             aplicar: (valores) => {
               const a = atualRef.current;
               if (!a) return;
-              setRascunho({ titulo: a.titulo, conteudo: aplicarValoresNoConteudo(a.conteudo, valores).conteudo });
+              mudarRef.current({ titulo: a.titulo, conteudo: aplicarValoresNoConteudo(a.conteudo, valores).conteudo });
             },
           }
         : null,
@@ -650,19 +682,19 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
     setRascunho({ titulo: atual.titulo, conteudo: comBloco(atual.conteudo, tipo, m) });
   };
 
-  const salvar = async () => {
-    setSalvando(true);
-    try {
-      const d = await chamarProposta<any>("salvar", { proposta_id: proposta.id, versao_base: proposta.versao, titulo: atual.titulo, conteudo: atual.conteudo });
-      esquecer();
-      aplicarNaLista(qc, mesa.clientId, d && d.proposta);
-      toast.success(proposta.status !== "rascunho" ? "Salvo. A proposta voltou para rascunho: envie de novo para o cliente ver." : "Rascunho salvo.");
-    } catch (e) {
-      avisarErro(e, "O rascunho não foi salvo");
-    } finally {
-      setSalvando(false);
-    }
+  // O que o Salvar único da barra leva: só o que mudou (texto e modelo visual).
+  const camposDoTexto = () => {
+    const c: Record<string, unknown> = {};
+    if (atual.titulo !== proposta.titulo) c.titulo = atual.titulo;
+    if (JSON.stringify(atual.conteudo) !== JSON.stringify(proposta.conteudo)) c.conteudo = atual.conteudo;
+    return c;
   };
+  const sujas: SecaoSuja[] = [];
+  if (mudou) sujas.push({ rotulo: "Texto", chaves: Object.keys(camposDoTexto()), campos: camposDoTexto, depois: () => esquecer(), descartar: () => esquecer(), manter: rascunho.manter });
+  if (mudouVisual) sujas.push({ rotulo: "Modelo visual", chaves: ["visual"], campos: () => ({ visual }), depois: recarregarVisual, descartar: () => recarregarVisual(proposta) });
+
+  // Gerar e pesquisar gravam direto: numa proposta enviada, tiram o link (a frase vai na janela do custo).
+  const avisoDoLink = tiraOLink(proposta.status, ["conteudo"]) ? `${ROTULO_DO_STATUS[proposta.status] || "Enviada"}: gravar tira o link atual do cliente` : "";
 
   const depoisDaIa = (d: any) => {
     esquecer();
@@ -676,6 +708,8 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
   // Preencher tudo: aplica os campos escolhidos, grava e oferece o Desfazer (volta a versão de antes).
   const aplicarPreenchimento = async (chaves: string[]) => {
     if (!previaIa) return;
+    if (!(await confirmarTirar(proposta.status, ["titulo", "conteudo"], "Aplicar"))) return;
+    const voltouParaRascunho = proposta.status !== "rascunho";
     setAplicando(true);
     const versaoAntes = proposta.versao;
     try {
@@ -685,7 +719,9 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
       esquecer();
       aplicarNaLista(qc, mesa.clientId, d && d.proposta);
       setPreviaIa(null);
+      // O Desfazer continua sendo a ação (ele devolve o texto, não o link).
       toast.success(`${chaves.length} campo(s) preenchido(s).`, {
+        description: voltouParaRascunho ? "Envie de novo para o cliente ver." : undefined,
         duration: 10_000,
         action: {
           label: "Desfazer",
@@ -713,20 +749,9 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
           titulo="Escrever"
           recolher={false}
           descricao={`Nº ${proposta.numero} · versão ${proposta.versao}${mudou ? " · não salvo" : ""}`}
-          ajuda="O estrategista lê o contexto, a reunião, os arquivos e os itens, pesquisa o mercado na web (cada número com fonte e data) e escreve os blocos. Número sem fonte sai e vira pergunta. Preencher tudo mostra a prévia campo a campo antes de gravar; Gerar de novo grava direto e guarda a versão anterior."
-          acao={
-            <>
-              {mudou && (
-                <button type="button" className={botao.discreto} onClick={() => esquecer()}>
-                  Descartar
-                </button>
-              )}
-              <button type="button" className={mudou ? botao.primario : botao.secundario} onClick={() => void salvar()} disabled={!mudou || salvando || aceita}>
-                {salvando ? "Salvando..." : "Salvar"}
-              </button>
-            </>
-          }
+          ajuda="O estrategista lê o contexto, a reunião, os arquivos e os itens, pesquisa o mercado na web (cada número com fonte e data) e escreve os blocos. Número sem fonte sai e vira pergunta. Preencher tudo mostra a prévia campo a campo antes de gravar; Gerar de novo grava direto e guarda a versão anterior. O Salvar fica na barra do pé e leva os blocos e o modelo visual juntos."
         >
+          {rascunho.conflito && <AvisoDeMudanca className="mb-2" onManter={rascunho.manter} onVerANova={() => esquecer()} />}
           <div className="grid min-w-0 items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,240px)]">
             <CampoDeFormulario rotulo="Título da proposta">
               <input value={atual.titulo} onChange={(e) => setRascunho({ titulo: e.target.value, conteudo: atual.conteudo })} maxLength={120} className={campo} disabled={aceita} />
@@ -799,6 +824,7 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
             <BotaoComCusto
               rotulo={blocoDoTipo(proposta.conteudo, "capa").dados.headline ? "Gerar de novo" : "Gerar proposta"}
               titulo="Gerar a proposta"
+              descricao={avisoDoLink || undefined}
               variant="outline"
               disabled={aceita || mudou || !modeloId}
               partes={() => [{ modeloId, tipo: "texto", tokensEntrada: 14000, tokensSaida: 6000, buscasWeb: pesquisar ? 5 : 0 }]}
@@ -808,6 +834,7 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
             <BotaoComCusto
               rotulo="Só o mercado"
               titulo="Pesquisar o mercado"
+              descricao={avisoDoLink || undefined}
               variant="outline"
               disabled={aceita || mudou || !modeloId}
               partes={() => [{ modeloId, tipo: "texto", tokensEntrada: 6000, tokensSaida: 2500, buscasWeb: 5 }]}
@@ -824,7 +851,10 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
           <AvisoDaAgencia />
         </Secao>
 
-        <ModeloVisual proposta={proposta} visual={visual} onVisual={setVisual} />
+        <ModeloVisual visual={visual} mudou={mudouVisual} onVisual={setVisual} />
+
+        {/* UXS: os anexos moram perto da prévia; gravam direto, então esperam o rascunho ser salvo. */}
+        <AnexosDaProposta proposta={proposta} bloqueio={mudou || mudouVisual ? "Salve antes de anexar" : null} />
 
         <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <section className="min-w-0" aria-label="Blocos da proposta">
@@ -876,6 +906,7 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
             </div>
           </section>
         </div>
+        <BarraDoSalvar proposta={proposta} sujas={sujas} />
       </div>
     </ContextoDaIa.Provider>
   );

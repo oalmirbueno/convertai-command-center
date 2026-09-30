@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Download, FileCode2, FileText, Globe2, Link2Off, Loader2, Package, RefreshCcw, Save, Send } from "lucide-react";
+import { ChevronDown, Copy, Download, FileCode2, FileText, Globe2, Link2Off, Loader2, Package, RefreshCcw, Save, Send } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PreencherComIA, type CampoParaPreencher } from "@/components/sistema";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -46,6 +47,11 @@ const linhas = (v: string) => v.split(/\n+/).map((x) => x.trim()).filter(Boolean
  * vertical ou 24 páginas), como JSON versionado. Cada salvar é uma versão.
  * Exporta o PDF (o mesmo da aprovação), o pacote da marca (.zip com logos,
  * cores e fontes) e a página pública por link (revogável).
+ *
+ * UXS 30/09: um primário só, "Enviar para aprovação" (com mudança na versão,
+ * "Salvar versão e enviar": grava a versão nova e envia essa). Os três
+ * downloads ficam no "Baixar"; publicar com mudança vira "Salvar e publicar".
+ * Botão parado sempre diz o motivo na tela.
  */
 export default function EtapaGuideline() {
   const mesa = useMesa();
@@ -98,6 +104,60 @@ export default function EtapaGuideline() {
     depoisDeGravar(await chamarIdentidade("brandbook_salvar", { brandbook_id: atual.id, dados: rascunho, modelo }));
     toast.success("Versão nova salva");
   }, "A versão não foi salva");
+
+  /** Com mudança: grava a versão nova e devolve o id DELA (o próximo passo nunca usa a versão velha). */
+  const salvarSeMudou = async (): Promise<{ id: string; salvou: boolean }> => {
+    if (!atual) throw new Error("Nenhuma versão aberta.");
+    if (!mudou || !rascunho) return { id: atual.id, salvou: false };
+    const r = await chamarIdentidade<{ brandbook?: VersaoDoBrandbook; projeto?: ProjetoDeIdentidade; lacunas?: string[] }>("brandbook_salvar", { brandbook_id: atual.id, dados: rascunho, modelo });
+    depoisDeGravar(r);
+    if (!r.brandbook || !r.brandbook.id) throw new Error("A versão nova não voltou do servidor.");
+    return { id: r.brandbook.id, salvou: true };
+  };
+
+  /** Salvar (se mudou) e depois o passo; se salvou e o passo falhou, a mensagem diz as duas coisas. */
+  const salvarE = (qual: string, passo: (id: string) => Promise<void>, erroDoPasso: string, erroDepoisDeSalvar: string) => {
+    setOcupado(qual);
+    let salvou = false;
+    void (async () => {
+      try {
+        const v = await salvarSeMudou();
+        salvou = v.salvou;
+        await passo(v.id);
+      } catch (e) {
+        avisarErro(e, salvou ? erroDepoisDeSalvar : erroDoPasso);
+      } finally {
+        setOcupado(null);
+      }
+    })();
+  };
+
+  const enviarParaAprovacao = () =>
+    salvarE(
+      "aprovar",
+      async (id) => {
+        const r = await chamarIdentidade<{ file_id: string; revisao_solicitada: boolean; aviso: string | null; projeto?: ProjetoDeIdentidade }>("brandbook_compartilhar", { brandbook_id: id });
+        if (r.projeto) guardar(r.projeto);
+        void qc.invalidateQueries({ queryKey: CHAVES.brandbooks(projeto.id) });
+        toast.success("Brandbook em Arquivos", { description: r.revisao_solicitada ? "Revisão da agência pedida." : r.aviso || undefined });
+      },
+      "O brandbook não foi enviado",
+      "A versão foi salva, mas o envio não",
+    );
+
+  const publicar = () =>
+    salvarE(
+      "publicar",
+      async (id) => {
+        const r = await chamarIdentidade<{ caminho: string; imagens_fora: string[] }>("brandbook_publicar", { brandbook_id: id });
+        void qc.invalidateQueries({ queryKey: CHAVES.brandbooks(projeto.id) });
+        const link = `${window.location.origin}${r.caminho}`;
+        await copiarTexto(link);
+        toast.success("Página publicada e link copiado", { description: r.imagens_fora && r.imagens_fora.length ? `Imagens fora (grandes demais): ${r.imagens_fora.length}` : link });
+      },
+      "A página não foi publicada",
+      "A versão foi salva, mas a página não foi publicada",
+    );
 
   const mexer = (fn: (d: DadosDoBrandbook) => DadosDoBrandbook) => setRascunho((d) => (d ? fn(d) : d));
 
@@ -161,9 +221,9 @@ export default function EtapaGuideline() {
       {versoesQ.isLoading && <Carregando forma="lista" linhas={3} rotulo="Lendo o brandbook" />}
 
       {!versoesQ.isLoading && !atual && (
-        <Secao titulo="Montar o brandbook" recolher={false}>
+        <Secao titulo="Montar o brandbook" recolher={false} data-bloco-da-etapa="montar">
           <p className={juntar(texto.corpo, "mb-3")}>O primeiro rascunho sai do briefing, do conceito escolhido e do sistema.</p>
-          <button type="button" className={botao.primario} onClick={() => void montar()} disabled={ocupado === "montar"} data-montar-brandbook="">
+          <button type="button" className={botao.primario} onClick={() => void montar()} disabled={ocupado === "montar"} data-montar-brandbook="" data-campo="montar">
             {ocupado === "montar" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <FileText className="mr-1.5 h-4 w-4" />} Montar brandbook
           </button>
         </Secao>
@@ -175,6 +235,7 @@ export default function EtapaGuideline() {
             titulo={`Versão ${atual.versao}`}
             descricao={`${prontas} de ${estado.length} ${modelo === "prancha" ? "seções" : "páginas"} prontas · ${atual.arquivo_pdf_id ? textoDaAprovacao(situacao.data) : "não enviado"}`}
             recolher={`mesa-identidade:${projeto.id}:guideline:versao`}
+            data-bloco-da-etapa="versao"
             acao={
               <>
                 {versoes.length > 1 && (
@@ -186,7 +247,7 @@ export default function EtapaGuideline() {
                     ))}
                   </select>
                 )}
-                <button type="button" className={juntar(mudou ? botao.primario : botao.secundario, "m-1 h-8")} disabled={!mudou || ocupado === "salvar"} onClick={() => void salvarVersao()}>
+                <button type="button" className={juntar(botao.secundario, "m-1 h-8")} disabled={!mudou || ocupado === "salvar"} onClick={() => void salvarVersao()}>
                   {ocupado === "salvar" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />} Salvar versão
                 </button>
                 <MenuMais
@@ -204,46 +265,65 @@ export default function EtapaGuideline() {
               </>
             }
           >
-            {lacunas.length > 0 && <p className={juntar(texto.auxiliar, "mb-3 text-warning")}>Falta: {lacunas.join(", ")}.</p>}
+            {(lacunas.length > 0 || !dados.logos.principal) && (
+              <p className={juntar(texto.auxiliar, "mb-3 text-warning")} data-falta-no-brandbook="">
+                {lacunas.length > 0 ? `Falta: ${lacunas.join(", ")}.` : ""}
+                {!dados.logos.principal ? `${lacunas.length > 0 ? " " : ""}Sem a logo principal, o envio para aprovação fica parado (envie na etapa Sistema e monte de novo).` : ""}
+              </p>
+            )}
             <div className="-m-1 flex min-w-0 flex-wrap items-center">
-              <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!!ocupado} onClick={() => void rodar("pdf", async () => {
-                const r = await pdfDoBrandbook(dados, modelo, atual.versao);
-                salvarArquivo(r.bytes, r.nome, "application/pdf");
-                if (r.semImagem) toast.warning(`${r.semImagem} imagem(ns) ficaram fora do PDF.`);
-              }, "O PDF não saiu")}>
-                {ocupado === "pdf" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Download className="mr-1.5 h-4 w-4" />} Baixar PDF
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild disabled={!!ocupado}>
+                  <button type="button" className={juntar(botao.secundario, "m-1")} data-baixar-brandbook="">
+                    {ocupado === "pdf" || ocupado === "web" || ocupado === "pacote" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Download className="mr-1.5 h-4 w-4" />} Baixar
+                    <ChevronDown className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" sideOffset={6} className="min-w-[180px] max-w-[calc(100vw-24px)] p-1">
+                  <DropdownMenuItem
+                    className="min-h-8 cursor-pointer rounded px-2 py-1.5 text-[13px]"
+                    onSelect={() =>
+                      void rodar("pdf", async () => {
+                        const r = await pdfDoBrandbook(dados, modelo, atual.versao);
+                        salvarArquivo(r.bytes, r.nome, "application/pdf");
+                        if (r.semImagem) toast.warning(`${r.semImagem} imagem(ns) ficaram fora do PDF.`);
+                      }, "O PDF não saiu")
+                    }
+                  >
+                    <FileText className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" /> PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="min-h-8 cursor-pointer rounded px-2 py-1.5 text-[13px]"
+                    onSelect={() =>
+                      void rodar("web", async () => {
+                        const r = await paginaWebDoBrandbook(dados, modelo, atual.versao);
+                        salvarArquivo(new Blob([r.html], { type: "text/html" }), r.nome, "text/html");
+                      }, "A página web não saiu")
+                    }
+                  >
+                    <FileCode2 className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" /> Página web
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="min-h-8 cursor-pointer rounded px-2 py-1.5 text-[13px]"
+                    onSelect={() =>
+                      void rodar("pacote", async () => {
+                        const pdf = await pdfDoBrandbook(dados, modelo, atual.versao).catch(() => null);
+                        const web = await paginaWebDoBrandbook(dados, modelo, atual.versao).catch(() => null);
+                        const r = await pacoteDaMarca({ clientId: mesa.clientId, marcaId: projeto.marca_id || (marca && !marca.principal ? marca.id : null), dados, modelo, versao: atual.versao, pdf: pdf ? { bytes: pdf.bytes, nome: pdf.nome } : null, projeto: projeto.dados, paginaWeb: web ? web.html : null });
+                        salvarArquivo(r.blob, r.nome, "application/zip");
+                        if (r.fora.length) toast.warning(`Ficaram fora do pacote: ${r.fora.slice(0, 3).join(", ")}`);
+                      }, "O pacote não saiu")
+                    }
+                  >
+                    <Package className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" /> Pacote .zip
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <button type="button" className={juntar(botao.primario, "m-1")} disabled={!!ocupado || !dados.logos.principal} title={!dados.logos.principal ? "Falta a logo principal" : undefined} onClick={enviarParaAprovacao} data-campo="enviar" data-enviar-brandbook="">
+                {ocupado === "aprovar" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />} {mudou ? "Salvar versão e enviar" : "Enviar para aprovação"}
               </button>
-              <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!!ocupado} onClick={() => void rodar("web", async () => {
-                const r = await paginaWebDoBrandbook(dados, modelo, atual.versao);
-                salvarArquivo(new Blob([r.html], { type: "text/html" }), r.nome, "text/html");
-              }, "A página web não saiu")}>
-                {ocupado === "web" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <FileCode2 className="mr-1.5 h-4 w-4" />} Baixar página web
-              </button>
-              <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!!ocupado} onClick={() => void rodar("pacote", async () => {
-                const pdf = await pdfDoBrandbook(dados, modelo, atual.versao).catch(() => null);
-                const web = await paginaWebDoBrandbook(dados, modelo, atual.versao).catch(() => null);
-                const r = await pacoteDaMarca({ clientId: mesa.clientId, marcaId: projeto.marca_id || (marca && !marca.principal ? marca.id : null), dados, modelo, versao: atual.versao, pdf: pdf ? { bytes: pdf.bytes, nome: pdf.nome } : null, projeto: projeto.dados, paginaWeb: web ? web.html : null });
-                salvarArquivo(r.blob, r.nome, "application/zip");
-                if (r.fora.length) toast.warning(`Ficaram fora do pacote: ${r.fora.slice(0, 3).join(", ")}`);
-              }, "O pacote não saiu")}>
-                {ocupado === "pacote" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Package className="mr-1.5 h-4 w-4" />} Baixar pacote
-              </button>
-              <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!!ocupado || mudou || !dados.logos.principal} title={!dados.logos.principal ? "Falta a logo principal" : mudou ? "Salve a versão antes" : undefined} onClick={() => void rodar("aprovar", async () => {
-                const r = await chamarIdentidade<{ file_id: string; revisao_solicitada: boolean; aviso: string | null; projeto?: ProjetoDeIdentidade }>("brandbook_compartilhar", { brandbook_id: atual.id });
-                if (r.projeto) guardar(r.projeto);
-                void qc.invalidateQueries({ queryKey: CHAVES.brandbooks(projeto.id) });
-                toast.success("Brandbook em Arquivos", { description: r.revisao_solicitada ? "Revisão da agência pedida." : r.aviso || undefined });
-              }, "O brandbook não foi enviado")}>
-                {ocupado === "aprovar" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />} Enviar para aprovação
-              </button>
-              <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!!ocupado || mudou} onClick={() => void rodar("publicar", async () => {
-                const r = await chamarIdentidade<{ caminho: string; imagens_fora: string[] }>("brandbook_publicar", { brandbook_id: atual.id });
-                void qc.invalidateQueries({ queryKey: CHAVES.brandbooks(projeto.id) });
-                const link = `${window.location.origin}${r.caminho}`;
-                await copiarTexto(link);
-                toast.success("Página publicada e link copiado", { description: r.imagens_fora && r.imagens_fora.length ? `Imagens fora (grandes demais): ${r.imagens_fora.length}` : link });
-              }, "A página não foi publicada")}>
-                {ocupado === "publicar" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Globe2 className="mr-1.5 h-4 w-4" />} {publicado ? "Atualizar página" : "Publicar página"}
+              <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!!ocupado} onClick={publicar} data-publicar-brandbook="">
+                {ocupado === "publicar" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Globe2 className="mr-1.5 h-4 w-4" />} {mudou ? "Salvar e publicar" : publicado ? "Atualizar página" : "Publicar página"}
               </button>
               {publicado && (
                 <button type="button" className={juntar(botao.discreto, "m-1")} onClick={() => void copiarTexto(publicado).then((ok) => (ok ? toast.success("Link copiado") : toast.error("Não deu para copiar")))}>

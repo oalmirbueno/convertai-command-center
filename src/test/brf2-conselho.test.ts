@@ -112,6 +112,9 @@ describe("presets e modos", () => {
   it("o catálogo manda os presets (filtrados pela origem) e os modos", () => {
     const cat = catalogoDosEspecialistas("mesa-proposta");
     expect(cat.presets.map((p) => p.id)).toEqual(PRESETS.slice());
+    // Frente UXS (CNS-01): cada preset diz a mesa de origem; a Sala da mesma origem começa por ele.
+    expect(cat.presets.find((p) => p.id === "proposta")!.origem).toBe("mesa-proposta");
+    expect(cat.presets.find((p) => p.id === "crise")!.origem).toBe("painel-crise");
     expect(cat.modos.map((m) => m.id)).toEqual(["rapido", "padrao", "profundo"]);
     expect(cat.modos.find((m) => m.id === "rapido")!.rodadas).toBe(2);
   });

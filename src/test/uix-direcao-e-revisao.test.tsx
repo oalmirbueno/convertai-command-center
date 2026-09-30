@@ -463,7 +463,7 @@ describe("telas da base", () => {
       return Promise.resolve({ data: {}, error: null });
     });
     const PresetsDeEstilo = (await import("@/components/mesa-site/PresetsDeEstilo")).default;
-    montar(h(PresetsDeEstilo, { site: site({ etapa: "direcao" }) }));
+    montar(h(PresetsDeEstilo, { site: site({ etapa: "direcao" }), preset: null, onPreset: vi.fn() }));
     fireEvent.click(document.querySelector("[data-sugerir-base]") as HTMLElement);
     await waitFor(() => expect(document.querySelector('[data-grupo-da-sugestao="estilo"]')).not.toBeNull(), { timeout: 20_000 });
     expect(screen.getByText("A marca já tem fontes: a base não sugere outras.")).toBeTruthy();

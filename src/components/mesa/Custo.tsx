@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -180,10 +180,18 @@ interface BotaoComCustoProps {
   size?: "default" | "sm";
   className?: string;
   rotuloConfirmar?: string;
+  /**
+   * Sempre pede o segundo clique, mesmo barato (ex.: refazer artes que já
+   * estão com o cliente). Não muda o limite nem a checagem de saldo. Um
+   * segundo clique colado ao primeiro (duplo clique) não confirma sozinho.
+   */
+  sempreConfirmar?: boolean;
 }
 
 /** Acima deste valor o botão pede um segundo clique antes de gastar. */
 const LIMITE_SEM_CONFIRMAR_USD = 1;
+/** Com `sempreConfirmar`: clique que chega antes disto depois de armar é o mesmo gesto (duplo clique). */
+const RESPIRO_DO_CONFIRMAR_MS = 400;
 
 /**
  * Botão de ação que gasta, sem janela: o preço estimado fica ao lado do rótulo
@@ -204,11 +212,20 @@ export function BotaoComCusto({
   variant = "default",
   size = "sm",
   className = "",
+  sempreConfirmar = false,
 }: BotaoComCustoProps) {
   const mesa = useMesa();
   const avisarErro = useAvisarErro();
   const [rodando, setRodando] = useState(false);
   const [armado, setArmado] = useState(false);
+  const armadoEm = useRef(0);
+  const desarmar = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (desarmar.current !== null) window.clearTimeout(desarmar.current);
+    },
+    [],
+  );
   let partesAtuais: ParteDaEstimativa[] | null = null;
   try {
     partesAtuais = partes();
@@ -224,11 +241,22 @@ export function BotaoComCusto({
       avisarErro(erroDeSaldo(valor - mesa.saldoUsd, mesa.saldoUsd), titulo);
       return;
     }
-    // Caro, ou sem estimativa (não dá para saber quanto vai gastar): segundo clique.
-    if ((valor === undefined || valor > LIMITE_SEM_CONFIRMAR_USD) && !armado) {
+    // Caro, sem estimativa (não dá para saber quanto vai gastar) ou pedido pela tela: segundo clique.
+    if ((sempreConfirmar || valor === undefined || valor > LIMITE_SEM_CONFIRMAR_USD) && !armado) {
       setArmado(true);
-      window.setTimeout(() => setArmado(false), 6000);
+      armadoEm.current = Date.now();
+      // Um só relógio: o de um armar antigo não desarma o de agora.
+      if (desarmar.current !== null) window.clearTimeout(desarmar.current);
+      desarmar.current = window.setTimeout(() => {
+        desarmar.current = null;
+        setArmado(false);
+      }, 6000);
       return;
+    }
+    if (sempreConfirmar && armado && Date.now() - armadoEm.current < RESPIRO_DO_CONFIRMAR_MS) return;
+    if (desarmar.current !== null) {
+      window.clearTimeout(desarmar.current);
+      desarmar.current = null;
     }
     setArmado(false);
     setRodando(true);

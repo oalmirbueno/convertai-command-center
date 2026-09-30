@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Check, ExternalLink, Loader2, Save } from "lucide-react";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
+import Secao from "@/components/sistema/Secao";
 import { botao, campo, juntar, lista, texto } from "@/components/sistema/estilos";
 import { useFontesGoogle } from "@/lib/identidade/fontesGoogle";
 import { normalizarHex } from "../../../supabase/functions/_shared/cores-da-marca";
@@ -9,12 +10,28 @@ import { normalizarEstrategia } from "../../../supabase/functions/_shared/estrat
 import { estilosDaPersonalidade, fonteDoCatalogo, hierarquiaDoPar, linkDaFamilia, paresParaEstilos, pilhaDaFonte } from "../../../supabase/functions/_shared/tipografia-da-marca";
 import { dataUrlDoSvg, descricaoDoPadrao, svgDoPadrao, TIPOS_DE_PADRAO, type TipoDePadrao } from "../../../supabase/functions/mesa-identidade/modulos/grafismos-da-marca";
 import { chamarIdentidade, type ProjetoDeIdentidade } from "./identidadeApi";
-import { Pastilha, partesDoCusto, SeletorDoModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
+import { Pastilha, partesDoCusto, RotuloComModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
 import { enviarFeitoNaTela, pngDoSvg } from "./arquivosDaMarca";
 
 export type TipoDoSistema = { familia: string; uso: "titulo" | "texto" | "apoio"; pesos: string; licenca: string; alternativa: string };
 
 const POR_PAGINA = 6;
+
+/**
+ * O par (título e texto) na forma do sistema: licença pelo catálogo do Google
+ * Fonts ("Google Fonts (OFL)" ou "Confirmar a licença") e a família de apoio
+ * que já estava fica. O "Usar" das combinações e o "Do caminho" usam esta.
+ */
+export function tiposDoPar(titulo: string, texto: string, atuais: TipoDoSistema[]): TipoDoSistema[] {
+  const t = String(titulo || "").trim();
+  const x = String(texto || "").trim();
+  if (!t && !x) return [];
+  const lic = (f: string) => (fonteDoCatalogo(f) ? "Google Fonts (OFL)" : "Confirmar a licença");
+  const novos: TipoDoSistema[] = [];
+  if (t) novos.push({ familia: t, uso: "titulo", pesos: "", licenca: lic(t), alternativa: "" });
+  if (x && x !== t) novos.push({ familia: x, uso: "texto", pesos: "", licenca: lic(x), alternativa: "" });
+  return novos.concat(atuais.filter((y) => y.uso === "apoio"));
+}
 
 /** Um par com a prévia real (a fonte só baixa quando o par aparece na tela). */
 export function PrevisaoDoPar({ titulo, texto: familiaTexto, pesoTitulo = 700, nome, marca, ativo }: { titulo: string; texto: string; pesoTitulo?: number; nome: string; marca: string; ativo: boolean }) {
@@ -36,11 +53,16 @@ export function PrevisaoDoPar({ titulo, texto: familiaTexto, pesoTitulo = 700, n
  * personalidade da estratégia (regra fixa, sem custo), com a prévia real
  * carregada sob demanda, e os pares sugeridos pelo diretor (IA, custo antes).
  * "Usar" troca as famílias do sistema.
+ *
+ * UXS 30/09: a hierarquia (a prévia do que foi escolhido) fica à vista; as
+ * combinações e os pares ficam no bloco "Gerar combinações", recolhido quando
+ * a tipografia já está salva. Recolhido, nada monta e nenhuma fonte de par
+ * baixa. O modelo é o do seletor do cabeçalho da etapa (o botão mostra o nome).
  */
-export function TipografiaDaMarca({ tipos, onUsar }: { tipos: TipoDoSistema[]; onUsar: (novos: TipoDoSistema[], origem: string) => void }) {
+export function TipografiaDaMarca({ tipos, onUsar, geradorRecolhido = false }: { tipos: TipoDoSistema[]; onUsar: (novos: TipoDoSistema[], origem: string) => void; geradorRecolhido?: boolean }) {
   const mesa = useMesa();
   const { projeto, guardar } = useProjetoDaMesa();
-  const [modeloId, setModeloId] = useModeloDaAcao("identidade");
+  const [modeloId] = useModeloDaAcao("identidade");
   const [pagina, setPagina] = useState(1);
   const est = normalizarEstrategia(projeto.dados.estrategia);
   const estilos = useMemo(() => estilosDaPersonalidade({ arquetipo: est.arquetipo.principal, eixos: est.personalidade.eixos }), [JSON.stringify(est.arquetipo), JSON.stringify(est.personalidade.eixos)]);
@@ -51,12 +73,7 @@ export function TipografiaDaMarca({ tipos, onUsar }: { tipos: TipoDoSistema[]; o
   const corpo = tipos.filter((t) => t.uso === "texto")[0] || titulo;
   const hierarquia = titulo ? hierarquiaDoPar({ titulo: titulo.familia, texto: corpo ? corpo.familia : titulo.familia, pesoTitulo: 700 }) : [];
   const prontas = useFontesGoogle(titulo ? [{ familia: titulo.familia, pesos: [700] }, { familia: corpo ? corpo.familia : titulo.familia, pesos: [400, 600] }] : [], !!titulo);
-  const usar = (t: string, x: string, origem: string) => {
-    const lic = (f: string) => (fonteDoCatalogo(f) ? "Google Fonts (OFL)" : "Confirmar a licença");
-    const novos: TipoDoSistema[] = [{ familia: t, uso: "titulo", pesos: "", licenca: lic(t), alternativa: "" }];
-    if (x && x !== t) novos.push({ familia: x, uso: "texto", pesos: "", licenca: lic(x), alternativa: "" });
-    onUsar(novos.concat(tipos.filter((y) => y.uso === "apoio")), origem);
-  };
+  const usar = (t: string, x: string, origem: string) => onUsar(tiposDoPar(t, x, tipos), origem);
   return (
     <div className="mt-6 min-w-0 border-t border-border pt-5" data-tipografia-da-marca="">
       {titulo && (
@@ -72,11 +89,17 @@ export function TipografiaDaMarca({ tipos, onUsar }: { tipos: TipoDoSistema[]; o
           ))}
         </div>
       )}
+      <Secao
+        titulo="Gerar combinações"
+        nivel={3}
+        recolher={`mesa-identidade:${projeto.id}:sistema:tipografia:gerador`}
+        recolhidaDeInicio={geradorRecolhido}
+        resumo={propostas.length ? `${pares.length} combinações · ${propostas.length} pares do diretor` : `${pares.length} combinações e pares com IA`}
+      >
       <div className="mb-2 flex min-w-0 flex-wrap items-center">
         <span className={juntar(texto.rotulo, "m-1 min-w-0 flex-1")}>Combinações para esta personalidade{estilos.length ? `: ${estilos.slice(0, 4).join(", ")}` : ""}</span>
-        <SeletorDoModelo papel="identidade" valor={modeloId} onEscolher={setModeloId} />
         <BotaoComCusto
-          rotulo="Sugerir pares com IA"
+          rotulo={<RotuloComModelo rotulo="Sugerir pares com IA" papel="identidade" modeloId={modeloId} />}
           titulo="Pares de fonte"
           partes={() => partesDoCusto(mesa.catalogo, "fontes", modeloId)}
           executar={() => chamarIdentidade<{ projeto: ProjetoDeIdentidade }>("fontes_propor", { projeto_id: projeto.id, modelo_id: modeloId || undefined })}
@@ -129,6 +152,7 @@ export function TipografiaDaMarca({ tipos, onUsar }: { tipos: TipoDoSistema[]; o
           Mais combinações
         </button>
       )}
+      </Secao>
     </div>
   );
 }
@@ -178,8 +202,7 @@ export function GrafismosGerados({ cores, familia, nome, onGuardar }: { cores: s
     </div>
   );
   return (
-    <div className="mt-6 min-w-0 border-t border-border pt-5" data-grafismos-gerados="">
-      <p className={juntar(texto.rotulo, "mb-2")}>Gerar padrão com as cores da marca</p>
+    <div className="min-w-0" data-grafismos-gerados="">
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
         <div className="-m-1 flex min-w-0 flex-wrap content-start items-end">
           <label className="m-1 grid min-w-0">

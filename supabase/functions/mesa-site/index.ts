@@ -72,6 +72,7 @@ import {
   ESQUEMA_DO_CONTEUDO,
   lerDnaDoJev,
   normalizarOpcoesDeCopy,
+  PERGUNTAS_DO_BRIEFING_DO_SITE,
   perguntasDoDna,
   promptDaImagem,
   rotuloDoAtributo,
@@ -157,17 +158,8 @@ const ESQUEMA_DO_AGENTE = {
   },
 };
 
-/** Perguntas do briefing de site quando a frente BRF ainda não tem um respondido. */
-export const PERGUNTAS_DO_BRIEFING = [
-  { id: "objetivo", rotulo: "O que o site precisa fazer acontecer" },
-  { id: "publico", rotulo: "Para quem é" },
-  { id: "oferta", rotulo: "O que o cliente vende ou oferece" },
-  { id: "diferenciais", rotulo: "Por que escolher o cliente" },
-  { id: "acao", rotulo: "Qual o próximo passo do visitante (WhatsApp, formulário, agenda)" },
-  { id: "referencias", rotulo: "Sites que o cliente admira" },
-  { id: "evitar", rotulo: "O que evitar" },
-  { id: "dominio", rotulo: "Domínio (se já tiver)" },
-];
+/** Perguntas do briefing de site quando a frente BRF ainda não tem um respondido (uma fonte só com a tela: site-metodo.ts). */
+export const PERGUNTAS_DO_BRIEFING = PERGUNTAS_DO_BRIEFING_DO_SITE.map((p) => ({ id: p.id, rotulo: p.rotulo }));
 
 // ------------------------------------------------------------------ erros, banco e acesso
 

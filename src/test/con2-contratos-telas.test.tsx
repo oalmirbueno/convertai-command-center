@@ -99,9 +99,10 @@ describe("CON2: quem assina", () => {
     fireEvent.click(screen.getByRole("button", { name: /Testemunha/ }));
     fireEvent.change(screen.getAllByRole("textbox", { name: "Nome completo" })[1], { target: { value: "Ana Testemunha" } });
     fireEvent.change(screen.getAllByRole("textbox", { name: "E-mail" })[1], { target: { value: "ana@x.com" } });
-    const salvar = screen.getByRole("button", { name: /Salvar quem assina/ }) as HTMLButtonElement;
+    // UXS: quem assina salva pela barra do rascunho ("Salvar"), junto com Dados.
+    const salvar = screen.getByRole("button", { name: "Salvar" }) as HTMLButtonElement;
     expect(salvar.disabled).toBe(true);
-    expect(screen.getByText(/testemunha precisa do CPF/)).toBeTruthy();
+    expect(within(document.querySelector("[data-assinantes]") as HTMLElement).getByText(/testemunha precisa do CPF/)).toBeTruthy();
     fireEvent.change(screen.getAllByRole("textbox", { name: "CPF" })[1], { target: { value: "529.982.247-25" } });
     expect(salvar.disabled).toBe(false);
     fireEvent.click(salvar);
@@ -136,8 +137,12 @@ describe("CON2: dados com IA e ficha", () => {
     expect(screen.queryByRole("button", { name: /Preencher Cláusulas extras com IA/ })).toBeNull();
     expect(screen.getByText("Prazo de resposta (SLA)")).toBeTruthy();
     expect(screen.queryByText("Exclusividade no segmento")).toBeNull();
+    // UXS: Puxar da ficha grava direto (o que está salvo mais o que veio da ficha), com Desfazer no aviso.
     fireEvent.click(screen.getByRole("button", { name: /Puxar da ficha/ }));
-    await waitFor(() => expect((screen.getByDisplayValue("11.222.333/0001-81") as HTMLInputElement).value).toBe("11.222.333/0001-81"));
+    await waitFor(() => expect(chamadas.some((c) => c.acao === "salvar")).toBe(true));
+    const gravado = chamadas.find((c) => c.acao === "salvar")!.corpo.variaveis as Record<string, string>;
+    expect(gravado.cliente_documento).toBe("11.222.333/0001-81");
+    expect(Object.keys(gravado).every((k) => k === "cliente_documento" || k === "cliente_nome")).toBe(true);
   });
 
   it("assinado: o menu oferece aditivo e renovação", async () => {

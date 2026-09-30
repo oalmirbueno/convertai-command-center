@@ -1,15 +1,17 @@
 import { useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ImagePlus, Link2, Loader2, RotateCcw, Sparkles, Undo2, Upload, Wand2, X } from "lucide-react";
+import { BadgeCheck, Check, ChevronDown, ImagePlus, Link2, Loader2, RotateCcw, Sparkles, Undo2, Upload, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { juntar, texto } from "@/components/sistema/estilos";
-import { padraoPara, textoDoErro, usd, type Qualidade } from "@/lib/mesa/api";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { foco, juntar, texto } from "@/components/sistema/estilos";
+import { modelosAtivos, nomeDoModelo, padraoPara, QUALIDADES, textoDoErro, usd, type Qualidade } from "@/lib/mesa/api";
 import { enfileirarLaminas } from "@/lib/mesa/filaDeGeracao";
 import { Ampliar } from "./Ampliar";
 import { AvisoDeErro, BotaoComCusto, EstimativaInline } from "./Custo";
@@ -61,23 +63,65 @@ import { tipoDaCampanha } from "../../../supabase/functions/_shared/tipos-de-cam
  * escolher um selo pronto, pedir para melhorar, enviar uma referência, tudo;
  * está gerando muitos selos genéricos").
  *
- * Quatro caminhos na mesma tela: Gerar (3 ou 4 opções com a direção da
- * campanha e da marca, estilo nomeado e modelo escolhido na hora, custo
- * antes), Escolher pronto (acervo, logos e selos antigos, com busca), Enviar
- * (PNG, SVG, JPG ou WebP) e Logo da marca. Melhorar este selo mostra a versão
- * nova ao lado da antiga. Toda versão fica guardada: escolher de novo é voltar.
- * O Estúdio cola o selo escolhido pelo código, intacto, e a troca mostra
- * quantas artes usam o antigo, com "refazer as não aprovadas" (custo e Confirmar).
+ * Dois caminhos na mesma tela (frente UXS, 30/09: mais simples sem perder
+ * nada): Gerar (3 ou 4 opções com a direção da campanha e da marca, estilo
+ * nomeado e modelo escolhido na hora, custo antes; o botão vem primeiro e os
+ * ajustes ficam recolhidos atrás de uma linha-resumo, lembrados por cliente)
+ * e Escolher pronto (a logo da marca, enviar um arquivo PNG, SVG, JPG ou
+ * WebP, os selos de outras campanhas e o acervo, com busca). Melhorar este
+ * selo mostra a versão nova ao lado da antiga. Um formulário por vez
+ * (Melhorar ou Trocar). Toda versão fica guardada: usar de novo é voltar. O
+ * Estúdio cola o selo escolhido pelo código, intacto, e a troca mostra
+ * quantas artes usam o antigo, com o Refazer (custo à vista e segundo clique
+ * para confirmar).
  */
 
-type Caminho = "gerar" | "pronto" | "enviar" | "logo";
+type Caminho = "gerar" | "pronto";
 
 const CAMINHOS: { valor: Caminho; rotulo: string }[] = [
   { valor: "gerar", rotulo: "Gerar" },
+  // "Escolher pronto" é o nome que o servidor usa nos avisos (agente-calendario/selo-da-campanha.ts).
   { valor: "pronto", rotulo: "Escolher pronto" },
-  { valor: "enviar", rotulo: "Enviar" },
-  { valor: "logo", rotulo: "Logo da marca" },
 ];
+
+type Painel = "melhorar" | "trocar" | null;
+
+/** Os ajustes do Gerar lembrados por cliente (o ajuste preferido da equipe). */
+export interface AjustesDoGerar {
+  estilo: EscolhaDeEstilo;
+  quantidade: number;
+  /** "" = o padrão de imagem do catálogo. */
+  modelo: string;
+  qualidade: Qualidade;
+}
+
+const AJUSTES_PADRAO: AjustesDoGerar = { estilo: ESTILO_AUTOMATICO, quantidade: OPCOES_PADRAO_DE_SELO, modelo: "", qualidade: "media" };
+
+/** O que veio do navegador, campo a campo: valor velho ou estranho cai no padrão daquele campo. */
+export function limparAjustesDoGerar(v: unknown): AjustesDoGerar {
+  const o = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+  const estilo =
+    o.estilo === ESTILO_AUTOMATICO || (ESTILOS_DE_SELO as readonly string[]).indexOf(String(o.estilo)) >= 0 ? (o.estilo as EscolhaDeEstilo) : AJUSTES_PADRAO.estilo;
+  const q = o.quantidade;
+  const quantidade = typeof q === "number" && Math.floor(q) === q && q >= 1 && q <= 4 ? q : AJUSTES_PADRAO.quantidade;
+  const qualidade = o.qualidade === "baixa" || o.qualidade === "media" || o.qualidade === "alta" ? o.qualidade : AJUSTES_PADRAO.qualidade;
+  const modelo = typeof o.modelo === "string" ? o.modelo : "";
+  return { estilo, quantidade, modelo, qualidade };
+}
+
+/** Plural simples: 1 lâmina, 2 lâminas. */
+const plural = (n: number, um: string, varios: string) => (n === 1 ? um : varios);
+
+const rotuloDaQualidade = (q: Qualidade) => {
+  const achada = QUALIDADES.find((x) => x.valor === q);
+  return achada ? achada.rotulo : q;
+};
+
+/** Quadrinho do caminho pronto (logo, enviar): o mesmo cartão de mídia da miniatura dos selos. */
+const QUADRINHO = juntar(
+  "flex h-16 w-28 flex-col items-center justify-center rounded-md border border-border bg-background px-2 text-center text-[12px] leading-4 text-foreground transition-colors hover:border-primary/50 disabled:pointer-events-none disabled:opacity-50",
+  foco,
+);
 
 function Miniatura({ caminho, alt, tamanho = "h-16 w-16", marcada = false }: { caminho: string; alt: string; tamanho?: string; marcada?: boolean }) {
   return (
@@ -92,14 +136,14 @@ function Linha({ children, tom = "neutro" }: { children: ReactNode; tom?: "neutr
   return <p className={juntar("text-[12px] leading-4", cor)}>{children}</p>;
 }
 
-/** O que a troca do selo significa para as artes da campanha, com o Refazer (custo e Confirmar). */
+/** O que a troca do selo significa para as artes da campanha, com o Refazer (custo à vista e segundo clique para confirmar). */
 function ArtesDaCampanha({ impacto, onRefeito }: { impacto: ImpactoNaTela; onRefeito: () => void }) {
   const { catalogo } = useMesa();
-  const [confirmando, setConfirmando] = useState(false);
   const n = laminasARefazer(impacto);
   const enviadas = impacto.refazer.filter((r) => r.enviada).length;
   if (impacto.erro) return <Linha tom="aviso">{impacto.erro}</Linha>;
-  if (!impacto.aprovadas.laminas && !n) return null;
+  const aprovadas = impacto.aprovadas.laminas;
+  if (!aprovadas && !n) return null;
   const refazer = async () => {
     let naFila = 0;
     const falhas: string[] = [];
@@ -113,49 +157,42 @@ function ArtesDaCampanha({ impacto, onRefeito }: { impacto: ImpactoNaTela; onRef
       }
     }
     if (!naFila && falhas.length) throw new Error(falhas[0]);
-    return { na_fila: naFila, falhas, aviso_da_acao: falhas.length ? `${falhas.length} arte(s) não entraram na fila: ${falhas[0]}` : null };
+    return { na_fila: naFila, falhas, aviso_da_acao: falhas.length ? `${falhas.length} ${plural(falhas.length, "arte não entrou", "artes não entraram")} na fila: ${falhas[0]}` : null };
   };
+  // "Ficam como estão" (e não "com o selo antigo"): a lâmina sem selo colado pelo código também conta
+  // aqui (impactoDaTroca). `n` conta lâminas; `enviadas` conta artes.
+  const estado = [
+    aprovadas > 0 ? `${aprovadas} ${plural(aprovadas, "aprovada fica como está", "aprovadas ficam como estão")}` : "",
+    n > 0 ? `${n} ${plural(n, "lâmina", "lâminas")} a refazer${enviadas ? ` (${enviadas} ${plural(enviadas, "arte", "artes")} com o cliente)` : ""}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
-    <div className="min-w-0 space-y-1.5" data-selo="artes">
-      {impacto.aprovadas.laminas > 0 && (
-        <Linha>{impacto.aprovadas.laminas} lâmina(s) aprovada(s) usam outro selo e ficam como estão.</Linha>
-      )}
+    <div className="flex min-w-0 flex-wrap items-center" data-selo="artes">
+      <span className="mr-2 text-[12px] leading-4 text-muted-foreground">{estado}</span>
       {n > 0 && (
-        <div className="flex min-w-0 flex-wrap items-center">
-          <span className="mr-2 text-[12px] text-muted-foreground">
-            {n} lâmina(s) ainda não aprovada(s) usam outro selo{enviadas ? ` (${enviadas} com o cliente)` : ""}.
-          </span>
-          {!confirmando ? (
-            <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-primary" onClick={() => setConfirmando(true)}>
-              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Refazer as não aprovadas
-            </Button>
-          ) : (
-            <span className="inline-flex items-center">
-              <BotaoComCusto
-                rotulo="Confirmar"
-                titulo="Refazer com o selo novo"
-                descricao="As lâminas com selo das artes ainda não aprovadas entram na fila do Estúdio e saem com o selo novo."
-                partes={() => partesDoRefazer(catalogo, impacto)}
-                executar={refazer}
-                aoConcluir={() => {
-                  setConfirmando(false);
-                  onRefeito();
-                }}
-                className="h-7"
-              />
-              <Button type="button" size="sm" variant="ghost" className="ml-1 h-7 px-2" onClick={() => setConfirmando(false)}>
-                Cancelar
-              </Button>
-            </span>
-          )}
-        </div>
+        <BotaoComCusto
+          rotulo={
+            <>
+              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Refazer {n} {plural(n, "lâmina", "lâminas")}
+            </>
+          }
+          titulo="Refazer com o selo novo"
+          descricao={`As lâminas com selo das artes ainda não aprovadas entram na fila do Estúdio e saem com o selo novo${enviadas ? ", inclusive a arte que já está com o cliente" : ""}. O segundo clique confirma.`}
+          partes={() => partesDoRefazer(catalogo, impacto)}
+          executar={refazer}
+          aoConcluir={() => onRefeito()}
+          sempreConfirmar
+          variant="ghost"
+          className="h-7 px-2 text-primary"
+        />
       )}
     </div>
   );
 }
 
 export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
-  const { clientId, catalogo } = useMesa();
+  const { clientId, catalogo, catalogoCarregando } = useMesa();
   const { marca } = useMarcaDaMesa();
   const qc = useQueryClient();
   const chave = chavesDoSelo.estado(clientId, campanha.id);
@@ -163,28 +200,41 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
   // Resposta incompleta (função antiga no ar, SQL ainda não aplicado): a tela segue com listas vazias.
   const dados: EstadoDoSelo | undefined = estado.data && Array.isArray(estado.data.versoes) ? estado.data : undefined;
 
-  const [caminho, setCaminho] = useState<Caminho>("gerar");
-  const [aberto, setAberto] = useState(false);
+  // O caminho de costume fica lembrado por cliente (valor velho ou estranho volta ao Gerar).
+  const [caminho, setCaminho] = useEstadoDaTela<Caminho>(`selo:caminho:${clientId}`, "gerar", { validar: (v) => v === "gerar" || v === "pronto" });
+  // Um formulário por vez: Melhorar ou Trocar.
+  const [painel, setPainel] = useState<Painel>(null);
   const [ampliar, setAmpliar] = useState<string | null>(null);
   const [trocando, setTrocando] = useState(false);
   const [ultimaTroca, setUltimaTroca] = useState<{ anterior: string | null } | null>(null);
   const [tirarFundo, setTirarFundo] = useState(true);
   const [aviso, setAviso] = useState<string[]>([]);
-  // Gerar
+  // Gerar: estilo, opções, modelo e qualidade lembrados por cliente, conferidos campo a campo.
+  const [ajustesGuardados, setAjustesGuardados] = useEstadoDaTela<AjustesDoGerar>(`selo:ajustes:${clientId}`, AJUSTES_PADRAO, {
+    validar: (v) => !!v && typeof v === "object",
+    esperaMs: 0,
+  });
+  const { estilo, quantidade, qualidade, modelo: modeloGuardado } = limparAjustesDoGerar(ajustesGuardados);
+  const mudarAjustes = (m: Partial<AjustesDoGerar>) => setAjustesGuardados((a) => ({ ...limparAjustesDoGerar(a), ...m }));
+  // O guardado só vale se ainda estiver ativo; senão o padrão de imagem. Conta a cada render: o catálogo que chega depois acerta sozinho.
+  const modeloValido = modeloGuardado && modelosAtivos(catalogo, "imagem").some((m) => m.id === modeloGuardado) ? modeloGuardado : "";
   const imagemPadrao = padraoPara(catalogo, "imagem");
-  const [estilo, setEstilo] = useState<EscolhaDeEstilo>(ESTILO_AUTOMATICO);
-  const [quantidade, setQuantidade] = useState(OPCOES_PADRAO_DE_SELO);
-  const [modeloId, setModeloId] = useState(imagemPadrao ? imagemPadrao.id : "");
-  const [qualidade, setQualidade] = useState<Qualidade>("media");
-  const [textoDoSelo, setTextoDoSelo] = useState("");
+  const modeloId = modeloValido || (imagemPadrao ? imagemPadrao.id : "");
+  const modeloDoSelo = modeloId ? catalogo.find((m) => m.id === modeloId) || null : null;
+  const nomeDoModeloDoSelo = modeloDoSelo ? nomeDoModelo(modeloDoSelo) : catalogoCarregando ? "Lendo os modelos" : "Escolha o modelo";
+  // A grade dos ajustes: recolhida por padrão, aberta quando a campanha não tem selo; a escolha fica guardada.
+  const [ajustesAbertos, setAjustesAbertos] = useEstadoDaTela<string>(`selo:ajustes:aberto:${clientId}`, "", { validar: (v) => v === "aberto" || v === "recolhido" });
+  // null = a pessoa não mexeu no texto: o campo mostra o do servidor e o pedido vai sem texto (o servidor decide).
+  const [textoDigitado, setTextoDigitado] = useState<string | null>(null);
   const [pedido, setPedido] = useState("");
   // Desenho em curso guardado fora do componente (chave "selo:<id>"): trocar de campanha e voltar
   // não libera um segundo desenho pago no meio do primeiro.
   const emCurso = usePedidoDaCampanha(`selo:${campanha.id}`);
   const gerandoDesde = emCurso ? emCurso.desde : null;
+  const gerandoAgora = useRef<number | null>(gerandoDesde);
+  gerandoAgora.current = gerandoDesde;
   const [opcoes, setOpcoes] = useState<OpcaoGerada[]>([]);
   // Melhorar
-  const [melhorando, setMelhorando] = useState(false);
   const [pedidoDeMelhora, setPedidoDeMelhora] = useState("");
   const [linkDeMelhora, setLinkDeMelhora] = useState("");
   const [refsDeMelhora, setRefsDeMelhora] = useState<string[]>([]);
@@ -201,6 +251,23 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
   const caminhoAtual = dados ? dados.campanha.selo_path : campanha.selo_path;
   const referencias = dados && Array.isArray(dados.referencias) ? dados.referencias : [];
   const tipo = tipoDaCampanha(campanha.identidade);
+  // Com selo de versão, a linha de estado e os botões esperam a leitura (nada pisca nem pula).
+  const lendoOSelo = estado.isLoading && !!campanha.selo_id;
+
+  const textoDoServidor = dados ? dados.texto : campanha.nome;
+  const textoDoResumo = (textoDigitado !== null ? textoDigitado.trim() : "") || textoDoServidor || "";
+  const resumoDoGerar = [
+    estilo === ESTILO_AUTOMATICO ? "Automático" : rotuloDoEstilo(estilo),
+    `${quantidade} ${plural(quantidade, "opção", "opções")}`,
+    nomeDoModeloDoSelo,
+    rotuloDaQualidade(qualidade),
+    textoDoResumo ? `"${textoDoResumo}"` : "",
+    pedido.trim() ? "com pedido" : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const semModelo = !modeloId && !catalogoCarregando;
+  const gradeAberta = semModelo || (ajustesAbertos === "" ? !caminhoAtual : ajustesAbertos === "aberto");
 
   const reler = () => {
     void qc.invalidateQueries({ queryKey: chave });
@@ -214,12 +281,21 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
     reler();
   };
 
-  const trocar = async (fazer: () => Promise<any>, ok: string) => {
+  /**
+   * Troca o selo. O aviso de sucesso leva o Desfazer (com o selo de antes que
+   * a própria resposta trouxe, não o do estado). `fecharCaminhos`: a troca
+   * veio do Trocar (pronto, envio, logo, opção gerada): o formulário fecha e
+   * as opções geradas ficam; com opções ainda chegando, fica aberto.
+   */
+  const trocar = async (fazer: () => Promise<any>, ok: string, opcoesDaTroca: { comDesfazer?: boolean; fecharCaminhos?: boolean } = {}) => {
     setTrocando(true);
     try {
       const data = await fazer();
       aplicarTroca(data);
-      toast.success(ok);
+      const anterior = opcoesDaTroca.comDesfazer !== false && data && data.anterior ? (data.anterior.selo_id as string | null) : undefined;
+      if (anterior !== undefined) toast.success(ok, { action: { label: "Desfazer", onClick: () => void voltarPara(anterior) } });
+      else toast.success(ok);
+      if (opcoesDaTroca.fecharCaminhos && gerandoAgora.current === null) setPainel((p) => (p === "trocar" ? null : p));
       return data;
     } catch (e) {
       toast.error("O selo não foi trocado", { description: textoDoErro(e) });
@@ -229,13 +305,15 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
     }
   };
 
-  const usarPronto = (p: SeloPronto, ok: string) => trocar(() => usarSeloPronto(campanha.id, p, tirarFundo), ok);
-  const escolher = (seloId: string | null, ok = "Selo trocado.") => trocar(() => escolherSelo(campanha.id, seloId), ok);
-  const desfazer = async () => {
-    if (!ultimaTroca) return;
-    const r = await escolher(ultimaTroca.anterior, "O selo de antes voltou.");
+  const usarPronto = (p: SeloPronto, ok: string) => trocar(() => usarSeloPronto(campanha.id, p, tirarFundo), ok, { fecharCaminhos: true });
+  const escolher = (seloId: string | null, ok = "Selo trocado.", opcoesDaTroca: { fecharCaminhos?: boolean } = {}) => trocar(() => escolherSelo(campanha.id, seloId), ok, opcoesDaTroca);
+  /** Volta ao selo de antes (Desfazer do topo e do aviso). Esta troca não leva outro Desfazer. */
+  async function voltarPara(anteriorId: string | null) {
+    const r = await trocar(() => escolherSelo(campanha.id, anteriorId), "O selo de antes voltou.", { comDesfazer: false });
     if (r) setUltimaTroca(null);
-  };
+    return r;
+  }
+  const desfazer = () => (ultimaTroca ? voltarPara(ultimaTroca.anterior) : Promise.resolve(null));
 
   const enviar = async (arquivo: File | null | undefined) => {
     if (!arquivo) return;
@@ -299,11 +377,12 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
     marcarPedidoDaCampanha(chaveDoPedido, { mensagem: "selo", desde: Date.now() });
     try {
       const r = await gerarOpcoes(
-        { campanhaId: campanha.id, estilo, quantidade, tipo, modeloId, qualidade, texto: textoDoSelo, pedido },
+        // Sem edição, o texto não vai: o servidor segue decidindo o texto do selo.
+        { campanhaId: campanha.id, estilo, quantidade, tipo, modeloId, qualidade, texto: textoDigitado !== null ? textoDigitado : "", pedido },
         (o) => setOpcoes((l) => l.concat([o])),
       );
       reler();
-      return { custo_usd: r.custo_usd, aviso_da_acao: r.falhas.length ? `${r.falhas.length} opção(ões) não saíram: ${r.falhas[0]}` : null };
+      return { custo_usd: r.custo_usd, aviso_da_acao: r.falhas.length ? `${r.falhas.length} ${plural(r.falhas.length, "opção não saiu", "opções não saíram")}: ${r.falhas[0]}` : null };
     } finally {
       marcarPedidoDaCampanha(chaveDoPedido, null);
     }
@@ -324,20 +403,31 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
     return r;
   };
 
-  const descartarNova = async () => {
+  /** Arquivar e depois desfazer o arquivar, com o erro na tela (nada engolido). */
+  const desarquivar = (seloId: string) =>
+    arquivarSelo(campanha.id, seloId, true)
+      .then(reler)
+      .catch((e) => toast.error("A versão não voltou", { description: textoDoErro(e) }));
+
+  /** Comparar: fica o selo de hoje e a versão nova é arquivada (com Desfazer). Se não arquivar, o Comparar continua. */
+  const ficarComADeAntes = async () => {
     if (!comparar) return;
+    const id = comparar.nova.versao.id;
     try {
-      await arquivarSelo(campanha.id, comparar.nova.versao.id);
+      await arquivarSelo(campanha.id, id);
     } catch (e) {
       toast.error("A versão nova não foi arquivada", { description: textoDoErro(e) });
+      return;
     }
     setComparar(null);
     reler();
+    toast.success("Versão nova arquivada.", { action: { label: "Desfazer", onClick: () => void desarquivar(id) } });
   };
 
   const conferencia = atual ? atual.conferencia : null;
   const impacto = dados && dados.impacto && Array.isArray(dados.impacto.refazer) ? dados.impacto : null;
   const antigos = dados && Array.isArray(dados.antigos) ? dados.antigos : [];
+  const nomeDaMarca = marca ? `da ${marca.nome}` : "da marca";
 
   return (
     <div className="min-w-0 space-y-4" data-selo="secao">
@@ -355,40 +445,73 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
           )}
         </div>
         <div className="min-w-0 flex-1 space-y-2">
-          <p className={texto.corpo} data-selo="atual">
-            {atual
-              ? [ROTULO_DA_ORIGEM[atual.origem] || atual.origem, rotuloDoEstilo(atual.estilo), atual.texto ? `"${atual.texto}"` : ""].filter(Boolean).join(" · ")
-              : caminhoAtual
-                ? "Selo de antes das versões"
-                : "A campanha ainda não tem selo."}
-          </p>
+          {lendoOSelo ? (
+            <div className="min-w-0" aria-busy="true" aria-label="Lendo o selo" data-selo="lendo">
+              <div className="h-5 w-48 max-w-full animate-pulse rounded bg-muted" />
+              <div className="mt-2 flex min-w-0 flex-wrap items-center">
+                <div className="mb-1 mr-1.5 h-8 w-36 animate-pulse rounded-md bg-muted" />
+                <div className="mb-1 mr-1.5 h-8 w-28 animate-pulse rounded-md bg-muted" />
+              </div>
+            </div>
+          ) : (
+            <p className={texto.corpo} data-selo="atual">
+              {atual
+                ? [ROTULO_DA_ORIGEM[atual.origem] || atual.origem, rotuloDoEstilo(atual.estilo), atual.texto ? `"${atual.texto}"` : ""].filter(Boolean).join(" · ")
+                : caminhoAtual
+                  ? "Selo de antes das versões"
+                  : "A campanha ainda não tem selo."}
+            </p>
+          )}
           {conferencia && conferencia.ok === true && <Linha tom="ok">Texto conferido.</Linha>}
           {conferencia && conferencia.aviso && <Linha tom="aviso">{conferencia.aviso}</Linha>}
           {aviso.map((a) => <Linha key={a} tom="aviso">{a}</Linha>)}
-          <div className="flex min-w-0 flex-wrap items-center">
-            {atual && (
-              <Button type="button" size="sm" variant={melhorando ? "secondary" : "outline"} className="mb-1 mr-1.5 h-8" onClick={() => setMelhorando((v) => !v)} aria-expanded={melhorando}>
-                <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Melhorar este selo
+          {!lendoOSelo && (
+            <div className="flex min-w-0 flex-wrap items-center">
+              {atual && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={painel === "melhorar" ? "secondary" : "outline"}
+                  className="mb-1 mr-1.5 h-8"
+                  onClick={() => setPainel((p) => (p === "melhorar" ? null : "melhorar"))}
+                  aria-expanded={painel === "melhorar"}
+                >
+                  <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Melhorar este selo
+                </Button>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                variant={painel === "trocar" ? "secondary" : atual ? "ghost" : "default"}
+                className="mb-1 mr-1.5 h-8"
+                onClick={() => setPainel((p) => (p === "trocar" ? null : "trocar"))}
+                aria-expanded={painel === "trocar"}
+              >
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> {caminhoAtual ? "Trocar o selo" : "Escolher o selo"}
               </Button>
-            )}
-            <Button type="button" size="sm" variant={aberto ? "secondary" : atual ? "ghost" : "default"} className="mb-1 mr-1.5 h-8" onClick={() => setAberto((v) => !v)} aria-expanded={aberto}>
-              <Sparkles className="mr-1.5 h-3.5 w-3.5" /> {caminhoAtual ? "Trocar o selo" : "Escolher o selo"}
-            </Button>
-            {ultimaTroca && (
-              <Button type="button" size="sm" variant="ghost" className="mb-1 h-8" onClick={() => void desfazer()} disabled={trocando}>
-                <Undo2 className="mr-1.5 h-3.5 w-3.5" /> Desfazer
-              </Button>
-            )}
-            {trocando && <Loader2 className="mb-1 h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Trocando o selo" />}
-          </div>
+              {ultimaTroca && (
+                <Button type="button" size="sm" variant="ghost" className="mb-1 h-8" onClick={() => void desfazer()} disabled={trocando}>
+                  <Undo2 className="mr-1.5 h-3.5 w-3.5" /> Desfazer
+                </Button>
+              )}
+              {trocando && <Loader2 className="mb-1 h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Trocando o selo" />}
+            </div>
+          )}
           {impacto && <ArtesDaCampanha impacto={impacto} onRefeito={reler} />}
         </div>
       </div>
 
-      {estado.isError && <AvisoDeErro erro={estado.error} />}
+      {estado.isError && (
+        <div className="min-w-0 space-y-1.5">
+          <AvisoDeErro erro={estado.error} />
+          <Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => void estado.refetch()} disabled={estado.isFetching}>
+            {estado.isFetching ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="mr-1.5 h-3.5 w-3.5" />} Tentar de novo
+          </Button>
+        </div>
+      )}
 
       {/* Melhorar: pedido em texto e referência (imagem ou link); a versão nova aparece ao lado da de hoje. */}
-      {melhorando && atual && (
+      {painel === "melhorar" && atual && (
         <div className="min-w-0 space-y-2 border-t border-border pt-3" data-selo="melhorar">
           <Textarea
             value={pedidoDeMelhora}
@@ -425,10 +548,30 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
               descricao="O gerador edita o selo de hoje com o pedido e a referência. A versão nova aparece ao lado; a de hoje continua até você escolher."
               partes={() => partesDoMelhorar(catalogo, modeloId, qualidade)}
               executar={melhorar}
-              disabled={!pedidoDeMelhora.trim() || subindo || gerandoDesde !== null}
-              className="h-8"
+              disabled={!pedidoDeMelhora.trim() || subindo || gerandoDesde !== null || !modeloId}
+              className="mb-1 mr-1 h-8"
             />
-            <span className="ml-2 text-[12px] text-muted-foreground">Modelo e qualidade: os do Gerar.</span>
+            {/* Modelo e qualidade à vista onde se gasta (os mesmos do Gerar, lembrados por cliente). */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Modelo e qualidade do Melhorar"
+                  title="Trocar o modelo e a qualidade (os mesmos do Gerar)"
+                  className={juntar("mb-1 inline-flex h-8 min-w-0 max-w-full items-center rounded-md px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", foco)}
+                  data-selo="modelo-do-melhorar"
+                >
+                  <span className="min-w-0 truncate">
+                    {nomeDoModeloDoSelo} · {rotuloDaQualidade(qualidade)}
+                  </span>
+                  <ChevronDown className="ml-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" sideOffset={6} className="w-[calc(100vw-24px)] max-w-[300px] space-y-3 p-3">
+                <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modeloId} onChange={(id) => mudarAjustes({ modelo: id })} rotulo="Modelo de imagem" qualidade={qualidade} />
+                <SeletorDeQualidade valor={qualidade} onChange={(q) => mudarAjustes({ qualidade: q })} />
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
       )}
@@ -459,8 +602,8 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
                 >
                   <Check className="mr-1.5 h-3.5 w-3.5" /> Escolher a nova
                 </Button>
-                <Button type="button" size="sm" variant="ghost" className="mb-1 h-8" onClick={() => void descartarNova()}>
-                  <Undo2 className="mr-1.5 h-3.5 w-3.5" /> Desfazer
+                <Button type="button" size="sm" variant="ghost" className="mb-1 h-8" onClick={() => void ficarComADeAntes()} disabled={trocando}>
+                  <X className="mr-1.5 h-3.5 w-3.5" /> Ficar com a de antes
                 </Button>
               </div>
             </div>
@@ -468,48 +611,92 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
         </div>
       )}
 
-      {/* Os 4 caminhos para escolher o selo. */}
-      {aberto && (
+      {/* Os 2 caminhos para escolher o selo: gerar ou usar um pronto. */}
+      {painel === "trocar" && (
         <div className="min-w-0 space-y-3 border-t border-border pt-3" data-selo="caminhos">
           <div className="flex min-w-0 flex-wrap items-center">
             <SeletorCompacto opcoes={CAMINHOS} valor={caminho} onEscolher={(v) => setCaminho(v as Caminho)} rotulo="Como escolher o selo" listaQuandoNaoCabe />
             <AjudaRecolhida className="ml-1.5" rotulo="Como o selo entra nas artes">
               O selo escolhido entra nas artes da campanha pelo código, intacto, na capa e no fechamento, no canto oposto ao da logo. Nunca é redesenhado pelo gerador. As artes que ainda vão ser geradas já saem com ele.
             </AjudaRecolhida>
+            {/* Só no pronto: no Gerar o fundo não muda nada. */}
+            {caminho === "pronto" && (
+              <label className="ml-3 inline-flex items-center text-[12px] text-muted-foreground">
+                <input type="checkbox" className="mr-1.5" checked={tirarFundo} onChange={(e) => setTirarFundo(e.target.checked)} /> Tirar o fundo liso
+              </label>
+            )}
           </div>
 
           {caminho === "gerar" && (
             <div className="min-w-0 space-y-3" data-selo="gerar">
-              <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <Campo rotulo="Estilo">
-                  <Select value={estilo} onValueChange={(v) => setEstilo(v as EscolhaDeEstilo)}>
-                    <SelectTrigger className="h-9 min-w-0 text-[13px]" aria-label="Estilo do selo"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={ESTILO_AUTOMATICO}>Automático (estilos diferentes)</SelectItem>
-                      {ESTILOS_DE_SELO.map((e) => <SelectItem key={e} value={e}>{DEFINICAO_DO_ESTILO[e].rotulo}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </Campo>
-                <Campo rotulo="Opções">
-                  <Select value={String(quantidade)} onValueChange={(v) => setQuantidade(Number(v))}>
-                    <SelectTrigger className="h-9 min-w-0 text-[13px]" aria-label="Quantas opções"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {[1, 2, 3, 4].map((n) => <SelectItem key={n} value={String(n)}>{n} {n === 1 ? "opção" : "opções"}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </Campo>
-                <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modeloId} onChange={setModeloId} rotulo="Modelo de imagem" qualidade={qualidade} />
-                <SeletorDeQualidade valor={qualidade} onChange={setQualidade} />
+              {/* O caminho mais comum primeiro: gerar com os ajustes de costume; ajustar é um clique na linha-resumo. */}
+              <div className="flex min-w-0 flex-wrap items-center">
+                <BotaoComCusto
+                  rotulo={<><Sparkles className="mr-1.5 h-3.5 w-3.5" />{quantidade === 1 ? "Gerar 1 opção" : `Gerar ${quantidade} opções`}</>}
+                  titulo="Opções de selo"
+                  descricao="O gerador desenha as opções com a campanha, a marca, o estilo, as referências e o que o dono já ensinou. Você escolhe uma; nada é aplicado sozinho."
+                  partes={() => partesDaGeracao(catalogo, modeloId, qualidade, quantidade)}
+                  executar={gerar}
+                  disabled={gerandoDesde !== null || !modeloId}
+                  className="mb-1 mr-2 h-8"
+                />
+                <button
+                  type="button"
+                  onClick={() => setAjustesAbertos(gradeAberta ? "recolhido" : "aberto")}
+                  aria-expanded={gradeAberta}
+                  title={gradeAberta ? "Recolher os ajustes" : "Ajustar estilo, opções, modelo, qualidade e texto"}
+                  className={juntar("mb-1 mr-1 flex min-w-0 max-w-full items-center rounded-md px-1 py-0.5 text-left text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", foco)}
+                  data-selo="resumo-do-gerar"
+                >
+                  <ChevronDown className={juntar("mr-1 h-4 w-4 shrink-0 transition-transform", gradeAberta ? "" : "-rotate-90")} aria-hidden="true" />
+                  <span className="min-w-0 truncate">{resumoDoGerar}</span>
+                </button>
+                <AjudaRecolhida className="mb-1 ml-1" rotulo="O que vai na direção do selo">
+                  A direção junta o tipo, o objetivo, o conceito, o período, o público e o tom da campanha, a paleta e a fonte de título da marca da campanha, o estilo escolhido, as referências pelo papel e o que o dono já pediu para evitar. Cada opção sai num estilo ou composição diferente. O texto é lido depois e, se o gerador errar, aparece o aviso.
+                </AjudaRecolhida>
               </div>
-              <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-                <Campo rotulo="Texto do selo">
-                  <Input value={textoDoSelo} onChange={(e) => setTextoDoSelo(e.target.value.slice(0, 60))} placeholder={dados ? dados.texto : campanha.nome} aria-label="Texto do selo" className="h-9 text-[13px]" />
-                </Campo>
-                <Campo rotulo="Algo a mais (opcional)">
-                  <Input value={pedido} onChange={(e) => setPedido(e.target.value.slice(0, 400))} placeholder="Ex.: com um coração no lugar do o" aria-label="Pedido extra para o selo" className="h-9 text-[13px]" />
-                </Campo>
-              </div>
+              {gerandoDesde !== null && <Cronometro desde={gerandoDesde} rotulo="Desenhando as opções" previsao="~40s" />}
               {dados && (dados.avisos_do_texto || []).map((a) => <Linha key={a} tom="aviso">{a}</Linha>)}
+
+              {gradeAberta && (
+                <div className="min-w-0 space-y-3" data-selo="ajustes">
+                  <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <Campo rotulo="Estilo">
+                      <Select value={estilo} onValueChange={(v) => mudarAjustes({ estilo: v as EscolhaDeEstilo })}>
+                        <SelectTrigger className="h-9 min-w-0 text-[13px]" aria-label="Estilo do selo"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={ESTILO_AUTOMATICO}>Automático (estilos diferentes)</SelectItem>
+                          {ESTILOS_DE_SELO.map((e) => <SelectItem key={e} value={e}>{DEFINICAO_DO_ESTILO[e].rotulo}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </Campo>
+                    <Campo rotulo="Opções">
+                      <Select value={String(quantidade)} onValueChange={(v) => mudarAjustes({ quantidade: Number(v) })}>
+                        <SelectTrigger className="h-9 min-w-0 text-[13px]" aria-label="Quantas opções"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {[1, 2, 3, 4].map((n) => <SelectItem key={n} value={String(n)}>{n} {n === 1 ? "opção" : "opções"}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </Campo>
+                    <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modeloId} onChange={(id) => mudarAjustes({ modelo: id })} rotulo="Modelo de imagem" qualidade={qualidade} />
+                    <SeletorDeQualidade valor={qualidade} onChange={(q) => mudarAjustes({ qualidade: q })} />
+                  </div>
+                  <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Campo rotulo="Texto do selo">
+                      <Input
+                        value={textoDigitado !== null ? textoDigitado : textoDoServidor || ""}
+                        onChange={(e) => setTextoDigitado(e.target.value.slice(0, 60))}
+                        placeholder={textoDoServidor || campanha.nome}
+                        aria-label="Texto do selo"
+                        className="h-9 text-[13px]"
+                      />
+                    </Campo>
+                    <Campo rotulo="Algo a mais (opcional)">
+                      <Input value={pedido} onChange={(e) => setPedido(e.target.value.slice(0, 400))} placeholder="Ex.: com um coração no lugar do o" aria-label="Pedido extra para o selo" className="h-9 text-[13px]" />
+                    </Campo>
+                  </div>
+                </div>
+              )}
 
               {/* Referências do selo, com o papel que o Jev decidiu (dá para trocar). */}
               <div className="min-w-0 space-y-2" data-selo="referencias">
@@ -570,30 +757,46 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
                   </div>
                 )}
               </div>
-
-              <div className="flex min-w-0 flex-wrap items-center">
-                <BotaoComCusto
-                  rotulo={<><Sparkles className="mr-1.5 h-3.5 w-3.5" />{quantidade === 1 ? "Gerar 1 opção" : `Gerar ${quantidade} opções`}</>}
-                  titulo="Opções de selo"
-                  descricao="O gerador desenha as opções com a campanha, a marca, o estilo, as referências e o que o dono já ensinou. Você escolhe uma; nada é aplicado sozinho."
-                  partes={() => partesDaGeracao(catalogo, modeloId, qualidade, quantidade)}
-                  executar={gerar}
-                  disabled={gerandoDesde !== null || !modeloId}
-                  className="mb-1 mr-2 h-8"
-                />
-                {gerandoDesde !== null && <Cronometro desde={gerandoDesde} rotulo="Desenhando as opções" previsao="~40s" />}
-                <AjudaRecolhida className="mb-1 ml-1" rotulo="O que vai na direção do selo">
-                  A direção junta o tipo, o objetivo, o conceito, o período, o público e o tom da campanha, a paleta e a fonte de título da marca da campanha, o estilo escolhido, as referências pelo papel e o que o dono já pediu para evitar. Cada opção sai num estilo ou composição diferente. O texto é lido depois e, se o gerador errar, aparece o aviso.
-                </AjudaRecolhida>
-              </div>
             </div>
           )}
 
           {caminho === "pronto" && (
             <div className="min-w-0 space-y-3" data-selo="pronto">
-              <label className="inline-flex items-center text-[12px] text-muted-foreground">
-                <input type="checkbox" className="mr-1.5" checked={tirarFundo} onChange={(e) => setTirarFundo(e.target.checked)} /> Tirar o fundo liso
-              </label>
+              {/* Logo e envio primeiro: um clique cada, sem custo. */}
+              <ul className="flex min-w-0 flex-wrap" aria-label="Logo ou arquivo">
+                <li className="mb-2 mr-2">
+                  <button
+                    type="button"
+                    className={QUADRINHO}
+                    disabled={trocando}
+                    onClick={() => void usarPronto({ origem: "logo" }, "A logo virou o selo da campanha.")}
+                    aria-label={`Usar a logo ${nomeDaMarca} como selo`}
+                    title={`Usar a logo ${nomeDaMarca} como selo`}
+                  >
+                    <BadgeCheck className="mb-1 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <span className="max-w-full truncate">Logo {nomeDaMarca}</span>
+                  </button>
+                </li>
+                <li className="mb-2 mr-2">
+                  <input ref={arquivoRef} type="file" accept={TIPOS_DO_SELO_ENVIADO} className="hidden" data-testid="selo-enviado" onChange={(e) => void enviar(e.target.files && e.target.files[0])} />
+                  <button
+                    type="button"
+                    className={QUADRINHO}
+                    disabled={subindo || trocando}
+                    onClick={() => arquivoRef.current && arquivoRef.current.click()}
+                    aria-label="Enviar um arquivo como selo (PNG, SVG, JPG ou WebP)"
+                    title="Enviar um arquivo como selo: PNG, SVG, JPG ou WebP"
+                  >
+                    {subindo ? (
+                      <Loader2 className="mb-1 h-5 w-5 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
+                    ) : (
+                      <Upload className="mb-1 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    )}
+                    <span>Enviar arquivo</span>
+                    <span className="text-[11px] text-muted-foreground">PNG, SVG, JPG, WebP</span>
+                  </button>
+                </li>
+              </ul>
               {antigos.length > 0 && (
                 <div className="min-w-0">
                   <p className={texto.rotulo}>Selos de outras campanhas</p>
@@ -609,31 +812,6 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
                 </div>
               )}
               <SeletorDoAcervo titulo="Acervo do cliente (logos, selos, imagens)" onEscolher={(img) => void usarPronto({ origem: "acervo", imagem_id: img.id }, "Imagem do acervo escolhida como selo.")} />
-            </div>
-          )}
-
-          {caminho === "enviar" && (
-            <div className="min-w-0 space-y-2" data-selo="enviar">
-              <input ref={arquivoRef} type="file" accept={TIPOS_DO_SELO_ENVIADO} className="hidden" data-testid="selo-enviado" onChange={(e) => void enviar(e.target.files && e.target.files[0])} />
-              <div className="flex min-w-0 flex-wrap items-center">
-                <Button type="button" size="sm" className="mb-1 mr-2 h-8" disabled={subindo || trocando} onClick={() => arquivoRef.current && arquivoRef.current.click()}>
-                  {subindo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />} Enviar PNG, SVG, JPG ou WebP
-                </Button>
-                <label className="mb-1 inline-flex items-center text-[12px] text-muted-foreground">
-                  <input type="checkbox" className="mr-1.5" checked={tirarFundo} onChange={(e) => setTirarFundo(e.target.checked)} /> Tirar o fundo liso
-                </label>
-              </div>
-            </div>
-          )}
-
-          {caminho === "logo" && (
-            <div className="flex min-w-0 flex-wrap items-center" data-selo="logo">
-              <Button type="button" size="sm" className="mb-1 mr-2 h-8" disabled={trocando} onClick={() => void usarPronto({ origem: "logo" }, "A logo virou o selo da campanha.")}>
-                Usar a logo {marca ? `da ${marca.nome}` : "da marca"} como selo
-              </Button>
-              <label className="mb-1 inline-flex items-center text-[12px] text-muted-foreground">
-                <input type="checkbox" className="mr-1.5" checked={tirarFundo} onChange={(e) => setTirarFundo(e.target.checked)} /> Tirar o fundo liso
-              </label>
             </div>
           )}
         </div>
@@ -659,7 +837,7 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
                   variant={o.versao.id === (atual && atual.id) ? "secondary" : "outline"}
                   className="mt-1 h-7 w-full"
                   disabled={trocando || o.versao.id === (atual && atual.id)}
-                  onClick={() => void escolher(o.versao.id, "Selo escolhido.")}
+                  onClick={() => void escolher(o.versao.id, "Selo escolhido.", { fecharCaminhos: true })}
                 >
                   {o.versao.id === (atual && atual.id) ? "Escolhido" : "Escolher"}
                 </Button>
@@ -669,7 +847,7 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
         </div>
       )}
 
-      {/* Histórico: toda versão fica guardada; escolher uma antiga é voltar. */}
+      {/* Histórico: toda versão fica guardada; usar uma antiga é voltar. */}
       {versoes.length > 1 && (
         <div className="min-w-0 border-t border-border pt-3" data-selo="historico">
           <p className={texto.rotulo}>Versões ({versoes.length})</p>
@@ -687,7 +865,7 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
                   ) : (
                     <span className="inline-flex items-center">
                       <button type="button" className="mr-2 text-[11px] text-primary hover:underline" disabled={trocando} onClick={() => void escolher(v.id, "Versão escolhida.")}>
-                        Voltar
+                        Usar
                       </button>
                       <button
                         type="button"
@@ -696,7 +874,7 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
                           try {
                             await arquivarSelo(campanha.id, v.id);
                             reler();
-                            toast.success("Versão arquivada.", { action: { label: "Desfazer", onClick: () => void arquivarSelo(campanha.id, v.id, true).then(reler) } });
+                            toast.success("Versão arquivada.", { action: { label: "Desfazer", onClick: () => void desarquivar(v.id) } });
                           } catch (e) {
                             toast.error("Não arquivou", { description: textoDoErro(e) });
                           }

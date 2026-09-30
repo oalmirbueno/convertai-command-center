@@ -400,7 +400,7 @@ async function payloadDoContrato(ch: Chamador, l: Linha) {
     contrato: paraTela(l),
     texto: l.documento_texto || (montado ? montado.texto : null),
     montado: montado ? { faltando: montado.faltando, clausulas: montado.clausulas } : null,
-    pode_congelar: montado ? podeCongelar(montado) : { pode: false, motivo: l.congelado_em ? "Já congelado." : "Contrato de arquivo." },
+    pode_congelar: montado ? podeCongelar(montado) : { pode: false, motivo: l.congelado_em ? "Já assinado pela agência." : "Contrato de arquivo." },
     variaveis: montado ? montado.variaveis : variaveisDaLinha(l, modelos),
     valores: montado ? montado.valores : l.variaveis,
     agencia: { completa: !agencia.faltando.length, faltando: agencia.faltando, aviso: agencia.aviso },
@@ -712,7 +712,7 @@ async function congelar(ch: Chamador, corpo: Record<string, unknown>) {
 
 async function marcarEnviado(ch: Chamador, corpo: Record<string, unknown>) {
   const l = await lerLinha(ch, corpo.contract_id, true);
-  if (l.status !== "sent") throw new ErroHttp(409, "contrato_nao_enviavel", "Só contrato congelado e assinado pela agência sai para o cliente.");
+  if (l.status !== "sent") throw new ErroHttp(409, "contrato_nao_enviavel", "Só contrato assinado pela agência sai para o cliente.");
   let linha = l;
   if (!l.sent_at) {
     const { data, error } = await servico().from("contracts").update({ sent_at: new Date().toISOString() }).eq("id", l.id).eq("status", "sent").is("sent_at", null).select(bancoTemCon2() ? CAMPOS_CON2 : CAMPOS).maybeSingle();
@@ -727,7 +727,7 @@ async function novaVersao(ch: Chamador, corpo: Record<string, unknown>) {
   const l = await lerLinha(ch, corpo.contract_id, true);
   if (l.origem !== "modelo") throw new ErroHttp(409, "contrato_de_arquivo", "Contrato de arquivo não tem versão por modelo.");
   if (l.substituido_por) throw new ErroHttp(409, "ja_substituido", "Este contrato já tem versão nova.", { novo_id: l.substituido_por });
-  if (l.status === "draft") throw new ErroHttp(409, "ainda_rascunho", "O rascunho se edita direto; versão nova é para o que já foi congelado.");
+  if (l.status === "draft") throw new ErroHttp(409, "ainda_rascunho", "O rascunho se edita direto; versão nova é para o que já foi assinado pela agência.");
   if (l.status !== "sent" && l.status !== "completed") throw new ErroHttp(409, "contrato_encerrado", "Contrato cancelado ou substituído não ganha versão nova.");
   const { data, error } = await servico()
     .from("contracts")
@@ -793,7 +793,7 @@ async function diff(ch: Chamador, corpo: Record<string, unknown>) {
 async function pdfLink(ch: Chamador, corpo: Record<string, unknown>) {
   const l = await lerLinha(ch, corpo.contract_id);
   const ref = l.status === "completed" ? l.original_file_url : l.documento_pdf_url || l.original_file_url;
-  if (!ref || !ref.startsWith("files://")) throw new ErroHttp(409, "sem_pdf", "Este contrato ainda não tem PDF congelado. Baixe a prévia pela tela.");
+  if (!ref || !ref.startsWith("files://")) throw new ErroHttp(409, "sem_pdf", "Este contrato ainda não tem o PDF assinado pela agência. Baixe a prévia pela tela.");
   const { data, error } = await servico().storage.from("files").createSignedUrl(ref.slice("files://".length), 10 * 60);
   if (error || !data?.signedUrl) throw new ErroHttp(503, "pdf_indisponivel", "O PDF não abriu agora.");
   return json({ url: data.signedUrl, custo_usd: 0 });
@@ -1092,7 +1092,7 @@ async function executarItem(ch: Chamador, clientId: string, item: ItemDaAcaoDoAg
     const l = await criarRascunho(ch, { clientId, servicos, extra });
     const [todos, agencia] = await Promise.all([lerModelos(), lerAgencia()]);
     const m = montar(l, todos, agencia);
-    return { desfazer: { tipo: "cancelar_rascunho", contract_id: l.id }, aviso: `rascunho ${l.numero || ""}${m.faltando.length ? `; faltam ${m.faltando.length} campos` : "; pronto para congelar"}` };
+    return { desfazer: { tipo: "cancelar_rascunho", contract_id: l.id }, aviso: `rascunho ${l.numero || ""}${m.faltando.length ? `; faltam ${m.faltando.length} campos` : "; pronto para assinar"}` };
   }
   // Frente CON2: CNPJ, aditivo e renovação (sem custo, com Desfazer).
   if (item.operacao === "puxar_cnpj") {

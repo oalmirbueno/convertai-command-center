@@ -3,6 +3,8 @@ import { ChevronDown, ChevronRight, Loader2, Sparkles } from "lucide-react";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { PreencherComIA } from "@/components/sistema";
 import { botao, campo, campoTexto, etiqueta, juntar, lista, texto } from "@/components/sistema/estilos";
 import { modeloDoPapel } from "@/lib/mesa/api";
@@ -94,11 +96,13 @@ export default function CopyPorSecao({ site, modeloId }: { site: LinhaDoSite; mo
     await salvarSecao(uid, campos);
   };
 
+  // Os mesmos nomes da tela (Título, Subtítulo e Botão) na prévia do ✨.
   const camposDaAbertura = [
-    { chave: "abertura.headline", rotulo: "Headline", tipo: "texto" as const, valorAtual: abertura.headline, dica: "resultado para o público em até 8 palavras", maximo: 80 },
+    { chave: "abertura.headline", rotulo: "Título", tipo: "texto" as const, valorAtual: abertura.headline, dica: "a headline: resultado para o público em até 8 palavras", maximo: 80 },
     { chave: "abertura.subtitulo", rotulo: "Subtítulo", tipo: "texto_longo" as const, valorAtual: abertura.subtitulo, dica: "o que é e para quem, em 1 ou 2 frases", maximo: 240 },
-    { chave: "abertura.cta", rotulo: "CTA", tipo: "texto" as const, valorAtual: abertura.cta, dica: "ação com benefício em até 5 palavras", maximo: 40 },
+    { chave: "abertura.cta", rotulo: "Botão", tipo: "texto" as const, valorAtual: abertura.cta, dica: "o CTA: ação com benefício em até 5 palavras", maximo: 40 },
   ];
+  const aberturaMudou = !!escolhida && (abertura.headline !== escolhida.headline || abertura.subtitulo !== escolhida.subtitulo || abertura.cta !== escolhida.cta);
   const aplicarNaAbertura = async (v: Record<string, unknown>) => {
     const campos: Record<string, unknown> = {};
     ["headline", "subtitulo", "cta"].forEach((k) => {
@@ -119,12 +123,19 @@ export default function CopyPorSecao({ site, modeloId }: { site: LinhaDoSite; mo
           <span className={juntar(texto.rotulo, "min-w-0 flex-1")}>Abertura</span>
           <PreencherComIA papel="site" clientId={clientId} marcaId={marca ? marca.id : null} campos={camposDaAbertura} rotulo="Preencher a abertura" onAplicar={aplicarNaAbertura} onDesfazer={aplicarNaAbertura} />
         </div>
+        {/* UXS 30/09: os três campos com nome à vista (antes eram três caixas vazias só com aria-label). */}
         <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-3">
-          <input value={abertura.headline} onChange={(e) => setAbertura((a) => ({ ...a, headline: e.target.value }))} maxLength={80} className={campo} aria-label="Headline" />
-          <input value={abertura.subtitulo} onChange={(e) => setAbertura((a) => ({ ...a, subtitulo: e.target.value }))} maxLength={240} className={campo} aria-label="Subtítulo" />
-          <div className="flex min-w-0 items-center">
-            <input value={abertura.cta} onChange={(e) => setAbertura((a) => ({ ...a, cta: e.target.value }))} maxLength={40} className={juntar(campo, "mr-2 flex-1")} aria-label="CTA" />
-            <button type="button" className={botao.secundario} disabled={!!ocupado} onClick={() => void rodar("A abertura não foi salva", () => salvarSite("conteudo_editar", { site_id: site.id, campos: abertura }).then(() => undefined))}>
+          <CampoDeFormulario rotulo="Título">
+            <input value={abertura.headline} onChange={(e) => setAbertura((a) => ({ ...a, headline: e.target.value }))} maxLength={80} className={campo} aria-label="Título da abertura" />
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Subtítulo">
+            <input value={abertura.subtitulo} onChange={(e) => setAbertura((a) => ({ ...a, subtitulo: e.target.value }))} maxLength={240} className={campo} aria-label="Subtítulo da abertura" />
+          </CampoDeFormulario>
+          <div className="flex min-w-0 items-end">
+            <CampoDeFormulario rotulo="Botão" className="mr-2 flex-1">
+              <input value={abertura.cta} onChange={(e) => setAbertura((a) => ({ ...a, cta: e.target.value }))} maxLength={40} className={campo} aria-label="Botão da abertura" />
+            </CampoDeFormulario>
+            <button type="button" className={botao.secundario} disabled={!!ocupado || !aberturaMudou} onClick={() => void rodar("A abertura não foi salva", () => salvarSite("conteudo_editar", { site_id: site.id, campos: abertura }).then(() => undefined))} data-salvar-abertura="">
               Salvar
             </button>
           </div>
@@ -140,18 +151,25 @@ export default function CopyPorSecao({ site, modeloId }: { site: LinhaDoSite; mo
           const geradas = porSecao[uid] && Array.isArray(porSecao[uid].opcoes) ? porSecao[uid].opcoes : [];
           return (
             <li key={uid} className="min-w-0 py-1" data-copy-da-secao={uid}>
-              <button type="button" className={juntar(lista.linha, "w-full text-left")} onClick={() => setAberta(aqui ? null : uid)} aria-expanded={aqui}>
-                {aqui ? <ChevronDown className="mr-1.5 h-4 w-4 shrink-0" /> : <ChevronRight className="mr-1.5 h-4 w-4 shrink-0" />}
-                <span className="mr-2 min-w-0 flex-1">
-                  <span className={juntar(texto.corpo, "block truncate font-medium")}>{rotuloDaSecao(uid)}</span>
-                  <span className={juntar(texto.auxiliar, "block truncate")}>{c.titulo || (onde && onde.pagina ? onde.pagina.titulo : "sem texto ainda")}</span>
-                </span>
-                {vazia && <span className={juntar(etiqueta, "bg-muted")}>vazia</span>}
-                {lib && lib.so_real && <span className={juntar(etiqueta, "ml-1 bg-muted")}>só real</span>}
-              </button>
+              <div className="flex min-w-0 items-center">
+                <button type="button" className={juntar(lista.linha, "min-w-0 flex-1 text-left")} onClick={() => setAberta(aqui ? null : uid)} aria-expanded={aqui}>
+                  {aqui ? <ChevronDown className="mr-1.5 h-4 w-4 shrink-0" /> : <ChevronRight className="mr-1.5 h-4 w-4 shrink-0" />}
+                  <span className="mr-2 min-w-0 flex-1">
+                    <span className={juntar(texto.corpo, "block truncate font-medium")}>{rotuloDaSecao(uid)}</span>
+                    <span className={juntar(texto.auxiliar, "block truncate")}>{c.titulo || (onde && onde.pagina ? onde.pagina.titulo : "sem texto ainda")}</span>
+                  </span>
+                  {vazia && <span className={juntar(etiqueta, "bg-muted")}>vazia</span>}
+                  {lib && lib.so_real && <span className={juntar(etiqueta, "ml-1 bg-muted")}>só foto real</span>}
+                </button>
+                {/* A fórmula da seção no "?", fora do botão que abre a seção. */}
+                {aqui && lib && lib.formula && (
+                  <AjudaRecolhida className="ml-1 shrink-0" rotulo="Fórmula da seção">
+                    {lib.formula}
+                  </AjudaRecolhida>
+                )}
+              </div>
               {aqui && (
                 <div className="min-w-0 space-y-3 px-2 pb-3 pt-1">
-                  {lib && <p className={juntar(texto.auxiliar, "whitespace-normal")}>{lib.formula}</p>}
                   <input value={rascunho.titulo} onChange={(e) => setRascunho((r) => ({ ...r, titulo: e.target.value }))} maxLength={140} className={campo} aria-label={`Título de ${rotuloDaSecao(uid)}`} placeholder="Título" />
                   <textarea value={rascunho.texto} onChange={(e) => setRascunho((r) => ({ ...r, texto: e.target.value }))} rows={3} maxLength={900} className={campoTexto} aria-label={`Texto de ${rotuloDaSecao(uid)}`} placeholder="Texto" />
                   {lib && lib.itens && (

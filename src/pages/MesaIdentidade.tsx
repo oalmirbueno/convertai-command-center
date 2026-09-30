@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -23,9 +23,10 @@ import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { juntar, superficie } from "@/components/sistema/estilos";
-import { ETAPAS_DA_IDENTIDADE, etapaAtual, etapasDoProjeto, ehEtapaDaIdentidade, podeAbrir, progresso, type EtapaDaIdentidade } from "../../supabase/functions/_shared/identidade-etapas";
-import { chamarIdentidade, CHAVES, guardarProjeto, useProjeto, type ProjetoDeIdentidade } from "@/components/mesa-identidade/identidadeApi";
+import { ETAPAS_DA_IDENTIDADE, etapaAtual, etapaFeita, etapasDoProjeto, ehEtapaDaIdentidade, podeAbrir, progresso, type EtapaDaIdentidade } from "../../supabase/functions/_shared/identidade-etapas";
+import { chamarIdentidade, guardarProjeto, useProjeto, type ProjetoDeIdentidade } from "@/components/mesa-identidade/identidadeApi";
 import { ProjetoProvider, type ProjetoDaMesa } from "@/components/mesa-identidade/Comuns";
+import { ContextoDasGravacoes, GravacoesDaMesa, novaFilaDeGravacao, salvarNaFila, type FilaDeGravacao } from "@/components/mesa-identidade/gravacao";
 
 /**
  * Mesa Identidade Visual e Naming (/mesa-identidade, só equipe: admin, gestor
@@ -116,6 +117,11 @@ export default function MesaIdentidade() {
   const [modelosUsados, setModelosUsados] = useState(false);
   const [versaoCarteira, setVersaoCarteira] = useState(0);
   const telaCheia = useTelaCheiaDaMesa();
+  // UXS 30/09: uma fila de gravação por página (projeto_salvar um por vez; a versão sai do cache na hora).
+  const filaDeGravacao = useRef<FilaDeGravacao | null>(null);
+  if (!filaDeGravacao.current) filaDeGravacao.current = novaFilaDeGravacao();
+  const gravacoes = useRef<GravacoesDaMesa | null>(null);
+  if (!gravacoes.current) gravacoes.current = new GravacoesDaMesa();
 
   const role = profile?.role || "";
   const isAdmin = role === "admin";
@@ -170,6 +176,40 @@ export default function MesaIdentidade() {
     if (clientId) gravarOnde(clientId, etapa, projeto ? projeto.id : null, nomeDoCliente || null);
   }, [clientId, etapa, projeto, nomeDoCliente]);
 
+  // Mudança ainda indo para o banco: o navegador pergunta antes de fechar ou recarregar.
+  useEffect(() => {
+    const g = gravacoes.current;
+    const antesDeFechar = (e: BeforeUnloadEvent) => {
+      if (!g || !g.temPendente()) return undefined;
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    };
+    window.addEventListener("beforeunload", antesDeFechar);
+    return () => window.removeEventListener("beforeunload", antesDeFechar);
+  }, []);
+
+  /**
+   * Antes de trocar de etapa: grava o pendente. Se falhar, não troca (o texto
+   * fica na tela) e o aviso oferece sair mesmo assim.
+   */
+  const trocarDeEtapa = (v: EtapaDaIdentidade) => {
+    const g = gravacoes.current;
+    if (!g || !g.temPendente()) {
+      mudar({ etapa: v });
+      return;
+    }
+    g.salvarTudo().then(
+      () => mudar({ etapa: v }),
+      (e) =>
+        toast.error("A mudança desta etapa não foi salva", {
+          description: textoDoErro(e),
+          duration: 12_000,
+          action: { label: "Sair mesmo assim", onClick: () => mudar({ etapa: v }) },
+        }),
+    );
+  };
+
   const mesAtual = inicioDoMes();
   const consumo = useQuery({
     queryKey: ["mesa", "consumo", clientId, mesAtual],
@@ -219,17 +259,8 @@ export default function MesaIdentidade() {
     ? {
         projeto,
         guardar: (p) => guardarProjeto(queryClient, p),
-        salvarParte: async (parte, v, opcoes = {}) => {
-          try {
-            const r = await chamarIdentidade<{ projeto: ProjetoDeIdentidade }>("projeto_salvar", { projeto_id: projeto.id, versao: projeto.versao, parte, valor: v, substituir: opcoes.substituir === true });
-            guardarProjeto(queryClient, r.projeto);
-            return r.projeto;
-          } catch (e) {
-            // Outra pessoa salvou antes: relê para a tela mostrar o que está no banco.
-            void queryClient.invalidateQueries({ queryKey: CHAVES.projeto(projeto.id) });
-            throw e;
-          }
-        },
+        // UXS 30/09 (IDV-01/02): uma gravação por vez; a versão sai do cache na hora de gravar (nunca a do render).
+        salvarParte: (parte, v, opcoes = {}) => salvarNaFila(filaDeGravacao.current as FilaDeGravacao, queryClient, projeto.id, projeto.versao, parte, v, opcoes),
         concluir: async (e) => {
           try {
             const r = await chamarIdentidade<{ projeto: ProjetoDeIdentidade }>("etapa_concluir", { projeto_id: projeto.id, etapa: e });
@@ -248,7 +279,7 @@ export default function MesaIdentidade() {
             toast.error("A etapa não reabriu", { description: textoDoErro(err) });
           }
         },
-        irPara: (e) => mudar({ etapa: e }),
+        irPara: (e) => trocarDeEtapa(e),
       }
     : null;
 
@@ -264,7 +295,8 @@ export default function MesaIdentidade() {
       toast.info(abre.motivo || "Etapa ainda fechada.");
       return;
     }
-    mudar({ etapa: v });
+    if (v === etapa) return;
+    trocarDeEtapa(v);
   };
 
   const andamento = projeto ? progresso(projeto) : null;
@@ -286,8 +318,9 @@ export default function MesaIdentidade() {
             itens={(projeto ? etapasDoProj : ETAPAS_DA_IDENTIDADE.map((e) => e.valor).filter((e) => e !== "naming")).map((v) => {
               const e = ETAPAS_DA_IDENTIDADE.filter((x) => x.valor === v)[0];
               const aberta = !projeto ? v === "inicio" : podeAbrir(projeto, v).pode;
-              const feita = !!projeto && projeto.concluidas.indexOf(v) >= 0;
-              return { valor: v, rotulo: e.rotulo, dica: aberta ? (feita ? "Concluída" : undefined) : "Abre quando a etapa de antes fechar", destaque: !!projeto && v === etapaAtual(projeto) && !feita, dados: { "data-etapa-aberta": aberta ? "sim" : "nao" } };
+              // UXS 30/09 (IDV-07): feita pela mesma regra do andamento (projeto antigo conta a etapa nova atrás de uma fechada).
+              const feita = !!projeto && etapaFeita(projeto, v);
+              return { valor: v, rotulo: e.rotulo, dica: aberta ? (feita ? "Concluída" : undefined) : "Abre quando a etapa de antes fechar", destaque: !!projeto && v === etapaAtual(projeto) && !feita, feita, fechada: !aberta, dados: { "data-etapa-aberta": aberta ? "sim" : "nao" } };
             })}
             valor={etapa}
             onEscolher={escolherEtapa}
@@ -361,6 +394,7 @@ export default function MesaIdentidade() {
                   />
                 ) : contextoDoProjeto ? (
                   <ProjetoProvider valor={contextoDoProjeto}>
+                    <ContextoDasGravacoes.Provider value={gravacoes.current}>
                     {etapa === "briefing" && <EtapaBriefing />}
                     {etapa === "pesquisa" && <EtapaPesquisa />}
                     {etapa === "estrategia" && <EtapaEstrategia />}
@@ -371,6 +405,7 @@ export default function MesaIdentidade() {
                     {etapa === "guideline" && <EtapaGuideline />}
                     {etapa === "apresentacao" && <EtapaApresentacao />}
                     {etapa === "entrega" && <EtapaEntrega />}
+                    </ContextoDasGravacoes.Provider>
                   </ProjetoProvider>
                 ) : null}
               </Suspense>

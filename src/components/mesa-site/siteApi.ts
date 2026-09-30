@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { hashKey, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { chamarFuncao } from "@/lib/mesa/api";
@@ -248,4 +248,32 @@ export function secoesConstruidas(lista: TrabalhoDoMotor[]): string[] {
     .filter((t) => t.estado === "feito" && t.tipo === "construir")
     .forEach((t) => ((Array.isArray(t.resultado.secoes) ? t.resultado.secoes : []) as string[]).forEach((x) => s.indexOf(x) < 0 && s.push(x)));
   return s;
+}
+
+/**
+ * O endereço da prévia só pelo cache dos trabalhos (UXS 30/09): quem busca a
+ * lista é o diretor de site (sempre montado com o site aberto). Sem chamada,
+ * sem canal e sem intervalo novos; atualiza quando o cache muda.
+ */
+export function usePreviaEmCache(siteId: string | null): string | null {
+  const qc = useQueryClient();
+  const ler = () => {
+    const d = siteId ? qc.getQueryData<{ trabalhos: TrabalhoDoMotor[] }>(CHAVES.trabalhos(siteId)) : undefined;
+    const p = d && Array.isArray(d.trabalhos) ? previaAtual(d.trabalhos) : null;
+    return p ? p.preview_url : null;
+  };
+  const [url, setUrl] = useState<string | null>(ler);
+  useEffect(() => {
+    if (!siteId) {
+      setUrl(null);
+      return;
+    }
+    const alvo = hashKey(CHAVES.trabalhos(siteId));
+    setUrl(ler());
+    return qc.getQueryCache().subscribe((ev) => {
+      if (ev && ev.query && ev.query.queryHash === alvo) setUrl(ler());
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qc, siteId]);
+  return url;
 }

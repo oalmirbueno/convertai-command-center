@@ -14,6 +14,7 @@ import { useFontesGoogle } from "@/lib/identidade/fontesGoogle";
 import { dataUrlDoBucket, desenharLayout } from "@/lib/identidade/desenharPeca";
 import { assinaturaDeEmail, layoutDaPeca, PECAS_DA_MARCA, svgDoLayout, type PecaDaMarca } from "../../../supabase/functions/mesa-identidade/modulos/aplicacoes-da-marca";
 import { contextoParaPreencher, useProjetoDaMesa } from "./Comuns";
+import { useValorSalvo } from "./gravacao";
 import { blobDoCanvas, enviarFeitoNaTela } from "./arquivosDaMarca";
 import { salvarArquivo } from "./exportarNoNavegador";
 
@@ -102,7 +103,14 @@ export default function PecasDaMarca() {
   const sistema = (d.sistema || {}) as Record<string, any>;
   const aplicacoes = (d.aplicacoes || {}) as { itens?: Array<{ tipo: string; descricao: string; imagem: string | null }>; assinatura?: Partial<Assinatura> };
   const [grupo, setGrupo] = useState<"redes" | "papelaria">("redes");
-  const [ass, setAss] = useState<Assinatura>({ ...ASSINATURA_VAZIA, ...(aplicacoes.assinatura || {}) });
+  // UXS 30/09: o contato grava sozinho (sem o Salvar), e a releitura não passa por cima do que está sendo digitado.
+  const pAss = useValorSalvo<Assinatura>({
+    id: "aplicacoes:assinatura",
+    servidor: { ...ASSINATURA_VAZIA, ...(aplicacoes.assinatura || {}) },
+    paraSalvar: (a) => a,
+    gravar: (n) => salvarParte("aplicacoes", { assinatura: n }),
+  });
+  const ass = pAss.valor;
   const [guardando, setGuardando] = useState<string | null>(null);
   const nome = String((d.naming && d.naming.nome) || (marca && !marca.principal ? marca.nome : mesa.clientName) || "Marca");
   const slogan = String((d.naming && d.naming.slogan) || "");
@@ -123,12 +131,13 @@ export default function PecasDaMarca() {
   const html = useMemo(() => assinaturaDeEmail({ nome: ass.pessoa || nome, cargo: ass.cargo, empresa: nome, telefone: ass.telefone, email: ass.email, site: ass.site, instagram: ass.instagram, logoUrl: ass.logo_url || null, cores, familia: corpo }), [JSON.stringify(ass), nome, JSON.stringify(cores), corpo]);
   const marcaId = projeto.marca_id || (marca && !marca.principal ? marca.id : null);
 
-  const salvarAssinatura = async (nova: Assinatura, frase?: string) => {
+  /** Troca e grava já (Preencher com IA e o Desfazer dele). Lança para a peça mostrar o erro. */
+  const salvarAssinatura = async (nova: Assinatura) => {
     try {
-      await salvarParte("aplicacoes", { assinatura: nova });
-      if (frase) toast.success(frase);
+      await pAss.trocarESalvar(nova);
     } catch (e) {
       avisarErro(e, "Os dados de contato não foram salvos");
+      throw e;
     }
   };
 
@@ -175,7 +184,7 @@ export default function PecasDaMarca() {
       <Secao
         titulo="Contato e assinatura de e-mail"
         divisoria
-        descricao={ass.email || ass.telefone ? "Preenchido" : "Em aberto"}
+        descricao={`${ass.email || ass.telefone ? "Preenchido" : "Em aberto"}${pAss.pendente ? " · não salvo" : ""}`}
         recolher={`mesa-identidade:${projeto.id}:aplicacoes:assinatura`}
         ajuda="Os dados entram no cartão, no timbrado e na assinatura. Para a logo aparecer no e-mail, use um endereço público (https) da logo, como o do site: link assinado do painel expira."
         acao={
@@ -189,19 +198,14 @@ export default function PecasDaMarca() {
               onAplicar={async (v) => {
                 const nova = { ...ass };
                 for (const k of Object.keys(v)) if ((nova as Record<string, string>)[k] !== undefined) (nova as Record<string, string>)[k] = String(v[k] || "");
-                setAss(nova);
                 await salvarAssinatura(nova);
               }}
               onDesfazer={async (a) => {
                 const nova = { ...ass };
                 for (const k of Object.keys(a)) if ((nova as Record<string, string>)[k] !== undefined) (nova as Record<string, string>)[k] = String(a[k] || "");
-                setAss(nova);
                 await salvarAssinatura(nova);
               }}
             />
-            <button type="button" className={juntar(botao.secundario, "m-1 h-8")} onClick={() => void salvarAssinatura(ass, "Contato salvo")}>
-              Salvar
-            </button>
           </>
         }
       >
@@ -209,7 +213,7 @@ export default function PecasDaMarca() {
           <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
             {CAMPOS_DA_ASSINATURA.map((c) => (
               <CampoDeFormulario key={c.chave} rotulo={c.rotulo}>
-                <input className={campo} value={ass[c.chave]} maxLength={c.chave === "logo_url" ? 600 : 120} onChange={(e) => setAss({ ...ass, [c.chave]: e.target.value })} />
+                <input className={campo} value={ass[c.chave]} maxLength={c.chave === "logo_url" ? 600 : 120} onChange={(e) => pAss.mudar({ ...ass, [c.chave]: e.target.value })} onBlur={() => void pAss.salvarAgora().catch(() => undefined)} />
               </CampoDeFormulario>
             ))}
           </div>

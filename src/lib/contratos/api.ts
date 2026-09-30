@@ -1,4 +1,6 @@
+import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao } from "@/lib/mesa/api";
+import { mensagemDaFuncao } from "@/lib/fileUrls";
 import type { FichaFiscal } from "../../../supabase/functions/contratos/modulos/contrato-ficha";
 import type {
   ClausulaDoModelo,
@@ -149,3 +151,46 @@ export const CHAVES_DOS_CONTRATOS = {
 };
 
 export type RespostaDoDiff = { antes: { id: string; versao: number }; depois: { id: string; versao: number }; linhas: LinhaDoDiff[]; resumo: { mudaram: number; entraram: number; sairam: number } };
+
+// ------------------------------------------------------------------ envio por e-mail e cópia (UXS, 30/09)
+
+/** O que a função send-contract-email responde em inglês, dito em português. */
+const ERROS_DO_EMAIL: Record<string, string> = {
+  "client without email": "O cliente não tem e-mail cadastrado.",
+  "admin must sign first": "A agência precisa assinar antes do envio.",
+  "contract must be frozen before sending": "A agência precisa assinar antes do envio.",
+  "contract is no longer available for sending": "Este contrato não pode mais ser enviado.",
+  "email service not configured": "O envio de e-mail não está configurado.",
+  "email sent but contract status was not recorded": "O e-mail saiu, mas o envio não ficou registrado. Atualize a tela.",
+  "contract not found": "Contrato não encontrado.",
+  forbidden: "Você não tem permissão para enviar este contrato.",
+  unauthorized: "Entre de novo para enviar.",
+};
+
+export function motivoDoEmail(bruto: string): string {
+  return ERROS_DO_EMAIL[bruto] || bruto;
+}
+
+/**
+ * Manda o link de assinatura por e-mail ao cliente (a função
+ * send-contract-email). Um lugar só para o contrato de modelo e o de PDF.
+ * Devolve o link que foi no e-mail; erro vira frase em português.
+ */
+export async function enviarContratoPorEmail(contractId: string): Promise<{ signUrl: string | null }> {
+  const { data, error } = await supabase.functions.invoke("send-contract-email", { body: { contract_id: contractId } });
+  if (error) throw new Error(motivoDoEmail(await mensagemDaFuncao(error, "O e-mail não foi enviado.")));
+  const corpo = (data || {}) as { error?: unknown; signUrl?: unknown };
+  if (typeof corpo.error === "string" && corpo.error) throw new Error(motivoDoEmail(corpo.error));
+  return { signUrl: typeof corpo.signUrl === "string" && corpo.signUrl ? corpo.signUrl : null };
+}
+
+/** Copia e só diz que deu certo depois que a cópia aconteceu (o aviso "copiado" não mente). */
+export async function copiarTexto(t: string): Promise<boolean> {
+  try {
+    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") return false;
+    await navigator.clipboard.writeText(t);
+    return true;
+  } catch {
+    return false;
+  }
+}

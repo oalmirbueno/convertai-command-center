@@ -1,12 +1,12 @@
 import { createElement as h } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { functions: { invoke: vi.fn() } } }));
 
 import { toast } from "sonner";
-import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import CartaoDeAcao, { CapacidadesDoAgente, OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import type { AcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 
 /**
@@ -93,11 +93,39 @@ describe("CartaoDeAcao", () => {
     expect(screen.queryByRole("button", { name: /Desfazer/ })).toBeNull();
   });
 
-  it("a linha do que o agente pode fazer leva aos atalhos", () => {
+  it("a linha do que o agente pode fazer leva aos atalhos (sem prometer confirmação: há ação que é feita na hora)", () => {
     const onAtalho = vi.fn();
     render(h(OQuePossoFazer, { capacidades: ["apagar", "refazer"], atalhos: [{ rotulo: "Refazer conteúdos", texto: "Refaça os conteúdos " }], onAtalho }));
-    expect(screen.getByText(/apagar, refazer. Confirmo com você antes./)).toBeTruthy();
+    expect(screen.getByText(/apagar, refazer\./)).toBeTruthy();
+    expect(screen.queryByText(/Confirmo com você antes/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Refazer conteúdos" }));
     expect(onAtalho).toHaveBeenCalledWith("Refaça os conteúdos ");
+  });
+
+  it("com até 4 atalhos, todos à vista; com mais, 3 e o \"...\" com o resto, na ordem, que também preenche", () => {
+    const onAtalho = vi.fn();
+    const atalhos = (n: number) => Array.from({ length: n }, (_, i) => ({ rotulo: `Atalho ${i + 1}`, texto: `Pedido ${i + 1} ` }));
+    const quatro = render(h(OQuePossoFazer, { capacidades: ["x"], atalhos: atalhos(4), onAtalho }));
+    expect(within(screen.getByRole("group", { name: "Atalhos de ação" })).getAllByRole("button").map((b) => b.textContent)).toEqual(["Atalho 1", "Atalho 2", "Atalho 3", "Atalho 4"]);
+    expect(screen.queryByRole("button", { name: "Mais atalhos" })).toBeNull();
+    quatro.unmount();
+
+    render(h(OQuePossoFazer, { capacidades: ["x"], atalhos: atalhos(7), onAtalho }));
+    const grupo = screen.getByRole("group", { name: "Atalhos de ação" });
+    expect(within(grupo).getAllByRole("button").length).toBe(4);
+    expect(screen.queryByRole("button", { name: "Atalho 4" })).toBeNull();
+    fireEvent.keyDown(screen.getByRole("button", { name: "Mais atalhos" }), { key: "Enter" });
+    const itens = screen.getAllByRole("menuitem");
+    expect(itens.map((i) => i.textContent)).toEqual(["Atalho 4", "Atalho 5", "Atalho 6", "Atalho 7"]);
+    fireEvent.click(itens[1]);
+    expect(onAtalho).toHaveBeenCalledWith("Pedido 5 ");
+  });
+
+  it("sem a linha Posso (a lista foi para o \"?\"): ficam só os atalhos; a lista inteira mora em CapacidadesDoAgente", () => {
+    render(h(OQuePossoFazer, { capacidades: ["apagar", "refazer"], mostrarCapacidades: false, atalhos: [{ rotulo: "Refazer", texto: "Refaça" }], onAtalho: vi.fn() }));
+    expect(screen.queryByText(/Posso:/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Refazer" })).toBeTruthy();
+    render(h(CapacidadesDoAgente, { capacidades: ["apagar (na hora)", "refazer (com Confirmar)"] }));
+    expect(screen.getAllByRole("listitem").map((i) => i.textContent)).toEqual(["apagar (na hora)", "refazer (com Confirmar)"]);
   });
 });

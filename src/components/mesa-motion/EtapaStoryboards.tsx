@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Check, Loader2, Sparkles } from "lucide-react";
+import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
@@ -10,13 +11,16 @@ import { usd } from "@/lib/mesa/api";
 import { pecaPorId } from "../../../supabase/functions/_shared/cena-hf";
 import { duracaoTotal } from "../../../supabase/functions/_shared/motion-metodo";
 import { ComFilme, ModeloDaAcao, useModeloDaAcao } from "./FilmeAberto";
-import { chamarMotion, type Filme, useGuardarFilme } from "./motionApi";
+import { chamarMotion, type Filme, type ResumoDaTroca, textoDaTroca, useGuardarFilme } from "./motionApi";
 import type { IrPara } from "@/components/mesa-videos/MesaDeVideo";
 
 /**
  * Etapa 4: 3 storyboards de conceitos diferentes (gerar a mais e escolher,
  * sem laço de correção). No filme da marca, cada storyboard é um roteiro de
  * 6 a 10 planos (gerado, real ou tipografia em código).
+ * Com cenas feitas, "Trocar para este" troca num clique e o aviso diz o que
+ * saiu, com Desfazer (o servidor guarda a cópia). "Gerar outros 3" também
+ * tem Desfazer: os storyboards pagos de antes voltam.
  */
 
 function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
@@ -28,13 +32,24 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
   const [gerando, setGerando] = useState(false);
   const [custo, setCusto] = useState<number | null>(null);
 
+  const desfazer = async (qual: "troca" | "geracao") => {
+    try {
+      const d = await chamarMotion<{ filme: Filme }>("storyboard_desfazer", { filme_id: filme.id, qual });
+      guardar(d.filme);
+      toast.success(qual === "troca" ? "As cenas de antes voltaram" : "Os storyboards de antes voltaram");
+    } catch (e) {
+      avisarErro(e, "Não deu para desfazer");
+    }
+  };
+
   const gerar = async () => {
     setGerando(true);
     try {
-      const d = await chamarMotion<{ filme: Filme; custo_usd: number }>("storyboards_gerar", { filme_id: filme.id, modelo_id: modelo ? modelo.id : undefined, pedido: pedido.trim() || undefined });
+      const d = await chamarMotion<{ filme: Filme; custo_usd: number; anterior?: { pode_desfazer?: boolean } }>("storyboards_gerar", { filme_id: filme.id, modelo_id: modelo ? modelo.id : undefined, pedido: pedido.trim() || undefined });
       guardar(d.filme);
       setCusto(d.custo_usd);
       atualizarCusto();
+      if (d.anterior && d.anterior.pode_desfazer) toast.success("3 storyboards novos", { description: "O custo da geração não volta.", duration: 15000, action: { label: "Desfazer", onClick: () => void desfazer("geracao") } });
     } catch (e) {
       avisarErro(e, "Os storyboards não foram gerados");
     } finally {
@@ -42,13 +57,21 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
     }
   };
 
+  const [escolhendo, setEscolhendo] = useState<number | null>(null);
   const escolher = async (i: number) => {
+    const antes: ResumoDaTroca = { cenas: filme.cenas.length, stills_aprovados: filme.cenas.filter((c) => c.still_aprovado).length, sob_medida: filme.cenas.filter((c) => c.modo === "sob_medida").length };
+    setEscolhendo(i);
     try {
-      const d = await chamarMotion<{ filme: Filme }>("storyboard_escolher", { filme_id: filme.id, indice: i });
+      const d = await chamarMotion<{ filme: Filme; anterior?: ResumoDaTroca }>("storyboard_escolher", { filme_id: filme.id, indice: i });
       guardar(d.filme);
+      const saiu = d.anterior && typeof d.anterior.cenas === "number" ? d.anterior : antes;
+      // O aviso fica uns 15 s e continua à vista depois de ir para os Stills.
+      if (saiu.cenas > 0) toast.success(`Cenas trocadas: ${textoDaTroca(saiu)}`, { duration: 15000, action: { label: "Desfazer", onClick: () => void desfazer("troca") } });
       irPara("stills");
     } catch (e) {
       avisarErro(e, "A escolha não foi salva");
+    } finally {
+      setEscolhendo(null);
     }
   };
 
@@ -71,7 +94,7 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
         <ModeloDaAcao chave="storyboards" alvo="storyboards" />
         <input value={pedido} onChange={(e) => setPedido(e.target.value)} maxLength={600} placeholder="Pedido extra (opcional): começar pela pergunta, mais cenas de prova..." className={juntar(campo, "mt-2")} aria-label="Pedido extra para os storyboards" />
         {custo !== null && <p className={juntar(texto.auxiliar, "mt-2")}>Custo desta geração: {usd(custo)}</p>}
-        {!filme.brand.essencia && <p className={juntar(texto.auxiliar, "mt-2")}>Gere o BRAND.md antes.</p>}
+        {!filme.brand.essencia && <EstadoVazio compacto className="mt-2" titulo="Gere o BRAND.md antes" acao={<button type="button" className={botao.secundario} onClick={() => irPara("brand")}>Abrir o BRAND.md</button>} />}
         {!filme.storyboards.length && !gerando && filme.brand.essencia && <EstadoVazio compacto icone={<Sparkles className="h-5 w-5" />} titulo="Gere os 3 storyboards e escolha um." />}
       </Secao>
 
@@ -90,8 +113,9 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
                     Escolhido
                   </span>
                 ) : (
-                  <button type="button" className={botao.secundario} onClick={() => void escolher(i)}>
-                    Escolher
+                  <button type="button" className={botao.secundario} onClick={() => void escolher(i)} disabled={escolhendo !== null}>
+                    {escolhendo === i ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                    {filme.cenas.length > 0 ? "Trocar para este" : "Escolher"}
                   </button>
                 )
               }
@@ -129,5 +153,5 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
 }
 
 export default function EtapaStoryboards({ irPara }: { irPara: IrPara }) {
-  return <ComFilme>{(filme) => <Conteudo key={filme.id} filme={filme} irPara={irPara} />}</ComFilme>;
+  return <ComFilme irPara={irPara}>{(filme) => <Conteudo key={filme.id} filme={filme} irPara={irPara} />}</ComFilme>;
 }

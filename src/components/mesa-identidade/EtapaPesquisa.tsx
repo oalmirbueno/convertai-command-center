@@ -1,62 +1,87 @@
-import { useEffect, useState } from "react";
-import { ExternalLink, Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Check, ExternalLink, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { PreencherComIA } from "@/components/sistema";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
+import BotaoComIcone from "@/components/sistema/BotaoComIcone";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { botao, campo, campoTexto, espaco, juntar, lista, texto } from "@/components/sistema/estilos";
 import { chamarIdentidade, type ProjetoDeIdentidade } from "./identidadeApi";
 import { CabecalhoDaEtapa, contextoParaPreencher, Pastilha, partesDoCusto, SeletorDoModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
+import { useGravacoesDaMesa, useValorSalvo } from "./gravacao";
 import Moodboard from "./Moodboard";
 
 type Referencia = { titulo: string; link: string; nota: string; tipo: "concorrente" | "referencia" };
 
 const linkValido = (s: string) => (/^https?:\/\/\S+$/i.test(s.trim()) ? s.trim() : "");
+const MAXIMO_DE_REFERENCIAS = 40;
+const chaveDoTexto = (s: string) => String(s || "").trim().toLowerCase();
+
+/** Já está na lista? O link bate (quando tem) ou nome e tipo batem (sem diferença de maiúsculas e sem espaço nas pontas). */
+export function jaGuardada(lista_: Referencia[], r: { titulo: string; link: string; tipo: Referencia["tipo"] }): boolean {
+  const link = linkValido(r.link || "");
+  return lista_.some((x) => (link && linkValido(x.link || "") === link) || (chaveDoTexto(x.titulo) === chaveDoTexto(r.titulo) && x.tipo === r.tipo));
+}
 
 /**
  * Etapa 3, Pesquisa e referências: concorrentes e referências visuais (as
  * da equipe, as do contexto do cliente e as da pesquisa com IA, que custa e
  * mostra o preço antes). O resumo da pesquisa guia os caminhos criativos.
+ *
+ * UXS 30/09: o resumo grava sozinho; da "Pesquisa com IA", "Usar este resumo"
+ * e "Guardar todos" fecham a etapa com 1 ou 2 cliques (com Desfazer); o item
+ * já guardado mostra "Guardada" (nada repete, nem no formulário).
  */
 export default function EtapaPesquisa() {
   const mesa = useMesa();
   const { marca } = useMarcaDaMesa();
   const { projeto, salvarParte, guardar } = useProjetoDaMesa();
+  const gravacoes = useGravacoesDaMesa();
   const [modeloId, setModeloId] = useModeloDaAcao("identidade");
   const avisarErro = useAvisarErro();
   const pesquisa = (projeto.dados.pesquisa || {}) as { referencias?: Referencia[]; resumo?: string; ia?: any };
-  const [refs, setRefs] = useState<Referencia[]>([]);
-  const [resumo, setResumo] = useState("");
+  const pRefs = useValorSalvo<Referencia[]>({
+    id: "pesquisa:referencias",
+    servidor: Array.isArray(pesquisa.referencias) ? pesquisa.referencias : [],
+    paraSalvar: (l) => l.slice(0, MAXIMO_DE_REFERENCIAS),
+    gravar: (n) => salvarParte("pesquisa", { referencias: n }),
+  });
+  const pResumo = useValorSalvo<string>({
+    id: "pesquisa:resumo",
+    servidor: pesquisa.resumo || "",
+    paraSalvar: (t) => t.slice(0, 3000),
+    gravar: (n) => salvarParte("pesquisa", { resumo: n }),
+  });
+  const refs = pRefs.valor;
+  const resumo = pResumo.valor;
   const [nova, setNova] = useState<Referencia>({ titulo: "", link: "", nota: "", tipo: "referencia" });
-  const [salvando, setSalvando] = useState(false);
   const [trazendo, setTrazendo] = useState(false);
 
-  useEffect(() => {
-    setRefs(Array.isArray(pesquisa.referencias) ? pesquisa.referencias : []);
-    setResumo(pesquisa.resumo || "");
-    // Relê quando referências ou resumo salvos mudam (o moodboard salva a mesma parte sem apagar o que está sendo escrito).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projeto.id, JSON.stringify(pesquisa.referencias || []), pesquisa.resumo || ""]);
-
-  const salvar = async (lista_: Referencia[] = refs, resumo_: string = resumo) => {
-    setSalvando(true);
+  const gravarRefs = async (novas: Referencia[], frase?: string, antes?: Referencia[]) => {
     try {
-      await salvarParte("pesquisa", { referencias: lista_.slice(0, 40), resumo: resumo_.slice(0, 3000) });
-      toast.success("Pesquisa salva");
+      await pRefs.trocarESalvar(novas);
+      if (frase && antes) toast.success(frase, { duration: 10_000, action: { label: "Desfazer", onClick: () => void gravarRefs(antes) } });
+      else if (frase) toast.success(frase);
     } catch (e) {
       avisarErro(e, "A pesquisa não foi salva");
-    } finally {
-      setSalvando(false);
     }
   };
 
+  const limpa = (r: Referencia): Referencia => ({ ...r, titulo: r.titulo.trim().slice(0, 120), link: linkValido(r.link), nota: r.nota.trim().slice(0, 300) });
+
   const acrescentar = (r: Referencia) => {
     if (!r.titulo.trim()) return;
-    const novas = refs.concat([{ ...r, titulo: r.titulo.trim().slice(0, 120), link: linkValido(r.link), nota: r.nota.trim().slice(0, 300) }]);
-    setRefs(novas);
-    void salvar(novas);
+    if (jaGuardada(refs, r)) {
+      toast.info("Essa referência já está guardada.");
+      return;
+    }
+    if (refs.length >= MAXIMO_DE_REFERENCIAS) {
+      toast.info(`A pesquisa já tem ${MAXIMO_DE_REFERENCIAS} referências.`);
+      return;
+    }
+    void gravarRefs(refs.concat([limpa(r)]));
   };
 
   const trazerDoContexto = async () => {
@@ -71,9 +96,8 @@ export default function EtapaPesquisa() {
         toast.info("Nada novo no contexto do cliente.");
         return;
       }
-      const novas = refs.concat(vindas);
-      setRefs(novas);
-      await salvar(novas);
+      await pRefs.trocarESalvar(refs.concat(vindas));
+      toast.success(vindas.length === 1 ? "1 referência do contexto" : `${vindas.length} referências do contexto`);
     } catch (e) {
       avisarErro(e, "As referências não vieram");
     } finally {
@@ -82,18 +106,80 @@ export default function EtapaPesquisa() {
   };
 
   const ia = pesquisa.ia as { resumo?: string; concorrentes?: Array<{ nome: string; comunica: string; link: string }>; referencias?: Array<{ titulo: string; por_que: string; link: string }>; cliches?: string[] } | undefined;
+  const achados: Referencia[] = useMemo(
+    () =>
+      ia
+        ? (ia.concorrentes || []).map((c): Referencia => ({ titulo: c.nome, link: c.link, nota: c.comunica, tipo: "concorrente" })).concat((ia.referencias || []).map((c): Referencia => ({ titulo: c.titulo, link: c.link, nota: c.por_que, tipo: "referencia" })))
+        : [],
+    [ia],
+  );
+  const faltamGuardar = achados.filter((a) => a.titulo && !jaGuardada(refs, a));
+
+  const guardarTodos = () => {
+    const livres = Math.max(0, MAXIMO_DE_REFERENCIAS - refs.length);
+    const entram = faltamGuardar.slice(0, livres).map(limpa);
+    const fora = faltamGuardar.length - entram.length;
+    if (!entram.length) {
+      toast.info(`A pesquisa já tem ${MAXIMO_DE_REFERENCIAS} referências.`);
+      return;
+    }
+    const antes = refs;
+    void gravarRefs(refs.concat(entram), fora ? `${entram.length} guardadas; ${fora} ficaram de fora (limite de ${MAXIMO_DE_REFERENCIAS})` : entram.length === 1 ? "1 guardada" : `${entram.length} guardadas`, antes);
+  };
+
+  const usarResumoDaIa = () => {
+    if (!ia || !ia.resumo) return;
+    const antes = resumo;
+    const trocou = !!antes.trim();
+    pResumo
+      .trocarESalvar(ia.resumo)
+      .then(() =>
+        toast.success(trocou ? "O resumo foi trocado pelo da pesquisa" : "Resumo da pesquisa usado", {
+          duration: 10_000,
+          action: { label: "Desfazer", onClick: () => void pResumo.trocarESalvar(antes).catch((e) => avisarErro(e, "Não foi possível desfazer")) },
+        }),
+      )
+      .catch((e) => avisarErro(e, "O resumo não foi salvo"));
+  };
+
+  const botaoGuardar = (r: Referencia, i: string) => {
+    const ja = jaGuardada(refs, r);
+    return (
+      <button key={i} type="button" className={juntar(botao.discreto, "h-8")} disabled={ja} onClick={() => acrescentar(r)} data-guardar-achado={ja ? "guardada" : "guardar"}>
+        {ja ? (
+          <>
+            <Check className="mr-1.5 h-3.5 w-3.5" /> Guardada
+          </>
+        ) : (
+          "Guardar"
+        )}
+      </button>
+    );
+  };
 
   return (
-    <div className={espaco.pagina} data-etapa-pesquisa="">
+    <div
+      className={espaco.pagina}
+      data-etapa-pesquisa=""
+      onBlur={() => {
+        if (gravacoes && gravacoes.temPendente()) void gravacoes.salvarTudo().catch(() => undefined);
+      }}
+    >
       <CabecalhoDaEtapa
         etapa="pesquisa"
-        ajuda="Junte concorrentes e referências (de qualquer segmento) e escreva o resumo do que a pesquisa mostrou. A pesquisa com IA busca na web e mostra o custo antes; link que a busca não trouxe não aparece."
+        ajuda="Junte concorrentes e referências (de qualquer segmento) e escreva o resumo do que a pesquisa mostrou. A pesquisa com IA busca na web e mostra o custo antes; link que a busca não trouxe não aparece. Tudo grava sozinho."
         acoes={
           <>
-            <button type="button" className={juntar(botao.secundario, "m-1 h-8")} onClick={() => void trazerDoContexto()} disabled={trazendo}>
-              {trazendo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1.5 h-3.5 w-3.5" />} Do contexto
-            </button>
-            <SeletorDoModelo papel="identidade" valor={modeloId} onEscolher={setModeloId} />
+            <BotaoComIcone
+              variante="secundario"
+              className="m-1 h-8"
+              icone={trazendo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              rotulo="Do contexto"
+              aria-label="Trazer as referências do contexto do cliente"
+              onClick={() => void trazerDoContexto()}
+              disabled={trazendo}
+            />
+            <SeletorDoModelo papel="identidade" valor={modeloId} onEscolher={setModeloId} className="max-w-[180px]" />
             <BotaoComCusto
               rotulo="Pesquisar com IA"
               titulo="Pesquisa de mercado"
@@ -107,7 +193,7 @@ export default function EtapaPesquisa() {
         }
       />
 
-      <Secao titulo="Referências e concorrentes" descricao={`${refs.length} guardadas`} recolher={`mesa-identidade:${projeto.id}:pesquisa:refs`}>
+      <Secao titulo="Referências e concorrentes" descricao={`${refs.length} guardadas`} recolher={`mesa-identidade:${projeto.id}:pesquisa:refs`} data-bloco-da-etapa="refs">
         {refs.length > 0 && (
           <ul className={juntar(lista.aberta, lista.divisoria, "mb-4")} aria-label="Referências guardadas">
             {refs.map((r, i) => (
@@ -124,16 +210,7 @@ export default function EtapaPesquisa() {
                     <ExternalLink className="h-4 w-4" />
                   </a>
                 )}
-                <button
-                  type="button"
-                  className={botao.icone}
-                  aria-label={`Tirar ${r.titulo}`}
-                  onClick={() => {
-                    const novas = refs.filter((_, k) => k !== i);
-                    setRefs(novas);
-                    void salvar(novas);
-                  }}
-                >
+                <button type="button" className={botao.icone} aria-label={`Tirar ${r.titulo}`} onClick={() => void gravarRefs(refs.filter((_, k) => k !== i), "Referência tirada", refs)}>
                   <Trash2 className="h-4 w-4" />
                 </button>
               </li>
@@ -168,7 +245,27 @@ export default function EtapaPesquisa() {
       </Secao>
 
       {ia && (
-        <Secao titulo="Pesquisa com IA" descricao={ia.concorrentes ? `${ia.concorrentes.length} concorrentes` : undefined} divisoria recolher={`mesa-identidade:${projeto.id}:pesquisa:ia`}>
+        <Secao
+          titulo="Pesquisa com IA"
+          descricao={ia.concorrentes ? `${ia.concorrentes.length} concorrentes` : undefined}
+          divisoria
+          recolher={`mesa-identidade:${projeto.id}:pesquisa:ia`}
+          data-bloco-da-etapa="pesquisa-ia"
+          acao={
+            <>
+              {ia.resumo && ia.resumo !== resumo && (
+                <button type="button" className={juntar(botao.discreto, "m-1 h-8")} onClick={usarResumoDaIa} data-usar-resumo-da-ia="">
+                  Usar este resumo
+                </button>
+              )}
+              {achados.length > 0 && (
+                <button type="button" className={juntar(botao.discreto, "m-1 h-8")} disabled={!faltamGuardar.length} onClick={guardarTodos} data-guardar-todos="">
+                  Guardar todos
+                </button>
+              )}
+            </>
+          }
+        >
           {ia.resumo && <p className={juntar(texto.corpo, "mb-3 whitespace-pre-line")}>{ia.resumo}</p>}
           <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Achados da pesquisa">
             {(ia.concorrentes || []).map((c, i) => (
@@ -177,9 +274,7 @@ export default function EtapaPesquisa() {
                   <span className={juntar(texto.corpo, "block truncate font-medium")}>{c.nome}</span>
                   <span className={juntar(texto.auxiliar, "block truncate")}>{c.comunica}</span>
                 </span>
-                <button type="button" className={juntar(botao.discreto, "h-8")} onClick={() => acrescentar({ titulo: c.nome, link: c.link, nota: c.comunica, tipo: "concorrente" })}>
-                  Guardar
-                </button>
+                {botaoGuardar({ titulo: c.nome, link: c.link, nota: c.comunica, tipo: "concorrente" }, `gc-${i}`)}
               </li>
             ))}
             {(ia.referencias || []).map((c, i) => (
@@ -188,9 +283,7 @@ export default function EtapaPesquisa() {
                   <span className={juntar(texto.corpo, "block truncate font-medium")}>{c.titulo}</span>
                   <span className={juntar(texto.auxiliar, "block truncate")}>{c.por_que}</span>
                 </span>
-                <button type="button" className={juntar(botao.discreto, "h-8")} onClick={() => acrescentar({ titulo: c.titulo, link: c.link, nota: c.por_que, tipo: "referencia" })}>
-                  Guardar
-                </button>
+                {botaoGuardar({ titulo: c.titulo, link: c.link, nota: c.por_que, tipo: "referencia" }, `gr-${i}`)}
               </li>
             ))}
           </ul>
@@ -203,7 +296,9 @@ export default function EtapaPesquisa() {
       <Secao
         titulo="Resumo da pesquisa"
         divisoria
+        descricao={pResumo.pendente ? "Não salvo" : undefined}
         recolher={`mesa-identidade:${projeto.id}:pesquisa:resumo`}
+        data-bloco-da-etapa="resumo"
         acao={
           <PreencherComIA
             papel="identidade"
@@ -212,25 +307,12 @@ export default function EtapaPesquisa() {
             campos={[{ chave: "resumo", rotulo: "Resumo da pesquisa", tipo: "texto_longo", valorAtual: resumo, dica: "Como as marcas do segmento se apresentam e onde está o espaço para a marca. Só com o que as fontes mostram.", maximo: 3000 }]}
             contexto={contextoParaPreencher(projeto, refs.length ? `Referências guardadas: ${refs.slice(0, 12).map((r) => `${r.titulo} (${r.tipo}): ${r.nota}`).join("; ")}` : undefined)}
             fontes={["contexto", "briefing", "dossie", "web"]}
-            onAplicar={async (v) => {
-              const novo = String(v.resumo || "");
-              setResumo(novo);
-              await salvar(refs, novo);
-            }}
-            onDesfazer={async (a) => {
-              const antigo = String(a.resumo || "");
-              setResumo(antigo);
-              await salvar(refs, antigo);
-            }}
+            onAplicar={(v) => pResumo.trocarESalvar(String(v.resumo || ""))}
+            onDesfazer={(a) => pResumo.trocarESalvar(String(a.resumo || ""))}
           />
         }
       >
-        <textarea className={juntar(campoTexto, "min-h-[110px]")} value={resumo} maxLength={3000} onChange={(e) => setResumo(e.target.value)} placeholder="O que a pesquisa mostrou e onde está o espaço para a marca" aria-label="Resumo da pesquisa" />
-        <div className="mt-2 flex justify-end">
-          <button type="button" className={botao.secundario} onClick={() => void salvar()} disabled={salvando}>
-            {salvando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />} Salvar
-          </button>
-        </div>
+        <textarea className={juntar(campoTexto, "min-h-[110px]")} value={resumo} maxLength={3000} onChange={(e) => pResumo.mudar(e.target.value)} placeholder="O que a pesquisa mostrou e onde está o espaço para a marca" aria-label="Resumo da pesquisa" />
       </Secao>
     </div>
   );

@@ -162,6 +162,131 @@ const email = (v: unknown) => {
 /** Horário no formato do schema: "Mo-Fr 09:00-18:00". */
 export const HORARIO = /^(Mo|Tu|We|Th|Fr|Sa|Su)(-(Mo|Tu|We|Th|Fr|Sa|Su))?(,(Mo|Tu|We|Th|Fr|Sa|Su))* ([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-4]):[0-5]\d$/;
 
+// ------------------------------------------------------------------ horário (UXS 30/09)
+
+/** Os dias do schema, na ordem da semana (a tela mostra Seg a Dom). */
+export const DIAS_DO_SCHEMA = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] as const;
+export const DIAS_NA_TELA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
+/** Uma linha de horário em pílulas: 7 dias ligados ou não, abre e fecha em HH:MM. */
+export type LinhaDeHorario = { dias: boolean[]; abre: string; fecha: string };
+
+/**
+ * Hora no formato HH:MM a partir do que a pessoa digitou ("9", "930", "09:30",
+ * "9h", "9h30"). Fechar aceita 24:00 (o schema aceita); abrir, não. Nunca
+ * deduz: sem número, null.
+ */
+export function horaDoTexto(v: unknown, fechar: boolean): string | null {
+  const s = String(v ?? "").trim().toLowerCase();
+  let h = -1;
+  let m = 0;
+  const comSeparador = /^(\d{1,2})\s*(?:h|:)\s*(\d{2})?\s*h?$/.exec(s);
+  const soDigitos = /^(\d{1,4})$/.exec(s);
+  if (comSeparador) {
+    h = Number(comSeparador[1]);
+    m = comSeparador[2] ? Number(comSeparador[2]) : 0;
+  } else if (soDigitos) {
+    const d = soDigitos[1];
+    if (d.length <= 2) h = Number(d);
+    else {
+      h = Number(d.slice(0, d.length - 2));
+      m = Number(d.slice(-2));
+    }
+  } else return null;
+  if (m > 59 || h < 0) return null;
+  if (h === 24 && m === 0 && fechar) return "24:00";
+  if (h > 23) return null;
+  return `${h < 10 ? "0" : ""}${h}:${m < 10 ? "0" : ""}${m}`;
+}
+
+/** Lê uma linha do schema ("Mo-We,Fr 09:00-18:00") em pílulas. Fora do formato, null. */
+export function lerLinhaDeHorario(h: unknown): LinhaDeHorario | null {
+  const s = String(h ?? "").trim();
+  if (!HORARIO.test(s)) return null;
+  const espaco = s.indexOf(" ");
+  const diasTxt = s.slice(0, espaco);
+  const horas = s.slice(espaco + 1).split("-");
+  const dias = [false, false, false, false, false, false, false];
+  diasTxt.split(",").forEach((parte) => {
+    const ab = parte.split("-");
+    const i = (DIAS_DO_SCHEMA as readonly string[]).indexOf(ab[0]);
+    if (ab.length === 1) {
+      dias[i] = true;
+      return;
+    }
+    const j = (DIAS_DO_SCHEMA as readonly string[]).indexOf(ab[1]);
+    // Faixa que vira a semana (Sa-Mo) passa pelo domingo.
+    for (let k = i, n = 0; n < 7; n += 1, k = (k + 1) % 7) {
+      dias[k] = true;
+      if (k === j) break;
+    }
+  });
+  return { dias, abre: horas[0], fecha: horas[1] };
+}
+
+/**
+ * Grava as pílulas no formato do schema: dias seguidos viram faixa ("Mo-Fr");
+ * o que não é seguido vai em lista ("Mo,We,Th"). A faixa só pode vir no
+ * primeiro item (a regex recusa "Mo,We-Fr"). Sem dia ou com hora inválida, null.
+ */
+export function textoDaLinhaDeHorario(l: LinhaDeHorario): string | null {
+  const idx: number[] = [];
+  (l.dias || []).forEach((v, i) => {
+    if (v && i < 7) idx.push(i);
+  });
+  const abre = horaDoTexto(l.abre, false);
+  const fecha = horaDoTexto(l.fecha, true);
+  if (!idx.length || !abre || !fecha) return null;
+  let fim = 0;
+  while (fim + 1 < idx.length && idx[fim + 1] === idx[fim] + 1) fim += 1;
+  const partes = [fim > 0 ? `${DIAS_DO_SCHEMA[idx[0]]}-${DIAS_DO_SCHEMA[idx[fim]]}` : DIAS_DO_SCHEMA[idx[0]]].concat(idx.slice(fim + 1).map((i) => DIAS_DO_SCHEMA[i]));
+  const t = `${partes.join(",")} ${abre}-${fecha}`;
+  return HORARIO.test(t) ? t : null;
+}
+
+const DIAS_EM_PORTUGUES: Record<string, number> = { seg: 0, segunda: 0, ter: 1, terca: 1, qua: 2, quarta: 2, qui: 3, quinta: 3, sex: 4, sexta: 4, sab: 5, sabado: 5, dom: 6, domingo: 6 };
+
+/**
+ * Horário escrito em português ("seg a sex 9h às 18h", "sábado 9:00-13:00")
+ * no formato do schema. Só regra fixa e só o que está explícito: dias por
+ * extenso ou abreviados (com ou sem acento) e horas com "h" ou ":". O que for
+ * ambíguo ("horário comercial", "toda hora") volta null: nada é deduzido.
+ */
+export function horarioDoTexto(bruto: unknown): string | null {
+  const s = String(bruto ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/-?feira/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const hora = "(\\d{1,2}(?:h(?:\\d{2})?|:\\d{2}h?))";
+  const m = new RegExp(`^(.+?)\\s*(?:das |de )?${hora}\\s*(?:as|a|ate|-)\\s*${hora}$`).exec(s);
+  if (!m) return null;
+  const dias = [false, false, false, false, false, false, false];
+  const pedacos = m[1].replace(/\s+e\s+/g, ",").split(",").map((x) => x.trim()).filter(Boolean);
+  if (!pedacos.length) return null;
+  for (const p of pedacos) {
+    const faixa = /^([a-z]+)(?:\s*(?:a|ate|-)\s*([a-z]+))?$/.exec(p);
+    if (!faixa) return null;
+    const i = DIAS_EM_PORTUGUES[faixa[1]];
+    const j = faixa[2] !== undefined ? DIAS_EM_PORTUGUES[faixa[2]] : i;
+    if (i === undefined || j === undefined) return null;
+    for (let k = i, n = 0; n < 7; n += 1, k = (k + 1) % 7) {
+      dias[k] = true;
+      if (k === j) break;
+    }
+  }
+  return textoDaLinhaDeHorario({ dias, abre: m[2], fecha: m[3] });
+}
+
+/** Uma linha de horário no formato do schema: já no formato, ou escrita em português. */
+export const horarioNoSchema = (h: unknown): string | null => {
+  const s = umaLinha(h, 80);
+  if (!s) return null;
+  return HORARIO.test(s) ? s : horarioDoTexto(s);
+};
+
 export function normalizarSeo(bruto: unknown): SeoDoSite {
   const o = bruto && typeof bruto === "object" ? (bruto as Record<string, unknown>) : {};
   const n = o.negocio && typeof o.negocio === "object" ? (o.negocio as Record<string, unknown>) : {};
@@ -182,11 +307,51 @@ export function normalizarSeo(bruto: unknown): SeoDoSite {
       cidade: umaLinha(n.cidade, 80),
       estado: umaLinha(n.estado, 2).toUpperCase().replace(/[^A-Z]/g, ""),
       cep: String(n.cep ?? "").replace(/\D/g, "").slice(0, 8),
-      horario: (Array.isArray(n.horario) ? n.horario : []).map((h) => umaLinha(h, 40)).filter((h) => HORARIO.test(h)).slice(0, 7),
+      horario: (Array.isArray(n.horario) ? n.horario : []).map(horarioNoSchema).filter((h): h is string => !!h).slice(0, 7),
       faixa_de_preco: /^\${1,4}$/.test(String(n.faixa_de_preco || "")) ? String(n.faixa_de_preco) : "",
       redes: (Array.isArray(n.redes) ? n.redes : []).map(urlHttps).filter((u): u is string => !!u).slice(0, 6),
     },
   };
+}
+
+/**
+ * Avisos do salvar do SEO (UXS 30/09): o que veio no pedido e não entrou, com
+ * a linha entre aspas (ela some do campo depois de salvar). Compara só o que
+ * veio no pedido, nunca dado antigo.
+ */
+export function avisosDoSeo(pedido: unknown, seo: SeoDoSite): string[] {
+  const p = pedido && typeof pedido === "object" ? (pedido as Record<string, unknown>) : {};
+  const n = p.negocio && typeof p.negocio === "object" ? (p.negocio as Record<string, unknown>) : {};
+  const avisos: string[] = [];
+  const cita = (v: unknown) => `"${umaLinha(v, 40)}"`;
+  (Array.isArray(n.horario) ? n.horario : []).forEach((h) => {
+    if (umaLinha(h, 80) && !horarioNoSchema(h)) avisos.push(`Não entrou no horário: ${cita(h)}.`);
+  });
+  if (umaLinha(n.email, 120) && !seo.negocio.email) avisos.push(`E-mail do negócio inválido: ${cita(n.email)}.`);
+  if (umaLinha(n.telefone, 40) && !seo.negocio.telefone) avisos.push(`Telefone do negócio inválido: ${cita(n.telefone)}.`);
+  (Array.isArray(n.redes) ? n.redes : []).forEach((r) => {
+    if (umaLinha(r, 300) && !urlHttps(r)) avisos.push(`Rede sem https não entrou: ${cita(r)}.`);
+  });
+  return avisos;
+}
+
+/** Avisos do salvar das integrações: pediu ligado e ficou desligado (sem número ou endereço curto). */
+export function avisosDeLigado(pedido: unknown, novo: IntegracoesDoSite): string[] {
+  const p = pedido && typeof pedido === "object" ? (pedido as Record<string, unknown>) : {};
+  const sub = (k: string) => (p[k] && typeof p[k] === "object" ? (p[k] as Record<string, unknown>) : {});
+  const avisos: string[] = [];
+  if (sub("whatsapp").ligado === true && !novo.whatsapp.ligado) avisos.push("O WhatsApp ficou desligado: falta um número válido.");
+  if (sub("mapa").ligado === true && !novo.mapa.ligado) avisos.push("O mapa ficou desligado: o endereço está curto.");
+  return avisos;
+}
+
+/**
+ * Título e descrição que o site usa de fato: o SEO salvo e, na falta dele, o
+ * da opção de conteúdo escolhida (a mesma regra do pacote-do-site.ts).
+ */
+export function seoEfetivo(seo: Pick<SeoDoSite, "titulo" | "descricao">, doConteudo?: { titulo?: string; descricao?: string } | null): { titulo: string; descricao: string } {
+  const c = doConteudo || {};
+  return { titulo: seo.titulo || umaLinha(c.titulo, 60), descricao: seo.descricao || umaLinha(c.descricao, 155) };
 }
 
 /**
@@ -318,6 +483,8 @@ export type EstadoParaChecklist = {
   construidoDepoisDasMudancas: boolean;
   /** UXM: regras de UX críticas ou altas que falharam ou faltam conferir (base UI UX Pro Max). Sem o número, não pesa. */
   pendenciasDeUx?: number | null;
+  /** SEO da opção de conteúdo escolhida (o pacote usa quando o SEO salvo está vazio). */
+  seoDoConteudo?: { titulo?: string; descricao?: string } | null;
 };
 
 /**
@@ -327,20 +494,21 @@ export type EstadoParaChecklist = {
 export function checklistDeLancamento(e: EstadoParaChecklist): ItemDoChecklist[] {
   const faltando = e.secoes.filter((s) => e.construidas.indexOf(s) < 0);
   const rastreio = !!(e.integracoes.pixel_meta.id || e.integracoes.ga4.id);
+  const seo = seoEfetivo(e.seo, e.seoDoConteudo);
   const itens: ItemDoChecklist[] = [
     { id: "briefing", rotulo: "Briefing salvo", ok: e.briefingSalvo, etapa: "briefing", obrigatorio: false },
     { id: "mapa", rotulo: "Mapa do site com seções", ok: e.temMapa && e.secoes.length > 0, etapa: "direcao", obrigatorio: true },
     { id: "estilo", rotulo: "Estilo escolhido", ok: e.preset, etapa: "direcao", obrigatorio: false },
     { id: "copy", rotulo: "Conteúdo escolhido", ok: e.copyEscolhida, etapa: "conteudo", obrigatorio: true },
-    { id: "imagens", rotulo: "Imagens nos slots", ok: e.slotsVazios === 0, etapa: "imagens", detalhe: e.slotsVazios ? `${e.slotsVazios} slot(s) vazio(s)` : undefined, obrigatorio: false },
+    { id: "imagens", rotulo: "Imagens nas seções", ok: e.slotsVazios === 0, etapa: "imagens", detalhe: e.slotsVazios ? `${e.slotsVazios} ${e.slotsVazios === 1 ? "imagem faltando" : "imagens faltando"}` : undefined, obrigatorio: false },
     { id: "construido", rotulo: "Todas as seções construídas", ok: !faltando.length && e.secoes.length > 0, etapa: "construcao", detalhe: faltando.length ? `faltam ${faltando.length}` : undefined, obrigatorio: true },
     { id: "atualizado", rotulo: "Site montado depois da última mudança", ok: e.construidoDepoisDasMudancas, etapa: "construcao", detalhe: e.construidoDepoisDasMudancas ? undefined : "SEO ou integrações mudaram: aplique no site", obrigatorio: false },
-    { id: "build", rotulo: "Build sem erro", ok: e.buildOk === true, etapa: "revisao", obrigatorio: true },
+    { id: "build", rotulo: "Montagem sem erro", ok: e.buildOk === true, etapa: "revisao", obrigatorio: true },
     { id: "qa", rotulo: "Revisão sem avisos", ok: e.buildOk === true && e.avisosDeQa === 0, etapa: "revisao", detalhe: e.avisosDeQa ? `${e.avisosDeQa} aviso(s)` : undefined, obrigatorio: false },
-    { id: "seo_titulo", rotulo: "Título e descrição de SEO", ok: !!e.seo.titulo && e.seo.descricao.length >= 50, etapa: "integracoes", obrigatorio: true },
+    { id: "seo_titulo", rotulo: "Título e descrição de SEO", ok: !!seo.titulo && seo.descricao.length >= 50, etapa: "integracoes", obrigatorio: true },
     { id: "og", rotulo: "Imagem de compartilhamento", ok: e.temOgImagem, etapa: "integracoes", obrigatorio: false },
     { id: "logo", rotulo: "Logo da marca (favicon)", ok: e.temLogo, etapa: "direcao", obrigatorio: false },
-    { id: "schema", rotulo: "Dados do negócio (schema)", ok: !!e.seo.negocio.nome && (!!e.seo.negocio.telefone || !!e.seo.negocio.email), etapa: "integracoes", obrigatorio: false },
+    { id: "schema", rotulo: "Dados do negócio no Google", ok: !!e.seo.negocio.nome && (!!e.seo.negocio.telefone || !!e.seo.negocio.email), etapa: "integracoes", obrigatorio: false },
     { id: "contato", rotulo: "Um jeito de falar com o cliente", ok: e.integracoes.whatsapp.ligado || e.integracoes.formulario.ligado, etapa: "integracoes", obrigatorio: true },
     { id: "formulario", rotulo: "Formulário ligado na seção de contato", ok: !e.secoesComFormulario || e.integracoes.formulario.ligado, etapa: "integracoes", obrigatorio: false },
     { id: "mapa_google", rotulo: "Endereço do mapa", ok: !e.secoesComMapa || e.integracoes.mapa.ligado, etapa: "integracoes", obrigatorio: false },

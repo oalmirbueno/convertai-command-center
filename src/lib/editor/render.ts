@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apagarEstadoDaTela, gravarEstadoDaTela, lerEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { CONSULTA_MINIMA_MS, FILA_PARADA_MS, ROTULO_DA_ETAPA, ROTULO_DO_ESTADO, type EtapaDoRender, type EstadoDoRender, type TipoDeRender } from "../../../supabase/functions/_shared/render-do-editor";
 import type { OndaDaFonte, ProjetoDeEdicao } from "../../../supabase/functions/_shared/projeto-de-edicao";
 import { palavrasNaOnda } from "../../../supabase/functions/_shared/onda-do-audio";
@@ -38,6 +39,35 @@ export interface EstadoDaFila {
 type Chamar = (corpo: Record<string, unknown>) => Promise<any>;
 
 const ativo = (p: PedidoNaFila) => p.estado === "fila" || p.estado === "rodando";
+
+/**
+ * Marca "esta versão tem render pedido" (no navegador, por usuário, 24 h):
+ * reabrir o editor ou recarregar lê a fila UMA vez só quando havia pedido;
+ * sem marca, abrir não chama a função. Some quando uma leitura volta sem
+ * pedido ativo. Gravada em pedirRender, então vale também para o agente.
+ */
+const ROTA_DA_MARCA = "/editor";
+const VALIDADE_DA_MARCA_MS = 24 * 60 * 60 * 1000;
+const chaveDaMarca = (versaoId: string) => `editor:render-ativo:${versaoId}`;
+
+export function marcarRenderAtivo(versaoId: string): void {
+  gravarEstadoDaTela(chaveDaMarca(versaoId), { em: Date.now() }, ROTA_DA_MARCA);
+}
+
+export function apagarMarcaDeRender(versaoId: string): void {
+  apagarEstadoDaTela(chaveDaMarca(versaoId), ROTA_DA_MARCA);
+}
+
+export function temRenderAtivo(versaoId: string | null | undefined): boolean {
+  if (!versaoId) return false;
+  const v = lerEstadoDaTela<{ em?: unknown } | null>(chaveDaMarca(versaoId), null, (x) => !!x && typeof x === "object", ROTA_DA_MARCA);
+  if (!v || typeof v.em !== "number") return false;
+  if (Date.now() - v.em > VALIDADE_DA_MARCA_MS) {
+    apagarMarcaDeRender(versaoId);
+    return false;
+  }
+  return true;
+}
 
 export function rotuloDoPedido(p: PedidoNaFila, agoraMs: number, worker: EstadoDaFila["worker"]): string {
   if (p.estado === "rodando") return `${p.etapa ? ROTULO_DA_ETAPA[p.etapa] : ROTULO_DO_ESTADO.rodando} ${Math.round((Number(p.progresso) || 0) * 100)}%`;
@@ -117,6 +147,7 @@ async function ler(versaoId: string): Promise<void> {
       v.vistos.add(p.id);
     });
     emitir(v, { pedidos, worker: r && r.worker ? r.worker : null, erro: null, codigo: null, lendo: false });
+    if (!pedidos.some(ativo)) apagarMarcaDeRender(versaoId);
   } catch (e) {
     const codigo = e && typeof e === "object" && typeof (e as { codigo?: unknown }).codigo === "string" ? String((e as { codigo: string }).codigo) : "erro";
     emitir(v, { erro: e instanceof Error ? e.message : "Não deu para ler a fila.", codigo, lendo: false });
@@ -165,6 +196,7 @@ export async function pedirRender(chamar: Chamar, e: { clientId: string; versaoI
   const r = await chamar({ acao: "render_pedir", client_id: e.clientId, versao_id: e.versaoId, tipo: e.tipo, uid: e.uid, revisao: e.revisao ?? null, inicio_s: e.inicio_s, fim_s: e.fim_s, fontes: e.fontes });
   const v = vigia(e.clientId, e.versaoId, chamar);
   const pedido = r.pedido as PedidoNaFila;
+  marcarRenderAtivo(e.versaoId);
   v.vistos.add(pedido.id);
   emitir(v, { pedidos: [pedido].concat(v.estado.pedidos.filter((p) => p.id !== pedido.id)), erro: null, codigo: null });
   agendar(v, e.versaoId);

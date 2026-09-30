@@ -1,20 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Loader2, Palette, Send } from "lucide-react";
-import { EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
+import { useAvisarErro } from "@/components/mesa/Custo";
 import { Ditado } from "@/components/mesa/Ditado";
 import { useMesa } from "@/components/mesa/MesaContexto";
-import { chamarFuncao, usd } from "@/lib/mesa/api";
-import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import { chamarFuncao, modeloDoPapel, usd } from "@/lib/mesa/api";
+import CartaoDeAcao, { CapacidadesDoAgente, OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import ModeloDoAgente from "@/components/agentes/ModeloDoAgente";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import CampoDoAgente, { focarNoFim } from "@/components/sistema/CampoDoAgente";
+import { BotaoNovaConversa, useNovaConversa } from "@/components/sistema/NovaConversa";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
-import { botao, campoTexto, conversa, juntar } from "@/components/sistema/estilos";
+import { botao, conversa, juntar } from "@/components/sistema/estilos";
 import { TAMANHOS_DA_IDENTIDADE } from "../../../supabase/functions/_shared/identidade-etapas";
-import { modeloDoPapelNaTela } from "./Comuns";
 
 /**
  * O diretor de marca (agente da Mesa Identidade, papel identidade), fixo ao
@@ -47,6 +50,9 @@ const CAPACIDADES = [
   "aprender o que você ensinar (\"nunca\", \"sempre\", \"não gostei\")",
 ];
 
+/** Tamanho de uma mensagem ao diretor (a estimativa do chip do modelo). */
+const PARTES_DA_CONVERSA = (modeloId: string) => [{ modeloId, tipo: "texto" as const, tokensEntrada: TAMANHOS_DA_IDENTIDADE.conversa.entrada, tokensSaida: TAMANHOS_DA_IDENTIDADE.conversa.saida }];
+
 export function observacaoDoDiretor(a: { itens: Array<{ operacao: string }>; custo_estimado_usd?: number | null; sem_desfazer?: boolean }): string {
   const custo = typeof a.custo_estimado_usd === "number" && a.custo_estimado_usd > 0 ? `Custo estimado: ${usd(a.custo_estimado_usd)} da carteira.` : "Sem custo.";
   if (a.itens.some((i) => i.operacao === "enviar_para_aprovacao")) return `${custo} O PDF vai para Arquivos com a revisão da agência pedida e não volta pelo Desfazer.`;
@@ -65,8 +71,12 @@ interface Mensagem {
 }
 
 export default function AgenteDiretorDeMarca({ projetoId, rascunho, onRascunho }: { projetoId: string | null; rascunho: string; onRascunho: (v: string) => void }) {
-  const { clientId, atualizarCusto, catalogo } = useMesa();
-  const modelo = modeloDoPapelNaTela(catalogo, "identidade");
+  const { clientId, atualizarCusto, catalogo, catalogoCarregando } = useMesa();
+  // Modelo do agente escolhido na hora, numa chave só dele: a das etapas
+  // (mesa-identidade:modelo:identidade) é de cada ação e não muda a conversa.
+  // Vazio = o padrão do papel "identidade", como antes.
+  const [modeloEscolhido, setModeloEscolhido] = useEstadoDaTela<string>("mesa-identidade:agente:modelo", "", { validar: (v) => typeof v === "string" });
+  const modelo = modeloDoPapel(catalogo, "identidade", modeloEscolhido || null);
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
@@ -75,6 +85,23 @@ export default function AgenteDiretorDeMarca({ projetoId, rascunho, onRascunho }
   const [enviando, setEnviando] = useState(false);
   const [nova, setNova] = useState(false);
   const listaRef = useRef<HTMLDivElement | null>(null);
+  const campo = useRef<HTMLTextAreaElement | null>(null);
+  const novaConversa = useNovaConversa<Mensagem>({
+    chave: clientId,
+    enviando,
+    mensagens,
+    conversaId,
+    limpar: () => {
+      setMensagens([]);
+      setConversaId(null);
+      setNova(true);
+    },
+    restaurar: (c) => {
+      setMensagens(c.mensagens);
+      setConversaId(c.conversaId);
+      setNova(false);
+    },
+  });
 
   useEffect(() => {
     let vivo = true;
@@ -113,7 +140,16 @@ export default function AgenteDiretorDeMarca({ projetoId, rascunho, onRascunho }
     setMensagens((l) => l.concat([{ id: null, papel: "usuario", conteudo: m, anexos: [], custo_usd: null, local }]));
     onRascunho("");
     try {
-      const d = await chamarFuncao<any>("mesa-identidade", { acao: "agente_conversar", client_id: clientId, mensagem: m, projeto_id: projetoId || undefined, conversa_id: conversaId || undefined, nova_conversa: nova || undefined });
+      const d = await chamarFuncao<any>("mesa-identidade", {
+        acao: "agente_conversar",
+        client_id: clientId,
+        mensagem: m,
+        projeto_id: projetoId || undefined,
+        conversa_id: conversaId || undefined,
+        nova_conversa: nova || undefined,
+        // Só o escolhido vai: sem escolha, a função usa o padrão do papel (como antes).
+        modelo_id: modeloEscolhido && modelo && modelo.id === modeloEscolhido ? modelo.id : undefined,
+      });
       setNova(false);
       setConversaId(d && d.conversa_id ? String(d.conversa_id) : conversaId);
       if (d && acoesDaMensagem(Array.isArray(d.anexos) ? d.anexos : []).some((a) => !!a.executada_em)) reler();
@@ -149,13 +185,10 @@ export default function AgenteDiretorDeMarca({ projetoId, rascunho, onRascunho }
         descricao={projetoId ? "Conversa sobre o projeto aberto" : "Abra ou crie um projeto no Início"}
         acoes={
           <>
-            {mensagens.length > 0 && (
-              <button type="button" className={juntar(botao.discreto, "h-8 px-2 text-[12px]")} onClick={() => { setMensagens([]); setConversaId(null); setNova(true); }}>
-                Nova conversa
-              </button>
-            )}
+            {mensagens.length > 0 && <BotaoNovaConversa onClick={novaConversa} desativado={enviando} />}
             <AjudaRecolhida rotulo="Como o diretor de marca funciona">
               Peça o que precisa. Fechar etapa, escolher nome ou caminho e montar o brandbook ele faz na hora, com Desfazer. Gerar nomes e caminhos, montar a estratégia, propor paletas, sugerir fontes e gerar taglines usam IA e vêm num cartão com o custo; enviar para aprovação e levar ao kit também pedem Confirmar. A logo final é sempre o arquivo da equipe. O que você ensinar vira regra; dá para esquecer.
+              <CapacidadesDoAgente capacidades={CAPACIDADES} />
             </AjudaRecolhida>
           </>
         }
@@ -163,25 +196,27 @@ export default function AgenteDiretorDeMarca({ projetoId, rascunho, onRascunho }
         refDasMensagens={listaRef}
         compositor={
           <>
-            <OQuePossoFazer capacidades={CAPACIDADES} atalhos={ATALHOS_DO_DIRETOR} onAtalho={(t) => onRascunho(t)} />
-            <textarea
-              value={rascunho}
-              onChange={(e) => onRascunho(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void enviar();
-                }
+            <OQuePossoFazer
+              capacidades={CAPACIDADES}
+              mostrarCapacidades={false}
+              atalhos={ATALHOS_DO_DIRETOR}
+              onAtalho={(t) => {
+                onRascunho(t);
+                focarNoFim(campo, t);
               }}
-              rows={2}
+            />
+            <CampoDoAgente
+              ref={campo}
+              valor={rascunho}
+              aoMudar={onRascunho}
+              aoEnviar={() => void enviar()}
               maxLength={4000}
               placeholder="Ex.: gere 3 caminhos mais sóbrios"
-              className={juntar(campoTexto, "min-h-[60px] resize-none")}
               aria-label="Mensagem ao diretor de marca"
             />
             <div className="flex min-w-0 items-center justify-between">
-              <div className="mr-2 min-w-0 truncate">
-                <EstimativaInline partes={modelo ? [{ modeloId: modelo.id, tipo: "texto", tokensEntrada: TAMANHOS_DA_IDENTIDADE.conversa.entrada, tokensSaida: TAMANHOS_DA_IDENTIDADE.conversa.saida }] : null} />
+              <div className="mr-2 min-w-0">
+                <ModeloDoAgente catalogo={catalogo} modelo={modelo} escolhido={modeloEscolhido} onEscolher={setModeloEscolhido} partes={PARTES_DA_CONVERSA} carregando={catalogoCarregando} disabled={enviando} />
               </div>
               <div className="ml-auto flex min-w-0 items-center">
                 <Ditado valor={rascunho} onChange={onRascunho} disabled={enviando} className="mr-1.5 min-w-0" />

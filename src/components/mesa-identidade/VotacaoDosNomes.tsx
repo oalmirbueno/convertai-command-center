@@ -14,17 +14,20 @@ type Votos = {
   votos: Array<{ candidato_id: string; origem: "equipe" | "cliente"; nota: number; votante: string; comentario: string | null; atualizado_em: string }>;
   resumo: Record<string, ResumoDoVoto>;
   votacao: { caminho: string; aberta_em: string | null; fechada_em: string | null } | null;
+  /** UXS 30/09: as notas de quem está olhando (o servidor filtra pela pessoa; a chave dela não vem). */
+  minhas?: Record<string, number>;
   aviso?: string;
 };
 
-function Estrelas({ valor, onEscolher, rotulo }: { valor: number; onEscolher: (n: number) => void; rotulo: string }) {
+function Estrelas({ valor, onEscolher, rotulo, gravando = false }: { valor: number; onEscolher: (n: number) => void; rotulo: string; gravando?: boolean }) {
   return (
-    <span className="inline-flex items-center" role="radiogroup" aria-label={rotulo}>
+    <span className="inline-flex items-center" role="radiogroup" aria-label={rotulo} aria-busy={gravando || undefined}>
       {[1, 2, 3, 4, 5].map((n) => (
-        <button key={n} type="button" role="radio" aria-checked={valor === n} aria-label={`${n} de 5`} onClick={() => onEscolher(n)} className={juntar("toque-compacto inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted", foco)}>
+        <button key={n} type="button" role="radio" aria-checked={valor === n} aria-label={`${n} de 5`} disabled={gravando} onClick={() => onEscolher(n)} className={juntar("toque-compacto inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted disabled:opacity-60", foco)}>
           <Star className={juntar("h-4 w-4", n <= valor ? "fill-primary text-primary" : "text-muted-foreground")} />
         </button>
       ))}
+      {gravando && <Loader2 className="ml-1 h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Gravando o voto" />}
     </span>
   );
 }
@@ -36,6 +39,10 @@ const media = (v: number | null) => (v === null ? "sem voto" : v.toFixed(1));
  * cliente vota por um link (sem login), que mostra só nome, justificativa e
  * pronúncia. O link não é enviado pelo painel: a equipe copia e manda. Fechar
  * a votação tira o link do ar para novos votos.
+ *
+ * UXS 30/09: as estrelas mostram o voto que a pessoa já deu e cada estrela
+ * grava na hora (a linha espera a resposta; se falhar, volta ao que está no
+ * banco). Saiu o "Registrar meu voto".
  */
 export default function VotacaoDosNomes({ rodada }: { rodada: RodadaDeNomes }) {
   const qc = useQueryClient();
@@ -43,9 +50,33 @@ export default function VotacaoDosNomes({ rodada }: { rodada: RodadaDeNomes }) {
   const chave = ["mesa-identidade", "votos", rodada.id];
   const votos = useQuery({ queryKey: chave, queryFn: () => chamarIdentidade<Votos>("naming_votos", { rodada_id: rodada.id }), staleTime: 30_000 });
   const finalistas: CandidatoDeNome[] = rodada.candidatos.filter((c) => c.finalista);
-  const [minhas, setMinhas] = useState<Record<string, number>>({});
+  /** Nota escolhida agora, enquanto grava (por finalista). */
+  const [otimistas, setOtimistas] = useState<Record<string, number>>({});
+  const [gravando, setGravando] = useState<Record<string, boolean>>({});
   const [ocupado, setOcupado] = useState<string | null>(null);
   const v = votos.data;
+  const minhas = (v && v.minhas) || {};
+  const notaDe = (id: string) => (otimistas[id] !== undefined ? otimistas[id] : minhas[id] || 0);
+
+  const votar = async (candidatoId: string, nota: number) => {
+    if (gravando[candidatoId]) return;
+    setOtimistas((o) => ({ ...o, [candidatoId]: nota }));
+    setGravando((g) => ({ ...g, [candidatoId]: true }));
+    try {
+      await chamarIdentidade("naming_votar", { rodada_id: rodada.id, votos: [{ candidato_id: candidatoId, nota }] });
+      await qc.invalidateQueries({ queryKey: chave });
+    } catch (e) {
+      avisarErro(e, "O voto não foi gravado");
+    } finally {
+      // Sem a nota otimista, a estrela mostra a do banco (a nova, ou a de antes quando falhou).
+      setOtimistas((o) => {
+        const n = { ...o };
+        delete n[candidatoId];
+        return n;
+      });
+      setGravando((g) => ({ ...g, [candidatoId]: false }));
+    }
+  };
   const link = v && v.votacao ? `${window.location.origin}${v.votacao.caminho}` : null;
   const aberta = !!(v && v.votacao && !v.votacao.fechada_em);
 
@@ -118,22 +149,16 @@ export default function VotacaoDosNomes({ rodada }: { rodada: RodadaDeNomes }) {
                   </span>
                 ))}
               </span>
-              <Estrelas valor={minhas[c.id] || 0} rotulo={`Seu voto em ${c.nome}`} onEscolher={(n) => setMinhas({ ...minhas, [c.id]: n })} />
+              <Estrelas valor={notaDe(c.id)} rotulo={`Seu voto em ${c.nome}`} gravando={!!gravando[c.id]} onEscolher={(n) => void votar(c.id, n)} />
             </li>
           );
         })}
       </ul>
-      <div className="mt-2 flex min-w-0 items-center justify-end">
-        {aberta && <Pastilha tom="bom">link aberto</Pastilha>}
-        <button type="button" className={juntar(botao.primario, "ml-2 h-8")} disabled={!Object.keys(minhas).length || ocupado === "votar"} onClick={() => void rodar("votar", async () => {
-          await chamarIdentidade("naming_votar", { rodada_id: rodada.id, votos: Object.keys(minhas).map((k) => ({ candidato_id: k, nota: minhas[k] })) });
-          setMinhas({});
-          toast.success("Voto registrado");
-          void qc.invalidateQueries({ queryKey: chave });
-        })}>
-          {ocupado === "votar" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Star className="mr-1.5 h-3.5 w-3.5" />} Registrar meu voto
-        </button>
-      </div>
+      {aberta && (
+        <div className="mt-2 flex min-w-0 items-center justify-end">
+          <Pastilha tom="bom">link aberto</Pastilha>
+        </div>
+      )}
     </Secao>
   );
 }

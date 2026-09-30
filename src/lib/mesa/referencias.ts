@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
@@ -323,14 +322,8 @@ export function limparBusca(t: string): string {
   return saida.split(" ").filter(Boolean).join(" ").trim();
 }
 
-export function useAtraso<T>(valor: T, ms: number): T {
-  const [v, setV] = useState(valor);
-  useEffect(() => {
-    const id = window.setTimeout(() => setV(valor), ms);
-    return () => window.clearTimeout(id);
-  }, [valor, ms]);
-  return v;
-}
+// O respiro mora em src/lib/useAtraso.ts (peças leves usam sem puxar este arquivo).
+export { useAtraso } from "@/lib/useAtraso";
 
 const CAMPOS_GLOBAL = "id, titulo, leitura, tags, storage_path, url_origem";
 

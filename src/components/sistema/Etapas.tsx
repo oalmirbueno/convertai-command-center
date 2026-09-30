@@ -1,4 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { Check } from "lucide-react";
 import { foco, juntar } from "./estilos";
 
 /**
@@ -24,6 +25,17 @@ export interface ItemDeEtapa {
   icone?: ReactNode;
   /** Atributos extras (data-*) para testes e medições. */
   dados?: Record<string, string>;
+  /**
+   * Etapa feita (UXS 30/09): um check pequeno no lugar do número (mesma
+   * largura), e o leitor de tela ouve "concluída".
+   */
+  feita?: boolean;
+  /**
+   * Etapa que ainda não abre: apagada e com aria-disabled, mas SEM disabled
+   * (o clique continua chegando, para a tela explicar por que não abre) e
+   * ainda na navegação por setas.
+   */
+  fechada?: boolean;
 }
 
 export default function Etapas({
@@ -87,17 +99,24 @@ export default function Etapas({
               data-etapa={item.valor}
               onClick={() => onEscolher(item.valor)}
               aria-current={aberta ? "page" : undefined}
+              aria-disabled={item.fechada && !aberta ? "true" : undefined}
               title={item.dica}
               {...(item.dados || {})}
               className={juntar(
                 "toque-compacto relative inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-md px-2.5 text-[13px] font-medium transition-colors sm:px-3",
                 foco,
-                aberta ? "text-foreground" : item.destaque ? "text-primary hover:bg-muted/60" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                aberta ? "text-foreground" : item.fechada ? "text-muted-foreground/60 hover:bg-muted/60" : item.destaque ? "text-primary hover:bg-muted/60" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
               )}
             >
-              {numerar && <span className={juntar("mr-1.5 text-[11px] tabular-nums", aberta ? "text-primary" : "text-muted-foreground/70")}>{i + 1}</span>}
+              {numerar && !item.feita && <span className={juntar("mr-1.5 text-[11px] tabular-nums", aberta ? "text-primary" : "text-muted-foreground/70")}>{i + 1}</span>}
+              {item.feita && (
+                <span className={juntar("mr-1.5 inline-flex w-3 shrink-0 justify-center", aberta ? "text-primary" : "text-muted-foreground")} aria-hidden="true" data-etapa-feita="">
+                  <Check className="h-3 w-3" />
+                </span>
+              )}
               {item.icone && <span className="mr-1.5 inline-flex shrink-0" aria-hidden="true">{item.icone}</span>}
               {item.rotulo}
+              {item.feita && <span className="sr-only">, concluída</span>}
               {typeof item.contador === "number" && item.contador > 0 && (
                 <span className="ml-1.5 rounded bg-muted px-1 text-[10.5px] font-semibold leading-4 tabular-nums text-foreground">{item.contador}</span>
               )}

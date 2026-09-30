@@ -27,6 +27,7 @@
  * Envio (nada sai sem o Confirmar da tela; o painel não manda WhatsApp):
  * - enviar { proposta_id } -> { proposta, link, whatsapp, email: { assunto, texto, para } } (gera o token, congela o hash, evento com resumo e provas)
  * - enviar_email { proposta_id, para } -> { ok } (Resend, depois do Confirmar)
+ * - contato { proposta_id } -> { nome, email, numero } (frente UXS: o contato do lead ou da ficha, só leitura, sem custo)
  * Modelos:
  * - modelo_salvar { proposta_id, nome, padrao? } -> { modelo }
  * - modelo_padrao { modelo_id } -> { modelo }
@@ -125,7 +126,7 @@ import {
 } from "./acoes-da-proposta.ts";
 import { blocosDaAgencia, CONSELHO_DISPONIVEL } from "./agencia.ts";
 import { ACOES_LONGAS_DA_EVOLUCAO, criarAcoesDaEvolucao, type DependenciasDaEvolucao } from "./evolucao.ts";
-import { normalizarAnexos, normalizarPacotes, normalizarPagamento, normalizarVisual, pacotesParaGravar } from "../_shared/proposta-comercial.ts";
+import { CAMPOS_QUE_TIRAM_O_LINK, normalizarAnexos, normalizarPacotes, normalizarPagamento, normalizarVisual, pacotesParaGravar } from "../_shared/proposta-comercial.ts";
 import { avisosDaRevisao, type ConferenciaDoDado, lerConferencia, PERGUNTAS_DA_REVISAO, perguntasDaConferencia } from "./conferencia.ts";
 // Frente PRO3 (30/09): proposta de upsell (o que o cliente já tem e os resultados reais).
 import { blocoJaTem, materialDoUpsell, NOME_DO_MATERIAL_DO_UPSELL, TITULO_DO_PROXIMO_PASSO, type UpsellDaProposta } from "./modulos/proposta-upsell.ts";
@@ -447,7 +448,8 @@ async function gravar(ch: Chamador, linha: LinhaDaProposta, mudancas: Partial<Pi
   if (linha.status === "aceita") throw new ErroHttp(409, "proposta_aceita", "Proposta aceita não muda. Crie uma nova.");
   if (["pacotes", "pagamento", "visual", "anexos", "ultimo_followup_em", "duplicada_de"].some((k) => k in mudancas)) exigirPro2();
   // O que o cliente vê e aceita: mudar volta para rascunho (pacotes, pagamento, anexos e visual também).
-  const mudaTexto = "conteudo" in mudancas || "itens" in mudancas || "validade_ate" in mudancas || "titulo" in mudancas || "pacotes" in mudancas || "pagamento" in mudancas || "anexos" in mudancas || "visual" in mudancas;
+  // A mesma lista da tela (CAMPOS_QUE_TIRAM_O_LINK): a tela pergunta antes, aqui é a regra.
+  const mudaTexto = CAMPOS_QUE_TIRAM_O_LINK.some((k) => k in mudancas);
   const { error: erroVersao } = await servico().from("proposta_versoes").upsert({
     proposta_id: linha.id,
     client_id: linha.client_id,
@@ -1042,6 +1044,18 @@ async function contatoDoCliente(linha: LinhaDaProposta): Promise<{ nome: string;
 }
 
 /**
+ * Contato do cliente para o Envio (frente UXS, 30/09): nome, e-mail e WhatsApp
+ * com a mesma regra do enviar (primeiro o lead, depois a ficha do cliente).
+ * Só leitura: sem custo, sem evento e sem auditoria. Assim o link mandado no
+ * dia seguinte já sai com o número e o nome, sem procurar o contato.
+ */
+async function contato(ch: Chamador, corpo: Record<string, unknown>) {
+  const linha = await lerLinha(ch, corpo.proposta_id);
+  const c = await contatoDoCliente(linha);
+  return json({ nome: c.nome, email: c.email, numero: c.whatsapp.replace(/[^\d]/g, ""), custo_usd: 0 });
+}
+
+/**
  * Envio (depois do Confirmar da tela): gera o token, congela o hash do texto,
  * marca enviada, move o lead para "proposta" e grava o evento com o resumo e
  * as provas (gancho do documento de entrega). Não manda nada ao cliente: a
@@ -1456,6 +1470,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   revisar,
   enviar,
   enviar_email: enviarEmail,
+  contato,
   modelo_salvar: modeloSalvar,
   modelo_padrao: modeloPadraoAcao,
   modelo_arquivar: modeloArquivar,

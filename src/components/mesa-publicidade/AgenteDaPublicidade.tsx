@@ -11,8 +11,10 @@ import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import CampoDoAgente, { focarNoFim } from "@/components/sistema/CampoDoAgente";
+import { BotaoNovaConversa, useNovaConversa } from "@/components/sistema/NovaConversa";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
-import { botao, campoTexto, conversa as estiloDaConversa, juntar } from "@/components/sistema/estilos";
+import { botao, conversa as estiloDaConversa, juntar } from "@/components/sistema/estilos";
 import { useMesaPublicidade } from "./Comuns";
 import { avisarAprendido, chaveDaCampanha, conversarComOAgente, lerHistorico, normalizarCampanha, type MensagemDoAgente } from "./publicidadeApi";
 
@@ -100,6 +102,21 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
   }, [clientId, campanhaId]);
 
   const mensagens = conversa.mensagens;
+  const campo = useRef<HTMLTextAreaElement | null>(null);
+  const novaConversa = useNovaConversa<MensagemDoAgente>({
+    chave,
+    enviando,
+    mensagens,
+    conversaId: conversa.conversaId,
+    limpar: () => {
+      setConversa((c) => ({ ...c, conversaId: null, mensagens: [] }));
+      setNova(true);
+    },
+    restaurar: (antes) => {
+      setConversa((c) => (c.chave === chave ? { ...c, conversaId: antes.conversaId, mensagens: antes.mensagens } : c));
+      setNova(false);
+    },
+  });
   useEffect(() => {
     if (lista.current) lista.current.scrollTop = lista.current.scrollHeight;
   }, [mensagens.length, enviando]);
@@ -142,18 +159,7 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
         descricao={campanha ? campanha.nome || campanha.kit_nome || "Campanha sem nome" : "Nenhuma campanha aberta"}
         acoes={
           <>
-            {mensagens.length > 0 && (
-              <button
-                type="button"
-                className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}
-                onClick={() => {
-                  setConversa((c) => ({ ...c, conversaId: null, mensagens: [] }));
-                  setNova(true);
-                }}
-              >
-                Nova conversa
-              </button>
-            )}
+            {mensagens.length > 0 && <BotaoNovaConversa onClick={novaConversa} desativado={enviando} />}
             <AjudaRecolhida rotulo="Como o agente da campanha funciona">
               Converse sobre a campanha aberta. Briefing, nome e ler a revisão ele faz na hora, com Desfazer. O que gasta IA (propor territórios, pedir tomadas, refazer foto) ou não volta (aprovar e reprovar) vem num cartão com o custo para você confirmar. O que você ensinar ("nunca", "não gostei") vira regra; dá para esquecer.
             </AjudaRecolhida>
@@ -163,20 +169,21 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
         refDasMensagens={lista}
         compositor={
           <>
-            <OQuePossoFazer capacidades={CAPACIDADES} atalhos={comAcao ? ATALHOS_DO_AGENTE : []} onAtalho={(t) => onRascunho(t)} />
-            <textarea
-              value={rascunho}
-              onChange={(e) => onRascunho(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void enviar();
-                }
+            <OQuePossoFazer
+              capacidades={CAPACIDADES}
+              atalhos={comAcao ? ATALHOS_DO_AGENTE : []}
+              onAtalho={(t) => {
+                onRascunho(t);
+                focarNoFim(campo, t);
               }}
-              rows={2}
+            />
+            <CampoDoAgente
+              ref={campo}
+              valor={rascunho}
+              aoMudar={onRascunho}
+              aoEnviar={() => void enviar()}
               maxLength={4000}
               placeholder="Ex.: proponha 3 territórios"
-              className={juntar(campoTexto, "min-h-[60px] resize-none")}
               aria-label="Mensagem ao agente"
             />
             <div className="flex min-w-0 items-center justify-between">

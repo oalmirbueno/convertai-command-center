@@ -113,6 +113,14 @@ export interface SessaoDoConselho {
   atualizado_em: string;
   concluido_em: string | null;
   trava_ate: string | null;
+  /**
+   * Frente UXS (CNS-09): lidos só na sessão aberta, para o "Convocar de novo"
+   * voltar ao formulário já preenchido (a lista de sessões não traz).
+   */
+  modo?: ModoDoConselho | null;
+  contexto?: string | null;
+  pauta?: { itens?: string[]; anexos?: Array<{ file_id: string; nome?: string }> } | null;
+  referencia?: Record<string, unknown> | null;
 }
 
 export interface NotaDaCritica {
@@ -265,6 +273,9 @@ export function convocarConselho(p: PedidoDeConvocacao) {
 
 const COLUNAS_DA_SESSAO =
   "id, client_id, marca_id, origem, tema, pergunta, criterios, especialistas, rodadas, rodadas_extras, rodada_atual, etapa, status, teto_usd, estimativa_usd, custo_usd, resultado, decisao, memoria_id, erro_codigo, erro_mensagem, aviso, criado_em, atualizado_em, concluido_em, trava_ate";
+// A sessão aberta lê também o que o "Convocar de novo" precisa (colunas de 20260930050000 e 196200).
+// A lista de sessões fica sem elas: a pauta guarda trechos dos anexos e pesaria 20 vezes.
+const COLUNAS_DA_SESSAO_ABERTA = `${COLUNAS_DA_SESSAO}, modo, contexto, pauta, referencia`;
 const COLUNAS_DA_FALA = "id, sessao_id, rodada, etapa, especialista, papel, modelo_id, pedido, status, conteudo, texto, notas, custo_usd, erro_mensagem, criado_em";
 
 // As tabelas do conselho ainda não estão nos tipos gerados do Supabase (entram quando o SQL CNS-01 for aplicado).
@@ -309,7 +320,7 @@ export function useSessaoDoConselho(sessaoId: string | null) {
     queryKey: ["conselho", "sessao", sessaoId],
     enabled: !!sessaoId,
     queryFn: async (): Promise<SessaoDoConselho | null> => {
-      const { data, error } = await tabela("conselho_sessoes").select(COLUNAS_DA_SESSAO).eq("id", sessaoId).maybeSingle();
+      const { data, error } = await tabela("conselho_sessoes").select(COLUNAS_DA_SESSAO_ABERTA).eq("id", sessaoId).maybeSingle();
       if (error) throw error;
       return data ? sessaoDaLinha(data as Record<string, unknown>) : null;
     },
@@ -389,6 +400,8 @@ export type ModoDoConselho = "rapido" | "padrao" | "profundo";
 export interface PresetDoConselho {
   id: "marca" | "campanha" | "proposta" | "site" | "crise";
   nome: string;
+  /** Mesa do preset ("mesa-proposta", "mesa-site"...): a Sala aberta dessa mesa já começa por ele. */
+  origem?: string;
   especialistas: string[];
   criterios: string[];
   modo: ModoDoConselho;

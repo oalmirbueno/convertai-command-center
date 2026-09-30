@@ -512,7 +512,7 @@ export type TrabalhoDaCampanha = {
 export type ImpactoDaTroca = {
   /** Aprovadas ou agendadas que usam outro selo: ficam como estão. */
   aprovadas: { trabalhos: number; laminas: number };
-  /** Ainda não aprovadas que usam outro selo: dá para refazer (com custo e Confirmar). */
+  /** Ainda não aprovadas que usam outro selo: dá para refazer (custo à vista e segundo clique para confirmar). */
   refazer: Array<{ trabalho_id: string; titulo: string | null; ordens: number[]; modelo_imagem_id: string | null; qualidade: string; enviada: boolean }>;
   /** Lâminas já com o selo atual. */
   com_o_atual: number;

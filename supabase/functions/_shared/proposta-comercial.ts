@@ -627,6 +627,22 @@ export function corDoTextoSobre(hex: string): "#ffffff" | "#0b0d0c" {
   return l > 0.45 ? "#0b0d0c" : "#ffffff";
 }
 
+// ------------------------------------------------------------------ link do cliente
+
+/**
+ * O que o cliente vê e aceita (frente UXS, 30/09). Numa proposta já enviada,
+ * gravar qualquer um destes campos volta para rascunho e tira o link (o aceite
+ * vale só para o texto enviado). O gravar da mesa-proposta e a tela usam a
+ * mesma lista: notas, transcrição, materiais, resumo e lead não tiram o link.
+ */
+export const CAMPOS_QUE_TIRAM_O_LINK = ["titulo", "conteudo", "itens", "validade_ate", "pacotes", "pagamento", "anexos", "visual"] as const;
+
+/** Gravar estes campos tira o link atual do cliente? Espelha o servidor: fora de rascunho e de aceita (enviada, vista, recusada). */
+export function tiraOLink(status: string, campos: string[]): boolean {
+  if (status === "rascunho" || status === "aceita") return false;
+  return campos.some((c) => (CAMPOS_QUE_TIRAM_O_LINK as readonly string[]).indexOf(c) >= 0);
+}
+
 // ------------------------------------------------------------------ anexos
 
 export type AnexoDaProposta = { id: string; tipo: "link" | "arquivo"; titulo: string; url: string; caminho: string };

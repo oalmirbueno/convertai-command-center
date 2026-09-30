@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ImagemDaMesa, useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
-import { EstadoVazio } from "@/components/sistema/Estados";
+import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campo, etiqueta, juntar, lista, texto } from "@/components/sistema/estilos";
 import { padraoPara, usd } from "@/lib/mesa/api";
 import { SeletorDeModelo } from "@/components/mesa/Seletores";
@@ -13,6 +13,7 @@ import { rotuloDoAtributo } from "../../../supabase/functions/_shared/site-metod
 import { PreencherComIA } from "@/components/sistema";
 import { chamarSite, type LinhaDoSite, useGuardarSite } from "./siteApi";
 import { listaDoValor } from "./CampoComIA";
+import { useBarraDaEtapa } from "./BarraDaEtapa";
 
 type Foto = { id: string; storage_bucket: string; storage_path: string; nome: string };
 
@@ -111,6 +112,9 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
 
   const imagensNaLeitura = refs.filter((r: any) => r.tipo !== "url").length + refs.filter((r: any) => r.tipo === "url").length;
   const dna = site.dna && Array.isArray(site.dna.atributos) ? site.dna : null;
+  // UXS 30/09: ler é a ação principal enquanto há referência não lida; depois, o Seguir da barra.
+  const naoLidas = refs.filter((r: any) => !r.lida_em).length;
+  useBarraDaEtapa({ estado: refs.length ? `${refs.length} referência${refs.length === 1 ? "" : "s"}${naoLidas ? ` · ${naoLidas} por ler` : ""}` : "Opcional", pendente: naoLidas > 0, ocupado: ocupado === "As referências não foram lidas" });
 
   return (
     <div className="min-w-0 space-y-6" data-etapa-referencias="">
@@ -132,7 +136,7 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
               onDesfazer={() => desfazerSugestoes()}
             />
           </span>
-          <button type="button" className={botao.primario} disabled={!refs.length || !!ocupado} onClick={() => void ler()} data-ler-referencias="">
+          <button type="button" className={naoLidas > 0 ? botao.primario : botao.secundario} disabled={!refs.length || !!ocupado} onClick={() => void ler()} data-ler-referencias="">
             {ocupado === "As referências não foram lidas" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <ScanEye className="mr-1 h-3.5 w-3.5" />}
             Ler as referências
           </button>
@@ -158,11 +162,26 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
             <Upload className="mr-1 h-3.5 w-3.5" />
             Prints
           </button>
-          <button type="button" className={juntar(botao.discreto, "mb-2")} onClick={() => setVerAcervo(!verAcervo)}>
+          <button type="button" className={juntar(botao.discreto, "mb-2")} onClick={() => setVerAcervo(!verAcervo)} aria-expanded={verAcervo} data-acervo-das-referencias="">
             <ImagemIcone className="mr-1 h-3.5 w-3.5" />
-            Acervo
+            Acervo{verAcervo && fotos.data ? ` · ${fotos.data.fotos.length} fotos` : ""}
           </button>
         </div>
+        {/* UXS 30/09: o acervo abre logo abaixo dos botões, dentro da seção (antes abria lá embaixo, depois da lista). */}
+        {verAcervo && (
+          <div className="min-w-0 pb-3" data-acervo-aberto="">
+            {fotos.isLoading && <Carregando forma="grade" linhas={6} rotulo="Lendo o acervo" />}
+            {fotos.isError && <EstadoDeErro titulo="O acervo não foi lido." acao={<button type="button" className={botao.discreto} onClick={() => void fotos.refetch()}>Tentar de novo</button>} />}
+            {fotos.data && !fotos.data.fotos.length && <EstadoVazio compacto titulo="Nenhuma foto no acervo da marca." />}
+            <div className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+              {(fotos.data ? fotos.data.fotos : []).slice(0, 36).map((f) => (
+                <button key={f.id} type="button" className="relative min-w-0 overflow-hidden rounded-md" title={`Usar ${f.nome} como referência`} onClick={() => void rodar("A foto não entrou", () => chamarSite("referencia_adicionar", { site_id: site.id, tipo: "acervo", imagem_id: f.id }))}>
+                  <ImagemDaMesa caminho={f.storage_path} bucket={f.storage_bucket} alt={f.nome} className="h-20 w-full" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
           <SeletorDeModelo catalogo={catalogo} tipo="texto" valor={leitor ? leitor.id : ""} onChange={setLeitorId} rotulo="Leitor das referências" />
         </div>
@@ -185,18 +204,6 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
           </ul>
         )}
       </Secao>
-
-      {verAcervo && (
-        <Secao titulo="Acervo da marca" descricao={fotos.data ? `${fotos.data.fotos.length} fotos` : undefined} recolher="mesa-site:referencias:acervo">
-          <div className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-            {(fotos.data ? fotos.data.fotos : []).slice(0, 36).map((f) => (
-              <button key={f.id} type="button" className="relative min-w-0 overflow-hidden rounded-md" title={`Usar ${f.nome} como referência`} onClick={() => void rodar("A foto não entrou", () => chamarSite("referencia_adicionar", { site_id: site.id, tipo: "acervo", imagem_id: f.id }))}>
-                <ImagemDaMesa caminho={f.storage_path} bucket={f.storage_bucket} alt={f.nome} className="h-20 w-full" />
-              </button>
-            ))}
-          </div>
-        </Secao>
-      )}
 
       {dna && (
         <Secao

@@ -137,9 +137,39 @@ describe("link público por tipo", () => {
   });
 });
 
+describe("link público: o que falta e o link desativado (frente UXS)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    rpc.mockReset();
+  });
+
+  it("o \"faltam N\" fica sempre à vista e leva à próxima pergunta sem resposta, sem tentar enviar", async () => {
+    const rolar = vi.fn();
+    (Element.prototype as unknown as { scrollIntoView: unknown }).scrollIntoView = rolar;
+    rpc.mockImplementation((nome: string) => (nome === "briefing_public_get" ? Promise.resolve({ data: aberto(), error: null }) : Promise.resolve({ data: { ok: true }, error: null })));
+    await montar();
+    const ir = await screen.findByRole("button", { name: "Ir para a próxima pergunta sem resposta" });
+    expect(ir.textContent).toMatch(/faltam \d+/);
+    expect(ir.className).not.toContain("text-destructive");
+    fireEvent.click(ir);
+    expect(rolar).toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalledWith("briefing_public_submit", expect.anything());
+    expect(screen.getByRole("button", { name: "Ir para a próxima pergunta sem resposta" }).className).toContain("text-destructive");
+    delete (Element.prototype as unknown as { scrollIntoView?: unknown }).scrollIntoView;
+  });
+
+  it("link que não existe ou foi desativado diz o que fazer", async () => {
+    rpc.mockImplementation(() => Promise.resolve({ data: null, error: null }));
+    await montar();
+    expect(await screen.findByText("Link desativado ou inexistente")).toBeInTheDocument();
+    expect(screen.getByText("Este link foi desativado ou não existe. Fale com quem enviou.")).toBeInTheDocument();
+  });
+});
+
 describe("gerar o link na equipe", () => {
   beforeEach(() => {
     invoke.mockReset();
+    localStorage.clear();
   });
 
   it("gera pelo servidor com o modelo escolhido e entrega link, WhatsApp e texto do grupo", async () => {
@@ -164,5 +194,63 @@ describe("gerar o link na equipe", () => {
     expect(wa.href).toContain("https://wa.me/5541999990000?text=");
     expect(decodeURIComponent(wa.href)).toContain("briefing de vídeo e motion");
     expect(screen.getByRole("button", { name: /Texto do grupo/i })).toBeInTheDocument();
+    // Com telefone, o WhatsApp é o principal.
+    expect(wa.className).toContain("bg-primary");
+  });
+
+  const gerarComo = async (props: Record<string, unknown>) => {
+    const { default: GerarLinkDoBriefing } = await import("@/components/briefing/GerarLinkDoBriefing");
+    const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+    const qc = new QueryClient();
+    const tela = (open: boolean) => (
+      <QueryClientProvider client={qc}>
+        <GerarLinkDoBriefing open={open} onClose={() => {}} clientId="c1" {...props} />
+      </QueryClientProvider>
+    );
+    return { tela, ...render(tela(true)) };
+  };
+
+  it("enquanto gera, Esc e o X não fecham a janela", async () => {
+    let terminar: (v: unknown) => void = () => {};
+    invoke.mockImplementation(() => new Promise((r) => (terminar = r)));
+    const fechar = vi.fn();
+    const { default: GerarLinkDoBriefing } = await import("@/components/briefing/GerarLinkDoBriefing");
+    const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <GerarLinkDoBriefing open onClose={fechar} clientId="c1" />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Gerar link/i }));
+    expect(await screen.findByRole("button", { name: /Gerando/i })).toBeDisabled();
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    screen.getAllByRole("button", { name: "Fechar" }).forEach((b) => fireEvent.click(b));
+    expect(fechar).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    await act(async () => {
+      terminar({ data: { briefing: { id: "b9", token: TOKEN, expira_em: "2026-10-30T12:00:00Z", modelo: "diagnostico" }, caminho: `/briefing/${TOKEN}`, cliente: "Padaria Aurora", telefone: null, prefill_campos: [] }, error: null });
+    });
+    // Sem telefone, Copiar link continua o principal.
+    expect((await screen.findByRole("button", { name: /Copiar link/i })).className).toContain("bg-primary");
+  });
+
+  it("sem modelo vindo da mesa, lembra o último tipo e validade usados; com modelo da mesa, ignora a lembrança", async () => {
+    invoke.mockResolvedValue({
+      data: { briefing: { id: "b9", token: TOKEN, expira_em: "2026-10-30T12:00:00Z", modelo: "site" }, caminho: `/briefing/${TOKEN}`, cliente: "Padaria Aurora", telefone: null, prefill_campos: [] },
+      error: null,
+    });
+    const { tela, rerender, unmount } = await gerarComo({});
+    fireEvent.change(screen.getByLabelText(/Tipo de briefing/i), { target: { value: "site" } });
+    fireEvent.change(screen.getByLabelText(/Validade/i), { target: { value: "15" } });
+    fireEvent.click(screen.getByRole("button", { name: /Gerar link/i }));
+    await screen.findByDisplayValue(`https://app.example.com/briefing/${TOKEN}`);
+    rerender(tela(false));
+    rerender(tela(true));
+    expect((await screen.findByLabelText(/Tipo de briefing/i) as HTMLSelectElement).value).toBe("site");
+    expect((screen.getByLabelText(/Validade/i) as HTMLSelectElement).value).toBe("15");
+    unmount();
+    await gerarComo({ modelo: "video" });
+    expect((screen.getByLabelText(/Tipo de briefing/i) as HTMLSelectElement).value).toBe("video");
+    expect((screen.getByLabelText(/Validade/i) as HTMLSelectElement).value).toBe("30");
   });
 });

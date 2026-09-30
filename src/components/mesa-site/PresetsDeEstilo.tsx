@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Check, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
@@ -11,7 +11,7 @@ import { botao, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import { usd } from "@/lib/mesa/api";
 import { CREDITO_DA_BASE } from "@/lib/uiux/carregar";
 import EscolhaDoProduto from "@/components/uiux/EscolhaDoProduto";
-import { normalizarEstilo, PRESETS_DE_ESTILO, PRESETS_DE_MOTION } from "../../../supabase/functions/_shared/site-biblioteca";
+import { normalizarEstilo, PRESETS_DE_ESTILO } from "../../../supabase/functions/_shared/site-biblioteca";
 import { rotuloDoAtributo } from "../../../supabase/functions/_shared/site-metodo";
 import { lerBaseDeDesign } from "../../../supabase/functions/_shared/uiux/consultas";
 import { TOKENS_DA_BASE, TOKENS_DO_RERANK } from "../../../supabase/functions/_shared/uiux/jev-da-base";
@@ -39,17 +39,21 @@ const ABAS = [
  * produto" mostra o produto da marca (do Jev ou da equipe) e troca pela lista
  * com busca. "Sugerir" pede ao Jev produto, estilo, padrão, par e preset numa
  * ida só, com a prévia antes de aplicar e o Desfazer depois.
+ *
+ * UXS 30/09: o preset da casa é da etapa Direção (valor e onPreset), que grava
+ * mapa, estilo e direção juntos no Salvar e no Seguir da barra; os presets de
+ * movimento foram para o grupo "Movimento" do Ajuste fino (children). O que a
+ * base aplica (produto, estilo da base, sugestão) continua gravando na hora,
+ * com o Desfazer.
  */
-export default function PresetsDeEstilo({ site }: { site: LinhaDoSite }) {
+export default function PresetsDeEstilo({ site, preset, onPreset, mudou = false, children }: { site: LinhaDoSite; preset: string | null; onPreset: (id: string | null) => void; mudou?: boolean; children?: ReactNode }) {
   const { clientId } = useMesa();
   const { marca } = useMarcaDaMesa();
   const kit = useKitDaMesa();
   const salvarSite = useSalvarSite(clientId, marca ? marca.id : null);
   const avisarErro = useAvisarErro();
-  const salvo = normalizarEstilo(site.estilo || {});
   const base = lerBaseDeDesign(site.direcao ? site.direcao.base_de_design : null);
-  const [preset, setPreset] = useState<string | null>(salvo.preset);
-  const [motion, setMotion] = useState<string[]>(salvo.motion);
+  const setPreset = onPreset;
   const [aba, setAba] = useEstadoDaTela<string>(`mesa-site:estilo:aba:${clientId}`, "casa", { validar: (v): v is string => v === "casa" || v === "base" });
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [produtoAberto, setProdutoAberto] = useState(false);
@@ -59,15 +63,6 @@ export default function PresetsDeEstilo({ site }: { site: LinhaDoSite }) {
   const destaque = destaqueDaMarca((kit.data && (kit.data as { paleta?: Array<{ hex?: string; papel?: string }> }).paleta) || (marca ? marca.paleta : null), reserva);
   const nome = (marca && marca.nome) || site.nome;
 
-  useEffect(() => {
-    const e = normalizarEstilo(site.estilo || {});
-    setPreset(e.preset);
-    setMotion(e.motion);
-    // Ao abrir outro site ou quando o estilo salvo muda (o diretor de site e a base também escolhem).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [site.id, JSON.stringify(site.estilo || null)]);
-
-  const mudou = preset !== salvo.preset || motion.join(",") !== salvo.motion.join(",");
 
   /** Grava na base com o Desfazer (volta base, estilo e DNA de antes). */
   const gravarNaBase = async (corpo: Record<string, unknown>, frase: string, depois?: () => Promise<unknown>) => {
@@ -123,7 +118,7 @@ export default function PresetsDeEstilo({ site }: { site: LinhaDoSite }) {
       if (marcados.padrao && e.padrao) corpo.padrao = e.padrao;
       if (marcados.par && e.par) corpo.par = e.par;
       const presetDoJev = marcados.preset && e.preset ? e.preset : null;
-      await gravarNaBase(corpo, "Base de design aplicada", presetDoJev ? () => salvarSite("estilo_salvar", { site_id: site.id, preset: presetDoJev, motion, aplicar_dna: true }) : undefined);
+      await gravarNaBase(corpo, "Base de design aplicada", presetDoJev ? () => salvarSite("estilo_salvar", { site_id: site.id, preset: presetDoJev, motion: normalizarEstilo(site.estilo || {}).motion, aplicar_dna: true }) : undefined);
       setJanela(false);
       setSugestao(null);
     } catch (err) {
@@ -160,18 +155,6 @@ export default function PresetsDeEstilo({ site }: { site: LinhaDoSite }) {
     }
   };
 
-  const salvar = async () => {
-    setOcupado("salvar");
-    try {
-      await salvarSite("estilo_salvar", { site_id: site.id, preset, motion, aplicar_dna: true });
-    } catch (e) {
-      avisarErro(e, "O estilo não foi salvo");
-    } finally {
-      setOcupado(null);
-    }
-  };
-
-  const alternarMotion = (id: string) => setMotion((l) => (l.indexOf(id) >= 0 ? l.filter((x) => x !== id) : l.length >= 3 ? l : l.concat([id])));
   const escolhido = PRESETS_DE_ESTILO.find((p) => p.id === preset) || null;
   const produtoRotulo = base.produto ? base.produto.rotulo || `produto ${base.produto.id}` : null;
   const resumo = [escolhido ? escolhido.rotulo : "Sem preset", base.estilo ? `base: ${base.estilo.rotulo || base.estilo.id}` : "", mudou ? "não salvo" : ""].filter(Boolean).join(" · ");
@@ -180,19 +163,13 @@ export default function PresetsDeEstilo({ site }: { site: LinhaDoSite }) {
     <Secao
       titulo="Estilo"
       descricao={resumo}
-      ajuda={`Duas fontes de estilo: os 11 presets da casa (DNA, movimento e nível, com prévia na cor de destaque da marca) e os 50 estilos da base UI UX Pro Max. O estilo da base aplica o preset da casa mais próximo; a paleta, as fontes e a logo são sempre as da marca. Sugerir pede ao Jev tipo de produto, estilo, padrão de página, par de fontes e preset numa ida só. Os presets de movimento usam só o kit livre e respeitam o movimento reduzido (até 3). ${CREDITO_DA_BASE}`}
+      ajuda={`Duas fontes de estilo: os 11 presets da casa (DNA, movimento e nível, com prévia na cor de destaque da marca) e os 50 estilos da base UI UX Pro Max. O estilo da base aplica o preset da casa mais próximo; a paleta, as fontes e a logo são sempre as da marca. Sugerir pede ao Jev tipo de produto, estilo, padrão de página, par de fontes e preset numa ida só. O Ajuste fino mostra e muda o DNA, o movimento (os presets de movimento usam só o kit livre e respeitam o movimento reduzido; até 3) e a referência de nível. O preset da casa grava no Salvar ou no Seguir do pé da etapa; o que vem da base grava na hora, com Desfazer. ${CREDITO_DA_BASE}`}
       recolher="mesa-site:direcao:estilo"
       acao={
-        <>
-          <button type="button" className={juntar(botao.secundario, "mr-2")} disabled={!!ocupado} onClick={() => void sugerir()} title={`Custo do Jev: ~${usd(CUSTO_DA_BASE)}`} data-sugerir-base="">
-            {ocupado === "jev" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
-            Sugerir
-          </button>
-          <button type="button" className={botao.primario} disabled={!!ocupado || !mudou} onClick={() => void salvar()} data-salvar-estilo="">
-            {ocupado === "salvar" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-            Salvar o estilo
-          </button>
-        </>
+        <button type="button" className={botao.secundario} disabled={!!ocupado} onClick={() => void sugerir()} title={`Custo do Jev: ~${usd(CUSTO_DA_BASE)}`} data-sugerir-base="">
+          {ocupado === "jev" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
+          Sugerir
+        </button>
       }
     >
       <div className="flex min-w-0 flex-wrap items-center" data-tipo-de-produto={base.produto ? base.produto.id : ""}>
@@ -232,26 +209,7 @@ export default function PresetsDeEstilo({ site }: { site: LinhaDoSite }) {
           })}
         </div>
       )}
-      <div className="min-w-0 border-t border-border pt-3">
-        <span className={juntar(texto.rotulo, "mb-1.5 block")}>Movimento (kit livre)</span>
-        <div className="flex flex-wrap" role="group" aria-label="Presets de movimento">
-          {PRESETS_DE_MOTION.map((m) => {
-            const ligado = motion.indexOf(m.id) >= 0;
-            return (
-              <button
-                key={m.id}
-                type="button"
-                aria-pressed={ligado}
-                title={`${m.descricao} (${m.pecas.join(", ")})`}
-                onClick={() => alternarMotion(m.id)}
-                className={juntar(etiqueta, "mb-2 mr-2 h-7 px-2.5 text-[12px]", ligado ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-muted/70")}
-              >
-                {m.rotulo}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {children}
       <EscolhaDoProduto
         aberta={produtoAberto}
         onFechar={() => setProdutoAberto(false)}

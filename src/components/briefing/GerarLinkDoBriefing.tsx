@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Copy, Loader2, MessageCircle, Users, X } from "lucide-react";
+import { Check, Copy, Loader2, MessageCircle, Users } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useClients, useProjects } from "@/hooks/useSupabaseData";
 import { appPublicUrl } from "@/lib/publicUrl";
-import { AjudaRecolhida, CampoDeFormulario, GrupoDeCampos, botao, campo, juntar, superficie, texto } from "@/components/sistema";
+import { CampoDeFormulario, GrupoDeCampos, JanelaCentral, botao, campo, gravarEstadoDaTela, juntar, lerEstadoDaTela, superficie, texto } from "@/components/sistema";
 import { type LinkGerado, chamarAgenteDoBriefing, textoDoErroDoBriefing } from "@/lib/briefing/api";
 import PerguntasExtras from "./PerguntasExtras";
 import {
@@ -28,9 +27,24 @@ import {
  * servidor grava a cópia do modelo e o que o painel já sabe do cliente para
  * ele só confirmar. Depois: Copiar link, WhatsApp (wa.me, a equipe envia) e
  * a mensagem pronta para o grupo. Nada é enviado daqui.
+ *
+ * Frente UXS: a janela é a JanelaCentral (Esc, foco preso, no centro), não
+ * fecha no meio do "Gerando...", lembra o último tipo e a última validade
+ * quando a tela não passa o modelo, e com o telefone do cliente o WhatsApp é
+ * o principal.
  */
 
 const VALIDADES = [7, 15, 30, 60, 90];
+
+/** Último tipo e validade usados (só quando a tela não passa o modelo). Rota fixa: o mesmo em /briefings, na ficha e no Dashboard. */
+const MEMORIA_DO_NOVO_LINK = "briefing:novo-link";
+const ROTA_DA_MEMORIA = "/briefings";
+type Lembrado = { modelo: SlugDoModelo; validade: number };
+const lembradoValido = (v: unknown): boolean => {
+  if (!v || typeof v !== "object") return false;
+  const x = v as { modelo?: unknown; validade?: unknown };
+  return SLUGS_DE_BRIEFING.indexOf(x.modelo as SlugDoModelo) >= 0 && VALIDADES.indexOf(Number(x.validade)) >= 0;
+};
 
 export async function copiarTexto(t: string): Promise<boolean> {
   try {
@@ -60,7 +74,7 @@ export default function GerarLinkDoBriefing({
   onClose,
   clientId: clienteFixo,
   marcaId: marcaInicial = null,
-  modelo: modeloInicial = "diagnostico",
+  modelo: modeloInicial,
   projectId: projetoInicial = null,
   aoGerar,
 }: {
@@ -75,7 +89,7 @@ export default function GerarLinkDoBriefing({
   const { data: clients } = useClients();
   const { data: projects } = useProjects();
   const [clientId, setClientId] = useState(clienteFixo || "");
-  const [modelo, setModelo] = useState<SlugDoModelo>(modeloInicial);
+  const [modelo, setModelo] = useState<SlugDoModelo>(modeloInicial ?? "diagnostico");
   const [marcaId, setMarcaId] = useState<string>(marcaInicial || "");
   const [projectId, setProjectId] = useState<string>(projetoInicial || "");
   const [validade, setValidade] = useState(VALIDADE_PADRAO_DIAS);
@@ -86,11 +100,13 @@ export default function GerarLinkDoBriefing({
 
   useEffect(() => {
     if (!open) return;
+    // Modelo vindo da mesa manda; sem ele, o último tipo e a última validade usados.
+    const lembrado = modeloInicial ? null : lerEstadoDaTela<Lembrado | null>(MEMORIA_DO_NOVO_LINK, null, lembradoValido, ROTA_DA_MEMORIA);
     setClientId(clienteFixo || "");
-    setModelo(modeloInicial);
+    setModelo(modeloInicial ?? (lembrado ? lembrado.modelo : "diagnostico"));
     setMarcaId(marcaInicial || "");
     setProjectId(projetoInicial || "");
-    setValidade(VALIDADE_PADRAO_DIAS);
+    setValidade(lembrado ? Number(lembrado.validade) : VALIDADE_PADRAO_DIAS);
     setGerado(null);
     setCopiado(null);
     setExtras([]);
@@ -112,8 +128,6 @@ export default function GerarLinkDoBriefing({
   const mensagem = gerado ? mensagemDoLink({ cliente: gerado.cliente, modelo: modeloDoLink, url, expiraEm: gerado.briefing.expira_em }) : "";
   const mensagemDoGrupo = gerado ? mensagemDoLink({ cliente: gerado.cliente, modelo: modeloDoLink, url, expiraEm: gerado.briefing.expira_em, grupo: true }) : "";
 
-  if (!open) return null;
-
   const gerar = async () => {
     if (!clientId) {
       toast.error("Escolha o cliente.");
@@ -130,6 +144,7 @@ export default function GerarLinkDoBriefing({
         extras,
       });
       setGerado(r);
+      if (!modeloInicial) gravarEstadoDaTela<Lembrado>(MEMORIA_DO_NOVO_LINK, { modelo, validade }, ROTA_DA_MEMORIA);
       aoGerar?.(r);
       toast.success("Link gerado. Copie e envie ao cliente.");
     } catch (e) {
@@ -149,100 +164,96 @@ export default function GerarLinkDoBriefing({
     window.setTimeout(() => setCopiado(null), 2000);
   };
 
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-labelledby="gerar-briefing-titulo" className="relative flex max-h-[92vh] w-full max-w-[520px] flex-col border-border bg-card sm:rounded-lg sm:border">
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3 sm:px-5">
-          <div className="flex min-w-0 items-center">
-            <h2 id="gerar-briefing-titulo" className={texto.tituloSecao}>Link do briefing</h2>
-            <AjudaRecolhida className="ml-1.5">
-              Gera um link para o cliente responder no celular, no tempo dele. Salva sozinho, aceita arquivos e vale até a data escolhida. O que o painel já sabe do cliente vai preenchido para ele só confirmar. Depois de enviado, a equipe recebe o aviso e a decupagem.
-            </AjudaRecolhida>
+  const telefone = gerado ? gerado.telefone : null;
+  return (
+    <JanelaCentral
+      aberta={open}
+      // Nada fecha no meio do "Gerando..." (Esc, fundo e o X): o link criado não some da vista.
+      onFechar={() => {
+        if (!gerando) onClose();
+      }}
+      fecharNoFundo={false}
+      titulo="Link do briefing"
+      ajuda="Gera um link para o cliente responder no celular, no tempo dele. Salva sozinho, aceita arquivos e vale até a data escolhida. O que o painel já sabe do cliente vai preenchido para ele só confirmar. Depois de enviado, a equipe recebe o aviso e a decupagem. Sem modelo vindo da mesa, a janela lembra o último tipo e a última validade."
+      largura="md"
+      corpo="rola"
+      rodape={
+        !gerado ? (
+          <>
+            <button type="button" onClick={onClose} disabled={gerando} className={botao.secundario}>Fechar</button>
+            <button type="button" onClick={() => void gerar()} disabled={gerando || !clientId} className={botao.primario}>
+              {gerando && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />}
+              {gerando ? "Gerando..." : "Gerar link"}
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" onClick={() => void copiar("grupo")} className={botao.discreto}>
+              {copiado === "grupo" ? <Check className="mr-1.5 h-4 w-4" aria-hidden="true" /> : <Users className="mr-1.5 h-4 w-4" aria-hidden="true" />}
+              {copiado === "grupo" ? "Copiado" : "Texto do grupo"}
+            </button>
+            {/* Com o telefone do cliente, o caminho comum é o WhatsApp com a mensagem pronta. */}
+            <a href={linkDoWhatsApp(mensagem, telefone)} target="_blank" rel="noopener noreferrer" className={telefone ? botao.primario : botao.secundario}>
+              <MessageCircle className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              WhatsApp
+            </a>
+            <button type="button" onClick={() => void copiar("link")} className={telefone ? botao.secundario : botao.primario}>
+              {copiado === "link" ? <Check className="mr-1.5 h-4 w-4" aria-hidden="true" /> : <Copy className="mr-1.5 h-4 w-4" aria-hidden="true" />}
+              {copiado === "link" ? "Copiado" : "Copiar link"}
+            </button>
+          </>
+        )
+      }
+    >
+      {!gerado ? (
+        <GrupoDeCampos colunas={1}>
+          {!clienteFixo && (
+            <CampoDeFormulario rotulo="Cliente" obrigatorio>
+              <select value={clientId} onChange={(e) => { setClientId(e.target.value); setMarcaId(""); setProjectId(""); }} className={campo}>
+                <option value="">Selecionar...</option>
+                {((clients as any[]) || []).map((c) => <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>)}
+              </select>
+            </CampoDeFormulario>
+          )}
+          <CampoDeFormulario rotulo="Tipo de briefing" obrigatorio apoio={`${MODELOS_DE_FABRICA[modelo].minutos} minutos, mais ou menos.`}>
+            <select value={modelo} onChange={(e) => setModelo(e.target.value as SlugDoModelo)} className={campo}>
+              {SLUGS_DE_BRIEFING.map((s) => <option key={s} value={s}>{MODELOS_DE_FABRICA[s].nome}</option>)}
+            </select>
+          </CampoDeFormulario>
+          {(marcas || []).length > 1 && (
+            <CampoDeFormulario rotulo="Marca" apoio="O que o cliente responder vai para o contexto desta marca.">
+              <select value={marcaId} onChange={(e) => setMarcaId(e.target.value)} className={campo}>
+                <option value="">Principal</option>
+                {(marcas || []).filter((m) => !m.principal).map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
+              </select>
+            </CampoDeFormulario>
+          )}
+          {projetosDoCliente.length > 0 && (
+            <CampoDeFormulario rotulo="Projeto" apoio="Opcional.">
+              <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={campo}>
+                <option value="">Sem projeto</option>
+                {projetosDoCliente.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </CampoDeFormulario>
+          )}
+          <CampoDeFormulario rotulo="Validade">
+            <select value={validade} onChange={(e) => setValidade(Number(e.target.value))} className={campo}>
+              {VALIDADES.map((d) => <option key={d} value={d}>{d} dias</option>)}
+            </select>
+          </CampoDeFormulario>
+          <PerguntasExtras extras={extras} onMudar={setExtras} chavesDoModelo={camposDoModelo(MODELOS_DE_FABRICA[modelo]).map((c) => c.key)} />
+        </GrupoDeCampos>
+      ) : (
+        <div className="min-w-0 space-y-4">
+          <CampoDeFormulario rotulo="Link" apoio={`${modeloDoLink.nome} · vale até ${new Date(gerado.briefing.expira_em).toLocaleDateString("pt-BR")}${gerado.prefill_campos.length ? ` · ${gerado.prefill_campos.length} dados para confirmar` : ""}`}>
+            <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} className={juntar(campo, "font-mono text-[12px]")} />
+          </CampoDeFormulario>
+          <div className="min-w-0">
+            <p className={juntar(texto.rotulo, "mb-1.5")}>Mensagem</p>
+            <p className={juntar(superficie.poco, texto.corpo, "whitespace-pre-line px-3 py-2 [overflow-wrap:anywhere]")}>{mensagem}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Fechar" className={botao.icone}><X className="h-4 w-4" aria-hidden="true" /></button>
         </div>
-
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-5">
-          {!gerado ? (
-            <GrupoDeCampos colunas={1}>
-              {!clienteFixo && (
-                <CampoDeFormulario rotulo="Cliente" obrigatorio>
-                  <select value={clientId} onChange={(e) => { setClientId(e.target.value); setMarcaId(""); setProjectId(""); }} className={campo}>
-                    <option value="">Selecionar...</option>
-                    {((clients as any[]) || []).map((c) => <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>)}
-                  </select>
-                </CampoDeFormulario>
-              )}
-              <CampoDeFormulario rotulo="Tipo de briefing" obrigatorio apoio={`${MODELOS_DE_FABRICA[modelo].minutos} minutos, mais ou menos.`}>
-                <select value={modelo} onChange={(e) => setModelo(e.target.value as SlugDoModelo)} className={campo}>
-                  {SLUGS_DE_BRIEFING.map((s) => <option key={s} value={s}>{MODELOS_DE_FABRICA[s].nome}</option>)}
-                </select>
-              </CampoDeFormulario>
-              {(marcas || []).length > 1 && (
-                <CampoDeFormulario rotulo="Marca" apoio="O que o cliente responder vai para o contexto desta marca.">
-                  <select value={marcaId} onChange={(e) => setMarcaId(e.target.value)} className={campo}>
-                    <option value="">Principal</option>
-                    {(marcas || []).filter((m) => !m.principal).map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}
-                  </select>
-                </CampoDeFormulario>
-              )}
-              {projetosDoCliente.length > 0 && (
-                <CampoDeFormulario rotulo="Projeto" apoio="Opcional.">
-                  <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={campo}>
-                    <option value="">Sem projeto</option>
-                    {projetosDoCliente.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </CampoDeFormulario>
-              )}
-              <CampoDeFormulario rotulo="Validade">
-                <select value={validade} onChange={(e) => setValidade(Number(e.target.value))} className={campo}>
-                  {VALIDADES.map((d) => <option key={d} value={d}>{d} dias</option>)}
-                </select>
-              </CampoDeFormulario>
-              <PerguntasExtras extras={extras} onMudar={setExtras} chavesDoModelo={camposDoModelo(MODELOS_DE_FABRICA[modelo]).map((c) => c.key)} />
-            </GrupoDeCampos>
-          ) : (
-            <div className="min-w-0 space-y-4">
-              <CampoDeFormulario rotulo="Link" apoio={`${modeloDoLink.nome} · vale até ${new Date(gerado.briefing.expira_em).toLocaleDateString("pt-BR")}${gerado.prefill_campos.length ? ` · ${gerado.prefill_campos.length} dados para confirmar` : ""}`}>
-                <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} className={juntar(campo, "font-mono text-[12px]")} />
-              </CampoDeFormulario>
-              <div className="min-w-0">
-                <p className={juntar(texto.rotulo, "mb-1.5")}>Mensagem</p>
-                <p className={juntar(superficie.poco, texto.corpo, "whitespace-pre-line px-3 py-2 [overflow-wrap:anywhere]")}>{mensagem}</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="flex shrink-0 flex-wrap justify-end border-t border-border px-4 py-3 sm:px-5 [&>*]:mt-1 [&>*+*]:ml-2">
-          {!gerado ? (
-            <>
-              <button type="button" onClick={onClose} className={botao.secundario}>Fechar</button>
-              <button type="button" onClick={() => void gerar()} disabled={gerando || !clientId} className={botao.primario}>
-                {gerando && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />}
-                {gerando ? "Gerando..." : "Gerar link"}
-              </button>
-            </>
-          ) : (
-            <>
-              <button type="button" onClick={() => void copiar("grupo")} className={botao.discreto}>
-                {copiado === "grupo" ? <Check className="mr-1.5 h-4 w-4" aria-hidden="true" /> : <Users className="mr-1.5 h-4 w-4" aria-hidden="true" />}
-                {copiado === "grupo" ? "Copiado" : "Texto do grupo"}
-              </button>
-              <a href={linkDoWhatsApp(mensagem, gerado.telefone)} target="_blank" rel="noopener noreferrer" className={botao.secundario}>
-                <MessageCircle className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                WhatsApp
-              </a>
-              <button type="button" onClick={() => void copiar("link")} className={botao.primario}>
-                {copiado === "link" ? <Check className="mr-1.5 h-4 w-4" aria-hidden="true" /> : <Copy className="mr-1.5 h-4 w-4" aria-hidden="true" />}
-                {copiado === "link" ? "Copiado" : "Copiar link"}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>,
-    document.body,
+      )}
+    </JanelaCentral>
   );
 }

@@ -104,7 +104,8 @@ describe("Mesa Proposta", () => {
 
   it("Contexto: abre a proposta do cliente e mostra o investimento que sai dos itens", async () => {
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=contexto`);
-    expect(await screen.findByText("2026-004")).toBeTruthy();
+    // UXS: a proposta aberta aparece no seletor da casca e no resumo da lista (recolhida).
+    expect((await screen.findAllByText(/2026-004/)).length).toBeGreaterThan(0);
     const investimento = await screen.findByText("Investimento");
     expect(investimento).toBeTruthy();
     await waitFor(() => expect(screen.getAllByText(/R\$ 1\.800,00 por mês/).length).toBeGreaterThan(0));
@@ -113,8 +114,8 @@ describe("Mesa Proposta", () => {
 
   it("Contexto: Nova proposta chama criar com o cliente", async () => {
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=contexto`);
-    await screen.findByText("2026-004");
-    fireEvent.click(screen.getByRole("button", { name: "Nova proposta" }));
+    await screen.findAllByText(/2026-004/);
+    fireEvent.click(await screen.findByRole("button", { name: "Nova proposta" }));
     fireEvent.click(await screen.findByRole("button", { name: /Criar proposta/ }));
     await waitFor(() => expect(chamadasDe("criar").length).toBe(1));
     expect(chamadasDe("criar")[0][1].body.client_id).toBe(CLIENTE);

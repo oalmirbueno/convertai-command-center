@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Loader2, Plus, Save, Trash2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { CampoDeFormulario, Carregando, EstadoDeErro, GrupoDeCampos, PreencherComIA, Secao, botao, campo as estiloDoCampo, campoTexto, etiqueta, juntar, lista, texto } from "@/components/sistema";
+import { CampoDeFormulario, Carregando, EstadoDeErro, GrupoDeCampos, JanelaCentral, PreencherComIA, Secao, botao, campo as estiloDoCampo, campoTexto, etiqueta, juntar, lista, texto } from "@/components/sistema";
 import type { CampoParaPreencher } from "@/components/sistema";
 import { ImagemDaMesa } from "@/components/mesa/MesaContexto";
 import { textoDoErro } from "@/lib/mesa/api";
-import { lerRascunho, salvarRascunho, type PedidoDoDocumento, type VistaDoRascunho } from "@/lib/documentos/registrarEntrega";
+import { lerRascunho, salvarRascunho, type PedidoDoDocumento, type ResultadoDaGeracao, type VistaDoRascunho } from "@/lib/documentos/registrarEntrega";
 import BotaoDocumentoDaEntrega from "./BotaoDocumentoDaEntrega";
 import {
   DEFINICOES_DE_DOCUMENTO,
@@ -27,6 +26,11 @@ import { moverItem } from "../../../supabase/functions/briefing-agente/modulos/b
  * - a capa com a identidade do cliente (logo e cor, pelo código).
  * Salvar guarda o rascunho; Gerar faz o PDF com o texto da equipe (sem IA
  * quando o resumo está escrito). Nada vai ao cliente daqui.
+ *
+ * Frente UXS: fechar (Esc, fundo, X) com mudança salva antes e só então
+ * fecha; se salvar falhar, não fecha e o erro fica no pé. Descartar (à
+ * esquerda do pé, só com mudança) volta ao que está salvo. Depois de gerar, a
+ * lista abre a janela de conferir e mandar no documento gerado.
  */
 
 const MAX_PROVAS_NO_PDF = 8;
@@ -57,9 +61,12 @@ export default function EditorDoDocumento({
   onFechar,
   alvo,
   marcaId,
+  onGerado,
 }: {
   aberto: boolean;
   onFechar: () => void;
+  /** O PDF saiu (a lista abre a conferência do documento gerado). */
+  onGerado?: (r: ResultadoDaGeracao) => void;
   /** Documento que já existe, ou o pedido de um novo (cliente, tipo, referência). */
   alvo: { documentoId: string; clientId: string } | (PedidoDoDocumento & { modelo?: ModeloDeDocumento }) | null;
   marcaId?: string | null;
@@ -74,10 +81,16 @@ export default function EditorDoDocumento({
   });
   const [r, setR] = useState<RascunhoDoDocumento | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [erroAoFechar, setErroAoFechar] = useState(false);
+  // Trava: Esc duas vezes ou Esc durante o Salvar não disparam outro salvar.
+  const fechando = useRef(false);
   const [novoNumero, setNovoNumero] = useState({ rotulo: "", valor: "", fonte: "" });
   useEffect(() => {
     if (vista.data) setR(vista.data.rascunho);
   }, [vista.data]);
+  useEffect(() => {
+    if (!aberto) setErroAoFechar(false);
+  }, [aberto]);
 
   const v = vista.data;
   const clientId = v ? v.documento.client_id : alvo ? alvo.clientId : "";
@@ -93,6 +106,7 @@ export default function EditorDoDocumento({
       qc.setQueryData(["documento-rascunho", chave], { ...v, rascunho: s.rascunho, documento: { ...v.documento, ...s.documento } });
       void qc.invalidateQueries({ queryKey: ["documentos-da-entrega", clientId] });
       toast.success("Rascunho salvo.");
+      setErroAoFechar(false);
       return true;
     } catch (e) {
       toast.error(textoDoErro(e, "Não foi possível salvar o rascunho."));
@@ -100,6 +114,27 @@ export default function EditorDoDocumento({
     } finally {
       setSalvando(false);
     }
+  };
+
+  /** Um lugar só para fechar: sem mudança fecha; com mudança salva e só fecha se salvou. */
+  const fecharComSalvar = async () => {
+    if (fechando.current || salvando) return;
+    if (!r || !v || vista.isError || !mudou) {
+      onFechar();
+      return;
+    }
+    fechando.current = true;
+    try {
+      if (await salvar()) onFechar();
+      else setErroAoFechar(true);
+    } finally {
+      fechando.current = false;
+    }
+  };
+  const descartar = () => {
+    if (!v) return;
+    setR(v.rascunho);
+    setErroAoFechar(false);
   };
 
   const mudarSecao = (id: string, textoNovo: string) => r && setR({ ...r, secoes: r.secoes.map((s) => (s.id === id ? { ...s, texto: textoNovo } : s)) });
@@ -127,156 +162,178 @@ export default function EditorDoDocumento({
       <PreencherComIA papel="documento" clientId={clientId} marcaId={marcaId ?? (v ? v.documento.marca_id : null)} campos={campos} contexto={contexto} fontes={["contexto", "dossie", "briefing"]} rotulo={rotulo} compacto={!rotulo} onAplicar={(valores) => aplicarIa(valores)} onDesfazer={(anteriores) => aplicarIa(anteriores)} />
     ) : null;
 
+  const rodape =
+    r && v ? (
+      <div className="flex w-full min-w-0 flex-wrap items-center [&>*]:m-0.5">
+        {mudou && (
+          <button type="button" onClick={descartar} disabled={salvando} className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}>
+            <Undo2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            Descartar
+          </button>
+        )}
+        {erroAoFechar && mudou && (
+          <span className="min-w-0 flex-1 truncate text-[12px] text-destructive" role="alert">
+            Não salvou. Tente de novo ou descarte.
+          </span>
+        )}
+        <span className="ml-auto flex shrink-0 flex-wrap items-center justify-end [&>*]:m-0.5">
+          <button type="button" onClick={() => void salvar()} disabled={!mudou || salvando} className={botao.secundario}>
+            {salvando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="mr-1.5 h-4 w-4" aria-hidden="true" />}
+            Salvar rascunho
+          </button>
+          <BotaoDocumentoDaEntrega
+            pedido={{ clientId: v.documento.client_id, marcaId: v.documento.marca_id, tipo: v.documento.tipo, referencia: v.documento.referencia, titulo: r.titulo || null, usarRascunho: true, documentoId: v.documento.id }}
+            statusDoDocumento={v.documento.status}
+            rotulo="Gerar PDF"
+            variante="primario"
+            // Gerar sempre com o rascunho salvo: salva antes quando mudou.
+            antesDeGerar={() => (mudou ? salvar() : Promise.resolve(true))}
+            onGerado={(g) => {
+              onFechar();
+              if (onGerado) onGerado(g);
+            }}
+          />
+        </span>
+      </div>
+    ) : undefined;
+
   return (
-    <Dialog open={aberto} onOpenChange={(o) => { if (!o) onFechar(); }}>
-      <DialogContent className="flex max-h-[92vh] w-[calc(100vw-16px)] max-w-4xl flex-col gap-0 p-0 sm:w-[calc(100vw-48px)]">
-        <div className="shrink-0 border-b border-border px-5 py-4 pr-12">
-          <DialogTitle className={juntar(texto.tituloSecao, "truncate")}>{r ? r.titulo || "Documento da entrega" : "Documento da entrega"}</DialogTitle>
-          <DialogDescription className={texto.auxiliar}>
-            {v ? `${v.eventos.length} itens do painel · ${incluidas} de ${MAX_PROVAS_NO_PDF} provas${mudou ? " · não salvo" : ""}` : "Abrindo"}
-          </DialogDescription>
-        </div>
-        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-4">
-          {vista.isLoading || (!r && !vista.isError) ? (
-            <Carregando linhas={5} rotulo="Montando o rascunho" />
-          ) : vista.isError || !r || !v ? (
-            <EstadoDeErro titulo="O rascunho não abriu." descricao={textoDoErro(vista.error)} acao={<button type="button" onClick={() => void vista.refetch()} className={botao.secundario}>Tentar de novo</button>} />
-          ) : (
-            <>
-              <GrupoDeCampos colunas={2}>
-                <CampoDeFormulario rotulo="Título">
-                  <input className={estiloDoCampo} value={r.titulo} maxLength={140} onChange={(e) => setR({ ...r, titulo: e.target.value })} aria-label="Título do documento" />
-                </CampoDeFormulario>
-                <CampoDeFormulario rotulo="Modelo">
-                  <select className={estiloDoCampo} value={r.modelo} onChange={(e) => {
-                    const m = e.target.value as ModeloDeDocumento;
-                    const def = DEFINICOES_DE_DOCUMENTO[m];
-                    // Troca as seções do modelo e guarda o texto das que continuam.
-                    const secoes = def.secoes.map((d) => ({ id: d.id, titulo: d.titulo, texto: (r.secoes.find((s) => s.id === d.id) || { texto: "" }).texto }));
-                    setR({ ...r, modelo: m, secoes });
-                  }} aria-label="Modelo do documento">
-                    {MODELOS_DE_DOCUMENTO.map((m) => <option key={m} value={m}>{DEFINICOES_DE_DOCUMENTO[m].nome}</option>)}
-                  </select>
-                </CampoDeFormulario>
-              </GrupoDeCampos>
-              <label className="flex min-w-0 items-center text-[13px] text-foreground">
-                <input type="checkbox" className="mr-2 h-4 w-4 accent-primary" checked={r.capa.identidade_do_cliente} onChange={(e) => setR({ ...r, capa: { identidade_do_cliente: e.target.checked } })} />
-                Capa com a identidade do cliente (logo e cor da marca)
-              </label>
+    <JanelaCentral
+      aberta={aberto}
+      // Esc, fundo e X passam por aqui: com mudança, salva antes de fechar.
+      onFechar={() => void fecharComSalvar()}
+      titulo={r ? r.titulo || "Documento da entrega" : "Documento da entrega"}
+      descricao={v ? `${v.eventos.length} itens do painel · ${incluidas} de ${MAX_PROVAS_NO_PDF} provas${mudou ? " · não salvo" : ""}` : "Abrindo"}
+      ajuda="O texto, as provas e os números do documento. Fechar com mudança salva o rascunho sozinho; Descartar volta ao que está salvo. Gerar PDF salva antes e, sem custo de IA, sai na hora; depois abre a conferência para mandar ao cliente."
+      largura="xl"
+      corpo="rola"
+      rodape={rodape}
+      data-editor-do-documento=""
+    >
+      <div className="min-w-0 space-y-6">
+        {vista.isLoading || (!r && !vista.isError) ? (
+          <Carregando linhas={5} rotulo="Montando o rascunho" />
+        ) : vista.isError || !r || !v ? (
+          <EstadoDeErro titulo="O rascunho não abriu." descricao={textoDoErro(vista.error)} acao={<button type="button" onClick={() => void vista.refetch()} className={botao.secundario}>Tentar de novo</button>} />
+        ) : (
+          <>
+            <GrupoDeCampos colunas={2}>
+              <CampoDeFormulario rotulo="Título">
+                <input className={estiloDoCampo} value={r.titulo} maxLength={140} onChange={(e) => setR({ ...r, titulo: e.target.value })} aria-label="Título do documento" />
+              </CampoDeFormulario>
+              <CampoDeFormulario rotulo="Modelo">
+                <select className={estiloDoCampo} value={r.modelo} onChange={(e) => {
+                  const m = e.target.value as ModeloDeDocumento;
+                  const def = DEFINICOES_DE_DOCUMENTO[m];
+                  // Troca as seções do modelo e guarda o texto das que continuam.
+                  const secoes = def.secoes.map((d) => ({ id: d.id, titulo: d.titulo, texto: (r.secoes.find((s) => s.id === d.id) || { texto: "" }).texto }));
+                  setR({ ...r, modelo: m, secoes });
+                }} aria-label="Modelo do documento">
+                  {MODELOS_DE_DOCUMENTO.map((m) => <option key={m} value={m}>{DEFINICOES_DE_DOCUMENTO[m].nome}</option>)}
+                </select>
+              </CampoDeFormulario>
+            </GrupoDeCampos>
+            <label className="flex min-w-0 items-center text-[13px] text-foreground">
+              <input type="checkbox" className="mr-2 h-4 w-4 accent-primary" checked={r.capa.identidade_do_cliente} onChange={(e) => setR({ ...r, capa: { identidade_do_cliente: e.target.checked } })} />
+              Capa com a identidade do cliente (logo e cor da marca)
+            </label>
 
-              <Secao titulo="Texto" recolher={false} acao={ia(camposDaIa, "Preencher tudo")} ajuda="O resumo e as seções do modelo. A IA escreve só com os itens e números do painel; o texto final é o seu. Com o resumo escrito, gerar o PDF não chama IA.">
-                <div className="min-w-0 space-y-4">
-                  <CampoDeTexto id="doc-resumo" rotulo="Resumo" ia={ia(campoUnico("resumo"))}>
-                    <textarea id="doc-resumo" className={campoTexto} rows={4} value={r.resumo} maxLength={1800} onChange={(e) => setR({ ...r, resumo: e.target.value })} />
+            <Secao titulo="Texto" recolher={false} acao={ia(camposDaIa, "Preencher tudo")} ajuda="O resumo e as seções do modelo. A IA escreve só com os itens e números do painel; o texto final é o seu. Com o resumo escrito, gerar o PDF não chama IA.">
+              <div className="min-w-0 space-y-4">
+                <CampoDeTexto id="doc-resumo" rotulo="Resumo" ia={ia(campoUnico("resumo"))}>
+                  <textarea id="doc-resumo" className={campoTexto} rows={4} value={r.resumo} maxLength={1800} onChange={(e) => setR({ ...r, resumo: e.target.value })} />
+                </CampoDeTexto>
+                {r.secoes.map((s) => (
+                  <CampoDeTexto key={s.id} id={`doc-secao-${s.id}`} rotulo={s.titulo} ia={ia(campoUnico(`secao.${s.id}`))} apoio={(DEFINICOES_DE_DOCUMENTO[r.modelo].secoes.find((d) => d.id === s.id) || { dica: "" }).dica}>
+                    <textarea id={`doc-secao-${s.id}`} className={campoTexto} rows={3} value={s.texto} maxLength={3000} onChange={(e) => mudarSecao(s.id, e.target.value)} />
                   </CampoDeTexto>
-                  {r.secoes.map((s) => (
-                    <CampoDeTexto key={s.id} id={`doc-secao-${s.id}`} rotulo={s.titulo} ia={ia(campoUnico(`secao.${s.id}`))} apoio={(DEFINICOES_DE_DOCUMENTO[r.modelo].secoes.find((d) => d.id === s.id) || { dica: "" }).dica}>
-                      <textarea id={`doc-secao-${s.id}`} className={campoTexto} rows={3} value={s.texto} maxLength={3000} onChange={(e) => mudarSecao(s.id, e.target.value)} />
-                    </CampoDeTexto>
-                  ))}
-                  <CampoDeTexto id="doc-proximos" rotulo="Próximos passos" ia={ia(campoUnico("proximos"))} apoio="Um por linha.">
-                    <textarea id="doc-proximos" className={campoTexto} rows={3} value={r.proximos.join("\n")} onChange={(e) => setR({ ...r, proximos: e.target.value.split("\n").map((x) => x.slice(0, 240)).slice(0, 6) })} />
-                  </CampoDeTexto>
-                </div>
-              </Secao>
+                ))}
+                <CampoDeTexto id="doc-proximos" rotulo="Próximos passos" ia={ia(campoUnico("proximos"))} apoio="Um por linha.">
+                  <textarea id="doc-proximos" className={campoTexto} rows={3} value={r.proximos.join("\n")} onChange={(e) => setR({ ...r, proximos: e.target.value.split("\n").map((x) => x.slice(0, 240)).slice(0, 6) })} />
+                </CampoDeTexto>
+              </div>
+            </Secao>
 
-              <Secao titulo="Provas" descricao={`${incluidas} de ${MAX_PROVAS_NO_PDF} no PDF`} recolher={false} divisoria ajuda="As imagens reais das entregas. Marque as que entram, na ordem que o cliente vai ver (arrastar ou setas), e ajuste a legenda.">
-                {!r.provas.length ? (
-                  <p className={texto.auxiliar}>Nenhuma entrega com imagem neste período.</p>
-                ) : (
-                  <ol className={juntar(lista.aberta, lista.divisoria)} aria-label="Provas do documento">
-                    {r.provas.map((p, i) => {
-                      const c = v.candidatos.find((x) => x.id === p.evento_id);
-                      if (!c) return null;
-                      return (
-                        <li key={p.evento_id} className={juntar(lista.linha, "items-start")} data-prova={p.evento_id}>
-                          <input type="checkbox" className="mr-3 mt-3 h-4 w-4 shrink-0 accent-primary" checked={p.incluir} disabled={!p.incluir && incluidas >= MAX_PROVAS_NO_PDF} onChange={(e) => setR({ ...r, provas: r.provas.map((x, k) => (k === i ? { ...x, incluir: e.target.checked } : x)) })} aria-label={`Incluir ${c.titulo}`} />
-                          <span className="mr-3 h-12 w-12 shrink-0 overflow-hidden rounded-md bg-muted">
-                            {c.imagem && <ImagemDaMesa caminho={c.imagem.caminho} bucket={c.imagem.bucket} alt={c.titulo} className="h-12 w-12 object-cover" />}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="flex min-w-0 items-center">
-                              <span className="truncate text-[13px] font-medium text-foreground">{c.titulo}</span>
-                              {c.forte && <span className={juntar(etiqueta, "ml-2 bg-primary/10 text-primary")}>aprovada</span>}
-                            </span>
-                            <input className={juntar(estiloDoCampo, "mt-1 h-8")} value={p.legenda} maxLength={200} onChange={(e) => setR({ ...r, provas: r.provas.map((x, k) => (k === i ? { ...x, legenda: e.target.value } : x)) })} aria-label={`Legenda de ${c.titulo}`} />
-                          </span>
-                          <button type="button" onClick={() => setR({ ...r, provas: moverItem(r.provas, i, i - 1) })} disabled={i === 0} className={juntar(botao.icone, "ml-1")} aria-label={`Subir ${c.titulo}`}>
-                            <ArrowUp className="h-4 w-4" aria-hidden="true" />
-                          </button>
-                          <button type="button" onClick={() => setR({ ...r, provas: moverItem(r.provas, i, i + 1) })} disabled={i === r.provas.length - 1} className={botao.icone} aria-label={`Descer ${c.titulo}`}>
-                            <ArrowDown className="h-4 w-4" aria-hidden="true" />
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                )}
-              </Secao>
-
-              <Secao titulo="Números" descricao={`${r.numeros.filter((n) => n.incluir).length} no PDF`} recolher={false} divisoria ajuda="Os números vêm do painel com a fonte. Número que você acrescenta só entra com a fonte escrita (ex.: Gerenciador de Anúncios, 30/09).">
-                {r.numeros.length > 0 && (
-                  <ul className={juntar(lista.aberta, lista.divisoria)}>
-                    {r.numeros.map((n, i) => (
-                      <li key={`${n.rotulo}-${i}`} className={lista.linha}>
-                        <input type="checkbox" className="mr-3 h-4 w-4 shrink-0 accent-primary" checked={n.incluir} onChange={(e) => setR({ ...r, numeros: r.numeros.map((x, k) => (k === i ? { ...x, incluir: e.target.checked } : x)) })} aria-label={`Incluir ${n.rotulo}`} />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13px] font-medium text-foreground">{n.rotulo}: {n.valor}</span>
-                          <span className={juntar(texto.auxiliar, "block truncate")}>Fonte: {n.fonte}{n.manual ? " (equipe)" : ""}</span>
+            <Secao titulo="Provas" descricao={`${incluidas} de ${MAX_PROVAS_NO_PDF} no PDF`} recolher={false} divisoria ajuda="As imagens reais das entregas. Marque as que entram, na ordem que o cliente vai ver (arrastar ou setas), e ajuste a legenda.">
+              {!r.provas.length ? (
+                <p className={texto.auxiliar}>Nenhuma entrega com imagem neste período.</p>
+              ) : (
+                <ol className={juntar(lista.aberta, lista.divisoria)} aria-label="Provas do documento">
+                  {r.provas.map((p, i) => {
+                    const c = v.candidatos.find((x) => x.id === p.evento_id);
+                    if (!c) return null;
+                    return (
+                      <li key={p.evento_id} className={juntar(lista.linha, "items-start")} data-prova={p.evento_id}>
+                        <input type="checkbox" className="mr-3 mt-3 h-4 w-4 shrink-0 accent-primary" checked={p.incluir} disabled={!p.incluir && incluidas >= MAX_PROVAS_NO_PDF} onChange={(e) => setR({ ...r, provas: r.provas.map((x, k) => (k === i ? { ...x, incluir: e.target.checked } : x)) })} aria-label={`Incluir ${c.titulo}`} />
+                        <span className="mr-3 h-12 w-12 shrink-0 overflow-hidden rounded-md bg-muted">
+                          {c.imagem && <ImagemDaMesa caminho={c.imagem.caminho} bucket={c.imagem.bucket} alt={c.titulo} className="h-12 w-12 object-cover" />}
                         </span>
-                        {n.manual && (
-                          <button type="button" onClick={() => setR({ ...r, numeros: r.numeros.filter((_, k) => k !== i) })} className={botao.icone} aria-label={`Tirar ${n.rotulo}`}>
-                            <Trash2 className="h-4 w-4" aria-hidden="true" />
-                          </button>
-                        )}
+                        <span className="min-w-0 flex-1">
+                          <span className="flex min-w-0 items-center">
+                            <span className="truncate text-[13px] font-medium text-foreground">{c.titulo}</span>
+                            {c.forte && <span className={juntar(etiqueta, "ml-2 bg-primary/10 text-primary")}>aprovada</span>}
+                          </span>
+                          <input className={juntar(estiloDoCampo, "mt-1 h-8")} value={p.legenda} maxLength={200} onChange={(e) => setR({ ...r, provas: r.provas.map((x, k) => (k === i ? { ...x, legenda: e.target.value } : x)) })} aria-label={`Legenda de ${c.titulo}`} />
+                        </span>
+                        <button type="button" onClick={() => setR({ ...r, provas: moverItem(r.provas, i, i - 1) })} disabled={i === 0} className={juntar(botao.icone, "ml-1")} aria-label={`Subir ${c.titulo}`}>
+                          <ArrowUp className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                        <button type="button" onClick={() => setR({ ...r, provas: moverItem(r.provas, i, i + 1) })} disabled={i === r.provas.length - 1} className={botao.icone} aria-label={`Descer ${c.titulo}`}>
+                          <ArrowDown className="h-4 w-4" aria-hidden="true" />
+                        </button>
                       </li>
-                    ))}
-                  </ul>
-                )}
-                <div className="mt-2 grid min-w-0 grid-cols-1 items-end gap-2 sm:grid-cols-[1fr_120px_1fr_auto]">
-                  <input className={estiloDoCampo} value={novoNumero.rotulo} placeholder="O que é" maxLength={60} onChange={(e) => setNovoNumero({ ...novoNumero, rotulo: e.target.value })} aria-label="Rótulo do número" />
-                  <input className={estiloDoCampo} value={novoNumero.valor} placeholder="Valor" inputMode="decimal" onChange={(e) => setNovoNumero({ ...novoNumero, valor: e.target.value })} aria-label="Valor do número" />
-                  <input className={estiloDoCampo} value={novoNumero.fonte} placeholder="Fonte (obrigatória)" maxLength={160} onChange={(e) => setNovoNumero({ ...novoNumero, fonte: e.target.value })} aria-label="Fonte do número" />
-                  <button
-                    type="button"
-                    className={botao.secundario}
-                    disabled={!novoNumero.rotulo.trim() || novoNumero.fonte.trim().length < 3 || !isFinite(Number(novoNumero.valor.replace(",", "."))) || !novoNumero.valor.trim()}
-                    onClick={() => {
-                      setR({ ...r, numeros: r.numeros.concat({ rotulo: novoNumero.rotulo.trim(), valor: Number(novoNumero.valor.replace(",", ".")), fonte: novoNumero.fonte.trim(), incluir: true, manual: true }) });
-                      setNovoNumero({ rotulo: "", valor: "", fonte: "" });
-                    }}
-                  >
-                    <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
-                    Número
-                  </button>
-                </div>
-              </Secao>
+                    );
+                  })}
+                </ol>
+              )}
+            </Secao>
 
-              {v.avisos.length > 0 && (
-                <ul className="list-disc space-y-1 pl-5" aria-label="Avisos da leitura">
-                  {v.avisos.map((a, i) => <li key={i} className="text-[12px] leading-5 text-muted-foreground">{a}</li>)}
+            <Secao titulo="Números" descricao={`${r.numeros.filter((n) => n.incluir).length} no PDF`} recolher={false} divisoria ajuda="Os números vêm do painel com a fonte. Número que você acrescenta só entra com a fonte escrita (ex.: Gerenciador de Anúncios, 30/09).">
+              {r.numeros.length > 0 && (
+                <ul className={juntar(lista.aberta, lista.divisoria)}>
+                  {r.numeros.map((n, i) => (
+                    <li key={`${n.rotulo}-${i}`} className={lista.linha}>
+                      <input type="checkbox" className="mr-3 h-4 w-4 shrink-0 accent-primary" checked={n.incluir} onChange={(e) => setR({ ...r, numeros: r.numeros.map((x, k) => (k === i ? { ...x, incluir: e.target.checked } : x)) })} aria-label={`Incluir ${n.rotulo}`} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-medium text-foreground">{n.rotulo}: {n.valor}</span>
+                        <span className={juntar(texto.auxiliar, "block truncate")}>Fonte: {n.fonte}{n.manual ? " (equipe)" : ""}</span>
+                      </span>
+                      {n.manual && (
+                        <button type="button" onClick={() => setR({ ...r, numeros: r.numeros.filter((_, k) => k !== i) })} className={botao.icone} aria-label={`Tirar ${n.rotulo}`}>
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      )}
+                    </li>
+                  ))}
                 </ul>
               )}
-            </>
-          )}
-        </div>
-        {r && v && (
-          <div className="flex shrink-0 flex-wrap items-center justify-end border-t border-border px-5 py-3 [&>*]:m-0.5">
-            <button type="button" onClick={() => void salvar()} disabled={!mudou || salvando} className={botao.secundario}>
-              {salvando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="mr-1.5 h-4 w-4" aria-hidden="true" />}
-              Salvar rascunho
-            </button>
-            <BotaoDocumentoDaEntrega
-              pedido={{ clientId: v.documento.client_id, marcaId: v.documento.marca_id, tipo: v.documento.tipo, referencia: v.documento.referencia, titulo: r.titulo || null, usarRascunho: true, documentoId: v.documento.id }}
-              rotulo="Gerar PDF"
-              variante="primario"
-              // Gerar sempre com o rascunho salvo: salva antes quando mudou.
-              antesDeGerar={() => (mudou ? salvar() : Promise.resolve(true))}
-              onGerado={() => onFechar()}
-            />
-          </div>
+              <div className="mt-2 grid min-w-0 grid-cols-1 items-end gap-2 sm:grid-cols-[1fr_120px_1fr_auto]">
+                <input className={estiloDoCampo} value={novoNumero.rotulo} placeholder="O que é" maxLength={60} onChange={(e) => setNovoNumero({ ...novoNumero, rotulo: e.target.value })} aria-label="Rótulo do número" />
+                <input className={estiloDoCampo} value={novoNumero.valor} placeholder="Valor" inputMode="decimal" onChange={(e) => setNovoNumero({ ...novoNumero, valor: e.target.value })} aria-label="Valor do número" />
+                <input className={estiloDoCampo} value={novoNumero.fonte} placeholder="Fonte (obrigatória)" maxLength={160} onChange={(e) => setNovoNumero({ ...novoNumero, fonte: e.target.value })} aria-label="Fonte do número" />
+                <button
+                  type="button"
+                  className={botao.secundario}
+                  disabled={!novoNumero.rotulo.trim() || novoNumero.fonte.trim().length < 3 || !isFinite(Number(novoNumero.valor.replace(",", "."))) || !novoNumero.valor.trim()}
+                  onClick={() => {
+                    setR({ ...r, numeros: r.numeros.concat({ rotulo: novoNumero.rotulo.trim(), valor: Number(novoNumero.valor.replace(",", ".")), fonte: novoNumero.fonte.trim(), incluir: true, manual: true }) });
+                    setNovoNumero({ rotulo: "", valor: "", fonte: "" });
+                  }}
+                >
+                  <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
+                  Número
+                </button>
+              </div>
+            </Secao>
+
+            {v.avisos.length > 0 && (
+              <ul className="list-disc space-y-1 pl-5" aria-label="Avisos da leitura">
+                {v.avisos.map((a, i) => <li key={i} className="text-[12px] leading-5 text-muted-foreground">{a}</li>)}
+              </ul>
+            )}
+          </>
         )}
-      </DialogContent>
-    </Dialog>
+      </div>
+    </JanelaCentral>
   );
 }

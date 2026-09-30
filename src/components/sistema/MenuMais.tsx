@@ -32,6 +32,7 @@ export default function MenuMais({
   alinhar = "end",
   className = "",
   desativado = false,
+  semDevolverFoco = false,
 }: {
   itens: Array<ItemDoMenu | false | null | undefined>;
   /** Nome do botão para leitor de tela. */
@@ -41,6 +42,11 @@ export default function MenuMais({
   alinhar?: "start" | "end";
   className?: string;
   desativado?: boolean;
+  /**
+   * Ao fechar, o foco NÃO volta ao botão "...": para o item que leva o foco a
+   * outro lugar (atalho que preenche o campo do agente e põe o cursor nele).
+   */
+  semDevolverFoco?: boolean;
 }) {
   const validos = itens.filter(Boolean) as ItemDoMenu[];
   if (validos.length === 0) return null;
@@ -56,7 +62,12 @@ export default function MenuMais({
           <Icone className="h-4 w-4" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align={alinhar} sideOffset={6} className="min-w-[180px] max-w-[calc(100vw-24px)] p-1">
+      <DropdownMenuContent
+        align={alinhar}
+        sideOffset={6}
+        onCloseAutoFocus={semDevolverFoco ? (e) => e.preventDefault() : undefined}
+        className="min-w-[180px] max-w-[calc(100vw-24px)] p-1"
+      >
         {ordenados.map((item, i) => {
           const traco = i > 0 && (item.separadorAntes || (item.perigo && i === comuns.length));
           return (

@@ -4,7 +4,7 @@
  * chama as RPCs security definer por token (proposta_publica_ler, _evento e
  * _aceitar), que recusam qualquer outro papel.
  *
- * - GET ?token=...                          -> { proposta, agencia, logo_cliente_url }
+ * - GET ?token=...                          -> { proposta, agencia, logo_cliente_url } (link que não existe: 404 { error: "link_invalido", agencia })
  * - POST { token, tipo: aberta|leitura, sessao, segundos } -> { ok } (rastreio de abertura e tempo de leitura)
  * - POST { token, aceitar: { nome, email, aceito: true, pacote?, pagamento? } } -> { ok, aceita_em, contrato }
  *
@@ -68,7 +68,17 @@ Deno.serve(async (req) => {
         registrarFalha("proposta-publica: leitura falhou", error);
         return json({ error: "indisponivel" }, 503);
       }
-      if (!data) return json({ error: "link_invalido" }, 404);
+      if (!data) {
+        // Frente UXS: o link não existe mais, mas o cliente sempre tem com quem falar (o contato da agência).
+        // Falha na leitura da agência não vira 500: o 404 sai sem ela.
+        let agenciaDoLink: ReturnType<typeof agenciaPublica> | null = null;
+        try {
+          agenciaDoLink = agenciaPublica(await lerDadosDaAgencia(db));
+        } catch (e) {
+          registrarFalha("proposta-publica: dados da agência não lidos no link inválido", e);
+        }
+        return json({ error: "link_invalido", agencia: agenciaDoLink }, 404);
+      }
       const proposta = data as Record<string, unknown>;
       let logo: string | null = null;
       const caminho = typeof proposta.logo_cliente_path === "string" ? proposta.logo_cliente_path : "";

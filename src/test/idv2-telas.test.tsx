@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createElement as h, type ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -111,14 +111,23 @@ describe("IDV2: as telas abrem", () => {
     expect(screen.getByRole("link", { name: /Fonte de Textura/ }).getAttribute("href")).toBe("https://x.org");
   });
 
-  it("Sistema: contraste, gerador de paleta, propostas do diretor, tipografia e padrões", () => {
+  it("Sistema: contraste e hierarquia à vista; os geradores nascem recolhidos quando a parte já tem valor e abrem com um toque", () => {
     const { container } = montar(h(EtapaSistema));
     expect(container.querySelector("[data-contraste-da-paleta]")).toBeTruthy();
+    expect(container.querySelector("[data-tipografia-da-marca]")).toBeTruthy();
+    expect(container.querySelector("[data-hierarquia]")).toBeTruthy();
+    // UXS 30/09 (IDV-11): cores (2) e tipografia (1 família) salvas no fixture: geradores recolhidos, nenhum par montado.
+    expect(container.querySelector("[data-gerador-de-paleta]")).toBeNull();
+    expect(container.querySelectorAll("[data-par]").length).toBe(0);
+    // Sem ativo salvo, o gerador de padrão nasce aberto.
+    expect(container.querySelector("[data-grafismos-gerados] img")!.getAttribute("src")).toMatch(/^data:image\/svg\+xml/);
+    fireEvent.click(screen.getByRole("button", { name: "Gerar paleta" }));
+    fireEvent.click(screen.getByRole("button", { name: "Gerar combinações" }));
     expect(container.querySelector("[data-gerador-de-paleta]")).toBeTruthy();
     expect(container.querySelector('[data-paleta-proposta="pl1"]')).toBeTruthy();
-    expect(container.querySelector("[data-tipografia-da-marca]")).toBeTruthy();
     expect(container.querySelectorAll("[data-par]").length).toBe(6);
-    expect(container.querySelector("[data-grafismos-gerados] img")!.getAttribute("src")).toMatch(/^data:image\/svg\+xml/);
+    // Um seletor de modelo só na etapa (o do cabeçalho).
+    expect(container.querySelectorAll('[data-seletor-de-modelo="identidade"]').length).toBe(1);
   });
 
   it("Naming: criador com modelo, 16 técnicas e o slogan", () => {

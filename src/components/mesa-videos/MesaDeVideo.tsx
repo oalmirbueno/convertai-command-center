@@ -162,9 +162,10 @@ export default function MesaDeVideo({
   const irPara: IrPara = (e, extras = {}) => mudar({ ...extras, etapa: e });
 
   // Troca de cliente: limpa o que era do anterior (a etapa remonta pela chave).
+  // O filme aberto (?filme=, Mesa Motion) também sai: o filme de um cliente nunca abre com o cabeçalho de outro.
   const trocarCliente = (id: string) => {
     const o = lerOnde(chaveOnde(id), etapas);
-    mudar({ client: id, etapa: o.etapa || etapas[0].valor, marca: null, origem: null });
+    mudar({ client: id, etapa: o.etapa || etapas[0].valor, marca: null, origem: null, filme: null });
   };
 
   const [redirecionando, setRedirecionando] = useState(false);
@@ -266,7 +267,7 @@ export default function MesaDeVideo({
       marcaId={marca ? marca.id : null}
       telaCheia={telaCheia}
       cliente={<SeletorDeClientesDaMesa mesa={mesa} clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />}
-      marca={clientId && marca ? <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id }, true)} /> : null}
+      marca={clientId && marca ? <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id, filme: null }, true)} /> : null}
       etapas={
         clientId ? (
           <Etapas rotulo={`Etapas da ${titulo}`} numerar itens={etapas.map((e) => ({ valor: e.valor, rotulo: e.rotulo, dica: e.dica }))} valor={etapa} onEscolher={(v) => mudar({ etapa: v })} />

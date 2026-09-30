@@ -211,7 +211,7 @@ export async function lerLinha(ch: Chamador, contractId: unknown, gestao = false
 
 export function exigirRascunhoDeModelo(l: Linha) {
   if (l.origem !== "modelo") throw new ErroHttp(409, "contrato_de_arquivo", "Este contrato é um PDF enviado: ele não é montado por modelo.");
-  if (l.status !== "draft" || l.congelado_em) throw new ErroHttp(409, "contrato_congelado", "O contrato já foi congelado. Para mudar, crie uma versão nova.");
+  if (l.status !== "draft" || l.congelado_em) throw new ErroHttp(409, "contrato_congelado", "O contrato já foi assinado pela agência. Para mudar, crie uma versão nova.");
 }
 
 export async function evento(l: { id: string; client_id: string }, tipo: string, resumo: string, detalhe: Record<string, unknown> = {}, criadoPor: string | null = null, extra: { ip?: string | null } = {}) {

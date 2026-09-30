@@ -929,10 +929,11 @@ export function resumoDoDiff(linhas: LinhaDoDiff[]): { mudaram: number; entraram
 // ------------------------------------------------------------------ mensagens prontas (nada é enviado sozinho)
 
 export function mensagensProntas(p: { cliente: string; titulo: string; link: string; hash: string; agencia: string }) {
-  const codigo = String(p.hash || "").slice(0, 12);
-  const whatsapp = `Olá, ${p.cliente}! Segue o contrato "${p.titulo}" para leitura e assinatura eletrônica: ${p.link}\nO código do documento é ${codigo}. Qualquer dúvida, é só responder aqui.`;
+  const codigo = String(p.hash || "").trim().slice(0, 12);
+  // Contrato de PDF enviado não tem código: a frase do código sai (nada de "O código do documento é .").
+  const whatsapp = `Olá, ${p.cliente}! Segue o contrato "${p.titulo}" para leitura e assinatura eletrônica: ${p.link}\n${codigo ? `O código do documento é ${codigo}. ` : ""}Qualquer dúvida, é só responder aqui.`;
   const assunto = `Contrato para assinatura: ${p.titulo}`;
-  const email = `Olá, ${p.cliente}.\n\nSegue o link do contrato "${p.titulo}" para leitura e assinatura eletrônica:\n${p.link}\n\nO documento tem o código de integridade ${codigo} (SHA-256). Se ele mudar, o link muda junto.\n\n${p.agencia}`;
+  const email = `Olá, ${p.cliente}.\n\nSegue o link do contrato "${p.titulo}" para leitura e assinatura eletrônica:\n${p.link}\n\n${codigo ? `O documento tem o código de integridade ${codigo} (SHA-256). Se ele mudar, o link muda junto.\n\n` : ""}${p.agencia}`;
   return { whatsapp, assunto, email, wa_me: `https://wa.me/?text=${encodeURIComponent(whatsapp)}` };
 }
 

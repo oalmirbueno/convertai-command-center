@@ -124,7 +124,7 @@ export default function VideoDaMarca({ titulo = "Vídeo da marca" }: { titulo?: 
       recolher={`mesa-identidade:${projeto.id}:video`}
       ajuda="O filme nasce na Mesa Motion já com a logo, as versões, a paleta, a tipografia, os grafismos, a estratégia, o tom, a tagline e as peças do projeto. A entrevista é pulada (as respostas vêm da estratégia). A apresentação em motion não usa IA: os slides viram cenas do kit. O render é da fila; o vídeo pronto entra no pacote, no brandbook web e vai para aprovação."
       acao={
-        <button type="button" className={juntar(botao.secundario, "m-1 h-8")} onClick={() => setAberta(true)} data-criar-video-da-marca="">
+        <button type="button" className={juntar(botao.secundario, "m-1 h-8")} onClick={() => setAberta(true)} data-criar-video-da-marca="" data-campo="criar-video">
           <Clapperboard className="mr-1.5 h-3.5 w-3.5" /> Criar vídeo
         </button>
       }

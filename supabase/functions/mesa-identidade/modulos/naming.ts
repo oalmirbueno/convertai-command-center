@@ -557,6 +557,27 @@ export function ordenarSlogans(lista: SloganDaMarca[]): SloganDaMarca[] {
 export type VotoDoNome = { candidato_id: string; origem: "equipe" | "cliente"; nota: number };
 export type ResumoDoVoto = { equipe: number | null; n_equipe: number; cliente: number | null; n_cliente: number };
 
+/**
+ * As notas da equipe de quem chamou (a mais nova por candidato; a lista vem
+ * da mais nova para a mais velha) e a lista sem a chave de quem votou, que
+ * nunca sai do servidor (UXS 30/09, IDV-10).
+ */
+export function separarMinhas<T extends VotoDoNome & { chave: string }>(votos: T[], userId: string): { votos: Array<Omit<T, "chave">>; minhas: Record<string, number> } {
+  const minhas: Record<string, number> = {};
+  for (const x of votos) {
+    const nota = Math.round(Number(x.nota));
+    if (x.origem === "equipe" && userId && x.chave === userId && minhas[x.candidato_id] === undefined && nota >= 1 && nota <= 5) minhas[x.candidato_id] = nota;
+  }
+  return {
+    votos: votos.map((v) => {
+      const copia = { ...v } as Record<string, unknown>;
+      delete copia.chave;
+      return copia as Omit<T, "chave">;
+    }),
+    minhas,
+  };
+}
+
 /** Resumo por nome: média e quantidade de votos da equipe e do cliente (nota de 1 a 5). */
 export function resumoDosVotos(votos: VotoDoNome[]): Record<string, ResumoDoVoto> {
   const somas: Record<string, { se: number; ne: number; sc: number; nc: number }> = {};

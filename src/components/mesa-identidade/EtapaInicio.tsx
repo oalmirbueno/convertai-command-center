@@ -6,7 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useKitDaMarca } from "@/components/mesa/kitDaMesa";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
-import Secao from "@/components/sistema/Secao";
+import Secao, { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import { useChaveDeRecolher, useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { Carregando } from "@/components/sistema/Estados";
 import { botao, campo, espaco, foco, juntar, lista, superficie, texto } from "@/components/sistema/estilos";
@@ -41,6 +42,10 @@ async function arquivoDaLogoDoKit(caminho: string | null | undefined, fileId: st
  * (IDV3: só tem logo e nome). Um projeto por marca (a marca aberta no topo);
  * os projetos em andamento ficam na lista para continuar de onde pararam.
  * Com um projeto aberto, o checklist de completude e o "Completar tudo".
+ *
+ * UXS 30/09: com projetos, a lista vem primeiro (voltar ao trabalho custa um
+ * clique; a linha abre na etapa atual) e a criação fica atrás do "Novo
+ * projeto", ali mesmo, com os mesmos campos. Sem projeto, a tela é a de antes.
  */
 export default function EtapaInicio({ projetoAberto, contexto, onAbrir }: { projetoAberto: ProjetoDeIdentidade | null; contexto?: ProjetoDaMesa | null; onAbrir: (p: ProjetoDeIdentidade, etapa?: EtapaDaIdentidade, extra?: Record<string, string | null>) => void }) {
   const { clientId, clientName } = useMesa();
@@ -94,120 +99,185 @@ export default function EtapaInicio({ projetoAberto, contexto, onAbrir }: { proj
   ];
 
   const listaDeProjetos = projetos.data || [];
+  // Com projeto na lista (ou lendo), a lista vem primeiro e a criação fica atrás do "Novo projeto".
+  const comProjetos = listaDeProjetos.length > 0 || projetos.isLoading;
+  const [novoAberto, setNovoAberto] = useState(false);
+  const chaveDaLista = useChaveDeRecolher("Projetos da marca", undefined) || `mesa-identidade:${clientId}:projetos`;
+  const [listaRecolhida, setListaRecolhida] = useRecolhido(chaveDaLista, false);
+  const emAndamento = listaDeProjetos.filter((p) => p.estado !== "entregue").length;
+  const entregues = listaDeProjetos.length - emAndamento;
+  const contagem = [emAndamento ? `${emAndamento} em andamento` : "", entregues ? `${entregues} ${entregues === 1 ? "entregue" : "entregues"}` : ""].filter(Boolean).join(" · ");
+  const AJUDA_DOS_MODOS =
+    "Marca do zero passa por todas as etapas, inclusive o Naming. No rebranding, o Naming só entra quando o nome também muda. Completar marca existente parte da logo e do nome que a marca já usa: a logo não muda, o painel completa estratégia, paleta, tipografia, grafismos, peças, mockups, brandbook, apresentação e vídeo. O projeto fica na marca aberta no topo (Acerbi e CME não se misturam).";
+
+  const criacao = (
+    <>
+      <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3" role="radiogroup" aria-label="Tipo de projeto">
+        {opcoes.map((o) => (
+          <button
+            key={o.valor}
+            type="button"
+            role="radio"
+            aria-checked={modo === o.valor}
+            onClick={() => setModo(o.valor)}
+            className={juntar(superficie.painel, "flex min-w-0 items-center p-4 text-left transition-colors hover:border-primary/50", modo === o.valor && "border-primary", foco)}
+            data-modo={o.valor}
+          >
+            <span className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">{o.icone}</span>
+            <span className="min-w-0">
+              <span className={juntar(texto.tituloSecao, "block truncate")}>{ROTULO_DO_MODO[o.valor]}</span>
+              <span className={juntar(texto.auxiliar, "block truncate")}>{o.detalhe}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+      {modo === "completar" && (
+        <div className="mt-4 grid min-w-0 grid-cols-1 items-end gap-4 sm:grid-cols-2" data-entrada-da-marca-existente="">
+          <CampoDeFormulario rotulo="Nome da marca" apoio="Como a marca já se chama">
+            <input className={campo} value={nomeExistente} maxLength={80} onChange={(e) => setNomeExistente(e.target.value)} placeholder={nomeDaMarca || "Nome"} />
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Logo" apoio={arquivo ? arquivo.name : logoDoKit ? "A do kit da marca" : "Arquivo real, SVG de preferência"}>
+            <input
+              ref={entrada}
+              type="file"
+              accept=".svg,.png,.jpg,.jpeg,.webp"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files && e.target.files[0];
+                if (f) setArquivo(f);
+                e.target.value = "";
+              }}
+            />
+            <button type="button" className={juntar(botao.secundario, "w-full")} onClick={() => entrada.current && entrada.current.click()} data-enviar-logo-existente="">
+              <ImagePlus className="mr-1.5 h-4 w-4" /> {arquivo ? "Trocar o arquivo" : logoDoKit ? "Usar outro arquivo" : "Enviar a logo"}
+            </button>
+          </CampoDeFormulario>
+        </div>
+      )}
+      {modo && (
+        <div className="mt-4 grid min-w-0 grid-cols-1 items-end gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <CampoDeFormulario rotulo="Nome do projeto" apoio="Opcional">
+            <input className={campo} value={titulo} maxLength={120} onChange={(e) => setTitulo(e.target.value)} placeholder={`${ROTULO_DO_MODO[modo]}: ${nomeDaMarca}`} />
+          </CampoDeFormulario>
+          <div className="flex min-w-0 items-center">
+            {modo === "rebranding" && (
+              <label className={juntar(texto.corpo, "mr-4 flex items-center")}>
+                <input type="checkbox" className="mr-2 h-4 w-4 accent-primary" checked={comNaming} onChange={(e) => setComNaming(e.target.checked)} />
+                O nome também muda
+              </label>
+            )}
+            <button type="button" className={botao.primario} onClick={() => void criar()} disabled={criando} data-criar-projeto="">
+              {criando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Plus className="mr-1.5 h-4 w-4" />} Começar
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
+  const listaDosProjetos = (
+    <>
+      {projetos.isLoading && <Carregando forma="lista" linhas={2} rotulo="Lendo os projetos" />}
+      {projetos.isError && (
+        <p className={juntar(texto.auxiliar, "text-warning")} role="alert">
+          {faltaATabela(projetos.error) ? "O banco ainda não tem as tabelas da Mesa Identidade." : "Não foi possível ler os projetos."}
+        </p>
+      )}
+      {projetos.isSuccess && !listaDeProjetos.length && <p className={texto.auxiliar}>Nenhum projeto ainda.</p>}
+      {listaDeProjetos.length > 0 && (
+        <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Projetos de identidade">
+          {listaDeProjetos.map((p) => {
+            const a = progresso(p);
+            const atual = etapaAtual(p);
+            const acaoDaLinha = p.estado === "entregue" ? "Abrir" : `Continuar em ${rotuloDaEtapa(atual)}`;
+            return (
+              <li key={p.id}>
+                <button type="button" className={juntar(lista.linha, "w-full text-left", projetoAberto && projetoAberto.id === p.id && lista.destaque, foco)} onClick={() => onAbrir(p)} title={acaoDaLinha}>
+                  <span className="min-w-0 flex-1">
+                    <span className={juntar(texto.corpo, "block truncate font-medium")}>{p.titulo}</span>
+                    <span className={juntar(texto.auxiliar, "block truncate")}>
+                      {ROTULO_DO_MODO[p.modo]} · {p.estado === "entregue" ? "entregue" : `em ${rotuloDaEtapa(atual)}`} · {a.feitas} de {a.total} etapas
+                    </span>
+                  </span>
+                  {p.estado === "entregue" ? <Pastilha tom="bom">Entregue</Pastilha> : <Pastilha>{rotuloDaEtapa(atual)}</Pastilha>}
+                  <span className="sr-only">. {acaoDaLinha}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </>
+  );
+
+  const completude =
+    projetoAberto && contexto ? (
+      <ProjetoProvider valor={contexto}>
+        <Suspense fallback={<Carregando forma="lista" linhas={3} rotulo="Lendo a completude da marca" />}>
+          <CompletarMarca
+            abrirJa={params.get("completar") === "1"}
+            onAberto={() => {
+              const next = new URLSearchParams(params);
+              next.delete("completar");
+              setParams(next, { replace: true });
+            }}
+          />
+        </Suspense>
+      </ProjetoProvider>
+    ) : null;
+
+  if (comProjetos) {
+    // Voltar ao trabalho: a completude do projeto aberto, a lista e, atrás do botão, a criação.
+    return (
+      <div className={espaco.pagina} data-etapa-inicio="" data-inicio-com-projetos="">
+        {completude}
+        <section className={juntar("min-w-0", completude && "border-t border-border pt-5")} data-recolhido={listaRecolhida ? "sim" : "nao"} data-lista-de-projetos="">
+          <CabecalhoDeSecao
+            className={listaRecolhida ? "" : "mb-3"}
+            titulo="Projetos da marca"
+            descricao={projetos.isSuccess ? contagem || undefined : undefined}
+            ajuda={AJUDA_DOS_MODOS}
+            recolher={{ recolhido: listaRecolhida, onAlternar: () => setListaRecolhida(!listaRecolhida), resumo: projetos.isSuccess ? contagem || undefined : undefined, modo: "icone" }}
+            acao={
+              <button
+                type="button"
+                className={juntar(botao.secundario, "m-1 h-8")}
+                aria-expanded={novoAberto}
+                onClick={() => {
+                  if (!novoAberto && listaRecolhida) setListaRecolhida(false);
+                  setNovoAberto(!novoAberto);
+                }}
+                data-novo-projeto=""
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" /> Novo projeto
+              </button>
+            }
+          />
+          {!listaRecolhida && (
+            <div className="min-w-0">
+              {novoAberto && (
+                <div className="mb-5 min-w-0 border-b border-border pb-5" data-bloco-novo-projeto="">
+                  {criacao}
+                </div>
+              )}
+              {listaDosProjetos}
+            </div>
+          )}
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className={espaco.pagina} data-etapa-inicio="">
-      <Secao
-        titulo={`Nova identidade para ${nomeDaMarca || "o cliente"}`}
-        recolher={false}
-        ajuda="Marca do zero passa por todas as etapas, inclusive o Naming. No rebranding, o Naming só entra quando o nome também muda. Completar marca existente parte da logo e do nome que a marca já usa: a logo não muda, o painel completa estratégia, paleta, tipografia, grafismos, peças, mockups, brandbook, apresentação e vídeo. O projeto fica na marca aberta no topo (Acerbi e CME não se misturam)."
-      >
-        <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3" role="radiogroup" aria-label="Tipo de projeto">
-          {opcoes.map((o) => (
-            <button
-              key={o.valor}
-              type="button"
-              role="radio"
-              aria-checked={modo === o.valor}
-              onClick={() => setModo(o.valor)}
-              className={juntar(superficie.painel, "flex min-w-0 items-center p-4 text-left transition-colors hover:border-primary/50", modo === o.valor && "border-primary", foco)}
-              data-modo={o.valor}
-            >
-              <span className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">{o.icone}</span>
-              <span className="min-w-0">
-                <span className={juntar(texto.tituloSecao, "block truncate")}>{ROTULO_DO_MODO[o.valor]}</span>
-                <span className={juntar(texto.auxiliar, "block truncate")}>{o.detalhe}</span>
-              </span>
-            </button>
-          ))}
-        </div>
-        {modo === "completar" && (
-          <div className="mt-4 grid min-w-0 grid-cols-1 items-end gap-4 sm:grid-cols-2" data-entrada-da-marca-existente="">
-            <CampoDeFormulario rotulo="Nome da marca" apoio="Como a marca já se chama">
-              <input className={campo} value={nomeExistente} maxLength={80} onChange={(e) => setNomeExistente(e.target.value)} placeholder={nomeDaMarca || "Nome"} />
-            </CampoDeFormulario>
-            <CampoDeFormulario rotulo="Logo" apoio={arquivo ? arquivo.name : logoDoKit ? "A do kit da marca" : "Arquivo real, SVG de preferência"}>
-              <input
-                ref={entrada}
-                type="file"
-                accept=".svg,.png,.jpg,.jpeg,.webp"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files && e.target.files[0];
-                  if (f) setArquivo(f);
-                  e.target.value = "";
-                }}
-              />
-              <button type="button" className={juntar(botao.secundario, "w-full")} onClick={() => entrada.current && entrada.current.click()} data-enviar-logo-existente="">
-                <ImagePlus className="mr-1.5 h-4 w-4" /> {arquivo ? "Trocar o arquivo" : logoDoKit ? "Usar outro arquivo" : "Enviar a logo"}
-              </button>
-            </CampoDeFormulario>
-          </div>
-        )}
-        {modo && (
-          <div className="mt-4 grid min-w-0 grid-cols-1 items-end gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
-            <CampoDeFormulario rotulo="Nome do projeto" apoio="Opcional">
-              <input className={campo} value={titulo} maxLength={120} onChange={(e) => setTitulo(e.target.value)} placeholder={`${ROTULO_DO_MODO[modo]}: ${nomeDaMarca}`} />
-            </CampoDeFormulario>
-            <div className="flex min-w-0 items-center">
-              {modo === "rebranding" && (
-                <label className={juntar(texto.corpo, "mr-4 flex items-center")}>
-                  <input type="checkbox" className="mr-2 h-4 w-4 accent-primary" checked={comNaming} onChange={(e) => setComNaming(e.target.checked)} />
-                  O nome também muda
-                </label>
-              )}
-              <button type="button" className={botao.primario} onClick={() => void criar()} disabled={criando} data-criar-projeto="">
-                {criando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Plus className="mr-1.5 h-4 w-4" />} Começar
-              </button>
-            </div>
-          </div>
-        )}
+      <Secao titulo={`Nova identidade para ${nomeDaMarca || "o cliente"}`} recolher={false} ajuda={AJUDA_DOS_MODOS}>
+        {criacao}
       </Secao>
 
-      {projetoAberto && contexto && (
-        <ProjetoProvider valor={contexto}>
-          <Suspense fallback={<Carregando forma="lista" linhas={3} rotulo="Lendo a completude da marca" />}>
-            <CompletarMarca
-              abrirJa={params.get("completar") === "1"}
-              onAberto={() => {
-                const next = new URLSearchParams(params);
-                next.delete("completar");
-                setParams(next, { replace: true });
-              }}
-            />
-          </Suspense>
-        </ProjetoProvider>
-      )}
+      {completude}
 
-      <Secao titulo="Projetos da marca" descricao={projetos.isSuccess ? `${listaDeProjetos.length} em andamento` : undefined} divisoria>
-        {projetos.isLoading && <Carregando forma="lista" linhas={2} rotulo="Lendo os projetos" />}
-        {projetos.isError && (
-          <p className={juntar(texto.auxiliar, "text-warning")} role="alert">
-            {faltaATabela(projetos.error) ? "O banco ainda não tem as tabelas da Mesa Identidade." : "Não foi possível ler os projetos."}
-          </p>
-        )}
-        {projetos.isSuccess && !listaDeProjetos.length && <p className={texto.auxiliar}>Nenhum projeto ainda.</p>}
-        {listaDeProjetos.length > 0 && (
-          <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Projetos de identidade">
-            {listaDeProjetos.map((p) => {
-              const a = progresso(p);
-              const atual = etapaAtual(p);
-              return (
-                <li key={p.id}>
-                  <button type="button" className={juntar(lista.linha, "w-full text-left", projetoAberto && projetoAberto.id === p.id && lista.destaque, foco)} onClick={() => onAbrir(p)}>
-                    <span className="min-w-0 flex-1">
-                      <span className={juntar(texto.corpo, "block truncate font-medium")}>{p.titulo}</span>
-                      <span className={juntar(texto.auxiliar, "block truncate")}>
-                        {ROTULO_DO_MODO[p.modo]} · {p.estado === "entregue" ? "entregue" : `em ${rotuloDaEtapa(atual)}`} · {a.feitas} de {a.total} etapas
-                      </span>
-                    </span>
-                    {p.estado === "entregue" ? <Pastilha tom="bom">Entregue</Pastilha> : <Pastilha>{rotuloDaEtapa(atual)}</Pastilha>}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+      <Secao titulo="Projetos da marca" descricao={projetos.isSuccess ? contagem || undefined : undefined} divisoria>
+        {listaDosProjetos}
       </Secao>
     </div>
   );

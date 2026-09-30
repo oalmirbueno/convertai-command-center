@@ -73,9 +73,10 @@ export default function ComparacaoDeBriefings({ ids, onVoltar }: { ids: [string,
           />
         }
       />
-      <div className="hidden min-w-0 grid-cols-2 gap-x-6 sm:grid">
-        <p className={juntar(texto.rotulo, "truncate")}>A: {rotuloA}</p>
-        <p className={juntar(texto.rotulo, "truncate")}>B: {rotuloB}</p>
+      {/* No celular, A e B empilhados numa coluna (antes sumiam e sobravam só as letras). */}
+      <div className="grid min-w-0 grid-cols-1 gap-y-0.5 sm:grid-cols-2 sm:gap-x-6" data-lados-da-comparacao="">
+        <p className={juntar(texto.rotulo, "min-w-0 truncate")}>A: {rotuloA}</p>
+        <p className={juntar(texto.rotulo, "min-w-0 truncate")}>B: {rotuloB}</p>
       </div>
       {!mostradas.length ? (
         <EstadoVazio titulo={filtro === "diferencas" ? "Nenhuma diferença." : "Nenhuma resposta para comparar."} />

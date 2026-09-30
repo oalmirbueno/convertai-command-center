@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Globe, Plus } from "lucide-react";
+import { ExternalLink, Globe, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -17,14 +17,16 @@ import CascaDaMesa from "@/components/sistema/CascaDaMesa";
 import BotaoDoConselho from "@/components/conselho/BotaoDoConselho";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 import Etapas from "@/components/sistema/Etapas";
-import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
+import AreaDeTrabalho, { abrirLateralDaArea } from "@/components/sistema/AreaDeTrabalho";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, juntar, superficie } from "@/components/sistema/estilos";
 import { ETAPAS_DO_SITE } from "../../supabase/functions/_shared/site-metodo";
 import ListaDeSites from "@/components/mesa-site/ListaDeSites";
-import { useSiteAberto } from "@/components/mesa-site/siteApi";
+import { usePreviaEmCache, useSiteAberto } from "@/components/mesa-site/siteApi";
+import EtapaComBarra from "@/components/mesa-site/BarraDaEtapa";
+import { pendenciasDasEtapas } from "@/components/mesa-site/estadoDoSite";
 
 /**
  * Mesa Site (/mesa-site, só equipe: admin, gestor e design), frente SIT
@@ -77,6 +79,24 @@ function lerOnde(clientId: string): { etapa: string | null; nome: string | null 
   } catch {
     return { etapa: null, nome: null };
   }
+}
+
+/** Pedido montado pela tela para o diretor de site: corta em ~1500 caracteres. */
+const MAX_DO_PEDIDO = 1500;
+
+/**
+ * Atalho "Abrir prévia" ao lado do nome do site (UXS 30/09): só ícone, só
+ * quando existe prévia. Lê o cache dos trabalhos (quem busca é o diretor).
+ */
+function AtalhoDaPrevia({ siteId }: { siteId: string }) {
+  const url = usePreviaEmCache(siteId);
+  if (!url) return null;
+  const local = !/trycloudflare|https:/.test(url);
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className={juntar(botao.icone, "ml-1 shrink-0")} aria-label="Abrir prévia" title={local ? "Abrir prévia (só na máquina da agência)" : "Abrir prévia"} data-abrir-previa="">
+      <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+    </a>
+  );
 }
 
 function gravarOnde(clientId: string, etapa: string, nome: string | null) {
@@ -190,6 +210,21 @@ export default function MesaSite() {
 
   const irPara = (e: string) => mudar({ etapa: e });
 
+  /**
+   * UXS 30/09: um erro vira pedido ao diretor de site num toque. Só preenche o
+   * campo e abre a lateral (enviar e o custo continuam com a pessoa e com o
+   * cartão de Confirmar); com texto no campo, acrescenta numa linha nova.
+   */
+  const pedirAoDiretor = (texto: string) => {
+    const pedido = texto.trim().slice(0, MAX_DO_PEDIDO);
+    if (!pedido) return;
+    setRascunhoDoAgente((atual) => (atual && atual.trim() ? `${atual.replace(/\s+$/, "")}\n${pedido}` : pedido));
+    abrirLateralDaArea();
+  };
+
+  // UXS 30/09: o que falta por etapa, só pela linha do site (sem chamada nova), com a regra do checklist.
+  const pendencias = useMemo(() => (site ? pendenciasDasEtapas(site, ETAPAS_DO_SITE.map((e) => e.valor)) : null), [site]);
+
   return (
     <CascaDaMesa
       mesa="site"
@@ -203,14 +238,23 @@ export default function MesaSite() {
           <Etapas
             rotulo="Etapas da Mesa Site"
             numerar
-            itens={ETAPAS_DO_SITE.map((e) => ({ valor: e.valor, rotulo: e.rotulo }))}
+            itens={ETAPAS_DO_SITE.map((e) => ({
+              valor: e.valor,
+              rotulo: e.rotulo,
+              contador: pendencias && pendencias.contador[e.valor] ? pendencias.contador[e.valor] : null,
+              destaque: !!pendencias && pendencias.destaque === e.valor,
+              dica: e.valor === "referencias" ? "Opcional" : pendencias ? pendencias.dica[e.valor] : undefined,
+            }))}
             valor={etapa}
             onEscolher={irPara}
             depois={
-              <button type="button" className={juntar(botao.barra, "ml-2 max-w-[180px]")} onClick={() => mudar({ site: null })} title="Trocar de site" data-trocar-site="">
-                <Globe className="mr-1 h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{site.nome}</span>
-              </button>
+              <>
+                <button type="button" className={juntar(botao.barra, "ml-2 max-w-[180px]")} onClick={() => mudar({ site: null })} title="Trocar de site" data-trocar-site="">
+                  <Globe className="mr-1 h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{site.nome}</span>
+                </button>
+                <AtalhoDaPrevia siteId={site.id} />
+              </>
             }
           />
         ) : null
@@ -254,7 +298,7 @@ export default function MesaSite() {
         <MesaProvider valor={valor}>
           {!site && (
             <RegiaoRolavel modo="lg" memoria={`mesa-site:${clientId}:sites`} className="pb-6">
-              {sitesCarregando ? <Carregando forma="lista" rotulo="Lendo os sites" /> : <ListaDeSites marcaId={marcaId} onAbrir={(id, e) => mudar({ site: id, etapa: e || "briefing" })} icone={<Plus className="h-4 w-4" />} />}
+              {sitesCarregando ? <Carregando forma="lista" rotulo="Lendo os sites" /> : <ListaDeSites marcaId={marcaId} marcaNome={marca && marcas.length > 1 ? marca.nome : null} onAbrir={(id, e) => mudar({ site: id, etapa: e || "briefing" })} icone={<Plus className="h-4 w-4" />} />}
             </RegiaoRolavel>
           )}
           {site && (
@@ -271,19 +315,22 @@ export default function MesaSite() {
                 </Suspense>
               }
             >
-              <RegiaoRolavel key={etapa} modo="lg" memoria={`mesa-site:${site.id}:${etapa}`} className="pb-6 lg:pr-1" data-regiao-da-etapa={etapa}>
-                <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo a etapa" />}>
-                  {etapa === "briefing" && <EtapaBriefing site={site} onIrPara={irPara} />}
-                  {etapa === "referencias" && <EtapaReferencias site={site} onIrPara={irPara} />}
-                  {etapa === "direcao" && <EtapaDirecao site={site} onIrPara={irPara} />}
-                  {etapa === "conteudo" && <EtapaConteudo site={site} onIrPara={irPara} />}
-                  {etapa === "imagens" && <EtapaImagens site={site} onIrPara={irPara} />}
-                  {etapa === "integracoes" && <EtapaIntegracoes site={site} onIrPara={irPara} />}
-                  {etapa === "construcao" && <EtapaConstrucao site={site} onIrPara={irPara} />}
-                  {etapa === "revisao" && <EtapaRevisao site={site} onIrPara={irPara} />}
-                  {etapa === "publicacao" && <EtapaPublicacao site={site} />}
-                </Suspense>
-              </RegiaoRolavel>
+              {/* UXS 30/09: a barra da etapa (Voltar, Salvar, Seguir) fica fora da região que rola, no pé. */}
+              <EtapaComBarra etapa={etapa} onIrPara={irPara}>
+                <RegiaoRolavel key={etapa} modo="lg" memoria={`mesa-site:${site.id}:${etapa}`} className="pb-6 lg:pr-1" data-regiao-da-etapa={etapa}>
+                  <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo a etapa" />}>
+                    {etapa === "briefing" && <EtapaBriefing site={site} onIrPara={irPara} />}
+                    {etapa === "referencias" && <EtapaReferencias site={site} onIrPara={irPara} />}
+                    {etapa === "direcao" && <EtapaDirecao site={site} onIrPara={irPara} />}
+                    {etapa === "conteudo" && <EtapaConteudo site={site} onIrPara={irPara} />}
+                    {etapa === "imagens" && <EtapaImagens site={site} onIrPara={irPara} />}
+                    {etapa === "integracoes" && <EtapaIntegracoes site={site} onIrPara={irPara} />}
+                    {etapa === "construcao" && <EtapaConstrucao site={site} onIrPara={irPara} onPedirAoDiretor={pedirAoDiretor} />}
+                    {etapa === "revisao" && <EtapaRevisao site={site} onIrPara={irPara} onPedirAoDiretor={pedirAoDiretor} />}
+                    {etapa === "publicacao" && <EtapaPublicacao site={site} />}
+                  </Suspense>
+                </RegiaoRolavel>
+              </EtapaComBarra>
             </AreaDeTrabalho>
           )}
 

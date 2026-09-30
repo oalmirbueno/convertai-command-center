@@ -1,9 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Loader2, FileSignature, CheckCircle2, Download, ShieldCheck, AlertCircle } from "lucide-react";
+import { Loader2, FileSignature, CheckCircle2, Download, ShieldCheck, AlertCircle, ExternalLink } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CampoDeFormulario, EstadoVazio, Painel, botao, juntar, texto } from "@/components/sistema";
+import { CampoDeFormulario, EstadoDeErro, EstadoVazio, Painel, botao, juntar, texto, toqueCompacto } from "@/components/sistema";
 import CascaPublica, { campoPublico } from "@/components/publico/CascaPublica";
+import { useLarguraMinima } from "@/hooks/useLarguraMinima";
 
 // Frente CON (30/09): contrato montado por modelo mostra o texto congelado com o código SHA-256.
 const DocumentoDoContrato = lazy(() => import("@/components/contratos/DocumentoDoContrato"));
@@ -11,7 +12,9 @@ const DocumentoDoContrato = lazy(() => import("@/components/contratos/DocumentoD
 const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/contract-public`;
 const EMAIL_VALIDO = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
-type Phase = "loading" | "invalid" | "replaced" | "ready" | "signing" | "done";
+// UXS (30/09): "erro" é falha de rede, resposta sem JSON ou 5xx (tem "Tentar de novo");
+// "invalid" fica só para a resposta do servidor (400, 404, link que não existe).
+type Phase = "loading" | "invalid" | "replaced" | "erro" | "ready" | "signing" | "done";
 
 export default function ContractPublic() {
   const { token } = useParams<{ token: string }>();
@@ -27,15 +30,31 @@ export default function ContractPublic() {
   const [signatario, setSignatario] = useState<{ papel: string; nome: string; email: string; assinado_em: string | null } | null>(null);
   const [assinaturas, setAssinaturas] = useState<Array<{ papel: string; nome: string; assinado: boolean }>>([]);
   const [faltam, setFaltam] = useState(0);
+  const [tentativa, setTentativa] = useState(0);
+  // Abaixo de 640 px o iframe do PDF não é montado (no iPhone ele mostra só a primeira página).
+  const pdfNaPagina = useLarguraMinima(640);
 
   useEffect(() => {
     if (!token) { setPhase("invalid"); return; }
+    let vivo = true;
+    setPhase("loading");
     fetch(`${FN_URL}?token=${encodeURIComponent(token)}`, {
       headers: { "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "" },
     })
-      .then(r => r.json())
-      .then((res) => {
-        if (res.error === "substituido") return setPhase("replaced");
+      .then(async (r) => {
+        let corpo: any = null;
+        try {
+          corpo = await r.json();
+        } catch {
+          corpo = null;
+        }
+        return { status: r.status, res: corpo };
+      })
+      .then(({ status, res }) => {
+        if (!vivo) return;
+        if (status === 410 || (res && res.error === "substituido")) return setPhase("replaced");
+        if (status === 400 || status === 404) return setPhase("invalid");
+        if (status >= 500 || !res) return setPhase("erro");
         if (res.error || !res.contract) return setPhase("invalid");
         setContract(res.contract);
         setClient(res.client);
@@ -46,14 +65,27 @@ export default function ContractPublic() {
         if (res.contract.client_signed_at || (res.signatario && res.signatario.assinado_em)) setPhase("done");
         else setPhase("ready");
       })
-      .catch(() => setPhase("invalid"));
-  }, [token]);
+      .catch(() => {
+        if (vivo) setPhase("erro");
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [token, tentativa]);
 
   const modelo = !!contract && contract.origem === "modelo";
 
   const handleSign = async () => {
-    if (!signName.trim() || !accept || (modelo && !EMAIL_VALIDO.test(signEmail.trim()))) {
-      setError(modelo ? "Preencha seu nome, um e-mail válido e marque a confirmação." : "Preencha seu nome e marque a confirmação.");
+    // Diz exatamente o que falta (UXS), na linha logo acima do botão.
+    const falta = !signName.trim()
+      ? "Escreva seu nome completo."
+      : modelo && !EMAIL_VALIDO.test(signEmail.trim())
+        ? "Escreva um e-mail válido."
+        : !accept
+          ? "Para assinar, marque a confirmação de leitura."
+          : null;
+    if (falta) {
+      setError(falta);
       return;
     }
     setError(null);
@@ -71,8 +103,14 @@ export default function ContractPublic() {
             : { token, signature_name: signName.trim(), accept: true },
         ),
       });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.mensagem || data.error || "Erro ao assinar");
+      // Resposta sem JSON (queda no meio do caminho) vira frase, não "Unexpected token".
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
+      if (!res.ok || !data || data.error) throw new Error((data && (data.mensagem || data.error)) || "Não deu para registrar a assinatura agora. Tente de novo.");
       if (data.pdf_url) setPdfFinal(String(data.pdf_url));
       setPhase("done");
       if (signatario && !data.concluido) {
@@ -81,7 +119,8 @@ export default function ContractPublic() {
         setSignatario((x) => (x ? { ...x, assinado_em: new Date().toISOString() } : x));
       } else setContract((c: any) => ({ ...c, client_signed_at: new Date().toISOString(), client_signature_name: signName.trim(), status: "completed" }));
     } catch (e: any) {
-      setError(e.message);
+      // Queda de rede chega como TypeError em inglês ("Failed to fetch").
+      setError(e instanceof TypeError ? "A conexão falhou. Confira a internet e tente de novo." : e.message);
       setPhase("ready");
     }
   };
@@ -119,6 +158,17 @@ export default function ContractPublic() {
         />
       )}
 
+      {phase === "erro" && (
+        <EstadoDeErro
+          titulo="Não deu para abrir o contrato agora."
+          acao={
+            <button type="button" className={botao.secundario} onClick={() => setTentativa((n) => n + 1)}>
+              Tentar de novo
+            </button>
+          }
+        />
+      )}
+
       {phase === "replaced" && (
         <EstadoVazio
           icone={<AlertCircle className="h-5 w-5 text-warning" />}
@@ -152,18 +202,25 @@ export default function ContractPublic() {
               <DocumentoDoContrato texto={contract.documento_texto || ""} hash={contract.documento_hash} />
             </Suspense>
           ) : (
-            <iframe
-              src={`${contract.original_file_url}#toolbar=1&view=FitH`}
-              className="h-[60vh] w-full rounded-lg border border-border bg-white"
-              title={contract.title}
-            />
+            <div className="min-w-0 space-y-3">
+              {/* O link fica em todas as larguras; no celular é o único jeito de ler o PDF inteiro. */}
+              <a href={contract.original_file_url} target="_blank" rel="noopener noreferrer" className={botao.secundario}>
+                <ExternalLink className="mr-1.5 h-4 w-4" aria-hidden="true" /> Abrir o contrato completo (PDF)
+              </a>
+              {pdfNaPagina && (
+                <iframe
+                  src={`${contract.original_file_url}#toolbar=1&view=FitH`}
+                  className="h-[60vh] w-full rounded-lg border border-border bg-white"
+                  title={contract.title}
+                />
+              )}
+            </div>
           )}
 
           <Painel
             titulo="Assinatura digital"
             rodape={
               <>
-                <span className={juntar(texto.auxiliar, "mr-auto hidden sm:inline")}>Fica registrada com data, hora e endereço IP.</span>
                 <button type="button" onClick={handleSign} disabled={phase === "signing"} className={juntar(botao.primario, "h-10 w-full sm:w-auto")}>
                   {phase === "signing" ? (
                     <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> Registrando assinatura...</>
@@ -175,7 +232,7 @@ export default function ContractPublic() {
             }
           >
             <div className="space-y-4">
-              <CampoDeFormulario rotulo="Seu nome completo" obrigatorio apoio="Como deve aparecer na assinatura." erro={error || undefined}>
+              <CampoDeFormulario rotulo="Seu nome completo" obrigatorio apoio="Como deve aparecer na assinatura.">
                 <input
                   value={signName}
                   onChange={(e) => setSignName(e.target.value)}
@@ -197,13 +254,21 @@ export default function ContractPublic() {
                 </CampoDeFormulario>
               )}
               <div className="flex items-start">
-                <Checkbox id="client-accept" checked={accept} onCheckedChange={(v) => setAccept(!!v)} className="mr-2 mt-0.5" disabled={phase === "signing"} />
+                <Checkbox id="client-accept" checked={accept} onCheckedChange={(v) => setAccept(!!v)} className={juntar(toqueCompacto, "mr-2 mt-0.5")} disabled={phase === "signing"} />
                 <label htmlFor="client-accept" className={juntar(texto.corpo, "cursor-pointer")}>
                   Li o contrato na íntegra e, ao assinar digitalmente, declaro que estou ciente e de acordo com todos os termos descritos.
                 </label>
               </div>
-              <p className={juntar(texto.auxiliar, "sm:hidden")}>Fica registrada com data, hora e endereço IP.</p>
-              {modelo && <p className={texto.auxiliar}>Seu nome, e-mail, IP, data e hora ficam no contrato como prova da assinatura (LGPD).</p>}
+              {/* Uma linha só sobre o registro, em todas as larguras. */}
+              <p className={texto.auxiliar}>
+                {modelo ? "Seu nome, e-mail, IP, data e hora ficam no contrato como prova da assinatura (LGPD)." : "Seu nome, IP, data e hora ficam registrados como prova da assinatura."}
+              </p>
+              {/* O erro num lugar só: logo acima do botão Assinar (validação e resposta do servidor). */}
+              {error && (
+                <p role="alert" className={juntar(texto.corpo, "text-destructive")} data-erro-da-assinatura="">
+                  {error}
+                </p>
+              )}
             </div>
           </Painel>
         </div>

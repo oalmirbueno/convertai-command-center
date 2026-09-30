@@ -11,6 +11,8 @@ import { assinaturaDoProjeto } from "./operacoes";
  *   próxima mudança ou o "Tentar de novo";
  * - conflito (outra pessoa salvou: revisão diferente) para tudo e pede para
  *   recarregar, nada se perde calado.
+ * - `agora()` espera a gravação em andamento e grava na hora o estado mais
+ *   novo (renderizar, sair do editor e o agente contam com isso).
  */
 
 export type EstadoDoSalvamento = "salvo" | "pendente" | "salvando" | "erro" | "conflito";
@@ -103,7 +105,11 @@ export function criarSalvador(o: OpcoesDoSalvador): Salvador {
       limpar();
       timer = setTimeout(() => void gravar(), espera);
     },
-    agora: () => gravar(),
+    agora: async () => {
+      // Espera a volta do que está em voo; depois grava o mais novo sem o respiro.
+      while (emVoo) await emVoo;
+      await gravar();
+    },
     tentarDeNovo() {
       if (estado === "erro") void gravar();
     },

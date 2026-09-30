@@ -4,7 +4,7 @@ import { Archive, BookOpen, Pencil, Plus, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
-import { EstadoVazio } from "@/components/sistema/Estados";
+import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import FaixaDeNumeros from "@/components/sistema/FaixaDeNumeros";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { botao, campo, campoTexto, etiqueta, juntar, lista, texto } from "@/components/sistema/estilos";
@@ -31,7 +31,24 @@ import { CHAVES, chamarBiblioteca, useHoraTecnica, useProvas, useServicos } from
  * registrada (só o autorizado entra na proposta) e os parâmetros da hora
  * técnica (custos do Financeiro, horas produtivas, impostos e margem).
  * Apagar é arquivar. A escrita vai pela função proposta-biblioteca.
+ *
+ * Frente UXS (30/09): enquanto lê, o formato do que vem (sem "Nenhum serviço
+ * ainda" nem contagem falsa); no erro, a frase e "Tentar de novo".
  */
+
+/** Erro de leitura com a saída (a lista antiga, quando há, continua na tela). */
+function ErroDaLeitura({ titulo, onTentar }: { titulo: string; onTentar: () => void }) {
+  return (
+    <EstadoDeErro
+      titulo={titulo}
+      acao={
+        <button type="button" className={botao.secundario} onClick={onTentar}>
+          Tentar de novo
+        </button>
+      }
+    />
+  );
+}
 
 export type AbaDaBiblioteca = "servicos" | "provas" | "hora";
 const ABAS: Array<{ valor: AbaDaBiblioteca; rotulo: string }> = [
@@ -88,11 +105,13 @@ function Servicos() {
     }
   };
 
-  if (servicos.data && servicos.data.semTabela) return <EstadoVazio compacto titulo="O banco ainda não tem a biblioteca." descricao="Falta aplicar a migration da proposta." />;
+  if (servicos.data && servicos.data.semTabela) return <EstadoVazio compacto titulo="A biblioteca ainda não foi ligada neste painel." descricao="Avise o administrador." />;
+  // Lendo ou com erro (sem lista): nada de "Nenhum serviço ainda" nem contagem falsa; o "+ Serviço" segue usável.
+  const semLista = !servicos.data && (!!servicos.isLoading || !!servicos.isError);
   return (
     <div className="space-y-4" data-biblioteca="servicos">
       <div className="flex items-center justify-between">
-        <p className={texto.auxiliar}>{vivos.length} serviço(s)</p>
+        <p className={texto.auxiliar}>{semLista ? "" : `${vivos.length} serviço(s)`}</p>
         <button type="button" className={botao.secundario} onClick={() => setEdicao({ ...servicoVazio })}>
           <Plus className="mr-1.5 h-4 w-4" /> Serviço
         </button>
@@ -144,7 +163,11 @@ function Servicos() {
           </div>
         </div>
       )}
-      {vivos.length ? (
+      {servicos.isLoading && !servicos.data ? (
+        <Carregando forma="lista" linhas={3} rotulo="Lendo os serviços" />
+      ) : servicos.isError && !servicos.data ? (
+        <ErroDaLeitura titulo="Os serviços não foram lidos agora." onTentar={() => void servicos.refetch()} />
+      ) : vivos.length ? (
         <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Serviços da agência">
           {vivos.map((s) => (
             <li key={s.id} className={lista.linha}>
@@ -217,11 +240,12 @@ function Provas() {
     }
   };
 
-  if (provas.data && provas.data.semTabela) return <EstadoVazio compacto titulo="O banco ainda não tem a biblioteca." descricao="Falta aplicar a migration da proposta." />;
+  if (provas.data && provas.data.semTabela) return <EstadoVazio compacto titulo="A biblioteca ainda não foi ligada neste painel." descricao="Avise o administrador." />;
+  const semLista = !provas.data && (!!provas.isLoading || !!provas.isError);
   return (
     <div className="space-y-4" data-biblioteca="provas">
       <div className="flex items-center justify-between">
-        <p className={texto.auxiliar}>{vivas.filter((p) => provaPodeEntrar(p)).length} autorizado(s) de {vivas.length}</p>
+        <p className={texto.auxiliar}>{semLista ? "" : `${vivas.filter((p) => provaPodeEntrar(p)).length} autorizado(s) de ${vivas.length}`}</p>
         <button type="button" className={botao.secundario} onClick={() => setEdicao({ ...provaVazia })}>
           <Plus className="mr-1.5 h-4 w-4" /> Novo
         </button>
@@ -285,7 +309,11 @@ function Provas() {
           </div>
         </div>
       )}
-      {vivas.length ? (
+      {provas.isLoading && !provas.data ? (
+        <Carregando forma="lista" linhas={3} rotulo="Lendo os cases" />
+      ) : provas.isError && !provas.data ? (
+        <ErroDaLeitura titulo="Os cases não foram lidos agora." onTentar={() => void provas.refetch()} />
+      ) : vivas.length ? (
         <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Cases e depoimentos">
           {vivas.map((p) => (
             <li key={p.id} className={lista.linha}>
@@ -349,7 +377,10 @@ function HoraTecnica() {
       setUsar(hora.data.usar_financeiro);
     }
   }, [hora.data, valores]);
-  if (hora.isLoading || !valores) return <p className={texto.auxiliar}>{hora.isError ? "A calculadora não foi lida agora." : "Lendo a calculadora..."}</p>;
+  if (hora.isLoading) return <Carregando forma="lista" linhas={3} rotulo="Lendo a hora técnica" />;
+  if (hora.isError && !hora.data) return <ErroDaLeitura titulo="A hora técnica não foi lida agora." onTentar={() => void hora.refetch()} />;
+  // Logo depois do Salvar (antes de os valores voltarem): nada de esqueleto, para não piscar.
+  if (!valores) return null;
   const p = daTela(valores);
   const doFinanceiro = usar && hora.data && hora.data.financeiro && hora.data.financeiro.regras > 0;
   const m = (k: keyof ParametrosNaTela) => (e: { target: { value: string } }) => setValores({ ...valores, [k]: e.target.value });

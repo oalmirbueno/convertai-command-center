@@ -1,16 +1,17 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Check, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { PreencherComIA } from "@/components/sistema";
-import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
+import { avisarFimDaAcao, BotaoComCusto, situacaoDaResposta, useAvisarErro } from "@/components/mesa/Custo";
+import { usd } from "@/lib/mesa/api";
 import Painel from "@/components/sistema/Painel";
 import Secao from "@/components/sistema/Secao";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { botao, campo, campoTexto, espaco, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import { textoSobre } from "../../../supabase/functions/_shared/cores-da-marca";
 import { chamarIdentidade, type ProjetoDeIdentidade } from "./identidadeApi";
-import { CabecalhoDaEtapa, contextoParaPreencher, ImagemInteira, Pastilha, partesDaImagem, partesDoCusto, SeletorDoModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
+import { CabecalhoDaEtapa, contextoParaPreencher, ImagemInteira, Pastilha, partesDaImagem, partesDoCusto, RotuloComModelo, SeletorDoModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
 
 type Caminho = {
   id: string;
@@ -32,11 +33,15 @@ type Caminho = {
  * (custo antes); a recomendação vem do conselho de agentes quando ele existir
  * e, hoje, do Jev, sempre como aviso: a equipe escolhe. A imagem de cada
  * caminho é inspiração, nunca a logo (logo pelo código).
+ *
+ * UXS 30/09: "Gerar de novo" diz quantos caminhos substitui e o aviso do fim
+ * traz Desfazer por 10 s (volta caminhos, escolhido, recomendação e imagens
+ * de antes, pela mesma gravação da mesa; o gasto não volta).
  */
 export default function EtapaConceito() {
   const mesa = useMesa();
   const { marca } = useMarcaDaMesa();
-  const { projeto, guardar } = useProjetoDaMesa();
+  const { projeto, guardar, salvarParte } = useProjetoDaMesa();
   const [modeloId, setModeloId] = useModeloDaAcao("identidade");
   const avisarErro = useAvisarErro();
   const conceito = (projeto.dados.conceito || {}) as { caminhos?: Caminho[]; escolhido?: string | null; recomendacao?: { id: string; confianca: number | null; fonte: string } | null };
@@ -44,6 +49,8 @@ export default function EtapaConceito() {
   const [quantos, setQuantos] = useState<2 | 3>(3);
   const [pedido, setPedido] = useState("");
   const [escolhendo, setEscolhendo] = useState<string | null>(null);
+  /** O conceito de antes de "Gerar de novo" (para o Desfazer do aviso). */
+  const antesDeGerar = useRef<Record<string, unknown> | null>(null);
 
   const escolher = async (id: string) => {
     setEscolhendo(id);
@@ -64,10 +71,11 @@ export default function EtapaConceito() {
     <div className={espaco.pagina} data-etapa-conceito="">
       <CabecalhoDaEtapa
         etapa="conceito"
-        ajuda="Os caminhos saem do briefing e da pesquisa, bem diferentes entre si. A recomendação é só um aviso (hoje do Jev; do conselho de agentes quando ele entrar): quem escolhe é a equipe. Gerar de novo substitui os caminhos; o diretor de marca desfaz."
+        ajuda="Os caminhos saem do briefing e da pesquisa, bem diferentes entre si. A recomendação é só um aviso (hoje do Jev; do conselho de agentes quando ele entrar): quem escolhe é a equipe. Gerar de novo substitui os caminhos; o aviso traz Desfazer por alguns segundos."
+        acoes={<SeletorDoModelo papel="identidade" valor={modeloId} onEscolher={setModeloId} className="max-w-[180px]" />}
       />
-      <Secao titulo="Gerar caminhos" recolher={`mesa-identidade:${projeto.id}:conceito:gerar`} recolhidaDeInicio={caminhos.length > 0}>
-        <div className="grid min-w-0 grid-cols-1 items-end gap-4 md:grid-cols-[minmax(0,1fr)_120px_auto_auto]">
+      <Secao titulo="Gerar caminhos" recolher={`mesa-identidade:${projeto.id}:conceito:gerar`} recolhidaDeInicio={caminhos.length > 0} data-bloco-da-etapa="gerar">
+        <div className="grid min-w-0 grid-cols-1 items-end gap-4 md:grid-cols-[minmax(0,1fr)_120px_auto]">
           <CampoDeFormulario
             rotulo={
               <span className="flex min-w-0 items-center">
@@ -95,19 +103,44 @@ export default function EtapaConceito() {
               <option value={3}>3</option>
             </select>
           </CampoDeFormulario>
-          <SeletorDoModelo papel="identidade" valor={modeloId} onEscolher={setModeloId} />
           <BotaoComCusto
-            rotulo={caminhos.length ? "Gerar de novo" : "Gerar caminhos"}
+            rotulo={<RotuloComModelo rotulo={caminhos.length ? `Gerar de novo (substitui os ${caminhos.length})` : "Gerar caminhos"} papel="identidade" modeloId={modeloId} />}
             titulo="Caminhos criativos"
             partes={() => partesDoCusto(mesa.catalogo, "conceito", modeloId)}
-            executar={() => chamarIdentidade<{ projeto: ProjetoDeIdentidade }>("conceito_gerar", { projeto_id: projeto.id, quantidade: quantos, pedido: pedido.trim() || undefined, modelo_id: modeloId || undefined })}
-            aoConcluir={(d) => guardar(d && d.projeto)}
+            executar={() => {
+              antesDeGerar.current = caminhos.length ? JSON.parse(JSON.stringify(projeto.dados.conceito || {})) : null;
+              return chamarIdentidade<{ projeto: ProjetoDeIdentidade }>("conceito_gerar", { projeto_id: projeto.id, quantidade: quantos, pedido: pedido.trim() || undefined, modelo_id: modeloId || undefined });
+            }}
+            // Um aviso só: o do fim da ação, com o custo real e (quando substituiu) o Desfazer.
+            fecharAoConfirmar
+            aoConcluir={(d, custo) => {
+              guardar(d && d.projeto);
+              const antes = antesDeGerar.current;
+              antesDeGerar.current = null;
+              if (!antes || situacaoDaResposta(d)) {
+                avisarFimDaAcao("Caminhos criativos", d, custo);
+                return;
+              }
+              toast.success("Caminhos criativos", {
+                description: `${custo === null ? "Custo registrado na carteira do cliente." : `Custo real: ${usd(custo)}.`} O Desfazer volta os caminhos de antes; o gasto não volta.`,
+                duration: 10_000,
+                action: {
+                  label: "Desfazer",
+                  onClick: () => {
+                    // salvarParte grava sobre a versão de agora (a da resposta, lida do cache na hora).
+                    salvarParte("conceito", antes, { substituir: true })
+                      .then(() => toast.success("Caminhos de antes de volta"))
+                      .catch((e) => avisarErro(e, "Não foi possível desfazer"));
+                  },
+                },
+              });
+            }}
           />
         </div>
       </Secao>
 
       {caminhos.length > 0 && (
-        <div className={juntar(espaco.grade, "grid-cols-1 xl:grid-cols-3")} data-caminhos="">
+        <div className={juntar(espaco.grade, "grid-cols-1 xl:grid-cols-3")} data-caminhos="" data-bloco-da-etapa="caminhos">
           {caminhos.map((c) => {
             const escolhido = conceito.escolhido === c.id;
             const recomendado = !!rec && rec.id === c.id;

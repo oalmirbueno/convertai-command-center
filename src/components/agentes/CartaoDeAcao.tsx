@@ -3,6 +3,8 @@ import { ArrowRight, Check, Loader2, Square, Undo2, Wand2, X } from "lucide-reac
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import CaminhoPronto from "./CaminhoPronto";
+import MenuMais from "@/components/sistema/MenuMais";
+import { toqueCompacto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import {
   acaoDoAnexo,
@@ -342,41 +344,90 @@ function lembrarEstado(a: AcaoDoAgente) {
   }
 }
 
+/** Atalhos à vista: até 4; com mais, 3 e o "..." com o resto (nenhum fica escondido). */
+export const MAX_ATALHOS_A_VISTA = 4;
+
 /**
  * Linha curta do que o agente sabe fazer, com atalhos que preenchem o campo.
- * Sem poluir: uma linha e, no máximo, quatro atalhos.
+ * Sem poluir: uma linha e, no máximo, quatro atalhos à vista. Com mais de
+ * quatro, ficam três e o "..." ("Mais atalhos") com os outros, na mesma ordem.
+ *
+ * `mostrarCapacidades={false}`: a lista já está no "?" do cabeçalho
+ * (CapacidadesDoAgente) e aqui ficam só os atalhos. No celular os atalhos têm
+ * 44 px de toque (toqueCompacto) sem crescer na tela.
  */
 export function OQuePossoFazer({
   capacidades,
   atalhos = [],
   onAtalho,
+  mostrarCapacidades = true,
   className = "",
 }: {
   capacidades: string[];
   atalhos?: { rotulo: string; texto: string }[];
   onAtalho?: (texto: string) => void;
+  mostrarCapacidades?: boolean;
   className?: string;
 }) {
   if (!capacidades.length) return null;
+  const comAtalhos = atalhos.length > 0 && !!onAtalho;
+  if (!mostrarCapacidades && !comAtalhos) return null;
+  const muitos = atalhos.length > MAX_ATALHOS_A_VISTA;
+  const aVista = muitos ? atalhos.slice(0, MAX_ATALHOS_A_VISTA - 1) : atalhos;
+  const noMais = muitos ? atalhos.slice(MAX_ATALHOS_A_VISTA - 1) : [];
   return (
     <div className={`min-w-0 ${className}`}>
-      <p className="truncate text-[11px] text-muted-foreground" title={`Posso: ${capacidades.join(", ")}.`}>
-        <span className="font-medium text-foreground">Posso:</span> {capacidades.join(", ")}. Confirmo com você antes.
-      </p>
-      {atalhos.length > 0 && onAtalho && (
-        <div className="mt-1 flex flex-wrap" role="group" aria-label="Atalhos de ação">
-          {atalhos.slice(0, 4).map((a) => (
+      {mostrarCapacidades && (
+        <p className="truncate text-[11px] text-muted-foreground" title={`Posso: ${capacidades.join(", ")}.`}>
+          <span className="font-medium text-foreground">Posso:</span> {capacidades.join(", ")}.
+        </p>
+      )}
+      {comAtalhos && onAtalho && (
+        <div className={`${mostrarCapacidades ? "mt-1 " : ""}-mb-2 flex flex-wrap items-center`} role="group" aria-label="Atalhos de ação">
+          {aVista.map((a) => (
             <button
               key={a.rotulo}
               type="button"
+              title={a.texto.trim()}
               onClick={() => onAtalho(a.texto)}
-              className="mb-1 mr-1 max-w-full truncate rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+              className={`${toqueCompacto} mb-2 mr-1 max-w-full truncate rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground`}
             >
               {a.rotulo}
             </button>
           ))}
+          {noMais.length > 0 && (
+            <MenuMais
+              rotulo="Mais atalhos"
+              alinhar="start"
+              semDevolverFoco
+              className="mb-2 h-7 w-7"
+              itens={noMais.map((a) => ({ rotulo: a.rotulo, dica: a.texto.trim(), aoEscolher: () => onAtalho(a.texto) }))}
+            />
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * O que o agente sabe fazer, dentro do "?" do cabeçalho (AjudaRecolhida): a
+ * lista inteira, que na linha do compositor só cabia cortada. As marcas "(na
+ * hora)", "(com Confirmar)" e "(com custo no cartão)" de cada item dizem o que
+ * pede confirmação.
+ */
+export function CapacidadesDoAgente({ capacidades }: { capacidades: string[] }) {
+  if (!capacidades.length) return null;
+  return (
+    <div className="mt-2 min-w-0" data-capacidades-do-agente="">
+      <p className="font-medium text-foreground">Posso</p>
+      <ul className="mt-0.5 list-disc pl-4">
+        {capacidades.map((c) => (
+          <li key={c} className="mt-0.5">
+            {c}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { Film, Loader2, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa, useUrlDaMesa } from "@/components/mesa/MesaContexto";
@@ -138,6 +139,7 @@ function Montagem({ projeto }: { projeto: ProjetoDeEdicao }) {
 }
 
 const editavel = (v: VersaoDeVideo) => !!v.projeto && !motivoParaNaoMudar(v, "decidir");
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Frente Q (26/09): o editor completo É a etapa Editar. Abre direto na última
@@ -150,6 +152,19 @@ export default function AreaDoEditor({ projeto, cenas, roteiroId, agenteNaLatera
   const queryClient = useQueryClient();
   const versoesQ = useVersoes(clientId);
   const [escolhida, setEscolhida] = useEstadoDaTela<string>(`mesa-edicao:editor:versao:${clientId}`, "");
+  // ?versao=<id> (link da Mesa Motion): entra no estado e sai do endereço, como o ?parte= do useParte.
+  // Só vale entre as editáveis (a linha de baixo cai na mais nova), então não precisa esperar a lista.
+  const [params, setParams] = useSearchParams();
+  const pedida = params.get("versao");
+  const versaoPedida = pedida && UUID.test(pedida) ? pedida : null;
+  useEffect(() => {
+    if (!pedida) return;
+    if (versaoPedida) setEscolhida(versaoPedida);
+    const next = new URLSearchParams(params);
+    next.delete("versao");
+    setParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedida]);
   const [criando, setCriando] = useState(false);
   const [falhouCriar, setFalhouCriar] = useState<string | null>(null);
   const [recarga, setRecarga] = useState(0);
@@ -157,7 +172,7 @@ export default function AreaDoEditor({ projeto, cenas, roteiroId, agenteNaLatera
   const navegador = navegadorDoEditor();
 
   const versoes = ((versoesQ.data && versoesQ.data.itens) || []).filter(editavel).sort((a, b) => (a.criado_em < b.criado_em ? 1 : -1));
-  const versao = versoes.find((v) => v.id === escolhida) || versoes[0] || null;
+  const versao = versoes.find((v) => v.id === (versaoPedida || escolhida)) || versoes[0] || null;
   const migrado = versao ? migrarProjeto(versao.projeto) : null;
   const temClipe = projeto.trilhas.some((t) => t.clipes.length);
 

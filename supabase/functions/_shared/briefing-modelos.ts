@@ -125,6 +125,14 @@ export const ROTULO_DA_CATEGORIA: Record<CategoriaDeAnexo, string> = {
   outros: "Outros",
 };
 
+/** Pasta de Arquivos em que cada categoria de anexo cai (a função pública grava; a leitura abre a mesma pasta). */
+export const PASTA_DO_ANEXO: Record<string, string> = { logo: "identidade", manual: "identidade", fotos: "base", videos: "base", textos: "base", referencias: "base", outros: "base" };
+
+/** A pasta para abrir os anexos de um briefing: identidade quando todos são logo ou manual; senão, base. */
+export function pastaDosAnexos(anexos: Array<{ categoria?: string | null }>): string {
+  return anexos.length > 0 && anexos.every((a) => PASTA_DO_ANEXO[String(a.categoria || "outros")] === "identidade") ? "identidade" : "base";
+}
+
 /** Validade padrão de um link novo (dias) e o teto. */
 export const VALIDADE_PADRAO_DIAS = 30;
 export const VALIDADE_MAXIMA_DIAS = 120;

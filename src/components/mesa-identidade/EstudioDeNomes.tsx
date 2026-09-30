@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AtSign, Check, Copy, Download, ExternalLink, Globe2, Languages, Loader2, MessageCircle, RefreshCcw, Search, Send } from "lucide-react";
 import { PreencherComIA } from "@/components/sistema";
@@ -10,10 +10,10 @@ import Secao from "@/components/sistema/Secao";
 import MenuMais from "@/components/sistema/MenuMais";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { Carregando } from "@/components/sistema/Estados";
-import { botao, campo, campoTexto, espaco, etiqueta, foco, juntar, lista, texto } from "@/components/sistema/estilos";
+import { botao, campo, campoTexto, espaco, etiqueta, foco, juntar, lista, texto, toqueCompacto } from "@/components/sistema/estilos";
 import { CRITERIOS_PADRAO, IDIOMAS_DO_TESTE, LIMITES_DO_NAMING, linksDoArroba, ROTULO_DO_RISCO, rotuloDaTecnica, TECNICAS_DE_NAMING, textoDoDominio, type AlvoDoNaming, type CandidatoDeNome, type SituacaoDoDominio } from "../../../supabase/functions/mesa-identidade/modulos/naming";
 import { chamarIdentidade, CHAVES, normalizarRodada, useRodadas, useSituacaoDoArquivo, textoDaAprovacao, type RodadaDeNomes } from "./identidadeApi";
-import { contextoParaPreencher, Pastilha, partesDoCusto, SeletorDoModelo, useModeloDaAcao, useProjetoOpcional } from "./Comuns";
+import { contextoParaPreencher, Pastilha, partesDoCusto, RotuloComModelo, SeletorDoModelo, useModeloDaAcao, useProjetoOpcional } from "./Comuns";
 import VotacaoDosNomes from "./VotacaoDosNomes";
 import { salvarArquivo } from "./exportarNoNavegador";
 
@@ -25,7 +25,17 @@ const TOM_DO_DOMINIO: Record<SituacaoDoDominio, "bom" | "ruim" | "neutro"> = { l
  * link pronto, ranqueia com o Jev pelos critérios do briefing e marca de 3 a
  * 5 finalistas com a justificativa. Baixar em PDF, enviar para aprovação no
  * painel e a mensagem pronta para o grupo (o Hermes envia; o painel registra).
+ *
+ * UXS 30/09: os finalistas gravam sozinhos 600 ms depois do último clique
+ * (com 3 a 5 marcados); a rodada nova começa com as escolhas da última do
+ * mesmo escopo ("Voltar ao briefing" desfaz); o aviso do nome escolhido traz
+ * "Concluir etapa" (só na Mesa Identidade). Dentro da mesa, o modelo é o do
+ * cabeçalho da etapa; fora dela (Campanhas), o seletor fica aqui.
  */
+
+const TECNICAS_PADRAO = ["descritivo", "evocativo", "neologismo", "composto", "metafora"];
+const ESPERA_DOS_FINALISTAS = 600;
+const mesmoConjunto = (a: string[] | null, b: string[]) => !!a && a.length === b.length && a.every((x) => b.indexOf(x) >= 0);
 export default function EstudioDeNomes({
   alvo,
   projetoId = null,
@@ -33,6 +43,7 @@ export default function EstudioDeNomes({
   criteriosIniciais,
   pedidoInicial = "",
   onEscolhido,
+  concluirAoEscolher,
 }: {
   alvo: AlvoDoNaming;
   projetoId?: string | null;
@@ -40,6 +51,8 @@ export default function EstudioDeNomes({
   criteriosIniciais?: string[];
   pedidoInicial?: string;
   onEscolhido?: (nome: string) => void;
+  /** Só a etapa Naming passa: o aviso "Nome escolhido" ganha "Concluir etapa". */
+  concluirAoEscolher?: (() => void) | null;
 }) {
   const mesa = useMesa();
   const { marca } = useMarcaDaMesa();
@@ -50,25 +63,74 @@ export default function EstudioDeNomes({
   const rodadasQ = useRodadas(mesa.clientId, { projetoId, campanhaId });
   const chaveDasRodadas = CHAVES.rodadas(mesa.clientId, projetoId ? `p:${projetoId}` : campanhaId ? `c:${campanhaId}` : "todas");
   const [aberta, setAberta] = useState<string | null>(null);
-  const [tecnicas, setTecnicas] = useState<string[]>(["descritivo", "evocativo", "neologismo", "composto", "metafora"]);
-  const [quantidade, setQuantidade] = useState<number>(LIMITES_DO_NAMING.padrao);
-  const [criterios, setCriterios] = useState<string>((criteriosIniciais && criteriosIniciais.length ? criteriosIniciais : CRITERIOS_PADRAO).join("\n"));
-  const [pedido, setPedido] = useState(pedidoInicial);
+  const criteriosDoBriefing = (criteriosIniciais && criteriosIniciais.length ? criteriosIniciais : CRITERIOS_PADRAO).join("\n");
+  const [tecnicas, setTecnicasBruto] = useState<string[]>(TECNICAS_PADRAO);
+  const [quantidade, setQuantidadeBruto] = useState<number>(LIMITES_DO_NAMING.padrao);
+  const [criterios, setCriteriosBruto] = useState<string>(criteriosDoBriefing);
+  const [pedido, setPedidoBruto] = useState(pedidoInicial);
   const [marcados, setMarcados] = useState<string[] | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<{ texto: string; link: string } | null>(null);
+  /** A pessoa já mexeu no formulário: a rodada anterior não passa mais por cima. */
+  const mexeu = useRef(false);
+  const [daRodada, setDaRodada] = useState<string | null>(null);
+  const setTecnicas = (v: string[]) => {
+    mexeu.current = true;
+    setTecnicasBruto(v);
+  };
+  const setQuantidade = (v: number) => {
+    mexeu.current = true;
+    setQuantidadeBruto(v);
+  };
+  const setCriterios = (v: string) => {
+    mexeu.current = true;
+    setCriteriosBruto(v);
+  };
+  const setPedido = (v: string) => {
+    mexeu.current = true;
+    setPedidoBruto(v);
+  };
 
   const rodadas = rodadasQ.data || [];
   const rodada = rodadas.filter((r) => r.id === aberta)[0] || rodadas[0] || null;
   const situacao = useSituacaoDoArquivo(rodada ? rodada.arquivo_pdf_id : null);
+
+  // Finalistas gravando sozinhos: o temporizador guarda a rodada e some ao trocar de rodada ou sair da tela.
+  const agendado = useRef<{ timer: number; rodadaId: string } | null>(null);
+  const [gravandoFinalistas, setGravandoFinalistas] = useState(false);
+  const cancelarAgendado = () => {
+    if (agendado.current) {
+      window.clearTimeout(agendado.current.timer);
+      agendado.current = null;
+    }
+  };
   useEffect(() => {
+    cancelarAgendado();
     setMarcados(null);
     setMensagem(null);
   }, [rodada ? rodada.id : null]);
+  useEffect(() => () => cancelarAgendado(), []);
+
+  // Rodada nova com as escolhas da última do MESMO escopo (projeto ou campanha, e o mesmo alvo); nunca da lista "todas".
+  const ultimaDoEscopo = projetoId || campanhaId ? rodadas.filter((r) => (projetoId ? r.projeto_id === projetoId : r.campanha_id === campanhaId) && r.alvo === alvo)[0] || null : null;
+  useEffect(() => {
+    if (!ultimaDoEscopo || mexeu.current) return;
+    if (ultimaDoEscopo.tecnicas.length) setTecnicasBruto(ultimaDoEscopo.tecnicas);
+    if (ultimaDoEscopo.criterios.length) setCriteriosBruto(ultimaDoEscopo.criterios.join("\n"));
+    setPedidoBruto(ultimaDoEscopo.pedido || "");
+    setDaRodada(ultimaDoEscopo.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ultimaDoEscopo ? ultimaDoEscopo.id : null]);
 
   const ordenados = useMemo(() => (rodada ? rodada.candidatos.slice().sort((a, b) => Number(b.finalista) - Number(a.finalista)) : []), [rodada]);
-  const finalistas = marcados || (rodada ? rodada.candidatos.filter((c) => c.finalista).map((c) => c.id) : []);
-  const mudouFinalistas = !!marcados;
+  const salvos = rodada ? rodada.candidatos.filter((c) => c.finalista).map((c) => c.id) : [];
+  const finalistas = marcados || salvos;
+  /** Finalistas marcados na tela que ainda não chegaram ao banco (agendado ou indo). */
+  const mudouFinalistas = !!marcados || gravandoFinalistas;
+  /** Marcação que vai gravar (3 a 5) ou está gravando: o que custa ou envia espera. */
+  const aguardandoGravar = (!!marcados && finalistas.length >= LIMITES_DO_NAMING.finalistasMin) || gravandoFinalistas;
+  const aprovada = !!rodada && rodada.status === "aprovado";
+  const faltamFinalistas = Math.max(0, LIMITES_DO_NAMING.finalistasMin - finalistas.length);
 
   const guardarRodada = (r: RodadaDeNomes | null | undefined) => {
     const n = normalizarRodada(r);
@@ -88,7 +150,40 @@ export default function EstudioDeNomes({
     }
   };
 
+  /** Uma gravação de finalistas por vez (a última marcação chega por último). */
+  const filaDosFinalistas = useRef<Promise<void>>(Promise.resolve());
+  const gravarFinalistas = (ids: string[], rodadaId: string, anteriores: string[] | null): Promise<void> => {
+    const vez = filaDosFinalistas.current.then(() => gravarFinalistasAgora(ids, rodadaId, anteriores));
+    filaDosFinalistas.current = vez.catch(() => undefined);
+    return vez;
+  };
+
+  /** Grava os finalistas (sem custo). A resposta só limpa a marcação se ela ainda é a que foi enviada. */
+  const gravarFinalistasAgora = async (ids: string[], rodadaId: string, anteriores: string[] | null) => {
+    setGravandoFinalistas(true);
+    try {
+      const r = await chamarIdentidade<{ rodada: RodadaDeNomes }>("naming_finalistas", { rodada_id: rodadaId, ids });
+      guardarRodada(r.rodada);
+      setMarcados((m) => (mesmoConjunto(m, ids) ? null : m));
+      const votos = qc.getQueryData<{ votacao?: { fechada_em: string | null } | null }>(["mesa-identidade", "votos", rodadaId]);
+      const votacaoAberta = !!(votos && votos.votacao && !votos.votacao.fechada_em);
+      const enviada = !!(rodada && rodada.id === rodadaId && rodada.status !== "rascunho");
+      if (anteriores && (enviada || votacaoAberta)) {
+        toast.success("Finalistas atualizados", {
+          duration: 10_000,
+          action: { label: "Desfazer", onClick: () => void gravarFinalistas(anteriores, rodadaId, null) },
+        });
+      }
+    } catch (e) {
+      avisarErro(e, "Os finalistas não foram salvos");
+      setMarcados((m) => (mesmoConjunto(m, ids) ? null : m));
+    } finally {
+      setGravandoFinalistas(false);
+    }
+  };
+
   const alternarFinalista = (id: string) => {
+    if (!rodada || aprovada) return;
     const atual = finalistas.slice();
     const i = atual.indexOf(id);
     if (i >= 0) atual.splice(i, 1);
@@ -98,6 +193,18 @@ export default function EstudioDeNomes({
       return;
     }
     setMarcados(atual);
+    cancelarAgendado();
+    // Só grava com 3 a 5; abaixo disso a seção diz quantos faltam e o que está gravado continua valendo.
+    if (atual.length < LIMITES_DO_NAMING.finalistasMin) return;
+    const rodadaId = rodada.id;
+    const anteriores = salvos.slice();
+    agendado.current = {
+      rodadaId,
+      timer: window.setTimeout(() => {
+        agendado.current = null;
+        void gravarFinalistas(atual, rodadaId, anteriores);
+      }, ESPERA_DOS_FINALISTAS),
+    };
   };
 
   const baixarPdf = () =>
@@ -137,6 +244,10 @@ export default function EstudioDeNomes({
     />
   );
 
+  const motivoParado = aguardandoGravar ? "Salvando finalistas" : faltamFinalistas ? `Marque mais ${faltamFinalistas}` : null;
+  const comSeletor = !projetoDaMesa;
+  const rotuloDoModelo = (r: string) => (comSeletor ? r : <RotuloComModelo rotulo={r} papel="naming" modeloId={modeloId} />);
+
   const itensDoMenu = rodada
     ? [
         { rotulo: "Conferir domínios de novo", icone: <RefreshCcw className="h-4 w-4" />, aoEscolher: () => void rodar("conferir", async () => guardarRodada((await chamarIdentidade<{ rodada: RodadaDeNomes }>("naming_conferir", { rodada_id: rodada.id })).rodada)) },
@@ -155,6 +266,7 @@ export default function EstudioDeNomes({
         titulo="Gerar nomes"
         recolher={`mesa-identidade:nomes:${projetoId || campanhaId || mesa.clientId}:gerar`}
         recolhidaDeInicio={rodadas.length > 0}
+        data-bloco-da-etapa="gerar-nomes"
         ajuda="Escolha as técnicas e os critérios. A geração usa IA e mostra o custo antes; o ranking é do Jev (julgamento contra os critérios) e o domínio é conferido no RDAP público. O @ do Instagram e o INPI ficam a conferir, com o link pronto: o painel não entra em conta de terceiro."
       >
         <div className="flex min-w-0 flex-wrap -m-1" role="group" aria-label="Técnicas de naming">
@@ -192,10 +304,27 @@ export default function EstudioDeNomes({
             </select>
           </CampoDeFormulario>
         </div>
+        {daRodada && (
+          <p className={juntar(texto.auxiliar, "mt-2")} data-da-rodada-anterior="">
+            Com as escolhas da última rodada.{" "}
+            <button
+              type="button"
+              className={juntar(toqueCompacto, "rounded px-1 text-[12px] font-medium text-primary underline-offset-2 hover:underline", foco)}
+              onClick={() => {
+                setCriterios(criteriosDoBriefing);
+                setPedido(pedidoInicial);
+                setDaRodada(null);
+              }}
+              data-voltar-ao-briefing=""
+            >
+              Voltar ao briefing
+            </button>
+          </p>
+        )}
         <div className="mt-3 flex flex-wrap items-center justify-end">
-          <SeletorDoModelo papel="naming" valor={modeloId} onEscolher={setModeloId} />
+          {comSeletor && <SeletorDoModelo papel="naming" valor={modeloId} onEscolher={setModeloId} />}
           <BotaoComCusto
-            rotulo="Gerar nomes"
+            rotulo={rotuloDoModelo("Gerar nomes")}
             titulo="Gerar nomes"
             disabled={!tecnicas.length}
             partes={() => partesDoCusto(mesa.catalogo, "naming", modeloId)}
@@ -227,8 +356,9 @@ export default function EstudioDeNomes({
         <Secao
           titulo="Nomes"
           divisoria
-          descricao={`${rodada.candidatos.length} nomes · ${finalistas.length} finalistas${rodada.escolhido ? ` · escolhido: ${rodada.escolhido}` : ""}`}
+          descricao={`${rodada.candidatos.length} nomes · ${finalistas.length} finalistas${rodada.escolhido ? ` · escolhido: ${rodada.escolhido}` : ""}${aprovada ? " · rodada aprovada: gere outra para mudar" : faltamFinalistas ? ` · marque mais ${faltamFinalistas}` : aguardandoGravar ? " · salvando finalistas" : ""}`}
           recolher={`mesa-identidade:nomes:${rodada.id}`}
+          data-bloco-da-etapa="nomes"
           acao={
             <>
               {rodadas.length > 1 && (
@@ -240,20 +370,11 @@ export default function EstudioDeNomes({
                   ))}
                 </select>
               )}
-              {mudouFinalistas && (
-                <button type="button" className={juntar(botao.primario, "m-1 h-8")} disabled={ocupado === "finalistas" || finalistas.length < LIMITES_DO_NAMING.finalistasMin} onClick={() => void rodar("finalistas", async () => {
-                  guardarRodada((await chamarIdentidade<{ rodada: RodadaDeNomes }>("naming_finalistas", { rodada_id: rodada.id, ids: finalistas })).rodada);
-                  setMarcados(null);
-                  toast.success("Finalistas salvos");
-                })}>
-                  {ocupado === "finalistas" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />} Salvar finalistas
-                </button>
-              )}
               <BotaoComCusto
-                rotulo="Testar idiomas"
+                rotulo={aguardandoGravar ? "Salvando finalistas" : rotuloDoModelo("Testar idiomas")}
                 titulo="Pronúncia e significado em outros idiomas"
                 descricao={`Finalistas em ${IDIOMAS_DO_TESTE.map((i) => i.rotulo.toLowerCase()).join(", ")}; o risco é aviso do Jev`}
-                disabled={mudouFinalistas || finalistas.length < LIMITES_DO_NAMING.finalistasMin}
+                disabled={mudouFinalistas || salvos.length < LIMITES_DO_NAMING.finalistasMin}
                 partes={() => partesDoCusto(mesa.catalogo, "idiomas", modeloId)}
                 executar={() => chamarIdentidade<{ rodada: RodadaDeNomes; aviso_jev: string | null }>("naming_idiomas", { rodada_id: rodada.id, modelo_id: modeloId || undefined })}
                 aoConcluir={(d) => {
@@ -275,12 +396,13 @@ export default function EstudioDeNomes({
                 c={c}
                 finalista={finalistas.indexOf(c.id) >= 0}
                 escolhido={rodada.escolhido === c.nome}
+                travado={aprovada}
                 onFinalista={() => alternarFinalista(c.id)}
                 onEscolher={() =>
                   void rodar(`escolher-${c.id}`, async () => {
                     guardarRodada((await chamarIdentidade<{ rodada: RodadaDeNomes }>("naming_escolher", { rodada_id: rodada.id, candidato_id: c.id })).rodada);
                     if (projetoId) void qc.invalidateQueries({ queryKey: CHAVES.projeto(projetoId) });
-                    toast.success(`Nome escolhido: ${c.nome}`);
+                    toast.success(`Nome escolhido: ${c.nome}`, concluirAoEscolher ? { duration: 10_000, action: { label: "Concluir etapa", onClick: () => concluirAoEscolher() } } : undefined);
                     if (onEscolhido) onEscolhido(c.nome);
                   })
                 }
@@ -291,12 +413,12 @@ export default function EstudioDeNomes({
         </Secao>
       )}
 
-      {rodada && !mudouFinalistas && <VotacaoDosNomes rodada={rodada} />}
+      {rodada && <VotacaoDosNomes rodada={rodada} />}
 
       {rodada && (
         <Secao titulo="Aprovação" divisoria descricao={rodada.arquivo_pdf_id ? textoDaAprovacao(situacao.data) : rodada.enviado_grupo_em ? "Enviado no grupo" : "Ainda não enviado"} recolher={`mesa-identidade:nomes:${rodada.id}:aprovacao`}>
           <div className="-m-1 flex min-w-0 flex-wrap items-center">
-            <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!!ocupado || mudouFinalistas || finalistas.length < LIMITES_DO_NAMING.finalistasMin} onClick={() => void rodar("aprovar", async () => {
+            <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!!ocupado || mudouFinalistas || salvos.length < LIMITES_DO_NAMING.finalistasMin} onClick={() => void rodar("aprovar", async () => {
               const r = await chamarIdentidade<{ rodada: RodadaDeNomes; revisao_solicitada: boolean; aviso: string | null }>("naming_pdf_compartilhar", { rodada_id: rodada.id });
               guardarRodada(r.rodada);
               void situacao.refetch();
@@ -304,13 +426,14 @@ export default function EstudioDeNomes({
             })}>
               {ocupado === "aprovar" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />} Enviar para aprovação
             </button>
-            <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!!ocupado || mudouFinalistas || finalistas.length < LIMITES_DO_NAMING.finalistasMin} onClick={() => void rodar("mensagem", async () => {
+            <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!!ocupado || mudouFinalistas || salvos.length < LIMITES_DO_NAMING.finalistasMin} onClick={() => void rodar("mensagem", async () => {
               const r = await chamarIdentidade<{ rodada: RodadaDeNomes; mensagem: string; link_whatsapp: string }>("naming_mensagem", { rodada_id: rodada.id });
               guardarRodada(r.rodada);
               setMensagem({ texto: r.mensagem, link: r.link_whatsapp });
             })}>
               <MessageCircle className="mr-1.5 h-4 w-4" /> Mensagem do grupo
             </button>
+            {motivoParado && <span className={juntar(texto.auxiliar, "m-1")} data-motivo-parado="">{motivoParado}</span>}
             {rodada.enviado_grupo_em && <Pastilha tom="bom">Enviado no grupo em {new Date(rodada.enviado_grupo_em).toLocaleDateString("pt-BR")}</Pastilha>}
           </div>
           {mensagem && (
@@ -338,10 +461,10 @@ export default function EstudioDeNomes({
   );
 }
 
-function LinhaDoNome({ c, finalista, escolhido, onFinalista, onEscolher, escolhendo }: { c: CandidatoDeNome; finalista: boolean; escolhido: boolean; onFinalista: () => void; onEscolher: () => void; escolhendo: boolean }) {
+function LinhaDoNome({ c, finalista, escolhido, travado = false, onFinalista, onEscolher, escolhendo }: { c: CandidatoDeNome; finalista: boolean; escolhido: boolean; travado?: boolean; onFinalista: () => void; onEscolher: () => void; escolhendo: boolean }) {
   return (
     <li className={juntar(lista.linha, "items-start", finalista && lista.destaque)} data-nome={c.nome}>
-      <input type="checkbox" className="mr-3 mt-1 h-4 w-4 shrink-0 accent-primary" checked={finalista} onChange={onFinalista} aria-label={`Finalista: ${c.nome}`} />
+      <input type="checkbox" className="mr-3 mt-1 h-4 w-4 shrink-0 accent-primary" checked={finalista} disabled={travado} title={travado ? "Rodada aprovada: gere outra para mudar" : undefined} onChange={onFinalista} aria-label={`Finalista: ${c.nome}`} />
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 flex-wrap items-center">
           <span className={juntar(texto.tituloSecao, "mr-2 truncate")}>{c.nome}</span>

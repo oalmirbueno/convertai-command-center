@@ -29,6 +29,7 @@ import {
   EstadoDeErro,
   EstadoVazio,
   GrupoDeCampos,
+  Secao,
   SeletorCompacto,
   botao,
   campo,
@@ -1618,19 +1619,24 @@ export default function AdminFiles() {
           ) : (
             <AdminContracts clientId={selectedClient} />
           )
-        ) : primeiraCarga ? (
-          <Carregando forma={viewMode === "list" ? "lista" : "grade"} linhas={viewMode === "list" ? 6 : 8} rotulo="Carregando arquivos" />
-        ) : filesReadFailed && !allFiles ? (
-          <EstadoDeErro
-            titulo="Não foi possível carregar os arquivos."
-            descricao={`A pasta não está vazia. Houve uma falha de leitura${filesReadError instanceof Error ? `: ${filesReadError.message}` : "."}`}
-            acao={tentarDeNovo}
-          />
         ) : (
           <>
+            {/* Documentos da entrega: outra consulta, em paralelo com a dos arquivos e de pé mesmo se ela falhar
+                (antes só montava depois da lista inteira). Uma por cliente: recolher, editor e envio são de cada um. */}
             {activeFolder === "entregas" && selectedClient !== "all" && (
-              <DocumentosDaEntrega clientId={selectedClient} className="mb-6" />
+              <DocumentosDaEntrega key={selectedClient} clientId={selectedClient} className="mb-6" />
             )}
+            {activeFolder === "entregas" && selectedClient === "all" && <Secao className="mb-6" titulo="Documentos da entrega" descricao="escolha um cliente" recolher={false} />}
+            {primeiraCarga ? (
+              <Carregando forma={viewMode === "list" ? "lista" : "grade"} linhas={viewMode === "list" ? 6 : 8} rotulo="Carregando arquivos" />
+            ) : filesReadFailed && !allFiles ? (
+              <EstadoDeErro
+                titulo="Não foi possível carregar os arquivos."
+                descricao={`A pasta não está vazia. Houve uma falha de leitura${filesReadError instanceof Error ? `: ${filesReadError.message}` : "."}`}
+                acao={tentarDeNovo}
+              />
+            ) : (
+          <>
             {filesReadFailed && (
               <EstadoDeErro
                 className="mb-4"
@@ -1678,6 +1684,8 @@ export default function AdminFiles() {
                   <LinhaDoArquivo key={f.id} {...propsDoItem(f)} />
                 ))}
               </ul>
+            )}
+          </>
             )}
           </>
         )}

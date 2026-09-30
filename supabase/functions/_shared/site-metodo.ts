@@ -39,6 +39,22 @@ export const ETAPAS_DO_SITE = [
 export type EtapaDoSite = (typeof ETAPAS_DO_SITE)[number]["valor"];
 export const ehEtapaDoSite = (v: unknown): v is EtapaDoSite => typeof v === "string" && ETAPAS_DO_SITE.some((e) => e.valor === v);
 
+/**
+ * Perguntas do briefing de site quando a frente BRF ainda não tem um
+ * respondido. Uma fonte só (UXS 30/09): a função mesa-site devolve estas, e a
+ * tela já as mostra na hora, sem esperar o servidor. A dica vai para o ✨.
+ */
+export const PERGUNTAS_DO_BRIEFING_DO_SITE = [
+  { id: "objetivo", rotulo: "O que o site precisa fazer acontecer", dica: "uma frase de resultado para o negócio" },
+  { id: "publico", rotulo: "Para quem é", dica: "quem compra e o que procura" },
+  { id: "oferta", rotulo: "O que o cliente vende ou oferece", dica: "serviços ou produtos principais, sem preço inventado" },
+  { id: "diferenciais", rotulo: "Por que escolher o cliente", dica: "diferenciais concretos das fontes" },
+  { id: "acao", rotulo: "Qual o próximo passo do visitante (WhatsApp, formulário, agenda)", dica: "o CTA principal" },
+  { id: "referencias", rotulo: "Sites que o cliente admira", dica: "só endereços que aparecem nas fontes" },
+  { id: "evitar", rotulo: "O que evitar", dica: "o que o cliente não quer ver" },
+  { id: "dominio", rotulo: "Domínio (se já tiver)", dica: "só se estiver nas fontes; nunca inventar" },
+];
+
 // ------------------------------------------------------------------ DNA
 
 export type AtributoDoDna = { id: string; rotulo: string; descricao: string };

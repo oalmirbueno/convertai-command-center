@@ -17,7 +17,7 @@
  *   inventado) -> o Jev escolhe as provas (Score) -> imagens leves
  *   (imagem-reduzida/copias-leves, nunca a cheia) -> PDF (pdf-base) -> Arquivos
  *   (pasta entregas) com a revisão interna pedida. Nada vai ao cliente aqui.
- * - listar { client_id } -> { documentos } (sem IA)
+ * - listar { client_id, arquivados? } -> { documentos, arquivados } (sem IA; arquivados: true lista os arquivados)
  * - liberar { documento_id, modo: approval|client_shared, confirmado: true } -> { documento }
  *   (fluxo de aprovação que já existe: admin_release_file_now, com a sessão de quem confirmou)
  * - arquivar { documento_id, arquivar } -> { documento } (apagar = arquivar)
@@ -598,7 +598,7 @@ async function gerarRegistro(ch: Chamador, corpo: Record<string, unknown>) {
 async function listar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await garantirAcesso(ch, clientId);
-  const { data, error } = await servico().from(TABELA).select(CAMPOS).eq("client_id", clientId).is("arquivado_em", null).order("criado_em", { ascending: false }).limit(60);
+  const [{ data, error }, contagem] = await Promise.all([corpo.arquivados === true ? servico().from(TABELA).select(CAMPOS).eq("client_id", clientId).not("arquivado_em", "is", null).order("criado_em", { ascending: false }).limit(60) : servico().from(TABELA).select(CAMPOS).eq("client_id", clientId).is("arquivado_em", null).order("criado_em", { ascending: false }).limit(60), corpo.arquivados === true ? null : servico().from(TABELA).select("id", { count: "exact", head: true }).eq("client_id", clientId).not("arquivado_em", "is", null)]);
   if (error) throw erroDoBanco(error, "listar documentos");
   const linhas = (data as LinhaDoDocumento[]) || [];
   const ids = linhas.map((l) => l.file_id).filter((x): x is string => !!x);
@@ -615,7 +615,7 @@ async function listar(ch: Chamador, corpo: Record<string, unknown>) {
       codigo: typeof l.conteudo.codigo === "string" ? l.conteudo.codigo : null,
       arquivo: l.file_id ? arquivos[l.file_id] || null : null,
     })),
-    custo_usd: 0,
+    arquivados: contagem && !contagem.error ? contagem.count ?? 0 : null, custo_usd: 0,
   });
 }
 

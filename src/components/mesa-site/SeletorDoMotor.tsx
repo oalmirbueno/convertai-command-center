@@ -38,9 +38,10 @@ export default function SeletorDoMotor({ valor, onChange, rotulo = "Modelo do mo
         <span className={juntar(texto.rotulo, "mb-1 block")}>{rotulo}</span>
         <select value={valor} onChange={(e) => onChange(e.target.value)} className={campo} data-seletor-do-motor="">
           <option value="">Padrão{padrao ? `: ${nomeDoModelo(padrao)}` : ""}</option>
+          {/* UXS 30/09: o preço por seção (estimativa, sempre com "~"); o preço por 1M de tokens fica no title. */}
           {opcoes.map((m) => (
-            <option key={m.id} value={m.id}>
-              {nomeDoModelo(m)} · US$ {preco(m.preco_entrada_1m)}/{preco(m.preco_saida_1m)} por 1M
+            <option key={m.id} value={m.id} title={`US$ ${preco(m.preco_entrada_1m)} entrada / ${preco(m.preco_saida_1m)} saída por 1M de tokens`}>
+              {nomeDoModelo(m)} · ~{usd(custoPorSecao(m as never))} por seção
             </option>
           ))}
         </select>

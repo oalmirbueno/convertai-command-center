@@ -6,9 +6,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { Carregando, EstadoDeErro } from "@/components/sistema/Estados";
-import { botao, campoTexto, juntar, rolagem, texto } from "@/components/sistema/estilos";
+import { botao, campoTexto, juntar, rolagem, texto, toqueCompacto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
-import { chamarContratos, type PayloadDoContrato, type RespostaDoLembrete } from "@/lib/contratos/api";
+import { chamarContratos, copiarTexto, type PayloadDoContrato, type RespostaDoLembrete } from "@/lib/contratos/api";
 import { ROTULO_DO_SERVICO, SERVICOS_DO_CONTRATO, type ServicoDoContrato } from "../../../supabase/functions/_shared/contrato-modelo";
 
 /**
@@ -21,13 +21,14 @@ import { ROTULO_DO_SERVICO, SERVICOS_DO_CONTRATO, type ServicoDoContrato } from 
  *   em Dados).
  */
 
-function copiar(t: string, oQue: string) {
-  try {
-    void navigator.clipboard.writeText(t);
-    toast.success(`${oQue} copiado`);
-  } catch {
-    toast.error("Não deu para copiar; selecione e copie.");
+/** Só avisa "copiado" depois que a cópia aconteceu. */
+async function copiar(t: string, oQue: string): Promise<boolean> {
+  if (await copiarTexto(t)) {
+    toast.success(`${oQue} copiada`);
+    return true;
   }
+  toast.error("Não deu para copiar; selecione e copie.");
+  return false;
 }
 
 export function JanelaDeLembrete({ aberta, aoFechar, contratoId }: { aberta: boolean; aoFechar: () => void; contratoId: string }) {
@@ -55,7 +56,7 @@ export function JanelaDeLembrete({ aberta, aoFechar, contratoId }: { aberta: boo
                 </p>
                 <textarea readOnly value={l.mensagens.whatsapp} rows={4} className={campoTexto} aria-label={`Mensagem para ${l.nome}`} />
                 <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1">
-                  <button type="button" className={botao.discreto} onClick={() => { copiar(l.mensagens.whatsapp, "Mensagem"); registrar("copiado", l.id); }}>
+                  <button type="button" className={botao.discreto} onClick={() => void copiar(l.mensagens.whatsapp, "Mensagem").then((ok) => ok && registrar("copiado", l.id))}>
                     <Copy className="mr-1.5 h-4 w-4" aria-hidden="true" /> Copiar
                   </button>
                   <button type="button" className={botao.secundario} onClick={() => { window.open(l.mensagens.wa_me, "_blank", "noopener,noreferrer"); registrar("whatsapp", l.id); }}>
@@ -96,7 +97,7 @@ export function JanelaDeAditivo({ aberta, aoFechar, p, aoCriar }: { aberta: bool
     try {
       const novo = await chamarContratos("aditivo_criar", { contract_id: p.contrato.id, descricao: descricao.trim(), servicos: incluir });
       aoCriar(novo);
-      toast.success(`Aditivo ${novo.contrato.numero || ""} em rascunho`, { description: "Confira valor e data em Dados antes de congelar." });
+      toast.success(`Aditivo ${novo.contrato.numero || ""} em rascunho`, { description: "Confira valor e data em Dados antes de assinar." });
     } catch (e) {
       toast.error("O aditivo não foi criado", { description: textoDoErro(e) });
     } finally {
@@ -120,7 +121,7 @@ export function JanelaDeAditivo({ aberta, aoFechar, p, aoCriar }: { aberta: bool
               <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                 {fora.map((s) => (
                   <label key={s} className={juntar(texto.corpo, "flex min-w-0 cursor-pointer items-center")}>
-                    <Checkbox checked={incluir.indexOf(s) >= 0} onCheckedChange={(v) => setIncluir((l) => (v ? l.concat([s]) : l.filter((x) => x !== s)))} className="mr-2" />
+                    <Checkbox checked={incluir.indexOf(s) >= 0} onCheckedChange={(v) => setIncluir((l) => (v ? l.concat([s]) : l.filter((x) => x !== s)))} className={juntar(toqueCompacto, "mr-2")} />
                     <span className="truncate">{ROTULO_DO_SERVICO[s as ServicoDoContrato]}</span>
                   </label>
                 ))}

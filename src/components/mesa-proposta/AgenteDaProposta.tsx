@@ -2,20 +2,24 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, BriefcaseBusiness, Loader2, Paperclip, Send, X } from "lucide-react";
 import { toast } from "sonner";
-import { EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
+import { useAvisarErro } from "@/components/mesa/Custo";
 import { Ditado } from "@/components/mesa/Ditado";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { chamarFuncao, usd } from "@/lib/mesa/api";
-import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import CartaoDeAcao, { CapacidadesDoAgente, OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import ModeloDoAgente from "@/components/agentes/ModeloDoAgente";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import { lerArquivosDoAgente, tamanhoLegivel } from "@/components/mesa/leituraDeArquivos";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import CampoDoAgente, { focarNoFim } from "@/components/sistema/CampoDoAgente";
+import { BotaoNovaConversa, useNovaConversa } from "@/components/sistema/NovaConversa";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
-import { botao, campoTexto, conversa, juntar } from "@/components/sistema/estilos";
+import { botao, conversa, juntar } from "@/components/sistema/estilos";
 import { CHAVES, relerTudo } from "./propostaApi";
+import { tiraOLink } from "../../../supabase/functions/_shared/proposta-comercial";
 
 /**
  * O estrategista comercial da Mesa Proposta, fixo ao lado das etapas. A
@@ -52,18 +56,33 @@ const CAPACIDADES = [
 type Mensagem = { id: string | null; papel: "usuario" | "agente" | "sistema"; conteudo: string; anexos: unknown[]; custo_usd: number | null; nova?: boolean; aviso?: string | null; local?: string };
 type ArquivoPronto = { id: string; nome: string; tipo: string; texto: string; tamanho: number };
 
+/** Ações do agente que só mexem no contexto (não no que o cliente vê): não tiram o link. */
+const OPERACOES_SO_DE_CONTEXTO = ["resumir_reuniao"];
+
+/** Tamanho de uma mensagem ao estrategista (a estimativa do chip do modelo). */
+const PARTES_DA_CONVERSA = (modeloId: string) => [{ modeloId, tipo: "texto" as const, tokensEntrada: 9000, tokensSaida: 1500 }];
+
 export default function AgenteDaProposta({
   propostaId,
+  statusDaProposta = null,
   modeloId,
+  modeloEscolhido = "",
+  onModelo,
   rascunho,
   onRascunho,
 }: {
   propostaId: string | null;
+  /** Frente UXS: numa proposta enviada, o cartão de Confirmar avisa que a ação tira o link do cliente. */
+  statusDaProposta?: string | null;
+  /** O modelo que vai ser usado (o escolhido na página ou o padrão do papel "proposta"). */
   modeloId: string | null;
+  /** O que a pessoa escolheu ("" = padrão): o mesmo estado da etapa Rascunho (MesaProposta). */
+  modeloEscolhido?: string;
+  onModelo?: (id: string) => void;
   rascunho: string;
   onRascunho: (v: string) => void;
 }) {
-  const { clientId, atualizarCusto } = useMesa();
+  const { clientId, atualizarCusto, catalogo, catalogoCarregando } = useMesa();
   const qc = useQueryClient();
   const avisarErro = useAvisarErro();
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
@@ -75,6 +94,24 @@ export default function AgenteDaProposta({
   const [lendo, setLendo] = useState(false);
   const lista = useRef<HTMLDivElement | null>(null);
   const entrada = useRef<HTMLInputElement | null>(null);
+  const campo = useRef<HTMLTextAreaElement | null>(null);
+  const modelo = modeloId ? catalogo.find((x) => x.id === modeloId) || null : null;
+  const novaConversa = useNovaConversa<Mensagem>({
+    chave: clientId,
+    enviando,
+    mensagens,
+    conversaId,
+    limpar: () => {
+      setMensagens([]);
+      setConversaId(null);
+      setNova(true);
+    },
+    restaurar: (c) => {
+      setMensagens(c.mensagens);
+      setConversaId(c.conversaId);
+      setNova(false);
+    },
+  });
 
   useEffect(() => {
     let vivo = true;
@@ -175,21 +212,10 @@ export default function AgenteDaProposta({
         descricao={propostaId ? "Conversa sobre a proposta aberta" : "Crie ou abra uma proposta"}
         acoes={
           <>
-            {mensagens.length > 0 && (
-              <button
-                type="button"
-                className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}
-                onClick={() => {
-                  setMensagens([]);
-                  setConversaId(null);
-                  setNova(true);
-                }}
-              >
-                Nova conversa
-              </button>
-            )}
+            {mensagens.length > 0 && <BotaoNovaConversa onClick={novaConversa} desativado={enviando} />}
             <AjudaRecolhida rotulo="Como o estrategista funciona">
               Mande a transcrição, as notas e os arquivos da reunião. Ele pergunta o que falta em vez de inventar. Número de mercado só com fonte e data; preço só o que você disser. Escrever, pesquisar e reescrever usam IA e pedem Confirmar com o custo. Enviar ao cliente é o Confirmar da etapa Envio.
+              <CapacidadesDoAgente capacidades={CAPACIDADES} />
             </AjudaRecolhida>
           </>
         }
@@ -197,7 +223,15 @@ export default function AgenteDaProposta({
         refDasMensagens={lista}
         compositor={
           <>
-            <OQuePossoFazer capacidades={CAPACIDADES} atalhos={ATALHOS_DA_PROPOSTA} onAtalho={(t) => onRascunho(t)} />
+            <OQuePossoFazer
+              capacidades={CAPACIDADES}
+              mostrarCapacidades={false}
+              atalhos={ATALHOS_DA_PROPOSTA}
+              onAtalho={(t) => {
+                onRascunho(t);
+                focarNoFim(campo, t);
+              }}
+            />
             {arquivos.length > 0 && (
               <ul className="-m-0.5 flex flex-wrap" aria-label="Arquivos para mandar">
                 {arquivos.map((a) => (
@@ -211,24 +245,18 @@ export default function AgenteDaProposta({
                 ))}
               </ul>
             )}
-            <textarea
-              value={rascunho}
-              onChange={(e) => onRascunho(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void enviar();
-                }
-              }}
-              rows={2}
+            <CampoDoAgente
+              ref={campo}
+              valor={rascunho}
+              aoMudar={onRascunho}
+              aoEnviar={() => void enviar()}
               maxLength={4000}
               placeholder="Ex.: cole a transcrição ou diga o preço do site"
-              className={juntar(campoTexto, "min-h-[60px] resize-none")}
               aria-label="Mensagem ao estrategista"
             />
             <div className="flex min-w-0 items-center justify-between">
-              <div className="mr-2 min-w-0 truncate">
-                <EstimativaInline partes={modeloId ? [{ modeloId, tipo: "texto", tokensEntrada: 9000, tokensSaida: 1500 }] : null} />
+              <div className="mr-2 min-w-0">
+                <ModeloDoAgente catalogo={catalogo} modelo={modelo} escolhido={modeloEscolhido} onEscolher={onModelo} partes={PARTES_DA_CONVERSA} carregando={catalogoCarregando} disabled={enviando} />
               </div>
               <div className="ml-auto flex min-w-0 items-center">
                 <input ref={entrada} type="file" multiple className="hidden" onChange={(e) => anexar(e.target.files)} accept=".txt,.md,.csv,.tsv,.json,.srt,.vtt,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rtf,.html" />
@@ -280,11 +308,15 @@ export default function AgenteDaProposta({
                       acao={a}
                       recemFeita={!!m.nova}
                       titulo="O estrategista vai fazer na proposta"
-                      observacao={
+                      observacao={`${
                         typeof a.custo_estimado_usd === "number" && a.custo_estimado_usd > 0
                           ? `Custo estimado: ${usd(a.custo_estimado_usd)} da carteira. Desfazer volta a versão anterior; o gasto não volta.`
                           : "Sem custo. Dá para desfazer."
-                      }
+                      }${
+                        statusDaProposta && !a.executada_em && tiraOLink(statusDaProposta, a.itens.some((i) => OPERACOES_SO_DE_CONTEXTO.indexOf(i.operacao) < 0) ? ["conteudo"] : [])
+                          ? " Confirmar tira o link atual do cliente; depois é só Enviar de novo."
+                          : ""
+                      }`}
                       onPedido={(p) => chamarAcaoDoAgente("mesa-proposta", String(m.id), a.id, p)}
                       onFeito={(p) => {
                         if (p === "descartar") return;

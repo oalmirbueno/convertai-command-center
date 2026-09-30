@@ -4,10 +4,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Frente SEL (30/09), a tela do selo da campanha: os 4 caminhos (gerar,
- * escolher pronto, enviar, logo da marca), Melhorar com a versão nova ao lado
- * da antiga, Escolher e Desfazer, o histórico com voltar, as referências e a
- * atualização completa (refazer as não aprovadas com custo e Confirmar).
+ * Frente SEL (30/09), a tela do selo da campanha: os 2 caminhos (gerar e
+ * escolher pronto, que tem a logo da marca, o envio de arquivo, os selos de
+ * outras campanhas e o acervo), Melhorar com a versão nova ao lado da antiga,
+ * Escolher e Desfazer, o histórico com Usar, as referências e a atualização
+ * completa (refazer as não aprovadas com o custo à vista e segundo clique).
+ *
+ * Frente UXS (30/09): o Gerar primeiro com os ajustes recolhidos numa
+ * linha-resumo (lembrados por cliente), um formulário por vez, Desfazer no
+ * aviso da troca, "Ficar com a de antes" com Desfazer, esqueleto na leitura e
+ * "Tentar de novo" no erro.
  */
 
 const mock = vi.hoisted(() => ({
@@ -41,9 +47,26 @@ vi.mock("@/integrations/supabase/client", () => {
     },
   };
 });
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn(), message: vi.fn() } }));
+// Seletor de modelo e de qualidade como select nativo (o Radix Select não abre no jsdom); o resto dos Seletores é o real.
+vi.mock("@/components/mesa/Seletores", async () => {
+  const real = await vi.importActual<any>("@/components/mesa/Seletores");
+  return {
+    ...real,
+    SeletorDeModelo: ({ catalogo, tipo, valor, onChange, rotulo }: any) =>
+      h(
+        "select",
+        { "aria-label": rotulo, value: valor, onChange: (e: any) => onChange(e.target.value) },
+        catalogo.filter((m: any) => m.tipo === tipo && m.ativo).map((m: any) => h("option", { key: m.id, value: m.id }, m.rotulo)),
+      ),
+    SeletorDeQualidade: ({ valor, onChange }: any) =>
+      h("select", { "aria-label": "Qualidade", value: valor, onChange: (e: any) => onChange(e.target.value) }, ["baixa", "media", "alta"].map((q) => h("option", { key: q, value: q }, q))),
+  };
+});
 
+import { toast } from "sonner";
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
+import { gravarEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import CampanhaSelo from "@/components/mesa/CampanhaSelo";
 import { arquivoDeSeloAceito, corposDaGeracao, partesDaGeracao, partesDoRefazer } from "@/components/mesa/seloApi";
 import type { Campanha } from "@/components/mesa/mesaV4Api";
@@ -143,10 +166,13 @@ const estado = () => ({
 const chamadas = (acao: string, funcao = "agente-calendario") =>
   mock.invoke.mock.calls.filter((c) => c[0] === funcao && c[1] && c[1].body && c[1].body.acao === acao).map((c) => c[1].body);
 
-function montar() {
+function montar(c: Campanha = campanha) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa() }, h(CampanhaSelo, { campanha }))));
+  return render(h(QueryClientProvider, { client: qc }, h(MesaProvider, { valor: valorDaMesa() }, h(CampanhaSelo, { campanha: c }))));
 }
+
+/** O aviso de sucesso com esse texto (toast.success do mock). */
+const avisoDeSucesso = (textoDoAviso: string) => (toast.success as any).mock.calls.find((c: any[]) => c[0] === textoDoAviso);
 
 const originais: Record<string, unknown> = {};
 beforeAll(() => {
@@ -182,6 +208,8 @@ afterAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // A aba, os ajustes do Gerar e o abrir/recolher ficam no navegador: cada teste começa do zero.
+  window.localStorage.clear();
   mock.tabelas = {};
   mock.upload.mockResolvedValue({ data: {}, error: null });
   mock.invoke.mockImplementation(async (funcao: string, { body }: any) => {
@@ -212,7 +240,7 @@ const abrirCaminhos = async () => {
   fireEvent.click(screen.getByRole("button", { name: /Trocar o selo/ }));
 };
 
-describe("selo da campanha: 4 caminhos na mesma tela", () => {
+describe("selo da campanha: 2 caminhos na mesma tela (gerar e escolher pronto)", () => {
   it("Gerar: 3 opções em paralelo, no mesmo lote, estilos diferentes e o modelo escolhido; o texto errado avisa; Escolher e Desfazer", async () => {
     montar();
     await abrirCaminhos();
@@ -247,10 +275,11 @@ describe("selo da campanha: 4 caminhos na mesma tela", () => {
     expect(await screen.findByRole("button", { name: /Desfazer/ })).toBeTruthy();
   });
 
-  it("Enviar: SVG vira PNG no navegador, sobe na pasta da campanha e vira o selo", async () => {
+  it("Enviar (no Escolher pronto): SVG vira PNG no navegador, sobe na pasta da campanha e vira o selo", async () => {
     montar();
     await abrirCaminhos();
-    fireEvent.click(screen.getByRole("tab", { name: "Enviar" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Escolher pronto" }));
+    expect(screen.getByRole("button", { name: /Enviar um arquivo como selo/ })).toBeTruthy();
     const entrada = screen.getByTestId("selo-enviado") as HTMLInputElement;
     fireEvent.change(entrada, { target: { files: [new File(["<svg/>"], "selo.svg", { type: "image/svg+xml" })] } });
     await waitFor(() => expect(chamadas("selo_usar").length).toBe(1));
@@ -263,13 +292,14 @@ describe("selo da campanha: 4 caminhos na mesma tela", () => {
     expect(arquivoDeSeloAceito({ type: "", name: "logo.WEBP" })).toBe(true);
   });
 
-  it("Logo da marca: um clique, sem custo, com Desfazer", async () => {
+  it("Logo da marca (no Escolher pronto): um clique, sem custo; o Trocar fecha e o Desfazer do topo continua", async () => {
     montar();
     await abrirCaminhos();
-    fireEvent.click(screen.getByRole("tab", { name: "Logo da marca" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Escolher pronto" }));
     fireEvent.click(screen.getByRole("button", { name: /Usar a logo da marca como selo/ }));
     await waitFor(() => expect(chamadas("selo_usar").length).toBe(1));
     expect(chamadas("selo_usar")[0]).toEqual({ acao: "selo_usar", campanha_id: CAMP, origem: "logo", remover_fundo: true });
+    await waitFor(() => expect(document.querySelector('[data-selo="caminhos"]')).toBeNull());
     fireEvent.click(await screen.findByRole("button", { name: /Desfazer/ }));
     await waitFor(() => expect(chamadas("selo_escolher").length).toBe(1));
     expect(chamadas("selo_escolher")[0].selo_id).toBe("v1");
@@ -277,7 +307,7 @@ describe("selo da campanha: 4 caminhos na mesma tela", () => {
 });
 
 describe("selo da campanha: melhorar, versões e referências", () => {
-  it("Melhorar: pedido e link de referência; a nova aparece ao lado da antiga; Escolher a nova ou Desfazer (arquiva a nova)", async () => {
+  it("Melhorar: pedido e link de referência; a nova aparece ao lado da antiga; Ficar com a de antes arquiva a nova, com Desfazer no aviso", async () => {
     montar();
     await screen.findByText(/Gerado · Carimbo/);
     fireEvent.click(screen.getByRole("button", { name: /Melhorar este selo/ }));
@@ -288,10 +318,49 @@ describe("selo da campanha: melhorar, versões e referências", () => {
     expect(chamadas("selo_melhorar")[0]).toEqual({ acao: "selo_melhorar", campanha_id: CAMP, selo_id: "v1", pedido: "nada de selo genérico dourado", link: "https://exemplo.com/ref.png", modelo_id: "openai:gpt-image-2", qualidade: "media" });
     expect(await screen.findByAltText("Selo de antes")).toBeTruthy();
     expect(screen.getByAltText("Selo novo")).toBeTruthy();
-    fireEvent.click(screen.getAllByRole("button", { name: /Desfazer/ })[0]);
+    fireEvent.click(screen.getByRole("button", { name: /Ficar com a de antes/ }));
     await waitFor(() => expect(chamadas("selo_arquivar").length).toBe(1));
     expect(chamadas("selo_arquivar")[0]).toEqual({ acao: "selo_arquivar", campanha_id: CAMP, selo_id: "melhor" });
     expect(chamadas("selo_escolher").length).toBe(0);
+    await waitFor(() => expect(screen.queryByAltText("Selo novo")).toBeNull());
+    const aviso = avisoDeSucesso("Versão nova arquivada.");
+    expect(aviso[1].action.label).toBe("Desfazer");
+    aviso[1].action.onClick();
+    await waitFor(() => expect(chamadas("selo_arquivar").length).toBe(2));
+    expect(chamadas("selo_arquivar")[1]).toEqual({ acao: "selo_arquivar", campanha_id: CAMP, selo_id: "melhor", desfazer: true });
+  });
+
+  it("Ficar com a de antes que não arquiva: o erro aparece e o Comparar continua", async () => {
+    montar();
+    await screen.findByText(/Gerado · Carimbo/);
+    fireEvent.click(screen.getByRole("button", { name: /Melhorar este selo/ }));
+    fireEvent.change(screen.getByLabelText("O que melhorar no selo"), { target: { value: "letra da marca" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Melhorar(?! este)/ }));
+    await screen.findByAltText("Selo novo");
+    const padrao = mock.invoke.getMockImplementation() as any;
+    mock.invoke.mockImplementation(async (funcao: string, opcoes: any) =>
+      opcoes.body.acao === "selo_arquivar" ? { data: { error: "falhou" }, error: null } : padrao(funcao, opcoes),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Ficar com a de antes/ }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("A versão nova não foi arquivada", expect.anything()));
+    expect(screen.getByAltText("Selo novo")).toBeTruthy();
+    expect(avisoDeSucesso("Versão nova arquivada.")).toBeUndefined();
+  });
+
+  it("Melhorar: o chip mostra o modelo e a qualidade e a troca chega no pedido", async () => {
+    montar();
+    await screen.findByText(/Gerado · Carimbo/);
+    fireEvent.click(screen.getByRole("button", { name: /Melhorar este selo/ }));
+    const chip = screen.getByRole("button", { name: "Modelo e qualidade do Melhorar" });
+    expect(chip.textContent).toContain("Imagem · Padrão");
+    fireEvent.click(chip);
+    fireEvent.change(await screen.findByLabelText("Modelo de imagem"), { target: { value: "openrouter:outro-imagem" } });
+    fireEvent.change(screen.getByLabelText("Qualidade"), { target: { value: "baixa" } });
+    expect(screen.getByRole("button", { name: "Modelo e qualidade do Melhorar" }).textContent).toContain("Outro · Rascunho");
+    fireEvent.change(screen.getByLabelText("O que melhorar no selo"), { target: { value: "letra da marca" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Melhorar(?! este)/ }));
+    await waitFor(() => expect(chamadas("selo_melhorar").length).toBe(1));
+    expect(chamadas("selo_melhorar")[0]).toMatchObject({ modelo_id: "openrouter:outro-imagem", qualidade: "baixa" });
   });
 
   it("Melhorar e Escolher a nova troca o selo", async () => {
@@ -305,11 +374,11 @@ describe("selo da campanha: melhorar, versões e referências", () => {
     expect(chamadas("selo_escolher")[0].selo_id).toBe("melhor");
   });
 
-  it("histórico: toda versão fica guardada e Voltar escolhe a antiga", async () => {
+  it("histórico: toda versão fica guardada e Usar escolhe a antiga", async () => {
     montar();
     const versoes = await screen.findByRole("list", { name: "Versões do selo" });
     expect(within(versoes).getByText("Em uso")).toBeTruthy();
-    fireEvent.click(within(versoes).getByRole("button", { name: "Voltar" }));
+    fireEvent.click(within(versoes).getByRole("button", { name: "Usar" }));
     await waitFor(() => expect(chamadas("selo_escolher").length).toBe(1));
     expect(chamadas("selo_escolher")[0]).toEqual({ acao: "selo_escolher", campanha_id: CAMP, selo_id: "v0" });
   });
@@ -328,15 +397,20 @@ describe("selo da campanha: melhorar, versões e referências", () => {
 });
 
 describe("selo da campanha: atualizar de forma completa", () => {
-  it("mostra quantas usam outro selo; Refazer as não aprovadas pede Confirmar com o custo e põe capa e fechamento na fila do Estúdio", async () => {
+  it("mostra numa linha o que fica e o que refaz; o Refazer mostra o custo antes e sempre pede o segundo clique (duplo clique não confirma)", async () => {
     montar();
-    expect(await screen.findByText(/2 lâmina\(s\) aprovada\(s\) usam outro selo e ficam como estão/)).toBeTruthy();
-    expect(screen.getByText(/2 lâmina\(s\) ainda não aprovada\(s\) usam outro selo \(1 com o cliente\)/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /Refazer as não aprovadas/ }));
+    expect(await screen.findByText("2 aprovadas ficam como estão · 2 lâminas a refazer (1 arte com o cliente)")).toBeTruthy();
+    const refazer = screen.getByRole("button", { name: /Refazer 2 lâminas/ });
+    expect(refazer.textContent).toContain("~US$");
+    fireEvent.click(refazer);
     expect(chamadas("enfileirar", "estudio-arte").length).toBe(0);
-    const confirmar = screen.getByRole("button", { name: /Confirmar/ });
+    const confirmar = screen.getByRole("button", { name: /Clique de novo para confirmar/ });
     expect(confirmar.textContent).toContain("~US$");
+    // Um segundo clique colado ao primeiro (duplo clique) não confirma sozinho.
     fireEvent.click(confirmar);
+    expect(chamadas("enfileirar", "estudio-arte").length).toBe(0);
+    await new Promise((r) => setTimeout(r, 450));
+    fireEvent.click(screen.getByRole("button", { name: /Clique de novo para confirmar/ }));
     await waitFor(() => expect(chamadas("enfileirar", "estudio-arte").length).toBe(1));
     expect(chamadas("enfileirar", "estudio-arte")[0]).toEqual({ acao: "enfileirar", trabalho_id: "t-1", ordens: [1, 4], corrigir_sozinho: false });
     // 2 lâminas x US$ 0,04.
@@ -352,5 +426,155 @@ describe("selo da campanha: atualizar de forma completa", () => {
       { acao: "selo_gerar", campanha_id: CAMP, lote_id: "lote", estilo: "carimbo", variacao: 0, modelo_id: "m", qualidade: "media", texto: "Amor" },
       { acao: "selo_gerar", campanha_id: CAMP, lote_id: "lote", estilo: "carimbo", variacao: 1, modelo_id: "m", qualidade: "media", texto: "Amor" },
     ]);
+  });
+});
+
+describe("selo da campanha: mais simples de usar (frente UXS)", () => {
+  const gerarPronto = () => waitFor(() => expect((screen.getByRole("button", { name: /Gerar 3 opções/ }) as HTMLButtonElement).disabled).toBe(false));
+
+  it("Gerar primeiro: os ajustes ficam recolhidos numa linha-resumo que mostra a troca de modelo e qualidade, e a escolha fica lembrada", async () => {
+    const primeira = montar();
+    await abrirCaminhos();
+    const resumo = screen.getByRole("button", { name: /Automático · 3 opções · Imagem · Padrão/ });
+    expect(resumo.getAttribute("aria-expanded")).toBe("false");
+    expect(resumo.textContent).toContain('"Promoção do Amor"');
+    expect(screen.queryByLabelText("Estilo do selo")).toBeNull();
+    // As referências continuam à vista com os ajustes recolhidos.
+    expect(screen.getByLabelText("Link da referência do selo")).toBeTruthy();
+    fireEvent.click(resumo);
+    fireEvent.change(screen.getByLabelText("Modelo de imagem"), { target: { value: "openrouter:outro-imagem" } });
+    fireEvent.change(screen.getByLabelText("Qualidade"), { target: { value: "alta" } });
+    fireEvent.change(screen.getByLabelText("Pedido extra para o selo"), { target: { value: "coração no o" } });
+    const depois = screen.getByRole("button", { name: /Automático · 3 opções · Outro · Final \(alta\)/ });
+    expect(depois.getAttribute("aria-expanded")).toBe("true");
+    expect(depois.textContent).toContain("com pedido");
+    fireEvent.click(screen.getByRole("button", { name: /Gerar 3 opções/ }));
+    await waitFor(() => expect(chamadas("selo_gerar").length).toBe(3));
+    expect(chamadas("selo_gerar").every((c) => c.modelo_id === "openrouter:outro-imagem" && c.qualidade === "alta" && c.pedido === "coração no o")).toBe(true);
+    await gerarPronto();
+    primeira.unmount();
+    // Sair e voltar: modelo, qualidade e o abrir ficam (o pedido extra é de cada vez).
+    montar();
+    await abrirCaminhos();
+    const lembrado = screen.getByRole("button", { name: /Automático · 3 opções · Outro · Final \(alta\)/ });
+    expect(lembrado.getAttribute("aria-expanded")).toBe("true");
+    expect(lembrado.textContent).not.toContain("com pedido");
+  });
+
+  it("ajuste guardado que não vale mais cai no padrão, campo a campo (modelo desligado, quantidade estranha)", async () => {
+    gravarEstadoDaTela(`selo:ajustes:${CLIENTE}`, { estilo: "nao-existe", quantidade: 9, modelo: "openai:desligado", qualidade: "alta" });
+    montar();
+    await abrirCaminhos();
+    expect(screen.getByRole("button", { name: /Automático · 3 opções · Imagem · Final \(alta\)/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Gerar 3 opções/ }));
+    await waitFor(() => expect(chamadas("selo_gerar").length).toBe(3));
+    expect(chamadas("selo_gerar").every((c) => c.modelo_id === "openai:gpt-image-2" && c.qualidade === "alta")).toBe(true);
+  });
+
+  it("texto do selo: o campo mostra o do servidor e o pedido vai sem texto até a pessoa editar", async () => {
+    montar();
+    await abrirCaminhos();
+    fireEvent.click(screen.getByRole("button", { name: /Gerar 3 opções/ }));
+    await waitFor(() => expect(chamadas("selo_gerar").length).toBe(3));
+    expect(chamadas("selo_gerar").every((c) => !("texto" in c))).toBe(true);
+    await gerarPronto();
+    fireEvent.click(screen.getByRole("button", { name: /Automático · 3 opções/ }));
+    const campo = screen.getByLabelText("Texto do selo") as HTMLInputElement;
+    expect(campo.value).toBe("Promoção do Amor");
+    fireEvent.change(campo, { target: { value: "Amor em dobro" } });
+    expect(screen.getByRole("button", { name: /"Amor em dobro"/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Gerar 3 opções/ }));
+    await waitFor(() => expect(chamadas("selo_gerar").length).toBe(6));
+    expect(chamadas("selo_gerar").slice(3).every((c) => c.texto === "Amor em dobro")).toBe(true);
+  });
+
+  it("campanha sem selo: Escolher o selo já abre com os ajustes à vista", async () => {
+    const semSelo: Campanha = { ...campanha, selo_id: null, selo_path: null };
+    const padrao = mock.invoke.getMockImplementation() as any;
+    mock.invoke.mockImplementation(async (funcao: string, opcoes: any) =>
+      opcoes.body.acao === "selo_estado" ? { data: { ...estado(), campanha: { id: CAMP, selo_id: null, selo_path: null }, versoes: [], impacto: null }, error: null } : padrao(funcao, opcoes),
+    );
+    montar(semSelo);
+    await screen.findByText("A campanha ainda não tem selo.");
+    fireEvent.click(screen.getByRole("button", { name: /Escolher o selo/ }));
+    expect(screen.getByRole("button", { name: /Automático · 3 opções/ }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByLabelText("Estilo do selo")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Melhorar este selo/ })).toBeNull();
+  });
+
+  it("Escolher numa opção: o aviso traz o Desfazer (com o selo de antes da resposta) e o Trocar fecha, com as opções à vista", async () => {
+    montar();
+    await abrirCaminhos();
+    fireEvent.click(screen.getByRole("button", { name: /Gerar 3 opções/ }));
+    const lista = await screen.findByRole("list", { name: "Opções de selo" });
+    await waitFor(() => expect(within(lista).getAllByRole("button", { name: "Escolher" }).length).toBe(3));
+    await gerarPronto();
+    fireEvent.click(within(lista).getAllByRole("button", { name: "Escolher" })[1]);
+    await waitFor(() => expect(chamadas("selo_escolher").length).toBe(1));
+    await waitFor(() => expect(document.querySelector('[data-selo="caminhos"]')).toBeNull());
+    expect(screen.getByRole("list", { name: "Opções de selo" })).toBeTruthy();
+    const aviso = avisoDeSucesso("Selo escolhido.");
+    expect(aviso[1].action.label).toBe("Desfazer");
+    aviso[1].action.onClick();
+    await waitFor(() => expect(chamadas("selo_escolher").length).toBe(2));
+    expect(chamadas("selo_escolher")[1]).toEqual({ acao: "selo_escolher", campanha_id: CAMP, selo_id: "v1" });
+    // A troca feita pelo Desfazer não traz outro Desfazer.
+    await waitFor(() => expect(avisoDeSucesso("O selo de antes voltou.")).toBeTruthy());
+    expect(avisoDeSucesso("O selo de antes voltou.").length).toBe(1);
+  });
+
+  it("um formulário por vez: abrir o Melhorar com o Trocar aberto fecha o Trocar", async () => {
+    montar();
+    await abrirCaminhos();
+    expect(document.querySelector('[data-selo="caminhos"]')).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Melhorar este selo/ }));
+    expect(document.querySelector('[data-selo="caminhos"]')).toBeNull();
+    expect(document.querySelector('[data-selo="melhorar"]')).not.toBeNull();
+    expect(screen.getByRole("button", { name: /Trocar o selo/ }).getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: /Trocar o selo/ }));
+    expect(document.querySelector('[data-selo="melhorar"]')).toBeNull();
+  });
+
+  it("Escolher pronto: a aba fica lembrada e o Tirar o fundo liso aparece uma vez só, e só no pronto", async () => {
+    const primeira = montar();
+    await abrirCaminhos();
+    expect(screen.queryByLabelText("Tirar o fundo liso")).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Escolher pronto" }));
+    expect(screen.getAllByLabelText("Tirar o fundo liso").length).toBe(1);
+    primeira.unmount();
+    montar();
+    await abrirCaminhos();
+    expect(document.querySelector('[data-selo="pronto"]')).not.toBeNull();
+  });
+
+  it("lendo o selo: esqueleto no lugar do estado e dos botões, sem piscar o texto do selo antigo", async () => {
+    let soltar: (v: unknown) => void = () => undefined;
+    const padrao = mock.invoke.getMockImplementation() as any;
+    mock.invoke.mockImplementation((funcao: string, opcoes: any) =>
+      opcoes.body.acao === "selo_estado"
+        ? new Promise((r) => {
+            soltar = r;
+          })
+        : padrao(funcao, opcoes),
+    );
+    montar();
+    expect(await screen.findByLabelText("Lendo o selo")).toBeTruthy();
+    expect(screen.queryByText("Selo de antes das versões")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Trocar o selo/ })).toBeNull();
+    soltar({ data: estado(), error: null });
+    expect(await screen.findByText(/Gerado · Carimbo/)).toBeTruthy();
+    expect(screen.queryByLabelText("Lendo o selo")).toBeNull();
+  });
+
+  it("erro ao ler o selo: o aviso fica e o Tentar de novo lê de novo", async () => {
+    const padrao = mock.invoke.getMockImplementation() as any;
+    mock.invoke.mockImplementation(async (funcao: string, opcoes: any) =>
+      opcoes.body.acao === "selo_estado" ? { data: { error: "falhou" }, error: null } : padrao(funcao, opcoes),
+    );
+    montar();
+    const tentar = await screen.findByRole("button", { name: /Tentar de novo/ });
+    const antes = chamadas("selo_estado").length;
+    fireEvent.click(tentar);
+    await waitFor(() => expect(chamadas("selo_estado").length).toBe(antes + 1));
   });
 });

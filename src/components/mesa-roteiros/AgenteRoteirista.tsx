@@ -12,8 +12,10 @@ import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import CampoDoAgente, { focarNoFim } from "@/components/sistema/CampoDoAgente";
+import { BotaoNovaConversa, useNovaConversa } from "@/components/sistema/NovaConversa";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
-import { botao, campoTexto, conversa, juntar } from "@/components/sistema/estilos";
+import { botao, conversa, juntar } from "@/components/sistema/estilos";
 import { CHAVES } from "./roteirosApi";
 
 /**
@@ -109,7 +111,24 @@ export default function AgenteRoteirista({
   const [enviando, setEnviando] = useState(false);
   const [nova, setNova] = useState(false);
   const lista = useRef<HTMLDivElement | null>(null);
+  const campo = useRef<HTMLTextAreaElement | null>(null);
   const texto = rascunho;
+  const novaConversa = useNovaConversa<MensagemDoAgente>({
+    chave: clientId,
+    enviando,
+    mensagens,
+    conversaId,
+    limpar: () => {
+      setMensagens([]);
+      setConversaId(null);
+      setNova(true);
+    },
+    restaurar: (c) => {
+      setMensagens(c.mensagens);
+      setConversaId(c.conversaId);
+      setNova(false);
+    },
+  });
 
   // Lê a última conversa do cliente ao montar, sem custo.
   useEffect(() => {
@@ -191,19 +210,7 @@ export default function AgenteRoteirista({
         descricao={roteiroId ? "Conversa sobre o roteiro aberto" : "Conversa sobre os roteiros do cliente"}
         acoes={
           <>
-            {mensagens.length > 0 && (
-              <button
-                type="button"
-                className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}
-                onClick={() => {
-                  setMensagens([]);
-                  setConversaId(null);
-                  setNova(true);
-                }}
-              >
-                Nova conversa
-              </button>
-            )}
+            {mensagens.length > 0 && <BotaoNovaConversa onClick={novaConversa} desativado={enviando} />}
             <AjudaRecolhida rotulo="Como o agente de roteiros funciona">
               Peça o que precisa. Trocar texto, aprovar, arquivar e resolver comentário ele faz na hora, com Desfazer. Gerar, refazer gancho e mudar o tom usam IA e vêm num cartão com o custo; o PDF vai para Arquivos e também pede Confirmar. O que você ensinar ("nunca", "não gostei") vira regra; dá para esquecer.
             </AjudaRecolhida>
@@ -213,20 +220,21 @@ export default function AgenteRoteirista({
         refDasMensagens={lista}
         compositor={
           <>
-            <OQuePossoFazer capacidades={CAPACIDADES} atalhos={ATALHOS_DO_AGENTE} onAtalho={(t) => onRascunho(t)} />
-            <textarea
-              value={texto}
-              onChange={(e) => onRascunho(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void enviar();
-                }
+            <OQuePossoFazer
+              capacidades={CAPACIDADES}
+              atalhos={ATALHOS_DO_AGENTE}
+              onAtalho={(t) => {
+                onRascunho(t);
+                focarNoFim(campo, t);
               }}
-              rows={2}
+            />
+            <CampoDoAgente
+              ref={campo}
+              valor={texto}
+              aoMudar={onRascunho}
+              aoEnviar={() => void enviar()}
               maxLength={4000}
               placeholder="Ex.: gere os roteiros das 4 peças de vídeo da semana"
-              className={juntar(campoTexto, "min-h-[60px] resize-none")}
               aria-label="Mensagem ao agente"
             />
             <div className="flex min-w-0 items-center justify-between">

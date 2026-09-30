@@ -7,6 +7,7 @@ import { useMarcaDaMesa, useMesa, useUrlDaMesa } from "@/components/mesa/MesaCon
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { useReferenciasDoCliente } from "@/components/mesa/contextoDoCliente";
 import Secao from "@/components/sistema/Secao";
+import { Carregando } from "@/components/sistema/Estados";
 import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
 import { linhaDaMarca } from "../../../supabase/functions/_shared/heranca-da-marca";
 import { chamarIdentidade } from "./identidadeApi";
@@ -262,7 +263,7 @@ export default function Moodboard() {
               ))}
             </div>
           )}
-          {aberto === "acervo" && (refs.isLoading || fotos.isLoading) && <p className={texto.auxiliar}>Lendo o acervo...</p>}
+          {aberto === "acervo" && !doAcervo.length && (refs.isLoading || fotos.isLoading) && <Carregando forma="grade" linhas={6} rotulo="Lendo o acervo" />}
           {aberto === "acervo" && !refs.isLoading && !fotos.isLoading && !doAcervo.length && <p className={texto.auxiliar}>O acervo desta marca não tem imagem ainda.</p>}
         </div>
       )}

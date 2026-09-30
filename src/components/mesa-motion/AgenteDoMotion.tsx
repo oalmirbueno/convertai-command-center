@@ -1,19 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Clapperboard, Loader2, Send } from "lucide-react";
-import { EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
+import { useAvisarErro } from "@/components/mesa/Custo";
 import { Ditado } from "@/components/mesa/Ditado";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { usd } from "@/lib/mesa/api";
-import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import CartaoDeAcao, { CapacidadesDoAgente, OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
+import ModeloDoAgente from "@/components/agentes/ModeloDoAgente";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import CampoDoAgente, { focarNoFim } from "@/components/sistema/CampoDoAgente";
+import { BotaoNovaConversa, useNovaConversa } from "@/components/sistema/NovaConversa";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { botao, campoTexto, conversa, juntar } from "@/components/sistema/estilos";
+import { botao, conversa, juntar } from "@/components/sistema/estilos";
 import type { PropsDoAgenteDaMesa } from "@/components/mesa-videos/MesaDeVideo";
 import { TAMANHOS_DO_MOTION } from "../../../supabase/functions/_shared/motion-metodo";
 import { useModeloDaAcao } from "./FilmeAberto";
@@ -46,12 +49,16 @@ const CAPACIDADES = [
   'aprender o que você ensinar ("nunca", "sempre", "não gostei")',
 ];
 
+/** Tamanho de uma mensagem ao diretor (a estimativa do chip do modelo). */
+const PARTES_DA_CONVERSA = (modeloId: string) => [{ modeloId, tipo: "texto" as const, tokensEntrada: TAMANHOS_DO_MOTION.conversa.entrada, tokensSaida: TAMANHOS_DO_MOTION.conversa.saida }];
+
 type Mensagem = { id: string | null; papel: "usuario" | "agente" | "sistema"; conteudo: string; anexos: unknown[]; custo_usd: number | null; nova?: boolean; aviso?: string | null; local?: string };
 
 export default function AgenteDoMotion(_: PropsDoAgenteDaMesa) {
-  const { clientId, atualizarCusto } = useMesa();
+  const { clientId, atualizarCusto, catalogoCarregando } = useMesa();
   const [filmeId] = useFilmeDaUrl();
-  const { modelo } = useModeloDaAcao("conversa");
+  // O mesmo modelo da conversa que o agente sempre usou (chave mesa-motion:modelo:conversa:<cliente>), agora à vista no chip.
+  const { modelo, escolhido, setEscolhido, catalogo } = useModeloDaAcao("conversa");
   const qc = useQueryClient();
   const avisarErro = useAvisarErro();
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
@@ -61,6 +68,23 @@ export default function AgenteDoMotion(_: PropsDoAgenteDaMesa) {
   const [nova, setNova] = useState(false);
   const [rascunho, setRascunho] = useEstadoDaTela<string>(`mesa-motion:rascunho:${clientId}`, "");
   const listaRef = useRef<HTMLDivElement | null>(null);
+  const campo = useRef<HTMLTextAreaElement | null>(null);
+  const novaConversa = useNovaConversa<Mensagem>({
+    chave: `${clientId}:${filmeId || ""}`,
+    enviando,
+    mensagens,
+    conversaId,
+    limpar: () => {
+      setMensagens([]);
+      setConversaId(null);
+      setNova(true);
+    },
+    restaurar: (c) => {
+      setMensagens(c.mensagens);
+      setConversaId(c.conversaId);
+      setNova(false);
+    },
+  });
 
   useEffect(() => {
     if (!filmeId) return;
@@ -127,21 +151,10 @@ export default function AgenteDoMotion(_: PropsDoAgenteDaMesa) {
         descricao={filmeId ? "Filme aberto" : "Abra um filme"}
         acoes={
           <>
-            {mensagens.length > 0 && (
-              <button
-                type="button"
-                className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}
-                onClick={() => {
-                  setMensagens([]);
-                  setConversaId(null);
-                  setNova(true);
-                }}
-              >
-                Nova conversa
-              </button>
-            )}
+            {mensagens.length > 0 && <BotaoNovaConversa onClick={novaConversa} desativado={enviando} />}
             <AjudaRecolhida rotulo="Como o diretor de motion funciona">
               Peça em palavras simples. Escolher storyboard, trocar a peça da cena e pedir still ou amostra ele faz na hora, com Desfazer. Gerar texto com IA, escrever cena sob medida, renderizar e montar vêm num cartão com o custo antes. O que você ensinar vira regra para os próximos filmes deste cliente.
+              <CapacidadesDoAgente capacidades={CAPACIDADES} />
             </AjudaRecolhida>
           </>
         }
@@ -149,25 +162,29 @@ export default function AgenteDoMotion(_: PropsDoAgenteDaMesa) {
         refDasMensagens={listaRef}
         compositor={
           <>
-            <OQuePossoFazer capacidades={CAPACIDADES} atalhos={ATALHOS_DO_MOTION} onAtalho={(t) => setRascunho(t)} />
-            <textarea
-              value={rascunho}
-              onChange={(e) => setRascunho(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void enviar();
-                }
+            <OQuePossoFazer
+              capacidades={CAPACIDADES}
+              mostrarCapacidades={false}
+              atalhos={ATALHOS_DO_MOTION}
+              onAtalho={(t) => {
+                setRascunho(t);
+                focarNoFim(campo, t);
               }}
-              rows={2}
+            />
+            <CampoDoAgente
+              ref={campo}
+              valor={rascunho}
+              aoMudar={setRascunho}
+              aoEnviar={() => void enviar()}
               maxLength={4000}
               disabled={!filmeId}
               placeholder={filmeId ? "Ex.: troca a cena 3 pelo cartão final e manda a amostra" : "Abra ou crie um filme na etapa"}
-              className={juntar(campoTexto, "min-h-[60px] resize-none")}
               aria-label="Mensagem ao diretor de motion"
             />
             <div className="flex min-w-0 items-center justify-between">
-              <div className="mr-2 min-w-0 truncate">{modelo && <EstimativaInline partes={[{ modeloId: modelo.id, tipo: "texto", tokensEntrada: TAMANHOS_DO_MOTION.conversa.entrada, tokensSaida: TAMANHOS_DO_MOTION.conversa.saida }]} />}</div>
+              <div className="mr-2 min-w-0">
+                <ModeloDoAgente catalogo={catalogo} modelo={modelo} escolhido={escolhido} onEscolher={setEscolhido} partes={PARTES_DA_CONVERSA} carregando={catalogoCarregando} disabled={enviando} />
+              </div>
               <div className="ml-auto flex min-w-0 items-center">
                 <Ditado valor={rascunho} onChange={setRascunho} disabled={enviando} className="mr-1.5 min-w-0" />
                 <button type="button" className={juntar(botao.primario, "h-9")} onClick={() => void enviar()} disabled={enviando || !rascunho.trim() || !filmeId} aria-label="Enviar ao diretor de motion">

@@ -1,18 +1,22 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Code2, Film, Loader2, Play, RotateCcw, Sparkles } from "lucide-react";
+import { ArrowRight, Clapperboard, Code2, Film, Loader2, Play, RotateCcw, Sparkles, Square } from "lucide-react";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
 import Painel from "@/components/sistema/Painel";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import { EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campo, campoTexto, juntar, texto } from "@/components/sistema/estilos";
 import { usd } from "@/lib/mesa/api";
 import { chamarMesaVideos } from "@/components/mesa-videos/videosApi";
-import { causaDoRender, pecaPorId, pedidoComACausa, tokensDeEntradaDaCena } from "../../../supabase/functions/_shared/cena-hf";
-import { TAMANHOS_DO_MOTION, TETO_PADRAO_DA_CENA_USD, type CenaDaLinha } from "../../../supabase/functions/_shared/motion-metodo";
+import { causaDoRender, pecaPorId, pedidoComACausa, tokensDeEntradaDaCena, type FormatoDoMotion } from "../../../supabase/functions/_shared/cena-hf";
+import { ROTULO_DA_ETAPA, type EtapaDoRender } from "../../../supabase/functions/_shared/render-do-editor";
+import { chaveDoPedido, renderDaCena, TAMANHOS_DO_MOTION, TETO_PADRAO_DA_CENA_USD, type CenaDaLinha } from "../../../supabase/functions/_shared/motion-metodo";
 import { ComFilme, ModeloDaAcao, useModeloDaAcao } from "./FilmeAberto";
 import CenaNaFila from "./CenaNaFila";
-import { chamarMotion, CHAVES, type FilaDoFilme, type Filme, uidDoClique, useFilaDoFilme, useGuardarFilme } from "./motionApi";
+import EditorDaCena from "./EditorDaCena";
+import { chamarMotion, CHAVES, erroDaChave, type FilaDoFilme, type Filme, finaisQueFaltam, pedidoAtivoDaChave, type PedidoDoMotion, resumoDasFinais, uidDoClique, useFilaDoFilme, useGuardarFilme } from "./motionApi";
 import { useAcoesDaCena } from "./useAcoesDaCena";
 import type { IrPara } from "@/components/mesa-videos/MesaDeVideo";
 
@@ -187,14 +191,114 @@ function PlanoDeVideo({ filme, cena, videos }: { filme: Filme; cena: CenaDaLinha
   );
 }
 
+const andamento = (p: PedidoDoMotion) => (p.estado === "fila" ? "na fila" : `${p.etapa ? ROTULO_DA_ETAPA[p.etapa as EtapaDoRender] || p.etapa : "renderizando"} ${Math.round((Number(p.progresso) || 0) * 100)}%`);
+
+/** Estado curto de um formato da final: na fila, 40%, pronto, desatualizado, erro ou falta. */
+function estadoDaFinal(filme: Filme, fila: FilaDoFilme | undefined, cena: CenaDaLinha, f: FormatoDoMotion): string {
+  const chave = chaveDoPedido(cena.id, "final", f);
+  const ativo = pedidoAtivoDaChave(fila, chave);
+  if (ativo) return ativo.estado === "fila" ? "na fila" : `${Math.round((Number(ativo.progresso) || 0) * 100)}%`;
+  const r = renderDaCena(filme, cena, "final", f);
+  if (r && r.saida_path) return r.em_dia ? "pronto" : "desatualizado";
+  return erroDaChave(fila, chave) ? "erro" : "falta";
+}
+
+function FinalDaCena({ filme, links, fila, cena, onCancelar }: { filme: Filme; links: Record<string, string>; fila: FilaDoFilme | undefined; cena: CenaDaLinha; onCancelar: (id: string) => void }) {
+  const comRender = filme.formatos.find((f) => {
+    const r = renderDaCena(filme, cena, "final", f);
+    return !!(r && r.saida_path);
+  });
+  const [escolhido, setEscolhido] = useState<string | null>(null);
+  const formato = (escolhido && filme.formatos.indexOf(escolhido as FormatoDoMotion) >= 0 ? escolhido : comRender || filme.formatos[0] || "9:16") as FormatoDoMotion;
+  return (
+    <div className="min-w-0" data-final-da-cena={cena.id}>
+      <span className={juntar(texto.rotulo, "mb-1 block")}>{filme.formatos.length > 1 ? "Cena final" : `Cena final ${formato} · ${estadoDaFinal(filme, fila, cena, formato)}`}</span>
+      {filme.formatos.length > 1 && (
+        <SeletorCompacto
+          className="mb-2"
+          rotulo="Formato da cena final"
+          listaQuandoNaoCabe
+          valor={formato}
+          onEscolher={setEscolhido}
+          opcoes={filme.formatos.map((f) => ({ valor: f, rotulo: `${f} ${estadoDaFinal(filme, fila, cena, f)}` }))}
+        />
+      )}
+      <CenaNaFila filme={filme} links={links} fila={fila} cena={cena} modo="final" formato={formato} onCancelar={onCancelar} compacta />
+      {filme.formatos
+        .filter((f) => f !== formato)
+        .map((f) => {
+          const chave = chaveDoPedido(cena.id, "final", f);
+          const ativo = pedidoAtivoDaChave(fila, chave);
+          const erro = ativo ? null : erroDaChave(fila, chave);
+          if (!ativo && !erro) return null;
+          return (
+            <p key={f} className={juntar(texto.auxiliar, "mt-1 flex items-center", erro ? "text-destructive" : "")} role={erro ? "alert" : undefined}>
+              {ativo ? <Loader2 className="mr-1.5 h-3 w-3 shrink-0 animate-spin" /> : null}
+              <span className="min-w-0 flex-1">
+                {f}: {ativo ? andamento(ativo) : erro!.erro_mensagem || "Não saiu."}
+              </span>
+              {ativo && (
+                <button type="button" className={juntar(botao.barra, "h-7")} onClick={() => onCancelar(ativo.id)}>
+                  <Square className="mr-1 h-3 w-3" />
+                  Cancelar
+                </button>
+              )}
+            </p>
+          );
+        })}
+    </div>
+  );
+}
+
 function Conteudo({ filme, links, irPara }: { filme: Filme; links: Record<string, string>; irPara: IrPara }) {
   const fila = useFilaDoFilme(filme.id);
   const a = useAcoesDaCena(filme);
   const insumos = useQuery({ queryKey: CHAVES.insumos(filme.id), queryFn: () => chamarMotion<{ videos: Video[] }>("insumos_ler", { filme_id: filme.id }), enabled: filme.tipo === "filme_marca", staleTime: 60_000 });
+  const [confirmar, setConfirmar] = useState(false);
+  // O "Confirmar" do lote de finais volta a ser o botão comum depois de uns segundos.
+  useEffect(() => {
+    if (!confirmar) return;
+    const t = window.setTimeout(() => setConfirmar(false), 6000);
+    return () => window.clearTimeout(t);
+  }, [confirmar]);
   const formato = filme.formatos[0] || "9:16";
+  const prints = Array.isArray(filme.insumos.prints) ? (filme.insumos.prints as Array<{ path: string; nome: string }>) : [];
+  const finais = finaisQueFaltam(filme, fila.data);
+  const amostras = filme.cenas
+    .map((c, i) => ({ c, numero: i + 1 }))
+    .filter(({ c }) => {
+      if (c.tipo_plano !== "hf" || pedidoAtivoDaChave(fila.data, chaveDoPedido(c.id, "amostra", formato))) return false;
+      const r = renderDaCena(filme, c, "amostra", formato);
+      return !r || !r.em_dia;
+    });
+
+  const pedirFinais = () => {
+    if (!confirmar) return setConfirmar(true);
+    setConfirmar(false);
+    void a.pedirEmLote("finais", finais.map((x) => ({ cenaId: x.cena.id, modo: "final" as const, formatos: x.formatos, rotulo: `Cena ${x.numero}` })));
+  };
+  const pedirAmostras = () => void a.pedirEmLote("amostras", amostras.map((x) => ({ cenaId: x.c.id, modo: "amostra" as const, rotulo: `Cena ${x.numero}` })));
+
+  if (!filme.cenas.length) return <EstadoVazio icone={<Clapperboard className="h-5 w-5" />} titulo="Escolha um storyboard antes" acao={<button type="button" className={botao.secundario} onClick={() => irPara("storyboards")}>Abrir os storyboards</button>} />;
   return (
     <div className="min-w-0 space-y-6">
-      <Secao titulo="Construção" descricao={`${filme.cenas.length} cenas · formatos ${filme.formatos.join(", ")}`} ajuda="Amostra de 5 s em meia resolução para conferir o movimento; a final sai em WebM com alfa em cada formato e entra na linha do tempo da Mesa Edição. O worker roda lint e check do HyperFrames: erro volta como aviso, sem nova tentativa sozinha.">
+      <Secao
+        titulo="Construção"
+        descricao={`${filme.cenas.length} cenas · formatos ${filme.formatos.join(", ")}`}
+        ajuda="Amostra de 5 s em meia resolução para conferir o movimento; a final sai em WebM com alfa em cada formato e entra na linha do tempo da Mesa Edição. O worker roda lint e check do HyperFrames: erro volta como aviso, sem nova tentativa sozinha. Dica: faça o Som (trilha e cortes na batida) antes das cenas finais, porque casar os cortes muda a duração e a final sai de novo."
+        acao={
+          <>
+            <button type="button" className={botao.primario} onClick={pedirFinais} disabled={!finais.length || !!a.lote} data-pedir-finais={confirmar ? "confirmar" : ""}>
+              {a.lote === "finais" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Film className="mr-1 h-3.5 w-3.5" />}
+              {confirmar ? `Confirmar: ${resumoDasFinais(finais)}` : `Cenas finais que faltam (${finais.length ? resumoDasFinais(finais) : "0"})`}
+            </button>
+            <button type="button" className={botao.secundario} onClick={pedirAmostras} disabled={!amostras.length || !!a.lote} data-pedir-amostras="">
+              {a.lote === "amostras" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+              Amostras que faltam ({amostras.length})
+            </button>
+          </>
+        }
+      >
         {fila.data && fila.data.worker.situacao !== "ligado" && <p className={juntar(texto.auxiliar, "text-warning")}>A máquina da agência (worker de render) não está ligada: os pedidos esperam na fila.</p>}
       </Secao>
       {filme.cenas.map((c, i) => (
@@ -213,7 +317,7 @@ function Conteudo({ filme, links, irPara }: { filme: Filme; links: Record<string
                   <Play className="mr-1 h-3.5 w-3.5" />
                   Amostra de 5 s
                 </button>
-                <button type="button" className={juntar(botao.primario, "mb-2")} onClick={() => void a.pedir(c.id, "final")} disabled={a.ocupado === `${c.id}:final`}>
+                <button type="button" className={juntar(botao.secundario, "mb-2")} onClick={() => void a.pedir(c.id, "final")} disabled={a.ocupado === `${c.id}:final`}>
                   <Film className="mr-1 h-3.5 w-3.5" />
                   Cena final ({filme.formatos.length} formato{filme.formatos.length > 1 ? "s" : ""})
                 </button>
@@ -223,13 +327,11 @@ function Conteudo({ filme, links, irPara }: { filme: Filme; links: Record<string
                   <span className={juntar(texto.rotulo, "mb-1 block")}>Amostra {formato}</span>
                   <CenaNaFila filme={filme} links={links} fila={fila.data} cena={c} modo="amostra" formato={formato} onCancelar={(id) => void a.cancelar(id)} />
                 </div>
-                {filme.formatos.map((f) => (
-                  <div key={f} className="min-w-0">
-                    <span className={juntar(texto.rotulo, "mb-1 block")}>Final {f}</span>
-                    <CenaNaFila filme={filme} links={links} fila={fila.data} cena={c} modo="final" formato={f} onCancelar={(id) => void a.cancelar(id)} compacta />
-                  </div>
-                ))}
+                <FinalDaCena filme={filme} links={links} fila={fila.data} cena={c} onCancelar={(id) => void a.cancelar(id)} />
               </div>
+              <Secao titulo="Textos da cena" nivel={3} recolher={`mesa-motion:cena:${c.id}`} recolhidaDeInicio>
+                <EditorDaCena filme={filme} cena={c} prints={prints} links={links} />
+              </Secao>
               <Secao titulo="Escrever sob medida" nivel={3} recolher={`mesa-motion:escrever:${c.id}`} recolhidaDeInicio ajuda="O modelo escreve só o miolo (HTML, CSS e GSAP); o invólucro, as cores, as fontes e a logo são do código. A conferência recusa rede, relógio, sorteio e laço infinito.">
                 <EscreverCena filme={filme} cena={c} fila={fila.data} />
               </Secao>
@@ -246,5 +348,5 @@ function Conteudo({ filme, links, irPara }: { filme: Filme; links: Record<string
 }
 
 export default function EtapaConstrucao({ irPara }: { irPara: IrPara }) {
-  return <ComFilme>{(filme, links) => <Conteudo key={filme.id} filme={filme} links={links} irPara={irPara} />}</ComFilme>;
+  return <ComFilme irPara={irPara}>{(filme, links) => <Conteudo key={filme.id} filme={filme} links={links} irPara={irPara} />}</ComFilme>;
 }

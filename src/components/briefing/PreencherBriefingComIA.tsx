@@ -20,33 +20,40 @@ import { type PreviaDoPreenchimento, chamarAgenteDoBriefing, textoDoErroDoBriefi
 
 type Fontes = { site: boolean; instagram: boolean; contexto: boolean };
 
-export default function PreencherBriefingComIA({
+/**
+ * O modelo, o custo e o botão Gerar (frente UXS): só montam com a seção
+ * aberta, então abrir a leitura não chama a estimativa nem o catálogo à toa.
+ * O texto colado, as fontes e a prévia ficam no componente de fora: recolher
+ * a seção não perde nada.
+ */
+function ModeloECusto({
   briefingId,
-  temDesfazer,
-  onMudou,
+  modeloId,
+  onModelo,
+  caracteres,
+  fontes,
+  substituir,
+  temMaterial,
+  ocupado,
+  gerando,
+  onGerar,
 }: {
   briefingId: string;
-  /** Há um preenchimento aplicado que ainda dá para desfazer. */
-  temDesfazer: boolean;
-  onMudou: () => void;
+  modeloId: string;
+  onModelo: (id: string) => void;
+  caracteres: number;
+  fontes: Fontes;
+  substituir: boolean;
+  temMaterial: boolean;
+  ocupado: boolean;
+  gerando: boolean;
+  onGerar: (modelo: string) => void;
 }) {
   const catalogo = useCatalogo();
   const padrao = modeloDoPapel(catalogo.data || [], "briefing");
-  const [modeloId, setModeloId] = useState("");
-  const [reuniao, setReuniao] = useState("");
-  const [conversa, setConversa] = useState("");
-  const [fontes, setFontes] = useState<Fontes>({ site: true, instagram: true, contexto: true });
-  const [substituir, setSubstituir] = useState(false);
-  const [previa, setPrevia] = useState<PreviaDoPreenchimento | null>(null);
-  const [escolhidas, setEscolhidas] = useState<string[]>([]);
-  const [ocupado, setOcupado] = useState<"" | "gerando" | "aplicando" | "desfazendo">("");
-  const [erro, setErro] = useState<string | null>(null);
-  const [podeDesfazer, setPodeDesfazer] = useState(temDesfazer);
-  useEffect(() => setPodeDesfazer(temDesfazer), [temDesfazer]);
-
   const modelo = modeloId || (padrao ? padrao.id : "");
   // A estimativa só muda de faixa em faixa (a cada 2 mil caracteres), para não chamar a cada tecla.
-  const faixa = Math.ceil((reuniao.length + conversa.length) / 2000);
+  const faixa = Math.ceil(caracteres / 2000);
   const estimativa = useQuery({
     queryKey: ["briefing-preencher-estimar", briefingId, modelo, faixa, fontes.site, fontes.instagram, fontes.contexto, substituir],
     enabled: !!modelo,
@@ -60,9 +67,47 @@ export default function PreencherBriefingComIA({
       }),
     staleTime: 60_000,
   });
+  return (
+    <div className="grid min-w-0 grid-cols-1 items-end gap-4 sm:grid-cols-2">
+      <SeletorDeModelo catalogo={catalogo.data || []} tipo="texto" rotulo="Modelo" valor={modelo} onChange={onModelo} />
+      <div className="flex min-w-0 flex-wrap items-center justify-end">
+        <span className={juntar(texto.auxiliar, "mr-3")}>
+          {estimativa.isFetching ? "Calculando o custo..." : estimativa.data ? `${estimativa.data.campos} perguntas · cerca de ${usd(estimativa.data.custo_usd)}` : estimativa.isError ? textoDoErroDoBriefing(estimativa.error) : ""}
+        </span>
+        <button type="button" onClick={() => onGerar(modelo)} disabled={ocupado || !modelo || !temMaterial || !estimativa.data || !estimativa.data.campos} className={botao.primario}>
+          {gerando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="mr-1.5 h-4 w-4" aria-hidden="true" />}
+          {gerando ? "Lendo o material..." : "Gerar prévia"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function PreencherBriefingComIA({
+  briefingId,
+  temDesfazer,
+  onMudou,
+}: {
+  briefingId: string;
+  /** Há um preenchimento aplicado que ainda dá para desfazer. */
+  temDesfazer: boolean;
+  onMudou: () => void;
+}) {
+  const [modeloId, setModeloId] = useState("");
+  const [reuniao, setReuniao] = useState("");
+  const [conversa, setConversa] = useState("");
+  const [fontes, setFontes] = useState<Fontes>({ site: true, instagram: true, contexto: true });
+  const [substituir, setSubstituir] = useState(false);
+  const [previa, setPrevia] = useState<PreviaDoPreenchimento | null>(null);
+  const [escolhidas, setEscolhidas] = useState<string[]>([]);
+  const [ocupado, setOcupado] = useState<"" | "gerando" | "aplicando" | "desfazendo">("");
+  const [erro, setErro] = useState<string | null>(null);
+  const [podeDesfazer, setPodeDesfazer] = useState(temDesfazer);
+  useEffect(() => setPodeDesfazer(temDesfazer), [temDesfazer]);
+
   const temMaterial = reuniao.trim().length + conversa.trim().length >= 40 || fontes.site || fontes.instagram;
 
-  const gerar = async () => {
+  const gerar = async (modelo: string) => {
     setOcupado("gerando");
     setErro(null);
     try {
@@ -156,18 +201,18 @@ export default function PreencherBriefingComIA({
               Substituir o que já tem
             </label>
           </div>
-          <div className="grid min-w-0 grid-cols-1 items-end gap-4 sm:grid-cols-2">
-            <SeletorDeModelo catalogo={catalogo.data || []} tipo="texto" rotulo="Modelo" valor={modelo} onChange={setModeloId} />
-            <div className="flex min-w-0 flex-wrap items-center justify-end">
-              <span className={juntar(texto.auxiliar, "mr-3")}>
-                {estimativa.isFetching ? "Calculando o custo..." : estimativa.data ? `${estimativa.data.campos} perguntas · cerca de ${usd(estimativa.data.custo_usd)}` : estimativa.isError ? textoDoErroDoBriefing(estimativa.error) : ""}
-              </span>
-              <button type="button" onClick={() => void gerar()} disabled={!!ocupado || !modelo || !temMaterial || !estimativa.data || !estimativa.data.campos} className={botao.primario}>
-                {ocupado === "gerando" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="mr-1.5 h-4 w-4" aria-hidden="true" />}
-                {ocupado === "gerando" ? "Lendo o material..." : "Gerar prévia"}
-              </button>
-            </div>
-          </div>
+          <ModeloECusto
+            briefingId={briefingId}
+            modeloId={modeloId}
+            onModelo={setModeloId}
+            caracteres={reuniao.length + conversa.length}
+            fontes={fontes}
+            substituir={substituir}
+            temMaterial={temMaterial}
+            ocupado={!!ocupado}
+            gerando={ocupado === "gerando"}
+            onGerar={(m) => void gerar(m)}
+          />
           {erro && <p className="text-[13px] text-destructive" role="alert">{erro}</p>}
         </div>
       ) : (

@@ -98,12 +98,12 @@ export default function Versoes({ site, trabalhos }: { site: LinhaDoSite; trabal
           return (
             <li key={t.id} className="min-w-0">
               <div className={lista.linha}>
-                <button type="button" className="mr-2 flex min-w-0 flex-1 items-center text-left" onClick={() => setAberta(aqui ? null : chave)} aria-expanded={aqui}>
+                <button type="button" className="mr-2 flex min-w-0 flex-1 items-center text-left" onClick={() => setAberta(aqui ? null : chave)} aria-expanded={aqui} title={t.commit ? `Commit ${String(t.commit).slice(0, 12)}` : undefined}>
                   {aqui ? <ChevronDown className="mr-1.5 h-4 w-4 shrink-0" /> : <ChevronRight className="mr-1.5 h-4 w-4 shrink-0" />}
                   <span className="min-w-0 flex-1">
                     <span className={juntar(texto.corpo, "block truncate")}>{t.instrucao || ROTULO_DO_TIPO[t.tipo]}</span>
                     <span className={juntar(texto.auxiliar, "block truncate")}>
-                      {dataEHora(t.terminado_em || t.criado_em)} · {String(t.commit || "").slice(0, 8)}
+                      {dataEHora(t.terminado_em || t.criado_em)}
                       {arquivos.length ? ` · ${arquivos.length} arquivo(s)` : ""}
                     </span>
                   </span>

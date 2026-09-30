@@ -48,6 +48,41 @@ export async function chamarAgenteDoBriefing<T = any>(acao: string, corpo: Recor
   return data as T;
 }
 
+/** Resposta de uma consulta do Supabase (o mínimo que as telas do briefing usam). */
+export type RespostaSolta<T> = { data: T | null; error: { code?: string; message?: string } | null; count?: number | null };
+/**
+ * Consulta com a lista de colunas montada em texto (colunas novas com volta
+ * sem elas): o tipo gerado do Supabase não entende a string montada; este é
+ * o mínimo que a lista e a leitura dos briefings usam.
+ */
+export interface ConsultaSolta<T> extends PromiseLike<RespostaSolta<T>> {
+  select(colunas: string): ConsultaSolta<T>;
+  eq(coluna: string, valor: unknown): ConsultaSolta<T>;
+  is(coluna: string, valor: null): ConsultaSolta<T>;
+  not(coluna: string, operador: string, valor: unknown): ConsultaSolta<T>;
+  in(coluna: string, valores: unknown[]): ConsultaSolta<T>;
+  order(coluna: string, opcoes: { ascending: boolean }): ConsultaSolta<T>;
+  limit(n: number): ConsultaSolta<T>;
+  maybeSingle(): PromiseLike<RespostaSolta<T>>;
+}
+export function consultaSolta<T>(tabela: string): ConsultaSolta<T> {
+  return (supabase as unknown as { from: (t: string) => ConsultaSolta<T> }).from(tabela);
+}
+
+/** O que cada sugestão faz no contexto (mesmo tempo verbal nos dois blocos de "Levar para o contexto"). */
+export const ROTULO_DO_MODO_DA_SUGESTAO: Record<string, string> = { preencher: "Preenche", juntar: "Acrescenta", substituir: "Substitui" };
+
+/**
+ * Erro de coluna que o banco ainda não tem (migração da frente BRF2 não
+ * aplicada): a leitura repete sem as colunas novas e trata como vazias.
+ * Qualquer outro erro continua sendo erro.
+ */
+export function ehErroDeColuna(e: unknown): boolean {
+  if (!e || typeof e !== "object") return false;
+  const x = e as { code?: unknown; message?: unknown };
+  return x.code === "42703" || /column .* does not exist/i.test(String(x.message || ""));
+}
+
 export function textoDoErroDoBriefing(e: unknown, padrao = "Não foi possível concluir. Tente de novo."): string {
   if (e instanceof ErroDoBriefing) return e.message;
   const m = (e as any)?.message;

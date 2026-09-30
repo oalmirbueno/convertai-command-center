@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowRight, Loader2, Scale } from "lucide-react";
+import { EstadoVazio } from "@/components/sistema/Estados";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
@@ -47,6 +48,7 @@ function Conteudo({ filme, links, irPara }: { filme: Filme; links: Record<string
     }
   };
 
+  if (!filme.cenas.length) return <EstadoVazio icone={<Scale className="h-5 w-5" />} titulo="Escolha um storyboard antes" acao={<button type="button" className={botao.secundario} onClick={() => irPara("storyboards")}>Abrir os storyboards</button>} />;
   return (
     <div className="min-w-0 space-y-6">
       <Secao
@@ -64,10 +66,11 @@ function Conteudo({ filme, links, irPara }: { filme: Filme; links: Record<string
       </Secao>
       {filme.cenas
         .filter((c) => c.tipo_plano === "hf")
-        .map((c, i) => {
+        .map((c) => {
           const cr = porCena[c.id];
+          // O número da cena é o do filme (o mesmo das outras etapas), não o da lista filtrada.
           return (
-            <Painel key={c.id} titulo={`${i + 1}. ${c.titulo}`} descricao={cr && cr.media !== null ? `Média ${cr.media} · ${cr.base}` : "Sem nota"} recolher={`mesa-motion:critica:${c.id}`}>
+            <Painel key={c.id} titulo={`${filme.cenas.indexOf(c) + 1}. ${c.titulo}`} descricao={cr && cr.media !== null ? `Média ${cr.media} · ${cr.base}` : "Sem nota"} recolher={`mesa-motion:critica:${c.id}`}>
               <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
                 <CenaNaFila filme={filme} links={links} fila={fila.data} cena={c} modo="final" formato={formato} onCancelar={(id) => void a.cancelar(id)} />
                 {cr && (
@@ -98,5 +101,5 @@ function Conteudo({ filme, links, irPara }: { filme: Filme; links: Record<string
 }
 
 export default function EtapaCritica({ irPara }: { irPara: IrPara }) {
-  return <ComFilme>{(filme, links) => <Conteudo key={filme.id} filme={filme} links={links} irPara={irPara} />}</ComFilme>;
+  return <ComFilme irPara={irPara}>{(filme, links) => <Conteudo key={filme.id} filme={filme} links={links} irPara={irPara} />}</ComFilme>;
 }

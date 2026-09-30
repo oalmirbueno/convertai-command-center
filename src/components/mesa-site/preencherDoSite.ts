@@ -1,6 +1,6 @@
 import type { CampoParaPreencher } from "@/components/sistema";
 import { ehTipoDeSite, mapaDoSite, mapaPadrao, TIPOS_DE_SITE, type TipoDeSite } from "../../../supabase/functions/_shared/site-biblioteca";
-import { NICHOS as NICHOS_DO_SITE } from "../../../supabase/functions/_shared/site-metodo";
+import { NICHOS as NICHOS_DO_SITE, PERGUNTAS_DO_BRIEFING_DO_SITE } from "../../../supabase/functions/_shared/site-metodo";
 import type { LinhaDoSite } from "./siteApi";
 
 /**
@@ -11,16 +11,20 @@ import type { LinhaDoSite } from "./siteApi";
  * campos e a volta para as ações da função mesa-site.
  */
 
-export const PERGUNTAS_DO_BRIEFING_NA_TELA = [
-  { id: "objetivo", rotulo: "O que o site precisa fazer acontecer", dica: "uma frase de resultado para o negócio" },
-  { id: "publico", rotulo: "Para quem é", dica: "quem compra e o que procura" },
-  { id: "oferta", rotulo: "O que o cliente vende ou oferece", dica: "serviços ou produtos principais, sem preço inventado" },
-  { id: "diferenciais", rotulo: "Por que escolher o cliente", dica: "diferenciais concretos das fontes" },
-  { id: "acao", rotulo: "Qual o próximo passo do visitante (WhatsApp, formulário, agenda)", dica: "o CTA principal" },
-  { id: "referencias", rotulo: "Sites que o cliente admira", dica: "só endereços que aparecem nas fontes" },
-  { id: "evitar", rotulo: "O que evitar", dica: "o que o cliente não quer ver" },
-  { id: "dominio", rotulo: "Domínio (se já tiver)", dica: "só se estiver nas fontes; nunca inventar" },
-];
+/** As perguntas do briefing (a mesma lista que a função mesa-site devolve: site-metodo.ts). */
+export const PERGUNTAS_DO_BRIEFING_NA_TELA: Array<{ id: string; rotulo: string; dica?: string }> = PERGUNTAS_DO_BRIEFING_DO_SITE;
+
+/**
+ * As perguntas da tela na hora (sem esperar o servidor) e, pelo id, as que o
+ * servidor mandar a mais (entram no fim, sem substituir as da lista).
+ */
+export function perguntasDaTela(doServidor?: Array<{ id: string; rotulo: string }> | null): Array<{ id: string; rotulo: string }> {
+  const base = PERGUNTAS_DO_BRIEFING_NA_TELA.map((p) => ({ id: p.id, rotulo: p.rotulo }));
+  (doServidor || []).forEach((p) => {
+    if (p && typeof p.id === "string" && p.id && !base.some((x) => x.id === p.id)) base.push({ id: p.id, rotulo: String(p.rotulo || p.id) });
+  });
+  return base;
+}
 
 const txt = (v: unknown) => (typeof v === "string" ? v : v === null || v === undefined ? "" : Array.isArray(v) ? v.join(", ") : String(v));
 

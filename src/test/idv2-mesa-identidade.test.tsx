@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createElement as h } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -523,7 +523,9 @@ import { ProjetoProvider, type ProjetoDaMesa } from "@/components/mesa-identidad
 import EtapaEstrategia from "@/components/mesa-identidade/EtapaEstrategia";
 
 describe("IDV2: tela da Estratégia", () => {
-  it("os 12 arquétipos como escolha, os eixos e a frase montada pelas partes", async () => {
+  it("os 12 arquétipos como escolha, os eixos e a frase montada pelas partes (grava sozinha, só o que mudou)", async () => {
+    // UXS 30/09 (IDV-02): sem o Salvar; grava 800 ms depois da última mudança (relógio falso).
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const salvarParte = vi.fn(async () => projeto as any);
     const projeto = {
       id: "33333333-3333-4333-8333-333333333333", client_id: C, marca_id: null, modo: "zero", com_naming: true, titulo: "Forno", etapa: "estrategia", concluidas: ["inicio", "briefing", "pesquisa"],
@@ -545,15 +547,26 @@ describe("IDV2: tela da Estratégia", () => {
     expect(document.querySelectorAll("[data-eixo]").length).toBe(6);
     fireEvent.click(screen.getByRole("button", { name: "Montar a frase pelas partes" }));
     expect((screen.getByDisplayValue(/Para famílias do bairro, Forno Vivo é a padaria/) as HTMLTextAreaElement).value).toBe("Para famílias do bairro, Forno Vivo é a padaria de fermentação natural que faz o pão na sua frente.");
-    // Salvar grava a estratégia inteira (normalizada) na parte "estrategia".
-    fireEvent.click(document.querySelector("[data-salvar-estrategia]") as HTMLButtonElement);
-    await vi.waitFor(() => expect(salvarParte).toHaveBeenCalled());
-    const [parte, valor, opcoes] = salvarParte.mock.calls[0] as unknown as [string, any, any];
-    expect(parte).toBe("estrategia");
-    expect(valor.arquetipo.principal).toBe("sabio");
-    expect(opcoes).toEqual({ substituir: true });
-    // Cada seção tem o "Preencher tudo" da peça comum.
-    expect(screen.getAllByRole("button", { name: /Preencher tudo/ }).length).toBeGreaterThanOrEqual(8);
+    try {
+      // Nada grava enquanto a pessoa ainda mexe; 800 ms depois, grava a parte "estrategia" sem substituir a inteira.
+      expect(salvarParte).not.toHaveBeenCalled();
+      await act(async () => {
+        vi.advanceTimersByTime(800);
+      });
+      await vi.waitFor(() => expect(salvarParte).toHaveBeenCalled());
+      const [parte, valor, opcoes] = salvarParte.mock.calls[0] as unknown as [string, any, any];
+      expect(parte).toBe("estrategia");
+      expect(valor.arquetipo.principal).toBe("sabio");
+      expect(valor.posicionamento.declaracao).toContain("Forno Vivo");
+      expect(typeof valor.atualizado_em).toBe("string");
+      expect(opcoes).toBeUndefined();
+      // O "Salvar agora" continua (discreto) e só vale com mudança pendente.
+      expect(document.querySelector("[data-salvar-estrategia]")).toBeTruthy();
+      // Cada seção tem o "Preencher tudo" da peça comum.
+      expect(screen.getAllByRole("button", { name: /Preencher tudo/ }).length).toBeGreaterThanOrEqual(8);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

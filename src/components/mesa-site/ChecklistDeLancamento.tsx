@@ -4,55 +4,34 @@ import { CheckCircle2, Circle, CircleAlert } from "lucide-react";
 import Secao from "@/components/sistema/Secao";
 import { useKitDaMesa } from "@/components/mesa/kitDaMesa";
 import { botao, etiqueta, juntar, lista, texto } from "@/components/sistema/estilos";
-import { mapaDoSite, normalizarEstilo, secaoDaBiblioteca, secoesDoMapa, slotsDoMapa, slotsVazios } from "../../../supabase/functions/_shared/site-biblioteca";
-import { checklistDeLancamento, type ItemDoChecklist, normalizarIntegracoes, normalizarSeo, pendentesObrigatorios } from "../../../supabase/functions/_shared/site-lancamento";
+import { checklistDeLancamento, type ItemDoChecklist, pendentesObrigatorios } from "../../../supabase/functions/_shared/site-lancamento";
 import type { AvisoDeQa } from "../../../supabase/functions/_shared/site-metodo";
 import type { TrabalhoDoMotor } from "../../../supabase/functions/_shared/motor-codigo";
 import { CHAVES, chamarSite, type LinhaDoSite, montadoDepoisDasMudancas, secoesConstruidas } from "./siteApi";
+import { estadoDaLinha } from "./estadoDoSite";
 
 const ROTULO_DA_ETAPA: Record<string, string> = { briefing: "Briefing", direcao: "Direção", conteudo: "Conteúdo", imagens: "Imagens", integracoes: "Integrações e SEO", construcao: "Construção", revisao: "Revisão", publicacao: "Publicação" };
 
-/** O checklist do site (puro sobre o que a tela já tem). UXM: `pendenciasDeUx` (críticas e altas) vira um item não obrigatório. */
+/** O checklist do site (puro sobre o que a tela já tem; a montagem da linha é a mesma da barra das etapas). UXM: `pendenciasDeUx` (críticas e altas) vira um item não obrigatório. */
 export function useChecklistDoSite(site: LinhaDoSite, trabalhos: TrabalhoDoMotor[], pendenciasDeUx?: number | null): ItemDoChecklist[] {
   const kit = useKitDaMesa();
   const publicacao = useQuery({ queryKey: CHAVES.publicacao(site.id), queryFn: () => chamarSite<{ dominio: string | null; estado: string }>("publicacao_estado", { site_id: site.id }) });
   return useMemo(() => {
-    const mapa = mapaDoSite(site);
-    const secoes = secoesDoMapa(mapa);
     const ultimo = trabalhos.find((t) => t.estado === "feito" && (Array.isArray(t.resultado.qa) || !!t.resultado.build)) || null;
     const qa = ultimo && Array.isArray(ultimo.resultado.qa) ? (ultimo.resultado.qa as AvisoDeQa[]) : [];
     const build = ultimo ? (ultimo.resultado.build as { ok?: boolean } | undefined) : undefined;
-    const integracoes = normalizarIntegracoes(site.integracoes || {});
-    const seo = normalizarSeo(site.seo || {});
-    const imagens = (site.imagens || []) as Array<{ slot: string; secao?: string | null; escolhida?: boolean; origem?: string }>;
-    const usa = (t: "formulario" | "mapa") =>
-      mapa.paginas.some((p) =>
-        p.secoes.some((s) => {
-          const lib = secaoDaBiblioteca(s.tipo);
-          return !!(lib && lib.integra && lib.integra.indexOf(t) >= 0);
-        }),
-      );
-    return checklistDeLancamento({
-      briefingSalvo: !!(site.briefing && (site.briefing.salvo_em || site.briefing.fonte === "brf")),
-      temMapa: secoes.length > 0,
-      secoes,
-      construidas: secoesConstruidas(trabalhos),
-      preset: !!normalizarEstilo(site.estilo || {}).preset,
-      copyEscolhida: typeof site.conteudo.escolhida === "number",
-      slotsVazios: slotsVazios(slotsDoMapa(mapa, imagens)),
-      buildOk: build ? build.ok !== false : null,
-      avisosDeQa: qa.length,
-      seo,
-      temOgImagem: !!seo.og_imagem || imagens.some((i) => i.slot === "hero" && i.escolhida !== false),
-      temLogo: !!(kit.data && (kit.data.logo_path || kit.data.logo_file_id)),
-      integracoes,
-      secoesComFormulario: usa("formulario"),
-      secoesComMapa: usa("mapa"),
-      dominio: publicacao.data ? publicacao.data.dominio : null,
-      dominioVerificado: !!publicacao.data && publicacao.data.estado === "verificado",
-      construidoDepoisDasMudancas: montadoDepoisDasMudancas(site, trabalhos),
-      pendenciasDeUx: pendenciasDeUx === undefined ? null : pendenciasDeUx,
-    });
+    return checklistDeLancamento(
+      estadoDaLinha(site, {
+        construidas: secoesConstruidas(trabalhos),
+        buildOk: build ? build.ok !== false : null,
+        avisosDeQa: qa.length,
+        temLogo: !!(kit.data && (kit.data.logo_path || kit.data.logo_file_id)),
+        dominio: publicacao.data ? publicacao.data.dominio : null,
+        dominioVerificado: !!publicacao.data && publicacao.data.estado === "verificado",
+        construidoDepoisDasMudancas: montadoDepoisDasMudancas(site, trabalhos),
+        pendenciasDeUx: pendenciasDeUx === undefined ? null : pendenciasDeUx,
+      }),
+    );
   }, [site, trabalhos, publicacao.data, kit.data, pendenciasDeUx]);
 }
 

@@ -7,7 +7,8 @@
  *   retrato leva só nome, justificativa e pronúncia). Nada vai ao cliente por aqui: a equipe copia o link.
  * - naming_votacao_fechar { rodada_id } -> { fechada_em }
  * - naming_votar { rodada_id, votos: [{ candidato_id, nota 1..5 }], comentario? } -> { resumo } (voto da equipe)
- * - naming_votos { rodada_id } -> { votos, resumo, votacao }
+ * - naming_votos { rodada_id } -> { votos, resumo, votacao, minhas } (minhas: as notas de quem chamou, por
+ *   candidato; UXS 30/09. A chave de quem votou nunca sai daqui.)
  * - moodboard_web { projeto_id, busca, pagina? } -> { itens } (Openverse, com fonte e licença; sem custo)
  */
 
@@ -24,6 +25,7 @@ import {
   perguntasDoRiscoDeIdioma,
   resumoDosVotos,
   retratoDaVotacao,
+  separarMinhas,
   riscoPelaProbabilidade,
   type VotoDoNome,
 } from "./modulos/naming.ts";
@@ -152,10 +154,13 @@ export async function namingVotacaoFechar(ch: Chamador, corpo: Record<string, un
   return json({ rodada_id: r.id, fechada_em: agora, custo_usd: 0 });
 }
 
-async function lerVotos(rodadaId: string): Promise<Array<VotoDoNome & { votante: string; comentario: string | null; atualizado_em: string }>> {
-  const { data, error } = await servico().from("idv_naming_votos").select("candidato_id, origem, votante, nota, comentario, atualizado_em").eq("rodada_id", rodadaId).order("atualizado_em", { ascending: false }).limit(500);
+type VotoLido = VotoDoNome & { votante: string; comentario: string | null; atualizado_em: string };
+
+/** Os votos da rodada; `chave` (quem votou) fica só no servidor, para achar as notas de quem chamou. */
+async function lerVotos(rodadaId: string): Promise<Array<VotoLido & { chave: string }>> {
+  const { data, error } = await servico().from("idv_naming_votos").select("candidato_id, origem, votante, votante_chave, nota, comentario, atualizado_em").eq("rodada_id", rodadaId).order("atualizado_em", { ascending: false }).limit(500);
   if (error) throw semColunaDeVotacao(error) ? new ErroHttp(503, "banco_sem_votacao", AVISO_SEM_VOTACAO) : erroDoBanco(error, "votos_indisponiveis", "Não foi possível ler os votos.");
-  return ((data as Array<Record<string, unknown>> | null) || []).map((v) => ({ candidato_id: String(v.candidato_id), origem: v.origem === "cliente" ? "cliente" : "equipe", nota: Number(v.nota) || 0, votante: String(v.votante || ""), comentario: typeof v.comentario === "string" ? v.comentario : null, atualizado_em: String(v.atualizado_em || "") }));
+  return ((data as Array<Record<string, unknown>> | null) || []).map((v) => ({ candidato_id: String(v.candidato_id), origem: v.origem === "cliente" ? "cliente" : "equipe", nota: Number(v.nota) || 0, votante: String(v.votante || ""), comentario: typeof v.comentario === "string" ? v.comentario : null, atualizado_em: String(v.atualizado_em || ""), chave: String(v.votante_chave || "") }));
 }
 
 /** Voto da equipe: uma nota (1 a 5) por finalista, por pessoa (a de novo substitui). */
@@ -182,16 +187,18 @@ export async function namingVotos(ch: Chamador, corpo: Record<string, unknown>) 
   const r = await lerRodada(ch, corpo.rodada_id);
   const { data: v, error } = await servico().from("idv_naming_rodadas").select(CAMPOS_DA_VOTACAO).eq("id", r.id).maybeSingle();
   if (error) {
-    if (semColunaDeVotacao(error)) return json({ votos: [], resumo: {}, votacao: null, aviso: AVISO_SEM_VOTACAO, custo_usd: 0 });
+    if (semColunaDeVotacao(error)) return json({ votos: [], minhas: {}, resumo: {}, votacao: null, aviso: AVISO_SEM_VOTACAO, custo_usd: 0 });
     throw erroDoBanco(error, "votacao_indisponivel", "Não foi possível ler a votação.");
   }
-  const votos = await lerVotos(r.id).catch((e) => {
+  const lidos = await lerVotos(r.id).catch((e) => {
     if (e instanceof ErroHttp && e.codigo === "banco_sem_votacao") return [];
     throw e;
   });
+  const { votos, minhas } = separarMinhas(lidos, ch.userId);
   const linha = (v || {}) as { votacao_token?: string | null; votacao_aberta_em?: string | null; votacao_fechada_em?: string | null };
   return json({
     votos,
+    minhas,
     resumo: resumoDosVotos(votos),
     votacao: linha.votacao_token ? { caminho: `/nomes/${linha.votacao_token}`, aberta_em: linha.votacao_aberta_em || null, fechada_em: linha.votacao_fechada_em || null } : null,
     custo_usd: 0,

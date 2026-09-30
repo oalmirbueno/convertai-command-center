@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
@@ -170,6 +170,28 @@ describe("etapa Editar: editor completo e agente editor na lateral", () => {
     // Os atalhos das skills estão lá.
     expect(lateral.querySelector('[data-atalho-do-editor="brabo"]')).toBeTruthy();
   }, 20000);
+
+  it("?versao= (link da Mesa Motion) abre essa versão e sai do endereço; id que não é editável cai na mais nova", async () => {
+    const V2 = "44444444-4444-4444-8444-444444444444";
+    mock.tabelas.video_versoes = [versao(), { ...versao(), id: V2, numero: 2, titulo: "Reel motion", criado_em: "2026-09-25T10:00:00Z" }];
+    function Onde() {
+      return h("span", { "data-onde": useLocation().search });
+    }
+    const abrir = (versaoPedida: string) => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      return render(h(QueryClientProvider, { client: qc }, h(MemoryRouter, { initialEntries: [`/mesa-edicao?client=${CLIENTE}&etapa=editar&versao=${versaoPedida}`] }, h(TooltipProvider, null, h(MesaProvider, { valor: valor(), children: h("div", null, h(AreaDoEditor, { projeto: projeto(), roteiroId: null, agenteNaLateral: false }), h(Onde)) })))));
+    };
+    const um = abrir(V2);
+    const seletor = (await screen.findByRole("combobox", { name: "Versão em edição" }, { timeout: 8000 })) as HTMLSelectElement;
+    expect(seletor.value).toBe(V2);
+    await waitFor(() => expect((document.querySelector("[data-onde]") as HTMLElement).getAttribute("data-onde")).not.toContain("versao="));
+    expect((document.querySelector("[data-onde]") as HTMLElement).getAttribute("data-onde")).toContain("etapa=editar");
+    um.unmount();
+    window.localStorage.clear();
+    abrir("99999999-9999-4999-8999-999999999999");
+    const outro = (await screen.findByRole("combobox", { name: "Versão em edição" }, { timeout: 8000 })) as HTMLSelectElement;
+    expect(outro.value).toBe(VERSAO);
+  }, 30000);
 
   it("modelos: só texto ativo, do mais barato ao mais caro, agrupados; preço por 1M; custo por pedido preso ao teto", () => {
     const g = modelosDoAgente(CATALOGO);

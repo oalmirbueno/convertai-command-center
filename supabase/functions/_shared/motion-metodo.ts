@@ -75,6 +75,8 @@ export interface OpcaoDoIngrediente {
   valor: string;
   rotulo: string;
   dica?: string;
+  /** Num ingrediente de várias respostas, esta opção vale sozinha (ligar desliga as outras; ligar outra desliga esta). */
+  exclusiva?: boolean;
 }
 
 export interface Ingrediente {
@@ -132,7 +134,7 @@ export const INGREDIENTES: Ingrediente[] = [
       { valor: "depoimento", rotulo: "Depoimento real" },
       { valor: "numeros", rotulo: "Números reais", dica: "só com a fonte" },
       { valor: "metodo", rotulo: "O método (passos)" },
-      { valor: "sem_prova", rotulo: "Sem prova" },
+      { valor: "sem_prova", rotulo: "Sem prova", exclusiva: true },
     ],
   },
   {
@@ -206,6 +208,27 @@ export function duracaoAlvo(e: RespostasDaEntrevista, tipo: TipoDeFilme): number
   return tipo === "filme_marca" ? 45 : 15;
 }
 
+/**
+ * Múltipla escolha com opção exclusiva ("Sem prova"): ligar a exclusiva deixa
+ * só ela; ligar uma comum tira as exclusivas; desligar é como sempre.
+ */
+export function alternarOpcao(ing: Ingrediente, atual: string[], valor: string): string[] {
+  if (atual.indexOf(valor) >= 0) return atual.filter((x) => x !== valor);
+  const opcao = ing.opcoes.find((o) => o.valor === valor);
+  if (opcao && opcao.exclusiva) return [valor];
+  const exclusivas = ing.opcoes.filter((o) => o.exclusiva).map((o) => o.valor);
+  return atual.filter((x) => exclusivas.indexOf(x) < 0).concat([valor]);
+}
+
+/**
+ * Entrevista padrão por tipo ("Usar o padrão"): só a forma do filme. A duração
+ * é a mesma do duracaoAlvo e o fundo o mesmo do kit do filme (escuro).
+ * Objetivo, prova, frases, clima e observações ficam com a equipe.
+ */
+export function entrevistaPadrao(tipo: TipoDeFilme): Record<string, string> {
+  return { duracao: String(duracaoAlvo({}, tipo)), logo: "sting", abertura: "titulo", transicao: "corte_na_batida", ritmo: "medio", fundo: "escuro" };
+}
+
 // ------------------------------------------------------------------ BRAND.md e beat sheet
 
 export interface ProvaReal {
@@ -265,6 +288,9 @@ export function lerBrand(v: unknown): BrandDoFilme {
     beats,
   };
 }
+
+/** Texto da prova como o lerBrand guarda (travessão vira vírgula, espaços juntos), sem maiúscula: para achar a mesma prova nas duas listas. */
+export const textoDaProva = (t: unknown) => linha(t, 240).toLowerCase();
 
 /** Os números que o filme pode citar: só os que aparecem numa prova com fonte. */
 export function numerosDasProvas(provas: ProvaReal[]): number[] {
@@ -885,7 +911,9 @@ export function normalizarFilme(v: unknown): LinhaDoFilme | null {
   const o = v && typeof v === "object" ? (v as Record<string, unknown>) : null;
   if (!o || typeof o.id !== "string" || typeof o.client_id !== "string") return null;
   const obj = (x: unknown) => (x && typeof x === "object" && !Array.isArray(x) ? (x as Record<string, unknown>) : {});
-  const cenas = (Array.isArray(o.cenas) ? o.cenas : []).map((c, i) => cenaDaLinha({ ...(obj(c) as Partial<CenaDaLinha>), ordem: i + 1 }).cena);
+  const brand = lerBrand(o.brand);
+  // As provas do BRAND conferem os números da cena (sem elas, a peça de números perdia os itens a cada leitura).
+  const cenas = (Array.isArray(o.cenas) ? o.cenas : []).map((c, i) => cenaDaLinha({ ...(obj(c) as Partial<CenaDaLinha>), ordem: i + 1 }, brand.provas).cena);
   return {
     id: o.id,
     client_id: o.client_id,
@@ -896,7 +924,7 @@ export function normalizarFilme(v: unknown): LinhaDoFilme | null {
     formatos: (Array.isArray(o.formatos) ? o.formatos : ["9:16"]).filter(ehFormato),
     insumos: obj(o.insumos),
     entrevista: lerEntrevista(o.entrevista),
-    brand: lerBrand(o.brand),
+    brand,
     storyboards: (Array.isArray(o.storyboards) ? o.storyboards : []) as Storyboard[],
     storyboard_escolhido: typeof o.storyboard_escolhido === "number" ? o.storyboard_escolhido : null,
     cenas,

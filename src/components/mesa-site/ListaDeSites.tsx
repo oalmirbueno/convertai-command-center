@@ -15,19 +15,34 @@ import { CHAVES, chamarSite, type LinhaDoSite, useSites } from "./siteApi";
 
 const rotuloDaEtapa = (e: string) => (ETAPAS_DO_SITE.find((x) => x.valor === e) || { rotulo: e }).rotulo;
 
+/**
+ * Nome do site novo já preenchido (UXS 30/09): "Site <nome>" no institucional
+ * e "<tipo> <nome>" nos outros; com o mesmo nome já usado (vivo ou
+ * arquivado), soma " 2", " 3"...
+ */
+export function nomePadraoDoSite(tipo: string, dono: string, usados: string[]): string {
+  const quem = (dono || "").trim();
+  const base = (tipo === "institucional" ? `Site${quem ? ` ${quem}` : ""}` : `${rotuloDoTipo(tipo)}${quem ? ` ${quem}` : ""}`).slice(0, 110);
+  const tem = (n: string) => usados.some((u) => u.trim().toLowerCase() === n.toLowerCase());
+  if (!tem(base)) return base;
+  for (let i = 2; i < 100; i += 1) if (!tem(`${base} ${i}`)) return `${base} ${i}`;
+  return base;
+}
+
 /** Os sites do cliente (da marca aberta) e o "Novo site". Arquivar nunca apaga. */
-export default function ListaDeSites({ marcaId, onAbrir, icone }: { marcaId: string | null; onAbrir: (id: string, etapa?: string) => void; icone?: ReactNode }) {
-  const { clientId } = useMesa();
+export default function ListaDeSites({ marcaId, marcaNome, onAbrir, icone }: { marcaId: string | null; /** Nome da marca aberta quando o cliente tem mais de uma. */ marcaNome?: string | null; onAbrir: (id: string, etapa?: string) => void; icone?: ReactNode }) {
+  const { clientId, clientName } = useMesa();
   const qc = useQueryClient();
   const avisarErro = useAvisarErro();
   const sitesQ = useSites(clientId, marcaId);
-  const [nome, setNome] = useState("");
+  // Só o que a pessoa digitou; sem isso, o nome sai do tipo e da marca (troca junto, sem efeito e sem piscar).
+  const [nomeDigitado, setNomeDigitado] = useState<string | null>(null);
   const [tipo, setTipo] = useState<string>("institucional");
   const [criando, setCriando] = useState(false);
-  const [verArquivados, setVerArquivados] = useState(false);
   const todos = sitesQ.data ? sitesQ.data.lista : [];
   const vivos = todos.filter((s) => !s.arquivado_em);
   const arquivados = todos.filter((s) => !!s.arquivado_em);
+  const nome = nomeDigitado !== null ? nomeDigitado : nomePadraoDoSite(tipo, marcaNome || clientName || "", todos.map((s) => s.nome));
 
   const criar = async () => {
     const n = nome.trim();
@@ -35,7 +50,7 @@ export default function ListaDeSites({ marcaId, onAbrir, icone }: { marcaId: str
     setCriando(true);
     try {
       const d = await chamarSite<{ site: LinhaDoSite }>("site_criar", { client_id: clientId, nome: n, tipo, marca_id: marcaId || undefined });
-      setNome("");
+      setNomeDigitado(null);
       void qc.invalidateQueries({ queryKey: CHAVES.sites(clientId, marcaId) });
       onAbrir(d.site.id, "briefing");
     } catch (e) {
@@ -85,22 +100,36 @@ export default function ListaDeSites({ marcaId, onAbrir, icone }: { marcaId: str
         ajuda="Cada site é um projeto de código do cliente (na marca aberta), construído pelo motor de código com prévia ao vivo. O tipo (institucional, landing de campanha, portfólio, loja simples ou link na bio) dá o mapa inicial de páginas e seções; dá para trocar na Direção. Arquivar guarda o site e o código; nada é apagado."
         recolher={false}
       >
+        {/* UXS 30/09: uma linha só (Tipo, Nome já preenchido e Novo site); no celular, Tipo em cima e Nome e botão embaixo. Espaço por margem (Safari 11). */}
         <form
-          className="flex min-w-0 items-center"
+          className="flex min-w-0 flex-wrap items-center"
           onSubmit={(e) => {
             e.preventDefault();
             void criar();
           }}
+          data-novo-site=""
         >
-          <input value={nome} onChange={(e) => setNome(e.target.value)} maxLength={120} placeholder="Nome do site (ex.: Site institucional)" className={juntar(campo, "mr-2 flex-1")} aria-label="Nome do novo site" />
-          <button type="submit" className={botao.primario} disabled={!nome.trim() || criando}>
-            {criando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : icone}
-            Novo site
-          </button>
+          <div className="mb-2 mr-2 w-full min-w-0 sm:w-auto sm:shrink-0">
+            <SeletorCompacto rotulo="Tipo do site novo" modo="lista" opcoes={TIPOS_DE_SITE.map((t) => ({ valor: t.id, rotulo: t.rotulo, descricao: t.descricao }))} valor={tipo} onEscolher={setTipo} />
+          </div>
+          <div className="mb-2 flex min-w-0 flex-1 items-center">
+            <input
+              value={nome}
+              onChange={(e) => setNomeDigitado(e.target.value)}
+              onFocus={(e) => e.target.select()}
+              maxLength={120}
+              placeholder="Nome do site"
+              className={juntar(campo, "mr-2 min-w-0 flex-1")}
+              aria-label="Nome do novo site"
+            />
+            <button type="submit" className={juntar(botao.primario, "shrink-0")} disabled={!nome.trim() || criando}>
+              {criando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : icone ? <span className="mr-1 inline-flex">{icone}</span> : null}
+              Novo site
+            </button>
+          </div>
         </form>
-        <SeletorCompacto rotulo="Tipo do site novo" opcoes={TIPOS_DE_SITE.map((t) => ({ valor: t.id, rotulo: t.rotulo, descricao: t.descricao }))} valor={tipo} onEscolher={setTipo} listaQuandoNaoCabe />
         {sitesQ.data && sitesQ.data.aviso && <p className={texto.auxiliar}>{sitesQ.data.aviso}</p>}
-        {!vivos.length && !sitesQ.isLoading && <EstadoVazio compacto icone={<Globe className="h-5 w-5" />} titulo="Nenhum site ainda." descricao="Dê um nome e comece pelo briefing." />}
+        {!vivos.length && !sitesQ.isLoading && <EstadoVazio compacto icone={<Globe className="h-5 w-5" />} titulo="Nenhum site ainda." descricao="Escolha o tipo e comece pelo briefing." />}
         {vivos.length > 0 && <ul className={juntar(lista.aberta, lista.divisoria)}>{vivos.map(linha)}</ul>}
       </Secao>
       {arquivados.length > 0 && (
@@ -108,12 +137,7 @@ export default function ListaDeSites({ marcaId, onAbrir, icone }: { marcaId: str
           titulo="Arquivados"
           descricao={`${arquivados.length}`}
           recolher="mesa-site:sites:arquivados"
-          recolhidaDeInicio={!verArquivados}
-          acao={
-            <button type="button" className={botao.discreto} onClick={() => setVerArquivados(!verArquivados)}>
-              {verArquivados ? "Esconder" : "Ver"}
-            </button>
-          }
+          recolhidaDeInicio
         >
           <ul className={juntar(lista.aberta, lista.divisoria)}>{arquivados.map(linha)}</ul>
         </Secao>

@@ -1,42 +1,49 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Check, Loader2 } from "lucide-react";
+import { Check } from "lucide-react";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
-import { Carregando } from "@/components/sistema/Estados";
+import { Carregando, EstadoDeErro } from "@/components/sistema/Estados";
 import { PreencherComIA } from "@/components/sistema";
 import { botao, campoTexto, juntar, lista, texto } from "@/components/sistema/estilos";
 import { chamarSite, type LinhaDoSite, useSalvarSite } from "./siteApi";
 import CampoComIA, { textoDoValor } from "./CampoComIA";
-import { camposDoBriefing, camposDoSiteInteiro, destinosDosValores, mapaDoTipoAplicado } from "./preencherDoSite";
+import { camposDoBriefing, camposDoSiteInteiro, destinosDosValores, mapaDoTipoAplicado, perguntasDaTela } from "./preencherDoSite";
+import { useBarraDaEtapa } from "./BarraDaEtapa";
 
 type Pergunta = { id: string; rotulo: string };
 type Leitura = { encontrado: boolean; briefing_id?: string; titulo?: string | null; respostas: Record<string, unknown>; decupagem: { itens?: Array<{ texto?: string; categoria?: string }>; tom_de_voz?: string | null } | null; perguntas: Pergunta[] };
 
 const textoDe = (v: unknown): string => (Array.isArray(v) ? v.map(textoDe).filter(Boolean).join(", ") : v && typeof v === "object" ? JSON.stringify(v) : String(v ?? "")).slice(0, 1500);
+const emTexto = (salvas: Record<string, unknown>) => {
+  const r: Record<string, string> = {};
+  Object.keys(salvas || {}).forEach((k) => (r[k] = textoDe(salvas[k])));
+  return r;
+};
 
 /**
  * Etapa 1: o briefing do site. Lê o briefing de site da frente BRF (modelo
  * "site" ou "landing", da marca do site); sem ele, pergunta aqui mesmo. Salvar
  * é sempre parcial. SIT2: cada pergunta tem o ✨ do Preencher com IA, a seção
- * tem o "Preencher tudo" e o topo tem o "Preencher tudo do site" (briefing,
- * tipo, direção, SEO, dados do negócio e WhatsApp numa prévia só).
+ * tem o "Preencher o briefing" e o "Preencher tudo do site" (briefing, tipo,
+ * direção, SEO, dados do negócio e WhatsApp numa prévia só).
+ * UXS 30/09: as perguntas saem na hora (lista fixa, sem esperar o servidor);
+ * só o briefing respondido espera, com esqueleto próprio e "Tentar de novo".
+ * Salvar e Seguir moram na barra da etapa.
  */
-export default function EtapaBriefing({ site, onIrPara }: { site: LinhaDoSite; onIrPara: (etapa: string) => void }) {
+export default function EtapaBriefing({ site }: { site: LinhaDoSite; onIrPara?: (etapa: string) => void }) {
   const { clientId } = useMesa();
   const { marca } = useMarcaDaMesa();
   const salvarSite = useSalvarSite(clientId, marca ? marca.id : null);
   const avisarErro = useAvisarErro();
   const leitura = useQuery({ queryKey: ["mesa-site", "briefing", site.id], queryFn: () => chamarSite<Leitura>("briefing_ler", { site_id: site.id }) });
   const salvas = (site.briefing && site.briefing.respostas) || {};
-  const [respostas, setRespostas] = useState<Record<string, string>>({});
+  const [respostas, setRespostas] = useState<Record<string, string>>(() => emTexto(salvas));
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
-    const r: Record<string, string> = {};
-    Object.keys(salvas).forEach((k) => (r[k] = textoDe(salvas[k])));
-    setRespostas(r);
+    setRespostas(emTexto(salvas));
     // Só ao abrir outro site (a escrita da pessoa não é trocada por dado velho).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [site.id]);
@@ -45,13 +52,15 @@ export default function EtapaBriefing({ site, onIrPara }: { site: LinhaDoSite; o
     await salvarSite("site_salvar", { site_id: site.id, briefing: { respostas: novas, ...extra }, etapa: seguir ? "referencias" : undefined });
   };
 
-  const salvar = async (extra: Record<string, unknown> = {}, seguir = false) => {
+  /** Grava as respostas (com `seguir`, marca a etapa seguinte). true quando gravou; o erro aparece e mantém o que foi escrito. */
+  const salvar = async (extra: Record<string, unknown> = {}, seguir = false): Promise<boolean> => {
     setSalvando(true);
     try {
       await gravarRespostas(respostas, extra, seguir);
-      if (seguir) onIrPara("referencias");
+      return true;
     } catch (e) {
       avisarErro(e, "O briefing não foi salvo");
+      return false;
     } finally {
       setSalvando(false);
     }
@@ -74,22 +83,46 @@ export default function EtapaBriefing({ site, onIrPara }: { site: LinhaDoSite; o
     if (d.whatsappMensagem !== null) await salvarSite("integracoes_salvar", { site_id: site.id, integracoes: { whatsapp: { ...((site.integracoes && site.integracoes.whatsapp) || {}), mensagem: d.whatsappMensagem } } });
   };
 
-  if (leitura.isLoading) return <Carregando forma="lista" rotulo="Procurando o briefing do site" />;
   const d = leitura.data;
-  const usandoBrf = site.briefing && site.briefing.fonte === "brf" && d && d.briefing_id === site.briefing.briefing_id;
-  const perguntas = (d && d.perguntas) || [];
+  const usandoBrf = !!(site.briefing && site.briefing.fonte === "brf" && d && d.briefing_id === site.briefing.briefing_id);
+  // As perguntas da lista fixa na hora; as que o servidor mandar a mais entram no fim.
+  const perguntas = perguntasDaTela(d ? d.perguntas : null);
+  const respondidas = perguntas.filter((p) => (respostas[p.id] || "").trim()).length;
+
+  /** Usar o briefing respondido: só aplica (não troca de etapa); o formulário passa a mostrar as respostas dele. */
+  const usarBrf = async () => {
+    if (!d || !d.encontrado) return;
+    if (await salvar({ fonte: "brf", briefing_id: d.briefing_id, respostas: d.respostas })) setRespostas(emTexto(d.respostas || {}));
+  };
+
+  useBarraDaEtapa(
+    { estado: salvando ? "Salvando" : usandoBrf ? "Briefing respondido em uso" : `${respondidas} de ${perguntas.length} respondidas`, ocupado: salvando, salvar: true, pendente: !!(d && d.encontrado && !usandoBrf) },
+    { antesDeSeguir: () => salvar({}, true), aoSalvar: () => salvar() },
+  );
 
   return (
     <div className="min-w-0 space-y-6" data-etapa-briefing="">
-      {d && d.encontrado && (
+      {/* O lugar do briefing respondido: esqueleto só aqui; o formulário fica na mesma posição (as caixas não remontam). */}
+      {leitura.isLoading ? (
+        <Carregando forma="lista" linhas={2} rotulo="Procurando o briefing do site" />
+      ) : leitura.isError ? (
+        <EstadoDeErro
+          titulo="O briefing respondido não foi lido."
+          acao={
+            <button type="button" className={botao.discreto} onClick={() => void leitura.refetch()}>
+              Tentar de novo
+            </button>
+          }
+        />
+      ) : d && d.encontrado ? (
         <Secao
           titulo={d.titulo || "Briefing respondido"}
           descricao={usandoBrf ? "Em uso neste site" : "Da frente de briefings"}
           ajuda="O briefing de site que o cliente respondeu pelo link (Briefings). A decupagem grifa palavras-chave, dores, público e tom. Usar leva as respostas para o site; o texto das próximas etapas parte dele."
           acao={
-            <button type="button" className={usandoBrf ? botao.secundario : botao.primario} disabled={salvando} onClick={() => void salvar({ fonte: "brf", briefing_id: d.briefing_id, respostas: d.respostas }, true)}>
+            <button type="button" className={usandoBrf ? botao.secundario : botao.primario} disabled={salvando} onClick={() => void usarBrf()} data-usar-briefing="">
               {usandoBrf ? <Check className="mr-1 h-3.5 w-3.5" /> : null}
-              {usandoBrf ? "Seguir" : "Usar este briefing"}
+              {usandoBrf ? "Usar de novo" : "Usar este briefing"}
             </button>
           }
         >
@@ -111,12 +144,13 @@ export default function EtapaBriefing({ site, onIrPara }: { site: LinhaDoSite; o
             </div>
           )}
         </Secao>
-      )}
+      ) : null}
 
       <Secao
         titulo={d && d.encontrado ? "Complementar" : "Briefing do site"}
         descricao={d && !d.encontrado ? "Sem briefing de site respondido" : undefined}
-        ajuda="Sem o briefing de site do cliente, responda aqui o essencial. O ✨ de cada pergunta preenche pelo contexto da marca, pelo dossiê e pelos arquivos, com a prévia antes de gravar. Preencher tudo do site também propõe o tipo de site, a observação da direção, o SEO, os dados do negócio e a mensagem do WhatsApp. Nada de número ou nome que não esteja nas fontes."
+        ajuda="Sem o briefing de site do cliente, responda aqui o essencial. O ✨ de cada pergunta preenche pelo contexto da marca, pelo dossiê e pelos arquivos, com a prévia antes de gravar. Preencher tudo do site também propõe o tipo de site, a observação da direção, o SEO, os dados do negócio e a mensagem do WhatsApp. Nada de número ou nome que não esteja nas fontes. Salvar e Seguir ficam no pé da etapa."
+        recolher="mesa-site:briefing:formulario"
         acao={
           <>
             <span className="mr-2 inline-flex">
@@ -131,25 +165,18 @@ export default function EtapaBriefing({ site, onIrPara }: { site: LinhaDoSite; o
                 onDesfazer={(anteriores) => aplicarNoSite(anteriores)}
               />
             </span>
-            <span className="mr-2 inline-flex">
+            <span className="inline-flex">
               <PreencherComIA
                 papel="site"
                 clientId={clientId}
                 marcaId={marca ? marca.id : null}
                 campos={camposDoBriefing(perguntas, respostas)}
                 rotulo="Preencher o briefing"
+                compacto
                 onAplicar={(v) => aplicarNoSite(v)}
                 onDesfazer={(a) => aplicarNoSite(a)}
               />
             </span>
-            <button type="button" className={juntar(botao.secundario, "mr-2")} disabled={salvando} onClick={() => void salvar()}>
-              {salvando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-              Salvar
-            </button>
-            <button type="button" className={botao.primario} disabled={salvando} onClick={() => void salvar({}, true)}>
-              Seguir
-              <ArrowRight className="ml-1 h-3.5 w-3.5" />
-            </button>
           </>
         }
       >

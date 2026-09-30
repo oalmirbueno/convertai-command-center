@@ -19,6 +19,7 @@ const preencherProps: Array<Record<string, unknown>> = [];
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { functions: { invoke: vi.fn() }, from: vi.fn(), storage: { from: vi.fn() } } }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
+vi.mock("@/components/shared/FilePreviewContent", () => ({ default: () => null }));
 vi.mock("@/components/mesa/MesaContexto", () => ({ ImagemDaMesa: ({ alt }: { alt: string }) => h("span", { "data-imagem": alt }) }));
 vi.mock("@/components/sistema/PreencherComIA", () => ({
   default: (p: Record<string, unknown>) => {
@@ -81,10 +82,10 @@ beforeEach(() => {
   gerar.mockResolvedValue({ documento: { ...DOC, numero: 3 }, file_id: "f1", avisos: [], eventos: 2, provas: 2, provas_com_imagem: 2, custo_usd: 0, saldo_usd: 1 });
 });
 
-function montar() {
+function montar(props: Record<string, unknown> = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(ConfirmDialogProvider, null, h(EditorDoDocumento, { aberto: true, onFechar: vi.fn(), alvo: { documentoId: "d1", clientId: "c1" } })))),
+    h(MemoryRouter, null, h(QueryClientProvider, { client: qc }, h(ConfirmDialogProvider, null, h(EditorDoDocumento, { aberto: true, onFechar: vi.fn(), alvo: { documentoId: "d1", clientId: "c1" }, ...props })))),
   );
 }
 
@@ -116,16 +117,84 @@ describe("editor do documento de entrega", () => {
     expect(r.numeros.find((n: { rotulo: string }) => n.rotulo === "Leads")).toMatchObject({ valor: 42, manual: true, fonte: "Gerenciador de anúncios, 30/09" });
   });
 
-  it("Gerar PDF salva o rascunho antes, mostra o custo (sem IA com o texto da equipe) e usa o rascunho", async () => {
-    montar();
+  it("Gerar PDF salva o rascunho antes e, sem custo de IA com o texto da equipe, gera na hora (sem Confirmar)", async () => {
+    const onGerado = vi.fn();
+    const onFechar = vi.fn();
+    montar({ onGerado, onFechar });
     await screen.findByText("Carrossel do pernil");
     fireEvent.change(screen.getByLabelText("Resumo", { selector: "textarea" }), { target: { value: "Setembro teve duas publicações." } });
     fireEvent.click(screen.getByRole("button", { name: /Gerar PDF/ }));
     await waitFor(() => expect(salvar).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(estimar).toHaveBeenCalledWith("c1", { documentoId: "d1", usarRascunho: true }));
-    const janela = await screen.findByRole("alertdialog");
-    expect(within(janela).getByText(/Sem custo de IA/)).toBeInTheDocument();
-    fireEvent.click(within(janela).getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(gerar).toHaveBeenCalledWith(expect.objectContaining({ clientId: "c1", tipo: "mes_de_pautas", referencia: "2026-09", usarRascunho: true, documentoId: "d1" })));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    // Depois de gerar, o editor fecha e a lista abre a conferência do documento gerado.
+    await waitFor(() => expect(onGerado).toHaveBeenCalledWith(expect.objectContaining({ file_id: "f1" })));
+    expect(onFechar).toHaveBeenCalled();
+  });
+
+  it.each([
+    ["com custo de IA", { estimativa_usd: 0.012, modelo_id: "m1", texto_da_equipe: false }, "pendente", /Custo estimado/],
+    ["com texto da equipe falso, mesmo com custo zero", { estimativa_usd: 0, modelo_id: "m1", texto_da_equipe: false }, "pendente", /Sem custo de IA/],
+    ["com o documento já no cliente", { estimativa_usd: 0, modelo_id: "m1", texto_da_equipe: true }, "em_aprovacao", /precisa ser mandada de novo/],
+  ])("Gerar PDF mantém o Confirmar %s", async (_nome, estimativa, status, texto) => {
+    estimar.mockResolvedValue(estimativa);
+    ler.mockResolvedValue({ ...vista(), documento: { ...DOC, status } });
+    montar();
+    await screen.findByText("Carrossel do pernil");
+    fireEvent.click(screen.getByRole("button", { name: /Gerar PDF/ }));
+    const janela = await screen.findByRole("alertdialog");
+    expect(within(janela).getByText(texto as RegExp)).toBeInTheDocument();
+    expect(gerar).not.toHaveBeenCalled();
+    fireEvent.click(within(janela).getByRole("button", { name: "Confirmar" }));
+    await waitFor(() => expect(gerar).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("editor do documento: fechar não perde o que não foi salvo (frente UXS)", () => {
+  it("mudou a legenda e apertou Esc: salva uma vez e só então fecha", async () => {
+    const onFechar = vi.fn();
+    montar({ onFechar });
+    await screen.findByText("Carrossel do pernil");
+    fireEvent.change(screen.getByLabelText("Legenda de Reels da ceia"), { target: { value: "O Reels do mês" } });
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await waitFor(() => expect(onFechar).toHaveBeenCalledTimes(1));
+    expect(salvar).toHaveBeenCalledTimes(1);
+    expect(salvar.mock.calls[0][1].provas[1].legenda).toBe("O Reels do mês");
+    expect(salvar.mock.invocationCallOrder[0]).toBeLessThan(onFechar.mock.invocationCallOrder[0]);
+  });
+
+  it("sem mudança, fechar só fecha (nada é salvo)", async () => {
+    const onFechar = vi.fn();
+    montar({ onFechar });
+    await screen.findByText("Carrossel do pernil");
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(onFechar).toHaveBeenCalledTimes(1);
+    expect(salvar).not.toHaveBeenCalled();
+  });
+
+  it("se salvar falhar, não fecha, mostra o erro no pé e oferece Descartar", async () => {
+    salvar.mockRejectedValue(new Error("sem rede"));
+    const onFechar = vi.fn();
+    montar({ onFechar });
+    await screen.findByText("Carrossel do pernil");
+    fireEvent.change(screen.getByLabelText("Legenda de Reels da ceia"), { target: { value: "Outra" } });
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await waitFor(() => expect(salvar).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Não salvou. Tente de novo ou descarte.")).toBeInTheDocument();
+    expect(onFechar).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /Descartar/ })).toBeInTheDocument();
+  });
+
+  it("Descartar volta ao que está salvo, sem chamar o servidor", async () => {
+    montar();
+    await screen.findByText("Carrossel do pernil");
+    const legenda = screen.getByLabelText("Legenda de Reels da ceia") as HTMLInputElement;
+    fireEvent.change(legenda, { target: { value: "Outra" } });
+    fireEvent.click(screen.getByRole("button", { name: /Descartar/ }));
+    expect((screen.getByLabelText("Legenda de Reels da ceia") as HTMLInputElement).value).toBe("Reels");
+    expect(salvar).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /Descartar/ })).toBeNull();
   });
 });

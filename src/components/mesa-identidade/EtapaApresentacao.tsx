@@ -1,17 +1,19 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Download, Eye, EyeOff, Loader2, Maximize2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Eye, EyeOff, Loader2, Maximize2, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
+import { elementoEmTelaCheia, temTelaCheiaDoNavegador } from "@/components/mesa/TelaCheiaDaMesa";
 import Secao from "@/components/sistema/Secao";
 import { PreencherComIA } from "@/components/sistema";
-import { botao, campoTexto, espaco, juntar, lista, texto } from "@/components/sistema/estilos";
+import { botao, campoTexto, espaco, foco, juntar, lista, texto } from "@/components/sistema/estilos";
 import { useFontesGoogle } from "@/lib/identidade/fontesGoogle";
 import { camposDasFalas, prontoParaApresentar, roteiroDaApresentacao, SCRIPT_DA_APRESENTACAO } from "../../../supabase/functions/mesa-identidade/modulos/apresentacao-da-marca";
 import { urlDoGoogleFonts } from "../../../supabase/functions/_shared/tipografia-da-marca";
-import { imagensDaApresentacao, PalcoDoSlide, SlideDaMarca, type UrlDaImagem } from "./ApresentacaoDaMarca";
+import { ALTURA_DO_SLIDE, imagensDaApresentacao, LARGURA_DO_SLIDE, PalcoDoSlide, SlideDaMarca, type UrlDaImagem } from "./ApresentacaoDaMarca";
 import { CabecalhoDaEtapa, contextoParaPreencher, Pastilha, useProjetoDaMesa } from "./Comuns";
 import { salvarArquivo } from "./exportarNoNavegador";
 import VideoDaMarca from "./VideoDaMarca";
@@ -62,6 +64,149 @@ async function dataUrl(chave: string): Promise<string | null> {
   });
 }
 
+/** Teclas da apresentação: as mesmas da página exportada. */
+const TECLAS_DE_AVANCAR = ["ArrowRight", " ", "Spacebar", "PageDown"];
+const TECLAS_DE_VOLTAR = ["ArrowLeft", "PageUp"];
+
+/**
+ * "Apresentar" (UXS 30/09, IDV-15): uma camada do tamanho da janela, com o
+ * slide inteiro (cabe pela largura e pela altura) no meio. Toque ou clique na
+ * metade direita avança; na esquerda, volta. Teclas como na página exportada;
+ * Esc fecha. Onde o navegador tem tela cheia (e ela ainda não está ligada), a
+ * camada pede a tela cheia; no iPhone fica só a camada, com o Fechar sempre à
+ * vista. O contador aparece a cada troca e some em 2 s.
+ */
+function CamadaDaApresentacao({ total, atual, onIr, onFechar, children }: { total: number; atual: number; onIr: (n: number) => void; onFechar: () => void; children: ReactNode }) {
+  const camada = useRef<HTMLDivElement | null>(null);
+  const fechar = useRef<HTMLButtonElement | null>(null);
+  const [escala, setEscala] = useState(0.25);
+  const [contador, setContador] = useState(true);
+  const pedimos = useRef(false);
+  const atualRef = useRef(atual);
+  atualRef.current = atual;
+  const irRef = useRef(onIr);
+  irRef.current = onIr;
+  const fecharRef = useRef(onFechar);
+  fecharRef.current = onFechar;
+
+  // Cabe pela largura E pela altura (iPhone deitado, tela 21:9).
+  useEffect(() => {
+    const medir = () => setEscala(Math.max(0.05, Math.min(window.innerWidth / LARGURA_DO_SLIDE, window.innerHeight / ALTURA_DO_SLIDE)));
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  }, []);
+
+  // O contador reaparece a cada troca e some em 2 s.
+  useEffect(() => {
+    setContador(true);
+    const t = window.setTimeout(() => setContador(false), 2000);
+    return () => window.clearTimeout(t);
+  }, [atual]);
+
+  // Foco na camada, teclas no documento, tela cheia do navegador quando dá.
+  useEffect(() => {
+    const el = camada.current;
+    if (el) el.focus();
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "Esc") {
+        // O Esc é da camada: a tela cheia da mesa não sai junto.
+        e.preventDefault();
+        e.stopPropagation();
+        fecharRef.current();
+        return;
+      }
+      if (e.target === fechar.current && (e.key === " " || e.key === "Enter")) return;
+      if (TECLAS_DE_AVANCAR.indexOf(e.key) >= 0) {
+        e.preventDefault();
+        irRef.current(atualRef.current + 1);
+      } else if (TECLAS_DE_VOLTAR.indexOf(e.key) >= 0) {
+        e.preventDefault();
+        irRef.current(atualRef.current - 1);
+      }
+    };
+    const mudou = () => {
+      // Saiu da tela cheia pelo navegador (Esc dele): fecha a camada também.
+      if (pedimos.current && !elementoEmTelaCheia()) {
+        pedimos.current = false;
+        fecharRef.current();
+      }
+    };
+    document.addEventListener("keydown", tecla);
+    document.addEventListener("fullscreenchange", mudou);
+    document.addEventListener("webkitfullscreenchange", mudou);
+    if (el && temTelaCheiaDoNavegador() && !elementoEmTelaCheia()) {
+      const alvo = el as HTMLDivElement & { webkitRequestFullscreen?: () => void };
+      try {
+        const r = typeof alvo.requestFullscreen === "function" ? alvo.requestFullscreen() : alvo.webkitRequestFullscreen ? (alvo.webkitRequestFullscreen() as unknown as Promise<void> | undefined) : undefined;
+        pedimos.current = true;
+        if (r && typeof (r as Promise<void>).catch === "function") {
+          (r as Promise<void>).catch(() => {
+            // Recusado: fica só a camada (sem aviso).
+            pedimos.current = false;
+          });
+        }
+      } catch {
+        pedimos.current = false;
+      }
+    }
+    return () => {
+      document.removeEventListener("keydown", tecla);
+      document.removeEventListener("fullscreenchange", mudou);
+      document.removeEventListener("webkitfullscreenchange", mudou);
+      if (pedimos.current && elementoEmTelaCheia()) {
+        pedimos.current = false;
+        const d = document as Document & { webkitExitFullscreen?: () => void };
+        try {
+          const r = typeof d.exitFullscreen === "function" ? d.exitFullscreen() : d.webkitExitFullscreen ? (d.webkitExitFullscreen() as unknown as Promise<void> | undefined) : undefined;
+          if (r && typeof (r as Promise<void>).catch === "function") (r as Promise<void>).catch(() => undefined);
+        } catch {
+          /* já saiu */
+        }
+      }
+    };
+  }, []);
+
+  return createPortal(
+    <div
+      ref={camada}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Apresentação da marca"
+      tabIndex={-1}
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black outline-none"
+      data-tela-cheia="sim"
+      data-camada-da-apresentacao=""
+      onClick={(e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        if (e.clientX - r.left >= r.width / 2) onIr(atual + 1);
+        else onIr(atual - 1);
+      }}
+    >
+      <div className="relative overflow-hidden" style={{ width: LARGURA_DO_SLIDE * escala, height: ALTURA_DO_SLIDE * escala }}>
+        <div style={{ position: "absolute", top: 0, left: 0, width: LARGURA_DO_SLIDE, height: ALTURA_DO_SLIDE, transform: `scale(${escala})`, transformOrigin: "0 0" }}>{children}</div>
+      </div>
+      <span className={juntar(texto.etiqueta, "pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded bg-black/60 px-2 py-0.5 tabular-nums text-white transition-opacity", contador ? "opacity-80" : "opacity-0")} aria-live="polite" data-contador-da-apresentacao="">
+        {atual + 1} / {total}
+      </span>
+      <button
+        ref={fechar}
+        type="button"
+        className={juntar("toque-compacto absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white", foco)}
+        aria-label="Fechar a apresentação"
+        onClick={(e) => {
+          e.stopPropagation();
+          onFechar();
+        }}
+        data-fechar-apresentacao=""
+      >
+        <X className="h-5 w-5" />
+      </button>
+    </div>,
+    document.body,
+  );
+}
+
 /**
  * Etapa Apresentação (IDV2): a sequência para apresentar a marca ao cliente,
  * do problema à revelação e às aplicações. Cada slide diz o que falta e tem a
@@ -88,7 +233,9 @@ export default function EtapaApresentacao() {
   useFontesGoogle(tipos.map((t) => ({ familia: t.familia, pesos: [400, 700] })), tipos.length > 0);
   const [atual, setAtual] = useState(0);
   const [exportando, setExportando] = useState(false);
+  const [apresentando, setApresentando] = useState(false);
   const palco = useRef<HTMLDivElement | null>(null);
+  const botaoApresentar = useRef<HTMLButtonElement | null>(null);
   const ap = (d.apresentacao || {}) as { falas?: Record<string, string>; tirados?: string[] };
   const slide = incluidos[Math.min(atual, Math.max(0, incluidos.length - 1))];
 
@@ -109,11 +256,13 @@ export default function EtapaApresentacao() {
     }
   };
 
-  const telaCheia = () => {
-    const el = palco.current as (HTMLDivElement & { webkitRequestFullscreen?: () => void }) | null;
-    if (!el) return;
-    if (el.requestFullscreen) el.requestFullscreen().catch(() => toast.info("O navegador não deixou abrir em tela cheia."));
-    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  const irParaSlide = (n: number) => setAtual(Math.max(0, Math.min(incluidos.length - 1, n)));
+  const fecharApresentacao = () => {
+    setApresentando(false);
+    // O foco volta para quem abriu; o slide atual fica.
+    window.setTimeout(() => {
+      if (botaoApresentar.current) botaoApresentar.current.focus();
+    }, 0);
   };
 
   const exportar = async () => {
@@ -190,7 +339,7 @@ export default function EtapaApresentacao() {
               <button type="button" className={botao.icone} aria-label="Próximo slide" disabled={atual >= incluidos.length - 1} onClick={() => setAtual(Math.min(incluidos.length - 1, atual + 1))}>
                 <ChevronRight className="h-4 w-4" />
               </button>
-              <button type="button" className={juntar(botao.discreto, "m-1 h-8")} onClick={telaCheia}>
+              <button ref={botaoApresentar} type="button" className={juntar(botao.discreto, "m-1 h-8")} onClick={() => setApresentando(true)} data-apresentar="">
                 <Maximize2 className="mr-1.5 h-3.5 w-3.5" /> Apresentar
               </button>
             </>
@@ -203,6 +352,11 @@ export default function EtapaApresentacao() {
           </div>
           {slide.fala && <p className={juntar(texto.auxiliar, "mt-2 whitespace-pre-line")}>Fala: {slide.fala}</p>}
         </Secao>
+      )}
+      {apresentando && slide && (
+        <CamadaDaApresentacao total={incluidos.length} atual={Math.min(atual, Math.max(0, incluidos.length - 1))} onIr={irParaSlide} onFechar={fecharApresentacao}>
+          <SlideDaMarca id={slide.id} n={slide.n} dados={d} nome={nome} urlDe={urlDe} />
+        </CamadaDaApresentacao>
       )}
 
       <Secao titulo="Roteiro" divisoria descricao={`${incluidos.length} de ${roteiro.length} slides`} recolher={`mesa-identidade:${projeto.id}:apresentacao:roteiro`}>

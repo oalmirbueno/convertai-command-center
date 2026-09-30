@@ -335,7 +335,17 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
         )}
       </span>
       <div className="ml-2 min-w-0 shrink-0">
-        <Renderizar clientId={clientId} versaoId={versaoId} projeto={projeto} salvo={salvamento.estado === "salvo"} cursor={relogio.get} onOps={aplicarOps} />
+        <Renderizar
+          clientId={clientId}
+          versaoId={versaoId}
+          projeto={projeto}
+          salvamento={salvamento.estado}
+          salvarAgora={() => (salvador.current ? salvador.current.agora() : Promise.resolve())}
+          estadoDoSalvamento={() => (salvador.current ? salvador.current.estado() : "salvo")}
+          revisao={() => (salvador.current ? salvador.current.revisao() : null)}
+          cursor={relogio.get}
+          onOps={aplicarOps}
+        />
       </div>
     </div>
   );

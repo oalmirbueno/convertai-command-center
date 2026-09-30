@@ -1,16 +1,17 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast as avisar } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useToast } from "@/hooks/use-toast";
+import { useLarguraMinima } from "@/hooks/useLarguraMinima";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
-import { FileSignature, Upload, Send, CheckCircle2, Clock, ExternalLink, Copy, Mail, Trash2, Plus, BookOpen } from "lucide-react";
+import { FileSignature, Upload, Send, CheckCircle2, Clock, ChevronRight, ExternalLink, Mail, Trash2, Plus, BookOpen } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import {
   AreaDeTrabalho,
@@ -30,6 +31,7 @@ import {
   etiqueta,
   juntar,
   texto,
+  toqueCompacto,
   useEstadoDaTela,
 } from "@/components/sistema";
 import {
@@ -38,7 +40,9 @@ import {
   useResolvedFileUrl,
 } from "@/lib/fileUrls";
 import { textoDoErro } from "@/lib/mesa/api";
+import { AO_VIVO_CALMO } from "@/lib/consultaAoVivo";
 import { chamarContratos, CHAVES_DOS_CONTRATOS } from "@/lib/contratos/api";
+import EsqueletoDoPainel from "@/components/contratos/EsqueletoDoPainel";
 
 // Frente CON (30/09): contratos montados por modelo, com o agente de contratos ao lado.
 const DetalheDoContrato = lazy(() => import("@/components/contratos/DetalheDoContrato"));
@@ -47,6 +51,16 @@ const AgenteDeContratos = lazy(() => import("@/components/contratos/AgenteDeCont
 // Frente CON2 (30/09): painel (a vencer, pendentes, assinados no mês, recorrente) e editor de modelos.
 const PainelDosContratos = lazy(() => import("@/components/contratos/PainelDosContratos"));
 const EditorDeModelos = lazy(() => import("@/components/contratos/EditorDeModelos"));
+// UXS (30/09): a janela de envio do PDF é a mesma do contrato de modelo (só carrega ao abrir).
+const EnvioDoContratoDeArquivo = lazy(() => import("@/components/contratos/JanelaDeEnvio").then((m) => ({ default: m.EnvioDoContratoDeArquivo })));
+
+/**
+ * Só as colunas que a lista usa (UXS, 30/09): o select("*") trazia o texto
+ * inteiro congelado, os valores e as cláusulas de cada contrato a cada
+ * consulta. `string` de propósito: o parser de tipos do postgrest não entra.
+ * O token de assinatura não vem aqui; a janela de envio do PDF lê na hora.
+ */
+const COLUNAS_DA_LISTA: string = "id,title,description,client_id,status,origem,numero,versao,sent_at,admin_signed_at,client_signed_at,created_at,original_file_url,original_file_name,arquivado_em,substituido_por";
 
 type Contract = {
   id: string;
@@ -56,19 +70,16 @@ type Contract = {
   status: string;
   original_file_url: string;
   original_file_name: string;
-  admin_signature_name: string | null;
   admin_signed_at: string | null;
-  client_signature_name: string | null;
   client_signed_at: string | null;
-  sign_token: string;
   sent_at: string | null;
   created_at: string;
   /** Frente CON: 'modelo' é montado pelo modelo; sem a coluna (banco antigo), vale 'arquivo'. */
   origem?: string | null;
   numero?: string | null;
   versao?: number | null;
-  documento_hash?: string | null;
   arquivado_em?: string | null;
+  substituido_por?: string | null;
 };
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
@@ -79,9 +90,13 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   cancelled: { label: "Cancelado", cls: "bg-muted text-muted-foreground" },
   substituido: { label: "Substituído", cls: "bg-muted text-muted-foreground" },
 };
+const META_ARQUIVADO = { label: "Arquivado", cls: "bg-muted text-muted-foreground" };
 
+// UXS (30/09): a lista abre como fila de trabalho ("Em andamento"); o histórico fica a um clique.
 const FILTROS_DE_STATUS = [
-  { valor: "todos", rotulo: "Todos os status" },
+  { valor: "andamento", rotulo: "Em andamento" },
+  { valor: "encerrados", rotulo: "Encerrados" },
+  { valor: "todos", rotulo: "Todos" },
   { valor: "draft", rotulo: "Rascunho" },
   { valor: "sent", rotulo: "Aguardando cliente" },
   { valor: "signed", rotulo: "Em revisão" },
@@ -90,15 +105,34 @@ const FILTROS_DE_STATUS = [
   { valor: "substituido", rotulo: "Substituído" },
 ];
 
+/**
+ * Em andamento: rascunho, aguardando cliente, em revisão e assinado, sem
+ * arquivar e sem versão nova. Status desconhecido fica à vista (na dúvida,
+ * mostra). Encerrados é o complemento exato.
+ */
+function emAndamento(c: Contract): boolean {
+  return !c.arquivado_em && !c.substituido_por && c.status !== "cancelled" && c.status !== "substituido";
+}
+
+function noFiltro(c: Contract, filtro: string): boolean {
+  if (filtro === "todos") return true;
+  if (filtro === "andamento") return emAndamento(c);
+  if (filtro === "encerrados") return !emAndamento(c);
+  return c.status === filtro;
+}
+
 const UUID_VALIDO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function normalizar(v: string) {
   return v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 }
 
+const nomeDe = (cl: any) => String((cl && (cl.company_name || cl.full_name)) || "");
+
 export default function AdminContracts({ clientId: lockedClientId }: { clientId?: string } = {}) {
   const { user, profile } = useAuth();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const { data: clients = [] } = useClients();
   const isAdminOrStaff = profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "");
@@ -116,11 +150,12 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
   const vistaModelos = !lockedClientId && params.get("vista") === "modelos";
   const clienteFiltro = lockedClientId || (UUID_VALIDO.test(clienteDoLink) ? clienteDoLink : "");
   const [signOpen, setSignOpen] = useState<Contract | null>(null);
-  const [linkOpen, setLinkOpen] = useState<{ url: string; email: string } | null>(null);
+  // UXS: Enviar/Reenviar do PDF abre a janela de envio (copiar, WhatsApp ou e-mail) em vez de mandar o e-mail num clique.
+  const [envioAberto, setEnvioAberto] = useState<Contract | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Contract | null>(null);
   // Filtro e busca lembrados ao sair e voltar (por cliente quando a lista está travada num cliente).
   const escopo = lockedClientId || "todos";
-  const [filtroStatus, setFiltroStatus] = useEstadoDaTela(`contratos:status:${escopo}`, "todos", {
+  const [filtroStatus, setFiltroStatus] = useEstadoDaTela(`contratos:status:${escopo}`, "andamento", {
     validar: (v) => typeof v === "string" && FILTROS_DE_STATUS.some((f) => f.valor === v),
   });
   const [busca, setBusca] = useEstadoDaTela(`contratos:busca:${escopo}`, "", { validar: (v) => typeof v === "string" });
@@ -138,17 +173,20 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
   const { data: contracts = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["contracts", user?.id, lockedClientId || "all"],
     queryFn: async () => {
-      let q = supabase.from("contracts").select("*").order("created_at", { ascending: false });
+      let q = supabase.from("contracts").select(COLUNAS_DA_LISTA).order("created_at", { ascending: false });
       if (lockedClientId) q = q.eq("client_id", lockedClientId);
       const { data, error } = await q;
       if (error) throw error;
-      return data as Contract[];
+      return (data || []) as unknown as Contract[];
     },
     enabled: !!user,
-    refetchInterval: 15000,
+    // 60 s e releitura ao voltar à aba: as ações da tela já invalidam a lista.
+    ...AO_VIVO_CALMO,
   });
 
-  const clientById = (id: string) => clients.find((c: any) => c.id === id);
+  // Um mapa em vez de procurar o cliente na lista a cada linha, a cada render.
+  const clientesPorId = useMemo(() => new Map((clients as any[]).map((c) => [String(c.id), c] as [string, any])), [clients]);
+  const clientById = (id: string) => clientesPorId.get(String(id));
   const listaDeClientes = useMemo(
     () => (clients as any[]).map((c) => ({ id: String(c.id), nome: String(c.company_name || c.full_name || "Cliente") })).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
     [clients],
@@ -217,7 +255,8 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
   const abrirContrato = async (c: Contract) => {
     // Contrato de modelo abre por dentro (documento, dados, versões e trilha).
     if (c.origem === "modelo") {
-      if (lockedClientId) window.open(`/contratos?client=${c.client_id}&contrato=${c.id}`, "_self");
+      // Dentro de Arquivos do cliente: troca de tela sem recarregar o painel (o Voltar do navegador volta aos Arquivos).
+      if (lockedClientId) navigate(`/contratos?client=${c.client_id}&contrato=${c.id}`);
       else mudar({ contrato: c.id });
       return;
     }
@@ -233,20 +272,6 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
     }
   };
 
-  const enviarContrato = async (c: Contract) => {
-    const client = clientById(c.client_id);
-    const { data, error } = await supabase.functions.invoke("send-contract-email", {
-      body: { contract_id: c.id },
-    });
-    if (error || (data as any)?.error) {
-      toast({ title: "Erro ao enviar", description: error?.message || (data as any)?.error, variant: "destructive" });
-    } else {
-      toast({ title: "E-mail enviado ao cliente" });
-      qc.invalidateQueries({ queryKey: ["contracts"] });
-      setLinkOpen({ url: (data as any).signUrl, email: client?.email || "" });
-    }
-  };
-
   if (!isAdminOrStaff) {
     return (
       <div className="min-w-0 space-y-4">
@@ -258,15 +283,32 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
   const termo = normalizar(busca);
   const doCliente = clienteFiltro ? contracts.filter((c) => c.client_id === clienteFiltro) : contracts;
   const contagem: Record<string, number> = {};
-  for (const c of doCliente) contagem[c.status] = (contagem[c.status] || 0) + 1;
-  const filtrados = doCliente.filter((c) => {
-    if (filtroStatus !== "todos" && c.status !== filtroStatus) return false;
+  let andamento = 0;
+  for (const c of doCliente) {
+    contagem[c.status] = (contagem[c.status] || 0) + 1;
+    if (emAndamento(c)) andamento += 1;
+  }
+  const encerrados = doCliente.length - andamento;
+  const naBusca = (c: Contract) => {
     if (!termo) return true;
     const cl = clientById(c.client_id);
     return normalizar([c.title, c.description, c.numero, cl?.full_name, cl?.company_name, c.original_file_name].filter(Boolean).join(" ")).indexOf(termo) >= 0;
-  });
+  };
+  const filtrados = doCliente.filter((c) => noFiltro(c, filtroStatus) && naBusca(c));
+  // A busca não esconde contrato: no padrão, os encerrados que batem com o termo ficam a um clique.
+  const encerradosNaBusca = filtroStatus === "andamento" ? doCliente.filter((c) => !emAndamento(c) && naBusca(c)).length : 0;
   const aguardandoAssinatura = doCliente.filter((c) => !c.admin_signed_at && c.status === "draft").length;
-  const filtrando = filtroStatus !== "todos" || !!termo;
+  const filtrando = filtroStatus !== "andamento" || !!termo;
+  const limparFiltros = () => {
+    setBusca("");
+    // Volta ao padrão; sem nada em andamento, mostra todos (nunca uma lista vazia de novo).
+    setFiltroStatus(andamento > 0 ? "andamento" : "todos");
+  };
+  const verEncerrados = (qual: "encerrados" | "todos") => (
+    <button type="button" onClick={() => setFiltroStatus(qual)} className={botao.discreto}>
+      {qual === "encerrados" ? `Ver encerrados (${encerradosNaBusca})` : "Ver"}
+    </button>
+  );
 
   const lista: ReactNode = isError ? (
     <EstadoDeErro
@@ -292,99 +334,114 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
         ) : undefined
       }
     />
+  ) : filtrados.length === 0 && filtroStatus === "andamento" && encerradosNaBusca > 0 ? (
+    <EstadoVazio compacto titulo={termo ? "Nenhum contrato em andamento com esse termo." : "Nenhum contrato em andamento."} acao={verEncerrados("encerrados")} />
   ) : filtrados.length === 0 ? (
     <EstadoVazio
       compacto
       titulo="Nenhum contrato nesse filtro."
       acao={
-        <button
-          type="button"
-          onClick={() => {
-            setFiltroStatus("todos");
-            setBusca("");
-          }}
-          className={botao.discreto}
-        >
+        <button type="button" onClick={limparFiltros} className={botao.discreto}>
           Limpar filtros
         </button>
       }
     />
   ) : (
-    <Painel semEspaco>
-      <ul className="divide-y divide-border">
-        {filtrados.map((c) => {
-          const client = clientById(c.client_id);
-          const meta = STATUS_META[c.status] || STATUS_META.draft;
-          const modelo = c.origem === "modelo";
-          const podeExcluir = !modelo && canDeleteContracts && c.status === "draft" && !c.admin_signed_at && !c.sent_at && !c.client_signed_at;
-          return (
-            <li key={c.id} className="flex min-w-0 items-center px-3 py-3 sm:px-4">
-              <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-center">
-                  <FileSignature className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  <h3 className="min-w-0 truncate text-[13px] font-medium leading-5 text-foreground">{c.title}</h3>
-                  <span className={juntar(etiqueta, "ml-2 hidden sm:inline-flex", meta.cls)}>{meta.label}</span>
-                </div>
-                <p className={juntar(texto.auxiliar, "mt-1 truncate sm:pl-6")}>
-                  <span className="sm:hidden">{meta.label} · </span>
-                  {client?.full_name || "-"}
-                  {client?.company_name ? ` · ${client.company_name}` : ""}
-                  {modelo && c.numero ? ` · ${c.numero} v${c.versao || 1}` : ""}
-                  {` · ${new Date(c.created_at).toLocaleDateString("pt-BR")}`}
-                </p>
-                {!modelo && (
-                  <p className="mt-1 flex min-w-0 flex-wrap items-center text-[12px] sm:pl-6 [&>*]:mr-3">
-                    {c.admin_signed_at ? (
-                      <span className="inline-flex items-center text-success">
-                        <CheckCircle2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Admin assinou
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center text-muted-foreground">
-                        <Clock className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Aguarda sua assinatura
-                      </span>
-                    )}
-                    {c.client_signed_at ? (
-                      <span className="inline-flex items-center text-success">
-                        <CheckCircle2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Cliente assinou
-                      </span>
-                    ) : c.sent_at ? (
-                      <span className="inline-flex items-center text-warning">
-                        <Mail className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Enviado, aguardando cliente
-                      </span>
-                    ) : null}
-                  </p>
-                )}
-              </div>
-              <div className="ml-3 flex shrink-0 items-center sm:ml-4 [&>*+*]:ml-1.5 sm:[&>*+*]:ml-2">
-                <button type="button" onClick={() => void abrirContrato(c)} className={botao.secundario} aria-label={`Abrir ${c.title}`}>
-                  <ExternalLink className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
-                  <span className="hidden sm:inline">Abrir</span>
+    <div className="min-w-0 space-y-2">
+      <Painel semEspaco>
+        <ul className="divide-y divide-border">
+          {filtrados.map((c) => {
+            const client = clientById(c.client_id);
+            const arquivado = c.status === "completed" && !!c.arquivado_em;
+            const meta = arquivado ? META_ARQUIVADO : STATUS_META[c.status] || STATUS_META.draft;
+            const modelo = c.origem === "modelo";
+            const versao = Number(c.versao) || 1;
+            const podeExcluir = !modelo && canDeleteContracts && c.status === "draft" && !c.admin_signed_at && !c.sent_at && !c.client_signed_at;
+            const IconeDeAbrir = modelo ? ChevronRight : ExternalLink;
+            return (
+              <li key={c.id} className="flex min-w-0 items-center pr-3 sm:pr-4">
+                {/* A linha inteira abre o contrato (UXS), com o mesmo recuo e altura de antes (o respiro da linha passou para o botão). Fora da ordem do Tab: o teclado usa o "Abrir" ao lado. */}
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => void abrirContrato(c)}
+                  className={juntar(toqueCompacto, "min-w-0 flex-1 px-3 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none sm:px-4")}
+                  data-linha-do-contrato=""
+                >
+                  <span className="flex min-w-0 items-center">
+                    <FileSignature className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <span className="block min-w-0 truncate text-[13px] font-medium leading-5 text-foreground">{c.title}</span>
+                    <span className={juntar(etiqueta, "ml-2 hidden sm:inline-flex", meta.cls)}>{meta.label}</span>
+                  </span>
+                  <span className={juntar(texto.auxiliar, "mt-1 block truncate sm:pl-6")}>
+                    <span className="sm:hidden">{meta.label} · </span>
+                    {client?.full_name || "-"}
+                    {client?.company_name ? ` · ${client.company_name}` : ""}
+                    {modelo && c.numero ? ` · ${c.numero}${versao > 1 ? ` v${versao}` : ""}` : ""}
+                    {` · ${new Date(c.created_at).toLocaleDateString("pt-BR")}`}
+                  </span>
+                  {!modelo && (
+                    <span className="mt-1 flex min-w-0 flex-wrap items-center text-[12px] sm:pl-6 [&>*]:mr-3">
+                      {c.admin_signed_at ? (
+                        <span className="inline-flex items-center text-success">
+                          <CheckCircle2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Admin assinou
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center text-muted-foreground">
+                          <Clock className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Aguarda sua assinatura
+                        </span>
+                      )}
+                      {c.client_signed_at ? (
+                        <span className="inline-flex items-center text-success">
+                          <CheckCircle2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Cliente assinou
+                        </span>
+                      ) : c.sent_at ? (
+                        <span className="inline-flex items-center text-warning">
+                          <Mail className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Enviado, aguardando cliente
+                        </span>
+                      ) : null}
+                    </span>
+                  )}
                 </button>
-                {!modelo && canManageContracts && !c.admin_signed_at && (
-                  <button type="button" onClick={() => setSignOpen(c)} className={juntar(botao.secundario, "border-primary/50 text-primary hover:bg-primary/10")}>
-                    <FileSignature className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
-                    <span className="hidden sm:inline">Assinar</span>
-                    <span className="sr-only sm:hidden">Assinar {c.title}</span>
+                <div className="flex shrink-0 items-center [&>*+*]:ml-1.5 sm:[&>*+*]:ml-2">
+                  <button type="button" onClick={() => void abrirContrato(c)} className={botao.secundario} aria-label={`Abrir ${c.title}`}>
+                    <IconeDeAbrir className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                    <span className="hidden sm:inline">Abrir</span>
                   </button>
-                )}
-                {!modelo && canManageContracts && c.admin_signed_at && !c.client_signed_at && ["draft", "sent"].indexOf(c.status) >= 0 && (
-                  <button type="button" onClick={() => void enviarContrato(c)} className={botao.secundario}>
-                    <Send className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
-                    <span className="hidden sm:inline">{c.sent_at ? "Reenviar" : "Enviar"}</span>
-                    <span className="sr-only sm:hidden">{c.sent_at ? "Reenviar" : "Enviar"} {c.title}</span>
-                  </button>
-                )}
-                {podeExcluir && (
-                  <button type="button" onClick={() => setConfirmDelete(c)} className={juntar(botao.icone, "hover:text-destructive")} aria-label={`Excluir ${c.title}`}>
-                    <Trash2 className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </Painel>
+                  {!modelo && canManageContracts && !c.admin_signed_at && (
+                    <button type="button" onClick={() => setSignOpen(c)} className={juntar(botao.secundario, "border-primary/50 text-primary hover:bg-primary/10")}>
+                      <FileSignature className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                      <span className="hidden sm:inline">Assinar</span>
+                      <span className="sr-only sm:hidden">Assinar {c.title}</span>
+                    </button>
+                  )}
+                  {!modelo && canManageContracts && c.admin_signed_at && !c.client_signed_at && ["draft", "sent"].indexOf(c.status) >= 0 && (
+                    <button type="button" onClick={() => setEnvioAberto(c)} className={botao.secundario}>
+                      <Send className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                      <span className="hidden sm:inline">{c.sent_at ? "Reenviar" : "Enviar"}</span>
+                      <span className="sr-only sm:hidden">{c.sent_at ? "Reenviar" : "Enviar"} {c.title}</span>
+                    </button>
+                  )}
+                  {podeExcluir && (
+                    <button type="button" onClick={() => setConfirmDelete(c)} className={juntar(botao.icone, "hover:text-destructive")} aria-label={`Excluir ${c.title}`}>
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </Painel>
+      {termo && encerradosNaBusca > 0 && (
+        <p className={juntar(texto.auxiliar, "flex min-w-0 items-center")} data-encerrados-na-busca="">
+          <span className="min-w-0 truncate">
+            {encerradosNaBusca} {encerradosNaBusca === 1 ? "encerrado" : "encerrados"} com esse termo
+          </span>
+          <span className="ml-1 shrink-0">{verEncerrados("todos")}</span>
+        </p>
+      )}
+    </div>
   );
 
   const principal: ReactNode = vistaModelos ? (
@@ -398,22 +455,22 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
         contratoId={contratoAberto}
         aoVoltar={() => mudar({ contrato: null })}
         aoAbrir={(id) => mudar({ contrato: id })}
-        nomeDoCliente={(() => {
+        nomeDoCliente={aberto ? nomeDe(clientById(aberto.client_id)) : ""}
+        emailDoCliente={(() => {
           const cl = aberto ? clientById(aberto.client_id) : null;
-          return (cl && (cl.company_name || cl.full_name)) || "";
+          return cl ? (cl.email ? String(cl.email) : null) : undefined;
         })()}
       />
     </Suspense>
   ) : (
     <div className="min-w-0 space-y-4">
+      {/* Esqueleto no lugar do painel enquanto a lista e o painel chegam: a lista não pula para baixo. */}
+      {!lockedClientId && isLoading && contracts.length === 0 && <EsqueletoDoPainel />}
       {!lockedClientId && contracts.length > 0 && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<EsqueletoDoPainel />}>
           <PainelDosContratos
             clientId={clienteFiltro || null}
-            nomeDoCliente={(id) => {
-              const cl = clientById(id);
-              return (cl && (cl.company_name || cl.full_name)) || "";
-            }}
+            nomeDoCliente={(id) => nomeDe(clientById(id))}
             aoAbrir={(id, cliente) => mudar({ contrato: id, client: cliente })}
           />
         </Suspense>
@@ -421,6 +478,31 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
       {lista}
     </div>
   );
+
+  // Lateral sem cliente: escolher ali mesmo (mesmo ?client do filtro do topo). Com contrato aberto ainda sem dono conhecido, esqueleto (nada de trocar de cliente com o contrato na tela).
+  const lateralSemCliente: ReactNode = contratoAberto && (isLoading || isError) ? (
+    <div aria-busy="true" aria-label="Abrindo o agente" className="h-full min-h-[320px] animate-pulse rounded-lg bg-muted" />
+  ) : (
+    <EstadoVazio
+      compacto
+      icone={<FileSignature className="h-5 w-5" />}
+      titulo="Escolha um cliente"
+      descricao="O agente monta o contrato dele."
+      acao={
+        !contratoAberto && listaDeClientes.length > 0 ? (
+          <SeletorCompacto
+            modo="lista"
+            rotulo="Escolher cliente"
+            valor=""
+            opcoes={listaDeClientes.map((c) => ({ valor: c.id, rotulo: c.nome }))}
+            onEscolher={(v) => mudar({ client: v })}
+          />
+        ) : undefined
+      }
+    />
+  );
+
+  const envioCliente = envioAberto ? clientById(envioAberto.client_id) : null;
 
   return (
     <div className="min-w-0 space-y-4">
@@ -432,9 +514,13 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
             ? undefined
             : filtrando
               ? `${filtrados.length} de ${doCliente.length}`
-              : `${doCliente.length} ${doCliente.length === 1 ? "contrato" : "contratos"}${aguardandoAssinatura ? ` · ${aguardandoAssinatura} em rascunho` : ""}`
+              : [
+                  `${andamento} em andamento`,
+                  encerrados ? `${encerrados} ${encerrados === 1 ? "encerrado" : "encerrados"}` : null,
+                  aguardandoAssinatura ? `${aguardandoAssinatura} em rascunho` : null,
+                ].filter(Boolean).join(" · ")
         }
-        ajuda="Monte o contrato pelo modelo (condições gerais e um anexo por serviço), confira em Dados o que falta, congele e assine pela agência e envie o link. O agente ao lado monta pelo que você descrever. Contrato já pronto em PDF ainda sobe pelo menu."
+        ajuda="Monte o contrato pelo modelo (condições gerais e um anexo por serviço), confira em Dados o que falta, assine pela agência e envie o link. O agente ao lado monta pelo que você descrever. Contrato já pronto em PDF sobe pelo menu: depois de subir, a assinatura e o envio abrem em seguida. A lista mostra o que está em andamento; os encerrados ficam no filtro."
         acoes={
           canManageContracts ? (
             <div className="flex items-center [&>*+*]:ml-1.5">
@@ -473,7 +559,10 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
           )}
           <SeletorCompacto
             rotulo="Status do contrato"
-            opcoes={FILTROS_DE_STATUS.map((f) => ({ ...f, contador: f.valor === "todos" ? doCliente.length : contagem[f.valor] || 0 }))}
+            opcoes={FILTROS_DE_STATUS.map((f) => ({
+              ...f,
+              contador: f.valor === "todos" ? doCliente.length : f.valor === "andamento" ? andamento : f.valor === "encerrados" ? encerrados : contagem[f.valor] || 0,
+            }))}
             valor={filtroStatus}
             onEscolher={setFiltroStatus}
           />
@@ -495,7 +584,7 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
                 <AgenteDeContratos key={clienteDoAgente} clientId={clienteDoAgente} contratoId={contratoAberto} aoAbrirContrato={(id) => mudar({ contrato: id, client: clienteDoAgente })} />
               </Suspense>
             ) : (
-              <EstadoVazio compacto icone={<FileSignature className="h-5 w-5" />} titulo="Escolha um cliente" descricao="O agente monta o contrato dele." />
+              lateralSemCliente
             )
           }
         >
@@ -514,57 +603,49 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
               setNovoAberto(false);
               void qc.invalidateQueries({ queryKey: CHAVES_DOS_CONTRATOS.lista });
               qc.setQueryData(CHAVES_DOS_CONTRATOS.um(p.contrato.id), p);
-              if (lockedClientId) window.open(`/contratos?client=${p.contrato.client_id}&contrato=${p.contrato.id}`, "_self");
+              if (lockedClientId) navigate(`/contratos?client=${p.contrato.client_id}&contrato=${p.contrato.id}`);
               else mudar({ client: p.contrato.client_id, contrato: p.contrato.id, novo: null });
             }}
           />
         </Suspense>
       )}
 
+      {/* PDF pronto (UXS): subir, assinar e enviar num caminho só. Quem fechar no meio continua com Assinar e Enviar na linha. */}
       <UploadContractDialog
         open={uploadOpen}
         onOpenChange={setUploadOpen}
         clients={clients}
         lockedClientId={lockedClientId}
-        clienteInicial={clienteDoLink}
-        onCreated={() => qc.invalidateQueries({ queryKey: ["contracts"] })}
+        clienteInicial={clienteFiltro}
+        onCreated={(novo) => {
+          void qc.invalidateQueries({ queryKey: ["contracts"] });
+          setUploadOpen(false);
+          setSignOpen(novo);
+        }}
       />
 
       <AdminSignDialog
         contract={signOpen}
         onClose={() => setSignOpen(null)}
-        onSigned={() => { qc.invalidateQueries({ queryKey: ["contracts"] }); setSignOpen(null); }}
+        onSigned={(assinado) => {
+          void qc.invalidateQueries({ queryKey: ["contracts"] });
+          setSignOpen(null);
+          setEnvioAberto(assinado);
+        }}
         adminName={profile?.full_name || ""}
       />
 
-      <Dialog open={!!linkOpen} onOpenChange={(o) => !o && setLinkOpen(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Contrato enviado</DialogTitle>
-            <DialogDescription>
-              Link de assinatura enviado para <strong>{linkOpen?.email}</strong>.
-            </DialogDescription>
-          </DialogHeader>
-          <CampoDeFormulario rotulo="Link de assinatura">
-            <input readOnly value={linkOpen?.url || ""} onFocus={(e) => e.currentTarget.select()} className={juntar(campo, "font-mono text-[12px]")} />
-          </CampoDeFormulario>
-          <DialogFooter>
-            <button
-              type="button"
-              className={botao.secundario}
-              onClick={() => {
-                if (linkOpen) navigator.clipboard.writeText(linkOpen.url);
-                toast({ title: "Link copiado" });
-              }}
-            >
-              <Copy className="mr-1.5 h-4 w-4" aria-hidden="true" /> Copiar link
-            </button>
-            <button type="button" className={botao.primario} onClick={() => setLinkOpen(null)}>
-              Fechar
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {envioAberto && (
+        <Suspense fallback={null}>
+          <EnvioDoContratoDeArquivo
+            contrato={envioAberto}
+            nomeDoCliente={nomeDe(envioCliente)}
+            emailDoCliente={envioCliente && envioCliente.email ? String(envioCliente.email) : null}
+            aoFechar={() => setEnvioAberto(null)}
+            aoEnviado={() => void qc.invalidateQueries({ queryKey: ["contracts"] })}
+          />
+        </Suspense>
+      )}
 
       <ConfirmModal
         open={!!confirmDelete}
@@ -578,25 +659,63 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
   );
 }
 
-function UploadContractDialog({ open, onOpenChange, clients, onCreated, lockedClientId, clienteInicial }: any) {
+function UploadContractDialog({
+  open,
+  onOpenChange,
+  clients,
+  onCreated,
+  lockedClientId,
+  clienteInicial,
+}: {
+  open: boolean;
+  onOpenChange: (aberto: boolean) => void;
+  clients: any[];
+  onCreated: (novo: Contract) => void;
+  lockedClientId?: string;
+  /** O cliente do filtro (já conferido como id válido). Só entra se estiver na lista. */
+  clienteInicial: string;
+}) {
   const { user } = useAuth();
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [clientId, setClientId] = useState(lockedClientId || clienteInicial || "");
+  const [clientId, setClientId] = useState(lockedClientId || "");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const preenchido = useRef(false);
+  const naLista = (id: string) => !!id && clients.some((c: any) => String(c.id) === id);
 
-  const reset = () => {
-    setTitle(""); setDescription(""); setClientId(lockedClientId || ""); setFile(null);
+  // Ao abrir: tudo limpo e o cliente do contexto já escolhido.
+  useEffect(() => {
+    if (!open) return;
+    setTitle("");
+    setDescription("");
+    setFile(null);
+    if (fileRef.current) fileRef.current.value = "";
+    const inicial = lockedClientId || (naLista(clienteInicial) ? clienteInicial : "");
+    setClientId(inicial);
+    preenchido.current = !!inicial;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  // A lista de clientes chegou depois de abrir: preenche uma vez só (não desfaz a escolha da pessoa).
+  useEffect(() => {
+    if (!open || preenchido.current || lockedClientId || !naLista(clienteInicial)) return;
+    preenchido.current = true;
+    setClientId((atual) => atual || clienteInicial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, clients, clienteInicial, lockedClientId]);
+
+  const escolherArquivo = (f: File | null) => {
+    setFile(f);
+    // O nome do arquivo sugere o título, sem apagar o que a pessoa digitou.
+    if (f && !title.trim()) setTitle(f.name.replace(/\.pdf$/i, "").trim());
   };
 
+  const pronto = !!file && !!clientId && !!title.trim();
+
   const handleSubmit = async () => {
-    if (!file || !clientId || !title) {
-      toast({ title: "Preencha todos os campos", variant: "destructive" });
-      return;
-    }
+    if (!file || !clientId || !title.trim()) return;
     setUploading(true);
     try {
       const ext = file.name.split(".").pop();
@@ -605,31 +724,34 @@ function UploadContractDialog({ open, onOpenChange, clients, onCreated, lockedCl
         cacheControl: "3600", upsert: false,
       });
       if (upErr) throw upErr;
-      const { error: insErr } = await supabase.from("contracts").insert({
-        client_id: clientId,
-        title,
-        description: description || null,
-        original_file_url: `files://${path}`,
-        original_file_name: file.name,
-        status: "draft",
-        created_by: user?.id,
-      });
-      if (insErr) {
+      const { data: novo, error: insErr } = await supabase
+        .from("contracts")
+        .insert({
+          client_id: clientId,
+          title: title.trim(),
+          description: description || null,
+          original_file_url: `files://${path}`,
+          original_file_name: file.name,
+          status: "draft",
+          created_by: user?.id,
+        })
+        .select(COLUNAS_DA_LISTA)
+        .single();
+      if (insErr || !novo) {
         const { error: cleanupError } = await supabase.storage
           .from("files")
           .remove([path]);
+        const motivo = insErr ? insErr.message : "O contrato não foi criado.";
         if (cleanupError) {
           throw new Error(
-            `${insErr.message}. O arquivo enviado também ficou pendente de limpeza: ${cleanupError.message}`,
+            `${motivo}. O arquivo enviado também ficou pendente de limpeza: ${cleanupError.message}`,
           );
         }
-        throw insErr;
+        throw insErr || new Error(motivo);
       }
 
-      toast({ title: "Contrato criado", description: "Agora assine para liberar o envio ao cliente." });
-      reset();
-      onOpenChange(false);
-      onCreated();
+      toast({ title: "Contrato criado" });
+      onCreated(novo as unknown as Contract);
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
     } finally {
@@ -638,13 +760,26 @@ function UploadContractDialog({ open, onOpenChange, clients, onCreated, lockedCl
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Novo contrato</DialogTitle>
+          <DialogTitle>Subir contrato em PDF</DialogTitle>
           <DialogDescription>Suba o PDF e escolha o cliente.</DialogDescription>
         </DialogHeader>
         <GrupoDeCampos colunas={1}>
+          <CampoDeFormulario
+            rotulo="Arquivo PDF"
+            obrigatorio
+            apoio={file ? `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB` : undefined}
+          >
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".pdf"
+              onChange={(e) => escolherArquivo(e.target.files?.[0] || null)}
+              className="block w-full min-w-0 text-[13px] text-muted-foreground file:mr-3 file:h-9 file:rounded-md file:border-0 file:bg-muted file:px-3 file:text-[13px] file:font-medium file:text-foreground hover:file:bg-muted/80"
+            />
+          </CampoDeFormulario>
           <CampoDeFormulario rotulo="Título" obrigatorio>
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Contrato de prestação de serviços 2026" className={campo} />
           </CampoDeFormulario>
@@ -663,23 +798,16 @@ function UploadContractDialog({ open, onOpenChange, clients, onCreated, lockedCl
           <CampoDeFormulario rotulo="Descrição" apoio="Opcional.">
             <textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Resumo do escopo..." className={juntar(campoTexto, "min-h-[64px]")} />
           </CampoDeFormulario>
-          <CampoDeFormulario
-            rotulo="Arquivo PDF"
-            obrigatorio
-            apoio={file ? `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB` : undefined}
-          >
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".pdf"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-              className="block w-full min-w-0 text-[13px] text-muted-foreground file:mr-3 file:h-9 file:rounded-md file:border-0 file:bg-muted file:px-3 file:text-[13px] file:font-medium file:text-foreground hover:file:bg-muted/80"
-            />
-          </CampoDeFormulario>
         </GrupoDeCampos>
         <DialogFooter>
           <button type="button" className={botao.secundario} onClick={() => onOpenChange(false)}>Cancelar</button>
-          <button type="button" className={botao.primario} onClick={handleSubmit} disabled={uploading}>
+          <button
+            type="button"
+            className={botao.primario}
+            onClick={handleSubmit}
+            disabled={uploading || !pronto}
+            title={pronto ? undefined : "Escolha o arquivo, o título e o cliente"}
+          >
             {uploading ? "Enviando..." : "Criar contrato"}
           </button>
         </DialogFooter>
@@ -688,29 +816,48 @@ function UploadContractDialog({ open, onOpenChange, clients, onCreated, lockedCl
   );
 }
 
-function AdminSignDialog({ contract, onClose, onSigned, adminName }: any) {
+function AdminSignDialog({ contract, onClose, onSigned, adminName }: { contract: Contract | null; onClose: () => void; onSigned: (assinado: Contract) => void; adminName: string }) {
   const { toast } = useToast();
   const [signName, setSignName] = useState(adminName);
   const [accept, setAccept] = useState(false);
   const [loading, setLoading] = useState(false);
+  const id = contract ? contract.id : null;
+
+  // A janela nunca desmonta: a cada contrato, o aceite volta a desmarcado e o nome ao do perfil.
+  useEffect(() => {
+    if (!id) return;
+    setAccept(false);
+    setSignName(adminName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+  // O perfil chegou depois de abrir: o nome entra se o campo estiver vazio.
+  useEffect(() => {
+    if (id && adminName) setSignName((atual) => atual || adminName);
+  }, [id, adminName]);
 
   if (!contract) return null;
 
   const handleSign = async () => {
-    if (!signName.trim() || !accept) {
-      toast({ title: "Preencha o nome e aceite os termos", variant: "destructive" });
-      return;
-    }
+    if (!signName.trim() || !accept) return;
     setLoading(true);
-    const { error } = await supabase.from("contracts").update({
-      admin_signature_name: signName.trim(),
-      admin_signed_at: new Date().toISOString(),
-      admin_signature_ip: "portal",
-      status: "sent",
-    }).eq("id", contract.id);
+    const agora = new Date().toISOString();
+    const { data, error } = await supabase
+      .from("contracts")
+      .update({
+        admin_signature_name: signName.trim(),
+        admin_signed_at: agora,
+        admin_signature_ip: "portal",
+        status: "sent",
+      })
+      .eq("id", contract.id)
+      .select(COLUNAS_DA_LISTA)
+      .maybeSingle();
     setLoading(false);
     if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
-    else { toast({ title: "Assinatura registrada", description: "Agora você pode enviar ao cliente." }); onSigned(); }
+    else {
+      toast({ title: "Assinatura registrada" });
+      onSigned(data ? (data as unknown as Contract) : { ...contract, admin_signed_at: agora, status: "sent" });
+    }
   };
 
   return (
@@ -724,10 +871,10 @@ function AdminSignDialog({ contract, onClose, onSigned, adminName }: any) {
           <PrivateContractFrame contract={contract} />
           <div className="space-y-3 border-t border-border pt-4">
             <CampoDeFormulario rotulo="Seu nome completo" obrigatorio apoio="Como deve aparecer na assinatura.">
-              <input value={signName} onChange={(e) => setSignName(e.target.value)} className={campo} />
+              <input value={signName} onChange={(e) => setSignName(e.target.value)} className={campo} autoComplete="name" />
             </CampoDeFormulario>
             <div className="flex items-start">
-              <Checkbox id="admin-accept" checked={accept} onCheckedChange={(v) => setAccept(!!v)} className="mr-2 mt-0.5" />
+              <Checkbox id="admin-accept" checked={accept} onCheckedChange={(v) => setAccept(!!v)} className={juntar(toqueCompacto, "mr-2 mt-0.5")} />
               <label htmlFor="admin-accept" className={juntar(texto.corpo, "cursor-pointer")}>
                 Li o contrato na íntegra e, ao assinar digitalmente, declaro que estou ciente e de acordo com todos os termos descritos.
               </label>
@@ -736,7 +883,7 @@ function AdminSignDialog({ contract, onClose, onSigned, adminName }: any) {
         </div>
         <DialogFooter>
           <button type="button" className={botao.secundario} onClick={onClose}>Cancelar</button>
-          <button type="button" onClick={handleSign} disabled={loading} className={botao.primario}>
+          <button type="button" onClick={handleSign} disabled={loading || !accept || !signName.trim()} className={botao.primario}>
             <FileSignature className="mr-1.5 h-4 w-4" aria-hidden="true" />
             {loading ? "Assinando..." : "Assinar contrato"}
           </button>
@@ -751,9 +898,11 @@ function PrivateContractFrame({ contract }: { contract: Contract }) {
     fileUrl: contract.original_file_url,
     expiresIn: 15 * 60,
   });
+  // Abaixo de 640 px o iframe não é montado (no iPhone mostra só a primeira página); o link abre o PDF inteiro.
+  const pdfNaPagina = useLarguraMinima(640);
 
   if (loading) {
-    return <div className="h-[50vh] max-h-[400px] w-full animate-pulse rounded-md bg-muted" aria-busy="true" aria-label="Carregando contrato" />;
+    return <div className={juntar("w-full animate-pulse rounded-md bg-muted", pdfNaPagina ? "h-[50vh] max-h-[400px]" : "h-9")} aria-busy="true" aria-label="Carregando contrato" />;
   }
 
   if (error || !url) {
@@ -761,10 +910,17 @@ function PrivateContractFrame({ contract }: { contract: Contract }) {
   }
 
   return (
-    <iframe
-      src={`${url}#toolbar=1&view=FitH`}
-      className="h-[50vh] max-h-[400px] w-full rounded-md border border-border bg-white"
-      title={contract.title}
-    />
+    <div className="min-w-0 space-y-3">
+      <a href={url} target="_blank" rel="noopener noreferrer" className={botao.secundario}>
+        <ExternalLink className="mr-1.5 h-4 w-4" aria-hidden="true" /> Abrir o contrato completo (PDF)
+      </a>
+      {pdfNaPagina && (
+        <iframe
+          src={`${url}#toolbar=1&view=FitH`}
+          className="h-[50vh] max-h-[400px] w-full rounded-md border border-border bg-white"
+          title={contract.title}
+        />
+      )}
+    </div>
   );
 }

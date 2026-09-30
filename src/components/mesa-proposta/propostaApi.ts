@@ -296,6 +296,27 @@ export function relerTudo(qc: QueryClient, clientId: string, propostaId?: string
   }
 }
 
+export type ContatoDaProposta = { nome: string; email: string; numero: string };
+
+/**
+ * Contato do cliente para o Envio (frente UXS): a função lê com a mesma regra
+ * do enviar (primeiro o lead, depois a ficha). Só com link (fora de rascunho).
+ * Sem a ação publicada, fica vazio e o Envio segue como antes.
+ */
+export function useContatoDaProposta(propostaId: string | null, ativo: boolean) {
+  return useQuery({
+    queryKey: ["mesa-proposta", "contato", propostaId || "nenhuma"],
+    enabled: !!propostaId && ativo,
+    staleTime: 5 * 60_000,
+    retry: false,
+    queryFn: async (): Promise<ContatoDaProposta> => {
+      const d = await chamarProposta<Record<string, unknown>>("contato", { proposta_id: propostaId });
+      const texto = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+      return { nome: texto(d && d.nome), email: texto(d && d.email), numero: texto(d && d.numero).replace(/[^\d]/g, "") };
+    },
+  });
+}
+
 /** Link público da proposta (o mesmo endereço que a função devolve no envio). */
 export function linkPublico(token: string | null): string | null {
   if (!token || typeof window === "undefined") return null;
@@ -352,10 +373,11 @@ export function useServicos() {
   });
 }
 
-/** Cases e depoimentos da agência, com a autorização. */
-export function useProvas() {
+/** Cases e depoimentos da agência, com a autorização (`ativo` false: só lê quando alguém precisar). */
+export function useProvas(ativo = true) {
   return useQuery({
     queryKey: CHAVES.provas(),
+    enabled: ativo,
     staleTime: 60_000,
     queryFn: async (): Promise<{ lista: ProvaDaAgencia[]; semTabela: boolean }> => {
       const { data, error } = await (supabase as any).from("proposta_provas").select("id, tipo, titulo, texto, nome, cargo, empresa, link, nicho, autorizado, autorizacao, autorizado_em, arquivado_em").order("criado_em", { ascending: false }).limit(300);

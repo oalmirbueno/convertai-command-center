@@ -92,6 +92,11 @@ const corpoDoPedido = (p: PedidoDoDocumento) => {
   return corpo;
 };
 
+/** Hoje no horário de São Paulo ("2026-09-30"): depois das 21h o toISOString já marcava o dia seguinte. */
+export const hojeEmSaoPaulo = (agora: Date = new Date()) => new Date(agora.getTime() - 3 * 3_600_000).toISOString().slice(0, 10);
+/** Dia 1 do mês atual, no horário de São Paulo (o "De" padrão do período de um documento novo). */
+export const inicioDoMesEmSaoPaulo = (agora: Date = new Date()) => `${hojeEmSaoPaulo(agora).slice(0, 7)}-01`;
+
 /** Mês da Mesa ("2026-09-01") na referência do documento ("2026-09"). */
 export const referenciaDoMes = (mes: string) => String(mes || "").slice(0, 7);
 
@@ -126,8 +131,13 @@ export async function gerarDocumento(p: PedidoDoDocumento): Promise<ResultadoDaG
 }
 
 export async function listarDocumentos(clientId: string): Promise<DocumentoDaEntrega[]> {
-  const r = await chamarFuncao<{ documentos: DocumentoDaEntrega[] }>("documentos", { acao: "listar", client_id: clientId });
-  return r.documentos || [];
+  return (await lerDocumentosDaEntrega(clientId)).documentos;
+}
+
+/** A lista ativa com quantos estão arquivados (frente UXS), ou só os arquivados (para o Desarquivar). */
+export async function lerDocumentosDaEntrega(clientId: string, opcoes: { arquivados?: boolean } = {}): Promise<{ documentos: DocumentoDaEntrega[]; arquivados: number | null }> {
+  const r = await chamarFuncao<{ documentos: DocumentoDaEntrega[]; arquivados?: number | null }>("documentos", { acao: "listar", client_id: clientId, ...(opcoes.arquivados ? { arquivados: true } : {}) });
+  return { documentos: r.documentos || [], arquivados: typeof r.arquivados === "number" ? r.arquivados : null };
 }
 
 /** Manda ao cliente pelo fluxo de aprovação que já existe. Só depois do Confirmar. */
@@ -154,8 +164,19 @@ export const ROTULO_DO_TIPO_DE_ENTREGA: Record<TipoDeEntrega, string> = {
   periodo: "Período",
 };
 
-/** Pedido de volta a partir de um documento da lista (gerar de novo). */
-export const pedidoDoDocumento = (d: DocumentoDaEntrega): PedidoDoDocumento => ({ clientId: d.client_id, marcaId: d.marca_id, tipo: d.tipo, referencia: d.referencia, titulo: d.titulo });
+/**
+ * Pedido de volta a partir de um documento da lista (gerar de novo). Com o
+ * rascunho da equipe, gera com ele (texto escrito, provas escolhidas): sem
+ * isso o Gerar da lista cobrava IA e ignorava o texto da equipe.
+ */
+export const pedidoDoDocumento = (d: DocumentoDaEntrega): PedidoDoDocumento => ({
+  clientId: d.client_id,
+  marcaId: d.marca_id,
+  tipo: d.tipo,
+  referencia: d.referencia,
+  titulo: d.titulo,
+  ...(d.tem_rascunho ? { usarRascunho: true, documentoId: d.id } : {}),
+});
 
 // ------------------------------------------------------------------ portal do cliente
 

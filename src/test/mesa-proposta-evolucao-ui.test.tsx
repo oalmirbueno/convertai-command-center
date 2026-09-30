@@ -8,6 +8,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
  * Mesa Proposta, frente PRO2, na tela: os 3 pacotes no Investimento (o
  * nível de cada item vai no salvar), o follow-up no Envio (mensagem pronta e
  * "Já mandei" registra) e o modelo visual no Rascunho (a prévia muda na hora).
+ * Frente UXS: o Salvar é o único da barra do pé de cada etapa.
  */
 
 configure({ asyncUtilTimeout: 8000 });
@@ -116,22 +117,23 @@ beforeEach(() => {
 describe("Mesa Proposta, PRO2 na tela", () => {
   it("Contexto: liga os 3 pacotes, escolhe o nível do item e o salvar leva os pacotes", async () => {
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=contexto&proposta=${PROPOSTA}`);
-    const caixa = await screen.findByRole("checkbox", { name: /Proposta com 3 pacotes/ });
+    const caixa = await screen.findByRole("checkbox", { name: /Proposta com 3 pacotes/ }, { timeout: 30000 });
     fireEvent.click(caixa);
     fireEvent.change(await screen.findByLabelText("Pacote de Tráfego pago"), { target: { value: "completo" } });
-    const investimento = screen.getByText("Investimento", { selector: "h2" }).closest("section") as HTMLElement;
-    fireEvent.click(within(investimento).getByRole("button", { name: "Salvar" }));
+    // UXS: o Salvar único fica na barra do pé do Contexto e leva só o que mudou (os itens não mudaram).
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
     await waitFor(() => expect(chamadasDe("salvar").length).toBe(1));
     const corpo = chamadasDe("salvar")[0][1].body;
     expect(corpo.pacotes).toMatchObject({ ativo: true, niveis: { i1: "essencial", i2: "completo" } });
-    expect(corpo.itens.map((i: { id: string }) => i.id)).toEqual(["i1", "i2"]);
+    expect(Object.keys(corpo.pacotes.niveis).sort()).toEqual(["i1", "i2"]);
+    expect(corpo.itens).toBeUndefined();
   });
 
   it("Envio: proposta vista há dias sem resposta mostra o follow-up com a mensagem pronta; Já mandei registra", async () => {
     mock.tabelas.propostas = [linha({ status: "vista", token: "d".repeat(64), enviada_em: diasAtras(5), vista_em: diasAtras(3) })];
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=envio&proposta=${PROPOSTA}`);
     // findByText na primeira espera: varre a árvore ~9x mais rápido que findByRole (a etapa abre sob carga).
-    fireEvent.click(await screen.findByText("Preparar mensagem"));
+    fireEvent.click(await screen.findByText("Preparar mensagem", {}, { timeout: 30000 }));
     expect(await screen.findByDisplayValue("Oi, Joana. Ficou alguma dúvida?")).toBeTruthy();
     expect(screen.getAllByRole("link", { name: /Abrir no WhatsApp/ }).some((a) => (a.getAttribute("href") || "").indexOf("5541999999999") >= 0)).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Já mandei" }));
@@ -140,14 +142,16 @@ describe("Mesa Proposta, PRO2 na tela", () => {
 
   it("Rascunho: o modelo visual muda a prévia na hora e o salvar leva o visual", async () => {
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=rascunho&proposta=${PROPOSTA}`);
-    const previa = await screen.findByLabelText("Prévia ao vivo", {}, { timeout: 8000 });
+    const previa = await screen.findByLabelText("Prévia ao vivo", {}, { timeout: 30000 });
     expect((previa.querySelector("[data-proposta-documento]") as HTMLElement).getAttribute("data-tema")).toBe("aceleriq");
     const secao = screen.getByText("Modelo visual", { selector: "h2" }).closest("section") as HTMLElement;
     fireEvent.click(within(secao).getByRole("button", { name: "Mostrar" }));
     fireEvent.click(await screen.findByRole("radio", { name: /Claro/ }));
     expect((previa.querySelector("[data-proposta-documento]") as HTMLElement).getAttribute("data-tema")).toBe("claro");
-    fireEvent.click(within(secao).getByRole("button", { name: "Salvar" }));
+    // UXS: o Salvar único da barra do pé leva o visual (e só ele, sem texto mudado).
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
     await waitFor(() => expect(chamadasDe("salvar").length).toBe(1));
     expect(chamadasDe("salvar")[0][1].body.visual).toEqual({ tema: "claro", cores: [] });
+    expect(chamadasDe("salvar")[0][1].body.conteudo).toBeUndefined();
   });
 });

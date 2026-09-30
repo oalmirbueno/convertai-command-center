@@ -12,8 +12,10 @@
  *             filme_ler { filme_id } (sincroniza os renders prontos e devolve links de 1 h) · filme_salvar { filme_id, ... } · filme_arquivar { filme_id, arquivar }
  * Insumos:    insumos_ler { filme_id } · insumo_do_acervo { filme_id, cliente_imagem_id } (copia a foto para a pasta do filme)
  * Texto (IA): brand_gerar · storyboards_gerar { filme_id, modelo_id?, pedido? } · storyboard_escolher { filme_id, indice }
- * Cenas:      cena_salvar { filme_id, cena } · cena_escrever { filme_id, cena_id, modelo_id?, pedido?, teto_usd? } (uma cena por vez, teto, sem laço)
+ *             storyboard_desfazer { filme_id, qual?: troca|geracao } (volta a troca ou a geração pela cópia guardada no filme)
+ * Cenas:      cena_salvar { filme_id, cena } (sem still_aprovado: desaprova só se a cena mudou) · cena_escrever { filme_id, cena_id, modelo_id?, pedido?, teto_usd? } (uma cena por vez, teto, sem laço)
  *             cena_pedir { filme_id, cena_id, modo: still|amostra|final, formatos?, uid } · batidas_pedir { filme_id, uid } · ritmo_casar { filme_id }
+ *             ritmo_desfazer { filme_id, anterior, casadas? } (volta só a duração das cenas que ainda estão casadas)
  * Fila:       render_status { filme_id } · render_cancelar { filme_id, pedido_id }
  * Crítica:    critica_gerar { filme_id } (Jev, nota por critério, só aviso)
  * Render:     montar { filme_id, formatos?, uid } (projeto por formato na Mesa Edição + render final na fila)
@@ -61,6 +63,7 @@ import {
   contraste,
   coresDaMarca,
   dadosDaCenaSobMedida,
+  duracaoDaCena,
   ehFormato,
   escritaAnteriorDaTela,
   ESQUEMA_DA_CENA,
@@ -120,7 +123,10 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   ...PREFLIGHT_CACHE,
 };
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+/** Cópia de desfazer guardada no filme (insumos._desfazer): fica no banco, não vai para a tela. */
+const CHAVE_DO_DESFAZER = "_desfazer";
+const semCopiaDeDesfazer = (k: string, v: unknown) => (k === CHAVE_DO_DESFAZER ? undefined : v);
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body, semCopiaDeDesfazer), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UID = /^[A-Za-z0-9_-]{8,80}$/;
@@ -291,13 +297,28 @@ async function filmesListar(ch: Chamador, c: Record<string, unknown>) {
   return json({ filmes: ((data as unknown[]) || []).map(normalizarFilme).filter(Boolean), custo_usd: 0 });
 }
 
+/** Nome padrão sem repetir no select: "Filme da marca", "Filme da marca 2"... entre os ativos do cliente e da marca. */
+async function nomeLivre(clientId: string, marcaId: string | null, base: string): Promise<string> {
+  let q = servico().from("motion_filmes").select("nome").eq("client_id", clientId).is("arquivado_em", null).ilike("nome", `${base}%`).limit(200);
+  q = marcaId ? q.eq("marca_id", marcaId) : q.is("marca_id", null);
+  const { data, error } = await q;
+  if (error) {
+    if (!semTabela(error)) registrarFalha("mesa-motion: nomes dos filmes não lidos", error, { client_id: clientId });
+    return base;
+  }
+  const usados = new Set(((data as Array<{ nome: string }>) || []).map((x) => String(x.nome)));
+  if (!usados.has(base)) return base;
+  for (let n = 2; n < 500; n++) if (!usados.has(`${base} ${n}`)) return `${base} ${n}`;
+  return base;
+}
+
 async function filmeCriar(ch: Chamador, c: Record<string, unknown>) {
   const clientId = idDe(c.client_id, "client_id");
   await garantirAcesso(ch, clientId);
-  const nome = limpo(c.nome, 120) || "Apresentação da marca";
   const tipo = c.tipo === "filme_marca" ? "filme_marca" : "apresentacao";
   const formatos = (Array.isArray(c.formatos) ? c.formatos : tipo === "filme_marca" ? ["16:9", "9:16"] : ["9:16"]).filter(ehFormato);
   const marcaId = typeof c.marca_id === "string" && UUID.test(c.marca_id) ? c.marca_id : null;
+  const nome = limpo(c.nome, 120) || (await nomeLivre(clientId, marcaId, tipo === "filme_marca" ? "Filme da marca" : "Apresentação em motion"));
   const { data, error } = await servico()
     .from("motion_filmes")
     .insert({ client_id: clientId, marca_id: marcaId, nome, tipo, formatos: formatos.length ? formatos : ["9:16"], criado_por: ch.userId })
@@ -378,9 +399,23 @@ async function filmeSalvar(ch: Chamador, c: Record<string, unknown>) {
   if (c.entrevista !== undefined) campos.entrevista = lerEntrevista(c.entrevista);
   if (c.brand !== undefined) campos.brand = lerBrand(c.brand);
   if (c.som !== undefined) campos.som = { ...lerSom(c.som), batidas: f.som.batidas && lerSom(c.som).trilha && f.som.trilha && lerSom(c.som).trilha!.path === f.som.trilha.path ? f.som.batidas : null };
-  if (c.insumos !== undefined) campos.insumos = { ...f.insumos, ...obj(c.insumos) };
+  if (c.insumos !== undefined) {
+    // A cópia de desfazer só o servidor escreve (a tela não manda cena com código por aqui).
+    const vindos = { ...obj(c.insumos) };
+    delete vindos[CHAVE_DO_DESFAZER];
+    campos.insumos = { ...f.insumos, ...vindos };
+  }
   if (typeof c.modelo === "string") campos.modelo = c.modelo.slice(0, 120) || null;
-  if (Array.isArray(c.cenas)) campos.cenas = c.cenas.slice(0, 16).map((x, i) => cenaDaLinha({ ...(obj(x) as Partial<CenaDaLinha>), ordem: i + 1 }, f.brand.provas, f.client_id).cena);
+  if (Array.isArray(c.cenas)) {
+    // Como no cena_salvar: código sob medida só entra pelo cena_escrever (conferido); daqui vale só o que o filme já tinha.
+    campos.cenas = c.cenas.slice(0, 16).map((x, i) => {
+      const o = obj(x) as Partial<CenaDaLinha>;
+      const antiga = f.cenas.find((y) => y.id === o.id);
+      const cena = cenaDaLinha({ ...o, escrita: antiga ? antiga.escrita : null, ordem: i + 1 }, f.brand.provas, f.client_id).cena;
+      if (cena.modo === "sob_medida" && !cena.escrita) cena.modo = "kit";
+      return cena;
+    });
+  }
   if (!Object.keys(campos).length) return json({ filme: f, custo_usd: 0 });
   return json({ filme: await atualizarFilme(f.id, campos), custo_usd: 0 });
 }
@@ -510,39 +545,93 @@ async function gerarStoryboards(ch: Chamador, f: LinhaDoFilme, modeloId: unknown
   const storyboards = normalizarStoryboards(saida.json, f.tipo, f.brand.provas);
   if (!storyboards.length) throw new ErroHttp(502, "storyboards_vazios", "O modelo não devolveu storyboards. Tente de novo ou troque o modelo.");
   const anterior = { storyboards: f.storyboards, storyboard_escolhido: f.storyboard_escolhido };
-  const filme = await somarCusto(f, saida.custoUsd, { storyboards, storyboard_escolhido: null, etapa: "storyboards" });
+  // Cópia para o Desfazer da tela (os storyboards pagos de antes não se perdem num clique).
+  const copia = f.storyboards.length ? { storyboards: f.storyboards, storyboard_escolhido: f.storyboard_escolhido, conceitos: storyboards.map((s) => s.conceito), em: new Date().toISOString() } : null;
+  const filme = await somarCusto(f, saida.custoUsd, { storyboards, storyboard_escolhido: null, etapa: "storyboards", insumos: comDesfazer(f.insumos, "geracao", copia) });
   return { filme, anterior, custo: saida.custoUsd, saldo: saida.saldoUsd };
 }
 
 async function storyboardsGerar(ch: Chamador, c: Record<string, unknown>) {
   const f = await lerFilme(ch, c.filme_id);
   const r = await gerarStoryboards(ch, f, c.modelo_id, limpo(c.pedido, 600));
-  return json({ filme: r.filme, custo_usd: r.custo, saldo_usd: r.saldo });
+  return json({ filme: r.filme, anterior: { storyboards: r.anterior.storyboards.length, storyboard_escolhido: r.anterior.storyboard_escolhido, pode_desfazer: r.anterior.storyboards.length > 0 }, custo_usd: r.custo, saldo_usd: r.saldo });
 }
+
+/** Guarda (ou tira) a cópia de desfazer no filme: insumos._desfazer.troca ou .geracao. */
+function comDesfazer(insumos: Record<string, unknown>, qual: "troca" | "geracao", copia: Record<string, unknown> | null): Record<string, unknown> {
+  const d = { ...obj(insumos[CHAVE_DO_DESFAZER]) };
+  if (copia) d[qual] = copia;
+  else delete d[qual];
+  const novo = { ...insumos };
+  if (Object.keys(d).length) novo[CHAVE_DO_DESFAZER] = d;
+  else delete novo[CHAVE_DO_DESFAZER];
+  return novo;
+}
+
+/** Retrato das cenas (id, conteúdo, título, aprovação, plano): se mudar, a equipe mexeu depois da troca. */
+const retratoDasCenas = (cenas: CenaDaLinha[]) => JSON.stringify(cenas.map((x) => [x.id, assinaturaDaCena(x), x.titulo, x.still_aprovado, x.prompt, x.arquivo ? x.arquivo.id : null]));
+
+/** O que a troca de storyboard tirou (para o aviso da tela). */
+const resumoDasCenas = (cenas: CenaDaLinha[]) => ({ cenas: cenas.length, stills_aprovados: cenas.filter((x) => x.still_aprovado).length, sob_medida: cenas.filter((x) => x.modo === "sob_medida").length });
 
 async function escolherStoryboard(f: LinhaDoFilme, indice: number) {
   const sb = f.storyboards[indice];
   if (!sb) throw new ErroHttp(404, "storyboard_inexistente", "Este storyboard não existe.");
   const anterior = { storyboard_escolhido: f.storyboard_escolhido, cenas: f.cenas };
   const cenas = sb.cenas.map((x, i) => cenaDaLinha({ ...x, id: undefined, ordem: i + 1 }, f.brand.provas, f.client_id).cena);
-  const filme = await atualizarFilme(f.id, { storyboard_escolhido: indice, cenas, etapa: "stills" });
+  // Com cenas feitas, guarda a cópia: o Desfazer da tela volta as mesmas cenas (os ids iguais religam stills e renders).
+  const copia = f.cenas.length ? { storyboard_escolhido: f.storyboard_escolhido, cenas: f.cenas, retrato: retratoDasCenas(cenas), em: new Date().toISOString() } : null;
+  const filme = await atualizarFilme(f.id, { storyboard_escolhido: indice, cenas, etapa: "stills", insumos: comDesfazer(f.insumos, "troca", copia) });
   return { filme, anterior };
 }
 
 async function storyboardEscolher(ch: Chamador, c: Record<string, unknown>) {
   const f = await lerFilme(ch, c.filme_id);
   const r = await escolherStoryboard(f, Math.floor(Number(c.indice)));
-  return json({ filme: r.filme, custo_usd: 0 });
+  return json({ filme: r.filme, anterior: { storyboard_escolhido: r.anterior.storyboard_escolhido, ...resumoDasCenas(r.anterior.cenas), pode_desfazer: r.anterior.cenas.length > 0 }, custo_usd: 0 });
+}
+
+/** Volta a escolha anterior (storyboard e cenas) e tira a cópia da troca. */
+async function restaurarEscolha(f: LinhaDoFilme, a: Record<string, unknown>) {
+  return await atualizarFilme(f.id, { storyboard_escolhido: typeof a.storyboard_escolhido === "number" ? a.storyboard_escolhido : null, cenas: Array.isArray(a.cenas) ? a.cenas : [], insumos: comDesfazer(f.insumos, "troca", null) });
+}
+
+/**
+ * Desfazer da tela: a troca de storyboard (volta as cenas de antes, só se as
+ * cenas da troca ficaram como nasceram) ou a geração de outros 3 (volta os
+ * storyboards de antes, só se nenhum dos novos foi escolhido). Sem custo.
+ */
+async function storyboardDesfazer(ch: Chamador, c: Record<string, unknown>) {
+  const f = await lerFilme(ch, c.filme_id);
+  const qual = c.qual === "geracao" ? "geracao" : "troca";
+  const copia = obj(obj(f.insumos[CHAVE_DO_DESFAZER])[qual]);
+  if (qual === "troca") {
+    if (!Array.isArray(copia.cenas) || typeof copia.retrato !== "string") throw new ErroHttp(409, "nada_a_desfazer", "Não há troca de storyboard para desfazer.");
+    if (copia.retrato !== retratoDasCenas(f.cenas)) throw new ErroHttp(409, "cenas_mudaram", "As cenas mudaram depois da troca: desfazer agora apagaria esse trabalho.");
+    const filme = await restaurarEscolha(f, copia);
+    await auditar(ch, "motion_storyboard_desfazer", { client_id: f.client_id, qual }, true, f.id);
+    return json({ filme, custo_usd: 0 });
+  }
+  if (!Array.isArray(copia.storyboards) || !Array.isArray(copia.conceitos)) throw new ErroHttp(409, "nada_a_desfazer", "Não há geração de storyboards para desfazer.");
+  if (f.storyboard_escolhido !== null || JSON.stringify(f.storyboards.map((s) => s.conceito)) !== JSON.stringify(copia.conceitos)) {
+    throw new ErroHttp(409, "storyboards_mudaram", "Um dos storyboards novos já foi escolhido (ou gerado de novo): desfazer agora mexeria nas cenas.");
+  }
+  const filme = await atualizarFilme(f.id, { storyboards: copia.storyboards, storyboard_escolhido: typeof copia.storyboard_escolhido === "number" ? copia.storyboard_escolhido : null, insumos: comDesfazer(f.insumos, "geracao", null) });
+  await auditar(ch, "motion_storyboard_desfazer", { client_id: f.client_id, qual }, true, f.id);
+  return json({ filme, custo_usd: 0 });
 }
 
 async function cenaSalvar(ch: Chamador, c: Record<string, unknown>) {
   const f = await lerFilme(ch, c.filme_id);
   const nova = obj(c.cena);
   const i = f.cenas.findIndex((x) => x.id === nova.id);
-  const r = cenaDaLinha({ ...(i >= 0 ? f.cenas[i] : {}), ...(nova as Partial<CenaDaLinha>), ordem: i >= 0 ? i + 1 : f.cenas.length + 1 }, f.brand.provas, f.client_id);
+  const antiga = i >= 0 ? f.cenas[i] : null;
+  const r = cenaDaLinha({ ...(antiga || {}), ...(nova as Partial<CenaDaLinha>), ordem: i >= 0 ? i + 1 : f.cenas.length + 1 }, f.brand.provas, f.client_id);
   // Escrita sob medida só entra pela ação cena_escrever (conferida no servidor); daqui não se muda o código.
-  if (i >= 0) r.cena.escrita = f.cenas[i].escrita;
+  if (antiga) r.cena.escrita = antiga.escrita;
   if (r.cena.modo === "sob_medida" && !r.cena.escrita) r.cena.modo = "kit";
+  // Sem still_aprovado no pedido, quem decide é o servidor: desaprova só quando o conteúdo ou o título mudou.
+  if (antiga && typeof nova.still_aprovado !== "boolean" && (assinaturaDaCena(r.cena) !== assinaturaDaCena(antiga) || r.cena.titulo !== antiga.titulo)) r.cena.still_aprovado = false;
   const cenas = f.cenas.slice();
   if (i >= 0) cenas[i] = r.cena;
   else cenas.push(r.cena);
@@ -693,6 +782,34 @@ async function casarRitmo(f: LinhaDoFilme) {
 async function ritmoCasar(ch: Chamador, c: Record<string, unknown>) {
   const r = await casarRitmo(await lerFilme(ch, c.filme_id));
   return json({ filme: r.filme, anterior: r.anterior, custo_usd: 0 });
+}
+
+/**
+ * Volta só a duração (por id) sobre as cenas de agora. Com `casadas`, só a cena
+ * que ainda está com a duração casada volta (a que a equipe mexeu depois fica).
+ * A assinatura volta a ser a de antes, então as finais voltam a ficar em dia.
+ */
+function voltarDuracoes(cenas: CenaDaLinha[], anterior: unknown, casadas?: unknown): CenaDaLinha[] {
+  const lista = (Array.isArray(anterior) ? anterior : []).map(obj);
+  const cas = Array.isArray(casadas) ? casadas.map(obj) : null;
+  return cenas.map((x) => {
+    const a = lista.find((y) => y.id === x.id);
+    if (!a || !isFinite(Number(a.duracao_s)) || Number(a.duracao_s) <= 0) return x;
+    if (cas) {
+      const casada = cas.find((y) => y.id === x.id);
+      if (!casada || Math.abs(Number(casada.duracao_s) - x.duracao_s) > 0.011) return x;
+    }
+    return { ...x, duracao_s: duracaoDaCena(a.duracao_s, x.duracao_s) };
+  });
+}
+
+async function ritmoDesfazer(ch: Chamador, c: Record<string, unknown>) {
+  const f = await lerFilme(ch, c.filme_id);
+  if (!Array.isArray(c.anterior) || !c.anterior.length) throw new ErroHttp(400, "sem_anterior", "Faltam as durações de antes para desfazer.");
+  const cenas = voltarDuracoes(f.cenas, c.anterior, c.casadas);
+  const voltaram = cenas.filter((x, i) => x.duracao_s !== f.cenas[i].duracao_s).length;
+  const filme = voltaram ? await atualizarFilme(f.id, { cenas }) : f;
+  return json({ filme, voltaram, custo_usd: 0 });
 }
 
 async function renderStatus(ch: Chamador, c: Record<string, unknown>) {
@@ -1096,22 +1213,13 @@ async function reverterItem(ch: Chamador, filmeId: string, r: ResultadoDoItem) {
     const a = obj(d.anterior);
     return void (await atualizarFilme(f.id, { storyboards: Array.isArray(a.storyboards) ? a.storyboards : [], storyboard_escolhido: typeof a.storyboard_escolhido === "number" ? a.storyboard_escolhido : null }));
   }
-  if (d.tipo === "escolha") {
-    const a = obj(d.anterior);
-    return void (await atualizarFilme(f.id, { storyboard_escolhido: typeof a.storyboard_escolhido === "number" ? a.storyboard_escolhido : null, cenas: Array.isArray(a.cenas) ? a.cenas : [] }));
-  }
+  if (d.tipo === "escolha") return void (await restaurarEscolha(f, obj(d.anterior)));
   if (d.tipo === "cena") {
     const anterior = obj(d.anterior) as unknown as CenaDaLinha;
     return void (await atualizarFilme(f.id, { cenas: f.cenas.map((x) => (x.id === anterior.id ? anterior : x)) }));
   }
   if (d.tipo === "aprovacao") return void (await atualizarFilme(f.id, { cenas: f.cenas.map((x) => (x.id === d.cena_id ? { ...x, still_aprovado: false } : x)) }));
-  if (d.tipo === "duracoes") {
-    const lista = Array.isArray(d.anterior) ? (d.anterior as Array<{ id: string; duracao_s: number }>) : [];
-    return void (await atualizarFilme(f.id, { cenas: f.cenas.map((x) => {
-      const a = lista.find((y) => y.id === x.id);
-      return a ? { ...x, duracao_s: a.duracao_s } : x;
-    }) }));
-  }
+  if (d.tipo === "duracoes") return void (await atualizarFilme(f.id, { cenas: voltarDuracoes(f.cenas, d.anterior) }));
   if (d.tipo === "pedidos") {
     for (const id of Array.isArray(d.ids) ? (d.ids as string[]) : []) if (UUID.test(id)) await cancelarPedido(f, id);
     return;
@@ -1176,11 +1284,13 @@ const ACOES: Record<string, (ch: Chamador, c: Record<string, unknown>) => Promis
   brand_gerar: brandGerar,
   storyboards_gerar: storyboardsGerar,
   storyboard_escolher: storyboardEscolher,
+  storyboard_desfazer: storyboardDesfazer,
   cena_salvar: cenaSalvar,
   cena_escrever: cenaEscrever,
   cena_pedir: cenaPedir,
   batidas_pedir: batidasPedir,
   ritmo_casar: ritmoCasar,
+  ritmo_desfazer: ritmoDesfazer,
   render_status: renderStatus,
   render_cancelar: renderCancelar,
   critica_gerar: criticaGerar,

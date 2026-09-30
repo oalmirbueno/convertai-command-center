@@ -125,6 +125,55 @@ describe("link público /proposta/:token", () => {
     expect(await screen.findByText("Link indisponível")).toBeTruthy();
   });
 
+  // Frente UXS: falha de rede ou do servidor não é link ruim.
+  it("servidor indisponível ou rede caída mostram 'Não abriu agora.' e não 'Link indisponível'", async () => {
+    mockFetch({ error: "indisponivel" });
+    const { unmount } = montar();
+    expect(await screen.findByText("Não abriu agora.")).toBeTruthy();
+    expect(screen.queryByText("Link indisponível")).toBeNull();
+    expect(screen.getByRole("button", { name: "Tentar de novo" })).toBeTruthy();
+    unmount();
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))));
+    montar();
+    expect(await screen.findByText("Não abriu agora.")).toBeTruthy();
+    expect(screen.queryByText("Link indisponível")).toBeNull();
+  });
+
+  it("Tentar de novo lê de novo e, com sucesso, abre a proposta com uma única abertura", async () => {
+    chamadas = [];
+    let get = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const corpo = init && init.body ? JSON.parse(String(init.body)) : null;
+        chamadas.push({ url: String(url), corpo });
+        if (init && init.method === "POST") return { ok: true, json: async () => ({ ok: true }) } as Response;
+        get += 1;
+        if (get === 1) throw new TypeError("Failed to fetch");
+        return { ok: true, json: async () => propostaPublica() } as Response;
+      }),
+    );
+    montar();
+    fireEvent.click(await screen.findByRole("button", { name: "Tentar de novo" }));
+    expect(await screen.findByText("Mais pedidos pelo Instagram")).toBeTruthy();
+    expect(get).toBe(2);
+    await waitFor(() => expect(chamadas.filter((c) => c.corpo && c.corpo.tipo === "aberta")).toHaveLength(1));
+  });
+
+  it("link inválido com o WhatsApp da agência oferece 'Falar com a Aceleriq' (sem token no texto); sem ele, não", async () => {
+    mockFetch({ error: "link_invalido", agencia: { nome: "Aceleriq", whatsapp: "(41) 99999-0000" } });
+    const { unmount } = montar();
+    expect(await screen.findByText("Link indisponível")).toBeTruthy();
+    const falar = screen.getByRole("link", { name: "Falar com a Aceleriq" }) as HTMLAnchorElement;
+    expect(falar.href).toContain("wa.me/5541999990000");
+    expect(falar.href).not.toContain(TOKEN);
+    unmount();
+    mockFetch({ error: "link_invalido", agencia: { nome: "Aceleriq" } });
+    montar();
+    expect(await screen.findByText("Link indisponível")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Falar com a Aceleriq" })).toBeNull();
+  });
+
   it("o tempo de leitura sobe na mesma sessão a cada 15 s com a página à vista", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mockFetch(propostaPublica());
@@ -194,6 +243,16 @@ describe("a mesa no painel", () => {
     expect((MESAS_QUE_APRENDEM as readonly string[]).indexOf("proposta")).toBeGreaterThanOrEqual(0);
     expect(rotuloDoLugar(`/proposta/${TOKEN}`, "")).toBeNull();
     expect(entraPeloPadrao("proposta", { id: "x", plan_status: "inactive", client_type: "one_off" }).entra).toBe(true);
+  });
+
+  it("proposta-publica: o 404 do link que não existe leva a agência, lida sem virar 500 (frente UXS)", () => {
+    const fonte = ler("supabase/functions/proposta-publica/index.ts");
+    const trecho = fonte.slice(fonte.indexOf("if (!data) {"), fonte.indexOf('return json({ error: "link_invalido", agencia: agenciaDoLink }, 404);'));
+    expect(trecho).toContain("try {");
+    expect(trecho).toContain("registrarFalha(");
+    expect(fonte).toContain('return json({ error: "link_invalido", agencia: agenciaDoLink }, 404);');
+    // O token com formato ruim continua saindo sem ir ao banco.
+    expect(fonte).toContain('if (!TOKEN_OK.test(token)) return json({ error: "link_invalido" }, 404);');
   });
 
   it("rotas: a mesa só para admin e gestor; o link público fora do login; funções no config", () => {

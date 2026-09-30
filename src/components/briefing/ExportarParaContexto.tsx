@@ -3,19 +3,19 @@ import { useQuery } from "@tanstack/react-query";
 import { Check, Loader2, Undo2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Carregando, EstadoDeErro, Secao, botao, etiqueta, juntar, lista, texto } from "@/components/sistema";
-import { type PreviaDaExportacao, chamarAgenteDoBriefing, textoDoErroDoBriefing } from "@/lib/briefing/api";
+import { type PreviaDaExportacao, ROTULO_DO_MODO_DA_SUGESTAO, chamarAgenteDoBriefing, textoDoErroDoBriefing } from "@/lib/briefing/api";
 import { valorParaLer } from "@/lib/mesa/preencherComIA";
 import { ROTULO_DO_CAMPO_SUGERIDO } from "../../../supabase/functions/_shared/briefing-decupagem";
 
 /**
- * Exportar o briefing para o contexto (frente BRF2, 30/09/2026): os campos que
+ * "Respostas e cérebro", o bloco de "Levar para o contexto" na leitura do
+ * briefing (frente BRF2, 30/09/2026; junto dos pontos sugeridos na UXS): os campos que
  * o modelo liga ao contexto (negócio, público, oferta, diferenciais) e as
  * respostas inteiras no cérebro do cliente. Prévia antes, Confirmar grava,
  * Desfazer volta (a memória fica, marcada como desfeita). A marca que não é a
  * principal recebe só no contexto dela. Sem IA e sem custo.
  */
 
-const ROTULO_DO_MODO: Record<string, string> = { preencher: "Preencher", juntar: "Somar", substituir: "Trocar" };
 
 export default function ExportarParaContexto({ briefingId, onMudou }: { briefingId: string; onMudou: () => void }) {
   const [aberta, setAberta] = useState(false);
@@ -66,12 +66,12 @@ export default function ExportarParaContexto({ briefingId, onMudou }: { briefing
 
   return (
     <Secao
-      titulo="Exportar para o contexto"
+      titulo="Respostas e cérebro"
+      nivel={3}
       descricao={exportado ? "exportado" : undefined}
-      ajuda="Leva as respostas para o contexto do cliente (ou da marca) e guarda o briefing inteiro no cérebro, para as mesas usarem. Você vê o que muda antes; nada é gravado sem Confirmar, e Desfazer volta como estava."
+      ajuda="Leva os campos que o modelo liga ao contexto (negócio, público, oferta, diferenciais) para o contexto do cliente (ou da marca) e guarda o briefing inteiro no cérebro, para as mesas usarem. Você vê o que muda antes; nada é gravado sem Confirmar, e Desfazer volta como estava. Sem IA e sem custo."
       recolher={`briefing:exportar:${briefingId}`}
       recolhidaDeInicio
-      divisoria
     >
       {!aberta ? (
         <button type="button" onClick={() => setAberta(true)} className={botao.secundario}>
@@ -94,7 +94,7 @@ export default function ExportarParaContexto({ briefingId, onMudou }: { briefing
                     <label htmlFor={`exp-${s.id}`} className="min-w-0 flex-1 cursor-pointer">
                       <span className="flex min-w-0 items-center">
                         <span className="truncate text-[13px] font-medium text-foreground">{ROTULO_DO_CAMPO_SUGERIDO[s.campo] || s.rotulo}</span>
-                        <span className={juntar(etiqueta, "ml-2 shrink-0 bg-muted text-muted-foreground")}>{ROTULO_DO_MODO[s.modo]}</span>
+                        <span className={juntar(etiqueta, "ml-2 shrink-0 bg-muted text-muted-foreground")}>{ROTULO_DO_MODO_DA_SUGESTAO[s.modo]}</span>
                       </span>
                       <span className={juntar(texto.corpo, "mt-0.5 block text-muted-foreground [overflow-wrap:anywhere]")}>{valorParaLer(s.valor).slice(0, 400)}</span>
                       {s.modo === "substituir" && s.antes != null && <span className={juntar(texto.auxiliar, "mt-0.5 block [overflow-wrap:anywhere]")}>Hoje: {valorParaLer(s.antes).slice(0, 200)}</span>}

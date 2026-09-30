@@ -337,20 +337,26 @@ export default function BriefingPublic() {
   const faltando = useMemo(() => faltandoNoBriefing(modelo, respostas, anexos), [modelo, respostas, anexos]);
   const progresso = useMemo(() => progressoDoBriefing(modelo, respostas, anexos), [modelo, respostas, anexos]);
 
+  // Um caminho só para "o que falta": o Enviar e o "faltam N" da barra levam à próxima sem resposta.
+  const irParaFaltando = () => {
+    setMostrarErros(true);
+    if (!faltando.length) return;
+    const alvo = document.getElementById(idDoCampo(faltando[0].key));
+    if (alvo) {
+      try {
+        alvo.scrollIntoView({ behavior: "smooth", block: "center" });
+      } catch {
+        if (typeof alvo.scrollIntoView === "function") alvo.scrollIntoView();
+      }
+      try {
+        (alvo as HTMLElement).focus({ preventScroll: true } as FocusOptions);
+      } catch { /* sem foco */ }
+    }
+  };
+
   const enviar = async () => {
     if (faltando.length) {
-      setMostrarErros(true);
-      const alvo = document.getElementById(idDoCampo(faltando[0].key));
-      if (alvo) {
-        try {
-          alvo.scrollIntoView({ behavior: "smooth", block: "center" });
-        } catch {
-          if (typeof alvo.scrollIntoView === "function") alvo.scrollIntoView();
-        }
-        try {
-          (alvo as HTMLElement).focus({ preventScroll: true } as FocusOptions);
-        } catch { /* sem foco */ }
-      }
+      irParaFaltando();
       return;
     }
     setFase("enviando");
@@ -427,7 +433,7 @@ export default function BriefingPublic() {
   if (fase === "invalido") {
     return (
       <CascaPublica largura="larga" centralizar={false}>
-        <EstadoVazio icone={<Link2Off className="h-5 w-5" />} titulo="Link inválido ou já utilizado" descricao="Este briefing já foi enviado ou o link não existe mais." />
+        <EstadoVazio icone={<Link2Off className="h-5 w-5" />} titulo="Link desativado ou inexistente" descricao="Este link foi desativado ou não existe. Fale com quem enviou." />
       </CascaPublica>
     );
   }
@@ -547,10 +553,22 @@ export default function BriefingPublic() {
             <span className="mr-2 hidden h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-muted sm:block" aria-hidden="true">
               <span className="block h-full rounded-full bg-primary transition-all" style={{ width: `${progresso.pct}%` }} />
             </span>
-            <span className="truncate tabular-nums">
-              {progresso.respondidos} de {progresso.total} respondidas
-              {mostrarErros && faltando.length > 0 ? <span className="text-destructive"> · faltam {faltando.length}</span> : null}
+            <span className="min-w-0 truncate tabular-nums">
+              {progresso.respondidos} de {progresso.total}
+              <span className="hidden sm:inline"> respondidas</span>
             </span>
+            {/* Sempre à vista quando falta algo (não só depois de tentar enviar): leva à próxima sem resposta. */}
+            {faltando.length > 0 && (
+              <button
+                type="button"
+                onClick={irParaFaltando}
+                disabled={enviandoTudo}
+                aria-label="Ir para a próxima pergunta sem resposta"
+                className={juntar(botao.discreto, "ml-1 h-7 shrink-0 px-1.5 text-[12px] tabular-nums", mostrarErros ? "text-destructive hover:text-destructive" : "")}
+              >
+                · faltam {faltando.length}
+              </button>
+            )}
           </span>
         }
       >

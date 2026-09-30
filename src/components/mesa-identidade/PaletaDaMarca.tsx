@@ -3,10 +3,11 @@ import { Check, Wand2 } from "lucide-react";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoComCusto } from "@/components/mesa/Custo";
 import { botao, campo, juntar, lista, texto } from "@/components/sistema/estilos";
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { normalizarHex, ROTULO_DO_PAPEL_DA_COR, textoSobre, type PapelDaCor } from "../../../supabase/functions/_shared/cores-da-marca";
 import { avisosDeContraste, escalaDaCor, HARMONIAS, paletaHarmonica, paresParaTexto, type CorDaPaleta, type Harmonia } from "../../../supabase/functions/mesa-identidade/modulos/paleta-da-marca";
 import { chamarIdentidade, type ProjetoDeIdentidade } from "./identidadeApi";
-import { partesDoCusto, SeletorDoModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
+import { partesDoCusto, RotuloComModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
 
 type Cor = { nome: string; papel: PapelDaCor; hex: string };
 
@@ -56,16 +57,18 @@ export function ContrasteDaPaleta({ cores }: { cores: Cor[] }) {
  * ou outra), com neutras tingidas e a escala de apoio. Conta, sem custo. E as
  * 3 paletas propostas pelo diretor (IA, custo antes), cada uma com o
  * contraste conferido. "Usar" troca a paleta do sistema (dá para voltar pelo
- * Desfazer do aviso).
+ * Desfazer do aviso). UXS 30/09: fica no bloco recolhível "Gerar paleta" da
+ * etapa; o modelo é o do seletor do cabeçalho (o botão mostra o nome) e o
+ * pedido fica guardado (recolher o bloco não perde o rascunho).
  */
 export default function GeradorDePaleta({ cores, onUsar }: { cores: Cor[]; onUsar: (novas: Cor[], origem: string) => void }) {
   const mesa = useMesa();
   const { projeto, guardar } = useProjetoDaMesa();
-  const [modeloId, setModeloId] = useModeloDaAcao("identidade");
+  const [modeloId] = useModeloDaAcao("identidade");
   const primaria = cores.filter((c) => c.papel === "primaria" && normalizarHex(c.hex))[0];
   const [base, setBase] = useState<string>((primaria && normalizarHex(primaria.hex)) || "#157330");
   const [harmonia, setHarmonia] = useState<Harmonia>("complementar");
-  const [pedido, setPedido] = useState("");
+  const [pedido, setPedido] = useEstadoDaTela<string>(`mesa-identidade:${projeto.id}:paletas:pedido`, "", { validar: (v) => typeof v === "string" });
   const baseValida = normalizarHex(base);
   const gerada: CorDaPaleta[] = useMemo(() => (baseValida ? paletaHarmonica(baseValida, harmonia) : []), [baseValida, harmonia]);
   const escala = useMemo(() => (baseValida ? escalaDaCor(baseValida) : []), [baseValida]);
@@ -73,7 +76,7 @@ export default function GeradorDePaleta({ cores, onUsar }: { cores: Cor[]; onUsa
   const explica = HARMONIAS.filter((h) => h.valor === harmonia)[0];
 
   return (
-    <div className="mt-6 min-w-0 border-t border-border pt-5" data-gerador-de-paleta="">
+    <div className="min-w-0" data-gerador-de-paleta="">
       <div className="mb-3 flex min-w-0 flex-wrap items-end">
         <label className="m-1 grid min-w-0">
           <span className={juntar(texto.rotulo, "mb-1.5")}>Cor base</span>
@@ -116,9 +119,8 @@ export default function GeradorDePaleta({ cores, onUsar }: { cores: Cor[]; onUsa
         <div className="mb-2 flex min-w-0 flex-wrap items-center">
           <span className={juntar(texto.rotulo, "m-1 min-w-0 flex-1")}>Três paletas do diretor de marca</span>
           <input className={juntar(campo, "m-1 h-8 w-56 text-[12px]")} value={pedido} maxLength={400} placeholder="Pedido (opcional)" onChange={(e) => setPedido(e.target.value)} aria-label="Pedido para as paletas" />
-          <SeletorDoModelo papel="identidade" valor={modeloId} onEscolher={setModeloId} />
           <BotaoComCusto
-            rotulo={propostas.length ? "Propor de novo" : "Propor 3 paletas"}
+            rotulo={<RotuloComModelo rotulo={propostas.length ? "Propor de novo" : "Propor 3 paletas"} papel="identidade" modeloId={modeloId} />}
             titulo="Paletas da marca"
             partes={() => partesDoCusto(mesa.catalogo, "paletas", modeloId)}
             executar={() => chamarIdentidade<{ projeto: ProjetoDeIdentidade }>("paletas_propor", { projeto_id: projeto.id, modelo_id: modeloId || undefined, pedido: pedido.trim() || undefined })}

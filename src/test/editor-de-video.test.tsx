@@ -353,6 +353,38 @@ describe("salvamento automático sem laço", () => {
     expect(salvar).toHaveBeenCalledTimes(2);
     expect(estados).toContain("conflito");
   });
+
+  it("agora() espera a gravação em andamento e só resolve depois de gravar a versão mais nova (sem o respiro)", async () => {
+    const p0 = base();
+    const voltas: Array<() => void> = [];
+    const salvar = vi.fn((_p: ProjetoDeEdicao, rev: number) => new Promise<{ revisao: number }>((ok) => voltas.push(() => ok({ revisao: rev + 1 }))));
+    const s = criarSalvador({ salvar, revisaoInicial: 0, projetoInicial: p0, esperaMs: 1000 });
+    const p1 = aplicarOperacao(p0, { op: "dividir", clipe: "v1", em_s: 5 });
+    s.mudou(p1);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(salvar).toHaveBeenCalledTimes(1);
+    const p2 = aplicarOperacao(p1, { op: "remover", clipe: "v2" });
+    s.mudou(p2); // mudança durante a gravação
+    let pronto = false;
+    const agora = s.agora().then(() => {
+      pronto = true;
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(pronto).toBe(false);
+    voltas[0]();
+    await vi.advanceTimersByTimeAsync(0);
+    // Grava a mais nova na hora (não espera os 1000 ms do respiro).
+    expect(salvar).toHaveBeenCalledTimes(2);
+    expect(salvar.mock.calls[1][0]).toBe(p2);
+    expect(pronto).toBe(false);
+    voltas[1]();
+    await agora;
+    expect(pronto).toBe(true);
+    expect(s.estado()).toBe("salvo");
+    expect(s.revisao()).toBe(2);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(salvar).toHaveBeenCalledTimes(2);
+  });
 });
 
 // ------------------------------------------------------------------ gerações (câmera, continuar, transição)

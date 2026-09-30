@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BriefcaseBusiness, ChevronRight, Users } from "lucide-react";
@@ -16,13 +16,13 @@ import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import CascaDaMesa from "@/components/sistema/CascaDaMesa";
 import BotaoDoConselho from "@/components/conselho/BotaoDoConselho";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
-import Etapas from "@/components/sistema/Etapas";
-import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
+import AreaDeTrabalho, { abrirLateralDaArea } from "@/components/sistema/AreaDeTrabalho";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, foco, juntar, superficie } from "@/components/sistema/estilos";
 import { usePropostas } from "@/components/mesa-proposta/propostaApi";
+import { EtapasDaMesaProposta, SeletorDaProposta } from "@/components/mesa-proposta/NaCascaDaProposta";
 
 /**
  * Mesa Proposta (/mesa-proposta, só admin e gestor), frente PRO (30/09).
@@ -32,6 +32,11 @@ import { usePropostas } from "@/components/mesa-proposta/propostaApi";
  * (?lead=). Mesma casca das outras mesas; o estrategista comercial fica fixo
  * ao lado (no celular, a gaveta do botão de baixo).
  * Endereço: /mesa-proposta?client=<id>&etapa=contexto|rascunho|revisao|envio&proposta=<id>&lead=<id>
+ *
+ * Frente UXS (30/09): a proposta aberta fica no seletor da casca em todas as
+ * etapas (com "Nova proposta"); &nova=1 abre o formulário de nova proposta
+ * sem abrir a mais recente; &foco= (uma vez) leva do "Resolver" ao ponto
+ * que conserta. As Etapas mostram as pendências que bloqueiam e o follow-up.
  */
 
 const carregarContexto = () => import("@/components/mesa-proposta/EtapaContexto");
@@ -101,7 +106,24 @@ function EsqueletoDoAgente() {
 }
 
 /** O corpo da mesa com o cliente aberto (as propostas vêm do banco pela RLS). */
-function CorpoDaMesa({ etapa, propostaUrl, leadUrl, mudar, rascunhoDoAgente, setRascunhoDoAgente }: { etapa: Etapa; propostaUrl: string | null; leadUrl: string | null; mudar: (m: Record<string, string | null>, substituir?: boolean) => void; rascunhoDoAgente: string; setRascunhoDoAgente: (v: string) => void }) {
+function CorpoDaMesa({
+  etapa,
+  propostaUrl,
+  leadUrl,
+  novaUrl,
+  mudar,
+  rascunhoDoAgente,
+  setRascunhoDoAgente,
+}: {
+  etapa: Etapa;
+  propostaUrl: string | null;
+  leadUrl: string | null;
+  /** ?nova=1: veio pedir uma proposta nova (a mesa não abre a mais recente sozinha). */
+  novaUrl: boolean;
+  mudar: (m: Record<string, string | null>, substituir?: boolean) => void;
+  rascunhoDoAgente: string;
+  setRascunhoDoAgente: Dispatch<SetStateAction<string>>;
+}) {
   const { clientId, catalogo } = useMesaDaPagina();
   const propostas = usePropostas(clientId);
   const lista = propostas.data ? propostas.data.lista : [];
@@ -111,16 +133,39 @@ function CorpoDaMesa({ etapa, propostaUrl, leadUrl, mudar, rascunhoDoAgente, set
   // modeloDoPapel (frente BASE): o escolhido quando ainda está ligado; senão o padrão do papel "proposta"; senão o da estratégia.
   const modelo = modeloDoPapel(catalogo, "proposta", modeloEscolhido || null);
   const modeloId = modelo ? modelo.id : "";
+  // UXS: o formulário de nova proposta mora aqui (sobrevive à troca de etapa e de proposta).
+  // O ?nova=1 sai do endereço na hora (recarregar não reabre o formulário).
+  const [nova, setNova] = useState(novaUrl);
+  useEffect(() => {
+    if (!novaUrl) return;
+    setNova(true);
+    mudar({ nova: null }, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [novaUrl]);
 
   // Sem proposta no endereço: abre a mais recente viva (a do lead, quando veio do Comercial).
+  // Pedido de proposta nova: não abre nenhuma sozinha.
   useEffect(() => {
-    if (propostaUrl || !propostas.data || !lista.length) return;
+    if (propostaUrl || nova || novaUrl || !propostas.data || !lista.length) return;
     const doLead = leadUrl ? lista.find((p) => p.lead_id === leadUrl && !p.arquivada_em) : null;
     if (leadUrl && !doLead) return;
     const alvo = doLead || lista.find((p) => !p.arquivada_em);
     if (alvo) mudar({ proposta: alvo.id }, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [propostaUrl, propostas.data, leadUrl]);
+  }, [propostaUrl, propostas.data, leadUrl, nova]);
+
+  const abrir = (id: string, extra: Record<string, string | null> = {}) => {
+    setNova(false);
+    mudar({ proposta: id, nova: null, ...extra });
+  };
+  // "Responder" de uma pergunta do estrategista: preenche a conversa (nunca envia sozinho; a mensagem tem custo).
+  const responder = (pergunta: string) => {
+    const linha = `Sobre: ${pergunta}`;
+    setRascunhoDoAgente((r) => (r.trim() ? `${r.replace(/\s+$/, "")}\n${linha}` : linha));
+    abrirLateralDaArea();
+  };
+  // Cada etapa remonta ao trocar de proposta: envio preparado, e-mail, prévia e foco nunca passam de uma para outra.
+  const chaveDaEtapa = `${etapa}:${proposta ? proposta.id : "nenhuma"}`;
 
   return (
     <AreaDeTrabalho
@@ -131,7 +176,7 @@ function CorpoDaMesa({ etapa, propostaUrl, leadUrl, mudar, rascunhoDoAgente, set
       principalRolavel={false}
       lateral={
         <Suspense fallback={<EsqueletoDoAgente />}>
-          <AgenteDaProposta propostaId={proposta ? proposta.id : null} modeloId={modeloId || null} rascunho={rascunhoDoAgente} onRascunho={setRascunhoDoAgente} />
+          <AgenteDaProposta propostaId={proposta ? proposta.id : null} statusDaProposta={proposta ? proposta.status : null} modeloId={modeloId || null} modeloEscolhido={modeloEscolhido} onModelo={setModeloEscolhido} rascunho={rascunhoDoAgente} onRascunho={setRascunhoDoAgente} />
         </Suspense>
       }
     >
@@ -142,10 +187,23 @@ function CorpoDaMesa({ etapa, propostaUrl, leadUrl, mudar, rascunhoDoAgente, set
           <EstadoDeErro titulo="As propostas não foram lidas." acao={<button type="button" className={botao.secundario} onClick={() => void propostas.refetch()}>Tentar de novo</button>} />
         ) : (
           <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo a etapa" />}>
-            {etapa === "contexto" && <EtapaContexto proposta={proposta} propostas={lista} semTabela={!!(propostas.data && propostas.data.semTabela)} leadUrl={leadUrl} onAbrir={(id) => mudar({ proposta: id })} modeloId={modeloId} />}
-            {etapa === "rascunho" && <EtapaRascunho proposta={proposta} modeloId={modeloId} onModelo={setModeloEscolhido} />}
-            {etapa === "revisao" && <EtapaRevisao proposta={proposta} />}
-            {etapa === "envio" && <EtapaEnvio proposta={proposta} onAbrir={(id) => mudar({ proposta: id, etapa: "contexto" })} />}
+            {etapa === "contexto" && (
+              <EtapaContexto
+                key={chaveDaEtapa}
+                proposta={proposta}
+                propostas={lista}
+                semTabela={!!(propostas.data && propostas.data.semTabela)}
+                leadUrl={leadUrl}
+                onAbrir={(id) => abrir(id)}
+                modeloId={modeloId}
+                nova={nova}
+                onNova={setNova}
+                onResponder={responder}
+              />
+            )}
+            {etapa === "rascunho" && <EtapaRascunho key={chaveDaEtapa} proposta={proposta} modeloId={modeloId} onModelo={setModeloEscolhido} />}
+            {etapa === "revisao" && <EtapaRevisao key={chaveDaEtapa} proposta={proposta} />}
+            {etapa === "envio" && <EtapaEnvio key={chaveDaEtapa} proposta={proposta} onAbrir={(id) => abrir(id, { etapa: "contexto" })} />}
           </Suspense>
         )}
       </RegiaoRolavel>
@@ -165,6 +223,7 @@ export default function MesaProposta() {
   const etapa: Etapa = ETAPAS_DA_MESA_PROPOSTA.some((e) => e.valor === etapaUrl) ? (etapaUrl as Etapa) : "contexto";
   const propostaUrl = uuidOuNulo(params.get("proposta"));
   const leadUrl = uuidOuNulo(params.get("lead"));
+  const novaUrl = params.get("nova") === "1";
 
   const [recargaAberta, setRecargaAberta] = useState(false);
   const [chavesAbertas, setChavesAbertas] = useState(false);
@@ -221,7 +280,7 @@ export default function MesaProposta() {
 
   const trocarCliente = (id: string) => {
     const o = lerOnde(id);
-    mudar({ client: id, etapa: o.etapa || "contexto", proposta: null, marca: null });
+    mudar({ client: id, etapa: o.etapa || "contexto", proposta: null, marca: null, nova: null, foco: null });
   };
 
   useEffect(() => {
@@ -280,6 +339,14 @@ export default function MesaProposta() {
     : null;
 
   const lead = leadSemCliente.data;
+  // Seletor da proposta na casca: abrir uma (fica na etapa) ou pedir uma nova (vai ao Contexto).
+  const abrirProposta = (id: string) => mudar({ proposta: id, nova: null, foco: null });
+  const pedirNova = () => mudar({ etapa: "contexto", nova: "1", foco: null });
+  // Lead sem ficha: abre o seletor de cliente da casca.
+  const abrirSeletorDeCliente = () => {
+    const alvo = document.querySelector("[data-casca-identidade] [role=\"combobox\"]") as HTMLElement | null;
+    if (alvo) alvo.click();
+  };
 
   return (
     <CascaDaMesa
@@ -288,12 +355,22 @@ export default function MesaProposta() {
       clientId={clientId}
       telaCheia={telaCheia}
       caminho={<CaminhoDasPropostas />}
-      marca={clientId && marca ? <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id, proposta: null }, true)} /> : null}
+      etapasEmLinhaPropriaAte="2xl"
+      marca={
+        clientId ? (
+          <div className="flex min-w-0 items-center">
+            {marca && <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id, proposta: null }, true)} />}
+            {/* UXS: a proposta aberta em todas as etapas (de 640 px para cima; no celular, na linha das ações). */}
+            <SeletorDaProposta clientId={clientId} propostaId={propostaUrl} onAbrir={abrirProposta} onNova={pedirNova} className={juntar("hidden sm:inline-flex", marca ? "ml-2" : "")} />
+          </div>
+        ) : null
+      }
       cliente={<SeletorDeClientesDaMesa mesa="proposta" clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />}
-      etapas={clientId ? <Etapas rotulo="Etapas da Mesa Proposta" numerar itens={ETAPAS_DA_MESA_PROPOSTA.map((e) => ({ valor: e.valor, rotulo: e.rotulo }))} valor={etapa} onEscolher={(v) => mudar({ etapa: v })} /> : null}
+      etapas={clientId ? <EtapasDaMesaProposta clientId={clientId} propostaId={propostaUrl} itens={ETAPAS_DA_MESA_PROPOSTA} valor={etapa} onEscolher={(v) => mudar({ etapa: v, foco: null })} /> : null}
       acoes={
         clientId ? (
           <>
+          <SeletorDaProposta clientId={clientId} propostaId={propostaUrl} onAbrir={abrirProposta} onNova={pedirNova} compacto className="mr-auto max-w-[140px] sm:hidden" />
           <BotaoDoConselho
             clientId={clientId}
             origem="mesa-proposta"
@@ -332,16 +409,22 @@ export default function MesaProposta() {
           titulo={lead ? `Escolha o cliente da proposta de ${lead.company || lead.name}.` : "Escolha um cliente para abrir a Mesa Proposta."}
           descricao={lead ? "Lead sem ficha: em Clientes › Propostas, Nova proposta cria o cliente na hora." : "Proposta comercial com link e aceite."}
           acao={
-            <Link to="/clientes?propostas=1" className={botao.secundario}>
-              Ir para Clientes › Propostas
-            </Link>
+            <div className="flex flex-wrap items-center justify-center [&>*]:m-1">
+              {/* UXS: resolve para admin e gestor sem sair daqui (a troca de cliente mantém o lead). */}
+              <button type="button" className={botao.primario} onClick={abrirSeletorDeCliente}>
+                Escolher o cliente
+              </button>
+              <Link to="/clientes?propostas=1" className={botao.secundario}>
+                Ir para Clientes › Propostas
+              </Link>
+            </div>
           }
         />
       )}
 
       {valor && (
         <MesaProvider valor={valor}>
-          <CorpoDaMesa key={valor.clientId} etapa={etapa} propostaUrl={propostaUrl} leadUrl={leadUrl} mudar={mudar} rascunhoDoAgente={rascunhoDoAgente} setRascunhoDoAgente={setRascunhoDoAgente} />
+          <CorpoDaMesa key={valor.clientId} etapa={etapa} propostaUrl={propostaUrl} leadUrl={leadUrl} novaUrl={novaUrl} mudar={mudar} rascunhoDoAgente={rascunhoDoAgente} setRascunhoDoAgente={setRascunhoDoAgente} />
           {podeRecarregar && (
             <DialogoDeRecarga
               aberto={recargaAberta}
