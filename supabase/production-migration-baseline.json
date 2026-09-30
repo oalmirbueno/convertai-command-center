@@ -1721,6 +1721,30 @@
       "remote_name": "contratos_rotina_vencimentos",
       "remote_statements_sha256": "68cf0801337a041ef62a3382afb2c94b521abd54b0969f7fd541db83edf7a7ee",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930196000",
+      "path": "supabase/migrations/20260930196000_briefing_evolucao.sql",
+      "local_sha256": "5e0040c76cca54c96fa4125b524a6f44aaed2165968e49593a665b85c49bf324",
+      "remote_name": "briefing_evolucao",
+      "remote_statements_sha256": "33a1fada9314572d8ec13b2c69e1154e82fbca0a26fad609640c0149513377e4",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930196100",
+      "path": "supabase/migrations/20260930196100_documentos_evolucao.sql",
+      "local_sha256": "2227e3140c63dbfe6d68eedf0cda8471eda82569f08026a28a3f3403def3f79e",
+      "remote_name": "documentos_evolucao",
+      "remote_statements_sha256": "8979c1734ebb6021281e4e952842642a002392cc49efedd5a398a3e80dcbc3cf",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930196200",
+      "path": "supabase/migrations/20260930196200_conselho_evolucao.sql",
+      "local_sha256": "4f2c443fab232ce02366267e6c5a5b1b8fda7f5225e86c3a9db90ae943ce73ff",
+      "remote_name": "conselho_evolucao",
+      "remote_statements_sha256": "10ba4cf5afb4b467d5785bad6a2a416af74be86de47cd5aa13edc3f6924dc004",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
