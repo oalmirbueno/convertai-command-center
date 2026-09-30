@@ -1817,6 +1817,38 @@
       "remote_name": "superpoderes_das_mesas",
       "remote_statements_sha256": "6c8883a3c2471e6d0d6d3a68e4f0d7c47d5a3a097dc1c13236c289b83b36d802",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930296000",
+      "path": "supabase/migrations/20260930296000_staff_files_secure_por_indice.sql",
+      "local_sha256": "43189427b14ca0016ba597ab25ad24fd0301a6cb0ae56eaf06c786b36be2fd41",
+      "remote_name": "staff_files_secure_por_indice",
+      "remote_statements_sha256": "027c852138368aaa7cad9fd663aa827f88e29bbf1712196ac46275b01757eb3c",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930296100",
+      "path": "supabase/migrations/20260930296100_rls_tarefas_em_conjunto.sql",
+      "local_sha256": "c55a9b1508db1b30148db49c08465ad94f095089d73360245ef064765fdfef47",
+      "remote_name": "rls_tarefas_em_conjunto",
+      "remote_statements_sha256": "b4425ac2862d753dbb03303145f1a0058a30c2238931eab9251f9696df6a51ae",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930296200",
+      "path": "supabase/migrations/20260930296200_rls_mesas_em_conjunto.sql",
+      "local_sha256": "ff13cf2761365b1eade0f73df2c9e20ed2e5481e28718c9d7f3bd2056fe8b1b1",
+      "remote_name": "rls_mesas_em_conjunto",
+      "remote_statements_sha256": "32b7e057c3580657a183b7dff0a16faae4f19a069dc2f33e1d8c8ee5ad3bc322",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930296300",
+      "path": "supabase/migrations/20260930296300_rls_arquivos_sem_reler.sql",
+      "local_sha256": "8097e95a15723c65fecc6bdbf2701097f1878889b8e7dd97807400642c2aaf02",
+      "remote_name": "rls_arquivos_sem_reler",
+      "remote_statements_sha256": "4c1eec8c70ba225131ebfe3cf1db14fcf9e509cdd96419ab6e9a8e25c3158b29",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
