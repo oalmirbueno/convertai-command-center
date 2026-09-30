@@ -35,6 +35,11 @@ import {
   type VariavelDoModelo,
 } from "../_shared/contrato-modelo.ts";
 import type { PerguntaJev } from "../_shared/jev.ts";
+// Frente CON2 (30/09): CNPJ conferido pelo código e valor sem fonte barrado (a mesma régua do Preencher com IA).
+import { cnpjValido, soDigitos } from "../_shared/contrato-ficha.ts";
+import { numerosSemFonte, type ReferenciaDasFontes } from "../_shared/preencher-com-ia.ts";
+// Frente PRO2: a forma de pagamento aceita (com o desconto dela) vira as condições e o valor do contrato.
+import { normalizarPagamento, textoDaOpcao, valorDaOpcao } from "../_shared/proposta-comercial.ts";
 
 const txt = (v: unknown) => (v === null || v === undefined ? "" : String(v)).replace(/\s+/g, " ").trim();
 
@@ -178,6 +183,20 @@ export function mapearProposta(bruto: unknown, eventos: unknown[]): PropostaPara
     if (typeof v === "number") return isFinite(v) ? v : null;
     return v === null ? null : lerMoeda(v);
   };
+  // A opção de pagamento aceita (frente PRO2): o valor com desconto e a frase das condições saem do código da proposta.
+  let valorTotal = valor(["valor_total", "total", "valor", "investimento"]);
+  const valorMensal = valor(["valor_mensal", "mensalidade", "fee_mensal"]);
+  // "pagamento" virou objeto na frente PRO2 (as opções): só conta como texto quando é texto.
+  const condicoesBrutas = primeiro(o, ["condicoes_pagamento", "condicoes", "forma_pagamento"]) ?? (typeof o.pagamento === "string" ? o.pagamento : null);
+  let condicoes = typeof condicoesBrutas === "string" ? txt(condicoesBrutas) || null : null;
+  if (txt(o.pagamento_aceito) && o.pagamento && typeof o.pagamento === "object") {
+    const op = normalizarPagamento(o.pagamento).opcoes.find((x) => x.id === txt(o.pagamento_aceito));
+    if (op) {
+      const t = { unico: valorTotal || 0, mensal: valorMensal || 0, itens: 0 };
+      if (valorTotal !== null) valorTotal = valorDaOpcao(op, t).total_unico;
+      condicoes = `${textoDaOpcao(op, t)}${op.observacao ? `. ${op.observacao.replace(/\.$/, "")}` : ""}`;
+    }
+  }
   return {
     id,
     clientId: txt(primeiro(o, ["client_id", "cliente_id"])) || null,
@@ -186,9 +205,9 @@ export function mapearProposta(bruto: unknown, eventos: unknown[]): PropostaPara
     aceita: !!aceiteNoEvento || aceitaNaLinha,
     aceitaEm: txt(aceiteNoEvento ? primeiro(aceiteNoEvento, ["criado_em", "created_at", "em"]) : primeiro(o, ["aceita_em", "aprovada_em"])) || null,
     itensTexto: [txt(primeiro(o, ["titulo", "nome"])), itensTexto, txt(primeiro(o, ["resumo", "descricao"]))].filter(Boolean).join(". ").slice(0, 4000),
-    valorTotal: valor(["valor_total", "total", "valor", "investimento"]),
-    valorMensal: valor(["valor_mensal", "mensalidade", "fee_mensal"]),
-    condicoes: txt(primeiro(o, ["condicoes_pagamento", "condicoes", "forma_pagamento", "pagamento"])) || null,
+    valorTotal,
+    valorMensal,
+    condicoes,
     inicio: txt(primeiro(o, ["inicio", "data_inicio", "inicio_previsto"])) || null,
   };
 }
@@ -211,7 +230,7 @@ export function valoresDaProposta(p: PropostaParaContrato, servicos: ServicoDoCo
 
 export type AlvoDoContrato = { id: string; titulo: string; detalhe?: string | null; dados?: Record<string, unknown> };
 
-export const OPERACOES_DO_AGENTE = ["criar_contrato", "incluir_servico", "retirar_servico", "preencher", "alterar_clausula", "restaurar_clausula"] as const;
+export const OPERACOES_DO_AGENTE = ["criar_contrato", "incluir_servico", "retirar_servico", "preencher", "alterar_clausula", "restaurar_clausula", "puxar_cnpj", "criar_aditivo", "renovar"] as const;
 
 /** Lê "social, site" ou "Social e Instagram; Sites" como lista de serviços. */
 export function lerServicos(bruto: unknown): ServicoDoContrato[] {
@@ -243,7 +262,30 @@ export type ContextoDasRegras = {
   variaveis: Record<string, VariavelDoModelo>;
   servicosAtuais: ServicoDoContrato[];
   clausulas: Record<string, { atual: string; modelo: string }>;
+  /**
+   * Frente CON2: o que vale como fonte (pedido, conversa e DADOS). Valor em
+   * reais, número, prazo ou data que não aparece aqui não é preenchido.
+   * Sem ela (testes antigos), não confere.
+   */
+  fontes?: ReferenciaDasFontes | null;
+  /** O texto bruto das fontes (o CNPJ tem de estar nele). */
+  textoDasFontes?: string | null;
+  /** Contratos do cliente para aditivo e renovação, pelo id. */
+  contratos?: Record<string, EstadoDoContratoParaOAgente>;
 };
+
+export type EstadoDoContratoParaOAgente = { assinado: boolean; aditivo: boolean; temRenovacao: boolean; temVigencia: boolean; modelo: boolean };
+
+const TIPOS_COM_NUMERO = ["moeda", "inteiro", "percentual", "data"];
+
+/** Motivo quando o valor pedido tem número que não está nas fontes (null quando tem fonte ou não confere). */
+export function valorSemFonte(v: VariavelDoModelo, valor: unknown, fontes: ReferenciaDasFontes | null | undefined): string | null {
+  if (!fontes || TIPOS_COM_NUMERO.indexOf(v.tipo) < 0) return null;
+  const s = String(valor == null ? "" : valor);
+  // Data em AAAA-MM-DD: o ano precisa estar nas fontes; dia e mês pequenos passam como no Preencher com IA.
+  const semFonte = numerosSemFonte(v.tipo === "data" ? s.replace(/-/g, " ") : s, fontes);
+  return semFonte.length ? `${v.rotulo}: ${semFonte.join(", ")} não aparece no pedido nem nos dados. O agente não inventa valor, prazo nem data: diga o valor na conversa.` : null;
+}
 
 export function regrasDasOperacoes(ctx: ContextoDasRegras): Record<string, RegraDaOperacao<AlvoDoContrato>> {
   const soRascunho = () => (ctx.rascunho ? null : "O contrato aberto não é mais rascunho: crie uma versão nova pela tela.");
@@ -279,7 +321,10 @@ export function regrasDasOperacoes(ctx: ContextoDasRegras): Record<string, Regra
         const v = ctx.variaveis[String(a.dados && a.dados.nome)];
         return v ? valorPedido(v, b) : null;
       },
-      trava: () => soRascunho(),
+      trava: (a, para) => {
+        const v = ctx.variaveis[String(a.dados && a.dados.nome)];
+        return soRascunho() || (v ? valorSemFonte(v, para, ctx.fontes) : null);
+      },
     },
     // Reescrever cláusula NUNCA vai direto: o cartão mostra a diferença, pede Confirmar e tem Desfazer.
     alterar_clausula: {
@@ -297,6 +342,46 @@ export function regrasDasOperacoes(ctx: ContextoDasRegras): Record<string, Regra
       direta: true,
       trava: (a) => soRascunho() || (ctx.clausulas[String(a.dados && a.dados.chave)] && ctx.clausulas[String(a.dados && a.dados.chave)].atual === ctx.clausulas[String(a.dados && a.dados.chave)].modelo ? "A cláusula já está no texto do modelo." : null),
     },
+    // Frente CON2: dados públicos da Receita (BrasilAPI) para a ficha do cliente. Sem custo; Desfazer volta a ficha.
+    puxar_cnpj: {
+      rotulo: "puxar os dados pelo CNPJ",
+      alvos: ["f"],
+      direta: true,
+      para: (b) => {
+        const d = soDigitos(b);
+        return cnpjValido(d) ? d : null;
+      },
+      trava: (_a, para) => (ctx.textoDasFontes !== undefined && ctx.textoDasFontes !== null && soDigitos(ctx.textoDasFontes).indexOf(String(para)) < 0 ? "O CNPJ não está na conversa: cole o número para eu consultar." : null),
+    },
+    criar_aditivo: {
+      rotulo: "criar o aditivo (rascunho)",
+      alvos: ["c"],
+      direta: true,
+      para: (b) => {
+        const t = String(b == null ? "" : b).replace(/\s+/g, " ").trim();
+        return t.length >= 10 && t.length <= 2000 ? t : null;
+      },
+      trava: (a) => {
+        const c = ctx.contratos ? ctx.contratos[a.id] : null;
+        if (!c) return "Contrato não encontrado.";
+        if (!c.modelo) return "Contrato de arquivo: o aditivo pelo modelo sai de contrato montado por modelo.";
+        if (c.aditivo) return "Este já é um aditivo: crie o aditivo no contrato original.";
+        return c.assinado ? null : "Aditivo só de contrato assinado. Antes disso, crie uma versão nova pela tela.";
+      },
+    },
+    renovar: {
+      rotulo: "preparar a renovação (rascunho)",
+      alvos: ["c"],
+      direta: true,
+      trava: (a) => {
+        const c = ctx.contratos ? ctx.contratos[a.id] : null;
+        if (!c) return "Contrato não encontrado.";
+        if (!c.modelo || c.aditivo) return "Só contrato montado por modelo (não o aditivo) é renovado.";
+        if (!c.assinado) return "Só contrato assinado é renovado.";
+        if (!c.temVigencia) return "Contrato sem fim de vigência (só projeto): para trabalho novo, crie um contrato novo.";
+        return c.temRenovacao ? "Este contrato já tem renovação em andamento." : null;
+      },
+    },
   };
 }
 
@@ -307,6 +392,9 @@ export const DESCRICOES_DAS_OPERACOES: Record<(typeof OPERACOES_DO_AGENTE)[numbe
   preencher: "ref v#; para = o valor (moeda em número, data AAAA-MM-DD, escolha pelo rótulo). Só com valor dito pelo dono ou pelos DADOS; nunca invente",
   alterar_clausula: "ref k#; para = o texto NOVO inteiro da cláusula, mantendo as {{variáveis}} que continuam valendo. Só quando o dono pedir para mudar a regra; a equipe vê a diferença e confirma",
   restaurar_clausula: "ref k#; volta a cláusula alterada ao texto do modelo",
+  puxar_cnpj: "ref f1; para = o CNPJ que o dono escreveu (14 números). Consulta a Receita e completa a ficha fiscal do cliente; venha antes de criar_contrato",
+  criar_aditivo: "ref c#; para = o que muda, em uma ou duas frases, com as palavras do dono. Cria o rascunho do aditivo do contrato assinado; valor e datas a pessoa confere em Dados",
+  renovar: "ref c#; prepara o rascunho de renovação do contrato assinado (começa no dia seguinte ao fim)",
 };
 
 export const ESQUEMA_DAS_ACOES_DOS_CONTRATOS = esquemaDasAcoes(OPERACOES_DO_AGENTE as unknown as string[]);
@@ -316,7 +404,12 @@ export type AlvosDoAgente = {
   servicos: Array<AlvoComApelido<AlvoDoContrato>>;
   variaveis: Array<AlvoComApelido<AlvoDoContrato>>;
   clausulas: Array<AlvoComApelido<AlvoDoContrato>>;
+  /** Frente CON2: f1 (ficha fiscal do cliente) e c# (contratos do cliente para aditivo e renovação). */
+  ficha?: Array<AlvoComApelido<AlvoDoContrato>>;
+  contratos?: Array<AlvoComApelido<AlvoDoContrato>>;
 };
+
+export type ContratoParaOAgente = { id: string; titulo: string; numero: string | null; status: string; tipo: string; fim?: string | null };
 
 /** Apelidos: n1 (novo contrato), s1..s8 (serviços), v1.. (variáveis do aberto), k1.. (cláusulas do aberto). O id nunca vai ao modelo. */
 export function alvosDoAgente(p: {
@@ -327,6 +420,7 @@ export function alvosDoAgente(p: {
   valores: Valores;
   faltando: string[];
   clausulas: ClausulaMontada[];
+  contratos?: ContratoParaOAgente[];
 }): AlvosDoAgente {
   const novo = comApelido([{ id: p.clientId, titulo: "novo contrato para este cliente" }], "n");
   const servicos = comApelido(SERVICOS_DO_CONTRATO.map((s) => ({
@@ -351,7 +445,14 @@ export function alvosDoAgente(p: {
       dados: { chave: c.chave },
     })), "k", 120)
     : [];
-  return { novo, servicos, variaveis, clausulas };
+  const ficha = comApelido([{ id: p.clientId, titulo: "ficha fiscal do cliente (CNPJ, razão social, endereço, representante)" }], "f");
+  const contratos = comApelido((p.contratos || []).map((c) => ({
+    id: c.id,
+    titulo: `${c.numero || "sem número"} ${c.titulo}`.trim(),
+    detalhe: `${c.tipo === "aditivo" ? "aditivo; " : c.tipo === "renovacao" ? "renovação; " : ""}${c.status === "completed" ? "assinado" : c.status === "sent" ? "esperando assinatura" : c.status === "draft" ? "rascunho" : c.status}${c.fim ? `; vigência até ${c.fim}` : ""}`,
+    dados: { contrato: c.id },
+  })), "c", 30);
+  return { novo, servicos, variaveis, clausulas, ficha, contratos };
 }
 
 export function blocoDosAlvosDoContrato(a: AlvosDoAgente): string {
@@ -360,6 +461,8 @@ export function blocoDosAlvosDoContrato(a: AlvosDoAgente): string {
     blocoDosAlvos("SERVIÇOS (blocos)", a.servicos),
     blocoDosAlvos("VARIÁVEIS DO CONTRATO ABERTO", a.variaveis, "nenhum contrato aberto."),
     blocoDosAlvos("CLÁUSULAS DO CONTRATO ABERTO", a.clausulas, "nenhum contrato aberto."),
+    blocoDosAlvos("FICHA FISCAL", a.ficha || []),
+    blocoDosAlvos("CONTRATOS DO CLIENTE (aditivo e renovação)", a.contratos || [], "nenhum contrato."),
     regraDasAcoes(DESCRICOES_DAS_OPERACOES),
   ].join("\n");
 }
@@ -377,17 +480,20 @@ export function normalizarAcoesDosContratos(
   ctx: ContextoDasRegras,
   opcoes: { contratoId: string | null; clientId: string },
 ): AcaoDoAgente | null {
-  const todos = [...alvos.novo, ...alvos.servicos, ...alvos.variaveis, ...alvos.clausulas];
+  const todos = [...alvos.novo, ...alvos.servicos, ...alvos.variaveis, ...alvos.clausulas, ...(alvos.ficha || []), ...(alvos.contratos || [])];
   const acao = normalizarAcaoDoAgente(bruto, todos, regrasDasOperacoes(ctx), {
     agente: "contratos",
     contexto: { contract_id: opcoes.contratoId, client_id: opcoes.clientId },
     rotuloDoPara: (operacao, para) => {
       if (operacao === "criar_contrato") return lerServicos(para).map((s) => ROTULO_DO_SERVICO[s]).join(", ");
       if (operacao === "alterar_clausula") return "texto novo (veja a diferença)";
+      if (operacao === "puxar_cnpj") return `CNPJ ${String(para).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5")}`;
       return null;
     },
   });
   if (!acao) return null;
+  // Os dados do CNPJ entram antes do rascunho (o rascunho já nasce com a ficha).
+  acao.itens.sort((a, b) => (a.operacao === "puxar_cnpj" ? 0 : 1) - (b.operacao === "puxar_cnpj" ? 0 : 1));
   const diffs: DiffDaClausula[] = [];
   for (const item of acao.itens) {
     if (item.operacao !== "alterar_clausula") continue;

@@ -23,6 +23,10 @@ export default function ContractPublic() {
   const [accept, setAccept] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pdfFinal, setPdfFinal] = useState<string | null>(null);
+  // Frente CON2: link de uma pessoa da lista de quem assina (outro signatário do cliente ou testemunha).
+  const [signatario, setSignatario] = useState<{ papel: string; nome: string; email: string; assinado_em: string | null } | null>(null);
+  const [assinaturas, setAssinaturas] = useState<Array<{ papel: string; nome: string; assinado: boolean }>>([]);
+  const [faltam, setFaltam] = useState(0);
 
   useEffect(() => {
     if (!token) { setPhase("invalid"); return; }
@@ -35,9 +39,11 @@ export default function ContractPublic() {
         if (res.error || !res.contract) return setPhase("invalid");
         setContract(res.contract);
         setClient(res.client);
-        setSignName(res.client?.full_name || "");
-        setSignEmail(res.client?.email || "");
-        if (res.contract.client_signed_at) setPhase("done");
+        setSignatario(res.signatario || null);
+        setAssinaturas(Array.isArray(res.assinaturas) ? res.assinaturas : []);
+        setSignName(res.signatario ? res.signatario.nome : res.client?.full_name || "");
+        setSignEmail(res.signatario ? res.signatario.email : res.client?.email || "");
+        if (res.contract.client_signed_at || (res.signatario && res.signatario.assinado_em)) setPhase("done");
         else setPhase("ready");
       })
       .catch(() => setPhase("invalid"));
@@ -69,7 +75,11 @@ export default function ContractPublic() {
       if (!res.ok || data.error) throw new Error(data.mensagem || data.error || "Erro ao assinar");
       if (data.pdf_url) setPdfFinal(String(data.pdf_url));
       setPhase("done");
-      setContract((c: any) => ({ ...c, client_signed_at: new Date().toISOString(), client_signature_name: signName.trim(), status: "completed" }));
+      if (signatario && !data.concluido) {
+        // Assinou; o contrato fecha quando todos assinarem.
+        setFaltam(Number(data.faltam) || 0);
+        setSignatario((x) => (x ? { ...x, assinado_em: new Date().toISOString() } : x));
+      } else setContract((c: any) => ({ ...c, client_signed_at: new Date().toISOString(), client_signature_name: signName.trim(), status: "completed" }));
     } catch (e: any) {
       setError(e.message);
       setPhase("ready");
@@ -126,6 +136,17 @@ export default function ContractPublic() {
             </p>
           )}
 
+          {assinaturas.length > 1 && (
+            <p className={juntar(texto.auxiliar, "flex min-w-0 flex-wrap items-center [&>*]:mr-3")}>
+              {assinaturas.map((a, i) => (
+                <span key={i} className="inline-flex items-center">
+                  {a.assinado ? <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-success" aria-hidden="true" /> : null}
+                  {a.nome}
+                  {a.papel === "testemunha" ? " (testemunha)" : ""}
+                </span>
+              ))}
+            </p>
+          )}
           {modelo ? (
             <Suspense fallback={<div className="h-[60vh] animate-pulse rounded-lg bg-muted/70" aria-busy="true" />}>
               <DocumentoDoContrato texto={contract.documento_texto || ""} hash={contract.documento_hash} />
@@ -164,7 +185,7 @@ export default function ContractPublic() {
                 />
               </CampoDeFormulario>
               {modelo && (
-                <CampoDeFormulario rotulo="Seu e-mail" obrigatorio apoio="Vai para a página de carimbo do contrato.">
+                <CampoDeFormulario rotulo="Seu e-mail" obrigatorio apoio={signatario ? "O e-mail cadastrado para esta assinatura." : "Vai para a página de carimbo do contrato."}>
                   <input
                     value={signEmail}
                     onChange={(e) => setSignEmail(e.target.value)}
@@ -188,7 +209,15 @@ export default function ContractPublic() {
         </div>
       )}
 
-      {phase === "done" && contract && (
+      {phase === "done" && contract && signatario && !contract.client_signed_at && (
+        <EstadoVazio
+          icone={<CheckCircle2 className="h-5 w-5 text-success" />}
+          titulo="Sua assinatura está registrada"
+          descricao={faltam ? `Faltam ${faltam} ${faltam === 1 ? "assinatura" : "assinaturas"}. O contrato final sai quando todos assinarem.` : "O contrato final sai quando todos assinarem."}
+        />
+      )}
+
+      {phase === "done" && contract && (!signatario || contract.client_signed_at) && (
         <EstadoVazio
           icone={<CheckCircle2 className="h-5 w-5 text-success" />}
           titulo="Contrato assinado"

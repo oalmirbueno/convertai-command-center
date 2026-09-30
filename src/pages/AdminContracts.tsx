@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
-import { FileSignature, Upload, Send, CheckCircle2, Clock, ExternalLink, Copy, Mail, Trash2, Plus } from "lucide-react";
+import { FileSignature, Upload, Send, CheckCircle2, Clock, ExternalLink, Copy, Mail, Trash2, Plus, BookOpen } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import {
   AreaDeTrabalho,
@@ -44,6 +44,9 @@ import { chamarContratos, CHAVES_DOS_CONTRATOS } from "@/lib/contratos/api";
 const DetalheDoContrato = lazy(() => import("@/components/contratos/DetalheDoContrato"));
 const NovoContrato = lazy(() => import("@/components/contratos/NovoContrato"));
 const AgenteDeContratos = lazy(() => import("@/components/contratos/AgenteDeContratos"));
+// Frente CON2 (30/09): painel (a vencer, pendentes, assinados no mês, recorrente) e editor de modelos.
+const PainelDosContratos = lazy(() => import("@/components/contratos/PainelDosContratos"));
+const EditorDeModelos = lazy(() => import("@/components/contratos/EditorDeModelos"));
 
 type Contract = {
   id: string;
@@ -110,6 +113,7 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
   const [uploadOpen, setUploadOpen] = useState(false);
   const clienteDoLink = params.get("client") || "";
   const contratoAberto = !lockedClientId && UUID_VALIDO.test(params.get("contrato") || "") ? String(params.get("contrato")) : null;
+  const vistaModelos = !lockedClientId && params.get("vista") === "modelos";
   const clienteFiltro = lockedClientId || (UUID_VALIDO.test(clienteDoLink) ? clienteDoLink : "");
   const [signOpen, setSignOpen] = useState<Contract | null>(null);
   const [linkOpen, setLinkOpen] = useState<{ url: string; email: string } | null>(null);
@@ -383,7 +387,11 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
     </Painel>
   );
 
-  const principal: ReactNode = contratoAberto ? (
+  const principal: ReactNode = vistaModelos ? (
+    <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo os modelos" />}>
+      <EditorDeModelos aoVoltar={() => mudar({ vista: null })} />
+    </Suspense>
+  ) : contratoAberto ? (
     <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo o contrato" />}>
       <DetalheDoContrato
         key={contratoAberto}
@@ -397,7 +405,21 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
       />
     </Suspense>
   ) : (
-    lista
+    <div className="min-w-0 space-y-4">
+      {!lockedClientId && contracts.length > 0 && (
+        <Suspense fallback={null}>
+          <PainelDosContratos
+            clientId={clienteFiltro || null}
+            nomeDoCliente={(id) => {
+              const cl = clientById(id);
+              return (cl && (cl.company_name || cl.full_name)) || "";
+            }}
+            aoAbrir={(id, cliente) => mudar({ contrato: id, client: cliente })}
+          />
+        </Suspense>
+      )}
+      {lista}
+    </div>
   );
 
   return (
@@ -420,13 +442,18 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
                 <Plus className="h-4 w-4" aria-hidden="true" />
                 <span className="ml-1.5 hidden sm:inline">Novo contrato</span>
               </button>
-              <MenuMais itens={[{ rotulo: "Subir PDF pronto", icone: <Upload className="h-4 w-4" />, aoEscolher: () => setUploadOpen(true) }]} />
+              <MenuMais
+                itens={[
+                  { rotulo: "Subir PDF pronto", icone: <Upload className="h-4 w-4" />, aoEscolher: () => setUploadOpen(true) },
+                  !lockedClientId && { rotulo: "Modelos e biblioteca", icone: <BookOpen className="h-4 w-4" />, aoEscolher: () => mudar({ vista: "modelos", contrato: null }) },
+                ]}
+              />
             </div>
           ) : undefined
         }
       />
 
-      {contracts.length > 0 && !contratoAberto && (
+      {contracts.length > 0 && !contratoAberto && !vistaModelos && (
         <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
           <CampoDeBusca
             valor={busca}
@@ -458,8 +485,8 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
       ) : (
         <AreaDeTrabalho
           memoria="contratos"
-          memoriaDaRolagem={contratoAberto ? `contratos:${contratoAberto}` : "contratos:lista"}
-          rotuloDoPrincipal={contratoAberto ? "Contrato aberto" : "Lista de contratos"}
+          memoriaDaRolagem={vistaModelos ? "contratos:modelos" : contratoAberto ? `contratos:${contratoAberto}` : "contratos:lista"}
+          rotuloDoPrincipal={vistaModelos ? "Modelos de contrato" : contratoAberto ? "Contrato aberto" : "Lista de contratos"}
           rotuloDaLateral="Agente de contratos"
           iconeDaLateral={<FileSignature className="h-4 w-4" />}
           lateral={

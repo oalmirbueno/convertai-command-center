@@ -11,6 +11,11 @@
  * todas as páginas. A página de carimbo (assinaturas e trilha de eventos)
  * entra no PDF final, depois da assinatura do cliente.
  *
+ * Frente CON2 (30/09): capa (logo grande, partes, serviços, valor e o código
+ * de integridade), bloco de assinaturas com uma linha para cada pessoa
+ * (contratada, contratante, outros signatários e testemunhas) e página de
+ * carimbo com todas as assinaturas. A capa só repete o que está no texto.
+ *
  * Sem travessão.
  */
 import { CORES, type Fonte, larguraDoTexto, paraWinAnsi, quebrarLinhas } from "./pdf-roteiro.ts";
@@ -90,6 +95,8 @@ export type CarimboDoContrato = {
   verificacao?: string | null;
 };
 
+export type QuemAssinaNoPdf = { papel: string; nome: string; detalhe?: string | null };
+
 export type PdfDoContrato = {
   texto: string;
   numero: string;
@@ -97,6 +104,10 @@ export type PdfDoContrato = {
   /** Código de integridade do texto congelado (SHA-256). Sem ele, o PDF sai marcado como prévia. */
   hash?: string | null;
   carimbo?: CarimboDoContrato | null;
+  /** Capa com as partes e o código (padrão: sim). */
+  capa?: boolean;
+  /** Linhas de assinatura no fim do texto (contratada, contratante, testemunhas). */
+  quemAssina?: QuemAssinaNoPdf[];
 };
 
 /** "29/09/2026 14:03:21 (Brasília)" a partir de um instante ISO. */
@@ -123,6 +134,13 @@ class Documento {
     p.logo(LARGURA / 2 - 50, 26, 100);
     p.textoADireita(DIR, 46, this.cabecalho.direita.slice(0, 60), "F2", 7.4, CORES.cinza);
     p.linha(ESQ, 64, MIOLO);
+    this.y = TOPO;
+    return p;
+  }
+  /** Página da capa: só a faixa verde na margem (a capa desenha o resto). */
+  capa(): Pagina {
+    const p = new Pagina();
+    this.paginas.push(p);
     this.y = TOPO;
     return p;
   }
@@ -200,6 +218,80 @@ function desenharTexto(d: Documento, texto: string) {
       d.paragrafo(b.texto, "F1", 9.4, CORES.tinta);
       d.y += 4;
     }
+  }
+}
+
+/** O que a capa mostra, tirado do próprio texto (título, linha de identificação e quadro). */
+export function dadosDaCapa(texto: string): { titulo: string; meta: string; linhas: Array<{ rotulo: string; texto: string }> } {
+  const blocos = lerDocumento(texto);
+  const titulo = (blocos.find((b) => b.tipo === "titulo") as { texto: string } | undefined)?.texto || "Contrato";
+  const meta = (blocos.find((b) => b.tipo === "meta") as { texto: string } | undefined)?.texto || "";
+  const quero = ["Contratante", "Contratada", "Serviços", "Contrato original", "Valor", "Início e vigência", "Vale a partir de", "Renovação"];
+  const linhas: Array<{ rotulo: string; texto: string }> = [];
+  for (const b of blocos) {
+    if (b.tipo !== "quadro" || quero.indexOf(b.rotulo) < 0) continue;
+    // Na capa, só o nome da parte (a qualificação inteira fica no quadro).
+    const t = b.rotulo === "Contratante" || b.rotulo === "Contratada" ? b.texto.split(",")[0] : b.texto;
+    linhas.push({ rotulo: b.rotulo, texto: t });
+  }
+  linhas.sort((a, b) => quero.indexOf(a.rotulo) - quero.indexOf(b.rotulo));
+  return { titulo, meta, linhas };
+}
+
+function desenharCapa(d: Documento, p: PdfDoContrato) {
+  const pg = d.atual();
+  const c = dadosDaCapa(p.texto);
+  pg.retangulo(0, 0, LARGURA, 250, CORES.cartaoVerde);
+  pg.retangulo(0, 250, LARGURA, 3, CORES.verde);
+  pg.logo(ESQ, 70, 150);
+  pg.texto(ESQ, 186, /aditivo/i.test(c.titulo) ? "TERMO ADITIVO" : "CONTRATO", "F2", 8.4, CORES.verdeEscuro);
+  let y = 212;
+  for (const l of quebrarLinhas(c.titulo, "F2", 24, MIOLO).slice(0, 2)) {
+    pg.texto(ESQ, y, l, "F2", 24, CORES.tinta);
+    y += 28;
+  }
+  d.y = 290;
+  if (c.meta) {
+    d.paragrafo(c.meta, "F1", 9.6, CORES.cinza);
+    d.y += 14;
+  }
+  for (const l of c.linhas) {
+    const linhas = quebrarLinhas(l.texto, "F1", 10.4, MIOLO - 140).slice(0, 4);
+    const altura = linhas.length * 14.6 + 14;
+    if (d.y + altura > 684) break;
+    const q = pg;
+    q.texto(ESQ, d.y + 12, l.rotulo.toLocaleUpperCase("pt-BR"), "F2", 7.6, CORES.verdeEscuro);
+    linhas.forEach((x, i) => q.texto(ESQ + 140, d.y + 12 + i * 14.6, x, i === 0 && (l.rotulo === "Contratante" || l.rotulo === "Contratada") ? "F2" : "F1", 10.4, CORES.tinta));
+    d.y += altura;
+    q.linha(ESQ, d.y - 4, MIOLO);
+  }
+  // Código de integridade no pé da capa.
+  const base = 700;
+  pg.retangulo(ESQ, base, MIOLO, 70, CORES.cartao);
+  pg.texto(ESQ + 16, base + 20, p.hash ? "CÓDIGO DE INTEGRIDADE (SHA-256)" : "PRÉVIA, SEM VALOR DE ASSINATURA", "F2", 7.4, CORES.verdeEscuro);
+  const codigo = p.hash ? hashLegivel(p.hash) : "O código sai quando o contrato é congelado e assinado pela agência.";
+  quebrarLinhas(codigo, p.hash ? "F2" : "F1", 8.8, MIOLO - 32).slice(0, 3).forEach((l, i) => pg.texto(ESQ + 16, base + 36 + i * 12, l, p.hash ? "F2" : "F1", 8.8, CORES.tinta));
+}
+
+function desenharQuemAssina(d: Documento, lista: QuemAssinaNoPdf[]) {
+  const pessoas = lista.filter((x) => x && String(x.nome || "").trim());
+  if (!pessoas.length) return;
+  d.y += 18;
+  d.garantir(40);
+  d.atual().texto(ESQ, d.y + 8, "QUEM ASSINA", "F2", 8, CORES.verdeEscuro);
+  d.y += 16;
+  const coluna = (MIOLO - 24) / 2;
+  for (let i = 0; i < pessoas.length; i += 2) {
+    d.garantir(78);
+    const q = d.atual();
+    [pessoas[i], pessoas[i + 1]].forEach((x, k) => {
+      if (!x) return;
+      const xa = ESQ + k * (coluna + 24);
+      q.linha(xa, d.y + 36, coluna, CORES.tinta);
+      q.texto(xa, d.y + 50, String(x.nome).slice(0, 60), "F2", 9.4, CORES.tinta);
+      q.texto(xa, d.y + 63, `${x.papel}${x.detalhe ? ` · ${x.detalhe}` : ""}`.slice(0, 80), "F1", 8.2, CORES.cinza);
+    });
+    d.y += 78;
   }
 }
 
@@ -312,8 +404,13 @@ export function gerarPdfDoContrato(p: PdfDoContrato): Uint8Array {
   if (!String(p.texto || "").trim()) throw new Error("Contrato sem texto.");
   const codigo = p.hash ? `CÓDIGO ${String(p.hash).slice(0, 16).toUpperCase()}` : "PRÉVIA, SEM VALOR DE ASSINATURA";
   const d = new Documento({ esquerda: `CONTRATO Nº ${p.numero}  /  VERSÃO ${p.versao}`, direita: codigo });
+  if (p.capa !== false) {
+    d.capa();
+    desenharCapa(d, p);
+  }
   d.nova();
   desenharTexto(d, p.texto);
+  if (p.quemAssina && p.quemAssina.length) desenharQuemAssina(d, p.quemAssina);
   if (p.carimbo) desenharCarimbo(d, p, p.carimbo);
   d.rodapes(p.hash ? `Contrato nº ${p.numero}, versão ${p.versao}. SHA-256 ${p.hash}` : `Contrato nº ${p.numero}, versão ${p.versao}. Prévia: o código de integridade sai no envio.`);
   return montarBytes(d.paginas, `Contrato nº ${p.numero}`, p.hash ? `sha256:${p.hash}` : "previa");

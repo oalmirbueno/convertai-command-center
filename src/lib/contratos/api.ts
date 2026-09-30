@@ -1,5 +1,7 @@
 import { chamarFuncao } from "@/lib/mesa/api";
+import type { FichaFiscal } from "../../../supabase/functions/_shared/contrato-ficha";
 import type {
+  ClausulaDoModelo,
   ClausulaMontada,
   FaltaNoContrato,
   LinhaDoDiff,
@@ -39,7 +41,28 @@ export type ContratoNaTela = {
   arquivado_em: string | null;
   updated_at: string;
   clausulas_alteradas: Array<{ chave: string; texto: string; texto_original: string; confirmada_em?: string | null }>;
+  /** Frente CON2 (sem a migration, vêm vazios). */
+  tipo_documento?: "contrato" | "aditivo" | "renovacao";
+  contrato_mae_id?: string | null;
+  renovacao_de?: string | null;
+  vigencia_fim?: string | null;
+  lembrete_em?: string | null;
 };
+
+export type SignatarioNaTela = {
+  id: string;
+  papel: "contratante" | "testemunha";
+  principal: boolean;
+  ordem: number;
+  nome: string;
+  email: string;
+  documento: string | null;
+  obrigatorio: boolean;
+  assinado_em: string | null;
+  link: string | null;
+};
+
+export type DocumentoLigado = { id: string; title: string; numero: string | null; versao: number; status: string; tipo_documento?: string };
 
 export type PayloadDoContrato = {
   contrato: ContratoNaTela;
@@ -55,6 +78,53 @@ export type PayloadDoContrato = {
   sign_url?: string;
   mensagens?: { whatsapp: string; assunto: string; email: string; wa_me: string };
   anterior?: { chave: string; texto: string } | null;
+  // Frente CON2
+  signatarios?: SignatarioNaTela[];
+  ligados?: { aditivos: DocumentoLigado[]; renovacao: DocumentoLigado | null; mae: DocumentoLigado | null; renova: DocumentoLigado | null };
+  vigencia?: { inicio: string | null; fim: string | null; recorrente: boolean } | null;
+  ficha?: { existe: boolean; valores: Valores; ficha: FichaFiscal } | null;
+  extras_fora?: string[];
+  mensagens_por_pessoa?: Array<{ id: string; nome: string; papel: string; link: string; mensagens: { whatsapp: string; assunto: string; email: string; wa_me: string } }>;
+  origem?: string[];
+  avisos?: string[];
+  pergunta?: string | null;
+  ja_existia?: boolean;
+};
+
+export type Mensagens = { whatsapp: string; assunto: string; email: string; wa_me: string };
+
+export type RespostaDoPainel = {
+  painel: {
+    aVencer: Array<{ id: string; client_id: string; titulo: string; numero: string | null; fim: string; dias: number; renovacao_id: string | null }>;
+    pendentes: Array<{ id: string; client_id: string; titulo: string; numero: string | null; dias: number; lembrete_em: string | null }>;
+    assinadosNoMes: number;
+    recorrenteMensal: number;
+    ativos: number;
+  };
+  janela_dias: number;
+  lembrete_dias: number;
+};
+
+export type RespostaDoLembrete = {
+  dias: number;
+  ultimo_lembrete: string | null;
+  lembretes: Array<{ id: string | null; nome: string; papel: string; email: string; link: string; mensagens: Mensagens }>;
+};
+
+export type RespostaDaFicha = { ficha: FichaFiscal; existe?: boolean; faltas?: string[]; valores?: Valores; sugestao?: FichaFiscal | null; anterior?: FichaFiscal | null; avisos?: string[]; cache?: boolean; consultado_em?: string; salva?: FichaFiscal; mudaram?: string[] };
+
+export type ModeloNaTela = {
+  chave: string;
+  tipo: string;
+  servico: string | null;
+  nome: string;
+  ativo: { versao: number; revisao_juridica: string; variaveis: VariavelDoModelo[]; clausulas: ClausulaDoModelo[] };
+  versoes: Array<{ versao: number; ativo: boolean; revisao_juridica: string; clausulas: number }>;
+};
+
+export type Preferencias = {
+  extras: Record<string, "padrao_sim" | "padrao_nao" | "desligada">;
+  avisos: { aviso_vencimento_dias: number; lembrete_assinatura_dias: number };
 };
 
 export type ContextoDosContratos = {
@@ -71,6 +141,11 @@ export const CHAVES_DOS_CONTRATOS = {
   contexto: ["contratos", "contexto"] as const,
   um: (id: string) => ["contratos", "um", id] as const,
   diff: (id: string) => ["contratos", "diff", id] as const,
+  // Frente CON2
+  painel: (clientId: string | null) => ["contratos", "painel", clientId || "todos"] as const,
+  ficha: (clientId: string) => ["contratos", "ficha", clientId] as const,
+  modelos: ["contratos", "modelos"] as const,
+  propostas: (clientId: string) => ["contratos", "propostas", clientId] as const,
 };
 
 export type RespostaDoDiff = { antes: { id: string; versao: number }; depois: { id: string; versao: number }; linhas: LinhaDoDiff[]; resumo: { mudaram: number; entraram: number; sairam: number } };

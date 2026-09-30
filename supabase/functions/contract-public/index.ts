@@ -2,6 +2,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { EMAIL_APP_URL } from "../_shared/email-config.ts";
 import { hashDosBytes, nomeDoArquivoDoContrato } from "../_shared/contrato-modelo.ts";
 import { type EventoNoCarimbo, gerarPdfDoContrato } from "../_shared/pdf-contrato.ts";
+// Frente CON2 (30/09): mais de um signatário do cliente e testemunhas, cada um com o próprio link.
+import { fecharComSignatarios, lerSignatariosDoContrato } from "../_shared/contrato-assinaturas.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -48,7 +50,25 @@ const CAMPOS_MODELO =
 
 const EMAIL_VALIDO = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
-async function lerPorToken(supabase: any, token: string): Promise<{ contract: any; modelo: boolean; error: any }> {
+type SignatarioDoLink = { id: string; contract_id: string; papel: string; nome: string; email: string; principal: boolean; assinado_em: string | null };
+
+/** O link de uma pessoa da lista de quem assina (o principal usa o link de sempre, que também está na lista). */
+async function signatarioDoToken(supabase: any, token: string): Promise<SignatarioDoLink | null> {
+  const { data, error } = await supabase.from("contrato_signatarios").select("id, contract_id, papel, nome, email, principal, assinado_em").eq("token", token).is("removido_em", null).maybeSingle();
+  if (error) {
+    // Banco sem a lista (migration 20260930195100 pendente): segue o caminho de sempre.
+    if (!/contrato_signatarios|does not exist|schema cache/i.test(String(error.message || ""))) console.error("contract-public: signatário não lido", { message: error.message });
+    return null;
+  }
+  return data || null;
+}
+
+async function lerPorToken(supabase: any, token: string): Promise<{ contract: any; modelo: boolean; error: any; signatario?: SignatarioDoLink | null }> {
+  const signatario = await signatarioDoToken(supabase, token);
+  if (signatario) {
+    const r = await supabase.from("contracts").select(CAMPOS_MODELO).eq("id", signatario.contract_id).maybeSingle();
+    return { contract: r.data, modelo: !!r.data && r.data.origem === "modelo", error: r.error, signatario };
+  }
   const novo = await supabase.from("contracts").select(CAMPOS_MODELO).eq("sign_token", token).maybeSingle();
   if (!novo.error) return { contract: novo.data, modelo: !!novo.data && novo.data.origem === "modelo", error: null };
   // Banco sem as colunas novas (migration da frente CON ainda não aplicada): leitura antiga.
@@ -84,6 +104,46 @@ async function registrarVisita(supabase: any, contract: any, ip: string, userAge
   }
 }
 
+async function assinarComoSignatario(supabase: any, contract: any, signatario: SignatarioDoLink, body: any, ip: string, userAgent: string, token: string) {
+  const nome = typeof body.signature_name === "string" ? body.signature_name.trim() : "";
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const hashVisto = typeof body.hash === "string" ? body.hash.trim().toLowerCase() : "";
+  if (!nome || nome.length > 200 || !EMAIL_VALIDO.test(email) || email.length > 254 || body.accept !== true) {
+    return json({ error: "missing or invalid fields", mensagem: "Preencha nome, e-mail válido e o aceite." }, 400);
+  }
+  if (email !== String(signatario.email || "").toLowerCase()) {
+    return json({ error: "email_diferente", mensagem: "Use o e-mail cadastrado para esta assinatura. Se ele mudou, peça um link novo à agência." }, 400);
+  }
+  if (hashVisto !== contract.documento_hash) {
+    return json({ error: "documento_mudou", mensagem: "O documento mudou desde que você abriu o link. Abra o link de novo." }, 409);
+  }
+  const { data: r, error } = await supabase.rpc("contrato_assinar_signatario", {
+    p_token: token,
+    p_nome: nome,
+    p_email: email,
+    p_ip: ip,
+    p_user_agent: userAgent.slice(0, 400),
+    p_hash_visto: hashVisto,
+    p_assinado_em: new Date().toISOString(),
+  });
+  if (error) {
+    const status = error.message === "signatario not found" ? 404 : 409;
+    return json({ error: error.message, mensagem: error.message === "esta pessoa já assinou" ? "Sua assinatura já estava registrada." : "A assinatura não foi registrada. Abra o link de novo." }, status);
+  }
+  const faltam = Number(r && r.faltam) || 0;
+  if (faltam > 0) return json({ ok: true, faltam, concluido: false });
+  // Última assinatura obrigatória: fecha o contrato (PDF final com todas as assinaturas).
+  const { data: perfil } = await supabase.from("profiles").select("company_name, full_name").eq("id", contract.client_id).maybeSingle();
+  const cliente = (perfil && (perfil.company_name || perfil.full_name)) || "cliente";
+  const f = await fecharComSignatarios(supabase, contract.id, { verificacao: `${EMAIL_APP_URL}/contrato/${token}`, cliente });
+  if (!f.ok) {
+    console.error("contract-public: fechamento com signatários falhou", { contract_id: contract.id, motivo: f.motivo });
+    // A assinatura ficou registrada; a rotina diária tenta fechar de novo e a equipe pode pedir pela tela.
+    return json({ ok: true, faltam: 0, concluido: false, mensagem: "Sua assinatura ficou registrada. O PDF final sai em seguida." });
+  }
+  return json({ ok: true, faltam: 0, concluido: true, pdf_url: await urlAssinada(supabase, `files://${f.pdf_path}`), pdf_hash: f.pdf_hash });
+}
+
 async function assinarContratoDeModelo(supabase: any, contract: any, body: any, ip: string, userAgent: string, token: string) {
   const nome = typeof body.signature_name === "string" ? body.signature_name.trim() : "";
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
@@ -112,6 +172,10 @@ async function assinarContratoDeModelo(supabase: any, contract: any, body: any, 
     numero: String(contract.numero || ""),
     versao: Number(contract.versao) || 1,
     hash: contract.documento_hash,
+    quemAssina: [
+      { papel: "Pela contratada", nome: String(contract.admin_signature_name || "") },
+      { papel: "Pelo contratante", nome, detalhe: email },
+    ],
     carimbo: {
       assinaturas: [
         { papel: "Pela contratada", nome: String(contract.admin_signature_name || ""), email: contract.admin_signature_email, quando: String(contract.admin_signed_at), ip: contract.admin_signature_ip },
@@ -169,7 +233,7 @@ Deno.serve(async (req) => {
       const token = url.searchParams.get("token");
       if (!token) return json({ error: "missing token" }, 400);
 
-      const { contract, modelo, error } = await lerPorToken(supabase, token);
+      const { contract, modelo, error, signatario } = await lerPorToken(supabase, token);
       if (error || !contract) return json({ error: "invalid token" }, 404);
       if (contract.status === "substituido") {
         return json({ error: "substituido", mensagem: "Este link foi substituído por uma versão nova do contrato. Peça o link novo à agência." }, 410);
@@ -187,7 +251,11 @@ Deno.serve(async (req) => {
       if (modelo) {
         if (contract.status === "sent") await registrarVisita(supabase, contract, ip, userAgent);
         const pdfRef = contract.status === "completed" ? contract.original_file_url : contract.documento_pdf_url;
+        // Frente CON2: quem é a pessoa deste link e quem já assinou (nomes e papéis, sem e-mail nem IP dos outros).
+        const { lista } = signatario ? await lerSignatariosDoContrato(supabase, contract.id) : { lista: [] };
         return json({
+          signatario: signatario ? { papel: signatario.papel, nome: signatario.nome, email: signatario.email, assinado_em: signatario.assinado_em } : null,
+          assinaturas: lista.map((s) => ({ papel: s.papel, nome: s.nome, assinado: !!s.assinado_em })),
           contract: {
             title: contract.title,
             description: contract.description,
@@ -245,7 +313,10 @@ Deno.serve(async (req) => {
       const normalizedToken = typeof token === "string" ? token.trim() : "";
       if (!normalizedToken) return json({ error: "missing or invalid fields" }, 400);
 
-      const { contract, modelo } = await lerPorToken(supabase, normalizedToken);
+      const { contract, modelo, signatario } = await lerPorToken(supabase, normalizedToken);
+      if (contract && modelo && signatario) {
+        return await assinarComoSignatario(supabase, contract, signatario, body || {}, ip, userAgent, normalizedToken);
+      }
       if (contract && modelo) {
         return await assinarContratoDeModelo(supabase, contract, body || {}, ip, userAgent, normalizedToken);
       }

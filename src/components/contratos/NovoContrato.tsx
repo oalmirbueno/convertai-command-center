@@ -6,9 +6,11 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import { chamarContratos, CHAVES_DOS_CONTRATOS, type ContextoDosContratos, type PayloadDoContrato } from "@/lib/contratos/api";
+import { moedaBr } from "../../../supabase/functions/_shared/contrato-modelo";
 import { ROTULO_DO_SERVICO, SERVICOS_DO_CONTRATO } from "../../../supabase/functions/_shared/contrato-modelo";
 
 /**
@@ -16,7 +18,14 @@ import { ROTULO_DO_SERVICO, SERVICOS_DO_CONTRATO } from "../../../supabase/funct
  * quadro-resumo já nasce com o cadastro do cliente, os padrões do dono e o que
  * a agência usou por último; o que faltar aparece em Dados. Sem os dados da
  * agência, não cria e diz o que falta.
+ *
+ * Frente CON2: três jeitos de começar. Pelos serviços (como antes), do
+ * cliente (serviços ativos da ficha, plano do Financeiro e ficha fiscal) ou
+ * da proposta aceita (lista as aceitas do cliente).
  */
+
+type Origem = "servicos" | "cliente" | "proposta";
+type PropostaAceita = { id: string; numero: string; titulo: string; total_unico: number; total_mensal: number; aceita_em: string | null; contrato_id: string | null };
 export default function NovoContrato({
   aberto,
   aoFechar,
@@ -34,12 +43,21 @@ export default function NovoContrato({
   const [servicos, setServicos] = useState<string[]>([]);
   const [titulo, setTitulo] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  const [origem, setOrigem] = useState<Origem>("servicos");
+  const [propostaId, setPropostaId] = useState("");
+  const propostas = useQuery({
+    queryKey: CHAVES_DOS_CONTRATOS.propostas(clientId || "nenhum"),
+    enabled: aberto && origem === "proposta" && !!clientId,
+    queryFn: () => chamarContratos<{ propostas: PropostaAceita[] }>("propostas_aceitas", { client_id: clientId }),
+  });
   const contexto = useQuery({ queryKey: CHAVES_DOS_CONTRATOS.contexto, enabled: aberto, queryFn: () => chamarContratos<ContextoDosContratos>("contexto") });
   useEffect(() => {
     if (aberto) {
       setClientId(clienteInicial || "");
       setServicos([]);
       setTitulo("");
+      setOrigem("servicos");
+      setPropostaId("");
     }
   }, [aberto, clienteInicial]);
   const agencia = contexto.data ? contexto.data.agencia : null;
@@ -47,7 +65,16 @@ export default function NovoContrato({
   const criar = async () => {
     setOcupado(true);
     try {
-      const p = await chamarContratos("criar", { client_id: clientId, servicos, titulo: titulo.trim() || undefined });
+      const p =
+        origem === "cliente"
+          ? await chamarContratos("gerar_do_cliente", { client_id: clientId, titulo: titulo.trim() || undefined })
+          : origem === "proposta"
+            ? await chamarContratos("gerar_do_aceite", { proposta_id: propostaId })
+            : await chamarContratos("criar", { client_id: clientId, servicos, titulo: titulo.trim() || undefined });
+      if (origem !== "servicos") {
+        const linhas = (p.origem || []).concat(p.avisos || []).concat(p.pergunta ? [p.pergunta] : []);
+        toast.success(p.ja_existia ? "Esta proposta já tinha contrato" : "Rascunho montado", { description: linhas.join(" ") || undefined, duration: 9000 });
+      }
       aoCriar(p);
     } catch (e) {
       toast.error("O contrato não foi criado", { description: textoDoErro(e) });
@@ -74,6 +101,16 @@ export default function NovoContrato({
             </span>
           </p>
         )}
+        <SeletorCompacto
+          rotulo="Começar"
+          opcoes={[
+            { valor: "servicos", rotulo: "Pelos serviços" },
+            { valor: "cliente", rotulo: "Do cliente" },
+            { valor: "proposta", rotulo: "Da proposta" },
+          ]}
+          valor={origem}
+          onEscolher={(v) => setOrigem(v as Origem)}
+        />
         <GrupoDeCampos colunas={1}>
           <CampoDeFormulario rotulo="Cliente" obrigatorio>
             <select value={clientId} onChange={(e) => setClientId(e.target.value)} className={campo}>
@@ -89,6 +126,22 @@ export default function NovoContrato({
             <input value={titulo} onChange={(e) => setTitulo(e.target.value)} className={campo} placeholder="Ex.: Contrato de social media 2026" />
           </CampoDeFormulario>
         </GrupoDeCampos>
+        {origem === "cliente" && <p className={texto.auxiliar}>Usa os serviços ativos da ficha, o plano do Financeiro e a ficha fiscal. O que faltar aparece em Dados.</p>}
+        {origem === "proposta" && (
+          <CampoDeFormulario rotulo="Proposta aceita" obrigatorio apoio={propostas.isLoading ? "Lendo as propostas..." : propostas.data && !propostas.data.propostas.length ? "Este cliente não tem proposta aceita." : undefined}>
+            <select value={propostaId} onChange={(e) => setPropostaId(e.target.value)} className={campo} disabled={!clientId}>
+              <option value="">Escolha a proposta</option>
+              {(propostas.data ? propostas.data.propostas : []).map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.numero} · {x.titulo}
+                  {x.total_mensal ? ` · ${moedaBr(Number(x.total_mensal))}/mês` : x.total_unico ? ` · ${moedaBr(Number(x.total_unico))}` : ""}
+                  {x.contrato_id ? " · já tem contrato" : ""}
+                </option>
+              ))}
+            </select>
+          </CampoDeFormulario>
+        )}
+        {origem === "servicos" && (
         <fieldset className="min-w-0">
           <legend className={juntar(texto.rotulo, "mb-2")}>Serviços</legend>
           <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
@@ -100,11 +153,12 @@ export default function NovoContrato({
             ))}
           </div>
         </fieldset>
+        )}
         <DialogFooter>
           <button type="button" className={botao.secundario} onClick={aoFechar} disabled={ocupado}>
             Cancelar
           </button>
-          <button type="button" className={botao.primario} onClick={() => void criar()} disabled={ocupado || !clientId || !servicos.length || (!!agencia && !agencia.completa)}>
+          <button type="button" className={botao.primario} onClick={() => void criar()} disabled={ocupado || !clientId || (origem === "servicos" && !servicos.length) || (origem === "proposta" && !propostaId) || (!!agencia && !agencia.completa)}>
             {ocupado ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             Criar rascunho
           </button>

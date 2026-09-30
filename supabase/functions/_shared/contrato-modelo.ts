@@ -107,8 +107,8 @@ export type VariavelDoModelo = {
   opcoes?: OpcaoDaVariavel[];
   /** O último valor usado pela agência vira o padrão do próximo contrato (o agente aprende). */
   lembrar?: boolean;
-  /** Onde aparece na tela: quadro (condições), cliente (partes) ou serviço. */
-  grupo?: "quadro" | "cliente" | "servico";
+  /** Onde aparece na tela: quadro (condições), cliente (partes), serviço, cláusulas extras ou aditivo (frente CON2). */
+  grupo?: "quadro" | "cliente" | "servico" | "extras" | "aditivo";
   ajuda?: string;
   /** Número que conta palavra feminina (rodadas, horas, diárias): "2 (duas)". */
   feminino?: boolean;
@@ -127,7 +127,8 @@ export type ClausulaDoModelo = {
 
 export type ModeloDeContrato = {
   chave: string;
-  tipo: "condicoes_gerais" | "bloco";
+  /** extras: biblioteca de cláusulas que o dono liga por contrato; aditivo: o termo aditivo (frente CON2). */
+  tipo: "condicoes_gerais" | "bloco" | "extras" | "aditivo";
   servico: ServicoDoContrato | null;
   nome: string;
   versao: number;
@@ -470,7 +471,11 @@ export type EntradaDaMontagem = {
    */
   qualificacao?: string | null;
   alteradas?: ClausulaAlterada[];
+  /** Quem assina pelo contratante e as testemunhas (frente CON2). Sem lista, a seção de assinaturas fica como antes. */
+  signatarios?: SignatarioNoTexto[];
 };
+
+export type SignatarioNoTexto = { papel: "contratante" | "testemunha"; nome: string; email?: string | null; documento?: string | null };
 
 export type FaltaNoContrato = { nome: string; rotulo: string; motivo: "vazia" | "invalida"; detalhe?: string; onde: string };
 
@@ -503,6 +508,16 @@ export function modeloDoServico(modelos: ModeloDeContrato[], s: ServicoDoContrat
   return modelos.find((m) => m.tipo === "bloco" && m.servico === s) || null;
 }
 
+/** Biblioteca de cláusulas extras (frente CON2): cada cláusula entra quando o dono liga a chave dela. */
+export function modeloExtras(modelos: ModeloDeContrato[]): ModeloDeContrato | null {
+  return modelos.find((m) => m.tipo === "extras") || null;
+}
+
+/** O termo aditivo (frente CON2). */
+export function modeloAditivo(modelos: ModeloDeContrato[]): ModeloDeContrato | null {
+  return modelos.find((m) => m.tipo === "aditivo") || null;
+}
+
 /** As variáveis que valem para estes serviços (condições gerais primeiro, sem repetir nome). */
 export function variaveisDoContrato(modelos: ModeloDeContrato[], servicos: ServicoDoContrato[]): VariavelDoModelo[] {
   const saida: VariavelDoModelo[] = [];
@@ -516,6 +531,8 @@ export function variaveisDoContrato(modelos: ModeloDeContrato[], servicos: Servi
   };
   const g = modeloGeral(modelos);
   if (g) juntar(g.variaveis);
+  const x = modeloExtras(modelos);
+  if (x) juntar(x.variaveis);
   for (const s of servicosEmOrdem(servicos)) {
     const m = modeloDoServico(modelos, s);
     if (m) juntar(m.variaveis);
@@ -539,7 +556,7 @@ export function valoresComPadrao(variaveis: VariavelDoModelo[], valores: Valores
   return saida;
 }
 
-function valeACondicao(c: CondicaoDaClausula | undefined, valores: Valores): boolean {
+export function valeACondicao(c: CondicaoDaClausula | undefined, valores: Valores): boolean {
   if (!c) return true;
   const v = txt(valores[c.variavel]);
   if (c.preenchida === true && !v) return false;
@@ -560,21 +577,29 @@ export function variaveisDoTexto(texto: string): string[] {
   return nomes;
 }
 
-type Contexto = {
+export type ContextoDaMontagem = {
   porNome: Record<string, VariavelDoModelo>;
   valores: Valores;
   agencia: DadosDaAgencia;
   faltando: FaltaNoContrato[];
 };
+type Contexto = ContextoDaMontagem;
 
-function anotarFalta(ctx: Contexto, nome: string, onde: string, motivo: "vazia" | "invalida", detalhe?: string) {
+/** Contexto da montagem (o aditivo usa o mesmo preenchimento do contrato). */
+export function contextoDaMontagem(variaveis: VariavelDoModelo[], valores: Valores, agencia: DadosDaAgencia): ContextoDaMontagem {
+  const porNome: Record<string, VariavelDoModelo> = {};
+  variaveis.forEach((v) => (porNome[v.nome] = v));
+  return { porNome, valores, agencia, faltando: [] };
+}
+
+export function anotarFalta(ctx: Contexto, nome: string, onde: string, motivo: "vazia" | "invalida", detalhe?: string) {
   if (ctx.faltando.some((f) => f.nome === nome)) return;
   const v = ctx.porNome[nome];
   ctx.faltando.push({ nome, rotulo: v ? v.rotulo : nome.replace(/_/g, " "), motivo, detalhe, onde });
 }
 
 /** Troca as {{variáveis}}. O que falta vira "[falta: rótulo]" (só aparece na prévia; não congela). */
-function preencher(texto: string, ctx: Contexto, onde: string): string {
+export function preencher(texto: string, ctx: Contexto, onde: string): string {
   return String(texto || "").replace(new RegExp(MARCA.source, "g"), (_m, nome: string) => {
     if (nome.indexOf("agencia_") === 0) {
       const campo = nome.slice("agencia_".length) as keyof DadosDaAgencia;
@@ -601,7 +626,7 @@ function preencher(texto: string, ctx: Contexto, onde: string): string {
 }
 
 /** Linhas de uma cláusula: parágrafos numerados (n.1, n.2) quando há mais de um; "- " vira item. */
-function linhasDaClausula(numero: string, texto: string): string[] {
+export function linhasDaClausula(numero: string, texto: string): string[] {
   const linhas = texto.split("\n").map((l) => l.replace(/\s+$/g, "")).filter((l) => l.trim());
   const paragrafos = linhas.filter((l) => l.indexOf("- ") !== 0);
   let k = 0;
@@ -612,7 +637,7 @@ function linhasDaClausula(numero: string, texto: string): string[] {
   });
 }
 
-const CHAVE_DA_ALTERADA = (modelo: string, clausula: string) => `${modelo}:${clausula}`;
+export const CHAVE_DA_ALTERADA = (modelo: string, clausula: string) => `${modelo}:${clausula}`;
 
 /** Quadro-resumo: tudo que varia, em linhas "| rótulo | valor". */
 function quadroResumo(e: EntradaDaMontagem, ctx: Contexto, servicos: ServicoDoContrato[]): string[] {
@@ -650,6 +675,18 @@ function quadroResumo(e: EntradaDaMontagem, ctx: Contexto, servicos: ServicoDoCo
   const anexos = servicos.map((s, i) => `Anexo ${LETRAS[i]}, ${ROTULO_DO_SERVICO[s]}`);
   if (txt(v.proposta_numero)) anexos.push(`proposta comercial nº ${txt(v.proposta_numero)}`);
   linhas.push(l("Anexos", `${anexos.join("; ")}.`));
+  // Renovação (frente CON2): o código escreve de onde o contrato vem.
+  if (txt(v.renova_contrato_numero)) linhas.push(l("Renovação", `Renova o contrato nº ${txt(v.renova_contrato_numero)}${txt(v.renova_contrato_fim) ? `, que termina em ${dataPorExtenso(v.renova_contrato_fim)}` : ""}.`));
+  return linhas;
+}
+
+/** Linhas de quem assina (frente CON2): pelo contratante e as testemunhas. */
+export function linhasDosSignatarios(lista: SignatarioNoTexto[] | undefined): string[] {
+  const s = (lista || []).filter((x) => x && txt(x.nome));
+  if (!s.length) return [];
+  const linhas: string[] = [];
+  s.filter((x) => x.papel === "contratante").forEach((x) => linhas.push(`- Pelo CONTRATANTE: ${txt(x.nome)}${txt(x.email) ? `, ${txt(x.email)}` : ""}.`));
+  s.filter((x) => x.papel === "testemunha").forEach((x) => linhas.push(`- Testemunha: ${txt(x.nome)}${txt(x.documento) ? `, CPF ${formatarDocumento(String(x.documento))}` : ""}${txt(x.email) ? `, ${txt(x.email)}` : ""}.`));
   return linhas;
 }
 
@@ -686,8 +723,8 @@ export function montarContrato(e: EntradaDaMontagem): ContratoMontado {
   linhas.push(...quadroResumo(e, ctx, servicos));
 
   const clausulas: ClausulaMontada[] = [];
-  const secao = (modelo: ModeloDeContrato, prefixo: string, separador: string) => {
-    let n = 0;
+  const secao = (modelo: ModeloDeContrato, prefixo: string, separador: string, inicio = 0): number => {
+    let n = inicio;
     for (const c of modelo.clausulas) {
       if (!valeACondicao(c.quando, valores)) continue;
       n++;
@@ -699,12 +736,20 @@ export function montarContrato(e: EntradaDaMontagem): ContratoMontado {
       linhas.push(...linhasDaClausula(numero, texto));
       clausulas.push({ chave: CHAVE_DA_ALTERADA(modelo.chave, c.chave), modelo: modelo.chave, numero, titulo: c.titulo, texto, texto_modelo: c.texto, alterada: !!alterada });
     }
+    return n;
   };
 
   const geral = modeloGeral(e.modelos);
   linhas.push("## Condições gerais");
-  if (geral) secao(geral, "", ". ");
+  let feitas = 0;
+  if (geral) feitas = secao(geral, "", ". ");
   else ctx.faltando.push({ nome: "condicoes_gerais", rotulo: "condições gerais do modelo", motivo: "vazia", onde: "modelo" });
+  // Cláusulas extras ligadas (frente CON2): continuam a numeração das condições gerais.
+  const extras = modeloExtras(e.modelos);
+  if (extras && extras.clausulas.some((c) => valeACondicao(c.quando, valores))) {
+    linhas.push("## Cláusulas adicionais");
+    secao(extras, "", ". ", feitas);
+  }
 
   servicos.forEach((s, i) => {
     const m = modeloDoServico(e.modelos, s);
@@ -715,6 +760,7 @@ export function montarContrato(e: EntradaDaMontagem): ContratoMontado {
 
   linhas.push("## Assinaturas");
   linhas.push("E, por estarem de acordo, as partes assinam eletronicamente este contrato. A página de carimbo ao final registra o código de integridade do documento, as assinaturas e a trilha de eventos.");
+  linhas.push(...linhasDosSignatarios(e.signatarios));
 
   for (const f of faltandoNaAgencia(e.agencia)) {
     if (!ctx.faltando.some((x) => x.rotulo === f && x.onde === "dados da agência")) ctx.faltando.push({ nome: `agencia:${f}`, rotulo: f, motivo: "vazia", onde: "dados da agência" });

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useConfirm } from "@/components/shared/confirmDialog";
@@ -41,6 +41,8 @@ import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import type { FotoDoCliente as Foto } from "@/lib/fotoDoCliente";
 import { todayBR, toBRDateKey } from "@/lib/dateBR";
 import { useFinancePlans } from "@/hooks/useFinanceV2";
+// Frente CON2 (30/09): ficha fiscal do cliente (CNPJ pela Receita), reaproveitada nos contratos.
+const DadosFiscaisDoCliente = lazy(() => import("@/components/contratos/DadosFiscaisDoCliente"));
 
 
 
@@ -1008,6 +1010,13 @@ export default function EditClientDrawer({
                   ))}
                 </ul>
               </Secao>
+              {(isAdmin || profile?.role === "manager") && abaAberta === "cadastro" && (
+                <Secao titulo="Dados fiscais" divisoria ajuda="CNPJ ou CPF, razão social, endereço, representante e e-mails de contrato e cobrança. Todo contrato do cliente usa estes dados.">
+                  <Suspense fallback={<div className="h-24 animate-pulse rounded-md bg-muted" aria-busy="true" aria-label="Abrindo a ficha fiscal" />}>
+                    <DadosFiscaisDoCliente clientId={client.id} />
+                  </Suspense>
+                </Secao>
+              )}
             </div>
 
             {/* ── Plano e cobrança (admin) ── */}

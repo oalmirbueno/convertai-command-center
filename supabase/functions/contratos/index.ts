@@ -28,6 +28,14 @@
  * - executar_acao_agente { mensagem_id, acao_id?, descartar?, parar? }
  * - desfazer_acao_agente { mensagem_id, acao_id? }
  * - aprendizado_esquecer / aprendizado_guardar
+ * Frente CON2 (30/09), nos módulos ficha.ts, ciclo.ts e modelos.ts:
+ * - ficha_ler / ficha_salvar / cnpj_consultar (BrasilAPI no servidor, com cache)
+ * - painel / gerar_do_cliente / propostas_aceitas / aditivo_criar / renovar
+ * - lembrete / lembrete_registrar (mensagem pronta; nada é enviado)
+ * - signatarios_salvar / concluir_assinaturas (mais de um signatário e testemunhas)
+ * - modelos_listar / modelo_conferir / modelo_publicar / preferencias_ler / preferencias_salvar
+ * - rotina_vencimentos (só o cron, com x-cron-secret): renovação pronta e avisos
+ * O agente ganhou puxar_cnpj, criar_aditivo e renovar (Confirmar/Desfazer).
  *
  * Regras: o agente escolhe blocos (Jev) e preenche variáveis; nunca reescreve
  * cláusula sem o cartão com a diferença, Confirmar e Desfazer; pergunta o que
@@ -35,7 +43,6 @@
  * texto congelado nunca muda (versão nova invalida o link). Sem travessão.
  */
 
-import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { chamarTexto, cobrarJev, IaMotorErro, modeloDoPapel, type ModeloIa } from "../_shared/ia-motor.ts";
 // Frente BASE (30/09): a ficha da agência (agencia_dados) e a qualificação da contratada.
 import { DadosDaAgenciaIncompletos, exigirDadosDaAgencia, faltasNosDados, lerDadosDaAgencia, nomeDaAgencia, qualificacaoDaContratada, textoDasFaltas } from "../_shared/dados-da-agencia.ts";
@@ -43,7 +50,6 @@ import { jevPerguntar } from "../_shared/jev.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
-import { EMAIL_APP_URL } from "../_shared/email-config.ts";
 import {
   type AcaoDoAgente,
   acaoGuardadaNaMensagem,
@@ -112,42 +118,53 @@ import {
   servicosPorPalavras,
   valoresDaProposta,
 } from "./regras.ts";
+// Frente CON2 (30/09): a base dividida com os módulos novos, a ficha fiscal, o ciclo do contrato e o editor de modelos.
+import {
+  type Agencia,
+  AVISO_BANCO,
+  bancoTemCon2,
+  CAMPOS,
+  CAMPOS_CON2,
+  type Chamador,
+  corsHeaders,
+  ErroHttp,
+  evento,
+  exigirRascunhoDeModelo,
+  garantirAcesso,
+  garantirGestao,
+  idDe,
+  identificar,
+  json,
+  lerLinha,
+  limpo,
+  type Linha,
+  linkDeAssinatura,
+  type ModeloComEstado,
+  normalizarLinha,
+  type Nucleo,
+  type PedidoDeRascunho,
+  RASCUNHO_URL,
+  selecionarContratos,
+  semTabela,
+  servico,
+  sondarCon2,
+  UUID,
+} from "./base.ts";
+import { acoesDaFicha, aplicarCnpjNoCliente, lerFichaDoCliente, restaurarFicha } from "./ficha.ts";
+import { acoesDoCiclo, copiarSignatarios, criarAditivo, renovarContrato, rotinaVencimentos } from "./ciclo.ts";
+import { acoesDosModelos, extrasForaDaBiblioteca, lerPreferencias, valoresDasExtras } from "./modelos.ts";
+import { montarAditivo, paraOTexto, type Signatario, variaveisDoAditivo, vigenciaDoContrato } from "../_shared/contrato-ciclo.ts";
+import { type FichaFiscal, valoresDaFicha } from "../_shared/contrato-ficha.ts";
+import { lerSignatariosDoContrato, quemAssinaNoPdf, type SignatarioDoBanco } from "../_shared/contrato-assinaturas.ts";
+import { referenciaDas } from "../_shared/preencher-com-ia.ts";
 
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const RASCUNHO_URL = "modelo://rascunho";
 const REF_CONVERSA = "mesa_contratos";
 // Papel "contrato" da frente BASE: modelo, tarefa e agente (ia_usos e agente_conversas).
 const TAREFA = "contrato" as const;
 const AGENTE = "contrato" as const;
 const MAX_HISTORICO = 12;
-const CAMPOS =
-  "id, client_id, project_id, title, description, status, origem, numero, versao, versao_de, substituido_por, substituido_em, proposta_id, servicos, variaveis, modelo_versoes, clausulas_alteradas, documento_texto, documento_hash, documento_pdf_url, documento_pdf_hash, congelado_em, pdf_final_hash, admin_signature_name, admin_signed_at, admin_signature_email, client_signature_name, client_signed_at, client_signature_email, client_signature_ip, sign_token, sent_at, file_id, original_file_url, original_file_name, arquivado_em, motivo_arquivo, created_by, created_at, updated_at";
-
-const AVISO_BANCO = "O banco ainda não tem as tabelas de contratos por modelo (migrations 20260930030000 a 20260930030200 pendentes).";
-
-// ------------------------------------------------------------------ erros
-
-class ErroHttp extends Error {
-  status: number;
-  codigo: string;
-  extra: Record<string, unknown>;
-  constructor(status: number, codigo: string, mensagem: string, extra: Record<string, unknown> = {}) {
-    super(mensagem);
-    this.status = status;
-    this.codigo = codigo;
-    this.extra = extra;
-  }
-}
 
 const MENSAGEM_MOTOR: Record<string, { status: number; mensagem: string }> = {
   saldo_insuficiente: { status: 402, mensagem: "Saldo insuficiente na carteira de IA deste cliente. Peça a recarga a um admin ou gestor." },
@@ -167,139 +184,8 @@ function respostaDeErro(err: unknown): Response {
   return json({ error: "erro_interno", mensagem: "Falha inesperada nos contratos." }, 500);
 }
 
-function semTabela(error: { code?: string; message?: string } | null | undefined): boolean {
-  if (!error) return false;
-  const m = String(error.message || "");
-  return error.code === "42P01" || error.code === "42703" || error.code === "PGRST205" || error.code === "PGRST204" || /(contrato_|origem|documento_texto).*(does not exist|schema cache)/i.test(m);
-}
-
-// ------------------------------------------------------------------ banco e acesso
-
-type Chamador = { userId: string; email: string; nome: string; ip: string; doChamador: SupabaseClient };
-
-let servicoCache: SupabaseClient | null = null;
-function servico(): SupabaseClient {
-  if (!servicoCache) {
-    servicoCache = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } });
-  }
-  return servicoCache;
-}
-
-async function identificar(req: Request): Promise<Chamador> {
-  const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
-  if (!token) throw new ErroHttp(401, "sessao_expirada", "Sessão expirada. Entre de novo no painel.");
-  const { data: user } = await servico().auth.getUser(token);
-  const u = user?.user;
-  if (!u?.id) throw new ErroHttp(401, "sessao_expirada", "Sessão expirada. Entre de novo no painel.");
-  const { data: staff, error } = await servico().rpc("is_staff", { _user_id: u.id });
-  if (error) throw new ErroHttp(503, "autorizacao_indisponivel", "Não foi possível conferir a permissão agora.");
-  if (staff !== true) throw new ErroHttp(403, "somente_equipe", "Somente a equipe usa os contratos.");
-  const { data: perfil } = await servico().from("profiles").select("full_name, email").eq("id", u.id).maybeSingle();
-  const p = perfil as { full_name?: string | null; email?: string | null } | null;
-  const doChamador = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "painel";
-  return { userId: u.id, email: String((p && p.email) || u.email || ""), nome: String((p && p.full_name) || ""), ip, doChamador };
-}
-
-async function garantirAcesso(ch: Chamador, clientId: string) {
-  if (!UUID.test(clientId)) throw new ErroHttp(400, "client_id_invalido", "client_id precisa ser um UUID.");
-  const { data, error } = await ch.doChamador.rpc("can_access_client", { _client_id: clientId });
-  if (error) throw new ErroHttp(503, "autorizacao_indisponivel", "Não foi possível conferir o acesso ao cliente agora.");
-  if (data !== true) throw new ErroHttp(403, "sem_acesso_ao_cliente", "Você não tem acesso a este cliente.");
-}
-
-async function garantirGestao(ch: Chamador, clientId: string) {
-  await garantirAcesso(ch, clientId);
-  const { data, error } = await ch.doChamador.rpc("can_manage_client", { _client_id: clientId });
-  if (error) throw new ErroHttp(503, "autorizacao_indisponivel", "Não foi possível conferir a permissão agora.");
-  if (data !== true) throw new ErroHttp(403, "sem_permissao", "Só admin ou gestor do cliente mexe em contratos.");
-}
-
-const idDe = (v: unknown, nome: string): string => {
-  const s = String(v ?? "").trim();
-  if (!UUID.test(s)) throw new ErroHttp(400, `${nome}_invalido`, `${nome} precisa ser um UUID.`);
-  return s;
-};
-const limpo = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
-
-type Linha = {
-  id: string;
-  client_id: string;
-  project_id: string | null;
-  title: string;
-  description: string | null;
-  status: string;
-  origem: string;
-  numero: string | null;
-  versao: number;
-  versao_de: string | null;
-  substituido_por: string | null;
-  proposta_id: string | null;
-  servicos: string[];
-  variaveis: Valores;
-  modelo_versoes: Record<string, number>;
-  clausulas_alteradas: ClausulaAlterada[];
-  documento_texto: string | null;
-  documento_hash: string | null;
-  documento_pdf_url: string | null;
-  congelado_em: string | null;
-  admin_signed_at: string | null;
-  client_signed_at: string | null;
-  sign_token: string;
-  sent_at: string | null;
-  original_file_url: string;
-  arquivado_em: string | null;
-  updated_at: string;
-  [k: string]: unknown;
-};
-
-function normalizarLinha(d: unknown): Linha | null {
-  if (!d || typeof d !== "object") return null;
-  const o = d as Record<string, unknown>;
-  const valores: Valores = {};
-  if (o.variaveis && typeof o.variaveis === "object" && !Array.isArray(o.variaveis)) {
-    Object.keys(o.variaveis as Record<string, unknown>).forEach((k) => {
-      const v = (o.variaveis as Record<string, unknown>)[k];
-      if (v !== null && v !== undefined && String(v).trim()) valores[k] = String(v);
-    });
-  }
-  return {
-    ...(o as Linha),
-    versao: Number(o.versao) || 1,
-    servicos: Array.isArray(o.servicos) ? (o.servicos as unknown[]).map(String) : [],
-    variaveis: valores,
-    modelo_versoes: o.modelo_versoes && typeof o.modelo_versoes === "object" ? (o.modelo_versoes as Record<string, number>) : {},
-    clausulas_alteradas: Array.isArray(o.clausulas_alteradas) ? (o.clausulas_alteradas as ClausulaAlterada[]) : [],
-  };
-}
-
-async function lerLinha(ch: Chamador, contractId: unknown, gestao = false): Promise<Linha> {
-  const id = idDe(contractId, "contract_id");
-  const { data, error } = await servico().from("contracts").select(CAMPOS).eq("id", id).maybeSingle();
-  if (error) throw semTabela(error) ? new ErroHttp(503, "banco_sem_contratos", AVISO_BANCO) : new ErroHttp(503, "contrato_indisponivel", "Não foi possível ler o contrato agora.");
-  const linha = normalizarLinha(data);
-  if (!linha) throw new ErroHttp(404, "contrato_inexistente", "Contrato não encontrado.");
-  if (gestao) await garantirGestao(ch, linha.client_id);
-  else await garantirAcesso(ch, linha.client_id);
-  return linha;
-}
-
-function exigirRascunhoDeModelo(l: Linha) {
-  if (l.origem !== "modelo") throw new ErroHttp(409, "contrato_de_arquivo", "Este contrato é um PDF enviado: ele não é montado por modelo.");
-  if (l.status !== "draft" || l.congelado_em) throw new ErroHttp(409, "contrato_congelado", "O contrato já foi congelado. Para mudar, crie uma versão nova.");
-}
-
-async function evento(l: { id: string; client_id: string }, tipo: string, resumo: string, detalhe: Record<string, unknown> = {}, criadoPor: string | null = null, extra: { ip?: string | null } = {}) {
-  const { error } = await servico().from("contrato_eventos").insert({ contract_id: l.id, client_id: l.client_id, tipo, resumo: resumo.slice(0, 500), detalhe, criado_por: criadoPor, ip: extra.ip || null });
-  if (error) registrarFalha("contratos: evento da trilha não gravado", error, { contract_id: l.id, tipo });
-}
-
 // ------------------------------------------------------------------ modelos, agência, cliente
 
-type ModeloComEstado = ModeloDeContrato & { ativo: boolean };
 let modelosCache: { em: number; lista: ModeloComEstado[] } | null = null;
 
 async function lerModelos(): Promise<ModeloComEstado[]> {
@@ -313,7 +199,7 @@ async function lerModelos(): Promise<ModeloComEstado[]> {
   const clausulas = (cs as Array<Record<string, unknown>> | null) ?? [];
   const lista: ModeloComEstado[] = linhas.map((m) => ({
     chave: String(m.chave),
-    tipo: m.tipo === "bloco" ? "bloco" : "condicoes_gerais",
+    tipo: m.tipo === "bloco" ? "bloco" : m.tipo === "extras" ? "extras" : m.tipo === "aditivo" ? "aditivo" : "condicoes_gerais",
     servico: (m.servico as ServicoDoContrato | null) || null,
     nome: String(m.nome),
     versao: Number(m.versao) || 1,
@@ -348,6 +234,8 @@ function versoesUsadas(modelos: ModeloDeContrato[], servicos: ServicoDoContrato[
   const v: Record<string, number> = {};
   const g = modeloGeral(modelos);
   if (g) v[g.chave] = g.versao;
+  // Frente CON2: a biblioteca de extras e o termo aditivo também ficam na versão que o contrato usou.
+  modelos.filter((m) => m.tipo === "extras" || m.tipo === "aditivo").forEach((m) => (v[m.chave] = m.versao));
   for (const s of servicos) {
     const m = modeloDoServico(modelos, s);
     if (m) v[m.chave] = m.versao;
@@ -357,7 +245,6 @@ function versoesUsadas(modelos: ModeloDeContrato[], servicos: ServicoDoContrato[
 
 const AGENCIA_VAZIA: DadosDaAgencia = { razao_social: "", nome_fantasia: "", cnpj: "", endereco: "", cidade: "", uf: "", representante: "", representante_cpf: "", email: "", foro: "" };
 
-type Agencia = { dados: DadosDaAgencia; faltando: string[]; aviso: string | null; qualificacao: string | null; nome: string | null };
 
 /** Ficha da agência (agencia_dados, frente BASE). Sem ela, nenhum contrato é gerado. */
 async function lerAgencia(): Promise<Agencia> {
@@ -366,11 +253,13 @@ async function lerAgencia(): Promise<Agencia> {
     base = await lerDadosDaAgencia(servico());
   } catch (e) {
     registrarFalha("contratos: dados da agência não lidos", e);
-    return { dados: AGENCIA_VAZIA, faltando: faltandoNaAgencia(null), aviso: "Não foi possível ler os dados da agência.", qualificacao: null, nome: null };
+    return { dados: AGENCIA_VAZIA, faltando: faltandoNaAgencia(null), aviso: "Não foi possível ler os dados da agência.", qualificacao: null, nome: null, representante: "" };
   }
   const faltas = faltasNosDados(base, "contrato");
+  const dados = agenciaDoRegistro(base);
   return {
-    dados: agenciaDoRegistro(base),
+    dados,
+    representante: dados.representante,
     faltando: faltas.map((f) => (f.motivo === "invalido" ? `${f.rotulo} (inválido)` : f.rotulo)),
     aviso: textoDasFaltas(faltas),
     qualificacao: qualificacaoDaContratada(base),
@@ -427,11 +316,36 @@ async function lembrados(modelos: ModeloDeContrato[]): Promise<Valores> {
   return valoresLembrados(modelos, ((data as Array<{ variaveis: Valores | null }> | null) ?? []).map((r) => r.variaveis));
 }
 
-function montar(l: Linha, todos: ModeloComEstado[], agencia: Agencia): ContratoMontado {
+/** As variáveis que valem para esta linha (contrato e renovação: as do contrato; aditivo: as do aditivo). */
+function variaveisDaLinha(l: Linha, modelos: ModeloDeContrato[]) {
+  const servicos = servicosEmOrdem(l.servicos);
+  return l.tipo_documento === "aditivo" ? variaveisDoAditivo(modelos, servicos) : variaveisDoContrato(modelos, servicos);
+}
+
+function montar(l: Linha, todos: ModeloComEstado[], agencia: Agencia, signatarios: SignatarioDoBanco[] = []): ContratoMontado {
   const modelos = modelosDoContrato(todos, l.modelo_versoes);
   const servicos = servicosEmOrdem(l.servicos);
-  const vars = variaveisDoContrato(modelos, servicos);
+  const vars = variaveisDaLinha(l, modelos);
+  const quem = paraOTexto(signatarios.map((s) => ({ ...s, documento: s.documento || "" })) as Signatario[]);
+  if (l.tipo_documento === "aditivo") {
+    const v = l.variaveis;
+    return montarAditivo({
+      modelos,
+      servicos,
+      valores: valoresComPadrao(vars, v),
+      agencia: agencia.dados,
+      numero: String(l.numero || ""),
+      versao: l.versao,
+      data: hojeEmSaoPaulo(),
+      titulo: l.title,
+      alteradas: l.clausulas_alteradas,
+      qualificacao: agencia.qualificacao,
+      signatarios: quem,
+      mae: { numero: String(v.contrato_mae_numero || ""), versao: Number(v.contrato_mae_versao) || 1, assinado_em: v.contrato_mae_assinado_em || null, hash: v.contrato_mae_hash || null },
+    });
+  }
   return montarContrato({
+    signatarios: quem,
     modelos,
     servicos,
     valores: valoresComPadrao(vars, l.variaveis),
@@ -445,7 +359,14 @@ function montar(l: Linha, todos: ModeloComEstado[], agencia: Agencia): ContratoM
   });
 }
 
-const signUrl = (token: string) => `${EMAIL_APP_URL}/contrato/${token}`;
+const signUrl = linkDeAssinatura;
+
+async function signatariosDe(l: Linha): Promise<SignatarioDoBanco[]> {
+  if (l.origem !== "modelo") return [];
+  const { lista, erro } = await lerSignatariosDoContrato(servico(), l.id);
+  if (erro) registrarFalha("contratos: signatários não lidos", new Error(erro), { contract_id: l.id });
+  return lista;
+}
 
 /** O contrato como a tela usa (o token só vai para quem pode gerir, que já vê o link hoje). */
 function paraTela(l: Linha) {
@@ -453,47 +374,93 @@ function paraTela(l: Linha) {
 }
 
 async function payloadDoContrato(ch: Chamador, l: Linha) {
-  const [todos, agencia, eventos, versoes] = await Promise.all([
+  const [todos, agencia, eventos, versoes, signatarios, ligados, ficha, prefs] = await Promise.all([
     lerModelos(),
     lerAgencia(),
     servico().from("contrato_eventos").select("id, tipo, resumo, detalhe, ip, criado_por, criado_em").eq("contract_id", l.id).order("criado_em", { ascending: true }).limit(200),
     servico().from("contracts").select("id, versao, status, congelado_em, documento_hash, created_at").eq("client_id", l.client_id).eq("numero", l.numero || "sem-numero").order("versao", { ascending: true }),
+    signatariosDe(l),
+    documentosLigados(l),
+    l.origem === "modelo" && !l.congelado_em ? lerFichaDoCliente(l.client_id).catch((e) => (registrarFalha("contratos: ficha fiscal não lida", e, { client_id: l.client_id }), null)) : Promise.resolve(null),
+    lerPreferencias(),
   ]);
   if (eventos.error) registrarFalha("contratos: trilha não lida", eventos.error, { contract_id: l.id });
-  const montado = l.origem === "modelo" ? (l.congelado_em && l.documento_texto ? null : montar(l, todos, agencia)) : null;
+  const montado = l.origem === "modelo" ? (l.congelado_em && l.documento_texto ? null : montar(l, todos, agencia, signatarios)) : null;
   const modelos = modelosDoContrato(todos, l.modelo_versoes);
+  const vig = l.tipo_documento === "aditivo" ? null : vigenciaDoContrato(montado ? montado.valores : l.variaveis, l.servicos);
   return {
+    // Frente CON2: quem assina (com o link de cada um), aditivos e renovação ligados, vigência e a ficha fiscal.
+    signatarios: signatarios.map((s) => ({ id: s.id, papel: s.papel, principal: s.principal, ordem: s.ordem, nome: s.nome, email: s.email, documento: s.documento, obrigatorio: s.obrigatorio, assinado_em: s.assinado_em, link: l.status === "sent" ? signUrl(s.token) : null })),
+    ligados,
+    vigencia: vig ? { inicio: vig.inicio, fim: (l.vigencia_fim as string | null) || vig.fim, recorrente: vig.recorrente } : null,
+    ficha: ficha ? { existe: ficha.existe, valores: valoresDaFicha(ficha.ficha), ficha: ficha.ficha } : null,
+    extras_fora: extrasForaDaBiblioteca(prefs),
     contrato: paraTela(l),
     texto: l.documento_texto || (montado ? montado.texto : null),
     montado: montado ? { faltando: montado.faltando, clausulas: montado.clausulas } : null,
     pode_congelar: montado ? podeCongelar(montado) : { pode: false, motivo: l.congelado_em ? "Já congelado." : "Contrato de arquivo." },
-    variaveis: montado ? montado.variaveis : variaveisDoContrato(modelos, servicosEmOrdem(l.servicos)),
+    variaveis: montado ? montado.variaveis : variaveisDaLinha(l, modelos),
     valores: montado ? montado.valores : l.variaveis,
     agencia: { completa: !agencia.faltando.length, faltando: agencia.faltando, aviso: agencia.aviso },
-    revisao_juridica: Array.from(new Set(modelos.filter((m) => m.tipo === "condicoes_gerais" || l.servicos.indexOf(String(m.servico)) >= 0).map((m) => m.revisao_juridica))).join("; "),
+    revisao_juridica: Array.from(new Set(modelos.filter((m) => (l.tipo_documento === "aditivo" ? m.tipo === "aditivo" : m.tipo === "condicoes_gerais") || l.servicos.indexOf(String(m.servico)) >= 0).map((m) => m.revisao_juridica))).join("; "),
     eventos: (eventos.data as unknown[] | null) ?? [],
     versoes: (versoes.data as unknown[] | null) ?? [],
     custo_usd: 0,
   };
 }
 
+/** Aditivos deste contrato, a renovação dele e o contrato de onde ele vem (frente CON2). */
+async function documentosLigados(l: Linha) {
+  if (l.origem !== "modelo" || !bancoTemCon2()) return { aditivos: [], renovacao: null, mae: null, renova: null };
+  const ids = [l.contrato_mae_id, l.renovacao_de].filter(Boolean) as string[];
+  const [filhos, pais] = await Promise.all([
+    servico().from("contracts").select("id, title, numero, versao, status, tipo_documento, renovacao_de, contrato_mae_id, created_at").or(`contrato_mae_id.eq.${l.id},renovacao_de.eq.${l.id}`).neq("status", "cancelled").order("created_at", { ascending: true }).limit(50),
+    ids.length ? servico().from("contracts").select("id, title, numero, versao, status").in("id", ids) : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (filhos.error) registrarFalha("contratos: documentos ligados não lidos", filhos.error, { contract_id: l.id });
+  const f = (filhos.data as Array<Record<string, unknown>> | null) ?? [];
+  const p = (pais.data as Array<Record<string, unknown>> | null) ?? [];
+  return {
+    aditivos: f.filter((x) => x.contrato_mae_id === l.id),
+    renovacao: f.filter((x) => x.renovacao_de === l.id).pop() || null,
+    mae: p.find((x) => x.id === l.contrato_mae_id) || null,
+    renova: p.find((x) => x.id === l.renovacao_de) || null,
+  };
+}
+
 // ------------------------------------------------------------------ criar
 
-async function criarRascunho(ch: Chamador, p: { clientId: string; servicos: ServicoDoContrato[]; titulo?: string; extra?: Valores; projectId?: string | null; propostaId?: string | null; origemDoEvento?: "criado" | "gerado_do_aceite" }): Promise<Linha> {
+/** Valores que o código escreve fora das variáveis do modelo (aditivo e renovação), guardados no contrato. */
+const VALORES_DO_SISTEMA = ["contrato_mae_numero", "contrato_mae_versao", "contrato_mae_assinado_em", "contrato_mae_hash", "renova_contrato_numero", "renova_contrato_fim"];
+
+async function criarRascunho(ch: Chamador, p: PedidoDeRascunho): Promise<Linha> {
   const servicos = servicosEmOrdem(p.servicos);
-  if (!servicos.length) throw new ErroHttp(400, "sem_servicos", "Escolha pelo menos um serviço.");
+  const tipo = p.tipoDocumento || "contrato";
+  // O aditivo pode só mudar valor ou prazo (sem anexo novo); contrato e renovação precisam de serviço.
+  if (!servicos.length && tipo !== "aditivo") throw new ErroHttp(400, "sem_servicos", "Escolha pelo menos um serviço.");
   await exigirAgencia();
-  const [todos, cadastro] = await Promise.all([lerModelos(), valoresDoCadastro(p.clientId)]);
+  await sondarCon2();
+  const [todos, cadastro, ficha, prefs] = await Promise.all([
+    lerModelos(),
+    valoresDoCadastro(p.clientId),
+    lerFichaDoCliente(p.clientId).catch((e) => (registrarFalha("contratos: ficha fiscal não lida", e, { client_id: p.clientId }), null)),
+    lerPreferencias(),
+  ]);
   const modelos = modelosDoContrato(todos, {});
   const lembr = await lembrados(modelos);
-  const vars = variaveisDoContrato(modelos, servicos);
+  const vars = tipo === "aditivo" ? variaveisDoAditivo(modelos, servicos) : variaveisDoContrato(modelos, servicos);
   const extra: Valores = {};
   Object.keys(p.extra || {}).forEach((k) => {
     const v = String((p.extra || {})[k] ?? "").trim();
-    if (v && vars.some((x) => x.nome === k)) extra[k] = v;
+    if (v && (vars.some((x) => x.nome === k) || VALORES_DO_SISTEMA.indexOf(k) >= 0)) extra[k] = v;
   });
-  const valores = valoresComPadrao(vars, { ...cadastro, ...extra }, lembr);
+  // A ficha fiscal (frente CON2) vence o cadastro antigo; o que veio pedido vence os dois. As extras nascem como o dono deixou.
+  const daFicha = ficha && ficha.existe ? valoresDaFicha(ficha.ficha) : {};
+  const valores = valoresComPadrao(vars, { ...(tipo === "aditivo" ? {} : valoresDasExtras(prefs)), ...cadastro, ...daFicha, ...extra }, lembr);
   const titulo = limpo(p.titulo, 200) || `Contrato de ${servicos.map((s) => ROTULO_DO_SERVICO[s]).join(", ")}`.slice(0, 200);
+  const novos: Record<string, unknown> = tipo === "contrato" ? {} : { tipo_documento: tipo, contrato_mae_id: p.contratoMaeId || null, renovacao_de: p.renovacaoDe || null };
+  if (p.numero) novos.numero = p.numero;
+  if (p.clausulasAlteradas && p.clausulasAlteradas.length) novos.clausulas_alteradas = p.clausulasAlteradas;
   const { data, error } = await servico()
     .from("contracts")
     .insert({
@@ -504,22 +471,25 @@ async function criarRascunho(ch: Chamador, p: { clientId: string; servicos: Serv
       original_file_url: RASCUNHO_URL,
       original_file_name: "contrato-rascunho.pdf",
       status: "draft",
-      created_by: ch.userId,
+      created_by: ch.userId || null,
       origem: "modelo",
       servicos,
       variaveis: valores,
       modelo_versoes: versoesUsadas(modelos, servicos),
       proposta_id: p.propostaId || null,
+      ...novos,
     })
-    .select(CAMPOS)
+    .select(tipo === "contrato" && !bancoTemCon2() ? CAMPOS : CAMPOS_CON2)
     .single();
   if (error) {
     if (semTabela(error)) throw new ErroHttp(503, "banco_sem_contratos", AVISO_BANCO);
+    if (error.code === "23505" && p.renovacaoDe) throw new ErroHttp(409, "renovacao_ja_existe", "Este contrato já tem uma renovação em andamento.");
     if (error.code === "23505") throw new ErroHttp(409, "proposta_ja_tem_contrato", "Esta proposta já tem contrato.");
     throw new ErroHttp(503, "contrato_nao_criado", "O rascunho não foi criado. Tente de novo.", { detalhe: error.message });
   }
   const linha = normalizarLinha(data)!;
-  await evento(linha, p.origemDoEvento || "criado", p.origemDoEvento === "gerado_do_aceite" ? "Rascunho gerado da proposta aceita." : `Rascunho criado com ${servicos.map((s) => ROTULO_DO_SERVICO[s]).join(", ")}.`, { servicos, proposta_id: p.propostaId || null }, ch.userId);
+  const resumo = p.resumoDoEvento || (p.origemDoEvento === "gerado_do_aceite" ? "Rascunho gerado da proposta aceita." : `Rascunho criado com ${servicos.map((s) => ROTULO_DO_SERVICO[s]).join(", ")}.`);
+  await evento(linha, p.origemDoEvento || "criado", resumo, { servicos, proposta_id: p.propostaId || null, tipo_documento: tipo }, ch.userId || null);
   return linha;
 }
 
@@ -575,7 +545,7 @@ async function ler(ch: Chamador, corpo: Record<string, unknown>) {
 }
 
 async function atualizarRascunho(l: Linha, patch: Record<string, unknown>): Promise<Linha> {
-  const { data, error } = await servico().from("contracts").update(patch).eq("id", l.id).eq("status", "draft").eq("updated_at", l.updated_at).select(CAMPOS).maybeSingle();
+  const { data, error } = await servico().from("contracts").update(patch).eq("id", l.id).eq("status", "draft").eq("updated_at", l.updated_at).select(bancoTemCon2() ? CAMPOS_CON2 : CAMPOS).maybeSingle();
   if (error) throw new ErroHttp(409, "contrato_nao_gravado", "O contrato não foi gravado.", { detalhe: error.message });
   if (!data) throw new ErroHttp(409, "contrato_mudou", "O contrato mudou enquanto você editava. Atualize a tela.");
   return normalizarLinha(data)!;
@@ -585,8 +555,13 @@ async function salvar(ch: Chamador, corpo: Record<string, unknown>) {
   const l = await lerLinha(ch, corpo.contract_id, true);
   exigirRascunhoDeModelo(l);
   const todos = await lerModelos();
-  const vars = variaveisDoContrato(modelosDoContrato(todos, l.modelo_versoes), servicosEmOrdem(l.servicos));
+  const vars = variaveisDaLinha(l, modelosDoContrato(todos, l.modelo_versoes));
   const pedido = corpo.variaveis && typeof corpo.variaveis === "object" ? (corpo.variaveis as Record<string, unknown>) : {};
+  // Cláusula extra que o dono tirou da biblioteca não liga (frente CON2).
+  const fora = extrasForaDaBiblioteca(await lerPreferencias());
+  fora.forEach((k) => {
+    if (pedido[k] === "sim") pedido[k] = "nao";
+  });
   const valores: Valores = { ...l.variaveis };
   const mudaram: string[] = [];
   Object.keys(pedido).forEach((k) => {
@@ -600,16 +575,19 @@ async function salvar(ch: Chamador, corpo: Record<string, unknown>) {
   const titulo = limpo(corpo.titulo, 200);
   if (!mudaram.length && (!titulo || titulo === l.title)) return json(await payloadDoContrato(ch, l));
   const nova = await atualizarRascunho(l, { variaveis: valores, ...(titulo ? { title: titulo } : {}) });
-  if (mudaram.length) await evento(nova, "variaveis_salvas", `Campos atualizados: ${mudaram.slice(0, 8).join(", ")}${mudaram.length > 8 ? "..." : ""}.`, { campos: mudaram }, ch.userId);
+  // Preenchido pela IA (frente CON2): a trilha diz o modelo e as fontes que a pessoa viu antes de aplicar.
+  const ia = corpo.preenchido_ia && typeof corpo.preenchido_ia === "object" ? (corpo.preenchido_ia as Record<string, unknown>) : null;
+  if (mudaram.length && ia) await evento(nova, "preenchido_ia", `Preenchido com IA e aplicado pela equipe: ${mudaram.slice(0, 8).join(", ")}${mudaram.length > 8 ? "..." : ""}.`, { campos: mudaram, modelo_id: limpo(ia.modelo_id, 120) || null, fontes: Array.isArray(ia.fontes) ? (ia.fontes as unknown[]).map((x) => limpo(x, 120)).slice(0, 10) : [] }, ch.userId);
+  else if (mudaram.length) await evento(nova, "variaveis_salvas", `Campos atualizados: ${mudaram.slice(0, 8).join(", ")}${mudaram.length > 8 ? "..." : ""}.`, { campos: mudaram }, ch.userId);
   return json(await payloadDoContrato(ch, nova));
 }
 
 async function trocarServicos(ch: Chamador, l: Linha, servicos: ServicoDoContrato[]): Promise<Linha> {
   exigirRascunhoDeModelo(l);
-  if (!servicos.length) throw new ErroHttp(400, "sem_servicos", "O contrato precisa de pelo menos um serviço.");
+  if (!servicos.length && l.tipo_documento !== "aditivo") throw new ErroHttp(400, "sem_servicos", "O contrato precisa de pelo menos um serviço.");
   const todos = await lerModelos();
   const modelos = modelosDoContrato(todos, {});
-  const vars = variaveisDoContrato(modelos, servicos);
+  const vars = l.tipo_documento === "aditivo" ? variaveisDoAditivo(modelos, servicos) : variaveisDoContrato(modelos, servicos);
   // Serviço novo ganha os padrões das variáveis dele; nada do que já foi preenchido muda.
   const valores = valoresComPadrao(vars, l.variaveis, await lembrados(modelos));
   const nova = await atualizarRascunho(l, { servicos, variaveis: valores, modelo_versoes: { ...versoesUsadas(modelos, servicos), ...l.modelo_versoes } });
@@ -667,14 +645,18 @@ async function congelar(ch: Chamador, corpo: Record<string, unknown>) {
   const nome = limpo(corpo.nome_assinatura, 200);
   if (!nome || corpo.aceite !== true) throw new ErroHttp(400, "assinatura_incompleta", "Escreva o seu nome e marque o aceite para assinar pela agência.");
   await exigirAgencia();
-  const [todos, agencia] = await Promise.all([lerModelos(), lerAgencia()]);
-  const montado = montar(l, todos, agencia);
+  const [todos, agencia, signatarios] = await Promise.all([lerModelos(), lerAgencia(), signatariosDe(l)]);
+  const montado = montar(l, todos, agencia, signatarios);
   const pode = podeCongelar(montado);
   if (!pode.pode) throw new ErroHttp(409, "variaveis_faltando", pode.motivo || "Falta preencher o contrato.", { faltando: montado.faltando });
+  if (signatarios.length && !signatarios.some((s) => s.principal && s.token === l.sign_token)) throw new ErroHttp(409, "signatarios_sem_principal", "A lista de quem assina está sem o signatário principal. Salve a lista de novo em Assinantes.");
   const hash = await hashDoTexto(montado.texto);
   const cliente = await nomeDoCliente(l.client_id);
   const numero = String(l.numero || "");
-  const pdf = gerarPdfDoContrato({ texto: montado.texto, numero, versao: l.versao, hash });
+  // Frente CON2: capa e as linhas de quem assina (contratada, contratante e testemunhas).
+  const quemAssina = quemAssinaNoPdf({ agencia: agencia.nome || "", representanteDaAgencia: nome, signatarios, contratanteSemLista: montado.valores.cliente_representante ? String(montado.valores.cliente_representante).split(",")[0] : montado.valores.cliente_nome || null });
+  const pdf = gerarPdfDoContrato({ texto: montado.texto, numero, versao: l.versao, hash, quemAssina });
+  const vig = l.tipo_documento === "aditivo" ? null : vigenciaDoContrato(montado.valores, l.servicos);
   const pdfHash = await hashDosBytes(pdf);
   const arquivo = nomeDoArquivoDoContrato(numero, cliente, l.versao);
   const caminho = `contracts/${l.client_id}/${l.id}/v${l.versao}/${arquivo}`;
@@ -697,11 +679,12 @@ async function congelar(ch: Chamador, corpo: Record<string, unknown>) {
       admin_signature_ip: ch.ip,
       admin_signature_email: ch.email || null,
       status: "sent",
+      ...(bancoTemCon2() && vig ? { vigencia_inicio: vig.inicio, vigencia_fim: vig.fim } : {}),
     })
     .eq("id", l.id)
     .eq("status", "draft")
     .eq("updated_at", l.updated_at)
-    .select(CAMPOS)
+    .select(bancoTemCon2() ? CAMPOS_CON2 : CAMPOS)
     .maybeSingle();
   if (error || !data) {
     const { error: limpeza } = await servico().storage.from("files").remove([caminho]);
@@ -720,6 +703,8 @@ async function congelar(ch: Chamador, corpo: Record<string, unknown>) {
     ...(await payloadDoContrato(ch, linha)),
     sign_url: link,
     mensagens: mensagensProntas({ cliente, titulo: linha.title, link, hash, agencia: agencia.nome || "Aceleriq" }),
+    // Mais de um signatário: uma mensagem pronta para cada pessoa, com o link dela.
+    mensagens_por_pessoa: signatarios.map((s) => ({ id: s.id, nome: s.nome, papel: s.papel, link: signUrl(s.token), mensagens: mensagensProntas({ cliente: s.nome, titulo: linha.title, link: signUrl(s.token), hash, agencia: agencia.nome || "Aceleriq" }) })),
   });
 }
 
@@ -728,7 +713,7 @@ async function marcarEnviado(ch: Chamador, corpo: Record<string, unknown>) {
   if (l.status !== "sent") throw new ErroHttp(409, "contrato_nao_enviavel", "Só contrato congelado e assinado pela agência sai para o cliente.");
   let linha = l;
   if (!l.sent_at) {
-    const { data, error } = await servico().from("contracts").update({ sent_at: new Date().toISOString() }).eq("id", l.id).eq("status", "sent").is("sent_at", null).select(CAMPOS).maybeSingle();
+    const { data, error } = await servico().from("contracts").update({ sent_at: new Date().toISOString() }).eq("id", l.id).eq("status", "sent").is("sent_at", null).select(bancoTemCon2() ? CAMPOS_CON2 : CAMPOS).maybeSingle();
     if (error) throw new ErroHttp(409, "envio_nao_registrado", "O envio não foi registrado.", { detalhe: error.message });
     if (data) linha = normalizarLinha(data)!;
   }
@@ -762,11 +747,14 @@ async function novaVersao(ch: Chamador, corpo: Record<string, unknown>) {
       variaveis: l.variaveis,
       modelo_versoes: l.modelo_versoes,
       clausulas_alteradas: l.clausulas_alteradas,
+      // Frente CON2: a versão nova de um aditivo ou de uma renovação continua ligada ao mesmo contrato.
+      ...(l.tipo_documento !== "contrato" ? { tipo_documento: l.tipo_documento, contrato_mae_id: l.contrato_mae_id, renovacao_de: l.renovacao_de } : {}),
     })
-    .select(CAMPOS)
+    .select(bancoTemCon2() ? CAMPOS_CON2 : CAMPOS)
     .single();
   if (error || !data) throw new ErroHttp(503, "versao_nao_criada", "A versão nova não foi criada.", { detalhe: error ? error.message : null });
   const nova = normalizarLinha(data)!;
+  await copiarSignatarios(ch, l.id, nova);
   if (l.status === "sent") {
     // O link da versão anterior deixa de valer no mesmo passo (RPC com trava de linha).
     const { error: e } = await servico().rpc("contrato_substituir", { p_antigo: l.id, p_novo: nova.id, p_ator: ch.userId });
@@ -793,8 +781,8 @@ async function diff(ch: Chamador, corpo: Record<string, unknown>) {
   if (!outroId) throw new ErroHttp(409, "sem_versao_anterior", "Este contrato não tem versão anterior.");
   const o = await lerLinha(ch, outroId);
   if (o.client_id !== l.client_id) throw new ErroHttp(404, "versao_de_outro_cliente", "A outra versão não é deste cliente.");
-  const [todos, agencia] = await Promise.all([lerModelos(), lerAgencia()]);
-  const texto = (x: Linha) => x.documento_texto || (x.origem === "modelo" ? montar(x, todos, agencia).texto : "");
+  const [todos, agencia, sa, so] = await Promise.all([lerModelos(), lerAgencia(), signatariosDe(l), signatariosDe(o)]);
+  const texto = (x: Linha) => x.documento_texto || (x.origem === "modelo" ? montar(x, todos, agencia, x.id === l.id ? sa : so).texto : "");
   const [antes, depois] = o.versao <= l.versao ? [o, l] : [l, o];
   const linhas = diffDeDocumentos(texto(antes), texto(depois));
   return json({ antes: { id: antes.id, versao: antes.versao }, depois: { id: depois.id, versao: depois.versao }, linhas, resumo: resumoDoDiff(linhas), custo_usd: 0 });
@@ -843,6 +831,8 @@ O QUE VOCÊ FAZ:
 - Direitos autorais: se o JULGAMENTO trouxer a regra, preencha direitos_<serviço>; se não, diga qual padrão ficou (site: licença; os outros: cessão) e pergunte se confirma.
 - Pergunta o que falta: olhe "faltando" do contrato aberto e peça até 3 itens por vez, com o nome do campo.
 - Reescrever cláusula: só com alterar_clausula, o texto NOVO inteiro, mantendo as {{variáveis}}. A equipe vê a diferença e confirma. Nunca diga que mudou uma cláusula sem trazer o item.
+- CNPJ: quando o dono colar um CNPJ, use puxar_cnpj (f1) com os 14 números; os dados vêm da Receita, nunca de você. Venha antes de criar_contrato.
+- Contrato assinado que muda escopo, valor ou prazo: criar_aditivo (c#) com o que muda, nas palavras do dono. Contrato perto do fim: renovar (c#). Os valores e datas do aditivo a pessoa confere em Dados.
 - Você não assina, não congela, não envia e não cancela contrato: isso é da pessoa, na tela. Diga onde fica o botão.
 - Não fale de revisão jurídica para o cliente; para a equipe, lembre que o modelo v1 ainda aguarda revisão jurídica quando perguntarem.
 
@@ -899,8 +889,8 @@ type Situacao = { aberto: Linha | null; montado: ContratoMontado | null; ctx: Co
 async function situacaoDoCliente(ch: Chamador, clientId: string, contractId: unknown): Promise<Situacao> {
   const lido = contractId ? await lerLinha(ch, contractId).catch((e) => (registrarFalha("contratos: contrato aberto não lido", e), null)) : null;
   const aberto = lido && lido.client_id === clientId && lido.origem === "modelo" ? lido : null;
-  const [todos, agencia] = await Promise.all([lerModelos(), lerAgencia()]);
-  const montado = aberto ? montar(aberto, todos, agencia) : null;
+  const [todos, agencia, signatarios] = await Promise.all([lerModelos(), lerAgencia(), aberto ? signatariosDe(aberto) : Promise.resolve([] as SignatarioDoBanco[])]);
+  const montado = aberto ? montar(aberto, todos, agencia, signatarios) : null;
   const clausulas: ContextoDasRegras["clausulas"] = {};
   if (aberto && montado) {
     for (const c of montado.clausulas) {
@@ -933,8 +923,20 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["geral", "conta"]).catch((e) => (registrarFalha("contratos: contexto do agente não lido", e), "")),
     regrasDaMesa(servico(), { clientId, mesa: "contrato" }),
     julgarPedido(mensagem, !!sit.aberto, clientId, ch.userId, conversaId),
-    servico().from("contracts").select("title, numero, versao, status, origem, created_at").eq("client_id", clientId).order("created_at", { ascending: false }).limit(12),
+    selecionarContratos((campos) => servico().from("contracts").select(campos).eq("client_id", clientId).is("arquivado_em", null).order("created_at", { ascending: false }).limit(20)),
   ]);
+  // Frente CON2: os contratos do cliente viram alvos (c#) para aditivo e renovação; a ficha fiscal entra nos DADOS.
+  const doCliente = ((lista.data as unknown[] | null) ?? []).map((d) => normalizarLinha(d)!).filter(Boolean);
+  const comRenovacao: Record<string, boolean> = {};
+  doCliente.forEach((c) => {
+    if (c.renovacao_de && c.status !== "cancelled") comRenovacao[c.renovacao_de] = true;
+  });
+  const vivos = doCliente.filter((c) => !c.substituido_por && c.status !== "cancelled");
+  sit.ctx.contratos = {};
+  vivos.forEach((c) => {
+    sit.ctx.contratos![c.id] = { assinado: c.status === "completed", aditivo: c.tipo_documento === "aditivo", temRenovacao: !!comRenovacao[c.id], temVigencia: !!(c.vigencia_fim || vigenciaDoContrato(c.variaveis, c.servicos).fim), modelo: c.origem === "modelo" };
+  });
+  const fichaDoCliente = await lerFichaDoCliente(clientId).catch((e) => (registrarFalha("contratos: ficha fiscal não lida", e, { client_id: clientId }), null));
   if (historico.error) registrarFalha("contratos: histórico da conversa não lido", historico.error, { conversa_id: conversaId });
   const faltando = sit.montado ? sit.montado.faltando.map((f) => f.nome) : [];
   const alvos = alvosDoAgente({
@@ -945,6 +947,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     valores: sit.montado ? sit.montado.valores : {},
     faltando,
     clausulas: sit.montado ? sit.montado.clausulas : [],
+    contratos: vivos.filter((c) => c.origem === "modelo").slice(0, 12).map((c) => ({ id: c.id, titulo: c.title, numero: c.numero, status: c.status, tipo: c.tipo_documento, fim: c.vigencia_fim || vigenciaDoContrato(c.variaveis, c.servicos).fim })),
   });
   const hoje = hojeEmSaoPaulo();
   const dados = {
@@ -962,7 +965,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
         pode_congelar: podeCongelar(sit.montado).pode,
       }
       : null,
-    contratos_do_cliente: ((lista.data as Array<Record<string, unknown>> | null) ?? []).map((c) => ({ titulo: c.title, numero: c.numero, versao: c.versao, status: c.status, origem: c.origem })),
+    contratos_do_cliente: doCliente.slice(0, 12).map((c) => ({ titulo: c.title, numero: c.numero, versao: c.versao, status: c.status, origem: c.origem, tipo: c.tipo_documento })),
+    ficha_fiscal: fichaDoCliente && fichaDoCliente.existe ? valoresDaFicha(fichaDoCliente.ficha) : null,
     julgamento: {
       servicos_escolhidos: julgamento.escolhidos.map((s) => `${s} (${ROTULO_DO_SERVICO[s]})`),
       servicos_incertos: julgamento.incertos.map((s) => `${s} (${ROTULO_DO_SERVICO[s]})`),
@@ -975,6 +979,10 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     .filter((m) => m.papel === "usuario" || m.papel === "agente")
     .map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: m.conteudo.slice(0, 4000) }));
   const ultima = anteriores.slice().reverse().find((m) => m.papel === "agente");
+  // O que vale como fonte para valor, prazo, data e CNPJ: o que o dono escreveu (agora e antes) e os DADOS. O que o agente disse antes não conta.
+  const doDono = [mensagem].concat(anteriores.filter((m) => m.papel === "usuario").map((m) => m.conteudo));
+  sit.ctx.fontes = referenciaDas(doDono.concat([JSON.stringify(dados)]));
+  sit.ctx.textoDasFontes = doDono.join("\n");
   const saida = await chamarTexto({
     clientId,
     tarefa: TAREFA,
@@ -1001,7 +1009,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   let acao = normalizarAcoesDosContratos(bruto, alvos, sit.ctx, { contratoId: sit.aberto ? sit.aberto.id : null, clientId });
   if (acao && julgamento.direitos) acao = { ...acao, contexto: { ...(acao.contexto || {}), direitos: julgamento.direitos } };
   const destino = (a: AcaoDoAgente | null) => {
-    const criado = a && (a.resultados || []).find((r) => r.ok && r.operacao === "criar_contrato" && r.desfazer && r.desfazer.contract_id);
+    const criado = a && (a.resultados || []).find((r) => r.ok && (r.operacao === "criar_contrato" || r.operacao === "criar_aditivo" || r.operacao === "renovar") && r.desfazer && r.desfazer.contract_id);
     const id = criado ? String(criado.desfazer!.contract_id) : sit.aberto ? sit.aberto.id : null;
     return { rotulo: "Abrir o contrato", destino: `/contratos?client=${clientId}${id ? `&contrato=${id}` : ""}` };
   };
@@ -1074,6 +1082,22 @@ async function executarItem(ch: Chamador, clientId: string, item: ItemDaAcaoDoAg
     const m = montar(l, todos, agencia);
     return { desfazer: { tipo: "cancelar_rascunho", contract_id: l.id }, aviso: `rascunho ${l.numero || ""}${m.faltando.length ? `; faltam ${m.faltando.length} campos` : "; pronto para congelar"}` };
   }
+  // Frente CON2: CNPJ, aditivo e renovação (sem custo, com Desfazer).
+  if (item.operacao === "puxar_cnpj") {
+    const aberto = acao.contexto && acao.contexto.contract_id ? String(acao.contexto.contract_id) : null;
+    const r = await aplicarCnpjNoCliente(ch, nucleo, { clientId, cnpj: String(item.para || ""), contractId: aberto });
+    const nome = r.ficha.razao_social || r.ficha.nome_fantasia;
+    return { desfazer: { tipo: "ficha", client_id: clientId, anterior: r.anterior, mudaram: r.mudaram, contract_id: r.contrato ? r.contrato.id : null, variaveis_antes: r.contrato ? r.contrato.antes : null }, aviso: `${nome || "ficha"}${r.mudaram.length ? `: ${r.mudaram.length} campos preenchidos` : ": nada novo"}${r.consulta.avisos.length ? `. ${r.consulta.avisos[0]}` : ""}` };
+  }
+  if (item.operacao === "criar_aditivo" || item.operacao === "renovar") {
+    const alvoId = String(item.alvo_id || "");
+    if (item.operacao === "criar_aditivo") {
+      const l = await criarAditivo(ch, nucleo, alvoId, { descricao: String(item.para || "") });
+      return { desfazer: { tipo: "cancelar_rascunho", contract_id: l.id }, aviso: `aditivo ${l.numero || ""} em rascunho; confira valor e data em Dados` };
+    }
+    const r = await renovarContrato(ch, nucleo, alvoId);
+    return { desfazer: r.jaExistia ? { tipo: "nada", contract_id: r.linha.id } : { tipo: "cancelar_rascunho", contract_id: r.linha.id }, aviso: r.jaExistia ? "a renovação já existia" : `renovação ${r.linha.numero || ""} em rascunho` };
+  }
   const contratoId = String((acao.contexto && acao.contexto.contract_id) || "");
   const l = await lerLinha(ch, contratoId, true);
   if (l.client_id !== clientId) throw new Error("Contrato não encontrado neste cliente.");
@@ -1111,6 +1135,20 @@ async function executarItem(ch: Chamador, clientId: string, item: ItemDaAcaoDoAg
 
 async function reverterItem(ch: Chamador, clientId: string, r: ResultadoDoItem) {
   const d = r.desfazer || {};
+  if (d.tipo === "ficha") {
+    // A ficha volta como estava; os campos que o CNPJ preencheu no rascunho voltam a ficar vazios.
+    await garantirGestao(ch, clientId);
+    await restaurarFicha(ch, clientId, d.anterior && typeof d.anterior === "object" ? (d.anterior as FichaFiscal) : null);
+    if (d.contract_id && d.variaveis_antes && typeof d.variaveis_antes === "object") {
+      const l = await lerLinha(ch, String(d.contract_id), true);
+      if (l.status === "draft" && !l.congelado_em) {
+        const valores = { ...l.variaveis };
+        Object.keys(d.variaveis_antes as Record<string, unknown>).forEach((k) => delete valores[k]);
+        await atualizarRascunho(l, { variaveis: valores });
+      }
+    }
+    return;
+  }
   const id = String(d.contract_id || "");
   if (!UUID.test(id)) throw new Error("Sem o que desfazer.");
   const l = await lerLinha(ch, id, true);
@@ -1174,6 +1212,24 @@ async function desfazerAcao(ch: Chamador, corpo: Record<string, unknown>) {
   return json({ anexo: r.anexo, voltaram: r.voltaram, falharam: r.falharam, custo_usd: 0 });
 }
 
+// ------------------------------------------------------------------ núcleo para os módulos da frente CON2
+
+const nucleo: Nucleo & { esquecerModelos: () => void } = {
+  lerModelos,
+  lerAgencia,
+  exigirAgencia,
+  modelosDoContrato,
+  montar,
+  criarRascunho,
+  atualizarRascunho,
+  payloadDoContrato,
+  nomeDoCliente,
+  julgar: (texto, clientId, userId, refId) => julgarPedido(texto, false, clientId, userId, refId),
+  esquecerModelos: () => {
+    modelosCache = null;
+  },
+};
+
 // ------------------------------------------------------------------ rotas
 
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
@@ -1196,14 +1252,33 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   executar_acao_agente: executarAcao,
   desfazer_acao_agente: desfazerAcao,
   ...rotasDoAprendizado({ mesa: "contrato", servico, garantirAcesso: (ch, clientId) => garantirAcesso(ch as Chamador, clientId), json }),
+  ...acoesDaFicha(nucleo),
+  ...acoesDoCiclo(nucleo),
+  ...acoesDosModelos(nucleo),
 };
 
-const ACOES_LONGAS = new Set(["agente_conversar", "executar_acao_agente", "congelar", "gerar_do_aceite"]);
+const ACOES_LONGAS = new Set(["agente_conversar", "executar_acao_agente", "congelar", "gerar_do_aceite", "gerar_do_cliente", "renovar", "aditivo_criar", "concluir_assinaturas", "cnpj_consultar"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "metodo_nao_permitido", mensagem: "Use POST." }, 405);
   try {
+    // Rotina diária (cron com x-cron-secret): só a rotina de vencimentos e assinaturas pendentes.
+    const cronSecret = (Deno.env.get("CRON_SECRET") || "").trim();
+    if (cronSecret && (req.headers.get("x-cron-secret") || "").trim() === cronSecret) {
+      let c: Record<string, unknown> = {};
+      try {
+        c = await req.json();
+      } catch { /* corpo vazio */ }
+      if (String(c.acao ?? "") !== "rotina_vencimentos") return json({ error: "nao_autorizado", mensagem: "O cron só roda a rotina de vencimentos." }, 403);
+      return respostaComFolego(async () => {
+        try {
+          return json({ resumo: await rotinaVencimentos(nucleo) });
+        } catch (err) {
+          return respostaDeErro(err);
+        }
+      }, corsHeaders);
+    }
     const chamador = await identificar(req);
     let corpo: Record<string, unknown> = {};
     try {

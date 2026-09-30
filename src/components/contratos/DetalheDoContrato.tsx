@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, Download, FileSignature, Send } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BellRing, Download, FileSignature, Send } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import Etapas from "@/components/sistema/Etapas";
@@ -15,6 +15,9 @@ import { textoDoErro } from "@/lib/mesa/api";
 import { chamarContratos, CHAVES_DOS_CONTRATOS, type PayloadDoContrato } from "@/lib/contratos/api";
 import DocumentoDoContrato from "./DocumentoDoContrato";
 import { ClausulasDoContrato, DadosDoContrato, JanelaDeAssinar, JanelaDeEnvio, TrilhaDoContrato, VersoesDoContrato } from "./PartesDoContrato";
+// Frente CON2: quem assina, lembrete, aditivo e renovação.
+import AssinantesDoContrato from "./AssinantesDoContrato";
+import { JanelaDeAditivo, JanelaDeLembrete } from "./JanelasDoCiclo";
 import { mensagensProntas, nomeDoArquivoDoContrato, STATUS_DO_CONTRATO } from "../../../supabase/functions/_shared/contrato-modelo";
 
 /**
@@ -29,6 +32,7 @@ const PARTES = [
   { valor: "documento", rotulo: "Documento" },
   { valor: "dados", rotulo: "Dados" },
   { valor: "clausulas", rotulo: "Cláusulas" },
+  { valor: "assinantes", rotulo: "Assinantes" },
   { valor: "versoes", rotulo: "Versões" },
   { valor: "trilha", rotulo: "Trilha" },
 ];
@@ -60,6 +64,8 @@ export default function DetalheDoContrato({ contratoId, aoVoltar, aoAbrir, nomeD
   const [envio, setEnvio] = useState(false);
   const [cancelando, setCancelando] = useState(false);
   const [ocupado, setOcupado] = useState(false);
+  const [lembrando, setLembrando] = useState(false);
+  const [aditivo, setAditivo] = useState(false);
   const consulta = useQuery({ queryKey: CHAVES_DOS_CONTRATOS.um(contratoId), queryFn: () => chamarContratos("ler", { contract_id: contratoId }) });
   const p = consulta.data;
 
@@ -124,6 +130,19 @@ export default function DetalheDoContrato({ contratoId, aoVoltar, aoAbrir, nomeD
       setOcupado(false);
     }
   };
+  const renovar = async () => {
+    setOcupado(true);
+    try {
+      const novo = await chamarContratos("renovar", { contract_id: c.id });
+      aplicar(novo);
+      toast.success(novo.ja_existia ? "A renovação já estava pronta" : `Renovação ${novo.contrato.numero || ""} em rascunho`, { description: novo.ja_existia ? undefined : "Começa no dia seguinte ao fim deste contrato. Confira os valores." });
+      aoAbrir(novo.contrato.id);
+    } catch (e) {
+      toast.error("A renovação não foi preparada", { description: textoDoErro(e) });
+    } finally {
+      setOcupado(false);
+    }
+  };
   const cancelar = async () => {
     setCancelando(false);
     try {
@@ -136,10 +155,15 @@ export default function DetalheDoContrato({ contratoId, aoVoltar, aoAbrir, nomeD
     }
   };
 
+  const tipo = c.tipo_documento === "aditivo" ? "aditivo" : c.tipo_documento === "renovacao" ? "renovação" : null;
+  const fim = p.vigencia && p.vigencia.fim ? p.vigencia.fim.split("-").reverse().join("/") : null;
+  const ligados = p.ligados || { aditivos: [], renovacao: null, mae: null, renova: null };
   const estado = [
     c.numero,
+    tipo,
     `versão ${c.versao}`,
     STATUS_DO_CONTRATO[c.status] || c.status,
+    fim && !rascunho ? `vigência até ${fim}` : null,
     rascunho && faltam ? `${faltam} ${faltam === 1 ? "campo falta" : "campos faltam"}` : null,
     c.documento_hash ? `código ${c.documento_hash.slice(0, 12)}` : null,
   ].filter(Boolean).join(" · ");
@@ -170,6 +194,12 @@ export default function DetalheDoContrato({ contratoId, aoVoltar, aoAbrir, nomeD
                   <span className="hidden sm:inline">{c.sent_at ? "Reenviar" : "Enviar"}</span>
                 </button>
               )}
+              {enviado && (
+                <button type="button" className={botao.secundario} onClick={() => setLembrando(true)} aria-label="Lembrete de assinatura">
+                  <BellRing className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                  <span className="hidden sm:inline">Lembrete</span>
+                </button>
+              )}
               {(enviado || assinado) && (
                 <button type="button" className={botao.secundario} onClick={() => void abrirPdf()} aria-label="Abrir o PDF">
                   <Download className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
@@ -181,6 +211,8 @@ export default function DetalheDoContrato({ contratoId, aoVoltar, aoAbrir, nomeD
                   rascunho && { rotulo: "Baixar prévia em PDF", aoEscolher: () => void baixarPrevia() },
                   (enviado || assinado) && { rotulo: assinado ? "Versão nova (aditivo)" : "Versão nova", aoEscolher: () => void novaVersao(), desativado: ocupado },
                   !!c.substituido_por && { rotulo: "Abrir a versão nova", aoEscolher: () => aoAbrir(String(c.substituido_por)) },
+                  assinado && c.tipo_documento !== "aditivo" && { rotulo: "Criar aditivo", aoEscolher: () => setAditivo(true) },
+                  assinado && c.tipo_documento !== "aditivo" && !!fim && { rotulo: ligados.renovacao ? "Abrir a renovação" : "Preparar renovação", aoEscolher: () => (ligados.renovacao ? aoAbrir(String(ligados.renovacao.id)) : void renovar()), desativado: ocupado },
                   !encerrado && !c.arquivado_em && { rotulo: assinado ? "Arquivar" : "Cancelar contrato", aoEscolher: () => setCancelando(true), perigo: true, separadorAntes: true },
                 ]}
               />
@@ -201,10 +233,34 @@ export default function DetalheDoContrato({ contratoId, aoVoltar, aoAbrir, nomeD
         </p>
       )}
       {c.status === "substituido" && <p className={juntar(texto.auxiliar, "text-warning")}>Esta versão foi substituída; o link dela não vale mais.</p>}
+      {(ligados.mae || ligados.renova || ligados.aditivos.length > 0 || ligados.renovacao) && (
+        <p className={juntar(texto.auxiliar, "flex min-w-0 flex-wrap items-center [&>*]:mr-3")} data-documentos-ligados="">
+          {ligados.mae && (
+            <button type="button" className="underline-offset-2 hover:underline" onClick={() => aoAbrir(String(ligados.mae!.id))}>
+              Aditivo do contrato {ligados.mae.numero}
+            </button>
+          )}
+          {ligados.renova && (
+            <button type="button" className="underline-offset-2 hover:underline" onClick={() => aoAbrir(String(ligados.renova!.id))}>
+              Renova o contrato {ligados.renova.numero}
+            </button>
+          )}
+          {ligados.aditivos.map((a) => (
+            <button key={a.id} type="button" className="underline-offset-2 hover:underline" onClick={() => aoAbrir(a.id)}>
+              Aditivo {a.numero} ({STATUS_DO_CONTRATO[a.status] || a.status})
+            </button>
+          ))}
+          {ligados.renovacao && (
+            <button type="button" className="underline-offset-2 hover:underline" onClick={() => aoAbrir(String(ligados.renovacao!.id))}>
+              Renovação {ligados.renovacao.numero} ({STATUS_DO_CONTRATO[ligados.renovacao.status] || ligados.renovacao.status})
+            </button>
+          )}
+        </p>
+      )}
 
       <Etapas
         rotulo="Partes do contrato"
-        itens={PARTES.map((x) => ({ ...x, contador: x.valor === "dados" && rascunho ? faltam || null : null }))}
+        itens={PARTES.map((x) => ({ ...x, contador: x.valor === "dados" && rascunho ? faltam || null : x.valor === "assinantes" && enviado ? (p.signatarios || []).filter((s) => s.obrigatorio && !s.assinado_em).length || null : null }))}
         valor={parte}
         onEscolher={setParte}
       />
@@ -212,6 +268,7 @@ export default function DetalheDoContrato({ contratoId, aoVoltar, aoAbrir, nomeD
       {parte === "documento" && (p.texto ? <DocumentoDoContrato texto={p.texto} hash={c.documento_hash} alteradas={numerosAlterados} /> : <EstadoDeErro titulo="Contrato de arquivo: abra o PDF pela lista." />)}
       {parte === "dados" && <DadosDoContrato p={p} editavel={rascunho} aoMudar={aplicar} />}
       {parte === "clausulas" && <ClausulasDoContrato p={p} editavel={rascunho} aoMudar={aplicar} />}
+      {parte === "assinantes" && <AssinantesDoContrato p={p} editavel={rascunho} aoMudar={aplicar} />}
       {parte === "versoes" && <VersoesDoContrato p={p} aoAbrir={aoAbrir} />}
       {parte === "trilha" && <TrilhaDoContrato p={p} />}
 
@@ -238,6 +295,19 @@ export default function DetalheDoContrato({ contratoId, aoVoltar, aoAbrir, nomeD
           void qc.invalidateQueries({ queryKey: CHAVES_DOS_CONTRATOS.lista });
         }}
       />
+      {enviado && <JanelaDeLembrete aberta={lembrando} aoFechar={() => setLembrando(false)} contratoId={c.id} />}
+      {assinado && (
+        <JanelaDeAditivo
+          aberta={aditivo}
+          aoFechar={() => setAditivo(false)}
+          p={p}
+          aoCriar={(novo) => {
+            setAditivo(false);
+            aplicar(novo);
+            aoAbrir(novo.contrato.id);
+          }}
+        />
+      )}
       <ConfirmModal
         open={cancelando}
         onCancel={() => setCancelando(false)}

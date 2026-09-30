@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle, FileSignature, Loader2, Send } from "lucide-react";
-import { chamarFuncao, textoDoErro, usd } from "@/lib/mesa/api";
+import { chamarFuncao, lerCatalogo, modeloDoPapel, textoDoErro, usd } from "@/lib/mesa/api";
+import { SeletorDeModelo } from "@/components/mesa/Seletores";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
@@ -31,6 +32,9 @@ export const ATALHOS_DO_AGENTE_DE_CONTRATOS = [
   { rotulo: "O que falta?", texto: "O que falta para congelar este contrato?" },
   { rotulo: "Site com cessão", texto: "Inclui a criação do site institucional, com cessão dos direitos após o pagamento." },
   { rotulo: "Mudar uma cláusula", texto: "Na cláusula de revisões, deixe claro que ajustes de texto pequenos não contam como rodada." },
+  { rotulo: "Puxar pelo CNPJ", texto: "Puxa os dados do cliente pelo CNPJ " },
+  { rotulo: "Aditivo", texto: "Cria um aditivo no contrato assinado: inclui 4 reels por mês a partir de novembro." },
+  { rotulo: "Renovar", texto: "Prepara a renovação do contrato que está vencendo." },
 ];
 
 const CAPACIDADES = [
@@ -39,6 +43,8 @@ const CAPACIDADES = [
   "perguntar o que falta para congelar",
   "incluir ou tirar serviços",
   "reescrever uma cláusula, sempre com a diferença e Confirmar",
+  "puxar os dados do cliente pelo CNPJ (Receita)",
+  "criar aditivo de contrato assinado e preparar a renovação",
   "aprender o que você ensinar (\"sempre\", \"nunca\")",
 ];
 
@@ -59,6 +65,10 @@ export default function AgenteDeContratos({ clientId, contratoId, aoAbrirContrat
   const [enviando, setEnviando] = useState(false);
   const [nova, setNova] = useState(false);
   const [rascunho, setRascunho] = useEstadoDaTela<string>(`contratos:agente:rascunho:${clientId}`, "");
+  // Frente CON2: o modelo do agente escolhido na hora (padrão: o do papel "contrato").
+  const [modeloEscolhido, setModeloEscolhido] = useEstadoDaTela<string>("contratos:agente:modelo", "", { validar: (v) => typeof v === "string" });
+  const catalogo = useQuery({ queryKey: ["mesa", "catalogo"], queryFn: lerCatalogo, staleTime: 30 * 60_000 });
+  const modelo = modeloDoPapel(catalogo.data || [], "contrato", modeloEscolhido || null);
   const lista = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -92,7 +102,7 @@ export default function AgenteDeContratos({ clientId, contratoId, aoAbrirContrat
 
   /** Contrato criado por uma ação: abre na tela. */
   const abrirCriado = (anexo: any) => {
-    const r = anexo && Array.isArray(anexo.resultados) ? anexo.resultados.find((x: any) => x && x.ok && x.operacao === "criar_contrato" && x.desfazer && x.desfazer.contract_id) : null;
+    const r = anexo && Array.isArray(anexo.resultados) ? anexo.resultados.find((x: any) => x && x.ok && (x.operacao === "criar_contrato" || x.operacao === "criar_aditivo" || x.operacao === "renovar") && x.desfazer && x.desfazer.contract_id) : null;
     if (r) aoAbrirContrato(String(r.desfazer.contract_id));
   };
 
@@ -104,7 +114,7 @@ export default function AgenteDeContratos({ clientId, contratoId, aoAbrirContrat
     setMensagens((l) => l.concat([{ id: null, papel: "usuario", conteudo: m, anexos: [], custo_usd: null, local }]));
     setRascunho("");
     try {
-      const d = await chamarFuncao<any>("contratos", { acao: "agente_conversar", client_id: clientId, mensagem: m, contract_id: contratoId || undefined, conversa_id: conversaId || undefined, nova_conversa: nova || undefined });
+      const d = await chamarFuncao<any>("contratos", { acao: "agente_conversar", client_id: clientId, mensagem: m, contract_id: contratoId || undefined, conversa_id: conversaId || undefined, nova_conversa: nova || undefined, modelo_id: modelo ? modelo.id : undefined });
       setNova(false);
       setConversaId(d && d.conversa_id ? String(d.conversa_id) : conversaId);
       const anexos = d && Array.isArray(d.anexos) ? d.anexos : [];
@@ -141,6 +151,9 @@ export default function AgenteDeContratos({ clientId, contratoId, aoAbrirContrat
               Explique o serviço do jeito que falaria. Ele escolhe os blocos, cria o rascunho, preenche o que você disse e pergunta o que falta. Mudar o texto de uma cláusula sempre vem num cartão com a diferença e o Confirmar. Assinar, congelar e enviar são com você, na tela.
             </AjudaRecolhida>
           </>
+        }
+        topo={
+          <SeletorDeModelo catalogo={catalogo.data || []} tipo="texto" valor={modelo ? modelo.id : ""} onChange={setModeloEscolhido} rotulo="Modelo do agente" disabled={enviando} />
         }
         rotuloDasMensagens="Conversa com o agente de contratos"
         refDasMensagens={lista}

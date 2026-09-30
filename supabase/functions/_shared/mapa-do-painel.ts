@@ -82,7 +82,7 @@ export const AREAS_DO_PAINEL: AreaDoPainel[] = [
   { chave: "execucao", nome: "Execução da equipe", rota: "/execucao", comCliente: false, faz: "quem está fazendo o quê", palavras: ["execucao", "quem esta fazendo", "operadores", "hermes"] },
   { chave: "pedidos", nome: "Pedidos", rota: "/pedidos", comCliente: true, faz: "pedidos dos clientes", palavras: ["pedido do cliente", "solicitacao"] },
   { chave: "briefings", nome: "Briefings", rota: "/briefings", comCliente: true, faz: "briefings", palavras: ["briefing"] },
-  { chave: "contratos", nome: "Contratos", rota: "/contratos", comCliente: true, faz: "contratos por modelo, versões, assinatura", agente: "contratos", palavras: ["contrato", "assinatura", "clausula", "aditivo"] },
+  { chave: "contratos", nome: "Contratos", rota: "/contratos", comCliente: true, faz: "contratos por modelo, aditivo, renovação, assinatura", agente: "contratos", palavras: ["contrato", "assinatura", "clausula", "aditivo", "renovacao", "cnpj"] },
   { chave: "arquivos", nome: "Arquivos", rota: "/arquivos", comCliente: true, faz: "arquivos e versões", palavras: ["arquivos", "arquivo", "upload", "enviar arquivo"] },
   { chave: "workspace", nome: "Workspace", rota: "/workspace", comCliente: true, faz: "pastas e documentos", agente: "workspace", palavras: ["workspace", "pasta", "documento", "nota do workspace"] },
   { chave: "metricas", nome: "Métricas", rota: "/metricas", comCliente: true, faz: "números do Instagram", palavras: ["metrica", "seguidores", "alcance", "engajamento", "instagram numeros"] },
@@ -176,7 +176,7 @@ export const AGENTES_DO_PAINEL: AgenteDoPainel[] = [
   { chave: "site", nome: "diretor de site", area: "mesa_site", funcao: "mesa-site", faz: "constrói e ajusta o site" },
   { chave: "motion", nome: "diretor de motion", area: "mesa_motion", funcao: "mesa-motion", faz: "BRAND.md, storyboards, cenas em código, crítica, som e render do filme" },
   { chave: "workspace", nome: "agente do workspace", area: "workspace", funcao: "workspace-agent", faz: "documentos" },
-  { chave: "contratos", nome: "agente de contratos", area: "contratos", funcao: "contratos", faz: "monta contrato por blocos, preenche variáveis, cláusula só com diferença e Confirmar" },
+  { chave: "contratos", nome: "agente de contratos", area: "contratos", funcao: "contratos", faz: "monta contrato, aditivo e renovação, puxa o CNPJ; cláusula só com diferença e Confirmar" },
 ];
 
 export const CHAVES_DAS_AREAS: ChaveDaArea[] = AREAS_DO_PAINEL.map((a) => a.chave);
