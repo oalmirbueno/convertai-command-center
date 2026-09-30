@@ -1809,6 +1809,14 @@
       "remote_name": "avisos_acento_corrigido",
       "remote_statements_sha256": "82bb222368a304b0a656911e6d41b69e2c41d26bbdb55b02d705e103dccdedc4",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930295000",
+      "path": "supabase/migrations/20260930295000_superpoderes_das_mesas.sql",
+      "local_sha256": "912d47b8feedbf20638dadb5e97e5fe4d5656937771494f4eb233abe10f0d9cd",
+      "remote_name": "superpoderes_das_mesas",
+      "remote_statements_sha256": "6c8883a3c2471e6d0d6d3a68e4f0d7c47d5a3a097dc1c13236c289b83b36d802",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
