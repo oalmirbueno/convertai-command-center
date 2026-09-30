@@ -1761,6 +1761,54 @@
       "remote_name": "propostas_em_clientes",
       "remote_statements_sha256": "ab41a8f597dd9b5639b8ff2a262103f4bd48366bdc0ca45c76ea84c789c2f733",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930292000",
+      "path": "supabase/migrations/20260930292000_mcp_files_worker_so_com_trabalho.sql",
+      "local_sha256": "30ddf267c244b219a1582273bdf88f078cc13f828e395ce2e4341f7225895d93",
+      "remote_name": "mcp_files_worker_so_com_trabalho",
+      "remote_statements_sha256": "79a46841f0a0547f5bb17effa4964c8ed0ed893f51bde14f78b6484e44e0086f",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930293300",
+      "path": "supabase/migrations/20260930293300_promotor_pula_publicacao_ocupada.sql",
+      "local_sha256": "e4ec0fbcbb44f8e10edbbbff85bd80c1ceb617bc9cb888e33022b29b00d6d393",
+      "remote_name": "promotor_pula_publicacao_ocupada",
+      "remote_statements_sha256": "5f675037c8883ca81453f4033777551d961e85c13d7ab1223e31a820438942e5",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930293400",
+      "path": "supabase/migrations/20260930293400_autopublicacao_vista_so_leitura.sql",
+      "local_sha256": "b4fc4a7074974f0a22d17fe2e5e50ace6dda622bbb50253b08fb16b5db3a80b1",
+      "remote_name": "autopublicacao_vista_so_leitura",
+      "remote_statements_sha256": "3a97eb3b5c3b471a631a67e34729b54118052c0629f7e91509be0a83404bf567",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930293600",
+      "path": "supabase/migrations/20260930293600_cron_limpa_historico.sql",
+      "local_sha256": "19d12f9610c8c4a3aa9f4240c9c97ceffbcee452a5d6b8a61ee35c72aa9e8305",
+      "remote_name": "cron_limpa_historico",
+      "remote_statements_sha256": "7556be6198f8a2aebb5816a35c94944d3b3938b2905e10fca7ac6434dcc3c0b8",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930293700",
+      "path": "supabase/migrations/20260930293700_funcoes_gatilho_fechadas.sql",
+      "local_sha256": "c6e1a3c82acd66900f3b83c0f13a0b9d685d3d0a81bebe5593aa60b486611d76",
+      "remote_name": "funcoes_gatilho_fechadas",
+      "remote_statements_sha256": "37037eff828d6a0e64aecb4b615730c901f476d6e3baccdd928c758a6f56ac62",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930294000",
+      "path": "supabase/migrations/20260930294000_avisos_acento_corrigido.sql",
+      "local_sha256": "165343d30e29594a9e425e0e15a4c1ac9e784c483588255c8e23cc1562fd27dc",
+      "remote_name": "avisos_acento_corrigido",
+      "remote_statements_sha256": "82bb222368a304b0a656911e6d41b69e2c41d26bbdb55b02d705e103dccdedc4",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
