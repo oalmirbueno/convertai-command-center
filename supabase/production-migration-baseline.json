@@ -1745,6 +1745,14 @@
       "remote_name": "conselho_evolucao",
       "remote_statements_sha256": "10ba4cf5afb4b467d5785bad6a2a416af74be86de47cd5aa13edc3f6924dc004",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930200000",
+      "path": "supabase/migrations/20260930200000_mesa_identidade_completar.sql",
+      "local_sha256": "d7c8919a5a9fab144416169e72f27197bc0a7347ff6ff7f6800b42a004a52e4f",
+      "remote_name": "mesa_identidade_completar",
+      "remote_statements_sha256": "fab02532f3527723a897ecc3c458caf1cb1466cd5785b010ae2dd3f87010a3dd",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
