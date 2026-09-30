@@ -1,4 +1,4 @@
-import { makeBrainContextHandler, noteBelongsToClient, type BrainContextDependencies } from './brain-client-context-handler.ts';
+import { makeBrainContextHandler, noteBelongsToClient, type BrainContextDependencies } from '../brain-client-context/modulos/brain-client-context-handler.ts';
 
 const CLIENT = '10000000-0000-4000-8000-000000000001';
 const OTHER = '10000000-0000-4000-8000-000000000002';

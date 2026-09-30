@@ -13,9 +13,9 @@ import {
   MOTORES_DE_VIDEO,
   type NivelDoMotor,
   nivelDoMotor,
-} from "../../../supabase/functions/_shared/modelos-de-video";
-import { normalizarProjetoDoDiretor, projetoVazio, type ProjetoDoDiretor, type TemplateDeVideo } from "../../../supabase/functions/_shared/diretor-de-video";
-import type { AvatarDaHeygen, VozDaHeygen } from "../../../supabase/functions/_shared/video-provedor-heygen";
+} from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
+import { normalizarProjetoDoDiretor, projetoVazio, type ProjetoDoDiretor, type TemplateDeVideo } from "../../../supabase/functions/mesa-videos/modulos/diretor-de-video";
+import type { AvatarDaHeygen, VozDaHeygen } from "../../../supabase/functions/mesa-videos/modulos/video-provedor-heygen";
 
 /**
  * Leituras e estado do gerador da Mesa Vídeos (frente V-A, 26/09/2026).

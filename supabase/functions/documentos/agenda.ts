@@ -12,7 +12,7 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { marcasDoCliente } from "../_shared/marca.ts";
-import { registrarEntregaNoBanco } from "../_shared/registro-de-entrega.ts";
+import { registrarEntregaNoBanco } from "./modulos/registro-de-entrega.ts";
 import { ehModeloDeDocumento, mesParaGerar, rotuloDoMesDeReferencia } from "../_shared/documento-modelos.ts";
 import { coletarDaLinha, type LinhaComRascunho, rascunhoDaLinha } from "./rascunho.ts";
 

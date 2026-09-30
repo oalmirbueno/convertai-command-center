@@ -5,7 +5,7 @@ import DocumentoDoContrato from "@/components/contratos/DocumentoDoContrato";
 import { PartesDoDiff } from "@/components/contratos/DiffDeTexto";
 import ContractPublic from "@/pages/ContractPublic";
 import { diffDeTexto, montarContrato, valoresComPadrao, variaveisDoContrato } from "../../supabase/functions/_shared/contrato-modelo";
-import { MODELOS_V1 } from "../../supabase/functions/_shared/contrato-modelo-v1";
+import { MODELOS_V1 } from "../../supabase/functions/contratos/modulos/contrato-modelo-v1";
 
 /**
  * Frente CON (30/09): a prévia HTML desenha o mesmo texto que é congelado,

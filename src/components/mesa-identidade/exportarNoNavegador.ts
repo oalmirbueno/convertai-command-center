@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { coresDoBrandbook, imagensDoBrandbook, logosDoBrandbook, SLOTS_DE_LOGO, type DadosDoBrandbook, type ModeloDoBrandbook } from "../../../supabase/functions/_shared/brandbook";
+import { coresDoBrandbook, imagensDoBrandbook, logosDoBrandbook, SLOTS_DE_LOGO, type DadosDoBrandbook, type ModeloDoBrandbook } from "../../../supabase/functions/mesa-identidade/modulos/brandbook";
 import { PERFIS, textoCmyk, textoRgb } from "../../../supabase/functions/_shared/cores-da-marca";
 import { normalizarEstrategia, rotuloDoArquetipo, textoDoEixo, EIXOS_DE_PERSONALIDADE } from "../../../supabase/functions/_shared/estrategia-de-marca";
 import { urlDoGoogleFonts } from "../../../supabase/functions/_shared/tipografia-da-marca";
@@ -31,7 +31,7 @@ export function salvarArquivo(bytes: Uint8Array | Blob, nome: string, tipo: stri
 
 /** Monta o PDF do modelo escolhido e devolve os bytes e o nome. */
 export async function pdfDoBrandbook(dados: DadosDoBrandbook, modelo: ModeloDoBrandbook, versao: number): Promise<{ bytes: Uint8Array; nome: string; semImagem: number }> {
-  const { gerarPdfDoBrandbook, nomeDoArquivoDoBrandbook, prepararImagens } = await import("../../../supabase/functions/_shared/pdf-identidade");
+  const { gerarPdfDoBrandbook, nomeDoArquivoDoBrandbook, prepararImagens } = await import("../../../supabase/functions/mesa-identidade/modulos/pdf-identidade");
   const arquivos: Record<string, Uint8Array> = {};
   let semImagem = 0;
   for (const c of imagensDoBrandbook(dados)) {

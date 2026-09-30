@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { avisoDoPlanoForaDoMes, datasDoPlanoDoMes } from "../../supabase/functions/_shared/perfis-instagram";
+import { avisoDoPlanoForaDoMes, datasDoPlanoDoMes } from "../../supabase/functions/perfis-instagram/modulos/perfis-instagram";
 import {
   type EntradaDoPacote,
   lerFoco,

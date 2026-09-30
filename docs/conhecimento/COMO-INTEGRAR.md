@@ -7,7 +7,7 @@ Plano da Frente R (25/09/2026). Esta frente só criou arquivos novos; a ligaçã
 | Arquivo | Conteúdo | Tamanho aproximado |
 |---|---|---|
 | `supabase/functions/_shared/conhecimento-ads.ts` | Base da Mesa Ads (já integrada). `CONHECIMENTO_ESTRATEGISTA_ADS` sozinho tem cerca de 41.600 caracteres, uns 12.000 tokens | já em uso |
-| `supabase/functions/_shared/conhecimento-design.ts` | Base do diretor de arte (já integrada no estúdio) | já em uso |
+| `supabase/functions/estudio-arte/modulos/conhecimento-design.ts` | Base do diretor de arte (já integrada no estúdio) | já em uso |
 | `supabase/functions/_shared/conhecimento-especialistas-ads.ts` | Pedro Sobral e Natália Torres: 56 princípios com fonte e data, blocos prontos por uso | ver tabela abaixo |
 | `supabase/functions/_shared/conhecimento-marketing.ts` | Skills de marketing, vendas, design e roteiro destiladas | de 3.300 a 7.700 caracteres por agente |
 

@@ -2,8 +2,8 @@ import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao } from "@/lib/mesa/api";
 import type { EtapaDaIdentidade, ModoDoProjeto } from "../../../supabase/functions/_shared/identidade-etapas";
-import type { CandidatoDeNome, AlvoDoNaming } from "../../../supabase/functions/_shared/naming";
-import { normalizarBrandbook, type DadosDoBrandbook, type ModeloDoBrandbook } from "../../../supabase/functions/_shared/brandbook";
+import type { CandidatoDeNome, AlvoDoNaming } from "../../../supabase/functions/mesa-identidade/modulos/naming";
+import { normalizarBrandbook, type DadosDoBrandbook, type ModeloDoBrandbook } from "../../../supabase/functions/mesa-identidade/modulos/brandbook";
 
 /**
  * Mesa Identidade: a ponte da tela com a função mesa-identidade e as tabelas

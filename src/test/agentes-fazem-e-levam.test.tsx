@@ -27,8 +27,8 @@ import { caminhoDaPublicidade } from "../../supabase/functions/mesa-publicidade/
 import { caminhoDoContexto } from "../../supabase/functions/agente-contexto/acoes-do-contexto";
 import { caminhoDoLancador } from "../../supabase/functions/voice-assistant-agent/acoes-do-lancador";
 import { caminhoDoEstilo } from "../../supabase/functions/agente-estilo/acoes-do-estilo";
-import { caminhoDosPerfis } from "../../supabase/functions/_shared/perfis-instagram";
-import { caminhoDaMesaDeVideo } from "../../supabase/functions/_shared/agente-de-video";
+import { caminhoDosPerfis } from "../../supabase/functions/perfis-instagram/modulos/perfis-instagram";
+import { caminhoDaMesaDeVideo } from "../../supabase/functions/mesa-videos/modulos/agente-de-video";
 import { anexosDaRespostaDoDiretor, caminhoDoTrabalho, comCaminhoDoDiretor } from "../../supabase/functions/estudio-arte/acoes-do-diretor";
 
 /**

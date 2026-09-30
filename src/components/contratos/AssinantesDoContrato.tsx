@@ -6,7 +6,7 @@ import { EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campo, juntar, lista, texto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import { chamarContratos, type PayloadDoContrato } from "@/lib/contratos/api";
-import { MAX_CONTRATANTES, MAX_TESTEMUNHAS, validarSignatarios } from "../../../supabase/functions/_shared/contrato-ciclo";
+import { MAX_CONTRATANTES, MAX_TESTEMUNHAS, validarSignatarios } from "../../../supabase/functions/contratos/modulos/contrato-ciclo";
 import { formatarDocumento } from "../../../supabase/functions/_shared/contrato-modelo";
 
 /**

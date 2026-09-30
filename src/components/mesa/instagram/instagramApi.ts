@@ -1,8 +1,8 @@
 import { keepPreviousData, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { marcaAtual } from "@/lib/mesa/marcas";
 import { chamarFuncao } from "@/lib/mesa/api";
-import type { VereditoDaBio, SugestaoDeBio, SugestaoDeNome, EscolhaDoJev, CorDaPaleta, EstiloDaCapa, DestaqueProposto } from "../../../../supabase/functions/_shared/conhecimento-perfil-instagram";
-import type { ChaveDaRede, PaginaNaPrevia } from "../../../../supabase/functions/_shared/instagram-do-cliente";
+import type { VereditoDaBio, SugestaoDeBio, SugestaoDeNome, EscolhaDoJev, CorDaPaleta, EstiloDaCapa, DestaqueProposto } from "../../../../supabase/functions/mesa-instagram/modulos/conhecimento-perfil-instagram";
+import type { ChaveDaRede, PaginaNaPrevia } from "../../../../supabase/functions/mesa-instagram/modulos/instagram-do-cliente";
 
 /**
  * Aba Instagram da Mesa (frente IG, 28/09): tipos e chamadas da função

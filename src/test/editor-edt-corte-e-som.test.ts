@@ -13,7 +13,7 @@ import {
   subidaDaTrilhaDb,
   trechosDeFala,
   ESPACO_MINIMO_ENTRE_SONS_S,
-} from "../../supabase/functions/_shared/som-do-editor";
+} from "../../supabase/functions/mesa-motion/modulos/som-do-editor";
 import { projetoDosTakes, normalizarProjeto, type ProjetoDeEdicao } from "../../supabase/functions/_shared/projeto-de-edicao";
 import { aplicarOperacao, trilhaPrincipal } from "@/lib/editor/operacoes";
 import { proporSkill, skillPorPalavras } from "@/lib/editor/skills";

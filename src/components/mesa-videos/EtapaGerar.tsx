@@ -13,13 +13,13 @@ import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulari
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campo, etiqueta, juntar, texto } from "@/components/sistema/estilos";
-import { ehPedidoDeVideo, MOVIMENTOS_DE_CAMERA, ROTULO_DO_ESTADO_DO_PEDIDO } from "../../../supabase/functions/_shared/pedidos-de-video";
-import { duracaoNoMotor, duracoesDoMotor, motorDoNivel, motorPorId, resolucaoNoMotor, type NivelDoMotor, type RequisitoDoPedido } from "../../../supabase/functions/_shared/modelos-de-video";
+import { ehPedidoDeVideo, MOVIMENTOS_DE_CAMERA, ROTULO_DO_ESTADO_DO_PEDIDO } from "../../../supabase/functions/mesa-videos/modulos/pedidos-de-video";
+import { duracaoNoMotor, duracoesDoMotor, motorDoNivel, motorPorId, resolucaoNoMotor, type NivelDoMotor, type RequisitoDoPedido } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
 import { custoNaTela, ESTADOS_EM_ANDAMENTO, motoresProntos, novoUid, TIPOS_DO_GERADOR, useMotoresDaMesa } from "@/lib/mesa-videos/api";
 import { AvisoDeAtivacao } from "./Comuns";
 import { MODOS_DO_GERAR, modoDoGerarValido, type ModoDoGerar } from "./modosDoGerar";
 import { BotaoDeGerar, SeletorDeCamera, SeletorDeMotor } from "./PecasDoGerador";
-import { movimentoDaMesaNaHiggsfield } from "../../../supabase/functions/_shared/video-provedor-higgsfield";
+import { movimentoDaMesaNaHiggsfield } from "../../../supabase/functions/mesa-videos/modulos/video-provedor-higgsfield";
 
 // Frente V-A: os outros jeitos de gerar (baixam só quando abertos).
 const GeradorLivre = lazy(() => import("./GeradorLivre"));

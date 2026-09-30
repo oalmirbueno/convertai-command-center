@@ -31,7 +31,7 @@ import {
   texto,
 } from "@/components/sistema";
 import { modeloDeFabrica, progressoDoBriefing } from "../../supabase/functions/_shared/briefing-modelos";
-import { contagemDoPainel, precisaDeLembrete, situacaoNoPainel, type SituacaoNoPainel } from "../../supabase/functions/_shared/briefing-editor";
+import { contagemDoPainel, precisaDeLembrete, situacaoNoPainel, type SituacaoNoPainel } from "../../supabase/functions/briefing-agente/modulos/briefing-editor";
 
 /**
  * Briefings (frente BRF, 30/09/2026; painel e modelos na frente BRF2): todos

@@ -8,8 +8,8 @@ import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulari
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { campo, juntar, texto } from "@/components/sistema/estilos";
 import { custoNaTela, novoUid, useMotoresDaMesa } from "@/lib/mesa-videos/api";
-import { duracaoNoMotor, duracoesDoMotor, type MotorDeVideo, motorDoNivel, motorPorId } from "../../../supabase/functions/_shared/modelos-de-video";
-import { MOVIMENTOS_DA_HIGGSFIELD } from "../../../supabase/functions/_shared/video-provedor-higgsfield";
+import { duracaoNoMotor, duracoesDoMotor, type MotorDeVideo, motorDoNivel, motorPorId } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
+import { MOVIMENTOS_DA_HIGGSFIELD } from "../../../supabase/functions/mesa-videos/modulos/video-provedor-higgsfield";
 import {
   ANGULOS_PRONTOS,
   azimuteDoPonto,
@@ -21,7 +21,7 @@ import {
   type ManterNoAngulo,
   pontoDoAzimute,
   textoDoAngulo,
-} from "../../../supabase/functions/_shared/video-angulo";
+} from "../../../supabase/functions/mesa-videos/modulos/video-angulo";
 import { BotaoDeGerar, EscolherImagem, SeletorDeCamera, SeletorDeMotor } from "./PecasDoGerador";
 import { chamarMesaVideos, chaveDosPedidos } from "./videosApi";
 

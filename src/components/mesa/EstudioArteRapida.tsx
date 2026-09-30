@@ -63,10 +63,10 @@ import {
   type DocumentoDaArteRapida,
   type PapelPedido,
   type PecaPedida,
-} from "../../../supabase/functions/_shared/arte-rapida";
-import { horarioSugerido, localParaIso, partesNoFuso, problemaNoHorario } from "../../../supabase/functions/_shared/entrega-na-agenda";
+} from "../../../supabase/functions/estudio-arte/modulos/arte-rapida";
+import { horarioSugerido, localParaIso, partesNoFuso, problemaNoHorario } from "../../../supabase/functions/estudio-arte/modulos/entrega-na-agenda";
 import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
-import { AJUDA_DO_USO } from "../../../supabase/functions/_shared/uso-da-foto";
+import { AJUDA_DO_USO } from "../../../supabase/functions/estudio-arte/modulos/uso-da-foto";
 
 /**
  * Arte rápida (frente AE, 28/09): a arte avulsa, fora do plano do mês, no

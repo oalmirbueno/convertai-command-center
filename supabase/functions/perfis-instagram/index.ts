@@ -121,7 +121,7 @@ import {
   ROTULO_DO_FORMATO_EDITORIAL,
   TETO_DE_CUSTO_DA_RODADA_USD,
   cabeNoTeto,
-} from "../_shared/perfis-instagram.ts";
+} from "./modulos/perfis-instagram.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 // Frente AG1 (29/09): a mensagem nunca some, as análises rodam pela conversa e o agente aprende com cada pedido.

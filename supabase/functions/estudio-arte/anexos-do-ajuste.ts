@@ -26,7 +26,7 @@
  * Puro (sem Deno): o vitest lê este arquivo.
  */
 
-import { FRASE_DA_IDENTIDADE, ROTULO_DA_FOTO_DE_IDENTIDADE } from "../_shared/uso-da-foto.ts";
+import { FRASE_DA_IDENTIDADE, ROTULO_DA_FOTO_DE_IDENTIDADE } from "./modulos/uso-da-foto.ts";
 
 export const PAPEIS_DO_ANEXO = ["estilo", "elemento", "exata", "rosto", "logo", "erro"] as const;
 export type PapelDoAnexo = (typeof PAPEIS_DO_ANEXO)[number];

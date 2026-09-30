@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { TAMANHO_DA_CAPA } from "../../../../supabase/functions/_shared/conhecimento-perfil-instagram";
+import { TAMANHO_DA_CAPA } from "../../../../supabase/functions/mesa-instagram/modulos/conhecimento-perfil-instagram";
 
 /**
  * Capa de destaque pronta para subir no Instagram (1080 x 1920), montada no

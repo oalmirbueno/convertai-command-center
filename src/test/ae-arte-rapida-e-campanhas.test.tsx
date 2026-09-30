@@ -43,7 +43,7 @@ import {
   perguntasDaArteRapida,
   tituloDoPedido,
   type ArquivoDaArteRapida,
-} from "../../supabase/functions/_shared/arte-rapida";
+} from "../../supabase/functions/estudio-arte/modulos/arte-rapida";
 import {
   blocoDoTipoParaOEstrategista,
   direcaoDoSeloDoTipo,

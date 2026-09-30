@@ -39,7 +39,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConfirmDialogProvider } from "@/components/shared/confirmDialog";
 import MesaProposta from "@/pages/MesaProposta";
 import { comBloco, conteudoDoModelo, MODELO_PADRAO_ACELERIQ } from "../../supabase/functions/_shared/proposta-modelo";
-import { blocoJaTem, materialDoUpsell, montarUpsell } from "../../supabase/functions/_shared/proposta-upsell";
+import { blocoJaTem, materialDoUpsell, montarUpsell } from "../../supabase/functions/mesa-proposta/modulos/proposta-upsell";
 
 const CLIENTE = "11111111-1111-4111-8111-111111111111";
 const PROPOSTA = "22222222-2222-4222-8222-222222222222";

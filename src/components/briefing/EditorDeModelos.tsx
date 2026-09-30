@@ -26,7 +26,7 @@ import {
   type SlugDoModelo,
   SLUGS_DE_BRIEFING,
 } from "../../../supabase/functions/_shared/briefing-modelos";
-import { chaveNova, moverItem } from "../../../supabase/functions/_shared/briefing-editor";
+import { chaveNova, moverItem } from "../../../supabase/functions/briefing-agente/modulos/briefing-editor";
 
 /**
  * Editor de modelos de briefing (frente BRF2, 30/09/2026), na aba Modelos de

@@ -95,16 +95,16 @@ import {
   proporOrganizacao,
   slugDoNome,
   type TakeParaOrganizar,
-} from "../../supabase/functions/_shared/organizador-de-takes";
-import { celula, montarPacote } from "../../supabase/functions/_shared/pacote-de-edicao";
-import { BLOCOS_DA_EDICAO, conhecimentoEdicao, FONTE_BRABO } from "../../supabase/functions/_shared/conhecimento-edicao";
-import { comFeedback, decidir, motivoParaNaoMudar, normalizarVersao, proximoNumero, resumoPorVideo, tempoDoVideo } from "../../supabase/functions/_shared/memoria-de-video";
-import { chaveDoPedido, estimarPedido, executorDoPedido, normalizarParametros, textoDaEstimativa } from "../../supabase/functions/_shared/pedidos-de-video";
-import { computadorLigado, motivoParaRecusar, normalizarPedidoDeTarefa, pareceCredencial, podeMudarEstado } from "../../supabase/functions/_shared/computador-do-agente";
-import { normalizarRoteiroAprovado } from "../../supabase/functions/_shared/roteiros-para-video";
-import { duracaoNoModelo, duracoesDoModelo, modeloDeVideo, modelosDeVideo, textoDasDuracoes, travaDePessoaReal } from "../../supabase/functions/_shared/modelos-de-video";
+} from "../../supabase/functions/mesa-videos/modulos/organizador-de-takes";
+import { celula, montarPacote } from "../../supabase/functions/mesa-videos/modulos/pacote-de-edicao";
+import { BLOCOS_DA_EDICAO, conhecimentoEdicao, FONTE_BRABO } from "../../supabase/functions/mesa-videos/modulos/conhecimento-edicao";
+import { comFeedback, decidir, motivoParaNaoMudar, normalizarVersao, proximoNumero, resumoPorVideo, tempoDoVideo } from "../../supabase/functions/mesa-videos/modulos/memoria-de-video";
+import { chaveDoPedido, estimarPedido, executorDoPedido, normalizarParametros, textoDaEstimativa } from "../../supabase/functions/mesa-videos/modulos/pedidos-de-video";
+import { computadorLigado, motivoParaRecusar, normalizarPedidoDeTarefa, pareceCredencial, podeMudarEstado } from "../../supabase/functions/mesa-videos/modulos/computador-do-agente";
+import { normalizarRoteiroAprovado } from "../../supabase/functions/mesa-videos/modulos/roteiros-para-video";
+import { duracaoNoModelo, duracoesDoModelo, modeloDeVideo, modelosDeVideo, textoDasDuracoes, travaDePessoaReal } from "../../supabase/functions/mesa-videos/modulos/modelos-de-video";
 import { edlDoProjeto, normalizarProjeto, projetoDosTakes, proximaRevisao, duracaoDoProjeto } from "../../supabase/functions/_shared/projeto-de-edicao";
-import { acaoDoEnvioParaEdicao, camposDoEnvio, INTENCOES, intencaoPorPalavras, perguntaDaIntencao } from "../../supabase/functions/_shared/agente-de-video";
+import { acaoDoEnvioParaEdicao, camposDoEnvio, INTENCOES, intencaoPorPalavras, perguntaDaIntencao } from "../../supabase/functions/mesa-videos/modulos/agente-de-video";
 
 const raiz = process.cwd();
 const ler = (p: string) => readFileSync(resolve(raiz, p), "utf8").replace(/\r\n/g, "\n");
@@ -616,7 +616,7 @@ describe("conhecimento de edição (Brabo destilado)", () => {
     expect(k.ids).toEqual(BLOCOS_DA_EDICAO.map((b) => b.id));
     expect(k.tamanho).toBeLessThanOrEqual(k.teto);
     expect(conhecimentoEdicao("legenda").ids).toEqual(["edicao_legenda_e_lettering", "edicao_sincronia"]);
-    const modulo = ler("supabase/functions/_shared/conhecimento-edicao.ts");
+    const modulo = ler("supabase/functions/mesa-videos/modulos/conhecimento-edicao.ts");
     expect(modulo).not.toMatch(/[—–]/);
     expect(modulo).toContain("Fernando Araújo / Brabo Space");
     // Frases do SKILL.md original não aparecem copiadas.
@@ -690,14 +690,14 @@ describe("Mesa Vídeos e Mesa Edição no esqueleto das mesas", () => {
       "src/components/mesa-edicao/AreaDoEditor.tsx",
       "src/components/mesa-edicao/Versoes.tsx",
       "src/components/mesa-edicao/pacote.ts",
-      "supabase/functions/_shared/modelos-de-video.ts",
+      "supabase/functions/mesa-videos/modulos/modelos-de-video.ts",
       "supabase/functions/_shared/projeto-de-edicao.ts",
-      "supabase/functions/_shared/agente-de-video.ts",
-      "supabase/functions/_shared/organizador-de-takes.ts",
-      "supabase/functions/_shared/pacote-de-edicao.ts",
-      "supabase/functions/_shared/pedidos-de-video.ts",
-      "supabase/functions/_shared/memoria-de-video.ts",
-      "supabase/functions/_shared/computador-do-agente.ts",
+      "supabase/functions/mesa-videos/modulos/agente-de-video.ts",
+      "supabase/functions/mesa-videos/modulos/organizador-de-takes.ts",
+      "supabase/functions/mesa-videos/modulos/pacote-de-edicao.ts",
+      "supabase/functions/mesa-videos/modulos/pedidos-de-video.ts",
+      "supabase/functions/mesa-videos/modulos/memoria-de-video.ts",
+      "supabase/functions/mesa-videos/modulos/computador-do-agente.ts",
     ]) {
       const f = ler(p);
       expect(f, p).not.toMatch(/\(\?<[=!]/); // lookbehind

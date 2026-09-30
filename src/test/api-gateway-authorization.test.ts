@@ -15,7 +15,7 @@ import {
   authorizeApiGatewayAction,
   normalizeApiGatewayPageLimit,
   type ApiGatewayPrincipal,
-} from '../../supabase/functions/_shared/api-gateway-auth.ts';
+} from '../../supabase/functions/api-gateway/modulos/api-gateway-auth.ts';
 
 const root = process.cwd();
 const read = (path: string) => readFileSync(resolve(root, path), 'utf8');

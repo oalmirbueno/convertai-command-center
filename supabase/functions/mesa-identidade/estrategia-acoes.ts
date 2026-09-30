@@ -25,9 +25,9 @@ import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
 import { TAMANHOS_DA_IDENTIDADE } from "../_shared/identidade-etapas.ts";
 import { ESQUEMA_DA_ESTRATEGIA, type Estrategia, juntarProposta, normalizarEstrategia, declaracaoDePosicionamento, ARQUETIPOS } from "../_shared/estrategia-de-marca.ts";
-import { avisosDeContraste, completarPaleta, type CorDaPaleta } from "../_shared/paleta-da-marca.ts";
+import { avisosDeContraste, completarPaleta, type CorDaPaleta } from "./modulos/paleta-da-marca.ts";
 import { FONTES_DO_CATALOGO, normalizarParesPropostos, PARES_DE_FONTES } from "../_shared/tipografia-da-marca.ts";
-import { normalizarSlogans, notaDoScore, ordenarSlogans, perguntasDosSlogans, type SloganDaMarca, TIPOS_DE_SLOGAN } from "../_shared/naming.ts";
+import { normalizarSlogans, notaDoScore, ordenarSlogans, perguntasDosSlogans, type SloganDaMarca, TIPOS_DE_SLOGAN } from "./modulos/naming.ts";
 import {
   AGENTE,
   type Chamador,

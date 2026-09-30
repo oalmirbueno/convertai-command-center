@@ -7,7 +7,7 @@ import { appPublicUrl } from "@/lib/publicUrl";
 import { chamarAgenteDoBriefing, textoDoErroDoBriefing } from "@/lib/briefing/api";
 import { copiarTexto } from "./GerarLinkDoBriefing";
 import { linkDoWhatsApp, type ModeloDeBriefing } from "../../../supabase/functions/_shared/briefing-modelos";
-import { MAX_LEMBRETES, mensagemDeLembrete } from "../../../supabase/functions/_shared/briefing-editor";
+import { MAX_LEMBRETES, mensagemDeLembrete } from "../../../supabase/functions/briefing-agente/modulos/briefing-editor";
 
 /**
  * Lembrete ao cliente que não terminou o briefing (frente BRF2, 30/09/2026).

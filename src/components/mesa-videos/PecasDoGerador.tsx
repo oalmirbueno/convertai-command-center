@@ -14,8 +14,8 @@ import { botao, campo, juntar, superficie, texto } from "@/components/sistema/es
 import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { subirQuadro } from "@/lib/mesa-videos/quadros";
 import type { MotorNaTela } from "@/lib/mesa-videos/api";
-import { atende, type CustoDoMotor, custoDoMotor, type MotorDeVideo, ROTULO_DO_NIVEL, textoDoCusto, type NivelDoMotor, type RequisitoDoPedido } from "../../../supabase/functions/_shared/modelos-de-video";
-import { MOVIMENTOS_DA_HIGGSFIELD } from "../../../supabase/functions/_shared/video-provedor-higgsfield";
+import { atende, type CustoDoMotor, custoDoMotor, type MotorDeVideo, ROTULO_DO_NIVEL, textoDoCusto, type NivelDoMotor, type RequisitoDoPedido } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
+import { MOVIMENTOS_DA_HIGGSFIELD } from "../../../supabase/functions/mesa-videos/modulos/video-provedor-higgsfield";
 import { useArquivosDeVideo } from "./videosApi";
 
 /**

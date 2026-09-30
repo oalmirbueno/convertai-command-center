@@ -37,11 +37,11 @@ import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { erroQueSobe, registrarFalha } from "../_shared/falha-registrada.ts";
 import { gravarTroca } from "../_shared/conversa-das-mesas.ts";
-import { MODOS, modoDe, type ModoDoConselho } from "../_shared/conselho-presets.ts";
+import { MODOS, modoDe, type ModoDoConselho } from "./modulos/conselho-presets.ts";
 import { arquivarElenco, ataEmPdf, type CtxDoConselho, elencos, pautaComAnexos, salvarElenco } from "./extras.ts";
 // Frente SYNC: a decisão do dono entra no cérebro (todo agente lê) e a conversa do conselho aprende como as mesas.
 import { aprenderDoPedido, regrasDaMesa, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
-import { decisaoDoConselhoNoCerebro, desfazerDecisaoNoCerebro } from "../_shared/sincronia-entre-mesas.ts";
+import { decisaoDoConselhoNoCerebro, desfazerDecisaoNoCerebro } from "./modulos/sincronia-entre-mesas.ts";
 import {
   avancarSessao,
   catalogoDosEspecialistas,

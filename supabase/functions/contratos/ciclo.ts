@@ -18,8 +18,8 @@
  */
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { hojeEmSaoPaulo, lerMoeda, ROTULO_DO_SERVICO, type ServicoDoContrato, servicosEmOrdem, SERVICOS_RECORRENTES, type Valores } from "../_shared/contrato-modelo.ts";
-import { efeitosDosAditivos, type LinhaDoPainel, mensagemDeLembrete, numeroDoAditivo, painelDosContratos, servicosDaFicha, validarSignatarios, valoresDaRenovacao, vigenciaDoContrato } from "../_shared/contrato-ciclo.ts";
-import { valoresDaFicha } from "../_shared/contrato-ficha.ts";
+import { efeitosDosAditivos, type LinhaDoPainel, mensagemDeLembrete, numeroDoAditivo, painelDosContratos, servicosDaFicha, validarSignatarios, valoresDaRenovacao, vigenciaDoContrato } from "./modulos/contrato-ciclo.ts";
+import { valoresDaFicha } from "./modulos/contrato-ficha.ts";
 import { fecharComSignatarios, lerSignatariosDoContrato } from "../_shared/contrato-assinaturas.ts";
 import {
   type Chamador,

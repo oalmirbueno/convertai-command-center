@@ -31,7 +31,7 @@ import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
-import { lerMapaDeBatidas } from "../../../supabase/functions/_shared/batidas-da-trilha.ts";
+import { lerMapaDeBatidas } from "../../../supabase/functions/mesa-motion/modulos/batidas-da-trilha.ts";
 import {
   conferirEscrita,
   contraste,
@@ -60,7 +60,7 @@ import {
   projetoDoFilme,
   SOM_PADRAO,
 } from "../../../supabase/functions/_shared/motion-metodo.ts";
-import { noAlvoDeLoudness } from "../../../supabase/functions/_shared/som-do-editor.ts";
+import { noAlvoDeLoudness } from "../../../supabase/functions/mesa-motion/modulos/som-do-editor.ts";
 import { armazemSupabase } from "../armazem.ts";
 import type { Fila, PedidoDoWorker } from "../fila.ts";
 import { executar, medirLoudness, sondar } from "../midia.ts";

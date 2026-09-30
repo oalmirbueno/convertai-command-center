@@ -39,7 +39,7 @@ import {
   trocarSecaoNoMapa,
 } from "../_shared/site-biblioteca.ts";
 import { normalizarIntegracoes, normalizarSeo } from "../_shared/site-lancamento.ts";
-import { camposParaRestaurar } from "../_shared/site-versoes.ts";
+import { camposParaRestaurar } from "./modulos/site-versoes.ts";
 import { guardarVersao, lerVersao, listarVersoes } from "./versoes.ts";
 import { camposDoEstilo, editarCopy, normalizarOpcoesDaSecao, novaChaveDoFormulario, sujeitoDoSlot } from "./estrutura-pura.ts";
 

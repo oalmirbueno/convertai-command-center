@@ -31,7 +31,7 @@ import { jevPerguntar } from "../_shared/jev.ts";
 import { lerContextoConsolidado, lerDossie } from "../_shared/contexto-cliente.ts";
 import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import { caminhoDaMiniatura, reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
-import { leituraParaAVisao } from "../_shared/video-armazenar.ts";
+import { leituraParaAVisao } from "./modulos/video-armazenar.ts";
 import { type AcaoDoAgente, comCaminho, executarDireto, type ItemDaAcaoDoAgente, podeExecutarDireto, type ResultadoDoItem } from "../_shared/acoes-do-agente.ts";
 import {
   acaoDeGerarPlanos,
@@ -61,9 +61,9 @@ import {
   RACIOCINIO_DO_DIRETOR,
   REGRAS_DIRETAS_DO_DIRETOR,
   sistemaDoDiretor,
-} from "../_shared/diretor-de-video.ts";
-import { caminhoDaMesaDeVideo } from "../_shared/agente-de-video.ts";
-import { kitPorId } from "../_shared/video-kits.ts";
+} from "./modulos/diretor-de-video.ts";
+import { caminhoDaMesaDeVideo } from "./modulos/agente-de-video.ts";
+import { kitPorId } from "./modulos/video-kits.ts";
 import { MAX_BYTES_DO_PROJETO, tamanhoDoProjeto } from "../_shared/projeto-de-edicao.ts";
 import { type BaseDaFuncao, catalogo, enviarGeracao, motorPronto } from "./geracao.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.

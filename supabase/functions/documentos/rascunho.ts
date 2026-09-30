@@ -18,7 +18,7 @@ import { marcasDoCliente, resolverMarca, type MarcaDoCliente } from "../_shared/
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
 import { decodificar } from "../_shared/imagem-local.ts";
 import { ehImagemDoPdf, type ImagemDoPdf, imagemParaPdf } from "../_shared/pdf-base.ts";
-import { candidatosAProva, FONTES, type PedidoDeRegistro } from "../_shared/registro-de-entrega.ts";
+import { candidatosAProva, FONTES, type PedidoDeRegistro } from "./modulos/registro-de-entrega.ts";
 import {
   DEFINICOES_DE_DOCUMENTO,
   ehModeloDeDocumento,

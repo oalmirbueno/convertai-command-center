@@ -9,7 +9,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
 import type { ModeloIa } from "@/lib/mesa/api";
 import { projetoDosTakes, type ProjetoDeEdicao } from "../../supabase/functions/_shared/projeto-de-edicao";
-import { catalogoEmUso, estadoDoMotor, motorDoNivel, MOTORES_DE_VIDEO } from "../../supabase/functions/_shared/modelos-de-video";
+import { catalogoEmUso, estadoDoMotor, motorDoNivel, MOTORES_DE_VIDEO } from "../../supabase/functions/mesa-videos/modulos/modelos-de-video";
 import { sistemaDoAgente } from "../../supabase/functions/editor-video/ferramentas";
 
 /**

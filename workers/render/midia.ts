@@ -5,7 +5,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { filtroLoudnormAplicar, filtroLoudnormMedir, lerLoudnorm, MIXAGEM_PADRAO, type MedidaDoLoudnorm } from "../../supabase/functions/_shared/som-do-editor.ts";
+import { filtroLoudnormAplicar, filtroLoudnormMedir, lerLoudnorm, MIXAGEM_PADRAO, type MedidaDoLoudnorm } from "../../supabase/functions/mesa-motion/modulos/som-do-editor.ts";
 
 export const FFMPEG = process.env.RENDER_FFMPEG || "ffmpeg";
 export const FFPROBE = process.env.RENDER_FFPROBE || "ffprobe";

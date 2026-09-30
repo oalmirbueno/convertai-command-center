@@ -5,7 +5,7 @@ import { Secao, botao, juntar } from "@/components/sistema";
 import { chamarAgenteDoBriefing, textoDoErroDoBriefing } from "@/lib/briefing/api";
 import EditorDeCampos from "./EditorDeCampos";
 import type { CampoDoBriefing } from "../../../supabase/functions/_shared/briefing-modelos";
-import { PREFIXO_EXTRA, MAX_EXTRAS } from "../../../supabase/functions/_shared/briefing-editor";
+import { PREFIXO_EXTRA, MAX_EXTRAS } from "../../../supabase/functions/briefing-agente/modulos/briefing-editor";
 
 /**
  * Perguntas extras de um projeto (frente BRF2, 30/09/2026): o que só este

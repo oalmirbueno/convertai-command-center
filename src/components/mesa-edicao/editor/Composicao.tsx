@@ -1,7 +1,7 @@
 import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { AbsoluteFill, getRemotionEnvironment, Html5Audio, Html5Video, Img, interpolate, OffthreadVideo, Sequence, staticFile, useCurrentFrame } from "remotion";
 import { duracaoDoClipe, mixagemPadrao, type ClipeDoProjeto, type ProjetoDeEdicao, type TrilhaDoProjeto } from "../../../../supabase/functions/_shared/projeto-de-edicao";
-import { dbParaGanho, ganhoDaTrilhaDb, MIXAGEM_PADRAO, subidaDaTrilhaDb, trechosDeFala } from "../../../../supabase/functions/_shared/som-do-editor";
+import { dbParaGanho, ganhoDaTrilhaDb, MIXAGEM_PADRAO, subidaDaTrilhaDb, trechosDeFala } from "../../../../supabase/functions/mesa-motion/modulos/som-do-editor";
 import { falaNaLinhaDoTempo } from "../../../lib/editor/transcricao";
 import { definicaoDaPeca, parametrosDaPeca, type IdDaPeca, type ParametrosDaPeca } from "../../../lib/editor/motion/catalogo";
 import { CarregarFontes, PecaDeMotion } from "./motion/Pecas";

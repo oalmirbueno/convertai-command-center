@@ -18,7 +18,7 @@ import {
   type CorDaPaleta,
   type DestaqueProposto,
   type EstiloDaCapa,
-} from "../../../../supabase/functions/_shared/conhecimento-perfil-instagram";
+} from "../../../../supabase/functions/mesa-instagram/modulos/conhecimento-perfil-instagram";
 import { chamarInstagram, type CapaGuardada } from "./instagramApi";
 import { baixarDoStorage, baixarZipDasCapas, capaComFoto, capaComIcone, capaComLogo, capaTipografica, nomeDoArquivo, salvarBlob } from "./capaDoDestaque";
 import { useFonteDaMarca } from "./fonteDaMarca";

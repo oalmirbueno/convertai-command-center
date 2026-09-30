@@ -157,7 +157,7 @@ Estados: `aguardando_dono` → `aprovada` → `executando` → `feita` ou `falho
 **O que já existe no código (desligado):**
 
 - **Tabela** `agente_computador_tarefas`, no SQL `V2-01-mesa-videos.sql` no scratchpad, ainda não aplicado. A RLS padrão deixa a equipe ler e só a service_role escrever.
-- **Regras puras** em `supabase/functions/_shared/computador-do-agente.ts`:
+- **Regras puras** em `supabase/functions/mesa-videos/modulos/computador-do-agente.ts`:
   - `computadorLigado`;
   - `pareceCredencial`;
   - `pedeAcaoIrreversivel`;

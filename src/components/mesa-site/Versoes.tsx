@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { botao, etiqueta, juntar, lista, texto } from "@/components/sistema/estilos";
 import { dataEHora } from "@/lib/mesa/api";
 import { podeVoltarPara, ROTULO_DO_TIPO, type TrabalhoDoMotor } from "../../../supabase/functions/_shared/motor-codigo";
-import { dadosDaVersao, diferencasEntreVersoes } from "../../../supabase/functions/_shared/site-versoes";
+import { dadosDaVersao, diferencasEntreVersoes } from "../../../supabase/functions/mesa-site/modulos/site-versoes";
 import { CHAVES, chamarMotor, chamarSite, type LinhaDoSite, useSalvarSite } from "./siteApi";
 
 type VersaoDoPlano = { id: string; motivo: string; criado_em: string };

@@ -26,7 +26,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
 
 import { ConfirmDialogProvider } from "@/components/shared/confirmDialog";
-import { registrarEntregaNoBanco } from "../../supabase/functions/_shared/registro-de-entrega";
+import { registrarEntregaNoBanco } from "../../supabase/functions/documentos/modulos/registro-de-entrega";
 import BotaoDocumentoDaEntrega from "@/components/documentos/BotaoDocumentoDaEntrega";
 import {
   ehRegistroDeEntrega,

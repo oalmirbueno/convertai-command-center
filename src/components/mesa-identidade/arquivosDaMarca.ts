@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { extrairPaleta } from "@/lib/identidadeVisual";
-import type { LogoDoBrandbook } from "../../../supabase/functions/_shared/brandbook";
+import type { LogoDoBrandbook } from "../../../supabase/functions/mesa-identidade/modulos/brandbook";
 import { pastaDoProjeto } from "./identidadeApi";
 
 /**

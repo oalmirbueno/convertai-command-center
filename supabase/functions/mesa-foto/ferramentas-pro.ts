@@ -56,7 +56,7 @@ import {
   PROVEDORES,
   type Rede,
   redePadrao,
-} from "../_shared/ferramentas-imagem.ts";
+} from "./modulos/ferramentas-imagem.ts";
 import { ErroDeRegra, extensaoDe, limpo, sha256Hex, UUID } from "./calculos.ts";
 import type { Chamador, FerramentasDaMesa, ImagemDoAcervoLida } from "./ferramentas.ts";
 

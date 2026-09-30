@@ -19,7 +19,7 @@ import {
   uuidEstavel,
   type PecaEntregue,
   type PostExistente,
-} from "../../supabase/functions/_shared/entrega-na-agenda";
+} from "../../supabase/functions/estudio-arte/modulos/entrega-na-agenda";
 import {
   confirmarDataDaPeca,
   desfazerDataDaPeca,
@@ -553,7 +553,7 @@ describe("contratos", () => {
   });
 
   it("sem regex moderna nos arquivos novos da tela", () => {
-    for (const p of ["src/components/mesa/PublicacaoDaPeca.tsx", "supabase/functions/_shared/entrega-na-agenda.ts"]) {
+    for (const p of ["src/components/mesa/PublicacaoDaPeca.tsx", "supabase/functions/estudio-arte/modulos/entrega-na-agenda.ts"]) {
       const t = ler(p);
       expect(t).not.toContain("(?<=");
       expect(t).not.toContain("(?<!");

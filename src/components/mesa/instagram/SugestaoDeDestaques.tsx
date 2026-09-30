@@ -6,7 +6,7 @@ import { botao, juntar, texto } from "@/components/sistema/estilos";
 import { usd } from "@/lib/mesa/api";
 import { BotaoComCusto, useAvisarErro } from "../Custo";
 import { useMesa } from "../MesaContexto";
-import type { DestaqueSugerido } from "../../../../supabase/functions/_shared/conhecimento-perfil-instagram";
+import type { DestaqueSugerido } from "../../../../supabase/functions/mesa-instagram/modulos/conhecimento-perfil-instagram";
 import { modeloDaAba } from "./BioENome";
 import { chamarInstagram, type CapaGuardada, type DestaqueProposto } from "./instagramApi";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";

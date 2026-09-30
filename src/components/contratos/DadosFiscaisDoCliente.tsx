@@ -17,7 +17,7 @@ import {
   mesclarFicha,
   OPCOES_DE_PESSOA,
   soDigitos,
-} from "../../../supabase/functions/_shared/contrato-ficha";
+} from "../../../supabase/functions/contratos/modulos/contrato-ficha";
 import { formatarDocumento, type Valores } from "../../../supabase/functions/_shared/contrato-modelo";
 
 /**

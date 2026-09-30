@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { datasComMesSeguinte } from "../../supabase/functions/_shared/perfis-instagram";
+import { datasComMesSeguinte } from "../../supabase/functions/perfis-instagram/modulos/perfis-instagram";
 import { blocoDasAcoesDosRoteiros, janelaDasPecas, normalizarAcoesDosRoteiros } from "../../supabase/functions/mesa-roteiros/acoes-dos-roteiros";
 
 /**

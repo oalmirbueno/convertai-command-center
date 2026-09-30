@@ -60,7 +60,7 @@ import {
   registrarEntregaNoBanco,
   SISTEMA_DO_DOCUMENTO,
   type TextosDoAgente,
-} from "../_shared/registro-de-entrega.ts";
+} from "./modulos/registro-de-entrega.ts";
 import { coletarEventos } from "./eventos.ts";
 import { coletarDaLinha, identidadeDaCapa, type LinhaComRascunho, rascunhoDaLinha, vistaDoRascunho } from "./rascunho.ts";
 import { lerAgendas, respostaDoCron, salvarAgenda } from "./agenda.ts";

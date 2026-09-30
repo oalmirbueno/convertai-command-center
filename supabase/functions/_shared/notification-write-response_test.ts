@@ -1,4 +1,4 @@
-import { notificationReadRows, notificationWriteResponse, type NotificationRow } from './notification-write-response.ts';
+import { notificationReadRows, notificationWriteResponse, type NotificationRow } from '../notify-admin/modulos/notification-write-response.ts';
 
 function assert(value: unknown, message = 'assertion failed'): asserts value {
   if (!value) throw new Error(message);

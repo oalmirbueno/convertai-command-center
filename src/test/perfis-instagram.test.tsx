@@ -64,7 +64,7 @@ import {
   quantasPautas,
   REGRAS_DO_PERFIL,
   resumoNumerico,
-} from "../../supabase/functions/_shared/perfis-instagram";
+} from "../../supabase/functions/perfis-instagram/modulos/perfis-instagram";
 import { MOTORES } from "../../supabase/functions/_shared/motores";
 
 const ler = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8").replace(/\r\n/g, "\n");
@@ -402,7 +402,7 @@ describe("tela dos perfis", () => {
     expect(aba).toContain('id="ctx-perfis"');
     expect(aba).toContain('titulo="Perfis do Instagram"');
     expect(aba).toContain('lazy(() => import("@/components/perfis/PerfisDoInstagram"))');
-    for (const p of ["src/components/perfis/PerfisDoInstagram.tsx", "src/components/perfis/PerfilAberto.tsx", "src/components/perfis/AgenteDoPerfil.tsx", "supabase/functions/_shared/perfis-instagram.ts"]) {
+    for (const p of ["src/components/perfis/PerfisDoInstagram.tsx", "src/components/perfis/PerfilAberto.tsx", "src/components/perfis/AgenteDoPerfil.tsx", "supabase/functions/perfis-instagram/modulos/perfis-instagram.ts"]) {
       const f = ler(p);
       expect(f, p).not.toMatch(/[—–]/);
       expect(f, p).not.toMatch(/\(\?<[=!]|\\p\{|\.at\(|Object\.hasOwn|aspect-ratio|crypto\.randomUUID/);

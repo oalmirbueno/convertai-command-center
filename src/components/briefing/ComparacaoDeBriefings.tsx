@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { CabecalhoDePagina, Carregando, EstadoDeErro, EstadoVazio, SeletorCompacto, botao, etiqueta, juntar, lista, texto } from "@/components/sistema";
 import { CAMPOS_DA_LEITURA, type LinhaDoBriefingNoPainel, nomeDoBriefing } from "./LeituraDoBriefing";
 import { type AnexoDoBriefing, modeloDoLink } from "../../../supabase/functions/_shared/briefing-modelos";
-import { compararBriefings } from "../../../supabase/functions/_shared/briefing-editor";
+import { compararBriefings } from "../../../supabase/functions/briefing-agente/modulos/briefing-editor";
 
 /**
  * Comparar dois briefings (frente BRF2, 30/09/2026): o mesmo cliente em dois

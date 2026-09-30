@@ -12,7 +12,7 @@
 
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { ehSlugDeBriefing, estadoDoLink, MODELOS_DE_FABRICA, modeloDoLink, modeloVigente } from "../_shared/briefing-modelos.ts";
-import { extrasDoModelo, MAX_LEMBRETES, modeloComExtras, normalizarExtras, proximaVersao, validarModeloEditado } from "../_shared/briefing-editor.ts";
+import { extrasDoModelo, MAX_LEMBRETES, modeloComExtras, normalizarExtras, proximaVersao, validarModeloEditado } from "./modulos/briefing-editor.ts";
 import { type Chamador, ErroHttp, garantirAdmin, json, lerBriefing, limpo, linhasDeModelos, registrar, servico } from "./base.ts";
 
 export async function versoesDoModelo(_ch: Chamador, corpo: Record<string, unknown>) {

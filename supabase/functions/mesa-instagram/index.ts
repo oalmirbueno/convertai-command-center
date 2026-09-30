@@ -106,7 +106,7 @@ import {
   type SugestaoDeNome,
   sugestoesLimpas,
   vereditoDaBio,
-} from "../_shared/conhecimento-perfil-instagram.ts";
+} from "./modulos/conhecimento-perfil-instagram.ts";
 import {
   capaDoTrabalho,
   contasDaMarca,
@@ -122,13 +122,13 @@ import {
   type PaginaNaPrevia,
   REDES_SOCIAIS,
   usernameDe,
-} from "../_shared/instagram-do-cliente.ts";
+} from "./modulos/instagram-do-cliente.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 // Frente AG1 (29/09): a mensagem nunca some, o agente age (grade, capas, bio) e aprende com cada pedido.
 import type { ImagemEntrada } from "../_shared/ia-motor.ts";
 import { defeitoDaImagem } from "../_shared/defeito-da-imagem.ts";
-import { type DestaqueProposto } from "../_shared/conhecimento-perfil-instagram.ts";
+import { type DestaqueProposto } from "./modulos/conhecimento-perfil-instagram.ts";
 import {
   type AcaoDoAgente,
   type AcaoGuardada,

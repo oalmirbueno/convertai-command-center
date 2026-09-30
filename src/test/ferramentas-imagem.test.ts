@@ -31,7 +31,7 @@ import {
   temCanalAlfa,
   urlDeResultadoSegura,
   VALIDADE_DA_FICHA_MS,
-} from "../../supabase/functions/_shared/ferramentas-imagem";
+} from "../../supabase/functions/mesa-foto/modulos/ferramentas-imagem";
 
 const invocar = vi.fn();
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { functions: { invoke: (...a: unknown[]) => invocar(...a) } } }));
@@ -225,7 +225,7 @@ describe("ferramentas de imagem: sem chave", () => {
 
   it("nenhum arquivo novo guarda chave, loga chave ou usa travessão", () => {
     const arquivos = [
-      "supabase/functions/_shared/ferramentas-imagem.ts",
+      "supabase/functions/mesa-foto/modulos/ferramentas-imagem.ts",
       "supabase/functions/mesa-foto/ferramentas-pro.ts",
       "src/components/ferramentas/ferramentasApi.ts",
       "src/components/ferramentas/FerramentasDaImagem.tsx",
@@ -238,7 +238,7 @@ describe("ferramentas de imagem: sem chave", () => {
       expect(t, a).not.toMatch(/Key [0-9a-f]{8}-[0-9a-f]{4}/);
     }
     // O módulo compartilhado roda nos testes: sem import de Deno, npm ou URL.
-    expect(ler("supabase/functions/_shared/ferramentas-imagem.ts")).not.toMatch(/^import /m);
+    expect(ler("supabase/functions/mesa-foto/modulos/ferramentas-imagem.ts")).not.toMatch(/^import /m);
   });
 });
 

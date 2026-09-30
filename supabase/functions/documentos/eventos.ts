@@ -22,7 +22,7 @@ import {
   periodoDaReferencia,
   type TipoDeEntrega,
   tituloPadrao,
-} from "../_shared/registro-de-entrega.ts";
+} from "./modulos/registro-de-entrega.ts";
 
 export type MarcaParaEventos = { id: string; nome: string; principal: boolean; project_id: string | null } | null;
 

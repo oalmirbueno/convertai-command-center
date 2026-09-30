@@ -15,7 +15,7 @@ import {
   type ModeloDeDocumento,
   type RascunhoDoDocumento,
 } from "../../../supabase/functions/_shared/documento-modelos";
-import { moverItem } from "../../../supabase/functions/_shared/briefing-editor";
+import { moverItem } from "../../../supabase/functions/briefing-agente/modulos/briefing-editor";
 
 /**
  * Editar o documento de entrega antes do PDF (frente BRF2, 30/09/2026):

@@ -14,7 +14,7 @@ import { textoDoErro } from "@/lib/mesa/api";
 import { chamarContratos, CHAVES_DOS_CONTRATOS, type ModeloNaTela, type Preferencias } from "@/lib/contratos/api";
 import { PartesDoDiff } from "./DiffDeTexto";
 import type { ClausulaDoModelo, ParteDoDiff, VariavelDoModelo } from "../../../supabase/functions/_shared/contrato-modelo";
-import { ROTULO_DAS_EXTRAS } from "../../../supabase/functions/_shared/contrato-modelo-extras-v1";
+import { ROTULO_DAS_EXTRAS } from "../../../supabase/functions/contratos/modulos/contrato-modelo-extras-v1";
 
 /**
  * Editor de modelos de contrato (frente CON2, 30/09), em /contratos?vista=modelos.

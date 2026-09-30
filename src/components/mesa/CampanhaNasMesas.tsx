@@ -10,7 +10,7 @@ import { useCampanhaEmUso } from "@/lib/mesa/campanhaAtiva";
 import { useMarcaDaMesa, useMesa } from "./MesaContexto";
 import { aplicarRespostaDaCampanha, campanhaSalvar, normalizarBriefing } from "./campanhasApi";
 import type { Campanha } from "./mesaV4Api";
-import { linkDaArteRapida } from "../../../supabase/functions/_shared/arte-rapida";
+import { linkDaArteRapida } from "../../../supabase/functions/estudio-arte/modulos/arte-rapida";
 import { DEFINICAO_DO_TIPO, TIPOS_DE_CAMPANHA, tipoDaCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
 
 /**

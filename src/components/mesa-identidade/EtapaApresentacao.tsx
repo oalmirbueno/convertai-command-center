@@ -9,7 +9,7 @@ import Secao from "@/components/sistema/Secao";
 import { PreencherComIA } from "@/components/sistema";
 import { botao, campoTexto, espaco, juntar, lista, texto } from "@/components/sistema/estilos";
 import { useFontesGoogle } from "@/lib/identidade/fontesGoogle";
-import { camposDasFalas, prontoParaApresentar, roteiroDaApresentacao, SCRIPT_DA_APRESENTACAO } from "../../../supabase/functions/_shared/apresentacao-da-marca";
+import { camposDasFalas, prontoParaApresentar, roteiroDaApresentacao, SCRIPT_DA_APRESENTACAO } from "../../../supabase/functions/mesa-identidade/modulos/apresentacao-da-marca";
 import { urlDoGoogleFonts } from "../../../supabase/functions/_shared/tipografia-da-marca";
 import { imagensDaApresentacao, PalcoDoSlide, SlideDaMarca, type UrlDaImagem } from "./ApresentacaoDaMarca";
 import { CabecalhoDaEtapa, contextoParaPreencher, Pastilha, useProjetoDaMesa } from "./Comuns";

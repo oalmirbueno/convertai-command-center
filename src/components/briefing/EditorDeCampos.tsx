@@ -8,7 +8,7 @@ import {
   type TipoDeCampo,
   TIPOS_DE_CAMPO,
 } from "../../../supabase/functions/_shared/briefing-modelos";
-import { chaveNova, moverItem } from "../../../supabase/functions/_shared/briefing-editor";
+import { chaveNova, moverItem } from "../../../supabase/functions/briefing-agente/modulos/briefing-editor";
 
 /**
  * Lista de perguntas editável (frente BRF2, 30/09/2026): o editor de modelos

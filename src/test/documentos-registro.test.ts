@@ -19,7 +19,7 @@ import {
   numerosDoTexto,
   periodoDaReferencia,
   resumoSemAgente,
-} from "../../supabase/functions/_shared/registro-de-entrega";
+} from "../../supabase/functions/documentos/modulos/registro-de-entrega";
 import { imagemParaPdf, imagensDoPdf, paginasDoPdf, textosDoPdf, type ImagemDoPdf } from "../../supabase/functions/_shared/pdf-base";
 import { coletarEventos } from "../../supabase/functions/documentos/eventos";
 import { JPEG_RGB } from "./fixtures/imagens-pdf";
@@ -347,7 +347,7 @@ describe("referência, marca e pedido do gancho", () => {
   });
 
   it("módulo puro, sem travessão e sem sintaxe que o Safari 11 não entende", () => {
-    const fonte = ler("supabase/functions/_shared/registro-de-entrega.ts");
+    const fonte = ler("supabase/functions/documentos/modulos/registro-de-entrega.ts");
     expect(fonte).not.toMatch(/from "npm:|from "https:|Deno\./);
     expect(fonte).not.toMatch(/\(\?<[=!a-z]|\\p\{|\.at\(|flatMap/i);
     expect(fonte).not.toMatch(/[–—]/);

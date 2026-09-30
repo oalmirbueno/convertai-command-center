@@ -7,7 +7,7 @@ import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import { useMesa } from "../MesaContexto";
 import { avisarCustoReal, EstimativaInline, useAvisarErro } from "../Custo";
-import { destaquesLimpos, type DestaqueProposto } from "../../../../supabase/functions/_shared/conhecimento-perfil-instagram";
+import { destaquesLimpos, type DestaqueProposto } from "../../../../supabase/functions/mesa-instagram/modulos/conhecimento-perfil-instagram";
 import { modeloDaAba } from "./BioENome";
 import { chamarInstagram, type MensagemDaAba } from "./instagramApi";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";

@@ -7,9 +7,9 @@ import { ESQUEMA_DO_CONTEUDO } from "../../supabase/functions/_shared/site-metod
 import { ESQUEMA_DO_BRAND, esquemaDosStoryboards } from "../../supabase/functions/_shared/motion-metodo";
 import { ESQUEMA_DA_CENA } from "../../supabase/functions/_shared/cena-hf";
 import { ESQUEMA_DA_CRITICA, ESQUEMA_DA_PROPOSTA, ESQUEMA_DA_REVISAO, ESQUEMA_DO_MODERADOR } from "../../supabase/functions/_shared/conselho";
-import { ESQUEMA_DOS_TEXTOS } from "../../supabase/functions/_shared/registro-de-entrega";
+import { ESQUEMA_DOS_TEXTOS } from "../../supabase/functions/documentos/modulos/registro-de-entrega";
 import { ESQUEMA_DAS_OBSERVACOES } from "../../supabase/functions/_shared/referencias-do-site";
-import { ESQUEMA_DA_LEITURA } from "../../supabase/functions/_shared/leitura-da-logo";
+import { ESQUEMA_DA_LEITURA } from "../../supabase/functions/mesa-identidade/modulos/leitura-da-logo";
 
 /**
  * QA 30/09: os esquemas das mesas novas vão à Anthropic (o padrão de proposta,

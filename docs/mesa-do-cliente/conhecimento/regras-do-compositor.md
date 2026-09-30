@@ -1,7 +1,7 @@
 # Regras recomendadas para o compositor de prompt
 
 - Alvo: `supabase/functions/_shared/direcao-arte.ts` (funções `caixaDaZona`, `tamanhoDoBloco`, `blocosDoTexto`, `normalizarLayout`, `layoutPadrao`, `promptDaLamina`).
-- Base: `supabase/functions/_shared/conhecimento-design.ts` versão `2026-09-23.2` (regras e desempates) e os arquivos desta pasta.
+- Base: `supabase/functions/estudio-arte/modulos/conhecimento-design.ts` versão `2026-09-23.2` (regras e desempates) e os arquivos desta pasta.
 - Status: **recomendação, nada aplicado**. O arquivo `direcao-arte.ts` não foi editado.
 - Por que mexer no compositor: o diretor escreve pouco e o código monta o prompt. Se o código calcula um tamanho ou uma zona que contradiz a base, a base perde. Hoje há contradições medidas (itens 1, 2, 7 e 12).
 

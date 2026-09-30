@@ -10,8 +10,8 @@ import Secao from "@/components/sistema/Secao";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { Carregando } from "@/components/sistema/Estados";
 import { botao, campo, campoTexto, espaco, juntar, texto } from "@/components/sistema/estilos";
-import { CAMPOS_DO_BRIEFING, type BriefingDaIdentidade, type CampoDoBriefing } from "../../../supabase/functions/_shared/briefing-da-identidade";
-import { CRITERIOS_PADRAO } from "../../../supabase/functions/_shared/naming";
+import { CAMPOS_DO_BRIEFING, type BriefingDaIdentidade, type CampoDoBriefing } from "../../../supabase/functions/mesa-identidade/modulos/briefing-da-identidade";
+import { CRITERIOS_PADRAO } from "../../../supabase/functions/mesa-identidade/modulos/naming";
 import { chamarIdentidade } from "./identidadeApi";
 import { CabecalhoDaEtapa, contextoParaPreencher, Pastilha, useProjetoDaMesa } from "./Comuns";
 

@@ -354,7 +354,7 @@ import {
   urlPublicaSegura,
 } from "./calculos.ts";
 // Frente CR (27/09): criativo que converte (formatos, layout, estruturas de copy) e a ordem dos estilos pelo resultado real.
-import { copyQueConverteParaOPrompt, formatoDoEstiloParaOPrompt, formatosParaOPlano, FRAMEWORKS_IDS } from "../_shared/conhecimento-criativo.ts";
+import { copyQueConverteParaOPrompt, formatoDoEstiloParaOPrompt, formatosParaOPlano, FRAMEWORKS_IDS } from "./modulos/conhecimento-criativo.ts";
 import {
   anuncioDaReferencia,
   anuncioDasDiarias,

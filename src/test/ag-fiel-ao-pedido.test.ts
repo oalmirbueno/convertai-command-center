@@ -33,7 +33,7 @@ import {
   INSTRUCOES_DA_ARTE_RAPIDA,
   normalizarPedidoDaArteRapida,
   perguntasDaArteRapida,
-} from "../../supabase/functions/_shared/arte-rapida";
+} from "../../supabase/functions/estudio-arte/modulos/arte-rapida";
 import { CONFIANCA_MINIMA_DO_TIPO, tipoPelaResposta } from "../../supabase/functions/_shared/tipos-de-campanha";
 import {
   camposParaMostrar,

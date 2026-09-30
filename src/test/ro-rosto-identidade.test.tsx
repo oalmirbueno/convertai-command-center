@@ -52,7 +52,7 @@ import {
   usoForteNoPedido,
   usoPedidoNaConversa,
   usoPelaRegra,
-} from "../../supabase/functions/_shared/uso-da-foto";
+} from "../../supabase/functions/estudio-arte/modulos/uso-da-foto";
 import {
   aplicarArquivosNasLaminas,
   decidirArteRapida,
@@ -63,7 +63,7 @@ import {
   perguntasDaArteRapida,
   ROTULO_DO_PAPEL,
   type ArquivoDaArteRapida,
-} from "../../supabase/functions/_shared/arte-rapida";
+} from "../../supabase/functions/estudio-arte/modulos/arte-rapida";
 import {
   blocoDoRosto,
   ESQUEMA_CONFERENCIA_DO_ROSTO,
@@ -437,7 +437,7 @@ describe("6. Tela", () => {
   });
 
   it("arquivos novos: sem travessão, sem lookbehind, \\p{} nem grupo nomeado", () => {
-    for (const f of ["supabase/functions/_shared/uso-da-foto.ts"]) {
+    for (const f of ["supabase/functions/estudio-arte/modulos/uso-da-foto.ts"]) {
       const s = ler(f);
       expect(s).not.toContain("—");
       expect(s).not.toMatch(/\(\?<[=!]|\\p\{|\(\?<[a-z]/);

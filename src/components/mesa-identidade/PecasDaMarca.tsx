@@ -12,7 +12,7 @@ import { botao, campo, foco, juntar, texto } from "@/components/sistema/estilos"
 import { carregarImagem } from "@/lib/mockups/api";
 import { useFontesGoogle } from "@/lib/identidade/fontesGoogle";
 import { dataUrlDoBucket, desenharLayout } from "@/lib/identidade/desenharPeca";
-import { assinaturaDeEmail, layoutDaPeca, PECAS_DA_MARCA, svgDoLayout, type PecaDaMarca } from "../../../supabase/functions/_shared/aplicacoes-da-marca";
+import { assinaturaDeEmail, layoutDaPeca, PECAS_DA_MARCA, svgDoLayout, type PecaDaMarca } from "../../../supabase/functions/mesa-identidade/modulos/aplicacoes-da-marca";
 import { contextoParaPreencher, useProjetoDaMesa } from "./Comuns";
 import { blobDoCanvas, enviarFeitoNaTela } from "./arquivosDaMarca";
 import { salvarArquivo } from "./exportarNoNavegador";

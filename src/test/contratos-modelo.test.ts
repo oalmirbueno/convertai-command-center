@@ -26,9 +26,9 @@ import {
   type ServicoDoContrato,
   type Valores,
 } from "../../supabase/functions/_shared/contrato-modelo";
-import { MODELOS_V1, REVISAO_JURIDICA_V1 } from "../../supabase/functions/_shared/contrato-modelo-v1";
+import { MODELOS_V1, REVISAO_JURIDICA_V1 } from "../../supabase/functions/contratos/modulos/contrato-modelo-v1";
 import { gerarPdfDoContrato, paginasDoPdf, textosDoPdf } from "../../supabase/functions/_shared/pdf-contrato";
-import { estadoDaAutentique, pedidoDeDocumentoAutentique } from "../../supabase/functions/_shared/assinatura-autentique";
+import { estadoDaAutentique, pedidoDeDocumentoAutentique } from "../../supabase/functions/contratos/modulos/assinatura-autentique";
 
 /**
  * Frente CON (30/09): modelo-base em 3 camadas (quadro-resumo, condições
@@ -357,7 +357,7 @@ describe("contratos: leitura, diferença e PDF", () => {
     expect(e.pronta).toBe(true);
     expect(estadoDaAutentique(null).pronta).toBe(false);
     expect(pedidoDeDocumentoAutentique({ nome: "C", signatarios: [{ email: " A@B.COM " }] }).variables.signers[0].email).toBe("a@b.com");
-    const fonte = readFileSync(resolve(process.cwd(), "supabase/functions/_shared/assinatura-autentique.ts"), "utf8");
+    const fonte = readFileSync(resolve(process.cwd(), "supabase/functions/contratos/modulos/assinatura-autentique.ts"), "utf8");
     expect(fonte).not.toMatch(/\bfetch\s*\(/);
   });
 });

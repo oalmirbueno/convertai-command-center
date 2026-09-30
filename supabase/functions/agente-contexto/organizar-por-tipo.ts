@@ -15,7 +15,7 @@
  *
  * Sem import de Deno: os testes (vitest) leem este arquivo.
  */
-import { alvosDoWorkspace, type NoDoWorkspace, PASTA_DE_ARQUIVADOS } from "../_shared/acoes-do-workspace.ts";
+import { alvosDoWorkspace, type NoDoWorkspace, PASTA_DE_ARQUIVADOS } from "./modulos/acoes-do-workspace.ts";
 
 export const PASTAS_POR_TIPO: Array<{ pasta: string; nome?: RegExp; extensao?: RegExp }> = [
   { pasta: "Marca", nome: /(logo|marca|brand|manual|identidade|paleta)/i },

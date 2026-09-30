@@ -13,7 +13,7 @@ import MenuMais from "@/components/sistema/MenuMais";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { Carregando } from "@/components/sistema/Estados";
 import { botao, campo, campoTexto, espaco, juntar, lista, texto } from "@/components/sistema/estilos";
-import { estadoDoModelo, imagensDoBrandbook, lacunasDoBrandbook, MODELOS_DE_BRANDBOOK, TEMAS_DO_BRANDBOOK, ehTema, type DadosDoBrandbook, type ModeloDoBrandbook } from "../../../supabase/functions/_shared/brandbook";
+import { estadoDoModelo, imagensDoBrandbook, lacunasDoBrandbook, MODELOS_DE_BRANDBOOK, TEMAS_DO_BRANDBOOK, ehTema, type DadosDoBrandbook, type ModeloDoBrandbook } from "../../../supabase/functions/mesa-identidade/modulos/brandbook";
 import { chamarIdentidade, CHAVES, textoDaAprovacao, useBrandbooks, useSituacaoDoArquivo, type ProjetoDeIdentidade, type VersaoDoBrandbook } from "./identidadeApi";
 import { CabecalhoDaEtapa, contextoParaPreencher, Pastilha, useProjetoDaMesa } from "./Comuns";
 import { pacoteDaMarca, paginaWebDoBrandbook, pdfDoBrandbook, salvarArquivo } from "./exportarNoNavegador";

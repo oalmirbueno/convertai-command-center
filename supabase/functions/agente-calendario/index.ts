@@ -226,7 +226,7 @@ import {
   type PautaParaChecar,
   perguntasDeRepeticao,
   type RespostaDeChoice,
-} from "../_shared/memoria-editorial.ts";
+} from "./modulos/memoria-editorial.ts";
 import {
   diagnosticoDasFrentes,
   type DiagnosticoEstruturado,

@@ -8,7 +8,7 @@ import { textoDoErro, usd } from "@/lib/mesa/api";
 import Secao from "@/components/sistema/Secao";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campo as campoDoSistema, juntar } from "@/components/sistema/estilos";
-import { motivoParaNaoMudar, resumoPorVideo, ROTULO_DO_ESTADO, tempoDoVideo, type ResumoDoVideo, type VersaoDeVideo } from "../../../supabase/functions/_shared/memoria-de-video";
+import { motivoParaNaoMudar, resumoPorVideo, ROTULO_DO_ESTADO, tempoDoVideo, type ResumoDoVideo, type VersaoDeVideo } from "../../../supabase/functions/mesa-videos/modulos/memoria-de-video";
 import { AvisoDeAtivacao } from "@/components/mesa-videos/Comuns";
 import { chamarMesaVideos, chaveDasVersoes, useArquivosDeVideo, useVersoes } from "@/components/mesa-videos/videosApi";
 

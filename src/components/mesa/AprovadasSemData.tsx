@@ -27,7 +27,7 @@ import {
   problemaNoHorario,
   rotuloDoPerfil,
   tipoDoConteudo,
-} from "../../../supabase/functions/_shared/entrega-na-agenda";
+} from "../../../supabase/functions/estudio-arte/modulos/entrega-na-agenda";
 
 /**
  * Aprovou → Agenda, sem data (frente AP, 28/09). Pedido do dono: "se não tem

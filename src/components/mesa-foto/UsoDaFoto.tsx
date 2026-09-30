@@ -11,7 +11,7 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { useAcoesDeUso } from "./AcoesDeUso";
 import { lerCampanhaEmUso } from "@/lib/mesa/campanhaAtiva";
 import { marcaAtual } from "@/lib/mesa/marcas";
-import { linkDaArteRapida } from "../../../supabase/functions/_shared/arte-rapida";
+import { linkDaArteRapida } from "../../../supabase/functions/estudio-arte/modulos/arte-rapida";
 import { useMesaFoto } from "./Comuns";
 import {
   acrescentarFotos,

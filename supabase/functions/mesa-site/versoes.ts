@@ -4,7 +4,7 @@
  * ../_shared/site-versoes.ts. O banco chega por parâmetro (service_role).
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { assinaturaDaVersao, dadosDaVersao } from "../_shared/site-versoes.ts";
+import { assinaturaDaVersao, dadosDaVersao } from "./modulos/site-versoes.ts";
 
 const semTabela = (e: { code?: string; message?: string } | null | undefined) => !!e && (e.code === "42P01" || e.code === "PGRST205" || /site_versoes.*(does not exist|schema cache)/i.test(String(e.message || "")));
 

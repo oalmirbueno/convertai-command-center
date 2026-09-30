@@ -12,7 +12,7 @@ import {
   textoPausa,
   textoVencido,
 } from "../../supabase/functions/check-renewals/marcos";
-import { cabecalhosDoEmailInterno } from "../../supabase/functions/_shared/email-interno";
+import { cabecalhosDoEmailInterno } from "../../supabase/functions/check-renewals/modulos/email-interno";
 
 /**
  * Frente N (27/09): "todas as notificações funcionando corretamente".

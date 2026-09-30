@@ -19,7 +19,7 @@
  * leem o mesmo arquivo. Sem regex moderna, sem travessão.
  */
 
-import { localParaIso, partesNoFuso } from "./entrega-na-agenda.ts";
+import { localParaIso, partesNoFuso } from "../estudio-arte/modulos/entrega-na-agenda.ts";
 
 export type ItemDoCalendario = {
   id: string;

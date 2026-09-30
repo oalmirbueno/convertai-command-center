@@ -63,7 +63,7 @@ import {
   perfisValidos,
   rotuloDoPerfil,
   type PostExistente,
-} from "../../supabase/functions/_shared/entrega-na-agenda";
+} from "../../supabase/functions/estudio-arte/modulos/entrega-na-agenda";
 import {
   CONFIANCA_MINIMA,
   entendimentoDoPedido,
@@ -71,7 +71,7 @@ import {
   formatoDoEstudio,
   perguntasDoPedido,
   resumoDoPedido,
-} from "../../supabase/functions/_shared/pedido-do-cliente";
+} from "../../supabase/functions/estudio-arte/modulos/pedido-do-cliente";
 import { confirmarDataDaPeca, perfisDaPeca } from "../../supabase/functions/estudio-arte/agenda-da-entrega";
 import { dataInicialDaAprovada, perfisIniciais } from "@/components/mesa/AprovadasSemData";
 import { entregaDaArteAprovada } from "@/lib/editorialEntregaAprovada";

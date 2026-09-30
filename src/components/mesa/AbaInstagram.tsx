@@ -37,8 +37,8 @@ import {
   type ItemDaGradeNaAba,
   type PainelDoInstagram,
 } from "./instagram/instagramApi";
-import { destaquesLimpos, type DestaqueProposto } from "../../../supabase/functions/_shared/conhecimento-perfil-instagram";
-import { ehBloco, ehRede, REDES_SOCIAIS, type ChaveDaRede } from "../../../supabase/functions/_shared/instagram-do-cliente";
+import { destaquesLimpos, type DestaqueProposto } from "../../../supabase/functions/mesa-instagram/modulos/conhecimento-perfil-instagram";
+import { ehBloco, ehRede, REDES_SOCIAIS, type ChaveDaRede } from "../../../supabase/functions/mesa-instagram/modulos/instagram-do-cliente";
 
 /**
  * Aba Redes da Mesa (frente IG; rodada 2 em 28/09: nome "Redes", tudo a um

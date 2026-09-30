@@ -36,7 +36,7 @@ import {
   type TemaDaProposta,
   type VisualDaProposta,
 } from "../../../supabase/functions/_shared/proposta-comercial";
-import { contextoDoUpsell } from "../../../supabase/functions/_shared/proposta-upsell";
+import { contextoDoUpsell } from "../../../supabase/functions/mesa-proposta/modulos/proposta-upsell";
 import PropostaDocumento from "./PropostaDocumento";
 import AvisoDaAgencia from "./AvisoDaAgencia";
 import PreviaDoPreenchimento from "./PreviaDoPreenchimento";

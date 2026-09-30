@@ -26,7 +26,7 @@
  *   cliente ver (admin_release_file_now em client_shared).
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { problemaNoHorario, publicacaoDaPeca } from "../_shared/entrega-na-agenda.ts";
+import { problemaNoHorario, publicacaoDaPeca } from "./modulos/entrega-na-agenda.ts";
 import { postAtualDaPeca, type ContextoDaAgenda, type TrabalhoParaAgenda } from "./agenda-da-entrega.ts";
 
 type Chamador = { userId: string; token: string; doChamador: SupabaseClient };

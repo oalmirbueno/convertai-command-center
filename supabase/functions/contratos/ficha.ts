@@ -24,7 +24,7 @@ import {
   mesclarFicha,
   soDigitos,
   valoresDaFicha,
-} from "../_shared/contrato-ficha.ts";
+} from "./modulos/contrato-ficha.ts";
 import { type Chamador, ErroHttp, evento, garantirAcesso, garantirGestao, idDe, json, lerLinha, type Nucleo, semTabela, servico } from "./base.ts";
 
 const CAMPOS_DA_LINHA = "client_id, tipo_pessoa, documento, razao_social, nome_fantasia, logradouro, numero, complemento, bairro, cidade, uf, cep, representante_nome, representante_cpf, representante_cargo, email_contrato, email_cobranca, telefone, situacao_cadastral, fonte, consultado_em, atualizado_em";

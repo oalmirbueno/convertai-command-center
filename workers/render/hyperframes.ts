@@ -24,7 +24,7 @@ import { createHash } from "node:crypto";
 import { createReadStream, existsSync } from "node:fs";
 import { copyFile, mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { medirBatidas } from "../../supabase/functions/_shared/batidas-da-trilha.ts";
+import { medirBatidas } from "../../supabase/functions/mesa-motion/modulos/batidas-da-trilha.ts";
 import { AMOSTRA_DA_CENA_S, type CenaDoFilme, ehFormato, type FormatoDoMotion, type MarcaDaCena, montarDocumento, tempoDoStill } from "../../supabase/functions/_shared/cena-hf.ts";
 import { caminhoDaCena, type ModoDoPedidoDaCena } from "../../supabase/functions/_shared/motion-metodo.ts";
 import type { Fila, PedidoDoWorker } from "./fila.ts";

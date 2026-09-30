@@ -3,7 +3,7 @@
 Tudo passa pela função `mesa-videos` (POST, `supabase.functions.invoke("mesa-videos", { body })`),
 só equipe com acesso ao cliente. Erro sempre volta com `{ error, mensagem }` (códigos abaixo).
 Código: `supabase/functions/mesa-videos/geracao.ts` e `diretor.ts`; regras puras em
-`supabase/functions/_shared/modelos-de-video.ts`, `video-executor.ts`, `video-angulo.ts`,
+`supabase/functions/mesa-videos/modulos/modelos-de-video.ts`, `video-executor.ts`, `video-angulo.ts`,
 `video-kits.ts` e `diretor-de-video.ts`.
 
 ## Regras que valem para toda geração

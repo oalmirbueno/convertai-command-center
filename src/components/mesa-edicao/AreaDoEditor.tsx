@@ -8,7 +8,7 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campo, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import { chamarMesaVideos, chaveDasVersoes, useVersoes } from "@/components/mesa-videos/videosApi";
-import { motivoParaNaoMudar, type VersaoDeVideo } from "../../../supabase/functions/_shared/memoria-de-video";
+import { motivoParaNaoMudar, type VersaoDeVideo } from "../../../supabase/functions/mesa-videos/modulos/memoria-de-video";
 import { duracaoDoClipe, migrarProjeto, ROTULO_DA_TRILHA, type ClipeDoProjeto, type ProjetoDeEdicao } from "../../../supabase/functions/_shared/projeto-de-edicao";
 import { navegadorDoEditor } from "./editor/apoio";
 import type { CenaDoRoteiro } from "@/lib/editor/skills";

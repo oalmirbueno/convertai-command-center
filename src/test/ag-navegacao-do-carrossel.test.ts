@@ -10,7 +10,7 @@ import {
   perguntaDaNavegacao,
   semTextoDaNavegacao,
   TEXTO_DO_INDICADOR,
-} from "../../supabase/functions/_shared/navegacao-do-carrossel";
+} from "../../supabase/functions/estudio-arte/modulos/navegacao-do-carrossel";
 
 // Pedido do dono (28/09), só para CARROSSEL: capa com o indicador "arraste para
 // o lado" na base, lâminas do meio com o mesmo indicador, última com a fileira

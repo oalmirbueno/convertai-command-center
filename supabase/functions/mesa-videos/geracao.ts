@@ -44,7 +44,7 @@ import {
   novidadesDoProvedor,
   ROTULO_DO_ESTADO_DO_MOTOR,
   ROTULO_DO_NIVEL,
-} from "../_shared/modelos-de-video.ts";
+} from "./modulos/modelos-de-video.ts";
 import {
   chaveDaGeracao,
   corpoDaGeracao,
@@ -58,12 +58,12 @@ import {
   type ModoDaGeracao,
   passouDoPrazo,
   podeConsultar,
-} from "../_shared/video-executor.ts";
-import { normalizarAngulo, normalizarManter, normalizarVariacoes } from "../_shared/video-angulo.ts";
-import { fotoParaEditar, guardarDoProvedor, LEITURA_DA_FOTO_PARA_EDITAR, LEITURA_DA_MINIATURA_DO_QUADRO } from "../_shared/video-armazenar.ts";
-import type { Credenciais, ExecutorDoProvedor, RefDoEnvio } from "../_shared/video-provedor-comum.ts";
-import { movimentoValido } from "../_shared/video-provedor-higgsfield.ts";
-import { cloneLiberadoParaVideo, duracaoEstimadaDaFala, listarAvataresDaHeygen, listarVozesDaHeygen, ROTEIRO_MAX_CARACTERES } from "../_shared/video-provedor-heygen.ts";
+} from "./modulos/video-executor.ts";
+import { normalizarAngulo, normalizarManter, normalizarVariacoes } from "./modulos/video-angulo.ts";
+import { fotoParaEditar, guardarDoProvedor, LEITURA_DA_FOTO_PARA_EDITAR, LEITURA_DA_MINIATURA_DO_QUADRO } from "./modulos/video-armazenar.ts";
+import type { Credenciais, ExecutorDoProvedor, RefDoEnvio } from "./modulos/video-provedor-comum.ts";
+import { movimentoValido } from "./modulos/video-provedor-higgsfield.ts";
+import { cloneLiberadoParaVideo, duracaoEstimadaDaFala, listarAvataresDaHeygen, listarVozesDaHeygen, ROTEIRO_MAX_CARACTERES } from "./modulos/video-provedor-heygen.ts";
 
 export interface BaseDaFuncao {
   servico: () => SupabaseClient;

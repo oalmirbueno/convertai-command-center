@@ -41,9 +41,9 @@ import {
   proximaVersao,
   situacaoNoPainel,
   validarModeloEditado,
-} from "../../supabase/functions/_shared/briefing-editor";
-import { camposParaIa, fontesDoMaterial, limparPreenchimento, pedidoDoPreenchimento, PARTE_DO_MATERIAL } from "../../supabase/functions/_shared/briefing-preencher";
-import { custoDaTranscricao, juntarTranscricao, tipoDoAudio } from "../../supabase/functions/_shared/briefing-audio";
+} from "../../supabase/functions/briefing-agente/modulos/briefing-editor";
+import { camposParaIa, fontesDoMaterial, limparPreenchimento, pedidoDoPreenchimento, PARTE_DO_MATERIAL } from "../../supabase/functions/briefing-agente/modulos/briefing-preencher";
+import { custoDaTranscricao, juntarTranscricao, tipoDoAudio } from "../../supabase/functions/briefing-publico/modulos/briefing-audio";
 import EditorDeCampos from "@/components/briefing/EditorDeCampos";
 import RespostaPorAudio from "@/components/briefing/RespostaPorAudio";
 import PreencherBriefingComIA from "@/components/briefing/PreencherBriefingComIA";

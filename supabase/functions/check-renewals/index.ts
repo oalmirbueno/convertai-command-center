@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { cabecalhosDoEmailInterno } from "../_shared/email-interno.ts";
+import { cabecalhosDoEmailInterno } from "./modulos/email-interno.ts";
 import {
   avisaAntes,
   avisaVencido,

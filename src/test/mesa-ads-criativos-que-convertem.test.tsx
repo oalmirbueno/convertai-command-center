@@ -52,7 +52,7 @@ import {
   formatoDoEstilo,
   FRAMEWORKS_DE_COPY,
   REQUISITOS_DO_ESTILO,
-} from "../../supabase/functions/_shared/conhecimento-criativo";
+} from "../../supabase/functions/mesa-ads/modulos/conhecimento-criativo";
 import {
   copyArriscada,
   custoMedio,
@@ -169,7 +169,7 @@ describe("base: formatos que convertem, estruturas de copy e fontes", () => {
     expect(k).toMatch(/4U/);
     expect(k).toMatch(/Reversão de risco/);
     expect(k).toMatch(/nunca "Saiba mais"/);
-    const fonte = ler("supabase/functions/_shared/conhecimento-criativo.ts");
+    const fonte = ler("supabase/functions/mesa-ads/modulos/conhecimento-criativo.ts");
     for (const url of ["https://adrio.ai/", "https://blog.adnabu.com/", "https://www.tryatria.com/", "https://github.com/coreyhaines31/marketingskills", "https://www.facebook.com/business/help/"]) expect(fonte).toContain(url);
     // O layout que converte chega à arte pela direção do anúncio (o prompt do Estúdio fica byte a byte o mesmo).
     const layout = corpoDe(indexAds, "layoutDoAnuncio");
@@ -182,7 +182,7 @@ describe("base: formatos que convertem, estruturas de copy e fontes", () => {
 
   it("nenhum travessão nem regex incompatível nos arquivos novos da frente CR", () => {
     for (const a of [
-      "supabase/functions/_shared/conhecimento-criativo.ts",
+      "supabase/functions/mesa-ads/modulos/conhecimento-criativo.ts",
       "supabase/functions/mesa-ads/melhores-criativos.ts",
       "src/components/mesa-ads/ModeloDaCopy.tsx",
       "src/components/mesa-ads/ProducaoDoPlano.tsx",

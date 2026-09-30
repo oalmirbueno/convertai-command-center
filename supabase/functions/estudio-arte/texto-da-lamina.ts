@@ -43,7 +43,7 @@ import {
   PALAVRAS_DO_CTA,
   PALAVRAS_DO_TITULO,
 } from "../_shared/menos-texto-nas-laminas.ts";
-import { passaDoLimite } from "../_shared/limite-do-miolo.ts";
+import { passaDoLimite } from "./modulos/limite-do-miolo.ts";
 import { semTravessao } from "./refinar-texto.ts";
 // Frente FS (29/09): a falha do redator continua virando corte com aviso, agora com o motivo e no log.
 import { nuloComLog, registrarFalha } from "../_shared/falha-registrada.ts";

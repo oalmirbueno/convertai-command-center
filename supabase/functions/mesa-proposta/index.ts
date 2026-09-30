@@ -126,7 +126,7 @@ import { ACOES_LONGAS_DA_EVOLUCAO, criarAcoesDaEvolucao, type DependenciasDaEvol
 import { normalizarAnexos, normalizarPacotes, normalizarPagamento, normalizarVisual, pacotesParaGravar } from "../_shared/proposta-comercial.ts";
 import { avisosDaRevisao, type ConferenciaDoDado, lerConferencia, PERGUNTAS_DA_REVISAO, perguntasDaConferencia } from "./conferencia.ts";
 // Frente PRO3 (30/09): proposta de upsell (o que o cliente já tem e os resultados reais).
-import { blocoJaTem, materialDoUpsell, NOME_DO_MATERIAL_DO_UPSELL, TITULO_DO_PROXIMO_PASSO, type UpsellDaProposta } from "../_shared/proposta-upsell.ts";
+import { blocoJaTem, materialDoUpsell, NOME_DO_MATERIAL_DO_UPSELL, TITULO_DO_PROXIMO_PASSO, type UpsellDaProposta } from "./modulos/proposta-upsell.ts";
 import { retratoDoCliente } from "./upsell.ts";
 
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();

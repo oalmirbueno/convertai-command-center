@@ -15,7 +15,7 @@ import { tempoFino } from "@/lib/editor/tempo";
 import GeracaoComCusto from "./GeracaoComCusto";
 import { useMotoresDaMesa } from "@/lib/mesa-videos/api";
 import { SeletorDeMotor } from "@/components/mesa-videos/PecasDoGerador";
-import { duracaoNoMotor, duracoesDoMotor, motorDoNivel, motorPorId, type NivelDoMotor, type RequisitoDoPedido } from "../../../../supabase/functions/_shared/modelos-de-video";
+import { duracaoNoMotor, duracoesDoMotor, motorDoNivel, motorPorId, type NivelDoMotor, type RequisitoDoPedido } from "../../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
 
 /**
  * Gerar a partir do editor (frente V-B): troca de câmera (tipo Higgsfield:

@@ -35,7 +35,7 @@ import {
 } from "../_shared/acoes-do-agente.ts";
 import { caminhoNaArea } from "../_shared/mapa-do-painel.ts";
 import { alvosDoAcervo, DESCRICOES_DO_ACERVO, type FotoDoAcervo, regrasDoAcervo } from "../_shared/acoes-do-acervo.ts";
-import { alvosDoWorkspace, DESCRICOES_DO_WORKSPACE, type NoDoWorkspace, regrasDoWorkspace, rotuloDoDestino } from "../_shared/acoes-do-workspace.ts";
+import { alvosDoWorkspace, DESCRICOES_DO_WORKSPACE, type NoDoWorkspace, regrasDoWorkspace, rotuloDoDestino } from "./modulos/acoes-do-workspace.ts";
 
 export const OPERACOES_DO_CONTEXTO = [
   "trocar_logo",

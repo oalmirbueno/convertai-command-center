@@ -113,7 +113,7 @@ import {
   type Qualidade,
 } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar, notaScore, type PerguntaJev, probabilidadeNoul } from "../_shared/jev.ts";
-import { CONHECIMENTO_DIRETOR, PADRAO_NA_IMAGEM } from "../_shared/conhecimento-design.ts";
+import { CONHECIMENTO_DIRETOR, PADRAO_NA_IMAGEM } from "./modulos/conhecimento-design.ts";
 import {
   blocoDaSerie,
   blocoDasPreferencias,
@@ -168,7 +168,7 @@ import {
   type NavegacaoDaLamina,
   perguntaDaNavegacao,
   semTextoDaNavegacao,
-} from "../_shared/navegacao-do-carrossel.ts";
+} from "./modulos/navegacao-do-carrossel.ts";
 import {
   blocoDaVariedade,
   capasNoHistorico,
@@ -329,7 +329,7 @@ import {
   partesNoFuso,
   pedidoDeAjustePendente,
   tipoDoConteudo,
-} from "../_shared/entrega-na-agenda.ts";
+} from "./modulos/entrega-na-agenda.ts";
 import { conhecimentoEstudioPara } from "../_shared/conhecimento-dos-agentes.ts";
 import { decidirAutocorrecao, type DecisaoDeAutocorrecao, LIMITE_DE_AUTOCORRECAO, rodadasSeguidas } from "./autocorrecao.ts";
 import {
@@ -422,7 +422,7 @@ import {
   mensagemFalaDaFoto,
   usoDoAcervo,
   usoPedidoNaConversa,
-} from "../_shared/uso-da-foto.ts";
+} from "./modulos/uso-da-foto.ts";
 import {
   acabamentoDaLamina,
   ampliar,
@@ -511,7 +511,7 @@ import {
   perguntasDaArteRapida,
   type RespostaDeEscolha,
   tituloDoPedido,
-} from "../_shared/arte-rapida.ts";
+} from "./modulos/arte-rapida.ts";
 import { criarItemDaArteRapida, dataDaAgendaValida, ErroDoItemDaArte, hojeEmSaoPaulo } from "./arte-rapida-na-agenda.ts";
 import { TONS, tomValido } from "../_shared/conhecimento-ads.ts";
 import { hostResolvePublico, imagensDoBehance, lerMetaTags, tipoDoLink, urlPublicaSegura } from "./links.ts";

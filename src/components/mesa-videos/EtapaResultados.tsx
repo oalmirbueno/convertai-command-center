@@ -8,7 +8,7 @@ import { textoDoErro } from "@/lib/mesa/api";
 import Secao from "@/components/sistema/Secao";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import { botao, etiqueta, juntar, texto } from "@/components/sistema/estilos";
-import { ehPedidoDeVideo } from "../../../supabase/functions/_shared/pedidos-de-video";
+import { ehPedidoDeVideo } from "../../../supabase/functions/mesa-videos/modulos/pedidos-de-video";
 import { AvisoDeAtivacao } from "./Comuns";
 import type { IrPara } from "./MesaDeVideo";
 import { chamarMesaVideos, chaveDosArquivos, duracaoCurta, subirVideos, tamanhoCurto, useArquivosDeVideo, usePedidos, type ArquivoDeVideo } from "./videosApi";

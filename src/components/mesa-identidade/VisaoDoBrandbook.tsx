@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { arquivosEntregues, coresDoBrandbook, estadoDoModelo, SLOTS_DE_LOGO, type DadosDoBrandbook, type LogoDoBrandbook, type ModeloDoBrandbook, type TemaDoBrandbook } from "../../../supabase/functions/_shared/brandbook";
+import { arquivosEntregues, coresDoBrandbook, estadoDoModelo, SLOTS_DE_LOGO, type DadosDoBrandbook, type LogoDoBrandbook, type ModeloDoBrandbook, type TemaDoBrandbook } from "../../../supabase/functions/mesa-identidade/modulos/brandbook";
 import { contraste, luminanciaRelativa, PERFIS, ROTULO_DO_PAPEL_DA_COR, textoCmyk, textoRgb, type FichaDaCor } from "../../../supabase/functions/_shared/cores-da-marca";
 
 /**

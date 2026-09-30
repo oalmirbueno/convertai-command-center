@@ -18,7 +18,7 @@ import {
 } from "../../supabase/functions/contratos/regras";
 import { podeExecutarDireto } from "../../supabase/functions/_shared/acoes-do-agente";
 import { montarContrato, valoresComPadrao, variaveisDoContrato, type VariavelDoModelo } from "../../supabase/functions/_shared/contrato-modelo";
-import { MODELOS_V1 } from "../../supabase/functions/_shared/contrato-modelo-v1";
+import { MODELOS_V1 } from "../../supabase/functions/contratos/modulos/contrato-modelo-v1";
 
 /**
  * Frente CON (30/09): o Jev escolhe os blocos pela explicação do dono, a

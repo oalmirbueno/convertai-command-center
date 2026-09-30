@@ -9,7 +9,7 @@ import { EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campo, campoTexto, juntar, texto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import { useProjetoDoDiretor } from "@/lib/mesa-videos/api";
-import { conferirContinuidade, type Biblia, type CenarioDaBiblia, type PersonagemDaBiblia, type ProjetoDoDiretor } from "../../../supabase/functions/_shared/diretor-de-video";
+import { conferirContinuidade, type Biblia, type CenarioDaBiblia, type PersonagemDaBiblia, type ProjetoDoDiretor } from "../../../supabase/functions/mesa-videos/modulos/diretor-de-video";
 import { EscolherImagem } from "./PecasDoGerador";
 import type { IrPara } from "./MesaDeVideo";
 import { chamarMesaVideos } from "./videosApi";

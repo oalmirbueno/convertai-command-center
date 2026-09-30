@@ -17,7 +17,7 @@
  * Contrato comum em ../_shared/acoes-do-agente.ts. Puro: o Vitest lê.
  */
 import { type AcaoDoAgente, type ItemDaAcaoDoAgente, TIPO_DA_ACAO } from "../_shared/acoes-do-agente.ts";
-import type { CorDaPaleta, DestaqueProposto } from "../_shared/conhecimento-perfil-instagram.ts";
+import type { CorDaPaleta, DestaqueProposto } from "./modulos/conhecimento-perfil-instagram.ts";
 
 /** Medido em ia_usos (29/09): capa de destaque em qualidade baixa, US$ 0,007. */
 export const CUSTO_DA_CAPA_USD = 0.007;

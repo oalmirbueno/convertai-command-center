@@ -4,7 +4,7 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoComCusto } from "@/components/mesa/Custo";
 import { botao, campo, juntar, lista, texto } from "@/components/sistema/estilos";
 import { normalizarHex, ROTULO_DO_PAPEL_DA_COR, textoSobre, type PapelDaCor } from "../../../supabase/functions/_shared/cores-da-marca";
-import { avisosDeContraste, escalaDaCor, HARMONIAS, paletaHarmonica, paresParaTexto, type CorDaPaleta, type Harmonia } from "../../../supabase/functions/_shared/paleta-da-marca";
+import { avisosDeContraste, escalaDaCor, HARMONIAS, paletaHarmonica, paresParaTexto, type CorDaPaleta, type Harmonia } from "../../../supabase/functions/mesa-identidade/modulos/paleta-da-marca";
 import { chamarIdentidade, type ProjetoDeIdentidade } from "./identidadeApi";
 import { partesDoCusto, SeletorDoModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
 

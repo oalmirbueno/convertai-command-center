@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { KITS_DE_VIDEO, kitPorId, lacunasDoTexto, preencherPrompt, problemasDoKit } from "../../supabase/functions/_shared/video-kits";
+import { KITS_DE_VIDEO, kitPorId, lacunasDoTexto, preencherPrompt, problemasDoKit } from "../../supabase/functions/mesa-videos/modulos/video-kits";
 import {
   atende,
   catalogoEmUso,
@@ -15,8 +15,8 @@ import {
   nivelDoMotor,
   novidadesDoProvedor,
   textoDoCusto,
-} from "../../supabase/functions/_shared/modelos-de-video";
-import { azimuteDoPonto, normalizarAngulo, normalizarVariacoes, parametrosDoAngulo, pontoDoAzimute, promptDoAngulo, textoDoAngulo } from "../../supabase/functions/_shared/video-angulo";
+} from "../../supabase/functions/mesa-videos/modulos/modelos-de-video";
+import { azimuteDoPonto, normalizarAngulo, normalizarVariacoes, parametrosDoAngulo, pontoDoAzimute, promptDoAngulo, textoDoAngulo } from "../../supabase/functions/mesa-videos/modulos/video-angulo";
 import {
   chaveDaGeracao,
   corpoDaGeracao,
@@ -29,7 +29,7 @@ import {
   podeConsultar,
   urlsDoResultado,
   consultarNoFal,
-} from "../../supabase/functions/_shared/video-executor";
+} from "../../supabase/functions/mesa-videos/modulos/video-executor";
 import {
   acaoDeGerarPlanos,
   aplicarRespostaDoDiretor,
@@ -51,8 +51,8 @@ import {
   projetoVazio,
   RACIOCINIO_DO_DIRETOR,
   sistemaDoDiretor,
-} from "../../supabase/functions/_shared/diretor-de-video";
-import { AGENTES_DA_MESA_DE_VIDEO, intencaoPorPalavras } from "../../supabase/functions/_shared/agente-de-video";
+} from "../../supabase/functions/mesa-videos/modulos/diretor-de-video";
+import { AGENTES_DA_MESA_DE_VIDEO, intencaoPorPalavras } from "../../supabase/functions/mesa-videos/modulos/agente-de-video";
 import { tempoDoQuadro } from "@/lib/mesa-videos/quadros";
 import { MODOS_DO_GERAR, modoDoGerarValido } from "@/components/mesa-videos/modosDoGerar";
 import { naEntradaDaEdicao } from "@/components/mesa-videos/videosApi";
@@ -258,7 +258,7 @@ describe("executor (fila do fal, sem laço)", () => {
     expect(urlsDoResultado({ images: [{ url: "https://a.png" }, { url: "http://b" }] })).toEqual({ tipo: "imagem", urls: ["https://a.png"] });
     expect(chaveDaGeracao("angulo", "abc-1")).toBe("angulo:abc-1");
     // Nenhum setInterval/laço de consulta no código do gerador.
-    for (const p of ["supabase/functions/_shared/video-executor.ts", "supabase/functions/mesa-videos/geracao.ts", "src/components/mesa-videos/GeracoesRecentes.tsx"]) {
+    for (const p of ["supabase/functions/mesa-videos/modulos/video-executor.ts", "supabase/functions/mesa-videos/geracao.ts", "src/components/mesa-videos/GeracoesRecentes.tsx"]) {
       expect(ler(p), p).not.toMatch(/setInterval|refetchInterval|while \(true\)/);
     }
   });
@@ -467,10 +467,10 @@ describe("tela do gerador", () => {
       "src/components/mesa-videos/modosDoGerar.ts",
       "src/lib/mesa-videos/api.ts",
       "src/lib/mesa-videos/quadros.ts",
-      "supabase/functions/_shared/video-kits.ts",
-      "supabase/functions/_shared/video-angulo.ts",
-      "supabase/functions/_shared/video-executor.ts",
-      "supabase/functions/_shared/diretor-de-video.ts",
+      "supabase/functions/mesa-videos/modulos/video-kits.ts",
+      "supabase/functions/mesa-videos/modulos/video-angulo.ts",
+      "supabase/functions/mesa-videos/modulos/video-executor.ts",
+      "supabase/functions/mesa-videos/modulos/diretor-de-video.ts",
       "supabase/functions/mesa-videos/geracao.ts",
       "supabase/functions/mesa-videos/diretor.ts",
     ];

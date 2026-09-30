@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { montarContrato, valoresComPadrao, variaveisDoContrato } from "../../supabase/functions/_shared/contrato-modelo";
-import { MODELOS_V1 } from "../../supabase/functions/_shared/contrato-modelo-v1";
+import { MODELOS_V1 } from "../../supabase/functions/contratos/modulos/contrato-modelo-v1";
 
 /**
  * Frente CON (30/09): o contrato aberto na tela. Rascunho com campo faltando

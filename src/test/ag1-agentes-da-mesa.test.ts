@@ -36,7 +36,7 @@ import {
 import { pedidoParaRefazer as pedidoParaRefazerDoServidor } from "../../supabase/functions/agente-calendario/acoes-agenda";
 import { pedidoParaRefazer } from "@/components/mesa/planoDoMes";
 import { acaoDaBio, acaoDaOrdem, acaoDasCapas, CUSTO_DA_CAPA_USD, estiloPadraoDaCapa, gradeComApelido, ordemConferida, REGRAS_DAS_REDES } from "../../supabase/functions/mesa-instagram/acoes-das-redes";
-import { destaquesLimpos, promptDaCapa } from "../../supabase/functions/_shared/conhecimento-perfil-instagram";
+import { destaquesLimpos, promptDaCapa } from "../../supabase/functions/mesa-instagram/modulos/conhecimento-perfil-instagram";
 import { acaoDaAnalise, analiseDoModelo, CUSTO_DA_ANALISE_USD } from "../../supabase/functions/perfis-instagram/analises-na-conversa";
 import { podeExecutarDireto } from "../../supabase/functions/_shared/acoes-do-agente";
 import { aprendizadosDaMarca, aprendizadosDoPainel, chaveDoTexto, fonteDoAprendizado, gruposDosAprendizados } from "@/components/mesa/aprendizadosDoPainel";

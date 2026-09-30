@@ -10,8 +10,8 @@ import Secao from "@/components/sistema/Secao";
 import { botao, campo, juntar, lista, rolagem, texto } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { estimarLocal, modeloDoPapel, modelosAtivos, nomeDoModelo, textoDoErro, usd, type ModeloIa } from "@/lib/mesa/api";
-import { TEMAS_DO_BRANDBOOK } from "../../../supabase/functions/_shared/brandbook";
-import { ROTULO_DA_VERSAO, TIPOS_DE_LOGO, type VersaoDaLogo } from "../../../supabase/functions/_shared/leitura-da-logo";
+import { TEMAS_DO_BRANDBOOK } from "../../../supabase/functions/mesa-identidade/modulos/brandbook";
+import { ROTULO_DA_VERSAO, TIPOS_DE_LOGO, type VersaoDaLogo } from "../../../supabase/functions/mesa-identidade/modulos/leitura-da-logo";
 import { linkDaFamilia } from "../../../supabase/functions/_shared/tipografia-da-marca";
 import { etapasDoProjeto, faltaNaEtapa, rotuloDaEtapa, type EtapaDaIdentidade } from "../../../supabase/functions/_shared/identidade-etapas";
 import {
@@ -27,7 +27,7 @@ import {
   resumoDoChecklist,
   rotuloDoPasso,
   totalDoPlano,
-} from "../../../supabase/functions/_shared/completar-marca";
+} from "../../../supabase/functions/mesa-identidade/modulos/completar-marca";
 import { chamarIdentidade, CHAVES, useBrandbooks, useSituacaoDoArquivo, type ProjetoDeIdentidade } from "./identidadeApi";
 import { Pastilha, SeletorDoModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
 import { desfazerPasso, relerProjeto, Rodada, rodarExecucao } from "./rodadaDoCompletar";

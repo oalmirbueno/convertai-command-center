@@ -20,7 +20,7 @@ import {
   type MudancaDeData,
   type Rascunho,
 } from "../../../../supabase/functions/_shared/calendario-da-grade";
-import { amanhaAs } from "../../../../supabase/functions/_shared/instagram-do-cliente";
+import { amanhaAs } from "../../../../supabase/functions/mesa-instagram/modulos/instagram-do-cliente";
 import type { ItemDaGradeNaAba } from "./instagramApi";
 
 /**

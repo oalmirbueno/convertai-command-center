@@ -7,7 +7,7 @@ import { useMarcaDaMesa } from "./MesaContexto";
 import type { BlocoTexto, LayoutLamina } from "@/lib/mesa/layout";
 import { mediaKindFromFile } from "@/lib/fileUrls";
 import { ordenarLaminasDoCarrossel } from "@/components/shared/CarouselSlider";
-import { laminasLongasDoRoteiro } from "../../../supabase/functions/_shared/limite-do-miolo";
+import { laminasLongasDoRoteiro } from "../../../supabase/functions/estudio-arte/modulos/limite-do-miolo";
 
 /** Item editorial da agenda (tarefa com entrega de arte) e o trabalho do estúdio dele. */
 export interface ItemDoMes {

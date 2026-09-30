@@ -11,7 +11,7 @@ import {
   type ApiGatewayAction,
   type ApiGatewayClientScopeMode,
   type ApiGatewayPrincipal,
-} from '../_shared/api-gateway-auth.ts'
+} from './modulos/api-gateway-auth.ts'
 import { sanitizeAuditError, sanitizeAuditInput } from '../_shared/mcp-security.ts'
 
 const corsHeaders = {

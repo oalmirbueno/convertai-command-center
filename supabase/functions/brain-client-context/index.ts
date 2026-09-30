@@ -2,7 +2,7 @@
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { bridgeStatusPublic, getFile, searchCode } from "../_shared/second-brain-github.ts";
-import { makeBrainContextHandler } from "../_shared/brain-client-context-handler.ts";
+import { makeBrainContextHandler } from "./modulos/brain-client-context-handler.ts";
 
 const url = Deno.env.get("SUPABASE_URL")!;
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

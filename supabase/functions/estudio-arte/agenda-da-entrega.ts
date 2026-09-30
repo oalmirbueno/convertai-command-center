@@ -29,7 +29,7 @@ import {
   type PerfilDaPeca,
   type PostExistente,
   type PublicacaoExistente,
-} from "../_shared/entrega-na-agenda.ts";
+} from "./modulos/entrega-na-agenda.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 

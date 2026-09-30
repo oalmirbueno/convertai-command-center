@@ -5,7 +5,7 @@
  *
  *   deno test supabase/functions/_shared/video-armazenar_test.ts
  */
-import { emPartes, guardarDoProvedor, metadadoDoTus, TAMANHO_DA_PARTE } from "./video-armazenar.ts";
+import { emPartes, guardarDoProvedor, metadadoDoTus, TAMANHO_DA_PARTE } from "../mesa-videos/modulos/video-armazenar.ts";
 
 function assert(cond: unknown, msg: string) {
   if (!cond) throw new Error(msg);

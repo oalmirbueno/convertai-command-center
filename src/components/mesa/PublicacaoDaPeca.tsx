@@ -33,7 +33,7 @@ import {
   type PublicacaoExistente,
   type EstadoDaPublicacao,
   type TomDoEstado,
-} from "../../../supabase/functions/_shared/entrega-na-agenda";
+} from "../../../supabase/functions/estudio-arte/modulos/entrega-na-agenda";
 import { ehPostDeFotos, linkDoPostNaMesaFoto } from "../../../supabase/functions/_shared/post-de-fotos";
 
 /**

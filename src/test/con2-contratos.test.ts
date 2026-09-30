@@ -15,7 +15,7 @@ import {
   mesclarFicha,
   nomeLegivel,
   valoresDaFicha,
-} from "../../supabase/functions/_shared/contrato-ficha";
+} from "../../supabase/functions/contratos/modulos/contrato-ficha";
 import {
   diasEntre,
   efeitosDosAditivos,
@@ -31,7 +31,7 @@ import {
   variaveisDoAditivo,
   vigenciaDoContrato,
   type LinhaDoPainel,
-} from "../../supabase/functions/_shared/contrato-ciclo";
+} from "../../supabase/functions/contratos/modulos/contrato-ciclo";
 import { conferirRascunhoDoModelo, lerRascunhoDoModelo, resumoDaMudanca, revisaoDaVersaoNova } from "../../supabase/functions/_shared/contrato-editor";
 import {
   lerDocumento,
@@ -45,8 +45,8 @@ import {
   type ServicoDoContrato,
   type Valores,
 } from "../../supabase/functions/_shared/contrato-modelo";
-import { MODELOS_V1, CONDICOES_GERAIS_V1 } from "../../supabase/functions/_shared/contrato-modelo-v1";
-import { ADITIVO_V1, EXTRAS_V1, MODELOS_EXTRAS_V1 } from "../../supabase/functions/_shared/contrato-modelo-extras-v1";
+import { MODELOS_V1, CONDICOES_GERAIS_V1 } from "../../supabase/functions/contratos/modulos/contrato-modelo-v1";
+import { ADITIVO_V1, EXTRAS_V1, MODELOS_EXTRAS_V1 } from "../../supabase/functions/contratos/modulos/contrato-modelo-extras-v1";
 import { dadosDaCapa, gerarPdfDoContrato, paginasDoPdf, textosDoPdf } from "../../supabase/functions/_shared/pdf-contrato";
 import { quemAssinaNoPdf } from "../../supabase/functions/_shared/contrato-assinaturas";
 import { alvosDoAgente, mapearProposta, normalizarAcoesDosContratos, regrasDasOperacoes, valorSemFonte, type ContextoDasRegras } from "../../supabase/functions/contratos/regras";

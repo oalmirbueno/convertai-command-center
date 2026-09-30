@@ -44,7 +44,7 @@ import {
   modeloDoLink,
   progressoDoBriefing,
 } from "../../supabase/functions/_shared/briefing-modelos";
-import { juntarTranscricao } from "../../supabase/functions/_shared/briefing-audio";
+import { juntarTranscricao } from "../../supabase/functions/briefing-publico/modulos/briefing-audio";
 
 /**
  * Página pública do briefing (/briefing/:token), frente BRF (30/09/2026).

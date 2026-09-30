@@ -49,7 +49,7 @@ Tempo típico (comparativos e páginas dos modelos): recorte de 2 a 10 s; upscal
 
 **Provedor principal: fal.ai.** Uma conta e uma chave para os dois tipos de modelo (Topaz, SeedVR2, Clarity, BRIA RMBG 2.0, BiRefNet e outros), pagamento por uso sem mensalidade, fila assíncrona padronizada e preços publicados por modelo. Replicate tem quase os mesmos modelos, mas preço por tempo de GPU (menos previsível). remove.bg, Photoroom e Magnific são bons, mas cada um pede conta e plano próprios.
 
-Padrões implementados (`supabase/functions/_shared/ferramentas-imagem.ts`, `MOTOR_PADRAO`):
+Padrões implementados (`supabase/functions/mesa-foto/modulos/ferramentas-imagem.ts`, `MOTOR_PADRAO`):
 
 | Tarefa | Motor padrão | Custo típico | Por quê | Alternativa no código |
 |---|---|---|---|---|

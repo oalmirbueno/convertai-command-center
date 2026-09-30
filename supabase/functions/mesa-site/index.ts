@@ -75,7 +75,7 @@ import {
   type SlotDeImagem,
 } from "../_shared/site-metodo.ts";
 import { baixarImagem, ESQUEMA_DAS_OBSERVACOES, lerPagina, MAX_IMAGENS_NA_LEITURA, MAX_REFERENCIAS, referenciasDoSite, SISTEMA_DA_LEITURA, urlPublica } from "../_shared/referencias-do-site.ts";
-import { cartaoDeDns, ehRegistrador, estadoDoDominio, normalizarDominio } from "../_shared/dns-do-site.ts";
+import { cartaoDeDns, ehRegistrador, estadoDoDominio, normalizarDominio } from "./modulos/dns-do-site.ts";
 import { configDoDominio, criarApiDaVercel, ErroDaVercel, faltasParaPublicar, vercelLigada, verificarDominio } from "../_shared/publicacao-vercel.ts";
 import { nomeDoProjeto } from "../_shared/motor-codigo.ts";
 import { blocoDasAcoesDoSite, caminhoDoSite, ESQUEMA_DAS_ACOES_DO_SITE, type ListasDoAgente, normalizarAcoesDoSite, OPERACOES_DO_MOTOR, regrasDoSite } from "./acoes-do-site.ts";

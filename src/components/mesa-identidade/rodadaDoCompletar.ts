@@ -6,13 +6,13 @@ import { carregarFontesGoogle } from "@/lib/identidade/fontesGoogle";
 const desenho = () => import("@/lib/identidade/desenharPeca");
 const versoes = () => import("@/lib/identidade/versoesDaLogo");
 const mockups = () => Promise.all([import("@/lib/mockups/api"), import("@/lib/mockups/catalogo"), import("@/lib/mockups/renderizar")]);
-import type { LogoDoBrandbook } from "../../../supabase/functions/_shared/brandbook";
-import { CAMPOS_DO_BRIEFING, valoresDoBriefing, type BriefingDaIdentidade } from "../../../supabase/functions/_shared/briefing-da-identidade";
+import type { LogoDoBrandbook } from "../../../supabase/functions/mesa-identidade/modulos/brandbook";
+import { CAMPOS_DO_BRIEFING, valoresDoBriefing, type BriefingDaIdentidade } from "../../../supabase/functions/mesa-identidade/modulos/briefing-da-identidade";
 import { juntarProposta, normalizarEstrategia, type Estrategia } from "../../../supabase/functions/_shared/estrategia-de-marca";
-import { descricaoDoPadrao, svgDoPadrao, type TipoDePadrao } from "../../../supabase/functions/_shared/grafismos-da-marca";
-import { layoutDaPeca, PECAS_DA_MARCA, svgDoLayout } from "../../../supabase/functions/_shared/aplicacoes-da-marca";
+import { descricaoDoPadrao, svgDoPadrao, type TipoDePadrao } from "../../../supabase/functions/mesa-identidade/modulos/grafismos-da-marca";
+import { layoutDaPeca, PECAS_DA_MARCA, svgDoLayout } from "../../../supabase/functions/mesa-identidade/modulos/aplicacoes-da-marca";
 import { luminanciaRelativa, normalizarHex } from "../../../supabase/functions/_shared/cores-da-marca";
-import { svgDoPadraoDoSimbolo, type LeituraPorVisao } from "../../../supabase/functions/_shared/leitura-da-logo";
+import { svgDoPadraoDoSimbolo, type LeituraPorVisao } from "../../../supabase/functions/mesa-identidade/modulos/leitura-da-logo";
 import {
   camposDasFalasVazias,
   camposDoBriefing,
@@ -25,8 +25,8 @@ import {
   paletaCompleta,
   type PassoId,
   tipografiaCompleta,
-} from "../../../supabase/functions/_shared/completar-marca";
-import { brandDaEstrategia, cenasDaApresentacao, entrevistaDaEstrategia, insumosDaIdentidade } from "../../../supabase/functions/_shared/motion-da-identidade";
+} from "../../../supabase/functions/mesa-identidade/modulos/completar-marca";
+import { brandDaEstrategia, cenasDaApresentacao, entrevistaDaEstrategia, insumosDaIdentidade } from "../../../supabase/functions/mesa-motion/modulos/motion-da-identidade";
 import { chamarIdentidade, pastaDoProjeto, type ProjetoDeIdentidade } from "./identidadeApi";
 import { enviarFeitoNaTela, enviarImagemDeApoio, pngDoSvg } from "./arquivosDaMarca";
 import { contextoParaPreencher } from "./Comuns";

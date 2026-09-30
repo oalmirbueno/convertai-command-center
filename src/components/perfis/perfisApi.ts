@@ -12,7 +12,7 @@ import {
   ROTULO_DO_FORMATO,
   ROTULO_DO_FORMATO_EDITORIAL,
   ROTULO_DO_PAPEL,
-} from "../../../supabase/functions/_shared/perfis-instagram";
+} from "../../../supabase/functions/perfis-instagram/modulos/perfis-instagram";
 
 /**
  * Tela dos Perfis do Instagram (frente P): tipos do que a função

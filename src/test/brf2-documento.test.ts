@@ -8,7 +8,7 @@ import {
   gerarPdfDoRegistro,
   montarRegistro,
   type NumeroReal,
-} from "../../supabase/functions/_shared/registro-de-entrega";
+} from "../../supabase/functions/documentos/modulos/registro-de-entrega";
 import {
   DEFINICOES_DE_DOCUMENTO,
   juntarCandidatos,

@@ -17,7 +17,7 @@ import {
   pedidoValeParaTodas,
   regraValeParaTodasAsMesas,
 } from "../../supabase/functions/_shared/mesas-que-aprendem";
-import { decisaoDoConselhoNoCerebro, desfazerDecisaoNoCerebro, textoDaDecisao } from "../../supabase/functions/_shared/sincronia-entre-mesas";
+import { decisaoDoConselhoNoCerebro, desfazerDecisaoNoCerebro, textoDaDecisao } from "../../supabase/functions/conselho/modulos/sincronia-entre-mesas";
 import { esquecerContextoCompleto, lerContextoCompletoDaMarca } from "../../supabase/functions/_shared/contexto-completo-da-marca";
 import { esquecerMarcas } from "../../supabase/functions/_shared/marca";
 import { aprendizadosDaMesa, aprendizadosDoPainel, mesasDosAprendizados } from "@/components/mesa/aprendizadosDoPainel";

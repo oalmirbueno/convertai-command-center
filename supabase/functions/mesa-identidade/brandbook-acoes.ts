@@ -19,8 +19,8 @@ import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { lerDadosDaAgencia, nomeDaAgencia } from "../_shared/dados-da-agencia.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { type AcaoDoAgente, TIPO_DA_ACAO } from "../_shared/acoes-do-agente.ts";
-import { brandbookDoProjeto, brandbookPublico, coresDoBrandbook, type DadosDoBrandbook, ehModelo, imagensDoBrandbook, lacunasDoBrandbook, type ModeloDoBrandbook, normalizarBrandbook, tokenPublico } from "../_shared/brandbook.ts";
-import { gerarPdfDoBrandbook, nomeDoArquivoDoBrandbook, prepararImagens } from "../_shared/pdf-identidade.ts";
+import { brandbookDoProjeto, brandbookPublico, coresDoBrandbook, type DadosDoBrandbook, ehModelo, imagensDoBrandbook, lacunasDoBrandbook, type ModeloDoBrandbook, normalizarBrandbook, tokenPublico } from "./modulos/brandbook.ts";
+import { gerarPdfDoBrandbook, nomeDoArquivoDoBrandbook, prepararImagens } from "./modulos/pdf-identidade.ts";
 // Frente SYNC: a estratégia aprovada e a tagline também viram sugestão para o contexto da marca (Confirmar e Desfazer campo a campo).
 import { aplicarNoContexto, contextoDaEstrategia, estrategiaAprovada, mudancasNoContexto, reverterNoContexto } from "../_shared/contexto-completo-regras.ts";
 import { esquecerContextoCompleto } from "../_shared/contexto-completo-da-marca.ts";

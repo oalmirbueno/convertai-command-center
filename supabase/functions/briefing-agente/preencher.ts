@@ -31,7 +31,7 @@ import {
   MAX_SITE,
   pedidoDoPreenchimento,
   tamanhoDoPreenchimento,
-} from "../_shared/briefing-preencher.ts";
+} from "./modulos/briefing-preencher.ts";
 import { type Chamador, dadosSabidos, ErroHttp, json, lerBriefing, type LinhaDoBriefing, registrar, salvarPeloLink, servico } from "./base.ts";
 
 const PAPEL = "briefing" as const;

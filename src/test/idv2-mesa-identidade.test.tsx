@@ -24,12 +24,12 @@ import {
   valoresDoTexto,
 } from "../../supabase/functions/_shared/estrategia-de-marca";
 import { concluirEtapa, ETAPAS_NOVAS, etapaAtual, faltaNaEtapa, podeAbrir, reabrirEtapa, TAMANHOS_DA_IDENTIDADE } from "../../supabase/functions/_shared/identidade-etapas";
-import { avisosDeContraste, coresDaHarmonia, completarPaleta, escalaDaCor, HARMONIAS, hexParaHsl, hslParaHex, matrizDeContraste, neutrasDaMarca, nomeDaCor, paletaHarmonica, paresParaTexto } from "../../supabase/functions/_shared/paleta-da-marca";
+import { avisosDeContraste, coresDaHarmonia, completarPaleta, escalaDaCor, HARMONIAS, hexParaHsl, hslParaHex, matrizDeContraste, neutrasDaMarca, nomeDaCor, paletaHarmonica, paresParaTexto } from "../../supabase/functions/mesa-identidade/modulos/paleta-da-marca";
 import { contraste, luminanciaRelativa } from "../../supabase/functions/_shared/cores-da-marca";
 import { estilosDaPersonalidade, familiaSegura, FONTES_DO_CATALOGO, fonteDoCatalogo, hierarquiaDoPar, normalizarParesPropostos, PARES_DE_FONTES, paresParaEstilos, pilhaDaFonte, urlDoGoogleFonts } from "../../supabase/functions/_shared/tipografia-da-marca";
-import { dataUrlDoSvg, escaparXml, svgDoPadrao, TIPOS_DE_PADRAO } from "../../supabase/functions/_shared/grafismos-da-marca";
-import { assinaturaDeEmail, coresDaPeca, layoutDaPeca, PECAS_DA_MARCA, svgDoLayout } from "../../supabase/functions/_shared/aplicacoes-da-marca";
-import { camposDasFalas, prontoParaApresentar, roteiroDaApresentacao, SCRIPT_DA_APRESENTACAO, SLIDES_DA_APRESENTACAO } from "../../supabase/functions/_shared/apresentacao-da-marca";
+import { dataUrlDoSvg, escaparXml, svgDoPadrao, TIPOS_DE_PADRAO } from "../../supabase/functions/mesa-identidade/modulos/grafismos-da-marca";
+import { assinaturaDeEmail, coresDaPeca, layoutDaPeca, PECAS_DA_MARCA, svgDoLayout } from "../../supabase/functions/mesa-identidade/modulos/aplicacoes-da-marca";
+import { camposDasFalas, prontoParaApresentar, roteiroDaApresentacao, SCRIPT_DA_APRESENTACAO, SLIDES_DA_APRESENTACAO } from "../../supabase/functions/mesa-identidade/modulos/apresentacao-da-marca";
 import {
   IDIOMAS_DO_TESTE,
   linksDoArroba,
@@ -43,9 +43,9 @@ import {
   retratoDaVotacao,
   riscoPelaProbabilidade,
   TECNICAS_DE_NAMING,
-} from "../../supabase/functions/_shared/naming";
-import { brandbookDoProjeto, brandbookPublico, ehTema, normalizarBrandbook, TEMAS_DO_BRANDBOOK, VERSAO_DO_ESQUEMA } from "../../supabase/functions/_shared/brandbook";
-import { gerarPdfDoBrandbook } from "../../supabase/functions/_shared/pdf-identidade";
+} from "../../supabase/functions/mesa-identidade/modulos/naming";
+import { brandbookDoProjeto, brandbookPublico, ehTema, normalizarBrandbook, TEMAS_DO_BRANDBOOK, VERSAO_DO_ESQUEMA } from "../../supabase/functions/mesa-identidade/modulos/brandbook";
+import { gerarPdfDoBrandbook } from "../../supabase/functions/mesa-identidade/modulos/pdf-identidade";
 import { paginasDoPdf } from "../../supabase/functions/_shared/pdf-roteiro";
 import { alvosDoDiretor, DESCRICOES_DAS_OPERACOES, normalizarAcoesDoDiretor, OPERACOES_COM_IA, OPERACOES_DO_DIRETOR, regrasDoDiretor } from "../../supabase/functions/mesa-identidade/acoes-do-diretor";
 import { podeExecutarDireto } from "../../supabase/functions/_shared/acoes-do-agente";

@@ -11,7 +11,7 @@ import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { botao, campo, etiqueta, juntar, lista, texto } from "@/components/sistema/estilos";
 import { dataEHora } from "@/lib/mesa/api";
-import { type CartaoDeDns, REGISTRADORES, ROTULO_DO_DOMINIO, type EstadoDoDominio } from "../../../supabase/functions/_shared/dns-do-site";
+import { type CartaoDeDns, REGISTRADORES, ROTULO_DO_DOMINIO, type EstadoDoDominio } from "../../../supabase/functions/mesa-site/modulos/dns-do-site";
 import { CHAVES, chamarSite, type LinhaDoSite, useGuardarSite, useTrabalhos } from "./siteApi";
 import { useChecklistDoSite } from "./ChecklistDeLancamento";
 import { pendentesObrigatorios } from "../../../supabase/functions/_shared/site-lancamento";

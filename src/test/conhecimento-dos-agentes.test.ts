@@ -25,7 +25,7 @@ import {
   POLITICAS_META,
   REGRAS_DE_HONESTIDADE,
 } from "../../supabase/functions/_shared/conhecimento-ads";
-import { CONHECIMENTO_DIRETOR } from "../../supabase/functions/_shared/conhecimento-design";
+import { CONHECIMENTO_DIRETOR } from "../../supabase/functions/estudio-arte/modulos/conhecimento-design";
 import { BASE_DO_ESTRATEGISTA } from "../../supabase/functions/_shared/conhecimento-conteudo";
 import {
   ANTI_GENERICO,

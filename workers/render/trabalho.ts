@@ -11,7 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { medirOnda } from "../../supabase/functions/_shared/onda-do-audio.ts";
 import { caminhoDaSaida, fontesUsadas, recortarProjeto } from "../../supabase/functions/_shared/render-do-editor.ts";
-import { ganhoDaTrilhaDb, MIXAGEM_PADRAO } from "../../supabase/functions/_shared/som-do-editor.ts";
+import { ganhoDaTrilhaDb, MIXAGEM_PADRAO } from "../../supabase/functions/mesa-motion/modulos/som-do-editor.ts";
 import type { Armazem } from "./armazem.ts";
 import type { Fila, PedidoDoWorker } from "./fila.ts";
 import { amostrasMono, executar, FFMPEG, medirLoudness, normalizarLoudness, sondar } from "./midia.ts";

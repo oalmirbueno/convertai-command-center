@@ -47,7 +47,7 @@ import {
   TEMPO_MINIMO_MS,
   urlDoMapa,
 } from "../../supabase/functions/_shared/site-lancamento";
-import { assinaturaDaVersao, camposParaRestaurar, dadosDaVersao, diferencasEntreVersoes } from "../../supabase/functions/_shared/site-versoes";
+import { assinaturaDaVersao, camposParaRestaurar, dadosDaVersao, diferencasEntreVersoes } from "../../supabase/functions/mesa-site/modulos/site-versoes";
 import { ATRIBUTOS_DO_DNA, ETAPAS_DO_SITE, estiloDoPacote, promptDaSecao, revisarHtml, rotuloDaSecao, tipoDaSecaoPeloId, type PacoteDoSite } from "../../supabase/functions/_shared/site-metodo";
 import { camposDoEstilo, editarCopy, normalizarOpcoesDaSecao, sujeitoDoSlot } from "../../supabase/functions/mesa-site/estrutura-pura";
 import { alvosDoSite, caminhoDoSite, normalizarAcoesDoSite, OPERACOES_DO_SITE, regrasDoSite } from "../../supabase/functions/mesa-site/acoes-do-site";

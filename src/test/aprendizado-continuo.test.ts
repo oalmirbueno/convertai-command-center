@@ -32,7 +32,7 @@ import {
   nosDasPropostas,
   perguntasDeRepeticao,
   seloDaEvolucao,
-} from "../../supabase/functions/_shared/memoria-editorial";
+} from "../../supabase/functions/agente-calendario/modulos/memoria-editorial";
 import {
   categoriaDaLinhaDeMemoria,
   chaveDoAprendizado,

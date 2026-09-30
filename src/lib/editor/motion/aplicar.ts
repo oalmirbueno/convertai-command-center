@@ -1,5 +1,5 @@
 import { duracaoDoClipe, type FonteDoProjeto, type ProjetoDeEdicao, type TipoDeTrilha } from "../../../../supabase/functions/_shared/projeto-de-edicao";
-import { BIBLIOTECA_DE_SONS, caminhoDoSom, chaveDoSom, planoDeSons, somPorId, type EventoDeMovimento } from "../../../../supabase/functions/_shared/som-do-editor";
+import { BIBLIOTECA_DE_SONS, caminhoDoSom, chaveDoSom, planoDeSons, somPorId, type EventoDeMovimento } from "../../../../supabase/functions/mesa-motion/modulos/som-do-editor";
 import { colide, fimDoClipe } from "../operacoes";
 import { arred } from "../tempo";
 import { falaNaLinhaDoTempo } from "../transcricao";

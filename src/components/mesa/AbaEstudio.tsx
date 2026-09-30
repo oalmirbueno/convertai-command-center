@@ -28,7 +28,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { textoDoMioloEnxuto } from "../../../supabase/functions/_shared/limite-do-miolo";
+import { textoDoMioloEnxuto } from "../../../supabase/functions/estudio-arte/modulos/limite-do-miolo";
 import { precisaEnxugarNaGeracao, TAMANHO_DO_ENXUGAR, textoDaSugestaoDeDividir, type LaminaDoTexto } from "../../../supabase/functions/estudio-arte/texto-da-lamina";
 import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
@@ -76,7 +76,7 @@ import EstudioEntrega from "./EstudioEntrega";
 import EstudioArteRapida, { type ModoRapidoDoDetalhe } from "./EstudioArteRapida";
 import { ModoDoEstudio, SeletorDeFormatoCompacto, SeletorDeQualidadeCompacto } from "./EstudioControles";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { NOVA_ARTE_RAPIDA, PARAMETRO_DA_ARTE_RAPIDA } from "../../../supabase/functions/_shared/arte-rapida";
+import { NOVA_ARTE_RAPIDA, PARAMETRO_DA_ARTE_RAPIDA } from "../../../supabase/functions/estudio-arte/modulos/arte-rapida";
 import EstudioFotos from "./EstudioFotos";
 import EstudioLaminaGrande from "./EstudioLaminaGrande";
 import EstudioLista, { DICA_DO_ROTEIRO, formatoDoItem, SeloDoItem, type FontesDaLista } from "./EstudioLista";
@@ -114,7 +114,7 @@ import PranchetaDoEstudio, { AVISO_DA_ORDEM_NO_CONTINUO, estaConferindo, type An
 import { chaveDoCorrigirSozinho, conferirECorrigir, type DecisaoDeAutocorrecao } from "./autocorrecaoDaLamina";
 import ReferenciasDoEstudio, { type AlvoDasReferencias } from "./ReferenciasDoEstudio";
 import BotaoDoEstilo from "@/components/estilo/BotaoDoEstilo";
-import { laminaCitada, pedidoDeAjustePendente } from "../../../supabase/functions/_shared/entrega-na-agenda";
+import { laminaCitada, pedidoDeAjustePendente } from "../../../supabase/functions/estudio-arte/modulos/entrega-na-agenda";
 import {
   AVISO_CONTINUO_FORA_DO_4X5,
   copiarTexto,

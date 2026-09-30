@@ -39,7 +39,7 @@ import {
   renderDaCena,
   SOM_PADRAO,
 } from "../../supabase/functions/_shared/motion-metodo";
-import { medirBatidas } from "../../supabase/functions/_shared/batidas-da-trilha";
+import { medirBatidas } from "../../supabase/functions/mesa-motion/modulos/batidas-da-trilha";
 import { normalizarProjeto } from "../../supabase/functions/_shared/projeto-de-edicao";
 import { alvosDoMotion, normalizarAcoesDoMotion, regrasDoMotion, type ListasDoMotion } from "../../supabase/functions/mesa-motion/acoes-do-motion";
 import { podeExecutarDireto } from "../../supabase/functions/_shared/acoes-do-agente";

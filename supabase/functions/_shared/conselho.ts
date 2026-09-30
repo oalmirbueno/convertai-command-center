@@ -52,7 +52,7 @@ import { SISTEMA_VISUAL_DE_SOCIAL, TENDENCIA_DO_NICHO } from "./conhecimento-est
 import { CONHECIMENTO_TRAFEGO } from "./conhecimento-trafego.ts";
 import { INTELIGENCIA_EDITORIAL, TECNICAS_EDITORIAIS } from "./conhecimento-roteiros.ts";
 import { TERRITORIOS_CRIATIVOS, VERDADE_DO_PRODUTO } from "./conhecimento-publicidade.ts";
-import { MODOS, MODOS_DO_CONSELHO, modoDe, type ModoDoConselho, type PautaDoConselho, pautaDaLinha, PRESETS, PRESETS_DO_CONSELHO, rodadasDoModo, textoDaPauta } from "./conselho-presets.ts";
+import { MODOS, MODOS_DO_CONSELHO, modoDe, type ModoDoConselho, type PautaDoConselho, pautaDaLinha, PRESETS, PRESETS_DO_CONSELHO, rodadasDoModo, textoDaPauta } from "../conselho/modulos/conselho-presets.ts";
 
 export const VERSAO_DO_CONSELHO = "2026-09-30.2";
 

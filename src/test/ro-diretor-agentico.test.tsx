@@ -83,7 +83,7 @@ import {
   papelPelaRegra,
   perguntaDoPapelDoAnexo,
 } from "../../supabase/functions/estudio-arte/anexos-do-ajuste";
-import { FRASE_DA_IDENTIDADE } from "../../supabase/functions/_shared/uso-da-foto";
+import { FRASE_DA_IDENTIDADE } from "../../supabase/functions/estudio-arte/modulos/uso-da-foto";
 import { aprenderDoPedido, blocoDasRegras, esquecerRegra, regrasDaMesa, type JulgamentoDoEnsino } from "../../supabase/functions/_shared/aprendizado-das-mesas";
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
 import PlanoDoDiretor from "@/components/mesa/PlanoDoDiretor";

@@ -86,7 +86,7 @@ import {
   type RoteiroParaOrganizar,
   type TakeParaOrganizar,
   TIPOS_DE_ARQUIVO,
-} from "../_shared/organizador-de-takes.ts";
+} from "./modulos/organizador-de-takes.ts";
 import {
   chaveDoPedido,
   estimarPedido,
@@ -96,12 +96,12 @@ import {
   PRECOS_REFERENCIA,
   TIPOS_DE_PEDIDO,
   type TipoDePedido,
-} from "../_shared/pedidos-de-video.ts";
-import { comFeedback, decidir, motivoParaNaoMudar, normalizarVersao, normalizarVersoes, proximoNumero } from "../_shared/memoria-de-video.ts";
-import { montarPacote, type TakeDoPacote } from "../_shared/pacote-de-edicao.ts";
-import { conhecimentoEdicao } from "../_shared/conhecimento-edicao.ts";
-import { normalizarRoteirosAprovados, type RoteiroAprovado, VIEW_DOS_ROTEIROS, viewAindaNaoExiste } from "../_shared/roteiros-para-video.ts";
-import { computadorLigado, motivoParaRecusar, normalizarPedidoDeTarefa, podeMudarEstado, type EstadoDaTarefa } from "../_shared/computador-do-agente.ts";
+} from "./modulos/pedidos-de-video.ts";
+import { comFeedback, decidir, motivoParaNaoMudar, normalizarVersao, normalizarVersoes, proximoNumero } from "./modulos/memoria-de-video.ts";
+import { montarPacote, type TakeDoPacote } from "./modulos/pacote-de-edicao.ts";
+import { conhecimentoEdicao } from "./modulos/conhecimento-edicao.ts";
+import { normalizarRoteirosAprovados, type RoteiroAprovado, VIEW_DOS_ROTEIROS, viewAindaNaoExiste } from "./modulos/roteiros-para-video.ts";
+import { computadorLigado, motivoParaRecusar, normalizarPedidoDeTarefa, podeMudarEstado, type EstadoDaTarefa } from "./modulos/computador-do-agente.ts";
 import {
   acaoDeArquivarResultados,
   acaoDeLigarACena,
@@ -125,18 +125,18 @@ import {
   REGRAS_DOS_RESULTADOS,
   type ResultadoGerado,
   rotuloDaCena,
-} from "../_shared/agente-de-video.ts";
+} from "./modulos/agente-de-video.ts";
 // Frente AG2 (29/09): referência do pedido, ordem clara, aprendizado e falhas no log.
 import { pedidoAponta, referenciaDoPedido } from "../_shared/conversa-das-mesas.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { aprenderDoPedido, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
-import { modelosDeVideo } from "../_shared/modelos-de-video.ts";
+import { modelosDeVideo } from "./modulos/modelos-de-video.ts";
 import { JevErro, jevPerguntar } from "../_shared/jev.ts";
 import { cobrarJev } from "../_shared/ia-motor.ts";
 import { MAX_BYTES_DO_PROJETO, normalizarProjeto, type ProjetoDeEdicao, proximaRevisao, tamanhoDoProjeto } from "../_shared/projeto-de-edicao.ts";
 // Frente V-A (26/09): gerador (motores, ângulo, continuar, transição, antes e depois) e o diretor.
-import { AGENTE_DO_DIRETOR } from "../_shared/diretor-de-video.ts";
+import { AGENTE_DO_DIRETOR } from "./modulos/diretor-de-video.ts";
 import {
   anguloGerar,
   antesDepoisImagem,

@@ -39,8 +39,8 @@ import {
   TECNICAS_DE_NAMING,
   TECNICAS_VALIDAS,
   type TecnicaDeNaming,
-} from "../_shared/naming.ts";
-import { gerarPdfDoNaming, nomeDoArquivoDoNaming } from "../_shared/pdf-identidade.ts";
+} from "./modulos/naming.ts";
+import { gerarPdfDoNaming, nomeDoArquivoDoNaming } from "./modulos/pdf-identidade.ts";
 import { normalizarEstrategia } from "../_shared/estrategia-de-marca.ts";
 import {
   type Chamador,

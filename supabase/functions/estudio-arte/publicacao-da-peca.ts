@@ -30,8 +30,8 @@ import {
   problemaNoHorario,
   publicacaoDaPeca,
   tipoDoConteudo,
-} from "../_shared/entrega-na-agenda.ts";
-import { entendimentoDoPedido, estadoDoPedido, perguntasDoPedido } from "../_shared/pedido-do-cliente.ts";
+} from "./modulos/entrega-na-agenda.ts";
+import { entendimentoDoPedido, estadoDoPedido, perguntasDoPedido } from "./modulos/pedido-do-cliente.ts";
 import { ErroDaAgenda, perfisDaPeca, type ContextoDaAgenda, type TrabalhoParaAgenda } from "./agenda-da-entrega.ts";
 
 type Chamador = { userId: string; token: string; doChamador: SupabaseClient };

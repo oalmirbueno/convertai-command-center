@@ -6,7 +6,7 @@ import { copiarTexto } from "@/components/mesa/ContextoPaleta";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
 import { botao, foco, juntar, lista, texto } from "@/components/sistema/estilos";
-import { LIMITES_DO_NAMING, type CandidatoDeNome, type ResumoDoVoto } from "../../../supabase/functions/_shared/naming";
+import { LIMITES_DO_NAMING, type CandidatoDeNome, type ResumoDoVoto } from "../../../supabase/functions/mesa-identidade/modulos/naming";
 import { chamarIdentidade, type RodadaDeNomes } from "./identidadeApi";
 import { Pastilha } from "./Comuns";
 

@@ -4,10 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { ErroDaMesa, mensagemDoCodigo } from "@/lib/mesa/api";
 import type { FotoDoAcervo } from "@/components/mesa-foto/fotoApi";
 import { acervoDaMesaDeVideos, type GrupoDoAcervoDeVideo } from "@/components/mesa-foto/canvas/historia";
-import { normalizarVersoes, type VersaoDeVideo } from "../../../supabase/functions/_shared/memoria-de-video";
-import { normalizarRoteirosAprovados, type RoteiroAprovado, VIEW_DOS_ROTEIROS, viewAindaNaoExiste } from "../../../supabase/functions/_shared/roteiros-para-video";
-import type { EstadoDoPedido, EstimativaDoPedido, TipoDePedido } from "../../../supabase/functions/_shared/pedidos-de-video";
-import type { EstadoDaTarefa } from "../../../supabase/functions/_shared/computador-do-agente";
+import { normalizarVersoes, type VersaoDeVideo } from "../../../supabase/functions/mesa-videos/modulos/memoria-de-video";
+import { normalizarRoteirosAprovados, type RoteiroAprovado, VIEW_DOS_ROTEIROS, viewAindaNaoExiste } from "../../../supabase/functions/mesa-videos/modulos/roteiros-para-video";
+import type { EstadoDoPedido, EstimativaDoPedido, TipoDePedido } from "../../../supabase/functions/mesa-videos/modulos/pedidos-de-video";
+import type { EstadoDaTarefa } from "../../../supabase/functions/mesa-videos/modulos/computador-do-agente";
 
 /**
  * Leitura e chamadas da Mesa Vídeos (Frente V2, 25/09/2026). A tela lê direto

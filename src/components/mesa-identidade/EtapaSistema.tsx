@@ -8,7 +8,7 @@ import Secao from "@/components/sistema/Secao";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { botao, campo, campoTexto, espaco, juntar, lista, texto } from "@/components/sistema/estilos";
 import { fichaDaCor, normalizarHex, PERFIS, ROTULO_DO_PAPEL_DA_COR, textoCmyk, textoRgb, type PapelDaCor } from "../../../supabase/functions/_shared/cores-da-marca";
-import { SLOTS_DE_LOGO, USOS_INCORRETOS_PADRAO, type LogoDoBrandbook, type SlotDeLogo } from "../../../supabase/functions/_shared/brandbook";
+import { SLOTS_DE_LOGO, USOS_INCORRETOS_PADRAO, type LogoDoBrandbook, type SlotDeLogo } from "../../../supabase/functions/mesa-identidade/modulos/brandbook";
 import { enviarImagemDeApoio, enviarLogo, motivoParaRecusarLogo, paletaDaLogo } from "./arquivosDaMarca";
 import { CabecalhoDaEtapa, contextoParaPreencher, ImagemInteira, Pastilha, useProjetoDaMesa } from "./Comuns";
 import GeradorDePaleta, { ContrasteDaPaleta } from "./PaletaDaMarca";

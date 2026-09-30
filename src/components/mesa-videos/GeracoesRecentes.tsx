@@ -9,8 +9,8 @@ import { EstadoVazio } from "@/components/sistema/Estados";
 import { botao, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import { ESTADOS_EM_ANDAMENTO, TIPOS_DO_GERADOR } from "@/lib/mesa-videos/api";
-import { motorPorId } from "../../../supabase/functions/_shared/modelos-de-video";
-import { provedorCancela } from "../../../supabase/functions/_shared/video-executor";
+import { motorPorId } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
+import { provedorCancela } from "../../../supabase/functions/mesa-videos/modulos/video-executor";
 import { gravarMiniaturaDoVideo } from "@/lib/mesa-videos/quadros";
 import { chamarMesaVideos, chaveDosArquivos, chaveDosPedidos, usePedidos, type ArquivoDeVideo, type PedidoDeVideo } from "./videosApi";
 

@@ -44,7 +44,7 @@ import {
   allowedApiGatewayActions,
   type ApiGatewayAction,
   type ApiGatewayScopePreset,
-} from "../../supabase/functions/_shared/api-gateway-auth.ts";
+} from "../../supabase/functions/api-gateway/modulos/api-gateway-auth.ts";
 
 const SUPABASE_FUNCTIONS_URL = `${String(import.meta.env.VITE_SUPABASE_URL).replace(/\/$/, "")}/functions/v1`;
 const GATEWAY_URL = `${SUPABASE_FUNCTIONS_URL}/api-gateway`;

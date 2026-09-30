@@ -62,7 +62,7 @@ import {
   propostasDaMarca,
   escolherDestaquesDaMarca,
   semNomesDeOutros,
-} from "../../supabase/functions/_shared/conhecimento-perfil-instagram";
+} from "../../supabase/functions/mesa-instagram/modulos/conhecimento-perfil-instagram";
 import {
   avisosDaSequencia,
   capaDoTrabalho,
@@ -79,7 +79,7 @@ import {
   trocasDeData,
   usernameDe,
   type ItemPlanejado,
-} from "../../supabase/functions/_shared/instagram-do-cliente";
+} from "../../supabase/functions/mesa-instagram/modulos/instagram-do-cliente";
 import { lerAlvo } from "@/components/mesa/AbaInstagram";
 import { usePlanejamento, type Planejamento } from "@/components/mesa/instagram/usePlanejamento";
 import { escolherFonteDaMarca } from "@/components/mesa/instagram/fonteDaMarca";

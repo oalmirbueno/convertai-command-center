@@ -14,9 +14,9 @@ import { cargaDoItem, executarItemDoPlano, reverterItemDoPlano, type Dependencia
 import { organizarPorTipo, pastaDoTipo } from "../../supabase/functions/agente-contexto/organizar-por-tipo";
 import { normalizarAcoesDoContexto } from "../../supabase/functions/agente-contexto/acoes-do-contexto";
 import { limparSegredos, linhasDoBriefing, montarPacoteExterno, temSegredo } from "../../supabase/functions/_shared/pacote-externo";
-import { briefingDeIdentidade, paletaDoBrandBook, propostaDoKitPeloBrandBook } from "../../supabase/functions/_shared/identidade-visual";
-import { executarLeituras, FERRAMENTAS_DO_CLIENTE, NOMES_DAS_FERRAMENTAS, normalizarPedidosDeLeitura, termoDeBusca } from "../../supabase/functions/_shared/ferramentas-do-cliente";
-import { conhecimentoDoPlano } from "../../supabase/functions/_shared/conhecimento-do-plano";
+import { briefingDeIdentidade, paletaDoBrandBook, propostaDoKitPeloBrandBook } from "../../supabase/functions/agente-contexto/modulos/identidade-visual";
+import { executarLeituras, FERRAMENTAS_DO_CLIENTE, NOMES_DAS_FERRAMENTAS, normalizarPedidosDeLeitura, termoDeBusca } from "../../supabase/functions/agente-contexto/modulos/ferramentas-do-cliente";
+import { conhecimentoDoPlano } from "../../supabase/functions/agente-contexto/modulos/conhecimento-do-plano";
 import { ferramentasDoMotor, motor, origemDoBloco } from "../../supabase/functions/_shared/motores";
 import type { ItemDaAcaoDoAgente } from "../../supabase/functions/_shared/acoes-do-agente";
 
@@ -550,9 +550,9 @@ describe("índice dos motores e ligação no código", () => {
       "supabase/functions/agente-contexto/executor-do-plano.ts",
       "supabase/functions/agente-contexto/organizar-por-tipo.ts",
       "supabase/functions/_shared/pacote-externo.ts",
-      "supabase/functions/_shared/identidade-visual.ts",
-      "supabase/functions/_shared/ferramentas-do-cliente.ts",
-      "supabase/functions/_shared/conhecimento-do-plano.ts",
+      "supabase/functions/agente-contexto/modulos/identidade-visual.ts",
+      "supabase/functions/agente-contexto/modulos/ferramentas-do-cliente.ts",
+      "supabase/functions/agente-contexto/modulos/conhecimento-do-plano.ts",
       "src/components/mesa/ContextoPlanoDoCliente.tsx",
       "src/components/mesa/planoDoClienteApi.ts",
       "src/components/mesa/AgenteDeContexto.tsx",

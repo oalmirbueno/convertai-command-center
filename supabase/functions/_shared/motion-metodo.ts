@@ -21,7 +21,7 @@
  * insumos. Sem travessão.
  */
 
-import { batidaMaisPerto, type MapaDeBatidas } from "./batidas-da-trilha.ts";
+import { batidaMaisPerto, type MapaDeBatidas } from "../mesa-motion/modulos/batidas-da-trilha.ts";
 import {
   type CenaDoFilme,
   duracaoDaCena,
@@ -33,7 +33,7 @@ import {
   pecaPorId,
   PECAS_DO_KIT,
 } from "./cena-hf.ts";
-import { caminhoDoSom, chaveDoSom, planoDeSons, somPorId } from "./som-do-editor.ts";
+import { caminhoDoSom, chaveDoSom, planoDeSons, somPorId } from "../mesa-motion/modulos/som-do-editor.ts";
 
 // ------------------------------------------------------------------ etapas
 

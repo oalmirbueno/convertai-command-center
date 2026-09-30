@@ -15,7 +15,7 @@
  * Sem import de Deno: os testes (vitest) leem este arquivo com um banco falso.
  */
 import type { AcaoDoAgente, ItemDaAcaoDoAgente, ResultadoDoItem } from "../_shared/acoes-do-agente.ts";
-import { pastaDoBrandBook } from "../_shared/identidade-visual.ts";
+import { pastaDoBrandBook } from "./modulos/identidade-visual.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 

@@ -111,7 +111,7 @@ import {
   textoDoResultado,
 } from "../_shared/acoes-do-agente.ts";
 import { executarNoAcervo, type FotoDoAcervo, reverterNoAcervo } from "../_shared/acoes-do-acervo.ts";
-import { executarNoWorkspace, type NoDoWorkspace, reverterNoWorkspace } from "../_shared/acoes-do-workspace.ts";
+import { executarNoWorkspace, type NoDoWorkspace, reverterNoWorkspace } from "./modulos/acoes-do-workspace.ts";
 import {
   blocoDasAcoesDoContexto,
   caminhoDoContexto,
@@ -126,8 +126,8 @@ import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import { AREAS_DO_CEREBRO } from "../_shared/cerebro-do-cliente.ts";
 import { blocoDoMetodoParaPrompt, faseDoCliente, METODO_ACELERA } from "../_shared/metodo-acelera.ts";
-import { conhecimentoDoPlano } from "../_shared/conhecimento-do-plano.ts";
-import { blocoDasFerramentas, ESQUEMA_DO_LER, executarLeituras, normalizarPedidosDeLeitura } from "../_shared/ferramentas-do-cliente.ts";
+import { conhecimentoDoPlano } from "./modulos/conhecimento-do-plano.ts";
+import { blocoDasFerramentas, ESQUEMA_DO_LER, executarLeituras, normalizarPedidosDeLeitura } from "./modulos/ferramentas-do-cliente.ts";
 import { type CaminhoDoCliente, limparSegredos, linhasDoBriefing, montarPacoteExterno, TIPOS_DE_PACOTE, type TipoDePacote } from "../_shared/pacote-externo.ts";
 import {
   briefingDeIdentidade,
@@ -137,7 +137,7 @@ import {
   pastaDoBrandBook,
   propostaDoKitPeloBrandBook,
   SISTEMA_DO_BRAND_BOOK,
-} from "../_shared/identidade-visual.ts";
+} from "./modulos/identidade-visual.ts";
 import {
   blocoDoPlanoParaPrompt,
   type DadosDoPlano,

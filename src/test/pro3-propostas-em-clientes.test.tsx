@@ -62,7 +62,7 @@ import {
   SERVICOS_DA_CASA,
   textoDoPlano,
   type EstadoParaUpsell,
-} from "../../supabase/functions/_shared/proposta-upsell";
+} from "../../supabase/functions/mesa-proposta/modulos/proposta-upsell";
 import { planoDoCliente, retratoDoCliente } from "../../supabase/functions/mesa-proposta/upsell";
 import { alvosDaProposta, normalizarAcoesDaProposta } from "../../supabase/functions/mesa-proposta/acoes-da-proposta";
 import { elencoPadrao, grupoDaOrigem } from "../../supabase/functions/_shared/conselho";

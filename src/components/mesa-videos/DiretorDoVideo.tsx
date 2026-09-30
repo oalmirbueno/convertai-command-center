@@ -14,7 +14,7 @@ import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campoTexto, conversa, juntar, texto } from "@/components/sistema/estilos";
 import { chaveDaConversaDoDiretor, type MensagemGuardadaDoDiretor, projetoAtualDoDiretor, useConversaDoDiretor, useProjetoDoDiretor } from "@/lib/mesa-videos/api";
-import { FASES_DO_DIRETOR, type FaseDoDiretor, type ProjetoDoDiretor } from "../../../supabase/functions/_shared/diretor-de-video";
+import { FASES_DO_DIRETOR, type FaseDoDiretor, type ProjetoDoDiretor } from "../../../supabase/functions/mesa-videos/modulos/diretor-de-video";
 import type { IrPara } from "./MesaDeVideo";
 import { chamarMesaVideos, chaveDosArquivos, chaveDosPedidos } from "./videosApi";
 

@@ -2,7 +2,7 @@
 
 Frente V-A, conferido em 26/09/2026 nas páginas públicas dos provedores (sem chamada paga).
 Resumo próprio; os números vão para o catálogo em código
-(`supabase/functions/_shared/modelos-de-video.ts`, com fonte e data em cada motor).
+(`supabase/functions/mesa-videos/modulos/modelos-de-video.ts`, com fonte e data em cada motor).
 Legenda: **C** = conferido na página do provedor; **T** = só em fonte de terceiro ou página que
 diverge (no catálogo fica `incerto: true` e a tela mostra "~").
 

@@ -33,9 +33,9 @@ import {
   type TarefaAds,
 } from "./conhecimento-dos-agentes.ts";
 import { VERSAO_CONHECIMENTO_REPOSITORIOS } from "./conhecimento-repositorios.ts";
-import { conhecimentoDoPlano } from "./conhecimento-do-plano.ts";
-import { NOMES_DAS_FERRAMENTAS } from "./ferramentas-do-cliente.ts";
-import { conhecimentoEdicao } from "./conhecimento-edicao.ts";
+import { conhecimentoDoPlano } from "../agente-contexto/modulos/conhecimento-do-plano.ts";
+import { NOMES_DAS_FERRAMENTAS } from "../agente-contexto/modulos/ferramentas-do-cliente.ts";
+import { conhecimentoEdicao } from "../mesa-videos/modulos/conhecimento-edicao.ts";
 import { conhecimentoPublicidade } from "./conhecimento-publicidade.ts";
 import { conhecimentoRoteiros } from "./conhecimento-roteiros.ts";
 import { conhecimentoEstilo } from "./conhecimento-estilo.ts";

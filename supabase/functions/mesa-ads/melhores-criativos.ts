@@ -23,7 +23,7 @@
  */
 
 import { ESTILOS_VISUAIS, type Nicho, OBJETIVOS_DE_CAMPANHA } from "../_shared/conhecimento-ads.ts";
-import { formatoDoEstilo, nomeDoFramework, REQUISITOS_DO_ESTILO, ROTULO_DO_REQUISITO, type RequisitoDoEstilo } from "../_shared/conhecimento-criativo.ts";
+import { formatoDoEstilo, nomeDoFramework, REQUISITOS_DO_ESTILO, ROTULO_DO_REQUISITO, type RequisitoDoEstilo } from "./modulos/conhecimento-criativo.ts";
 import { type Diaria, numerosReais, somarMetricas } from "./calculos.ts";
 
 // ------------------------------------------------------------------ desempenho por estilo

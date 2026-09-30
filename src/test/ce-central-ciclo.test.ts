@@ -10,7 +10,7 @@ import {
   regrasDoRitual,
   semTravessao,
 } from "../../supabase/functions/_shared/comunicacao-com-cliente";
-import { canalPelaRegra, julgarDaCentral, promessasComoTexto, provaPelaRegra } from "../../supabase/functions/_shared/julgamentos-da-central";
+import { canalPelaRegra, julgarDaCentral, promessasComoTexto, provaPelaRegra } from "../../supabase/functions/ritual-writer/modulos/julgamentos-da-central";
 import { estadoRealComoTexto, lerEstadoReal, periodosDe, tendenciaDosAnuncios } from "../../supabase/functions/_shared/estado-real-do-cliente";
 import { chaveDaPromessa, dependeDoCliente, reforcarPromessas, segundaDaSemana } from "../../supabase/functions/ritual-writer/reforco";
 import { escolhaDoModelo, escreverComModeloDaCentral, MODELOS_DA_CENTRAL as MODELOS_DO_SERVIDOR } from "../../supabase/functions/_shared/modelo-da-central";
@@ -401,7 +401,7 @@ describe("contratos da Central (frente CE)", () => {
     for (const arq of [
       "src/components/central/SeletorDeModelo.tsx", "src/components/central/modeloDaCentral.ts", "src/components/central/PromessasDoRascunho.tsx",
       "src/components/esteira/MetasDeSeguidores.tsx", "supabase/functions/_shared/comunicacao-com-cliente.ts", "supabase/functions/_shared/estado-real-do-cliente.ts",
-      "supabase/functions/_shared/metas-de-seguidores.ts", "supabase/functions/_shared/julgamentos-da-central.ts", "supabase/functions/ritual-writer/reforco.ts",
+      "supabase/functions/_shared/metas-de-seguidores.ts", "supabase/functions/ritual-writer/modulos/julgamentos-da-central.ts", "supabase/functions/ritual-writer/reforco.ts",
     ]) {
       const t = ler(arq);
       expect(t.includes(EM) || t.includes(EN)).toBe(false);

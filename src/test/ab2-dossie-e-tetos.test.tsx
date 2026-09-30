@@ -15,7 +15,7 @@ import {
   lerDocumentosDeMarca,
   todasAsPaginas,
 } from "../../supabase/functions/_shared/contexto-cliente";
-import { executarLeituras } from "../../supabase/functions/_shared/ferramentas-do-cliente";
+import { executarLeituras } from "../../supabase/functions/agente-contexto/modulos/ferramentas-do-cliente";
 import { openRouterSlug, requestAiChatCompletion, resolveAiProviderChain, type AiProviderEnvName } from "../../supabase/functions/_shared/ai-provider";
 import {
   blocoDosAlvos,

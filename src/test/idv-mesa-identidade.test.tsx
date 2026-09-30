@@ -32,7 +32,7 @@ import {
   slugDoNome,
   TECNICAS_DE_NAMING,
   urlDoRdap,
-} from "../../supabase/functions/_shared/naming";
+} from "../../supabase/functions/mesa-identidade/modulos/naming";
 import { cmykIngenuo, contraste, fichaDaCor, hexParaRgb, normalizarHex, proporcaoDeUso, rgbParaCmyk, textoSobre } from "../../supabase/functions/_shared/cores-da-marca";
 import {
   brandbookDoProjeto,
@@ -46,10 +46,10 @@ import {
   SECOES_DA_PRANCHA,
   tokenPublico,
   USOS_INCORRETOS_PADRAO,
-} from "../../supabase/functions/_shared/brandbook";
-import { abrirPng, gerarPdfDoBrandbook, gerarPdfDoNaming, imagemParaPdf, medidasDoJpeg, prepararImagens } from "../../supabase/functions/_shared/pdf-identidade";
+} from "../../supabase/functions/mesa-identidade/modulos/brandbook";
+import { abrirPng, gerarPdfDoBrandbook, gerarPdfDoNaming, imagemParaPdf, medidasDoJpeg, prepararImagens } from "../../supabase/functions/mesa-identidade/modulos/pdf-identidade";
 import { paginasDoPdf, textosDoPdf } from "../../supabase/functions/_shared/pdf-roteiro";
-import { montarBriefingDaIdentidade, respostasDoBriefing } from "../../supabase/functions/_shared/briefing-da-identidade";
+import { montarBriefingDaIdentidade, respostasDoBriefing } from "../../supabase/functions/mesa-identidade/modulos/briefing-da-identidade";
 import { alvosDoDiretor, normalizarAcoesDoDiretor, pedidoSobreNome, regrasDoDiretor, respostaPromete } from "../../supabase/functions/mesa-identidade/acoes-do-diretor";
 import { podeExecutarDireto } from "../../supabase/functions/_shared/acoes-do-agente";
 import { MESAS_DO_PAINEL, cargasDaMesa, etapaQueVaiAbrir } from "@/lib/mesa/preCarga";

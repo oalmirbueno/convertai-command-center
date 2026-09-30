@@ -11,14 +11,14 @@ import {
   laminaCitada,
   pedidoDeAjustePendente,
   type AjusteDoCliente,
-} from "../../../supabase/functions/_shared/entrega-na-agenda";
+} from "../../../supabase/functions/estudio-arte/modulos/entrega-na-agenda";
 import {
   ROTULO_DO_TIPO,
   formatoDoEstudio,
   lerEntendido,
   resumoDoPedido,
   type PedidoEntendido,
-} from "../../../supabase/functions/_shared/pedido-do-cliente";
+} from "../../../supabase/functions/estudio-arte/modulos/pedido-do-cliente";
 import type { FormatoDoPost } from "./estudioUtil";
 
 /**

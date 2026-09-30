@@ -22,7 +22,7 @@ import PreencherBriefingComIA from "./PreencherBriefingComIA";
 import PerguntasExtras from "./PerguntasExtras";
 import LembreteDoBriefing from "./LembreteDoBriefing";
 import ExportarParaContexto from "./ExportarParaContexto";
-import { extrasDoModelo } from "../../../supabase/functions/_shared/briefing-editor";
+import { extrasDoModelo } from "../../../supabase/functions/briefing-agente/modulos/briefing-editor";
 import { tamanhoLegivel } from "./CamposDoBriefing";
 import { copiarTexto } from "./GerarLinkDoBriefing";
 import { type LinhaDaDecupagem, chamarAgenteDoBriefing, textoDoErroDoBriefing } from "@/lib/briefing/api";

@@ -1,5 +1,5 @@
 import { edlDoProjeto, type ProjetoDeEdicao } from "../../../supabase/functions/_shared/projeto-de-edicao";
-import { slugDoPacote } from "../../../supabase/functions/_shared/pacote-de-edicao";
+import { slugDoPacote } from "../../../supabase/functions/mesa-videos/modulos/pacote-de-edicao";
 import type { AcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import { duracaoDaTrilhaPrincipal } from "./agente";
 import { tempoFino } from "./tempo";

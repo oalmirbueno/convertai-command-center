@@ -10,7 +10,7 @@ import Secao from "@/components/sistema/Secao";
 import { botao, campo, juntar, lista, texto } from "@/components/sistema/estilos";
 import { estimarLocal, modeloDoPapel, modelosAtivos, nomeDoModelo, usd } from "@/lib/mesa/api";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { STORYBOARDS_DO_MOTION } from "../../../supabase/functions/_shared/completar-marca";
+import { STORYBOARDS_DO_MOTION } from "../../../supabase/functions/mesa-identidade/modulos/completar-marca";
 import { CHAVES, type ProjetoDeIdentidade } from "./identidadeApi";
 import { Pastilha, useProjetoDaMesa } from "./Comuns";
 import { criarVideosDaMarca, Rodada } from "./rodadaDoCompletar";

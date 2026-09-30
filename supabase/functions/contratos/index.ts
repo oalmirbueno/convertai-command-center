@@ -98,7 +98,7 @@ import {
   variaveisDoContrato,
 } from "../_shared/contrato-modelo.ts";
 import { gerarPdfDoContrato } from "../_shared/pdf-contrato.ts";
-import { estadoDaAutentique } from "../_shared/assinatura-autentique.ts";
+import { estadoDaAutentique } from "./modulos/assinatura-autentique.ts";
 import {
   alvosDoAgente,
   blocoDosAlvosDoContrato,
@@ -153,8 +153,8 @@ import {
 import { acoesDaFicha, aplicarCnpjNoCliente, lerFichaDoCliente, restaurarFicha } from "./ficha.ts";
 import { acoesDoCiclo, copiarSignatarios, criarAditivo, renovarContrato, rotinaVencimentos } from "./ciclo.ts";
 import { acoesDosModelos, extrasForaDaBiblioteca, lerPreferencias, valoresDasExtras } from "./modelos.ts";
-import { montarAditivo, paraOTexto, type Signatario, variaveisDoAditivo, vigenciaDoContrato } from "../_shared/contrato-ciclo.ts";
-import { type FichaFiscal, valoresDaFicha } from "../_shared/contrato-ficha.ts";
+import { montarAditivo, paraOTexto, type Signatario, variaveisDoAditivo, vigenciaDoContrato } from "./modulos/contrato-ciclo.ts";
+import { type FichaFiscal, valoresDaFicha } from "./modulos/contrato-ficha.ts";
 import { lerSignatariosDoContrato, quemAssinaNoPdf, type SignatarioDoBanco } from "../_shared/contrato-assinaturas.ts";
 import { referenciaDas } from "../_shared/preencher-com-ia.ts";
 

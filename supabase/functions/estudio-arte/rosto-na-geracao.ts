@@ -33,7 +33,7 @@
  *   sem laço de regerar.
  */
 
-import { linhasDaIdentidadeDaFoto } from "../_shared/uso-da-foto.ts";
+import { linhasDaIdentidadeDaFoto } from "./modulos/uso-da-foto.ts";
 
 export type FonteDoRosto = "cliente" | "equipe" | "fotos" | "escolhidas";
 export const FONTES_DO_ROSTO: FonteDoRosto[] = ["cliente", "equipe", "fotos", "escolhidas"];

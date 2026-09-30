@@ -4,7 +4,7 @@ import Secao from "@/components/sistema/Secao";
 import Painel from "@/components/sistema/Painel";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import { botao, juntar } from "@/components/sistema/estilos";
-import { SERVICOS_DA_CASA } from "../../../supabase/functions/_shared/proposta-upsell";
+import { SERVICOS_DA_CASA } from "../../../supabase/functions/mesa-proposta/modulos/proposta-upsell";
 import { LinhaDaProposta } from "./AreaDePropostas";
 import { enderecoDaProposta, filtrarCarteira, useCriarProposta, usePropostasDoCliente } from "./propostasDaCarteira";
 

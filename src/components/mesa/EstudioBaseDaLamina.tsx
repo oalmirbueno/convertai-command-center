@@ -10,7 +10,7 @@ import { useAcervo } from "./SeletorDoAcervo";
 import type { CardDaDirecao, CardGerado } from "./useItensDoMes";
 import { AVISO_CONTINUO_SEM_MODELO } from "./estudioUtil";
 import { seloDaSerie } from "./fidelidadeDaReferencia";
-import { AJUDA_DO_USO, DICA_DO_USO, fotoSemUso, ROTULO_DO_USO, type UsoDaFoto, usoDaFotoLivre, usoDoAcervo } from "../../../supabase/functions/_shared/uso-da-foto";
+import { AJUDA_DO_USO, DICA_DO_USO, fotoSemUso, ROTULO_DO_USO, type UsoDaFoto, usoDaFotoLivre, usoDoAcervo } from "../../../supabase/functions/estudio-arte/modulos/uso-da-foto";
 
 /**
  * O que a próxima geração da lâmina vai usar, mostrado EM CIMA da lâmina

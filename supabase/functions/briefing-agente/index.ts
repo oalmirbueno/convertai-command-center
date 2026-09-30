@@ -47,7 +47,7 @@ import {
   VALIDADE_MAXIMA_DIAS,
   VALIDADE_PADRAO_DIAS,
 } from "../_shared/briefing-modelos.ts";
-import { modeloComExtras, normalizarExtras } from "../_shared/briefing-editor.ts";
+import { modeloComExtras, normalizarExtras } from "./modulos/briefing-editor.ts";
 import { porCategoria, type ItemDecupado } from "../_shared/briefing-decupagem.ts";
 import {
   anexosDoBriefing,
@@ -58,7 +58,7 @@ import {
   ErroDaDecupagem,
   type LinhaDaDecupagem,
 } from "../_shared/briefing-decupar.ts";
-import { gerarPdfDoBriefing, nomeDoArquivoDoBriefing } from "../_shared/pdf-briefing.ts";
+import { gerarPdfDoBriefing, nomeDoArquivoDoBriefing } from "./modulos/pdf-briefing.ts";
 import { IaMotorErro } from "../_shared/ia-motor.ts";
 import {
   type Chamador,

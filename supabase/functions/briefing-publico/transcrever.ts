@@ -17,7 +17,7 @@
 
 import { garantirCota, garantirSaldo, IaMotorErro, type ModeloIa, registrarUso, resolverChave } from "../_shared/ia-motor.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
-import { custoDaTranscricao, MAX_BYTES_DO_AUDIO, MAX_SEGUNDOS_DO_AUDIO, TRANSCRICAO, tipoDoAudio } from "../_shared/briefing-audio.ts";
+import { custoDaTranscricao, MAX_BYTES_DO_AUDIO, MAX_SEGUNDOS_DO_AUDIO, TRANSCRICAO, tipoDoAudio } from "./modulos/briefing-audio.ts";
 import { estadoDoLink } from "../_shared/briefing-modelos.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 

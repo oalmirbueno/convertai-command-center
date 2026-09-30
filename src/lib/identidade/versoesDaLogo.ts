@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { LogoDoBrandbook } from "../../../supabase/functions/_shared/brandbook";
+import type { LogoDoBrandbook } from "../../../supabase/functions/mesa-identidade/modulos/brandbook";
 import {
   analisarLogo,
   COR_DA_MONOCROMATICA,
@@ -13,7 +13,7 @@ import {
   svgMonocromatico,
   type VersaoDaLogo,
   versoesPossiveis,
-} from "../../../supabase/functions/_shared/leitura-da-logo";
+} from "../../../supabase/functions/mesa-identidade/modulos/leitura-da-logo";
 
 /**
  * A logo real no navegador (frente IDV3, "Completar marca existente"): lê os

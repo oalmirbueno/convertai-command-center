@@ -33,7 +33,7 @@ import {
   type ServicoDaBiblioteca,
   type VisualDaProposta,
 } from "../../../supabase/functions/_shared/proposta-comercial";
-import { lerUpsell, type UpsellDaProposta } from "../../../supabase/functions/_shared/proposta-upsell";
+import { lerUpsell, type UpsellDaProposta } from "../../../supabase/functions/mesa-proposta/modulos/proposta-upsell";
 
 /**
  * Mesa Proposta: a ponte da tela com a função mesa-proposta e as tabelas

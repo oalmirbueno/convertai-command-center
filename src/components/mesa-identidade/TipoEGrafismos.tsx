@@ -7,7 +7,7 @@ import { useFontesGoogle } from "@/lib/identidade/fontesGoogle";
 import { normalizarHex } from "../../../supabase/functions/_shared/cores-da-marca";
 import { normalizarEstrategia } from "../../../supabase/functions/_shared/estrategia-de-marca";
 import { estilosDaPersonalidade, fonteDoCatalogo, hierarquiaDoPar, linkDaFamilia, paresParaEstilos, pilhaDaFonte } from "../../../supabase/functions/_shared/tipografia-da-marca";
-import { dataUrlDoSvg, descricaoDoPadrao, svgDoPadrao, TIPOS_DE_PADRAO, type TipoDePadrao } from "../../../supabase/functions/_shared/grafismos-da-marca";
+import { dataUrlDoSvg, descricaoDoPadrao, svgDoPadrao, TIPOS_DE_PADRAO, type TipoDePadrao } from "../../../supabase/functions/mesa-identidade/modulos/grafismos-da-marca";
 import { chamarIdentidade, type ProjetoDeIdentidade } from "./identidadeApi";
 import { Pastilha, partesDoCusto, SeletorDoModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
 import { enviarFeitoNaTela, pngDoSvg } from "./arquivosDaMarca";

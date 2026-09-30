@@ -24,7 +24,7 @@ import path from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
 import { cortesDaOnda, type TrechoDeTempo } from "../../../supabase/functions/_shared/onda-do-audio.ts";
 import { caminhoDaSaida, PARTE_DO_UPLOAD_BYTES } from "../../../supabase/functions/_shared/render-do-editor.ts";
-import { BIBLIOTECA_DE_SONS, caminhoDoSom, chaveDoSom, planoDeSons, noAlvoDeLoudness } from "../../../supabase/functions/_shared/som-do-editor.ts";
+import { BIBLIOTECA_DE_SONS, caminhoDoSom, chaveDoSom, planoDeSons, noAlvoDeLoudness } from "../../../supabase/functions/mesa-motion/modulos/som-do-editor.ts";
 import { armazemSupabase } from "../armazem.ts";
 import type { Fila, PedidoDoWorker } from "../fila.ts";
 import { executar, medirLoudness, sondar } from "../midia.ts";

@@ -15,7 +15,7 @@ import { botao, campo, campoTexto, etiqueta, juntar, texto } from "@/components/
 import { textoDoErro } from "@/lib/mesa/api";
 import { useMotoresDaMesa, useProjetoDoDiretor } from "@/lib/mesa-videos/api";
 import { quadroDoVideoNoStorage } from "@/lib/mesa-videos/quadros";
-import { duracoesDoMotor, motorPorId, textoDoCusto } from "../../../supabase/functions/_shared/modelos-de-video";
+import { duracoesDoMotor, motorPorId, textoDoCusto } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
 import {
   conferirContinuidade,
   custoDoPlano,
@@ -24,7 +24,7 @@ import {
   type ModoDoPlano,
   type PlanoDoRoteiro,
   type QuadroDoPlano,
-} from "../../../supabase/functions/_shared/diretor-de-video";
+} from "../../../supabase/functions/mesa-videos/modulos/diretor-de-video";
 import { EscolherImagem } from "./PecasDoGerador";
 import type { IrPara } from "./MesaDeVideo";
 import { chamarMesaVideos, chaveDosPedidos, useArquivosDeVideo, type ArquivoDeVideo } from "./videosApi";

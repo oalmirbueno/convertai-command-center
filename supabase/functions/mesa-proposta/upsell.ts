@@ -9,7 +9,7 @@
  */
 import { lerEstadoReal, type BancoDoEstado } from "../_shared/estado-real-do-cliente.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
-import { montarUpsell, resultadosDoEstado, servicosDoCadastro, type PlanoAtual, type UpsellDaProposta } from "../_shared/proposta-upsell.ts";
+import { montarUpsell, resultadosDoEstado, servicosDoCadastro, type PlanoAtual, type UpsellDaProposta } from "./modulos/proposta-upsell.ts";
 
 // deno-lint-ignore no-explicit-any
 type Banco = { from: (tabela: string) => any };

@@ -47,9 +47,9 @@ vi.mock("../../supabase/functions/_shared/ia-motor.ts", () => ({
 }));
 vi.mock("../../supabase/functions/_shared/contexto-cliente.ts", () => ({ lerContextoConsolidado: async () => ({}), lerDossie: async () => null }));
 vi.mock("../../supabase/functions/_shared/imagem-reduzida.ts", () => ({ caminhoDaMiniatura: (x: string) => x, reduzidaSemTransformacao: async () => null }));
-vi.mock("../../supabase/functions/_shared/video-armazenar.ts", () => ({ leituraParaAVisao: () => ({ miniatura: false, caixa: 512, opcoes: {} }) }));
+vi.mock("../../supabase/functions/mesa-videos/modulos/video-armazenar.ts", () => ({ leituraParaAVisao: () => ({ miniatura: false, caixa: 512, opcoes: {} }) }));
 vi.mock("../../supabase/functions/mesa-videos/geracao.ts", async () => {
-  const m = await import("../../supabase/functions/_shared/modelos-de-video");
+  const m = await import("../../supabase/functions/mesa-videos/modulos/modelos-de-video");
   return {
     catalogo: async () => ({ motores: m.MOTORES_DE_VIDEO, desligados: [] }),
     motorPronto: async (_b: unknown, id: string) => ({ motor: m.motorPorId(id), motores: m.MOTORES_DE_VIDEO }),
@@ -101,7 +101,7 @@ import {
   prometeSemAcao,
   REGRAS_DIRETAS_DO_DIRETOR,
   type ProjetoDoDiretor,
-} from "../../supabase/functions/_shared/diretor-de-video";
+} from "../../supabase/functions/mesa-videos/modulos/diretor-de-video";
 import {
   acaoDeArquivarResultados,
   acaoDeLigarACena,
@@ -114,7 +114,7 @@ import {
   REGRAS_DO_ENVIO,
   REGRAS_DOS_RESULTADOS,
   type ResultadoGerado,
-} from "../../supabase/functions/_shared/agente-de-video";
+} from "../../supabase/functions/mesa-videos/modulos/agente-de-video";
 import { podeExecutarDireto } from "../../supabase/functions/_shared/acoes-do-agente";
 import { rotasDoAprendizado } from "../../supabase/functions/_shared/aprendizado-das-mesas";
 

@@ -16,7 +16,7 @@ import {
   nosDasPropostas,
   normalizarEvolucao,
   seloDaEvolucao,
-} from "../../../supabase/functions/_shared/memoria-editorial";
+} from "../../../supabase/functions/agente-calendario/modulos/memoria-editorial";
 
 /**
  * Memória editorial na tela do Mês (frente AP, 27/09/2026):

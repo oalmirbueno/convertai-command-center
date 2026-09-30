@@ -32,7 +32,7 @@ import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { AVISO_SEM_REGISTRO, gravarTroca } from "../_shared/conversa-das-mesas.ts";
 import { anexoDasRegrasSeguidas, aprenderDoPedido, CAMPOS_DO_APRENDIZADO, regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
 import { etapaAtual, faltaNaEtapa, reabrirEtapa } from "../_shared/identidade-etapas.ts";
-import { lacunasDoBrandbook } from "../_shared/brandbook.ts";
+import { lacunasDoBrandbook } from "./modulos/brandbook.ts";
 import {
   alvosDoDiretor,
   blocoDasAcoesDoDiretor,
@@ -69,7 +69,7 @@ import { escolherNome, estimarNaming, gerarRodada, lerRodada } from "./naming-ac
 import { estimativaDaProposta, gerarFontes, gerarPaletas, gerarSlogans, montarEstrategia } from "./estrategia-acoes.ts";
 import { aplicarNoKit, compartilharBrandbook, lerBrandbook, montarBrandbook, propostaDoKit, reverterNoKit } from "./brandbook-acoes.ts";
 import { completarNoServidor, estimativaDoCompletarNoServidor } from "./completar-acoes.ts";
-import { checklistDaMarca, resumoDoChecklist } from "../_shared/completar-marca.ts";
+import { checklistDaMarca, resumoDoChecklist } from "./modulos/completar-marca.ts";
 
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
 const MAX_HISTORICO = 12;
@@ -356,7 +356,7 @@ export async function executarItem(ch: Chamador, clientId: string, item: ItemDaA
         origem = `brandbook versão ${r.linha.versao}`;
       } else {
         p = await lerProjeto(ch, item.alvo_id);
-        const { brandbookDoProjeto } = await import("../_shared/brandbook.ts");
+        const { brandbookDoProjeto } = await import("./modulos/brandbook.ts");
         dados = brandbookDoProjeto({ nomeDaMarca: p.titulo, dados: p.dados, clientId: p.client_id });
       }
       if (p.client_id !== clientId) throw new Error("Projeto de outro cliente.");

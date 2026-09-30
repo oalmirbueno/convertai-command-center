@@ -16,7 +16,7 @@ import {
   type TrabalhoParaAcoes,
 } from "../../supabase/functions/estudio-arte/acoes-do-diretor";
 import { alvosDoAcervo, etiquetaPedida, type FotoDoAcervo, pastaPedida } from "../../supabase/functions/_shared/acoes-do-acervo";
-import { alvosDoWorkspace, type NoDoWorkspace, regrasDoWorkspace } from "../../supabase/functions/_shared/acoes-do-workspace";
+import { alvosDoWorkspace, type NoDoWorkspace, regrasDoWorkspace } from "../../supabase/functions/agente-contexto/modulos/acoes-do-workspace";
 import { normalizarAcaoDoAgente } from "../../supabase/functions/_shared/acoes-do-agente";
 import { blocoDasAcoesDoContexto, normalizarAcoesDoContexto, pedeAcaoNoContexto } from "../../supabase/functions/agente-contexto/acoes-do-contexto";
 import { blocoDasAcoesDaMesaFoto, normalizarAcoesDaMesaFoto, pedeAcaoNasFotos } from "../../supabase/functions/mesa-foto/acoes-da-mesa-foto";

@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Camada, LayoutDaPeca } from "../../../supabase/functions/_shared/aplicacoes-da-marca";
+import type { Camada, LayoutDaPeca } from "../../../supabase/functions/mesa-identidade/modulos/aplicacoes-da-marca";
 
 /**
  * Desenha no canvas o layout de uma peça da marca (IDV2): redes, papelaria.

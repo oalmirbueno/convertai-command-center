@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { botao, campo, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import { useMesa } from "../MesaContexto";
-import { enderecoDaRede, redePorChave, REDES_SOCIAIS, type ChaveDaRede } from "../../../../supabase/functions/_shared/instagram-do-cliente";
+import { enderecoDaRede, redePorChave, REDES_SOCIAIS, type ChaveDaRede } from "../../../../supabase/functions/mesa-instagram/modulos/instagram-do-cliente";
 import { chamarInstagram, type PainelDoInstagram } from "./instagramApi";
 
 /**

@@ -36,7 +36,7 @@ import {
 } from "../_shared/jogada-do-texto.ts";
 import type { MoldeDaReferencia } from "../_shared/direcao-arte.ts";
 import { contarPalavras, PALAVRAS_DO_TITULO } from "../_shared/menos-texto-nas-laminas.ts";
-import { passaDoLimite } from "../_shared/limite-do-miolo.ts";
+import { passaDoLimite } from "./modulos/limite-do-miolo.ts";
 import { semTravessao } from "./refinar-texto.ts";
 
 // ------------------------------------------------------------------ 1. termo decorativo

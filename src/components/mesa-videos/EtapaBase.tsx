@@ -13,7 +13,7 @@ import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
-import { VIEW_DOS_ROTEIROS } from "../../../supabase/functions/_shared/roteiros-para-video";
+import { VIEW_DOS_ROTEIROS } from "../../../supabase/functions/mesa-videos/modulos/roteiros-para-video";
 import { AvisoDeAtivacao } from "./Comuns";
 import type { IrPara } from "./MesaDeVideo";
 import {

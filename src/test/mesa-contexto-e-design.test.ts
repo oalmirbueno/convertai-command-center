@@ -12,7 +12,7 @@ import {
   type MarcaParaDirecao,
   type ZonaTexto,
 } from "../../supabase/functions/_shared/direcao-arte";
-import { CONHECIMENTO_DIRETOR, PADRAO_NA_IMAGEM } from "../../supabase/functions/_shared/conhecimento-design";
+import { CONHECIMENTO_DIRETOR, PADRAO_NA_IMAGEM } from "../../supabase/functions/estudio-arte/modulos/conhecimento-design";
 import { caixaDaZona as caixaDaTela } from "@/lib/mesa/layout";
 
 /**

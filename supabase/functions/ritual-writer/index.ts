@@ -44,7 +44,7 @@ import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { jevPerguntar } from "../_shared/jev.ts";
 import { escolhaDoModelo } from "../_shared/modelo-da-central.ts";
 import { estadoRealComoTexto, evidenciasDoEstado, lerEstadoReal } from "../_shared/estado-real-do-cliente.ts";
-import { julgarDaCentral, promessasComoTexto, rotuloDoCanal } from "../_shared/julgamentos-da-central.ts";
+import { julgarDaCentral, promessasComoTexto, rotuloDoCanal } from "./modulos/julgamentos-da-central.ts";
 import { conferirRepeticao, escreverRitual, MOMENTO, RITUAL_BRIEF } from "./escritor.ts";
 import { lerContextoDoRitual } from "./contexto.ts";
 import { extrairMemoriaDoRitual } from "./memoria.ts";

@@ -1,6 +1,6 @@
 # Base de conhecimento de design da Mesa do cliente
 
-Material que ensina o diretor de arte (LLM) a dirigir lâminas de carrossel e posts do Instagram em 4:5 (1080 x 1350). Tudo aqui foi lido e consolidado em `supabase/functions/_shared/conhecimento-design.ts` (versão `2026-09-23.2`).
+Material que ensina o diretor de arte (LLM) a dirigir lâminas de carrossel e posts do Instagram em 4:5 (1080 x 1350). Tudo aqui foi lido e consolidado em `supabase/functions/estudio-arte/modulos/conhecimento-design.ts` (versão `2026-09-23.2`).
 
 ## Como a base entra no agente
 

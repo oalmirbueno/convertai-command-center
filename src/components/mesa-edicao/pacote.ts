@@ -1,5 +1,5 @@
 import type { ArquivoDeVideo, PedidoDeVideo } from "@/components/mesa-videos/videosApi";
-import { takesNaOrdem, type EntradaDoPacote, type TakeDoPacote } from "../../../supabase/functions/_shared/pacote-de-edicao";
+import { takesNaOrdem, type EntradaDoPacote, type TakeDoPacote } from "../../../supabase/functions/mesa-videos/modulos/pacote-de-edicao";
 import { projetoDosTakes, type ProjetoDeEdicao } from "../../../supabase/functions/_shared/projeto-de-edicao";
 
 /**

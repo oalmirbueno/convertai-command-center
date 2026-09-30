@@ -36,7 +36,7 @@ import {
 } from "../_shared/contrato-modelo.ts";
 import type { PerguntaJev } from "../_shared/jev.ts";
 // Frente CON2 (30/09): CNPJ conferido pelo código e valor sem fonte barrado (a mesma régua do Preencher com IA).
-import { cnpjValido, soDigitos } from "../_shared/contrato-ficha.ts";
+import { cnpjValido, soDigitos } from "./modulos/contrato-ficha.ts";
 import { numerosSemFonte, type ReferenciaDasFontes } from "../_shared/preencher-com-ia.ts";
 // Frente PRO2: a forma de pagamento aceita (com o desconto dela) vira as condições e o valor do contrato.
 import { normalizarPagamento, textoDaOpcao, valorDaOpcao } from "../_shared/proposta-comercial.ts";

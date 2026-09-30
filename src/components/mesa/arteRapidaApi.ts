@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao } from "@/lib/mesa/api";
-import { arteRapidaDa, ehArteRapida, type ArteRapida } from "../../../supabase/functions/_shared/arte-rapida";
+import { arteRapidaDa, ehArteRapida, type ArteRapida } from "../../../supabase/functions/estudio-arte/modulos/arte-rapida";
 import { ultimasVersoes, type ItemDoMes, type Trabalho } from "./useItensDoMes";
 
 /**

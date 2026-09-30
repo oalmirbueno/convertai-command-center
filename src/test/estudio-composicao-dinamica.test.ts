@@ -30,7 +30,7 @@ import {
   textoEsperadoNaConferencia,
 } from "../../supabase/functions/estudio-arte/composicao-dinamica";
 import { MUDANCAS_DO_GERADOR_DO_ESTUDIO } from "../../supabase/functions/_shared/motores";
-import { laminasLongasDoRoteiro, textoDoMioloEnxuto } from "../../supabase/functions/_shared/limite-do-miolo";
+import { laminasLongasDoRoteiro, textoDoMioloEnxuto } from "../../supabase/functions/estudio-arte/modulos/limite-do-miolo";
 import { CASOS_DO_REPLICAR, MARCA_CASO, MOLDE_CASO } from "./fixtures/replicarCasos";
 
 /**
@@ -398,7 +398,7 @@ describe("5. Ligação no servidor e registro", () => {
   });
 
   it("arquivos novos sem travessão, lookbehind nem grupo nomeado", () => {
-    for (const f of ["supabase/functions/_shared/jogada-do-texto.ts", "supabase/functions/estudio-arte/composicao-dinamica.ts", "supabase/functions/_shared/limite-do-miolo.ts"]) {
+    for (const f of ["supabase/functions/_shared/jogada-do-texto.ts", "supabase/functions/estudio-arte/composicao-dinamica.ts", "supabase/functions/estudio-arte/modulos/limite-do-miolo.ts"]) {
       const s = ler(f);
       expect(s, f).not.toContain("—");
       expect(s, f).not.toContain("(?<");

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Mic, Square } from "lucide-react";
 import { botao, juntar, texto } from "@/components/sistema";
-import { MAX_SEGUNDOS_DO_AUDIO } from "../../../supabase/functions/_shared/briefing-audio";
+import { MAX_SEGUNDOS_DO_AUDIO } from "../../../supabase/functions/briefing-publico/modulos/briefing-audio";
 
 /**
  * Responder por áudio no link do briefing (frente BRF2, 30/09/2026): grava no

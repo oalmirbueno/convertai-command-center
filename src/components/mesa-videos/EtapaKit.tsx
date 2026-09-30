@@ -12,9 +12,9 @@ import { gravarEstadoDaTela, lerEstadoDaTela, useEstadoDaTela } from "@/componen
 import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import { useMotoresDaMesa, useProjetoDoDiretor, useProjetosSalvos, useTemplatesDeVideo } from "@/lib/mesa-videos/api";
-import { KITS_DE_VIDEO, kitPorId, duracaoDoKit } from "../../../supabase/functions/_shared/video-kits";
-import { custoDoMotor, motorDoPapel, textoDoCusto } from "../../../supabase/functions/_shared/modelos-de-video";
-import { projetoDoKit, projetoDoTemplate, type TemplateDeVideo } from "../../../supabase/functions/_shared/diretor-de-video";
+import { KITS_DE_VIDEO, kitPorId, duracaoDoKit } from "../../../supabase/functions/mesa-videos/modulos/video-kits";
+import { custoDoMotor, motorDoPapel, textoDoCusto } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
+import { projetoDoKit, projetoDoTemplate, type TemplateDeVideo } from "../../../supabase/functions/mesa-videos/modulos/diretor-de-video";
 import { AvisoDeAtivacao } from "./Comuns";
 import type { IrPara } from "./MesaDeVideo";
 import { chamarMesaVideos } from "./videosApi";

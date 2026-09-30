@@ -5,7 +5,7 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
 import { botao, campo, juntar, lista, texto } from "@/components/sistema/estilos";
-import { TIPOS_DE_SLOGAN, type SloganDaMarca } from "../../../supabase/functions/_shared/naming";
+import { TIPOS_DE_SLOGAN, type SloganDaMarca } from "../../../supabase/functions/mesa-identidade/modulos/naming";
 import { chamarIdentidade, type ProjetoDeIdentidade } from "./identidadeApi";
 import { Pastilha, partesDoCusto, SeletorDoModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
 

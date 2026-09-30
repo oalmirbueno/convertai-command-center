@@ -6,7 +6,7 @@ import CascaPublica from "@/components/publico/CascaPublica";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { juntar, texto } from "@/components/sistema/estilos";
 import VisaoDoBrandbook from "@/components/mesa-identidade/VisaoDoBrandbook";
-import { ehTema, type DadosDoBrandbook, type LogoDoBrandbook, type ModeloDoBrandbook } from "../../supabase/functions/_shared/brandbook";
+import { ehTema, type DadosDoBrandbook, type LogoDoBrandbook, type ModeloDoBrandbook } from "../../supabase/functions/mesa-identidade/modulos/brandbook";
 
 /**
  * Página pública do brandbook (/marca/:token), frente IDV. Sem login: lê só

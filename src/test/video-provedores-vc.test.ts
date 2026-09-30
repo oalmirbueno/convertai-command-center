@@ -18,11 +18,11 @@ import {
   motorPorId,
   MOTORES_DE_VIDEO,
   nivelDoMotor,
-} from "../../supabase/functions/_shared/modelos-de-video";
-import { corpoDaGeracao, endpointDaGeracao, executorDoProvedor, faltaParaGerar, provedorCancela, type EntradaDaGeracao } from "../../supabase/functions/_shared/video-executor";
-import { ErroDoProvedor } from "../../supabase/functions/_shared/video-provedor-comum";
-import { cancelarNaRunway, consultarNaRunway, corpoDaRunway, enviarNaRunway, erroDaRunway, lerTarefaDaRunway, resultadoDaRunway, RUNWAY_VERSAO } from "../../supabase/functions/_shared/video-provedor-runway";
-import { cancelarNaHiggsfield, consultarNaHiggsfield, enviarNaHiggsfield, erroDaHiggsfield, MOVIMENTOS_DA_HIGGSFIELD, movimentoDaMesaNaHiggsfield } from "../../supabase/functions/_shared/video-provedor-higgsfield";
+} from "../../supabase/functions/mesa-videos/modulos/modelos-de-video";
+import { corpoDaGeracao, endpointDaGeracao, executorDoProvedor, faltaParaGerar, provedorCancela, type EntradaDaGeracao } from "../../supabase/functions/mesa-videos/modulos/video-executor";
+import { ErroDoProvedor } from "../../supabase/functions/mesa-videos/modulos/video-provedor-comum";
+import { cancelarNaRunway, consultarNaRunway, corpoDaRunway, enviarNaRunway, erroDaRunway, lerTarefaDaRunway, resultadoDaRunway, RUNWAY_VERSAO } from "../../supabase/functions/mesa-videos/modulos/video-provedor-runway";
+import { cancelarNaHiggsfield, consultarNaHiggsfield, enviarNaHiggsfield, erroDaHiggsfield, MOVIMENTOS_DA_HIGGSFIELD, movimentoDaMesaNaHiggsfield } from "../../supabase/functions/mesa-videos/modulos/video-provedor-higgsfield";
 import {
   cloneLiberadoParaVideo,
   consultarNaHeygen,
@@ -32,7 +32,7 @@ import {
   listarVozesDaHeygen,
   normalizarAvataresDaHeygen,
   resultadoDaHeygen,
-} from "../../supabase/functions/_shared/video-provedor-heygen";
+} from "../../supabase/functions/mesa-videos/modulos/video-provedor-heygen";
 
 /**
  * Frente V-C (26/09): Runway, Higgsfield e HeyGen. Fetch simulado em tudo:
@@ -55,7 +55,7 @@ vi.mock("@/integrations/supabase/client", () => {
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn(), message: vi.fn() } }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ profile: { role: "admin" }, user: { id: "u-1" } }) }));
 
-import { ehArquivoDeVideo, fotoParaEditar, LEITURA_DA_FOTO_PARA_EDITAR, LEITURA_DA_MINIATURA_DO_QUADRO, leituraParaAVisao, TETO_DO_ORIGINAL_PARA_EDITAR } from "../../supabase/functions/_shared/video-armazenar";
+import { ehArquivoDeVideo, fotoParaEditar, LEITURA_DA_FOTO_PARA_EDITAR, LEITURA_DA_MINIATURA_DO_QUADRO, leituraParaAVisao, TETO_DO_ORIGINAL_PARA_EDITAR } from "../../supabase/functions/mesa-videos/modulos/video-armazenar";
 import { erroDaChamada } from "@/components/mesa-videos/videosApi";
 import AvatarFalando from "@/components/mesa-videos/AvatarFalando";
 import { MODOS_DO_GERAR } from "@/components/mesa-videos/modosDoGerar";
@@ -446,10 +446,10 @@ describe("arquivos da frente V-C", () => {
   it("sem travessão, piso Safari 11, sem laço e chave nunca no front", () => {
     const raiz = resolve(__dirname, "../..");
     const arquivos = [
-      "supabase/functions/_shared/video-provedor-comum.ts",
-      "supabase/functions/_shared/video-provedor-runway.ts",
-      "supabase/functions/_shared/video-provedor-higgsfield.ts",
-      "supabase/functions/_shared/video-provedor-heygen.ts",
+      "supabase/functions/mesa-videos/modulos/video-provedor-comum.ts",
+      "supabase/functions/mesa-videos/modulos/video-provedor-runway.ts",
+      "supabase/functions/mesa-videos/modulos/video-provedor-higgsfield.ts",
+      "supabase/functions/mesa-videos/modulos/video-provedor-heygen.ts",
       "src/components/mesa-videos/AvatarFalando.tsx",
       "src/components/mesa-videos/rascunhoDoAvatar.ts",
     ];

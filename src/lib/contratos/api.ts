@@ -1,5 +1,5 @@
 import { chamarFuncao } from "@/lib/mesa/api";
-import type { FichaFiscal } from "../../../supabase/functions/_shared/contrato-ficha";
+import type { FichaFiscal } from "../../../supabase/functions/contratos/modulos/contrato-ficha";
 import type {
   ClausulaDoModelo,
   ClausulaMontada,

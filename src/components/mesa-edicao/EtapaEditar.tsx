@@ -11,9 +11,9 @@ import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulari
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campo, campoTexto, etiqueta, juntar, superficie, texto } from "@/components/sistema/estilos";
-import { montarPacote } from "../../../supabase/functions/_shared/pacote-de-edicao";
-import { FONTE_BRABO, MODOS_DE_COMPOSICAO } from "../../../supabase/functions/_shared/conhecimento-edicao";
-import { ROTULO_DA_TAREFA } from "../../../supabase/functions/_shared/computador-do-agente";
+import { montarPacote } from "../../../supabase/functions/mesa-videos/modulos/pacote-de-edicao";
+import { FONTE_BRABO, MODOS_DE_COMPOSICAO } from "../../../supabase/functions/mesa-videos/modulos/conhecimento-edicao";
+import { ROTULO_DA_TAREFA } from "../../../supabase/functions/mesa-videos/modulos/computador-do-agente";
 import type { IrPara } from "@/components/mesa-videos/MesaDeVideo";
 import {
   BUCKET_DOS_VIDEOS,

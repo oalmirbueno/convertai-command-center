@@ -100,8 +100,8 @@ import {
   TETO_MAXIMO_DA_CENA_USD,
   TETO_PADRAO_DA_CENA_USD,
 } from "../_shared/motion-metodo.ts";
-import { lerMapaDeBatidas } from "../_shared/batidas-da-trilha.ts";
-import { kitDaIdentidade } from "../_shared/motion-da-identidade.ts";
+import { lerMapaDeBatidas } from "./modulos/batidas-da-trilha.ts";
+import { kitDaIdentidade } from "./modulos/motion-da-identidade.ts";
 import { situacaoDoWorker } from "../_shared/render-do-editor.ts";
 import { blocoDasAcoesDoMotion, caminhoDoMotion, ESQUEMA_DAS_ACOES_DO_MOTION, type ListasDoMotion, normalizarAcoesDoMotion, regrasDoMotion } from "./acoes-do-motion.ts";
 

@@ -11,7 +11,7 @@ import MenuMais from "@/components/sistema/MenuMais";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { Carregando } from "@/components/sistema/Estados";
 import { botao, campo, campoTexto, espaco, etiqueta, foco, juntar, lista, texto } from "@/components/sistema/estilos";
-import { CRITERIOS_PADRAO, IDIOMAS_DO_TESTE, LIMITES_DO_NAMING, linksDoArroba, ROTULO_DO_RISCO, rotuloDaTecnica, TECNICAS_DE_NAMING, textoDoDominio, type AlvoDoNaming, type CandidatoDeNome, type SituacaoDoDominio } from "../../../supabase/functions/_shared/naming";
+import { CRITERIOS_PADRAO, IDIOMAS_DO_TESTE, LIMITES_DO_NAMING, linksDoArroba, ROTULO_DO_RISCO, rotuloDaTecnica, TECNICAS_DE_NAMING, textoDoDominio, type AlvoDoNaming, type CandidatoDeNome, type SituacaoDoDominio } from "../../../supabase/functions/mesa-identidade/modulos/naming";
 import { chamarIdentidade, CHAVES, normalizarRodada, useRodadas, useSituacaoDoArquivo, textoDaAprovacao, type RodadaDeNomes } from "./identidadeApi";
 import { contextoParaPreencher, Pastilha, partesDoCusto, SeletorDoModelo, useModeloDaAcao, useProjetoOpcional } from "./Comuns";
 import VotacaoDosNomes from "./VotacaoDosNomes";
@@ -103,7 +103,7 @@ export default function EstudioDeNomes({
   const baixarPdf = () =>
     rodar("pdf", async () => {
       if (!rodada) return;
-      const { gerarPdfDoNaming, nomeDoArquivoDoNaming } = await import("../../../supabase/functions/_shared/pdf-identidade");
+      const { gerarPdfDoNaming, nomeDoArquivoDoNaming } = await import("../../../supabase/functions/mesa-identidade/modulos/pdf-identidade");
       const candidatos = rodada.candidatos.map((c) => ({ ...c, finalista: finalistas.indexOf(c.id) >= 0 }));
       const alvoTexto = alvo === "campanha" ? "nome da campanha" : alvo === "produto" ? "nome do produto" : "nome da marca";
       const bytes = gerarPdfDoNaming({ cliente: marca && !marca.principal ? marca.nome : mesa.clientName, alvo: alvoTexto, criterios: rodada.criterios, candidatos });

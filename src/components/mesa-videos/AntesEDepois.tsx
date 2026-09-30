@@ -12,7 +12,7 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campo, campoTexto, juntar, texto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import { custoNaTela, novoUid, useMotoresDaMesa } from "@/lib/mesa-videos/api";
-import { duracaoNoMotor, motorDoNivel, motorPorId, type NivelDoMotor } from "../../../supabase/functions/_shared/modelos-de-video";
+import { duracaoNoMotor, motorDoNivel, motorPorId, type NivelDoMotor } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
 import { BotaoDeGerar, EscolherImagem, SeletorDeMotor } from "./PecasDoGerador";
 import { chamarMesaVideos, chaveDosArquivos, chaveDosPedidos, useArquivosDeVideo } from "./videosApi";
 

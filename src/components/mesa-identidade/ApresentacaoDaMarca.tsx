@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ARQUETIPOS, EIXOS_DE_PERSONALIDADE, normalizarEstrategia, rotuloDoArquetipo } from "../../../supabase/functions/_shared/estrategia-de-marca";
-import { coresDaPeca } from "../../../supabase/functions/_shared/aplicacoes-da-marca";
+import { coresDaPeca } from "../../../supabase/functions/mesa-identidade/modulos/aplicacoes-da-marca";
 import { normalizarHex, textoSobre } from "../../../supabase/functions/_shared/cores-da-marca";
 import { hierarquiaDoPar, pilhaDaFonte } from "../../../supabase/functions/_shared/tipografia-da-marca";
-import type { SlideId } from "../../../supabase/functions/_shared/apresentacao-da-marca";
+import type { SlideId } from "../../../supabase/functions/mesa-identidade/modulos/apresentacao-da-marca";
 
 /**
  * Os slides da apresentação da marca (IDV2), em 1280 x 720 com estilo na

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gerarPdfDoBriefing, nomeDoArquivoDoBriefing } from "../../supabase/functions/_shared/pdf-briefing";
+import { gerarPdfDoBriefing, nomeDoArquivoDoBriefing } from "../../supabase/functions/briefing-agente/modulos/pdf-briefing";
 import { paginasDoPdf, textosDoPdf } from "../../supabase/functions/_shared/pdf-roteiro";
 
 /** Frente BRF: o PDF do briefing que vai para Arquivos (no lugar do window.print). */

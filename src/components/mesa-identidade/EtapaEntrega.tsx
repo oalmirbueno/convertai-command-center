@@ -11,7 +11,7 @@ import { botao, espaco, juntar, lista, texto } from "@/components/sistema/estilo
 import { chamarIdentidade, CHAVES, textoDaAprovacao, useBrandbooks, useRodadas, useSituacaoDoArquivo } from "./identidadeApi";
 import { CabecalhoDaEtapa, useProjetoDaMesa } from "./Comuns";
 import { faltaNaEtapa } from "../../../supabase/functions/_shared/identidade-etapas";
-import { prontoParaApresentar, roteiroDaApresentacao } from "../../../supabase/functions/_shared/apresentacao-da-marca";
+import { prontoParaApresentar, roteiroDaApresentacao } from "../../../supabase/functions/mesa-identidade/modulos/apresentacao-da-marca";
 import VideoDaMarca from "./VideoDaMarca";
 import ResultadoDaMarca from "./ResultadoDaMarca";
 

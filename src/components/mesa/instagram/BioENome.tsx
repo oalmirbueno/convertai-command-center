@@ -12,7 +12,7 @@ import {
   sinaisDaBio,
   type SugestaoDeBio,
   type SugestaoDeNome,
-} from "../../../../supabase/functions/_shared/conhecimento-perfil-instagram";
+} from "../../../../supabase/functions/mesa-instagram/modulos/conhecimento-perfil-instagram";
 import { chamarInstagram, copiarTexto, type AnaliseDaBio, type PerfilDaAba } from "./instagramApi";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 
