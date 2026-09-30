@@ -22,6 +22,24 @@ function dadosDoSite(pacote) {
   return { seo, titulo, descricao, url, og: ogAbsoluta, destaque, indexar: seo.indexar !== false };
 }
 
+/**
+ * A URL das fontes do Google que o painel montou (pacote.fontes_url), só de
+ * fonts.googleapis.com/css2 e sempre com display=swap (texto aparece na hora,
+ * regras de UX uupm:ux:50 e 75). Qualquer outra coisa: null.
+ */
+export function urlDasFontes(pacote) {
+  const u = pacote && typeof pacote.fontes_url === "string" ? pacote.fontes_url.trim() : "";
+  if (!/^https:\/\/fonts\.googleapis\.com\/css2\?family=[A-Za-z0-9+:;,@.&=%_-]+$/.test(u) || u.length > 2000) return null;
+  return /[?&]display=swap(&|$)/.test(u) ? u : `${u.replace(/[?&]display=[a-z]+/g, "")}&display=swap`;
+}
+
+/** Os links das fontes para o <head> (preconnect e a folha de estilo), ou lista vazia. */
+export function linksDasFontes(pacote) {
+  const u = urlDasFontes(pacote);
+  if (!u) return [];
+  return [`<link rel="preconnect" href="https://fonts.googleapis.com" />`, `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />`, `<link rel="stylesheet" href="${esc(u)}" data-fontes />`];
+}
+
 /** O HTML de uma página: a base do build com o conteúdo pré-renderizado e as tags de SEO. */
 export function montarPagina(base, conteudo, pacote, pagina) {
   const d = dadosDoSite(pacote);
@@ -29,6 +47,8 @@ export function montarPagina(base, conteudo, pacote, pagina) {
   const titulo = pagina.slug && pagina.titulo ? `${pagina.titulo} | ${d.titulo}`.slice(0, 70) : d.titulo;
   const canonical = d.url ? `${d.url}${caminho}` : null;
   const extras = [
+    // As fontes do pacote carregam de verdade no site publicado (antes ficavam só no CSS).
+    ...linksDasFontes(pacote),
     canonical ? `<link rel="canonical" href="${esc(canonical)}" />` : "",
     canonical ? `<meta property="og:url" content="${esc(canonical)}" />` : "",
     `<meta property="og:type" content="website" />`,

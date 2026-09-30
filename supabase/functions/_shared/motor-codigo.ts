@@ -61,6 +61,33 @@ export const TOKENS_POR_SECAO = { entrada: 260_000, saida: 14_000, cacheFracao: 
 export const TOKENS_POR_AJUSTE = { entrada: 140_000, saida: 7_000, cacheFracao: 0.8 };
 /** Base de todo trabalho que gasta: ler o AGENTS.md, o pacote e o projeto. */
 export const TOKENS_DA_BASE = { entrada: 40_000, saida: 2_000, cacheFracao: 0.5 };
+/**
+ * A skill ui-ux-pro-max em cada passada (frente UIM, 30/09). TOKENS_POR_SECAO
+ * foi medido antes dela e com o bash desligado. Agora, em cada seção (uma
+ * sessão por seção), o SKILL.md entra no contexto quando o agente carrega a
+ * skill e volta em todas as chamadas seguintes; somam-se o MASTER.md, as
+ * buscas (1 a 4, cortadas em 12.000 caracteres), a prova de UX e a saída do
+ * `npm run checar`, que passou a rodar. Esta parcela soma por passada (seção
+ * ou ajuste). O teste uim-skills-do-motor liga BYTES_DO_SKILL_MD ao arquivo.
+ */
+export const BYTES_DO_SKILL_MD = 28_066;
+/** Bytes por token do SKILL.md (Markdown técnico em inglês; a conta erra para mais). */
+export const BYTES_POR_TOKEN = 4;
+/**
+ * Chamadas ao modelo numa seção com a skill. Medido em 30/09 na etapa C do
+ * provar-skills (deepseek-v4-flash, hero e serviços): 29 chamadas nas duas
+ * seções e 18 num hero sozinho; vale o maior.
+ */
+export const CHAMADAS_POR_SECAO = 18;
+/**
+ * O resto que a skill traz de volta a cada chamada (MASTER.md, saída das
+ * buscas, prova de UX, saída do build e as voltas a mais). Medido na mesma
+ * prova: 926.544 tokens de entrada em 2 seções (443 mil por seção, 92% em
+ * cache) e 610 mil num hero sozinho; com 260 mil de TOKENS_POR_SECAO, a
+ * parcela da skill ficou entre 180 e 310 mil por seção.
+ */
+export const TOKENS_DAS_BUSCAS = 200_000;
+export const TOKENS_DA_SKILL = { entrada: Math.ceil(BYTES_DO_SKILL_MD / BYTES_POR_TOKEN) * CHAMADAS_POR_SECAO + TOKENS_DAS_BUSCAS, saida: 4_000, cacheFracao: 0.85 };
 export const MAX_SECOES = 12;
 export const MAX_INSTRUCAO = 4000;
 /** Intervalo mínimo entre dois eventos gravados de um trabalho. */
@@ -154,7 +181,8 @@ export function estimarTrabalho(m: ModeloDoMotor | null, tipo: TipoDeTrabalho, s
   if (!gasta(tipo) || !m) return { estimativa_usd: 0, teto_sugerido_usd: 0, passos: tipo === "construir" ? Math.max(1, secoes) : 1 };
   const n = tipo === "construir" ? Math.min(MAX_SECOES, Math.max(1, Math.round(secoes))) : 1;
   const porPasso = tipo === "construir" ? TOKENS_POR_SECAO : TOKENS_POR_AJUSTE;
-  const bruto = custoDosTokens(m, TOKENS_DA_BASE) + n * custoDosTokens(m, porPasso);
+  // UIM: cada passada (seção ou ajuste) carrega a skill ui-ux-pro-max e roda as buscas e o build.
+  const bruto = custoDosTokens(m, TOKENS_DA_BASE) + n * (custoDosTokens(m, porPasso) + custoDosTokens(m, TOKENS_DA_SKILL));
   const estimativa = arred(bruto);
   const teto = Math.min(TETO_MAXIMO_USD, Math.max(TETO_MINIMO_USD, Math.ceil(estimativa * 2 * 20) / 20));
   return { estimativa_usd: estimativa, teto_sugerido_usd: arred(teto), passos: n };

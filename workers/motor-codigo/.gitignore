@@ -1,0 +1,4 @@
+# Pasta de configuração global do opencode que é só do worker (XDG_CONFIG_HOME próprio).
+.opencode-casa/
+# Cache do Python da busca da skill (o embrulho já desliga; é só a rede de segurança).
+vendor/**/__pycache__/

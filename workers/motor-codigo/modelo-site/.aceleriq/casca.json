@@ -1,11 +1,12 @@
 {
-  "versao": 2,
+  "versao": 3,
   "arquivos": [
     "AGENTS.md",
     "index.html",
     "scripts/prerender.mjs",
     "scripts/seo.mjs",
     "scripts/conferir.mjs",
+    "scripts/uiux.mjs",
     "src/App.tsx",
     "src/main.tsx",
     "src/entry-server.tsx",
@@ -13,6 +14,7 @@
     "src/lib/integracoes.tsx",
     "src/lib/movimento.ts",
     "src/lib/Revelar.tsx",
-    "src/lib/rolagem.ts"
+    "src/lib/rolagem.ts",
+    "src/lib/Grafico.tsx"
   ]
 }

@@ -10,6 +10,9 @@ import { PROJETO_VALIDO } from "../../../supabase/functions/_shared/motor-codigo
 import type { Fila } from "./fila.ts";
 import { rodar } from "./processos.ts";
 
+// UIM: um `2>nul` do agente no bash do Git cria o arquivo "nul", que quebra o git add do commit.
+import { apagarArquivosReservados } from "./nomes-reservados.ts";
+
 export const MODELO_DO_SITE = resolve(import.meta.dirname, "..", "modelo-site");
 
 export type ArquivoDoPacote = { bucket: string; path: string; destino: string };
@@ -26,6 +29,7 @@ export const commitAtual = (pasta: string) => git(pasta, ["rev-parse", "HEAD"]);
 
 /** Commit do que mudou; sem mudança, devolve o commit atual (null = nada novo). */
 export async function commitar(pasta: string, mensagem: string): Promise<{ commit: string; novo: boolean }> {
+  apagarArquivosReservados(pasta);
   await git(pasta, ["add", "-A"]);
   const status = await git(pasta, ["status", "--porcelain"]);
   if (!status) return { commit: await commitAtual(pasta), novo: false };
@@ -45,11 +49,24 @@ export function pastaDoProjeto(raiz: string, projeto: string): string {
   return join(raiz, projeto);
 }
 
+/**
+ * O que nunca sai do modelo para um projeto: dependências, build, cache do
+ * Python, qualquer pasta .opencode (as skills moram no worker; uma .opencode
+ * no projeto faz o opencode instalar pacotes do npm ali) e o que a base de
+ * design gera (design system, consulta gravada, log e prova de UX são de
+ * cada projeto).
+ */
+export function copiaDoModelo(origem: string): boolean {
+  if (/[\\/](node_modules|dist|dist-ssr|__pycache__|\.opencode)([\\/]|$)/.test(origem) || /\.pyc$/i.test(origem)) return false;
+  const rel = origem.slice(MODELO_DO_SITE.length).split("\\").join("/").replace(/^\/+/, "");
+  return !/^(design-system|\.aceleriq\/ux|\.aceleriq\/uiux-[a-z]+\.jsonl?)(\/|$)/.test(rel);
+}
+
 /** Cria o projeto do modelo (primeira vez) e deixa o git pronto. */
 export async function garantirProjeto(pasta: string): Promise<boolean> {
   if (existsSync(join(pasta, ".git"))) return false;
   mkdirSync(pasta, { recursive: true });
-  cpSync(MODELO_DO_SITE, pasta, { recursive: true, filter: (origem) => !/[\\/](node_modules|dist|dist-ssr)([\\/]|$)/.test(origem) });
+  cpSync(MODELO_DO_SITE, pasta, { recursive: true, filter: copiaDoModelo });
   mkdirSync(join(pasta, "public", "marca"), { recursive: true });
   mkdirSync(join(pasta, "public", "imagens"), { recursive: true });
   await git(pasta, ["init", "-q", "-b", "main"]);

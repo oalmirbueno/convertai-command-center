@@ -6,24 +6,31 @@
  * o custo que o opencode conta é o "pela tabela" do painel, e o teto do
  * trabalho aborta a sessão quando o custo chega nele.
  */
+import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { createOpencodeClient } from "@opencode-ai/sdk";
 import { criarContadorDeCusto, type EventoResumido, modeloParaOpencode, type ModeloDoMotor, passouDoTeto, resumirEventoDoOpencode } from "../../../supabase/functions/_shared/motor-codigo.ts";
-import { CHAVE_DO_PROVEDOR, configDoOpencode, temChave } from "./config-opencode.ts";
+import { ambienteDoOpencode, CHAVE_DO_PROVEDOR, configDoOpencode, PASTA_CASA_DO_OPENCODE, SKILLS_DA_CASA, temChave } from "./config-opencode.ts";
 
-export { CHAVE_DO_PROVEDOR, configDoOpencode, temChave };
+// O ambiente mora em config-opencode.ts (um só, para as frentes UIM e superpowers); daqui só sai reexportado.
+export { ambienteDoOpencode, CHAVE_DO_PROVEDOR, configDoOpencode, SKILLS_DA_CASA, temChave };
 import { esperarNaSaida, matar, subir } from "./processos.ts";
 
-const BINARIO = resolve(import.meta.dirname, "..", "node_modules", "opencode-ai", "bin", process.platform === "win32" ? "opencode.exe" : "opencode");
+export const BINARIO = resolve(import.meta.dirname, "..", "node_modules", "opencode-ai", "bin", process.platform === "win32" ? "opencode.exe" : "opencode");
 
 export type ServidorDoOpencode = { url: string; fechar: () => void; cliente: ReturnType<typeof createOpencodeClient> };
 
-export async function subirOpencode(pasta: string, m: ModeloDoMotor, medidorUrl?: string | null): Promise<ServidorDoOpencode> {
+/** Tipo do trabalho: decide as skills liberadas (permission.skill) além das da casa. */
+export type OpcoesDaSubida = { tipo?: string | null };
+
+export async function subirOpencode(pasta: string, m: ModeloDoMotor, medidorUrl?: string | null, opcoes: OpcoesDaSubida = {}): Promise<ServidorDoOpencode> {
   const o = modeloParaOpencode(m);
   if (!temChave(o.providerID)) throw new Error(`o worker não tem a chave ${CHAVE_DO_PROVEDOR[o.providerID]} no ambiente`);
+  // Ambiente isolado (frente UIM): só as skills da casa, sem CLAUDE.md nem pasta global pessoal.
+  mkdirSync(PASTA_CASA_DO_OPENCODE, { recursive: true });
   const p = subir(BINARIO, ["serve", "--port=0", "--hostname=127.0.0.1", "--pure"], {
     cwd: pasta,
-    env: { ...process.env, OPENCODE_CONFIG_CONTENT: JSON.stringify(configDoOpencode(m, medidorUrl)), NO_COLOR: "1" },
+    env: ambienteDoOpencode(configDoOpencode(m, medidorUrl, { tipo: opcoes.tipo }), "nativo"),
   });
   const m1 = await esperarNaSaida(p.saida, /listening on (https?:\/\/\S+)/, 45_000, () => p.processo.exitCode === null);
   if (!m1) {
