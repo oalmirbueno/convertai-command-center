@@ -1689,6 +1689,38 @@
       "remote_name": "mesa_identidade_v2",
       "remote_statements_sha256": "091c2ab914c7795f42e169c2a7fd4d1ca82397114ea3d3064089e1855e9c2c70",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930195000",
+      "path": "supabase/migrations/20260930195000_contratos_ficha_fiscal.sql",
+      "local_sha256": "d4b3a5f9aedbb88dd95d0f29e1b75196a351152c572d4a9283bf19c0c7ef2152",
+      "remote_name": "contratos_ficha_fiscal",
+      "remote_statements_sha256": "90dc56a2b665d7c6620886c585f3c803578b7fa0285dd6c553ae513120e240b8",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930195100",
+      "path": "supabase/migrations/20260930195100_contratos_ciclo_e_signatarios.sql",
+      "local_sha256": "8e88a7d68fe7dc209bb6d1bf5b8537e2dc8f5014a060b6ff2bce6a770a622bd1",
+      "remote_name": "contratos_ciclo_e_signatarios",
+      "remote_statements_sha256": "c7b14f78951d303034bfa6965552bb8ca246272f87103bfeeb6f9fb874c086d8",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930195200",
+      "path": "supabase/migrations/20260930195200_contratos_extras_e_aditivo_v1.sql",
+      "local_sha256": "629a45d6cc8ae18d9263948b8d16bb16a7006f38ac9218b4bc8a990e23bc4755",
+      "remote_name": "contratos_extras_e_aditivo_v1",
+      "remote_statements_sha256": "2d309877af2f2a37f4f990e163ddb6c3b8ab4e57b4aa0201460399e5f9bf3fe9",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930195300",
+      "path": "supabase/migrations/20260930195300_contratos_rotina_vencimentos.sql",
+      "local_sha256": "033993f659744e3854d81243da04f24c37807ef6918cf0ee81c4d403e8f7a224",
+      "remote_name": "contratos_rotina_vencimentos",
+      "remote_statements_sha256": "68cf0801337a041ef62a3382afb2c94b521abd54b0969f7fd541db83edf7a7ee",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
