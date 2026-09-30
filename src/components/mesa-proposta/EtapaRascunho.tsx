@@ -623,7 +623,14 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
             clientId: mesa.clientId,
             marcaId: proposta.marca_id,
             // PRO3: no upsell, o que o cliente já tem e os resultados reais entram no contexto (os números ganham fonte).
-            contexto: `Proposta comercial ${proposta.numero} (${proposta.titulo}). Itens: ${proposta.itens.map((i) => i.nome).join(", ") || "nenhum ainda"}. Regra: nunca invente número, preço, prazo, cliente atendido ou resultado.${proposta.upsell ? ` ${contextoDoUpsell(proposta.upsell, 2300)}` : ""}`.slice(0, 2900),
+            // QA 30/09: a reunião e os materiais guardados na proposta também são fonte ("Palavras do cliente" e
+            // "Desafio" voltavam vazios com a reunião colada). O servidor aceita até 3000 caracteres.
+            contexto: [
+              `Proposta comercial ${proposta.numero} (${proposta.titulo}). Itens: ${proposta.itens.map((i) => i.nome).join(", ") || "nenhum ainda"}. Regra: nunca invente número, preço, prazo, cliente atendido ou resultado.${proposta.upsell ? ` ${contextoDoUpsell(proposta.upsell, 2300)}` : ""}`,
+              proposta.contexto.notas ? `Notas da reunião: ${proposta.contexto.notas}` : "",
+              proposta.contexto.transcricao ? `Transcrição da reunião: ${proposta.contexto.transcricao}` : "",
+              (proposta.contexto.materiais || []).length ? `Materiais: ${(proposta.contexto.materiais || []).map((m) => `${m.nome}: ${m.texto}`).join(" | ")}` : "",
+            ].filter(Boolean).join("\n").slice(0, 3000),
             desligado: aceita,
             campos: camposDoBloco,
             aplicar: (valores) => {
@@ -673,7 +680,8 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
     const versaoAntes = proposta.versao;
     try {
       const conteudo = mesclarPorChaves(atual.conteudo, previaIa.proposto, chaves);
-      const d = await chamarProposta<any>("salvar", { proposta_id: proposta.id, versao_base: proposta.versao, titulo: atual.titulo, conteudo });
+      // aplicar_previa: o servidor leva as perguntas e a conferência do mercado (do evento da prévia) ao contexto.
+      const d = await chamarProposta<any>("salvar", { proposta_id: proposta.id, versao_base: proposta.versao, titulo: atual.titulo, conteudo, aplicar_previa: true, chaves_aplicadas: chaves });
       esquecer();
       aplicarNaLista(qc, mesa.clientId, d && d.proposta);
       setPreviaIa(null);

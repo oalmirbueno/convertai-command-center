@@ -55,6 +55,8 @@ export interface PropsDoPreencherComIA {
   /** A mesa grava; a peça oferece o Desfazer chamando onDesfazer. */
   onAplicar: (valores: Record<string, unknown>, r: ResultadoDoPreenchimento) => void | Promise<void>;
   onDesfazer?: (anteriores: Record<string, unknown>) => void | Promise<void>;
+  /** Abre com "Substituir o que já tem" marcado (ex.: sugerir texto de uma cláusula que já tem texto). */
+  substituirInicial?: boolean;
 }
 
 /** Chave (rota fixa) do último modelo escolhido por papel: vale em todas as mesas. */
@@ -78,7 +80,7 @@ export function PreencherComIA(props: PropsDoPreencherComIA): JSX.Element {
   });
   const [instrucao, setInstrucao] = useEstadoDaTela<string>(`preencher-ia:instrucao:${papel}:${clientId}:${campos.length ? campos[0].chave : ""}`, "", { validar: ehTexto });
   const [fontes, setFontes] = useState<FonteDoPreenchimento[]>(() => (props.fontes && props.fontes.length ? props.fontes.slice() : FONTES_PADRAO.slice()));
-  const [substituir, setSubstituir] = useState(false);
+  const [substituir, setSubstituir] = useState(!!props.substituirInicial);
   const [resultado, setResultado] = useState<ResultadoDoPreenchimento | null>(null);
   const [preenchendo, setPreenchendo] = useState(false);
   const [aplicando, setAplicando] = useState(false);

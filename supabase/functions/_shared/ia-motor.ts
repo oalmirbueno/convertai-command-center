@@ -60,6 +60,7 @@
  */
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { tetoDeSaidaNoProvedor } from "./teto-de-saida.ts";
 import {
   capacidadesDaListaDeImagens,
   type CapacidadesImagem,
@@ -985,7 +986,7 @@ async function textoOpenAi(m: ModeloIa, chave: string, e: EntradaTexto): Promise
     const { nome, schema } = nomeEsquema(e.esquemaJson);
     corpo.text = { format: { type: "json_schema", name: nome, schema, strict: true } };
   }
-  if (e.maxTokensSaida) corpo.max_output_tokens = e.maxTokensSaida;
+  if (e.maxTokensSaida) corpo.max_output_tokens = tetoDeSaidaNoProvedor(m, e.maxTokensSaida, e.raciocinio);
 
   const res = await buscar("openai", "https://api.openai.com/v1/responses", {
     method: "POST",
@@ -1034,7 +1035,7 @@ async function textoAnthropic(m: ModeloIa, chave: string, e: EntradaTexto): Prom
   });
   const corpo: Record<string, unknown> = {
     model: m.modelo_api,
-    max_tokens: e.maxTokensSaida ?? 16_000,
+    max_tokens: tetoDeSaidaNoProvedor(m, e.maxTokensSaida, e.raciocinio) ?? 16_000,
     system: e.sistema,
     messages,
   };
@@ -1116,7 +1117,7 @@ async function textoOpenRouter(m: ModeloIa, chave: string, e: EntradaTexto): Pro
     const { nome, schema } = nomeEsquema(e.esquemaJson);
     corpo.response_format = { type: "json_schema", json_schema: { name: nome, strict: true, schema } };
   }
-  if (e.maxTokensSaida) corpo.max_tokens = e.maxTokensSaida;
+  if (e.maxTokensSaida) corpo.max_tokens = tetoDeSaidaNoProvedor(m, e.maxTokensSaida, e.raciocinio);
 
   const res = await buscar("openrouter", "https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",

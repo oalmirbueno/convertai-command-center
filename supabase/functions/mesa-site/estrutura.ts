@@ -147,7 +147,14 @@ export async function sugerirPreset(ctx: ContextoDaEstrutura, ch: ChamadorDaEstr
 
 async function presetSugerir(ctx: ContextoDaEstrutura, ch: ChamadorDaEstrutura, c: Record<string, unknown>) {
   const s = await ctx.lerSite(ch, c.site_id);
-  const r = await sugerirPreset(ctx, ch, s);
+  let r: Awaited<ReturnType<typeof sugerirPreset>>;
+  try {
+    r = await sugerirPreset(ctx, ch, s);
+  } catch (e) {
+    // QA 30/09: o Jev fora do ar virava 500 genérico. A sugestão é opcional: a tela segue com a escolha manual.
+    const motivo = registrarFalha("mesa-site: Jev não sugeriu o preset", e, { site_id: s.id });
+    return ctx.json({ preset: null, probabilidades: {}, aviso: `A sugestão de estilo não saiu agora (${motivo.slice(0, 120)}). Escolha o preset na lista.`, custo_usd: 0 });
+  }
   return ctx.json({ preset: r.preset, probabilidades: r.probabilidades, aviso: r.preset ? null : "O Jev não escolheu um preset da lista.", custo_usd: r.custo });
 }
 

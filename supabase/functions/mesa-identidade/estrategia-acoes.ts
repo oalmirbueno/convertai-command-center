@@ -223,9 +223,11 @@ export async function gerarPaletas(ch: Chamador, p: LinhaDoProjeto, opcoes: { mo
   });
   const propostas = normalizarPaletasPropostas(saida.json);
   if (!propostas.length) throw new ErroHttp(502, "sem_paletas", "O modelo não devolveu paletas aproveitáveis. Nada foi gravado; tente de novo.");
-  const sistema = (p.dados.sistema as Record<string, unknown>) || {};
+  // Relê antes de gravar: a IA leva de 30 a 90 s e a equipe pode ter salvo o projeto nesse meio (QA 30/09: 409 e a proposta paga se perdia).
+  const fresco = await lerProjeto(ch, p.id);
+  const sistema = (fresco.dados.sistema as Record<string, unknown>) || {};
   const antes = sistema.propostas_de_paleta ?? null;
-  const projeto = await gravarProjeto(p, { dados: dadosComParte(p.dados, "sistema", { propostas_de_paleta: propostas }), custo_usd: p.custo_usd + saida.custoUsd });
+  const projeto = await gravarProjeto(fresco, { dados: dadosComParte(fresco.dados, "sistema", { propostas_de_paleta: propostas }), custo_usd: fresco.custo_usd + saida.custoUsd });
   return { projeto, propostas, antes, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd };
 }
 
@@ -271,9 +273,11 @@ export async function gerarFontes(ch: Chamador, p: LinhaDoProjeto, opcoes: { mod
   });
   const propostas = normalizarParesPropostos(saida.json);
   if (!propostas.length) throw new ErroHttp(502, "sem_fontes", "O modelo não devolveu pares aproveitáveis. Nada foi gravado; tente de novo.");
-  const sistema = (p.dados.sistema as Record<string, unknown>) || {};
+  // Relê antes de gravar (a equipe pode ter salvo o projeto enquanto a IA respondia).
+  const fresco = await lerProjeto(ch, p.id);
+  const sistema = (fresco.dados.sistema as Record<string, unknown>) || {};
   const antes = sistema.propostas_de_fonte ?? null;
-  const projeto = await gravarProjeto(p, { dados: dadosComParte(p.dados, "sistema", { propostas_de_fonte: propostas }), custo_usd: p.custo_usd + saida.custoUsd });
+  const projeto = await gravarProjeto(fresco, { dados: dadosComParte(fresco.dados, "sistema", { propostas_de_fonte: propostas }), custo_usd: fresco.custo_usd + saida.custoUsd });
   return { projeto, propostas, antes, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd };
 }
 
@@ -336,9 +340,11 @@ export async function gerarSlogans(ch: Chamador, p: LinhaDoProjeto, opcoes: { mo
   if (!brutos.length) throw new ErroHttp(502, "sem_slogans", "O modelo não devolveu frases aproveitáveis. Nada foi gravado; tente de novo.");
   const est = normalizarEstrategia(p.dados.estrategia);
   const r = await ranquearSlogans(ch, p, brutos, { nome: base.nome, posicionamento: est.posicionamento.declaracao || est.posicionamento.diferencial || null, tom: est.tom.atributos, arquetipo: est.arquetipo.principal || null, briefing: base.dados.briefing });
-  const naming = (p.dados.naming as Record<string, unknown>) || {};
+  // Relê antes de gravar (a equipe pode ter salvo o projeto enquanto a IA e o Jev respondiam).
+  const fresco = await lerProjeto(ch, p.id);
+  const naming = (fresco.dados.naming as Record<string, unknown>) || {};
   const antes = naming.slogans ?? null;
-  const projeto = await gravarProjeto(p, { dados: dadosComParte(p.dados, "naming", { slogans: r.slogans, aviso_slogans: r.aviso }), custo_usd: p.custo_usd + saida.custoUsd });
+  const projeto = await gravarProjeto(fresco, { dados: dadosComParte(fresco.dados, "naming", { slogans: r.slogans, aviso_slogans: r.aviso }), custo_usd: fresco.custo_usd + saida.custoUsd });
   return { projeto, slogans: r.slogans, aviso: r.aviso, antes, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd };
 }
 

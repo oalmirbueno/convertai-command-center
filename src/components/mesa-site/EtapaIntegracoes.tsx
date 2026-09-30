@@ -57,6 +57,8 @@ export default function EtapaIntegracoes({ site, onIrPara }: { site: LinhaDoSite
 
   const montado = montadoDepoisDasMudancas(site, trabalhos);
   const rodando = trabalhos.some((t) => t.estado === "na_fila" || t.estado === "executando" || t.estado === "parando");
+  // Motor desligado: o pedido espera na fila e a tela diz isso, sem girar para sempre (QA 30/09).
+  const parado = rodando && !!trabalhosQ.data && !trabalhosQ.data.vivo;
 
   const rodar = async (rotulo: string, fn: () => Promise<unknown>) => {
     setOcupado(rotulo);
@@ -115,12 +117,12 @@ export default function EtapaIntegracoes({ site, onIrPara }: { site: LinhaDoSite
     <div className="min-w-0 space-y-6" data-etapa-integracoes="">
       <Secao
         titulo="Integrações"
-        descricao={montado ? "Site em dia" : "Mudou depois do último build"}
+        descricao={parado ? "Motor desligado: a montagem espera na fila (pare em Construção)" : montado ? "Site em dia" : "Mudou depois do último build"}
         ajuda="O WhatsApp flutuante e o formulário são os jeitos de falar com o cliente. O formulário manda o contato para o Comercial do painel (origem site), com armadilha para robô, tempo mínimo e limite por visitante. Pixel da Meta e GA4 só carregam depois do Aceitar do aviso de cookies (LGPD), que liga sozinho quando há rastreio. O mapa do Google só carrega com o clique. Aplicar no site monta de novo com o que está salvo, sem gastar modelo."
         acao={
           <>
             <button type="button" className={juntar(botao.secundario, "mr-2")} disabled={!!ocupado || rodando} onClick={() => void aplicarNoSite()} data-aplicar-no-site="">
-              {ocupado === "A montagem não entrou na fila" || rodando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
+              {ocupado === "A montagem não entrou na fila" || (rodando && !parado) ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
               Aplicar no site
             </button>
             <button type="button" className={botao.primario} disabled={!!ocupado} onClick={() => void salvarIntegracoes()} data-salvar-integracoes="">

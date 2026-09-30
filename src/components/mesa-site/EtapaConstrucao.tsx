@@ -65,11 +65,11 @@ export default function EtapaConstrucao({ site }: { site: LinhaDoSite; onIrPara?
   const tetoUsd = teto.trim() ? Number(teto.replace(",", ".")) : estimativa.data ? estimativa.data.teto_sugerido_usd : 0;
 
   const selecionado = useMemo(() => trabalhos.find((t) => t.id === aberto) || trabalhos[0] || null, [trabalhos, aberto]);
-  const eventos = useEventos(selecionado);
+  const vivo = trabalhosQ.data ? trabalhosQ.data.vivo : false;
+  const eventos = useEventos(selecionado, vivo);
   const previa = previaAtual(trabalhos);
   const rodando = trabalhos.some((t) => ehAberto(t.estado));
   const executor = trabalhosQ.data ? trabalhosQ.data.executor : null;
-  const vivo = trabalhosQ.data ? trabalhosQ.data.vivo : false;
 
   const reler = () => {
     void qc.invalidateQueries({ queryKey: CHAVES.trabalhos(site.id) });

@@ -62,7 +62,8 @@ export const FONTES_PADRAO: FonteDoPreenchimento[] = ["contexto", "briefing", "d
 export const PAPEIS_QUE_PREENCHEM = ["proposta", "contrato", "briefing", "conselho", "identidade", "naming", "site", "motion", "documento"] as const;
 export type PapelQuePreenche = (typeof PAPEIS_QUE_PREENCHEM)[number];
 
-export const MAX_CAMPOS = 40;
+/** 80: o "Preencher tudo" dos Dados do contrato com 3 serviços manda 43 campos (QA 30/09). */
+export const MAX_CAMPOS = 80;
 const MAX_CHAVE = 120;
 const MAX_ROTULO = 120;
 const MAX_DICA = 400;
@@ -150,49 +151,92 @@ function objetoSimples(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
-/** Objeto com chaves conhecidas (do valor atual) vira objeto no esquema; sem forma conhecida, texto JSON. */
-function chavesDoObjeto(c: CampoParaPreencher): string[] | null {
-  if (!objetoSimples(c.valorAtual)) return null;
-  const chaves = Object.keys(c.valorAtual).filter((k) => NOME_DE_PROPRIEDADE.test(k)).slice(0, 20);
-  return chaves.length ? chaves : null;
+/** Forma de um campo "objeto": as chaves (lista = chave com lista de textos) e se o campo é uma lista de objetos. */
+export type FormaDoObjeto = { chaves: Array<{ nome: string; lista: boolean; numero: boolean }>; ehLista: boolean };
+
+/** Chaves escritas na dica no formato "{ nome, idade, dores[] }" (convenção das mesas). */
+function chavesDaDica(dica: string | undefined): Array<{ nome: string; lista: boolean; numero: boolean }> {
+  const m = /\{([^{}]*)\}/.exec(dica || "");
+  if (!m) return [];
+  const saida: Array<{ nome: string; lista: boolean; numero: boolean }> = [];
+  for (const parte of m[1].split(",")) {
+    const bruto = parte.trim();
+    const lista = /\[\]$/.test(bruto);
+    const nome = bruto.replace(/\[\]$/, "").trim();
+    if (NOME_DE_PROPRIEDADE.test(nome) && !saida.some((c) => c.nome === nome)) saida.push({ nome, lista, numero: false });
+  }
+  return saida.slice(0, 20);
 }
+
+function chavesDoValor(v: Record<string, unknown>) {
+  return Object.keys(v).filter((k) => NOME_DE_PROPRIEDADE.test(k)).slice(0, 20).map((k) => ({ nome: k, lista: Array.isArray(v[k]), numero: typeof v[k] === "number" }));
+}
+
+/**
+ * Forma do campo "objeto": pelo valor atual (objeto, ou lista cujo primeiro
+ * item é objeto) e, sem valor, pelas chaves da dica ("Lista de { situacao,
+ * certo, errado }"). Sem forma conhecida, null (vai como texto JSON).
+ * QA 30/09: "Exemplos por situação" da estratégia é uma lista de objetos e
+ * voltava sempre vazio ("a resposta não veio no formato do campo").
+ */
+export function formaDoObjeto(c: CampoParaPreencher): FormaDoObjeto | null {
+  const v = c.valorAtual;
+  const ehLista = Array.isArray(v) || /^\s*lista\b/i.test(c.dica || "");
+  let chaves: FormaDoObjeto["chaves"] = [];
+  if (objetoSimples(v)) chaves = chavesDoValor(v);
+  else if (Array.isArray(v) && objetoSimples(v[0])) chaves = chavesDoValor(v[0] as Record<string, unknown>);
+  if (!chaves.length) chaves = chavesDaDica(c.dica);
+  return chaves.length ? { chaves, ehLista } : null;
+}
+
+/** O que o modelo devolve quando a fonte não dá base, por tipo (sem null: ver propriedadeDoCampo). */
+const VAZIO_DO_TIPO: Record<TipoDoCampo, string> = {
+  texto: "texto vazio",
+  texto_longo: "texto vazio",
+  lista: "lista vazia",
+  numero: "texto vazio",
+  escolha: "texto vazio",
+  objeto: "texto vazio",
+};
 
 function descricaoDoCampo(c: CampoParaPreencher): string {
   const partes = [c.rotulo];
   if (c.maximo) partes.push(c.tipo === "lista" ? `até ${c.maximo} itens` : c.tipo === "numero" ? "" : `até ${c.maximo} caracteres`);
+  if (c.tipo === "numero") partes.push("só o número, em algarismos");
   if (c.dica) partes.push(c.dica);
-  partes.push("null quando as fontes não dão base");
+  partes.push(`${VAZIO_DO_TIPO[c.tipo]} quando as fontes não dão base`);
   return partes.filter(Boolean).join(". ");
 }
 
+/**
+ * Propriedade do campo SEM tipo união (nada de ["string","null"] nem anyOf).
+ * A Anthropic (direta e pelo OpenRouter) recusa esquema com mais de 16
+ * parâmetros com união ("Schemas contains too many parameters with union
+ * types (19 ...) limit: 16"), visto em 30/09 no Preencher tudo do site com o
+ * Opus 5.5 (18 campos). Antes disso, enum com tipo em lista também era
+ * recusado. Por isso "sem base" é vazio: texto "", lista [], escolha "" (a
+ * opção vazia entra no enum). Número vai como texto (algarismos) para poder
+ * voltar vazio sem inventar 0; a limpeza converte e confere.
+ */
 function propriedadeDoCampo(c: CampoParaPreencher): Record<string, unknown> {
   const description = descricaoDoCampo(c);
   switch (c.tipo) {
-    case "numero":
-      return { type: ["number", "null"], description };
     case "lista":
-      return { type: ["array", "null"], items: { type: "string" }, description };
+      return { type: "array", items: { type: "string" }, description };
     case "escolha":
-      // anyOf em vez de type [string, null] + enum: a Anthropic (direta e pelo OpenRouter) recusa enum
-      // com tipo em lista ("Enum value ... does not match declared type"), visto em 30/09 no Preencher tudo do site.
-      return { anyOf: [{ type: "string", enum: c.opcoes || [] }, { type: "null" }], description };
+      return { type: "string", enum: (c.opcoes || []).concat([""]), description };
     case "objeto": {
-      const chaves = chavesDoObjeto(c);
-      if (!chaves) return { type: ["string", "null"], description: `${description}. Objeto em texto JSON` };
-      const atual = c.valorAtual as Record<string, unknown>;
+      const forma = formaDoObjeto(c);
+      if (!forma) return { type: "string", description: `${description}. Objeto em texto JSON` };
       const properties: Record<string, unknown> = {};
-      for (const k of chaves) {
-        const v = atual[k];
-        properties[k] = typeof v === "number"
-          ? { type: ["number", "null"] }
-          : Array.isArray(v)
-          ? { type: ["array", "null"], items: { type: "string" } }
-          : { type: ["string", "null"] };
-      }
-      return { type: ["object", "null"], additionalProperties: false, required: chaves, properties, description };
+      for (const k of forma.chaves) properties[k.nome] = k.lista ? { type: "array", items: { type: "string" } } : { type: "string" };
+      const objeto = { type: "object", additionalProperties: false, required: forma.chaves.map((k) => k.nome), properties };
+      if (forma.ehLista) return { type: "array", items: objeto, description: `${description}. Lista vazia quando as fontes não dão base` };
+      return { ...objeto, description: `${description}. Chave sem base fica vazia` };
     }
     default:
-      return { type: ["string", "null"], description };
+      // texto, texto_longo e numero.
+      return { type: "string", description };
   }
 }
 
@@ -200,7 +244,8 @@ export type MapaDoEsquema = Record<string, CampoParaPreencher>;
 
 /**
  * Esquema JSON estrito (OpenAI strict, Anthropic e OpenRouter): todas as
- * chaves obrigatórias, additionalProperties false, null para "sem base".
+ * chaves obrigatórias, additionalProperties false, vazio para "sem base" e
+ * nenhum tipo união (limite de 16 da Anthropic, ver propriedadeDoCampo).
  */
 export function esquemaDosCampos(campos: CampoParaPreencher[]): { nome: string; schema: Record<string, unknown>; mapa: MapaDoEsquema } {
   const mapa: MapaDoEsquema = {};
@@ -229,7 +274,7 @@ export function esquemaDosCampos(campos: CampoParaPreencher[]): { nome: string; 
             type: "object",
             additionalProperties: false,
             required: ["campo", "trecho", "url"],
-            properties: { campo: { type: "string" }, trecho: { type: "string" }, url: { type: ["string", "null"] } },
+            properties: { campo: { type: "string" }, trecho: { type: "string" }, url: { type: "string", description: "url da web ou texto vazio" } },
           },
         },
         avisos: { type: "array", items: { type: "string" }, description: "O que ficou vazio e por quê" },
@@ -275,7 +320,7 @@ export function montarPedido(p: PedidoDoPreenchimento): { sistema: string; mensa
   const sistema = [
     `Você preenche campos de uma mesa de trabalho da agência Aceleriq (papel: ${p.papel}). Escreva em português do Brasil, direto, sem travessão.`,
     "Regra dura: use só o que está nas fontes do pedido, na instrução e no que a tela sabe" + (p.web ? " e o que achar na pesquisa na web, sempre com a url" : "") + ".",
-    "Nunca invente número, preço, data, prazo, porcentagem, nome de pessoa, empresa, produto ou lugar. Se a fonte não traz, o campo fica null e vai um aviso curto dizendo o que faltou.",
+    "Nunca invente número, preço, data, prazo, porcentagem, nome de pessoa, empresa, produto ou lugar. Se a fonte não traz, o campo fica vazio (texto vazio ou lista vazia) e vai um aviso curto dizendo o que faltou, citando o campo pelo nome (nunca c0, c1...).",
     "Para cada número, data ou nome que usar, ponha em citacoes o trecho literal da fonte (com a url quando vier da web).",
     "Respeite o tipo, as opções e o limite de cada campo. Em fontes_usadas, repita os rótulos das fontes como vieram (### rótulo).",
     p.substituir ? "Campos com valor atual podem ser reescritos; mantenha o que já estava certo." : "Os campos pedidos estão vazios.",
@@ -484,10 +529,14 @@ function conferirCampo(bruto: unknown, c: CampoParaPreencher, ref: ReferenciaDas
   if (campoVazio(bruto)) return vazio(null);
   switch (c.tipo) {
     case "numero": {
+      // Texto sem algarismo ("não informado") é sem base: nunca vira 0.
+      if (typeof bruto !== "number" && !/\d/.test(String(bruto))) return vazio(null);
       const n = typeof bruto === "number" ? bruto : Number(valorDoNumero(String(bruto).replace(/[^\d.,-]/g, "")));
       if (!Number.isFinite(n)) return vazio("o valor não é um número");
       const s = String(n);
-      if (!ref.numeros[valorDoNumero(s)] && !ref.digitos[s.replace(/[.,-]/g, "")]) return vazio(`o número ${s} não aparece nas fontes`);
+      // Inteiro pequeno (até 10, com sinal) fica livre, como no texto: escala de -2 a 2, nota de 1 a 5.
+      const pequeno = Number.isInteger(n) && Math.abs(n) <= 10;
+      if (!pequeno && !ref.numeros[valorDoNumero(s)] && !ref.digitos[s.replace(/[.,-]/g, "")]) return vazio(`o número ${s} não aparece nas fontes`);
       return { valor: n, aviso: null };
     }
     case "escolha": {
@@ -525,22 +574,52 @@ function conferirCampo(bruto: unknown, c: CampoParaPreencher, ref: ReferenciaDas
           return vazio("a resposta não veio no formato do campo");
         }
       }
-      if (!objetoSimples(obj)) return vazio("a resposta não veio no formato do campo");
-      const saida: Record<string, unknown> = {};
-      for (const k of Object.keys(obj)) {
-        const v = obj[k];
-        if (campoVazio(v)) continue;
-        const textoDoValor = valorParaTexto(v, 4000);
-        const numeros = numerosSemFonte(textoDoValor, ref);
-        if (numeros.length) return vazio(`o número ${numeros.slice(0, 3).join(", ")} não aparece nas fontes`);
-        if (nomesEstritos && typeof v === "string") {
-          const nomes = nomesSemFonte(v, ref);
-          if (nomes.length) return vazio(`o nome ${nomes.slice(0, 3).join(", ")} não aparece nas fontes`);
+      const forma = formaDoObjeto(c);
+      // Chave que sai (número ou nome fora das fontes) sai sozinha, com aviso: o resto do objeto fica.
+      const avisos: string[] = [];
+      const limparObjeto = (o: Record<string, unknown>): Record<string, unknown> | null => {
+        const saida: Record<string, unknown> = {};
+        for (const k of Object.keys(o)) {
+          if (forma && !forma.chaves.some((x) => x.nome === k)) continue;
+          let v = o[k];
+          // O esquema pede texto (sem união); a chave que era número volta número.
+          const ehNumero = forma ? forma.chaves.some((x) => x.nome === k && x.numero) : false;
+          if (ehNumero && typeof v === "string" && /\d/.test(v)) {
+            const n = Number(valorDoNumero(v.replace(/[^\d.,-]/g, "")));
+            if (Number.isFinite(n)) v = n;
+          }
+          if (campoVazio(v)) continue;
+          const textoDoValor = valorParaTexto(v, 4000);
+          const numeros = numerosSemFonte(textoDoValor, ref);
+          if (numeros.length) {
+            avisos.push(`${k} saiu (o número ${numeros.slice(0, 3).join(", ")} não aparece nas fontes)`);
+            continue;
+          }
+          if (nomesEstritos) {
+            const nomes = (Array.isArray(v) ? v : [v]).filter((x) => typeof x === "string").reduce((a: string[], x) => a.concat(nomesSemFonte(String(x), ref)), []);
+            if (nomes.length) {
+              avisos.push(`${k} saiu (o nome ${nomes.slice(0, 3).join(", ")} não aparece nas fontes)`);
+              continue;
+            }
+          }
+          saida[k] = typeof v === "string" ? semTravessao(v.trim()) : Array.isArray(v) ? v.map((x) => (typeof x === "string" ? semTravessao(x.trim()) : x)).filter((x) => !campoVazio(x)) : v;
         }
-        saida[k] = typeof v === "string" ? semTravessao(v.trim()) : v;
+        return Object.keys(saida).length ? saida : null;
+      };
+      const comAvisos = (valor: unknown): Conferencia => ({ valor, aviso: avisos.length ? `${c.rotulo}: ${avisos.slice(0, 3).join("; ")}.` : null });
+      if (Array.isArray(obj)) {
+        let itens = obj.filter(objetoSimples).map(limparObjeto).filter((x): x is Record<string, unknown> => !!x);
+        if (c.maximo && itens.length > c.maximo) {
+          avisos.push(`cortada em ${c.maximo} itens`);
+          itens = itens.slice(0, c.maximo);
+        }
+        if (!itens.length) return vazio(avisos[0] || null);
+        return comAvisos(itens);
       }
-      if (!Object.keys(saida).length) return vazio(null);
-      return { valor: saida, aviso: null };
+      if (!objetoSimples(obj)) return vazio("a resposta não veio no formato do campo");
+      const limpo = limparObjeto(obj);
+      if (!limpo) return vazio(avisos[0] || null);
+      return comAvisos(limpo);
     }
     default: {
       const s = typeof bruto === "string" ? bruto : valorParaTexto(bruto, 20_000);
@@ -571,6 +650,7 @@ export function limparResposta(json: unknown, ctx: ContextoDaLimpeza): { valores
   const nomesEstritos = ctx.papel !== "naming";
   const valores: Record<string, unknown> = {};
   const avisos: string[] = [];
+  const comAviso: Record<string, true> = {};
   for (const k of Object.keys(ctx.mapa)) {
     const c = ctx.mapa[k];
     if (!ctx.substituir && !campoVazio(c.valorAtual)) continue;
@@ -578,10 +658,22 @@ export function limparResposta(json: unknown, ctx: ContextoDaLimpeza): { valores
     const ref = referenciaDas(textos.concat([c.rotulo, c.dica || "", (c.opcoes || []).join(" "), valorParaTexto(c.valorAtual, 20_000)]));
     const r = conferirCampo(brutos[k], c, ref, nomesEstritos);
     if (r.valor !== undefined) valores[c.chave] = r.valor;
-    if (r.aviso) avisos.push(r.aviso);
+    if (r.aviso) {
+      avisos.push(r.aviso);
+      comAviso[k] = true;
+    }
   }
-  // Avisos do modelo (curtos) depois dos da conferência, sem repetir.
-  for (const a of listaDeTextos(raiz.avisos, 12)) if (avisos.indexOf(a) < 0) avisos.push(a);
+  // Avisos do modelo (curtos) depois dos da conferência, sem repetir: a chave
+  // interna (c0, c1...) vira o nome do campo, e o aviso sobre um campo que a
+  // conferência já avisou sai (visto em 30/09: "c5 ficou vazio" repetindo
+  // "Sites que o cliente admira: ficou vazio").
+  for (const bruto of listaDeTextos(raiz.avisos, 12)) {
+    const citadas = (bruto.match(/\bc\d{1,2}\b/g) || []).filter((k) => !!ctx.mapa[k]);
+    if (citadas.some((k) => comAviso[k])) continue;
+    const a = bruto.replace(/\bc\d{1,2}\b/g, (k) => (ctx.mapa[k] ? ctx.mapa[k].rotulo : k));
+    const rotuloRepetido = Object.keys(comAviso).some((k) => normalizarParaComparar(a).indexOf(normalizarParaComparar(ctx.mapa[k].rotulo)) === 0);
+    if (!rotuloRepetido && avisos.indexOf(a) < 0) avisos.push(a);
+  }
 
   // Fontes: só os rótulos que o servidor leu de fato, mais as urls da web citadas.
   const rotulos = ctx.fontes.filter((f) => f.texto.trim()).map((f) => f.rotulo);

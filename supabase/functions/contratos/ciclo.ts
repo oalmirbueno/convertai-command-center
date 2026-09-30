@@ -22,7 +22,6 @@ import { efeitosDosAditivos, type LinhaDoPainel, mensagemDeLembrete, numeroDoAdi
 import { valoresDaFicha } from "../_shared/contrato-ficha.ts";
 import { fecharComSignatarios, lerSignatariosDoContrato } from "../_shared/contrato-assinaturas.ts";
 import {
-  bancoTemCon2,
   type Chamador,
   ErroHttp,
   evento,
@@ -250,10 +249,32 @@ async function gerarDoCliente(ch: Chamador, n: Nucleo, corpo: Record<string, unk
   return json({ ...(await n.payloadDoContrato(ch, linha)), origem, avisos, pergunta });
 }
 
+// ------------------------------------------------------------------ marcas pela trilha (QA 30/09)
+
+/**
+ * Última vez de cada evento por contrato, lida da trilha (contrato_eventos).
+ * A guarda do banco (contracts_secure_guard) não deixa gravar lembrete_em nem
+ * aviso_vencimento_em em contrato enviado ou assinado: a gravação falhava
+ * sempre, o "último lembrete" nunca aparecia e o aviso de vencimento se
+ * repetia todo dia na trilha. A marca passa a ser o próprio evento.
+ */
+export async function ultimosEventos(ids: string[], tipo: string): Promise<Record<string, string>> {
+  const saida: Record<string, string> = {};
+  if (!ids.length) return saida;
+  const { data, error } = await servico().from("contrato_eventos").select("contract_id, criado_em").eq("tipo", tipo).in("contract_id", ids.slice(0, 1000)).order("criado_em", { ascending: false }).limit(5000);
+  if (error) {
+    registrarFalha(`contratos: trilha (${tipo}) não lida`, error);
+    return saida;
+  }
+  for (const e of (data as Array<{ contract_id: string; criado_em: string }> | null) ?? []) if (!saida[e.contract_id]) saida[e.contract_id] = e.criado_em;
+  return saida;
+}
+
 // ------------------------------------------------------------------ lembrete (mensagem pronta; a pessoa envia)
 
 async function lembretes(ch: Chamador, n: Nucleo, l: Linha) {
-  const [{ lista }, cliente, agencia] = await Promise.all([lerSignatariosDoContrato(servico(), l.id), n.nomeDoCliente(l.client_id), n.lerAgencia()]);
+  const [{ lista }, cliente, agencia, marcas] = await Promise.all([lerSignatariosDoContrato(servico(), l.id), n.nomeDoCliente(l.client_id), n.lerAgencia(), ultimosEventos([l.id], "lembrete_copiado")]);
+  const ultimoLembrete = marcas[l.id] || null;
   const hoje = hojeEmSaoPaulo();
   const desde = String(l.sent_at || l.congelado_em || "").slice(0, 10) || hoje;
   const dias = Math.max(0, Math.round((Date.parse(hoje) - Date.parse(desde)) / 86400000));
@@ -262,7 +283,7 @@ async function lembretes(ch: Chamador, n: Nucleo, l: Linha) {
     : [{ id: null, nome: l.variaveis.cliente_representante ? String(l.variaveis.cliente_representante).split(",")[0] : cliente, papel: "contratante" as const, email: l.variaveis.cliente_email || "", link: linkDeAssinatura(l.sign_token) }];
   return {
     dias,
-    ultimo_lembrete: (l.lembrete_em as string | null) || null,
+    ultimo_lembrete: ultimoLembrete || (l.lembrete_em as string | null) || null,
     lembretes: pendentes.map((x) => ({ ...x, mensagens: mensagemDeLembrete({ nome: x.nome, titulo: l.title, link: x.link, dias, agencia: agencia.nome || "Aceleriq" }) })),
   };
 }
@@ -280,6 +301,11 @@ export function acoesDoCiclo(n: Nucleo) {
       const [r, prefs] = await Promise.all([q, lerPreferencias()]);
       if (r.error) throw semTabela(r.error) ? new ErroHttp(503, "banco_sem_ciclo", "O banco ainda não tem o ciclo dos contratos (migration 20260930195100 pendente).") : new ErroHttp(503, "painel_indisponivel", "Não foi possível montar o painel agora.");
       const linhas = ((r.data as unknown[] | null) ?? []).map((d) => normalizarLinha(d) as unknown as LinhaDoPainel);
+      // O "lembrete em" vem da trilha (a coluna não grava em contrato enviado: ver ultimosEventos).
+      const lembretes = await ultimosEventos(linhas.filter((l) => l.status === "sent").map((l) => l.id), "lembrete_copiado");
+      linhas.forEach((l) => {
+        if (lembretes[l.id]) l.lembrete_em = lembretes[l.id];
+      });
       const painel = painelDosContratos(linhas, hojeEmSaoPaulo(), prefs.avisos.aviso_vencimento_dias);
       return json({ painel, janela_dias: prefs.avisos.aviso_vencimento_dias, lembrete_dias: prefs.avisos.lembrete_assinatura_dias, custo_usd: 0 });
     },
@@ -315,10 +341,7 @@ export function acoesDoCiclo(n: Nucleo) {
       const l = await lerLinha(ch, corpo.contract_id, true);
       if (l.status !== "sent") throw new ErroHttp(409, "nada_pendente", "Este contrato não está esperando assinatura.");
       const canal = limpo(corpo.canal, 20) || "whatsapp";
-      if (bancoTemCon2()) {
-        const { error } = await servico().from("contracts").update({ lembrete_em: new Date().toISOString() }).eq("id", l.id).eq("status", "sent");
-        if (error) registrarFalha("contratos: lembrete não marcado", error, { contract_id: l.id });
-      }
+      // A marca é o próprio evento (a guarda do banco não deixa gravar lembrete_em em contrato enviado).
       await evento(l, "lembrete_copiado", `Lembrete de assinatura usado (${canal}), enviado pela equipe.`, { canal, signatario_id: corpo.signatario_id || null }, ch.userId);
       return json({ ok: true, custo_usd: 0 });
     },
@@ -375,10 +398,12 @@ export async function rotinaVencimentos(n: Nucleo) {
   const nomes: Record<string, string> = {};
   const nome = async (id: string) => (nomes[id] = nomes[id] || (await n.nomeDoCliente(id)));
   const aditivos = await aditivosDe(linhas.filter((l) => l.status === "completed").map((l) => l.id));
+  // Aviso de vencimento já dado: pela trilha (a coluna aviso_vencimento_em não grava em contrato assinado).
+  const jaAvisados = await ultimosEventos(linhas.filter((l) => l.status === "completed").map((l) => l.id), "aviso_vencimento");
   for (const l of linhas) {
     try {
       const sistema: Chamador = { userId: String(l.created_by || ""), email: "", nome: "rotina", ip: "rotina", doChamador: servico(), sistema: true };
-      if (l.status === "completed" && l.tipo_documento !== "aditivo" && !l.substituido_por && !l.aviso_vencimento_em) {
+      if (l.status === "completed" && l.tipo_documento !== "aditivo" && !l.substituido_por && !l.aviso_vencimento_em && !jaAvisados[l.id]) {
         const ef = efeitosDosAditivos(l as unknown as LinhaDoPainel, aditivos, hoje);
         const fim = ef.fim;
         if (!fim) continue;
@@ -386,8 +411,6 @@ export async function rotinaVencimentos(n: Nucleo) {
         if (dias > prefs.avisos.aviso_vencimento_dias || dias < -30) continue;
         const r = await renovarContrato(sistema, n, l.id);
         if (!r.jaExistia) resumo.renovacoes++;
-        const { error: marca } = await servico().from("contracts").update({ aviso_vencimento_em: new Date().toISOString() }).eq("id", l.id);
-        if (marca) registrarFalha("contratos: aviso de vencimento não marcado", marca, { contract_id: l.id });
         await evento(l, "aviso_vencimento", dias >= 0 ? `Vence em ${dias} dias. A renovação está pronta para revisar.` : `Venceu há ${-dias} dias. A renovação está pronta para revisar.`, { fim, renovacao_id: r.linha.id }, null);
         await avisar(quem, `Contrato ${l.numero || ""} de ${await nome(l.client_id)} ${dias >= 0 ? `vence em ${dias} dias` : `venceu há ${-dias} dias`}. A renovação está pronta para revisar.`, `/contratos?client=${l.client_id}&contrato=${r.linha.id}`, 30);
         resumo.avisos_vencimento++;

@@ -42,7 +42,9 @@ const ativo = (p: PedidoNaFila) => p.estado === "fila" || p.estado === "rodando"
 export function rotuloDoPedido(p: PedidoNaFila, agoraMs: number, worker: EstadoDaFila["worker"]): string {
   if (p.estado === "rodando") return `${p.etapa ? ROTULO_DA_ETAPA[p.etapa] : ROTULO_DO_ESTADO.rodando} ${Math.round((Number(p.progresso) || 0) * 100)}%`;
   if (p.estado === "fila") {
-    const parado = agoraMs - Date.parse(p.criado_em) > FILA_PARADA_MS && (!worker || worker.situacao !== "ligado");
+    // Máquina sabidamente desligada (ou nunca ligada): diz na hora, sem esperar 2 min (QA 30/09).
+    if (worker && worker.situacao !== "ligado") return "Na fila: a máquina da agência está desligada";
+    const parado = agoraMs - Date.parse(p.criado_em) > FILA_PARADA_MS && !worker;
     return parado ? "Na fila: a máquina da agência parece desligada" : ROTULO_DO_ESTADO.fila;
   }
   if (p.estado === "erro") return p.erro_mensagem || ROTULO_DO_ESTADO.erro;

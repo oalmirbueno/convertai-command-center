@@ -148,7 +148,9 @@ describe("IDV2: estratégia de marca", () => {
     const s = ESQUEMA_DA_ESTRATEGIA.schema as any;
     expect(s.required).toEqual(expect.arrayContaining(["proposito", "arquetipo", "posicionamento", "tom", "avisos"]));
     expect(s.properties.arquetipo.properties.principal.enum.length).toBe(12);
-    expect(s.properties.personalidade.properties.eixos.properties.humor).toEqual({ type: "integer", minimum: -2, maximum: 2 });
+    // Sem minimum/maximum (a Anthropic recusa): a faixa vai como enum, QA 30/09.
+    expect(s.properties.personalidade.properties.eixos.properties.humor).toMatchObject({ type: "integer", enum: [-2, -1, 0, 1, 2] });
+    expect(s.properties.personalidade.properties.eixos.properties.humor.minimum).toBeUndefined();
   });
 
   it("a estratégia vai para o brandbook (vale mais que o briefing)", () => {

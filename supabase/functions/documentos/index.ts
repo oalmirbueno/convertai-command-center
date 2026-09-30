@@ -225,7 +225,7 @@ async function dadosDaAgencia(): Promise<DadosDaAgencia> {
     return await exigirDadosDaAgencia(servico(), "documento");
   } catch (e) {
     if (e instanceof DadosDaAgenciaIncompletos) {
-      throw new ErroHttp(409, e.codigo, `${e.message} Preencha em Configurações, Dados da agência.`, { faltas: e.faltas });
+      throw new ErroHttp(409, e.codigo, e.message, { faltas: e.faltas }); // a mensagem já traz "Preencha em Configurações" (QA 30/09)
     }
     registrarFalha("documentos: dados da agência não lidos", e);
     throw new ErroHttp(503, "dados_da_agencia_indisponiveis", "Não foi possível ler os dados da agência agora.");
@@ -263,6 +263,7 @@ const custoEstimado = (m: ModeloIa) => estimarComModelo(m, { tokensEntrada: TAMA
 
 async function estimar(_ch: Chamador, corpo: Record<string, unknown>) {
   await garantirAcesso(_ch, String(corpo.client_id ?? ""));
+  await dadosDaAgencia(); // faltando dado da agência, a tela sabe já no custo (QA 30/09)
   const m = await modeloDoDocumento(corpo.modelo_id);
   // Com o rascunho da equipe (texto escrito e provas escolhidas), o gerar não chama modelo nem Jev.
   if (corpo.usar_rascunho === true && UUID.test(String(corpo.documento_id || ""))) {
@@ -409,8 +410,7 @@ async function gerarRegistro(ch: Chamador, corpo: Record<string, unknown>) {
   const s = servico();
   const clientId = pedido.client_id;
 
-  // Dados da agência antes de tudo (faltando, nada de IA é gasto).
-  const agencia = await dadosDaAgencia();
+  const agencia = await dadosDaAgencia(); // antes de tudo: faltando, nada de IA é gasto
   const [marca, marcas, cliente, modelo] = await Promise.all([
     resolverMarca(s, clientId, { marca_id: pedido.marca_id, project_id: pedido.tipo === "projeto" ? pedido.referencia : null }),
     marcasDoCliente(s, clientId),

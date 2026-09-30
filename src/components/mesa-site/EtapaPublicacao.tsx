@@ -77,9 +77,10 @@ export default function EtapaPublicacao({ site }: { site: LinhaDoSite }) {
 
   const baixar = () =>
     rodar("O zip não saiu", async () => {
-      const d = await chamarSite<{ zip: { path: string } | null; trabalho?: { id: string } }>("zip_pedir", { site_id: site.id });
+      const d = await chamarSite<{ zip: { path: string } | null; trabalho?: { id: string }; ja_na_fila?: boolean; motor_ligado?: boolean }>("zip_pedir", { site_id: site.id });
       if (!d.zip) {
-        toast.info("O motor está guardando o código. O zip aparece aqui em instantes.");
+        if (d.motor_ligado === false) toast.info("O motor de código (máquina da agência) está desligado: o pedido do zip espera na fila e sai quando ele ligar.");
+        else toast.info(d.ja_na_fila ? "O zip já está na fila do motor. Aparece aqui em instantes." : "O motor está guardando o código. O zip aparece aqui em instantes.");
         return;
       }
       const { data, error } = await supabase.storage.from("mesa").createSignedUrl(d.zip.path, 600, { download: `${site.projeto}.zip` });

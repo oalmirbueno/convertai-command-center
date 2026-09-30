@@ -460,7 +460,7 @@ export const ESQUEMA_DA_ESTRATEGIA = {
         additionalProperties: false,
         required: ["eixos", "tracos"],
         properties: {
-          eixos: { type: "object", additionalProperties: false, required: EIXOS_DE_PERSONALIDADE.map((e) => e.valor), properties: EIXOS_DE_PERSONALIDADE.reduce((a, e) => ({ ...a, [e.valor]: { type: "integer", minimum: -2, maximum: 2 } }), {} as Record<string, unknown>) },
+          eixos: { type: "object", additionalProperties: false, required: EIXOS_DE_PERSONALIDADE.map((e) => e.valor), properties: EIXOS_DE_PERSONALIDADE.reduce((a, e) => ({ ...a, [e.valor]: { type: "integer", enum: [-2, -1, 0, 1, 2], description: `${e.esquerda} (-2) a ${e.direita} (2)` } }), {} as Record<string, unknown>) },
           tracos: LISTA,
         },
       },

@@ -354,7 +354,7 @@ export default function AgenteEditor({
   // Frente EDT: a marca aberta (logo e cor do kit) e a fila de render desta versão.
   const kit = useKitDaMesa();
   const marca: MarcaParaOAgente = { logo_path: (kit.data && kit.data.logo_path) || null, cor: corDaPaleta(kit.data ? kit.data.paleta : null), nome: kit.marca ? kit.marca.nome : null };
-  useFilaDeRender(clientId, versaoId || null, chamarEditorVideo, (p: PedidoNaFila) => {
+  const filaDeRender = useFilaDeRender(clientId, versaoId || null, chamarEditorVideo, (p: PedidoNaFila) => {
     if (p.estado !== "pronto" || p.tipo === "onda") return;
     const atual = projetoRef.current;
     const entrada = (p.entrada || {}) as { inicio_s?: number; fim_s?: number };
@@ -366,6 +366,10 @@ export default function AgenteEditor({
     }
     rolarParaBaixo();
   });
+  // Máquina da agência desligada: o agente não promete prazo (QA 30/09); o pedido espera na fila.
+  const maquinaDesligadaRef = useRef(false);
+  maquinaDesligadaRef.current = !!filaDeRender.worker && filaDeRender.worker.situacao !== "ligado";
+  const quandoAMaquinaLigar = " A máquina da agência está desligada: o pedido espera na fila e roda quando ela ligar.";
 
   const modelo = modelos.find((m) => m.id === escolha.modelo) || modelos.find((m) => (m.padrao_para || []).indexOf("diretor_arte") >= 0) || modelos[0] || null;
   const raciocinios = (modelo && modelo.raciocinio) || [];
@@ -507,7 +511,7 @@ export default function AgenteEditor({
       const c = controleRef.current;
       if (c && c.salvarAgora) await c.salvarAgora();
       const r = await pedirRender(chamarEditorVideo, { clientId, versaoId, tipo: "render_final", uid: `x${acao.id}`.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80).padEnd(8, "0") });
-      anexo = { ...acao, executada_em: agora, resultados: acao.itens.map((i) => ({ ref: i.ref, alvo_id: r.pedido.id, titulo: `${i.titulo}: ${r.ja_existia ? "já estava na fila" : "na fila da máquina da agência"}`, operacao: i.operacao, ok: true, desfazer: null })) };
+      anexo = { ...acao, executada_em: agora, resultados: acao.itens.map((i) => ({ ref: i.ref, alvo_id: r.pedido.id, titulo: `${i.titulo}: ${r.ja_existia ? "já estava na fila" : maquinaDesligadaRef.current ? "na fila (a máquina da agência está desligada: roda quando ela ligar)" : "na fila da máquina da agência"}`, operacao: i.operacao, ok: true, desfazer: null })) };
       resposta = { anexo, feitos: 1, falhas: 0 };
     } else if (ehGeracao(acao)) {
       if (pedido !== "confirmar") throw new Error("Geração não tem Desfazer: o que foi gerado fica na Mídia.");
@@ -580,7 +584,10 @@ export default function AgenteEditor({
       const fontes = fontesSemOnda(trab);
       if (!fontes.length) return nada("Todas as fontes já têm a onda medida.");
       const r = await pedirRender(chamarEditorVideo, { clientId, versaoId, tipo: "onda", uid: uidDoClique(), fontes });
-      return { ...nada(`Pedi a onda de ${fontes.length} ${fontes.length === 1 ? "fonte" : "fontes"} à máquina da agência (uns 30 s, sem custo). Quando voltar, o corte pela onda pode rodar.`), naFila: { tipo: "onda", pedido_id: r.pedido.id } };
+      const texto = maquinaDesligadaRef.current
+        ? `Pedi a onda de ${fontes.length} ${fontes.length === 1 ? "fonte" : "fontes"} (sem custo).${quandoAMaquinaLigar}`
+        : `Pedi a onda de ${fontes.length} ${fontes.length === 1 ? "fonte" : "fontes"} à máquina da agência (uns 30 s, sem custo). Quando voltar, o corte pela onda pode rodar.`;
+      return { ...nada(texto), naFila: { tipo: "onda", pedido_id: r.pedido.id } };
     }
     if (nome === "amostra") {
       const j = janelaDaAmostra(a.inicio_s, a.fim_s, trab.duracao_s);
@@ -648,7 +655,7 @@ export default function AgenteEditor({
           const c = controleRef.current;
           if (c && c.salvarAgora) await c.salvarAgora();
           await pedirRender(chamarEditorVideo, { clientId, versaoId, tipo: "amostra", uid: uidDoClique(), inicio_s: amostra.inicio_s, fim_s: amostra.fim_s });
-          falar("agente", [{ tipo: "resposta", texto: `Montando a amostra de ${tempoFino(amostra.inicio_s || 0)} a ${tempoFino(amostra.fim_s || 0)} na máquina da agência (uns 2 min). Aviso aqui quando ficar pronta.` }]);
+          falar("agente", [{ tipo: "resposta", texto: maquinaDesligadaRef.current ? `Amostra de ${tempoFino(amostra.inicio_s || 0)} a ${tempoFino(amostra.fim_s || 0)} na fila.${quandoAMaquinaLigar} Aviso aqui quando ficar pronta.` : `Montando a amostra de ${tempoFino(amostra.inicio_s || 0)} a ${tempoFino(amostra.fim_s || 0)} na máquina da agência (uns 2 min). Aviso aqui quando ficar pronta.` }]);
         } catch (e) {
           console.error("[agente editor] amostra não pedida", e);
           falar("agente", [{ tipo: "aviso", texto: `A amostra não foi para a fila: ${emPreparacao(e) ? "falta publicar a função editor-video." : textoDoErro(e)}` }]);

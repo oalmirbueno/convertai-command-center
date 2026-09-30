@@ -57,8 +57,8 @@ import {
   type ResultadoDoItem,
   textoDoResultado,
 } from "../_shared/acoes-do-agente.ts";
-import { ehAberto, estimarTrabalho, podeDesfazer, type TrabalhoDoMotor } from "../_shared/motor-codigo.ts";
-import { criarTrabalho, ErroDoMotor, lerTrabalho, modeloDoMotor, pararTrabalho, trabalhosDoProjeto } from "../_shared/motor-fila.ts";
+import { ehAberto, estimarTrabalho, executorVivo, podeDesfazer, type TrabalhoDoMotor } from "../_shared/motor-codigo.ts";
+import { criarTrabalho, ErroDoMotor, executorDoMotor, lerTrabalho, modeloDoMotor, pararTrabalho, trabalhosDoProjeto } from "../_shared/motor-fila.ts";
 import { imagensDoSite, type LinhaDoSite, montarPacoteDoSite } from "../_shared/pacote-do-site.ts";
 import {
   dnaManual,
@@ -683,11 +683,20 @@ async function zipPedir(ch: Chamador, c: Record<string, unknown>) {
   const s = await lerSite(ch, c.site_id);
   const z = await ultimoZip(s);
   if (z && c.novo !== true) return json({ zip: z, custo_usd: 0 });
+  // QA 30/09: cada clique criava um trabalho de zip novo. O que já está na fila é reaproveitado,
+  // e a tela sabe se o motor está ligado (desligado, o zip só sai quando ele ligar).
+  const executor = await executorDoMotor(servico()).catch((e) => {
+    registrarFalha("mesa-site: executor do motor não lido no zip", e, { site_id: s.id });
+    return null;
+  });
+  const motor_ligado = executorVivo(executor ? executor.visto_em : null);
+  const abertos = (await trabalhosDoProjeto(servico(), s.client_id, s.id, 30)).filter((t) => t.tipo === "zip" && ehAberto(t.estado));
+  if (abertos.length) return json({ zip: z, trabalho: abertos[0], ja_na_fila: true, motor_ligado, custo_usd: 0 });
   const { trabalho } = await criarTrabalho(servico(), {
     clientId: s.client_id, marcaId: s.marca_id, mesa: "site", projeto: s.projeto, referencia: { tipo: "site", id: s.id },
     pedidoBruto: { tipo: "zip", instrucao: "Guardar o código" }, modeloId: null, pacote: {}, userId: ch.userId,
   });
-  return json({ zip: z, trabalho, custo_usd: 0 });
+  return json({ zip: z, trabalho, motor_ligado, custo_usd: 0 });
 }
 
 // ------------------------------------------------------------------ estimativas (custo antes)

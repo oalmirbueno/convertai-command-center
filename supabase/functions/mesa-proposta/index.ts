@@ -683,9 +683,38 @@ async function salvar(ch: Chamador, corpo: Record<string, unknown>) {
       ...(typeof corpo.transcricao === "string" ? { transcricao: textoLimpo(corpo.transcricao, MAX_MATERIAL_GUARDADO) } : {}),
     };
   }
+  // Aplicar do "Preencher tudo" (prévia): as perguntas e a conferência do mercado vêm do evento da prévia,
+  // gravado pelo servidor (nada vem da tela). A conferência só entra quando o mercado foi aplicado.
+  if (corpo.aplicar_previa === true) {
+    const daPrevia = await dadosDaUltimaPrevia(linha.id);
+    if (daPrevia) {
+      const chaves = Array.isArray(corpo.chaves_aplicadas) ? corpo.chaves_aplicadas.map((c) => String(c)) : [];
+      const tocouMercado = chaves.some((c) => c.indexOf("mercado.") === 0);
+      const base = (mudancas.contexto as Contexto | undefined) || linha.contexto;
+      mudancas.contexto = {
+        ...base,
+        ...(daPrevia.perguntas.length ? { perguntas: daPrevia.perguntas } : {}),
+        ...(tocouMercado && daPrevia.conferencia ? { conferencia: daPrevia.conferencia } : {}),
+      };
+    }
+  }
   if (!Object.keys(mudancas).length) return json({ proposta: saidaDaLinha(linha), custo_usd: 0 });
-  const nova = await gravar(ch, linha, mudancas, "manual");
+  const nova = await gravar(ch, linha, mudancas, corpo.aplicar_previa === true ? "preenchimento" : "manual");
   return json({ proposta: saidaDaLinha(nova), custo_usd: 0 });
+}
+
+/** Perguntas e conferência da última prévia do Preencher tudo desta proposta (evento "preenchida"). */
+async function dadosDaUltimaPrevia(propostaId: string): Promise<{ perguntas: string[]; conferencia: unknown[] | null } | null> {
+  const { data, error } = await servico().from("proposta_eventos").select("dados").eq("proposta_id", propostaId).eq("tipo", "preenchida").order("criado_em", { ascending: false }).limit(1);
+  if (error) {
+    registrarFalha("mesa-proposta: prévia do Preencher tudo não lida no Aplicar", error, { proposta_id: propostaId });
+    return null;
+  }
+  const d = ((data ?? []) as Array<{ dados: Record<string, unknown> | null }>)[0]?.dados;
+  if (!d || d.previa !== true) return null;
+  const perguntas = Array.isArray(d.perguntas) ? d.perguntas.filter((x): x is string => typeof x === "string" && !!x.trim()).slice(0, 12) : [];
+  const conferencia = Array.isArray(d.conferencia) ? d.conferencia : null;
+  return { perguntas, conferencia };
 }
 
 /** Texto dos arquivos lidos no navegador (PDF, Word, planilha, texto): vira material da proposta. */
@@ -884,7 +913,8 @@ async function escrever(ch: Chamador, linha: LinhaDaProposta, p: { modeloId?: un
   const conferencia = tocouMercado ? await conferirDados(linha.client_id, mercado.dados, ch.userId, linha.id) : [];
   // PRO2, Preencher tudo: nada é gravado sem a pessoa ver. Volta a prévia; a tela aplica campo a campo.
   if (p.previa) {
-    await evento({ proposta_id: linha.id, client_id: linha.client_id, tipo: "preenchida", dados: { previa: true, modelo_id: saida.modeloId, custo_usd: saida.custoUsd, tiradas: r.tiradas.length, fontes: p.fontes || null }, criado_por: ch.userId });
+    // A conferência do Jev (já paga) e as perguntas ficam no evento: o Aplicar da prévia as leva ao contexto (QA 30/09).
+    await evento({ proposta_id: linha.id, client_id: linha.client_id, tipo: "preenchida", dados: { previa: true, modelo_id: saida.modeloId, custo_usd: saida.custoUsd, tiradas: r.tiradas.length, fontes: p.fontes || null, perguntas: r.perguntas, conferencia: tocouMercado ? conferencia : null }, criado_por: ch.userId });
     return { linha, perguntas: r.perguntas, tiradas: r.tiradas, conferencia, custo: saida.custoUsd, saldo: saida.saldoUsd, reserva: saida.reservaUsada, resumo: r.resumo, proposto: r.conteudo };
   }
   // Lê de novo para não perder o que a equipe gravou enquanto o modelo escrevia (a versão confere).

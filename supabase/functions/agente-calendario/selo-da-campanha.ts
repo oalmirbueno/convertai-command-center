@@ -195,6 +195,13 @@ export function acoesDoSelo(deps: DepsDoSelo) {
   async function reduzida(servico: SupabaseClient, bucket: string, caminho: string, lado = LADO_DO_SELO): Promise<ImagemEntrada> {
     const r = await reduzidaSemTransformacao(servico, bucket, caminho, lado, lado, { copiaSoEmPng: true, maxBytes: MAX_BYTES, pedirCopia: true })
       ?? await reduzidaSemTransformacao(servico, bucket, caminho, lado, lado, { maxBytes: MAX_BYTES, pedirCopia: true });
+    // SVG e WebP sem cópia leve em PNG ou JPEG não abrem aqui (o decodificador só lê PNG e JPEG):
+    // dizer isso, e não "grande demais" nem a falha genérica (QA 30/09).
+    const ext = (caminho.split("?")[0].split(".").pop() || "").toLowerCase();
+    const formatoRuim = (r && r.cabe && /svg|webp/i.test(String(r.mime || ""))) || (!(r && r.cabe) && (ext === "svg" || ext === "webp"));
+    if (formatoRuim) {
+      throw deps.erro(422, "formato_nao_suportado", `A imagem está em ${ext === "svg" || /svg/i.test(String(r && r.mime)) ? "SVG" : "WebP"}, que não abre aqui. Envie em PNG ou JPEG (a logo, pelo Kit da marca no Contexto).`);
+    }
     if (!r || !r.cabe) throw deps.erro(422, "imagem_grande_demais", "A imagem é grande demais para abrir aqui. Envie uma versão menor (até 2000 px).");
     return { bytes: r.bytes, mime: r.mime, nome: caminho.split("/").pop() || "imagem" };
   }

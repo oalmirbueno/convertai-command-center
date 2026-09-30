@@ -137,7 +137,7 @@ export function pedidoDoPreenchimento(m: ModeloDeBriefing, campos: CampoParaPree
     papel: "briefing",
     campos,
     fontes,
-    contexto: `Briefing "${m.titulo}". Responda como o cliente responderia, só com o que o material diz. Pergunta que o material não responde fica null.`,
+    contexto: `Briefing "${m.titulo}". Responda como o cliente responderia, só com o que o material diz. Pergunta que o material não responde fica vazia.`,
     substituir,
   });
 }

@@ -297,6 +297,7 @@ export function ClausulasDoContrato({ p, editavel, aoMudar }: { p: PayloadDoCont
                     fontes={["contexto", "briefing", "dossie", "conversa"]}
                     compacto
                     rotulo={`Sugerir texto da cláusula ${c.numero}`}
+                    substituirInicial
                     onAplicar={(v) => {
                       const novo = String(v[c.chave] == null ? "" : v[c.chave]).trim();
                       if (!novo) return;

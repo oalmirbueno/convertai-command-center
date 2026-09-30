@@ -277,6 +277,8 @@ export interface ModeloIa {
   conferido_em?: string | null;
   criado_em?: string | null;
   novo?: boolean | null;
+  /** false quando o provedor tirou o modelo (a sincronização marca): o servidor recusa com modelo_indisponivel. */
+  disponivel?: boolean | null;
 }
 
 export const QUALIDADES: { valor: Qualidade; rotulo: string }[] = [
@@ -325,7 +327,7 @@ export async function lerCatalogo(): Promise<ModeloIa[]> {
 }
 
 export const modelosAtivos = (catalogo: ModeloIa[], tipo: "texto" | "imagem") =>
-  catalogo.filter((m) => m.ativo && m.tipo === tipo);
+  catalogo.filter((m) => m.ativo && m.tipo === tipo && m.disponivel !== false);
 
 export function padraoPara(catalogo: ModeloIa[], papel: Papel): ModeloIa | null {
   const tipo = PAPEIS.find((p) => p.valor === papel)?.tipo || "texto";

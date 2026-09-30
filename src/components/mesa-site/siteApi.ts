@@ -114,17 +114,18 @@ export function useTrabalhos(clientId: string, siteId: string | null) {
         vivo: !!d.executor_vivo,
       };
     },
-    // Enquanto há trabalho aberto, relê de 4 em 4 s (o canal ao vivo acelera quando está ligado).
+    // Enquanto há trabalho aberto e o motor está ligado, relê de 4 em 4 s (o canal ao vivo acelera).
+    // Motor desligado: o pedido só espera na fila; relê de 30 em 30 s (QA 30/09: antes eram 4 s sem fim).
     refetchInterval: (query) => {
-      const d = query.state.data as { trabalhos: TrabalhoDoMotor[] } | undefined;
-      return d && d.trabalhos.some((t) => ABERTOS.indexOf(t.estado) >= 0) ? 4000 : 30_000;
+      const d = query.state.data as { trabalhos: TrabalhoDoMotor[]; vivo: boolean } | undefined;
+      return d && d.vivo && d.trabalhos.some((t) => ABERTOS.indexOf(t.estado) >= 0) ? 4000 : 30_000;
     },
   });
   useAoVivo("motor_trabalhos", siteId ? `referencia_id=eq.${siteId}` : null, CHAVES.trabalhos(siteId || "nenhum"));
   return q;
 }
 
-export function useEventos(trabalho: TrabalhoDoMotor | null) {
+export function useEventos(trabalho: TrabalhoDoMotor | null, vivo = true) {
   const aberto = !!trabalho && ABERTOS.indexOf(trabalho.estado) >= 0;
   const q = useQuery({
     queryKey: CHAVES.eventos(trabalho ? trabalho.id : "nenhum"),
@@ -133,7 +134,8 @@ export function useEventos(trabalho: TrabalhoDoMotor | null) {
       const d = await chamarMotor<{ eventos: EventoDoMotor[] }>("eventos", { trabalho_id: trabalho!.id });
       return d.eventos || [];
     },
-    refetchInterval: aberto ? 2500 : false,
+    // Motor desligado: nada anda; sem leitura de 2,5 em 2,5 s (o canal ao vivo avisa se ele ligar).
+    refetchInterval: aberto && vivo ? 2500 : false,
   });
   useAoVivo("motor_eventos", trabalho ? `trabalho_id=eq.${trabalho.id}` : null, CHAVES.eventos(trabalho ? trabalho.id : "nenhum"));
   return q;

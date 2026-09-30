@@ -62,8 +62,12 @@ export function partesDoCusto(catalogo: ModeloIa[], alvo: AlvoDoCusto, escolhido
  * no navegador). Vazio = o padrão do papel (modeloDoPapel).
  */
 export function useModeloDaAcao(papel: "identidade" | "naming"): [string, (id: string) => void] {
+  const { catalogo } = useMesa();
   const [id, setId] = useEstadoDaTela<string>(`mesa-identidade:modelo:${papel}`, "", { validar: (v) => typeof v === "string" });
-  return [id, (v: string) => setId(v)];
+  // O modelo lembrado que saiu do catálogo (desligado ou indisponível) volta ao padrão e nunca vai ao
+  // servidor como modelo_id (QA 30/09: o seletor mostrava "Padrão" e a ação mandava o id velho, recusado).
+  const valido = id && catalogo.length > 0 && !modelosAtivos(catalogo, "texto").some((m) => m.id === id) ? "" : id;
+  return [valido, (v: string) => setId(v)];
 }
 
 /**

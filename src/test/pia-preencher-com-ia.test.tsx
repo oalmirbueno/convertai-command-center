@@ -84,7 +84,7 @@ const CAMPOS: CampoParaPreencher[] = [
 ];
 
 describe("esquema a partir dos campos", () => {
-  it("monta o esquema estrito: tudo obrigatório, null para sem base, opções e objetos", () => {
+  it("monta o esquema estrito: tudo obrigatório, vazio para sem base, opções e objetos", () => {
     const { schema, mapa } = esquemaDosCampos(CAMPOS);
     const s = schema as any;
     expect(s.additionalProperties).toBe(false);
@@ -93,21 +93,143 @@ describe("esquema a partir dos campos", () => {
     expect(v.additionalProperties).toBe(false);
     expect(v.required).toEqual(["c0", "c1", "c2", "c3", "c4", "c5", "c6"]);
     expect(Object.keys(mapa).map((k) => mapa[k].chave)).toEqual(CAMPOS.map((c) => c.chave));
-    expect(v.properties.c0.type).toEqual(["string", "null"]);
+    expect(v.properties.c0.type).toBe("string");
     expect(v.properties.c0.description).toContain("até 40 caracteres");
-    expect(v.properties.c2.type).toEqual(["array", "null"]);
+    expect(v.properties.c0.description).toContain("texto vazio quando as fontes não dão base");
+    expect(v.properties.c2.type).toBe("array");
     expect(v.properties.c2.items).toEqual({ type: "string" });
     expect(v.properties.c2.description).toContain("até 2 itens");
-    expect(v.properties.c3.type).toEqual(["number", "null"]);
-    // anyOf (a Anthropic recusa enum com tipo em lista): string com as opções ou null.
-    expect(v.properties.c4.anyOf).toEqual([{ type: "string", enum: ["Básico", "Completo"] }, { type: "null" }]);
-    expect(v.properties.c5.type).toEqual(["object", "null"]);
+    expect(v.properties.c2.description).toContain("lista vazia");
+    // Número vai como texto (algarismos): pode voltar vazio sem inventar 0.
+    expect(v.properties.c3.type).toBe("string");
+    // Escolha: as opções mais a opção vazia (sem base), sem tipo em lista nem anyOf.
+    expect(v.properties.c4).toMatchObject({ type: "string", enum: ["Básico", "Completo", ""] });
+    expect(v.properties.c5.type).toBe("object");
     expect(v.properties.c5.required).toEqual(["nome", "cargo"]);
     expect(v.properties.c5.additionalProperties).toBe(false);
+    expect(v.properties.c5.properties.nome).toEqual({ type: "string" });
     // Objeto sem forma conhecida vai como texto JSON.
-    expect(v.properties.c6.type).toEqual(["string", "null"]);
+    expect(v.properties.c6.type).toBe("string");
     const citacao = s.properties.citacoes.items;
     expect(citacao.required).toEqual(["campo", "trecho", "url"]);
+    expect(citacao.properties.url.type).toBe("string");
+  });
+
+  it("nenhum tipo união no esquema, nem com 40 campos (a Anthropic recusa mais de 16)", () => {
+    // Visto em 30/09: Preencher tudo do site (18 campos) no Opus 5.5 voltou 400
+    // "Schemas contains too many parameters with union types (19 ...) limit: 16".
+    const muitos: CampoParaPreencher[] = [];
+    for (let i = 0; i < 40; i++) {
+      const tipo = (["texto", "texto_longo", "lista", "numero", "escolha", "objeto"] as const)[i % 6];
+      muitos.push({ chave: `k${i}`, rotulo: `Campo ${i}`, tipo, opcoes: tipo === "escolha" ? ["a", "b"] : undefined, valorAtual: tipo === "objeto" ? { x: "", y: [], z: 0 } : undefined });
+    }
+    const { schema } = esquemaDosCampos(muitos);
+    const unioes: string[] = [];
+    const opcionais: string[] = [];
+    const andar = (no: unknown, caminho: string) => {
+      if (!no || typeof no !== "object") return;
+      const o = no as Record<string, any>;
+      if (Array.isArray(o.type) || Array.isArray(o.anyOf) || Array.isArray(o.oneOf)) unioes.push(caminho);
+      if (o.enum) expect(typeof o.type).toBe("string");
+      if (o.type === "object") {
+        expect(o.additionalProperties).toBe(false);
+        Object.keys(o.properties || {}).forEach((k) => {
+          if ((o.required || []).indexOf(k) < 0) opcionais.push(`${caminho}.${k}`);
+          andar(o.properties[k], `${caminho}.${k}`);
+        });
+      }
+      if (o.items) andar(o.items, `${caminho}[]`);
+    };
+    andar(schema, "$");
+    expect(unioes).toEqual([]);
+    expect(opcionais).toEqual([]);
+  });
+
+  it("vazio do modelo é sem base: texto, lista, escolha e número em texto", () => {
+    const { mapa } = esquemaDosCampos(CAMPOS);
+    const r = limparResposta(
+      { valores: { c0: "", c2: [], c3: "", c4: "", c5: { nome: "", cargo: "" }, c6: "" }, fontes_usadas: [], citacoes: [{ campo: "c0", trecho: "x", url: "" }], avisos: [] },
+      { papel: "proposta", mapa, fontes: FONTES },
+    );
+    expect(r.valores).toEqual({});
+    expect(r.avisos.filter((a) => a.indexOf("ficou vazio, as fontes não dão base") > 0)).toHaveLength(6);
+    // Número em texto (como o esquema pede) é convertido e conferido.
+    const n = limparResposta({ valores: { c3: "R$ 1.500" }, fontes_usadas: [], citacoes: [], avisos: [] }, { papel: "proposta", mapa, fontes: FONTES });
+    expect(n.valores.preco).toBe(1500);
+    // Inteiro pequeno (escala de -2 a 2) fica livre, como no texto.
+    const escala = esquemaDosCampos([{ chave: "eixo", rotulo: "Formal ou casual", tipo: "numero", dica: "Inteiro de -2 a 2" }]);
+    const e = limparResposta({ valores: { c0: "-1" }, fontes_usadas: [], citacoes: [], avisos: [] }, { papel: "identidade", mapa: escala.mapa, fontes: [] });
+    expect(e.valores.eixo).toBe(-1);
+  });
+
+  it("número em texto sem algarismo é sem base (nunca vira 0); até 80 campos passam (Dados do contrato com 3 serviços)", () => {
+    const campos: CampoParaPreencher[] = [{ chave: "multa", rotulo: "Multa", tipo: "numero" }];
+    const { mapa } = esquemaDosCampos(campos);
+    const r = limparResposta({ valores: { c0: "não informado" }, fontes_usadas: [], citacoes: [], avisos: [] }, { papel: "contrato", mapa, fontes: FONTES });
+    expect(r.valores.multa).toBeUndefined();
+    expect(r.avisos[0]).toContain("Multa: ficou vazio");
+    const muitos = Array.from({ length: 43 }, (_, i) => ({ chave: `v${i}`, rotulo: `Variável ${i}`, tipo: "texto" }));
+    expect(normalizarCampos(muitos)).toHaveLength(43);
+    expect(() => normalizarCampos(Array.from({ length: 81 }, (_, i) => ({ chave: `v${i}`, tipo: "texto" })))).toThrow();
+  });
+
+  it("objeto em lista (Exemplos por situação): esquema de lista de objetos pela dica e itens conferidos um a um", () => {
+    // QA 30/09: tom.exemplos da estratégia é "objeto" com valor [] e voltava sempre vazio.
+    const campos: CampoParaPreencher[] = [
+      { chave: "tom.exemplos", rotulo: "Exemplos por situação", tipo: "objeto", valorAtual: [], dica: "Lista de { situacao, certo, errado } (ex.: responder reclamação).", maximo: 2 },
+      { chave: "publico.persona", rotulo: "Persona", tipo: "objeto", valorAtual: { nome: "", idade: "", dores: [] }, dica: "Objeto { nome, idade, dores[] }" },
+    ];
+    const { schema, mapa } = esquemaDosCampos(campos);
+    const v = (schema as any).properties.valores.properties;
+    expect(v.c0.type).toBe("array");
+    expect(v.c0.items).toMatchObject({ type: "object", additionalProperties: false, required: ["situacao", "certo", "errado"] });
+    expect(v.c1.properties.dores).toEqual({ type: "array", items: { type: "string" } });
+    const r = limparResposta(
+      {
+        valores: {
+          c0: [
+            { situacao: "Responder reclamação", certo: "Sentimos muito, vamos resolver hoje.", errado: "Não é culpa nossa." },
+            { situacao: "Anunciar promoção", certo: "Pão quente com desconto de 90%", errado: "Compre já" },
+            { situacao: "Agradecer", certo: "Obrigado pela visita!", errado: "Valeu" },
+            { situacao: "Convidar", certo: "Venha provar o pão de hoje.", errado: "Aparece" },
+          ],
+          c1: { nome: "Carlos Lima", idade: "de 25 a 34", dores: ["Pouco tempo de manhã"] },
+        },
+        fontes_usadas: [],
+        citacoes: [],
+        avisos: [],
+      },
+      { papel: "identidade", mapa, fontes: FONTES },
+    );
+    // O item com número inventado (90%) sai sozinho; a lista é cortada no máximo.
+    expect(r.valores["tom.exemplos"]).toEqual([
+      { situacao: "Responder reclamação", certo: "Sentimos muito, vamos resolver hoje.", errado: "Não é culpa nossa." },
+      { situacao: "Anunciar promoção", errado: "Compre já" },
+    ]);
+    // Na persona, só a idade (números fora das fontes) sai; nome e dores ficam.
+    expect(r.valores["publico.persona"]).toEqual({ nome: "Carlos Lima", dores: ["Pouco tempo de manhã"] });
+    expect(r.avisos.some((a) => a.indexOf("Persona:") === 0 && a.indexOf("idade saiu") > 0)).toBe(true);
+  });
+
+  it("objeto: chave que era número volta número; avisos do modelo sem c0/c1 e sem repetir a conferência", () => {
+    const campos: CampoParaPreencher[] = [
+      { chave: "persona", rotulo: "Persona", tipo: "objeto", valorAtual: { nome: "", idade: 0 } },
+      { chave: "site", rotulo: "Sites que o cliente admira", tipo: "texto" },
+      { chave: "obs", rotulo: "Observação", tipo: "texto" },
+    ];
+    const { mapa } = esquemaDosCampos(campos);
+    const r = limparResposta(
+      {
+        valores: { c0: { nome: "Carlos Lima", idade: "1.500" }, c1: "", c2: "" },
+        fontes_usadas: [],
+        citacoes: [],
+        avisos: ["c1 ficou vazio: as fontes não informam sites.", "c2 sem base no briefing."],
+      },
+      { papel: "identidade", mapa, fontes: FONTES, substituir: true },
+    );
+    expect(r.valores.persona).toEqual({ nome: "Carlos Lima", idade: 1500 });
+    expect(r.avisos.some((a) => /\bc\d\b/.test(a))).toBe(false);
+    expect(r.avisos.filter((a) => a.indexOf("Sites que o cliente admira") === 0)).toHaveLength(1);
   });
 
   it("recusa campo sem chave, tipo desconhecido, escolha sem opções e chave repetida", () => {
@@ -166,7 +288,7 @@ describe("limpeza da resposta", () => {
         },
         fontes_usadas: [],
         citacoes: [],
-        avisos: ["Contato ficou vazio: sem dado."],
+        avisos: ["Contato ficou vazio: sem dado.", "Faltou o briefing de preços."],
       },
       ctx(),
     );
@@ -174,7 +296,9 @@ describe("limpeza da resposta", () => {
     expect(String(r.valores["capa.headline"])).not.toContain("—");
     expect(r.valores.entregas).toEqual(["Posts no feed", "Stories"]);
     expect(r.valores.plano).toBeUndefined();
-    expect(r.avisos).toContain("Contato ficou vazio: sem dado.");
+    // Aviso do modelo que não repete a conferência fica; o que repete (Contato) sai.
+    expect(r.avisos).toContain("Faltou o briefing de preços.");
+    expect(r.avisos.filter((a) => a.indexOf("Contato") === 0)).toHaveLength(1);
     expect(r.avisos.some((a) => a.indexOf("Entregas") === 0 && a.indexOf("2 itens") > 0)).toBe(true);
   });
 
@@ -343,5 +467,15 @@ describe("a tela do Preencher com IA", () => {
     fireEvent.click(screen.getByRole("button", { name: "Preencher tudo" }));
     await screen.findByText(/Substituir o que já tem\" para refazer/);
     expect((screen.getByRole("button", { name: "Preencher" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("substituirInicial abre com \"Substituir o que já tem\" marcado e o estimar já pede substituir", async () => {
+    // QA 30/09: "Sugerir texto da cláusula" (Contratos) sempre tem texto e ficava travado.
+    montar({ substituirInicial: true });
+    fireEvent.click(screen.getByRole("button", { name: "Preencher tudo" }));
+    const caixa = (await screen.findByRole("checkbox")) as HTMLInputElement;
+    expect(caixa.checked).toBe(true);
+    await waitFor(() => expect(estimar).toHaveBeenCalled());
+    expect(estimar.mock.calls[estimar.mock.calls.length - 1][0].substituir).toBe(true);
   });
 });

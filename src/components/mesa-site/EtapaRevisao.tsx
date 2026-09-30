@@ -31,6 +31,8 @@ export default function EtapaRevisao({ site, onIrPara }: { site: LinhaDoSite; on
   const trabalhos = trabalhosQ.data ? trabalhosQ.data.trabalhos : [];
   const ultimo: TrabalhoDoMotor | null = trabalhos.find((t) => t.estado === "feito" && (Array.isArray(t.resultado.qa) || !!t.resultado.build)) || null;
   const revisando = trabalhos.some((t) => t.tipo === "revisar" && ehAberto(t.estado));
+  // Motor desligado: a revisão espera na fila; a tela diz isso em vez de "Revisando" para sempre (QA 30/09).
+  const naFilaParada = revisando && !!trabalhosQ.data && !trabalhosQ.data.vivo;
   const [pedindo, setPedindo] = useState(false);
   const qa = ultimo && Array.isArray(ultimo.resultado.qa) ? (ultimo.resultado.qa as AvisoDeQa[]) : [];
   const build = ultimo ? (ultimo.resultado.build as { ok?: boolean; log?: string } | undefined) : undefined;
@@ -58,8 +60,8 @@ export default function EtapaRevisao({ site, onIrPara }: { site: LinhaDoSite; on
         acao={
           <>
             <button type="button" className={juntar(botao.secundario, "mr-2")} disabled={pedindo || revisando} onClick={() => void revisar()} data-revisar="">
-              {pedindo || revisando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <ScanSearch className="mr-1 h-3.5 w-3.5" />}
-              {revisando ? "Revisando" : "Revisar de novo"}
+              {pedindo || (revisando && !naFilaParada) ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <ScanSearch className="mr-1 h-3.5 w-3.5" />}
+              {naFilaParada ? "Na fila: motor desligado" : revisando ? "Revisando" : "Revisar de novo"}
             </button>
             <button type="button" className={botao.primario} onClick={() => onIrPara("publicacao")}>
               Seguir
