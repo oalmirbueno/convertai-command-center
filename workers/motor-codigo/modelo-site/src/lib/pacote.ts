@@ -34,6 +34,17 @@ export type Pacote = {
   globais?: string[];
   integracoes?: Integracoes | null;
   seo?: { titulo?: string; descricao?: string; url?: string | null; og_imagem?: string | null; indexar?: boolean; robots?: string; schema?: Record<string, unknown> | null } | null;
+  /** Endereço css2 (display=swap) das fontes; o pré-render põe o link no HTML. */
+  fontes_url?: string | null;
+  /** Base de design (UI UX Pro Max): estilo, padrão, variantes por seção, regras de UX e o gráfico da série real. */
+  base_de_design?: {
+    consulta?: string;
+    estilo?: { id: string; nome: string; rotulo: string; checklist: string; variaveis: string; efeitos: string; nao_usar_para: string };
+    padrao?: { id: string; nome: string; rotulo: string; ordem: string; cta: string };
+    variantes?: Record<string, { id: string; rotulo: string; padrao: string; cta?: string; origem: string }>;
+    regras_ux?: Array<{ id: string; severidade: string; titulo: string; modo: string }>;
+    grafico?: { tipo: "linha" | "barras" | "rosca"; dados: Array<{ rotulo: string; valor: number }>; fonte: string; regra?: string } | null;
+  } | null;
 };
 
 /** O pacote do cliente (marca, copy, imagens, logo, páginas, integrações). Só leitura. */

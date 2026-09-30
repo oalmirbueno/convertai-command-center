@@ -16,6 +16,7 @@ import { garantirPrevia } from "./previa.ts";
 import { rodarPassada, subirOpencode } from "./opencode.ts";
 import { abrirMedidor, type Medidor } from "./medidor.ts";
 import { ziparProjeto } from "./zip.ts";
+import { revisaoDeUx } from "./revisao-ux.ts";
 
 /** A primeira linha útil do erro de build, sem as cores do terminal. */
 export function resumoDoBuild(log: string): string {
@@ -193,6 +194,11 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
         resultado.qa = qa;
         resultado.build = { ok: true };
         await avisar({ tipo: "passo", resumo: qa.length ? `Revisão: ${qa.length} aviso(s)` : "Revisão sem avisos" });
+        // UXM: as regras de UX da base conferidas por código (aviso, nunca trava) e a prova que o agente deixou.
+        const ux = revisaoDeUx(pasta, html);
+        resultado.ux = ux.avisos;
+        resultado.ux_agente = ux.agente;
+        await avisar({ tipo: "passo", resumo: ux.avisos.length ? `UX: ${ux.avisos.length} regra(s) da base para olhar` : "UX: regras de código em dia" });
       }
       if (t.tipo === "publicar") {
         if (!b.ok) throw new Error("o build falhou; nada foi publicado");

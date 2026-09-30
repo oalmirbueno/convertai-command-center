@@ -20,6 +20,10 @@
  * - nada inventado: número e nome que não estão nas fontes esvaziam o campo,
  *   com aviso (conferido por código);
  * - garantirSaldo antes; o uso fica com tarefa e agente = papel (um dos 9).
+ * - UXM: fonte "base" (UI UX Pro Max 2.15.0), padrão nos papéis site e
+ *   identidade: o base_de_design da marca (último site da marca ou o projeto
+ *   de Identidade dela) vira um bloco com apelidos b1..bN; a resposta traz
+ *   regras_usadas e a regra aparece nas fontes do resultado.
  * Nada é gravado aqui: a tela mostra a prévia e a mesa grava ao Aplicar.
  */
 
@@ -29,6 +33,9 @@ import { lerContextoConsolidado } from "../_shared/contexto-cliente.ts";
 import { lerContextoDaMarca, lerDossieDaMarca, type MarcaDoCliente, type MarcaLeve, marcasDoCliente, resolverMarca } from "../_shared/marca.ts";
 import { projetoDaMarcaAberta } from "../_shared/heranca-da-marca.ts";
 import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
+import { itensDaBaseDeDesign } from "../_shared/uiux/base-completa.ts";
+import { blocoDaBaseDeDesign, type ItemDaBase, regrasParaCampos, rotuloDaCitacao, TETO_DO_BLOCO_DO_PREENCHER } from "../_shared/uiux/citar.ts";
+import { lerBaseDaMarca, lerBaseDeDesign } from "../_shared/uiux/consultas.ts";
 import { linhasDoBriefing, limparSegredos } from "../_shared/pacote-externo.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
@@ -45,6 +52,7 @@ import {
   normalizarCampos,
   normalizarFontes,
   palavrasDeBusca,
+  type RegraDaBaseNoPedido,
   type ResultadoDoPreenchimento,
   resultadoVazio,
   tetoDeSaida,
@@ -161,6 +169,7 @@ const NOMES_DAS_PARTES: Record<FonteDoPreenchimento, string> = {
   arquivos: "Arquivos do cliente",
   conversa: "Conversa do agente",
   web: "Pesquisa na web",
+  base: "Base de design (UI UX Pro Max)",
 };
 
 function estimativa(m: ModeloIa, campos: CampoParaPreencher[], fontes: FonteDoPreenchimento[], extras: number) {
@@ -278,6 +287,41 @@ async function lerConversa(clientId: string, papel: string, conversaId: string |
   return { id: "conversa", rotulo: "conversa com o agente da mesa", texto: limparSegredos(linhas.join("\n")) };
 }
 
+/**
+ * UXM: a base de design da marca para o papel (site: o site mais novo da
+ * marca; identidade: o projeto de Identidade mais novo da marca). A outra
+ * marca nunca herda: a principal lê o dela e o sem marca.
+ */
+async function lerBaseDaMarcaDoPapel(clientId: string, marca: MarcaLeve | null, papel: string, campos: CampoParaPreencher[]): Promise<{ fonte: FonteLida | null; itens: ItemDaBase[] }> {
+  // Mesma regra de marca do briefing: a outra marca só a dela; a principal, a dela e a sem marca.
+  const soDaMarca = marca && !marca.principal ? marca.id : null;
+  const comSemMarca = marca && marca.principal ? `marca_id.is.null,marca_id.eq.${marca.id}` : null;
+  let itens: ItemDaBase[] = [];
+  const regras = regrasParaCampos(campos);
+  if (papel === "site") {
+    let q = servico().from("sites").select("direcao, atualizado_em").eq("client_id", clientId).is("arquivado_em", null);
+    if (soDaMarca) q = q.eq("marca_id", soDaMarca);
+    else if (comSemMarca) q = q.or(comSemMarca);
+    const { data, error } = await q.order("atualizado_em", { ascending: false }).limit(1);
+    if (error) throw error;
+    const linha = ((data ?? []) as Array<{ direcao: Record<string, unknown> | null }>)[0];
+    const b = lerBaseDeDesign(linha && linha.direcao ? linha.direcao.base_de_design : null);
+    itens = itensDaBaseDeDesign(b, { regras });
+  } else if (papel === "identidade") {
+    let q = servico().from("idv_projetos").select("dados, atualizado_em").eq("client_id", clientId).is("arquivado_em", null);
+    if (soDaMarca) q = q.eq("marca_id", soDaMarca);
+    else if (comSemMarca) q = q.or(comSemMarca);
+    const { data, error } = await q.order("atualizado_em", { ascending: false }).limit(1);
+    if (error) throw error;
+    const linha = ((data ?? []) as Array<{ dados: Record<string, unknown> | null }>)[0];
+    const sistema = linha && linha.dados && typeof linha.dados.sistema === "object" ? (linha.dados.sistema as Record<string, unknown>) : {};
+    const b = lerBaseDaMarca(sistema.base_de_design);
+    itens = itensDaBaseDeDesign({ produto: b.produto, par: b.par }, { regras, paletaDoSetor: b.paleta_setor ? b.paleta_setor.id : null });
+  }
+  const texto = blocoDaBaseDeDesign({ papel, itens, max: TETO_DO_BLOCO_DO_PREENCHER, campo: "regras_usadas" });
+  return { fonte: texto ? { id: "base", rotulo: "base de design (UI UX Pro Max 2.15.0)", texto } : null, itens: texto ? itens : [] };
+}
+
 /** Lê as fontes pedidas; fonte que falha fica de fora, com aviso e no log (nunca engolida). */
 async function lerFontes(
   clientId: string,
@@ -287,7 +331,7 @@ async function lerFontes(
   campos: CampoParaPreencher[],
   instrucao: string,
   conversaId: string | null,
-): Promise<{ lidas: FonteLida[]; avisos: string[] }> {
+): Promise<{ lidas: FonteLida[]; avisos: string[]; regrasDaBase: RegraDaBaseNoPedido[] }> {
   const avisos: string[] = [];
   // undefined = não pedida ou falhou (com aviso); null ou vazio = lida e sem nada.
   const passo = async <T>(nome: string, f: () => Promise<T>): Promise<T | undefined> => {
@@ -300,7 +344,7 @@ async function lerFontes(
     }
   };
   const quer = (f: FonteDoPreenchimento) => fontes.indexOf(f) >= 0;
-  const [contexto, briefing, dossie, arquivos, conversa] = await Promise.all([
+  const [contexto, briefing, dossie, arquivos, conversa, base] = await Promise.all([
     quer("contexto")
       ? passo("o contexto da marca", async () => {
         const base = textoDoContexto(marca ? await lerContextoDaMarca(servico(), clientId, marca) : await lerContextoConsolidado(servico(), clientId));
@@ -314,6 +358,7 @@ async function lerFontes(
     quer("dossie") ? passo("o dossiê", () => lerDossieDaMarca(servico(), clientId, marca, 5000)) : undefined,
     quer("arquivos") ? passo("os arquivos", () => lerArquivos(clientId, marca, palavrasDeBusca(campos, instrucao))) : undefined,
     quer("conversa") ? passo("a conversa do agente", () => lerConversa(clientId, papel, conversaId)) : undefined,
+    quer("base") ? passo("a base de design", () => lerBaseDaMarcaDoPapel(clientId, marca, papel, campos)) : undefined,
   ]);
   const lidas: FonteLida[] = [];
   const rotuloDaMarca = marca && !marca.principal ? ` (${marca.nome})` : "";
@@ -327,7 +372,12 @@ async function lerFontes(
   else if (quer("arquivos") && arquivos !== undefined) avisos.push("Nenhum trecho de arquivo do cliente bateu com os campos.");
   if (conversa) lidas.push(conversa);
   else if (quer("conversa") && conversa !== undefined) avisos.push("A conversa do agente desta mesa está vazia.");
-  return { lidas, avisos };
+  let regrasDaBase: RegraDaBaseNoPedido[] = [];
+  if (base && base.fonte) {
+    lidas.push(base.fonte);
+    regrasDaBase = base.itens.map((i) => ({ apelido: i.apelido, id: i.id, rotulo: rotuloDaCitacao(i) }));
+  } else if (quer("base") && base !== undefined) avisos.push(papel === "site" || papel === "identidade" ? "A marca ainda não escolheu a base de design (produto, estilo ou padrão)." : "A base de design vale para o site e a identidade.");
+  return { lidas, avisos, regrasDaBase };
 }
 
 // ------------------------------------------------------------------ ações
@@ -369,9 +419,9 @@ async function acaoPreencher(ch: Chamador, corpo: Record<string, unknown>): Prom
     registrarFalha("preencher-ia: marca do pedido falhou", e, { client_id: clientId });
     return null;
   });
-  const { lidas, avisos: avisosDasFontes } = await lerFontes(clientId, marca, papel, fontes, alvo, instrucao, conversaId);
+  const { lidas, avisos: avisosDasFontes, regrasDaBase } = await lerFontes(clientId, marca, papel, fontes, alvo, instrucao, conversaId);
 
-  const { sistema, mensagem, esquema } = montarPedido({ papel, campos: alvo, fontes: lidas, contexto, instrucao, web, substituir });
+  const { sistema, mensagem, esquema } = montarPedido({ papel, campos: alvo, fontes: lidas, contexto, instrucao, web, substituir, regrasDaBase });
   const saida = await chamarTexto({
     clientId,
     tarefa: papel,
@@ -385,7 +435,7 @@ async function acaoPreencher(ch: Chamador, corpo: Record<string, unknown>): Prom
     maxTokensSaida: tetoDeSaida(alvo),
   });
 
-  const limpa = limparResposta(saida.json, { papel, mapa: esquema.mapa, fontes: lidas, instrucao, contexto, web, substituir });
+  const limpa = limparResposta(saida.json, { papel, mapa: esquema.mapa, fontes: lidas, instrucao, contexto, web, substituir, regrasDaBase });
   if (contexto) limpa.fontes.push("o que a tela sabe");
   const pulados = campos.length - alvo.length;
   const avisos = avisosDasFontes.concat(limpa.avisos);
@@ -398,6 +448,7 @@ async function acaoPreencher(ch: Chamador, corpo: Record<string, unknown>): Prom
     avisos,
     saldo_usd: saida.saldoUsd,
   };
+  if (limpa.regras_usadas.length) resultado.regras_usadas = limpa.regras_usadas;
   if (saida.reservaUsada) resultado.reserva_usada = saida.reservaUsada;
   return json(resultado);
 }

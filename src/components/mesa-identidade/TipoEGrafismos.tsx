@@ -17,7 +17,7 @@ export type TipoDoSistema = { familia: string; uso: "titulo" | "texto" | "apoio"
 const POR_PAGINA = 6;
 
 /** Um par com a prévia real (a fonte só baixa quando o par aparece na tela). */
-function PrevisaoDoPar({ titulo, texto: familiaTexto, pesoTitulo = 700, nome, marca, ativo }: { titulo: string; texto: string; pesoTitulo?: number; nome: string; marca: string; ativo: boolean }) {
+export function PrevisaoDoPar({ titulo, texto: familiaTexto, pesoTitulo = 700, nome, marca, ativo }: { titulo: string; texto: string; pesoTitulo?: number; nome: string; marca: string; ativo: boolean }) {
   const pronto = useFontesGoogle([{ familia: titulo, pesos: [pesoTitulo] }, { familia: familiaTexto, pesos: [400, 600] }], ativo);
   return (
     <span className="block min-w-0" data-par-carregado={pronto ? "sim" : "nao"}>

@@ -1,5 +1,5 @@
 {
-  "versao": 2,
+  "versao": 3,
   "arquivos": [
     "AGENTS.md",
     "index.html",
@@ -13,6 +13,7 @@
     "src/lib/integracoes.tsx",
     "src/lib/movimento.ts",
     "src/lib/Revelar.tsx",
-    "src/lib/rolagem.ts"
+    "src/lib/rolagem.ts",
+    "src/lib/Grafico.tsx"
   ]
 }

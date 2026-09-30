@@ -22,13 +22,24 @@ function dadosDoSite(pacote) {
   return { seo, titulo, descricao, url, og: ogAbsoluta, destaque, indexar: seo.indexar !== false };
 }
 
+/** O endereço das fontes do pacote, só o css2 do Google Fonts com display=swap (nada de outro host). */
+export function urlDasFontes(pacote) {
+  const u = typeof pacote.fontes_url === "string" ? pacote.fontes_url : "";
+  return /^https:\/\/fonts\.googleapis\.com\/css2\?[A-Za-z0-9+:;@&=.,%_-]+$/.test(u) && /display=swap/.test(u) ? u : null;
+}
+
 /** O HTML de uma página: a base do build com o conteúdo pré-renderizado e as tags de SEO. */
 export function montarPagina(base, conteudo, pacote, pagina) {
   const d = dadosDoSite(pacote);
   const caminho = pagina.slug ? `/${pagina.slug}/` : "/";
   const titulo = pagina.slug && pagina.titulo ? `${pagina.titulo} | ${d.titulo}`.slice(0, 70) : d.titulo;
   const canonical = d.url ? `${d.url}${caminho}` : null;
+  // A fonte da marca carrega de verdade (UXM, lacuna 4.1): preconnect e o css2 com display=swap.
+  const fontes = urlDasFontes(pacote);
   const extras = [
+    fontes ? `<link rel="preconnect" href="https://fonts.googleapis.com" />` : "",
+    fontes ? `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />` : "",
+    fontes ? `<link rel="stylesheet" href="${esc(fontes)}" />` : "",
     canonical ? `<link rel="canonical" href="${esc(canonical)}" />` : "",
     canonical ? `<meta property="og:url" content="${esc(canonical)}" />` : "",
     `<meta property="og:type" content="website" />`,
