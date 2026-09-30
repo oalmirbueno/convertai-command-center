@@ -394,6 +394,10 @@ export type ItemDaProposta = {
   origem: "plano" | "servico" | "manual";
   plano_id: string | null;
   servico: string | null;
+  /** Horas estimadas por unidade (frente PRO2: calculadora de hora técnica e ajuste por margem). Só existe quando foi dita. */
+  horas?: number;
+  /** Serviço da biblioteca da agência de onde o item veio (frente PRO2). */
+  biblioteca_id?: string;
 };
 
 export const MAX_ITENS = 30;
@@ -431,7 +435,7 @@ export function normalizarItem(bruto: unknown, i = 0): ItemDaProposta | null {
   if (!nome || valor === null) return null;
   const q = Math.round(Number(o.quantidade));
   const origem = o.origem === "plano" || o.origem === "servico" ? o.origem : "manual";
-  return {
+  const item: ItemDaProposta = {
     id: textoLimpo(o.id, 40) || `i${i + 1}`,
     nome,
     descricao: textoLimpo(o.descricao, 300),
@@ -442,6 +446,11 @@ export function normalizarItem(bruto: unknown, i = 0): ItemDaProposta | null {
     plano_id: typeof o.plano_id === "string" && o.plano_id ? o.plano_id.slice(0, 40) : null,
     servico: typeof o.servico === "string" && o.servico ? o.servico.slice(0, 40) : null,
   };
+  // Campos da frente PRO2: só entram quando existem (o item antigo fica igual).
+  const horas = Number(o.horas);
+  if (o.horas !== undefined && o.horas !== null && o.horas !== "" && Number.isFinite(horas) && horas > 0 && horas <= 10_000) item.horas = Math.round(horas * 100) / 100;
+  if (typeof o.biblioteca_id === "string" && /^[0-9a-f-]{36}$/i.test(o.biblioteca_id)) item.biblioteca_id = o.biblioteca_id;
+  return item;
 }
 
 export function normalizarItens(bruto: unknown): ItemDaProposta[] {
@@ -783,9 +792,18 @@ export function jsonEstavel(v: unknown): string {
   return `{${Object.keys(o).sort().filter((k) => o[k] !== undefined).map((k) => `${JSON.stringify(k)}:${jsonEstavel(o[k])}`).join(",")}}`;
 }
 
-/** SHA-256 do conteúdo, dos itens e da validade (o aceite vale para este texto). */
-export async function hashDaProposta(p: { conteudo: ConteudoDaProposta; itens: ItemDaProposta[]; validade_ate: string | null }): Promise<string> {
-  const bytes = new TextEncoder().encode(jsonEstavel({ conteudo: p.conteudo, itens: p.itens, validade_ate: p.validade_ate }));
+/**
+ * SHA-256 do conteúdo, dos itens e da validade (o aceite vale para este texto).
+ * Frente PRO2: pacotes, pagamento e anexos entram só quando existem, e a
+ * proposta antiga continua com o mesmo hash.
+ */
+export async function hashDaProposta(p: { conteudo: ConteudoDaProposta; itens: ItemDaProposta[]; validade_ate: string | null; pacotes?: unknown; pagamento?: unknown; anexos?: unknown }): Promise<string> {
+  const cheio = (v: unknown) => (Array.isArray(v) ? v.length > 0 : !!v && typeof v === "object" && Object.keys(v as Record<string, unknown>).length > 0);
+  const base: Record<string, unknown> = { conteudo: p.conteudo, itens: p.itens, validade_ate: p.validade_ate };
+  if (cheio(p.pacotes)) base.pacotes = p.pacotes;
+  if (cheio(p.pagamento)) base.pagamento = p.pagamento;
+  if (cheio(p.anexos)) base.anexos = p.anexos;
+  const bytes = new TextEncoder().encode(jsonEstavel(base));
   const d = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(d)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }

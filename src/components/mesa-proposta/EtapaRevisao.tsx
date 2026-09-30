@@ -10,6 +10,7 @@ import { EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campo, juntar, lista, texto } from "@/components/sistema/estilos";
 import { conteudoSemNumeroInventado, dataCurta } from "../../../supabase/functions/_shared/proposta-modelo";
 import { aplicarNaLista, chamarProposta, useVersoes, type ConferenciaDoDado, type Proposta } from "./propostaApi";
+import CompararVersoes from "./CompararVersoes";
 
 /**
  * Etapa 3, Revisão: o que falta (bloqueia o envio ou só avisa), número sem
@@ -34,6 +35,11 @@ const ORIGEM: Record<string, string> = {
   pesquisa: "pesquisa",
   restauracao: "restauração",
   envio: "envio",
+  duplicacao: "cópia",
+  preenchimento: "preenchimento",
+  pacotes: "pacotes",
+  margem: "margem",
+  resumo: "resumo da reunião",
 };
 
 /** Material do cliente que vale como origem de número (o mesmo critério do servidor, na parte que a tela vê). */
@@ -207,6 +213,8 @@ export default function EtapaRevisao({ proposta }: { proposta: Proposta | null }
           <p className={texto.auxiliar}>Sem versões anteriores.</p>
         )}
       </Secao>
+
+      <CompararVersoes key={proposta.id} proposta={proposta} versoes={versoes.data || []} />
 
       <Secao titulo="Salvar como modelo" divisoria ajuda="Guarda a estrutura, o processo, as condições e os próximos passos desta proposta (sem o texto do cliente) para as próximas.">
         <div className="grid min-w-0 items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">

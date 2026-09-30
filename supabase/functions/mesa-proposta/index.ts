@@ -34,6 +34,11 @@
  * - agente_conversar { client_id, proposta_id?, mensagem, arquivos?, conversa_id?, nova_conversa? }
  * - agente_historico { client_id } ; executar_acao_agente ; desfazer_acao_agente ; aprendizado_esquecer ; aprendizado_guardar
  *
+ * Frente PRO2 (30/09): pacotes, pagamento, visual, anexos, duplicar, follow-up,
+ * Preencher tudo com prévia, 3 headlines, tom da marca, resumo da reunião,
+ * montar pacotes (Jev) e ajuste pela margem. As ações novas moram em
+ * evolucao.ts (a lista está lá); a calculadora, em hora-tecnica.ts.
+ *
  * Regras: nada de número inventado (proposta-modelo.ts: dado sem fonte sai,
  * frase com número sem origem sai e vira pendência); o agente pergunta o que
  * falta; provas e quem somos vêm da agência; o Jev confere dado contra o
@@ -45,7 +50,7 @@ import { chamarTexto, cobrarJev, estimarComModelo, IaMotorErro, modeloDoPapel, t
 // Frente BASE (30/09): dados da agência (Configurações, Dados da agência) exigidos antes de gastar IA na proposta.
 import { DadosDaAgenciaIncompletos, exigirDadosDaAgencia, faltasNosDados, lerDadosDaAgencia, textoDasFaltas } from "../_shared/dados-da-agencia.ts";
 import { JevErro, jevPerguntar, notaScore, probabilidadeNoul } from "../_shared/jev.ts";
-import { lerContextoDaMarca, resolverMarca } from "../_shared/marca.ts";
+import { kitComMarca, lerContextoDaMarca, resolverMarca } from "../_shared/marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import {
@@ -115,6 +120,8 @@ import {
   respostaPromete,
 } from "./acoes-da-proposta.ts";
 import { blocosDaAgencia, CONSELHO_DISPONIVEL } from "./agencia.ts";
+import { ACOES_LONGAS_DA_EVOLUCAO, criarAcoesDaEvolucao, type DependenciasDaEvolucao } from "./evolucao.ts";
+import { normalizarAnexos, normalizarPacotes, normalizarPagamento, normalizarVisual, pacotesParaGravar } from "../_shared/proposta-comercial.ts";
 import { avisosDaRevisao, type ConferenciaDoDado, lerConferencia, PERGUNTAS_DA_REVISAO, perguntasDaConferencia } from "./conferencia.ts";
 
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
@@ -141,12 +148,37 @@ const MAX_HISTORICO = 12;
 const TAMANHO_DA_GERACAO = { entrada: 14_000, saida: 6_000 };
 const TAMANHO_DA_PESQUISA = { entrada: 6_000, saida: 2_500 };
 const TAMANHO_DA_CONVERSA = { entrada: 9_000, saida: 1_500 };
+/** PRO2: 3 headlines, tom da marca num bloco e o resumo da reunião colada. */
+const TAMANHOS_DA_EVOLUCAO: Record<string, { entrada: number; saida: number }> = {
+  headlines: { entrada: 6_000, saida: 400 },
+  tom: { entrada: 6_000, saida: 1_500 },
+  resumo: { entrada: 14_000, saida: 1_500 },
+};
 /** Teto do material do cliente que vai ao modelo (caracteres). */
 const MAX_MATERIAL_NO_PROMPT = 40_000;
 const MAX_MATERIAL_GUARDADO = 60_000;
 const MAX_MATERIAIS = 12;
-const CAMPOS =
+const CAMPOS_BASE =
   "id, client_id, marca_id, lead_id, modelo_id, numero, titulo, status, versao, conteudo, itens, total_unico, total_mensal, validade_ate, contexto, pendencias, logo_cliente_path, token, hash_enviado, aceite, enviada_em, vista_em, aceita_em, recusada_em, motivo_recusa, expirada_em, arquivada_em, custo_usd, criado_por, criado_em, atualizado_em";
+/** Colunas da frente PRO2 (migration 20260930130000). Sem elas no banco, a mesa segue com as de antes. */
+const CAMPOS_PRO2 = `${CAMPOS_BASE}, pacotes, pagamento, visual, anexos, duplicada_de, pacote_aceito, pagamento_aceito, ultimo_followup_em`;
+let temPro2 = true;
+let CAMPOS = CAMPOS_PRO2;
+/** Coluna nova ainda não criada (migration da PRO2 pendente): volta às colunas de antes, com o registro da falha. */
+function semColunaDaPro2(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error || !temPro2) return false;
+  if (error.code === "42703" || /column .*(pacotes|pagamento|visual|anexos|duplicada_de|pacote_aceito|pagamento_aceito|ultimo_followup_em).* does not exist/i.test(String(error.message || ""))) {
+    temPro2 = false;
+    CAMPOS = CAMPOS_BASE;
+    registrarFalha("mesa-proposta: colunas da PRO2 ausentes (migration 20260930130000 pendente)", error);
+    return true;
+  }
+  return false;
+}
+const AVISO_PRO2 = "O banco ainda não tem os campos novos da proposta (migration 20260930130000_proposta_comercial_evolucao.sql pendente).";
+function exigirPro2() {
+  if (!temPro2) throw new ErroHttp(503, "banco_sem_pro2", AVISO_PRO2);
+}
 
 // ------------------------------------------------------------------ texto do agente
 
@@ -330,8 +362,17 @@ export type LinhaDaProposta = {
   logo_cliente_path: string | null;
   arquivada_em: string | null;
   custo_usd: number;
+  /** Frente PRO2. */
+  pacotes: Record<string, unknown>;
+  pagamento: Record<string, unknown>;
+  visual: Record<string, unknown>;
+  anexos: unknown[];
+  duplicada_de: string | null;
+  ultimo_followup_em: string | null;
   [k: string]: unknown;
 };
+
+const objeto = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 
 function normalizarLinha(d: unknown): LinhaDaProposta | null {
   if (!d || typeof d !== "object") return null;
@@ -356,12 +397,19 @@ function normalizarLinha(d: unknown): LinhaDaProposta | null {
     logo_cliente_path: (o.logo_cliente_path as string) || null,
     arquivada_em: (o.arquivada_em as string) || null,
     custo_usd: Number(o.custo_usd) || 0,
+    pacotes: objeto(o.pacotes),
+    pagamento: objeto(o.pagamento),
+    visual: objeto(o.visual),
+    anexos: Array.isArray(o.anexos) ? o.anexos : [],
+    duplicada_de: (o.duplicada_de as string) || null,
+    ultimo_followup_em: (o.ultimo_followup_em as string) || null,
   };
 }
 
 async function lerLinha(ch: Chamador, propostaId: unknown): Promise<LinhaDaProposta> {
   const id = idDe(propostaId, "proposta_id");
-  const { data, error } = await servico().from(TABELA).select(CAMPOS).eq("id", id).maybeSingle();
+  let { data, error } = await servico().from(TABELA).select(CAMPOS).eq("id", id).maybeSingle();
+  if (error && semColunaDaPro2(error)) ({ data, error } = await servico().from(TABELA).select(CAMPOS).eq("id", id).maybeSingle());
   if (error) {
     if (semTabela(error)) throw new ErroHttp(503, "banco_sem_propostas", AVISO_BANCO);
     throw new ErroHttp(503, "proposta_indisponivel", "Não foi possível ler a proposta agora.");
@@ -377,7 +425,7 @@ async function evento(p: { proposta_id: string; client_id: string; tipo: string;
   if (error) registrarFalha(`mesa-proposta: evento ${p.tipo} não gravado`, error, { proposta_id: p.proposta_id });
 }
 
-type OrigemDaVersao = "manual" | "agente" | "geracao" | "pesquisa" | "restauracao" | "envio";
+type OrigemDaVersao = "manual" | "agente" | "geracao" | "pesquisa" | "restauracao" | "envio" | "duplicacao" | "preenchimento" | "pacotes" | "margem" | "resumo";
 
 /**
  * Grava a mudança: guarda a versão de antes em proposta_versoes e sobe a
@@ -387,7 +435,9 @@ type OrigemDaVersao = "manual" | "agente" | "geracao" | "pesquisa" | "restauraca
  */
 async function gravar(ch: Chamador, linha: LinhaDaProposta, mudancas: Partial<Pick<LinhaDaProposta, "titulo" | "conteudo" | "itens" | "validade_ate" | "contexto" | "lead_id">> & Record<string, unknown>, origem: OrigemDaVersao, nota?: string): Promise<LinhaDaProposta> {
   if (linha.status === "aceita") throw new ErroHttp(409, "proposta_aceita", "Proposta aceita não muda. Crie uma nova.");
-  const mudaTexto = "conteudo" in mudancas || "itens" in mudancas || "validade_ate" in mudancas || "titulo" in mudancas;
+  if (["pacotes", "pagamento", "visual", "anexos", "ultimo_followup_em", "duplicada_de"].some((k) => k in mudancas)) exigirPro2();
+  // O que o cliente vê e aceita: mudar volta para rascunho (pacotes, pagamento, anexos e visual também).
+  const mudaTexto = "conteudo" in mudancas || "itens" in mudancas || "validade_ate" in mudancas || "titulo" in mudancas || "pacotes" in mudancas || "pagamento" in mudancas || "anexos" in mudancas || "visual" in mudancas;
   const { error: erroVersao } = await servico().from("proposta_versoes").upsert({
     proposta_id: linha.id,
     client_id: linha.client_id,
@@ -396,6 +446,7 @@ async function gravar(ch: Chamador, linha: LinhaDaProposta, mudancas: Partial<Pi
     conteudo: linha.conteudo,
     itens: linha.itens,
     validade_ate: linha.validade_ate,
+    ...(temPro2 ? { pacotes: linha.pacotes, pagamento: linha.pagamento } : {}),
     origem,
     nota: nota ? nota.slice(0, 300) : null,
     criado_por: ch.userId,
@@ -406,6 +457,11 @@ async function gravar(ch: Chamador, linha: LinhaDaProposta, mudancas: Partial<Pi
   const campos: Record<string, unknown> = { ...mudancas, versao: linha.versao + 1, total_unico: t.unico, total_mensal: t.mensal };
   if ("itens" in mudancas) campos.itens = itens;
   if ("conteudo" in mudancas) campos.conteudo = normalizarConteudo(mudancas.conteudo);
+  // Pacotes seguem os itens (item que saiu perde o nível; item novo entra no essencial).
+  if (temPro2 && ("pacotes" in mudancas || ("itens" in mudancas && linha.pacotes.ativo === true))) campos.pacotes = normalizarPacotes("pacotes" in mudancas ? mudancas.pacotes : linha.pacotes, itens);
+  if ("pagamento" in mudancas) campos.pagamento = normalizarPagamento(mudancas.pagamento);
+  if ("visual" in mudancas) campos.visual = normalizarVisual(mudancas.visual);
+  if ("anexos" in mudancas) campos.anexos = normalizarAnexos(mudancas.anexos, linha.client_id);
   const voltaParaRascunho = mudaTexto && linha.status !== "rascunho";
   if (voltaParaRascunho) Object.assign(campos, { status: "rascunho", token: null, hash_enviado: null });
   const hoje = hojeEmSaoPaulo();
@@ -441,7 +497,10 @@ async function estimar(ch: Chamador, corpo: Record<string, unknown>) {
   await garantirAcesso(ch, clientId);
   const m = await modeloDeTexto(corpo.modelo_id);
   const alvo = String(corpo.acao_alvo || "gerar");
-  const est = alvo === "pesquisar" ? custoDe(m, TAMANHO_DA_PESQUISA, 5) : alvo === "conversa" ? custoDe(m, TAMANHO_DA_CONVERSA) : custoDe(m, TAMANHO_DA_GERACAO, corpo.pesquisar === false ? 0 : 5);
+  const pro2 = TAMANHOS_DA_EVOLUCAO[alvo];
+  const est = pro2
+    ? custoDe(m, pro2)
+    : alvo === "pesquisar" ? custoDe(m, TAMANHO_DA_PESQUISA, 5) : alvo === "conversa" ? custoDe(m, TAMANHO_DA_CONVERSA) : custoDe(m, TAMANHO_DA_GERACAO, corpo.pesquisar === false ? 0 : 5);
   return json({ estimativa_usd: est, modelo_id: m.id, custo_usd: 0 });
 }
 
@@ -485,6 +544,39 @@ async function logoDoCliente(clientId: string, marcaId: string | null): Promise<
   }
 }
 
+/** Cores da marca (a outra marca não herda da principal: regra de heranca-da-marca.ts, via kitComMarca). */
+async function coresDoCliente(clientId: string, marcaId: string | null): Promise<string[]> {
+  try {
+    const marca = await resolverMarca(servico(), clientId, { marca_id: marcaId });
+    const { data } = await servico().from("cliente_kit_marca").select("paleta").eq("client_id", clientId).maybeSingle();
+    const kit = kitComMarca({ paleta: (data as { paleta?: unknown } | null)?.paleta ?? [] }, marca);
+    return normalizarVisual({ tema: "cliente", cores: Array.isArray(kit.paleta) ? kit.paleta : [] }).cores;
+  } catch (e) {
+    registrarFalha("mesa-proposta: cores do cliente não lidas", e, { client_id: clientId });
+    return [];
+  }
+}
+
+/** Insere a proposta com o próximo número (até 3 tentativas se o número já foi usado). */
+async function inserirProposta(base: Record<string, unknown>): Promise<LinhaDaProposta> {
+  let criada: unknown = null;
+  let dados = base;
+  for (let tentativa = 0; tentativa < 4 && !criada; tentativa++) {
+    const numero = await proximoNumero();
+    const numeroFinal = tentativa ? `${numero}-${tentativa + 1}` : numero;
+    const { data, error } = await servico().from(TABELA).insert({ ...dados, numero: numeroFinal }).select(CAMPOS).single();
+    if (!error) criada = data;
+    else if (semTabela(error)) throw new ErroHttp(503, "banco_sem_propostas", AVISO_BANCO);
+    else if (semColunaDaPro2(error)) {
+      const { visual: _v, pacotes: _p, pagamento: _pg, anexos: _a, duplicada_de: _d, ...semPro2 } = dados;
+      dados = semPro2;
+    } else if (error.code !== "23505") throw new ErroHttp(503, "proposta_nao_criada", "Não foi possível criar a proposta agora.");
+  }
+  const linha = normalizarLinha(criada);
+  if (!linha) throw new ErroHttp(503, "proposta_nao_criada", "Não foi possível criar a proposta agora.");
+  return linha;
+}
+
 async function criar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
@@ -520,17 +612,9 @@ async function criar(ch: Chamador, corpo: Record<string, unknown>) {
     logo_cliente_path: await logoDoCliente(clientId, marcaId),
     criado_por: ch.userId,
   };
-  let criada: unknown = null;
-  for (let tentativa = 0; tentativa < 3 && !criada; tentativa++) {
-    const numero = await proximoNumero();
-    const numeroFinal = tentativa ? `${numero}-${tentativa + 1}` : numero;
-    const { data, error } = await servico().from(TABELA).insert({ ...base, numero: numeroFinal }).select(CAMPOS).single();
-    if (!error) criada = data;
-    else if (semTabela(error)) throw new ErroHttp(503, "banco_sem_propostas", AVISO_BANCO);
-    else if (error.code !== "23505") throw new ErroHttp(503, "proposta_nao_criada", "Não foi possível criar a proposta agora.");
-  }
-  const linha = normalizarLinha(criada);
-  if (!linha) throw new ErroHttp(503, "proposta_nao_criada", "Não foi possível criar a proposta agora.");
+  // PRO2: as cores da marca do cliente entram no visual (o tema "Cores do cliente" usa).
+  const cores = await coresDoCliente(clientId, marcaId);
+  const linha = await inserirProposta(temPro2 && cores.length ? { ...base, visual: normalizarVisual({ tema: "aceleriq", cores }) } : base);
   await evento({ proposta_id: linha.id, client_id: clientId, tipo: "criada", dados: { modelo_id: modeloId, lead_id: leadId, agencia: avisoDaAgencia }, criado_por: ch.userId });
   return json({ proposta: saidaDaLinha(linha), aviso_agencia: avisoDaAgencia, custo_usd: 0 });
 }
@@ -549,6 +633,11 @@ async function salvar(ch: Chamador, corpo: Record<string, unknown>) {
     mudancas.validade_ate = v;
   }
   if (corpo.lead_id !== undefined) mudancas.lead_id = idOuNulo(corpo.lead_id, "lead_id");
+  // PRO2: pacotes, pagamento, visual e anexos (o gravar normaliza e confere a pasta dos anexos).
+  if (corpo.pacotes !== undefined) mudancas.pacotes = objeto(corpo.pacotes);
+  if (corpo.pagamento !== undefined) mudancas.pagamento = objeto(corpo.pagamento);
+  if (corpo.visual !== undefined) mudancas.visual = objeto(corpo.visual);
+  if (corpo.anexos !== undefined) mudancas.anexos = Array.isArray(corpo.anexos) ? corpo.anexos : [];
   if (typeof corpo.notas === "string" || typeof corpo.transcricao === "string") {
     mudancas.contexto = {
       ...linha.contexto,
@@ -596,11 +685,15 @@ async function materialRemover(ch: Chamador, corpo: Record<string, unknown>) {
 async function versaoRestaurar(ch: Chamador, corpo: Record<string, unknown>) {
   const linha = await lerLinha(ch, corpo.proposta_id);
   const v = Math.round(Number(corpo.versao));
-  const { data, error } = await servico().from("proposta_versoes").select("titulo, conteudo, itens, validade_ate").eq("proposta_id", linha.id).eq("versao", v).maybeSingle();
+  const colunasDaVersao: string = temPro2 ? "titulo, conteudo, itens, validade_ate, pacotes, pagamento" : "titulo, conteudo, itens, validade_ate";
+  const { data, error } = await servico().from("proposta_versoes").select(colunasDaVersao).eq("proposta_id", linha.id).eq("versao", v).maybeSingle();
   if (error) throw new ErroHttp(503, "versao_indisponivel", "Não foi possível ler a versão agora.");
   if (!data) throw new ErroHttp(404, "versao_inexistente", "Versão não encontrada.");
-  const d = data as { titulo: string | null; conteudo: unknown; itens: unknown; validade_ate: string | null };
-  const nova = await gravar(ch, linha, { titulo: d.titulo || linha.titulo, conteudo: normalizarConteudo(d.conteudo), itens: normalizarItens(d.itens), validade_ate: diaValido(d.validade_ate) || linha.validade_ate }, "restauracao", `restaurada a versão ${v}`);
+  const d = data as unknown as { titulo: string | null; conteudo: unknown; itens: unknown; validade_ate: string | null; pacotes?: unknown; pagamento?: unknown };
+  const volta: Record<string, unknown> = { titulo: d.titulo || linha.titulo, conteudo: normalizarConteudo(d.conteudo), itens: normalizarItens(d.itens), validade_ate: diaValido(d.validade_ate) || linha.validade_ate };
+  if (temPro2 && d.pacotes !== undefined) volta.pacotes = objeto(d.pacotes);
+  if (temPro2 && d.pagamento !== undefined) volta.pagamento = objeto(d.pagamento);
+  const nova = await gravar(ch, linha, volta, "restauracao", `restaurada a versão ${v}`);
   await evento({ proposta_id: linha.id, client_id: linha.client_id, tipo: "restaurada", dados: { versao: v }, criado_por: ch.userId });
   return json({ proposta: saidaDaLinha(nova), custo_usd: 0 });
 }
@@ -649,7 +742,7 @@ function materialDaReuniao(ctx: Contexto): string {
 type ContextoDaGeracao = { dados: Record<string, unknown>; origem: string; cliente: string; blocoCliente: string };
 
 /** Tudo o que o estrategista lê: cliente, marca, briefing, lead, itens, reunião, arquivos e o cérebro do painel. */
-async function contextoDaGeracao(linha: LinhaDaProposta): Promise<ContextoDaGeracao> {
+async function contextoDaGeracao(linha: LinhaDaProposta, fontes?: FonteDoPreenchimento[]): Promise<ContextoDaGeracao> {
   const db = servico();
   const [cliente, marca, briefing, lead, cerebro] = await Promise.all([
     nomeDoCliente(linha.client_id),
@@ -678,7 +771,22 @@ async function contextoDaGeracao(linha: LinhaDaProposta): Promise<ContextoDaGera
   };
   // A origem dos números: tudo o que é do cliente e do painel (inclusive os valores dos itens).
   const origem = [reuniao, JSON.stringify(dados), linha.itens.map((i) => `${i.quantidade} ${i.valor_unitario}`).join(" "), cerebro].join("\n");
-  return { dados: { ...dados, material_da_reuniao: reuniao || "(nenhum: pergunte à equipe)" }, origem, cliente, blocoCliente: cerebro ? blocoDoContextoDoCliente(cerebro, cliente) : "" };
+  // PRO2 (Preencher tudo): a equipe escolhe de onde ler. Sem a lista, lê tudo (como antes).
+  const usa = (f: FonteDoPreenchimento) => !fontes || !fontes.length || fontes.indexOf(f) >= 0;
+  const escolhidos = {
+    ...dados,
+    contexto_do_cliente: usa("contexto") ? dados.contexto_do_cliente : "(fora desta vez)",
+    briefing: usa("briefing") ? dados.briefing : "(fora desta vez)",
+    material_da_reuniao: usa("reuniao") ? reuniao || "(nenhum: pergunte à equipe)" : "(fora desta vez)",
+  };
+  return { dados: escolhidos, origem, cliente, blocoCliente: cerebro && usa("contexto") ? blocoDoContextoDoCliente(cerebro, cliente) : "" };
+}
+
+export type FonteDoPreenchimento = "reuniao" | "briefing" | "contexto" | "site";
+const FONTES_DO_PREENCHIMENTO: FonteDoPreenchimento[] = ["reuniao", "briefing", "contexto", "site"];
+function lerFontes(v: unknown): FonteDoPreenchimento[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  return v.map(String).filter((f): f is FonteDoPreenchimento => (FONTES_DO_PREENCHIMENTO as string[]).indexOf(f) >= 0);
 }
 
 // ------------------------------------------------------------------ conferência (Jev, só aviso)
@@ -702,14 +810,14 @@ async function conferirDados(clientId: string, dados: DadoDeMercado[], userId: s
 
 // ------------------------------------------------------------------ gerar e pesquisar
 
-type Gerado = { linha: LinhaDaProposta; perguntas: string[]; tiradas: string[]; conferencia: ConferenciaDoDado[]; custo: number; saldo: number | null; reserva?: string; resumo: string };
+type Gerado = { linha: LinhaDaProposta; perguntas: string[]; tiradas: string[]; conferencia: ConferenciaDoDado[]; custo: number; saldo: number | null; reserva?: string; resumo: string; proposto?: ConteudoDaProposta };
 
-async function escrever(ch: Chamador, linha: LinhaDaProposta, p: { modeloId?: unknown; orientacao?: string; pesquisar: boolean; somente?: TipoDeBloco[]; sistema: string; origemDaVersao: OrigemDaVersao; tarefaTexto: string }): Promise<Gerado> {
+async function escrever(ch: Chamador, linha: LinhaDaProposta, p: { modeloId?: unknown; orientacao?: string; pesquisar: boolean; somente?: TipoDeBloco[]; sistema: string; origemDaVersao: OrigemDaVersao; tarefaTexto: string; previa?: boolean; fontes?: FonteDoPreenchimento[] }): Promise<Gerado> {
   if (linha.status === "aceita") throw new ErroHttp(409, "proposta_aceita", "Proposta aceita não muda. Crie uma nova.");
   // Antes de gastar IA: a proposta sai com o nome, o contato e a logo da agência.
   const agencia = await exigirDadosDaAgencia(servico(), "proposta");
   const modelo = await modeloDeTexto(p.modeloId);
-  const [ctx, regras] = await Promise.all([contextoDaGeracao(linha), regrasDaMesa(servico(), { clientId: linha.client_id, mesa: "proposta", marcaId: linha.marca_id })]);
+  const [ctx, regras] = await Promise.all([contextoDaGeracao(linha, p.fontes), regrasDaMesa(servico(), { clientId: linha.client_id, mesa: "proposta", marcaId: linha.marca_id })]);
   const hoje = hojeEmSaoPaulo();
   const pedido = [p.tarefaTexto, p.orientacao ? `ORIENTAÇÃO DA EQUIPE: ${p.orientacao}` : ""].filter(Boolean).join("\n");
   const saida = await chamarTexto({
@@ -731,6 +839,11 @@ async function escrever(ch: Chamador, linha: LinhaDaProposta, p: { modeloId?: un
   const mercado = blocoDoTipo(r.conteudo, "mercado").dados;
   const tocouMercado = !p.somente || p.somente.indexOf("mercado") >= 0;
   const conferencia = tocouMercado ? await conferirDados(linha.client_id, mercado.dados, ch.userId, linha.id) : [];
+  // PRO2, Preencher tudo: nada é gravado sem a pessoa ver. Volta a prévia; a tela aplica campo a campo.
+  if (p.previa) {
+    await evento({ proposta_id: linha.id, client_id: linha.client_id, tipo: "preenchida", dados: { previa: true, modelo_id: saida.modeloId, custo_usd: saida.custoUsd, tiradas: r.tiradas.length, fontes: p.fontes || null }, criado_por: ch.userId });
+    return { linha, perguntas: r.perguntas, tiradas: r.tiradas, conferencia, custo: saida.custoUsd, saldo: saida.saldoUsd, reserva: saida.reservaUsada, resumo: r.resumo, proposto: r.conteudo };
+  }
   // Lê de novo para não perder o que a equipe gravou enquanto o modelo escrevia (a versão confere).
   const atual = await lerLinha(ch, linha.id);
   let conteudo = atual.versao === linha.versao ? r.conteudo : aplicarGeracao(atual.conteudo, saida.json, ctx.origem, { somente: p.somente, hoje }).conteudo;
@@ -743,17 +856,25 @@ async function escrever(ch: Chamador, linha: LinhaDaProposta, p: { modeloId?: un
 }
 
 const respostaDoGerado = (g: Gerado) =>
-  json({ proposta: saidaDaLinha(g.linha), perguntas: g.perguntas, tiradas: g.tiradas, conferencia: g.conferencia, resumo: g.resumo, custo_usd: g.custo, saldo_usd: g.saldo, reserva_usada: g.reserva });
+  json({ proposta: saidaDaLinha(g.linha), perguntas: g.perguntas, tiradas: g.tiradas, conferencia: g.conferencia, resumo: g.resumo, custo_usd: g.custo, saldo_usd: g.saldo, reserva_usada: g.reserva, ...(g.proposto ? { proposto: g.proposto } : {}) });
+
+const SITE_OK = /^https?:\/\/[^\s/$.?#][^\s]*$/i;
 
 async function gerar(ch: Chamador, corpo: Record<string, unknown>) {
   const linha = await lerLinha(ch, corpo.proposta_id);
+  const fontes = lerFontes(corpo.fontes);
+  const site = textoLimpo(corpo.site, 300);
+  if (site && !SITE_OK.test(site)) throw new ErroHttp(400, "site_invalido", "O site precisa começar com http:// ou https://.");
+  const lerSite = !!site && (!fontes || fontes.indexOf("site") >= 0);
   const g = await escrever(ch, linha, {
     modeloId: corpo.modelo_id,
-    orientacao: textoLimpo(corpo.orientacao, 1000),
-    pesquisar: corpo.pesquisar !== false,
+    orientacao: [textoLimpo(corpo.orientacao, 1000), lerSite ? `Leia o site do cliente (${site}) com a busca e use o que estiver lá, com a url como fonte.` : ""].filter(Boolean).join(" "),
+    pesquisar: corpo.pesquisar !== false || lerSite,
     sistema: SISTEMA_ESTRATEGISTA,
     origemDaVersao: "geracao",
     tarefaTexto: "Escreva a proposta inteira com o material e, se a pesquisa estiver ligada, a pesquisa de mercado na web.",
+    previa: corpo.previa === true,
+    fontes,
   });
   return respostaDoGerado(g);
 }
@@ -853,7 +974,8 @@ async function enviar(ch: Chamador, corpo: Record<string, unknown>) {
   // O link mostra o nome e o contato da agência: sem eles, não sai.
   await exigirDadosDaAgencia(servico(), "proposta");
   const token = linha.token && linha.status !== "rascunho" ? linha.token : tokenNovo();
-  const hash = await hashDaProposta(linha);
+  const pagamentoEnviado = normalizarPagamento(linha.pagamento);
+  const hash = await hashDaProposta({ ...linha, pacotes: pacotesParaGravar(linha.pacotes, linha.itens), pagamento: pagamentoEnviado.opcoes.length ? pagamentoEnviado : undefined, anexos: normalizarAnexos(linha.anexos) });
   const agora = new Date().toISOString();
   const { data, error } = await servico().from(TABELA)
     .update({ status: linha.status === "vista" ? "vista" : "enviada", token, hash_enviado: hash, enviada_em: agora, enviada_por: ch.userId })
@@ -1019,7 +1141,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   let resposta = textoLimpo(j.resposta, 4000) || "Pronto.";
   const sugestoes = (Array.isArray(j.sugestoes) ? j.sugestoes : []).map((s) => textoLimpo(s, 140)).filter(Boolean).slice(0, 3);
   const aprendendo = aprenderDoPedido(servico(), { clientId, mesa: "proposta", pedido: mensagem, regraSugerida: j.regra_aprendida, userId: ch.userId, ultimaResposta: ultimaResposta ? ultimaResposta.conteudo : null });
-  let acao: AcaoDoAgente | null = linha ? normalizarAcoesDaProposta(j.acoes, paraAcao(linha), mensagem, custoDe(modelo, TAMANHO_DA_GERACAO), custoDe(modelo, TAMANHO_DA_PESQUISA, 5)) : null;
+  let acao: AcaoDoAgente | null = linha ? normalizarAcoesDaProposta(j.acoes, paraAcao(linha), mensagem, custoDe(modelo, TAMANHO_DA_GERACAO), custoDe(modelo, TAMANHO_DA_PESQUISA, 5), undefined, { resumo: custoDe(modelo, TAMANHOS_DA_EVOLUCAO.resumo), pacotes: 0.01 }) : null;
   let levar = pedeParaLevar(mensagem);
   if (acao && linha) acao = comCaminho(acao, caminhoDaProposta(clientId, linha.id, acao, { abrirSozinho: levar }));
   // "Ele já vai fazendo": headline, mostrar/ocultar, validade e item com o preço dito vão direto, com Desfazer.
@@ -1078,7 +1200,14 @@ async function executarItem(ch: Chamador, clientId: string, item: ItemDaAcaoDoAg
   const propostaId = doBloco ? doBloco.propostaId : doItem ? doItem.propostaId : item.alvo_id;
   const linha = await lerLinha(ch, propostaId);
   if (linha.client_id !== clientId) throw new Error("A proposta é de outro cliente.");
-  const antes = { conteudo: linha.conteudo, itens: linha.itens, validade_ate: linha.validade_ate, proposta_id: linha.id };
+  const antes: Record<string, unknown> = { conteudo: linha.conteudo, itens: linha.itens, validade_ate: linha.validade_ate, proposta_id: linha.id };
+  // PRO2: pacotes, pagamento e as notas da reunião também voltam no Desfazer.
+  if (temPro2) Object.assign(antes, { pacotes: linha.pacotes, pagamento: linha.pagamento });
+  antes.notas = linha.contexto.notas || "";
+  if (item.operacao === "montar_pacotes" || item.operacao === "ajustar_margem" || item.operacao === "resumir_reuniao") {
+    const feito = await evolucao.executarItem(ch, linha, item);
+    return { desfazer: antes, custo: feito.custo, aviso: feito.aviso };
+  }
   if (item.operacao === "trocar_headline" || item.operacao === "ocultar_bloco" || item.operacao === "mostrar_bloco") {
     const tipo = doBloco && ehTipoDeBloco(doBloco.tipo) ? doBloco.tipo : null;
     if (!tipo) throw new Error("Bloco não encontrado.");
@@ -1129,7 +1258,11 @@ async function executarItem(ch: Chamador, clientId: string, item: ItemDaAcaoDoAg
 async function reverterItem(ch: Chamador, r: ResultadoDoItem) {
   const d = r.desfazer || {};
   const linha = await lerLinha(ch, d.proposta_id);
-  await gravar(ch, linha, { conteudo: normalizarConteudo(d.conteudo), itens: normalizarItens(d.itens), validade_ate: diaValido(d.validade_ate) || linha.validade_ate }, "restauracao", `desfeito: ${r.titulo}`);
+  const volta: Record<string, unknown> = { conteudo: normalizarConteudo(d.conteudo), itens: normalizarItens(d.itens), validade_ate: diaValido(d.validade_ate) || linha.validade_ate };
+  if (temPro2 && d.pacotes && typeof d.pacotes === "object") volta.pacotes = d.pacotes;
+  if (temPro2 && d.pagamento && typeof d.pagamento === "object") volta.pagamento = d.pagamento;
+  if (typeof d.notas === "string" && d.notas !== (linha.contexto.notas || "")) volta.contexto = { ...linha.contexto, notas: d.notas };
+  await gravar(ch, linha, volta, "restauracao", `desfeito: ${r.titulo}`);
 }
 
 function comoErroDaProposta(e: unknown): unknown {
@@ -1182,9 +1315,39 @@ async function desfazerAcao(ch: Chamador, corpo: Record<string, unknown>) {
   return json({ anexo: r.anexo, voltaram: r.voltaram, falharam: r.falharam, custo_usd: 0 });
 }
 
+// ------------------------------------------------------------------ PRO2 (evolucao.ts)
+
+const dependencias: DependenciasDaEvolucao<Chamador, LinhaDaProposta> = {
+  servico,
+  json,
+  erro: (status, codigo, mensagem, extra) => new ErroHttp(status, codigo, mensagem, extra),
+  lerLinha,
+  gravar: (ch, linha, mudancas, origem, nota) => gravar(ch, linha, mudancas, origem as OrigemDaVersao, nota),
+  evento,
+  saidaDaLinha,
+  garantirAcesso,
+  idDe,
+  modeloDeTexto,
+  raciocinioPara,
+  custoDe,
+  contextoDaGeracao: (linha) => contextoDaGeracao(linha),
+  materialDaReuniao: (linha) => materialDaReuniao(linha.contexto),
+  inserirProposta,
+  nomeDoCliente,
+  logoDoCliente,
+  contatoDoCliente,
+  baseDoLink,
+  exigirPro2,
+  regrasDaVoz: `${REGRAS_DA_VOZ}\n\n${REGRAS_DOS_NUMEROS}`,
+  referencia: REF_PROPOSTA,
+  tamanhos: TAMANHOS_DA_EVOLUCAO,
+};
+const evolucao = criarAcoesDaEvolucao(dependencias);
+
 // ------------------------------------------------------------------ rotas
 
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
+  ...evolucao.acoes,
   estimar,
   criar,
   salvar,
@@ -1209,7 +1372,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
 };
 
 /** Ações que podem passar de 150 s (IA com busca na web): a resposta começa na hora. */
-const ACOES_LONGAS = new Set(["gerar", "pesquisar", "agente_conversar", "executar_acao_agente"]);
+const ACOES_LONGAS = new Set(["gerar", "pesquisar", "agente_conversar", "executar_acao_agente", ...ACOES_LONGAS_DA_EVOLUCAO]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

@@ -16,6 +16,11 @@
  * - gerar_proposta (p1)     escreve os blocos com o contexto e a pesquisa de mercado
  * - pesquisar_mercado (p1)  refaz só o mercado, com busca na web (fonte e data)
  * - reescrever_bloco (b)    reescreve um bloco pela orientação
+ * - resumir_reuniao (p1)    resume a transcrição colada nas notas (frente PRO2)
+ * Com o Jev (Confirmar e custo antes, frente PRO2):
+ * - montar_pacotes (p1)     monta Essencial, Recomendado e Completo com a biblioteca
+ * Sem custo, mas mexe em preço (Confirmar, com Desfazer, frente PRO2):
+ * - ajustar_margem (p1)     para = a margem em %, pela calculadora de hora técnica
  *
  * Regra do preço: o valor de um item só entra se estiver escrito no pedido da
  * equipe (o agente não inventa preço). Enviar ao cliente não é ação do agente:
@@ -36,6 +41,7 @@ import {
 } from "../_shared/acoes-do-agente.ts";
 import { caminhoNaArea } from "../_shared/mapa-do-painel.ts";
 import { type Bloco, diaValido, type ItemDaProposta, lerValor, numeroTemOrigem, reais, ROTULO_DO_BLOCO, textoLimpo } from "../_shared/proposta-modelo.ts";
+import { lerMargem } from "../_shared/proposta-comercial.ts";
 
 export const OPERACOES_DA_PROPOSTA = [
   "trocar_headline",
@@ -47,9 +53,12 @@ export const OPERACOES_DA_PROPOSTA = [
   "gerar_proposta",
   "pesquisar_mercado",
   "reescrever_bloco",
+  "montar_pacotes",
+  "ajustar_margem",
+  "resumir_reuniao",
 ];
 /** Operações que chamam o modelo (custam IA). */
-export const OPERACOES_COM_IA = ["gerar_proposta", "pesquisar_mercado", "reescrever_bloco"];
+export const OPERACOES_COM_IA = ["gerar_proposta", "pesquisar_mercado", "reescrever_bloco", "resumir_reuniao", "montar_pacotes"];
 
 export const ESQUEMA_DAS_ACOES_DA_PROPOSTA = esquemaDasAcoes(OPERACOES_DA_PROPOSTA);
 
@@ -183,6 +192,33 @@ export function regrasDaProposta(): Record<string, RegraDaOperacao<AlvoDaPropost
         travaDoStatus(alvo) ||
         (alvo.dados && (alvo.dados.tipo === "provas" || alvo.dados.tipo === "quem_somos") ? "Provas e quem somos vêm dos dados da agência, não do agente." : null),
     },
+    montar_pacotes: {
+      rotulo: "montar os 3 pacotes da",
+      // Combina com as outras na mesma proposta (ex.: resumir e depois montar os pacotes).
+      combina: true,
+      alvos: ["p"],
+      para: (bruto) => textoLimpo(bruto, 300) || "sem orientação extra",
+      trava: (alvo) => travaDoStatus(alvo),
+    },
+    // Sem custo, mas mexe em preço: sempre com Confirmar (sem "direta").
+    ajustar_margem: {
+      rotulo: "ajustar os preços pela margem na",
+      // Combina com as outras na mesma proposta (ex.: resumir e depois montar os pacotes).
+      combina: true,
+      alvos: ["p"],
+      para: (bruto) => {
+        const m = lerMargem(bruto);
+        return m === null ? null : String(m);
+      },
+      trava: (alvo) => travaDoStatus(alvo),
+    },
+    resumir_reuniao: {
+      rotulo: "resumir a reunião nas notas da",
+      // Combina com as outras na mesma proposta (ex.: resumir e depois montar os pacotes).
+      combina: true,
+      alvos: ["p"],
+      trava: (alvo) => travaDoStatus(alvo),
+    },
   };
 }
 
@@ -196,6 +232,9 @@ export const DESCRICOES_DA_PROPOSTA: Record<string, string> = {
   gerar_proposta: "escreve a proposta inteira com o contexto, as notas, a transcrição, os arquivos e a pesquisa de mercado (ref p1). para: orientação extra ou vazio.",
   pesquisar_mercado: "refaz só o bloco de mercado com busca na web: concorrentes e faixa de preço do nicho e da região, cada número com fonte e data (ref p1). para: o foco da pesquisa.",
   reescrever_bloco: "reescreve um bloco pela orientação (ref b.., menos provas e quem somos). para: a orientação (ex.: 'mais direto, na voz do cliente').",
+  montar_pacotes: "monta os 3 pacotes (Essencial, Recomendado e Completo) com os itens e a biblioteca de serviços da agência; o preço vem da biblioteca (ref p1). para: orientação extra ou vazio.",
+  ajustar_margem: "recalcula o preço dos itens que têm horas pela calculadora de hora técnica para chegar na margem pedida (ref p1). para: a margem em %, SÓ a que a equipe disse (ex.: '35').",
+  resumir_reuniao: "resume a transcrição e as notas coladas em notas organizadas (objetivo, dores, pedidos, prazos, falas, o que falta), embaixo das notas atuais (ref p1). para vazio.",
 };
 
 /** Bloco do prompt com os alvos (apelidos, nunca id) e a regra das ações. */
@@ -209,7 +248,7 @@ export function blocoDasAcoesDaProposta(p: PropostaParaAcao): string {
  * Lê as ações do modelo, troca apelido por alvo e aplica a regra do preço:
  * item com valor que não está no pedido vai para recusados, com o motivo.
  */
-export function normalizarAcoesDaProposta(bruto: unknown, p: PropostaParaAcao, pedido: string, custoPorGeracaoUsd: number, custoDaPesquisaUsd: number, id?: string): AcaoDoAgente | null {
+export function normalizarAcoesDaProposta(bruto: unknown, p: PropostaParaAcao, pedido: string, custoPorGeracaoUsd: number, custoDaPesquisaUsd: number, id?: string, custosDaPro2: { resumo?: number; pacotes?: number } = {}): AcaoDoAgente | null {
   const acao = normalizarAcaoDoAgente(bruto, alvosDaProposta(p), regrasDaProposta(), {
     agente: "proposta",
     id: id || `proposta-${Date.now().toString(36)}`,
@@ -227,6 +266,14 @@ export function normalizarAcoesDaProposta(bruto: unknown, p: PropostaParaAcao, p
       }
       it.para_rotulo = `${lido.nome}: ${lido.quantidade} x ${reais(lido.valor)} ${lido.recorrencia === "mensal" ? "por mês" : "único"}`;
     }
+    // A margem é a da equipe: número que não está no pedido não vira preço.
+    if (it.operacao === "ajustar_margem") {
+      if (!numeroTemOrigem(String(it.para || ""), pedido)) {
+        acao.recusados.push({ ref: it.ref, titulo: it.titulo, operacao: it.operacao, motivo: "A margem não está no seu pedido. Diga a margem em % e eu ajusto." });
+        continue;
+      }
+      it.para_rotulo = `margem de ${it.para}%`;
+    }
     ficam.push(it);
   }
   acao.itens = ficam;
@@ -236,6 +283,8 @@ export function normalizarAcoesDaProposta(bruto: unknown, p: PropostaParaAcao, p
     if (it.operacao === "gerar_proposta") custo += custoPorGeracaoUsd + custoDaPesquisaUsd;
     else if (it.operacao === "pesquisar_mercado") custo += custoDaPesquisaUsd;
     else if (it.operacao === "reescrever_bloco") custo += custoPorGeracaoUsd / 3;
+    else if (it.operacao === "resumir_reuniao") custo += custosDaPro2.resumo ?? custoPorGeracaoUsd / 3;
+    else if (it.operacao === "montar_pacotes") custo += custosDaPro2.pacotes ?? 0.01;
   }
   acao.custo_estimado_usd = custo > 0 ? Math.round(custo * 1e6) / 1e6 : 0;
   return acao;
@@ -243,7 +292,7 @@ export function normalizarAcoesDaProposta(bruto: unknown, p: PropostaParaAcao, p
 
 /** "Ir para" depois de feito: IA e blocos abrem o Rascunho; preço e validade, o Contexto. */
 export function caminhoDaProposta(clientId: string, propostaId: string, acao: Pick<AcaoDoAgente, "itens">, opcoes: { abrirSozinho?: boolean } = {}): CaminhoDoAgente | null {
-  const precoOuValidade = acao.itens.every((i) => i.operacao === "adicionar_item" || i.operacao === "remover_item" || i.operacao === "definir_validade");
+  const precoOuValidade = acao.itens.every((i) => ["adicionar_item", "remover_item", "definir_validade", "montar_pacotes", "ajustar_margem", "resumir_reuniao"].indexOf(i.operacao) >= 0);
   return caminhoNaArea("mesa_proposta", {
     clientId,
     etapa: precoOuValidade ? "contexto" : "rascunho",

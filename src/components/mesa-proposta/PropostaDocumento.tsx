@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import "./proposta-documento.css";
 import { MarcaAceleriq } from "@/components/publico/CascaPublica";
 import {
@@ -15,13 +15,29 @@ import {
   type ItemDaProposta,
   type TipoDeBloco,
 } from "../../../supabase/functions/_shared/proposta-modelo";
+import {
+  barrasDoCronograma,
+  comparativoDosPacotes,
+  corDoTextoSobre,
+  normalizarPagamento,
+  normalizarVisual,
+  resumoDosPacotes,
+  ROTULO_DO_NIVEL,
+  textoDaOpcao,
+  type NivelDoPacote,
+  type TemaDaProposta,
+} from "../../../supabase/functions/_shared/proposta-comercial";
 
 /**
  * O documento da proposta: a mesma página na prévia da mesa e no link
  * público /proposta/:token. Vertical, legível no celular, identidade da
- * Aceleriq (logo e verde) e a logo do cliente na capa. Páginas claras
- * explicam; dinheiro e prova ficam no escuro. Imprimir dá o PDF A4 vertical
- * (uma página por bloco; o CSS esconde botões e aceite).
+ * Aceleriq (logo e verde) e a logo do cliente na capa. Imprimir dá o PDF A4
+ * vertical (uma página por bloco; o CSS esconde botões e aceite).
+ *
+ * Frente PRO2: quatro modelos visuais (Aceleriq, Claro, Editorial e Cores do
+ * cliente, com a cor da marca na capa), três pacotes com comparativo,
+ * formas de pagamento, cronograma em barras (semanas lidas do marco),
+ * materiais anexados e âncoras para o índice do link.
  *
  * O preço sai só dos itens (totaisDosItens): o texto do bloco de
  * investimento traz intangíveis e condições; o valor é do código.
@@ -34,9 +50,27 @@ export type DadosDoDocumento = {
   itens: ItemDaProposta[];
   validade_ate: string | null;
   data: string | null;
+  /** Frente PRO2 (tudo opcional: a proposta antiga desenha igual). */
+  pacotes?: unknown;
+  pagamento?: unknown;
+  visual?: unknown;
+  anexos?: Array<{ id: string; titulo: string; url?: string }>;
 };
 
 export type AgenciaDoDocumento = { nome: string; site?: string; email?: string; whatsapp?: string; instagram?: string };
+
+/** Fundo de cada página no modelo visual escolhido. */
+export function fundoNoTema(tipo: TipoDeBloco, tema: TemaDaProposta): "escuro" | "claro" {
+  if (tema === "claro" || tema === "editorial") return "claro";
+  return FUNDO_DO_BLOCO[tipo];
+}
+
+/** Itens do índice do link (os blocos que aparecem, menos a capa). */
+export function itensDoIndice(conteudo: ConteudoDaProposta): Array<{ tipo: TipoDeBloco; titulo: string }> {
+  return blocosParaMostrar(conteudo)
+    .filter((b) => b.tipo !== "capa")
+    .map((b) => ({ tipo: b.tipo, titulo: b.titulo }));
+}
 
 function Fonte({ f }: { f: FonteDoDado }) {
   return (
@@ -120,7 +154,148 @@ function Lista({ itens, numerada }: { itens: Array<{ titulo: string; texto?: str
   );
 }
 
-function Conteudo({ b, itens, aceite }: { b: Bloco; itens: ItemDaProposta[]; aceite?: ReactNode }) {
+function Cronograma({ x }: { x: DadosDoBloco["cronograma"] }) {
+  const g = barrasDoCronograma(x.marcos);
+  const comBarra = g.total_semanas > 0 && g.barras.some((b) => b.esquerda !== null);
+  if (!comBarra) {
+    return (
+      <ul className="pd-lista pd-linha-do-tempo">
+        {x.marcos.map((m, i) => (
+          <li key={`${m.titulo}-${i}`}>
+            <span>
+              {m.quando ? <span className="pd-quando">{m.quando}</span> : null}
+              <span className="pd-item-titulo">{m.titulo}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return (
+    <div className="pd-gantt" role="list" aria-label={`Cronograma em ${g.total_semanas} semanas`}>
+      {g.barras.map((b, i) => (
+        <div key={`${b.titulo}-${i}`} className="pd-gantt-linha" role="listitem">
+          <span className="pd-gantt-rotulo">
+            <span className="pd-item-titulo">{b.titulo}</span>
+            {b.quando ? <span className="pd-quando">{b.quando}</span> : null}
+          </span>
+          <span className="pd-gantt-trilho" aria-hidden="true">
+            {b.esquerda !== null ? <span className="pd-gantt-barra" style={{ left: `${b.esquerda}%`, width: `${b.largura}%` }} /> : null}
+          </span>
+        </div>
+      ))}
+      <div className="pd-gantt-escala" aria-hidden="true">
+        <span>Semana 1</span>
+        <span>Semana {g.total_semanas}</span>
+      </div>
+    </div>
+  );
+}
+
+function Investimento({ x, itens, pacotes, pagamento, pacoteEscolhido }: { x: DadosDoBloco["investimento"]; itens: ItemDaProposta[]; pacotes?: unknown; pagamento?: unknown; pacoteEscolhido?: NivelDoPacote | null }) {
+  const resumo = resumoDosPacotes(itens, pacotes);
+  const opcoes = normalizarPagamento(pagamento).opcoes;
+  const base = resumo.length ? (resumo.find((p) => (pacoteEscolhido ? p.nivel === pacoteEscolhido : p.destaque)) || resumo[1]) : null;
+  const totaisBase = base ? base.totais : totaisDosItens(itens);
+  const pagamentoTexto = (
+    <div>
+      <span className="pd-meta-rotulo">Pagamento</span>
+      {opcoes.length ? (
+        <ul className="pd-opcoes">
+          {opcoes.map((op) => (
+            <li key={op.id}>
+              {textoDaOpcao(op, totaisBase)}
+              {op.observacao ? <span className="pd-item-texto">{op.observacao}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="pd-corpo">{x.condicoes || (opcoes.length ? "" : "Combinado no contrato.")}</p>
+      {base && opcoes.length ? <p className="pd-pequeno">Valores do pacote {base.nome}.</p> : null}
+      {x.observacao ? <p className="pd-pequeno">{x.observacao}</p> : null}
+    </div>
+  );
+
+  if (resumo.length) {
+    const linhas = comparativoDosPacotes(itens, pacotes);
+    return (
+      <>
+        {x.intangiveis.length ? <Lista itens={x.intangiveis.map((i) => ({ titulo: i }))} /> : null}
+        <div className="pd-pacotes">
+          {resumo.map((p) => (
+            <div key={p.nivel} className={`pd-pacote${p.destaque ? " pd-pacote-destaque" : ""}${pacoteEscolhido === p.nivel ? " pd-pacote-escolhido" : ""}`} data-pacote={p.nivel}>
+              {p.destaque ? <span className="pd-selo">Recomendado</span> : null}
+              <span className="pd-item-titulo">{p.nome}</span>
+              {p.descricao ? <span className="pd-item-texto">{p.descricao}</span> : null}
+              {p.totais.unico > 0 ? <span className="pd-valor-pacote">{reais(p.totais.unico)}</span> : null}
+              {p.totais.mensal > 0 ? <span className={p.totais.unico > 0 ? "pd-valor-mensal-pacote" : "pd-valor-pacote"}>{`${reais(p.totais.mensal)} por mês`}</span> : null}
+              <span className="pd-pequeno">{p.itens.length} {p.itens.length === 1 ? "item" : "itens"}</span>
+            </div>
+          ))}
+        </div>
+        <div className="pd-tabela-rola">
+          <table className="pd-comparativo">
+            <caption>O que cada pacote inclui</caption>
+            <thead>
+              <tr>
+                <th scope="col">Item</th>
+                {resumo.map((p) => (
+                  <th key={p.nivel} scope="col">
+                    {p.nome}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {linhas.map((l) => (
+                <tr key={l.id}>
+                  <th scope="row">{l.nome}</th>
+                  {resumo.map((p) => (
+                    <td key={p.nivel}>{l.em[p.nivel] ? <span className="pd-sim" aria-label="inclui">✓</span> : <span className="pd-nao" aria-label="não inclui">–</span>}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="pd-total">
+          <div>
+            <span className="pd-meta-rotulo">Como escolher</span>
+            <p className="pd-corpo">{`Os três pacotes somam o de baixo: o ${ROTULO_DO_NIVEL.completo.toLowerCase()} inclui tudo. Você escolhe no aceite.`}</p>
+          </div>
+          {pagamentoTexto}
+        </div>
+      </>
+    );
+  }
+
+  const t = totaisDosItens(itens);
+  const unicos = itens.filter((i) => i.recorrencia === "unico").map((i) => (i.quantidade > 1 ? `${i.quantidade} x ${i.nome}` : i.nome));
+  const mensais = itens.filter((i) => i.recorrencia === "mensal").map((i) => (i.quantidade > 1 ? `${i.quantidade} x ${i.nome}` : i.nome));
+  return (
+    <>
+      {x.intangiveis.length ? <Lista itens={x.intangiveis.map((i) => ({ titulo: i }))} /> : null}
+      <div className="pd-total">
+        <div>
+          <span className="pd-meta-rotulo">Investimento</span>
+          {t.unico > 0 ? <span className="pd-valor">{reais(t.unico)}</span> : null}
+          {t.mensal > 0 ? <span className={t.unico > 0 ? "pd-valor-mensal" : "pd-valor"}>{`${reais(t.mensal)} por mês`}</span> : null}
+          {!t.itens ? <span className="pd-valor-mensal">A definir</span> : null}
+          {unicos.length || mensais.length ? (
+            <p className="pd-incluido">
+              {unicos.length ? `Inclui: ${unicos.join(", ")}.` : ""}
+              {unicos.length && mensais.length ? " " : ""}
+              {mensais.length ? `Mensal: ${mensais.join(", ")}.` : ""}
+            </p>
+          ) : null}
+        </div>
+        {pagamentoTexto}
+      </div>
+    </>
+  );
+}
+
+function Conteudo({ b, d, aceite, pacoteEscolhido }: { b: Bloco; d: DadosDoDocumento; aceite?: ReactNode; pacoteEscolhido?: NivelDoPacote | null }) {
   switch (b.tipo) {
     case "desafio": {
       const x = b.dados as DadosDoBloco["desafio"];
@@ -170,19 +345,30 @@ function Conteudo({ b, itens, aceite }: { b: Bloco; itens: ItemDaProposta[]; ace
             </div>
           ) : null}
           {x.concorrentes.length ? (
-            <ul className="pd-lista">
-              {x.concorrentes.map((c) => (
-                <li key={c.nome}>
-                  <span className="pd-check" aria-hidden="true" />
-                  <span>
-                    <span className="pd-item-titulo">{c.nome}</span>
-                    {c.faz_bem ? <span className="pd-item-texto">Faz bem: {c.faz_bem}</span> : null}
-                    {c.oportunidade ? <span className="pd-item-texto">Oportunidade: {c.oportunidade}</span> : null}
-                    <Fonte f={c.fonte} />
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <div className="pd-tabela-rola">
+              <table className="pd-comparativo pd-concorrencia">
+                <caption>Concorrência</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Quem</th>
+                    <th scope="col">Faz bem</th>
+                    <th scope="col">Oportunidade</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {x.concorrentes.map((c) => (
+                    <tr key={c.nome}>
+                      <th scope="row">
+                        {c.nome}
+                        <Fonte f={c.fonte} />
+                      </th>
+                      <td>{c.faz_bem}</td>
+                      <td>{c.oportunidade}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : null}
           {x.faixa_de_preco ? (
             <div className="pd-cartao">
@@ -231,51 +417,13 @@ function Conteudo({ b, itens, aceite }: { b: Bloco; itens: ItemDaProposta[]; ace
       const x = b.dados as DadosDoBloco["cronograma"];
       return (
         <>
-          <ul className="pd-lista pd-linha-do-tempo">
-            {x.marcos.map((m, i) => (
-              <li key={`${m.titulo}-${i}`}>
-                <span>
-                  {m.quando ? <span className="pd-quando">{m.quando}</span> : null}
-                  <span className="pd-item-titulo">{m.titulo}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
+          <Cronograma x={x} />
           {x.observacao ? <p className="pd-pequeno">{x.observacao}</p> : null}
         </>
       );
     }
-    case "investimento": {
-      const x = b.dados as DadosDoBloco["investimento"];
-      const t = totaisDosItens(itens);
-      const unicos = itens.filter((i) => i.recorrencia === "unico").map((i) => (i.quantidade > 1 ? `${i.quantidade} x ${i.nome}` : i.nome));
-      const mensais = itens.filter((i) => i.recorrencia === "mensal").map((i) => (i.quantidade > 1 ? `${i.quantidade} x ${i.nome}` : i.nome));
-      return (
-        <>
-          {x.intangiveis.length ? <Lista itens={x.intangiveis.map((i) => ({ titulo: i }))} /> : null}
-          <div className="pd-total">
-            <div>
-              <span className="pd-meta-rotulo">Investimento</span>
-              {t.unico > 0 ? <span className="pd-valor">{reais(t.unico)}</span> : null}
-              {t.mensal > 0 ? <span className={t.unico > 0 ? "pd-valor-mensal" : "pd-valor"}>{`${reais(t.mensal)} por mês`}</span> : null}
-              {!t.itens ? <span className="pd-valor-mensal">A definir</span> : null}
-              {unicos.length || mensais.length ? (
-                <p className="pd-incluido">
-                  {unicos.length ? `Inclui: ${unicos.join(", ")}.` : ""}
-                  {unicos.length && mensais.length ? " " : ""}
-                  {mensais.length ? `Mensal: ${mensais.join(", ")}.` : ""}
-                </p>
-              ) : null}
-            </div>
-            <div>
-              <span className="pd-meta-rotulo">Pagamento</span>
-              <p className="pd-corpo">{x.condicoes || "Combinado no contrato."}</p>
-              {x.observacao ? <p className="pd-pequeno">{x.observacao}</p> : null}
-            </div>
-          </div>
-        </>
-      );
-    }
+    case "investimento":
+      return <Investimento x={b.dados as DadosDoBloco["investimento"]} itens={d.itens} pacotes={d.pacotes} pagamento={d.pagamento} pacoteEscolhido={pacoteEscolhido} />;
     case "provas": {
       const x = b.dados as DadosDoBloco["provas"];
       return (
@@ -332,6 +480,8 @@ export default function PropostaDocumento({
   aceite,
   previa = false,
   emFoco,
+  animar = false,
+  pacoteEscolhido = null,
 }: {
   dados: DadosDoDocumento;
   cliente: string;
@@ -341,14 +491,32 @@ export default function PropostaDocumento({
   previa?: boolean;
   /** Bloco que está sendo editado (a prévia marca). */
   emFoco?: TipoDeBloco | null;
+  /** Link público: as páginas entram com um fade leve ao rolar (o link liga). */
+  animar?: boolean;
+  /** Pacote marcado no aceite (destaca no investimento). */
+  pacoteEscolhido?: NivelDoPacote | null;
 }) {
   const blocos = blocosParaMostrar(dados.conteudo);
+  const visual = normalizarVisual(dados.visual);
+  const cor = visual.cores[0] || "";
+  const textoNaCor = cor ? corDoTextoSobre(cor) : "#ffffff";
+  const estilo = (cor ? { "--pd-cliente": cor, "--pd-cliente-texto": textoNaCor } : {}) as CSSProperties;
+  const anexos = (dados.anexos || []).filter((a) => a && a.titulo);
+  const classe = ["pd", previa ? "pd-previa" : "", `pd-tema-${visual.tema}`, cor ? "pd-com-cor" : "", animar ? "pd-anima" : ""].filter(Boolean).join(" ");
   return (
-    <div className={previa ? "pd pd-previa" : "pd"} data-proposta-documento="">
+    <div className={classe} style={estilo} data-proposta-documento="" data-tema={visual.tema}>
       {blocos.map((b, i) => {
-        const escuro = FUNDO_DO_BLOCO[b.tipo] === "escuro";
+        // Capa no tema "Cores do cliente": o fundo é a cor da marca; o topo segue o contraste.
+        const capaNaCor = b.tipo === "capa" && visual.tema === "cliente" && !!cor;
+        const escuro = capaNaCor ? textoNaCor === "#ffffff" : fundoNoTema(b.tipo, visual.tema) === "escuro";
         return (
-          <section key={b.id} className={`pd-pagina ${escuro ? "pd-escuro" : "pd-claro"}${emFoco === b.tipo ? " pd-bloco-em-foco" : ""}`} data-bloco={b.tipo} aria-label={b.titulo}>
+          <section
+            key={b.id}
+            id={previa ? undefined : `pd-${b.tipo}`}
+            className={`pd-pagina ${escuro ? "pd-escuro" : "pd-claro"}${capaNaCor ? " pd-capa-na-cor" : ""}${emFoco === b.tipo ? " pd-bloco-em-foco" : ""}${animar ? " pd-revela" : ""}`}
+            data-bloco={b.tipo}
+            aria-label={b.titulo}
+          >
             <div className="pd-interno">
               <Topo escuro={escuro} numero={i + 1} total={blocos.length} />
               {b.tipo === "capa" ? (
@@ -356,13 +524,36 @@ export default function PropostaDocumento({
               ) : (
                 <>
                   <h2 className="pd-titulo">{b.titulo}</h2>
-                  <Conteudo b={b} itens={dados.itens} aceite={aceite} />
+                  <Conteudo b={b} d={dados} aceite={aceite} pacoteEscolhido={pacoteEscolhido} />
                 </>
               )}
             </div>
           </section>
         );
       })}
+      {anexos.length ? (
+        <section id={previa ? undefined : "pd-anexos"} className={`pd-pagina pd-claro${animar ? " pd-revela" : ""}`} data-bloco="anexos" aria-label="Materiais">
+          <div className="pd-interno">
+            <h2 className="pd-titulo">Materiais</h2>
+            <ul className="pd-lista">
+              {anexos.map((a) => (
+                <li key={a.id}>
+                  <span className="pd-check" aria-hidden="true" />
+                  <span>
+                    {a.url ? (
+                      <a className="pd-item-titulo pd-link" href={a.url} target="_blank" rel="noopener noreferrer">
+                        {a.titulo}
+                      </a>
+                    ) : (
+                      <span className="pd-item-titulo">{a.titulo}</span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      ) : null}
       {aceite && !blocos.some((b) => b.tipo === "proximos_passos") ? (
         <section className="pd-pagina pd-escuro" data-bloco="aceite" aria-label="Aceite">
           <div className="pd-interno">{aceite}</div>

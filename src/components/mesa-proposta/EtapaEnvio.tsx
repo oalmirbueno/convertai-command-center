@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Archive, Copy, ExternalLink, FileSignature, Mail, MessageCircle, Send, Undo2, XCircle } from "lucide-react";
+import { Archive, Copy, CopyPlus, ExternalLink, FileSignature, Mail, MessageCircle, Send, Undo2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
@@ -15,6 +15,9 @@ import { assuntoDoEmail, dataCurta, mensagemDoWhatsApp, textoDoEmail, textoDoTot
 import { aplicarNaLista, chamarProposta, gerarContratoDoAceite, linkPublico, resumoDoRastreio, tempoLegivel, useEventos, type Proposta } from "./propostaApi";
 import { SeloDaProposta } from "./EtapaContexto";
 import AvisoDaAgencia from "./AvisoDaAgencia";
+import DuplicarProposta from "./DuplicarProposta";
+import FollowupDaProposta from "./FollowupDaProposta";
+import { normalizarPagamento, ROTULO_DO_NIVEL, ROTULO_DO_PAGAMENTO, ehNivel } from "../../../supabase/functions/_shared/proposta-comercial";
 
 /**
  * Etapa 4, Envio: o Confirmar gera o link público (token), congela o texto
@@ -40,6 +43,11 @@ const NOME_DO_EVENTO: Record<string, string> = {
   restaurada: "Versão restaurada",
   contrato_pedido: "Contrato pedido",
   contrato_pendente: "Contrato aguardando a mesa de contratos",
+  duplicada: "Criada como cópia",
+  followup: "Follow-up feito",
+  pacotes_montados: "Pacotes montados",
+  anexo: "Anexo",
+  preenchida: "Prévia do preenchimento",
 };
 
 async function copiar(t: string, rotulo: string) {
@@ -51,7 +59,7 @@ async function copiar(t: string, rotulo: string) {
   }
 }
 
-export default function EtapaEnvio({ proposta }: { proposta: Proposta | null }) {
+export default function EtapaEnvio({ proposta, onAbrir }: { proposta: Proposta | null; onAbrir?: (id: string) => void }) {
   const mesa = useMesa();
   const qc = useQueryClient();
   const avisarErro = useAvisarErro();
@@ -62,11 +70,14 @@ export default function EtapaEnvio({ proposta }: { proposta: Proposta | null }) 
   const [para, setPara] = useState("");
   const [mandandoEmail, setMandandoEmail] = useState(false);
   const [gerandoContrato, setGerandoContrato] = useState(false);
+  const [duplicando, setDuplicando] = useState(false);
 
   if (!proposta) return <EstadoVazio titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma no Contexto." />;
   const bloqueios = proposta.pendencias.filter((p) => p.bloqueia);
   const link = linkPublico(proposta.status !== "rascunho" ? proposta.token : null);
   const r = resumoDoRastreio(eventos.data || []);
+  const opcaoAceita = proposta.pagamento_aceito ? normalizarPagamento(proposta.pagamento).opcoes.find((o) => o.id === proposta.pagamento_aceito) : null;
+  const formaAceita = opcaoAceita ? ROTULO_DO_PAGAMENTO[opcaoAceita.tipo] : null;
   const mensagem = link ? (preparado && preparado.whatsapp ? preparado.whatsapp.texto : mensagemDoWhatsApp({ contato: "", titulo: proposta.titulo, link, validade: proposta.validade_ate })) : "";
   const numeroDoWhats = preparado && preparado.whatsapp ? preparado.whatsapp.numero : "";
   const emailPara = para || (preparado && preparado.email ? preparado.email.para : "");
@@ -165,6 +176,7 @@ export default function EtapaEnvio({ proposta }: { proposta: Proposta | null }) 
             <MenuMais
               itens={[
                 proposta.status !== "rascunho" && proposta.status !== "aceita" ? { rotulo: "Voltar para rascunho", icone: <Undo2 className="h-4 w-4" />, aoEscolher: () => void mudarStatus("rascunho") } : null,
+                { rotulo: "Duplicar", icone: <CopyPlus className="h-4 w-4" />, aoEscolher: () => setDuplicando(true) },
                 { rotulo: proposta.arquivada_em ? "Desarquivar" : "Arquivar", icone: <Archive className="h-4 w-4" />, aoEscolher: () => void arquivar() },
                 proposta.status !== "aceita" && proposta.status !== "recusada" ? { rotulo: "Marcar recusada", icone: <XCircle className="h-4 w-4" />, perigo: true, aoEscolher: () => void mudarStatus("recusada") } : null,
               ]}
@@ -235,6 +247,8 @@ export default function EtapaEnvio({ proposta }: { proposta: Proposta | null }) 
         )}
       </Secao>
 
+      <FollowupDaProposta proposta={proposta} />
+
       <Secao titulo="Rastreio" divisoria descricao={r.ultima ? `Última abertura ${dataCurta(r.ultima.slice(0, 10))}` : "Ainda não aberta"}>
         <FaixaDeNumeros
           colunas={3}
@@ -242,7 +256,11 @@ export default function EtapaEnvio({ proposta }: { proposta: Proposta | null }) 
           itens={[
             { rotulo: "Aberturas", valor: String(r.aberturas) },
             { rotulo: "Tempo de leitura", valor: tempoLegivel(r.segundos), apoio: r.maior ? `maior: ${tempoLegivel(r.maior)}` : undefined },
-            { rotulo: "Aceite", valor: proposta.aceite && proposta.aceite.nome ? "Aceita" : "Não", apoio: proposta.aceite && proposta.aceite.nome ? `${proposta.aceite.nome}${proposta.aceita_em ? `, ${dataCurta(proposta.aceita_em.slice(0, 10))}` : ""}` : undefined },
+            {
+              rotulo: "Aceite",
+              valor: proposta.aceite && proposta.aceite.nome ? (ehNivel(proposta.pacote_aceito) ? proposta.pacotes.nomes[proposta.pacote_aceito] || ROTULO_DO_NIVEL[proposta.pacote_aceito] : "Aceita") : "Não",
+              apoio: proposta.aceite && proposta.aceite.nome ? `${proposta.aceite.nome}${proposta.aceita_em ? `, ${dataCurta(proposta.aceita_em.slice(0, 10))}` : ""}${formaAceita ? `, ${formaAceita}` : ""}` : undefined,
+            },
           ]}
         />
         {(eventos.data || []).length > 0 && (
@@ -259,6 +277,7 @@ export default function EtapaEnvio({ proposta }: { proposta: Proposta | null }) 
           </ul>
         )}
       </Secao>
+      {duplicando && <DuplicarProposta proposta={proposta} aberta={duplicando} onAberta={setDuplicando} onAbrir={onAbrir} />}
     </div>
   );
 }

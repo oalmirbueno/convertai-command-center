@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import PropostaDocumento from "@/components/mesa-proposta/PropostaDocumento";
+import PropostaDocumento, { itensDoIndice } from "@/components/mesa-proposta/PropostaDocumento";
 import "@/components/mesa-proposta/proposta-documento.css";
 import { MarcaAceleriq } from "@/components/publico/CascaPublica";
 import {
@@ -11,15 +11,23 @@ import {
   motivoParaNaoAceitar,
   normalizarConteudo,
   normalizarItens,
+  reais,
   statusEfetivo,
+  totaisDosItens,
   validarAceite,
 } from "../../supabase/functions/_shared/proposta-modelo";
+import { ehNivel, normalizarPagamento, resumoDosPacotes, textoDaOpcao, type NivelDoPacote, type ResumoDoPacote, type OpcaoDePagamento } from "../../supabase/functions/_shared/proposta-comercial";
 
 /**
  * /proposta/:token (frente PRO): a proposta que o cliente abre pelo link,
  * sem login. Página vertical, feita para o celular, com o aceite no fim
  * (nome, e-mail e a caixa) e "Baixar PDF" pela impressão do navegador (A4
  * vertical, sem biblioteca pesada).
+ *
+ * Frente PRO2: índice no topo, páginas que entram com um fade leve ao rolar
+ * (sem animação para quem pede menos movimento e em navegador sem
+ * IntersectionObserver), barra fixa com "Aceitar agora" e o WhatsApp da
+ * agência, e no aceite a escolha do pacote e da forma de pagamento.
  *
  * Rastreio: ao abrir, uma sessão (guardada nesta aba) avisa a função; a cada
  * 15 s com a página à vista, o tempo de leitura sobe na mesma linha. Nada de
@@ -43,7 +51,14 @@ type Publica = {
   itens: unknown;
   cliente: string;
   aceite: { nome?: string; em?: string } | null;
+  pacotes?: unknown;
+  pagamento?: unknown;
+  visual?: unknown;
+  anexos?: Array<{ id: string; titulo: string; url: string }>;
+  pacote_aceito?: string | null;
 };
+
+type Agencia = { nome?: string; site?: string; email?: string; whatsapp?: string; instagram?: string };
 
 function sessaoDaAba(token: string): string {
   const chave = `proposta:sessao:${token.slice(0, 16)}`;
@@ -70,15 +85,39 @@ function enviarRastreio(corpo: Record<string, unknown>, aoSair = false) {
   }
 }
 
-function FormularioDeAceite({ token, onAceito }: { token: string; onAceito: (nome: string, em: string) => void }) {
+/** Número do WhatsApp da agência para o wa.me (só dígitos, com o 55 quando faltar). */
+export function whatsDaAgencia(telefone: string | undefined): string {
+  const d = String(telefone || "").replace(/[^\d]/g, "");
+  if (d.length < 10) return "";
+  return d.length <= 11 ? `55${d}` : d;
+}
+
+function FormularioDeAceite({
+  token,
+  pacotes,
+  opcoes,
+  totaisDoPacote,
+  pacote,
+  onPacote,
+  onAceito,
+}: {
+  token: string;
+  pacotes: ResumoDoPacote[];
+  opcoes: OpcaoDePagamento[];
+  totaisDoPacote: ReturnType<typeof totaisDosItens>;
+  pacote: NivelDoPacote | null;
+  onPacote: (n: NivelDoPacote) => void;
+  onAceito: (nome: string, em: string) => void;
+}) {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [aceito, setAceito] = useState(false);
+  const [pagamento, setPagamento] = useState<string>(opcoes.length === 1 ? opcoes[0].id : "");
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
   const aceitar = async () => {
-    const problema = validarAceite({ nome, email, aceito });
+    const problema = validarAceite({ nome, email, aceito }) || (pacotes.length && !pacote ? "Escolha um dos pacotes." : null) || (opcoes.length > 1 && !pagamento ? "Escolha a forma de pagamento." : null);
     if (problema) {
       setErro(problema);
       return;
@@ -86,10 +125,13 @@ function FormularioDeAceite({ token, onAceito }: { token: string; onAceito: (nom
     setErro(null);
     setEnviando(true);
     try {
+      const corpo: Record<string, unknown> = { nome: nome.trim(), email: email.trim(), aceito: true };
+      if (pacotes.length && pacote) corpo.pacote = pacote;
+      if (opcoes.length && pagamento) corpo.pagamento = pagamento;
       const r = await fetch(FN_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: CHAVE_API },
-        body: JSON.stringify({ token, aceitar: { nome: nome.trim(), email: email.trim(), aceito: true } }),
+        body: JSON.stringify({ token, aceitar: corpo }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || d.error) throw new Error(d.mensagem || "Não foi possível registrar o aceite agora. Tente de novo.");
@@ -103,6 +145,7 @@ function FormularioDeAceite({ token, onAceito }: { token: string; onAceito: (nom
 
   return (
     <form
+      id="pd-aceite"
       className="pd-aceite"
       onSubmit={(e) => {
         e.preventDefault();
@@ -110,6 +153,31 @@ function FormularioDeAceite({ token, onAceito }: { token: string; onAceito: (nom
       }}
       aria-label="Aceitar a proposta"
     >
+      {pacotes.length ? (
+        <fieldset className="pd-escolha">
+          <legend>Qual pacote?</legend>
+          {pacotes.map((p) => (
+            <label key={p.nivel}>
+              <input type="radio" name="pacote" value={p.nivel} checked={pacote === p.nivel} onChange={() => onPacote(p.nivel)} />
+              <span>
+                {p.nome}
+                {p.destaque ? " (recomendado)" : ""}: {[p.totais.unico > 0 ? reais(p.totais.unico) : "", p.totais.mensal > 0 ? `${reais(p.totais.mensal)} por mês` : ""].filter(Boolean).join(" + ")}
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
+      {opcoes.length > 1 ? (
+        <fieldset className="pd-escolha">
+          <legend>Forma de pagamento</legend>
+          {opcoes.map((op) => (
+            <label key={op.id}>
+              <input type="radio" name="pagamento" value={op.id} checked={pagamento === op.id} onChange={() => setPagamento(op.id)} />
+              <span>{textoDaOpcao(op, totaisDoPacote)}</span>
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
       <label htmlFor="aceite-nome">Seu nome completo</label>
       <input id="aceite-nome" type="text" autoComplete="name" value={nome} onChange={(e) => setNome(e.target.value)} maxLength={200} />
       <label htmlFor="aceite-email">Seu e-mail</label>
@@ -130,14 +198,44 @@ function FormularioDeAceite({ token, onAceito }: { token: string; onAceito: (nom
   );
 }
 
+/** Fade leve ao rolar: só com IntersectionObserver e sem "reduzir movimento". */
+function useEntradaSuave(ativo: boolean): boolean {
+  const [ligado, setLigado] = useState(false);
+  useEffect(() => {
+    if (!ativo || typeof window === "undefined" || !("IntersectionObserver" in window)) return;
+    const reduz = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!reduz) setLigado(true);
+  }, [ativo]);
+  // Depois do desenho com as classes: observa as páginas e revela ao entrar na tela.
+  useEffect(() => {
+    if (!ligado) return;
+    const obs = new IntersectionObserver(
+      (entradas) => {
+        entradas.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.classList.add("pd-visivel");
+            obs.unobserve(e.target);
+          }
+        });
+      },
+      { rootMargin: "0px 0px -8% 0px", threshold: 0.05 },
+    );
+    Array.prototype.slice.call(document.querySelectorAll(".pd-revela")).forEach((el: Element) => obs.observe(el));
+    return () => obs.disconnect();
+  }, [ligado]);
+  return ligado;
+}
+
 export default function PropostaPublica() {
   const { token = "" } = useParams<{ token: string }>();
   const [fase, setFase] = useState<Fase>("lendo");
   const [p, setP] = useState<Publica | null>(null);
   const [logo, setLogo] = useState<string | null>(null);
-  const [agencia, setAgencia] = useState<{ nome?: string; site?: string; email?: string; whatsapp?: string; instagram?: string } | null>(null);
+  const [agencia, setAgencia] = useState<Agencia | null>(null);
   const [aceiteFeito, setAceiteFeito] = useState<{ nome: string; em: string } | null>(null);
+  const [pacote, setPacote] = useState<NivelDoPacote | null>(null);
   const segundos = useRef(0);
+  const animar = useEntradaSuave(fase === "pronto");
 
   useEffect(() => {
     if (!/^[0-9a-f]{32,128}$/i.test(token)) {
@@ -217,28 +315,67 @@ export default function PropostaPublica() {
   const status = aceiteFeito ? "aceita" : statusEfetivo(ehStatus(p.status) ? p.status : "enviada", validade, hoje);
   const motivo = aceiteFeito ? "Esta proposta já foi aceita." : motivoParaNaoAceitar({ status, validade_ate: validade }, hoje);
   const quemAceitou = aceiteFeito || (p.aceite && p.aceite.nome ? { nome: p.aceite.nome, em: p.aceite.em || "" } : null);
+  const conteudo = normalizarConteudo(p.conteudo);
+  const itens = normalizarItens(p.itens);
+  const pacotes = resumoDosPacotes(itens, p.pacotes);
+  const opcoes = normalizarPagamento(p.pagamento).opcoes;
+  const pacoteAceito = ehNivel(p.pacote_aceito) ? p.pacote_aceito : null;
+  const pacoteVisto = pacoteAceito || pacote;
+  const doPacote = pacotes.length ? pacotes.find((x) => x.nivel === pacoteVisto) || pacotes.find((x) => x.destaque) || pacotes[1] : null;
+  const totaisDoPacote = doPacote ? doPacote.totais : totaisDosItens(itens);
+  const indice = itensDoIndice(conteudo);
+  const whats = agencia ? whatsDaAgencia(agencia.whatsapp) : "";
+  const podeAceitar = !motivo && status !== "aceita";
+  const comBarra = podeAceitar || !!whats;
 
   const blocoDeAceite =
     status === "aceita" ? (
-      <div className="pd-aceite" role="status">
+      <div id="pd-aceite" className="pd-aceite" role="status">
         <p className="pd-ok">Proposta aceita{quemAceitou ? ` por ${quemAceitou.nome}` : ""}{quemAceitou && quemAceitou.em ? ` em ${dataCurta(quemAceitou.em.slice(0, 10))}` : ""}.</p>
         <p className="pd-pequeno">Obrigado. A Aceleriq entra em contato com o contrato e o kickoff.</p>
       </div>
     ) : motivo ? (
-      <div className="pd-aceite" role="status">
+      <div id="pd-aceite" className="pd-aceite" role="status">
         <p className="pd-erro">{motivo}</p>
       </div>
     ) : (
-      <FormularioDeAceite token={token} onAceito={(nome, em) => setAceiteFeito({ nome, em })} />
+      <FormularioDeAceite token={token} pacotes={pacotes} opcoes={opcoes} totaisDoPacote={totaisDoPacote} pacote={pacote} onPacote={setPacote} onAceito={(nome, em) => setAceiteFeito({ nome, em })} />
     );
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0b0d0c" }}>
+    <div className={comBarra ? "pd-com-barra" : undefined} style={{ minHeight: "100vh", background: "#0b0d0c" }}>
+      {indice.length > 2 ? (
+        <nav className="pd pd-indice pd-nao-imprime" aria-label="Índice da proposta">
+          <details>
+            <summary>Índice da proposta {p.numero}</summary>
+            <ol>
+              {indice.map((i) => (
+                <li key={i.tipo}>
+                  <a href={`#pd-${i.tipo}`}>{i.titulo}</a>
+                </li>
+              ))}
+            </ol>
+          </details>
+        </nav>
+      ) : null}
       <PropostaDocumento
-        dados={{ numero: p.numero, titulo: p.titulo, conteudo: normalizarConteudo(p.conteudo), itens: normalizarItens(p.itens), validade_ate: validade, data: p.enviada_em ? p.enviada_em.slice(0, 10) : null }}
+        dados={{
+          numero: p.numero,
+          titulo: p.titulo,
+          conteudo,
+          itens,
+          validade_ate: validade,
+          data: p.enviada_em ? p.enviada_em.slice(0, 10) : null,
+          pacotes: p.pacotes,
+          pagamento: p.pagamento,
+          visual: p.visual,
+          anexos: Array.isArray(p.anexos) ? p.anexos : [],
+        }}
         cliente={p.cliente}
         logoCliente={logo}
         aceite={blocoDeAceite}
+        animar={animar}
+        pacoteEscolhido={pacoteVisto}
       />
       <div className="pd pd-rodape pd-nao-imprime">
         {validade && status !== "aceita" ? <div>Proposta {p.numero}, válida até {dataCurta(validade)}.</div> : <div>Proposta {p.numero}</div>}
@@ -247,6 +384,20 @@ export default function PropostaPublica() {
           Baixar PDF
         </button>
       </div>
+      {comBarra ? (
+        <div className="pd pd-barra-fixa pd-nao-imprime" role="region" aria-label="Ações da proposta">
+          {podeAceitar ? (
+            <a className="pd-barra-aceitar" href="#pd-aceite">
+              Aceitar agora
+            </a>
+          ) : null}
+          {whats ? (
+            <a className="pd-barra-whatsapp" href={`https://wa.me/${whats}?text=${encodeURIComponent(`Oi, estou vendo a proposta ${p.numero} (${p.titulo}).`)}`} target="_blank" rel="noopener noreferrer">
+              Falar no WhatsApp
+            </a>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

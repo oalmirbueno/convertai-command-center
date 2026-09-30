@@ -32,6 +32,9 @@ export const ATALHOS_DA_PROPOSTA = [
   { rotulo: "Pesquise o mercado", texto: "Pesquise concorrentes e a faixa de preço do nicho na região do cliente." },
   { rotulo: "O que falta?", texto: "O que falta para esta proposta ficar pronta para enviar?" },
   { rotulo: "Headline mais direta", texto: "Reescreva a capa com uma headline mais direta, de benefício." },
+  { rotulo: "Monte os 3 pacotes", texto: "Monte os 3 pacotes (essencial, recomendado e completo) com a biblioteca de serviços." },
+  { rotulo: "Resuma a reunião", texto: "Resuma a reunião que colei nas notas e na transcrição." },
+  { rotulo: "Ajuste a margem", texto: "Ajuste os preços para a margem de 30%." },
 ];
 
 const CAPACIDADES = [
@@ -40,6 +43,9 @@ const CAPACIDADES = [
   "reescrever um bloco e trocar a headline",
   "adicionar item com o preço que você disser, e mudar a validade",
   "mostrar ou ocultar blocos",
+  "montar os 3 pacotes com a biblioteca da agência (o preço vem de lá)",
+  "ajustar os preços pela margem que você disser, pela hora técnica",
+  "resumir a reunião colada em notas organizadas",
   "aprender o que você ensinar (\"nunca\", \"sempre\", \"não gostei\")",
 ];
 

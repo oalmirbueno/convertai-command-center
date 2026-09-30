@@ -107,6 +107,8 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.proposta-publica]
     verify_jwt = false
+  [functions.proposta-biblioteca]
+    verify_jwt = true
   [functions.mesa-site]
     verify_jwt = true
   [functions.preencher-ia]

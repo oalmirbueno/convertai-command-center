@@ -18,6 +18,21 @@ import {
   type StatusDaProposta,
   type Totais,
 } from "../../../supabase/functions/_shared/proposta-modelo";
+import {
+  normalizarAnexos,
+  normalizarPacotes,
+  normalizarPagamento,
+  normalizarProva,
+  normalizarServico,
+  normalizarVisual,
+  type AnexoDaProposta,
+  type Pacotes,
+  type Pagamento,
+  type ParametrosDaHora,
+  type ProvaDaAgencia,
+  type ServicoDaBiblioteca,
+  type VisualDaProposta,
+} from "../../../supabase/functions/_shared/proposta-comercial";
 
 /**
  * Mesa Proposta: a ponte da tela com a função mesa-proposta e as tabelas
@@ -35,6 +50,10 @@ export const CHAVES = {
   eventos: (id: string) => ["mesa-proposta", "eventos", id] as const,
   modelos: () => ["mesa-proposta", "modelos"] as const,
   leads: () => ["mesa-proposta", "leads"] as const,
+  servicos: () => ["mesa-proposta", "servicos"] as const,
+  provas: () => ["mesa-proposta", "provas"] as const,
+  hora: () => ["mesa-proposta", "hora-tecnica"] as const,
+  versao: (id: string, versao: number) => ["mesa-proposta", "versao", id, versao] as const,
 };
 
 export type Material = { nome: string; tipo: string; texto: string; em: string };
@@ -66,6 +85,15 @@ export interface Proposta {
   arquivada_em: string | null;
   custo_usd: number;
   atualizado_em: string | null;
+  /** Frente PRO2. */
+  pacotes: Pacotes;
+  pagamento: Pagamento;
+  visual: VisualDaProposta;
+  anexos: AnexoDaProposta[];
+  duplicada_de: string | null;
+  pacote_aceito: string | null;
+  pagamento_aceito: string | null;
+  ultimo_followup_em: string | null;
 }
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -113,11 +141,27 @@ export function normalizarProposta(d: unknown): Proposta | null {
     arquivada_em: (o.arquivada_em as string) || null,
     custo_usd: Number(o.custo_usd) || 0,
     atualizado_em: (o.atualizado_em as string) || null,
+    pacotes: normalizarPacotes(o.pacotes, itens),
+    pagamento: normalizarPagamento(o.pagamento),
+    visual: normalizarVisual(o.visual),
+    anexos: normalizarAnexos(o.anexos),
+    duplicada_de: (o.duplicada_de as string) || null,
+    pacote_aceito: (o.pacote_aceito as string) || null,
+    pagamento_aceito: (o.pagamento_aceito as string) || null,
+    ultimo_followup_em: (o.ultimo_followup_em as string) || null,
   };
 }
 
-const CAMPOS =
+const CAMPOS_BASE =
   "id, client_id, marca_id, lead_id, modelo_id, numero, titulo, status, versao, conteudo, itens, validade_ate, contexto, token, aceite, enviada_em, vista_em, aceita_em, recusada_em, arquivada_em, custo_usd, atualizado_em";
+/** Colunas da frente PRO2: sem a migration no banco, a lista lê as de antes (a mesa não quebra). */
+const CAMPOS = `${CAMPOS_BASE}, pacotes, pagamento, visual, anexos, duplicada_de, pacote_aceito, pagamento_aceito, ultimo_followup_em`;
+
+/** Coluna nova da PRO2 ainda não criada no banco. */
+export function faltaAColunaNova(erro: unknown): boolean {
+  const e = (erro || {}) as { code?: string; message?: string };
+  return e.code === "42703" || /column .* does not exist/i.test(String(e.message || ""));
+}
 
 /** Propostas do cliente, as mais recentes antes (sem a tabela: lista vazia com o aviso). */
 export function usePropostas(clientId: string) {
@@ -126,7 +170,8 @@ export function usePropostas(clientId: string) {
     enabled: !!clientId,
     staleTime: 20_000,
     queryFn: async (): Promise<{ lista: Proposta[]; semTabela: boolean }> => {
-      const { data, error } = await (supabase as any).from("propostas").select(CAMPOS).eq("client_id", clientId).order("atualizado_em", { ascending: false }).limit(60);
+      let { data, error } = await (supabase as any).from("propostas").select(CAMPOS).eq("client_id", clientId).order("atualizado_em", { ascending: false }).limit(60);
+      if (error && faltaAColunaNova(error)) ({ data, error } = await (supabase as any).from("propostas").select(CAMPOS_BASE).eq("client_id", clientId).order("atualizado_em", { ascending: false }).limit(60));
       if (error) {
         if (faltaATabela(error)) return { lista: [], semTabela: true };
         throw error;
@@ -273,4 +318,85 @@ export async function gerarContratoDoAceite(propostaId: string): Promise<{ contr
   if (typeof d.error === "string") throw new Error(typeof d.mensagem === "string" ? d.mensagem : "O contrato não foi gerado.");
   const contrato = d.contrato && typeof d.contrato === "object" ? d.contrato : null;
   return { contratoId: contrato && contrato.id ? String(contrato.id) : null, jaExistia: d.ja_existia === true, pergunta: typeof d.pergunta === "string" ? d.pergunta : null };
+}
+
+// ------------------------------------------------------------------ frente PRO2
+
+/** Chama a função da biblioteca comercial (serviços, provas e hora técnica). */
+export function chamarBiblioteca<T = any>(acao: string, corpo: Record<string, unknown> = {}): Promise<T> {
+  return chamarFuncao<T>("proposta-biblioteca", { acao, ...corpo });
+}
+
+const semTabelaNova = (erro: unknown, tabela: string) => faltaATabela(erro) || new RegExp(`${tabela}.*(does not exist|schema cache)`, "i").test(String(((erro || {}) as { message?: string }).message || ""));
+
+/** Serviços da biblioteca da agência. */
+export function useServicos() {
+  return useQuery({
+    queryKey: CHAVES.servicos(),
+    staleTime: 60_000,
+    queryFn: async (): Promise<{ lista: ServicoDaBiblioteca[]; semTabela: boolean }> => {
+      const { data, error } = await (supabase as any).from("proposta_servicos").select("id, nome, categoria, descricao, unidade, preco, recorrencia, horas, entregaveis, ordem, arquivado_em").order("ordem", { ascending: true }).order("nome", { ascending: true }).limit(300);
+      if (error) {
+        if (semTabelaNova(error, "proposta_servicos")) return { lista: [], semTabela: true };
+        throw error;
+      }
+      return { lista: ((data || []) as unknown[]).map(normalizarServico).filter((s): s is ServicoDaBiblioteca => !!s), semTabela: false };
+    },
+  });
+}
+
+/** Cases e depoimentos da agência, com a autorização. */
+export function useProvas() {
+  return useQuery({
+    queryKey: CHAVES.provas(),
+    staleTime: 60_000,
+    queryFn: async (): Promise<{ lista: ProvaDaAgencia[]; semTabela: boolean }> => {
+      const { data, error } = await (supabase as any).from("proposta_provas").select("id, tipo, titulo, texto, nome, cargo, empresa, link, nicho, autorizado, autorizacao, autorizado_em, arquivado_em").order("criado_em", { ascending: false }).limit(300);
+      if (error) {
+        if (semTabelaNova(error, "proposta_provas")) return { lista: [], semTabela: true };
+        throw error;
+      }
+      return { lista: ((data || []) as unknown[]).map(normalizarProva).filter((p): p is ProvaDaAgencia => !!p), semTabela: false };
+    },
+  });
+}
+
+export type HoraTecnicaNaTela = {
+  parametros: ParametrosDaHora;
+  usar_financeiro: boolean;
+  financeiro: { custos_fixos_mes: number; pro_labore_mes: number; regras: number } | null;
+  aviso: string | null;
+  custo_hora: number;
+  preco_hora: number;
+};
+
+/** Hora técnica (parâmetros e custos do Financeiro), pela função: só quando a calculadora abre. */
+export function useHoraTecnica(ativo = true) {
+  return useQuery({
+    queryKey: CHAVES.hora(),
+    enabled: ativo,
+    staleTime: 5 * 60_000,
+    retry: false,
+    queryFn: async (): Promise<HoraTecnicaNaTela> => {
+      const d = await chamarBiblioteca<{ hora: HoraTecnicaNaTela }>("calculadora_ler");
+      return d.hora;
+    },
+  });
+}
+
+export type VersaoCompleta = { versao: number; titulo: string | null; conteudo: ConteudoDaProposta; itens: ItemDaProposta[]; origem: string; criado_em: string };
+
+/** Uma versão inteira (para comparar com a atual). */
+export function useVersaoCompleta(propostaId: string | null, versao: number | null) {
+  return useQuery({
+    queryKey: CHAVES.versao(propostaId || "nenhuma", versao || 0),
+    enabled: !!propostaId && !!versao,
+    staleTime: 10 * 60_000,
+    queryFn: async (): Promise<VersaoCompleta | null> => {
+      const { data, error } = await (supabase as any).from("proposta_versoes").select("versao, titulo, conteudo, itens, origem, criado_em").eq("proposta_id", propostaId).eq("versao", versao).maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      return { versao: Number(data.versao), titulo: data.titulo || null, conteudo: normalizarConteudo(data.conteudo), itens: normalizarItens(data.itens), origem: String(data.origem || ""), criado_em: String(data.criado_em || "") };
+    },
+  });
 }

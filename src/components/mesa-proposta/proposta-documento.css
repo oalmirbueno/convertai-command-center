@@ -610,3 +610,450 @@
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ------------------------------------------------------------------
+ * Frente PRO2 (30/09): modelos visuais, pacotes, comparativo, pagamento,
+ * cronograma em barras, materiais, índice, barra fixa e entrada suave.
+ * Mesmo cuidado de compatibilidade: sem gap em flex, sem função de faixa,
+ * sem proporção fixa; a animação respeita "reduzir movimento".
+ * ------------------------------------------------------------------ */
+
+/* Pacotes */
+.pd-pacotes {
+  display: -ms-grid;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-gap: 14px;
+  margin-top: 28px;
+}
+
+.pd-pacote {
+  position: relative;
+  border: 1px solid var(--pd-linha-escura);
+  border-radius: 12px;
+  padding: 20px 18px 18px;
+  background: var(--pd-escuro-2);
+}
+
+.pd-claro .pd-pacote {
+  border-color: var(--pd-linha);
+  background: #fff;
+}
+
+.pd-pacote .pd-item-titulo {
+  font-size: 20px;
+}
+
+.pd-pacote-destaque {
+  border: 2px solid var(--pd-verde);
+}
+
+.pd-pacote-escolhido {
+  box-shadow: 0 0 0 3px var(--pd-verde-vivo);
+}
+
+.pd-selo {
+  position: absolute;
+  top: -11px;
+  left: 16px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--pd-verde);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pd-valor-pacote {
+  display: block;
+  margin-top: 14px;
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.pd-valor-mensal-pacote {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tabelas (comparativo dos pacotes e concorrência): rolam de lado no celular. */
+.pd-tabela-rola {
+  margin-top: 24px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pd-comparativo {
+  width: 100%;
+  min-width: 420px;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.pd-comparativo caption {
+  text-align: left;
+  font-weight: 600;
+  padding-bottom: 8px;
+}
+
+.pd-comparativo th,
+.pd-comparativo td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--pd-linha);
+  text-align: left;
+  vertical-align: top;
+}
+
+.pd-escuro .pd-comparativo th,
+.pd-escuro .pd-comparativo td {
+  border-bottom-color: var(--pd-linha-escura);
+}
+
+.pd-comparativo thead th {
+  font-size: 13px;
+  color: var(--pd-cinza);
+  font-weight: 600;
+}
+
+.pd-escuro .pd-comparativo thead th {
+  color: var(--pd-cinza-claro);
+}
+
+.pd-comparativo tbody th {
+  font-weight: 500;
+}
+
+.pd-sim {
+  color: var(--pd-verde);
+  font-weight: 700;
+}
+
+.pd-escuro .pd-sim {
+  color: var(--pd-verde-vivo);
+}
+
+.pd-nao {
+  color: var(--pd-cinza-claro);
+}
+
+/* Formas de pagamento */
+.pd-opcoes {
+  list-style: none;
+  margin: 8px 0 12px;
+  padding: 0;
+}
+
+.pd-opcoes > li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--pd-linha-escura);
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pd-claro .pd-opcoes > li {
+  border-bottom-color: var(--pd-linha);
+}
+
+/* Cronograma em barras */
+.pd-gantt {
+  margin-top: 8px;
+}
+
+.pd-gantt-linha {
+  display: -webkit-box;
+  display: flex;
+  -webkit-box-align: center;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--pd-linha);
+}
+
+.pd-gantt-rotulo {
+  -webkit-box-flex: 0;
+  flex: 0 0 40%;
+  min-width: 0;
+  padding-right: 14px;
+}
+
+.pd-gantt-rotulo .pd-quando {
+  display: block;
+  margin-top: 2px;
+}
+
+.pd-gantt-trilho {
+  position: relative;
+  -webkit-box-flex: 1;
+  flex: 1 1 auto;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--pd-linha);
+}
+
+.pd-gantt-barra {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 7px;
+  background: var(--pd-verde);
+  min-width: 10px;
+}
+
+.pd-gantt-escala {
+  display: -webkit-box;
+  display: flex;
+  -webkit-box-pack: justify;
+  justify-content: space-between;
+  margin-top: 8px;
+  margin-left: 40%;
+  font-size: 12px;
+  color: var(--pd-cinza);
+}
+
+.pd-link {
+  color: inherit;
+  text-decoration: underline;
+}
+
+/* Modelo visual: Claro (tudo claro, leve no celular) */
+.pd-tema-claro {
+  background: var(--pd-claro);
+}
+
+.pd-tema-claro .pd-capa,
+.pd-tema-editorial .pd-capa {
+  border-bottom: 4px solid var(--pd-verde);
+  padding-bottom: 24px;
+}
+
+/* Modelo visual: Editorial (papel creme, títulos com serifa) */
+.pd-tema-editorial {
+  --pd-claro: #faf6ee;
+  --pd-linha: rgba(40, 32, 20, 0.14);
+  background: #faf6ee;
+}
+
+.pd-tema-editorial .pd-headline,
+.pd-tema-editorial .pd-titulo,
+.pd-tema-editorial .pd-valor,
+.pd-tema-editorial .pd-valor-pacote {
+  font-family: "Fraunces", "Playfair Display", Georgia, "Times New Roman", serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.pd-tema-editorial .pd-citacao {
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+}
+
+/* Modelo visual: Cores do cliente (a cor da marca na capa e nos destaques) */
+.pd-tema-cliente.pd-com-cor {
+  --pd-verde: var(--pd-cliente);
+  --pd-verde-vivo: var(--pd-cliente);
+}
+
+.pd-capa-na-cor {
+  background: var(--pd-cliente);
+  color: var(--pd-cliente-texto);
+}
+
+.pd-capa-na-cor .pd-rotulo,
+.pd-capa-na-cor .pd-meta-rotulo,
+.pd-capa-na-cor .pd-pagina-numero,
+.pd-capa-na-cor .pd-pequeno,
+.pd-capa-na-cor .pd-sub {
+  color: var(--pd-cliente-texto);
+  opacity: 0.85;
+}
+
+.pd-tema-cliente .pd-bolinha,
+.pd-tema-cliente .pd-selo,
+.pd-tema-cliente .pd-botao {
+  color: var(--pd-cliente-texto);
+}
+
+/* Em qualquer tema, a cor do cliente vira uma faixa fina no pé da capa. */
+.pd-com-cor [data-bloco="capa"]:after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 6px;
+  background: var(--pd-cliente);
+}
+
+/* Índice, barra fixa e entrada suave (só no link público) */
+.pd-indice {
+  background: var(--pd-escuro);
+  color: #fff;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--pd-linha-escura);
+}
+
+.pd-indice summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.pd-indice ol {
+  max-width: 760px;
+  margin: 12px auto 0;
+  padding-left: 22px;
+  font-size: 15px;
+  line-height: 1.9;
+}
+
+.pd-indice a {
+  color: #fff;
+  text-decoration: none;
+  border-bottom: 1px solid var(--pd-linha-escura);
+}
+
+.pd-barra-fixa {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: -webkit-box;
+  display: flex;
+  -webkit-box-pack: center;
+  justify-content: center;
+  padding: 10px 16px 14px;
+  background: rgba(11, 13, 12, 0.96);
+  border-top: 1px solid var(--pd-linha-escura);
+}
+
+.pd-barra-fixa a {
+  display: inline-block;
+  -webkit-box-flex: 1;
+  flex: 1 1 0;
+  max-width: 260px;
+  height: 46px;
+  line-height: 46px;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.pd-barra-fixa a + a {
+  margin-left: 10px;
+}
+
+.pd-barra-aceitar {
+  background: var(--pd-verde);
+  color: #fff;
+}
+
+.pd-barra-whatsapp {
+  border: 1px solid var(--pd-linha-escura);
+  color: #fff;
+}
+
+.pd-com-barra {
+  padding-bottom: 76px;
+}
+
+.pd-escolha {
+  margin: 18px 0 6px;
+  padding: 0;
+  border: 0;
+}
+
+.pd-escolha legend {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.pd-escolha label {
+  display: -webkit-box;
+  display: flex;
+  -webkit-box-align: start;
+  align-items: flex-start;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--pd-linha-escura);
+  border-radius: 10px;
+  font-size: 15px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.pd-escolha input {
+  margin: 4px 10px 0 0;
+}
+
+.pd-anima .pd-revela {
+  opacity: 0;
+  -webkit-transform: translateY(18px);
+  transform: translateY(18px);
+  -webkit-transition: opacity 0.6s ease, -webkit-transform 0.6s ease;
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.pd-anima .pd-revela.pd-visivel {
+  opacity: 1;
+  -webkit-transform: none;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pd-anima .pd-revela {
+    opacity: 1;
+    -webkit-transform: none;
+    transform: none;
+    -webkit-transition: none;
+    transition: none;
+  }
+}
+
+@media (min-width: 640px) {
+  .pd-pacotes {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+.pd-previa .pd-pacotes {
+  grid-template-columns: 1fr;
+}
+
+.pd-previa .pd-valor-pacote {
+  font-size: 24px;
+}
+
+@media print {
+  .pd-indice,
+  .pd-barra-fixa {
+    display: none !important;
+  }
+  .pd-anima .pd-revela {
+    opacity: 1 !important;
+    -webkit-transform: none !important;
+    transform: none !important;
+  }
+  .pd-pacotes {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+  .pd-tabela-rola {
+    overflow: visible;
+  }
+  .pd-com-barra {
+    padding-bottom: 0;
+  }
+}

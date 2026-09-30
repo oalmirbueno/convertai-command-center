@@ -121,10 +121,10 @@ function CorpoDaMesa({ etapa, propostaUrl, leadUrl, mudar, rascunhoDoAgente, set
           <EstadoDeErro titulo="As propostas não foram lidas." acao={<button type="button" className={botao.secundario} onClick={() => void propostas.refetch()}>Tentar de novo</button>} />
         ) : (
           <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo a etapa" />}>
-            {etapa === "contexto" && <EtapaContexto proposta={proposta} propostas={lista} semTabela={!!(propostas.data && propostas.data.semTabela)} leadUrl={leadUrl} onAbrir={(id) => mudar({ proposta: id })} />}
+            {etapa === "contexto" && <EtapaContexto proposta={proposta} propostas={lista} semTabela={!!(propostas.data && propostas.data.semTabela)} leadUrl={leadUrl} onAbrir={(id) => mudar({ proposta: id })} modeloId={modeloId} />}
             {etapa === "rascunho" && <EtapaRascunho proposta={proposta} modeloId={modeloId} onModelo={setModeloEscolhido} />}
             {etapa === "revisao" && <EtapaRevisao proposta={proposta} />}
-            {etapa === "envio" && <EtapaEnvio proposta={proposta} />}
+            {etapa === "envio" && <EtapaEnvio proposta={proposta} onAbrir={(id) => mudar({ proposta: id, etapa: "contexto" })} />}
           </Suspense>
         )}
       </RegiaoRolavel>

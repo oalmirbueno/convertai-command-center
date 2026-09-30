@@ -6,7 +6,12 @@
  *
  * - GET ?token=...                          -> { proposta, agencia, logo_cliente_url }
  * - POST { token, tipo: aberta|leitura, sessao, segundos } -> { ok } (rastreio de abertura e tempo de leitura)
- * - POST { token, aceitar: { nome, email, aceito: true } } -> { ok, aceita_em, contrato }
+ * - POST { token, aceitar: { nome, email, aceito: true, pacote?, pagamento? } } -> { ok, aceita_em, contrato }
+ *
+ * Frente PRO2: o GET leva pacotes, pagamento, visual e anexos (arquivo vira
+ * link assinado de 1 h, o caminho não sai); o aceite vai pela RPC v2, que
+ * grava o pacote e a forma de pagamento escolhidos (sem a v2 no banco, a de
+ * antes, só quando não há pacote).
  *
  * O aceite cria o evento "aceita" (na RPC), que a frente de contratos
  * consome, e o "contrato_pendente": a equipe gera o contrato pela etapa
@@ -18,6 +23,7 @@ import { validarAceite } from "../_shared/proposta-modelo.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { lerDadosDaAgencia } from "../_shared/dados-da-agencia.ts";
 import { agenciaPublica } from "../mesa-proposta/agencia.ts";
+import { normalizarAnexos } from "../_shared/proposta-comercial.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -76,8 +82,18 @@ Deno.serve(async (req) => {
       } catch (e) {
         registrarFalha("proposta-publica: dados da agência não lidos", e);
       }
-      const { logo_cliente_path: _fora, ...publica } = proposta;
-      return json({ proposta: publica, agencia, logo_cliente_url: logo });
+      const { logo_cliente_path: _fora, anexos: anexosBrutos, ...publica } = proposta;
+      // Anexos: link vai como está; arquivo vira link assinado (o caminho do Storage não sai).
+      const anexos: Array<{ id: string; tipo: string; titulo: string; url: string }> = [];
+      for (const a of normalizarAnexos(anexosBrutos)) {
+        if (a.tipo === "link") anexos.push({ id: a.id, tipo: a.tipo, titulo: a.titulo, url: a.url });
+        else {
+          const { data: assinado, error: e } = await db.storage.from("mesa").createSignedUrl(a.caminho, 60 * 60);
+          if (e || !assinado) registrarFalha("proposta-publica: anexo sem link", e || new Error("sem link"));
+          else anexos.push({ id: a.id, tipo: a.tipo, titulo: a.titulo, url: assinado.signedUrl });
+        }
+      }
+      return json({ proposta: { ...publica, anexos }, agencia, logo_cliente_url: logo });
     }
 
     if (req.method === "POST") {
@@ -89,15 +105,19 @@ Deno.serve(async (req) => {
         const a = corpo.aceitar as Record<string, unknown>;
         const erro = validarAceite(a);
         if (erro) return json({ error: "aceite_invalido", mensagem: erro }, 400);
-        const { data, error } = await db.rpc("proposta_publica_aceitar", {
-          p_token: token,
-          p_nome: String(a.nome).trim(),
-          p_email: String(a.email).trim(),
-          p_ip: ipDe(req),
-          p_user_agent: navegadorDe(req),
-        });
+        const pacote = typeof a.pacote === "string" ? a.pacote.trim().slice(0, 20) : "";
+        const pagamento = typeof a.pagamento === "string" ? a.pagamento.trim().slice(0, 30) : "";
+        const base = { p_token: token, p_nome: String(a.nome).trim(), p_email: String(a.email).trim(), p_ip: ipDe(req), p_user_agent: navegadorDe(req) };
+        let { data, error } = await db.rpc("proposta_publica_aceitar_v2", { ...base, p_pacote: pacote || null, p_pagamento: pagamento || null });
+        // Sem a v2 no banco (migration da PRO2 pendente): o aceite de antes, só quando não há pacote a gravar.
+        if (error && (error.code === "PGRST202" || error.code === "42883") && !pacote) {
+          registrarFalha("proposta-publica: aceite v2 ausente, usando o de antes", error);
+          ({ data, error } = await db.rpc("proposta_publica_aceitar", base));
+        }
         if (error) {
           const m = String(error.message || "");
+          if (/package required/.test(m)) return json({ error: "pacote_obrigatorio", mensagem: "Escolha um dos pacotes para aceitar." }, 400);
+          if (/invalid payment/.test(m)) return json({ error: "pagamento_invalido", mensagem: "Escolha uma das formas de pagamento." }, 400);
           if (/expired/.test(m)) return json({ error: "expirada", mensagem: "A validade desta proposta terminou. Fale com a Aceleriq para receber uma nova." }, 409);
           if (/not open/.test(m)) return json({ error: "encerrada", mensagem: "Esta proposta não está mais aberta para aceite." }, 409);
           if (/not found/.test(m)) return json({ error: "link_invalido", mensagem: "Link inválido." }, 404);
