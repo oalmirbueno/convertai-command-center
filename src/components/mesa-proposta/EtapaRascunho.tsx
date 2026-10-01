@@ -40,6 +40,8 @@ import {
 } from "../../../supabase/functions/_shared/proposta-comercial";
 import { contextoDoUpsell } from "../../../supabase/functions/mesa-proposta/modulos/proposta-upsell";
 import PropostaDocumento from "./PropostaDocumento";
+// Frente MOD (30/09): coleta de dados públicos de concorrentes pelo navegador do agente (pronta e desligada).
+import { BotaoDoNavegador, TarefasDoNavegador } from "@/components/agentes/NavegadorDoAgente";
 import AvisoDaAgencia from "./AvisoDaAgencia";
 import PreviaDoPreenchimento from "./PreviaDoPreenchimento";
 import AnexosDaProposta from "./AnexosDaProposta";
@@ -185,6 +187,17 @@ function EscolhaDasProvas({ b, mudar }: { b: Bloco; mudar: (dados: Record<string
 }
 
 /** Os campos de um bloco. `mudar` recebe os dados novos inteiros. */
+/** Pedir ao navegador do agente os dados públicos de um concorrente (desligado até o dono testar o computer use). */
+function ColetaDeConcorrentes() {
+  const mesa = useMesa();
+  return (
+    <div className="min-w-0 pt-1">
+      <BotaoDoNavegador caso="coleta_publica" clientId={mesa.clientId} origem="proposta" rotulo="Coletar dados de um concorrente" compacto />
+      <TarefasDoNavegador clientId={mesa.clientId} origem="proposta" titulo="Coletas do navegador" />
+    </div>
+  );
+}
+
 function CamposDoBloco({ b, mudar }: { b: Bloco; mudar: (dados: Record<string, unknown>) => void }) {
   const d = b.dados as Record<string, unknown>;
   const m = (campoMudado: Record<string, unknown>) => mudar({ ...d, ...campoMudado });
@@ -261,6 +274,7 @@ function CamposDoBloco({ b, mudar }: { b: Bloco; mudar: (dados: Record<string, u
                 </button>
               </div>
             ))}
+            <ColetaDeConcorrentes />
             {x.faixa_de_preco && (
               <div className="flex min-w-0 items-center">
                 <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>Faixa: {x.faixa_de_preco.texto}</span>

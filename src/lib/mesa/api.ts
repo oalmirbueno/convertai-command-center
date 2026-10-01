@@ -10,8 +10,10 @@ import { toast } from "sonner";
  */
 import { supabase } from "@/integrations/supabase/client";
 import { corpoComMarca } from "@/lib/mesa/marcas";
+import type { RecursosDoModelo } from "../../../supabase/functions/_shared/recursos-dos-modelos";
+import { capacidadesNaTela, lancadoHaPouco } from "@/lib/mesa/recursos-na-tela";
 
-export type FuncaoDaMesa = "ia-gateway" | "agente-calendario" | "estudio-arte" | "agente-contexto" | "mesa-ads" | "mesa-foto" | "mesa-publicidade" | "mesa-roteiros" | "agente-estilo" | "perfis-instagram" | "mesa-instagram" | "conselho" | "documentos" | "contratos" | "mesa-identidade" | "mesa-proposta" | "proposta-biblioteca" | "mesa-site" | "motor-codigo" | "mesa-mockups" | "preencher-ia" | "mesa-motion" | "agente-cfo";
+export type FuncaoDaMesa = "ia-gateway" | "agente-calendario" | "estudio-arte" | "agente-contexto" | "mesa-ads" | "mesa-foto" | "mesa-publicidade" | "mesa-roteiros" | "agente-estilo" | "perfis-instagram" | "mesa-instagram" | "conselho" | "documentos" | "contratos" | "mesa-identidade" | "mesa-proposta" | "proposta-biblioteca" | "mesa-site" | "motor-codigo" | "mesa-mockups" | "preencher-ia" | "mesa-motion" | "agente-cfo" | "computador-do-agente";
 
 export type AcaoDeErro = "recarregar" | "cota" | "chave" | "modelo" | null;
 
@@ -58,6 +60,8 @@ const NOMES_DAS_FUNCOES: Record<FuncaoDaMesa, string> = {
   "preencher-ia": "preenchimento com IA",
   // Frente CFO (30/09): o agente financeiro (Assist e Financeiro › CFO).
   "agente-cfo": "CFO",
+  // Frente MOD (30/09): o navegador do agente (computer use só de leitura, com o Confirmar do dono).
+  "computador-do-agente": "navegador do agente",
 };
 
 const PROVEDORES: Record<string, string> = {
@@ -281,6 +285,10 @@ export interface ModeloIa {
   novo?: boolean | null;
   /** false quando o provedor tirou o modelo (a sincronização marca): o servidor recusa com modelo_indisponivel. */
   disponivel?: boolean | null;
+  contexto_tokens?: number | null;
+  modalidades?: { entrada?: string[]; saida?: string[] } | null;
+  /** Frente MOD: ferramentas, JSON, visão, raciocínio, cache, busca e lançamento (recursos-dos-modelos.ts). */
+  recursos?: Partial<RecursosDoModelo> | null;
 }
 
 export const QUALIDADES: { valor: Qualidade; rotulo: string }[] = [
@@ -307,7 +315,7 @@ export const PAPEIS: { valor: Papel; rotulo: string; tipo: "texto" | "imagem" }[
 
 /** Mesmas colunas que o ia-gateway devolve na ação "catalogo". */
 export const COLUNAS_DO_CATALOGO =
-  "id, provedor, modelo_api, tipo, rotulo, preco_entrada_1m, preco_saida_1m, preco_cache_1m, preco_imagem, raciocinio, padrao_para, ativo, novo, disponivel, contexto_tokens, modalidades, fonte_preco, conferido_em, criado_em";
+  "id, provedor, modelo_api, tipo, rotulo, preco_entrada_1m, preco_saida_1m, preco_cache_1m, preco_imagem, raciocinio, padrao_para, ativo, novo, disponivel, contexto_tokens, modalidades, fonte_preco, conferido_em, criado_em, recursos";
 
 /**
  * Catálogo direto da tabela, pela RLS da equipe (o ia-gateway fazia o mesmo
@@ -374,6 +382,20 @@ export function precoDoModelo(m: ModeloIa, qualidade: Qualidade = "media"): stri
 
 export const nomeDoModelo = (m: ModeloIa) => m.rotulo || m.modelo_api || m.id;
 
+/** Visão, ferramentas, raciocínio e JSON do modelo (linha sem recursos: o que o catálogo já sabia). */
+export const capacidadesDoModeloNaTela = (m: ModeloIa) => capacidadesNaTela(m);
+
+/** Lançado há menos de 30 dias (pela data do provedor; senão pela entrada no catálogo). */
+export const modeloLancadoHaPouco = (m: ModeloIa, agora = Date.now()) => lancadoHaPouco(m, agora);
+
+/** "1M" ou "200 mil" tokens de contexto. */
+export function contextoCurto(m: ModeloIa): string {
+  const n = Number(m.contexto_tokens) || 0;
+  if (!n) return "";
+  if (n >= 1000000) return `${Math.round(n / 100000) / 10} mi`.replace(".", ",");
+  return `${Math.round(n / 1000)} mil`;
+}
+
 /** Chegou há pouco: coluna `novo` quando existir; senão criado ou conferido nos últimos 14 dias. */
 export function modeloNovo(m: ModeloIa, agora = Date.now()): boolean {
   if (typeof m.novo === "boolean") return m.novo;
@@ -405,6 +427,11 @@ export const saidaPorRaciocinio = (r?: string | null) => SAIDA_POR_RACIOCINIO[St
 
 // Mesmos valores do motor (supabase/functions/_shared/ia-motor.ts).
 const CUSTO_BUSCA_WEB_USD: Record<string, number> = { openai: 0.01, anthropic: 0.01, openrouter: 0 };
+/** Preço publicado da busca web do modelo (recursos.busca_web_usd), como o custoDaBuscaWeb do motor. */
+const custoDaBuscaNaTela = (m: ModeloIa) => {
+  const p = m.recursos && m.recursos.busca_web_usd;
+  return typeof p === "number" && isFinite(p) && p >= 0 ? p : CUSTO_BUSCA_WEB_USD[m.provedor] || 0;
+};
 const numero = (v: unknown) => {
   const n = typeof v === "string" ? Number(v) : (v as number);
   return typeof n === "number" && isFinite(n) ? n : 0;
@@ -430,7 +457,7 @@ export function estimarLocal(partes: ParteDaEstimativa[], catalogo: ModeloIa[]):
       custo = numero(parte.imagens || 1) * porImagem + (numero(parte.tokensEntrada) * pImg) / 1000000;
     } else {
       custo = (numero(parte.tokensEntrada) * pe + numero(parte.tokensSaida) * numero(m.preco_saida_1m)) / 1000000 +
-        numero(parte.buscasWeb) * (CUSTO_BUSCA_WEB_USD[m.provedor] || 0);
+        numero(parte.buscasWeb) * custoDaBuscaNaTela(m);
     }
     total += custo * vezes;
   }

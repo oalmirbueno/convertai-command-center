@@ -31,9 +31,14 @@ describe("chamarTexto: o método no fim do sistema, nos 3 provedores e na estima
   });
 
   it("OpenAI (instructions), Anthropic (system), OpenRouter (mensagem system) e a estimativa usam o sistema completo", () => {
-    expect(motor).toContain("instructions: sistemaCompleto(e), input, store: false");
-    expect(motor).toContain("    system: sistemaCompleto(e),\n    messages,");
-    expect(motor).toContain('const messages: unknown[] = [{ role: "system", content: sistemaCompleto(e) }];');
+    // MOD2 (30/09): os 3 corpos saem de corpo-dos-provedores.ts com a entrada que o motor monta; o sistema
+    // que entra lá é o completo (entradaDoProvedor) e os 3 provedores passam por ela.
+    expect(motor).toContain("    sistema: sistemaCompleto(e),\n");
+    expect(motor).toContain("const corpo = corpoOpenAi(m.modelo_api, entradaDoProvedor(m, e));");
+    expect(motor).toContain("const corpo = corpoAnthropic(m.modelo_api, entradaDoProvedor(m, e));");
+    expect(motor).toContain("const corpo = corpoOpenRouter(m.modelo_api, entradaDoProvedor(m, e));");
+    const corpos = ler("supabase/functions/_shared/corpo-dos-provedores.ts");
+    expect(corpos).toContain("instructions: e.sistema, input, store: false");
     expect(motor).toContain("const caracteres = sistemaCompleto(e).length + e.mensagens.reduce");
     // Nenhum outro lugar lê e.sistema direto (a junção é uma só).
     expect(motor.match(/\be\.sistema\b/g)).toHaveLength(1);

@@ -442,16 +442,22 @@ describe("ia-motor: a conversão é central e não toca a OpenAI", () => {
     return resto.slice(0, resto.search(/\n(?:export )?(?:async )?function /));
   };
 
+  // MOD2 (30/09): o corpo de cada provedor saiu para corpo-dos-provedores.ts (puro); o motor entrega a ele a
+  // entrada já na forma do provedor (entradaDoProvedor). A garantia é a mesma de antes.
   it("OpenAI: o esquema original, como antes", () => {
-    const openai = corpo("textoOpenAi");
-    expect(openai).toContain("const { nome, schema } = nomeEsquema(e.esquemaJson);");
-    expect(openai).toContain('corpo.text = { format: { type: "json_schema", name: nome, schema, strict: true } };');
-    expect(openai).not.toContain("esquemaDoProvedor");
+    const entrada = motor.slice(motor.indexOf("function entradaDoProvedor("), motor.indexOf("function entradaDoProvedor(") + 1200);
+    expect(entrada).toContain('esquemaJson: !e.esquemaJson ? undefined : m.provedor === "openai" ? e.esquemaJson : esquemaDoProvedor(m, e.esquemaJson),');
+    expect(corpo("textoOpenAi")).toContain("const corpo = corpoOpenAi(m.modelo_api, entradaDoProvedor(m, e));");
+    const corpos = readFileSync(resolve(__dirname, "../../supabase/functions/_shared/corpo-dos-provedores.ts"), "utf8");
+    expect(corpos).toContain("const { nome, schema } = nomeEsquema(e.esquemaJson);");
+    expect(corpos).toContain('corpo.text = { format: { type: "json_schema", name: nome, schema, strict: true } };');
   });
 
   it("Anthropic e OpenRouter: o esquema passa pelo esquemaDoProvedor (decide pelo modelo que vai atender)", () => {
-    expect(corpo("textoAnthropic")).toContain('outputConfig.format = { type: "json_schema", schema: nomeEsquema(esquemaDoProvedor(m, e.esquemaJson)).schema };');
-    expect(corpo("textoOpenRouter")).toContain("const { nome, schema } = nomeEsquema(esquemaDoProvedor(m, e.esquemaJson));");
+    expect(corpo("textoAnthropic")).toContain("const corpo = corpoAnthropic(m.modelo_api, entradaDoProvedor(m, e));");
+    expect(corpo("textoOpenRouter")).toContain("const corpo = corpoOpenRouter(m.modelo_api, entradaDoProvedor(m, e));");
+    const corpos = readFileSync(resolve(__dirname, "../../supabase/functions/_shared/corpo-dos-provedores.ts"), "utf8");
+    expect(corpos).toContain('outputConfig.format = { type: "json_schema", schema: nomeEsquema(e.esquemaJson).schema };');
     expect(motor).toContain("const { esquema, conversao } = esquemaNoProvedor(m, e);");
   });
 

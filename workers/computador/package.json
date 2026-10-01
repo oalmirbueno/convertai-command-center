@@ -1,0 +1,24 @@
+{
+  "name": "aceleriq-navegador-do-agente",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Worker do navegador do agente (frente MOD): puxa as tarefas de navegador aprovadas pelo dono (agente_computador_tarefas), roda num Chromium isolado (só leitura, lista de domínios, sem login nem pagamento), guarda um print por passo e para no teto ou no Parar.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "worker": "node principal.ts",
+    "uma-vez": "node principal.ts --uma-vez",
+    "navegador": "npx playwright-core install chromium",
+    "teste": "node --test testes/travas.test.ts testes/banco.test.ts testes/modelos-no-banco.test.ts",
+    "prova-real": "node prova-real.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.97.0",
+    "playwright-core": "1.63.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.0"
+  }
+}

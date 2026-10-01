@@ -14,7 +14,10 @@
  *   conferir o catalogo. So admin ou chamada com x-cron-secret.
  * - sincronizar_catalogo: atualiza ia_modelos sozinho (cron diario 06:17).
  *   Le a lista publica do OpenRouter (sem chave), converte preco por token
- *   para preco por 1M e grava pela RPC backend ia_modelos_sincronizar: modelo
+ *   para preco por 1M, le os recursos de cada modelo de texto (ferramentas,
+ *   JSON, visao, raciocinio obrigatorio e padrao, preco da busca web e da
+ *   escrita de cache, saida maxima, lancamento; frente MOD, 30/09) e grava
+ *   pela RPC backend ia_modelos_sincronizar: modelo
  *   novo entra desligado e marcado como novo; nunca desliga nem apaga o que o
  *   dono ligou; o que sumiu vira indisponivel. Da OpenAI e da Anthropic
  *   diretas so confere quais ids existem (os precos openai:* ficam como
@@ -146,12 +149,11 @@ Deno.serve(async (req) => {
     const doChamador = clienteDoChamador(chamador.token);
 
     if (acao === "catalogo") {
-      const { data, error } = await doChamador
-        .from("ia_modelos")
-        .select("id, provedor, modelo_api, tipo, rotulo, preco_entrada_1m, preco_saida_1m, preco_cache_1m, preco_imagem, raciocinio, padrao_para, ativo, novo, disponivel, contexto_tokens, modalidades, fonte_preco, conferido_em, criado_em")
-        .order("tipo")
-        .order("provedor")
-        .order("id");
+      const colunas = "id, provedor, modelo_api, tipo, rotulo, preco_entrada_1m, preco_saida_1m, preco_cache_1m, preco_imagem, raciocinio, padrao_para, ativo, novo, disponivel, contexto_tokens, modalidades, fonte_preco, conferido_em, criado_em";
+      const ler = (lista: string) => doChamador.from("ia_modelos").select(lista).order("tipo").order("provedor").order("id");
+      // Frente MOD: recursos (ferramentas, JSON, visão, raciocínio, cache, lançamento). Banco sem a coluna: o de antes.
+      let { data, error } = await ler(`${colunas}, recursos`);
+      if (error && /recursos|column/i.test(error.message || "")) ({ data, error } = await ler(colunas));
       if (error) return json({ error: "catalogo_indisponivel", mensagem: error.message }, 500);
       return json({ modelos: data ?? [] });
     }

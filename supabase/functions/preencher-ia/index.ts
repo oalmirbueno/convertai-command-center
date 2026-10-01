@@ -442,6 +442,11 @@ async function acaoPreencher(ch: Chamador, corpo: Record<string, unknown>): Prom
 
   const limpa = limparResposta(saida.json, { papel, mapa: esquema.mapa, fontes: lidas, instrucao, contexto, web, substituir, regrasDaBase });
   if (contexto) limpa.fontes.push("o que a tela sabe");
+  // Frente MOD (30/09): a busca web nativa do provedor devolve as páginas citadas; entram como fonte com o endereço.
+  for (const f of (saida.fontes || []).slice(0, 8)) {
+    const fonte = `${f.titulo} (${f.url})`;
+    if (limpa.fontes.indexOf(fonte) < 0) limpa.fontes.push(fonte);
+  }
   const pulados = campos.length - alvo.length;
   const avisos = avisosDasFontes.concat(limpa.avisos);
   if (pulados > 0) avisos.push(`${pulados} ${pulados === 1 ? "campo já preenchido ficou" : "campos já preenchidos ficaram"} como estava${pulados === 1 ? "" : "m"}.`);

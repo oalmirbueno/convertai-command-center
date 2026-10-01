@@ -36,6 +36,10 @@ export const CADEIA_LEGADA = ["gpt-4.1", "gpt-4o", "gpt-4o-mini"];
 export const MODELOS_DA_CENTRAL: ReadonlyArray<{ id: string; rotulo: string }> = [
   { id: MODELO_PADRAO_DA_CENTRAL, rotulo: "GPT-6 Luna" },
   { id: "openrouter:openai/gpt-6-sol", rotulo: "GPT-6 Sol" },
+  // MOD2: lançamentos de setembro.
+  { id: "openrouter:openai/gpt-6.1-sol", rotulo: "GPT-6.1 Sol" },
+  { id: "openrouter:anthropic/claude-sonnet-5.5", rotulo: "Claude Sonnet 5.5" },
+  { id: "openrouter:anthropic/claude-opus-5.5", rotulo: "Claude Opus 5.5" },
   { id: MODELO_LEGADO, rotulo: "GPT-4.1 (antigo)" },
 ];
 export const RACIOCINIOS_DA_CENTRAL = ["max", "xhigh", "high", "medium", "low"] as const;

@@ -181,3 +181,5 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.briefing-publico]
     verify_jwt = false
+  [functions.computador-do-agente]
+    verify_jwt = true

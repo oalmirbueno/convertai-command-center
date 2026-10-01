@@ -1,15 +1,19 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, RefreshCw, Search, Sparkles } from "lucide-react";
+import { Brain, Eye, Loader2, RefreshCw, Search, Sparkles, Wand2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { Switch } from "@/components/ui/switch";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
 import {
+  capacidadesDoModeloNaTela,
   chamarFuncao,
+  contextoCurto,
+  modeloLancadoHaPouco,
   modeloNovo,
   nomeDoModelo,
   nomeDoProvedor,
@@ -19,12 +23,27 @@ import {
   textoDoErro,
   type ModeloIa,
 } from "@/lib/mesa/api";
+import {
+  aplicarMudancas,
+  melhorDoPapel,
+  type MudancaDePadrao,
+  mudancasDaRecomendacao,
+  RECOMENDACOES_POR_PAPEL,
+  recomendadoDoPapel,
+  vezesOPreco,
+} from "@/lib/mesa/modelo-por-papel";
 
 /**
  * Modelos de IA (só admin). O catálogo chega sozinho do OpenRouter e da
  * OpenAI (ação sincronizar_catalogo do ia-gateway); aqui o dono liga o que
  * quer usar e escolhe o padrão de cada papel. A escrita em ia_modelos é
  * direta na tabela: a RLS só deixa o admin gravar.
+ *
+ * Frente MOD (30/09): abre numa janela central (regra do dono: pop-up no
+ * meio, não gaveta); cada papel mostra o modelo recomendado (modelo-por-papel.ts,
+ * com o porquê no "?") e "Aplicar a recomendação" mostra antes o que muda e só
+ * grava no Confirmar; a lista mostra "novo", visão, ferramentas, raciocínio,
+ * contexto e a data de lançamento.
  */
 
 const POR_PAGINA = 40;
@@ -39,6 +58,7 @@ export const PAPEIS_DA_TELA: { valor: string; rotulo: string; dica: string; tipo
   { valor: "imagem", rotulo: "Gerador de imagem", dica: "Pinta as lâminas.", tipo: "imagem" },
   { valor: "leitura", rotulo: "Leitura de imagem", dica: "Lê referências e organiza o acervo.", tipo: "texto" },
   { valor: "contexto", rotulo: "Agente de contexto", dica: "Monta o contexto e conversa sobre a marca.", tipo: "texto" },
+  { valor: "estrategista_rapido", rotulo: "Conteúdo rápido", dica: "Legendas e ideias rápidas, sem raciocínio longo.", tipo: "texto" },
   // Mesas novas (frente BAS, 29/09). Sem padrão, usam o da estratégia.
   { valor: "proposta", rotulo: "Proposta", dica: "Escreve a proposta comercial.", tipo: "texto" },
   { valor: "contrato", rotulo: "Contrato", dica: "Monta o contrato da proposta aceita.", tipo: "texto" },
@@ -89,6 +109,7 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
   const [limite, setLimite] = useState(POR_PAGINA);
   const [sincronizando, setSincronizando] = useState(false);
   const [salvando, setSalvando] = useState<string | null>(null);
+  const [revisao, setRevisao] = useState<MudancaDePadrao[] | null>(null);
 
   const catalogo = useQuery({
     queryKey: ["mesa", "catalogo-completo"],
@@ -182,6 +203,48 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
     }
   };
 
+  const porId = (id: string | null) => (id ? modelos.find((m) => m.id === id) || null : null);
+  const nomeDoId = (id: string | null) => {
+    const m = porId(id);
+    return m ? nomeDoModelo(m) : id ? id.replace(/^[a-z]+:/, "") : "nenhum";
+  };
+
+  /** Mostra o que muda; nada é gravado antes do Confirmar. */
+  const reverRecomendacao = () => {
+    const mudancas = mudancasDaRecomendacao(modelos);
+    if (!mudancas.length) {
+      toast.success("Os padrões já seguem a recomendação", { description: "Ligue um modelo recomendado que esteja desligado para ele virar padrão." });
+      return;
+    }
+    setRevisao(mudancas);
+  };
+
+  /** Grava primeiro quem ganha o papel e depois quem perde: o papel nunca fica sem padrão. */
+  const aplicarRecomendacao = async () => {
+    if (!revisao) return;
+    setSalvando("recomendacao");
+    try {
+      const finais = aplicarMudancas(modelos, revisao);
+      const ganham = Object.keys(finais).filter((id) => {
+        const antes = (porId(id) || { padrao_para: [] as string[] }).padrao_para || [];
+        return finais[id].some((p) => antes.indexOf(p) < 0);
+      });
+      const perdem = Object.keys(finais).filter((id) => ganham.indexOf(id) < 0);
+      for (const id of ganham.concat(perdem)) {
+        const { error } = await (supabase as any).from("ia_modelos").update({ padrao_para: finais[id] }).eq("id", id);
+        if (error) throw error;
+      }
+      toast.success(`${revisao.length} padrão(ões) trocado(s)`, { description: "Cada mesa ainda troca o modelo na hora pelo seletor." });
+      setRevisao(null);
+      atualizar();
+    } catch (e) {
+      toast.error("Não foi possível aplicar a recomendação", { description: textoDoErro(e) });
+      atualizar();
+    } finally {
+      setSalvando(null);
+    }
+  };
+
   return (
     <JanelaCentral
       aberta={aberto}
@@ -189,31 +252,81 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
       largura="xl"
       icone={<Sparkles className="h-4 w-4" />}
       titulo="Modelos de IA"
-      ajuda="O catálogo chega sozinho dos provedores. Ligue o que a equipe pode usar e escolha o padrão de cada papel."
+      ajuda="O catálogo chega sozinho dos provedores. Ligue o que a equipe pode usar e escolha o padrão de cada papel. A recomendação por papel pesa qualidade e preço (docs/motores/MODELOS.md) e só usa modelo ligado."
       descricaoOculta="O catálogo chega sozinho dos provedores. Ligue o que a equipe pode usar e escolha o padrão de cada papel."
     >
         <div className="flex flex-wrap items-center">
-          <Button type="button" size="sm" variant="outline" className="mr-2" onClick={() => void sincronizar()} disabled={sincronizando}>
+          <Button type="button" size="sm" variant="outline" className="mb-1 mr-2" onClick={() => void sincronizar()} disabled={sincronizando}>
             {sincronizando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
             Buscar modelos novos agora
           </Button>
-          <span className="text-[11.5px] text-muted-foreground">{modelos.filter((m) => m.ativo).length} ativos de {modelos.length}</span>
+          <Button type="button" size="sm" variant="outline" className="mb-1 mr-2" onClick={reverRecomendacao} disabled={!modelos.length || salvando === "recomendacao"}>
+            <Wand2 className="mr-1.5 h-3.5 w-3.5" />
+            Aplicar a recomendação
+          </Button>
+          <span className="mb-1 text-[12px] text-muted-foreground">{modelos.filter((m) => m.ativo).length} ativos de {modelos.length}</span>
         </div>
 
-        <section className="mt-4 rounded-xl border border-border bg-card">
-          <div className="border-b border-border px-3.5 py-2.5">
+        {revisao && (
+          <section className="mt-2 border-y border-border py-3" aria-label="O que muda com a recomendação" data-revisao-da-recomendacao>
+            <p className="text-[13px] font-medium">O que muda ({revisao.length})</p>
+            <ul className="mt-1.5 space-y-1">
+              {revisao.map((mu) => {
+                const de = porId(mu.de);
+                const para = porId(mu.para);
+                const vezes = vezesOPreco(de, para);
+                return (
+                  <li key={mu.papel} className="text-[12px] leading-4 [overflow-wrap:anywhere]" data-troca-de-papel={mu.papel}>
+                    <span className="font-medium">{rotuloDoPapel(mu.papel)}:</span> {nomeDoId(mu.de)} → <span className="text-foreground">{nomeDoId(mu.para)}</span>
+                    {para && (
+                      <span className="text-muted-foreground">
+                        {" "}({de ? `${precoDoModelo(de)} → ` : ""}{precoDoModelo(para)})
+                      </span>
+                    )}
+                    {vezes != null && vezes >= 1.5 && (
+                      <span className="text-destructive" data-troca-cara>{` ${String(vezes).replace(".", ",")} vezes o preço por token: o gasto deste papel sobe junto.`}</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="mt-2.5 flex flex-wrap items-center">
+              <Button type="button" size="sm" className="mr-2" onClick={() => void aplicarRecomendacao()} disabled={salvando === "recomendacao"}>
+                {salvando === "recomendacao" && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                Confirmar
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setRevisao(null)} disabled={salvando === "recomendacao"}>Cancelar</Button>
+            </div>
+          </section>
+        )}
+
+        <section className="mt-3">
+          <div className="flex items-center border-b border-border pb-2">
             <p className="text-[13px] font-medium">Padrão por papel</p>
-            <p className="text-[11.5px] text-muted-foreground">O modelo que cada agente usa quando a tela não pede outro.</p>
+            <AjudaRecolhida className="ml-1.5">O modelo que cada agente usa quando a tela não pede outro. A recomendação pesa qualidade e preço por papel (docs/motores/MODELOS.md) e só usa modelo ligado.</AjudaRecolhida>
           </div>
           <ul className="divide-y divide-border">
             {PAPEIS_DA_TELA.map((papel) => {
               const opcoes = modelos.filter((m) => m.ativo && m.tipo === papel.tipo);
               const atual = modelos.find((m) => (m.padrao_para || []).indexOf(papel.valor) >= 0) || null;
+              const recomendado = recomendadoDoPapel(modelos, papel.valor);
+              const melhor = melhorDoPapel(papel.valor);
+              const porque = (RECOMENDACOES_POR_PAPEL.find((r) => r.papel === papel.valor) || { porque: "" }).porque;
+              const melhorDesligado = !!melhor && melhor !== recomendado;
               return (
-                <li key={papel.valor} className="grid grid-cols-1 items-center gap-2 px-3.5 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+                <li key={papel.valor} className="grid grid-cols-1 items-center gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
                   <div className="min-w-0">
-                    <p className="text-[12.5px] font-medium">{papel.rotulo}</p>
+                    <p className="text-[13px] font-medium">{papel.rotulo}</p>
                     <p className="text-[11px] leading-snug text-muted-foreground">{papel.dica}</p>
+                    {melhor && (
+                      <p className="mt-0.5 flex items-center text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-recomendado={melhor}>
+                        <span className="min-w-0">
+                          Recomendado: {nomeDoId(melhor)}
+                          {melhorDesligado ? (porId(melhor) ? " (desligado: ligue para usar)" : " (ainda não chegou ao catálogo)") : ""}
+                        </span>
+                        {porque && <AjudaRecolhida className="ml-1">{porque}</AjudaRecolhida>}
+                      </p>
+                    )}
                     <p className="mt-0.5 text-[11px] leading-snug [overflow-wrap:anywhere]">
                       {atual ? (
                         <span className={atual.ativo ? "text-foreground" : "text-destructive"}>
@@ -229,7 +342,7 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
                     onValueChange={(v) => void definirPadrao(papel.valor, v)}
                     disabled={salvando === `padrao-${papel.valor}` || opcoes.length === 0}
                   >
-                    <SelectTrigger className="h-9 min-w-0 text-[12.5px]">
+                    <SelectTrigger className="h-9 min-w-0 text-[13px]">
                       <SelectValue placeholder={opcoes.length ? "Trocar o modelo" : "Nenhum modelo ativo deste tipo"} />
                     </SelectTrigger>
                     <SelectContent>
@@ -252,7 +365,7 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <Select value={tipo} onValueChange={(v: any) => { setTipo(v); setLimite(POR_PAGINA); }}>
-              <SelectTrigger className="h-9 text-[12.5px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Texto e imagem</SelectItem>
                 <SelectItem value="texto">Texto</SelectItem>
@@ -260,14 +373,14 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
               </SelectContent>
             </Select>
             <Select value={provedor} onValueChange={(v) => { setProvedor(v); setLimite(POR_PAGINA); }}>
-              <SelectTrigger className="h-9 text-[12.5px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos os provedores</SelectItem>
                 {provedores.map((p) => <SelectItem key={p} value={p}>{nomeDoProvedor(p)}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={situacao} onValueChange={(v: any) => { setSituacao(v); setLimite(POR_PAGINA); }}>
-              <SelectTrigger className="h-9 text-[12.5px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos</SelectItem>
                 <SelectItem value="ativos">Só ativos</SelectItem>
@@ -278,9 +391,9 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
         </div>
 
         {catalogo.isLoading && <p className="mt-4 text-sm text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo catálogo…</p>}
-        {catalogo.isError && <p className="mt-4 rounded-lg bg-destructive/10 p-3 text-[12.5px]">{textoDoErro(catalogo.error)}</p>}
+        {catalogo.isError && <p className="mt-4 rounded-lg bg-destructive/10 p-3 text-[13px]">{textoDoErro(catalogo.error)}</p>}
 
-        <ul className="mt-3 divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+        <ul className="mt-3 divide-y divide-border border-y border-border">
           {filtrados.slice(0, limite).map((m, i, lista) => {
             const novo = modeloNovo(m);
             const grupo = m.ativo ? "Ligados para a equipe" : "Desligados";
@@ -288,7 +401,7 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
             return (
               <li key={m.id} className="min-w-0">
                 {grupo !== grupoAnterior && (
-                  <p className="bg-muted px-3 py-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">
+                  <p className="bg-muted px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
                     {grupo} ({m.ativo ? filtrados.filter((x) => x.ativo).length : filtrados.filter((x) => !x.ativo).length})
                   </p>
                 )}
@@ -296,15 +409,16 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
                 <div className="mr-3 min-w-0 flex-1">
                   <div className="flex flex-wrap items-center">
                     <span className="mr-1.5 min-w-0 text-[13px] font-medium [overflow-wrap:anywhere]">{nomeDoModelo(m)}</span>
-                    {novo && <span className="mr-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">novo</span>}
+                    {(novo || modeloLancadoHaPouco(m)) && <span className="mr-1 rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-semibold text-primary-foreground">novo</span>}
                     {(m.padrao_para || []).map((p) => (
-                      <span key={p} className="mr-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      <span key={p} className="mr-1 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
                         padrão: {rotuloDoPapel(p)}
                       </span>
                     ))}
                   </div>
-                  <p className="mt-0.5 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">
-                    {nomeDoProvedor(m.provedor)} · {m.tipo} · {precoDoModelo(m)}
+                  <p className="mt-0.5 flex flex-wrap items-center text-[12px] text-muted-foreground [overflow-wrap:anywhere]">
+                    <span className="mr-1.5">{nomeDoProvedor(m.provedor)} · {m.tipo} · {precoDoModelo(m)}{m.tipo === "texto" && contextoCurto(m) ? ` · ${contextoCurto(m)} de contexto` : ""}{m.recursos && m.recursos.lancado_em ? ` · lançado em ${m.recursos.lancado_em.split("-").reverse().join("/")}` : ""}</span>
+                    {m.tipo === "texto" && <CapacidadesDoModelo m={m} />}
                   </p>
                 </div>
                 <Switch checked={m.ativo} disabled={salvando === m.id} onCheckedChange={(v) => void alternarAtivo(m, v)} aria-label={`Ativar ${nomeDoModelo(m)}`} />
@@ -312,7 +426,7 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
               </li>
             );
           })}
-          {!catalogo.isLoading && filtrados.length === 0 && <li className="px-3 py-4 text-[12.5px] text-muted-foreground">Nenhum modelo com esses filtros.</li>}
+          {!catalogo.isLoading && filtrados.length === 0 && <li className="px-3 py-4 text-[13px] text-muted-foreground">Nenhum modelo com esses filtros.</li>}
         </ul>
         {filtrados.length > limite && (
           <Button type="button" variant="ghost" size="sm" className="mt-2 w-full" onClick={() => setLimite((l) => l + POR_PAGINA)}>
@@ -320,5 +434,24 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
           </Button>
         )}
     </JanelaCentral>
+  );
+}
+
+/** Visão, ferramentas e raciocínio em ícones (o nome inteiro no leitor de tela e no title). */
+function CapacidadesDoModelo({ m }: { m: ModeloIa }) {
+  const c = capacidadesDoModeloNaTela(m);
+  const itens: Array<{ chave: string; rotulo: string; icone: typeof Eye }> = [];
+  if (c.visao) itens.push({ chave: "visao", rotulo: "Vê imagem", icone: Eye });
+  if (c.ferramentas) itens.push({ chave: "ferramentas", rotulo: "Usa ferramentas", icone: Wrench });
+  if (c.raciocinio) itens.push({ chave: "raciocinio", rotulo: "Raciocina", icone: Brain });
+  if (!itens.length) return null;
+  return (
+    <span className="inline-flex items-center" aria-label={itens.map((i) => i.rotulo).join(", ")}>
+      {itens.map((i) => (
+        <span key={i.chave} title={i.rotulo} className="mr-1 inline-flex">
+          <i.icone className="h-3.5 w-3.5" aria-hidden="true" />
+        </span>
+      ))}
+    </span>
   );
 }

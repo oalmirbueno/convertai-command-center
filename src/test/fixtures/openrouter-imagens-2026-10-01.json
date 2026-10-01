@@ -1,0 +1,315 @@
+[
+ {
+  "id": "recraft/recraft-v4.1-flash",
+  "name": "Recraft: Recraft V4.1 Flash",
+  "created": 1790177946,
+  "architecture": {
+   "input_modalities": [
+    "text"
+   ],
+   "output_modalities": [
+    "image"
+   ]
+  },
+  "endpoints": 1,
+  "refs_max": null,
+  "precos": [
+   {
+    "billable": "output_image",
+    "unit": "image",
+    "cost_usd": 0.007
+   }
+  ],
+  "preco_media_no_catalogo": 0.007
+ },
+ {
+  "id": "inclusionai/ming-image-0.1-design",
+  "name": "inclusionAI: Ming Image 0.1 Design",
+  "created": 1790095711,
+  "architecture": {
+   "input_modalities": [
+    "text"
+   ],
+   "output_modalities": [
+    "image"
+   ]
+  },
+  "endpoints": 1,
+  "refs_max": 0,
+  "precos": [
+   {
+    "billable": "input_image",
+    "unit": "token",
+    "cost_usd": 0
+   },
+   {
+    "billable": "output_image",
+    "unit": "token",
+    "cost_usd": 0
+   }
+  ],
+  "preco_media_no_catalogo": 0
+ },
+ {
+  "id": "openai/gpt-image-2.5-sunburst",
+  "name": "OpenAI: GPT Image 2.5 Sunburst",
+  "created": 1788916368,
+  "architecture": {
+   "input_modalities": [
+    "text",
+    "image"
+   ],
+   "output_modalities": [
+    "image"
+   ]
+  },
+  "endpoints": 1,
+  "refs_max": 16,
+  "precos": [
+   {
+    "billable": "input_image",
+    "unit": "token",
+    "cost_usd": 0.000008
+   },
+   {
+    "billable": "input_text",
+    "unit": "token",
+    "cost_usd": 0.000005
+   },
+   {
+    "billable": "output_image",
+    "unit": "token",
+    "cost_usd": 0.00003
+   }
+  ],
+  "preco_media_no_catalogo": 0.0103
+ },
+ {
+  "id": "openai/gpt-image-2.5-flare",
+  "name": "OpenAI: GPT Image 2.5 Flare",
+  "created": 1788916350,
+  "architecture": {
+   "input_modalities": [
+    "text",
+    "image"
+   ],
+   "output_modalities": [
+    "image"
+   ]
+  },
+  "endpoints": 1,
+  "refs_max": 16,
+  "precos": [
+   {
+    "billable": "input_image",
+    "unit": "token",
+    "cost_usd": 0.000008
+   },
+   {
+    "billable": "input_text",
+    "unit": "token",
+    "cost_usd": 0.000005
+   },
+   {
+    "billable": "output_image",
+    "unit": "token",
+    "cost_usd": 0.00003
+   }
+  ],
+  "preco_media_no_catalogo": 0.0103
+ },
+ {
+  "id": "microsoft/mai-image-2.6",
+  "name": "Microsoft AI: MAI-Image-2.6",
+  "created": 1788550742,
+  "architecture": {
+   "input_modalities": [
+    "text",
+    "image"
+   ],
+   "output_modalities": [
+    "image"
+   ]
+  },
+  "endpoints": 1,
+  "refs_max": 5,
+  "precos": [
+   {
+    "billable": "input_text",
+    "unit": "token",
+    "cost_usd": 0.000005
+   },
+   {
+    "billable": "input_image",
+    "unit": "token",
+    "cost_usd": 0.000008
+   },
+   {
+    "billable": "output_image",
+    "unit": "token",
+    "cost_usd": 0.000038
+   }
+  ],
+  "preco_media_no_catalogo": 0.0418
+ },
+ {
+  "id": "microsoft/mai-image-2.6-flash",
+  "name": "Microsoft AI: MAI-Image-2.6 Flash",
+  "created": 1788550735,
+  "architecture": {
+   "input_modalities": [
+    "text",
+    "image"
+   ],
+   "output_modalities": [
+    "image"
+   ]
+  },
+  "endpoints": 1,
+  "refs_max": 5,
+  "precos": [
+   {
+    "billable": "input_text",
+    "unit": "token",
+    "cost_usd": 0.00000175
+   },
+   {
+    "billable": "input_image",
+    "unit": "token",
+    "cost_usd": 0.0000025
+   },
+   {
+    "billable": "output_image",
+    "unit": "token",
+    "cost_usd": 0.000019
+   }
+  ],
+  "preco_media_no_catalogo": 0.0209
+ },
+ {
+  "id": "meta/muse-image",
+  "name": "Meta: Muse Image",
+  "created": 1787764532,
+  "architecture": {
+   "input_modalities": [
+    "text",
+    "image"
+   ],
+   "output_modalities": [
+    "image"
+   ]
+  },
+  "endpoints": 0,
+  "refs_max": null,
+  "precos": [],
+  "preco_media_no_catalogo": null
+ },
+ {
+  "id": "x-ai/grok-imagine-image-2.0",
+  "name": "xAI: Grok Imagine Image 2.0",
+  "created": 1786486044,
+  "architecture": {
+   "input_modalities": [
+    "text",
+    "image"
+   ],
+   "output_modalities": [
+    "image"
+   ]
+  },
+  "endpoints": 1,
+  "refs_max": 3,
+  "precos": [
+   {
+    "billable": "input_image",
+    "unit": "image",
+    "cost_usd": 0.01
+   },
+   {
+    "billable": "output_image",
+    "unit": "image",
+    "cost_usd": 0.04,
+    "variant": "low_1k"
+   },
+   {
+    "billable": "output_image",
+    "unit": "image",
+    "cost_usd": 0.06,
+    "variant": "low_2k"
+   },
+   {
+    "billable": "output_image",
+    "unit": "image",
+    "cost_usd": 0.06,
+    "variant": "medium_1k"
+   },
+   {
+    "billable": "output_image",
+    "unit": "image",
+    "cost_usd": 0.08,
+    "variant": "medium_2k"
+   }
+  ],
+  "preco_media_no_catalogo": 0.04
+ },
+ {
+  "id": "qwen/qwen-image-3",
+  "name": "Qwen: Qwen Image 3",
+  "created": 1785894548,
+  "architecture": {
+   "input_modalities": [
+    "text",
+    "image"
+   ],
+   "output_modalities": [
+    "image"
+   ]
+  },
+  "endpoints": 1,
+  "refs_max": 4,
+  "precos": [
+   {
+    "billable": "input_image",
+    "unit": "image",
+    "cost_usd": 0.003
+   },
+   {
+    "billable": "output_image",
+    "unit": "image",
+    "cost_usd": 0.03,
+    "variant": "1k"
+   },
+   {
+    "billable": "output_image",
+    "unit": "image",
+    "cost_usd": 0.03,
+    "variant": "2k"
+   }
+  ],
+  "preco_media_no_catalogo": 0.03
+ },
+ {
+  "id": "black-forest-labs/flux.2-max",
+  "name": "Black Forest Labs: FLUX.2 Max",
+  "created": 1765857570,
+  "architecture": {
+   "input_modalities": [
+    "text",
+    "image"
+   ],
+   "output_modalities": [
+    "image"
+   ]
+  },
+  "endpoints": 1,
+  "refs_max": 8,
+  "precos": [
+   {
+    "billable": "output_image",
+    "unit": "megapixel",
+    "cost_usd": 0.07
+   }
+  ],
+  "preco_media_no_catalogo": 0.0735
+ }
+]

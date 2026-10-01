@@ -35,6 +35,8 @@ import {
   type TomDoEstado,
 } from "../../../supabase/functions/estudio-arte/modulos/entrega-na-agenda";
 import { ehPostDeFotos, linkDoPostNaMesaFoto } from "../../../supabase/functions/_shared/post-de-fotos";
+// Frente MOD (30/09): navegador do agente (conferir se o post está no ar).
+import { BotaoDoNavegador, TarefasDoNavegador } from "@/components/agentes/NavegadorDoAgente";
 
 /**
  * Publicação da peça (frente EA, 27/09): o mesmo bloco na Entrega da Mesa e
@@ -379,6 +381,7 @@ export function PublicacaoDaMesaNaAgenda({
   // Post de fotos: o item sempre abre na Mesa Foto (fotos, legenda e envio moram lá).
   const linkDaMesaFoto = soFotos && !linkDoEstudio && peca.data.taskId ? linkDoPostNaMesaFoto(clientId, { taskId: peca.data.taskId, trabalhoId: peca.data.peca.id }) : null;
   return (
+    <>
     <section className="flex min-w-0 items-center rounded-xl border border-border bg-card px-4 py-3">
       <div className="min-w-0 flex-1">
         <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Publicação da Mesa</p>
@@ -410,6 +413,12 @@ export function PublicacaoDaMesaNaAgenda({
           <ExternalLink className="mr-1.5 h-4 w-4" /> Ver post
         </a>
       )}
+      {/* Frente MOD (30/09): o navegador do agente confere se o post está no ar, com print como prova. */}
+      {estado.codigo === "publicado" && estado.link && (
+        <span className="ml-2">
+          <BotaoDoNavegador caso="conferir_post" clientId={clientId} origem="agenda" url={estado.link} rotulo="Conferir no ar" compacto />
+        </span>
+      )}
       <JanelaDaPublicacao
         aberta={aberta}
         onFechar={() => setAberta(false)}
@@ -422,5 +431,7 @@ export function PublicacaoDaMesaNaAgenda({
         onMudou={() => void peca.refetch()}
       />
     </section>
+    {estado.link && <TarefasDoNavegador clientId={clientId} origem="agenda" url={estado.link} titulo="Conferência do post" />}
+    </>
   );
 }

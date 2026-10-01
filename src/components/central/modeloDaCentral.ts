@@ -13,6 +13,9 @@ export const RACIOCINIO_PADRAO_DA_CENTRAL = "max";
 export const MODELOS_DA_CENTRAL: ReadonlyArray<{ id: string; rotulo: string; ajuda: string }> = [
   { id: MODELO_PADRAO_DA_CENTRAL, rotulo: "GPT-6 Luna", ajuda: "Padrão. Rápido e barato, pensa bem com raciocínio máximo." },
   { id: "openrouter:openai/gpt-6-sol", rotulo: "GPT-6 Sol", ajuda: "Mais forte e cerca de 20 vezes mais caro." },
+  { id: "openrouter:openai/gpt-6.1-sol", rotulo: "GPT-6.1 Sol", ajuda: "Lançado em 29/09: mais forte que o GPT-6 Sol pelo mesmo preço (US$ 2 / 10 por 1M)." },
+  { id: "openrouter:anthropic/claude-sonnet-5.5", rotulo: "Claude Sonnet 5.5", ajuda: "Lançado em 28/09: escreve muito bem em português, pela metade do preço do Opus (US$ 2 / 10 por 1M)." },
+  { id: "openrouter:anthropic/claude-opus-5.5", rotulo: "Claude Opus 5.5", ajuda: "O mais forte da lista, para o texto que mais importa (US$ 4 / 20 por 1M)." },
   { id: "legado:gpt-4.1", rotulo: "GPT-4.1 (antigo)", ajuda: "O que a Central usava até 28/09." },
 ];
 
