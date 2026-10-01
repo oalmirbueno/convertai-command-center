@@ -1929,6 +1929,14 @@
       "remote_name": "video_coleta_dos_pedidos",
       "remote_statements_sha256": "4ad1593b477e467aeba1524732082685c740d4ebd634f5395fd7edbe7a59d741",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930322000",
+      "path": "supabase/migrations/20260930322000_mockups_mais_modelos.sql",
+      "local_sha256": "c5dc6ea04e343fc45e00a2a468b8231dc8ddc8288a2f822719035c06ff0607ea",
+      "remote_name": "mockups_mais_modelos",
+      "remote_statements_sha256": "f946f6df3b0adaf75bc2c62b2728346ff04a67b31057e4b4a5e21073596332b7",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
