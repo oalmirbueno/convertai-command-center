@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BriefcaseBusiness, ChevronRight, Users } from "lucide-react";
@@ -21,8 +21,11 @@ import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, foco, juntar, superficie } from "@/components/sistema/estilos";
-import { usePropostas } from "@/components/mesa-proposta/propostaApi";
+import { CHAVES, usePropostas, type Proposta } from "@/components/mesa-proposta/propostaApi";
 import { EtapasDaMesaProposta, SeletorDaProposta } from "@/components/mesa-proposta/NaCascaDaProposta";
+import { JanelasDaProposta, MenuDaProposta, MenuDaPropostaNoCelular, type PedidoDaProposta } from "@/components/mesa-proposta/AcoesDaProposta";
+import { ETAPAS_DA_PROPOSTA, ehEtapaDaProposta, etapaPeloStatus, type EtapaDaProposta } from "@/components/mesa-proposta/caminhoDaProposta";
+import NovaProposta from "@/components/clientes-propostas/NovaProposta";
 
 /**
  * Mesa Proposta (/mesa-proposta, só admin e gestor), frente PRO (30/09).
@@ -31,35 +34,39 @@ import { EtapasDaMesaProposta, SeletorDaProposta } from "@/components/mesa-propo
  * seletor de mesas, a casca mostra "Clientes › Propostas"), ou pelo lead do Comercial
  * (?lead=). Mesma casca das outras mesas; o estrategista comercial fica fixo
  * ao lado (no celular, a gaveta do botão de baixo).
- * Endereço: /mesa-proposta?client=<id>&etapa=contexto|rascunho|revisao|envio&proposta=<id>&lead=<id>
+ * Endereço: /mesa-proposta?client=<id>&etapa=contexto|rascunho|revisao|envio|acompanhar&proposta=<id>&lead=<id>
  *
  * Frente UXS (30/09): a proposta aberta fica no seletor da casca em todas as
- * etapas (com "Nova proposta"); &nova=1 abre o formulário de nova proposta
- * sem abrir a mais recente; &foco= (uma vez) leva do "Resolver" ao ponto
- * que conserta. As Etapas mostram as pendências que bloqueiam e o follow-up.
+ * etapas (com "Nova proposta"); &nova=1 abre a nova proposta sem abrir a
+ * mais recente; &foco= (uma vez) leva do "Resolver" ao ponto que conserta.
+ *
+ * Frente PRS (30/09), "está completa e confusa": o caminho virou cinco
+ * etapas com o nome do que se faz (Conversa, Rascunho, Revisar, Enviar,
+ * Acompanhar; ver caminhoDaProposta.ts), cada uma termina no próximo passo, a
+ * "Nova proposta" é a mesma janela de Clientes e as ações da proposta
+ * (todas as propostas, biblioteca, duplicar, modelo, arquivar, status) ficam
+ * no "..." ao lado do seletor da proposta. Endereço: etapa=contexto|rascunho|
+ * revisao|envio|acompanhar (os valores de antes seguem valendo).
  */
 
 const carregarContexto = () => import("@/components/mesa-proposta/EtapaContexto");
 const carregarRascunho = () => import("@/components/mesa-proposta/EtapaRascunho");
 const carregarRevisao = () => import("@/components/mesa-proposta/EtapaRevisao");
 const carregarEnvio = () => import("@/components/mesa-proposta/EtapaEnvio");
+const carregarAcompanhar = () => import("@/components/mesa-proposta/EtapaAcompanhar");
 // Mesmas chaves da pré-carga do painel (src/lib/mesa/preCarga.ts).
 const EtapaContexto = lazyComPreCarga("mesa-proposta/contexto", carregarContexto);
 const EtapaRascunho = lazyComPreCarga("mesa-proposta/rascunho", carregarRascunho);
 const EtapaRevisao = lazyComPreCarga("mesa-proposta/revisao", carregarRevisao);
 const EtapaEnvio = lazyComPreCarga("mesa-proposta/envio", carregarEnvio);
+const EtapaAcompanhar = lazyComPreCarga("mesa-proposta/acompanhar", carregarAcompanhar);
 const AgenteDaProposta = lazyComPreCarga("mesa-proposta/agente", () => import("@/components/mesa-proposta/AgenteDaProposta"));
 const ChavesECotas = lazy(() => import("@/components/mesa/ChavesECotas"));
 const ModelosDeIa = lazy(() => import("@/components/mesa/ModelosDeIa"));
 
-export const ETAPAS_DA_MESA_PROPOSTA = [
-  { valor: "contexto", rotulo: "Contexto" },
-  { valor: "rascunho", rotulo: "Rascunho" },
-  { valor: "revisao", rotulo: "Revisão" },
-  { valor: "envio", rotulo: "Envio" },
-] as const;
+export const ETAPAS_DA_MESA_PROPOSTA = ETAPAS_DA_PROPOSTA;
 
-type Etapa = (typeof ETAPAS_DA_MESA_PROPOSTA)[number]["valor"];
+type Etapa = EtapaDaProposta;
 
 const UUID_VALIDO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const uuidOuNulo = (v: string | null) => (v && UUID_VALIDO.test(v) ? v : null);
@@ -69,7 +76,7 @@ function lerOnde(clientId: string): { etapa: string | null; nome: string | null 
   try {
     const v = JSON.parse(window.localStorage.getItem(chaveOnde(clientId)) || "null");
     if (!v || typeof v !== "object") return { etapa: null, nome: null };
-    return { etapa: ETAPAS_DA_MESA_PROPOSTA.some((e) => e.valor === v.etapa) ? String(v.etapa) : null, nome: typeof v.nome === "string" && v.nome ? v.nome.slice(0, 120) : null };
+    return { etapa: ehEtapaDaProposta(v.etapa) ? String(v.etapa) : null, nome: typeof v.nome === "string" && v.nome ? v.nome.slice(0, 120) : null };
   } catch {
     return { etapa: null, nome: null };
   }
@@ -110,7 +117,11 @@ function CorpoDaMesa({
   etapa,
   propostaUrl,
   leadUrl,
-  novaUrl,
+  nova,
+  onNova,
+  pedido,
+  onPedidoFeito,
+  etapaNaUrl,
   mudar,
   rascunhoDoAgente,
   setRascunhoDoAgente,
@@ -118,8 +129,15 @@ function CorpoDaMesa({
   etapa: Etapa;
   propostaUrl: string | null;
   leadUrl: string | null;
-  /** ?nova=1: veio pedir uma proposta nova (a mesa não abre a mais recente sozinha). */
-  novaUrl: boolean;
+  /** A janela "Nova proposta" está aberta (a mesa não abre a mais recente sozinha). */
+  nova: boolean;
+  onNova: () => void;
+  /** O que o "..." da proposta pediu (lista, biblioteca, duplicar...). */
+  pedido: { tipo: PedidoDaProposta; em: number } | null;
+  /** O pedido foi tratado (a casca esquece; remontar não repete). */
+  onPedidoFeito: () => void;
+  /** O endereço trouxe a etapa (link do agente, da carteira): a abertura automática não troca de etapa. */
+  etapaNaUrl: boolean;
   mudar: (m: Record<string, string | null>, substituir?: boolean) => void;
   rascunhoDoAgente: string;
   setRascunhoDoAgente: Dispatch<SetStateAction<string>>;
@@ -133,30 +151,38 @@ function CorpoDaMesa({
   // modeloDoPapel (frente BASE): o escolhido quando ainda está ligado; senão o padrão do papel "proposta"; senão o da estratégia.
   const modelo = modeloDoPapel(catalogo, "proposta", modeloEscolhido || null);
   const modeloId = modelo ? modelo.id : "";
-  // UXS: o formulário de nova proposta mora aqui (sobrevive à troca de etapa e de proposta).
-  // O ?nova=1 sai do endereço na hora (recarregar não reabre o formulário).
-  const [nova, setNova] = useState(novaUrl);
-  useEffect(() => {
-    if (!novaUrl) return;
-    setNova(true);
-    mudar({ nova: null }, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [novaUrl]);
 
+  const pediuDoLead = useRef(false);
+  // A etapa veio no link quando a mesa montou (a de "onde parou" chega depois e não conta).
+  const etapaDoLink = useRef(etapaNaUrl);
   // Sem proposta no endereço: abre a mais recente viva (a do lead, quando veio do Comercial).
   // Pedido de proposta nova: não abre nenhuma sozinha.
   useEffect(() => {
-    if (propostaUrl || nova || novaUrl || !propostas.data || !lista.length) return;
+    if (propostaUrl || nova || !propostas.data) return;
     const doLead = leadUrl ? lista.find((p) => p.lead_id === leadUrl && !p.arquivada_em) : null;
-    if (leadUrl && !doLead) return;
+    if (leadUrl && !doLead) {
+      // Veio do lead do Comercial e ele ainda não tem proposta: a janela de nova proposta abre (uma vez) com o lead.
+      if (!pediuDoLead.current) {
+        pediuDoLead.current = true;
+        onNova();
+      }
+      return;
+    }
     const alvo = doLead || lista.find((p) => !p.arquivada_em);
-    if (alvo) mudar({ proposta: alvo.id }, true);
+    // PRS: sem etapa no link, a enviada abre no Acompanhar (nunca no formulário do rascunho);
+    // o rascunho abre onde a pessoa parou (a etapa de "onde parou" ainda pode não ter chegado ao endereço).
+    const atual: Etapa = etapaNaUrl ? etapa : (lerOnde(clientId).etapa as Etapa | null) || etapa;
+    if (alvo) mudar(etapaDoLink.current ? { proposta: alvo.id } : { proposta: alvo.id, etapa: etapaPeloStatus(alvo.status, atual) }, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [propostaUrl, propostas.data, leadUrl, nova]);
 
+  // Abrir outra proposta: a etapa segue o status dela (a enviada no Acompanhar; o rascunho fica onde está).
+  // Lê do cache: a proposta recém-duplicada já está lá antes do próximo desenho.
+  const qc = useQueryClient();
   const abrir = (id: string, extra: Record<string, string | null> = {}) => {
-    setNova(false);
-    mudar({ proposta: id, nova: null, ...extra });
+    const cache = qc.getQueryData<{ lista: Proposta[] }>(CHAVES.propostas(clientId));
+    const alvo = (cache ? cache.lista : lista).find((p) => p.id === id);
+    mudar({ proposta: id, nova: null, ...(alvo ? { etapa: etapaPeloStatus(alvo.status, etapa) } : {}), ...extra });
   };
   // "Responder" de uma pergunta do estrategista: preenche a conversa (nunca envia sozinho; a mensagem tem custo).
   const responder = (pergunta: string) => {
@@ -187,26 +213,15 @@ function CorpoDaMesa({
           <EstadoDeErro titulo="As propostas não foram lidas." acao={<button type="button" className={botao.secundario} onClick={() => void propostas.refetch()}>Tentar de novo</button>} />
         ) : (
           <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo a etapa" />}>
-            {etapa === "contexto" && (
-              <EtapaContexto
-                key={chaveDaEtapa}
-                proposta={proposta}
-                propostas={lista}
-                semTabela={!!(propostas.data && propostas.data.semTabela)}
-                leadUrl={leadUrl}
-                onAbrir={(id) => abrir(id)}
-                modeloId={modeloId}
-                nova={nova}
-                onNova={setNova}
-                onResponder={responder}
-              />
-            )}
+            {etapa === "contexto" && <EtapaContexto key={chaveDaEtapa} proposta={proposta} propostas={lista} semTabela={!!(propostas.data && propostas.data.semTabela)} modeloId={modeloId} onModelo={setModeloEscolhido} onNova={onNova} onResponder={responder} />}
             {etapa === "rascunho" && <EtapaRascunho key={chaveDaEtapa} proposta={proposta} modeloId={modeloId} onModelo={setModeloEscolhido} />}
             {etapa === "revisao" && <EtapaRevisao key={chaveDaEtapa} proposta={proposta} />}
-            {etapa === "envio" && <EtapaEnvio key={chaveDaEtapa} proposta={proposta} onAbrir={(id) => abrir(id, { etapa: "contexto" })} />}
+            {etapa === "envio" && <EtapaEnvio key={chaveDaEtapa} proposta={proposta} />}
+            {etapa === "acompanhar" && <EtapaAcompanhar key={chaveDaEtapa} proposta={proposta} onAbrir={(id) => abrir(id, { etapa: "contexto" })} />}
           </Suspense>
         )}
       </RegiaoRolavel>
+      <JanelasDaProposta pedido={pedido} proposta={proposta} propostas={lista} onAbrir={(id) => abrir(id)} onNova={onNova} onFeito={onPedidoFeito} />
     </AreaDeTrabalho>
   );
 }
@@ -231,6 +246,9 @@ export default function MesaProposta() {
   const [chavesUsadas, setChavesUsadas] = useState(false);
   const [modelosUsados, setModelosUsados] = useState(false);
   const [versaoCarteira, setVersaoCarteira] = useState(0);
+  // PRS: a janela "Nova proposta" (a mesma de Clientes) e o pedido do "..." da proposta.
+  const [novaAberta, setNovaAberta] = useState(novaUrl);
+  const [pedido, setPedido] = useState<{ tipo: PedidoDaProposta; em: number } | null>(null);
   const telaCheia = useTelaCheiaDaMesa();
 
   const role = profile?.role || "";
@@ -252,15 +270,27 @@ export default function MesaProposta() {
   const nomeDoCliente = (clienteNaLista && clienteNaLista.nome) || (onde && onde.nome) || "";
   const [rascunhoDoAgente, setRascunhoDoAgente] = useEstadoDaTela<string>(`mesa-proposta:agente:rascunho:${clientId || "sem-cliente"}`, "");
 
+  // Duas mudanças no mesmo ciclo (a abertura da proposta e a etapa de "onde parou") somam em vez de uma apagar a outra.
+  const pendente = useRef<{ de: URLSearchParams; valor: URLSearchParams } | null>(null);
   const mudar = (mudancas: Record<string, string | null>, substituir = false) => {
-    const next = new URLSearchParams(params);
+    const base = pendente.current && pendente.current.de === params ? pendente.current.valor : params;
+    const next = new URLSearchParams(base);
     Object.keys(mudancas).forEach((k) => {
       const v = mudancas[k];
       if (v) next.set(k, v);
       else next.delete(k);
     });
+    pendente.current = { de: params, valor: next };
     setParams(next, { replace: substituir });
   };
+
+  // ?nova=1 abre a janela uma vez e sai do endereço (recarregar não reabre).
+  useEffect(() => {
+    if (!novaUrl) return;
+    setNovaAberta(true);
+    mudar({ nova: null }, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [novaUrl]);
 
   // Veio do lead sem cliente no endereço: o lead ganho já aponta o cliente.
   const leadSemCliente = useQuery({
@@ -278,13 +308,16 @@ export default function MesaProposta() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadSemCliente.data]);
 
+  // A etapa sai do endereço: "onde parou" volta pelo efeito abaixo e a proposta enviada abre no Acompanhar.
   const trocarCliente = (id: string) => {
-    const o = lerOnde(id);
-    mudar({ client: id, etapa: o.etapa || "contexto", proposta: null, marca: null, nova: null, foco: null });
+    setPedido(null);
+    mudar({ client: id, etapa: null, proposta: null, marca: null, nova: null, foco: null });
   };
 
   useEffect(() => {
     if (!clientId || etapaUrl) return;
+    // A abertura da proposta já escolheu a etapa neste ciclo: ela vence.
+    if (pendente.current && pendente.current.de === params && pendente.current.valor.get("etapa")) return;
     const o = lerOnde(clientId);
     if (o.etapa) mudar({ etapa: o.etapa }, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -339,9 +372,15 @@ export default function MesaProposta() {
     : null;
 
   const lead = leadSemCliente.data;
-  // Seletor da proposta na casca: abrir uma (fica na etapa) ou pedir uma nova (vai ao Contexto).
-  const abrirProposta = (id: string) => mudar({ proposta: id, nova: null, foco: null });
-  const pedirNova = () => mudar({ etapa: "contexto", nova: "1", foco: null });
+  // Seletor da proposta na casca e controle do celular: a etapa segue o status (a enviada no Acompanhar).
+  // A lista vem do cache (a casca não redesenha a cada mudança da lista).
+  const abrirProposta = (id: string) => {
+    const cache = clientId ? queryClient.getQueryData<{ lista: Proposta[] }>(CHAVES.propostas(clientId)) : undefined;
+    const alvo = cache ? cache.lista.find((p) => p.id === id) : undefined;
+    mudar({ proposta: id, nova: null, foco: null, ...(alvo ? { etapa: etapaPeloStatus(alvo.status, etapa) } : {}) });
+  };
+  const pedirNova = () => setNovaAberta(true);
+  const pedir = (tipo: PedidoDaProposta) => setPedido({ tipo, em: Date.now() });
   // Lead sem ficha: abre o seletor de cliente da casca.
   const abrirSeletorDeCliente = () => {
     const alvo = document.querySelector("[data-casca-identidade] [role=\"combobox\"]") as HTMLElement | null;
@@ -362,6 +401,7 @@ export default function MesaProposta() {
             {marca && <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id, proposta: null }, true)} />}
             {/* UXS: a proposta aberta em todas as etapas (de 640 px para cima; no celular, na linha das ações). */}
             <SeletorDaProposta clientId={clientId} propostaId={propostaUrl} onAbrir={abrirProposta} onNova={pedirNova} className={juntar("hidden sm:inline-flex", marca ? "ml-2" : "")} />
+            <MenuDaProposta clientId={clientId} propostaId={propostaUrl} onPedir={pedir} className="ml-1 hidden sm:inline-flex" />
           </div>
         ) : null
       }
@@ -370,7 +410,8 @@ export default function MesaProposta() {
       acoes={
         clientId ? (
           <>
-          <SeletorDaProposta clientId={clientId} propostaId={propostaUrl} onAbrir={abrirProposta} onNova={pedirNova} compacto className="mr-auto max-w-[140px] sm:hidden" />
+          {/* PRS: no celular, um controle só (trocar de proposta, nova e as ações). */}
+          <MenuDaPropostaNoCelular clientId={clientId} propostaId={propostaUrl} onAbrir={abrirProposta} onNova={pedirNova} onPedir={pedir} className="mr-auto sm:hidden" />
           <BotaoDoConselho
             clientId={clientId}
             origem="mesa-proposta"
@@ -424,7 +465,16 @@ export default function MesaProposta() {
 
       {valor && (
         <MesaProvider valor={valor}>
-          <CorpoDaMesa key={valor.clientId} etapa={etapa} propostaUrl={propostaUrl} leadUrl={leadUrl} novaUrl={novaUrl} mudar={mudar} rascunhoDoAgente={rascunhoDoAgente} setRascunhoDoAgente={setRascunhoDoAgente} />
+          <CorpoDaMesa key={valor.clientId} etapa={etapa} propostaUrl={propostaUrl} leadUrl={leadUrl} nova={novaAberta || novaUrl} onNova={pedirNova} pedido={pedido} onPedidoFeito={() => setPedido(null)} etapaNaUrl={!!etapaUrl} mudar={mudar} rascunhoDoAgente={rascunhoDoAgente} setRascunhoDoAgente={setRascunhoDoAgente} />
+          <NovaProposta
+            aberta={novaAberta}
+            onAberta={setNovaAberta}
+            clientes={[]}
+            clienteFixo={{ id: valor.clientId, nome: valor.clientName || "Cliente" }}
+            leadInicial={leadUrl || ""}
+            marcaId={marca ? marca.id : null}
+            podeCriarCliente={false}
+          />
           {podeRecarregar && (
             <DialogoDeRecarga
               aberto={recargaAberta}

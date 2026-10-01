@@ -6,7 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { textoDoErro } from "@/lib/mesa/api";
 import { dataCurta, hojeEmSaoPaulo, reais, ROTULO_DO_STATUS, statusEfetivo, type StatusDaProposta } from "../../../supabase/functions/_shared/proposta-modelo";
 import { followupDaProposta, type Followup } from "../../../supabase/functions/_shared/proposta-comercial";
-import { CHAVES, chamarProposta, faltaAColunaNova, faltaATabela } from "@/components/mesa-proposta/propostaApi";
+import { aplicarNaLista, CHAVES, chamarProposta, faltaAColunaNova, faltaATabela } from "@/components/mesa-proposta/propostaApi";
+import { etapaPeloStatus } from "@/components/mesa-proposta/caminhoDaProposta";
 
 /**
  * Propostas em Clientes (frente PRO3, 30/09/2026), pedido do dono: "a
@@ -123,9 +124,13 @@ export function filtrarCarteira(lista: LinhaDaCarteira[], filtro: FiltroDaCartei
   }
 }
 
-/** Etapa em que a proposta abre: rascunho no Contexto; enviada, vista ou aceita no Envio. */
+/**
+ * Etapa em que a proposta abre (frente PRS, 30/09): rascunho na Conversa (o
+ * começo do caminho); enviada, vista, aceita, recusada ou vencida no
+ * Acompanhar, onde está o que fazer agora (follow-up, contrato, renovar).
+ */
 export function enderecoDaProposta(l: { id: string; client_id: string; status: string }): string {
-  const etapa = l.status === "rascunho" ? "contexto" : l.status === "recusada" || l.status === "expirada" ? "revisao" : "envio";
+  const etapa = etapaPeloStatus(l.status);
   return `/mesa-proposta?client=${encodeURIComponent(l.client_id)}&proposta=${encodeURIComponent(l.id)}&etapa=${etapa}`;
 }
 
@@ -199,7 +204,17 @@ export function useLeadsParaProposta(ativo = true) {
   });
 }
 
-export type PedidoDeProposta = { clientId: string; leadId?: string | null; tipo?: "nova" | "upsell" };
+export type PedidoDeProposta = {
+  clientId: string;
+  leadId?: string | null;
+  tipo?: "nova" | "upsell";
+  /** Nome do projeto (vira o título; vazio = o padrão do servidor). */
+  titulo?: string;
+  /** Modelo de proposta da agência (vazio = o padrão). */
+  modeloId?: string | null;
+  /** Marca aberta na mesa (a proposta nasce com a logo e as cores dela). */
+  marcaId?: string | null;
+};
 
 /**
  * Cria a proposta (sem custo) e abre a Mesa Proposta nela. O toast traz o
@@ -214,12 +229,22 @@ export function useCriarProposta(abrir?: (caminho: string) => void | Promise<voi
     const chave = `${p.clientId}:${p.tipo || "nova"}`;
     setCriando(chave);
     try {
-      const d = await chamarProposta<any>("criar", { client_id: p.clientId, lead_id: p.leadId || undefined, tipo: p.tipo === "upsell" ? "upsell" : undefined });
+      const d = await chamarProposta<any>("criar", {
+        client_id: p.clientId,
+        lead_id: p.leadId || undefined,
+        tipo: p.tipo === "upsell" ? "upsell" : undefined,
+        titulo: p.titulo && p.titulo.trim() ? p.titulo.trim() : undefined,
+        modelo_id: p.modeloId || undefined,
+        marca_id: p.marcaId || undefined,
+      });
       const proposta = d && d.proposta;
       const id = proposta && typeof proposta.id === "string" ? proposta.id : "";
       if (!id) throw new Error("A proposta não voltou da função.");
+      // PRS: a proposta entra na lista da mesa na hora (a mesa abre nela sem esperar a releitura).
+      if (proposta && proposta.client_id) aplicarNaLista(qc, p.clientId, proposta);
       void qc.invalidateQueries({ queryKey: CHAVE_DA_CARTEIRA });
       void qc.invalidateQueries({ queryKey: CHAVES.propostas(p.clientId) });
+      if (d && d.aviso_agencia) toast.info("Dados da agência incompletos", { description: "Quem somos e provas ficam de fora até a agência cadastrar." });
       const avisos: string[] = d && Array.isArray(d.avisos_upsell) ? d.avisos_upsell : [];
       toast.success(p.tipo === "upsell" ? `Proposta de upsell ${proposta.numero || ""} criada com o que o cliente já tem.` : `Proposta ${proposta.numero || ""} criada.`, {
         description: avisos.length ? avisos.join(" ") : undefined,
@@ -237,7 +262,7 @@ export function useCriarProposta(abrir?: (caminho: string) => void | Promise<voi
           },
         },
       });
-      const caminho = `/mesa-proposta?client=${encodeURIComponent(p.clientId)}&proposta=${encodeURIComponent(id)}&etapa=${p.tipo === "upsell" ? "rascunho" : "contexto"}`;
+      const caminho = `/mesa-proposta?client=${encodeURIComponent(p.clientId)}&proposta=${encodeURIComponent(id)}&etapa=${p.tipo === "upsell" ? "rascunho" : "contexto"}${p.marcaId ? `&marca=${encodeURIComponent(p.marcaId)}` : ""}`;
       if (abrir) await abrir(caminho);
       else navigate(caminho);
       return id;

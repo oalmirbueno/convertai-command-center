@@ -239,7 +239,7 @@ export function BarraDoSalvar({ proposta, sujas, rotuloDoToast }: { proposta: Pr
       for (const s of sujas) s.depois(p);
       setConflito(false);
       const feito = `${rotuloDoToast || rotulos.join(", ")}: salvo.`;
-      if (tirou) toast.success(feito, { description: "A proposta voltou para rascunho. Envie de novo para o cliente ver.", action: { label: "Ir para o Envio", onClick: () => irPara("envio") } });
+      if (tirou) toast.success(feito, { description: "A proposta voltou para rascunho. Envie de novo para o cliente ver.", action: { label: "Ir para Enviar", onClick: () => irPara("envio") } });
       else toast.success(feito);
     } catch (e) {
       // Outra pessoa (ou o agente) gravou no meio: a edição fica na tela e a barra pergunta.

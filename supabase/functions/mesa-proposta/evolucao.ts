@@ -357,7 +357,7 @@ export function criarAcoesDaEvolucao<C extends ChamadorMinimo, L extends LinhaMi
       answers = res.answers as unknown as typeof answers;
     } catch (e) {
       registrarFalha("mesa-proposta: Jev indisponível para montar os pacotes", e, { codigo: e instanceof JevErro ? e.codigo : "desconhecido" });
-      throw d.erro(503, "jev_indisponivel", "A montagem dos pacotes está fora do ar agora. Monte à mão no Contexto ou tente de novo em instantes.");
+      throw d.erro(503, "jev_indisponivel", "A montagem dos pacotes está fora do ar agora. Monte à mão em Mais opções de preço, na Conversa, ou tente de novo em instantes.");
     }
     const lidos = lerPacotesDoJev(lista, answers);
     const r = pacotesDasEscolhas(linha.itens, lidos.escolhas, linha.pacotes);

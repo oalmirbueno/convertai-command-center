@@ -9,8 +9,8 @@ import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
 import { CHAVES, chamarProposta, type Proposta } from "./propostaApi";
 
 /**
- * Salvar como modelo (frente UXS, 30/09): saiu da Revisão e mora no menu da
- * seção Envio, numa janela central. Guarda a estrutura, o processo, as
+ * Salvar como modelo (frente UXS, 30/09): saiu da Revisão e mora no "..." da
+ * proposta, ao lado do seletor na casca (frente PRS), numa janela central. Guarda a estrutura, o processo, as
  * condições e os próximos passos (sem o texto do cliente) para as próximas
  * propostas; o modelo aparece em Nova proposta. Vale também para proposta
  * aceita (a que deu certo é o melhor modelo).

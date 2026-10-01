@@ -1,25 +1,20 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Archive, Copy, CopyPlus, ExternalLink, FileSignature, LayoutTemplate, Mail, MessageCircle, Send, Undo2, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Copy, ExternalLink, Mail, MessageCircle, Send } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import Secao from "@/components/sistema/Secao";
-import FaixaDeNumeros from "@/components/sistema/FaixaDeNumeros";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
-import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
-import MenuMais from "@/components/sistema/MenuMais";
+import { EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campo, campoTexto, juntar, lista, texto } from "@/components/sistema/estilos";
 import { assuntoDoEmail, dataCurta, mensagemDoWhatsApp, textoDoEmail, textoDoTotal } from "../../../supabase/functions/_shared/proposta-modelo";
-import { aplicarNaLista, chamarProposta, gerarContratoDoAceite, linkPublico, resumoDoRastreio, tempoLegivel, useContatoDaProposta, useEventos, type Proposta } from "./propostaApi";
+import { aplicarNaLista, chamarProposta, linkPublico, useContatoDaProposta, type Proposta } from "./propostaApi";
 import SeloDaProposta from "./SeloDaProposta";
 import AvisoDaAgencia from "./AvisoDaAgencia";
-import DuplicarProposta from "./DuplicarProposta";
-import FollowupDaProposta from "./FollowupDaProposta";
-import SalvarComoModelo from "./SalvarComoModelo";
-import { useResolverPendencia } from "./navegacaoDaProposta";
-import { normalizarPagamento, ROTULO_DO_NIVEL, ROTULO_DO_PAGAMENTO, ehNivel } from "../../../supabase/functions/_shared/proposta-comercial";
+import { useIrParaEtapa, useResolverPendencia } from "./navegacaoDaProposta";
+import ProximoPasso from "./ProximoPasso";
 
 /**
  * Etapa 4, Envio: o Confirmar gera o link público (token), congela o texto
@@ -33,30 +28,13 @@ import { normalizarPagamento, ROTULO_DO_NIVEL, ROTULO_DO_PAGAMENTO, ehNivel } fr
  * hoje e mandar amanhã já sai com o número e o nome. A mensagem do WhatsApp
  * dá para editar. Cada bloqueio tem "Resolver". "Salvar como modelo" mora
  * no menu desta seção. O rastreio não mostra número falso enquanto lê.
+ *
+ * Frente PRS (30/09): esta etapa ficou só com o envio (gerar o link e mandar
+ * pelo WhatsApp ou por e-mail). O que vem depois (aberturas, follow-up,
+ * aceite, contrato e a linha do tempo) mora no Acompanhar
+ * (EtapaAcompanhar.tsx); Duplicar, Salvar como modelo, Arquivar, Voltar para
+ * rascunho e Marcar recusada, no "..." da proposta na casca.
  */
-
-const NOME_DO_EVENTO: Record<string, string> = {
-  criada: "Criada",
-  gerada: "Escrita pelo estrategista",
-  pesquisada: "Mercado pesquisado",
-  editada: "Editada depois do envio",
-  revisada: "Revisada",
-  enviada: "Link gerado",
-  email_enviado: "E-mail enviado",
-  aberta: "Aberta pelo cliente",
-  aceita: "Aceita",
-  recusada: "Recusada",
-  expirada: "Expirou",
-  arquivada: "Arquivada",
-  restaurada: "Versão restaurada",
-  contrato_pedido: "Contrato pedido",
-  contrato_pendente: "Contrato aguardando a mesa de contratos",
-  duplicada: "Criada como cópia",
-  followup: "Follow-up feito",
-  pacotes_montados: "Pacotes montados",
-  anexo: "Anexo",
-  preenchida: "Prévia do preenchimento",
-};
 
 async function copiar(t: string, rotulo: string) {
   try {
@@ -69,13 +47,13 @@ async function copiar(t: string, rotulo: string) {
 
 type Preparado = { whatsapp?: { texto: string; numero: string }; email?: { para: string; texto?: string } };
 
-export default function EtapaEnvio({ proposta, onAbrir }: { proposta: Proposta | null; onAbrir?: (id: string) => void }) {
+export default function EtapaEnvio({ proposta }: { proposta: Proposta | null }) {
   const mesa = useMesa();
   const qc = useQueryClient();
   const avisarErro = useAvisarErro();
   const confirmar = useConfirm();
   const resolver = useResolverPendencia(proposta);
-  const eventos = useEventos(proposta ? proposta.id : null);
+  const irPara = useIrParaEtapa();
   // Com link (fora de rascunho), o contato vem da função: a mesma regra do enviar (lead, depois a ficha).
   const contato = useContatoDaProposta(proposta ? proposta.id : null, !!proposta && proposta.status !== "rascunho");
   const [enviando, setEnviando] = useState(false);
@@ -84,18 +62,10 @@ export default function EtapaEnvio({ proposta, onAbrir }: { proposta: Proposta |
   // A mensagem editada vale enquanto a base (proposta, link e contato) for a mesma.
   const [editada, setEditada] = useState<{ origem: string; texto: string } | null>(null);
   const [mandandoEmail, setMandandoEmail] = useState(false);
-  const [gerandoContrato, setGerandoContrato] = useState(false);
-  const [duplicando, setDuplicando] = useState(false);
-  const [modelo, setModelo] = useState(false);
 
-  if (!proposta) return <EstadoVazio titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma no Contexto." />;
+  if (!proposta) return <EstadoVazio titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma pelo seletor da proposta." />;
   const bloqueios = proposta.pendencias.filter((p) => p.bloqueia);
   const link = linkPublico(proposta.status !== "rascunho" ? proposta.token : null);
-  const lendoEventos = eventos.isLoading;
-  const erroNosEventos = eventos.isError && !eventos.data;
-  const r = resumoDoRastreio(eventos.data || []);
-  const opcaoAceita = proposta.pagamento_aceito ? normalizarPagamento(proposta.pagamento).opcoes.find((o) => o.id === proposta.pagamento_aceito) : null;
-  const formaAceita = opcaoAceita ? ROTULO_DO_PAGAMENTO[opcaoAceita.tipo] : null;
   // Ordem: a resposta do enviar, depois o contato lido, depois vazio (nunca inventa nome nem número).
   const doBanco = contato.data || null;
   const nomeDoContato = doBanco ? doBanco.nome : "";
@@ -118,7 +88,7 @@ export default function EtapaEnvio({ proposta, onAbrir }: { proposta: Proposta |
       aplicarNaLista(qc, mesa.clientId, d && d.proposta);
       setPreparado({ whatsapp: d && d.whatsapp, email: d && d.email });
       if (d && d.email && d.email.para && !para) setPara(String(d.email.para));
-      toast.success("Link pronto. Mande pelo WhatsApp ou por e-mail.");
+      toast.success("Link pronto. Mande pelo WhatsApp ou por e-mail.", { action: { label: "Acompanhar", onClick: () => irPara("acompanhar") } });
     } catch (e) {
       avisarErro(e, "O envio não foi preparado");
     } finally {
@@ -141,55 +111,10 @@ export default function EtapaEnvio({ proposta, onAbrir }: { proposta: Proposta |
     }
   };
 
-  const mudarStatus = async (status: "recusada" | "rascunho") => {
-    const ok = await confirmar(
-      status === "recusada"
-        ? { title: "Marcar como recusada?", description: "O link deixa de aceitar. Fica registrado no lead.", confirmLabel: "Marcar recusada", destructive: true }
-        : { title: "Voltar para rascunho?", description: "O link atual deixa de valer. Para o cliente ver de novo, confirme um novo envio.", confirmLabel: "Voltar para rascunho" },
-    );
-    if (!ok) return;
-    try {
-      const d = await chamarProposta<any>("status_mudar", { proposta_id: proposta.id, status });
-      aplicarNaLista(qc, mesa.clientId, d && d.proposta);
-    } catch (e) {
-      avisarErro(e, "O status não mudou");
-    }
-  };
-
-  const gerarContrato = async () => {
-    const ok = await confirmar({ title: "Gerar o contrato desta proposta?", description: "O contrato nasce em rascunho na mesa de contratos, com os valores e os itens aceitos. Nada vai ao cliente sem você.", confirmLabel: "Gerar contrato" });
-    if (!ok) return;
-    setGerandoContrato(true);
-    try {
-      const r = await gerarContratoDoAceite(proposta.id);
-      void qc.invalidateQueries({ queryKey: ["mesa-proposta", "eventos", proposta.id] });
-      toast.success(r.jaExistia ? "O contrato desta proposta já existia." : "Contrato em rascunho. Abra em Contratos.", { description: r.pergunta || undefined });
-    } catch (e) {
-      avisarErro(e, "O contrato não foi gerado");
-    } finally {
-      setGerandoContrato(false);
-    }
-  };
-
-  const arquivar = async () => {
-    try {
-      const d = await chamarProposta<any>("arquivar", { proposta_id: proposta.id, arquivar: !proposta.arquivada_em });
-      aplicarNaLista(qc, mesa.clientId, d && d.proposta);
-    } catch (e) {
-      avisarErro(e, "Não foi possível arquivar");
-    }
-  };
-
-  const aceite = {
-    rotulo: "Aceite",
-    valor: proposta.aceite && proposta.aceite.nome ? (ehNivel(proposta.pacote_aceito) ? proposta.pacotes.nomes[proposta.pacote_aceito] || ROTULO_DO_NIVEL[proposta.pacote_aceito] : "Aceita") : "Não",
-    apoio: proposta.aceite && proposta.aceite.nome ? `${proposta.aceite.nome}${proposta.aceita_em ? `, ${dataCurta(proposta.aceita_em.slice(0, 10))}` : ""}${formaAceita ? `, ${formaAceita}` : ""}` : undefined,
-  };
-
   return (
     <div className="min-w-0 space-y-6" data-etapa-proposta="envio">
       <Secao
-        titulo="Envio"
+        titulo="Enviar"
         recolher={false}
         descricao={
           <span className="inline-flex items-center">
@@ -199,30 +124,19 @@ export default function EtapaEnvio({ proposta, onAbrir }: { proposta: Proposta |
             </span>
           </span>
         }
-        ajuda="Confirmar gera o link público e congela o texto enviado. Mudar a proposta depois volta para rascunho: o link antigo para de aceitar e é preciso confirmar de novo. O menu tem Duplicar, Salvar como modelo e Arquivar."
+        ajuda="Enviar gera o link público (com Confirmar antes) e congela o texto enviado. Nada vai ao cliente sozinho: você manda o link pelo WhatsApp ou pelo e-mail daqui. Mudar a proposta depois volta para rascunho: o link antigo para de aceitar e é preciso enviar de novo. Duplicar, Salvar como modelo e Arquivar ficam no ... ao lado do seletor da proposta."
         acao={
-          <>
-            <MenuMais
-              itens={[
-                proposta.status !== "rascunho" && proposta.status !== "aceita" ? { rotulo: "Voltar para rascunho", icone: <Undo2 className="h-4 w-4" />, aoEscolher: () => void mudarStatus("rascunho") } : null,
-                { rotulo: "Duplicar", icone: <CopyPlus className="h-4 w-4" />, aoEscolher: () => setDuplicando(true) },
-                { rotulo: "Salvar como modelo", icone: <LayoutTemplate className="h-4 w-4" />, aoEscolher: () => setModelo(true) },
-                { rotulo: proposta.arquivada_em ? "Desarquivar" : "Arquivar", icone: <Archive className="h-4 w-4" />, aoEscolher: () => void arquivar() },
-                proposta.status !== "aceita" && proposta.status !== "recusada" ? { rotulo: "Marcar recusada", icone: <XCircle className="h-4 w-4" />, perigo: true, aoEscolher: () => void mudarStatus("recusada") } : null,
-              ]}
-            />
-            {proposta.status === "aceita" ? (
-              <button type="button" className={botao.primario} onClick={() => void gerarContrato()} disabled={gerandoContrato}>
-                <FileSignature className="mr-1.5 h-4 w-4" />
-                {gerandoContrato ? "Gerando..." : "Gerar contrato"}
-              </button>
-            ) : (
-              <button type="button" className={botao.primario} onClick={() => void enviar()} disabled={enviando || bloqueios.length > 0 || !!proposta.arquivada_em}>
-                <Send className="mr-1.5 h-4 w-4" />
-                {enviando ? "Preparando..." : proposta.status === "rascunho" ? "Enviar" : "Enviar de novo"}
-              </button>
-            )}
-          </>
+          proposta.status === "aceita" ? (
+            <button type="button" className={botao.secundario} onClick={() => irPara("acompanhar")}>
+              Ver o aceite
+              <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden="true" />
+            </button>
+          ) : (
+            <button type="button" className={botao.primario} onClick={() => void enviar()} disabled={enviando || bloqueios.length > 0 || !!proposta.arquivada_em}>
+              <Send className="mr-1.5 h-4 w-4" />
+              {enviando ? "Preparando..." : proposta.status === "rascunho" ? "Enviar" : "Enviar de novo"}
+            </button>
+          )
         }
       >
         <AvisoDaAgencia />
@@ -240,6 +154,11 @@ export default function EtapaEnvio({ proposta, onAbrir }: { proposta: Proposta |
               </li>
             ))}
           </ul>
+        )}
+        {proposta.status === "aceita" && (
+          <p className={juntar(texto.corpo, "mb-3 flex items-center")}>
+            <CheckCircle2 className="mr-2 h-4 w-4 text-success" aria-hidden="true" /> Aceita. O contrato e o aceite estão em Acompanhar.
+          </p>
         )}
         {link ? (
           <div className="min-w-0 space-y-4">
@@ -283,53 +202,7 @@ export default function EtapaEnvio({ proposta, onAbrir }: { proposta: Proposta |
         )}
       </Secao>
 
-      <FollowupDaProposta proposta={proposta} />
-
-      {/* Rastreio: nada de número falso enquanto lê; o aceite vem da proposta (já lida) e fica sempre à vista. */}
-      <Secao titulo="Rastreio" divisoria descricao={lendoEventos || erroNosEventos ? undefined : r.ultima ? `Última abertura ${dataCurta(r.ultima.slice(0, 10))}` : "Ainda não aberta"}>
-        <FaixaDeNumeros
-          colunas={erroNosEventos ? 1 : 3}
-          semMoldura
-          itens={
-            erroNosEventos
-              ? [aceite]
-              : [
-                  { rotulo: "Aberturas", valor: lendoEventos ? "..." : String(r.aberturas) },
-                  { rotulo: "Tempo de leitura", valor: lendoEventos ? "..." : tempoLegivel(r.segundos), apoio: !lendoEventos && r.maior ? `maior: ${tempoLegivel(r.maior)}` : undefined },
-                  aceite,
-                ]
-          }
-        />
-        {lendoEventos ? (
-          <Carregando forma="lista" linhas={3} rotulo="Lendo o rastreio" className="mt-4" />
-        ) : erroNosEventos ? (
-          <EstadoDeErro
-            className="mt-4"
-            titulo="O rastreio não foi lido agora."
-            acao={
-              <button type="button" className={botao.secundario} onClick={() => void eventos.refetch()}>
-                Tentar de novo
-              </button>
-            }
-          />
-        ) : (
-          (eventos.data || []).length > 0 && (
-            <ul className={juntar(lista.aberta, lista.divisoria, "mt-4")} aria-label="Linha do tempo da proposta">
-              {(eventos.data || []).slice(0, 30).map((e) => (
-                <li key={e.id} className={lista.linha}>
-                  <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>
-                    {NOME_DO_EVENTO[e.tipo] || e.tipo}
-                    {e.tipo === "aberta" && e.segundos ? ` · ${tempoLegivel(e.segundos)}` : ""}
-                  </span>
-                  <span className={juntar(texto.auxiliar, "ml-3 shrink-0 tabular-nums")}>{new Date(e.criado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
-                </li>
-              ))}
-            </ul>
-          )
-        )}
-      </Secao>
-      {duplicando && <DuplicarProposta proposta={proposta} aberta={duplicando} onAberta={setDuplicando} onAbrir={onAbrir} />}
-      {modelo && <SalvarComoModelo proposta={proposta} aberta={modelo} onAberta={setModelo} />}
+      {link && <ProximoPasso etapa="envio" estado="Depois de mandar, acompanhe as aberturas e o aceite" />}
     </div>
   );
 }

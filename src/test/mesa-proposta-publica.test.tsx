@@ -233,7 +233,8 @@ describe("a mesa no painel", () => {
     expect(MESAS.some((m) => m.valor === "proposta")).toBe(false);
     expect(MESAS_FORA_DO_SELETOR.some((m) => m.valor === "proposta" && m.caminho === "/mesa-proposta")).toBe(true);
     expect(enderecoDaMesa("proposta", "22222222-2222-4222-8222-222222222222")).toBe("/mesa-proposta?client=22222222-2222-4222-8222-222222222222");
-    expect(Object.keys(MESAS_DO_PAINEL["/mesa-proposta"].etapas)).toEqual(["contexto", "rascunho", "revisao", "envio"]);
+    // PRS: a quinta etapa, Acompanhar, também é pré-carregada.
+    expect(Object.keys(MESAS_DO_PAINEL["/mesa-proposta"].etapas)).toEqual(["contexto", "rascunho", "revisao", "envio", "acompanhar"]);
     expect(cargasDaMesa("/mesa-proposta", "?client=22222222-2222-4222-8222-222222222222").map(([k]) => k)).toEqual(["pagina/mesa-proposta", "mesa-proposta/contexto", "mesa-proposta/agente"]);
     const pre = ler("src/lib/mesa/preCarga.ts");
     const primeiras = pre.slice(pre.indexOf("const PRIMEIRAS"), pre.indexOf("];", pre.indexOf("const PRIMEIRAS")));

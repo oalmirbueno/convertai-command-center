@@ -149,8 +149,10 @@ describe("Contexto: um Salvar só, sem perder texto", () => {
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=contexto&proposta=${PROPOSTA}`);
     const notas = (await screen.findByLabelText("Notas da equipe")) as HTMLTextAreaElement;
     fireEvent.change(notas, { target: { value: "Quer 3 posts por semana." } });
+    // PRS: as formas de pagamento moram em "Mais opções de preço" (recolhido, mas montado).
+    fireEvent.click(screen.getByRole("button", { name: /Mais opções de preço/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: "À vista" }));
-    expect(await screen.findByText("Não salvo: Reunião, Pagamento")).toBeTruthy();
+    expect(await screen.findByText("Não salvo: Conversa, Pagamento")).toBeTruthy();
     fireEvent.click(botaoSalvar());
     await waitFor(() => expect(chamadasDe("salvar")).toHaveLength(1));
     const corpo = chamadasDe("salvar")[0][1].body;
@@ -179,7 +181,7 @@ describe("Contexto: um Salvar só, sem perder texto", () => {
     });
     expect(screen.getByDisplayValue("Gestão completa")).toBeTruthy();
     expect(screen.queryByDisplayValue("Tráfego")).toBeNull();
-    expect(screen.getByText("Não salvo: Investimento")).toBeTruthy();
+    expect(screen.getByText("Não salvo: Itens e preço")).toBeTruthy();
   });
 
   it("(c) salvar só as notas numa proposta enviada: o pedido não leva itens, pagamento, pacotes nem visual, e não pergunta nada", async () => {
@@ -196,19 +198,19 @@ describe("Contexto: um Salvar só, sem perder texto", () => {
     mock.tabelas.propostas = [linha({ contexto: { notas: "Notas", materiais: [{ nome: "briefing.txt", tipo: "texto", texto: "abc", em: "2026-09-30T10:00:00Z" }] } })];
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=contexto&proposta=${PROPOSTA}`);
     fireEvent.change(await screen.findByDisplayValue("1800"), { target: { value: "2100" } });
-    expect(await screen.findByText("Não salvo: Investimento")).toBeTruthy();
+    expect(await screen.findByText("Não salvo: Itens e preço")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Tirar briefing.txt" }));
     await waitFor(() => expect(chamadasDe("material_remover")).toHaveLength(1));
     await waitFor(() => expect(screen.queryByText("briefing.txt")).toBeNull());
     expect(screen.getByDisplayValue("2100")).toBeTruthy();
-    expect(screen.getByText("Não salvo: Investimento")).toBeTruthy();
+    expect(screen.getByText("Não salvo: Itens e preço")).toBeTruthy();
   });
 
   it("o rascunho das notas guardado na chave antiga (com a versão) volta e fica como não salvo", async () => {
     window.localStorage.setItem(`tela:anon:/:mesa-proposta:notas:${PROPOSTA}:3`, JSON.stringify({ v: "Notas digitadas ontem.", em: Date.now() }));
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=contexto&proposta=${PROPOSTA}`);
     await waitFor(() => expect((screen.getByLabelText("Notas da equipe") as HTMLTextAreaElement).value).toBe("Notas digitadas ontem."));
-    expect(await screen.findByText("Não salvo: Reunião")).toBeTruthy();
+    expect(await screen.findByText("Não salvo: Conversa")).toBeTruthy();
     expect(window.localStorage.getItem(`tela:anon:/:mesa-proposta:notas:${PROPOSTA}:3`)).toBeNull();
   });
 
@@ -332,10 +334,10 @@ describe("Envio, casca e navegação", () => {
     expect(screen.queryByLabelText("Link da proposta")).toBeNull();
   });
 
-  it("?nova=1 abre o formulário e não abre a proposta mais recente sozinha", async () => {
+  it("?nova=1 abre a janela de nova proposta (a mesma de Clientes) e não abre a proposta mais recente sozinha", async () => {
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=contexto&nova=1`);
-    expect(await screen.findByRole("button", { name: /Criar proposta/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Fechar" }).getAttribute("aria-expanded")).toBe("true");
+    const janela = await screen.findByRole("dialog", { name: /Nova proposta/ });
+    expect(within(janela).getByRole("button", { name: /^Criar proposta$/ })).toBeTruthy();
     await new Promise((r) => setTimeout(r, 300));
     expect(screen.queryByLabelText("Notas da equipe")).toBeNull();
   });
@@ -375,10 +377,10 @@ describe("Envio, casca e navegação", () => {
     expect(screen.queryByText("Salvar como modelo")).toBeNull();
   });
 
-  it("Envio: Salvar como modelo está no menu e abre no centro", async () => {
+  it("Salvar como modelo está no ... da proposta (casca, qualquer etapa) e abre no centro", async () => {
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=envio&proposta=${PROPOSTA}`);
-    const envio = (await screen.findByText("Envio", { selector: "h2" })).closest("section") as HTMLElement;
-    fireEvent.keyDown(within(envio).getByRole("button", { name: "Mais ações" }), { key: "Enter" });
+    await screen.findByText("Enviar", { selector: "h2" });
+    fireEvent.keyDown(screen.getAllByRole("button", { name: "Ações da proposta" })[0], { key: "Enter" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Salvar como modelo" }));
     const janela = await screen.findByRole("dialog", { name: "Salvar como modelo" });
     expect(janela.getAttribute("data-janela-central")).toBe("");

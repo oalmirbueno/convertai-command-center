@@ -50,6 +50,15 @@ const ETAPAS_DA_MESA_MOTION: Record<string, string> = {
   render: "Render e entrega",
 };
 
+/** Frente PRS (30/09): o nome das etapas da Mesa Proposta (o valor do endereço ficou o de antes). */
+const ETAPAS_DA_MESA_PROPOSTA: Record<string, string> = {
+  contexto: "Conversa",
+  rascunho: "Rascunho",
+  revisao: "Revisar",
+  envio: "Enviar",
+  acompanhar: "Acompanhar",
+};
+
 const OUTRAS_AREAS: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/financeiro": "Financeiro",
@@ -138,7 +147,7 @@ export function rotuloDoLugar(pathname: string, search: string): string | null {
   const q = lerBusca(search);
   const sub = subDoLugar(rota, q);
   if (!sub) return base;
-  const nomeSub = rota === "/mesa" ? ABAS_DA_MESA[sub] : rota === "/mesa-ads" ? ETAPAS_DA_MESA_ADS[sub] : rota === "/mesa-site" ? ETAPAS_DA_MESA_SITE[sub] : rota === "/mesa-motion" ? ETAPAS_DA_MESA_MOTION[sub] : null;
+  const nomeSub = rota === "/mesa" ? ABAS_DA_MESA[sub] : rota === "/mesa-ads" ? ETAPAS_DA_MESA_ADS[sub] : rota === "/mesa-site" ? ETAPAS_DA_MESA_SITE[sub] : rota === "/mesa-motion" ? ETAPAS_DA_MESA_MOTION[sub] : rota === "/mesa-proposta" ? ETAPAS_DA_MESA_PROPOSTA[sub] : null;
   return `${base} · ${nomeSub || capitalizar(sub)}`;
 }
 

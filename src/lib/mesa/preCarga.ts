@@ -202,7 +202,7 @@ export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/me
       agente: () => import("@/components/mesa-identidade/AgenteDiretorDeMarca"),
     },
   },
-  // Mesa Proposta (frente PRO, 30/09): contexto, rascunho, revisão e envio. Fora da pré-carga ociosa.
+  // Mesa Proposta (frente PRO, 30/09; PRS: + acompanhar): conversa, rascunho, revisar, enviar e acompanhar. Fora da pré-carga ociosa.
   "/mesa-proposta": {
     prefixo: "mesa-proposta",
     pagina: () => import("@/pages/MesaProposta"),
@@ -215,6 +215,7 @@ export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/me
       rascunho: () => import("@/components/mesa-proposta/EtapaRascunho"),
       revisao: () => import("@/components/mesa-proposta/EtapaRevisao"),
       envio: () => import("@/components/mesa-proposta/EtapaEnvio"),
+      acompanhar: () => import("@/components/mesa-proposta/EtapaAcompanhar"),
     },
     sempre: {
       agente: () => import("@/components/mesa-proposta/AgenteDaProposta"),

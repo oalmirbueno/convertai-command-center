@@ -98,27 +98,37 @@ beforeEach(() => {
 });
 
 describe("Mesa Proposta", () => {
-  it("quatro etapas: Contexto, Rascunho, Revisão e Envio", () => {
-    expect(ETAPAS_DA_MESA_PROPOSTA.map((e) => e.rotulo)).toEqual(["Contexto", "Rascunho", "Revisão", "Envio"]);
+  it("cinco etapas com o nome do que se faz (PRS): Conversa, Rascunho, Revisar, Enviar e Acompanhar", () => {
+    expect(ETAPAS_DA_MESA_PROPOSTA.map((e) => e.rotulo)).toEqual(["Conversa", "Rascunho", "Revisar", "Enviar", "Acompanhar"]);
+    // Os valores do endereço de antes continuam (link salvo e "onde parou" seguem valendo).
+    expect(ETAPAS_DA_MESA_PROPOSTA.map((e) => e.valor)).toEqual(["contexto", "rascunho", "revisao", "envio", "acompanhar"]);
   });
 
   it("Contexto: abre a proposta do cliente e mostra o investimento que sai dos itens", async () => {
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=contexto`);
     // UXS: a proposta aberta aparece no seletor da casca e no resumo da lista (recolhida).
     expect((await screen.findAllByText(/2026-004/)).length).toBeGreaterThan(0);
-    const investimento = await screen.findByText("Investimento");
+    const investimento = await screen.findByText("O que vai oferecer");
     expect(investimento).toBeTruthy();
     await waitFor(() => expect(screen.getAllByText(/R\$ 1\.800,00 por mês/).length).toBeGreaterThan(0));
     expect((screen.getByDisplayValue("Gestão de redes") as HTMLInputElement).value).toBe("Gestão de redes");
   });
 
-  it("Contexto: Nova proposta chama criar com o cliente", async () => {
+  it("Nova proposta (PRS): o seletor da casca abre a mesma janela de Clientes e cria com o cliente e o projeto", async () => {
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=contexto`);
     await screen.findAllByText(/2026-004/);
-    fireEvent.click(await screen.findByRole("button", { name: "Nova proposta" }));
-    fireEvent.click(await screen.findByRole("button", { name: /Criar proposta/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Proposta: Nº 2026-004 · / }));
+    fireEvent.click(await screen.findByRole("option", { name: /Nova proposta/ }));
+    const janela = await screen.findByRole("dialog", { name: /Nova proposta/ });
+    expect(janela.getAttribute("data-janela-central")).toBe("");
+    // O cliente já está escolhido: só Venda nova e Upsell.
+    expect(within(janela).getByRole("tab", { name: "Venda nova" }).getAttribute("aria-selected")).toBe("true");
+    expect(within(janela).queryByRole("tab", { name: "Cliente novo" })).toBeNull();
+    fireEvent.change(within(janela).getByLabelText("Projeto"), { target: { value: "Site novo" } });
+    fireEvent.click(within(janela).getByRole("button", { name: /^Criar proposta$/ }));
     await waitFor(() => expect(chamadasDe("criar").length).toBe(1));
-    expect(chamadasDe("criar")[0][1].body.client_id).toBe(CLIENTE);
+    expect(chamadasDe("criar")[0][1].body).toMatchObject({ client_id: CLIENTE, titulo: "Site novo" });
+    expect(chamadasDe("criar")[0][1].body.tipo).toBeUndefined();
   });
 
   it("Rascunho: a prévia muda ao vivo e Salvar manda o conteúdo com a versão de base", async () => {

@@ -117,7 +117,9 @@ beforeEach(() => {
 describe("Mesa Proposta, PRO2 na tela", () => {
   it("Contexto: liga os 3 pacotes, escolhe o nível do item e o salvar leva os pacotes", async () => {
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=contexto&proposta=${PROPOSTA}`);
-    const caixa = await screen.findByRole("checkbox", { name: /Proposta com 3 pacotes/ }, { timeout: 30000 });
+    // PRS: pacotes, horas, pagamento e lead moram em "Mais opções de preço".
+    fireEvent.click(await screen.findByRole("button", { name: /Mais opções de preço/ }, { timeout: 30000 }));
+    const caixa = await screen.findByRole("checkbox", { name: /Proposta com 3 pacotes/ });
     fireEvent.click(caixa);
     fireEvent.change(await screen.findByLabelText("Pacote de Tráfego pago"), { target: { value: "completo" } });
     // UXS: o Salvar único fica na barra do pé do Contexto e leva só o que mudou (os itens não mudaram).
@@ -129,9 +131,9 @@ describe("Mesa Proposta, PRO2 na tela", () => {
     expect(corpo.itens).toBeUndefined();
   });
 
-  it("Envio: proposta vista há dias sem resposta mostra o follow-up com a mensagem pronta; Já mandei registra", async () => {
+  it("Acompanhar (PRS): proposta vista há dias sem resposta mostra o follow-up com a mensagem pronta; Já mandei registra", async () => {
     mock.tabelas.propostas = [linha({ status: "vista", token: "d".repeat(64), enviada_em: diasAtras(5), vista_em: diasAtras(3) })];
-    montar(`/mesa-proposta?client=${CLIENTE}&etapa=envio&proposta=${PROPOSTA}`);
+    montar(`/mesa-proposta?client=${CLIENTE}&etapa=acompanhar&proposta=${PROPOSTA}`);
     // findByText na primeira espera: varre a árvore ~9x mais rápido que findByRole (a etapa abre sob carga).
     fireEvent.click(await screen.findByText("Preparar mensagem", {}, { timeout: 30000 }));
     expect(await screen.findByDisplayValue("Oi, Joana. Ficou alguma dúvida?")).toBeTruthy();

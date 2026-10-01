@@ -132,8 +132,8 @@ export const AREAS_DO_PAINEL: AreaDoPainel[] = [
   },
   // Frente PRO (30/09): proposta comercial do cliente (link público /proposta/:token).
   {
-    chave: "mesa_proposta", nome: "Mesa Proposta", rota: "/mesa-proposta", parametro: "etapa", etapas: ["contexto", "rascunho", "revisao", "envio"], comCliente: true,
-    faz: "proposta comercial com link", agente: "proposta",
+    chave: "mesa_proposta", nome: "Mesa Proposta", rota: "/mesa-proposta", parametro: "etapa", etapas: ["contexto", "rascunho", "revisao", "envio", "acompanhar"], comCliente: true,
+    faz: "proposta comercial com link, aceite e follow-up", agente: "proposta",
     palavras: ["proposta", "proposta comercial", "aceite da proposta"],
   },
   // Frente SIT (30/09): criador de sites com o motor de código (prévia ao vivo, publicação com domínio).

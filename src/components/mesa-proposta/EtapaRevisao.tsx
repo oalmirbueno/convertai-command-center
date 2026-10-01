@@ -7,10 +7,11 @@ import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import { botao, juntar, lista, texto } from "@/components/sistema/estilos";
-import { conteudoSemNumeroInventado, dataCurta, dominio } from "../../../supabase/functions/_shared/proposta-modelo";
+import { conteudoSemNumeroInventado, dataCurta, dominio, textoDoTotal } from "../../../supabase/functions/_shared/proposta-modelo";
 import { aplicarNaLista, chamarProposta, useVersoes, type ConferenciaDoDado, type Proposta } from "./propostaApi";
 import { useConfirmarTirarOLink, useResolverPendencia } from "./navegacaoDaProposta";
 import CompararVersoes from "./CompararVersoes";
+import ProximoPasso from "./ProximoPasso";
 
 /**
  * Etapa 3, Revisão: o que falta (bloqueia o envio ou só avisa), número sem
@@ -22,7 +23,13 @@ import CompararVersoes from "./CompararVersoes";
  * Frente UXS (30/09): cada pendência tem "Resolver" (leva ao lugar que
  * conserta); cada fonte do mercado abre em um clique; Versões e Comparar
  * viraram o Histórico (recolhido); Restaurar tem Desfazer; "Salvar como
- * modelo" mora no menu do Envio.
+ * modelo" mora no "..." da proposta (frente PRS).
+ *
+ * Frente PRS (30/09): eram cinco seções do mesmo peso. Agora são duas e o
+ * histórico: "Antes de enviar" (o que falta, com Resolver, e o preço com a
+ * validade numa linha) e "Conferência" (números sem origem, fontes do
+ * mercado e a revisão da IA, com o botão Revisar), mais o Histórico
+ * recolhido. A etapa termina em "Seguir para Enviar".
  */
 
 const VEREDITO: Record<ConferenciaDoDado["veredito"], string> = {
@@ -68,7 +75,7 @@ export default function EtapaRevisao({ proposta }: { proposta: Proposta | null }
   const [comparar, setComparar] = useState<number | null>(null);
   const semOrigem = useMemo(() => (proposta ? conteudoSemNumeroInventado(proposta.conteudo, origemNaTela(proposta)).tiradas : []), [proposta]);
 
-  if (!proposta) return <EstadoVazio titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma no Contexto." />;
+  if (!proposta) return <EstadoVazio titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma pelo seletor da proposta." />;
   const conferencia = proposta.contexto.conferencia || [];
   const ultima = revisao || (proposta.contexto.revisao ? { avisos: proposta.contexto.revisao.avisos || [], notas: proposta.contexto.revisao.notas || {} } : null);
   const listaDeVersoes = versoes.data || [];
@@ -115,9 +122,22 @@ export default function EtapaRevisao({ proposta }: { proposta: Proposta | null }
   };
 
   const bloqueiam = proposta.pendencias.filter((p) => p.bloqueia).length;
+  const conferem = conferencia.filter((c) => c.veredito === "confere").length;
+  const resumoDaConferencia = [
+    semOrigem.length ? `${semOrigem.length} número(s) sem origem` : "números com origem",
+    conferencia.length ? `${conferem} de ${conferencia.length} fontes conferem` : "",
+    ultima ? `${ultima.avisos.length} aviso(s) da IA` : "IA ainda não revisou",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <div className="min-w-0 space-y-6" data-etapa-proposta="revisao">
-      <Secao titulo="O que falta" descricao={proposta.pendencias.length ? `${bloqueiam} bloqueiam o envio` : "Nada pendente"}>
+      <Secao
+        titulo="Antes de enviar"
+        recolher={false}
+        descricao={`${textoDoTotal(proposta.totais)} · até ${dataCurta(proposta.validade_ate) || "sem data"}${bloqueiam ? ` · ${bloqueiam} bloqueiam o envio` : proposta.pendencias.length ? " · só avisos" : ""}`}
+        ajuda="O que falta para a proposta sair. O que bloqueia impede o Enviar; o resto é aviso. Resolver leva ao lugar que conserta (preço e validade na Conversa, o texto no Rascunho, as provas na Biblioteca)."
+      >
         {proposta.pendencias.length ? (
           <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="O que falta">
             {proposta.pendencias.map((p) => (
@@ -141,76 +161,76 @@ export default function EtapaRevisao({ proposta }: { proposta: Proposta | null }
       </Secao>
 
       <Secao
-        titulo="Números sem origem"
+        titulo="Conferência"
         divisoria
-        descricao={semOrigem.length ? `${semOrigem.length} trecho(s)` : "Nenhum"}
-        ajuda="Frases com número que não está nas notas, na transcrição, nos arquivos nem nos itens. Confirme com o cliente, ponha a fonte ou tire o número. É aviso: a decisão é da equipe."
-      >
-        {semOrigem.length ? (
-          <ul className="list-disc space-y-1 pl-5">
-            {semOrigem.map((t) => (
-              <li key={t} className={juntar(texto.corpo, "[overflow-wrap:anywhere]")}>
-                {t}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className={texto.auxiliar}>Todo número tem origem no material ou fonte.</p>
-        )}
-      </Secao>
-
-      <Secao titulo="Fontes do mercado" divisoria descricao={conferencia.length ? `${conferencia.filter((c) => c.veredito === "confere").length} de ${conferencia.length} conferem` : "Sem dado de mercado"}>
-        {conferencia.length ? (
-          <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Fontes do mercado">
-            {conferencia.map((c, i) => (
-              <li key={`${c.url}-${i}`} className={lista.linha}>
-                <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>
-                  {c.valor} · {c.rotulo}
-                </span>
-                <span className={juntar(texto.auxiliar, "ml-3 shrink-0", c.veredito === "contradiz" && "text-destructive", c.veredito === "confere" && "text-success")}>{VEREDITO[c.veredito] || c.veredito}</span>
-                {/* A conferência mora no banco: a tela só abre endereço http(s). */}
-                {URL_DA_FONTE.test(c.url || "") && (
-                  <a href={c.url} target="_blank" rel="noopener noreferrer" className={juntar(botao.icone, "ml-1")} aria-label={`Abrir a fonte: ${c.rotulo}`} title={dominio(c.url)}>
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
-                )}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className={texto.auxiliar}>Peça a pesquisa de mercado no Rascunho.</p>
-        )}
-      </Secao>
-
-      <Secao
-        titulo="Revisão da proposta"
-        divisoria
-        descricao={ultima ? `${ultima.avisos.length} aviso(s)` : undefined}
-        ajuda="Clareza para quem lê no celular, promessa de resultado e se o desafio usa as palavras do cliente. É aviso, não bloqueia. O conselho de agentes entra aqui quando estiver no painel."
+        descricao={resumoDaConferencia}
+        ajuda="Três conferências, todas só aviso (a decisão é da equipe). Números sem origem: frases com número que não está nas notas, na transcrição, nos arquivos nem nos itens; confirme com o cliente, ponha a fonte ou tire o número. Fontes do mercado: cada dado conferido contra o trecho da fonte. Revisão da IA: clareza para quem lê no celular, promessa de resultado e se o desafio usa as palavras do cliente."
         acao={
           <button type="button" className={botao.secundario} onClick={() => void revisar()} disabled={revisando}>
             <ShieldCheck className="mr-1.5 h-4 w-4" />
-            {revisando ? "Revisando..." : "Revisar"}
+            {revisando ? "Revisando..." : "Revisar com IA"}
           </button>
         }
       >
-        {ultima ? (
-          ultima.avisos.length ? (
-            <ul className="list-disc space-y-1 pl-5">
-              {ultima.avisos.map((a) => (
-                <li key={a} className={texto.corpo}>
-                  {a}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className={juntar(texto.corpo, "flex items-center")}>
-              <CheckCircle2 className="mr-2 h-4 w-4 text-success" aria-hidden="true" /> Sem aviso na última revisão.
-            </p>
-          )
-        ) : (
-          <p className={texto.auxiliar}>Ainda não revisada.</p>
-        )}
+        <div className="min-w-0 space-y-5">
+          <div className="min-w-0" data-conferencia="numeros">
+            <h3 className={juntar(texto.rotulo, "mb-1")}>Números sem origem</h3>
+            {semOrigem.length ? (
+              <ul className="list-disc space-y-1 pl-5">
+                {semOrigem.map((t) => (
+                  <li key={t} className={juntar(texto.corpo, "[overflow-wrap:anywhere]")}>
+                    {t}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className={texto.auxiliar}>Todo número tem origem no material ou fonte.</p>
+            )}
+          </div>
+          <div className="min-w-0" data-conferencia="fontes">
+            <h3 className={juntar(texto.rotulo, "mb-1")}>Fontes do mercado</h3>
+            {conferencia.length ? (
+              <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Fontes do mercado">
+                {conferencia.map((c, i) => (
+                  <li key={`${c.url}-${i}`} className={lista.linha}>
+                    <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>
+                      {c.valor} · {c.rotulo}
+                    </span>
+                    <span className={juntar(texto.auxiliar, "ml-3 shrink-0", c.veredito === "contradiz" && "text-destructive", c.veredito === "confere" && "text-success")}>{VEREDITO[c.veredito] || c.veredito}</span>
+                    {/* A conferência mora no banco: a tela só abre endereço http(s). */}
+                    {URL_DA_FONTE.test(c.url || "") && (
+                      <a href={c.url} target="_blank" rel="noopener noreferrer" className={juntar(botao.icone, "ml-1")} aria-label={`Abrir a fonte: ${c.rotulo}`} title={dominio(c.url)}>
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className={texto.auxiliar}>Sem dado de mercado. A pesquisa fica no Rascunho, em Ajustes da IA.</p>
+            )}
+          </div>
+          <div className="min-w-0" data-conferencia="revisao">
+            <h3 className={juntar(texto.rotulo, "mb-1")}>Revisão da IA</h3>
+            {ultima ? (
+              ultima.avisos.length ? (
+                <ul className="list-disc space-y-1 pl-5">
+                  {ultima.avisos.map((a) => (
+                    <li key={a} className={texto.corpo}>
+                      {a}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className={juntar(texto.corpo, "flex items-center")}>
+                  <CheckCircle2 className="mr-2 h-4 w-4 text-success" aria-hidden="true" /> Sem aviso na última revisão.
+                </p>
+              )
+            ) : (
+              <p className={texto.auxiliar}>Ainda não revisada.</p>
+            )}
+          </div>
+        </div>
       </Secao>
 
       <Secao
@@ -258,6 +278,7 @@ export default function EtapaRevisao({ proposta }: { proposta: Proposta | null }
           <p className={texto.auxiliar}>Sem versões anteriores.</p>
         )}
       </Secao>
+      <ProximoPasso etapa="revisao" estado={bloqueiam ? `${bloqueiam} pendência(s) bloqueiam o envio` : undefined} destaque={!bloqueiam} />
     </div>
   );
 }

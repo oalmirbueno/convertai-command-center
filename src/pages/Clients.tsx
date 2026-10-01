@@ -47,7 +47,7 @@ import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-context
 import { useQuery } from "@tanstack/react-query";
 import AreaDePropostas from "@/components/clientes-propostas/AreaDePropostas";
 import { AcoesComerciaisDoCliente } from "@/components/clientes-propostas/PropostasDoCliente";
-import { useCriarProposta } from "@/components/clientes-propostas/propostasDaCarteira";
+import NovaProposta, { type TipoDaNovaProposta } from "@/components/clientes-propostas/NovaProposta";
 
 function getRenewalStatus(dateStr: string | null | undefined) {
   if (!dateStr) return null;
@@ -529,7 +529,8 @@ export default function Clients() {
   const isAdmin = profile?.role === "admin";
   // Frente PRO3 (30/09): a proposta mora em Clientes (só admin e gestor, a régua da Mesa Proposta).
   const podeProposta = profile?.role === "admin" || profile?.role === "manager";
-  const { criar: criarProposta } = useCriarProposta();
+  // PRS: o "..." da linha abre a mesma janela "Nova proposta" de Clientes, da ficha e da Mesa (com o cliente fixo).
+  const [propostaDaLinha, setPropostaDaLinha] = useState<{ id: string; nome: string; tipo: TipoDaNovaProposta } | null>(null);
   const { data: clients, isLoading, isError, refetch } = useClients();
   // A cara de cada cliente: cadastro, senao Instagram (como em /metricas), senao a logo dos arquivos.
   const clientesParaFoto = useMemo(() => ((clients ?? []) as any[]).map((c) => ({ id: String(c.id), nome: c.company_name || c.full_name, avatar_url: c.avatar_url })), [clients]);
@@ -638,7 +639,8 @@ export default function Clients() {
     }
     // PRO3: proposta pelo cliente (nova venda ou upsell), sem passar pelo seletor de mesas.
     if (podeProposta && !isInternalClient(c)) {
-      itens.splice(1, 0, { rotulo: "Proposta de upsell", acao: () => void criarProposta({ clientId: String(c.id), tipo: "upsell" }) }, { rotulo: "Nova proposta", acao: () => void criarProposta({ clientId: String(c.id), tipo: "nova" }) });
+      const nomeDoCliente = String(c.company_name || c.full_name || "Cliente");
+      itens.splice(1, 0, { rotulo: "Nova proposta...", acao: () => setPropostaDaLinha({ id: String(c.id), nome: nomeDoCliente, tipo: "casa" }) }, { rotulo: "Proposta de upsell...", acao: () => setPropostaDaLinha({ id: String(c.id), nome: nomeDoCliente, tipo: "upsell" }) });
     }
     if (c.email) itens.push({ rotulo: "Copiar e-mail", acao: copiar("E-mail", c.email) });
     if (c.phone) itens.push({ rotulo: "Copiar telefone", acao: copiar("Telefone", c.phone) });
@@ -1212,7 +1214,7 @@ export default function Clients() {
             className={`ml-3 h-2 w-2 shrink-0 rounded-full ${statusDot[c.plan_status || "active"] || "bg-muted-foreground"}`}
           />
           {extra?.acao && <span className="ml-2 shrink-0">{extra.acao}</span>}
-          {/* PRO3: upsell e conselho de agentes direto na linha do cliente. */}
+          {/* PRO3: conselho de agentes direto na linha do cliente (PRS: nova proposta e upsell ficam no "..." da linha). */}
           {podeProposta && !internal && (
             <span className="ml-2 hidden shrink-0 items-center sm:flex">
               <AcoesComerciaisDoCliente cliente={{ id: String(c.id), nome: nome || "Cliente", services_config: c.services_config, plan_name: c.plan_name, client_type: c.client_type }} />
@@ -1548,6 +1550,19 @@ export default function Clients() {
         initialProjectId={searchParams.get("project")}
       />
       {isAdmin && <BriefingLinkModal open={briefingOpen} onClose={() => setBriefingOpen(false)} />}
+      {propostaDaLinha && (
+        <NovaProposta
+          key={`${propostaDaLinha.id}:${propostaDaLinha.tipo}`}
+          aberta
+          onAberta={(v) => {
+            if (!v) setPropostaDaLinha(null);
+          }}
+          clientes={[]}
+          clienteFixo={{ id: propostaDaLinha.id, nome: propostaDaLinha.nome }}
+          tipoInicial={propostaDaLinha.tipo}
+          podeCriarCliente={false}
+        />
+      )}
       {menuCliente && (
         <MenuDeContexto
           x={menuCliente.x}

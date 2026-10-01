@@ -1,17 +1,16 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Eye, EyeOff, Globe, Palette, RefreshCw, Sparkles, Trash2, Wand2 } from "lucide-react";
+import { Eye, EyeOff, Palette, RefreshCw, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
-import { SeletorDeModelo } from "@/components/mesa/Seletores";
 import { PreencherComIA } from "@/components/sistema";
 import Secao from "@/components/sistema/Secao";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { botao, campo, campoTexto, etiqueta, juntar, texto } from "@/components/sistema/estilos";
-import { gravarEstadoDaTela, useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { gravarEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   blocoDoTipo,
   blocoVazio,
@@ -47,6 +46,8 @@ import AnexosDaProposta from "./AnexosDaProposta";
 import { aplicarNaLista, chamarProposta, useProvas, type Proposta } from "./propostaApi";
 import { AvisoDeMudanca, BarraDoSalvar, useRascunhoComBase, type SecaoSuja } from "./edicaoDaProposta";
 import { rolarAte, useConfirmarTirarOLink, useFocoDeChegada } from "./navegacaoDaProposta";
+import { AjustesDaIA, useAjustesDaGeracao } from "./GeracaoDaProposta";
+import ProximoPasso from "./ProximoPasso";
 
 /**
  * Etapa 2, Rascunho: gerar com o estrategista (custo antes, pesquisa de
@@ -67,6 +68,16 @@ import { rolarAte, useConfirmarTirarOLink, useFocoDeChegada } from "./navegacaoD
  * versão na chave): versão nova não apaga o que foi digitado, e a linha "A
  * proposta mudou" aparece só se o texto mudou no banco. Os anexos moram aqui,
  * embaixo do Modelo visual. Numa proposta enviada, gravar pergunta antes.
+ *
+ * Frente PRS (30/09), "completa e confusa": eram quatro botões de gerar lado a
+ * lado (Preencher tudo, Gerar de novo, Só o mercado e o Sugerir do upsell),
+ * mais quatro caixas de fonte, o site e o seletor de modelo abertos no topo.
+ * Agora há um botão só: "Gerar o rascunho" quando ainda não há texto (grava
+ * direto: não há o que perder) e "Gerar de novo" depois, que sempre mostra a
+ * prévia campo a campo antes de gravar. Gravar direto sem prévia e pesquisar
+ * só o mercado continuam em "Ajustes da IA", junto do modelo e das fontes
+ * (recolhido). Os blocos e a prévia vêm logo embaixo; o modelo visual e os
+ * anexos, depois deles. A etapa termina em "Seguir para Revisar".
  */
 
 const linhas = (v: string[]) => v.join("\n");
@@ -77,14 +88,6 @@ const dePares = (s: string) =>
     const i = l.indexOf("|");
     return i < 0 ? { a: l, b: "" } : { a: l.slice(0, i).trim(), b: l.slice(i + 1).trim() };
   });
-
-type FonteDoRascunho = "reuniao" | "briefing" | "contexto" | "site";
-const FONTES: Array<{ valor: FonteDoRascunho; rotulo: string }> = [
-  { valor: "reuniao", rotulo: "Reunião e arquivos" },
-  { valor: "briefing", rotulo: "Briefing" },
-  { valor: "contexto", rotulo: "Contexto do cliente" },
-  { valor: "site", rotulo: "Site do cliente" },
-];
 
 /** O que os campos precisam para o "Preencher com IA" (sem passar por cada componente). */
 type IaDoRascunho = {
@@ -162,7 +165,7 @@ function EscolhaDasProvas({ b, mudar }: { b: Bloco; mudar: (dados: Record<string
     const atuais = vivas.filter((v) => (v.id === p.id ? sim : escolhida(v)));
     mudar(blocoDasProvas(atuais).dados);
   };
-  if (!vivas.length) return <p className={texto.auxiliar}>{x.cases.length || x.depoimentos.length ? `${x.cases.length} case(s) e ${x.depoimentos.length} depoimento(s).` : "Sem case cadastrado. Cadastre na Biblioteca, no Contexto."}</p>;
+  if (!vivas.length) return <p className={texto.auxiliar}>{x.cases.length || x.depoimentos.length ? `${x.cases.length} case(s) e ${x.depoimentos.length} depoimento(s).` : "Sem case cadastrado. Cadastre na Biblioteca comercial (no ... da proposta)."}</p>;
   return (
     <ul className="min-w-0 space-y-1" aria-label="Provas da biblioteca">
       {vivas.map((p) => {
@@ -312,7 +315,7 @@ function CamposDoBloco({ b, mudar }: { b: Bloco; mudar: (dados: Record<string, u
       const x = b.dados as DadosDoBloco["investimento"];
       return (
         <>
-          <Area b={b} chave="investimento.intangiveis" rotulo="Intangíveis" dica="Um por linha; o valor sai dos itens do Contexto" valor={linhas(x.intangiveis)} onMudar={(v) => m({ intangiveis: deLinhas(v) })} />
+          <Area b={b} chave="investimento.intangiveis" rotulo="Intangíveis" dica="Um por linha; o valor sai dos itens da Conversa" valor={linhas(x.intangiveis)} onMudar={(v) => m({ intangiveis: deLinhas(v) })} />
           <Area b={b} chave="investimento.condicoes" rotulo="Condições" valor={x.condicoes} onMudar={(v) => m({ condicoes: v })} />
           <Linha b={b} rotulo="Observação" valor={x.observacao} onMudar={(v) => m({ observacao: v })} />
         </>
@@ -581,9 +584,7 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
   const qc = useQueryClient();
   const avisarErro = useAvisarErro();
   const confirmarTirar = useConfirmarTirarOLink();
-  const [pesquisar, setPesquisar] = useEstadoDaTela<boolean>("mesa-proposta:pesquisar", true, { validar: (v) => typeof v === "boolean" });
-  const [fontes, setFontes] = useEstadoDaTela<FonteDoRascunho[]>("mesa-proposta:fontes", ["reuniao", "briefing", "contexto"], { validar: (v) => Array.isArray(v) });
-  const [site, setSite] = useEstadoDaTela<string>(`mesa-proposta:site:${mesa.clientId}`, "", { validar: (v) => typeof v === "string" });
+  const ajustes = useAjustesDaGeracao();
   // UXS: o rascunho fica pela proposta (sem a versão na chave) e compara com a base da edição.
   const doBanco = useMemo<TextoDoRascunho>(() => (proposta ? { titulo: proposta.titulo, conteudo: proposta.conteudo } : null), [proposta]);
   const rascunho = useRascunhoComBase<TextoDoRascunho>({
@@ -676,7 +677,7 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
     [proposta ? proposta.id : "", proposta ? proposta.versao : 0, aceita, mesa.clientId],
   );
 
-  if (!proposta || !atual) return <EstadoVazio titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma no Contexto." />;
+  if (!proposta || !atual) return <EstadoVazio titulo="Nenhuma proposta aberta." descricao="Crie ou abra uma pelo seletor da proposta." />;
 
   const mudarBloco = (tipo: TipoDeBloco, m: Partial<Pick<Bloco, "titulo" | "visivel" | "dados">>) => {
     setRascunho({ titulo: atual.titulo, conteudo: comBloco(atual.conteudo, tipo, m) });
@@ -701,8 +702,8 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
     aplicarNaLista(qc, mesa.clientId, d && d.proposta);
     const tiradas = d && Array.isArray(d.tiradas) ? d.tiradas.length : 0;
     const perguntas = d && Array.isArray(d.perguntas) ? d.perguntas.length : 0;
-    if (tiradas) toast.warning(`${tiradas} número(s) saíram por falta de fonte.`, { description: "Veja na Revisão." });
-    if (perguntas) toast.info(`O estrategista tem ${perguntas} pergunta(s).`, { description: "Estão no Contexto." });
+    if (tiradas) toast.warning(`${tiradas} número(s) saíram por falta de fonte.`, { description: "Veja em Revisar." });
+    if (perguntas) toast.info(`O estrategista tem ${perguntas} pergunta(s).`, { description: "Estão na Conversa." });
   };
 
   // Preencher tudo: aplica os campos escolhidos, grava e oferece o Desfazer (volta a versão de antes).
@@ -739,122 +740,110 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
     }
   };
 
-  const alternarFonte = (f: FonteDoRascunho, sim: boolean) => setFontes(sim ? fontes.concat([f]) : fontes.filter((x) => x !== f));
-  const siteOk = !site.trim() || /^https?:\/\/\S+\.\S+/i.test(site.trim());
+  const jaEscrito = !!blocoDoTipo(proposta.conteudo, "capa").dados.headline;
+  const pedidoDeGerar = () => ({ proposta_id: proposta.id, modelo_id: modeloId || undefined, ...ajustes.pedido() });
+  // Gerar de novo: sempre com a prévia (nada é gravado sem a pessoa ver).
+  const gerarComPrevia = (
+    <BotaoComCusto
+      rotulo={
+        <>
+          <Sparkles className="mr-1.5 h-4 w-4" />
+          Gerar de novo
+        </>
+      }
+      titulo="Gerar de novo (prévia)"
+      descricao="Mostra o que vai mudar, campo a campo, antes de gravar"
+      variant="outline"
+      disabled={aceita || mudou || !modeloId || !ajustes.pronto}
+      partes={() => [{ modeloId, tipo: "texto", tokensEntrada: 14000, tokensSaida: 6000, buscasWeb: ajustes.buscasWeb }]}
+      executar={() => chamarProposta("gerar", { ...pedidoDeGerar(), previa: true })}
+      aoConcluir={(d: any) => {
+        if (d && d.proposto) setPreviaIa({ proposto: normalizarConteudo(d.proposto), avisos: (Array.isArray(d.tiradas) ? d.tiradas.map((t: string) => `Saiu por falta de fonte: ${t}`) : []).concat(Array.isArray(d.perguntas) ? d.perguntas : []) });
+      }}
+    />
+  );
+  // Primeira escrita: grava direto (não há texto para perder; a versão anterior fica no histórico).
+  const gerarDireto = (principal: boolean) => (
+    <BotaoComCusto
+      rotulo={
+        principal ? (
+          <>
+            <Sparkles className="mr-1.5 h-4 w-4" />
+            Gerar o rascunho
+          </>
+        ) : (
+          "Gerar e gravar sem prévia"
+        )
+      }
+      titulo="Gerar a proposta"
+      descricao={avisoDoLink || undefined}
+      variant={principal ? "default" : "outline"}
+      disabled={aceita || mudou || !modeloId || !ajustes.pronto}
+      partes={() => [{ modeloId, tipo: "texto", tokensEntrada: 14000, tokensSaida: 6000, buscasWeb: ajustes.buscasWeb }]}
+      executar={() => chamarProposta("gerar", pedidoDeGerar())}
+      aoConcluir={(d) => depoisDaIa(d)}
+    />
+  );
 
   return (
     <ContextoDaIa.Provider value={ia}>
       <div className="min-w-0 space-y-6" data-etapa-proposta="rascunho">
         <Secao
-          titulo="Escrever"
+          titulo="Rascunho"
           recolher={false}
           descricao={`Nº ${proposta.numero} · versão ${proposta.versao}${mudou ? " · não salvo" : ""}`}
-          ajuda="O estrategista lê o contexto, a reunião, os arquivos e os itens, pesquisa o mercado na web (cada número com fonte e data) e escreve os blocos. Número sem fonte sai e vira pergunta. Preencher tudo mostra a prévia campo a campo antes de gravar; Gerar de novo grava direto e guarda a versão anterior. O Salvar fica na barra do pé e leva os blocos e o modelo visual juntos."
+          ajuda="O estrategista lê a conversa, os arquivos, os itens e o que o painel sabe do cliente, pesquisa o mercado na web (cada número com fonte e data) e escreve os blocos. Número sem fonte sai e vira pergunta. Gerar o rascunho grava direto na primeira vez; depois, Gerar de novo mostra a prévia campo a campo antes de gravar. Em Ajustes da IA: o modelo, de onde ler, a pesquisa na web, gravar sem prévia e pesquisar só o mercado. Edite cada bloco à esquerda e veja a página do cliente à direita. O Salvar fica na barra do pé e leva os blocos e o modelo visual juntos."
         >
           {rascunho.conflito && <AvisoDeMudanca className="mb-2" onManter={rascunho.manter} onVerANova={() => esquecer()} />}
-          <div className="grid min-w-0 items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,240px)]">
-            <CampoDeFormulario rotulo="Título da proposta">
-              <input value={atual.titulo} onChange={(e) => setRascunho({ titulo: e.target.value, conteudo: atual.conteudo })} maxLength={120} className={campo} disabled={aceita} />
-            </CampoDeFormulario>
-            <SeletorDeModelo catalogo={mesa.catalogo} tipo="texto" valor={modeloId} onChange={onModelo} rotulo="Modelo de IA" />
-          </div>
-          <div className="mt-3 min-w-0" aria-label="De onde ler">
-            <span className={texto.rotulo}>Ler de</span>
-            <div className="mt-1 flex min-w-0 flex-wrap [&>*]:mb-1 [&>*]:mr-4">
-              {FONTES.map((f) => (
-                <label key={f.valor} className={juntar(texto.corpo, "inline-flex items-center")}>
-                  <input type="checkbox" className="mr-2" checked={fontes.indexOf(f.valor) >= 0} onChange={(e) => alternarFonte(f.valor, e.target.checked)} />
-                  {f.rotulo}
-                </label>
-              ))}
-              <label className={juntar(texto.corpo, "inline-flex items-center")}>
-                <input type="checkbox" className="mr-2" checked={pesquisar} onChange={(e) => setPesquisar(e.target.checked)} />
-                <Globe className="mr-1 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                Pesquisa de mercado na web
-              </label>
+          <CampoDeFormulario rotulo="Título da proposta">
+            <input value={atual.titulo} onChange={(e) => setRascunho({ titulo: e.target.value, conteudo: atual.conteudo })} maxLength={120} className={campo} disabled={aceita} />
+          </CampoDeFormulario>
+          {!aceita && (
+            <div className="mt-3 flex min-w-0 flex-wrap items-center [&>*]:mb-2 [&>*]:mr-2" data-gerar-da-proposta="">
+              {/* PRO3: o estrategista sugere o upsell pelo que o cliente já tem e pelos resultados reais (prévia, modelo e custo antes). */}
+              {proposta.upsell && ia && (
+                <span data-sugerir-proximo-passo="">
+                  <PreencherComIA
+                    papel="proposta"
+                    clientId={mesa.clientId}
+                    marcaId={proposta.marca_id}
+                    campos={camposDoBloco(blocoDoTipo(atual.conteudo, "solucao")).concat(camposDoBloco(blocoDoTipo(atual.conteudo, "ja_tem")), camposDoBloco(blocoDoTipo(atual.conteudo, "capa")).slice(0, 1))}
+                    contexto={ia.contexto}
+                    fontes={["contexto", "briefing", "dossie", "arquivos"]}
+                    rotulo="Sugerir o próximo passo"
+                    onAplicar={(valores) => ia.aplicar(valores)}
+                    onDesfazer={(anteriores) => ia.aplicar(anteriores)}
+                  />
+                </span>
+              )}
+              {jaEscrito ? gerarComPrevia : gerarDireto(true)}
             </div>
-            {fontes.indexOf("site") >= 0 && (
-              <CampoDeFormulario rotulo="Site do cliente" erro={siteOk ? undefined : "Comece com https://"} className="mt-2 max-w-[420px]">
-                <input value={site} onChange={(e) => setSite(e.target.value)} className={campo} placeholder="https://" inputMode="url" />
-              </CampoDeFormulario>
-            )}
-          </div>
-          <div className="mt-3 flex min-w-0 flex-wrap items-center [&>*]:mb-2 [&>*]:mr-2">
-            {/* PRO3: o estrategista sugere o upsell pelo que o cliente já tem e pelos resultados reais (prévia, modelo e custo antes). */}
-            {proposta.upsell && ia && !aceita && (
-              <span data-sugerir-proximo-passo="">
-                <PreencherComIA
-                  papel="proposta"
-                  clientId={mesa.clientId}
-                  marcaId={proposta.marca_id}
-                  campos={camposDoBloco(blocoDoTipo(atual.conteudo, "solucao")).concat(camposDoBloco(blocoDoTipo(atual.conteudo, "ja_tem")), camposDoBloco(blocoDoTipo(atual.conteudo, "capa")).slice(0, 1))}
-                  contexto={ia.contexto}
-                  fontes={["contexto", "briefing", "dossie", "arquivos"]}
-                  rotulo="Sugerir o próximo passo"
-                  onAplicar={(valores) => ia.aplicar(valores)}
-                  onDesfazer={(anteriores) => ia.aplicar(anteriores)}
+          )}
+          {!aceita && (
+            <AjustesDaIA ajustes={ajustes} modeloId={modeloId} onModelo={onModelo} chave={`mesa-proposta:ajustes:${mesa.clientId}`}>
+              <div className="flex min-w-0 flex-wrap items-center [&>*]:mb-2 [&>*]:mr-2" aria-label="Outras gerações">
+                {jaEscrito && gerarDireto(false)}
+                <BotaoComCusto
+                  rotulo="Só pesquisar o mercado"
+                  titulo="Pesquisar o mercado"
+                  descricao={avisoDoLink || undefined}
+                  variant="outline"
+                  disabled={mudou || !modeloId}
+                  partes={() => [{ modeloId, tipo: "texto", tokensEntrada: 6000, tokensSaida: 2500, buscasWeb: 5 }]}
+                  executar={() => chamarProposta("pesquisar", { proposta_id: proposta.id, modelo_id: modeloId || undefined })}
+                  aoConcluir={(d) => depoisDaIa(d)}
                 />
-              </span>
-            )}
-            <BotaoComCusto
-              rotulo={
-                <>
-                  <Sparkles className="mr-1.5 h-4 w-4" />
-                  Preencher tudo
-                </>
-              }
-              titulo="Preencher tudo (prévia)"
-              descricao="Mostra o que vai mudar, campo a campo, antes de gravar"
-              disabled={aceita || mudou || !modeloId || !siteOk || !fontes.length}
-              partes={() => [{ modeloId, tipo: "texto", tokensEntrada: 14000, tokensSaida: 6000, buscasWeb: pesquisar || (fontes.indexOf("site") >= 0 && !!site.trim()) ? 5 : 0 }]}
-              executar={() =>
-                chamarProposta("gerar", {
-                  proposta_id: proposta.id,
-                  modelo_id: modeloId || undefined,
-                  pesquisar,
-                  previa: true,
-                  fontes,
-                  site: fontes.indexOf("site") >= 0 && site.trim() ? site.trim() : undefined,
-                })
-              }
-              aoConcluir={(d: any) => {
-                if (d && d.proposto) setPreviaIa({ proposto: normalizarConteudo(d.proposto), avisos: (Array.isArray(d.tiradas) ? d.tiradas.map((t: string) => `Saiu por falta de fonte: ${t}`) : []).concat(Array.isArray(d.perguntas) ? d.perguntas : []) });
-              }}
-            />
-            <BotaoComCusto
-              rotulo={blocoDoTipo(proposta.conteudo, "capa").dados.headline ? "Gerar de novo" : "Gerar proposta"}
-              titulo="Gerar a proposta"
-              descricao={avisoDoLink || undefined}
-              variant="outline"
-              disabled={aceita || mudou || !modeloId}
-              partes={() => [{ modeloId, tipo: "texto", tokensEntrada: 14000, tokensSaida: 6000, buscasWeb: pesquisar ? 5 : 0 }]}
-              executar={() => chamarProposta("gerar", { proposta_id: proposta.id, modelo_id: modeloId || undefined, pesquisar, fontes, site: fontes.indexOf("site") >= 0 && site.trim() ? site.trim() : undefined })}
-              aoConcluir={(d) => depoisDaIa(d)}
-            />
-            <BotaoComCusto
-              rotulo="Só o mercado"
-              titulo="Pesquisar o mercado"
-              descricao={avisoDoLink || undefined}
-              variant="outline"
-              disabled={aceita || mudou || !modeloId}
-              partes={() => [{ modeloId, tipo: "texto", tokensEntrada: 6000, tokensSaida: 2500, buscasWeb: 5 }]}
-              executar={() => chamarProposta("pesquisar", { proposta_id: proposta.id, modelo_id: modeloId || undefined })}
-              aoConcluir={(d) => depoisDaIa(d)}
-            />
-          </div>
+              </div>
+            </AjustesDaIA>
+          )}
           {mudou && <p className={texto.auxiliar}>Salve ou descarte a edição antes de gerar.</p>}
           {previaIa && (
             <div className="mt-3">
-              <PreviaDoPreenchimento atual={atual.conteudo} proposto={previaIa.proposto} titulo="Prévia do Preencher tudo" avisos={previaIa.avisos} aplicando={aplicando} onDescartar={() => setPreviaIa(null)} onAplicar={(chaves) => aplicarPreenchimento(chaves)} />
+              <PreviaDoPreenchimento atual={atual.conteudo} proposto={previaIa.proposto} titulo="O que a IA propõe" avisos={previaIa.avisos} aplicando={aplicando} onDescartar={() => setPreviaIa(null)} onAplicar={(chaves) => aplicarPreenchimento(chaves)} />
             </div>
           )}
           <AvisoDaAgencia />
         </Secao>
-
-        <ModeloVisual visual={visual} mudou={mudouVisual} onVisual={setVisual} />
-
-        {/* UXS: os anexos moram perto da prévia; gravam direto, então esperam o rascunho ser salvo. */}
-        <AnexosDaProposta proposta={proposta} bloqueio={mudou || mudouVisual ? "Salve antes de anexar" : null} />
 
         <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <section className="min-w-0" aria-label="Blocos da proposta">
@@ -906,6 +895,12 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
             </div>
           </section>
         </div>
+        <ModeloVisual visual={visual} mudou={mudouVisual} onVisual={setVisual} />
+
+        {/* UXS: os anexos moram perto da prévia; gravam direto, então esperam o rascunho ser salvo. */}
+        <AnexosDaProposta proposta={proposta} bloqueio={mudou || mudouVisual ? "Salve antes de anexar" : null} />
+
+        <ProximoPasso etapa="rascunho" estado={!jaEscrito ? "Ainda sem texto: gere o rascunho acima" : undefined} />
         <BarraDoSalvar proposta={proposta} sujas={sujas} />
       </div>
     </ContextoDaIa.Provider>

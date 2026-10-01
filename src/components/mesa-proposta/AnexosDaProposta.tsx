@@ -46,7 +46,7 @@ export default function AnexosDaProposta({ proposta, bloqueio = null }: { propos
     const tirou = tiraOLink(proposta.status, ["anexos"]);
     const d = await chamarProposta<any>("salvar", { proposta_id: proposta.id, versao_base: proposta.versao, anexos });
     aplicarNaLista(qc, mesa.clientId, d && d.proposta);
-    if (tirou) toast.success(ok, { description: "A proposta voltou para rascunho. Envie de novo para o cliente ver.", action: { label: "Ir para o Envio", onClick: () => irPara("envio") } });
+    if (tirou) toast.success(ok, { description: "A proposta voltou para rascunho. Envie de novo para o cliente ver.", action: { label: "Ir para Enviar", onClick: () => irPara("envio") } });
     else toast.success(ok);
   };
 

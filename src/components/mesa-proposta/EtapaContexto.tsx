@@ -13,23 +13,20 @@ import Secao from "@/components/sistema/Secao";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { RotuloLargo } from "@/components/sistema/BotaoComIcone";
-import { useChaveDeRecolher, useRecolhido } from "@/components/sistema/TituloRecolhivel";
-import { botao, campo, campoTexto, etiqueta, foco, juntar, lista, rolagem, texto } from "@/components/sistema/estilos";
+import { useChaveDeRecolher } from "@/components/sistema/TituloRecolhivel";
+import { botao, campo, campoTexto, foco, juntar, lista, rolagem, texto } from "@/components/sistema/estilos";
 import { gravarEstadoDaTela, useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   dataCurta,
-  hojeEmSaoPaulo,
   lerValor,
   normalizarItens,
   reais,
-  ROTULO_DO_STATUS,
   textoDoTotal,
   totaisDosItens,
   type ItemDaProposta,
 } from "../../../supabase/functions/_shared/proposta-modelo";
 import {
   avisosDosPacotes,
-  followupDaProposta,
   itemDoServico,
   margemDosItens,
   NIVEIS_DO_PACOTE,
@@ -41,26 +38,35 @@ import {
   type Pacotes,
   type ServicoDaBiblioteca,
 } from "../../../supabase/functions/_shared/proposta-comercial";
-import { aplicarNaLista, chamarProposta, useHoraTecnica, useLeadsDoComercial, useModelosDeProposta, useServicos, type Proposta } from "./propostaApi";
+import { aplicarNaLista, chamarProposta, useHoraTecnica, useLeadsDoComercial, useServicos, type Proposta } from "./propostaApi";
 import { AvisoDeMudanca, BarraDoSalvar, ProvedorDoSalvar, useRascunhoComBase, useSecaoSuja, useSecoesSujas } from "./edicaoDaProposta";
-import { rolarAte, useFocoDeChegada } from "./navegacaoDaProposta";
+import { rolarAte, useFocoDeChegada, useIrParaEtapa } from "./navegacaoDaProposta";
+import { temConversa, temRascunho } from "./caminhoDaProposta";
+import { AjustesDaIA, useAjustesDaGeracao } from "./GeracaoDaProposta";
+import MaisOpcoes from "./MaisOpcoes";
+import ProximoPasso from "./ProximoPasso";
 import BibliotecaDaAgencia, { type AbaDaBiblioteca } from "./BibliotecaDaAgencia";
 import CalculadoraDaProposta from "./CalculadoraDaProposta";
-import PagamentoDaProposta from "./PagamentoDaProposta";
+import PagamentoDaProposta, { resumoDoPagamento } from "./PagamentoDaProposta";
 import SeloDaProposta from "./SeloDaProposta";
 
 /**
- * Etapa 1, Contexto: qual proposta (criar ou abrir), a reunião (notas,
- * transcrição e os arquivos lidos no navegador), o investimento pelos itens
- * (da biblioteca, do plano do Financeiro, do serviço ou livre), com a hora
- * técnica numa linha, a validade, o lead do Comercial e o pagamento. O preço
- * da proposta sai só daqui.
+ * Etapa 1, Conversa (valor "contexto" no endereço): o que o cliente disse
+ * (notas, transcrição e os arquivos lidos no navegador) e o que vai oferecer
+ * (os itens, da biblioteca, do plano do Financeiro, do serviço ou livres, e
+ * a validade). O preço da proposta sai só daqui.
  *
- * Frente UXS (30/09): um Salvar só, na barra do pé ("Não salvo: Reunião,
- * Investimento"), que grava tudo num pedido e nunca apaga a seção que ainda
- * não foi salva; os anexos do cliente moram no Rascunho, perto da prévia; a
- * calculadora abre numa janela central; a lista de propostas nasce recolhida
- * (a proposta aberta fica no seletor da casca).
+ * Frente UXS (30/09): um Salvar só, na barra do pé, que grava tudo num pedido
+ * e nunca apaga a seção que ainda não foi salva.
+ *
+ * Frente PRS (30/09), "está completa e confusa": a lista de propostas e o
+ * formulário de nova proposta saíram daqui (a proposta aberta, a lista com as
+ * arquivadas e a "Nova proposta" moram na casca, e a janela de nova proposta
+ * é a mesma de Clientes). Pacotes, horas por item, hora técnica, Calculadora,
+ * formas de pagamento e o lead do Comercial ficam em "Mais opções de preço"
+ * (recolhido, com a linha de estado). A etapa termina no próximo passo:
+ * "Gerar o rascunho com IA" (custo antes), com os ajustes da IA recolhidos ao
+ * lado; com o rascunho já escrito, "Seguir para Rascunho".
  */
 
 type ItemNaTela = { id: string; nome: string; quantidade: string; valor: string; recorrencia: "unico" | "mensal"; origem: ItemDaProposta["origem"]; plano_id: string | null; servico: string | null; descricao: string; horas: string; biblioteca_id: string | null };
@@ -82,130 +88,7 @@ const paraTela = (i: ItemDaProposta): ItemNaTela => ({
 // O selo mora num arquivo próprio (o Envio usa sem baixar o Contexto); continua saindo daqui também.
 export { SeloDaProposta };
 
-function ListaDePropostas({ propostas, abertaId, onAbrir }: { propostas: Proposta[]; abertaId: string | null; onAbrir: (id: string) => void }) {
-  const [verArquivadas, setVerArquivadas] = useState(false);
-  const vivas = propostas.filter((p) => verArquivadas || !p.arquivada_em);
-  const hoje = hojeEmSaoPaulo();
-  return (
-    <>
-      <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Propostas do cliente">
-        {vivas.map((p) => (
-          <li key={p.id}>
-            <button type="button" onClick={() => onAbrir(p.id)} className={juntar(lista.linha, "w-full text-left", p.id === abertaId && lista.destaque)} aria-current={p.id === abertaId ? "true" : undefined}>
-              <span className={juntar(texto.auxiliar, "mr-3 shrink-0 tabular-nums")}>{p.numero}</span>
-              <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>{p.titulo}</span>
-              <span className={juntar(texto.auxiliar, "ml-3 hidden shrink-0 tabular-nums sm:inline")}>{textoDoTotal(p.totais)}</span>
-              {(() => {
-                // Lembrete de follow-up: vista sem resposta, não aberta ou vencendo (a mensagem pronta fica no Envio).
-                const f = p.arquivada_em ? null : followupDaProposta(p, hoje);
-                return f ? (
-                  <>
-                    <span className={juntar(etiqueta, "ml-3 hidden shrink-0 bg-warning/15 text-warning md:inline")} title="Follow-up pronto no Envio" data-followup={f.situacao}>
-                      {f.texto}
-                    </span>
-                    {/* No celular, só o ponto (o selo com texto não cabe). */}
-                    <span className="ml-3 inline-block h-2 w-2 shrink-0 rounded-full bg-warning md:hidden" title="Follow-up pronto no Envio" data-ponto-do-followup="">
-                      <span className="sr-only">Follow-up pronto no Envio</span>
-                    </span>
-                  </>
-                ) : null;
-              })()}
-              <span className="ml-3 shrink-0">
-                <SeloDaProposta status={p.status_efetivo} />
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
-      {propostas.some((p) => p.arquivada_em) && (
-        <button type="button" className={juntar(botao.discreto, "mt-1 h-8 px-2 text-[12px]")} onClick={() => setVerArquivadas((v) => !v)}>
-          {verArquivadas ? "Esconder arquivadas" : "Ver arquivadas"}
-        </button>
-      )}
-    </>
-  );
-}
-
-function NovaProposta({ leadInicial, focar, onCriada }: { leadInicial: string | null; focar: boolean; onCriada: (id: string) => void }) {
-  const mesa = useMesa();
-  const qc = useQueryClient();
-  const avisarErro = useAvisarErro();
-  const modelos = useModelosDeProposta();
-  const leads = useLeadsDoComercial();
-  const [modelo, setModelo] = useState("");
-  const [lead, setLead] = useState(leadInicial || "");
-  const [titulo, setTitulo] = useState("");
-  const [criando, setCriando] = useState(false);
-  const projeto = useRef<HTMLInputElement | null>(null);
-  useEffect(() => {
-    if (leadInicial) setLead(leadInicial);
-  }, [leadInicial]);
-  // Foco no Projeto só com mouse (no celular o teclado cobriria o formulário).
-  useEffect(() => {
-    if (!focar || !projeto.current) return;
-    try {
-      if (typeof window.matchMedia === "function" && window.matchMedia("(pointer: fine)").matches) projeto.current.focus();
-    } catch {
-      /* sem matchMedia: sem foco */
-    }
-  }, [focar]);
-  // Os leads ganhos por este cliente vêm primeiro (nada é escolhido sozinho).
-  const todos = leads.data || [];
-  const ganhos = todos.filter((l) => l.won_client_id === mesa.clientId);
-  const ordenados = ganhos.concat(todos.filter((l) => l.won_client_id !== mesa.clientId));
-  const criar = async () => {
-    setCriando(true);
-    try {
-      const d = await chamarProposta<any>("criar", { client_id: mesa.clientId, modelo_id: modelo || undefined, lead_id: lead || undefined, titulo: titulo.trim() || undefined });
-      const p = aplicarNaLista(qc, mesa.clientId, d && d.proposta);
-      if (d && d.aviso_agencia) toast.info("Dados da agência incompletos", { description: "Quem somos e provas ficam de fora até a agência cadastrar." });
-      if (p) onCriada(p.id);
-    } catch (e) {
-      avisarErro(e, "A proposta não foi criada");
-    } finally {
-      setCriando(false);
-    }
-  };
-  return (
-    <div className="mb-4 space-y-3" data-nova-proposta="">
-      <GrupoDeCampos colunas={3}>
-        <CampoDeFormulario rotulo="Projeto">
-          <input ref={projeto} value={titulo} onChange={(e) => setTitulo(e.target.value)} maxLength={120} placeholder="Ex.: Identidade visual e redes" className={campo} />
-        </CampoDeFormulario>
-        <CampoDeFormulario rotulo="Modelo de proposta">
-          <select value={modelo} onChange={(e) => setModelo(e.target.value)} className={campo}>
-            <option value="">Padrão da agência</option>
-            {(modelos.data || []).map((m) => (
-              <option key={m.id || m.nome} value={m.id || ""}>
-                {m.nome}
-                {m.padrao ? " (padrão)" : ""}
-              </option>
-            ))}
-          </select>
-        </CampoDeFormulario>
-        <CampoDeFormulario rotulo="Lead do Comercial">
-          <select value={lead} onChange={(e) => setLead(e.target.value)} className={campo}>
-            <option value="">Sem lead</option>
-            {ordenados.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.empresa ? `${l.empresa} (${l.nome})` : l.nome}
-                {l.won_client_id === mesa.clientId ? " (ganho deste cliente)" : ""}
-              </option>
-            ))}
-          </select>
-        </CampoDeFormulario>
-      </GrupoDeCampos>
-      <div className="flex justify-end">
-        <button type="button" className={botao.primario} onClick={() => void criar()} disabled={criando}>
-          {criando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <FilePlus2 className="mr-1.5 h-4 w-4" />}
-          Criar proposta
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** Reunião: notas, transcrição e os arquivos do cliente (lidos no navegador). */
+/** Conversa: notas, transcrição e os arquivos do cliente (lidos no navegador). */
 function Reuniao({ proposta, modeloId }: { proposta: Proposta; modeloId: string }) {
   const mesa = useMesa();
   const qc = useQueryClient();
@@ -225,7 +108,7 @@ function Reuniao({ proposta, modeloId }: { proposta: Proposta; modeloId: string 
     transcricao.esquecer();
   };
   useSecaoSuja("reuniao", mudou, {
-    rotulo: "Reunião",
+    rotulo: "Conversa",
     chaves: Object.keys(campos()),
     campos,
     depois: esquecer,
@@ -267,11 +150,10 @@ function Reuniao({ proposta, modeloId }: { proposta: Proposta; modeloId: string 
   const emConflito = notas.conflito || transcricao.conflito;
   return (
     <Secao
-      titulo="Reunião"
+      titulo="Conversa"
       id="proposta-reuniao"
-      divisoria
       descricao={estado || undefined}
-      ajuda="Cole as notas e a transcrição da reunião de pré-briefing. O estrategista usa as palavras do cliente no desafio e só aceita número que esteja aqui, nos arquivos ou no painel. Anexar lê PDF, Word, planilha, apresentação ou texto aqui no navegador e o texto vira material da proposta (também dá para mandar pela conversa do estrategista). Salvar e resumir grava as notas antes de resumir."
+      ajuda="Cole as notas e a transcrição da conversa (reunião, áudio transcrito ou WhatsApp) ou anexe o briefing. O estrategista usa as palavras do cliente no desafio e só aceita número que esteja aqui, nos arquivos ou no painel. Anexar lê PDF, Word, planilha, apresentação ou texto aqui no navegador e o texto vira material da proposta (também dá para mandar pela conversa do estrategista). Salvar e resumir grava as notas antes de resumir."
       acao={
         <>
           <input ref={entrada} type="file" multiple className="hidden" onChange={(e) => void anexar(e.target.files)} accept=".txt,.md,.csv,.tsv,.json,.srt,.vtt,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rtf,.html" />
@@ -564,7 +446,7 @@ function Investimento({ proposta, onBiblioteca, onParametros }: { proposta: Prop
     return false;
   };
   useSecaoSuja("investimento", mudou, {
-    rotulo: "Investimento",
+    rotulo: "Itens e preço",
     chaves: Object.keys(campos()),
     campos,
     validar,
@@ -589,7 +471,8 @@ function Investimento({ proposta, onBiblioteca, onParametros }: { proposta: Prop
 
   // Horas por item: a coluna aparece com a caixa marcada, ou quando um item salvo (ou da biblioteca) tem horas;
   // depois que apareceu, só some quando a pessoa desmarca.
-  const horasAutomaticas = proposta.itens.some((i) => !!i.horas) || vivos.some((s) => !!s.horas) || itens.some((i) => !!i.horas);
+  // PRS: a biblioteca ter horas não liga mais a coluna sozinha (a caixa mora em Mais opções de preço).
+  const horasAutomaticas = proposta.itens.some((i) => !!i.horas) || itens.some((i) => !!i.horas);
   const horasPedidas = horasLigadas === null ? horasAutomaticas : horasLigadas;
   const horasJaApareceram = useRef(false);
   if (horasPedidas) horasJaApareceram.current = true;
@@ -608,13 +491,15 @@ function Investimento({ proposta, onBiblioteca, onParametros }: { proposta: Prop
         ? `Hora técnica: ${margem && margem.margem_pct !== null ? `margem ${margem.margem_pct}% · ` : ""}preço da hora ${reais(hora.data.preco_hora)}`
         : "Hora técnica";
 
+  const pagamentoLigado = resumoDoPagamento(proposta.pagamento.opcoes);
+  const resumoDoMais = [pacotes.ativo ? "3 pacotes" : "", comColunaDeHoras ? "horas por item" : "", pagamentoLigado || "sem forma de pagamento", lead ? "com lead" : ""].filter(Boolean).join(" · ");
   return (
     <Secao
-      titulo="Investimento"
+      titulo="O que vai oferecer"
       id="proposta-investimento"
       divisoria
       descricao={`${pacotes.ativo && resumo.length ? resumo.map((p) => `${p.nome} ${textoDoTotal(p.totais)}`).join(" · ") : textoDoTotal(totais)}${mudou ? " · não salvo" : ""}`}
-      ajuda="O preço da proposta sai só destes itens: da biblioteca da agência, do plano do Financeiro, de um serviço ou livre. Horas por item mostram a margem real na linha da hora técnica, e a Calculadora ajusta os preços para a margem que você quer (com prévia e Desfazer). Com os 3 pacotes ligados, cada item entra a partir de um nível: o Essencial tem o básico, o Recomendado soma o dele e o Completo tem tudo."
+      ajuda="Os itens e o preço da proposta: da biblioteca da agência, do plano do Financeiro, de um serviço ou livre. O preço sai só daqui (a IA nunca inventa valor). A validade é até quando o cliente pode aceitar. Em Mais opções de preço: 3 pacotes (cada item entra a partir de um nível: o Essencial tem o básico, o Recomendado soma o dele e o Completo tem tudo), horas por item com a margem na linha da hora técnica e a Calculadora (prévia e Desfazer), as formas de pagamento que o cliente escolhe no aceite e o lead do Comercial."
       acao={
         <AdicionarItem
           servicos={vivos}
@@ -636,17 +521,6 @@ function Investimento({ proposta, onBiblioteca, onParametros }: { proposta: Prop
         />
       }
     >
-      <div className="mb-3 flex min-w-0 flex-wrap items-center [&>*]:mb-1 [&>*]:mr-4">
-        <label className={juntar(texto.corpo, "inline-flex items-center")}>
-          <input type="checkbox" className="mr-2" checked={pacotes.ativo} onChange={(e) => setPacotes({ ...pacotes, ativo: e.target.checked })} />
-          <Layers className="mr-1 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          Proposta com 3 pacotes
-        </label>
-        <label className={juntar(texto.corpo, "inline-flex items-center")}>
-          <input type="checkbox" className="mr-2" checked={comColunaDeHoras} onChange={(e) => setHorasLigadas(e.target.checked)} />
-          Horas por item
-        </label>
-      </div>
       {itens.length ? (
         <ul className="min-w-0 space-y-3" aria-label="Itens do investimento">
           {itens.map((i, n) => {
@@ -728,8 +602,23 @@ function Investimento({ proposta, onBiblioteca, onParametros }: { proposta: Prop
       ) : (
         <EstadoVazio compacto titulo="Sem itens." descricao="Adicione da biblioteca, do Financeiro ou livre." />
       )}
+      <CampoDeFormulario rotulo="Validade" apoio={validade ? `Até ${dataCurta(validade)}` : undefined} className="mt-4 max-w-[220px]">
+        <input type="date" value={validade} onChange={(e) => setValidade(e.target.value)} className={campo} />
+      </CampoDeFormulario>
+      <MaisOpcoes chave={`mesa-proposta:preco-mais:${mesa.clientId}`} rotulo="Mais opções de preço" resumo={resumoDoMais} abertoDeInicio={pacotes.ativo} className="mt-4">
+        <div className="flex min-w-0 flex-wrap items-center [&>*]:mb-1 [&>*]:mr-4">
+          <label className={juntar(texto.corpo, "inline-flex items-center")}>
+            <input type="checkbox" className="mr-2" checked={pacotes.ativo} onChange={(e) => setPacotes({ ...pacotes, ativo: e.target.checked })} />
+            <Layers className="mr-1 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            Proposta com 3 pacotes
+          </label>
+          <label className={juntar(texto.corpo, "inline-flex items-center")}>
+            <input type="checkbox" className="mr-2" checked={comColunaDeHoras} onChange={(e) => setHorasLigadas(e.target.checked)} />
+            Horas por item
+          </label>
+        </div>
       {pacotes.ativo && (
-        <div className="mt-4 min-w-0" data-pacotes="">
+        <div className="min-w-0" data-pacotes="">
           <GrupoDeCampos colunas={3}>
             {NIVEIS_DO_PACOTE.map((n) => (
               <CampoDeFormulario key={n} rotulo={`Pacote ${ROTULO_DO_NIVEL[n]}`} apoio={resumo.length ? textoDoTotal((resumo.find((p) => p.nivel === n) || resumo[0]).totais) : undefined}>
@@ -762,38 +651,26 @@ function Investimento({ proposta, onBiblioteca, onParametros }: { proposta: Prop
           )}
         </div>
       )}
-      <div className="mt-4">
-        <GrupoDeCampos colunas={2}>
-          <CampoDeFormulario rotulo="Validade" apoio={validade ? `Até ${dataCurta(validade)}` : undefined}>
-            <input type="date" value={validade} onChange={(e) => setValidade(e.target.value)} className={campo} />
-          </CampoDeFormulario>
-          <CampoDeFormulario rotulo="Lead do Comercial">
-            <select value={lead} onChange={(e) => setLead(e.target.value)} className={campo}>
-              <option value="">Sem lead</option>
-              {(leads.data || []).map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.empresa ? `${l.empresa} (${l.nome})` : l.nome}
-                  {l.won_client_id === mesa.clientId ? " (ganho deste cliente)" : ""}
-                </option>
-              ))}
-            </select>
-          </CampoDeFormulario>
-        </GrupoDeCampos>
-      </div>
-      {totais.itens > 0 && !pacotes.ativo && (
-        <p className={juntar(texto.auxiliar, "mt-3 tabular-nums")}>
-          {totais.unico > 0 ? `Único ${reais(totais.unico)}` : ""}
-          {totais.unico > 0 && totais.mensal > 0 ? " · " : ""}
-          {totais.mensal > 0 ? `Mensal ${reais(totais.mensal)}` : ""}
-        </p>
-      )}
-      <div className="mt-3 flex min-w-0 flex-wrap items-center" data-hora-tecnica="">
-        <Calculator className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span className={juntar(texto.auxiliar, "mr-2 min-w-0 tabular-nums")}>{linhaDaHora}</span>
-        <button type="button" className={juntar(botao.discreto, "h-8 px-2 text-[12px]")} onClick={() => setCalculadora(true)} disabled={mudou} title={mudou ? "Salve os itens antes de ajustar a margem" : "Custo e preço da hora e a margem dos itens"}>
-          Calculadora
-        </button>
-      </div>
+        <div className="flex min-w-0 flex-wrap items-center" data-hora-tecnica="">
+          <Calculator className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span className={juntar(texto.auxiliar, "mr-2 min-w-0 tabular-nums")}>{linhaDaHora}</span>
+          <button type="button" className={juntar(botao.discreto, "h-8 px-2 text-[12px]")} onClick={() => setCalculadora(true)} disabled={mudou} title={mudou ? "Salve os itens antes de ajustar a margem" : "Custo e preço da hora e a margem dos itens"}>
+            Calculadora
+          </button>
+        </div>
+        <PagamentoDaProposta key={`p-${proposta.id}`} proposta={proposta} embutido />
+        <CampoDeFormulario rotulo="Lead do Comercial" className="max-w-[420px]">
+          <select value={lead} onChange={(e) => setLead(e.target.value)} className={campo}>
+            <option value="">Sem lead</option>
+            {(leads.data || []).map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.empresa ? `${l.empresa} (${l.nome})` : l.nome}
+                {l.won_client_id === mesa.clientId ? " (ganho deste cliente)" : ""}
+              </option>
+            ))}
+          </select>
+        </CampoDeFormulario>
+      </MaisOpcoes>
       {calculadora && (
         <CalculadoraDaProposta
           proposta={proposta}
@@ -814,27 +691,26 @@ export default function EtapaContexto({
   proposta,
   propostas,
   semTabela,
-  leadUrl,
-  onAbrir,
   modeloId = "",
-  nova = false,
+  onModelo,
   onNova,
   onResponder,
 }: {
   proposta: Proposta | null;
   propostas: Proposta[];
   semTabela: boolean;
-  leadUrl: string | null;
-  onAbrir: (id: string) => void;
-  /** Modelo de IA escolhido na mesa (resumo da reunião). */
+  /** Modelo de IA escolhido na mesa (resumo e geração). */
   modeloId?: string;
-  /** Formulário de nova proposta aberto (a mesa guarda: sobrevive à troca de proposta e de etapa). */
-  nova?: boolean;
-  onNova?: (aberta: boolean) => void;
+  onModelo?: (id: string) => void;
+  /** Abre a janela "Nova proposta" (a mesma de Clientes). */
+  onNova?: () => void;
   /** "Responder" de uma pergunta do estrategista: vai para o rascunho da conversa (nunca envia sozinho). */
   onResponder?: (pergunta: string) => void;
 }) {
   const mesa = useMesa();
+  const qc = useQueryClient();
+  const irPara = useIrParaEtapa();
+  const ajustes = useAjustesDaGeracao();
   const [biblioteca, setBiblioteca] = useState(false);
   const [aba, setAba] = useState<AbaDaBiblioteca>("servicos");
   const abrirBiblioteca = (a: AbaDaBiblioteca) => {
@@ -843,12 +719,12 @@ export default function EtapaContexto({
   };
   const { sujas, informar } = useSecoesSujas(["reuniao", "investimento", "pagamento"]);
 
-  // Chegou pelo "Resolver" (Revisão ou Envio): abre a seção antes de montar e rola até ela.
+  // Chegou pelo "Resolver" (Revisar ou Enviar): abre a seção antes de montar e rola até ela.
   const focoDeChegada = useFocoDeChegada();
-  const chaveDaReuniao = useChaveDeRecolher("Reunião", undefined);
-  const chaveDoInvestimento = useChaveDeRecolher("Investimento", undefined);
+  const chaveDaConversa = useChaveDeRecolher("Conversa", undefined);
+  const chaveDoInvestimento = useChaveDeRecolher("O que vai oferecer", undefined);
   useState(() => {
-    if (focoDeChegada === "reuniao" && chaveDaReuniao) gravarEstadoDaTela(chaveDaReuniao, false);
+    if (focoDeChegada === "reuniao" && chaveDaConversa) gravarEstadoDaTela(chaveDaConversa, false);
     if (focoDeChegada === "investimento" && chaveDoInvestimento) gravarEstadoDaTela(chaveDoInvestimento, false);
     return null;
   });
@@ -858,95 +734,89 @@ export default function EtapaContexto({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const vivas = propostas.filter((p) => !p.arquivada_em).length;
-  // A lista nasce recolhida quando já há proposta (a aberta fica no seletor da casca); a escolha fica guardada.
-  const [listaRecolhida, setListaRecolhida] = useRecolhido(`mesa-proposta:lista:${mesa.clientId}`, vivas > 0 && !(leadUrl && !proposta));
-  const formularioForcado = !propostas.length || (!!leadUrl && !proposta);
-  const mostrarFormulario = nova || formularioForcado;
-  const perguntas = proposta ? proposta.contexto.perguntas || [] : [];
-  const verLista = !listaRecolhida || !proposta;
-
   if (semTabela) return <EstadoVazio titulo="A Mesa Proposta ainda não foi ligada neste painel." descricao="Avise o administrador." />;
+  if (!proposta) {
+    const vivas = propostas.filter((p) => !p.arquivada_em).length;
+    return (
+      <div className="min-w-0" data-etapa-proposta="contexto">
+        <EstadoVazio
+          icone={<FilePlus2 className="h-5 w-5" />}
+          titulo={vivas ? "Escolha uma proposta ou crie uma nova." : "Nenhuma proposta para este cliente ainda."}
+          descricao="Venda nova ou upsell, sem custo."
+          acao={
+            onNova ? (
+              <button type="button" className={botao.primario} onClick={onNova}>
+                <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                Nova proposta
+              </button>
+            ) : undefined
+          }
+        />
+      </div>
+    );
+  }
+
+  const perguntas = proposta.contexto.perguntas || [];
+  const aceita = proposta.status === "aceita";
+  const jaTemRascunho = temRascunho(proposta);
+  const semNada = !temConversa(proposta);
+  const estado = sujas.length ? "Salve antes de gerar" : semNada ? "Cole a conversa ou anexe o briefing" : !proposta.itens.length ? "Sem itens: a IA escreve sem preço" : undefined;
+
+  const depoisDeGerar = (d: any) => {
+    aplicarNaLista(qc, mesa.clientId, d && d.proposta);
+    const tiradas = d && Array.isArray(d.tiradas) ? d.tiradas.length : 0;
+    const perguntasNovas = d && Array.isArray(d.perguntas) ? d.perguntas.length : 0;
+    if (tiradas) toast.warning(`${tiradas} número(s) saíram por falta de fonte.`, { description: "Veja em Revisar." });
+    if (perguntasNovas) toast.info(`O estrategista tem ${perguntasNovas} pergunta(s).`, { description: "Estão na Conversa." });
+    irPara("rascunho");
+  };
+
   return (
     <ProvedorDoSalvar value={informar}>
       <div className="min-w-0 space-y-6" data-etapa-proposta="contexto">
-        <Secao
-          titulo="Propostas"
-          recolher={false}
-          acao={
-            <>
-              <button type="button" className={botao.discreto} onClick={() => abrirBiblioteca("servicos")} aria-label="Biblioteca comercial">
-                <BookOpen className="h-4 w-4" />
-                <RotuloLargo>Biblioteca</RotuloLargo>
-              </button>
-              {!formularioForcado && (
-                <button type="button" className={nova ? botao.discreto : botao.secundario} onClick={() => onNova && onNova(!nova)} aria-expanded={nova}>
-                  <Plus className="h-4 w-4" />
-                  <RotuloLargo>{nova ? "Fechar" : "Nova proposta"}</RotuloLargo>
-                </button>
-              )}
-            </>
-          }
-        >
-          {/* O formulário fica fora do que recolhe: recolher só esconde a lista. */}
-          {mostrarFormulario && (
-            <NovaProposta
-              leadInicial={leadUrl}
-              focar={nova}
-              onCriada={(id) => {
-                if (onNova) onNova(false);
-                onAbrir(id);
-              }}
-            />
-          )}
-          {propostas.length > 0 && (
-            <>
-              {proposta && (
-                <button
-                  type="button"
-                  onClick={() => setListaRecolhida(!listaRecolhida)}
-                  aria-expanded={!listaRecolhida}
-                  className={juntar("relative -left-1 flex min-w-0 max-w-full items-center rounded-md px-1 py-0.5 text-left hover:bg-muted", foco)}
-                  data-recolher-lista-de-propostas=""
-                >
-                  <ChevronDown className={juntar("mr-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform", listaRecolhida ? "-rotate-90" : "")} aria-hidden="true" />
-                  <span className={juntar(texto.auxiliar, "min-w-0 truncate tabular-nums")}>
-                    {listaRecolhida ? `Nº ${proposta.numero} · ${ROTULO_DO_STATUS[proposta.status_efetivo] || proposta.status_efetivo} · ${vivas} no total` : `${vivas} no total`}
-                  </span>
-                </button>
-              )}
-              {verLista && (
-                <div className={proposta ? "mt-1" : ""}>
-                  <ListaDePropostas propostas={propostas} abertaId={proposta ? proposta.id : null} onAbrir={onAbrir} />
-                </div>
-              )}
-            </>
-          )}
-        </Secao>
-        {proposta && (
-          <>
-            {perguntas.length > 0 && (
-              <Secao titulo="O estrategista precisa saber" divisoria descricao={`${perguntas.length} pergunta(s)`}>
-                <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Perguntas do estrategista">
-                  {perguntas.map((p) => (
-                    <li key={p} className={lista.linha}>
-                      <span className={juntar(texto.corpo, "min-w-0 flex-1")}>{p}</span>
-                      {onResponder && (
-                        <button type="button" className={juntar(botao.discreto, "ml-2 h-8 px-2 text-[12px]")} onClick={() => onResponder(p)} aria-label={`Responder: ${p}`}>
-                          Responder
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </Secao>
-            )}
-            <Reuniao key={`r-${proposta.id}`} proposta={proposta} modeloId={modeloId} />
-            <Investimento key={`i-${proposta.id}`} proposta={proposta} onBiblioteca={() => abrirBiblioteca("servicos")} onParametros={() => abrirBiblioteca("hora")} />
-            <PagamentoDaProposta key={`p-${proposta.id}`} proposta={proposta} />
-            <BarraDoSalvar proposta={proposta} sujas={sujas} />
-          </>
+        {perguntas.length > 0 && (
+          <Secao titulo="O estrategista precisa saber" descricao={`${perguntas.length} pergunta(s)`}>
+            <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Perguntas do estrategista">
+              {perguntas.map((p) => (
+                <li key={p} className={lista.linha}>
+                  <span className={juntar(texto.corpo, "min-w-0 flex-1")}>{p}</span>
+                  {onResponder && (
+                    <button type="button" className={juntar(botao.discreto, "ml-2 h-8 px-2 text-[12px]")} onClick={() => onResponder(p)} aria-label={`Responder: ${p}`}>
+                      Responder
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </Secao>
         )}
+        <Reuniao key={`r-${proposta.id}`} proposta={proposta} modeloId={modeloId} />
+        <Investimento key={`i-${proposta.id}`} proposta={proposta} onBiblioteca={() => abrirBiblioteca("servicos")} onParametros={() => abrirBiblioteca("hora")} />
+        {!aceita && !jaTemRascunho && onModelo && <AjustesDaIA ajustes={ajustes} modeloId={modeloId} onModelo={onModelo} chave={`mesa-proposta:ajustes:${mesa.clientId}`} />}
+        <ProximoPasso
+          etapa="contexto"
+          estado={jaTemRascunho ? undefined : estado}
+          acao={
+            !aceita && !jaTemRascunho ? (
+              <BotaoComCusto
+                rotulo={
+                  <>
+                    <Sparkles className="mr-1.5 h-4 w-4" />
+                    Gerar o rascunho com IA
+                  </>
+                }
+                titulo="Gerar o rascunho"
+                descricao="O estrategista lê a conversa, os arquivos, os itens e o que o painel sabe do cliente e escreve a proposta. Número sem fonte sai e vira pergunta."
+                disabled={sujas.length > 0 || !modeloId || !ajustes.pronto}
+                partes={() => [{ modeloId, tipo: "texto", tokensEntrada: 14000, tokensSaida: 6000, buscasWeb: ajustes.buscasWeb }]}
+                executar={() => chamarProposta("gerar", { proposta_id: proposta.id, modelo_id: modeloId || undefined, ...ajustes.pedido() })}
+                aoConcluir={(d) => depoisDeGerar(d)}
+              />
+            ) : undefined
+          }
+          destaque={jaTemRascunho}
+        />
+        <BarraDoSalvar proposta={proposta} sujas={sujas} />
         {biblioteca && <BibliotecaDaAgencia aberta={biblioteca} onAberta={setBiblioteca} aba={aba} onAba={setAba} />}
       </div>
     </ProvedorDoSalvar>

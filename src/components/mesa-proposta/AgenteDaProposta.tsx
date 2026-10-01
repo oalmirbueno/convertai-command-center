@@ -145,7 +145,7 @@ export default function AgenteDaProposta({
     lerArquivosDoAgente(todos, arquivos.reduce((n, a) => n + a.texto.length, 0))
       .then((r) => {
         if (r.lidos.length) setArquivos((l) => l.concat(r.lidos.map((a) => ({ id: a.id, nome: a.nome, tipo: a.tipo, texto: a.texto, tamanho: a.tamanho }))));
-        const recusados = r.naoLidos.map((n) => `${n.nome}: ${n.motivo}`).concat(r.imagens.map((i) => `${i.name}: imagem não entra na proposta (use a logo do cliente no Contexto da Mesa).`));
+        const recusados = r.naoLidos.map((n) => `${n.nome}: ${n.motivo}`).concat(r.imagens.map((i) => `${i.name}: imagem não entra na proposta (a logo vem da marca do cliente e entra na capa sozinha; veja no Modelo visual do Rascunho).`));
         if (recusados.length) toast.error("Alguns arquivos não foram lidos", { description: recusados.slice(0, 3).join(" ") });
       })
       .catch(() => toast.error("Não deu para ler os arquivos", { description: "Tente de novo ou mande em PDF." }))
@@ -214,7 +214,7 @@ export default function AgenteDaProposta({
           <>
             {mensagens.length > 0 && <BotaoNovaConversa onClick={novaConversa} desativado={enviando} />}
             <AjudaRecolhida rotulo="Como o estrategista funciona">
-              Mande a transcrição, as notas e os arquivos da reunião. Ele pergunta o que falta em vez de inventar. Número de mercado só com fonte e data; preço só o que você disser. Escrever, pesquisar e reescrever usam IA e pedem Confirmar com o custo. Enviar ao cliente é o Confirmar da etapa Envio.
+              Mande a transcrição, as notas e os arquivos da reunião. Ele pergunta o que falta em vez de inventar. Número de mercado só com fonte e data; preço só o que você disser. Escrever, pesquisar e reescrever usam IA e pedem Confirmar com o custo. Enviar ao cliente é o Confirmar da etapa Enviar.
               <CapacidadesDoAgente capacidades={CAPACIDADES} />
             </AjudaRecolhida>
           </>

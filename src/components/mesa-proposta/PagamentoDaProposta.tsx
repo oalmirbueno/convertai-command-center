@@ -44,7 +44,14 @@ function daTela(e: Estado): OpcaoDePagamento[] {
   }).opcoes;
 }
 
-export default function PagamentoDaProposta({ proposta }: { proposta: Proposta }) {
+/** Resumo de uma linha das formas ligadas ("à vista 5% · parcelado 3x"), para a linha do "Mais opções". */
+export function resumoDoPagamento(opcoes: OpcaoDePagamento[]): string {
+  return opcoes
+    .map((o) => (o.tipo === "a_vista" ? `à vista${o.desconto_pct ? ` ${String(o.desconto_pct).replace(".", ",")}%` : ""}` : o.tipo === "parcelado" ? `parcelado ${o.parcelas}x` : "mensal"))
+    .join(" · ");
+}
+
+export default function PagamentoDaProposta({ proposta, embutido = false }: { proposta: Proposta; /** PRS: sem a seção própria, dentro do "Mais opções de preço" (o Salvar é o mesmo da barra). */ embutido?: boolean }) {
   // Base da edição: as formas de quando a seção carregou ou foi salva por último.
   const [base, setBase] = useState<{ versao: number; opcoes: OpcaoDePagamento[] }>(() => ({ versao: proposta.versao, opcoes: proposta.pagamento.opcoes }));
   const [estado, setEstado] = useState<Estado>(() => paraTela(proposta.pagamento.opcoes));
@@ -71,57 +78,69 @@ export default function PagamentoDaProposta({ proposta }: { proposta: Proposta }
     descartar: () => recarregar(proposta),
   });
 
+  const sugerido = !opcoes.length ? (
+    <button type="button" className={embutido ? juntar(botao.discreto, "h-8 px-2 text-[12px]") : botao.discreto} onClick={() => setEstado(paraTela(PAGAMENTO_SUGERIDO.opcoes))}>
+      Usar o sugerido
+    </button>
+  ) : undefined;
+  const formas = (
+    <ul className={juntar(lista.aberta, "space-y-3")} aria-label="Formas de pagamento">
+      {TIPOS_DE_PAGAMENTO.map((t) => {
+        const e = estado[t];
+        const op = opcoes.find((o) => o.tipo === t);
+        return (
+          <li key={t} className="min-w-0" data-forma-de-pagamento={t}>
+            <label className={juntar(texto.corpo, "inline-flex items-center font-medium")}>
+              <input type="checkbox" className="mr-2" checked={e.ativo} onChange={(ev) => m(t, { ativo: ev.target.checked })} />
+              {ROTULO_DO_PAGAMENTO[t]}
+            </label>
+            {e.ativo && (
+              <div className="mt-2 grid min-w-0 grid-cols-2 items-end gap-2 sm:grid-cols-[96px_96px_96px_minmax(0,1fr)]">
+                {t !== "mensal" && (
+                  <CampoDeFormulario rotulo="Desconto (%)">
+                    <input value={e.desconto} onChange={(ev) => m(t, { desconto: ev.target.value.replace(/[^\d.,]/g, "") })} inputMode="decimal" className={campo} />
+                  </CampoDeFormulario>
+                )}
+                {t === "parcelado" && (
+                  <>
+                    <CampoDeFormulario rotulo="Parcelas">
+                      <input value={e.parcelas} onChange={(ev) => m(t, { parcelas: ev.target.value.replace(/[^\d]/g, "") })} inputMode="numeric" className={campo} />
+                    </CampoDeFormulario>
+                    <CampoDeFormulario rotulo="Entrada (%)">
+                      <input value={e.entrada} onChange={(ev) => m(t, { entrada: ev.target.value.replace(/[^\d.,]/g, "") })} inputMode="decimal" className={campo} />
+                    </CampoDeFormulario>
+                  </>
+                )}
+                <CampoDeFormulario rotulo="Observação" className="col-span-2 sm:col-span-1">
+                  <input value={e.observacao} onChange={(ev) => m(t, { observacao: ev.target.value })} maxLength={200} className={campo} placeholder="Ex.: PIX ou boleto" />
+                </CampoDeFormulario>
+              </div>
+            )}
+            {op && totaisDaBase.itens > 0 && <p className={juntar(texto.auxiliar, "mt-1 tabular-nums")}>{textoDaOpcao(op, totaisDaBase)}</p>}
+          </li>
+        );
+      })}
+    </ul>
+  );
+  if (embutido)
+    return (
+      <div className="min-w-0" data-pagamento-embutido="">
+        <div className="mb-2 flex min-w-0 items-center">
+          <span className={juntar(texto.rotulo, "mr-2")}>Formas de pagamento</span>
+          {sugerido}
+        </div>
+        {formas}
+      </div>
+    );
   return (
     <Secao
       titulo="Pagamento"
       divisoria
       descricao={`${opcoes.length ? `${opcoes.length} forma(s)` : "Só o texto das condições"}${mudou ? " · não salvo" : ""}`}
       ajuda="As formas de pagamento aparecem com o valor calculado na página do cliente, que escolhe uma no aceite. O desconto vale só para o valor único; o mensal segue mensal. Sem nenhuma forma ligada, vale o texto das condições do Rascunho. O Salvar fica na barra do pé da etapa."
-      acao={
-        !opcoes.length ? (
-          <button type="button" className={botao.discreto} onClick={() => setEstado(paraTela(PAGAMENTO_SUGERIDO.opcoes))}>
-            Usar o sugerido
-          </button>
-        ) : undefined
-      }
+      acao={sugerido}
     >
-      <ul className={juntar(lista.aberta, "space-y-3")} aria-label="Formas de pagamento">
-        {TIPOS_DE_PAGAMENTO.map((t) => {
-          const e = estado[t];
-          const op = opcoes.find((o) => o.tipo === t);
-          return (
-            <li key={t} className="min-w-0" data-forma-de-pagamento={t}>
-              <label className={juntar(texto.corpo, "inline-flex items-center font-medium")}>
-                <input type="checkbox" className="mr-2" checked={e.ativo} onChange={(ev) => m(t, { ativo: ev.target.checked })} />
-                {ROTULO_DO_PAGAMENTO[t]}
-              </label>
-              {e.ativo && (
-                <div className="mt-2 grid min-w-0 grid-cols-2 items-end gap-2 sm:grid-cols-[96px_96px_96px_minmax(0,1fr)]">
-                  {t !== "mensal" && (
-                    <CampoDeFormulario rotulo="Desconto (%)">
-                      <input value={e.desconto} onChange={(ev) => m(t, { desconto: ev.target.value.replace(/[^\d.,]/g, "") })} inputMode="decimal" className={campo} />
-                    </CampoDeFormulario>
-                  )}
-                  {t === "parcelado" && (
-                    <>
-                      <CampoDeFormulario rotulo="Parcelas">
-                        <input value={e.parcelas} onChange={(ev) => m(t, { parcelas: ev.target.value.replace(/[^\d]/g, "") })} inputMode="numeric" className={campo} />
-                      </CampoDeFormulario>
-                      <CampoDeFormulario rotulo="Entrada (%)">
-                        <input value={e.entrada} onChange={(ev) => m(t, { entrada: ev.target.value.replace(/[^\d.,]/g, "") })} inputMode="decimal" className={campo} />
-                      </CampoDeFormulario>
-                    </>
-                  )}
-                  <CampoDeFormulario rotulo="Observação" className="col-span-2 sm:col-span-1">
-                    <input value={e.observacao} onChange={(ev) => m(t, { observacao: ev.target.value })} maxLength={200} className={campo} placeholder="Ex.: PIX ou boleto" />
-                  </CampoDeFormulario>
-                </div>
-              )}
-              {op && totaisDaBase.itens > 0 && <p className={juntar(texto.auxiliar, "mt-1 tabular-nums")}>{textoDaOpcao(op, totaisDaBase)}</p>}
-            </li>
-          );
-        })}
-      </ul>
+      {formas}
     </Secao>
   );
 }

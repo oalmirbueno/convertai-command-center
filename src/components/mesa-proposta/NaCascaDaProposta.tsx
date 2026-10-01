@@ -4,6 +4,7 @@ import SeletorCompacto, { type OpcaoCompacta } from "@/components/sistema/Seleto
 import { hojeEmSaoPaulo, ROTULO_DO_STATUS, textoDoTotal } from "../../../supabase/functions/_shared/proposta-modelo";
 import { followupDaProposta } from "../../../supabase/functions/_shared/proposta-comercial";
 import { usePropostas } from "./propostaApi";
+import { etapasFeitas, type EtapaDaProposta } from "./caminhoDaProposta";
 
 /**
  * O que a casca da Mesa Proposta mostra da proposta aberta (frente UXS, 30/09).
@@ -12,10 +13,14 @@ import { usePropostas } from "./propostaApi";
  *
  * - SeletorDaProposta: "Nº 2026-014 · Enviada ▾" em todas as etapas; lista as
  *   vivas (título e total na linha de apoio) e termina com "Nova proposta".
- *   As arquivadas ficam no Contexto ("Ver arquivadas"); a aberta arquivada
+ *   As arquivadas ficam em "Todas as propostas", no "..." da proposta ("Ver arquivadas"); a aberta arquivada
  *   aparece no fim, com a linha "Arquivada". `compacto`: só o número (celular).
- * - EtapasDaMesaProposta: Revisão com o número de pendências que bloqueiam o
- *   envio e Envio em destaque quando há follow-up pronto.
+ * - EtapasDaMesaProposta: Revisar com o número de pendências que bloqueiam o
+ *   envio e Acompanhar em destaque quando há follow-up pronto. Frente PRS
+ *   (30/09): o check pequeno em cada etapa feita (conversa com material e
+ *   itens, rascunho escrito, nada bloqueando, enviada, aceita), para a pessoa
+ *   ver onde está no caminho. No celular, a Mesa usa MenuDaPropostaNoCelular
+ *   (um controle só para trocar, criar e as ações).
  */
 
 const NOVA = "__nova";
@@ -81,6 +86,7 @@ export function EtapasDaMesaProposta({
   const vale = !!p && p.status !== "aceita" && !p.arquivada_em;
   const bloqueios = vale && p ? p.pendencias.filter((x) => x.bloqueia).length : 0;
   const followup = p && !p.arquivada_em ? followupDaProposta(p, hojeEmSaoPaulo()) : null;
+  const feitas = etapasFeitas(p);
   return (
     <Etapas
       rotulo="Etapas da Mesa Proposta"
@@ -89,8 +95,9 @@ export function EtapasDaMesaProposta({
         valor: e.valor,
         rotulo: e.rotulo,
         contador: e.valor === "revisao" && bloqueios ? bloqueios : null,
-        destaque: e.valor === "envio" && !!followup,
-        dica: e.valor === "revisao" && bloqueios ? `${bloqueios} pendência(s) bloqueiam o envio` : e.valor === "envio" && followup ? "Follow-up pronto no Envio" : undefined,
+        destaque: e.valor === "acompanhar" && !!followup,
+        feita: !!p && feitas[e.valor as EtapaDaProposta] === true && e.valor !== valor,
+        dica: e.valor === "revisao" && bloqueios ? `${bloqueios} pendência(s) bloqueiam o envio` : e.valor === "acompanhar" && followup ? "Follow-up pronto no Acompanhar" : undefined,
       }))}
       valor={valor}
       onEscolher={onEscolher}

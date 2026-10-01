@@ -737,7 +737,7 @@ export type PropostaParaConferir = {
 
 export type Pendencia = { chave: string; texto: string; bloqueia: boolean };
 
-/** O que falta antes de enviar. `bloqueia`: o Envio não libera sem isso. */
+/** O que falta antes de enviar. `bloqueia`: a etapa Enviar não libera sem isso. */
 export function pendenciasDaProposta(p: PropostaParaConferir, hoje: string): Pendencia[] {
   const saida: Pendencia[] = [];
   const ctx = p.contexto || {};

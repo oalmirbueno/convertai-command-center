@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BellRing, BriefcaseBusiness, Plus, TrendingUp } from "lucide-react";
+import { BellRing, BriefcaseBusiness, Plus } from "lucide-react";
 import NovoClienteRapido from "@/components/clientes/NovoClienteRapido";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import Painel from "@/components/sistema/Painel";
@@ -118,17 +118,13 @@ export default function AreaDePropostas({
         className="mb-3"
         titulo="Propostas"
         descricao={resumo}
-        ajuda="Proposta comercial com link e aceite. Nova proposta é para cliente novo (do lead do Comercial ou criando o cliente agora); Upsell é para quem já é cliente e nasce com o que ele já tem e os resultados reais. A proposta abre na Mesa Proposta."
+        ajuda="Proposta comercial com link e aceite. Nova proposta abre uma janela só: cliente novo (do lead do Comercial ou criando o cliente agora), venda nova para cliente da casa ou upsell, que nasce com o que ele já tem e os resultados reais. A proposta abre na Mesa Proposta, no caminho Conversa, Rascunho, Revisar, Enviar e Acompanhar."
         recolher={{ recolhido, onAlternar: () => setRecolhido(!recolhido), resumo }}
         acao={
           <>
             {!recolhido && (
               <SeletorCompacto rotulo="Filtrar propostas" modo="lista" opcoes={FILTROS_DA_CARTEIRA.map((f) => ({ valor: f.valor, rotulo: f.rotulo }))} valor={filtro} onEscolher={(v) => setFiltro(v as FiltroDaCarteira)} />
             )}
-            <button type="button" className={botao.secundario} onClick={() => setJanela({ aberta: true, tipo: "upsell" })} aria-label="Proposta de upsell">
-              <TrendingUp className="h-4 w-4" aria-hidden="true" />
-              <span className="ml-1.5 hidden sm:inline">Upsell</span>
-            </button>
             <button type="button" className={botao.primario} onClick={() => setJanela({ aberta: true, tipo: "nova" })} aria-label="Nova proposta">
               <Plus className="h-4 w-4" aria-hidden="true" />
               <span className="ml-1.5 hidden sm:inline">Nova proposta</span>
@@ -191,8 +187,9 @@ export default function AreaDePropostas({
           inicial={novoCliente ? { nome: novoCliente.fullName, empresa: novoCliente.company, email: novoCliente.email, whatsapp: novoCliente.phone, leadId: novoCliente.leadId } : null}
           onCriado={(c) => {
             const leadId = novoCliente ? novoCliente.leadId : null;
+            const pedido = novoCliente;
             setNovoCliente(null);
-            void criar({ clientId: c.id, leadId, tipo: "nova" });
+            void criar({ clientId: c.id, leadId, tipo: "nova", titulo: pedido ? pedido.titulo : undefined, modeloId: pedido ? pedido.modeloId : null });
           }}
         />
       )}

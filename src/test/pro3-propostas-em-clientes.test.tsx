@@ -166,7 +166,9 @@ describe("propostas em Clientes: leitura, filtro e endereço", () => {
     expect(filtrarCarteira(lista, "upsell").map((x) => x.id)).toEqual(["u"]);
     expect(filtrarCarteira(lista, "encerradas")).toHaveLength(1);
     expect(enderecoDaProposta(upsell)).toBe(`/mesa-proposta?client=${CLIENTE}&proposta=u&etapa=contexto`);
-    expect(enderecoDaProposta(l)).toBe(`/mesa-proposta?client=${CLIENTE}&proposta=${PROPOSTA}&etapa=envio`);
+    // PRS: enviada, vista, aceita, recusada ou vencida abre no Acompanhar.
+    expect(enderecoDaProposta(l)).toBe(`/mesa-proposta?client=${CLIENTE}&proposta=${PROPOSTA}&etapa=acompanhar`);
+    expect(enderecoDaProposta(vencida)).toBe(`/mesa-proposta?client=${CLIENTE}&proposta=${vencida.id}&etapa=acompanhar`);
   });
 
   it("a área Propostas abre por ?propostas=1, lista com o nome do cliente e abre a mesa no clique", async () => {
@@ -182,7 +184,7 @@ describe("propostas em Clientes: leitura, filtro e endereço", () => {
     expect(sel && sel.campos).toContain("upsell_em:contexto->upsell->>lido_em");
     expect(sel && sel.campos).not.toMatch(/(^|, )contexto(,|$)/);
     fireEvent.click(linha);
-    expect(screen.getByTestId("endereco").textContent).toBe(`/mesa-proposta?client=${CLIENTE}&proposta=${PROPOSTA}&etapa=envio`);
+    expect(screen.getByTestId("endereco").textContent).toBe(`/mesa-proposta?client=${CLIENTE}&proposta=${PROPOSTA}&etapa=acompanhar`);
   });
 
   it("Nova proposta abre numa janela central (dialog), com Cliente novo e Upsell", async () => {
@@ -203,7 +205,9 @@ describe("propostas em Clientes: leitura, filtro e endereço", () => {
     expect(clientes).toContain("<AreaDePropostas");
     expect(clientes).toContain('abrirNaEntrada={searchParams.get("propostas") === "1"}');
     expect(clientes).toContain("<AcoesComerciaisDoCliente");
-    expect(clientes).toContain('rotulo: "Proposta de upsell"');
+    // PRS: o "..." da linha abre a janela única (o teste renderizado mora em prs-clientes-linha.test.tsx).
+    expect(clientes).toContain('rotulo: "Proposta de upsell..."');
+    expect(clientes).toContain('tipo: "upsell"');
     const ficha = ler("src/components/admin/EditClientDrawer.tsx");
     expect(ficha).toContain("<PropostasDoCliente");
     const secao = ler("src/components/clientes-propostas/PropostasDoCliente.tsx");
