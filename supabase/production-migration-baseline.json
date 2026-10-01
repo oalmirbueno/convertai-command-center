@@ -1865,6 +1865,14 @@
       "remote_name": "cfo_agente",
       "remote_statements_sha256": "757e1592996b61943eeefcc080f0fb65d4211b417d3622a090839fb716680e90",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930315000",
+      "path": "supabase/migrations/20260930315000_motion_vozes.sql",
+      "local_sha256": "3a81edeab71033bf86563a2eb516d75b4a45064aac3e123346aaf0d5e7df037a",
+      "remote_name": "motion_vozes",
+      "remote_statements_sha256": "72fe95ca80af0c74dbc44adb97e0a7cc32298d026f6524143836536a38c19c22",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
