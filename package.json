@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "publicar": "vite build && npx --yes wrangler@4 deploy",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",

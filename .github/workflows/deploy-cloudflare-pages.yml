@@ -1,0 +1,56 @@
+name: Publicar o painel (Cloudflare)
+
+# Publica o front a cada push no main. Precisa dos segredos do repositório
+# CLOUDFLARE_API_TOKEN (modelo "Edit Cloudflare Workers") e CLOUDFLARE_ACCOUNT_ID.
+# Sem eles o job termina avisando, sem falhar o main.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "supabase/**"
+      - "docs/**"
+      - "workers/**"
+  workflow_dispatch:
+
+concurrency:
+  group: cloudflare-pages-producao
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Conferir segredos
+        id: segredos
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONTA: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$CONTA" ]; then
+            echo "Segredos da Cloudflare ausentes: publicação pulada." >> "$GITHUB_STEP_SUMMARY"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.segredos.outputs.ok == 'true'
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        if: steps.segredos.outputs.ok == 'true'
+        with:
+          node-version: 24
+          cache: npm
+      - name: Instalar
+        if: steps.segredos.outputs.ok == 'true'
+        run: npm ci
+      - name: Build
+        if: steps.segredos.outputs.ok == 'true'
+        run: npm run build
+      - name: Publicar
+        if: steps.segredos.outputs.ok == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4 deploy --message="$(git log -1 --format=%s | head -c 300)"

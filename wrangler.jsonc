@@ -1,0 +1,12 @@
+{
+  // Front do painel na Cloudflare (Workers com arquivos estáticos). Ver docs/hospedagem/CLOUDFLARE-PAGES.md.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "aceleriq-painel",
+  "compatibility_date": "2026-09-30",
+  "observability": { "enabled": true },
+  "assets": {
+    "directory": "./dist",
+    // Rotas do painel (/mesa, /proposta/:token...) devolvem o index.html.
+    "not_found_handling": "single-page-application"
+  }
+}

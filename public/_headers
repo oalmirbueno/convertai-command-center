@@ -1,0 +1,12 @@
+# Cloudflare Pages: cabeçalhos por caminho (ver docs/hospedagem/CLOUDFLARE-PAGES.md).
+# Os pedaços em /assets têm hash no nome: nunca mudam, cache de 1 ano.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# version.json é o que o painel consulta para saber que saiu versão nova.
+/version.json
+  Cache-Control: no-store
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
