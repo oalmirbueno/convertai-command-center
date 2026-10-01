@@ -1873,6 +1873,14 @@
       "remote_name": "motion_vozes",
       "remote_statements_sha256": "72fe95ca80af0c74dbc44adb97e0a7cc32298d026f6524143836536a38c19c22",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930316000",
+      "path": "supabase/migrations/20260930316000_estado_dos_motores.sql",
+      "local_sha256": "ee6cc7d85f32a4c85e93e7fe2927e7d59166d32b479c278623eb0a924e5fceee",
+      "remote_name": "estado_dos_motores",
+      "remote_statements_sha256": "21a09839926e1eb189b9207539b10c3e1e95a49ddb1c8a6b3d8b20ce16dc31c2",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
