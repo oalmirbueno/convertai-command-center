@@ -8,10 +8,14 @@
  *     -> { sugestoes[{mockup_id, nota, confianca}], segmento, aviso, custo_usd }
  *     Jev (Score) diz quanto cada mockup combina com o negócio. Sem Jev, a ordem da sequência,
  *     com aviso na tela e a falha no log (nada engolido).
- * - cena_estimar { client_id, tipo: fachada|social, modelo_id? } -> { estimativa_usd, modelo_id, modelo_nome } (sem IA)
+ * - cena_estimar { client_id, tipo, modelo_id? } -> { estimativa_usd, modelo_id, modelo_nome } (sem IA)
+ *     tipo: fachada | social | papelaria | embalagem | veiculo | vestuario | sinalizacao | digital
  * - cena_gerar { client_id, marca_id?, tipo, pedido?, modelo_id? } -> { caminho, custo_usd, saldo_usd, modelo_id }
  *     A cena sai com uma área lisa e SEM logo; a logo entra depois pelo código (homografia).
  *     Guardada em mesa/<cliente>/mockups/cenas/. Custo à vista antes (a tela pede Confirmar).
+ * - acervo_guardar { client_id, marca_id?, file_id, nome } -> { imagem_id, ja_existia }
+ *     O mockup já enviado para Arquivos entra no acervo de imagens do cliente (cliente_imagens),
+ *     com a etiqueta da marca. O mesmo arquivo não entra duas vezes. Sem IA e sem custo.
  */
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { carregarModelo, chamarImagem, cobrarJev, estimarComModelo, IaMotorErro, modeloPadrao, type ModeloIa } from "../_shared/ia-motor.ts";
@@ -30,8 +34,10 @@ import {
   promptDaCena,
   ranquear,
   TAMANHO_DA_CENA,
+  TIPOS_DE_CENA,
   type TipoDeCena,
 } from "./sugestao.ts";
+import { type ArquivoDoAcervo, type BancoDoAcervo, ErroDoAcervo, guardarMockupNoAcervo, type MarcaDoAcervo } from "./acervo.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 const corsHeaders = {
@@ -156,8 +162,8 @@ async function sugerir(ch: Chamador, corpo: Record<string, unknown>) {
 }
 
 function tipoDe(v: unknown): TipoDeCena {
-  if (v === "fachada" || v === "social") return v;
-  throw new ErroHttp(400, "tipo_invalido", "A cena é fachada ou social.");
+  if (typeof v === "string" && (TIPOS_DE_CENA as string[]).indexOf(v) >= 0) return v as TipoDeCena;
+  throw new ErroHttp(400, "tipo_invalido", `Tipo de cena desconhecido. Use: ${TIPOS_DE_CENA.join(", ")}.`);
 }
 
 /**
@@ -207,10 +213,47 @@ async function cenaGerar(ch: Chamador, corpo: Record<string, unknown>) {
   return json({ caminho, tamanho: img.tamanho, custo_usd: img.custoUsd, saldo_usd: img.saldoUsd, modelo_id: img.modeloId, reserva_usada: img.reservaUsada ?? null });
 }
 
+async function acervoGuardar(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = await garantirAcesso(ch, corpo.client_id);
+  const db = servico();
+  // As regras (cliente, etiqueta "mockup", marca, sem duplicar, corrida) ficam em ./acervo.ts.
+  const banco: BancoDoAcervo = {
+    async lerArquivo(fileId) {
+      const { data, error } = await db.from("files").select("id, client_id, storage_bucket, storage_path, file_name, tags").eq("id", fileId).maybeSingle();
+      if (error) throw error;
+      return (data as ArquivoDoAcervo | null) || null;
+    },
+    async lerMarca(marcaId) {
+      const { data } = await db.from("cliente_marcas").select("id, client_id, principal").eq("id", marcaId).maybeSingle();
+      return (data as MarcaDoAcervo | null) || null;
+    },
+    async acharImagem(cliente, fileId) {
+      const { data } = await db.from("cliente_imagens").select("id").eq("client_id", cliente).eq("file_id", fileId).maybeSingle();
+      return data ? String(data.id) : null;
+    },
+    async inserirImagem(linha) {
+      const { data, error } = await db.from("cliente_imagens").insert(linha).select("id").single();
+      if (error) throw error;
+      return String(data.id);
+    },
+  };
+  try {
+    const r = await guardarMockupNoAcervo(banco, { clientId, fileId: corpo.file_id, marcaId: corpo.marca_id, nome: corpo.nome });
+    return json({ ...r, custo_usd: 0 });
+  } catch (e) {
+    if (e instanceof ErroDoAcervo) {
+      if (e.status >= 500) registrarFalha(`mesa-mockups: acervo_guardar (${e.codigo})`, e.causa || e, { client_id: clientId, file_id: String(corpo.file_id ?? "") });
+      throw new ErroHttp(e.status, e.codigo, e.message);
+    }
+    throw e;
+  }
+}
+
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   sugerir,
   cena_estimar: cenaEstimar,
   cena_gerar: cenaGerar,
+  acervo_guardar: acervoGuardar,
 };
 
 /** Ações que podem passar de 150 s: a resposta começa na hora. */

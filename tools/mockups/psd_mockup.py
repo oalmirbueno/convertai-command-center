@@ -26,6 +26,7 @@ Saída: <pasta_saida>/{alta,trabalho}/{base.jpg,vazio.jpg,ganho.png,uv.png,mapa.
 Código de saída: 0 aprovado, 2 revisão, 1 erro.
 """
 import argparse
+import re
 import io
 import json
 import os
@@ -267,10 +268,28 @@ def mascara_na_tela(l, W, H):
 
 # ---------------------------------------------------------------- passadas
 
-def passada(psd_path, uids, modo, dispmap, avisos):
-    """modo: 'preto' | 'branco' | 'vazio'. Devolve a composição em uint8 RGB (resolução cheia)."""
+def esconder_camadas(psd, esconder):
+    """Esconde as camadas cujo nome casa com `esconder` (regex, sem diferenciar maiúsculas):
+    a dica do vendedor por cima da cena ("Important tip..."), que não pode ir para o cliente."""
+    if not esconder:
+        return 0
+    padrao = re.compile(esconder, re.I)
+    n = 0
+    for l in list(psd.descendants()):
+        if padrao.search(str(l.name or '')):
+            l.visible = False
+            n += 1
+    return n
+
+
+def passada(psd_path, uids, modo, dispmap, avisos, esconder=None):
+    """modo: 'preto' | 'branco' | 'vazio' | 'original' (o PSD como veio, para a miniatura).
+    Devolve a composição em uint8 RGB (resolução cheia)."""
     psd = PSDImage.open(psd_path)
     W, H = psd.size
+    esconder_camadas(psd, esconder)
+    if modo == 'original':
+        return rgb8(psd.composite(force=True))
     for l in list(psd.descendants()):
         if l.kind != 'smartobject':
             continue
@@ -520,7 +539,7 @@ def salvar_conjunto(pasta, base, vazio, ganho, uvrgb, mapa):
     return {f: os.path.getsize(os.path.join(pasta, f)) for f in ('base.jpg', 'vazio.jpg', 'ganho.png', 'uv.png', 'mapa.png')}
 
 
-def processar(psd_path, saida, ident, categoria, tags, origem, dispmap=None):
+def processar(psd_path, saida, ident, categoria, tags, origem, dispmap=None, esconder=None):
     t0 = time.time()
     os.makedirs(saida, exist_ok=True)
     avisos = set()
@@ -605,6 +624,20 @@ def processar(psd_path, saida, ident, categoria, tags, origem, dispmap=None):
     qc = np.concatenate([previa_t, np.full((Ht, 12, 3), 255, np.uint8), recon], 1)
     Image.fromarray(qc).save(os.path.join(saida, 'qc.jpg'), quality=80)
 
+    if esconder:
+        # O controle acima compara com a prévia como o vendedor gravou (com a dica por cima). As
+        # camadas que vão para o painel saem sem as camadas escondidas (mesma geometria e slots).
+        limpo = {}
+        for modo_p in ('preto', 'branco', 'vazio', 'original'):
+            t = time.time()
+            limpo[modo_p] = passada(psd_path, uids, modo_p, dispmap, avisos, esconder)
+            print(f'  {ident}: {modo_p} sem "{esconder}" {round(time.time() - t, 1)} s', flush=True)
+        base_a = reduzir(limpo['preto'], Wa, Ha)
+        vazio_a = reduzir(limpo['vazio'], Wa, Ha)
+        ganho_a = np.clip(reduzir(limpo['branco'], Wa, Ha).astype(np.int16) - base_a.astype(np.int16), 0, 255).astype(np.uint8)
+        base_t, vazio_t, ganho_t = reduzir(base_a, Wt, Ht), reduzir(vazio_a, Wt, Ht), reduzir(ganho_a, Wt, Ht)
+        previa = limpo['original']
+        meta['camadas_escondidas'] = esconder
     tam = {}
     tam['alta'] = salvar_conjunto(os.path.join(saida, 'alta'), base_a, vazio_a, ganho_a, uv_a, mapa)
     tam['trabalho'] = salvar_conjunto(os.path.join(saida, 'trabalho'), base_t, vazio_t, ganho_t, uv_t, mapa_t)
@@ -656,9 +689,10 @@ def main():
     ap.add_argument('--tags', default='')
     ap.add_argument('--origem', default='')
     ap.add_argument('--dispmap', default=None)
+    ap.add_argument('--esconder', default=None, help='regex do nome das camadas a esconder (dica do vendedor)')
     a = ap.parse_args()
     try:
-        meta = processar(a.psd, a.saida, a.id, a.categoria, [t for t in a.tags.split(',') if t], a.origem, a.dispmap)
+        meta = processar(a.psd, a.saida, a.id, a.categoria, [t for t in a.tags.split(',') if t], a.origem, a.dispmap, a.esconder)
     except Exception as e:  # o lote registra e segue; nada é engolido
         import traceback
         traceback.print_exc()

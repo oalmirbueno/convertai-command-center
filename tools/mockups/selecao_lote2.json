@@ -1,0 +1,932 @@
+{
+ "descricao": "Lote 2 (frente MCK, rodada 2, 30/09/2026): famílias parecidas com as aprovadas e o que faltava por categoria. Fora: GFXTRA/GFXDAY (sem licença), Lata (não comercial), flats antigos e telas web.",
+ "itens": [
+  {
+   "id": "dispositivo-iphone-15b",
+   "zip": "Mockups-20260929T151004Z-1-005",
+   "cadeia": "Mockups/Gadgets/01.zip",
+   "membro": "Iphone 15 Mockup/Iphone 15 Mockup 2.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "celular",
+    "app",
+    "instagram"
+   ],
+   "origem": "pacote Drive Gadgets/01"
+  },
+  {
+   "id": "dispositivo-iphone-15-01",
+   "zip": "Mockups-20260929T151004Z-1-006",
+   "cadeia": "Mockups/Gadgets/04.zip",
+   "membro": "Iphone 15 Mockup/Iphone 15 Mockup - 01.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "celular",
+    "app",
+    "instagram"
+   ],
+   "origem": "pacote Drive Gadgets/04"
+  },
+  {
+   "id": "dispositivo-iphone-15-02",
+   "zip": "Mockups-20260929T151004Z-1-006",
+   "cadeia": "Mockups/Gadgets/04.zip",
+   "membro": "Iphone 15 Mockup/Iphone 15 Mockup - 02.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "celular",
+    "app",
+    "instagram"
+   ],
+   "origem": "pacote Drive Gadgets/04"
+  },
+  {
+   "id": "dispositivo-iphone-15-03",
+   "zip": "Mockups-20260929T151004Z-1-006",
+   "cadeia": "Mockups/Gadgets/04.zip",
+   "membro": "Iphone 15 Mockup/Iphone 15 Mockup - 03.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "celular",
+    "app",
+    "instagram"
+   ],
+   "origem": "pacote Drive Gadgets/04"
+  },
+  {
+   "id": "dispositivo-gadgets-06-1",
+   "zip": "Mockups-20260929T151004Z-1-005",
+   "cadeia": "Mockups/Gadgets/06.zip",
+   "membro": "PSD 1.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "tela",
+    "app"
+   ],
+   "origem": "pacote Drive Gadgets/06"
+  },
+  {
+   "id": "dispositivo-gadgets-06-2",
+   "zip": "Mockups-20260929T151004Z-1-005",
+   "cadeia": "Mockups/Gadgets/06.zip",
+   "membro": "PSD 2.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "tela",
+    "app"
+   ],
+   "origem": "pacote Drive Gadgets/06"
+  },
+  {
+   "id": "dispositivo-gadgets-06-3",
+   "zip": "Mockups-20260929T151004Z-1-005",
+   "cadeia": "Mockups/Gadgets/06.zip",
+   "membro": "PSD 3.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "tela",
+    "app"
+   ],
+   "origem": "pacote Drive Gadgets/06"
+  },
+  {
+   "id": "dispositivo-gadgets-07-3149",
+   "zip": "Mockups-20260929T151004Z-1-006",
+   "cadeia": "Mockups/Gadgets/07.zip",
+   "membro": "1.3149.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "tela",
+    "site"
+   ],
+   "origem": "pacote Drive Gadgets/07"
+  },
+  {
+   "id": "dispositivo-gadgets-07-3150",
+   "zip": "Mockups-20260929T151004Z-1-006",
+   "cadeia": "Mockups/Gadgets/07.zip",
+   "membro": "1.3150.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "tela",
+    "site"
+   ],
+   "origem": "pacote Drive Gadgets/07"
+  },
+  {
+   "id": "dispositivo-gadgets-07-3151",
+   "zip": "Mockups-20260929T151004Z-1-006",
+   "cadeia": "Mockups/Gadgets/07.zip",
+   "membro": "1.3151.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "tela",
+    "site"
+   ],
+   "origem": "pacote Drive Gadgets/07"
+  },
+  {
+   "id": "dispositivo-ipad-1",
+   "zip": "Mockups-20260929T151004Z-1-006",
+   "cadeia": "Mockups/Gadgets/05.zip",
+   "membro": "Ipad Mockup/1.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "tablet",
+    "app"
+   ],
+   "origem": "pacote Drive Gadgets/05"
+  },
+  {
+   "id": "dispositivo-ipad-2",
+   "zip": "Mockups-20260929T151004Z-1-006",
+   "cadeia": "Mockups/Gadgets/05.zip",
+   "membro": "Ipad Mockup/2.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "tablet",
+    "app"
+   ],
+   "origem": "pacote Drive Gadgets/05"
+  },
+  {
+   "id": "dispositivo-tablet-002",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Tablet_Mockup_White_Edition_2/002.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "tablet",
+    "app"
+   ],
+   "origem": "Parte-1 Celulares e Tablets"
+  },
+  {
+   "id": "dispositivo-tablet-003",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Tablet_Mockup_White_Edition_2/003.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "tablet",
+    "app"
+   ],
+   "origem": "Parte-1 Celulares e Tablets"
+  },
+  {
+   "id": "dispositivo-tablet-004",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Tablet_Mockup_White_Edition_2/004.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "tablet",
+    "app"
+   ],
+   "origem": "Parte-1 Celulares e Tablets"
+  },
+  {
+   "id": "dispositivo-tablet-005",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Tablet_Mockup_White_Edition_2/005.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "tablet",
+    "app"
+   ],
+   "origem": "Parte-1 Celulares e Tablets"
+  },
+  {
+   "id": "dispositivo-tablet-006",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Tablet_Mockup_White_Edition_2/006.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "tablet",
+    "app"
+   ],
+   "origem": "Parte-1 Celulares e Tablets"
+  },
+  {
+   "id": "dispositivo-tablet-007",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Tablet_Mockup_White_Edition_2/007.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "tablet",
+    "app"
+   ],
+   "origem": "Parte-1 Celulares e Tablets"
+  },
+  {
+   "id": "dispositivo-tablet-008",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Tablet_Mockup_White_Edition_2/008.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "tablet",
+    "app"
+   ],
+   "origem": "Parte-1 Celulares e Tablets"
+  },
+  {
+   "id": "cartao-visita-1",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "de Visita 1.psd",
+   "categoria": "cartao",
+   "tags": [
+    "cartao"
+   ],
+   "origem": "Parte-1 Cartão",
+   "prefixo": "Cart"
+  },
+  {
+   "id": "cartao-visita-3",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "de Visita 3.psd",
+   "categoria": "cartao",
+   "tags": [
+    "cartao"
+   ],
+   "origem": "Parte-1 Cartão",
+   "prefixo": "Cart"
+  },
+  {
+   "id": "cartao-visita-4",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "de Visita 4.psd",
+   "categoria": "cartao",
+   "tags": [
+    "cartao"
+   ],
+   "origem": "Parte-1 Cartão",
+   "prefixo": "Cart"
+  },
+  {
+   "id": "cartao-visita-5",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "de Visita 5.psd",
+   "categoria": "cartao",
+   "tags": [
+    "cartao"
+   ],
+   "origem": "Parte-1 Cartão",
+   "prefixo": "Cart"
+  },
+  {
+   "id": "cartao-vol-18",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Business-Card-Mock-Up-vol-18.psd",
+   "categoria": "cartao",
+   "tags": [
+    "cartao"
+   ],
+   "origem": "Parte-1 Cartão"
+  },
+  {
+   "id": "cartao-freepik-02",
+   "zip": "Mockups-20260929T151004Z-1-005",
+   "cadeia": "Mockups/Cartão de Visitas/02.zip",
+   "membro": "5110188.psd",
+   "categoria": "cartao",
+   "tags": [
+    "cartao"
+   ],
+   "origem": "Freepik (atribuição)"
+  },
+  {
+   "id": "papelaria-branding-2",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Branding/Branding 2.psd",
+   "categoria": "papelaria",
+   "tags": [
+    "kit"
+   ],
+   "origem": "Parte-1 Branding",
+   "fora": "curadoria: o slot do caderno vermelho mostra pedaços soltos da logo"
+  },
+  {
+   "id": "papelaria-branding-3",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Branding/Branding 3.psd",
+   "categoria": "papelaria",
+   "tags": [
+    "kit"
+   ],
+   "origem": "Parte-1 Branding"
+  },
+  {
+   "id": "papelaria-ivory-1",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Branding Full 2/01 Ivory - View One.psd",
+   "categoria": "papelaria",
+   "tags": [
+    "kit",
+    "claro"
+   ],
+   "origem": "Parte-1 Branding Full 2"
+  },
+  {
+   "id": "papelaria-ebony-1",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Branding Full 2/01 Ebony - View One.psd",
+   "categoria": "papelaria",
+   "tags": [
+    "kit",
+    "escuro"
+   ],
+   "origem": "Parte-1 Branding Full 2",
+   "fora": "curadoria: na cena escura a marca quase não aparece"
+  },
+  {
+   "id": "papelaria-ivory-5",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Branding Full 2/05 Ivory - View Five.psd",
+   "categoria": "papelaria",
+   "tags": [
+    "kit",
+    "claro"
+   ],
+   "origem": "Parte-1 Branding Full 2",
+   "fora": "curadoria: selo do vendedor (EBONY&IVORY) na imagem e só os cartões recebem a marca"
+  },
+  {
+   "id": "papelaria-kit-04",
+   "zip": "Mockups-20260929T151004Z-1-005",
+   "cadeia": "Mockups/Branding/04.zip",
+   "membro": "Main Files/Stationary Mockup 001.psd",
+   "categoria": "papelaria",
+   "tags": [
+    "kit"
+   ],
+   "origem": "pacote Drive Branding/04"
+  },
+  {
+   "id": "papelaria-pasta-2",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Envelopes e Pastas/Pasta.psd",
+   "categoria": "papelaria",
+   "tags": [
+    "pasta"
+   ],
+   "origem": "Parte-2 Pastas"
+  },
+  {
+   "id": "papelaria-pastas",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Envelopes e Pastas/Pastas.psd",
+   "categoria": "papelaria",
+   "tags": [
+    "pasta"
+   ],
+   "origem": "Parte-2 Pastas"
+  },
+  {
+   "id": "poster-pessoa-1",
+   "zip": "Mockups-20260929T151004Z-1-004",
+   "cadeia": "Mockups/Variados/Mockups-Parte-3.zip",
+   "membro": "Posters/Poster (Pessoa Segurando) 1.psd",
+   "categoria": "poster",
+   "tags": [
+    "cartaz",
+    "pessoa"
+   ],
+   "origem": "Parte-3 Posters"
+  },
+  {
+   "id": "poster-pessoa-2",
+   "zip": "Mockups-20260929T151004Z-1-004",
+   "cadeia": "Mockups/Variados/Mockups-Parte-3.zip",
+   "membro": "Posters/Poster (Pessoa Segurando) 2.psd",
+   "categoria": "poster",
+   "tags": [
+    "cartaz",
+    "pessoa"
+   ],
+   "origem": "Parte-3 Posters"
+  },
+  {
+   "id": "poster-pessoa-3",
+   "zip": "Mockups-20260929T151004Z-1-004",
+   "cadeia": "Mockups/Variados/Mockups-Parte-3.zip",
+   "membro": "Posters/Poster (Pessoa Segurando) 3.psd",
+   "categoria": "poster",
+   "tags": [
+    "cartaz",
+    "pessoa"
+   ],
+   "origem": "Parte-3 Posters"
+  },
+  {
+   "id": "poster-pessoa-5",
+   "zip": "Mockups-20260929T151004Z-1-004",
+   "cadeia": "Mockups/Variados/Mockups-Parte-3.zip",
+   "membro": "Posters/Poster (Pessoa Segurando) 5.psd",
+   "categoria": "poster",
+   "tags": [
+    "cartaz",
+    "pessoa"
+   ],
+   "origem": "Parte-3 Posters"
+  },
+  {
+   "id": "poster-moldura-2",
+   "zip": "Mockups-20260929T151004Z-1-004",
+   "cadeia": "Mockups/Variados/poster-2.zip",
+   "membro": "Poster Mockup/Poster Mockup.psd",
+   "categoria": "poster",
+   "tags": [
+    "quadro",
+    "parede"
+   ],
+   "origem": "pacote Drive poster-2"
+  },
+  {
+   "id": "poster-vertical",
+   "zip": "Mockups-20260929T151004Z-1-001",
+   "cadeia": "",
+   "membro": "Mockups/vertical-poster-mockup/1.psd",
+   "categoria": "poster",
+   "tags": [
+    "cartaz",
+    "rua"
+   ],
+   "origem": "pacote Drive vertical-poster"
+  },
+  {
+   "id": "outdoor-1",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Advertising/Outdoor 1.psd",
+   "categoria": "outdoor",
+   "tags": [
+    "outdoor",
+    "rua"
+   ],
+   "origem": "Parte-1 Advertising"
+  },
+  {
+   "id": "outdoor-2",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Advertising/Outdoor 2.psd",
+   "categoria": "outdoor",
+   "tags": [
+    "outdoor",
+    "rua"
+   ],
+   "origem": "Parte-1 Advertising"
+  },
+  {
+   "id": "outdoor-simples",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Advertising/Outdoor.psd",
+   "categoria": "outdoor",
+   "tags": [
+    "outdoor"
+   ],
+   "origem": "Parte-1 Advertising"
+  },
+  {
+   "id": "outdoor-cena-5",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Advertising/Scene 5.psd",
+   "categoria": "outdoor",
+   "tags": [
+    "cena",
+    "rua"
+   ],
+   "origem": "Parte-1 Advertising"
+  },
+  {
+   "id": "outdoor-cena-6",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Advertising/Scene 6.psd",
+   "categoria": "outdoor",
+   "tags": [
+    "cena",
+    "rua"
+   ],
+   "origem": "Parte-1 Advertising"
+  },
+  {
+   "id": "outdoor-cena-7",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Advertising/Scene 7.psd",
+   "categoria": "outdoor",
+   "tags": [
+    "cena",
+    "rua"
+   ],
+   "origem": "Parte-1 Advertising"
+  },
+  {
+   "id": "outdoor-cena-12",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Advertising/Scene 12.psd",
+   "categoria": "outdoor",
+   "tags": [
+    "cena",
+    "rua"
+   ],
+   "origem": "Parte-1 Advertising"
+  },
+  {
+   "id": "outdoor-8306",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Advertising/outdoor-mockup-8306.psd",
+   "categoria": "outdoor",
+   "tags": [
+    "outdoor"
+   ],
+   "origem": "Parte-1 Advertising"
+  },
+  {
+   "id": "outdoor-place",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Advertising/placeyourdesign.psd",
+   "categoria": "outdoor",
+   "tags": [
+    "outdoor"
+   ],
+   "origem": "Parte-1 Advertising"
+  },
+  {
+   "id": "outdoor-vertical",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Folders e Flyers/Vertical Billboard - Mock Up.psd",
+   "categoria": "outdoor",
+   "tags": [
+    "outdoor",
+    "vertical"
+   ],
+   "origem": "Parte-2 Folders"
+  },
+  {
+   "id": "outdoor-360-02",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Advertising/360_billboard_9.6x3.6m_mockup_02.psd",
+   "categoria": "outdoor",
+   "tags": [
+    "outdoor",
+    "estrada"
+   ],
+   "origem": "Parte-1 Advertising"
+  },
+  {
+   "id": "outdoor-360-03",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Advertising/360_billboard_9.6x3.6m_mockup_03.psd",
+   "categoria": "outdoor",
+   "tags": [
+    "outdoor",
+    "estrada"
+   ],
+   "origem": "Parte-1 Advertising"
+  },
+  {
+   "id": "outdoor-360-04",
+   "zip": "Mockups-Parte-1-002",
+   "cadeia": "",
+   "membro": "Advertising/360_billboard_9.6x3.6m_mockup_04.psd",
+   "categoria": "outdoor",
+   "tags": [
+    "outdoor",
+    "estrada"
+   ],
+   "origem": "Parte-1 Advertising"
+  },
+  {
+   "id": "veiculo-van-01",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Dooca_Van_Mockup/01.psd",
+   "categoria": "veiculo",
+   "tags": [
+    "van",
+    "frota",
+    "delivery"
+   ],
+   "origem": "GraphicRiver Dooca"
+  },
+  {
+   "id": "veiculo-van-06",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Dooca_Van_Mockup/06.psd",
+   "categoria": "veiculo",
+   "tags": [
+    "van",
+    "frota",
+    "delivery"
+   ],
+   "origem": "GraphicRiver Dooca"
+  },
+  {
+   "id": "folder-1",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Folders e Flyers/Folder 1.psd",
+   "categoria": "folder",
+   "tags": [
+    "folder"
+   ],
+   "origem": "Parte-2 Folders",
+   "fora": "curadoria: etiqueta do vendedor (brochure) na imagem"
+  },
+  {
+   "id": "folder-2-dobras",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Folders e Flyers/Folder 2 dobras 2.psd",
+   "categoria": "folder",
+   "tags": [
+    "folder"
+   ],
+   "origem": "Parte-2 Folders"
+  },
+  {
+   "id": "folder-trifold",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Folders e Flyers/Tri Fold Brochure MockUp.psd",
+   "categoria": "folder",
+   "tags": [
+    "folder",
+    "tres-dobras"
+   ],
+   "origem": "Parte-2 Folders"
+  },
+  {
+   "id": "livro-revista-1",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Livros e Revistas/Revista 1.psd",
+   "categoria": "livro",
+   "tags": [
+    "revista"
+   ],
+   "origem": "Parte-2 Livros",
+   "fora": "curadoria: etiqueta do vendedor (magazine ad) na imagem"
+  },
+  {
+   "id": "livro-revista-3",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Livros e Revistas/Revista 3.psd",
+   "categoria": "livro",
+   "tags": [
+    "revista"
+   ],
+   "origem": "Parte-2 Livros"
+  },
+  {
+   "id": "livro-revista-5",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Livros e Revistas/Revista 5.psd",
+   "categoria": "livro",
+   "tags": [
+    "revista"
+   ],
+   "origem": "Parte-2 Livros"
+  },
+  {
+   "id": "livro-5",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Livros e Revistas/Livro 5.psd",
+   "categoria": "livro",
+   "tags": [
+    "livro"
+   ],
+   "origem": "Parte-2 Livros"
+  },
+  {
+   "id": "livro-6",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Livros e Revistas/Livro 6.psd",
+   "categoria": "livro",
+   "tags": [
+    "livro"
+   ],
+   "origem": "Parte-2 Livros"
+  },
+  {
+   "id": "embalagem-caixa-1",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Diversos/Caixa 1.psd",
+   "categoria": "embalagem",
+   "tags": [
+    "caixa",
+    "produto"
+   ],
+   "origem": "Parte-2 Diversos"
+  },
+  {
+   "id": "embalagem-garrafa-bebida",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Diversos/Garrafa bebida.psd",
+   "categoria": "embalagem",
+   "tags": [
+    "garrafa",
+    "bebida"
+   ],
+   "origem": "Parte-2 Diversos"
+  },
+  {
+   "id": "embalagem-trofeu",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Diversos/Troféu.psd",
+   "categoria": "embalagem",
+   "tags": [
+    "trofeu",
+    "premio"
+   ],
+   "origem": "Parte-2 Diversos"
+  },
+  {
+   "id": "papelaria-caderno",
+   "zip": "Mockups-20260929T151004Z-1-001",
+   "cadeia": "",
+   "membro": "Mockups/Variados/caderno.psd",
+   "categoria": "papelaria",
+   "tags": [
+    "caderno",
+    "brinde"
+   ],
+   "origem": "pacote Drive Variados"
+  },
+  {
+   "id": "caneca-copo-1",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Diversos/Copo 1.psd",
+   "categoria": "caneca",
+   "tags": [
+    "copo",
+    "cafe"
+   ],
+   "origem": "Parte-2 Diversos"
+  },
+  {
+   "id": "caneca-xicara-2",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Diversos/Xicara 2.psd",
+   "categoria": "caneca",
+   "tags": [
+    "xicara",
+    "cafe"
+   ],
+   "origem": "Parte-2 Diversos"
+  },
+  {
+   "id": "caneca-squeeze",
+   "zip": "Mockups-20260929T151004Z-1-001",
+   "cadeia": "",
+   "membro": "Mockups/Variados/squeeze.psd",
+   "categoria": "caneca",
+   "tags": [
+    "squeeze",
+    "academia"
+   ],
+   "origem": "pacote Drive Variados"
+  },
+  {
+   "id": "vestuario-camiseta",
+   "zip": "Mockups-20260929T151004Z-1-005",
+   "cadeia": "",
+   "membro": "Mockups/Variados/camiseta.psd",
+   "categoria": "vestuario",
+   "tags": [
+    "camiseta",
+    "uniforme"
+   ],
+   "origem": "pacote Drive Variados"
+  },
+  {
+   "id": "vestuario-camisa",
+   "zip": "Mockups-20260929T151004Z-1-004",
+   "cadeia": "Mockups/Variados/Mockups-Parte-3.zip",
+   "membro": "Camisa.psd",
+   "categoria": "vestuario",
+   "tags": [
+    "camisa",
+    "uniforme"
+   ],
+   "origem": "Parte-3 Vestuário"
+  },
+  {
+   "id": "vestuario-tshirt-1",
+   "zip": "Mockups-20260929T151004Z-1-004",
+   "cadeia": "Mockups/Variados/Mockups-Parte-3.zip",
+   "membro": "Tshirt Mockup 1.psd",
+   "categoria": "vestuario",
+   "tags": [
+    "camiseta"
+   ],
+   "origem": "Parte-3 Vestuário"
+  },
+  {
+   "id": "vestuario-tshirt-2",
+   "zip": "Mockups-20260929T151004Z-1-004",
+   "cadeia": "Mockups/Variados/Mockups-Parte-3.zip",
+   "membro": "Tshirt mockup 2.psd",
+   "categoria": "vestuario",
+   "tags": [
+    "camiseta"
+   ],
+   "origem": "Parte-3 Vestuário"
+  },
+  {
+   "id": "vestuario-bone-2",
+   "zip": "Mockups-20260929T151004Z-1-004",
+   "cadeia": "Mockups/Variados/bone.zip",
+   "membro": "Baseball Cap.psd",
+   "categoria": "vestuario",
+   "tags": [
+    "bone",
+    "uniforme"
+   ],
+   "origem": "pacote Drive bone"
+  },
+  {
+   "id": "dispositivo-home-office-1",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Home Office/Home Office (1).psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "escritorio",
+    "site"
+   ],
+   "origem": "Parte-2 Home Office"
+  },
+  {
+   "id": "dispositivo-home-office-2",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Home Office/Home Office (2).psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "escritorio",
+    "site"
+   ],
+   "origem": "Parte-2 Home Office"
+  },
+  {
+   "id": "dispositivo-cena-01",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Home Office/Scene 01.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "escritorio"
+   ],
+   "origem": "Parte-2 Home Office",
+   "fora": "curadoria: texto do vendedor na cena (Designer Desk Essentials)"
+  },
+  {
+   "id": "dispositivo-cena-02",
+   "zip": "Mockups-Parte-2-003",
+   "cadeia": "",
+   "membro": "Home Office/Scene 02.psd",
+   "categoria": "dispositivo",
+   "tags": [
+    "escritorio"
+   ],
+   "origem": "Parte-2 Home Office"
+  }
+ ]
+}

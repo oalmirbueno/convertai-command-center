@@ -5,7 +5,7 @@
  * Seis texturas: base, vazio, ganho, uv, mapa e um atlas com o design de cada slot empilhado.
  * uv e mapa são lidos sem filtro e sem conversão de cor (são números, não cores).
  */
-import { comporMockup, type ImagemRGBA } from "./composicao";
+import { comporMockup, RAZAO_MAX_DO_FUNDO, type ImagemRGBA } from "./composicao";
 
 export interface CamadasCarregadas {
   largura: number;
@@ -15,6 +15,18 @@ export interface CamadasCarregadas {
   ganho: HTMLImageElement;
   uv: HTMLImageElement;
   mapa: HTMLImageElement;
+  /** Fundo trocável (só mockup de estúdio). */
+  fundo?: HTMLImageElement | null;
+}
+
+/** Ajustes da cena (mesma conta de composicao.ts). */
+export interface AjustesDaCena {
+  luz?: number;
+  brilho?: number;
+  /** Ganho médio (0..1) de cada slot (ganhoMedio[0] = slot 1). */
+  ganhoMedio?: number[];
+  /** Fundo novo, do tamanho do mockup; só vale com a camada fundo. */
+  novoFundo?: HTMLCanvasElement | null;
 }
 
 const MAX_SLOTS = 8;
@@ -36,34 +48,53 @@ uniform sampler2D uGanho;
 uniform sampler2D uUv;
 uniform sampler2D uMapa;
 uniform sampler2D uAtlas;
+uniform sampler2D uFundo;
+uniform sampler2D uNovoFundo;
 uniform vec4 uRect[${MAX_SLOTS}];
 uniform vec4 uMargem[${MAX_SLOTS}];
+uniform float uGm[${MAX_SLOTS}];
+uniform float uLuz;
+uniform float uBrilho;
+uniform float uTroca;
 void main() {
   vec3 b = texture2D(uBase, vPos).rgb;
   vec3 z = texture2D(uVazio, vPos).rgb;
   float k = floor(texture2D(uMapa, vPos).r * 255.0 + 0.5);
-  if (k < 0.5) { gl_FragColor = vec4(b, 1.0); return; }
-  vec4 r = vec4(0.0);
-  vec4 m = vec4(0.0);
-  for (int i = 0; i < ${MAX_SLOTS}; i++) {
-    if (abs(float(i + 1) - k) < 0.5) { r = uRect[i]; m = uMargem[i]; }
+  vec3 cor = b;
+  if (k > 0.5) {
+    vec4 r = vec4(0.0);
+    vec4 m = vec4(0.0);
+    float gm = 1.0;
+    for (int i = 0; i < ${MAX_SLOTS}; i++) {
+      if (abs(float(i + 1) - k) < 0.5) { r = uRect[i]; m = uMargem[i]; gm = uGm[i]; }
+    }
+    if (r.z <= 0.0) {
+      cor = z;
+    } else {
+      vec3 g = texture2D(uGanho, vPos).rgb;
+      g = max(vec3(0.0), vec3(gm) + (g - vec3(gm)) * uLuz);
+      vec3 e = floor(texture2D(uUv, vPos).rgb * 255.0 + 0.5);
+      float ulo = floor(e.b / 16.0);
+      float vlo = e.b - ulo * 16.0;
+      vec2 uv = vec2(e.r * 16.0 + ulo, e.g * 16.0 + vlo) / 4095.0;
+      uv = clamp(uv, m.xy, m.zw);
+      vec4 d = texture2D(uAtlas, r.xy + uv * r.zw);
+      cor = z + d.a * (b - z) + g * d.rgb * uBrilho;
+    }
   }
-  if (r.z <= 0.0) { gl_FragColor = vec4(z, 1.0); return; }
-  vec3 g = texture2D(uGanho, vPos).rgb;
-  vec3 e = floor(texture2D(uUv, vPos).rgb * 255.0 + 0.5);
-  float ulo = floor(e.b / 16.0);
-  float vlo = e.b - ulo * 16.0;
-  vec2 uv = vec2(e.r * 16.0 + ulo, e.g * 16.0 + vlo) / 4095.0;
-  uv = clamp(uv, m.xy, m.zw);
-  vec4 d = texture2D(uAtlas, r.xy + uv * r.zw);
-  gl_FragColor = vec4(z + d.a * (b - z) + g * d.rgb, 1.0);
+  if (uTroca > 0.5) {
+    vec2 f = texture2D(uFundo, vPos).rg;
+    vec3 nf = texture2D(uNovoFundo, vPos).rgb;
+    cor = f.r * cor + (1.0 - f.r) * nf * (f.g * ${RAZAO_MAX_DO_FUNDO.toFixed(2)});
+  }
+  gl_FragColor = vec4(cor, 1.0);
 }`;
 
 type Gl = WebGLRenderingContext;
 
 export interface Compositor {
   /** Desenha o mockup no canvas de destino (tamanho do destino = tamanho das camadas). */
-  desenhar(camadas: CamadasCarregadas, designs: Array<HTMLCanvasElement | null>, destino: HTMLCanvasElement): void;
+  desenhar(camadas: CamadasCarregadas, designs: Array<HTMLCanvasElement | null>, destino: HTMLCanvasElement, ajustes?: AjustesDaCena): void;
   /**
    * Solta o que o compositor guardou desta imagem (textura na GPU ou pixels lidos).
    * A entrada sai do cache junto com a textura: a mesma imagem desenhada de novo
@@ -72,6 +103,10 @@ export interface Compositor {
   liberar(img: object): void;
   webgl: boolean;
   ladoMaximo: number;
+}
+
+function limitar(v: number | undefined, min: number, max: number, padrao: number): number {
+  return typeof v === "number" && Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : padrao;
 }
 
 function compilar(gl: Gl, tipo: number, fonte: string): WebGLShader {
@@ -135,6 +170,7 @@ function criarWebgl(): Compositor | null {
   const ladoMaximo = g.getParameter(g.MAX_TEXTURE_SIZE) as number;
   const cache = new WeakMap<object, WebGLTexture>();
   const atlasTex = g.createTexture();
+  const novoFundoTex = g.createTexture();
 
   const textura = (img: TexImageSource & object, numero: boolean): WebGLTexture => {
     const ja = cache.get(img);
@@ -162,7 +198,7 @@ function criarWebgl(): Compositor | null {
       cache.delete(img);
       if (!perdido) g.deleteTexture(t);
     },
-    desenhar(c, designs, destino) {
+    desenhar(c, designs, destino, ajustes = {}) {
       tela.width = c.largura;
       tela.height = c.altura;
       g.viewport(0, 0, c.largura, c.altura);
@@ -214,6 +250,33 @@ function criarWebgl(): Compositor | null {
       }
       g.uniform4fv(g.getUniformLocation(prog, "uRect"), rects);
       g.uniform4fv(g.getUniformLocation(prog, "uMargem"), margens);
+      const gms = new Float32Array(MAX_SLOTS);
+      for (let i = 0; i < MAX_SLOTS; i++) {
+        const v = ajustes.ganhoMedio && ajustes.ganhoMedio[i];
+        gms[i] = typeof v === "number" && Number.isFinite(v) ? v : 1;
+      }
+      g.uniform1fv(g.getUniformLocation(prog, "uGm"), gms);
+      g.uniform1f(g.getUniformLocation(prog, "uLuz"), limitar(ajustes.luz, 0, 1.5, 1));
+      g.uniform1f(g.getUniformLocation(prog, "uBrilho"), limitar(ajustes.brilho, 0.6, 1.4, 1));
+      const troca = !!(c.fundo && ajustes.novoFundo);
+      g.uniform1f(g.getUniformLocation(prog, "uTroca"), troca ? 1 : 0);
+      if (troca) {
+        g.activeTexture(g.TEXTURE6);
+        g.bindTexture(g.TEXTURE_2D, textura(c.fundo as HTMLImageElement, true));
+        g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR);
+        g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.LINEAR);
+        g.uniform1i(g.getUniformLocation(prog, "uFundo"), 6);
+        g.activeTexture(g.TEXTURE7);
+        g.bindTexture(g.TEXTURE_2D, novoFundoTex);
+        g.pixelStorei(g.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+        g.pixelStorei(g.UNPACK_COLORSPACE_CONVERSION_WEBGL, g.BROWSER_DEFAULT_WEBGL);
+        g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, ajustes.novoFundo as HTMLCanvasElement);
+        g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR);
+        g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.LINEAR);
+        g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE);
+        g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE);
+        g.uniform1i(g.getUniformLocation(prog, "uNovoFundo"), 7);
+      }
       g.drawArrays(g.TRIANGLE_STRIP, 0, 4);
       destino.width = c.largura;
       destino.height = c.altura;
@@ -248,16 +311,33 @@ function criarCanvas2d(): Compositor {
     liberar(img) {
       pixelsCache.delete(img);
     },
-    desenhar(c, designs, destino) {
+    desenhar(c, designs, destino, ajustes = {}) {
       const { largura: w, altura: h } = c;
       const ds: Array<ImagemRGBA | null> = designs.map((d) => {
         if (!d) return null;
         const ctx = d.getContext("2d");
         return ctx ? { largura: d.width, altura: d.height, pixels: ctx.getImageData(0, 0, d.width, d.height).data } : null;
       });
+      const troca = !!(c.fundo && ajustes.novoFundo);
+      let novo: Uint8ClampedArray | null = null;
+      if (troca) {
+        const nctx = (ajustes.novoFundo as HTMLCanvasElement).getContext("2d");
+        novo = nctx ? nctx.getImageData(0, 0, w, h).data : null;
+      }
       const out = comporMockup(
-        { largura: w, altura: h, base: pixelsDe(c.base, w, h), vazio: pixelsDe(c.vazio, w, h), ganho: pixelsDe(c.ganho, w, h), uv: pixelsDe(c.uv, w, h), mapa: pixelsDe(c.mapa, w, h) },
+        {
+          largura: w,
+          altura: h,
+          base: pixelsDe(c.base, w, h),
+          vazio: pixelsDe(c.vazio, w, h),
+          ganho: pixelsDe(c.ganho, w, h),
+          uv: pixelsDe(c.uv, w, h),
+          mapa: pixelsDe(c.mapa, w, h),
+          fundo: troca && c.fundo ? pixelsDe(c.fundo, w, h) : null,
+        },
         ds,
+        undefined,
+        { luz: ajustes.luz, brilho: ajustes.brilho, ganhoMedio: ajustes.ganhoMedio, novoFundo: novo },
       );
       destino.width = w;
       destino.height = h;

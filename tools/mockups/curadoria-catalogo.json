@@ -1,0 +1,18 @@
+{
+ "descricao": "Curadoria do catálogo (frente MCK, rodada 3, 01/10/2026). Mockups aprovados no controle de qualidade, mas que repetem a mesma cena de outro do mesmo pacote: sobem com ativo=false (ficam guardados e podem voltar), para a sugestão do Jev não ficar dominada por telas e tablets. Por pacote ficam 2 ou 3 vistas diferentes.",
+ "inativos": {
+  "dispositivo-tablet-002": "Tablet White Edition: fica a 001 (revistas), a 003 (mesa) e a 005 (mão)",
+  "dispositivo-tablet-004": "Tablet White Edition: fica a 001 (revistas), a 003 (mesa) e a 005 (mão)",
+  "dispositivo-tablet-006": "Tablet White Edition: fica a 001 (revistas), a 003 (mesa) e a 005 (mão)",
+  "dispositivo-tablet-008": "Tablet White Edition: fica a 001 (revistas), a 003 (mesa) e a 005 (mão)",
+  "outdoor-tela-3": "Outdoor Ad Screens: fica a 1 (horizontal), a 2 (vertical) e a 6 (de lado)",
+  "outdoor-tela-4": "Outdoor Ad Screens: fica a 1 (horizontal), a 2 (vertical) e a 6 (de lado)",
+  "outdoor-tela-5": "Outdoor Ad Screens: fica a 1 (horizontal), a 2 (vertical) e a 6 (de lado)",
+  "dispositivo-iphone-15-02": "iPhone 15 (Gadgets/04): fica a 01; as três vistas são quase iguais",
+  "dispositivo-iphone-15-03": "iPhone 15 (Gadgets/04): fica a 01; as três vistas são quase iguais",
+  "dispositivo-gadgets-06-3": "Gadgets/06: fica a 1 e a 2 (notebooks escuros quase iguais)",
+  "dispositivo-gadgets-07-3151": "Gadgets/07: fica a 3149 e a 3150 (mesma cena de concreto)",
+  "dispositivo-macbook-03": "MacBook (Gadgets/03): fica a 01 e a 02",
+  "dispositivo-notebook-08b": "Gadgets/08: fica a 1 (as duas vistas do mesmo notebook)"
+ }
+}

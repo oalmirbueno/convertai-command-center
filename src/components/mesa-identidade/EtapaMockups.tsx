@@ -43,7 +43,7 @@ export default function EtapaMockups() {
         </p>
       )}
       <PecasDaMarca />
-      <Secao titulo="Estúdio de mockups" divisoria recolher={`mesa-identidade:${projeto.id}:aplicacoes:mockups`} descricao={`${Array.isArray(projeto.dados.mockups) ? projeto.dados.mockups.length : 0} no brandbook`}>
+      <Secao titulo="Estúdio de mockups" divisoria recolher={`mesa-identidade:${projeto.id}:aplicacoes:mockups`} descricao={`${Array.isArray(projeto.dados.mockups) ? projeto.dados.mockups.length : 0} na apresentação`}>
         <EstudioDeMockups
           clientId={clientId}
           marcaId={marcaId}
@@ -53,8 +53,8 @@ export default function EtapaMockups() {
           chaveDaMemoria={`mesa-identidade:mockups:projeto:${projeto.id}`}
           onEnviados={(itens) => {
             salvarParte("mockups", { itens }).then(
-              () => toast.success(itens.length === 1 ? "Mockup no brandbook" : `${itens.length} mockups no brandbook`),
-              (e) => toast.error(`Os mockups foram para Arquivos, mas não entraram no brandbook: ${e instanceof Error ? e.message : String(e)}`),
+              () => toast.success(itens.length === 1 ? "Mockup na apresentação e no brandbook" : `${itens.length} mockups na apresentação e no brandbook`),
+              (e) => toast.error(`Os mockups foram para Arquivos, mas não entraram na apresentação: ${e instanceof Error ? e.message : String(e)}`),
             );
           }}
         />

@@ -4,7 +4,7 @@ Cada PSD roda num processo à parte (memória e tempo limitados). Mockup já pro
 (meta.json existente na mesma versão do pipeline) é pulado, então dá para parar e retomar.
 
 Uso:
-  python processar_lote.py <selecao.json> [<selecao2.json> ...] [--trabalho C:/AI/acervo-aceleriq/mockups-trabalho] [--procs 2] [--so id1,id2]
+  python processar_lote.py <selecao.json> [<selecao2.json> ...] [--trabalho C:/AI/acervo-aceleriq/mockups-trabalho] [--procs 2] [--so id1,id2] [--so-catalogo]
 Saída: <trabalho>/saida/<id>/... e <trabalho>/catalogo.json (aprovados + lista de revisão).
 """
 import argparse
@@ -87,10 +87,15 @@ def montar_catalogo(sel, saida):
                 meta['slots'] = [meta['slots'][i] for i in vivos]
             # Curadoria: papel do slot marcado à mão na seleção (ex.: timbrado e envelope claros).
             papeis = item.get('papeis', [])
+            # Curadoria: área segura marcada à mão (ex.: o peito da camiseta, quando o slot é a peça inteira).
+            areas = item.get('areas', [])
             for slot in meta.get('slots', []):
                 k = int(slot.get('indice', 0)) - 1
                 if 0 <= k < len(papeis) and papeis[k]:
                     slot['papel'] = papeis[k]
+                if 0 <= k < len(areas) and areas[k]:
+                    slot['area_segura'] = [float(v) for v in areas[k]]
+                    slot['area_segura_fonte'] = 'curadoria'
             meta['nome'] = nome_legivel(item)
             itens.append(meta)
         else:
@@ -105,13 +110,14 @@ def main():
     ap.add_argument('--procs', type=int, default=2)
     ap.add_argument('--so', default='')
     ap.add_argument('--refazer', action='store_true')
+    ap.add_argument('--so-catalogo', action='store_true', help='só remonta o catalogo.json (ex.: depois do calibrar.py)')
     a = ap.parse_args()
     sel = [i for arq in a.selecao for i in json.load(open(arq, encoding='utf-8'))['itens']]
     ext = json.load(open(os.path.join(a.trabalho, 'extracao.json'), encoding='utf-8'))['itens']
     saida = os.path.join(a.trabalho, 'saida')
     so = {x for x in a.so.split(',') if x}
     fila = []
-    for item in sel:
+    for item in (sel if not a.so_catalogo else []):
         if so and item['id'] not in so:
             continue
         mp = os.path.join(saida, item['id'], 'meta.json')
@@ -128,6 +134,8 @@ def main():
                '--origem', item.get('origem', '') + ' | ' + e.get('origem_caminho', '')]
         if disp:
             cmd += ['--dispmap', disp]
+        if item.get('esconder'):
+            cmd += ['--esconder', item['esconder']]
         fila.append((e.get('bytes', 0), item['id'], cmd))
     fila.sort()  # os pequenos primeiro: o catálogo cresce rápido
     comandos = {ident: cmd for _, ident, cmd in fila}

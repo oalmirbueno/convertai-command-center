@@ -16,6 +16,69 @@ export interface LogoDoKit {
   tom?: TomDaLogo;
   /** Luminância medida na imagem (0..1), média ponderada pelo alfa. Vence o tom quando existe. */
   luminancia?: number | null;
+  /**
+   * Como a luz se espalha pela BORDA da logo (a silhueta: pixel opaco que encosta no transparente),
+   * em faixas de luma com o peso de cada uma. Com ela, a regra também confere se um PEDAÇO da logo
+   * some na superfície (ex.: o "iq" verde de uma logo branca e verde sobre um fundo verde): a média
+   * passa, mas a marca fica ilegível. O miolo de dentro de uma forma (texto branco num selo
+   * colorido, preenchimento branco de uma logo preta) não conta: quem encosta na superfície é a
+   * forma de fora, e a versão chapada apagaria justamente esse miolo.
+   */
+  distribuicao?: Array<{ luma: number; peso: number }> | null;
+}
+
+/** Parte da logo (0..1) que pode sumir na superfície antes de a versão ser recusada. */
+export const PARTE_ILEGIVEL_MAXIMA = 0.08;
+/** Contraste abaixo do qual um pedaço da logo conta como ilegível. */
+export const CONTRASTE_DO_PEDACO = 1.35;
+
+/** Alfa abaixo do qual o pixel conta como transparente. */
+const ALFA_VAZIO = 0.1;
+
+/**
+ * Pixel opaco que encosta no transparente (vizinho de 8, ou a beirada da imagem): a silhueta.
+ * Sem `largura`, a imagem é tratada como uma linha só (todo pixel encosta na beirada).
+ */
+function naSilhueta(pixels: Uint8ClampedArray | Uint8Array, largura: number, altura: number, x: number, y: number): boolean {
+  if (x === 0 || y === 0 || x === largura - 1 || y === altura - 1) return true;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue;
+      if (pixels[((y + dy) * largura + (x + dx)) * 4 + 3] / 255 < ALFA_VAZIO) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Distribuição da luma da silhueta da logo em 16 faixas, pesada pelo alfa (pixel transparente e
+ * miolo não contam). `largura` é a largura da imagem em pixels: sem ela, conta a logo inteira.
+ */
+export function distribuicaoDaLogo(pixels: Uint8ClampedArray | Uint8Array, largura?: number, faixas = 16): Array<{ luma: number; peso: number }> {
+  const pesos = new Array(faixas).fill(0);
+  const somas = new Array(faixas).fill(0);
+  const total = Math.floor(pixels.length / 4);
+  const w = largura && largura > 0 && total % largura === 0 ? Math.floor(largura) : total;
+  const h = w ? Math.floor(total / w) : 0;
+  for (let i = 0; i < pixels.length; i += 4) {
+    const a = pixels[i + 3] / 255;
+    if (a < ALFA_VAZIO) continue;
+    const n = i / 4;
+    if (!naSilhueta(pixels, w, h, n % w, Math.floor(n / w))) continue;
+    const l = luma(pixels[i], pixels[i + 1], pixels[i + 2]);
+    const k = Math.min(faixas - 1, Math.floor(l * faixas));
+    pesos[k] += a;
+    somas[k] += l * a;
+  }
+  const soma = pesos.reduce((t, p) => t + p, 0);
+  if (!soma) return [];
+  return pesos.map((p, k) => ({ luma: p ? somas[k] / p : (k + 0.5) / faixas, peso: p / soma })).filter((f) => f.peso > 0);
+}
+
+/** Quanto da silhueta da logo (0..1) fica sem contraste nesta superfície. */
+export function parteIlegivel(distribuicao: Array<{ luma: number; peso: number }> | null | undefined, superficie: number): number {
+  if (!distribuicao || !distribuicao.length) return 0;
+  return distribuicao.reduce((t, f) => t + (contraste(f.luma, superficie) < CONTRASTE_DO_PEDACO ? f.peso : 0), 0);
 }
 
 export type VarianteDaLogo = { tipo: "original"; id: string } | { tipo: "branca" } | { tipo: "preta" };
@@ -87,19 +150,27 @@ export function escolherVarianteDaLogo(superficie: number | null | undefined, lo
     return { variante: { tipo: "preta" }, contraste: 1, motivo: "sem logo no kit" };
   }
   let melhor: { logo: LogoDoKit; c: number } | null = null;
+  let somePedaco: string | null = null;
   for (const l of logos) {
     const lu = lumaEstimada(l);
     if (lu === null) continue;
     const c = contraste(lu, superficie);
+    // A média passa, mas um pedaço some (o verde da logo no fundo verde): esta versão não serve.
+    const some = parteIlegivel(l.distribuicao, superficie);
+    if (some > PARTE_ILEGIVEL_MAXIMA) {
+      somePedaco = `${Math.round(some * 100)}% da logo ${l.id} some na superfície`;
+      continue;
+    }
     if (!melhor || c > melhor.c) melhor = { logo: l, c };
   }
   if (melhor && melhor.c >= minimo) {
     return { variante: { tipo: "original", id: melhor.logo.id }, contraste: melhor.c, motivo: `logo ${melhor.logo.id} com contraste ${melhor.c.toFixed(1)}` };
   }
   const c = contraste(escura ? 1 : 0, superficie);
+  const versao = escura ? "branca" : "preta";
   return {
     variante: chapada,
     contraste: c,
-    motivo: melhor ? `nenhuma logo do kit passa de ${minimo}: versão ${escura ? "branca" : "preta"}` : `sem medida da logo: versão ${escura ? "branca" : "preta"}`,
+    motivo: somePedaco && !melhor ? `${somePedaco}: versão ${versao}` : melhor ? `nenhuma logo do kit passa de ${minimo}: versão ${versao}` : `sem medida da logo: versão ${versao}`,
   };
 }

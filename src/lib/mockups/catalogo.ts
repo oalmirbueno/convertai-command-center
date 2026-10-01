@@ -23,7 +23,12 @@ export interface ConjuntoDeCamadas {
   ganho: string;
   uv: string;
   mapa: string;
+  /** Fundo trocável (R = objeto, G = luz do fundo / 1,25). Só nos mockups de estúdio. */
+  fundo?: string | null;
 }
+
+/** De onde veio o mockup: PSD da agência ou cena gerada por IA (a marca entra pelo código nos dois). */
+export type FonteDoMockup = "psd" | "ia";
 
 export interface MockupDoCatalogo {
   id: string;
@@ -37,6 +42,9 @@ export interface MockupDoCatalogo {
   alturaTrabalho: number;
   caminhos: { alta: ConjuntoDeCamadas; trabalho: ConjuntoDeCamadas; thumb: string };
   luminanciaMedia: number | null;
+  fonte: FonteDoMockup;
+  /** Tem a camada do fundo: o fundo da cena troca por cor, degradê ou textura da marca. */
+  fundoTrocavel: boolean;
 }
 
 export interface TexturaDoCatalogo {
@@ -51,7 +59,7 @@ export interface TexturaDoCatalogo {
 
 export type CategoriaDeMockup =
   | "papelaria" | "cartao" | "folder" | "livro" | "dispositivo" | "poster" | "caneca" | "vestuario"
-  | "sacola" | "embalagem" | "logo-efeito" | "outdoor" | "veiculo";
+  | "sacola" | "embalagem" | "logo-efeito" | "fachada" | "sinalizacao" | "outdoor" | "veiculo";
 
 /** Ordem da sequência bonita: papelaria, digital, produto, exterior. */
 export const CATEGORIAS: Array<{ id: CategoriaDeMockup; rotulo: string; grupo: "Papelaria" | "Digital" | "Produto" | "Exterior" }> = [
@@ -59,13 +67,15 @@ export const CATEGORIAS: Array<{ id: CategoriaDeMockup; rotulo: string; grupo: "
   { id: "cartao", rotulo: "Cartão", grupo: "Papelaria" },
   { id: "folder", rotulo: "Folder", grupo: "Papelaria" },
   { id: "livro", rotulo: "Livro", grupo: "Papelaria" },
-  { id: "dispositivo", rotulo: "Telas", grupo: "Digital" },
+  { id: "dispositivo", rotulo: "Telas e celular", grupo: "Digital" },
   { id: "poster", rotulo: "Pôster", grupo: "Digital" },
   { id: "caneca", rotulo: "Caneca", grupo: "Produto" },
   { id: "vestuario", rotulo: "Vestuário", grupo: "Produto" },
   { id: "sacola", rotulo: "Sacola", grupo: "Produto" },
   { id: "embalagem", rotulo: "Embalagem", grupo: "Produto" },
   { id: "logo-efeito", rotulo: "Logo com efeito", grupo: "Produto" },
+  { id: "fachada", rotulo: "Fachada", grupo: "Exterior" },
+  { id: "sinalizacao", rotulo: "Sinalização", grupo: "Exterior" },
   { id: "outdoor", rotulo: "Outdoor", grupo: "Exterior" },
   { id: "veiculo", rotulo: "Veículo", grupo: "Exterior" },
 ];
@@ -85,7 +95,7 @@ const texto = (v: unknown, max = 200) => (typeof v === "string" ? v.slice(0, max
 function conjunto(v: unknown): ConjuntoDeCamadas | null {
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>;
-  const c = { base: texto(o.base), vazio: texto(o.vazio), ganho: texto(o.ganho), uv: texto(o.uv), mapa: texto(o.mapa) };
+  const c: ConjuntoDeCamadas = { base: texto(o.base), vazio: texto(o.vazio), ganho: texto(o.ganho), uv: texto(o.uv), mapa: texto(o.mapa), fundo: texto(o.fundo) || null };
   return c.base && c.vazio && c.ganho && c.uv && c.mapa ? c : null;
 }
 
@@ -140,6 +150,9 @@ export function normalizarMockup(v: unknown): MockupDoCatalogo | null {
     alturaTrabalho: at,
     caminhos: { alta, trabalho, thumb },
     luminanciaMedia: num(o.luminancia_media, 0, 1),
+    fonte: o.fonte === "ia" ? "ia" : "psd",
+    // O fundo só troca quando as duas versões (trabalho e alta) têm a camada.
+    fundoTrocavel: !!(alta.fundo && trabalho.fundo),
   };
 }
 
@@ -166,7 +179,22 @@ export function ordenarNaSequencia<T extends { categoria: string; nome: string }
  * Candidatos para a sugestão: os mockups das categorias escolhidas. Sem categoria escolhida,
  * todos. Limite para o Jev (o estado vai inteiro numa pergunta por item).
  */
-export function candidatosDaSugestao(itens: MockupDoCatalogo[], categorias: string[], limite = 40): MockupDoCatalogo[] {
-  const set = categorias.length ? itens.filter((m) => categorias.indexOf(m.categoria) >= 0) : itens;
+export function candidatosDaSugestao(itens: MockupDoCatalogo[], categorias: string[], limite = 40, fonte: FiltroDeFonte = "todos"): MockupDoCatalogo[] {
+  const set = filtrarPorFonte(categorias.length ? itens.filter((m) => categorias.indexOf(m.categoria) >= 0) : itens, fonte);
   return ordenarNaSequencia(set).slice(0, limite);
+}
+
+/** Filtro da tela: todos, só os PSDs da agência ou só os feitos com IA. */
+export type FiltroDeFonte = "todos" | FonteDoMockup;
+
+export function filtrarPorFonte<T extends { fonte: FonteDoMockup }>(itens: T[], filtro: FiltroDeFonte): T[] {
+  return filtro === "todos" ? itens : itens.filter((m) => m.fonte === filtro);
+}
+
+/** Busca por nome ou etiqueta, sem acento e sem caixa ("cafe" acha "Café"). */
+export function buscarMockups<T extends { nome: string; tags: string[]; categoria: string }>(itens: T[], termo: string): T[] {
+  const limpar = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const t = limpar(termo.trim());
+  if (!t) return itens;
+  return itens.filter((m) => limpar(`${m.nome} ${m.tags.join(" ")} ${rotuloDaCategoria(m.categoria)}`).indexOf(t) >= 0);
 }

@@ -8,16 +8,22 @@ export const BUCKET = "mockups";
 export const ARQUIVOS_DO_CONJUNTO = ["base.jpg", "vazio.jpg", "ganho.png", "uv.png", "mapa.png"];
 export const CATEGORIAS = [
   "papelaria", "cartao", "sacola", "caneca", "vestuario", "embalagem", "outdoor", "dispositivo",
-  "poster", "veiculo", "logo-efeito", "folder", "livro",
+  "poster", "veiculo", "logo-efeito", "folder", "livro", "fachada", "sinalizacao",
 ];
+/** De onde veio o mockup: PSD pré-processado ou cena gerada por IA (mockup_de_ia.py). */
+export const FONTES = ["psd", "ia"];
 export const CATEGORIAS_DE_TEXTURA = ["grunge", "papel", "concreto", "fumaca", "carimbo", "outro"];
 export const PAPEIS = ["arte", "logo", "cor", "verso"];
 
 const ID = /^[a-z0-9][a-z0-9-]{1,79}$/;
 
-/** Caminhos de um mockup no bucket. */
-export function caminhosDoMockup(id) {
-  const conjunto = (pasta) => Object.fromEntries(ARQUIVOS_DO_CONJUNTO.map((f) => [f.split(".")[0], `catalogo/${id}/${pasta}/${f}`]));
+/** Camada extra do fundo trocável (R = objeto, G = luz do fundo). */
+export const ARQUIVO_DO_FUNDO = "fundo.png";
+
+/** Caminhos de um mockup no bucket (com fundo trocável, mais o fundo.png de cada tamanho). */
+export function caminhosDoMockup(id, comFundo = false) {
+  const arquivos = comFundo ? ARQUIVOS_DO_CONJUNTO.concat([ARQUIVO_DO_FUNDO]) : ARQUIVOS_DO_CONJUNTO;
+  const conjunto = (pasta) => Object.fromEntries(arquivos.map((f) => [f.split(".")[0], `catalogo/${id}/${pasta}/${f}`]));
   return { alta: conjunto("alta"), trabalho: conjunto("trabalho"), thumb: `catalogo/${id}/thumb.jpg` };
 }
 
@@ -64,6 +70,8 @@ export function linhaDoCatalogo(meta) {
   const at = numero(meta.altura_trabalho, 1, 2048);
   if (!largura || !altura || !lt || !at) return { erro: `${id}: dimensões inválidas` };
   const bytes = meta.bytes || {};
+  const fonte = FONTES.includes(meta.fonte) ? meta.fonte : "psd";
+  const comFundo = meta.fundo_trocavel === true;
   const soma = (o) => Object.values(o || {}).reduce((t, v) => t + (Number(v) || 0), 0);
   return {
     linha: {
@@ -76,21 +84,34 @@ export function linhaDoCatalogo(meta) {
       altura: Math.round(altura),
       largura_trabalho: Math.round(lt),
       altura_trabalho: Math.round(at),
-      caminhos: caminhosDoMockup(id),
+      caminhos: caminhosDoMockup(id, comFundo),
+      fonte,
       qualidade: {
         diferenca: numero(meta.qualidade.diferenca, 0, 255),
         diferenca_imagem: numero(meta.qualidade.diferenca_imagem, 0, 255),
         diferenca_slot: numero(meta.qualidade.diferenca_slot, 0, 255),
         limite: numero(meta.qualidade.limite, 0, 255),
+        metodo: meta.qualidade.metodo ? String(meta.qualidade.metodo).slice(0, 200) : null,
+        calibrado: !!meta.calibracao,
         avisos: Array.isArray(meta.qualidade.avisos) ? meta.qualidade.avisos.slice(0, 12) : [],
       },
       luminancia_media: numero(meta.luminancia_media, 0, 1),
       origem: meta.origem ? String(meta.origem).slice(0, 300) : null,
       versao_pipeline: Number(meta.versao_pipeline) || 1,
       bytes: soma(bytes.alta) + soma(bytes.trabalho) + (Number(bytes.thumb) || 0),
-      ativo: true,
+      // Curadoria (curadoria-catalogo.json): vista repetida sobe guardada, fora da tela.
+      ativo: meta.ativo !== false,
     },
   };
+}
+
+/**
+ * Aplica a curadoria (curadoria-catalogo.json) nos itens do catálogo: o id listado em
+ * `inativos` sobe com ativo=false. Devolve uma cópia; o resto fica igual.
+ */
+export function aplicarCuradoria(itens, curadoria) {
+  const inativos = (curadoria && curadoria.inativos) || {};
+  return (itens || []).map((m) => (m && Object.prototype.hasOwnProperty.call(inativos, m.id) ? { ...m, ativo: false } : m));
 }
 
 /** Item de texturas.json -> linha de textura_catalogo. */
@@ -119,11 +140,12 @@ export function linhaDaTextura(t) {
 }
 
 /** Lista de envios (arquivo local -> caminho no bucket) de um mockup. */
-export function enviosDoMockup(id, pastaLocal) {
-  const c = caminhosDoMockup(id);
+export function enviosDoMockup(id, pastaLocal, comFundo = false) {
+  const c = caminhosDoMockup(id, comFundo);
+  const arquivos = comFundo ? ARQUIVOS_DO_CONJUNTO.concat([ARQUIVO_DO_FUNDO]) : ARQUIVOS_DO_CONJUNTO;
   const lista = [];
   for (const pasta of ["alta", "trabalho"]) {
-    for (const f of ARQUIVOS_DO_CONJUNTO) lista.push({ local: `${pastaLocal}/${pasta}/${f}`, destino: c[pasta][f.split(".")[0]] });
+    for (const f of arquivos) lista.push({ local: `${pastaLocal}/${pasta}/${f}`, destino: c[pasta][f.split(".")[0]] });
   }
   lista.push({ local: `${pastaLocal}/thumb.jpg`, destino: c.thumb });
   return lista;

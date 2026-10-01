@@ -9,6 +9,7 @@ import { createFileRecord, confirmStoredObject } from "@/lib/fileRecordActions";
 import { requestFileAgencyReview } from "@/lib/fileApprovalActions";
 import { normalizarMockup, normalizarTextura, ordenarNaSequencia, type ConjuntoDeCamadas, type MockupDoCatalogo, type TexturaDoCatalogo } from "./catalogo";
 import { liberarDoCompositor, type CamadasCarregadas } from "./webgl";
+import type { TipoDeCena } from "./cenas";
 
 export const BUCKET_MOCKUPS = "mockups";
 const db = supabase as any;
@@ -126,17 +127,20 @@ export function liberarCamadas(conjunto: ConjuntoDeCamadas | null | undefined): 
   esquecerImagem(conjunto.ganho);
   esquecerImagem(conjunto.uv);
   esquecerImagem(conjunto.mapa);
+  if (conjunto.fundo) esquecerImagem(conjunto.fundo);
 }
 
 export async function carregarCamadas(conjunto: ConjuntoDeCamadas, largura: number, altura: number): Promise<CamadasCarregadas> {
-  const [base, vazio, ganho, uv, mapa] = await Promise.all([
+  const [base, vazio, ganho, uv, mapa, fundo] = await Promise.all([
     carregarImagem(conjunto.base),
     carregarImagem(conjunto.vazio),
     carregarImagem(conjunto.ganho),
     carregarImagem(conjunto.uv),
     carregarImagem(conjunto.mapa),
+    // O fundo é opcional: se não abrir, o mockup sai com o fundo original (e não quebra).
+    conjunto.fundo ? carregarImagem(conjunto.fundo).catch(() => null) : Promise.resolve(null),
   ]);
-  return { largura, altura, base, vazio, ganho, uv, mapa };
+  return { largura, altura, base, vazio, ganho, uv, mapa, fundo };
 }
 
 /** Onde está a logo do kit: caminho no bucket mesa ou arquivo em Arquivos. */
@@ -319,7 +323,7 @@ export async function sugerirMockups(p: { clientId: string; marcaId: string | nu
   });
 }
 
-export type TipoDeCena = "fachada" | "social";
+export type { TipoDeCena } from "./cenas";
 
 export async function estimarCena(p: { clientId: string; tipo: TipoDeCena; modeloId?: string | null }) {
   return chamarFuncao<{ estimativa_usd: number; modelo_id: string; modelo_nome: string }>("mesa-mockups", { acao: "cena_estimar", client_id: p.clientId, tipo: p.tipo, modelo_id: p.modeloId ?? null });
@@ -333,5 +337,19 @@ export async function gerarCena(p: { clientId: string; marcaId: string | null; t
     tipo: p.tipo,
     pedido: p.pedido || "",
     modelo_id: p.modeloId ?? null,
+  });
+}
+
+/**
+ * Mockup enviado -> acervo de imagens do cliente (cliente_imagens), para as outras mesas usarem.
+ * Só pelo servidor (a tabela não aceita escrita da tela); o mesmo arquivo não entra duas vezes.
+ */
+export async function guardarNoAcervo(p: { clientId: string; marcaId: string | null; fileId: string; nome: string }) {
+  return chamarFuncao<{ imagem_id: string; ja_existia: boolean }>("mesa-mockups", {
+    acao: "acervo_guardar",
+    client_id: p.clientId,
+    marca_id: p.marcaId,
+    file_id: p.fileId,
+    nome: p.nome,
   });
 }

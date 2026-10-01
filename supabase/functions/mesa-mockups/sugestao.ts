@@ -93,27 +93,61 @@ export function ranquear(candidatos: CandidatoDeMockup[], notas: NotaDoMockup[])
 
 // ------------------------------------------------------------------ cenas
 
-export type TipoDeCena = "fachada" | "social";
+export type TipoDeCena = "fachada" | "social" | "papelaria" | "embalagem" | "veiculo" | "vestuario" | "sinalizacao" | "digital";
 
-export const TAMANHO_DA_CENA: Record<TipoDeCena, string> = { fachada: "1536x1024", social: "1024x1536" };
+export const TIPOS_DE_CENA: TipoDeCena[] = ["fachada", "social", "papelaria", "embalagem", "veiculo", "vestuario", "sinalizacao", "digital"];
+
+export const TAMANHO_DA_CENA: Record<TipoDeCena, string> = {
+  fachada: "1536x1024",
+  social: "1024x1536",
+  papelaria: "1536x1024",
+  embalagem: "1536x1024",
+  veiculo: "1536x1024",
+  vestuario: "1024x1536",
+  sinalizacao: "1024x1536",
+  digital: "1536x1024",
+};
 
 const SEM_TEXTO = "Nenhum texto, letra, número, logo, marca ou símbolo em lugar nenhum da imagem.";
+const LISA = "totalmente branca e lisa, fosca, plana, sem nada escrito, sem estampa, com bordas retas e nítidas, bem iluminada e sem reflexos fortes";
+
+/**
+ * O que a IA desenha em cada tipo: o objeto real do negócio e UMA superfície grande, lisa e branca,
+ * de frente ou em perspectiva suave, que o código acha e onde aplica a marca (homografia).
+ */
+const CENAS: Record<TipoDeCena, (negocio: string) => string> = {
+  fachada: (n) =>
+    `Fotografia realista, de dia, da fachada de ${n}, vista de frente e um pouco de baixo, luz natural suave. ` +
+    `Acima da entrada há uma placa retangular grande, plana, ${LISA}, de frente para a câmera, ocupando cerca de um terço da largura da imagem.`,
+  social:
+    (n) =>
+      `Fotografia realista de uma mão segurando um smartphone moderno na vertical, a tela de frente para a câmera, ` +
+      `tela totalmente branca e lisa, acesa, sem interface, sem ícones e sem reflexo forte, ocupando boa parte da imagem. ` +
+      `Fundo desfocado de um ambiente ligado a ${n}.`,
+  papelaria: (n) =>
+    `Fotografia realista vista de cima de uma mesa de trabalho de ${n}, com uma folha A4 e um cartão de visita apoiados na mesa, ` +
+    `a folha ${LISA}, o cartão também branco e liso, uma caneta ao lado, luz natural suave.`,
+  embalagem: (n) =>
+    `Fotografia realista de produto: uma caixa de embalagem de ${n} em pé sobre um balcão, a face da frente virada para a câmera em ângulo suave, ` +
+    `a face da frente ${LISA}, fundo do ambiente desfocado.`,
+  veiculo: (n) =>
+    `Fotografia realista, de dia, de uma van de entrega branca estacionada numa rua limpa, vista de lado, a van inteira na imagem, ` +
+    `a lateral de carga plana ${LISA}, sem janelas na área de carga, ligada ao dia a dia de ${n}.`,
+  vestuario: (n) =>
+    `Fotografia realista de uma camiseta branca lisa de uniforme dobrada com cuidado sobre uma superfície clara, vista de cima, ` +
+    `a camiseta inteira aparecendo, tecido branco sem estampa, no ambiente de ${n}.`,
+  sinalizacao: (n) =>
+    `Fotografia realista de um totem de sinalização retangular em pé na entrada de ${n}, a face da frente virada para a câmera, ` +
+    `a face da frente ${LISA}, ocupando boa parte da altura da imagem.`,
+  digital: (n) =>
+    `Fotografia realista de uma TV de parede grande sobre o balcão de ${n}, vista de frente em ângulo suave, ` +
+    `a tela acesa ${LISA}, sem interface.`,
+};
 
 /** O texto pedido ao gerador. A área lisa é o que o código depois acha e preenche com a marca. */
 export function promptDaCena(tipo: TipoDeCena, cliente: ClienteParaSugestao, cores: string[], pedido: string): string {
   const negocio = cliente.negocio ? cliente.negocio.slice(0, 240) : "um pequeno negócio local";
   const paleta = cores.length ? ` Detalhes discretos do ambiente nas cores ${cores.slice(0, 3).join(", ")}.` : "";
   const extra = pedido.trim() ? ` Pedido da equipe: ${pedido.trim().slice(0, 300)}.` : "";
-  if (tipo === "fachada") {
-    return (
-      `Fotografia realista, de dia, da fachada de ${negocio}, vista de frente e um pouco de baixo, luz natural suave. ` +
-      `Acima da entrada há uma placa retangular grande, plana, totalmente branca e lisa, sem nada escrito, de frente para a câmera, ` +
-      `ocupando cerca de um terço da largura da imagem, bem iluminada e sem reflexos fortes.${paleta} ${SEM_TEXTO}${extra}`
-    );
-  }
-  return (
-    `Fotografia realista de uma mão segurando um smartphone moderno na vertical, a tela de frente para a câmera, ` +
-    `tela totalmente branca e lisa, acesa, sem interface, sem ícones e sem reflexo forte, ocupando boa parte da imagem. ` +
-    `Fundo desfocado de um ambiente ligado a ${negocio}.${paleta} ${SEM_TEXTO}${extra}`
-  );
+  return `${CENAS[tipo](negocio)}${paleta} ${SEM_TEXTO}${extra}`;
 }

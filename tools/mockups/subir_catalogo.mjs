@@ -3,7 +3,10 @@
  * Sobe o catálogo de mockups e as texturas para o bucket `mockups` e grava as linhas de
  * public.mockup_catalogo e public.textura_catalogo (upsert pelo id).
  *
- * Antes: aplicar supabase/migrations/20260930110000_estudio_de_mockups.sql (cria bucket e tabelas).
+ * Antes: aplicar supabase/migrations/20260930110000_estudio_de_mockups.sql (cria bucket e tabelas) e
+ * 20260930322000_mockups_mais_modelos.sql (categorias fachada/sinalizacao e a coluna fonte).
+ * Sobe o catalogo.json (PSDs, inclusive os recuperados pelo calibrar.py) e o catalogo-ia.json
+ * (mockups gerados por IA, com o fundo.png quando o fundo é trocável).
  *
  * Chave de serviço: nunca em arquivo. Vem, nesta ordem,
  *   1) da variável SUPABASE_SERVICE_ROLE_KEY do processo, ou
@@ -17,7 +20,11 @@
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { BUCKET, enviosDoMockup, linhaDaTextura, linhaDoCatalogo, tipoDoArquivo } from "./catalogo-linhas.mjs";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { aplicarCuradoria, BUCKET, enviosDoMockup, linhaDaTextura, linhaDoCatalogo, tipoDoArquivo } from "./catalogo-linhas.mjs";
+
+const AQUI = dirname(fileURLToPath(import.meta.url));
 
 const PROJETO = "jjjtkowvxemvituvywvf";
 const URL_DO_PROJETO = `https://${PROJETO}.supabase.co`;
@@ -62,6 +69,10 @@ function lerJson(caminho) {
 async function main() {
   const a = argumentos();
   const catalogo = lerJson(join(a.trabalho, "catalogo.json"));
+  if (existsSync(join(a.trabalho, "catalogo-ia.json"))) catalogo.itens = (catalogo.itens || []).concat(lerJson(join(a.trabalho, "catalogo-ia.json")).itens || []);
+  // Vistas repetidas do mesmo pacote sobem guardadas (ativo=false): ver curadoria-catalogo.json.
+  const curadoria = existsSync(join(AQUI, "curadoria-catalogo.json")) ? lerJson(join(AQUI, "curadoria-catalogo.json")) : null;
+  catalogo.itens = aplicarCuradoria(catalogo.itens, curadoria);
   const texturas = !a.semTexturas && existsSync(join(a.trabalho, "texturas.json")) ? lerJson(join(a.trabalho, "texturas.json")) : { itens: [] };
 
   const linhas = [];
@@ -74,7 +85,7 @@ async function main() {
       problemas.push(r.erro);
       continue;
     }
-    const lista = enviosDoMockup(meta.id, join(a.trabalho, "saida", meta.id).replace(/\\/g, "/"));
+    const lista = enviosDoMockup(meta.id, join(a.trabalho, "saida", meta.id).replace(/\\/g, "/"), meta.fundo_trocavel === true);
     const falta = lista.filter((e) => !existsSync(e.local));
     if (falta.length) {
       problemas.push(`${meta.id}: faltam ${falta.map((f) => f.local).join(", ")}`);
@@ -100,6 +111,8 @@ async function main() {
     envios.push({ local: png, destino: r.linha.caminho }, { local: mini, destino: r.linha.caminho_mini });
   }
   const bytes = envios.reduce((t, e) => t + statSync(e.local).size, 0);
+  const guardados = linhas.filter((l) => !l.ativo).length;
+  if (guardados) console.log(`curadoria: ${guardados} vistas repetidas sobem guardadas (ativo=false)`);
   console.log(`mockups: ${linhas.length} | texturas: ${linhasTex.length} | arquivos: ${envios.length} | ${(bytes / 1e6).toFixed(1)} MB`);
   for (const p of problemas) console.log("  fora:", p);
   if (a.seco) return;

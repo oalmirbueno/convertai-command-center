@@ -6,10 +6,12 @@
 import type { MockupDoCatalogo, SlotDoMockup } from "./catalogo";
 import { carregarCamadas, carregarImagem, ondeEstaALogo } from "./api";
 import { desenharDesign, type EscolhasDoDesign, type LogoCarregada } from "./designDoSlot";
-import { lumaDaLogo, type TomDaLogo, type EscolhaDaVariante } from "./varianteDaLogo";
-import { compositor } from "./webgl";
+import { distribuicaoDaLogo, lumaDaLogo, type TomDaLogo, type EscolhaDaVariante } from "./varianteDaLogo";
+import { compositor, type CamadasCarregadas } from "./webgl";
 import { escalaQueCabe, limparForaDaTela } from "@/lib/recorte/limpezaDaLogo";
 import { fundoPelaBorda } from "../../../supabase/functions/_shared/recorte-limpo";
+import { ganhoMedioPorSlot } from "./composicao";
+import { desenharFundo, type FundoPedido } from "./fundoDaCena";
 import { ordenarCantos, projetarDesign, type Ponto } from "./homografia";
 
 export type Qualidade = "trabalho" | "alta";
@@ -20,7 +22,46 @@ export interface Renderizado {
   webgl: boolean;
 }
 
-export async function renderizarMockup(m: MockupDoCatalogo, qualidade: Qualidade, logos: LogoCarregada[], escolhas: EscolhasDoDesign, destino?: HTMLCanvasElement): Promise<Renderizado> {
+/** Luz, brilho e fundo da cena (o que não é o design do slot). */
+export interface CenaDoRender {
+  luz?: number;
+  brilho?: number;
+  /** Fundo novo (só vale nos mockups com fundo trocável). */
+  fundo?: FundoPedido | null;
+}
+
+const ganhosMedios = new WeakMap<object, number[]>();
+
+/** Ganho médio de cada slot, lido numa cópia pequena (256 px) do ganho e do mapa; guardado por imagem. */
+export function ganhoMedioDasCamadas(c: CamadasCarregadas, slots: number): number[] {
+  const ja = ganhosMedios.get(c.ganho);
+  if (ja && ja.length >= slots) return ja;
+  const f = Math.min(1, 256 / Math.max(c.largura, c.altura));
+  const w = Math.max(1, Math.round(c.largura * f));
+  const h = Math.max(1, Math.round(c.altura * f));
+  const ler = (img: HTMLImageElement, liso: boolean) => {
+    const t = document.createElement("canvas");
+    t.width = w;
+    t.height = h;
+    const ctx = t.getContext("2d");
+    if (!ctx) return null;
+    // O mapa é número (índice do slot): sem suavizar, senão a borda vira outro índice.
+    ctx.imageSmoothingEnabled = liso;
+    ctx.drawImage(img, 0, 0, w, h);
+    try {
+      return ctx.getImageData(0, 0, w, h).data;
+    } catch {
+      return null;
+    }
+  };
+  const g = ler(c.ganho, true);
+  const m = ler(c.mapa, false);
+  const r = g && m ? ganhoMedioPorSlot(g, m, slots) : new Array(slots).fill(1);
+  ganhosMedios.set(c.ganho, r);
+  return r;
+}
+
+export async function renderizarMockup(m: MockupDoCatalogo, qualidade: Qualidade, logos: LogoCarregada[], escolhas: EscolhasDoDesign, destino?: HTMLCanvasElement, cena: CenaDoRender = {}): Promise<Renderizado> {
   const alta = qualidade === "alta";
   const largura = alta ? m.largura : m.larguraTrabalho;
   const altura = alta ? m.altura : m.alturaTrabalho;
@@ -41,7 +82,14 @@ export async function renderizarMockup(m: MockupDoCatalogo, qualidade: Qualidade
   }
   const canvas = destino || document.createElement("canvas");
   const c = compositor();
-  c.desenhar(camadas, designs, canvas);
+  const luz = typeof cena.luz === "number" ? cena.luz : 1;
+  const novoFundo = cena.fundo && m.fundoTrocavel && camadas.fundo ? desenharFundo(cena.fundo, largura, altura) : null;
+  c.desenhar(camadas, designs, canvas, {
+    luz,
+    brilho: cena.brilho,
+    ganhoMedio: luz === 1 ? undefined : ganhoMedioDasCamadas(camadas, maxIndice),
+    novoFundo,
+  });
   return { canvas, escolhas: vistas, webgl: c.webgl };
 }
 
@@ -58,8 +106,12 @@ function medidas(img: HTMLImageElement | HTMLCanvasElement): { w: number; h: num
   return { w: el.naturalWidth || img.width || 1, h: el.naturalHeight || img.height || 1 };
 }
 
-/** Mede a luma de uma logo numa cópia pequena (64 px). */
+/** Mede a luma de uma logo numa cópia pequena (64 px): a média e como ela se espalha. */
 export function medirLogo(img: HTMLImageElement | HTMLCanvasElement): number | null {
+  return medirLogoCompleta(img).luma;
+}
+
+export function medirLogoCompleta(img: HTMLImageElement | HTMLCanvasElement): { luma: number | null; distribuicao: Array<{ luma: number; peso: number }> | null } {
   const lado = 64;
   const m = medidas(img);
   const f = Math.min(1, lado / Math.max(m.w, m.h));
@@ -69,12 +121,13 @@ export function medirLogo(img: HTMLImageElement | HTMLCanvasElement): number | n
   c.width = w;
   c.height = h;
   const ctx = c.getContext("2d");
-  if (!ctx) return null;
+  if (!ctx) return { luma: null, distribuicao: null };
   ctx.drawImage(img, 0, 0, w, h);
   try {
-    return lumaDaLogo(ctx.getImageData(0, 0, w, h).data);
+    const px = ctx.getImageData(0, 0, w, h).data;
+    return { luma: lumaDaLogo(px), distribuicao: distribuicaoDaLogo(px, w) };
   } catch {
-    return null;
+    return { luma: null, distribuicao: null };
   }
 }
 
@@ -149,12 +202,14 @@ export async function carregarLogos(lista: LogoDoKitParaCarregar[]): Promise<Log
     try {
       const img = await logoSemCaixaBranca(await carregarImagem(onde.caminho, onde.bucket));
       const m = medidas(img);
+      const medida = medirLogoCompleta(img);
       out.push({
         id: l.id,
         imagem: img,
         largura: m.w,
         altura: m.h,
-        luma: medirLogo(img),
+        luma: medida.luma,
+        distribuicao: medida.distribuicao,
         tom: l.tom === "clara" || l.tom === "escura" ? l.tom : null,
       });
     } catch {

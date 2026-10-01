@@ -1,16 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Loader2, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { botao, juntar, texto } from "@/components/sistema";
-import { textoDoErro, usd } from "@/lib/mesa/api";
-import { carregarImagem, estimarCena, gerarCena, salvarAplicacao, type TipoDeCena } from "@/lib/mockups/api";
+import { modelosAtivos, textoDoErro, usd } from "@/lib/mesa/api";
+import { useCatalogo } from "@/components/mesa/MesaContexto";
+import { SeletorDeModelo } from "@/components/mesa/Seletores";
+import { carregarImagem, estimarCena, gerarCena, salvarAplicacao } from "@/lib/mockups/api";
+import { rotuloDoTipoDeCena, TIPOS_DE_CENA, type TipoDeCena } from "@/lib/mockups/cenas";
 import type { EscolhasDoDesign, LogoCarregada } from "@/lib/mockups/designDoSlot";
 import { detectarAreaLisa, ordenarCantos, type Ponto } from "@/lib/mockups/homografia";
 import { comporCena } from "@/lib/mockups/renderizar";
 
 /**
- * Fachada e redes sociais (o pacote de PSDs não tem): a IA desenha só a cena, com uma área lisa;
- * a marca entra pelo código, por homografia, nos 4 cantos achados ou marcados à mão.
+ * Cenas sob medida para o negócio do cliente (fachada, sinalização, veículo, embalagem, papelaria,
+ * vestuário, tela digital e redes): a IA desenha só a cena, com uma área lisa; a marca entra pelo
+ * código, por homografia, nos 4 cantos achados ou marcados à mão. O gerador é escolhido na hora,
+ * com o custo antes.
  */
 export default function EditorDeCena({
   clientId,
@@ -27,6 +32,9 @@ export default function EditorDeCena({
 }) {
   const [tipo, setTipo] = useState<TipoDeCena>("fachada");
   const [pedido, setPedido] = useState("");
+  const catalogo = useCatalogo();
+  const geradores = useMemo(() => modelosAtivos(catalogo.data || [], "imagem"), [catalogo.data]);
+  const [modeloId, setModeloId] = useState("");
   const [estimativa, setEstimativa] = useState<{ valor: number; modelo: string } | null>(null);
   const [confirmar, setConfirmar] = useState(false);
   const [gerando, setGerando] = useState(false);
@@ -41,19 +49,24 @@ export default function EditorDeCena({
   useEffect(() => {
     let vivo = true;
     setEstimativa(null);
-    estimarCena({ clientId, tipo })
-      .then((e) => vivo && setEstimativa({ valor: e.estimativa_usd, modelo: e.modelo_nome }))
+    estimarCena({ clientId, tipo, modeloId: modeloId || null })
+      .then((e) => {
+        if (!vivo) return;
+        setEstimativa({ valor: e.estimativa_usd, modelo: e.modelo_nome });
+        // O seletor mostra o gerador que a função vai usar (o padrão do papel, se nada foi escolhido).
+        if (!modeloId && e.modelo_id) setModeloId(e.modelo_id);
+      })
       .catch((e) => vivo && toast.error(textoDoErro(e, "Não foi possível estimar o custo da cena.")));
     return () => {
       vivo = false;
     };
-  }, [clientId, tipo]);
+  }, [clientId, tipo, modeloId]);
 
   const gerar = async () => {
     setConfirmar(false);
     setGerando(true);
     try {
-      const r = await gerarCena({ clientId, marcaId, tipo, pedido });
+      const r = await gerarCena({ clientId, marcaId, tipo, pedido, modeloId: modeloId || null });
       const img = await carregarImagem(r.caminho, "mesa");
       setCena({ caminho: r.caminho, img });
       toast.success(`Cena pronta (${usd(r.custo_usd)}).`);
@@ -156,7 +169,7 @@ export default function EditorDeCena({
         cenaCaminho: cena.caminho,
         config: { tipo, cantos: ordenarCantos(cantos), luz, fundo: escolhas.fundo, segunda: escolhas.segunda, escala: escolhas.escala },
       });
-      onUsar({ aplicacaoId: ap.id, imagem: blob, nome: tipo === "fachada" ? "Fachada" : "Redes sociais", caminho: cena.caminho, cantos: ordenarCantos(cantos), luz });
+      onUsar({ aplicacaoId: ap.id, imagem: blob, nome: rotuloDoTipoDeCena(tipo), caminho: cena.caminho, cantos: ordenarCantos(cantos), luz });
       toast.success("Cena guardada nas escolhas.");
     } catch (e) {
       toast.error(textoDoErro(e, "A cena não foi guardada."));
@@ -170,20 +183,24 @@ export default function EditorDeCena({
 
   return (
     <div className="grid min-w-0 gap-5">
+      <div role="group" aria-label="Tipo de cena" className="flex min-w-0 flex-wrap">
+        {TIPOS_DE_CENA.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            aria-pressed={tipo === t.id}
+            onClick={() => setTipo(t.id)}
+            className={juntar(botao.secundario, "mb-2 mr-2 h-8 px-3 text-[12px]", tipo === t.id && "border-primary bg-primary/10 text-foreground")}
+          >
+            {t.rotulo}
+          </button>
+        ))}
+      </div>
+      <div className="grid min-w-0 grid-cols-1 items-end gap-3 sm:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
+        <SeletorDeModelo catalogo={geradores} tipo="imagem" rotulo="Gerador da cena" valor={modeloId} onChange={(id) => setModeloId(id)} />
+        <p className={texto.auxiliar}>{estimativa ? `${estimativa.modelo} · cerca de ${usd(estimativa.valor)} por cena` : "Calculando o custo..."}</p>
+      </div>
       <div className="flex min-w-0 flex-wrap items-center">
-        <div role="group" aria-label="Tipo de cena" className="mb-2 mr-3 inline-flex rounded-md bg-muted p-0.5">
-          {(["fachada", "social"] as TipoDeCena[]).map((t) => (
-            <button
-              key={t}
-              type="button"
-              aria-pressed={tipo === t}
-              onClick={() => setTipo(t)}
-              className={juntar(botao.barra, "h-8 px-3", tipo === t && "bg-background text-foreground")}
-            >
-              {t === "fachada" ? "Fachada" : "Redes sociais"}
-            </button>
-          ))}
-        </div>
         <input
           value={pedido}
           onChange={(e) => setPedido(e.target.value)}

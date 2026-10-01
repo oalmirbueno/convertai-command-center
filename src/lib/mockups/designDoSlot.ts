@@ -17,6 +17,8 @@ export interface LogoCarregada {
   altura: number;
   luma: number | null;
   tom?: TomDaLogo;
+  /** Faixas de luma da logo (a regra confere se um pedaço some na superfície). */
+  distribuicao?: Array<{ luma: number; peso: number }> | null;
 }
 
 export interface EscolhasDoDesign {
@@ -35,6 +37,14 @@ export interface EscolhasDoDesign {
    * título, embaixo da logo, só no slot de arte. A fonte já vem carregada.
    */
   assinatura?: { texto: string; familia: string } | null;
+  /** Deslocamento da logo dentro da área segura (-1 a 1 em cada eixo; 0 = centro). */
+  posicao?: { x: number; y: number } | null;
+  /** Giro da logo em graus. */
+  rotacao?: number;
+  /** Versão da logo: auto (pelo contraste), a do kit como veio, branca ou preta. */
+  variante?: "auto" | "original" | "branca" | "preta";
+  /** Arte com a logo sozinha ou em padrão repetido (estampa da marca). */
+  modo?: "logo" | "padrao";
 }
 
 export interface Caixa {
@@ -44,8 +54,11 @@ export interface Caixa {
   h: number;
 }
 
-/** A logo (lw x lh) contida na área segura do design (W x H), no centro, ocupando `escala` dela. */
-export function caixaDaLogo(area: [number, number, number, number], W: number, H: number, lw: number, lh: number, escala: number): Caixa {
+/**
+ * A logo (lw x lh) contida na área segura do design (W x H), ocupando `escala` dela. Sem posição,
+ * no centro; com posição, desliza até a borda da área (-1 encosta à esquerda/topo, 1 à direita/base).
+ */
+export function caixaDaLogo(area: [number, number, number, number], W: number, H: number, lw: number, lh: number, escala: number, posicao?: { x: number; y: number } | null): Caixa {
   const ax = area[0] * W;
   const ay = area[1] * H;
   const aw = Math.max(1, (area[2] - area[0]) * W);
@@ -54,7 +67,9 @@ export function caixaDaLogo(area: [number, number, number, number], W: number, H
   const f = Math.min((aw * e) / Math.max(1, lw), (ah * e) / Math.max(1, lh));
   const w = lw * f;
   const h = lh * f;
-  return { x: ax + (aw - w) / 2, y: ay + (ah - h) / 2, w, h };
+  const px = posicao ? Math.max(-1, Math.min(1, posicao.x || 0)) : 0;
+  const py = posicao ? Math.max(-1, Math.min(1, posicao.y || 0)) : 0;
+  return { x: ax + ((aw - w) / 2) * (1 + px), y: ay + ((ah - h) / 2) * (1 + py), w, h };
 }
 
 /**
@@ -117,12 +132,16 @@ export function desenharDesign(slot: SlotDoMockup, logos: LogoCarregada[], escol
   }
   if (slot.papel === "cor" || !logos.length) return { canvas: c, escolha: null };
 
-  const doKit: LogoDoKit[] = logos.map((l) => ({ id: l.id, tom: l.tom, luminancia: l.luma }));
-  const escolha = escolherVarianteDaLogo(superficieDoSlot(slot, escolhas), doKit);
+  const doKit: LogoDoKit[] = logos.map((l) => ({ id: l.id, tom: l.tom, luminancia: l.luma, distribuicao: l.distribuicao }));
+  const automatica = escolherVarianteDaLogo(superficieDoSlot(slot, escolhas), doKit);
+  const escolha = varianteForcada(automatica, escolhas.variante, logos);
   const v = escolha.variante;
   const logo = v.tipo === "original" ? logos.find((l) => l.id === v.id) || logos[0] : logos[0];
   const escala = escolhas.escala > 0 ? escolhas.escala : ESCALA_POR_PAPEL[slot.papel] || 0.5;
-  const cx = caixaDaLogo(slot.areaSegura, W, H, logo.largura, logo.altura, slot.papel === "verso" ? escala * 0.65 : escala);
+  const padrao = escolhas.modo === "padrao" && (slot.papel === "arte" || slot.papel === "verso");
+  const cx = padrao
+    ? caixaDaLogo([0, 0, 1, 1], W, H, logo.largura, logo.altura, Math.max(0.06, escala * 0.28))
+    : caixaDaLogo(slot.areaSegura, W, H, logo.largura, logo.altura, slot.papel === "verso" ? escala * 0.65 : escala, escolhas.posicao);
   const lw = Math.max(1, Math.round(cx.w));
   const lh = Math.max(1, Math.round(cx.h));
   const camada = tela(lw, lh);
@@ -139,9 +158,49 @@ export function desenharDesign(slot: SlotDoMockup, logos: LogoCarregada[], escol
     lc.globalAlpha = Math.max(0, Math.min(1, escolhas.desgaste || 0));
     cobrir(lc, escolhas.textura.imagem, escolhas.textura.largura, escolhas.textura.altura, lw, lh);
   }
-  ctx.drawImage(camada, Math.round(cx.x), Math.round(cx.y));
+  const giro = ((escolhas.rotacao || 0) * Math.PI) / 180;
+  if (padrao) {
+    for (const p of posicoesDoPadrao(W, H, lw, lh)) desenharGirado(ctx, camada, p.x, p.y, lw, lh, giro);
+  } else {
+    desenharGirado(ctx, camada, cx.x, cx.y, lw, lh, giro);
+  }
   desenharAssinatura(ctx, slot, escolhas, W, H);
   return { canvas: c, escolha };
+}
+
+/** A versão pedida na tela vence a automática (auto = regra do contraste). */
+export function varianteForcada(auto: EscolhaDaVariante, pedida: EscolhasDoDesign["variante"], logos: Array<Pick<LogoCarregada, "id">>): EscolhaDaVariante {
+  if (!pedida || pedida === "auto") return auto;
+  if (pedida === "original") {
+    const id = auto.variante.tipo === "original" ? auto.variante.id : logos[0] ? logos[0].id : "principal";
+    return { variante: { tipo: "original", id }, contraste: auto.contraste, motivo: "versão do kit pedida na tela" };
+  }
+  return { variante: { tipo: pedida }, contraste: auto.contraste, motivo: `versão ${pedida} pedida na tela` };
+}
+
+/** Onde cada logo do padrão fica (grade com linhas alternadas, meia logo de folga). */
+export function posicoesDoPadrao(W: number, H: number, lw: number, lh: number): Array<{ x: number; y: number }> {
+  const passoX = Math.max(4, lw * 1.9);
+  const passoY = Math.max(4, lh * 2.2);
+  const out: Array<{ x: number; y: number }> = [];
+  let linha = 0;
+  for (let y = -lh; y < H + lh && out.length < 600; y += passoY, linha++) {
+    const deslocar = linha % 2 ? passoX / 2 : 0;
+    for (let x = -lw + deslocar; x < W + lw && out.length < 600; x += passoX) out.push({ x, y });
+  }
+  return out;
+}
+
+function desenharGirado(ctx: CanvasRenderingContext2D, img: CanvasImageSource, x: number, y: number, w: number, h: number, giro: number) {
+  if (!giro) {
+    ctx.drawImage(img, Math.round(x), Math.round(y));
+    return;
+  }
+  ctx.save();
+  ctx.translate(x + w / 2, y + h / 2);
+  ctx.rotate(giro);
+  ctx.drawImage(img, -w / 2, -h / 2);
+  ctx.restore();
 }
 
 /** A linha da assinatura no rodapé da área segura (arte), na cor que contrasta com o fundo. */
