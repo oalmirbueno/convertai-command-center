@@ -349,13 +349,14 @@ describe("navegação: Modelos e Canvas discretos, fora do caminho de 3 passos",
     );
     const nav = screen.getByRole("navigation", { name: "Etapas da Mesa Foto" });
     const caminho = nav.querySelector("[data-caminho-principal]") as HTMLElement;
-    expect(within(caminho).getAllByRole("button")).toHaveLength(3);
+    // 30/09 (frente FTL): a linha de produção tem 5 passos; as ferramentas seguem fora dela.
+    expect(within(caminho).getAllByRole("button")).toHaveLength(5);
     // 25/09: Biblioteca, Modelos e Canvas são ferramentas de apoio, fora do caminho principal.
     // 26/09 (sistema de design): as ferramentas moram num seletor compacto ("Ferramentas").
     const apoio = nav.querySelector("[data-etapas-de-apoio]") as HTMLElement;
     expect(apoio.closest("[data-caminho-principal]")).toBeNull();
-    fireEvent.click(within(apoio).getByRole("button", { name: /^Ferramentas/ }));
-    const lista = await screen.findByRole("listbox", { name: "Ferramentas" });
+    fireEvent.click(within(apoio).getByRole("button", { name: /^Mais/ }));
+    const lista = await screen.findByRole("listbox", { name: "Mais" });
     const ferramentas = within(lista).getAllByRole("option").map((o) => (o.querySelector(".truncate") as HTMLElement).textContent);
     expect(ferramentas).toEqual(expect.arrayContaining(["Biblioteca", "Modelos", "Canvas"]));
     fireEvent.click(within(lista).getByRole("option", { name: /^Modelos/ }));
@@ -371,7 +372,8 @@ describe("navegação: Modelos e Canvas discretos, fora do caminho de 3 passos",
     expect(pagina).toContain('const EtapaCanvas = lazyComPreCarga("mesa-foto/canvas", () => import("@/components/mesa-foto/EtapaCanvas"));');
     const preCarga = ler("src/lib/mesa/preCarga.ts");
     const primeiras = /const PRIMEIRAS[^=]*= \[([\s\S]*?)\];/.exec(preCarga);
-    expect(primeiras && primeiras[1]).toContain('["/mesa-foto", "acervo"]');
+    // 30/09 (frente FTL): a Mesa Foto abre no passo 1 (O que fazer), a etapa mais leve.
+    expect(primeiras && primeiras[1]).toContain('["/mesa-foto", "criar"]');
     expect(primeiras && primeiras[1]).not.toMatch(/canvas/i);
     const pasta = resolve(raiz, "src/components/mesa-foto");
     const comXyflow = readdirSync(pasta).filter((n) => /\.(ts|tsx)$/.test(n) && /from "@xyflow\/react"/.test(readFileSync(resolve(pasta, n), "utf8")));

@@ -115,7 +115,7 @@ function ResumoDoKit({ kit }: { kit: KitDeFoto }) {
       </div>
       <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
         <ListaCurta titulo="Não pode mudar" itens={kit.invariantes} vazio="Nada escrito." />
-        <ListaCurta titulo="Lacunas: tomadas que dependem delas ficam bloqueadas" itens={kit.lacunas} vazio="Nenhuma lacuna escrita." tom="alerta" />
+        <ListaCurta titulo="Lacunas: fotos que dependem delas ficam bloqueadas" itens={kit.lacunas} vazio="Nenhuma lacuna escrita." tom="alerta" />
       </div>
     </div>
   );
@@ -153,7 +153,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
       className="-mb-1.5"
       opcoes={[
         { valor: "variacoes" as ModoDoNovo, rotulo: "Variações", dica: "Quantas fotos e de que tipos" },
-        { valor: "receita" as ModoDoNovo, rotulo: "Por receita", dica: "Tomadas de uma receita pronta por categoria" },
+        { valor: "receita" as ModoDoNovo, rotulo: "Por receita", dica: "Fotos de uma receita pronta por categoria" },
       ]}
       valor={modo}
       onEscolher={setModo}
@@ -246,7 +246,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
             titulo="Receita"
             acao={comoMontar}
             recolher={`mesa-foto:ensaio:receita:${clientId}`}
-            resumo={receita ? `${receita.nome} · ${tomadas.length} ${tomadas.length === 1 ? "tomada" : "tomadas"}` : "nenhuma escolhida"}
+            resumo={receita ? `${receita.nome} · ${tomadas.length} ${tomadas.length === 1 ? "foto" : "fotos"}` : "nenhuma escolhida"}
             dica={receitas.data && receitas.data.fonte === "local" ? "Receitas da pesquisa (a função ainda não respondeu)." : "Direção fotográfica pronta por categoria."}>
             {receitas.isLoading && <Carregando linhas={2} rotulo="Lendo as receitas" />}
             <div role="radiogroup" aria-label="Receita" className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
@@ -273,7 +273,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
             </div>
             {receita && (
               <div className="mt-3 space-y-1.5">
-                <p className="text-[12px] text-muted-foreground">Tomadas (toque para tirar)</p>
+                <p className="text-[12px] text-muted-foreground">Fotos (toque para tirar)</p>
                 <div className="flex min-w-0 flex-wrap">
                   {receita.tomadas.map((t) => {
                     const dentro = fora.indexOf(t.id) < 0;
@@ -299,7 +299,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
 
       <div className="min-w-0 space-y-5">
         {modo === "variacoes" && (
-          <Cartao titulo="Montar" dica="O diretor monta as tomadas com o produto e a marca. Nenhuma imagem é gerada agora: o total para gerar aparece antes.">
+          <Cartao titulo="Montar" dica="O diretor monta as fotos com o produto e a marca. Nenhuma imagem é gerada agora: o total para gerar aparece antes.">
             <div className="relative min-w-0">
               <CampoDeFormulario rotulo="Pedido ao diretor (opcional)">
                 <textarea value={pedido} onChange={(e) => setPedido(e.target.value)} rows={3} placeholder="Ex.: fundo verde da marca, mesa de escritório clara" className={juntar(campoTexto, "pr-10")} aria-label="Pedido das variações" />
@@ -313,7 +313,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
                 </>
               }
               titulo="Variações planejadas"
-              descricao="O diretor monta as tomadas com o produto e a marca. Nenhuma imagem é gerada agora: o total para gerar aparece antes."
+              descricao="O diretor monta as fotos com o produto e a marca. Nenhuma imagem é gerada agora: o total para gerar aparece antes."
               className="mt-3 h-9 w-full text-[12.5px]"
               disabled={!kit || !kit.id}
               partes={() => partesDoPlanoDeLote(catalogo)}
@@ -360,10 +360,10 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
             <BotaoComCusto
               rotulo={
                 <>
-                  <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Planejar {tomadas.length} {tomadas.length === 1 ? "tomada" : "tomadas"}
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Planejar {tomadas.length} {tomadas.length === 1 ? "foto" : "fotos"}
                 </>
               }
-              titulo="Ensaio planejado"
+              titulo="Lote planejado"
               descricao="O diretor de fotografia monta as fotos com o produto, a receita, a campanha da Mesa e o contexto do cliente. Nenhuma imagem é gerada agora."
               className="mt-3 h-9 w-full text-[12.5px]"
               disabled={!kit || !kit.id || !receita || tomadas.length === 0 || !receitaServeParaKit(receita, kit.tipo)}
@@ -383,7 +383,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
               aoConcluir={(data) => {
                 if (data && data.ensaio) onPlanejado(data.ensaio);
                 if (data && data.estimativa_usd !== null && data.estimativa_usd !== undefined) {
-                  toast.info(`Gerar todas as tomadas: cerca de ${usd(data.estimativa_usd)}`, { description: "O custo de cada tomada aparece no botão antes de gerar." });
+                  toast.info(`Gerar todas as fotos: cerca de ${usd(data.estimativa_usd)}`, { description: "O custo de cada foto aparece no botão antes de gerar." });
                 }
               }}
             />
@@ -492,7 +492,7 @@ function CartaoDaTomada({
       const r = await editarTomada(ensaioId, tomada.id, { nome: tomada.nome });
       if (r.ensaio) guardarEnsaio(queryClient, clientId, r.ensaio);
       const nova = r.tomada;
-      if (nova && nova.status !== "bloqueada") toast.success("Tomada liberada", { description: "O produto agora tem a evidência que faltava." });
+      if (nova && nova.status !== "bloqueada") toast.success("Foto liberada", { description: "O produto agora tem a evidência que faltava." });
       else toast.info("Ainda bloqueada", { description: (nova && nova.motivo_bloqueio) || tomada.motivo_bloqueio || "Falta evidência no produto." });
     } catch (e) {
       avisarErro(e, "Não conferida");
@@ -600,7 +600,7 @@ function CartaoDaTomada({
                   </>
                 )
               }
-              titulo={ultima ? "Variação gerada" : "Tomada gerada"}
+              titulo={ultima ? "Variação gerada" : "Foto gerada"}
               descricao="Gera uma versão desta foto, uma vez. Refazer pede uma variação nova; as versões antigas ficam."
               variant="outline"
               className="mb-1 mr-1 h-8 text-[12px]"
@@ -704,6 +704,12 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
               <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> Comparar com as fontes
             </Button>
           )}
+          {/* Linha de produção (frente FTL, 30/09): o passo seguinte é Aprovar (4) e depois Usar (5). */}
+          {resumo.paraRevisar > 0 && (
+            <Button type="button" size="sm" className="mb-1 ml-1 h-8 text-[12px]" onClick={() => irPara("aprovar", { ensaio: ensaio.id })} data-seguir-para-aprovar="">
+              Aprovar {resumo.paraRevisar} {resumo.paraRevisar === 1 ? "foto" : "fotos"}
+            </Button>
+          )}
           {resumo.aprovadas > 0 && (
             <Button type="button" size="sm" variant="outline" className="mb-1 ml-1 h-8 text-[12px]" onClick={() => irPara("usar", { ensaio: ensaio.id })}>
               Usar as {resumo.aprovadas} aprovadas
@@ -715,7 +721,7 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
           opcoes={[
             { valor: "todas" as FiltroDoResultado, rotulo: `Todas · ${ensaio.tomadas.length}` },
             { valor: "gerar" as FiltroDoResultado, rotulo: `A gerar · ${faltamGerar}` },
-            { valor: "revisar" as FiltroDoResultado, rotulo: `Para revisar · ${resumo.paraRevisar}` },
+            { valor: "revisar" as FiltroDoResultado, rotulo: `Esperando aprovação · ${resumo.paraRevisar}` },
             { valor: "prontas" as FiltroDoResultado, rotulo: `Aprovadas · ${resumo.aprovadas}` },
           ]}
           valor={filtro}
@@ -771,7 +777,7 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
             className="mt-3 h-9 w-full text-[12.5px]"
             rotulo={(n) => (
               <>
-                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Gerar {n} {n === 1 ? "tomada" : "tomadas"}, uma por vez
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Gerar {n} {n === 1 ? "foto" : "fotos"}, uma por vez
               </>
             )}
           />
@@ -821,8 +827,8 @@ export default function EtapaEnsaio() {
             escolherEnsaio(v);
           }}
         >
-          <SelectTrigger className="mb-1.5 mr-2 h-9 w-full min-w-0 text-[12.5px] sm:w-[340px]" aria-label="Ensaio aberto">
-            <SelectValue placeholder={lista.length ? "Abrir um ensaio" : "Nenhum ensaio ainda"} />
+          <SelectTrigger className="mb-1.5 mr-2 h-9 w-full min-w-0 text-[12.5px] sm:w-[340px]" aria-label="Lote aberto">
+            <SelectValue placeholder={lista.length ? "Abrir um lote" : "Nenhum lote ainda"} />
           </SelectTrigger>
           <SelectContent>
             {lista
@@ -849,13 +855,13 @@ export default function EtapaEnsaio() {
               escolherEnsaio(null);
             }}
           >
-            <Plus className="mr-1 h-3.5 w-3.5" /> Novo ensaio
+            <Plus className="mr-1 h-3.5 w-3.5" /> Novo lote
           </Button>
         )}
       </div>
       {(kits.isError || ensaios.isError) && <AvisoDeErro erro={kits.error || ensaios.error} />}
       {kits.isLoading ? (
-        <Carregando forma="aba" rotulo="Lendo kits e ensaios" />
+        <Carregando forma="aba" rotulo="Lendo produtos e lotes" />
       ) : ensaio ? (
         <EnsaioAberto key={ensaio.id} ensaio={ensaio} kit={kitDoEnsaio} />
       ) : (

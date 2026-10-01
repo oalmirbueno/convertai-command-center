@@ -136,12 +136,12 @@ export const ATALHOS_DO_DIRETOR: { rotulo: string; mensagem: string; icone: type
     icone: PackageOpen,
   },
   {
-    rotulo: "8 variações",
+    rotulo: "8 fotos do produto",
     mensagem: "Monte um plano de 8 variações do produto: herói em fundo de cor, fundo branco, lifestyle na mesa, na mão, flat lay com props, macro de detalhe, cenário da marca e produto flutuando.",
     icone: Sparkles,
   },
   {
-    rotulo: "Campanha com modelo",
+    rotulo: "Foto com modelo",
     mensagem: "Monte uma campanha com modelo sintético usando o produto do kit, com a pegada da marca e das referências de estilo anexadas.",
     icone: Megaphone,
   },
@@ -303,7 +303,7 @@ const QUANTIDADES = [4, 6, 8, 12, 16].map((n) => ({ valor: n, rotulo: String(n) 
 /** plano_de_variacoes: quantidade e tipos ajustáveis, e gerar todas com o total antes. */
 function CartaoDoPlanoDeVariacoes({ sugestao, mensagemId }: { sugestao: SugestaoDoAgente; mensagemId?: string | null }) {
   const { clientId, catalogo } = useMesa();
-  const { kitId, ensaioId, irPara } = useMesaFoto();
+  const { kitId, ensaioId, irPara, escolherObjetivo } = useMesaFoto();
   const aoCriar = useAoCriarEnsaio();
   const plano = lerPlanoDeVariacoes(sugestao.bruto);
   const [quantidade, setQuantidade] = useState(plano.quantidade);
@@ -336,6 +336,8 @@ function CartaoDoPlanoDeVariacoes({ sugestao, mensagemId }: { sugestao: Sugestao
       if (r.ensaio) {
         aoCriar(r.ensaio, false);
         setCriado(r.ensaio);
+        // A pessoa pediu as fotos do produto: a linha de produção passa a seguir esse objetivo.
+        if (escolherObjetivo) escolherObjetivo("variacoes");
         irPara("ensaio", { ensaio: r.ensaio.id, kit: r.ensaio.kit_id || kit });
       }
     } catch (e) {
@@ -421,7 +423,7 @@ function CartaoDoPlanoDeVariacoes({ sugestao, mensagemId }: { sugestao: Sugestao
 /** campanha: guia de estilo, modelo sintético e as fotos; gerar ou abrir na aba Campanha. */
 function CartaoDaCampanha({ sugestao, mensagemId }: { sugestao: SugestaoDoAgente; mensagemId?: string | null }) {
   const { clientId, catalogo } = useMesa();
-  const { kitId, ensaioId, irPara } = useMesaFoto();
+  const { kitId, ensaioId, irPara, escolherObjetivo } = useMesaFoto();
   const avisarErro = useAvisarErro();
   const aoCriar = useAoCriarEnsaio();
   const plano = lerPlanoDeCampanha(sugestao.bruto);
@@ -443,6 +445,8 @@ function CartaoDaCampanha({ sugestao, mensagemId }: { sugestao: SugestaoDoAgente
       const r = await criar();
       if (r.ensaio) {
         aoCriar(r.ensaio, false);
+        // A pessoa pediu a foto com modelo: a linha de produção passa a seguir esse objetivo.
+        if (escolherObjetivo) escolherObjetivo("modelo");
         irPara("campanha", { ensaio: r.ensaio.id, kit: r.ensaio.kit_id || kit });
       }
     } catch (e) {
@@ -802,7 +806,7 @@ function Conversa({ mensagens, pendente, anexos, onOpcao }: { mensagens: Mensage
     <>
       {mensagens.length === 0 && !pendente && (
         <p className={juntar(conversa.apoio, "leading-relaxed")} data-diretor-vazio="">
-          Peça o que quer: melhorar uma foto, variações, campanha, book ou um carrossel na Agenda.
+          Peça: melhorar uma foto, fotos do produto, foto com modelo, book ou um post na Agenda.
         </p>
       )}
       {mensagens.map((m, i) => (
@@ -1087,7 +1091,7 @@ export default function AgenteDiretor({
                   }
                 }}
                 rows={3}
-                placeholder="Ex.: 8 variações do mouse, uma com fundo verde da marca."
+                placeholder="Ex.: 8 fotos do mouse, uma com fundo verde da marca."
                 aria-label="Mensagem ao diretor"
                 className="resize-none"
               />

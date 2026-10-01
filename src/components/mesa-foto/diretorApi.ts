@@ -92,7 +92,8 @@ export function useSelecaoParaODiretor(clientId: string, etapa: string, ids: str
  * dono está) e as fotos marcadas (as da etapa primeiro, depois as do passo 1).
  */
 export function focoDaTela(p: { clientId: string; etapa: string; selecionadas: string[]; kitId: string | null; ensaioId: string | null }): FocoDoDiretor {
-  const e = p.etapa || "acervo";
+  // 30/09 (frente FTL): "Aprovar" é a revisão para o diretor (a função conhece "revisar").
+  const e = p.etapa === "aprovar" ? "revisar" : p.etapa || "acervo";
   const daEtapa = selecaoPublicada(p.clientId, e);
   const imagens: string[] = [];
   daEtapa.concat(p.selecionadas || []).forEach((id) => {

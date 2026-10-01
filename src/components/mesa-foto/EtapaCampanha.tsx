@@ -344,6 +344,12 @@ function CampanhaAberta({ ensaio }: { ensaio: Ensaio }) {
         </div>
         <div className="mt-2 flex min-w-0 flex-wrap items-center">
           <BotaoDoLote ensaio={ensaio} modeloId={modelo} qualidade={qualidade} className="mb-1 mr-1.5 h-9 text-[12.5px]" />
+          {/* Linha de produção (frente FTL, 30/09): o passo seguinte é Aprovar (4). */}
+          {r.paraRevisar > 0 && (
+            <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-9 text-[13px]" onClick={() => irPara("aprovar", { ensaio: ensaio.id })} data-seguir-para-aprovar="">
+              Aprovar {r.paraRevisar} {r.paraRevisar === 1 ? "foto" : "fotos"}
+            </Button>
+          )}
           {r.aprovadas > 0 && (
             <Button type="button" size="sm" variant="ghost" className="mb-1 h-9 text-[12.5px]" onClick={() => irPara("usar", { ensaio: ensaio.id })}>
               Usar as {r.aprovadas} aprovadas

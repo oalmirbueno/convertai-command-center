@@ -16,6 +16,7 @@ import { invalidarAcervo } from "@/components/mesa/contextoDoCliente";
 import { useMarcaDaMesa } from "@/components/mesa/MesaContexto";
 import { fotoDaMarcaAberta } from "../../../supabase/functions/_shared/heranca-da-marca";
 import { novoId } from "@/components/mesa/estudioUtil";
+import { objetivoPorValor, type ObjetivoDaFoto } from "./linhaDeProducao";
 
 /**
  * Mesa Foto: a ponte da tela com a função mesa-foto e as tabelas
@@ -2759,27 +2760,61 @@ export function partesDoExemplo(catalogo: ModeloIa[]): ParteDaEstimativa[] {
 export interface ProximoPasso {
   etapa: string;
   rotulo: string;
-  extras?: { kit?: string | null; ensaio?: string | null };
+  extras?: { kit?: string | null; ensaio?: string | null; imagem?: string | null };
 }
 
 /**
- * O caminho principal em 3 passos (1. Fotos do produto, com o produto
- * identificado ali mesmo, 2. Criar, 3. Usar, com a revisão dentro): a tela
- * sempre mostra o próximo passo.
+ * A linha de produção em 5 passos (frente FTL, 30/09; linhaDeProducao.ts):
+ * 1 O que fazer, 2 Fotos, 3 Gerar, 4 Aprovar, 5 Usar. A tela sempre mostra o
+ * próximo passo, pelo que existe (fotos, produto, lote aberto) e pelo que a
+ * pessoa escolheu produzir. Lote aberto com foto esperando decisão vem antes
+ * de tudo; sem objetivo, o próximo é escolher o que fazer.
+ *
+ * No Estúdio e no Preparar (as ferramentas de uma foto), depois de gerar o
+ * próximo é o passo 4: com gerada esperando a equipe, Aprovar; sem pendente e
+ * com aprovada, Usar. `selecionadas` conta só as marcadas que valem
+ * (marcadasQueContam).
  */
-export function proximoPasso(e: { fotos: number; kits: KitDeFoto[]; kitId: string | null; ensaio: Ensaio | null; selecionadas: number }): ProximoPasso {
-  if (e.fotos === 0) return { etapa: "acervo", rotulo: "Subir as fotos do produto" };
-  if (!e.kits.length) {
-    return { etapa: "acervo", rotulo: e.selecionadas ? `Identificar o produto (${e.selecionadas} ${e.selecionadas === 1 ? "foto" : "fotos"})` : "Identificar o produto" };
+export function proximoPasso(e: {
+  fotos: number;
+  kits: KitDeFoto[];
+  kitId: string | null;
+  ensaio: Ensaio | null;
+  selecionadas: number;
+  objetivo?: ObjetivoDaFoto | null;
+  /** A etapa aberta agora. */
+  etapa?: string | null;
+  /** Fotos geradas do acervo (fora dos lotes): esperando a equipe e já aprovadas. */
+  geradas?: { pendentes: number; aprovadas: number } | null;
+}): ProximoPasso {
+  if (e.fotos === 0) return { etapa: "acervo", rotulo: "Subir as fotos" };
+  if ((e.etapa === "estudio" || e.etapa === "preparar") && e.geradas) {
+    const g = e.geradas;
+    if (g.pendentes) return { etapa: "aprovar", rotulo: `Aprovar ${g.pendentes} ${g.pendentes === 1 ? "foto" : "fotos"}` };
+    if (g.aprovadas) return { etapa: "usar", rotulo: `Usar ${g.aprovadas} ${g.aprovadas === 1 ? "aprovada" : "aprovadas"}` };
   }
-  if (!e.kitId) return { etapa: "acervo", rotulo: "Escolher o produto" };
-  if (!e.ensaio) return { etapa: "criar", rotulo: "Criar as fotos" };
-  const r = resumoDoEnsaio(e.ensaio);
-  const faltam = tomadasParaGerar(e.ensaio).filter((t) => !t.versoes.length).length;
-  if (r.paraRevisar) return { etapa: "usar", rotulo: `Revisar ${r.paraRevisar} ${r.paraRevisar === 1 ? "foto" : "fotos"}`, extras: { ensaio: e.ensaio.id } };
-  if (faltam) return { etapa: ehCampanha(e.ensaio) ? "campanha" : "ensaio", rotulo: `Gerar ${faltam} ${faltam === 1 ? "foto" : "fotos"}`, extras: { ensaio: e.ensaio.id } };
-  if (r.aprovadas) return { etapa: "usar", rotulo: `Usar ${r.aprovadas} ${r.aprovadas === 1 ? "aprovada" : "aprovadas"}`, extras: { ensaio: e.ensaio.id } };
-  return { etapa: "criar", rotulo: "Criar mais fotos" };
+  if (e.ensaio) {
+    const r = resumoDoEnsaio(e.ensaio);
+    const faltam = tomadasParaGerar(e.ensaio).filter((t) => !t.versoes.length).length;
+    if (r.paraRevisar) return { etapa: "aprovar", rotulo: `Aprovar ${r.paraRevisar} ${r.paraRevisar === 1 ? "foto" : "fotos"}`, extras: { ensaio: e.ensaio.id } };
+    if (faltam) return { etapa: ehCampanha(e.ensaio) ? "campanha" : "ensaio", rotulo: `Gerar ${faltam} ${faltam === 1 ? "foto" : "fotos"}`, extras: { ensaio: e.ensaio.id } };
+    if (r.aprovadas) return { etapa: "usar", rotulo: `Usar ${r.aprovadas} ${r.aprovadas === 1 ? "aprovada" : "aprovadas"}`, extras: { ensaio: e.ensaio.id } };
+  }
+  const o = objetivoPorValor(e.objetivo || null);
+  if (!o) return { etapa: "criar", rotulo: e.ensaio ? "Criar mais fotos" : "Escolher o que fazer" };
+  if (o.requisito === "produto") {
+    if (!e.kits.length) {
+      return { etapa: "acervo", rotulo: e.selecionadas ? `Identificar o produto (${e.selecionadas} ${e.selecionadas === 1 ? "foto" : "fotos"})` : "Identificar o produto" };
+    }
+    if (!e.kitId) return { etapa: "acervo", rotulo: "Escolher o produto" };
+    return { etapa: o.etapa, rotulo: o.valor === "modelo" ? "Montar a foto com modelo" : "Montar as fotos do produto" };
+  }
+  if (o.requisito === "uma_foto") {
+    if (!e.selecionadas) return { etapa: "acervo", rotulo: "Marcar 1 foto" };
+    return { etapa: o.etapa, rotulo: `Abrir no ${o.ferramenta}` };
+  }
+  if (!e.selecionadas) return { etapa: "acervo", rotulo: "Marcar as fotos do post" };
+  return { etapa: "agenda", rotulo: "Montar o post" };
 }
 
 // ------------------------------------------------------------------ ligada à Mesa: campanhas do cliente

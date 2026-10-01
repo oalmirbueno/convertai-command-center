@@ -280,7 +280,7 @@ function LinhaDaTomada({
               </>
             }
             titulo="Variação gerada"
-            descricao="Gera uma versão nova desta tomada, com variação real. As versões antigas ficam."
+            descricao="Gera uma versão nova desta foto, com variação real. As versões antigas ficam."
             variant="outline"
             className="h-8 text-[12px]"
             disabled={!imagem}
@@ -300,7 +300,7 @@ function LinhaDaTomada({
           <FontesDoKit kit={kit} fotos={fotos} onAbrir={(f) => onAmpliar(f.storage_path, `Fonte: ${f.nome}`)} />
         </div>
         {tomada.versoes.length === 0 ? (
-          <p className="self-center text-[12px] text-muted-foreground">{tomada.status === "bloqueada" ? tomada.motivo_bloqueio || "Bloqueada por falta de evidência." : "Ainda sem versão. Gere na etapa Ensaio."}</p>
+          <p className="self-center text-[12px] text-muted-foreground">{tomada.status === "bloqueada" ? tomada.motivo_bloqueio || "Bloqueada por falta de evidência." : "Ainda sem versão. Gere no passo 3 (Gerar)."}</p>
         ) : (
           <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
             {tomada.versoes
@@ -397,9 +397,9 @@ export default function EtapaRevisar() {
     return (
       <div className="min-w-0 space-y-4">
         {ensaios.isLoading ? (
-          <Carregando linhas={3} rotulo="Lendo os ensaios" />
+          <Carregando linhas={3} rotulo="Lendo os lotes" />
         ) : lista.length ? (
-          <Cartao titulo="Qual ensaio revisar?">
+          <Cartao titulo="Qual lote comparar?">
             {/* 28/09: a lista segue a rolagem da região principal (uma rolagem por região). */}
             <ul className="space-y-1.5">
               {lista.map((e) => {
@@ -409,7 +409,7 @@ export default function EtapaRevisar() {
                     <button type="button" onClick={() => escolherEnsaio(e.id)} className="flex w-full min-w-0 items-center rounded-md border border-border px-3 py-2 text-left hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                       <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{nomeDaReceita(receitas.data ? receitas.data.receitas : null, e.receita_id)}</span>
                       <span className="ml-2 shrink-0 text-[12px] text-muted-foreground">
-                        {r.paraRevisar} para revisar · {r.aprovadas} aprovadas
+                        {r.paraRevisar} esperando aprovação · {r.aprovadas} aprovadas
                       </span>
                     </button>
                   </li>
@@ -419,10 +419,10 @@ export default function EtapaRevisar() {
           </Cartao>
         ) : (
           <Vazio
-            titulo="Nada para revisar ainda"
+            titulo="Nada para comparar ainda"
             acao={
               <Button type="button" size="sm" className="h-8 text-[12px]" onClick={() => irPara("ensaio")}>
-                Montar um ensaio
+                Gerar fotos do produto
               </Button>
             }
           />
@@ -438,13 +438,13 @@ export default function EtapaRevisar() {
     <div className="min-w-0 space-y-4">
       <div className="flex min-w-0 flex-wrap items-center">
         <p className="mb-1.5 mr-auto min-w-0 text-[12.5px] text-muted-foreground">
-          <span className="font-semibold text-foreground">{resumo.paraRevisar}</span> para revisar · {resumo.aprovadas} de {resumo.total} aprovadas · {resumo.versoes} versões · {usd(resumo.custo)} no ensaio
+          <span className="font-semibold text-foreground">{resumo.paraRevisar}</span> esperando aprovação · {resumo.aprovadas} de {resumo.total} aprovadas · {resumo.versoes} versões · {usd(resumo.custo)} no lote
         </p>
         <Pilulas
           rotulo="Mostrar"
           opcoes={[
-            { valor: "revisar" as const, rotulo: "Para revisar" },
-            { valor: "todas" as const, rotulo: "Todas as tomadas" },
+            { valor: "revisar" as const, rotulo: "Esperando aprovação" },
+            { valor: "todas" as const, rotulo: "Todas as fotos" },
           ]}
           valor={so}
           onEscolher={setSo}
@@ -456,13 +456,13 @@ export default function EtapaRevisar() {
         )}
       </div>
       {tomadas.length === 0 ? (
-        <Vazio titulo={so === "revisar" ? "Nada esperando revisão" : "Sem tomadas"}>
+        <Vazio titulo={so === "revisar" ? "Nada esperando aprovação" : "Sem fotos"}>
           {resumo.aprovadas ? (
             <button type="button" className="font-medium text-primary hover:underline" onClick={() => irPara("usar")}>
               Ir para Usar as {resumo.aprovadas} aprovadas
             </button>
           ) : (
-            "Gere as tomadas na etapa Ensaio."
+            "Gere as fotos no passo 3 (Gerar)."
           )}
         </Vazio>
       ) : (

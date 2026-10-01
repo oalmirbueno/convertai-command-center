@@ -601,22 +601,44 @@ describe("telas da frente MF", () => {
     }
   });
 
-  it("Criar: 'o que você quer fazer?' com o Estúdio e o Post na Agenda sem precisar de produto; Variações e Campanha pedem o produto", async () => {
+  it("O que fazer (passo 1): cinco objetivos em termos simples; escolher guarda e leva às Fotos; o avançado fica recolhido", async () => {
     mock.tabelas.foto_kits = [];
-    const foto = valorDaFoto({ selecionadas: [F1] });
+    const escolherObjetivo = vi.fn();
+    const foto = valorDaFoto({ selecionadas: [F1], escolherObjetivo });
     montar(h(EtapaCriar), foto);
-    expect(await screen.findByText("O que você quer fazer?")).toBeTruthy();
-    const formas = Array.from(document.querySelectorAll("[data-forma-de-criar]")).map((b) => b.getAttribute("data-forma-de-criar"));
-    expect(formas).toEqual(["estudio", "agenda", "ensaio", "campanha"]);
-    await waitFor(() => expect((document.querySelector('[data-forma-de-criar="ensaio"]') as HTMLButtonElement).disabled).toBe(true));
-    expect((document.querySelector('[data-forma-de-criar="estudio"]') as HTMLButtonElement).disabled).toBe(false);
-    // Com uma foto marcada, o Estúdio já abre nela.
-    fireEvent.click(document.querySelector('[data-forma-de-criar="estudio"]') as HTMLElement);
-    expect(foto.irPara).toHaveBeenCalledWith("estudio", { imagem: F1 });
-    // O ajuste fino (Preparar) e as ferramentas de apoio seguem a um clique.
-    const apoios = document.querySelector("[data-apoios-do-criar]") as HTMLElement;
-    expect(within(apoios).getByRole("button", { name: /Ajuste fino/ })).toBeTruthy();
+    expect(await screen.findByText("O que você quer produzir?")).toBeTruthy();
+    const objetivos = Array.from(document.querySelectorAll("[data-objetivo]")).map((b) => b.getAttribute("data-objetivo"));
+    expect(objetivos).toEqual(["melhorar", "variacoes", "modelo", "fundo", "post"]);
+    // Nenhum cartão travado: cada um diz o que precisa, e o passo 2 pede.
+    expect(Array.from(document.querySelectorAll("[data-objetivo]")).every((b) => !(b as HTMLButtonElement).disabled)).toBe(true);
+    expect((document.querySelector('[data-objetivo="variacoes"]') as HTMLElement).textContent).toContain("Precisa: fotos do produto");
+    fireEvent.click(document.querySelector('[data-objetivo="melhorar"]') as HTMLElement);
+    expect(escolherObjetivo).toHaveBeenCalledWith("melhorar", true);
+    // As formas avançadas ficam recolhidas (um toque abre) e seguem a um clique.
+    fireEvent.click(screen.getByRole("button", { name: /Mais formas de criar/ }));
+    const apoios = (await waitFor(() => {
+      const el = document.querySelector("[data-apoios-do-criar]");
+      if (!el) throw new Error("recolhido");
+      return el;
+    })) as HTMLElement;
     for (const r of ["Book", "Clones", "Modelos", "Canvas", "Biblioteca"]) expect(within(apoios).getByRole("button", { name: new RegExp(r) })).toBeTruthy();
+    fireEvent.click(within(apoios).getByRole("button", { name: /Canvas/ }));
+    expect(foto.irPara).toHaveBeenCalledWith("canvas");
+  });
+
+  it("O que fazer: com o objetivo escolhido e a foto já marcada, o atalho vai direto ao Estúdio na foto", async () => {
+    mock.tabelas.foto_kits = [];
+    mock.tabelas.cliente_imagens = [linhaDaFoto(F1)];
+    const foto = valorDaFoto({ selecionadas: [F1], objetivo: "melhorar" });
+    montar(h(EtapaCriar), foto);
+    const atalho = (await waitFor(() => {
+      const el = document.querySelector("[data-atalho-da-linha]");
+      if (!el) throw new Error("sem atalho");
+      return el;
+    })) as HTMLElement;
+    expect((document.querySelector('[data-objetivo="melhorar"]') as HTMLElement).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(within(atalho).getByRole("button", { name: /Abrir no Estúdio/ }));
+    expect(foto.irPara).toHaveBeenCalledWith("estudio", { imagem: F1 });
   });
 
   it("Estúdio de fotos: a foto grande com antes e depois, as versões, as ferramentas ao lado e a moldura do recorte do post", async () => {
@@ -751,6 +773,9 @@ describe("textos de tela e compatibilidade (Safari 11)", () => {
     "src/components/mesa-foto/EtapaEstudio.tsx",
     "src/components/mesa-foto/EtapaAgenda.tsx",
     "src/components/mesa-foto/EtapaCriar.tsx",
+    "src/components/mesa-foto/EtapaAprovar.tsx",
+    "src/components/mesa-foto/GuiaDaLinha.tsx",
+    "src/components/mesa-foto/linhaDeProducao.ts",
     "src/components/mesa-foto/SeletorDoPerfil.tsx",
     "src/components/mesa-foto/ProvaDoDiretor.tsx",
     "src/components/mesa-foto/CartaoDaGeracao.tsx",

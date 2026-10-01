@@ -3,20 +3,19 @@ import { ArrowUpRight, CalendarPlus, ClipboardCheck, Filter, Megaphone, PenTool 
 import { Button } from "@/components/ui/button";
 import { Ampliar } from "@/components/mesa/Ampliar";
 import { AvisoDeErro } from "@/components/mesa/Custo";
-import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
+import { useMesa } from "@/components/mesa/MesaContexto";
 import { BotoesDeUso } from "./AcoesDeUso";
-import { Cartao, MiniaturaDaFoto, Moldura, SeloCurto, useMesaFoto, Vazio } from "./Comuns";
+import { Cartao, MiniaturaDaFoto, SeloCurto, useMesaFoto, Vazio } from "./Comuns";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import BarraDeAcoes from "@/components/sistema/BarraDeAcoes";
 import { juntar, superficie } from "@/components/sistema/estilos";
 import { Carregando } from "@/components/sistema/Estados";
-import { DecisaoRapida, MenuDeUso, useLevarParaAsMesas } from "./UsoDaFoto";
-import { classeDaFoto, fotosParaRevisar, proporcaoDoFormato, useEnsaios, useFotos, type FotoDoAcervo } from "./fotoApi";
+import { MenuDeUso, precisaAprovar, useLevarParaAsMesas } from "./UsoDaFoto";
+import { classeDaFoto, fotosParaRevisar, useEnsaios, useFotos, type FotoDoAcervo } from "./fotoApi";
 
 /**
- * Passo 3, Usar (com a revisão dentro): em cima, as fotos geradas que ainda
- * esperam decisão (aprovar ou rejeitar ali mesmo, ou "Aprovar e usar"); em
- * baixo, as prontas, cada uma com o menu Usar (Mesa, Mesa Ads, Baixar,
+ * Passo 5, Usar (30/09, frente FTL: a revisão foi para o passo 4, Aprovar;
+ * aqui fica a linha com o atalho): as prontas, cada uma com o menu Usar (Mesa, Mesa Ads, Baixar,
  * Mandar para aprovação, Arquivos) e as ações do grupo marcado.
  *
  * A foto aprovada já está no acervo único do cliente (cliente_imagens,
@@ -33,56 +32,30 @@ export { chaveDasFotosParaUsar, enderecoParaUsar, guardarFotosParaUsar } from ".
 
 type Origem = "aprovadas" | "ensaio" | "todas_tratadas";
 
-/** Revisar sem trocar de tela: a última versão de cada tomada ainda sem decisão. */
-function ParaRevisar() {
+/**
+ * 30/09 (frente FTL): a revisão mudou para o passo 4 (Aprovar). Aqui fica só
+ * uma linha com quantas esperam e o atalho para lá.
+ */
+function EsperandoAprovacao() {
   const { clientId } = useMesa();
   const { ensaioId, irPara } = useMesaFoto();
   const ensaios = useEnsaios(clientId);
-  const pendentes = useMemo(() => fotosParaRevisar(ensaios.data || [], ensaioId), [ensaios.data, ensaioId]);
-  const [ampliada, setAmpliada] = useState<number | null>(null);
-  if (!pendentes.length) return null;
+  const fotos = useFotos(clientId);
+  const n = useMemo(
+    () => fotosParaRevisar(ensaios.data || [], ensaioId).length + (fotos.data || []).filter((f) => !f.referencia_web && precisaAprovar(f)).length,
+    [ensaios.data, fotos.data, ensaioId],
+  );
+  if (!n) return null;
   return (
-    <Cartao
-      titulo={`Para revisar · ${pendentes.length}`}
-      recolher={`mesa-foto:usar:para-revisar:${clientId}`}
-      resumo="esperando a decisão da equipe"
-      dica="Fotos geradas esperando a decisão da equipe. Aprovar põe a foto no acervo, pronta para a Mesa e a Mesa Ads."
-      acao={
-        <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" onClick={() => irPara("revisar", { ensaio: pendentes[0].ensaio.id })}>
-          <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> Comparar com as fontes
-        </Button>
-      }
-    >
-      {/* 28/09: sem caixa com rolagem própria; a grade segue a rolagem da região principal. */}
-      <div className="min-w-0">
-        <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" data-para-revisar="">
-          {pendentes.map((p, i) => (
-            <li key={`${p.ensaio.id}-${p.tomada.id}-${p.versao.versao}`} className={juntar(superficie.painel, "min-w-0 p-1.5")} data-pendente={p.tomada.id}>
-              <button type="button" className="block w-full cursor-zoom-in" onClick={() => setAmpliada(i)} aria-label={`Ver grande: ${p.tomada.nome}`}>
-                <Moldura proporcao={proporcaoDoFormato(p.tomada.formato)} className="border border-border">
-                  <ImagemDaMesa caminho={p.versao.storage_path || ""} alt={p.tomada.nome} className="h-full w-full !object-contain" />
-                  <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
-                    gerada
-                  </span>
-                </Moldura>
-              </button>
-              <p className="mt-1 truncate px-0.5 text-[12px] font-medium" title={p.tomada.nome}>
-                {p.tomada.nome} <span className="font-normal text-muted-foreground">v{p.versao.versao}</span>
-              </p>
-              <div className="mt-1 flex min-w-0 flex-wrap items-center">
-                <DecisaoRapida ensaio={p.ensaio} tomada={p.tomada} versao={p.versao} compacta />
-                <MenuDeUso pendente={p} variante="outline" className="mb-1" />
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <Ampliar
-        imagens={pendentes.map((p) => ({ caminho: p.versao.storage_path || "", titulo: `${p.tomada.nome}, v${p.versao.versao} (gerada)`, legenda: "Imagem gerada por IA", proporcao: proporcaoDoFormato(p.tomada.formato) }))}
-        indice={ampliada}
-        onFechar={() => setAmpliada(null)}
-      />
-    </Cartao>
+    <div className="flex min-w-0 flex-wrap items-center text-[13px]" data-esperando-aprovacao={n}>
+      <ClipboardCheck className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+      <span className="mr-2">
+        {n} {n === 1 ? "foto gerada ainda espera" : "fotos geradas ainda esperam"} a aprovação da equipe.
+      </span>
+      <button type="button" className="rounded font-medium text-primary hover:underline" onClick={() => irPara("aprovar")}>
+        Aprovar
+      </button>
+    </div>
   );
 }
 
@@ -126,12 +99,12 @@ export default function EtapaUsar() {
   };
 
   const opcoes: { valor: Origem; rotulo: string }[] = [{ valor: "aprovadas", rotulo: "Todas as aprovadas" }];
-  if (ensaio) opcoes.push({ valor: "ensaio", rotulo: "Deste ensaio" });
+  if (ensaio) opcoes.push({ valor: "ensaio", rotulo: "Deste lote" });
   opcoes.push({ valor: "todas_tratadas", rotulo: "Aprovadas e tratadas" });
 
   return (
     <div className="min-w-0 space-y-5">
-      <ParaRevisar />
+      <EsperandoAprovacao />
 
       <Cartao
         titulo="Prontas para usar"
@@ -159,7 +132,7 @@ export default function EtapaUsar() {
               </Button>
             }
           >
-            Aprove as fotos geradas em Para revisar (acima) ou no resultado de Variações e Campanha.
+            Aprove as fotos geradas no passo 4 (Aprovar) ou no resultado de Fotos do produto e Foto com modelo.
           </Vazio>
         )}
         {lista.length > 0 && (

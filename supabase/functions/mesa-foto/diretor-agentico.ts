@@ -53,16 +53,18 @@ import { PAPEIS, PAPEIS_DE_EVIDENCIA } from "./receitas.ts";
 export const AGENTE_SEM_CUSTO = "diretor";
 export const AGENTE_DE_GERACAO = "diretor_geracao";
 
-export const ETAPAS_DO_DIRETOR = ["acervo", "kits", "criar", "ensaio", "campanha", "preparar", "revisar", "usar", "biblioteca", "modelos", "clones", "book", "canvas", "estudio", "agenda"] as const;
+export const ETAPAS_DO_DIRETOR = ["acervo", "kits", "criar", "ensaio", "campanha", "preparar", "revisar", "aprovar", "usar", "biblioteca", "modelos", "clones", "book", "canvas", "estudio", "agenda"] as const;
 
+// Nomes da linha de produção da tela (frente FTL, 30/09): os mesmos termos simples em todo lugar.
 export const ROTULO_DA_ETAPA: Record<string, string> = {
   acervo: "Fotos",
   kits: "Produto",
-  criar: "Criar",
-  ensaio: "Variações",
-  campanha: "Campanha",
-  preparar: "Preparar",
-  revisar: "Revisar",
+  criar: "O que fazer",
+  ensaio: "Fotos do produto",
+  campanha: "Foto com modelo",
+  preparar: "Tirar fundo e ajustes",
+  revisar: "Comparar com as fontes",
+  aprovar: "Aprovar",
   usar: "Usar",
   biblioteca: "Biblioteca",
   modelos: "Modelos",
@@ -666,7 +668,7 @@ ${linhas.join("\n")}
 }
 
 /** Para onde a resposta leva (campo ir_para): a equipe aperta e já cai na área certa. */
-export const DESTINOS_DO_DIRETOR = ["nenhum", "acervo", "estudio", "agenda", "criar", "ensaio", "campanha", "usar", "clones", "book", "canvas", "modelos", "biblioteca", "kits"] as const;
+export const DESTINOS_DO_DIRETOR = ["nenhum", "acervo", "estudio", "agenda", "criar", "ensaio", "campanha", "aprovar", "usar", "clones", "book", "canvas", "modelos", "biblioteca", "kits"] as const;
 
 export const REGRA_DO_CAMINHO = `- ir_para e ir_para_ref: a área do painel onde a equipe continua depois da sua resposta (${DESTINOS_DO_DIRETOR.join(", ")}), e o apelido que abre junto (i# abre a foto, a# o post, c# o clone, b# o book, k# o produto, m# a modelo) ou null. Sempre que houver próximo passo, diga a área: a tela mostra o botão para ir. Sem próximo passo, "nenhum".`;
 
@@ -1534,13 +1536,13 @@ export function caminhoDaAcaoDoDiretor(acao: Pick<AcaoDoAgente, "agente" | "iten
 }
 
 const ETAPA_DO_DESTINO: Record<string, string> = {
-  acervo: "acervo", estudio: "estudio", agenda: "agenda", criar: "criar", ensaio: "ensaio", campanha: "campanha", usar: "usar",
+  acervo: "acervo", estudio: "estudio", agenda: "agenda", criar: "criar", ensaio: "ensaio", campanha: "campanha", aprovar: "aprovar", usar: "usar",
   clones: "clones", book: "book", canvas: "canvas", modelos: "modelos", biblioteca: "biblioteca", kits: "kits",
 };
 
 const ROTULO_DO_DESTINO: Record<string, string> = {
-  acervo: "Ir para Fotos", estudio: "Abrir no Estúdio de fotos", agenda: "Abrir o post na Agenda", criar: "Ir para Criar", ensaio: "Ir para Variações",
-  campanha: "Ir para Campanha", usar: "Ir para Usar", clones: "Abrir o clone", book: "Abrir o book", canvas: "Abrir o Canvas", modelos: "Abrir a modelo",
+  acervo: "Ir para Fotos", estudio: "Abrir no Estúdio de fotos", agenda: "Abrir o post na Agenda", criar: "Escolher o que fazer", ensaio: "Ir para Fotos do produto",
+  campanha: "Ir para Foto com modelo", aprovar: "Ir para Aprovar", usar: "Ir para Usar", clones: "Abrir o clone", book: "Abrir o book", canvas: "Abrir o Canvas", modelos: "Abrir a modelo",
   biblioteca: "Ir para a Biblioteca", kits: "Abrir o produto",
 };
 
@@ -1680,8 +1682,8 @@ export function opcoesDoPacote(p: Pick<PacoteDoDiretor, "clones" | "kits" | "ima
   if (clone) somar(`Gerar com o clone ${clone.titulo}`, `Gere as fotos que pedi com o clone ${clone.ref} (${clone.titulo}).`);
   const kit = p.kits.find((k) => k.id === p.foco.kit_id && k.dados.refs.length) || p.kits.find((k) => k.dados.refs.length);
   if (kit) {
-    somar(`Variações de ${kit.titulo}`, `Monte o ensaio de variações do produto ${kit.ref} (${kit.titulo}), sem gerar ainda.`);
-    somar(`Campanha com ${kit.titulo}`, `Monte a campanha com modelo do produto ${kit.ref} (${kit.titulo}), sem gerar ainda.`);
+    somar(`Fotos do produto: ${kit.titulo}`, `Monte o ensaio de variações do produto ${kit.ref} (${kit.titulo}), sem gerar ainda.`);
+    somar(`Foto com modelo: ${kit.titulo}`, `Monte a campanha com modelo do produto ${kit.ref} (${kit.titulo}), sem gerar ainda.`);
   }
   const marcadas = p.imagens.filter((i) => i.dados.selecionada && !i.dados.gerada);
   if (marcadas.length && !kit) somar("Identificar o produto", `Identifique o produto pelas fotos marcadas (${marcadas.slice(0, 6).map((i) => i.ref).join(", ")}).`);

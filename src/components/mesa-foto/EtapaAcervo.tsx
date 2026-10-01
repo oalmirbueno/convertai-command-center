@@ -19,8 +19,10 @@ import { campo, foco, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
 import ProdutoDasFotos from "./ProdutoDasFotos";
+import GuiaDaLinha from "./GuiaDaLinha";
 import { MenuDeUso, precisaAprovar, useLevarParaAsMesas } from "./UsoDaFoto";
 import { gravarNaSessao } from "./sessao";
+import { objetivoPorValor } from "./linhaDeProducao";
 import {
   acrescentarFotos,
   classeDaFoto,
@@ -42,7 +44,8 @@ import {
 } from "./fotoApi";
 
 /**
- * Passo 1, Fotos: as fotos do cliente num lugar só (o mesmo acervo que a
+ * Passo 2 da linha de produção, Fotos (30/09, frente FTL: em cima, a faixa
+ * GuiaDaLinha diz o que está fazendo, o que falta e leva ao passo 3): as fotos do cliente num lugar só (o mesmo acervo que a
  * Mesa e a Mesa Ads usam). Subir em lote bem à vista (arrastar e soltar,
  * colar com Ctrl+V ou escolher), o produto identificado ali mesmo
  * (ProdutoDasFotos), grade compacta com um selo simples por foto (original,
@@ -476,7 +479,8 @@ export default function EtapaAcervo() {
   const { clientId } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
-  const { selecionadas, setSelecionadas, imagemId, irPara, abrirNoEstudio, prepararNaAgenda } = useMesaFoto();
+  const { selecionadas, setSelecionadas, imagemId, irPara, abrirNoEstudio, prepararNaAgenda, objetivo } = useMesaFoto();
+  const objetivoAberto = objetivoPorValor(objetivo || null);
   const levar = useLevarParaAsMesas();
   const fotos = useFotos(clientId);
   const kits = useKits(clientId);
@@ -618,8 +622,10 @@ export default function EtapaAcervo() {
      */
     <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1" data-etapa-fotos="">
       <div className={todas.length > 0 ? "min-w-0 space-y-4 pb-4 lg:max-h-[45%] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-1" : "min-w-0 space-y-4 pb-4"} data-topo-das-fotos="">
+        {/* Linha de produção (frente FTL, 30/09): o que está fazendo, o que falta e o botão de seguir. */}
+        <GuiaDaLinha />
         <Cartao
-          titulo="Fotos do produto"
+          titulo="Suas fotos"
           dica="Suba as fotos que o cliente mandou: produto, embalagem, detalhes. Quantas quiser de uma vez; o original fica guardado como veio e o produto é identificado logo abaixo. É o mesmo acervo da Mesa e da Mesa Ads. Para produto, 4 a 8 fotos: frente, três quartos, laterais, verso, detalhes e a embalagem em separado. Para pessoa, 6 a 12 fotos recentes e autorizadas, sem filtro de beleza. Para alimento, a porção real vista de cima, a 45 graus e de lado."
           acao={todas.length > 0 ? zona : undefined}
           recolher={todas.length > 0 ? `mesa-foto:acervo:envio-recolhido:${clientId}` : undefined}
@@ -634,7 +640,7 @@ export default function EtapaAcervo() {
           )}
         </Cartao>
 
-        {todas.length > 0 && <ProdutoDasFotos fotos={todas} />}
+        {todas.length > 0 && <ProdutoDasFotos fotos={todas} recolhidoDeInicio={!!objetivoAberto && objetivoAberto.requisito !== "produto"} />}
 
         {fotos.isLoading && <Carregando forma="grade" linhas={8} rotulo="Lendo o acervo" />}
         {fotos.isError && <AvisoDeErro erro={fotos.error} />}

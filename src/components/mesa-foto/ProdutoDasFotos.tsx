@@ -8,6 +8,7 @@ import { MiniaturaDaFoto, useMesaFoto } from "./Comuns";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import CartaoDaIdentificacao, { AcoesDaIdentificacao } from "./Identificacao";
+import { useSeguirNaLinha } from "./GuiaDaLinha";
 import { gravarNaSessao, lerDaSessao } from "./sessao";
 import {
   chaveDosKits,
@@ -87,10 +88,12 @@ function ChipDoProduto({ kit, capa, ativo, onEscolher }: { kit: KitDeFoto; capa:
   );
 }
 
-export default function ProdutoDasFotos({ fotos }: { fotos: FotoDoAcervo[] }) {
+export default function ProdutoDasFotos({ fotos, recolhidoDeInicio = false }: { fotos: FotoDoAcervo[]; recolhidoDeInicio?: boolean }) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
   const { kitId, escolherKit, irPara, selecionadas } = useMesaFoto();
+  // Frente FTL (30/09): com o objetivo que pede o produto, o botão segue para gerar.
+  const { objetivo } = useSeguirNaLinha();
   const [identificacao, setIdentificacaoNaTela] = useState<IdentificacaoDoProduto | null>(() => {
     const bruta = lerDaSessao<any>(clientId, "identificacao");
     return bruta ? normalizarIdentificacao(bruta) : null;
@@ -110,7 +113,8 @@ export default function ProdutoDasFotos({ fotos }: { fotos: FotoDoAcervo[] }) {
     if (ids[0]) escolherKit(ids[0]);
   };
   // 28/09 (dono: "recolher ali no Produto"): o bloco recolhe e mostra só o produto escolhido.
-  const [recolhido, setRecolhido] = useRecolhido(`mesa-foto:acervo:produto-recolhido:${clientId}`);
+  // 30/09: quem vai melhorar uma foto, tirar fundo ou montar post não precisa do produto: começa recolhido.
+  const [recolhido, setRecolhido] = useRecolhido(`mesa-foto:acervo:produto-recolhido:${clientId}`, recolhidoDeInicio);
   const resumo = kit ? kit.nome || "produto escolhido" : kits.length ? `${kits.length} ${kits.length === 1 ? "produto" : "produtos"}` : "nenhum ainda";
 
   return (
@@ -188,9 +192,12 @@ export default function ProdutoDasFotos({ fotos }: { fotos: FotoDoAcervo[] }) {
 
       {kit && (
         <div className="mt-3 flex min-w-0 flex-wrap items-center">
-          <Button type="button" size="sm" className="mb-1 mr-2 h-8 text-[12px]" onClick={() => irPara("criar")} data-criar-deste-produto="">
-            Criar fotos de {kit.nome || "este produto"} <ArrowRight className="ml-1 h-3.5 w-3.5" />
-          </Button>
+          {/* Com o objetivo que pede o produto, o "seguir" já está na faixa do passo (GuiaDaLinha), no alto. */}
+          {!(objetivo && objetivo.requisito === "produto") && (
+            <Button type="button" size="sm" variant="outline" className="mb-1 mr-2 h-8 text-[12px]" onClick={() => irPara("criar")} data-criar-deste-produto="">
+              O que fazer com {kit.nome || "este produto"} <ArrowRight className="ml-1 h-3.5 w-3.5" />
+            </Button>
+          )}
           <button type="button" className="mb-1 text-[12px] text-muted-foreground hover:text-foreground" onClick={() => irPara("kits", { kit: kit.id })}>
             Detalhes do produto
           </button>

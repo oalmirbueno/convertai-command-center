@@ -6,6 +6,7 @@ import { estimarLocal, padraoPara, usd } from "@/lib/mesa/api";
 import { useMesaFoto, type EtapaDaMesaFoto } from "./Comuns";
 import { nomeDaReceita, partesDaGeracao, resumoDoEnsaio, rotuloDoEstadoDoEnsaio, rotuloDoTipo, tomadasParaGerar, useEnsaios, useKits, useReceitas } from "./fotoApi";
 import { resumoDoLote, useLotes } from "./lote";
+import { objetivoPorValor } from "./linhaDeProducao";
 
 /**
  * Segunda linha da barra da Mesa Foto: o produto (kit) aberto, com a troca
@@ -22,7 +23,10 @@ import { resumoDoLote, useLotes } from "./lote";
  */
 export default function BarraDoEnsaio({ inicio }: { inicio?: ReactNode }) {
   const { clientId, catalogo } = useMesa();
-  const { kitId, ensaioId, irPara, escolherKit, proximo, etapa } = useMesaFoto();
+  const { kitId, ensaioId, irPara, escolherKit, proximo, etapa, selecionadas, marcadas: marcadasDaPagina, objetivo, prepararNaAgenda } = useMesaFoto();
+  // As marcadas que contam (a página filtra as que não existem e as referências da internet).
+  const marcadas = marcadasDaPagina || selecionadas;
+  const objetivoAberto = objetivoPorValor(objetivo || null);
   const kits = useKits(clientId);
   const ensaios = useEnsaios(clientId);
   const receitas = useReceitas();
@@ -37,12 +41,17 @@ export default function BarraDoEnsaio({ inicio }: { inicio?: ReactNode }) {
   const ativos = Object.keys(lotes)
     .map((k) => lotes[k])
     .filter((l) => l.client_id === clientId && l.ativo);
-  const mostrarProximo = !!proximo && proximo.etapa !== etapa;
-  if (!inicio && kits.isSuccess && !lista.length && !kit && !ensaio && !ativos.length && !mostrarProximo) return null;
+  // Linha de produção (frente FTL, 30/09): nas Fotos com objetivo, o "seguir" já está na faixa do passo
+  // (GuiaDaLinha); aqui não repete. O produto só aparece quando está escolhido ou quando o objetivo pede.
+  const mostrarProximo = !!proximo && proximo.etapa !== etapa && !(etapa === "acervo" && !!objetivoAberto);
+  const mostrarProduto = !!kit || (objetivoAberto ? objetivoAberto.requisito === "produto" : etapa !== "criar");
+  const semProduto = !mostrarProduto || (kits.isSuccess && !lista.length && !kit);
+  if (!inicio && semProduto && !ensaio && !ativos.length && !mostrarProximo) return null;
 
   return (
-    <div className="mt-2 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground" aria-label="Kit, ensaio e custo" data-barra-do-ensaio="">
+    <div className="mt-2 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground" aria-label="Produto, lote e custo" data-barra-do-ensaio="">
       {inicio ? <div className="mr-3 min-w-0">{inicio}</div> : null}
+      {mostrarProduto && (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button type="button" className="mr-3 inline-flex min-w-0 max-w-full items-center rounded-md py-0.5 hover:text-foreground" aria-label="Trocar o produto (kit)">
@@ -73,6 +82,7 @@ export default function BarraDoEnsaio({ inicio }: { inicio?: ReactNode }) {
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+      )}
       {ensaio && (
         <button
           type="button"
@@ -88,7 +98,7 @@ export default function BarraDoEnsaio({ inicio }: { inicio?: ReactNode }) {
       )}
       {ensaio && (
         <span className="mr-3 whitespace-nowrap tabular-nums">
-          {resumo.aprovadas}/{resumo.total} aprovadas{resumo.paraRevisar ? ` · ${resumo.paraRevisar} para revisar` : ""}
+          {resumo.aprovadas}/{resumo.total} aprovadas{resumo.paraRevisar ? ` · ${resumo.paraRevisar} esperando aprovação` : ""}
         </span>
       )}
       {ensaio && (
@@ -121,7 +131,16 @@ export default function BarraDoEnsaio({ inicio }: { inicio?: ReactNode }) {
       {mostrarProximo && proximo && (
         <button
           type="button"
-          onClick={() => irPara(proximo.etapa as EtapaDaMesaFoto, proximo.extras)}
+          onClick={() => {
+            // O post leva as marcadas para a Agenda (a Agenda monta o post com elas); sem isso o
+            // post abria vazio. Estúdio e Preparar abrem já na foto marcada (linha de produção, 30/09).
+            if (proximo.etapa === "agenda" && marcadas.length && prepararNaAgenda) {
+              prepararNaAgenda(marcadas.slice(0, 20));
+              return;
+            }
+            const comFoto = (proximo.etapa === "estudio" || proximo.etapa === "preparar") && marcadas.length ? { ...(proximo.extras || {}), imagem: marcadas[0] } : proximo.extras;
+            irPara(proximo.etapa as EtapaDaMesaFoto, comFoto);
+          }}
           className="ml-auto inline-flex min-w-0 max-w-full items-center rounded-md border border-primary/50 px-2.5 py-1 text-[12px] font-semibold text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-proximo-passo=""
         >

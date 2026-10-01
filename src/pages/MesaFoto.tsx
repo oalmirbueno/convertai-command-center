@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Aperture, BookOpen, Camera, Library, Shapes, UserRound, UsersRound, Wrench } from "lucide-react";
+import { Aperture, BookOpen, Camera, Library, MoreHorizontal, Shapes, UserRound, UsersRound } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,8 +22,9 @@ import {
   type EtapaDaMesaFoto,
   type MesaFotoValor,
 } from "@/components/mesa-foto/Comuns";
-import { proximoPasso, useEnsaios, useFotos, useKits } from "@/components/mesa-foto/fotoApi";
+import { classeDaFoto, proximoPasso, useEnsaios, useFotos, useKits } from "@/components/mesa-foto/fotoApi";
 import { CHAVES_DO_ABERTO, useContextoDoDiretor, useFocoDoDiretor } from "@/components/mesa-foto/diretorApi";
+import { ehObjetivo, etapaDeGerar, marcadasQueContam, objetivoDaEtapa, objetivoPorValor, type ObjetivoDaFoto } from "@/components/mesa-foto/linhaDeProducao";
 import { gravarNaSessao } from "@/components/mesa-foto/sessao";
 import { CHAVE_DAS_FOTOS_DO_POST } from "@/components/mesa-foto/agendaApi";
 import { gravarEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
@@ -55,6 +56,13 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
  * sintéticas), Clones, Book (estúdio do book do produto ou da pessoa, 26/09)
  * e Canvas (docs/mesa-foto/MODELOS-E-CANVAS.md), num seletor só ("Ferramentas").
  * O Canvas carrega o React Flow só quando a aba abre.
+ *
+ * 30/09 (frente FTL; dono: "a linha de produção das fotos está muito confusa
+ * e difícil, facilite"): a linha de produção em 5 passos, na ordem em que a
+ * pessoa pensa (src/components/mesa-foto/linhaDeProducao.ts): 1 O que fazer
+ * (?etapa=criar, onde a mesa abre), 2 Fotos, 3 Gerar (a ferramenta do que foi
+ * escolhido), 4 Aprovar (conferir e aprovar num lugar só) e 5 Usar. O
+ * objetivo fica guardado por cliente; as ferramentas avançadas ficam em "Mais".
  *
  * Sistema de design (26/09, docs/design/SISTEMA.md): o corpo é uma
  * AreaDeTrabalho. A etapa rola na região principal (a posição fica guardada
@@ -92,6 +100,7 @@ const carregarClones = () => import("@/components/mesa-foto/EtapaClones");
 const carregarBook = () => import("@/components/mesa-foto/EtapaBook");
 const carregarEstudio = () => import("@/components/mesa-foto/EtapaEstudio");
 const carregarAgenda = () => import("@/components/mesa-foto/EtapaAgenda");
+const carregarAprovar = () => import("@/components/mesa-foto/EtapaAprovar");
 // O Canvas (React Flow, ~60 KB) não entra na pré-carga: só baixa quando a aba abre.
 // Mesmas chaves da pré-carga do painel (src/lib/mesa/preCarga.ts): o que já
 // baixou antes do clique aparece direto, sem esqueleto.
@@ -109,6 +118,7 @@ const EtapaPreparar = lazyComPreCarga("mesa-foto/preparar", carregarPreparar);
 const EtapaEnsaio = lazyComPreCarga("mesa-foto/ensaio", carregarEnsaio);
 const EtapaRevisar = lazyComPreCarga("mesa-foto/revisar", carregarRevisar);
 const EtapaUsar = lazyComPreCarga("mesa-foto/usar", carregarUsar);
+const EtapaAprovar = lazyComPreCarga("mesa-foto/aprovar", carregarAprovar);
 const EtapaBiblioteca = lazyComPreCarga("mesa-foto/biblioteca", carregarBiblioteca);
 const BarraDoEnsaio = lazyComPreCarga("mesa-foto/barra-do-ensaio", () => import("@/components/mesa-foto/BarraDoEnsaio"));
 const AgenteDiretor = lazyComPreCarga("mesa-foto/agente-diretor", () => import("@/components/mesa-foto/AgenteDiretor"));
@@ -148,7 +158,7 @@ function gravarOnde(clientId: string, onde: OndeParou) {
   try {
     window.localStorage.setItem(chaveOnde(clientId), JSON.stringify(onde));
   } catch {
-    /* armazenamento indisponível: abre sempre no Acervo */
+    /* armazenamento indisponível: abre sempre no passo 1 */
   }
 }
 
@@ -195,7 +205,8 @@ export default function MesaFoto() {
 
   const clientIdUrl = params.get("client") || "";
   const etapaUrl = params.get("etapa");
-  const etapa: EtapaDaMesaFoto = ETAPAS_DA_MESA_FOTO.some((e) => e.valor === etapaUrl) ? (etapaUrl as EtapaDaMesaFoto) : "acervo";
+  // 30/09 (frente FTL): a mesa abre no passo 1, "O que fazer".
+  const etapa: EtapaDaMesaFoto = ETAPAS_DA_MESA_FOTO.some((e) => e.valor === etapaUrl) ? (etapaUrl as EtapaDaMesaFoto) : "criar";
   const kitUrl = uuidOuNulo(params.get("kit"));
   const ensaioUrl = uuidOuNulo(params.get("ensaio"));
   const imagemUrl = uuidOuNulo(params.get("imagem"));
@@ -228,6 +239,26 @@ export default function MesaFoto() {
     validar: (v) => Array.isArray(v) && v.every((x) => typeof x === "string"),
   });
   const onde = useMemo(() => (clientId ? lerOnde(clientId) : null), [clientId]);
+  // O que produzir (passo 1), por cliente. Só a escolha da pessoa muda o objetivo: o passo 1, a
+  // faixa das Fotos e o seletor do passo 3. Quem chega DE FORA numa ferramenta de gerar (primeira
+  // carga com ?etapa=, link do diretor, outra mesa) já está "fazendo" aquilo e o objetivo segue a
+  // ferramenta. A navegação interna (passos, Próximo, Abrir no Estúdio, Post na Agenda) não regrava:
+  // usar uma foto aprovada num post não transforma "Fotos do produto" em "Post com fotos".
+  const [objetivoGuardado, setObjetivoGuardado] = useEstadoDaTela<ObjetivoDaFoto | null>(`mesa-foto:objetivo:${clientId}`, null, {
+    validar: (v) => v === null || ehObjetivo(v),
+  });
+  const objetivo: ObjetivoDaFoto | null = objetivoGuardado;
+  // A etapa que a própria página pediu (mudar): a chegada nela é interna e não mexe no objetivo.
+  const etapaPedidaAqui = useRef<string | null>(null);
+  useEffect(() => {
+    if (!clientId) return;
+    const interna = etapaPedidaAqui.current === etapa;
+    etapaPedidaAqui.current = null;
+    if (interna) return;
+    const deFora = objetivoDaEtapa(etapa);
+    if (deFora && deFora !== objetivoGuardado) setObjetivoGuardado(deFora);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, etapa]);
   // O caminho do diretor (e dos avisos) pode trazer o que abrir em cada etapa: grava o "aberto"
   // da etapa antes dela montar e tira o parâmetro do endereço (voltar não reabre o antigo).
   const abertosAplicados = useRef<string>("");
@@ -257,6 +288,7 @@ export default function MesaFoto() {
   const mudar = (mudancas: Record<string, string | null>, substituir = false) => {
     const base = pendente.current && pendente.current.base === params ? pendente.current.atual : params;
     const next = new URLSearchParams(base);
+    if (mudancas.etapa && mudancas.etapa !== etapa) etapaPedidaAqui.current = mudancas.etapa;
     Object.keys(mudancas).forEach((k) => {
       const v = mudancas[k];
       if (v) next.set(k, v);
@@ -268,7 +300,7 @@ export default function MesaFoto() {
 
   const trocarCliente = (id: string) => {
     const o = lerOnde(id);
-    mudar({ client: id, etapa: o.etapa || "acervo", kit: o.kit, ensaio: o.ensaio, imagem: null, marca: null });
+    mudar({ client: id, etapa: o.etapa || "criar", kit: o.kit, ensaio: o.ensaio, imagem: null, marca: null });
   };
 
   useEffect(() => {
@@ -295,9 +327,16 @@ export default function MesaFoto() {
   const ensaiosQ = useEnsaios(clientId);
   const listaDeKits = kitsQ.data || [];
   const ensaioAberto = ensaioUrl ? (ensaiosQ.data || []).find((e) => e.id === ensaioUrl) || null : null;
+  // As marcadas que contam (existem e podem sair): a mesma regra da faixa das Fotos, do Próximo e da aba 3.
+  const marcadas = useMemo(() => marcadasQueContam(selecionadas, fotosQ.isSuccess ? fotosQ.data || [] : null), [selecionadas, fotosQ.isSuccess, fotosQ.data]);
+  // Geradas fora dos lotes (Estúdio, Preparar, ângulo, clone, Canvas): o passo 4 depois de gerar.
+  const geradas = useMemo(() => {
+    const g = (fotosQ.data || []).filter((f) => !f.referencia_web && classeDaFoto(f) === "gerada");
+    return { pendentes: g.filter((f) => !f.aprovada).length, aprovadas: g.filter((f) => f.aprovada).length };
+  }, [fotosQ.data]);
   const proximo =
     clientId && fotosQ.isSuccess && kitsQ.isSuccess
-      ? proximoPasso({ fotos: (fotosQ.data || []).length, kits: listaDeKits, kitId: kitUrl, ensaio: ensaioAberto, selecionadas: selecionadas.length })
+      ? proximoPasso({ fotos: (fotosQ.data || []).length, kits: listaDeKits, kitId: kitUrl, ensaio: ensaioAberto, selecionadas: marcadas.length, objetivo, etapa, geradas })
       : null;
 
   // Kit ou ensaio no endereço que a lista em cache ainda não tem (gravado pelo
@@ -318,7 +357,7 @@ export default function MesaFoto() {
   useEffect(
     () =>
       quandoOcioso(() => {
-        for (const etapa of [EtapaAcervo, EtapaKits, EtapaCriar, EtapaEstudio, EtapaEnsaio, EtapaCampanha, EtapaPreparar, EtapaRevisar, EtapaUsar, EtapaAgenda, EtapaBiblioteca, EtapaModelos, EtapaClones, EtapaBook]) {
+        for (const etapa of [EtapaCriar, EtapaAcervo, EtapaKits, EtapaEstudio, EtapaEnsaio, EtapaCampanha, EtapaPreparar, EtapaAprovar, EtapaRevisar, EtapaUsar, EtapaAgenda, EtapaBiblioteca, EtapaModelos, EtapaClones, EtapaBook]) {
           etapa.preCarregar().catch(() => {
             /* sem rede agora: baixa quando a etapa abrir */
           });
@@ -395,6 +434,7 @@ export default function MesaFoto() {
     },
     selecionadas,
     setSelecionadas,
+    marcadas,
     // O diretor é a lateral fixa: abrir é mostrar a lateral (ou a gaveta no
     // celular); o pedido de outra etapa vai para o rascunho do campo dele.
     abrirAgente: () => {
@@ -412,9 +452,27 @@ export default function MesaFoto() {
       if (clientId) gravarNaSessao(clientId, CHAVE_DAS_FOTOS_DO_POST, imagemIds.slice(0, 20));
       mudar({ etapa: "agenda", task: null, trabalho: null });
     },
+    objetivo,
+    escolherObjetivo: (o: ObjetivoDaFoto | null, ir?: boolean) => {
+      setObjetivoGuardado(o);
+      if (ir) mudar({ etapa: "acervo" });
+    },
   };
   const passoAtual = passoDaEtapa(etapa);
   const passoRecomendado = proximo ? passoDaEtapa(proximo.etapa) : null;
+  const objetivoAberto = objetivoPorValor(objetivo);
+  // Passo 3 (Gerar): a ferramenta do objetivo, já na foto marcada (Estúdio e Preparar); o post não
+  // gera e vai direto ao post (passo 5) levando as marcadas.
+  const abrirPasso = (p: { passo: number; etapa: EtapaDaMesaFoto }) => {
+    if (p.passo !== 3) {
+      mudar({ etapa: p.etapa });
+      return;
+    }
+    const destino = etapaDeGerar(objetivo) as EtapaDaMesaFoto;
+    if (destino === "agenda" && marcadas.length && valorDaFoto.prepararNaAgenda) valorDaFoto.prepararNaAgenda(marcadas);
+    else if ((destino === "estudio" || destino === "preparar") && marcadas.length) mudar({ etapa: destino, imagem: marcadas[0] });
+    else mudar({ etapa: destino });
+  };
   // Ferramentas de apoio (aba com disponivel false em ABAS_FUTURAS some).
   const apoios = ETAPAS_DE_APOIO.filter((e) => ABAS_FUTURAS.every((a) => a.etapa !== e.etapa || a.disponivel));
   const ferramentaAberta = apoios.find((e) => e.etapa === etapa) || null;
@@ -432,7 +490,7 @@ export default function MesaFoto() {
 
   return (
     // Casca padrão das mesas (src/components/sistema/CascaDaMesa.tsx). O caminho
-    // em 3 passos e as ferramentas de apoio ficam numa linha própria até 1536 px.
+    // em 5 passos (linha de produção) e as ferramentas avançadas ficam numa linha própria até 1536 px.
     <CascaDaMesa
       mesa="foto"
       titulo="Mesa Foto"
@@ -448,46 +506,55 @@ export default function MesaFoto() {
       etapas={
         clientId ? (
           <nav aria-label="Etapas da Mesa Foto" className="flex w-full min-w-0 items-center py-1">
-            <div className="grid min-w-0 flex-1 grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5" data-caminho-principal="">
-              {PASSOS_PRINCIPAIS.map((p) => {
+            {/* Linha de produção (frente FTL, 30/09): 5 passos. No celular só o passo aberto mostra o
+                nome; os outros ficam no número (o nome vai no leitor de tela e na dica). */}
+            <div className="flex min-w-0 flex-1 rounded-lg bg-muted p-0.5" data-caminho-principal="" data-linha-de-producao="">
+              {PASSOS_PRINCIPAIS.map((p, i) => {
                 const ativo = !!passoAtual && passoAtual.passo === p.passo;
                 const recomendado = !ativo && !!passoRecomendado && passoRecomendado.passo === p.passo;
+                const pula = p.passo === 3 && !!objetivoAberto && objetivoAberto.valor === "post";
+                const dica = p.passo === 3 && objetivoAberto ? (pula ? "O post usa fotos prontas: não precisa gerar" : `${p.dica}. Agora: ${objetivoAberto.titulo}`) : p.dica;
                 return (
                   <button
-                    key={p.etapa}
+                    key={p.passo}
                     type="button"
-                    onClick={() => mudar({ etapa: p.etapa })}
+                    onClick={() => abrirPasso(p)}
                     aria-current={ativo ? "page" : undefined}
-                    title={p.dica}
+                    aria-label={`${p.passo}. ${p.rotulo}`}
+                    title={dica}
+                    data-passo={p.passo}
                     data-proximo={recomendado ? "" : undefined}
+                    data-pula={pula ? "" : undefined}
                     className={juntar(
-                      "inline-flex h-8 min-w-0 items-center justify-center rounded-md px-1 text-[13px] font-medium transition-colors",
+                      "inline-flex h-8 min-w-0 items-center justify-center rounded-md text-[13px] font-medium transition-colors",
+                      i > 0 && "ml-0.5",
+                      ativo ? "flex-1 bg-card px-2 text-foreground shadow-sm" : "shrink-0 px-1.5 sm:flex-1 sm:shrink sm:px-2",
                       foco,
-                      ativo ? "bg-card text-foreground shadow-sm" : recomendado ? "text-primary hover:bg-card/60" : "text-muted-foreground hover:text-foreground",
+                      !ativo && (recomendado ? "text-primary hover:bg-card/60" : pula ? "text-muted-foreground/60 hover:text-foreground" : "text-muted-foreground hover:text-foreground"),
                     )}
                   >
-                    <span className={`mr-1.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${ativo || recomendado ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"}`}>
+                    <span className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${ativo || recomendado ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"}`}>
                       {p.passo}
                     </span>
-                    <span className="truncate">{p.rotulo}</span>
+                    <span className={juntar("ml-1.5 min-w-0 truncate", !ativo && "hidden sm:block")}>{p.rotulo}</span>
                   </button>
                 );
               })}
             </div>
-            {/* Ferramentas de apoio (pedido do dono, 26/09): um seletor só, com a
-                aberta no botão e a recomendada marcada na lista. */}
+            {/* Ferramentas avançadas (Mais): um seletor só, fora da linha de produção, com a aberta
+                no botão e a recomendada marcada na lista. */}
             <div
               className="ml-1.5 min-w-0 max-w-[42%] shrink-0 sm:ml-2 sm:max-w-none"
               data-etapas-de-apoio=""
               data-ferramenta={ferramentaAberta ? ferramentaAberta.etapa : undefined}
               data-proximo={ferramentaEmDestaque ? "" : undefined}
               role="group"
-              aria-label="Ferramentas de apoio"
+              aria-label="Ferramentas avançadas"
             >
               <SeletorCompacto
                 modo="lista"
-                rotulo="Ferramentas"
-                icone={<Wrench className="h-4 w-4" />}
+                rotulo="Mais"
+                icone={<MoreHorizontal className="h-4 w-4" />}
                 opcoes={apoios.map((e) => ({
                   valor: e.etapa,
                   rotulo: e.rotulo,
@@ -565,6 +632,7 @@ export default function MesaFoto() {
                   {etapa === "ensaio" && <EtapaEnsaio />}
                   {etapa === "campanha" && <EtapaCampanha />}
                   {etapa === "revisar" && <EtapaRevisar />}
+                  {etapa === "aprovar" && <EtapaAprovar />}
                   {etapa === "usar" && <EtapaUsar />}
                   {etapa === "biblioteca" && <EtapaBiblioteca />}
                   {etapa === "modelos" && <EtapaModelos />}

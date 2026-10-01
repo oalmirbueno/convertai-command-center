@@ -8,6 +8,8 @@ import { EstadoVazio } from "@/components/sistema/Estados";
 import { juntar } from "@/components/sistema/estilos";
 import { ImagemDaMesa } from "@/components/mesa/MesaContexto";
 import { classeDaFoto, proporcaoDaFoto, rotuloDoModo, type FotoDoAcervo, type ProximoPasso } from "./fotoApi";
+import { objetivoDaEtapa, type ObjetivoDaFoto } from "./linhaDeProducao";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 
 /**
  * Peças comuns da Mesa Foto: o contexto da página (kit, ensaio, fotos
@@ -21,25 +23,26 @@ import { classeDaFoto, proporcaoDaFoto, rotuloDoModo, type FotoDoAcervo, type Pr
 
 /**
  * Todas as telas da Mesa Foto (o valor vai no endereço: ?etapa=...). A
- * navegação mostra só o caminho principal em 3 passos (1 Fotos, 2 Criar,
- * 3 Usar) e, discretas ao lado, as ferramentas de apoio (Biblioteca, Modelos
- * e Canvas). O produto (kit) é identificado dentro de Fotos; o Estúdio de
- * fotos, Variações, Campanha e Preparar ficam dentro de Criar; Revisar e o
- * Post na Agenda ficam dentro de Usar (a comparação segue em ?etapa=revisar).
+ * navegação mostra a linha de produção em 5 passos (linhaDeProducao.ts):
+ * 1 O que fazer, 2 Fotos, 3 Gerar, 4 Aprovar e 5 Usar. Cada etapa antiga
+ * mora dentro de um passo; as ferramentas avançadas (Biblioteca, Modelos,
+ * Clones, Book e Canvas) ficam em "Mais", fora do caminho.
  *
- * 27/09 (dono: "ainda está confuso, não está tão facilitado pra criar"):
- * Estúdio de fotos (?etapa=estudio&imagem=<id>) e Post na Agenda
- * (?etapa=agenda&task=<id>&trabalho=<id>) entram no caminho principal.
+ * 27/09: Estúdio de fotos (?etapa=estudio&imagem=<id>) e Post na Agenda
+ * (?etapa=agenda&task=<id>&trabalho=<id>).
+ * 30/09 (frente FTL): "aprovar" (conferir e aprovar num lugar só) e os
+ * rótulos em termos simples.
  */
 export const ETAPAS_DA_MESA_FOTO = [
   { valor: "acervo", rotulo: "Fotos" },
   { valor: "kits", rotulo: "Produto" },
-  { valor: "criar", rotulo: "Criar" },
+  { valor: "criar", rotulo: "O que fazer" },
   { valor: "estudio", rotulo: "Estúdio de fotos" },
-  { valor: "ensaio", rotulo: "Variações" },
-  { valor: "campanha", rotulo: "Campanha" },
-  { valor: "preparar", rotulo: "Preparar" },
-  { valor: "revisar", rotulo: "Revisar" },
+  { valor: "ensaio", rotulo: "Fotos do produto" },
+  { valor: "campanha", rotulo: "Foto com modelo" },
+  { valor: "preparar", rotulo: "Tirar fundo e ajustes" },
+  { valor: "revisar", rotulo: "Comparar com as fontes" },
+  { valor: "aprovar", rotulo: "Aprovar" },
   { valor: "usar", rotulo: "Usar" },
   { valor: "agenda", rotulo: "Post na Agenda" },
   { valor: "biblioteca", rotulo: "Biblioteca" },
@@ -52,18 +55,20 @@ export const ETAPAS_DA_MESA_FOTO = [
 export type EtapaDaMesaFoto = (typeof ETAPAS_DA_MESA_FOTO)[number]["valor"];
 
 /**
- * O caminho principal (pedido do dono, 25/09: "não tem um processo mais
- * simples"): 1. Fotos do produto (com o produto identificado ali mesmo),
- * 2. Criar, 3. Usar (revisar e levar para a Mesa, a Mesa Ads, baixar ou
- * mandar ao cliente).
+ * A linha de produção (frente FTL, 30/09; dono: "a linha de produção das
+ * fotos está muito confusa e difícil, facilite"): escolher o que produzir,
+ * subir ou escolher as fotos, gerar, conferir e aprovar, usar. O passo 3
+ * abre a ferramenta do objetivo escolhido (etapaDeGerar).
  */
 export const PASSOS_PRINCIPAIS: { passo: number; etapa: EtapaDaMesaFoto; rotulo: string; dica: string; inclui: EtapaDaMesaFoto[] }[] = [
-  { passo: 1, etapa: "acervo", rotulo: "Fotos", dica: "Fotos do produto e o produto identificado", inclui: ["acervo", "kits"] },
-  { passo: 2, etapa: "criar", rotulo: "Criar", dica: "Estúdio de fotos, variações, campanha ou ajuste de uma foto", inclui: ["criar", "estudio", "ensaio", "campanha", "preparar"] },
-  { passo: 3, etapa: "usar", rotulo: "Usar", dica: "Revisar e usar: post na Agenda para o cliente aprovar, Mesa, Mesa Ads ou baixar", inclui: ["usar", "revisar", "agenda"] },
+  { passo: 1, etapa: "criar", rotulo: "O que fazer", dica: "Escolha o que produzir: melhorar uma foto, fotos do produto, foto com modelo, tirar fundo ou post", inclui: ["criar"] },
+  { passo: 2, etapa: "acervo", rotulo: "Fotos", dica: "Suba ou marque as fotos; o produto é identificado ali mesmo", inclui: ["acervo", "kits"] },
+  { passo: 3, etapa: "estudio", rotulo: "Gerar", dica: "A ferramenta do que você escolheu: Estúdio, fotos do produto, foto com modelo ou ajustes", inclui: ["estudio", "ensaio", "campanha", "preparar"] },
+  { passo: 4, etapa: "aprovar", rotulo: "Aprovar", dica: "Confira cada foto gerada e aprove ou refaça", inclui: ["aprovar", "revisar"] },
+  { passo: 5, etapa: "usar", rotulo: "Usar", dica: "Post na Agenda para o cliente aprovar, Mesa, Mesa Ads ou baixar", inclui: ["usar", "agenda"] },
 ];
 
-/** Ferramentas de apoio: à mão, discretas, sem disputar com o caminho principal. */
+/** Ferramentas avançadas ("Mais"): à mão, recolhidas, sem disputar com a linha de produção. */
 export const ETAPAS_DE_APOIO: { etapa: EtapaDaMesaFoto; rotulo: string }[] = [
   { etapa: "biblioteca", rotulo: "Biblioteca" },
   { etapa: "modelos", rotulo: "Modelos" },
@@ -88,12 +93,12 @@ export const ABAS_FUTURAS: { etapa: string; rotulo: string; disponivel: boolean;
   { etapa: "canvas", rotulo: "Canvas", disponivel: true, depoisDe: "criar" },
 ];
 
-/** As formas de criar (passo 2): o Estúdio de fotos primeiro (uma foto, todas as ferramentas). */
+/** As ferramentas do passo 3 (Gerar), com o nome simples do que produzem. */
 export const FORMAS_DE_CRIAR: { etapa: EtapaDaMesaFoto; rotulo: string; dica: string }[] = [
-  { etapa: "estudio", rotulo: "Estúdio", dica: "Uma foto grande e as ferramentas ao lado: luz, cor, fundo, cenário, ângulo, ampliar e o recorte do post." },
-  { etapa: "ensaio", rotulo: "Variações", dica: "Várias fotos do produto: fundo de cor, lifestyle, na mão, flat lay, macro." },
-  { etapa: "campanha", rotulo: "Campanha", dica: "Modelo sintético usando o produto, com a pegada da marca." },
-  { etapa: "preparar", rotulo: "Preparar", dica: "Ajuste fino de uma foto: fundo branco, luz, cenário." },
+  { etapa: "estudio", rotulo: "Melhorar uma foto", dica: "Estúdio: uma foto grande e as ferramentas ao lado: luz, cor, fundo, cenário, ângulo, ampliar e o recorte do post." },
+  { etapa: "ensaio", rotulo: "Fotos do produto", dica: "Várias fotos do produto: fundo de cor, lifestyle, na mão, flat lay, macro." },
+  { etapa: "campanha", rotulo: "Foto com modelo", dica: "Pessoa criada pela IA usando o produto, com a pegada da marca." },
+  { etapa: "preparar", rotulo: "Tirar fundo e ajustes", dica: "Ajuste fino de uma foto: fundo branco ou transparente, luz, cenário, áreas protegidas." },
 ];
 
 export const passoDaEtapa = (etapa: string) => PASSOS_PRINCIPAIS.find((p) => (p.inclui as string[]).indexOf(etapa) >= 0) || null;
@@ -108,6 +113,11 @@ export interface MesaFotoValor {
   irPara: (etapa: EtapaDaMesaFoto, extras?: { imagem?: string | null; kit?: string | null; ensaio?: string | null }) => void;
   selecionadas: string[];
   setSelecionadas: (ids: string[]) => void;
+  /**
+   * Frente FTL: as marcadas que contam para a linha (existem no acervo e podem sair;
+   * marcadasQueContam). Fora da página, vale `selecionadas`.
+   */
+  marcadas?: string[];
   abrirAgente: () => void;
   /** A etapa aberta (para a navegação de dentro de Criar). */
   etapa?: string;
@@ -119,6 +129,10 @@ export interface MesaFotoValor {
   abrirNoEstudio?: (imagemId: string, ferramenta?: string | null) => void;
   /** Frente MF: leva as fotos para o Post na Agenda (foto única ou carrossel). */
   prepararNaAgenda?: (imagemIds: string[]) => void;
+  /** Frente FTL: o que a pessoa escolheu produzir (passo 1), guardado por cliente. */
+  objetivo?: ObjetivoDaFoto | null;
+  /** Frente FTL: escolhe o objetivo; `ir` leva junto para o passo das Fotos. */
+  escolherObjetivo?: (o: ObjetivoDaFoto | null, ir?: boolean) => void;
 }
 
 const Contexto = createContext<MesaFotoValor | null>(null);
@@ -462,33 +476,27 @@ export function Pilulas<T extends string | number>({
 }
 
 /**
- * Dentro do passo 2 (Criar): as formas lado a lado, para trocar sem voltar.
- * Variações, Campanha e Preparar usam o mesmo produto (kit) aberto; o
- * Estúdio de fotos trabalha numa foto (com ou sem produto).
+ * Dentro do passo 3 (Gerar): a ferramenta aberta num seletor só, com o nome
+ * simples do que ela produz (antes eram 4 abas com o nome da ferramenta).
+ * Trocar aqui troca também o objetivo guardado.
  */
 export function NavDoCriar({ atual, className = "" }: { atual: EtapaDaMesaFoto; className?: string }) {
-  const { irPara } = useMesaFoto();
+  const { irPara, escolherObjetivo } = useMesaFoto();
   // 28/09 (dono: "seletor pequeno não ganha linha própria"): mora na barra do kit e do ensaio, no cabeçalho da mesa.
   return (
     <nav aria-label="Formas de criar" className={juntar("flex min-w-0 flex-wrap items-center", className)} data-nav-do-criar="">
-      <button type="button" onClick={() => irPara("criar")} className="mr-1 h-7 rounded-md px-1.5 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground">
-        Criar
-      </button>
-      <span aria-hidden="true" className="mr-1 text-[11px] text-muted-foreground/60">/</span>
-      <div className="grid min-w-0 grid-cols-4 gap-0.5 rounded-lg bg-muted p-0.5">
-        {FORMAS_DE_CRIAR.map((f) => (
-          <button
-            key={f.etapa}
-            type="button"
-            onClick={() => irPara(f.etapa)}
-            aria-current={atual === f.etapa ? "page" : undefined}
-            title={f.dica}
-            className={`min-w-0 truncate rounded-md px-2.5 py-0.5 text-[12px] font-medium ${atual === f.etapa ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-          >
-            {f.rotulo}
-          </button>
-        ))}
-      </div>
+      <SeletorCompacto
+        modo="lista"
+        rotulo="Gerando"
+        opcoes={FORMAS_DE_CRIAR.map((f) => ({ valor: f.etapa, rotulo: f.rotulo, descricao: f.dica }))}
+        valor={atual}
+        onEscolher={(v) => {
+          const o = objetivoDaEtapa(v);
+          if (o && escolherObjetivo) escolherObjetivo(o);
+          irPara(v as EtapaDaMesaFoto);
+        }}
+        className="h-7 text-[12px]"
+      />
     </nav>
   );
 }

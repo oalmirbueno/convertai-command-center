@@ -73,6 +73,7 @@ import EtapaPreparar from "@/components/mesa-foto/EtapaPreparar";
 import EtapaEnsaio from "@/components/mesa-foto/EtapaEnsaio";
 import EtapaRevisar from "@/components/mesa-foto/EtapaRevisar";
 import EtapaUsar, { enderecoParaUsar } from "@/components/mesa-foto/EtapaUsar";
+import EtapaAprovar from "@/components/mesa-foto/EtapaAprovar";
 import EtapaBiblioteca from "@/components/mesa-foto/EtapaBiblioteca";
 import AgenteDiretor from "@/components/mesa-foto/AgenteDiretor";
 import EtapaCampanha from "@/components/mesa-foto/EtapaCampanha";
@@ -376,7 +377,7 @@ describe("rota, casca e troca entre mesas", () => {
     expect(api).toContain('"mesa-foto": "diretor de fotografia"');
   });
 
-  it("a página mostra cliente, saldo, o caminho em 3 passos com as etapas de apoio, a troca de mesas e a barra do kit e do ensaio", async () => {
+  it("a página mostra cliente, saldo, a linha de produção em 5 passos com as ferramentas avançadas, a troca de mesas e a barra do kit e do ensaio", async () => {
     render(
       h(
         QueryClientProvider,
@@ -387,29 +388,34 @@ describe("rota, casca e troca entre mesas", () => {
     expect(screen.getByRole("heading", { name: "Mesa Foto" }).className).toContain("sr-only");
     const nav = screen.getByRole("navigation", { name: "Etapas da Mesa Foto" });
     const botoes = within(nav).getAllByRole("button");
-    // Pedido do dono (25/09, "não tem um processo mais simples"): 1 Fotos (o produto é identificado ali),
-    // 2 Criar, 3 Usar (com a revisão dentro); as ferramentas de apoio num seletor só (26/09, sistema de design).
-    expect(botoes.map((b) => b.textContent)).toEqual(["1Fotos", "2Criar", "3Usar", "Ferramentas"]);
+    // Frente FTL (30/09; dono: "a linha de produção das fotos está muito confusa e difícil, facilite"):
+    // 1 O que fazer, 2 Fotos, 3 Gerar, 4 Aprovar, 5 Usar; as ferramentas avançadas num seletor só ("Mais").
+    // Mudança de propósito: antes eram 3 passos (Fotos, Criar, Usar) e o seletor "Ferramentas".
+    expect(botoes.map((b) => b.textContent)).toEqual(["1O que fazer", "2Fotos", "3Gerar", "4Aprovar", "5Usar", "Mais"]);
+    expect(botoes.slice(0, 5).map((b) => b.getAttribute("aria-label"))).toEqual(["1. O que fazer", "2. Fotos", "3. Gerar", "4. Aprovar", "5. Usar"]);
     const apoio = nav.querySelector("[data-etapas-de-apoio]") as HTMLElement;
     expect(apoio.querySelector('[data-seletor-compacto="lista"]')).toBeTruthy();
     expect(apoio.closest("[data-caminho-principal]")).toBeNull();
-    fireEvent.click(within(apoio).getByRole("button", { name: /^Ferramentas/ }));
-    const ferramentas = await screen.findByRole("listbox", { name: "Ferramentas" });
+    fireEvent.click(within(apoio).getByRole("button", { name: /^Mais/ }));
+    const ferramentas = await screen.findByRole("listbox", { name: "Mais" });
     expect(within(ferramentas).getAllByRole("option").map((o) => (o.querySelector(".truncate") as HTMLElement).textContent)).toEqual(["Biblioteca", "Modelos", "Clones", "Book", "Canvas"]);
     fireEvent.keyDown(ferramentas, { key: "Escape" });
     // 27/09 (frente MF, dono: "ainda está confuso, não está tão facilitado pra criar"): o Estúdio de fotos
     // entra no passo 2 (Criar) e o Post na Agenda no passo 3 (Usar). Mudança de propósito: as etapas
     // antigas continuam todas, na mesma ordem relativa.
-    expect(ETAPAS_DA_MESA_FOTO.map((e) => e.valor)).toEqual(["acervo", "kits", "criar", "estudio", "ensaio", "campanha", "preparar", "revisar", "usar", "agenda", "biblioteca", "modelos", "clones", "book", "canvas"]);
-    expect(PASSOS_PRINCIPAIS.map((p) => p.inclui)).toEqual([["acervo", "kits"], ["criar", "estudio", "ensaio", "campanha", "preparar"], ["usar", "revisar", "agenda"]]);
+    // 30/09 (frente FTL): a etapa nova "aprovar" (conferir e aprovar num lugar só); nenhuma antiga saiu.
+    expect(ETAPAS_DA_MESA_FOTO.map((e) => e.valor)).toEqual(["acervo", "kits", "criar", "estudio", "ensaio", "campanha", "preparar", "revisar", "aprovar", "usar", "agenda", "biblioteca", "modelos", "clones", "book", "canvas"]);
+    expect(PASSOS_PRINCIPAIS.map((p) => p.inclui)).toEqual([["criar"], ["acervo", "kits"], ["estudio", "ensaio", "campanha", "preparar"], ["aprovar", "revisar"], ["usar", "agenda"]]);
     // Modelos e Canvas já têm tela: aparecem como abas avançadas.
     expect(ABAS_FUTURAS.map((a) => [a.etapa, a.disponivel])).toEqual([["modelos", true], ["clones", true], ["book", true], ["canvas", true]]);
-    // Celular: o caminho principal em 3 colunas e o seletor ao lado, sem rolagem lateral.
+    // Celular: a linha em uma faixa (só o passo aberto mostra o nome) e o seletor ao lado, sem rolagem lateral.
     const caminho = nav.querySelector("[data-caminho-principal]") as HTMLElement;
-    expect(caminho.className).toContain("grid-cols-3");
+    expect(caminho.className).toContain("flex");
     expect(caminho.className).toContain("min-w-0");
+    expect((botoes[1].querySelector("span + span") as HTMLElement).className).toContain("hidden sm:block");
     expect(nav.className).toContain("min-w-0");
     expect(apoio.className).toContain("max-w-[42%]");
+    // Sem etapa no endereço, a mesa abre no passo 1 (O que fazer).
     expect(botoes[0].getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("combobox", { name: /Cliente: Loja Sintética/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Saldo e gasto do mês" })).toBeTruthy();
@@ -426,34 +432,40 @@ describe("rota, casca e troca entre mesas", () => {
     fireEvent.keyDown(troca.firstElementChild as HTMLElement, { key: "Escape" });
     // Barra do kit e do ensaio.
     // A barra é carregada sob demanda (lazyComPreCarga): no teste o primeiro import pode passar de 1 s.
-    const barra = await screen.findByLabelText("Kit, ensaio e custo", {}, { timeout: 8000 });
+    const barra = await screen.findByLabelText("Produto, lote e custo", {}, { timeout: 8000 });
     await waitFor(() => expect(barra.textContent).toContain("Mouse M720"));
     await waitFor(() => expect(barra.textContent).toContain("Catálogo fiel"));
     expect(barra.textContent).toContain("0/3 aprovadas");
-    // O próximo passo fica sempre em destaque: aqui há 1 versão esperando revisão, no passo 3 (Usar).
-    const proximo = await screen.findByText(/Próximo: Revisar 1 foto/);
+    // O próximo passo fica sempre em destaque: aqui há 1 versão esperando decisão, no passo 4 (Aprovar).
+    const proximo = await screen.findByText(/Próximo: Aprovar 1 foto/);
     expect(proximo.closest("[data-proximo-passo]")).toBeTruthy();
-    expect(botoes[2].hasAttribute("data-proximo")).toBe(true);
+    expect(botoes[3].hasAttribute("data-proximo")).toBe(true);
     // O diretor de fotografia fica fixo na lateral da área de trabalho, com o campo à vista (26/09).
     const campoDoDiretor = await screen.findByLabelText("Mensagem ao diretor", {}, { timeout: 8000 });
     expect(campoDoDiretor.closest("[data-lateral]")).toBeTruthy();
     expect(campoDoDiretor.closest("[data-compositor-do-agente]")).toBeTruthy();
     expect(document.querySelector("[data-area-de-trabalho] [data-regiao-principal]")).toBeTruthy();
     // Ferramenta pelo seletor: a aberta aparece no botão.
-    fireEvent.click(within(apoio).getByRole("button", { name: /^Ferramentas/ }));
+    fireEvent.click(within(apoio).getByRole("button", { name: /^Mais/ }));
     fireEvent.click(await screen.findByRole("option", { name: /^Biblioteca/ }));
     await waitFor(() => expect(apoio.getAttribute("data-ferramenta")).toBe("biblioteca"), { timeout: 5000 });
-    expect(within(apoio).getByRole("button", { name: "Ferramentas: Biblioteca" })).toBeTruthy();
-    // Variações, Campanha e Preparar ficam dentro do passo 2 (Criar).
-    fireEvent.click(within(nav).getAllByRole("button")[1]);
-    await waitFor(() => expect(document.querySelector('[data-forma-de-criar="campanha"]')).toBeTruthy(), { timeout: 5000 });
-    fireEvent.click(document.querySelector('[data-forma-de-criar="ensaio"]') as HTMLElement);
-    const criar = await screen.findByRole("navigation", { name: "Formas de criar" });
-    expect(within(criar).getByRole("button", { name: "Variações" }).getAttribute("aria-current")).toBe("page");
-    expect(within(nav).getAllByRole("button")[1].getAttribute("aria-current")).toBe("page");
-    // Produto (kits) e Revisar continuam por endereço, dentro dos passos 1 e 3.
-    fireEvent.click(within(nav).getAllByRole("button")[2]);
-    await waitFor(() => expect(within(nav).getAllByRole("button")[2].getAttribute("aria-current")).toBe("page"), { timeout: 5000 });
+    expect(within(apoio).getByRole("button", { name: "Mais: Biblioteca" })).toBeTruthy();
+    // Passo 1: escolher o que produzir guarda o objetivo e leva ao passo 2 (Fotos).
+    fireEvent.click(within(nav).getByRole("button", { name: "1. O que fazer" }));
+    await waitFor(() => expect(document.querySelector('[data-objetivo="variacoes"]')).toBeTruthy(), { timeout: 5000 });
+    fireEvent.click(document.querySelector('[data-objetivo="variacoes"]') as HTMLElement);
+    await waitFor(() => expect(within(nav).getByRole("button", { name: "2. Fotos" }).getAttribute("aria-current")).toBe("page"), { timeout: 5000 });
+    expect((await screen.findByText("Fazendo:", {}, { timeout: 5000 })).closest("[data-guia-da-linha]")!.getAttribute("data-guia-da-linha")).toBe("variacoes");
+    // Passo 3 (Gerar) abre a ferramenta do objetivo; a barra mostra a forma num seletor com nome simples.
+    fireEvent.click(within(nav).getByRole("button", { name: "3. Gerar" }));
+    const criar = await screen.findByRole("navigation", { name: "Formas de criar" }, { timeout: 5000 });
+    expect(within(criar).getByRole("button", { name: "Gerando: Fotos do produto" })).toBeTruthy();
+    expect(within(nav).getByRole("button", { name: "3. Gerar" }).getAttribute("aria-current")).toBe("page");
+    // Passos 4 e 5: Aprovar e Usar.
+    fireEvent.click(within(nav).getByRole("button", { name: "4. Aprovar" }));
+    await waitFor(() => expect(document.querySelector("[data-etapa-aprovar]")).toBeTruthy(), { timeout: 5000 });
+    fireEvent.click(within(nav).getByRole("button", { name: "5. Usar" }));
+    await waitFor(() => expect(within(nav).getByRole("button", { name: "5. Usar" }).getAttribute("aria-current")).toBe("page"), { timeout: 5000 });
   }, 30000);
 });
 
@@ -646,7 +658,7 @@ describe("etapa 4, ensaio", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Por receita" }));
     fireEvent.click(screen.getByRole("radio", { name: /Catálogo fiel/ }));
     fireEvent.click(screen.getByRole("button", { name: "Escala com medida confirmada" }));
-    const planejar = screen.getByRole("button", { name: /Planejar 7 tomadas/ });
+    const planejar = screen.getByRole("button", { name: /Planejar 7 fotos/ });
     fireEvent.click(planejar);
     await waitFor(() => expect(chamadasDe("ensaio_planejar")).toHaveLength(1));
     const corpo = chamadasDe("ensaio_planejar")[0];
@@ -668,7 +680,7 @@ describe("etapa 4, ensaio", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Por receita" }));
     fireEvent.click(screen.getByRole("radio", { name: /Retrato profissional/ }));
     expect(screen.getByText(/não serve para kit de produto/)).toBeTruthy();
-    expect((screen.getByRole("button", { name: /Planejar 6 tomadas/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /Planejar 6 fotos/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("tomada bloqueada pode ser conferida de novo com tomada_editar (sem IA), depois de completar o kit", async () => {
@@ -707,7 +719,7 @@ describe("etapa 4, ensaio", () => {
     expect((within(presa).getByRole("button", { name: /^Gerar/ }) as HTMLButtonElement).disabled).toBe(false);
     const falhou = screen.getByText("Falhou antes").closest("[data-tomada]") as HTMLElement;
     expect(within(falhou).getByText(/O gerador recusou o tamanho/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Gerar 2 tomadas, uma por vez/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Gerar 2 fotos, uma por vez/ })).toBeTruthy();
   });
 
   it("tomada bloqueada mostra o motivo e não gera; gerar manda a câmera dos botões e o guia, uma tomada por vez", async () => {
@@ -1335,7 +1347,7 @@ describe("v2: variações e gerar em lote", () => {
       return base(nome, opcoes);
     });
     const primeira = montar(h(EtapaEnsaio), { kitId: KIT, ensaioId: ENSAIO });
-    const botao = await screen.findByRole("button", { name: /Gerar 2 tomadas, uma por vez/ });
+    const botao = await screen.findByRole("button", { name: /Gerar 2 fotos, uma por vez/ });
     expect(botao.textContent).toContain("US$");
     fireEvent.click(botao);
     await waitFor(() => expect(chamadasDe("tomada_gerar")).toHaveLength(1));
@@ -1449,8 +1461,10 @@ describe("v2: diretor que trabalha", () => {
     const escolherEnsaio = vi.fn();
     montar(h(AgenteAberto), { kitId: KIT, escolherKit, escolherEnsaio });
     const atalhos = await screen.findByRole("group", { name: "Atalhos do diretor" });
-    expect(within(atalhos).getAllByRole("button").map((b) => b.textContent)).toEqual(["Identificar produto", "Tirar da caixa", "8 variações", "Campanha com modelo"]);
-    fireEvent.click(within(atalhos).getByRole("button", { name: "8 variações" }));
+    // Frente FTL, rodada 2 (30/09): os atalhos usam os termos simples da linha de produção. Mudança de
+    // propósito: antes "8 variações" e "Campanha com modelo"; o pedido ao diretor continua o mesmo.
+    expect(within(atalhos).getAllByRole("button").map((b) => b.textContent)).toEqual(["Identificar produto", "Tirar da caixa", "8 fotos do produto", "Foto com modelo"]);
+    fireEvent.click(within(atalhos).getByRole("button", { name: "8 fotos do produto" }));
     await waitFor(() => expect(chamadasDe("agente_conversar")).toHaveLength(1));
     expect(chamadasDe("agente_conversar")[0].mensagem).toContain("8 variações");
     expect(await screen.findByText("Vi caixas do mouse NTC X, vou trabalhar com ele.")).toBeTruthy();
@@ -1619,11 +1633,18 @@ describe("v2: normalizadores e contrato", () => {
     const kits = [normalizarKit(KIT_BRUTO)!];
     const ensaio = normalizarEnsaio(ENSAIO_BRUTO)!;
     expect(proximoPasso({ fotos: 0, kits: [], kitId: null, ensaio: null, selecionadas: 0 }).etapa).toBe("acervo");
-    // 25/09: o produto se identifica e escolhe dentro de Fotos; revisar fica dentro de Usar.
-    expect(proximoPasso({ fotos: 3, kits: [], kitId: null, ensaio: null, selecionadas: 2 })).toEqual({ etapa: "acervo", rotulo: "Identificar o produto (2 fotos)" });
-    expect(proximoPasso({ fotos: 3, kits, kitId: null, ensaio: null, selecionadas: 0 }).etapa).toBe("acervo");
-    expect(proximoPasso({ fotos: 3, kits, kitId: KIT, ensaio: null, selecionadas: 0 }).etapa).toBe("criar");
-    expect(proximoPasso({ fotos: 3, kits, kitId: KIT, ensaio, selecionadas: 0 })).toMatchObject({ etapa: "usar", rotulo: "Revisar 1 foto" });
+    // 30/09 (frente FTL): sem objetivo, o próximo é escolher o que fazer; com o objetivo, o que ele pede.
+    expect(proximoPasso({ fotos: 3, kits: [], kitId: null, ensaio: null, selecionadas: 2 })).toEqual({ etapa: "criar", rotulo: "Escolher o que fazer" });
+    expect(proximoPasso({ fotos: 3, kits: [], kitId: null, ensaio: null, selecionadas: 2, objetivo: "variacoes" })).toEqual({ etapa: "acervo", rotulo: "Identificar o produto (2 fotos)" });
+    expect(proximoPasso({ fotos: 3, kits, kitId: null, ensaio: null, selecionadas: 0, objetivo: "modelo" })).toEqual({ etapa: "acervo", rotulo: "Escolher o produto" });
+    expect(proximoPasso({ fotos: 3, kits, kitId: KIT, ensaio: null, selecionadas: 0, objetivo: "variacoes" })).toEqual({ etapa: "ensaio", rotulo: "Montar as fotos do produto" });
+    expect(proximoPasso({ fotos: 3, kits, kitId: KIT, ensaio: null, selecionadas: 0, objetivo: "modelo" }).etapa).toBe("campanha");
+    expect(proximoPasso({ fotos: 3, kits: [], kitId: null, ensaio: null, selecionadas: 0, objetivo: "melhorar" })).toEqual({ etapa: "acervo", rotulo: "Marcar 1 foto" });
+    expect(proximoPasso({ fotos: 3, kits: [], kitId: null, ensaio: null, selecionadas: 1, objetivo: "fundo" })).toEqual({ etapa: "preparar", rotulo: "Abrir no Preparar" });
+    expect(proximoPasso({ fotos: 3, kits: [], kitId: null, ensaio: null, selecionadas: 3, objetivo: "post" })).toEqual({ etapa: "agenda", rotulo: "Montar o post" });
+    // Lote aberto com foto esperando decisão vem antes de tudo: passo 4 (Aprovar).
+    expect(proximoPasso({ fotos: 3, kits, kitId: KIT, ensaio, selecionadas: 0 })).toMatchObject({ etapa: "aprovar", rotulo: "Aprovar 1 foto" });
+    expect(proximoPasso({ fotos: 3, kits, kitId: KIT, ensaio, selecionadas: 0, objetivo: "melhorar" })).toMatchObject({ etapa: "aprovar" });
     const semVersao = normalizarEnsaio({ ...ENSAIO_BRUTO, receita_id: "campanha-com-modelo", tomadas: [{ id: "a", status: "pendente", versoes: [] }] })!;
     expect(proximoPasso({ fotos: 3, kits, kitId: KIT, ensaio: semVersao, selecionadas: 0 })).toMatchObject({ etapa: "campanha", rotulo: "Gerar 1 foto" });
   });
@@ -1655,13 +1676,14 @@ describe("25/09: usar de verdade (Mesa, Mesa Ads, baixar, aprovação em cada fo
     expect(chamadasDe("acervo_decidir")).toHaveLength(0);
   });
 
-  it("foto gerada ainda sem decisão: revisar em Usar e \"Aprovar e usar na Mesa Ads\" aprova, põe no acervo e abre o Estúdio Ads", async () => {
+  it("foto gerada ainda sem decisão: revisar em Aprovar (passo 4) e \"Aprovar e usar na Mesa Ads\" aprova, põe no acervo e abre o Estúdio Ads", async () => {
     const NOVA = "aaaaaaaa-0000-4000-8000-000000000007";
     respostas.versao_decidir = (corpo: any) => ({
       ensaio: { ...ENSAIO_BRUTO, tomadas: ENSAIO_BRUTO.tomadas.map((t: any) => (t.id === corpo.tomada_id ? { ...t, versoes: [{ ...t.versoes[0], aprovada: true, imagem_id: NOVA }] } : t)) },
       imagem: fotoBruta(NOVA, { nome: "Mouse M720, Três quartos v1", gerada: true, modo: "angulo", derivada_de: F1, aprovada: true, kit_id: KIT, tags: ["mesa_foto", "ensaio", "gerada"] }),
     });
-    montar(h(EtapaUsar));
+    // 30/09 (frente FTL): a revisão saiu de Usar e foi para o passo 4; Usar mostra só o atalho.
+    montar(h(EtapaAprovar));
     const pendente = (await waitFor(() => {
       const el = document.querySelector('[data-pendente="t3"]');
       if (!el) throw new Error("sem pendente");
@@ -1833,7 +1855,7 @@ describe("25/09: variações organizadas, com rolagem própria e revisar no resu
     const h1 = screen.getByText("Herói verde").closest("[data-tomada]") as HTMLElement;
     fireEvent.click(within(h1).getByRole("button", { name: /^Aprovar/ }));
     await waitFor(() => expect(chamadasDe("versao_decidir")).toEqual([{ acao: "versao_decidir", ensaio_id: ENSAIO, tomada_id: "h1", versao: 1, decisao: "aprovar" }]));
-    fireEvent.click(screen.getByRole("radio", { name: /^Para revisar/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Esperando aprovação/ }));
     await waitFor(() => expect(screen.queryByText("Na mão")).toBeNull());
     expect(screen.getByText("Herói verde")).toBeTruthy();
     // Sem laço: aprovar não gerou nem conferiu nada sozinho.
@@ -2338,7 +2360,7 @@ describe("28/09: Fotos organizada (barra numa linha e blocos que recolhem)", () 
     expect(barra.textContent).toContain("2 marcadas");
   });
 
-  it("Fotos do produto e O produto recolhem, mostram o resumo e lembram a escolha", async () => {
+  it("Suas fotos e O produto recolhem, mostram o resumo e lembram a escolha", async () => {
     window.localStorage.clear();
     montar(h(EtapaAcervo));
     await screen.findByText("mouse-frente.jpg");
@@ -2348,7 +2370,8 @@ describe("28/09: Fotos organizada (barra numa linha e blocos que recolhem)", () 
     expect(within(produto).getByRole("button", { name: /O produto/ }).getAttribute("aria-expanded")).toBe("false");
     // O botão Identificar continua à vista com o bloco recolhido.
     expect(within(produto).getByRole("button", { name: /Identificar o produto/ })).toBeTruthy();
-    const envio = screen.getByRole("button", { name: /Fotos do produto/ });
+    // 30/09 (frente FTL): o bloco de envio virou "Suas fotos" ("Fotos do produto" é agora um objetivo da linha).
+    const envio = screen.getByRole("button", { name: /Suas fotos/ });
     fireEvent.click(envio);
     await waitFor(() => expect(envio.getAttribute("aria-expanded")).toBe("false"));
     expect(envio.textContent).toMatch(/fotos no acervo/);

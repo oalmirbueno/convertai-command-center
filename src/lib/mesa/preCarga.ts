@@ -74,7 +74,8 @@ export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/me
     prefixo: "mesa-foto",
     pagina: () => import("@/pages/MesaFoto"),
     parametro: "etapa",
-    padrao: "acervo",
+    // Frente FTL (30/09): a linha de produção abre no passo 1, "O que fazer".
+    padrao: "criar",
     onde: "mesa-foto:onde:",
     campoOnde: "etapa",
     etapas: {
@@ -84,6 +85,7 @@ export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/me
       ensaio: () => import("@/components/mesa-foto/EtapaEnsaio"),
       revisar: () => import("@/components/mesa-foto/EtapaRevisar"),
       usar: () => import("@/components/mesa-foto/EtapaUsar"),
+      aprovar: () => import("@/components/mesa-foto/EtapaAprovar"),
       biblioteca: () => import("@/components/mesa-foto/EtapaBiblioteca"),
       campanha: () => import("@/components/mesa-foto/EtapaCampanha"),
       criar: () => import("@/components/mesa-foto/EtapaCriar"),
@@ -370,7 +372,7 @@ export const PaginaMesaMotion = paginaDaMesa("/mesa-motion");
 const PRIMEIRAS: Array<[Caminho, string]> = [
   ["/mesa", "contexto"],
   ["/mesa-ads", "oferta"],
-  ["/mesa-foto", "acervo"],
+  ["/mesa-foto", "criar"],
 ];
 
 /**
