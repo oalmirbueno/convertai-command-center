@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { corpoComMarca } from "@/lib/mesa/marcas";
 
-export type FuncaoDaMesa = "ia-gateway" | "agente-calendario" | "estudio-arte" | "agente-contexto" | "mesa-ads" | "mesa-foto" | "mesa-publicidade" | "mesa-roteiros" | "agente-estilo" | "perfis-instagram" | "mesa-instagram" | "conselho" | "documentos" | "contratos" | "mesa-identidade" | "mesa-proposta" | "proposta-biblioteca" | "mesa-site" | "motor-codigo" | "mesa-mockups" | "preencher-ia" | "mesa-motion";
+export type FuncaoDaMesa = "ia-gateway" | "agente-calendario" | "estudio-arte" | "agente-contexto" | "mesa-ads" | "mesa-foto" | "mesa-publicidade" | "mesa-roteiros" | "agente-estilo" | "perfis-instagram" | "mesa-instagram" | "conselho" | "documentos" | "contratos" | "mesa-identidade" | "mesa-proposta" | "proposta-biblioteca" | "mesa-site" | "motor-codigo" | "mesa-mockups" | "preencher-ia" | "mesa-motion" | "agente-cfo";
 
 export type AcaoDeErro = "recarregar" | "cota" | "chave" | "modelo" | null;
 
@@ -56,6 +56,8 @@ const NOMES_DAS_FUNCOES: Record<FuncaoDaMesa, string> = {
   "motor-codigo": "motor de código",
   // Frente PIA (30/09): o "Preencher com IA" das mesas (src/components/sistema/PreencherComIA.tsx).
   "preencher-ia": "preenchimento com IA",
+  // Frente CFO (30/09): o agente financeiro (Assist e Financeiro › CFO).
+  "agente-cfo": "CFO",
 };
 
 const PROVEDORES: Record<string, string> = {

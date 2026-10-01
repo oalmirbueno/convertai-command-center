@@ -42,6 +42,8 @@ const QuizPublicPage = lazy(() => import("@/pages/QuizPublicPage"));
 const AdminBriefings = lazy(() => import("@/pages/AdminBriefings"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const AdminFinanceiro = lazy(() => import("@/pages/AdminFinanceiro"));
+// Frente CFO (30/09): o campo próprio do agente financeiro. Só admin.
+const FinanceiroCFO = lazy(() => import("@/pages/FinanceiroCFO"));
 const AdminComercial = lazy(() => import("@/pages/AdminComercial"));
 const AdminProjection = lazy(() => import("@/pages/AdminProjection"));
 const AdminExecucao = lazy(() => import("@/pages/AdminExecucao"));
@@ -321,6 +323,7 @@ export function AppRoutes() {
             ser mandado para alguem. */}
         <Route path="/comercial/:aba" element={<ComercialRoute><AdminComercial /></ComercialRoute>} />
         <Route path="/financeiro/projecao" element={<StaffRoute><AdminProjection /></StaffRoute>} />
+        <Route path="/financeiro/cfo" element={<>{profile?.role === "admin" ? <FinanceiroCFO /> : <Navigate to="/financeiro" replace />}</>} />
         {/* Horas e custos (frente CR): tempo por cliente, custo de IA, entregas e capacidade. Só admin e gestor; o RPC repete a trava. */}
         <Route path="/horas" element={<>{profile?.role === "admin" || profile?.role === "manager" ? <AdminHoras /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/api-docs" element={<StaffRoute><ApiDocs /></StaffRoute>} />

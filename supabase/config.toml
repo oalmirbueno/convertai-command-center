@@ -115,6 +115,8 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.preencher-ia]
     verify_jwt = true
+  [functions.agente-cfo]
+    verify_jwt = true
   [functions.motor-codigo]
     verify_jwt = true
   [functions.site-formulario]

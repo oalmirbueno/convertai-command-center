@@ -19,6 +19,8 @@ import {
   AcoesDoDialogo, Etiqueta, GradeDeKpis, Kpi, botaoDeLinha, corDoTom, type Tom,
 } from "@/components/finance/pecasDoFinanceiro";
 import NewIncomeModal from "./NewIncomeModal";
+// Frente CFO (30/09): a trava do limite do mês nas despesas novas.
+import { useTravaDeGasto } from "@/components/cfo/TravaDeGasto";
 import { useFinanceSettings, useFinanceMutations } from "@/hooks/useFinanceV2";
 import { useFinanceBoxes, boxesTotal, EMPTY_BOXES, type FinanceBoxes } from "@/hooks/useFinanceBoxes";
 import { DEFAULT_TAX_RATE, interpolateProLabore, nextProLaboreTier } from "@/lib/directorPlan";
@@ -108,6 +110,7 @@ interface Props {
 
 export default function CashFlow({ billing = [], projectPayments = [], clientsReserveSuggestion = 0 }: Props) {
   const qc = useQueryClient();
+  const { pedirLiberacao, janela: janelaDaTrava } = useTravaDeGasto("caixa");
   // Período, segmento, blocos abertos e a lista escolhida em cada bloco
   // ficam lembrados (sair e voltar mantém).
   const [period, setPeriod] = useEstadoDaTela<6 | 12 | 24>("financeiro:fluxo:periodo", 12, {
@@ -681,6 +684,14 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
       return;
     }
     const label = mode === "investment" ? "Investimento" : "Despesa";
+    // Despesa nova passa pela trava do CFO (investimento com dinheiro do sócio fica fora).
+    if (!form.id && mode === "expense") {
+      const liberado = await pedirLiberacao({ valor: payload.amount, recorrente: payload.recurrence === "monthly", categoria: payload.category, descricao: payload.description });
+      if (!liberado) {
+        toast.info("Não lancei: ficou dentro do limite do CFO.");
+        return;
+      }
+    }
     if (form.id) {
       const { error } = await supabase.from("expenses").update(payload).eq("id", form.id);
       if (error) return toast.error(error.message);
@@ -824,6 +835,7 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
 
   return (
     <div className="min-w-0 space-y-6">
+      {janelaDaTrava}
       {/* Filtros e ações da aba: período e segmento (lembram ao voltar), CSV e Lançamento. */}
       <BarraDeAcoes
         inicio={

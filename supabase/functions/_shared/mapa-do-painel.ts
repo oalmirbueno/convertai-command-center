@@ -46,6 +46,7 @@ export type ChaveDaArea =
   | "mesa_edicao"
   | "mesa_identidade" | "mesa_proposta" | "mesa_site" | "mesa_motion"
   | "financeiro"
+  | "financeiro_cfo"
   | "cofre"
   | "equipe";
 
@@ -148,6 +149,8 @@ export const AREAS_DO_PAINEL: AreaDoPainel[] = [
     palavras: ["motion", "apresentacao da empresa", "filme da marca", "video institucional", "logo animada", "vinheta", "portfolio"],
   },
   { chave: "financeiro", nome: "Financeiro", rota: "/financeiro", comCliente: false, faz: "cobrança e caixa", soPessoa: true, palavras: ["financeiro", "cobranca", "mensalidade", "pagamento", "fatura", "boleto", "caixa"] },
+  // Frente CFO (30/09): o agente financeiro (só admin). O Aceleriq não mexe no financeiro: leva até o CFO.
+  { chave: "financeiro_cfo", nome: "CFO", rota: "/financeiro/cfo", comCliente: false, faz: "projeção, limite do mês, onde cortar e plano de crescimento", agente: "cfo", palavras: ["cfo", "projecao financeira", "posso gastar", "onde corto", "limite do mes", "plano de crescimento", "folego de caixa"] },
   { chave: "cofre", nome: "Cofre", rota: "/cofre", comCliente: false, faz: "senhas", soPessoa: true, palavras: ["senha", "cofre", "credencial", "acesso salvo"] },
   { chave: "equipe", nome: "Equipe", rota: "/equipe", comCliente: false, faz: "pessoas", soPessoa: true, palavras: ["equipe", "permissao", "papel da pessoa"] },
 ];
@@ -158,6 +161,7 @@ export type AgenteDoPainel = { chave: string; nome: string; area: ChaveDaArea; f
 export const AGENTES_DO_PAINEL: AgenteDoPainel[] = [
   { chave: "aceleriq", nome: "Aceleriq (lançador)", area: "projetos", funcao: "voice-assistant-agent", faz: "projeto do contrato, tarefa, lembrete, nota no cliente, abre áreas" },
   { chave: "central", nome: "agente da Central", area: "central", funcao: "agente-central", faz: "atualiza dossiês" },
+  { chave: "cfo", nome: "CFO", area: "financeiro_cfo", funcao: "agente-cfo", faz: "projeção, limite do mês com trava, cortes e metas, com Confirmar" },
   { chave: "ciclo", nome: "coach do Ciclo", area: "ciclo", funcao: "cycle-coach", faz: "próximo passo da semana" },
   { chave: "contexto", nome: "agente de contexto", area: "mesa", funcao: "agente-contexto", faz: "kit, contexto, logo, referências, workspace, plano do cliente" },
   { chave: "mes", nome: "agente do Mês", area: "mesa", funcao: "agente-calendario", faz: "plano do mês e agenda" },

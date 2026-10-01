@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { LazyMotion, domAnimation, m, AnimatePresence } from "framer-motion";
 import { Mic, MicOff, Sparkles, X, Paperclip, Loader2, CheckCircle2, AlertCircle, FileText, ArrowRight, Edit3, Undo2, Brain, MessageSquare } from "lucide-react";
@@ -11,6 +11,8 @@ import { chamarAcaoDoLancador, destinoDoAgente, type DestinoDoAgente } from "@/l
 import { botao, campo, campoTexto, juntar, superficie } from "@/components/sistema/estilos";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { AtalhosDoAgente, SeletorDeCliente, SeletorDeServico, nomeDoCliente } from "@/components/admin/agente/SeletoresDoAgente";
+// Frente CFO (30/09): com o serviço "CFO" escolhido, o Assist abre a conversa do agente financeiro (carrega só nessa hora).
+const ConversaDoCFO = lazy(() => import("@/components/cfo/ConversaDoCFO"));
 import {
   ATALHO_DO_AGENTE,
   clienteDaRota,
@@ -19,6 +21,7 @@ import {
   preContextoDoAgente,
   servicoPelaChave,
   servicosParaEscolha,
+  SERVICO_DO_CFO,
   type AtalhoDoAgente,
   type PedidoParaAbrirAgente,
 } from "@/lib/lancador";
@@ -1356,7 +1359,10 @@ export default function VoiceAssistant({
 
   const podeAvancar = !executing && !((!parsed || parsed.kind === "unknown") && !(answers.client_id && answers.project_type));
   const listaDeServicos = servicosParaEscolha((clienteEscolhido as any)?.services_config);
-  const linhaDeEstado = listening
+  const modoCfo = servico === SERVICO_DO_CFO;
+  const linhaDeEstado = modoCfo
+    ? "CFO: números do financeiro, conta em código."
+    : listening
     ? "Ouvindo. Toque no microfone para parar."
     : aiThinking
       ? "Pensando com o contexto do cliente."
@@ -1419,11 +1425,19 @@ export default function VoiceAssistant({
                     </div>
                   </div>
                 </fieldset>
-                {phase === "input" && (
+                {phase === "input" && !modoCfo && (
                   <AtalhosDoAgente temCliente={!!answers.client_id} ocupado={aiThinking} onAtalho={usarAtalho} />
                 )}
               </header>
 
+              {modoCfo ? (
+                <div className="flex min-h-0 flex-1 flex-col" data-assist-cfo="">
+                  <Suspense fallback={<p className="px-3 py-3 text-[12px] text-muted-foreground">Abrindo o CFO…</p>}>
+                    <ConversaDoCFO semMoldura titulo="" className="min-h-0 flex-1" />
+                  </Suspense>
+                </div>
+              ) : (
+              <>
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3" data-conversa-do-agente="">
                 {/* ---------- INPUT PHASE ---------- */}
                 {phase === "input" && (
@@ -2124,6 +2138,8 @@ export default function VoiceAssistant({
                   </div>
                 )}
               </div>
+              </>
+              )}
         </m.section>
       )}
     </AnimatePresence>

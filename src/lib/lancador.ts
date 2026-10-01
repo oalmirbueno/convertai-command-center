@@ -103,6 +103,9 @@ export interface ServicoDoAgente {
  * que o cadastro usa em profiles.services_config), mais "Geral" e
  * "Contrato". Financeiro fica de fora de propósito: é jurisdição proibida
  * do agente (ele não mexe em cobrança, mensalidade nem pagamento).
+ * Frente CFO (30/09): o dono pediu o CFO no Assist. "CFO" é outro agente
+ * (função agente-cfo, só admin): com ele escolhido, o Assist abre a conversa
+ * do CFO no lugar da do Aceleriq. O Aceleriq continua sem mexer no financeiro.
  */
 const TIPO_DO_SERVICO: Record<string, string> = {
   social: "social_media",
@@ -117,7 +120,11 @@ export const SERVICOS_DO_AGENTE: ServicoDoAgente[] = [
   { chave: "geral", rotulo: "Geral" },
   ...Object.keys(SERVICE_LABELS).map((chave) => ({ chave, rotulo: SERVICE_LABELS[chave], tipoDeProjeto: TIPO_DO_SERVICO[chave] })),
   { chave: "contrato", rotulo: "Contrato" },
+  { chave: "cfo", rotulo: "CFO (financeiro)" },
 ];
+
+/** Serviço que troca o Assist para a conversa do CFO. */
+export const SERVICO_DO_CFO = "cfo";
 
 export function servicoPelaChave(chave: string | null | undefined): ServicoDoAgente {
   return SERVICOS_DO_AGENTE.find((s) => s.chave === chave) || SERVICOS_DO_AGENTE[0];

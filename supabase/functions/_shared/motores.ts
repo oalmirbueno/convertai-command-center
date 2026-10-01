@@ -624,6 +624,7 @@ export const SEM_METODO_DE_PROPOSITO: Record<string, string> = {
   "motion.cena": "escreverCena da Mesa Motion: o escritor de cenas tem o método próprio (frente SPM, _shared/cena-hf.ts) e a prova é o lint e o check do worker.",
   mcp: "O MCP não tem prompt próprio: as ações de mesa passam pela ponte e chamam as funções acima, que já levam o método.",
   jev: "O Jev (julgamento) não é modelo de texto: pergunta tipada, sem sistema; o método não se aplica.",
+  "cfo.explicacao": "Explicação do CFO (frente CFO): a IA só reescreve a conta do motor em código, presa aos números (valor fora da conta faz valer o motor); método de trabalho puxaria conteúdo além da conta.",
 };
 
 /**
@@ -636,6 +637,7 @@ export const SEM_METODO_DE_PROPOSITO: Record<string, string> = {
  * chama e não entra aqui.
  */
 export const CHAMADAS_SEM_METODO: Record<string, string> = {
+  "agente-cfo/index.ts#explicar": "cfo.explicacao",
   "agente-calendario/selo-da-campanha.ts#classificarReferencia": "leituras",
   "agente-calendario/selo-da-campanha.ts#lerTextoDoSelo": "leituras",
   "agente-contexto/index.ts#acervoClassificar": "leituras",

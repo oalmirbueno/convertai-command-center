@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
 import { useQuery } from "@tanstack/react-query";
@@ -12,7 +12,7 @@ import { fireWebhook, webhooks } from "@/lib/webhooks";
 import {
   DollarSign, TrendingUp, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle, Briefcase,
   AlertTriangle as AlertTriangleIcon, History, ChevronLeft, ChevronRight, ChevronDown, LayoutList, LayoutDashboard,
-  Sparkles, ArrowLeftRight, Repeat, Receipt, Tag, Landmark, Wallet, Inbox,
+  Sparkles, ArrowLeftRight, Repeat, Receipt, Tag, Landmark, Wallet, Inbox, Brain,
 } from "lucide-react";
 import { getProjectBrand, BrandFilter, BRAND_FILTERS, matchesBrandFilter } from "@/lib/brandHelpers";
 import { Progress } from "@/components/ui/progress";
@@ -32,6 +32,8 @@ import PlansPricing from "@/components/finance/PlansPricing";
 import ManagementSummary from "@/components/finance/ManagementSummary";
 import AdsInvestment from "@/components/finance/AdsInvestment";
 import CFOAssistant from "@/components/finance/CFOAssistant";
+// Frente CFO (30/09): o campo do agente financeiro (carrega só quando a aba abre).
+const AreaDoCFO = lazy(() => import("@/components/cfo/AreaDoCFO"));
 import { useFinanceSettings } from "@/hooks/useFinanceV2";
 import { isInternalClient } from "@/lib/clientFlags";
 import { useFinanceBoxes, boxesTotal } from "@/hooks/useFinanceBoxes";
@@ -97,6 +99,7 @@ type PapelDaAba = "admin" | "gestao" | "todos";
 /** Abas do Financeiro v1 e quem vê cada uma (as mesmas condições do TabsList antigo). */
 const ABAS_DO_FINANCEIRO: { valor: string; rotulo: string; papeis: PapelDaAba; icone: ReactNode }[] = [
   { valor: "overview", rotulo: "Visão geral", papeis: "admin", icone: <LayoutDashboard className="h-3.5 w-3.5" /> },
+  { valor: "cfo", rotulo: "CFO", papeis: "admin", icone: <Brain className="h-3.5 w-3.5" /> },
   { valor: "assistant", rotulo: "Assistente", papeis: "admin", icone: <Sparkles className="h-3.5 w-3.5" /> },
   { valor: "cashflow", rotulo: "Fluxo de caixa", papeis: "gestao", icone: <ArrowLeftRight className="h-3.5 w-3.5" /> },
   { valor: "renewals", rotulo: "Mensalidades", papeis: "admin", icone: <Repeat className="h-3.5 w-3.5" /> },
@@ -1147,6 +1150,14 @@ function LegacyFinanceiro() {
         {(isAdmin || isManager) && (
           <TabsContent value="capital" className="mt-0 space-y-6">
             <InvestorCapital billing={billing || []} projectPayments={projectPayments || []} />
+          </TabsContent>
+        )}
+
+        {isAdmin && aba === "cfo" && (
+          <TabsContent value="cfo" className="mt-0 space-y-6">
+            <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo o CFO" />}>
+              <AreaDoCFO />
+            </Suspense>
           </TabsContent>
         )}
 

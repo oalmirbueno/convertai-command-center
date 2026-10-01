@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useFinanceSettings, useFinanceRecurringRules, useFinanceMutations } from "@/hooks/useFinanceV2";
 import { interpolateProLabore, nextProLaboreTier, PRO_LABORE_LADDER } from "@/lib/directorPlan";
 import AreaTributaria from "@/components/finance/AreaTributaria";
+// Frente CFO (30/09): a trava do limite do mês nos custos fixos novos.
+import { useTravaDeGasto } from "@/components/cfo/TravaDeGasto";
 import { custoMensal, diasAteVencer, proximoVencimento } from "@/lib/tributos";
 import {
   CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, RegiaoRolavel, Secao, SeletorCompacto,
@@ -70,6 +72,7 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
   const [pagando, setPagando] = useState<string | null>(null);
   const [vencModal, setVencModal] = useState<any | null>(null);
   const qc = useQueryClient();
+  const { pedirLiberacao, janela: janelaDaTrava } = useTravaDeGasto("custos_fixos");
   const { data: settings } = useFinanceSettings();
   const { data: rules } = useFinanceRecurringRules();
   const { updateSettings, upsertRecurringRule } = useFinanceMutations();
@@ -136,6 +139,14 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
       recurrence: form.recurrence || "monthly",
       notes: form.notes || null,
     };
+    // Custo fixo novo passa pela trava do CFO: o que se repete conta todo mês.
+    if (!form.id) {
+      const liberado = await pedirLiberacao({ valor: payload.amount, recorrente: payload.recurrence === "monthly", categoria: payload.category, descricao: payload.description });
+      if (!liberado) {
+        toast.info("Não lancei: ficou dentro do limite do CFO.");
+        return;
+      }
+    }
     if (form.id) {
       const { error } = await supabase.from("expenses").update(payload).eq("id", form.id);
       if (error) return toast.error(error.message);
@@ -296,6 +307,7 @@ export default function FixedCosts({ monthlyOperationalRevenue, grossReceivedThi
 
   return (
     <div className="min-w-0 space-y-6">
+      {janelaDaTrava}
       {/* As três leituras: três opções, controle segmentado (lembra ao voltar). Com o seletor por fora, ele mora no título da página. */}
       {!seletorDeFora && (
         <SeletorCompacto
