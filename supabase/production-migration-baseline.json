@@ -1921,6 +1921,14 @@
       "remote_name": "navegador_do_agente",
       "remote_statements_sha256": "c2d63183268fbfd71a78340d9f0a7b9f95ea21afe88c829bc54f94c9bb3f1917",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930321000",
+      "path": "supabase/migrations/20260930321000_video_coleta_dos_pedidos.sql",
+      "local_sha256": "2ddaa32f1c2613a9a5a462a37765b93e2cda43b7c2cf921f229c232a06243065",
+      "remote_name": "video_coleta_dos_pedidos",
+      "remote_statements_sha256": "4ad1593b477e467aeba1524732082685c740d4ebd634f5395fd7edbe7a59d741",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
