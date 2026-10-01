@@ -1857,6 +1857,14 @@
       "remote_name": "roteiro_biblioteca",
       "remote_statements_sha256": "a219e40703b42eaca67d3b8bf1e2dfd24a7150ab1fce417824bbbb3c931a3822",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930314000",
+      "path": "supabase/migrations/20260930314000_cfo_agente.sql",
+      "local_sha256": "ced90774a6b4b5425edd65dcf91097dd57f583d791df913979dfac0f5c6c121c",
+      "remote_name": "cfo_agente",
+      "remote_statements_sha256": "757e1592996b61943eeefcc080f0fb65d4211b417d3622a090839fb716680e90",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
