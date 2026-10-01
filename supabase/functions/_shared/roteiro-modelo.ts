@@ -86,7 +86,51 @@ export type Roteiro = {
   fontes: string[];
   /** Cinema: premissa em uma frase. Vazio nos outros tipos. */
   logline: string;
+  /**
+   * Frente ROT (30/09): o modelo da biblioteca "Roteiros validados" que o
+   * roteiro seguiu. Só existe quando há (versões antigas ficam sem, e o hash
+   * delas não muda: jsonCanonico ignora chave indefinida).
+   */
+  base?: BaseDoRoteiro;
 };
+
+/** Frente ROT: qual modelo da base o roteiro usou e como foi escolhido. */
+export type BaseDoRoteiro = {
+  id: string;
+  nome: string;
+  objetivo: string;
+  origem: string;
+  /** equipe (escolheu na tela), jev (escolheu entre os candidatos) ou regra (Jev fora do ar). */
+  como: "equipe" | "jev" | "regra";
+  confianca: number | null;
+  alternativas: Array<{ id: string; nome: string }>;
+};
+
+/** Lê a base guardada no roteiro; sem id e nome válidos, nada (o roteiro fica sem base). */
+export function normalizarBaseDoRoteiro(v: unknown): BaseDoRoteiro | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  const id = umaLinha(o.id, 60);
+  const nome = umaLinha(o.nome, 140);
+  if (!id || !nome) return undefined;
+  const como = o.como === "equipe" || o.como === "jev" ? o.como : "regra";
+  const c = Number(o.confianca);
+  return {
+    id,
+    nome,
+    objetivo: umaLinha(o.objetivo, 40),
+    origem: umaLinha(o.origem, 40),
+    como,
+    confianca: o.confianca == null || !isFinite(c) ? null : Math.max(0, Math.min(1, Math.round(c * 1000) / 1000)),
+    alternativas: (Array.isArray(o.alternativas) ? o.alternativas : [])
+      .map((a) => {
+        const x = (a && typeof a === "object" ? a : {}) as Record<string, unknown>;
+        return { id: umaLinha(x.id, 60), nome: umaLinha(x.nome, 140) };
+      })
+      .filter((a) => !!a.id && !!a.nome)
+      .slice(0, 3),
+  };
+}
 
 export type AvisoDoJev = {
   /** Notas de 1 a 5 (ou null quando o Jev não respondeu). */
@@ -328,7 +372,8 @@ export function normalizarRoteiro(bruto: unknown, padrao: { titulo?: string; tip
   const blocos = normalizarBlocos(o.blocos);
   const ganchos = normalizarGanchos(o.ganchos, blocos);
   const escolhido = numeroEntre(o.gancho_escolhido, 0, Math.max(0, ganchos.length - 1), 0);
-  return {
+  const base = normalizarBaseDoRoteiro(o.base);
+  const r: Roteiro = {
     titulo: umaLinha(o.titulo, 140) || umaLinha(padrao.titulo, 140) || "Roteiro sem título",
     subtitulo: umaLinha(o.subtitulo, 200),
     tipo,
@@ -347,6 +392,9 @@ export function normalizarRoteiro(bruto: unknown, padrao: { titulo?: string; tip
     fontes: listaDeTextos(o.fontes, 12, 200),
     logline: tipo === "cinema" ? umaLinha(o.logline, 300) : "",
   };
+  // Frente ROT: a chave só entra quando há base (versão antiga continua com o mesmo hash).
+  if (base) r.base = base;
+  return r;
 }
 
 /** O roteiro tem o mínimo para gravar? Lista o que falta, em frases curtas. */

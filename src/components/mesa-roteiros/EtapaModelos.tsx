@@ -11,6 +11,7 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { modoDoTipo, type EstruturaDoModelo } from "../../../supabase/functions/_shared/roteiro-modelo";
 import { chamarRoteiros, CHAVES, useModelos, useRoteiros, type ModeloDeRoteiro } from "./roteirosApi";
 import { AvisoDoBanco, BlocoRecolhivel } from "./Comuns";
+import BibliotecaValidada from "./BibliotecaValidada";
 
 /**
  * Etapa 5: memória (MEMORIA-E-TEMPLATES.md, de forma simples). Todo roteiro
@@ -20,7 +21,7 @@ import { AvisoDoBanco, BlocoRecolhivel } from "./Comuns";
  * número ou oferta do cliente de origem. Usar um modelo abre um roteiro novo
  * com ele como base (a IA não copia: segue o ritmo com o conteúdo novo).
  */
-export default function EtapaModelos({ onUsarModelo }: { onUsarModelo: (id: string) => void }) {
+export default function EtapaModelos({ onUsarModelo, onUsarBase }: { onUsarModelo: (id: string) => void; onUsarBase?: (id: string) => void }) {
   const { clientId } = useMesa();
   const qc = useQueryClient();
   const avisarErro = useAvisarErro();
@@ -73,7 +74,16 @@ export default function EtapaModelos({ onUsarModelo }: { onUsarModelo: (id: stri
     }
   };
 
-  if (modelosQ.data && modelosQ.data.indisponivel) return <AvisoDoBanco />;
+  // Frente ROT: a biblioteca "Roteiros validados" vem primeiro e não depende da tabela da memória.
+  const biblioteca = <BibliotecaValidada onUsarBase={(id) => (onUsarBase ? onUsarBase(id) : undefined)} />;
+  if (modelosQ.data && modelosQ.data.indisponivel) {
+    return (
+      <div className="min-w-0 space-y-6" data-etapa-modelos="">
+        {biblioteca}
+        <AvisoDoBanco />
+      </div>
+    );
+  }
 
   const doCliente = modelos.filter((m) => m.escopo === "cliente");
   const daAgencia = modelos.filter((m) => m.escopo === "agencia");
@@ -97,10 +107,10 @@ export default function EtapaModelos({ onUsarModelo }: { onUsarModelo: (id: stri
 
   return (
     <div className="min-w-0 space-y-6" data-etapa-modelos="">
+      {biblioteca}
       <BlocoRecolhivel
         chave={`mesa-roteiros:modelos:cliente:${clientId}`}
         nivel={2}
-        divisoria={false}
         icone={<UserRound className="h-4 w-4" />}
         titulo="Modelos deste cliente"
         ajuda="Todo roteiro aprovado vira modelo daqui, com estrutura, ritmo, direção e as falas como exemplo. Fica só com este cliente."

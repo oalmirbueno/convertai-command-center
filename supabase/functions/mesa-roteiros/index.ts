@@ -9,8 +9,15 @@
  *
  * Roteiro (o roteirista, com o conhecimento de conhecimento-roteiros.ts):
  * - estimar { client_id, acao_alvo: gerar|gancho|tom|conversa, quantidade?, modelo_id? } -> { estimativa_usd, modelo_id } (sem IA)
- * - gerar { client_id, task_id?, roteiro_id?, tipo, duracao_s?, objetivo?, pedido?, tema?, modelo_id?, modelo_roteiro_id?, campanha_id? }
- *   -> { roteiro, versao, aviso_jev, custo_usd, saldo_usd, aviso_banco? }
+ * - gerar { client_id, task_id?, roteiro_id?, tipo, duracao_s?, objetivo?, pedido?, tema?, modelo_id?, modelo_roteiro_id?, campanha_id?, objetivo_base?, modelo_base_id? }
+ *   -> { roteiro, versao, aviso_jev, base, custo_usd, saldo_usd, aviso_banco? }
+ * Base "Roteiros validados" (frente ROT, 30/09; modulos/roteiros-validados.ts): todo roteiro segue um
+ * modelo da biblioteca. A equipe escolhe (modelo_base_id) ou o Jev escolhe entre os candidatos do
+ * objetivo (objetivo_base: autoridade, produto, presenca_de_marca, venda, conexao, engajamento) com o
+ * contexto da marca; sem o Jev, a regra do objetivo. O roteiro guarda a base usada (conteudo.base).
+ * - biblioteca_salvar { client_id, escopo: agencia|cliente, ficha, id? } -> { modelo } (modelo próprio, sem IA)
+ * - biblioteca_arquivar { id, arquivar } -> { modelo } (apagar é arquivar)
+ * - biblioteca_extrair { client_id, texto, nicho?, modelo_id? } -> { ficha, custo_usd, saldo_usd } (Preencher com IA; não grava)
  * - gancho_refazer { roteiro_id, pedido?, modelo_id? } -> { roteiro, versao, custo_usd, saldo_usd }
  * - tom_mudar { roteiro_id, tom, modelo_id? } -> { roteiro, versao, aviso_jev, custo_usd, saldo_usd }
  * Revisão salva (sem IA):
@@ -127,6 +134,26 @@ import { anexoDasRegrasSeguidas, aprenderDoPedido, type Aprendido, CAMPOS_DO_APR
 import { type ComentarioParaAcao, idsDoPdf, itensDaReferencia, MAX_COMENTARIOS_PARA_O_AGENTE, regrasDosRoteiros, respostaPromete } from "./acoes-dos-roteiros.ts";
 import { lerIdDoComentario } from "./acoes-de-edicao.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
+// Frente ROT (30/09): a biblioteca "Roteiros validados" é a base obrigatória do roteirista (modulos/, nunca _shared).
+import {
+  blocoDaBaseParaORoteirista,
+  candidatosParaAMarca,
+  type EscolhaDoModelo,
+  escolherPelaRegra,
+  ESQUEMA_DA_FICHA,
+  type FichaDoModelo,
+  indiceDaBaseParaOAgente,
+  lerBaseDoPara,
+  lerEscolhaDoJev,
+  modeloValidadoPorId,
+  normalizarFichaPropria,
+  objetivoDoTexto,
+  type ObjetivoDaBase,
+  perguntaDaEscolha,
+  ROTULO_DO_OBJETIVO,
+  SISTEMA_DA_EXTRACAO,
+} from "./modulos/roteiros-validados.ts";
+import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 
 /** Cérebro e dossiê do cliente para o agente (cache curto; padrão do diretor de fotografia). */
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
@@ -159,7 +186,7 @@ const SISTEMA_ROTEIRISTA = `Você é o roteirista da Mesa Roteiros da Aceleriq, 
 
 REGRAS DA SAÍDA (responda só com o JSON do esquema):
 - ganchos: exatamente 3, de mecanismos diferentes (pergunta concreta, resultado primeiro, contraste, problema específico, objeção principal, curiosidade com recompensa...), cada um com a promessa e o motivo em uma frase. gancho_escolhido: o índice (0 a 2) do que você recomenda. O primeiro bloco (Abertura) fala exatamente o gancho escolhido.
-- blocos: de 4 a 8, na ordem de gravação. funcao curta (Abertura, Resposta, Explicação, Exemplo, Orientação, Fechamento, ou a do modo). fala limpa, do jeito que a pessoa diz, sem marcação técnica e sem emoji. segundos estimados pela fala (cerca de 2,5 palavras por segundo). visual: o que a câmera mostra no bloco. texto_na_tela: até 6 palavras, ou vazio. broll: imagem de apoio do bloco, ou vazio.
+- blocos: de 4 a 8, na ordem de gravação (com MODELO DA BASE, a quantidade e a ordem dos blocos do modelo, até 10). funcao curta: com MODELO DA BASE, o nome do bloco do modelo (Gancho, Origem, Virada...); sem ele, Abertura, Resposta, Explicação, Exemplo, Orientação, Fechamento ou a do modo. fala limpa, do jeito que a pessoa diz, sem marcação técnica e sem emoji. segundos estimados pela fala (cerca de 2,5 palavras por segundo). visual: o que a câmera mostra no bloco. texto_na_tela: até 6 palavras, ou vazio. broll: imagem de apoio do bloco, ou vazio.
 - A soma dos segundos fica perto da duração pedida. Se o assunto não cabe, reduza o escopo e diga isso em pendencias; nunca corte uma ressalva essencial.
 - direcao: enquadramento, ambiente, figurino, objetos, luz e camera coerentes com a marca e a cena; orientacoes com 2 a 5 frases curtas de atuação e captação.
 - broll: 1 a 4 imagens de apoio gerais, sem dado de cliente real.
@@ -349,6 +376,8 @@ type ContextoDaPeca = {
   campanhaId: string | null;
   oferta: string | null;
   termosPrivados: string[];
+  /** Frente ROT: a linha "Usando: ..." do contexto completo da marca (o que entrou no roteiro). */
+  usando: string;
 };
 
 async function contextoDaPeca(clientId: string, peca: Peca | null, opcoes: { campanhaId?: string | null; modeloRoteiroId?: string | null; tipo: TipoDeRoteiro; marcaId?: unknown }): Promise<ContextoDaPeca> {
@@ -356,6 +385,10 @@ async function contextoDaPeca(clientId: string, peca: Peca | null, opcoes: { cam
   // Frente MC (29/09): a marca da peça (projeto da tarefa) ou a aberta no topo; a CME não roteiriza com o contexto da Acerbi.
   const marca = await resolverMarca(servico(), clientId, { task_id: peca ? (peca as { id?: string }).id : null, marca_id: opcoes.marcaId }).catch((e) => (registrarFalha("mesa-roteiros: marca da peça falhou", e), null));
   const outraMarca = marca && !marca.principal ? marca : null;
+  // Frente ROT: o contexto completo da marca (estratégia aprovada, briefing, decisões do conselho e Instagram),
+  // pela regra única de herança; completa o que a mesa já lê (contexto, dossiê e cérebro). Nunca lança.
+  const completoP = contextoCompletoParaPrompt(servico(), clientId, marca, { area: "video", partes: ["marca", "estrategia", "briefing", "decisoes", "instagram"], semTitulo: true, teto: 3500 })
+    .catch((e) => (registrarFalha("mesa-roteiros: contexto completo da marca não lido", e), { bloco: "", usando: "" }));
   const [cliente, consolidado, dossie, propostas, modelos] = await Promise.all([
     outraMarca ? Promise.resolve(outraMarca.nome) : nomeDoCliente(clientId),
     (marca ? lerContextoDaMarca(servico(), clientId, marca) : lerContextoConsolidado(servico(), clientId)).catch((e) => (registrarFalha("mesa-roteiros: lerContextoConsolidado falhou", e), ({}))),
@@ -386,6 +419,7 @@ async function contextoDaPeca(clientId: string, peca: Peca | null, opcoes: { cam
   const modelo = escolhido || doCliente;
   const c = consolidado as Record<string, unknown>;
   const cerebro = await cerebroP;
+  const completo = await completoP;
   const dossies = (dossie.data as { summary: string | null }[] | null) ?? [];
   const oferta = typeof c.oferta === "string" ? c.oferta : null;
   return {
@@ -394,6 +428,7 @@ async function contextoDaPeca(clientId: string, peca: Peca | null, opcoes: { cam
     campanhaId: campanha ? String(campanha.id) : null,
     oferta,
     termosPrivados: [cliente, ...cliente.split(/\s+/).filter((p) => p.length >= 4)],
+    usando: completo.usando || "",
     dados: {
       cliente,
       contexto: {
@@ -406,6 +441,7 @@ async function contextoDaPeca(clientId: string, peca: Peca | null, opcoes: { cam
       },
       dossie_resumo: dossies.length && dossies[0].summary ? String(dossies[0].summary).slice(0, 1500) : null,
       cerebro_do_cliente: cerebro.texto || null,
+      contexto_completo_da_marca: completo.bloco || null,
       peca: peca ? { titulo: peca.titulo, descricao: limpo(peca.descricao, 1200) || null, data: peca.data, formato: peca.formato } : null,
       roteiro_ja_gravado_na_agenda: item
         ? {
@@ -467,6 +503,101 @@ async function avisoDoJev(clientId: string, r: Roteiro, oferta: string | null, u
     console.error("[mesa-roteiros] jev indisponível", { codigo: e instanceof JevErro ? e.codigo : "desconhecido" });
     return null;
   }
+}
+
+// ------------------------------------------------------------------ base: a biblioteca "Roteiros validados" (frente ROT)
+
+const TABELA_BIBLIOTECA = "roteiro_biblioteca";
+const CAMPOS_DA_BIBLIOTECA = "id, escopo, client_id, nome, objetivo, ficha, criado_em, arquivado_em";
+
+/** Modelos próprios do dono (da agência e deste cliente), na forma da ficha. Sem a tabela: lista vazia. */
+async function lerProprios(clientId: string): Promise<FichaDoModelo[]> {
+  const { data, error } = await servico()
+    .from(TABELA_BIBLIOTECA)
+    .select(CAMPOS_DA_BIBLIOTECA)
+    .is("arquivado_em", null)
+    .or(`client_id.eq.${clientId},escopo.eq.agencia`)
+    .order("criado_em", { ascending: false })
+    .limit(60);
+  if (error) {
+    if (!semTabela(error)) registrarFalha("mesa-roteiros: modelos próprios da biblioteca não lidos", error, { client_id: clientId });
+    return [];
+  }
+  const linhas = ((data as { id: string; nome: string; objetivo: string; ficha: unknown }[] | null) ?? []);
+  return linhas
+    .map((l) => normalizarFichaPropria({ ...((l.ficha && typeof l.ficha === "object" ? l.ficha : {}) as Record<string, unknown>), nome: l.nome, objetivo: l.objetivo }, l.id))
+    .filter((m): m is FichaDoModelo => !!m);
+}
+
+type PedidoDaBase = {
+  clientId: string;
+  /** Objetivo escolhido na tela ou dito ao agente (Autoridade, Produto...). */
+  objetivo: ObjetivoDaBase | null;
+  /** Modelo escolhido pela equipe (id da base ou do modelo próprio). */
+  modeloBaseId: string | null;
+  /** A base da versão atual (gerar de novo segue o mesmo modelo). */
+  anterior: BaseDoRoteiroGuardada | null;
+  tipo: TipoDeRoteiro;
+  duracaoS: number;
+  tema: string;
+  pedido: string;
+  peca: Peca | null;
+  ctx: ContextoDaPeca;
+  userId: string;
+  refId: string;
+};
+
+type BaseDoRoteiroGuardada = NonNullable<Roteiro["base"]>;
+
+const textoDe = (v: unknown): string => (typeof v === "string" ? v : v == null ? "" : JSON.stringify(v));
+
+/**
+ * Escolhe o modelo da base que o roteiro segue (regra do dono: sempre há
+ * base). A equipe escolheu: é ele. Gerar de novo sem escolha nova: o mesmo
+ * da versão atual. Senão, o Jev escolhe entre os candidatos do objetivo
+ * (Choice, com o contexto da marca); fora do ar, a regra do objetivo e do
+ * nicho decide. Nunca lança por causa do Jev.
+ */
+async function escolherBase(p: PedidoDaBase): Promise<EscolhaDoModelo> {
+  const proprios = await lerProprios(p.clientId);
+  if (p.modeloBaseId) {
+    const m = modeloValidadoPorId(p.modeloBaseId, proprios);
+    if (!m) throw new ErroHttp(404, "modelo_base_inexistente", "Este modelo da biblioteca não existe ou não é deste cliente.");
+    return { modelo: m, como: "equipe", confianca: null, alternativas: [] };
+  }
+  if (!p.objetivo && p.anterior) {
+    const m = modeloValidadoPorId(p.anterior.id, proprios);
+    if (m) return { modelo: m, como: p.anterior.como, confianca: p.anterior.confianca, alternativas: p.anterior.alternativas };
+  }
+  const contexto = ((p.ctx.dados.contexto || {}) as Record<string, unknown>);
+  const pista = [p.ctx.cliente, contexto.negocio, contexto.publico, contexto.oferta, p.tema, p.pedido, p.peca ? p.peca.titulo : ""].map(textoDe).join(" ");
+  // Regra fixa do nicho no código (advogado só em nicho regulado; regulado sem polêmica); o Jev julga entre os que servem.
+  const candidatos = candidatosParaAMarca(p.objetivo, proprios, pista);
+  const pelaRegra = (): EscolhaDoModelo => ({ modelo: escolherPelaRegra(candidatos, { objetivo: p.objetivo, texto: pista }) || candidatos[0], como: "regra", confianca: null, alternativas: [] });
+  if (candidatos.length < 2) return pelaRegra();
+  try {
+    const pergunta = perguntaDaEscolha(candidatos, {
+      objetivo: p.objetivo,
+      tipo: modoDoTipo(p.tipo).rotulo,
+      tema: p.tema,
+      pedido: p.pedido,
+      peca: p.peca ? `${p.peca.titulo}${p.peca.descricao ? `: ${limpo(p.peca.descricao, 400)}` : ""}` : "",
+      duracao_s: p.duracaoS,
+      marca: { nome: p.ctx.cliente, negocio: contexto.negocio ?? null, publico: contexto.publico ?? null, oferta: contexto.oferta ?? null, tom: contexto.tom_de_voz ?? null },
+    });
+    const res = await jevPerguntar(pergunta);
+    await cobrarJev(res, { clientId: p.clientId, tarefa: TAREFA, referencia: { tipo: REF_ROTEIRO, id: p.refId }, criadoPor: p.userId });
+    return lerEscolhaDoJev(res.answers.modelo, candidatos) || pelaRegra();
+  } catch (e) {
+    // A base é obrigatória, o Jev não: fora do ar, a regra do objetivo escolhe (e o motivo fica no log).
+    registrarFalha("mesa-roteiros: Jev da base fora do ar, escolha pela regra", e, { client_id: p.clientId, codigo: e instanceof JevErro ? e.codigo : "desconhecido" });
+    return pelaRegra();
+  }
+}
+
+/** O que fica guardado no roteiro sobre a base (a tela mostra "Base: ..."). */
+function baseParaGuardar(e: EscolhaDoModelo): BaseDoRoteiroGuardada {
+  return { id: e.modelo.id, nome: e.modelo.nome, objetivo: e.modelo.objetivo, origem: e.modelo.origem, como: e.como, confianca: e.confianca, alternativas: e.alternativas };
 }
 
 // ------------------------------------------------------------------ gravar versões
@@ -572,28 +703,44 @@ type PedidoDeRoteiro = {
   tom?: string;
   /** Frente MC: marca aberta no topo (sem tarefa, é ela que diz de qual marca é o roteiro). */
   marcaId?: unknown;
+  /** Frente ROT: objetivo da base (Autoridade, Produto...) e o modelo escolhido pela equipe, se houver. */
+  objetivoBase?: ObjetivoDaBase | null;
+  modeloBaseId?: string | null;
 };
 
-type Gerado = Gravado & { custo_usd: number; saldo_usd: number; aviso_jev: AvisoDoJev | null; reserva_usada?: string };
+type Gerado = Gravado & { custo_usd: number; saldo_usd: number; aviso_jev: AvisoDoJev | null; reserva_usada?: string; base: BaseDoRoteiroGuardada | null };
 
 async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado> {
   const peca = p.taskId ? await lerPeca(p.clientId, p.taskId) : null;
   if (peca && !ehPecaDeVideo(peca.formato)) throw new ErroHttp(409, "peca_nao_e_video", "Esta peça da agenda não é de vídeo (Reels, vídeo, short ou story).");
-  const [ctx, modelo, regras, sp] = await Promise.all([
-    contextoDaPeca(p.clientId, peca, { campanhaId: p.campanhaId, modeloRoteiroId: p.modeloRoteiroId, tipo: p.tipo, marcaId: p.marcaId }),
+  const atualDaLinha = p.linha ? versaoPorNumero(p.linha.versoes, p.linha.versao_atual) : null;
+  const ctxP = contextoDaPeca(p.clientId, peca, { campanhaId: p.campanhaId, modeloRoteiroId: p.modeloRoteiroId, tipo: p.tipo, marcaId: p.marcaId });
+  // Frente ROT: a base sai junto com as outras leituras. Mudar o tom mantém a base da versão atual (o roteiro já a segue).
+  const anterior = atualDaLinha && atualDaLinha.conteudo.base ? atualDaLinha.conteudo.base : null;
+  const escolhaP: Promise<EscolhaDoModelo | null> = p.tom
+    ? Promise.resolve(null)
+    : ctxP.then((c) => escolherBase({
+      clientId: p.clientId, objetivo: p.objetivoBase || null, modeloBaseId: p.modeloBaseId || null, anterior, tipo: p.tipo, duracaoS: p.duracaoS,
+      tema: p.tema, pedido: p.pedido, peca, ctx: c, userId: ch.userId, refId: p.linha ? p.linha.id : p.taskId || p.clientId,
+    }));
+  const [ctx, modelo, regras, sp, escolha] = await Promise.all([
+    ctxP,
     modeloDeTexto(p.modeloId),
     // Frente AG2: as regras que a equipe ensinou valem na geração (EVITAR primeiro). Nunca lança.
     regrasDaMesa(servico(), { clientId: p.clientId, mesa: "roteiro" }),
     // Frente SPP: o código escolhe o método (gerar ou ajustar o tom). Nunca lança.
     superpoderesPara(servico(), { agente: "roteiros.roteirista", momento: p.tom ? "ajustar" : "gerar" }),
+    escolhaP,
   ]);
-  const atual = p.linha ? versaoPorNumero(p.linha.versoes, p.linha.versao_atual) : null;
+  const atual = atualDaLinha;
   const modo = modoDoTipo(p.tipo);
   const abertos = p.linha ? p.linha.comentarios.filter((c) => !c.resolvido).slice(-8).map((c) => ({ bloco: c.bloco_id, texto: c.texto })) : [];
   const pedidoDaEquipe = {
-    modo: { tipo: p.tipo, rotulo: modo.rotulo, estrutura_inicial: modo.estrutura, cuidados: modo.cuidados, papeis: modo.papeis },
+    // Frente ROT: com base, a estrutura é a do modelo (o modo fica com os cuidados e os papéis).
+    modo: { tipo: p.tipo, rotulo: modo.rotulo, estrutura_inicial: escolha ? escolha.modelo.blocos.map((b) => b.funcao) : modo.estrutura, cuidados: modo.cuidados, papeis: modo.papeis },
+    estrutura_da_base: escolha ? { modelo: escolha.modelo.nome, blocos: escolha.modelo.blocos.map((b) => `${b.funcao}: ${b.faz}`), duracao_s: escolha.modelo.duracao_s } : null,
     duracao_alvo_s: p.duracaoS,
-    objetivo: p.objetivo || null,
+    objetivo: p.objetivo || (escolha ? `${ROTULO_DO_OBJETIVO[p.objetivoBase || escolha.modelo.objetivo]} (pela base)` : null),
     tema: p.tema || (peca ? peca.titulo : null),
     pedido_da_equipe: p.pedido || null,
     mudar_tom_para: p.tom || null,
@@ -602,6 +749,8 @@ async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado
   };
   const instrucao = p.tom
     ? `Reescreva o roteiro_atual no tom "${p.tom}". Preserve fatos, funções dos blocos, tempos, CTA e pendências; mude a forma de dizer, os ganchos e a legenda. Responda com o roteiro completo.`
+    : escolha
+    ? `Escreva o roteiro desta peça com o que está em DADOS, seguindo bloco a bloco o MODELO DA BASE "${escolha.modelo.nome}" (estrutura_da_base): cada bloco do roteiro tem a função do bloco do modelo, na mesma ordem.`
     : "Escreva o roteiro desta peça com o que está em DADOS.";
   const saida = await chamarTexto({
     clientId: p.clientId,
@@ -609,7 +758,7 @@ async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado
     agente: AGENTE,
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
-    sistema: `${SISTEMA_ROTEIRISTA}\n\n${CONHECIMENTO_DO_ROTEIRO}` + (regras.bloco ? `\n\n${regras.bloco}` : ""),
+    sistema: `${SISTEMA_ROTEIRISTA}\n\n${CONHECIMENTO_DO_ROTEIRO}` + (regras.bloco ? `\n\n${regras.bloco}` : "") + (escolha ? `\n\n${blocoDaBaseParaORoteirista(escolha)}` : ""),
     mensagens: [{ papel: "usuario", conteudo: `${instrucao}\n\nDADOS:\n${JSON.stringify({ ...ctx.dados, ...pedidoDaEquipe })}` }],
     esquemaJson: ESQUEMA_DO_ROTEIRO,
     maxTokensSaida: 7_000,
@@ -619,6 +768,9 @@ async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado
   });
   const titulo = peca ? peca.titulo : p.tema || "Roteiro avulso";
   const roteiro = normalizarRoteiro({ ...(saida.json as Record<string, unknown>), tipo: p.tipo }, { titulo, tipo: p.tipo, duracao_s: p.duracaoS });
+  // Frente ROT: o roteiro diz qual modelo da base seguiu (a escolha é do código, não do texto do modelo de IA).
+  const base = escolha ? baseParaGuardar(escolha) : anterior;
+  if (base) roteiro.base = base;
   const aviso = await avisoDoJev(p.clientId, roteiro, ctx.oferta, ch.userId, p.linha ? p.linha.id : p.taskId || p.clientId);
   const gravado = await guardarVersao(
     ch,
@@ -626,7 +778,7 @@ async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado
     roteiro,
     { origem: p.origem, nota: p.tom ? `Tom: ${p.tom}` : p.pedido ? `Pedido: ${p.pedido}` : "Gerado pela mesa", custo_usd: saida.custoUsd, modelo_id: saida.modeloId, aviso },
   );
-  const out: Gerado = { ...gravado, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd, aviso_jev: aviso };
+  const out: Gerado = { ...gravado, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd, aviso_jev: aviso, base: base || null };
   if (saida.reservaUsada) out.reserva_usada = saida.reservaUsada;
   return out;
 }
@@ -680,6 +832,8 @@ async function estimar(ch: Chamador, corpo: Record<string, unknown>) {
   const quantidade = Math.max(1, Math.min(20, Number(corpo.quantidade) || 1));
   const unidade = alvo === "conversa"
     ? estimarComModelo(modelo, { tokensEntrada: TAMANHO_DA_CONVERSA.entrada, tokensSaida: TAMANHO_DA_CONVERSA.saida })
+    : alvo === "extrair"
+    ? estimarComModelo(modelo, TAMANHO_DA_EXTRACAO)
     : alvo === "gancho"
     ? estimarComModelo(modelo, { tokensEntrada: 6_000, tokensSaida: 2_500 })
     : custoDaGeracao(modelo);
@@ -718,8 +872,11 @@ async function gerar(ch: Chamador, corpo: Record<string, unknown>) {
     campanhaId: idOuNulo(corpo.campanha_id, "campanha_id"),
     origem: "ia",
     marcaId: corpo.marca_id,
+    // Frente ROT: "agora eu preciso de autoridade" (objetivo) ou o modelo escolhido na biblioteca.
+    objetivoBase: objetivoDoTexto(corpo.objetivo_base),
+    modeloBaseId: lerIdDaBase(corpo.modelo_base_id),
   });
-  return json({ roteiro: r.linha, versao: r.versao, aviso_jev: r.aviso_jev, custo_usd: r.custo_usd, saldo_usd: r.saldo_usd, aviso_banco: r.aviso_banco || null, reserva_usada: r.reserva_usada });
+  return json({ roteiro: r.linha, versao: r.versao, aviso_jev: r.aviso_jev, base: r.base, custo_usd: r.custo_usd, saldo_usd: r.saldo_usd, aviso_banco: r.aviso_banco || null, reserva_usada: r.reserva_usada });
 }
 
 /**
@@ -1050,6 +1207,114 @@ async function modeloRevogar(ch: Chamador, corpo: Record<string, unknown>) {
   return json({ modelo: novo, custo_usd: 0 });
 }
 
+// ------------------------------------------------------------------ biblioteca: modelos próprios (frente ROT)
+
+const UUID_OU_BASE = /^((rv|casa)-[a-z0-9-]{3,60}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+/** Id de modelo da base (rv-..., casa-...) ou de modelo próprio (UUID); outra coisa vira nulo. */
+function lerIdDaBase(v: unknown): string | null {
+  const s = String(v ?? "").trim();
+  if (!s || s === "auto") return null;
+  if (!UUID_OU_BASE.test(s)) throw new ErroHttp(400, "modelo_base_invalido", "Modelo da biblioteca inválido.");
+  return s;
+}
+
+/** Tokens de ler um roteiro de exemplo e montar a ficha (o custo aparece antes). */
+const TAMANHO_DA_EXTRACAO = { tokensEntrada: 5_000, tokensSaida: 1_800 };
+
+/**
+ * biblioteca_salvar { client_id, escopo: agencia|cliente, ficha, id? } -> { modelo }
+ * Cria ou atualiza um modelo próprio (sem IA). O da agência vale para todos
+ * os clientes; o do cliente só para ele. Só a equipe com acesso ao cliente.
+ */
+async function bibliotecaSalvar(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = idDe(corpo.client_id, "client_id");
+  await garantirAcesso(ch, clientId);
+  const escopo = corpo.escopo === "cliente" ? "cliente" : "agencia";
+  const ficha = normalizarFichaPropria(corpo.ficha);
+  if (!ficha) throw new ErroHttp(400, "ficha_incompleta", "O modelo precisa de nome e de pelo menos 2 blocos.");
+  const id = idOuNulo(corpo.id, "id");
+  const { id: _i, origem: _o, ...guardar } = ficha;
+  const campos = { nome: ficha.nome, objetivo: ficha.objetivo, ficha: guardar };
+  if (id) {
+    const { data: atual, error: e1 } = await servico().from(TABELA_BIBLIOTECA).select("id, escopo, client_id").eq("id", id).maybeSingle();
+    if (e1) throw semTabela(e1) ? new ErroHttp(503, "banco_sem_biblioteca", AVISO_BANCO_DA_BIBLIOTECA) : new ErroHttp(503, "biblioteca_indisponivel", "Não foi possível ler o modelo.");
+    const m = atual as { id: string; escopo: string; client_id: string | null } | null;
+    if (!m) throw new ErroHttp(404, "modelo_inexistente", "Modelo não encontrado.");
+    if (m.client_id) await garantirAcesso(ch, m.client_id);
+    const { data, error } = await servico().from(TABELA_BIBLIOTECA).update(campos).eq("id", id).select(CAMPOS_DA_BIBLIOTECA).single();
+    if (error) throw new ErroHttp(503, "modelo_nao_gravado", "Não foi possível gravar o modelo.");
+    return json({ modelo: data, custo_usd: 0 });
+  }
+  const { data, error } = await servico()
+    .from(TABELA_BIBLIOTECA)
+    .insert({ ...campos, escopo, client_id: escopo === "cliente" ? clientId : null, criado_por: ch.userId })
+    .select(CAMPOS_DA_BIBLIOTECA)
+    .single();
+  if (error) throw semTabela(error) ? new ErroHttp(503, "banco_sem_biblioteca", AVISO_BANCO_DA_BIBLIOTECA) : new ErroHttp(503, "modelo_nao_gravado", "Não foi possível gravar o modelo.");
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "roteiro_biblioteca_salvar", origin: "mesa:mesa-roteiros", keyId: `mesa:mesa-roteiros:${ch.userId}`, scopes: ["mesa:write"],
+    input: { client_id: clientId, escopo }, success: true, statusCode: 200, durationMs: 0, resultRef: (data as { id: string }).id,
+  });
+  return json({ modelo: data, custo_usd: 0 });
+}
+
+/** biblioteca_arquivar { id, arquivar } -> { modelo }: apagar é arquivar (volta pelo Desfazer). */
+async function bibliotecaArquivar(ch: Chamador, corpo: Record<string, unknown>) {
+  const id = idDe(corpo.id, "id");
+  const { data, error } = await servico().from(TABELA_BIBLIOTECA).select("id, escopo, client_id").eq("id", id).maybeSingle();
+  if (error) throw semTabela(error) ? new ErroHttp(503, "banco_sem_biblioteca", AVISO_BANCO_DA_BIBLIOTECA) : new ErroHttp(503, "biblioteca_indisponivel", "Não foi possível ler o modelo.");
+  const m = data as { id: string; escopo: string; client_id: string | null } | null;
+  if (!m) throw new ErroHttp(404, "modelo_inexistente", "Modelo não encontrado.");
+  if (m.client_id) await garantirAcesso(ch, m.client_id);
+  const arquivar = corpo.arquivar !== false;
+  const { data: novo, error: e } = await servico()
+    .from(TABELA_BIBLIOTECA)
+    .update(arquivar ? { arquivado_em: new Date().toISOString(), arquivado_por: ch.userId } : { arquivado_em: null, arquivado_por: null })
+    .eq("id", id)
+    .select(CAMPOS_DA_BIBLIOTECA)
+    .single();
+  if (e) throw new ErroHttp(503, "modelo_nao_gravado", "Não foi possível arquivar o modelo.");
+  return json({ modelo: novo, custo_usd: 0 });
+}
+
+/**
+ * biblioteca_extrair { client_id, texto, nicho?, modelo_id? } -> { ficha, custo_usd, saldo_usd }
+ * "Preencher com IA": lê um ou mais roteiros de exemplo que o dono colou e
+ * devolve a ficha (estrutura e técnica, sem copiar o texto). Não grava: a
+ * tela mostra a prévia e o dono salva.
+ */
+async function bibliotecaExtrair(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = idDe(corpo.client_id, "client_id");
+  await garantirAcesso(ch, clientId);
+  const exemplo = limpo(corpo.texto, 12_000);
+  if (exemplo.length < 80) throw new ErroHttp(400, "exemplo_curto", "Cole pelo menos um roteiro de exemplo (umas 3 frases).");
+  const nicho = limpo(corpo.nicho, 200);
+  const [modelo, sp] = await Promise.all([
+    modeloDeTexto(corpo.modelo_id),
+    // Frente SPP: o método da casa (aceite e prova) também na ficha. Nunca lança.
+    superpoderesPara(servico(), { agente: "roteiros.roteirista", momento: "gerar" }),
+  ]);
+  const saida = await chamarTexto({
+    clientId,
+    tarefa: TAREFA,
+    agente: AGENTE,
+    modeloId: modelo.id,
+    raciocinio: raciocinioPara(modelo),
+    metodo: sp,
+    sistema: SISTEMA_DA_EXTRACAO,
+    mensagens: [{ papel: "usuario", conteudo: `Monte a ficha do modelo.${nicho ? `\nNicho: ${nicho}` : ""}\n\nEXEMPLO:\n${exemplo}` }],
+    esquemaJson: ESQUEMA_DA_FICHA,
+    maxTokensSaida: 2_500,
+    referencia: { tipo: REF_ROTEIRO, id: clientId },
+    criadoPor: ch.userId,
+  });
+  const ficha = normalizarFichaPropria(saida.json, "novo");
+  if (!ficha) throw new ErroHttp(422, "ficha_nao_lida", "Não deu para tirar uma estrutura deste exemplo. Cole o roteiro inteiro.", { custo_usd: saida.custoUsd });
+  return json({ ficha, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd });
+}
+
+const AVISO_BANCO_DA_BIBLIOTECA = "O banco ainda não guarda modelos próprios (migração 20260930313000 pendente). A base validada funciona normalmente.";
+
 // ------------------------------------------------------------------ agente da mesa
 
 async function listasParaOAgente(
@@ -1141,7 +1406,9 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   });
   // Frente SYNC: a marca aberta na tela (marca_id vem pela casca) vale no contexto, nas regras e no que aprende.
   const marcaDaConversa = typeof corpo.marca_id === "string" && corpo.marca_id ? corpo.marca_id : null;
-  const [modelo, historico, listas, cliente, contextoDoCliente, regras, referencia, sp] = await Promise.all([
+  // Frente ROT: os modelos próprios entram no índice da base que o agente vê.
+  const propriosP = lerProprios(clientId);
+  const [modelo, historico, listas, cliente, contextoDoCliente, regras, referencia, sp, proprios] = await Promise.all([
     modeloDeTexto(corpo.modelo_id),
     historicoP,
     listasP,
@@ -1157,6 +1424,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
       pedido: mensagem,
       ultimaResposta: (((h.data as { papel: string; conteudo: string }[] | null) ?? []).find((m) => m.papel === "agente") || { conteudo: null }).conteudo,
     })),
+    propriosP,
   ]);
   if (historico.error) registrarFalha("mesa-roteiros: histórico da conversa não lido", historico.error, { conversa_id: conversaId });
   const hoje = new Date().toISOString().slice(0, 10);
@@ -1174,7 +1442,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const ultimaResposta = anteriores.slice().reverse().find((m) => m.papel === "agente");
   // O roteiro aberto vem primeiro na lista: "este roteiro" vira r1.
   const roteirosOrdenados = aberto ? [...listas.roteiros.filter((r) => r.id === aberto.id), ...listas.roteiros.filter((r) => r.id !== aberto.id)] : listas.roteiros;
-  const extras = `${blocoDaReferencia(referencia.r, referencia.itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}`;
+  const extras = `${blocoDaReferencia(referencia.r, referencia.itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${indiceDaBaseParaOAgente(proprios)}`;
   const saida = await chamarTexto({
     clientId,
     tarefa: TAREFA,
@@ -1328,7 +1596,9 @@ async function executarItem(ch: Chamador, clientId: string, item: ItemDaAcaoDoAg
     return { desfazer: null, aviso: partes.join("; "), custo: 0 };
   }
   if (item.operacao === "gerar_roteiro") {
-    const tipo = ehTipoDeRoteiro(item.para) ? item.para : "fala_camera";
+    // Frente ROT: o para vem como "tipo" ou "tipo@objetivo" / "tipo@modelo" (a base que a equipe pediu ao agente).
+    const pedidoDaBase = lerBaseDoPara(item.para);
+    const tipo = ehTipoDeRoteiro(pedidoDaBase.tipo) ? pedidoDaBase.tipo : "fala_camera";
     const { data: vivo, error: erroVivo } = await servico().from(TABELA).select(CAMPOS).eq("task_id", item.alvo_id).is("arquivado_em", null).maybeSingle();
     if (erroVivo) throw new Error(semTabela(erroVivo) ? AVISO_BANCO : "Não foi possível ler o roteiro desta peça agora.");
     const linha = normalizarLinhaDoRoteiro(vivo);
@@ -1341,11 +1611,14 @@ async function executarItem(ch: Chamador, clientId: string, item: ItemDaAcaoDoAg
     const r = await escreverRoteiro(ch, {
       clientId, linha, taskId: item.alvo_id, tipo, duracaoS: modoDoTipo(tipo).duracao_padrao_s, objetivo: "", pedido: "", tema: item.titulo,
       modeloId: undefined, modeloRoteiroId: null, campanhaId: null, origem: "agente",
+      objetivoBase: pedidoDaBase.objetivo, modeloBaseId: pedidoDaBase.modeloId,
     });
     if (!r.linha) throw new Error("O roteiro foi gerado, mas o banco ainda não guarda roteiros.");
+    // O cartão diz qual modelo da base o roteiro seguiu.
+    const aviso = r.base ? `base: ${r.base.nome} (${ROTULO_DO_OBJETIVO[r.base.objetivo as ObjetivoDaBase] || r.base.objetivo})` : undefined;
     return linha
-      ? { desfazer: { tipo: "voltar_versao", roteiro_id: r.linha.id, versao_anterior: linha.versao_atual, versao_nova: r.versao.numero, status_anterior: linha.status }, custo: r.custo_usd }
-      : { desfazer: { tipo: "arquivar_criado", roteiro_id: r.linha.id }, custo: r.custo_usd };
+      ? { desfazer: { tipo: "voltar_versao", roteiro_id: r.linha.id, versao_anterior: linha.versao_atual, versao_nova: r.versao.numero, status_anterior: linha.status }, aviso, custo: r.custo_usd }
+      : { desfazer: { tipo: "arquivar_criado", roteiro_id: r.linha.id }, aviso, custo: r.custo_usd };
   }
   const { data } = await servico().from(TABELA).select(CAMPOS).eq("id", item.alvo_id).maybeSingle();
   const linha = normalizarLinhaDoRoteiro(data);
@@ -1499,11 +1772,18 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   modelo_revogar: modeloRevogar,
   agente_conversar: agenteConversar,
   agente_historico: agenteHistorico,
+  // Frente ROT: os modelos próprios da biblioteca "Roteiros validados" (a base validada mora no código).
+  biblioteca_salvar: bibliotecaSalvar,
+  biblioteca_arquivar: bibliotecaArquivar,
+  biblioteca_extrair: bibliotecaExtrair,
   executar_acao_agente: executarAcao,
   desfazer_acao_agente: desfazerAcao,
   // Frente AG2: "Esquecer" e "Guardar como regra" do aprendizado (sem IA).
   ...rotasDoAprendizado({ mesa: "roteiro", servico, garantirAcesso: (ch, clientId) => garantirAcesso(ch as Chamador, clientId), json }),
 };
+
+/** Frente ROT: ler um roteiro de exemplo e montar a ficha também usa IA. */
+const ACOES_LONGAS_DA_BASE = new Set(["biblioteca_extrair"]);
 
 /** Ações que podem passar de 150 s (IA, envio de arquivo): a resposta começa na hora. */
 const ACOES_LONGAS = new Set(["gerar", "gancho_refazer", "tom_mudar", "agente_conversar", "executar_acao_agente", "pdf_compartilhar"]);
@@ -1527,7 +1807,7 @@ Deno.serve(async (req) => {
         return respostaDeErro(err);
       }
     };
-    return ACOES_LONGAS.has(acao) ? respostaComFolego(rodar, corsHeaders) : await rodar();
+    return ACOES_LONGAS.has(acao) || ACOES_LONGAS_DA_BASE.has(acao) ? respostaComFolego(rodar, corsHeaders) : await rodar();
   } catch (err) {
     return respostaDeErro(err);
   }

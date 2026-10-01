@@ -28,8 +28,17 @@ import {
   type Roteiro,
   type TipoDeRoteiro,
 } from "../../../supabase/functions/_shared/roteiro-modelo";
-import { atualizarNoCache, chamarRoteiros, gerarRoteiro, roteiroDaPeca, salvarVersao, useModelos, usePecasDeVideo, useRoteiros } from "./roteirosApi";
-import { AvisoDoBanco, AvisoDoJevCartao, BlocoRecolhivel, OBJETIVOS, RotuloLargo, SeloDoStatus } from "./Comuns";
+import { atualizarNoCache, chamarRoteiros, gerarRoteiro, roteiroDaPeca, salvarVersao, useBiblioteca, useModelos, usePecasDeVideo, useRoteiros } from "./roteirosApi";
+import { AvisoDoBanco, AvisoDoJevCartao, BlocoRecolhivel, RotuloLargo, SeloDoStatus } from "./Comuns";
+// Frente ROT (30/09): a base "Roteiros validados" (objetivo e modelo) no formulário e no editor.
+import {
+  candidatosPorObjetivo,
+  DICA_DO_OBJETIVO,
+  modeloValidadoPorId,
+  OBJETIVOS_DA_BASE,
+  ROTULO_DO_OBJETIVO,
+  type ObjetivoDaBase,
+} from "../../../supabase/functions/mesa-roteiros/modulos/roteiros-validados";
 import { baixarBytes, itemSolto, montarPdf } from "./pdfNoNavegador";
 
 /**
@@ -53,6 +62,7 @@ export default function EtapaRoteiro({
   tarefaId,
   avulso,
   modeloId,
+  baseId = null,
   onAberto,
   onIrPara,
   onVoltar,
@@ -61,6 +71,8 @@ export default function EtapaRoteiro({
   tarefaId: string | null;
   avulso: boolean;
   modeloId: string | null;
+  /** Frente ROT: modelo da biblioteca escolhido na etapa Modelos. */
+  baseId?: string | null;
   onAberto: (id: string) => void;
   onIrPara: (etapa: IrPara, roteiroId?: string | null) => void;
   onVoltar: () => void;
@@ -109,14 +121,28 @@ export default function EtapaRoteiro({
   return (
     <div className="min-w-0 space-y-4">
       {roteirosQ.data && roteirosQ.data.indisponivel && <AvisoDoBanco />}
-      <FormularioDeGeracao tarefaId={tarefaId} modeloInicial={modeloId} onGerado={(id) => onAberto(id)} onSolto={setSolto} />
+      <FormularioDeGeracao tarefaId={tarefaId} modeloInicial={modeloId} baseInicial={baseId} onGerado={(id) => onAberto(id)} onSolto={setSolto} />
     </div>
   );
 }
 
 // ------------------------------------------------------------------ formulário de geração
 
-function FormularioDeGeracao({ tarefaId, modeloInicial, onGerado, onSolto }: { tarefaId: string | null; modeloInicial: string | null; onGerado: (id: string) => void; onSolto: (r: Roteiro) => void }) {
+const AUTOMATICO = "auto";
+
+function FormularioDeGeracao({
+  tarefaId,
+  modeloInicial,
+  baseInicial,
+  onGerado,
+  onSolto,
+}: {
+  tarefaId: string | null;
+  modeloInicial: string | null;
+  baseInicial: string | null;
+  onGerado: (id: string) => void;
+  onSolto: (r: Roteiro) => void;
+}) {
   const mesa = useMesa();
   const qc = useQueryClient();
   const avisarErro = useAvisarErro();
@@ -128,7 +154,20 @@ function FormularioDeGeracao({ tarefaId, modeloInicial, onGerado, onSolto }: { t
   const escolhido = modelosDeRoteiro.filter((m) => m.id === modeloDeRoteiro)[0] || null;
   const [tipo, setTipo] = useState<TipoDeRoteiro>("fala_camera");
   const [duracao, setDuracao] = useState<number>(modoDoTipo("fala_camera").duracao_padrao_s);
-  const [objetivo, setObjetivo] = useState("ensinar");
+  // Frente ROT: "agora eu preciso de autoridade". Sem objetivo, o agente escolhe pelo contexto da marca.
+  const bibliotecaQ = useBiblioteca(mesa.clientId);
+  const proprios = bibliotecaQ.data ? bibliotecaQ.data.lista.map((p) => p.ficha) : [];
+  const baseDaUrl = baseInicial ? modeloValidadoPorId(baseInicial, proprios) : null;
+  const [objetivo, setObjetivo] = useState<ObjetivoDaBase | typeof AUTOMATICO>(AUTOMATICO);
+  const [modeloBase, setModeloBase] = useState<string>(baseInicial || AUTOMATICO);
+  const objetivoDaBase = objetivo === AUTOMATICO ? null : objetivo;
+  const candidatos = candidatosPorObjetivo(objetivoDaBase, proprios);
+  const baseEscolhida = modeloBase === AUTOMATICO ? null : modeloValidadoPorId(modeloBase, proprios);
+  const trocarObjetivo = (o: ObjetivoDaBase | typeof AUTOMATICO) => {
+    setObjetivo(o);
+    // Modelo que não serve ao objetivo novo volta para o automático.
+    if (modeloBase !== AUTOMATICO && o !== AUTOMATICO && !candidatosPorObjetivo(o, proprios).some((m) => m.id === modeloBase)) setModeloBase(AUTOMATICO);
+  };
   // Textos guardados por cliente e peça (ou avulso): sair e voltar mantém.
   const base = `mesa-roteiros:gerar:${mesa.clientId}:${tarefaId || "avulso"}`;
   const [tema, setTema] = useEstadoDaTela<string>(`${base}:tema`, "");
@@ -157,7 +196,9 @@ function FormularioDeGeracao({ tarefaId, modeloInicial, onGerado, onSolto }: { t
     task_id: tarefaId,
     tipo,
     duracao_s: duracao,
-    objetivo: (OBJETIVOS.filter((o) => o.valor === objetivo)[0] || OBJETIVOS[0]).rotulo,
+    objetivo: objetivoDaBase ? ROTULO_DO_OBJETIVO[objetivoDaBase] : baseEscolhida ? ROTULO_DO_OBJETIVO[baseEscolhida.objetivo] : undefined,
+    objetivo_base: objetivoDaBase,
+    modelo_base_id: baseEscolhida ? baseEscolhida.id : null,
     pedido: pedido.trim() || undefined,
     tema: tema.trim() || undefined,
     modelo_id: idDoModeloIa || null,
@@ -187,7 +228,7 @@ function FormularioDeGeracao({ tarefaId, modeloInicial, onGerado, onSolto }: { t
       data-formulario-de-roteiro=""
       titulo={peca ? `Roteiro de ${peca.titulo}` : tarefaId ? "Roteiro da peça" : "Roteiro avulso"}
       descricao={peca ? `${ROTULO_DO_FORMATO[peca.formato] || peca.formato} · ${dataCurta(peca.data)}${peca.temRoteiroDaAgenda ? " · roteiro do calendário entra como base" : ""}` : undefined}
-      ajuda="Contexto do cliente, cérebro e campanha entram sozinhos."
+      ajuda="Contexto completo da marca, cérebro e campanha entram sozinhos. Todo roteiro segue um modelo da biblioteca Roteiros validados: escolha o objetivo e o modelo, ou deixe no automático e o agente escolhe e diz qual usou."
       rodape={
         <>
           <button type="button" className={botao.secundario} onClick={() => void emBranco()} disabled={criando || semTema}>
@@ -248,18 +289,52 @@ function FormularioDeGeracao({ tarefaId, modeloInicial, onGerado, onSolto }: { t
           </div>
         </div>
 
+        <div className="min-w-0" data-objetivo-da-base="">
+          <div className="mb-1.5 flex min-w-0 items-center">
+            <span className={texto.rotulo}>Objetivo do vídeo</span>
+            <AjudaRecolhida className="ml-1" rotulo="Sobre o objetivo">
+              {objetivoDaBase ? DICA_DO_OBJETIVO[objetivoDaBase] : "No automático, o agente escolhe o modelo pelo tema, pela peça e pelo contexto da marca."}
+            </AjudaRecolhida>
+          </div>
+          <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1" role="radiogroup" aria-label="Objetivo do vídeo">
+            {[AUTOMATICO as string].concat(OBJETIVOS_DA_BASE as unknown as string[]).map((o) => {
+              const ativo = objetivo === o;
+              return (
+                <button
+                  key={o}
+                  type="button"
+                  role="radio"
+                  aria-checked={ativo}
+                  onClick={() => trocarObjetivo(o as ObjetivoDaBase | typeof AUTOMATICO)}
+                  className={juntar("inline-flex h-8 items-center rounded-md border px-2.5 text-[12px] transition-colors", ativo ? "border-primary bg-primary/5 font-medium text-foreground" : "border-border text-muted-foreground hover:border-primary/40", foco)}
+                >
+                  {o === AUTOMATICO ? "Automático" : ROTULO_DO_OBJETIVO[o as ObjetivoDaBase]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <GrupoDeCampos colunas={3}>
-          <CampoDeFormulario rotulo="Duração (segundos)">
-            <input type="number" min={10} max={300} value={duracao} onChange={(e) => setDuracao(Math.max(10, Math.min(300, Number(e.target.value) || 10)))} className={campo} />
-          </CampoDeFormulario>
-          <CampoDeFormulario rotulo="Objetivo">
-            <select value={objetivo} onChange={(e) => setObjetivo(e.target.value)} className={campo}>
-              {OBJETIVOS.map((o) => (
-                <option key={o.valor} value={o.valor}>
-                  {o.rotulo}
+          <CampoDeFormulario
+            rotulo="Modelo da base"
+            ajuda="Roteiros validados e os modelos próprios. Automático: o agente escolhe entre os do objetivo e diz qual usou."
+            apoio={baseEscolhida ? baseEscolhida.quando_usar : undefined}
+            largo
+          >
+            <select value={modeloBase} onChange={(e) => setModeloBase(e.target.value)} className={campo} aria-label="Modelo da base" data-modelo-da-base-escolhido={modeloBase}>
+              <option value={AUTOMATICO}>Automático: o agente escolhe{objetivoDaBase ? ` (${ROTULO_DO_OBJETIVO[objetivoDaBase]})` : ""}</option>
+              {baseDaUrl && !candidatos.some((m) => m.id === baseDaUrl.id) && <option value={baseDaUrl.id}>{baseDaUrl.nome}</option>}
+              {candidatos.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.nome} · {ROTULO_DO_OBJETIVO[m.objetivo]}
+                  {m.origem === "proprio" ? " · próprio" : ""}
                 </option>
               ))}
             </select>
+          </CampoDeFormulario>
+          <CampoDeFormulario rotulo="Duração (segundos)">
+            <input type="number" min={10} max={300} value={duracao} onChange={(e) => setDuracao(Math.max(10, Math.min(300, Number(e.target.value) || 10)))} className={campo} />
           </CampoDeFormulario>
           <CampoDeFormulario rotulo="Modelo aprovado" ajuda="Opcional. O roteiro segue o ritmo do modelo com o conteúdo novo; a IA não copia.">
             <select value={modeloDeRoteiro} onChange={(e) => setModeloDeRoteiro(e.target.value)} className={campo} disabled={!modelosDeRoteiro.length}>
@@ -300,6 +375,29 @@ function FormularioDeGeracao({ tarefaId, modeloInicial, onGerado, onSolto }: { t
         </GrupoDeCampos>
       </div>
     </Painel>
+  );
+}
+
+// ------------------------------------------------------------------ base usada (frente ROT)
+
+const COMO_FOI_ESCOLHIDO: Record<string, string> = {
+  equipe: "escolhido pela equipe",
+  jev: "escolhido pelo agente pelo objetivo e pelo contexto da marca",
+  regra: "escolhido pela regra do objetivo",
+};
+
+/** "Base: <modelo> (Autoridade)": qual modelo da biblioteca o roteiro seguiu e como foi escolhido. */
+export function LinhaDaBase({ base }: { base: Roteiro["base"] }) {
+  if (!base) return null;
+  const objetivo = ROTULO_DO_OBJETIVO[base.objetivo as ObjetivoDaBase] || base.objetivo;
+  return (
+    <p className={juntar(texto.auxiliar, "flex min-w-0 items-center leading-5")} data-base-do-roteiro={base.id}>
+      <span className="min-w-0 [overflow-wrap:anywhere]">
+        <span className="font-medium text-foreground">Base: {base.nome}</span>
+        {objetivo ? ` (${objetivo})` : ""} · {COMO_FOI_ESCOLHIDO[base.como] || base.como}
+        {base.alternativas.length ? `. Também serviam: ${base.alternativas.map((a) => a.nome).join(", ")}` : ""}
+      </span>
+    </p>
   );
 }
 
@@ -469,6 +567,7 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
         {bloqueio && <p className={juntar(superficie.poco, "px-3 py-2 text-[12px]")}>{bloqueio}</p>}
         {erro ? <AvisoDeErro erro={erro} /> : null}
         {faltas.length > 0 && <p className={juntar(texto.auxiliar, "leading-5 [overflow-wrap:anywhere]")}>Falta: {faltas.join(" ")}</p>}
+        <LinhaDaBase base={rascunho.base} />
         <AvisoDoJevCartao aviso={versao ? versao.aviso : null} />
       </section>
 

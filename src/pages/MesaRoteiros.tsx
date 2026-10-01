@@ -114,6 +114,8 @@ export default function MesaRoteiros() {
   const tarefaUrl = uuidOuNulo(params.get("tarefa"));
   const modeloUrl = uuidOuNulo(params.get("modelo"));
   const avulso = params.get("avulso") === "1";
+  // Frente ROT: o modelo da biblioteca "Roteiros validados" escolhido na etapa Modelos (rv-..., casa-... ou UUID do próprio).
+  const baseUrl = /^((rv|casa)-[a-z0-9-]{3,60}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(params.get("base") || "") ? params.get("base") : null;
 
   const [recargaAberta, setRecargaAberta] = useState(false);
   const [chavesAbertas, setChavesAbertas] = useState(false);
@@ -156,12 +158,12 @@ export default function MesaRoteiros() {
 
   const trocarCliente = (id: string) => {
     const o = lerOnde(id);
-    mudar({ client: id, etapa: o.etapa || "agenda", roteiro: null, tarefa: null, modelo: null, avulso: null, marca: null });
+    mudar({ client: id, etapa: o.etapa || "agenda", roteiro: null, tarefa: null, modelo: null, avulso: null, marca: null, base: null });
   };
 
-  const abrirRoteiro = (id: string, destino: Etapa = "roteiro") => mudar({ etapa: destino, roteiro: id, tarefa: null, avulso: null, modelo: null });
+  const abrirRoteiro = (id: string, destino: Etapa = "roteiro") => mudar({ etapa: destino, roteiro: id, tarefa: null, avulso: null, modelo: null, base: null });
   const novoDaPeca = (taskId: string) => mudar({ etapa: "roteiro", roteiro: null, tarefa: taskId, avulso: null });
-  const novoAvulso = (modeloId?: string | null) => mudar({ etapa: "roteiro", roteiro: null, tarefa: null, avulso: "1", modelo: modeloId || null });
+  const novoAvulso = (modeloId?: string | null, base?: string | null) => mudar({ etapa: "roteiro", roteiro: null, tarefa: null, avulso: "1", modelo: modeloId || null, base: base || null });
 
   // Endereço só com o cliente: abre na etapa em que parou.
   useEffect(() => {
@@ -319,14 +321,15 @@ export default function MesaRoteiros() {
                     tarefaId={tarefaUrl}
                     avulso={avulso}
                     modeloId={modeloUrl}
-                    onAberto={(id) => mudar({ roteiro: id, tarefa: null, avulso: null, modelo: null }, true)}
+                    baseId={baseUrl}
+                    onAberto={(id) => mudar({ roteiro: id, tarefa: null, avulso: null, modelo: null, base: null }, true)}
                     onIrPara={(e, id) => mudar({ etapa: e, roteiro: id || roteiroUrl })}
-                    onVoltar={() => mudar({ etapa: "agenda", roteiro: null, tarefa: null, avulso: null, modelo: null })}
+                    onVoltar={() => mudar({ etapa: "agenda", roteiro: null, tarefa: null, avulso: null, modelo: null, base: null })}
                   />
                 )}
                 {etapa === "revisao" && <EtapaRevisao roteiroId={roteiroUrl} onAbrirRoteiro={(id, e) => abrirRoteiro(id, e || "revisao")} />}
                 {etapa === "pdf" && <EtapaPdf roteiroId={roteiroUrl} />}
-                {etapa === "modelos" && <EtapaModelos onUsarModelo={(id) => novoAvulso(id)} />}
+                {etapa === "modelos" && <EtapaModelos onUsarModelo={(id) => novoAvulso(id)} onUsarBase={(id) => novoAvulso(null, id)} />}
               </Suspense>
             </RegiaoRolavel>
           </AreaDeTrabalho>

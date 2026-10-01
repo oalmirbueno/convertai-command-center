@@ -14,6 +14,7 @@
  *
  * Sem import de Deno: o Vitest lê este arquivo.
  */
+import { lerBaseDoPara, modeloValidadoPorId, ROTULO_DO_OBJETIVO } from "./modulos/roteiros-validados.ts";
 import {
   type AcaoDoAgente,
   type AlvoComApelido,
@@ -178,6 +179,34 @@ export function tipoPedido(bruto: unknown): TipoDeRoteiro | null {
 
 const umaLinha = (v: unknown, max: number) => String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, max);
 
+/**
+ * Frente ROT: o para do gerar_roteiro. Sem base, só o tipo (como antes);
+ * com base pedida, "tipo@objetivo" ou "tipo@id_do_modelo". Base que não se
+ * lê é ignorada (o código escolhe pelo contexto), tipo que não se lê recusa.
+ */
+export function paraDoGerar(bruto: unknown): string | null {
+  const s = String(bruto == null ? "" : bruto);
+  const i = s.indexOf("@");
+  const tipo = tipoPedido(i >= 0 ? s.slice(0, i) : s);
+  if (!tipo) return null;
+  if (i < 0) return tipo;
+  const base = lerBaseDoPara(`${tipo}@${s.slice(i + 1)}`);
+  if (base.modeloId) return modeloValidadoPorId(base.modeloId) || /^[0-9a-f-]{36}$/i.test(base.modeloId) ? `${tipo}@${base.modeloId}` : tipo;
+  return base.objetivo ? `${tipo}@${base.objetivo}` : tipo;
+}
+
+/** Como o cartão mostra o para do gerar_roteiro ("Fala para câmera · base: Autoridade"). */
+export function rotuloDoGerar(para: string): string {
+  const b = lerBaseDoPara(para);
+  const tipo = modoDoTipo(b.tipo).rotulo;
+  if (b.objetivo) return `${tipo} · base: ${ROTULO_DO_OBJETIVO[b.objetivo]}`;
+  if (b.modeloId) {
+    const m = modeloValidadoPorId(b.modeloId);
+    return `${tipo} · base: ${m ? m.nome : "modelo próprio"}`;
+  }
+  return tipo;
+}
+
 const travaDoRoteiro = (alvo: AlvoComApelido<AlvoDosRoteiros>): string | null => {
   const d = alvo.dados || {};
   if (d.arquivado === true) return "Roteiro arquivado. Desarquive antes.";
@@ -205,7 +234,8 @@ export function regrasDosRoteiros(): Record<string, RegraDaOperacao<AlvoDosRotei
     gerar_roteiro: {
       rotulo: "gerar o roteiro de",
       alvos: ["p"],
-      para: (bruto) => tipoPedido(bruto),
+      // Frente ROT: "tipo" ou "tipo@objetivo" / "tipo@modelo" (a base que a equipe pediu).
+      para: (bruto) => paraDoGerar(bruto),
       trava: (alvo) => {
         const s = alvo.dados ? alvo.dados.roteiro_status : null;
         if (s === "aprovado" || s === "gravado") return "A peça já tem roteiro aprovado. Peça uma mudança no roteiro dela.";
@@ -238,7 +268,7 @@ export function regrasDosRoteiros(): Record<string, RegraDaOperacao<AlvoDosRotei
 export const DESCRICOES_DOS_ROTEIROS: Record<string, string> = {
   refazer_gancho: "três ganchos novos, de mecanismos diferentes, para o roteiro (ref r..). para: o que a equipe pediu (ex.: 'mais direto'), ou vazio.",
   mudar_tom: "reescreve as falas do roteiro (ref r..) no tom pedido, mantendo fatos, estrutura e tempos. para: o tom (ex.: 'mais leve e próximo').",
-  gerar_roteiro: "gera o roteiro de uma peça de vídeo da agenda (ref p..). para: fala_camera, tutorial, ugc ou cinema (vazio: fala_camera). Pedido de 'peças da semana' vale para as peças com data nos próximos 7 dias.",
+  gerar_roteiro: "gera o roteiro de uma peça de vídeo da agenda (ref p..), sempre seguindo um modelo da biblioteca Roteiros validados. para: fala_camera, tutorial, ugc ou cinema (vazio: fala_camera); com objetivo ou modelo pedido, junte com @ (fala_camera@autoridade, fala_camera@produto, fala_camera@presenca_de_marca, fala_camera@venda, fala_camera@conexao, fala_camera@engajamento ou fala_camera@id_do_modelo). Pedido de 'peças da semana' vale para as peças com data nos próximos 7 dias.",
   arquivar_roteiro: "arquiva o roteiro (ref r..). Dá para desarquivar. para vazio.",
   gerar_pdf: "gera UM PDF de gravação com os roteiros aprovados ou gravados pedidos (ref r.., um item por roteiro, até 12) e manda para Arquivos com a revisão da agência. Não aprova nada. para vazio.",
   ...DESCRICOES_DE_EDICAO,
@@ -283,7 +313,7 @@ export function normalizarAcoesDosRoteiros(
     id: id || `roteiros-${Date.now().toString(36)}`,
     contexto: { client_id: clientId },
     rotuloDoPara: (operacao, para) => {
-      if (operacao === "gerar_roteiro" && typeof para === "string") return modoDoTipo(para).rotulo;
+      if (operacao === "gerar_roteiro" && typeof para === "string") return rotuloDoGerar(para);
       if (operacao === "refazer_gancho" && para === "sem pedido extra") return null;
       return null;
     },

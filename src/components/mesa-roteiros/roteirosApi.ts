@@ -15,6 +15,7 @@ import {
   type TipoDeRoteiro,
   type VersaoDoRoteiro,
 } from "../../../supabase/functions/_shared/roteiro-modelo";
+import { normalizarFichaPropria, type FichaDoModelo } from "../../../supabase/functions/mesa-roteiros/modulos/roteiros-validados";
 
 /**
  * Mesa Roteiros: a ponte da tela com a função mesa-roteiros e as tabelas
@@ -30,6 +31,7 @@ export const CHAVES = {
   pecas: (clientId: string) => ["mesa-roteiros", "pecas", clientId] as const,
   roteiros: (clientId: string) => ["mesa-roteiros", "roteiros", clientId] as const,
   modelos: (clientId: string) => ["mesa-roteiros", "modelos", clientId] as const,
+  biblioteca: (clientId: string) => ["mesa-roteiros", "biblioteca", clientId] as const,
 };
 
 export interface PecaDeVideo {
@@ -177,6 +179,45 @@ export function useModelos(clientId: string) {
   });
 }
 
+export interface ModeloProprio {
+  ficha: FichaDoModelo;
+  escopo: "agencia" | "cliente";
+  criado_em: string;
+}
+
+/**
+ * Frente ROT: os modelos próprios da biblioteca "Roteiros validados" (da
+ * agência e deste cliente). A base validada mora no código; esta leitura
+ * traz só o que o dono acrescentou. Sem a tabela, lista vazia com aviso.
+ */
+export function useBiblioteca(clientId: string) {
+  return useQuery({
+    queryKey: CHAVES.biblioteca(clientId),
+    enabled: !!clientId,
+    staleTime: 60_000,
+    queryFn: async (): Promise<{ lista: ModeloProprio[]; indisponivel: boolean }> => {
+      const { data, error } = await (supabase as any)
+        .from("roteiro_biblioteca")
+        .select("id, escopo, client_id, nome, objetivo, ficha, criado_em")
+        .is("arquivado_em", null)
+        .or(`client_id.eq.${clientId},escopo.eq.agencia`)
+        .order("criado_em", { ascending: false })
+        .limit(100);
+      if (error) {
+        if (faltaATabela(error) || /roteiro_biblioteca/.test(String(error.message || ""))) return { lista: [], indisponivel: true };
+        throw error;
+      }
+      const lista: ModeloProprio[] = [];
+      ((data || []) as any[]).forEach((l) => {
+        if (!l || !UUID.test(String(l.id))) return;
+        const ficha = normalizarFichaPropria({ ...(l.ficha && typeof l.ficha === "object" ? l.ficha : {}), nome: l.nome, objetivo: l.objetivo }, String(l.id));
+        if (ficha) lista.push({ ficha, escopo: l.escopo === "cliente" ? "cliente" : "agencia", criado_em: String(l.criado_em || "") });
+      });
+      return { lista, indisponivel: false };
+    },
+  });
+}
+
 /** Roteiro vivo de cada peça (o não arquivado mais recente). */
 export function roteiroDaPeca(lista: LinhaDoRoteiro[], taskId: string): LinhaDoRoteiro | null {
   return lista.filter((r) => r.task_id === taskId && !r.arquivado_em)[0] || null;
@@ -242,6 +283,9 @@ export interface PedidoDeGeracao {
   tema?: string;
   modelo_id?: string | null;
   modelo_roteiro_id?: string | null;
+  /** Frente ROT: objetivo da base (autoridade, produto...) e o modelo da biblioteca ("auto" ou vazio: o agente escolhe). */
+  objetivo_base?: string | null;
+  modelo_base_id?: string | null;
 }
 
 export const gerarRoteiro = (p: PedidoDeGeracao) => chamarRoteiros("gerar", p as unknown as Record<string, unknown>);
