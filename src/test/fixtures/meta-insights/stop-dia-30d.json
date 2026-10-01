@@ -1,0 +1,500 @@
+{
+ "data": [
+  {
+   "campaign_id": "120252431533690270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "11.68",
+   "impressions": "423",
+   "inline_link_clicks": "1",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "1"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "104"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "4"
+    },
+    {
+     "action_type": "comment",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "104"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "4"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "video_view",
+     "value": "99"
+    }
+   ],
+   "date_start": "2026-09-14",
+   "date_stop": "2026-09-14"
+  },
+  {
+   "campaign_id": "120252431533690270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "24.33",
+   "impressions": "1238",
+   "inline_link_clicks": "3",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "3"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "3"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "245"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "5"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "245"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "5"
+    },
+    {
+     "action_type": "post",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "3"
+    },
+    {
+     "action_type": "video_view",
+     "value": "237"
+    }
+   ],
+   "date_start": "2026-09-15",
+   "date_stop": "2026-09-15"
+  },
+  {
+   "campaign_id": "120252431533690270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "22.18",
+   "impressions": "941",
+   "inline_link_clicks": "6",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "6"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "4"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "2"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "182"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "6"
+    },
+    {
+     "action_type": "comment",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "182"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "post",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "4"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_5_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "video_view",
+     "value": "170"
+    }
+   ],
+   "date_start": "2026-09-16",
+   "date_stop": "2026-09-16"
+  },
+  {
+   "campaign_id": "120252431533690270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "22.12",
+   "impressions": "1016",
+   "inline_link_clicks": "1",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "1"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "192"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "3"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "192"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "3"
+    },
+    {
+     "action_type": "video_view",
+     "value": "188"
+    }
+   ],
+   "date_start": "2026-09-17",
+   "date_stop": "2026-09-17"
+  },
+  {
+   "campaign_id": "120252431533690270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "24.26",
+   "impressions": "1026",
+   "inline_link_clicks": "4",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "4"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "212"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "3"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "212"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "video_view",
+     "value": "205"
+    }
+   ],
+   "date_start": "2026-09-18",
+   "date_stop": "2026-09-18"
+  },
+  {
+   "campaign_id": "120252431533690270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0",
+   "impressions": "0",
+   "inline_link_clicks": "0",
+   "actions": [
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    }
+   ],
+   "date_start": "2026-09-21",
+   "date_stop": "2026-09-21"
+  },
+  {
+   "campaign_id": "120252431533690270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0",
+   "impressions": "0",
+   "inline_link_clicks": "0",
+   "actions": [
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    }
+   ],
+   "date_start": "2026-09-23",
+   "date_stop": "2026-09-23"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "6.16",
+   "impressions": "178",
+   "inline_link_clicks": "1",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    }
+   ],
+   "date_start": "2026-09-30",
+   "date_stop": "2026-09-30"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "7.97",
+   "impressions": "251",
+   "inline_link_clicks": "1",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "1"
+    }
+   ],
+   "date_start": "2026-09-30",
+   "date_stop": "2026-09-30"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "5.51",
+   "impressions": "71",
+   "inline_link_clicks": "0",
+   "actions": [
+    {
+     "action_type": "post_reaction",
+     "value": "2"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "3"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "3"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "3"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "3"
+    },
+    {
+     "action_type": "post",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "2"
+    }
+   ],
+   "date_start": "2026-10-01",
+   "date_stop": "2026-10-01"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "4.62",
+   "impressions": "116",
+   "inline_link_clicks": "1",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "1"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "3"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "2"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "3"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "post",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    }
+   ],
+   "date_start": "2026-10-01",
+   "date_stop": "2026-10-01"
+  }
+ ]
+}

@@ -48,6 +48,7 @@ import { chaveDosResultados, lerContaComResultados, type GrupoDeObjetivo } from 
 import GerenciadorAoVivo, { BotaoAtualizarAgora, SituacaoDaConta, useAtualizarGerenciador, useGerenciador } from "./GerenciadorAoVivo";
 import { gerarRelatorioDeAnuncios, pedidoDeOtimizar, type NoNoGerenciador, type RelatorioGerado } from "./gerenciadorApi";
 import SeletorDePeriodo from "./SeletorDePeriodo";
+import MetricasDaMeta from "./MetricasDaMeta";
 import { corpoDoPeriodo, ehEscolhaDoPeriodo, PERIODO_PADRAO, resolverPeriodo, trechoDoPeriodo, type EscolhaDoPeriodo } from "./periodoDaConta";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 
@@ -90,6 +91,10 @@ import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
  * o que o agente faz e fez, e os resultados e criativos. Um só "Atualizar
  * agora" (lê a Meta e pede a coleta); a tabela de campanhas saiu (o
  * Gerenciador é a tabela).
+ *
+ * 01/10 (frente ADM, "engajamento 5, mas só chegou 1 mensagem"): o bloco
+ * Números da Meta, lido na Meta com a janela do Gerenciador, com o objetivo,
+ * o nível, as colunas escolhidas e o horário das conversas e resultados.
  *
  * 28/09 (frente AD3, "o topo é um card gigante; o gerenciador igual ao da Meta;
  * filtros por data; gerar o relatório ali"): o período (hoje, ontem, 7, 14, 30 e
@@ -647,6 +652,9 @@ export default function AbaConta({
             descricao="Conecte a conta da Meta no cadastro do cliente para ver campanhas, anúncios e métricas aqui."
           />
         )}
+
+        {/* Frente ADM (01/10): os números da Meta como no Gerenciador (objetivo, nível, colunas e horário). */}
+        {(!dados || dados.conta.conectada) && <MetricasDaMeta clientId={clientId} periodo={periodo} rotuloDoPeriodo={trechoDoPeriodo(periodo)} />}
 
         {/* 2. O Gerenciador ao vivo: campanha, conjunto e anúncio, com as ações e a prova. */}
         {(!dados || dados.conta.conectada) && (

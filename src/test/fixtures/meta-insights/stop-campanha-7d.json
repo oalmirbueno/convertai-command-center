@@ -1,0 +1,134 @@
+{
+ "data": [
+  {
+   "campaign_id": "120252750344450270",
+   "campaign_name": "STOP | Serviços | WhatsApp | 30set-07out26 | R10dia",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "11.67",
+   "impressions": "249",
+   "reach": "195",
+   "frequency": "1.276923",
+   "clicks": "4",
+   "ctr": "1.606426",
+   "cpc": "2.9175",
+   "cpm": "46.86747",
+   "inline_link_clicks": "1",
+   "inline_link_click_ctr": "0.401606",
+   "cost_per_inline_link_click": "11.67",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "1"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "4"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "3"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "4"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "post",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    }
+   ],
+   "date_start": "2026-09-25",
+   "date_stop": "2026-10-01"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "campaign_name": "STOP | Mouse R9,90 | WhatsApp | 30set-07out26 | R10dia",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "12.59",
+   "impressions": "367",
+   "reach": "303",
+   "frequency": "1.211221",
+   "clicks": "5",
+   "ctr": "1.362398",
+   "cpc": "2.518",
+   "cpm": "34.305177",
+   "inline_link_clicks": "2",
+   "inline_link_click_ctr": "0.544959",
+   "cost_per_inline_link_click": "6.295",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "2"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "4"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "2"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "4"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "post",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    }
+   ],
+   "date_start": "2026-09-25",
+   "date_stop": "2026-10-01"
+  }
+ ]
+}

@@ -1,0 +1,155 @@
+{
+ "data": [
+  {
+   "campaign_id": "120252590294940246",
+   "campaign_name": "[FRIO] - [LEAD - SITE] - LP Ajenda",
+   "objective": "OUTCOME_LEADS",
+   "optimization_goal": "Unknown Optimization Goal",
+   "spend": "502.29",
+   "impressions": "11647",
+   "reach": "5994",
+   "frequency": "1.94311",
+   "clicks": "448",
+   "ctr": "3.846484",
+   "cpc": "1.121183",
+   "cpm": "43.126127",
+   "inline_link_clicks": "323",
+   "inline_link_click_ctr": "2.773246",
+   "cost_per_inline_link_click": "1.555077",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "323"
+    },
+    {
+     "action_type": "initiate_checkout",
+     "value": "2"
+    },
+    {
+     "action_type": "add_to_cart",
+     "value": "28"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_initiate_checkout",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_custom",
+     "value": "32"
+    },
+    {
+     "action_type": "offsite_initiate_checkout_add_20_s_calls",
+     "value": "2"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_add_to_cart",
+     "value": "28"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "11"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "280"
+    },
+    {
+     "action_type": "onsite_web_lead",
+     "value": "44"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "280"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "939"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "26"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "939"
+    },
+    {
+     "action_type": "onsite_web_add_to_cart",
+     "value": "28"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "27"
+    },
+    {
+     "action_type": "post",
+     "value": "9"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_web_app_add_to_cart",
+     "value": "28"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "10"
+    },
+    {
+     "action_type": "onsite_web_initiate_checkout",
+     "value": "2"
+    },
+    {
+     "action_type": "omni_initiated_checkout",
+     "value": "2"
+    },
+    {
+     "action_type": "omni_add_to_cart",
+     "value": "28"
+    },
+    {
+     "action_type": "lead",
+     "value": "44"
+    },
+    {
+     "action_type": "custom_event_actions_add_20_s_calls",
+     "value": "13"
+    },
+    {
+     "action_type": "offsite_add_to_cart_add_20_s_calls",
+     "value": "28"
+    },
+    {
+     "action_type": "video_view",
+     "value": "590"
+    },
+    {
+     "action_type": "offsite_conversion.fb_pixel_lead",
+     "value": "44"
+    },
+    {
+     "action_type": "offsite_lead_add_20_s_calls",
+     "value": "44"
+    }
+   ],
+   "video_thruplay_watched_actions": [
+    {
+     "action_type": "video_view",
+     "value": "230"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01"
+  }
+ ]
+}

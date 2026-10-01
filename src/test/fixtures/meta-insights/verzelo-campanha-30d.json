@@ -1,0 +1,296 @@
+{
+ "data": [
+  {
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "40"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "15"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_replied_7d",
+     "value": "5"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "1"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "7"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "58"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "18"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "58"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "18"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "15"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "6"
+    }
+   ],
+   "cpc": "2.548475",
+   "cpm": "23.836398",
+   "ctr": "0.93532",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "clicks": "59",
+   "cost_per_inline_link_click": "3.759",
+   "inline_link_click_ctr": "0.634115",
+   "frequency": "1.52404",
+   "impressions": "6308",
+   "inline_link_clicks": "40",
+   "reach": "4139",
+   "spend": "150.36",
+   "campaign_id": "120247085569030137",
+   "campaign_name": "[VERZELO] Direct | Reel poda | Curitiba controlada | Semana 31 AGO"
+  },
+  {
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "25"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "5"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "3"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_block",
+     "value": "4"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "31"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "6"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "31"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "6"
+    },
+    {
+     "action_type": "post",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "5"
+    }
+   ],
+   "cpc": "0.701136",
+   "cpm": "8.986309",
+   "ctr": "1.281678",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "objective": "LINK_CLICKS",
+   "optimization_goal": "NONE",
+   "clicks": "44",
+   "cost_per_inline_link_click": "1.234",
+   "inline_link_click_ctr": "0.728226",
+   "frequency": "1.268662",
+   "impressions": "3433",
+   "inline_link_clicks": "25",
+   "reach": "2706",
+   "spend": "30.85",
+   "campaign_id": "120247125336730137",
+   "campaign_name": "[VERZELO] Perfil Instagram | Oferta de serviÃ§os | Curitiba | 7 dias"
+  },
+  {
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "25"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "11"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_replied_7d",
+     "value": "7"
+    },
+    {
+     "action_type": "landing_page_view",
+     "value": "1"
+    },
+    {
+     "action_type": "omni_landing_page_view",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "9"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "36"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "11"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "36"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "11"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "11"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_5_message_send",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "7"
+    }
+   ],
+   "cpc": "2.381522",
+   "cpm": "29.576134",
+   "ctr": "1.241901",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "clicks": "46",
+   "cost_per_inline_link_click": "4.382",
+   "inline_link_click_ctr": "0.674946",
+   "frequency": "1.526164",
+   "impressions": "3704",
+   "inline_link_clicks": "25",
+   "reach": "2427",
+   "spend": "109.55",
+   "campaign_id": "120247503478070137",
+   "campaign_name": "[VERZELO] Mensagens | Post real | Curitiba + Almirante | 7 dias"
+  },
+  {
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "4"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "6"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "2"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "6"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "2"
+    }
+   ],
+   "cpc": "2.084286",
+   "cpm": "26.100179",
+   "ctr": "1.252236",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "clicks": "7",
+   "cost_per_inline_link_click": "3.6475",
+   "inline_link_click_ctr": "0.715564",
+   "frequency": "1.167015",
+   "impressions": "559",
+   "inline_link_clicks": "4",
+   "reach": "479",
+   "spend": "14.59",
+   "campaign_id": "120247657284900137",
+   "campaign_name": "[VERZELO] Mensagens | Curitiba + Almirante | 30 SET â€“ 07 OUT | CÃ³pia"
+  }
+ ]
+}

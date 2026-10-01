@@ -227,15 +227,17 @@ describe("importar anúncios próprios", () => {
     expect(m.cpm).toBe(10);
     expect(m.custo_por_resultado).toBe(3.33);
   });
-  it("conta a conexão de mensagem quando a conversa iniciada não vem, sem somar as duas", () => {
+  it("conta só a conversa iniciada, como a coluna Resultados do Gerenciador (a conexão de mensagem não entra)", () => {
+    // Frente ADM (01/10): a reserva antiga (conexão no dia sem conversa) passava a Meta em setembro:
+    // Stop 7 contra 4, Verzelo 17 contra 13, Mirante 118 contra 116 (insights lidos na Graph API).
     const m = somarMetricas([
-      // Direct da Verzelo: a Meta só registrou a conexão de mensagem.
+      // Dia em que a Meta só registrou a conexão de mensagem: 0 conversa iniciada.
       dia("2026-09-23", { actions: [{ action_type: "onsite_conversion.total_messaging_connection", value: "1" }, { action_type: "link_click", value: "4" }] }),
       // Dia com as duas: vale a conversa iniciada.
       dia("2026-09-24", { actions: [{ action_type: "onsite_conversion.messaging_conversation_started_7d", value: "2" }, { action_type: "onsite_conversion.total_messaging_connection", value: "2" }] }),
     ]);
-    expect(m.resultados_por_tipo).toEqual({ mensagens: 3 });
-    expect(m.resultados).toBe(3);
+    expect(m.resultados_por_tipo).toEqual({ mensagens: 2 });
+    expect(m.resultados).toBe(2);
   });
 });
 

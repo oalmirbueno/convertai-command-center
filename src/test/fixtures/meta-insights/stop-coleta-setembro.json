@@ -1,0 +1,762 @@
+[
+ {
+  "action_values": null,
+  "actions": [
+   {
+    "action_type": "link_click",
+    "value": "1"
+   },
+   {
+    "action_type": "post_reaction",
+    "value": "3"
+   },
+   {
+    "action_type": "onsite_conversion.total_messaging_connection",
+    "value": "1"
+   },
+   {
+    "action_type": "post_engagement",
+    "value": "104"
+   },
+   {
+    "action_type": "post_interaction_gross",
+    "value": "4"
+   },
+   {
+    "action_type": "comment",
+    "value": "1"
+   },
+   {
+    "action_type": "page_engagement",
+    "value": "104"
+   },
+   {
+    "action_type": "post_interaction_net",
+    "value": "4"
+   },
+   {
+    "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.messaging_first_reply",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.post_net_comment",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.post_net_like",
+    "value": "3"
+   },
+   {
+    "action_type": "onsite_conversion.messaging_conversation_started_7d",
+    "value": "1"
+   },
+   {
+    "action_type": "video_view",
+    "value": "99"
+   }
+  ],
+  "ad_id": "120252432064770270",
+  "adset_id": "120252431534210270",
+  "campaign_id": "120252431533690270",
+  "clicks": 11,
+  "day": "2026-09-14",
+  "frequency": "1.1220",
+  "impressions": 423,
+  "link_clicks": 1,
+  "objective": "OUTCOME_ENGAGEMENT",
+  "optimization_goal": "REPLIES",
+  "reach": 377,
+  "spend": "11.68"
+ },
+ {
+  "action_values": null,
+  "actions": [
+   {
+    "action_type": "link_click",
+    "value": "3"
+   },
+   {
+    "action_type": "post_reaction",
+    "value": "3"
+   },
+   {
+    "action_type": "post_engagement",
+    "value": "245"
+   },
+   {
+    "action_type": "post_interaction_gross",
+    "value": "5"
+   },
+   {
+    "action_type": "page_engagement",
+    "value": "245"
+   },
+   {
+    "action_type": "post_interaction_net",
+    "value": "5"
+   },
+   {
+    "action_type": "post",
+    "value": "2"
+   },
+   {
+    "action_type": "onsite_conversion.post_net_like",
+    "value": "3"
+   },
+   {
+    "action_type": "video_view",
+    "value": "237"
+   }
+  ],
+  "ad_id": "120252432064770270",
+  "adset_id": "120252431534210270",
+  "campaign_id": "120252431533690270",
+  "clicks": 10,
+  "day": "2026-09-15",
+  "frequency": "1.1538",
+  "impressions": 1238,
+  "link_clicks": 3,
+  "objective": "OUTCOME_ENGAGEMENT",
+  "optimization_goal": "REPLIES",
+  "reach": 1073,
+  "spend": "24.33"
+ },
+ {
+  "action_values": null,
+  "actions": [
+   {
+    "action_type": "link_click",
+    "value": "4"
+   },
+   {
+    "action_type": "post_reaction",
+    "value": "3"
+   },
+   {
+    "action_type": "onsite_conversion.total_messaging_connection",
+    "value": "2"
+   },
+   {
+    "action_type": "post_engagement",
+    "value": "92"
+   },
+   {
+    "action_type": "post_interaction_gross",
+    "value": "4"
+   },
+   {
+    "action_type": "page_engagement",
+    "value": "92"
+   },
+   {
+    "action_type": "post_interaction_net",
+    "value": "4"
+   },
+   {
+    "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.messaging_first_reply",
+    "value": "1"
+   },
+   {
+    "action_type": "post",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.post_net_like",
+    "value": "3"
+   },
+   {
+    "action_type": "onsite_conversion.messaging_user_depth_5_message_send",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.messaging_conversation_started_7d",
+    "value": "1"
+   },
+   {
+    "action_type": "video_view",
+    "value": "84"
+   }
+  ],
+  "ad_id": "120252432064770270",
+  "adset_id": "120252431534210270",
+  "campaign_id": "120252431533690270",
+  "clicks": 10,
+  "day": "2026-09-16",
+  "frequency": "1.1114",
+  "impressions": 469,
+  "link_clicks": 4,
+  "objective": "OUTCOME_ENGAGEMENT",
+  "optimization_goal": "REPLIES",
+  "reach": 422,
+  "spend": "11.87"
+ },
+ {
+  "action_values": null,
+  "actions": [
+   {
+    "action_type": "post_reaction",
+    "value": "1"
+   },
+   {
+    "action_type": "post_engagement",
+    "value": "41"
+   },
+   {
+    "action_type": "post_interaction_gross",
+    "value": "2"
+   },
+   {
+    "action_type": "comment",
+    "value": "1"
+   },
+   {
+    "action_type": "page_engagement",
+    "value": "41"
+   },
+   {
+    "action_type": "post_interaction_net",
+    "value": "2"
+   },
+   {
+    "action_type": "onsite_conversion.post_net_comment",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.post_net_like",
+    "value": "1"
+   },
+   {
+    "action_type": "video_view",
+    "value": "39"
+   }
+  ],
+  "ad_id": "120252475864380270",
+  "adset_id": "120252431534210270",
+  "campaign_id": "120252431533690270",
+  "clicks": 2,
+  "day": "2026-09-16",
+  "frequency": "1.1552",
+  "impressions": 134,
+  "link_clicks": 0,
+  "objective": "OUTCOME_ENGAGEMENT",
+  "optimization_goal": "REPLIES",
+  "reach": 116,
+  "spend": "3.68"
+ },
+ {
+  "action_values": null,
+  "actions": [
+   {
+    "action_type": "link_click",
+    "value": "2"
+   },
+   {
+    "action_type": "post_engagement",
+    "value": "49"
+   },
+   {
+    "action_type": "page_engagement",
+    "value": "49"
+   },
+   {
+    "action_type": "video_view",
+    "value": "47"
+   }
+  ],
+  "ad_id": "120252475865190270",
+  "adset_id": "120252431534210270",
+  "campaign_id": "120252431533690270",
+  "clicks": 3,
+  "day": "2026-09-16",
+  "frequency": "1.1536",
+  "impressions": 338,
+  "link_clicks": 2,
+  "objective": "OUTCOME_ENGAGEMENT",
+  "optimization_goal": "REPLIES",
+  "reach": 293,
+  "spend": "6.63"
+ },
+ {
+  "action_values": null,
+  "actions": [
+   {
+    "action_type": "link_click",
+    "value": "1"
+   },
+   {
+    "action_type": "post_reaction",
+    "value": "1"
+   },
+   {
+    "action_type": "post_engagement",
+    "value": "101"
+   },
+   {
+    "action_type": "post_interaction_gross",
+    "value": "1"
+   },
+   {
+    "action_type": "page_engagement",
+    "value": "101"
+   },
+   {
+    "action_type": "post_interaction_net",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.post_net_like",
+    "value": "1"
+   },
+   {
+    "action_type": "video_view",
+    "value": "99"
+   }
+  ],
+  "ad_id": "120252475864380270",
+  "adset_id": "120252431534210270",
+  "campaign_id": "120252431533690270",
+  "clicks": 5,
+  "day": "2026-09-17",
+  "frequency": "1.1667",
+  "impressions": 455,
+  "link_clicks": 1,
+  "objective": "OUTCOME_ENGAGEMENT",
+  "optimization_goal": "REPLIES",
+  "reach": 390,
+  "spend": "10.59"
+ },
+ {
+  "action_values": null,
+  "actions": [
+   {
+    "action_type": "post_reaction",
+    "value": "2"
+   },
+   {
+    "action_type": "onsite_conversion.total_messaging_connection",
+    "value": "1"
+   },
+   {
+    "action_type": "post_engagement",
+    "value": "91"
+   },
+   {
+    "action_type": "post_interaction_gross",
+    "value": "2"
+   },
+   {
+    "action_type": "page_engagement",
+    "value": "91"
+   },
+   {
+    "action_type": "post_interaction_net",
+    "value": "2"
+   },
+   {
+    "action_type": "onsite_conversion.post_net_like",
+    "value": "2"
+   },
+   {
+    "action_type": "video_view",
+    "value": "89"
+   }
+  ],
+  "ad_id": "120252475865190270",
+  "adset_id": "120252431534210270",
+  "campaign_id": "120252431533690270",
+  "clicks": 3,
+  "day": "2026-09-17",
+  "frequency": "1.1449",
+  "impressions": 561,
+  "link_clicks": 0,
+  "objective": "OUTCOME_ENGAGEMENT",
+  "optimization_goal": "REPLIES",
+  "reach": 490,
+  "spend": "11.53"
+ },
+ {
+  "action_values": null,
+  "actions": [
+   {
+    "action_type": "post_reaction",
+    "value": "2"
+   },
+   {
+    "action_type": "post_engagement",
+    "value": "48"
+   },
+   {
+    "action_type": "post_interaction_gross",
+    "value": "2"
+   },
+   {
+    "action_type": "page_engagement",
+    "value": "48"
+   },
+   {
+    "action_type": "post_interaction_net",
+    "value": "2"
+   },
+   {
+    "action_type": "onsite_conversion.post_net_like",
+    "value": "2"
+   },
+   {
+    "action_type": "video_view",
+    "value": "46"
+   }
+  ],
+  "ad_id": "120252475864380270",
+  "adset_id": "120252431534210270",
+  "campaign_id": "120252431533690270",
+  "clicks": 1,
+  "day": "2026-09-18",
+  "frequency": "1.1237",
+  "impressions": 209,
+  "link_clicks": 0,
+  "objective": "OUTCOME_ENGAGEMENT",
+  "optimization_goal": "REPLIES",
+  "reach": 186,
+  "spend": "4.83"
+ },
+ {
+  "action_values": null,
+  "actions": [
+   {
+    "action_type": "link_click",
+    "value": "4"
+   },
+   {
+    "action_type": "post_reaction",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.total_messaging_connection",
+    "value": "1"
+   },
+   {
+    "action_type": "post_engagement",
+    "value": "164"
+   },
+   {
+    "action_type": "post_interaction_gross",
+    "value": "1"
+   },
+   {
+    "action_type": "page_engagement",
+    "value": "164"
+   },
+   {
+    "action_type": "post_interaction_net",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.messaging_first_reply",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.post_net_like",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.messaging_conversation_started_7d",
+    "value": "1"
+   },
+   {
+    "action_type": "video_view",
+    "value": "159"
+   }
+  ],
+  "ad_id": "120252475865190270",
+  "adset_id": "120252431534210270",
+  "campaign_id": "120252431533690270",
+  "clicks": 12,
+  "day": "2026-09-18",
+  "frequency": "1.1789",
+  "impressions": 817,
+  "link_clicks": 4,
+  "objective": "OUTCOME_ENGAGEMENT",
+  "optimization_goal": "REPLIES",
+  "reach": 693,
+  "spend": "19.43"
+ },
+ {
+  "action_values": null,
+  "actions": [
+   {
+    "action_type": "onsite_conversion.total_messaging_connection",
+    "value": "1"
+   }
+  ],
+  "ad_id": "120252475865190270",
+  "adset_id": "120252431534210270",
+  "campaign_id": "120252431533690270",
+  "clicks": 0,
+  "day": "2026-09-21",
+  "frequency": "0.0000",
+  "impressions": 0,
+  "link_clicks": 0,
+  "objective": "OUTCOME_ENGAGEMENT",
+  "optimization_goal": "REPLIES",
+  "reach": 0,
+  "spend": "0.00"
+ },
+ {
+  "action_values": null,
+  "actions": [
+   {
+    "action_type": "onsite_conversion.total_messaging_connection",
+    "value": "1"
+   }
+  ],
+  "ad_id": "120252475865190270",
+  "adset_id": "120252431534210270",
+  "campaign_id": "120252431533690270",
+  "clicks": 0,
+  "day": "2026-09-23",
+  "frequency": "0.0000",
+  "impressions": 0,
+  "link_clicks": 0,
+  "objective": "OUTCOME_ENGAGEMENT",
+  "optimization_goal": "REPLIES",
+  "reach": 0,
+  "spend": "0.00"
+ },
+ {
+  "action_values": null,
+  "actions": [
+   {
+    "action_type": "link_click",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.total_messaging_connection",
+    "value": "1"
+   },
+   {
+    "action_type": "post_engagement",
+    "value": "1"
+   },
+   {
+    "action_type": "page_engagement",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.messaging_first_reply",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.messaging_conversation_started_7d",
+    "value": "1"
+   }
+  ],
+  "ad_id": "120252750885810270",
+  "adset_id": "120252750366930270",
+  "campaign_id": "120252750344450270",
+  "clicks": 1,
+  "day": "2026-09-30",
+  "frequency": "1.0893",
+  "impressions": 61,
+  "link_clicks": 1,
+  "objective": "OUTCOME_ENGAGEMENT",
+  "optimization_goal": "REPLIES",
+  "reach": 56,
+  "spend": "2.66"
+ },
+ {
+  "action_values": null,
+  "actions": null,
+  "ad_id": "120252750887610270",
+  "adset_id": "120252750366930270",
+  "campaign_id": "120252750344450270",
+  "clicks": 0,
+  "day": "2026-09-30",
+  "frequency": "1.2188",
+  "impressions": 117,
+  "link_clicks": 0,
+  "objective": "OUTCOME_ENGAGEMENT",
+  "optimization_goal": "REPLIES",
+  "reach": 96,
+  "spend": "3.50"
+ },
+ {
+  "action_values": null,
+  "actions": [
+   {
+    "action_type": "link_click",
+    "value": "1"
+   },
+   {
+    "action_type": "post_engagement",
+    "value": "1"
+   },
+   {
+    "action_type": "page_engagement",
+    "value": "1"
+   }
+  ],
+  "ad_id": "120252750890280270",
+  "adset_id": "120252750367590270",
+  "campaign_id": "120252750345370270",
+  "clicks": 1,
+  "day": "2026-09-30",
+  "frequency": "1.1009",
+  "impressions": 251,
+  "link_clicks": 1,
+  "objective": "OUTCOME_ENGAGEMENT",
+  "optimization_goal": "REPLIES",
+  "reach": 228,
+  "spend": "7.97"
+ },
+ {
+  "action_values": null,
+  "actions": [
+   {
+    "action_type": "post_reaction",
+    "value": "1"
+   },
+   {
+    "action_type": "post_engagement",
+    "value": "1"
+   },
+   {
+    "action_type": "post_interaction_gross",
+    "value": "1"
+   },
+   {
+    "action_type": "page_engagement",
+    "value": "1"
+   },
+   {
+    "action_type": "post_interaction_net",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.post_net_like",
+    "value": "1"
+   }
+  ],
+  "ad_id": "120252750885810270",
+  "adset_id": "120252750366930270",
+  "campaign_id": "120252750344450270",
+  "clicks": 1,
+  "day": "2026-10-01",
+  "frequency": "1.1724",
+  "impressions": 34,
+  "link_clicks": 0,
+  "objective": "OUTCOME_ENGAGEMENT",
+  "optimization_goal": "REPLIES",
+  "reach": 29,
+  "spend": "3.52"
+ },
+ {
+  "action_values": null,
+  "actions": [
+   {
+    "action_type": "post_reaction",
+    "value": "1"
+   },
+   {
+    "action_type": "post_engagement",
+    "value": "2"
+   },
+   {
+    "action_type": "post_interaction_gross",
+    "value": "2"
+   },
+   {
+    "action_type": "page_engagement",
+    "value": "2"
+   },
+   {
+    "action_type": "post_interaction_net",
+    "value": "2"
+   },
+   {
+    "action_type": "post",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.post_net_like",
+    "value": "1"
+   }
+  ],
+  "ad_id": "120252750887610270",
+  "adset_id": "120252750366930270",
+  "campaign_id": "120252750344450270",
+  "clicks": 1,
+  "day": "2026-10-01",
+  "frequency": "1.0417",
+  "impressions": 25,
+  "link_clicks": 0,
+  "objective": "OUTCOME_ENGAGEMENT",
+  "optimization_goal": "REPLIES",
+  "reach": 24,
+  "spend": "1.03"
+ },
+ {
+  "action_values": null,
+  "actions": [
+   {
+    "action_type": "post_reaction",
+    "value": "1"
+   },
+   {
+    "action_type": "post_engagement",
+    "value": "2"
+   },
+   {
+    "action_type": "post_interaction_gross",
+    "value": "2"
+   },
+   {
+    "action_type": "page_engagement",
+    "value": "2"
+   },
+   {
+    "action_type": "post_interaction_net",
+    "value": "2"
+   },
+   {
+    "action_type": "post",
+    "value": "1"
+   },
+   {
+    "action_type": "onsite_conversion.post_net_like",
+    "value": "1"
+   }
+  ],
+  "ad_id": "120252750890280270",
+  "adset_id": "120252750367590270",
+  "campaign_id": "120252750345370270",
+  "clicks": 4,
+  "day": "2026-10-01",
+  "frequency": "1.1795",
+  "impressions": 92,
+  "link_clicks": 0,
+  "objective": "OUTCOME_ENGAGEMENT",
+  "optimization_goal": "REPLIES",
+  "reach": 78,
+  "spend": "4.20"
+ }
+]

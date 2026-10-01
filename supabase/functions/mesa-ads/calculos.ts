@@ -34,9 +34,9 @@ export type Diaria = {
  * então somar os dois contaria em dobro.
  */
 export const GRUPOS_DE_RESULTADO: { chave: "mensagens" | "leads" | "compras"; tipos: string[] }[] = [
-  // Conversa iniciada; sem ela no dia, a conexão de mensagem (o Direct e o WhatsApp de alguns
-  // anúncios só registram esta: Verzelo, 23/09).
-  { chave: "mensagens", tipos: ["onsite_conversion.messaging_conversation_started_7d", "onsite_conversion.total_messaging_connection"] },
+  // Só a conversa iniciada (a coluna Resultados do Gerenciador). A conexão de mensagem conta também
+  // quem já tinha conversado: somada nos dias sem conversa, passava a Meta (frente ADM, 01/10).
+  { chave: "mensagens", tipos: ["onsite_conversion.messaging_conversation_started_7d"] },
   { chave: "leads", tipos: ["lead", "offsite_conversion.fb_pixel_lead", "onsite_web_lead"] },
   { chave: "compras", tipos: ["purchase", "omni_purchase", "offsite_conversion.fb_pixel_purchase"] },
 ];

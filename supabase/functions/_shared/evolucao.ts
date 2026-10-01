@@ -1,23 +1,16 @@
 /**
- * Evolução do cliente: o que está funcionando, o que manter, o que descartar
- * e o que a Mesa aprende, somando o perfil orgânico do Instagram e os
- * anúncios da Meta (pedido do dono em 25/09/2026).
+ * Evolução do cliente: o que funciona, o que manter, o que descartar e o que
+ * a Mesa aprende, somando o perfil do Instagram e os anúncios da Meta (25/09).
  *
- * Tudo aqui é regra em código, sem IA e sem Deno: a função mesa-ads usa, e o
- * teste do painel importa direto. A IA, quando entra, só EXPLICA a leitura
- * pronta (os números saem daqui, nunca dela).
+ * Regra em código, sem IA e sem Deno (a mesa-ads usa, o teste importa). A IA
+ * só EXPLICA a leitura pronta; os números saem daqui.
  *
- * Três partes:
- * 1. Métricas completas de anúncio, com o resultado certo para o objetivo da
- *    campanha (mensagens, cadastros, compras, visitas, cliques, engajamento,
- *    visualizações de vídeo ou alcance), custo por resultado, valor de
- *    conversão e ROAS quando a Meta mediu.
+ * 1. Métricas de anúncio com o resultado certo para o objetivo da campanha,
+ *    custo por resultado, valor de conversão e ROAS quando a Meta mediu.
  * 2. Regras de evolução: volume mínimo, comparação com a média da conta (por
- *    tipo de resultado) e com a média do perfil (por post).
- * 3. Leitura do banco (lerDesempenhoDoCliente): uma visão única de
- *    "desempenho do cliente" que junta orgânico e anúncios. O banco entra por
- *    um tipo estrutural (from/select/eq...), então qualquer função que tenha
- *    um cliente do supabase-js pode chamar.
+ *    tipo de resultado) e do perfil (por post).
+ * 3. Leitura do banco (lerDesempenhoDoCliente): orgânico e anúncios juntos,
+ *    por um tipo estrutural do banco (from/select/eq...).
  *
  * Sem travessão nos textos (regra do dono).
  */
@@ -56,8 +49,8 @@ export type TipoDeResultado =
   | "alcance";
 
 export const TIPOS_DE_RESULTADO: { tipo: TipoDeResultado; rotulo: string; singular: string; acoes: string[] }[] = [
-  // Conversa iniciada; sem ela no dia, a conexão de mensagem (Direct e WhatsApp de alguns anúncios só registram esta).
-  { tipo: "mensagens", rotulo: "Conversas iniciadas", singular: "conversa", acoes: ["onsite_conversion.messaging_conversation_started_7d", "onsite_conversion.total_messaging_connection"] },
+  // Só a conversa iniciada (Resultados do Gerenciador); a conexão de mensagem passava a Meta (ADM, 01/10).
+  { tipo: "mensagens", rotulo: "Conversas iniciadas", singular: "conversa", acoes: ["onsite_conversion.messaging_conversation_started_7d"] },
   { tipo: "leads", rotulo: "Cadastros", singular: "cadastro", acoes: ["lead", "offsite_conversion.fb_pixel_lead", "onsite_web_lead"] },
   { tipo: "compras", rotulo: "Compras", singular: "compra", acoes: ["purchase", "omni_purchase", "offsite_conversion.fb_pixel_purchase"] },
   { tipo: "visitas", rotulo: "Visitas à página", singular: "visita", acoes: ["landing_page_view", "omni_landing_page_view"] },
@@ -134,20 +127,22 @@ export function valorDaAcao(actions: unknown, tipos: string[]): number | null {
 export function tipoDoResultado(objetivo?: string | null, otimizacao?: string | null, actions?: unknown): TipoDeResultado | null {
   const o = String(otimizacao ?? "").toUpperCase();
   const tem = (t: TipoDeResultado) => valorDaAcao(actions, ACOES_POR_TIPO.get(t) ?? []) != null;
-  if (o) {
-    if (o === "CONVERSATIONS" || o.indexOf("MESSAGING") === 0) return "mensagens";
+  const obj = String(objetivo ?? "").toUpperCase();
+  if (o && o !== "NONE" && o.indexOf("UNKNOWN") !== 0) {
+    // REPLIES: conjunto de conversas nos insights (sem ele, virava "engajamento"; ADM, 01/10).
+    if (o === "CONVERSATIONS" || o === "REPLIES" || o.indexOf("MESSAGING") === 0) return "mensagens";
     if (o === "LEAD_GENERATION" || o === "QUALITY_LEAD" || o === "QUALITY_CALL") return "leads";
     if (o === "LANDING_PAGE_VIEWS") return "visitas";
-    if (o === "LINK_CLICKS") return "cliques_link";
-    if (o === "POST_ENGAGEMENT" || o === "PAGE_LIKES" || o === "EVENT_RESPONSES") return "engajamento";
+    if (o === "LINK_CLICKS" || o === "PROFILE_VISIT" || o === "VISIT_INSTAGRAM_PROFILE") return "cliques_link";
+    if (o === "POST_ENGAGEMENT" || o === "PAGE_LIKES" || o === "EVENT_RESPONSES" || o === "PROFILE_AND_PAGE_ENGAGEMENT") return "engajamento";
     if (o === "THRUPLAY" || o === "TWO_SECOND_CONTINUOUS_VIDEO_VIEWS") return "video";
     if (o === "REACH" || o === "IMPRESSIONS" || o === "AD_RECALL_LIFT") return "alcance";
-    if (o === "OFFSITE_CONVERSIONS" || o === "VALUE") {
+    if (o === "OFFSITE_CONVERSIONS" || o === "VALUE" || o === "CONVERSIONS") {
+      if (obj === "OUTCOME_LEADS" || obj === "LEAD_GENERATION") return "leads";
       if (tem("compras")) return "compras";
       if (tem("leads")) return "leads";
     }
   }
-  const obj = String(objetivo ?? "").toUpperCase();
   if (obj === "OUTCOME_SALES" || obj === "CONVERSIONS" || obj === "PRODUCT_CATALOG_SALES") {
     if (tem("compras")) return "compras";
     if (tem("leads")) return "leads";

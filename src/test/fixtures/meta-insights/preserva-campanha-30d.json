@@ -1,0 +1,88 @@
+{
+ "data": [
+  {
+   "campaign_id": "120250134320700411",
+   "campaign_name": "PEB | BACACHERI | ENGAJAMENTO IG | R$62,46 | ADS MANAGER",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "PROFILE_AND_PAGE_ENGAGEMENT",
+   "spend": "2.71",
+   "impressions": "7",
+   "reach": "3",
+   "frequency": "2.333333",
+   "clicks": "0",
+   "ctr": "0",
+   "cpm": "387.142857",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01"
+  },
+  {
+   "campaign_id": "120250170004660411",
+   "campaign_name": "PEB | BACACHERI | TURBINAR POST | PERFIL IG | R$55,93",
+   "objective": "LINK_CLICKS",
+   "optimization_goal": "NONE",
+   "spend": "34.13",
+   "impressions": "559",
+   "reach": "48",
+   "frequency": "11.645833",
+   "clicks": "0",
+   "ctr": "0",
+   "cpm": "61.055456",
+   "inline_link_clicks": "0",
+   "actions": [
+    {
+     "action_type": "post_reaction",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "28"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "28"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "1"
+    },
+    {
+     "action_type": "video_view",
+     "value": "27"
+    }
+   ],
+   "video_thruplay_watched_actions": [
+    {
+     "action_type": "video_view",
+     "value": "6"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01"
+  },
+  {
+   "campaign_id": "120250591602520411",
+   "campaign_name": "PEB | RECONHECIMENTO | SOMENTE IG | R$80 TOTAL | 7 DIAS",
+   "objective": "OUTCOME_AWARENESS",
+   "optimization_goal": "REACH",
+   "spend": "7.19",
+   "impressions": "1096",
+   "reach": "1058",
+   "frequency": "1.035917",
+   "clicks": "0",
+   "ctr": "0",
+   "cpm": "6.560219",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01"
+  }
+ ]
+}

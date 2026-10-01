@@ -1,0 +1,1033 @@
+{
+ "data": [
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.4",
+   "impressions": "11",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "00:00:00 - 00:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.84",
+   "impressions": "19",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "00:00:00 - 00:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.03",
+   "impressions": "2",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "01:00:00 - 01:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "1.16",
+   "impressions": "6",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "01:00:00 - 01:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.01",
+   "impressions": "1",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "02:00:00 - 02:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.09",
+   "impressions": "3",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "02:00:00 - 02:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.03",
+   "impressions": "5",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "03:00:00 - 03:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.06",
+   "impressions": "4",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "04:00:00 - 04:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.06",
+   "impressions": "2",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "04:00:00 - 04:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.47",
+   "impressions": "4",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "05:00:00 - 05:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.01",
+   "impressions": "1",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "05:00:00 - 05:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.02",
+   "impressions": "1",
+   "inline_link_clicks": "0",
+   "actions": [
+    {
+     "action_type": "post_reaction",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "1"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "1"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "06:00:00 - 06:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.17",
+   "impressions": "3",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "06:00:00 - 06:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.25",
+   "impressions": "6",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "07:00:00 - 07:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "1.22",
+   "impressions": "16",
+   "inline_link_clicks": "0",
+   "actions": [
+    {
+     "action_type": "post_reaction",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "2"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "2"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "2"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "2"
+    },
+    {
+     "action_type": "post",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "1"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "07:00:00 - 07:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.87",
+   "impressions": "19",
+   "inline_link_clicks": "0",
+   "actions": [
+    {
+     "action_type": "post_reaction",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "2"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "2"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "2"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "2"
+    },
+    {
+     "action_type": "post",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "1"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "08:00:00 - 08:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.46",
+   "impressions": "26",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "08:00:00 - 08:59:59"
+  },
+  {
+   "campaign_id": "120252431533690270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "10.14",
+   "impressions": "413",
+   "inline_link_clicks": "2",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "2"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "89"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "6"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "89"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "6"
+    },
+    {
+     "action_type": "post",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "5"
+    },
+    {
+     "action_type": "video_view",
+     "value": "81"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "09:00:00 - 09:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "2.64",
+   "impressions": "17",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "09:00:00 - 09:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.42",
+   "impressions": "22",
+   "inline_link_clicks": "1",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "09:00:00 - 09:59:59"
+  },
+  {
+   "campaign_id": "120252431533690270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "8.5",
+   "impressions": "380",
+   "inline_link_clicks": "1",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "84"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "84"
+    },
+    {
+     "action_type": "video_view",
+     "value": "83"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "10:00:00 - 10:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.76",
+   "impressions": "6",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "10:00:00 - 10:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.16",
+   "impressions": "13",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "10:00:00 - 10:59:59"
+  },
+  {
+   "campaign_id": "120252431533690270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "8.8",
+   "impressions": "394",
+   "inline_link_clicks": "2",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "2"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "69"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "2"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "69"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_5_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "video_view",
+     "value": "65"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "11:00:00 - 11:59:59"
+  },
+  {
+   "campaign_id": "120252431533690270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "10.21",
+   "impressions": "464",
+   "inline_link_clicks": "1",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "1"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "2"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "87"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "2"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "87"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "2"
+    },
+    {
+     "action_type": "video_view",
+     "value": "84"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "12:00:00 - 12:59:59"
+  },
+  {
+   "campaign_id": "120252431533690270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "12.01",
+   "impressions": "457",
+   "inline_link_clicks": "1",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "88"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "88"
+    },
+    {
+     "action_type": "video_view",
+     "value": "87"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "13:00:00 - 13:59:59"
+  },
+  {
+   "campaign_id": "120252431533690270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "10.84",
+   "impressions": "516",
+   "inline_link_clicks": "4",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "4"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "117"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "117"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "video_view",
+     "value": "113"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "14:00:00 - 14:59:59"
+  },
+  {
+   "campaign_id": "120252431533690270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "13.44",
+   "impressions": "576",
+   "inline_link_clicks": "1",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "97"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "97"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "video_view",
+     "value": "96"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "15:00:00 - 15:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.14",
+   "impressions": "7",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "15:00:00 - 15:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.05",
+   "impressions": "4",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "15:00:00 - 15:59:59"
+  },
+  {
+   "campaign_id": "120252431533690270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "14.72",
+   "impressions": "650",
+   "inline_link_clicks": "1",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "1"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "141"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "5"
+    },
+    {
+     "action_type": "comment",
+     "value": "2"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "141"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    },
+    {
+     "action_type": "video_view",
+     "value": "135"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "16:00:00 - 16:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.52",
+   "impressions": "16",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "16:00:00 - 16:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "1.04",
+   "impressions": "34",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "16:00:00 - 16:59:59"
+  },
+  {
+   "campaign_id": "120252431533690270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "15.91",
+   "impressions": "794",
+   "inline_link_clicks": "2",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "2"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "4"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "163"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "6"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "163"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "6"
+    },
+    {
+     "action_type": "post",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "4"
+    },
+    {
+     "action_type": "video_view",
+     "value": "155"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "17:00:00 - 17:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "2.2",
+   "impressions": "48",
+   "inline_link_clicks": "1",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "1"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "17:00:00 - 17:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "1.07",
+   "impressions": "36",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "17:00:00 - 17:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "1.4",
+   "impressions": "41",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "18:00:00 - 18:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "2.09",
+   "impressions": "63",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "18:00:00 - 18:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.82",
+   "impressions": "22",
+   "inline_link_clicks": "0",
+   "actions": [
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "1"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "19:00:00 - 19:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "1.39",
+   "impressions": "52",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "19:00:00 - 19:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.17",
+   "impressions": "6",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "20:00:00 - 20:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.89",
+   "impressions": "15",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "20:00:00 - 20:59:59"
+  },
+  {
+   "campaign_id": "120252431533690270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0",
+   "impressions": "0",
+   "inline_link_clicks": "0",
+   "actions": [
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "1"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "21:00:00 - 21:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.21",
+   "impressions": "10",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "21:00:00 - 21:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.4",
+   "impressions": "13",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "21:00:00 - 21:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.28",
+   "impressions": "10",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "22:00:00 - 22:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.76",
+   "impressions": "22",
+   "inline_link_clicks": "1",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "1"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "22:00:00 - 22:59:59"
+  },
+  {
+   "campaign_id": "120252750344450270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.42",
+   "impressions": "18",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "23:00:00 - 23:59:59"
+  },
+  {
+   "campaign_id": "120252750345370270",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "spend": "0.28",
+   "impressions": "12",
+   "inline_link_clicks": "0",
+   "date_start": "2026-09-02",
+   "date_stop": "2026-10-01",
+   "hourly_stats_aggregated_by_advertiser_time_zone": "23:00:00 - 23:59:59"
+  }
+ ]
+}

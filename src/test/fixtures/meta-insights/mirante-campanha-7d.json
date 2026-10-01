@@ -1,0 +1,174 @@
+{
+ "data": [
+  {
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "76"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "30"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_replied_7d",
+     "value": "40"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "44"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "118"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "42"
+    },
+    {
+     "action_type": "comment",
+     "value": "1"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "118"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "42"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "18"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "38"
+    },
+    {
+     "action_type": "post",
+     "value": "6"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+     "value": "9"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "30"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_5_message_send",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "41"
+    }
+   ],
+   "cpc": "0.569452",
+   "cpm": "25.034628",
+   "ctr": "4.396266",
+   "date_start": "2026-09-25",
+   "date_stop": "2026-10-01",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "clicks": "146",
+   "cost_per_inline_link_click": "1.093947",
+   "inline_link_click_ctr": "2.288467",
+   "frequency": "1.394207",
+   "impressions": "3321",
+   "inline_link_clicks": "76",
+   "reach": "2382",
+   "spend": "83.14",
+   "campaign_id": "52633424918841",
+   "campaign_name": "MLF | IG DIRECT | QUARTO 01 + CAFE INCLUSO | 23-30 SET | R108"
+  },
+  {
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "7"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_replied_7d",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "3"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "10"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "3"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "10"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "3"
+    }
+   ],
+   "cpc": "0.643333",
+   "cpm": "27.056075",
+   "ctr": "4.205607",
+   "date_start": "2026-09-25",
+   "date_stop": "2026-10-01",
+   "objective": "OUTCOME_ENGAGEMENT",
+   "optimization_goal": "REPLIES",
+   "clicks": "9",
+   "cost_per_inline_link_click": "0.827143",
+   "inline_link_click_ctr": "3.271028",
+   "frequency": "1.07",
+   "impressions": "214",
+   "inline_link_clicks": "7",
+   "reach": "200",
+   "spend": "5.79",
+   "campaign_id": "52635070617441",
+   "campaign_name": "MLF | IG DIRECT | QUARTO 01 + OUTUBRO | 01-07 OUT | R120"
+  }
+ ]
+}

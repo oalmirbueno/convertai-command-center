@@ -1,0 +1,65 @@
+{
+ "data": [
+  {
+   "spend": "24.26",
+   "impressions": "616",
+   "reach": "461",
+   "frequency": "1.336226",
+   "clicks": "9",
+   "ctr": "1.461039",
+   "cpc": "2.695556",
+   "cpm": "39.383117",
+   "inline_link_clicks": "3",
+   "inline_link_click_ctr": "0.487013",
+   "cost_per_inline_link_click": "8.086667",
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "3"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "2"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "8"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "5"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "8"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "5"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "2"
+    },
+    {
+     "action_type": "post",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "3"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "2"
+    }
+   ],
+   "date_start": "2026-09-25",
+   "date_stop": "2026-10-01"
+  }
+ ]
+}

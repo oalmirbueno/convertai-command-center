@@ -1,0 +1,97 @@
+{
+ "data": [
+  {
+   "actions": [
+    {
+     "action_type": "link_click",
+     "value": "251"
+    },
+    {
+     "action_type": "post_reaction",
+     "value": "82"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_replied_7d",
+     "value": "111"
+    },
+    {
+     "action_type": "onsite_conversion.total_messaging_connection",
+     "value": "122"
+    },
+    {
+     "action_type": "onsite_conversion.post_unlike",
+     "value": "1"
+    },
+    {
+     "action_type": "post_engagement",
+     "value": "385"
+    },
+    {
+     "action_type": "post_interaction_gross",
+     "value": "134"
+    },
+    {
+     "action_type": "comment",
+     "value": "2"
+    },
+    {
+     "action_type": "page_engagement",
+     "value": "385"
+    },
+    {
+     "action_type": "post_interaction_net",
+     "value": "136"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+     "value": "57"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_first_reply",
+     "value": "108"
+    },
+    {
+     "action_type": "post",
+     "value": "26"
+    },
+    {
+     "action_type": "onsite_conversion.post_unsave",
+     "value": "1"
+    },
+    {
+     "action_type": "onsite_conversion.post_save",
+     "value": "24"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_comment",
+     "value": "2"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+     "value": "38"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_save",
+     "value": "23"
+    },
+    {
+     "action_type": "onsite_conversion.post_net_like",
+     "value": "81"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_user_depth_5_message_send",
+     "value": "19"
+    },
+    {
+     "action_type": "onsite_conversion.messaging_conversation_started_7d",
+     "value": "116"
+    }
+   ],
+   "date_start": "2026-09-02",
+   "date_stop": "2026-09-30",
+   "impressions": "14284",
+   "reach": "8148",
+   "spend": "333.28"
+  }
+ ]
+}

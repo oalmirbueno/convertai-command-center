@@ -356,6 +356,35 @@ import {
 } from "./calculos.ts";
 // Frente CR (27/09): criativo que converte (formatos, layout, estruturas de copy) e a ordem dos estilos pelo resultado real.
 import { copyQueConverteParaOPrompt, formatoDoEstiloParaOPrompt, formatosParaOPlano, FRAMEWORKS_IDS } from "./modulos/conhecimento-criativo.ts";
+// Frente ADM (01/10): os números da Meta certos e com o nome certo (Conta da Mesa Ads).
+import {
+  avisosDoNumero,
+  CAMPOS_DO_TEMPO,
+  CAMPOS_DOS_INSIGHTS,
+  caminhoDosInsights,
+  type Classificacao,
+  classificacaoDosConjuntos,
+  classificar,
+  COLUNAS_DE_TODOS,
+  contagensDaColeta,
+  faixasDoTempo,
+  type IdDaMetrica,
+  type IdDoObjetivo,
+  itemDaLinha,
+  type ItemDaMetrica,
+  linhasDaColeta,
+  melhorHorario,
+  METRICAS,
+  NIVEIS,
+  type NivelDaMetrica,
+  objetivoDe,
+  OBJETIVOS,
+  paginaDosInsights,
+  rotuloDaMetrica,
+  somarNumeros,
+  textoDaJanela,
+  totaisPorObjetivo,
+} from "./modulos/metricas-meta.ts";
 // Frente CPY: o motor de copy da casa (limpeza, clichê de IA e promessa proibida).
 import { conferirCopy, LIMIARES, limparCopy, perguntaDoCliche } from "../_shared/motor-de-copy.ts";
 import {
@@ -8988,6 +9017,268 @@ async function gerenciadorLer(servico: SupabaseClient, chamador: Chamador, corpo
   return json({ ...leitura, forcada, gravada_em: gravadaEm, tempo_ms: Date.now() - inicioDoPedido, custo_usd: 0 });
 }
 
+// ------------------------------------------------------------------ Números da Meta (frente ADM, 01/10)
+// "Os números não estão marcando correto: está engajamento 5, mas só chegou 1 mensagem" (dono, 01/10).
+// Lidos na Meta agora (só leitura), com a janela de atribuição do Gerenciador e o resultado
+// certo de cada conjunto (modulos/metricas-meta.ts). Sem acesso à Meta, a coleta do painel com o aviso.
+
+const leiturasDasMetricas = new CacheCurto<Record<string, unknown>>(60_000, 40);
+const TETO_DAS_METRICAS_MS = 25_000;
+const PAGINAS_DE_INSIGHTS = 10;
+
+/** Todas as páginas de uma leitura de insights (até 10 x 500 linhas). */
+async function insightsDaMeta(grafo: GrafoMeta, act: string, opcoes: Parameters<typeof caminhoDosInsights>[1], campos: string) {
+  const linhas: Record<string, unknown>[] = [];
+  let depois: string | null = null;
+  let cortada = false;
+  for (let p = 0; p < PAGINAS_DE_INSIGHTS; p++) {
+    const bruto = await grafo.ler(caminhoDosInsights(act, { ...opcoes, depois }), campos);
+    const pagina = paginaDosInsights(bruto);
+    linhas.push(...pagina.linhas);
+    depois = pagina.depois;
+    if (!depois) break;
+    if (p === PAGINAS_DE_INSIGHTS - 1) cortada = true;
+  }
+  return { linhas, cortada };
+}
+
+async function comTetoDaMeta<T>(promessa: Promise<T>, ms: number, oQue: string): Promise<T> {
+  let relogio: ReturnType<typeof setTimeout> | undefined;
+  const teto = new Promise<never>((_, falhar) => { relogio = setTimeout(() => falhar(new Error(`${oQue} passou de ${ms / 1000} s`)), ms); });
+  try {
+    return await Promise.race([promessa, teto]);
+  } finally {
+    if (relogio !== undefined) clearTimeout(relogio);
+  }
+}
+
+async function contasMetaParaMetricas(servico: SupabaseClient, clientId: string) {
+  const { data } = await servico.from("external_accounts").select("id, external_id, display_name, status").eq("client_id", clientId).eq("platform", "meta_ads");
+  return ((data as { id: string; external_id: string | null; display_name: string | null; status: string | null }[] | null) ?? [])
+    .filter((x) => x.status !== "inactive" && x.status !== "disconnected" && /^(act_)?[0-9]{3,30}$/.test(String(x.external_id ?? "")))
+    .map((x) => ({ id: x.id, act: String(x.external_id).replace(/^act_/, ""), nome: x.display_name }))
+    .slice(0, MAX_CONTAS_NO_GERENCIADOR);
+}
+
+const NIVEL_VALIDO = (v: unknown): NivelDaMetrica => (NIVEIS.indexOf(String(v) as NivelDaMetrica) >= 0 ? String(v) as NivelDaMetrica : "campanha");
+const OBJETIVO_VALIDO = (v: unknown): IdDoObjetivo | null => (objetivoDe(String(v ?? "")) ? String(v) as IdDoObjetivo : null);
+
+/** Nomes da coleta (campanha e anúncio) para a leitura sem Meta. */
+async function nomesDaColeta(servico: SupabaseClient, clientId: string) {
+  const [c, a] = await Promise.all([
+    servico.from("ads_campaigns").select("campaign_id, name").eq("client_id", clientId).limit(500),
+    servico.from("ads_creatives").select("ad_id, ad_name").eq("client_id", clientId).limit(1500),
+  ]);
+  return {
+    campanhas: new Map(((c.data as { campaign_id: string; name: string | null }[] | null) ?? []).map((x) => [String(x.campaign_id), String(x.name ?? "")])),
+    anuncios: new Map(((a.data as { ad_id: string; ad_name: string | null }[] | null) ?? []).map((x) => [String(x.ad_id), String(x.ad_name ?? "")])),
+  };
+}
+
+async function lerMetricasDaConta(servico: SupabaseClient, clientId: string, periodo: { inicio: string; fim: string; dias: number }, nivel: NivelDaMetrica, objetivo: IdDoObjetivo | null) {
+  const [contas, acesso, diarias] = await Promise.all([
+    contasMetaParaMetricas(servico, clientId),
+    acessoDeGestao(servico, clientId).catch((e) => (registrarFalha("mesa-ads: acessoDeGestao falhou (métricas)", e), null)),
+    lerDiariasAds(servico, clientId, periodo.inicio, periodo.fim).catch((e) => (registrarFalha("mesa-ads: lerDiariasAds falhou (métricas)", e), null)),
+  ]);
+  const grafo = acesso ? acesso.grafo : null;
+  const avisos: string[] = [];
+  let fonte: "meta_ao_vivo" | "coleta" = grafo ? "meta_ao_vivo" : "coleta";
+  const conjuntosLidos: Record<string, unknown>[] = [];
+  const nivelLido: Record<string, unknown>[] = [];
+  const totaisDasContas: Record<string, unknown>[] = [];
+  const especificacoes: unknown[] = [];
+  if (grafo && contas.length) {
+    try {
+      await comTetoDaMeta(Promise.all(contas.map(async (c) => {
+        const base = { inicio: periodo.inicio, fim: periodo.fim };
+        const [conj, doNivel, specs] = await Promise.all([
+          insightsDaMeta(grafo, c.act, { ...base, nivel: "conjunto" }, CAMPOS_DOS_INSIGHTS),
+          nivel === "campanha" || nivel === "anuncio" ? insightsDaMeta(grafo, c.act, { ...base, nivel }, CAMPOS_DOS_INSIGHTS) : Promise.resolve(null),
+          grafo.ler(`act_${c.act}/adsets?limit=300`, "id,attribution_spec").catch(() => null),
+        ]);
+        if (conj.cortada || (doNivel && doNivel.cortada)) avisos.push("A Meta mandou muitas linhas: a lista pode ter vindo cortada.");
+        conjuntosLidos.push(...conj.linhas);
+        if (doNivel) nivelLido.push(...doNivel.linhas);
+        for (const s of paginaDosInsights(specs).linhas) if (Array.isArray(s.attribution_spec)) especificacoes.push(s.attribution_spec);
+        // O total exato (alcance não soma entre linhas): a conta inteira, ou só as campanhas do objetivo.
+        const classes = classificacaoDosConjuntos(conj.linhas);
+        const campanhasDoObjetivo = objetivo
+          ? [...new Set([...classes.values()].filter((x) => x.objetivo === objetivo && x.campanha).map((x) => String(x.campanha)))]
+          : null;
+        if (campanhasDoObjetivo && !campanhasDoObjetivo.length) return;
+        const total = await insightsDaMeta(grafo, c.act, { ...base, nivel: "conta", campanhas: campanhasDoObjetivo }, CAMPOS_DOS_INSIGHTS);
+        totaisDasContas.push(...total.linhas);
+      })), TETO_DAS_METRICAS_MS, "A Meta");
+    } catch (e) {
+      registrarFalha("mesa-ads: leitura das métricas na Meta falhou", e);
+      fonte = "coleta";
+      conjuntosLidos.length = 0;
+      nivelLido.length = 0;
+      totaisDasContas.length = 0;
+      avisos.push(`A leitura na Meta falhou (${e instanceof Error ? e.message : "sem resposta"}).`);
+    }
+  } else if (!contas.length) {
+    avisos.push("Nenhuma conta de anúncios da Meta ligada a este cliente.");
+  } else if (acesso && acesso.gestao && acesso.gestao.motivo) {
+    avisos.push(acesso.gestao.motivo);
+  }
+
+  // Sem Meta: a coleta do painel, no mesmo formato.
+  if (fonte === "coleta" && diarias && diarias.length) {
+    const nomes = await nomesDaColeta(servico, clientId).catch(() => ({ campanhas: new Map<string, string>(), anuncios: new Map<string, string>() }));
+    const brutas = diarias as unknown as Record<string, unknown>[];
+    conjuntosLidos.push(...linhasDaColeta(brutas, "conjunto", nomes));
+    if (nivel === "campanha" || nivel === "anuncio") nivelLido.push(...linhasDaColeta(brutas, nivel, nomes));
+  }
+
+  const classes = classificacaoDosConjuntos(conjuntosLidos);
+  const conjuntos = conjuntosLidos.map((l) => itemDaLinha("conjunto", l, classes)).filter((i): i is ItemDaMetrica => !!i);
+  const objetivos = totaisPorObjetivo(conjuntos);
+  const doObjetivo = (i: ItemDaMetrica) => !objetivo || i.objetivo === objetivo;
+  const base = conjuntos.filter(doObjetivo);
+  const alcanceExato = totaisDasContas.length ? totaisDasContas.reduce((s, l) => s + (Number(l.reach) || 0), 0) : null;
+  const total = somarNumeros(base.map((i) => ({ numeros: i.numeros, resultado: i.resultado })), alcanceExato);
+  const itens = (nivel === "conjunto" ? conjuntos : nivel === "conta" ? [] : nivelLido.map((l) => itemDaLinha(nivel, l, classes)).filter((i): i is ItemDaMetrica => !!i))
+    .filter(doObjetivo)
+    .sort((a, b) => (b.numeros.gasto ?? 0) - (a.numeros.gasto ?? 0))
+    .slice(0, 500);
+  const porResultado = new Map<IdDaMetrica, number>();
+  for (const i of base) if (i.resultado && i.resultado !== "alcance") porResultado.set(i.resultado, (porResultado.get(i.resultado) ?? 0) + (i.numeros[i.resultado] ?? 0));
+
+  // A coleta do painel (o que o resto da aba usa) contra a Meta: diferença vira aviso.
+  const diariasDoObjetivo = (diarias ?? []).filter((d) => !objetivo || classificar(d.objective ?? null, d.optimization_goal ?? null).objetivo === objetivo);
+  avisos.push(...avisosDoNumero({
+    fim: periodo.fim,
+    hoje: hojeSaoPaulo(),
+    fonte,
+    aoVivo: fonte === "meta_ao_vivo" ? { conversas: total.numeros.conversas ?? 0, leads: total.numeros.leads ?? 0, compras: total.numeros.compras ?? 0, gasto: total.numeros.gasto ?? 0 } : null,
+    coleta: fonte === "meta_ao_vivo" && diarias ? contagensDaColeta(diariasDoObjetivo) : null,
+  }));
+  if (contas.length > 1 && alcanceExato !== null) avisos.push("Alcance somado de mais de uma conta: a mesma pessoa pode contar duas vezes.");
+
+  return {
+    periodo,
+    nivel,
+    objetivo,
+    fonte,
+    janela: fonte === "meta_ao_vivo" ? textoDaJanela(especificacoes) : "a da coleta do painel (padrão da Meta: 7 dias após o clique ou 1 dia após ver)",
+    total: {
+      numeros: total.numeros,
+      resultado: total.resultado,
+      resultado_rotulo: total.resultado ? rotuloDaMetrica(total.resultado) : "Resultados",
+      misto: total.misto,
+      por_resultado: [...porResultado].map(([metrica, valor]) => ({ metrica, rotulo: rotuloDaMetrica(metrica), valor })),
+    },
+    objetivos,
+    itens,
+    catalogo: METRICAS.map((m) => ({ id: m.id, rotulo: m.rotulo, ajuda: m.ajuda, formato: m.formato, bomQuandoSobe: m.bomQuandoSobe, acoes: m.acoes ?? [] })),
+    definicoes_de_objetivo: OBJETIVOS,
+    colunas_de_todos: COLUNAS_DE_TODOS,
+    contas: contas.map((c) => ({ id: c.act, nome: c.nome })),
+    avisos: [...new Set(avisos)],
+    lido_em: new Date().toISOString(),
+  };
+}
+
+/**
+ * metricas_meta { client_id, nivel?: conta | campanha | conjunto | anuncio, objetivo?, dias? | inicio, fim }
+ *   -> { periodo, fonte, janela, total, objetivos, itens, catalogo, definicoes_de_objetivo, avisos, custo_usd: 0 }
+ * Os números da Meta como no Gerenciador (só leitura; mesma janela de atribuição), com o
+ * resultado certo de cada conjunto e todas as métricas do catálogo. Grátis.
+ */
+async function metricasMeta(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const periodo = periodoDoPedido({ dias: corpo.dias, inicio: corpo.inicio, fim: corpo.fim }, DIAS_CONTA, 14, hojeSaoPaulo());
+  const nivel = NIVEL_VALIDO(corpo.nivel);
+  const objetivo = OBJETIVO_VALIDO(corpo.objetivo);
+  const chave = `m:${clientId}:${periodo.inicio}:${periodo.fim}:${nivel}:${objetivo ?? ""}`;
+  if (corpo.ao_vivo === true) leiturasDasMetricas.esquecer(`m:${clientId}:`);
+  const r = await leiturasDasMetricas.obter(chave, () => lerMetricasDaConta(servico, clientId, periodo, nivel, objetivo) as unknown as Promise<Record<string, unknown>>);
+  return json({ ...r, custo_usd: 0 });
+}
+
+async function lerMetricasNoTempo(servico: SupabaseClient, clientId: string, periodo: { inicio: string; fim: string; dias: number }, objetivo: IdDoObjetivo | null, campanha: string | null) {
+  const [contas, acesso] = await Promise.all([
+    contasMetaParaMetricas(servico, clientId),
+    acessoDeGestao(servico, clientId).catch((e) => (registrarFalha("mesa-ads: acessoDeGestao falhou (horário)", e), null)),
+  ]);
+  const grafo = acesso ? acesso.grafo : null;
+  const avisos: string[] = [];
+  const conj: Record<string, unknown>[] = [];
+  const horas: Record<string, unknown>[] = [];
+  const dias: Record<string, unknown>[] = [];
+  let fonte: "meta_ao_vivo" | "coleta" = grafo && contas.length ? "meta_ao_vivo" : "coleta";
+  if (fonte === "meta_ao_vivo" && grafo) {
+    try {
+      await comTetoDaMeta(Promise.all(contas.map(async (c) => {
+        const base = { inicio: periodo.inicio, fim: periodo.fim, nivel: "conjunto" as NivelDaMetrica };
+        const [a, b, d] = await Promise.all([
+          insightsDaMeta(grafo, c.act, base, "adset_id,campaign_id,objective,optimization_goal,spend"),
+          insightsDaMeta(grafo, c.act, { ...base, quebra: "hora" }, CAMPOS_DO_TEMPO),
+          insightsDaMeta(grafo, c.act, { ...base, quebra: "dia" }, CAMPOS_DO_TEMPO),
+        ]);
+        conj.push(...a.linhas);
+        horas.push(...b.linhas);
+        dias.push(...d.linhas);
+      })), TETO_DAS_METRICAS_MS, "A Meta");
+    } catch (e) {
+      registrarFalha("mesa-ads: leitura por horário na Meta falhou", e);
+      fonte = "coleta";
+      avisos.push(`A leitura na Meta falhou (${e instanceof Error ? e.message : "sem resposta"}).`);
+    }
+  }
+  if (fonte === "coleta") {
+    // A coleta guarda o dia, não a hora: sem Meta, só o dia da semana.
+    const diarias = await lerDiariasAds(servico, clientId, periodo.inicio, periodo.fim).catch(() => []);
+    for (const l of diarias as unknown as Record<string, unknown>[]) dias.push({ ...l, date_start: l.day, inline_link_clicks: l.link_clicks });
+    conj.push(...(diarias as unknown as Record<string, unknown>[]));
+    avisos.push("Sem leitura da Meta agora: o horário não aparece (a coleta do painel guarda só o dia).");
+  }
+  const classes = classificacaoDosConjuntos(conj);
+  const classe = (l: Record<string, unknown>): Classificacao => {
+    const c = classes.get(String(l.adset_id ?? ""));
+    return c ? { objetivo: c.objetivo, resultado: c.resultado } : classificar(String(l.objective ?? ""), String(l.optimization_goal ?? ""));
+  };
+  const filtroDaCampanha = campanha ? (l: Record<string, unknown>) => String(l.campaign_id ?? "") === campanha : () => true;
+  const filtro = (c: Classificacao) => !objetivo || c.objetivo === objetivo;
+  const porHora = faixasDoTempo(horas.filter(filtroDaCampanha), "hora", classe, filtro);
+  const porDia = faixasDoTempo(dias.filter(filtroDaCampanha), "dia_da_semana", classe, filtro);
+  const temConversa = porHora.faixas.some((f) => f.conversas > 0) || porDia.faixas.some((f) => f.conversas > 0);
+  const chave: "resultados" | "conversas" | "cliques_link" = porHora.resultado || porDia.resultado ? "resultados" : temConversa ? "conversas" : "cliques_link";
+  const rotuloDaChave = chave === "resultados" ? rotuloDaMetrica(porHora.resultado || porDia.resultado) : chave === "conversas" ? "Conversas iniciadas" : "Cliques no link";
+  return {
+    periodo,
+    objetivo,
+    fonte,
+    medida: { chave, rotulo: rotuloDaChave },
+    fuso: "o fuso da conta de anúncios",
+    hora: fonte === "meta_ao_vivo" ? { faixas: porHora.faixas, melhor: melhorHorario(porHora.faixas, chave, "hora") } : null,
+    dia_da_semana: { faixas: porDia.faixas, melhor: melhorHorario(porDia.faixas, chave, "dia_da_semana") },
+    avisos: [...new Set(avisos.concat(periodo.fim >= hojeSaoPaulo() ? ["O período inclui hoje: os números de hoje ainda podem subir."] : []))],
+    lido_em: new Date().toISOString(),
+  };
+}
+
+/**
+ * metricas_por_hora { client_id, objetivo?, campanha_id?, dias? | inicio, fim }
+ *   -> { hora: { faixas[24], melhor }, dia_da_semana: { faixas[7], melhor }, medida, avisos, custo_usd: 0 }
+ * Em que hora (fuso da conta) e em que dia da semana as conversas e os resultados acontecem,
+ * pela quebra hourly_stats_aggregated_by_advertiser_time_zone da Meta. Só leitura. Grátis.
+ */
+async function metricasPorHora(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const periodo = periodoDoPedido({ dias: corpo.dias, inicio: corpo.inicio, fim: corpo.fim }, DIAS_CONTA, 14, hojeSaoPaulo());
+  const objetivo = OBJETIVO_VALIDO(corpo.objetivo);
+  const campanha = typeof corpo.campanha_id === "string" && /^[0-9]{3,30}$/.test(corpo.campanha_id) ? corpo.campanha_id : null;
+  const chave = `h:${clientId}:${periodo.inicio}:${periodo.fim}:${objetivo ?? ""}:${campanha ?? ""}`;
+  if (corpo.ao_vivo === true) leiturasDasMetricas.esquecer(`h:${clientId}:`);
+  const r = await leiturasDasMetricas.obter(chave, () => lerMetricasNoTempo(servico, clientId, periodo, objetivo, campanha) as unknown as Promise<Record<string, unknown>>);
+  return json({ ...r, custo_usd: 0 });
+}
+
 const NOME_DO_NIVEL_COM_ARTIGO: Record<string, string> = { campanha: "a campanha", conjunto: "o conjunto", anuncio: "o anúncio" };
 const brlDaAcao = (v: number | null | undefined) => (typeof v === "number" ? `R$ ${v.toFixed(2).replace(".", ",")}` : "?");
 
@@ -9456,6 +9747,9 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   // Frente AD3 (28/09): o anúncio aberto (criativo, qualidade e aprendizado lidos na Meta) e o relatório do período.
   gerenciador_anuncio: gerenciadorAnuncio,
   relatorio_ads_gerar: relatorioAdsGerar,
+  // Frente ADM (01/10): números da Meta por nível, objetivo e período, e por horário (só leitura).
+  metricas_meta: metricasMeta,
+  metricas_por_hora: metricasPorHora,
   // Frente AG3 (29/09): "Esquecer" e "Guardar como regra" da linha "Aprendi" dos agentes de tráfego.
   esquecer_regra: esquecerRegraDoTrafego,
   guardar_regra: guardarRegraDoTrafego,
