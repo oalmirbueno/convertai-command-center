@@ -84,6 +84,12 @@ const PARAMS_DE_TESTE: Record<string, Record<string, unknown>> = {
   depoimento: { texto: "Organizaram o nosso marketing.", nome: "Ana", fonte: "print do WhatsApp" },
   cartao_final: { chamada: "Vamos conversar?", botao: "Fale com a gente" },
   logo_3d: { tagline: "AcelerIQ" },
+  // Frente MOV (30/09): peças novas (mesa-motion/modulos/pecas-extras.ts).
+  frase_impacto: { frase: "Marketing com método de verdade", destaque: "método" },
+  foto_destaque: { imagens: [`${CLIENTE}/video/motion/f/insumos/loja.jpg`], titulo: "Nossa loja" },
+  mockup_tela: { imagens: [`${CLIENTE}/video/motion/f/insumos/site.png`], titulo: "O site novo", moldura: "celular" },
+  pergunta: { pergunta: "Quanto custa um bom marketing?", resposta: "Menos que ficar parado" },
+  beneficios: { titulo: "O que você ganha", itens: ["Plano claro", "Conteúdo no prazo"] },
 };
 
 const cena = (p: Partial<CenaDoFilme>): CenaDoFilme => ({ ...ESTADO_VAZIO_DA_CENA("c1", 1), ...p });
@@ -115,7 +121,7 @@ describe("marca da cena pelo kit (cores, fontes livres, contraste)", () => {
 });
 
 describe("kit 2D e 3D: documento HyperFrames de cada peça", () => {
-  it("as 10 peças montam em todos os formatos, com raiz, linha do tempo e só arquivos locais", () => {
+  it("as 15 peças montam em todos os formatos, com raiz, linha do tempo e só arquivos locais", () => {
     expect(PECAS_DO_KIT.map((p) => p.id)).toEqual(Object.keys(PARAMS_DE_TESTE));
     PECAS_DO_KIT.forEach((p) =>
       LISTA_DE_FORMATOS.forEach((f) => {

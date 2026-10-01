@@ -10,6 +10,10 @@ import { casarNoRitmo, duracaoTotal, INGREDIENTES, normalizarFilme, renderDaCena
 import { ComFilme } from "./FilmeAberto";
 import { chamarMotion, CHAVES, type Filme, finaisQueFaltam, type PedidoDoMotion, uidDoClique, useFilaDoFilme, useGuardarFilme } from "./motionApi";
 import { useAcoesDaCena } from "./useAcoesDaCena";
+import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
+import VozDoFilme from "./VozDoFilme";
+import { EfeitosSobMedida, GerarTrilha } from "./SomGerado";
+import { useSituacaoDaVoz } from "./vozApi";
 import type { IrPara } from "@/components/mesa-videos/MesaDeVideo";
 
 /**
@@ -42,7 +46,11 @@ function Energia({ valores, drop, duracao }: { valores: number[]; drop: number |
   );
 }
 
-function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
+function Conteudo({ filme, links, irPara }: { filme: Filme; links: Record<string, string>; irPara: IrPara }) {
+  const { clientId } = useMesa();
+  const { marca } = useMarcaDaMesa();
+  const situacaoDaVoz = useSituacaoDaVoz(clientId, marca ? marca.id : null);
+  const temChave = !!(situacaoDaVoz.data && situacaoDaVoz.data.tem_chave);
   const guardar = useGuardarFilme();
   const avisarErro = useAvisarErro();
   const qc = useQueryClient();
@@ -134,7 +142,13 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
 
   return (
     <div className="min-w-0 space-y-6">
-      <Secao titulo="Trilha" descricao={som.trilha ? som.trilha.nome : rotuloDoClima ? `Clima pedido: ${rotuloDoClima}` : "Nenhuma escolhida"} ajuda="Música da Mídia do cliente (tipo áudio) com licença comercial registrada. Sem trilha, o filme sai só com os efeitos.">
+      <VozDoFilme filme={filme} links={links} />
+      <Secao
+        titulo="Trilha"
+        descricao={som.trilha ? som.trilha.nome : rotuloDoClima ? `Clima pedido: ${rotuloDoClima}` : "Nenhuma escolhida"}
+        ajuda="Música da Mídia do cliente (tipo áudio) com licença comercial registrada, ou uma trilha instrumental composta pela ElevenLabs Music no tamanho do filme. Com narração, a música fica 18 dB abaixo da voz e sobe nas pausas. Sem trilha, o filme sai só com a voz e os efeitos."
+        acao={<GerarTrilha filme={filme} temChave={temChave} />}
+      >
         <select
           className={juntar(campo, "max-w-[480px]")}
           value={som.trilha ? som.trilha.path : ""}
@@ -151,6 +165,7 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
             </option>
           ))}
         </select>
+        {som.trilha && links[som.trilha.path] && <audio controls preload="none" className="mt-2 h-8 w-full max-w-[480px]" src={links[som.trilha.path]} aria-label="Ouvir a trilha" />}
       </Secao>
 
       <Secao
@@ -205,6 +220,15 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
             <input type="range" min={0} max={1.2} step={0.05} value={som.volume_efeitos} onChange={(e) => void salvar({ volume_efeitos: Number(e.target.value) })} className="w-full" />
           </label>
         </div>
+        {som.narracao.ligada && (
+          <label className="mt-3 block min-w-0 sm:max-w-[33%]">
+            <span className={texto.rotulo}>Narração ({Math.round(som.narracao.volume * 100)}%)</span>
+            <input type="range" min={0} max={1.5} step={0.05} value={som.narracao.volume} onChange={(e) => void salvar({ narracao: { ...som.narracao, volume: Number(e.target.value) } })} className="w-full" aria-label="Volume da narração" />
+          </label>
+        )}
+        <div className="mt-4 min-w-0">
+          <EfeitosSobMedida filme={filme} links={links} temChave={temChave} />
+        </div>
       </Secao>
       <button type="button" className={botao.primario} onClick={() => irPara("render")}>
         Seguir para o render
@@ -215,5 +239,5 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
 }
 
 export default function EtapaSom({ irPara }: { irPara: IrPara }) {
-  return <ComFilme irPara={irPara}>{(filme) => <Conteudo key={filme.id} filme={filme} irPara={irPara} />}</ComFilme>;
+  return <ComFilme irPara={irPara}>{(filme, links) => <Conteudo key={filme.id} filme={filme} links={links} irPara={irPara} />}</ComFilme>;
 }

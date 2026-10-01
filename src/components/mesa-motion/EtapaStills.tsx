@@ -12,6 +12,7 @@ import { chaveDoPedido, renderDaCena } from "../../../supabase/functions/_shared
 import { ComFilme } from "./FilmeAberto";
 import CenaNaFila from "./CenaNaFila";
 import EditorDaCena from "./EditorDaCena";
+import DirecaoDeArte from "./DirecaoDeArte";
 import { type Filme, pedidoAtivoDaChave, useFilaDoFilme } from "./motionApi";
 import { useAcoesDaCena } from "./useAcoesDaCena";
 import type { IrPara } from "@/components/mesa-videos/MesaDeVideo";
@@ -67,6 +68,7 @@ function Conteudo({ filme, links, irPara }: { filme: Filme; links: Record<string
   if (!filme.cenas.length) return <EstadoVazio icone={<ImageIcon className="h-5 w-5" />} titulo="Escolha um storyboard antes" acao={<button type="button" className={botao.secundario} onClick={() => irPara("storyboards")}>Abrir os storyboards</button>} />;
   return (
     <div className="min-w-0 space-y-6">
+      {hf.length > 0 && <DirecaoDeArte filme={filme} />}
       <Secao
         titulo="Stills"
         descricao={`${aprovadas} de ${filme.cenas.length} aprovados · ${formato}`}

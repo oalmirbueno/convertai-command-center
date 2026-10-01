@@ -24,6 +24,8 @@
  * Sem travessão.
  */
 
+import { camadaDoAcabamento, type IdDaPecaExtra, montarPecaExtra, PECAS_EXTRAS } from "../mesa-motion/modulos/pecas-extras.ts";
+
 // ------------------------------------------------------------------ formatos
 
 export const FORMATOS_DO_MOTION = {
@@ -163,7 +165,9 @@ export type IdDaPeca =
   | "carrossel_provas"
   | "depoimento"
   | "cartao_final"
-  | "logo_3d";
+  | "logo_3d"
+  // Frente MOV (30/09): peças novas em mesa-motion/modulos/pecas-extras.ts.
+  | IdDaPecaExtra;
 
 export type TipoDoParametro = "texto" | "lista" | "numeros" | "imagens";
 
@@ -188,7 +192,7 @@ export interface PecaDoKit {
   precisa_de_logo?: boolean;
 }
 
-export const PECAS_DO_KIT: PecaDoKit[] = [
+const PECAS_DE_ANTES: PecaDoKit[] = [
   {
     id: "logo_sting",
     rotulo: "Logo sting",
@@ -299,6 +303,8 @@ export const PECAS_DO_KIT: PecaDoKit[] = [
   },
 ];
 
+export const PECAS_DO_KIT: PecaDoKit[] = PECAS_DE_ANTES.concat(PECAS_EXTRAS);
+
 export const pecaPorId = (id: unknown): PecaDoKit | null => PECAS_DO_KIT.find((p) => p.id === id) || null;
 
 export type NumeroReal = { valor: number; prefixo: string; sufixo: string; rotulo: string; fonte: string };
@@ -392,6 +398,8 @@ export interface CenaDoFilme {
   movimento: string;
   /** Aprovação do still (etapa 5). */
   still_aprovado: boolean;
+  /** Frente MOV: acabamento da direção de arte (grao, grade, luz, cinema); sem ele, o limpo de sempre. */
+  acabamento?: string;
 }
 
 export const ESTADO_VAZIO_DA_CENA = (id: string, ordem: number): CenaDoFilme => ({
@@ -469,6 +477,8 @@ function montarPeca(cena: CenaDoFilme, marca: MarcaDaCena, q: Quadro): Montagem 
   const logo = marca.tem_logo ? `<img class="logo" id="logo" src="marca/logo.png" alt="">` : `<div class="logo-texto" id="logo">${esc(marca.nome)}</div>`;
   const peca = cena.peca || "abertura";
   const saida = Math.max(0.5, D - 0.45);
+  const extra = montarPecaExtra(cena, marca, q);
+  if (extra) return extra;
 
   if (peca === "logo_sting") {
     const v = linhasDeVelocidade();
@@ -1063,7 +1073,8 @@ export function montarDocumento(cena: CenaDoFilme, marca: MarcaDaCena, o: Opcoes
     miolo = montarPeca({ ...cenaAjustada, params: lidos.params }, marca, q);
   }
   const c = marca.cores;
-  const fundo = cena.fundo === "transparente" ? "" : `<div class="fundo" id="fundo"><div class="luz" id="luz"></div></div>`;
+  const ac = cena.fundo === "transparente" ? { baixo: "", topo: "", css: "", js: "" } : camadaDoAcabamento(cena.acabamento, c, q);
+  const fundo = cena.fundo === "transparente" ? "" : `<div class="fundo" id="fundo"><div class="luz" id="luz"></div>${ac.baixo}</div>`;
   const tema = cena.tema === "claro" ? { fundo: c.claro, texto: c.fundo } : { fundo: c.fundo, texto: c.texto };
   const gsap = o.gsap || "gsap.min.js";
   const html = `<!doctype html>
@@ -1084,6 +1095,7 @@ html,body{margin:0;padding:0;background:transparent;}
 .velocidade{position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden;}
 .vel{position:absolute;left:0;border-radius:calc(var(--u) * 1);background:linear-gradient(90deg, ${c.primaria}00, ${c.primaria});}
 .logo-texto{font-family:"Titulo",sans-serif;font-weight:800;color:var(--primaria);letter-spacing:-.02em;}
+${ac.css}
 ${miolo.css}
 </style>
 </head>
@@ -1092,6 +1104,7 @@ ${miolo.css}
 <section id="cena-corpo" class="cena clip" data-start="0" data-duration="${n3(D)}">
 ${fundo}
 ${miolo.corpo}
+${ac.topo}
 </section>
 </div>
 <script>
@@ -1101,6 +1114,7 @@ window.__timelines = window.__timelines || {};
   var D = ${n3(duracaoDaCena(cena.duracao_s))};
   var U = ${n3(q.u)};
   ${cena.fundo === "transparente" ? "" : `tl.fromTo("#luz", { xPercent: -6, yPercent: 4 }, { xPercent: 6, yPercent: -4, duration: D, ease: "none" }, 0);`}
+  ${ac.js}
   (function (tl, D, U) {
 ${miolo.js}
   })(tl, D, U);

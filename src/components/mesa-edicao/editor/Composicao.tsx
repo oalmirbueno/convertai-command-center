@@ -326,7 +326,11 @@ export function ComposicaoDoProjeto({ projeto, urls, publico, mix, cor_da_marca 
   const fps = projeto.fps;
   const origem = publico === "estatico" ? "estatico" : "painel";
   // A fala da linha do tempo (para a trilha abaixar na voz): uma conta por projeto, não por quadro.
-  const fala = useMemo(() => trechosDeFala(falaNaLinhaDoTempo(projeto)), [projeto]);
+  // Frente MOV: a narração (trilha de áudio com papel "voz", fala por palavra da ElevenLabs) também abaixa a música.
+  const fala = useMemo(() => {
+    const vozes = projeto.trilhas.filter((t) => t.tipo === "audio" && t.clipes.some((c) => estiloTxt(c, "papel", "") === "voz"));
+    return trechosDeFala(vozes.reduce((l, t) => l.concat(falaNaLinhaDoTempo(projeto, t.id)), falaNaLinhaDoTempo(projeto)));
+  }, [projeto]);
   const ganhos = (mix && mix.ganhos_db) || {};
   const trilhas = projeto.trilhas
     .map((t, i) => ({ t, i }))

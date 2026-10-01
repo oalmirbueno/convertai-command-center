@@ -6,7 +6,7 @@ import { PreencherComIA, type CampoParaPreencher } from "@/components/sistema";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { botao, campo, campoTexto, juntar, lista, texto } from "@/components/sistema/estilos";
 import { PECAS_DO_KIT, pecaPorId, type IdDaPeca } from "../../../supabase/functions/_shared/cena-hf";
-import type { CenaDaLinha } from "../../../supabase/functions/_shared/motion-metodo";
+import { type CenaDaLinha, TRANSICOES_DA_CENA } from "../../../supabase/functions/_shared/motion-metodo";
 import { chamarMotion, deTexto, type Filme, paraTexto, useGuardarFilme } from "./motionApi";
 
 /**
@@ -19,13 +19,14 @@ import { chamarMotion, deTexto, type Filme, paraTexto, useGuardarFilme } from ".
  * fonte (o servidor tira o que não está nas provas).
  */
 
-type Rascunho = { titulo: string; duracao_s: number; fundo: "marca" | "transparente"; tema: "escuro" | "claro"; params: Record<string, string> };
+/** transicao "" = a do filme (entrevista); "auto" no pedido tira a da cena. */
+type Rascunho = { titulo: string; duracao_s: number; fundo: "marca" | "transparente"; tema: "escuro" | "claro"; transicao: string; params: Record<string, string> };
 
 function rascunhoDa(cena: CenaDaLinha): Rascunho {
   const peca = cena.modo === "sob_medida" ? null : cena.peca ? pecaPorId(cena.peca) : null;
   const params: Record<string, string> = {};
   (peca ? peca.parametros : []).forEach((p) => (params[p.chave] = paraTexto(cena.params[p.chave], p.tipo)));
-  return { titulo: cena.titulo, duracao_s: cena.duracao_s, fundo: cena.fundo, tema: cena.tema, params };
+  return { titulo: cena.titulo, duracao_s: cena.duracao_s, fundo: cena.fundo, tema: cena.tema, transicao: cena.transicao || "", params };
 }
 
 const mesmo = (a: Rascunho, b: Rascunho) => JSON.stringify(a) === JSON.stringify(b);
@@ -39,7 +40,7 @@ function pedidoDa(x: Rascunho, c: CenaDaLinha): Record<string, unknown> {
     const v = x.params[p.chave];
     if (v !== undefined && v !== "") params[p.chave] = deTexto(v, p.tipo);
   });
-  return { id: c.id, titulo: x.titulo, duracao_s: x.duracao_s, peca: sob ? null : c.peca, modo: sob ? "sob_medida" : "kit", fundo: x.fundo, tema: x.tema, params: sob ? c.params : params };
+  return { id: c.id, titulo: x.titulo, duracao_s: x.duracao_s, peca: sob ? null : c.peca, modo: sob ? "sob_medida" : "kit", fundo: x.fundo, tema: x.tema, transicao: x.transicao || "auto", params: sob ? c.params : params };
 }
 
 const nomeDoArquivo = (p: string) => p.split("/").pop() || p;
@@ -201,6 +202,17 @@ export default function EditorDaCena({ filme, cena, prints, links = {} }: { film
             <option value="marca:escuro">Fundo da marca, escuro</option>
             <option value="marca:claro">Fundo da marca, claro</option>
             <option value="transparente:escuro">Transparente (por cima de vídeo)</option>
+          </select>
+        </label>
+        <label className="min-w-0">
+          <span className={texto.rotulo}>Entrada da cena</span>
+          <select className={campo} value={r.transicao} onChange={(e) => mudarESalvar({ ...r, transicao: e.target.value })} aria-label="Transição de entrada da cena">
+            <option value="">A do filme (entrevista)</option>
+            {TRANSICOES_DA_CENA.map((t) => (
+              <option key={t.valor} value={t.valor}>
+                {t.rotulo}
+              </option>
+            ))}
           </select>
         </label>
       </div>

@@ -16,6 +16,11 @@
  * - "mede as batidas" / "casa no ritmo"     -> medir_batidas / casar_ritmo (x1)             na hora, Desfazer
  * - "critica o filme"                       -> criticar (x1)                                Jev (centavos)
  * - "monta e renderiza"                     -> montar_filme (x1)                            Confirmar
+ * Frente MOV (30/09), voz e som pela ElevenLabs:
+ * - "escreve as falas da narração"          -> escrever_falas (x1; para = pedido)          custo de modelo
+ * - "gera a narração" / "narra a cena 2"    -> gerar_narracao (x1 = roteiro; c.. = a cena)  custo de voz, Confirmar
+ * - "encaixa as cenas na voz"               -> casar_narracao (x1)                          na hora, Desfazer
+ * - "gera uma trilha épica"                 -> gerar_trilha (x1; para = pedido da trilha)   custo de música, Confirmar
  *
  * Sem import de Deno: o vitest lê este arquivo.
  */
@@ -45,8 +50,12 @@ export const OPERACOES_DO_MOTION = [
   "casar_ritmo",
   "criticar",
   "montar_filme",
+  "escrever_falas",
+  "gerar_narracao",
+  "casar_narracao",
+  "gerar_trilha",
 ];
-export const OPERACOES_COM_CUSTO = ["gerar_brand", "gerar_storyboards", "escrever_cena", "criticar"];
+export const OPERACOES_COM_CUSTO = ["gerar_brand", "gerar_storyboards", "escrever_cena", "criticar", "escrever_falas", "gerar_narracao", "gerar_trilha"];
 export const ESQUEMA_DAS_ACOES_DO_MOTION = esquemaDasAcoes(OPERACOES_DO_MOTION);
 
 type AlvoDoMotion = { id: string; titulo: string; detalhe?: string | null; dados?: Record<string, unknown> };
@@ -59,6 +68,8 @@ export type ListasDoMotion = {
   storyboards: Array<{ conceito: string; escolhido: boolean }>;
   tem_trilha: boolean;
   tem_batidas: boolean;
+  /** Frente MOV: a narração (voz escolhida, falas escritas, áudios gerados) e a chave da ElevenLabs no servidor. */
+  voz?: { tem_chave: boolean; tem_voz: boolean; falas: number; audios: number; cenas_com_fala: string[] };
 };
 
 export function alvosDoMotion(l: ListasDoMotion): Array<AlvoComApelido<AlvoDoMotion>> {
@@ -72,7 +83,8 @@ export function alvosDoMotion(l: ListasDoMotion): Array<AlvoComApelido<AlvoDoMot
     "c",
   );
   const sbs = comApelido(l.storyboards.map((s, i) => ({ id: String(i), titulo: umaLinha(s.conceito, 100) || `Storyboard ${i + 1}`, detalhe: s.escolhido ? "escolhido" : null, dados: { escolhido: s.escolhido } })), "b");
-  const filme = comApelido([{ id: l.filmeId, titulo: "o filme aberto", dados: { tem_trilha: l.tem_trilha, tem_batidas: l.tem_batidas, cenas: l.cenas.length } }], "x");
+  const v = l.voz || { tem_chave: false, tem_voz: false, falas: 0, audios: 0, cenas_com_fala: [] };
+  const filme = comApelido([{ id: l.filmeId, titulo: "o filme aberto", dados: { tem_trilha: l.tem_trilha, tem_batidas: l.tem_batidas, cenas: l.cenas.length, tem_chave: v.tem_chave, tem_voz: v.tem_voz, falas: v.falas, audios: v.audios } }], "x");
   return [...cenas, ...sbs, ...filme];
 }
 
@@ -119,6 +131,23 @@ export function regrasDoMotion(): Record<string, RegraDaOperacao<AlvoDoMotion>> 
     casar_ritmo: { rotulo: "casar os cortes com a batida em", combina: true, alvos: ["x"], direta: true, trava: (a) => (a.dados && a.dados.tem_batidas ? null : "Meça as batidas da trilha antes.") },
     criticar: { rotulo: "criticar as cenas de", combina: true, alvos: ["x"] },
     montar_filme: { rotulo: "montar na Mesa Edição e renderizar", combina: true, alvos: ["x"], trava: (a) => (a.dados && Number(a.dados.cenas) > 0 ? null : "O filme ainda não tem cenas.") },
+    escrever_falas: { rotulo: "escrever as falas da narração de", combina: true, alvos: ["x"], para: (b) => umaLinha(b, 600) || "sem pedido extra", trava: (a) => (a.dados && Number(a.dados.cenas) > 0 ? null : "Escolha o storyboard antes.") },
+    gerar_narracao: {
+      rotulo: "gerar a narração (ElevenLabs) de",
+      combina: true,
+      alvos: ["x", "c"],
+      trava: (a) => {
+        const x = a.dados || {};
+        // Cena: a conferência da voz e da fala é na hora de gerar (a cena não sabe da chave).
+        if (a.ref.charAt(0) === "c") return null;
+        if (x.tem_chave === false) return "A chave da ElevenLabs não está no servidor.";
+        if (x.tem_voz === false) return "Escolha a voz da marca na etapa Voz e som antes.";
+        if (!Number(x.falas)) return "Escreva as falas antes.";
+        return null;
+      },
+    },
+    casar_narracao: { rotulo: "encaixar a duração das cenas na narração de", combina: true, alvos: ["x"], direta: true, trava: (a) => (a.dados && Number(a.dados.audios) > 0 ? null : "Gere a narração antes.") },
+    gerar_trilha: { rotulo: "gerar a trilha (ElevenLabs Music) de", combina: true, alvos: ["x"], para: (b) => umaLinha(b, 900) || "pelo clima da entrevista", trava: (a) => (a.dados && a.dados.tem_chave === false ? "A chave da ElevenLabs não está no servidor." : null) },
   };
 }
 
@@ -136,6 +165,10 @@ export const DESCRICOES_DAS_ACOES = {
   casar_ritmo: "ajusta a duração das cenas para os cortes caírem na batida. Sem custo.",
   criticar: "nota de 1 a 10 por critério (legível no celular, hierarquia, ritmo, marca, só fatos reais) pelo Jev. Só aviso. Custo de centavos.",
   montar_filme: "monta o filme na Mesa Edição (um projeto por formato) e põe o render na fila. Sem custo de modelo.",
+  escrever_falas: "escreve a fala de narração de cada cena (x1; para = pedido extra), no tempo de cada cena, com tag de emoção. Custa modelo.",
+  gerar_narracao: "gera a narração na voz da marca pela ElevenLabs: x1 = o roteiro inteiro; c.. = só aquela cena. Custa voz (cartão com o custo).",
+  casar_narracao: "ajusta a duração de cada cena ao tempo da fala (e à batida, se medida). Sem custo.",
+  gerar_trilha: "compõe uma trilha instrumental no tamanho do filme pela ElevenLabs Music (para = pedido; senão o clima da entrevista) e mede as batidas. Custa música.",
 };
 
 export function blocoDasAcoesDoMotion(l: ListasDoMotion): string {
@@ -144,7 +177,7 @@ export function blocoDasAcoesDoMotion(l: ListasDoMotion): string {
   return [blocoDosAlvos("CENAS DO FILME", por("c"), "nenhuma ainda."), blocoDosAlvos("STORYBOARDS", por("b"), "nenhum gerado ainda."), blocoDosAlvos("FILME", por("x")), regraDasAcoes(DESCRICOES_DAS_ACOES)].join("\n");
 }
 
-export function normalizarAcoesDoMotion(bruto: unknown, l: ListasDoMotion, clientId: string, custos: { brand: number; storyboards: number; cena: number; critica: number }, id?: string): AcaoDoAgente | null {
+export function normalizarAcoesDoMotion(bruto: unknown, l: ListasDoMotion, clientId: string, custos: { brand: number; storyboards: number; cena: number; critica: number; falas?: number; narracao?: number; narracao_por_cena?: number; trilha?: number }, id?: string): AcaoDoAgente | null {
   const acao = normalizarAcaoDoAgente(bruto, alvosDoMotion(l), regrasDoMotion(), {
     agente: "motion",
     id: id || `motion-${Date.now().toString(36)}`,
@@ -157,6 +190,9 @@ export function normalizarAcoesDoMotion(bruto: unknown, l: ListasDoMotion, clien
     else if (i.operacao === "gerar_storyboards") custo += custos.storyboards;
     else if (i.operacao === "escrever_cena") custo += custos.cena;
     else if (i.operacao === "criticar") custo += custos.critica;
+    else if (i.operacao === "escrever_falas") custo += custos.falas || 0;
+    else if (i.operacao === "gerar_narracao") custo += i.ref.charAt(0) === "c" ? custos.narracao_por_cena || 0 : custos.narracao || 0;
+    else if (i.operacao === "gerar_trilha") custo += custos.trilha || 0;
   }
   acao.custo_estimado_usd = Math.round(custo * 1e6) / 1e6;
   if (acao.itens.length && acao.itens.every((i) => i.operacao === "criticar")) acao.sem_desfazer = true;
@@ -172,13 +208,13 @@ export function caminhoDoMotion(clientId: string, filmeId: string, acao: Pick<Ac
       ? "storyboards"
       : ops.indexOf("pedir_still") >= 0 || ops.indexOf("aprovar_still") >= 0
         ? "stills"
-        : ops.indexOf("medir_batidas") >= 0 || ops.indexOf("casar_ritmo") >= 0
+        : ops.indexOf("medir_batidas") >= 0 || ops.indexOf("casar_ritmo") >= 0 || ops.some((o) => o === "escrever_falas" || o === "gerar_narracao" || o === "casar_narracao" || o === "gerar_trilha")
           ? "som"
           : ops.indexOf("criticar") >= 0
             ? "critica"
             : ops.indexOf("montar_filme") >= 0
               ? "render"
               : "construcao";
-  const rotulos: Record<string, string> = { brand: "Abrir o BRAND.md", storyboards: "Abrir os storyboards", stills: "Abrir os stills", som: "Abrir o som", critica: "Abrir a crítica", render: "Abrir o render", construcao: "Abrir a construção" };
+  const rotulos: Record<string, string> = { brand: "Abrir o BRAND.md", storyboards: "Abrir os storyboards", stills: "Abrir os stills", som: "Abrir a voz e o som", critica: "Abrir a crítica", render: "Abrir o render", construcao: "Abrir a construção" };
   return { rotulo: rotulos[etapa], destino: `/mesa-motion?client=${clientId}&filme=${filmeId}&etapa=${etapa}` };
 }

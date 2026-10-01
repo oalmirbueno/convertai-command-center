@@ -141,7 +141,9 @@ export async function trabalharRender(amb: Ambiente, p: PedidoDoWorker, pasta: s
   // Trilha 22 dB abaixo da voz: voz pela onda medida (ou medida agora), trilha medida no arquivo.
   await avisar("montando", 0.1, true);
   const principal = projeto.trilhas.find((t) => t.tipo === "video");
-  const fontesDaVoz = principal ? Array.from(new Set(principal.clipes.map((c) => c.fonte).filter((x): x is string => !!x))) : [];
+  // Frente MOV: a narração da Mesa Motion (trilha de áudio com papel "voz") também é voz; com ela, a voz é só ela (as cenas em código não têm som).
+  const daNarracao = projeto.trilhas.filter((t) => t.tipo === "audio").reduce((l, t) => l.concat(t.clipes.filter((c) => c.estilo && c.estilo.papel === "voz").map((c) => c.fonte).filter((x): x is string => !!x)), [] as string[]);
+  const fontesDaVoz = daNarracao.length ? Array.from(new Set(daNarracao)) : principal ? Array.from(new Set(principal.clipes.map((c) => c.fonte).filter((x): x is string => !!x))) : [];
   const ganhos: Record<string, number> = {};
   const trilhas = projeto.trilhas.filter((t) => t.tipo === "audio").reduce((l, t) => l.concat(t.clipes.filter((c) => c.estilo && c.estilo.papel === "trilha")), [] as Projeto["trilhas"][number]["clipes"]);
   let vozLufs: number | null = null;

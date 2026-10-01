@@ -16,6 +16,7 @@ import { modeloDoPapel } from "@/lib/mesa/api";
 import type { IrPara } from "@/components/mesa-videos/MesaDeVideo";
 import { TAMANHOS_DO_MOTION, type TipoDeFilme } from "../../../supabase/functions/_shared/motion-metodo";
 import { chamarMotion, CHAVES, type Filme, nomePadraoDoFilme, useFilme, useFilmeDaUrl, useFilmes, useGuardarFilme } from "./motionApi";
+import PoucosCliques from "./PoucosCliques";
 
 /**
  * Barra do filme aberto (Mesa Motion): o select do filme, "Novo filme" (janela
@@ -253,6 +254,7 @@ export function ComFilme({ children, irPara }: { children: (filme: Filme, links:
           ))}
         </select>
         <BotaoComIcone icone={<Plus className="h-3.5 w-3.5" />} rotulo="Novo filme" className="mb-2 mr-1" onClick={() => abrirNovo()} disabled={indisponivel} data-novo-filme="" />
+        {doDono && !doDono.arquivado_em && <PoucosCliques filme={doDono} />}
         {doDono && (
           <MenuMais
             rotulo="Mais do filme"

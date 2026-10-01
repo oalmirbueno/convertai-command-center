@@ -84,6 +84,7 @@ import {
   type CenaDaLinha,
   cenaDaLinha,
   chaveDoPedido,
+  duracaoTotal,
   duracaoAlvo,
   ehEtapaDoMotion,
   ESQUEMA_DO_BRAND,
@@ -114,6 +115,11 @@ import { kitDaIdentidade } from "./modulos/motion-da-identidade.ts";
 import { situacaoDoWorker } from "../_shared/render-do-editor.ts";
 import { blocoDasAcoesDoMotion, caminhoDoMotion, ESQUEMA_DAS_ACOES_DO_MOTION, type ListasDoMotion, normalizarAcoesDoMotion, regrasDoMotion } from "./acoes-do-motion.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
+// Frente MOV (30/09): narração pela ElevenLabs, voz da marca, trilha e efeitos gerados, direção de arte pelo Jev.
+import { ACOES_LONGAS_DA_VOZ, criarVoz } from "./voz.ts";
+import { ErroDaVoz } from "./modulos/elevenlabs.ts";
+import { estimarMusica, estimarNarracao, faltasDaNarracao, narracaoDaCena, narracaoDaTela, semTags } from "./modulos/narracao.ts";
+import { fraseDoWorkerAntigo, novidadeDaCena, workerConheceMov } from "./modulos/pecas-extras.ts";
 
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
 
@@ -184,6 +190,10 @@ function respostaDeErro(err: unknown): Response {
     return json({ ...err.paraJson(), mensagem: c ? c.mensagem : err.message }, c ? c.status : err.status >= 400 ? err.status : 500);
   }
   if (err instanceof JevErro) return json({ error: "jev_indisponivel", mensagem: "O Jev não respondeu agora. Tente de novo em instantes." }, 503);
+  if (err instanceof ErroDaVoz) {
+    if (err.codigo === "voz_indisponivel" || err.codigo === "voz_resposta_invalida") registrarFalha("mesa-motion: ElevenLabs", err, { codigo: err.codigo });
+    return json({ error: err.codigo, mensagem: err.message }, err.status);
+  }
   registrarFalha("mesa-motion: erro inesperado", err);
   return json({ error: "erro_interno", mensagem: "Falha inesperada na Mesa Motion." }, 500);
 }
@@ -372,6 +382,10 @@ async function linksDoFilme(f: LinhaDoFilme): Promise<Record<string, string>> {
     if (r.saida_path) caminhos.push(r.saida_path);
     if (r.miniatura_path) caminhos.push(r.miniatura_path);
   });
+  // Frente MOV: a narração, a trilha e os efeitos gerados tocam na tela.
+  f.som.narracao.audios.forEach((a) => caminhos.push(a.path));
+  f.som.efeitos_sob_medida.forEach((e) => caminhos.push(e.path));
+  if (f.som.trilha) caminhos.push(f.som.trilha.path);
   const unicos = Array.from(new Set(caminhos.filter((p) => p.indexOf(`${f.client_id}/`) === 0))).slice(0, 200);
   const links: Record<string, string> = {};
   if (!unicos.length) return links;
@@ -398,7 +412,12 @@ async function filmeSalvar(ch: Chamador, c: Record<string, unknown>) {
   }
   if (c.entrevista !== undefined) campos.entrevista = lerEntrevista(c.entrevista);
   if (c.brand !== undefined) campos.brand = lerBrand(c.brand);
-  if (c.som !== undefined) campos.som = { ...lerSom(c.som), batidas: f.som.batidas && lerSom(c.som).trilha && f.som.trilha && lerSom(c.som).trilha!.path === f.som.trilha.path ? f.som.batidas : null };
+  if (c.som !== undefined) {
+    const vindo = lerSom(c.som);
+    // Áudios da narração e efeitos gerados (caminhos no Storage) só o servidor escreve: da tela vale a configuração.
+    const narracao = obj(c.som).narracao === undefined ? f.som.narracao : narracaoDaTela(f.som.narracao, obj(c.som).narracao);
+    campos.som = { ...vindo, batidas: f.som.batidas && vindo.trilha && f.som.trilha && vindo.trilha.path === f.som.trilha.path ? f.som.batidas : null, narracao, efeitos_sob_medida: f.som.efeitos_sob_medida };
+  }
   if (c.insumos !== undefined) {
     // A cópia de desfazer só o servidor escreve (a tela não manda cena com código por aqui).
     const vindos = { ...obj(c.insumos) };
@@ -436,15 +455,16 @@ async function insumosLer(ch: Chamador, c: Record<string, unknown>) {
   const [dossie, imagens, arquivos] = await Promise.all([
     lerDossieDaMarca(servico(), f.client_id, kit.marca, 3000).catch((e) => (registrarFalha("mesa-motion: dossiê", e), null)),
     servico().from("cliente_imagens").select("id, storage_bucket, storage_path, nome, categoria, tags").eq("client_id", f.client_id).eq("ativa", true).order("criado_em", { ascending: false }).limit(60),
-    servico().from("video_arquivos").select("id, nome, tipo, storage_path, duracao_s, largura, altura, mime").eq("client_id", f.client_id).in("tipo", ["bruto", "take", "gerado", "audio", "render", "cena"]).order("criado_em", { ascending: false }).limit(80),
+    servico().from("video_arquivos").select("id, nome, tipo, storage_path, duracao_s, largura, altura, mime, grupo").eq("client_id", f.client_id).in("tipo", ["bruto", "take", "gerado", "audio", "render", "cena"]).order("criado_em", { ascending: false }).limit(80),
   ]);
-  const lista = ((arquivos.data as Array<{ id: string; nome: string; tipo: string; storage_path: string; duracao_s: number | null; mime: string | null }>) || []).filter((a) => a.storage_path && a.storage_path.indexOf(`${f.client_id}/`) === 0);
+  const lista = ((arquivos.data as Array<{ id: string; nome: string; tipo: string; storage_path: string; duracao_s: number | null; mime: string | null; grupo: string | null }>) || []).filter((a) => a.storage_path && a.storage_path.indexOf(`${f.client_id}/`) === 0);
   return json({
     kit: { nome: kit.nome, paleta: kit.paleta, fontes: kit.fontes, tem_logo: !!kit.logo_path, cores_da_cena: kit.cena.cores, fonte_titulo: kit.cena.fonte_titulo, fonte_texto: kit.cena.fonte_texto, avisos: kit.avisos, estilo: kit.estilo, regras: kit.regras, tom: kit.tom },
     dossie: dossie || null,
     imagens: ((imagens.data as unknown[]) || []).slice(0, 60),
     videos: lista.filter((a) => a.tipo !== "audio"),
-    musicas: lista.filter((a) => a.tipo === "audio" || /^audio\//.test(a.mime || "")),
+    // Narração e efeito gerados (frente MOV) não são trilha.
+    musicas: lista.filter((a) => (a.tipo === "audio" || /^audio\//.test(a.mime || "")) && a.grupo !== "narracao" && a.grupo !== "efeito"),
     custo_usd: 0,
   });
 }
@@ -578,7 +598,8 @@ async function escolherStoryboard(f: LinhaDoFilme, indice: number) {
   const sb = f.storyboards[indice];
   if (!sb) throw new ErroHttp(404, "storyboard_inexistente", "Este storyboard não existe.");
   const anterior = { storyboard_escolhido: f.storyboard_escolhido, cenas: f.cenas };
-  const cenas = sb.cenas.map((x, i) => cenaDaLinha({ ...x, id: undefined, ordem: i + 1 }, f.brand.provas, f.client_id).cena);
+  // Frente MOV: as cenas nascem com o acabamento escolhido na entrevista (direção de arte).
+  const cenas = sb.cenas.map((x, i) => cenaDaLinha({ ...x, id: undefined, ordem: i + 1, acabamento: typeof f.entrevista.acabamento === "string" ? f.entrevista.acabamento : undefined }, f.brand.provas, f.client_id).cena);
   // Com cenas feitas, guarda a cópia: o Desfazer da tela volta as mesmas cenas (os ids iguais religam stills e renders).
   const copia = f.cenas.length ? { storyboard_escolhido: f.storyboard_escolhido, cenas: f.cenas, retrato: retratoDasCenas(cenas), em: new Date().toISOString() } : null;
   const filme = await atualizarFilme(f.id, { storyboard_escolhido: indice, cenas, etapa: "stills", insumos: comDesfazer(f.insumos, "troca", copia) });
@@ -720,6 +741,23 @@ async function inserirPedido(ch: Chamador, f: LinhaDoFilme, tipo: "cena_hf" | "b
   throw new ErroHttp(409, "pedido_em_conflito", "Já há um pedido igual em andamento.");
 }
 
+/**
+ * Frente MOV: o worker de render tem a própria cópia do código. Se o worker
+ * visto por último ainda não conhece as novidades (peças novas, acabamento,
+ * narração como voz na mixagem), recusa com a frase em vez de deixar o
+ * pedido falhar na fila. Sem worker visto, o pedido espera na fila como antes.
+ */
+async function exigirWorkerNovo(novidade: string | null) {
+  if (!novidade) return;
+  const { data, error } = await servico().from("render_workers").select("versao, visto_em").order("visto_em", { ascending: false }).limit(1);
+  if (error) {
+    registrarFalha("mesa-motion: versão do worker não lida", error, { novidade });
+    return;
+  }
+  const w = ((data as Array<{ versao: string | null }>) || [])[0];
+  if (w && !workerConheceMov(w.versao)) throw new ErroHttp(409, "worker_antigo", fraseDoWorkerAntigo(w.versao, novidade), { versao_do_worker: w.versao });
+}
+
 async function pedirCena(ch: Chamador, f: LinhaDoFilme, cenaId: string, modo: ModoDoPedidoDaCena, formatos: FormatoDoMotion[], uid: string) {
   const cena = f.cenas.find((x) => x.id === cenaId);
   if (!cena) throw new ErroHttp(404, "cena_inexistente", "Cena não encontrada neste filme.");
@@ -732,6 +770,7 @@ async function pedirCena(ch: Chamador, f: LinhaDoFilme, cenaId: string, modo: Mo
   } catch (e) {
     throw new ErroHttp(409, "cena_incompleta", e instanceof Error ? e.message : "A cena não pode ser montada.");
   }
+  await exigirWorkerNovo(novidadeDaCena(cena));
   const pedidos: unknown[] = [];
   for (const formato of formatos) {
     const r = await inserirPedido(ch, f, "cena_hf", formatos.length > 1 ? `${uid}-${formato.replace(":", "x")}` : uid, {
@@ -920,12 +959,17 @@ async function montar(ch: Chamador, f0: LinhaDoFilme, formatosPedidos: FormatoDo
       }
     });
   });
-  if (faltando.length) throw new ErroHttp(409, "cenas_faltando", `Falta renderizar: ${faltando.slice(0, 6).join("; ")}.`, { faltando });
+  // Frente MOV: com a narração ligada, cada fala precisa do áudio em dia (senão o filme fala o texto velho).
+  faltasDaNarracao(f.som.narracao, f.cenas).forEach((x) => faltando.push(x));
+  if (faltando.length) throw new ErroHttp(409, "cenas_faltando", `Falta: ${faltando.slice(0, 6).join("; ")}.`, { faltando });
+  // A mixagem com a narração como voz só existe no worker novo (trabalho.ts da frente MOV).
+  const temNarracao = f.som.narracao.ligada && f.cenas.some((c) => semTags(f.som.narracao.falas[c.id] || ""));
+  await exigirWorkerNovo(temNarracao ? "a mixagem com a narração (a música abaixa na voz)" : null);
   const videos = { ...obj(f.montagem.videos) } as Record<string, string>;
   const versoes: Record<string, string> = {};
   const pedidos: Record<string, string> = {};
   for (const formato of formatos) {
-    const projeto = projetoDoFilme({ titulo: f.nome, formato, materiais: porFormato[formato], som: f.som });
+    const projeto = projetoDoFilme({ titulo: f.nome, formato, materiais: porFormato[formato], som: f.som, transicao: f.entrevista.transicao });
     const videoId = videos[formato] && UUID.test(videos[formato]) ? videos[formato] : crypto.randomUUID();
     videos[formato] = videoId;
     const { data: ant } = await servico().from("video_versoes").select("numero").eq("client_id", f.client_id).eq("video_id", videoId).order("numero", { ascending: false }).limit(1);
@@ -1009,7 +1053,7 @@ async function estimar(ch: Chamador, c: Record<string, unknown>) {
   await garantirAcesso(ch, clientId);
   const m = await modeloDoPapel(PAPEL, typeof c.modelo_id === "string" && c.modelo_id ? c.modelo_id : null);
   if (!m) throw new ErroHttp(409, "sem_modelo", "Nenhum modelo de texto ativo para o papel motion.");
-  const alvo = c.alvo === "brand" || c.alvo === "storyboards" || c.alvo === "cena" ? c.alvo : "conversa";
+  const alvo = c.alvo === "brand" || c.alvo === "storyboards" || c.alvo === "cena" || c.alvo === "falas" ? c.alvo : "conversa";
   const t = TAMANHOS_DO_MOTION[alvo];
   return json({ estimativa_usd: estimarComModelo(m, { tokensEntrada: t.entrada, tokensSaida: t.saida }), modelo_id: m.id, teto_padrao_usd: TETO_PADRAO_DA_CENA_USD, custo_usd: 0 });
 }
@@ -1040,12 +1084,31 @@ function listasDoAgente(f: LinhaDoFilme): ListasDoMotion {
     storyboards: f.storyboards.map((s, i) => ({ conceito: s.conceito, escolhido: f.storyboard_escolhido === i })),
     tem_trilha: !!f.som.trilha,
     tem_batidas: !!(f.som.batidas && f.som.batidas.batidas.length),
+    voz: {
+      tem_chave: !!(Deno.env.get("ELEVENLABS_API_KEY") || "").trim(),
+      tem_voz: !!f.som.narracao.voz,
+      falas: Object.keys(f.som.narracao.falas).filter((k) => semTags(f.som.narracao.falas[k])).length,
+      audios: f.som.narracao.audios.length,
+      cenas_com_fala: f.cenas.filter((c) => semTags(f.som.narracao.falas[c.id] || "")).map((c) => c.id),
+    },
   };
 }
 
-async function custosDoAgente(modelo: ModeloIa) {
+async function custosDoAgente(modelo: ModeloIa, f: LinhaDoFilme) {
   const est = (t: { entrada: number; saida: number }) => estimarComModelo(modelo, { tokensEntrada: t.entrada, tokensSaida: t.saida });
-  return { brand: est(TAMANHOS_DO_MOTION.brand), storyboards: est(TAMANHOS_DO_MOTION.storyboards), cena: est(TAMANHOS_DO_MOTION.cena), critica: 0.001 };
+  const n = f.som.narracao;
+  const falas = f.cenas.map((c) => n.falas[c.id] || "").filter((t) => semTags(t));
+  const maior = falas.reduce((m, t) => (t.length > m.length ? t : m), "");
+  return {
+    brand: est(TAMANHOS_DO_MOTION.brand),
+    storyboards: est(TAMANHOS_DO_MOTION.storyboards),
+    cena: est(TAMANHOS_DO_MOTION.cena),
+    critica: 0.001,
+    falas: VOZ.estimarFalas(modelo),
+    narracao: estimarNarracao(falas, n.modelo).custo_usd,
+    narracao_por_cena: estimarNarracao([maior], n.modelo).custo_usd,
+    trilha: estimarMusica(duracaoTotal(f.cenas) + 1.5),
+  };
 }
 
 const ESQUEMA_DO_AGENTE_COM_METODO = comMetodosUsados(ESQUEMA_DO_AGENTE);
@@ -1076,6 +1139,15 @@ async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
   const referencia = await referenciaDoPedido(mensagem, itens, { agente: "diretor de motion da Mesa Motion", ultimaResposta: ultima ? ultima.conteudo : null }).catch((e) => (registrarFalha("mesa-motion: referência do pedido", e), null));
   const dados = {
     filme: { nome: f.nome, tipo: f.tipo, etapa: f.etapa, formatos: f.formatos, duracao_total_s: f.cenas.reduce((s, x) => s + x.duracao_s, 0), entrevista: f.entrevista, brand: { promessa: f.brand.promessa, provas: f.brand.provas, beats: f.brand.beats }, trilha: f.som.trilha ? f.som.trilha.nome : null, batidas: f.som.batidas ? { bpm: f.som.batidas.bpm, drop_s: f.som.batidas.drop_s } : null, critica: f.critica },
+    narracao: {
+      ligada: f.som.narracao.ligada,
+      voz: f.som.narracao.voz ? f.som.narracao.voz.nome : null,
+      modelo: f.som.narracao.modelo,
+      falas: f.cenas.map((c, i) => {
+        const nc = narracaoDaCena(f.som.narracao, c.id);
+        return { cena: i + 1, fala: f.som.narracao.falas[c.id] || null, audio: nc ? (nc.desatualizada ? "desatualizado" : "em dia") : null };
+      }),
+    },
     marca: { nome: kit.nome, cores: kit.cena.cores, tem_logo: kit.cena.tem_logo },
   };
   const saida = await chamarTexto({
@@ -1095,7 +1167,7 @@ async function agenteConversar(ch: Chamador, c: Record<string, unknown>) {
   let resposta = limpo(j.resposta, 4000) || "Pronto.";
   const sugestoes = (Array.isArray(j.sugestoes) ? j.sugestoes : []).map((x) => limpo(x, 140)).filter(Boolean).slice(0, 3);
   const aprendendo = aprenderDoPedido(servico(), { clientId: f.client_id, mesa: "motion", pedido: mensagem, regraSugerida: j.regra_aprendida, marcaId: kit.marca ? kit.marca.id : f.marca_id, userId: ch.userId, ultimaResposta: ultima ? ultima.conteudo : null });
-  let acao = normalizarAcoesDoMotion(j.acoes, l, f.client_id, await custosDoAgente(modelo));
+  let acao = normalizarAcoesDoMotion(j.acoes, l, f.client_id, await custosDoAgente(modelo, f));
   if (acao) acao = comCaminho(acao, caminhoDoMotion(f.client_id, f.id, acao));
   // Ordem clara e sem custo (escolher storyboard, trocar peça, pedir still ou amostra): faz na hora, com Desfazer.
   if (acao && podeExecutarDireto(acao, regrasDoMotion(), { pedidoClaro: true }).direto) {
@@ -1202,6 +1274,24 @@ async function executarItem(ch: Chamador, filmeId: string, item: ItemDaAcaoDoAge
     const r = await montar(ch, f, [], uidDoItem(item));
     return { desfazer: null, aviso: `${Object.keys(r.versoes).length} formato(s) na fila` };
   }
+  // Frente MOV: voz e som pela ElevenLabs.
+  if (op === "escrever_falas") {
+    const r = await VOZ.escreverFalas(ch, f, { pedido: item.para && item.para !== "sem pedido extra" ? String(item.para) : "" });
+    return { desfazer: { tipo: "falas", anteriores: r.anteriores }, custo: r.custo };
+  }
+  if (op === "gerar_narracao") {
+    const daCena = item.ref.charAt(0) === "c";
+    const r = await VOZ.gerarNarracao(ch, f, daCena ? "cena" : "roteiro", daCena ? item.alvo_id : undefined);
+    return { desfazer: { tipo: "narracao", anteriores: r.anteriores }, custo: r.custo, aviso: r.avisos.length ? r.avisos.join(" ") : undefined };
+  }
+  if (op === "casar_narracao") {
+    const r = await VOZ.casarNarracao(f);
+    return { desfazer: { tipo: "duracoes", anterior: r.anterior }, aviso: r.avisos.length ? r.avisos.join(" ") : undefined };
+  }
+  if (op === "gerar_trilha") {
+    const r = await VOZ.gerarTrilha(ch, f, { prompt: item.para && item.para !== "pelo clima da entrevista" ? String(item.para) : "", uid: uidDoItem(item) });
+    return { desfazer: { tipo: "trilha", anterior: r.anterior }, custo: r.custo, aviso: r.avisos.length ? r.avisos.join(" ") : undefined };
+  }
   throw new Error("Operação desconhecida.");
 }
 
@@ -1224,6 +1314,10 @@ async function reverterItem(ch: Chamador, filmeId: string, r: ResultadoDoItem) {
     for (const id of Array.isArray(d.ids) ? (d.ids as string[]) : []) if (UUID.test(id)) await cancelarPedido(f, id);
     return;
   }
+  // Frente MOV: as falas, os áudios (os arquivos ficam na Mídia) e a trilha de antes voltam.
+  if (d.tipo === "falas") return void (await atualizarFilme(f.id, { som: { ...f.som, narracao: { ...f.som.narracao, falas: obj(d.anteriores) } } }));
+  if (d.tipo === "narracao") return void (await atualizarFilme(f.id, { som: { ...f.som, narracao: lerSom({ narracao: { ...f.som.narracao, audios: d.anteriores } }).narracao } }));
+  if (d.tipo === "trilha") return void (await atualizarFilme(f.id, { som: { ...f.som, trilha: lerSom({ trilha: d.anterior }).trilha, batidas: null } }));
   throw new Error("Sem o que desfazer.");
 }
 
@@ -1270,6 +1364,23 @@ async function desfazerAcao(ch: Chamador, c: Record<string, unknown>) {
   return json({ anexo: r.anexo, voltaram: r.voltaram, falharam: r.falharam, custo_usd: 0 });
 }
 
+// ------------------------------------------------------------------ voz e som (frente MOV)
+
+const VOZ = criarVoz({
+  servico,
+  json,
+  erro: (status, codigo, mensagem, extra) => new ErroHttp(status, codigo, mensagem, extra || {}),
+  garantirAcesso: (ch, clientId) => garantirAcesso(ch, clientId),
+  lerFilme: (ch, id, permitir) => lerFilme(ch, id, permitir),
+  atualizarFilme,
+  somarCusto,
+  modeloDoPedido,
+  kitDoFilme,
+  linksDoFilme,
+  pedirBatidas: (ch, f, uid) => pedirBatidas(ch, f, uid),
+  auditar,
+});
+
 // ------------------------------------------------------------------ rotas
 
 const ACOES: Record<string, (ch: Chamador, c: Record<string, unknown>) => Promise<Response>> = {
@@ -1301,10 +1412,11 @@ const ACOES: Record<string, (ch: Chamador, c: Record<string, unknown>) => Promis
   executar_acao_agente: executarAcao,
   desfazer_acao_agente: desfazerAcao,
   ...rotasDoAprendizado({ mesa: "motion", servico, garantirAcesso: (ch, clientId) => garantirAcesso(ch as Chamador, clientId), json }),
+  ...VOZ.acoes,
 };
 
 /** IA ou rede: a resposta começa na hora (a plataforma corta em 150 s sem resposta). */
-const ACOES_LONGAS = new Set(["brand_gerar", "storyboards_gerar", "cena_escrever", "critica_gerar", "agente_conversar", "executar_acao_agente", "insumo_do_acervo", "montar"]);
+const ACOES_LONGAS = new Set(["brand_gerar", "storyboards_gerar", "cena_escrever", "critica_gerar", "agente_conversar", "executar_acao_agente", "insumo_do_acervo", "montar", ...ACOES_LONGAS_DA_VOZ]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

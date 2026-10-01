@@ -46,7 +46,7 @@ const ETAPAS_DA_MESA_MOTION: Record<string, string> = {
   stills: "Stills",
   construcao: "Construção",
   critica: "Crítica",
-  som: "Som",
+  som: "Voz e som",
   render: "Render e entrega",
 };
 

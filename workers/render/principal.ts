@@ -25,7 +25,7 @@ import { armazemSupabase } from "./armazem.ts";
 import { filaSupabase } from "./fila.ts";
 import { umPedido, type Ambiente } from "./trabalho.ts";
 
-export const VERSAO_DO_WORKER = "edt-1.0+mot-1.0";
+export const VERSAO_DO_WORKER = "edt-1.0+mot-1.0+mov-1";
 
 export function lerAmbiente(env: NodeJS.ProcessEnv): { url: string; chave: string; nome: string; pasta: string; intervalo: number; chrome: string | null; concorrencia: number | null } {
   const url = String(env.SUPABASE_URL || env.VITE_SUPABASE_URL || "").trim();

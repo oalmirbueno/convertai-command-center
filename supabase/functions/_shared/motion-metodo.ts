@@ -34,6 +34,9 @@ import {
   PECAS_DO_KIT,
 } from "./cena-hf.ts";
 import { caminhoDoSom, chaveDoSom, planoDeSons, somPorId } from "../mesa-motion/modulos/som-do-editor.ts";
+// Frente MOV (30/09): narração pela ElevenLabs, efeitos sob medida e acabamento (módulos da função, fora do _shared).
+import { type EfeitoSobMedida, lerEfeitosSobMedida, lerNarracao, NARRACAO_PADRAO, type NarracaoDoFilme, trilhaDaNarracao } from "../mesa-motion/modulos/narracao.ts";
+import { ACABAMENTOS, ehAcabamento } from "../mesa-motion/modulos/pecas-extras.ts";
 
 // ------------------------------------------------------------------ etapas
 
@@ -45,7 +48,7 @@ export const ETAPAS_DO_MOTION = [
   { valor: "stills", rotulo: "Stills", dica: "Um quadro por cena para aprovar" },
   { valor: "construcao", rotulo: "Construção", dica: "Cenas em código, amostra de 5 s e final" },
   { valor: "critica", rotulo: "Crítica", dica: "Folha de contato e nota por critério (aviso)" },
-  { valor: "som", rotulo: "Som", dica: "Trilha, batidas e efeitos no pico" },
+  { valor: "som", rotulo: "Voz e som", dica: "Narração, trilha, batidas e efeitos no pico" },
   { valor: "render", rotulo: "Render e entrega", dica: "4 formatos, miniatura e entrega" },
 ] as const;
 export type EtapaDoMotion = (typeof ETAPAS_DO_MOTION)[number]["valor"];
@@ -67,6 +70,7 @@ export const TAMANHOS_DO_MOTION = {
   storyboards: { entrada: 7_500, saida: 7_000 },
   cena: { entrada: 5_500, saida: 6_000 },
   conversa: { entrada: 9_000, saida: 2_500 },
+  falas: { entrada: 4_500, saida: 1_600 },
 } as const;
 
 // ------------------------------------------------------------------ entrevista
@@ -153,6 +157,20 @@ export const INGREDIENTES: Ingrediente[] = [
       { valor: "corte_na_batida", rotulo: "Corte seco na batida" },
       { valor: "empurrao", rotulo: "Empurrão com rastro" },
       { valor: "fade", rotulo: "Fade suave" },
+      { valor: "zoom", rotulo: "Zoom de entrada" },
+    ],
+  },
+  {
+    chave: "acabamento",
+    rotulo: "Acabamento",
+    opcoes: ACABAMENTOS.map((a) => ({ valor: a.valor, rotulo: a.rotulo, dica: a.dica })),
+  },
+  {
+    chave: "locucao",
+    rotulo: "Locução",
+    opcoes: [
+      { valor: "com_voz", rotulo: "Com narração", dica: "voz da ElevenLabs, fala por cena" },
+      { valor: "sem_voz", rotulo: "Só trilha e efeitos" },
     ],
   },
   {
@@ -399,6 +417,23 @@ export interface CenaDaLinha extends CenaDoFilme {
   camera: string;
   /** Plano gerado ou real: o arquivo escolhido (video_arquivos). */
   arquivo: { id: string; path: string; duracao_s: number | null } | null;
+  /** Frente MOV: transição de entrada desta cena na montagem (sem ela, a da entrevista). */
+  transicao?: TransicaoDaCena;
+}
+
+/** Transição de entrada da cena na Mesa Edição (o corte seco é "corte"). */
+export const TRANSICOES_DA_CENA = [
+  { valor: "corte", rotulo: "Corte seco" },
+  { valor: "fade", rotulo: "Fade" },
+  { valor: "deslizar", rotulo: "Empurrão" },
+  { valor: "zoom", rotulo: "Zoom" },
+] as const;
+export type TransicaoDaCena = (typeof TRANSICOES_DA_CENA)[number]["valor"];
+const ehTransicao = (v: unknown): v is TransicaoDaCena => TRANSICOES_DA_CENA.some((t) => t.valor === v);
+
+/** A transição da entrevista na linguagem da Mesa Edição. */
+export function transicaoDaEntrevista(v: unknown): TransicaoDaCena {
+  return v === "fade" ? "fade" : v === "empurrao" ? "deslizar" : v === "zoom" ? "zoom" : "corte";
 }
 
 export interface Storyboard {
@@ -529,6 +564,8 @@ export function cenaDaLinha(p: Partial<CenaDaLinha> & { ordem: number }, provas:
     camera: tipo_plano === "gerado" ? linha(p.camera, 200) : "",
     arquivo: p.arquivo && typeof p.arquivo === "object" && typeof p.arquivo.id === "string" ? p.arquivo : null,
   };
+  if (ehTransicao(p.transicao)) cena.transicao = p.transicao;
+  if (ehAcabamento(p.acabamento) && p.acabamento !== "limpo") cena.acabamento = p.acabamento;
   return { cena, avisos };
 }
 
@@ -578,7 +615,8 @@ export type ModoDoPedidoDaCena = "still" | "amostra" | "final";
 
 /** Assinatura curta do conteúdo da cena (FNV-1a): muda a cena, o render antigo fica "desatualizado". */
 export function assinaturaDaCena(c: CenaDoFilme): string {
-  const texto = JSON.stringify([c.modo, c.peca, c.params, c.escrita ? [c.escrita.html, c.escrita.css, c.escrita.js] : null, c.duracao_s, c.fundo, c.tema]);
+  // O acabamento só entra quando existe: as cenas de antes mantêm a assinatura (e os renders em dia).
+  const texto = JSON.stringify([c.modo, c.peca, c.params, c.escrita ? [c.escrita.html, c.escrita.css, c.escrita.js] : null, c.duracao_s, c.fundo, c.tema]) + (c.acabamento && c.acabamento !== "limpo" ? `|${c.acabamento}` : "");
   let h = 0x811c9dc5;
   for (let i = 0; i < texto.length; i++) {
     h ^= texto.charCodeAt(i);
@@ -621,9 +659,12 @@ export interface SomDoFilme {
   volume_musica: number;
   volume_efeitos: number;
   efeitos: "casados" | "poucos" | "nenhum";
+  /** Frente MOV: a narração pela ElevenLabs e os efeitos gerados sob medida. */
+  narracao: NarracaoDoFilme;
+  efeitos_sob_medida: EfeitoSobMedida[];
 }
 
-export const SOM_PADRAO = (): SomDoFilme => ({ trilha: null, clima: null, batidas: null, volume_musica: 0.85, volume_efeitos: 0.7, efeitos: "casados" });
+export const SOM_PADRAO = (): SomDoFilme => ({ trilha: null, clima: null, batidas: null, volume_musica: 0.85, volume_efeitos: 0.7, efeitos: "casados", narracao: NARRACAO_PADRAO(), efeitos_sob_medida: [] });
 
 export function lerSom(v: unknown): SomDoFilme {
   const o = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
@@ -637,6 +678,8 @@ export function lerSom(v: unknown): SomDoFilme {
     volume_musica: vol(o.volume_musica, base.volume_musica),
     volume_efeitos: vol(o.volume_efeitos, base.volume_efeitos),
     efeitos: o.efeitos === "poucos" || o.efeitos === "nenhum" ? o.efeitos : "casados",
+    narracao: lerNarracao(o.narracao),
+    efeitos_sob_medida: lerEfeitosSobMedida(o.efeitos_sob_medida),
   };
 }
 
@@ -689,18 +732,22 @@ const r3 = (n: number) => Math.round(n * 1000) / 1000;
  * movimento. O worker renderiza pela mesma ComposicaoDoProjeto e acerta
  * -14 LUFS.
  */
-export function projetoDoFilme(p: { titulo: string; formato: FormatoDoMotion; fps?: number; materiais: MaterialDaCena[]; som: SomDoFilme }): Record<string, unknown> {
+export function projetoDoFilme(p: { titulo: string; formato: FormatoDoMotion; fps?: number; materiais: MaterialDaCena[]; som: SomDoFilme; transicao?: unknown }): Record<string, unknown> {
   const fps = p.fps || 30;
   const q = (s: number) => Math.round(s * fps) / fps;
   const { largura, altura } = FORMATOS_DO_MOTION[p.formato];
   const fontes: Record<string, Record<string, unknown>> = {};
   const clipes: Record<string, unknown>[] = [];
   const eventos: Array<{ pico_s: number; som: string; prioridade: number; ref: string }> = [];
+  const inicios: Array<{ id: string; inicio_s: number; duracao_s: number }> = [];
+  const transicaoPadrao = transicaoDaEntrevista(p.transicao);
   let t = 0;
   p.materiais.forEach((m, i) => {
     const chave = `cena-${i + 1}`;
     fontes[chave] = { chave, arquivo_id: null, nome: m.cena.titulo, tipo: "gerado", storage_bucket: "mesa", storage_path: m.caminho, duracao_s: m.duracao_s, largura, altura, midia: "video" };
     const d = q(Math.min(m.duracao_s, m.cena.duracao_s));
+    inicios.push({ id: m.cena.id, inicio_s: q(t), duracao_s: d });
+    const tr = m.cena.transicao || transicaoPadrao;
     clipes.push({
       id: `v${i + 1}`,
       fonte: chave,
@@ -711,7 +758,7 @@ export function projetoDoFilme(p: { titulo: string; formato: FormatoDoMotion; fp
       volume: 0,
       texto: null,
       estilo: null,
-      transicao_entrada: null,
+      transicao_entrada: i > 0 && tr !== "corte" ? { tipo: tr, duracao_s: 0.35 } : null,
       transicao_saida: null,
       zoom: null,
       cena_ref: m.cena.id,
@@ -744,10 +791,17 @@ export function projetoDoFilme(p: { titulo: string; formato: FormatoDoMotion; fp
     comparar: null,
     origem: null,
   });
+  // Frente MOV: a narração (um clipe por cena com fala) e a música que abaixa na voz.
+  const voz = trilhaDaNarracao(p.som.narracao, inicios, fps);
+  const comVoz = voz.clipes.length > 0;
+  if (comVoz) {
+    Object.keys(voz.fontes).forEach((k) => (fontes[k] = voz.fontes[k]));
+    trilhas.push({ id: "audio-voz", tipo: "audio", nome: "Narração", muda: false, oculta: false, clipes: voz.clipes });
+  }
   if (p.som.trilha) {
     fontes.musica = { chave: "musica", arquivo_id: p.som.trilha.arquivo_id, nome: p.som.trilha.nome, tipo: "audio", storage_bucket: "mesa", storage_path: p.som.trilha.path, duracao_s: p.som.trilha.duracao_s, largura: null, altura: null, midia: "audio" };
     const dur = Math.min(duracao, p.som.trilha.duracao_s || duracao);
-    trilhas.push({ id: "audio-1", tipo: "audio", nome: "Música", muda: false, oculta: false, clipes: [audio("m1", "musica", 0, dur, { papel: "musica", clima: p.som.clima }, p.som.volume_musica)] });
+    trilhas.push({ id: "audio-1", tipo: "audio", nome: "Música", muda: false, oculta: false, clipes: [audio("m1", "musica", 0, dur, { papel: comVoz ? "trilha" : "musica", clima: p.som.clima }, p.som.volume_musica)] });
   }
   if (p.som.efeitos !== "nenhum" && eventos.length) {
     const plano = planoDeSons(eventos, { modo: p.som.efeitos === "poucos" ? "poucos" : "casados", fps });
@@ -761,6 +815,19 @@ export function projetoDoFilme(p: { titulo: string; formato: FormatoDoMotion; fp
       });
     if (efeitos.length) trilhas.push({ id: "audio-2", tipo: "audio", nome: "Efeitos", muda: false, oculta: false, clipes: efeitos });
   }
+  // Efeitos gerados sob medida (ElevenLabs): no momento pedido dentro da cena.
+  const sobMedida = (p.som.efeitos_sob_medida || [])
+    .map((e, k) => {
+      const c = inicios.find((x) => x.id === e.cena_id);
+      if (!c) return null;
+      const ini = c.inicio_s + Math.min(e.t_s, Math.max(0, c.duracao_s - 0.1));
+      if (ini >= duracao) return null;
+      const chave = `efeito-${k + 1}`;
+      fontes[chave] = { chave, arquivo_id: null, nome: e.nome, tipo: "audio", storage_bucket: "mesa", storage_path: e.path, duracao_s: e.duracao_s, largura: null, altura: null, midia: "audio" };
+      return audio(`g${k + 1}`, chave, ini, Math.min(e.duracao_s, duracao - ini), { papel: "efeito", som: "sob_medida" }, p.som.volume_efeitos);
+    })
+    .filter((x): x is ReturnType<typeof audio> => !!x);
+  if (sobMedida.length) trilhas.push({ id: "audio-3", tipo: "audio", nome: "Efeitos sob medida", muda: false, oculta: false, clipes: sobMedida });
   return {
     formato_versao: 2,
     titulo: `${p.titulo} · ${p.formato}`.slice(0, 120),
@@ -777,14 +844,15 @@ export function projetoDoFilme(p: { titulo: string; formato: FormatoDoMotion; fp
     fontes,
     trilhas,
     atualizado_em: null,
-    transcricoes: {},
+    transcricoes: voz.transcricoes,
     visoes: {},
     marcadores: p.materiais.map((m, i) => ({ id: `mk${i + 1}`, tempo_s: q(p.materiais.slice(0, i).reduce((s, x) => s + Math.min(x.duracao_s, x.cena.duracao_s), 0)), rotulo: m.cena.titulo.slice(0, 60) })),
     continuidade: { personagem: null, cenario: null, referencias: [] },
     skills_aplicadas: [],
     referencias: [],
     ondas: {},
-    mixagem: { trilha_abaixo_da_voz_db: 22, subida_nas_pausas_db: 6, lufs_alvo: -14, duck: false },
+    // Com narração a música fica 18 dB abaixo da voz e sobe nas pausas; sem voz, sem duck (como era).
+    mixagem: comVoz ? { trilha_abaixo_da_voz_db: 18, subida_nas_pausas_db: 6, lufs_alvo: -14, duck: true } : { trilha_abaixo_da_voz_db: 22, subida_nas_pausas_db: 6, lufs_alvo: -14, duck: false },
   };
 }
 
