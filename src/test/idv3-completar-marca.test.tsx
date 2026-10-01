@@ -88,7 +88,7 @@ import {
   totalDoPlano,
 } from "../../supabase/functions/mesa-identidade/modulos/completar-marca";
 import { brandDaEstrategia, caminhoDaIdentidade, cenasDaApresentacao, entrevistaDaEstrategia, insumosDaIdentidade, kitDaIdentidade } from "../../supabase/functions/mesa-motion/modulos/motion-da-identidade";
-import { etapasDoProjeto, podeAbrir, precisaDeNaming, ROTULO_DO_MODO } from "../../supabase/functions/_shared/identidade-etapas";
+import { etapasDoProjeto, podeAbrir, precisaDeNaming, ROTULO_DO_MODO } from "../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
 import { roteiroDaApresentacao } from "../../supabase/functions/mesa-identidade/modulos/apresentacao-da-marca";
 import { TAMANHOS_DO_MOTION } from "../../supabase/functions/_shared/motion-metodo";
 import { luminanciaRelativa } from "../../supabase/functions/_shared/cores-da-marca";

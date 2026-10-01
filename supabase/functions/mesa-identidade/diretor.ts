@@ -33,7 +33,7 @@ import { blocoDoContextoDoCliente, criarContextoDoAgente, TODAS_AS_PARTES } from
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { AVISO_SEM_REGISTRO, gravarTroca } from "../_shared/conversa-das-mesas.ts";
 import { anexoDasRegrasSeguidas, aprenderDoPedido, CAMPOS_DO_APRENDIZADO, regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
-import { etapaAtual, faltaNaEtapa, reabrirEtapa } from "../_shared/identidade-etapas.ts";
+import { etapaAtual, faltaNaEtapa, reabrirEtapa } from "./modulos/identidade-etapas.ts";
 import { lacunasDoBrandbook } from "./modulos/brandbook.ts";
 import {
   alvosDoDiretor,

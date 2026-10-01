@@ -14,6 +14,8 @@
 
 import { Image } from "./imagescript.ts";
 import { proporcaoDoTrechoConfere } from "./carrossel-continuo.ts";
+// IDR (30/09): recorte sem halo (alfa pela projeção, cor descontaminada, franja e miolo das letras).
+import { fundoPelaBorda, limparBordaDoRecorte, recortarFundoSolido, toleranciaDoFundo } from "./recorte-limpo.ts";
 import {
   ALTURA_LAMINA,
   type Alinhamento,
@@ -732,8 +734,25 @@ export async function logoLimpa(bytes: Uint8Array, opcoes: { aparar?: boolean } 
   // alfa, e o branco é desenho. O preenchimento a partir da borda atravessava a
   // transparência e apagava as letras brancas encostadas nela ("Aceler").
   if (nTransparentes >= nBorda * 0.5) {
+    // IDR (revisão de 01/10): a franja de um PNG transparente NUNCA sai aqui (sem prévia, a logo iria
+    // alterada direto para a arte). Ponta clara da VIFUT e anel branco da CME são desenho. A limpeza da
+    // franja fica só na janela "Limpar fundo" da Mesa Identidade, com antes e depois.
     if (fonte === img && l.width === img.width && l.height === img.height) return bytes;
     return await l.encode(1);
+  }
+  // IDR (30/09): fundo liso e claro (branco, creme, cinza de JPEG): recorte limpo, sem franja. O branco
+  // cercado pelo desenho fica, como antes (o gerador copia o que vê; branco de letra não some).
+  const liso = fundoPelaBorda({ data: b, largura: W, altura: H });
+  if (liso.tipo === "solido" && liso.claro && liso.cor) {
+    const r = recortarFundoSolido({ data: b, largura: W, altura: H }, { cor: liso.cor, tolerancia: toleranciaDoFundo(liso.ruido), furos: "manter" });
+    const limpos = r.info.fundo_px;
+    if (limpos < W * H * 0.005 || limpos > W * H * 0.97) {
+      if (!opcoes.aparar) return bytes;
+      const semLimpeza = fonte.width > 512 || fonte.height > 512 ? fonte.clone().contain(512, 512) : fonte;
+      return fonte === img && semLimpeza === img ? bytes : await semLimpeza.encode(1);
+    }
+    b.set(r.data);
+    return await (opcoes.aparar ? aparadaPeloAlfa(l) ?? l : l).encode(1);
   }
   const temCorDeFundo = nClaros > 0 && nClaros >= nBorda * 0.35;
   const cor = temCorDeFundo ? [sr / nClaros, sg / nClaros, sb / nClaros] : [255, 255, 255];
@@ -771,33 +790,9 @@ export async function logoLimpa(bytes: Uint8Array, opcoes: { aparar?: boolean } 
     const semLimpeza = fonte.width > 512 || fonte.height > 512 ? fonte.clone().contain(512, 512) : fonte;
     return fonte === img && semLimpeza === img ? bytes : await semLimpeza.encode(1);
   }
-  // Franja: 2 passadas nos pixels colados ao fundo tirado; o que é quase a cor
-  // do fundo fica transparente em proporção e a cor perde a mistura com ele.
-  for (let passe = 0; passe < 2; passe++) {
-    const franja: number[] = [];
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        const p = y * W + x;
-        if (visto[p] === 2 || b[p * 4 + 3] === 0) continue;
-        if ((x > 0 && visto[p - 1] === 2) || (x < W - 1 && visto[p + 1] === 2) || (y > 0 && visto[p - W] === 2) || (y < H - 1 && visto[p + W] === 2)) {
-          franja.push(p);
-        }
-      }
-    }
-    for (const p of franja) {
-      const i = p * 4;
-      const a = Math.min(1, distancia(i) / 70);
-      if (a < 1) {
-        if (a <= 0.02) {
-          b[i + 3] = 0;
-        } else {
-          for (let c = 0; c < 3; c++) b[i + c] = Math.max(0, Math.min(255, Math.round((b[i + c] - cor[c] * (1 - a)) / a)));
-          b[i + 3] = Math.round(b[i + 3] * a);
-        }
-      }
-      visto[p] = 2;
-    }
-  }
+  // Franja (IDR, 30/09): o alfa da borda sai da projeção entre a cor de dentro e a do fundo tirado ali
+  // (xadrez desenhado ou creme: a cor de cada ponto ficou sob o transparente) e a cor perde a mistura.
+  b.set(limparBordaDoRecorte({ data: b, largura: W, altura: H }, { corSobTransparente: true }).data);
   // Fundo branco tirado agora: a margem que ele ocupava também sai.
   return await (opcoes.aparar ? aparadaPeloAlfa(l) ?? l : l).encode(1);
 }

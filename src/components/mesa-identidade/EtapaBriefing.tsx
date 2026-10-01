@@ -13,7 +13,7 @@ import BotaoComIcone from "@/components/sistema/BotaoComIcone";
 import { campo, campoTexto, espaco, juntar, texto } from "@/components/sistema/estilos";
 import { CAMPOS_DO_BRIEFING, type BriefingDaIdentidade, type CampoDoBriefing } from "../../../supabase/functions/mesa-identidade/modulos/briefing-da-identidade";
 import { CRITERIOS_PADRAO } from "../../../supabase/functions/mesa-identidade/modulos/naming";
-import { faltaNaEtapa } from "../../../supabase/functions/_shared/identidade-etapas";
+import { faltaNaEtapa } from "../../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
 import { chamarIdentidade } from "./identidadeApi";
 import { CabecalhoDaEtapa, contextoParaPreencher, Pastilha, useProjetoDaMesa } from "./Comuns";
 import { useGravacaoAgendada, useGravacoesDaMesa } from "./gravacao";

@@ -3137,10 +3137,16 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
         modelo_imagem_id: mImg.id,
       });
     }
+    // CPU já gasta antes da chamada ao gerador (a espera da rede não conta): entra no orçamento da borda limpa.
+    let cpuAntes = 0;
+    const tAbrir = performance.now();
     const o = aberta ?? await abrirFoto(bytes);
+    cpuAntes += performance.now() - tAbrir;
     const prompt = promptDoPreparo({ modo: "fundo_transparente", tipo, cenario: null, instrucao, guiaTexto: null, estilos: [], temAreasProtegidas: false, entradaRecortada: false });
     const tentar = async (t: string) => {
+      const tTela = performance.now();
       const { tela, png } = await telaDoRecorte(o, t);
+      cpuAntes += performance.now() - tTela;
       const saida = await chamarImagem({
         clientId,
         modeloId: mImg.id,
@@ -3170,10 +3176,11 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     somar(volta.saida);
     const falhou = (codigo: string, mensagem: string) =>
       new ErroHttp(502, codigo, `${mensagem} Nada foi gravado; o custo da chamada já foi cobrado.`, { custo_usd: arred6(custo), saldo_usd: saldo });
+    const tVolta = performance.now();
     const g = await abrirFoto(volta.saida.png).catch(() => null);
     if (!g) throw falhou("imagem_invalida", "O gerador devolveu uma imagem que não abre.");
     if (fracaoTransparenteDe(g) < 0.02) throw falhou("fundo_nao_veio_transparente", "O gerador devolveu a foto com fundo opaco.");
-    const r = await recortePreservandoOriginal(o, g, volta.tela);
+    const r = await recortePreservandoOriginal(o, g, volta.tela, tVolta - cpuAntes);
     if (r.situacao === "vazio") throw falhou("recorte_vazio", "O gerador não achou o assunto (a máscara veio vazia). Marque a área do assunto e tente de novo.");
     if (r.situacao === "desalinhado") {
       if (!opcoes.aceitarDesalinhado && !opcoes.guardarDesalinhado) {

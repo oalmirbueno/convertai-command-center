@@ -57,6 +57,21 @@ Padrões implementados (`supabase/functions/mesa-foto/modulos/ferramentas-imagem
 | Ampliar criativo (opcional) | Clarity Upscaler (creativity 0,35, resemblance 0,6) | US$ 0,03 por MP de saída (2x de 1024 px: US$ 0,13; teto de 16 MP: US$ 0,48) | Reconstrói textura; marcado como gerado e com aviso | |
 | Tirar fundo (cabelo e produto) | BRIA RMBG 2.0 | US$ 0,018 | Melhor resultado medido em fundo complexo e cabelo, licença comercial limpa, preço fixo | BiRefNet v2 Heavy 2048 (`motor: 'birefnet'`, cerca de US$ 0,002 a 0,012) |
 
+### Borda sem halo (frente IDR, 30/09/2026)
+
+Dono: "retira o fundo, mas ainda fica recorte branco". O halo não é só a máscara: é a cor da borda, que guarda a mistura com o fundo antigo. Pesquisa de 30/09 (fal.ai, páginas dos modelos e comparativos de 2026): BRIA RMBG 2.0 continua com a melhor máscara medida, mas a saída na fal traz a cor original na borda; o BiRefNet v2 tem `refine_foreground` (estimativa da cor do assunto na GPU) e variantes Heavy e Matting em 2048 px; BEN2 e Pixelcut (produto, sem franja, US$ 0,016) ficam como candidatos, sem motor no código ainda.
+
+Decisão implementada:
+
+- **Sem motor escolhido** (`motorDoFundoPara`): até 1 MP, BRIA RMBG 2.0 e depois a borda refeita pelo código com a foto original atrás; acima de 1 MP vai o BiRefNet v2 Heavy 2K com `refine_foreground`. A equipe ainda escolhe o motor pelo `motor`.
+- **A borda do recorte pro é um passo à parte** (revisão de 01/10): o resultado pago entra no acervo primeiro; a tela chama depois `ferramenta_borda_limpa` (sem custo), que grava a versão limpa como derivada nova (tag `borda_limpa`, id fixo) e arquiva o recorte do provedor. Estourar a CPU nesse passo não perde nada, e `ferramenta_retomar` nunca refaz a borda. Medido no Deno local, em duas sessões (uma com a máquina carregada): abrir JPEG e PNG, limpar, gravar PNG e sha256 levaram de 0,26 a 0,93 s em 1 MP e de 0,58 a 1,42 s em 1,8 MP; a primeira chamada (sem JIT) é a mais lenta. Daí o teto de 1 MP (`MP_DA_BORDA_LIMPA`).
+- **Borda pelo código** (sem IA e sem custo): o alfa sai da projeção C = aF + (1 - a)B entre a cor do assunto (F, o miolo perto) e a do fundo naquele ponto (B, a foto original sob a máscara); a cor perde a mistura; máscara macia longe do assunto com a cor do fundo vira fundo; com fundo claro a borda cede 1 px; o transparente em volta recebe a cor da borda (reduzir sem pré-multiplicar não puxa o fundo).
+- **Logo e arte chapada** não precisam de IA: fundo liso pela borda (cor e tolerância pelo ruído), vãos fechados da cor do fundo tirados ou mantidos (escolha da equipe) e a mesma projeção na faixa da borda. PNG já transparente com franja: só na janela "Limpar fundo", com prévia (nunca sozinho no Estúdio, no selo ou nas versões da logo). Só sai o anel de até 2 px que contorna 60% ou mais da borda externa das formas vizinhas e é mistura (não branco chapado); a ponta clara da bússola da VIFUT e o anel branco da CME ficam.
+- O "Tirar fundo" da Mesa Foto (máscara do gerador alinhada à foto original) passa pela mesma borda (`recorte.ts`). Custo medido de novo em 01/10 (caneca de 1600 x 1120, 8 rodadas por processo, 4 processos, Deno local, com e sem carga na máquina): a mediana do recorte inteiro em regime foi de 0,55 a 0,76 s sem a limpeza para 0,92 a 0,96 s com ela (+0,2 a 0,4 s), e a primeira chamada (sem JIT) foi de 0,93 a 1,17 s para 1,32 a 1,74 s. Por isso a limpeza é pulada quando a CPU do pedido (abrir a foto, a tela, abrir a máscara, alinhar, compor) já passou de 1,2 s (`ORCAMENTO_DA_BORDA_MS`) ou acima de 2 MP: fica a borda da máscara, como antes.
+- Medidas da borda (0 a 255; acima de 12 aparece): na caneca, o halo claro caiu de 83 para 11,9, e o escuro subiu de 2,7 para 12,9 (a silhueta real da caneca, mais escura, aparece onde a mistura clara saiu; a cor limpa agora não passa da cor de dentro). As provas acompanham as duas medidas.
+
+Provas com imagens reais (antes x depois, sobre escuro, cor e xadrez, com a medida do halo) na entrega da frente IDR.
+
 ## O que o dono precisa fazer
 
 1. Criar a conta em https://fal.ai (login com Google ou GitHub) e pôr crédito em Billing (US$ 10 dá cerca de 120 ampliações fiéis 2x ou 550 recortes).

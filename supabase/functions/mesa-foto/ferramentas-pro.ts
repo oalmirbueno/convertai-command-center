@@ -9,10 +9,17 @@
  * - ferramentas_estimar { client_id, imagem_id }
  *     -> { configurada, segredo, provedor, imagem, saldo_usd, opcoes[], motores[] } (sem custo)
  * - upscale { client_id, imagem_id, fator: 2|4, modo: 'fiel'|'criativo', motor?, conteudo?: 'foto'|'texto'|'arte', refazer? }
- * - remover_fundo { client_id, imagem_id, motor?: 'bria'|'birefnet', refazer? }
- *     -> pronto:        { situacao: 'pronto', imagem, url, custo_usd, saldo_usd, uso_id, ja_existia, cobrado, ... }
+ * - remover_fundo { client_id, imagem_id, motor?: 'bria'|'birefnet', refazer? } (sem motor: motorDoFundoPara)
+ *     -> pronto:        { situacao: 'pronto', imagem, url, custo_usd, saldo_usd, uso_id, ja_existia, cobrado, borda_limpa_pendente, ... }
  *     -> passou do prazo: { situacao: 'em_andamento', ficha, andamento, posicao, estimativa_usd, custo_usd: 0 }
  * - ferramenta_retomar { client_id, ficha } -> igual a upscale/remover_fundo (não cobra duas vezes)
+ * - ferramenta_borda_limpa { client_id, imagem_id } (IDR, revisão de 01/10; sem custo)
+ *     imagem_id = o recorte do provedor já gravado. A borda é refeita pelo código com a foto original
+ *     atrás (sem halo) num PASSO À PARTE: o resultado pago já está no acervo antes, e estourar a CPU
+ *     aqui não perde nada. Até MP_DA_BORDA_LIMPA; grava uma derivada nova (tag borda_limpa, id fixo
+ *     pelo recorte de origem: repetir não duplica) e arquiva o recorte do provedor.
+ *     -> { situacao: 'pronto', imagem, url, custo_usd: 0, borda_limpa: true, substitui }
+ *     -> { situacao: 'sem_borda_limpa', motivo, custo_usd: 0 } (fica o recorte do provedor)
  *
  * A derivada vai para o acervo (cliente_imagens) com derivada_de = a foto de
  * origem, modo 'detalhe' (ampliada) ou 'preservar' (sem fundo) e as tags
@@ -47,7 +54,9 @@ import {
   MAX_BYTES_ENTRADA,
   mimeDaImagem,
   MOTOR_PADRAO,
+  motorDoFundoPara,
   MOTORES,
+  MP_DA_BORDA_LIMPA,
   type PedidoNaFila,
   type PlanoDaFerramenta,
   planoDaFicha,
@@ -59,6 +68,9 @@ import {
 } from "./modulos/ferramentas-imagem.ts";
 import { ErroDeRegra, extensaoDe, limpo, sha256Hex, UUID } from "./calculos.ts";
 import type { Chamador, FerramentasDaMesa, ImagemDoAcervoLida } from "./ferramentas.ts";
+import { decodificar } from "../_shared/imagem-sob-demanda.ts";
+import { limparBordaDoRecorte } from "../_shared/recorte-limpo.ts";
+import { registrarFalha } from "../_shared/falha-registrada.ts";
 
 const REFERENCIA_DO_USO = "ferramenta_imagem";
 const PASTA = "Mesa Foto / Ferramentas";
@@ -171,6 +183,88 @@ export function acoesDasFerramentasPro(f: FerramentasDaMesa, rede: Rede = redePa
     };
   }
 
+  // ---------------------------------------------------------------- borda limpa (IDR, passo à parte)
+
+  /** Cabe na borda limpa por código (CPU da função)? */
+  const cabeNaBordaLimpa = (d: { largura: number | null; altura: number | null }) =>
+    !!d.largura && !!d.altura && (d.largura * d.altura) / 1e6 <= MP_DA_BORDA_LIMPA;
+
+  /**
+   * O recorte do provedor com a borda refeita pelo código: o fundo de cada
+   * ponto vem da foto original (mesmo tamanho), o alfa só baixa, a cor perde a
+   * mistura e, com fundo claro que ainda sobra, a borda cede 1 px. Roda só em
+   * ferramenta_borda_limpa, DEPOIS do resultado pago estar no acervo.
+   */
+  async function bordaLimpa(origem: ImagemDoAcervoLida, bytes: Uint8Array): Promise<Uint8Array | null> {
+    const original = await f.baixar(origem.storage_bucket, origem.storage_path, MAX_BYTES_ENTRADA);
+    const [o, g] = await Promise.all([decodificar(original), decodificar(bytes)]);
+    if (o.width !== g.width || o.height !== g.height) return null;
+    if ((g.width * g.height) / 1e6 > MP_DA_BORDA_LIMPA) return null;
+    const r = limparBordaDoRecorte({ data: g.bitmap, largura: g.width, altura: g.height }, { original: o.bitmap, erodir: "auto" });
+    g.bitmap.set(r.data);
+    return await g.encode(1);
+  }
+
+  /** Id fixo da versão com borda limpa de um recorte (repetir o passo nunca duplica a foto). */
+  async function idDaBordaLimpa(recorteId: string): Promise<string> {
+    const h = await sha256Hex(new TextEncoder().encode(`borda_limpa:${recorteId}`));
+    const v = ((parseInt(h.charAt(16), 16) & 0x3) | 0x8).toString(16);
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${v}${h.slice(17, 20)}-${h.slice(20, 32)}`;
+  }
+
+  async function bordaLimpaDoRecorte(ch: Chamador, corpo: Record<string, unknown>) {
+    const { clientId, img } = await lerOrigem(ch, corpo);
+    const tags = img.tags ?? [];
+    const sem = (motivo: string) => f.json({ situacao: "sem_borda_limpa", motivo, custo_usd: 0 });
+    if (tags.indexOf("borda_limpa") >= 0) return f.json({ situacao: "pronto", ...(await comUrl(img)), custo_usd: 0, borda_limpa: true, ja_existia: true, substitui: null });
+    if (tags.indexOf("sem_fundo") < 0 || !img.derivada_de) throw new ErroDeRegra(409, "nao_e_recorte_pro", "A borda limpa vale para o recorte feito pelo Tirar fundo (pro).");
+    const id = await idDaBordaLimpa(img.id);
+    const [ja] = await f.lerImagens(clientId, [id]);
+    if (ja) return f.json({ situacao: "pronto", ...(await comUrl(ja)), custo_usd: 0, borda_limpa: true, ja_existia: true, substitui: img.id });
+    if (!cabeNaBordaLimpa(img)) return sem(`Foto acima de ${String(MP_DA_BORDA_LIMPA).replace(".", ",")} MP: fica o recorte do provedor.`);
+    const [origem] = await f.lerImagens(clientId, [img.derivada_de]);
+    if (!origem) return sem("A foto de origem saiu do acervo: fica o recorte do provedor.");
+    let limpos: Uint8Array | null;
+    try {
+      limpos = await bordaLimpa(origem, await f.baixar(img.storage_bucket, img.storage_path, MAX_BYTES_ENTRADA));
+    } catch (e) {
+      registrarFalha("mesa-foto: borda limpa do recorte pro", e, { imagem_id: img.id });
+      return sem("Não deu para refazer a borda agora: fica o recorte do provedor.");
+    }
+    if (!limpos) return sem("O recorte não tem o tamanho da foto original: fica o recorte do provedor.");
+    const caminho = `${clientId}/foto/ferramentas/${origem.id}/sem-fundo-borda-limpa-${id.slice(0, 8)}-${crypto.randomUUID().slice(0, 6)}.png`;
+    await f.salvarNoMesa(caminho, limpos, "image/png");
+    const { data, error } = await db().from("cliente_imagens").insert({
+      id,
+      client_id: clientId,
+      origem: "mesa_foto",
+      storage_bucket: "mesa",
+      storage_path: caminho,
+      nome: limpo(img.nome, 160),
+      pasta: img.pasta ?? PASTA,
+      categoria: img.categoria,
+      tags: Array.from(new Set([...tags, "borda_limpa"])),
+      descricao: limpo(`${img.descricao ?? "Sem fundo."} Borda refeita pelo código com a foto original atrás, sem halo.`, 1000),
+      derivada_de: origem.id,
+      gerada: false,
+      modo: "preservar",
+      kit_id: img.kit_id,
+      sha256: await sha256Hex(limpos),
+      largura: img.largura,
+      altura: img.altura,
+      aprovada: false,
+    }).select(f.camposImagem).single();
+    if (error || !data) {
+      await db().storage.from("mesa").remove([caminho]).catch(() => {});
+      registrarFalha("mesa-foto: gravar a borda limpa", error, { imagem_id: img.id });
+      return sem("A versão com borda limpa não entrou no acervo: fica o recorte do provedor.");
+    }
+    // O recorte do provedor sai da vista (arquivar, nunca apagar): a versão limpa toma o lugar.
+    const { error: errArquivar } = await db().from("cliente_imagens").update({ ativa: false }).eq("id", img.id).eq("client_id", clientId);
+    if (errArquivar) registrarFalha("mesa-foto: arquivar o recorte do provedor", errArquivar, { imagem_id: img.id });
+    return f.json({ situacao: "pronto", ...(await comUrl(data as unknown as ImagemDoAcervoLida)), custo_usd: 0, borda_limpa: true, ja_existia: false, substitui: img.id });
+  }
+
   // ---------------------------------------------------------------- acervo
 
   async function gravarDerivada(
@@ -251,6 +345,10 @@ export function acoesDasFerramentasPro(f: FerramentasDaMesa, rede: Rede = redePa
     };
   }
 
+  /** Recorte do provedor que ainda pode ganhar a borda limpa (a tela chama ferramenta_borda_limpa). */
+  const pendenteDeBorda = (plano: PlanoDaFerramenta, img: ImagemDoAcervoLida) =>
+    plano.tarefa === "remover_fundo" && (img.tags ?? []).indexOf("borda_limpa") < 0 && cabeNaBordaLimpa(img);
+
   /** Acompanha o pedido; pronto vira derivada no acervo; senão devolve a ficha para retomar. */
   async function acompanharEConcluir(ch: Chamador, clientId: string, origem: ImagemDoAcervoLida, plano: PlanoDaFerramenta, pedido: PedidoNaFila, ficha: string, chave: string) {
     try {
@@ -266,6 +364,8 @@ export function acoesDasFerramentasPro(f: FerramentasDaMesa, rede: Rede = redePa
           ...resumoDoPlano(plano),
         });
       }
+      // O resultado pago entra no acervo primeiro, sem conta pesada no meio (revisão IDR, 01/10): a borda
+      // limpa é o passo à parte ferramenta_borda_limpa, que a tela chama depois. Retomar nunca a faz.
       const r = await concluirPedido(plano, andamento, pedido, dependencias(ch, clientId, plano));
       const { img, ja_existia } = await gravarDerivada(clientId, origem, plano, r);
       return f.json({
@@ -278,6 +378,7 @@ export function acoesDasFerramentasPro(f: FerramentasDaMesa, rede: Rede = redePa
         uso_id: r.usoId,
         cobrado: r.cobradoAgora,
         ja_existia,
+        borda_limpa_pendente: pendenteDeBorda(plano, img),
       });
     } catch (err) {
       throw comoErroDaMesa(err, ficha);
@@ -289,7 +390,7 @@ export function acoesDasFerramentasPro(f: FerramentasDaMesa, rede: Rede = redePa
     if (!refazer) {
       const existente = comEtiqueta(await derivadasDe(clientId, origem.id), etiquetaDoResultado(plano));
       if (existente) {
-        return f.json({ situacao: "pronto", ...(await comUrl(existente)), ...resumoDoPlano(plano), custo_usd: 0, cobrado: false, ja_existia: true });
+        return f.json({ situacao: "pronto", ...(await comUrl(existente)), ...resumoDoPlano(plano), custo_usd: 0, cobrado: false, ja_existia: true, borda_limpa_pendente: pendenteDeBorda(plano, existente) });
       }
     }
     const chave = chaveDoProvedor(plano.motor.provedor);
@@ -316,13 +417,15 @@ export function acoesDasFerramentasPro(f: FerramentasDaMesa, rede: Rede = redePa
 
   async function removerFundo(ch: Chamador, corpo: Record<string, unknown>) {
     try {
-      const pedido = lerPedidoDeFundo(corpo);
+      const lido = lerPedidoDeFundo(corpo);
       const { clientId, img } = await lerOrigem(ch, corpo);
       const tags = img.tags ?? [];
       if (tags.indexOf("sem_fundo") >= 0 || tags.indexOf("preparo:fundo_transparente") >= 0) {
         throw new ErroDeRegra(409, "ja_e_recorte", "Esta foto já está sem fundo.");
       }
       const { entrada } = await medidas(img);
+      // IDR: sem motor escolhido, o do tamanho (BRIA com a borda pelo código até 2 MP; BiRefNet acima).
+      const pedido = { ...lido, motor: motorDoFundoPara(entrada, corpo.motor) };
       return await executar(ch, clientId, img, planoDoFundo(pedido, entrada), pedido.refazer);
     } catch (err) {
       throw comoErroDaMesa(err);
@@ -346,7 +449,7 @@ export function acoesDasFerramentasPro(f: FerramentasDaMesa, rede: Rede = redePa
     const id = UUID.test(dados.pedido.request_id) ? dados.pedido.request_id.toLowerCase() : "";
     if (id) {
       const [ja] = await f.lerImagens(clientId, [id]);
-      if (ja) return f.json({ situacao: "pronto", ...(await comUrl(ja)), ...resumoDoPlano(plano), custo_usd: 0, cobrado: false, ja_existia: true });
+      if (ja) return f.json({ situacao: "pronto", ...(await comUrl(ja)), ...resumoDoPlano(plano), custo_usd: 0, cobrado: false, ja_existia: true, borda_limpa_pendente: pendenteDeBorda(plano, ja) });
     }
     let chave: string;
     try {
@@ -381,7 +484,7 @@ export function acoesDasFerramentasPro(f: FerramentasDaMesa, rede: Rede = redePa
       opcao("upscale_4x_criativo", () => planoDoUpscale(lerPedidoDeUpscale({ fator: 4, modo: "criativo" }), entrada, mime)),
       jaSemFundo
         ? { chave: "remover_fundo", impedimento: { codigo: "ja_e_recorte", mensagem: "Esta foto já está sem fundo." }, ja_existe: null }
-        : opcao("remover_fundo", () => planoDoFundo(lerPedidoDeFundo({}), entrada)),
+        : opcao("remover_fundo", () => planoDoFundo({ ...lerPedidoDeFundo({}), motor: motorDoFundoPara(entrada) }, entrada)),
     ];
     let saldo: number | null = null;
     try {
@@ -408,6 +511,7 @@ export function acoesDasFerramentasPro(f: FerramentasDaMesa, rede: Rede = redePa
       upscale,
       remover_fundo: removerFundo,
       ferramenta_retomar: retomar,
+      ferramenta_borda_limpa: bordaLimpaDoRecorte,
     } as Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>>,
   };
 }

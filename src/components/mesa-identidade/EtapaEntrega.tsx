@@ -11,7 +11,7 @@ import Secao from "@/components/sistema/Secao";
 import { botao, espaco, foco, juntar, lista, texto } from "@/components/sistema/estilos";
 import { chamarIdentidade, CHAVES, textoDaAprovacao, useBrandbooks, useRodadas, useSituacaoDoArquivo } from "./identidadeApi";
 import { CabecalhoDaEtapa, irAoQueFalta, useProjetoDaMesa } from "./Comuns";
-import { etapasDoProjeto, faltaNaEtapa, podeAbrir, type DestinoDoQueFalta } from "../../../supabase/functions/_shared/identidade-etapas";
+import { etapasDoProjeto, faltaNaEtapa, podeAbrir, type DestinoDoQueFalta } from "../../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
 import { prontoParaApresentar, roteiroDaApresentacao } from "../../../supabase/functions/mesa-identidade/modulos/apresentacao-da-marca";
 import VideoDaMarca from "./VideoDaMarca";
 import ResultadoDaMarca from "./ResultadoDaMarca";

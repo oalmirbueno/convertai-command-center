@@ -7,7 +7,7 @@ import { useMesa, useUrlDaMesa } from "@/components/mesa/MesaContexto";
 import { botao, campo, etiqueta, foco, juntar, texto, toqueCompacto } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { modeloDoPapel, modelosAtivos, nomeDoModelo, precoDoModelo, textoDoErro, type ModeloIa, type ParteDaEstimativa } from "@/lib/mesa/api";
-import { destinoDoQueFalta, etapaFeita, etapasDoProjeto, faltaComDestino, podeAbrir, rotuloDaEtapa, TAMANHOS_DA_IDENTIDADE, type DestinoDoQueFalta, type EtapaDaIdentidade } from "../../../supabase/functions/_shared/identidade-etapas";
+import { destinoDoQueFalta, etapaFeita, etapasDoProjeto, faltaComDestino, podeAbrir, rotuloDaEtapa, TAMANHOS_DA_IDENTIDADE, type DestinoDoQueFalta, type EtapaDaIdentidade } from "../../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
 import type { ProjetoDeIdentidade } from "./identidadeApi";
 import { useGravacoesDaMesa, useResumoDasGravacoes } from "./gravacao";
 
@@ -414,6 +414,20 @@ export function ImagemInteira({ caminho, alt, className = "", fundo }: { caminho
 export function Pastilha({ tom = "neutro", children }: { tom?: "neutro" | "bom" | "alerta" | "ruim"; children: ReactNode }) {
   const cor = tom === "bom" ? "bg-primary/10 text-primary" : tom === "alerta" ? "bg-warning/15 text-warning" : tom === "ruim" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground";
   return <span className={juntar(etiqueta, cor)}>{children}</span>;
+}
+
+/**
+ * Nota do Jev (0 a 1) de uma proposta contra a estratégia (IDR, 30/09): a
+ * pastilha só aparece quando há nota; abaixo de 45 fica em alerta.
+ */
+export function NotaDoJev({ nota }: { nota?: number | null }) {
+  if (typeof nota !== "number" || !isFinite(nota)) return null;
+  const n = Math.round(nota * 100);
+  return (
+    <span className="ml-2 shrink-0" title="Quanto a proposta expressa a estratégia, pelo Jev (0 a 100). É aviso: a escolha é da equipe." data-nota-do-jev={n}>
+      <Pastilha tom={n >= 70 ? "bom" : n >= 45 ? "neutro" : "alerta"}>nota {n}</Pastilha>
+    </span>
+  );
 }
 
 /**

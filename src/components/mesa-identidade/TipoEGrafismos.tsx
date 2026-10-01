@@ -10,7 +10,7 @@ import { normalizarEstrategia } from "../../../supabase/functions/_shared/estrat
 import { estilosDaPersonalidade, fonteDoCatalogo, hierarquiaDoPar, linkDaFamilia, paresParaEstilos, pilhaDaFonte } from "../../../supabase/functions/_shared/tipografia-da-marca";
 import { dataUrlDoSvg, descricaoDoPadrao, svgDoPadrao, TIPOS_DE_PADRAO, type TipoDePadrao } from "../../../supabase/functions/mesa-identidade/modulos/grafismos-da-marca";
 import { chamarIdentidade, type ProjetoDeIdentidade } from "./identidadeApi";
-import { Pastilha, partesDoCusto, RotuloComModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
+import { NotaDoJev, Pastilha, partesDoCusto, RotuloComModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
 import { enviarFeitoNaTela, pngDoSvg } from "./arquivosDaMarca";
 
 export type TipoDoSistema = { familia: string; uso: "titulo" | "texto" | "apoio"; pesos: string; licenca: string; alternativa: string };
@@ -68,7 +68,7 @@ export function TipografiaDaMarca({ tipos, onUsar, geradorRecolhido = false }: {
   const estilos = useMemo(() => estilosDaPersonalidade({ arquetipo: est.arquetipo.principal, eixos: est.personalidade.eixos }), [JSON.stringify(est.arquetipo), JSON.stringify(est.personalidade.eixos)]);
   const pares = useMemo(() => paresParaEstilos(estilos), [estilos.join(",")]);
   const marca = (projeto.dados.naming && projeto.dados.naming.nome) || "";
-  const propostas = (((projeto.dados.sistema || {}) as Record<string, any>).propostas_de_fonte || []) as Array<{ titulo: string; texto: string; porque: string; conferida: boolean }>;
+  const propostas = (((projeto.dados.sistema || {}) as Record<string, any>).propostas_de_fonte || []) as Array<{ titulo: string; texto: string; porque: string; conferida: boolean; nota_jev?: number | null }>;
   const titulo = tipos.filter((t) => t.uso === "titulo")[0] || tipos[0];
   const corpo = tipos.filter((t) => t.uso === "texto")[0] || titulo;
   const hierarquia = titulo ? hierarquiaDoPar({ titulo: titulo.familia, texto: corpo ? corpo.familia : titulo.familia, pesoTitulo: 700 }) : [];
@@ -114,8 +114,11 @@ export function TipografiaDaMarca({ tipos, onUsar, geradorRecolhido = false }: {
             <li key={`${p.titulo}-${p.texto}`} className={juntar(lista.linha, "items-start")}>
               <span className="min-w-0 flex-1">
                 <PrevisaoDoPar titulo={p.titulo} texto={p.texto} nome={`${p.titulo} + ${p.texto}`} marca={marca} ativo />
-                <span className={juntar(texto.auxiliar, "mt-1 block")}>
-                  {p.titulo} + {p.texto}. {p.porque}
+                <span className={juntar(texto.auxiliar, "mt-1 flex min-w-0 items-center")}>
+                  <span className="min-w-0">
+                    {p.titulo} + {p.texto}. {p.porque}
+                  </span>
+                  <NotaDoJev nota={p.nota_jev} />
                 </span>
                 {!p.conferida && <Pastilha tom="alerta">fora do catálogo: confira no Google Fonts</Pastilha>}
               </span>

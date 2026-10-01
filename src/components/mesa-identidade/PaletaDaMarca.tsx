@@ -7,7 +7,7 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { normalizarHex, ROTULO_DO_PAPEL_DA_COR, textoSobre, type PapelDaCor } from "../../../supabase/functions/_shared/cores-da-marca";
 import { avisosDeContraste, escalaDaCor, HARMONIAS, paletaHarmonica, paresParaTexto, type CorDaPaleta, type Harmonia } from "../../../supabase/functions/mesa-identidade/modulos/paleta-da-marca";
 import { chamarIdentidade, type ProjetoDeIdentidade } from "./identidadeApi";
-import { partesDoCusto, RotuloComModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
+import { NotaDoJev, partesDoCusto, RotuloComModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
 
 type Cor = { nome: string; papel: PapelDaCor; hex: string };
 
@@ -72,7 +72,8 @@ export default function GeradorDePaleta({ cores, onUsar }: { cores: Cor[]; onUsa
   const baseValida = normalizarHex(base);
   const gerada: CorDaPaleta[] = useMemo(() => (baseValida ? paletaHarmonica(baseValida, harmonia) : []), [baseValida, harmonia]);
   const escala = useMemo(() => (baseValida ? escalaDaCor(baseValida) : []), [baseValida]);
-  const propostas = (((projeto.dados.sistema || {}) as Record<string, any>).propostas_de_paleta || []) as Array<{ id: string; nome: string; ideia: string; cores: CorDaPaleta[]; avisos: string[] }>;
+  const propostas = (((projeto.dados.sistema || {}) as Record<string, any>).propostas_de_paleta || []) as Array<{ id: string; nome: string; ideia: string; cores: CorDaPaleta[]; avisos: string[]; nota_jev?: number | null }>;
+  const avisoDoJev = String(((projeto.dados.sistema || {}) as Record<string, any>).aviso_das_paletas || "");
   const explica = HARMONIAS.filter((h) => h.valor === harmonia)[0];
 
   return (
@@ -134,7 +135,10 @@ export default function GeradorDePaleta({ cores, onUsar }: { cores: Cor[]; onUsa
             {propostas.map((p) => (
               <li key={p.id} className={juntar(lista.linha, "items-start")} data-paleta-proposta={p.id}>
                 <span className="min-w-0 flex-1">
-                  <span className={juntar(texto.corpo, "block truncate font-medium")}>{p.nome}</span>
+                  <span className="flex min-w-0 items-center">
+                    <span className={juntar(texto.corpo, "min-w-0 truncate font-medium")}>{p.nome}</span>
+                    <NotaDoJev nota={p.nota_jev} />
+                  </span>
                   {p.ideia && <span className={juntar(texto.auxiliar, "mb-2 block")}>{p.ideia}</span>}
                   <Faixa cores={p.cores} altura={36} />
                   {p.avisos.length > 0 && <span className={juntar(texto.auxiliar, "mt-1 block text-warning")}>{p.avisos[0]}</span>}
@@ -146,6 +150,7 @@ export default function GeradorDePaleta({ cores, onUsar }: { cores: Cor[]; onUsa
             ))}
           </ul>
         )}
+        {propostas.length > 0 && avisoDoJev && <p className={juntar(texto.auxiliar, "mt-1")}>{avisoDoJev}</p>}
         {!propostas.length && <p className={texto.auxiliar}>Nenhuma proposta ainda.</p>}
       </div>
     </div>

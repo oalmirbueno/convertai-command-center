@@ -17,7 +17,7 @@ import { BotaoNovaConversa, useNovaConversa } from "@/components/sistema/NovaCon
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import { botao, conversa, juntar } from "@/components/sistema/estilos";
-import { TAMANHOS_DA_IDENTIDADE } from "../../../supabase/functions/_shared/identidade-etapas";
+import { TAMANHOS_DA_IDENTIDADE } from "../../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
 
 /**
  * O diretor de marca (agente da Mesa Identidade, papel identidade), fixo ao

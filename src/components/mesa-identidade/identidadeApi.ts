@@ -1,7 +1,7 @@
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao } from "@/lib/mesa/api";
-import type { EtapaDaIdentidade, ModoDoProjeto } from "../../../supabase/functions/_shared/identidade-etapas";
+import type { EtapaDaIdentidade, ModoDoProjeto } from "../../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
 import type { CandidatoDeNome, AlvoDoNaming } from "../../../supabase/functions/mesa-identidade/modulos/naming";
 import { normalizarBrandbook, type DadosDoBrandbook, type ModeloDoBrandbook } from "../../../supabase/functions/mesa-identidade/modulos/brandbook";
 
@@ -60,6 +60,9 @@ export interface RodadaDeNomes {
   custo_usd: number;
   criado_em: string;
 }
+
+/** Coerência da marca gravada pelo coerencia_conferir (IDR): código + Jev, só aviso. */
+export type { Coerencia, ItemDaCoerencia } from "../../../supabase/functions/mesa-identidade/modulos/coerencia-da-marca";
 
 export interface VersaoDoBrandbook {
   id: string;

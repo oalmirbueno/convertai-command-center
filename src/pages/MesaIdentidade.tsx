@@ -23,7 +23,7 @@ import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { juntar, superficie } from "@/components/sistema/estilos";
-import { ETAPAS_DA_IDENTIDADE, etapaAtual, etapaFeita, etapasDoProjeto, ehEtapaDaIdentidade, podeAbrir, progresso, type EtapaDaIdentidade } from "../../supabase/functions/_shared/identidade-etapas";
+import { ETAPAS_DA_IDENTIDADE, etapaAtual, etapaFeita, etapasDoProjeto, ehEtapaDaIdentidade, podeAbrir, progresso, type EtapaDaIdentidade } from "../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
 import { chamarIdentidade, guardarProjeto, useProjeto, type ProjetoDeIdentidade } from "@/components/mesa-identidade/identidadeApi";
 import { ProjetoProvider, type ProjetoDaMesa } from "@/components/mesa-identidade/Comuns";
 import { ContextoDasGravacoes, GravacoesDaMesa, novaFilaDeGravacao, salvarNaFila, type FilaDeGravacao } from "@/components/mesa-identidade/gravacao";
@@ -60,6 +60,8 @@ const EtapaGuideline = lazyComPreCarga("mesa-identidade/guideline", () => import
 const EtapaEntrega = lazyComPreCarga("mesa-identidade/entrega", () => import("@/components/mesa-identidade/EtapaEntrega"));
 const AgenteDiretorDeMarca = lazyComPreCarga("mesa-identidade/agente", () => import("@/components/mesa-identidade/AgenteDiretorDeMarca"));
 const ChavesECotas = lazy(() => import("@/components/mesa/ChavesECotas"));
+// IDR (30/09): o fio da marca (nome, arquétipo, cores, fontes, tagline e a coerência) no alto de cada etapa.
+const FioDaMarca = lazy(() => import("@/components/mesa-identidade/FioDaMarca"));
 const ModelosDeIa = lazy(() => import("@/components/mesa/ModelosDeIa"));
 
 export const ETAPAS_DA_MESA_IDENTIDADE = ETAPAS_DA_IDENTIDADE;
@@ -395,6 +397,9 @@ export default function MesaIdentidade() {
                 ) : contextoDoProjeto ? (
                   <ProjetoProvider valor={contextoDoProjeto}>
                     <ContextoDasGravacoes.Provider value={gravacoes.current}>
+                    <Suspense fallback={null}>
+                      <FioDaMarca />
+                    </Suspense>
                     {etapa === "briefing" && <EtapaBriefing />}
                     {etapa === "pesquisa" && <EtapaPesquisa />}
                     {etapa === "estrategia" && <EtapaEstrategia />}

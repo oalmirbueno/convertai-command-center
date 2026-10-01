@@ -22,6 +22,7 @@
 import { contraste, hexParaRgb, luminanciaRelativa, normalizarHex, rgbParaHex } from "../../_shared/cores-da-marca.ts";
 import { ehTipoDePadrao, type TipoDePadrao } from "./grafismos-da-marca.ts";
 import { type CategoriaDaFonte, familiaSegura, fonteDoCatalogo, FONTES_DO_CATALOGO } from "../../_shared/tipografia-da-marca.ts";
+import { fundoPelaBorda, recortarFundoSolido, toleranciaDoFundo } from "../../_shared/recorte-limpo.ts";
 
 // ------------------------------------------------------------------ pixels
 
@@ -249,6 +250,8 @@ export function orientacaoDa(caixa: Caixa | null, W: number, H: number): Orienta
 /** A análise inteira (a tela chama com os pixels da logo desenhada no canvas). */
 export function analisarLogo(img: ImagemRGBA): AnaliseDaLogo {
   const f = fundoDaImagem(img);
+  // Revisão de 01/10: PNG transparente é lido como veio. O claro colado ao transparente pode ser desenho
+  // (pontas da bússola e cinzas da VIFUT, anel branco da CME): nada de tirar "franja" por conta própria.
   const m = mascaraDoConteudo(img, f.fundo, f.cor);
   const caixa = caixaDaMascara(m, img.largura, img.altura);
   const cores = coresDoConteudo(img, m);
@@ -265,47 +268,75 @@ export function analisarLogo(img: ImagemRGBA): AnaliseDaLogo {
   };
 }
 
+/** Os pixels no formato do recorte limpo (sem copiar quando já são bytes). */
+function comoPixels(img: ImagemRGBA): { data: Uint8ClampedArray | Uint8Array; largura: number; altura: number } {
+  const d = img.data;
+  const data = d instanceof Uint8ClampedArray || d instanceof Uint8Array ? d : Uint8ClampedArray.from(d as ArrayLike<number>);
+  return { data, largura: img.largura, altura: img.altura };
+}
+
 // ------------------------------------------------------------------ versões por código
 
 /**
  * Recolore o conteúdo com UMA cor, mantendo a forma e a transparência (o
  * fundo some). Monocromática = cor escura; negativa = branco. Não mexe no
- * desenho: cada pixel da logo continua onde estava.
+ * desenho: cada pixel da logo continua onde estava. O alfa é o do recorte
+ * limpo (semFundo): a negativa branca não ganha contorno do fundo antigo.
  */
-export function recolorir(img: ImagemRGBA, a: Pick<AnaliseDaLogo, "fundo" | "cor_do_fundo">, hex: string): Uint8ClampedArray {
+export function recolorir(img: ImagemRGBA, a: Pick<AnaliseDaLogo, "fundo" | "cor_do_fundo">, hex: string, furos: VaosDaLogo = "tirar"): Uint8ClampedArray {
   const c = hexParaRgb(normalizarHex(hex) || "#111111");
-  const cor = a.cor_do_fundo ? hexParaRgb(a.cor_do_fundo) : null;
-  const fundo: [number, number, number] | null = cor ? [cor.r, cor.g, cor.b] : null;
+  // PNG transparente: o alfa como veio (o quase invisível zera, como antes de 30/09); o resto, o do recorte limpo.
+  const transparente = a.fundo === "transparente";
+  const limpa = transparente ? img.data : semFundo(img, a, furos);
   const saida = new Uint8ClampedArray(img.largura * img.altura * 4);
-  const d = img.data;
   for (let i = 0; i < saida.length; i += 4) {
-    const alfa = opacidadeDoConteudo([d[i], d[i + 1], d[i + 2], d[i + 3]], a.fundo, fundo);
     saida[i] = c.r;
     saida[i + 1] = c.g;
     saida[i + 2] = c.b;
-    saida[i + 3] = Math.round(alfa * 255);
+    saida[i + 3] = transparente && limpa[i + 3] < ALFA_VISIVEL ? 0 : limpa[i + 3];
   }
   return saida;
 }
 
-/** Tira o fundo sólido (as cores da logo ficam; o fundo vira transparente, com borda suave). */
-export function semFundo(img: ImagemRGBA, a: Pick<AnaliseDaLogo, "fundo" | "cor_do_fundo">): Uint8ClampedArray {
+/** Última limpeza (as versões da mesma logo pedem a mesma conta 3 ou 4 vezes seguidas). */
+let ultimaLimpeza: { dados: ArrayLike<number>; fundo: string; cor: string | null; furos: VaosDaLogo; saida: Uint8ClampedArray } | null = null;
+
+/** O vão fechado da cor do fundo (miolo das letras, espaço negativo): sai (padrão) ou fica (branco que é desenho). */
+export type VaosDaLogo = "tirar" | "manter";
+
+/**
+ * Tira o fundo sem halo (IDR, 30/09): fundo sólido pelo recorte limpo (alfa
+ * pela projeção, cor descontaminada; o vão fechado sai, ou fica com
+ * `furos` "manter"). PNG transparente fica como veio (revisão de 01/10: a
+ * franja só sai na janela "Limpar fundo", com prévia). Fundo misto fica só
+ * com o alfa (a versão vai para o designer).
+ */
+export function semFundo(img: ImagemRGBA, a: Pick<AnaliseDaLogo, "fundo" | "cor_do_fundo">, furos: VaosDaLogo = "tirar"): Uint8ClampedArray {
+  if (ultimaLimpeza && ultimaLimpeza.dados === img.data && ultimaLimpeza.fundo === a.fundo && ultimaLimpeza.cor === a.cor_do_fundo && ultimaLimpeza.furos === furos) return ultimaLimpeza.saida;
+  const px = comoPixels(img);
+  let saida: Uint8ClampedArray;
   const cor = a.cor_do_fundo ? hexParaRgb(a.cor_do_fundo) : null;
-  const fundo: [number, number, number] | null = cor ? [cor.r, cor.g, cor.b] : null;
-  const saida = new Uint8ClampedArray(img.largura * img.altura * 4);
-  const d = img.data;
-  for (let i = 0; i < saida.length; i += 4) {
-    const alfa = opacidadeDoConteudo([d[i], d[i + 1], d[i + 2], d[i + 3]], a.fundo, fundo);
-    saida[i] = d[i];
-    saida[i + 1] = d[i + 1];
-    saida[i + 2] = d[i + 2];
-    saida[i + 3] = Math.round(alfa * 255);
+  if (cor && (a.fundo === "claro" || a.fundo === "escuro" || a.fundo === "cor")) {
+    const borda = fundoPelaBorda(px);
+    saida = recortarFundoSolido(px, { cor: [cor.r, cor.g, cor.b], tolerancia: toleranciaDoFundo(borda.ruido), furos }).data;
+  } else if (a.fundo === "transparente") {
+    saida = Uint8ClampedArray.from(px.data);
+  } else {
+    saida = new Uint8ClampedArray(img.largura * img.altura * 4);
+    const d = img.data;
+    for (let i = 0; i < saida.length; i += 4) {
+      saida[i] = d[i];
+      saida[i + 1] = d[i + 1];
+      saida[i + 2] = d[i + 2];
+      saida[i + 3] = Math.round(opacidadeDoConteudo([d[i], d[i + 1], d[i + 2], d[i + 3]], a.fundo, null) * 255);
+    }
   }
+  ultimaLimpeza = { dados: img.data, fundo: a.fundo, cor: a.cor_do_fundo, furos, saida };
   return saida;
 }
 
 /** Recorta uma caixa (com margem de proteção), já sem o fundo. */
-export function recortar(img: ImagemRGBA, a: Pick<AnaliseDaLogo, "fundo" | "cor_do_fundo">, caixa: Caixa, margem = 0.08): ImagemRGBA {
+export function recortar(img: ImagemRGBA, a: Pick<AnaliseDaLogo, "fundo" | "cor_do_fundo">, caixa: Caixa, margem = 0.08, furos: VaosDaLogo = "tirar"): ImagemRGBA {
   const pad = Math.round(Math.max(caixa.w, caixa.h) * margem);
   const x0 = Math.max(0, caixa.x - pad);
   const y0 = Math.max(0, caixa.y - pad);
@@ -313,8 +344,7 @@ export function recortar(img: ImagemRGBA, a: Pick<AnaliseDaLogo, "fundo" | "cor_
   const y1 = Math.min(img.altura, caixa.y + caixa.h + pad);
   const w = x1 - x0;
   const h = y1 - y0;
-  const limpa = a.fundo === "transparente" ? null : semFundo(img, a);
-  const fonte = limpa || img.data;
+  const fonte = semFundo(img, a, furos);
   const saida = new Uint8ClampedArray(w * h * 4);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {

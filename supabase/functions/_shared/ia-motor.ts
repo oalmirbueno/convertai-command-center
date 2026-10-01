@@ -1176,11 +1176,27 @@ type UsoOpenRouter = {
 
 async function textoOpenRouter(m: ModeloIa, chave: string, e: EntradaTexto): Promise<RespostaProvedorTexto> {
   const corpo = corpoOpenRouter(m.modelo_api, entradaDoProvedor(m, e));
-  const res = await buscar("openrouter", "https://openrouter.ai/api/v1/chat/completions", {
+  const enviar = (c: Record<string, unknown>) => buscar("openrouter", "https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: cabecalhosOpenRouter(chave),
-    body: JSON.stringify(corpo),
+    body: JSON.stringify(c),
   }, e.timeoutMs ?? TIMEOUT_TEXTO_MS);
+  let res: Response;
+  try {
+    res = await enviar(corpo);
+  } catch (err) {
+    // IDR (30/09, estratégia da Mesa Identidade parada em 30/09 15:53): alguns provedores do OpenRouter
+    // recusam o esquema estrito grande ("The compiled grammar is too large"). Uma nova tentativa em modo
+    // JSON, com o esquema escrito no sistema; a resposta passa pela mesma leitura e normalização de quem chamou.
+    const entrada = entradaDoProvedor(m, e);
+    if (!entrada.esquemaJson || !ehEsquemaGrandeDemais(err)) throw err;
+    const { nome, schema } = nomeEsquema(entrada.esquemaJson);
+    const sistema = `${entrada.sistema}\n\nResponda só com um objeto JSON válido que siga este esquema (${nome}):\n${JSON.stringify(schema)}`;
+    const emJson = corpoOpenRouter(m.modelo_api, { ...entrada, sistema, esquemaJson: undefined });
+    emJson.response_format = { type: "json_object" };
+    console.warn("[ia-motor] esquema estrito recusado pelo provedor; nova tentativa em modo JSON", { modelo: m.id, esquema: nome });
+    res = await enviar(emJson);
+  }
   const data = await res.json() as { choices?: Array<{ message?: { content?: string | null } }>; usage?: UsoOpenRouter };
   const u = data.usage ?? {};
   return {
@@ -1194,6 +1210,13 @@ async function textoOpenRouter(m: ModeloIa, chave: string, e: EntradaTexto): Pro
     custoProvedor: typeof u.cost === "number" && Number.isFinite(u.cost) ? u.cost : null,
     fontes: e.pesquisaWeb ? fontesDoOpenRouter(data as Parameters<typeof fontesDoOpenRouter>[0]) : [],
   };
+}
+
+/** O provedor recusou o esquema estrito por tamanho ou complexidade (não é erro do pedido nem de crédito). */
+export function ehEsquemaGrandeDemais(err: unknown): boolean {
+  if (!(err instanceof IaMotorErro)) return false;
+  const status = Number((err.detalhes as Record<string, unknown> | undefined)?.status_provedor);
+  return status === 400 && /grammar is too large|too many (strict )?tools|schema is too (large|complex)|simplify your (tool )?schemas?/i.test(err.message);
 }
 
 function validarRaciocinio(m: ModeloIa, raciocinio?: string) {

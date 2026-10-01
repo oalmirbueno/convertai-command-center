@@ -10,7 +10,7 @@ import { IaMotorErro, modeloDoPapel as modeloDoPapelDaBase, type ModeloIa } from
 import { ErroDaAcao } from "../_shared/acoes-do-agente.ts";
 import { lerMarcaCompleta, type MarcaDoCliente } from "../_shared/marca.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
-import { ehEtapaDaIdentidade, ehModoDoProjeto, type EtapaDaIdentidade, type ModoDoProjeto } from "../_shared/identidade-etapas.ts";
+import { ehEtapaDaIdentidade, ehModoDoProjeto, type EtapaDaIdentidade, type ModoDoProjeto } from "./modulos/identidade-etapas.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 export const corsHeaders = {

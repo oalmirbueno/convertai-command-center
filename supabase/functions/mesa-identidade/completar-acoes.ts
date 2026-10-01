@@ -18,7 +18,7 @@
 
 import { carregarModelo, chamarTexto, estimarComModelo, modeloPadrao, type ModeloIa } from "../_shared/ia-motor.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
-import { TAMANHOS_DA_IDENTIDADE } from "../_shared/identidade-etapas.ts";
+import { TAMANHOS_DA_IDENTIDADE } from "./modulos/identidade-etapas.ts";
 import { catalogoParaALeitura, ESQUEMA_DA_LEITURA, normalizarLeituraPorVisao, SISTEMA_DA_LEITURA } from "./modulos/leitura-da-logo.ts";
 import { juntarPerguntas, novaExecucao, normalizarExecucao, type OpcoesDoCompletar, PASSOS_DO_SERVIDOR, planoDeCompletar, rotuloDoPasso } from "./modulos/completar-marca.ts";
 import {

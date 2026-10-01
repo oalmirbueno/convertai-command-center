@@ -21,7 +21,7 @@
 
 /** Formas do Jev que o naming usa (as mesmas de jev.ts, repetidas aqui para a tela não puxar o arquivo do Deno). */
 export type PerguntaJev = { type: "score"; instructions: unknown; criteria: string[] } | { type: "choice"; instructions: unknown; criteria: Record<string, unknown> } | { type: "noul"; instructions: unknown };
-export type RespostaJev = { choice?: string; confidence?: number; probabilities?: Record<string, number>; score?: number; noul?: number };
+export type RespostaJev = { choice?: string; confidence?: number; probabilities?: Record<string, number>; score?: number; noul?: number; legend?: Record<string, unknown> };
 
 // ------------------------------------------------------------------ técnicas
 
@@ -306,12 +306,18 @@ export function perguntasDoRanking(candidatos: CandidatoDeNome[]): Record<string
   return q;
 }
 
-/** Nota do Score (1 a 5, pode ser fracionada) vira 0 a 1. */
+/**
+ * Nota do Score vira 0 a 1. IDR (30/09): a escala vem da legenda do Jev (a
+ * API responde os níveis de 0 a 4; com a conta de 1 a 5, um nome no nível 1
+ * ou abaixo virava nota 0 e perdia a ordem). Sem legenda, 1 a 5 como antes.
+ */
 export function notaDoScore(r: RespostaJev | undefined): number | null {
   const s = r && typeof r.score === "number" && isFinite(r.score) ? r.score : null;
   if (s === null) return null;
-  const min = 1;
-  const max = NIVEIS_DO_NOME.length;
+  const chaves = Object.keys((r && (r.legend || r.probabilities)) || {}).map(Number).filter((n) => isFinite(n));
+  const min = chaves.length ? Math.min.apply(null, chaves) : 1;
+  const max = chaves.length ? Math.max.apply(null, chaves) : NIVEIS_DO_NOME.length;
+  if (max <= min) return null;
   return Math.max(0, Math.min(1, (s - min) / (max - min)));
 }
 

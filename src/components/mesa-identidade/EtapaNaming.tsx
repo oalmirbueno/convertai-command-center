@@ -1,6 +1,6 @@
 import { espaco, juntar, texto } from "@/components/sistema/estilos";
 import { normalizarEstrategia } from "../../../supabase/functions/_shared/estrategia-de-marca";
-import { etapaFeita } from "../../../supabase/functions/_shared/identidade-etapas";
+import { etapaFeita } from "../../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
 import { CabecalhoDaEtapa, SeletorDoModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
 import EstudioDeNomes from "./EstudioDeNomes";
 import SlogansDaMarca from "./SlogansDaMarca";

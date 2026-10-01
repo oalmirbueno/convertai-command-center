@@ -16,7 +16,7 @@ import { chamarTexto, cobrarJev } from "../_shared/ia-motor.ts";
 import { jevPerguntar, probabilidadeNoul, type PerguntaJev } from "../_shared/jev.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
-import { TAMANHOS_DA_IDENTIDADE } from "../_shared/identidade-etapas.ts";
+import { TAMANHOS_DA_IDENTIDADE } from "./modulos/identidade-etapas.ts";
 import { tokenPublico } from "./modulos/brandbook.ts";
 import {
   type CandidatoDeNome,

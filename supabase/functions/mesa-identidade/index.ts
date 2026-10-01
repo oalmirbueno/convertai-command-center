@@ -41,6 +41,10 @@
  * - logo_ler { projeto_id, modelo_id? } -> { projeto, leitura } (visão, custo antes pelo estimar com acao_alvo "leitura")
  * - video_registrar { projeto_id, filme_id } -> { projeto } (filme criado na Mesa Motion, conferido no banco)
  * - completar_registrar { projeto_id } -> { projeto } (fim da rodada: evento para o documento de entrega)
+ * Coerência da marca (IDR, 30/09; o Jev é fração de centavo):
+ * - coerencia_conferir { projeto_id } -> { projeto, coerencia, custo_usd } (regras do código + Score do Jev por
+ *   dimensão; grava dados.coerencia; é aviso, nada do sistema muda). paletas_propor e fontes_propor devolvem a
+ *   nota do Jev em cada proposta (nota_jev) e aviso_jev.
  * Brandbook e kit:
  * - brandbook_montar { projeto_id, modelo } | brandbook_salvar { brandbook_id, dados, modelo?, nota? } | brandbook_listar { projeto_id }
  * - brandbook_compartilhar { brandbook_id } -> { file_id } ; brandbook_publicar / brandbook_revogar { brandbook_id }
@@ -91,6 +95,7 @@ import { estimativaDaProposta, estrategiaPropor, fontesPropor, paletasPropor, sl
 import { moodboardWeb, namingIdiomas, namingVotacaoAbrir, namingVotacaoFechar, namingVotar, namingVotos } from "./naming-v2-acoes.ts";
 import { completarRegistrar, estimativaDaLeitura, logoLer, videoRegistrar } from "./completar-acoes.ts";
 import { ACOES_LONGAS_DA_BASE_DA_MARCA, ROTAS_DA_BASE_DA_MARCA } from "./base-acoes.ts";
+import { coerenciaConferir } from "./coerencia-acoes.ts";
 
 async function estimar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
@@ -140,6 +145,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   logo_ler: logoLer,
   video_registrar: videoRegistrar,
   completar_registrar: completarRegistrar,
+  coerencia_conferir: coerenciaConferir,
   brandbook_montar: brandbookMontar,
   brandbook_listar: brandbookListar,
   brandbook_salvar: brandbookSalvar,
@@ -159,7 +165,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
 };
 
 /** Ações que podem passar de 150 s (IA, rede, PDF com imagens): a resposta começa na hora. */
-const ACOES_LONGAS = new Set(["pesquisa_ia", "conceito_gerar", "conceito_imagem", "naming_gerar", "naming_conferir", "naming_pdf_compartilhar", "brandbook_compartilhar", "brandbook_publicar", "agente_conversar", "executar_acao_agente", "estrategia_propor", "paletas_propor", "fontes_propor", "slogans_gerar", "naming_idiomas", "logo_ler", ...ACOES_LONGAS_DA_BASE_DA_MARCA]);
+const ACOES_LONGAS = new Set(["pesquisa_ia", "conceito_gerar", "conceito_imagem", "naming_gerar", "naming_conferir", "naming_pdf_compartilhar", "brandbook_compartilhar", "brandbook_publicar", "agente_conversar", "executar_acao_agente", "estrategia_propor", "paletas_propor", "fontes_propor", "slogans_gerar", "naming_idiomas", "logo_ler", "coerencia_conferir", ...ACOES_LONGAS_DA_BASE_DA_MARCA]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

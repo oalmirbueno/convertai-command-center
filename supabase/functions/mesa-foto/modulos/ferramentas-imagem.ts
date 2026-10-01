@@ -334,6 +334,30 @@ export function planoDoUpscale(pedido: PedidoDeUpscale, entrada: Dimensoes, mime
   };
 }
 
+/**
+ * Borda limpa por código (IDR, 30/09: "ainda fica recorte branco"): até este
+ * tamanho a função refaz a borda do recorte com a foto original atrás
+ * (_shared/recorte-limpo.ts). Revisão de 01/10: é um passo à parte
+ * (ferramenta_borda_limpa), depois do resultado pago estar no acervo, e o teto
+ * caiu de 2 para 1 MP: abrir JPEG e PNG, limpar, gravar PNG e o sha256 mediram
+ * de 0,26 a 0,93 s em 1 MP e de 0,58 a 1,42 s em 1,8 MP no Deno local, com e
+ * sem carga (a primeira chamada, sem JIT, é a mais lenta), e a função tem 2 s
+ * de CPU.
+ */
+export const MP_DA_BORDA_LIMPA = 1.0;
+
+/**
+ * Motor quando a equipe não escolhe (IDR): até 1 MP, BRIA RMBG 2.0 (a melhor
+ * máscara medida) e depois a borda limpa pelo código; acima disso, o BiRefNet
+ * v2 Heavy 2K com refine_foreground (a cor da borda já sai limpa do provedor,
+ * sem a mistura com o fundo).
+ */
+export function motorDoFundoPara(entrada: Dimensoes, escolhido?: unknown): IdDoMotor {
+  const e = texto(escolhido);
+  if (e && MOTORES[e as IdDoMotor] && MOTORES[e as IdDoMotor].tarefa === "remover_fundo") return e as IdDoMotor;
+  return mp(entrada) <= MP_DA_BORDA_LIMPA ? "bria" : "birefnet";
+}
+
 export function planoDoFundo(pedido: PedidoDeFundo, entrada: Dimensoes): PlanoDaFerramenta {
   const motor = MOTORES[pedido.motor];
   validarEntrada(motor, entrada);
@@ -351,7 +375,7 @@ export function planoDoFundo(pedido: PedidoDeFundo, entrada: Dimensoes): PlanoDa
     conteudo: "foto",
     formato_saida: "png",
     estimativa_usd: custoDoMotor(motor, entrada),
-    avisos: [],
+    avisos: mp(entrada) <= MP_DA_BORDA_LIMPA ? [] : [`Foto acima de ${String(MP_DA_BORDA_LIMPA).replace(".", ",")} MP: a borda sai limpa pelo próprio modelo (sem o acabamento por código).`],
   };
 }
 

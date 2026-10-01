@@ -289,7 +289,10 @@ describe("2. logo sem caixa branca, gerada junto com a arte em todos os modos (2
     // 26/09: a margem vazia em volta da logo sai antes de reduzir (a logo não chega minúscula ao gerador).
     expect(imagemLocal).toContain("const fonte = opcoes.aparar ? aparadaPeloAlfa(img) ?? img : img;");
     expect(corpoDe("baixarLogo")).toContain("await logoLimpa(bruta.bytes, { aparar: true });");
-    expect(imagemLocal).toContain("const a = Math.min(1, distancia(i) / 70);");
+    // IDR (30/09): a franja sai pela projeção (recorte-limpo.ts), com a cor de cada ponto do fundo tirado;
+    // fundo liso e claro vai pelo recorte limpo (miolo das letras fora, sem halo).
+    expect(imagemLocal).toContain("b.set(limparBordaDoRecorte({ data: b, largura: W, altura: H }, { corSobTransparente: true }).data);");
+    expect(imagemLocal).toContain("if (liso.tipo === \"solido\" && liso.claro && liso.cor) {");
     // 26/09: reduzida a 1024 sem a transformação do Storage (cópia PNG do painel ou redução local).
     expect(corpoDe("baixarLogoReduzida")).toContain("reduzidaSemTransformacao(servico(), bucket, caminho, 1024, 1024, { copiaSoEmPng: true, maxBytes: MAX_BYTES_IMAGEM })");
     expect(corpoDe("baixarLogoReduzida")).not.toContain("transform:");

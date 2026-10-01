@@ -15,7 +15,7 @@ import {
   precisaDeNaming,
   progresso,
   reabrirEtapa,
-} from "../../supabase/functions/_shared/identidade-etapas";
+} from "../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
 import {
   ajusteDoDominio,
   arrobaDoNome,

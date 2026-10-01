@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fundoPelaBorda, recortarFundoSolido, toleranciaDoFundo, type Rgb } from "../../../supabase/functions/_shared/recorte-limpo";
 
 /**
  * A logo lida no navegador (pedido do dono, 25/09: "a imagem com o texto
@@ -151,62 +152,22 @@ export function estiloDoFundoDaLogo(fundo: FundoDaLogo): Record<string, string> 
 }
 
 /**
- * Tira o fundo liso ligado à borda. O preenchimento parte das bordas, como no
- * servidor (logoLimpa): a cor do fundo que fica presa dentro de uma letra
- * fechada não sai. A franja de 2 px perde a mistura com o fundo. Mexe nos
- * pixels. Devolve quantos pixels ficaram transparentes.
- * Nunca roda em logo que já é transparente (guarda do servidor, 26/09: o
- * preenchimento atravessava a transparência e apagava letras brancas).
+ * Tira o fundo liso ligado à borda (IDR, 30/09: recorte limpo, o mesmo do
+ * servidor). O alfa da borda sai da projeção entre a cor da logo e a do
+ * fundo e a cor perde a mistura (sem contorno branco no escuro). O branco
+ * cercado pelo desenho fica (preenchimento só a partir da borda, contrato de
+ * 25/09). Mexe nos pixels.
+ * Devolve quantos pixels ficaram transparentes. Nunca roda em logo que já é
+ * transparente (guarda do servidor, 26/09).
  */
 export function tirarFundoLiso(px: Pixels, W: number, H: number, hex: string): number {
-  const cor = [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+  const cor: Rgb = [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
   if (cor.some((v) => !isFinite(v))) return 0;
-  // 0 = não visto; 1 = na pilha ou fica; 2 = fundo tirado. Pilha tipada: cada
-  // pixel entra no máximo uma vez (logo de 2048 px sem estourar a memória do celular).
-  const visto = new Uint8Array(W * H);
-  const pilha = new Int32Array(W * H);
-  let topo = 0;
-  const empilhar = (p: number) => {
-    if (visto[p]) return;
-    visto[p] = 1;
-    pilha[topo++] = p;
-  };
-  borda(W, H).forEach(empilhar);
-  let limpos = 0;
-  while (topo > 0) {
-    const p = pilha[--topo];
-    const i = p * 4;
-    if (px[i + 3] >= 16 && distancia(px, i, cor) > 40) continue;
-    px[i + 3] = 0;
-    visto[p] = 2;
-    limpos++;
-    const x = p % W, y = (p - x) / W;
-    if (x > 0) empilhar(p - 1);
-    if (x < W - 1) empilhar(p + 1);
-    if (y > 0) empilhar(p - W);
-    if (y < H - 1) empilhar(p + W);
-  }
-  for (let passe = 0; passe < 2; passe++) {
-    const franja: number[] = [];
-    for (let p = 0; p < W * H; p++) {
-      if (visto[p] === 2 || px[p * 4 + 3] === 0) continue;
-      const x = p % W;
-      if ((x > 0 && visto[p - 1] === 2) || (x < W - 1 && visto[p + 1] === 2) || (p >= W && visto[p - W] === 2) || (p + W < W * H && visto[p + W] === 2)) franja.push(p);
-    }
-    for (const p of franja) {
-      const i = p * 4;
-      const a = Math.min(1, distancia(px, i, cor) / 90);
-      if (a < 1) {
-        if (a <= 0.02) px[i + 3] = 0;
-        else {
-          for (let c = 0; c < 3; c++) px[i + c] = Math.max(0, Math.min(255, Math.round((px[i + c] - cor[c] * (1 - a)) / a)));
-          px[i + 3] = Math.round(px[i + 3] * a);
-        }
-      }
-      visto[p] = 2;
-    }
-  }
-  return limpos;
+  const img = { data: px, largura: W, altura: H };
+  const borda = fundoPelaBorda(img);
+  const r = recortarFundoSolido(img, { cor, tolerancia: borda.tipo === "solido" ? toleranciaDoFundo(borda.ruido) : 40, furos: "manter" });
+  px.set(r.data);
+  return r.info.fundo_px;
 }
 
 // ------------------------------------------------------------------ navegador

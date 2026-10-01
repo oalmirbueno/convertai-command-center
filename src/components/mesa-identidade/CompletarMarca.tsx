@@ -13,7 +13,7 @@ import { estimarLocal, modeloDoPapel, modelosAtivos, nomeDoModelo, textoDoErro, 
 import { TEMAS_DO_BRANDBOOK } from "../../../supabase/functions/mesa-identidade/modulos/brandbook";
 import { ROTULO_DA_VERSAO, TIPOS_DE_LOGO, type VersaoDaLogo } from "../../../supabase/functions/mesa-identidade/modulos/leitura-da-logo";
 import { linkDaFamilia } from "../../../supabase/functions/_shared/tipografia-da-marca";
-import { etapasDoProjeto, faltaNaEtapa, rotuloDaEtapa, type EtapaDaIdentidade } from "../../../supabase/functions/_shared/identidade-etapas";
+import { etapasDoProjeto, faltaNaEtapa, rotuloDaEtapa, type EtapaDaIdentidade } from "../../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
 import {
   checklistDaMarca,
   type CustoDoPasso,

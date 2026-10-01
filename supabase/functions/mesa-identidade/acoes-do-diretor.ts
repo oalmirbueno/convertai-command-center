@@ -27,7 +27,7 @@ import {
   type RegraDaOperacao,
   regraDasAcoes,
 } from "../_shared/acoes-do-agente.ts";
-import { ehEtapaDaIdentidade, rotuloDaEtapa } from "../_shared/identidade-etapas.ts";
+import { ehEtapaDaIdentidade, rotuloDaEtapa } from "./modulos/identidade-etapas.ts";
 
 export const OPERACOES_DO_DIRETOR = [
   "concluir_etapa",

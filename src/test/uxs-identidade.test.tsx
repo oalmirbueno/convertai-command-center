@@ -57,7 +57,7 @@ import EtapaApresentacao from "@/components/mesa-identidade/EtapaApresentacao";
 import EtapaGuideline from "@/components/mesa-identidade/EtapaGuideline";
 import VotacaoDosNomes from "@/components/mesa-identidade/VotacaoDosNomes";
 import EstudioDeNomes from "@/components/mesa-identidade/EstudioDeNomes";
-import { ETAPAS_DA_IDENTIDADE, destinoDoQueFalta, etapaFeita, etapasDoProjeto, faltaComDestino, faltaNaEtapa } from "../../supabase/functions/_shared/identidade-etapas";
+import { ETAPAS_DA_IDENTIDADE, destinoDoQueFalta, etapaFeita, etapasDoProjeto, faltaComDestino, faltaNaEtapa } from "../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
 import { faltaNaEstrategia } from "../../supabase/functions/_shared/estrategia-de-marca";
 import { normalizarBrandbook } from "../../supabase/functions/mesa-identidade/modulos/brandbook";
 import { separarMinhas } from "../../supabase/functions/mesa-identidade/modulos/naming";

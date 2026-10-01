@@ -20,7 +20,7 @@
  * Puro: sem Deno, sem banco. A tela, a função e os testes usam o mesmo arquivo.
  */
 
-import { faltaNaEstrategia } from "./estrategia-de-marca.ts";
+import { faltaNaEstrategia } from "../../_shared/estrategia-de-marca.ts";
 
 export const ETAPAS_DA_IDENTIDADE = [
   { valor: "inicio", rotulo: "Início" },

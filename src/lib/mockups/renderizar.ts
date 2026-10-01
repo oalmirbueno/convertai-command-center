@@ -8,6 +8,8 @@ import { carregarCamadas, carregarImagem, ondeEstaALogo } from "./api";
 import { desenharDesign, type EscolhasDoDesign, type LogoCarregada } from "./designDoSlot";
 import { lumaDaLogo, type TomDaLogo, type EscolhaDaVariante } from "./varianteDaLogo";
 import { compositor } from "./webgl";
+import { escalaQueCabe, limparForaDaTela } from "@/lib/recorte/limpezaDaLogo";
+import { fundoPelaBorda } from "../../../supabase/functions/_shared/recorte-limpo";
 import { ordenarCantos, projetarDesign, type Ponto } from "./homografia";
 
 export type Qualidade = "trabalho" | "alta";
@@ -50,12 +52,19 @@ export function paraBlob(canvas: HTMLCanvasElement, tipo = "image/png", qualidad
   });
 }
 
+/** Largura e altura de uma imagem ou de um canvas. */
+function medidas(img: HTMLImageElement | HTMLCanvasElement): { w: number; h: number } {
+  const el = img as HTMLImageElement;
+  return { w: el.naturalWidth || img.width || 1, h: el.naturalHeight || img.height || 1 };
+}
+
 /** Mede a luma de uma logo numa cópia pequena (64 px). */
-export function medirLogo(img: HTMLImageElement): number | null {
+export function medirLogo(img: HTMLImageElement | HTMLCanvasElement): number | null {
   const lado = 64;
-  const f = Math.min(1, lado / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
-  const w = Math.max(1, Math.round((img.naturalWidth || 1) * f));
-  const h = Math.max(1, Math.round((img.naturalHeight || 1) * f));
+  const m = medidas(img);
+  const f = Math.min(1, lado / Math.max(m.w, m.h));
+  const w = Math.max(1, Math.round(m.w * f));
+  const h = Math.max(1, Math.round(m.h * f));
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
@@ -76,6 +85,61 @@ export interface LogoDoKitParaCarregar {
   tom: TomDaLogo | string | null | undefined;
 }
 
+/** Lado da logo limpa para o mockup (a exportação alta tem até 3000 px no quadro inteiro). */
+const LADO_DA_LOGO_NO_MOCKUP = 2000;
+
+/**
+ * Logo enviada com fundo liso e CLARO (JPEG, PNG com fundo branco): o fundo
+ * sai pelo recorte limpo antes de compor, senão vira caixa branca ou ganha
+ * contorno branco no mockup (revisão IDR, 01/10). O branco cercado pelo
+ * desenho fica (contrato de 25/09). PNG transparente e logo em fundo escuro
+ * ou de cor ficam como vieram: nada muda sem prévia. A conta roda fora da
+ * tela (worker) e só quando a borda de uma cópia de 128 px mostra o fundo.
+ */
+export function logoSemCaixaBranca(img: HTMLImageElement): Promise<HTMLImageElement | HTMLCanvasElement> {
+  // A mesma logo (carregarImagem guarda a imagem) não refaz a conta a cada troca de mockup.
+  const ja = logosLimpas.get(img);
+  if (ja) return ja;
+  const p = limparParaMockup(img);
+  logosLimpas.set(img, p);
+  return p;
+}
+
+const logosLimpas = new WeakMap<HTMLImageElement, Promise<HTMLImageElement | HTMLCanvasElement>>();
+
+async function limparParaMockup(img: HTMLImageElement): Promise<HTMLImageElement | HTMLCanvasElement> {
+  const { w, h } = medidas(img);
+  try {
+    const amostra = desenharEmCanvas(img, Math.min(1, 128 / Math.max(w, h)));
+    if (!amostra) return img;
+    const pequena = amostra.ctx.getImageData(0, 0, amostra.c.width, amostra.c.height);
+    const fundo = fundoPelaBorda({ data: pequena.data, largura: pequena.width, altura: pequena.height });
+    if (fundo.tipo !== "solido" || !fundo.claro) return img;
+    const cheia = desenharEmCanvas(img, escalaQueCabe(w, h, LADO_DA_LOGO_NO_MOCKUP));
+    if (!cheia) return img;
+    const px = cheia.ctx.getImageData(0, 0, cheia.c.width, cheia.c.height);
+    const r = await limparForaDaTela({ op: "mockup", data: px.data, largura: px.width, altura: px.height });
+    if (!r.data) return img;
+    px.data.set(r.data);
+    cheia.ctx.putImageData(px, 0, 0);
+    return cheia.c;
+  } catch {
+    // Canvas indisponível ou imagem de outra origem: a logo vai como veio.
+    return img;
+  }
+}
+
+function desenharEmCanvas(img: HTMLImageElement, escala: number): { c: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null {
+  const { w, h } = medidas(img);
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(w * escala));
+  c.height = Math.max(1, Math.round(h * escala));
+  const ctx = c.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  return { c, ctx };
+}
+
 /** Carrega as logos do kit (principal e alternativa) e mede cada uma. Logo que não abre fica fora. */
 export async function carregarLogos(lista: LogoDoKitParaCarregar[]): Promise<LogoCarregada[]> {
   const out: LogoCarregada[] = [];
@@ -83,12 +147,13 @@ export async function carregarLogos(lista: LogoDoKitParaCarregar[]): Promise<Log
     const onde = await ondeEstaALogo(l.path, l.fileId);
     if (!onde) continue;
     try {
-      const img = await carregarImagem(onde.caminho, onde.bucket);
+      const img = await logoSemCaixaBranca(await carregarImagem(onde.caminho, onde.bucket));
+      const m = medidas(img);
       out.push({
         id: l.id,
         imagem: img,
-        largura: img.naturalWidth,
-        altura: img.naturalHeight,
+        largura: m.w,
+        altura: m.h,
         luma: medirLogo(img),
         tom: l.tom === "clara" || l.tom === "escura" ? l.tom : null,
       });

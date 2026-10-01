@@ -48,9 +48,13 @@ export interface ResultadoDaFerramenta {
   jaExistia: boolean;
   cobrado: boolean;
   avisos: string[];
+  /** Tirar fundo (pro): o servidor ainda pode refazer a borda pelo código (passo à parte, sem custo). */
+  bordaLimpaPendente?: boolean;
+  /** A imagem devolvida já é a versão com a borda refeita pelo código (sem halo). */
+  bordaLimpa?: boolean;
 }
 
-export type EstadoDoAndamento = { etapa: "enviando" | "na_fila" | "processando" | "retomando"; posicao: number | null; tentativa: number };
+export type EstadoDoAndamento = { etapa: "enviando" | "na_fila" | "processando" | "retomando" | "limpando_borda"; posicao: number | null; tentativa: number };
 
 const num = (v: unknown): number | null => {
   if (v === null || v === undefined || v === "") return null;
@@ -111,7 +115,30 @@ export function normalizarResultado(d: any): ResultadoDaFerramenta {
     jaExistia: !!d.ja_existia,
     cobrado: !!d.cobrado,
     avisos: textos(d.avisos),
+    ...(d.borda_limpa_pendente ? { bordaLimpaPendente: true } : {}),
+    ...(d.borda_limpa ? { bordaLimpa: true } : {}),
   };
+}
+
+/**
+ * Borda limpa do recorte pro (revisão IDR, 01/10): passo à parte e sem custo,
+ * DEPOIS do resultado pago estar no acervo. Falhou ou não coube: fica o
+ * recorte do provedor, com o motivo nos avisos (nunca vira erro do pedido).
+ */
+export async function limparBordaDoRecorte(clientId: string, r: ResultadoDaFerramenta): Promise<ResultadoDaFerramenta> {
+  if (!r.bordaLimpaPendente) return r;
+  try {
+    const d = await chamarFuncao("mesa-foto", { acao: "ferramenta_borda_limpa", client_id: clientId, imagem_id: r.imagem.id });
+    if (d && d.situacao === "pronto") {
+      const limpa = normalizarResultado(d);
+      return { ...r, imagem: limpa.imagem, url: limpa.url, bordaLimpa: true, bordaLimpaPendente: false };
+    }
+    const motivo = d && typeof d.motivo === "string" ? d.motivo : "A borda limpa não ficou pronta: fica o recorte do provedor.";
+    return { ...r, bordaLimpaPendente: false, avisos: r.avisos.concat(motivo) };
+  } catch (e) {
+    const motivo = e instanceof Error && e.message ? e.message : "erro desconhecido";
+    return { ...r, bordaLimpaPendente: false, avisos: r.avisos.concat(`A borda limpa não ficou pronta (${motivo}): o recorte do provedor está no acervo.`) };
+  }
 }
 
 /** Sem a chave da fal.ai no servidor: a tela mostra o aviso em vez de erro genérico. */
@@ -176,14 +203,17 @@ export function ampliarImagem(
   return rodarAteFicarPronto(corpo, aoAndar);
 }
 
-export function tirarFundoPro(
+export async function tirarFundoPro(
   p: { clientId: string; imagemId: string; motor?: "bria" | "birefnet"; refazer?: boolean },
   aoAndar?: (e: EstadoDoAndamento) => void,
 ): Promise<ResultadoDaFerramenta> {
   const corpo: Record<string, unknown> = { acao: "remover_fundo", client_id: p.clientId, imagem_id: p.imagemId };
   if (p.motor) corpo.motor = p.motor;
   if (p.refazer) corpo.refazer = true;
-  return rodarAteFicarPronto(corpo, aoAndar);
+  const r = await rodarAteFicarPronto(corpo, aoAndar);
+  if (!r.bordaLimpaPendente) return r;
+  if (aoAndar) aoAndar({ etapa: "limpando_borda", posicao: null, tentativa: 0 });
+  return limparBordaDoRecorte(p.clientId, r);
 }
 
 /** Frase do andamento para a tela. */
@@ -192,5 +222,6 @@ export function textoDoAndamento(e: EstadoDoAndamento | null, segundos: number):
   if (!e || e.etapa === "enviando") return `Enviando ao provedor${s}`;
   if (e.etapa === "na_fila") return `Na fila do provedor${e.posicao !== null ? `, posição ${e.posicao}` : ""}${s}`;
   if (e.etapa === "retomando") return `Retomando o pedido, sem cobrar de novo${s}`;
+  if (e.etapa === "limpando_borda") return `Pronto e no acervo. Limpando a borda, sem custo${s}`;
   return `Processando${s}`;
 }

@@ -14,7 +14,7 @@ import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { superpoderesPara } from "../_shared/superpoderes.ts";
 import { regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
-import { concluirEtapa, ehEtapaDaIdentidade, ehModoDoProjeto, etapaAtual, reabrirEtapa, TAMANHOS_DA_IDENTIDADE } from "../_shared/identidade-etapas.ts";
+import { concluirEtapa, ehEtapaDaIdentidade, ehModoDoProjeto, etapaAtual, reabrirEtapa, TAMANHOS_DA_IDENTIDADE } from "./modulos/identidade-etapas.ts";
 import { montarBriefingDaIdentidade, respostasDoBriefing } from "./modulos/briefing-da-identidade.ts";
 import { normalizarHex } from "../_shared/cores-da-marca.ts";
 import { ehTema } from "./modulos/brandbook.ts";

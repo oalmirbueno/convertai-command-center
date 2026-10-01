@@ -629,7 +629,7 @@ describe("função mesa-foto (contrato pelo código)", () => {
   it("preparar preserva: recorte com pixels originais, áreas protegidas de volta e erro explícito sem fundo transparente", () => {
     const p = corpoDe(fonte, "preparar");
     for (const trecho of [
-      'fundo: "transparente"', "aceitaFundoTransparente(mImg)", '"fundo_transparente_nao_suportado"', "recortePreservandoOriginal(o, g, volta.tela)", "devolverOriginalNasAreas(",
+      'fundo: "transparente"', "aceitaFundoTransparente(mImg)", '"fundo_transparente_nao_suportado"', "recortePreservandoOriginal(o, g, volta.tela, tVolta - cpuAntes)", "devolverOriginalNasAreas(",
       "mascaraProtegendo(", '"recorte_ou_area_necessaria"', '"fundo_nao_veio_transparente"', "tamanhoFixo: true", "derivada_de: imagem.id",
     ]) expect(p, trecho).toContain(trecho);
     expect(imagemFonte).toContain("devolverOriginalForaDasAreas(original, gerado, complementoDasAreas(protegidas)");

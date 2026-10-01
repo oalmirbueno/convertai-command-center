@@ -21,7 +21,7 @@ import { registrarFalha } from "../_shared/falha-registrada.ts";
 // Frente SPP (30/09): o método da casa (superpoderes) nas gerações da identidade (o código escolhe).
 import { superpoderesPara } from "../_shared/superpoderes.ts";
 import { regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
-import { TAMANHOS_DA_IDENTIDADE } from "../_shared/identidade-etapas.ts";
+import { TAMANHOS_DA_IDENTIDADE } from "./modulos/identidade-etapas.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import {
   type AlvoDoNaming,
@@ -44,6 +44,7 @@ import {
 } from "./modulos/naming.ts";
 import { gerarPdfDoNaming, nomeDoArquivoDoNaming } from "./modulos/pdf-identidade.ts";
 import { normalizarEstrategia } from "../_shared/estrategia-de-marca.ts";
+import { direcaoDoArquetipo } from "./modulos/coerencia-da-marca.ts";
 import {
   type Chamador,
   dadosComParte,
@@ -209,7 +210,15 @@ async function contextoDoNaming(clientId: string, marcaId: string | null, projet
       evita: briefing.evita ?? null,
       campanha: campanha ? { nome: campanha.nome, objetivo: campanha.objetivo, conceito: campanha.conceito, pedido: campanha.pedido } : null,
       estrategia: est && (est.arquetipo.principal || est.posicionamento.diferencial || est.tom.atributos.length)
-        ? { arquetipo: est.arquetipo.principal || null, posicionamento: est.posicionamento.declaracao || est.posicionamento.diferencial || null, tom: est.tom.atributos, valores: est.valores.map((v) => v.nome) }
+        ? {
+          arquetipo: est.arquetipo.principal || null,
+          posicionamento: est.posicionamento.declaracao || est.posicionamento.diferencial || null,
+          tom: est.tom.atributos,
+          valores: est.valores.map((v) => v.nome),
+          // IDR (30/09): o som que o arquétipo pede e os traços, para o nome nascer coerente com a estratégia.
+          tracos: est.personalidade.tracos,
+          som_do_nome: (direcaoDoArquetipo(est.arquetipo.principal) || { nome: null }).nome,
+        }
         : null,
     } as Record<string, unknown>,
   };

@@ -11,7 +11,7 @@ import { useChaveDeRecolher, useRecolhido } from "@/components/sistema/TituloRec
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { Carregando } from "@/components/sistema/Estados";
 import { botao, campo, espaco, foco, juntar, lista, superficie, texto } from "@/components/sistema/estilos";
-import { etapaAtual, progresso, rotuloDaEtapa, ROTULO_DO_MODO, type EtapaDaIdentidade, type ModoDoProjeto } from "../../../supabase/functions/_shared/identidade-etapas";
+import { etapaAtual, progresso, rotuloDaEtapa, ROTULO_DO_MODO, type EtapaDaIdentidade, type ModoDoProjeto } from "../../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
 import { chamarIdentidade, faltaATabela, useProjetos, type ProjetoDeIdentidade } from "./identidadeApi";
 import { Pastilha, ProjetoProvider, type ProjetoDaMesa } from "./Comuns";
 import { enviarLogo, extensaoDe, motivoParaRecusarLogo, TIPOS_DE_LOGO } from "./arquivosDaMarca";

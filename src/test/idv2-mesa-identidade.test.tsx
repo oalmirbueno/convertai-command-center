@@ -23,7 +23,7 @@ import {
   textoDoEixo,
   valoresDoTexto,
 } from "../../supabase/functions/_shared/estrategia-de-marca";
-import { concluirEtapa, ETAPAS_NOVAS, etapaAtual, faltaNaEtapa, podeAbrir, reabrirEtapa, TAMANHOS_DA_IDENTIDADE } from "../../supabase/functions/_shared/identidade-etapas";
+import { concluirEtapa, ETAPAS_NOVAS, etapaAtual, faltaNaEtapa, podeAbrir, reabrirEtapa, TAMANHOS_DA_IDENTIDADE } from "../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
 import { avisosDeContraste, coresDaHarmonia, completarPaleta, escalaDaCor, HARMONIAS, hexParaHsl, hslParaHex, matrizDeContraste, neutrasDaMarca, nomeDaCor, paletaHarmonica, paresParaTexto } from "../../supabase/functions/mesa-identidade/modulos/paleta-da-marca";
 import { contraste, luminanciaRelativa } from "../../supabase/functions/_shared/cores-da-marca";
 import { estilosDaPersonalidade, familiaSegura, FONTES_DO_CATALOGO, fonteDoCatalogo, hierarquiaDoPar, normalizarParesPropostos, PARES_DE_FONTES, paresParaEstilos, pilhaDaFonte, urlDoGoogleFonts } from "../../supabase/functions/_shared/tipografia-da-marca";
@@ -50,7 +50,7 @@ import { paginasDoPdf } from "../../supabase/functions/_shared/pdf-roteiro";
 import { alvosDoDiretor, DESCRICOES_DAS_OPERACOES, normalizarAcoesDoDiretor, OPERACOES_COM_IA, OPERACOES_DO_DIRETOR, regrasDoDiretor } from "../../supabase/functions/mesa-identidade/acoes-do-diretor";
 import { podeExecutarDireto } from "../../supabase/functions/_shared/acoes-do-agente";
 import { MESAS_DO_PAINEL } from "@/lib/mesa/preCarga";
-import { ETAPAS_DA_IDENTIDADE } from "../../supabase/functions/_shared/identidade-etapas";
+import { ETAPAS_DA_IDENTIDADE } from "../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
 import { linhasQueCabem } from "@/lib/identidade/desenharPeca";
 import { mensagemDoErroDaVotacao } from "@/pages/VotacaoDeNomes";
 import { dadosDoPublico } from "@/pages/BrandbookPublico";

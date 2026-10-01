@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { ImagePlus, Loader2, Pipette, Plus, RefreshCcw, Trash2, Upload } from "lucide-react";
+import { lazy, Suspense, useRef, useState } from "react";
+import { Eraser, ImagePlus, Loader2, Pipette, Plus, RefreshCcw, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { PreencherComIA } from "@/components/sistema";
@@ -9,7 +9,7 @@ import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { botao, campo, campoTexto, espaco, foco, juntar, lista, texto } from "@/components/sistema/estilos";
 import { fichaDaCor, normalizarHex, PERFIS, ROTULO_DO_PAPEL_DA_COR, textoCmyk, textoRgb, type PapelDaCor } from "../../../supabase/functions/_shared/cores-da-marca";
 import { SLOTS_DE_LOGO, USOS_INCORRETOS_PADRAO, type LogoDoBrandbook, type SlotDeLogo } from "../../../supabase/functions/mesa-identidade/modulos/brandbook";
-import { faltaNaEtapa } from "../../../supabase/functions/_shared/identidade-etapas";
+import { faltaNaEtapa } from "../../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
 import { enviarImagemDeApoio, enviarLogo, motivoParaRecusarLogo, paletaDaLogo } from "./arquivosDaMarca";
 import { CabecalhoDaEtapa, contextoParaPreencher, ImagemInteira, Pastilha, SeletorDoModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
 import { useGravacoesDaMesa, useValorSalvo } from "./gravacao";
@@ -17,6 +17,9 @@ import GeradorDePaleta, { ContrasteDaPaleta } from "./PaletaDaMarca";
 import { GrafismosGerados, tiposDoPar, TipografiaDaMarca, type TipoDoSistema } from "./TipoEGrafismos";
 import PaletaDoSetor from "./PaletaDoSetor";
 import ParesDaBase from "./ParesDaBase";
+
+// IDR (30/09): limpar o fundo da logo abre sob demanda (a conta pesada só carrega quando a equipe pede).
+const RecorteDaLogo = lazy(() => import("./RecorteDaLogo"));
 
 type Cor = { nome: string; papel: PapelDaCor; hex: string };
 type Tipo = { familia: string; uso: "titulo" | "texto" | "apoio"; pesos: string; licenca: string; alternativa: string };
@@ -109,6 +112,7 @@ export default function EtapaSistema() {
   const foto = pFoto.valor;
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [sugeridas, setSugeridas] = useState<string[]>([]);
+  const [limpando, setLimpando] = useState<{ slot: SlotDeLogo; i: number } | null>(null);
 
   // O que a etapa exige, pelo que está SALVO (a descrição da seção diz "não salvo" quando a tela está na frente).
   const faltaSalva = faltaNaEtapa("sistema", projeto.dados);
@@ -167,12 +171,34 @@ export default function EtapaSistema() {
           action: { label: "Desfazer", onClick: () => void pLogos.trocarESalvar(antes).catch((e) => avisarErro(e, "Não foi possível desfazer")) },
         });
       } else toast.success(/svg/i.test(l.mime) ? "Logo em vetor guardada" : "Logo guardada", { description: descricao });
+      // IDR: logo em bitmap com fundo liso ou franja clara (o "recorte branco"): oferece a limpeza, nunca faz sozinho.
+      if (!/svg/i.test(l.mime)) {
+        const i = slot === "alternativas" ? novas.alternativas.length - 1 : slot === "icone" ? novas.icone.length - 1 : 0;
+        import("./RecorteDaLogo")
+          .then((m) => m.precisaLimpar(arquivo))
+          .then((precisa) => {
+            if (precisa) toast.info("A logo tem fundo ou contorno claro", { description: "Aparece como recorte branco no escuro. Dá para limpar por código, sem mudar o desenho.", duration: 12_000, action: { label: "Limpar fundo", onClick: () => setLimpando({ slot, i }) } });
+          })
+          .catch(() => undefined);
+      }
     } catch (e) {
       avisarErro(e, "A logo não foi enviada");
     } finally {
       setOcupado(null);
     }
   };
+
+  /** A versão limpa entra no lugar da logo (o arquivo antigo fica guardado; o Desfazer volta o registro). */
+  const usarLimpa = async (slot: SlotDeLogo, i: number, nova: LogoDoBrandbook) => {
+    const antes = logos;
+    const novas: Logos = { ...logos };
+    if (slot === "alternativas") novas.alternativas = logos.alternativas.map((x, k) => (k === i ? nova : x));
+    else if (slot === "icone") novas.icone = logos.icone.map((x, k) => (k === i ? nova : x));
+    else novas[slot] = nova;
+    await pLogos.trocarESalvar(novas);
+    toast.success("Logo limpa no lugar", { duration: 10_000, action: { label: "Desfazer", onClick: () => void pLogos.trocarESalvar(antes).catch((e) => avisarErro(e, "Não foi possível desfazer")) } });
+  };
+  const itemLimpando = limpando ? (limpando.slot === "alternativas" ? logos.alternativas[limpando.i] : limpando.slot === "icone" ? logos.icone[limpando.i] : logos[limpando.slot]) || null : null;
 
   const tirar = async (slot: SlotDeLogo, i = 0) => {
     const novas: Logos = { ...logos };
@@ -230,9 +256,14 @@ export default function EtapaSistema() {
         <div className={juntar("grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4")}>
           {SLOTS_DE_LOGO.map((s) => {
             const itens = s.valor === "alternativas" ? logos.alternativas : s.valor === "icone" ? logos.icone : logos[s.valor] ? [logos[s.valor] as LogoDoBrandbook] : [];
-            return <SlotDaLogo key={s.valor} slot={s.valor} rotulo={s.rotulo} varios={s.varios} itens={itens} ocupado={ocupado === `logo-${s.valor}`} onArquivo={(f) => void enviar(s.valor, f)} onTirar={(i) => void tirar(s.valor, i)} />;
+            return <SlotDaLogo key={s.valor} slot={s.valor} rotulo={s.rotulo} varios={s.varios} itens={itens} ocupado={ocupado === `logo-${s.valor}`} onArquivo={(f) => void enviar(s.valor, f)} onTirar={(i) => void tirar(s.valor, i)} onLimpar={(i) => setLimpando({ slot: s.valor, i })} />;
           })}
         </div>
+        {limpando && itemLimpando && (
+          <Suspense fallback={null}>
+            <RecorteDaLogo aberta onFechar={() => setLimpando(null)} clientId={mesa.clientId} projetoId={projeto.id} slot={limpando.slot} logo={itemLimpando} onUsar={(nova) => usarLimpa(limpando.slot, limpando.i, nova)} />
+          </Suspense>
+        )}
       </Secao>
 
       <Secao
@@ -530,7 +561,7 @@ export default function EtapaSistema() {
  * arquivos) mantêm o envio no título para acrescentar. Uma entrada de arquivo
  * só por slot, sempre pela mesma validação (`enviar`, com motivoParaRecusarLogo).
  */
-function SlotDaLogo({ slot, rotulo, varios, itens, ocupado, onArquivo, onTirar }: { slot: SlotDeLogo; rotulo: string; varios: boolean; itens: LogoDoBrandbook[]; ocupado: boolean; onArquivo: (f: File) => void; onTirar: (i: number) => void }) {
+function SlotDaLogo({ slot, rotulo, varios, itens, ocupado, onArquivo, onTirar, onLimpar }: { slot: SlotDeLogo; rotulo: string; varios: boolean; itens: LogoDoBrandbook[]; ocupado: boolean; onArquivo: (f: File) => void; onTirar: (i: number) => void; onLimpar: (i: number) => void }) {
   const entrada = useRef<HTMLInputElement | null>(null);
   const [arrastando, setArrastando] = useState(false);
   const abrir = () => {
@@ -611,6 +642,11 @@ function SlotDaLogo({ slot, rotulo, varios, itens, ocupado, onArquivo, onTirar }
           <div className="mt-1 flex min-w-0 items-center">
             <Pastilha tom={/svg/i.test(l.mime) ? "bom" : "neutro"}>{/svg/i.test(l.mime) ? "SVG" : "PNG"}</Pastilha>
             <span className={juntar(texto.etiqueta, "ml-1.5 min-w-0 flex-1 truncate text-muted-foreground")}>{l.rotulo}</span>
+            {!/svg/i.test(l.mime) && (
+              <button type="button" className={botao.icone} aria-label={`Limpar o fundo de ${nome}`} title="Limpar fundo e contorno claro" disabled={ocupado} onClick={() => onLimpar(i)} data-limpar-logo={slot}>
+                <Eraser className="h-4 w-4" />
+              </button>
+            )}
             <button type="button" className={botao.icone} aria-label={`Tirar ${nome}`} disabled={ocupado} onClick={() => onTirar(i)}>
               <Trash2 className="h-4 w-4" />
             </button>

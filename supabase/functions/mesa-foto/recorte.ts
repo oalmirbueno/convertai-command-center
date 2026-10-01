@@ -19,6 +19,8 @@
 import type { Image } from "../_shared/imagescript.ts";
 // FN-01: imagem-local.ts carrega só quando uma foto é aberta (não na partida da função).
 import { type Alinhamento, cobrir, decodificar, IDENTIDADE } from "../_shared/imagem-sob-demanda.ts";
+// IDR (30/09): a borda sem halo (o fundo de cada ponto é a própria foto sob o transparente).
+import { limparBordaDoRecorte } from "../_shared/recorte-limpo.ts";
 
 /**
  * Lado maior da foto no "Tirar fundo": decodificar JPEG é o passo mais caro
@@ -33,6 +35,15 @@ export const LIMITE_RECORTE_DESALINHADO = 24;
 export const LIMITE_RECORTE_CONFERIR = 14;
 /** Menos que isto de assunto (fração do quadro) é recorte vazio. */
 export const ASSUNTO_MINIMO = 0.01;
+/**
+ * Borda sem halo no "Tirar fundo" (IDR; revisão de 01/10): a limpeza custa de
+ * 0,2 a 0,4 s em 1,8 MP no Deno local, e o recorte inteiro chegou a 1,3 a 1,7 s
+ * na primeira chamada (sem JIT). Ela é pulada quando o recorte já gastou este
+ * tempo desde o começo, ou acima deste tamanho: fica a borda da máscara (como
+ * antes de 30/09), nunca o estouro dos 2 s de CPU.
+ */
+export const ORCAMENTO_DA_BORDA_MS = 1200;
+export const MP_DA_BORDA_NO_RECORTE = 2.0;
 
 export type ResultadoDoRecorte = {
   png: Uint8Array;
@@ -45,6 +56,8 @@ export type ResultadoDoRecorte = {
   /** Fração do quadro que ficou com o assunto (alfa acima de 128). */
   assunto: number;
   situacao: "ok" | "conferir" | "desalinhado" | "vazio";
+  /** IDR: pixels da borda refeitos (alfa e cor), a erosão aplicada (0 ou 1 px) e se a limpeza foi pulada (tempo ou tamanho). */
+  borda?: { px: number; erosao: number; pulada?: "tempo" | "tamanho" };
 };
 
 /** Janela da foto original que a tela de trabalho mostra ("cover" pelo centro, igual a cobrir()). */
@@ -220,7 +233,10 @@ export async function recortePreservandoOriginal(
   original: Uint8Array | Image,
   geradoComAlfa: Uint8Array | Image,
   tela?: Image | null,
+  /** Quando o trabalho começou (performance.now()); padrão: agora. */
+  inicio?: number,
 ): Promise<ResultadoDoRecorte> {
+  const comeco = typeof inicio === "number" ? inicio : performance.now();
   const o = original instanceof Uint8Array ? await decodificar(original) : original;
   const g = geradoComAlfa instanceof Uint8Array ? await decodificar(geradoComAlfa) : geradoComAlfa;
   const est = alinharAssunto(o, g, tela);
@@ -257,6 +273,12 @@ export async function recortePreservandoOriginal(
       if (final > 128) opacos++;
     }
   }
+  // IDR (30/09, "ainda fica recorte branco"): a máscara do gerador é macia e às vezes pega 1 a 2 px do fundo.
+  // Na faixa da borda, o alfa sai da projeção entre a cor do assunto e a do fundo ali (a foto original está
+  // sob o transparente), a cor perde a mistura e, com fundo claro que ainda sobra, a borda cede 1 px.
+  const pulada: "tempo" | "tamanho" | null = (W * H) / 1e6 > MP_DA_BORDA_NO_RECORTE ? "tamanho" : performance.now() - comeco > ORCAMENTO_DA_BORDA_MS ? "tempo" : null;
+  const limpeza = pulada ? null : limparBordaDoRecorte({ data: ob, largura: W, altura: H }, { corSobTransparente: true, erodir: "auto" });
+  if (limpeza) ob.set(limpeza.data);
   const assunto = opacos / (W * H);
   const situacao: ResultadoDoRecorte["situacao"] = assunto < ASSUNTO_MINIMO
     ? "vazio"
@@ -265,7 +287,7 @@ export async function recortePreservandoOriginal(
     : erro > LIMITE_RECORTE_CONFERIR
     ? "conferir"
     : "ok";
-  return { png: await o.encode(1), largura: W, altura: H, alinhamento: al, alinhou, erro, assunto, situacao };
+  return { png: await o.encode(1), largura: W, altura: H, alinhamento: al, alinhou, erro, assunto, situacao, borda: limpeza ? { px: limpeza.info.borda_px, erosao: limpeza.info.erosao } : { px: 0, erosao: 0, pulada: pulada || "tempo" } };
 }
 
 // ------------------------------------------------------------------ passos do "Tirar fundo"

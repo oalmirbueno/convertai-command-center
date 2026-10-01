@@ -11,6 +11,7 @@ import {
   ROTULO_DA_VERSAO,
   semFundo,
   svgMonocromatico,
+  type VaosDaLogo,
   type VersaoDaLogo,
   versoesPossiveis,
 } from "../../../supabase/functions/mesa-identidade/modulos/leitura-da-logo";
@@ -135,7 +136,7 @@ function dataUrl(blob: Blob): Promise<string> {
  * monocromática e a negativa também saem em SVG (vetor recolorido); PNG
  * original: só PNG, e o vetor vai para a lista do designer.
  */
-export async function gerarVersoesDaLogo(pasta: string, logo: LogoDoBrandbook, lida?: { analise: AnaliseDaLogo; pixels: ImagemRGBA; mime: string; svg: string | null }): Promise<VersoesGeradas> {
+export async function gerarVersoesDaLogo(pasta: string, logo: LogoDoBrandbook, lida?: { analise: AnaliseDaLogo; pixels: ImagemRGBA; mime: string; svg: string | null }, furos: VaosDaLogo = "tirar"): Promise<VersoesGeradas> {
   const l = lida || (await lerLogoPorCodigo(logo));
   const { porCodigo, designer } = versoesPossiveis(l.analise, l.mime);
   const alternativas: LogoDoBrandbook[] = [];
@@ -147,7 +148,7 @@ export async function gerarVersoesDaLogo(pasta: string, logo: LogoDoBrandbook, l
     const base = `${pasta}/logos/${v}-${agora}`;
     if (v === "simbolo") {
       if (!l.analise.simbolo.caixa) continue;
-      const corte = recortar(l.pixels, l.analise, l.analise.simbolo.caixa);
+      const corte = recortar(l.pixels, l.analise, l.analise.simbolo.caixa, 0.08, furos);
       const png = await pngDosPixels(new Uint8ClampedArray(corte.data as ArrayLike<number>), corte.largura, corte.altura);
       await enviar(`${base}.png`, png, "image/png");
       icone.push({ caminho: `${base}.png`, mime: "image/png", rotulo: ROTULO_DA_VERSAO.simbolo, previa_png: `${base}.png`, largura: corte.largura, altura: corte.altura });
@@ -155,7 +156,7 @@ export async function gerarVersoesDaLogo(pasta: string, logo: LogoDoBrandbook, l
       geradas.push(v);
       continue;
     }
-    const pixels = v === "sem_fundo" ? semFundo(l.pixels, l.analise) : recolorir(l.pixels, l.analise, v === "negativa" ? COR_DA_NEGATIVA : COR_DA_MONOCROMATICA);
+    const pixels = v === "sem_fundo" ? semFundo(l.pixels, l.analise, furos) : recolorir(l.pixels, l.analise, v === "negativa" ? COR_DA_NEGATIVA : COR_DA_MONOCROMATICA, furos);
     const png = await pngDosPixels(pixels, l.pixels.largura, l.pixels.altura);
     await enviar(`${base}.png`, png, "image/png");
     let caminho = `${base}.png`;

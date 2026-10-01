@@ -124,7 +124,11 @@ export function FerramentasDaImagem({ clientId, imagemId, mostrarCriativo = fals
         ? await tirarFundoPro({ clientId, imagemId }, setAndamento)
         : await ampliarImagem({ clientId, imagemId, fator: o.fator === 4 ? 4 : 2, modo: o.modo === "criativo" ? "criativo" : "fiel" }, setAndamento);
       toast.success(r.jaExistia ? "Esta versão já estava no acervo" : o.tarefa === "remover_fundo" ? "Fundo removido" : "Imagem ampliada", {
-        description: r.jaExistia ? "Sem custo novo." : `Custo ${usd(r.custoUsd)}. A nova versão foi para o acervo.`,
+        description: [
+          r.jaExistia ? "Sem custo novo." : `Custo ${usd(r.custoUsd)}. A nova versão foi para o acervo.`,
+          r.bordaLimpa ? "Borda refeita pelo código, sem halo." : "",
+          r.avisos.length ? r.avisos[r.avisos.length - 1] : "",
+        ].filter(Boolean).join(" "),
       });
       if (aoConcluir) aoConcluir(r, o.chave);
       if (vivo.current) carregar();
