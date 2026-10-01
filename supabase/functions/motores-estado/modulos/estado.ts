@@ -8,10 +8,21 @@
  * Nada aqui fala com o banco nem com a rede: o vitest roda com os dados
  * reais de 30/09 (workers que nunca ligaram, OpenRouter no limite etc.).
  * Sem travessão nos textos.
+ *
+ * Frente CUS (01/10): o navegador do agente (computer use) entra como motor, com as
+ * ações que ele faz, o modelo de cada uma e o custo médio real (acoesDoNavegador).
  */
 
+import {
+  CASOS_DO_NAVEGADOR,
+  casoLigado,
+  custoEstimadoDoCaso,
+  DEFINICOES_DOS_CASOS,
+  MODELO_PADRAO_DO_COMPUTADOR,
+} from "../../computador-do-agente/modulos/navegador.ts";
+
 export type SituacaoDoMotor = "ok" | "atencao" | "parado" | "sem_uso";
-export type IdDoMotor = "site" | "motion" | "edicao" | "imagem" | "video" | "ia";
+export type IdDoMotor = "site" | "motion" | "edicao" | "imagem" | "video" | "ia" | "navegador";
 
 export interface EstadoDoMotor {
   id: IdDoMotor;
@@ -85,6 +96,8 @@ export interface EntradaDoEstado {
     ultimoPronto: string | null;
   };
   carteirasBaixas: Array<{ cliente: string; saldo: number }>;
+  /** Frente CUS: o worker do navegador e a fila dele (sem isto, o quadro fica com os 6 de antes). */
+  navegador?: EntradaDoNavegador;
 }
 
 /** Worker sem batida há mais que isto está desligado (o mesmo prazo da tela das mesas). */
@@ -408,9 +421,131 @@ function motorDaIa(e: EntradaDoEstado): EstadoDoMotor {
   return { id: "ia", nome: "Chaves e crédito da IA", situacao, resumo, ultimo_sinal: null, fila: { esperando: 0, rodando: 0, desde: null }, ultimo_erro: null, falta, detalhes, chaves };
 }
 
+// ------------------------------------------------------------------ navegador do agente (frente CUS)
+
+export const LIGAR_NAVEGADOR = `Ligar o worker do navegador nesta máquina: workers\\ligar\\ligar-navegador.cmd (passo a passo em ${GUIA}).`;
+
+export interface ExecutorDoNavegador {
+  nome: string;
+  visto_em: string | null;
+  versao?: string | null;
+  casos?: string[] | null;
+  provedores?: string[] | null;
+  ultimo_erro?: string | null;
+  ultimo_erro_em?: string | null;
+}
+
+export interface EntradaDoNavegador {
+  /** COMPUTADOR_COM_MODELO_LIGADO=1 na função (o valor não é segredo). */
+  comModelo: boolean;
+  executores: ExecutorDoNavegador[];
+  /** Tarefas vivas: aguardando_dono, aprovada e executando. */
+  abertos: Array<{ estado: string; criado_em: string; trava_ate?: string | null }>;
+  ultimaFalha: { motivo: string | null; em: string | null } | null;
+  ultimaFeita: string | null;
+  /** As últimas tarefas feitas (custo médio real por ação e o modelo mais usado). */
+  feitas: Array<{ caso: string; custo_usd: number; modelo_id: string | null }>;
+}
+
+const NOME_DO_PROVEDOR: Record<string, string> = { anthropic: "Anthropic (Claude)", openai: "OpenAI (GPT)" };
+
+export function motorDoNavegador(e: EntradaDoEstado, n: EntradaDoNavegador): EstadoDoMotor {
+  const ex = n.executores[0];
+  const rodando = n.abertos.filter((x) => x.estado === "executando");
+  // Tarefa rodando com a trava em dia também prova vida (o worker só bate ponto entre uma tarefa e outra).
+  const travaViva = rodando.some((x) => isFinite(ms(x.trava_ate)) && ms(x.trava_ate) > e.agora);
+  const vivo = vistoRecente(ex as Executor | undefined, e.agora) || travaViva;
+  const fila = filaDe(n.abertos.filter((x) => x.estado !== "aguardando_dono"), (x) => x.estado === "aprovada");
+  const esperandoDono = n.abertos.filter((x) => x.estado === "aguardando_dono").length;
+  const falta: string[] = [];
+  const detalhes: string[] = [];
+  let situacao: SituacaoDoMotor;
+  let resumo: string;
+  if (!ex && !travaViva) {
+    situacao = "parado";
+    resumo = "O worker do navegador nunca foi ligado.";
+    falta.push(LIGAR_NAVEGADOR);
+  } else if (!vivo) {
+    situacao = "parado";
+    resumo = `Worker do navegador desligado desde ${dataCurta(ex ? ex.visto_em : null)}.`;
+    falta.push(LIGAR_NAVEGADOR);
+  } else {
+    situacao = "ok";
+    resumo = rodando.length ? "Ligado, rodando uma tarefa." : "Ligado, esperando tarefa.";
+  }
+  resumo += frasDaFila(fila, "tarefa aprovada", "tarefas aprovadas");
+  if (esperandoDono) detalhes.push(`${plural(esperandoDono, "tarefa espera", "tarefas esperam")} o Confirmar do dono.`);
+  const provedores = ex && Array.isArray(ex.provedores) ? ex.provedores.filter((p) => NOME_DO_PROVEDOR[p]) : [];
+  if (!n.comModelo) {
+    falta.push("Pôr COMPUTADOR_COM_MODELO_LIGADO=1 nos segredos do Supabase para as ações com modelo (coleta, referência, perfil e concorrentes).");
+  } else if (ex && vivo) {
+    if (provedores.length) detalhes.push(`Computer use nesta máquina: ${provedores.map((p) => NOME_DO_PROVEDOR[p]).join(" e ")}.`);
+    else if (ex.provedores && !ex.provedores.length) {
+      falta.push("Pôr ANTHROPIC_API_KEY ou OPENAI_API_KEY na máquina do navegador e ligar de novo (sem chave, as ações com modelo esperam).");
+    } else detalhes.push("Worker antigo (sem a lista de provedores): só faz computer use com a Anthropic. Atualize o código e ligue de novo.");
+    if (provedores.length === 1) {
+      const outro = provedores[0] === "openai" ? "Claude" : "GPT";
+      const chave = provedores[0] === "openai" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY";
+      detalhes.push(`Tarefa com modelo ${outro} espera: falta ${chave} na máquina.`);
+    }
+  }
+  if (ex && ex.versao) detalhes.push(`Versão do worker: ${curto(ex.versao, 60)}.`);
+  const erros = [
+    ex && ex.ultimo_erro ? { em: ex.ultimo_erro_em || null, texto: curto(ex.ultimo_erro) } : null,
+    n.ultimaFalha && n.ultimaFalha.motivo ? { em: n.ultimaFalha.em, texto: curto(n.ultimaFalha.motivo) } : null,
+  ].filter((x): x is { em: string | null; texto: string } => !!x);
+  const ultimo_erro = erros.sort((a, b) => (ms(b.em) || 0) - (ms(a.em) || 0))[0] || null;
+  if (situacao === "ok" && ultimo_erro && maisNovo(ultimo_erro.em, n.ultimaFeita)) situacao = "atencao";
+  if (situacao === "ok" && falta.length) situacao = "atencao";
+  return { id: "navegador", nome: "Navegador do agente (computer use)", situacao, resumo, ultimo_sinal: ex ? ex.visto_em : null, fila, ultimo_erro, falta, detalhes };
+}
+
+export interface AcaoDoNavegadorNaTela {
+  caso: string;
+  rotulo: string;
+  onde: string;
+  modelo: string;
+  custo: string;
+  feitas: number;
+  ligada: boolean;
+}
+
+const NOME_CURTO: Record<string, string> = {
+  "anthropic:claude-sonnet-5-5": "Claude Sonnet 5.5",
+  "anthropic:claude-opus-5-5": "Claude Opus 5.5",
+  "openai:gpt-6.1-sol": "GPT-6.1 Sol",
+  "openai:gpt-6-astra": "GPT-6 Astra",
+};
+const nomeCurto = (id: string) => NOME_CURTO[id] || id.replace(/^(anthropic|openai):/, "");
+
+/** A lista das ações do navegador para as Configurações: onde pede, o modelo e o custo médio real. */
+export function acoesDoNavegador(n: EntradaDoNavegador): AcaoDoNavegadorNaTela[] {
+  return CASOS_DO_NAVEGADOR.map((caso) => {
+    const d = DEFINICOES_DOS_CASOS[caso];
+    const feitas = n.feitas.filter((f) => f.caso === caso);
+    const media = feitas.length ? feitas.reduce((s, f) => s + (Number(f.custo_usd) || 0), 0) / feitas.length : null;
+    const usos: Record<string, number> = {};
+    feitas.forEach((f) => {
+      if (f.modelo_id) usos[f.modelo_id] = (usos[f.modelo_id] || 0) + 1;
+    });
+    const maisUsado = Object.keys(usos).sort((a, b) => usos[b] - usos[a])[0] || null;
+    const extra = maisUsado && maisUsado !== MODELO_PADRAO_DO_COMPUTADOR ? `; mais usado: ${nomeCurto(maisUsado)}` : "";
+    const modelo = d.usaModelo ? `Escolhido no pedido (padrão ${nomeCurto(MODELO_PADRAO_DO_COMPUTADOR)}${extra})` : "Sem modelo (roteiro fixo)";
+    const estimado = d.usaModelo ? custoEstimadoDoCaso(caso, { preco_entrada_1m: 2, preco_saida_1m: 10, preco_cache_1m: 0.2 }).estimado : 0;
+    const custo = !d.usaModelo
+      ? "US$ 0"
+      : media !== null
+      ? `${dinheiro(media)} em média (${plural(feitas.length, "feita", "feitas")})`
+      : `cerca de ${dinheiro(estimado)} com o padrão (sem histórico; teto ${dinheiro(d.tetoCustoUsd)})`;
+    return { caso, rotulo: d.rotulo, onde: d.onde, modelo, custo, feitas: feitas.length, ligada: casoLigado(caso, n.comModelo) };
+  });
+}
+
 /** O quadro inteiro, na ordem da tela. */
 export function montarEstado(e: EntradaDoEstado): EstadoDoMotor[] {
-  return [motorDoSite(e), motorDeRender(e, "motion"), motorDeRender(e, "edicao"), motorDeImagem(e), motorDeVideo(e), motorDaIa(e)];
+  const motores = [motorDoSite(e), motorDeRender(e, "motion"), motorDeRender(e, "edicao"), motorDeImagem(e), motorDeVideo(e), motorDaIa(e)];
+  if (e.navegador) motores.push(motorDoNavegador(e, e.navegador));
+  return motores;
 }
 
 /** Resumo de uma linha para o topo ("2 motores parados"). */

@@ -15,7 +15,9 @@ import { chamarSite, type LinhaDoSite, useGuardarSite } from "./siteApi";
 import { listaDoValor } from "./CampoComIA";
 import { useBarraDaEtapa } from "./BarraDaEtapa";
 // Frente MOD (30/09): o navegador do agente captura a tela inteira da referência (com o Confirmar do dono).
-import { BotaoDoNavegador, TarefasDoNavegador } from "@/components/agentes/NavegadorDoAgente";
+// Frente CUS (01/10): "Notas de estilo" (computer use com o modelo escolhido) leva print e notas para a Direção.
+import { BotaoDoNavegador, TarefasDoNavegador, type InsumoDoNavegador } from "@/components/agentes/NavegadorDoAgente";
+import { dominioDaUrl, fonteDoCartao, notasParaDirecao, observacaoComNotas, printPrincipal } from "@/lib/agentes/insumosDoNavegador";
 
 type Foto = { id: string; storage_bucket: string; storage_path: string; nome: string };
 
@@ -69,6 +71,24 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
     if (ultimo) guardar(ultimo);
   };
   const fotos = useQuery({ queryKey: ["mesa-site", "acervo", site.id], enabled: verAcervo, queryFn: () => chamarSite<{ fotos: Foto[] }>("fotos_reais", { site_id: site.id }) });
+
+  /** Cartão da referência com notas: o print entra nas referências e as notas na observação da Direção (fica a versão anterior). */
+  const levarParaDirecao: InsumoDoNavegador = {
+    aoUsar: async (c) => {
+      const caminho = printPrincipal(c);
+      const dominio = dominioDaUrl(fonteDoCartao(c));
+      let atual = site;
+      if (caminho) {
+        const d = await chamarSite<{ site: LinhaDoSite }>("referencia_adicionar", { site_id: site.id, tipo: "print", path: caminho, nome: `Página inteira de ${dominio}` });
+        atual = d.site;
+        guardar(d.site);
+      }
+      const observacao = observacaoComNotas(String((atual.direcao && atual.direcao.observacao) || ""), notasParaDirecao(c));
+      const d2 = await chamarSite<{ site: LinhaDoSite }>("site_salvar", { site_id: site.id, direcao: { observacao } });
+      guardar(d2.site);
+      return `Notas de ${dominio} na Direção${caminho ? " e o print nas referências" : ""}. A versão anterior fica em Versões.`;
+    },
+  };
 
   const rodar = async (rotulo: string, fn: () => Promise<{ site?: LinhaDoSite } | void>) => {
     setOcupado(rotulo);
@@ -199,6 +219,7 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
                   <span className={juntar(texto.auxiliar, "block truncate")}>{r.lida_em ? (r.leitura && r.leitura.titulo) || "lida" : "ainda não lida"}</span>
                 </span>
                 {r.tipo === "url" && r.url && <BotaoDoNavegador caso="captura_site" clientId={clientId} origem="mesa_site" url={String(r.url)} rotulo="Capturar a tela inteira" compacto />}
+                {r.tipo === "url" && r.url && <BotaoDoNavegador caso="capturar_referencia" clientId={clientId} origem="mesa_site" url={String(r.url)} rotulo="Notas de estilo" compacto />}
                 <button type="button" className={botao.icone} aria-label={`Arquivar ${r.nome}`} onClick={() => void rodar("Não foi possível arquivar", () => chamarSite("referencia_arquivar", { site_id: site.id, referencia_id: r.id }))}>
                   <Archive className="h-4 w-4" />
                 </button>
@@ -208,7 +229,8 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
         )}
       </Secao>
 
-      <TarefasDoNavegador clientId={clientId} origem="mesa_site" titulo="Capturas de tela inteira" />
+      <TarefasDoNavegador clientId={clientId} origem="mesa_site" titulo="Capturas de tela inteira" casos={["captura_site"]} />
+      <TarefasDoNavegador clientId={clientId} origem="mesa_site" titulo="Referências com notas de estilo" casos={["capturar_referencia"]} insumo={levarParaDirecao} />
 
       {dna && (
         <Secao

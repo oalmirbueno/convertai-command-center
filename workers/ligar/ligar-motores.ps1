@@ -5,7 +5,8 @@
     .\ligar-motores.ps1 -Motor conferir        confere a máquina e as chaves (não liga nada)
     .\ligar-motores.ps1 -Motor render          liga o worker de render (Motion e Mesa Edição) nesta janela
     .\ligar-motores.ps1 -Motor codigo          liga o worker do motor de código (Mesa Site) nesta janela
-    .\ligar-motores.ps1 -Motor todos           abre uma janela para cada worker
+    .\ligar-motores.ps1 -Motor navegador       liga o worker do navegador do agente (computer use) nesta janela
+    .\ligar-motores.ps1 -Motor todos           abre uma janela para cada worker (render, código e navegador)
     .\ligar-motores.ps1 -Motor render -UmaVez  faz um pedido da fila e sai (teste)
     .\ligar-motores.ps1 -GuardarChaves         pergunta as chaves (sem mostrar) e guarda nas variáveis do Windows
 
@@ -15,7 +16,7 @@
   Passo a passo: docs\motores\LIGAR-OS-MOTORES.md
 #>
 param(
-  [ValidateSet('conferir', 'render', 'codigo', 'todos')]
+  [ValidateSet('conferir', 'render', 'codigo', 'navegador', 'todos')]
   [string]$Motor = 'conferir',
   [switch]$UmaVez,
   [switch]$GuardarChaves
@@ -26,6 +27,7 @@ try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
 $Raiz = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $PastaRender = Join-Path $Raiz 'workers\render'
 $PastaCodigo = Join-Path $Raiz 'workers\motor-codigo'
+$PastaNavegador = Join-Path $Raiz 'workers\computador'
 $ArquivoEnv = Join-Path $env:USERPROFILE '.aceleriq\motores.env'
 $UrlPadrao = 'https://jjjtkowvxemvituvywvf.supabase.co'
 $NodeMinimo = [version]'22.18.0'
@@ -137,6 +139,50 @@ function Conferir-Codigo([switch]$instalar) {
   return $ok
 }
 
+# Chromium do Playwright (headless shell) já baixado, ou o Chrome apontado em COMPUTADOR_CHROME.
+function Achar-Chromium {
+  $c = Ler-Variavel 'COMPUTADOR_CHROME'
+  if ($c) { if (Test-Path $c) { return $c } else { return $null } }
+  $base = Join-Path $env:LOCALAPPDATA 'ms-playwright'
+  if (-not (Test-Path $base)) { return $null }
+  $pasta = Get-ChildItem -LiteralPath $base -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^chromium_headless_shell-\d+$' } | Sort-Object { [int]($_.Name -replace '\D', '') } -Descending | Select-Object -First 1
+  if (-not $pasta) { return $null }
+  $exe = Get-ChildItem -LiteralPath $pasta.FullName -Recurse -Filter 'chrome-headless-shell.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($exe) { return $exe.FullName } else { return $null }
+}
+
+function Conferir-Navegador([switch]$instalar) {
+  Escrever "`nWorker do navegador do agente (computer use, só leitura)" 'White'
+  $ok = Conferir-Node
+  $ok = (Conferir-Chaves @('SUPABASE_SERVICE_ROLE_KEY') @() @()) -and $ok
+  if ($instalar) { $ok = (Instalar-SePrecisar $PastaNavegador @('playwright-core', '@supabase\supabase-js')) -and $ok }
+  elseif (Test-Path (Join-Path $PastaNavegador 'node_modules\playwright-core')) { Ok 'dependências instaladas' }
+  else { Aviso 'dependências ainda não instaladas (o ligar-navegador instala na primeira vez)' }
+  $chromium = Achar-Chromium
+  if (-not $chromium -and $instalar -and (Test-Path (Join-Path $PastaNavegador 'node_modules\playwright-core'))) {
+    Escrever '  baixando o Chromium do navegador do agente (uma vez)...' 'Cyan'
+    Push-Location $PastaNavegador
+    try { & npx playwright-core install chromium } finally { Pop-Location }
+    $chromium = Achar-Chromium
+  }
+  if ($chromium) { Ok "Chromium do navegador ($(Split-Path (Split-Path (Split-Path $chromium -Parent) -Parent) -Leaf))" }
+  elseif (Ler-Variavel 'COMPUTADOR_CHROME') { Falta 'COMPUTADOR_CHROME aponta para um arquivo que não existe'; $ok = $false }
+  else { Falta 'Chromium do Playwright (o ligar-navegador baixa; ou rode npm run navegador em workers\computador)'; $ok = $false }
+  $ligado = Ler-Variavel 'COMPUTADOR_COM_MODELO_LIGADO'
+  $chaves = @('ANTHROPIC_API_KEY', 'OPENAI_API_KEY' | Where-Object { Ler-Variavel $_ })
+  if ($ligado -eq '1') {
+    Ok 'COMPUTADOR_COM_MODELO_LIGADO=1 nesta máquina (as ações com modelo ligam)'
+    if ($chaves.Count) { Ok "chave de modelo do computer use: $($chaves -join ', ')" }
+    else { Falta 'uma chave de modelo para o computer use (ANTHROPIC_API_KEY para Claude ou OPENAI_API_KEY para GPT); OpenRouter não serve aqui'; $ok = $false }
+    if ($chaves.Count -eq 1) { Aviso "só $($chaves[0]): tarefa pedida com modelo do outro provedor espera na fila" }
+  } else {
+    Aviso 'COMPUTADOR_COM_MODELO_LIGADO diferente de 1: só as ações sem modelo (capturar, conferir post e conferir site) rodam nesta máquina'
+    if ($chaves.Count) { Ok "chave de modelo pronta para quando ligar: $($chaves -join ', ')" }
+  }
+  Aviso 'COMPUTADOR_COM_MODELO_LIGADO também precisa ser 1 nos segredos do Supabase (função computador-do-agente): confira em Configurações › Estado dos motores'
+  return $ok
+}
+
 function Guardar-Chaves {
   Escrever 'Guardar as chaves nas variáveis do Windows (Usuário). Enter vazio mantém a que já existe.' 'White'
   foreach ($n in 'SUPABASE_SERVICE_ROLE_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'VERCEL_TOKEN') {
@@ -158,7 +204,8 @@ function Guardar-Chaves {
 function Preparar-Sessao {
   Carregar-ArquivoEnv
   if (-not (Ler-Variavel 'SUPABASE_URL')) { [Environment]::SetEnvironmentVariable('SUPABASE_URL', $UrlPadrao, 'Process') }
-  Levar-ParaSessao @('SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'VERCEL_TOKEN', 'VERCEL_TEAM_ID',
+  Levar-ParaSessao @('SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'ANTHROPIC_WORKSPACE_ID', 'VERCEL_TOKEN', 'VERCEL_TEAM_ID',
+    'COMPUTADOR_COM_MODELO_LIGADO', 'COMPUTADOR_MODELO', 'COMPUTADOR_EXECUTOR', 'COMPUTADOR_INTERVALO_S', 'COMPUTADOR_CHROME',
     'RENDER_CHROME', 'RENDER_FFMPEG', 'RENDER_FFPROBE', 'RENDER_HYPERFRAMES', 'RENDER_GSAP', 'RENDER_PASTA', 'RENDER_WORKER_NOME', 'RENDER_INTERVALO_S', 'RENDER_CONCORRENCIA',
     'MOTOR_PASTA', 'MOTOR_EXECUTOR', 'MOTOR_TUNEL', 'MOTOR_PREVIA_MINUTOS', 'MOTOR_PRAZO_MIN', 'UIUX_PYTHON')
 }
@@ -183,6 +230,16 @@ function Ligar-Codigo {
   } finally { Pop-Location }
 }
 
+function Ligar-Navegador {
+  if (-not (Conferir-Navegador -instalar)) { Escrever "`nO navegador do agente não foi ligado: resolva o que falta acima." 'Red'; exit 1 }
+  $Host.UI.RawUI.WindowTitle = 'Aceleriq · navegador do agente'
+  Escrever "`nLigando o navegador do agente. Deixe esta janela aberta; Ctrl+C para parar depois da tarefa atual." 'Cyan'
+  Push-Location $PastaNavegador
+  try {
+    if ($UmaVez) { & node principal.ts --uma-vez } else { & node principal.ts }
+  } finally { Pop-Location }
+}
+
 if ($GuardarChaves) { Guardar-Chaves; exit 0 }
 Preparar-Sessao
 
@@ -192,16 +249,19 @@ switch ($Motor) {
     if (Test-Path $ArquivoEnv) { Ok "arquivo de chaves $ArquivoEnv" } else { Aviso "sem $ArquivoEnv (tudo bem se as chaves estão nas variáveis do Windows)" }
     $r = Conferir-Render
     $c = Conferir-Codigo
+    $n = Conferir-Navegador
     Escrever ''
     if ($r) { Escrever 'Render: pronto para ligar (ligar-render.cmd).' 'Green' } else { Escrever 'Render: falta algo acima.' 'Red' }
     if ($c) { Escrever 'Motor de código: pronto para ligar (ligar-motor-codigo.cmd).' 'Green' } else { Escrever 'Motor de código: falta algo acima.' 'Red' }
+    if ($n) { Escrever 'Navegador do agente: pronto para ligar (ligar-navegador.cmd).' 'Green' } else { Escrever 'Navegador do agente: falta algo acima.' 'Red' }
   }
   'render' { Ligar-Render }
   'codigo' { Ligar-Codigo }
+  'navegador' { Ligar-Navegador }
   'todos' {
-    foreach ($m in 'render', 'codigo') {
+    foreach ($m in 'render', 'codigo', 'navegador') {
       Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Motor', $m)
     }
-    Escrever 'Abri uma janela para cada worker. Deixe as duas abertas; o Estado dos motores (Configurações) mostra quando eles baterem ponto.' 'Cyan'
+    Escrever 'Abri uma janela para cada worker (render, código e navegador). Deixe as três abertas; o Estado dos motores (Configurações) mostra quando eles baterem ponto.' 'Cyan'
   }
 }

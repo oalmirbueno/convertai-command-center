@@ -43,6 +43,10 @@ import {
 } from "./adsApi";
 import { Andamento, CabecalhoDaParte, Foto, SeloDeEvidencia, useAndamento, useParteRecolhida } from "./Comuns";
 import JanelaDaReferencia, { CartaoTipografico } from "./JanelaDaReferencia";
+// Frente CUS (01/10): o navegador do agente analisa o perfil público de um concorrente; o resultado entra na biblioteca.
+import { supabase } from "@/integrations/supabase/client";
+import { BotaoDoNavegador, TarefasDoNavegador, type InsumoDoNavegador } from "@/components/agentes/NavegadorDoAgente";
+import { referenciaDeAds } from "@/lib/agentes/insumosDoNavegador";
 
 export { CAMPOS_DA_FICHA } from "./adsApi";
 
@@ -229,6 +233,19 @@ export default function AbaReferencias() {
 
   const atualizar = () => queryClient.invalidateQueries({ queryKey: chavesAds.referencias(clientId) });
 
+  /** O perfil analisado vira referência E0 da biblioteca, com o print do navegador (some como qualquer outra). */
+  const guardarPerfil: InsumoDoNavegador = {
+    aoUsar: async (c) => {
+      const r = referenciaDeAds(c);
+      const { error } = await (supabase as any)
+        .from("ads_referencias")
+        .insert({ client_id: clientId, titulo: r.titulo, url: r.url, origem: r.origem, storage_path: r.storage_path, evidencia: "E0" });
+      if (error) throw error;
+      void atualizar();
+      return `${r.titulo} entrou na biblioteca como referência (E0, inspiração).`;
+    },
+  };
+
   const alternarDestaque = async (r: ReferenciaAds) => {
     const chave = chavesAds.referencias(clientId);
     queryClient.setQueryData<ReferenciaAds[]>(chave, (l) => (l || []).map((x) => (x.id === r.id ? { ...x, destaque: !r.destaque } : x)));
@@ -404,6 +421,7 @@ export default function AbaReferencias() {
                   void atualizar();
                 }}
               />
+              <BotaoDoNavegador caso="perfil_publico" clientId={clientId} origem="mesa_ads" rotulo="Perfil de concorrente" />
               <Button type="button" size="sm" variant={colarLink ? "outline" : "default"} className="h-9" disabled={importando} onClick={() => void importar()} title="Traz os anúncios do cliente com imagem, copy e métricas. Sem custo de IA.">
                 {importando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1 h-3.5 w-3.5" />}
                 Importar meus anúncios
@@ -412,6 +430,7 @@ export default function AbaReferencias() {
           }
         />
         {desdePadroes !== null && <Andamento desde={desdePadroes} rotulo="Criando os padrões do nicho" />}
+        <TarefasDoNavegador clientId={clientId} origem="mesa_ads" titulo="Perfis de concorrentes" casos={["perfil_publico"]} insumo={guardarPerfil} />
         {colarLink && (
           <div className="mb-3 flex w-full min-w-0 flex-wrap items-center border-y border-border py-3">
             <Input

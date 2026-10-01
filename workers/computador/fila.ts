@@ -7,6 +7,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ModeloDoCatalogoParaComputador } from "../../supabase/functions/computador-do-agente/modulos/navegador.ts";
 
 export interface TarefaDoNavegador {
   id: string;
@@ -22,6 +23,10 @@ export interface TarefaDoNavegador {
   aprovado_por: string | null;
   aprovado_em: string | null;
   criado_por: string | null;
+  /** Frente CUS: o modelo do computer use escolhido no pedido (null = o padrão da máquina). */
+  modelo_id?: string | null;
+  /** Frente CUS: os sites de uma pesquisa de concorrentes visuais (o primeiro é a url_inicial). */
+  urls?: string[] | null;
 }
 
 export type RespostaDoPasso = "seguir" | "parar" | "teto";
@@ -34,11 +39,16 @@ export interface ProvaDoPasso {
 }
 
 export interface Fila {
-  pegar(token: string, executor: string, casos: string[], versao: string): Promise<TarefaDoNavegador | null>;
+  /** provedores: os de computer use com chave nesta máquina (a fila só entrega tarefa de modelo deles). */
+  pegar(token: string, executor: string, casos: string[], versao: string, provedores?: string[]): Promise<TarefaDoNavegador | null>;
   passo(id: string, token: string, prova: ProvaDoPasso | null, custoUsd: number): Promise<RespostaDoPasso>;
   concluir(id: string, token: string, estado: "feita" | "falhou", resultado: Record<string, unknown>, motivo: string | null): Promise<boolean>;
   /** Uso de modelo na carteira do cliente (ia_registrar_uso). */
   registrarUso(uso: UsoDoModelo): Promise<void>;
+  /** Linha do catálogo (ia_modelos) do modelo da tarefa, para o preço e o nome da API. */
+  lerModelo?(id: string): Promise<ModeloDoCatalogoParaComputador | null>;
+  /** Último erro do worker fora de uma tarefa (null limpa), para o Estado dos motores. */
+  erro?(executor: string, texto: string | null): Promise<void>;
 }
 
 export interface UsoDoModelo {
@@ -70,9 +80,30 @@ export function filaSupabase(db: SupabaseClient): Fila {
     return data as T;
   };
   return {
-    async pegar(token, executor, casos, versao) {
-      const linhas = await rpc<TarefaDoNavegador[] | null>("computador_tarefa_pegar", { _token: token, _executor: executor, _casos: casos, _versao: versao });
+    async pegar(token, executor, casos, versao, provedores) {
+      const args: Record<string, unknown> = { _token: token, _executor: executor, _casos: casos, _versao: versao };
+      if (provedores) args._provedores = provedores;
+      let linhas: TarefaDoNavegador[] | null;
+      try {
+        linhas = await rpc<TarefaDoNavegador[] | null>("computador_tarefa_pegar", args);
+      } catch (err) {
+        // Banco ainda sem a migration 20260930325000 (pegada sem provedores): pega como o worker antigo,
+        // só os casos de antes e só a Anthropic (a pegada antiga não sabe filtrar pelo modelo).
+        if (!provedores || !/Could not find the function|PGRST202|_provedores/i.test(String(err instanceof Error ? err.message : err))) throw err;
+        if (provedores.indexOf("anthropic") < 0) return null;
+        const antigos = casos.filter((c) => ["captura_site", "conferir_post", "coleta_publica"].indexOf(c) >= 0);
+        linhas = await rpc<TarefaDoNavegador[] | null>("computador_tarefa_pegar", { _token: token, _executor: executor, _casos: antigos, _versao: versao });
+      }
       return linhas && linhas.length ? linhas[0] : null;
+    },
+    async lerModelo(id) {
+      const { data, error } = await db.from("ia_modelos").select("id, provedor, modelo_api, rotulo, tipo, preco_entrada_1m, preco_saida_1m, preco_cache_1m, disponivel, recursos").eq("id", id).maybeSingle();
+      if (error) throw new Error(`ia_modelos: ${error.message}`);
+      return (data as ModeloDoCatalogoParaComputador | null) || null;
+    },
+    async erro(executor, texto) {
+      // Banco sem a migration 20260930325000: o erro fica só no console.
+      await db.rpc("computador_executor_erro", { _executor: executor, _erro: texto }).then(() => undefined, () => undefined);
     },
     async passo(id, token, prova, custoUsd) {
       const r = await rpc<string>("computador_tarefa_passo", { _id: id, _token: token, _prova: prova, _custo_usd: Math.max(0, custoUsd) });

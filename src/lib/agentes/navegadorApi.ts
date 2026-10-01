@@ -11,13 +11,21 @@ import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao } from "@/lib/mesa/api";
 import {
   type CasoDoNavegador,
+  custoEstimadoDoCaso,
   DEFINICOES_DOS_CASOS,
   type EstadoDaTarefa,
+  MODELO_PADRAO_DO_COMPUTADOR,
+  type ModeloDoCatalogoParaComputador,
+  POR_QUE_SO_ESTES_MODELOS,
+  provedorDoComputador,
   ROTULO_DA_TAREFA,
 } from "../../../supabase/functions/computador-do-agente/modulos/navegador";
 
 export type { CasoDoNavegador, EstadoDaTarefa };
-export { DEFINICOES_DOS_CASOS, ROTULO_DA_TAREFA };
+export { custoEstimadoDoCaso, DEFINICOES_DOS_CASOS, MODELO_PADRAO_DO_COMPUTADOR, POR_QUE_SO_ESTES_MODELOS, provedorDoComputador, ROTULO_DA_TAREFA };
+
+/** Origens do pedido (a mesa que pediu e que recebe o insumo). */
+export type OrigemDoNavegador = "mesa_site" | "agenda" | "proposta" | "mesa_ads" | "mesa_identidade" | "painel";
 
 export interface TarefaDoNavegador {
   id: string;
@@ -39,6 +47,8 @@ export interface TarefaDoNavegador {
   criado_em: string;
   aprovado_em: string | null;
   terminado_em: string | null;
+  /** Frente CUS: o modelo do computer use escolhido no pedido (null nas ações de roteiro fixo). */
+  modelo_id?: string | null;
   /** Aprovada há mais de 24 h sem executor: a fila tira na próxima vez que um worker olhar. */
   vencida?: boolean;
 }
@@ -46,17 +56,48 @@ export interface TarefaDoNavegador {
 export interface CasoNaTela {
   valor: CasoDoNavegador;
   rotulo: string;
+  descricao?: string;
+  onde?: string;
   usa_modelo: boolean;
   ligado: boolean;
   motivo: string | null;
   teto_passos: number;
   teto_custo_usd: number;
+  insumo?: string | null;
+  varios_sites?: boolean;
+  /** Tarefas feitas desta ação (as últimas 300 da fila) e o custo médio real delas. */
+  feitas?: number;
+  custo_medio_usd?: number | null;
+  /** Estimativa pelo modelo padrão quando ainda não há histórico. */
+  custo_estimado_usd?: number;
+}
+
+export type ModeloDoNavegador = ModeloDoCatalogoParaComputador & { rotulo?: string | null; ativo?: boolean };
+
+export interface ExecutorDoNavegador {
+  nome: string;
+  visto_em: string;
+  versao: string | null;
+  casos: string[];
+  provedores?: string[];
+  ultimo_erro?: string | null;
+  ultimo_erro_em?: string | null;
 }
 
 export interface EstadoDoNavegador {
   casos: CasoNaTela[];
   com_modelo: boolean;
-  executores: Array<{ nome: string; visto_em: string; versao: string | null; casos: string[] }>;
+  /** Frente CUS: os modelos do catálogo com computer use (o padrão primeiro). */
+  modelos?: ModeloDoNavegador[];
+  modelo_padrao?: string;
+  executores: ExecutorDoNavegador[];
+}
+
+/** Resultado inteiro de uma tarefa, com as imagens do cartão (link de 10 minutos). */
+export interface CartaoDaTarefa {
+  tarefa: { id: string; caso: CasoDoNavegador; estado: EstadoDaTarefa; url_inicial: string; dominios: string[]; objetivo: string | null; origem: string | null; modelo_id: string | null; client_id: string | null };
+  resultado: Record<string, unknown>;
+  imagens: Array<{ rotulo: string; url: string | null; storage_path: string }>;
 }
 
 export interface ProvaNaTela {
@@ -98,7 +139,7 @@ export function intervaloDaLista(itens: Array<Pick<TarefaDoNavegador, "estado" |
 export const COLUNAS_DA_LISTA = [
   "id", "client_id", "titulo", "caso", "estado", "url_inicial", "dominios", "objetivo", "origem",
   "teto_passos", "teto_custo_usd", "passos_feitos", "custo_usd", "motivo", "criado_por", "criado_em",
-  "aprovado_em", "terminado_em",
+  "aprovado_em", "terminado_em", "modelo_id",
   "r_no_ar:resultado->no_ar", "r_parcial:resultado->parcial", "r_resumo:resultado->>resumo", "r_motivo:resultado->>motivo", "r_capturas:resultado->capturas",
 ].join(", ");
 
@@ -153,12 +194,52 @@ export function useEstadoDoNavegador(ativo = true) {
     enabled: ativo,
     staleTime: 60_000,
     retry: false,
-    queryFn: () => chamarFuncao<EstadoDoNavegador>("computador-do-agente", { acao: "estado" }),
+    queryFn: async () => normalizarEstado(await chamarFuncao<EstadoDoNavegador>("computador-do-agente", { acao: "estado" })),
   });
 }
 
-export const pedirAoNavegador = (p: { caso: CasoDoNavegador; url: string; dominios?: string; objetivo?: string; origem: string; client_id?: string | null }) =>
-  chamarFuncao<{ tarefa: TarefaDoNavegador }>("computador-do-agente", { acao: "pedir", ...p });
+/** Resposta da função com as listas sempre presentes (função antiga sem modelos, resposta parcial). */
+export function normalizarEstado(d: Partial<EstadoDoNavegador> | null | undefined): EstadoDoNavegador {
+  const o = (d && typeof d === "object" ? d : {}) as Partial<EstadoDoNavegador>;
+  return {
+    casos: Array.isArray(o.casos) ? o.casos : [],
+    com_modelo: o.com_modelo === true,
+    modelos: Array.isArray(o.modelos) ? o.modelos : [],
+    modelo_padrao: typeof o.modelo_padrao === "string" ? o.modelo_padrao : undefined,
+    executores: Array.isArray(o.executores) ? o.executores.map((e) => ({ ...e, casos: Array.isArray(e.casos) ? e.casos : [] })) : [],
+  };
+}
+
+export const pedirAoNavegador = (p: { caso: CasoDoNavegador; url: string; urls?: string; dominios?: string; objetivo?: string; origem: string; client_id?: string | null; modelo_id?: string | null }) =>
+  chamarFuncao<{ tarefa: TarefaDoNavegador; custo_estimado_usd?: number; teto_custo_usd?: number }>("computador-do-agente", { acao: "pedir", ...p });
+
+export const cartaoDaTarefa = (tarefaId: string) => chamarFuncao<CartaoDaTarefa>("computador-do-agente", { acao: "cartao", tarefa_id: tarefaId });
+
+/** Rótulo curto do modelo para a tela ("Claude Sonnet 5.5", "GPT-6.1 Sol"), sem o "(Anthropic direta)". */
+export function nomeDoModelo(m: Pick<ModeloDoNavegador, "id" | "rotulo"> | null | undefined, id?: string | null): string {
+  const bruto = (m && (m.rotulo || m.id)) || id || "";
+  return String(bruto).replace(/\s*\((Anthropic|OpenAI) direta\)\s*$/i, "").replace(/^(anthropic|openai):/, "") || "modelo padrão";
+}
+
+/** O executor ligado tem a chave do provedor deste modelo? (sem executor ligado: não dá para saber). */
+export function executorTemProvedor(e: EstadoDoNavegador | undefined, modeloId: string, agora = Date.now()): boolean | null {
+  const p = provedorDoComputador(modeloId);
+  if (!e || !p) return null;
+  const vivos = e.executores.filter((x) => {
+    const t = new Date(x.visto_em).getTime();
+    return Number.isFinite(t) && agora - t < 120_000;
+  });
+  if (!vivos.length) return null;
+  // Worker antigo (sem a lista de provedores) só fala com a Anthropic.
+  return vivos.some((x) => (Array.isArray(x.provedores) && x.provedores.length ? x.provedores.indexOf(p) >= 0 : p === "anthropic" && x.casos.indexOf("coleta_publica") >= 0));
+}
+
+/** "US$ 0,03" (até centavo; abaixo de 1 centavo mostra "menos de US$ 0,01"). */
+export function dolares(v: number | null | undefined): string {
+  const n = Number(v) || 0;
+  if (n > 0 && n < 0.01) return "menos de US$ 0,01";
+  return `US$ ${n.toFixed(2).replace(".", ",")}`;
+}
 
 export const decidirTarefa = (tarefaId: string, estado: "aprovada" | "cancelada") =>
   chamarFuncao<{ tarefa: TarefaDoNavegador }>("computador-do-agente", { acao: "decidir", tarefa_id: tarefaId, estado });
@@ -193,6 +274,9 @@ export function resumoDoResultado(t: Pick<TarefaDoNavegador, "caso" | "estado" |
   if (t.caso === "captura_site") {
     const caps = Array.isArray((r as { capturas?: unknown }).capturas) ? ((r as { capturas: unknown[] }).capturas.length) : 0;
     return `${caps} captura(s) de tela inteira${(r as { parcial?: unknown }).parcial ? " (parou no teto)" : ""}.`;
+  }
+  if (t.caso === "capturar_referencia" && !(r as { resumo?: unknown }).resumo && Array.isArray((r as { capturas?: unknown }).capturas)) {
+    return `${(r as { capturas: unknown[] }).capturas.length} captura(s) de tela inteira.`;
   }
   return String((r as { resumo?: unknown }).resumo || "Coleta feita.");
 }

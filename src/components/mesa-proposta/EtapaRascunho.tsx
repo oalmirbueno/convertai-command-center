@@ -42,8 +42,10 @@ import {
 } from "../../../supabase/functions/_shared/proposta-comercial";
 import { contextoDoUpsell } from "../../../supabase/functions/mesa-proposta/modulos/proposta-upsell";
 import PropostaDocumento from "./PropostaDocumento";
-// Frente MOD (30/09): coleta de dados públicos de concorrentes pelo navegador do agente (pronta e desligada).
+// Frente MOD (30/09): coleta de dados públicos de concorrentes pelo navegador do agente.
+// Frente CUS (01/10): qualquer modelo com computer use; o resultado vira concorrente do bloco com um clique.
 import { BotaoDoNavegador, TarefasDoNavegador } from "@/components/agentes/NavegadorDoAgente";
+import { concorrenteParaProposta } from "@/lib/agentes/insumosDoNavegador";
 import AvisoDaAgencia from "./AvisoDaAgencia";
 import PreviaDoPreenchimento from "./PreviaDoPreenchimento";
 import AnexosDaProposta from "./AnexosDaProposta";
@@ -189,13 +191,29 @@ function EscolhaDasProvas({ b, mudar }: { b: Bloco; mudar: (dados: Record<string
 }
 
 /** Os campos de um bloco. `mudar` recebe os dados novos inteiros. */
-/** Pedir ao navegador do agente os dados públicos de um concorrente (desligado até o dono testar o computer use). */
-function ColetaDeConcorrentes() {
+/**
+ * Pedir ao navegador do agente os dados públicos de um concorrente. O cartão do resultado põe o concorrente
+ * no bloco (com a página lida como fonte); o Salvar da barra grava e a lixeira do bloco tira.
+ */
+function ColetaDeConcorrentes({ concorrentes, onMudar }: { concorrentes: DadosDoBloco["mercado"]["concorrentes"]; onMudar: (lista: DadosDoBloco["mercado"]["concorrentes"]) => void }) {
   const mesa = useMesa();
   return (
     <div className="min-w-0 pt-1">
       <BotaoDoNavegador caso="coleta_publica" clientId={mesa.clientId} origem="proposta" rotulo="Coletar dados de um concorrente" compacto />
-      <TarefasDoNavegador clientId={mesa.clientId} origem="proposta" titulo="Coletas do navegador" />
+      <TarefasDoNavegador
+        clientId={mesa.clientId}
+        origem="proposta"
+        titulo="Coletas do navegador"
+        insumo={{
+          aoUsar: async (c) => {
+            const novo = concorrenteParaProposta(c);
+            if (concorrentes.some((x) => x.fonte && x.fonte.url === novo.fonte.url)) throw new Error("Esse concorrente já está no bloco Mercado.");
+            if (concorrentes.length >= 5) throw new Error("O bloco Mercado já tem 5 concorrentes. Tire um antes.");
+            onMudar(concorrentes.concat([novo]));
+            return `${novo.nome} entrou no bloco Mercado, com a fonte. Salve a proposta para gravar.`;
+          },
+        }}
+      />
     </div>
   );
 }
@@ -276,7 +294,7 @@ function CamposDoBloco({ b, mudar }: { b: Bloco; mudar: (dados: Record<string, u
                 </button>
               </div>
             ))}
-            <ColetaDeConcorrentes />
+            <ColetaDeConcorrentes concorrentes={x.concorrentes} onMudar={(l) => m({ concorrentes: l })} />
             {x.faixa_de_preco && (
               <div className="flex min-w-0 items-center">
                 <span className={juntar(texto.corpo, "min-w-0 flex-1 truncate")}>Faixa: {x.faixa_de_preco.texto}</span>

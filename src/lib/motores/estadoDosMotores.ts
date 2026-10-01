@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { EstadoDoMotor, SituacaoDoMotor } from "../../../supabase/functions/motores-estado/modulos/estado";
+import type { AcaoDoNavegadorNaTela, EstadoDoMotor, SituacaoDoMotor } from "../../../supabase/functions/motores-estado/modulos/estado";
 
 /**
  * Estado dos motores na tela (frente MTR, 30/09/2026): chama a função
@@ -8,12 +8,14 @@ import type { EstadoDoMotor, SituacaoDoMotor } from "../../../supabase/functions
  * erro e o que falta (Configurações, linha "Estado dos motores").
  */
 
-export type { EstadoDoMotor, SituacaoDoMotor };
+export type { AcaoDoNavegadorNaTela, EstadoDoMotor, SituacaoDoMotor };
 
 export interface QuadroDosMotores {
   motores: EstadoDoMotor[];
   geral: { parados: number; atencao: number; texto: string };
   avisos: string[];
+  /** Frente CUS: as ações do navegador do agente, com o modelo e o custo médio de cada uma. */
+  acoes_do_navegador: AcaoDoNavegadorNaTela[];
   conferido_em: string;
 }
 
@@ -67,6 +69,7 @@ export async function lerEstadoDosMotores(): Promise<QuadroDosMotores> {
     motores: Array.isArray(d.motores) ? d.motores : [],
     geral: d.geral || { parados: 0, atencao: 0, texto: "" },
     avisos: Array.isArray(d.avisos) ? d.avisos : [],
+    acoes_do_navegador: Array.isArray(d.acoes_do_navegador) ? d.acoes_do_navegador : [],
     conferido_em: typeof d.conferido_em === "string" ? d.conferido_em : new Date().toISOString(),
   };
 }

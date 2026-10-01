@@ -457,7 +457,7 @@ describe("travas do navegador do agente (computer use)", () => {
     expect(casoLigado("captura_site", false)).toBe(true);
     expect(casoLigado("conferir_post", false)).toBe(true);
     expect(casoLigado("coleta_publica", false)).toBe(false);
-    expect(motivoParaRecusarNoNavegador(pedido({ caso: "coleta_publica", objetivo: "preços públicos da página inicial" }), false)).toMatch(/Pronto e desligado/);
+    expect(motivoParaRecusarNoNavegador(pedido({ caso: "coleta_publica", objetivo: "preços públicos da página inicial" }), false)).toMatch(/Desligado: esta ação usa um modelo/);
     expect(motivoParaRecusarNoNavegador(pedido({ caso: "coleta_publica", objetivo: "preços públicos da página inicial" }), true)).toBeNull();
     expect(motivoParaRecusarNoNavegador(pedido({}), false)).toBeNull();
     expect(dentroDoTeto({ passos: 5, custoUsd: 0 }, { passos: 6, custoUsd: 0 })).toBe(true);

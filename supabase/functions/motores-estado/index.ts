@@ -5,7 +5,7 @@
  * POST {} (só a equipe) -> { motores, geral, conferido_em }
  *
  * Para cada motor (site, render do Motion, render da Mesa Edição, imagem,
- * vídeo e as chaves/crédito da IA): ligado ou não, último sinal do worker, a
+ * vídeo, as chaves/crédito da IA e, frente CUS, o navegador do agente): ligado ou não, último sinal do worker, a
  * fila, o último erro legível e o que falta. Lê as filas e as batidas com a
  * service_role DEPOIS de conferir que quem chama é da equipe; dos segredos, só
  * a PRESENÇA (o valor nunca sai do servidor; ambiente ou cofre do painel); do OpenRouter, o crédito pelas
@@ -20,7 +20,9 @@ import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { carregarChaves, chaveCarregada } from "../_shared/chaves.ts";
 import {
+  acoesDoNavegador,
   type EntradaDoEstado,
+  type EntradaDoNavegador,
   erroDoPedidoDeVideo,
   lerChaveDoOpenrouter,
   lerCreditosDoOpenrouter,
@@ -148,6 +150,10 @@ async function estado(admin: boolean) {
     videoUltimoPronto,
     carteiras,
     openrouter,
+    navExecutores,
+    navAbertos,
+    navFalha,
+    navFeitas,
   ] = await Promise.all([
     linhas<Linha>("motor_executores", avisos, db.from("motor_executores").select("nome, visto_em, versao, capacidades, trabalho_id").order("visto_em", { ascending: false }).limit(3)),
     linhas<Linha>("motor_trabalhos", avisos, db.from("motor_trabalhos").select("estado, criado_em, modelo").in("estado", ["na_fila", "executando", "parando"]).order("criado_em", { ascending: true }).limit(50)),
@@ -170,6 +176,11 @@ async function estado(admin: boolean) {
     linhas<Linha>("video_pedidos (último pronto)", avisos, db.from("video_pedidos").select("atualizado_em").eq("estado", "pronto").order("atualizado_em", { ascending: false }).limit(1)),
     admin ? linhas<Linha>("ia_carteiras", avisos, db.from("ia_carteiras").select("client_id, saldo_usd").lt("saldo_usd", 0.1).order("saldo_usd", { ascending: true }).limit(12)) : Promise.resolve([] as Linha[]),
     lerOpenrouter().catch((e) => ({ chave: null, creditos: null, erro: registrarFalha("motores-estado: OpenRouter", e) })),
+    // Frente CUS: o navegador do agente (worker, fila, último erro e o custo real de cada ação).
+    linhas<Linha>("computador_executores", avisos, db.from("computador_executores").select("*").order("visto_em", { ascending: false }).limit(3)),
+    linhas<Linha>("agente_computador_tarefas", avisos, db.from("agente_computador_tarefas").select("estado, criado_em, trava_ate").not("caso", "is", null).in("estado", ["aguardando_dono", "aprovada", "executando"]).order("criado_em", { ascending: true }).limit(50)),
+    linhas<Linha>("agente_computador_tarefas (falhas)", avisos, db.from("agente_computador_tarefas").select("motivo, terminado_em, atualizado_em").not("caso", "is", null).eq("estado", "falhou").order("atualizado_em", { ascending: false }).limit(1)),
+    linhas<Linha>("agente_computador_tarefas (feitas)", avisos, db.from("agente_computador_tarefas").select("caso, custo_usd, modelo_id, terminado_em").not("caso", "is", null).eq("estado", "feita").order("terminado_em", { ascending: false }).limit(300)),
   ]);
 
   // Nomes de cliente só para o admin (carteiras e o cliente do último erro de imagem).
@@ -219,9 +230,25 @@ async function estado(admin: boolean) {
       ultimoPronto: videoUltimoPronto[0] ? s(videoUltimoPronto[0].atualizado_em) : null,
     },
     carteirasBaixas: carteiras.map((c) => ({ cliente: nomes[String(c.client_id)] || "cliente", saldo: Number(c.saldo_usd) || 0 })),
+    navegador: navegadorDe(navExecutores, navAbertos, navFalha, navFeitas),
   };
   const motores = montarEstado(entrada);
-  return json({ motores, geral: resumoGeral(motores), avisos, conferido_em: new Date(agora).toISOString(), custo_usd: 0 });
+  const acoes_do_navegador = entrada.navegador ? acoesDoNavegador(entrada.navegador) : [];
+  return json({ motores, geral: resumoGeral(motores), avisos, acoes_do_navegador, conferido_em: new Date(agora).toISOString(), custo_usd: 0 });
+}
+
+/** As linhas do navegador do agente no formato do módulo puro (frente CUS). */
+function navegadorDe(executores: Record<string, unknown>[], abertos: Record<string, unknown>[], falha: Record<string, unknown>[], feitas: Record<string, unknown>[]): EntradaDoNavegador {
+  const s = (v: unknown) => (v === null || v === undefined ? null : String(v));
+  const textos = (v: unknown) => (Array.isArray(v) ? v.map((x) => String(x)) : null);
+  return {
+    comModelo: segredo("COMPUTADOR_COM_MODELO_LIGADO") === "1",
+    executores: executores.map((x) => ({ nome: String(x.nome), visto_em: s(x.visto_em), versao: s(x.versao), casos: textos(x.casos), provedores: textos(x.provedores), ultimo_erro: s(x.ultimo_erro), ultimo_erro_em: s(x.ultimo_erro_em) })),
+    abertos: abertos.map((x) => ({ estado: String(x.estado), criado_em: String(x.criado_em), trava_ate: s(x.trava_ate) })),
+    ultimaFalha: falha[0] ? { motivo: s(falha[0].motivo), em: s(falha[0].terminado_em) || s(falha[0].atualizado_em) } : null,
+    ultimaFeita: feitas[0] ? s(feitas[0].terminado_em) : null,
+    feitas: feitas.map((x) => ({ caso: String(x.caso), custo_usd: Number(x.custo_usd) || 0, modelo_id: s(x.modelo_id) })),
+  };
 }
 
 Deno.serve(async (req) => {

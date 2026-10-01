@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ChevronRight, KeyRound, RefreshCw } from "lucide-react";
 import { AjudaRecolhida, Carregando, EstadoDeErro, Secao, botao, foco, juntar, lista, texto } from "@/components/sistema";
 import {
+  type AcaoDoNavegadorNaTela,
   CHAVE_DO_ESTADO_DOS_MOTORES,
   COR_DA_SITUACAO,
   lerEstadoDosMotores,
@@ -25,7 +26,7 @@ export const AJUDA_DOS_MOTORES =
   "Os motores são o que trabalha fora da tela: o motor de código do site e o worker de render (Motion e Mesa Edição) rodam " +
   "na máquina da agência; a geração de imagem e de vídeo roda no servidor com as chaves dos provedores. Parado quer dizer " +
   "que o pedido espera na fila até o motor voltar. O passo a passo para ligar está em docs/motores/LIGAR-OS-MOTORES.md " +
-  "(workers\\ligar\\ligar-todos.cmd liga os dois workers). Nada aqui gasta crédito.";
+  "(workers\\ligar\\ligar-todos.cmd liga os três workers: render, motor de código e navegador do agente). Nada aqui gasta crédito.";
 
 function LinhaDoMotor({ m, aberto, onAlternar, onAbrirChaves }: { m: EstadoDoMotor; aberto: boolean; onAlternar: () => void; onAbrirChaves?: (id?: string | null) => void }) {
   const chaves = Array.isArray(m.chaves) ? m.chaves : [];
@@ -110,6 +111,37 @@ function LinhaDoMotor({ m, aberto, onAlternar, onAbrirChaves }: { m: EstadoDoMot
 }
 
 /**
+ * Frente CUS (01/10): as ações do navegador do agente numa lista só, com onde se pede, o modelo de cada uma e o
+ * custo médio real (das tarefas feitas) ou a estimativa pelo padrão quando ainda não há histórico.
+ */
+export const AJUDA_DO_NAVEGADOR =
+  "O navegador do agente abre sites públicos num Chromium isolado da máquina da agência, só para ler: nada de login, senha, formulário ou pagamento, " +
+  "e toda tarefa espera o Confirmar do dono. As ações com modelo usam computer use: Claude Sonnet 5.5 (padrão) ou Opus 5.5, GPT-6.1 Sol ou GPT-6 Astra, " +
+  "escolhido no pedido, com o custo estimado antes. O custo sai da carteira de IA do cliente. Passo a passo em docs/motores/COMPUTADOR-DO-AGENTE.md.";
+
+export function AcoesDoNavegador({ acoes }: { acoes: AcaoDoNavegadorNaTela[] }) {
+  if (!acoes.length) return null;
+  return (
+    <Secao titulo="Navegador do agente" descricao={`${acoes.length} ações, ${acoes.filter((a) => a.ligada).length} ligadas`} ajuda={AJUDA_DO_NAVEGADOR} recolher="config:navegador-do-agente" className="mt-6" data-acoes-do-navegador="">
+      <ul className={juntar(lista.aberta, lista.divisoria)}>
+        {acoes.map((a) => (
+          <li key={a.caso} className="min-w-0 py-2" data-acao-do-navegador={a.caso} data-ligada={a.ligada ? "sim" : "nao"}>
+            <span className={juntar(texto.corpo, "block truncate font-medium")}>
+              {a.rotulo}
+              {!a.ligada && <span className={juntar(texto.etiqueta, "ml-2 text-warning")}>desligada</span>}
+            </span>
+            <span className={juntar(texto.auxiliar, "block truncate")}>{a.onde}</span>
+            <span className={juntar(texto.auxiliar, "block whitespace-normal")}>
+              {a.modelo} · {a.custo}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Secao>
+  );
+}
+
+/**
  * `semTitulo`: dentro da linha "Estado dos motores" das Configurações (a linha
  * já é o título). `onAbrirChaves`: o motor sem chave mostra o atalho para
  * Configurações › Chaves e custos (frente CHV; só o admin recebe).
@@ -140,6 +172,7 @@ export default function EstadoDosMotores({ semTitulo = false, onAbrirChaves }: {
             ))}
           </ul>
           {quadro.avisos.length > 0 && <p className={juntar(texto.auxiliar, "mt-2")}>Leitura incompleta: {quadro.avisos.slice(0, 3).join("; ")}</p>}
+          <AcoesDoNavegador acoes={quadro.acoes_do_navegador || []} />
         </>
       ) : null}
     </Secao>

@@ -210,7 +210,8 @@ describe("regras puras do navegador", () => {
     const coleta = tarefa({ estado: "aprovada", caso: "coleta_publica", objetivo: "preços e serviços da página inicial" });
     assert.match(String(motivoParaNaoRodar(coleta, { comModelo: false, modelo: null })), /desligado/i);
     assert.match(String(motivoParaNaoRodar(coleta, { comModelo: true, modelo: null })), /desligado/i);
-    assert.deepEqual(casosDoWorker({ comModelo: false, modelo: null }), ["captura_site", "conferir_post"]);
+    // Sem modelo: as ações de roteiro fixo (a conferência do site publicado entrou na frente CUS).
+    assert.deepEqual(casosDoWorker({ comModelo: false, modelo: null }), ["captura_site", "conferir_post", "conferir_site"]);
   });
 
   it("domínio fora da lista e URL de login são recusados antes de abrir", () => {

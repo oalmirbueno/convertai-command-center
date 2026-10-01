@@ -18,6 +18,8 @@ import { chamarSite, CHAVES, type LinhaDoSite, trabalhosDeCodigo, useGuardarSite
 import { useChecklistDoSite } from "./ChecklistDeLancamento";
 import { pendentesObrigatorios } from "../../../supabase/functions/_shared/site-lancamento";
 import { useBarraDaEtapa } from "./BarraDaEtapa";
+// Frente CUS (01/10): o navegador do agente confere o site publicado (prints, velocidade e links quebrados).
+import { BotaoDoNavegador, TarefasDoNavegador } from "@/components/agentes/NavegadorDoAgente";
 
 type Estado = {
   vercel_ligada: boolean;
@@ -234,6 +236,12 @@ export default function EtapaPublicacao({ site }: { site: LinhaDoSite }) {
           {ocupado === "O domínio não foi salvo" || ocupado === "O registrador não foi salvo" ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-label="Salvando" /> : null}
         </form>
         <SeletorCompacto rotulo="Registrador do domínio" opcoes={REGISTRADORES.map((r) => ({ valor: r.id, rotulo: r.rotulo }))} valor={registrador} onEscolher={salvarRegistrador} listaQuandoNaoCabe />
+        {e && (e.dominio || e.deploy_url) && (
+          <div className="min-w-0 pt-2" data-conferir-site-publicado="">
+            <BotaoDoNavegador caso="conferir_site" clientId={clientId} origem="mesa_site" url={e.dominio ? `https://${e.dominio}/` : String(e.deploy_url)} rotulo="Conferir o site no ar" compacto />
+          </div>
+        )}
+        <TarefasDoNavegador clientId={clientId} origem="mesa_site" titulo="Conferências do site publicado" casos={["conferir_site"]} />
       </Secao>
 
       {e && e.cartao && (

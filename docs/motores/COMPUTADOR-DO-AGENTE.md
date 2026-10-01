@@ -205,7 +205,7 @@ O caminho que ficou mais seguro não foi o desktop (Cua), e sim um **navegador i
 |---|---|---|---|
 | Capturar a tela inteira de um site de referência | Mesa Site › Referências, em cada endereço | roteiro fixo, sem modelo: abre, rola até o fim, captura computador e celular | **ligado** (custo zero de modelo) |
 | Conferir se um post publicado está no ar | Agenda e Entrega › Publicação da Mesa › "Conferir no ar" | roteiro fixo: abre o link, lê status, og:title e o aviso de "não disponível" | **ligado** |
-| Coletar dados públicos de concorrentes | Mesa Proposta › bloco Mercado | computer use do Claude (`computer_toolset_20260801`, Sonnet 5.5, esforço médio) | **pronto e desligado, sem prova na API real**: nunca foi chamado na API da Anthropic (não há `ANTHROPIC_API_KEY` na máquina); os testes do laço usam um modelo falso. Primeiro `npm run prova-real` (seção "Prova real", abaixo) e a leitura das provas pelo dono; depois `COMPUTADOR_COM_MODELO_LIGADO=1` na função e no worker, mais a chave na máquina |
+| Coletar dados públicos de concorrentes | Mesa Proposta › bloco Mercado | computer use (`computer_toolset_20260801` do Claude ou a ferramenta `computer` da OpenAI, esforço médio) | **ligado em 01/10**: prova real com o Claude Sonnet 5.5 (3 passos, US$ 0,025) e `COMPUTADOR_COM_MODELO_LIGADO=1` nos segredos; a frente CUS abriu para qualquer modelo com computer use (seção 9) |
 
 ### Travas (conferidas três vezes: na função, no banco e no worker)
 
@@ -238,9 +238,9 @@ O worker roda na máquina da agência, junto do render e do motor-codigo. Por is
 - o Chromium sobe com `--host-resolver-rules` que manda os nomes internos para `~NOTFOUND`.
 Testado com um `<img src="http://127.0.0.1:porta/...">`, `localhost`, `[::1]`, `169.254.169.254` e um domínio que resolve para `10.0.0.5` (`workers/computador/testes/travas.test.ts`).
 
-### Prova real do computer use (pendente)
+### Prova real do computer use (feita em 01/10)
 
-O caso `coleta_publica` (o único com modelo) segue DESLIGADO: nunca foi chamado na API real, porque não há `ANTHROPIC_API_KEY` na máquina. A prova é um comando: `npm run prova-real` em `workers/computador`, com a chave só na sessão. Ela roda uma coleta de ponta a ponta num site público, com teto de US$ 0,20 e 8 passos, e guarda em `tmp/prova-real-<data>/` cada pedido (sem a chave), cada resposta da API, os prints e o resumo. Se a API recusar alguma forma do corpo (400), o erro fica no resumo; corrija `corpoDoTurno` e rode de novo. Só depois de a prova passar e o dono ler as provas: `COMPUTADOR_COM_MODELO_LIGADO=1` na função `computador-do-agente` e no worker.
+Anthropic, 01/10: Claude Sonnet 5.5, 3 passos, US$ 0,025 (`workers/computador/tmp/prova-real-2026-10-01T13-22-14-087Z`); as duas tentativas antes pararam na chave (sem workspace e chave inválida), daí o `ANTHROPIC_WORKSPACE_ID` opcional. OpenAI, 01/10 (frente CUS): seção 9. Histórico do texto de 30/09: a prova era um comando: `npm run prova-real` em `workers/computador`, com a chave só na sessão. Ela roda uma coleta de ponta a ponta num site público, com teto de US$ 0,20 e 8 passos, e guarda em `tmp/prova-real-<data>/` cada pedido (sem a chave), cada resposta da API, os prints e o resumo. Se a API recusar alguma forma do corpo (400), o erro fica no resumo; corrija `corpoDoTurno` e rode de novo. Só depois de a prova passar e o dono ler as provas: `COMPUTADOR_COM_MODELO_LIGADO=1` na função `computador-do-agente` e no worker.
 
 ### Peças
 
@@ -262,3 +262,41 @@ npm run worker
 ```
 
 Fontes da API: [computer use da Anthropic](https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool) (toolset GA, recomendações de segurança: VM ou contêiner dedicado, lista de domínios, nenhum dado sensível, humano confirma o que tem consequência), [computer use da OpenAI](https://developers.openai.com/api/docs/guides/tools-computer-use) (ferramenta `computer` nos GPT-6; navegador isolado, lista de sites, limites de passos, tempo e custo).
+
+## 9. Qualquer modelo e mais ações (frente CUS, 01/10/2026)
+
+Pedido do dono: "Eu posso usar o computer use com qualquer modelo? Em qualquer ação? Deixa bem completinho, bem pronto essa parte."
+
+### Modelos
+
+- **Qualquer modelo do catálogo marcado com computer use** (`ia_modelos.recursos.computer_use = true`, migration `20260930325000`): Claude Sonnet 5.5 (padrão) e Claude Opus 5.5, pela Anthropic (`computer_toolset_20260801`), e GPT-6.1 Sol e GPT-6 Astra, pela OpenAI (Responses API, ferramenta `computer`). O seletor das ações com modelo mostra só esses, com o porquê no "?": o computer use é uma ferramenta de cada provedor e só existe na API direta; pelo OpenRouter, e nos modelos sem a ferramenta, o modelo não vê a tela nem clica. A chave fica na máquina do navegador, por isso o modelo não precisa estar ligado em Modelos de IA.
+- **O worker escolhe o provedor pelo modelo da tarefa** (`anthropic:...` ou `openai:...`) e lê o preço do catálogo. A pegada da fila (`computador_tarefa_pegar`, 5º argumento `_provedores`) só entrega tarefa de modelo cujo provedor tem chave na máquina; o worker antigo (4 argumentos) continua funcionando e só pega o que é da Anthropic.
+- **Custo antes do Confirmar:** o pedido e o Confirmar mostram a estimativa (turnos típicos da ação vezes o turno típico do modelo, medido na prova real: 3.500 tokens novos, 6.000 em cache e 300 de saída por turno) e o teto. O que o modelo gasta vai para a carteira de IA do cliente (`ia_usos`, tarefa `computador`), mesmo quando a tarefa para no meio.
+
+**OpenAI, conferido ao vivo em 01/10** (developers.openai.com/api/docs/guides/tools-computer-use e a referência de `POST /v1/responses`): ferramenta `{ "type": "computer" }`; a resposta traz `computer_call` com `call_id`, um lote em `actions` (`click {button, x, y, keys?}`, `double_click`, `scroll {x, y, scroll_x, scroll_y}`, `keypress {keys}`, `type {text}`, `move`, `drag {path}`, `wait`, `screenshot`) e `pending_safety_checks`; o cliente devolve `computer_call_output` com `{ type: "computer_screenshot", image_url: data URL, detail: "original" }` e segue com `previous_response_id`. Travas próprias: o lote passa pelas mesmas travas do Claude (cada ação da OpenAI é traduzida para a do toolset); ação recusada encerra o lote e o motivo vai em texto junto do print; **`pending_safety_checks` nunca é reconhecido sozinho**: a tarefa para e o passo volta para o dono.
+
+**Prova real com a OpenAI (01/10, `npm run prova-real -- --provedor openai`, teto US$ 0,20):** GPT-6.1 Sol em https://www.example.com, feita, 2 passos, US$ 0,0058 (2.293 tokens de entrada, 126 de saída). A API aceitou o corpo (ferramenta `computer`, `reasoning`, `truncation: "auto"`, imagem de entrada). O modelo respondeu direto da primeira tela, sem pedir ação: a volta `computer_call` / `computer_call_output` ficou provada só com o fetch falso nos testes (formato da documentação), não contra a API real. Provas no scratchpad da entrega (`build/CUS-provas`).
+
+### Ações (todas só de leitura de páginas públicas, com as travas da seção 8)
+
+| Ação | Onde | Modelo | Teto | O que entrega | Vira insumo |
+|---|---|---|---|---|---|
+| Capturar a tela inteira (`captura_site`) | Mesa Site › Referências | sem modelo | 6 passos, US$ 0 | página inteira no computador e no celular | |
+| Conferir post no ar (`conferir_post`) | Agenda e Entrega › Publicação | sem modelo | 4 passos, US$ 0 | no ar ou não, com o motivo | |
+| **Conferir o site publicado** (`conferir_site`) | Mesa Site › Publicação (Domínio) | sem modelo | 6 passos, US$ 0 | prints no computador e no celular, tempo até o primeiro byte e de carga, peso, imagens pesadas e links quebrados do próprio site (HEAD de dentro do Chromium, sem seguir redirecionamento) | |
+| Coletar dados de concorrente (`coleta_publica`) | Mesa Proposta › Mercado | o escolhido | 25 passos, US$ 1 | dados com a fonte | concorrente no bloco Mercado, com a fonte |
+| **Capturar referência com notas de estilo** (`capturar_referencia`) | Mesa Site › Referências (botão "Notas de estilo") | o escolhido | 14 passos, US$ 0,60 | página inteira, cores, fontes, botão e logo lidos do CSS, notas de estilo (paleta, tipografia, ritmo, botões, fotos), levar e evitar | print nas referências e notas na observação da Direção (fica a versão anterior) |
+| **Analisar perfil público** (`perfil_publico`) | Mesa Ads › Referências | o escolhido | 15 passos, US$ 0,60 | o que aparece sem login (og:title e og:description), bio, números, formatos e tom; rede que pede login para no que é público, sem chamar o modelo | referência E0 da biblioteca, com o print |
+| **Pesquisar concorrentes visuais** (`concorrentes_visuais`) | Mesa Identidade › Pesquisa | o escolhido | 30 passos, US$ 1,50 | até 5 sites: topo e recorte do logo, cores e fontes do CSS e o que cada identidade comunica (uma sessão do modelo por site, até 5 turnos cada) | uma referência "concorrente" por site, com Desfazer |
+
+Toda tarefa feita abre um **cartão** ("Resultado", em janela central): resumo, a página de onde veio, os prints marcados pelo worker (link de 10 min pela ação `cartao` da função) e o que a ação trouxe; o botão do cartão leva a coleta para a mesa de origem com um clique. A lista das ações, com o modelo e o custo médio real de cada uma, fica em Configurações › Estado dos motores › Navegador do agente.
+
+### Peças novas ou mudadas
+
+- Regras: `supabase/functions/computador-do-agente/modulos/navegador.ts` (casos novos, `modelosDoComputador`, `custoEstimadoDoCaso`, `POR_QUE_SO_ESTES_MODELOS`).
+- Função `computador-do-agente`: `estado` devolve os modelos com computer use e o custo médio por ação; `pedir` aceita `modelo_id` e `urls`; ação nova `cartao`.
+- Função `motores-estado`: motor "navegador" e a lista `acoes_do_navegador`.
+- Banco: `20260930325000_navegador_qualquer_modelo_e_acoes.sql`.
+- Worker (`cus-1.2`): `modelo.ts` (sessões Anthropic e OpenAI, laço único), `trabalho.ts` (ações novas), `principal.ts` (as duas chaves, último erro), `prova-real.ts` (`--provedor`, `--modelo`).
+- Tela: `NavegadorDoAgente.tsx` (seletor de modelo, custo, sites), `ResultadoDoNavegador.tsx` (cartão), `src/lib/agentes/insumosDoNavegador.ts`.
+- Atalhos: `workers/ligar/ligar-navegador.cmd`, `ligar-todos.cmd` (três janelas) e o conferir com Chromium, chave e variável.

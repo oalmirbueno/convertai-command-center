@@ -7,15 +7,19 @@
  * mostra as provas. Desenho: docs/motores/COMPUTADOR-DO-AGENTE.md, seção 8.
  *
  * Ações (POST { acao, ... }, equipe logada):
- * - estado -> { casos (ligado, motivo, tetos), executores (último visto), com_modelo }
- * - pedir { caso, url, dominios?, objetivo?, origem?, client_id? } -> { tarefa }
+ * - estado -> { casos (ligado, motivo, tetos, onde, custo médio), modelos (os do catálogo com computer use),
+ *   modelo_padrao, executores (último visto, provedores com chave, último erro), com_modelo }
+ * - pedir { caso, url, urls?, dominios?, objetivo?, origem?, client_id?, modelo_id? } -> { tarefa, custo_estimado_usd }
  *   recusa: caso desligado, URL que não é pública, login/conta/pagamento,
- *   domínio fora da lista, objetivo com senha, login ou ação que não é leitura.
+ *   domínio fora da lista, objetivo com senha, login ou ação que não é leitura,
+ *   modelo que não faz computer use (frente CUS: qualquer modelo marcado no catálogo, Anthropic ou OpenAI).
  *   Nasce "aguardando_dono".
  * - decidir { tarefa_id, estado: "aprovada" | "cancelada" } -> { tarefa }
  *   só o dono (admin) aprova, e as travas são conferidas de novo na aprovação.
  * - parar { tarefa_id } -> { tarefa }   o dono ou quem pediu, a qualquer momento.
  * - provas { tarefa_id } -> { provas: [{ passo, url, legenda, em }] } (link de 10 min)
+ * - cartao { tarefa_id } -> { tarefa, resultado, imagens: [{ rotulo, url, storage_path }] } (o cartão da coleta,
+ *   com fonte e print; a mesa de origem transforma em insumo com um clique)
  *
  * Escrita só com a chave de serviço, depois de conferir papel e acesso ao
  * cliente (can_access_client). Toda mudança vai para o auditLog.
@@ -28,8 +32,13 @@ import {
   CASOS_DO_NAVEGADOR,
   casoLigado,
   type CasoDoNavegador,
+  custoEstimadoDoCaso,
   DEFINICOES_DOS_CASOS,
   type EstadoDaTarefa,
+  fazComputerUse,
+  MODELO_PADRAO_DO_COMPUTADOR,
+  type ModeloDoCatalogoParaComputador,
+  modelosDoComputador,
   motivoDoCasoDesligado,
   motivoParaRecusarNoNavegador,
   normalizarPedidoDoNavegador,
@@ -133,7 +142,34 @@ type Tarefa = {
   criado_por: string | null;
   provas: Array<{ passo?: number; storage_path?: string; legenda?: string; em?: string }> | null;
   passos_feitos?: number;
+  modelo_id?: string | null;
+  urls?: string[] | null;
+  resultado?: Record<string, unknown> | null;
 };
+
+const COLUNAS_DO_MODELO = "id, provedor, modelo_api, rotulo, tipo, preco_entrada_1m, preco_saida_1m, preco_cache_1m, disponivel, ativo, recursos";
+
+/** Os modelos do catálogo que fazem computer use (recursos.computer_use), o padrão primeiro. */
+async function modelosComComputador(): Promise<ModeloDoCatalogoParaComputador[]> {
+  const { data, error } = await servico().from("ia_modelos").select(COLUNAS_DO_MODELO).in("provedor", ["anthropic", "openai"]).eq("tipo", "texto");
+  if (error) {
+    registrarFalha("computador-do-agente:modelos_ler", error);
+    return [];
+  }
+  return modelosDoComputador((data || []) as ModeloDoCatalogoParaComputador[]);
+}
+
+/** O modelo escolhido precisa estar no catálogo e fazer computer use (a tela só oferece esses). */
+async function modeloDoPedido(id: string): Promise<ModeloDoCatalogoParaComputador> {
+  const { data, error } = await servico().from("ia_modelos").select(COLUNAS_DO_MODELO).eq("id", id).maybeSingle();
+  if (error) throw new ErroHttp(503, "catalogo_indisponivel", "Não foi possível ler o catálogo de modelos agora.");
+  const m = data as ModeloDoCatalogoParaComputador | null;
+  if (!m) throw new ErroHttp(409, "modelo_inexistente", "Esse modelo não está no catálogo.");
+  if (!fazComputerUse(m)) {
+    throw new ErroHttp(409, "modelo_sem_computer_use", `${m.rotulo || m.id} não faz computer use. Escolha um modelo marcado com computer use (o padrão é o Claude Sonnet 5.5).`);
+  }
+  return m;
+}
 
 async function lerTarefa(ch: Chamador, corpo: Record<string, unknown>): Promise<Tarefa> {
   const id = String(corpo.tarefa_id ?? "").trim();
@@ -150,13 +186,42 @@ async function lerTarefa(ch: Chamador, corpo: Record<string, unknown>): Promise<
 
 async function estado(): Promise<Response> {
   const modelo = comModelo();
+  const [executores, feitas, modelos] = await Promise.all([
+    servico().from("computador_executores").select("*").order("visto_em", { ascending: false }).limit(5),
+    servico().from(TABELA).select("caso, custo_usd").eq("estado", "feita").not("caso", "is", null).order("terminado_em", { ascending: false }).limit(300),
+    modelosComComputador(),
+  ]);
+  if (executores.error) registrarFalha("computador-do-agente:executores_ler", executores.error);
+  if (feitas.error) registrarFalha("computador-do-agente:custos_ler", feitas.error);
+  // Custo médio real de cada ação (as últimas 300 feitas); sem histórico, a estimativa pelo padrão.
+  const soma: Record<string, { n: number; usd: number }> = {};
+  ((feitas.data || []) as Array<{ caso: string; custo_usd: number | string | null }>).forEach((f) => {
+    const x = soma[f.caso] || (soma[f.caso] = { n: 0, usd: 0 });
+    x.n += 1;
+    x.usd += Number(f.custo_usd) || 0;
+  });
+  const padrao = modelos.find((m) => m.id === MODELO_PADRAO_DO_COMPUTADOR) || modelos[0] || null;
   const casos = CASOS_DO_NAVEGADOR.map((c) => {
     const d = DEFINICOES_DOS_CASOS[c];
-    return { valor: c, rotulo: d.rotulo, usa_modelo: d.usaModelo, ligado: casoLigado(c, modelo), motivo: motivoDoCasoDesligado(c, modelo), teto_passos: d.tetoPassos, teto_custo_usd: d.tetoCustoUsd };
+    const real = soma[c];
+    return {
+      valor: c,
+      rotulo: d.rotulo,
+      descricao: d.descricao,
+      onde: d.onde,
+      usa_modelo: d.usaModelo,
+      ligado: casoLigado(c, modelo),
+      motivo: motivoDoCasoDesligado(c, modelo),
+      teto_passos: d.tetoPassos,
+      teto_custo_usd: d.tetoCustoUsd,
+      insumo: d.insumo,
+      varios_sites: d.variosSites,
+      feitas: real ? real.n : 0,
+      custo_medio_usd: real && real.n ? Math.round((real.usd / real.n) * 10000) / 10000 : null,
+      custo_estimado_usd: custoEstimadoDoCaso(c, padrao).estimado,
+    };
   });
-  const { data, error } = await servico().from("computador_executores").select("nome, visto_em, versao, casos").order("visto_em", { ascending: false }).limit(5);
-  if (error) registrarFalha("computador-do-agente:executores_ler", error);
-  return json({ casos, com_modelo: modelo, executores: data || [] });
+  return json({ casos, com_modelo: modelo, modelos, modelo_padrao: padrao ? padrao.id : MODELO_PADRAO_DO_COMPUTADOR, executores: executores.data || [] });
 }
 
 async function pedir(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
@@ -165,11 +230,8 @@ async function pedir(ch: Chamador, corpo: Record<string, unknown>): Promise<Resp
   const motivo = motivoParaRecusarNoNavegador(p, comModelo());
   if (motivo) throw new ErroHttp(409, "tarefa_recusada", motivo);
   const d = DEFINICOES_DOS_CASOS[p.caso as CasoDoNavegador];
-  const passos = d.usaModelo
-    ? [`Abrir ${p.url}`, `Ler e coletar: ${p.objetivo}`, "Uma captura de tela por passo", "Parar no teto ou antes de qualquer login, formulário ou pagamento"]
-    : p.caso === "captura_site"
-    ? [`Abrir ${p.url}`, "Rolar até o fim para carregar a página", "Capturar a tela inteira (computador e celular)"]
-    : [`Abrir ${p.url}`, "Conferir se a página responde e mostra o post", "Capturar a tela como prova"];
+  const m = d.usaModelo && p.modelo_id ? await modeloDoPedido(p.modelo_id) : null;
+  const passos = passosDoPedido(p.caso as CasoDoNavegador, p.url as string, p.urls, p.objetivo, m);
   const { data, error } = await servico()
     .from(TABELA)
     .insert({
@@ -186,14 +248,39 @@ async function pedir(ch: Chamador, corpo: Record<string, unknown>): Promise<Resp
       origem: p.origem,
       teto_passos: d.tetoPassos,
       teto_custo_usd: d.tetoCustoUsd,
+      modelo_id: m ? m.id : null,
+      urls: d.variosSites ? p.urls : [],
       criado_por: ch.userId,
     })
     .select("*")
     .single();
   if (error) throw erroDaTabela(error);
   const t = data as Tarefa;
-  await auditar(ch, "computador_navegador_pedir", { caso: p.caso, dominios: p.dominios, origem: p.origem, client_id: p.client_id }, t.id);
-  return json({ tarefa: t });
+  const custo = custoEstimadoDoCaso(p.caso as CasoDoNavegador, m, p.urls.length);
+  await auditar(ch, "computador_navegador_pedir", { caso: p.caso, dominios: p.dominios, origem: p.origem, client_id: p.client_id, modelo_id: m ? m.id : null }, t.id);
+  return json({ tarefa: t, custo_estimado_usd: custo.estimado, teto_custo_usd: custo.teto });
+}
+
+/** Os passos que o dono lê no Confirmar (o worker segue o roteiro do caso, não este texto). */
+function passosDoPedido(caso: CasoDoNavegador, url: string, urls: string[], objetivo: string, m: ModeloDoCatalogoParaComputador | null): string[] {
+  const quem = m ? `${m.rotulo || m.id} (computer use)` : "";
+  const fim = "Parar no teto ou antes de qualquer login, formulário ou pagamento";
+  switch (caso) {
+    case "captura_site":
+      return [`Abrir ${url}`, "Rolar até o fim para carregar a página", "Capturar a tela inteira (computador e celular)"];
+    case "conferir_post":
+      return [`Abrir ${url}`, "Conferir se a página responde e mostra o post", "Capturar a tela como prova"];
+    case "conferir_site":
+      return [`Abrir ${url}`, "Medir o tempo de carregamento", "Capturar a tela no computador e no celular", "Conferir os links do próprio site (só leitura)"];
+    case "capturar_referencia":
+      return [`Abrir ${url}`, "Capturar a tela inteira (computador e celular)", "Ler cores e fontes do código da página", `${quem}: escrever as notas de estilo`, fim];
+    case "perfil_publico":
+      return [`Abrir ${url}`, "Ler o que aparece sem login (título, descrição, imagem)", `${quem}: ${objetivo}`, fim];
+    case "concorrentes_visuais":
+      return [...urls.map((u) => `Abrir ${u}, ler logo, cores e fontes e capturar o topo`), `${quem}: ${objetivo}`, fim];
+    default:
+      return [`Abrir ${url}`, `${quem}: ${objetivo}`, "Uma captura de tela por passo", fim];
+  }
 }
 
 async function decidir(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
@@ -207,11 +294,10 @@ async function decidir(ch: Chamador, corpo: Record<string, unknown>): Promise<Re
   if (novo === "aprovada") {
     // As travas valem de novo no Confirmar (o caso pode ter sido desligado depois do pedido).
     if (!t.caso) throw new ErroHttp(409, "tarefa_recusada", "Tarefa de aplicativo de desktop: continua desligada (Mesa Edição).");
-    const motivo = motivoParaRecusarNoNavegador(
-      normalizarPedidoDoNavegador({ caso: t.caso, url: t.url_inicial, dominios: t.dominios, objetivo: t.objetivo, origem: t.origem, client_id: t.client_id }),
-      comModelo(),
-    );
+    const p = normalizarPedidoDoNavegador({ caso: t.caso, url: t.url_inicial, urls: t.urls, dominios: t.dominios, objetivo: t.objetivo, origem: t.origem, client_id: t.client_id, modelo_id: t.modelo_id });
+    const motivo = motivoParaRecusarNoNavegador(p, comModelo());
     if (motivo) throw new ErroHttp(409, "tarefa_recusada", motivo);
+    if (p.modelo_id) await modeloDoPedido(p.modelo_id);
   }
   const mudanca: Record<string, unknown> = { estado: novo, atualizado_em: new Date().toISOString() };
   if (novo === "aprovada") {
@@ -271,12 +357,33 @@ async function provas(ch: Chamador, corpo: Record<string, unknown>): Promise<Res
   return json({ provas: saida });
 }
 
+/** Imagens do cartão: as que o worker marcou no resultado (página inteira, celular, topo de cada site). */
+async function cartao(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
+  const t = await lerTarefa(ch, corpo);
+  const r = (t.resultado && typeof t.resultado === "object" ? t.resultado : {}) as Record<string, unknown>;
+  const marcadas = Array.isArray(r.imagens) ? (r.imagens as Array<{ rotulo?: unknown; storage_path?: unknown }>) : [];
+  // Sem imagem marcada (tarefa antiga): o último print da tarefa.
+  const lista = marcadas.length
+    ? marcadas.slice(0, 12).map((i) => ({ rotulo: String(i.rotulo || ""), storage_path: String(i.storage_path || "") }))
+    : (Array.isArray(t.provas) ? t.provas.slice(-1) : []).map((p) => ({ rotulo: String(p.legenda || "Último passo"), storage_path: String(p.storage_path || "") }));
+  // Só caminho da pasta da tarefa (nunca um caminho qualquer que veio no resultado).
+  const daTarefa = (c: string) => !!c && c.indexOf(`/computador/${t.id}/`) > 0 && c.indexOf("..") < 0;
+  const imagens: Array<{ rotulo: string; url: string | null; storage_path: string }> = [];
+  for (const i of lista.filter((x) => daTarefa(x.storage_path))) {
+    const { data, error } = await servico().storage.from(BUCKET).createSignedUrl(i.storage_path, LINK_DA_PROVA_S);
+    if (error) registrarFalha("computador-do-agente:cartao_link", error, { tarefa_id: t.id });
+    imagens.push({ rotulo: i.rotulo, url: data?.signedUrl ?? null, storage_path: i.storage_path });
+  }
+  return json({ tarefa: { id: t.id, caso: t.caso, estado: t.estado, url_inicial: t.url_inicial, dominios: t.dominios, objetivo: t.objetivo, origem: t.origem, modelo_id: t.modelo_id || null, client_id: t.client_id }, resultado: r, imagens });
+}
+
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   estado: () => estado(),
   pedir,
   decidir,
   parar,
   provas,
+  cartao,
 };
 
 Deno.serve(async (req) => {

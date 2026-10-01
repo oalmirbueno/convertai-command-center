@@ -12,6 +12,9 @@ import { chamarIdentidade, type ProjetoDeIdentidade } from "./identidadeApi";
 import { CabecalhoDaEtapa, contextoParaPreencher, Pastilha, partesDoCusto, SeletorDoModelo, useModeloDaAcao, useProjetoDaMesa } from "./Comuns";
 import { useGravacoesDaMesa, useValorSalvo } from "./gravacao";
 import Moodboard from "./Moodboard";
+// Frente CUS (01/10): o navegador do agente pesquisa os concorrentes visuais (logo, cores, fontes e o que comunicam).
+import { BotaoDoNavegador, TarefasDoNavegador, type InsumoDoNavegador } from "@/components/agentes/NavegadorDoAgente";
+import { concorrentesParaIdentidade } from "@/lib/agentes/insumosDoNavegador";
 
 type Referencia = { titulo: string; link: string; nota: string; tipo: "concorrente" | "referencia" };
 
@@ -70,6 +73,21 @@ export default function EtapaPesquisa() {
   };
 
   const limpa = (r: Referencia): Referencia => ({ ...r, titulo: r.titulo.trim().slice(0, 120), link: linkValido(r.link), nota: r.nota.trim().slice(0, 300) });
+
+  /** Sites dos concorrentes já guardados (preenchem a pesquisa visual do navegador). */
+  const sitesDosConcorrentes = refs.filter((r) => r.tipo === "concorrente" && linkValido(r.link)).map((r) => r.link);
+  /** Cartão da pesquisa visual: cada concorrente lido entra como referência "concorrente", com Desfazer. */
+  const guardarConcorrentes: InsumoDoNavegador = {
+    rotulo: "Guardar como concorrentes",
+    aoUsar: async (c) => {
+      const novas = concorrentesParaIdentidade(c).map(limpa).filter((r) => !jaGuardada(refs, r));
+      if (!novas.length) throw new Error("Esses concorrentes já estão guardados.");
+      const cabem = novas.slice(0, Math.max(0, MAXIMO_DE_REFERENCIAS - refs.length));
+      if (!cabem.length) throw new Error(`A pesquisa já tem ${MAXIMO_DE_REFERENCIAS} referências. Tire alguma antes.`);
+      await gravarRefs(refs.concat(cabem), `${cabem.length} concorrente(s) guardado(s) com cores e tipografia`, refs);
+      return "";
+    },
+  };
 
   const acrescentar = (r: Referencia) => {
     if (!r.titulo.trim()) return;
@@ -194,6 +212,10 @@ export default function EtapaPesquisa() {
       />
 
       <Secao titulo="Referências e concorrentes" descricao={`${refs.length} guardadas`} recolher={`mesa-identidade:${projeto.id}:pesquisa:refs`} data-bloco-da-etapa="refs">
+        <div className="mb-2 min-w-0" data-concorrentes-visuais="">
+          <BotaoDoNavegador caso="concorrentes_visuais" clientId={mesa.clientId} origem="mesa_identidade" url={sitesDosConcorrentes[0] || ""} urls={sitesDosConcorrentes.slice(1, 5).join("\n")} rotulo="Pesquisar concorrentes visuais" compacto />
+        </div>
+        <TarefasDoNavegador clientId={mesa.clientId} origem="mesa_identidade" titulo="Pesquisas visuais do navegador" casos={["concorrentes_visuais"]} insumo={guardarConcorrentes} />
         {refs.length > 0 && (
           <ul className={juntar(lista.aberta, lista.divisoria, "mb-4")} aria-label="Referências guardadas">
             {refs.map((r, i) => (
