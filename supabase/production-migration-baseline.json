@@ -1937,6 +1937,14 @@
       "remote_name": "mockups_mais_modelos",
       "remote_statements_sha256": "f946f6df3b0adaf75bc2c62b2728346ff04a67b31057e4b4a5e21073596332b7",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930323000",
+      "path": "supabase/migrations/20260930323000_chaves_e_custos.sql",
+      "local_sha256": "817b67f7f5afd8f7e620619ade49712db400ea893a776a247cbb2643dd40816d",
+      "remote_name": "chaves_e_custos",
+      "remote_statements_sha256": "1fe3011c44c60af97b006845545f1a8b6674b09e4e0c10418ab8b3fc238e8910",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
