@@ -137,6 +137,16 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
       try {
         const passos = t.tipo === "construir" ? ((pedido.secoes as string[]) || []) : [String(pedido.secao || "")];
         const feitas: string[] = [];
+        // SPV: a prévia editável marca seção a seção (pronta, construindo, na fila) pelo resultado parcial.
+        if (t.tipo === "construir") resultado.secoes_pedidas = passos.slice();
+        else resultado.secao_pedida = passos[0] || null;
+        const andamento = async (secaoAtual: string | null) => {
+          try {
+            await fila.atualizar(t.id, { resultado: { ...resultado, secoes: feitas.slice(), secao_atual: secaoAtual } });
+          } catch (e) {
+            await avisar({ tipo: "aviso", resumo: `O andamento da seção não foi gravado: ${e instanceof Error ? e.message.slice(0, 160) : "erro"}` });
+          }
+        };
         const falhas: Array<{ secao: string; motivo: string }> = [];
         // UIM: prova de que a passada consultou a base de design e conferiu o checklist de UX (aviso, não trava).
         const consultas: ConsultaDaSecao[] = [];
@@ -146,6 +156,7 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
             break;
           }
           await avisar({ tipo: "passo", resumo: `${t.tipo === "construir" ? "Construindo" : "Ajustando"} ${rotuloDaSecao(secao)}` });
+          await andamento(secao);
           const antesDaSecao = await commitAtual(pasta);
           const linhasDoLog = lerLogDaBase(pasta).length;
           const inicioDaPassada = Date.now();
@@ -192,6 +203,7 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
             } else {
               await avisar({ tipo: "commit", resumo: `Commit da seção ${rotuloDaSecao(secao)}`, dados: { commit: c.commit, custo_usd: gasto.custo } });
               feitas.push(secao);
+              await andamento(null);
               // SPM: a prova de verdade é a conferência que o MOTOR roda no build dele, com o conferir.mjs do modelo.
               conferencia = conferirSecaoDoProjeto(pasta, secao);
             }
@@ -228,6 +240,26 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
           resultado.custo_tabela_usd = Math.round(gasto.tabela * 1e6) / 1e6;
           resultado.chamadas_ao_modelo = medidor.chamadas();
           await medidor.fechar();
+        }
+      }
+    }
+
+    // SPV: a edição de conteúdo feita na prévia chega ao projeto sem modelo e sem build: pacote, marca.css,
+    // imagens novas e um commit. A prévia do Vite recarrega sozinha (o pacote é importado pelo site).
+    if (t.tipo === "conteudo") {
+      const avisos = await escreverPacote(pasta, pacote, fila);
+      for (const a of avisos) await avisar({ tipo: "aviso", resumo: a });
+      const c = await commitar(pasta, t.instrucao || "Edição pela prévia");
+      await fila.atualizar(t.id, { commit: c.commit });
+      await avisar({ tipo: "commit", resumo: c.novo ? "Edição da prévia no projeto" : "O projeto já estava com esta edição", dados: { commit: c.commit } });
+      if (cfg.comPrevia) {
+        try {
+          if (await instalarSePrecisar(pasta)) await avisar({ tipo: "passo", resumo: "Dependências instaladas" });
+          const pv = await garantirPrevia(t.projeto, pasta);
+          await fila.atualizar(t.id, { preview_url: pv.url, preview_expira_em: new Date(Date.now() + 60 * 60_000).toISOString() });
+          if (pv.nova) await avisar({ tipo: "previa", resumo: pv.publica ? "Prévia ao vivo aberta" : "Prévia só nesta máquina", dados: { url: pv.url, publica: pv.publica, aviso: pv.aviso } });
+        } catch (e) {
+          await avisar({ tipo: "aviso", resumo: `A prévia do motor não abriu: ${e instanceof Error ? e.message.slice(0, 200) : "erro"}` });
         }
       }
     }
@@ -276,8 +308,9 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
       }
     }
 
-    // Zip do código (cópia de segurança e "Baixar o site") depois de toda mudança.
-    if (t.tipo !== "revisar" && t.tipo !== "publicar") {
+    // Zip do código (cópia de segurança e "Baixar o site") depois de toda mudança de código
+    // (a edição de conteúdo da prévia vive no banco; o próximo trabalho de código guarda o zip).
+    if (t.tipo !== "revisar" && t.tipo !== "publicar" && t.tipo !== "conteudo") {
       const commit = await commitAtual(pasta);
       const bytes = ziparProjeto(pasta, t.projeto);
       const caminho = `${t.client_id}/site/${t.referencia_id || t.projeto}/codigo/${t.projeto}-${commit.slice(0, 8)}.zip`;

@@ -11,7 +11,7 @@ import { botao, campo, campoTexto, juntar, texto } from "@/components/sistema/es
 import { CAMPOS_DO_FORMULARIO, normalizarIntegracoes, normalizarSeo, normalizarWhatsapp, TIPOS_DE_NEGOCIO } from "../../../supabase/functions/_shared/site-lancamento";
 import { rotuloDaSecao, SLOTS_DE_IMAGEM } from "../../../supabase/functions/_shared/site-metodo";
 import { mapaDoSite } from "../../../supabase/functions/_shared/site-biblioteca";
-import { CHAVES, chamarMotor, type LinhaDoSite, montadoDepoisDasMudancas, useSalvarSite, useTrabalhos } from "./siteApi";
+import { chamarMotor, CHAVES, type LinhaDoSite, montadoDepoisDasMudancas, trabalhosDeCodigo, useSalvarSite, useTrabalhos } from "./siteApi";
 import CampoComIA, { listaDoValor, textoDoValor } from "./CampoComIA";
 import { copyDaLinha, usaNoMapa } from "./estadoDoSite";
 import HorarioDoNegocio, { horarioParaSalvar, type LinhaDaTela, linhasDoHorario } from "./HorarioDoNegocio";
@@ -92,7 +92,8 @@ export default function EtapaIntegracoes({ site }: { site: LinhaDoSite; onIrPara
   const salvarSite = useSalvarSite(clientId, marca ? marca.id : null);
   const avisarErro = useAvisarErro();
   const trabalhosQ = useTrabalhos(clientId, site.id);
-  const trabalhos = trabalhosQ.data ? trabalhosQ.data.trabalhos : [];
+  // SPV: só os trabalhos de código (a edição da prévia esperando não é montagem na fila).
+  const trabalhos = trabalhosQ.data ? trabalhosDeCodigo(trabalhosQ.data.trabalhos) : [];
   const copy = copyDaLinha(site);
   const seoDoConteudo: SeoDoConteudo = copy ? copy.seo : null;
   const nomePadrao = (marca && marca.nome) || clientName || "";

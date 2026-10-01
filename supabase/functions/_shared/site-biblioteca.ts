@@ -108,7 +108,13 @@ export const ROTULO_DA_CATEGORIA: Record<CategoriaDaSecao, string> = {
 /** UXM: `variante` = id de uma variante da seção (site-variantes.ts); opcional, mapas antigos continuam valendo. */
 export type SecaoNoMapa = { uid: string; tipo: string; nota?: string; variante?: string };
 export type PaginaDoMapa = { id: string; slug: string; titulo: string; secoes: SecaoNoMapa[] };
-export type MapaDoSite = { tipo: TipoDeSite; paginas: PaginaDoMapa[]; globais: string[]; fonte: "padrao" | "jev" | "manual" };
+/**
+ * Seção escondida na prévia editável (SPV, 30/09): sai da página (o site não
+ * mostra), mas guarda o lugar e o uid para voltar igual. `pagina` null = uma
+ * global (topo ou rodapé).
+ */
+export type SecaoOculta = { uid: string; tipo: string; pagina: string | null; posicao: number; nota?: string; variante?: string };
+export type MapaDoSite = { tipo: TipoDeSite; paginas: PaginaDoMapa[]; globais: string[]; fonte: "padrao" | "jev" | "manual"; ocultas?: SecaoOculta[] };
 
 export const MAX_PAGINAS = 6;
 export const MAX_SECOES_POR_PAGINA = 14;
@@ -225,7 +231,35 @@ export function normalizarMapa(bruto: unknown, tipoPadrao: TipoDeSite = "landing
     }
     paginas.push({ id, slug, titulo, secoes });
   });
-  return { tipo, globais, paginas, fonte: o.fonte === "jev" || o.fonte === "padrao" ? (o.fonte as "jev" | "padrao") : "manual" };
+  const mapa: MapaDoSite = { tipo, globais, paginas, fonte: o.fonte === "jev" || o.fonte === "padrao" ? (o.fonte as "jev" | "padrao") : "manual" };
+  const ocultas = ocultasValidas(o.ocultas, mapa, usados);
+  if (ocultas.length) mapa.ocultas = ocultas;
+  return mapa;
+}
+
+/** SPV: as seções escondidas que ainda valem (uid único, fora das páginas, página que existe). */
+function ocultasValidas(bruto: unknown, m: MapaDoSite, usados: Set<string>): SecaoOculta[] {
+  const saida: SecaoOculta[] = [];
+  const globaisValidas = BIBLIOTECA_DE_SECOES.filter((s) => s.global).map((s) => s.id);
+  for (const b of (Array.isArray(bruto) ? bruto : []).slice(0, 24)) {
+    const x = b && typeof b === "object" ? (b as Record<string, unknown>) : {};
+    const uid = typeof x.uid === "string" ? x.uid.toLowerCase() : "";
+    const tipo = String(x.tipo || "");
+    const lib = secaoDaBiblioteca(tipo);
+    if (!lib || !UID.test(uid)) continue;
+    const pagina = typeof x.pagina === "string" && x.pagina ? x.pagina : null;
+    if (lib.global) {
+      if (pagina || uid !== tipo || globaisValidas.indexOf(uid) < 0 || m.globais.indexOf(uid) >= 0 || saida.some((o) => o.uid === uid)) continue;
+    } else {
+      if (!pagina || !m.paginas.some((p) => p.id === pagina) || usados.has(uid) || saida.some((o) => o.uid === uid)) continue;
+    }
+    const nova: SecaoOculta = { uid, tipo, pagina, posicao: Math.max(0, Math.min(MAX_SECOES_POR_PAGINA, Math.floor(Number(x.posicao) || 0))) };
+    const nota = umaLinha(x.nota, 200);
+    if (nota) nova.nota = nota;
+    if (typeof x.variante === "string" && VARIANTE.test(x.variante)) nova.variante = x.variante;
+    saida.push(nova);
+  }
+  return saida;
 }
 
 /** O mapa de um site antigo (só direcao.secoes, uma página). */
@@ -443,9 +477,46 @@ export const presetDeMotion = (id: unknown): PresetDeMotion | null => PRESETS_DE
 /** Todo preset de movimento fica dentro do kit livre (testado). */
 export const dentroDoKit = (p: PresetDeMotion) => p.pecas.every((x) => (KIT_LIVRE as readonly string[]).indexOf(x) >= 0);
 
-export type EstiloDoSite = { preset: string | null; motion: string[] };
+/**
+ * Ajuste da marca feito na prévia editável (frente SPV, 30/09): cor de
+ * destaque, fundo e texto e as fontes de título e de texto SÓ deste site. O
+ * kit da marca não muda (outras mesas seguem com ele); vazio = o do kit.
+ */
+export type AjustesDaMarcaNoSite = { destaque?: string; fundo?: string; texto?: string; fonte_titulo?: string; fonte_texto?: string };
+export const PAPEIS_DE_COR_DO_AJUSTE = ["destaque", "fundo", "texto"] as const;
+export const PAPEIS_DE_FONTE_DO_AJUSTE = ["fonte_titulo", "fonte_texto"] as const;
+const HEX_DO_AJUSTE = /^#[0-9a-f]{6}$/i;
+const FONTE_DO_AJUSTE = /^[A-Za-z0-9][A-Za-z0-9 ]{1,39}$/;
 
-/** Estilo salvo: preset válido (ou nenhum) e até 3 presets de movimento válidos. */
+/** Só cores #rrggbb e nomes de família simples (letras, números e espaço). */
+export function normalizarAjustes(bruto: unknown): AjustesDaMarcaNoSite | null {
+  const o = bruto && typeof bruto === "object" && !Array.isArray(bruto) ? (bruto as Record<string, unknown>) : {};
+  const a: AjustesDaMarcaNoSite = {};
+  for (const k of PAPEIS_DE_COR_DO_AJUSTE) {
+    const v = typeof o[k] === "string" ? String(o[k]).trim() : "";
+    if (HEX_DO_AJUSTE.test(v)) a[k] = v.toLowerCase();
+  }
+  for (const k of PAPEIS_DE_FONTE_DO_AJUSTE) {
+    const v = typeof o[k] === "string" ? String(o[k]).replace(/\s+/g, " ").trim() : "";
+    if (FONTE_DO_AJUSTE.test(v)) a[k] = v;
+  }
+  return Object.keys(a).length ? a : null;
+}
+
+/** As fontes do site com a troca feita na prévia (título e texto); as outras ficam. */
+export function fontesComAjustes(fontes: Array<{ nome: string; papel: string }>, ajustes: AjustesDaMarcaNoSite | null | undefined): Array<{ nome: string; papel: string }> {
+  if (!ajustes || (!ajustes.fonte_titulo && !ajustes.fonte_texto)) return fontes;
+  const ehTitulo = (p: string) => /tit|display|head/i.test(p);
+  const ehTexto = (p: string) => /texto|corpo|body/i.test(p);
+  let lista = fontes.slice();
+  if (ajustes.fonte_titulo) lista = [{ nome: ajustes.fonte_titulo, papel: "titulo" }].concat(lista.filter((f) => !ehTitulo(String(f.papel || ""))));
+  if (ajustes.fonte_texto) lista = lista.filter((f) => !ehTexto(String(f.papel || ""))).concat([{ nome: ajustes.fonte_texto, papel: "texto" }]);
+  return lista.slice(0, 4);
+}
+
+export type EstiloDoSite = { preset: string | null; motion: string[]; ajustes?: AjustesDaMarcaNoSite };
+
+/** Estilo salvo: preset válido (ou nenhum), até 3 presets de movimento válidos e os ajustes da prévia (SPV). */
 export function normalizarEstilo(bruto: unknown): EstiloDoSite {
   const o = bruto && typeof bruto === "object" ? (bruto as Record<string, unknown>) : {};
   const preset = presetDeEstilo(o.preset) ? String(o.preset) : null;
@@ -453,7 +524,8 @@ export function normalizarEstilo(bruto: unknown): EstiloDoSite {
     .map((m) => String(m))
     .filter((m, i, l) => !!presetDeMotion(m) && l.indexOf(m) === i)
     .slice(0, 3);
-  return { preset, motion };
+  const ajustes = normalizarAjustes(o.ajustes);
+  return ajustes ? { preset, motion, ajustes } : { preset, motion };
 }
 
 // ------------------------------------------------------------------ preset do motor (custo)

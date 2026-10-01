@@ -18,7 +18,7 @@
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { executorVivo } from "../_shared/motor-codigo.ts";
-import { criarTrabalho, ErroDoMotor, eventosDoTrabalho, executorDoMotor, lerTrabalho, orcar, pararTrabalho, trabalhosDoProjeto } from "../_shared/motor-fila.ts";
+import { criarTrabalho, ErroDoMotor, eventosDoTrabalho, executorDoMotor, lerTrabalho, orcar, pararTrabalho, trabalhosDoProjeto, ultimoConteudo } from "../_shared/motor-fila.ts";
 import { type LinhaDoSite, montarPacoteDoSite } from "../_shared/pacote-do-site.ts";
 import { resolverMarca } from "../_shared/marca.ts";
 import { regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
@@ -128,6 +128,7 @@ async function pedir(ch: Chamador, c: Record<string, unknown>) {
       regras_da_equipe: regras.regras.map((r) => `${r.tipo === "evitar" ? "EVITAR" : "PREFERIR"}: ${r.texto}`),
       contexto_da_marca: contextoDaMarca || null,
     } as unknown as Record<string, unknown>,
+    pacoteDe: site.pacote_mudou_em || null,
     userId: ch.userId,
   });
   await auditLog({
@@ -146,8 +147,10 @@ async function parar(ch: Chamador, c: Record<string, unknown>) {
 async function listar(ch: Chamador, c: Record<string, unknown>) {
   const clientId = idDe(c.client_id, "client_id");
   await garantirAcesso(ch, clientId);
-  const [trabalhos, executor] = await Promise.all([trabalhosDoProjeto(servico(), clientId, idDe(c.site_id, "site_id")), executorDoMotor(servico())]);
-  return json({ trabalhos, executor, executor_vivo: executorVivo(executor ? executor.visto_em : null), custo_usd: 0 });
+  const siteId = idDe(c.site_id, "site_id");
+  // SPV: os trabalhos de código vêm sem o "conteudo" (a edição da prévia); o último deles vai à parte (estado e prévia).
+  const [trabalhos, conteudo, executor] = await Promise.all([trabalhosDoProjeto(servico(), clientId, siteId), ultimoConteudo(servico(), clientId, siteId), executorDoMotor(servico())]);
+  return json({ trabalhos, conteudo, executor, executor_vivo: executorVivo(executor ? executor.visto_em : null), custo_usd: 0 });
 }
 
 async function eventos(ch: Chamador, c: Record<string, unknown>) {

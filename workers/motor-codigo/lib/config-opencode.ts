@@ -128,6 +128,8 @@ export const SKILLS_POR_TRABALHO: Record<string, SkillDoSuperpowers[]> = {
   desfazer: [],
   publicar: [],
   zip: [],
+  // SPV: levar a edição da prévia ao projeto é máquina (sem agente).
+  conteudo: [],
 };
 
 /** Sempre negadas no motor, com o porquê (a tela das Configurações e o AGENTS.md repetem). */

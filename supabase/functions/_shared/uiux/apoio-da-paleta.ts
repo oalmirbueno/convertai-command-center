@@ -292,6 +292,21 @@ export function coresDoSite(p: { paleta?: unknown; dna?: unknown; estilo?: unkno
     ? ordenadas[0] && lum(ordenadas[0].hex) < 0.2 ? ordenadas[0].hex : "#0b0b0c"
     : ordenadas.length && lum(ordenadas[ordenadas.length - 1].hex) > 0.8 ? ordenadas[ordenadas.length - 1].hex : "#fafaf7";
   const texto = lum(fundo) > 0.4 ? "#111111" : "#f5f5f3";
+  // SPV (30/09): o ajuste da prévia editável (estilo.ajustes) vence, só neste site. Fundo trocado sem
+  // texto trocado: o texto sai do contraste do fundo novo.
+  const ajustes = p.estilo && typeof p.estilo === "object" ? ((p.estilo as { ajustes?: { destaque?: unknown; fundo?: unknown; texto?: unknown } }).ajustes || null) : null;
+  if (ajustes) {
+    const hex = (v: unknown) => {
+      const h = typeof v === "string" ? normalizarHex(v) : null;
+      return h ? h.toLowerCase() : null;
+    };
+    const d = hex(ajustes.destaque);
+    const f = hex(ajustes.fundo);
+    const t = hex(ajustes.texto);
+    const fundoFinal = f || fundo;
+    const textoFinal = t || (f ? (lum(fundoFinal) > 0.4 ? "#111111" : "#f5f5f3") : texto);
+    return { destaque: d || destaque, fundo: fundoFinal, texto: textoFinal, escuro: f ? lum(fundoFinal) <= 0.4 : escuro };
+  }
   return { destaque, fundo, texto, escuro };
 }
 

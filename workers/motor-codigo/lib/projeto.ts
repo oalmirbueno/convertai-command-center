@@ -10,6 +10,8 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { PROJETO_VALIDO } from "../../../supabase/functions/_shared/motor-codigo.ts";
 import { ajustarAoDestaque, apoioDaPaleta, type ApoioDaPaleta, coresDoSite, type PapelDoApoio, variaveisDoApoio } from "../../../supabase/functions/_shared/uiux/apoio-da-paleta.ts";
 import type { Fila } from "./fila.ts";
+// SPV: a ponte da prévia editável mora com a Mesa Site (a tela usa a mesma).
+import { codigoDaPonte } from "../../../supabase/functions/mesa-site/modulos/ponte-da-previa.ts";
 import { ambienteSemSegredos } from "./config-opencode.ts";
 import type { ConferenciaDaSecao } from "./marcas-da-resposta.ts";
 import { rodar } from "./processos.ts";
@@ -294,6 +296,8 @@ export async function escreverPacote(pasta: string, pacote: Record<string, unkno
   mkdirSync(join(pasta, ".aceleriq"), { recursive: true });
   writeFileSync(join(pasta, ".aceleriq", "pacote.json"), JSON.stringify(resto, null, 2));
   writeFileSync(join(pasta, "src", "marca.css"), cssDaMarca(resto));
+  // SPV: a ponte da prévia editável (o vite.config da casca serve só no desenvolvimento; o build não leva).
+  writeFileSync(join(pasta, ".aceleriq", "ponte.js"), codigoDaPonte());
   for (const a of Array.isArray(arquivos) ? arquivos : []) {
     if (!a || typeof a.destino !== "string" || /\.\./.test(a.destino) || !/^(public|referencias)\//.test(a.destino)) continue;
     const alvo = join(pasta, a.destino);

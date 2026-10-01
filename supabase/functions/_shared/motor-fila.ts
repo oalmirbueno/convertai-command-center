@@ -110,6 +110,8 @@ export type NovoTrabalho = {
   modeloId: string | null;
   /** Pacote do site (kit da marca, DNA, copy, imagens) que o worker escreve no projeto. */
   pacote: Record<string, unknown>;
+  /** SPV: de quando é o pacote (sites.pacote_mudou_em lido junto): a prévia só troca o pacote de um pedido na fila por um mais novo. */
+  pacoteDe?: string | null;
   userId: string;
 };
 
@@ -158,9 +160,13 @@ export async function criarTrabalho(db: SupabaseClient, n: NovoTrabalho): Promis
       alvo: commitAlvo,
       modelo: o.modelo ? { id: o.modelo.id, provedor: o.modelo.provedor, modelo_api: o.modelo.modelo_api, preco_entrada_1m: o.modelo.preco_entrada_1m, preco_saida_1m: o.modelo.preco_saida_1m, preco_cache_1m: o.modelo.preco_cache_1m ?? null } : null,
       pacote: n.pacote,
+      pacote_de: n.pacoteDe || null,
     },
     teto_usd: gasta(o.pedido.tipo) ? o.pedido.teto_usd : 0,
     estimativa_usd: o.estimativa_usd,
+    // SPV: a tela sabe desde a fila quais seções o trabalho vai mexer (a prévia marca "na fila");
+    // o worker acrescenta a seção atual e as prontas enquanto roda.
+    resultado: o.pedido.tipo === "construir" ? { secoes_pedidas: o.pedido.secoes } : o.pedido.tipo === "ajustar" && o.pedido.secao ? { secao_pedida: o.pedido.secao } : {},
     criado_por: n.userId,
   };
   const { data, error } = await db.from("motor_trabalhos").insert(linha).select(CAMPOS_DO_TRABALHO).single();
@@ -203,13 +209,29 @@ export async function pararTrabalho(db: SupabaseClient, t: TrabalhoDoMotor, user
   return atual;
 }
 
+/**
+ * Os trabalhos de código do site (mais novo primeiro). SPV: o "conteudo" (a
+ * edição da prévia levada ao projeto, um por edição) fica de fora: dezenas
+ * deles numa sessão tirariam os construir da janela e a tela acharia que
+ * nada foi construído. O último "conteudo" vem por `ultimoConteudo`.
+ */
 export async function trabalhosDoProjeto(db: SupabaseClient, clientId: string, referenciaId: string, limite = 30): Promise<TrabalhoDoMotor[]> {
-  const { data, error } = await db.from("motor_trabalhos").select(CAMPOS_DO_TRABALHO).eq("client_id", clientId).eq("referencia_id", referenciaId).order("criado_em", { ascending: false }).limit(limite);
+  const { data, error } = await db.from("motor_trabalhos").select(CAMPOS_DO_TRABALHO).eq("client_id", clientId).eq("referencia_id", referenciaId).neq("tipo", "conteudo").order("criado_em", { ascending: false }).limit(limite);
   if (error) {
     if (semTabela(error)) throw new ErroDoMotor(503, "banco_sem_motor", AVISO_SEM_MOTOR);
     throw new ErroDoMotor(503, "fila_indisponivel", "Não foi possível ler a fila agora.");
   }
   return ((data as unknown[]) ?? []).map(normalizarTrabalho).filter((t): t is TrabalhoDoMotor => !!t);
+}
+
+/** SPV: o último trabalho "conteudo" do site (estado e prévia do motor), ou null. Falha de leitura não derruba a lista. */
+export async function ultimoConteudo(db: SupabaseClient, clientId: string, referenciaId: string): Promise<TrabalhoDoMotor | null> {
+  const { data, error } = await db.from("motor_trabalhos").select(CAMPOS_DO_TRABALHO).eq("client_id", clientId).eq("referencia_id", referenciaId).eq("tipo", "conteudo").order("criado_em", { ascending: false }).limit(1);
+  if (error) {
+    if (!semTabela(error)) console.error("[motor-fila] último conteudo não lido", { codigo: error.code ?? null });
+    return null;
+  }
+  return ((data as unknown[]) ?? []).map(normalizarTrabalho).find((t): t is TrabalhoDoMotor => !!t) || null;
 }
 
 export async function eventosDoTrabalho(db: SupabaseClient, trabalhoId: string, desde = 0, limite = 200) {

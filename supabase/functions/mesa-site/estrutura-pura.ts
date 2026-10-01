@@ -19,7 +19,8 @@ const txt = (v: unknown, max: number) => semTravessao(String(v ?? "").replace(/\
  */
 export function camposDoEstilo(s: LinhaDoSite, pedido: { preset?: unknown; motion?: unknown; aplicarDna?: boolean; atributos?: string[] }): Record<string, unknown> {
   const atual = normalizarEstilo(s.estilo || {});
-  const estilo = normalizarEstilo({ preset: pedido.preset !== undefined ? pedido.preset : atual.preset, motion: pedido.motion !== undefined ? pedido.motion : atual.motion });
+  // SPV: os ajustes de cor e fonte feitos na prévia ficam quando o preset ou o movimento mudam.
+  const estilo = normalizarEstilo({ preset: pedido.preset !== undefined ? pedido.preset : atual.preset, motion: pedido.motion !== undefined ? pedido.motion : atual.motion, ajustes: atual.ajustes });
   const campos: Record<string, unknown> = { estilo, pacote_mudou_em: new Date().toISOString() };
   const p = presetDeEstilo(estilo.preset);
   const doEstiloDaBase = Array.isArray(pedido.atributos) && pedido.atributos.length ? pedido.atributos : null;

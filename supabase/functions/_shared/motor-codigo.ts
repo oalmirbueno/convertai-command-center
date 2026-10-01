@@ -29,8 +29,13 @@ export const ROTULO_DO_ESTADO: Record<EstadoDoTrabalho, string> = {
   cancelado: "Cancelado",
 };
 
-/** O que o trabalho faz. Só construir e ajustar gastam modelo; o resto é máquina. */
-export const TIPOS_DE_TRABALHO = ["construir", "ajustar", "desfazer", "revisar", "publicar", "zip"] as const;
+/**
+ * O que o trabalho faz. Só construir e ajustar gastam modelo; o resto é máquina.
+ * SPV (30/09): "conteudo" leva ao projeto o pacote novo depois de uma edição
+ * de conteúdo feita na prévia (texto, imagem, cor, fonte, seções): sem modelo,
+ * sem build, só o pacote e o commit, e o Vite da prévia recarrega sozinho.
+ */
+export const TIPOS_DE_TRABALHO = ["construir", "ajustar", "desfazer", "revisar", "publicar", "zip", "conteudo"] as const;
 export type TipoDeTrabalho = (typeof TIPOS_DE_TRABALHO)[number];
 
 export const ROTULO_DO_TIPO: Record<TipoDeTrabalho, string> = {
@@ -40,6 +45,7 @@ export const ROTULO_DO_TIPO: Record<TipoDeTrabalho, string> = {
   revisar: "Revisar (acessibilidade, celular e SEO)",
   publicar: "Publicar",
   zip: "Guardar o código (zip)",
+  conteudo: "Levar a edição da prévia ao site",
 };
 
 export const TIPOS_QUE_GASTAM: TipoDeTrabalho[] = ["construir", "ajustar"];

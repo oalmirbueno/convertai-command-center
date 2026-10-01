@@ -14,7 +14,7 @@ import { botao, campo, etiqueta, juntar, lista, texto } from "@/components/siste
 import { dataEHora } from "@/lib/mesa/api";
 import { type CartaoDeDns, normalizarDominio, REGISTRADORES, ROTULO_DO_DOMINIO, type EstadoDoDominio } from "../../../supabase/functions/mesa-site/modulos/dns-do-site";
 import { ehAberto } from "../../../supabase/functions/_shared/motor-codigo";
-import { CHAVES, chamarSite, type LinhaDoSite, useGuardarSite, useTrabalhos } from "./siteApi";
+import { chamarSite, CHAVES, type LinhaDoSite, trabalhosDeCodigo, useGuardarSite, useTrabalhos } from "./siteApi";
 import { useChecklistDoSite } from "./ChecklistDeLancamento";
 import { pendentesObrigatorios } from "../../../supabase/functions/_shared/site-lancamento";
 import { useBarraDaEtapa } from "./BarraDaEtapa";
@@ -56,7 +56,8 @@ export default function EtapaPublicacao({ site }: { site: LinhaDoSite }) {
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
   const trabalhosQ = useTrabalhos(clientId, site.id);
-  const trabalhos = trabalhosQ.data ? trabalhosQ.data.trabalhos : [];
+  // SPV: só os trabalhos de código (a edição da prévia esperando não é montagem na fila).
+  const trabalhos = trabalhosQ.data ? trabalhosDeCodigo(trabalhosQ.data.trabalhos) : [];
   const checklist = useChecklistDoSite(site, trabalhos);
   const pendentes = pendentesObrigatorios(checklist);
   // Uma gravação da publicação por vez: o servidor troca o JSON inteiro, e duas juntas desfariam uma delas.

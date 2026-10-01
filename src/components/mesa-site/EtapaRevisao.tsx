@@ -10,7 +10,7 @@ import { dataEHora } from "@/lib/mesa/api";
 import { ehAberto, type TrabalhoDoMotor } from "../../../supabase/functions/_shared/motor-codigo";
 import type { AvisoDeQa } from "../../../supabase/functions/_shared/site-metodo";
 import { pendentesObrigatorios } from "../../../supabase/functions/_shared/site-lancamento";
-import { CHAVES, chamarMotor, type LinhaDoSite, previaAtual, useTrabalhos } from "./siteApi";
+import { chamarMotor, CHAVES, comAEdicaoDaPrevia, type LinhaDoSite, previaAtual, trabalhosDeCodigo, useTrabalhos } from "./siteApi";
 import ChecklistDeLancamento, { useChecklistDoSite } from "./ChecklistDeLancamento";
 import ChecklistDeUx, { useChecklistDeUx } from "./ChecklistDeUx";
 import PreviaNosAparelhos from "./PreviaNosAparelhos";
@@ -47,7 +47,8 @@ export default function EtapaRevisao({ site, onIrPara, onPedirAoDiretor }: { sit
   const qc = useQueryClient();
   const avisarErro = useAvisarErro();
   const trabalhosQ = useTrabalhos(clientId, site.id);
-  const trabalhos = trabalhosQ.data ? trabalhosQ.data.trabalhos : [];
+  // SPV: só os trabalhos de código (a edição da prévia esperando não é montagem na fila).
+  const trabalhos = trabalhosQ.data ? trabalhosDeCodigo(trabalhosQ.data.trabalhos) : [];
   const ultimo: TrabalhoDoMotor | null = trabalhos.find((t) => t.estado === "feito" && (Array.isArray(t.resultado.qa) || !!t.resultado.build)) || null;
   const revisando = trabalhos.some((t) => t.tipo === "revisar" && ehAberto(t.estado));
   // Motor desligado: a revisão espera na fila; a tela diz isso em vez de "Revisando" para sempre (QA 30/09).
@@ -59,7 +60,7 @@ export default function EtapaRevisao({ site, onIrPara, onPedirAoDiretor }: { sit
   const ux = useChecklistDeUx(site, trabalhos);
   const checklist = useChecklistDoSite(site, trabalhos, ux.graves);
   const obrigatorios = pendentesObrigatorios(checklist);
-  const previa = previaAtual(trabalhos);
+  const previa = previaAtual(comAEdicaoDaPrevia(trabalhosQ.data ? { trabalhos, conteudo: trabalhosQ.data.conteudo } : null));
 
   const revisar = async () => {
     setPedindo(true);

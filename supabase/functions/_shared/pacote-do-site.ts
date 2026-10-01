@@ -10,7 +10,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { kitComMarca, lerContextoDaMarca, lerMarcaParaDirecaoDaMarca, type MarcaDoCliente } from "./marca.ts";
 import { coresValidas, type DnaDoSite, estiloDoPacote, type OpcaoDeCopy, type PacoteDoSite } from "./site-metodo.ts";
-import { mapaDoSite, normalizarEstilo, secoesDoMapa } from "./site-biblioteca.ts";
+import { fontesComAjustes, mapaDoSite, normalizarEstilo, secoesDoMapa } from "./site-biblioteca.ts";
 import { integracoesDoPacote, normalizarIntegracoes, normalizarSeo, robotsTxt, schemaDoNegocio, urlDoSite } from "./site-lancamento.ts";
 import { variantesDoMapa } from "./site-variantes.ts";
 import { lerBaseDeDesign, lerSerieReal } from "./uiux/consultas.ts";
@@ -47,6 +47,8 @@ export type LinhaDoSite = {
   estilo?: Record<string, unknown> | null;
   integracoes?: Record<string, unknown> | null;
   seo?: Record<string, unknown> | null;
+  /** Quando o pacote mudou por último (SIT2); a prévia (SPV) carimba o pacote de cada pedido com ele. */
+  pacote_mudou_em?: string | null;
   arquivado_em: string | null;
   criado_em: string;
   atualizado_em: string;
@@ -85,6 +87,13 @@ const extensao = (path: string) => {
   return m ? m[1].toLowerCase() : "png";
 };
 
+/** Onde a imagem fica no site (public/imagens): "<slot ou foto>-<8 do id>.<ext>". */
+export function arquivoDaImagemNoSite(img: Pick<ImagemDoSite, "id" | "origem" | "slot" | "path">): string {
+  const id = String(img.id || "").replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase() || "img";
+  const slot = img.origem === "real" ? "foto" : String(img.slot || "secao").replace(/[^a-z0-9_-]/gi, "").slice(0, 20) || "secao";
+  return `/imagens/${slot}-${id}.${extensao(img.path)}`;
+}
+
 export async function montarPacoteDoSite(db: SupabaseClient, site: LinhaDoSite, marca: MarcaDoCliente | null, secoes?: string[]): Promise<{ pacote: PacoteDoSite; arquivos: ArquivoDoPacote[] }> {
   const [kitBruto, direcaoDaMarca, contexto] = await Promise.all([
     db.from("cliente_kit_marca").select("paleta, logo_path, logo_file_id, estilo, regras, contexto").eq("client_id", site.client_id).maybeSingle(),
@@ -103,8 +112,9 @@ export async function montarPacoteDoSite(db: SupabaseClient, site: LinhaDoSite, 
   const arquivoDaImagem = new Map<string, string>();
   imagensDoSite(site.imagens)
     .filter((i) => i.escolhida !== false)
-    .forEach((img, n) => {
-      const arquivo = `/imagens/${img.origem === "real" ? "foto" : img.slot}-${n + 1}.${extensao(img.path)}`;
+    .forEach((img) => {
+      // SPV: o nome leva o começo do id (trocar a imagem na prévia baixa a nova; a prévia acha a imagem pelo arquivo).
+      const arquivo = arquivoDaImagemNoSite(img);
       arquivos.push({ bucket: img.bucket, path: img.path, destino: `public${arquivo}` });
       arquivoDaImagem.set(img.id, arquivo);
       if (img.origem === "real") fotos.push({ arquivo, alt: img.alt, secao: img.secao || null });
@@ -129,7 +139,9 @@ export async function montarPacoteDoSite(db: SupabaseClient, site: LinhaDoSite, 
   const baseDeDesign = lerBaseDeDesign(obj(site.direcao).base_de_design);
   const temBase = !!(baseDeDesign.produto || baseDeDesign.estilo || baseDeDesign.padrao || baseDeDesign.par);
   const parDaBase = baseDeDesign.par ? BASE_COMPLETA.pares.filter((x) => x.no === baseDeDesign.par!.id)[0] || null : null;
-  const fontesEscolhidas = fontesDoSite(direcaoDaMarca.fontes, direcaoDaMarca.tipografiaCitada, parDaBase ? { titulo: parDaBase.titulo, texto: parDaBase.texto } : null);
+  const fontesDaMarca = fontesDoSite(direcaoDaMarca.fontes, direcaoDaMarca.tipografiaCitada, parDaBase ? { titulo: parDaBase.titulo, texto: parDaBase.texto } : null);
+  // SPV: a fonte trocada na prévia editável (estilo.ajustes) vale só neste site.
+  const fontesEscolhidas = { ...fontesDaMarca, fontes: fontesComAjustes(fontesDaMarca.fontes, normalizarEstilo(site.estilo || {}).ajustes || null) };
   const paleta = direcaoDaMarca.paleta
     .filter((p) => coresValidas([p.hex]).length)
     .map((p) => ({ hex: coresValidas([p.hex])[0], nome: p.nome, papel: p.papel }))

@@ -90,10 +90,12 @@ describe("uma integração só com o motor", () => {
     for (const k of Object.keys(b)) expect(tipo, k).toMatch(new RegExp(`\\n\\s+${k}\\??:`));
   });
 
-  it("uma casca v4 com a união das listas (embrulho da busca, Grafico, seo, o pacote com a base e, do superpowers, .gitignore e vite.config)", () => {
+  it("uma casca v5 com a união das listas (embrulho da busca, Grafico, seo, o pacote com a base e, do superpowers, .gitignore e vite.config)", () => {
     const casca = lerCasca(MODELO_DO_SITE)!;
     // Integração UIM + SPM (30/09): as duas frentes subiram para a v3 com listas diferentes; a união é a v4.
-    expect(casca.versao).toBe(4);
+    // SPV (30/09): a v5 leva a ponte da prévia editável no vite.config (só no desenvolvimento) aos projetos que já existem.
+    expect(casca.versao).toBe(5);
+    expect(ler("workers/motor-codigo/modelo-site/vite.config.ts")).toContain('apply: "serve"');
     expect(casca.arquivos).toEqual(expect.arrayContaining(["scripts/uiux.mjs", "src/lib/Grafico.tsx", "scripts/seo.mjs", "scripts/prerender.mjs", "src/lib/pacote.ts", ".gitignore", "vite.config.ts"]));
     expect(casca.arquivos.filter((a, i, l) => l.indexOf(a) !== i)).toEqual([]);
     // A casca das mesas não sobe outra versão por conta própria: é a mesma do motor.

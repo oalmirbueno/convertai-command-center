@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Hammer, Loader2, RotateCcw, Square } from "lucide-react";
+import { Hammer, Loader2, RotateCcw, Square } from "lucide-react";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
@@ -10,10 +10,11 @@ import { botao, campo, etiqueta, juntar, lista, texto } from "@/components/siste
 import { nomeDoModelo, usd } from "@/lib/mesa/api";
 import { ehAberto, podeDesfazer, ROTULO_DO_ESTADO, ROTULO_DO_TIPO, type TrabalhoDoMotor } from "../../../supabase/functions/_shared/motor-codigo";
 import { rotuloDaSecao, SECOES_PADRAO } from "../../../supabase/functions/_shared/site-metodo";
-import { CHAVES, chamarMotor, type EventoDoMotor, type LinhaDoSite, previaAtual, secoesConstruidas, useEventos, useSalvarSite, useTrabalhos } from "./siteApi";
+import { CHAVES, chamarMotor, comAEdicaoDaPrevia, type EventoDoMotor, type LinhaDoSite, secoesConstruidas, trabalhosDeCodigo, useEventos, useSalvarSite, useTrabalhos } from "./siteApi";
 import SeletorDoMotor from "./SeletorDoMotor";
-import PreviaNosAparelhos from "./PreviaNosAparelhos";
 import Versoes from "./Versoes";
+import PreviaEditavel from "./PreviaEditavel";
+import EstadoDoMotor, { useEstadoDoMotor } from "./EstadoDoMotor";
 import { mapaDoSite, secoesDoMapa } from "../../../supabase/functions/_shared/site-biblioteca";
 import { useBarraDaEtapa } from "./BarraDaEtapa";
 
@@ -57,14 +58,17 @@ export function rotuloDoConstruir(escolhidas: string[], faltando: string[], teto
  * ganha "Tentar de novo" (construir leva ao botão; ajustar vira pedido ao
  * diretor de site; revisar pede de novo, sem custo).
  */
-export default function EtapaConstrucao({ site, onPedirAoDiretor }: { site: LinhaDoSite; onIrPara?: (etapa: string) => void; onPedirAoDiretor?: (texto: string) => void }) {
+export default function EtapaConstrucao({ site, onIrPara, onPedirAoDiretor }: { site: LinhaDoSite; onIrPara?: (etapa: string) => void; onPedirAoDiretor?: (texto: string) => void }) {
   const { clientId, catalogo, atualizarCusto } = useMesa();
   const { marca } = useMarcaDaMesa();
   const qc = useQueryClient();
   const avisarErro = useAvisarErro();
   const salvarSite = useSalvarSite(clientId, marca ? marca.id : null);
   const trabalhosQ = useTrabalhos(clientId, site.id);
-  const trabalhos = trabalhosQ.data ? trabalhosQ.data.trabalhos : [];
+  // SPV: levar a edição da prévia ao site do motor é máquina e fica no histórico da prévia, não na lista de
+  // trabalhos. A prévia e o estado do motor veem também o último "conteudo" (estado e prévia do motor).
+  const todos = useMemo(() => comAEdicaoDaPrevia(trabalhosQ.data), [trabalhosQ.data]);
+  const trabalhos = useMemo(() => (trabalhosQ.data ? trabalhosDeCodigo(trabalhosQ.data.trabalhos) : []), [trabalhosQ.data]);
   const feitas = secoesConstruidas(trabalhos);
   // SIT2: as seções saem do mapa (páginas na ordem, topo e rodapé globais); site antigo, da direção.
   const secoesDoSite: string[] = site.mapa && Array.isArray((site.mapa as any).paginas) && (site.mapa as any).paginas.length ? secoesDoMapa(mapaDoSite(site)) : Array.isArray(site.direcao.secoes) && site.direcao.secoes.length ? site.direcao.secoes : SECOES_PADRAO.slice();
@@ -103,9 +107,9 @@ export default function EtapaConstrucao({ site, onPedirAoDiretor }: { site: Linh
   const vivo = trabalhosQ.data ? trabalhosQ.data.vivo : false;
   const eventos = useEventos(passoAberto ? selecionado : null, vivo);
   const eventosEmCache = selecionado ? qc.getQueryData<EventoDoMotor[]>(CHAVES.eventos(selecionado.id)) : undefined;
-  const previa = previaAtual(trabalhos);
   const rodando = trabalhos.some((t) => ehAberto(t.estado));
   const executor = trabalhosQ.data ? trabalhosQ.data.executor : null;
+  const estadoDoMotor = useEstadoDoMotor(executor, todos);
   const modeloEscolhido = modelo ? catalogo.find((m) => m.id === modelo) || null : null;
 
   const reler = () => {
@@ -194,7 +198,7 @@ export default function EtapaConstrucao({ site, onPedirAoDiretor }: { site: Linh
     <div className="min-w-0 space-y-6" data-etapa-construcao="">
       <Secao
         titulo="Construir"
-        descricao={vivo ? `Motor ligado${executor && executor.capacidades && executor.capacidades.tunel === false ? " · prévia só local" : ""}` : "Motor desligado: o pedido espera na fila"}
+        descricao={<EstadoDoMotor estado={estadoDoMotor} compacto />}
         ajuda="Uma seção por vez, pela fórmula de 6 blocos, com o método da casa (AGENTS.md do projeto) e as regras de licença do kit de motion. O teto fica reservado na carteira enquanto o trabalho roda; o custo real vem do provedor e só ele sai da carteira. O motor roda no worker da agência (workers/motor-codigo). As seções, o modelo e o teto ficam em Mais opções."
         acao={
           <button ref={botaoConstruir} type="button" aria-label={rotuloDoBotao} className={faltando.length ? botao.primario : botao.secundario} disabled={enviando || !escolhidas.length || !(tetoUsd > 0) || !!estimativa.isError} onClick={() => void construir()} title={!escolhidas.length && !faltando.length ? "Para reconstruir, marque as seções em Mais opções" : undefined} data-construir="">
@@ -238,27 +242,10 @@ export default function EtapaConstrucao({ site, onPedirAoDiretor }: { site: Linh
         </div>
       </Secao>
 
-      <div className="grid min-w-0 grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1fr)_420px]">
-        <Secao
-          titulo="Prévia"
-          descricao={previa ? (previa.preview_url && /trycloudflare|https:/.test(previa.preview_url) ? "Ao vivo" : "Só na máquina da agência") : "Sem prévia ainda"}
-          recolher="mesa-site:construcao:previa"
-          acao={
-            previa && previa.preview_url ? (
-              <a href={previa.preview_url} target="_blank" rel="noopener noreferrer" className={botao.secundario}>
-                <ExternalLink className="mr-1 h-3.5 w-3.5" />
-                Abrir
-              </a>
-            ) : null
-          }
-        >
-          {previa && previa.preview_url ? (
-            <PreviaNosAparelhos url={previa.preview_url} titulo={site.nome} />
-          ) : (
-            <EstadoVazio compacto titulo="A prévia aparece quando o motor começa a construir." />
-          )}
-        </Secao>
+      {/* SPV: a prévia editável ocupa a largura toda; os trabalhos e as versões vêm depois. */}
+      <PreviaEditavel site={site} trabalhos={todos} executor={executor} onIrPara={onIrPara} />
 
+      <div className="min-w-0">
         <Secao titulo="Trabalhos" descricao={rodando ? "Rodando" : `${trabalhos.length}`} recolher="mesa-site:construcao:trabalhos">
           {!trabalhos.length && <EstadoVazio compacto titulo="Nenhum trabalho ainda." />}
           <ul className={juntar(lista.aberta, lista.divisoria)}>

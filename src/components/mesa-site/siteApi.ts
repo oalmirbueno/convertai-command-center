@@ -102,22 +102,45 @@ export function useSalvarSite(clientId: string, marcaId: string | null) {
 
 const ABERTOS = ["na_fila", "executando", "parando"];
 
+/**
+ * Os trabalhos de código (SPV): sem o "conteudo", que é a edição da prévia
+ * levada ao projeto. O servidor já manda assim; o filtro aqui cobre a função
+ * antiga no ar. Construção, Integrações, Revisão e Publicação (e o checklist)
+ * olham só estes: uma edição esperando não é "montagem na fila".
+ */
+export const trabalhosDeCodigo = (lista: TrabalhoDoMotor[]) => lista.filter((t) => t.tipo !== "conteudo");
+
+export type TrabalhosDoSite = { trabalhos: TrabalhoDoMotor[]; conteudo: TrabalhoDoMotor | null; executor: ExecutorDoMotor; vivo: boolean };
+
+/** Os de código mais o último "conteudo", do mais novo ao mais velho: a prévia do motor e o estado do motor leem esta lista. */
+export function comAEdicaoDaPrevia(d: Pick<TrabalhosDoSite, "trabalhos" | "conteudo"> | null | undefined): TrabalhoDoMotor[] {
+  if (!d) return [];
+  if (!d.conteudo) return d.trabalhos;
+  // Entra na posição pela data, sem reordenar o resto (a lista já vem do mais novo ao mais velho).
+  const quando = Date.parse(d.conteudo.criado_em) || 0;
+  const i = d.trabalhos.findIndex((t) => (Date.parse(t.criado_em) || 0) <= quando);
+  const saida = d.trabalhos.slice();
+  saida.splice(i < 0 ? saida.length : i, 0, d.conteudo);
+  return saida;
+}
+
 export function useTrabalhos(clientId: string, siteId: string | null) {
   const q = useQuery({
     queryKey: CHAVES.trabalhos(siteId || "nenhum"),
     enabled: !!siteId,
-    queryFn: async () => {
-      const d = await chamarMotor<{ trabalhos: unknown[]; executor: ExecutorDoMotor; executor_vivo: boolean }>("listar", { client_id: clientId, site_id: siteId });
-      return {
-        trabalhos: (d.trabalhos || []).map(normalizarTrabalho).filter((t): t is TrabalhoDoMotor => !!t),
-        executor: d.executor || null,
-        vivo: !!d.executor_vivo,
-      };
+    queryFn: async (): Promise<TrabalhosDoSite> => {
+      const d = await chamarMotor<{ trabalhos: unknown[]; conteudo?: unknown; executor: ExecutorDoMotor; executor_vivo: boolean }>("listar", { client_id: clientId, site_id: siteId });
+      const todos = (d.trabalhos || []).map(normalizarTrabalho).filter((t): t is TrabalhoDoMotor => !!t);
+      // Função antiga no ar: o "conteudo" ainda vem na lista; o mais novo vira o campo à parte.
+      const conteudo = (d.conteudo ? normalizarTrabalho(d.conteudo) : null) || todos.find((t) => t.tipo === "conteudo") || null;
+      return { trabalhos: trabalhosDeCodigo(todos), conteudo, executor: d.executor || null, vivo: !!d.executor_vivo };
     },
     // Enquanto há trabalho aberto e o motor está ligado, relê de 4 em 4 s (o canal ao vivo acelera).
     // Motor desligado: o pedido só espera na fila; relê de 30 em 30 s (QA 30/09: antes eram 4 s sem fim).
     refetchInterval: (query) => {
-      const d = query.state.data as { trabalhos: TrabalhoDoMotor[]; vivo: boolean } | undefined;
+      const lido = query.state.data as TrabalhosDoSite | undefined;
+      // A edição da prévia esperando (o "conteudo", à parte) também conta como trabalho aberto.
+      const d = lido ? { vivo: lido.vivo, trabalhos: comAEdicaoDaPrevia(lido) } : undefined;
       return d && d.vivo && d.trabalhos.some((t) => ABERTOS.indexOf(t.estado) >= 0) ? 4000 : 30_000;
     },
   });
@@ -258,8 +281,8 @@ export function secoesConstruidas(lista: TrabalhoDoMotor[]): string[] {
 export function usePreviaEmCache(siteId: string | null): string | null {
   const qc = useQueryClient();
   const ler = () => {
-    const d = siteId ? qc.getQueryData<{ trabalhos: TrabalhoDoMotor[] }>(CHAVES.trabalhos(siteId)) : undefined;
-    const p = d && Array.isArray(d.trabalhos) ? previaAtual(d.trabalhos) : null;
+    const d = siteId ? qc.getQueryData<TrabalhosDoSite>(CHAVES.trabalhos(siteId)) : undefined;
+    const p = d && Array.isArray(d.trabalhos) ? previaAtual(comAEdicaoDaPrevia(d)) : null;
     return p ? p.preview_url : null;
   };
   const [url, setUrl] = useState<string | null>(ler);

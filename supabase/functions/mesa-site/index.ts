@@ -27,6 +27,8 @@
  *             integracoes_salvar { site_id, integracoes } · seo_salvar { site_id, seo }
  *             secao_copy_gerar { site_id, secao, modelo_id?, pedido? } · conteudo_editar { site_id, secao?, campos }
  *             versoes_listar · versao_ler { versao_id } · versao_restaurar { versao_id } · imagens_dos_slots_gerar { site_id, maximo?, qualidade?, modelo_id? }
+ * SPV (previa.ts): previa_dados { site_id } · previa_editar { site_id, edicao, confirmar?, instrucao?, teto_usd?, modelo_id? }
+ *             previa_desfazer { site_id, edicao_id } · previa_edicoes { site_id } (prévia editável na construção)
  *
  * Regras: gerar opções e escolher (sem laço de correção); Jev para julgar
  * (DNA, ordem clara, "essa"); o agente nunca promete sem ação; mudança por
@@ -89,6 +91,7 @@ import { ACOES_LONGAS_DA_ESTRUTURA, type ContextoDaEstrutura, estimarDaEstrutura
 import { ehTipoDeSite, mapaDoSite, mapaPadrao, normalizarEstilo, secoesDoMapa, slotsDoMapa, secaoDaBiblioteca, slotsQueOGeradorFaz, tipoDoUid } from "../_shared/site-biblioteca.ts";
 import { custoJev } from "../_shared/ia-motor.ts";
 import { guardarVersao } from "./versoes.ts";
+import { type ContextoDaPrevia, rotasDaPrevia } from "./previa.ts";
 import { ACOES_LONGAS_DA_BASE, baseInicialDoSite, estimarDaBase, rotasDaBase } from "./base-de-design.ts";
 import { itensDaBaseDeDesign, regrasDoMapa } from "../_shared/uiux/base-completa.ts";
 import { anexoDaBaseCitada, blocoDaBaseDeDesign, CAMPO_BASE_CITADA, conhecimentoDaBaseDeDesign, TETO_DO_BLOCO_DO_DIRETOR } from "../_shared/uiux/citar.ts";
@@ -925,8 +928,8 @@ async function agenteHistorico(ch: Chamador, c: Record<string, unknown>) {
   return json({ conversa_id: conversa.id, mensagens, custo_usd: 0 });
 }
 
-/** Trabalho do motor pedido pelo agente: o pacote leva as regras ensinadas e os anexos da conversa. */
-async function trabalhoDoAgente(ch: Chamador, s: LinhaDoSite, pedido: Record<string, unknown>, anexos: Array<{ bucket: string; path: string; nome: string }>) {
+/** O pacote que o worker escreve no projeto: kit da marca, copy, imagens, regras ensinadas e contexto completo. */
+async function pacoteDoMotor(s: LinhaDoSite, anexos: Array<{ bucket: string; path: string; nome: string }> = []): Promise<Record<string, unknown>> {
   const marca = await marcaDoSite(s);
   const { pacote, arquivos } = await montarPacoteDoSite(servico(), s, marca);
   const regras = await regrasDaMesa(servico(), { clientId: s.client_id, mesa: "site", marcaId: s.marca_id });
@@ -934,12 +937,27 @@ async function trabalhoDoAgente(ch: Chamador, s: LinhaDoSite, pedido: Record<str
   const contextoDaMarca = await CONTEXTO_DO_AGENTE.ler(servico(), s.client_id, ["arte", "copy", "geral"], { marca: marca || s.marca_id, partes: ["estrategia", "briefing", "decisoes", "cerebro"], area: "site", teto: 6000 })
     .catch((e) => (registrarFalha("mesa-site: contexto do motor", e), ""));
   const extras = anexos.map((a, i) => ({ bucket: a.bucket, path: a.path, destino: `referencias/anexo-${i + 1}-${a.nome.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 60)}` }));
-  const motor = await modeloDoMotor(servico(), s.modelo);
+  return { ...pacote, arquivos: [...arquivos, ...extras], regras_da_equipe: regras.regras.map((r) => `${r.tipo === "evitar" ? "EVITAR" : "PREFERIR"}: ${r.texto}`), contexto_da_marca: contextoDaMarca || null } as unknown as Record<string, unknown>;
+}
+
+/**
+ * Trabalho do motor pedido pelo agente (ou pela prévia editável, SPV): o
+ * pacote leva as regras ensinadas e os anexos da conversa. `pedido.modelo_id`
+ * troca o modelo só deste trabalho (o salvo no site continua).
+ */
+async function trabalhoDoAgente(ch: Chamador, s: LinhaDoSite, pedido: Record<string, unknown>, anexos: Array<{ bucket: string; path: string; nome: string }>, pacotePronto?: Record<string, unknown>) {
+  // SPV: a prévia já montou o pacote deste mesmo site (não monta duas vezes).
+  const pacote = pacotePronto && !anexos.length ? pacotePronto : await pacoteDoMotor(s, anexos);
+  const { modelo_id: modeloPedido, ...resto } = pedido;
+  // Só construir e ajustar usam modelo: os trabalhos de máquina (revisar, desfazer, conteúdo) não dependem do modelo salvo.
+  const usaModelo = pedido.tipo === "construir" || pedido.tipo === "ajustar";
+  const motor = usaModelo ? await modeloDoMotor(servico(), typeof modeloPedido === "string" && modeloPedido ? modeloPedido : s.modelo) : null;
   const est = estimarTrabalho(motor, pedido.tipo === "construir" ? "construir" : pedido.tipo === "ajustar" ? "ajustar" : "revisar", 1);
   const { trabalho } = await criarTrabalho(servico(), {
     clientId: s.client_id, marcaId: s.marca_id, mesa: "site", projeto: s.projeto, referencia: { tipo: "site", id: s.id },
-    pedidoBruto: { teto_usd: est.teto_sugerido_usd, ...pedido }, modeloId: motor ? motor.id : null,
-    pacote: { ...pacote, arquivos: [...arquivos, ...extras], regras_da_equipe: regras.regras.map((r) => `${r.tipo === "evitar" ? "EVITAR" : "PREFERIR"}: ${r.texto}`), contexto_da_marca: contextoDaMarca || null } as unknown as Record<string, unknown>,
+    pedidoBruto: { teto_usd: est.teto_sugerido_usd, ...resto }, modeloId: motor ? motor.id : null,
+    pacote,
+    pacoteDe: s.pacote_mudou_em || null,
     userId: ch.userId,
   });
   return trabalho;
@@ -1094,6 +1112,14 @@ const ESTRUTURA: ContextoDaEstrutura = {
   },
 };
 
+// ------------------------------------------------------------------ prévia editável (SPV)
+
+const PREVIA: ContextoDaPrevia = {
+  ...ESTRUTURA,
+  pedirTrabalho: (ch, s, pedido, pacote) => trabalhoDoAgente(ch as Chamador, s, pedido, [], pacote),
+  pacoteDoMotor: (s) => pacoteDoMotor(s),
+};
+
 // ------------------------------------------------------------------ rotas
 
 const ACOES: Record<string, (ch: Chamador, c: Record<string, unknown>) => Promise<Response>> = {
@@ -1122,6 +1148,7 @@ const ACOES: Record<string, (ch: Chamador, c: Record<string, unknown>) => Promis
   ...rotasDoAprendizado({ mesa: "site", servico, garantirAcesso: (ch, clientId) => garantirAcesso(ch as Chamador, clientId), json }),
   ...(rotasDaEstrutura(ESTRUTURA) as Record<string, (ch: Chamador, c: Record<string, unknown>) => Promise<Response>>),
   ...(rotasDaBase(ESTRUTURA) as Record<string, (ch: Chamador, c: Record<string, unknown>) => Promise<Response>>),
+  ...(rotasDaPrevia(PREVIA) as Record<string, (ch: Chamador, c: Record<string, unknown>) => Promise<Response>>),
 };
 
 /** IA ou rede: a resposta começa na hora (a plataforma corta em 150 s sem resposta). */
