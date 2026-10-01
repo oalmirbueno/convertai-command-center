@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { ProjetoDeEdicao } from "../../../../supabase/functions/_shared/projeto-de-edicao";
+import { caminhoDaFonteValido, chaveDaFonteDaMarca, type ProjetoDeEdicao } from "../../../../supabase/functions/_shared/projeto-de-edicao";
 
 /**
  * Apoio do editor (frente V-B): URLs assinadas das fontes (uma leitura por
@@ -69,8 +69,13 @@ export function useUrlsDasFontes(projeto: ProjetoDeEdicao, extras: { storage_buc
       if (f.storage_path && f.storage_bucket !== BUCKET_PUBLICO) lista.push({ chave: k, bucket: f.storage_bucket || "mesa", caminho: f.storage_path });
     });
     extras.forEach((x) => x.storage_path && lista.push({ chave: `@${x.storage_path}`, bucket: x.storage_bucket || "mesa", caminho: x.storage_path }));
+    // A letra da marca (arquivo no bucket mesa) entra no mesmo mapa: a composição carrega pela chave "@caminho".
+    const id = projeto.identidade;
+    if (id && id.fonte && id.fonte_path && caminhoDaFonteValido(id.fonte_path) && !lista.some((x) => x.chave === chaveDaFonteDaMarca(id.fonte_path as string))) {
+      lista.push({ chave: chaveDaFonteDaMarca(id.fonte_path), bucket: "mesa", caminho: id.fonte_path });
+    }
     return lista.sort((a, b) => (a.chave < b.chave ? -1 : 1));
-  }, [projeto.fontes, extras]);
+  }, [projeto.fontes, projeto.identidade, extras]);
   // Uma consulta por arquivo (duas fontes no mesmo arquivo dividem a mesma).
   const arquivos = useMemo(() => {
     const vistos: Record<string, true> = {};

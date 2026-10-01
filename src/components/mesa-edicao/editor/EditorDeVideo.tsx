@@ -30,6 +30,12 @@ import PainelTimestamp from "./PainelTimestamp";
 import PainelDeReferencias from "./PainelDeReferencias";
 import AgenteEditor from "./AgenteEditor";
 import Renderizar from "./Renderizar";
+import PainelEditarComIA from "./PainelEditarComIA";
+import { PainelDeCor, PainelDeFormato, PainelDeZoom } from "./PaineisDeImagem";
+import { PainelDeMotion, PainelDeSom, PainelDeTextos } from "./PaineisDeTextoESom";
+import { PainelDeCapitulos, PainelDeExportar } from "./PaineisDeSaida";
+import EstadoDaMaquina from "./EstadoDaMaquina";
+import type { ContextoDoPainel } from "./apoioDosPaineis";
 import { publicarNaPonte, tirarDaPonte } from "./ponteDoAgente";
 
 /**
@@ -49,15 +55,46 @@ import { publicarNaPonte, tirarDaPonte } from "./ponteDoAgente";
  * Ctrl+Shift+Z ou Ctrl+Y refaz; setas andam 1 quadro (Shift: 1 s).
  */
 
-type AbaEsquerda = "midia" | "skills" | "gerar" | "timestamp" | "referencias" | "ajustes";
+type AbaEsquerda =
+  | "ia"
+  | "midia"
+  | "corte"
+  | "textos"
+  | "motion"
+  | "zoom"
+  | "cor"
+  | "formato"
+  | "som"
+  | "capitulos"
+  | "exportar"
+  | "gerar"
+  | "timestamp"
+  | "referencias"
+  | "skills"
+  | "ajustes";
 type AbaDireita = "ajustes" | "agente";
 
-const ABAS_ESQUERDA: { valor: AbaEsquerda; rotulo: string }[] = [
-  { valor: "midia", rotulo: "Mídia" },
-  { valor: "skills", rotulo: "Skills" },
-  { valor: "gerar", rotulo: "Gerar" },
-  { valor: "timestamp", rotulo: "Timestamp" },
-  { valor: "referencias", rotulo: "Referências" },
+/**
+ * Frente EDT, rodada 2 (dono: "o editor só tem transcrição e corte, deixe
+ * completo"): um painel por área, na ordem de quem edita, começando pelo
+ * "Editar com IA". Todas as peças mexem no MESMO projeto e desfazem com Ctrl+Z.
+ */
+const ABAS_ESQUERDA: { valor: AbaEsquerda; rotulo: string; descricao?: string }[] = [
+  { valor: "ia", rotulo: "Editar com IA", descricao: "Uma instrução monta a edição inteira" },
+  { valor: "midia", rotulo: "Mídia", descricao: "Vídeos, imagens e áudios do cliente" },
+  { valor: "corte", rotulo: "Corte", descricao: "Pausas, erros, repetições e ordem" },
+  { valor: "textos", rotulo: "Legendas e textos", descricao: "Legenda da marca, títulos e chamadas" },
+  { valor: "motion", rotulo: "Motion", descricao: "Animações na fala e a logo" },
+  { valor: "zoom", rotulo: "Zoom e efeitos", descricao: "Punch-in, efeitos e transições" },
+  { valor: "cor", rotulo: "Cor", descricao: "Looks, correção e LUT" },
+  { valor: "formato", rotulo: "Formato", descricao: "9:16, 1:1, 16:9 seguindo o rosto" },
+  { valor: "som", rotulo: "Som", descricao: "Música com ducking e efeitos" },
+  { valor: "capitulos", rotulo: "Capítulos e virais", descricao: "Capítulos e cortes curtos" },
+  { valor: "exportar", rotulo: "Exportar", descricao: "Render, formatos, legenda e capítulos" },
+  { valor: "gerar", rotulo: "Gerar", descricao: "Câmera, continuar, transição, B-roll" },
+  { valor: "timestamp", rotulo: "Timestamp", descricao: "Fala palavra por palavra" },
+  { valor: "referencias", rotulo: "Referências", descricao: "Copiar a edição de um vídeo" },
+  { valor: "skills", rotulo: "Skills (todas)" },
 ];
 
 /** Com o agente na lateral da mesa e a janela estreita, os Ajustes viram uma aba da esquerda. */
@@ -109,7 +146,7 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
   const previa = useRef<ControleDaPrevia | null>(null);
   const [selecao, setSelecao] = useState<string[]>([]);
   const [px, setPx] = useEstadoDaTela<number>(`mesa-edicao:editor:zoom:${clientId}`, 40, { validar: (v) => typeof v === "number" && v > 0 });
-  const [aba, setAba] = useEstadoDaTela<AbaEsquerda>(`mesa-edicao:editor:aba:${clientId}`, "midia", { validar: (v) => ABAS_COM_AJUSTES.some((a) => a.valor === v) });
+  const [aba, setAba] = useEstadoDaTela<AbaEsquerda>(`mesa-edicao:editor:aba2:${clientId}`, "ia", { validar: (v) => ABAS_COM_AJUSTES.some((a) => a.valor === v) });
   const [abaDireita, setAbaDireita] = useEstadoDaTela<AbaDireita>(`mesa-edicao:editor:lado:${clientId}`, "ajustes", { validar: (v) => v === "ajustes" || v === "agente" });
   const [geracao, setGeracao] = useState<PedidoDeGeracao>({ tipo: "angulo_gerar", clipe: null });
   const [extras, setExtras] = useState<ItemDaBiblioteca[]>([]);
@@ -299,6 +336,21 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
   };
 
   const apelidos = useMemo(() => apelidosDoProjeto(projeto), [projeto]);
+  const ctx: ContextoDoPainel = {
+    projeto,
+    urls,
+    cursor: relogio.get,
+    selecao,
+    onOps: aplicarOps,
+    controle,
+    versaoId,
+    irPara: (a: string) => ABAS_COM_AJUSTES.some((x) => x.valor === a) && setAba(a as AbaEsquerda),
+    irParaTempo: (s: number) => relogio.set(noQuadro(Math.max(0, s), projeto.fps)),
+    desfazer: () => setH((x) => desfazer(x)),
+    salvarAgora: () => (salvador.current ? salvador.current.agora() : Promise.resolve()),
+    revisao: () => (salvador.current ? salvador.current.revisao() : null),
+    estadoDoSalvamento: () => (salvador.current ? salvador.current.estado() : "salvo"),
+  };
   const contextoDaSkill = { agora: new Date().toISOString(), cenas: cenas || null, selecionados: selecao };
 
   // ---------------------------------------------------------------- partes da tela
@@ -334,7 +386,10 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
           </button>
         )}
       </span>
-      <div className="ml-2 min-w-0 shrink-0">
+      <span className="ml-2 hidden shrink-0 xl:inline-flex">
+        <EstadoDaMaquina compacto />
+      </span>
+      <div className="ml-1 min-w-0 shrink-0">
         <Renderizar
           clientId={clientId}
           versaoId={versaoId}
@@ -369,9 +424,33 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
     </ComCursor>
   );
 
-  const abaVisivel: AbaEsquerda = aba === "ajustes" && !ajustesNaEsquerda ? "midia" : aba;
+  const abaVisivel: AbaEsquerda = aba === "ajustes" && !ajustesNaEsquerda ? "ia" : aba;
+  const contextoDasSkills = { agora: new Date().toISOString(), cenas: cenas || null, selecionados: selecao };
   const painelEsquerdo =
-    abaVisivel === "midia" ? (
+    abaVisivel === "ia" ? (
+      <PainelEditarComIA projeto={projeto} controle={controle} versaoId={versaoId} irPara={ctx.irPara} />
+    ) : abaVisivel === "corte" ? (
+      <div data-painel="corte">
+        <p className="mb-1 text-[14px] font-semibold">Corte</p>
+        <PainelDeSkills projeto={projeto} contexto={contextoDasSkills} controle={controle} ids={["brabo", "cortar_pela_onda", "ficar_com_melhor_tomada", "cortar_silencios", "organizar_por_roteiro", "fechar_buracos", "antes_depois"]} />
+      </div>
+    ) : abaVisivel === "textos" ? (
+      <PainelDeTextos ctx={ctx} />
+    ) : abaVisivel === "motion" ? (
+      <PainelDeMotion ctx={ctx} />
+    ) : abaVisivel === "zoom" ? (
+      <PainelDeZoom ctx={ctx} />
+    ) : abaVisivel === "cor" ? (
+      <PainelDeCor ctx={ctx} />
+    ) : abaVisivel === "formato" ? (
+      <PainelDeFormato ctx={ctx} />
+    ) : abaVisivel === "som" ? (
+      <PainelDeSom ctx={ctx} />
+    ) : abaVisivel === "capitulos" ? (
+      <PainelDeCapitulos ctx={ctx} />
+    ) : abaVisivel === "exportar" ? (
+      <PainelDeExportar ctx={ctx} />
+    ) : abaVisivel === "midia" ? (
       <Biblioteca projeto={projeto} onInserir={(i, onde) => inserir(i, onde)} onVirarClipe={virarClipe} />
     ) : abaVisivel === "skills" ? (
       <PainelDeSkills projeto={projeto} contexto={contextoDaSkill} controle={controle} />
@@ -433,6 +512,7 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
           </ul>
         </div>
         <p className={texto.auxiliar}>{agenteNaLateral ? "Linha do tempo e câmera abrem no computador. O agente editor fica no botão de baixo." : "Linha do tempo, câmera e agente abrem no computador."}</p>
+        <PainelEditarComIA projeto={projeto} controle={controle} versaoId={versaoId} />
         <PainelDeSkills projeto={projeto} contexto={contextoDaSkill} controle={controle} />
         {janelaDeComparar}
       </div>

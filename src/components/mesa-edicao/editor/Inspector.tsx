@@ -16,13 +16,16 @@ import {
 import { acharClipe, emOrdem, fimDoClipe, type Operacao } from "@/lib/editor/operacoes";
 import { apelidosDoProjeto, rotuloDoClipe } from "@/lib/editor/apelidos";
 import { segundosDoTexto, tempoFino } from "@/lib/editor/tempo";
+import { EFEITOS_DE_AJUSTE, MODOS_DE_ZOOM, ROTULO_DO_EFEITO, efeitoDoClipe } from "@/lib/editor/efeitos";
+import { LOOKS } from "@/lib/editor/cor";
+import { FONTES_DE_TEXTO, POSICOES_DE_TEXTO, PRESETS_DE_LEGENDA, PRESETS_DE_TEXTO } from "@/lib/editor/estilosDeTexto";
 
 /**
  * Propriedades do clipe escolhido (frente V-B). Cada campo grava ao sair do
  * campo ou no Enter (um passo no desfazer por mudança, não por tecla).
  */
 
-const ROTULO_DA_TRANSICAO: Record<TipoDeTransicao, string> = { corte: "Corte seco", fade: "Fade", dissolver: "Dissolver", deslizar: "Deslizar", zoom: "Zoom" };
+export const ROTULO_DA_TRANSICAO: Record<TipoDeTransicao, string> = { corte: "Corte seco", fade: "Fade", dissolver: "Dissolver", deslizar: "Deslizar", zoom: "Zoom", flash: "Flash", whip: "Chicote (whip)", desfoque: "Desfoque" };
 const VELOCIDADES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 
 function CampoDeTempo({ rotulo, valor, onMudar, desativado }: { rotulo: string; valor: number; onMudar: (s: number) => void; desativado?: boolean }) {
@@ -263,10 +266,183 @@ export default function Inspector({
           </div>
         </div>
       )}
+      {trilha.tipo === "ajuste" && <AjusteDoEfeito c={c} mudar={mudar} />}
+      {temTexto && <EstiloDoTexto c={c} legenda={trilha.tipo === "legenda"} mudar={mudar} letraDaMarca={projeto.identidade && projeto.identidade.fonte ? projeto.identidade.fonte : null} />}
+      {trilha.tipo === "video" && fonte && fonte.midia !== "audio" && <FocoDoRecorte c={c} mudar={mudar} temRosto={!!(projeto.rostos || {})[fonte.chave]} />}
       <label className="block">
         <span className={texto.rotulo}>Nota</span>
         <input className={juntar(campo, "mt-1 h-8")} defaultValue={c.nota || ""} key={`${c.id}:nota:${c.nota}`} maxLength={300} onBlur={(e) => e.target.value !== (c.nota || "") && mudar({ nota: e.target.value || null }, "Nota de")} />
       </label>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- frente EDT, rodada 2
+
+type Mudar = (campos: Partial<ClipeDoProjeto>, rotulo: string) => void;
+const estiloDe = (c: ClipeDoProjeto) => (c.estilo || {}) as Record<string, unknown>;
+
+/** Deslizante que grava ao soltar (um passo do desfazer por mudança). */
+function DeslizanteDoClipe({ id, rotulo, valor, min, max, passo, onSoltar }: { id: string; rotulo: string; valor: number; min: number; max: number; passo: number; onSoltar: (v: number) => void }) {
+  const soltar = (ev: { target: EventTarget }) => onSoltar(Number((ev.target as HTMLInputElement).value));
+  return <input type="range" min={min} max={max} step={passo} defaultValue={valor} key={`${id}:${valor}`} className="mt-2 w-full" onMouseUp={soltar} onKeyUp={soltar} onTouchEnd={soltar} aria-label={rotulo} />;
+}
+
+/** Efeito da camada de ajuste: qual efeito e os números dele. */
+function AjusteDoEfeito({ c, mudar }: { c: ClipeDoProjeto; mudar: Mudar }) {
+  const e = efeitoDoClipe(c);
+  const efeito = e ? e.efeito : "zoom";
+  const params = e ? e.params : {};
+  const mudarParams = (novos: Record<string, unknown>, rotulo: string) => mudar({ estilo: { ...estiloDe(c), efeito, params: { ...params, ...novos } } }, rotulo);
+  const escala = Number(params.escala || 1.15);
+  const forca = Number(params.forca !== undefined ? params.forca : 0.5);
+  return (
+    <div className="space-y-2 border-t border-border pt-3" data-ajuste-do-efeito={efeito}>
+      <Linha>
+        <label className="block min-w-0">
+          <span className={texto.rotulo}>Efeito</span>
+          <select className={juntar(campo, "mt-1 h-8")} value={efeito} onChange={(ev) => mudar({ estilo: { ...estiloDe(c), efeito: ev.target.value, params: ev.target.value === "cor" ? { look: "pb" } : {} } }, "Efeito de")}>
+            {EFEITOS_DE_AJUSTE.map((x) => (
+              <option key={x} value={x}>
+                {ROTULO_DO_EFEITO[x]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {efeito === "zoom" ? (
+          <label className="block min-w-0">
+            <span className={texto.rotulo}>Movimento</span>
+            <select className={juntar(campo, "mt-1 h-8")} value={String(params.modo || "punch")} onChange={(ev) => mudarParams({ modo: ev.target.value, entrada_s: ev.target.value === "punch" ? 0.12 : 0 }, "Zoom de")}>
+              {MODOS_DE_ZOOM.map((x) => (
+                <option key={x.valor} value={x.valor}>
+                  {x.rotulo}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : efeito === "cor" ? (
+          <label className="block min-w-0">
+            <span className={texto.rotulo}>Look do trecho</span>
+            <select className={juntar(campo, "mt-1 h-8")} value={String(params.look || "natural")} onChange={(ev) => mudarParams({ look: ev.target.value }, "Cor de")}>
+              {LOOKS.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.rotulo}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <span />
+        )}
+      </Linha>
+      {efeito === "zoom" && (
+        <label className="block">
+          <span className={texto.rotulo}>Escala {escala.toFixed(2).replace(".", ",")}x</span>
+          <DeslizanteDoClipe id={`${c.id}:escala`} rotulo="Escala do zoom" valor={escala} min={1} max={2} passo={0.01} onSoltar={(v) => mudarParams({ escala: v }, "Escala de")} />
+        </label>
+      )}
+      {(efeito === "tremor" || efeito === "flash" || efeito === "desfoque") && (
+        <label className="block">
+          <span className={texto.rotulo}>Força {Math.round(forca * 100)}%</span>
+          <DeslizanteDoClipe id={`${c.id}:forca`} rotulo="Força do efeito" valor={forca} min={0} max={1} passo={0.05} onSoltar={(v) => mudarParams({ forca: v }, "Força de")} />
+        </label>
+      )}
+    </div>
+  );
+}
+
+/** Estilo do texto ou da legenda (catálogo da casa, posição, cor e letra). */
+function EstiloDoTexto({ c, legenda, mudar, letraDaMarca }: { c: ClipeDoProjeto; legenda: boolean; mudar: Mudar; letraDaMarca?: string | null }) {
+  const e = estiloDe(c);
+  const presets = legenda ? PRESETS_DE_LEGENDA : PRESETS_DE_TEXTO;
+  const preset = String(e.preset || (legenda ? "destaque" : "simples"));
+  const cor = /^#[0-9a-fA-F]{6}$/.test(String(e.cor || "")) ? String(e.cor) : "";
+  const sem = (k: string) => {
+    const copia = { ...e };
+    delete copia[k];
+    return copia;
+  };
+  return (
+    <div className="space-y-2 border-t border-border pt-3">
+      <Linha>
+        <label className="block min-w-0">
+          <span className={texto.rotulo}>Estilo</span>
+          <select className={juntar(campo, "mt-1 h-8")} value={preset} onChange={(ev) => mudar({ estilo: { ...e, preset: ev.target.value } }, "Estilo de")}>
+            {presets.map((x) => (
+              <option key={x.valor} value={x.valor} title={x.quando}>
+                {x.rotulo}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block min-w-0">
+          <span className={texto.rotulo}>Onde</span>
+          <select className={juntar(campo, "mt-1 h-8")} value={String(e.posicao || (legenda ? "auto" : "meio"))} onChange={(ev) => mudar({ estilo: { ...e, posicao: ev.target.value } }, "Posição de")}>
+            {POSICOES_DE_TEXTO.map((x) => (
+              <option key={x.valor} value={x.valor}>
+                {x.rotulo}
+              </option>
+            ))}
+          </select>
+        </label>
+      </Linha>
+      <Linha>
+        <label className="block min-w-0">
+          <span className={texto.rotulo}>Cor de destaque</span>
+          <input type="color" className={juntar(campo, "mt-1 h-8 p-1")} value={cor || "#00ff66"} onChange={(ev) => mudar({ estilo: { ...e, cor: ev.target.value } }, "Cor de")} aria-label="Cor de destaque" />
+        </label>
+        <label className="block min-w-0">
+          <span className={texto.rotulo}>Letra</span>
+          <select className={juntar(campo, "mt-1 h-8")} value={String(e.fonte || "")} onChange={(ev) => mudar({ estilo: ev.target.value ? { ...e, fonte: ev.target.value } : sem("fonte") }, "Letra de")}>
+            <option value="">{letraDaMarca ? `Da marca (${letraDaMarca})` : "Do estilo"}</option>
+            {FONTES_DE_TEXTO.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+        </label>
+      </Linha>
+      {cor && (
+        <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} onClick={() => mudar({ estilo: sem("cor") }, "Cor da marca em")}>
+          Voltar à cor da marca
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Foco manual do recorte (vence o rosto rastreado neste clipe). */
+function FocoDoRecorte({ c, mudar, temRosto }: { c: ClipeDoProjeto; mudar: Mudar; temRosto: boolean }) {
+  const e = estiloDe(c);
+  const manual = e.foco_x !== undefined && e.foco_x !== null;
+  const fx = manual ? Number(e.foco_x) : 0.5;
+  const fy = manual ? Number(e.foco_y) : 0.4;
+  const gravar = (x: number, y: number) => mudar({ estilo: { ...e, foco_x: Math.round(x * 1000) / 1000, foco_y: Math.round(y * 1000) / 1000 } }, "Foco de");
+  const automatico = () => {
+    const copia = { ...e };
+    delete copia.foco_x;
+    delete copia.foco_y;
+    mudar({ estilo: Object.keys(copia).length ? copia : null }, "Foco automático em");
+  };
+  return (
+    <div className="space-y-2 border-t border-border pt-3">
+      <p className={texto.rotulo}>Foco do recorte: {manual ? "manual" : temRosto ? "segue o rosto" : "centro"}</p>
+      <Linha>
+        <label className="block min-w-0">
+          <span className={texto.auxiliar}>Horizontal {Math.round(fx * 100)}%</span>
+          <DeslizanteDoClipe id={`${c.id}:fx`} rotulo="Foco horizontal" valor={fx} min={0} max={1} passo={0.01} onSoltar={(v) => gravar(v, fy)} />
+        </label>
+        <label className="block min-w-0">
+          <span className={texto.auxiliar}>Vertical {Math.round(fy * 100)}%</span>
+          <DeslizanteDoClipe id={`${c.id}:fy`} rotulo="Foco vertical" valor={fy} min={0} max={1} passo={0.01} onSoltar={(v) => gravar(fx, v)} />
+        </label>
+      </Linha>
+      {manual && (
+        <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} onClick={automatico}>
+          {temRosto ? "Voltar a seguir o rosto" : "Voltar ao centro"}
+        </button>
+      )}
     </div>
   );
 }

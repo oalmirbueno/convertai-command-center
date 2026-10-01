@@ -4,7 +4,7 @@ import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { botao, campo, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
 import type { ProjetoDeEdicao } from "../../../../supabase/functions/_shared/projeto-de-edicao";
-import { parametrosComPadrao, proporSkill, SKILLS_DO_EDITOR, type ContextoDaSkill, type PropostaDaSkill, type Skill, type ValorDoParametro } from "@/lib/editor/skills";
+import { parametrosComPadrao, proporSkill, SKILLS_DO_EDITOR, type ContextoDaSkill, type IdDaSkill, type PropostaDaSkill, type Skill, type ValorDoParametro } from "@/lib/editor/skills";
 import { acaoDaProposta, acaoFeita } from "@/lib/editor/cartao";
 import { temFala } from "@/lib/editor/transcricao";
 import type { AcaoDoAgente, RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
@@ -52,7 +52,7 @@ function Parametros({ s, valores, mudar }: { s: Skill; valores: Record<string, V
   );
 }
 
-export default function PainelDeSkills({ projeto, contexto, controle }: { projeto: ProjetoDeEdicao; contexto: ContextoDaSkill; controle: ControleDePropostas }) {
+export default function PainelDeSkills({ projeto, contexto, controle, ids }: { projeto: ProjetoDeEdicao; contexto: ContextoDaSkill; controle: ControleDePropostas; /** Rodada 2: só estas skills (painéis por área). */ ids?: IdDaSkill[] }) {
   const [aberta, setAberta] = useState<string | null>(null);
   const [valores, setValores] = useState<Record<string, Record<string, ValorDoParametro>>>({});
   const [proposta, setProposta] = useState<{ p: PropostaDaSkill; id: string; acao: AcaoDoAgente } | null>(null);
@@ -113,7 +113,7 @@ export default function PainelDeSkills({ projeto, contexto, controle }: { projet
         </div>
       )}
       <ul className="divide-y divide-border">
-        {SKILLS_DO_EDITOR.map((s) => {
+        {SKILLS_DO_EDITOR.filter((s) => !ids || ids.indexOf(s.id) >= 0).map((s) => {
           const aberto = aberta === s.id;
           const vals = parametrosComPadrao(s, valores[s.id]);
           const semFala = s.precisaDeFala && !fala;

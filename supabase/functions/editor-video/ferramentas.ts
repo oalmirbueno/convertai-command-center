@@ -48,7 +48,7 @@ export const FERRAMENTAS_DO_AGENTE: DefinicaoDeFerramenta[] = [
   { nome: "remover", descricao: "Tira um clipe; com ondular, o resto encosta.", argumentos: '{"clipe": "c3", "ondular": boolean}', leitura: false },
   { nome: "recortar", descricao: "Tira um trecho da FONTE de um clipe (tempos da fonte).", argumentos: '{"clipe": "c3", "de_s": number, "ate_s": number}', leitura: false },
   { nome: "ajustar", descricao: "Muda velocidade (0.25 a 4), volume (0 a 2), zoom {de, para} ou nota de um clipe.", argumentos: '{"clipe": "c3", "velocidade"?: number, "volume"?: number, "zoom"?: {"de": number, "para": number} | null, "nota"?: string}', leitura: false },
-  { nome: "inserir_texto", descricao: "Texto na tela (trilha texto) num trecho.", argumentos: '{"inicio_s": number, "duracao_s": number, "texto": string}', leitura: false },
+  { nome: "inserir_texto", descricao: "Texto na tela (trilha texto) num trecho. estilo: simples, titulo, manchete (gancho), tarja, marca_texto, balao, vidro, chamada (botão), nome (\"Nome | cargo\").", argumentos: '{"inicio_s": number, "duracao_s": number, "texto": string, "estilo"?: string}', leitura: false },
   { nome: "reordenar", descricao: "Nova ordem da trilha de vídeo, com todos os apelidos dela.", argumentos: '{"ordem": ["c2", "c1", "c3"]}', leitura: false },
   { nome: "fechar_buracos", descricao: "Encosta os clipes da trilha de vídeo.", argumentos: "{}", leitura: false },
   // AG2 (29/09): música e trilhas. Volume de música/voz é por clipe (ajustar volume); tirar o som ou esconder é da trilha.
@@ -68,7 +68,13 @@ export const FERRAMENTAS_DO_AGENTE: DefinicaoDeFerramenta[] = [
   { nome: "cortar_pela_onda", descricao: "Tira toda pausa acima de 0,25 s pela onda medida e deixa 0,12 s na emenda. Nenhuma palavra sai. Sem onda medida: chame medir_onda.", argumentos: '{"pausa_max_s"?: number, "emenda_s"?: number}', leitura: false },
   { nome: "ficar_com_melhor_tomada", descricao: "Tira falsos começos, frases repetidas e gagueira; fica a última tomada inteira. A lista do que saiu vai no cartão.", argumentos: '{"pausa_s"?: number}', leitura: false },
   { nome: "conferir_corte", descricao: "Confere o corte: respiros acima de 0,25 s, palavra mordida, repetição, clipe curto. Só AVISO: não corrija em laço, conte ao dono.", argumentos: "{}", leitura: true },
-  { nome: "legendar", descricao: "Legenda a fala em blocos de N palavras (padrão 3; o dono pode pedir 1 a 8).", argumentos: '{"palavras_por_vez"?: number, "estilo"?: "destaque"|"caixa"|"simples", "posicao"?: "topo"|"meio"|"base"}', leitura: false },
+  { nome: "legendar", descricao: "Legenda a fala em blocos de N palavras (padrão 3; o dono pode pedir 1 a 8), com a cor da marca. Estilos: destaque, caixa, caixa_palavra, impacto, gigante, pulso, fita, papelaria, discreta, simples. posicao auto desvia do rosto.", argumentos: '{"palavras_por_vez"?: number, "estilo"?: string, "posicao"?: "auto"|"topo"|"meio"|"base"}', leitura: false },
+  // Frente EDT, rodada 2: editor completo.
+  { nome: "formato", descricao: "Reenquadra o vídeo inteiro (9:16, 1:1, 4:5, 16:9); o recorte segue o rosto rastreado (sem rastro: o centro).", argumentos: '{"formato": "9:16"|"1:1"|"4:5"|"16:9", "seguir_rosto"?: boolean}', leitura: false },
+  { nome: "cor", descricao: "Cor do vídeo inteiro: look (natural, vivo, quente, frio, cinema, suave, vintage, noite, pb), intensidade 0 a 1 e ajustes de -1 a 1.", argumentos: '{"look"?: string, "intensidade"?: number, "exposicao"?: number, "contraste"?: number, "saturacao"?: number, "temperatura"?: number, "vinheta"?: number}', leitura: false },
+  { nome: "zoom_momentos", descricao: "Zoom e punch-in nas frases fortes (a força de cada frase é julgada pelo Jev), na camada Câmera e cor.", argumentos: '{"intensidade"?: "suave"|"media"|"forte"}', leitura: false },
+  { nome: "efeito", descricao: "Efeito de câmera num trecho da linha: zoom (modo punch, empurrao ou recuo; escala 1 a 2), tremor, flash, desfoque ou cor do trecho (look).", argumentos: '{"efeito": "zoom"|"tremor"|"flash"|"desfoque"|"cor", "inicio_s": number, "duracao_s": number, "escala"?: number, "modo"?: string, "look"?: string}', leitura: false },
+  { nome: "capitulos", descricao: "Marca os capítulos na régua (o Jev acha onde o assunto muda; o título é um trecho dito).", argumentos: "{}", leitura: false },
   { nome: "animar", descricao: "Põe uma peça de motion na palavra DITA (o tempo sai da fala medida). Peças: rotulo, carimbo, lista, passos, contador, notificacao, polaroide, cartao_final, lettering, barra, preco, comentario, selo. Número, preço e porcentagem só se foram ditos.", argumentos: '{"peca": string, "palavra_ref"?: string, "inicio_s"?: number, "duracao_s"?: number, "params": object}', leitura: false },
   { nome: "sugerir_animacoes", descricao: "Acha na fala os momentos que pedem animação e escolhe a peça de cada um (julgamento pelo Jev). Põe as peças na linha do tempo.", argumentos: '{"densidade"?: "poucas"|"medias"}', leitura: false },
   { nome: "sons", descricao: "Efeitos sonoros CC0 no pico de cada animação (0,65 s entre eles). Refaz os que já estavam.", argumentos: '{"modo"?: "casados"|"poucos"}', leitura: false },
@@ -84,7 +90,7 @@ export const FERRAMENTAS_DO_AGENTE: DefinicaoDeFerramenta[] = [
 export const FERRAMENTAS_DE_SAIDA = ["exportar", "renderizar", "gerar_broll", "gerar_elemento"];
 
 /** Frente EDT: ferramentas que a tela roda chamando o servidor (sem custo para o cliente) dentro do laço. */
-export const FERRAMENTAS_DO_SERVIDOR = ["sugerir_animacoes", "medir_onda", "amostra"];
+export const FERRAMENTAS_DO_SERVIDOR = ["sugerir_animacoes", "medir_onda", "amostra", "zoom_momentos", "capitulos"];
 
 export const NOMES_DAS_FERRAMENTAS = FERRAMENTAS_DO_AGENTE.map((f) => f.nome);
 
@@ -226,6 +232,7 @@ export function sistemaDoAgente(): string {
     "Reordenar = reordenar com TODOS os apelidos da trilha de vídeo. Música: volume por clipe (ajustar volume), tirar o som da trilha inteira (trilha muda). Exportar ou renderizar = exportar (vira um cartão com Confirmar; nunca diga que já exportou).",
     "Corte de verdade: tirar pausas/respiros = cortar_pela_onda (sem onda: medir_onda e avise que volta em ~30 s); erros, repetição e falso começo = ficar_com_melhor_tomada; depois de cortar, conferir_corte e CONTE o resultado (é aviso, não refaça em laço).",
     "Legenda padrão: 3 palavras por vez (legendar); o dono muda a quantidade. Animação na palavra dita = animar; momentos pela fala = sugerir_animacoes; som = sons (depois das animações); música = musica; marca = logo e cartao_final.",
+    "Editor completo: formato (9:16, 1:1, 16:9) = formato; cor, look ou LUT = cor; momentos fortes = zoom_momentos; tremor, flash, desfoque ou zoom num trecho = efeito; título, gancho, chamada e nome na tela = inserir_texto com estilo; capítulos = capitulos. Para a edição inteira de uma vez, sugira o painel Editar com IA.",
     "Amostra (8 a 15 s) antes do vídeo inteiro quando o dono quer conferir o estilo. B-roll e elementos gerados são PAGOS: só gerar_broll/gerar_elemento (cartão com custo); nunca diga que gerou.",
     "\"Esse\", \"este corte\", \"o selecionado\" = os clipes em \"Selecionados na tela\"; \"aqui\" = o cursor. \"O segundo clipe\" conta na ordem da trilha de vídeo. \"Todos\" = todos os da trilha de vídeo.",
     "Dúvida real (não dá para saber qual clipe, qual trecho ou o que o dono quer): não mude nada; termine com UMA pergunta curta em resposta e até 4 respostas curtas em opcoes (ex.: [\"c2\", \"c3\"]). Sem dúvida, opcoes vazio.",

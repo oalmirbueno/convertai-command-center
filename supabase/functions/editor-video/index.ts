@@ -45,6 +45,14 @@
  * - animacoes_sugerir (animacoes.ts): o Jev escolhe em quais frases ditas entra animação e qual peça.
  * - elemento_estimar / elemento_gerar (elemento.ts): ícone ou objeto com fundo transparente, pago, custo antes.
  *
+ * Frente EDT, rodada 2 (30/09, editor completo, edicao-com-ia.ts):
+ * - edicao_planejar: o "Editar com IA" (um passo do modelo escolhido, custo antes; o plano é limpo pelo código).
+ * - momentos_avaliar, capitulos_sugerir, broll_escolher: julgamentos do Jev (força das frases, momentos
+ *   virais, capítulos e B-roll do acervo). Sem custo para o cliente.
+ * - rosto_rastrear: onde está o rosto em cada quadro (modelo com imagem; pago, custo antes) para o
+ *   reenquadramento 9:16, 1:1 e 16:9 seguir a pessoa.
+ * - render_pedir aceita `formato` (o mesmo projeto renderizado em outro formato).
+ *
  * Nada aqui grava o projeto: a tela junta o resultado e salva pela mesa-videos
  * (projeto_salvar). Sem travessão.
  */
@@ -103,6 +111,7 @@ import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/
 import { rotasDoRender } from "./render.ts";
 import { rotasDoElemento } from "./elemento.ts";
 import { frasesDoCorpo, sugerirAnimacoes } from "./animacoes.ts";
+import { rotasDaEdicaoComIa } from "./edicao-com-ia.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 const corsHeaders = {
@@ -829,6 +838,19 @@ const ROTAS_DO_ELEMENTO = rotasDoElemento({
   respostaDeErro: (e) => respostaDeErro(e),
 });
 
+const ROTAS_DA_EDICAO = rotasDaEdicaoComIa({
+  servico,
+  garantirAcesso: (ch, clientId) => garantirAcesso(ch as Chamador, clientId),
+  json,
+  erro: (status, codigo, mensagem, extra) => new ErroHttp(status, codigo, mensagem, extra || {}),
+  userId: (ch) => (ch as Chamador).userId,
+  auditar: (ch, ferramenta, input, sucesso) => auditar(ch as Chamador, ferramenta, input, sucesso),
+  folego: (f) => respostaComFolego(f, corsHeaders),
+  respostaDeErro: (e) => respostaDeErro(e),
+  conferirCusto,
+  idDe,
+});
+
 /** Em quais frases ditas entra animação e qual peça (Jev; sem custo para o cliente). */
 async function animacoesSugerir(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id || "");
@@ -877,6 +899,11 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   animacoes_sugerir: animacoesSugerir,
   elemento_estimar: ROTAS_DO_ELEMENTO.elemento_estimar as (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>,
   elemento_gerar: ROTAS_DO_ELEMENTO.elemento_gerar as (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>,
+  edicao_planejar: ROTAS_DA_EDICAO.edicao_planejar as (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>,
+  momentos_avaliar: ROTAS_DA_EDICAO.momentos_avaliar as (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>,
+  capitulos_sugerir: ROTAS_DA_EDICAO.capitulos_sugerir as (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>,
+  broll_escolher: ROTAS_DA_EDICAO.broll_escolher as (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>,
+  rosto_rastrear: ROTAS_DA_EDICAO.rosto_rastrear as (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>,
 };
 
 Deno.serve(async (req) => {

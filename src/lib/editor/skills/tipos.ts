@@ -21,7 +21,11 @@ export type IdDaSkill =
   | "transicoes_suaves"
   | "cortar_pela_onda"
   | "ficar_com_melhor_tomada"
-  | "efeitos_sonoros";
+  | "efeitos_sonoros"
+  | "reenquadrar"
+  | "cor"
+  | "zoom_nos_momentos"
+  | "editar_com_ia";
 
 export interface CenaDoRoteiro {
   ref: string;

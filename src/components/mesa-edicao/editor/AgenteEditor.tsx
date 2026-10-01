@@ -42,6 +42,10 @@ import { janelaDaAmostra } from "../../../../supabase/functions/_shared/render-d
 import MensagemPadrao, { estilosLigados, lerMensagensPadrao, TIPO_DO_PADRAO, type MensagemPadraoDoEditor } from "./MensagemPadrao";
 import type { ControleDePropostas } from "./PainelDeSkills";
 import { pegarPedidoPendente, temPedidoPendente } from "./ponteDoAgente";
+import { Montador } from "@/lib/editor/skills/tipos";
+import { capitulosEm, frasesDoProjeto, notasPorRegra, zoomNosMomentosEm } from "@/lib/editor/skills/pecasDaEdicao";
+import { comRegraNoResto } from "@/lib/editor/editarComIa";
+import { capitulosEmBlocos, momentosEmBlocos } from "@/lib/editor/julgarEmBlocos";
 
 /**
  * Agente editor (frente V-B; frente Q, 26/09: virou a lateral fixa da etapa
@@ -592,6 +596,30 @@ export default function AgenteEditor({
     if (nome === "amostra") {
       const j = janelaDaAmostra(a.inicio_s, a.fim_s, trab.duracao_s);
       return { ...nada(`Amostra de ${tempoFino(j.inicio_s)} a ${tempoFino(j.fim_s)}: vai para a fila depois de aplicar o que mudou.`), naFila: { tipo: "amostra", pedido_id: "", inicio_s: j.inicio_s, fim_s: j.fim_s } };
+    }
+    // Rodada 2: o Jev julga a força das frases e os capítulos; o código põe no tempo (sem custo para o cliente).
+    if (nome === "zoom_momentos" || nome === "capitulos") {
+      const frases = frasesDoProjeto(trab);
+      if (!frases.length) return nada("Sem fala marcada: não há frase para julgar (Timestamp).", false);
+      const m = new Montador(trab);
+      if (nome === "zoom_momentos") {
+        let notas: { k: string; nota: number }[];
+        let fonte = "Jev";
+        try {
+          const r = await momentosEmBlocos(chamarEditorVideo, { clientId, titulo: trab.titulo, frases, forca: true, virais: false });
+          notas = comRegraNoResto(frases, r.forca);
+          if (r.aviso) fonte = `Jev; ${r.aviso} O resto seguiu a regra da casa`;
+        } catch (e) {
+          console.error("[agente editor] momentos fortes pelo Jev", e);
+          notas = notasPorRegra(frases);
+          fonte = "regra da casa (o Jev não respondeu)";
+        }
+        const n = zoomNosMomentosEm(m, frases, notas, a.intensidade === "suave" || a.intensidade === "forte" ? String(a.intensidade) : "media");
+        return { projeto: m.projeto, operacoes: m.operacoes, texto: n ? `${n} ${n === 1 ? "zoom" : "zooms"} nos momentos fortes (${fonte}).` : "Nenhuma frase forte o bastante.", ok: true };
+      }
+      const r = await capitulosEmBlocos(chamarEditorVideo, { clientId, frases });
+      const n = capitulosEm(m, r.capitulos);
+      return { projeto: m.projeto, operacoes: m.operacoes, texto: `${n ? `${n} ${n === 1 ? "capítulo" : "capítulos"}: ${r.capitulos.map((c) => `${tempoFino(c.inicio_s)} ${c.titulo}`).join("; ")}.` : "Um assunto só: sem capítulos."}${r.aviso ? ` ${r.aviso}` : ""}`, ok: true };
     }
     if (nome === "gerar_broll" || nome === "gerar_elemento") {
       const s = nome === "gerar_broll" ? await estimarBroll(chamarMesaVideos, clientId, trab, a) : await estimarElemento(chamarEditorVideo, clientId, a);

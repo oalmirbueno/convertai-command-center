@@ -9,6 +9,12 @@ import { Montador } from "./skills/tipos";
 import { conferirCorteDoProjeto, textoDaConferencia } from "./skills/corteDeVerdade";
 import { CHAVE_DA_LOGO, pecasDoProjeto, porLogo, porPeca, porTrilha } from "./motion/aplicar";
 import { PECAS_DE_MOTION, type IdDaPeca } from "./motion/catalogo";
+import { presetDaLegendaValido, presetDoTextoValido } from "./estilosDeTexto";
+import { EFEITOS_DE_AJUSTE, clipeDeZoom, type ModoDeZoom } from "./efeitos";
+import { LOOKS } from "./cor";
+import { corEm, NOME_DA_TRILHA_DE_AJUSTE, reenquadrarEm } from "./skills/pecasDaEdicao";
+import { trilhaLivre } from "./motion/aplicar";
+import { FORMATOS_DO_PROJETO, type CorDoProjeto } from "../../../supabase/functions/_shared/projeto-de-edicao";
 
 /**
  * Agente editor, lado da tela (frente V-B). O servidor (editor-video,
@@ -191,7 +197,8 @@ export function executarFerramenta(p: ProjetoDeEdicao, ch: ChamadaDeFerramenta, 
           ops.push(o);
           t = base.trilhas.find((x) => x.tipo === "texto");
         }
-        const ins: Operacao = { op: "inserir", trilha: String(t && t.id), clipe: { inicio_s: num(a.inicio_s), entrada_s: 0, saida_s: num(a.duracao_s), texto: String(a.texto || "").slice(0, 500), origem: { tipo: "manual", ref: "agente" } } };
+        const estilo = a.estilo && presetDoTextoValido(a.estilo) ? { preset: String(a.estilo) } : null;
+        const ins: Operacao = { op: "inserir", trilha: String(t && t.id), clipe: { inicio_s: num(a.inicio_s), entrada_s: 0, saida_s: num(a.duracao_s), texto: String(a.texto || "").slice(0, 500), estilo, origem: { tipo: "manual", ref: "agente" } } };
         const novo = aplicarOperacao(base, ins);
         return { projeto: novo, operacoes: ops.concat([ins]), texto: "Texto inserido.", ok: true };
       }
@@ -236,7 +243,7 @@ export function executarFerramenta(p: ProjetoDeEdicao, ch: ChamadaDeFerramenta, 
         if (ch.ferramenta === "legendar") {
           const n = Number(a.palavras_por_vez);
           if (isFinite(n) && n >= 1) params.palavras_por_bloco = Math.min(8, Math.round(n));
-          if (a.estilo) params.estilo = String(a.estilo);
+          if (a.estilo && presetDaLegendaValido(a.estilo)) params.estilo = String(a.estilo);
           if (a.posicao) params.posicao = String(a.posicao);
         } else {
           Object.keys(a).forEach((k) => {
@@ -247,6 +254,44 @@ export function executarFerramenta(p: ProjetoDeEdicao, ch: ChamadaDeFerramenta, 
         const prop = proporSkill(id, p, { agora }, params);
         if (!prop.operacoes.length) return { projeto: p, operacoes: [], texto: `${prop.titulo}: ${prop.resumo}${prop.avisos.length ? ` ${prop.avisos.join(" ")}` : ""}`, ok: false };
         return { projeto: prop.resultado, operacoes: prop.operacoes, texto: `${prop.titulo}: ${prop.resumo}${prop.avisos.length ? ` ${prop.avisos.join(" ")}` : ""}`, ok: true };
+      }
+      case "formato": {
+        const f = String(a.formato || "");
+        if (!FORMATOS_DO_PROJETO[f]) throw new ErroDaOperacao("Formato precisa ser 9:16, 1:1, 4:5 ou 16:9.");
+        const m = new Montador(p);
+        const mudou = reenquadrarEm(m, f, a.seguir_rosto !== false);
+        const semRosto = !Object.keys(p.rostos || {}).length;
+        return { projeto: m.projeto, operacoes: m.operacoes, texto: mudou ? `Vídeo em ${f}.${semRosto ? " Sem rosto rastreado: o recorte fica no centro (o dono rastreia no painel Formato)." : " O recorte segue o rosto."}` : "Já estava assim.", ok: true };
+      }
+      case "cor": {
+        const campos: Partial<CorDoProjeto> = {};
+        if (a.look !== undefined) {
+          if (!LOOKS.some((l) => l.id === String(a.look))) throw new ErroDaOperacao(`Look desconhecido: ${String(a.look)}. Looks: ${LOOKS.map((l) => l.id).join(", ")}.`);
+          campos.look = String(a.look);
+        }
+        (["intensidade", "exposicao", "contraste", "saturacao", "temperatura", "tinta", "vinheta"] as const).forEach((k) => {
+          if (a[k] === undefined) return;
+          const v = num(a[k]);
+          if (isNaN(v)) return;
+          (campos as Record<string, number>)[k] = Math.max(k === "intensidade" || k === "vinheta" ? 0 : -1, Math.min(1, v));
+        });
+        const m = new Montador(p);
+        const mudou = corEm(m, campos);
+        return { projeto: m.projeto, operacoes: m.operacoes, texto: mudou ? `Cor: ${Object.keys(campos).join(", ")}.` : "A cor já estava assim.", ok: true };
+      }
+      case "efeito": {
+        const efeito = String(a.efeito || "");
+        if ((EFEITOS_DE_AJUSTE as readonly string[]).indexOf(efeito) < 0) throw new ErroDaOperacao(`Efeito desconhecido: ${efeito || "sem nome"}.`);
+        const ini = Math.max(0, num(a.inicio_s));
+        const d = Math.max(0.2, Math.min(10, isNaN(num(a.duracao_s)) ? 1.5 : num(a.duracao_s)));
+        if (isNaN(ini)) throw new ErroDaOperacao("Diga o tempo (inicio_s) do efeito.");
+        const m = new Montador(p);
+        const trilha = trilhaLivre(m, "ajuste", NOME_DA_TRILHA_DE_AJUSTE, ini, ini + d);
+        if (efeito === "zoom") {
+          const modo = (["punch", "empurrao", "recuo"].indexOf(String(a.modo)) >= 0 ? String(a.modo) : "punch") as ModoDeZoom;
+          m.aplicar({ op: "inserir", trilha, clipe: clipeDeZoom(ini, d, isNaN(num(a.escala)) ? 1.15 : num(a.escala), modo, "agente") });
+        } else m.aplicar({ op: "inserir", trilha, clipe: { inicio_s: ini, entrada_s: 0, saida_s: d, estilo: { efeito, params: efeito === "cor" ? { look: LOOKS.some((l) => l.id === String(a.look)) ? String(a.look) : "pb" } : {} }, origem: { tipo: "skill", ref: "agente" } } });
+        return { projeto: m.projeto, operacoes: m.operacoes, texto: `Efeito ${efeito} em ${tempoFino(ini)} por ${tempoFino(d)}.`, ok: true };
       }
       case "animar": {
         const peca = String(a.peca || "") as IdDaPeca;

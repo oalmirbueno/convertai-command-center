@@ -1,6 +1,7 @@
 import { duracaoDoClipe, ROTULO_DA_TRILHA, type ClipeDoProjeto, type ProjetoDeEdicao } from "../../../supabase/functions/_shared/projeto-de-edicao";
 import { emOrdem, fimDoClipe, type Operacao } from "./operacoes";
 import { tempoFino } from "./tempo";
+import { rotuloDoAjuste } from "./efeitos";
 
 /**
  * Apelidos para o agente (frente V-B; padrão agêntico: nunca id cru). Os
@@ -29,6 +30,10 @@ export function rotuloDoClipe(p: ProjetoDeEdicao, c: ClipeDoProjeto): string {
   const f = c.fonte ? p.fontes[c.fonte] : null;
   if (f) return f.nome;
   if (c.texto) return c.texto.length > 40 ? `${c.texto.slice(0, 39)}…` : c.texto;
+  const ajuste = rotuloDoAjuste(c);
+  if (ajuste) return ajuste;
+  const peca = c.estilo && typeof (c.estilo as Record<string, unknown>).peca === "string" ? String((c.estilo as Record<string, unknown>).peca) : null;
+  if (peca) return `Animação: ${peca.replace("_", " ")}`;
   return "Clipe";
 }
 
@@ -119,6 +124,13 @@ const ROTULO_DA_OPERACAO: Record<Operacao["op"], string> = {
   onda: "Guardar a onda de",
   mixagem: "Ajustar a mixagem",
   registrar_skill: "Registrar",
+  marcadores: "Marcar",
+  remover_marcador: "Tirar marcador",
+  formato: "Trocar o formato para",
+  cor: "Ajustar a cor",
+  rosto: "Guardar o rosto de",
+  enquadramento: "Ajustar o enquadramento",
+  identidade: "Guardar a identidade da marca",
 };
 
 /** Texto de uma operação para a prévia ("Dividir c3 em 0:04,20"). */
@@ -139,7 +151,14 @@ export function rotuloDaOperacao(o: Operacao, p: ProjetoDeEdicao, a: Apelidos = 
       return `Tirar ${nome(o.clipe)}${o.ondular ? " e puxar o resto" : ""}`;
     case "recortar":
       return `Cortar ${tempoFino(o.de_s)} a ${tempoFino(o.ate_s)} da fonte de ${nome(o.clipe)}`;
+    case "marcadores":
+      return `Marcar ${o.lista.length} ${o.tipo === "capitulo" ? (o.lista.length === 1 ? "capítulo" : "capítulos") : o.tipo === "viral" ? (o.lista.length === 1 ? "momento viral" : "momentos virais") : "marcadores"}`;
+    case "formato":
+      return `Trocar o formato para ${o.formato}`;
+    case "cor":
+      return `Ajustar a cor${o.campos.look ? `: look ${o.campos.look}` : ""}${o.campos.lut ? `, LUT ${o.campos.lut.nome}` : ""}`;
     case "inserir":
+      if (o.clipe.estilo && (o.clipe.estilo as Record<string, unknown>).efeito) return `Inserir ${rotuloDoAjuste(o.clipe as ClipeDoProjeto) || "efeito"} em ${tempoFino(o.clipe.inicio_s)} (${trilha(o.trilha)})`;
       return `Inserir ${o.clipe.texto ? `"${String(o.clipe.texto).slice(0, 30)}"` : o.clipe.fonte ? p.fontes[o.clipe.fonte]?.nome || "mídia" : "clipe"} em ${tempoFino(o.clipe.inicio_s)} (${trilha(o.trilha)})`;
     case "propriedades": {
       const k = Object.keys(o.campos || {});

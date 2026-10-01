@@ -18,7 +18,7 @@ import { useTempo, type Relogio } from "./apoio";
  */
 
 export const ALTURA_DA_REGUA = 26;
-const ALTURA: Record<TipoDeTrilha, number> = { video: 56, sobreposicao: 44, texto: 36, legenda: 36, audio: 40 };
+const ALTURA: Record<TipoDeTrilha, number> = { video: 56, sobreposicao: 44, texto: 36, legenda: 36, audio: 40, ajuste: 30 };
 const LARGURA_DO_CABECALHO = 116;
 const IMA_PX = 8;
 export const ZOOM_MIN = 4;
@@ -30,6 +30,7 @@ const COR: Record<TipoDeTrilha, string> = {
   texto: "bg-amber-500/20 border-amber-400/50",
   legenda: "bg-violet-500/20 border-violet-400/50",
   audio: "bg-emerald-500/15 border-emerald-400/40",
+  ajuste: "bg-rose-500/15 border-rose-400/40",
 };
 
 /** Passo das marcas da régua para caber texto (>= 64 px entre marcas). */
@@ -80,7 +81,7 @@ function Cursor({ relogio, px }: { relogio: Relogio; px: number }) {
   return <div className="pointer-events-none absolute bottom-0 top-0 z-20 w-px bg-red-500" style={{ left: LARGURA_DO_CABECALHO + t * px }} data-cursor-da-linha="" />;
 }
 
-function Regua({ px, largura, relogio, marcadores, aoBuscar }: { px: number; largura: number; relogio: Relogio; marcadores: { tempo_s: number; rotulo: string }[]; aoBuscar: (s: number) => void }) {
+function Regua({ px, largura, relogio, marcadores, aoBuscar }: { px: number; largura: number; relogio: Relogio; marcadores: { tempo_s: number; rotulo: string; tipo?: string; fim_s?: number | null }[]; aoBuscar: (s: number) => void }) {
   const passo = passoDaRegua(px);
   const total = largura / px;
   const arrastando = useRef(false);
@@ -132,9 +133,14 @@ function Regua({ px, largura, relogio, marcadores, aoBuscar }: { px: number; lar
         tabIndex={-1}
       >
         {marcasJsx}
-        {marcadores.map((m, k) => (
-          <span key={`m${k}`} title={m.rotulo} className="absolute bottom-0 h-2 w-2 -translate-x-1/2 rotate-45 bg-amber-400" style={{ left: m.tempo_s * px }} />
-        ))}
+        {marcadores.map((m, k) =>
+          // Rodada 2: capítulo em azul, momento viral em rosa (com a faixa até o fim do trecho), marcador em âmbar.
+          m.tipo === "viral" && m.fim_s ? (
+            <span key={`m${k}`} title={m.rotulo} className="absolute bottom-0 h-1 rounded-sm bg-rose-500/80" style={{ left: m.tempo_s * px, width: Math.max(2, (m.fim_s - m.tempo_s) * px) }} />
+          ) : (
+            <span key={`m${k}`} title={m.rotulo} className={juntar("absolute bottom-0 h-2 w-2 -translate-x-1/2 rotate-45", m.tipo === "capitulo" ? "bg-sky-400" : "bg-amber-400")} style={{ left: m.tempo_s * px }} />
+          ),
+        )}
       </div>
     </div>
   );

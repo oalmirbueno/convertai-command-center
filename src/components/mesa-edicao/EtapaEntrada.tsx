@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Copy, Film, Loader2, Music, Play, Star, Subtitles, Upload } from "lucide-react";
+import { copiarTexto as copiarParaAArea } from "@/components/mesa/estudioUtil";
 import { toast } from "sonner";
 import { useMesa, useUrlDaMesa } from "@/components/mesa/MesaContexto";
 import { textoDoErro, usd } from "@/lib/mesa/api";
@@ -87,11 +88,7 @@ export function LinhaDoArquivo({ arquivo, aberto, onAbrir }: { arquivo: ArquivoD
 }
 
 function copiarTexto(t: string) {
-  try {
-    void navigator.clipboard.writeText(t).then(() => toast.success("Copiado"));
-  } catch {
-    toast.error("Não deu para copiar aqui.");
-  }
+  void copiarParaAArea(t).then((ok) => (ok ? toast.success("Copiado") : toast.error("Não deu para copiar aqui.")));
 }
 
 /**

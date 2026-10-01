@@ -1,10 +1,14 @@
 import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { AbsoluteFill, getRemotionEnvironment, Html5Audio, Html5Video, Img, interpolate, OffthreadVideo, Sequence, staticFile, useCurrentFrame } from "remotion";
-import { duracaoDoClipe, mixagemPadrao, type ClipeDoProjeto, type ProjetoDeEdicao, type TrilhaDoProjeto } from "../../../../supabase/functions/_shared/projeto-de-edicao";
+import { chaveDaFonteDaMarca, corPadrao, duracaoDoClipe, enquadramentoPadrao, mixagemPadrao, type ClipeDoProjeto, type CorDoProjeto, type ProjetoDeEdicao, type TrilhaDoProjeto } from "../../../../supabase/functions/_shared/projeto-de-edicao";
 import { dbParaGanho, ganhoDaTrilhaDb, MIXAGEM_PADRAO, subidaDaTrilhaDb, trechosDeFala } from "../../../../supabase/functions/mesa-motion/modulos/som-do-editor";
 import { falaNaLinhaDoTempo } from "../../../lib/editor/transcricao";
 import { definicaoDaPeca, parametrosDaPeca, type IdDaPeca, type ParametrosDaPeca } from "../../../lib/editor/motion/catalogo";
-import { CarregarFontes, PecaDeMotion } from "./motion/Pecas";
+import { CarregarFonteDaMarca, CarregarFontes, PecaDeMotion } from "./motion/Pecas";
+import { filtroDaCor, type FiltroDaCor } from "../../../lib/editor/cor";
+import { cameraNoTempo } from "../../../lib/editor/efeitos";
+import { recortePara, rostoNoTempo } from "../../../lib/editor/reenquadre";
+import TextoNaTela from "./TextoNaTela";
 
 /**
  * Composição Remotion gerada do projeto de edição (frente V-B). A MESMA
@@ -39,7 +43,6 @@ export function resolverUrl(u: string | null | undefined): string | null {
 
 export const urlPublica = (caminho: string, publico: "painel" | "estatico") => (publico === "estatico" ? staticFile(caminho) : `/${caminho}`);
 
-const VERDE = "#00FF66";
 const q = (s: number, fps: number) => Math.round(s * fps);
 
 function estiloNum(c: ClipeDoProjeto, k: string, padrao: number): number {
@@ -52,9 +55,11 @@ const estiloTxt = (c: ClipeDoProjeto, k: string, padrao: string) => {
 };
 
 /** Opacidade, deslocamento e escala de entrada/saída + zoom do clipe, no quadro local. */
-function movimento(c: ClipeDoProjeto, frame: number, dur: number, fps: number): CSSProperties {
+function movimento(c: ClipeDoProjeto, frame: number, dur: number, fps: number): CSSProperties & { flash?: number } {
   let opacidade = 1;
   let x = 0;
+  let desfoque = 0;
+  let flash = 0;
   let escala = c.zoom ? interpolate(frame, [0, Math.max(1, dur - 1)], [c.zoom.de, c.zoom.para], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) : 1;
   const ent = c.transicao_entrada;
   if (ent && ent.tipo !== "corte") {
@@ -63,6 +68,13 @@ function movimento(c: ClipeDoProjeto, frame: number, dur: number, fps: number): 
     if (ent.tipo === "fade" || ent.tipo === "dissolver") opacidade *= t;
     if (ent.tipo === "deslizar") x += (1 - t) * 100;
     if (ent.tipo === "zoom") escala *= 1 + (1 - t) * 0.2;
+    // Rodada 2: flash (clarão que some), whip (chicote com borrão) e desfoque.
+    if (ent.tipo === "flash") flash = Math.max(flash, 1 - t);
+    if (ent.tipo === "whip") {
+      x += (1 - t) * 60;
+      desfoque = Math.max(desfoque, (1 - t) * 24);
+    }
+    if (ent.tipo === "desfoque") desfoque = Math.max(desfoque, (1 - t) * 30);
   }
   const sai = c.transicao_saida;
   if (sai && sai.tipo !== "corte") {
@@ -71,15 +83,47 @@ function movimento(c: ClipeDoProjeto, frame: number, dur: number, fps: number): 
     if (sai.tipo === "fade" || sai.tipo === "dissolver") opacidade *= t;
     if (sai.tipo === "deslizar") x -= (1 - t) * 100;
     if (sai.tipo === "zoom") escala *= 1 + (1 - t) * 0.2;
+    if (sai.tipo === "flash") flash = Math.max(flash, 1 - t);
+    if (sai.tipo === "whip") {
+      x -= (1 - t) * 60;
+      desfoque = Math.max(desfoque, (1 - t) * 24);
+    }
+    if (sai.tipo === "desfoque") desfoque = Math.max(desfoque, (1 - t) * 30);
   }
-  return { opacity: opacidade, transform: `translateX(${x}%) scale(${escala})`, transformOrigin: "50% 50%" };
+  return { opacity: opacidade, transform: `translateX(${x}%) scale(${escala})`, transformOrigin: "50% 50%", filter: desfoque > 0.3 ? `blur(${Math.round(desfoque)}px)` : undefined, flash };
 }
 
 const cheio: CSSProperties = { position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover" };
 
-function Midia({ projeto, urls, fonte, entrada_s, velocidade, volume, muda, estilo }: { projeto: ProjetoDeEdicao; urls: Record<string, string>; fonte: string | null; entrada_s: number; velocidade: number; volume: number; muda: boolean; estilo?: CSSProperties }) {
+/**
+ * Recorte do vídeo no quadro de saída (rodada 2): foco manual do clipe
+ * (estilo.foco_x/foco_y) ou o rosto rastreado da fonte no tempo DA FONTE.
+ * Sem nenhum dos dois, o centro (como antes).
+ */
+export function recorteDoClipe(projeto: ProjetoDeEdicao, c: ClipeDoProjeto, tFonte: number): { posicao: string | undefined; focoX: number; focoY: number; meiaAltura: number } {
+  const f = c.fonte ? projeto.fontes[c.fonte] : null;
+  if (!f) return { posicao: undefined, focoX: 0.5, focoY: 0.5, meiaAltura: 0 };
+  const e = (c.estilo || {}) as Record<string, unknown>;
+  const fx = Number(e.foco_x);
+  const fy = Number(e.foco_y);
+  let alvo: { x: number; y: number; w: number } | null = isFinite(fx) && isFinite(fy) && e.foco_x !== null && e.foco_y !== null && e.foco_x !== undefined ? { x: fx, y: fy, w: 0 } : null;
+  const enq = projeto.enquadramento || enquadramentoPadrao();
+  if (!alvo && enq.seguir_rosto && projeto.rostos && projeto.rostos[f.chave]) {
+    const r = rostoNoTempo(projeto.rostos[f.chave], tFonte, enq.suavidade);
+    if (r) alvo = { x: r.x, y: r.y, w: r.w };
+  }
+  if (!alvo) return { posicao: undefined, focoX: 0.5, focoY: 0.5, meiaAltura: 0 };
+  const rc = recortePara(f.largura, f.altura, projeto.largura, projeto.altura, alvo.x, alvo.y);
+  // Meia altura do rosto na saída (rosto ~1,3x mais alto que largo), para a zona protegida do texto.
+  const escala = f.largura && f.altura ? Math.max(projeto.largura / f.largura, projeto.altura / f.altura) : 0;
+  const meiaAltura = escala && alvo.w ? Math.min(0.5, (alvo.w * (f.largura as number) * escala * 1.3) / 2 / projeto.altura) : 0;
+  return { posicao: `${Math.round(rc.x * 100) / 100}% ${Math.round(rc.y * 100) / 100}%`, focoX: rc.focoX, focoY: rc.focoY, meiaAltura };
+}
+
+function Midia({ projeto, urls, fonte, entrada_s, velocidade, volume, muda, estilo, posicao }: { projeto: ProjetoDeEdicao; urls: Record<string, string>; fonte: string | null; entrada_s: number; velocidade: number; volume: number; muda: boolean; estilo?: CSSProperties; posicao?: string }) {
   const f = fonte ? projeto.fontes[fonte] : null;
   const url = fonte ? resolverUrl(urls[fonte]) : null;
+  if (posicao) estilo = { ...estilo, objectPosition: posicao };
   if (!f || !url) {
     return (
       <AbsoluteFill style={{ background: "#111", color: "#777", alignItems: "center", justifyContent: "center", fontSize: projeto.largura * 0.03, fontFamily: "Outfit, sans-serif" }}>
@@ -129,12 +173,15 @@ function Rotulo({ lado, children, largura }: { lado: "esq" | "dir"; children: Re
   );
 }
 
-function ClipeVisual({ projeto, urls, trilha, c }: { projeto: ProjetoDeEdicao; urls: Record<string, string>; trilha: TrilhaDoProjeto; c: ClipeDoProjeto }) {
+function ClipeVisual({ projeto, urls, trilha, c, filtroCss }: { projeto: ProjetoDeEdicao; urls: Record<string, string>; trilha: TrilhaDoProjeto; c: ClipeDoProjeto; filtroCss?: string }) {
   const frame = useCurrentFrame();
   const fps = projeto.fps;
   const dur = Math.max(1, q(duracaoDoClipe(c), fps));
-  const mov = movimento(c, frame, dur, fps);
+  const { flash, ...mov } = movimento(c, frame, dur, fps);
+  if (filtroCss) mov.filter = mov.filter ? `${filtroCss} ${mov.filter}` : filtroCss;
   const sobre = trilha.tipo === "sobreposicao";
+  const rec = recorteDoClipe(projeto, c, c.entrada_s + (frame / fps) * c.velocidade);
+  const clarao = flash && flash > 0.001 ? <div style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", background: "#ffffff", opacity: Math.min(1, flash * 1.1) }} /> : null;
   const caixa: CSSProperties = sobre
     ? (() => {
         const esc = estiloNum(c, "escala", 0.4);
@@ -216,58 +263,18 @@ function ClipeVisual({ projeto, urls, trilha, c }: { projeto: ProjetoDeEdicao; u
     );
   }
   return (
-    <div style={{ ...caixa, ...mov }}>
-      <Midia projeto={projeto} urls={urls} fonte={c.fonte} entrada_s={c.entrada_s} velocidade={c.velocidade} volume={c.volume} muda={trilha.muda} />
-    </div>
+    <>
+      <div style={{ ...caixa, ...mov }}>
+        <Midia projeto={projeto} urls={urls} fonte={c.fonte} entrada_s={c.entrada_s} velocidade={c.velocidade} volume={c.volume} muda={trilha.muda} posicao={rec.posicao} />
+      </div>
+      {clarao}
+    </>
   );
 }
 
-function ClipeDeTexto({ projeto, trilha, c }: { projeto: ProjetoDeEdicao; trilha: TrilhaDoProjeto; c: ClipeDoProjeto }) {
+function ClipeDeTexto({ projeto, trilha, c, rosto }: { projeto: ProjetoDeEdicao; trilha: TrilhaDoProjeto; c: ClipeDoProjeto; rosto: { y: number; meia: number } | null }) {
   const frame = useCurrentFrame();
-  const fps = projeto.fps;
-  const dur = Math.max(1, q(duracaoDoClipe(c), fps));
-  const L = projeto.largura;
-  const legenda = trilha.tipo === "legenda";
-  const preset = estiloTxt(c, "preset", legenda ? "destaque" : "simples");
-  const posicao = estiloTxt(c, "posicao", legenda ? "base" : "meio");
-  const topo = posicao === "topo" ? "12%" : posicao === "base" ? "72%" : "45%";
-  const tamanho = estiloNum(c, "tamanho", legenda ? 0.058 : 0.07) * L;
-  const agora = frame / fps;
-  const palavras = legenda && c.estilo && Array.isArray((c.estilo as Record<string, unknown>).palavras) ? ((c.estilo as Record<string, unknown>).palavras as { t: string; i: number; f: number }[]) : null;
-  const mov = movimento(c, frame, dur, fps);
-  const entrada = legenda ? interpolate(frame, [0, 3], [0.92, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) : 1;
-  const caixa = preset === "caixa";
-  return (
-    <div style={{ position: "absolute", left: "7%", right: "7%", top: topo, display: "flex", justifyContent: "center", ...mov }}>
-      <div
-        style={{
-          fontFamily: "Outfit, Inter, sans-serif",
-          fontWeight: 800,
-          fontSize: tamanho,
-          lineHeight: 1.15,
-          textAlign: "center",
-          color: caixa ? "#111" : "#fff",
-          background: caixa ? "#fff" : "transparent",
-          padding: caixa ? `${tamanho * 0.15}px ${tamanho * 0.35}px` : 0,
-          borderRadius: caixa ? tamanho * 0.2 : 0,
-          textShadow: caixa ? "none" : "0 2px 10px rgba(0,0,0,0.65)",
-          transform: `scale(${entrada})`,
-        }}
-      >
-        {palavras && preset !== "simples"
-          ? palavras.map((w, k) => {
-              const falando = agora >= w.i && agora < Math.max(w.f, w.i + 0.08);
-              return (
-                <span key={k} style={{ color: falando ? (caixa ? "#0a7a2f" : VERDE) : undefined }}>
-                  {w.t}
-                  {k < palavras.length - 1 ? " " : ""}
-                </span>
-              );
-            })
-          : c.texto}
-      </div>
-    </div>
-  );
+  return <TextoNaTela projeto={projeto} legenda={trilha.tipo === "legenda"} c={c} frame={frame} rosto={rosto} />;
 }
 
 /**
@@ -320,7 +327,81 @@ function ClipeDePeca({ projeto, urls, c, corDaMarca }: { projeto: ProjetoDeEdica
   return <PecaDeMotion peca={id} params={params} tempos={tempos} desdeS={Number(e._desde_s) || 0} duracaoQuadros={dur} imagem={c.fonte ? resolverUrl(urls[c.fonte]) : null} corDaMarca={corDaMarca} />;
 }
 
-const ORDEM: Record<string, number> = { video: 0, sobreposicao: 1, texto: 2, legenda: 3, audio: 4 };
+const ORDEM: Record<string, number> = { video: 0, sobreposicao: 1, texto: 2, legenda: 3, audio: 4, ajuste: 5 };
+
+/** Filtro SVG de uma cor (rodada 2): LUT aproximada (matriz e curvas, na força escolhida), tom e matriz de cor. */
+function FiltroSvg({ id, f }: { id: string; f: FiltroDaCor }) {
+  return (
+    <filter id={id} colorInterpolationFilters="sRGB" x="0" y="0" width="100%" height="100%">
+      {f.lut && <feColorMatrix type="matrix" in="SourceGraphic" values={f.lut.matriz} result="lutm" />}
+      {f.lut && (
+        <feComponentTransfer in="lutm" result="lutc">
+          <feFuncR type="table" tableValues={f.lut.r} />
+          <feFuncG type="table" tableValues={f.lut.g} />
+          <feFuncB type="table" tableValues={f.lut.b} />
+        </feComponentTransfer>
+      )}
+      {f.lut && <feComposite in="lutc" in2="SourceGraphic" operator="arithmetic" k1={0} k2={f.lut.forca} k3={1 - f.lut.forca} k4={0} result="lut" />}
+      {f.tom && (
+        <feComponentTransfer result="tom">
+          <feFuncR type="table" tableValues={f.tom} />
+          <feFuncG type="table" tableValues={f.tom} />
+          <feFuncB type="table" tableValues={f.tom} />
+        </feComponentTransfer>
+      )}
+      {f.matriz && <feColorMatrix type="matrix" values={f.matriz} />}
+    </filter>
+  );
+}
+
+const idDoFiltro = (chave: string) => `cor-${chave.replace(/[^a-z0-9_-]/gi, "")}`;
+
+/** Onde o rosto está na saída (0 a 1) no tempo t da linha: a legenda "automática" desvia dele. */
+export function rostoNaSaida(projeto: ProjetoDeEdicao, t: number): { x: number; y: number; meia: number } | null {
+  const v = projeto.trilhas.find((x) => x.tipo === "video" && !x.oculta);
+  if (!v || !projeto.rostos) return null;
+  const c = v.clipes.find((x) => t >= x.inicio_s && t < x.inicio_s + duracaoDoClipe(x));
+  if (!c || !c.fonte || !projeto.rostos[c.fonte]) return null;
+  const r = recorteDoClipe(projeto, c, c.entrada_s + (t - c.inicio_s) * c.velocidade);
+  return r.posicao ? { x: r.focoX, y: r.focoY, meia: r.meiaAltura } : null;
+}
+
+/**
+ * Câmera da camada de ajuste (rodada 2): as trilhas de vídeo andam juntas
+ * (zoom, tremor, desfoque) com a origem no rosto, e ganham a cor do projeto
+ * (ou a do trecho). Legenda e texto ficam fora, por cima.
+ */
+function GrupoDeVideo({ projeto, children, corBase, filtroBase }: { projeto: ProjetoDeEdicao; children: ReactNode; corBase: CorDoProjeto; filtroBase: string | null }) {
+  const frame = useCurrentFrame();
+  const t = frame / projeto.fps;
+  const cam = cameraNoTempo(projeto, t, corBase);
+  const rosto = cam.escala !== 1 ? rostoNaSaida(projeto, t) : null;
+  const filtros: string[] = [];
+  const f = cam.cor ? filtroDaCor(cam.cor.cor) : null;
+  if (cam.cor && f && !f.neutro) filtros.push(`url(#${idDoFiltro(cam.cor.id)})`);
+  else if (!cam.cor && filtroBase) filtros.push(filtroBase);
+  if (cam.desfoque > 0) filtros.push(`blur(${Math.round(cam.desfoque * projeto.largura)}px)`);
+  const vinheta = cam.cor && f ? f.vinheta : 0;
+  return (
+    <>
+      <AbsoluteFill
+        style={{
+          transform: `translate(${Math.round(cam.dx * 10000) / 100}%, ${Math.round(cam.dy * 10000) / 100}%) scale(${Math.round(cam.escala * 10000) / 10000})`,
+          transformOrigin: rosto ? `${Math.round(rosto.x * 1000) / 10}% ${Math.round(rosto.y * 1000) / 10}%` : "50% 50%",
+          filter: filtros.length ? filtros.join(" ") : undefined,
+        }}
+      >
+        {children}
+      </AbsoluteFill>
+      {vinheta > 0 && <Vinheta forca={vinheta} />}
+      {cam.flash && <AbsoluteFill style={{ background: cam.flash.cor, opacity: cam.flash.opacidade }} />}
+    </>
+  );
+}
+
+function Vinheta({ forca }: { forca: number }) {
+  return <AbsoluteFill style={{ background: `radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,${Math.round(Math.min(1, forca) * 85) / 100}) 100%)` }} />;
+}
 
 export function ComposicaoDoProjeto({ projeto, urls, publico, mix, cor_da_marca }: PropsDaComposicao) {
   const fps = projeto.fps;
@@ -332,33 +413,78 @@ export function ComposicaoDoProjeto({ projeto, urls, publico, mix, cor_da_marca 
     return trechosDeFala(vozes.reduce((l, t) => l.concat(falaNaLinhaDoTempo(projeto, t.id)), falaNaLinhaDoTempo(projeto)));
   }, [projeto]);
   const ganhos = (mix && mix.ganhos_db) || {};
+  const corBase = projeto.cor || corPadrao();
+  const corDaMarca = (projeto.identidade && projeto.identidade.cor) || cor_da_marca || null;
+  const idDaMarca = projeto.identidade;
+  const letraDaMarca = idDaMarca && idDaMarca.fonte && idDaMarca.fonte_path ? { familia: idDaMarca.fonte, url: resolverUrl(urls[chaveDaFonteDaMarca(idDaMarca.fonte_path)]) } : null;
+  // Filtros de cor: o do projeto e um por clipe "cor" da camada de ajuste (desenhados uma vez).
+  const filtros = useMemo(() => {
+    const lista: { id: string; f: FiltroDaCor }[] = [];
+    const base = filtroDaCor(corBase);
+    if (!base.neutro && (base.lut || base.tom || base.matriz)) lista.push({ id: idDoFiltro("base"), f: base });
+    projeto.trilhas.forEach((t) => {
+      if (t.tipo !== "ajuste") return;
+      t.clipes.forEach((c) => {
+        const e = (c.estilo || {}) as Record<string, unknown>;
+        if (e.efeito !== "cor") return;
+        const cam = cameraNoTempo({ ...projeto, trilhas: [{ ...t, oculta: false, clipes: [c] }] }, c.inicio_s + 1e-3, corBase);
+        if (!cam.cor) return;
+        const f = filtroDaCor(cam.cor.cor);
+        if (!f.neutro && (f.lut || f.tom || f.matriz)) lista.push({ id: idDoFiltro(c.id), f });
+      });
+    });
+    return { lista, base: base.neutro ? null : base };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projeto.cor, projeto.trilhas]);
+  const filtroBase = filtros.lista.some((x) => x.id === idDoFiltro("base")) ? `url(#${idDoFiltro("base")})` : null;
   const trilhas = projeto.trilhas
     .map((t, i) => ({ t, i }))
-    .filter((x) => !x.t.oculta)
+    .filter((x) => !x.t.oculta && x.t.tipo !== "ajuste")
     // Vídeo principal (a primeira trilha de vídeo) embaixo; as outras por cima, na ordem do projeto.
     .sort((a, b) => ORDEM[a.t.tipo] - ORDEM[b.t.tipo] || a.i - b.i);
-  return (
-    <AbsoluteFill style={{ background: "#000", overflow: "hidden" }}>
-      <CarregarFontes url={(c) => urlPublica(c, origem)} />
-      {trilhas.map(({ t }) =>
+  const camada = (tipos: string[]) =>
+    trilhas
+      .filter(({ t }) => tipos.indexOf(t.tipo) >= 0)
+      .map(({ t }) =>
         t.clipes.map((c) => {
           const de = q(c.inicio_s, fps);
           const d = Math.max(1, q(duracaoDoClipe(c), fps));
+          const peca = c.estilo && typeof (c.estilo as Record<string, unknown>).peca === "string";
           return (
             <Sequence key={`${t.id}:${c.id}`} from={de} durationInFrames={d} layout="none" name={`${t.nome} ${c.id}`}>
-              {c.estilo && typeof (c.estilo as Record<string, unknown>).peca === "string" && t.tipo !== "audio" && t.tipo !== "video" ? (
-                <ClipeDePeca projeto={projeto} urls={urls} c={c} corDaMarca={cor_da_marca || null} />
+              {peca && t.tipo !== "audio" && t.tipo !== "video" ? (
+                <ClipeDePeca projeto={projeto} urls={urls} c={c} corDaMarca={corDaMarca} />
               ) : t.tipo === "video" || t.tipo === "sobreposicao" ? (
-                <ClipeVisual projeto={projeto} urls={urls} trilha={t} c={c} />
+                <ClipeVisual projeto={projeto} urls={urls} trilha={t} c={c} filtroCss={t.tipo === "sobreposicao" && c.fonte && projeto.fontes[c.fonte] && projeto.fontes[c.fonte].midia !== "imagem" ? filtroBase || undefined : undefined} />
               ) : t.tipo === "audio" ? (
                 <ClipeDeAudio projeto={projeto} urls={urls} trilha={t} c={c} fala={fala} ganhoMedidoDb={typeof ganhos[c.id] === "number" ? ganhos[c.id] : null} />
               ) : (
-                <ClipeDeTexto projeto={projeto} trilha={t} c={c} />
+                <ClipeDeTexto projeto={projeto} trilha={t} c={c} rosto={rostoNaSaida(projeto, c.inicio_s + duracaoDoClipe(c) / 2)} />
               )}
             </Sequence>
           );
         }),
+      );
+  return (
+    <AbsoluteFill style={{ background: "#000", overflow: "hidden" }}>
+      <CarregarFontes url={(c) => urlPublica(c, origem)} />
+      {letraDaMarca && <CarregarFonteDaMarca familia={letraDaMarca.familia} url={letraDaMarca.url} />}
+      {filtros.lista.length > 0 && (
+        <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
+          <defs>
+            {filtros.lista.map((x) => (
+              <FiltroSvg key={x.id} id={x.id} f={x.f} />
+            ))}
+          </defs>
+        </svg>
       )}
+      <GrupoDeVideo projeto={projeto} corBase={corBase} filtroBase={filtroBase}>
+        {camada(["video"])}
+      </GrupoDeVideo>
+      {camada(["sobreposicao"])}
+      {filtros.base && filtros.base.vinheta > 0 && <Vinheta forca={filtros.base.vinheta} />}
+      {camada(["texto", "legenda"])}
+      {camada(["audio"])}
     </AbsoluteFill>
   );
 }

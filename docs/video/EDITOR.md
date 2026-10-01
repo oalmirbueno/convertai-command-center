@@ -348,3 +348,119 @@ plano/p3-referencias.md §2.5 (claude-motion-design e product-film-skill, MIT, s
   HyperFrames baixa o Chrome dele na primeira vez) ou `RENDER_HYPERFRAMES` e `RENDER_GSAP` apontando
   para uma instalação já feita. Teste local: `npm run motion-ponta-a-ponta` (PGlite, Storage local,
   OPENROUTER_API_KEY e TYPESAFE_API_KEY só na sessão).
+
+---
+
+## 14. Frente EDT, rodada 2 (30/09/2026): o editor completo
+
+Pedido do dono: "o editor só tem transcrição e corte, melhore isso, deixe completo" e "o motor de
+edição já está pronto, o EDIT IA PRO?". O que o EDIT IA PRO faz na máquina da pessoa (a skill
+comprada, especificação em plano/p2-editor.md) agora está dentro do painel, com código e textos
+nossos e as regras da casa (a IA escolhe; quem mede tempo é o código; nada muda sem Confirmar ou
+sem Ctrl+Z; custo antes; julgamento pelo Jev).
+
+### 14.1 Painéis (coluna da esquerda, na ordem de quem edita)
+
+| Painel | O que faz | Onde |
+|---|---|---|
+| Editar com IA | Uma instrução (ou uma receita: Reels dinâmico, Anúncio com prova, Aula, Depoimento, Podcast em cortes, Institucional) vira um plano (modelo escolhido, custo antes; ou o Plano da casa, grátis). A pessoa liga e desliga peças; "Montar" corta, reenquadra, pede os julgamentos ao Jev e monta tudo numa proposta só (Confirmar e Desfazer). A conversa do editor guarda o pedido e o que saiu. | `editor/PainelEditarComIA.tsx`, `lib/editor/edicaoCompleta.ts`, `lib/editor/editarComIa.ts` |
+| Corte | Brabo, corte pela onda, melhor tomada (erros, repetições, falso começo), silêncios, ordem do roteiro, buracos, antes e depois | skills de antes, filtradas |
+| Legendas e textos | 10 estilos de legenda (palavra acesa, caixa, caixa na palavra, impacto, gigante, pulso, fita, papelaria, discreta, simples) com a cor e a letra da marca; posição "automática" desvia do rosto; 9 estilos de texto (título, manchete de gancho, tarjas, marca-texto, balão, vidro, chamada, nome e cargo, simples) no cursor; trocar o estilo de todas as legendas de uma vez | `editor/PaineisDeTextoESom.tsx`, `lib/editor/estilosDeTexto.ts`, `editor/TextoNaTela.tsx` |
+| Motion | "Sugerir na fala" (o Jev escolhe a peça), as 13 peças no cursor com os campos, logo na abertura, no canto ou no fim | mesmo arquivo |
+| Zoom e efeitos | Zoom nos momentos fortes (força de cada frase pelo Jev; sem ele, a regra da casa, dita na tela), efeito no cursor (zoom punch-in, empurrão ou recuo; tremor; flash; desfoque; cor do trecho), punch-in e transições | `editor/PaineisDeImagem.tsx`, `lib/editor/efeitos.ts` |
+| Cor | 9 looks, força, exposição, contraste, saturação, temperatura, tinta, vinheta, LUT .cube do cliente (1D e 3D) e "cor só neste trecho" | mesmo arquivo, `lib/editor/cor.ts` |
+| Formato | 9:16, 1:1, 4:5, 16:9; seguir o rosto e a suavidade; rastrear o rosto (modelo com imagem, pago, custo antes) | mesmo arquivo, `lib/editor/reenquadre.ts` |
+| Som | Música do projeto ou do acervo como trilha (abaixo da voz, sobe nas pausas, ducking), os controles da mixagem, 20 efeitos CC0 para ouvir e pôr no cursor, efeitos casados às animações | `editor/PaineisDeTextoESom.tsx` |
+| Capítulos e virais | Capítulos (o Jev acha onde o assunto muda e escolhe o título entre trechos DITOS) e momentos virais (janelas de 15 a 60 s com nota); "Criar corte 9:16" vira uma versão nova só com o trecho; copiar capítulos para o YouTube | `editor/PaineisDeSaida.tsx` |
+| Exportar | Estado da máquina de render antes do clique, render em vários formatos de uma vez, amostra de 12 s, legenda .srt e capítulos | mesmo arquivo, `editor/EstadoDaMaquina.tsx` |
+
+Correções do revisor (01/10):
+
+- Plano da casa: a primeira música da Mídia do projeto já vem escolhida, e o plano tem o campo
+  "Música abaixo da voz" (as músicas do projeto ou "Sem música"). Antes, pelo caminho grátis, a
+  música nunca entrava.
+- Julgamentos do vídeo inteiro: força, virais, capítulos e B-roll vão ao Jev em blocos (60
+  frases; 30 no B-roll), um bloco por vez (`lib/editor/julgarEmBlocos.ts`). Os virais repetem o fim
+  do bloco anterior (a janela desliza) e os capítulos julgam a fronteira entre blocos. Um bloco que
+  falha devolve o que já saiu com o aviso "julguei só até mm:ss"; no zoom, o resto segue a regra da
+  casa (dito na tela).
+- Rastreio do rosto: Parar ou um lote que falha (sem crédito, tempo esgotado) não perde o que já
+  foi pago: o rastro fecha com as leituras que vieram e o motivo aparece como aviso.
+- Letra da marca: a fonte de título da marca aberta (`cliente_fontes`, pela regra de herança) vai
+  para `identidade.fonte` e `identidade.fonte_path`; a prévia assina o arquivo, o worker baixa (só
+  da pasta do cliente ou de `biblioteca/fontes/`) e a composição carrega antes do primeiro quadro.
+- Cartão final: legenda e texto não ficam por cima dele (a legenda é aparada no começo do cartão;
+  a chamada vai para logo antes).
+- Exportar: erro ao ler `render_workers` mostra "Não deu para conferir o render" (antes dizia
+  "nunca ligado"); o MP4 entra na Mídia com o formato no nome ("Título (render 1:1)") e em
+  `origem.formato`; o pedido grava sempre o formato efetivo em `entrada.formato`.
+- Custo do plano: a tela soma o teto do método da casa e a função soma o tamanho real, então o
+  conferido nunca passa do mostrado.
+
+Ajustes (coluna da direita) ganhou: efeito do clipe de ajuste (tipo, movimento, escala, força,
+look), estilo do texto e da legenda (estilo, onde, cor, letra) e o foco manual do recorte do clipe
+(vence o rosto rastreado; "voltar a seguir o rosto").
+
+### 14.2 Formato do projeto (tudo opcional, com padrão; projeto antigo abre igual)
+
+- Trilha nova `ajuste` ("Câmera e cor"): clipe sem mídia com `estilo.efeito` (zoom, tremor, flash,
+  desfoque, cor) e `estilo.params`; vale no trecho dele sobre as trilhas de vídeo (legenda e texto
+  ficam fora). É a camada de ajuste do Premiere e do CapCut: arrasta, estica e apaga como clipe.
+- Transições novas: `flash`, `whip` (chicote com borrão) e `desfoque`.
+- `cor` (look, intensidade, exposição, contraste, saturação, temperatura, tinta, vinheta, `lut`
+  com curvas por canal + matriz 3x4 + erro médio), `rostos` (centro e largura do rosto por tempo
+  da fonte), `enquadramento` (seguir o rosto, suavidade), `identidade` (nome, cores e letra da
+  marca, copiados para o render desenhar igual à prévia).
+- Marcadores com `tipo` (marcador, capítulo, viral), `fim_s` e `nota`.
+- Operações novas: `formato`, `cor`, `rosto`, `enquadramento`, `identidade`, `marcadores`
+  (troca a lista de um tipo), `remover_marcador`.
+
+### 14.3 Como a cor, o rosto e o zoom são desenhados
+
+- Cor: um filtro SVG por grade (curvas em `feComponentTransfer`, saturação, temperatura e tinta
+  em `feColorMatrix`, em sRGB), no grupo das trilhas de vídeo e nas sobreposições de mídia. A LUT
+  3D não cabe num filtro: a tela lê o .cube e guarda `curvas(matriz · entrada)` (curvas do eixo
+  cinza, matriz por mínimos quadrados sobre a LUT inteira) e mostra se ficou fiel, próxima ou
+  aproximada. Prévia e render usam o mesmo Chrome e a mesma conta.
+- Rosto: um quadro a cada 1,5 s vai a um modelo com imagem (lotes de 12, custo antes); as
+  leituras são limpas pelo código (pulo de erro sai, falha herda o vizinho) e suavizadas (média
+  móvel pelo tempo + zona morta). O recorte "cover" põe o rosto no meio e a um terço do alto. A
+  CSP do painel não deixa rodar detector de rosto em WebAssembly no navegador; por isso a visão.
+- Zoom: a câmera do grupo de vídeo escala a partir do rosto (ou do centro) no quadro atual; o
+  punch-in entra em 0,12 s e segura; o empurrão anda até a escala.
+
+### 14.4 Função `editor-video` (ações novas, `edicao-com-ia.ts`)
+
+| Ação | O que faz | Custo |
+|---|---|---|
+| `edicao_planejar` | Um passo do modelo escolhido devolve o plano (esquema fechado); o código limpa (opção fora da lista vira a padrão, número não dito sai do texto, música só entre as da Mídia). Leva o método da casa (superpoderes `edicao.agente`). | modelo, custo antes (mesma conta na tela e na função) |
+| `momentos_avaliar` | Jev: Score de 5 níveis por frase (força) e, se pedido, Score + Noul por janela de 15 a 60 s (viral). | sem custo para o cliente |
+| `capitulos_sugerir` | Jev: Noul "começa assunto novo" por fronteira; depois Choice do título entre trechos ditos. | sem custo |
+| `broll_escolher` | Jev: Choice por frase entre os vídeos do acervo (ou nenhum); um vídeo por vez, 6 s entre eles. | sem custo |
+| `rosto_rastrear` | Modelo com imagem: centro e largura do rosto por quadro. | pago, custo antes |
+| `render_pedir` com `formato` | O mesmo projeto renderizado em outro formato (migration `20260930319000`: um ativo por versão, tipo e formato). | sem custo |
+
+O agente editor ganhou `formato`, `cor`, `zoom_momentos`, `efeito`, `capitulos`, `inserir_texto`
+com estilo e os 10 estilos de legenda.
+
+### 14.5 Render e máquina desligada
+
+O render continua no worker da máquina da agência (Remotion, `workers/render`, seção 12.1). A barra
+e o Exportar mostram antes do clique se ele está ligado, desligado ou nunca foi ligado (lê
+`render_workers`), com o passo a passo no "?". Em 30/09 a tabela estava vazia: o worker nunca foi
+ligado em produção; por isso nenhum MP4 saiu do painel até hoje e 5 cenas da Mesa Motion esperam
+na fila. A prévia do navegador funciona sempre.
+
+Prova local (sem banco): `npx vite-node workers/render/testes/editor-completo-ponta-a-ponta.ts` na
+raiz monta a edição inteira pelo Plano da casa a partir de um vídeo 16:9 e renderiza pelo mesmo
+código do worker em 9:16 e numa amostra 1:1, com quadros para conferir.
+
+### 14.6 O que depende de fora
+
+- Publicar a `editor-video` (ações novas) e a `mesa-videos` (o `projeto_salvar` normaliza pelo
+  `projeto-de-edicao.ts`; sem publicar de novo, cor, rosto, enquadramento, identidade, a trilha de
+  ajuste e os capítulos somem ao salvar).
+- Aplicar a migration `20260930319000_editor_render_por_formato.sql`.
+- Ligar o worker na máquina da agência (seção 12.1).
+- Crédito: o plano usa o modelo escolhido (OpenAI direto ou OpenRouter); sem crédito, o Plano da
+  casa faz o mesmo de graça. Os julgamentos usam o Jev (chave `TYPESAFE_API_KEY` no servidor).

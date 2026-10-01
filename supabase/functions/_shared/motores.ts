@@ -650,6 +650,7 @@ export const CHAMADAS_SEM_METODO: Record<string, string> = {
   "agente-estilo/templates.ts#lerSequencia": "leituras",
   "editor-video/index.ts#receitaLer/respostaComFolego": "leituras",
   "editor-video/index.ts#visaoDescrever/respostaComFolego": "leituras",
+  "editor-video/edicao-com-ia.ts#rostoRastrear/a.folego": "leituras",
   "estudio-arte/aprendizado-no-estudio.ts#lerVisaoDaEntrega": "leituras",
   "estudio-arte/index.ts#ajustarCard": "estudio.gerador",
   "estudio-arte/index.ts#conferirRosto": "estudio.conferencias",

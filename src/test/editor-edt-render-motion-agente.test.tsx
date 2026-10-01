@@ -210,7 +210,9 @@ describe("ferramentas novas do agente editor", () => {
   it("estão no esquema; as pagas viram cartão e as do servidor rodam no laço", () => {
     ["medir_onda", "ler_onda", "cortar_pela_onda", "ficar_com_melhor_tomada", "conferir_corte", "legendar", "animar", "sugerir_animacoes", "sons", "musica", "logo", "cartao_final", "amostra", "gerar_broll", "gerar_elemento", "renderizar"].forEach((n) => expect(NOMES_DAS_FERRAMENTAS).toContain(n));
     expect(FERRAMENTAS_DE_SAIDA).toEqual(expect.arrayContaining(["gerar_broll", "gerar_elemento", "renderizar"]));
-    expect(FERRAMENTAS_DO_SERVIDOR).toEqual(["sugerir_animacoes", "medir_onda", "amostra"]);
+    // Rodada 2: zoom nos momentos fortes e capítulos também vão ao servidor (Jev) dentro do laço.
+    expect(FERRAMENTAS_DO_SERVIDOR).toEqual(["sugerir_animacoes", "medir_onda", "amostra", "zoom_momentos", "capitulos"]);
+    ["formato", "cor", "zoom_momentos", "efeito", "capitulos"].forEach((n) => expect(NOMES_DAS_FERRAMENTAS).toContain(n));
     expect(ANEXOS_ACEITOS).toContain("padrao_do_editor");
   });
 

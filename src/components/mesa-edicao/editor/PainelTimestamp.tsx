@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { Check, Copy, Loader2, Timer } from "lucide-react";
+import { copiarTexto as copiarParaAArea } from "@/components/mesa/estudioUtil";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
@@ -32,11 +33,7 @@ type Fase = { tipo: "parado" } | { tipo: "rodando"; texto: string } | { tipo: "p
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function copiar(t: string) {
-  try {
-    void navigator.clipboard.writeText(t).then(() => toast.success("Copiado"));
-  } catch {
-    toast.error("Não deu para copiar aqui.");
-  }
+  void copiarParaAArea(t).then((ok) => (ok ? toast.success("Copiado") : toast.error("Não deu para copiar aqui.")));
 }
 
 export default function PainelTimestamp({ projeto, urls, onAplicarProjeto }: { projeto: ProjetoDeEdicao; urls: Record<string, string>; onAplicarProjeto: (p: ProjetoDeEdicao, rotulo: string) => void }) {

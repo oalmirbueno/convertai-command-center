@@ -48,3 +48,11 @@ export async function bancoComOMotion(): Promise<PGlite> {
   await db.exec(sql);
   return db;
 }
+
+/** Frente EDT, rodada 2: a fila + a migration do render por formato (idempotente: pode rodar de novo no mesmo banco). */
+export async function bancoComFormatos(existente?: PGlite): Promise<PGlite> {
+  const db = existente || (await bancoComAFila());
+  const sql = readFileSync(path.join(RAIZ_DO_REPO, "supabase", "migrations", "20260930319000_editor_render_por_formato.sql"), "utf8");
+  await db.exec(sql);
+  return db;
+}

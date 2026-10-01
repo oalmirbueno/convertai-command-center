@@ -34,7 +34,7 @@
 
 export const VERSAO_DO_FORMATO_DO_PROJETO = 2;
 
-export const TIPOS_DE_TRILHA = ["video", "texto", "legenda", "audio", "sobreposicao"] as const;
+export const TIPOS_DE_TRILHA = ["video", "texto", "legenda", "audio", "sobreposicao", "ajuste"] as const;
 export type TipoDeTrilha = (typeof TIPOS_DE_TRILHA)[number];
 
 export const ROTULO_DA_TRILHA: Record<TipoDeTrilha, string> = {
@@ -43,9 +43,12 @@ export const ROTULO_DA_TRILHA: Record<TipoDeTrilha, string> = {
   legenda: "Legenda",
   audio: "Áudio",
   sobreposicao: "Sobreposição",
+  // Frente EDT, rodada 2 (30/09): camada de ajuste (como no Premiere e no CapCut). O clipe não tem mídia: no trecho
+  // dele, mexe no vídeo de baixo (zoom e punch-in, tremor, flash, desfoque, cor do trecho). Legenda e texto ficam fora.
+  ajuste: "Ajuste",
 };
 
-export const TIPOS_DE_TRANSICAO = ["corte", "fade", "dissolver", "deslizar", "zoom"] as const;
+export const TIPOS_DE_TRANSICAO = ["corte", "fade", "dissolver", "deslizar", "zoom", "flash", "whip", "desfoque"] as const;
 export type TipoDeTransicao = (typeof TIPOS_DE_TRANSICAO)[number];
 
 export const FORMATOS_DO_PROJETO: Record<string, { largura: number; altura: number }> = {
@@ -155,10 +158,19 @@ export interface VisaoDaFonte {
   amostras: number;
 }
 
+export const TIPOS_DE_MARCADOR = ["marcador", "capitulo", "viral"] as const;
+export type TipoDeMarcador = (typeof TIPOS_DE_MARCADOR)[number];
+
 export interface MarcadorDoProjeto {
   id: string;
   tempo_s: number;
   rotulo: string;
+  /** Frente EDT, rodada 2: capítulo (início de assunto) ou momento viral (trecho que vale um corte curto). */
+  tipo: TipoDeMarcador;
+  /** Fim do trecho (momento viral); capítulo e marcador simples: null. */
+  fim_s: number | null;
+  /** Nota de 0 a 1 (momento viral: potencial, julgado pelo Jev). */
+  nota: number | null;
 }
 
 /** O que a geração (troca de câmera, continuar, transição) precisa manter igual. */
@@ -218,6 +230,84 @@ export interface MixagemDoProjeto {
 }
 
 export const mixagemPadrao = (): MixagemDoProjeto => ({ trilha_abaixo_da_voz_db: 22, subida_nas_pausas_db: 6, lufs_alvo: -14, duck: true });
+
+/**
+ * Cor do projeto (frente EDT, rodada 2): correção básica, um look pronto e a
+ * LUT (.cube) do cliente. A LUT não viaja inteira: a tela lê o .cube e guarda
+ * a aproximação dela em curvas por canal + uma matriz de cor (src/lib/editor/cor.ts),
+ * desenhada por filtro SVG igual na prévia e no render (o mesmo Chrome).
+ */
+export interface CurvaDaLut {
+  nome: string;
+  /** Curva por canal, de 0 a 1 (até 33 pontos): o tom da LUT no eixo cinza. */
+  r: number[];
+  g: number[];
+  b: number[];
+  /** Matriz 3x4 (linha por canal: r, g, b, deslocamento), aplicada antes das curvas. */
+  matriz: number[];
+  /** Erro médio da aproximação (0 a 1), para a tela dizer quanto ficou fiel. */
+  erro: number;
+}
+
+export interface CorDoProjeto {
+  look: string;
+  /** Força do look e da LUT (0 a 1). */
+  intensidade: number;
+  exposicao: number;
+  contraste: number;
+  saturacao: number;
+  temperatura: number;
+  tinta: number;
+  vinheta: number;
+  lut: CurvaDaLut | null;
+}
+
+export const corPadrao = (): CorDoProjeto => ({ look: "natural", intensidade: 1, exposicao: 0, contraste: 0, saturacao: 0, temperatura: 0, tinta: 0, vinheta: 0, lut: null });
+
+/** Rosto rastreado numa fonte (tempo DA FONTE; x, y (centro) e w (largura) de 0 a 1 do quadro da fonte). */
+export interface PontoDoRosto {
+  t: number;
+  x: number;
+  y: number;
+  w: number;
+}
+
+export interface RastroDoRosto {
+  pontos: PontoDoRosto[];
+  origem: string | null;
+  em: string | null;
+}
+
+export const MAX_PONTOS_DO_ROSTO = 2000;
+
+/** Reenquadramento (9:16, 1:1, 16:9): o recorte segue o rosto rastreado (sem rastro, o centro). */
+export interface EnquadramentoDoProjeto {
+  seguir_rosto: boolean;
+  /** 0 (segue colado) a 1 (bem suave): quanto o recorte demora para acompanhar o rosto. */
+  suavidade: number;
+}
+
+export const enquadramentoPadrao = (): EnquadramentoDoProjeto => ({ seguir_rosto: true, suavidade: 0.6 });
+
+/** A identidade da marca que o vídeo usa (cópia no projeto: o render desenha igual à prévia). */
+export interface IdentidadeDoVideo {
+  nome: string | null;
+  cor: string | null;
+  cor2: string | null;
+  fonte: string | null;
+  /**
+   * Arquivo da letra da marca no bucket "mesa" (cliente_fontes.storage_path:
+   * pasta do cliente ou biblioteca/fontes). A prévia assina e o worker baixa;
+   * a composição carrega com o nome `fonte`.
+   */
+  fonte_path?: string | null;
+}
+
+/** Caminho aceito para a letra da marca (arquivo de fonte, sem subir pasta). */
+export const CAMINHO_DA_FONTE_DA_MARCA = /^[A-Za-z0-9][A-Za-z0-9/_. -]{2,300}\.(ttf|otf|woff2?)$/i;
+export const caminhoDaFonteValido = (v: unknown): v is string => typeof v === "string" && CAMINHO_DA_FONTE_DA_MARCA.test(v) && v.indexOf("..") < 0 && v.indexOf("//") < 0;
+/** Chave da letra da marca no mapa de URLs (prévia e worker). */
+export const chaveDaFonteDaMarca = (caminho: string) => `@${caminho}`;
 
 export interface SkillAplicada {
   skill: string;
@@ -289,6 +379,11 @@ export interface ProjetoDeEdicao {
   /** Frente EDT (opcionais, com padrão): onda medida por fonte e a mixagem do render. */
   ondas: Record<string, OndaDaFonte>;
   mixagem: MixagemDoProjeto;
+  /** Frente EDT, rodada 2 (opcionais, com padrão): cor, rosto por fonte, reenquadramento e identidade. */
+  cor: CorDoProjeto;
+  rostos: Record<string, RastroDoRosto>;
+  enquadramento: EnquadramentoDoProjeto;
+  identidade: IdentidadeDoVideo | null;
 }
 
 // ------------------------------------------------------------------ utilidades
@@ -442,6 +537,10 @@ export function projetoDosTakes(e: {
     referencias: [],
     ondas: {},
     mixagem: mixagemPadrao(),
+    cor: corPadrao(),
+    rostos: {},
+    enquadramento: enquadramentoPadrao(),
+    identidade: null,
   };
 }
 
@@ -616,7 +715,11 @@ function marcadores(v: unknown): MarcadorDoProjeto[] {
     .map((m, i) => {
       const o = m && typeof m === "object" ? (m as Record<string, unknown>) : null;
       if (!o) return null;
-      return { id: textoCurto(o.id, 40) || `m${i + 1}`, tempo_s: seg(num(o.tempo_s, 0, MAX_DURACAO_S, 0)), rotulo: textoCurto(o.rotulo, 80) || "Marcador" };
+      const tipo = (TIPOS_DE_MARCADOR as readonly string[]).indexOf(String(o.tipo)) >= 0 ? (String(o.tipo) as TipoDeMarcador) : "marcador";
+      const tempo = seg(num(o.tempo_s, 0, MAX_DURACAO_S, 0));
+      const fim = o.fim_s === null || o.fim_s === undefined ? null : seg(num(o.fim_s, 0, MAX_DURACAO_S, tempo));
+      const nota = o.nota === null || o.nota === undefined || !isFinite(Number(o.nota)) ? null : Math.round(num(o.nota, 0, 1, 0) * 1000) / 1000;
+      return { id: textoCurto(o.id, 40) || `m${i + 1}`, tempo_s: tempo, rotulo: textoCurto(o.rotulo, 80) || "Marcador", tipo, fim_s: fim !== null && fim > tempo ? fim : null, nota };
     })
     .filter((m): m is MarcadorDoProjeto => !!m);
 }
@@ -713,7 +816,104 @@ export function normalizarProjeto(v: unknown): ProjetoDeEdicao | null {
     referencias: referencias(o.referencias),
     ondas: ondas(o.ondas, fontes),
     mixagem: mixagem(o.mixagem),
+    cor: corDoProjeto(o.cor),
+    rostos: rostos(o.rostos, fontes),
+    enquadramento: enquadramento(o.enquadramento),
+    identidade: identidade(o.identidade),
   };
+}
+
+const COR_HEX = /^#[0-9a-fA-F]{6}$/;
+
+function curva(v: unknown): number[] | null {
+  if (!Array.isArray(v) || v.length < 2 || v.length > 33) return null;
+  const l = v.map((x) => Number(x));
+  if (l.some((x) => !isFinite(x))) return null;
+  return l.map((x) => Math.round(Math.max(0, Math.min(1, x)) * 10000) / 10000);
+}
+
+function corDoProjeto(v: unknown): CorDoProjeto {
+  const p = corPadrao();
+  if (!v || typeof v !== "object" || Array.isArray(v)) return p;
+  const o = v as Record<string, unknown>;
+  let lut: CurvaDaLut | null = null;
+  const l = o.lut && typeof o.lut === "object" ? (o.lut as Record<string, unknown>) : null;
+  if (l) {
+    const r = curva(l.r);
+    const g = curva(l.g);
+    const b = curva(l.b);
+    const m = Array.isArray(l.matriz) && l.matriz.length === 12 ? (l.matriz as unknown[]).map((x) => num(x, -4, 4, 0)) : null;
+    if (r && g && b && m) lut = { nome: textoCurto(l.nome, 80) || "LUT", r, g, b, matriz: m.map((x) => Math.round(x * 100000) / 100000), erro: num(l.erro, 0, 1, 0) };
+  }
+  const f = (k: string, min: number, max: number) => Math.round(num(o[k], min, max, 0) * 1000) / 1000;
+  return {
+    look: /^[a-z_]{2,30}$/.test(String(o.look || "")) ? String(o.look) : p.look,
+    intensidade: Math.round(num(o.intensidade, 0, 1, 1) * 1000) / 1000,
+    exposicao: f("exposicao", -1, 1),
+    contraste: f("contraste", -1, 1),
+    saturacao: f("saturacao", -1, 1),
+    temperatura: f("temperatura", -1, 1),
+    tinta: f("tinta", -1, 1),
+    vinheta: f("vinheta", 0, 1),
+    lut,
+  };
+}
+
+function rostos(v: unknown, fontes: Record<string, FonteDoProjeto>): Record<string, RastroDoRosto> {
+  const saida: Record<string, RastroDoRosto> = {};
+  if (!v || typeof v !== "object" || Array.isArray(v)) return saida;
+  const o = v as Record<string, unknown>;
+  const r4 = (n: number) => Math.round(n * 10000) / 10000;
+  Object.keys(o).forEach((k) => {
+    const chave = chaveDaFonte(k);
+    const x = o[k] && typeof o[k] === "object" ? (o[k] as Record<string, unknown>) : null;
+    if (!fontes[chave] || !x || !Array.isArray(x.pontos)) return;
+    const pontos: PontoDoRosto[] = [];
+    (x.pontos as unknown[]).slice(0, MAX_PONTOS_DO_ROSTO).forEach((p) => {
+      const y = p && typeof p === "object" ? (p as Record<string, unknown>) : null;
+      if (!y) return;
+      const t = seg(num(y.t, 0, MAX_DURACAO_S, -1));
+      if (t < 0) return;
+      pontos.push({ t, x: r4(num(y.x, 0, 1, 0.5)), y: r4(num(y.y, 0, 1, 0.4)), w: r4(num(y.w, 0, 1, 0.2)) });
+    });
+    pontos.sort((a, b) => a.t - b.t);
+    if (pontos.length) saida[chave] = { pontos, origem: textoCurto(x.origem, 60), em: textoCurto(x.em, 40) };
+  });
+  return saida;
+}
+
+function enquadramento(v: unknown): EnquadramentoDoProjeto {
+  const p = enquadramentoPadrao();
+  if (!v || typeof v !== "object" || Array.isArray(v)) return p;
+  const o = v as Record<string, unknown>;
+  return { seguir_rosto: o.seguir_rosto !== false, suavidade: Math.round(num(o.suavidade, 0, 1, p.suavidade) * 100) / 100 };
+}
+
+function identidade(v: unknown): IdentidadeDoVideo | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  const cor = COR_HEX.test(String(o.cor || "")) ? String(o.cor) : null;
+  const cor2 = COR_HEX.test(String(o.cor2 || "")) ? String(o.cor2) : null;
+  const fonte = /^[A-Za-z0-9 ]{2,40}$/.test(String(o.fonte || "")) ? String(o.fonte) : null;
+  const nome = textoCurto(o.nome, 80);
+  // O arquivo só vale junto do nome da letra.
+  const fonte_path = fonte && caminhoDaFonteValido(o.fonte_path) ? o.fonte_path : null;
+  if (!(cor || cor2 || fonte || nome)) return null;
+  // Sem arquivo, a chave nem entra (projeto antigo continua igual).
+  return fonte_path ? { nome, cor, cor2, fonte, fonte_path } : { nome, cor, cor2, fonte };
+}
+
+/**
+ * Mesmo projeto em outro formato (9:16, 1:1, 4:5, 16:9): muda só o tamanho da
+ * saída. O recorte de cada vídeo segue o rosto rastreado (ou o foco manual do
+ * clipe) na composição; legenda, texto e peças são relativos ao quadro.
+ * Pura: a tela, a função (render em vários formatos) e os testes usam a mesma.
+ */
+export function comFormato<P extends ProjetoDeEdicao>(p: P, formato: string): P {
+  const tam = FORMATOS_DO_PROJETO[formato];
+  if (!tam) throw new Error(`Formato desconhecido: ${formato}.`);
+  if (p.formato === formato && p.largura === tam.largura && p.altura === tam.altura) return p;
+  return { ...p, formato, largura: tam.largura, altura: tam.altura };
 }
 
 function ondas(v: unknown, fontes: Record<string, FonteDoProjeto>): Record<string, OndaDaFonte> {

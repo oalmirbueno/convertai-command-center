@@ -61,6 +61,38 @@ export function CarregarFontes({ url }: { url: (caminho: string) => string }) {
   return null;
 }
 
+/**
+ * A letra da marca (arquivo do cliente): no render a URL já vem pronta e o
+ * quadro espera (delayRender); na prévia a URL assinada chega depois e a
+ * letra entra quando carregar. Falha vira aviso no console e o estilo segue
+ * com a reserva (nunca trava o render).
+ */
+export function CarregarFonteDaMarca({ familia, url }: { familia: string | null; url: string | null }) {
+  const temFontFace = typeof window !== "undefined" && typeof (window as unknown as { FontFace?: unknown }).FontFace === "function";
+  const [handle] = useState(() => (temFontFace && familia && url ? delayRender("letra da marca") : null));
+  useEffect(() => {
+    let vivo = true;
+    const soltar = () => {
+      if (vivo && handle !== null) continueRender(handle);
+    };
+    if (!temFontFace || !familia || !url) {
+      soltar();
+      return;
+    }
+    const F = (window as unknown as { FontFace: new (f: string, s: string) => { load: () => Promise<unknown> } }).FontFace;
+    new F(familia, `url(${url})`)
+      .load()
+      .then((ff) => (document as unknown as { fonts: { add: (x: unknown) => void } }).fonts.add(ff))
+      .catch((e: unknown) => console.error(`[editor] a letra da marca (${familia}) não carregou`, e))
+      .then(soltar);
+    return () => {
+      vivo = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [familia, url]);
+  return null;
+}
+
 export interface PropsDaPeca {
   peca: IdDaPeca;
   params: ParametrosDaPeca;

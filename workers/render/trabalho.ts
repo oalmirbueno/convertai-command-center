@@ -11,6 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { medirOnda } from "../../supabase/functions/_shared/onda-do-audio.ts";
 import { caminhoDaSaida, fontesUsadas, recortarProjeto } from "../../supabase/functions/_shared/render-do-editor.ts";
+import { caminhoDaFonteValido, chaveDaFonteDaMarca } from "../../supabase/functions/_shared/projeto-de-edicao.ts";
 import { ganhoDaTrilhaDb, MIXAGEM_PADRAO } from "../../supabase/functions/mesa-motion/modulos/som-do-editor.ts";
 import type { Armazem } from "./armazem.ts";
 import type { Fila, PedidoDoWorker } from "./fila.ts";
@@ -45,6 +46,8 @@ type Projeto = {
   trilhas: { id: string; tipo: string; oculta: boolean; muda?: boolean; clipes: { id: string; fonte: string | null; inicio_s: number; entrada_s: number; saida_s: number; velocidade: number; estilo: Record<string, unknown> | null }[] }[];
   ondas?: Record<string, { lufs: number | null }>;
   mixagem?: { trilha_abaixo_da_voz_db: number; lufs_alvo: number };
+  formato?: string;
+  identidade?: { fonte?: string | null; fonte_path?: string | null } | null;
 };
 
 const extensao = (c: string) => {
@@ -104,6 +107,20 @@ export function progressoDoRemotion(texto: string): number | null {
   return Math.max(0, Math.min(1, base + (n / t) * 0.5));
 }
 
+/** Nome do MP4 na Mídia: com o formato, para a equipe distinguir os renders de vários formatos ("Título (render 1:1)"). */
+export function nomeDoRender(titulo: string, amostra: boolean, formato: string | null): string {
+  const tipo = amostra ? "amostra" : "render";
+  return `${titulo} (${tipo}${formato ? ` ${formato}` : ""})`.slice(0, 120);
+}
+
+/** Caminho da letra da marca que o worker pode baixar: só da pasta do cliente ou da biblioteca de fontes. */
+export function letraDaMarcaParaBaixar(projeto: Projeto, clientId: string): string | null {
+  const id = projeto.identidade;
+  const caminho = id && id.fonte && id.fonte_path ? id.fonte_path : null;
+  if (!caminho || !caminhoDaFonteValido(caminho)) return null;
+  return caminho.indexOf(`${clientId}/`) === 0 || caminho.indexOf("biblioteca/fontes/") === 0 ? caminho : null;
+}
+
 export async function trabalharRender(amb: Ambiente, p: PedidoDoWorker, pasta: string): Promise<{ saida: string; arquivoId: string; resultado: Record<string, unknown> }> {
   const avisar = relator(amb, p);
   if (!p.projeto) throw new Error("Pedido sem projeto.");
@@ -137,6 +154,17 @@ export async function trabalharRender(amb: Ambiente, p: PedidoDoWorker, pasta: s
     await amb.armazem.baixar(f.storage_bucket || "mesa", f.storage_path, path.join(publico, nome));
     urls[chave] = `estatico:${nome}`;
     locais[chave] = path.join(publico, nome);
+  }
+  // Letra da marca: o arquivo do cliente (ou da biblioteca de fontes) vem do bucket mesa; sem ela, o estilo usa a reserva.
+  const letra = letraDaMarcaParaBaixar(projeto, p.client_id);
+  if (letra) {
+    const nome = `midia/letra-da-marca${extensao(letra)}`;
+    try {
+      await amb.armazem.baixar("mesa", letra, path.join(publico, nome));
+      urls[chaveDaFonteDaMarca(letra)] = `estatico:${nome}`;
+    } catch (e) {
+      if (amb.log) amb.log(`a letra da marca não baixou (${(e as Error).message}); o vídeo sai com a letra do estilo`);
+    }
   }
   // Trilha 22 dB abaixo da voz: voz pela onda medida (ou medida agora), trilha medida no arquivo.
   await avisar("montando", 0.1, true);
@@ -219,9 +247,10 @@ export async function trabalharRender(amb: Ambiente, p: PedidoDoWorker, pasta: s
     }
   }
   const titulo = (p.versao_id ? await amb.fila.tituloDaVersao(p.versao_id) : null) || String(projeto.titulo || "Vídeo");
+  const formatoDoRender = String((p.entrada && p.entrada.formato) || projeto.formato || "").slice(0, 8) || null;
   const arquivoId = await amb.fila.registrarArquivo({
     client_id: p.client_id,
-    nome: `${titulo}${amostra ? " (amostra)" : " (render)"}`.slice(0, 120),
+    nome: nomeDoRender(titulo, amostra, formatoDoRender),
     nome_original: `${p.id}.mp4`,
     storage_bucket: "mesa",
     storage_path: saida,
@@ -232,7 +261,7 @@ export async function trabalharRender(amb: Ambiente, p: PedidoDoWorker, pasta: s
     largura: sonda.largura,
     altura: sonda.altura,
     sha256: await sha256(final),
-    origem: { render_pedido_id: p.id, versao_id: p.versao_id, revisao: p.revisao, lufs: volume.depois, amostra: amostra ? p.entrada : null },
+    origem: { render_pedido_id: p.id, versao_id: p.versao_id, revisao: p.revisao, lufs: volume.depois, amostra: amostra ? p.entrada : null, formato: formatoDoRender },
   });
   // Gancho do documento de entrega (frente DOC): o resumo e as provas ficam no resultado do pedido.
   const resumo = `${amostra ? "Amostra" : "Vídeo inteiro"} de ${sonda.duracao_s} s em ${sonda.largura}x${sonda.altura}, ${volume.depois !== null ? `${volume.depois} LUFS` : "sem áudio"}, ${Math.round(bytes / 1024)} KB, revisão ${p.revisao}.`;

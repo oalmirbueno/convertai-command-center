@@ -20,6 +20,13 @@ import {
   type ReferenciaDeEdicao,
   type OndaDaFonte,
   type MixagemDoProjeto,
+  type CorDoProjeto,
+  type EnquadramentoDoProjeto,
+  type IdentidadeDoVideo,
+  type RastroDoRosto,
+  type TipoDeMarcador,
+  comFormato,
+  FORMATOS_DO_PROJETO,
   MAX_REFERENCIAS,
 } from "../../../supabase/functions/_shared/projeto-de-edicao";
 import { arred, noQuadro, umQuadro } from "./tempo";
@@ -60,7 +67,15 @@ export type Operacao =
   | { op: "visao"; fonte: string; visao: VisaoDaFonte }
   | { op: "referencias"; lista: ReferenciaDeEdicao[] }
   | { op: "continuidade"; campos: Partial<ContinuidadeDoProjeto> }
-  | { op: "marcador"; tempo_s: number; rotulo: string }
+  | { op: "marcador"; tempo_s: number; rotulo: string; tipo?: TipoDeMarcador; fim_s?: number | null; nota?: number | null }
+  /** Frente EDT, rodada 2: troca a lista de marcadores de um tipo (capítulos, momentos virais) de uma vez. */
+  | { op: "marcadores"; tipo: TipoDeMarcador; lista: { tempo_s: number; rotulo: string; fim_s?: number | null; nota?: number | null }[] }
+  | { op: "remover_marcador"; id: string }
+  | { op: "formato"; formato: string }
+  | { op: "cor"; campos: Partial<CorDoProjeto> }
+  | { op: "rosto"; fonte: string; rastro: RastroDoRosto | null }
+  | { op: "enquadramento"; campos: Partial<EnquadramentoDoProjeto> }
+  | { op: "identidade"; identidade: IdentidadeDoVideo | null }
   | { op: "onda"; fonte: string; onda: OndaDaFonte }
   | { op: "mixagem"; campos: Partial<MixagemDoProjeto> }
   | { op: "registrar_skill"; skill: string; resumo: string; em: string };
@@ -92,7 +107,7 @@ export const emOrdem = (t: TrilhaDoProjeto) => t.clipes.slice().sort((a, b) => a
 /** Primeira trilha de vídeo (a principal). */
 export const trilhaPrincipal = (p: ProjetoDeEdicao) => p.trilhas.find((t) => t.tipo === "video") || null;
 
-const PREFIXO: Record<TipoDeTrilha, string> = { video: "v", texto: "t", legenda: "l", audio: "a", sobreposicao: "s" };
+const PREFIXO: Record<TipoDeTrilha, string> = { video: "v", texto: "t", legenda: "l", audio: "a", sobreposicao: "s", ajuste: "e" };
 
 /** Próximo id livre com o prefixo da trilha (v7, l12): determinístico, nunca repete. */
 export function novoId(p: ProjetoDeEdicao, tipo: TipoDeTrilha, reservados: string[] = []): string {
@@ -117,6 +132,7 @@ export function colide(t: TrilhaDoProjeto, ini: number, fim: number, exceto?: st
 /** Trilhas que aceitam o clipe: vídeo e sobreposição trocam entre si; o resto só com o mesmo tipo. */
 export function trilhasCompativeis(a: TipoDeTrilha, b: TipoDeTrilha): boolean {
   if (a === b) return true;
+  if (a === "ajuste" || b === "ajuste") return false;
   const visuais: TipoDeTrilha[] = ["video", "sobreposicao"];
   const textos: TipoDeTrilha[] = ["texto", "legenda"];
   return (visuais.indexOf(a) >= 0 && visuais.indexOf(b) >= 0) || (textos.indexOf(a) >= 0 && textos.indexOf(b) >= 0);
@@ -392,8 +408,45 @@ export function aplicarOperacao(p: ProjetoDeEdicao, o: Operacao): ProjetoDeEdica
       if (p.marcadores.length >= MAX_MARCADORES) throw new ErroDaOperacao("Marcadores demais.");
       let n = p.marcadores.length + 1;
       while (p.marcadores.some((m) => m.id === `m${n}`)) n++;
-      return { ...p, marcadores: p.marcadores.concat([{ id: `m${n}`, tempo_s: noQuadro(o.tempo_s, p.fps), rotulo: String(o.rotulo || "Marcador").slice(0, 80) }]) };
+      const tempo = noQuadro(o.tempo_s, p.fps);
+      const fim = typeof o.fim_s === "number" && o.fim_s > tempo ? noQuadro(o.fim_s, p.fps) : null;
+      return { ...p, marcadores: p.marcadores.concat([{ id: `m${n}`, tempo_s: tempo, rotulo: String(o.rotulo || "Marcador").slice(0, 80), tipo: o.tipo || "marcador", fim_s: fim, nota: typeof o.nota === "number" ? o.nota : null }]) };
     }
+    case "marcadores": {
+      const outros = p.marcadores.filter((m) => m.tipo !== o.tipo);
+      const lista = (o.lista || []).slice(0, Math.max(0, MAX_MARCADORES - outros.length));
+      let n = 0;
+      const livre = () => {
+        do n++;
+        while (outros.some((m) => m.id === `m${n}`));
+        return `m${n}`;
+      };
+      const novos = lista.map((x) => {
+        const tempo = noQuadro(Math.max(0, Number(x.tempo_s) || 0), p.fps);
+        const fim = typeof x.fim_s === "number" && x.fim_s > tempo ? noQuadro(x.fim_s, p.fps) : null;
+        return { id: livre(), tempo_s: tempo, rotulo: String(x.rotulo || "Marcador").slice(0, 80), tipo: o.tipo, fim_s: fim, nota: typeof x.nota === "number" ? Math.max(0, Math.min(1, x.nota)) : null };
+      });
+      return { ...p, marcadores: outros.concat(novos).sort((a, b) => a.tempo_s - b.tempo_s) };
+    }
+    case "remover_marcador":
+      return { ...p, marcadores: p.marcadores.filter((m) => m.id !== o.id) };
+    case "formato": {
+      if (!FORMATOS_DO_PROJETO[o.formato]) throw new ErroDaOperacao(`Formato desconhecido: ${o.formato}.`);
+      return comFormato(p, o.formato);
+    }
+    case "cor":
+      return { ...p, cor: { ...p.cor, ...o.campos } };
+    case "rosto": {
+      if (!p.fontes[o.fonte]) throw new ErroDaOperacao("O rosto é de uma mídia que não está no projeto.");
+      const rostos = { ...(p.rostos || {}) };
+      if (o.rastro && o.rastro.pontos.length) rostos[o.fonte] = o.rastro;
+      else delete rostos[o.fonte];
+      return { ...p, rostos };
+    }
+    case "enquadramento":
+      return { ...p, enquadramento: { ...p.enquadramento, ...o.campos } };
+    case "identidade":
+      return { ...p, identidade: o.identidade };
     case "onda": {
       if (!p.fontes[o.fonte]) throw new ErroDaOperacao("A onda é de uma mídia que não está no projeto.");
       return { ...p, ondas: { ...(p.ondas || {}), [o.fonte]: o.onda } };

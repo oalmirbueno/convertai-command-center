@@ -192,8 +192,9 @@ export function useFilaDeRender(clientId: string, versaoId: string | null | unde
 }
 
 /** Põe na fila (uid do clique: pedir duas vezes devolve o mesmo) e já mostra o pedido. */
-export async function pedirRender(chamar: Chamar, e: { clientId: string; versaoId: string; tipo: TipoDeRender; uid: string; revisao?: number | null; inicio_s?: number; fim_s?: number; fontes?: string[] }): Promise<{ pedido: PedidoNaFila; ja_existia: boolean }> {
-  const r = await chamar({ acao: "render_pedir", client_id: e.clientId, versao_id: e.versaoId, tipo: e.tipo, uid: e.uid, revisao: e.revisao ?? null, inicio_s: e.inicio_s, fim_s: e.fim_s, fontes: e.fontes });
+export async function pedirRender(chamar: Chamar, e: { clientId: string; versaoId: string; tipo: TipoDeRender; uid: string; revisao?: number | null; inicio_s?: number; fim_s?: number; fontes?: string[]; formato?: string | null }): Promise<{ pedido: PedidoNaFila; ja_existia: boolean }> {
+  // Rodada 2: `formato` renderiza o mesmo projeto em outro formato (9:16, 1:1, 4:5, 16:9).
+  const r = await chamar({ acao: "render_pedir", client_id: e.clientId, versao_id: e.versaoId, tipo: e.tipo, uid: e.uid, revisao: e.revisao ?? null, inicio_s: e.inicio_s, fim_s: e.fim_s, fontes: e.fontes, formato: e.formato || undefined });
   const v = vigia(e.clientId, e.versaoId, chamar);
   const pedido = r.pedido as PedidoNaFila;
   marcarRenderAtivo(e.versaoId);
@@ -251,3 +252,26 @@ export function fontesSemOnda(p: ProjetoDeEdicao): string[] {
   return chaves;
 }
 
+
+/** Formato de um pedido (vazio: o formato do projeto). */
+export const formatoDoPedido = (p: PedidoNaFila): string | null => {
+  const f = p.entrada && typeof p.entrada === "object" ? (p.entrada as Record<string, unknown>).formato : null;
+  return typeof f === "string" && f ? f : null;
+};
+
+/**
+ * Linhas da legenda para o .srt da exportação (os clipes da trilha de legenda
+ * como estão na linha do tempo).
+ */
+export function linhasDaLegenda(p: ProjetoDeEdicao): { texto: string; i: number; f: number }[] {
+  const saida: { texto: string; i: number; f: number }[] = [];
+  p.trilhas
+    .filter((t) => t.tipo === "legenda" && !t.oculta)
+    .forEach((t) =>
+      t.clipes.forEach((c) => {
+        if (!c.texto) return;
+        saida.push({ texto: c.texto, i: c.inicio_s, f: Math.round((c.inicio_s + (c.saida_s - c.entrada_s) / (c.velocidade || 1)) * 1000) / 1000 });
+      }),
+    );
+  return saida.sort((a, b) => a.i - b.i);
+}

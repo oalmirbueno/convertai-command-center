@@ -8,6 +8,7 @@ import { SKILL_FECHAR_BURACOS, SKILL_ORGANIZAR, SKILL_TRANSICOES } from "./organ
 import { SKILL_PUNCH_IN } from "./punchIn";
 import { SKILL_CORTAR_PELA_ONDA, SKILL_MELHOR_TOMADA } from "./corteDeVerdade";
 import { SKILL_EFEITOS_SONOROS } from "./efeitosSonoros";
+import { SKILL_COR, SKILL_REENQUADRAR, SKILL_ZOOM_NOS_MOMENTOS } from "./pecasDaEdicao";
 import type { ContextoDaSkill, IdDaSkill, PropostaDaSkill, Skill, ValorDoParametro } from "./tipos";
 
 export * from "./tipos";
@@ -20,6 +21,9 @@ export const SKILLS_DO_EDITOR: Skill[] = [
   SKILL_CORTAR_SILENCIOS,
   SKILL_LEGENDAS,
   SKILL_PUNCH_IN,
+  SKILL_ZOOM_NOS_MOMENTOS,
+  SKILL_REENQUADRAR,
+  SKILL_COR,
   SKILL_ORGANIZAR,
   SKILL_ANTES_DEPOIS,
   SKILL_FECHAR_BURACOS,
@@ -61,7 +65,10 @@ export function skillPorPalavras(texto: string): IdDaSkill | null {
   if (/silenci|pausa|respiro/.test(t)) return "cortar_silencios";
   if (/efeito|sonoplast|sfx/.test(t)) return "efeitos_sonoros";
   if (/legenda|caption|subtitul/.test(t)) return "legendas";
+  if (/reenquadr|9:16|1:1|16:9|vertical|horizontal|quadrad/.test(t)) return "reenquadrar";
+  if (/momento(s)? forte|enfase|ênfase/.test(t)) return "zoom_nos_momentos";
   if (/punch|zoom|gancho/.test(t)) return "punch_in";
+  if (/(^|[^a-z])(cor|look|lut|colori|grade)([^a-z]|$)/.test(t)) return "cor";
   if (/roteiro|ordem|organiz/.test(t)) return "organizar_por_roteiro";
   if (/buraco|encost|vao/.test(t)) return "fechar_buracos";
   if (/transic|fade|dissolv/.test(t)) return "transicoes_suaves";

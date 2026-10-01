@@ -1,6 +1,7 @@
 import { arred } from "../tempo";
 import { falaNaLinhaDoTempo, type PalavraNaLinha } from "../transcricao";
 import { Montador, parametrosComPadrao, type Skill, type ValorDoParametro } from "./tipos";
+import { POSICOES_DE_TEXTO, PRESETS_DE_LEGENDA } from "../estilosDeTexto";
 
 /**
  * Legendas animadas (estilo HyperFrames / clone 03: blocos de até 4 palavras,
@@ -9,11 +10,8 @@ import { Montador, parametrosComPadrao, type Skill, type ValorDoParametro } from
  * legenda inteira a partir da fala no tempo da linha (depois de cortes).
  */
 
-export const PRESETS_DE_LEGENDA = [
-  { valor: "destaque", rotulo: "Palavra acesa" },
-  { valor: "caixa", rotulo: "Caixa (adesivo)" },
-  { valor: "simples", rotulo: "Simples" },
-] as const;
+// Frente EDT, rodada 2: 10 estilos (catálogo em ../estilosDeTexto.ts, com cor e letra da marca).
+export { PRESETS_DE_LEGENDA };
 
 const FIM_DE_FRASE = /[.!?…]$/;
 
@@ -72,6 +70,7 @@ export function legendasEm(m: Montador, params: Record<string, ValorDoParametro>
         texto: b.map((w) => w.t).join(" "),
         estilo: {
           ...(params.posicao ? { posicao: String(params.posicao) } : {}),
+          ...(typeof params.cor === "string" && /^#[0-9a-fA-F]{6}$/.test(params.cor) ? { cor: params.cor } : {}),
           preset: String(params.estilo),
           animacao: params.estilo === "simples" ? "nenhuma" : "palavra",
           palavras: b.map((w) => ({ t: w.t, i: arred(w.i - ini), f: arred(w.f - ini) })),
@@ -92,6 +91,7 @@ export const SKILL_LEGENDAS: Skill = {
   parametros: [
     { chave: "palavras_por_bloco", rotulo: "Palavras por bloco", tipo: "numero", padrao: PALAVRAS_POR_LEGENDA, min: 1, max: 8, passo: 1 },
     { chave: "estilo", rotulo: "Estilo", tipo: "escolha", padrao: "destaque", opcoes: PRESETS_DE_LEGENDA.map((x) => ({ valor: x.valor, rotulo: x.rotulo })) },
+    { chave: "posicao", rotulo: "Onde", tipo: "escolha", padrao: "auto", opcoes: POSICOES_DE_TEXTO.map((x) => ({ valor: x.valor, rotulo: x.rotulo })) },
   ],
   propor(p, ctx, dados) {
     const params = parametrosComPadrao(SKILL_LEGENDAS, dados);

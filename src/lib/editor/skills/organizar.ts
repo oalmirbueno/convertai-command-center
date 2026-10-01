@@ -88,7 +88,7 @@ export const SKILL_FECHAR_BURACOS: Skill = {
 export function transicoesEm(m: Montador, params: Record<string, ValorDoParametro>): number {
   const t = trilhaPrincipal(m.projeto);
   if (!t) return 0;
-  const tipo = params.tipo === "dissolver" ? "dissolver" : "fade";
+  const tipo = (["fade", "dissolver", "whip", "flash", "desfoque", "zoom", "deslizar"].indexOf(String(params.tipo)) >= 0 ? String(params.tipo) : "fade") as "fade";
   const d = Number(params.duracao_s);
   let n = 0;
   const l = emOrdem(t);
@@ -110,7 +110,21 @@ export const SKILL_TRANSICOES: Skill = {
   referencia: "hyperframes-animation (transições)",
   precisaDeFala: false,
   parametros: [
-    { chave: "tipo", rotulo: "Tipo", tipo: "escolha", padrao: "fade", opcoes: [{ valor: "fade", rotulo: "Fade" }, { valor: "dissolver", rotulo: "Dissolver" }] },
+    {
+      chave: "tipo",
+      rotulo: "Tipo",
+      tipo: "escolha",
+      padrao: "fade",
+      opcoes: [
+        { valor: "fade", rotulo: "Fade" },
+        { valor: "dissolver", rotulo: "Dissolver" },
+        { valor: "whip", rotulo: "Chicote (whip)" },
+        { valor: "flash", rotulo: "Flash" },
+        { valor: "desfoque", rotulo: "Desfoque" },
+        { valor: "zoom", rotulo: "Zoom" },
+        { valor: "deslizar", rotulo: "Deslizar" },
+      ],
+    },
     { chave: "duracao_s", rotulo: "Duração (s)", tipo: "numero", padrao: 0.3, min: 0.1, max: 1.5, passo: 0.1 },
   ],
   propor(p, ctx, dados) {
