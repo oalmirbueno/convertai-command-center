@@ -1,11 +1,14 @@
 /**
  * Pacote dos workers (frente SUP, 01/10/2026).
  *
- * Versão = os 10 primeiros caracteres do hash da árvore `workers/` no git: o
+ * Versão = os 10 primeiros caracteres do hash das árvores do pacote no git: o
  * mesmo código dá a mesma versão (publicado do main ou montado de um clone),
- * e qualquer mudança em qualquer worker dá versão nova.
+ * e qualquer mudança dá versão nova.
  *
- * O pacote é o zip dessa árvore (`git archive`), com o caminho `workers/...`.
+ * O pacote é o zip de `workers/`, `src/` e `supabase/functions/` (`git archive`):
+ * os workers importam por caminho relativo código do painel e das funções (a
+ * composição do Remotion mora em src/). Só `workers/` quebrava os 3 na partida
+ * (ERR_MODULE_NOT_FOUND, 01/10).
  * Na máquina: extrai em versoes\<versao>, instala as dependências de cada
  * motor numa pasta por package-lock (deps\<motor>-<hash>) e liga por junção,
  * então duas versões com o mesmo lock não baixam nada de novo.
@@ -26,10 +29,15 @@ function git(repo: string, args: string[]): string {
   return String(r.stdout).trim();
 }
 
-/** Árvore `workers/` do HEAD (publicação) ou do índice (o que está staged, para testes e o modo migrar). */
+/** O que vai no pacote: os workers e o código de fora que eles importam por caminho relativo. */
+export const PASTAS_DO_PACOTE = ["workers", "src", "supabase/functions"] as const;
+
+const raizDe = (repo: string, deOnde: "HEAD" | "indice") => (deOnde === "indice" ? git(repo, ["write-tree"]) : "HEAD");
+
+/** Identidade das árvores do pacote no HEAD (publicação) ou no índice (o que está staged, para testes e o modo migrar). */
 export function arvoreDosWorkers(repo: string, deOnde: "HEAD" | "indice" = "HEAD"): string {
-  const raiz = deOnde === "indice" ? git(repo, ["write-tree"]) : "HEAD";
-  return git(repo, ["rev-parse", `${raiz}:workers`]);
+  const raiz = raizDe(repo, deOnde);
+  return sha256(PASTAS_DO_PACOTE.map((p) => git(repo, ["rev-parse", `${raiz}:${p}`])).join("|"));
 }
 
 export const versaoDaArvore = (arvore: string) => arvore.slice(0, 10).toLowerCase();
@@ -38,7 +46,7 @@ export const versaoDaArvore = (arvore: string) => arvore.slice(0, 10).toLowerCas
 export function montarPacote(repo: string, destinoZip: string, deOnde: "HEAD" | "indice" = "HEAD"): { versao: string; sha256: string; tamanho: number; arvore: string } {
   const arvore = arvoreDosWorkers(repo, deOnde);
   mkdirSync(path.dirname(destinoZip), { recursive: true });
-  git(repo, ["-c", "core.autocrlf=false", "archive", "--format=zip", "--prefix=workers/", "-o", destinoZip, arvore]);
+  git(repo, ["-c", "core.autocrlf=false", "archive", "--format=zip", "-o", destinoZip, raizDe(repo, deOnde), "--", ...PASTAS_DO_PACOTE]);
   const bytes = readFileSync(destinoZip);
   return { versao: versaoDaArvore(arvore), sha256: sha256(bytes), tamanho: bytes.length, arvore };
 }
@@ -88,21 +96,26 @@ export async function extrairPacote(zip: string, destino: string, registro?: Reg
   const codigo = await r(comandoDoTar(), ["-xf", zip, "-C", tmp], { cwd: tmp, registro });
   if (codigo !== 0) throw new Error(`não consegui extrair o pacote (tar saiu com ${codigo})`);
   if (!existsSync(path.join(tmp, "workers", "supervisor", "principal.ts"))) throw new Error("o pacote não tem workers/supervisor/principal.ts");
+  if (!existsSync(path.join(tmp, "supabase", "functions", "_shared"))) throw new Error("o pacote não tem supabase/functions (os workers importam de lá)");
   tirarJuncoes(destino);
   rmSync(destino, { recursive: true, force: true });
   renameSync(tmp, destino);
 }
 
-/** Copia a árvore dos workers de um clone (modo migrar) para versoes\<versao>, sem node_modules. */
-export function copiarDoClone(origemWorkers: string, destino: string): void {
+/** Copia as pastas do pacote de um clone (modo migrar) para versoes\<versao>, sem node_modules. */
+export function copiarDoClone(clone: string, destino: string): void {
   const tmp = `${destino}.copiando`;
   tirarJuncoes(tmp);
   rmSync(tmp, { recursive: true, force: true });
-  cpSync(origemWorkers, path.join(tmp, "workers"), {
-    recursive: true,
-    // Sem dependências, provas locais, build e arquivos .env (chave mora no cofre DPAPI, nunca copiada em texto).
-    filter: (de) => !/[\\/](node_modules|tmp|\.vite|dist|\.git)([\\/]|$)|[\\/]\.env(\.[^\\/]*)?$/.test(de.slice(origemWorkers.length)),
-  });
+  for (const p of PASTAS_DO_PACOTE) {
+    const origem = path.join(clone, p);
+    if (!existsSync(origem)) continue;
+    cpSync(origem, path.join(tmp, p), {
+      recursive: true,
+      // Sem dependências, provas locais, build e arquivos .env (chave mora no cofre DPAPI, nunca copiada em texto).
+      filter: (de) => !/[\\/](node_modules|tmp|\.vite|dist|\.git)([\\/]|$)|[\\/]\.env(\.[^\\/]*)?$/.test(de.slice(origem.length)),
+    });
+  }
   tirarJuncoes(destino);
   rmSync(destino, { recursive: true, force: true });
   renameSync(tmp, destino);

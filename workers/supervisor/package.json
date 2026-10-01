@@ -9,7 +9,7 @@
   },
   "scripts": {
     "iniciar": "node principal.ts",
-    "teste": "node --test testes/canal.test.ts testes/registros.test.ts testes/filhos.test.ts testes/supervisor.test.ts testes/atualizacao.test.ts testes/lancador.test.ts testes/segredos.test.ts testes/janela.test.ts testes/banco-motores.test.ts testes/sem-navegador.test.ts",
+    "teste": "node --test testes/canal.test.ts testes/registros.test.ts testes/filhos.test.ts testes/supervisor.test.ts testes/atualizacao.test.ts testes/lancador.test.ts testes/segredos.test.ts testes/janela.test.ts testes/banco-motores.test.ts testes/sem-navegador.test.ts testes/pacote.test.ts",
     "empacotar": "node empacotar.ts",
     "publicar": "node empacotar.ts --subir --se-mudou"
   }

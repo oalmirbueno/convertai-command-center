@@ -21,7 +21,7 @@ import { criarWorkerFalso, esperarAte, eventos, pastaTemp } from "./apoio.ts";
 const A = "aaaaaaaaaa";
 const B = "bbbbbbbbbb";
 
-/** Zip de uma versão falsa (workers/supervisor/principal.ts e o package.json de cada motor). */
+/** Zip de uma versão falsa (workers/supervisor/principal.ts, o package.json de cada motor e o código de fora que eles importam). */
 function zipDeVersao(): Uint8Array {
   const dir = pastaTemp("aceleriq-pacote-");
   for (const w of ["supervisor", "render", "motor-codigo", "computador"]) {
@@ -29,8 +29,12 @@ function zipDeVersao(): Uint8Array {
     writeFileSync(path.join(dir, "workers", w, "package.json"), JSON.stringify({ name: `falso-${w}`, private: true }));
   }
   writeFileSync(path.join(dir, "workers", "supervisor", "principal.ts"), "process.exit(0);\n");
+  mkdirSync(path.join(dir, "supabase", "functions", "_shared"), { recursive: true });
+  writeFileSync(path.join(dir, "supabase", "functions", "_shared", "render-do-editor.ts"), "export {};\n");
+  mkdirSync(path.join(dir, "src"), { recursive: true });
+  writeFileSync(path.join(dir, "src", "vazio.ts"), "export {};\n");
   const zip = path.join(dir, "pacote.zip");
-  const r = spawnSync(comandoDoTar(), ["-a", "-cf", zip, "-C", dir, "workers"], { windowsHide: true, encoding: "utf8" });
+  const r = spawnSync(comandoDoTar(), ["-a", "-cf", zip, "-C", dir, "workers", "supabase", "src"], { windowsHide: true, encoding: "utf8" });
   assert.equal(r.status, 0, `tar não criou o zip: ${r.stderr}`);
   return new Uint8Array(readFileSync(zip));
 }

@@ -17,7 +17,7 @@ import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { caminhos, gravarJson, type IdDoMotor, lerAtual, MOTORES, NOME_DO_MOTOR, pastaDaVersao } from "./config.ts";
-import { arvoreDosWorkers, copiarDoClone, prepararDependencias, sha256, versaoDaArvore } from "./pacote.ts";
+import { arvoreDosWorkers, copiarDoClone, PASTAS_DO_PACOTE, prepararDependencias, sha256, versaoDaArvore } from "./pacote.ts";
 import type { Registro } from "./registros.ts";
 
 const args = process.argv.slice(2);
@@ -26,10 +26,10 @@ const AQUI = path.dirname(fileURLToPath(import.meta.url));
 
 const tela: Registro = { arquivo: "tela", linha: (t) => console.log(t) };
 
-/** Versão de um clone: o hash da árvore workers/ no git; fora do git, um hash do caminho e da hora. */
+/** Versão de um clone: o hash das árvores do pacote no git; fora do git, um hash do caminho e da hora. */
 export function versaoDoClone(clone: string): string {
   try {
-    const st = spawnSync("git", ["-C", clone, "status", "--porcelain", "--", "workers"], { encoding: "utf8", windowsHide: true });
+    const st = spawnSync("git", ["-C", clone, "status", "--porcelain", "--", ...PASTAS_DO_PACOTE], { encoding: "utf8", windowsHide: true });
     const limpo = st.status === 0 && !String(st.stdout).trim();
     if (limpo) return versaoDaArvore(arvoreDosWorkers(clone, "HEAD"));
     // Clone com mudança local: versão própria (não confunde com a publicada).
@@ -56,7 +56,7 @@ async function preparar(): Promise<void> {
     pasta = pastaDaVersao(c, versao);
     console.log(`Copiando os workers de ${clone} (versão ${versao})...`);
     mkdirSync(c.versoes, { recursive: true });
-    copiarDoClone(path.join(path.resolve(clone), "workers"), pasta);
+    copiarDoClone(path.resolve(clone), pasta);
   } else {
     // Rodando de dentro de versoes\<versao>\workers\supervisor.
     pasta = path.resolve(AQUI, "..", "..");
