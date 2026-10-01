@@ -1,8 +1,16 @@
 import { useEffect, useRef, type ReactNode } from "react";
+import * as SelectPrimitive from "@radix-ui/react-select";
+import { Brain, Check, Eye, Wrench } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+// Pelo caminho próprio, nunca pelo índice "@/components/sistema": o índice exporta o PreencherComIA,
+// que importa este arquivo, e o ciclo travava a Mesa Proposta nos testes (01/10).
+import { etiqueta, juntar } from "@/components/sistema/estilos";
 import {
+  capacidadesDoModeloNaTela,
+  contextoCurto,
+  modeloLancadoHaPouco,
   modelosAtivos,
   nomeDoModelo,
   precoDoModelo,
@@ -12,7 +20,52 @@ import {
 } from "@/lib/mesa/api";
 import { ORDEM_DO_RACIOCINIO, raciocinioQueVale } from "@/lib/mesa/recursos-na-tela";
 
-/** Seletor de modelo: só modelos ativos do tipo, com o preço ao lado do nome. */
+/**
+ * Item do seletor de modelo (frente MOD, 30/09): nome e preço por 1M (o que
+ * aparece no campo fechado) e, só na lista, "novo" para o lançado há menos de
+ * 30 dias e o que o modelo faz: vê imagem, usa ferramentas, raciocina.
+ */
+function ItemDoModelo({ m, qualidade }: { m: ModeloIa; qualidade: Qualidade }) {
+  const cap = capacidadesDoModeloNaTela(m);
+  const novo = modeloLancadoHaPouco(m);
+  const contexto = m.tipo === "texto" ? contextoCurto(m) : "";
+  const dica = [
+    cap.visao ? "vê imagem" : "",
+    cap.ferramentas ? "usa ferramentas" : "",
+    cap.raciocinio ? "raciocina" : "",
+    cap.json ? "responde em JSON" : "",
+    contexto ? `contexto de ${contexto} tokens` : "",
+  ].filter(Boolean).join(", ");
+  return (
+    <SelectPrimitive.Item
+      value={m.id}
+      title={dica || undefined}
+      className="relative flex w-full min-w-0 cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-[13px] outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+      data-modelo-novo={novo ? "sim" : undefined}
+    >
+      <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+        <SelectPrimitive.ItemIndicator>
+          <Check className="h-4 w-4" />
+        </SelectPrimitive.ItemIndicator>
+      </span>
+      <span className="min-w-0 flex-1 truncate">
+        <SelectPrimitive.ItemText>
+          {nomeDoModelo(m)} <span className="text-muted-foreground">· {precoDoModelo(m, qualidade)}</span>
+        </SelectPrimitive.ItemText>
+      </span>
+      {m.tipo === "texto" && (
+        <span className="ml-2 flex shrink-0 items-center text-muted-foreground" aria-label={dica || undefined}>
+          {cap.visao && <Eye className="ml-1 h-3.5 w-3.5" aria-hidden="true" />}
+          {cap.ferramentas && <Wrench className="ml-1 h-3.5 w-3.5" aria-hidden="true" />}
+          {cap.raciocinio && <Brain className="ml-1 h-3.5 w-3.5" aria-hidden="true" />}
+        </span>
+      )}
+      {novo && <span className={juntar(etiqueta, "ml-1.5 bg-primary/10 text-primary")}>novo</span>}
+    </SelectPrimitive.Item>
+  );
+}
+
+/** Seletor de modelo: só modelos ativos do tipo, com o preço por 1M, "novo" e o que cada um faz. */
 export function SeletorDeModelo({
   catalogo,
   tipo,
@@ -34,15 +87,11 @@ export function SeletorDeModelo({
   return (
     <Campo rotulo={rotulo}>
       <Select value={valor || ""} onValueChange={onChange} disabled={disabled || opcoes.length === 0}>
-        <SelectTrigger className="h-9 min-w-0 text-[12.5px]">
+        <SelectTrigger className="h-9 min-w-0 text-[13px]">
           <SelectValue placeholder={opcoes.length ? "Escolher modelo" : "Nenhum modelo ativo"} />
         </SelectTrigger>
         <SelectContent>
-          {opcoes.map((m) => (
-            <SelectItem key={m.id} value={m.id}>
-              {nomeDoModelo(m)} <span className="text-muted-foreground">· {precoDoModelo(m, qualidade)}</span>
-            </SelectItem>
-          ))}
+          {opcoes.map((m) => <ItemDoModelo key={m.id} m={m} qualidade={qualidade} />)}
         </SelectContent>
       </Select>
     </Campo>
@@ -53,7 +102,7 @@ export function SeletorDeQualidade({ valor, onChange, disabled }: { valor: Quali
   return (
     <Campo rotulo="Qualidade">
       <Select value={valor} onValueChange={(v) => onChange(v as Qualidade)} disabled={disabled}>
-        <SelectTrigger className="h-9 min-w-0 text-[12.5px]"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="h-9 min-w-0 text-[13px]"><SelectValue /></SelectTrigger>
         <SelectContent>
           {QUALIDADES.map((q) => <SelectItem key={q.valor} value={q.valor}>{q.rotulo}</SelectItem>)}
         </SelectContent>
@@ -72,6 +121,13 @@ const ROTULO_RACIOCINIO: Record<string, string> = {
   max: "Máximo",
 };
 
+/**
+ * Nível de raciocínio do modelo escolhido, do menor para o maior, com o
+ * "(padrão)" do provedor. Trocou para um modelo que não aceita o nível
+ * escolhido (ex.: "Sem raciocínio" no Claude 5.5 ou no GPT-6.1 Sol, que
+ * sempre raciocinam): o nível passa sozinho para o mais perto aceito, em vez
+ * de o pedido voltar com "raciocínio não aceito".
+ */
 export function SeletorDeRaciocinio({ modelo, valor, onChange }: { modelo: ModeloIa | null; valor: string; onChange: (v: string) => void }) {
   const niveis = (modelo?.raciocinio || []).slice().sort((a, b) => ORDEM_DO_RACIOCINIO.indexOf(a) - ORDEM_DO_RACIOCINIO.indexOf(b));
   const padrao = (modelo && modelo.recursos && modelo.recursos.raciocinio_padrao) || "";

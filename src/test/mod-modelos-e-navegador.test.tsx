@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createElement as h, useState } from "react";
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
   ehApelidoDoOpenRouter,
@@ -47,7 +47,7 @@ import {
   podeParar,
   urlDeLoginOuPagamento,
 } from "../../supabase/functions/computador-do-agente/modulos/navegador";
-import { SeletorDeRaciocinio } from "@/components/mesa/Seletores";
+import { SeletorDeModelo, SeletorDeRaciocinio } from "@/components/mesa/Seletores";
 import { aprovacaoVencida, COLUNAS_DA_LISTA, intervaloDaLista, resumoDoResultado, tarefaDaLinha, tarefaAtiva } from "@/lib/agentes/navegadorApi";
 import type { ModeloIa } from "@/lib/mesa/api";
 
@@ -366,6 +366,50 @@ describe("raciocínio na tela: o nível acompanha o modelo novo", () => {
     const agora = Date.parse("2026-09-30T12:00:00Z");
     expect(lancadoHaPouco({ recursos: { lancado_em: "2026-09-29" } }, agora)).toBe(true);
     expect(lancadoHaPouco({ recursos: { lancado_em: "2026-07-24" } }, agora)).toBe(false);
+  });
+});
+
+describe("lista do seletor de modelo: ícones, 'novo' e a dica (MOD2, 01/10)", () => {
+  const linha = (id: string, extra: Partial<ModeloIa>): ModeloIa => ({
+    id, provedor: "openrouter", modelo_api: id, tipo: "texto", rotulo: id.toUpperCase(), preco_entrada_1m: 1, preco_saida_1m: 2, preco_cache_1m: null, preco_imagem: null,
+    raciocinio: [], padrao_para: [], ativo: true, recursos: null, ...extra,
+  });
+
+  it("aberta, cada item traz o que o modelo faz e o 'novo'; fechado, o campo mostra só nome e preço", async () => {
+    const antes = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = () => {};
+    try {
+      const novo = linha("novo-1", {
+        raciocinio: ["low", "high"], contexto_tokens: 1000000,
+        recursos: { visao: true, ferramentas: true, json: true, lancado_em: new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10) },
+      });
+      const antigo = linha("antigo-1", { recursos: { lancado_em: "2025-01-01" } });
+      render(h(SeletorDeModelo, { catalogo: [novo, antigo], tipo: "texto", valor: "novo-1", onChange: () => {} }));
+      const campo = screen.getByRole("combobox");
+      expect(campo.textContent).toContain("NOVO-1");
+      expect(campo.textContent).not.toMatch(/novo$/);
+      fireEvent.keyDown(campo, { key: "Enter" });
+      const itens = await screen.findAllByRole("option");
+      expect(itens).toHaveLength(2);
+      const [a, b] = itens;
+      expect(a.getAttribute("data-modelo-novo")).toBe("sim");
+      expect(a.getAttribute("title")).toBe("vê imagem, usa ferramentas, raciocina, responde em JSON, contexto de 1 mi tokens");
+      expect(a.querySelector(".lucide-eye")).not.toBeNull();
+      expect(a.querySelector(".lucide-wrench")).not.toBeNull();
+      expect(a.querySelector(".lucide-brain")).not.toBeNull();
+      expect(a.textContent).toContain("novo");
+      expect(b.getAttribute("data-modelo-novo")).toBeNull();
+      expect(b.querySelector("svg.lucide-eye, svg.lucide-wrench, svg.lucide-brain")).toBeNull();
+    } finally {
+      Element.prototype.scrollIntoView = antes;
+    }
+  });
+
+  it("Seletores não importa o índice de @/components/sistema: o índice puxa o PreencherComIA, que puxa Seletores, e o ciclo travava a Mesa Proposta nos testes", () => {
+    const seletores = ler("src/components/mesa/Seletores.tsx");
+    expect(seletores).not.toMatch(/from\s+["']@\/components\/sistema["']/);
+    // O outro lado do ciclo continua existindo; por isso a trava acima.
+    expect(ler("src/components/sistema/PreencherComIA.tsx")).toMatch(/from\s+["']@\/components\/mesa\/Seletores["']/);
   });
 });
 
