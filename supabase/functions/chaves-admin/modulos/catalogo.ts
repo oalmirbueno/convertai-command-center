@@ -22,7 +22,8 @@ export type IdDoProvedor =
   | "heygen"
   | "higgsfield"
   | "github"
-  | "openart";
+  | "openart"
+  | "aws";
 
 export interface CampoDaChave {
   nome: NomeDaChave;
@@ -88,6 +89,19 @@ export const PROVEDORES: ProvedorDoPainel[] = [
     recarga: "https://openart.ai/pricing",
     emBreve: true,
     grupo: "midia",
+  },
+  {
+    id: "aws",
+    nome: "AWS (render na nuvem)",
+    serve: "Renderizar vídeos no Remotion Lambda",
+    campos: [
+      { nome: "REMOTION_AWS_ACCESS_KEY_ID", rotulo: "Id da chave de acesso", exemplo: "AKIA…" },
+      { nome: "REMOTION_AWS_SECRET_ACCESS_KEY", rotulo: "Chave secreta" },
+    ],
+    onde: "IAM › Usuários › remotion-user › Credenciais de segurança",
+    saldoPelaApi: false,
+    recarga: "https://us-east-1.console.aws.amazon.com/billing/home",
+    grupo: "servicos",
   },
   { id: "github", nome: "GitHub", serve: "Segundo cérebro (repositório)", campos: [{ nome: "SECOND_BRAIN_GITHUB_TOKEN", rotulo: "Token", exemplo: "github_pat_…" }], onde: "github.com/settings/tokens", saldoPelaApi: false, recarga: null, grupo: "servicos" },
 ];

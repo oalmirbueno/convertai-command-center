@@ -19,7 +19,9 @@
  * - Runway: GET /v1/organization (creditBalance) [401];
  * - HeyGen: GET /v3/users/me (saldo da carteira ou créditos) [401];
  * - Higgsfield: GET /requests/<id que não existe>/status: 404 = a chave passou [401];
- * - GitHub: GET /user [401].
+ * - GitHub: GET /user [401];
+ * - AWS: STS GetCallerIdentity assinado (SigV4), que nunca é cobrado e
+ *   funciona sem permissão nenhuma [403 InvalidClientTokenId/SignatureDoesNotMatch].
  *
  * Regra dura: nada do que o provedor responde em texto vai para a tela ou o
  * banco (a OpenAI devolve o começo da chave na mensagem de erro). Só o status
@@ -279,6 +281,20 @@ const TESTADORES: Record<IdDoProvedor, Testador> = {
     return semTeste("O OpenArt ainda não tem API pública para testar. A chave fica guardada para quando entrar.");
   },
 
+  async aws(v, buscar) {
+    if (!v.REMOTION_AWS_ACCESS_KEY_ID || !v.REMOTION_AWS_SECRET_ACCESS_KEY) return semTeste("A AWS precisa do id da chave e da chave secreta.");
+    const consulta = "Action=GetCallerIdentity&Version=2011-06-15";
+    const cab = await assinarSigV4({ id: v.REMOTION_AWS_ACCESS_KEY_ID, segredo: v.REMOTION_AWS_SECRET_ACCESS_KEY, regiao: "us-east-1", servico: "sts", host: "sts.us-east-1.amazonaws.com", consulta });
+    const r = await pedir(buscar, `https://sts.us-east-1.amazonaws.com/?${consulta}`, { method: "GET", headers: cab });
+    if (r.status === 403 || r.status === 401) return invalida(r.status);
+    const base = porStatus(r.status);
+    if (!base) return semTeste(`A AWS respondeu ${r.status}.`, r.status);
+    if (base.estado !== "valida") return base;
+    // Só o número da conta (12 dígitos), nunca o texto da resposta.
+    const conta = (r.texto.match(/<Account>(\d{12})<\/Account>/) || [])[1];
+    return valida("Chave válida.", { sem_saldo_pela_api: true, ...(conta ? { conta: `conta ${conta}` } : {}) }, r.status);
+  },
+
   async github(v, buscar) {
     const r = await pedir(buscar, "https://api.github.com/user", {
       method: "GET",
@@ -291,6 +307,33 @@ const TESTADORES: Record<IdDoProvedor, Testador> = {
     return valida("Chave válida.", { sem_saldo_pela_api: true, ...(conta ? { conta: `@${conta}` } : {}) }, r.status);
   },
 };
+
+async function hmac(chave: BufferSource, texto: string): Promise<ArrayBuffer> {
+  const k = await crypto.subtle.importKey("raw", chave, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return crypto.subtle.sign("HMAC", k, new TextEncoder().encode(texto));
+}
+
+async function sha256Hex(texto: string): Promise<string> {
+  return hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto)));
+}
+
+const hex = (b: ArrayBuffer) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, "0")).join("");
+
+/** Cabeçalhos AWS SigV4 de um GET sem corpo (`consulta` já em ordem e codificada; só o teste de chave usa). */
+export async function assinarSigV4(o: { id: string; segredo: string; regiao: string; servico: string; host: string; consulta: string; agora?: Date }): Promise<Record<string, string>> {
+  const quando = (o.agora || new Date()).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const dia = quando.slice(0, 8);
+  const assinados = "host;x-amz-date";
+  const canonico = ["GET", "/", o.consulta, `host:${o.host}`, `x-amz-date:${quando}`, "", assinados, await sha256Hex("")].join("\n");
+  const escopo = `${dia}/${o.regiao}/${o.servico}/aws4_request`;
+  const aAssinar = ["AWS4-HMAC-SHA256", quando, escopo, await sha256Hex(canonico)].join("\n");
+  let k = await hmac(new TextEncoder().encode(`AWS4${o.segredo}`), dia);
+  k = await hmac(k, o.regiao);
+  k = await hmac(k, o.servico);
+  k = await hmac(k, "aws4_request");
+  const assinatura = hex(await hmac(k, aAssinar));
+  return { "X-Amz-Date": quando, Authorization: `AWS4-HMAC-SHA256 Credential=${o.id}/${escopo}, SignedHeaders=${assinados}, Signature=${assinatura}` };
+}
 
 /**
  * Testa as chaves de um provedor. `valores` = {NOME: segredo}. Nunca lança:
