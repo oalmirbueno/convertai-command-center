@@ -1969,6 +1969,14 @@
       "remote_name": "troca_de_cenario",
       "remote_statements_sha256": "74964ab79535b7a6c43e394c857f996d424be94c8ba8de864c8ee2cf74114f70",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930328000",
+      "path": "supabase/migrations/20260930328000_chaves_aws_render.sql",
+      "local_sha256": "2425110fa9a4844ed727dd4deea1897a8baa6f84eb694497878f08f019474da4",
+      "remote_name": "chaves_aws_render",
+      "remote_statements_sha256": "bdf6334af8d57c96034640fbfaece11eb48e1fb0ee84bc0d39765b097fc055c1",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
