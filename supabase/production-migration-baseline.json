@@ -1945,6 +1945,14 @@
       "remote_name": "chaves_e_custos",
       "remote_statements_sha256": "1fe3011c44c60af97b006845545f1a8b6674b09e4e0c10418ab8b3fc238e8910",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930325000",
+      "path": "supabase/migrations/20260930325000_navegador_qualquer_modelo_e_acoes.sql",
+      "local_sha256": "e10160c4ff25af819b906888830a255a8dc24608e2007457f42054e2e38f2935",
+      "remote_name": "navegador_qualquer_modelo_e_acoes",
+      "remote_statements_sha256": "e3fde949b1063775f7c2ffe58265a34c704968c4a8425e80296218b9a00b462f",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
