@@ -2,9 +2,9 @@ import { useState, type DragEvent } from "react";
 import { ChevronLeft, ChevronRight, Clapperboard, Copy, CopyPlus, Film, Layers, Sparkles, UserRoundCheck, X } from "lucide-react";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
 import { BotaoComCusto } from "@/components/mesa/Custo";
+import { videosDoResultado } from "./videoNoCanvas";
 import {
   entradasDoGerar,
-  NOS_DE_VIDEO_EM_BREVE,
   partesDaSerie,
   partesDoResultado,
   VARIACOES_POR_VEZ,
@@ -32,6 +32,10 @@ export interface AcoesDaHistoria {
   onProxima: (gerarId: string) => void;
   /** Marca o Resultado aberto (ou o primeiro) como cena. */
   onNovaCena: () => void;
+  /** Frente CNV: cartão Vídeo da cena (a foto no 1º quadro). */
+  onAnimar?: (gerarId: string) => void;
+  /** Frente CNV: um cartão Vídeo para cada cena com foto que ainda não tem. */
+  onAnimarTodas?: () => void;
 }
 
 export function HistoriaDoCanvas({
@@ -181,6 +185,14 @@ export function HistoriaDoCanvas({
                     <button type="button" className={`${BOTAO} mb-1 mr-1 px-1.5`} disabled={!foto} onClick={() => acoes.onProxima(h.no.id)} title="Próxima cena com a pessoa desta foto" aria-label={`Próxima cena depois da ${h.numero}`}>
                       <UserRoundCheck className="mr-0.5 h-3.5 w-3.5" /> Próxima
                     </button>
+                    {acoes.onAnimar && (
+                      <button type="button" className={`${BOTAO} mb-1 mr-1 px-1.5`} disabled={!foto} onClick={() => acoes.onAnimar && acoes.onAnimar(h.no.id)} title="Vídeo desta cena (a foto no 1º quadro)" aria-label={`Animar a cena ${h.numero}`} data-animar-da-historia={h.no.id}>
+                        <Film className="mr-0.5 h-3.5 w-3.5" /> {(() => {
+                          const v = videosDoResultado(canvas, h.no.id);
+                          return v.prontos ? `${v.prontos} ${v.prontos === 1 ? "vídeo" : "vídeos"}` : v.cartoes ? "Vídeo" : "Animar";
+                        })()}
+                      </button>
+                    )}
                   </div>
                   <div className="flex min-w-0 items-center">
                     <BotaoComCusto
@@ -216,8 +228,14 @@ export function HistoriaDoCanvas({
           </ol>
         )}
       </div>
-      <div className="flex min-w-0 shrink-0 flex-wrap items-center border-t border-white/10 px-3 py-1.5 text-[11px] text-zinc-500">
-        <Film className="mr-1 h-3 w-3" /> Mesa Vídeos (em breve): {NOS_DE_VIDEO_EM_BREVE.map((v) => v.rotulo.toLowerCase()).join(", ")} por cena, a partir desta história.
+      <div className="flex min-w-0 shrink-0 flex-wrap items-center border-t border-white/10 px-3 py-1.5 text-[11px] text-zinc-400">
+        <Film className="mr-1 h-3 w-3" />
+        <span className="mr-2 min-w-0 flex-1">Cada cena vira vídeo pelo cartão Vídeo (a foto é o 1º quadro). A Mesa Vídeos e a Edição leem esta mesma história.</span>
+        {acoes.onAnimarTodas && cenas.length > 0 && (
+          <button type="button" className={`${BOTAO} my-0.5`} onClick={acoes.onAnimarTodas} data-animar-todas="">
+            <Film className="mr-1 h-3.5 w-3.5" /> Animar as que faltam
+          </button>
+        )}
       </div>
     </section>
   );

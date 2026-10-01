@@ -488,6 +488,7 @@ export function AjustesDoResultado({
   onGerar,
   onVariacoes,
   onPersonagemCriada,
+  onAnimar,
 }: {
   canvas: Canvas;
   no: NoDoCanvas;
@@ -498,6 +499,8 @@ export function AjustesDoResultado({
   onGerar: (gerarId: string) => Promise<Record<string, never>>;
   onVariacoes: (gerarId: string, r: ResultadoDoCanvas) => Promise<unknown>;
   onPersonagemCriada?: (p: PersonagemCriada, r: ResultadoDoCanvas) => void;
+  /** Frente CNV: vira vídeo (cartão Vídeo com a foto no 1º quadro). */
+  onAnimar?: () => void;
 }) {
   const { catalogo } = useMesa();
   const avisarErro = useAvisarErro();
@@ -535,7 +538,7 @@ export function AjustesDoResultado({
 
   return (
     <div className="min-w-0 space-y-3.5" data-ajustes-do-resultado={no.id}>
-      <AjustesDaCena canvas={canvas} no={no} onMudar={onMudar} />
+      <AjustesDaCena canvas={canvas} no={no} onMudar={onMudar} onAnimar={onAnimar} />
       <div className="min-w-0">
         <p className={ROTULO}>Ação</p>
         <Escolha rotulo="Ação do Resultado" opcoes={ACOES_DO_RESULTADO} valor={d.acao || "livre"} onEscolher={(v) => onMudar({ acao: v })} />

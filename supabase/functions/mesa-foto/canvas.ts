@@ -55,6 +55,15 @@
  *     folha sai pela ação modelo_vista_gerar que já existe.
  * - canvas_salvar aceita canvas.historia { sinopse, formato } (coluna do SQL
  *   V-01; sem a coluna, grava o resto e avisa).
+ *
+ * Quadro animado (frente CNV, 30/09; modulos/quadro-animado.ts):
+ * - canvas_quadro_montar { client_id, marca_id?, canvas_id?, pedido, formato, midias, modelo_id? }
+ *     -> { resposta, modelo, conteudo, duracao_s, animacao, opcoes: [{ modelo, probabilidade }], recomendado, custo_usd, saldo_usd, avisos }
+ *     A IA (papel motion, modelo escolhido na tela) escreve o conteúdo e escolhe
+ *     o modelo de layout; o Jev ordena as opções de layout pelo pedido. Nada é
+ *     gravado: a tela mostra a prévia, aplica e oferece o Desfazer.
+ * - canvas_quadro_ordenar { client_id, pedido, conteudo, modelos: [ids], midias }
+ *     -> { opcoes, recomendado, custo_usd } (só o Jev, sem modelo de texto).
  */
 
 import {
@@ -67,6 +76,7 @@ import {
   type ImagemEntrada,
   lerResolucao,
   limiteDeReferencias,
+  modeloDoPapel,
   type ModeloIa,
   type Qualidade,
   type Resolucao,
@@ -84,6 +94,7 @@ import {
   ANGULOS_DE_VARIACAO,
   type CanvasNormalizado,
   canvasGravado,
+  caminhosDeFora,
   CHAVES_DOS_MODELOS_PRONTOS,
   entradasDaSaida,
   escolherSaida,
@@ -127,6 +138,8 @@ import { garantirPermitido, identidadesDaVista, NIVEIS_PELE, personaUsavel } fro
 import { FORMATOS, type Formato, TAMANHO_DO_FORMATO } from "./receitas.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+// Frente CNV (30/09): Quadro animado do Canvas (conteúdo pela IA, posição pelo código, layout ordenado pelo Jev).
+import { descricaoParaEscolha, ESQUEMA_DA_MONTAGEM, limparMontagem, LISTA_DE_FORMATOS_DO_QUADRO, modeloPorId, MODELOS_DO_QUADRO, SISTEMA_DA_MONTAGEM } from "./modulos/quadro-animado.ts";
 // Frente SPP (revisão 30/09): o agente do Canvas conversa com a equipe e recebe o método da casa (a conferência do canvas não).
 import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 
@@ -645,6 +658,9 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     await f.garantirAcesso(ch, clientId);
     const bruto = (corpo.canvas && typeof corpo.canvas === "object" ? corpo.canvas : {}) as Record<string, unknown>;
     const c = normalizarCanvas(bruto);
+    // Frente CNV: mídia do Quadro e vídeos do cartão Vídeo só da pasta deste cliente.
+    const fora = caminhosDeFora(c, clientId);
+    if (fora.length) throw new ErroDeRegra(400, "midia_de_outro_cliente", "O Quadro ou o Vídeo cita um arquivo que não é deste cliente. Troque a mídia pelo acervo dele.", { caminhos: fora.slice(0, 5) });
     const historia = lerHistoria(bruto.historia);
     const conferidos = await conferirIds(clientId, c);
     // Produto de outro cliente (esteira): a equipe precisa ter acesso ao cliente do kit.
@@ -1154,6 +1170,120 @@ Nunca peça pessoa parecida com alguém real, nunca menor de idade, nunca sexual
     return f.json({ ...r, resposta: fechado.resposta, metodo: fechado.anexo, tarefa, no_saida_id: saida ? saida.id : null, custo_usd: arred6(lido.custoUsd), saldo_usd: lido.saldoUsd });
   }
 
+  // ---------------------------------------------------------------- quadro animado (frente CNV)
+
+  /** Ordena os modelos de layout pelo pedido (Jev Choice). Nunca lança: sem Jev, fica a ordem que veio. */
+  async function ordenarLayouts(clientId: string, canvasId: string | null, ch: Chamador, e: { pedido: string; conteudo: Record<string, unknown>; modelos: string[]; marca: string | null; midias: number }) {
+    const candidatos = e.modelos.filter((id, i, l) => !!modeloPorId(id) && l.indexOf(id) === i).slice(0, 6);
+    if (candidatos.length < 2) return { opcoes: candidatos.map((m) => ({ modelo: m, probabilidade: null as number | null })), custo: 0, aviso: null as string | null };
+    const criteria: Record<string, string> = {};
+    candidatos.forEach((id) => {
+      criteria[id] = descricaoParaEscolha(modeloPorId(id)!);
+    });
+    try {
+      const res = await jevPerguntar({
+        state: { pedido: e.pedido || "(sem pedido: quadro de vídeo curto da marca)", marca: e.marca, conteudo: e.conteudo, midias_disponiveis: e.midias },
+        questions: {
+          layout: {
+            type: "choice",
+            instructions: "Qual destes layouts de quadro de vídeo curto (Reels ou Stories) atende melhor ao `pedido` da marca, com o `conteudo` já escrito e as mídias disponíveis (`midias_disponiveis`)?",
+            criteria,
+          },
+        },
+      });
+      const cobrado = await cobrarJev(res, { clientId, tarefa: "motion", referencia: canvasId ? { tipo: REF_CANVAS, id: canvasId } : undefined, criadoPor: ch.userId });
+      const prob = (res.answers.layout && res.answers.layout.probabilities) || {};
+      const opcoes = candidatos.map((m) => ({ modelo: m, probabilidade: typeof prob[m] === "number" ? Math.round(prob[m] * 1000) / 1000 : null }));
+      opcoes.sort((a, b) => (b.probabilidade ?? -1) - (a.probabilidade ?? -1));
+      return { opcoes, custo: cobrado ? cobrado.custoUsd : 0, aviso: null };
+    } catch (err) {
+      registrarFalha("mesa-foto: jev não ordenou os layouts do quadro", err, { client_id: clientId });
+      return {
+        opcoes: candidatos.map((m) => ({ modelo: m, probabilidade: null as number | null })),
+        custo: 0,
+        aviso: err instanceof JevErro && err.codigo === "jev_sem_chave" ? "O Jev está sem chave: a ordem das opções é a da IA." : "O Jev não respondeu agora: a ordem das opções é a da IA.",
+      };
+    }
+  }
+
+  /** Monta o quadro pelo pedido: conteúdo e modelo pela IA, layout ordenado pelo Jev. Não grava nada. */
+  async function canvasQuadroMontar(ch: Chamador, corpo: Record<string, unknown>) {
+    const clientId = idDe(corpo.client_id, "client_id");
+    await f.garantirAcesso(ch, clientId);
+    const canvasId = corpo.canvas_id ? (await canvasComAcesso(ch, idDe(corpo.canvas_id, "canvas_id"))).id : null;
+    // Pedido de layout e texto gráfico (não vai a gerador de imagem): sem o filtro da persona, que recusaria "moda infantil".
+    const pedido = limpo(corpo.pedido, 1500);
+    const formato = (LISTA_DE_FORMATOS_DO_QUADRO as string[]).indexOf(String(corpo.formato)) >= 0 ? String(corpo.formato) : "9:16";
+    const midias = (Array.isArray(corpo.midias) ? corpo.midias : []).slice(0, 8).map((x) => {
+      const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+      return { nome: limpo(o.nome, 80), tipo: o.tipo === "video" ? "video" : "imagem" };
+    });
+    // O método da casa (frente SPP) entra como no agente do Canvas: entender o pedido, receber o que a equipe deu e provar.
+    const spP = superpoderesPara(db(), { agente: "foto.canvas", pedido: pedido || "Montar um quadro animado da marca" });
+    const modelo = await modeloDoPapel("motion", typeof corpo.modelo_id === "string" && corpo.modelo_id ? corpo.modelo_id : null);
+    if (!modelo) throw new ErroDeRegra(409, "sem_modelo", "Nenhum modelo de texto ligado para o papel motion. Escolha um no seletor.");
+    const contexto = f.contextoDoCliente ? await f.contextoDoCliente(clientId, undefined, corpo.marca_id).catch((e) => (registrarFalha("mesa-foto: contexto do quadro não lido", e), null)) : null;
+    const dados = {
+      formato,
+      midias_disponiveis: midias,
+      modelos: MODELOS_DO_QUADRO.map((m) => ({ id: m.id, rotulo: m.rotulo, descricao: m.descricao, pede_midia: m.pedeMidia })),
+      cliente: contexto ? contexto.dados : null,
+      conteudo_atual: corpo.conteudo_atual && typeof corpo.conteudo_atual === "object" ? corpo.conteudo_atual : null,
+    };
+    const lido = await chamarTexto({
+      clientId,
+      tarefa: "motion",
+      agente: "motion",
+      modeloId: modelo.id,
+      sistema: `${SISTEMA_DA_MONTAGEM}
+
+DADOS REAIS:
+${JSON.stringify(dados).slice(0, 24_000)}`,
+      metodo: await spP,
+      mensagens: [{ papel: "usuario", conteudo: pedido || "Monte um quadro de vídeo curto com a cara da marca, pelo contexto do cliente." }],
+      esquemaJson: comMetodosUsados(ESQUEMA_DA_MONTAGEM),
+      maxTokensSaida: 2_000,
+      timeoutMs: 120_000,
+      referencia: canvasId ? { tipo: REF_CANVAS, id: canvasId } : undefined,
+      criadoPor: ch.userId,
+    });
+    const m = limparMontagem(lido.json, { midias: midias.length });
+    // Não grava nada no canvas: a resposta leva a linha "Método:" e a tela aplica só o que a pessoa escolher.
+    const declarados = lido.json && typeof lido.json === "object" ? (lido.json as { metodos_usados?: unknown }).metodos_usados : undefined;
+    const fechado = await fecharComMetodo(db(), { usoId: lido.usoId, metodo: await spP, resposta: m.resposta, declarados, acaoFeita: false, clientId });
+    const avisos: string[] = [];
+    const marca = contexto && contexto.cliente ? String(contexto.cliente) : null;
+    const ordem = await ordenarLayouts(clientId, canvasId, ch, { pedido, conteudo: m.conteudo as unknown as Record<string, unknown>, modelos: [m.modelo].concat(m.alternativas), marca, midias: midias.length });
+    if (ordem.aviso) avisos.push(ordem.aviso);
+    if (!contexto) avisos.push("O contexto da marca não foi lido agora: o texto saiu só do pedido.");
+    return f.json({
+      resposta: fechado.resposta,
+      metodo: fechado.anexo,
+      modelo: m.modelo,
+      conteudo: m.conteudo,
+      duracao_s: m.duracao_s,
+      animacao: m.animacao,
+      opcoes: ordem.opcoes,
+      recomendado: ordem.opcoes.length ? ordem.opcoes[0].modelo : m.modelo,
+      modelo_ia: modelo.id,
+      custo_usd: arred6(lido.custoUsd + ordem.custo),
+      saldo_usd: lido.saldoUsd,
+      avisos,
+    });
+  }
+
+  /** Sugestões de layout com o conteúdo que já está no quadro, ordenadas pelo Jev (sem modelo de texto). */
+  async function canvasQuadroOrdenar(ch: Chamador, corpo: Record<string, unknown>) {
+    const clientId = idDe(corpo.client_id, "client_id");
+    await f.garantirAcesso(ch, clientId);
+    const pedido = limpo(corpo.pedido, 1500);
+    const conteudo = (corpo.conteudo && typeof corpo.conteudo === "object" ? corpo.conteudo : {}) as Record<string, unknown>;
+    const conteudoLimpo = { titulo: limpo(conteudo.titulo, 120), subtitulo: limpo(conteudo.subtitulo, 200), cta: limpo(conteudo.cta, 60), selo: limpo(conteudo.selo, 40) };
+    const modelos = (Array.isArray(corpo.modelos) ? corpo.modelos : []).map(String);
+    const ordem = await ordenarLayouts(clientId, null, ch, { pedido, conteudo: conteudoLimpo, modelos, marca: null, midias: Number(corpo.midias) || 0 });
+    return f.json({ opcoes: ordem.opcoes, recomendado: ordem.opcoes.length ? ordem.opcoes[0].modelo : null, avisos: ordem.aviso ? [ordem.aviso] : [], custo_usd: arred6(ordem.custo) });
+  }
+
   /** estimar { acao_alvo: 'canvas_gerar', canvas_id, no_saida_id?, modelo_imagem_id?, qualidade?, resolucao?, motores? } */
   async function estimarCanvas(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
     const c = await canvasComAcesso(ch, idDe(corpo.canvas_id, "canvas_id"));
@@ -1180,6 +1310,8 @@ Nunca peça pessoa parecida com alguém real, nunca menor de idade, nunca sexual
       canvas_conferir: canvasConferir,
       canvas_agente: canvasAgente,
       canvas_personagem_criar: canvasPersonagemCriar,
+      canvas_quadro_montar: canvasQuadroMontar,
+      canvas_quadro_ordenar: canvasQuadroOrdenar,
     } as Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>>,
     estimar: estimarCanvas,
   };
@@ -1202,7 +1334,7 @@ function lerContextoDoAmbiente(ctx: { cliente: string; dados: Record<string, unk
 }
 
 /** Ações do Canvas que chamam IA ou baixam imagens (respondem com fôlego). */
-export const ACOES_LONGAS_DO_CANVAS = ["canvas_montar", "canvas_gerar", "canvas_conferir", "canvas_ler", "canvas_salvar", "canvas_agente", "canvas_personagem_criar"];
+export const ACOES_LONGAS_DO_CANVAS = ["canvas_montar", "canvas_gerar", "canvas_conferir", "canvas_ler", "canvas_salvar", "canvas_agente", "canvas_personagem_criar", "canvas_quadro_montar"];
 
 /** Coluna que ainda não existe no banco (SQL pendente): o PostgREST devolve PGRST204 e o Postgres 42703. */
 export function colunaFaltando(erro: { code?: string; message?: string } | null | undefined, coluna: string): boolean {

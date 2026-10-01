@@ -398,10 +398,12 @@ describe("canvas v3: contrato tela x função", () => {
     expect(ANGULOS_DA_TELA).toHaveLength(ANGULOS_DE_VARIACAO.length);
     expect(MODELOS_PRONTOS.map((m) => m.chave)).toEqual(CHAVES_DOS_MODELOS_PRONTOS);
     (Object.keys(TIPOS_DE_NO) as (keyof typeof TIPO_NA_FUNCAO)[]).forEach((t) => expect(TIPOS_NA_FUNCAO as readonly string[]).toContain(TIPO_NA_FUNCAO[t]));
-    // Vídeo fica só preparado: nem a tela nem a função têm o tipo ainda.
-    expect(Object.keys(TIPOS_DE_NO)).not.toContain("video");
-    expect(regras).toContain("canvas_video_gerar");
-    expect(() => normalizarCanvasNaFuncao({ nos: [{ id: "v", tipo: "video" }] })).toThrow(/Tipo de cartão/);
+    // Frente CNV (30/09): o Vídeo e o Quadro existem na tela e na função (o "em breve" saiu).
+    expect(Object.keys(TIPOS_DE_NO)).toContain("video");
+    expect(Object.keys(TIPOS_DE_NO)).toContain("quadro");
+    expect(regras).toContain("modulos/video-do-canvas.ts");
+    expect(normalizarCanvasNaFuncao({ nos: [{ id: "v", tipo: "video" }] }).nos[0].tipo).toBe("video");
+    expect(() => normalizarCanvasNaFuncao({ nos: [{ id: "v", tipo: "foguete" }] })).toThrow(/Tipo de cartão/);
   });
 
   it("o que a tela salva dos cartões novos passa na função e volta igual", () => {
@@ -525,10 +527,11 @@ describe("canvas v3: tela", () => {
     await waitFor(() => expect(document.querySelector("[data-quadro]")!.getAttribute("data-tela-cheia")).toBe("nao"));
   });
 
-  it("paleta com Agente (bolinha) e Vídeo em breve; cartão selecionado mostra Apagar e sai do quadro", async () => {
+  it("paleta com Agente (bolinha), Vídeo e Quadro ligados; cartão selecionado mostra Apagar e sai do quadro", async () => {
     montar(h(EtapaCanvas));
     await waitFor(() => expect(document.querySelectorAll("[data-no-do-canvas]").length).toBe(2));
-    expect((document.querySelector('[data-paleta="video"]') as HTMLButtonElement).disabled).toBe(true);
+    expect((document.querySelector('[data-paleta="video"]') as HTMLButtonElement).disabled).toBe(false);
+    expect((document.querySelector('[data-paleta="quadro"]') as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(document.querySelector('[data-paleta="agente"]') as HTMLElement);
     await waitFor(() => expect(noDoQuadro("agente")).toBeTruthy());
     await waitFor(() => expect(document.querySelectorAll(".react-flow__edge").length).toBe(2));

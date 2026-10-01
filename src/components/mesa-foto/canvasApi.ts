@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao, type ParteDaEstimativa, type Qualidade } from "@/lib/mesa/api";
 import { decidirFoto, normalizarFoto, type FotoDoAcervo } from "./fotoApi";
 import { normalizarConferenciaDaPersona, type ConferenciaDaPersona, type Persona, type Resolucao } from "./modelosApi";
+import { lerDadosDoVideo, type DadosDoVideo } from "../../../supabase/functions/mesa-foto/modulos/video-do-canvas";
+import { normalizarQuadro, type QuadroAnimado } from "../../../supabase/functions/mesa-foto/modulos/quadro-animado";
 
 /**
  * Canvas da Mesa Foto: o grafo (cartões e ligações) que o dono monta para
@@ -21,10 +23,13 @@ import { normalizarConferenciaDaPersona, type ConferenciaDaPersona, type Persona
  * pose/intenção e carrossel; "Variações desta" e o carrossel são N chamadas
  * de canvas_gerar (uma imagem por chamada, custo de todas à vista antes).
  *
- * Vídeo (em breve): só o lugar na paleta (TIPOS_FUTUROS). Contrato previsto
- * em supabase/functions/mesa-foto/canvas-regras.ts (cabeçalho): cartão
- * "video" ligado a um Resultado, dados { imagem_id, motor_video, duracao_s,
- * movimento, formato }, ações canvas_video_gerar e canvas_video_status.
+ * Vídeo e Quadro (frente CNV, 30/09): o cartão "video" recebe a foto de um
+ * Resultado (alça "inicio"), a foto de outro como último quadro (alça
+ * "final") ou o vídeo de outro cartão Vídeo ("continuar"), e gera pelo motor
+ * da Mesa Vídeos (canvas/videoNoCanvas.ts). O cartão "quadro" é a composição
+ * animada em camadas (canvas/quadro/) e recebe mídias de Resultados e Vídeos
+ * (alça "midia"). Dados validados pelos mesmos módulos da função
+ * (supabase/functions/mesa-foto/modulos/).
  *
  * Cenas e história (dono, 25/09 à noite; docs/mesa-foto/cenas/PESQUISA.md):
  * um Resultado alimenta outro Resultado com um papel (personagem, produto,
@@ -36,8 +41,11 @@ import { normalizarConferenciaDaPersona, type ConferenciaDaPersona, type Persona
 
 // ------------------------------------------------------------------ tipos
 
-export type TipoDeNo = "produto" | "modelo" | "ambiente" | "estilo" | "texto" | "gerar" | "agente";
-export type Entrada = "produto" | "pessoa" | "ambiente" | "estilo" | "texto" | "agente";
+export type TipoDeNo = "produto" | "modelo" | "ambiente" | "estilo" | "texto" | "gerar" | "agente" | "video" | "quadro";
+/** Tipos que recebem cartões de entrada e alimentam um Resultado de foto. */
+export type TipoDeEntrada = Exclude<TipoDeNo, "gerar" | "video" | "quadro">;
+/** Alça onde a linha chega: as seis do Resultado, as do Vídeo (inicio, final, continuar) e a do Quadro (midia). */
+export type Entrada = "produto" | "pessoa" | "ambiente" | "estilo" | "texto" | "agente" | "inicio" | "final" | "continuar" | "midia";
 export type ModoDoAmbiente = "descrever" | "foto" | "contexto";
 export type UsoDaFotoDoAmbiente = "usar" | "complementar";
 
@@ -130,6 +138,10 @@ export interface DadosDoNo {
   mensagens?: MensagemDoAgente[];
   /** Resultado: marcado como cena da história (null = fora da história). */
   cena?: CenaDoResultado | null;
+  /** Cartão Vídeo (frente CNV): motor, duração, câmera, pedidos feitos à Mesa Vídeos. */
+  video?: DadosDoVideo;
+  /** Cartão Quadro (frente CNV): a composição em camadas. */
+  quadro?: QuadroAnimado;
 }
 
 export interface NoDoCanvas {
@@ -202,8 +214,12 @@ export const TAMANHO_DO_CARTAO = { largura: 200, altura: 88 };
 export const TAMANHO_DA_SAIDA = { largura: 280, altura: 412 };
 /** O Agente é uma bolinha (com o nome embaixo). */
 export const TAMANHO_DO_AGENTE = { largura: 76, altura: 92 };
+/** Vídeo e Quadro (frente CNV): mostram a prévia, o andamento e as ações. */
+export const TAMANHO_DO_VIDEO = { largura: 240, altura: 300 };
+export const TAMANHO_DO_QUADRO = { largura: 240, altura: 320 };
 
-export const tamanhoDoNo = (tipo: TipoDeNo) => (tipo === "gerar" ? TAMANHO_DA_SAIDA : tipo === "agente" ? TAMANHO_DO_AGENTE : TAMANHO_DO_CARTAO);
+export const tamanhoDoNo = (tipo: TipoDeNo) =>
+  tipo === "gerar" ? TAMANHO_DA_SAIDA : tipo === "agente" ? TAMANHO_DO_AGENTE : tipo === "video" ? TAMANHO_DO_VIDEO : tipo === "quadro" ? TAMANHO_DO_QUADRO : TAMANHO_DO_CARTAO;
 
 export const ORDEM_DAS_ENTRADAS: Entrada[] = ["produto", "pessoa", "ambiente", "estilo", "texto", "agente"];
 
@@ -220,6 +236,8 @@ export const TIPOS_DE_NO: Record<TipoDeNo, { rotulo: string; dica: string; entra
   texto: { rotulo: "Pedido", dica: "O que você quer na foto, em palavras (ou uma restrição).", entrada: "texto", cor: "#cbd5e1", borda: "border-slate-300/50", fundo: "bg-slate-300/15", texto: "text-slate-200" },
   agente: { rotulo: "Agente", dica: "Converse com o diretor de fotografia: ele lê o contexto do cliente e escreve o pedido do Resultado ligado.", entrada: "agente", cor: "#a78bfa", borda: "border-violet-400/50", fundo: "bg-violet-400/15", texto: "text-violet-300" },
   gerar: { rotulo: "Resultado", dica: "Junta os cartões ligados e gera a foto.", entrada: null, cor: "#f4f4f5", borda: "border-white/20", fundo: "bg-zinc-950", texto: "text-white" },
+  video: { rotulo: "Vídeo", dica: "Anima a foto de um Resultado (1º quadro) com o motor de vídeo escolhido; emenda com outra cena ou continua outro vídeo.", entrada: null, cor: "#f97316", borda: "border-orange-400/50", fundo: "bg-orange-400/15", texto: "text-orange-300" },
+  quadro: { rotulo: "Quadro", dica: "Composição animada em camadas (texto, foto, vídeo, formas e logo) com a cara da marca, pronta para exportar ou renderizar.", entrada: null, cor: "#2dd4bf", borda: "border-teal-400/50", fundo: "bg-teal-400/15", texto: "text-teal-300" },
 };
 
 export const ROTULOS_DAS_ENTRADAS: Record<Entrada, string> = {
@@ -229,14 +247,19 @@ export const ROTULOS_DAS_ENTRADAS: Record<Entrada, string> = {
   estilo: "Estilo",
   texto: "Pedido",
   agente: "Agente",
+  inicio: "1º quadro",
+  final: "Último quadro",
+  continuar: "Continuar vídeo",
+  midia: "Mídia",
 };
 
-export const TIPOS_DA_PALETA: TipoDeNo[] = ["produto", "modelo", "ambiente", "estilo", "texto", "agente", "gerar"];
+export const TIPOS_DA_PALETA: TipoDeNo[] = ["produto", "modelo", "ambiente", "estilo", "texto", "agente", "gerar", "video", "quadro"];
 
-/** Tipos que ainda não existem: aparecem desligados na paleta ("em breve"). */
-export const TIPOS_FUTUROS: { chave: string; rotulo: string; dica: string }[] = [
-  { chave: "video", rotulo: "Vídeo", dica: "Em breve: transformar a foto aprovada em vídeo curto (movimento de câmera, UGC)." },
-];
+/** Tipos que ainda não existem (aparecem desligados na paleta). Frente CNV: o Vídeo saiu daqui e funciona. */
+export const TIPOS_FUTUROS: { chave: string; rotulo: string; dica: string }[] = [];
+
+/** Alças de chegada do cartão Vídeo, de cima para baixo. */
+export const ENTRADAS_DO_VIDEO: Entrada[] = ["inicio", "final", "continuar"];
 
 // ------------------------------------------------------------------ composição (espelho de canvas-regras.ts)
 
@@ -299,14 +322,6 @@ export const ENQUADRAMENTOS_DA_CENA: { valor: string; rotulo: string; dica: stri
   { valor: "pov", rotulo: "POV", dica: "O que a pessoa vê." },
 ];
 
-/** Nós da Mesa Vídeos (em breve): o mesmo Canvas com estas opções a mais (docs/mesa-videos/CONTRATO.md). */
-export const NOS_DE_VIDEO_EM_BREVE: { chave: string; rotulo: string; dica: string }[] = [
-  { chave: "animar", rotulo: "Animar cena", dica: "A foto da cena vira o 1º quadro do vídeo." },
-  { chave: "duracao", rotulo: "Duração", dica: "De 4 a 15 s por cena, conforme o motor de vídeo." },
-  { chave: "camera", rotulo: "Câmera", dica: "Movimento: travelling, pan, órbita, zoom, câmera na mão." },
-  { chave: "audio", rotulo: "Áudio", dica: "Fala, trilha e efeitos da cena." },
-];
-
 function normalizarAnimacao(v: any): AnimacaoDaCena | null {
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
   const a = v.audio && typeof v.audio === "object" ? v.audio : null;
@@ -349,6 +364,8 @@ export const rotuloDaAcao = (v?: string | null) => (ACOES_DO_RESULTADO.find((a) 
 export const rotuloDaPose = (v?: string | null) => (POSES_DO_RESULTADO.find((a) => a.valor === v) || POSES_DO_RESULTADO[0]).rotulo;
 
 export const entradaDoTipo = (t: TipoDeNo): Entrada | null => TIPOS_DE_NO[t].entrada;
+/** O cartão é de entrada (alimenta um Resultado de foto)? */
+export const ehEntrada = (t: TipoDeNo): t is TipoDeEntrada => t !== "gerar" && t !== "video" && t !== "quadro";
 
 // ------------------------------------------------------------------ normalizadores
 
@@ -455,6 +472,16 @@ function normalizarDados(tipo: TipoDeNo, v: any): DadosDoNo {
     saida.resultados = resultados;
     saida.cena = normalizarCena(d.cena);
   }
+  // Vídeo e Quadro: a função grava plano (vídeo) ou em "quadro"; a tela guarda aninhado.
+  if (tipo === "video") {
+    const v = lerDadosDoVideo(d.video && typeof d.video === "object" ? d.video : d);
+    saida.video = v;
+    saida.titulo = texto(d.titulo) || v.titulo || "";
+  }
+  if (tipo === "quadro") {
+    saida.quadro = normalizarQuadro(d.quadro && typeof d.quadro === "object" ? d.quadro : {});
+    saida.titulo = texto(d.titulo);
+  }
   return saida;
 }
 
@@ -473,8 +500,19 @@ export function normalizarLigacao(v: any, nos: NoDoCanvas[]): Ligacao | null {
   const para = texto(v.para || v.target);
   const origem = nos.find((n) => n.id === de);
   const destino = nos.find((n) => n.id === para);
-  if (!origem || !destino || destino.tipo !== "gerar" || de === para) return null;
+  if (!origem || !destino || de === para) return null;
   const id = texto(v.id) || `lig-${de}-${para}`;
+  if (destino.tipo === "video") {
+    if (origem.tipo === "video") return { id, de, para, entrada: "continuar", ordem: numero(v.ordem) };
+    if (origem.tipo !== "gerar") return null;
+    const quadro = texto(v.quadro || v.entrada) === "final" ? "final" : "inicio";
+    return { id, de, para, entrada: quadro, ordem: numero(v.ordem), imagem_id: textoOuNulo(v.imagem_id) };
+  }
+  if (destino.tipo === "quadro") {
+    if (origem.tipo !== "gerar" && origem.tipo !== "video") return null;
+    return { id, de, para, entrada: "midia", ordem: numero(v.ordem), imagem_id: origem.tipo === "gerar" ? textoOuNulo(v.imagem_id) : null };
+  }
+  if (destino.tipo !== "gerar" || !ehEntrada(origem.tipo) && origem.tipo !== "gerar") return null;
   if (origem.tipo === "gerar") {
     // Resultado alimentando Resultado (cena anterior): o papel escolhe a alça.
     const papel = lerPapelDaLigacao(v.papel);
@@ -551,17 +589,51 @@ export function alcancaPorResultados(c: Pick<Canvas, "nos" | "ligacoes">, de: st
   return false;
 }
 
+/** Algum caminho de Vídeo para Vídeo (continuar) leva de `de` até `ate`? */
+export function alcancaPorVideos(c: Pick<Canvas, "nos" | "ligacoes">, de: string, ate: string): boolean {
+  const videos = c.nos.filter((n) => n.tipo === "video").map((n) => n.id);
+  const vistos: string[] = [];
+  const pilha = [de];
+  while (pilha.length) {
+    const atual = pilha.pop() as string;
+    if (atual === ate) return true;
+    if (vistos.indexOf(atual) >= 0) continue;
+    vistos.push(atual);
+    c.ligacoes.forEach((l) => {
+      if (l.de === atual && videos.indexOf(l.para) >= 0) pilha.push(l.para);
+    });
+  }
+  return false;
+}
+
 /**
- * A entrada da ligação se ela é possível (destino que é Resultado, sem
- * repetir); senão null. Resultado com Resultado vale (cena anterior), com o
- * papel escolhido e sem laço.
+ * A entrada da ligação se ela é possível; senão null.
+ * - Resultado de foto: recebe os cartões de entrada e outro Resultado (cena
+ *   anterior, com o papel escolhido e sem laço). Vídeo e Quadro não entram.
+ * - Vídeo (frente CNV): a foto de um Resultado na alça "inicio" (1º quadro)
+ *   ou "final" (último quadro), uma de cada; o vídeo de outro cartão Vídeo em
+ *   "continuar" (um só, sem laço). Continuar exclui as fotos e vice-versa.
+ * - Quadro: fotos de Resultados e vídeos de cartões Vídeo ("midia").
  */
-export function podeLigar(c: Pick<Canvas, "nos" | "ligacoes">, de: string, para: string, papel?: PapelDaLigacao | null): Entrada | null {
+export function podeLigar(c: Pick<Canvas, "nos" | "ligacoes">, de: string, para: string, papel?: PapelDaLigacao | null, alca?: string | null): Entrada | null {
   if (!de || !para || de === para) return null;
   const origem = c.nos.find((n) => n.id === de);
   const destino = c.nos.find((n) => n.id === para);
-  if (!origem || !destino || destino.tipo !== "gerar") return null;
+  if (!origem || !destino) return null;
   if (c.ligacoes.some((l) => l.de === de && l.para === para)) return null;
+  if (destino.tipo === "video") {
+    // Continuar um vídeo já começa no fim dele: não convive com a foto do 1º nem do último quadro.
+    if (origem.tipo === "video") return c.ligacoes.some((l) => l.para === para && (l.entrada === "continuar" || l.entrada === "inicio" || l.entrada === "final")) || alcancaPorVideos(c, para, de) ? null : "continuar";
+    if (origem.tipo !== "gerar") return null;
+    if (c.ligacoes.some((l) => l.para === para && l.entrada === "continuar")) return null;
+    const livre = (q: Entrada) => !c.ligacoes.some((l) => l.para === para && l.entrada === q);
+    if (alca === "final") return livre("final") ? "final" : null;
+    if (alca === "inicio") return livre("inicio") ? "inicio" : null;
+    return livre("inicio") ? "inicio" : livre("final") ? "final" : null;
+  }
+  if (destino.tipo === "quadro") return origem.tipo === "gerar" || origem.tipo === "video" ? "midia" : null;
+  if (destino.tipo !== "gerar") return null;
+  if (origem.tipo === "video" || origem.tipo === "quadro") return null;
   if (origem.tipo === "gerar") return alcancaPorResultados(c, para, de) ? null : entradaDoPapel(papel || "personagem");
   return entradaDoTipo(origem.tipo);
 }
@@ -571,12 +643,14 @@ export function podeLigar(c: Pick<Canvas, "nos" | "ligacoes">, de: string, para:
  * sai do tipo do cartão, nunca da alça tocada; de Resultado para Resultado,
  * sai do papel (que a tela tira da alça onde a linha chegou).
  */
-export function ligar<T extends Pick<Canvas, "nos" | "ligacoes">>(c: T, de: string, para: string, papel?: PapelDaLigacao | null): T {
-  const entrada = podeLigar(c, de, para, papel);
+export function ligar<T extends Pick<Canvas, "nos" | "ligacoes">>(c: T, de: string, para: string, papel?: PapelDaLigacao | null, alca?: string | null): T {
+  const entrada = podeLigar(c, de, para, papel, alca);
   if (!entrada) return c;
   const ordem = c.ligacoes.filter((l) => l.para === para && l.entrada === entrada).length;
   const origem = c.nos.find((n) => n.id === de);
-  const extra: Partial<Ligacao> = origem && origem.tipo === "gerar" ? { papel: papel || "personagem", imagem_id: null } : {};
+  const destino = c.nos.find((n) => n.id === para);
+  const paraVideoOuQuadro = !!destino && (destino.tipo === "video" || destino.tipo === "quadro");
+  const extra: Partial<Ligacao> = origem && origem.tipo === "gerar" ? (paraVideoOuQuadro ? { imagem_id: null } : { papel: papel || "personagem", imagem_id: null }) : {};
   return { ...c, ligacoes: c.ligacoes.concat([{ id: novoId("lig"), de, para, entrada, ordem, ...extra }]) };
 }
 
@@ -1241,6 +1315,8 @@ export const TIPO_NA_FUNCAO: Record<TipoDeNo, string> = {
   texto: "prompt",
   gerar: "saida",
   agente: "agente",
+  video: "video",
+  quadro: "quadro",
 };
 
 /** Dados de um cartão na forma que a função grava (canvas-regras.ts, dadosDoNo). */
@@ -1257,6 +1333,9 @@ export function dadosParaAFuncao(tipo: TipoDeNo, d: DadosDoNo): Record<string, u
   }
   if (tipo === "texto") return { texto: d.texto || "", papel: d.papel === "restricao" ? "restricao" : "pedido" };
   if (tipo === "agente") return { pedido: (d.pedido || "").trim(), mensagens: (d.mensagens || []).slice(-24).map((m) => ({ papel: m.papel, texto: m.texto.slice(0, 2000) })) };
+  // Frente CNV: o Vídeo vai plano (modulos/video-do-canvas.ts) e o Quadro dentro de "quadro".
+  if (tipo === "video") return { ...lerDadosDoVideo(d.video || {}), titulo: (d.titulo || "").trim() || null };
+  if (tipo === "quadro") return { titulo: (d.titulo || "").trim() || null, quadro: normalizarQuadro(d.quadro || {}) };
   // Resultado: as fotos vão junto (a função guarda o atalho, sem a URL assinada, que expira).
   return {
     motores: d.motores || [],
@@ -1306,7 +1385,15 @@ export function corpoDoCanvas(c: Canvas) {
     nome: c.nome.trim() || "Canvas sem nome",
     nos: c.nos.map((n) => ({ id: n.id, tipo: TIPO_NA_FUNCAO[n.tipo], x: Math.round(n.x), y: Math.round(n.y), dados: dadosParaAFuncao(n.tipo, n.dados) })),
     // A entrada (produto, pessoa...) sai do tipo do cartão de origem: a função não guarda. Entre Resultados vão o papel e a foto.
-    ligacoes: c.ligacoes.map((l) => (l.papel ? { id: l.id, de: l.de, para: l.para, ordem: l.ordem, papel: l.papel, imagem_id: l.imagem_id || null } : { id: l.id, de: l.de, para: l.para, ordem: l.ordem })),
+    ligacoes: c.ligacoes.map((l) =>
+      l.papel
+        ? { id: l.id, de: l.de, para: l.para, ordem: l.ordem, papel: l.papel, imagem_id: l.imagem_id || null }
+        : l.entrada === "inicio" || l.entrada === "final" || l.entrada === "continuar"
+        ? { id: l.id, de: l.de, para: l.para, ordem: l.ordem, quadro: l.entrada, imagem_id: l.imagem_id || null }
+        : l.entrada === "midia"
+        ? { id: l.id, de: l.de, para: l.para, ordem: l.ordem, imagem_id: l.imagem_id || null }
+        : { id: l.id, de: l.de, para: l.para, ordem: l.ordem },
+    ),
     viewport: { x: Math.round(c.viewport.x), y: Math.round(c.viewport.y), zoom: Math.round(c.viewport.zoom * 1000) / 1000 },
   };
   if (c.id) corpo.id = c.id;

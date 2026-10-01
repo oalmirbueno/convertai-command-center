@@ -1,11 +1,11 @@
 import { Clapperboard, Film, X } from "lucide-react";
+import { videosDoResultado } from "./videoNoCanvas";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
 import {
   ENQUADRAMENTOS_DA_CENA,
   entradasDoGerar,
   fotoDaLigacao,
   nomeDoResultado,
-  NOS_DE_VIDEO_EM_BREVE,
   PAPEIS_DA_LIGACAO,
   type Canvas,
   type CenaDoResultado,
@@ -54,10 +54,25 @@ function FotosParaEscolher({ no, escolhida, onEscolher, rotulo }: { no: NoDoCanv
 
 /**
  * A cena no Resultado: marcar como cena da história, o que acontece, o
- * enquadramento, o lugar, a narrativa, a foto da cena e a semente fixa. A
- * animação aparece como "em breve" (reservado para a Mesa Vídeos).
+ * enquadramento, o lugar, a narrativa, a foto da cena e a semente fixa. O
+ * vídeo da cena (frente CNV) sai do cartão Vídeo ligado a ela: "Animar".
  */
-export function AjustesDaCena({ canvas, no, onMudar }: { canvas: Canvas; no: NoDoCanvas; onMudar: (dados: Partial<DadosDoNo>) => void }) {
+export function AjustesDaCena({ canvas, no, onMudar, onAnimar }: { canvas: Canvas; no: NoDoCanvas; onMudar: (dados: Partial<DadosDoNo>) => void; onAnimar?: () => void }) {
+  const videos = videosDoResultado(canvas, no.id);
+  const temFoto = (no.dados.resultados || []).some((r) => r.status === "gerada");
+  const animar = onAnimar ? (
+    <div className="min-w-0 border-t border-white/10 pt-2" data-animar-cena={no.id}>
+      <p className={`${ROTULO} flex items-center`}>
+        <Film className="mr-1 h-3 w-3" /> Vídeo {no.dados.cena ? "da cena" : "desta foto"}
+      </p>
+      <div className="flex min-w-0 flex-wrap items-center">
+        <button type="button" className={`${BOTAO} mb-1 mr-1.5`} onClick={onAnimar} disabled={!temFoto} title={temFoto ? "Cartão Vídeo com esta foto no 1º quadro" : "Gere a foto antes: ela é o 1º quadro"}>
+          <Film className="mr-1 h-3.5 w-3.5" /> {videos.cartoes ? "Abrir o Vídeo" : "Animar"}
+        </button>
+        <span className="mb-1 text-[11px] text-zinc-400">{videos.cartoes ? `${videos.prontos} ${videos.prontos === 1 ? "vídeo pronto" : "vídeos prontos"}${videos.andamento ? ` · ${videos.andamento} gerando` : ""}` : temFoto ? "a foto vira o 1º quadro" : "sem foto ainda"}</span>
+      </div>
+    </div>
+  ) : null;
   const cena = no.dados.cena || null;
   const historia = cenasDaHistoria(canvas);
   const minha = historia.find((h) => h.no.id === no.id) || null;
@@ -72,6 +87,7 @@ export function AjustesDaCena({ canvas, no, onMudar }: { canvas: Canvas; no: NoD
         <button type="button" className={BOTAO} onClick={() => onMudar({ cena: cenaNova(historia.length + 1) })} data-marcar-cena={no.id}>
           <Clapperboard className="mr-1 h-3.5 w-3.5" /> Esta é uma cena
         </button>
+        {animar && <div className="mt-2">{animar}</div>}
       </div>
     );
   }
@@ -117,18 +133,7 @@ export function AjustesDaCena({ canvas, no, onMudar }: { canvas: Canvas; no: NoD
           className={`${CAMPO} h-7 w-28 py-0`}
         />
       </label>
-      <div className="min-w-0 border-t border-white/10 pt-2">
-        <p className={`${ROTULO} flex items-center`}>
-          <Film className="mr-1 h-3 w-3" /> Vídeo da cena (Mesa Vídeos, em breve)
-        </p>
-        <div className="flex min-w-0 flex-wrap">
-          {NOS_DE_VIDEO_EM_BREVE.map((v) => (
-            <span key={v.chave} title={v.dica} className="mb-1 mr-1 inline-flex h-6 cursor-not-allowed items-center rounded-full border border-dashed border-white/20 px-2 text-[11px] text-zinc-500">
-              {v.rotulo}
-            </span>
-          ))}
-        </div>
-      </div>
+      {animar}
     </div>
   );
 }

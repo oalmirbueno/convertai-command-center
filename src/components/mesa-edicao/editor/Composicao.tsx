@@ -9,6 +9,8 @@ import { filtroDaCor, type FiltroDaCor } from "../../../lib/editor/cor";
 import { cameraNoTempo } from "../../../lib/editor/efeitos";
 import { recortePara, rostoNoTempo } from "../../../lib/editor/reenquadre";
 import TextoNaTela from "./TextoNaTela";
+// Frente CNV: camada do Quadro animado do Canvas (clipe com estilo.camada).
+import { CamadaNaComposicao } from "../../mesa-foto/canvas/quadro/CamadaNaComposicao";
 
 /**
  * Composição Remotion gerada do projeto de edição (frente V-B). A MESMA
@@ -452,7 +454,9 @@ export function ComposicaoDoProjeto({ projeto, urls, publico, mix, cor_da_marca 
           const peca = c.estilo && typeof (c.estilo as Record<string, unknown>).peca === "string";
           return (
             <Sequence key={`${t.id}:${c.id}`} from={de} durationInFrames={d} layout="none" name={`${t.nome} ${c.id}`}>
-              {peca && t.tipo !== "audio" && t.tipo !== "video" ? (
+              {c.estilo && typeof (c.estilo as Record<string, unknown>).camada === "object" && t.tipo === "sobreposicao" ? (
+                <CamadaNaComposicao estilo={c.estilo as Record<string, unknown>} url={c.fonte ? urls[c.fonte] : null} entrada_s={c.entrada_s} duracao_s={duracaoDoClipe(c)} />
+              ) : peca && t.tipo !== "audio" && t.tipo !== "video" ? (
                 <ClipeDePeca projeto={projeto} urls={urls} c={c} corDaMarca={corDaMarca} />
               ) : t.tipo === "video" || t.tipo === "sobreposicao" ? (
                 <ClipeVisual projeto={projeto} urls={urls} trilha={t} c={c} filtroCss={t.tipo === "sobreposicao" && c.fonte && projeto.fontes[c.fonte] && projeto.fontes[c.fonte].midia !== "imagem" ? filtroBase || undefined : undefined} />

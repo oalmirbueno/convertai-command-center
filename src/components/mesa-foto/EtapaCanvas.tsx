@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   Background,
@@ -28,6 +28,7 @@ import {
   ChevronRight,
   Clapperboard,
   Copy,
+  Film,
   Download,
   Eye,
   EyeOff,
@@ -101,7 +102,10 @@ import {
   TAMANHO_DO_CARTAO,
   tamanhoDoNo,
   TIPOS_DE_NO,
-  TIPOS_FUTUROS,
+  TAMANHO_DO_QUADRO,
+  TAMANHO_DO_VIDEO,
+  ENTRADAS_DO_VIDEO,
+  ehEntrada,
   useCanvases,
   useProdutosDeFora,
   VARIACOES_POR_VEZ,
@@ -117,13 +121,24 @@ import { ChatDoAgente } from "./canvas/Agente";
 import { EditorDaLigacaoDeResultado } from "./canvas/Cena";
 import { HistoriaDoCanvas, type AcoesDaHistoria } from "./canvas/FaixaDaHistoria";
 import { cenaNova, cenasDaHistoria, duplicarCena, marcarComoCena, proximaCena } from "./canvas/historia";
-import { BOTAO, descrever, FLUTUANTE, Gaveta, ICONE_DO_VIDEO, ICONES, kitsUsaveis, MiniaturaGrande, PAINEL, useRodaPresa, type Descricao, type Fontes } from "./canvas/comum";
+import { BOTAO, descrever, FLUTUANTE, Gaveta, ICONES, kitsUsaveis, MiniaturaGrande, PAINEL, useRodaPresa, type Descricao, type Fontes } from "./canvas/comum";
 import { AjustesDoResultado, CustoDoResultado, EditorDoCartao, useUsoDoResultado } from "./canvas/Editores";
 import { EscolherCartao, type AbaDaEscolha, type PedidoDeEscolha } from "./canvas/Escolher";
 import { EsteiraDeProdutos, TIPO_ARRASTADO_DA_ESTEIRA } from "./canvas/Esteira";
 import { ComoFunciona, GaleriaDeModelos } from "./canvas/Galeria";
 import { andamentoDoResultado, gerarNoResultado, gerarVariacoes, tirarPendentes, usePendentes } from "./canvas/geracao";
 import { ModoLista } from "./canvas/ModoLista";
+// Frente CNV (30/09): cartões Vídeo (gera pela Mesa Vídeos) e Quadro (composição animada em camadas).
+import { AjustesDoVideo, CorpoDoVideo, JanelaDoVideo } from "./canvas/CartaoDeVideo";
+import { useVigiaDosVideos } from "./canvas/vigiaDosVideos";
+import { AjustesDoQuadro, CorpoDoQuadro, type AbaDoEditor } from "./canvas/CartaoDoQuadro";
+import { animarCenasQueFaltam, animarResultado, midiasLigadasAoQuadro, posicaoAoLado, quadroAoLado } from "./canvas/videoNoCanvas";
+import { useMarcaDoQuadro } from "./canvas/quadro/quadroApi";
+import { aplicarModelo as modeloDoQuadro, quadroVazio, type FormatoDoQuadro, type QuadroAnimado } from "../../../supabase/functions/mesa-foto/modulos/quadro-animado";
+import { lerDadosDoVideo, ultimoVideo } from "../../../supabase/functions/mesa-foto/modulos/video-do-canvas";
+
+// O editor do Quadro é grande (palco, linha do tempo, IA): só carrega quando abre.
+const EditorDeQuadro = lazy(() => import("./canvas/quadro/EditorDeQuadro"));
 
 /**
  * Canvas v3 (docs/mesa-foto/MODELOS-E-CANVAS.md, seções 7 e 9.2; pedidos do
@@ -173,7 +188,10 @@ const ATRASO_DO_SALVAR_MS = 1500;
 const DURACAO_DA_LINHA_NOVA_MS = 1800;
 const CHAVE_DO_COMO_FUNCIONA = "mesa-foto:canvas:como-funciona-visto";
 const CHAVE_DO_FOCO = "mesa-foto:canvas:foco-desligado";
-const TIPOS_DA_BARRA: Exclude<TipoDeNo, "gerar">[] = ["produto", "modelo", "ambiente", "estilo", "texto", "agente"];
+const TIPOS_DA_BARRA: Exclude<TipoDeNo, "gerar">[] = ["produto", "modelo", "ambiente", "estilo", "texto", "agente", "video", "quadro"];
+/** Cor das linhas que chegam ao Vídeo e ao Quadro. */
+const COR_DO_VIDEO = "#f97316";
+const COR_DO_QUADRO = "#2dd4bf";
 
 // ------------------------------------------------------------------ contexto do quadro (os nós chamam a tela)
 
@@ -189,6 +207,12 @@ interface ValorDoQuadro {
   abrir: (noId: string) => void;
   tirar: (noId: string) => void;
   aplicarModelo: (chave: string) => void;
+  /** Frente CNV: anima a foto do Resultado (cartão Vídeo ligado ao 1º quadro). */
+  animar: (gerarId: string) => void;
+  /** Abre o player do vídeo gerado. */
+  verVideo: (caminho: string) => void;
+  /** Abre o editor do Quadro animado. */
+  editarQuadro: (quadroId: string, aba: AbaDoEditor) => void;
 }
 
 const ContextoDoQuadro = createContext<ValorDoQuadro | null>(null);
@@ -387,6 +411,18 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
         ) : (
           <span className="flex-1 text-[11px] font-semibold uppercase tracking-wider">Resultado</span>
         )}
+        {ctx && atual && gerando.length === 0 && (
+          <button
+            type="button"
+            className="nodrag mr-1.5 inline-flex h-6 items-center rounded-md border border-orange-400/40 bg-orange-400/10 px-1.5 text-[11px] font-semibold text-orange-200 hover:bg-orange-400/20"
+            onClick={() => ctx.animar(no.id)}
+            aria-label="Animar esta foto"
+            title="Vira vídeo: cartão Vídeo com esta foto no 1º quadro"
+            data-animar-resultado={no.id}
+          >
+            <Film className="mr-1 h-3 w-3" /> Animar
+          </button>
+        )}
         {gerando.length > 0 ? (
           <Loader2 className="h-4 w-4 animate-spin text-emerald-300" aria-label="Gerando" />
         ) : (
@@ -566,7 +602,67 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
   );
 }
 
-const TIPOS_NO_QUADRO = { produto: NoCartao, modelo: NoCartao, ambiente: NoCartao, estilo: NoCartao, texto: NoCartao, agente: NoAgente, gerar: NoResultado };
+interface DadosDoVideoNoQuadro extends Record<string, unknown> {
+  no: NoDoCanvas;
+  canvas: Canvas;
+}
+type NoDeVideo = Node<DadosDoVideoNoQuadro>;
+
+/** Alças do Vídeo: 1º quadro, último quadro e continuar (esquerda, de cima para baixo); a saída vai ao Quadro ou a outro Vídeo. */
+const TOPO_DAS_ALCAS_DO_VIDEO = 64;
+const PASSO_DAS_ALCAS_DO_VIDEO = 44;
+
+function NoVideo({ data, selected }: NodeProps<NoDeVideo>) {
+  const ctx = useContext(ContextoDoQuadro);
+  const { no, canvas } = data;
+  const tipo = TIPOS_DE_NO.video;
+  return (
+    <div
+      style={{ width: TAMANHO_DO_VIDEO.largura, height: TAMANHO_DO_VIDEO.altura }}
+      className={`relative flex flex-col overflow-visible rounded-xl border bg-zinc-950 text-zinc-100 shadow-sm ${selected ? "border-white/60 ring-2 ring-orange-400/70" : "border-orange-400/30"}`}
+      data-no-do-canvas={no.id}
+      data-tipo="video"
+    >
+      <div className="flex h-9 shrink-0 items-center px-3">
+        <span className="mr-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-orange-400/20">
+          <Film className="h-3 w-3 text-orange-300" />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[12px] font-semibold">{(no.dados.titulo || "").trim() || tipo.rotulo}</span>
+      </div>
+      {ctx ? <CorpoDoVideo canvas={canvas} no={no} fontes={ctx.fontes} onVer={ctx.verVideo} /> : null}
+      {selected && <FerramentasDoNo noId={no.id} tipo="video" />}
+      {ENTRADAS_DO_VIDEO.map((e, i) => (
+        <Handle key={e} type="target" position={Position.Left} id={e} title={ROTULOS_DAS_ENTRADAS[e]} style={{ top: TOPO_DAS_ALCAS_DO_VIDEO + i * PASSO_DAS_ALCAS_DO_VIDEO, width: ALCA, height: ALCA, background: i === 2 ? COR_DO_VIDEO : COR_DA_CENA, border: "2px solid #09090b" }} />
+      ))}
+      <Handle type="source" position={Position.Right} id="saida" title="Ligar este vídeo num Quadro ou noutro Vídeo (continuar)" style={{ width: ALCA, height: ALCA, background: COR_DO_VIDEO, border: "2px solid #09090b" }} />
+    </div>
+  );
+}
+
+function NoQuadro({ data, selected }: NodeProps<NoDeVideo>) {
+  const ctx = useContext(ContextoDoQuadro);
+  const { no, canvas } = data;
+  return (
+    <div
+      style={{ width: TAMANHO_DO_QUADRO.largura, height: TAMANHO_DO_QUADRO.altura }}
+      className={`relative flex flex-col overflow-visible rounded-xl border bg-zinc-950 text-zinc-100 shadow-sm ${selected ? "border-white/60 ring-2 ring-teal-400/70" : "border-teal-400/30"}`}
+      data-no-do-canvas={no.id}
+      data-tipo="quadro"
+    >
+      <div className="flex h-9 shrink-0 items-center px-3">
+        <span className="mr-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-teal-400/20">
+          <Layers className="h-3 w-3 text-teal-300" />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[12px] font-semibold">{(no.dados.titulo || "").trim() || "Quadro animado"}</span>
+      </div>
+      {ctx ? <CorpoDoQuadro canvas={canvas} no={no} fontes={ctx.fontes} onEditar={(aba) => ctx.editarQuadro(no.id, aba)} /> : null}
+      {selected && <FerramentasDoNo noId={no.id} tipo="quadro" />}
+      <Handle type="target" position={Position.Left} id="midia" title="Mídias do quadro (fotos e vídeos)" style={{ width: ALCA, height: ALCA, background: COR_DO_QUADRO, border: "2px solid #09090b" }} />
+    </div>
+  );
+}
+
+const TIPOS_NO_QUADRO = { produto: NoCartao, modelo: NoCartao, ambiente: NoCartao, estilo: NoCartao, texto: NoCartao, agente: NoAgente, gerar: NoResultado, video: NoVideo, quadro: NoQuadro };
 
 /** Cor da linha e da alça de Resultado para Resultado (cena anterior). */
 const COR_DA_CENA = "#34d399";
@@ -581,6 +677,11 @@ function alcasDoNo(tipo: TipoDeNo) {
     ];
   }
   const t = tamanhoDoNo(tipo);
+  if (tipo === "video") {
+    const entradas = ENTRADAS_DO_VIDEO.map((e, i) => ({ id: e, type: "target" as const, position: Position.Left, x: -ALCA / 2, y: TOPO_DAS_ALCAS_DO_VIDEO + i * PASSO_DAS_ALCAS_DO_VIDEO - ALCA / 2, width: ALCA, height: ALCA }));
+    return [...entradas, { id: "saida", type: "source" as const, position: Position.Right, x: t.largura - ALCA / 2, y: t.altura / 2 - ALCA / 2, width: ALCA, height: ALCA }];
+  }
+  if (tipo === "quadro") return [{ id: "midia", type: "target" as const, position: Position.Left, x: -ALCA / 2, y: t.altura / 2 - ALCA / 2, width: ALCA, height: ALCA }];
   const y = tipo === "agente" ? 30 : t.altura / 2;
   return [{ id: "saida", type: "source" as const, position: Position.Right, x: t.largura - ALCA / 2, y: y - ALCA / 2, width: ALCA, height: ALCA }];
 }
@@ -625,15 +726,6 @@ function Paleta({ onTipo, onAdicionar, onResultado }: { onTipo: (t: TipoDeNo) =>
           </button>
         );
       })}
-      {TIPOS_FUTUROS.map((t) => (
-        <button key={t.chave} type="button" disabled title={t.dica} data-paleta={t.chave} aria-label={`${t.rotulo} (em breve)`} className="mb-0.5 flex w-full cursor-not-allowed flex-col items-center rounded-xl px-0.5 py-1 text-center opacity-50">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-dashed border-white/20">
-            <ICONE_DO_VIDEO className="h-3.5 w-3.5 text-zinc-400" />
-          </span>
-          <span className="mt-0.5 text-[11px] leading-none text-zinc-400">{t.rotulo}</span>
-          <span className="text-[11px] leading-none text-zinc-500">em breve</span>
-        </button>
-      ))}
       <span className="mx-1 my-1 block h-px bg-white/10" />
       <button type="button" onClick={onAdicionar} data-paleta="adicionar" className="mb-0.5 flex w-full flex-col items-center rounded-xl px-0.5 py-1 text-center hover:bg-white/10" title="Escolher do acervo, dos produtos ou das pessoas, pela foto">
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-400 text-black">
@@ -708,7 +800,10 @@ function Quadro({
   onCheia,
   folgaDireita,
   onFundo,
+  semTeclas = false,
 }: {
+  /** Frente CNV: com uma janela por cima (editor do Quadro, player), Delete e Backspace não apagam cartão do quadro. */
+  semTeclas?: boolean;
   /** Largura (px) que os ajustes abertos cobrem à direita: o enquadrar deixa os cartões fora dela. */
   folgaDireita: number;
   /** Toque no fundo do quadro (fecha as gavetas). */
@@ -794,6 +889,7 @@ function Quadro({
           } as DadosDoResultado,
         };
       }
+      if (n.tipo === "video" || n.tipo === "quadro") return { ...base, data: { no: n, canvas } as DadosDoVideoNoQuadro };
       const ligacao = canvas.ligacoes.find((l) => l.de === n.id);
       const numero = ligacao ? (entradasDoGerar(canvas, ligacao.para).find((e) => e.ligacao.id === ligacao.id) || { numero: null }).numero : null;
       return { ...base, data: { no: n, descricao: descrever(n, fontes), numero, ligado: !!ligacao } as DadosDoCartao };
@@ -804,7 +900,9 @@ function Quadro({
     (): Edge[] =>
       canvas.ligacoes.map((l) => {
         const origem = canvas.nos.find((n) => n.id === l.de);
-        const cor = l.papel ? COR_DA_CENA : origem ? TIPOS_DE_NO[origem.tipo].cor : "#71717a";
+        const paraVideo = l.entrada === "inicio" || l.entrada === "final" || l.entrada === "continuar";
+        const paraQuadro = l.entrada === "midia";
+        const cor = paraVideo ? COR_DO_VIDEO : paraQuadro ? COR_DO_QUADRO : l.papel ? COR_DA_CENA : origem ? TIPOS_DE_NO[origem.tipo].cor : "#71717a";
         const ativa = !!selecionado && selecionado.tipo === "ligacao" && selecionado.id === l.id;
         const gerando = andamentoDoResultado(andamentos, l.para).gerando.length > 0;
         const aresta: Edge = {
@@ -818,8 +916,14 @@ function Quadro({
           style: { stroke: cor, strokeWidth: ativa ? 3.5 : 2.5, strokeDasharray: l.papel ? "6 4" : undefined },
           animated: gerando || recentes.indexOf(l.id) >= 0,
         };
-        // Resultado para Resultado: a linha diz o papel (personagem, produto, cenário, estilo).
-        if (l.papel) {
+        // Resultado para Resultado: a linha diz o papel (personagem, produto, cenário, estilo); para o Vídeo, qual quadro.
+        if (paraVideo) {
+          aresta.label = ROTULOS_DAS_ENTRADAS[l.entrada];
+          aresta.labelStyle = { fill: "#f4f4f5", fontSize: 11, fontWeight: 600 };
+          aresta.labelBgStyle = { fill: "#09090b" };
+          aresta.labelBgPadding = [6, 3];
+          aresta.labelBgBorderRadius = 8;
+        } else if (l.papel) {
           aresta.label = rotuloDoPapel(l.papel);
           aresta.labelStyle = { fill: "#f4f4f5", fontSize: 11, fontWeight: 600 };
           aresta.labelBgStyle = { fill: "#09090b" };
@@ -928,9 +1032,9 @@ function Quadro({
         }}
         onConnect={(c: Connection) => {
           // De Resultado para Resultado, a alça onde a linha chega escolhe o papel (pessoa = personagem).
-          if (c.source && c.target) onMudarCanvas((atual) => ligar(atual, c.source, c.target, papelDaAlca(c.targetHandle)));
+          if (c.source && c.target) onMudarCanvas((atual) => ligar(atual, c.source, c.target, papelDaAlca(c.targetHandle), c.targetHandle));
         }}
-        isValidConnection={(c) => !!podeLigar(canvas, String(c.source), String(c.target), papelDaAlca(c.targetHandle))}
+        isValidConnection={(c) => !!podeLigar(canvas, String(c.source), String(c.target), papelDaAlca(c.targetHandle), c.targetHandle)}
         edgesReconnectable
         onReconnectStart={() => {
           religou.current = false;
@@ -941,7 +1045,7 @@ function Quadro({
           onMudarCanvas((c) => {
             const sem = desligar(c, velha.id);
             const papel = papelDaAlca(nova.targetHandle);
-            return podeLigar(sem, nova.source, nova.target, papel) ? ligar(sem, nova.source, nova.target, papel) : c;
+            return podeLigar(sem, nova.source, nova.target, papel, nova.targetHandle) ? ligar(sem, nova.source, nova.target, papel, nova.targetHandle) : c;
           });
         }}
         onReconnectEnd={(_e, velha) => {
@@ -973,7 +1077,7 @@ function Quadro({
         noWheelClassName="nowheel"
         noPanClassName="nopan"
         noDragClassName="nodrag"
-        deleteKeyCode={["Backspace", "Delete"]}
+        deleteKeyCode={semTeclas ? null : ["Backspace", "Delete"]}
         proOptions={{ hideAttribution: true }}
         style={estilo}
       >
@@ -1143,6 +1247,75 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     setSalvar((s) => (s.estado === "conflito" ? s : { estado: "pendente", erro: "" }));
   }, []);
 
+  // ---------------------------------------------------------------- vídeo e quadro (frente CNV)
+
+  const marcaDoQuadro = useMarcaDoQuadro();
+  const vigia = useVigiaDosVideos(canvas, mudar);
+  const [videoVendo, setVideoVendo] = useState<string | null>(null);
+  const [quadroAberto, setQuadroAberto] = useState<{ id: string; aba: AbaDoEditor } | null>(null);
+  const aprovadas = useMemo(() => (fotos.data || []).filter((f) => f.aprovada).map((f) => f.id), [fotos.data]);
+
+  /** Anima a foto do Resultado: cartão Vídeo ligado ao 1º quadro (ou o que já existe) e os ajustes abertos. */
+  const animar = (gerarId: string) => {
+    const r = animarResultado(atual.current, gerarId, null);
+    if (!r.videoId) return;
+    if (r.novo) mudar(() => r.canvas);
+    const id = r.videoId;
+    // Depois do clique: o botão mora dentro do Resultado e o React Flow seleciona o Resultado no mesmo clique.
+    window.setTimeout(() => {
+      setSelecionado({ tipo: "no", id });
+      setRecolhida(false);
+    }, 0);
+    if (r.novo) toast.success("Cartão Vídeo no quadro", { description: "A foto é o 1º quadro. Escolha o motor, a câmera e gere com o custo à vista." });
+  };
+
+  /** Cartão Vídeo solto (ligar à mão) ou ligado ao Resultado aberto que já tem foto. */
+  const porVideo = (posicao: { x: number; y: number } | null) => {
+    const alvo = resultadoAlvo(atual.current, resultadoAtivo);
+    const g = alvo ? atual.current.nos.find((n) => n.id === alvo) || null : null;
+    if (!posicao && g && (g.dados.resultados || []).some((r) => r.status === "gerada")) {
+      animar(g.id);
+      return;
+    }
+    const no = novoNo("video", 0, 0, { video: lerDadosDoVideo({}) });
+    const p = posicao || (g ? posicaoAoLado(atual.current, g, TAMANHO_DO_VIDEO) : { x: 760, y: 0 });
+    mudar((c) => ({ ...c, nos: c.nos.concat([{ ...no, x: Math.round(p.x), y: Math.round(p.y) }]) }));
+    setSelecionado({ tipo: "no", id: no.id });
+    setRecolhida(false);
+  };
+
+  /** Cartão Quadro (ligado ao cartão de origem quando há) e o editor aberto. */
+  const porQuadro = (deId: string | null, posicao: { x: number; y: number } | null, quadro?: QuadroAnimado, aba: AbaDoEditor = "modelos") => {
+    const de = deId ? atual.current.nos.find((n) => n.id === deId) || null : null;
+    const formato: FormatoDoQuadro = de && de.tipo === "video" && de.dados.video ? (de.dados.video.formato as FormatoDoQuadro) : de && de.tipo === "gerar" && (de.dados.formato === "1:1" || de.dados.formato === "4:5" || de.dados.formato === "16:9" || de.dados.formato === "9:16") ? (de.dados.formato as FormatoDoQuadro) : "9:16";
+    const q = quadro || quadroVazio(formato, marcaDoQuadro.fundo);
+    if (de) {
+      const r = quadroAoLado(atual.current, de.id, { quadro: q });
+      mudar(() => r.canvas);
+      setSelecionado({ tipo: "no", id: r.quadroId });
+      setQuadroAberto({ id: r.quadroId, aba });
+      return;
+    }
+    const no = novoNo("quadro", 0, 0, { quadro: q });
+    const p = posicao || { x: 1060, y: 0 };
+    mudar((c) => ({ ...c, nos: c.nos.concat([{ ...no, x: Math.round(p.x), y: Math.round(p.y) }]) }));
+    setSelecionado({ tipo: "no", id: no.id });
+    setQuadroAberto({ id: no.id, aba });
+  };
+
+  /** "Pôr num Quadro": o vídeo pronto de fundo, com o modelo de capa da marca. */
+  const videoNumQuadro = (videoId: string) => {
+    const v = atual.current.nos.find((n) => n.id === videoId);
+    const pronto = v && v.dados.video ? ultimoVideo(v.dados.video) : null;
+    if (!v || !pronto || !v.dados.video) return;
+    const formato = v.dados.video.formato as FormatoDoQuadro;
+    const titulo = (v.dados.titulo || "").replace(/^Vídeo:\s*/, "").trim();
+    const q = modeloDoQuadro("capa_cheia", { titulo: titulo || marcaDoQuadro.nome || "", subtitulo: "", cta: "", selo: "", topicos: [], midias: [{ bucket: "mesa", caminho: pronto.storage_path, nome: "Vídeo do cartão", imagem_id: null, arquivo_id: pronto.arquivo_id }] }, marcaDoQuadro, formato, Math.max(3, v.dados.video.duracao_s));
+    porQuadro(videoId, null, q, "camadas");
+  };
+
+  const gravarQuadro = (id: string, q: QuadroAnimado) => mudar((c) => mudarDados(c, id, { quadro: q }));
+
   // Rascunho local a cada mudança (JSON, com try/catch): nada se perde se a aba fechar.
   useEffect(() => {
     if (mexeu.current) guardarRascunho(canvas);
@@ -1274,6 +1447,16 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
   };
 
   const aoTocarNaPaleta = (t: TipoDeNo) => {
+    if (t === "video") {
+      porVideo(null);
+      return;
+    }
+    if (t === "quadro") {
+      const alvo = resultadoAlvo(atual.current, resultadoAtivo);
+      const g = alvo ? atual.current.nos.find((n) => n.id === alvo) || null : null;
+      porQuadro(g && (g.dados.resultados || []).some((r) => r.status === "gerada") ? g.id : null, null);
+      return;
+    }
     if (t === "texto" || t === "agente") {
       porNoQuadro(t, t === "texto" ? { papel: "pedido" } : {}, { selecionar: true });
       setRecolhida(false);
@@ -1287,6 +1470,8 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
   };
 
   const aoSoltar = (t: TipoDeNo, posicao: { x: number; y: number }) => {
+    if (t === "video") return porVideo(posicao);
+    if (t === "quadro") return porQuadro(null, posicao);
     const id = porNoQuadro(t, t === "texto" ? { papel: "pedido" } : {}, { posicao, selecionar: t !== "gerar" });
     if (t !== "texto" && t !== "gerar" && t !== "agente") {
       setProntosAbertos(false);
@@ -1394,6 +1579,16 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
       setRecolhida(false);
       toast.success("Próxima cena no quadro", { description: "A pessoa desta foto já entra como personagem. Escreva a ação e gere." });
     },
+    onAnimar: animar,
+    onAnimarTodas: () => {
+      const r = animarCenasQueFaltam(atual.current, null, aprovadas);
+      if (!r.criados) {
+        toast.info("Nada para animar", { description: "Toda cena com foto já tem o seu cartão Vídeo." });
+        return;
+      }
+      mudar(() => r.canvas);
+      toast.success(`${r.criados} ${r.criados === 1 ? "cartão Vídeo" : "cartões Vídeo"} no quadro`, { description: "Um por cena, com a foto dela no 1º quadro. Gere cada um com o custo à vista." });
+    },
     onNovaCena: () => {
       const alvo = resultadoAlvo(atual.current, resultadoAtivo);
       const n = atual.current.nos.find((x) => x.id === alvo) || null;
@@ -1468,6 +1663,9 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     abrir: abrirNo,
     tirar,
     aplicarModelo,
+    animar,
+    verVideo: setVideoVendo,
+    editarQuadro: (id, aba) => setQuadroAberto({ id, aba }),
   };
 
   let conteudoDoPainel: ReactNode = null;
@@ -1512,6 +1710,64 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
         </div>
       </div>
     );
+  } else if (cartaoDoPainel && cartaoDoPainel.tipo === "video") {
+    tituloDoPainel = "Vídeo";
+    conteudoDoPainel = (
+      <div className="min-w-0 space-y-3">
+        <input
+          value={cartaoDoPainel.dados.titulo || ""}
+          onChange={(e) => {
+            const v = e.target.value.slice(0, 120);
+            mudar((c) => mudarDados(c, cartaoDoPainel.id, { titulo: v }));
+          }}
+          placeholder="Nome do vídeo (vai para a Mesa Vídeos)"
+          aria-label="Nome do vídeo"
+          className="w-full min-w-0 rounded-lg border border-white/10 bg-zinc-900 px-2.5 py-2 text-[13px] text-zinc-100 placeholder:text-zinc-500 focus:border-orange-400/60 focus:outline-none"
+        />
+        <AjustesDoVideo
+          key={cartaoDoPainel.id}
+          canvas={canvas}
+          no={cartaoDoPainel}
+          fontes={fontes}
+          onMudar={(d) => mudar((c) => mudarDados(c, cartaoDoPainel.id, { video: d }))}
+          onMudarCanvas={mudar}
+          onGerado={vigia.agendar}
+          onConferir={vigia.conferir}
+          onPorNoQuadro={videoNumQuadro}
+          onVer={setVideoVendo}
+        />
+        <div className="flex min-w-0 flex-wrap items-center border-t border-white/10 pt-2.5">
+          <button type="button" className={`${BOTAO} mb-1 mr-1.5`} onClick={() => setSelecionado(null)}>
+            Voltar aos ajustes
+          </button>
+          <button type="button" className={`${BOTAO} mb-1 text-red-300`} onClick={() => tirar(cartaoDoPainel.id)} aria-label="Tirar o cartão do quadro">
+            <Trash2 className="mr-1 h-3 w-3" /> Apagar
+          </button>
+        </div>
+      </div>
+    );
+  } else if (cartaoDoPainel && cartaoDoPainel.tipo === "quadro") {
+    tituloDoPainel = "Quadro animado";
+    conteudoDoPainel = (
+      <div className="min-w-0 space-y-3">
+        <AjustesDoQuadro
+          canvas={canvas}
+          no={cartaoDoPainel}
+          fontes={fontes}
+          marca={marcaDoQuadro}
+          onMudar={(d) => mudar((c) => mudarDados(c, cartaoDoPainel.id, d))}
+          onEditar={(aba) => setQuadroAberto({ id: cartaoDoPainel.id, aba })}
+        />
+        <div className="flex min-w-0 flex-wrap items-center border-t border-white/10 pt-2.5">
+          <button type="button" className={`${BOTAO} mb-1 mr-1.5`} onClick={() => setSelecionado(null)}>
+            Voltar aos ajustes
+          </button>
+          <button type="button" className={`${BOTAO} mb-1 text-red-300`} onClick={() => tirar(cartaoDoPainel.id)} aria-label="Tirar o cartão do quadro">
+            <Trash2 className="mr-1 h-3 w-3" /> Apagar
+          </button>
+        </div>
+      </div>
+    );
   } else if (cartaoDoPainel) {
     const ligado = canvas.ligacoes.some((l) => l.de === cartaoDoPainel.id);
     tituloDoPainel = `Cartão: ${TIPOS_DE_NO[cartaoDoPainel.tipo].rotulo}`;
@@ -1525,7 +1781,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
           onEscolher={() => abrirEscolha(cartaoDoPainel.tipo, cartaoDoPainel.id)}
           onAgente={cartaoDoPainel.tipo === "ambiente" ? () => ambienteComAgente(cartaoDoPainel.id) : undefined}
         />
-        {!ligado && (
+        {!ligado && ehEntrada(cartaoDoPainel.tipo) && (
           <button
             type="button"
             className={BOTAO}
@@ -1562,6 +1818,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
           onGerar={gerar}
           onVariacoes={variacoes}
           onPersonagemCriada={aoPersonagem}
+          onAnimar={() => animar(resultadoDoPainel.id)}
         />
         {resultados.length > 1 && (
           <button type="button" className={`${BOTAO} text-red-300`} onClick={() => tirar(resultadoDoPainel.id)}>
@@ -1672,6 +1929,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
             onCheia={alternarCheia}
             folgaDireita={folgaDireita}
             onFundo={fecharGavetas}
+            semTeclas={!!quadroAberto || !!videoVendo}
           />
         </ContextoDoQuadro.Provider>
         <Paleta onTipo={aoTocarNaPaleta} onAdicionar={() => abrirEscolha("produto", null)} onResultado={() => porNoQuadro("gerar")} />
@@ -1679,7 +1937,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
           recolhida={recolhida}
           onRecolher={setRecolhida}
           titulo={tituloDoPainel}
-          custo={<CustoDoResultado canvas={canvas} no={resultadoDoPainel} />}
+          custo={cartaoDoPainel && cartaoDoPainel.tipo === "video" ? "Custo do vídeo no botão Gerar" : cartaoDoPainel && cartaoDoPainel.tipo === "quadro" ? "Editar não custa; Montar com IA mostra o custo" : <CustoDoResultado canvas={canvas} no={resultadoDoPainel} />}
           custoCurto={<CustoDoResultado canvas={canvas} no={resultadoDoPainel} curto />}
         >
           {conteudoDoPainel}
@@ -1739,6 +1997,12 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
             onEscolher={(t, trocarId, gerarId) => abrirEscolha(t, trocarId, gerarId)}
             onAgenteDoAmbiente={(noId, gerarId) => ambienteComAgente(noId, gerarId)}
             onPersonagemCriada={aoPersonagem}
+            onAnimar={animar}
+            renderVideo={(n) => (
+              <AjustesDoVideo canvas={canvas} no={n} fontes={fontes} onMudar={(d) => mudar((c) => mudarDados(c, n.id, { video: d }))} onMudarCanvas={mudar} onGerado={vigia.agendar} onConferir={vigia.conferir} onPorNoQuadro={videoNumQuadro} onVer={setVideoVendo} />
+            )}
+            onEditarQuadro={(id) => setQuadroAberto({ id, aba: "camadas" })}
+            onPorQuadro={() => porQuadro(null, null)}
           />
         </div>
       ) : cheia ? (
@@ -1748,6 +2012,28 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
         quadro
       )}
       {lista && <EscolherCartao lugar="pagina" pedido={escolha} fontes={fontes} onFechar={() => setEscolha(null)} onEscolher={aoEscolher} />}
+      {videoVendo && <JanelaDoVideo caminho={videoVendo} titulo="Vídeo do Canvas" onFechar={() => setVideoVendo(null)} />}
+      {quadroAberto &&
+        (() => {
+          const no = canvas.nos.find((n) => n.id === quadroAberto.id && n.tipo === "quadro");
+          if (!no) return null;
+          return (
+            <Suspense fallback={null}>
+              <EditorDeQuadro
+                key={no.id}
+                aberto
+                abaInicial={quadroAberto.aba}
+                onFechar={() => setQuadroAberto(null)}
+                inicial={no.dados.quadro || quadroVazio("9:16", marcaDoQuadro.fundo)}
+                titulo={(no.dados.titulo || "").trim() || `${canvas.nome}: quadro`}
+                canvasId={canvas.id}
+                ligadas={midiasLigadasAoQuadro(canvas, no.id, aprovadas)}
+                marca={marcaDoQuadro}
+                onGravar={(q) => gravarQuadro(no.id, q)}
+              />
+            </Suspense>
+          );
+        })()}
     </div>
   );
 }

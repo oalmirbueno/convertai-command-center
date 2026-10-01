@@ -46,6 +46,8 @@ type AnimacaoDaCena = {
 
 ## 3. Nós extras de vídeo (em breve, não existem no tipo de nó)
 
+> **Atualização (frente CNV, 30/09):** o cartão **Vídeo** existe e gera pela `cena_gerar` desta função (1º quadro, último quadro e continuar), e o cartão **Quadro** é a composição animada em camadas que vai para o render. A tabela abaixo fica como histórico. Veja `docs/mesa-foto/CANVAS-VIDEO-E-QUADRO.md`.
+
 | Nó | O que faz | Dados previstos |
 | --- | --- | --- |
 | Animar cena | Liga numa cena e anima a foto dela | grava em `dados.cena.animacao` da cena ligada |

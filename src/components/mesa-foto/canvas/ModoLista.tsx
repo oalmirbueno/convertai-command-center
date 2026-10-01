@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { Film, LayoutTemplate, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Cartao, Pilulas } from "../Comuns";
-import { desligar, entradasDoGerar, mudarDados, mudarLigacao, nomeDoResultado, removerNo, resumoDoResultado, rotuloDoPapel, TIPOS_DE_NO, type Canvas, type PersonagemCriada, type ResultadoDoCanvas, type TipoDeNo } from "../canvasApi";
+import { desligar, entradasDoGerar, mudarDados, mudarLigacao, nomeDoResultado, removerNo, resumoDoResultado, rotuloDoPapel, TIPOS_DE_NO, type Canvas, type NoDoCanvas, type PersonagemCriada, type ResultadoDoCanvas, type TipoDeNo } from "../canvasApi";
 import { EditorDaLigacaoDeResultado } from "./Cena";
 import { ChatDoAgente } from "./Agente";
 import { descrever, ICONES, type Fontes } from "./comum";
@@ -23,6 +23,10 @@ export function ModoLista({
   onEscolher,
   onAgenteDoAmbiente,
   onPersonagemCriada,
+  onAnimar,
+  renderVideo,
+  onEditarQuadro,
+  onPorQuadro,
 }: {
   canvas: Canvas;
   fontes: Fontes;
@@ -34,12 +38,19 @@ export function ModoLista({
   onEscolher: (t: TipoDeNo, trocarId: string | null, gerarId: string | null) => void;
   onAgenteDoAmbiente: (noId: string, gerarId: string | null) => Promise<unknown>;
   onPersonagemCriada?: (p: PersonagemCriada, r: ResultadoDoCanvas) => void;
+  /** Frente CNV: animar a foto (cartão Vídeo), os ajustes do Vídeo e o editor do Quadro. */
+  onAnimar?: (gerarId: string) => void;
+  renderVideo?: (no: NoDoCanvas) => ReactNode;
+  onEditarQuadro?: (quadroId: string) => void;
+  onPorQuadro?: () => void;
 }) {
   const resultados = canvas.nos.filter((n) => n.tipo === "gerar");
+  const videos = canvas.nos.filter((n) => n.tipo === "video");
+  const quadros = canvas.nos.filter((n) => n.tipo === "quadro");
   const [resultadoId, setResultadoId] = useState<string | null>(resultados.length ? resultados[0].id : null);
   const resultado = resultados.find((s) => s.id === resultadoId) || resultados[0] || null;
   const entradas = resultado ? entradasDoGerar(canvas, resultado.id) : [];
-  const soltos = canvas.nos.filter((n) => n.tipo !== "gerar" && !canvas.ligacoes.some((l) => l.de === n.id));
+  const soltos = canvas.nos.filter((n) => n.tipo !== "gerar" && n.tipo !== "video" && n.tipo !== "quadro" && !canvas.ligacoes.some((l) => l.de === n.id));
 
   if (!resultado) {
     return (
@@ -114,8 +125,42 @@ export function ModoLista({
         <p className="mb-3 text-[12px] leading-snug [overflow-wrap:anywhere]" data-junta="">
           {resumoDoResultado(entradas, (x) => (x.tipo === "gerar" ? nomeDoResultado(canvas, x) : descrever(x, fontes).titulo)) || "Junta o que você puser acima. Comece por um produto ou uma pessoa."}
         </p>
-        <AjustesDoResultado canvas={canvas} no={resultado} fontes={fontes} onMudar={(dados) => onMudarCanvas((c) => mudarDados(c, resultado.id, dados))} garantirSalvo={garantirSalvo} comGerar onGerar={onGerar} onVariacoes={onVariacoes} onPersonagemCriada={onPersonagemCriada} />
+        <AjustesDoResultado canvas={canvas} no={resultado} fontes={fontes} onMudar={(dados) => onMudarCanvas((c) => mudarDados(c, resultado.id, dados))} garantirSalvo={garantirSalvo} comGerar onGerar={onGerar} onVariacoes={onVariacoes} onPersonagemCriada={onPersonagemCriada} onAnimar={onAnimar ? () => onAnimar(resultado.id) : undefined} />
       </Cartao>
+      {renderVideo && videos.length > 0 && (
+        <Cartao titulo={`Vídeos (${videos.length})`} className="!border-white/10 !bg-zinc-950 text-zinc-100">
+          <ol className="min-w-0 space-y-4">
+            {videos.map((v) => (
+              <li key={v.id} className="min-w-0" data-video-da-lista={v.id}>
+                <p className="mb-2 flex items-center text-[13px] font-semibold text-orange-300">
+                  <Film className="mr-1.5 h-3.5 w-3.5" /> {(v.dados.titulo || "").trim() || "Vídeo"}
+                </p>
+                {renderVideo(v)}
+              </li>
+            ))}
+          </ol>
+        </Cartao>
+      )}
+      {(quadros.length > 0 || onPorQuadro) && onEditarQuadro && (
+        <Cartao titulo={`Quadros animados (${quadros.length})`} className="!border-white/10 !bg-zinc-950 text-zinc-100">
+          <ul className="min-w-0">
+            {quadros.map((q) => (
+              <li key={q.id} className="flex min-w-0 items-center py-1.5" data-quadro-da-lista={q.id}>
+                <LayoutTemplate className="mr-2 h-3.5 w-3.5 shrink-0 text-teal-300" />
+                <span className="min-w-0 flex-1 truncate text-[13px]">{(q.dados.titulo || "").trim() || "Quadro animado"}</span>
+                <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={() => onEditarQuadro(q.id)}>
+                  <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
+                </Button>
+              </li>
+            ))}
+          </ul>
+          {onPorQuadro && (
+            <Button type="button" size="sm" variant="outline" className="mt-2 h-9 text-[12px]" onClick={onPorQuadro}>
+              <Plus className="mr-1 h-3.5 w-3.5" /> Novo quadro animado
+            </Button>
+          )}
+        </Cartao>
+      )}
     </div>
   );
 }

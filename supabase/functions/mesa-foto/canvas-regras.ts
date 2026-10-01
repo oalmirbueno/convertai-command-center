@@ -29,11 +29,14 @@
  * - Produto de outro cliente: vale se a equipe tem acesso ao cliente do kit
  *   (a função confere can_access_client); a cobrança é sempre do cliente do canvas.
  *
- * Vídeo (em breve, sem código ainda): cartão "video" ligado a um resultado,
- * dados { imagem_id (foto aprovada do resultado), motor_video, duracao_s,
- * movimento, formato } e ação canvas_video_gerar { canvas_id, no_video_id }
- * -> { job_id } com consulta canvas_video_status. Não entra em TIPOS_DE_NO
- * até existir: canvas com esse cartão é recusado.
+ * Vídeo e Quadro (frente CNV, 30/09): o cartão "video" recebe a foto de um
+ * resultado (ligação saida -> video com quadro "inicio"), opcionalmente a de
+ * outro resultado como último quadro ("final") ou o vídeo de outro cartão
+ * video ("continuar"), e guarda os pedidos feitos à Mesa Vídeos (a geração é
+ * a ação cena_gerar da função mesa-videos, com o custo confirmado antes). O
+ * cartão "quadro" é a composição animada em camadas (modulos/quadro-animado.ts)
+ * e recebe mídias de resultados e de vídeos. Dados validados em
+ * modulos/video-do-canvas.ts e modulos/quadro-animado.ts.
  *
  * Cenas e história (dono, 25/09 à noite; docs/mesa-foto/cenas/PESQUISA.md e
  * docs/mesa-videos/CONTRATO.md):
@@ -50,9 +53,11 @@
 
 import { ErroDeRegra, limpo, listaDeTextos, semTravessao, UUID } from "./calculos.ts";
 import { FORMATOS, type Formato } from "./receitas.ts";
-import { BLOCO_HIPER_REALISMO, type FichaDaPersona, fichaEmTexto, garantirPermitido, normalizarFicha, PROIBICOES_DA_PERSONA } from "./personas.ts";
+import { BLOCO_HIPER_REALISMO, conteudoProibido, type FichaDaPersona, fichaEmTexto, garantirPermitido, normalizarFicha, PROIBICOES_DA_PERSONA } from "./personas.ts";
+import { lerDadosDoVideo, lerQuadroDaLigacao, type QuadroDaLigacao } from "./modulos/video-do-canvas.ts";
+import { normalizarQuadro } from "./modulos/quadro-animado.ts";
 
-export const TIPOS_DE_NO = ["produto", "modelo", "ambiente", "estilo", "prompt", "saida", "agente"] as const;
+export const TIPOS_DE_NO = ["produto", "modelo", "ambiente", "estilo", "prompt", "saida", "agente", "video", "quadro"] as const;
 export type TipoDeNo = typeof TIPOS_DE_NO[number];
 
 // ------------------------------------------------------------------ composição (v3)
@@ -180,7 +185,7 @@ export function lerPedidoDoCanvas(corpo: Record<string, unknown>): { no_saida_id
 
 export type NoCanvas = { id: string; tipo: TipoDeNo; x: number; y: number; dados: Record<string, unknown> };
 /** papel e imagem_id só existem na ligação de um resultado para outro resultado. */
-export type LigacaoCanvas = { id: string; de: string; para: string; ordem: number; papel?: PapelDaLigacao; imagem_id?: string | null };
+export type LigacaoCanvas = { id: string; de: string; para: string; ordem: number; papel?: PapelDaLigacao; imagem_id?: string | null; quadro?: QuadroDaLigacao };
 
 // ------------------------------------------------------------------ cenas e história
 
@@ -339,7 +344,7 @@ export const LIMITE_REFERENCIAS_DO_CANVAS = 12;
 
 /** Papel de cada nó de entrada ao chegar no gerador. */
 export type PapelNoCanvas = "produto" | "pessoa" | "ambiente" | "estilo";
-export const PAPEL_DO_NO: Record<Exclude<TipoDeNo, "saida" | "prompt" | "agente">, PapelNoCanvas> = {
+export const PAPEL_DO_NO: Record<Exclude<TipoDeNo, "saida" | "prompt" | "agente" | "video" | "quadro">, PapelNoCanvas> = {
   produto: "produto",
   modelo: "pessoa",
   ambiente: "ambiente",
@@ -502,7 +507,38 @@ export function dadosDoNo(tipo: TipoDeNo, bruto: unknown): Record<string, unknow
         .slice(-MAX_MENSAGENS_DO_AGENTE);
       return { titulo, pedido, mensagens };
     }
+    case "video": {
+      const v = lerDadosDoVideo(d);
+      // O pedido vai ao gerador de vídeo: a checagem fica, com o erro dizendo o cartão e o campo.
+      if (v.prompt) garantirPermitidoNoVideo(v.prompt, titulo);
+      return { ...v, titulo };
+    }
+    case "quadro": {
+      // Texto das camadas do Quadro é gráfico (não vai a gerador de imagem): o filtro da persona não se aplica.
+      // "Moda infantil" ou "a cara da sua marca" são textos de post legítimos e não podem derrubar o salvamento do canvas.
+      const q = normalizarQuadro(d.quadro ?? d);
+      return { titulo, quadro: q };
+    }
   }
+}
+
+/** Por que o pedido do Vídeo foi recusado, na língua do cartão (não da persona). */
+const MOTIVO_NO_VIDEO: Record<string, string> = {
+  semelhanca_proibida: "não peça semelhança com pessoa real (sósia, \"parecido com\", \"a cara de\"); descreva traços",
+  pessoa_publica_proibida: "tire o nome de pessoa conhecida; o vídeo não pode lembrar alguém real",
+  menor_de_idade: "o vídeo gerado não mostra menor de idade; descreva só adultos",
+  sexualizacao_proibida: "sem sexualização no vídeo",
+};
+
+/**
+ * Checagem do pedido do cartão Vídeo (vai ao gerador). O erro cita o cartão e
+ * o campo, para a pessoa saber o que mudar; o código continua o do filtro.
+ */
+export function garantirPermitidoNoVideo(prompt: string, titulo: string | null): void {
+  const motivo = conteudoProibido(prompt);
+  if (!motivo) return;
+  const nome = titulo ? `Cartão Vídeo "${titulo.slice(0, 60)}"` : "Cartão Vídeo";
+  throw new ErroDeRegra(422, motivo.codigo, `${nome}, campo "Pedido ao motor": ${MOTIVO_NO_VIDEO[motivo.codigo] || motivo.mensagem}.`, { cartao: "video", campo: "prompt" });
 }
 
 /**
@@ -544,16 +580,42 @@ export function normalizarCanvas(bruto: unknown): CanvasNormalizado {
     const destino = porId.get(para);
     if (!origem || !destino) throw new ErroDeRegra(400, "ligacao_invalida", "Ligação com cartão que não existe no canvas.", { de, para });
     if (de === para) throw new ErroDeRegra(400, "ligacao_invalida", "Um cartão não se liga a ele mesmo.", { de });
-    if (destino.tipo !== "saida") throw new ErroDeRegra(400, "ligacao_invalida", "As ligações vão sempre para um cartão de resultado.", { de, para });
+    if (destino.tipo !== "saida" && destino.tipo !== "video" && destino.tipo !== "quadro") throw new ErroDeRegra(400, "ligacao_invalida", "As ligações vão para um cartão de resultado, de vídeo ou de quadro.", { de, para });
+    if (destino.tipo === "saida" && (origem.tipo === "video" || origem.tipo === "quadro")) throw new ErroDeRegra(400, "ligacao_invalida", "Vídeo e Quadro não entram num Resultado de foto.", { de, para });
+    if (destino.tipo === "video" && origem.tipo !== "saida" && origem.tipo !== "video") throw new ErroDeRegra(400, "ligacao_invalida", "O Vídeo recebe a foto de um Resultado ou o vídeo de outro cartão Vídeo.", { de, para });
+    if (destino.tipo === "quadro" && origem.tipo !== "saida" && origem.tipo !== "video") throw new ErroDeRegra(400, "ligacao_invalida", "O Quadro recebe fotos de Resultados e vídeos de cartões Vídeo.", { de, para });
     const chave = `${de}>${para}`;
     if (vistas.has(chave)) return;
     vistas.add(chave);
     const id = ID_DE_NO.test(String(l.id ?? "")) ? String(l.id) : `l_${de}_${para}`.slice(0, 64);
     const ordem = Math.round(numeroFinito(l.ordem, i, 0, 10_000));
+    // Cartão Vídeo: a foto do resultado entra como 1º ou último quadro; o vídeo de outro cartão, para continuar.
+    if (destino.tipo === "video") {
+      const quadro: QuadroDaLigacao = origem.tipo === "video" ? "continuar" : lerQuadroDaLigacao(l.quadro) === "final" ? "final" : "inicio";
+      if (ligacoes.some((x) => x.para === para && x.quadro === quadro)) throw new ErroDeRegra(400, "ligacao_invalida", quadro === "inicio" ? "O Vídeo já tem a foto do 1º quadro." : quadro === "final" ? "O Vídeo já tem o último quadro." : "O Vídeo já continua outro vídeo.", { de, para });
+      // Continuar um vídeo já começa no fim dele: não convive com a foto do 1º nem do último quadro (uma seria descartada em silêncio).
+      const doVideo = ligacoes.filter((x) => x.para === para);
+      if (quadro === "continuar" ? doVideo.some((x) => x.quadro === "inicio" || x.quadro === "final") : doVideo.some((x) => x.quadro === "continuar")) {
+        throw new ErroDeRegra(400, "ligacao_invalida", "Um Vídeo continua outro vídeo OU parte da foto de um Resultado, não os dois. Desligue uma das entradas.", { de, para });
+      }
+      ligacoes.push({ id, de, para, ordem, quadro, imagem_id: origem.tipo === "saida" ? idOuNulo(l.imagem_id) : null });
+      return;
+    }
+    if (destino.tipo === "quadro") {
+      ligacoes.push({ id, de, para, ordem, imagem_id: origem.tipo === "saida" ? idOuNulo(l.imagem_id) : null });
+      return;
+    }
     // Resultado alimentando resultado (cena anterior -> esta cena): leva o papel e a foto escolhida.
     if (origem.tipo === "saida") ligacoes.push({ id, de, para, ordem, papel: lerPapelDaLigacao(l.papel), imagem_id: idOuNulo(l.imagem_id) });
     else ligacoes.push({ id, de, para, ordem });
   });
+  // Vídeo que continua vídeo: sem laço (A continua B que continua A).
+  const videos = new Set(nos.filter((n) => n.tipo === "video").map((n) => n.id));
+  for (const l of ligacoes) {
+    if (videos.has(l.de) && videos.has(l.para) && alcanca(ligacoes.filter((x) => x !== l), videos, l.para, l.de)) {
+      throw new ErroDeRegra(400, "ligacao_em_laco", "Um vídeo não pode continuar a si mesmo pela cadeia.", { de: l.de, para: l.para });
+    }
+  }
   const saidas = new Set(nos.filter((n) => n.tipo === "saida").map((n) => n.id));
   for (const l of ligacoes) {
     if (saidas.has(l.de) && alcanca(ligacoes.filter((x) => x !== l), saidas, l.para, l.de)) {
@@ -584,6 +646,31 @@ export function canvasGravado(linha: { nome?: unknown; nos?: unknown; ligacoes?:
       ligacoes: ligacoes as LigacaoCanvas[],
     };
   }
+}
+
+/**
+ * Caminhos de Storage citados pelos cartões Vídeo e Quadro que NÃO são da
+ * pasta do cliente do canvas (a função recusa: o render e o gerador baixam
+ * com a chave de serviço, então só a pasta do próprio cliente vale).
+ */
+export function caminhosDeFora(c: Pick<CanvasNormalizado, "nos">, clientId: string): string[] {
+  const fora: string[] = [];
+  const conferir = (caminho: unknown) => {
+    if (typeof caminho === "string" && caminho && caminho.indexOf(`${clientId}/`) !== 0) fora.push(caminho.slice(0, 120));
+  };
+  for (const n of c.nos) {
+    if (n.tipo === "quadro") {
+      const q = n.dados.quadro as { camadas?: { midia?: { caminho?: string } | null }[] } | undefined;
+      (q && Array.isArray(q.camadas) ? q.camadas : []).forEach((x) => conferir(x.midia ? x.midia.caminho : null));
+    }
+    if (n.tipo === "video") {
+      (Array.isArray(n.dados.pedidos) ? (n.dados.pedidos as { quadro_path?: string | null; videos?: { storage_path?: string }[] }[]) : []).forEach((p) => {
+        conferir(p.quadro_path);
+        (p.videos || []).forEach((v) => conferir(v.storage_path));
+      });
+    }
+  }
+  return fora;
 }
 
 /** Ids de banco que o canvas cita (para a função conferir contra o banco). */
@@ -651,6 +738,8 @@ export function entradasDaSaida(c: Pick<CanvasNormalizado, "nos" | "ligacoes">, 
       if (!e.resultados.some((x) => x.no.id === n.id)) e.resultados.push({ no: n, ligacao: l, papel: lerPapelDaLigacao(l.papel) });
       continue;
     }
+    // Vídeo e Quadro nunca entram num resultado de foto (normalizarCanvas recusa); aqui só por segurança.
+    if (n.tipo === "video" || n.tipo === "quadro") continue;
     if (!e[n.tipo].some((x) => x.id === n.id)) e[n.tipo].push(n);
   }
   return e;

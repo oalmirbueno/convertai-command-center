@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type ReactNode } from "react";
-import { Bot, Box, Film, MapPin, MessageSquareText, Palette, Sparkles, UserRound, X } from "lucide-react";
+import { Bot, Box, Film, LayoutTemplate, MapPin, MessageSquareText, Palette, Sparkles, UserRound, X } from "lucide-react";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
 import { ImagemDaBiblioteca } from "../EtapaBiblioteca";
 import { rotuloDoTipo, type FotoDoAcervo, type ItemDaBiblioteca, type KitDeFoto } from "../fotoApi";
@@ -14,7 +14,7 @@ import { faltaNoCartao, TIPOS_DE_NO, type NoDoCanvas, type ProdutoDaEsteira, typ
  * texto claro; o quadro pode ser claro.
  */
 
-export const ICONES: Record<TipoDeNo, typeof Box> = { produto: Box, modelo: UserRound, ambiente: MapPin, estilo: Palette, texto: MessageSquareText, gerar: Sparkles, agente: Bot };
+export const ICONES: Record<TipoDeNo, typeof Box> = { produto: Box, modelo: UserRound, ambiente: MapPin, estilo: Palette, texto: MessageSquareText, gerar: Sparkles, agente: Bot, video: Film, quadro: LayoutTemplate };
 export const ICONE_DO_VIDEO = Film;
 
 /** Painel flutuante preto (paleta, ajustes, esteira, galeria, conversa). */
@@ -260,6 +260,15 @@ export function descrever(no: NoDoCanvas, f: Fontes): Descricao {
   if (no.tipo === "agente") {
     const p = (d.pedido || "").trim();
     return { titulo: "Agente", subtitulo: p ? p.slice(0, 60) : "toque para conversar", miniatura: null };
+  }
+  if (no.tipo === "video") {
+    const v = d.video;
+    const prontos = v ? v.pedidos.reduce((n, p) => n + p.videos.length, 0) : 0;
+    return { titulo: (d.titulo || "").trim() || "Vídeo", subtitulo: `${v ? `${v.duracao_s} s · ${v.formato}` : ""}${prontos ? ` · ${prontos} ${prontos === 1 ? "vídeo" : "vídeos"}` : ""}`, miniatura: null };
+  }
+  if (no.tipo === "quadro") {
+    const q = d.quadro;
+    return { titulo: (d.titulo || "").trim() || "Quadro", subtitulo: q ? `${q.formato} · ${q.camadas.length} ${q.camadas.length === 1 ? "camada" : "camadas"}` : "", miniatura: null };
   }
   return { titulo: "Resultado", subtitulo: "", miniatura: null };
 }
