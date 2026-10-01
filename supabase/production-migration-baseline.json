@@ -1961,6 +1961,14 @@
       "remote_name": "aceleriq_motores",
       "remote_statements_sha256": "d613aa9e4160d1b8773aa2bc2fa4a9c8bfb81ffeb2e7b1e8952c470a6aa19acc",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930327000",
+      "path": "supabase/migrations/20260930327000_troca_de_cenario.sql",
+      "local_sha256": "e709c3e8f4f7c9580f4f485895baa230bfa80aab04fae0d7237a4ad1125488de",
+      "remote_name": "troca_de_cenario",
+      "remote_statements_sha256": "74964ab79535b7a6c43e394c857f996d424be94c8ba8de864c8ee2cf74114f70",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
