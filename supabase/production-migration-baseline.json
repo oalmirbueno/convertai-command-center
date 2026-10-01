@@ -1849,6 +1849,14 @@
       "remote_name": "rls_arquivos_sem_reler",
       "remote_statements_sha256": "4c1eec8c70ba225131ebfe3cf1db14fcf9e509cdd96419ab6e9a8e25c3158b29",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930313000",
+      "path": "supabase/migrations/20260930313000_roteiro_biblioteca.sql",
+      "local_sha256": "64f93ec6919611904f073e956826ee785ff63df0e6e9e71a56d60b4e6b345f27",
+      "remote_name": "roteiro_biblioteca",
+      "remote_statements_sha256": "a219e40703b42eaca67d3b8bf1e2dfd24a7150ab1fce417824bbbb3c931a3822",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

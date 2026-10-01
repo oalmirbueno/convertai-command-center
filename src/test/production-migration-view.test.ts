@@ -103,7 +103,7 @@ function buildFixture(appliedForward = 0) {
 // Timeout proprio: os its montam pacotes reais no filesystem e, com a suite
 // inteira em paralelo, o padrao de 5s estoura por CARGA — nao por regressao.
 // O falso-vermelho recorrente custava um cheque manual a cada rodada.
-describe("production migration view", { timeout: 120000 }, () => { // 30/09: com 231+ migrations o teste passa de 30 s com a máquina carregada
+describe("production migration view", { timeout: 120000 }, () => { // 30/09: com 232+ migrations o teste passa de 30 s com a máquina carregada
   it("parses quoted RFC-style CSV and the Supabase statement boundaries", () => {
     expect(parseCsv(
       '\uFEFF"first","comma,value","escaped ""quote"""\r\n'
@@ -127,20 +127,20 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
     expect(statements[2]).toBe("SELECT (1 + 2)");
   });
 
-  it("validates the explicit 96 legacy + 2 attestations + 231 forward + 12 alias contract", () => {
+  it("validates the explicit 96 legacy + 2 attestations + 232 forward + 12 alias contract", () => {
     const plan = loadProductionMigrationPlan();
     const versions = listProductionVersions();
     const attested = new Set(plan.attestations.map((entry) => entry.local_version));
 
     expect(plan.legacyEntries).toHaveLength(96);
     expect(plan.attestations).toHaveLength(2);
-    expect(plan.manifest.forward_migrations).toHaveLength(231);
-    expect(plan.forwardMigrations).toHaveLength(231);
+    expect(plan.manifest.forward_migrations).toHaveLength(232);
+    expect(plan.forwardMigrations).toHaveLength(232);
     expect(plan.manifest.applied_forward_aliases).toHaveLength(12);
     expect(plan.appliedAliases).toHaveLength(12);
     expect(plan.shadowPaths).toHaveLength(12);
-    expect(plan.forwardLedger).toHaveLength(231);
-    expect(versions).toHaveLength(327);
+    expect(plan.forwardLedger).toHaveLength(232);
+    expect(versions).toHaveLength(328);
     expect(versions).toEqual([...versions].sort());
     expect(versions.some((version) => attested.has(version))).toBe(false);
     // Aliased canonical versions are never remote rows; the unaliased forward
@@ -149,7 +149,7 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
       expect(versions).not.toContain(alias.canonical.version);
     }
     const unaliased = plan.forwardLedger.filter((entry) => entry.alias === null);
-    expect(unaliased).toHaveLength(219);
+    expect(unaliased).toHaveLength(220);
     for (const forward of unaliased) {
       expect(versions).toContain(forward.canonical.version);
     }
@@ -174,7 +174,7 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
     expect(shadowCli.stdout).toBe(`${plan.shadowPaths.join("\n")}\n`);
 
     const sqlValues = formatProductionLedgerSqlValues();
-    expect(sqlValues.split("\n")).toHaveLength(327);
+    expect(sqlValues.split("\n")).toHaveLength(328);
     expect(sqlValues).toMatch(/^\('20260223193632','',[0-9a-f']+\),/);
     const lastAlias = plan.appliedAliases.at(-1)!;
     expect(sqlValues).toContain(`'${lastAlias.remoteVersion}','${lastAlias.remoteName}'`);
@@ -196,7 +196,7 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
     const cliSplit = entries.filter(
       (entry) => entry.remote_hash_mode === "supabase_cli_split",
     );
-    expect(cliSplit).toHaveLength(226);
+    expect(cliSplit).toHaveLength(227);
     const hardening = cliSplit.find((entry) => entry.version === "20260809044000")!;
     const hardeningSource = plan.forwardMigrations.find(
       (source) => source.version === hardening.version,
@@ -307,13 +307,13 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
     })).toThrow(/forward statement SHA-256 mismatch/);
   });
 
-  it("accepts the complete declared 327-row raw ledger and rejects normalized rows", () => {
+  it("accepts the complete declared 328-row raw ledger and rejects normalized rows", () => {
     const plan = loadProductionMigrationPlan();
-    const rows = remoteRows(231);
-    expect(rows).toHaveLength(327);
+    const rows = remoteRows(232);
+    expect(rows).toHaveLength(328);
     const reconciliation = validateRemoteLedger(plan, parseRemoteLedgerCsv(ledgerCsv(rows)));
     expect(reconciliation.pendingForward).toHaveLength(0);
-    expect(reconciliation.appliedForward).toHaveLength(231);
+    expect(reconciliation.appliedForward).toHaveLength(232);
     expect(reconciliation.appliedAliases).toHaveLength(12);
 
     const normalizedAlias = structuredClone(rows);
@@ -344,10 +344,10 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
       aliases: 96,
       appliedForward: 0,
       appliedAliases: 0,
-      pendingForward: 231,
-      files: 327,
+      pendingForward: 232,
+      files: 328,
     });
-    expect(filenames).toHaveLength(327);
+    expect(filenames).toHaveLength(328);
     expect(filenames.filter((name) => name.endsWith("_production_ledger_sentinel.sql")))
       .toHaveLength(96);
     for (const attestation of plan.attestations) {
@@ -363,17 +363,17 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
 
   it("reconciles the complete aliased ledger to sentinels only and zero pending forward", () => {
     const plan = loadProductionMigrationPlan();
-    const { outputDir, result } = buildFixture(231);
+    const { outputDir, result } = buildFixture(232);
     const filenames = readdirSync(outputDir).sort();
 
     expect(result).toEqual({
       aliases: 96,
-      appliedForward: 231,
+      appliedForward: 232,
       appliedAliases: 12,
       pendingForward: 0,
-      files: 327,
+      files: 328,
     });
-    expect(filenames).toHaveLength(327);
+    expect(filenames).toHaveLength(328);
     expect(filenames.filter((name) => name.endsWith("_production_ledger_sentinel.sql")))
       .toHaveLength(108);
     // The unaliased forwards keep their canonical filenames, but its content must
@@ -397,7 +397,7 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
     }
   }, TEMPO_PACOTE_COMPLETO);
 
-  it("keeps only the one hundred thirty-five new forwards pending over the old 192-row baseline without replaying history", () => {
+  it("keeps only the one hundred thirty-six new forwards pending over the old 192-row baseline without replaying history", () => {
     const plan = loadProductionMigrationPlan();
     const oldRows = remoteRows(96);
     expect(oldRows).toHaveLength(192);
@@ -405,11 +405,11 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
     expect(reconciliation.appliedForward).toHaveLength(96);
     expect(reconciliation.appliedAliases).toHaveLength(12);
     expect(reconciliation.pendingForward.map((entry) => entry.version)).toEqual([
-      "20260912213530", "20260912213638", "20260914174905", "20260916100000", "20260916120000", "20260916150000", "20260917200000", "20260918120000", "20260918130000", "20260918140000", "20260918150000", "20260918160000", "20260921120000", "20260921130000", "20260921140000", "20260922120000", "20260922122000", "20260922123000", "20260922124000", "20260922130000", "20260923120000", "20260923140000", "20260923171454", "20260923195925", "20260923203526", "20260924012047", "20260924015930", "20260924021731", "20260924021905", "20260924133108", "20260924133627", "20260924133829", "20260924134019", "20260924141858", "20260924144000", "20260924165938", "20260924181211", "20260924193310", "20260925135033", "20260925162027", "20260925162115", "20260925162220", "20260925162246", "20260925162259", "20260925174450", "20260925174500", "20260925183539", "20260925195654", "20260925202310", "20260925235814", "20260925235901", "20260925235943", "20260926000009", "20260926000018", "20260926000032", "20260926031000", "20260926031100", "20260926031200", "20260926031300", "20260926031400", "20260926031500", "20260926031600", "20260926031633", "20260926034000", "20260926040000", "20260926041000", "20260926050000", "20260926050100", "20260926050200", "20260926050300", "20260926050400", "20260926050500", "20260926050600", "20260926060000", "20260926070000", "20260927010000", "20260927020000", "20260927020100", "20260927030000", "20260927040000", "20260927050000", "20260928010000", "20260928020000", "20260928030000", "20260928040000", "20260928050000", "20260928060000", "20260928060100", "20260928070000", "20260928080000", "20260928090000", "20260928100000", "20260929010000", "20260929020000", "20260930000000", "20260930000100", "20260930000200", "20260930010000", "20260930010100", "20260930020000", "20260930030000", "20260930030100", "20260930030200", "20260930040000", "20260930050000", "20260930060000", "20260930080000", "20260930090000", "20260930090100", "20260930110000", "20260930110100", "20260930130000", "20260930160000", "20260930180000", "20260930190000", "20260930195000", "20260930195100", "20260930195200", "20260930195300", "20260930196000", "20260930196100", "20260930196200", "20260930200000", "20260930210000", "20260930292000", "20260930293300", "20260930293400", "20260930293600", "20260930293700", "20260930294000", "20260930295000", "20260930296000", "20260930296100", "20260930296200", "20260930296300",
+      "20260912213530", "20260912213638", "20260914174905", "20260916100000", "20260916120000", "20260916150000", "20260917200000", "20260918120000", "20260918130000", "20260918140000", "20260918150000", "20260918160000", "20260921120000", "20260921130000", "20260921140000", "20260922120000", "20260922122000", "20260922123000", "20260922124000", "20260922130000", "20260923120000", "20260923140000", "20260923171454", "20260923195925", "20260923203526", "20260924012047", "20260924015930", "20260924021731", "20260924021905", "20260924133108", "20260924133627", "20260924133829", "20260924134019", "20260924141858", "20260924144000", "20260924165938", "20260924181211", "20260924193310", "20260925135033", "20260925162027", "20260925162115", "20260925162220", "20260925162246", "20260925162259", "20260925174450", "20260925174500", "20260925183539", "20260925195654", "20260925202310", "20260925235814", "20260925235901", "20260925235943", "20260926000009", "20260926000018", "20260926000032", "20260926031000", "20260926031100", "20260926031200", "20260926031300", "20260926031400", "20260926031500", "20260926031600", "20260926031633", "20260926034000", "20260926040000", "20260926041000", "20260926050000", "20260926050100", "20260926050200", "20260926050300", "20260926050400", "20260926050500", "20260926050600", "20260926060000", "20260926070000", "20260927010000", "20260927020000", "20260927020100", "20260927030000", "20260927040000", "20260927050000", "20260928010000", "20260928020000", "20260928030000", "20260928040000", "20260928050000", "20260928060000", "20260928060100", "20260928070000", "20260928080000", "20260928090000", "20260928100000", "20260929010000", "20260929020000", "20260930000000", "20260930000100", "20260930000200", "20260930010000", "20260930010100", "20260930020000", "20260930030000", "20260930030100", "20260930030200", "20260930040000", "20260930050000", "20260930060000", "20260930080000", "20260930090000", "20260930090100", "20260930110000", "20260930110100", "20260930130000", "20260930160000", "20260930180000", "20260930190000", "20260930195000", "20260930195100", "20260930195200", "20260930195300", "20260930196000", "20260930196100", "20260930196200", "20260930200000", "20260930210000", "20260930292000", "20260930293300", "20260930293400", "20260930293600", "20260930293700", "20260930294000", "20260930295000", "20260930296000", "20260930296100", "20260930296200", "20260930296300", "20260930313000",
     ]);
 
     const { outputDir, result } = buildFixture(96);
-    expect(result).toEqual({ aliases: 96, appliedForward: 96, appliedAliases: 12, pendingForward: 135, files: 327 });
+    expect(result).toEqual({ aliases: 96, appliedForward: 96, appliedAliases: 12, pendingForward: 136, files: 328 });
     // Applied rows become sentinels that fail closed if accidentally replayed.
     for (const legacy of plan.legacyEntries) {
       const emitted = readFileSync(join(outputDir, `${legacy.remote_version}_production_ledger_sentinel.sql`), "utf8");
@@ -438,7 +438,7 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
     const reconciliation = validateRemoteLedger(plan, prior);
     expect(reconciliation.appliedForward).toHaveLength(98);
     expect(reconciliation.appliedAliases).toHaveLength(12);
-    expect(reconciliation.pendingForward.map((entry) => entry.version)).toEqual(["20260914174905", "20260916100000", "20260916120000", "20260916150000", "20260917200000", "20260918120000", "20260918130000", "20260918140000", "20260918150000", "20260918160000", "20260921120000", "20260921130000", "20260921140000", "20260922120000", "20260922122000", "20260922123000", "20260922124000", "20260922130000", "20260923120000", "20260923140000", "20260923171454", "20260923195925", "20260923203526", "20260924012047", "20260924015930", "20260924021731", "20260924021905", "20260924133108", "20260924133627", "20260924133829", "20260924134019", "20260924141858", "20260924144000", "20260924165938", "20260924181211", "20260924193310", "20260925135033", "20260925162027", "20260925162115", "20260925162220", "20260925162246", "20260925162259", "20260925174450", "20260925174500", "20260925183539", "20260925195654", "20260925202310", "20260925235814", "20260925235901", "20260925235943", "20260926000009", "20260926000018", "20260926000032", "20260926031000", "20260926031100", "20260926031200", "20260926031300", "20260926031400", "20260926031500", "20260926031600", "20260926031633", "20260926034000", "20260926040000", "20260926041000", "20260926050000", "20260926050100", "20260926050200", "20260926050300", "20260926050400", "20260926050500", "20260926050600", "20260926060000", "20260926070000", "20260927010000", "20260927020000", "20260927020100", "20260927030000", "20260927040000", "20260927050000", "20260928010000", "20260928020000", "20260928030000", "20260928040000", "20260928050000", "20260928060000", "20260928060100", "20260928070000", "20260928080000", "20260928090000", "20260928100000", "20260929010000", "20260929020000", "20260930000000", "20260930000100", "20260930000200", "20260930010000", "20260930010100", "20260930020000", "20260930030000", "20260930030100", "20260930030200", "20260930040000", "20260930050000", "20260930060000", "20260930080000", "20260930090000", "20260930090100", "20260930110000", "20260930110100", "20260930130000", "20260930160000", "20260930180000", "20260930190000", "20260930195000", "20260930195100", "20260930195200", "20260930195300", "20260930196000", "20260930196100", "20260930196200", "20260930200000", "20260930210000", "20260930292000", "20260930293300", "20260930293400", "20260930293600", "20260930293700", "20260930294000", "20260930295000", "20260930296000", "20260930296100", "20260930296200", "20260930296300"]);
+    expect(reconciliation.pendingForward.map((entry) => entry.version)).toEqual(["20260914174905", "20260916100000", "20260916120000", "20260916150000", "20260917200000", "20260918120000", "20260918130000", "20260918140000", "20260918150000", "20260918160000", "20260921120000", "20260921130000", "20260921140000", "20260922120000", "20260922122000", "20260922123000", "20260922124000", "20260922130000", "20260923120000", "20260923140000", "20260923171454", "20260923195925", "20260923203526", "20260924012047", "20260924015930", "20260924021731", "20260924021905", "20260924133108", "20260924133627", "20260924133829", "20260924134019", "20260924141858", "20260924144000", "20260924165938", "20260924181211", "20260924193310", "20260925135033", "20260925162027", "20260925162115", "20260925162220", "20260925162246", "20260925162259", "20260925174450", "20260925174500", "20260925183539", "20260925195654", "20260925202310", "20260925235814", "20260925235901", "20260925235943", "20260926000009", "20260926000018", "20260926000032", "20260926031000", "20260926031100", "20260926031200", "20260926031300", "20260926031400", "20260926031500", "20260926031600", "20260926031633", "20260926034000", "20260926040000", "20260926041000", "20260926050000", "20260926050100", "20260926050200", "20260926050300", "20260926050400", "20260926050500", "20260926050600", "20260926060000", "20260926070000", "20260927010000", "20260927020000", "20260927020100", "20260927030000", "20260927040000", "20260927050000", "20260928010000", "20260928020000", "20260928030000", "20260928040000", "20260928050000", "20260928060000", "20260928060100", "20260928070000", "20260928080000", "20260928090000", "20260928100000", "20260929010000", "20260929020000", "20260930000000", "20260930000100", "20260930000200", "20260930010000", "20260930010100", "20260930020000", "20260930030000", "20260930030100", "20260930030200", "20260930040000", "20260930050000", "20260930060000", "20260930080000", "20260930090000", "20260930090100", "20260930110000", "20260930110100", "20260930130000", "20260930160000", "20260930180000", "20260930190000", "20260930195000", "20260930195100", "20260930195200", "20260930195300", "20260930196000", "20260930196100", "20260930196200", "20260930200000", "20260930210000", "20260930292000", "20260930293300", "20260930293400", "20260930293600", "20260930293700", "20260930294000", "20260930295000", "20260930296000", "20260930296100", "20260930296200", "20260930296300", "20260930313000"]);
   });
 
   it("turns an applied forward prefix into sentinels and leaves only its suffix pending", () => {
@@ -447,7 +447,7 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
 
     expect(result.appliedForward).toBe(2);
     expect(result.appliedAliases).toBe(2);
-    expect(result.pendingForward).toBe(229);
+    expect(result.pendingForward).toBe(230);
     for (const applied of plan.forwardLedger.slice(0, 2)) {
       expect(readFileSync(
         join(outputDir, `${applied.version}_production_ledger_sentinel.sql`),
@@ -462,7 +462,7 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
     const root = temporaryRoot();
     const sourceDir = join(root, "repository-migrations");
     cpSync(resolve(repoRoot, "supabase/migrations"), sourceDir, { recursive: true });
-    expect(listProductionVersions({ sourceDir })).toHaveLength(327);
+    expect(listProductionVersions({ sourceDir })).toHaveLength(328);
   });
 
   it("applies canonical-only migrations when the shadow files are excluded in CI", () => {
@@ -539,7 +539,7 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
 
   it("keeps a future unaliased forward migration pending after the current package", () => {
     const plan = loadProductionMigrationPlan();
-    const rows = parseRemoteLedgerCsv(ledgerCsv(remoteRows(231)));
+    const rows = parseRemoteLedgerCsv(ledgerCsv(remoteRows(232)));
     const future = { ...plan.forwardLedger.at(-1)! };
     const syntheticPlan = {
       ...plan,
@@ -556,7 +556,7 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
     };
 
     const reconciliation = validateRemoteLedger(syntheticPlan, rows);
-    expect(reconciliation.appliedForward).toHaveLength(231);
+    expect(reconciliation.appliedForward).toHaveLength(232);
     expect(reconciliation.appliedAliases).toHaveLength(12);
     expect(reconciliation.pendingForward).toHaveLength(1);
     expect(reconciliation.pendingForward[0].version).toBe("20260915120000");
@@ -680,7 +680,7 @@ describe("production migration view", { timeout: 120000 }, () => { // 30/09: com
       ],
     };
 
-    const live = parseRemoteLedgerCsv(ledgerCsv(remoteRows(231)));
+    const live = parseRemoteLedgerCsv(ledgerCsv(remoteRows(232)));
     const pending = validateRemoteLedger(syntheticPlan, live);
     expect(pending.pendingForward).toHaveLength(1);
     expect(pending.pendingForward[0].bytes).toEqual(canonical.bytes);
