@@ -45,7 +45,7 @@ import { executarTrabalho } from "./lib/executar.ts";
 import { acharPython } from "./modelo-site/scripts/uiux.mjs";
 import { desligarTodas, limparPrevias, temCloudflared } from "./lib/previa.ts";
 import { temChave } from "./lib/opencode.ts";
-import { esperar } from "./lib/processos.ts";
+import { aoPedirParada, avisarSupervisor, encerrarCanal, esperaQueAcorda } from "../supervisor/canal.ts";
 
 const VERSAO = "motor-codigo 0.2.0 (opencode 1.18.33, superpowers v6.4.2)";
 
@@ -91,11 +91,20 @@ export async function laco(fila: Fila, opcoes: { umaVez?: boolean } = {}) {
   const caps = await capacidades(python);
   console.log(`[motor] ${VERSAO} · executor ${cfg.executor} · fila ${fila.nome} · projetos em ${cfg.pastaProjetos} · túnel ${caps.tunel ? "sim" : "não"} · base de design ${python ? "com Python" : "sem Python"}`);
   let parar = false;
+  const soneca = esperaQueAcorda();
   process.on("SIGINT", () => {
     parar = true;
     desligarTodas();
     process.exit(0);
   });
+  // Frente SUP: o Aceleriq Motores pede parada LIMPA (troca de versão, Reiniciar, Pausar, Sair).
+  // Nunca derruba um "construir" no meio: termina o trabalho em curso, desliga as prévias e sai.
+  aoPedirParada(() => {
+    console.log("[motor] o Aceleriq Motores pediu parada: termino o trabalho em curso e saio.");
+    parar = true;
+    soneca.acordar();
+  });
+  avisarSupervisor({ tipo: "pronto", motor: "codigo", versao: VERSAO });
   let ultimaBatida = 0;
   while (!parar) {
     if (Date.now() - ultimaBatida > 30_000) {
@@ -110,10 +119,11 @@ export async function laco(fila: Fila, opcoes: { umaVez?: boolean } = {}) {
       console.error("[motor] fila indisponível:", e instanceof Error ? e.message : e);
     }
     if (!t) {
-      if (opcoes.umaVez) break;
-      await esperar(3000);
+      if (opcoes.umaVez || parar) break;
+      await soneca.esperar(3000);
       continue;
     }
+    avisarSupervisor({ tipo: "ocupado", id: t.id });
     console.log(`[motor] trabalho ${t.id} (${t.tipo}) do projeto ${t.projeto}`);
     await fila.batida(cfg.executor, { versao: VERSAO, capacidades: caps, trabalho_id: t.id });
     const batendo = setInterval(() => void fila.batida(cfg.executor, { versao: VERSAO, capacidades: caps, trabalho_id: t!.id }), 30_000);
@@ -123,6 +133,7 @@ export async function laco(fila: Fila, opcoes: { umaVez?: boolean } = {}) {
     } finally {
       clearInterval(batendo);
       ultimaBatida = 0;
+      avisarSupervisor({ tipo: "ocioso" });
     }
     if (opcoes.umaVez) break;
   }
@@ -139,4 +150,5 @@ if (process.argv[1] && /worker\.ts$/.test(process.argv[1])) {
   const fila = await filaSupabase(url, chave);
   await laco(fila, { umaVez: process.argv.indexOf("--uma-vez") >= 0 });
   desligarTodas();
+  encerrarCanal();
 }

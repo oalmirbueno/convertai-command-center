@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { ChevronRight, KeyRound, RefreshCw } from "lucide-react";
 import { AjudaRecolhida, Carregando, EstadoDeErro, Secao, botao, foco, juntar, lista, texto } from "@/components/sistema";
 import {
@@ -13,6 +13,9 @@ import {
 } from "@/lib/motores/estadoDosMotores";
 import { dataCurta } from "../../../supabase/functions/motores-estado/modulos/estado";
 
+// Frente SUP (01/10): as máquinas do Aceleriq Motores e o instalador, só para o admin (carregado à parte).
+const MaquinasDosMotores = lazy(() => import("./MaquinasDosMotores"));
+
 /**
  * Configurações, Estado dos motores (frente MTR, 30/09/2026): uma linha por
  * motor (site, render do Motion, render da Mesa Edição, imagem, vídeo e as
@@ -25,7 +28,8 @@ import { dataCurta } from "../../../supabase/functions/motores-estado/modulos/es
 export const AJUDA_DOS_MOTORES =
   "Os motores são o que trabalha fora da tela: o motor de código do site e o worker de render (Motion e Mesa Edição) rodam " +
   "na máquina da agência; a geração de imagem e de vídeo roda no servidor com as chaves dos provedores. Parado quer dizer " +
-  "que o pedido espera na fila até o motor voltar. O passo a passo para ligar está em docs/motores/LIGAR-OS-MOTORES.md " +
+  "que o pedido espera na fila até o motor voltar. Com o Aceleriq Motores (Máquinas, para o admin) os três workers rodam sem janela " +
+  "e abrem junto com o Windows (docs/motores/ACELERIQ-MOTORES.md). O jeito antigo continua em docs/motores/LIGAR-OS-MOTORES.md " +
   "(workers\\ligar\\ligar-todos.cmd liga os três workers: render, motor de código e navegador do agente). Nada aqui gasta crédito.";
 
 function LinhaDoMotor({ m, aberto, onAlternar, onAbrirChaves }: { m: EstadoDoMotor; aberto: boolean; onAlternar: () => void; onAbrirChaves?: (id?: string | null) => void }) {
@@ -146,7 +150,7 @@ export function AcoesDoNavegador({ acoes }: { acoes: AcaoDoNavegadorNaTela[] }) 
  * já é o título). `onAbrirChaves`: o motor sem chave mostra o atalho para
  * Configurações › Chaves e custos (frente CHV; só o admin recebe).
  */
-export default function EstadoDosMotores({ semTitulo = false, onAbrirChaves }: { semTitulo?: boolean; onAbrirChaves?: (id?: string | null) => void } = {}) {
+export default function EstadoDosMotores({ semTitulo = false, onAbrirChaves, admin = false }: { semTitulo?: boolean; onAbrirChaves?: (id?: string | null) => void; admin?: boolean } = {}) {
   const q = useQuery({ queryKey: CHAVE_DO_ESTADO_DOS_MOTORES, queryFn: lerEstadoDosMotores, staleTime: 30_000, refetchOnWindowFocus: false });
   const [abertos, setAbertos] = useState<Record<string, boolean>>({});
   const alternar = (id: string) => setAbertos((a) => ({ ...a, [id]: !a[id] }));
@@ -175,6 +179,11 @@ export default function EstadoDosMotores({ semTitulo = false, onAbrirChaves }: {
           <AcoesDoNavegador acoes={quadro.acoes_do_navegador || []} />
         </>
       ) : null}
+      {admin && (
+        <Suspense fallback={<Carregando rotulo="Lendo as máquinas" linhas={2} />}>
+          <MaquinasDosMotores />
+        </Suspense>
+      )}
     </Secao>
   );
 }

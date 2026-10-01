@@ -19,8 +19,8 @@
 import { randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
-import { setTimeout as esperar } from "node:timers/promises";
 import { createClient } from "@supabase/supabase-js";
+import { aoPedirParada, avisarSupervisor, encerrarCanal, esperaQueAcorda } from "../supervisor/canal.ts";
 import { armazemSupabase } from "./armazem.ts";
 import { baterPonto, capacidadesDoWorker, INTERVALO_DA_BATIDA_MS } from "./batida.ts";
 import { filaSupabase, type Fila } from "./fila.ts";
@@ -60,6 +60,8 @@ async function principal() {
     async pegar(token, worker, versao) {
       const p = await filaBase.pegar(token, worker, versao);
       pedidoAtual = p ? p.id : null;
+      // Frente SUP: o Aceleriq Motores sabe que há render em curso (não troca versão nem para no meio).
+      if (p) avisarSupervisor({ tipo: "ocupado", id: p.id });
       return p;
     },
   };
@@ -82,10 +84,19 @@ async function principal() {
   };
   const umaVez = process.argv.indexOf("--uma-vez") >= 0;
   let parar = false;
+  const soneca = esperaQueAcorda();
   process.on("SIGINT", () => {
     console.log("Parando depois do pedido em curso.");
     parar = true;
+    soneca.acordar();
   });
+  // Frente SUP: parada limpa pedida pelo Aceleriq Motores (termina o pedido em curso e sai).
+  aoPedirParada(() => {
+    console.log("O Aceleriq Motores pediu parada: termino o pedido em curso e saio.");
+    parar = true;
+    soneca.acordar();
+  });
+  avisarSupervisor({ tipo: "pronto", motor: "render", versao: VERSAO_DO_WORKER });
   console.log(`Worker ${cfg.nome} (${VERSAO_DO_WORKER}) olhando a fila a cada ${cfg.intervalo} s. Ctrl+C para parar.`);
   while (!parar) {
     let feito = null;
@@ -95,12 +106,14 @@ async function principal() {
       // Falha ao falar com a fila (rede, banco): espera o intervalo e olha de novo; nada é repetido às cegas.
       console.error(`A fila não respondeu: ${e instanceof Error ? e.message : e}`);
     }
+    if (pedidoAtual) avisarSupervisor({ tipo: "ocioso" });
     pedidoAtual = null;
     if (feito) console.log(`${feito.tipo} ${feito.id}: ${feito.estado} (${feito.detalhe})`);
     if (umaVez) break;
-    if (!feito) await esperar(cfg.intervalo * 1000);
+    if (!feito && !parar) await soneca.esperar(cfg.intervalo * 1000);
   }
   clearInterval(relogio);
+  encerrarCanal();
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"))) {

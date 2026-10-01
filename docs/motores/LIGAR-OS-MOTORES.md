@@ -1,5 +1,7 @@
 # Ligar os motores do painel
 
+> **01/10/2026 (frente SUP):** o jeito novo é o **Aceleriq Motores**: supervisor invisível que abre junto com o Windows, sem janela, com ícone na bandeja e atualização sozinha, instalável em qualquer computador pelo painel (Configurações › Estado dos motores › Máquinas). Veja `ACELERIQ-MOTORES.md`. Os atalhos desta página continuam valendo como alternativa.
+
 Frente MTR, 30/09/2026. Pedido do dono: "os motores do site e também do motion, edição de vídeo e também geração não estão funcionando".
 
 Este guia diz o que cada motor precisa, como ligar os workers nesta máquina e onde ver se está tudo certo. O estado de cada motor fica no painel, em **Configurações › Estado dos motores** (ou `/config?motores=1`).
@@ -114,3 +116,8 @@ O worker escolhe o provedor pelo modelo de cada tarefa e só pega tarefa de prov
 **No painel:** Configurações › Estado dos motores mostra a linha "Navegador do agente (computer use)" (ligado, último sinal, fila, último erro e o que falta) e, abaixo do quadro, a lista "Navegador do agente" com cada ação, onde se pede, o modelo e o custo médio real.
 
 **Prova real:** `npm run prova-real` (Anthropic) e `npm run prova-real -- --provedor openai` (OpenAI), na pasta `workers/computador`, com teto de US$ 0,20 e 8 passos; as provas ficam em `workers/computador/tmp/`.
+
+## 7. Aceleriq Motores (frente SUP, 01/10/2026)
+
+As janelas desta página viram um supervisor invisível: `workers/supervisor` (lançador estável, supervisor, ícone na bandeja, cofre DPAPI e atualização sozinha) e `workers/instalador/instalar-motores.ps1` (instalar pelo painel, migrar esta máquina, desinstalar e conferir). Passo a passo, segurança e o comando para migrar esta máquina: `ACELERIQ-MOTORES.md`.
+

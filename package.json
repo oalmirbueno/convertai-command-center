@@ -12,6 +12,7 @@
     "dev": "vite",
     "build": "vite build",
     "publicar": "vite build && npx --yes wrangler@4 deploy",
+    "publicar:motores": "node workers/supervisor/empacotar.ts --subir --se-mudou",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",

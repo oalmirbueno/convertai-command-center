@@ -25,8 +25,8 @@
  */
 
 import os from "node:os";
-import { setTimeout as esperar } from "node:timers/promises";
 import { createClient } from "@supabase/supabase-js";
+import { aoPedirParada, avisarSupervisor, encerrarCanal, esperaQueAcorda } from "../supervisor/canal.ts";
 import { armazemSupabase, filaSupabase } from "./fila.ts";
 import { abrirNavegador } from "./navegador.ts";
 import { clienteAnthropic, clienteOpenAI, modeloDoComputador, semSegredo } from "./modelo.ts";
@@ -59,8 +59,21 @@ export function lerAmbiente(env: NodeJS.ProcessEnv) {
 async function principal() {
   const cfg = lerAmbiente(process.env);
   const db = createClient(cfg.url, cfg.chave, { auth: { persistSession: false, autoRefreshToken: false } });
+  const filaBase = filaSupabase(db);
+  let tarefaAtual: string | null = null;
   const amb: Ambiente = {
-    fila: filaSupabase(db),
+    // Frente SUP: avisa o Aceleriq Motores quando pega uma tarefa (não troca versão nem para no meio).
+    fila: {
+      ...filaBase,
+      async pegar(token, executor, casos, versao, provedores) {
+        const t = await filaBase.pegar(token, executor, casos, versao, provedores);
+        if (t) {
+          tarefaAtual = t.id;
+          avisarSupervisor({ tipo: "ocupado", id: t.id });
+        }
+        return t;
+      },
+    },
     armazem: armazemSupabase(db),
     abrir: (op) => abrirNavegador({ ...op, executavel: cfg.chrome }),
     comModelo: cfg.comModelo,
@@ -80,10 +93,18 @@ async function principal() {
   );
   const umaVez = process.argv.indexOf("--uma-vez") >= 0;
   let parar = false;
+  const soneca = esperaQueAcorda();
   process.on("SIGINT", () => {
     parar = true;
+    soneca.acordar();
     console.log("[navegador] parando depois da tarefa atual");
   });
+  aoPedirParada(() => {
+    parar = true;
+    soneca.acordar();
+    console.log("[navegador] o Aceleriq Motores pediu parada: termino a tarefa atual e saio");
+  });
+  avisarSupervisor({ tipo: "pronto", motor: "navegador", versao: VERSAO_DO_WORKER });
   let comErro = false;
   while (!parar) {
     let pegou = false;
@@ -98,9 +119,12 @@ async function principal() {
       comErro = true;
       if (amb.fila.erro) await amb.fila.erro(amb.executor, `Falha na fila: ${texto}`).catch(() => undefined);
     }
+    if (tarefaAtual) avisarSupervisor({ tipo: "ocioso" });
+    tarefaAtual = null;
     if (umaVez) break;
-    if (!pegou) await esperar(cfg.intervaloS * 1000);
+    if (!pegou && !parar) await soneca.esperar(cfg.intervaloS * 1000);
   }
+  encerrarCanal();
 }
 
 if (process.argv[1] && /principal\.ts$/.test(process.argv[1])) {

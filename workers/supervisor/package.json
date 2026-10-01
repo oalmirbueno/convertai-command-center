@@ -1,0 +1,16 @@
+{
+  "name": "aceleriq-motores-supervisor",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Aceleriq Motores (frente SUP): supervisor invisível que sobe os workers sem janela, reinicia quem cair, mostra o ícone na bandeja e atualiza sozinho com os motores ociosos. Sem dependências.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "iniciar": "node principal.ts",
+    "teste": "node --test testes/canal.test.ts testes/registros.test.ts testes/filhos.test.ts testes/supervisor.test.ts testes/atualizacao.test.ts testes/lancador.test.ts testes/segredos.test.ts testes/janela.test.ts testes/banco-motores.test.ts testes/sem-navegador.test.ts",
+    "empacotar": "node empacotar.ts",
+    "publicar": "node empacotar.ts --subir --se-mudou"
+  }
+}

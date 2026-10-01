@@ -38,3 +38,6 @@ test-results/
 *.sw?
 PACOTE-SQL-*.sql
 REPARO-SQL-*.sql
+
+# Pacote dos workers montado pelo npm run publicar:motores (frente SUP); sobe para o Storage, nunca para o git.
+.aceleriq-pacotes/

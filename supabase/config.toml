@@ -121,6 +121,8 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.motores-estado]
     verify_jwt = true
+  [functions.motores-parear]
+    verify_jwt = false
   [functions.chaves-admin]
     verify_jwt = true
   [functions.site-formulario]

@@ -209,7 +209,7 @@ export default function SettingsPage() {
           carregando="Conferindo os motores"
           data-linha-motores=""
         >
-          <EstadoDosMotores semTitulo onAbrirChaves={admin ? abrirChaves : undefined} />
+          <EstadoDosMotores semTitulo onAbrirChaves={admin ? abrirChaves : undefined} admin={admin} />
         </LinhaQueAbre>
         <LinhaQueAbre
           id="superpoderes"
