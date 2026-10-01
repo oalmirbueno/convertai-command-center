@@ -410,7 +410,7 @@ export const MOTORES_DE_VIDEO: MotorDeVideo[] = [
   {
     id: "minimax-h3-max", rotulo: "MiniMax H3 Max", familia: "video", linha: "minimax-h3", versao: "3", principal: true, provedor: "fal", chave_env: "FAL_KEY",
     endpoints: { texto: "minimax/h3-max/text-to-video", imagem: "minimax/h3-max/image-to-video", ultimo: "minimax/h3-max/image-to-video", estender: "minimax/h3-max/extend-video" },
-    dialeto: "minimax_h3", duracoes: faixa(2, 15), resolucoes: ["768p", "1080p"], resolucao_padrao: "768p", formatos: TODOS,
+    dialeto: "minimax_h3", duracoes: faixa(5, 15), resolucoes: ["768p", "1080p"], resolucao_padrao: "768p", formatos: TODOS,
     cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, estender: true, audio: true }),
     preco: { por_segundo: { "480p": 0.05, "768p": 0.08, "1080p": 0.16 }, fonte: F("minimax/h3-max/reference-to-video"), conferido_em: HOJE },
     papeis: ["hero", "movimento"], prazo_min: 20, nota: "Rápido e com áudio estéreo. Extensão nativa (preço da extensão estimado pelo mesmo valor).",
@@ -418,7 +418,7 @@ export const MOTORES_DE_VIDEO: MotorDeVideo[] = [
   {
     id: "minimax-h3-max-turbo", rotulo: "H3 Max Turbo (rascunho)", familia: "video", linha: "minimax-h3", versao: "3", principal: false, rapido: true, provedor: "fal", chave_env: "FAL_KEY",
     endpoints: { texto: "minimax/h3-max-turbo/text-to-video", imagem: "minimax/h3-max-turbo/image-to-video", ultimo: "minimax/h3-max-turbo/image-to-video" },
-    dialeto: "minimax_h3", duracoes: faixa(2, 15), resolucoes: ["480p", "768p", "1080p"], resolucao_padrao: "768p", formatos: TODOS,
+    dialeto: "minimax_h3", duracoes: faixa(5, 15), resolucoes: ["480p", "768p", "1080p"], resolucao_padrao: "768p", formatos: TODOS,
     cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, audio: true }),
     preco: { por_segundo: { "480p": 0.025, "768p": 0.04, "1080p": 0.08 }, fonte: F("minimax/h3-max-turbo/image-to-video"), conferido_em: HOJE },
     papeis: ["rascunho"], prazo_min: 10, nota: "Prévia em segundos (5 s em cerca de 2 s no teste do provedor). Use antes de gastar no motor caro.",
@@ -426,10 +426,10 @@ export const MOTORES_DE_VIDEO: MotorDeVideo[] = [
   {
     id: "hailuo-2.3-pro", rotulo: "Hailuo 2.3 Pro", familia: "video", linha: "hailuo", versao: "2.3", principal: true, provedor: "fal", chave_env: "FAL_KEY",
     endpoints: { imagem: "fal-ai/minimax/hailuo-2.3/pro/image-to-video" },
-    dialeto: "hailuo", duracoes: [6, 10], resolucoes: ["1080p"], resolucao_padrao: "1080p", formatos: ["9:16", "16:9", "1:1"],
+    dialeto: "hailuo", duracoes: [6], resolucoes: ["1080p"], resolucao_padrao: "1080p", formatos: ["9:16", "16:9", "1:1"],
     cap: cap({ primeiro_quadro: true }),
     preco: { por_video: 0.49, fonte: F("fal-ai/minimax/hailuo-2.3/pro/image-to-video"), conferido_em: HOJE, incerto: true },
-    papeis: ["movimento"], prazo_min: 30, nota: "Geração anterior da MiniMax. Sem áudio e sem último quadro.",
+    papeis: ["movimento"], prazo_min: 30, nota: "Geração anterior da MiniMax. Sem áudio e sem último quadro. Duração fixa (a fal não recebe duração).",
   },
   // ------------------------------------------------------------------ outros de 2026
   {
@@ -467,10 +467,10 @@ export const MOTORES_DE_VIDEO: MotorDeVideo[] = [
   {
     id: "ltx-2.3", rotulo: "LTX-2.3 Pro", familia: "video", linha: "ltx", versao: "2.3", principal: true, provedor: "fal", chave_env: "FAL_KEY",
     endpoints: { texto: "fal-ai/ltx-2.3/text-to-video", imagem: "fal-ai/ltx-2.3/image-to-video", ultimo: "fal-ai/ltx-2.3/image-to-video", estender: "fal-ai/ltx-2.3/extend-video" },
-    dialeto: "ltx", duracoes: [6, 8, 10, 12, 14], resolucoes: ["1080p", "1440p"], resolucao_padrao: "1080p", formatos: ["9:16", "16:9"],
+    dialeto: "ltx", duracoes: [6, 8, 10], resolucoes: ["1080p", "1440p"], resolucao_padrao: "1080p", formatos: ["9:16", "16:9"],
     cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, estender: true, audio: true }),
     preco: { por_segundo: { "1080p": 0.06, "1440p": 0.12 }, fonte: F("fal-ai/ltx-2.3/image-to-video"), conferido_em: HOJE },
-    papeis: ["barato", "transicao"], prazo_min: 20, nota: "Pesos abertos. Durações pares. Extensão a US$ 0,10/s.",
+    papeis: ["barato", "transicao"], prazo_min: 20, nota: "Pesos abertos. 6, 8 ou 10 s (o esquema da fal não aceita mais). Extensão a US$ 0,10/s.",
   },
   {
     id: "ltx-2.3-fast", rotulo: "LTX-2.3 Fast (rascunho)", familia: "video", linha: "ltx", versao: "2.3", principal: false, rapido: true, provedor: "fal", chave_env: "FAL_KEY",

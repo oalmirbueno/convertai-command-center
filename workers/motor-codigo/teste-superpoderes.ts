@@ -10,7 +10,7 @@
  * Confere:
  *   - GET /skill: exatamente as 15 skills do vendor e a embutida; nenhuma pessoal
  *     (~/.claude/skills, ~/.agents/skills e a pasta global do opencode, plantada aqui);
- *   - no pedido gravado: as 5 skills do "construir" em <available_skills>, e só elas; a regra
+ *   - no pedido gravado: as 5 skills do "construir" e as da casa em <available_skills>, e só elas; a regra
  *     dos 1% e a abertura da casa no sistema; o AGENTS.md com a seção do método; nenhum trecho
  *     do ~/.claude/CLAUDE.md nem do AGENTS.md global plantado; sem question e task;
  *   - skill liberada carrega (writing-plans) e a negada é recusada (brainstorming);
@@ -295,7 +295,8 @@ async function semGasto() {
     const sistema = sistemaDoPedido(primeiro.j as never);
     const ferramentas = (primeiro.j.tools as Array<{ function?: { name?: string } }>).map((t) => String(t.function && t.function.name));
     const listadas = skillsListadas(sistema);
-    const liberadas = SKILLS_POR_TRABALHO.construir;
+    // As skills da casa (ui-ux-pro-max) valem em todo trabalho e aparecem junto das do tipo (SKILLS_DA_CASA).
+    const liberadas = (SKILLS_POR_TRABALHO.construir as readonly string[]).concat(SKILLS_DA_CASA);
     conferir(`as ${liberadas.length} skills do construir em <available_skills>, e só elas (sem brainstorming nem executing-plans)`, listadas.length === liberadas.length && liberadas.every((n) => listadas.indexOf(n) >= 0), listadas.join(", "));
     if (s.modo === "plugin") {
       // O plugin oficial injeta a abertura na primeira mensagem do usuário (experimental.chat.messages.transform).
@@ -378,7 +379,9 @@ async function semGasto() {
     const sistemaGpt = doGpt ? sistemaDoPedido(doGpt as never) : "";
     conferir("modelo gpt-5-falso: apply_patch no lugar de edit e write", ferramentasGpt.indexOf("apply_patch") >= 0 && ferramentasGpt.indexOf("edit") < 0 && ferramentasGpt.indexOf("write") < 0, ferramentasGpt.join(", "));
     conferir("modelo gpt-5-falso: a abertura da casa manda usar o apply_patch", sistemaGpt.indexOf("`apply_patch`") >= 0);
-    conferir("modelo gpt-5-falso: as 5 skills do ajustar", skillsListadas(sistemaGpt).length === SKILLS_POR_TRABALHO.ajustar.length, skillsListadas(sistemaGpt).join(", "));
+    const doAjustar = (SKILLS_POR_TRABALHO.ajustar as readonly string[]).concat(SKILLS_DA_CASA);
+    const listadasGpt = skillsListadas(sistemaGpt);
+    conferir(`modelo gpt-5-falso: as ${doAjustar.length} skills do ajustar (com as da casa)`, listadasGpt.length === doAjustar.length && doAjustar.every((n) => listadasGpt.indexOf(n) >= 0), listadasGpt.join(", "));
     relatorio.ferramentas_com_gpt = ferramentasGpt;
   } finally {
     falso.close();

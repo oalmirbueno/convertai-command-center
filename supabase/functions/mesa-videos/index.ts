@@ -145,6 +145,7 @@ import {
   continuarVideo,
   custoEstimar,
   gerarCancelar,
+  gerarReconferir,
   gerarStatus,
   heygenCatalogo,
   gerarStatusCliente,
@@ -1302,6 +1303,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   gerar_cancelar: direto(gerarCancelar),
   antes_depois_imagem: comFolego(antesDepoisImagem),
   gerar_status: comFolego(gerarStatus),
+  // Frente MTR: "Conferir de novo" o envio que venceu o prazo e ainda tem o pedido no provedor.
+  gerar_reconferir: comFolego(gerarReconferir),
   gerar_status_cliente: comFolego(gerarStatusCliente),
   quadro_registrar: direto(quadroRegistrar),
   motores_sincronizar: (ch) => motoresSincronizarDaEquipe(ch),

@@ -241,6 +241,17 @@ sozinho por `import.meta.glob`), com as props
   `409 cancelar_indisponivel`. O que foi cancelado não é cobrado; tudo cancelado vira
   `estado: "cancelado"`.
 
+## Prazo, teto e `gerar_reconferir` (frente MTR, 30/09)
+
+- Passou do `prazo_min` do motor, a variação NÃO encerra: a consulta segue (fila, gerando ou
+  consulta que falhou por rede ou 5xx) com um aviso, até o teto duro de 24 h (ou 6x o prazo, se
+  maior). Pronta no provedor em qualquer momento: baixa e cobra. Passou do teto: vira erro dizendo
+  que o provedor pode ter cobrado, com o `request_id`.
+- `gerar_reconferir { pedido_id }` -> `{ pedidos, reabertos }`. Reabre as variações em erro por
+  prazo, teto ou motor fora do catálogo que ainda têm `request_id` e nada baixado nem cobrado, e
+  consulta uma vez. Erro do provedor e cancelado não voltam. Nada para reabrir:
+  `409 nada_para_reconferir`.
+
 ## Catálogo
 
 - `motores_estado` -> `{ motores: [{ id, estado, estado_rotulo, nivel, nivel_rotulo, novo, rotulo, linha, versao, chave, custo_5s }], sugestao: { top, normal, rapido } }`.

@@ -19,7 +19,8 @@ import type { Fila, LinhaDaFila } from "./fila.ts";
 import { arquivosMudados, atualizarCasca, commitar, commitAtual, type ConferenciaDaSecao, conferirSecaoDoProjeto, construirSite, escreverPacote, garantirProjeto, instalarSePrecisar, pastaDoProjeto, reporCasca, voltarCommits } from "./projeto.ts";
 import { garantirPrevia } from "./previa.ts";
 import { rodarPassada, subirOpencode } from "./opencode.ts";
-import { SKILLS_POR_TRABALHO, VERSAO_DO_SUPERPOWERS } from "./config-opencode.ts";
+import { SKILLS_POR_TRABALHO, temChave, VERSAO_DO_SUPERPOWERS } from "./config-opencode.ts";
+import { escolherRota, idsNoOpenrouter, provedorDoOpencode } from "./rota-do-modelo.ts";
 import { eventosDasMarcas } from "./marcas-da-resposta.ts";
 
 export { eventosDasMarcas, lerMarcasDaResposta, prontoSemProva } from "./marcas-da-resposta.ts";
@@ -54,7 +55,7 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
   let medidor: Medidor | null = null;
   const pedido = t.pedido || {};
   const pacote = (pedido.pacote || {}) as Record<string, unknown>;
-  const modelo = (pedido.modelo || null) as ModeloDoMotor | null;
+  let modelo = (pedido.modelo || null) as ModeloDoMotor | null;
   const pasta = pastaDoProjeto(cfg.pastaProjetos, t.projeto);
   const resultado: Record<string, unknown> = {};
   let estadoFinal = "feito";
@@ -64,6 +65,16 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
 
   try {
     await avisar({ tipo: "estado", resumo: "O motor pegou o trabalho" });
+    // Frente MTR: a chave do provedor é conferida ANTES de montar projeto, dependências e prévia.
+    // Sem a chave direta e com a do OpenRouter, segue pelo mesmo modelo no OpenRouter (com aviso).
+    if (modelo && TIPOS_QUE_GASTAM.indexOf(t.tipo as (typeof TIPOS_QUE_GASTAM)[number]) >= 0) {
+      const precisaDeRota = !temChave(provedorDoOpencode(modelo));
+      const alternativo = precisaDeRota && fila.modeloAlternativo ? await fila.modeloAlternativo(idsNoOpenrouter(modelo)) : null;
+      const rota = escolherRota(modelo, temChave, alternativo);
+      if (!rota.ok || !rota.modelo) throw new Error(rota.motivo || "sem rota para o modelo");
+      if (rota.aviso) await avisar({ tipo: "aviso", resumo: rota.aviso });
+      modelo = rota.modelo;
+    }
     const novo = await garantirProjeto(pasta);
     if (novo) await avisar({ tipo: "passo", resumo: "Projeto criado do modelo da casa" });
     // SIT2: casca da casa mais nova (multipágina, integrações, SEO) entra antes do trabalho, num commit próprio.
@@ -300,7 +311,7 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
   } catch (e) {
     resultado.arquivos_erro = e instanceof Error ? e.message.slice(0, 200) : "diff indisponível";
   }
-  await fila.atualizar(t.id, {
+  const final = {
     estado: estadoFinal,
     custo_usd: Math.round(gasto.custo * 1e6) / 1e6,
     custo_fonte: gasto.custo > 0 ? (resultado.custo_real_usd ? "provedor" : "tabela") : null,
@@ -308,7 +319,16 @@ export async function executarTrabalho(t: LinhaDaFila, fila: Fila, cfg: ConfigDo
     resultado,
     erro,
     terminado_em: new Date().toISOString(),
-  });
+  };
+  // Frente MTR (rodada 2): só fecha se o trabalho ainda é deste executor e está rodando.
+  // Outro worker pode ter varrido como órfão (batidas perdidas por rede): não sobrescreve
+  // o "falhou" dele com "feito" nem manda um segundo "fim"; registra um aviso.
+  const fechou = fila.fechar ? await fila.fechar(t.id, t.executor, final) : (await fila.atualizar(t.id, final), true);
+  if (!fechou) {
+    console.warn(`[motor] trabalho ${t.id}: a fila já tinha encerrado este trabalho (órfão varrido por outro executor); resultado deste worker não gravado.`);
+    await fila.evento(t, { tipo: "aviso", resumo: `Este trabalho já tinha sido encerrado pela fila (sem batida por mais de 3 min). O resultado desta execução (${estadoFinal}, US$ ${gasto.custo.toFixed(4)}) não foi gravado por cima.`, dados: { estado_da_execucao: estadoFinal, custo_usd: gasto.custo, uso_id: final.uso_id } });
+    return { estado: "encerrado_pela_fila", custo: gasto.custo };
+  }
   // Evento final direto (fora do limitador): a tela fecha o trabalho com ele.
   await new Promise((r) => setTimeout(r, 1000));
   const sobra = limitador.soltar(Date.now() + 1000);

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, RefreshCw, X } from "lucide-react";
+import { History, Loader2, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
@@ -10,7 +10,7 @@ import { botao, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import { ESTADOS_EM_ANDAMENTO, TIPOS_DO_GERADOR } from "@/lib/mesa-videos/api";
 import { motorPorId } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
-import { provedorCancela } from "../../../supabase/functions/mesa-videos/modulos/video-executor";
+import { podeReconferir, provedorCancela } from "../../../supabase/functions/mesa-videos/modulos/video-executor";
 import { gravarMiniaturaDoVideo } from "@/lib/mesa-videos/quadros";
 import { chamarMesaVideos, chaveDosArquivos, chaveDosPedidos, usePedidos, type ArquivoDeVideo, type PedidoDeVideo } from "./videosApi";
 
@@ -22,6 +22,9 @@ import { chamarMesaVideos, chaveDosArquivos, chaveDosPedidos, usePedidos, type A
  * Frente V-C (26/09): avatar falando (HeyGen) aparece com o próprio nome; na
  * Runway e na Higgsfield dá para cancelar o que ainda não terminou (uma
  * chamada, nada cobrado do que foi cancelado).
+ * Frente MTR (30/09): a variação que passou do prazo segue conferida até 24 h
+ * (com aviso); a que venceu e ainda tem o pedido no provedor ganha
+ * "Conferir de novo" (uma consulta; pronto lá, baixa e cobra).
  */
 
 const ROTULO: Record<string, string> = {
@@ -43,6 +46,9 @@ interface Envio {
   posicao: number | null;
   storage_path: string | null;
   custo_usd: number | null;
+  request_id?: string;
+  uso_id?: string | null;
+  arquivo_id?: string | null;
 }
 
 const enviosDe = (p: PedidoDeVideo): Envio[] => {
@@ -86,6 +92,20 @@ export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVide
       else toast.warning("Não deu para cancelar", { description: "Já começou a gerar. Quando terminar, aparece aqui." });
     } catch (e) {
       toast.error("Não foi possível cancelar", { description: textoDoErro(e) });
+    } finally {
+      setConferindo(null);
+    }
+  };
+
+  const reconferir = async (pedidoId: string) => {
+    setConferindo(pedidoId);
+    try {
+      await chamarMesaVideos({ acao: "gerar_reconferir", pedido_id: pedidoId });
+      void queryClient.invalidateQueries({ queryKey: chaveDosPedidos(clientId) });
+      void queryClient.invalidateQueries({ queryKey: chaveDosArquivos(clientId) });
+      atualizarCusto();
+    } catch (e) {
+      toast.error("Não foi possível conferir de novo", { description: textoDoErro(e) });
     } finally {
       setConferindo(null);
     }
@@ -137,7 +157,7 @@ export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVide
       descricao={`${emAndamento.length} em andamento`}
       recolher={`mesa-videos:geracoes:${clientId}`}
       resumo={`${pedidos.length} ${pedidos.length === 1 ? "pedido" : "pedidos"} · ${emAndamento.length} em andamento`}
-      ajuda="Cada pedido mostra as variações. A consulta ao provedor só acontece quando você abre esta etapa ou toca em Conferir. Erro não é tentado de novo sozinho e não é cobrado."
+      ajuda="Cada pedido mostra as variações. A consulta ao provedor só acontece quando você abre esta etapa ou toca em Conferir. Passou do prazo, segue sendo conferido por até 24 h; o que venceu e ainda está no provedor tem Conferir de novo. Erro do provedor não é tentado de novo e não é cobrado."
       acao={
         <button type="button" className={botao.secundario} disabled={!!conferindo || !emAndamento.length} onClick={() => void conferir(null)} aria-label="Conferir as gerações em andamento">
           {conferindo === "todos" ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 sm:mr-1.5" />}
@@ -154,6 +174,7 @@ export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVide
           const motorDoPedido = motorPorId(p.executor);
           const podeCancelar = ESTADOS_EM_ANDAMENTO.indexOf(p.estado as string) >= 0 && (p.estado as string) !== "baixando" && !!motorDoPedido && provedorCancela(motorDoPedido.provedor);
           const par = p.parametros as { prompt?: string };
+          const reconferivel = (p.estado as string) !== "baixando" && envios.some((e) => podeReconferir({ estado: e.estado as "erro", request_id: e.request_id || "", erro: e.erro, uso_id: e.uso_id || null, arquivo_id: e.arquivo_id || null }));
           return (
             <li key={p.id} className="flex min-w-0 items-start py-2.5" data-geracao={p.id}>
               <div className="mr-2 flex shrink-0">
@@ -176,6 +197,11 @@ export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVide
               {ESTADOS_EM_ANDAMENTO.indexOf(p.estado as string) >= 0 && (
                 <button type="button" className={botao.icone} disabled={!!conferindo} onClick={() => void conferir(p.id)} aria-label={`Conferir ${alvo.titulo || "pedido"}`} title={(p.estado as string) === "baixando" ? "Baixar de novo" : "Conferir"}>
                   {conferindo === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                </button>
+              )}
+              {reconferivel && (
+                <button type="button" className={botao.icone} disabled={!!conferindo} onClick={() => void reconferir(p.id)} aria-label={`Conferir de novo ${alvo.titulo || "pedido"}`} title="Conferir de novo no provedor">
+                  {conferindo === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <History className="h-3.5 w-3.5" />}
                 </button>
               )}
               {podeCancelar && (

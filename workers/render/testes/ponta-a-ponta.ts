@@ -359,9 +359,12 @@ async function principal() {
         await executar("ffmpeg", ["-y", "-v", "error", "-ss", String(Math.max(0, t)), "-i", local, "-frames:v", "1", path.join(PASTA, `quadro-${l.tipo}-${String(t).replace(".", "_")}.png`)]);
       }
     }
-    const envios = srv.envios.filter((e) => e.objeto.indexOf("/video/render/") > 0);
+    // Os dois MP4 (amostra e vídeo inteiro) sobem em partes; a miniatura (frente MOT) é um JPG à parte, só do vídeo inteiro.
+    const envios = srv.envios.filter((e) => e.objeto.indexOf("/video/render/") > 0 && /\.mp4$/.test(e.objeto));
     assert.equal(envios.length, 2);
     envios.forEach((e) => assert.equal(e.feito, e.total));
+    const miniaturas = srv.envios.filter((e) => e.objeto.indexOf("/video/render/") > 0 && /\.jpg$/.test(e.objeto));
+    assert.equal(miniaturas.length, 1, "a miniatura do vídeo inteiro sobe uma vez");
     provas.upload = envios.map((e) => ({ objeto: e.objeto, bytes: e.total, partes: e.partes.length }));
     await writeFile(path.join(PASTA, "provas.json"), JSON.stringify(provas, null, 1));
     log(`PASSOU. Provas em ${path.join(PASTA, "provas.json")}`);

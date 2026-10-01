@@ -22,10 +22,11 @@ import path from "node:path";
 import { setTimeout as esperar } from "node:timers/promises";
 import { createClient } from "@supabase/supabase-js";
 import { armazemSupabase } from "./armazem.ts";
-import { filaSupabase } from "./fila.ts";
-import { umPedido, type Ambiente } from "./trabalho.ts";
+import { baterPonto, capacidadesDoWorker, INTERVALO_DA_BATIDA_MS } from "./batida.ts";
+import { filaSupabase, type Fila } from "./fila.ts";
+import { PASTA_DO_WORKER, umPedido, type Ambiente } from "./trabalho.ts";
 
-export const VERSAO_DO_WORKER = "edt-1.0+mot-1.0+mov-1";
+export const VERSAO_DO_WORKER = "edt-1.0+mot-1.0+mtr-1+mov-1";
 
 export function lerAmbiente(env: NodeJS.ProcessEnv): { url: string; chave: string; nome: string; pasta: string; intervalo: number; chrome: string | null; concorrencia: number | null } {
   const url = String(env.SUPABASE_URL || env.VITE_SUPABASE_URL || "").trim();
@@ -48,8 +49,30 @@ export function lerAmbiente(env: NodeJS.ProcessEnv): { url: string; chave: strin
 async function principal() {
   const cfg = lerAmbiente(process.env);
   const db = createClient(cfg.url, cfg.chave, { auth: { persistSession: false, autoRefreshToken: false } });
+  // Frente MTR: batida a cada 30 s, inclusive no meio de um render longo, com o que esta máquina tem.
+  const caps = await capacidadesDoWorker(PASTA_DO_WORKER);
+  if (caps.faltas.length) console.warn(`Atenção nesta máquina: ${caps.faltas.join("; ")}.`);
+  const iniciadoEm = new Date().toISOString();
+  let pedidoAtual: string | null = null;
+  const filaBase = filaSupabase(db);
+  const fila: Fila = {
+    ...filaBase,
+    async pegar(token, worker, versao) {
+      const p = await filaBase.pegar(token, worker, versao);
+      pedidoAtual = p ? p.id : null;
+      return p;
+    },
+  };
+  let avisouBatida = false;
+  const bater = async () => {
+    const ok = await baterPonto(db, cfg.nome, VERSAO_DO_WORKER, caps, { pedido_id: pedidoAtual, iniciado_em: iniciadoEm }).catch(() => false);
+    if (!ok && !avisouBatida) console.error("A batida não foi gravada (rede ou chave?). O worker segue tentando.");
+    avisouBatida = !ok;
+  };
+  await bater();
+  const relogio = setInterval(() => void bater(), INTERVALO_DA_BATIDA_MS);
   const amb: Ambiente = {
-    fila: filaSupabase(db),
+    fila,
     armazem: armazemSupabase(cfg.url, cfg.chave),
     token: randomUUID(),
     pasta: cfg.pasta,
@@ -72,10 +95,12 @@ async function principal() {
       // Falha ao falar com a fila (rede, banco): espera o intervalo e olha de novo; nada é repetido às cegas.
       console.error(`A fila não respondeu: ${e instanceof Error ? e.message : e}`);
     }
+    pedidoAtual = null;
     if (feito) console.log(`${feito.tipo} ${feito.id}: ${feito.estado} (${feito.detalhe})`);
     if (umaVez) break;
     if (!feito) await esperar(cfg.intervalo * 1000);
   }
+  clearInterval(relogio);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"))) {

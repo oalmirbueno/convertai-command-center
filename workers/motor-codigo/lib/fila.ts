@@ -9,7 +9,7 @@
  */
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { EventoResumido } from "../../../supabase/functions/_shared/motor-codigo.ts";
+import type { EventoResumido, ModeloDoMotor } from "../../../supabase/functions/_shared/motor-codigo.ts";
 
 export type LinhaDaFila = {
   id: string;
@@ -28,6 +28,8 @@ export type LinhaDaFila = {
   estimativa_usd: number | null;
   custo_usd: number;
   criado_por: string | null;
+  /** Quem pegou o trabalho (a pegada grava; a gravação final confere). */
+  executor?: string | null;
 };
 
 export type UsoDoTrabalho = { modeloId: string; provedor: string; tokensEntrada: number; tokensSaida: number; tokensCache: number; custoUsd: number; fonte: "provedor" | "tabela" };
@@ -36,6 +38,13 @@ export interface Fila {
   nome: string;
   pegar(executor: string): Promise<LinhaDaFila | null>;
   atualizar(id: string, campos: Record<string, unknown>): Promise<void>;
+  /**
+   * Frente MTR (rodada 2): a gravação FINAL só vale se o trabalho ainda está
+   * executando/parando com ESTE executor. Se outro worker varreu como órfão
+   * (batidas falharam por rede), não sobrescreve "falhou" com "feito":
+   * devolve false e o worker registra um aviso.
+   */
+  fechar?(id: string, executor: string | null | undefined, campos: Record<string, unknown>): Promise<boolean>;
   evento(t: Pick<LinhaDaFila, "id" | "client_id">, ev: EventoResumido): Promise<void>;
   estado(id: string): Promise<string | null>;
   baixar(bucket: string, path: string): Promise<Uint8Array | null>;
@@ -43,6 +52,8 @@ export interface Fila {
   registrarUso(t: LinhaDaFila, u: UsoDoTrabalho): Promise<string | null>;
   mesclarPublicacao(siteId: string, dados: Record<string, unknown>): Promise<void>;
   batida(nome: string, info: { versao: string; capacidades: Record<string, unknown>; trabalho_id: string | null }): Promise<void>;
+  /** Frente MTR: o mesmo modelo servido pelo OpenRouter (ids em ordem de preferência), para quando falta a chave do provedor direto. */
+  modeloAlternativo?(ids: string[]): Promise<ModeloDoMotor | null>;
 }
 
 // ------------------------------------------------------------------ Supabase
@@ -61,6 +72,13 @@ export async function filaSupabase(url: string, chaveServico: string): Promise<F
     async atualizar(id, campos) {
       const { error } = await db.from("motor_trabalhos").update(campos).eq("id", id);
       if (error) throw new Error(`fila: atualizar ${error.message}`);
+    },
+    async fechar(id, executor, campos) {
+      let q = db.from("motor_trabalhos").update(campos).eq("id", id).in("estado", ["executando", "parando"]);
+      if (executor) q = q.eq("executor", executor);
+      const { data, error } = await q.select("id");
+      if (error) throw new Error(`fila: fechar ${error.message}`);
+      return Array.isArray(data) && data.length > 0;
     },
     async evento(t, ev) {
       const { error } = await db.from("motor_eventos").insert({ trabalho_id: t.id, client_id: t.client_id, tipo: ev.tipo, resumo: ev.resumo.slice(0, 300) || "-", dados: ev.dados || {} });
@@ -114,6 +132,20 @@ export async function filaSupabase(url: string, chaveServico: string): Promise<F
       const { error } = await db.from("motor_executores").upsert({ nome, visto_em: new Date().toISOString(), versao: info.versao, capacidades: info.capacidades, trabalho_id: info.trabalho_id });
       if (error) console.error("[motor] batida não gravada:", error.message);
     },
+    async modeloAlternativo(ids) {
+      if (!ids.length) return null;
+      const { data, error } = await db.from("ia_modelos").select("id, provedor, modelo_api, preco_entrada_1m, preco_saida_1m, preco_cache_1m, contexto_tokens").in("id", ids).eq("ativo", true);
+      if (error) {
+        console.error("[motor] catálogo indisponível para a rota pelo OpenRouter:", error.message);
+        return null;
+      }
+      const linhas = (data || []) as ModeloDoMotor[];
+      for (const id of ids) {
+        const l = linhas.find((x) => x.id === id);
+        if (l) return { ...l, preco_entrada_1m: Number(l.preco_entrada_1m), preco_saida_1m: Number(l.preco_saida_1m), preco_cache_1m: l.preco_cache_1m == null ? null : Number(l.preco_cache_1m) };
+      }
+      return null;
+    },
   };
 }
 
@@ -152,6 +184,12 @@ export function filaLocal(pasta: string): Fila & { enfileirar(linha: LinhaDaFila
     },
     async atualizar(id, campos) {
       gravar(id, { ...ler(id), ...campos, atualizado_em: new Date().toISOString() });
+    },
+    async fechar(id, executor, campos) {
+      const atual = ler(id);
+      if (["executando", "parando"].indexOf(String(atual.estado)) < 0 || (executor && atual.executor !== executor)) return false;
+      gravar(id, { ...atual, ...campos, atualizado_em: new Date().toISOString() });
+      return true;
     },
     async evento(t, ev) {
       appendFileSync(join(dirE, `${t.id}.jsonl`), `${JSON.stringify({ ...ev, em: new Date().toISOString() })}\n`);

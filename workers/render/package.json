@@ -10,7 +10,7 @@
   "scripts": {
     "worker": "node principal.ts",
     "uma-vez": "node principal.ts --uma-vez",
-    "teste": "node --test testes/fila.test.ts",
+    "teste": "node --test testes/fila.test.ts testes/batida.test.ts",
     "ponta-a-ponta": "node testes/ponta-a-ponta.ts",
     "sons": "node sons/medir-sons.mjs",
     "motion-ponta-a-ponta": "node testes/motion-ponta-a-ponta.ts"

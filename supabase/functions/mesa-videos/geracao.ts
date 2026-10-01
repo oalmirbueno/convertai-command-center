@@ -19,6 +19,8 @@
  * - avatar_gerar { client_id, fonte: "estoque" | "clone", avatar_id? | clone_id?, voz_id, roteiro, formato, resolucao?, legendas?, velocidade?, uid, custo_confirmado_usd } -> { ok, pedido_id, custo_estimado }
  * - heygen_catalogo { tipo: "avatares" | "vozes", token? } -> { itens, proximo }
  * - gerar_cancelar { pedido_id } (Runway e Higgsfield) -> { pedidos, cancelados }
+ * Frente MTR (30/09): o envio vencido segue conferido até 24 h; "Conferir de novo" reabre o que venceu.
+ * - gerar_reconferir { pedido_id } -> { pedidos, reabertos }
  *
  * Custo: sem `custo_confirmado_usd` a ação NÃO gera; devolve 409
  * confirmar_custo com a estimativa (a tela mostra e a pessoa confirma). Se a
@@ -47,6 +49,7 @@ import {
   ROTULO_DO_NIVEL,
 } from "./modulos/modelos-de-video.ts";
 import {
+  avisoDeCobrancaNoProvedor,
   chaveDaGeracao,
   corpoDaGeracao,
   credenciaisPorNome,
@@ -57,8 +60,11 @@ import {
   executorDoProvedor,
   faltaParaGerar,
   type ModoDaGeracao,
+  desfechoDaConsulta,
   passouDoPrazo,
+  passouDoTeto,
   podeConsultar,
+  podeReconferir,
 } from "./modulos/video-executor.ts";
 import { normalizarAngulo, normalizarManter, normalizarVariacoes } from "./modulos/video-angulo.ts";
 import { fotoParaEditar, guardarDoProvedor, LEITURA_DA_FOTO_PARA_EDITAR, LEITURA_DA_MINIATURA_DO_QUADRO } from "./modulos/video-armazenar.ts";
@@ -729,34 +735,29 @@ async function consultarPedido(b: BaseDaFuncao, p: LinhaDoPedido): Promise<Linha
   const cacheDoQuadro: CacheDoQuadro = {};
   for (const e of envios) {
     if (e.estado === "enviado" || e.estado === "gerando") {
-      if (passouDoPrazo(e, prazoMin, agora)) {
-        e.estado = "erro";
-        e.erro = `Passou do prazo de ${prazoMin} min sem terminar. Nada foi cobrado.`;
-        continue;
-      }
       if (!executor) {
         e.estado = "erro";
-        e.erro = "O motor deste pedido saiu do catálogo. Nada foi cobrado.";
+        e.erro = `O motor deste pedido saiu do catálogo; não deu para conferir no provedor. ${avisoDeCobrancaNoProvedor(e.request_id)}`;
         continue;
       }
+      // Frente MTR: o vencido também pergunta ao provedor (a tela fechada não consulta; o vídeo
+      // pronto lá não pode se perder). Pronto baixa e cobra; fila, gerando ou consulta que falhou
+      // seguem com aviso até o teto duro (24 h), e só então encerram dizendo que o provedor pode ter cobrado.
+      const vencido = passouDoPrazo(e, prazoMin, agora);
+      const alemDoTeto = passouDoTeto(e, prazoMin, agora);
+      let situacao: Awaited<ReturnType<ExecutorDoProvedor["consultar"]>> | null = null;
+      let falha: string | null = null;
       try {
-        const s = await executor.consultar(refDoEnvio(e), credenciais);
-        e.consultado_em = new Date().toISOString();
-        e.posicao = s.posicao;
-        if (typeof s.duracao_s === "number" && s.duracao_s > 0) e.duracao_s = s.duracao_s;
-        if (s.estado === "gerando") {
-          e.estado = "gerando";
-          e.erro = null;
-        } else if (s.estado === "fila") e.erro = null;
-        else if (s.estado === "erro") {
-          e.estado = "erro";
-          e.erro = s.erro;
-        } else if (s.estado === "pronto") e.estado = "baixando";
+        situacao = await executor.consultar(refDoEnvio(e), credenciais);
+        e.posicao = situacao.posicao;
+        if (typeof situacao.duracao_s === "number" && situacao.duracao_s > 0) e.duracao_s = situacao.duracao_s;
       } catch (err) {
-        // Falha de rede na consulta não encerra o envio: a próxima consulta (pedida pela tela) tenta.
-        e.consultado_em = new Date().toISOString();
-        e.erro = err instanceof Error ? err.message : "Consulta falhou.";
+        falha = err instanceof Error ? err.message : "Consulta falhou.";
       }
+      e.consultado_em = new Date().toISOString();
+      const d = desfechoDaConsulta(situacao, vencido, prazoMin, falha, alemDoTeto, e.request_id);
+      if (d.estado) e.estado = d.estado;
+      e.erro = d.erro;
     }
     if (e.estado === "baixando") {
       if (!executor) {
@@ -806,6 +807,47 @@ export async function gerarStatusCliente(b: BaseDaFuncao, corpo: Record<string, 
   const saida: LinhaDoPedido[] = [];
   for (const p of (data || []) as LinhaDoPedido[]) saida.push(await consultarPedido(b, p));
   return b.json({ pedidos: saida });
+}
+
+/**
+ * "Conferir de novo" (frente MTR, 30/09): a variação que virou erro por prazo,
+ * teto ou motor fora do catálogo, mas ainda tem o pedido no provedor
+ * (request_id) e nada baixado nem cobrado, volta a ser consultada UMA vez.
+ * Pronta lá: baixa e cobra normalmente. Ainda sem terminar: segue até o teto;
+ * passou do teto: volta ao erro dizendo que o provedor pode ter cobrado.
+ * Uma chamada por toque, sem laço.
+ */
+export async function gerarReconferir(b: BaseDaFuncao, corpo: Record<string, unknown>) {
+  const id = String(corpo.pedido_id || "");
+  if (!UUID.test(id)) throw b.erro(400, "pedido_id_invalido", "pedido_id precisa ser um UUID.");
+  const { data, error } = await b.servico().from("video_pedidos").select("*").eq("id", id).maybeSingle();
+  if (error) throw semSql(b, error);
+  if (!data) throw b.erro(404, "pedido_inexistente", "Pedido não encontrado.");
+  const p = data as LinhaDoPedido;
+  await b.garantirAcesso(p.client_id);
+  const envios = ((p.resultado && p.resultado.envios) || []).map((e) => ({ ...e }));
+  let reabertos = 0;
+  for (const e of envios) {
+    if (!podeReconferir(e)) continue;
+    e.estado = "enviado";
+    e.consultado_em = null;
+    e.erro = null;
+    reabertos++;
+  }
+  if (!reabertos) throw b.erro(409, "nada_para_reconferir", "Nada neste pedido pode ser conferido de novo: só a variação que venceu o prazo e ainda tem o pedido no provedor.");
+  const estado = estadoDoPedidoPelosEnvios(envios);
+  // Reabre só se o pedido não mudou desde a leitura (outra aba não reabre junto).
+  const { data: reaberto, error: e2 } = await b.servico()
+    .from("video_pedidos")
+    .update({ estado, resultado: { ...(p.resultado || {}), envios }, consultado_em: null, atualizado_em: new Date().toISOString() })
+    .eq("id", p.id)
+    .eq("estado", p.estado)
+    .select("*")
+    .maybeSingle();
+  if (e2) throw semSql(b, e2);
+  if (!reaberto) throw b.erro(409, "pedido_mudou", "O pedido mudou enquanto você conferia. Atualize a lista.");
+  await b.auditar("video_reconferir", { client_id: p.client_id, pedido_id: p.id, reabertos }, true, p.id);
+  return b.json({ pedidos: [await consultarPedido(b, reaberto as LinhaDoPedido)], reabertos });
 }
 
 // ------------------------------------------------------------------ cancelar (Runway e Higgsfield; frente V-C)

@@ -11,8 +11,10 @@
  *
  * SEM LAÇO: nada aqui repete sozinho. Consultar é uma chamada só, quando a
  * tela ou o próximo passo pede, com intervalo mínimo entre consultas e prazo
- * por motor; passou do prazo, o envio vira erro registrado. Erro do provedor
- * NÃO é tentado de novo: fica registrado com o motivo.
+ * por motor. Passou do prazo, o envio segue sendo conferido com aviso até o
+ * teto duro (24 h; frente MTR) e só então vira erro, dizendo que o provedor
+ * pode ter cobrado. Erro do provedor NÃO é tentado de novo: fica registrado
+ * com o motivo.
  *
  * Puro onde dá: o corpo de cada motor, a leitura do resultado e as regras de
  * consulta são funções sem rede (testadas). As chamadas recebem a chave e o
@@ -100,6 +102,11 @@ export function corpoDaGeracao(m: MotorDeVideo, e: EntradaDaGeracao): Record<str
     case "kling": {
       const elementos = refs.length ? [{ frontal_image_url: refs[0], reference_image_urls: refs.slice(1, 4) }] : [];
       if (e.modo === "estender") return semVazios({ prompt, video_url: e.video_url, duration: String(d), elements: elementos, generate_audio: audio });
+      // Frente MTR (prova pelo esquema público da fal, 30/09): o image-to-video do Kling O3 pede
+      // "image_url" (obrigatório) e não tem negative_prompt nem elements; o v3 e o 2.6 usam "start_image_url".
+      if (ini && /\/o3\//.test(m.endpoints.imagem || "") && e.modo !== "referencia") {
+        return semVazios({ prompt, image_url: ini, end_image_url: fim, duration: String(d), generate_audio: audio });
+      }
       return semVazios({ prompt, start_image_url: ini, end_image_url: fim, duration: String(d), aspect_ratio: ini ? undefined : ar, negative_prompt: e.negativo, generate_audio: audio, elements: elementos });
     }
     case "veo": {
@@ -117,10 +124,11 @@ export function corpoDaGeracao(m: MotorDeVideo, e: EntradaDaGeracao): Record<str
     case "minimax_h3": {
       const R = r.toUpperCase();
       if (e.modo === "estender") return semVazios({ prompt, video_url: e.video_url, duration: d, resolution: R, output: "continuation", seed });
-      return semVazios({ prompt, image_url: ini, end_image_url: fim, duration: d, resolution: R, aspect_ratio: ini ? undefined : ar, seed });
+      // prompt_expansion_mode é obrigatório no esquema da fal (texto e imagem); "balanced" é o padrão dela.
+      return semVazios({ prompt, prompt_expansion_mode: "balanced", image_url: ini, end_image_url: fim, duration: d, resolution: R, aspect_ratio: ini ? undefined : ar, seed });
     }
     case "hailuo":
-      return semVazios({ prompt, image_url: ini, duration: String(d), prompt_optimizer: true });
+      return semVazios({ prompt, image_url: ini, prompt_optimizer: true }); // a fal não recebe duração aqui (esquema público)
     case "happyhorse":
       return semVazios({ prompt, image_url: ini, duration: d, resolution: r, aspect_ratio: ini ? undefined : ar, seed });
     case "flux3":
@@ -298,10 +306,78 @@ export function podeConsultar(e: Pick<EnvioAoProvedor, "estado" | "consultado_em
   return !isFinite(t) || agora - t >= INTERVALO_MINIMO_DA_CONSULTA_MS;
 }
 
-/** Passou do prazo do motor? (o envio vira erro registrado e para de ser consultado) */
+/** Passou do prazo do motor? (o envio ganha aviso; só vira erro no teto duro, ver `passouDoTeto`) */
 export function passouDoPrazo(e: Pick<EnvioAoProvedor, "enviado_em">, prazoMin: number, agora: number): boolean {
   const t = Date.parse(e.enviado_em);
   return isFinite(t) && agora - t > Math.max(1, prazoMin) * 60_000;
+}
+
+/**
+ * Teto duro do envio (frente MTR, rodada 2): depois do PRAZO do motor o envio
+ * NÃO encerra; segue sendo conferido (com aviso) até este teto. A fal (e os
+ * outros) terminam e cobram mesmo quando a fila atrasa; encerrar no prazo
+ * perdia vídeo pago. 24 h, ou 6x o prazo quando o prazo for maior que 4 h.
+ */
+export const TETO_DO_ENVIO_MIN = 24 * 60;
+export function tetoDoEnvioMin(prazoMin: number): number {
+  return Math.max(TETO_DO_ENVIO_MIN, 6 * Math.max(1, prazoMin));
+}
+export function passouDoTeto(e: Pick<EnvioAoProvedor, "enviado_em">, prazoMin: number, agora: number): boolean {
+  return passouDoPrazo(e, tetoDoEnvioMin(prazoMin), agora);
+}
+
+/** Texto honesto de quando o envio é encerrado sem o resultado: o provedor pode ter cobrado. */
+export function avisoDeCobrancaNoProvedor(requestId: string | null | undefined): string {
+  const id = String(requestId || "").trim();
+  return `O provedor pode ter cobrado; confira no painel dele${id ? ` (pedido ${id.slice(0, 64)})` : ""} e use "Conferir de novo".`;
+}
+
+/**
+ * Frente MTR (30/09, rodada 2): o que fazer com um envio DEPOIS de perguntar ao provedor.
+ *
+ * - pronto: baixa e cobra (dentro ou fora do prazo; antes, o vencido se perdia);
+ * - erro do provedor: encerra com o motivo (o provedor não cobra erro);
+ * - fila/gerando ou consulta que falhou (rede, 5xx):
+ *   - dentro do prazo: segue, sem aviso (ou com o motivo da falha);
+ *   - depois do prazo: SEGUE com um aviso ("passou do prazo, ainda conferindo");
+ *     nunca vira erro por uma consulta só;
+ *   - depois do teto duro (24 h): encerra, dizendo que o provedor pode ter cobrado.
+ */
+export function desfechoDaConsulta(
+  s: { estado: "fila" | "gerando" | "pronto" | "erro"; erro?: string | null } | null,
+  vencido: boolean,
+  prazoMin: number,
+  falhaDaConsulta: string | null = null,
+  alemDoTeto = false,
+  requestId: string | null = null,
+): { estado: EnvioAoProvedor["estado"] | null; erro: string | null } {
+  if (s && s.estado === "pronto") return { estado: "baixando", erro: null };
+  if (s && s.estado === "erro") return { estado: "erro", erro: s.erro || "O provedor recusou o pedido." };
+  const falha = falhaDaConsulta ? falhaDaConsulta.slice(0, 160) : null;
+  const horas = Math.round(tetoDoEnvioMin(prazoMin) / 60);
+  if (alemDoTeto) {
+    const motivo = s ? `Passou de ${horas} h sem terminar no provedor.` : `Passou de ${horas} h sem resposta do provedor${falha ? ` (última consulta: ${falha})` : ""}.`;
+    return { estado: "erro", erro: `${motivo} ${avisoDeCobrancaNoProvedor(requestId)}` };
+  }
+  const continua: EnvioAoProvedor["estado"] | null = s && s.estado === "gerando" ? "gerando" : null;
+  if (vencido) {
+    const onde = !s ? `a consulta falhou${falha ? ` (${falha})` : ""}` : s.estado === "gerando" ? "ainda gerando no provedor" : "ainda na fila do provedor";
+    return { estado: continua, erro: `Passou do prazo de ${Math.max(1, prazoMin)} min e ${onde}. Seguimos conferindo por até ${horas} h; nada é cobrado aqui antes de ficar pronto.` };
+  }
+  // Dentro do prazo: falha de rede não encerra, a próxima consulta tenta.
+  if (!s) return { estado: null, erro: falha || "Consulta falhou." };
+  return { estado: continua, erro: null };
+}
+
+/**
+ * Pode "Conferir de novo"? Envio que virou erro por PRAZO, teto, falta de
+ * resposta ou motor fora do catálogo, ainda com o pedido no provedor
+ * (request_id) e sem nada baixado nem cobrado. Erro do provedor e cancelado
+ * não voltam (o provedor já disse que não gerou).
+ */
+export function podeReconferir(e: Pick<EnvioAoProvedor, "estado" | "request_id" | "erro" | "uso_id" | "arquivo_id">): boolean {
+  if (e.estado !== "erro" || !String(e.request_id || "").trim() || e.uso_id || e.arquivo_id) return false;
+  return /passou do prazo|passou de \d+ h|sem resposta do provedor|saiu do catálogo/i.test(String(e.erro || ""));
 }
 
 /** Estado do pedido a partir dos envios (as variações). */
