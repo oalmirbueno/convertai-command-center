@@ -1953,6 +1953,14 @@
       "remote_name": "navegador_qualquer_modelo_e_acoes",
       "remote_statements_sha256": "e3fde949b1063775f7c2ffe58265a34c704968c4a8425e80296218b9a00b462f",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930326000",
+      "path": "supabase/migrations/20260930326000_aceleriq_motores.sql",
+      "local_sha256": "5d191e6c9cd7abce82bb434241d492205b74894c28342acf8b82fac0dd6459ec",
+      "remote_name": "aceleriq_motores",
+      "remote_statements_sha256": "d613aa9e4160d1b8773aa2bc2fa4a9c8bfb81ffeb2e7b1e8952c470a6aa19acc",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
