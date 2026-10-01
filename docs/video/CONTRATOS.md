@@ -241,16 +241,21 @@ sozinho por `import.meta.glob`), com as props
   `409 cancelar_indisponivel`. O que foi cancelado não é cobrado; tudo cancelado vira
   `estado: "cancelado"`.
 
-## Prazo, teto e `gerar_reconferir` (frente MTR, 30/09)
+## Prazo, teto e `gerar_reconferir` (frente MTR, 30/09; unificado com a VGN em 01/10)
 
 - Passou do `prazo_min` do motor, a variação NÃO encerra: a consulta segue (fila, gerando ou
   consulta que falhou por rede ou 5xx) com um aviso, até o teto duro de 24 h (ou 6x o prazo, se
-  maior). Pronta no provedor em qualquer momento: baixa e cobra. Passou do teto: vira erro dizendo
-  que o provedor pode ter cobrado, com o `request_id`.
-- `gerar_reconferir { pedido_id }` -> `{ pedidos, reabertos }`. Reabre as variações em erro por
-  prazo, teto ou motor fora do catálogo que ainda têm `request_id` e nada baixado nem cobrado, e
-  consulta uma vez. Erro do provedor e cancelado não voltam. Nada para reabrir:
-  `409 nada_para_reconferir`.
+  maior), pela tela aberta e pela coleta de 1 min (`gerar_coletar`, frente VGN). O prazo e o teto
+  contam de `recuperado_em` quando houver, senão de `enviado_em`. Pronta no provedor em qualquer
+  momento: baixa e cobra. Passou do teto: vira erro, só depois de uma última consulta, dizendo
+  que o provedor pode ter cobrado, com o `request_id`, e indicando Recuperar.
+- `gerar_reconferir { pedido_id }` é a MESMA ação de `gerar_recuperar` (abaixo) e devolve
+  `{ pedidos, recuperando, reabertos }` (os dois números são iguais). A regra de quem volta é uma
+  só (`podeRecuperar` = `podeReconferir`): erro daqui (prazo antigo, teto, consulta sem resposta,
+  motor fora do catálogo, download não guardado), com `request_id`, sem arquivo, até 7 dias do
+  envio; já cobrada, só a que não foi guardada (baixa de novo sem cobrar). Erro do provedor e
+  cancelado não voltam: `409 nada_a_recuperar`. A tela tem um botão só, "Recuperar" (rótulo
+  acessível "Conferir de novo e recuperar ..."), que chama `gerar_reconferir`.
 
 ## Catálogo
 
@@ -260,3 +265,14 @@ sozinho por `import.meta.glob`), com as props
   e grava versões novas em `video_motores` como "novo, sem preço".
 - `gerar_status { pedido_id }`, `gerar_status_cliente { client_id }` (até 6 em andamento),
   `quadro_registrar { client_id, storage_path, origem_arquivo_id?, posicao? }`.
+
+## Frente VGN (30/09/2026): coleta, recuperar, foto que fala e o prompt do diretor
+
+- `motores_estado` não mudou: a "Situação do gerador" monta provedores e carteira na tela (lista dos motores + saldo da mesa).
+- `gerar_coletar { limite? }` (só pelo cron, `x-cron-secret`; SQL 20260930321000, a cada minuto e só quando há pedido em andamento) -> `{ ok, conferidos, prontos, erros, restantes }`. Mesma consulta da tela; rodada de até 45 s.
+- Trava de um pedido (tela e cron): o `update` condicional marca `consultado_em = agora + 3 min` (cobre consulta, cobrança e download), o trabalho usa a linha DEVOLVIDA pela trava e, no fim, `consultado_em` volta à hora real. A cobrança de cada variação (`uso_id`) é gravada no pedido ANTES do download: duas coletas nunca cobram o mesmo vídeo. `video_arquivos` repetido (mesmo `storage_path`) é reaproveitado.
+- Na coleta do cron não há pessoa: `criado_por` (uso e arquivo) é o de quem pediu a geração, ou nulo; nunca texto vazio.
+- `gerar_recuperar { pedido_id }` -> `{ pedidos, recuperando, reabertos }` (o mesmo que `gerar_reconferir`). Só variação aceita pelo provedor, sem arquivo, parada aqui por prazo, teto, falha de consulta, motor fora do catálogo ou download que não foi guardado, até 7 dias contados do `enviado_em` ORIGINAL (que não muda). O prazo do motor volta a correr de `recuperado_em`, e `tentativas_de_baixar` volta a zero. Erro dito pelo provedor devolve 409 `nada_a_recuperar`; pedido sendo conferido naquele instante (ou que mudou desde a leitura) devolve 409 `pedido_em_conferencia`.
+- Prazo: a variação só vira erro depois de UMA última consulta ao provedor, e só no teto de 24 h (seção acima); se ele terminou, o vídeo é guardado e cobrado.
+- `labial_gerar { client_id, motor? (h3-max-labial | heygen-avatar4-labial | sync-3-labial), imagem_path, audio_arquivo_id, formato?, resolucao?, estilo? ("estavel" | "expressivo"), confirma_direito_de_imagem: true, uid, custo_confirmado_usd, variacoes? }` -> igual ao `gerar_video`. O áudio é um `video_arquivos` tipo `audio` do cliente, com `duracao_s` (até 60 s); o custo sai dessa duração. Pedido `gerar_livre` com `alvo.modo = "labial"` e `parametros.labial` (sem URL assinada).
+- `diretor_prompt { client_id, marca_id?, modelo_id?, motor, modo, formato, duracao_s, audio, referencias, tem_quadro_inicial, tem_quadro_final, texto, cena? }` -> `{ prompt, negativo, fala_pt, notas, avisos, motor, modelo_id, custo_usd, saldo_usd }`. Nada é gravado; a tela mostra a prévia, aplica e oferece o Desfazer. Modelo: o escolhido ou o padrão do papel `motion`; contexto completo da marca (a marca que não é a principal não herda).

@@ -9,6 +9,7 @@ import { botao, campo, campoTexto, juntar, texto } from "@/components/sistema/es
 import { custoNaTela, novoUid, useMotoresDaMesa } from "@/lib/mesa-videos/api";
 import { duracaoNoMotor, duracoesDoMotor, motorDoNivel, motorPorId, type NivelDoMotor, resolucaoNoMotor } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
 import { BotaoDeGerar, EscolherImagem, SeletorDeCamera, SeletorDeMotor } from "./PecasDoGerador";
+import DiretorDoPrompt from "./DiretorDoPrompt";
 import { chamarMesaVideos, chaveDosPedidos } from "./videosApi";
 
 /**
@@ -115,6 +116,22 @@ export default function GeradorLivre() {
           </div>
         )}
       </GrupoDeCampos>
+      {/* Frente VGN: o diretor escreve o prompt no jeito do motor, com a marca (prévia, Aplicar e Desfazer). */}
+      <div className="flex min-w-0 justify-end">
+        <DiretorDoPrompt
+          motor={motor}
+          modo={modo}
+          formato={r.formato}
+          duracao={duracao}
+          audio={!!(motor && motor.cap.audio && r.audio)}
+          referencias={r.referencias.length}
+          temInicial={!!r.inicial}
+          temFinal={!!r.final}
+          texto={r.prompt}
+          atual={{ prompt: r.prompt, negativo: r.negativo }}
+          onAplicar={(p) => mudar({ prompt: p.prompt, negativo: p.negativo })}
+        />
+      </div>
       <CampoDeFormulario rotulo="O que acontece" largo apoio={modo === "referencia" ? "Cite as referências como @Image1, @Image2 quando o motor pedir." : undefined}>
         <textarea className={juntar(campoTexto, "min-h-[96px]")} value={r.prompt} maxLength={2400} onChange={(e) => mudar({ prompt: e.target.value })} placeholder="Ex.: a mulher da foto abre a porta da cozinha nova e sorri, câmera lenta de frente" />
       </CampoDeFormulario>

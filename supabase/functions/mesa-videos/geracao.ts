@@ -19,8 +19,21 @@
  * - avatar_gerar { client_id, fonte: "estoque" | "clone", avatar_id? | clone_id?, voz_id, roteiro, formato, resolucao?, legendas?, velocidade?, uid, custo_confirmado_usd } -> { ok, pedido_id, custo_estimado }
  * - heygen_catalogo { tipo: "avatares" | "vozes", token? } -> { itens, proximo }
  * - gerar_cancelar { pedido_id } (Runway e Higgsfield) -> { pedidos, cancelados }
- * Frente MTR (30/09): o envio vencido segue conferido até 24 h; "Conferir de novo" reabre o que venceu.
- * - gerar_reconferir { pedido_id } -> { pedidos, reabertos }
+ * Frente VGN (30/09): a geração que "não funcionava" (dados reais: o único pedido
+ * enviado ao fal, em 28/09, venceu o prazo porque ninguém consultou de novo; a
+ * resposta do provedor nunca foi buscada). Agora:
+ * - gerar_coletar { limite? } (cron de 1 min, só quando há pedido em andamento) -> { conferidos, prontos, erros }
+ * - gerar_recuperar { pedido_id } -> pergunta de novo ao provedor o que venceu o prazo aqui (sem gerar de novo)
+ * - labial_gerar { client_id, motor?, imagem_path, audio_arquivo_id, formato?, resolucao?, estilo?, confirma_direito_de_imagem, uid, custo_confirmado_usd }
+ * Frente MTR (30/09) + VGN, unificados: o prazo do motor NÃO encerra o envio. Depois
+ * dele, o envio segue conferido (tela e cron) com aviso até o teto de 24 h, e só
+ * vira erro depois de uma última consulta ao provedor (se ele terminou, o vídeo é
+ * guardado); no teto, o erro diz que o provedor pode ter cobrado.
+ * - gerar_recuperar { pedido_id } e gerar_reconferir { pedido_id } ("Conferir de novo", MTR) são
+ *   a MESMA ação -> { pedidos, recuperando, reabertos }.
+ * Tela e cron consultam o mesmo pedido por uma trava que cobre a rodada inteira
+ * (consultado_em no futuro enquanto alguém trabalha) e a cobrança de cada
+ * variação é gravada ANTES de baixar: o mesmo vídeo nunca é cobrado duas vezes.
  *
  * Custo: sem `custo_confirmado_usd` a ação NÃO gera; devolve 409
  * confirmar_custo com a estimativa (a tela mostra e a pessoa confirma). Se a
@@ -61,16 +74,18 @@ import {
   faltaParaGerar,
   type ModoDaGeracao,
   desfechoDaConsulta,
+  INTERVALO_MINIMO_DA_CONSULTA_MS,
   passouDoPrazo,
   passouDoTeto,
   podeConsultar,
-  podeReconferir,
 } from "./modulos/video-executor.ts";
 import { normalizarAngulo, normalizarManter, normalizarVariacoes } from "./modulos/video-angulo.ts";
 import { fotoParaEditar, guardarDoProvedor, LEITURA_DA_FOTO_PARA_EDITAR, LEITURA_DA_MINIATURA_DO_QUADRO } from "./modulos/video-armazenar.ts";
 import type { Credenciais, ExecutorDoProvedor, RefDoEnvio } from "./modulos/video-provedor-comum.ts";
 import { movimentoValido } from "./modulos/video-provedor-higgsfield.ts";
 import { cloneLiberadoParaVideo, duracaoEstimadaDaFala, listarAvataresDaHeygen, listarVozesDaHeygen, ROTEIRO_MAX_CARACTERES } from "./modulos/video-provedor-heygen.ts";
+import { registrarFalha } from "../_shared/falha-registrada.ts";
+import { podeRecuperar, resumoDaColeta } from "./modulos/coleta-de-video.ts";
 
 export interface BaseDaFuncao {
   servico: () => SupabaseClient;
@@ -84,6 +99,8 @@ export interface BaseDaFuncao {
 
 const BUCKET = "mesa";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Quem fica como autor: a pessoa da chamada; no cron, quem pediu; nunca texto que não seja UUID. */
+const quemCriou = (...ids: Array<string | null | undefined>): string | null => ids.find((x) => !!x && UUID.test(String(x))) || null;
 const URL_PARA_O_PROVEDOR_S = 3600;
 /** Tarefa e agente do registro de uso (valores que o banco aceita hoje; SQL não é preciso para cobrar). */
 const TAREFA_DO_USO = "estudio";
@@ -128,6 +145,11 @@ export async function catalogo(b: BaseDaFuncao): Promise<{ motores: MotorDeVideo
   // Sem a tabela (SQL V-01): vale o catálogo em código.
   if (error) return catalogoEmUso([]);
   return catalogoEmUso((data || []) as LinhaDoCatalogoDeVideo[]);
+}
+
+/** Frente VGN: só os motores que geram hoje (chave existe, com preço, ligados); o diretor propõe só destes. */
+export function motoresProntosDoCatalogo(c: { motores: MotorDeVideo[]; desligados: string[] }): MotorDeVideo[] {
+  return c.motores.filter((m) => m.provedor === "painel" || (estadoDoMotor(m, { temChave, desligados: c.desligados }) === "pronto" && !!executorDoProvedor(m.provedor)));
 }
 
 export async function motorPronto(b: BaseDaFuncao, id: string): Promise<{ motor: MotorDeVideo; motores: MotorDeVideo[] }> {
@@ -211,7 +233,7 @@ async function conferirSaldo(b: BaseDaFuncao, clientId: string, usd: number) {
 }
 
 /** Registra o uso de UMA variação pronta na carteira (ia_registrar_uso, chave da agência). */
-async function cobrar(b: BaseDaFuncao, clientId: string, pedidoId: string, motor: string, usd: number, imagens: number, provedor = "fal"): Promise<string | null> {
+async function cobrar(b: BaseDaFuncao, clientId: string, pedidoId: string, motor: string, usd: number, imagens: number, provedor = "fal", criadoPor: string | null = null): Promise<string | null> {
   const { data, error } = await b.servico().rpc("ia_registrar_uso", {
     _client_id: clientId,
     _tarefa: TAREFA_DO_USO,
@@ -227,12 +249,13 @@ async function cobrar(b: BaseDaFuncao, clientId: string, pedidoId: string, motor
     _custo_fonte: "tabela",
     _referencia_tipo: "video_pedido",
     _referencia_id: pedidoId,
-    _criado_por: b.userId,
+    // Frente VGN: na coleta do cron não há pessoa na chamada; vale quem pediu a geração.
+    _criado_por: quemCriou(b.userId, criadoPor),
     _chave_origem: "agencia",
     _chave_id: null,
   });
   if (error) {
-    console.error("[mesa-videos] uso de vídeo não registrado", { pedido_id: pedidoId, motor });
+    registrarFalha("mesa-videos: uso de vídeo não registrado", error, { pedido_id: pedidoId, motor, client_id: clientId });
     return null;
   }
   const l = (Array.isArray(data) ? data[0] : data) as { uso_id?: string } | null;
@@ -305,7 +328,7 @@ export async function enviarGeracao(b: BaseDaFuncao, p: PedidoDeGeracao): Promis
       estado: "enviado",
       chave,
       resultado: { envios: [] },
-      criado_por: b.userId,
+      criado_por: quemCriou(b.userId),
       projeto_id: p.projetoId,
       prazo_em: prazo,
     })
@@ -573,7 +596,7 @@ async function gravarMiniaturaDaImagem(b: BaseDaFuncao, caminho: string, bytes: 
 async function registrarArquivo(
   b: BaseDaFuncao,
   clientId: string,
-  a: { caminho: string; tipo: string; nome: string; mime: string; bytes: number; duracao?: number | null; nota: string; pedidoId: string | null; origem: Record<string, unknown>; cenaRef?: string | null; grupo?: string | null },
+  a: { caminho: string; tipo: string; nome: string; mime: string; bytes: number; duracao?: number | null; nota: string; pedidoId: string | null; origem: Record<string, unknown>; cenaRef?: string | null; grupo?: string | null; criadoPor?: string | null },
 ) {
   const nome = a.nome.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 120) || "gerado";
   const { data, error } = await b.servico()
@@ -591,12 +614,19 @@ async function registrarArquivo(
       nota: a.nota.slice(0, 600),
       cena_ref: a.cenaRef ? a.cenaRef.slice(0, 40) : null,
       grupo: a.grupo ? a.grupo.slice(0, 80) : null,
-      criado_por: b.userId,
+      // Frente VGN: na coleta do cron não há pessoa (userId ""), e criado_por é uuid:
+      // vale quem pediu a geração (o mesmo do cobrar); sem ninguém, nulo.
+      criado_por: quemCriou(b.userId, a.criadoPor),
       pedido_id: a.pedidoId,
       origem: a.origem,
     })
     .select("*")
     .single();
+  if (error && String(error.code || "") === "23505") {
+    // Já registrado (uma rodada anterior guardou o arquivo e caiu antes de gravar o pedido): reaproveita.
+    const { data: existente } = await b.servico().from("video_arquivos").select("*").eq("storage_bucket", BUCKET).eq("storage_path", a.caminho).maybeSingle();
+    if (existente) return existente;
+  }
   if (error) throw semSql(b, error);
   return data;
 }
@@ -615,7 +645,7 @@ export async function quadroRegistrar(b: BaseDaFuncao, corpo: Record<string, unk
 
 // ------------------------------------------------------------------ status (sem laço)
 
-type LinhaDoPedido = { id: string; client_id: string; tipo: string; alvo: Record<string, unknown>; parametros: Record<string, unknown>; custo_estimado: Record<string, unknown>; executor: string; estado: string; resultado: { envios?: EnvioAoProvedor[] } | null; consultado_em?: string | null };
+type LinhaDoPedido = { id: string; client_id: string; tipo: string; alvo: Record<string, unknown>; parametros: Record<string, unknown>; custo_estimado: Record<string, unknown>; executor: string; estado: string; resultado: { envios?: EnvioAoProvedor[] } | null; consultado_em?: string | null; criado_por?: string | null };
 
 const refDoEnvio = (e: EnvioAoProvedor): RefDoEnvio => ({ request_id: e.request_id, status_url: e.status_url, response_url: e.response_url, endpoint: e.endpoint });
 
@@ -636,6 +666,9 @@ async function miniaturaDoProvedor(b: BaseDaFuncao, caminho: string, url: string
     return false;
   }
 }
+
+/** Frente VGN: vezes que o resultado pronto é pedido de novo antes de virar erro (a coleta roda a cada minuto). */
+const TENTATIVAS_DE_BAIXAR = 5;
 
 /** O quadro inicial já lido nesta consulta (as variações do mesmo pedido usam o mesmo quadro). */
 type CacheDoQuadro = { lido?: boolean; bytes?: Uint8Array | null; mime?: string };
@@ -701,30 +734,68 @@ async function baixarResultado(b: BaseDaFuncao, p: LinhaDoPedido, motor: MotorDe
     origem: { motor: p.executor, provedor: motor ? motor.provedor : null, endpoint: e.endpoint, pedido: p.id, variacao: e.n, plano: p.alvo.plano_ref || null, projeto: p.alvo.projeto_id || null, tipo: p.tipo, modo: p.alvo.modo || null, legendado: !!(avatar && avatar.legendas && r.legendado_url) },
     cenaRef: p.alvo.plano_ref ? String(p.alvo.plano_ref) : null,
     grupo: p.alvo.titulo ? String(p.alvo.titulo) : null,
+    criadoPor: p.criado_por || null,
   })) as { id: string };
   return { arquivo_id: arquivo.id, storage_path: caminho };
 }
 
 /**
- * Uma rodada de consulta de UM pedido (a tela pede ao abrir os Resultados ou
- * no botão "Conferir"). Trava por consultado_em: duas abas não consultam juntas.
+ * Quanto tempo a trava de um pedido vale: cobre a rodada INTEIRA (consulta,
+ * cobrança e download em partes), não só o intervalo entre consultas. A função
+ * tem 150 s de parede; 180 s garante que quem travou já terminou ou morreu
+ * antes de outro (tela ou cron) poder entrar. Quem termina solta na hora.
  */
-async function consultarPedido(b: BaseDaFuncao, p: LinhaDoPedido): Promise<LinhaDoPedido> {
-  const envios = ((p.resultado && p.resultado.envios) || []).slice();
+const TRAVA_DO_PEDIDO_MS = 180_000;
+
+/** Grava os envios do pedido (sem mexer na trava): guarda a cobrança antes de baixar. */
+async function gravarEnvios(b: BaseDaFuncao, p: LinhaDoPedido, envios: EnvioAoProvedor[]) {
+  const { error } = await b.servico().from("video_pedidos").update({ resultado: { ...(p.resultado || {}), envios }, atualizado_em: new Date().toISOString() }).eq("id", p.id);
+  if (error) registrarFalha("mesa-videos: cobrança do vídeo não gravada no pedido antes de baixar", error, { pedido_id: p.id });
+}
+
+/**
+ * Uma rodada de consulta de UM pedido (a tela pede ao abrir os Resultados, no
+ * botão "Conferir" e sozinha com a etapa aberta; o cron, a cada minuto).
+ *
+ * Trava (frente VGN, depois da revisão): quem consegue marcar consultado_em
+ * segue, e a marca vai para AGORA + 3 min, cobrindo o trabalho todo; ninguém
+ * mais entra até ela ser solta no fim (consultado_em = hora real) ou vencer.
+ * O trabalho usa a LINHA DEVOLVIDA pela trava, nunca a lida antes dela (que
+ * pode ter uso_id nulo de uma cobrança que outra rodada já fez).
+ */
+async function consultarPedido(b: BaseDaFuncao, lida: LinhaDoPedido): Promise<LinhaDoPedido> {
   const agora = Date.now();
-  const precisa = envios.some((e) => podeConsultar(e, agora) || e.estado === "baixando");
-  if (!precisa) return p;
-  // Trava: só quem conseguir marcar consultado_em segue (intervalo mínimo entre consultas).
-  const limite = new Date(agora - 15_000).toISOString();
+  const precisa = ((lida.resultado && lida.resultado.envios) || []).some((e) => podeConsultar(e, agora) || e.estado === "baixando");
+  if (!precisa) return lida;
+  const limite = new Date(agora - INTERVALO_MINIMO_DA_CONSULTA_MS).toISOString();
   const { data: travado, error } = await b.servico()
     .from("video_pedidos")
-    .update({ consultado_em: new Date(agora).toISOString() })
-    .eq("id", p.id)
+    .update({ consultado_em: new Date(agora + TRAVA_DO_PEDIDO_MS).toISOString() })
+    .eq("id", lida.id)
     .or(`consultado_em.is.null,consultado_em.lt.${limite}`)
-    .select("id")
+    .select("*")
     .maybeSingle();
   if (error) throw semSql(b, error);
-  if (!travado) return p;
+  if (!travado) return lida;
+  const p = travado as LinhaDoPedido;
+  let salvo: LinhaDoPedido | null = null;
+  try {
+    salvo = await trabalharNoPedido(b, p, agora);
+    return salvo;
+  } finally {
+    if (!salvo) {
+      // Algo quebrou no meio: solta a trava (a próxima rodada tenta; o que foi cobrado já está gravado).
+      try {
+        await b.servico().from("video_pedidos").update({ consultado_em: new Date().toISOString() }).eq("id", p.id);
+      } catch {
+        /* a trava vence sozinha em 3 min */
+      }
+    }
+  }
+}
+
+async function trabalharNoPedido(b: BaseDaFuncao, p: LinhaDoPedido, agora: number): Promise<LinhaDoPedido> {
+  const envios = ((p.resultado && p.resultado.envios) || []).slice();
   const c = await catalogo(b);
   const motor = motorPorId(p.executor, c.motores);
   // O executor do provedor do motor (fal, Runway, Higgsfield, HeyGen); a chave só pelo nome do segredo.
@@ -740,9 +811,11 @@ async function consultarPedido(b: BaseDaFuncao, p: LinhaDoPedido): Promise<Linha
         e.erro = `O motor deste pedido saiu do catálogo; não deu para conferir no provedor. ${avisoDeCobrancaNoProvedor(e.request_id)}`;
         continue;
       }
-      // Frente MTR: o vencido também pergunta ao provedor (a tela fechada não consulta; o vídeo
-      // pronto lá não pode se perder). Pronto baixa e cobra; fila, gerando ou consulta que falhou
-      // seguem com aviso até o teto duro (24 h), e só então encerram dizendo que o provedor pode ter cobrado.
+      // Frentes MTR e VGN: o prazo só decide DEPOIS de perguntar ao provedor (o pedido de 28/09
+      // venceu sem a última consulta, e o resultado pronto no fal nunca foi buscado). Pronto baixa
+      // e cobra; fila, gerando ou consulta que falhou seguem com aviso até o teto duro (24 h,
+      // conferidos pela tela e pela coleta de 1 min), e só então encerram dizendo que o provedor
+      // pode ter cobrado (Recuperar busca de novo, sem gerar outra vez).
       const vencido = passouDoPrazo(e, prazoMin, agora);
       const alemDoTeto = passouDoTeto(e, prazoMin, agora);
       let situacao: Awaited<ReturnType<ExecutorDoProvedor["consultar"]>> | null = null;
@@ -752,7 +825,9 @@ async function consultarPedido(b: BaseDaFuncao, p: LinhaDoPedido): Promise<Linha
         e.posicao = situacao.posicao;
         if (typeof situacao.duracao_s === "number" && situacao.duracao_s > 0) e.duracao_s = situacao.duracao_s;
       } catch (err) {
+        // Falha de rede na consulta não encerra o envio: a próxima consulta (tela ou coleta) tenta.
         falha = err instanceof Error ? err.message : "Consulta falhou.";
+        registrarFalha("mesa-videos: consulta ao provedor falhou", err, { pedido_id: p.id, variacao: e.n });
       }
       e.consultado_em = new Date().toISOString();
       const d = desfechoDaConsulta(situacao, vencido, prazoMin, falha, alemDoTeto, e.request_id);
@@ -767,8 +842,11 @@ async function consultarPedido(b: BaseDaFuncao, p: LinhaDoPedido): Promise<Linha
       // Cobra uma vez só (o provedor já gerou), antes de baixar. Avatar: pela duração real, até o confirmado.
       const valor = custoDaVariacaoPronta(motor, porVariacao, e.duracao_s, String(p.parametros.resolucao || ""));
       if (!e.uso_id && valor > 0) {
-        e.uso_id = await cobrar(b, p.client_id, p.id, p.executor, valor, p.tipo === "angulo" ? 1 : 0, motor ? motor.provedor : "fal");
+        e.uso_id = await cobrar(b, p.client_id, p.id, p.executor, valor, p.tipo === "angulo" ? 1 : 0, motor ? motor.provedor : "fal", p.criado_por || null);
         e.custo_usd = valor;
+        // Grava a cobrança JÁ, antes do download (que pode levar mais que a rodada): se esta
+        // rodada morrer baixando, a próxima vê o uso_id e não cobra o mesmo vídeo de novo.
+        if (e.uso_id) await gravarEnvios(b, p, envios);
       }
       try {
         const r = await baixarResultado(b, p, motor, e, executor, credenciais, cacheDoQuadro);
@@ -777,14 +855,25 @@ async function consultarPedido(b: BaseDaFuncao, p: LinhaDoPedido): Promise<Linha
         e.estado = "pronto";
         e.erro = null;
       } catch (err) {
-        // Fica "baixando" com o motivo: o botão "Baixar de novo" pede outra vez (nunca sozinho).
-        e.erro = err instanceof Error ? err.message : "Não baixou.";
+        // Fica "baixando" com o motivo: a próxima consulta (tela ou coleta) pede outra vez, até
+        // TENTATIVAS_DE_BAIXAR vezes (a coleta de 1 min não pode virar laço sem fim).
+        e.tentativas_de_baixar = (e.tentativas_de_baixar || 0) + 1;
+        const motivo = err instanceof Error ? err.message : "Não baixou.";
+        e.erro = motivo;
+        registrarFalha("mesa-videos: resultado pronto não foi guardado", err, { pedido_id: p.id, variacao: e.n, tentativa: e.tentativas_de_baixar });
+        if (e.tentativas_de_baixar >= TENTATIVAS_DE_BAIXAR) {
+          e.estado = "erro";
+          e.erro = `O provedor terminou, mas o arquivo não foi guardado depois de ${TENTATIVAS_DE_BAIXAR} tentativas (${motivo.slice(0, 160)}). O uso já foi registrado: use Recuperar para baixar de novo sem cobrar outra vez.`;
+        }
       }
     }
   }
   const estado = estadoDoPedidoPelosEnvios(envios);
-  const { data: salvo } = await b.servico().from("video_pedidos").update({ estado, resultado: { ...(p.resultado || {}), envios }, atualizado_em: new Date().toISOString() }).eq("id", p.id).select("*").single();
-  return (salvo as LinhaDoPedido) || { ...p, estado, resultado: { envios } };
+  // Grava e SOLTA a trava (consultado_em = hora real: a próxima consulta respeita o intervalo mínimo).
+  const fim = new Date().toISOString();
+  const { data: salvo, error: eSalvar } = await b.servico().from("video_pedidos").update({ estado, resultado: { ...(p.resultado || {}), envios }, consultado_em: fim, atualizado_em: fim }).eq("id", p.id).select("*").single();
+  if (eSalvar || !salvo) throw semSql(b, eSalvar || { message: "O pedido não foi gravado." });
+  return salvo as LinhaDoPedido;
 }
 
 export async function gerarStatus(b: BaseDaFuncao, corpo: Record<string, unknown>) {
@@ -809,15 +898,66 @@ export async function gerarStatusCliente(b: BaseDaFuncao, corpo: Record<string, 
   return b.json({ pedidos: saida });
 }
 
+// ------------------------------------------------------------------ coleta sem tela (frente VGN)
+
+const ESTADOS_EM_ANDAMENTO_NO_BANCO = ["enviado", "gerando", "baixando"];
+/** Teto de uma rodada do cron: abaixo do minuto entre rodadas (a trava de cada pedido cobre o que passar disso). */
+const TETO_DA_COLETA_MS = 45_000;
+
 /**
- * "Conferir de novo" (frente MTR, 30/09): a variação que virou erro por prazo,
- * teto ou motor fora do catálogo, mas ainda tem o pedido no provedor
- * (request_id) e nada baixado nem cobrado, volta a ser consultada UMA vez.
- * Pronta lá: baixa e cobra normalmente. Ainda sem terminar: segue até o teto;
- * passou do teto: volta ao erro dizendo que o provedor pode ter cobrado.
- * Uma chamada por toque, sem laço.
+ * Coleta do cron (1 min, só quando há pedido em andamento; SQL 20260930321000):
+ * consulta os pedidos de TODOS os clientes que estão na fila do provedor, os
+ * mais esquecidos primeiro, guarda o que ficou pronto no acervo do cliente e
+ * cobra a variação pronta. Mesma consulta da tela (trava por consultado_em que
+ * cobre a rodada inteira: tela e cron, ou duas rodadas do cron, nunca trabalham
+ * no mesmo pedido juntos; cada um usa a linha devolvida pela própria trava). Não repete erro de
+ * provedor: só pergunta de novo o que ainda está em andamento.
  */
+export async function gerarColetar(b: BaseDaFuncao, corpo: Record<string, unknown> = {}) {
+  const limite = Math.max(1, Math.min(12, Math.round(numero(corpo.limite, 8))));
+  const inicio = Date.now();
+  const { data, error } = await b.servico()
+    .from("video_pedidos")
+    .select("*")
+    .in("estado", ESTADOS_EM_ANDAMENTO_NO_BANCO)
+    .order("consultado_em", { ascending: true, nullsFirst: true })
+    .limit(limite);
+  if (error) throw semSql(b, error);
+  const antes = (data || []) as LinhaDoPedido[];
+  const depois: LinhaDoPedido[] = [];
+  for (const p of antes) {
+    if (Date.now() - inicio > TETO_DA_COLETA_MS) break;
+    try {
+      depois.push(await consultarPedido(b, p));
+    } catch (e) {
+      registrarFalha("mesa-videos: coleta de um pedido falhou", e, { pedido_id: p.id, client_id: p.client_id });
+      depois.push(p);
+    }
+  }
+  const resumo = resumoDaColeta(antes, depois);
+  return b.json({ ok: true, ...resumo, restantes: antes.length - depois.length });
+}
+
+/**
+ * Recuperar = "Conferir de novo" (frentes VGN e MTR, unificadas): o envio virou
+ * erro AQUI (teto, prazo antigo, consulta sem resposta, motor fora do catálogo
+ * ou download que não foi guardado), mas o provedor pode ter terminado (o fal
+ * guarda o resultado). Pergunta de novo, UMA vez, só pelas variações que têm
+ * número no provedor e nenhum arquivo (regra única em `podeRecuperar`); nada é
+ * gerado de novo e só é cobrado o que vier pronto e ainda não foi cobrado.
+ * Ainda sem terminar: segue conferido até o teto, contado do Recuperar. Uma
+ * chamada por toque, sem laço.
+ */
+export async function gerarRecuperar(b: BaseDaFuncao, corpo: Record<string, unknown>) {
+  return recuperarPedido(b, corpo, "video_recuperar");
+}
+
+/** "Conferir de novo" (nome da frente MTR, que a tela usa): a mesma ação de `gerarRecuperar`. */
 export async function gerarReconferir(b: BaseDaFuncao, corpo: Record<string, unknown>) {
+  return recuperarPedido(b, corpo, "video_reconferir");
+}
+
+async function recuperarPedido(b: BaseDaFuncao, corpo: Record<string, unknown>, ferramenta: string) {
   const id = String(corpo.pedido_id || "");
   if (!UUID.test(id)) throw b.erro(400, "pedido_id_invalido", "pedido_id precisa ser um UUID.");
   const { data, error } = await b.servico().from("video_pedidos").select("*").eq("id", id).maybeSingle();
@@ -826,28 +966,98 @@ export async function gerarReconferir(b: BaseDaFuncao, corpo: Record<string, unk
   const p = data as LinhaDoPedido;
   await b.garantirAcesso(p.client_id);
   const envios = ((p.resultado && p.resultado.envios) || []).map((e) => ({ ...e }));
-  let reabertos = 0;
-  for (const e of envios) {
-    if (!podeReconferir(e)) continue;
-    e.estado = "enviado";
-    e.consultado_em = null;
+  const agora = new Date();
+  const alvo = envios.filter((e) => podeRecuperar(e, agora.getTime()));
+  if (!alvo.length) throw b.erro(409, "nada_a_recuperar", "Não há variação para recuperar: ou já está pronta, ou o provedor recusou (erro do provedor e cancelado não voltam), ou passou de 7 dias.");
+  alvo.forEach((e) => {
+    e.estado = "gerando";
     e.erro = null;
-    reabertos++;
-  }
-  if (!reabertos) throw b.erro(409, "nada_para_reconferir", "Nada neste pedido pode ser conferido de novo: só a variação que venceu o prazo e ainda tem o pedido no provedor.");
-  const estado = estadoDoPedidoPelosEnvios(envios);
-  // Reabre só se o pedido não mudou desde a leitura (outra aba não reabre junto).
-  const { data: reaberto, error: e2 } = await b.servico()
+    e.consultado_em = null;
+    // enviado_em fica (é a hora real do envio e conta os 7 dias); o prazo novo do motor
+    // corre a partir de recuperado_em. Download que falhou começa a contar de novo.
+    e.recuperado_em = agora.toISOString();
+    e.tentativas_de_baixar = 0;
+  });
+  // Só se ninguém estiver trabalhando no pedido agora (trava em vigor = consultado_em no futuro)
+  // e se ele não mudou desde a leitura (outra aba não recupera junto).
+  const { data: salvo, error: eSalvar } = await b.servico()
     .from("video_pedidos")
-    .update({ estado, resultado: { ...(p.resultado || {}), envios }, consultado_em: null, atualizado_em: new Date().toISOString() })
+    .update({ estado: estadoDoPedidoPelosEnvios(envios), resultado: { ...(p.resultado || {}), envios }, consultado_em: null, atualizado_em: agora.toISOString() })
     .eq("id", p.id)
     .eq("estado", p.estado)
+    .or(`consultado_em.is.null,consultado_em.lt.${agora.toISOString()}`)
     .select("*")
     .maybeSingle();
-  if (e2) throw semSql(b, e2);
-  if (!reaberto) throw b.erro(409, "pedido_mudou", "O pedido mudou enquanto você conferia. Atualize a lista.");
-  await b.auditar("video_reconferir", { client_id: p.client_id, pedido_id: p.id, reabertos }, true, p.id);
-  return b.json({ pedidos: [await consultarPedido(b, reaberto as LinhaDoPedido)], reabertos });
+  if (eSalvar) throw semSql(b, eSalvar);
+  if (!salvo) throw b.erro(409, "pedido_em_conferencia", "Este pedido está sendo conferido agora (ou mudou). Tente de novo em instantes.");
+  const r = await consultarPedido(b, salvo as LinhaDoPedido);
+  await b.auditar(ferramenta, { client_id: p.client_id, pedido_id: p.id, variacoes: alvo.length, estado: r.estado }, true, p.id);
+  // "recuperando" (VGN) e "reabertos" (MTR): o mesmo número, para as duas telas e contratos.
+  return b.json({ pedidos: [r], recuperando: alvo.length, reabertos: alvo.length });
+}
+
+// ------------------------------------------------------------------ foto + áudio = pessoa falando (família labial, frente VGN)
+
+/** Até quanto de áudio vai num vídeo labial (o provedor cobra por segundo do vídeo, que dura o que o áudio dura). */
+const LABIAL_MAX_S = 60;
+
+/**
+ * A foto fala o áudio escolhido (voz da ElevenLabs gerada na Mesa Motion,
+ * locução gravada, trilha de fala do acervo). O áudio vem do acervo de vídeo
+ * do cliente (tipo áudio, com a duração lida na subida); a foto, do bucket do
+ * cliente. Rosto de pessoa real só com a confirmação de que a pessoa autorizou
+ * o uso da imagem e da voz em vídeo (registrada no pedido).
+ */
+export async function labialGerar(b: BaseDaFuncao, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id || "");
+  await b.garantirAcesso(clientId);
+  const { motor } = await motorPronto(b, linha(corpo.motor, 60) || "h3-max-labial");
+  if (motor.familia !== "labial") throw b.erro(400, "motor_nao_e_labial", `${motor.rotulo} não faz foto falando.`);
+  const imagem = caminhoDoCliente(b, clientId, corpo.imagem_path, "imagem_path");
+  if (!imagem) throw b.erro(400, "imagem_path_invalido", "Escolha a foto de quem fala.");
+  if (corpo.confirma_direito_de_imagem !== true) throw b.erro(422, "confirmar_direito_de_imagem", "Confirme que a pessoa da foto autorizou o uso da imagem e da voz em vídeo (ou que a imagem não é de pessoa real).");
+  const audioId = String(corpo.audio_arquivo_id || "");
+  if (!UUID.test(audioId)) throw b.erro(400, "audio_faltando", "Escolha o áudio que a pessoa vai falar.");
+  const { data: a, error: eA } = await b.servico().from("video_arquivos").select("id, client_id, tipo, storage_bucket, storage_path, duracao_s, estado, nome").eq("id", audioId).maybeSingle();
+  if (eA) throw semSql(b, eA);
+  const audio = a as { client_id: string; tipo: string; storage_bucket: string | null; storage_path: string; duracao_s: number | null; estado: string | null; nome: string | null } | null;
+  if (!audio || audio.client_id !== clientId || audio.estado === "arquivado") throw b.erro(404, "audio_inexistente", "Áudio não encontrado no acervo do cliente.");
+  if (audio.tipo !== "audio") throw b.erro(400, "nao_e_audio", "Escolha um arquivo de áudio (MP3, WAV, M4A).");
+  const duracao = Number(audio.duracao_s);
+  if (!(duracao > 0)) throw b.erro(409, "audio_sem_duracao", "Não deu para saber a duração deste áudio. Suba o arquivo de novo pela biblioteca.");
+  if (duracao > LABIAL_MAX_S) throw b.erro(400, "audio_longo", `Áudio de ${Math.round(duracao)} s: até ${LABIAL_MAX_S} s por vídeo. Divida a fala em partes.`);
+  const { data: assinada, error: eAss } = await b.servico().storage.from(audio.storage_bucket || BUCKET).createSignedUrl(audio.storage_path, URL_PARA_O_PROVEDOR_S);
+  if (eAss || !assinada || !assinada.signedUrl) throw b.erro(404, "arquivo_indisponivel", "O áudio não foi encontrado no armazenamento.");
+  const formato = ["9:16", "16:9", "1:1", "4:5"].indexOf(String(corpo.formato)) >= 0 ? String(corpo.formato) : "9:16";
+  const estilo = corpo.estilo === "expressivo" ? "expressivo" : "estavel";
+  const entrada: EntradaDaGeracao = {
+    modo: "labial",
+    prompt: "",
+    duracao_s: duracao,
+    formato,
+    resolucao: linha(corpo.resolucao, 10) || null,
+    audio: true,
+    quadro_inicial_url: await urlAssinada(b, imagem),
+    audio_url: assinada.signedUrl,
+    estilo_da_fala: estilo,
+  };
+  const titulo = linha(corpo.titulo, 120) || `Fala: ${linha(audio.nome, 80) || "áudio"}`;
+  const r = await enviarGeracao(b, {
+    clientId,
+    tipo: "gerar_livre",
+    motor,
+    entrada,
+    caminhos: { quadro_inicial: imagem, quadro_final: null, referencias: [], video_arquivo_id: null },
+    variacoes: normalizarVariacoes(corpo.variacoes),
+    uid: linha(corpo.uid, 64),
+    confirmado: corpo.custo_confirmado_usd,
+    projetoId: UUID.test(String(corpo.projeto_id || "")) ? String(corpo.projeto_id) : null,
+    planoRef: linha(corpo.plano_ref, 8) || null,
+    titulo,
+    // Nada de URL assinada no banco: só o que dá para auditar depois.
+    extras: { labial: { audio_arquivo_id: audioId, audio_path: audio.storage_path, duracao_audio_s: duracao, estilo, confirma_direito_de_imagem: true } },
+  });
+  return b.json(r);
 }
 
 // ------------------------------------------------------------------ cancelar (Runway e Higgsfield; frente V-C)
@@ -863,13 +1073,26 @@ export async function gerarCancelar(b: BaseDaFuncao, corpo: Record<string, unkno
   const { data, error } = await b.servico().from("video_pedidos").select("*").eq("id", id).maybeSingle();
   if (error) throw semSql(b, error);
   if (!data) throw b.erro(404, "pedido_inexistente", "Pedido não encontrado.");
-  const p = data as LinhaDoPedido;
-  await b.garantirAcesso(p.client_id);
+  const lido = data as LinhaDoPedido;
+  await b.garantirAcesso(lido.client_id);
   const c = await catalogo(b);
-  const motor = motorPorId(p.executor, c.motores);
+  const motor = motorPorId(lido.executor, c.motores);
   const executor = motor ? executorDoProvedor(motor.provedor) : null;
   if (!motor || !executor || !executor.cancelar) throw b.erro(409, "cancelar_indisponivel", "Este provedor não cancela pela API. O pedido termina sozinho ou vence no prazo; erro não é cobrado.");
   const credenciais = credenciaisDoMotor(motor);
+  // Frente VGN: a mesma trava da coleta (o cron pode estar baixando este pedido agora); o
+  // cancelamento usa a linha devolvida pela trava e a solta ao gravar.
+  const agora = Date.now();
+  const { data: travado, error: eTrava } = await b.servico()
+    .from("video_pedidos")
+    .update({ consultado_em: new Date(agora + TRAVA_DO_PEDIDO_MS).toISOString() })
+    .eq("id", lido.id)
+    .or(`consultado_em.is.null,consultado_em.lt.${new Date(agora).toISOString()}`)
+    .select("*")
+    .maybeSingle();
+  if (eTrava) throw semSql(b, eTrava);
+  if (!travado) throw b.erro(409, "pedido_em_conferencia", "Este pedido está sendo conferido agora. Tente de novo em instantes.");
+  const p = travado as LinhaDoPedido;
   const envios = ((p.resultado && p.resultado.envios) || []).slice();
   let cancelados = 0;
   for (const e of envios) {
@@ -886,7 +1109,8 @@ export async function gerarCancelar(b: BaseDaFuncao, corpo: Record<string, unkno
     }
   }
   const estado = cancelados && envios.every((e) => e.estado === "erro") ? "cancelado" : estadoDoPedidoPelosEnvios(envios);
-  const { data: salvo } = await b.servico().from("video_pedidos").update({ estado, resultado: { ...(p.resultado || {}), envios }, atualizado_em: new Date().toISOString() }).eq("id", p.id).select("*").single();
+  const fim = new Date().toISOString();
+  const { data: salvo } = await b.servico().from("video_pedidos").update({ estado, resultado: { ...(p.resultado || {}), envios }, consultado_em: fim, atualizado_em: fim }).eq("id", p.id).select("*").single();
   await b.auditar("video_cancelar", { client_id: p.client_id, pedido_id: p.id, motor: motor.id, cancelados }, cancelados > 0, p.id);
   return b.json({ pedidos: [(salvo as LinhaDoPedido) || { ...p, estado, resultado: { envios } }], cancelados });
 }

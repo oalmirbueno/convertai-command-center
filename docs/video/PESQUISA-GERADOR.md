@@ -330,3 +330,58 @@ pela API usada aqui.
   clone precisa citar vídeo e voz por IA na finalidade; a HeyGen pode derrubar o vídeo se a pessoa
   pedir. v1 e v2 saem do ar em 31/10/2026 (a mesa já usa a v3).
 - Sem chave: os cinco aparecem como "Precisa de chave" com o nome do segredo que falta.
+
+## 10. Conferência ao vivo e motores ligados (frente VGN, 30/09/2026)
+
+Tudo conferido nesta data, sem gastar crédito: a lista pública de modelos do fal
+(`api.fal.ai/v1/models?category=text-to-video|image-to-video|video-to-video`,
+616 endpoints), o esquema de entrada de cada endpoint
+(`fal.ai/api/openapi/queue/openapi.json?endpoint_id=...`, fotografado em
+`src/test/fixtures/fal-esquemas-video-2026-09-30.json`) e o texto de preço da
+página de cada modelo. Webhook do fal: `?fal_webhook=<url>` na fila, assinado
+com ED25519 (JWKS em `rest.fal.ai/.well-known/jwks.json`); não usamos por ora
+(ver "Por que não funcionava").
+
+### Por que a geração "não funcionava" (dados reais, só leitura)
+- `video_pedidos` tinha **um** pedido de geração na vida: ângulo, 28/09, cliente
+  Almir (carteira US$ 10,16). O fal aceitou (request_id), a tela consultou uma vez
+  38 s depois e nunca mais. Dez minutos depois o prazo encerrou o pedido **sem
+  perguntar ao provedor**; o resultado pronto nunca foi buscado. Nada foi cobrado.
+- A consulta só acontecia com a etapa Resultados aberta ou no botão Conferir.
+- `FAL_KEY` existe nos segredos (o Topaz e o Bria da Mesa Foto usaram em 25 e 29/09).
+  Não existem `RUNWAYML_API_SECRET`, `HIGGSFIELD_API_KEY/SECRET` nem `HEYGEN_API_KEY`.
+- Carteiras: 12 de 13 clientes com menos de US$ 2 (quatro abaixo de US$ 0,25).
+  Um clipe de 5 s custa de US$ 0,15 (Veo Lite) a US$ 5,82 (Seedance 2.5 1080p).
+- Erros de corpo que dariam 422 no provedor (achados comparando com o esquema):
+  MiniMax H3 sem `prompt_expansion_mode` (obrigatório); Kling O3 com
+  `start_image_url` (o O3 e o Turbo chamam de `image_url`); elemento do Kling com
+  lista de referências vazia; LTX-2.3 Pro pedindo 12 e 14 s (aceita 6, 8, 10);
+  Hailuo recebendo duração; FLUX 3 com quadros-chave no formato errado.
+
+### O que mudou no catálogo
+| Motor | Mudança |
+|---|---|
+| Seedance 2.5 | 1080p (US$ 1,164/s) |
+| Seedance 2.0 Mini | novo, US$ 0,0721/s (480p) e 0,1547/s (720p) |
+| Kling 3.0 Turbo Pro | novo, US$ 0,14/s, pelo texto ou imagem |
+| Kling 3.0 4K | novo, US$ 0,42/s com ou sem áudio |
+| Kling O3 Pro | novo, US$ 0,112/s (0,14 com áudio), referência e continuação |
+| Veo 3.1 e Fast | 4k (0,40/0,60 e 0,30/0,35 por s) |
+| Gemini Omni Flash 1.1 | 4k (US$ 0,30/s) |
+| Wan 3.0 Prime | novo Top da linha Wan, US$ 0,068/0,14/0,28 por s |
+| MiniMax H3 Max | referência (até 9 imagens); promoção de 50% acabou em 30/09 |
+| HappyHorse | 1.0 trocado pelo 1.1 (1080p a US$ 0,18/s) |
+| FLUX 3 | pelo texto e primeiro-último quadro no endpoint próprio |
+| Grok Imagine 1.5 | pelo texto |
+| LTX-2.3 | Pro US$ 0,08/s (era 0,06), Fast 0,06/s (era 0,04), até 2160p |
+| Luma Ray 3.2 | novo, US$ 0,03/0,06/0,24 por s (5 s de imagem, 10 s pelo texto) |
+| Hailuo 2.3 Pro | clipe fechado de 6 s a US$ 0,49 |
+| Sora 2 | continua encerrado (deprecated no fal) |
+
+### Foto que fala (família labial, nova)
+Foto + áudio (voz da ElevenLabs feita na Mesa Motion, locução gravada) vira a
+pessoa falando aquele áudio, pela mesma FAL_KEY:
+- H3 Max Lip Sync (`minimax/h3-max/lip-sync/image-to-video`): 0,05/0,08/0,16/0,32 por s (480p a 2K), 1,2x acima de 15 s.
+- HeyGen Avatar IV pelo fal (`fal-ai/heygen/avatar4/image-to-video`): US$ 0,10/s, fala estável ou expressiva.
+- sync-3 (`fal-ai/sync-lipsync/v3/image-to-video`): US$ 0,1333/s.
+OmniHuman 1.5 ficou de fora: a página não traz preço (motor sem preço não gera).

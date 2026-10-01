@@ -26,6 +26,16 @@
  * `escolha_manual`: aparecem na lista para a equipe escolher, mas nunca viram
  * o motor sugerido sozinhos (o que já estava pronto continua igual).
  *
+ * Frente VGN (30/09/2026): catálogo conferido AO VIVO na lista pública do fal
+ * (api.fal.ai/v1/models), nos esquemas de entrada (fal.ai/api/openapi) e nas
+ * páginas de preço de cada modelo. Preços corrigidos (LTX-2.3, HappyHorse 1.1),
+ * resoluções novas (Seedance 2.5 e Veo 3.1 em 1080p e 4k), motores novos
+ * (Kling 3.0 Turbo e 4K, Kling O3 Pro, Wan 3.0 Prime, Seedance 2.0 Mini,
+ * Luma Ray 3.2, FLUX 3 pelo texto) e a família "labial": foto + áudio vira a
+ * pessoa falando aquele áudio (voz da ElevenLabs, locução gravada), por
+ * H3 Max Lip Sync, sync-3 e HeyGen Avatar IV pelo fal (a mesma FAL_KEY).
+ * Registro da pesquisa: docs/video/PESQUISA-GERADOR.md, seção "30/09".
+ *
  * Puro: sem Deno, sem banco. A tela, a função mesa-videos e os testes usam o mesmo.
  */
 
@@ -215,7 +225,7 @@ export function travaDePessoaReal(m: ModeloDeVideo | null, temPessoaReal: boolea
 // precisa do valor antes).
 // ====================================================================================
 
-export type FamiliaDoMotor = "video" | "angulo" | "imagem" | "avatar";
+export type FamiliaDoMotor = "video" | "angulo" | "imagem" | "avatar" | "labial";
 export type ProvedorDoMotor = "fal" | "runway" | "higgsfield" | "heygen" | "painel";
 export type NivelDoMotor = "normal" | "top" | "rapido";
 
@@ -240,6 +250,10 @@ export type DialetoDoMotor =
   | "higgsfield"
   | "heygen_avatar"
   | "heygen_foto"
+  | "luma"
+  | "h3_labial"
+  | "sync_labial"
+  | "heygen_fal_labial"
   | "painel"
   | "nenhum";
 
@@ -257,6 +271,8 @@ export interface CapacidadesDoMotor {
   camera?: boolean;
   /** Pessoa falando um roteiro (avatar ou foto que fala, HeyGen). */
   avatar?: boolean;
+  /** Foto + áudio pronto vira a pessoa falando aquele áudio (frente VGN). */
+  labial?: boolean;
 }
 
 export interface PrecoDoMotor {
@@ -270,6 +286,8 @@ export interface PrecoDoMotor {
   por_imagem?: number;
   /** Extra por imagem de referência. */
   por_referencia?: number;
+  /** Multiplicador acima de N segundos (H3 Max Lip Sync: 1,2 acima de 15 s). */
+  longo?: { acima_s: number; fator: number };
   fonte: string;
   conferido_em: string;
   incerto?: boolean;
@@ -295,7 +313,7 @@ export interface MotorDeVideo {
   modelo?: string;
   /** Só quando a equipe escolhe: nunca vira o motor sugerido de um nível ou papel. */
   escolha_manual?: boolean;
-  endpoints: { texto?: string; imagem?: string; ultimo?: string; referencia?: string; estender?: string; angulo?: string; avatar?: string };
+  endpoints: { texto?: string; imagem?: string; ultimo?: string; referencia?: string; estender?: string; angulo?: string; avatar?: string; labial?: string };
   dialeto: DialetoDoMotor;
   duracoes: number[] | { min: number; max: number };
   resolucoes: string[];
@@ -316,6 +334,8 @@ export interface MotorDeVideo {
 }
 
 const HOJE = "2026-09-26";
+/** Frente VGN: conferido de novo, ao vivo, na lista e nas páginas de preço do fal. */
+const HOJE_VGN = "2026-09-30";
 const F = (endpoint: string) => `https://fal.ai/models/${endpoint}`;
 const TODOS = ["9:16", "16:9", "1:1", "4:5"];
 const faixa = (min: number, max: number) => ({ min, max });
@@ -326,9 +346,9 @@ export const MOTORES_DE_VIDEO: MotorDeVideo[] = [
   {
     id: "seedance-2.5", rotulo: "Seedance 2.5", familia: "video", linha: "seedance", versao: "2.5", principal: true, provedor: "fal", chave_env: "FAL_KEY",
     endpoints: { texto: "bytedance/seedance-2.5/text-to-video", imagem: "bytedance/seedance-2.5/image-to-video", ultimo: "bytedance/seedance-2.5/image-to-video", referencia: "bytedance/seedance-2.5/reference-to-video", estender: "bytedance/seedance-2.5/reference-to-video" },
-    dialeto: "seedance", duracoes: faixa(4, 15), resolucoes: ["480p", "720p"], resolucao_padrao: "720p", formatos: TODOS,
+    dialeto: "seedance", duracoes: faixa(4, 15), resolucoes: ["480p", "720p", "1080p"], resolucao_padrao: "720p", formatos: TODOS,
     cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, referencias: 9, estender: true, audio: true }),
-    preco: { por_segundo: { "480p": 0.2205, "720p": 0.473 }, fonte: F("bytedance/seedance-2.5/image-to-video"), conferido_em: HOJE },
+    preco: { por_segundo: { "480p": 0.2205, "720p": 0.473, "1080p": 1.164 }, fonte: F("bytedance/seedance-2.5/image-to-video"), conferido_em: HOJE_VGN },
     papeis: ["hero", "consistencia", "fala"], prazo_min: 40, nota: "Até 30 s no provedor (a mesa usa até 15). Áudio incluso. Referência @Image1 no prompt. Não aceita rosto de pessoa real no fluxo padrão.", documentado: "seedance-2",
   },
   {
@@ -339,6 +359,14 @@ export const MOTORES_DE_VIDEO: MotorDeVideo[] = [
     preco: { por_segundo: { "720p": 0.2419, "480p": 0.2419 }, fonte: F("bytedance/seedance-2.0/fast/image-to-video"), conferido_em: HOJE, incerto: true },
     papeis: ["consistencia", "barato"], prazo_min: 30, nota: "Mais barato que o 2.5, com as mesmas referências.",
   },
+  {
+    id: "seedance-2.0-mini", rotulo: "Seedance 2.0 Mini", familia: "video", linha: "seedance", versao: "2.0", principal: false, provedor: "fal", chave_env: "FAL_KEY",
+    endpoints: { texto: "bytedance/seedance-2.0/mini/text-to-video", imagem: "bytedance/seedance-2.0/mini/image-to-video", ultimo: "bytedance/seedance-2.0/mini/image-to-video", referencia: "bytedance/seedance-2.0/mini/reference-to-video" },
+    dialeto: "seedance", duracoes: faixa(4, 15), resolucoes: ["480p", "720p"], resolucao_padrao: "720p", formatos: TODOS,
+    cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, referencias: 9, audio: true }),
+    preco: { por_segundo: { "480p": 0.0721, "720p": 0.1547 }, fonte: F("bytedance/seedance-2.0/mini/image-to-video"), conferido_em: HOJE_VGN },
+    papeis: ["barato", "consistencia"], prazo_min: 30, nota: "O Seedance mais barato: bom para testar a cena antes do 2.5. Áudio incluso.",
+  },
   // ------------------------------------------------------------------ Kling
   {
     id: "kling-3-pro", rotulo: "Kling 3.0 Pro", familia: "video", linha: "kling", versao: "3.0", principal: true, provedor: "fal", chave_env: "FAL_KEY",
@@ -347,6 +375,30 @@ export const MOTORES_DE_VIDEO: MotorDeVideo[] = [
     cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, referencias: 4, audio: true, pessoa_real: true }),
     preco: { por_segundo: { padrao: 0.112 }, por_segundo_audio: { padrao: 0.168 }, fonte: F("fal-ai/kling-video/v3/pro/text-to-video"), conferido_em: HOJE, incerto: true },
     papeis: ["movimento", "hero", "consistencia"], prazo_min: 30, nota: "Física e câmera fortes. Elements com até 4 imagens (uma de frente). Preço diverge entre páginas do provedor.", documentado: "kling-3",
+  },
+  {
+    id: "kling-3-turbo-pro", rotulo: "Kling 3.0 Turbo Pro", familia: "video", linha: "kling", versao: "3.0", principal: false, provedor: "fal", chave_env: "FAL_KEY",
+    endpoints: { texto: "fal-ai/kling-video/v3/turbo/pro/text-to-video", imagem: "fal-ai/kling-video/v3/turbo/pro/image-to-video" },
+    dialeto: "kling", duracoes: faixa(3, 15), resolucoes: ["1080p"], resolucao_padrao: "1080p", formatos: ["9:16", "16:9", "1:1"],
+    cap: cap({ texto: true, primeiro_quadro: true, pessoa_real: true }),
+    preco: { por_segundo: { padrao: 0.14 }, fonte: F("fal-ai/kling-video/v3/turbo/pro/image-to-video"), conferido_em: HOJE_VGN },
+    papeis: ["movimento"], prazo_min: 20, nota: "Kling 3.0 mais rápido. Sem último quadro, sem referências e sem opção de áudio.",
+  },
+  {
+    id: "kling-3-4k", rotulo: "Kling 3.0 4K", familia: "video", linha: "kling", versao: "3.0", principal: false, provedor: "fal", chave_env: "FAL_KEY",
+    endpoints: { texto: "fal-ai/kling-video/v3/4k/text-to-video", imagem: "fal-ai/kling-video/v3/4k/image-to-video", ultimo: "fal-ai/kling-video/v3/4k/image-to-video" },
+    dialeto: "kling", duracoes: faixa(3, 15), resolucoes: ["4k"], resolucao_padrao: "4k", formatos: ["9:16", "16:9", "1:1"],
+    cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, referencias: 4, audio: true, pessoa_real: true }),
+    preco: { por_segundo: { padrao: 0.42 }, por_segundo_audio: { padrao: 0.42 }, fonte: F("fal-ai/kling-video/v3/4k/image-to-video"), conferido_em: HOJE_VGN },
+    papeis: ["hero"], prazo_min: 40, nota: "O Kling 3.0 em 4K nativo, com áudio pelo mesmo preço. Para peça final de tela grande.",
+  },
+  {
+    id: "kling-o3-pro", rotulo: "Kling O3 Pro", familia: "video", linha: "kling-o3", versao: "3.0", principal: true, provedor: "fal", chave_env: "FAL_KEY",
+    endpoints: { texto: "fal-ai/kling-video/o3/pro/text-to-video", imagem: "fal-ai/kling-video/o3/pro/image-to-video", ultimo: "fal-ai/kling-video/o3/pro/image-to-video", referencia: "fal-ai/kling-video/o3/pro/reference-to-video", estender: "fal-ai/kling-video/o3/pro/video-to-video/reference" },
+    dialeto: "kling", duracoes: faixa(3, 15), resolucoes: ["1080p"], resolucao_padrao: "1080p", formatos: ["9:16", "16:9", "1:1"],
+    cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, referencias: 4, estender: true, audio: true, pessoa_real: true }),
+    preco: { por_segundo: { padrao: 0.112 }, por_segundo_audio: { padrao: 0.14 }, fonte: F("fal-ai/kling-video/o3/pro/image-to-video"), conferido_em: HOJE_VGN },
+    papeis: ["consistencia", "hero"], prazo_min: 30, nota: "Omni em qualidade Pro: personagem e produto por elemento (@Element1) e o próximo plano com continuidade.",
   },
   {
     id: "kling-o3-standard", rotulo: "Kling O3 Standard", familia: "video", linha: "kling", versao: "3.0", principal: false, provedor: "fal", chave_env: "FAL_KEY",
@@ -368,17 +420,17 @@ export const MOTORES_DE_VIDEO: MotorDeVideo[] = [
   {
     id: "veo-3.1", rotulo: "Veo 3.1", familia: "video", linha: "veo", versao: "3.1", principal: true, provedor: "fal", chave_env: "FAL_KEY",
     endpoints: { texto: "fal-ai/veo3.1", imagem: "fal-ai/veo3.1/image-to-video", ultimo: "fal-ai/veo3.1/first-last-frame-to-video", referencia: "fal-ai/veo3.1/reference-to-video", estender: "fal-ai/veo3.1/extend-video" },
-    dialeto: "veo", duracoes: [4, 6, 8], resolucoes: ["720p", "1080p"], resolucao_padrao: "1080p", formatos: ["9:16", "16:9"],
+    dialeto: "veo", duracoes: [4, 6, 8], resolucoes: ["720p", "1080p", "4k"], resolucao_padrao: "1080p", formatos: ["9:16", "16:9"],
     cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, referencias: 3, estender: true, audio: true, pessoa_real: true }),
-    preco: { por_segundo: { "720p": 0.2, "1080p": 0.2 }, por_segundo_audio: { "720p": 0.4, "1080p": 0.4 }, fonte: F("fal-ai/veo3.1/image-to-video"), conferido_em: HOJE },
+    preco: { por_segundo: { "720p": 0.2, "1080p": 0.2, "4k": 0.4 }, por_segundo_audio: { "720p": 0.4, "1080p": 0.4, "4k": 0.6 }, fonte: F("fal-ai/veo3.1/image-to-video"), conferido_em: HOJE_VGN },
     papeis: ["hero", "fala"], prazo_min: 30, nota: "Fala em português com áudio nativo. Pessoa real só adulta e com autorização. Extensão de vídeo de até 8 s.", documentado: "veo-3.1",
   },
   {
     id: "veo-3.1-fast", rotulo: "Veo 3.1 Fast", familia: "video", linha: "veo", versao: "3.1", principal: false, provedor: "fal", chave_env: "FAL_KEY",
     endpoints: { texto: "fal-ai/veo3.1/fast", imagem: "fal-ai/veo3.1/fast/image-to-video", ultimo: "fal-ai/veo3.1/fast/first-last-frame-to-video" },
-    dialeto: "veo", duracoes: [4, 6, 8], resolucoes: ["720p", "1080p"], resolucao_padrao: "1080p", formatos: ["9:16", "16:9"],
+    dialeto: "veo", duracoes: [4, 6, 8], resolucoes: ["720p", "1080p", "4k"], resolucao_padrao: "1080p", formatos: ["9:16", "16:9"],
     cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, audio: true, pessoa_real: true }),
-    preco: { por_segundo: { "720p": 0.1, "1080p": 0.1 }, por_segundo_audio: { "720p": 0.15, "1080p": 0.15 }, fonte: F("fal-ai/veo3.1/fast/first-last-frame-to-video"), conferido_em: HOJE },
+    preco: { por_segundo: { "720p": 0.1, "1080p": 0.1, "4k": 0.3 }, por_segundo_audio: { "720p": 0.15, "1080p": 0.15, "4k": 0.35 }, fonte: F("fal-ai/veo3.1/fast/image-to-video"), conferido_em: HOJE_VGN },
     papeis: ["fala", "transicao", "barato"], prazo_min: 30, nota: "Metade do preço do Veo 3.1, com fala.",
   },
   {
@@ -392,14 +444,22 @@ export const MOTORES_DE_VIDEO: MotorDeVideo[] = [
   {
     id: "gemini-omni-flash-1.1", rotulo: "Gemini Omni Flash 1.1", familia: "video", linha: "gemini-omni", versao: "1.1", principal: true, provedor: "fal", chave_env: "FAL_KEY",
     endpoints: { texto: "google/gemini-omni-flash/v1.1/text-to-video", imagem: "google/gemini-omni-flash/v1.1/image-to-video", ultimo: "google/gemini-omni-flash/v1.1/image-to-video", referencia: "google/gemini-omni-flash/v1.1/reference-to-video" },
-    dialeto: "gemini_omni", duracoes: [8], resolucoes: ["360p", "720p", "1080p"], resolucao_padrao: "720p", formatos: ["9:16", "16:9"],
+    dialeto: "gemini_omni", duracoes: [8], resolucoes: ["360p", "720p", "1080p", "4k"], resolucao_padrao: "720p", formatos: ["9:16", "16:9"],
     cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, referencias: 3, audio: true }),
-    preco: { por_segundo: { "360p": 0.03, "720p": 0.1, "1080p": 0.15 }, fonte: F("google/gemini-omni-flash/v1.1/image-to-video"), conferido_em: HOJE },
+    preco: { por_segundo: { "360p": 0.03, "720p": 0.1, "1080p": 0.15, "4k": 0.3 }, fonte: F("google/gemini-omni-flash/v1.1/image-to-video"), conferido_em: HOJE_VGN },
     papeis: ["barato", "consistencia"], prazo_min: 30, nota: "Áudio sincronizado sempre ligado. Clipe de 8 s.",
   },
   // ------------------------------------------------------------------ Wan (Alibaba)
   {
-    id: "wan-3.0", rotulo: "Wan 3.0", familia: "video", linha: "wan", versao: "3.0", principal: true, provedor: "fal", chave_env: "FAL_KEY",
+    id: "wan-3.0-prime", rotulo: "Wan 3.0 Prime", familia: "video", linha: "wan", versao: "3.0", principal: true, provedor: "fal", chave_env: "FAL_KEY",
+    endpoints: { texto: "alibaba/wan-3.0-prime/text-to-video", imagem: "alibaba/wan-3.0-prime/image-to-video", ultimo: "alibaba/wan-3.0-prime/image-to-video", referencia: "alibaba/wan-3.0-prime/reference-to-video" },
+    dialeto: "wan3", duracoes: faixa(2, 15), resolucoes: ["480p", "720p", "1080p"], resolucao_padrao: "720p", formatos: TODOS,
+    cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, referencias: 10, audio: true }),
+    preco: { por_segundo: { "480p": 0.068, "720p": 0.14, "1080p": 0.28 }, fonte: F("alibaba/wan-3.0-prime/image-to-video"), conferido_em: HOJE_VGN },
+    papeis: ["hero", "consistencia"], prazo_min: 30, nota: "A versão de mais qualidade do Wan 3.0 (24/08). Até 10 imagens de referência e áudio junto.",
+  },
+  {
+    id: "wan-3.0", rotulo: "Wan 3.0", familia: "video", linha: "wan", versao: "3.0", principal: false, provedor: "fal", chave_env: "FAL_KEY",
     endpoints: { texto: "alibaba/wan-3.0/text-to-video", imagem: "alibaba/wan-3.0/image-to-video", ultimo: "alibaba/wan-3.0/image-to-video", referencia: "alibaba/wan-3.0/reference-to-video" },
     dialeto: "wan3", duracoes: faixa(2, 15), resolucoes: ["480p", "720p", "1080p"], resolucao_padrao: "720p", formatos: TODOS,
     cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, referencias: 10, audio: true }),
@@ -409,11 +469,11 @@ export const MOTORES_DE_VIDEO: MotorDeVideo[] = [
   // ------------------------------------------------------------------ MiniMax / Hailuo
   {
     id: "minimax-h3-max", rotulo: "MiniMax H3 Max", familia: "video", linha: "minimax-h3", versao: "3", principal: true, provedor: "fal", chave_env: "FAL_KEY",
-    endpoints: { texto: "minimax/h3-max/text-to-video", imagem: "minimax/h3-max/image-to-video", ultimo: "minimax/h3-max/image-to-video", estender: "minimax/h3-max/extend-video" },
-    dialeto: "minimax_h3", duracoes: faixa(5, 15), resolucoes: ["768p", "1080p"], resolucao_padrao: "768p", formatos: TODOS,
-    cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, estender: true, audio: true }),
+    endpoints: { texto: "minimax/h3-max/text-to-video", imagem: "minimax/h3-max/image-to-video", ultimo: "minimax/h3-max/image-to-video", referencia: "minimax/h3-max/reference-to-video", estender: "minimax/h3-max/extend-video" },
+    dialeto: "minimax_h3", duracoes: faixa(5, 15), resolucoes: ["480p", "768p", "1080p"], resolucao_padrao: "768p", formatos: TODOS,
+    cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, referencias: 9, estender: true, audio: true }),
     preco: { por_segundo: { "480p": 0.05, "768p": 0.08, "1080p": 0.16 }, fonte: F("minimax/h3-max/reference-to-video"), conferido_em: HOJE },
-    papeis: ["hero", "movimento"], prazo_min: 20, nota: "Rápido e com áudio estéreo. Extensão nativa (preço da extensão estimado pelo mesmo valor).",
+    papeis: ["hero", "movimento"], prazo_min: 20, nota: "Rápido e com áudio estéreo. Até 9 imagens de referência (as 4 primeiras sem custo a mais). Extensão nativa pelo mesmo preço por segundo. A promoção de 50% acabou em 30/09: vale a tabela cheia.",
   },
   {
     id: "minimax-h3-max-turbo", rotulo: "H3 Max Turbo (rascunho)", familia: "video", linha: "minimax-h3", versao: "3", principal: false, rapido: true, provedor: "fal", chave_env: "FAL_KEY",
@@ -429,31 +489,31 @@ export const MOTORES_DE_VIDEO: MotorDeVideo[] = [
     dialeto: "hailuo", duracoes: [6], resolucoes: ["1080p"], resolucao_padrao: "1080p", formatos: ["9:16", "16:9", "1:1"],
     cap: cap({ primeiro_quadro: true }),
     preco: { por_video: 0.49, fonte: F("fal-ai/minimax/hailuo-2.3/pro/image-to-video"), conferido_em: HOJE, incerto: true },
-    papeis: ["movimento"], prazo_min: 30, nota: "Geração anterior da MiniMax. Sem áudio e sem último quadro. Duração fixa (a fal não recebe duração).",
+    papeis: ["movimento"], prazo_min: 30, nota: "Geração anterior da MiniMax. Clipe de 6 s por preço fechado, sem áudio e sem último quadro. Duração fixa (a fal não recebe duração).",
   },
   // ------------------------------------------------------------------ outros de 2026
   {
-    id: "happyhorse-1.0", rotulo: "HappyHorse 1.0", familia: "video", linha: "happyhorse", versao: "1.0", principal: true, provedor: "fal", chave_env: "FAL_KEY",
-    endpoints: { imagem: "alibaba/happy-horse/image-to-video", texto: "alibaba/happy-horse/v1.1/text-to-video" },
+    id: "happyhorse-1.1", rotulo: "HappyHorse 1.1", familia: "video", linha: "happyhorse", versao: "1.1", principal: true, provedor: "fal", chave_env: "FAL_KEY",
+    endpoints: { imagem: "alibaba/happy-horse/v1.1/image-to-video", texto: "alibaba/happy-horse/v1.1/text-to-video", referencia: "alibaba/happy-horse/v1.1/reference-to-video" },
     dialeto: "happyhorse", duracoes: faixa(3, 15), resolucoes: ["720p", "1080p"], resolucao_padrao: "720p", formatos: TODOS,
-    cap: cap({ texto: true, primeiro_quadro: true, audio: true }),
-    preco: { por_segundo: { "720p": 0.14, "1080p": 0.28 }, fonte: F("alibaba/happy-horse/image-to-video"), conferido_em: HOJE },
-    papeis: ["hero"], prazo_min: 30, nota: "Sincronia labial sem português na lista do provedor: fala em PT vai por outro motor.",
+    cap: cap({ texto: true, primeiro_quadro: true, referencias: 4 }),
+    preco: { por_segundo: { "720p": 0.14, "1080p": 0.18 }, fonte: F("alibaba/happy-horse/v1.1/image-to-video"), conferido_em: HOJE_VGN },
+    papeis: ["hero"], prazo_min: 30, nota: "Versão 1.1 (21/06), mais barata em 1080p que a 1.0. O áudio vem do próprio modelo, sem opção de ligar ou desligar; fala em português vai por outro motor.",
   },
   {
     id: "flux-3-video", rotulo: "FLUX 3 Vídeo", familia: "video", linha: "flux3", versao: "3", principal: true, provedor: "fal", chave_env: "FAL_KEY",
-    endpoints: { imagem: "blackforestlabs/flux-3/image-to-video", ultimo: "blackforestlabs/flux-3/keyframes-to-video", estender: "blackforestlabs/flux-3/extend-video" },
+    endpoints: { texto: "blackforestlabs/flux-3/text-to-video", imagem: "blackforestlabs/flux-3/image-to-video", ultimo: "blackforestlabs/flux-3/first-last-frame-to-video", estender: "blackforestlabs/flux-3/extend-video" },
     dialeto: "flux3", duracoes: faixa(5, 15), resolucoes: ["720p", "1080p"], resolucao_padrao: "1080p", formatos: TODOS,
-    cap: cap({ primeiro_quadro: true, ultimo_quadro: true, estender: true, audio: true }),
-    preco: { por_segundo: { "720p": 0.17, "1080p": 0.29 }, fonte: F("blackforestlabs/flux-3/image-to-video"), conferido_em: HOJE },
-    papeis: ["hero", "transicao"], prazo_min: 30, nota: "Quadros-chave (primeiro e último) e extensão. Preço da extensão estimado pelo mesmo valor.",
+    cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, estender: true, audio: true }),
+    preco: { por_segundo: { "720p": 0.17, "1080p": 0.29 }, fonte: F("blackforestlabs/flux-3/image-to-video"), conferido_em: HOJE_VGN },
+    papeis: ["hero", "transicao"], prazo_min: 30, nota: "Pelo texto, a partir de uma imagem, do primeiro ao último quadro e extensão. Preço da extensão estimado pelo mesmo valor.",
   },
   {
     id: "grok-imagine-1.5", rotulo: "Grok Imagine Vídeo 1.5", familia: "video", linha: "grok", versao: "1.5", principal: true, provedor: "fal", chave_env: "FAL_KEY",
-    endpoints: { imagem: "xai/grok-imagine-video/v1.5/image-to-video", estender: "xai/grok-imagine-video/extend-video" },
+    endpoints: { texto: "xai/grok-imagine-video/v1.5/text-to-video", imagem: "xai/grok-imagine-video/v1.5/image-to-video", estender: "xai/grok-imagine-video/extend-video" },
     dialeto: "grok", duracoes: faixa(2, 15), resolucoes: ["480p", "720p", "1080p"], resolucao_padrao: "720p", formatos: TODOS,
-    cap: cap({ primeiro_quadro: true, estender: true, audio: true }),
-    preco: { por_segundo: { "480p": 0.08, "720p": 0.14, "1080p": 0.25 }, por_referencia: 0.01, fonte: F("xai/grok-imagine-video/v1.5/image-to-video"), conferido_em: HOJE },
+    cap: cap({ texto: true, primeiro_quadro: true, estender: true, audio: true }),
+    preco: { por_segundo: { "480p": 0.08, "720p": 0.14, "1080p": 0.25 }, por_referencia: 0.01, fonte: F("xai/grok-imagine-video/v1.5/image-to-video"), conferido_em: HOJE_VGN },
     papeis: ["barato"], prazo_min: 30, nota: "Extensão a partir do último quadro (endpoint da versão 1).",
   },
   {
@@ -467,17 +527,17 @@ export const MOTORES_DE_VIDEO: MotorDeVideo[] = [
   {
     id: "ltx-2.3", rotulo: "LTX-2.3 Pro", familia: "video", linha: "ltx", versao: "2.3", principal: true, provedor: "fal", chave_env: "FAL_KEY",
     endpoints: { texto: "fal-ai/ltx-2.3/text-to-video", imagem: "fal-ai/ltx-2.3/image-to-video", ultimo: "fal-ai/ltx-2.3/image-to-video", estender: "fal-ai/ltx-2.3/extend-video" },
-    dialeto: "ltx", duracoes: [6, 8, 10], resolucoes: ["1080p", "1440p"], resolucao_padrao: "1080p", formatos: ["9:16", "16:9"],
+    dialeto: "ltx", duracoes: [6, 8, 10], resolucoes: ["1080p", "1440p", "2160p"], resolucao_padrao: "1080p", formatos: ["9:16", "16:9"],
     cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, estender: true, audio: true }),
-    preco: { por_segundo: { "1080p": 0.06, "1440p": 0.12 }, fonte: F("fal-ai/ltx-2.3/image-to-video"), conferido_em: HOJE },
-    papeis: ["barato", "transicao"], prazo_min: 20, nota: "Pesos abertos. 6, 8 ou 10 s (o esquema da fal não aceita mais). Extensão a US$ 0,10/s.",
+    preco: { por_segundo: { "1080p": 0.08, "1440p": 0.16, "2160p": 0.32 }, fonte: F("fal-ai/ltx-2.3/image-to-video"), conferido_em: HOJE_VGN },
+    papeis: ["barato", "transicao"], prazo_min: 20, nota: "Pesos abertos. 6, 8 ou 10 s (o esquema da fal não aceita mais). Até 4K (2160p). Preço conferido em 30/09 (era US$ 0,06/s na tabela antiga). Extensão a US$ 0,10/s.",
   },
   {
     id: "ltx-2.3-fast", rotulo: "LTX-2.3 Fast (rascunho)", familia: "video", linha: "ltx", versao: "2.3", principal: false, rapido: true, provedor: "fal", chave_env: "FAL_KEY",
     endpoints: { texto: "fal-ai/ltx-2.3/text-to-video/fast", imagem: "fal-ai/ltx-2.3/image-to-video/fast", ultimo: "fal-ai/ltx-2.3/image-to-video/fast" },
-    dialeto: "ltx", duracoes: [6, 8, 10, 12, 14], resolucoes: ["1080p"], resolucao_padrao: "1080p", formatos: ["9:16", "16:9"],
+    dialeto: "ltx", duracoes: [6, 8, 10, 12, 14], resolucoes: ["1080p", "1440p", "2160p"], resolucao_padrao: "1080p", formatos: ["9:16", "16:9"],
     cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true, audio: true }),
-    preco: { por_segundo: { "1080p": 0.04 }, fonte: F("fal-ai/ltx-2.3/image-to-video/fast"), conferido_em: HOJE },
+    preco: { por_segundo: { "1080p": 0.06, "1440p": 0.12, "2160p": 0.24 }, fonte: F("fal-ai/ltx-2.3/image-to-video/fast"), conferido_em: HOJE_VGN },
     papeis: ["rascunho", "barato"], prazo_min: 10, nota: "Prévia rápida em 1080p.",
   },
   {
@@ -487,6 +547,37 @@ export const MOTORES_DE_VIDEO: MotorDeVideo[] = [
     cap: cap({ texto: true, primeiro_quadro: true }),
     preco: { por_segundo: { "480p": 0.075 }, fonte: F("fal-ai/hunyuan-video-v1.5/image-to-video"), conferido_em: HOJE, incerto: true },
     papeis: ["barato"], prazo_min: 20, nota: "Pesos abertos, 480p.",
+  },
+  // ------------------------------------------------------------------ Luma (frente VGN, 30/09)
+  {
+    id: "luma-ray-3.2", rotulo: "Luma Ray 3.2", familia: "video", linha: "luma", versao: "3.2", principal: true, provedor: "fal", chave_env: "FAL_KEY",
+    endpoints: { texto: "luma/agent/ray/v3.2/text-to-video", imagem: "luma/agent/ray/v3.2/image-to-video", ultimo: "luma/agent/ray/v3.2/image-to-video" },
+    dialeto: "luma", duracoes: [5, 10], resolucoes: ["540p", "720p", "1080p"], resolucao_padrao: "720p", formatos: TODOS,
+    cap: cap({ texto: true, primeiro_quadro: true, ultimo_quadro: true }),
+    preco: { por_segundo: { "540p": 0.03, "720p": 0.06, "1080p": 0.24 }, fonte: F("luma/agent/ray/v3.2/image-to-video"), conferido_em: HOJE_VGN },
+    papeis: ["movimento", "barato"], prazo_min: 30, nota: "Luz e câmera de cinema, sem áudio. A partir de imagem só 5 s (10 s só pelo texto). Preço do provedor por clipe de 5 s, aqui por segundo.",
+  },
+  // ------------------------------------------------------------------ foto + áudio = pessoa falando (família labial, frente VGN)
+  {
+    id: "h3-max-labial", rotulo: "H3 Max Lip Sync", familia: "labial", linha: "h3-labial", versao: "3", principal: true, provedor: "fal", chave_env: "FAL_KEY",
+    endpoints: { labial: "minimax/h3-max/lip-sync/image-to-video" }, dialeto: "h3_labial", duracoes: faixa(1, 60), resolucoes: ["480p", "768p", "1080p", "2k"], resolucao_padrao: "768p", formatos: TODOS,
+    cap: cap({ primeiro_quadro: true, audio: true, pessoa_real: true, labial: true }),
+    preco: { por_segundo: { "480p": 0.05, "768p": 0.08, "1080p": 0.16, "2k": 0.32 }, longo: { acima_s: 15, fator: 1.2 }, fonte: F("minimax/h3-max/lip-sync/image-to-video"), conferido_em: HOJE_VGN },
+    papeis: ["fala"], prazo_min: 30, nota: "A foto fala o áudio escolhido (voz da ElevenLabs, locução gravada). O vídeo dura o que o áudio dura; acima de 15 s o provedor cobra 1,2 vez.",
+  },
+  {
+    id: "heygen-avatar4-labial", rotulo: "HeyGen Avatar IV (pelo fal)", familia: "labial", linha: "heygen-fal", versao: "4", principal: true, provedor: "fal", chave_env: "FAL_KEY",
+    endpoints: { labial: "fal-ai/heygen/avatar4/image-to-video" }, dialeto: "heygen_fal_labial", duracoes: faixa(1, 60), resolucoes: ["480p", "720p", "1080p"], resolucao_padrao: "720p", formatos: TODOS,
+    cap: cap({ primeiro_quadro: true, audio: true, pessoa_real: true, labial: true }),
+    preco: { por_segundo: { padrao: 0.1 }, fonte: F("fal-ai/heygen/avatar4/image-to-video"), conferido_em: HOJE_VGN },
+    papeis: ["fala"], prazo_min: 30, nota: "O motor Avatar IV da HeyGen pela conta do fal (não precisa da chave da HeyGen). Expressão estável ou expressiva.",
+  },
+  {
+    id: "sync-3-labial", rotulo: "sync-3 Avatar", familia: "labial", linha: "sync-labial", versao: "3", principal: true, provedor: "fal", chave_env: "FAL_KEY",
+    endpoints: { labial: "fal-ai/sync-lipsync/v3/image-to-video" }, dialeto: "sync_labial", duracoes: faixa(1, 60), resolucoes: ["padrao"], resolucao_padrao: "padrao", formatos: TODOS,
+    cap: cap({ primeiro_quadro: true, audio: true, pessoa_real: true, labial: true }),
+    preco: { por_segundo: { padrao: 0.1333 }, fonte: F("fal-ai/sync-lipsync/v3/image-to-video"), conferido_em: HOJE_VGN },
+    papeis: ["fala"], prazo_min: 30, nota: "Sincronia labial da sync. Só a foto e o áudio, sem outros ajustes.",
   },
   // ------------------------------------------------------------------ fora do fal (frente V-C: executor próprio, escolha manual)
   // Runway: api.dev.runwayml.com, versão 2024-11-06; 1 crédito = US$ 0,01 (docs/video/PESQUISA-GERADOR.md, seção 9).
@@ -606,12 +697,14 @@ export function custoDoMotor(m: MotorDeVideo, e: { duracao_s?: number; resolucao
   if (typeof p.por_imagem === "number") return { usd: arred4((p.por_imagem + extraRef) * n), detalhe: `US$ ${p.por_imagem} por imagem x ${n}`, incerto: !!p.incerto };
   if (typeof p.por_video === "number") return { usd: arred4((p.por_video + extraRef) * n), detalhe: `US$ ${p.por_video} por vídeo x ${n}`, incerto: !!p.incerto };
   const r = resolucaoNoMotor(m, e.resolucao);
-  const d = duracaoNoMotor(m, e.duracao_s || 5);
+  // Labial: o vídeo dura o que o áudio dura (segundo começado conta inteiro).
+  const d = m.familia === "labial" ? Math.max(1, Math.ceil(Number(e.duracao_s) || 1)) : duracaoNoMotor(m, e.duracao_s || 5);
   const comAudio = !!e.audio && m.cap.audio;
   const comAudioTaxa = comAudio ? valorDaTabela(p.por_segundo_audio, r) : null;
   const taxa = comAudioTaxa !== null ? comAudioTaxa : valorDaTabela(p.por_segundo, r);
   if (taxa === null) return { usd: null, detalhe: `sem preço para ${r}`, incerto: true };
-  return { usd: arred4((taxa * d + extraRef) * n), detalhe: `US$ ${taxa}/s x ${d} s${n > 1 ? ` x ${n}` : ""} (${r}${comAudio ? ", com áudio" : ""})`, incerto: !!p.incerto };
+  const fator = p.longo && d > p.longo.acima_s ? p.longo.fator : 1;
+  return { usd: arred4((taxa * d * fator + extraRef) * n), detalhe: `US$ ${taxa}/s x ${d} s${fator !== 1 ? ` x ${String(fator).replace(".", ",")} (acima de ${p.longo ? p.longo.acima_s : 0} s)` : ""}${n > 1 ? ` x ${n}` : ""} (${r}${comAudio && m.familia !== "labial" ? ", com áudio" : ""})`, incerto: !!p.incerto };
 }
 
 /** "US$ 0,47" ("~" quando o preço é estimado; "Sem cotação" sem preço). */
@@ -693,10 +786,10 @@ export function nivelDoMotor(m: MotorDeVideo, motores: MotorDeVideo[] = MOTORES_
 export const ROTULO_DO_NIVEL: Record<NivelDoMotor, string> = { normal: "Normal", top: "Top", rapido: "Rápido" };
 
 /** Ordem de preferência das linhas no Top (a linha escolhe; a versão sai do catálogo). */
-export const ORDEM_DAS_LINHAS_TOP = ["seedance", "veo", "kling", "minimax-h3", "wan", "flux3", "gemini-omni", "happyhorse", "grok", "ltx", "pixverse", "hailuo", "hunyuan", "qwen-angulos", "flux2-angulos", "painel"];
+export const ORDEM_DAS_LINHAS_TOP = ["seedance", "veo", "kling", "kling-o3", "minimax-h3", "wan", "flux3", "luma", "gemini-omni", "happyhorse", "grok", "ltx", "pixverse", "hailuo", "hunyuan", "h3-labial", "heygen-fal", "sync-labial", "qwen-angulos", "flux2-angulos", "painel"];
 
 export interface RequisitoDoPedido {
-  modo: "texto" | "primeiro_quadro" | "primeiro_ultimo" | "referencia" | "estender" | "imagem" | "angulo" | "avatar";
+  modo: "texto" | "primeiro_quadro" | "primeiro_ultimo" | "referencia" | "estender" | "imagem" | "angulo" | "avatar" | "labial";
   audio?: boolean;
   pessoa_real?: boolean;
   referencias?: number;
@@ -708,6 +801,7 @@ export function atende(m: MotorDeVideo, r: RequisitoDoPedido): boolean {
   if (r.modo === "angulo") return m.familia === "angulo";
   if (r.modo === "imagem") return m.familia === "imagem";
   if (r.modo === "avatar") return m.familia === "avatar" && (!r.formato || m.formatos.indexOf(r.formato) >= 0) && (!r.pessoa_real || m.cap.pessoa_real);
+  if (r.modo === "labial") return m.familia === "labial" && !!m.endpoints.labial && (!r.formato || m.formatos.indexOf(r.formato) >= 0);
   if (m.familia !== "video") return false;
   const c = m.cap;
   if (r.modo === "texto" && !c.texto) return false;
@@ -794,6 +888,9 @@ export const LINHAS_DO_FAL: { linha: string; re: RegExp; base: string; rotulo: (
   { linha: "gemini-omni", re: /^google\/gemini-omni-flash\/v([0-9.]+)\/(text-to-video|image-to-video|reference-to-video)$/, base: "gemini-omni-flash-1.1", rotulo: (v) => `Gemini Omni Flash ${v}` },
   { linha: "grok", re: /^xai\/grok-imagine-video\/v([0-9.]+)\/(image-to-video)$/, base: "grok-imagine-1.5", rotulo: (v) => `Grok Imagine Vídeo ${v}` },
   { linha: "qwen-angulos", re: /^fal-ai\/qwen-image-edit-([0-9]+)-multiple-angles()$/, base: "qwen-angulos-2511", rotulo: (v) => `Qwen Edit ${v} Ângulos` },
+  // Frente VGN (30/09): as linhas novas também avisam versão nova.
+  { linha: "happyhorse", re: /^alibaba\/happy-horse\/v([0-9.]+)\/(text-to-video|image-to-video|reference-to-video)$/, base: "happyhorse-1.1", rotulo: (v) => `HappyHorse ${v}` },
+  { linha: "luma", re: /^luma\/agent\/ray\/v([0-9.]+)\/(text-to-video|image-to-video)$/, base: "luma-ray-3.2", rotulo: (v) => `Luma Ray ${v}` },
 ];
 
 export interface ModeloDoProvedor {

@@ -129,7 +129,8 @@ describe("catálogo de motores", () => {
     MOTORES_DE_VIDEO.filter((m) => !m.situacao && m.provedor === "fal").forEach((m) => {
       expect(m.preco, m.id).toBeTruthy();
       expect(m.preco!.fonte, m.id).toMatch(/^https:\/\//);
-      expect(m.preco!.conferido_em, m.id).toBe("2026-09-26");
+      // Frente VGN: parte do catálogo foi conferida de novo em 30/09 (ao vivo no fal).
+      expect(m.preco!.conferido_em, m.id).toMatch(/^2026-09-(26|30)$/);
       expect(Object.keys(m.endpoints).length, m.id).toBeGreaterThan(0);
     });
     const tem = (nome: string) => !!Deno_ok(nome);
@@ -434,7 +435,8 @@ describe("agente diretor", () => {
 
 describe("tela do gerador", () => {
   it("modos do Gerar (mais de 4 vira seletor) e o agente entende diretor e ângulo", () => {
-    expect(MODOS_DO_GERAR.map((m) => m.valor)).toEqual(["cena", "livre", "angulo", "continuar", "antes_depois", "avatar"]);
+    // Frente VGN: "labial" (foto que fala) entrou antes do avatar.
+    expect(MODOS_DO_GERAR.map((m) => m.valor)).toEqual(["cena", "livre", "angulo", "continuar", "antes_depois", "labial", "avatar"]);
     expect(modoDoGerarValido("x")).toBe("cena");
     expect(intencaoPorPalavras("videos", "quero ele de lado, outro ângulo")).toBe("angulo");
     expect(intencaoPorPalavras("videos", "abre o diretor para montar o filme")).toBe("diretor");
@@ -487,5 +489,22 @@ describe("tela do gerador", () => {
         expect(f, p).not.toMatch(/\[(min|max|clamp)\(/);
       }
     }
+  });
+});
+
+describe("frente VGN depois da revisão (01/10)", () => {
+  it("o diretor do prompt recebe kit, estratégia, briefing e decisões ANTES do consolidado e do dossiê", () => {
+    const d = ler("supabase/functions/mesa-videos/diretor.ts");
+    expect(d).toContain('contextoDoCliente(b, clientId, corpo.marca_id, "prompt")');
+    expect(d).toContain('ordem === "prompt" ? cabeca.concat([completo, consolidado, dossieTexto])');
+  });
+  it("coleta: autor do arquivo vem de quem pediu (cron sem pessoa), trava cobre a rodada e a cobrança é gravada antes de baixar", () => {
+    const g = ler("supabase/functions/mesa-videos/geracao.ts");
+    expect(g).toContain("criado_por: quemCriou(b.userId, a.criadoPor)");
+    expect(g).toContain("criadoPor: p.criado_por || null");
+    expect(g).toMatch(/const TRAVA_DO_PEDIDO_MS = 180_000;/);
+    expect(g).toMatch(/update\(\{ consultado_em: new Date\(agora \+ TRAVA_DO_PEDIDO_MS\)\.toISOString\(\) \}\)[\s\S]{0,200}\.select\("\*"\)/);
+    expect(g).toContain("if (e.uso_id) await gravarEnvios(b, p, envios);");
+    expect(g).not.toMatch(/criado_por: b\.userId,/);
   });
 });

@@ -10,6 +10,8 @@ export const MODOS_DO_GERAR = [
   { valor: "continuar", rotulo: "Continuar ou transição", titulo: "Continuar vídeo", descricao: "Continua a história ou emenda A com B.", ajuda: "Continuar usa a extensão nativa do motor quando existe; senão, o último quadro do vídeo vira o começo do próximo. Transição: primeiro quadro = fim de A e último quadro = começo de B." },
   { valor: "antes_depois", rotulo: "Antes e depois", titulo: "Antes e depois de uma foto", descricao: "Gera o antes ou o depois, os vídeos e a montagem.", ajuda: "A partir de uma foto, o modelo de imagem do painel gera a outra versão com a mesma câmera e luz. Depois, um vídeo curto de cada e a montagem lado a lado, em cortina ou em sequência na Mesa Edição." },
   // Frente V-C (26/09): HeyGen.
+  // Frente VGN (30/09): foto + áudio (voz da ElevenLabs, locução) vira a pessoa falando, pelo fal.
+  { valor: "labial", rotulo: "Foto que fala", titulo: "Foto que fala", descricao: "Uma foto e um áudio viram a pessoa falando.", ajuda: "Escolha a foto de quem fala e o áudio da fala: a voz da ElevenLabs feita na Mesa Motion, uma locução gravada ou um trecho de entrevista (suba aqui mesmo). A boca acompanha o áudio e o vídeo dura o que o áudio dura, até 60 s. Custo antes; só é cobrado o que ficar pronto. Pessoa real só com autorização de imagem e de voz." },
   { valor: "avatar", rotulo: "Avatar falando", titulo: "Avatar falando", descricao: "Roteiro vira uma pessoa falando, com voz em português.", ajuda: "Escreva o roteiro e escolha quem fala: um avatar de estoque da HeyGen ou a foto de um clone da Mesa Foto (só com a autorização de imagem válida). Escolha a voz, o formato e se quer legenda no vídeo. O custo aparece antes e é cobrado pela duração real, até o valor confirmado." },
 ] as const;
 

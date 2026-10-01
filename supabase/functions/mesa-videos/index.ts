@@ -154,6 +154,9 @@ import {
   motoresSincronizar,
   quadroRegistrar,
   transicaoGerar,
+  gerarColetar,
+  gerarRecuperar,
+  labialGerar,
 } from "./geracao.ts";
 import {
   antesDepoisParaEditor,
@@ -162,6 +165,7 @@ import {
   diretorEditorDesfazer,
   diretorParaEditor,
   diretorProporGerar,
+  diretorPrompt,
   diretorSalvar,
   desfazerItemDoDiretor,
   executarItemDoDiretor,
@@ -1303,15 +1307,21 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   gerar_cancelar: direto(gerarCancelar),
   antes_depois_imagem: comFolego(antesDepoisImagem),
   gerar_status: comFolego(gerarStatus),
-  // Frente MTR: "Conferir de novo" o envio que venceu o prazo e ainda tem o pedido no provedor.
+  // Frente MTR: "Conferir de novo" o envio que venceu e ainda tem o pedido no provedor.
+  // É a mesma ação do gerar_recuperar (frente VGN); os dois nomes ficam (tela e contratos).
   gerar_reconferir: comFolego(gerarReconferir),
   gerar_status_cliente: comFolego(gerarStatusCliente),
+  // Frente VGN (30/09): recuperar o que venceu o prazo aqui e a foto que fala o áudio (família labial).
+  gerar_recuperar: comFolego(gerarRecuperar),
+  labial_gerar: direto(labialGerar),
   quadro_registrar: direto(quadroRegistrar),
   motores_sincronizar: (ch) => motoresSincronizarDaEquipe(ch),
   // Frente V-A: agente diretor, bíblia, roteiro e templates.
   diretor_conversar: comFolego(diretorConversar),
   diretor_salvar: direto(diretorSalvar),
   diretor_propor_gerar: direto(diretorProporGerar),
+  // Frente VGN: o diretor escreve o prompt do motor com a marca (prévia; nada gravado).
+  diretor_prompt: comFolego(diretorPrompt),
   diretor_avaliar: comFolego(diretorAvaliar),
   diretor_para_editor: direto(diretorParaEditor),
   diretor_editor_desfazer: direto(diretorEditorDesfazer),
@@ -1324,15 +1334,19 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "metodo_nao_permitido", mensagem: "Use POST." }, 405);
   try {
-    // Cron semanal (DESLIGADO no SQL V-01): só a sincronização do catálogo de motores.
+    // Cron: sincronização semanal do catálogo (DESLIGADA no SQL V-01) e, frente VGN (30/09),
+    // a coleta de 1 minuto dos pedidos em andamento (SQL 20260930321000; só chama quando há pedido).
     const cronSecret = (Deno.env.get("CRON_SECRET") || "").trim();
     if (cronSecret && (req.headers.get("x-cron-secret") || "").trim() === cronSecret) {
       let c: Record<string, unknown> = {};
       try {
         c = await req.json();
       } catch { /* corpo vazio */ }
-      if (String(c.acao ?? "") !== "motores_sincronizar") return json({ error: "nao_autorizado", mensagem: "O cron só sincroniza o catálogo." }, 403);
-      return await motoresSincronizar({ ...baseDa({ userId: "", token: "", doChamador: servico(), admin: true }), garantirAcesso: async () => {} });
+      const acaoDoCron = String(c.acao ?? "");
+      const baseDoCron = { ...baseDa({ userId: "", token: "", doChamador: servico(), admin: true }), garantirAcesso: async () => {} };
+      if (acaoDoCron === "gerar_coletar") return await gerarColetar(baseDoCron, c);
+      if (acaoDoCron !== "motores_sincronizar") return json({ error: "nao_autorizado", mensagem: "O cron só sincroniza o catálogo e coleta os pedidos." }, 403);
+      return await motoresSincronizar(baseDoCron);
     }
     const chamador = await identificar(req);
     let corpo: Record<string, unknown> = {};

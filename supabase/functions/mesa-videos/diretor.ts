@@ -26,7 +26,7 @@
  */
 
 import { blocoDaMarca, lerContextoDaMarca, lerDossieDaMarca, marcaDoPedido, marcasDoCliente } from "../_shared/marca.ts";
-import { chamarTexto, cobrarJev, IaMotorErro } from "../_shared/ia-motor.ts";
+import { chamarTexto, cobrarJev, IaMotorErro, modeloDoPapel } from "../_shared/ia-motor.ts";
 import { jevPerguntar } from "../_shared/jev.ts";
 import { lerContextoConsolidado, lerDossie } from "../_shared/contexto-cliente.ts";
 import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
@@ -65,7 +65,10 @@ import {
 import { caminhoDaMesaDeVideo } from "./modulos/agente-de-video.ts";
 import { kitPorId } from "./modulos/video-kits.ts";
 import { MAX_BYTES_DO_PROJETO, tamanhoDoProjeto } from "../_shared/projeto-de-edicao.ts";
-import { type BaseDaFuncao, catalogo, enviarGeracao, motorPronto } from "./geracao.ts";
+import { type BaseDaFuncao, catalogo, enviarGeracao, motoresProntosDoCatalogo, motorPronto } from "./geracao.ts";
+// Frente VGN (30/09): o prompt do motor pelo diretor, com a marca e o contexto completo.
+import { ESQUEMA_DO_PROMPT, lerPromptDoDiretor, MAX_TEXTO_DO_PEDIDO, mensagemDoPrompt, sistemaDoPrompt } from "./modulos/prompt-do-motor.ts";
+import { motorPorId } from "./modulos/modelos-de-video.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 // Frente SPP (30/09): o método da casa (superpoderes) na conversa do diretor de vídeo. A leitura dos quadros fica sem.
@@ -91,7 +94,12 @@ function projetoDoCorpo(b: BaseDaFuncao, v: unknown): ProjetoDoDiretor {
   return p;
 }
 
-async function contextoDoCliente(b: BaseDaFuncao, clientId: string, marcaId: unknown = null): Promise<string> {
+/**
+ * `ordem: "prompt"` (frente VGN, depois da revisão): o diretor do prompt recebe o contexto
+ * completo da marca (kit, estratégia com tom e tagline, briefing, decisões) LOGO depois do
+ * bloco da marca, antes do consolidado e do dossiê; o corte do sistema pega o fim, nunca a marca.
+ */
+async function contextoDoCliente(b: BaseDaFuncao, clientId: string, marcaId: unknown = null, ordem: "conversa" | "prompt" = "conversa"): Promise<string> {
   const db = b.servico();
   // Frente MC (29/09): o Reels da CME parte do contexto e do dossiê da CME, nunca dos da Acerbi.
   const marca = await marcaDoPedido(db, clientId, { marca_id: marcaId }).catch((e) => (registrarFalha("mesa-videos: marca do pedido falhou", e), null));
@@ -104,7 +112,11 @@ async function contextoDoCliente(b: BaseDaFuncao, clientId: string, marcaId: unk
   // Frente SYNC: o que faltava do contexto completo da marca (kit, estratégia aprovada com tom e tagline, briefing, decisões e cérebro).
   const completo = await contextoCompletoParaPrompt(db, clientId, marca || (typeof marcaId === "string" ? marcaId : null), { area: "video", partes: ["kit", "estrategia", "briefing", "decisoes", "cerebro"], semTitulo: true, teto: 5000 })
     .then((c) => c.bloco, (e) => (registrarFalha("mesa-videos: contexto completo não lido", e), ""));
-  return [nome ? `Cliente: ${nome}` : "", marca ? blocoDaMarca(marca, await marcasDoCliente(db, clientId)) : "", Object.keys(contexto || {}).length ? `Contexto consolidado: ${JSON.stringify(contexto).slice(0, 3000)}` : "", dossie ? `Dossiê:\n${dossie}` : "", completo].filter(Boolean).join("\n\n") || "sem contexto registrado";
+  const cabeca = [nome ? `Cliente: ${nome}` : "", marca ? blocoDaMarca(marca, await marcasDoCliente(db, clientId)) : ""];
+  const consolidado = Object.keys(contexto || {}).length ? `Contexto consolidado: ${JSON.stringify(contexto).slice(0, 3000)}` : "";
+  const dossieTexto = dossie ? `Dossiê:\n${dossie}` : "";
+  const partes = ordem === "prompt" ? cabeca.concat([completo, consolidado, dossieTexto]) : cabeca.concat([consolidado, dossieTexto, completo]);
+  return partes.filter(Boolean).join("\n\n") || "sem contexto registrado";
 }
 
 /** Grava o projeto (trava otimista pela versão). Sem a tabela: devolve o projeto sem id e avisa (com o motivo no log). */
@@ -259,7 +271,8 @@ export async function diretorConversar(b: BaseDaFuncao, corpo: Record<string, un
     atual.id ? andamentoDosPlanos(b, clientId, atual.id) : Promise.resolve({} as Record<string, AndamentoDoPlano>),
   ]);
   const sistema = [
-    sistemaDoDiretor({ fase, kit, contexto, motores: cat.motores }),
+    // Frente VGN: o diretor só propõe motor que gera hoje (chave existe, com preço, ligado).
+    sistemaDoDiretor({ fase, kit, contexto, motores: motoresProntosDoCatalogo(cat) }),
     blocoDoEstadoReal(atual, andamento, cat.motores),
     blocoDaReferencia(conversa.referencia, itens),
     regras.bloco ? `\n${regras.bloco}` : "",
@@ -376,6 +389,68 @@ export async function diretorSalvar(b: BaseDaFuncao, corpo: Record<string, unkno
   const g = await gravarProjeto(b, clientId, p);
   if (!g.gravado) throw b.erro(503, "banco_sem_diretor", "O diretor ainda não foi ativado no banco. O projeto fica guardado neste navegador. Aplique o SQL V-01.");
   return b.json({ projeto: g.projeto, continuidade: conferirContinuidade(g.projeto.biblia, g.projeto.roteiro) });
+}
+
+/**
+ * Frente VGN (30/09): o diretor escreve o prompt do motor escolhido a partir do
+ * pedido em português, com a marca e o contexto completo do cliente (kit,
+ * estratégia, briefing, decisões, dossiê; a marca que não é a principal não
+ * herda da outra). Nada é gravado: a tela mostra a prévia, a pessoa aplica e
+ * pode desfazer. O modelo é o padrão do papel "motion" ou o que a pessoa
+ * escolheu na hora; o custo aparece antes na tela e é cobrado da carteira.
+ */
+export async function diretorPrompt(b: BaseDaFuncao, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id || "");
+  await b.garantirAcesso(clientId);
+  const texto = String(corpo.texto || "").replace(/\s+/g, " ").trim().slice(0, MAX_TEXTO_DO_PEDIDO);
+  if (!texto) throw b.erro(400, "texto_vazio", "Escreva em português o que acontece na cena.");
+  const cat = await catalogo(b);
+  const motor = motorPorId(String(corpo.motor || "").slice(0, 60), cat.motores);
+  if (!motor || (motor.familia !== "video" && motor.familia !== "avatar")) throw b.erro(400, "motor_desconhecido", "Escolha o motor de vídeo antes.");
+  const modelo = await modeloDoPapel("motion", typeof corpo.modelo_id === "string" && corpo.modelo_id ? corpo.modelo_id : null).catch((e) => {
+    registrarFalha("mesa-videos: modelo do diretor de prompt não carregou", e, { client_id: clientId });
+    return null;
+  });
+  if (!modelo) throw b.erro(409, "sem_modelo_de_texto", "Nenhum modelo de texto ativo para o diretor. Ative um em Configurações > Modelos.");
+  // Frente SPP: o método da casa vai junto (o mesmo do diretor de vídeo; nunca lança).
+  const spP = superpoderesPara(b.servico(), { agente: "videos.diretor", pedido: texto });
+  const contexto = await contextoDoCliente(b, clientId, corpo.marca_id, "prompt");
+  const num = (v: unknown, p: number) => (isFinite(Number(v)) ? Number(v) : p);
+  let saida;
+  try {
+    saida = await chamarTexto({
+      clientId,
+      tarefa: "motion",
+      agente: "diretor_arte",
+      modeloId: modelo.id,
+      sistema: sistemaDoPrompt(motor, contexto),
+      mensagens: [{
+        papel: "usuario",
+        conteudo: mensagemDoPrompt({
+          texto,
+          modo: String(corpo.modo || "texto").slice(0, 30),
+          formato: String(corpo.formato || "9:16").slice(0, 6),
+          duracao_s: Math.max(1, Math.min(60, num(corpo.duracao_s, 5))),
+          audio: corpo.audio === true,
+          referencias: Math.max(0, Math.min(10, Math.round(num(corpo.referencias, 0)))),
+          tem_quadro_inicial: corpo.tem_quadro_inicial === true,
+          tem_quadro_final: corpo.tem_quadro_final === true,
+          cena: typeof corpo.cena === "string" ? corpo.cena : null,
+        }),
+      }],
+      esquemaJson: ESQUEMA_DO_PROMPT,
+      maxTokensSaida: 2000,
+      timeoutMs: 90_000,
+      criadoPor: b.userId,
+      metodo: await spP,
+    });
+  } catch (e) {
+    if (e instanceof IaMotorErro) throw b.erro(e.status, e.codigo, e.message, e.detalhes);
+    throw e;
+  }
+  const lido = lerPromptDoDiretor(saida.json);
+  if (!lido) throw b.erro(502, "sem_prompt", "O diretor não devolveu um prompt. Nada foi aplicado; o custo da leitura já foi registrado.");
+  return b.json({ ...lido, motor: motor.id, modelo_id: saida.modeloId || modelo.id, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd });
 }
 
 /** Proposta para gerar (ou refazer) planos sem passar pelo modelo (botão "Gerar selecionados" do Roteiro). */

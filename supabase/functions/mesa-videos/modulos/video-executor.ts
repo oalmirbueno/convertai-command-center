@@ -33,6 +33,7 @@ import { type Credenciais, type ExecutorDoProvedor, pedirJson, semVazios, type S
 import { corpoDaRunway, EXECUTOR_DA_RUNWAY, faltaNaRunway } from "./video-provedor-runway.ts";
 import { corpoDaHiggsfield, EXECUTOR_DA_HIGGSFIELD, movimentoValido } from "./video-provedor-higgsfield.ts";
 import { corpoDoAvatar, type EntradaDoAvatar, EXECUTOR_DA_HEYGEN, faltaNoAvatar } from "./video-provedor-heygen.ts";
+import { podeRecuperar } from "./coleta-de-video.ts";
 
 export type { SituacaoNoProvedor } from "./video-provedor-comum.ts";
 
@@ -42,7 +43,7 @@ export const TIMEOUT_DO_PROVEDOR_MS = 20_000;
 export const INTERVALO_MINIMO_DA_CONSULTA_MS = 15_000;
 export const VARIACOES_MAX = 4;
 
-export type ModoDaGeracao = "texto" | "primeiro_quadro" | "primeiro_ultimo" | "referencia" | "estender" | "angulo" | "avatar";
+export type ModoDaGeracao = "texto" | "primeiro_quadro" | "primeiro_ultimo" | "referencia" | "estender" | "angulo" | "avatar" | "labial";
 
 export interface EntradaDaGeracao {
   modo: ModoDaGeracao;
@@ -63,6 +64,10 @@ export interface EntradaDaGeracao {
   camera?: string | null;
   /** Avatar falando (HeyGen): quem fala, voz, legendas. O roteiro vai em `prompt`. */
   avatar?: EntradaDoAvatar | null;
+  /** Labial (frente VGN): o áudio que a foto fala (URL assinada, só no servidor). */
+  audio_url?: string | null;
+  /** Labial pela HeyGen no fal: fala estável (padrão) ou expressiva. */
+  estilo_da_fala?: "estavel" | "expressivo" | null;
 }
 
 /** Qual endpoint do motor atende ao modo. Lança Error com a frase quando nenhum. */
@@ -71,6 +76,7 @@ export function endpointDaGeracao(m: MotorDeVideo, e: Pick<EntradaDaGeracao, "mo
   let alvo: string | undefined;
   if (e.modo === "angulo") alvo = ep.angulo;
   else if (e.modo === "avatar") alvo = ep.avatar;
+  else if (e.modo === "labial") alvo = ep.labial;
   else if (e.modo === "estender") alvo = ep.estender;
   else if (e.modo === "referencia") alvo = ep.referencia || ep.imagem;
   else if (e.modo === "primeiro_ultimo") alvo = ep.ultimo;
@@ -95,56 +101,89 @@ export function corpoDaGeracao(m: MotorDeVideo, e: EntradaDaGeracao): Record<str
   const prompt = String(e.prompt || "").slice(0, 2400);
   const ar = e.formato === "4:5" ? "3:4" : e.formato;
   switch (m.dialeto) {
-    case "seedance":
-      if (e.modo === "estender") return semVazios({ prompt, task: "extension", video_urls: e.video_url ? [e.video_url] : [], duration: String(d), resolution: r, generate_audio: audio, seed });
-      if (e.modo === "referencia") return semVazios({ prompt, task: "reference", image_urls: ini ? [ini].concat(refs) : refs, duration: String(d), aspect_ratio: ar, resolution: r, generate_audio: audio, seed });
-      return semVazios({ prompt, image_url: ini, end_image_url: fim, duration: String(d), aspect_ratio: ar, resolution: r, generate_audio: audio, seed });
+    case "seedance": {
+      // Esquemas conferidos em 30/09: "task" e "seed" só no reference-to-video do 2.5.
+      const v25 = endpointDaGeracao(m, e).indexOf("seedance-2.5") >= 0;
+      if (e.modo === "estender") return semVazios({ prompt, task: "extension", video_urls: e.video_url ? [e.video_url] : [], duration: String(d), resolution: r, generate_audio: audio, seed: v25 ? seed : undefined });
+      if (e.modo === "referencia") return semVazios({ prompt, task: v25 ? "reference" : undefined, image_urls: ini ? [ini].concat(refs) : refs, duration: String(d), aspect_ratio: ar, resolution: r, generate_audio: audio, seed: v25 ? seed : undefined });
+      return semVazios({ prompt, image_url: ini, end_image_url: fim, duration: String(d), aspect_ratio: ar, resolution: r, generate_audio: audio });
+    }
     case "kling": {
-      const elementos = refs.length ? [{ frontal_image_url: refs[0], reference_image_urls: refs.slice(1, 4) }] : [];
-      if (e.modo === "estender") return semVazios({ prompt, video_url: e.video_url, duration: String(d), elements: elementos, generate_audio: audio });
-      // Frente MTR (prova pelo esquema público da fal, 30/09): o image-to-video do Kling O3 pede
-      // "image_url" (obrigatório) e não tem negative_prompt nem elements; o v3 e o 2.6 usam "start_image_url".
-      if (ini && /\/o3\//.test(m.endpoints.imagem || "") && e.modo !== "referencia") {
-        return semVazios({ prompt, image_url: ini, end_image_url: fim, duration: String(d), generate_audio: audio });
-      }
-      return semVazios({ prompt, start_image_url: ini, end_image_url: fim, duration: String(d), aspect_ratio: ini ? undefined : ar, negative_prompt: e.negativo, generate_audio: audio, elements: elementos });
+      // O3 e Turbo chamam o quadro de "image_url" (obrigatório; sem negative_prompt nem elements no
+      // image-to-video do O3, prova pelo esquema público da fal, MTR e VGN 30/09); v3 Pro, 4K e 2.6 de "start_image_url".
+      // O video-to-video/reference (estender do O3) não tem generate_audio.
+      // Elemento pede ao menos 1 imagem extra: com uma referência só, ela vale nos dois lugares.
+      const ep = endpointDaGeracao(m, e);
+      const o3 = ep.indexOf("/o3/") >= 0;
+      const turbo = ep.indexOf("/turbo/") >= 0;
+      const arK = ar === "9:16" || ar === "16:9" || ar === "1:1" ? ar : "9:16";
+      const elementos = refs.length ? [{ frontal_image_url: refs[0], reference_image_urls: refs.length > 1 ? refs.slice(1, 4) : [refs[0]] }] : [];
+      if (e.modo === "estender") return semVazios({ prompt, video_url: e.video_url, duration: String(d), elements: elementos });
+      if (turbo) return semVazios({ prompt, image_url: ini, duration: String(d), aspect_ratio: ini ? undefined : arK });
+      if (e.modo === "texto") return semVazios({ prompt, duration: String(d), aspect_ratio: arK, negative_prompt: o3 ? undefined : e.negativo, generate_audio: audio });
+      // Referência no O3 vai ao reference-to-video; no v3 Pro e no 4K, pelo image-to-video com elementos (sem proporção: segue o quadro).
+      if (e.modo === "referencia" && ep.indexOf("reference-to-video") >= 0) return semVazios({ prompt, start_image_url: ini, duration: String(d), aspect_ratio: arK, elements: elementos, generate_audio: audio });
+      if (e.modo === "referencia") return semVazios({ prompt, start_image_url: ini || refs[0], duration: String(d), negative_prompt: e.negativo, elements: elementos, generate_audio: audio });
+      if (o3) return semVazios({ prompt, image_url: ini, end_image_url: fim, duration: String(d), generate_audio: audio });
+      return semVazios({ prompt, start_image_url: ini, end_image_url: fim, duration: String(d), negative_prompt: e.negativo, generate_audio: audio, elements: elementos });
     }
     case "veo": {
-      const base = { prompt, duration: `${d}s`, resolution: r, aspect_ratio: ar === "9:16" || ar === "16:9" ? ar : "auto", generate_audio: audio, negative_prompt: e.negativo, seed };
-      if (e.modo === "estender") return semVazios({ ...base, video_url: e.video_url, duration: "7s" });
-      if (e.modo === "primeiro_ultimo") return semVazios({ ...base, first_frame_url: ini, last_frame_url: e.quadro_final_url });
+      const arV = ar === "9:16" || ar === "16:9" ? ar : "9:16";
+      const base = { prompt, duration: `${d}s`, resolution: r, aspect_ratio: arV, generate_audio: audio };
+      if (e.modo === "estender") return semVazios({ ...base, video_url: e.video_url, duration: "7s", aspect_ratio: "auto", negative_prompt: e.negativo, seed });
+      // Referência: o esquema não tem negativo nem semente.
       if (e.modo === "referencia") return semVazios({ ...base, image_urls: (ini ? [ini] : []).concat(refs).slice(0, 3) });
-      return semVazios({ ...base, image_url: ini });
+      if (e.modo === "primeiro_ultimo") return semVazios({ ...base, aspect_ratio: "auto", first_frame_url: ini, last_frame_url: e.quadro_final_url, negative_prompt: e.negativo, seed });
+      if (e.modo === "primeiro_quadro") return semVazios({ ...base, aspect_ratio: "auto", image_url: ini, negative_prompt: e.negativo, seed });
+      return semVazios({ ...base, negative_prompt: e.negativo, seed });
     }
-    case "gemini_omni":
-      if (e.modo === "referencia") return semVazios({ prompt, image_urls: (ini ? [ini] : []).concat(refs).slice(0, 3), resolution: r, aspect_ratio: ar });
-      return semVazios({ prompt, image_url: ini, end_image_url: fim, resolution: r, aspect_ratio: ar });
+    case "gemini_omni": {
+      const arG = ar === "9:16" || ar === "16:9" ? ar : "9:16";
+      if (e.modo === "referencia") return semVazios({ prompt, image_urls: (ini ? [ini] : []).concat(refs).slice(0, 3), resolution: r, aspect_ratio: arG });
+      return semVazios({ prompt, image_url: ini, end_image_url: fim, resolution: r, aspect_ratio: arG });
+    }
     case "wan3":
-      return semVazios({ prompt, start_image_url: e.modo === "referencia" ? undefined : ini, end_image_url: fim, reference_image_urls: e.modo === "referencia" ? (ini ? [ini] : []).concat(refs) : undefined, duration: d, resolution: r, aspect_ratio: ar, audio, negative_prompt: e.negativo, seed });
+      if (e.modo === "referencia") return semVazios({ prompt, reference_image_urls: (ini ? [ini] : []).concat(refs).slice(0, 10), duration: d, resolution: r, aspect_ratio: ar, audio, seed });
+      return semVazios({ prompt, start_image_url: ini, end_image_url: fim, duration: d, resolution: r, aspect_ratio: ini ? "adaptive" : ar, audio, seed });
     case "minimax_h3": {
+      // O modo de expansão do prompt é obrigatório no esquema (sem ele o fal recusa com 422).
       const R = r.toUpperCase();
       if (e.modo === "estender") return semVazios({ prompt, video_url: e.video_url, duration: d, resolution: R, output: "continuation", seed });
-      // prompt_expansion_mode é obrigatório no esquema da fal (texto e imagem); "balanced" é o padrão dela.
+      if (e.modo === "referencia") return semVazios({ prompt, prompt_expansion_mode: "balanced", reference_image_urls: (ini ? [ini] : []).concat(refs).slice(0, 9), duration: d, resolution: R, aspect_ratio: ar, seed });
       return semVazios({ prompt, prompt_expansion_mode: "balanced", image_url: ini, end_image_url: fim, duration: d, resolution: R, aspect_ratio: ini ? undefined : ar, seed });
     }
     case "hailuo":
-      return semVazios({ prompt, image_url: ini, prompt_optimizer: true }); // a fal não recebe duração aqui (esquema público)
+      // O Hailuo 2.3 Pro não recebe duração (esquema público da fal; preço fechado por vídeo).
+      return semVazios({ prompt, image_url: ini, prompt_optimizer: true });
     case "happyhorse":
-      return semVazios({ prompt, image_url: ini, duration: d, resolution: r, aspect_ratio: ini ? undefined : ar, seed });
+      if (e.modo === "referencia") return semVazios({ prompt, image_urls: (ini ? [ini] : []).concat(refs).slice(0, 4), duration: d, resolution: r, aspect_ratio: e.formato, seed });
+      return semVazios({ prompt, image_url: ini, duration: d, resolution: r, aspect_ratio: ini ? undefined : e.formato, seed });
     case "flux3":
       if (e.modo === "estender") return semVazios({ prompt, video_url: e.video_url, duration: d, resolution: r, generate_audio: audio });
-      if (e.modo === "primeiro_ultimo") return semVazios({ prompt, keyframes: [{ image_url: ini, frame_index: 0 }, { image_url: e.quadro_final_url, frame_index: d * 24 - 1 }], duration: d, resolution: r, aspect_ratio: ar, generate_audio: audio });
+      if (e.modo === "primeiro_ultimo") return semVazios({ prompt, start_image_url: ini, end_image_url: e.quadro_final_url, duration: d, resolution: r, aspect_ratio: ar, generate_audio: audio });
       return semVazios({ prompt, image_url: ini, duration: d, resolution: r, aspect_ratio: ini ? undefined : ar, generate_audio: audio });
     case "grok":
       if (e.modo === "estender") return semVazios({ prompt, video_url: e.video_url, duration: Math.min(10, d) });
+      if (e.modo === "texto") return semVazios({ prompt, duration: d, resolution: r, aspect_ratio: ar });
       return semVazios({ prompt, image_url: ini, duration: d, resolution: r });
     case "pixverse":
-      return semVazios({ prompt, image_url: ini, duration: d, resolution: r, aspect_ratio: ini ? undefined : ar, negative_prompt: e.negativo, seed, generate_audio_switch: audio });
+      if (e.modo === "texto") return semVazios({ prompt, duration: d, resolution: r, aspect_ratio: ar, seed, generate_audio_switch: audio });
+      return semVazios({ prompt, image_url: ini, duration: d, resolution: r, seed, generate_audio_switch: audio });
     case "ltx":
       if (e.modo === "estender") return semVazios({ prompt, video_url: e.video_url, duration: d, mode: "end" });
-      return semVazios({ prompt, image_url: ini, end_image_url: fim, duration: d, resolution: r, aspect_ratio: ini ? undefined : ar, generate_audio: audio });
+      if (e.modo === "texto") return semVazios({ prompt, duration: d, resolution: r, aspect_ratio: ar === "16:9" ? "16:9" : "9:16", generate_audio: audio });
+      return semVazios({ prompt, image_url: ini, end_image_url: fim, duration: d, resolution: r, generate_audio: audio });
     case "hunyuan":
-      return semVazios({ prompt, image_url: ini, aspect_ratio: ini ? undefined : ar, seed });
+      return semVazios({ prompt, image_url: ini, aspect_ratio: ar === "16:9" ? "16:9" : "9:16", negative_prompt: e.negativo, seed });
+    case "luma":
+      // A partir de imagem só 5 s (faltaParaGerar recusa 10 s antes do custo).
+      return semVazios({ prompt, image_url: ini, end_image_url: fim, duration: d >= 10 && e.modo === "texto" ? "10s" : "5s", resolution: r, aspect_ratio: ar });
+    case "h3_labial":
+      return semVazios({ image_url: ini, audio_url: e.audio_url, resolution: r.toUpperCase(), seed });
+    case "sync_labial":
+      return semVazios({ image_url: ini, audio_url: e.audio_url });
+    case "heygen_fal_labial":
+      return semVazios({ image_url: ini, audio_url: e.audio_url, resolution: r, aspect_ratio: e.formato, talking_style: e.estilo_da_fala === "expressivo" ? "expressive" : "stable" });
     case "runway":
       return corpoDaRunway(m, e);
     case "higgsfield":
@@ -180,7 +219,16 @@ export function faltaParaGerar(m: MotorDeVideo, e: EntradaDaGeracao): string | n
     if (m.dialeto === "heygen_foto" && (!e.avatar || e.avatar.tipo !== "foto")) return "Este motor fala a partir de uma foto.";
     if (m.dialeto === "heygen_avatar" && (!e.avatar || e.avatar.tipo !== "estoque")) return "Este motor fala com um avatar de estoque.";
   }
+  if (e.modo === "labial" || m.familia === "labial") {
+    if (m.familia !== "labial" || e.modo !== "labial") return `${m.rotulo} não faz este tipo de geração.`;
+    if (!e.quadro_inicial_url) return "Escolha a foto de quem fala.";
+    if (!e.audio_url) return "Escolha o áudio que a pessoa vai falar.";
+    if (!(e.duracao_s > 0)) return "Não deu para saber a duração do áudio.";
+    if (e.duracao_s > 60) return "Áudio longo demais: até 60 s por vídeo. Divida a fala em partes.";
+    return null;
+  }
   if (e.modo !== "angulo" && !String(e.prompt || "").trim()) return "Escreva o que acontece no vídeo.";
+  if (m.dialeto === "luma" && e.modo !== "texto" && e.duracao_s > 5) return "O Luma a partir de imagem faz só 5 s. Escolha 5 s ou gere pelo texto.";
   if (m.dialeto === "runway") {
     const f = faltaNaRunway(m, e);
     if (f) return f;
@@ -217,6 +265,10 @@ export interface EnvioAoProvedor {
   custo_usd: number | null;
   /** Duração real informada pelo provedor (HeyGen cobra por ela). */
   duracao_s?: number | null;
+  /** Frente VGN: quantas vezes o resultado pronto não foi guardado (teto na coleta). */
+  tentativas_de_baixar?: number;
+  /** Frente VGN: quando a pessoa pediu Recuperar (o prazo do motor corre daqui; enviado_em fica intacto). */
+  recuperado_em?: string | null;
 }
 
 type Buscar = typeof fetch;
@@ -306,9 +358,13 @@ export function podeConsultar(e: Pick<EnvioAoProvedor, "estado" | "consultado_em
   return !isFinite(t) || agora - t >= INTERVALO_MINIMO_DA_CONSULTA_MS;
 }
 
-/** Passou do prazo do motor? (o envio ganha aviso; só vira erro no teto duro, ver `passouDoTeto`) */
-export function passouDoPrazo(e: Pick<EnvioAoProvedor, "enviado_em">, prazoMin: number, agora: number): boolean {
-  const t = Date.parse(e.enviado_em);
+/**
+ * Passou do prazo do motor? O envio ganha aviso e segue conferido; só vira erro
+ * no teto duro (ver `passouDoTeto`), depois de uma última pergunta ao provedor.
+ */
+export function passouDoPrazo(e: Pick<EnvioAoProvedor, "enviado_em" | "recuperado_em">, prazoMin: number, agora: number): boolean {
+  // Recuperado: o prazo conta a partir do pedido de Recuperar (enviado_em é a hora real do envio).
+  const t = Date.parse(e.recuperado_em || e.enviado_em);
   return isFinite(t) && agora - t > Math.max(1, prazoMin) * 60_000;
 }
 
@@ -322,14 +378,14 @@ export const TETO_DO_ENVIO_MIN = 24 * 60;
 export function tetoDoEnvioMin(prazoMin: number): number {
   return Math.max(TETO_DO_ENVIO_MIN, 6 * Math.max(1, prazoMin));
 }
-export function passouDoTeto(e: Pick<EnvioAoProvedor, "enviado_em">, prazoMin: number, agora: number): boolean {
+export function passouDoTeto(e: Pick<EnvioAoProvedor, "enviado_em" | "recuperado_em">, prazoMin: number, agora: number): boolean {
   return passouDoPrazo(e, tetoDoEnvioMin(prazoMin), agora);
 }
 
 /** Texto honesto de quando o envio é encerrado sem o resultado: o provedor pode ter cobrado. */
 export function avisoDeCobrancaNoProvedor(requestId: string | null | undefined): string {
   const id = String(requestId || "").trim();
-  return `O provedor pode ter cobrado; confira no painel dele${id ? ` (pedido ${id.slice(0, 64)})` : ""} e use "Conferir de novo".`;
+  return `O provedor pode ter cobrado; confira no painel dele${id ? ` (pedido ${id.slice(0, 64)})` : ""} e use Recuperar (busca o resultado de novo, sem gerar outra vez).`;
 }
 
 /**
@@ -370,14 +426,17 @@ export function desfechoDaConsulta(
 }
 
 /**
- * Pode "Conferir de novo"? Envio que virou erro por PRAZO, teto, falta de
- * resposta ou motor fora do catálogo, ainda com o pedido no provedor
- * (request_id) e sem nada baixado nem cobrado. Erro do provedor e cancelado
- * não voltam (o provedor já disse que não gerou).
+ * Pode "Conferir de novo"? (frente MTR) É a mesma regra do "Recuperar" da frente
+ * VGN (`podeRecuperar`, em coleta-de-video.ts): envio que virou erro AQUI (prazo,
+ * teto, falta de resposta, motor fora do catálogo ou download não guardado),
+ * ainda com o pedido no provedor (request_id) e sem arquivo. Erro do provedor e
+ * cancelado não voltam (o provedor já disse que não gerou).
  */
-export function podeReconferir(e: Pick<EnvioAoProvedor, "estado" | "request_id" | "erro" | "uso_id" | "arquivo_id">): boolean {
-  if (e.estado !== "erro" || !String(e.request_id || "").trim() || e.uso_id || e.arquivo_id) return false;
-  return /passou do prazo|passou de \d+ h|sem resposta do provedor|saiu do catálogo/i.test(String(e.erro || ""));
+export function podeReconferir(
+  e: Pick<EnvioAoProvedor, "estado" | "request_id" | "erro" | "uso_id" | "arquivo_id"> & Partial<Pick<EnvioAoProvedor, "status_url" | "enviado_em">>,
+  agora: number = Date.now(),
+): boolean {
+  return podeRecuperar(e, agora);
 }
 
 /** Estado do pedido a partir dos envios (as variações). */

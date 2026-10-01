@@ -263,6 +263,9 @@ describe("vídeo vencido segue conferido até o teto (desfechoDaConsulta, rodada
     expect(podeReconferir({ ...base, request_id: "", erro: "Passou do prazo de 10 min" })).toBe(false);
     expect(podeReconferir({ ...base, uso_id: "u1", erro: "Passou do prazo de 10 min" })).toBe(false);
     expect(podeReconferir({ ...base, estado: "gerando" as never, erro: "Passou do prazo de 10 min" })).toBe(false);
+    // Unificado com o Recuperar da VGN (01/10): mesma regra. Já cobrado, só volta o download não guardado.
+    expect(podeReconferir({ ...base, uso_id: "u1", erro: "O provedor terminou, mas o arquivo não foi guardado depois de 5 tentativas." })).toBe(true);
+    expect(podeReconferir({ ...base, erro: "Passou do prazo de 10 min", enviado_em: "2026-09-20T00:00:00Z" }, Date.parse("2026-09-30T00:00:00Z"))).toBe(false);
   });
   it("o consultarPedido usa o desfecho com o teto, nunca marca erro sem perguntar, e o reconferir está na rota", () => {
     const g = ler("supabase/functions/mesa-videos/geracao.ts");

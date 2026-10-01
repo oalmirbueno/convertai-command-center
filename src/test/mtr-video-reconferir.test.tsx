@@ -8,7 +8,8 @@ import { describe, expect, it, vi } from "vitest";
  * Frente MTR, rodada 2: "Conferir de novo" nas Gerações da Mesa Vídeos.
  * O pedido de 28/09 (troca de ângulo que venceu o prazo com a tela fechada)
  * ganha o botão; erro do provedor e cancelado não ganham. O toque chama
- * gerar_reconferir UMA vez (sem laço).
+ * gerar_reconferir UMA vez (sem laço). Desde 01/10 é o mesmo botão Recuperar
+ * da frente VGN (gerar_reconferir = gerar_recuperar no servidor).
  */
 
 const { chamar, pedidos } = vi.hoisted(() => ({ chamar: vi.fn(), pedidos: { itens: [] as unknown[] } }));
@@ -42,7 +43,10 @@ describe("Gerações: Conferir de novo (rodada 2)", () => {
     chamar.mockResolvedValue({ pedidos: [], reabertos: 1 });
     montar();
     const botoes = Array.from(document.querySelectorAll("button[aria-label^='Conferir de novo']"));
-    expect(botoes.map((b) => b.getAttribute("aria-label"))).toEqual(["Conferir de novo vencido"]);
+    // Unificado com o Recuperar da frente VGN (01/10): um botão só, com o texto "Recuperar" no nome acessível.
+    expect(botoes.map((b) => b.getAttribute("aria-label"))).toEqual(["Conferir de novo e recuperar vencido"]);
+    expect(botoes[0].textContent).toContain("Recuperar");
+    expect(document.querySelectorAll("button[aria-label^='Recuperar']").length).toBe(0);
     fireEvent.click(botoes[0]);
     await waitFor(() => expect(chamar).toHaveBeenCalledWith({ acao: "gerar_reconferir", pedido_id: "vencido" }));
     expect(chamar).toHaveBeenCalledTimes(1);

@@ -52,6 +52,8 @@ vi.mock("../../supabase/functions/mesa-videos/geracao.ts", async () => {
   const m = await import("../../supabase/functions/mesa-videos/modulos/modelos-de-video");
   return {
     catalogo: async () => ({ motores: m.MOTORES_DE_VIDEO, desligados: [] }),
+    // Frente VGN: o diretor recebe só os motores que geram hoje (aqui, todos).
+    motoresProntosDoCatalogo: (c: { motores: unknown[] }) => c.motores,
     motorPronto: async (_b: unknown, id: string) => ({ motor: m.motorPorId(id), motores: m.MOTORES_DE_VIDEO }),
     enviarGeracao: async (_b: unknown, p: Record<string, any>) => {
       gerador.chamadas.push(p);

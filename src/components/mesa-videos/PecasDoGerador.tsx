@@ -3,7 +3,7 @@ import { Check, ImageIcon, Loader2, Upload, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useMesa } from "@/components/mesa/MesaContexto";
+import { useMesa, useMesaOpcional } from "@/components/mesa/MesaContexto";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
 import { useFotos } from "@/components/mesa-foto/fotoApi";
 import { textoDoErro } from "@/lib/mesa/api";
@@ -16,6 +16,7 @@ import { subirQuadro } from "@/lib/mesa-videos/quadros";
 import type { MotorNaTela } from "@/lib/mesa-videos/api";
 import { atende, type CustoDoMotor, custoDoMotor, type MotorDeVideo, ROTULO_DO_NIVEL, textoDoCusto, type NivelDoMotor, type RequisitoDoPedido } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
 import { MOVIMENTOS_DA_HIGGSFIELD } from "../../../supabase/functions/mesa-videos/modulos/video-provedor-higgsfield";
+import { oQueFaltaParaGerar } from "../../../supabase/functions/mesa-videos/modulos/coleta-de-video";
 import { useArquivosDeVideo } from "./videosApi";
 
 /**
@@ -30,7 +31,7 @@ import { useArquivosDeVideo } from "./videosApi";
 export function BotaoDeGerar({
   custo,
   rotulo = "Gerar",
-  motivo,
+  motivo: motivoDado,
   onConfirmar,
   icone,
   extra,
@@ -46,6 +47,10 @@ export function BotaoDeGerar({
 }) {
   const [aberto, setAberto] = useState(false);
   const [fazendo, setFazendo] = useState(false);
+  // Frente VGN: a carteira do cliente que não cobre o custo aparece ANTES (antes o servidor recusava depois do clique).
+  const mesa = useMesaOpcional();
+  const faltaSaldo = motivoDado ? null : oQueFaltaParaGerar({ custoUsd: custo.usd, saldoUsd: mesa ? mesa.saldoUsd : null });
+  const motivo = motivoDado || faltaSaldo;
   const semPreco = custo.usd === null;
   const bloqueado = !!motivo || semPreco;
   const confirmar = async () => {
@@ -129,12 +134,12 @@ export function SeletorDeMotor({
       lista
         .filter((x) => (atende(x.motor, requisito) || (!!aceitar && aceitar(x.motor))) && !x.motor.situacao)
         // Normal = o mais barato que atende (inclui os Top); Top = a última geração; Rápido = rascunho.
-        .filter((x) => requisito.modo === "angulo" || requisito.modo === "imagem" || (nivel === "normal" ? x.nivel !== "rapido" : x.nivel === nivel))
+        .filter((x) => requisito.modo === "angulo" || requisito.modo === "imagem" || requisito.modo === "labial" || (nivel === "normal" ? x.nivel !== "rapido" : x.nivel === nivel))
         .sort((a, b) => (custoDoMotor(a.motor, { duracao_s: 5 }).usd ?? 99) - (custoDoMotor(b.motor, { duracao_s: 5 }).usd ?? 99)),
     [lista, requisito, nivel, aceitar],
   );
   const atual = lista.find((x) => x.motor.id === valor) || null;
-  const mostraNivel = requisito.modo !== "angulo" && requisito.modo !== "imagem";
+  const mostraNivel = requisito.modo !== "angulo" && requisito.modo !== "imagem" && requisito.modo !== "labial";
   return (
     <div className="min-w-0" data-seletor-de-motor="">
       <div className="mb-1.5 flex min-w-0 items-center">

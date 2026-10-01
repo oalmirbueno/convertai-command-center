@@ -12,11 +12,13 @@ import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { botao, campo, etiqueta, juntar, texto } from "@/components/sistema/estilos";
+import { botao, campo, campoTexto, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import { ehPedidoDeVideo, MOVIMENTOS_DE_CAMERA, ROTULO_DO_ESTADO_DO_PEDIDO } from "../../../supabase/functions/mesa-videos/modulos/pedidos-de-video";
 import { duracaoNoMotor, duracoesDoMotor, motorDoNivel, motorPorId, resolucaoNoMotor, type NivelDoMotor, type RequisitoDoPedido } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
 import { custoNaTela, ESTADOS_EM_ANDAMENTO, motoresProntos, novoUid, TIPOS_DO_GERADOR, useMotoresDaMesa } from "@/lib/mesa-videos/api";
 import { AvisoDeAtivacao } from "./Comuns";
+import SituacaoDoGerador from "./SituacaoDoGerador";
+import DiretorDoPrompt from "./DiretorDoPrompt";
 import { MODOS_DO_GERAR, modoDoGerarValido, type ModoDoGerar } from "./modosDoGerar";
 import { BotaoDeGerar, SeletorDeCamera, SeletorDeMotor } from "./PecasDoGerador";
 import { movimentoDaMesaNaHiggsfield } from "../../../supabase/functions/mesa-videos/modulos/video-provedor-higgsfield";
@@ -28,6 +30,8 @@ const ContinuarVideo = lazy(() => import("./ContinuarVideo"));
 const AntesEDepois = lazy(() => import("./AntesEDepois"));
 // Frente V-C: HeyGen (avatar falando).
 const AvatarFalando = lazy(() => import("./AvatarFalando"));
+// Frente VGN: foto + áudio vira a pessoa falando (família labial, pelo fal).
+const FotoQueFala = lazy(() => import("./FotoQueFala"));
 import type { IrPara } from "./MesaDeVideo";
 import { chamarMesaVideos, chaveDosPedidos, fotoDaCenaNoAcervo, useHistorias, usePedidos, useRoteirosAprovados, useVinculos, type PedidoDeVideo } from "./videosApi";
 
@@ -64,9 +68,12 @@ interface Rascunho {
   efeitos: string;
   /** Movimento pronto da Higgsfield (frente V-C); vazio = o equivalente do movimento da mesa. */
   camera?: string;
+  /** Frente VGN: prompt escrito pelo diretor (ou à mão) no lugar do montado da cena; vazio = o da cena. */
+  promptProprio?: string;
+  negativo?: string;
 }
 
-const RASCUNHO_VAZIO: Rascunho = { origem: "", nivel: "normal", motor: "", duracao: 5, resolucao: "", movimento: "parada", formato: "9:16", audio: false, variacoes: 1, fala: "", trilha: "", efeitos: "", camera: "" };
+const RASCUNHO_VAZIO: Rascunho = { origem: "", nivel: "normal", motor: "", duracao: 5, resolucao: "", movimento: "parada", formato: "9:16", audio: false, variacoes: 1, fala: "", trilha: "", efeitos: "", camera: "", promptProprio: "", negativo: "" };
 
 interface Origem {
   valor: string;
@@ -234,7 +241,8 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
       client_id: clientId,
       motor: motor.id,
       modo: quadro ? "primeiro_quadro" : "texto",
-      prompt: promptDaCena(origem, rc, !!cameraPronta),
+      prompt: (rc.promptProprio || "").trim() || promptDaCena(origem, rc, !!cameraPronta),
+      negativo: rc.negativo || null,
       duracao_s: duracao,
       formato: rc.formato,
       resolucao,
@@ -267,6 +275,7 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
             {modo === "continuar" && <ContinuarVideo />}
             {modo === "antes_depois" && <AntesEDepois />}
             {modo === "avatar" && <AvatarFalando />}
+            {modo === "labial" && <FotoQueFala />}
           </Suspense>
         </Secao>
       ) : (
@@ -307,7 +316,7 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
                       value={origem ? origem.valor : ""}
                       onChange={(e) => {
                         const o = origens.find((x) => x.valor === e.target.value);
-                        mudar({ origem: e.target.value, fala: o ? o.fala : "", motor: "" });
+                        mudar({ origem: e.target.value, fala: o ? o.fala : "", motor: "", promptProprio: "", negativo: "" });
                       }}
                     >
                       <option value="">Escolha a cena</option>
@@ -393,12 +402,42 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
                 </CampoDeFormulario>
               </GrupoDeCampos>
 
+              {/* Frente VGN: o diretor escreve o prompt da cena no jeito do motor, com a marca. */}
+              {origem && (
+                <div className="min-w-0 space-y-2" data-prompt-da-cena="">
+                  <div className="flex min-w-0 items-center">
+                    <p className={juntar(texto.rotulo, "mr-2 min-w-0 flex-1")}>{rc.promptProprio ? "Prompt do motor (escrito)" : "Prompt do motor (montado da cena)"}</p>
+                    {rc.promptProprio ? (
+                      <button type="button" className={juntar(botao.discreto, "mr-1 h-8 px-2 text-[12px]")} onClick={() => mudar({ promptProprio: "", negativo: "" })}>
+                        Voltar ao da cena
+                      </button>
+                    ) : null}
+                    <DiretorDoPrompt
+                      motor={motor}
+                      modo={quadro ? "primeiro_quadro" : "texto"}
+                      formato={rc.formato}
+                      duracao={duracao}
+                      audio={audio}
+                      temInicial={!!quadro}
+                      texto={[origem.descricao || origem.rotulo, rc.fala.trim() ? `Fala: "${rc.fala.trim()}"` : ""].filter(Boolean).join(". ")}
+                      cena={promptDaCena(origem, rc, !!cameraPronta)}
+                      atual={{ prompt: rc.promptProprio || "", negativo: rc.negativo || "" }}
+                      onAplicar={(p) => mudar({ promptProprio: p.prompt, negativo: p.negativo })}
+                    />
+                  </div>
+                  <textarea className={juntar(campoTexto, "min-h-[72px]")} value={rc.promptProprio || promptDaCena(origem, rc, !!cameraPronta)} maxLength={2400} onChange={(e) => mudar({ promptProprio: e.target.value })} aria-label="Prompt do motor" />
+                </div>
+              )}
+
               <BotaoDeGerar custo={custo} motivo={motivo} onConfirmar={gerar} icone={<Clapperboard className="mr-1.5 h-3.5 w-3.5" />} extra={`${motor ? motor.rotulo : ""}, ${duracao} s, ${rc.variacoes} ${rc.variacoes === 1 ? "variação" : "variações"}`} />
             </div>
           )}
         </Secao>
       )}
 
+      <div className="min-w-0 space-y-6">
+      {/* Frente VGN: o que falta para gerar (chave do provedor, carteira do cliente), antes do clique. */}
+      <SituacaoDoGerador />
       <Secao
         titulo="Na fila"
         descricao={pedidosQ.isLoading ? undefined : `${fila.length} ${fila.length === 1 ? "pedido" : "pedidos"}`}
@@ -422,6 +461,7 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
           <EstadoVazio compacto titulo="Nada gerando agora." descricao="O que ficar pronto aparece nos Resultados." />
         )}
       </Secao>
+      </div>
     </div>
   );
 }

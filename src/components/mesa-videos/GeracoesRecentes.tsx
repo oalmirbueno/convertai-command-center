@@ -10,21 +10,27 @@ import { botao, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import { ESTADOS_EM_ANDAMENTO, TIPOS_DO_GERADOR } from "@/lib/mesa-videos/api";
 import { motorPorId } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
-import { podeReconferir, provedorCancela } from "../../../supabase/functions/mesa-videos/modulos/video-executor";
+import { provedorCancela } from "../../../supabase/functions/mesa-videos/modulos/video-executor";
+import { podeRecuperar, proximaConferencia, type EnvioRecuperavel } from "../../../supabase/functions/mesa-videos/modulos/coleta-de-video";
 import { gravarMiniaturaDoVideo } from "@/lib/mesa-videos/quadros";
 import { chamarMesaVideos, chaveDosArquivos, chaveDosPedidos, usePedidos, type ArquivoDeVideo, type PedidoDeVideo } from "./videosApi";
 
 /**
  * Gerações recentes (frente V-A, Resultados): o andamento de cada pedido do
- * gerador (variações), com custo. SEM LAÇO: ao abrir, UMA consulta dos
- * pedidos em andamento; depois só o botão "Conferir". Vídeo pronto sem
- * miniatura ganha a sua aqui (primeiro quadro, no navegador).
+ * gerador (variações), com custo. Vídeo pronto sem miniatura ganha a sua aqui
+ * (primeiro quadro, no navegador).
+ * Frente VGN (30/09): com a tela aberta e visível, confere sozinha enquanto há
+ * pedido em andamento (20 s, dobrando até 2 min; consultar o provedor não
+ * custa); com a tela fechada, a coleta do servidor (cron de 1 min) guarda o
+ * que ficar pronto. O que venceu o prazo aqui pode ser recuperado (pergunta de
+ * novo ao provedor, sem gerar outra vez).
  * Frente V-C (26/09): avatar falando (HeyGen) aparece com o próprio nome; na
  * Runway e na Higgsfield dá para cancelar o que ainda não terminou (uma
  * chamada, nada cobrado do que foi cancelado).
  * Frente MTR (30/09): a variação que passou do prazo segue conferida até 24 h
  * (com aviso); a que venceu e ainda tem o pedido no provedor ganha
- * "Conferir de novo" (uma consulta; pronto lá, baixa e cobra).
+ * "Conferir de novo" (uma consulta; pronto lá, baixa e cobra). É o mesmo botão
+ * Recuperar da frente VGN: uma regra (podeRecuperar) e uma ação no servidor.
  */
 
 const ROTULO: Record<string, string> = {
@@ -39,16 +45,11 @@ const ROTULO: Record<string, string> = {
 
 const ROTULO_DO_TIPO: Record<string, string> = { gerar_livre: "Livre", gerar_plano: "Plano do roteiro", angulo: "Ângulo", continuar_video: "Continuação", transicao: "Transição" };
 
-interface Envio {
+interface Envio extends EnvioRecuperavel {
   n: number;
-  estado: string;
-  erro: string | null;
   posicao: number | null;
   storage_path: string | null;
   custo_usd: number | null;
-  request_id?: string;
-  uso_id?: string | null;
-  arquivo_id?: string | null;
 }
 
 const enviosDe = (p: PedidoDeVideo): Envio[] => {
@@ -79,6 +80,8 @@ export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVide
   const queryClient = useQueryClient();
   const pedidosQ = usePedidos(clientId);
   const [conferindo, setConferindo] = useState<string | null>(null);
+  // Sobe a cada conferência automática que falha: reagenda mesmo sem a lista mudar.
+  const [falhasDaConferencia, setFalhasDaConferencia] = useState(0);
   const jaConferiu = useRef(false);
   const pedidos = ((pedidosQ.data && pedidosQ.data.itens) || []).filter((p) => TIPOS_DO_GERADOR.indexOf(p.tipo as string) >= 0).slice(0, 30);
   const emAndamento = pedidos.filter((p) => ESTADOS_EM_ANDAMENTO.indexOf(p.estado as string) >= 0);
@@ -97,15 +100,21 @@ export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVide
     }
   };
 
-  const reconferir = async (pedidoId: string) => {
+  // "Recuperar" (frente VGN) e "Conferir de novo" (frente MTR) são a mesma ação no servidor:
+  // gerar_reconferir = gerar_recuperar. Pergunta de novo ao provedor, sem gerar outra vez.
+  const recuperar = async (pedidoId: string) => {
     setConferindo(pedidoId);
     try {
-      await chamarMesaVideos({ acao: "gerar_reconferir", pedido_id: pedidoId });
+      const r = await chamarMesaVideos<{ pedidos?: PedidoDeVideo[] }>({ acao: "gerar_reconferir", pedido_id: pedidoId });
       void queryClient.invalidateQueries({ queryKey: chaveDosPedidos(clientId) });
       void queryClient.invalidateQueries({ queryKey: chaveDosArquivos(clientId) });
       atualizarCusto();
+      const p = r && r.pedidos && r.pedidos[0];
+      if (p && (p.estado as string) === "pronto") toast.success("Recuperado", { description: "O provedor tinha terminado: o vídeo foi guardado no acervo." });
+      else if (p && (p.estado as string) === "erro") toast.warning("Não deu para recuperar", { description: enviosDe(p).map((e) => e.erro).filter(Boolean)[0] || "O provedor não tem mais este resultado." });
+      else toast.message("Perguntando ao provedor", { description: "Ainda está gerando. Quando terminar, aparece aqui." });
     } catch (e) {
-      toast.error("Não foi possível conferir de novo", { description: textoDoErro(e) });
+      toast.error("Não foi possível recuperar", { description: textoDoErro(e) });
     } finally {
       setConferindo(null);
     }
@@ -120,18 +129,50 @@ export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVide
       atualizarCusto();
     } catch (e) {
       if (pedidoId) toast.error("Não foi possível conferir", { description: textoDoErro(e) });
+      else {
+        // Conferência automática que falhou (rede, 5xx): avisa uma vez e agenda a próxima com o mesmo recuo.
+        toast.warning("A conferência automática falhou", { id: "mesa-videos-conferir-auto", description: `${textoDoErro(e)} Tento de novo sozinho; o servidor também confere a cada minuto.` });
+        setFalhasDaConferencia((n) => n + 1);
+      }
     } finally {
       setConferindo(null);
     }
   };
 
-  // Uma consulta ao abrir (só se há algo em andamento). Nunca repete sozinha.
+  // Uma consulta ao abrir (só se há algo em andamento).
   useEffect(() => {
     if (jaConferiu.current || !emAndamento.length) return;
     jaConferiu.current = true;
     void conferir(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emAndamento.length]);
+
+  // Frente VGN: enquanto houver pedido em andamento e a aba estiver visível, confere de novo
+  // (20 s, 40 s, 80 s, até 2 min). Aba escondida não consulta: a coleta do servidor cobre.
+  const tentativa = useRef(0);
+  // "parcial" é pronto + erro: nada mais a perguntar ao provedor.
+  const gerandoAgora = emAndamento.filter((p) => (p.estado as string) !== "parcial");
+  const assinaturaDoAndamento = gerandoAgora.map((p) => `${p.id}:${String(p.estado)}`).join("|");
+  useEffect(() => {
+    tentativa.current = 0;
+  }, [assinaturaDoAndamento]);
+  useEffect(() => {
+    const espera = proximaConferencia(tentativa.current, gerandoAgora.length);
+    if (espera === null) return;
+    const t = window.setTimeout(() => {
+      tentativa.current += 1;
+      let visivel = true;
+      try {
+        visivel = document.visibilityState !== "hidden";
+      } catch {
+        /* sem a API: considera visível */
+      }
+      if (visivel && !conferindo) void conferir(null);
+      else void queryClient.invalidateQueries({ queryKey: chaveDosPedidos(clientId) });
+    }, espera);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assinaturaDoAndamento, pedidosQ.dataUpdatedAt, falhasDaConferencia]);
 
   // Vídeo gerado sem quadro inicial não tem miniatura (o servidor não decodifica vídeo):
   // grava do primeiro quadro, uma vez por vídeo (lembrado no navegador).
@@ -157,7 +198,7 @@ export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVide
       descricao={`${emAndamento.length} em andamento`}
       recolher={`mesa-videos:geracoes:${clientId}`}
       resumo={`${pedidos.length} ${pedidos.length === 1 ? "pedido" : "pedidos"} · ${emAndamento.length} em andamento`}
-      ajuda="Cada pedido mostra as variações. A consulta ao provedor só acontece quando você abre esta etapa ou toca em Conferir. Passou do prazo, segue sendo conferido por até 24 h; o que venceu e ainda está no provedor tem Conferir de novo. Erro do provedor não é tentado de novo e não é cobrado."
+      ajuda="Cada pedido mostra as variações. Com esta etapa aberta, o painel confere sozinho enquanto algo está gerando; com ela fechada, o servidor confere a cada minuto e guarda o vídeo pronto no acervo. Passou do prazo, segue sendo conferido por até 24 h. Erro do provedor não é tentado de novo e não é cobrado. O que parou aqui e ainda está no provedor tem Recuperar (Conferir de novo): o painel pergunta de novo ao provedor, sem gerar outra vez."
       acao={
         <button type="button" className={botao.secundario} disabled={!!conferindo || !emAndamento.length} onClick={() => void conferir(null)} aria-label="Conferir as gerações em andamento">
           {conferindo === "todos" ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 sm:mr-1.5" />}
@@ -173,8 +214,10 @@ export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVide
           const alvo = p.alvo as { titulo?: string; motor?: string; modo?: string };
           const motorDoPedido = motorPorId(p.executor);
           const podeCancelar = ESTADOS_EM_ANDAMENTO.indexOf(p.estado as string) >= 0 && (p.estado as string) !== "baixando" && !!motorDoPedido && provedorCancela(motorDoPedido.provedor);
+          // Uma regra só para "Recuperar" e "Conferir de novo" (podeRecuperar = podeReconferir).
+          // Pedido em erro, parcial ou com uma variação parada enquanto outra ainda gera (nunca no meio do download).
+          const recuperavel = (p.estado as string) !== "baixando" && envios.some((e) => podeRecuperar(e, Date.now()));
           const par = p.parametros as { prompt?: string };
-          const reconferivel = (p.estado as string) !== "baixando" && envios.some((e) => podeReconferir({ estado: e.estado as "erro", request_id: e.request_id || "", erro: e.erro, uso_id: e.uso_id || null, arquivo_id: e.arquivo_id || null }));
           return (
             <li key={p.id} className="flex min-w-0 items-start py-2.5" data-geracao={p.id}>
               <div className="mr-2 flex shrink-0">
@@ -186,7 +229,7 @@ export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVide
               </div>
               <div className="mr-2 min-w-0 flex-1">
                 <p className="truncate text-[13px] font-medium">
-                  {alvo.modo === "avatar" ? "Avatar falando" : ROTULO_DO_TIPO[p.tipo as string] || p.tipo} · {alvo.titulo || alvo.motor || p.executor}
+                  {alvo.modo === "avatar" ? "Avatar falando" : alvo.modo === "labial" ? "Foto que fala" : ROTULO_DO_TIPO[p.tipo as string] || p.tipo} · {alvo.titulo || alvo.motor || p.executor}
                 </p>
                 <p className={juntar(texto.auxiliar, "truncate")} title={par.prompt || ""}>
                   {envios.filter((e) => e.estado === "pronto").length} de {envios.length} prontas{custo !== null ? ` · US$ ${custo.toFixed(2).replace(".", ",")}` : ""}
@@ -199,9 +242,10 @@ export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVide
                   {conferindo === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                 </button>
               )}
-              {reconferivel && (
-                <button type="button" className={botao.icone} disabled={!!conferindo} onClick={() => void reconferir(p.id)} aria-label={`Conferir de novo ${alvo.titulo || "pedido"}`} title="Conferir de novo no provedor">
-                  {conferindo === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <History className="h-3.5 w-3.5" />}
+              {recuperavel && (
+                <button type="button" className={juntar(botao.discreto, "h-7 px-1.5 text-[12px]")} disabled={!!conferindo} onClick={() => void recuperar(p.id)} aria-label={`Conferir de novo e recuperar ${alvo.titulo || "pedido"}`} title="Conferir de novo no provedor e recuperar (não gera outra vez)">
+                  {conferindo === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1" /> : <History className="h-3.5 w-3.5 sm:mr-1" />}
+                  <span className="hidden sm:inline">Recuperar</span>
                 </button>
               )}
               {podeCancelar && (
