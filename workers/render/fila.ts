@@ -13,7 +13,9 @@ export interface PedidoDoWorker {
   /** Frente MOT: cena HyperFrames e batidas pertencem a um filme (motion_id) e não a uma versão. */
   versao_id: string | null;
   motion_id?: string | null;
-  tipo: "render_final" | "amostra" | "onda" | "cena_hf" | "batidas";
+  /** Frente TCN: a troca de cenário (preparar o trecho e compor a final). */
+  cenario_id?: string | null;
+  tipo: "render_final" | "amostra" | "onda" | "cena_hf" | "batidas" | "cenario";
   projeto: Record<string, unknown> | null;
   revisao: number | null;
   entrada: Record<string, unknown>;

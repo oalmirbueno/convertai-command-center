@@ -53,6 +53,9 @@
  * - Projeto de edição (_shared/projeto-de-edicao.ts; coluna video_versoes.projeto, SQL E2-01):
  *   versao_registrar aceita { projeto }; projeto_salvar { versao_id, projeto, revisao_lida } -> { versao }
  *   (trava otimista pela revisão; versão aprovada não muda). É onde o editor completo grava.
+ * - Troca de cenário com a pessoa fixa (frente TCN, 01/10; cenario.ts, SQL 20260930327000):
+ *   cenario_amostra, cenario_gerar, cenario_status, cenario_inserido, cenario_descartar; o cron
+ *   gerar_coletar também anda as trocas em curso.
  *
  * Sem travessão.
  */
@@ -159,6 +162,8 @@ import {
   gerarRecuperar,
   labialGerar,
 } from "./geracao.ts";
+// Frente TCN (01/10): trocar o cenário com a pessoa fixa (Mesa Edição).
+import { cenarioAmostra, cenarioDescartar, cenarioGerar, cenarioInserido, cenariosColetar, cenarioStatus } from "./cenario.ts";
 import {
   antesDepoisParaEditor,
   diretorAvaliar,
@@ -1329,6 +1334,12 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   antes_depois_para_editor: direto(antesDepoisParaEditor),
   template_salvar: direto(templateSalvar),
   template_arquivar: direto(templateArquivar),
+  // Frente TCN (01/10): trocar o cenário com a pessoa fixa. Amostra e final geram imagem na hora: com fôlego.
+  cenario_amostra: comFolego(cenarioAmostra),
+  cenario_gerar: comFolego(cenarioGerar),
+  cenario_status: comFolego(cenarioStatus),
+  cenario_inserido: direto(cenarioInserido),
+  cenario_descartar: direto(cenarioDescartar),
 };
 
 Deno.serve(async (req) => {
@@ -1347,7 +1358,18 @@ Deno.serve(async (req) => {
       } catch { /* corpo vazio */ }
       const acaoDoCron = String(c.acao ?? "");
       const baseDoCron = { ...baseDa({ userId: "", token: "", doChamador: servico(), admin: true }), garantirAcesso: async () => {} };
-      if (acaoDoCron === "gerar_coletar") return await gerarColetar(baseDoCron, c);
+      if (acaoDoCron === "gerar_coletar") {
+        // Frente TCN: a mesma rodada anda as trocas de cenário em curso (preparo, provedor e composição).
+        const pedidos = await gerarColetar(baseDoCron, c);
+        let trocas: Record<string, unknown> = {};
+        try {
+          trocas = await cenariosColetar(baseDoCron);
+        } catch (e) {
+          trocas = { erro: e instanceof Error ? e.message.slice(0, 200) : "falhou" };
+        }
+        const corpoDosPedidos = await pedidos.json().catch(() => ({}));
+        return json({ ...corpoDosPedidos, trocas_de_cenario: trocas }, pedidos.status);
+      }
       if (acaoDoCron !== "motores_sincronizar") return json({ error: "nao_autorizado", mensagem: "O cron só sincroniza o catálogo e coleta os pedidos." }, 403);
       return await motoresSincronizar(baseDoCron);
     }

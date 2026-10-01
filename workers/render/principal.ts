@@ -3,7 +3,8 @@
  *
  * Roda na máquina da agência e puxa a fila render_pedidos: onda do áudio,
  * amostra de 8 a 15 s e vídeo inteiro; frente MOT: cena HyperFrames (still,
- * amostra de 5 s ou final com alfa) e batidas da trilha da Mesa Motion. Um pedido por vez. Sem pedido, olha a
+ * amostra de 5 s ou final com alfa) e batidas da trilha da Mesa Motion; frente
+ * TCN: troca de cenário (preparar o trecho e compor a final, por ffmpeg). Um pedido por vez. Sem pedido, olha a
  * fila de novo a cada RENDER_INTERVALO_S (padrão 15 s).
  *
  * Ligar (PowerShell, na pasta workers/render, com a chave só na sessão):
@@ -26,7 +27,8 @@ import { baterPonto, capacidadesDoWorker, INTERVALO_DA_BATIDA_MS } from "./batid
 import { filaSupabase, type Fila } from "./fila.ts";
 import { PASTA_DO_WORKER, umPedido, type Ambiente } from "./trabalho.ts";
 
-export const VERSAO_DO_WORKER = "edt-1.0+mot-1.0+mtr-1+mov-1";
+// Frente TCN (01/10): "+tcn-1" = sabe a troca de cenário (o banco só entrega o tipo "cenario" a quem tem "tcn-").
+export const VERSAO_DO_WORKER = "edt-1.0+mot-1.0+mtr-1+tcn-1+mov-1";
 
 export function lerAmbiente(env: NodeJS.ProcessEnv): { url: string; chave: string; nome: string; pasta: string; intervalo: number; chrome: string | null; concorrencia: number | null } {
   const url = String(env.SUPABASE_URL || env.VITE_SUPABASE_URL || "").trim();

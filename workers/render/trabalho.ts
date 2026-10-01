@@ -17,6 +17,7 @@ import type { Armazem } from "./armazem.ts";
 import type { Fila, PedidoDoWorker } from "./fila.ts";
 import { amostrasMono, executar, FFMPEG, medirLoudness, normalizarLoudness, sondar } from "./midia.ts";
 import { trabalharBatidas, trabalharCenaHf } from "./hyperframes.ts";
+import { trabalharCenario } from "./cenario.ts";
 
 export const PASTA_DO_WORKER = path.dirname(fileURLToPath(import.meta.url));
 export const RAIZ_DO_REPO = path.resolve(PASTA_DO_WORKER, "..", "..");
@@ -288,6 +289,14 @@ export async function umPedido(amb: Ambiente, worker: string, versao: string): P
         return { id: p.id, tipo: p.tipo, estado: "pronto", detalhe: String(resultado.resumo || "") };
       }
       const r = await trabalharCenaHf(apoio, p, pasta, relator(amb, p));
+      const ok = await amb.fila.concluir(p.id, amb.token, r.saida, r.arquivoId, r.resultado);
+      if (!ok) return { id: p.id, tipo: p.tipo, estado: "parado", detalhe: "O pedido não era mais deste worker na hora de concluir." };
+      log(`pronto: ${r.saida}`);
+      return { id: p.id, tipo: p.tipo, estado: "pronto", detalhe: r.saida };
+    }
+    if (p.tipo === "cenario") {
+      // Frente TCN: preparar o trecho para o provedor ou compor a final da troca de cenário.
+      const r = await trabalharCenario({ fila: amb.fila, armazem: amb.armazem, log: amb.log, publico: PUBLICO_DO_PAINEL }, p, pasta, relator(amb, p));
       const ok = await amb.fila.concluir(p.id, amb.token, r.saida, r.arquivoId, r.resultado);
       if (!ok) return { id: p.id, tipo: p.tipo, estado: "parado", detalhe: "O pedido não era mais deste worker na hora de concluir." };
       log(`pronto: ${r.saida}`);

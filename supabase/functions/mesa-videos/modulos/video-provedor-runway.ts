@@ -39,7 +39,8 @@ export const RUNWAY_CHAVE = "RUNWAYML_API_SECRET";
 const NOME = "A Runway";
 
 /** Rotas que a mesa usa (lista fechada: nada fora dela vai com a chave). */
-export const ROTAS_DA_RUNWAY = ["image_to_video", "text_to_video"];
+// Frente TCN (01/10): video_to_video (Aleph 2) para a troca de cenário.
+export const ROTAS_DA_RUNWAY = ["image_to_video", "text_to_video", "video_to_video"];
 
 /** Proporção da Runway (largura:altura) por formato da mesa. Imagem para vídeo (Gen-4.5 e Gen-4 Turbo). */
 export const PROPORCOES_DA_RUNWAY_IMAGEM: Record<string, string> = { "9:16": "720:1280", "16:9": "1280:720", "1:1": "960:960", "4:5": "832:1104" };

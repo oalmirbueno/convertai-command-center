@@ -56,3 +56,11 @@ export async function bancoComFormatos(existente?: PGlite): Promise<PGlite> {
   await db.exec(sql);
   return db;
 }
+
+/** Frente TCN: a fila + Motion + render por formato + a troca de cenário (pode rodar de novo no mesmo banco). */
+export async function bancoComATroca(existente?: PGlite): Promise<PGlite> {
+  const db = existente || (await bancoComFormatos(await bancoComOMotion()));
+  const sql = readFileSync(path.join(RAIZ_DO_REPO, "supabase", "migrations", "20260930327000_troca_de_cenario.sql"), "utf8").replace(/NOTIFY pgrst[^;]*;/g, "");
+  await db.exec(sql);
+  return db;
+}

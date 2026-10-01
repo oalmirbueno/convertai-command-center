@@ -27,6 +27,7 @@ import Biblioteca from "./Biblioteca";
 import PainelDeSkills, { type ControleDePropostas } from "./PainelDeSkills";
 import PainelDeGeracao, { type PedidoDeGeracao } from "./PainelDeGeracao";
 import PainelTimestamp from "./PainelTimestamp";
+import PainelTrocaDeCenario, { useEntradaDasTrocas } from "./PainelTrocaDeCenario";
 import PainelDeReferencias from "./PainelDeReferencias";
 import AgenteEditor from "./AgenteEditor";
 import Renderizar from "./Renderizar";
@@ -68,6 +69,7 @@ type AbaEsquerda =
   | "capitulos"
   | "exportar"
   | "gerar"
+  | "cenario"
   | "timestamp"
   | "referencias"
   | "skills"
@@ -92,6 +94,7 @@ const ABAS_ESQUERDA: { valor: AbaEsquerda; rotulo: string; descricao?: string }[
   { valor: "capitulos", rotulo: "Capítulos e virais", descricao: "Capítulos e cortes curtos" },
   { valor: "exportar", rotulo: "Exportar", descricao: "Render, formatos, legenda e capítulos" },
   { valor: "gerar", rotulo: "Gerar", descricao: "Câmera, continuar, transição, B-roll" },
+  { valor: "cenario", rotulo: "Trocar cenário", descricao: "Pessoa fixa, cenário novo" },
   { valor: "timestamp", rotulo: "Timestamp", descricao: "Fala palavra por palavra" },
   { valor: "referencias", rotulo: "Referências", descricao: "Copiar a edição de um vídeo" },
   { valor: "skills", rotulo: "Skills (todas)" },
@@ -335,6 +338,9 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
     setComparar({ antes: urls[chaveA], depois: urls[chaveB], rotulos: [projeto.fontes[chaveA].nome, projeto.fontes[chaveB].nome], tipo: imagem ? "imagem" : "video" });
   };
 
+  // Frente TCN: a troca de cenário pronta entra sozinha na linha do tempo (um passo do Ctrl+Z), mesmo com o painel fechado.
+  useEntradaDasTrocas({ clientId, versaoId, projeto, onOps: aplicarOps, desfazer: () => setH((x) => desfazer(x)) });
+
   const apelidos = useMemo(() => apelidosDoProjeto(projeto), [projeto]);
   const ctx: ContextoDoPainel = {
     projeto,
@@ -458,6 +464,8 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
       <ComCursor relogio={relogio} passo={0.25}>
         {(cursor) => <PainelDeGeracao projeto={projeto} urls={urls} urlsExtras={urls} pedido={geracao} selecao={selecao} cursor={cursor} onOps={aplicarOps} />}
       </ComCursor>
+    ) : abaVisivel === "cenario" ? (
+      <PainelTrocaDeCenario projeto={projeto} urls={urls} selecao={selecao} versaoId={versaoId} irParaTempo={ctx.irParaTempo} />
     ) : abaVisivel === "timestamp" ? (
       <PainelTimestamp projeto={projeto} urls={urls} onAplicarProjeto={aplicarProjeto} />
     ) : abaVisivel === "ajustes" ? (
