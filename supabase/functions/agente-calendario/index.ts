@@ -125,6 +125,9 @@ import {
   REGRA_DE_MENOS_TEXTO,
   textoDoAviso,
 } from "../_shared/menos-texto-nas-laminas.ts";
+// Frente CPY: o motor de copy da casa (limpeza e conferência da legenda, sem rede).
+import { REGRA_DA_LEGENDA_NO_PLANO } from "../_shared/motor-de-copy.ts";
+import { legendaDoItem } from "./modulos/legenda-do-item.ts";
 import {
   acaoDeAtualizarPublico,
   blocoDaDecisaoDoPublico,
@@ -529,6 +532,16 @@ function normalizarCards(v: unknown, formato: Formato, avisos: string[] = []): C
   return conferido.cards;
 }
 
+/**
+ * Legenda do item pelo motor de copy: sem travessão, espaços e aspas limpos,
+ * no teto do Instagram, e os avisos que importam no Mês (clichê de IA,
+ * promessa proibida, tamanho, gancho longo; CTA só quando o item não tem um).
+ */
+export function copyDoItem(copy: unknown, cta: unknown): { texto: string; avisos: string[] } {
+  // A regra mora no motor (legendaDoItem, testada no vitest); aqui só o recorte de tamanho do Mês.
+  return legendaDoItem(texto(copy, 2400), !!texto(cta, 300));
+}
+
 export function normalizarItem(bruto: unknown, uteis: string[], dataPadrao?: string): Item {
   const o = (bruto ?? {}) as Record<string, unknown>;
   const cardsBrutos = Array.isArray(o.cards) ? o.cards : [];
@@ -536,6 +549,9 @@ export function normalizarItem(bruto: unknown, uteis: string[], dataPadrao?: str
   const avisosDeTexto: string[] = [];
   const cards = normalizarCards(cardsBrutos, formato, avisosDeTexto);
   const tipo = String(o.tipo_conteudo ?? "") === "extra_sazonal" ? "extra_sazonal" : "principal";
+  // Frente CPY: a legenda passa pelo motor de copy (limpeza da casa e conferência em código, como aviso; sem nova chamada).
+  const legenda = copyDoItem(o.copy, o.cta);
+  for (const a of legenda.avisos) avisosDeTexto.push(a);
   return {
     tema_id: texto(o.tema_id, 40),
     // Data sempre de segunda a sexta dentro do periodo.
@@ -547,7 +563,7 @@ export function normalizarItem(bruto: unknown, uteis: string[], dataPadrao?: str
     tema: texto(o.tema, 200),
     gancho: texto(o.gancho, 400),
     resumo: texto(o.resumo, 1200),
-    copy: texto(o.copy, 2200),
+    copy: legenda.texto,
     cta: texto(o.cta, 300),
     objetivo: normalizarObjetivo(o.objetivo),
     metrica_principal: texto(o.metrica_principal, 200),
@@ -2025,7 +2041,7 @@ Regras dos itens:
 - ${REGRA_DO_CARROSSEL}
 - ${REGRA_DO_ESTATICO}
 - carrossel_infinito: true quando o carrossel for uma cena panorâmica contínua (o fundo atravessa os cards e o último se liga ao primeiro) e isso fizer sentido para o tema.
-- copy: a legenda completa do post.
+- copy: a legenda completa do post. ${REGRA_DA_LEGENDA_NO_PLANO}
 - data: use exatamente a data indicada para o tema.
 - tipo_conteudo: extra_sazonal só para conteúdo de data sazonal marcado como extra; senão principal.
 - status: planejado.`;
@@ -2697,7 +2713,7 @@ Regras dos itens:
 - formato: carrossel ou estatico, igual ao do item. Estático tem exatamente 1 card.
 - cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim (descreva a protagonista igual em todos os cards), variando só a pose, o gesto e o enquadramento (nunca a mesma pose em dois cards seguidos); prefira foto real do cliente quando o contexto tiver. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6; 7 ou mais só quando o conteúdo pede. Nunca escreva o nome da marca no texto dos cards. Não repita tema, gancho nem imagem de posts recentes.
 - carrossel_infinito: true quando o carrossel for uma cena panorâmica contínua (o fundo atravessa os cards e o último se liga ao primeiro) e isso fizer sentido.
-- copy: a legenda completa do post.
+- copy: a legenda completa do post. ${REGRA_DA_LEGENDA_NO_PLANO}
 - data: exatamente a data do item.
 - tipo_conteudo: principal.
 - status: planejado.`;
@@ -3450,7 +3466,7 @@ const REGRAS_DOS_ITENS = `Regras dos itens:
 - formato: carrossel ou estatico. Estático tem exatamente 1 card.
 - cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim, variando só a pose, o gesto e o enquadramento; prefira foto real do cliente quando o contexto tiver. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6. Nunca escreva o nome da marca no texto dos cards.
 - carrossel_infinito: true quando o carrossel for uma cena panorâmica contínua e isso fizer sentido.
-- copy: a legenda completa do post. O texto longo (explicação, detalhes, lista) mora aqui, nunca nas lâminas.
+- copy: a legenda completa do post. O texto longo (explicação, detalhes, lista) mora aqui, nunca nas lâminas. ${REGRA_DA_LEGENDA_NO_PLANO}
 - Menos texto nas lâminas: capa só com o gancho curto (até ${PALAVRAS_DA_CAPA} palavras); cada lâmina seguinte com UMA ideia, título curto (até ${PALAVRAS_DO_TITULO} palavras) na 1ª linha e apoio curto (até ${PALAVRAS_DO_APOIO} palavras) na 2ª, em sequência passo a passo até o CTA; linguagem clara para o cliente final, sem jargão. Confira cada lâmina antes de responder e reescreva agora a que passar.
 - tipo_conteudo: principal (ou extra_sazonal para data comemorativa).
 - status: planejado.
@@ -6301,6 +6317,15 @@ type ResultadoDoTexto = { task_id: string; titulo: string; ok: boolean; motivo?:
 export function itemComTextosNovos(item: Record<string, unknown>, campos: CamposDeTexto): Record<string, unknown> {
   const novo: Record<string, unknown> = { ...item };
   for (const k of ["tema", "gancho", "copy", "cta", "publico"] as const) if (campos[k]) novo[k] = campos[k];
+  // Frente CPY: a legenda revisada passa pelo motor de copy; os avisos dela trocam os da legenda antiga e ficam junto dos das lâminas.
+  if (campos.copy) {
+    const legenda = copyDoItem(campos.copy, novo.cta);
+    if (legenda.texto) novo.copy = legenda.texto;
+    const antes = Array.isArray(item.avisos_de_texto) ? (item.avisos_de_texto as unknown[]).map(String) : [];
+    const todos = antes.filter((a) => a.indexOf("Legenda: ") !== 0).concat(legenda.avisos);
+    if (todos.length) novo.avisos_de_texto = todos;
+    else delete novo.avisos_de_texto;
+  }
   if (campos.cards && campos.cards.length && Array.isArray(item.cards)) {
     const porOrdem = new Map(campos.cards.map((c) => [c.ordem, c.texto]));
     const cards = (item.cards as Array<Record<string, unknown>>).map((c, i) => {
@@ -6309,7 +6334,10 @@ export function itemComTextosNovos(item: Record<string, unknown>, campos: Campos
     }) as Array<{ ordem: number; funcao?: string; texto: string }>;
     const conferido = conferirLaminas(cards);
     novo.cards = conferido.cards;
-    if (conferido.avisos.length) novo.avisos_de_texto = conferido.avisos.map(textoDoAviso);
+    if (conferido.avisos.length) {
+      const daLegenda = Array.isArray(novo.avisos_de_texto) ? (novo.avisos_de_texto as unknown[]).map(String).filter((a) => a.indexOf("Legenda: ") === 0) : [];
+      novo.avisos_de_texto = conferido.avisos.map(textoDoAviso).concat(daLegenda);
+    }
   }
   return novo;
 }

@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { CampoDeFormulario, GrupoDeCampos, botao, campo as estiloDoCampo, juntar, texto } from "@/components/sistema";
 import { useProjects } from "@/hooks/useSupabaseData";
 import { type PedidoDoDocumento, hojeEmSaoPaulo, inicioDoMesEmSaoPaulo } from "@/lib/documentos/registrarEntrega";
-import { DEFINICOES_DE_DOCUMENTO, MODELOS_DE_DOCUMENTO, type ModeloDeDocumento, mesAnterior } from "../../../supabase/functions/_shared/documento-modelos";
+import { DEFINICOES_DE_DOCUMENTO, MODELOS_DE_DOCUMENTO, type ModeloDeDocumento, mesAnterior } from "../../../supabase/functions/documentos/modulos/documento-modelos";
 
 /**
  * Começar um documento de entrega (frente BRF2, 30/09/2026): o modelo decide

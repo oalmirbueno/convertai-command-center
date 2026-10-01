@@ -50,6 +50,9 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { carregarModelo, chamarTexto, cobrarJev, estimarComModelo, IaMotorErro, modeloPadrao, type ModeloIa } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar, notaScore, probabilidadeNoul } from "../_shared/jev.ts";
+// Frente CPY: o motor de copy da casa (bloco do pedido, limpeza e conferência).
+import { blocoDoMotor, LIMIARES, objetivoDaCopy, perguntaDoCliche } from "../_shared/motor-de-copy.ts";
+import { avisoComAsFrasesDaCasa, roteiroPeloMotorDeCopy } from "./modulos/roteiro-pela-casa.ts";
 import { lerContextoConsolidado } from "../_shared/contexto-cliente.ts";
 import { lerContextoDaMarca, resolverMarca } from "../_shared/marca.ts";
 import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
@@ -494,13 +497,18 @@ async function avisoDoJev(clientId: string, r: Roteiro, oferta: string | null, u
           type: "noul",
           instructions: "A `promessa_do_gancho` é cumprida pelos `blocos` e é coerente com a `oferta_do_cliente` e o `cta`, sem prometer resultado que o vídeo não entrega?",
         },
+        cliche: perguntaDoCliche("formada pelo `gancho` e pela fala dos `blocos`"),
       },
     });
     await cobrarJev(res, { clientId, tarefa: TAREFA, referencia: { tipo: REF_ROTEIRO, id: refId }, criadoPor: userId });
-    return avisoDasRespostasDoJev(notaScore(res.answers.retencao), notaScore(res.answers.clareza), probabilidadeNoul(res.answers.promessa));
+    const aviso = avisoDasRespostasDoJev(notaScore(res.answers.retencao), notaScore(res.answers.clareza), probabilidadeNoul(res.answers.promessa));
+    // Frente CPY: o clichê de IA do motor de copy, como aviso.
+    const cliche = probabilidadeNoul(res.answers.cliche);
+    if (cliche != null && cliche >= LIMIARES.cliche) aviso.frases.push("A fala soa como texto genérico de IA: troque frase feita por detalhe concreto do negócio.");
+    return aviso;
   } catch (e) {
-    // O Jev é aviso: fora do ar, o roteiro segue sem ele.
-    console.error("[mesa-roteiros] jev indisponível", { codigo: e instanceof JevErro ? e.codigo : "desconhecido" });
+    // O Jev é aviso: fora do ar, o roteiro segue sem ele (a conferência em código continua valendo). Nada engolido: vai para o log.
+    registrarFalha("mesa-roteiros: Jev indisponível (vale a conferência em código)", e, { client_id: clientId, codigo: e instanceof JevErro ? e.codigo : "desconhecido" });
     return null;
   }
 }
@@ -759,7 +767,11 @@ async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
     sistema: `${SISTEMA_ROTEIRISTA}\n\n${CONHECIMENTO_DO_ROTEIRO}` + (regras.bloco ? `\n\n${regras.bloco}` : "") + (escolha ? `\n\n${blocoDaBaseParaORoteirista(escolha)}` : ""),
-    mensagens: [{ papel: "usuario", conteudo: `${instrucao}\n\nDADOS:\n${JSON.stringify({ ...ctx.dados, ...pedidoDaEquipe })}` }],
+    mensagens: [{
+      papel: "usuario",
+      // Frente CPY: o motor de copy da casa (voz, CTA, fatos, promessa, clichê e tamanho da fala); a estrutura é a do modelo da base ou a do modo.
+      conteudo: `${instrucao}\n\nDADOS:\n${JSON.stringify({ ...ctx.dados, ...pedidoDaEquipe, motor_de_copy: blocoDoMotor({ canal: "roteiro", objetivo: objetivoDaCopy(p.objetivo || (peca ? peca.titulo : "")), estruturaPedida: escolha ? `a do modelo da base ${escolha.modelo.nome}` : `a do modo ${modo.rotulo}` }) })}`,
+    }],
     esquemaJson: ESQUEMA_DO_ROTEIRO,
     maxTokensSaida: 7_000,
     metodo: sp,
@@ -767,11 +779,13 @@ async function escreverRoteiro(ch: Chamador, p: PedidoDeRoteiro): Promise<Gerado
     criadoPor: ch.userId,
   });
   const titulo = peca ? peca.titulo : p.tema || "Roteiro avulso";
-  const roteiro = normalizarRoteiro({ ...(saida.json as Record<string, unknown>), tipo: p.tipo }, { titulo, tipo: p.tipo, duracao_s: p.duracaoS });
+  const pelaCasa = roteiroPeloMotorDeCopy(normalizarRoteiro({ ...(saida.json as Record<string, unknown>), tipo: p.tipo }, { titulo, tipo: p.tipo, duracao_s: p.duracaoS }));
+  const roteiro = pelaCasa.roteiro;
   // Frente ROT: o roteiro diz qual modelo da base seguiu (a escolha é do código, não do texto do modelo de IA).
   const base = escolha ? baseParaGuardar(escolha) : anterior;
   if (base) roteiro.base = base;
-  const aviso = await avisoDoJev(p.clientId, roteiro, ctx.oferta, ch.userId, p.linha ? p.linha.id : p.taskId || p.clientId);
+  // Frente CPY: as frases da conferência em código entram mesmo quando o Jev falha (sem chave, fora do ar ou 402).
+  const aviso = avisoComAsFrasesDaCasa(await avisoDoJev(p.clientId, roteiro, ctx.oferta, ch.userId, p.linha ? p.linha.id : p.taskId || p.clientId), pelaCasa.frases);
   const gravado = await guardarVersao(
     ch,
     { clientId: p.clientId, linha: p.linha, taskId: p.taskId, propostaId: ctx.propostaId, campanhaId: ctx.campanhaId },

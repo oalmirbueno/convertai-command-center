@@ -8,7 +8,7 @@ import { type DocumentoDaEntrega, type ResultadoDaGeracao, pedidoDoDocumento, RO
 import { copiarTexto } from "@/components/briefing/GerarLinkDoBriefing";
 import BotaoDocumentoDaEntrega from "./BotaoDocumentoDaEntrega";
 import { linkDoWhatsApp } from "../../../supabase/functions/_shared/briefing-modelos";
-import { mensagemDoDocumento } from "../../../supabase/functions/_shared/documento-modelos";
+import { mensagemDoDocumento } from "../../../supabase/functions/documentos/modulos/documento-modelos";
 
 /**
  * "Conferir e mandar" o documento de entrega (frente BRF2, 30/09/2026; uma

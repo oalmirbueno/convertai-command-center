@@ -273,6 +273,8 @@ export type OpcaoDeCopy = {
   secoes: SecaoDeCopy[];
   faq: Array<{ pergunta: string; resposta: string }>;
   seo: { titulo: string; descricao: string; palavras: string[] };
+  /** Frente CPY: a conferência do motor de copy na abertura (nota de 0 a 100, alerta e avisos). */
+  conferencia?: { nota: number; alerta: boolean; avisos: string[] };
 };
 
 /** Esquema do conteúdo: exatamente 3 opções (gerar a mais e escolher). */

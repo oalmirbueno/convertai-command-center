@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { join, relative, sep } from "node:path";
 import { criarLimitador, type EventoResumido, type ModeloDoMotor, TIPOS_QUE_GASTAM } from "../../../supabase/functions/_shared/motor-codigo.ts";
 import { type PacoteDoSite, promptDaSecao, revisarHtml, rotuloDaSecao } from "../../../supabase/functions/_shared/site-metodo.ts";
-import { criarApiDaVercel, garantirProjeto as garantirProjetoVercel, ligarDominio, publicarArquivos, vercelLigada } from "../../../supabase/functions/_shared/publicacao-vercel.ts";
+import { criarApiDaVercel, garantirProjeto as garantirProjetoVercel, ligarDominio, publicarArquivos, vercelLigada } from "../../../supabase/functions/mesa-site/modulos/publicacao-vercel.ts";
 // UIM: a base de design (skill ui-ux-pro-max): design system gerado pelo motor e prova de consulta por seção.
 import { type ConsultaDaSecao, consultaDaSecao, eventoDaConsulta, lerLogDaBase, lerProvaDeUx, resumoDaBaseNaEntrega, totalDaBase } from "./prova-da-base.ts";
 import { ajustarPromptDaBase, prepararDesignSystem } from "./design-system.ts";

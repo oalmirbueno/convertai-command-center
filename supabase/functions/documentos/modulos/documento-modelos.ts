@@ -23,7 +23,7 @@ import {
   type Prova,
   resumoSemAgente,
   type TipoDeEntrega,
-} from "../documentos/modulos/registro-de-entrega.ts";
+} from "./registro-de-entrega.ts";
 
 // ------------------------------------------------------------------ modelos
 

@@ -42,7 +42,7 @@ vi.mock("@/lib/documentos/registrarEntrega", async (importOriginal) => {
 
 import { ConfirmDialogProvider } from "@/components/shared/confirmDialog";
 import EditorDoDocumento from "@/components/documentos/EditorDoDocumento";
-import { normalizarRascunho } from "../../supabase/functions/_shared/documento-modelos";
+import { normalizarRascunho } from "../../supabase/functions/documentos/modulos/documento-modelos";
 
 const DOC = { id: "d1", client_id: "c1", marca_id: null, tipo: "mes_de_pautas", referencia: "2026-09", titulo: "Entrega de setembro", numero: 3, versao: 0, status: "pendente", file_id: null, avisos: [], custo_usd: 0, criado_em: "2026-10-01T10:00:00Z" };
 const vista = () => ({

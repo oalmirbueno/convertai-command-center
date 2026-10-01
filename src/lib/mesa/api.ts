@@ -417,7 +417,19 @@ export interface ParteDaEstimativa {
   buscasWeb?: number;
   /** Quantas vezes esta parte se repete (ex.: um card vezes N cards). */
   vezes?: number;
+  /** Custo fixo em US$ que não depende do catálogo (ex.: a conferência do Jev). Com ele, o modelo é ignorado. */
+  fixoUsd?: number;
 }
+
+/**
+ * Frente CPY: a conferência do motor de copy pelo Jev (voz, força, fato
+ * inventado, promessa e clichê de até 3 variações numa chamada só) entra na
+ * estimativa antes do Confirmar. O Jev cobra US$ 0,042 por milhão de tokens
+ * de entrada (ia-motor.ts, JEV_PRECO_ENTRADA_1M); o pedido tem até ~8 mil
+ * tokens, então US$ 0,0005 cobre com folga.
+ */
+export const CUSTO_DA_CONFERENCIA_DO_JEV_USD = 0.0005;
+export const parteDaConferenciaDoJev = (): ParteDaEstimativa => ({ modeloId: null, tipo: "texto", fixoUsd: CUSTO_DA_CONFERENCIA_DO_JEV_USD });
 
 // Saída estimada por nível de raciocínio, igual à do motor (só para a estimativa).
 const SAIDA_POR_RACIOCINIO: Record<string, number> = {
@@ -447,6 +459,10 @@ export function estimarLocal(partes: ParteDaEstimativa[], catalogo: ModeloIa[]):
   for (const parte of partes) {
     const vezes = parte.vezes === undefined ? 1 : parte.vezes;
     if (vezes <= 0) continue;
+    if (typeof parte.fixoUsd === "number") {
+      total += numero(parte.fixoUsd) * vezes;
+      continue;
+    }
     const m = catalogo.find((x) => x.id === parte.modeloId);
     if (!m) return null;
     const pe = numero(m.preco_entrada_1m);
@@ -472,6 +488,10 @@ export async function estimarCusto(partes: ParteDaEstimativa[], catalogo?: Model
   }
   let total = 0;
   for (const parte of partes) {
+    if (typeof parte.fixoUsd === "number") {
+      total += numero(parte.fixoUsd) * Math.max(0, parte.vezes === undefined ? 1 : parte.vezes);
+      continue;
+    }
     if (!parte.modeloId) throw new ErroDaMesa("sem_modelo", mensagemDoCodigo("sem_modelo"));
     const vezes = parte.vezes === undefined ? 1 : parte.vezes;
     if (vezes <= 0) continue;
@@ -505,7 +525,8 @@ export const TAMANHOS = {
   preparar: { entrada: 20000, saida: 8000 },
   leituraDoCard: { entrada: 2500, saida: 400 },
   ajuste: { entrada: 6000, saida: 1200 },
-  legenda: { entrada: 8000, saida: 1500 },
+  // Frente CPY: 3 variações de legenda (o motor de copy confere e fica com a melhor) e o contexto completo da marca.
+  legenda: { entrada: 11000, saida: 4000 },
   lerReferencia: { entrada: 3000, saida: 800 },
 };
 

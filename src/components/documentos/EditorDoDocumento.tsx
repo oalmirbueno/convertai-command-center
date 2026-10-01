@@ -13,7 +13,7 @@ import {
   MODELOS_DE_DOCUMENTO,
   type ModeloDeDocumento,
   type RascunhoDoDocumento,
-} from "../../../supabase/functions/_shared/documento-modelos";
+} from "../../../supabase/functions/documentos/modulos/documento-modelos";
 import { moverItem } from "../../../supabase/functions/briefing-agente/modulos/briefing-editor";
 
 /**

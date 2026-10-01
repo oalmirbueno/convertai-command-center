@@ -23,7 +23,7 @@ import {
   rascunhoInicial,
   rotuloDoMesDeReferencia,
   secoesDoRascunho,
-} from "../../supabase/functions/_shared/documento-modelos";
+} from "../../supabase/functions/documentos/modulos/documento-modelos";
 import { imagemParaPdf, imagensDoPdf, textosDoPdf, type ImagemDoPdf } from "../../supabase/functions/_shared/pdf-base";
 import { JPEG_RGB } from "./fixtures/imagens-pdf";
 

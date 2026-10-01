@@ -15,7 +15,7 @@ import {
   type PacoteDoSite,
 } from "../../supabase/functions/_shared/site-metodo";
 import { apexDe, cartaoDeDns, estadoDoDominio, normalizarDominio, REGISTRADORES } from "../../supabase/functions/mesa-site/modulos/dns-do-site";
-import { faltasParaPublicar, criarApiDaVercel, garantirProjeto, vercelLigada } from "../../supabase/functions/_shared/publicacao-vercel";
+import { faltasParaPublicar, criarApiDaVercel, garantirProjeto, vercelLigada } from "../../supabase/functions/mesa-site/modulos/publicacao-vercel";
 import { lerHtmlDeReferencia, urlPublica } from "../../supabase/functions/_shared/referencias-do-site";
 import { alvosDoSite, normalizarAcoesDoSite, regrasDoSite } from "../../supabase/functions/mesa-site/acoes-do-site";
 import { podeExecutarDireto } from "../../supabase/functions/_shared/acoes-do-agente";

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { chamarFuncao, textoDoErro, type ParteDaEstimativa } from "@/lib/mesa/api";
 import { BotaoComCusto } from "./Custo";
+import { NotaDaCopy } from "@/components/sistema/OpcoesDaCopy";
 import { FRAMEWORKS } from "./MesConhecimento";
 import { corpoDoRefinar, OBJETIVOS_DO_REFINO } from "./estudioUtil";
 
@@ -24,6 +25,10 @@ export interface OpcaoRefinada {
   texto: string;
   tecnica: string;
   porque: string;
+  /** Frente CPY: nota e avisos do motor de copy (as opções já vêm da melhor para a pior). */
+  nota?: number | null;
+  alerta?: boolean;
+  avisos?: string[];
 }
 
 export default function EstudioRefinarTexto({
@@ -161,6 +166,7 @@ export default function EstudioRefinarTexto({
                       {o.porque}
                     </p>
                   )}
+                  <NotaDaCopy nota={o.nota} alerta={o.alerta} avisos={o.avisos} />
                   <div className="mt-1.5 flex justify-end">
                     <Button type="button" size="sm" variant={aplicada === i ? "ghost" : "default"} className="h-7 px-2.5 text-[11.5px]" disabled={bloqueado || aplicando !== null} onClick={() => void aplicar(i)}>
                       {aplicando === i ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : aplicada === i ? <Check className="mr-1 h-3.5 w-3.5 text-success" /> : null}

@@ -4,6 +4,8 @@ import { Eye, EyeOff, Palette, RefreshCw, Sparkles, Trash2, Wand2 } from "lucide
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
+import { NotaDaCopy, opcoesDaResposta, type OpcaoDaCopy } from "@/components/sistema/OpcoesDaCopy";
+import { parteDaConferenciaDoJev } from "@/lib/mesa/api";
 import { PreencherComIA } from "@/components/sistema";
 import Secao from "@/components/sistema/Secao";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
@@ -358,6 +360,8 @@ function CamposDoBloco({ b, mudar }: { b: Bloco; mudar: (dados: Record<string, u
 /** 3 headlines para a capa (a pessoa escolhe; nada é gravado sozinho). */
 function TresHeadlines({ proposta, modeloId, desligado, onEscolher }: { proposta: Proposta; modeloId: string; desligado: boolean; onEscolher: (h: string) => void }) {
   const [opcoes, setOpcoes] = useState<string[]>([]);
+  // Frente CPY: a nota e os avisos do motor de copy de cada headline (a melhor já vem primeiro).
+  const [notas, setNotas] = useState<Record<string, OpcaoDaCopy>>({});
   return (
     <div className="min-w-0" data-tres-headlines="">
       <BotaoComCusto
@@ -369,9 +373,14 @@ function TresHeadlines({ proposta, modeloId, desligado, onEscolher }: { proposta
         titulo="Gerar 3 headlines"
         variant="outline"
         disabled={desligado || !modeloId}
-        partes={() => [{ modeloId, tipo: "texto", tokensEntrada: 6000, tokensSaida: 400 }]}
+        partes={() => [{ modeloId, tipo: "texto", tokensEntrada: 6000, tokensSaida: 400 }, parteDaConferenciaDoJev()]}
         executar={() => chamarProposta("headlines", { proposta_id: proposta.id, modelo_id: modeloId || undefined })}
-        aoConcluir={(d: any) => setOpcoes(d && Array.isArray(d.opcoes) ? d.opcoes : [])}
+        aoConcluir={(d: any) => {
+          setOpcoes(d && Array.isArray(d.opcoes) ? d.opcoes : []);
+          const porTexto: Record<string, OpcaoDaCopy> = {};
+          for (const o of opcoesDaResposta(d ? { opcoes: d.conferencia } : null, "headline")) porTexto[o.texto] = o;
+          setNotas(porTexto);
+        }}
       />
       {opcoes.length > 0 && (
         <ul className="mt-2 min-w-0 space-y-1" aria-label="Headlines sugeridas">
@@ -387,6 +396,7 @@ function TresHeadlines({ proposta, modeloId, desligado, onEscolher }: { proposta
               >
                 {h}
               </button>
+              {notas[h] && <NotaDaCopy nota={notas[h].nota} alerta={notas[h].alerta} avisos={notas[h].avisos} />}
             </li>
           ))}
         </ul>

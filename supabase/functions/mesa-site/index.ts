@@ -39,6 +39,9 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { carregarModelo, chamarImagem, chamarTexto, cobrarJev, estimarComModelo, IaMotorErro, modeloDoPapel, modeloPadrao, type ImagemEntrada, type ModeloIa } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar } from "../_shared/jev.ts";
+// Frente CPY: o motor de copy da casa.
+import { blocoDoMotor, objetivoDaCopy, ofertaDosFatos } from "../_shared/motor-de-copy.ts";
+import { conferirCopies, vozDaMarca } from "../_shared/motor-de-copy-servidor.ts";
 import { fotoDaMarca, lerMarcaParaDirecaoDaMarca, type MarcaDoCliente, resolverMarca } from "../_shared/marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
@@ -84,7 +87,7 @@ import {
 } from "../_shared/site-metodo.ts";
 import { baixarImagem, ESQUEMA_DAS_OBSERVACOES, lerPagina, MAX_IMAGENS_NA_LEITURA, MAX_REFERENCIAS, referenciasDoSite, SISTEMA_DA_LEITURA, urlPublica } from "../_shared/referencias-do-site.ts";
 import { cartaoDeDns, ehRegistrador, estadoDoDominio, normalizarDominio } from "./modulos/dns-do-site.ts";
-import { configDoDominio, criarApiDaVercel, ErroDaVercel, faltasParaPublicar, vercelLigada, verificarDominio } from "../_shared/publicacao-vercel.ts";
+import { configDoDominio, criarApiDaVercel, ErroDaVercel, faltasParaPublicar, vercelLigada, verificarDominio } from "./modulos/publicacao-vercel.ts";
 import { nomeDoProjeto } from "../_shared/motor-codigo.ts";
 import { blocoDasAcoesDoSite, caminhoDoSite, ESQUEMA_DAS_ACOES_DO_SITE, type ListasDoAgente, normalizarAcoesDoSite, OPERACOES_DO_MOTOR, regrasDoSite } from "./acoes-do-site.ts";
 import { ACOES_LONGAS_DA_ESTRUTURA, type ContextoDaEstrutura, estimarDaEstrutura, executarItemDaEstrutura, reverterDaEstrutura, rotasDaEstrutura, TOKENS_DO_JEV } from "./estrutura.ts";
@@ -524,7 +527,13 @@ async function gerarConteudo(ch: Chamador, s: LinhaDoSite, modeloId: unknown, pe
     tipo_de_site: pacote.tipo || null,
     pedido_da_equipe: pedido || null,
   };
-  const regras = await regrasDaMesa(servico(), { clientId: s.client_id, mesa: "site", marcaId: s.marca_id });
+  // Frente CPY: o motor de copy da casa (voz pelo contexto completo, CTA, fatos, promessa, clichê) e a conferência das 3 opções.
+  const [regras, voz] = await Promise.all([
+    regrasDaMesa(servico(), { clientId: s.client_id, mesa: "site", marcaId: s.marca_id }),
+    vozDaMarca(servico(), s.client_id, s.marca_id ? { marca_id: s.marca_id } : null),
+  ]);
+  const objetivoDoSite = pedido && objetivoDaCopy(pedido) !== "educacao" ? objetivoDaCopy(pedido) : "contato";
+  (dados as Record<string, unknown>).motor_de_copy = blocoDoMotor({ canal: "site", objetivo: objetivoDoSite, variacoes: 3, estruturaPedida: "a FORMULA de cada seção em SECOES; o conceito e a headline mudam entre as opções", regras: voz.regras });
   const saida = await chamarTexto({
     clientId: s.client_id,
     tarefa: PAPEL,
@@ -538,12 +547,32 @@ async function gerarConteudo(ch: Chamador, s: LinhaDoSite, modeloId: unknown, pe
     referencia: { tipo: "site", id: s.id },
     criadoPor: ch.userId,
   });
-  const opcoes = normalizarOpcoesDeCopy(saida.json);
-  if (!opcoes.length) throw new ErroHttp(502, "conteudo_vazio", "O modelo não devolveu opções de conteúdo. Tente de novo.");
+  const escritas = normalizarOpcoesDeCopy(saida.json);
+  if (!escritas.length) throw new ErroHttp(502, "conteudo_vazio", "O modelo não devolveu opções de conteúdo. Tente de novo.");
+  // A abertura (headline, subtítulo e CTA) de cada opção passa pela conferência (código e Jev); a melhor vem primeiro. Aviso, sem reescrever.
+  const conf = await conferirCopies({
+    textos: escritas.map((o) => `${o.headline}\n${o.subtitulo}\n${o.cta}`),
+    canal: "site",
+    objetivo: objetivoDoSite,
+    voz,
+    // Os fatos do site (pedido, briefing, tipo, direção com as seções e os dados da marca): o Jev não marca como inventado o serviço que está aqui.
+    oferta: ofertaDosFatos([
+      ["Pedido da equipe", pedido],
+      ["Briefing do site", dados.briefing],
+      ["Tipo de site", dados.tipo_de_site],
+      ["Seções", dados.SECOES.map((x) => (x as { nome?: string }).nome || x.id)],
+      ["Direção", dados.direcao],
+      ["Cliente", dados.cliente],
+      ["Marca", dados.marca],
+    ]),
+    cortar: false,
+    cobranca: { clientId: s.client_id, tarefa: PAPEL, referencia: { tipo: "site", id: s.id }, criadoPor: ch.userId },
+  });
+  const opcoes = conf.ordem.map((i) => ({ ...escritas[i], conferencia: { nota: conf.conferencias[i].nota, alerta: conf.conferencias[i].alerta, avisos: conf.conferencias[i].avisos } }));
   const anterior = s.conteudo;
   await versaoAntes(s, "conteúdo novo (3 opções)", ch.userId);
   const site = await atualizarSite(s.id, { conteudo: { opcoes, escolhida: null, gerado_em: new Date().toISOString(), modelo: modelo.id, pedido: pedido || null }, etapa: s.etapa === "direcao" || s.etapa === "conteudo" ? "conteudo" : s.etapa });
-  return { site, opcoes, anterior, custo: saida.custoUsd, saldo: saida.saldoUsd };
+  return { site, opcoes, anterior, custo: Math.round((saida.custoUsd + conf.custo_usd) * 1e6) / 1e6, saldo: saida.saldoUsd, jev_erro: conf.jev_erro };
 }
 
 async function conteudoGerar(ch: Chamador, c: Record<string, unknown>) {

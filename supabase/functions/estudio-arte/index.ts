@@ -520,6 +520,9 @@ import { hostResolvePublico, imagensDoBehance, lerMetaTags, tipoDoLink, urlPubli
 import { ANTI_GENERICO, CTA_PRINCIPIOS, FORMULAS_DE_TITULO, REVISAO_DE_MARCA, VOZ_DE_MARCA } from "../_shared/conhecimento-marketing.ts";
 import { FRAMEWORKS, frameworkPorId } from "../_shared/conhecimento-conteudo.ts";
 import { ESQUEMA_REFINO, INSTRUCOES_REFINO, limparOpcoesDoRefino, OBJETIVOS_DO_REFINO, objetivosDoRefino } from "./refinar-texto.ts";
+// Frente CPY: o motor de copy da casa (estrutura por objetivo, variações com nota e conferência do Jev).
+import { blocoDoMotor, frameworkDaCopy, objetivoDaCopy, ofertaDosFatos, porqueDaEscolha } from "../_shared/motor-de-copy.ts";
+import { conferirCopies, vozDaMarca } from "../_shared/motor-de-copy-servidor.ts";
 // Frente R3 (26/09): jogada do texto, palavra decorativa, cor por papel e miolo enxuto e desenhado.
 import { blocoDoMioloDesenhado, enxugarMiolo, ESQUEMA_MIOLO_ENXUTO, passaDoLimite, termoDecorativoDaLamina, textoEsperadoNaConferencia } from "./composicao-dinamica.ts";
 import { blocosDeLeitura } from "../_shared/jogada-do-texto.ts";
@@ -6685,23 +6688,35 @@ const ESQUEMA_LEGENDA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["legenda", "hashtags_candidatas"],
+    required: ["variacoes", "hashtags_candidatas"],
     properties: {
-      legenda: { type: "string" },
+      // Frente CPY: 3 variações, cada uma numa estrutura do motor de copy; o código confere e fica com a melhor.
+      variacoes: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["framework", "legenda"],
+          properties: { framework: { type: "string" }, legenda: { type: "string" } },
+        },
+      },
       hashtags_candidatas: { type: "array", items: { type: "string" } },
     },
   },
 };
 
+/** Variações de legenda que o Estúdio pede (gerar a mais e escolher, sem laço). */
+const VARIACOES_DA_LEGENDA = 3;
+
 const INSTRUCOES_LEGENDA = `LEGENDA FINAL DO POST
 
-Escreva a legenda do Instagram deste post a partir do item da agenda, da direção de arte e do contexto da marca. A legenda completa a arte: conta o que a arte não cabe, com a voz da marca, sem repetir lâmina por lâmina.
+Escreva ${VARIACOES_DA_LEGENDA} variações da legenda do Instagram deste post a partir do item da agenda, da direção de arte e do contexto da marca, cada uma na estrutura que \`motor_de_copy\` indica (o código confere e fica com a melhor). A legenda completa a arte: conta o que a arte não cabe, com a voz da marca, sem repetir lâmina por lâmina.
 - Primeira linha forte (gancho que funciona antes do "mais"), ligada à capa.
 - Corpo em 2 a 4 parágrafos curtos: contexto, o porquê, um detalhe concreto do negócio (bairro, serviço, prova, bastidor) tirado do contexto; linguagem do público da marca, português do Brasil, emoji só se a marca usa.
 - Termine com a chamada para ação do item (um verbo claro: salvar, comentar, chamar no WhatsApp, agendar).
 - Não repita frases das legendas recentes em \`legendas_recentes\`.
 - NÃO coloque hashtags na legenda. Em hashtags_candidatas, sugira de 10 a 14 hashtags em minúsculas, sem acento, com #: misture nicho, serviço, cidade ou bairro, e o tema do post; nada genérico demais (#love, #instagood) e nada que o público não busque.
-- Se o item já traz uma legenda prevista, parta dela e melhore sem mudar o sentido.
+- Se o item já traz uma legenda prevista: a variação 1 parte dela e melhora sem mudar o sentido, na estrutura da variação 1; as outras contam a mesma ideia do post (mesmo tema, mesma oferta, mesmo CTA) nas estruturas delas, com outro gancho, nunca paráfrase da prevista. Sem legenda prevista, as ${VARIACOES_DA_LEGENDA} são ideias diferentes, como pede o motor_de_copy.
 - Sem travessão. Sem inventar preço, dado ou promessa que não estão no item ou no contexto.`;
 
 const NIVEIS_HASHTAG = [
@@ -6775,6 +6790,11 @@ async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
     nome: marcaDaLegenda && !marcaDaLegenda.principal ? texto(marcaDaLegenda.nome, 120) : texto(p?.company_name || p?.full_name, 120) || null,
     contexto: contexto ? contextoComMarca(contexto, marcaDaLegenda) : null,
   };
+  // Frente CPY: voz pelo contexto completo da marca (estratégia, briefing, cérebro, decisões) e a estrutura pelo objetivo do post.
+  const voz = await vozDaMarca(servico(), t.client_id, marcaDaLegenda ?? null);
+  const objetivoDoPost = objetivoDaCopy(item.post?.objective ?? item.itemProposta?.objetivo ?? "");
+  // Com legenda prevista (do post ou do item do Mês), a variação 1 parte dela e as outras contam a mesma ideia em outras estruturas.
+  const temLegendaPrevista = !!(texto(item.post?.default_caption, 2200) || texto(item.itemProposta ? item.itemProposta.copy : null, 2200));
   const r = await chamarTexto({
     clientId: t.client_id,
     tarefa: "estudio",
@@ -6799,19 +6819,51 @@ async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
           cards: t.direcao.cards.map((c) => ({ ordem: c.ordem, funcao: c.funcao, texto_exato: c.texto_exato })),
         },
         marca,
+        contexto_completo_da_marca: voz.bloco || null,
+        motor_de_copy: blocoDoMotor({ canal: "legenda", objetivo: objetivoDoPost, variacoes: VARIACOES_DA_LEGENDA, partirDoPrevisto: temLegendaPrevista, regras: voz.regras }),
         legendas_recentes: ((recentes.data as { caption: string }[] | null) ?? []).map((x) => texto(x.caption, 400)),
       }),
     }],
     esquemaJson: ESQUEMA_LEGENDA,
-    maxTokensSaida: 8_000,
+    maxTokensSaida: 10_000,
     // Chamada longa (diretor com a base de conhecimento inteira): 5 min antes de desistir.
     timeoutMs: 300_000,
     referencia: { tipo: "estudio_trabalho", id: t.id },
     criadoPor: ch.userId,
   });
-  const bruto = (r.json ?? {}) as { legenda?: string; hashtags_candidatas?: unknown[] };
+  const bruto = (r.json ?? {}) as { legenda?: string; variacoes?: Array<{ framework?: unknown; legenda?: unknown }>; hashtags_candidatas?: unknown[] };
   // Hashtag que escapou para dentro do texto sai dali: elas vivem em campo próprio.
-  const final = texto(bruto.legenda, 2200).replace(/(\s*#[\p{L}\p{N}_]+)+\s*$/u, "").trim();
+  const semHashtagNoFim = (v: unknown) => texto(v, 2200).replace(/(\s*#[\p{L}\p{N}_]+)+\s*$/u, "").trim();
+  const escritas = (Array.isArray(bruto.variacoes) ? bruto.variacoes : [])
+    .map((v) => ({ framework: frameworkDaCopy(v && v.framework), legenda: semHashtagNoFim(v && v.legenda) }))
+    .filter((v) => v.legenda)
+    .slice(0, VARIACOES_DA_LEGENDA);
+  // Modelo que ainda devolve o formato antigo (uma legenda só) continua servindo.
+  if (!escritas.length && bruto.legenda) escritas.push({ framework: null, legenda: semHashtagNoFim(bruto.legenda) });
+  if (!escritas.length) throw new ErroEstudio(502, "legenda_vazia", "O diretor não devolveu a legenda. Tente de novo.");
+  // Conferência como aviso (sem laço): limpeza, régua do canal e Jev (voz, força, fato inventado, promessa, clichê).
+  const conf = await conferirCopies({
+    textos: escritas.map((v) => v.legenda),
+    canal: "legenda",
+    objetivo: objetivoDoPost,
+    voz,
+    // Os fatos do item (tarefa e o que o Mês planejou), para o Jev não marcar como inventado o que já estava previsto.
+    oferta: ofertaDosFatos([
+      ["Tarefa", texto(item.tarefa.description, 1200)],
+      ["Item do plano", item.itemProposta ? { tema: item.itemProposta.tema, gancho: item.itemProposta.gancho, resumo: item.itemProposta.resumo, cta: item.itemProposta.cta, legenda_prevista: item.itemProposta.copy } : null],
+      ["Legenda prevista do post", texto(item.post?.default_caption, 1200)],
+    ]) || null,
+    semHashtags: true,
+    cobranca: { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: t.id }, criadoPor: ch.userId },
+  });
+  const opcoes = conf.ordem.map((i) => ({
+    legenda: conf.textos[i],
+    framework: escritas[i].framework,
+    nota: conf.conferencias[i].nota,
+    alerta: conf.conferencias[i].alerta,
+    avisos: conf.conferencias[i].avisos,
+  })).filter((o) => o.legenda);
+  const final = opcoes.length ? opcoes[0].legenda : "";
   if (!final) throw new ErroEstudio(502, "legenda_vazia", "O diretor não devolveu a legenda. Tente de novo.");
   const candidatas = [...new Set((bruto.hashtags_candidatas ?? []).map(limparHashtag).filter(Boolean) as string[])].slice(0, 16);
   const hashtags = await escolherHashtags(
@@ -6820,12 +6872,18 @@ async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
     { marca: { nome: marca.nome, contexto: marca.contexto }, post: { titulo: item.tarefa.title, conceito: t.direcao.conceito, legenda: final.slice(0, 600) } },
     ch.userId,
   );
-  const gravado = await mutarTrabalho(t.id, (x) => ({ legenda: final, hashtags, custo_usd: arred(num(x.custo_usd) + r.custoUsd) }));
+  const custoTotal = arred(r.custoUsd + conf.custo_usd);
+  const gravado = await mutarTrabalho(t.id, (x) => ({ legenda: final, hashtags, custo_usd: arred(num(x.custo_usd) + custoTotal) }));
   return json({
     trabalho_id: t.id,
     legenda: gravado.legenda,
     hashtags: (gravado as Trabalho & { hashtags?: string[] }).hashtags ?? hashtags,
-    custo_usd: r.custoUsd,
+    // Frente CPY: as outras variações (a tela oferece trocar) e o porquê da escolhida.
+    opcoes,
+    porque: porqueDaEscolha(conf.conferencias[conf.ordem[0]], escritas.length),
+    usando: voz.usando || null,
+    jev_erro: conf.jev_erro,
+    custo_usd: custoTotal,
     saldo_usd: r.saldoUsd,
     reserva_usada: r.reservaUsada ?? null,
   });
@@ -8862,6 +8920,10 @@ async function refinarTexto(ch: Chamador, corpo: Record<string, unknown>) {
     // Frente SPP (revisão 30/09): o refino é ajuste pedido pela equipe (receber e prova, escolhidos pelo código). Nunca lança.
     superpoderesPara(servico(), { agente: "estudio.refino", momento: "ajustar" }),
   ]);
+  // Frente CPY: a voz da marca para o motor de copy e para a conferência das opções. Nunca lança.
+  const voz = await vozDaMarca(servico(), t.client_id, marcaDoTexto ?? null);
+  const canalDoRefino = alvo === "legenda" ? "legenda" as const : "lamina" as const;
+  const objetivoDoRefino = objetivoDaCopy(corpo.objetivo_do_post ?? (t.direcao as { objetivo?: unknown }).objetivo ?? "");
   const p = perfil.data as { company_name: string | null; full_name: string | null } | null;
   const r = await chamarTexto({
     clientId: t.client_id,
@@ -8887,6 +8949,7 @@ async function refinarTexto(ch: Chamador, corpo: Record<string, unknown>) {
           contexto: contexto ? contextoComMarca(contexto, marcaDoTexto) : null,
         },
         cerebro_do_cliente: cerebro.texto || null,
+        motor_de_copy: blocoDoMotor({ canal: canalDoRefino, objetivo: objetivoDoRefino, variacoes: 3, estruturaPedida: framework ? framework.nome : null, regras: voz.regras }),
       }),
     }],
     esquemaJson: ESQUEMA_REFINO,
@@ -8896,11 +8959,23 @@ async function refinarTexto(ch: Chamador, corpo: Record<string, unknown>) {
     referencia: { tipo: "estudio_trabalho", id: t.id },
     criadoPor: ch.userId,
   });
-  await mutarTrabalho(t.id, (x) => ({ custo_usd: arred(num(x.custo_usd) + r.custoUsd) }));
-  const opcoes = limparOpcoesDoRefino(r.json, alvo, original);
-  if (!opcoes.length) {
+  const limpas = limparOpcoesDoRefino(r.json, alvo, original);
+  if (!limpas.length) {
+    await mutarTrabalho(t.id, (x) => ({ custo_usd: arred(num(x.custo_usd) + r.custoUsd) }));
     throw new ErroEstudio(502, "refino_vazio", "O redator não devolveu opções utilizáveis. Tente de novo ou mude os objetivos.", { custo_usd: r.custoUsd, saldo_usd: r.saldoUsd });
   }
+  // Frente CPY: as opções vêm na ordem da conferência (código e Jev), cada uma com a nota e os avisos. Sem reescrever.
+  const conf = await conferirCopies({
+    textos: limpas.map((o) => o.texto),
+    canal: canalDoRefino,
+    objetivo: objetivoDoRefino,
+    voz,
+    semHashtags: true,
+    cortar: false,
+    cobranca: { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: t.id }, criadoPor: ch.userId },
+  });
+  await mutarTrabalho(t.id, (x) => ({ custo_usd: arred(num(x.custo_usd) + r.custoUsd + conf.custo_usd) }));
+  const opcoes = conf.ordem.map((i) => ({ ...limpas[i], texto: conf.textos[i] || limpas[i].texto, nota: conf.conferencias[i].nota, alerta: conf.conferencias[i].alerta, avisos: conf.conferencias[i].avisos }));
   return json({
     trabalho_id: t.id,
     alvo,

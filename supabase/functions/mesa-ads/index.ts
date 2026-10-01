@@ -356,6 +356,8 @@ import {
 } from "./calculos.ts";
 // Frente CR (27/09): criativo que converte (formatos, layout, estruturas de copy) e a ordem dos estilos pelo resultado real.
 import { copyQueConverteParaOPrompt, formatoDoEstiloParaOPrompt, formatosParaOPlano, FRAMEWORKS_IDS } from "./modulos/conhecimento-criativo.ts";
+// Frente CPY: o motor de copy da casa (limpeza, clichê de IA e promessa proibida).
+import { conferirCopy, LIMIARES, limparCopy, perguntaDoCliche } from "../_shared/motor-de-copy.ts";
 import {
   anuncioDaReferencia,
   anuncioDasDiarias,
@@ -1509,6 +1511,8 @@ type NotasCopy = {
   tom?: number | null;
   /** Frente CR: poder de parar a rolagem (0 a 10), só quando pedido (produção e refino escolhem a melhor). */
   parada?: number | null;
+  /** Frente CPY: soa como texto genérico de IA (Noul do motor de copy), como aviso. */
+  cliche_ia?: boolean | null;
 };
 
 /** Probabilidade do Noul "genérico" a partir da qual a peça leva o aviso. */
@@ -1553,6 +1557,7 @@ async function conferirCopiesComJev(
       instructions: `O anúncio \`copies[${i}]\` (texto principal, título e texto na arte) é genérico, isto é, serviria para qualquer concorrente da categoria trocando só o nome, sem situação específica do público nem promessa concreta da \`oferta\`?`,
       criteria: CRITERIOS_GENERICO,
     };
+    questions[`cliche_${i}`] = perguntaDoCliche(`\`copies[${i}]\``);
     if (regrasTom) {
       questions[`tom_${i}`] = {
         type: "score",
@@ -1575,7 +1580,9 @@ async function conferirCopiesComJev(
       notas: copies.map((_, i) => {
         const risco = notaScore(r.answers[`risco_${i}`]);
         const prob = probabilidadeNoul(r.answers[`generico_${i}`]);
+        const cliche = probabilidadeNoul(r.answers[`cliche_${i}`]);
         return {
+          cliche_ia: cliche == null ? null : cliche >= LIMIARES.cliche,
           risco_politica: notaDe0a10(risco, NIVEIS_RISCO_POLITICA.length),
           clareza: notaDe0a10(notaScore(r.answers[`clareza_${i}`]), NIVEIS_CLAREZA.length),
           alerta_politica: alertaDePolitica(risco),
@@ -1709,8 +1716,15 @@ type CopyAnuncio = {
 };
 
 /** Limites da Meta aplicados em código: título até 40, texto principal visível em cerca de 125. */
-function normalizarCopy(o: Record<string, unknown>): CopyAnuncio {
+function normalizarCopy(bruto: Record<string, unknown>): CopyAnuncio {
   const avisos: string[] = [];
+  // Frente CPY: limpeza da casa pelo motor de copy (travessão, aspas, espaços) em cada campo, sem cortar (os tetos são os daqui).
+  const limpo = (v: unknown) => limparCopy(v, "anuncio", { cortar: false }).texto;
+  const o: Record<string, unknown> = { ...bruto, texto_principal: limpo(bruto.texto_principal), texto_principal_longo: limpo(bruto.texto_principal_longo), titulo: limpo(bruto.titulo), descricao: bruto.descricao == null ? null : limpo(bruto.descricao) };
+  // Clichê de IA e promessa proibida em código (o Jev confere política, clareza e genérico à parte): aviso, sem reescrever.
+  for (const p of conferirCopy(`${o.texto_principal_longo || o.texto_principal}\n${o.titulo}`, "anuncio").problemas) {
+    if (p.tipo === "cliche" || p.tipo === "promessa") avisos.push(p.texto);
+  }
   const principal = texto(o.texto_principal, 400);
   if (principal.length > 125) avisos.push(`Texto principal com ${principal.length} caracteres: só cerca de 125 aparecem antes do "ver mais".`);
   const tituloBruto = texto(o.titulo, 200);
@@ -3032,6 +3046,7 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
       // Conferência como aviso (sem laço): genérico pelo Jev, tom abaixo do pedido e as regras em código.
       const avisosTom = avisosDeTom({ headline: texto(v.headline_arte, 120), texto_principal: copy.texto_principal }, regrasTom, numerosDaOferta);
       if (nota?.generico) avisosTom.unshift("Genérico pela conferência do Jev: serviria para qualquer concorrente.");
+      if (nota?.cliche_ia) avisosTom.unshift("Soa como texto genérico de IA pela conferência do Jev.");
       if (typeof nota?.tom === "number" && nota.tom < 6) avisosTom.unshift(`Abaixo do tom ${regrasTom.nome.toLowerCase()} pedido (nota ${String(nota.tom).replace(".", ",")}).`);
       for (const x of avisosTom) avisos.push(`${a.nome}, variação ${i + 1}: ${x}`);
       const gancho = texto(v.gancho_visual, 600) || a.gancho_visual;

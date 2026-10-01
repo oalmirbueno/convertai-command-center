@@ -56,6 +56,8 @@ export interface ItemProposto {
   /** Frente AP: o ângulo da pauta e a checagem da memória editorial (tema novo, ângulo novo ou repetição). */
   angulo?: string;
   evolucao?: unknown;
+  /** Avisos da conferência do texto (lâminas e legenda pelo motor de copy). Aviso, nunca bloqueio. */
+  avisos_de_texto?: string[];
 }
 
 export interface PropostaV4 {

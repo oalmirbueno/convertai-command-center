@@ -49,6 +49,7 @@ import {
   modelosAtivos,
   nomeDoModelo,
   padraoPara,
+  parteDaConferenciaDoJev,
   precoDoModelo,
   somarMeses,
   TAMANHOS,
@@ -107,6 +108,7 @@ import EstudioLogoDaLamina from "./EstudioLogoDaLamina";
 import EstudioFidelidadeDaReferencia from "./EstudioFidelidadeDaReferencia";
 import EstudioReferenciaNaHora from "./EstudioReferenciaNaHora";
 import EstudioRefinarTexto from "./EstudioRefinarTexto";
+import OpcoesDaCopy, { NotaDaCopy, opcoesDaResposta, type OpcaoDaCopy } from "@/components/sistema/OpcoesDaCopy";
 import EstudioTextoDaLamina from "./EstudioTextoDaLamina";
 import { useModoFoco } from "@/lib/modoFoco";
 import { temJanelaAberta } from "./TelaCheiaDaMesa";
@@ -419,6 +421,8 @@ function DetalheDoItem({
   const [modeloImagem, setModeloImagem] = useState("");
   const [qualidade, setQualidade] = useState<Qualidade>("media");
   const [legenda, setLegenda] = useState("");
+  // Frente CPY: as variações da legenda escritas junto (o motor de copy já pôs a melhor no campo).
+  const [opcoesDaLegenda, setOpcoesDaLegenda] = useState<OpcaoDaCopy[]>([]);
   const [hashtagsTexto, setHashtagsTexto] = useState("");
   const [salvandoLegenda, setSalvandoLegenda] = useState(false);
   const [entregando, setEntregando] = useState(false);
@@ -454,6 +458,7 @@ function DetalheDoItem({
     setModeloImagem(trabalho?.modelo_imagem_id || padraoPara(catalogo, "imagem")?.id || "");
     setQualidade((trabalho?.qualidade as Qualidade) || "media");
     setLegenda(trabalho?.legenda || "");
+    setOpcoesDaLegenda([]);
     setHashtagsTexto(normalizarHashtags(trabalho?.hashtags || []).join(" "));
   }, [trabalho?.id, catalogo.length]);
 
@@ -506,10 +511,12 @@ function DetalheDoItem({
   const partesDiretor = (): ParteDaEstimativa[] => [
     { modeloId: diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.preparar.entrada, tokensSaida: TAMANHOS.preparar.saida },
   ];
-  /** Refinar texto: uma chamada do redator (modelo do diretor), do tamanho da legenda. */
+  /** Uma chamada do redator (modelo do diretor), do tamanho da legenda (enxugar o miolo usa só ela). */
   const partesRefinar = (): ParteDaEstimativa[] => [
     { modeloId: diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida },
   ];
+  /** Refinar texto: o redator e a conferência do motor de copy pelo Jev (frente CPY), que também é cobrada. */
+  const partesDoRefinoConferido = (): ParteDaEstimativa[] => [...partesRefinar(), parteDaConferenciaDoJev()];
 
   /** Etapa nova da lâmina. O cronômetro só começa ao sair da fila e não recomeça entre etapas. */
   const marcar = (ordem: number, etapa: EtapaDaLamina, detalhe?: string) =>
@@ -1771,7 +1778,7 @@ function DetalheDoItem({
             alvo="lamina"
             ordem={cardSelecionado.ordem}
             texto={cardSelecionado.texto_exato || ""}
-            partes={partesRefinar}
+            partes={partesDoRefinoConferido}
             bloqueado={entregue || laminaOcupada(cardSelecionado.ordem)}
             onAplicar={async (novo) => {
               await configurar({ card: { ordem: cardSelecionado.ordem, texto_exato: novo } });
@@ -2043,15 +2050,17 @@ function DetalheDoItem({
           variant="outline"
           className="h-8 gap-1 px-2.5 text-[12px]"
           disabled={entregue}
-          partes={() => [{ modeloId: diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida }]}
+          partes={() => [{ modeloId: diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida }, parteDaConferenciaDoJev()]}
           executar={() => chamarFuncao("estudio-arte", { acao: "legenda", trabalho_id: trabalho.id })}
           aoConcluir={(data) => {
             if (typeof data?.legenda === "string") setLegenda(data.legenda);
             if (Array.isArray(data?.hashtags)) setHashtagsTexto(normalizarHashtags(data.hashtags).join(" "));
+            setOpcoesDaLegenda(opcoesDaResposta(data));
             atualizar();
           }}
         />
       </div>
+      {opcoesDaLegenda.length > 0 && opcoesDaLegenda[0].texto === legenda && <NotaDaCopy nota={opcoesDaLegenda[0].nota} alerta={opcoesDaLegenda[0].alerta} avisos={opcoesDaLegenda[0].avisos} framework={opcoesDaLegenda[0].framework} />}
       <Textarea
         value={legenda}
         onChange={(e) => setLegenda(e.target.value)}
@@ -2061,11 +2070,20 @@ function DetalheDoItem({
         className="text-[13px] leading-relaxed"
         disabled={entregue}
       />
+      <OpcoesDaCopy
+        opcoes={opcoesDaLegenda}
+        atual={legenda}
+        bloqueado={entregue}
+        onUsar={(novo) => {
+          setLegenda(novo);
+          toast.success("Legenda trocada", { description: "Confira e salve (grava sozinha ao sair do campo)." });
+        }}
+      />
       <EstudioRefinarTexto
         trabalhoId={trabalho.id}
         alvo="legenda"
         texto={legenda}
-        partes={partesRefinar}
+        partes={partesDoRefinoConferido}
         bloqueado={entregue}
         onAplicar={(novo) => {
           setLegenda(novo);

@@ -58,7 +58,7 @@ import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import Painel from "@/components/sistema/Painel";
-import { conversa, juntar, superficie, texto as estiloDeTexto } from "@/components/sistema/estilos";
+import { conversa, juntar, lista as estiloDeLista, superficie, texto as estiloDeTexto } from "@/components/sistema/estilos";
 import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
 // Frente AP (27/09): selo da memória editorial, "Trocar ângulo" e a linha de evolução por pilar.
 import LinhaDeEvolucaoDoMes, { avisoDaPauta, BotaoDeTrocarAngulo, chaveDaLinhaDeEvolucao, SeloDaPauta, useTrocarAngulo } from "./MemoriaEditorialNoMes";
@@ -120,6 +120,8 @@ interface Item {
   /** Frente AP: ângulo e checagem da memória editorial. */
   angulo?: string;
   evolucao?: unknown;
+  /** Frente CPY: avisos da conferência do texto (lâminas e legenda pelo motor de copy). */
+  avisos_de_texto?: string[];
 }
 
 interface Proposta {
@@ -207,6 +209,7 @@ function LinhaDoItem({
   onTrocarAngulo?: () => Promise<void>;
 }) {
   const texto = item.copy || item.legenda || item.resumo;
+  const avisosDoItem = Array.isArray(item.avisos_de_texto) ? item.avisos_de_texto.filter((a) => typeof a === "string" && a.trim() !== "") : [];
   return (
     <Collapsible className="min-w-0">
       <div className="flex min-w-0 items-start rounded-lg transition-colors hover:bg-muted/40">
@@ -220,6 +223,12 @@ function LinhaDoItem({
             {item.tema && item.gancho && <p className="mt-0.5 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">{item.tema}</p>}
             {item.evolucao ? <SeloDaPauta evolucao={item.evolucao} className="mt-1" /> : null}
             {avisoDaPauta(item.evolucao) && <p className="mt-0.5 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{avisoDaPauta(item.evolucao)}</p>}
+            {/* Frente CPY: quantos avisos o texto tem; a lista abre no detalhe do item. */}
+            {avisosDoItem.length > 0 && (
+              <p className="mt-0.5 text-[11px] text-warning" data-conta-avisos-do-texto="">
+                {avisosDoItem.length === 1 ? "1 aviso no texto" : `${avisosDoItem.length} avisos no texto`}
+              </p>
+            )}
           </div>
           <ChevronDown className="ml-3 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         </CollapsibleTrigger>
@@ -227,6 +236,13 @@ function LinhaDoItem({
         {apagar && <BotaoDeApagar onApagar={apagar} className="mr-2 mt-2.5 shrink-0" />}
       </div>
       <CollapsibleContent className="space-y-3 px-2 pb-3 sm:pl-[84px]">
+        {avisosDoItem.length > 0 && (
+          <ul className={juntar(estiloDeLista.divisoria, "min-w-0")} aria-label="Avisos do texto" data-avisos-do-texto="">
+            {avisosDoItem.map((a, i) => (
+              <li key={i} className="break-words py-1 text-[12px] leading-snug text-warning">{a}</li>
+            ))}
+          </ul>
+        )}
         {texto && <p className="whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">{texto}</p>}
         <p className="text-[12px] text-muted-foreground">
           {[rotuloEditorial(item.tipo_editorial, item.framework) || null, item.pilar, item.fase ? `fase ${item.fase}` : null, item.objetivo, item.cta ? `CTA: ${item.cta}` : null, item.carrossel_infinito ? "carrossel infinito" : null].filter(Boolean).join(" · ")}

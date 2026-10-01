@@ -13,7 +13,7 @@ import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { diffDeTexto, type ModeloDeContrato } from "../_shared/contrato-modelo.ts";
 import { CHAVES_DAS_EXTRAS, type ChaveDaExtra } from "./modulos/contrato-modelo-extras-v1.ts";
-import { conferirRascunhoDoModelo, lerRascunhoDoModelo, resumoDaMudanca, revisaoDaVersaoNova } from "../_shared/contrato-editor.ts";
+import { conferirRascunhoDoModelo, lerRascunhoDoModelo, resumoDaMudanca, revisaoDaVersaoNova } from "./modulos/contrato-editor.ts";
 import { type Chamador, ErroHttp, garantirAdmin, json, limpo, type ModeloComEstado, type Nucleo, semTabela, servico } from "./base.ts";
 
 export type EstadoDaExtra = "padrao_sim" | "padrao_nao" | "desligada";

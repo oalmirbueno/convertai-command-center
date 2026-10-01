@@ -32,7 +32,7 @@ import {
   vigenciaDoContrato,
   type LinhaDoPainel,
 } from "../../supabase/functions/contratos/modulos/contrato-ciclo";
-import { conferirRascunhoDoModelo, lerRascunhoDoModelo, resumoDaMudanca, revisaoDaVersaoNova } from "../../supabase/functions/_shared/contrato-editor";
+import { conferirRascunhoDoModelo, lerRascunhoDoModelo, resumoDaMudanca, revisaoDaVersaoNova } from "../../supabase/functions/contratos/modulos/contrato-editor";
 import {
   lerDocumento,
   linhasDosSignatarios,

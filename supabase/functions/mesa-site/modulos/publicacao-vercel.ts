@@ -12,7 +12,7 @@
  * função em Deno e testes com fetch falso).
  */
 
-import type { ConfigDaVercel } from "../mesa-site/modulos/dns-do-site.ts";
+import type { ConfigDaVercel } from "./dns-do-site.ts";
 
 export const VERCEL_API = "https://api.vercel.com";
 

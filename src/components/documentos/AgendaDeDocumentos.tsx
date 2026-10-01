@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { CampoDeFormulario, GrupoDeCampos, Secao, campo as estiloDoCampo, juntar, texto } from "@/components/sistema";
 import { textoDoErro } from "@/lib/mesa/api";
 import { lerAgendas, salvarAgenda } from "@/lib/documentos/registrarEntrega";
-import { DEFINICOES_DE_DOCUMENTO, MODELOS_DE_DOCUMENTO, type ModeloDeDocumento, rotuloDoMesDeReferencia } from "../../../supabase/functions/_shared/documento-modelos";
+import { DEFINICOES_DE_DOCUMENTO, MODELOS_DE_DOCUMENTO, type ModeloDeDocumento, rotuloDoMesDeReferencia } from "../../../supabase/functions/documentos/modulos/documento-modelos";
 
 /**
  * Documento mensal automático (frente BRF2, 30/09/2026): no dia marcado, o

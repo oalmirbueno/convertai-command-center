@@ -65,7 +65,7 @@ import {
 import { coletarEventos } from "./eventos.ts";
 import { coletarDaLinha, identidadeDaCapa, type LinhaComRascunho, rascunhoDaLinha, vistaDoRascunho } from "./rascunho.ts";
 import { lerAgendas, respostaDoCron, salvarAgenda } from "./agenda.ts";
-import { DEFINICOES_DE_DOCUMENTO, normalizarRascunho, numerosDoRascunho, provasDoRascunho, secoesDoRascunho } from "../_shared/documento-modelos.ts";
+import { DEFINICOES_DE_DOCUMENTO, normalizarRascunho, numerosDoRascunho, provasDoRascunho, secoesDoRascunho } from "./modulos/documento-modelos.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 const corsHeaders = {

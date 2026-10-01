@@ -27,7 +27,7 @@ import {
   normalizarRascunho,
   type RascunhoDoDocumento,
   rascunhoInicial,
-} from "../_shared/documento-modelos.ts";
+} from "./modulos/documento-modelos.ts";
 import { type Coleta, coletarEventos } from "./eventos.ts";
 
 export type LinhaComRascunho = {

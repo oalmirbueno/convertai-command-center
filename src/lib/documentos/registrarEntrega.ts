@@ -1,5 +1,5 @@
 import { chamarFuncao } from "@/lib/mesa/api";
-import type { DefinicaoDoModelo, ModeloDeDocumento, RascunhoDoDocumento } from "../../../supabase/functions/_shared/documento-modelos";
+import type { DefinicaoDoModelo, ModeloDeDocumento, RascunhoDoDocumento } from "../../../supabase/functions/documentos/modulos/documento-modelos";
 
 /**
  * Gancho do Registro da entrega (Frente DOC, 29/09/2026) para qualquer mesa

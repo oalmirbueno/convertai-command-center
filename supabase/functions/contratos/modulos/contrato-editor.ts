@@ -11,8 +11,8 @@
  *
  * Puro: sem Deno, sem npm, sem Supabase. Compatível com Safari 11. Sem travessão.
  */
-import { type ClausulaDoModelo, type ModeloDeContrato, type TipoDeVariavel, type VariavelDoModelo, variaveisDoTexto } from "./contrato-modelo.ts";
-import { VALORES_DO_SISTEMA_NO_ADITIVO } from "../contratos/modulos/contrato-modelo-extras-v1.ts";
+import { type ClausulaDoModelo, type ModeloDeContrato, type TipoDeVariavel, type VariavelDoModelo, variaveisDoTexto } from "../../_shared/contrato-modelo.ts";
+import { VALORES_DO_SISTEMA_NO_ADITIVO } from "./contrato-modelo-extras-v1.ts";
 
 const txt = (v: unknown) => (v === null || v === undefined ? "" : String(v)).trim();
 

@@ -24,6 +24,9 @@ import { JevErro, jevPerguntar } from "../_shared/jev.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 // Frente SPP (30/09): headlines, tom e resumo com o método da casa (critério de aceite, revisão e prova).
 import { superpoderesPara } from "../_shared/superpoderes.ts";
+// Frente CPY: o motor de copy da casa (headlines conferidas e em ordem).
+import { blocoDoMotor, ofertaDosFatos, regrasDaCasa } from "../_shared/motor-de-copy.ts";
+import { conferirCopies } from "../_shared/motor-de-copy-servidor.ts";
 import type { ItemDaAcaoDoAgente } from "../_shared/acoes-do-agente.ts";
 import {
   blocoDoTipo,
@@ -246,15 +249,39 @@ export function criarAcoesDaEvolucao<C extends ChamadorMinimo, L extends LinhaMi
       modeloId: modelo.id,
       raciocinio: d.raciocinioPara(modelo),
       sistema: `${SISTEMA_HEADLINES(d.regrasDaVoz)}${ctx.blocoCliente ? `\n\n${ctx.blocoCliente}` : ""}\n\nDADOS:\n${JSON.stringify({ ...ctx.dados, headline_atual: capa.headline, desafio: blocoDoTipo(linha.conteudo, "desafio").dados.texto }).slice(0, 50_000)}`,
-      mensagens: [{ papel: "usuario", conteudo: `Escreva 3 headlines para a capa.${textoLimpo(corpo.orientacao, 300) ? ` Orientação: ${textoLimpo(corpo.orientacao, 300)}` : ""}` }],
+      mensagens: [{ papel: "usuario", conteudo: `Escreva 3 headlines para a capa.${textoLimpo(corpo.orientacao, 300) ? ` Orientação: ${textoLimpo(corpo.orientacao, 300)}` : ""}\n\n${blocoDoMotor({ canal: "proposta", objetivo: "venda", variacoes: 3, frameworks: ["4u", "bab", "pas"] })}` }],
       esquemaJson: ESQUEMA_DAS_HEADLINES,
       maxTokensSaida: 800,
       metodo: await superpoderesPara(d.servico(), { agente: "proposta.escrever", momento: "gerar" }),
       referencia: { tipo: d.referencia, id: linha.id },
       criadoPor: ch.userId,
     });
-    const opcoes = lerHeadlines(saida.json, ctx.origem);
-    return d.json({ opcoes, avisos: opcoes.length < 3 ? ["Alguma headline saiu por trazer número sem origem ou repetir outra."] : [], custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd, reserva_usada: saida.reservaUsada });
+    const lidas = lerHeadlines(saida.json, ctx.origem);
+    // Frente CPY: as headlines passam pelo motor de copy (limpeza da casa, régua e Jev); a melhor vem primeiro. A voz aqui é a da agência.
+    const conf = await conferirCopies({
+      textos: lidas,
+      canal: "proposta",
+      objetivo: "venda",
+      voz: { bloco: "", essencial: `${d.regrasDaVoz}\n\nCLIENTE DA PROPOSTA: ${JSON.stringify(ctx.dados.cliente ?? null).slice(0, 800)}`, usando: "", nome: "agência", regras: regrasDaCasa() },
+      // Os fatos verificáveis da proposta (itens e valores, desafio, solução, provas, condições, lead e reunião), não o começo cru da origem.
+      oferta: ofertaDosFatos([
+        ["Projeto", linha.titulo],
+        ["Itens e valores", linha.itens.map((i) => ({ nome: i.nome, descricao: i.descricao, quantidade: i.quantidade, valor_unitario: i.valor_unitario, recorrencia: i.recorrencia }))],
+        ["Desafio", blocoDoTipo(linha.conteudo, "desafio").dados.texto],
+        ["Solução", blocoDoTipo(linha.conteudo, "solucao").dados],
+        ["Provas", blocoDoTipo(linha.conteudo, "provas").dados],
+        ["Condições", blocoDoTipo(linha.conteudo, "investimento").dados.condicoes],
+        ["Lead do comercial", ctx.dados.lead_do_comercial],
+        ["Reunião", d.materialDaReuniao(linha)],
+      ]),
+      cortar: false,
+      cobranca: { clientId: linha.client_id, tarefa: PAPEL, referencia: { tipo: d.referencia, id: linha.id }, criadoPor: ch.userId },
+    });
+    const opcoes = conf.ordem.map((i) => conf.textos[i]).filter(Boolean);
+    const conferencia = conf.ordem.map((i) => ({ headline: conf.textos[i], nota: conf.conferencias[i].nota, alerta: conf.conferencias[i].alerta, avisos: conf.conferencias[i].avisos }));
+    const avisos = opcoes.length < 3 ? ["Alguma headline saiu por trazer número sem origem ou repetir outra."] : [];
+    if (conf.conferencias.some((c) => c.alerta)) avisos.push("Alguma headline tem promessa ou fato sem base pelo Jev: confira antes de usar.");
+    return d.json({ opcoes, conferencia, avisos, jev_erro: conf.jev_erro, custo_usd: Math.round((saida.custoUsd + conf.custo_usd) * 1e6) / 1e6, saldo_usd: saida.saldoUsd, reserva_usada: saida.reservaUsada });
   }
 
   async function tomDaMarca(ch: C, corpo: Record<string, unknown>) {

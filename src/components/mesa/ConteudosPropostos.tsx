@@ -22,6 +22,8 @@ import {
 } from "./mesaV4Api";
 // Frente AP (27/09): selo da memória editorial e "Trocar ângulo" na pauta repetida.
 import { avisoDaPauta, chaveDaLinhaDeEvolucao, SeloDaPauta, useTrocarAngulo } from "./MemoriaEditorialNoMes";
+// Frente CPY: os avisos do texto (motor de copy e lâminas) à vista no cartão, recolhidos.
+import { AvisosDoTexto } from "@/components/sistema/OpcoesDaCopy";
 
 /**
  * Conteúdos que o agente do mês ou a campanha propõem, em cartões enxutos
@@ -65,6 +67,7 @@ export function CartaoDoConteudo({
         {item.tema && <p className="mt-1 line-clamp-2 text-[12.5px] font-medium leading-snug [overflow-wrap:anywhere]">{item.tema}</p>}
         {item.gancho && <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{item.gancho}</p>}
         {avisoDaPauta(item.evolucao) && <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{avisoDaPauta(item.evolucao)}</p>}
+        <AvisosDoTexto avisos={item.avisos_de_texto} className="mt-0.5" />
         <div className="mt-1.5 flex flex-wrap items-center">
           {(cards.length > 0 || texto) && (
             <button

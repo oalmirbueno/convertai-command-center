@@ -13,6 +13,8 @@ import { useFiltroDaMarca, useMesa } from "./MesaContexto";
 import { projetosDaListaNaMarca } from "@/lib/mesa/marcas";
 import MesEscolhaEditorial from "./MesEscolhaEditorial";
 import { corpoDaEscolha, escolhaLivre, rotuloEditorial, type EscolhaEditorial } from "./MesConhecimento";
+// Frente CPY: os avisos do texto (motor de copy e lâminas), recolhidos na linha do conteúdo.
+import { AvisosDoTexto } from "@/components/sistema/OpcoesDaCopy";
 import {
   atualizarAgenda,
   chaves,
@@ -191,6 +193,8 @@ function LinhaDoConteudo({
           <p className="mt-0.5 text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{item.tema || "Sem título"}</p>
           {item.gancho && <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{item.gancho}</p>}
           {item.instrucao_arte && <p className="mt-1 text-[11.5px] text-foreground [overflow-wrap:anywhere]">Arte: {item.instrucao_arte}</p>}
+          {/* Frente CPY: os avisos do texto (motor de copy e lâminas), recolhidos. */}
+          <AvisosDoTexto avisos={item.avisos_de_texto} className="mt-0.5" />
           <div className="mt-1.5 flex flex-wrap items-center">
             {!naAgenda && (
               <>

@@ -7,11 +7,12 @@ import Painel from "@/components/sistema/Painel";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
-import { modeloDoPapel, nomeDoModelo, usd } from "@/lib/mesa/api";
+import { modeloDoPapel, nomeDoModelo, parteDaConferenciaDoJev, usd } from "@/lib/mesa/api";
 import { SeletorDeModelo } from "@/components/mesa/Seletores";
 import { rotuloDaSecao, type OpcaoDeCopy } from "../../../supabase/functions/_shared/site-metodo";
 import { chamarSite, type LinhaDoSite, useGuardarSite } from "./siteApi";
 import CopyPorSecao from "./CopyPorSecao";
+import { NotaDaCopy } from "@/components/sistema/OpcoesDaCopy";
 import SerieDoGrafico from "./SerieDoGrafico";
 import { useBarraDaEtapa } from "./BarraDaEtapa";
 
@@ -124,6 +125,7 @@ export default function EtapaConteudo({ site }: { site: LinhaDoSite; onIrPara?: 
                 <p className={texto.tituloSecao}>{o.headline}</p>
                 <p className={texto.corpo}>{o.subtitulo}</p>
                 <p className={juntar(texto.rotulo, "text-primary")}>CTA: {o.cta}</p>
+                {o.conferencia && <NotaDaCopy nota={o.conferencia.nota} alerta={o.conferencia.alerta} avisos={o.conferencia.avisos} />}
                 <ul className="space-y-1.5 border-t border-border pt-3">
                   {o.secoes.slice(0, 10).map((s) => (
                     <li key={s.id} className="min-w-0">
@@ -155,7 +157,7 @@ export default function EtapaConteudo({ site }: { site: LinhaDoSite; onIrPara?: 
           <>
             {modelo && (
               <span className="mr-2 inline-flex min-w-0">
-                <EstimativaInline partes={[{ modeloId: modelo.id, tipo: "texto", tokensEntrada: 7000, tokensSaida: 7500 }]} />
+                <EstimativaInline partes={[{ modeloId: modelo.id, tipo: "texto", tokensEntrada: 7000, tokensSaida: 7500 }, parteDaConferenciaDoJev()]} />
               </span>
             )}
             <button type="button" className={escolhida !== null ? botao.secundario : botao.primario} disabled={gerando} onClick={() => void gerar()} data-gerar-conteudo="">
