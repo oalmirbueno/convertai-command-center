@@ -1881,6 +1881,14 @@
       "remote_name": "estado_dos_motores",
       "remote_statements_sha256": "21a09839926e1eb189b9207539b10c3e1e95a49ddb1c8a6b3d8b20ce16dc31c2",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930317000",
+      "path": "supabase/migrations/20260930317000_previa_editavel_do_site.sql",
+      "local_sha256": "34b83d610ea92ad3a7c2c6f5de195d500e9f35c936242f7a9dd1eaff84c14822",
+      "remote_name": "previa_editavel_do_site",
+      "remote_statements_sha256": "8b61ede36accaecad88a9f5d00d84e29964303c456574e40f8dcc708ce30dd07",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
