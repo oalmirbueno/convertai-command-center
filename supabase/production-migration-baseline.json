@@ -1897,6 +1897,30 @@
       "remote_name": "editor_render_por_formato",
       "remote_statements_sha256": "bbb3ab4a1198e4c770d92dbfcf760998dfcd17ae51def37eab8a187f9d282289",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930320000",
+      "path": "supabase/migrations/20260930320000_modelos_e_recursos.sql",
+      "local_sha256": "78f0e9254bc3fca0ad8b485f0209d5fc3cdb22e938837ad71e8d3245f01c18dc",
+      "remote_name": "modelos_e_recursos",
+      "remote_statements_sha256": "7126e6b8cae86749d3106725c3a4cafe59852cb3aee4e744a527fdfe65b61a7d",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930320100",
+      "path": "supabase/migrations/20260930320100_modelo_por_papel.sql",
+      "local_sha256": "a1876eb92c3f973558289bd5e726fb23b54eeff480ecfeca931acb65bf32e13b",
+      "remote_name": "modelo_por_papel",
+      "remote_statements_sha256": "0022cef041557e508df3069e3e1756196be1c1c9d9dc08e9d27cacec46707dc2",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930320200",
+      "path": "supabase/migrations/20260930320200_navegador_do_agente.sql",
+      "local_sha256": "8018693c296135864c93f5232f414458af7693b38df5b1a9d526e08c16ddc02a",
+      "remote_name": "navegador_do_agente",
+      "remote_statements_sha256": "c2d63183268fbfd71a78340d9f0a7b9f95ea21afe88c829bc54f94c9bb3f1917",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
