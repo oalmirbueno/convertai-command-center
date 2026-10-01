@@ -2,9 +2,9 @@ import { useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { chamarFuncao } from "@/lib/mesa/api";
-import { type CenaDaLinha, chaveDoPedido, ETAPAS_DO_MOTION, type EtapaDoMotion, type LinhaDoFilme, normalizarFilme, renderDaCena } from "../../../supabase/functions/_shared/motion-metodo";
-import type { FormatoDoMotion, NumeroReal } from "../../../supabase/functions/_shared/cena-hf";
-import type { TipoDeFilme } from "../../../supabase/functions/_shared/motion-metodo";
+import { type CenaDaLinha, chaveDoPedido, ETAPAS_DO_MOTION, type EtapaDoMotion, type LinhaDoFilme, normalizarFilme, renderDaCena } from "../../../supabase/functions/mesa-motion/modulos/motion-metodo";
+import type { FormatoDoMotion, NumeroReal } from "../../../supabase/functions/mesa-motion/modulos/cena-hf";
+import type { TipoDeFilme } from "../../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import { CONSULTA_MINIMA_MS } from "../../../supabase/functions/_shared/render-do-editor";
 
 /**

@@ -28,6 +28,7 @@
  * aqui. Sem travessão.
  */
 
+import { carregarChaves, chaveCarregada } from "../_shared/chaves.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { chamarTexto, cobrarJev, estimarComModelo, IaMotorErro, modeloDoPapel, type ModeloIa } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar } from "../_shared/jev.ts";
@@ -76,7 +77,7 @@ import {
   separarFalhaAnterior,
   SISTEMA_DA_CENA,
   tokensDeEntradaDaCena,
-} from "../_shared/cena-hf.ts";
+} from "./modulos/cena-hf.ts";
 import {
   assinaturaDaCena,
   brandMd,
@@ -109,7 +110,7 @@ import {
   TAMANHOS_DO_MOTION,
   TETO_MAXIMO_DA_CENA_USD,
   TETO_PADRAO_DA_CENA_USD,
-} from "../_shared/motion-metodo.ts";
+} from "./modulos/motion-metodo.ts";
 import { lerMapaDeBatidas } from "./modulos/batidas-da-trilha.ts";
 import { kitDaIdentidade } from "./modulos/motion-da-identidade.ts";
 import { situacaoDoWorker } from "../_shared/render-do-editor.ts";
@@ -1085,7 +1086,7 @@ function listasDoAgente(f: LinhaDoFilme): ListasDoMotion {
     tem_trilha: !!f.som.trilha,
     tem_batidas: !!(f.som.batidas && f.som.batidas.batidas.length),
     voz: {
-      tem_chave: !!(Deno.env.get("ELEVENLABS_API_KEY") || "").trim(),
+      tem_chave: !!chaveCarregada("ELEVENLABS_API_KEY"),
       tem_voz: !!f.som.narracao.voz,
       falas: Object.keys(f.som.narracao.falas).filter((k) => semTags(f.som.narracao.falas[k])).length,
       audios: f.som.narracao.audios.length,
@@ -1423,6 +1424,8 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "metodo_nao_permitido", mensagem: "Use POST." }, 405);
   try {
     const ch = await identificar(req);
+    // Chave da ElevenLabs: ambiente primeiro; sem ele, o cofre do painel (frente CHV).
+    await carregarChaves(["ELEVENLABS_API_KEY"]);
     let corpo: Record<string, unknown> = {};
     try {
       corpo = await req.json();

@@ -18,7 +18,7 @@ import {
   tempoDoStill,
   type CenaDoFilme,
   type MarcaDaCena,
-} from "../../supabase/functions/_shared/cena-hf";
+} from "../../supabase/functions/mesa-motion/modulos/cena-hf";
 import {
   assinaturaDaCena,
   brandMd,
@@ -38,7 +38,7 @@ import {
   projetoDoFilme,
   renderDaCena,
   SOM_PADRAO,
-} from "../../supabase/functions/_shared/motion-metodo";
+} from "../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import { medirBatidas } from "../../supabase/functions/mesa-motion/modulos/batidas-da-trilha";
 import { normalizarProjeto } from "../../supabase/functions/_shared/projeto-de-edicao";
 import { alvosDoMotion, normalizarAcoesDoMotion, regrasDoMotion, type ListasDoMotion } from "../../supabase/functions/mesa-motion/acoes-do-motion";

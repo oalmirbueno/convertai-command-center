@@ -7,7 +7,7 @@ import BotaoComIcone from "@/components/sistema/BotaoComIcone";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { botao, juntar, lista, texto } from "@/components/sistema/estilos";
 import { textoDoErro, usd } from "@/lib/mesa/api";
-import { duracaoAlvo, normalizarFilme, TAMANHOS_DO_MOTION } from "../../../supabase/functions/_shared/motion-metodo";
+import { duracaoAlvo, normalizarFilme, TAMANHOS_DO_MOTION } from "../../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import { CARACTERES_POR_SEGUNDO, lerNarracao, modeloDeVoz } from "../../../supabase/functions/mesa-motion/modulos/narracao";
 import { useModeloDaAcao } from "./FilmeAberto";
 import { chamarMotion, type Filme, uidDoClique, useGuardarFilme } from "./motionApi";

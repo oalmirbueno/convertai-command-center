@@ -36,7 +36,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: v
 
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
 import EtapaConstrucao from "@/components/mesa-motion/EtapaConstrucao";
-import { cenaDaLinha } from "../../supabase/functions/_shared/motion-metodo";
+import { cenaDaLinha } from "../../supabase/functions/mesa-motion/modulos/motion-metodo";
 
 const CLIENTE = "4dd691a7-d481-451f-800b-5e6b6fdc8721";
 const FILME = "44444444-4444-4444-8444-444444444444";

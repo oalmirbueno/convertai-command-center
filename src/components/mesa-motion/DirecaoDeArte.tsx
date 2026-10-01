@@ -6,7 +6,7 @@ import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
 import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
 import { usd } from "@/lib/mesa/api";
-import { INGREDIENTES } from "../../../supabase/functions/_shared/motion-metodo";
+import { INGREDIENTES } from "../../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import { ESTILOS_DA_VOZ, lerNarracao } from "../../../supabase/functions/mesa-motion/modulos/narracao";
 import { ACABAMENTOS } from "../../../supabase/functions/mesa-motion/modulos/pecas-extras";
 import { chamarMotion, type Filme, useGuardarFilme } from "./motionApi";

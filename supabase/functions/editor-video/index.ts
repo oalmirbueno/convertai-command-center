@@ -58,6 +58,7 @@
  */
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { chave as chaveDoPainel } from "../_shared/chaves.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import {
@@ -325,8 +326,9 @@ async function timestampParte(ch: Chamador, corpo: Record<string, unknown>) {
 
 // ------------------------------------------------------------------ alinhamento forçado (fal)
 
-function chaveFal(): string {
-  const k = (Deno.env.get("FAL_KEY") || "").trim();
+/** Ambiente primeiro; sem ele, o cofre do painel (Configurações › Chaves e custos). */
+async function chaveFal(): Promise<string> {
+  const k = (await chaveDoPainel("FAL_KEY")).trim();
   if (!k) throw new ErroHttp(503, "provedor_sem_chave", "O alinhamento ainda não tem chave (FAL_KEY).");
   return k;
 }
@@ -348,7 +350,7 @@ async function alinharIniciar(ch: Chamador, corpo: Record<string, unknown>) {
   try {
     res = await fetch(`https://queue.fal.run/${PROVEDORES_DE_TIMESTAMP.alinhamento.modelo}`, {
       method: "POST",
-      headers: { Authorization: `Key ${chaveFal()}`, "Content-Type": "application/json", "X-Fal-Object-Lifecycle-Preference": JSON.stringify({ expiration_duration_seconds: 86400 }) },
+      headers: { Authorization: `Key ${await chaveFal()}`, "Content-Type": "application/json", "X-Fal-Object-Lifecycle-Preference": JSON.stringify({ expiration_duration_seconds: 86400 }) },
       body: JSON.stringify({ audio_url: assinada.signedUrl, text: texto }),
       signal: AbortSignal.timeout(30_000),
     });
@@ -371,7 +373,7 @@ async function alinharAndamento(ch: Chamador, corpo: Record<string, unknown>) {
   const statusUrl = String(p.status_url || "");
   const respostaUrl = String(p.response_url || "");
   if (!FILA_FAL.test(statusUrl) || !FILA_FAL.test(respostaUrl)) throw new ErroHttp(400, "pedido_invalido", "Pedido de alinhamento inválido.");
-  const cab = { Authorization: `Key ${chaveFal()}` };
+  const cab = { Authorization: `Key ${await chaveFal()}` };
   const st = await fetch(statusUrl, { headers: cab, signal: AbortSignal.timeout(20_000) }).catch(() => null);
   if (!st) return json({ situacao: "processando" });
   const s = (await st.json().catch(() => null)) as Record<string, unknown> | null;

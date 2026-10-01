@@ -1,3 +1,5 @@
+import { chave as chaveDoPainel } from './chaves.ts'
+
 const DEFAULT_RESEND_API_URL = 'https://api.resend.com'
 const MAX_ERROR_BODY_LENGTH = 16_000
 const REQUEST_TIMEOUT_MS = 10_000
@@ -123,7 +125,8 @@ export async function sendResendEmail(
   payload: ResendEmailPayload,
   options: ResendSendOptions = {},
 ): Promise<ResendSendResult> {
-  const apiKey = options.apiKey?.trim() || runtimeEnv('RESEND_API_KEY')
+  // Ambiente primeiro; sem ele, o cofre do painel (Configurações › Chaves e custos).
+  const apiKey = options.apiKey?.trim() || (await chaveDoPainel('RESEND_API_KEY')) || undefined
   if (!apiKey) {
     throw new ResendApiError('Email transport is not configured', { status: 500 })
   }

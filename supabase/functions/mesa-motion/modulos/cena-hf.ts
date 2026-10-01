@@ -24,7 +24,7 @@
  * Sem travessão.
  */
 
-import { camadaDoAcabamento, type IdDaPecaExtra, montarPecaExtra, PECAS_EXTRAS } from "../mesa-motion/modulos/pecas-extras.ts";
+import { camadaDoAcabamento, type IdDaPecaExtra, montarPecaExtra, PECAS_EXTRAS } from "./pecas-extras.ts";
 
 // ------------------------------------------------------------------ formatos
 

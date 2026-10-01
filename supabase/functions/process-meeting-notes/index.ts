@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import {
   requestAiChatCompletion,
-  resolveAiProviderChain,
+  resolverCadeiaDaIa,
 } from "../_shared/ai-provider.ts";
 
 const corsHeaders = {
@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const providers = resolveAiProviderChain({
+    const providers = await resolverCadeiaDaIa({
       primaryModels: ["gpt-4o-mini"],
       lovableModels: ["google/gemini-3-flash-preview", "google/gemini-2.5-flash"],
     });

@@ -1,3 +1,5 @@
+import { carregarChaves, chaveCarregada } from "./chaves.ts";
+
 export type AiProviderEnvName =
   | "AI_BASE_URL"
   | "AI_API_KEY"
@@ -71,6 +73,15 @@ function readRuntimeEnv(name: AiProviderEnvName): string | undefined {
   return Deno.env.get(name);
 }
 
+// Frente CHV: as chaves da cadeia também valem do cofre do painel (_shared/chaves.ts).
+const CHAVES_DA_CADEIA_NO_COFRE: AiProviderEnvName[] = ["OPENAI_API_KEY", "OPENROUTER_API_KEY"];
+
+function readRuntimeEnvOrVault(name: AiProviderEnvName): string | undefined {
+  const doAmbiente = readRuntimeEnv(name);
+  if (doAmbiente && doAmbiente.trim()) return doAmbiente;
+  return CHAVES_DA_CADEIA_NO_COFRE.indexOf(name) >= 0 ? chaveCarregada(name) || undefined : undefined;
+}
+
 function optionalValue(value: string | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
@@ -137,7 +148,7 @@ function buildProviders(
 
 export function resolveAiProviderChain(
   options: AiProviderChainOptions,
-  env: AiProviderEnvReader = readRuntimeEnv,
+  env: AiProviderEnvReader = readRuntimeEnvOrVault,
 ): AiProvider[] {
   const aiApiKey = optionalValue(env("AI_API_KEY"));
   const openAiApiKey = optionalValue(env("OPENAI_API_KEY"));
@@ -210,6 +221,12 @@ export function resolveAiProviderChain(
   }
 
   return providers;
+}
+
+/** A cadeia com as chaves do cofre carregadas antes (o ambiente continua mandando). */
+export async function resolverCadeiaDaIa(options: AiProviderChainOptions): Promise<AiProvider[]> {
+  await carregarChaves(CHAVES_DA_CADEIA_NO_COFRE);
+  return resolveAiProviderChain(options);
 }
 
 export async function fetchAiChatCompletion(

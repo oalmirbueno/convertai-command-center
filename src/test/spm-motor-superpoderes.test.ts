@@ -51,7 +51,7 @@ import {
   SISTEMA_DA_CENA,
   type CenaDoFilme,
   type MarcaDaCena,
-} from "../../supabase/functions/_shared/cena-hf";
+} from "../../supabase/functions/mesa-motion/modulos/cena-hf";
 
 /**
  * Frente SPM (30/09/2026): o Superpowers original (obra/superpowers v6.4.2,

@@ -36,6 +36,7 @@
  * vai ao cliente. Sem travessão.
  */
 
+import { chave as chaveDoPainel } from "../_shared/chaves.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { carregarModelo, chamarImagem, chamarTexto, cobrarJev, estimarComModelo, IaMotorErro, modeloDoPapel, modeloPadrao, type ImagemEntrada, type ModeloIa } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar } from "../_shared/jev.ts";
@@ -652,7 +653,8 @@ async function fotoRealUsar(ch: Chamador, c: Record<string, unknown>) {
 
 // ------------------------------------------------------------------ publicação
 
-const tokenDaVercel = () => (Deno.env.get("VERCEL_TOKEN") || "").trim();
+/** Ambiente primeiro; sem ele, o cofre do painel (Configurações › Chaves e custos). O worker usa o próprio .env. */
+const tokenDaVercel = async () => (await chaveDoPainel("VERCEL_TOKEN")).trim();
 
 async function ultimoZip(s: LinhaDoSite): Promise<{ path: string; em: string | null } | null> {
   const { data } = await servico().from("motor_trabalhos").select("zip_path, terminado_em").eq("referencia_id", s.id).not("zip_path", "is", null).order("terminado_em", { ascending: false }).limit(1);
@@ -670,7 +672,7 @@ async function publicacaoEstado(ch: Chamador, c: Record<string, unknown>) {
   const p = obj(s.publicacao);
   const dominio = typeof p.dominio === "string" ? p.dominio : null;
   const registrador = ehRegistrador(p.registrador) ? p.registrador : "registro_br";
-  const ligada = vercelLigada(tokenDaVercel());
+  const ligada = vercelLigada(await tokenDaVercel());
   const [zip, construido] = await Promise.all([ultimoZip(s), temBuild(s)]);
   const config = p.config && typeof p.config === "object" ? (p.config as Record<string, unknown>) : null;
   return json({
@@ -689,7 +691,7 @@ async function publicacaoEstado(ch: Chamador, c: Record<string, unknown>) {
 async function dominioVerificar(ch: Chamador, c: Record<string, unknown>) {
   const s = await lerSite(ch, c.site_id);
   const p = obj(s.publicacao);
-  const token = tokenDaVercel();
+  const token = await tokenDaVercel();
   if (!vercelLigada(token)) throw new ErroHttp(409, "publicacao_desligada", "A publicação pela Vercel ainda está desligada (falta a conta da agência). Baixe o site em zip.");
   if (typeof p.dominio !== "string" || typeof p.projeto_vercel !== "string") throw new ErroHttp(409, "sem_publicacao", "Publique o site com o domínio antes de verificar.");
   const api = criarApiDaVercel({ token, teamId: Deno.env.get("VERCEL_TEAM_ID") || null, fetch });
@@ -706,7 +708,7 @@ async function publicar(ch: Chamador, c: Record<string, unknown>) {
   if (c.confirmar !== true) throw new ErroHttp(400, "confirmar_publicacao", "Publicar pede Confirmar na tela.");
   const p = obj(s.publicacao);
   const dominio = typeof p.dominio === "string" ? p.dominio : null;
-  const faltas = faltasParaPublicar({ vercelLigada: vercelLigada(tokenDaVercel()), temBuild: await temBuild(s), dominio });
+  const faltas = faltasParaPublicar({ vercelLigada: vercelLigada(await tokenDaVercel()), temBuild: await temBuild(s), dominio });
   if (faltas.length) throw new ErroHttp(409, "publicacao_desligada", `Ainda falta: ${faltas.join("; ")}. Enquanto isso, baixe o site em zip.`, { faltas });
   const marca = await marcaDoSite(s);
   const { pacote, arquivos } = await montarPacoteDoSite(servico(), s, marca);

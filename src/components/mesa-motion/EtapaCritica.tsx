@@ -7,7 +7,7 @@ import Secao from "@/components/sistema/Secao";
 import Painel from "@/components/sistema/Painel";
 import { botao, juntar, texto } from "@/components/sistema/estilos";
 import { usd } from "@/lib/mesa/api";
-import { CRITERIOS_DA_CRITICA } from "../../../supabase/functions/_shared/motion-metodo";
+import { CRITERIOS_DA_CRITICA } from "../../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import { ComFilme } from "./FilmeAberto";
 import CenaNaFila from "./CenaNaFila";
 import { chamarMotion, type Filme, useFilaDoFilme, useGuardarFilme } from "./motionApi";

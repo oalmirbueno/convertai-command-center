@@ -13,7 +13,7 @@
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
-import { ESPECIALISTAS, type FalaDoConselho, LIMITES, type SessaoDoConselho } from "../_shared/conselho.ts";
+import { ESPECIALISTAS, type FalaDoConselho, LIMITES, type SessaoDoConselho } from "./modulos/conselho.ts";
 import { ehPreset, MAX_TRECHO_DO_ANEXO, modoDe, type PautaDoConselho, pautaDoPedido } from "./modulos/conselho-presets.ts";
 import { gerarPdfDaAta, nomeDoPdfDaAta } from "./modulos/pdf-ata-do-conselho.ts";
 import { ehImagemDoPdf, imagemParaPdf } from "../_shared/pdf-base.ts";

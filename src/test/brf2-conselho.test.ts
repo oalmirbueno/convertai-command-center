@@ -21,7 +21,7 @@ import {
   type SessaoDoConselho,
   tamanhoDaFala,
   validarConvocacao,
-} from "../../supabase/functions/_shared/conselho";
+} from "../../supabase/functions/conselho/modulos/conselho";
 import { MODOS, pautaDaLinha, pautaDoPedido, PRESETS, PRESETS_DO_CONSELHO, rodadasDoModo, textoDaPauta } from "../../supabase/functions/conselho/modulos/conselho-presets";
 import { gerarPdfDaAta, nomeDoPdfDaAta } from "../../supabase/functions/conselho/modulos/pdf-ata-do-conselho";
 import { paginasDoPdf, textosDoPdf } from "../../supabase/functions/_shared/pdf-base";

@@ -294,7 +294,6 @@ export default function SuperpoderesDasMesas() {
       descricao={`obra/superpowers ${VERSAO_DO_SUPERPOWERS} · MIT`}
       ajuda={AJUDA_DOS_SUPERPODERES}
       recolher="config:superpoderes"
-      className="max-w-3xl"
       data-superpoderes=""
     >
       <div className="min-w-0 space-y-5">

@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.97.0";
 import {
   requestAiChatCompletion,
-  resolveAiProviderChain,
+  resolverCadeiaDaIa,
 } from "../_shared/ai-provider.ts";
 import { fetchPublicText } from "../_shared/public-http.ts";
 
@@ -120,7 +120,7 @@ Deno.serve(async (req) => {
     }
 
     // Sintetiza a persona quando houver um provider de IA. Se falhar, usa os metadados brutos.
-    const providers = resolveAiProviderChain({
+    const providers = await resolverCadeiaDaIa({
       primaryModels: ["gpt-4o-mini"],
       lovableModels: ["google/gemini-2.5-flash"],
     });

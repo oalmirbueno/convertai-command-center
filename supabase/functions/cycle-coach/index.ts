@@ -17,7 +17,7 @@ import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import {
   DEFAULT_LOVABLE_MODEL_CHAIN,
   requestAiChatCompletion,
-  resolveAiProviderChain,
+  resolverCadeiaDaIa,
 } from "../_shared/ai-provider.ts";
 import { recortarDossie } from "../_shared/dossie-recortado.ts";
 // Frente SPP (30/09): o coach com o método da casa (só a prova; o código escolhe).
@@ -291,7 +291,7 @@ Deno.serve(async (req) => {
 
     const aiCoach = await (async () => {
       try {
-        const providers = resolveAiProviderChain({
+        const providers = await resolverCadeiaDaIa({
           primaryModels: PRIMARY_MODEL_CHAIN,
           lovableModels: DEFAULT_LOVABLE_MODEL_CHAIN,
         });

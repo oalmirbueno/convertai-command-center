@@ -4,9 +4,9 @@ import { ESQUEMA_DA_ESTRATEGIA } from "../../supabase/functions/_shared/estrateg
 import { ESQUEMA_DA_GERACAO } from "../../supabase/functions/_shared/proposta-modelo";
 import { ESQUEMA_DAS_HEADLINES, ESQUEMA_DO_RESUMO, esquemaDoTom } from "../../supabase/functions/_shared/proposta-comercial";
 import { ESQUEMA_DO_CONTEUDO } from "../../supabase/functions/_shared/site-metodo";
-import { ESQUEMA_DO_BRAND, esquemaDosStoryboards } from "../../supabase/functions/_shared/motion-metodo";
-import { ESQUEMA_DA_CENA } from "../../supabase/functions/_shared/cena-hf";
-import { ESQUEMA_DA_CRITICA, ESQUEMA_DA_PROPOSTA, ESQUEMA_DA_REVISAO, ESQUEMA_DO_MODERADOR } from "../../supabase/functions/_shared/conselho";
+import { ESQUEMA_DO_BRAND, esquemaDosStoryboards } from "../../supabase/functions/mesa-motion/modulos/motion-metodo";
+import { ESQUEMA_DA_CENA } from "../../supabase/functions/mesa-motion/modulos/cena-hf";
+import { ESQUEMA_DA_CRITICA, ESQUEMA_DA_PROPOSTA, ESQUEMA_DA_REVISAO, ESQUEMA_DO_MODERADOR } from "../../supabase/functions/conselho/modulos/conselho";
 import { ESQUEMA_DOS_TEXTOS } from "../../supabase/functions/documentos/modulos/registro-de-entrega";
 import { ESQUEMA_DAS_OBSERVACOES } from "../../supabase/functions/_shared/referencias-do-site";
 import { ESQUEMA_DA_LEITURA } from "../../supabase/functions/mesa-identidade/modulos/leitura-da-logo";

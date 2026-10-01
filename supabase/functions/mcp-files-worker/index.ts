@@ -13,7 +13,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { unzipSync, strFromU8 } from 'https://esm.sh/fflate@0.8.2';
 import {
   requestAiChatCompletion,
-  resolveAiProviderChain,
+  resolverCadeiaDaIa,
 } from '../_shared/ai-provider.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -26,7 +26,9 @@ const MAX_BATCH = Number(Deno.env.get('MCP_FILE_WORKER_BATCH') ?? 5);
 const CHUNK_CHARS = Number(Deno.env.get('MCP_FILE_CHUNK_CHARS') ?? 1800);
 const CHUNK_OVERLAP = Number(Deno.env.get('MCP_FILE_CHUNK_OVERLAP') ?? 180);
 const OCR_MODEL_OVERRIDE = Deno.env.get('MCP_FILE_OCR_MODEL')?.trim();
-const OCR_PROVIDERS = resolveAiProviderChain({
+// Frente CHV (01/10): a cadeia sai na hora do uso, com a chave do cofre do
+// painel quando o ambiente não tem (Configurações › Chaves e custos).
+const ocrProviders = () => resolverCadeiaDaIa({
   primaryModels: [OCR_MODEL_OVERRIDE || 'gpt-4o-mini'],
   lovableModels: [OCR_MODEL_OVERRIDE || 'google/gemini-2.5-flash'],
 });
@@ -262,7 +264,7 @@ async function extract(bytes: Uint8Array, mime: string, name: string): Promise<E
 
 // ─── PDF (provider multimodal) ─────────────────────────────────
 async function extractPdf(bytes: Uint8Array): Promise<ExtractionResult> {
-  if (!OCR_PROVIDERS.length) {
+  if (!(await ocrProviders()).length) {
     return { status: 'unsupported', engine: 'pdf-none', units: [], meta: { reason: 'AI provider missing' } };
   }
   const b64 = toBase64(bytes);
@@ -287,7 +289,7 @@ function splitPages(raw: string): string[] {
 
 // ─── Image OCR (provider vision) ───────────────────────────────
 async function extractImageOcr(bytes: Uint8Array, mime: string): Promise<ExtractionResult> {
-  if (!OCR_PROVIDERS.length) {
+  if (!(await ocrProviders()).length) {
     return { status: 'unsupported', engine: 'ocr-none', units: [], meta: { reason: 'AI provider missing' } };
   }
   const b64 = toBase64(bytes);
@@ -301,7 +303,7 @@ async function extractImageOcr(bytes: Uint8Array, mime: string): Promise<Extract
 
 async function callFileAI(content: unknown): Promise<{ text: string; model: string }> {
   const { response: res, provider } = await requestAiChatCompletion(
-    OCR_PROVIDERS,
+    await ocrProviders(),
     { messages: [{ role: 'user', content }] },
   );
   if (!res.ok) throw new Error(`AI provider ${res.status}: ${(await res.text()).slice(0, 400)}`);

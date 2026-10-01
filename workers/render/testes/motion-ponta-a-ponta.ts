@@ -44,7 +44,7 @@ import {
   type FormatoDoMotion,
   type MarcaDaCena,
   SISTEMA_DA_CENA,
-} from "../../../supabase/functions/_shared/cena-hf.ts";
+} from "../../../supabase/functions/mesa-motion/modulos/cena-hf.ts";
 import {
   assinaturaDaCena,
   brandMd,
@@ -59,7 +59,7 @@ import {
   perguntasDaCritica,
   projetoDoFilme,
   SOM_PADRAO,
-} from "../../../supabase/functions/_shared/motion-metodo.ts";
+} from "../../../supabase/functions/mesa-motion/modulos/motion-metodo.ts";
 import { noAlvoDeLoudness } from "../../../supabase/functions/mesa-motion/modulos/som-do-editor.ts";
 import { armazemSupabase } from "../armazem.ts";
 import type { Fila, PedidoDoWorker } from "../fila.ts";

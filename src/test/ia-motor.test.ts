@@ -116,7 +116,7 @@ describe("motor de modelos: chave por cliente e cota (SPEC 2.1)", () => {
     expect(resolver).toContain('.from("ia_clientes_config")');
     expect(resolver).toContain("?.usar_chave_agencia !== false;");
     expect(resolver).toContain('throw new IaMotorErro("cliente_sem_chave"');
-    expect(resolver).toContain('return { segredo: chaveDoProvedor(provedor), origem: "agencia", chaveId: null');
+    expect(resolver).toContain('return { segredo: await chaveDoProvedor(provedor), origem: "agencia", chaveId: null');
     expect(resolver.indexOf("ia_chave_resolver")).toBeLessThan(resolver.indexOf("chaveDoProvedor(provedor)"));
   });
 
@@ -171,7 +171,9 @@ describe("Jev: ajudante unico", () => {
   it("chama o System One com jev-latest e a chave do ambiente", () => {
     expect(jev).toContain('export const JEV_URL = "https://api.typesafe.ai/v1/systemone";');
     expect(jev).toContain('export const JEV_MODELO = "jev-latest";');
-    expect(jev).toContain('Deno.env.get("TYPESAFE_API_KEY")');
+    // Frente CHV (01/10): ambiente primeiro, depois o cofre do painel (_shared/chaves.ts).
+    expect(jev).toContain('await chaveDoPainel("TYPESAFE_API_KEY")');
+    expect(jev).toContain('import { chave as chaveDoPainel } from "./chaves.ts";');
     expect(jev).toContain("export async function jevPerguntar(");
   });
 

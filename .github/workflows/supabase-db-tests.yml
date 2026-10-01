@@ -206,7 +206,7 @@ jobs:
 
       - name: Run MCP Deno unit tests
         if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
-        run: deno test --allow-env supabase/functions/mcp-server/mcp_test.ts supabase/functions/_shared/brain-client-context-handler_test.ts supabase/functions/_shared/notification-write-response_test.ts
+        run: deno test --allow-env supabase/functions/mcp-server/mcp_test.ts supabase/functions/brain-client-context/modulos/brain-client-context-handler_test.ts supabase/functions/_shared/notification-write-response_test.ts
 
       - name: Type-check portable and public Edge Functions
         if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}

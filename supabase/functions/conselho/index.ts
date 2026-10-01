@@ -67,7 +67,7 @@ import {
   type SessaoDoConselho,
   tamanhoDaFala,
   validarConvocacao,
-} from "../_shared/conselho.ts";
+} from "./modulos/conselho.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

@@ -30,9 +30,10 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { chamarTexto, cobrarJev, estimarComModelo, garantirSaldo, type ModeloIa } from "../_shared/ia-motor.ts";
 import { jevPerguntar } from "../_shared/jev.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+import { chaveCarregada } from "../_shared/chaves.ts";
 import { superpoderesPara } from "../_shared/superpoderes.ts";
 import { regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
-import { type CenaDaLinha, duracaoTotal, type LinhaDoFilme, pastaDoFilme, TAMANHOS_DO_MOTION } from "../_shared/motion-metodo.ts";
+import { type CenaDaLinha, duracaoTotal, type LinhaDoFilme, pastaDoFilme, TAMANHOS_DO_MOTION } from "./modulos/motion-metodo.ts";
 import {
   type AudioDaNarracao,
   assinarTrechos,
@@ -101,7 +102,7 @@ const semTabelaDasVozes = (e: { code?: string; message?: string } | null | undef
 const AVISO_SEM_VOZES = "O banco ainda não tem a voz da marca (migration 20260930315000 pendente).";
 
 export function criarVoz(d: DepsDaVoz) {
-  const conexao = (): Conexao => (d.conexao ? d.conexao() : { chave: chaveDaElevenLabs((n) => Deno.env.get(n)) });
+  const conexao = (): Conexao => (d.conexao ? d.conexao() : { chave: chaveDaElevenLabs((n) => chaveCarregada(n)) });
   const idDe = (v: unknown, nome: string) => {
     const s = String(v ?? "").trim();
     if (!UUID.test(s)) throw d.erro(400, `${nome}_invalido`, `${nome} precisa ser um UUID.`);

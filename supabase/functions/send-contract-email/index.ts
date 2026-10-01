@@ -1,3 +1,4 @@
+import { chave as chaveDoPainel } from "../_shared/chaves.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import {
   EMAIL_APP_URL,
@@ -103,7 +104,8 @@ Deno.serve(async (req) => {
     if (!recipient) return json({ error: "client without email" }, 400);
 
     const signUrl = `${PORTAL_URL}/contrato/${contract.sign_token}`;
-    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+    // Ambiente primeiro; sem ele, o cofre do painel (Configurações › Chaves e custos).
+    const RESEND_API_KEY = await chaveDoPainel("RESEND_API_KEY");
 
     if (!RESEND_API_KEY) {
       return json({ error: "email service not configured" }, 500);

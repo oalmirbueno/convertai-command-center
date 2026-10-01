@@ -1,8 +1,8 @@
 import { Loader2, Square } from "lucide-react";
 import { botao, juntar, texto } from "@/components/sistema/estilos";
 import { ROTULO_DA_ETAPA, type EtapaDoRender } from "../../../supabase/functions/_shared/render-do-editor";
-import { chaveDoPedido, type ModoDoPedidoDaCena, renderDaCena } from "../../../supabase/functions/_shared/motion-metodo";
-import { provaDoRender, type CenaDoFilme, type FormatoDoMotion } from "../../../supabase/functions/_shared/cena-hf";
+import { chaveDoPedido, type ModoDoPedidoDaCena, renderDaCena } from "../../../supabase/functions/mesa-motion/modulos/motion-metodo";
+import { provaDoRender, type CenaDoFilme, type FormatoDoMotion } from "../../../supabase/functions/mesa-motion/modulos/cena-hf";
 import { erroDaChave, type FilaDoFilme, type Filme, pedidoAtivoDaChave } from "./motionApi";
 
 /**

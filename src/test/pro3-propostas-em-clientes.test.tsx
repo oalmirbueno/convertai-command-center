@@ -65,7 +65,7 @@ import {
 } from "../../supabase/functions/mesa-proposta/modulos/proposta-upsell";
 import { planoDoCliente, retratoDoCliente } from "../../supabase/functions/mesa-proposta/upsell";
 import { alvosDaProposta, normalizarAcoesDaProposta } from "../../supabase/functions/mesa-proposta/acoes-da-proposta";
-import { elencoPadrao, grupoDaOrigem } from "../../supabase/functions/_shared/conselho";
+import { elencoPadrao, grupoDaOrigem } from "../../supabase/functions/conselho/modulos/conselho";
 import { SERVICE_LABELS } from "@/lib/cycleDefs";
 
 const ler = (p: string) => readFileSync(resolve(__dirname, "../..", p), "utf8");

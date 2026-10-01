@@ -6,7 +6,7 @@ import { useAvisarErro } from "@/components/mesa/Custo";
 import { PreencherComIA, type CampoParaPreencher } from "@/components/sistema";
 import Secao from "@/components/sistema/Secao";
 import { botao, campoTexto, juntar, texto } from "@/components/sistema/estilos";
-import { alternarOpcao, entrevistaPadrao, INGREDIENTES, lerEntrevista, type RespostasDaEntrevista } from "../../../supabase/functions/_shared/motion-metodo";
+import { alternarOpcao, entrevistaPadrao, INGREDIENTES, lerEntrevista, type RespostasDaEntrevista } from "../../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import { ComFilme } from "./FilmeAberto";
 import { chamarMotion, type Filme, useGuardarFilme } from "./motionApi";
 import type { IrPara } from "@/components/mesa-videos/MesaDeVideo";

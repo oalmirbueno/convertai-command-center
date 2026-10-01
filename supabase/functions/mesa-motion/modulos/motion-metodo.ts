@@ -21,7 +21,7 @@
  * insumos. Sem travessão.
  */
 
-import { batidaMaisPerto, type MapaDeBatidas } from "../mesa-motion/modulos/batidas-da-trilha.ts";
+import { batidaMaisPerto, type MapaDeBatidas } from "./batidas-da-trilha.ts";
 import {
   type CenaDoFilme,
   duracaoDaCena,
@@ -33,10 +33,10 @@ import {
   pecaPorId,
   PECAS_DO_KIT,
 } from "./cena-hf.ts";
-import { caminhoDoSom, chaveDoSom, planoDeSons, somPorId } from "../mesa-motion/modulos/som-do-editor.ts";
+import { caminhoDoSom, chaveDoSom, planoDeSons, somPorId } from "./som-do-editor.ts";
 // Frente MOV (30/09): narração pela ElevenLabs, efeitos sob medida e acabamento (módulos da função, fora do _shared).
-import { type EfeitoSobMedida, lerEfeitosSobMedida, lerNarracao, NARRACAO_PADRAO, type NarracaoDoFilme, trilhaDaNarracao } from "../mesa-motion/modulos/narracao.ts";
-import { ACABAMENTOS, ehAcabamento } from "../mesa-motion/modulos/pecas-extras.ts";
+import { type EfeitoSobMedida, lerEfeitosSobMedida, lerNarracao, NARRACAO_PADRAO, type NarracaoDoFilme, trilhaDaNarracao } from "./narracao.ts";
+import { ACABAMENTOS, ehAcabamento } from "./pecas-extras.ts";
 
 // ------------------------------------------------------------------ etapas
 

@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAvisarErro } from "@/components/mesa/Custo";
-import type { FormatoDoMotion } from "../../../supabase/functions/_shared/cena-hf";
-import type { ModoDoPedidoDaCena } from "../../../supabase/functions/_shared/motion-metodo";
+import type { FormatoDoMotion } from "../../../supabase/functions/mesa-motion/modulos/cena-hf";
+import type { ModoDoPedidoDaCena } from "../../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import { chamarMotion, CHAVES, type Filme, uidDoClique, useGuardarFilme } from "./motionApi";
 
 /** Um pedido do lote: a cena, o modo e (na final) só os formatos que faltam. */

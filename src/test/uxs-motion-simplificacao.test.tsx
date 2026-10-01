@@ -37,7 +37,7 @@ import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
 import EditorDaCena from "@/components/mesa-motion/EditorDaCena";
 import ListaDeProvas from "@/components/mesa-motion/ListaDeProvas";
 import { deTexto, faltantesDoFilme, finaisQueFaltam, nomePadraoDoFilme, paraTexto, resumoDasFinais, textoDaTroca } from "@/components/mesa-motion/motionApi";
-import { alternarOpcao, assinaturaDaCena, cenaDaLinha, duracaoAlvo, entrevistaPadrao, INGREDIENTES, lerBrand, lerEntrevista, normalizarFilme, textoDaProva, type RenderDaCena } from "../../supabase/functions/_shared/motion-metodo";
+import { alternarOpcao, assinaturaDaCena, cenaDaLinha, duracaoAlvo, entrevistaPadrao, INGREDIENTES, lerBrand, lerEntrevista, normalizarFilme, textoDaProva, type RenderDaCena } from "../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import type { ProjetoDeEdicao } from "../../supabase/functions/_shared/projeto-de-edicao";
 import Renderizar from "@/components/mesa-edicao/editor/Renderizar";
 import { _limparVigias, marcarRenderAtivo, pedirRender, temRenderAtivo } from "@/lib/editor/render";

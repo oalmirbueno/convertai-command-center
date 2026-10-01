@@ -18,6 +18,8 @@
  * o estado em log: o estado costuma carregar dado de cliente.
  */
 
+import { chave as chaveDoPainel } from "./chaves.ts";
+
 export const JEV_URL = "https://api.typesafe.ai/v1/systemone";
 export const JEV_MODELO = "jev-latest";
 export const JEV_TIMEOUT_MS = 20_000;
@@ -92,13 +94,14 @@ function validarPerguntas(questions: Record<string, PerguntaJev>) {
 
 /**
  * Faz as perguntas ao Jev sobre o estado dado e devolve as respostas por id.
- * `chave` e `fetchImpl` existem para teste; em producao vem do ambiente.
+ * `chave` e `fetchImpl` existem para teste; em producao vem do ambiente ou do cofre.
  */
 export async function jevPerguntar(
   { state, questions }: { state: unknown; questions: Record<string, PerguntaJev> },
   opcoes: { chave?: string; timeoutMs?: number; fetchImpl?: typeof fetch } = {},
 ): Promise<ResultadoJev> {
-  const chave = (opcoes.chave ?? Deno.env.get("TYPESAFE_API_KEY") ?? "").trim();
+  // Ambiente do servidor primeiro; sem ele, o cofre do painel (Configurações › Chaves e custos).
+  const chave = (opcoes.chave ?? (await chaveDoPainel("TYPESAFE_API_KEY")) ?? "").trim();
   if (!chave) throw new JevErro("jev_sem_chave", "TYPESAFE_API_KEY ausente");
   validarPerguntas(questions);
 

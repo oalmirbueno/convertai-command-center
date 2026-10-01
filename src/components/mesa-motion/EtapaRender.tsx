@@ -10,7 +10,7 @@ import { EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campo, campoTexto, juntar, texto } from "@/components/sistema/estilos";
 import { chaveDasVersoes } from "@/components/mesa-videos/videosApi";
 import { ROTULO_DA_ETAPA, type EtapaDoRender } from "../../../supabase/functions/_shared/render-do-editor";
-import { renderDaCena } from "../../../supabase/functions/_shared/motion-metodo";
+import { renderDaCena } from "../../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import { ComFilme } from "./FilmeAberto";
 import { chamarMotion, faltantesDoFilme, type Filme, finaisQueFaltam, type PedidoDoMotion, uidDoClique, useFilaDoFilme, useGuardarFilme } from "./motionApi";
 import { useAcoesDaCena } from "./useAcoesDaCena";

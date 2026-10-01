@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { ChevronRight, RefreshCw } from "lucide-react";
-import { Carregando, EstadoDeErro, Secao, botao, foco, juntar, lista, texto } from "@/components/sistema";
+import { ChevronRight, KeyRound, RefreshCw } from "lucide-react";
+import { AjudaRecolhida, Carregando, EstadoDeErro, Secao, botao, foco, juntar, lista, texto } from "@/components/sistema";
 import {
   CHAVE_DO_ESTADO_DOS_MOTORES,
   COR_DA_SITUACAO,
@@ -27,7 +27,8 @@ export const AJUDA_DOS_MOTORES =
   "que o pedido espera na fila até o motor voltar. O passo a passo para ligar está em docs/motores/LIGAR-OS-MOTORES.md " +
   "(workers\\ligar\\ligar-todos.cmd liga os dois workers). Nada aqui gasta crédito.";
 
-function LinhaDoMotor({ m, aberto, onAlternar }: { m: EstadoDoMotor; aberto: boolean; onAlternar: () => void }) {
+function LinhaDoMotor({ m, aberto, onAlternar, onAbrirChaves }: { m: EstadoDoMotor; aberto: boolean; onAlternar: () => void; onAbrirChaves?: (id?: string | null) => void }) {
+  const chaves = Array.isArray(m.chaves) ? m.chaves : [];
   const cor = COR_DA_SITUACAO[m.situacao];
   const idDoCorpo = `motor-${m.id}-detalhes`;
   return (
@@ -87,7 +88,19 @@ function LinhaDoMotor({ m, aberto, onAlternar }: { m: EstadoDoMotor; aberto: boo
               ))}
             </ul>
           )}
-          {!m.ultimo_sinal && !m.ultimo_erro && !m.falta.length && !m.detalhes.length && m.fila.esperando + m.fila.rodando === 0 && (
+          {chaves.length > 0 && (
+            <p className={juntar(texto.auxiliar, "mt-2")} data-atalho-chaves="">
+              {onAbrirChaves ? (
+                <button type="button" onClick={() => onAbrirChaves(chaves[0])} className={juntar("inline-flex items-center font-medium text-primary underline-offset-2 hover:underline", foco)}>
+                  <KeyRound className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                  Abrir Chaves e custos
+                </button>
+              ) : (
+                "Peça a um admin para cadastrar a chave em Configurações › Chaves e custos."
+              )}
+            </p>
+          )}
+          {!m.ultimo_sinal && !m.ultimo_erro && !m.falta.length && !m.detalhes.length && !chaves.length && m.fila.esperando + m.fila.rodando === 0 && (
             <p className={texto.auxiliar}>Nada pendente.</p>
           )}
         </div>
@@ -96,7 +109,12 @@ function LinhaDoMotor({ m, aberto, onAlternar }: { m: EstadoDoMotor; aberto: boo
   );
 }
 
-export default function EstadoDosMotores() {
+/**
+ * `semTitulo`: dentro da linha "Estado dos motores" das Configurações (a linha
+ * já é o título). `onAbrirChaves`: o motor sem chave mostra o atalho para
+ * Configurações › Chaves e custos (frente CHV; só o admin recebe).
+ */
+export default function EstadoDosMotores({ semTitulo = false, onAbrirChaves }: { semTitulo?: boolean; onAbrirChaves?: (id?: string | null) => void } = {}) {
   const q = useQuery({ queryKey: CHAVE_DO_ESTADO_DOS_MOTORES, queryFn: lerEstadoDosMotores, staleTime: 30_000, refetchOnWindowFocus: false });
   const [abertos, setAbertos] = useState<Record<string, boolean>>({});
   const alternar = (id: string) => setAbertos((a) => ({ ...a, [id]: !a[id] }));
@@ -109,7 +127,7 @@ export default function EstadoDosMotores() {
   const quadro = q.data;
   const descricao = quadro ? `${quadro.geral.texto} · conferido ${dataCurta(quadro.conferido_em)}` : undefined;
   return (
-    <Secao titulo="Estado dos motores" descricao={descricao} ajuda={AJUDA_DOS_MOTORES} acao={atualizar} recolher={false} className="max-w-3xl" data-estado-dos-motores="">
+    <Secao titulo={semTitulo ? undefined : "Estado dos motores"} descricao={descricao} ajuda={semTitulo ? undefined : AJUDA_DOS_MOTORES} acao={semTitulo ? <><AjudaRecolhida rotulo="O que são os motores">{AJUDA_DOS_MOTORES}</AjudaRecolhida>{atualizar}</> : atualizar} recolher={false} data-estado-dos-motores="">
       {q.isLoading ? (
         <Carregando rotulo="Conferindo os motores" linhas={4} />
       ) : q.isError ? (
@@ -118,7 +136,7 @@ export default function EstadoDosMotores() {
         <>
           <ul className={juntar(lista.aberta, lista.divisoria)}>
             {ordenarPorUrgencia(quadro.motores).map((m) => (
-              <LinhaDoMotor key={m.id} m={m} aberto={!!abertos[m.id]} onAlternar={() => alternar(m.id)} />
+              <LinhaDoMotor key={m.id} m={m} aberto={!!abertos[m.id]} onAlternar={() => alternar(m.id)} onAbrirChaves={onAbrirChaves} />
             ))}
           </ul>
           {quadro.avisos.length > 0 && <p className={juntar(texto.auxiliar, "mt-2")}>Leitura incompleta: {quadro.avisos.slice(0, 3).join("; ")}</p>}

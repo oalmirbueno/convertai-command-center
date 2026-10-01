@@ -8,7 +8,7 @@
  * vídeo e as chaves/crédito da IA): ligado ou não, último sinal do worker, a
  * fila, o último erro legível e o que falta. Lê as filas e as batidas com a
  * service_role DEPOIS de conferir que quem chama é da equipe; dos segredos, só
- * a PRESENÇA (o valor nunca sai do servidor); do OpenRouter, o crédito pelas
+ * a PRESENÇA (o valor nunca sai do servidor; ambiente ou cofre do painel); do OpenRouter, o crédito pelas
  * rotas de consulta (/key e /credits), que não gastam nada.
  *
  * Nomes de cliente (carteiras vazias) e números de crédito só para o admin.
@@ -18,6 +18,7 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+import { carregarChaves, chaveCarregada } from "../_shared/chaves.ts";
 import {
   type EntradaDoEstado,
   erroDoPedidoDeVideo,
@@ -63,13 +64,11 @@ async function identificar(req: Request): Promise<{ userId: string; admin: boole
   return { userId, admin: admin.data === true };
 }
 
-const segredo = (nome: string) => {
-  try {
-    return (Deno.env.get(nome) || "").trim();
-  } catch {
-    return "";
-  }
-};
+/**
+ * Ambiente da função primeiro; sem ele, o cofre do painel (Configurações ›
+ * Chaves e custos), carregado no começo de `estado` (frente CHV).
+ */
+const segredo = (nome: string) => chaveCarregada(nome);
 
 /** Linhas de uma consulta; falha vira aviso (nunca derruba o quadro). */
 async function linhas<T>(onde: string, avisos: string[], consulta: PromiseLike<{ data: unknown; error: { message?: string } | null }>): Promise<T[]> {
@@ -121,6 +120,7 @@ async function lerOpenrouter(): Promise<EntradaDoEstado["openrouter"]> {
 }
 
 async function estado(admin: boolean) {
+  await carregarChaves(SEGREDOS_CONFERIDOS);
   const db = servico();
   const avisos: string[] = [];
   const agora = Date.now();

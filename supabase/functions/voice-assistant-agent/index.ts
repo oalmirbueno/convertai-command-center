@@ -14,7 +14,7 @@ import { corsHeaders as corsDoSupabase } from "npm:@supabase/supabase-js@2/cors"
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   fetchAiChatCompletion,
-  resolveAiProviderChain,
+  resolverCadeiaDaIa,
   type AiProvider,
 } from "../_shared/ai-provider.ts";
 import { type AreaDoCerebro } from "../_shared/cerebro-do-cliente.ts";
@@ -791,7 +791,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const providers = resolveAiProviderChain({
+    const providers = await resolverCadeiaDaIa({
       primaryModels: PRIMARY_MODEL_CHAIN,
       lovableModels: LOVABLE_COMPAT_MODEL_CHAIN,
     });

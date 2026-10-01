@@ -35,7 +35,7 @@ import VozDoFilme from "@/components/mesa-motion/VozDoFilme";
 import PoucosCliques from "@/components/mesa-motion/PoucosCliques";
 import JanelaDasVozes from "@/components/mesa-motion/JanelaDasVozes";
 import { EfeitosSobMedida } from "@/components/mesa-motion/SomGerado";
-import { cenaDaLinha, normalizarFilme } from "../../supabase/functions/_shared/motion-metodo";
+import { cenaDaLinha, normalizarFilme } from "../../supabase/functions/mesa-motion/modulos/motion-metodo";
 
 const CLIENTE = "4dd691a7-d481-451f-800b-5e6b6fdc8721";
 const FILME = "33333333-3333-4333-8333-333333333333";

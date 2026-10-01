@@ -32,8 +32,8 @@ import {
 } from "../../supabase/functions/mesa-motion/modulos/narracao";
 import { adicionarVozCompartilhada, bytesDoBase64, clonarVoz, erroDaResposta, ErroDaVoz, falar, listarVozes, listarVozesCompartilhadas } from "../../supabase/functions/mesa-motion/modulos/elevenlabs";
 import { ACABAMENTOS, camadaDoAcabamento, fraseDoWorkerAntigo, novidadeDaCena, PECAS_EXTRAS, workerConheceMov } from "../../supabase/functions/mesa-motion/modulos/pecas-extras";
-import { coresDaMarca, ESTADO_VAZIO_DA_CENA, LISTA_DE_FORMATOS, type MarcaDaCena, montarDocumento, PECAS_DO_KIT } from "../../supabase/functions/_shared/cena-hf";
-import { assinaturaDaCena, cenaDaLinha, INGREDIENTES, lerSom, projetoDoFilme, SOM_PADRAO, transicaoDaEntrevista } from "../../supabase/functions/_shared/motion-metodo";
+import { coresDaMarca, ESTADO_VAZIO_DA_CENA, LISTA_DE_FORMATOS, type MarcaDaCena, montarDocumento, PECAS_DO_KIT } from "../../supabase/functions/mesa-motion/modulos/cena-hf";
+import { assinaturaDaCena, cenaDaLinha, INGREDIENTES, lerSom, projetoDoFilme, SOM_PADRAO, transicaoDaEntrevista } from "../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import { normalizarProjeto } from "../../supabase/functions/_shared/projeto-de-edicao";
 import { ESQUEMA_DAS_ACOES_DO_MOTION, normalizarAcoesDoMotion, OPERACOES_DO_MOTION, regrasDoMotion } from "../../supabase/functions/mesa-motion/acoes-do-motion";
 
@@ -356,7 +356,8 @@ describe("banco, servidor e regras", () => {
   });
 
   it("a chave fica no servidor; todo gasto confere o saldo antes e registra o uso como motion", () => {
-    expect(voz).toContain('chaveDaElevenLabs((n) => Deno.env.get(n))');
+    // Frente CHV (01/10): ambiente primeiro, depois o cofre do painel (carregado na entrada da função).
+    expect(voz).toContain('chaveDaElevenLabs((n) => chaveCarregada(n))');
     expect(voz).not.toMatch(/sk_[A-Za-z0-9]{10,}/);
     expect(voz.match(/await saldoAntes\(/g)!.length).toBeGreaterThanOrEqual(4);
     expect(voz).toContain('_tarefa: "motion"');

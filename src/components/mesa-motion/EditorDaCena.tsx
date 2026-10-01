@@ -5,8 +5,8 @@ import { useAvisarErro } from "@/components/mesa/Custo";
 import { PreencherComIA, type CampoParaPreencher } from "@/components/sistema";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { botao, campo, campoTexto, juntar, lista, texto } from "@/components/sistema/estilos";
-import { PECAS_DO_KIT, pecaPorId, type IdDaPeca } from "../../../supabase/functions/_shared/cena-hf";
-import { type CenaDaLinha, TRANSICOES_DA_CENA } from "../../../supabase/functions/_shared/motion-metodo";
+import { PECAS_DO_KIT, pecaPorId, type IdDaPeca } from "../../../supabase/functions/mesa-motion/modulos/cena-hf";
+import { type CenaDaLinha, TRANSICOES_DA_CENA } from "../../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import { chamarMotion, deTexto, type Filme, paraTexto, useGuardarFilme } from "./motionApi";
 
 /**

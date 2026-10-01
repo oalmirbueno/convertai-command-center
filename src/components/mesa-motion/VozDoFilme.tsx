@@ -24,7 +24,7 @@ import {
 } from "../../../supabase/functions/mesa-motion/modulos/narracao";
 import { ModeloDaAcao, useModeloDaAcao } from "./FilmeAberto";
 import JanelaDasVozes from "./JanelaDasVozes";
-import { normalizarFilme } from "../../../supabase/functions/_shared/motion-metodo";
+import { normalizarFilme } from "../../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import { chamarMotion, type Filme, useGuardarFilme } from "./motionApi";
 import { previaDaVoz, trechoDoAudio, useSituacaoDaVoz, type VozSalva } from "./vozApi";
 

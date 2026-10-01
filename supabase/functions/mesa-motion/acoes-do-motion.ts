@@ -34,7 +34,7 @@ import {
   type RegraDaOperacao,
   regraDasAcoes,
 } from "../_shared/acoes-do-agente.ts";
-import { PECAS_DO_KIT } from "../_shared/cena-hf.ts";
+import { PECAS_DO_KIT } from "./modulos/cena-hf.ts";
 
 export const OPERACOES_DO_MOTION = [
   "gerar_brand",

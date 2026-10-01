@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ImageUp, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { CampoDeFormulario, EstadoDeErro, GrupoDeCampos, Secao, botao, campo, campoTexto, juntar, texto } from "@/components/sistema";
+import { CampoDeFormulario, EstadoDeErro, GrupoDeCampos, Secao, botao, campo, campoTexto, espaco, juntar, texto } from "@/components/sistema";
 import {
   CAMPOS_DA_AGENCIA,
   CHAVE_DOS_DADOS_DA_AGENCIA,
@@ -188,7 +188,6 @@ export default function DadosDaAgencia() {
       titulo="Dados da agência"
       ajuda={AJUDA_DOS_DADOS_DA_AGENCIA}
       descricao={salvo ? estadoDosDados(salvo) : undefined}
-      className="max-w-3xl"
       acao={
         admin ? (
           <button type="button" className={botao.primario} onClick={() => void salvar()} disabled={!mudou || salvando}>
@@ -217,11 +216,14 @@ export default function DadosDaAgencia() {
       {rascunho && (
         <div className="min-w-0 space-y-6">
           {!admin && <p className={texto.auxiliar}>Só o admin altera.</p>}
-          {GRUPOS.map((g) => (
-            <GrupoDeCampos key={g.grupo} titulo={g.titulo}>
-              {CAMPOS_DA_AGENCIA.filter((c) => c.grupo === g.grupo).map(renderCampo)}
-            </GrupoDeCampos>
-          ))}
+          {/* Largura total (frente CHV): grupos lado a lado no computador largo. */}
+          <div className={juntar(espaco.colunas, "xl:grid-cols-2")}>
+            {GRUPOS.map((g) => (
+              <GrupoDeCampos key={g.grupo} titulo={g.titulo}>
+                {CAMPOS_DA_AGENCIA.filter((c) => c.grupo === g.grupo).map(renderCampo)}
+              </GrupoDeCampos>
+            ))}
+          </div>
           <div className="min-w-0">
             <p className={juntar(texto.rotulo, "mb-1.5")}>
               Logo<span className="ml-0.5 text-destructive" aria-hidden="true">*</span>

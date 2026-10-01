@@ -6,7 +6,7 @@ import { useAvisarErro } from "@/components/mesa/Custo";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { botao, campo, campoTexto, juntar, lista, texto } from "@/components/sistema/estilos";
 import { usd } from "@/lib/mesa/api";
-import { duracaoTotal, normalizarFilme } from "../../../supabase/functions/_shared/motion-metodo";
+import { duracaoTotal, normalizarFilme } from "../../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import { estimarEfeito, estimarMusica, promptDaTrilha } from "../../../supabase/functions/mesa-motion/modulos/narracao";
 import { chamarMotion, type Filme, uidDoClique, useGuardarFilme } from "./motionApi";
 

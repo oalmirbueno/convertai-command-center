@@ -14,7 +14,7 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
 import { modeloDoPapel } from "@/lib/mesa/api";
 import type { IrPara } from "@/components/mesa-videos/MesaDeVideo";
-import { TAMANHOS_DO_MOTION, type TipoDeFilme } from "../../../supabase/functions/_shared/motion-metodo";
+import { TAMANHOS_DO_MOTION, type TipoDeFilme } from "../../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import { chamarMotion, CHAVES, type Filme, nomePadraoDoFilme, useFilme, useFilmeDaUrl, useFilmes, useGuardarFilme } from "./motionApi";
 import PoucosCliques from "./PoucosCliques";
 

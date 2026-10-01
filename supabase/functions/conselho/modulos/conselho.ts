@@ -32,8 +32,8 @@
  * liga os falsos). Sem travessão em nenhum texto.
  */
 
-import type { PerguntaJev, RespostaJev } from "./jev.ts";
-import { type BlocoDeConhecimento, montarComTeto } from "./conhecimento-dos-agentes.ts";
+import type { PerguntaJev, RespostaJev } from "../../_shared/jev.ts";
+import { type BlocoDeConhecimento, montarComTeto } from "../../_shared/conhecimento-dos-agentes.ts";
 import {
   ANTI_GENERICO,
   CTA_PRINCIPIOS,
@@ -44,15 +44,15 @@ import {
   POSICIONAMENTO_E_CONCORRENCIA,
   ROTEIRO_DE_VIDEO,
   VOZ_DE_MARCA,
-} from "./conhecimento-marketing.ts";
-import { BRIEFING_ANTES_DE_CRIAR, META_NA_PRATICA, PESQUISA_DE_CLIENTE, PSICOLOGIA_DO_COMPRADOR, REVISAO_EM_SETE_PASSADAS } from "./conhecimento-repositorios.ts";
-import { ALCANCE_E_CONVERSAO, SINAIS_PARA_MEDIR } from "./conhecimento-social.ts";
-import { ESCALA_DE_EVIDENCIA, NIVEIS_DE_CONSCIENCIA, REGRAS_DE_HONESTIDADE } from "./conhecimento-ads.ts";
-import { SISTEMA_VISUAL_DE_SOCIAL, TENDENCIA_DO_NICHO } from "./conhecimento-estilo.ts";
-import { CONHECIMENTO_TRAFEGO } from "./conhecimento-trafego.ts";
-import { INTELIGENCIA_EDITORIAL, TECNICAS_EDITORIAIS } from "./conhecimento-roteiros.ts";
-import { TERRITORIOS_CRIATIVOS, VERDADE_DO_PRODUTO } from "./conhecimento-publicidade.ts";
-import { MODOS, MODOS_DO_CONSELHO, modoDe, type ModoDoConselho, type PautaDoConselho, pautaDaLinha, PRESETS, PRESETS_DO_CONSELHO, rodadasDoModo, textoDaPauta } from "../conselho/modulos/conselho-presets.ts";
+} from "../../_shared/conhecimento-marketing.ts";
+import { BRIEFING_ANTES_DE_CRIAR, META_NA_PRATICA, PESQUISA_DE_CLIENTE, PSICOLOGIA_DO_COMPRADOR, REVISAO_EM_SETE_PASSADAS } from "../../_shared/conhecimento-repositorios.ts";
+import { ALCANCE_E_CONVERSAO, SINAIS_PARA_MEDIR } from "../../_shared/conhecimento-social.ts";
+import { ESCALA_DE_EVIDENCIA, NIVEIS_DE_CONSCIENCIA, REGRAS_DE_HONESTIDADE } from "../../_shared/conhecimento-ads.ts";
+import { SISTEMA_VISUAL_DE_SOCIAL, TENDENCIA_DO_NICHO } from "../../_shared/conhecimento-estilo.ts";
+import { CONHECIMENTO_TRAFEGO } from "../../_shared/conhecimento-trafego.ts";
+import { INTELIGENCIA_EDITORIAL, TECNICAS_EDITORIAIS } from "../../_shared/conhecimento-roteiros.ts";
+import { TERRITORIOS_CRIATIVOS, VERDADE_DO_PRODUTO } from "../../_shared/conhecimento-publicidade.ts";
+import { MODOS, MODOS_DO_CONSELHO, modoDe, type ModoDoConselho, type PautaDoConselho, pautaDaLinha, PRESETS, PRESETS_DO_CONSELHO, rodadasDoModo, textoDaPauta } from "./conselho-presets.ts";
 
 export const VERSAO_DO_CONSELHO = "2026-09-30.2";
 

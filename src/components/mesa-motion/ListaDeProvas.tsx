@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Loader2, Plus, X } from "lucide-react";
 import { botao, campo, juntar, lista, texto } from "@/components/sistema/estilos";
-import { textoDaProva, type ProvaReal } from "../../../supabase/functions/_shared/motion-metodo";
+import { textoDaProva, type ProvaReal } from "../../../supabase/functions/mesa-motion/modulos/motion-metodo";
 
 /**
  * Lista de provas com fonte (Insumos e BRAND.md): tirar, e pôr uma nova com

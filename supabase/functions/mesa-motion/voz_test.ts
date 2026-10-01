@@ -8,7 +8,7 @@
  */
 
 import { criarVoz, type DepsDaVoz } from "./voz.ts";
-import { lerSom, type LinhaDoFilme, normalizarFilme } from "../_shared/motion-metodo.ts";
+import { lerSom, type LinhaDoFilme, normalizarFilme } from "./modulos/motion-metodo.ts";
 
 function igual(a: unknown, b: unknown, msg = "") {
   const x = JSON.stringify(a);

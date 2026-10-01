@@ -41,7 +41,7 @@ import EtapaEntrevista from "@/components/mesa-motion/EtapaEntrevista";
 import EtapaConstrucao from "@/components/mesa-motion/EtapaConstrucao";
 import EtapaRender from "@/components/mesa-motion/EtapaRender";
 import EtapaStills from "@/components/mesa-motion/EtapaStills";
-import { assinaturaDaCena, cenaDaLinha } from "../../supabase/functions/_shared/motion-metodo";
+import { assinaturaDaCena, cenaDaLinha } from "../../supabase/functions/mesa-motion/modulos/motion-metodo";
 
 const CLIENTE = "4dd691a7-d481-451f-800b-5e6b6fdc8721";
 const OUTRO_CLIENTE = "5ee791a7-d481-451f-800b-5e6b6fdc8722";

@@ -248,7 +248,7 @@ describe("superpoderes: o método da casa em todas as mesas (frente SPP)", () =>
     // equipe e recebe o método (foto.canvas); a conferência do Canvas segue sem (CHAMADAS_SEM_METODO).
     for (const p of [
       "supabase/functions/_shared/direcao-arte.ts",
-      "supabase/functions/_shared/cena-hf.ts",
+      "supabase/functions/mesa-motion/modulos/cena-hf.ts",
       "supabase/functions/mesa-foto/clones.ts",
       "supabase/functions/mesa-foto/modelos.ts",
       "supabase/functions/mesa-foto/book.ts",

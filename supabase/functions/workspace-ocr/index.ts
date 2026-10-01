@@ -2,7 +2,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.97.0";
 import {
   requestAiChatCompletion,
-  resolveAiProviderChain,
+  resolverCadeiaDaIa,
 } from "../_shared/ai-provider.ts";
 import { conferirImagemDoOcr } from "./formato-da-imagem.ts";
 
@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
       return json({ error: "Limite de uso da IA atingido. Tente de novo mais tarde.", code: "limite_de_uso" }, 429);
     }
 
-    const providers = resolveAiProviderChain({
+    const providers = await resolverCadeiaDaIa({
       primaryModels: ["gpt-4o-mini"],
       lovableModels: ["google/gemini-2.5-flash-lite"],
     });

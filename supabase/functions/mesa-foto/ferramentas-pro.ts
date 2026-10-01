@@ -35,6 +35,7 @@
  */
 
 import { garantirSaldo, IaMotorErro, lerSaldo, type ModeloIa, type Qualidade, registrarUso } from "../_shared/ia-motor.ts";
+import { carregarChaves, chaveCarregada } from "../_shared/chaves.ts";
 import {
   acompanharPedido,
   assinarFicha,
@@ -71,6 +72,11 @@ import type { Chamador, FerramentasDaMesa, ImagemDoAcervoLida } from "./ferramen
 import { decodificar } from "../_shared/imagem-sob-demanda.ts";
 import { limparBordaDoRecorte } from "../_shared/recorte-limpo.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+
+/** Segredos das ferramentas pro: carregados do cofre do painel quando o ambiente não tem (frente CHV). */
+const SEGREDOS_DAS_FERRAMENTAS = Object.values(PROVEDORES).map((p) => p.segredo);
+/** Ambiente primeiro, depois o que o cofre trouxe (ferramentas-imagem.ts fica sem import: roda nos testes). */
+const AMBIENTE_COM_COFRE = { get: (nome: string) => chaveCarregada(nome) || undefined };
 
 const REFERENCIA_DO_USO = "ferramenta_imagem";
 const PASTA = "Mesa Foto / Ferramentas";
@@ -393,7 +399,8 @@ export function acoesDasFerramentasPro(f: FerramentasDaMesa, rede: Rede = redePa
         return f.json({ situacao: "pronto", ...(await comUrl(existente)), ...resumoDoPlano(plano), custo_usd: 0, cobrado: false, ja_existia: true, borda_limpa_pendente: pendenteDeBorda(plano, existente) });
       }
     }
-    const chave = chaveDoProvedor(plano.motor.provedor);
+    await carregarChaves(SEGREDOS_DAS_FERRAMENTAS);
+    const chave = chaveDoProvedor(plano.motor.provedor, AMBIENTE_COM_COFRE);
     await garantirSaldo(clientId, plano.estimativa_usd);
     const imagemUrl = await f.urlAssinada(origem.storage_bucket, origem.storage_path);
     if (!imagemUrl) throw new ErroDeRegra(502, "arquivo_indisponivel", "Não foi possível ler a imagem no armazenamento.");
@@ -451,9 +458,10 @@ export function acoesDasFerramentasPro(f: FerramentasDaMesa, rede: Rede = redePa
       const [ja] = await f.lerImagens(clientId, [id]);
       if (ja) return f.json({ situacao: "pronto", ...(await comUrl(ja)), ...resumoDoPlano(plano), custo_usd: 0, cobrado: false, ja_existia: true, borda_limpa_pendente: pendenteDeBorda(plano, ja) });
     }
+    await carregarChaves(SEGREDOS_DAS_FERRAMENTAS);
     let chave: string;
     try {
-      chave = chaveDoProvedor(plano.motor.provedor);
+      chave = chaveDoProvedor(plano.motor.provedor, AMBIENTE_COM_COFRE);
     } catch (err) {
       throw comoErroDaMesa(err);
     }
@@ -490,7 +498,8 @@ export function acoesDasFerramentasPro(f: FerramentasDaMesa, rede: Rede = redePa
     try {
       saldo = await lerSaldo(clientId);
     } catch { /* carteira fora do ar não impede a estimativa */ }
-    const configurada = ferramentasConfiguradas("fal");
+    await carregarChaves(SEGREDOS_DAS_FERRAMENTAS);
+    const configurada = ferramentasConfiguradas("fal", AMBIENTE_COM_COFRE);
     return f.json({
       configurada,
       segredo: PROVEDORES.fal.segredo,

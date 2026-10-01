@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { JEV_TIMEOUT_MS } from "../_shared/jev.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+import { chave as chaveDoPainel } from "../_shared/chaves.ts";
 
 /**
  * O que e aquele arquivo? Julgamento tipado com TypeSafe (modelo Jev).
@@ -140,7 +141,8 @@ Deno.serve(async (req) => {
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   if (!(await autorizado(req, admin))) return json({ error: "unauthorized" }, 401);
 
-  const chave = Deno.env.get("TYPESAFE_API_KEY")?.trim();
+  // Ambiente primeiro; sem ele, o cofre do painel (Configurações › Chaves e custos).
+  const chave = (await chaveDoPainel("TYPESAFE_API_KEY")).trim();
   if (!chave) return json({ ok: true, skipped: "sem TYPESAFE_API_KEY" });
 
   let corpo: Record<string, unknown> = {};

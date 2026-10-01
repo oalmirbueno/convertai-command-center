@@ -11,6 +11,7 @@
 //   6. OpenClaw reviews & consolidates
 //
 // Nothing is copied into Supabase. No mirror table. No sync job.
+import { chave as chaveDoPainel, chaveCarregada } from './chaves.ts';
 
 const API = 'https://api.github.com';
 const DEFAULT_TIMEOUT_MS = 8000;
@@ -74,9 +75,9 @@ interface Config {
   branch: string;
 }
 
-function loadConfig(): Config {
-  // Single canonical secret. No silent fallback.
-  const token = Deno.env.get('SECOND_BRAIN_GITHUB_TOKEN') ?? '';
+async function loadConfig(): Promise<Config> {
+  // Single canonical secret. No silent fallback. Ambiente primeiro; sem ele, o cofre do painel (frente CHV).
+  const token = await chaveDoPainel('SECOND_BRAIN_GITHUB_TOKEN');
   const owner = Deno.env.get('SECOND_BRAIN_GITHUB_OWNER') ?? '';
   const repo = Deno.env.get('SECOND_BRAIN_GITHUB_REPO') ?? '';
   const branch = Deno.env.get('SECOND_BRAIN_DEFAULT_BRANCH') ?? 'main';
@@ -136,7 +137,7 @@ async function consultarBranch(cfg: Config): Promise<string> {
 
 /** Minimal public status: presence only, never repo/owner/branch/token. */
 export function bridgeStatusPublic(): { configured: boolean } {
-  const tokenPresent = !!Deno.env.get('SECOND_BRAIN_GITHUB_TOKEN');
+  const tokenPresent = !!chaveCarregada('SECOND_BRAIN_GITHUB_TOKEN');
   const owner = Deno.env.get('SECOND_BRAIN_GITHUB_OWNER') ?? '';
   const repo = Deno.env.get('SECOND_BRAIN_GITHUB_REPO') ?? '';
   return { configured: tokenPresent && !!owner && !!repo };
@@ -147,7 +148,7 @@ export function bridgeStatus(): Record<string, unknown> {
   const owner = Deno.env.get('SECOND_BRAIN_GITHUB_OWNER') ?? null;
   const repo = Deno.env.get('SECOND_BRAIN_GITHUB_REPO') ?? null;
   const branch = Deno.env.get('SECOND_BRAIN_DEFAULT_BRANCH') ?? 'main';
-  const tokenPresent = !!Deno.env.get('SECOND_BRAIN_GITHUB_TOKEN');
+  const tokenPresent = !!chaveCarregada('SECOND_BRAIN_GITHUB_TOKEN');
   return {
     configured: tokenPresent && !!owner && !!repo,
     owner,
@@ -282,7 +283,7 @@ export interface FetchedFile {
 }
 
 export async function getFile(path: string, ref?: string): Promise<FetchedFile> {
-  const cfg = loadConfig();
+  const cfg = await loadConfig();
   const safe = assertReadable(path);
   const branch = ref ?? await resolveBranch(cfg);
   const res = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(safe)}`, {
@@ -319,7 +320,7 @@ export async function getContextBundle(extra?: string[]): Promise<{
 }
 
 export async function searchCode(query: string, limit = 10): Promise<Array<{ path: string; sha: string; url: string }>> {
-  const cfg = loadConfig();
+  const cfg = await loadConfig();
   if (!query || query.length < 2) throw new SecondBrainError({ kind: 'validation', detail: 'query too short' });
   const q = `${query} repo:${cfg.owner}/${cfg.repo}`;
   const res = await gh(cfg, 'GET', '/search/code', {
@@ -331,7 +332,7 @@ export async function searchCode(query: string, limit = 10): Promise<Array<{ pat
 }
 
 export async function listInboxPending(limit = 25): Promise<Array<{ path: string; sha: string; size: number }>> {
-  const cfg = loadConfig();
+  const cfg = await loadConfig();
   const branch = await resolveBranch(cfg);
   const inboxPath = INBOX_PREFIX.replace(/\/$/, '');
   const res = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(inboxPath)}`, {
@@ -376,7 +377,7 @@ export async function getBridgePulse(force = false): Promise<BridgePulse> {
     PULSE_CACHE = { at: now, value };
     return value;
   }
-  const cfg = loadConfig();
+  const cfg = await loadConfig();
   const branch = await resolveBranch(cfg);
   const [commitsRes, pending] = await Promise.all([
     gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/commits`, { query: { sha: branch, per_page: '1' } }),
@@ -410,7 +411,7 @@ export interface RecentCommit {
 }
 
 export async function listRecentCommits(limit = 10, pathFilter?: string): Promise<RecentCommit[]> {
-  const cfg = loadConfig();
+  const cfg = await loadConfig();
   const branch = await resolveBranch(cfg);
   const query: Record<string, string> = {
     sha: branch,
@@ -490,7 +491,7 @@ export async function lerPulsoCompleto(limit: number, force = false): Promise<{
 
 /** Branch (uma consulta), commits e pasta do inbox em paralelo. `tolerante`: commits que falham viram lista vazia. */
 async function lerCommitsEInbox(limit: number, tolerante: boolean) {
-  const cfg = loadConfig();
+  const cfg = await loadConfig();
   const branch = await resolveBranch(cfg);
   const inboxPath = INBOX_PREFIX.replace(/\/$/, '');
   const [commitsRes, inboxRes] = await Promise.all([
@@ -586,7 +587,7 @@ export interface ProposalResult {
 }
 
 export async function proposeUpdate(input: ProposalInput): Promise<ProposalResult> {
-  const cfg = loadConfig();
+  const cfg = await loadConfig();
 
   // Structural validation
   if (!input?.title || input.title.length < 3) throw new SecondBrainError({ kind: 'validation', detail: 'title required (>=3 chars)' });

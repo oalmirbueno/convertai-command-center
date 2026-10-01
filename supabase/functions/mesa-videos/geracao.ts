@@ -41,6 +41,7 @@
  * carteira conferido antes; cobrança por variação pronta (ia_registrar_uso).
  */
 
+import { chave as chaveDoPainel, chaveCarregada } from "../_shared/chaves.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { chamarImagem, garantirSaldo, IaMotorErro, modeloPadrao } from "../_shared/ia-motor.ts";
 import { caminhoDaMiniatura, MAX_PIXELS_REDUCAO_NA_FUNCAO, reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
@@ -115,14 +116,14 @@ function temChave(nome: string): boolean {
   return !!lerSegredo(nome);
 }
 
-/** Valor do segredo (só no servidor; nunca volta para a tela nem para o registro). */
+/**
+ * Valor do segredo (só no servidor; nunca volta para a tela nem para o registro).
+ * Ambiente primeiro; sem ele, o que o cofre do painel trouxe na entrada da função
+ * (carregarChaves em index.ts; Configurações › Chaves e custos).
+ */
 function lerSegredo(nome: string): string {
   if (!nome) return "";
-  try {
-    return (Deno.env.get(nome) || "").trim();
-  } catch {
-    return "";
-  }
+  return chaveCarregada(nome);
 }
 
 const credenciaisDoMotor = (m: MotorDeVideo): Credenciais => credenciaisPorNome(m, lerSegredo);
@@ -1217,7 +1218,7 @@ export async function heygenCatalogo(b: BaseDaFuncao, corpo: Record<string, unkn
 
 export async function motoresSincronizar(b: BaseDaFuncao) {
   const lista: { endpoint_id: string; status?: string | null }[] = [];
-  const chave = (Deno.env.get("FAL_KEY") || "").trim();
+  const chave = (await chaveDoPainel("FAL_KEY")).trim();
   let completa = true;
   for (const categoria of ["image-to-video", "text-to-video", "video-to-video", "image-to-image"]) {
     let cursor = "";

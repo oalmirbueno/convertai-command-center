@@ -57,6 +57,7 @@
  * Sem travessão.
  */
 
+import { CHAVES_DE_VIDEO, carregarChaves } from "../_shared/chaves.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import {
@@ -1334,6 +1335,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "metodo_nao_permitido", mensagem: "Use POST." }, 405);
   try {
+    // Chaves dos provedores de vídeo: ambiente primeiro; sem ele, o cofre do painel (frente CHV).
+    await carregarChaves(CHAVES_DE_VIDEO);
     // Cron: sincronização semanal do catálogo (DESLIGADA no SQL V-01) e, frente VGN (30/09),
     // a coleta de 1 minuto dos pedidos em andamento (SQL 20260930321000; só chama quando há pedido).
     const cronSecret = (Deno.env.get("CRON_SECRET") || "").trim();

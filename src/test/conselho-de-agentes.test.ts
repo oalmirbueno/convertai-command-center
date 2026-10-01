@@ -20,7 +20,7 @@ import {
   planoDasEtapas,
   type SessaoDoConselho,
   validarConvocacao,
-} from "../../supabase/functions/_shared/conselho";
+} from "../../supabase/functions/conselho/modulos/conselho";
 
 /**
  * Conselho de agentes (frente CNS, 30/09): o núcleo roda inteiro com banco,

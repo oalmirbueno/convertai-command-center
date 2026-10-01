@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { renderDaCena } from "../../../supabase/functions/_shared/motion-metodo";
+import { renderDaCena } from "../../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import { casarComANarracao, faltasDaNarracao, semTags } from "../../../supabase/functions/mesa-motion/modulos/narracao";
 import { chamarMotion, type Filme } from "./motionApi";
 

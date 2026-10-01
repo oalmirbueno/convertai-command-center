@@ -299,7 +299,7 @@ export const VARIANTES_DAS_FUNCOES: VariantesDeTeste = {
   "briefing-agente/preencher.ts": [{ pedido: `pedidoDoPreenchimento({ titulo: "Briefing" }, ${CAMPOS_DE_TESTE}, [], false)` }],
   "preencher-ia/index.ts": [{ esquema: `montarPedido({ papel: "site", fontes: [], campos: ${CAMPOS_DE_TESTE} }).esquema` }],
   "conselho/index.ts": ["ESQUEMA_DA_PROPOSTA", "ESQUEMA_DA_CRITICA", "ESQUEMA_DA_REVISAO", "ESQUEMA_DO_MODERADOR"].map((nome) => ({
-    p: { arquivo: "_shared/conselho.ts", expressao: `({ esquema: ${nome} })` },
+    p: { arquivo: "conselho/modulos/conselho.ts", expressao: `({ esquema: ${nome} })` },
   })),
   "mesa-foto/canvas.ts": [{ criterios: CRITERIOS_DE_TESTE }],
   "mesa-foto/index.ts": [{ criterios: CRITERIOS_DE_TESTE }],

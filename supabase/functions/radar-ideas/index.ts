@@ -14,7 +14,7 @@ import { corsHeaders as corsDoSupabase } from "npm:@supabase/supabase-js@2/cors"
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   requestAiChatCompletion,
-  resolveAiProviderChain,
+  resolverCadeiaDaIa,
   type AiProvider,
 } from "../_shared/ai-provider.ts";
 import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
@@ -329,7 +329,7 @@ Deno.serve(async (req) => {
         : "não há dossiê registrado: deduza o nicho pelo nome e pelos materiais e diga explicitamente que a ideia é uma hipótese a validar com o dossiê."
     } Passo 2: busque na web tendências e formatos que estão funcionando AGORA para esse nicho no Brasil (Instagram, TikTok, experiência do cliente). Passo 3: gere as 3 ideias seguindo as regras, cada uma citando o fato do dossiê/registro que a justifica. Lembre: específicas para ${clientName}, com a descrição completa da ideia.`;
 
-    const providers = resolveAiProviderChain({
+    const providers = await resolverCadeiaDaIa({
       primaryModels: PRIMARY_MODEL_CHAIN,
       lovableModels: LOVABLE_COMPAT_MODEL_CHAIN,
     });

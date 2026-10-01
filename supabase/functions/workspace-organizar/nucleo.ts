@@ -12,6 +12,7 @@ import { JevErro, jevPerguntar } from "../_shared/jev.ts";
 import { dimensoesDoCabecalho, mimeDaImagem } from "../_shared/imagem-cabecalho.ts";
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+import { chave as chaveDoPainel } from "../_shared/chaves.ts";
 import type { BancoDoWorkspace, NoDoIndice } from "./aplicar.ts";
 import { arquivosParaOrganizar, type ArquivoCandidato, chamadasPorRajada, type NoCompleto } from "./candidatos.ts";
 import { defeitoDaImagem, ESQUEMA_DA_LEITURA, type ItemParaLer, LADO_DA_LEITURA, lerArquivos, MAX_POR_CHAMADA, pedidoDoLote, SISTEMA_DA_LEITURA, textoDoMotivo, tokensDaLeitura } from "./leitura.ts";
@@ -385,7 +386,7 @@ export async function proporNoCliente(clientId: string, userId: string | null, c
 
   let custoDoJev = 0;
   let avisoDoJev: string | null = null;
-  const temChave = !!(Deno.env.get("TYPESAFE_API_KEY") || "").trim();
+  const temChave = !!(await chaveDoPainel("TYPESAFE_API_KEY"));
   const perguntar: Perguntar | null = temChave
     ? async (state, questions: Record<string, PerguntaJev>) => {
       let ultimo: unknown = null;

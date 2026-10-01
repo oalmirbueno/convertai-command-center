@@ -1,3 +1,4 @@
+import { chave as chaveDoPainel } from '../_shared/chaves.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { sendResendEmail } from '../_shared/resend.ts'
 
@@ -79,7 +80,8 @@ async function moveToDlq(
 }
 
 Deno.serve(async (req) => {
-  const resendApiKey = Deno.env.get('RESEND_API_KEY')
+  // Ambiente primeiro; sem ele, o cofre do painel (Configurações › Chaves e custos).
+  const resendApiKey = await chaveDoPainel('RESEND_API_KEY')
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 

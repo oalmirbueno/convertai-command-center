@@ -26,6 +26,11 @@ export interface EstadoDoMotor {
   falta: string[];
   /** Linhas de apoio (capacidades, chaves opcionais, avisos). */
   detalhes: string[];
+  /**
+   * Provedores (id de Configurações › Chaves e custos) cuja chave falta ou
+   * pede atenção: a tela mostra o atalho "Chaves e custos" (frente CHV).
+   */
+  chaves?: string[];
 }
 
 export interface Executor {
@@ -256,6 +261,14 @@ function creditoDoOpenrouter(e: EntradaDoEstado): { semCredito: boolean; chaveNo
   };
 }
 
+/** Onde o admin cadastra e testa as chaves (frente CHV, 01/10/2026). */
+export const CHAVES_E_CUSTOS = "em Configurações › Chaves e custos";
+
+/** Provedores sem chave, pelos segredos conferidos (id da tela Chaves e custos). */
+function chavesQueFaltam(e: EntradaDoEstado, pares: Array<[string, string[]]>): string[] {
+  return pares.filter(([, nomes]) => nomes.some((n) => !e.segredos[n])).map(([id]) => id);
+}
+
 function motorDeImagem(e: EntradaDoEstado): EstadoDoMotor {
   const fila = filaDe(e.imagem.abertos, (x) => x.status === "fila");
   const falta: string[] = [];
@@ -266,7 +279,7 @@ function motorDeImagem(e: EntradaDoEstado): EstadoDoMotor {
   if (!e.segredos.OPENROUTER_API_KEY && !e.segredos.OPENAI_API_KEY) {
     situacao = "parado";
     resumo = "Sem chave de provedor de imagem no servidor.";
-    falta.push("Pôr OPENROUTER_API_KEY nos segredos do Supabase (Edge Functions, Secrets).");
+    falta.push(`Cadastrar a chave do OpenRouter (OPENROUTER_API_KEY) ${CHAVES_E_CUSTOS}.`);
   } else if (cr.semCredito) {
     situacao = "parado";
     resumo = "OpenRouter sem crédito: as imagens pelo OpenRouter param.";
@@ -290,7 +303,9 @@ function motorDeImagem(e: EntradaDoEstado): EstadoDoMotor {
     if (erro && erro.erro_codigo === "saldo_insuficiente") falta.push(`Recarregar a carteira de IA ${erro.cliente ? `de ${erro.cliente}` : "do cliente"} (Financeiro, Carteira de IA).`);
   }
   if (!e.segredos.FAL_KEY) detalhes.push("Sem FAL_KEY: as ferramentas de foto da fal (tirar fundo, ampliar) ficam desligadas.");
-  return { id: "imagem", nome: "Geração de imagem (Estúdio e Mesa Foto)", situacao, resumo, ultimo_sinal: e.imagem.ultimaFeita, fila, ultimo_erro, falta, detalhes };
+  const chaves = chavesQueFaltam(e, [["fal", ["FAL_KEY"]]]);
+  if ((!e.segredos.OPENROUTER_API_KEY && !e.segredos.OPENAI_API_KEY) || cr.semCredito || cr.chaveNoLimite) chaves.unshift("openrouter");
+  return { id: "imagem", nome: "Geração de imagem (Estúdio e Mesa Foto)", situacao, resumo, ultimo_sinal: e.imagem.ultimaFeita, fila, ultimo_erro, falta, detalhes, chaves };
 }
 
 function motorDeVideo(e: EntradaDoEstado): EstadoDoMotor {
@@ -302,7 +317,7 @@ function motorDeVideo(e: EntradaDoEstado): EstadoDoMotor {
   if (!e.segredos.FAL_KEY) {
     situacao = "parado";
     resumo = "Sem FAL_KEY no servidor: os motores de vídeo da fal ficam desligados.";
-    falta.push("Pôr FAL_KEY nos segredos do Supabase (Edge Functions, Secrets).");
+    falta.push(`Cadastrar a chave do fal.ai (FAL_KEY) ${CHAVES_E_CUSTOS}.`);
   } else if (e.video.pedidos7d > 0) {
     situacao = "ok";
     resumo = `Ligado pela fal: ${plural(e.video.pedidos7d, "vídeo pedido", "vídeos pedidos")} em 7 dias, ${plural(e.video.prontos7d, "pronto", "prontos")}.`;
@@ -342,6 +357,7 @@ function motorDeVideo(e: EntradaDoEstado): EstadoDoMotor {
     ultimo_erro: erro ? { em: erro.em, texto: textoDoErro } : null,
     falta,
     detalhes,
+    chaves: chavesQueFaltam(e, [["fal", ["FAL_KEY"]], ["runway", ["RUNWAYML_API_SECRET"]], ["higgsfield", ["HIGGSFIELD_API_KEY", "HIGGSFIELD_API_SECRET"]], ["heygen", ["HEYGEN_API_KEY"]]]),
   };
 }
 
@@ -354,7 +370,7 @@ function motorDaIa(e: EntradaDoEstado): EstadoDoMotor {
   if (!e.segredos.OPENROUTER_API_KEY) {
     situacao = "parado";
     resumo = "Sem OPENROUTER_API_KEY no servidor: a maior parte dos modelos para.";
-    falta.push("Pôr OPENROUTER_API_KEY nos segredos do Supabase.");
+    falta.push(`Cadastrar a chave do OpenRouter (OPENROUTER_API_KEY) ${CHAVES_E_CUSTOS}.`);
   } else if (cr.semCredito) {
     situacao = "parado";
     resumo = "OpenRouter sem crédito.";
@@ -380,14 +396,16 @@ function motorDaIa(e: EntradaDoEstado): EstadoDoMotor {
   if (!e.segredos.OPENAI_API_KEY) detalhes.push("Sem OPENAI_API_KEY: os modelos da OpenAI direta ficam desligados (pelo OpenRouter seguem).");
   if (!e.segredos.ANTHROPIC_API_KEY) detalhes.push("Sem ANTHROPIC_API_KEY: os modelos Claude vão pelo OpenRouter (a Anthropic direta fica desligada).");
   if (!e.segredos.TYPESAFE_API_KEY) {
-    falta.push("Pôr TYPESAFE_API_KEY nos segredos do Supabase (o Jev julga e confere nas mesas).");
+    falta.push(`Cadastrar a chave da TypeSafe (TYPESAFE_API_KEY) ${CHAVES_E_CUSTOS}: o Jev julga e confere nas mesas.`);
     if (situacao === "ok") situacao = "atencao";
   }
-  if (!e.segredos.ELEVENLABS_API_KEY) detalhes.push("Sem ELEVENLABS_API_KEY no servidor: a voz da ElevenLabs não roda pelas funções.");
+  if (!e.segredos.ELEVENLABS_API_KEY) detalhes.push("Sem ELEVENLABS_API_KEY: a voz da ElevenLabs não roda pelas funções.");
   if (e.admin && e.carteirasBaixas.length) {
     detalhes.push(`Carteiras de IA quase vazias: ${e.carteirasBaixas.slice(0, 6).map((c) => `${c.cliente} (${dinheiro(c.saldo)})`).join(", ")}.`);
   }
-  return { id: "ia", nome: "Chaves e crédito da IA", situacao, resumo, ultimo_sinal: null, fila: { esperando: 0, rodando: 0, desde: null }, ultimo_erro: null, falta, detalhes };
+  const chaves = chavesQueFaltam(e, [["openrouter", ["OPENROUTER_API_KEY"]], ["typesafe", ["TYPESAFE_API_KEY"]], ["openai", ["OPENAI_API_KEY"]], ["anthropic", ["ANTHROPIC_API_KEY"]], ["elevenlabs", ["ELEVENLABS_API_KEY"]]]);
+  if (chaves.indexOf("openrouter") < 0 && (cr.semCredito || cr.chaveNoLimite || (cr.restante !== null && cr.restante < 2))) chaves.unshift("openrouter");
+  return { id: "ia", nome: "Chaves e crédito da IA", situacao, resumo, ultimo_sinal: null, fila: { esperando: 0, rodando: 0, desde: null }, ultimo_erro: null, falta, detalhes, chaves };
 }
 
 /** O quadro inteiro, na ordem da tela. */

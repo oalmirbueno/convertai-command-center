@@ -14,7 +14,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   DEFAULT_LOVABLE_MODEL_CHAIN,
   requestAiChatCompletion,
-  resolveAiProviderChain,
+  resolverCadeiaDaIa,
 } from "../_shared/ai-provider.ts";
 // O navegador guarda a resposta do preflight (OPTIONS) em vez de perguntar de novo a cada chamada.
 const corsHeaders = { ...corsDoSupabase, "Access-Control-Max-Age": "7200" };
@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
     const reserva = fallbackItems(pedido);
 
     try {
-      const providers = resolveAiProviderChain({
+      const providers = await resolverCadeiaDaIa({
         primaryModels: PRIMARY_MODEL_CHAIN,
         lovableModels: DEFAULT_LOVABLE_MODEL_CHAIN,
       });

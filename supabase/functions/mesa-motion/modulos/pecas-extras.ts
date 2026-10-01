@@ -19,7 +19,7 @@
  * Sem travessão.
  */
 
-import type { CenaDoFilme, MarcaDaCena, PecaDoKit } from "../../_shared/cena-hf.ts";
+import type { CenaDoFilme, MarcaDaCena, PecaDoKit } from "./cena-hf.ts";
 
 interface Quadro {
   largura: number;

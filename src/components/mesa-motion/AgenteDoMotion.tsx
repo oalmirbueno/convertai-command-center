@@ -18,7 +18,7 @@ import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, conversa, juntar } from "@/components/sistema/estilos";
 import type { PropsDoAgenteDaMesa } from "@/components/mesa-videos/MesaDeVideo";
-import { TAMANHOS_DO_MOTION } from "../../../supabase/functions/_shared/motion-metodo";
+import { TAMANHOS_DO_MOTION } from "../../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import { useModeloDaAcao } from "./FilmeAberto";
 import { chamarMotion, CHAVES, useFilmeDaUrl } from "./motionApi";
 

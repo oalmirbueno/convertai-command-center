@@ -58,6 +58,7 @@
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { tetoDeSaidaNoProvedor } from "./teto-de-saida.ts";
+import { chave as chaveDoPainel } from "./chaves.ts";
 import { esquemaNoProvedor, LIMITE_DE_OPCIONAIS, LIMITE_DE_UNIOES, respostaNoFormatoOriginal } from "./esquema-compativel.ts";
 import {
   capacidadesDaListaDeImagens,
@@ -386,9 +387,9 @@ function clienteServico(): SupabaseClient {
   return servico;
 }
 
-/** A chave da agencia para cada provedor vem so do ambiente do servidor. */
-export function chaveDoProvedor(provedor: Provedor): string {
-  const chave = Deno.env.get(ENV_CHAVE[provedor])?.trim();
+/** A chave da agencia: o ambiente do servidor e, sem ele, o cofre do painel (chaves.ts). */
+export async function chaveDoProvedor(provedor: Provedor): Promise<string> {
+  const chave = await chaveDoPainel(ENV_CHAVE[provedor]);
   if (!chave) {
     throw new IaMotorErro("provedor_sem_chave", `O provedor ${provedor} ainda nao tem chave configurada.`, { provedor });
   }
@@ -443,7 +444,7 @@ export async function resolverChave(clientId: string, provedor: Provedor): Promi
   if (!usarAgencia) {
     throw new IaMotorErro("cliente_sem_chave", `O cliente nao tem chave propria de ${provedor} e nao usa a chave da agencia.`, { provedor });
   }
-  return { segredo: chaveDoProvedor(provedor), origem: "agencia", chaveId: null, cotaMensalUsd: null, gastoMesUsd: 0 };
+  return { segredo: await chaveDoProvedor(provedor), origem: "agencia", chaveId: null, cotaMensalUsd: null, gastoMesUsd: 0 };
 }
 
 /** Com chave do cliente, a cota do mes precisa cobrir a estimativa. */
@@ -1656,7 +1657,7 @@ export async function chamarImagem(e: EntradaImagem): Promise<SaidaImagem> {
 
 /** Lista os ids reais de modelo que o provedor oferece para a nossa chave. */
 export async function listarModelosDoProvedor(provedor: Provedor): Promise<string[]> {
-  const chave = chaveDoProvedor(provedor);
+  const chave = await chaveDoProvedor(provedor);
   const alvo: Record<Provedor, { url: string; headers: Record<string, string> }> = {
     openai: { url: "https://api.openai.com/v1/models", headers: { "Authorization": `Bearer ${chave}` } },
     anthropic: { url: "https://api.anthropic.com/v1/models?limit=1000", headers: { "x-api-key": chave, "anthropic-version": "2023-06-01" } },

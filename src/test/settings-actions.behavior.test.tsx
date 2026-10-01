@@ -4,6 +4,8 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import SettingsPage from "@/pages/SettingsPage";
 
 vi.mock("@/contexts/ThemeContext", () => ({ useTheme: () => ({ theme: "dark", setTheme: vi.fn() }) }));
+// Frente CHV (01/10): a página lê o papel (Chaves e custos e Modelos de IA são só do admin).
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ profile: { role: "team" }, user: { id: "u-1" } }) }));
 vi.mock("@/components/NotificationsPanel", () => ({
   default: ({ open, onOpenChange }: { open: boolean; onOpenChange: (value: boolean) => void }) => open
     ? <div role="dialog" aria-label="Notificações"><button onClick={() => onOpenChange(false)}>Fechar avisos</button></div>

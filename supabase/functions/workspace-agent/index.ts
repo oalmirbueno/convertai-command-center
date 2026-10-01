@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.97.0";
 import {
   requestAiChatCompletion,
-  resolveAiProviderChain,
+  resolverCadeiaDaIa,
 } from "../_shared/ai-provider.ts";
 import { fetchPublicText } from "../_shared/public-http.ts";
 import { listMemory as _listProjectMemory, upsertMemory as _upsertProjectMemory, memoryToPromptBlock } from "../_shared/project-memory-services.ts";
@@ -276,7 +276,7 @@ Deno.serve(async (req) => {
       const raw = String(preview?.text || "").slice(0, 32000);
       const ctxName = preview?.context?.client_name || "Global";
       const folderP = preview?.context?.folder_path || "raiz";
-      const providers = resolveAiProviderChain({
+      const providers = await resolverCadeiaDaIa({
         primaryModels: [specialMode === "structure" ? "gpt-5-mini" : "gpt-4o-mini"],
         lovableModels: ["google/gemini-3-flash-preview", "google/gemini-2.5-flash", "openai/gpt-5-mini"],
       });
@@ -670,7 +670,7 @@ Regras absolutas:
       return false;
     });
 
-    const routerProviders = resolveAiProviderChain({
+    const routerProviders = await resolverCadeiaDaIa({
       primaryModels: ["gpt-5-mini"],
       lovableModels: ["google/gemini-3-flash-preview", "google/gemini-2.5-flash", "openai/gpt-5-mini"],
     });
@@ -814,7 +814,7 @@ Regras:
 
     // ============ MOTOR ============
     // Provider OpenAI-compatible configurado primeiro; compatibilidade opcional por último.
-    const providers = resolveAiProviderChain({
+    const providers = await resolverCadeiaDaIa({
       primaryModels: ["gpt-5", "gpt-5-mini", "gpt-4.1", "gpt-4o-mini"],
       lovableModels: [
         "google/gemini-2.5-pro",
@@ -1015,7 +1015,7 @@ async function responderComAcao(o: {
   const alvos = alvosDoWorkspace(o.clientId, o.clientName, (nosR.data as NoDoWorkspace[]) || []);
   const historico = ((historicoR.data as { role: string; content: string }[] | null) || []).slice(1).reverse()
     .map((m) => `${m.role === "user" ? "Equipe" : "Agente"}: ${String(m.content).slice(0, 500)}`).join("\n");
-  const providers = resolveAiProviderChain({ primaryModels: ["gpt-5-mini", "gpt-4.1"], lovableModels: ["google/gemini-2.5-flash", "openai/gpt-5-mini"] });
+  const providers = await resolverCadeiaDaIa({ primaryModels: ["gpt-5-mini", "gpt-4.1"], lovableModels: ["google/gemini-2.5-flash", "openai/gpt-5-mini"] });
   if (!providers.length) return json({ error: "Nenhum provedor de IA configurado" }, 500);
   let bruto: Record<string, unknown> | null = null;
   const sp = await o.metodo;

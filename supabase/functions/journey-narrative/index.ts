@@ -13,7 +13,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   DEFAULT_LOVABLE_MODEL_CHAIN,
   requestAiChatCompletion,
-  resolveAiProviderChain,
+  resolverCadeiaDaIa,
 } from "../_shared/ai-provider.ts";
 
 // FN-02: mesmas listas do supabase-js, com o cache do pré-voo.
@@ -203,7 +203,7 @@ Deno.serve(async (req) => {
 
     const aiNarrative = await (async () => {
       try {
-        const providers = resolveAiProviderChain({
+        const providers = await resolverCadeiaDaIa({
           primaryModels: PRIMARY_MODEL_CHAIN,
           lovableModels: LOVABLE_COMPAT_MODEL_CHAIN,
         });

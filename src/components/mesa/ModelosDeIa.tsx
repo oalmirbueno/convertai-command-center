@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { Switch } from "@/components/ui/switch";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
+import { dolar, lerUsoDaSemana } from "@/lib/config/chavesECustos";
+import { custoSemanalCom, usoDoPapel } from "@/lib/config/custoDaSemana";
 import {
   capacidadesDoModeloNaTela,
   chamarFuncao,
@@ -100,6 +102,60 @@ export function resumoDaSincronizacao(data: any): { falhou: boolean; erro: strin
   return { falhou: false, erro: null, novos };
 }
 
+/**
+ * Confirmar a troca do padrão de UM papel (frente CHV, 01/10/2026): de, para,
+ * preço e o custo estimado por semana pelo uso real dos últimos 7 dias. Nada
+ * é gravado antes do Confirmar.
+ */
+function TrocaDoPapel({
+  rotulo,
+  de,
+  para,
+  uso,
+  semUso,
+  salvando,
+  onConfirmar,
+  onCancelar,
+}: {
+  rotulo: string;
+  de: ModeloIa | null;
+  para: ModeloIa | null;
+  uso: ReturnType<typeof usoDoPapel> | undefined;
+  semUso: boolean;
+  salvando: boolean;
+  onConfirmar: () => void;
+  onCancelar: () => void;
+}) {
+  const hoje = uso ? Number(uso.custo_usd) || 0 : null;
+  const comONovo = uso ? custoSemanalCom(uso, para) : null;
+  return (
+    <div className="min-w-0 border-t border-border pt-2 sm:col-span-2" data-troca-do-papel="">
+      <p className="text-[12px] leading-4 [overflow-wrap:anywhere]">
+        <span className="font-medium">{rotulo}:</span> {de ? nomeDoModelo(de) : "sem padrão"} → <span className="font-medium">{para ? nomeDoModelo(para) : "?"}</span>
+        {para && <span className="text-muted-foreground"> ({precoDoModelo(para)})</span>}
+      </p>
+      <p className="mt-0.5 text-[12px] leading-4 text-muted-foreground tabular-nums" data-custo-da-semana="">
+        {uso === undefined
+          ? semUso
+            ? "Sem a estimativa da semana agora (o uso não pôde ser lido)."
+            : "Calculando o custo da semana…"
+          : uso === null || !uso.chamadas
+            ? "Este papel não teve uso nos últimos 7 dias: sem custo para estimar."
+            : `Últimos 7 dias: ${uso.chamadas} chamadas, ${dolar(hoje)}. Com o novo: ${comONovo === null ? "preço a conferir" : `~${dolar(comONovo)} por semana`}.`}
+      </p>
+      <div className="mt-1.5 flex flex-wrap items-center">
+        <Button type="button" size="sm" className="mr-2" onClick={onConfirmar} disabled={salvando || !para} data-confirmar-troca="">
+          {salvando && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+          Confirmar
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={onCancelar} disabled={salvando}>
+          Cancelar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean; onOpenChange: (v: boolean) => void }) {
   const queryClient = useQueryClient();
   const [busca, setBusca] = useState("");
@@ -110,6 +166,15 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
   const [sincronizando, setSincronizando] = useState(false);
   const [salvando, setSalvando] = useState<string | null>(null);
   const [revisao, setRevisao] = useState<MudancaDePadrao[] | null>(null);
+  // Frente CHV (01/10): trocar o padrão de um papel pede Confirmar, com o custo estimado por semana antes.
+  const [pendente, setPendente] = useState<{ papel: string; para: string } | null>(null);
+  const usoDaSemana = useQuery({
+    queryKey: ["config", "chaves", "uso-semana"],
+    enabled: aberto && !!pendente,
+    queryFn: lerUsoDaSemana,
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
 
   const catalogo = useQuery({
     queryKey: ["mesa", "catalogo-completo"],
@@ -195,6 +260,7 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
         if (erroAntigo) throw erroAntigo;
       }
       toast.success("Padrão salvo");
+      setPendente(null);
       atualizar();
     } catch (e) {
       toast.error("Não foi possível salvar o padrão", { description: textoDoErro(e) });
@@ -338,8 +404,8 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
                     </p>
                   </div>
                   <Select
-                    value={atual?.id || ""}
-                    onValueChange={(v) => void definirPadrao(papel.valor, v)}
+                    value={pendente && pendente.papel === papel.valor ? pendente.para : atual?.id || ""}
+                    onValueChange={(v) => setPendente(v && v !== (atual?.id || "") ? { papel: papel.valor, para: v } : null)}
                     disabled={salvando === `padrao-${papel.valor}` || opcoes.length === 0}
                   >
                     <SelectTrigger className="h-9 min-w-0 text-[13px]">
@@ -351,6 +417,18 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
                       ))}
                     </SelectContent>
                   </Select>
+                  {pendente && pendente.papel === papel.valor && (
+                    <TrocaDoPapel
+                      rotulo={papel.rotulo}
+                      de={atual}
+                      para={porId(pendente.para)}
+                      uso={usoDaSemana.isLoading ? undefined : usoDoPapel(usoDaSemana.data?.agentes, papel.valor)}
+                      semUso={usoDaSemana.isError}
+                      salvando={salvando === `padrao-${papel.valor}`}
+                      onConfirmar={() => void definirPadrao(papel.valor, pendente.para)}
+                      onCancelar={() => setPendente(null)}
+                    />
+                  )}
                 </li>
               );
             })}

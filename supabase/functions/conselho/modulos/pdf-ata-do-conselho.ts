@@ -21,7 +21,7 @@ import {
   rotuloEmCima,
   tituloDeSecao,
 } from "../../_shared/pdf-base.ts";
-import { type FalaDoConselho, NOME_DA_ETAPA, nomeDoEspecialista, planoDasEtapas, type SessaoDoConselho } from "../../_shared/conselho.ts";
+import { type FalaDoConselho, NOME_DA_ETAPA, nomeDoEspecialista, planoDasEtapas, type SessaoDoConselho } from "./conselho.ts";
 import { MODOS } from "./conselho-presets.ts";
 
 const semTravessao = (t: string) => String(t || "").replace(/\s*[\u2013\u2014]\s*/g, ", ");

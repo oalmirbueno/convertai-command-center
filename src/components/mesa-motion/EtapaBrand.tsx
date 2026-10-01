@@ -7,7 +7,7 @@ import { PreencherComIA, type CampoParaPreencher } from "@/components/sistema";
 import Secao from "@/components/sistema/Secao";
 import { botao, campo, campoTexto, juntar, lista, texto } from "@/components/sistema/estilos";
 import { usd } from "@/lib/mesa/api";
-import { brandMd, textoDaProva, type BeatDoFilme, type BrandDoFilme, type ProvaReal } from "../../../supabase/functions/_shared/motion-metodo";
+import { brandMd, textoDaProva, type BeatDoFilme, type BrandDoFilme, type ProvaReal } from "../../../supabase/functions/mesa-motion/modulos/motion-metodo";
 import { ComFilme, ModeloDaAcao, useModeloDaAcao } from "./FilmeAberto";
 import ListaDeProvas from "./ListaDeProvas";
 import { chamarMotion, type Filme, useGuardarFilme } from "./motionApi";
