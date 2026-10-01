@@ -1889,6 +1889,14 @@
       "remote_name": "previa_editavel_do_site",
       "remote_statements_sha256": "8b61ede36accaecad88a9f5d00d84e29964303c456574e40f8dcc708ce30dd07",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260930319000",
+      "path": "supabase/migrations/20260930319000_editor_render_por_formato.sql",
+      "local_sha256": "9b7048a9c35e7d806b5ab65bea88d6dee3cb1b64b0e782235a12fbd3edc5b637",
+      "remote_name": "editor_render_por_formato",
+      "remote_statements_sha256": "bbb3ab4a1198e4c770d92dbfcf760998dfcd17ae51def37eab8a187f9d282289",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
