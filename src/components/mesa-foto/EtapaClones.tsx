@@ -21,8 +21,7 @@ import { MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto } from "./Comuns";
 import { AjudaRecolhida, BarraDeAcoes, CampoDeEscolha, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Secao, SeletorCompacto, botao, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 import { ZonaDeEnvio } from "./EtapaAcervo";
 import SeletorDeFotos from "./SeletorDeFotos";
-import SeletorLateral, { type ItemDoSeletor } from "./SeletorLateral";
-import TituloRecolhivel from "@/components/sistema/TituloRecolhivel";
+import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { AtalhosDaFoto, MenuDeUso } from "./UsoDaFoto";
 import { useSelecaoParaODiretor } from "./diretorApi";
 import { acrescentarFotos, baixarDoStorage, baixarUmaAUma, classeDaFoto, invalidarFotos, subirOriginais, useFotos, type FotoDoAcervo } from "./fotoApi";
@@ -98,8 +97,10 @@ import {
  * Pensado para a futura mesa de vídeo: a folha aprovada vira o pacote de
  * referência do rosto (clone_pacote).
  *
- * Layout: no computador, clones à esquerda e o clone aberto à direita, com a
- * folha e as variações lado a lado; no celular, tudo em uma coluna.
+ * Layout (02/10, "organizar"): os clones já feitos numa faixa compacta no
+ * topo; o clone aberto ocupa a largura toda: "Antes" (fotos reais) compacto,
+ * o resultado grande com a galeria por tipo (variações e folha, rolagem
+ * própria) e, embaixo, gerar (folha e variações lado a lado no largo).
  *
  * 26/09 (pedido do dono): sem piscar ao criar ou gerar (provisório no lugar
  * do esqueleto e imagem no cache assim que a função devolve), aprovar na hora
@@ -372,40 +373,105 @@ function DialogoDeFotosDaGeracao({
 
 const PONTO_DO_CLONE: Record<string, string> = { rascunho: "bg-muted-foreground/40", folha: "bg-primary", pronta: "bg-success", arquivada: "bg-muted-foreground/30" };
 
-/** Clones no seletor lateral compacto (o mesmo das personas, 26/09). */
-function ListaDeClones({ clones, escolhido, onEscolher, onNovo, novoAberto }: { clones: Clone[]; escolhido: string | null; onEscolher: (id: string) => void; onNovo: () => void; novoAberto: boolean }) {
+/** Quantas variações ativas de cada clone o acervo em cache já tem (marcadas com `clone:<id>`). */
+function variacoesPorClone(fotos: FotoDoAcervo[]): Record<string, number> {
+  const saida: Record<string, number> = {};
+  fotos.forEach((f) => {
+    if (f.ativa === false) return;
+    f.tags.forEach((t) => {
+      if (t.indexOf("clone:") === 0) saida[t.slice(6)] = (saida[t.slice(6)] || 0) + 1;
+    });
+  });
+  return saida;
+}
+
+/**
+ * Clones já feitos numa faixa compacta no topo (pedido do dono, 02/10:
+ * "organizar"): capa, nome, estado e quantas variações; o aberto em destaque.
+ * A faixa rola de lado por dentro (nunca a página) e recolhe pelo título,
+ * deixando à vista só o nome do aberto.
+ */
+function FaixaDeClones({
+  clones,
+  escolhido,
+  onEscolher,
+  onNovo,
+  novoAberto,
+  variacoes,
+  carregando,
+}: {
+  clones: Clone[];
+  escolhido: string | null;
+  onEscolher: (id: string) => void;
+  onNovo: () => void;
+  novoAberto: boolean;
+  /** Variações por clone (do acervo em cache); sem o acervo lido, nada aparece. */
+  variacoes: Record<string, number> | null;
+  carregando: boolean;
+}) {
   const { clientId } = useMesa();
-  const itens: ItemDoSeletor[] = clones.map((c) => ({
-    id: c.id,
-    nome: c.nome,
-    miniatura: (
-      <span className="block h-full w-full" data-clone={c.id}>
-        {c.capa_url ? (
-          <img src={c.capa_url} alt={c.nome} className="h-full w-full object-cover" loading="lazy" />
-        ) : (
-          <span className="flex h-full w-full items-center justify-center text-muted-foreground">
-            <UserRound className="h-4 w-4" />
-          </span>
-        )}
-      </span>
-    ),
-    estado: { rotulo: statusDoClone(c.status).rotulo, ponto: PONTO_DO_CLONE[c.status] || "bg-muted-foreground/40" },
-    nota: c.autorizacao_valida.ok ? null : "autorização inválida",
-    alerta: !c.autorizacao_valida.ok,
-  }));
+  const [recolhido, setRecolhido] = useRecolhido(`mesa-foto:clones:lista:${clientId}`);
+  const atual = clones.find((c) => c.id === escolhido) || null;
   return (
-    <SeletorLateral
-      titulo="Clones"
-      recolher={`mesa-foto:clones:lista:${clientId}`}
-      itens={itens}
-      escolhido={escolhido}
-      onEscolher={onEscolher}
-      onNovo={onNovo}
-      novoRotulo="Novo clone"
-      novoAberto={novoAberto}
-      vazio="Nenhum clone ainda."
-      ajuda="De 1 a 4 fotos reais da mesma pessoa do cliente, com a autorização de uso de imagem registrada. Depois vêm a folha de identidade e as variações com o mesmo rosto."
-    />
+    <section className="min-w-0" aria-label="Clones" data-faixa-de-clones="" data-recolhido={recolhido ? "sim" : "nao"}>
+      <div className={juntar("flex min-w-0 items-center", recolhido ? "" : "mb-2")}>
+        <h2 className="min-w-0">
+          <TituloRecolhivel titulo="Clones" recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={atual ? atual.nome : undefined} />
+        </h2>
+        <span className={juntar(texto.auxiliar, "ml-1.5 shrink-0 tabular-nums")}>{clones.length}</span>
+        {!recolhido && (
+          <AjudaRecolhida className="ml-1">De 1 a 4 fotos reais da mesma pessoa do cliente, com a autorização de uso de imagem registrada. Depois vêm a folha de identidade e as variações com o mesmo rosto.</AjudaRecolhida>
+        )}
+        <button type="button" className={juntar(botao.secundario, "ml-auto h-8 px-2.5 text-[12px]")} onClick={onNovo} disabled={novoAberto}>
+          <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Novo clone
+        </button>
+      </div>
+      {recolhido ? null : carregando ? (
+        <Carregando forma="lista" linhas={1} rotulo="Lendo os clones" />
+      ) : clones.length === 0 ? (
+        <EstadoVazio compacto titulo="Nenhum clone ainda." />
+      ) : (
+        <ul className="scrollbar-hidden flex min-w-0 overflow-x-auto overscroll-x-contain pb-1" aria-label="Clones do cliente" data-lista-de-clones="">
+          {clones.map((c) => {
+            const ativo = c.id === escolhido;
+            const n = variacoes ? variacoes[c.id] || 0 : null;
+            const st = statusDoClone(c.status);
+            return (
+              <li key={c.id} className="mr-1.5 w-52 shrink-0" data-item-do-clone={c.id}>
+                <button
+                  type="button"
+                  onClick={() => onEscolher(c.id)}
+                  aria-pressed={ativo}
+                  aria-label={`Abrir ${c.nome}`}
+                  className={juntar("flex w-full min-w-0 items-center rounded-md px-1.5 py-1 text-left transition-colors", ativo ? "bg-primary/10 ring-1 ring-primary/40" : "hover:bg-muted", foco)}
+                >
+                  <span className="relative mr-2 block h-10 w-10 shrink-0 overflow-hidden rounded-md bg-muted" data-clone={c.id}>
+                    {c.capa_url ? (
+                      <img src={c.capa_url} alt={c.nome} className="h-full w-full object-cover" loading="lazy" />
+                    ) : (
+                      <span className="flex h-full w-full items-center justify-center text-muted-foreground">
+                        <UserRound className="h-4 w-4" />
+                      </span>
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className={juntar("block truncate text-[13px]", ativo ? "font-semibold" : "font-medium")}>{c.nome}</span>
+                    <span className="flex min-w-0 items-center text-[11px] text-muted-foreground">
+                      <span className={`mr-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${PONTO_DO_CLONE[c.status] || "bg-muted-foreground/40"}`} aria-hidden="true" />
+                      <span className="truncate">
+                        {c.autorizacao_valida.ok ? st.rotulo : "autorização inválida"}
+                        {n !== null ? ` · ${n} ${n === 1 ? "variação" : "variações"}` : ""}
+                      </span>
+                    </span>
+                  </span>
+                  {!c.autorizacao_valida.ok && <span className="ml-1 h-1.5 w-1.5 shrink-0 rounded-full bg-warning" aria-label="Atenção" />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -491,17 +557,20 @@ function EditorDeFotosDeOrigem({
     }
   };
 
+  // Na faixa do clone aberto ("Antes"), miniaturas pequenas numa linha só (dono, 02/10: "bloco compacto").
+  const compacta = modo === "faixa";
+  const botaoDaFoto = compacta ? "h-5 w-5" : "h-6 w-6";
   const miniaturas = (
-    <ul className={`grid min-w-0 gap-1.5 ${modo === "faixa" ? "grid-cols-4 sm:grid-cols-6" : "mb-2 grid-cols-4"}`} aria-label="Fotos de origem">
+    <ul className={compacta ? "flex min-w-0 flex-wrap" : "mb-2 grid min-w-0 grid-cols-4 gap-1.5"} aria-label="Fotos de origem">
       {ids.map((id) => {
         const f = fotoDe(id);
         const eh = principalAtual === id;
         return (
-          <li key={id} className="relative min-w-0" data-foto-real={id}>
+          <li key={id} className={compacta ? "relative mb-1.5 mr-1.5 w-16 shrink-0 sm:w-20" : "relative min-w-0"} data-foto-real={id}>
             {f ? <MiniaturaDaFoto foto={f} selo={false} className={eh ? "ring-2 ring-primary" : ""} /> : <span className="block w-full rounded-lg bg-muted" style={{ paddingBottom: "100%" }} />}
             {!bloqueado && (
               <>
-                <button type="button" aria-label="Foto principal" title="Marcar como principal" aria-pressed={eh} onClick={() => onMudar(ids, id)} className="absolute left-1 top-1 flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card">
+                <button type="button" aria-label="Foto principal" title="Marcar como principal" aria-pressed={eh} onClick={() => onMudar(ids, id)} className={`absolute left-1 top-1 flex ${botaoDaFoto} items-center justify-center rounded-md border border-border bg-card`}>
                   <Star className={`h-3 w-3 ${eh ? "fill-primary text-primary" : "text-muted-foreground"}`} />
                 </button>
                 <button
@@ -510,7 +579,7 @@ function EditorDeFotosDeOrigem({
                   title={ids.length <= minimo ? "O clone precisa de pelo menos 1 foto: troque em vez de tirar" : "Tirar esta foto"}
                   disabled={ids.length <= minimo}
                   onClick={() => tirar(id)}
-                  className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card text-muted-foreground disabled:opacity-40"
+                  className={`absolute right-1 top-1 flex ${botaoDaFoto} items-center justify-center rounded-md border border-border bg-card text-muted-foreground disabled:opacity-40`}
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -519,18 +588,18 @@ function EditorDeFotosDeOrigem({
                   aria-label="Trocar a foto"
                   title="Trocar por outra foto"
                   onClick={() => setEscolhendo({ trocar: id })}
-                  className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card text-muted-foreground"
+                  className={`absolute bottom-1 right-1 flex ${botaoDaFoto} items-center justify-center rounded-md border border-border bg-card text-muted-foreground`}
                 >
                   <ArrowRightLeft className="h-3 w-3" />
                 </button>
               </>
             )}
-            {eh && <span className="pointer-events-none absolute bottom-1 left-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[9.5px] font-semibold text-primary">principal</span>}
+            {eh && !compacta && <span className="pointer-events-none absolute bottom-1 left-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[9.5px] font-semibold text-primary">principal</span>}
           </li>
         );
       })}
-      {modo === "faixa" && !bloqueado && !cheio && (
-        <li className="min-w-0">
+      {compacta && !bloqueado && !cheio && (
+        <li className="mb-1.5 mr-1.5 w-16 shrink-0 sm:w-20">
           <button
             type="button"
             onClick={() => setEscolhendo({ trocar: null })}
@@ -538,7 +607,7 @@ function EditorDeFotosDeOrigem({
             className="relative block w-full rounded-lg border border-dashed border-primary/50 bg-card text-primary hover:bg-primary/5"
             style={{ paddingBottom: "100%" }}
           >
-            <span className="absolute inset-0 flex flex-col items-center justify-center text-[10.5px]">
+            <span className="absolute inset-0 flex flex-col items-center justify-center text-[11px]">
               <Plus className="mb-0.5 h-4 w-4" /> foto
             </span>
           </button>
@@ -745,38 +814,21 @@ function BotaoBaixarOriginal({ baixar, rotulo }: { baixar: () => Promise<void>; 
   );
 }
 
-function FolhaDeIdentidade({ aberto }: { aberto: CloneAberto }) {
-  const { clientId, atualizarCusto } = useMesa();
-  const queryClient = useQueryClient();
-  const avisarErro = useAvisarErro();
-  const andamentos = useAndamentos();
-  const [qualidade, setQualidade] = useState<Qualidade>("alta");
-  const [conferencias, setConferencias] = useState<Record<string, ConferenciaDoClone | null>>({});
-  const [ampliada, setAmpliada] = useState<number | null>(null);
-  // Vista em que a equipe escolhe as fotos de origem antes de gerar de novo.
-  const [escolhendoFotos, setEscolhendoFotos] = useState<{ valor: string; rotulo: string } | null>(null);
-  const c = aberto.clone;
-  const bloqueado = !c.autorizacao_valida.ok || c.status === "arquivada";
-  const motor = aberto.motores.find((m) => m.modelo_imagem_id === c.motor_preferido_id) || aberto.motores.find((m) => m.padrao) || null;
-  const motorId = motor ? motor.modelo_imagem_id : null;
-  const refs = Math.min(5, aberto.reais.length + aberto.folha.aprovadas);
-  const servidor = usePrecoNoServidor(clientId, "clone_folha", { modelo_id: c.id }, !bloqueado);
-  const porVista = typeof servidor.data === "number" ? servidor.data : null;
+/** A vista que ocupa cada lugar da folha: a aprovada ou, sem ela, a mais recente. */
+function vistasNaTela(aberto: CloneAberto): (VistaDoClone | null)[] {
   const ultimaDe = (v: string) => aberto.imagens.filter((i) => i.papel === "vista" && i.vista === v).pop() || null;
   const aprovadaDe = (v: string) => aberto.imagens.find((i) => i.papel === "vista" && i.vista === v && i.aprovada === true) || null;
-  const naTela: (VistaDoClone | null)[] = VISTAS_DO_CLONE.map((v) => aprovadaDe(v.valor) || ultimaDe(v.valor));
-  const prontas = naTela.filter((x): x is VistaDoClone => !!x);
-  const faltam = VISTAS_DO_CLONE.filter((v) => !ultimaDe(v.valor)).map((v) => v.valor);
-  // Feitas com as fotos de origem antigas: continuam guardadas, com "Gerar de novo com as fotos novas".
-  const antigas = VISTAS_DO_CLONE.filter((_v, k) => !!naTela[k] && naTela[k]!.desatualizada).map((v) => v.valor);
-  const gerandoAlguma = VISTAS_DO_CLONE.some((v) => {
-    const a = andamentos[chaveDoAndamento(c.id, "clone-vista", v.valor)];
-    return !!a && a.estado === "gerando";
-  });
-  const rodar = (vistas: string[], fotos: string[] | null = null) => {
-    void rodarVistas({ queryClient, clientId, cloneId: c.id, vistas, qualidade, atualizar: atualizarCusto, fotos });
-    return Promise.resolve({});
-  };
+  return VISTAS_DO_CLONE.map((v) => aprovadaDe(v.valor) || ultimaDe(v.valor));
+}
+
+const rotuloDaVista = (vista: string | null) => (VISTAS_DO_CLONE.find((v) => v.valor === vista) || { rotulo: vista || "vista" }).rotulo;
+
+/** Aprovar, apagar e restaurar uma vista da folha (na folha e no resultado grande). */
+function useAcoesDaVista(aberto: CloneAberto) {
+  const { clientId } = useMesa();
+  const queryClient = useQueryClient();
+  const avisarErro = useAvisarErro();
+  const c = aberto.clone;
   /**
    * Aprovar na hora (pedido do dono, 26/09: "aprovar demora, fica
    * carregando"): a vista fica aprovada na tela antes da função responder
@@ -821,7 +873,38 @@ function FolhaDeIdentidade({ aberto }: { aberto: CloneAberto }) {
       avisarErro(e, "Vista não apagada");
     }
   };
+  return { decidir, apagar, restaurar };
+}
 
+function FolhaDeIdentidade({ aberto, visto, onVer }: { aberto: CloneAberto; visto: string | null; onVer: (id: string) => void }) {
+  const { clientId, atualizarCusto } = useMesa();
+  const queryClient = useQueryClient();
+  const andamentos = useAndamentos();
+  const { decidir, apagar, restaurar } = useAcoesDaVista(aberto);
+  const [qualidade, setQualidade] = useState<Qualidade>("alta");
+  const [conferencias, setConferencias] = useState<Record<string, ConferenciaDoClone | null>>({});
+  // Vista em que a equipe escolhe as fotos de origem antes de gerar de novo.
+  const [escolhendoFotos, setEscolhendoFotos] = useState<{ valor: string; rotulo: string } | null>(null);
+  const c = aberto.clone;
+  const bloqueado = !c.autorizacao_valida.ok || c.status === "arquivada";
+  const motor = aberto.motores.find((m) => m.modelo_imagem_id === c.motor_preferido_id) || aberto.motores.find((m) => m.padrao) || null;
+  const motorId = motor ? motor.modelo_imagem_id : null;
+  const refs = Math.min(5, aberto.reais.length + aberto.folha.aprovadas);
+  const servidor = usePrecoNoServidor(clientId, "clone_folha", { modelo_id: c.id }, !bloqueado);
+  const porVista = typeof servidor.data === "number" ? servidor.data : null;
+  const ultimaDe = (v: string) => aberto.imagens.filter((i) => i.papel === "vista" && i.vista === v).pop() || null;
+  const naTela = vistasNaTela(aberto);
+  const faltam = VISTAS_DO_CLONE.filter((v) => !ultimaDe(v.valor)).map((v) => v.valor);
+  // Feitas com as fotos de origem antigas: continuam guardadas, com "Gerar de novo com as fotos novas".
+  const antigas = VISTAS_DO_CLONE.filter((_v, k) => !!naTela[k] && naTela[k]!.desatualizada).map((v) => v.valor);
+  const gerandoAlguma = VISTAS_DO_CLONE.some((v) => {
+    const a = andamentos[chaveDoAndamento(c.id, "clone-vista", v.valor)];
+    return !!a && a.estado === "gerando";
+  });
+  const rodar = (vistas: string[], fotos: string[] | null = null) => {
+    void rodarVistas({ queryClient, clientId, cloneId: c.id, vistas, qualidade, atualizar: atualizarCusto, fotos });
+    return Promise.resolve({});
+  };
   return (
     <Secao
       titulo="Folha de identidade"
@@ -884,9 +967,9 @@ function FolhaDeIdentidade({ aberto }: { aberto: CloneAberto }) {
           const conf = img ? (conferencias[img.id] !== undefined ? conferencias[img.id] : null) : null;
           return (
             <li key={v.valor} className="min-w-0" data-vista-do-clone={v.valor}>
-              <Moldura proporcao={img ? proporcaoDaImagem(img) : 0.8} className={`border ${img && img.aprovada === true ? "border-success/60" : "border-border"}`}>
+              <Moldura proporcao={img ? proporcaoDaImagem(img) : 0.8} className={`border ${img && visto === img.id ? "ring-2 ring-primary" : ""} ${img && img.aprovada === true ? "border-success/60" : "border-border"}`}>
                 {img ? (
-                  <button type="button" className="block h-full w-full cursor-zoom-in" aria-label={`Ver grande: ${v.rotulo}`} onClick={() => setAmpliada(prontas.indexOf(img))}>
+                  <button type="button" className="block h-full w-full cursor-zoom-in" aria-label={`Ver grande: ${v.rotulo}`} aria-pressed={visto === img.id} onClick={() => onVer(img.id)}>
                     <ImagemDaFolhaNaTela imagem={img} alt={`${c.nome}, ${v.rotulo}`} />
                   </button>
                 ) : (
@@ -970,9 +1053,9 @@ function FolhaDeIdentidade({ aberto }: { aberto: CloneAberto }) {
       {aberto.arquivadas.length > 0 && (
         <details className="mt-4 min-w-0 border-t border-border pt-3" data-vistas-apagadas="">
           <summary className="cursor-pointer text-[12px] font-medium text-muted-foreground">Apagadas ({aberto.arquivadas.length})</summary>
-          <ul className="mt-2 grid min-w-0 grid-cols-3 gap-2 pb-1 sm:grid-cols-4">
+          <ul className="mt-2 grid min-w-0 grid-cols-4 gap-2 pb-1 sm:grid-cols-6">
             {aberto.arquivadas.map((img) => {
-              const rotulo = (VISTAS_DO_CLONE.find((v) => v.valor === img.vista) || { rotulo: img.vista || "vista" }).rotulo;
+              const rotulo = rotuloDaVista(img.vista);
               return (
                 <li key={img.id} className="min-w-0" data-vista-apagada={img.id}>
                   <Moldura proporcao={proporcaoDaImagem(img)} className="border border-border">
@@ -997,11 +1080,6 @@ function FolhaDeIdentidade({ aberto }: { aberto: CloneAberto }) {
           executar={(fotos) => rodar([escolhendoFotos.valor], fotos)}
         />
       )}
-      <Ampliar
-        imagens={prontas.map((i) => ({ caminho: caminhoDaImagem(i), bucket: i.storage_bucket || "mesa", titulo: `${c.nome} (gerada)`, legenda: "Pessoa real recriada por IA com autorização.", proporcao: proporcaoDaImagem(i) }))}
-        indice={ampliada !== null && ampliada >= 0 ? ampliada : null}
-        onFechar={() => setAmpliada(null)}
-      />
     </Secao>
   );
 }
@@ -1115,17 +1193,16 @@ function PeloContexto({ clone, marcadas, onMarcar, sugestoes, onSugestoes }: { c
 }
 
 /** A variação aberta: grande, com aprovar, baixar o original, usar e as ferramentas pro (ampliar para o cliente). */
-function VariacaoAberta({
+/** As ações da variação que está grande no resultado (aprovar, baixar, usar, conferir, gerar de novo, apagar, ampliar). */
+function AcoesDaVariacao({
   foto,
   clone,
-  onFechar,
   onMudou,
   onRefazer,
   onApagar,
 }: {
   foto: FotoDoAcervo;
   clone: Clone;
-  onFechar: () => void;
   onMudou: (f: FotoDoAcervo) => void;
   /** Gerar de novo (o mesmo pedido, escolhendo as fotos); nulo quando o clone não pode gerar. */
   onRefazer: (() => void) | null;
@@ -1134,58 +1211,89 @@ function VariacaoAberta({
   const { clientId } = useMesa();
   const [conferencia, setConferencia] = useState<ConferenciaDoClone | null>(null);
   return (
-    <section className={juntar(superficie.poco, "mb-3 grid min-w-0 grid-cols-1 gap-3 p-3 sm:grid-cols-[180px_minmax(0,1fr)]")} aria-label={`Variação ${foto.nome}`} data-variacao-aberta={foto.id}>
-      <div className="min-w-0">
-        <Moldura proporcao={foto.largura && foto.altura ? foto.largura / foto.altura : 0.8} className="border border-border">
-          <ImagemDaMesa caminho={foto.storage_path} bucket={foto.storage_bucket || "mesa"} alt={foto.nome} className="h-full w-full !object-contain" />
-          <SeloGerada />
-        </Moldura>
-      </div>
-      <div className="min-w-0 space-y-2">
-        <div className="flex min-w-0 items-start">
-          <p className="mr-auto min-w-0 truncate text-[13px] font-semibold" title={foto.nome}>
-            {foto.nome}
-          </p>
-          <button type="button" onClick={onFechar} aria-label="Fechar a variação" className={juntar(botao.icone, "ml-2")}>
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="flex min-w-0 flex-wrap items-center">
-          <AprovarFoto foto={foto} onMudou={onMudou} />
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="mb-1.5 mr-1.5 h-8 text-[12px]"
-            onClick={() => void baixarUmaAUma(clientId, [foto]).catch(() => toast.error("Não foi possível baixar agora"))}
-            title="O arquivo original, sem ZIP"
-          >
-            <Download className="mr-1.5 h-3.5 w-3.5" /> Baixar original
+    <div className="min-w-0 space-y-1.5" aria-label={`Variação ${foto.nome}`} data-variacao-aberta={foto.id}>
+      <p className="min-w-0 truncate text-[13px] font-semibold" title={foto.nome}>
+        {foto.nome}
+      </p>
+      <div className="flex min-w-0 flex-wrap items-center">
+        <AprovarFoto foto={foto} onMudou={onMudou} />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="mb-1.5 mr-1.5 h-8 text-[12px]"
+          onClick={() => void baixarUmaAUma(clientId, [foto]).catch(() => toast.error("Não foi possível baixar agora"))}
+          title="O arquivo original, sem ZIP"
+        >
+          <Download className="mr-1.5 h-3.5 w-3.5" /> Baixar original
+        </Button>
+        <MenuDeUso foto={foto} rotulo="Usar" variante="outline" className="mb-1.5 mr-1.5" />
+        <AtalhosDaFoto foto={foto} />
+        <BotaoConferirClone cloneId={clone.id} imagemId={foto.id} origem="acervo" onConferencia={setConferencia} />
+        {onRefazer && (
+          <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={onRefazer} title="O mesmo pedido de novo; dá para escolher as fotos de origem">
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Gerar de novo
           </Button>
-          <MenuDeUso foto={foto} rotulo="Usar" variante="outline" className="mb-1.5 mr-1.5" />
-          <AtalhosDaFoto foto={foto} />
-          <BotaoConferirClone cloneId={clone.id} imagemId={foto.id} origem="acervo" onConferencia={setConferencia} />
-          {onRefazer && (
-            <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={onRefazer} title="O mesmo pedido de novo; dá para escolher as fotos de origem">
-              <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Gerar de novo
-            </Button>
-          )}
-          <Button type="button" size="sm" variant="ghost" className="mb-1.5 h-8 text-[12px] text-muted-foreground" onClick={onApagar} title="Sai do acervo e fica em Apagadas (dá para restaurar)">
-            <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Apagar
-          </Button>
-        </div>
-        {conferencia && <NotasDaSemelhanca c={conferencia} />}
-        {foto.tags.indexOf("uniforme_da_marca") >= 0 && <p className="text-[11px] text-warning">Uniforme com a logo oficial: confira letras, cores e proporção da logo antes de aprovar.</p>}
-        {foto.aprovada ? (
-          <div className="min-w-0 border-t border-border pt-2">
-            <p className={juntar(texto.rotulo, "mb-1.5")}>Ampliar para enviar ao cliente</p>
-            <AcoesProDaFoto foto={foto} mostrarCriativo={false} />
-          </div>
-        ) : (
-          <p className={texto.auxiliar}>Aprove para ampliar e mandar ao cliente.</p>
         )}
+        <Button type="button" size="sm" variant="ghost" className="mb-1.5 h-8 text-[12px] text-muted-foreground" onClick={onApagar} title="Sai do acervo e fica em Apagadas (dá para restaurar)">
+          <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Apagar
+        </Button>
       </div>
-    </section>
+      {conferencia && <NotasDaSemelhanca c={conferencia} />}
+      {foto.tags.indexOf("uniforme_da_marca") >= 0 && <p className="text-[11px] text-warning">Uniforme com a logo oficial: confira letras, cores e proporção da logo antes de aprovar.</p>}
+      {foto.aprovada ? (
+        <div className="min-w-0 border-t border-border pt-2">
+          <p className={juntar(texto.rotulo, "mb-1.5")}>Ampliar para enviar ao cliente</p>
+          <AcoesProDaFoto foto={foto} mostrarCriativo={false} />
+        </div>
+      ) : (
+        <p className={texto.auxiliar}>Aprove para ampliar e mandar ao cliente.</p>
+      )}
+    </div>
+  );
+}
+
+/** As ações da vista que está grande no resultado (as de gerar de novo e apagar ficam na folha). */
+function AcoesDaVistaGrande({ img, aberto }: { img: VistaDoClone; aberto: CloneAberto }) {
+  const { decidir } = useAcoesDaVista(aberto);
+  const [conferencia, setConferencia] = useState<ConferenciaDoClone | null>(null);
+  const c = aberto.clone;
+  const rotulo = rotuloDaVista(img.vista);
+  return (
+    <div className="min-w-0 space-y-1.5" data-vista-aberta={img.id}>
+      <p className="min-w-0 truncate text-[13px] font-semibold">
+        Folha · {rotulo}
+        {img.desatualizada ? <span className="ml-1.5 text-[11px] font-medium text-warning">fotos antigas</span> : null}
+      </p>
+      <div className="flex min-w-0 flex-wrap items-center">
+        {img.aprovada === true ? (
+          <span className="mb-1.5 mr-2 inline-flex items-center text-[12px]">
+            <span className="mr-2 inline-flex items-center font-medium text-success">
+              <Check className="mr-1 h-3.5 w-3.5" /> Vista aprovada
+            </span>
+            <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => void decidir(img, "rejeitar")}>
+              Tirar aprovação
+            </button>
+          </span>
+        ) : (
+          <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => void decidir(img, "aprovar")}>
+            <Check className="mr-1.5 h-3.5 w-3.5" /> Aprovar vista
+          </Button>
+        )}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="mb-1.5 mr-1.5 h-8 text-[12px]"
+          onClick={() => void baixarDoStorage(img.storage_bucket || "mesa", img.storage_path, `${c.nome} ${rotulo} gerada`).catch(() => toast.error("Não foi possível baixar agora"))}
+          title="O arquivo original, sem ZIP"
+        >
+          <Download className="mr-1.5 h-3.5 w-3.5" /> Baixar original
+        </Button>
+        <BotaoConferirClone cloneId={c.id} imagemId={img.id} origem="folha" onConferencia={setConferencia} />
+      </div>
+      {conferencia && <NotasDaSemelhanca c={conferencia} />}
+    </div>
   );
 }
 
@@ -1361,13 +1469,16 @@ function FotoDaExpressao({
   );
 }
 
-function Variacoes({ aberto }: { aberto: CloneAberto }) {
+/**
+ * Gerar variações (o plano em 3 passos). O que sai aparece no resultado
+ * grande, no topo do clone; a qualidade vem de cima porque "Gerar de novo"
+ * uma variação (no resultado) usa a mesma.
+ */
+function Variacoes({ aberto, qualidade, setQualidade }: { aberto: CloneAberto; qualidade: Qualidade; setQualidade: (q: Qualidade) => void }) {
   const { clientId, atualizarCusto } = useMesa();
   const idDoClone = aberto.clone.id;
   const queryClient = useQueryClient();
-  const avisarErro = useAvisarErro();
   const andamentos = useAndamentos();
-  const { baixar, baixando } = useAcoesDeUso();
   const c = aberto.clone;
   const bloqueado = !c.autorizacao_valida.ok || c.status === "arquivada";
   // O modo (sub-aba) e o pedido escrito ficam lembrados por clone: sair e voltar não perde.
@@ -1381,13 +1492,6 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
   const [marcadasSug, setMarcadasSug] = useState<number[]>([]);
   const [formato, setFormato] = useState("4:5");
   const [quantidade, setQuantidade] = useState(2);
-  const [qualidade, setQualidade] = useState<Qualidade>("alta");
-  const [conferencias, setConferencias] = useState<Record<string, ConferenciaDoClone | null>>({});
-  const [ampliada, setAmpliada] = useState<number | null>(null);
-  const [aberta, setAberta] = useState<string | null>(null);
-  const [escolhidas, setEscolhidas] = useState<string[]>([]);
-  // As variações marcadas vão ao diretor de fotografia (ele trabalha nelas sem o dono reenviar).
-  useSelecaoParaODiretor(clientId, "clones", escolhidas);
   const motor = aberto.motores.find((m) => m.modelo_imagem_id === c.motor_preferido_id) || aberto.motores.find((m) => m.padrao) || null;
   // Identidade que vai em cada variação: a foto real principal e TODAS as vistas aprovadas (até 8).
   const refs = Math.min(8, 1 + aberto.folha.aprovadas + (modo === "uniforme" ? 1 : 0) + fotosDaExpressao.length);
@@ -1416,54 +1520,12 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
     if (!p) return;
     setPedido({ preset: p.id, roupa: p.roupa, cenario: p.cenario, pose: p.pose, expressao: p.expressao, livre: pedido.livre });
   };
-  const variacaoAberta = aberta ? aberto.variacoes.find((v) => v.id === aberta) || null : null;
-  const mudouVariacao = (f: FotoDoAcervo) => guardarVariacaoDoClone(queryClient, c.id, f);
-  const marcar = (id: string) => setEscolhidas((l) => (l.indexOf(id) >= 0 ? l.filter((x) => x !== id) : l.concat([id])));
-  const selecionadas = aberto.variacoes.filter((v) => escolhidas.indexOf(v.id) >= 0);
-  // "Gerar de novo" de uma variação que não ficou parecida: o mesmo pedido, escolhendo as fotos de origem.
-  const [refazendo, setRefazendo] = useState<FotoDoAcervo | null>(null);
-  const refazer = (foto: FotoDoAcervo, fotos: string[] | null) => {
-    void rodarRefazerVariacao({ queryClient, clientId, cloneId: c.id, foto, qualidade, fotos, atualizar: atualizarCusto });
-    return Promise.resolve({});
-  };
-  /** Apagar = tirar do acervo (inativa), na hora e com desfazer; o arquivo fica. */
-  const restaurarVariacao = async (f: FotoDoAcervo) => {
-    moverVariacaoNoCache(queryClient, c.id, f.id, false);
-    try {
-      await arquivarImagemDoClone(c.id, f.id, "acervo", true);
-      invalidarClone(queryClient, clientId, c.id);
-      invalidarFotos(queryClient, clientId);
-    } catch (e) {
-      moverVariacaoNoCache(queryClient, c.id, f.id, true);
-      avisarErro(e, "Variação não restaurada");
-    }
-  };
-  const apagarVariacao = async (f: FotoDoAcervo) => {
-    if (aberta === f.id) setAberta(null);
-    setEscolhidas((l) => l.filter((x) => x !== f.id));
-    moverVariacaoNoCache(queryClient, c.id, f.id, true);
-    try {
-      await arquivarImagemDoClone(c.id, f.id, "acervo");
-      invalidarClone(queryClient, clientId, c.id);
-      invalidarFotos(queryClient, clientId);
-      toast.success("Variação apagada", { description: "Saiu do acervo e fica em Apagadas. Dá para restaurar.", action: { label: "Desfazer", onClick: () => void restaurarVariacao(f) } });
-    } catch (e) {
-      moverVariacaoNoCache(queryClient, c.id, f.id, false);
-      avisarErro(e, "Variação não apagada");
-    }
-  };
-  const menuDaVariacao = (f: FotoDoAcervo): ItemDoMenu[] => [
-    { rotulo: "Gerar de novo (escolher as fotos)", icone: <RefreshCw className="h-3.5 w-3.5" />, acao: () => setRefazendo(f), desativado: bloqueado },
-    { rotulo: "Apagar esta variação", icone: <Trash2 className="h-3.5 w-3.5" />, acao: () => void apagarVariacao(f), perigo: true },
-  ];
-
   return (
     <Secao
-      className="border-t border-border pt-5 min-[1600px]:border-t-0 min-[1600px]:pt-0"
-      titulo="Variações"
-      descricao={`${aberto.variacoes.length} ${aberto.variacoes.length === 1 ? "pronta" : "prontas"}`}
+      className="border-t border-border pt-4 xl:border-t-0 xl:pt-0"
+      titulo="Gerar variações"
       recolher={`mesa-foto:clones:variacoes:${clientId}`}
-      resumo={`${aberto.variacoes.length} ${aberto.variacoes.length === 1 ? "pronta" : "prontas"}`}
+      resumo={gerando > 0 ? `gerando ${gerando}` : undefined}
       ajuda={
         aberto.folha.aprovadas
           ? `Mesmo rosto em outra roupa, cenário, pose ou expressão. Cada variação leva a foto real e as ${aberto.folha.aprovadas} ${aberto.folha.aprovadas === 1 ? "vista aprovada" : "vistas aprovadas"} da folha, com os traços repetidos no pedido.`
@@ -1551,7 +1613,7 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
             </>
           }
           titulo="Variações do clone"
-          descricao={`Uma foto por chamada, ${motor ? motor.rotulo : "gerador do clone"}. Aparece aqui assim que sai; fica salva mesmo se você sair da aba.${typeof servidor.data === "number" ? ` Pela função: ~${usd(servidor.data)}.` : ""}`}
+          descricao={`Uma foto por chamada, ${motor ? motor.rotulo : "gerador do clone"}. Aparece grande no resultado assim que sai; fica salva mesmo se você sair da aba.${typeof servidor.data === "number" ? ` Pela função: ~${usd(servidor.data)}.` : ""}`}
           className="h-9 text-[13px]"
           disabled={bloqueado || vazio || gerando > 0 || itensDoLote.length === 0}
           fecharAoConfirmar
@@ -1570,96 +1632,247 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
           {e}
         </p>
       ))}
+    </Secao>
+  );
+}
 
-      {/* Resultados */}
-      {(aberto.variacoes.length > 0 || gerando > 0) && (
-        <div className="mt-4 min-w-0 border-t border-border pt-3" data-resultados-do-clone="">
-          <div className="mb-2 flex min-w-0 flex-wrap items-center text-[12px]">
-            <span className="mr-2 font-medium">{aberto.variacoes.length} prontas</span>
-            <button
-              type="button"
-              className={juntar("mr-2 rounded text-primary hover:underline", foco)}
-              onClick={() => setEscolhidas(escolhidas.length === aberto.variacoes.length ? [] : aberto.variacoes.map((v) => v.id))}
-            >
-              {escolhidas.length === aberto.variacoes.length && escolhidas.length > 0 ? "Desmarcar todas" : "Marcar todas"}
-            </button>
+// ------------------------------------------------------------------ resultado grande e galeria
+
+/** O que está grande no resultado: uma variação (do acervo) ou uma vista da folha. */
+type ItemVisto = { tipo: "variacao" | "vista"; id: string };
+
+/**
+ * Lista de miniaturas da galeria: no celular, uma faixa que rola de lado por
+ * dentro; de 1024 px para cima, uma grade de 3 dentro da galeria, que rola
+ * para baixo por dentro (nunca a página).
+ */
+const LISTA_DA_GALERIA = "scrollbar-hidden flex min-w-0 overflow-x-auto overscroll-x-contain pb-1 lg:grid lg:grid-cols-3 lg:gap-1.5 lg:overflow-x-visible lg:pb-0";
+const ITEM_DA_GALERIA = "relative mr-1.5 w-20 shrink-0 rounded-lg p-0.5 lg:mr-0 lg:w-auto lg:min-w-0";
+
+/**
+ * Resultado do clone (pedido do dono, 02/10: "visualização maior do
+ * resultado; clones e variações organizados"): à esquerda, o escolhido
+ * grande, na proporção real (sem corte), com as ações dele; à direita, a
+ * galeria por tipo (Variações e Folha), com cabeçalho curto e rolagem
+ * própria. Sem escolha, fica grande a variação mais nova (ou a vista
+ * aprovada mais à frente).
+ */
+function ResultadosDoClone({ aberto, visto, onVer, qualidade }: { aberto: CloneAberto; visto: ItemVisto | null; onVer: (v: ItemVisto) => void; qualidade: Qualidade }) {
+  const { clientId, atualizarCusto } = useMesa();
+  const queryClient = useQueryClient();
+  const avisarErro = useAvisarErro();
+  const andamentos = useAndamentos();
+  const { baixar, baixando } = useAcoesDeUso();
+  const c = aberto.clone;
+  const bloqueado = !c.autorizacao_valida.ok || c.status === "arquivada";
+  const motor = aberto.motores.find((m) => m.modelo_imagem_id === c.motor_preferido_id) || aberto.motores.find((m) => m.padrao) || null;
+  const [escolhidas, setEscolhidas] = useState<string[]>([]);
+  // As variações marcadas vão ao diretor de fotografia (ele trabalha nelas sem o dono reenviar).
+  useSelecaoParaODiretor(clientId, "clones", escolhidas);
+  const [ampliada, setAmpliada] = useState(false);
+  // "Gerar de novo" de uma variação que não ficou parecida: o mesmo pedido, escolhendo as fotos de origem.
+  const [refazendo, setRefazendo] = useState<FotoDoAcervo | null>(null);
+  const gerando = Object.keys(andamentos).filter((k) => k.indexOf(`${c.id}|clone-variacao|`) === 0 && andamentos[k].estado === "gerando").length;
+  const vistas = vistasNaTela(aberto).filter((x): x is VistaDoClone => !!x);
+  const variacoes = aberto.variacoes;
+
+  const variacaoEscolhida = visto && visto.tipo === "variacao" ? variacoes.find((v) => v.id === visto.id) || null : null;
+  const vistaEscolhida = visto && visto.tipo === "vista" ? aberto.imagens.find((i) => i.id === visto.id) || null : null;
+  const vistaPadrao = vistas.find((v) => v.aprovada === true) || vistas[0] || null;
+  const fotoGrande = variacaoEscolhida || (vistaEscolhida ? null : variacoes[0] || null);
+  const vistaGrande = fotoGrande ? null : vistaEscolhida || vistaPadrao;
+
+  const mudouVariacao = (f: FotoDoAcervo) => guardarVariacaoDoClone(queryClient, c.id, f);
+  const marcar = (id: string) => setEscolhidas((l) => (l.indexOf(id) >= 0 ? l.filter((x) => x !== id) : l.concat([id])));
+  const selecionadas = variacoes.filter((v) => escolhidas.indexOf(v.id) >= 0);
+  const refazer = (foto: FotoDoAcervo, fotos: string[] | null) => {
+    void rodarRefazerVariacao({ queryClient, clientId, cloneId: c.id, foto, qualidade, fotos, atualizar: atualizarCusto });
+    return Promise.resolve({});
+  };
+  /** Apagar = tirar do acervo (inativa), na hora e com desfazer; o arquivo fica. */
+  const restaurarVariacao = async (f: FotoDoAcervo) => {
+    moverVariacaoNoCache(queryClient, c.id, f.id, false);
+    try {
+      await arquivarImagemDoClone(c.id, f.id, "acervo", true);
+      invalidarClone(queryClient, clientId, c.id);
+      invalidarFotos(queryClient, clientId);
+    } catch (e) {
+      moverVariacaoNoCache(queryClient, c.id, f.id, true);
+      avisarErro(e, "Variação não restaurada");
+    }
+  };
+  const apagarVariacao = async (f: FotoDoAcervo) => {
+    setEscolhidas((l) => l.filter((x) => x !== f.id));
+    moverVariacaoNoCache(queryClient, c.id, f.id, true);
+    try {
+      await arquivarImagemDoClone(c.id, f.id, "acervo");
+      invalidarClone(queryClient, clientId, c.id);
+      invalidarFotos(queryClient, clientId);
+      toast.success("Variação apagada", { description: "Saiu do acervo e fica em Apagadas. Dá para restaurar.", action: { label: "Desfazer", onClick: () => void restaurarVariacao(f) } });
+    } catch (e) {
+      moverVariacaoNoCache(queryClient, c.id, f.id, false);
+      avisarErro(e, "Variação não apagada");
+    }
+  };
+  const menuDaVariacao = (f: FotoDoAcervo): ItemDoMenu[] => [
+    { rotulo: "Gerar de novo (escolher as fotos)", icone: <RefreshCw className="h-3.5 w-3.5" />, acao: () => setRefazendo(f), desativado: bloqueado },
+    { rotulo: "Apagar esta variação", icone: <Trash2 className="h-3.5 w-3.5" />, acao: () => void apagarVariacao(f), perigo: true },
+  ];
+
+  if (!variacoes.length && !vistas.length && !gerando && !aberto.variacoes_arquivadas.length) return null;
+
+  const idGrande = fotoGrande ? fotoGrande.id : vistaGrande ? vistaGrande.id : "";
+  const imagemGrande = fotoGrande
+    ? { caminho: fotoGrande.storage_path, bucket: fotoGrande.storage_bucket || "mesa", titulo: fotoGrande.nome, legenda: "Pessoa real recriada por IA com autorização. Ao publicar, ligue o rótulo de IA.", proporcao: fotoGrande.largura && fotoGrande.altura ? fotoGrande.largura / fotoGrande.altura : undefined }
+    : vistaGrande
+      ? { caminho: caminhoDaImagem(vistaGrande), bucket: vistaGrande.storage_bucket || "mesa", titulo: `${c.nome}, ${rotuloDaVista(vistaGrande.vista)} (gerada)`, legenda: "Pessoa real recriada por IA com autorização.", proporcao: proporcaoDaImagem(vistaGrande) }
+      : null;
+
+  return (
+    <section className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]" aria-label="Resultado do clone" data-resultados-do-clone="">
+      {/* O escolhido grande, inteiro (object-contain), com as ações dele embaixo. */}
+      <div className="min-w-0" data-resultado-grande={idGrande}>
+        <div className="relative flex h-[360px] w-full min-w-0 items-center justify-center overflow-hidden rounded-lg bg-muted sm:h-[460px] lg:h-[560px]">
+          {imagemGrande ? (
+            <>
+              <button type="button" className="block h-full w-full cursor-zoom-in" aria-label="Ver em tela cheia" title="Ver em tela cheia" onClick={() => setAmpliada(true)}>
+                <ImagemDaMesa caminho={imagemGrande.caminho} bucket={imagemGrande.bucket} alt={imagemGrande.titulo} className="h-full w-full !object-contain" />
+              </button>
+              <SeloGerada />
+              <span className="pointer-events-none absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-muted-foreground" aria-hidden="true">
+                <Maximize2 className="h-3.5 w-3.5" />
+              </span>
+            </>
+          ) : (
+            <span className="flex flex-col items-center text-[12px] text-muted-foreground" role="status">
+              {gerando > 0 && <Loader2 className="mb-1 h-5 w-5 animate-spin text-primary" />}
+              {gerando > 0 ? "gerando" : "Nada gerado ainda."}
+            </span>
+          )}
+        </div>
+        <div className="mt-2 min-w-0">
+          {fotoGrande ? (
+            <AcoesDaVariacao
+              key={fotoGrande.id}
+              foto={fotoGrande}
+              clone={c}
+              onMudou={mudouVariacao}
+              onRefazer={bloqueado ? null : () => setRefazendo(fotoGrande)}
+              onApagar={() => void apagarVariacao(fotoGrande)}
+            />
+          ) : vistaGrande ? (
+            <AcoesDaVistaGrande key={vistaGrande.id} img={vistaGrande} aberto={aberto} />
+          ) : null}
+        </div>
+      </div>
+
+      {/* A galeria por tipo, com rolagem própria (invisível). */}
+      <div className="scrollbar-hidden min-w-0 lg:max-h-[640px] lg:overflow-y-auto lg:overscroll-contain" data-galeria-do-clone="">
+        <div className="min-w-0" data-grupo-da-galeria="variacoes">
+          <div className="mb-1.5 flex min-w-0 flex-wrap items-center text-[12px]">
+            <span className="mr-2 font-semibold">
+              Variações · <span className="tabular-nums">{variacoes.length}</span>
+            </span>
+            {variacoes.length > 0 && (
+              <button
+                type="button"
+                className={juntar("mr-2 rounded text-primary hover:underline", foco)}
+                onClick={() => setEscolhidas(escolhidas.length === variacoes.length ? [] : variacoes.map((v) => v.id))}
+              >
+                {escolhidas.length === variacoes.length && escolhidas.length > 0 ? "Desmarcar todas" : "Marcar todas"}
+              </button>
+            )}
             {selecionadas.length > 0 && (
-              <Button type="button" size="sm" variant="outline" className="ml-auto h-8 text-[12px]" disabled={!!baixando} onClick={() => void baixar(selecionadas)} title="Uma a uma, sem ZIP, no tamanho original">
+              <Button type="button" size="sm" variant="outline" className="ml-auto h-7 px-2 text-[12px]" disabled={!!baixando} onClick={() => void baixar(selecionadas)} title="Uma a uma, sem ZIP, no tamanho original">
                 {baixando ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Download className="mr-1 h-3 w-3" />}
-                {baixando ? `Baixando ${baixando.feitos} de ${baixando.total}` : `Baixar ${selecionadas.length} (sem ZIP)`}
+                {baixando ? `${baixando.feitos} de ${baixando.total}` : `Baixar ${selecionadas.length}`}
               </Button>
             )}
           </div>
-          {variacaoAberta && (
-            <VariacaoAberta
-              key={variacaoAberta.id}
-              foto={variacaoAberta}
-              clone={c}
-              onFechar={() => setAberta(null)}
-              onMudou={mudouVariacao}
-              onRefazer={bloqueado ? null : () => setRefazendo(variacaoAberta)}
-              onApagar={() => void apagarVariacao(variacaoAberta)}
-            />
-          )}
-          <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Variações do clone">
-            {Array.from({ length: gerando }, (_x, i) => (
-              <li key={`gerando-${i}`} className="min-w-0 rounded-lg border border-dashed border-primary/40 p-1" data-variacao-gerando="">
-                <Moldura proporcao={1} className="animate-pulse">
-                  <span className="flex h-full w-full flex-col items-center justify-center text-[11px] text-muted-foreground">
-                    <Loader2 className="mb-1 h-4 w-4 animate-spin text-primary" /> gerando
-                  </span>
-                </Moldura>
-              </li>
-            ))}
-            {aberto.variacoes.map((f: FotoDoAcervo, i: number) => {
-              const conf = conferencias[f.id] !== undefined ? conferencias[f.id] : null;
-              const marcada = escolhidas.indexOf(f.id) >= 0;
-              return (
-                <li key={f.id} className={`relative min-w-0 rounded-lg border p-1 ${aberta === f.id ? "border-primary" : marcada ? "border-primary/60" : "border-transparent"}`} data-variacao-do-clone={f.id}>
-                  <div className="relative">
-                    <button type="button" className="block w-full" onClick={() => setAberta(f.id)} aria-label={`Abrir: ${f.nome}`}>
-                      <MiniaturaDaFoto foto={f} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAmpliada(i)}
-                      aria-label={`Ver grande: ${f.nome}`}
-                      className="absolute bottom-1 right-1 flex h-5 w-5 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-sm hover:text-foreground"
-                    >
-                      <Maximize2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                  <label className="absolute right-1.5 top-1.5 flex h-5 w-5 cursor-pointer items-center justify-center rounded-md border border-border bg-card shadow-sm">
-                    <input type="checkbox" checked={marcada} onChange={() => marcar(f.id)} className="h-3.5 w-3.5 accent-[hsl(var(--primary))]" aria-label={`Marcar ${f.nome}`} />
-                  </label>
-                  <div className="mt-1 flex min-w-0 flex-wrap items-center">
-                    <AprovarFoto foto={f} onMudou={mudouVariacao} />
-                    <BotaoConferirClone cloneId={c.id} imagemId={f.id} origem="acervo" onConferencia={(x) => setConferencias({ ...conferencias, [f.id]: x })} />
-                    <MenuDeUso foto={f} icone className="mb-1 ml-auto" />
-                    <MenuDoItem rotulo={`Mais opções: ${f.nome}`} itens={menuDaVariacao(f)} className="mb-1" />
-                  </div>
-                  {conf && <NotasDaSemelhanca c={conf} />}
+          {variacoes.length === 0 && gerando === 0 ? (
+            <p className={texto.auxiliar}>Nenhuma ainda.</p>
+          ) : (
+            <ul className={LISTA_DA_GALERIA} aria-label="Variações do clone" data-lista-de-variacoes="">
+              {Array.from({ length: gerando }, (_x, i) => (
+                <li key={`gerando-${i}`} className={juntar(ITEM_DA_GALERIA, "border border-dashed border-primary/40")} data-variacao-gerando="">
+                  <Moldura proporcao={1} className="animate-pulse">
+                    <span className="flex h-full w-full flex-col items-center justify-center text-[11px] text-muted-foreground">
+                      <Loader2 className="mb-1 h-4 w-4 animate-spin text-primary" /> gerando
+                    </span>
+                  </Moldura>
                 </li>
-              );
-            })}
-          </ul>
+              ))}
+              {variacoes.map((f) => {
+                const marcada = escolhidas.indexOf(f.id) >= 0;
+                const grande = !!fotoGrande && fotoGrande.id === f.id;
+                return (
+                  <li key={f.id} className={juntar(ITEM_DA_GALERIA, grande ? "ring-2 ring-primary" : marcada ? "ring-1 ring-primary/60" : "")} data-variacao-do-clone={f.id}>
+                    <button type="button" className="block w-full" onClick={() => onVer({ tipo: "variacao", id: f.id })} aria-label={`Abrir: ${f.nome}`} aria-pressed={grande} title={f.nome}>
+                      <MiniaturaDaFoto foto={f} selo={false} />
+                    </button>
+                    <label className="absolute right-1.5 top-1.5 flex h-5 w-5 cursor-pointer items-center justify-center rounded-md border border-border bg-card shadow-sm">
+                      <input type="checkbox" checked={marcada} onChange={() => marcar(f.id)} className="h-3.5 w-3.5 accent-[hsl(var(--primary))]" aria-label={`Marcar ${f.nome}`} />
+                    </label>
+                    {f.aprovada && (
+                      <span className="pointer-events-none absolute bottom-1.5 left-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-success/50 bg-card text-success" title="Aprovada">
+                        <Check className="h-3 w-3" aria-hidden="true" />
+                        <span className="sr-only">aprovada</span>
+                      </span>
+                    )}
+                    <MenuDoItem rotulo={`Mais opções: ${f.nome}`} itens={menuDaVariacao(f)} className="absolute bottom-1 right-1 !h-6 !w-6 border border-border bg-card shadow-sm" />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
-      )}
-      {aberto.variacoes_arquivadas.length > 0 && (
-        <details className="mt-4 min-w-0 border-t border-border pt-3" data-variacoes-apagadas="">
-          <summary className="cursor-pointer text-[12px] font-medium text-muted-foreground">Apagadas ({aberto.variacoes_arquivadas.length})</summary>
-          <ul className="mt-2 grid min-w-0 grid-cols-3 gap-2 pb-1 sm:grid-cols-4">
-            {aberto.variacoes_arquivadas.map((f) => (
-              <li key={f.id} className="min-w-0" data-variacao-apagada={f.id}>
-                <MiniaturaDaFoto foto={f} />
-                <Button type="button" size="sm" variant="ghost" className="h-7 w-full px-1 text-[11px]" onClick={() => void restaurarVariacao(f)} aria-label={`Restaurar ${f.nome}`}>
-                  <RotateCcw className="mr-1 h-3 w-3" /> Restaurar
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
+
+        {vistas.length > 0 && (
+          <div className="mt-3 min-w-0 border-t border-border pt-2" data-grupo-da-galeria="folha">
+            <p className="mb-1.5 text-[12px] font-semibold">
+              Folha · <span className="tabular-nums">{aberto.folha.aprovadas}</span> de {aberto.folha.total} aprovadas
+            </p>
+            <ul className={LISTA_DA_GALERIA} aria-label="Vistas da folha" data-lista-de-vistas="">
+              {vistas.map((img) => {
+                const rotulo = rotuloDaVista(img.vista);
+                const grande = !!vistaGrande && vistaGrande.id === img.id;
+                return (
+                  <li key={img.id} className={juntar(ITEM_DA_GALERIA, grande ? "ring-2 ring-primary" : "")} data-vista-na-galeria={img.id}>
+                    <button type="button" className="block w-full" onClick={() => onVer({ tipo: "vista", id: img.id })} aria-label={`Ver a vista ${rotulo}`} aria-pressed={grande} title={rotulo}>
+                      <Moldura proporcao={1}>
+                        <ImagemDaFolhaNaTela imagem={img} alt={`${c.nome}, ${rotulo}`} />
+                      </Moldura>
+                    </button>
+                    {img.aprovada === true && (
+                      <span className="pointer-events-none absolute bottom-1.5 left-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-success/50 bg-card text-success" title="Aprovada">
+                        <Check className="h-3 w-3" aria-hidden="true" />
+                      </span>
+                    )}
+                    <span className="block truncate px-0.5 text-[11px] text-muted-foreground">{rotulo}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
+        {aberto.variacoes_arquivadas.length > 0 && (
+          <details className="mt-3 min-w-0 border-t border-border pt-2" data-variacoes-apagadas="">
+            <summary className="cursor-pointer text-[12px] font-medium text-muted-foreground">Apagadas ({aberto.variacoes_arquivadas.length})</summary>
+            <ul className="mt-2 grid min-w-0 grid-cols-3 gap-1.5 pb-1">
+              {aberto.variacoes_arquivadas.map((f) => (
+                <li key={f.id} className="min-w-0" data-variacao-apagada={f.id}>
+                  <MiniaturaDaFoto foto={f} />
+                  <Button type="button" size="sm" variant="ghost" className="h-7 w-full px-1 text-[11px]" onClick={() => void restaurarVariacao(f)} aria-label={`Restaurar ${f.nome}`}>
+                    <RotateCcw className="mr-1 h-3 w-3" /> Restaurar
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </div>
+
       {refazendo && (
         <DialogoDeFotosDaGeracao
           titulo="Gerar de novo esta variação"
@@ -1669,15 +1882,10 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
           executar={(fotos) => refazer(refazendo, fotos)}
         />
       )}
-      <Ampliar
-        imagens={aberto.variacoes.map((f) => ({ caminho: f.storage_path, bucket: f.storage_bucket || "mesa", titulo: f.nome, legenda: "Pessoa real recriada por IA com autorização. Ao publicar, ligue o rótulo de IA.", proporcao: f.largura && f.altura ? f.largura / f.altura : undefined }))}
-        indice={ampliada}
-        onFechar={() => setAmpliada(null)}
-      />
-    </Secao>
+      <Ampliar imagens={imagemGrande ? [imagemGrande] : []} indice={ampliada && imagemGrande ? 0 : null} onFechar={() => setAmpliada(false)} />
+    </section>
   );
 }
-
 
 /**
  * Transferir o clone para outro cliente (pedido do dono, 26/09: "criei na
@@ -1770,6 +1978,8 @@ function DialogoDeTransferir({ clone, aberto, onFechar }: { clone: Clone; aberto
  */
 function FaixaDeFotosDeOrigem({ aberto }: { aberto: CloneAberto }) {
   const { clientId } = useMesa();
+  // "Antes" (dono, 02/10): bloco compacto, miniaturas pequenas numa linha, que recolhe pelo título.
+  const [recolhido, setRecolhido] = useRecolhido(`mesa-foto:clones:antes:${clientId}`);
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const fotos = useFotos(clientId);
@@ -1813,14 +2023,15 @@ function FaixaDeFotosDeOrigem({ aberto }: { aberto: CloneAberto }) {
     }
   };
   return (
-    <div className="mt-4 min-w-0" data-fotos-de-origem="">
-      <div className="mb-1.5 flex min-w-0 items-center">
-        <span className={texto.rotulo}>
-          Fotos de origem · {r.ids.length} de {MAX_FOTOS_DO_CLONE}
-        </span>
-        <AjudaRecolhida className="ml-1">A verdade sobre o rosto.{bloqueado ? "" : " O x tira, a seta troca, o + põe mais e a estrela marca a principal. As mudanças só valem depois de Salvar fotos."}</AjudaRecolhida>
+    <section className="min-w-0" aria-label="Antes: fotos reais de origem" data-fotos-de-origem="" data-antes-compacto="" data-recolhido={recolhido ? "sim" : "nao"}>
+      <div className={juntar("flex min-w-0 items-center", recolhido ? "" : "mb-1.5")}>
+        <h3 className="min-w-0">
+          <TituloRecolhivel titulo="Antes" recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={`${r.ids.length} de ${MAX_FOTOS_DO_CLONE} fotos reais`} />
+        </h3>
+        {!recolhido && <span className={juntar(texto.auxiliar, "ml-1.5 shrink-0 tabular-nums")}>{r.ids.length} de {MAX_FOTOS_DO_CLONE}</span>}
+        <AjudaRecolhida className="ml-1">As fotos reais da pessoa: a verdade sobre o rosto.{bloqueado ? "" : " O x tira, a seta troca, o + põe mais e a estrela marca a principal. As mudanças só valem depois de Salvar fotos."}</AjudaRecolhida>
       </div>
-      <EditorDeFotosDeOrigem modo="faixa" ids={r.ids} principal={r.principal} onMudar={(ids, principal) => setR({ ids, principal })} bloqueado={bloqueado || salvando} conhecidas={aberto.reais} />
+      {!recolhido && <EditorDeFotosDeOrigem modo="faixa" ids={r.ids} principal={r.principal} onMudar={(ids, principal) => setR({ ids, principal })} bloqueado={bloqueado || salvando} conhecidas={aberto.reais} />}
       {m.alguma && (
         <div className="mt-2 flex min-w-0 flex-wrap items-center rounded-lg border border-primary/40 bg-primary/5 p-2.5" role="status" data-fotos-mudadas="">
           <p className="mb-1 mr-auto min-w-0 text-[12px] leading-snug [overflow-wrap:anywhere]">
@@ -1835,7 +2046,7 @@ function FaixaDeFotosDeOrigem({ aberto }: { aberto: CloneAberto }) {
           </Button>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -1978,7 +2189,7 @@ function CabecalhoDoClone({ aberto, onAbrir, onApagado }: { aberto: CloneAberto;
   };
   const autorizacao = a ? `Autorizado por ${a.quem} em ${a.data}: ${a.finalidade}.` : "Sem autorização registrada.";
   return (
-    <div className="min-w-0" data-clone-aberto={c.id}>
+    <div className="min-w-0">
       {/* Nome e selos à esquerda; as ações na mesma linha (no celular, só o ícone). */}
       <div className="flex min-w-0 items-start">
         <div className="mr-3 min-w-0 flex-1">
@@ -2031,7 +2242,6 @@ function CabecalhoDoClone({ aberto, onAbrir, onApagado }: { aberto: CloneAberto;
           />
         </div>
       </div>
-      <FaixaDeFotosDeOrigem aberto={aberto} />
       {dialogo === "transferir" && <DialogoDeTransferir clone={c} aberto onFechar={() => setDialogo(null)} />}
       {dialogo === "apagar" && <DialogoDeApagarClone clone={c} onFechar={() => setDialogo(null)} onApagado={onApagado} />}
       {dialogo === "duplicar" && <DialogoDeDuplicar clone={c} onFechar={() => setDialogo(null)} onAbrir={onAbrir} />}
@@ -2039,23 +2249,46 @@ function CabecalhoDoClone({ aberto, onAbrir, onApagado }: { aberto: CloneAberto;
   );
 }
 
+/**
+ * O clone aberto, de cima para baixo (pedido do dono, 02/10): cabeçalho,
+ * "Antes" compacto (as fotos reais), o resultado grande com a galeria por
+ * tipo e, embaixo, gerar (folha à esquerda e variações à direita, no largo).
+ */
 function CloneAbertoNaTela({ id, provisorio, onAbrir, onApagado }: { id: string; provisorio: CloneAberto | null; onAbrir: (c: Clone) => void; onApagado: (id: string) => void }) {
   const q = useCloneAberto(id, provisorio);
+  const [visto, setVisto] = useState<ItemVisto | null>(null);
+  // A qualidade das variações vale no plano e no "Gerar de novo" do resultado.
+  const [qualidadeDaVariacao, setQualidadeDaVariacao] = useState<Qualidade>("alta");
+  // Chegou variação nova (gerada agora): ela fica grande.
+  const maisNova = q.data && q.data.variacoes.length ? q.data.variacoes[0].id : "";
+  const [ultimaNova, setUltimaNova] = useState(maisNova);
+  if (maisNova !== ultimaNova) {
+    setUltimaNova(maisNova);
+    if (maisNova) setVisto(null);
+  }
   if (q.isError && !q.data) return <ErroNaRegiao titulo="Não foi possível abrir o clone." erro={q.error} onTentar={() => void q.refetch()} />;
   // Esqueleto só na primeira carga sem provisório; depois o que já está na tela fica enquanto relê.
   if (!q.data) return <Carregando forma="aba" rotulo="Abrindo o clone" />;
   const aberto = q.data;
+  // Vista escolhida na folha (embaixo): fica grande e o resultado entra na tela.
+  const verVista = (idDaVista: string) => {
+    setVisto({ tipo: "vista", id: idDaVista });
+    const el = document.querySelector("[data-resultado-grande]") as HTMLElement | null;
+    if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  };
   return (
-    <div className="min-w-0 space-y-6">
+    <div className="min-w-0 space-y-4" data-clone-aberto={aberto.clone.id}>
       <CabecalhoDoClone aberto={aberto} onAbrir={onAbrir} onApagado={onApagado} />
       {q.isPlaceholderData && (
         <p className={juntar(texto.auxiliar, "flex items-center")} role="status">
           <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Lendo a folha e as variações
         </p>
       )}
-      <div className="grid min-w-0 grid-cols-1 gap-6 border-t border-border pt-5 min-[1600px]:grid-cols-2">
-        <FolhaDeIdentidade aberto={aberto} />
-        <Variacoes aberto={aberto} />
+      <FaixaDeFotosDeOrigem aberto={aberto} />
+      <ResultadosDoClone aberto={aberto} visto={visto} onVer={setVisto} qualidade={qualidadeDaVariacao} />
+      <div className="grid min-w-0 grid-cols-1 gap-6 border-t border-border pt-4 xl:grid-cols-2">
+        <FolhaDeIdentidade aberto={aberto} visto={visto && visto.tipo === "vista" ? visto.id : null} onVer={verVista} />
+        <Variacoes aberto={aberto} qualidade={qualidadeDaVariacao} setQualidade={setQualidadeDaVariacao} />
       </div>
     </div>
   );
@@ -2089,7 +2322,7 @@ function ClonesArquivados({ onRestaurado }: { onRestaurado: (c: Clone) => void }
     }
   };
   return (
-    <section className="mt-4 min-w-0 border-t border-border pt-3" aria-label="Clones arquivados" data-clones-arquivados="">
+    <section className="min-w-0" aria-label="Clones arquivados" data-clones-arquivados="">
       {/* Mesmo cabeçalho que recolhe dos outros blocos (seta que gira); fechado de início e a lista só é lida ao abrir. */}
       <h3 className="min-w-0">
         <TituloRecolhivel
@@ -2160,6 +2393,8 @@ export default function EtapaClones() {
   const aberto = clones.find((c) => c.id === escolhido) || (recemCriado && recemCriado.id === escolhido ? recemCriado : null) || (novo ? null : clones[0] || null);
   // O provisório do clone aberto: o da lista com as fotos reais e as variações que o acervo em cache já tem.
   const provisorio = useMemo(() => (aberto ? cloneAbertoProvisorio(aberto, fotosQ.data || []) : null), [aberto, fotosQ.data]);
+  // Quantas variações cada clone tem (do acervo já lido), para a faixa do topo.
+  const contagem = useMemo(() => (fotosQ.data ? variacoesPorClone(fotosQ.data) : null), [fotosQ.data]);
   // Abrir um clone que acabou de nascer ou voltar (criado, duplicado, restaurado): já na lista e aberto, sem piscar.
   const abrirClone = (c: Clone) => {
     guardarCloneNaLista(queryClient, clientId, c);
@@ -2175,55 +2410,52 @@ export default function EtapaClones() {
   };
 
   return (
-    <div className="min-w-0 pb-6">
-      {clonesQ.isError && <ErroNaRegiao className="mb-4" titulo="Não foi possível ler os clones." erro={clonesQ.error} onTentar={() => void clonesQ.refetch()} />}
-      <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[250px_minmax(0,1fr)]" data-clones-layout="">
-        <div className="min-w-0">
-          {clonesQ.isLoading ? (
-            <Carregando forma="lista" linhas={3} rotulo="Lendo os clones" />
-          ) : (
-            <ListaDeClones
-              clones={clones}
-              escolhido={aberto ? aberto.id : null}
-              onEscolher={(id) => {
-                setNovo(false);
-                setEscolhido(id);
-              }}
-              onNovo={() => {
-                setFotoDoPedido(null);
-                setNovo(true);
-              }}
-              novoAberto={novo}
-            />
-          )}
-          <ClonesArquivados onRestaurado={abrirClone} />
-        </div>
-        <div className="min-w-0">
-          {novo ? (
-            <NovoClone
-              key={fotoDoPedido || "novo"}
-              fotoInicial={fotoDoPedido}
-              onCancelar={() => setNovo(false)}
-              // Otimista: o clone novo entra na lista e abre já, com o provisório (sem esqueleto).
-              onCriado={abrirClone}
-            />
-          ) : aberto ? (
-            <CloneAbertoNaTela key={aberto.id} id={aberto.id} provisorio={provisorio} onAbrir={abrirClone} onApagado={esquecerClone} />
-          ) : clonesQ.isLoading ? (
-            <Carregando forma="aba" rotulo="Lendo os clones" />
-          ) : (
-            <EstadoVazio
-              icone={<UserRound className="h-5 w-5" />}
-              titulo="Crie o primeiro clone"
-              descricao="De 1 a 4 fotos reais da pessoa e a autorização de uso de imagem."
-              acao={
-                <button type="button" className={botao.primario} onClick={() => setNovo(true)}>
-                  <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Novo clone
-                </button>
-              }
-            />
-          )}
-        </div>
+    <div className="min-w-0 space-y-4 pb-6" data-clones-layout="">
+      {clonesQ.isError && <ErroNaRegiao titulo="Não foi possível ler os clones." erro={clonesQ.error} onTentar={() => void clonesQ.refetch()} />}
+      {/* Clones já feitos numa faixa no topo; o aberto ocupa a largura toda embaixo. */}
+      <div className="min-w-0 border-b border-border pb-3">
+        <FaixaDeClones
+          clones={clones}
+          escolhido={aberto ? aberto.id : null}
+          onEscolher={(id) => {
+            setNovo(false);
+            setEscolhido(id);
+          }}
+          onNovo={() => {
+            setFotoDoPedido(null);
+            setNovo(true);
+          }}
+          novoAberto={novo}
+          variacoes={contagem}
+          carregando={clonesQ.isLoading}
+        />
+        <ClonesArquivados onRestaurado={abrirClone} />
+      </div>
+      <div className="min-w-0">
+        {novo ? (
+          <NovoClone
+            key={fotoDoPedido || "novo"}
+            fotoInicial={fotoDoPedido}
+            onCancelar={() => setNovo(false)}
+            // Otimista: o clone novo entra na lista e abre já, com o provisório (sem esqueleto).
+            onCriado={abrirClone}
+          />
+        ) : aberto ? (
+          <CloneAbertoNaTela key={aberto.id} id={aberto.id} provisorio={provisorio} onAbrir={abrirClone} onApagado={esquecerClone} />
+        ) : clonesQ.isLoading ? (
+          <Carregando forma="aba" rotulo="Lendo os clones" />
+        ) : (
+          <EstadoVazio
+            icone={<UserRound className="h-5 w-5" />}
+            titulo="Crie o primeiro clone"
+            descricao="De 1 a 4 fotos reais da pessoa e a autorização de uso de imagem."
+            acao={
+              <button type="button" className={botao.primario} onClick={() => setNovo(true)}>
+                <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Novo clone
+              </button>
+            }
+          />
+        )}
       </div>
     </div>
   );
