@@ -151,11 +151,11 @@ describe("1. Amostra da tipografia anexada com papel e prioridade", () => {
     expect(anexosDaTipografia(tip, CLIENTE_A).map((a) => a.tipo)).toEqual(["fonte"]);
   });
 
-  it("prioridade: lâmina (foto, referência, logo, capa, sequência) > TIPOGRAFIA > referência automática > selo, no limite de 6", () => {
+  it("prioridade: lâmina (foto, referência, logo, selo da campanha, capa, sequência) > TIPOGRAFIA > referência automática, no limite de 6", () => {
     const tipos: TipoDoAnexo[] = ["selo", "identidade", "fonte_texto", "fonte", "sequencia", "capa", "logo"];
-    expect(anexosDaLamina(tipos.map((tipo) => ({ tipo })), { base: false }).map((c) => c.tipo)).toEqual(["logo", "capa", "sequencia", "fonte", "fonte_texto", "identidade"]);
-    // Com a imagem editada (base), a referência automática sai antes da tipografia.
-    expect(anexosDaLamina(tipos.map((tipo) => ({ tipo })), { base: true }).map((c) => c.tipo)).toEqual(["logo", "capa", "sequencia", "fonte", "fonte_texto"]);
+    expect(anexosDaLamina(tipos.map((tipo) => ({ tipo })), { base: false }).map((c) => c.tipo)).toEqual(["logo", "selo", "capa", "sequencia", "fonte", "fonte_texto"]);
+    // Com a imagem editada (base), a amostra do texto sai antes da do título.
+    expect(anexosDaLamina(tipos.map((tipo) => ({ tipo })), { base: true }).map((c) => c.tipo)).toEqual(["logo", "selo", "capa", "sequencia", "fonte"]);
     expect(MAX_ANEXOS_DA_LAMINA).toBe(6);
     // Uma de cada: duas amostras de título não entram juntas.
     expect(anexosDaLamina([{ tipo: "fonte" as const }, { tipo: "fonte" as const }], { base: false })).toHaveLength(1);

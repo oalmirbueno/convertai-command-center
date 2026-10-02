@@ -246,7 +246,8 @@ describe("5. prompt priorizado, proibições e anexos limitados", () => {
     expect(MAX_ANEXOS_DA_LAMINA).toBe(6);
     const tipos = ["selo", "identidade", "identidade", "fonte", "fonte", "capa", "logo", "referencia_equipe", "referencia_equipe", "referencia_equipe", "elemento", "foto_cliente"] as const;
     const plano = anexosDaLamina(tipos.map((tipo, i) => ({ tipo, i })), { base: false });
-    expect(plano.map((c) => c.tipo)).toEqual(["foto_cliente", "elemento", "referencia_equipe", "referencia_equipe", "logo", "capa"]);
+    // Dono, 02/10: o selo da campanha vai ao gerador logo depois da logo (nada colado por cima).
+    expect(plano.map((c) => c.tipo)).toEqual(["foto_cliente", "elemento", "referencia_equipe", "referencia_equipe", "logo", "selo"]);
     const comBase = anexosDaLamina(tipos.map((tipo) => ({ tipo })), { base: true });
     expect(comBase).toHaveLength(5);
     const miolo = anexosDaLamina([{ tipo: "fonte" as const }, { tipo: "fonte" as const }, { tipo: "capa" as const }], { base: false });

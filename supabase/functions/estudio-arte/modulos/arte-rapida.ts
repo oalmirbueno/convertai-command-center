@@ -539,7 +539,7 @@ O PEDIDO DA EQUIPE É A FONTE DA VERDADE (frente AG, 28/09: a arte do mouse pedi
 - Logos do pedido (L1, L2...): logos de parceiros, patrocinadores ou do evento, anexadas pela equipe. Entram como estão, alinhadas e legíveis (faixa de logos na base ou junto do bloco de texto), sempre com a logo da marca do cliente também. Diga no layout onde ficam; nunca invente logo.
 - Arte a melhorar (A1...): a arte que o cliente mandou. Leia o texto e a intenção dela e refaça com a identidade da marca (fontes, cores, logo), mais clara e profissional, mantendo todas as informações.
 - Referência (R1...): composição ou clima para seguir; nunca copie texto nem marca dela.
-- Campanha: com \`item.campanha\`, a peça é daquela campanha (tema, cores de apoio e selo) e o selo entra pequeno, sem poluir. O preço e a oferta da campanha entram quando o pedido não disser outra coisa; o que o pedido disser vale sobre a campanha.`;
+- Campanha: com \`item.campanha\`, a peça é daquela campanha (tema, cores de apoio e selo) e o selo é desenhado na arte pelo gerador, integrado à composição e com destaque, sem poluir (nunca um carimbo pequeno no canto). O preço e a oferta da campanha entram quando o pedido não disser outra coisa; o que o pedido disser vale sobre a campanha.`;
 
 /** Contexto do pedido para o diretor (vai em item.pedido_avulso). */
 export function pedidoParaODiretor(arte: Pick<ArteRapida, "pedido" | "peca" | "arquivos">, documentos: DocumentoDaArteRapida[]) {

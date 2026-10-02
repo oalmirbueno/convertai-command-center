@@ -200,8 +200,8 @@ describe("AB2 Estúdio: anexos no teto de 24 MB", () => {
     // Onde ia cru: elemento fora do replicar (PNG no recorte), selo, estilo e template.
     const g = corpoDe("gerarCard");
     expect(g).toContain('imagemReduzida("mesa", el.caminho, "elemento-real") : anexoLeve("mesa", el.caminho, "elemento-real", !!el.recortada)');
-    // Frente SEL (30/09): o selo não vai mais ao gerador (é colado pelo código em gravarVersao).
-    expect(g).not.toContain('anexoLeve("mesa", selo, "selo-da-campanha", true)');
+    // Dono, 02/10: o selo volta ao gerador (desenhado na arte, nada colado), pela cópia leve.
+    expect(g).toContain('anexoLeve("mesa", caminhoDoSelo, "selo-da-campanha", true)');
     expect(g).not.toContain('baixarImagem("mesa", el.caminho');
     expect((g.match(/baixar: anexoLeve,/g) || []).length).toBe(2);
     expect(g).not.toContain("baixar: baixarImagem,");

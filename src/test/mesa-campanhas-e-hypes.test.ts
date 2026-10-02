@@ -65,9 +65,10 @@ describe("campanhas", () => {
   });
   it("o Estúdio segue a identidade da campanha e anexa o selo na capa e no fechamento", () => {
     expect(estudio).toContain("direcao.campanha_id = campanha.id;");
-    // Frente SEL (30/09): o selo entra pelo código (gravarVersao), só nas lâminas com logo.
+    // Dono, 02/10: o selo vai anexado ao gerador (desenhado na arte), só nas lâminas com logo; nada colado.
     expect(corpoDe(estudio, "gerarCard")).toContain("campanha?.selo_path && leva");
-    expect(corpoDe(estudio, "gravarVersao")).toContain("colarSeloNaArte(img.png, seloPedido)");
+    expect(corpoDe(estudio, "gerarCard")).toContain('tipo: "selo",');
+    expect(corpoDe(estudio, "gravarVersao")).not.toContain("colarSeloNaArte");
     expect(corpoDe(estudio, "gerarCard")).toContain("baseComCampanha");
   });
 });

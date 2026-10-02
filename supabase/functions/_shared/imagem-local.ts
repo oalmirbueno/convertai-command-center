@@ -522,17 +522,6 @@ export async function aplicarLogo(arte: Uint8Array, logo: Uint8Array, caixa: Are
   return await img.encode(1);
 }
 
-/**
- * Selo da campanha (frente SEL, 30/09): colado pelo código, intacto, como a
- * aplicação exata da logo (cabe na caixa; halo só com pouco contraste). A
- * logo das lâminas continua gerada junto com a arte; só o selo é colado.
- */
-export async function aplicarSelo(arte: Uint8Array, selo: Uint8Array, caixa: Area, claro: boolean): Promise<Uint8Array> {
-  const img = await decodificar(arte);
-  logoNaImagem(img, await decodificar(selo), caixa, claro);
-  return await img.encode(1);
-}
-
 /** O mesmo que aplicarLogo, sobre a imagem já aberta (o panorama aplica na mesma passada do recorte). */
 function logoNaImagem(img: Image, L: Image, caixa: Area, clara: boolean) {
   const W = img.width, H = img.height;

@@ -22,8 +22,8 @@
  * - o texto não era conferido (saiu "Por R$ 9,90" com "Por" inventado).
  *
  * Aqui mora: os estilos nomeados, a direção completa (campanha, marca,
- * referências com papel, regras do dono), a conferência do texto, a caixa do
- * selo na lâmina (o Estúdio cola o selo pelo código, intacto), as perguntas
+ * referências com papel, regras do dono), a conferência do texto, o selo na
+ * lâmina (anexado ao gerador, grande e fiel; nada colado por cima), as perguntas
  * do Jev (papel da referência e o pedido do agente) e o impacto da troca.
  *
  * Sem lookbehind, propriedade Unicode ou grupo nomeado em regex (Safari 11).
@@ -383,44 +383,117 @@ export function direcaoDoSelo(ctx: ContextoDoSelo): string {
     ctx.fundoTransparente
       ? "Fundo transparente. Um único selo centralizado, inteiro, com margem em volta; sem mockup, sem cena, sem sombra no chão, sem outros elementos."
       : "Fundo branco liso e vazio em volta (o fundo será removido). Um único selo centralizado, inteiro, com margem; sem mockup, sem cena, sem sombra no chão, sem outros elementos.",
-    "Legível do tamanho de um ícone (o selo entra pequeno no canto das artes).",
+    "Desenho forte e legível: o selo entra grande nas artes, desenhado pelo gerador junto com a composição, e precisa funcionar também reduzido.",
   ];
   return linhas.filter((l, i, arr) => l !== "" || (i > 0 && arr[i - 1] !== "")).join("\n").trim();
 }
 
-// ------------------------------------------------------------------ lugar do selo na lâmina
+// ------------------------------------------------------------------ selo na lâmina (pelo gerador)
+//
+// Dono, 02/10: "o selo da campanha está saindo pequenininho, colado por cima.
+// O que está marcado como da campanha tem que ser trabalhado na arte pelo
+// gerador, não só colado no canto; nada colado por cima." Desde então o selo
+// vai ANEXADO ao gerador, que o desenha junto com a arte, grande e fiel ao
+// anexo (mesmas letras, forma e cores). O código não cola selo em modo nenhum.
 
 export type CaixaDoSelo = { x0: number; y0: number; x1: number; y1: number };
 
+/** Tamanho do selo na lâmina (px do quadro final e % da largura) e o mínimo aceitável. */
+export type TamanhoDoSelo = { largura: number; altura: number; larguraPct: number; larguraMinima: number; alturaMinima: number };
+
+const proporcaoDoSelo = (aspecto?: number | null) => (typeof aspecto === "number" && isFinite(aspecto) && aspecto > 0 ? Math.max(0.5, Math.min(3, aspecto)) : 1);
+
 /**
- * Onde o Estúdio cola o selo (frações do quadro), no lado oposto ao da logo
- * (a logo fica à esquerda: em cima quando o texto está na base, embaixo nos
- * demais). Texto na base: selo em cima à direita (no carrossel, um pouco
- * abaixo do contador do Instagram). Texto na coluna da direita: em cima à
- * esquerda. Nos demais: embaixo à direita. Lado de 17% da largura.
+ * Tamanho do selo pelo código: um elemento de destaque, nunca um detalhe.
+ * Redondo ou quadrado: 26% da largura do quadro; largo (fita, etiqueta):
+ * cresce com a raiz da proporção até 40% da largura, sem passar de 30% da
+ * altura. O mínimo é 80% disso (nunca abaixo de 20% da largura).
+ */
+export function tamanhoDoSelo(quadro: { largura: number; altura: number }, aspectoBruto?: number | null): TamanhoDoSelo {
+  const W = quadro.largura > 0 ? quadro.largura : 1080;
+  const H = quadro.altura > 0 ? quadro.altura : 1350;
+  const aspecto = proporcaoDoSelo(aspectoBruto);
+  let largura = W * Math.min(0.4, 0.26 * Math.sqrt(aspecto));
+  let altura = largura / aspecto;
+  if (altura > 0.3 * H) {
+    altura = 0.3 * H;
+    largura = altura * aspecto;
+  }
+  const larguraMinima = Math.min(largura, Math.max(0.2 * W, largura * 0.8));
+  return {
+    largura: Math.round(largura),
+    altura: Math.round(altura),
+    larguraPct: Math.round((largura / W) * 100),
+    larguraMinima: Math.round(larguraMinima),
+    alturaMinima: Math.round(larguraMinima / aspecto),
+  };
+}
+
+/**
+ * Área do selo (frações do quadro final) só onde a máscara limita o que o
+ * gerador desenha (foto real fixa e contínuo): no lado oposto ao da logo (a
+ * logo fica à esquerda: em cima quando o texto está na base, embaixo nos
+ * demais). Texto na base: em cima à direita (no carrossel, um pouco abaixo do
+ * contador do Instagram). Texto na coluna da direita: em cima à esquerda. Nos
+ * demais: embaixo à direita. Do tamanho de tamanhoDoSelo, com folga. Fora da
+ * máscara o lugar é da composição (seloNaComposicao sem caixa).
  */
 export function caixaDoSelo(o: { zona?: string | null; serie?: boolean; largura?: number; altura?: number; aspecto?: number | null }): CaixaDoSelo {
   const L = o.largura && o.largura > 0 ? o.largura : 1080;
   const A = o.altura && o.altura > 0 ? o.altura : 1350;
-  const mx = 90 / 1080;
+  const mx = 72 / 1080;
   const topo = 100 / 1350 + (o.serie ? 0.05 : 0);
   const base = 1 - 106 / 1350;
-  const aspecto = o.aspecto && o.aspecto > 0 ? Math.max(0.5, Math.min(3, o.aspecto)) : 1;
-  const largura = Math.min(0.26, 0.17 * Math.sqrt(aspecto));
-  const altura = (largura / aspecto) * (L / A);
+  const t = tamanhoDoSelo({ largura: L, altura: A }, o.aspecto);
+  // Folga de 10% para o gerador compor o selo dentro da área.
+  const largura = Math.min(0.44, (t.largura / L) * 1.1);
+  const altura = (t.altura / A) * 1.1;
   const r = (n: number) => Math.round(n * 1000) / 1000;
   const zona = String(o.zona || "");
   if (zona.indexOf("base") === 0) return { x0: r(1 - mx - largura), y0: r(topo), x1: r(1 - mx), y1: r(topo + altura) };
   if (zona === "coluna-direita") return { x0: r(mx), y0: r(topo), x1: r(mx + largura), y1: r(topo + altura) };
-  return { x0: r(1 - mx - largura), y0: r(base - altura), x1: r(1 - mx), y1: r(base) };
+  return { x0: r(1 - mx - largura), y0: r(Math.max(0, base - altura)), x1: r(1 - mx), y1: r(base) };
 }
 
-/** Frase para o prompt da lâmina: a área que fica livre para o selo entrar pelo código. */
-export function areaLivreParaOSelo(caixa: CaixaDoSelo): string {
+export type SeloParaOGerador = {
+  /** Número da imagem anexada com o selo; null quando o modelo não recebe a imagem (o selo vai pelo texto). */
+  indice: number | null;
+  quadro: { largura: number; altura: number };
+  /** Proporção do arquivo do selo (largura / altura). */
+  aspecto?: number | null;
+  /** Área reservada (frações) quando a máscara limita o desenho; sem ela o lugar é da composição. */
+  caixa?: CaixaDoSelo | null;
+  /** Texto e ideia do selo (identidade da campanha), para a fidelidade e para o caso sem imagem. */
+  texto?: string | null;
+  descricao?: string | null;
+  campanha?: string | null;
+};
+
+/**
+ * Bloco do prompt da lâmina: o selo da campanha desenhado pelo gerador junto
+ * com a arte, grande, harmonioso e fiel ao anexo. Sem imagem (modelo que não
+ * recebe tantas imagens), o gerador compõe o selo pelo texto, no mesmo
+ * tamanho grande: nunca um carimbo pequeno no canto.
+ */
+export function seloNaComposicao(s: SeloParaOGerador): string {
+  const t = tamanhoDoSelo(s.quadro, s.aspecto);
   const pct = (n: number) => Math.round(n * 100);
-  const lado = caixa.x0 > 0.5 ? "direita" : "esquerda";
-  const alto = caixa.y0 < 0.5 ? "em cima" : "embaixo";
-  return `SELO DA CAMPANHA: o selo pronto entra depois, colado pelo código, ${alto} à ${lado} (de ${pct(caixa.x0)}% a ${pct(caixa.x1)}% da largura e de ${pct(caixa.y0)}% a ${pct(caixa.y1)}% da altura). Deixe essa área só com o fundo: sem texto, sem logo, sem rosto e sem objeto importante nela. Não desenhe selo, etiqueta nem carimbo nenhum.`;
+  const texto = (s.texto || "").trim();
+  const nome = s.campanha ? ` "${s.campanha}"` : "";
+  const lado = s.caixa ? `${s.caixa.y0 < 0.5 ? "em cima" : "embaixo"} à ${s.caixa.x0 > 0.5 ? "direita" : "esquerda"}` : "";
+  return [
+    s.indice !== null
+      ? `SELO DA CAMPANHA${nome} (imagem ${s.indice}): faz parte da arte desde o começo, desenhado junto com ela como um elemento de destaque da composição. Nunca um adesivo pequeno colado num canto.`
+      : `SELO DA CAMPANHA${nome}: o modelo não recebeu a imagem do selo; componha o emblema da campanha${texto ? ` com o texto exato "${texto}"` : ""}${s.descricao ? ` (${s.descricao})` : ""}, nas cores da marca, como um elemento de destaque da composição. Nunca um adesivo pequeno num canto.`,
+    `- Tamanho: cerca de ${t.largura} x ${t.altura} px numa arte de ${s.quadro.largura} x ${s.quadro.altura} (${t.larguraPct}% da largura), nunca menor que ${t.larguraMinima} x ${t.alturaMinima} px.`,
+    s.caixa
+      ? `- Lugar: dentro da área reservada para ele, ${lado} (de ${pct(s.caixa.x0)}% a ${pct(s.caixa.x1)}% da largura e de ${pct(s.caixa.y0)}% a ${pct(s.caixa.y1)}% da altura), assentado na cena com a luz dela.`
+      : "- Lugar: a composição decide, em equilíbrio com o título e a logo: ancorado ao bloco do título, como peça de apoio ao lado do produto ou da pessoa, ou pousado numa área calma da cena. Dentro das margens, com respiro; nunca sobre rosto, mão ou produto, nunca cortado pela borda.",
+    s.indice !== null
+      ? `- Fidelidade: idêntico ao anexo, com as mesmas letras${texto ? ` ("${texto}")` : ""}, a mesma forma, o mesmo símbolo e as mesmas cores; pode ganhar a luz, a sombra e a textura da cena para parecer da arte, sem redesenhar, trocar letra, cortar nem mudar cor. Um selo só, sem caixa ou cartão atrás que não esteja no desenho dele.`
+      : "- Um selo só, letras nítidas e legíveis, sem caixa ou cartão atrás.",
+    "- Este selo entra nesta lâmina mesmo que a capa ou a série digam para não repetir selo ou etiqueta (isso vale para os selos da capa, não para o da campanha).",
+  ].join("\n");
 }
 
 // ------------------------------------------------------------------ Jev
@@ -496,7 +569,7 @@ export function intencaoPelaResposta(r: { choice?: string; confidence?: number }
 
 // ------------------------------------------------------------------ troca completa
 
-export type LaminaDoTrabalho = { ordem: number; versao: number; selo_da_campanha?: { caminho?: string | null } | null };
+export type LaminaDoTrabalho = { ordem: number; versao: number; selo_da_campanha?: { caminho?: string | null; aplicado?: boolean | null } | null };
 export type TrabalhoDaCampanha = {
   id: string;
   titulo?: string | null;
@@ -523,7 +596,8 @@ export const aprovado = (t: Pick<TrabalhoDaCampanha, "entrega_status" | "aprovad
 
 /**
  * Depois de trocar o selo: as lâminas que levam selo (capa e fechamento) e
- * cuja última versão usa outro selo (ou nenhum colado pelo código). As
+ * cuja última versão usa outro selo (ou nenhum: sem selo, ou o anexo não
+ * entrou, aplicado false). As
  * aprovadas ficam; as outras entram em "refazer". As que ainda não foram
  * geradas usam o selo novo na próxima geração, sozinhas.
  */
@@ -537,7 +611,8 @@ export function impactoDaTroca(trabalhos: TrabalhoDaCampanha[], seloAtual: strin
       const versoes = (t.cards || []).filter((c) => c && c.ordem === ordem);
       if (!versoes.length) continue;
       const ultima = versoes.reduce((a, b) => (b.versao > a.versao ? b : a));
-      const caminho = ultima.selo_da_campanha && ultima.selo_da_campanha.caminho ? ultima.selo_da_campanha.caminho : null;
+      const s = ultima.selo_da_campanha;
+      const caminho = s && s.caminho && s.aplicado !== false ? s.caminho : null;
       if (seloAtual && caminho === seloAtual) saida.com_o_atual += 1;
       else velhas.push(ordem);
     }

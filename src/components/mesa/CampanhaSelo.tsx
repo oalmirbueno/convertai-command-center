@@ -71,7 +71,8 @@ import { tipoDaCampanha } from "../../../supabase/functions/_shared/tipos-de-cam
  * WebP, os selos de outras campanhas e o acervo, com busca). Melhorar este
  * selo mostra a versão nova ao lado da antiga. Um formulário por vez
  * (Melhorar ou Trocar). Toda versão fica guardada: usar de novo é voltar. O
- * Estúdio cola o selo escolhido pelo código, intacto, e a troca mostra
+ * Estúdio anexa o selo escolhido ao gerador, que o desenha na arte, grande e
+ * fiel (dono, 02/10: nada colado por cima), e a troca mostra
  * quantas artes usam o antigo, com o Refazer (custo à vista e segundo clique
  * para confirmar).
  */
@@ -159,7 +160,7 @@ function ArtesDaCampanha({ impacto, onRefeito }: { impacto: ImpactoNaTela; onRef
     if (!naFila && falhas.length) throw new Error(falhas[0]);
     return { na_fila: naFila, falhas, aviso_da_acao: falhas.length ? `${falhas.length} ${plural(falhas.length, "arte não entrou", "artes não entraram")} na fila: ${falhas[0]}` : null };
   };
-  // "Ficam como estão" (e não "com o selo antigo"): a lâmina sem selo colado pelo código também conta
+  // "Ficam como estão" (e não "com o selo antigo"): a lâmina sem o selo na arte também conta
   // aqui (impactoDaTroca). `n` conta lâminas; `enviadas` conta artes.
   const estado = [
     aprovadas > 0 ? `${aprovadas} ${plural(aprovadas, "aprovada fica como está", "aprovadas ficam como estão")}` : "",
@@ -617,7 +618,7 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
           <div className="flex min-w-0 flex-wrap items-center">
             <SeletorCompacto opcoes={CAMINHOS} valor={caminho} onEscolher={(v) => setCaminho(v as Caminho)} rotulo="Como escolher o selo" listaQuandoNaoCabe />
             <AjudaRecolhida className="ml-1.5" rotulo="Como o selo entra nas artes">
-              O selo escolhido entra nas artes da campanha pelo código, intacto, na capa e no fechamento, no canto oposto ao da logo. Nunca é redesenhado pelo gerador. As artes que ainda vão ser geradas já saem com ele.
+              O selo escolhido vai para o gerador junto com a arte, na capa e no fechamento, e entra integrado à composição: grande, em destaque e fiel ao desenho (mesmas letras, forma e cores). Nada é colado por cima. As artes que ainda vão ser geradas já saem com ele.
             </AjudaRecolhida>
             {/* Só no pronto: no Gerar o fundo não muda nada. */}
             {caminho === "pronto" && (

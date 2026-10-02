@@ -3,7 +3,6 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   aprovado,
-  areaLivreParaOSelo,
   avisosDoTexto,
   caixaDoSelo,
   conferirTextoDoSelo,
@@ -23,6 +22,8 @@ import {
   quantidadeDeOpcoes,
   referenciasDoSelo,
   SELO_GENERICO,
+  seloNaComposicao,
+  tamanhoDoSelo,
   textoDoSelo,
   type ContextoDoSelo,
 } from "../../supabase/functions/_shared/selo-da-campanha";
@@ -34,7 +35,8 @@ import { podeExecutarDireto } from "../../supabase/functions/_shared/acoes-do-ag
  * escolher um selo pronto, pedir para melhorar, enviar uma referência, tudo;
  * está gerando muitos selos genéricos". Aqui: a direção com o contexto da
  * campanha e da marca, os estilos, a conferência do texto, o lugar do selo
- * na arte (colado pelo código), as perguntas do Jev, o impacto da troca e o
+ * na arte (anexado ao gerador, grande e fiel; dono, 02/10: nada colado por
+ * cima), as perguntas do Jev, o impacto da troca e o
  * cartão do agente. E os contratos do servidor e do SQL.
  */
 
@@ -161,8 +163,21 @@ describe("selo da campanha: texto conferido (só aviso)", () => {
   });
 });
 
-describe("selo da campanha: colado pelo código, no lado oposto ao da logo", () => {
-  it("texto na base: em cima à direita (no carrossel abaixo do contador); coluna da direita: em cima à esquerda; demais: embaixo à direita", () => {
+describe("selo da campanha: desenhado pelo gerador, grande e integrado (dono, 02/10)", () => {
+  it("tamanho de destaque: 26% da largura no selo redondo, maior no largo, nunca um detalhe", () => {
+    const redondo = tamanhoDoSelo({ largura: 1080, altura: 1350 }, 1);
+    expect(redondo.larguraPct).toBe(26);
+    expect(redondo.largura).toBe(281);
+    expect(redondo.larguraMinima).toBeGreaterThanOrEqual(216);
+    const largo = tamanhoDoSelo({ largura: 1080, altura: 1350 }, 2.5);
+    expect(largo.largura).toBeGreaterThan(redondo.largura);
+    expect(largo.larguraPct).toBeLessThanOrEqual(40);
+    // Alto e estreito: a altura para em 30% do quadro.
+    const alto = tamanhoDoSelo({ largura: 1080, altura: 1350 }, 0.5);
+    expect(alto.altura).toBeLessThanOrEqual(405);
+  });
+
+  it("área reservada só na máscara: lado oposto ao da logo, do tamanho do selo (maior que os 17% de antes)", () => {
     const base = caixaDoSelo({ zona: "base-esquerda" });
     expect(base.x0).toBeGreaterThan(0.5);
     expect(base.y0).toBeLessThan(0.2);
@@ -173,15 +188,40 @@ describe("selo da campanha: colado pelo código, no lado oposto ao da logo", () 
     const topo = caixaDoSelo({ zona: "topo-esquerda", largura: 1080, altura: 1920 });
     expect(topo.x0).toBeGreaterThan(0.5);
     expect(topo.y1).toBeLessThanOrEqual(1);
-    expect(topo.y0).toBeGreaterThan(0.8);
+    expect(topo.y0).toBeGreaterThan(0.7);
     for (const c of [base, serie, coluna, topo]) {
       expect(c.x0).toBeGreaterThanOrEqual(0);
       expect(c.x1).toBeLessThanOrEqual(1);
-      expect(c.x1 - c.x0).toBeGreaterThan(0.1);
+      expect(c.x1 - c.x0).toBeGreaterThan(0.26);
     }
-    const livre = areaLivreParaOSelo(base);
-    expect(livre).toContain("colado pelo código, em cima à direita");
-    expect(livre).toContain("Não desenhe selo");
+  });
+
+  it("o prompt pede o selo anexado integrado à composição, grande e fiel; nunca a área livre para colar", () => {
+    const p = seloNaComposicao({ indice: 3, quadro: { largura: 1080, altura: 1350 }, aspecto: 1, texto: "Promoção do Amor", campanha: "Promoção do Amor" });
+    expect(p).toContain('SELO DA CAMPANHA "Promoção do Amor" (imagem 3)');
+    expect(p).toContain("elemento de destaque da composição");
+    expect(p).toContain("Nunca um adesivo pequeno colado num canto");
+    expect(p).toContain("cerca de 281 x 281 px numa arte de 1080 x 1350 (26% da largura)");
+    expect(p).toContain("a composição decide");
+    // No fechamento a capa manda não repetir selo: o da campanha entra mesmo assim.
+    expect(p).toContain("mesmo que a capa ou a série digam para não repetir selo ou etiqueta");
+    expect(p).toContain('idêntico ao anexo, com as mesmas letras ("Promoção do Amor"), a mesma forma, o mesmo símbolo e as mesmas cores');
+    expect(p).not.toContain("colado pelo código");
+    expect(p).not.toContain("Não desenhe selo");
+    // Com máscara (foto fixa e contínuo): dentro da área reservada.
+    const comArea = seloNaComposicao({ indice: 2, quadro: { largura: 1080, altura: 1350 }, caixa: caixaDoSelo({ zona: "base-esquerda" }) });
+    expect(comArea).toContain("dentro da área reservada para ele, em cima à direita");
+    // Modelo que não recebe a imagem: o selo vai pelo texto, no mesmo tamanho grande.
+    const semImagem = seloNaComposicao({ indice: null, quadro: { largura: 1080, altura: 1350 }, texto: "Oferta Stop", descricao: "fita vermelha" });
+    expect(semImagem).toContain('o modelo não recebeu a imagem do selo; componha o emblema da campanha com o texto exato "Oferta Stop" (fita vermelha)');
+    expect(semImagem).toContain("(26% da largura)");
+    expect(semImagem).toContain("Nunca um adesivo pequeno num canto");
+  });
+
+  it("a direção do selo não pede mais selo pequeno no canto", () => {
+    const d = direcaoDoSelo(contexto());
+    expect(d).not.toContain("pequeno no canto");
+    expect(d).toContain("o selo entra grande nas artes, desenhado pelo gerador junto com a composição");
   });
 });
 
@@ -229,6 +269,11 @@ describe("selo da campanha: atualizar de forma completa", () => {
     ]);
     expect(aprovado({ entrega_status: "agendado" })).toBe(true);
     expect(aprovado({ entrega_status: null, post_id: "p" })).toBe(true);
+  });
+  it("selo que não foi ao gerador (aplicado false: composto pelo texto) não conta como o selo atual", () => {
+    const i = impactoDaTroca([{ id: "t", entrega_status: null, total: 1, cards: [{ ordem: 1, versao: 1, selo_da_campanha: { caminho: "novo.png", aplicado: false } }] }], "novo.png");
+    expect(i.com_o_atual).toBe(0);
+    expect(i.refazer.map((r) => r.trabalho_id)).toEqual(["t"]);
   });
 });
 
@@ -291,14 +336,40 @@ describe("selo da campanha: servidor, Estúdio e SQL", () => {
     expect(cal).toContain("blocoDoSeloParaOEstrategista(intencaoDoSelo)");
   });
 
-  it("o Estúdio cola o selo pelo código, intacto, e o ajuste cola o mesmo selo de novo; o leitor ignora o selo", () => {
-    expect(estudio).not.toContain('anexoLeve("mesa", selo, "selo-da-campanha", true)');
-    expect(estudio).toContain("pngFinal = await colarSeloNaArte(img.png, seloPedido);");
-    expect(estudio).toContain("return await aplicarSelo(png, bytes, caixa, medida ? medida.clara : false);");
+  it("o Estúdio anexa o selo ao gerador com a instrução de integrar; nada é colado por cima (nem no ajuste)", () => {
+    const corpo = (nome: string) => {
+      const i = estudio.indexOf(`async function ${nome}(`);
+      return estudio.slice(i, estudio.indexOf("\n}\n", i));
+    };
+    const gerar = corpo("gerarCard");
+    // O selo vai ao gerador como anexo (tipo selo), só nas lâminas com logo.
+    expect(gerar).toContain("const caminhoDoSelo = campanha?.selo_path && leva ? campanha.selo_path : null;");
+    expect(gerar).toContain('tipo: "selo",');
+    expect(gerar).toContain('carregar: () => anexoLeve("mesa", caminhoDoSelo, "selo-da-campanha", true),');
+    expect(gerar).toContain('if (c.tipo === "selo") {');
+    // O prompt leva o bloco de integração (lâmina e replicar) e a versão guarda o selo.
+    expect(gerar).toContain("? seloNaComposicao({");
+    expect((gerar.match(/\n\s+blocoDoSelo,\n/g) || []).length).toBe(2);
+    expect(gerar).toContain("...(seloAqui ? { selo_da_campanha: seloAqui } : {}),");
+    // Modelo com poucas imagens: o selo cai no texto, com aviso.
+    expect(gerar).toContain("indiceDoSelo <= limiteDeReferencias(modeloImagem) ? indiceDoSelo : null");
+    // Na máscara (foto fixa e contínuo) a área do selo abre para o gerador desenhar.
+    expect(gerar).toContain(".concat(seloAqui && seloAqui.caixa ? [ampliar(seloAqui.caixa, 0.02)] : []);");
+    expect(gerar).not.toContain("areaLivreParaOSelo");
+    // Nada colado: sem colarSeloNaArte nem aplicarSelo em lugar nenhum.
+    expect(estudio).not.toContain("colarSeloNaArte");
+    expect(estudio).not.toContain("aplicarSelo");
     expect(estudio).not.toContain("aplicarLogo(");
-    expect(estudio).toContain("seloAqui ? areaLivreParaOSelo(seloAqui.caixa) : \"\"");
-    expect(estudio).toContain("...(seloDaVersao(atualVersao) ? { selo_da_campanha: seloDaVersao(atualVersao) } : {}),");
-    expect(estudio).toContain("é o selo da campanha: não transcreva o texto dele.");
+    expect(corpo("gravarVersao")).not.toMatch(/colar|aplicarSelo|seloPedido/);
+    expect(fonte("supabase/functions/_shared/imagem-local.ts")).not.toContain("aplicarSelo");
+    expect(fonte("supabase/functions/_shared/imagem-sob-demanda.ts")).not.toContain("aplicarSelo");
+    // Ajuste: o mesmo selo da versão vai anexado de novo, com a instrução de manter.
+    const ajuste = corpo("ajustarCard");
+    expect(ajuste).toContain("const seloDoAjuste = seloDaVersao(atualVersao);");
+    expect(ajuste).toContain('referencias.push(await anexoLeve("mesa", seloDoAjuste.caminho, "selo-da-campanha", true));');
+    expect(ajuste).toContain("selo da campanha que já está na arte: mantenha como está");
+    // O leitor não transcreve o texto do selo.
+    expect(estudio).toContain("A arte tem o selo da campanha (um emblema com o nome ou o tema da campanha): não transcreva o texto dele.");
   });
 
   it("SQL: versões com RLS por cliente, escrita só pelo serviço, o selo de hoje vira a primeira versão", () => {

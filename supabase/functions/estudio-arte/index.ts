@@ -455,8 +455,7 @@ import {
   telaDoTrecho,
   recortarNaProporcao,
 } from "../_shared/imagem-sob-demanda.ts";
-import { aplicarSelo, caixaNoQuadroCentral } from "../_shared/imagem-sob-demanda.ts";
-import { areaLivreParaOSelo, caixaDoSelo, type CaixaDoSelo } from "../_shared/selo-da-campanha.ts";
+import { caixaDoSelo, seloNaComposicao, textoDoSelo, type CaixaDoSelo } from "../_shared/selo-da-campanha.ts";
 import {
   caminhoDaMedia,
   LADO_MEDIA,
@@ -945,36 +944,36 @@ type CampanhaDaLamina = {
 };
 
 /**
- * Frente SEL (30/09): o selo da campanha que o CÓDIGO cola na lâmina depois da
- * geração (gravarVersao), intacto: caminho no bucket mesa, caixa no quadro
- * final (frações) e a proporção do quadro (a tela do gerador pode ser 2:3 com
- * o 4:5 no centro). `aplicado` fica gravado na versão: true colado, false falhou.
+ * Selo da campanha na lâmina (dono, 02/10: "nada colado por cima; o que é da
+ * campanha o gerador trabalha na arte"). O selo vai ANEXADO ao gerador, que o
+ * desenha junto com a arte, grande e fiel (seloNaComposicao). A versão guarda
+ * qual selo foi (caminho e selo_id), o número da imagem, a área reservada
+ * (só onde a máscara limita o desenho) e `aplicado`: true quando o gerador
+ * recebeu a imagem do selo; false quando o selo foi composto pelo texto (o
+ * modelo não recebeu a imagem) ou o arquivo não abriu.
  */
-type SeloDaCampanhaNaLamina = { caminho: string; selo_id: string | null; caixa: CaixaDoSelo; proporcao: number; aplicado?: boolean };
+type SeloDaCampanhaNaLamina = {
+  caminho: string;
+  selo_id: string | null;
+  modo: "gerador";
+  indice: number | null;
+  caixa: CaixaDoSelo | null;
+  aplicado: boolean;
+};
 
-/** Lê o selo gravado numa versão (para o ajuste colar de novo o mesmo selo, na mesma caixa). */
-function seloDaVersao(v: unknown): SeloDaCampanhaNaLamina | null {
+/** O selo gravado numa versão (qualquer modo, inclusive o antigo, colado pelo código). */
+function seloGravado(v: unknown): { caminho: string; selo_id: string | null; aplicado: boolean } | null {
   const s = v && typeof v === "object" ? (v as Record<string, unknown>).selo_da_campanha : null;
   if (!s || typeof s !== "object") return null;
   const o = s as Record<string, unknown>;
-  const c = o.caixa as Record<string, unknown> | undefined;
-  const n = (x: unknown) => (typeof x === "number" && isFinite(x) ? x : NaN);
-  if (typeof o.caminho !== "string" || !o.caminho || o.aplicado !== true || !c) return null;
-  const caixa = { x0: n(c.x0), y0: n(c.y0), x1: n(c.x1), y1: n(c.y1) };
-  if ([caixa.x0, caixa.y0, caixa.x1, caixa.y1].some((x) => !isFinite(x))) return null;
-  return { caminho: o.caminho, selo_id: typeof o.selo_id === "string" ? o.selo_id : null, caixa, proporcao: n(o.proporcao) > 0 ? n(o.proporcao) : 0.8 };
+  if (typeof o.caminho !== "string" || !o.caminho) return null;
+  return { caminho: o.caminho, selo_id: typeof o.selo_id === "string" ? o.selo_id : null, aplicado: o.aplicado === true };
 }
 
-/**
- * Cola o selo pronto na arte (aplicarLogo: cabe na caixa, com halo só quando
- * o fundo tem o mesmo valor dele). O selo é um PNG pequeno (até 512 px).
- */
-async function colarSeloNaArte(png: Uint8Array, selo: SeloDaCampanhaNaLamina): Promise<Uint8Array> {
-  const bytes = await baixar("mesa", selo.caminho);
-  const d = dimensoesDoCabecalho(png);
-  const caixa = d ? caixaNoQuadroCentral(selo.caixa, d.largura, d.altura, selo.proporcao) : selo.caixa;
-  const medida = await analisarLogo(bytes).catch(() => null);
-  return await aplicarSelo(png, bytes, caixa, medida ? medida.clara : false);
+/** O selo que está de fato na arte da versão (para o ajuste anexar o mesmo selo ao gerador). */
+function seloDaVersao(v: unknown): { caminho: string; selo_id: string | null } | null {
+  const s = seloGravado(v);
+  return s && s.aplicado ? { caminho: s.caminho, selo_id: s.selo_id } : null;
 }
 
 async function lerCampanha(clientId: string, id: unknown): Promise<CampanhaDaLamina | null> {
@@ -4145,10 +4144,9 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
           ? `Leia esta arte. A tela tem ${recorte.largura ?? 1024} x ${recorte.altura ?? 1536} px e será cortada em 4:5 pelo centro: ignore tudo o que estiver nas faixas de 128 px do topo e da base, e leia só a área central.`
           : `Leia esta arte. A tela tem ${recorte.largura ?? "?"} x ${recorte.altura ?? "?"} px e será cortada em ${quadro.proporcao} pelo centro: leia só o que fica dentro desse recorte central.`;
     const leitor = await modeloDoPapel("leitura");
-    // Frente SEL: o selo da campanha colado pelo código não é texto da lâmina (senão vira "sobrando").
-    const seloColado = seloDaVersao(t.cards.find((c) => c.storage_path === caminho));
-    const semOSelo = seloColado
-      ? ` O emblema pequeno ${seloColado.caixa.y0 < 0.5 ? "em cima" : "embaixo"} à ${seloColado.caixa.x0 > 0.5 ? "direita" : "esquerda"} é o selo da campanha: não transcreva o texto dele.`
+    // O selo da campanha desenhado na arte não é texto da lâmina (senão vira "sobrando").
+    const semOSelo = seloGravado(t.cards.find((c) => c.storage_path === caminho))
+      ? " A arte tem o selo da campanha (um emblema com o nome ou o tema da campanha): não transcreva o texto dele."
       : "";
     const lido = await chamarTexto({
       clientId: t.client_id,
@@ -5339,6 +5337,16 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   if (logo && anexoLogo) candidatos.push({ tipo: "logo", rotulo: anexoLogo.legenda, carregar: async () => anexoLogo.imagem });
   // Conteúdo de campanha: selo do tema na capa e no fechamento, e a identidade da campanha no prompt.
   const campanha = t.direcao.campanha_id ? await lerCampanha(t.client_id, t.direcao.campanha_id) : null;
+  // Selo da campanha (dono, 02/10): ANEXADO ao gerador, que o desenha junto com a arte, grande e fiel (nada
+  // colado por cima). Mesma regra de antes: só nas lâminas com logo (capa e fechamento).
+  const caminhoDoSelo = campanha?.selo_path && leva ? campanha.selo_path : null;
+  if (caminhoDoSelo) {
+    candidatos.push({
+      tipo: "selo",
+      rotulo: `SELO DA CAMPANHA "${campanha!.nome}": desenhe integrado à arte, grande e idêntico a este anexo (mesmas letras, forma e cores)`,
+      carregar: () => anexoLeve("mesa", caminhoDoSelo, "selo-da-campanha", true),
+    });
+  }
   const capa = ordem > 1 && total > 1 ? versaoAtual(t, 1) : null;
   // Replicando, a capa não vai anexada (27/09): o layout é o da referência e a capa puxava a cena dela de volta.
   if (capa && !replicar) {
@@ -5416,18 +5424,6 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       });
     }
   }
-  // Frente SEL (30/09): o selo da campanha entra pelo CÓDIGO, intacto, depois da geração (gravarVersao cola
-  // na caixa do lado oposto ao da logo). Antes ia como anexo e o gerador o redesenhava (letra torta, cor mudada).
-  // O prompt só pede a área livre (areaLivreParaOSelo). Mesma regra de antes: só nas lâminas com logo.
-  const seloAqui: SeloDaCampanhaNaLamina | null = campanha?.selo_path && leva
-    ? {
-      caminho: campanha.selo_path,
-      selo_id: campanha.selo_id ?? null,
-      caixa: caixaDoSelo({ zona: zonaDoTexto, serie: total > 1, largura: quadro.final.largura, altura: quadro.final.altura }),
-      proporcao: quadro.final.largura / quadro.final.altura,
-    }
-    : null;
-
   // Imagem editada (foto, fatia ou tela do recorte) é a imagem 1 e empurra os anexos.
   const temBase = (!!baseFoto && !replicar) || !!recorteNaLamina;
   const deslocamento = temBase ? 1 : 0;
@@ -5480,6 +5476,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   let indiceDaLogo: number | null = null;
   let indiceDaCapa: number | null = null;
   let indiceDaSequencia: number | null = null;
+  let indiceDoSelo: number | null = null;
+  let aspectoDoSelo: number | null = null;
   // Frente T2: números das imagens das amostras da tipografia (título e texto).
   const indicesDaTipografia: { titulo: number | null; texto: number | null } = { titulo: null, texto: null };
   // Frente R4 (caso A): índice da referência da capa anexada como guia da identidade.
@@ -5508,6 +5506,11 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     if (c.tipo === "logo") indiceDaLogo = indice;
     if (c.tipo === "capa") indiceDaCapa = indice;
     if (c.tipo === "sequencia") indiceDaSequencia = indice;
+    if (c.tipo === "selo") {
+      indiceDoSelo = indice;
+      const d = dimensoesDoCabecalho(imagens[imagens.length - 1].bytes);
+      aspectoDoSelo = d && d.altura > 0 ? d.largura / d.altura : null;
+    }
     if (c.tipo === "fonte") indicesDaTipografia.titulo = indice;
     if (c.tipo === "fonte_texto") indicesDaTipografia.texto = indice;
     if (c.tipo === "identidade" && imagemDaSerie) indiceDaReferenciaDaSerie = indice;
@@ -5518,6 +5521,36 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       refsNoPrompt.push({ indice, molde: k >= 0 ? moldes[k] ?? null : null, id: c.ref.id });
     }
   }
+  // Selo da campanha: o modelo recebe no máximo limiteDeReferencias imagens (a base conta); o selo além do
+  // limite, cortado pelo teto de anexos ou que não abriu vai pelo texto da campanha, no mesmo tamanho grande.
+  const seloVisto = indiceDoSelo !== null && indiceDoSelo <= limiteDeReferencias(modeloImagem) ? indiceDoSelo : null;
+  const seloAqui: SeloDaCampanhaNaLamina | null = caminhoDoSelo
+    ? {
+      caminho: caminhoDoSelo,
+      selo_id: campanha!.selo_id ?? null,
+      modo: "gerador",
+      indice: seloVisto,
+      // Só onde a máscara limita o desenho (foto fixa e contínuo) o selo tem área reservada; senão a composição decide.
+      caixa: cenaFixa ? caixaDoSelo({ zona: zonaDoTexto, serie: total > 1, largura: quadro.final.largura, altura: quadro.final.altura, aspecto: aspectoDoSelo }) : null,
+      aplicado: seloVisto !== null,
+    }
+    : null;
+  if (seloAqui && seloVisto === null && indiceDoSelo !== null) {
+    avisosDaGeracao.push("O modelo escolhido não recebe tantas imagens: o selo da campanha foi composto pelo texto da campanha, sem o desenho exato. Para o selo fiel, gere com um modelo que aceite mais imagens.");
+  } else if (seloAqui && indiceDoSelo === null && escolhidosDaLamina.every((c) => c.tipo !== "selo")) {
+    avisosDaGeracao.push("O selo da campanha não coube entre as imagens desta lâmina: foi composto pelo texto da campanha. Tire uma referência ou foto para o selo entrar fiel.");
+  }
+  const blocoDoSelo = seloAqui && campanha
+    ? seloNaComposicao({
+      indice: seloAqui.indice,
+      quadro: quadro.final,
+      aspecto: aspectoDoSelo,
+      caixa: seloAqui.caixa,
+      texto: textoDoSelo(campanha),
+      descricao: campanha.identidade?.selo?.descricao ?? null,
+      campanha: campanha.nome,
+    })
+    : "";
   // Frente R (26/09, acréscimo do dono): rosto escolhido para a pessoa da referência.
   // Sem rosto (o padrão) nada é lido e nada entra. Com rosto: até 2 fotos depois
   // dos anexos da lâmina (antes das do estilo), no limite de imagens do modelo.
@@ -5664,8 +5697,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     campanha ? blocoDaCampanha(campanha) : "",
     // Frente T2: tipografia do cliente (amostras, família, peso e caixa por papel, âncora da série).
     blocoDaTipografiaAqui,
-    // Frente SEL: a área do selo fica livre; o selo entra depois, pelo código.
-    seloAqui ? areaLivreParaOSelo(seloAqui.caixa) : "",
+    // Selo da campanha desenhado pelo gerador junto com a arte, grande e fiel ao anexo.
+    blocoDoSelo,
     // Frente RO, fase 2: o que a equipe mandou NUNCA fazer (aprendido na conversa e nos ajustes).
     blocoDoEvitarAprendido,
     blocoDoEstiloPedido(t.direcao.estilo_pedido),
@@ -5729,7 +5762,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     ...(textoNaGeracao ? { texto_na_geracao: textoNaGeracao.resumo } : {}),
     ...(posicaoDaSerie ? { posicao_na_serie: posicaoDaSerie.registro } : {}),
     ...(partesDaLamina ? { texto_em_partes: partesDaLamina } : {}),
-    // Frente SEL: o selo que gravarVersao cola por cima (e o ajuste cola de novo, igual).
+    // O selo da campanha que foi ao gerador (o ajuste anexa o mesmo de novo; a troca de selo conta por ele).
     ...(seloAqui ? { selo_da_campanha: seloAqui } : {}),
   };
 
@@ -5813,8 +5846,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       continuidade,
       // Frente T2: tipografia do cliente (vale sobre o desenho da letra da referência).
       blocoDaTipografiaAqui,
-      // Frente SEL: também no replicar o selo entra pelo código; a área dele fica livre.
-      seloAqui ? areaLivreParaOSelo(seloAqui.caixa) : "",
+      // Também no replicar o selo é desenhado pelo gerador, integrado ao layout da referência.
+      blocoDoSelo,
       soltaAComposicao(fidelidade) ? blocoDeVariacao(versoesAntes, false, false, ordem, false) : blocoDeVariacao(versoesAntes, false, true, ordem, false),
       blocoDoEstilo,
       blocoDoTemplate,
@@ -5903,7 +5936,9 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     const navegacaoAqui = navegacaoDaLamina({ ordem, total, anuncio: ads, post: quadro.post });
     const margensAqui = margensDoQuadro(quadro.formato, quadro.post);
     const areasDoTexto = areasDeDesenho(card, total, false, quadro).concat(navegacaoAqui ? [areaDaNavegacao(margensAqui.base, margensAqui.x)] : []);
-    const areasComLogo = caixaDaLogoAqui ? areasDoTexto.concat([ampliar(caixaDaLogoAqui, 0.02)]) : areasDoTexto;
+    const areasComLogo = areasDoTexto
+      .concat(caixaDaLogoAqui ? [ampliar(caixaDaLogoAqui, 0.02)] : [])
+      .concat(seloAqui && seloAqui.caixa ? [ampliar(seloAqui.caixa, 0.02)] : []);
     const areas = panorama ? [INTERIOR_DA_LAMINA] : areasComLogo;
     const prompt = [
       panorama
@@ -6055,27 +6090,12 @@ async function gravarVersao(
   img: { png: Uint8Array; mime: string; usoId: string; custoUsd: number; saldoUsd: number; reservaUsada?: string | null },
   meta: { origem: "gerar" | "ajuste"; instrucao?: string; referencias?: string[]; custoExtraUsd?: number; extra?: Record<string, unknown>; avisos?: string[]; regras?: { id: string; tipo: string; texto: string }[] },
 ) {
-  // Frente SEL (30/09): o selo da campanha entra aqui, pelo código, intacto (nunca redesenhado pelo gerador).
-  // Falhou: a arte segue sem selo, com aviso na versão (nenhum erro engolido).
-  const seloPedido = meta.extra ? (meta.extra.selo_da_campanha as SeloDaCampanhaNaLamina | undefined) : undefined;
-  const avisosDoSelo: string[] = [];
-  let pngFinal = img.png;
-  let seloGravado: SeloDaCampanhaNaLamina | null = null;
-  if (seloPedido && typeof seloPedido.caminho === "string" && seloPedido.caixa) {
-    try {
-      pngFinal = await colarSeloNaArte(img.png, seloPedido);
-      seloGravado = { ...seloPedido, aplicado: true };
-    } catch (e) {
-      const motivo = registrarFalha("estudio-arte: selo da campanha não colado", e, { trabalho_id: t.id, ordem: card.ordem, selo: seloPedido.caminho });
-      avisosDoSelo.push(`O selo da campanha não entrou nesta lâmina (${motivo}). Gere de novo ou troque o selo na campanha.`);
-      seloGravado = { ...seloPedido, aplicado: false };
-    }
-  }
+  // O selo da campanha já vem na arte, desenhado pelo gerador (dono, 02/10): nada é colado aqui.
   // Frente FS (29/09): o que falhou no caminho e mudou a arte (logo não lida, referência que não abriu,
   // molde não medido...) fica na versão (a tela mostra na lâmina) e volta em aviso_da_acao.
-  const avisos = [...new Set((meta.avisos ?? []).concat(avisosDoSelo).filter(Boolean))].slice(0, 6);
+  const avisos = [...new Set((meta.avisos ?? []).filter(Boolean))].slice(0, 6);
   const proxima = Math.max(0, ...t.cards.filter((c) => c.ordem === card.ordem).map((c) => c.versao)) + 1;
-  const { caminho, versao } = await salvarNaMesa(t, card.ordem, proxima, pngFinal, seloGravado && seloGravado.aplicado ? "image/png" : img.mime);
+  const { caminho, versao } = await salvarNaMesa(t, card.ordem, proxima, img.png, img.mime);
   const custo = arred(img.custoUsd);
   const nova: VersaoCard = {
     ordem: card.ordem,
@@ -6090,7 +6110,6 @@ async function gravarVersao(
     criado_em: new Date().toISOString(),
     criado_por: ch.userId,
     ...(meta.extra ?? {}),
-    ...(seloGravado ? { selo_da_campanha: seloGravado } : {}),
     ...(avisos.length ? { avisos_da_geracao: avisos } : {}),
     // Frente RO, fase 2: as regras ensinadas que esta geração seguiu ("Segui: ...").
     ...(meta.regras && meta.regras.length ? { regras_seguidas: meta.regras } : {}),
@@ -6359,6 +6378,19 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
       legendas.push(`imagem ${referencias.length + 1}: ${anexo.legenda}${anexo.descricao ? ` ${anexo.descricao}` : ""}`);
     }
   }
+  // O selo da campanha já está na arte (desenhado pelo gerador): o mesmo arquivo vai junto para a edição
+  // manter o selo fiel, no mesmo lugar e tamanho (nada é colado por cima depois).
+  const seloDoAjuste = seloDaVersao(atualVersao);
+  if (seloDoAjuste) {
+    try {
+      referencias.push(await anexoLeve("mesa", seloDoAjuste.caminho, "selo-da-campanha", true));
+      legendas.push(`imagem ${referencias.length + 1}: selo da campanha que já está na arte: mantenha como está, no mesmo lugar e tamanho, com as mesmas letras, forma e cores; se a edição mexer nele, redesenhe idêntico a este anexo; nunca o reduza nem o mova para um canto`);
+    } catch (e) {
+      if (erroQueSobe(e)) throw e;
+      const motivo = registrarFalha("estudio-arte: selo do ajuste não abriu", e, { trabalho_id: base.id, selo: seloDoAjuste.caminho });
+      avisosDoAjuste.push(`O selo da campanha não abriu (${motivo}): o ajuste seguiu sem o anexo dele.`);
+    }
+  }
   // Referências escolhidas pela equipe (da lâmina ou do conjunto), como no
   // gerar_card: o ajuste segue o layout delas (pedido da Mesa Ads, 25/09).
   // Fora do contínuo (lá a cena é o panorama) e fora da autocorreção (só texto).
@@ -6559,9 +6591,8 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
       ...(a.entendi ? { entendi: texto(a.entendi, 300) } : {}),
       ...(fiel && fiel.removidas.length ? { texto_removido: fiel.removidas } : {}),
       versao_editada: atualVersao.versao,
-      // Frente SEL: a versão editada tinha o selo colado pelo código: cola de novo o MESMO selo, na mesma caixa
-      // (o gerador redesenha a imagem inteira na edição e o selo sairia torto).
-      ...(seloDaVersao(atualVersao) ? { selo_da_campanha: seloDaVersao(atualVersao) } : {}),
+      // O selo da versão editada segue na arte (anexado de novo à edição; nada colado por cima).
+      ...(seloDoAjuste ? { selo_da_campanha: { ...seloDoAjuste, modo: "gerador", indice: null, caixa: null, aplicado: true } } : {}),
       // Frente RO, fase 2: o que o ajuste aprendeu (Aprendi, com Esquecer) e as imagens anexadas com o papel.
       ...(aprendido ? { aprendido } : {}),
       ...(anexosDoAjuste.length ? { anexos_do_ajuste: anexosDoAjuste.map((x) => ({ nome: x.nome, papel: x.papel, papel_por: x.papel_por })) } : {}),

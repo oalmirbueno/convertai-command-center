@@ -88,7 +88,6 @@ export const estimarAlinhamento = (...a: Parameters<Local["estimarAlinhamento"]>
 
 export const acabamentoDaLamina = async (...a: Parameters<Local["acabamentoDaLamina"]>) => (await imagemLocal()).acabamentoDaLamina(...a);
 export const analisarLogo = async (...a: Parameters<Local["analisarLogo"]>) => (await imagemLocal()).analisarLogo(...a);
-export const aplicarSelo = async (...a: Parameters<Local["aplicarSelo"]>) => (await imagemLocal()).aplicarSelo(...a);
 export const colarFotoNaArea = async (...a: Parameters<Local["colarFotoNaArea"]>) => (await imagemLocal()).colarFotoNaArea(...a);
 export const colarMudancasNaBase = async (...a: Parameters<Local["colarMudancasNaBase"]>) => (await imagemLocal()).colarMudancasNaBase(...a);
 export const corrigirEmenda = async (...a: Parameters<Local["corrigirEmenda"]>) => (await imagemLocal()).corrigirEmenda(...a);

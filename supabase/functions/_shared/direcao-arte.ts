@@ -196,7 +196,9 @@ export function valorDaCor(hex: string | null | undefined): number | null {
  * gerador inventar. Agora cada tipo tem teto e a chamada leva no máximo
  * MAX_ANEXOS_DA_LAMINA imagens, contando a imagem editada (foto, fatia ou
  * tela do recorte), nesta ordem de prioridade: fotos do cliente, referências
- * escolhidas pela equipe, logo, capa da série, fonte, arte da marca e selo.
+ * escolhidas pela equipe, logo, selo da campanha, capa da série, fonte e arte
+ * da marca. O selo vem logo depois da logo (dono, 02/10: o selo da campanha é
+ * desenhado pelo gerador junto com a arte e não pode ficar de fora).
  */
 // Frente T2 (26/09): "fonte" é a amostra da fonte do título e "fonte_texto" a do texto (quando a família é outra).
 export type TipoDoAnexo = "foto_cliente" | "elemento" | "referencia_equipe" | "logo" | "capa" | "sequencia" | "fonte" | "fonte_texto" | "identidade" | "selo";
@@ -212,7 +214,8 @@ const PRIORIDADE_DO_ANEXO: Record<TipoDoAnexo, number> = {
   fonte: 5,
   fonte_texto: 5.1,
   identidade: 6,
-  selo: 7,
+  // Dono, 02/10: o selo da campanha vai ao gerador (nada colado por cima), logo depois da logo.
+  selo: 3.5,
 };
 const TETO_DO_TIPO: Record<TipoDoAnexo, number> = { foto_cliente: 1, elemento: 2, referencia_equipe: 2, logo: 1, capa: 1, sequencia: 1, fonte: 1, fonte_texto: 1, identidade: 1, selo: 1 };
 
