@@ -19,6 +19,7 @@ import {
 } from "./skills/pecasDaEdicao";
 import { CHAVE_DA_LOGO, porLogo, porPeca, porTrilha } from "./motion/aplicar";
 import type { IdDaPeca } from "./motion/catalogo";
+import { batidasEm, zoomAlternadoEm } from "./skills/brabo";
 
 /**
  * "Editar com IA" (frente EDT, rodada 2): monta a edição inteira a partir do
@@ -62,6 +63,12 @@ export interface DadosDaEdicao {
   animacoes?: AnimacaoEscolhida[] | null;
   capitulos?: { inicio_s: number; titulo: string }[] | null;
   virais?: { inicio_s: number; fim_s: number; nota: number; texto: string }[] | null;
+  /**
+   * 02/10 (agente, EDIT IA PRO): o ritmo do Brabo depois do corte, batidas de
+   * ~`batida_s` cortando nas pausas entre palavras e o punch-in alternado a
+   * cada batida (corte seco). Sem ele, como antes.
+   */
+  ritmo?: { batida_s: number; zoom: number } | null;
 }
 
 export interface PassoDaEdicao {
@@ -188,6 +195,16 @@ export function montarEdicaoCompleta(p: ProjetoDeEdicao, plano: PlanoDaEdicao, d
   }
 
   faseDeCorte(m, plano, agora, passos);
+
+  if (dados.ritmo) {
+    const ritmo = dados.ritmo;
+    rodar(m, passos, "ritmo", "Ritmo dinâmico (Brabo)", (x) => {
+      const batida = Math.max(1, Math.min(6, Number(ritmo.batida_s) || 2));
+      const b = batidasEm(x, batida);
+      const z = zoomAlternadoEm(x, Math.max(1, Math.min(1.3, Number(ritmo.zoom) || 1.08)));
+      return b || z ? `Batidas de ${String(batida).replace(".", ",")} s com punch-in alternado, corte seco.` : "O vídeo já está no ritmo.";
+    });
+  }
 
   const frases: FraseNaLinha[] = frasesDoProjeto(m.projeto);
   const fala = frases.length > 0;

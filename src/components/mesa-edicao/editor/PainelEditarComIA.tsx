@@ -2,7 +2,6 @@ import { useMemo, useRef, useState } from "react";
 import { Check, Loader2, Sparkles, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
-import { useKitDaMesa } from "@/components/mesa/kitDaMesa";
 import { SeletorDeModelo } from "@/components/mesa/Seletores";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
@@ -15,16 +14,16 @@ import type { ProjetoDeEdicao } from "../../../../supabase/functions/_shared/pro
 import { linhasDoPlano, LEGENDAS_DO_PLANO, LOOKS_DO_PLANO, planoPadrao, RECEITAS, type PlanoDaEdicao } from "../../../../supabase/functions/editor-video/modulos/plano-da-edicao";
 import { chamarEditorVideo, emPreparacao, novoId } from "@/lib/editor/api";
 import { acaoDaProposta, acaoFeita } from "@/lib/editor/cartao";
-import { montarEdicaoCompleta, projetoDepoisDoCorte, type MarcaDaEdicao, type PassoDaEdicao } from "@/lib/editor/edicaoCompleta";
+import { montarEdicaoCompleta, projetoDepoisDoCorte, type PassoDaEdicao } from "@/lib/editor/edicaoCompleta";
 import { acervoParaBroll, custoDoPlano, fontesSemRosto, julgar, pedirPlano, resumoParaOPlano } from "@/lib/editor/editarComIa";
 import { temFala } from "@/lib/editor/transcricao";
 import type { PropostaDaSkill } from "@/lib/editor/skills";
 import type { ItemParaBroll } from "@/lib/editor/skills/pecasDaEdicao";
-import { letraDaMarcaParaVideo, PRESETS_DE_LEGENDA } from "@/lib/editor/estilosDeTexto";
-import { useTipografiaDaMarca } from "@/lib/mesa/tipografiaDoCliente";
+import { PRESETS_DE_LEGENDA } from "@/lib/editor/estilosDeTexto";
 import { LOOKS } from "@/lib/editor/cor";
 import type { ControleDePropostas } from "./PainelDeSkills";
-import { corDaPaleta, modelosDoAgente } from "./AgenteEditor";
+import { modelosDoAgente } from "./AgenteEditor";
+import { useMarcaDoEditor } from "./marcaDoEditor";
 
 /**
  * Editar com IA (frente EDT, rodada 2): uma instrução monta a edição inteira
@@ -53,26 +52,8 @@ interface Montagem {
 const ROTULO_DA_LEGENDA: Record<string, string> = PRESETS_DE_LEGENDA.reduce((o, p) => ({ ...o, [p.valor]: p.rotulo }), {} as Record<string, string>);
 const ROTULO_DO_LOOK: Record<string, string> = LOOKS.reduce((o, l) => ({ ...o, [l.id]: l.rotulo }), {} as Record<string, string>);
 
-/**
- * A marca aberta para o editor: cores do kit, logo e a LETRA da marca (as
- * fontes que valem para ela, pela regra de herança: outra marca nunca herda a
- * letra da principal).
- */
-export function useMarcaDoEditor(): MarcaDaEdicao | null {
-  const kit = useKitDaMesa();
-  const { clientId } = useMesa();
-  const tipografia = useTipografiaDaMarca(clientId, kit.marca);
-  const daMarca = tipografia.data ? tipografia.data.daMarca : null;
-  return useMemo(() => {
-    const paleta = kit.data ? kit.data.paleta : null;
-    const cor = corDaPaleta(paleta);
-    const outras = (paleta || []).filter((c) => /^#[0-9a-fA-F]{6}$/.test(String(c.hex || "")) && c.hex !== cor);
-    const nome = kit.marca ? kit.marca.nome : null;
-    const letra = letraDaMarcaParaVideo(daMarca);
-    if (!cor && !nome && !letra && !(kit.data && kit.data.logo_path)) return null;
-    return { nome, cor, cor2: outras[0] ? outras[0].hex : null, fonte: letra ? letra.familia : null, fonte_path: letra ? letra.caminho : null, logo_path: (kit.data && kit.data.logo_path) || null };
-  }, [kit.data, kit.marca, daMarca]);
-}
+/** A marca aberta para o editor (02/10: mora em marcaDoEditor.ts, que o agente também usa). */
+export { useMarcaDoEditor };
 
 function Chave({ ligado, rotulo, onMudar }: { ligado: boolean; rotulo: string; onMudar: (v: boolean) => void }) {
   return (

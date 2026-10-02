@@ -17,7 +17,16 @@ import { EFEITOS_DE_AJUSTE, clipeDeZoom, type ModoDeZoom } from "./efeitos";
 import { LOOKS } from "./cor";
 import { corEm, NOME_DA_TRILHA_DE_AJUSTE, reenquadrarEm } from "./skills/pecasDaEdicao";
 import { trilhaLivre } from "./motion/aplicar";
-import { FORMATOS_DO_PROJETO, midiaDaFonte, type CorDoProjeto } from "../../../supabase/functions/_shared/projeto-de-edicao";
+import { FORMATOS_DO_PROJETO, midiaDaFonte, TIPOS_DE_TRANSICAO, type CorDoProjeto, type TipoDeTransicao } from "../../../supabase/functions/_shared/projeto-de-edicao";
+import { FERRAMENTAS_DO_AGENTE, PAINEIS_DO_EDITOR, respostaAfirma, respostaPromete } from "../../../supabase/functions/editor-video/ferramentas";
+import { FIDELIDADES_DA_RECEITA, normalizarReceita, type Fidelidade } from "../../../supabase/functions/editor-video/receita";
+import { entendimentoDoVideo, textoDoEntendimento } from "./entendimento";
+import { itensDoQueMudou, mensagemDoQueMudou } from "./relatorio";
+import { proporReceita } from "./skills/receita";
+import { definicaoDaPeca, parametrosDaPeca } from "./motion/catalogo";
+import { chaveNoProjeto, fonteDoItem } from "./biblioteca";
+import { textoEm } from "./skills/pecasDaEdicao";
+import { acharClipe } from "./operacoes";
 
 /**
  * Agente editor, lado da tela (frente V-B). O servidor (editor-video,
@@ -47,6 +56,17 @@ export interface ResultadoDaFerramenta {
   naFila?: { tipo: "amostra" | "onda"; pedido_id: string; inicio_s?: number; fim_s?: number } | null;
   /** 02/10: filtro que o agente pôs na tela (buscar). */
   filtro?: FiltroDaBusca | null;
+  /** 02/10: painel que o agente abre na tela do dono (trocar cenário, timestamp...). Não muda a linha do tempo. */
+  painel?: PedidoDePainel | null;
+}
+
+/** Painel do editor que o agente pede para abrir, com o que já vai preenchido. */
+export interface PedidoDePainel {
+  aba: string;
+  /** Id do clipe para escolher na linha do tempo (o painel usa o escolhido). */
+  clipe?: string | null;
+  /** Trocar cenário: o cenário escrito pelo agente. */
+  cenario?: string | null;
 }
 
 /**
@@ -159,7 +179,11 @@ export function itensDaReferencia(p: ProjetoDeEdicao): { ref: string; titulo: st
 /** Contexto que vai ao modelo: projeto com apelidos, estado da tela, fala resumida e o que foi visto. */
 export function contextoDoAgente(p: ProjetoDeEdicao, limite = 50000, tela: EstadoDaTela = {}, extra: OpcoesDaFerramenta = {}): string {
   const a = extra.apelidos || apelidosDoProjeto(p);
-  const partes = [resumoParaOAgente(p, a), linhasDaTela(p, tela, a).join("\n")];
+  // 02/10: o entendimento do vídeo vem PRIMEIRO (o projeto pode ser cortado no limite; o entendimento não).
+  const partes = [`Entendimento do vídeo (código):\n${textoDoEntendimento(entendimentoDoVideo(p))}`, resumoParaOAgente(p, a, { maxPorTrilha: 40 }), linhasDaTela(p, tela, a).join("\n")];
+  if (p.referencias && p.referencias.length) {
+    partes.push(`Referências (aplicar_referencia): ${p.referencias.map((r, k) => `r${k + 1}: ${r.nome}${normalizarReceita(r.receita) ? " (medida)" : " (sem medida: medir no painel Referências)"}, fidelidade ${r.fidelidade}`).join("; ")}.`);
+  }
   // 02/10: os takes repetidos já vão contados (o dono pede "tira os duplicados" e o modelo não precisa adivinhar).
   const repetidos = acharDuplicados(p, extra.assinaturas || null);
   partes.push(repetidos.length ? `Takes repetidos (regra fixa): ${textoDosDuplicados(repetidos, a.porId)} remover_duplicados tira.` : "Takes repetidos: nenhum.");
@@ -400,7 +424,17 @@ export function executarFerramenta(p: ProjetoDeEdicao, ch: ChamadaDeFerramenta, 
       }
       case "musica": {
         const m = new Montador(p);
-        const r = porTrilha(m, String(a.fonte || ""), isNaN(num(a.abaixo_da_voz_db)) ? null : num(a.abaixo_da_voz_db));
+        let fonte = String(a.fonte || "");
+        // 02/10: música do acervo do cliente (m3 de buscar) entra como fonte e vira a trilha.
+        if (/^m\d+$/.test(fonte)) {
+          const item = (opcoes.midias || [])[Number(fonte.slice(1)) - 1];
+          if (!item) throw new ErroDaOperacao(`Não achei a mídia ${fonte}. Use o m1, m2 de buscar.`);
+          if (midiaDaFonte(item.tipo, item.nome, item.storage_path) !== "audio") throw new ErroDaOperacao(`${item.nome} não é um áudio.`);
+          const c = chaveNoProjeto(m.projeto, item);
+          if (c.nova) m.aplicar({ op: "fonte", fonte: fonteDoItem(c.chave, item) });
+          fonte = c.chave;
+        }
+        const r = porTrilha(m, fonte, isNaN(num(a.abaixo_da_voz_db)) ? null : num(a.abaixo_da_voz_db));
         return { projeto: m.projeto, operacoes: m.operacoes, texto: `Trilha de ${tempoFino(r.duracao_s)}, ${m.projeto.mixagem.trilha_abaixo_da_voz_db} dB abaixo da voz; sobe nas pausas; o render sai em ${m.projeto.mixagem.lufs_alvo} LUFS.`, ok: true };
       }
       case "logo":
@@ -420,6 +454,157 @@ export function executarFerramenta(p: ProjetoDeEdicao, ch: ChamadaDeFerramenta, 
         if (marca && marca.cor) params.cor = marca.cor;
         const r = porPeca(m, { peca: "cartao_final", inicio_s: Math.max(0, total - 3.5), duracao_s: Math.min(3.5, Math.max(1, total)), params, fonte: m.projeto.fontes[CHAVE_DA_LOGO] ? CHAVE_DA_LOGO : null });
         return { projeto: m.projeto, operacoes: m.operacoes, texto: `Cartão final em ${tempoFino(r.inicio_s)}${m.projeto.fontes[CHAVE_DA_LOGO] ? " com a logo" : " (sem logo no kit)"}.`, ok: true };
+      }
+      // ---------------------------------------------------------------- 02/10: o resto do que a tela faz
+      case "entender_video":
+        return { projeto: p, operacoes: [], texto: textoDoEntendimento(entendimentoDoVideo(p), 12000), ok: true };
+      case "aplicar_referencia": {
+        const lista = p.referencias || [];
+        if (!lista.length) throw new ErroDaOperacao("Nenhuma referência no projeto. Ponha o vídeo de referência em Referências (link ou arquivo) e meça (sem custo).");
+        const ref = String(a.referencia || "").trim();
+        const r = /^r\d+$/.test(ref) ? lista[Number(ref.slice(1)) - 1] : ref ? lista.find((x) => x.nome.toLowerCase().indexOf(ref.toLowerCase()) >= 0) : lista[lista.length - 1];
+        if (!r) throw new ErroDaOperacao(`Não achei a referência ${ref}. Referências: ${lista.map((x, k) => `r${k + 1} ${x.nome}`).join(", ")}.`);
+        const receita = normalizarReceita(r.receita);
+        if (!receita) throw new ErroDaOperacao(`A referência ${r.nome} ainda não foi medida. Em Referências, clique em Medir (sem custo) e peça de novo.`);
+        const fid = (FIDELIDADES_DA_RECEITA as string[]).indexOf(String(a.fidelidade)) >= 0 ? (String(a.fidelidade) as Fidelidade) : r.fidelidade;
+        const prop = proporReceita(p, receita, fid, { agora }, r.nome);
+        const avisos = prop.avisos.length ? ` ${prop.avisos.join(" ")}` : "";
+        if (!prop.operacoes.length) return { projeto: p, operacoes: [], texto: `${prop.titulo}: ${prop.resumo}${avisos}`, ok: !prop.avisos.length };
+        return { projeto: prop.resultado, operacoes: prop.operacoes, texto: `${prop.titulo} (${fid}): ${prop.resumo}${avisos}`, ok: true };
+      }
+      case "editar_clipe": {
+        const ref = String(a.clipe || "");
+        const id = ap.porApelido[ref];
+        if (!id) throw new ErroDeApelido(`Não existe ${ref || "o clipe"}. Clipes: ${ap.lista.map((x) => x.apelido).slice(0, 40).join(", ")}.`);
+        const achado = acharClipe(p, id);
+        if (!achado) throw new ErroDeApelido(`O ${ref} já saiu do projeto neste pedido.`);
+        const { clipe: c, trilha: t } = achado;
+        const estilo: Record<string, unknown> = { ...((c.estilo || {}) as Record<string, unknown>) };
+        const campos: Record<string, unknown> = {};
+        const mudou: string[] = [];
+        if (a.texto !== undefined) {
+          if (t.tipo !== "texto" && t.tipo !== "legenda") throw new ErroDaOperacao(`${ref} não é texto nem legenda.`);
+          campos.texto = String(a.texto || "").replace(/\s+/g, " ").trim().slice(0, 500) || null;
+          mudou.push("texto");
+        }
+        if (a.estilo !== undefined) {
+          const v = String(a.estilo);
+          const valido = t.tipo === "legenda" ? presetDaLegendaValido(v) : presetDoTextoValido(v);
+          if (!valido) throw new ErroDaOperacao(`Estilo ${v} não existe para ${t.tipo === "legenda" ? "legenda" : "texto"}.`);
+          estilo.preset = v;
+          mudou.push("estilo");
+        }
+        if (a.params && typeof a.params === "object") {
+          const peca = estilo.peca;
+          if (typeof peca !== "string") throw new ErroDaOperacao(`${ref} não é uma peça de motion.`);
+          const novos = { ...((estilo.params || {}) as Record<string, unknown>), ...(a.params as Record<string, unknown>) };
+          try {
+            parametrosDaPeca(peca as IdDaPeca, novos);
+          } catch (e) {
+            throw new ErroDaOperacao(e instanceof Error ? e.message : "Parâmetro inválido.");
+          }
+          estilo.params = novos;
+          mudou.push(`params (${Object.keys(a.params as object).join(", ")})`);
+        }
+        if (a.fundo !== undefined) {
+          if (!/^#[0-9a-fA-F]{6}$/.test(String(a.fundo))) throw new ErroDaOperacao("Fundo é uma cor #RRGGBB.");
+          estilo.fundo = String(a.fundo);
+          mudou.push("fundo");
+        }
+        if (mudou.some((x) => x !== "texto")) campos.estilo = estilo;
+        const ops: Operacao[] = [];
+        if (Object.keys(campos).length) ops.push({ op: "propriedades", clipe: ref, campos });
+        if (a.duracao_s !== undefined) {
+          const d = num(a.duracao_s);
+          if (!(d >= 0.3 && d <= 120)) throw new ErroDaOperacao("Duração de 0,3 s a 120 s.");
+          ops.push({ op: "aparar", clipe: ref, lado: "fim", tempo_s: c.inicio_s + d });
+          mudou.push("duração");
+        }
+        if (!ops.length) throw new ErroDaOperacao("Diga o que mudar: texto, estilo, params, fundo ou duracao_s.");
+        return aplicar(ops, `Editei ${ref}: ${mudou.join(", ")}.`);
+      }
+      case "transicao": {
+        const tipo = String(a.tipo || "");
+        if ((TIPOS_DE_TRANSICAO as readonly string[]).indexOf(tipo) < 0) throw new ErroDaOperacao(`Transição desconhecida: ${tipo || "sem nome"}. Tipos: ${TIPOS_DE_TRANSICAO.join(", ")}.`);
+        const d = isNaN(num(a.duracao_s)) ? 0.3 : Math.max(0.1, Math.min(1.5, num(a.duracao_s)));
+        const valor = tipo === "corte" ? null : { tipo: tipo as TipoDeTransicao, duracao_s: d };
+        const todos = String(a.clipe || "") === "todos";
+        const principal = trilhaPrincipal(p);
+        const alvos = todos ? (principal ? emOrdem(principal).slice(1).map((c) => ap.porId[c.id]).filter(Boolean) : []) : [String(a.clipe || "")];
+        if (!alvos.length) throw new ErroDaOperacao("Sem clipe para a transição.");
+        const lado = a.lado === "saida" || a.lado === "ambos" ? a.lado : "entrada";
+        const campos = lado === "entrada" ? { transicao_entrada: valor } : lado === "saida" ? { transicao_saida: valor } : { transicao_entrada: valor, transicao_saida: valor };
+        return aplicar(alvos.map((c): Operacao => ({ op: "propriedades", clipe: c, campos })), `Transição ${tipo} (${lado}) em ${alvos.length === 1 ? alvos[0] : `${alvos.length} clipes`}.`);
+      }
+      case "mixagem": {
+        const campos: Record<string, number | boolean> = {};
+        const faixa = (k: string, v: unknown, min: number, max: number) => {
+          if (v === undefined) return;
+          const n = num(v);
+          if (isNaN(n)) throw new ErroDaOperacao(`${k} precisa ser número.`);
+          campos[k] = Math.max(min, Math.min(max, n));
+        };
+        faixa("trilha_abaixo_da_voz_db", a.abaixo_da_voz_db, 12, 36);
+        faixa("subida_nas_pausas_db", a.subida_nas_pausas_db, 0, 12);
+        faixa("lufs_alvo", a.lufs_alvo, -23, -9);
+        if (typeof a.duck === "boolean") campos.duck = a.duck;
+        if (!Object.keys(campos).length) throw new ErroDaOperacao("Diga o que mudar na mixagem.");
+        const o: Operacao = { op: "mixagem", campos };
+        return { projeto: aplicarOperacao(p, o), operacoes: [o], texto: `Mixagem: ${Object.keys(campos).map((k) => `${k} ${campos[k]}`).join(", ")}.`, ok: true };
+      }
+      case "cena": {
+        const d = isNaN(num(a.duracao_s)) ? 3 : Math.max(0.5, Math.min(30, num(a.duracao_s)));
+        const hex = (v: unknown) => (/^#[0-9a-fA-F]{6}$/.test(String(v || "")) ? String(v) : null);
+        const fundo = hex(a.fundo) || (marca && hex(marca.cor)) || "#111111";
+        const fundo2 = hex(a.fundo2);
+        const m = new Montador(p);
+        if (!trilhaPrincipal(m.projeto)) m.aplicar({ op: "trilha_nova", tipo: "video" });
+        const t = trilhaPrincipal(m.projeto);
+        if (!t) throw new ErroDaOperacao("Sem trilha de vídeo.");
+        const fimDaPrincipal = t.clipes.reduce((s, c) => Math.max(s, c.inicio_s + duracaoDoClipe(c)), 0);
+        let ini = isNaN(num(a.inicio_s)) ? fimDaPrincipal : Math.max(0, num(a.inicio_s));
+        // Dentro de um clipe: a cena entra no começo dele (e empurra o resto, com as outras trilhas juntas).
+        const sob = t.clipes.find((c) => c.inicio_s < ini - 1e-6 && c.inicio_s + duracaoDoClipe(c) > ini + 1e-6);
+        if (sob) ini = sob.inicio_s;
+        const empurra = ini < fimDaPrincipal - 1e-6;
+        if (empurra) {
+          const passo = Math.ceil(d * m.projeto.fps - 1e-6) / m.projeto.fps;
+          m.projeto.trilhas
+            .filter((x) => x.id !== t.id)
+            .forEach((x) =>
+              x.clipes
+                .filter((c) => c.inicio_s >= ini - 1e-6)
+                .sort((c1, c2) => c2.inicio_s - c1.inicio_s)
+                .forEach((c) => m.aplicar({ op: "mover", clipe: c.id, inicio_s: c.inicio_s + passo })),
+            );
+        }
+        m.aplicar({ op: "inserir", trilha: t.id, empurrar: empurra, clipe: { inicio_s: ini, entrada_s: 0, saida_s: d, estilo: { fundo, ...(fundo2 ? { fundo2 } : {}) }, origem: { tipo: "manual", ref: "agente:cena" } } });
+        const feitos = [`cena de ${tempoFino(d)} em ${tempoFino(ini)}`];
+        if (a.titulo) {
+          textoEm(m, String(a.titulo), ini + 0.15, Math.max(0.6, d - 0.3), presetDoTextoValido(a.estilo) ? String(a.estilo) : "titulo");
+          feitos.push("título");
+        }
+        if (a.peca) {
+          const peca = String(a.peca) as IdDaPeca;
+          const def = definicaoDaPeca(peca);
+          if (!def || peca === "logo") throw new ErroDaOperacao(`Peça desconhecida: ${peca}.`);
+          porPeca(m, { peca, inicio_s: ini + 0.2, duracao_s: Math.max(0.6, Math.min(def.duracao_s, d - 0.2)), params: (a.params && typeof a.params === "object" ? a.params : {}) as Record<string, unknown> });
+          feitos.push(`peça ${peca}`);
+        }
+        return { projeto: m.projeto, operacoes: m.operacoes, texto: `Pus ${feitos.join(", ")}${empurra ? "; o resto andou junto" : ""}.`, ok: true };
+      }
+      case "trocar_cenario": {
+        const ref = String(a.clipe || "");
+        const id = ap.porApelido[ref];
+        if (!id) throw new ErroDeApelido(`Não existe ${ref || "o clipe"}. Clipes: ${ap.lista.filter((x) => x.tipo === "video").map((x) => x.apelido).join(", ")}.`);
+        const cenario = String(a.cenario || "").replace(/\s+/g, " ").trim().slice(0, 400);
+        if (cenario.length < 3) throw new ErroDaOperacao("Descreva o cenário novo.");
+        return { projeto: p, operacoes: [], texto: `Abri Trocar cenário com ${ref} e o cenário "${cenario.slice(0, 80)}". O custo aparece no painel antes de gerar; nada foi gasto.`, ok: true, painel: { aba: "cenario", clipe: id, cenario } };
+      }
+      case "abrir_painel": {
+        const aba = String(a.painel || "");
+        if (PAINEIS_DO_EDITOR.indexOf(aba) < 0) throw new ErroDaOperacao(`Painel desconhecido: ${aba || "sem nome"}. Painéis: ${PAINEIS_DO_EDITOR.join(", ")}.`);
+        return { projeto: p, operacoes: [], texto: `Abri o painel ${aba} na tela do dono.`, ok: true, painel: { aba } };
       }
       case "fechar_buracos":
       case "aplicar_skill": {
@@ -504,6 +689,77 @@ export interface ResultadoDoAgente {
   mudancas: string;
   /** Clipes que o pedido mexeu e ainda estão na linha do tempo (destaque na tela). */
   tocados: string[];
+  /**
+   * 02/10 (dono: "o agente alucina"): o que mudou de verdade, contado pelo
+   * código comparando o projeto antes e depois (relatorio.ts). A mensagem
+   * final sai daqui, nunca do texto livre do modelo.
+   */
+  itensMudados: string[];
+  /** Ferramentas que não entraram, com o motivo (vai na mensagem final). */
+  naoEntrou: string[];
+  /** Pergunta do agente (dúvida real), quando houver. */
+  pergunta: string | null;
+  /** Painéis que o agente pediu para abrir na tela do dono. */
+  paineis: PedidoDePainel[];
+  /** A regra da casa rodou a edição completa porque o modelo não editou um pedido de edição completa. */
+  regraDaCasa: boolean;
+}
+
+const semAcentoDoPedido = (t: string) =>
+  String(t || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+
+/** Pedido que manda mexer no vídeo (editar, cortar, legendar, pôr música...). */
+export function pedidoDeEdicao(texto: string): boolean {
+  const t = semAcentoDoPedido(texto);
+  if (/\?\s*$/.test(t.trim()) && !/\b(pode|consegue|da pra|faz)\b/.test(t)) return false;
+  return /\b(edit|edicao|edita|corta|corte|cortar|legend|dinamic|brabo|completo|completa|musica|trilha|punch|zoom|anima|motion|arte|b-?roll|cor\b|look|lut|formato|reenquadr|transic|efeito|texto|titulo|gancho|capitul|tira|remov|apaga|monta|deixa|faz|faca|coloca|poe|ponha)/.test(t);
+}
+
+/**
+ * Pedido da edição inteira ("edita completo e dinâmico", "edita esse vídeo",
+ * "faz a edição com o Brabo"): o motor da casa (EDIT IA PRO) resolve sozinho
+ * se o modelo não editar.
+ */
+export function pedidoDeEdicaoCompleta(texto: string): boolean {
+  const t = semAcentoDoPedido(texto);
+  if (/\b(so|apenas|somente) (o|a|as|os)? ?(ritmo|batidas|legenda|corte|cor|musica)\b/.test(t)) return false;
+  return /\b(edicao|edita|editar|edite|editado)\b.{0,40}\b(complet|dinamic|inteir|tudo|toda|brabo|pro\b|profission)/.test(t) || /\b(complet|dinamic|inteir)[a-z]*\b.{0,30}\b(edicao|edita|editar|edite)\b/.test(t) || /\bedit ia pro\b/.test(t) || /^(edita|edite|editar|pode editar)( (ele|ela|esse|este|o|isso) ?(video)?)?( (pra|para) mim| por favor| ai)?[.!]*$/.test(t.trim()) || /\b(skill|metodo|jeito) do brabo\b/.test(t);
+}
+
+/**
+ * A mensagem final do agente, feita pelo CÓDIGO (02/10): o que mudou de verdade
+ * (comparando o projeto antes e depois), o que não entrou e, quando houver, a
+ * pergunta. O texto livre do modelo que afirma ou promete mudança nunca entra.
+ */
+export function mensagemFinalDoAgente(r: Pick<ResultadoDoAgente, "operacoes" | "itensMudados" | "mudancas" | "naoEntrou" | "pergunta" | "parado" | "regraDaCasa">, aplicado: boolean): string {
+  const partes: string[] = [];
+  const mudou = r.operacoes.length > 0 && (r.itensMudados.length > 0 || !!r.mudancas);
+  if (mudou) {
+    const lista = [r.mudancas].concat(r.itensMudados).filter(Boolean).join(" ");
+    partes.push(`${aplicado ? "Mudei" : "Vou mudar (confirme no cartão)"}: ${lista}${aplicado ? " O Desfazer volta tudo." : ""}`);
+    if (r.regraDaCasa) partes.push("O modelo não editou: rodei a edição completa da casa (EDIT IA PRO).");
+  } else partes.push(r.parado ? "Parei antes de mudar a linha do tempo." : "Nada mudou na linha do tempo.");
+  if (r.naoEntrou.length) partes.push(`Não entrou: ${r.naoEntrou.slice(0, 6).join("; ")}.`);
+  if (r.pergunta) partes.push(r.pergunta);
+  else if (!mudou && !r.naoEntrou.length && !r.parado) partes.push("O agente não chamou nenhuma ferramenta que muda o vídeo. Diga o que mudar (ex.: edita completo e dinâmico).");
+  return partes.join(" ");
+}
+
+/** Ferramenta que muda (ou pode mudar) a linha do tempo. */
+const muda = (nome: string) => FERRAMENTAS_DO_AGENTE.some((f) => f.nome === nome && !f.leitura);
+
+/**
+ * Conferência pelo código depois de cada ferramenta que muda o projeto (02/10):
+ * o que entrou de verdade, comparando o projeto antes e depois dela.
+ */
+export function conferencia(antes: ProjetoDeEdicao, depois: ProjetoDeEdicao, x: Pick<ResultadoDaFerramenta, "ok" | "operacoes">): { texto: string; falhou: boolean } {
+  if (!x.ok) return { texto: "Conferido: não entrou nada (veja o erro e corrija, ou diga ao dono).", falhou: true };
+  if (!x.operacoes.length) return { texto: "Conferido: nada a mudar.", falhou: false };
+  const itens = itensDoQueMudou(antes, depois);
+  return { texto: `Conferido: ${itens.length ? itens.join(" ") : `${x.operacoes.length} ajustes finos (tempo, volume, estilo).`}`, falhou: false };
 }
 
 /** O que o servidor devolve num passo (agente_passo). */
@@ -528,7 +784,19 @@ export class ErroDoPrimeiroPasso extends Error {
   }
 }
 
-/** O laço: passo no servidor, ferramentas aqui, resultado de volta; para no limite e diz por quê. */
+/**
+ * O laço (02/10, dono: "o agente alucina, não faz o que eu peço, para no
+ * meio"): planejar, executar, CONFERIR e seguir.
+ * - cada ferramenta que muda o projeto volta com a linha "Conferido" feita
+ *   pelo código (o que entrou de verdade, antes e depois);
+ * - o modelo que diz "terminei" com ferramenta que falhou ganha mais um passo
+ *   para corrigir (até 2 vezes), e o pedido de edição que terminou sem mudar
+ *   nada ganha um lembrete (uma vez);
+ * - pedido da edição completa que o modelo não editou: a regra da casa roda o
+ *   EDIT IA PRO (edicao_completa) sozinha, sem custo de modelo;
+ * - a mensagem final sai do código (mensagemFinalDoAgente), nunca do texto
+ *   livre do modelo.
+ */
 export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente> {
   let trabalho = e.projeto;
   const operacoes: Operacao[] = [];
@@ -548,6 +816,7 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
   let falhas = 0;
   let recusadas = 0;
   let parado = false;
+  let paradoPeloDono = false;
   let terminouBem = false;
   let exportar = false;
   let opcoes: string[] = [];
@@ -555,12 +824,56 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
   let seguidas: unknown = null;
   let metodo: unknown = null;
   let usoId: string | null = null;
+  let reforcos = 0;
+  let lembrouDeEditar = false;
+  let regraDaCasa = false;
+  const naoEntrou: string[] = [];
   const saidas: SaidaDoAgente[] = [];
+  const paineis: PedidoDePainel[] = [];
   const naFila: NonNullable<ResultadoDaFerramenta["naFila"]>[] = [];
+  // O que o dono escreveu (sem a dica que a tela junta no fim).
+  const doDono = String(e.pedido || "").split("\n\n(Dica da tela:")[0];
+  const ehEdicao = pedidoDeEdicao(doDono);
+
+  /** Roda uma chamada (aqui ou no servidor), confere e guarda; devolve a linha de resultado para o modelo. */
+  const rodar = async (c: ChamadaDeFerramenta): Promise<{ linha: string; falhou: boolean }> => {
+    usadas++;
+    const noServidor = FERRAMENTAS_DO_SERVIDOR.indexOf(c.ferramenta) >= 0 || (FERRAMENTAS_DE_SAIDA.indexOf(c.ferramenta) >= 0 && c.ferramenta.indexOf("gerar_") === 0);
+    const antes = trabalho;
+    let x: ResultadoDaFerramenta;
+    if (noServidor) {
+      try {
+        x = e.servidor ? await e.servidor(c, trabalho) : { projeto: trabalho, operacoes: [], texto: "Indisponível aqui.", ok: false };
+      } catch (err) {
+        console.error("[agente editor] ferramenta do servidor falhou", c.ferramenta, err);
+        x = { projeto: trabalho, operacoes: [], texto: `Erro em ${c.ferramenta}: ${err instanceof Error ? err.message.slice(0, 160) : "falhou"}`, ok: false };
+      }
+    } else x = executarFerramenta(trabalho, c, e.agora, e.marca || null, { apelidos: mapa, midias: e.midias || null, assinaturas: e.assinaturas || null, cursor_s: e.tela && typeof e.tela.cursor_s === "number" ? e.tela.cursor_s : null });
+    trabalho = x.projeto;
+    mapa = apelidosEstaveis(trabalho, mapa);
+    if (x.filtro) filtro = x.filtro;
+    x.operacoes.forEach((o) => operacoes.push(o));
+    if (x.exportar) exportar = true;
+    if (x.saida) saidas.push(x.saida);
+    if (x.naFila) naFila.push(x.naFila);
+    if (x.painel) paineis.push(x.painel);
+    if (!x.ok) {
+      falhas++;
+      naoEntrou.push(`${c.ferramenta}: ${x.texto.replace(/^Erro em [a-z_]+: /, "").split("\n")[0].slice(0, 140)}`);
+    } else {
+      // Corrigida no passo seguinte (a mesma ferramenta entrou): a falha antiga sai da lista.
+      for (let k = naoEntrou.length - 1; k >= 0; k--) if (naoEntrou[k].indexOf(`${c.ferramenta}:`) === 0) naoEntrou.splice(k, 1);
+    }
+    const conf = muda(c.ferramenta) ? conferencia(antes, trabalho, x) : null;
+    log.push({ tipo: "ferramenta", texto: `${c.ferramenta}${x.ok ? "" : " (não deu)"}: ${x.texto.split("\n")[0].slice(0, 160)}` });
+    return { linha: `${c.ferramenta}: ${x.texto}${conf ? `\n${conf.texto}` : ""}`, falhou: !x.ok };
+  };
+
   while (passo < MAX_PASSOS) {
     if (e.cancelado && e.cancelado()) {
       log.push({ tipo: "aviso", texto: `Parado pelo dono depois de ${passo} ${passo === 1 ? "passo" : "passos"}. O que já saiu fica para você conferir.` });
       parado = true;
+      paradoPeloDono = true;
       break;
     }
     passo++;
@@ -610,28 +923,12 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
     const resultados: string[] = [];
     const chamadas = p.chamadas || [];
     const cabem = Math.max(0, MAX_FERRAMENTAS - usadas);
+    let falhouNoPasso = false;
     for (const c of chamadas.slice(0, cabem)) {
-      usadas++;
-      const noServidor = FERRAMENTAS_DO_SERVIDOR.indexOf(c.ferramenta) >= 0 || (FERRAMENTAS_DE_SAIDA.indexOf(c.ferramenta) >= 0 && c.ferramenta.indexOf("gerar_") === 0);
-      let x: ResultadoDaFerramenta;
-      if (noServidor) {
-        try {
-          x = e.servidor ? await e.servidor(c, trabalho) : { projeto: trabalho, operacoes: [], texto: "Indisponível aqui.", ok: false };
-        } catch (err) {
-          console.error("[agente editor] ferramenta do servidor falhou", c.ferramenta, err);
-          x = { projeto: trabalho, operacoes: [], texto: `Erro em ${c.ferramenta}: ${err instanceof Error ? err.message.slice(0, 160) : "falhou"}`, ok: false };
-        }
-      } else x = executarFerramenta(trabalho, c, e.agora, e.marca || null, { apelidos: mapa, midias: e.midias || null, assinaturas: e.assinaturas || null, cursor_s: e.tela && typeof e.tela.cursor_s === "number" ? e.tela.cursor_s : null });
-      trabalho = x.projeto;
-      mapa = apelidosEstaveis(trabalho, mapa);
-      if (x.filtro) filtro = x.filtro;
-      x.operacoes.forEach((o) => operacoes.push(o));
-      if (x.exportar) exportar = true;
-      if (x.saida) saidas.push(x.saida);
-      if (x.naFila) naFila.push(x.naFila);
-      if (!x.ok) falhas++;
-      resultados.push(`${c.ferramenta}: ${x.texto}`);
-      log.push({ tipo: "ferramenta", texto: `${c.ferramenta}${x.ok ? "" : " (não deu)"}: ${x.texto.split("\n")[0].slice(0, 160)}` });
+      if (e.cancelado && e.cancelado()) break;
+      const x = await rodar(c);
+      resultados.push(x.linha);
+      if (x.falhou) falhouNoPasso = true;
     }
     if (chamadas.length > cabem) {
       recusadas += chamadas.length - cabem;
@@ -644,25 +941,52 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
       // O servidor parou pelo teto ou pelo limite: a resposta dele diz o motivo.
       parado = true;
       if (p.resposta) log.push({ tipo: "aviso", texto: p.resposta });
-      resposta = operacoes.length ? "Parei antes do fim. Confira o que já saiu." : "";
+      resposta = "";
       break;
     }
-    if (p.terminou || !chamadas.length) {
+    const pediuParar = p.terminou || !chamadas.length;
+    let lembrete = "";
+    if (pediuParar && passo < MAX_PASSOS && usadas < MAX_FERRAMENTAS && !opcoes.length) {
+      // Conferir antes de parar: ferramenta que falhou ganha a chance de corrigir; edição sem mudança, o lembrete.
+      if (falhouNoPasso && reforcos < 2) {
+        reforcos++;
+        lembrete = "Conferência do código: alguma ferramenta não entrou (veja acima). Corrija os argumentos ou use outra ferramenta e termine; se não der, termine dizendo o que faltou.";
+      } else if (ehEdicao && !operacoes.length && !saidas.length && !exportar && !paineis.length && !lembrouDeEditar && !respostaEhPergunta(p.resposta)) {
+        lembrouDeEditar = true;
+        lembrete = "Conferência do código: o pedido é de edição e nada mudou na linha do tempo. Edite agora com as ferramentas (edição inteira = edicao_completa) ou faça UMA pergunta curta se houver dúvida real.";
+      }
+    }
+    if (pediuParar && !lembrete) {
       terminouBem = true;
       break;
     }
     historico.push({ papel: "agente", conteudo: JSON.stringify({ plano: p.plano, chamadas: p.chamadas }) });
-    historico.push({ papel: "usuario", conteudo: `Resultados:\n${resultados.join("\n")}\n\nClipes agora (apelidos fixos neste pedido):\n${resumoParaOAgente(trabalho, mapa)}` });
+    historico.push({ papel: "usuario", conteudo: `Resultados:\n${resultados.join("\n") || "(nenhuma ferramenta)"}${lembrete ? `\n\n${lembrete}` : ""}\n\nClipes agora (apelidos fixos neste pedido):\n${resumoParaOAgente(trabalho, mapa, { maxPorTrilha: 40 })}` });
   }
   if (!terminouBem && !parado && passo >= MAX_PASSOS) {
     parado = true;
     log.push({ tipo: "aviso", texto: `Parou no limite de ${MAX_PASSOS} passos sem o agente dizer que terminou. Confira o que já saiu.` });
   }
-  if (resposta) log.push({ tipo: "resposta", texto: resposta });
-  const mudancas = resumoDoQueMudou(e.projeto, operacoes, mapa);
+  // Regra da casa: "edita completo" que o modelo não editou vira o EDIT IA PRO (sem modelo, sem custo).
+  if (!operacoes.length && !paradoPeloDono && !opcoes.length && pedidoDeEdicaoCompleta(doDono) && e.servidor) {
+    const x = await rodar({ ferramenta: "edicao_completa", argumentos: { receita: "dinamico" } });
+    if (operacoes.length) {
+      regraDaCasa = true;
+      log.push({ tipo: "aviso", texto: "O modelo não editou: a regra da casa rodou a edição completa (EDIT IA PRO)." });
+    } else if (!x.falhou) naoEntrou.push("edicao_completa: nada a montar com este vídeo");
+  }
+  const mudancas = operacoes.length && operacoes.length <= 12 ? resumoDoQueMudou(e.projeto, operacoes, mapa, { soClipes: true }) : "";
+  const itensMudados = operacoes.length ? itensDoQueMudou(e.projeto, trabalho) : [];
   const tocados = clipesTocados(operacoes, trabalho, e.projeto);
-  return { operacoes, resultado: trabalho, log, resposta, gasto_usd: gasto, passos: passo, ferramentas: usadas, falhas, recusadas, parado, exportar, opcoes, aprendido, seguidas, metodo, uso_id: usoId, saidas, naFila, filtro, mudancas, tocados };
+  // O texto livre do modelo só fica quando é pergunta (dúvida real); afirmação ou promessa de mudança nunca.
+  const pergunta = (opcoes.length || respostaEhPergunta(resposta)) && !respostaAfirma(resposta) && !respostaPromete(resposta) ? resposta : null;
+  const parcial = { operacoes, itensMudados, mudancas, naoEntrou, pergunta, parado, regraDaCasa };
+  log.push({ tipo: "resposta", texto: mensagemFinalDoAgente(parcial, true) });
+  return { operacoes, resultado: trabalho, log, resposta, gasto_usd: gasto, passos: passo, ferramentas: usadas, falhas, recusadas, parado, exportar, opcoes, aprendido, seguidas, metodo, uso_id: usoId, saidas, naFila, filtro, mudancas, tocados, itensMudados, naoEntrou, pergunta, paineis, regraDaCasa };
 }
+
+/** Resposta que é uma pergunta ao dono. */
+export const respostaEhPergunta = (t: string | null | undefined) => /\?\s*$/.test(String(t || "").trim());
 
 const VERBO_DO_RESUMO: Partial<Record<Operacao["op"], string>> = {
   remover: "Tirei",
@@ -680,7 +1004,7 @@ const VERBO_DO_RESUMO: Partial<Record<Operacao["op"], string>> = {
  * O que mudou, dito pelo CÓDIGO (02/10): o dono quer ver o que o agente fez com
  * os apelidos que ele vê na linha do tempo. "Tirei c3, c5. Movi c2. Pus 2 clipes."
  */
-export function resumoDoQueMudou(antes: ProjetoDeEdicao, ops: Operacao[], apelidos?: Apelidos | null): string {
+export function resumoDoQueMudou(antes: ProjetoDeEdicao, ops: Operacao[], apelidos?: Apelidos | null, opcoes: { soClipes?: boolean } = {}): string {
   // Os apelidos do fim do pedido (clipe novo) e os do começo (o que saiu).
   const a = { porId: { ...apelidosDoProjeto(antes).porId, ...(apelidos ? apelidos.porId : {}) } };
   const porVerbo: Record<string, string[]> = {};
@@ -713,8 +1037,9 @@ export function resumoDoQueMudou(antes: ProjetoDeEdicao, ops: Operacao[], apelid
     const [op, nome] = x.split(":");
     frases.push(op === "ondular" ? `Encostei a ${nome}.` : `Reordenei a ${nome}.`);
   });
-  if (inseridos) frases.push(`Pus ${inseridos} ${inseridos === 1 ? "clipe novo" : "clipes novos"}.`);
-  if (outras) frases.push(`Mais ${outras} ${outras === 1 ? "ajuste" : "ajustes"} (cor, formato, trilhas ou marcadores).`);
+  // soClipes (02/10): o resto (legendas, peças, cor) quem conta é o relatório do antes e depois.
+  if (inseridos && (!opcoes.soClipes || inseridos <= 2)) frases.push(`Pus ${inseridos} ${inseridos === 1 ? "clipe novo" : "clipes novos"}.`);
+  if (outras && !opcoes.soClipes) frases.push(`Mais ${outras} ${outras === 1 ? "ajuste" : "ajustes"} (cor, formato, trilhas ou marcadores).`);
   return frases.join(" ");
 }
 

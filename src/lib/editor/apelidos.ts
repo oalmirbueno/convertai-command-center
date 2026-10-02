@@ -90,20 +90,49 @@ export function apelidosEstaveis(p: ProjetoDeEdicao, anterior: Apelidos | null |
 }
 
 /** O que o agente lê do projeto: uma linha por clipe, com apelido e tempos exatos. */
-export function resumoParaOAgente(p: ProjetoDeEdicao, apelidos?: Apelidos | null): string {
+/** 02/10: o que o agente precisa para editar uma peça, um texto ou uma cena (params atuais, estilo, fundo). */
+function detalheDoEstilo(c: ClipeDoProjeto): string {
+  const e = (c.estilo || {}) as Record<string, unknown>;
+  if (typeof e.peca === "string") {
+    const params = JSON.stringify(e.params || {});
+    return `, params ${params.length > 160 ? `${params.slice(0, 159)}…` : params}`;
+  }
+  if (typeof e.fundo === "string") return `, cena fundo ${e.fundo}${typeof e.fundo2 === "string" ? ` a ${e.fundo2}` : ""}`;
+  if (typeof e.preset === "string") return `, estilo ${e.preset}`;
+  return "";
+}
+
+/**
+ * Projeto em texto para o agente. `maxPorTrilha` (02/10): trilha muito longa
+ * (legenda com 200 blocos) mostra o começo e o fim e diz quantos são; o
+ * ler_projeto devolve tudo.
+ */
+export function resumoParaOAgente(p: ProjetoDeEdicao, apelidos?: Apelidos | null, opcoes: { maxPorTrilha?: number } = {}): string {
   const a = apelidos || apelidosDoProjeto(p);
   const linhas = [`Projeto "${p.titulo}", ${p.formato}, ${p.fps} fps, ${tempoFino(p.duracao_s)} no total.`];
+  const max = opcoes.maxPorTrilha && opcoes.maxPorTrilha > 4 ? opcoes.maxPorTrilha : Infinity;
   p.trilhas.forEach((t) => {
-    linhas.push(`Trilha ${t.id} (${ROTULO_DA_TRILHA[t.tipo]}${t.muda ? ", muda" : ""}${t.oculta ? ", oculta" : ""}):`);
-    emOrdem(t).forEach((c) => {
+    linhas.push(`Trilha ${t.id} (${ROTULO_DA_TRILHA[t.tipo]}${t.nome && t.nome !== ROTULO_DA_TRILHA[t.tipo] ? ` "${t.nome}"` : ""}${t.muda ? ", muda" : ""}${t.oculta ? ", oculta" : ""}):`);
+    const ordem = emOrdem(t);
+    const linha = (c: ClipeDoProjeto) => {
       const f = c.fonte ? p.fontes[c.fonte] : null;
-      linhas.push(
+      return (
         `- ${a.porId[c.id]}: ${rotuloDoClipe(p, c)}, ${tempoFino(c.inicio_s)} a ${tempoFino(c.inicio_s + duracaoDoClipe(c))}` +
-          (f ? ` (fonte ${tempoFino(c.entrada_s)} a ${tempoFino(c.saida_s)})` : "") +
-          (c.velocidade !== 1 ? `, ${c.velocidade}x` : "") +
-          (c.zoom ? `, zoom ${c.zoom.de} a ${c.zoom.para}` : ""),
+        (f ? ` (fonte ${tempoFino(c.entrada_s)} a ${tempoFino(c.saida_s)})` : "") +
+        (c.velocidade !== 1 ? `, ${c.velocidade}x` : "") +
+        (c.zoom ? `, zoom ${c.zoom.de} a ${c.zoom.para}` : "") +
+        (c.transicao_entrada ? `, entra com ${c.transicao_entrada.tipo}` : "") +
+        detalheDoEstilo(c)
       );
-    });
+    };
+    if (ordem.length <= max) ordem.forEach((c) => linhas.push(linha(c)));
+    else {
+      const fim = 3;
+      ordem.slice(0, max - fim).forEach((c) => linhas.push(linha(c)));
+      const meio = ordem.slice(max - fim, ordem.length - fim);
+      linhas.push(`- (mais ${meio.length} clipes, ${a.porId[meio[0].id]} a ${a.porId[meio[meio.length - 1].id]}; ler_projeto mostra todos)`);
+      ordem.slice(ordem.length - fim).forEach((c) => linhas.push(linha(c)));
+    }
   });
   return linhas.join("\n");
 }

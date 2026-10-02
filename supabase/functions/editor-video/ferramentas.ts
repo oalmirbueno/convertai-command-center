@@ -17,8 +17,12 @@
  * 3. Visão: o que o modelo viu só vale nos tempos dos quadros que ele recebeu.
  */
 
-export const MAX_PASSOS = 6;
-export const MAX_FERRAMENTAS = 12;
+/**
+ * 02/10 (dono: "o agente é limitado, para no meio"): a edição inteira com
+ * conferência pede mais passos. O teto de custo do pedido continua valendo.
+ */
+export const MAX_PASSOS = 10;
+export const MAX_FERRAMENTAS = 30;
 export const TETO_PADRAO_USD = 0.5;
 export const TETO_MAXIMO_USD = 5;
 export const MAX_QUADROS_POR_CHAMADA = 12;
@@ -82,19 +86,41 @@ export const FERRAMENTAS_DO_AGENTE: DefinicaoDeFerramenta[] = [
   { nome: "animar", descricao: "Põe uma peça de motion na palavra DITA (o tempo sai da fala medida). Peças: rotulo, carimbo, lista, passos, contador, notificacao, polaroide, cartao_final, lettering, barra, preco, comentario, selo. Número, preço e porcentagem só se foram ditos.", argumentos: '{"peca": string, "palavra_ref"?: string, "inicio_s"?: number, "duracao_s"?: number, "params": object}', leitura: false },
   { nome: "sugerir_animacoes", descricao: "Acha na fala os momentos que pedem animação e escolhe a peça de cada um (julgamento pelo Jev). Põe as peças na linha do tempo.", argumentos: '{"densidade"?: "poucas"|"medias"}', leitura: false },
   { nome: "sons", descricao: "Efeitos sonoros CC0 no pico de cada animação (0,65 s entre eles). Refaz os que já estavam.", argumentos: '{"modo"?: "casados"|"poucos"}', leitura: false },
-  { nome: "musica", descricao: "Põe uma música da Mídia como trilha do vídeo inteiro, 22 dB abaixo da voz (medida no render), subindo nas pausas; o render sai em -14 LUFS.", argumentos: '{"fonte": string, "abaixo_da_voz_db"?: number}', leitura: false },
+  { nome: "musica", descricao: "Põe uma música como trilha do vídeo inteiro, 22 dB abaixo da voz (medida no render), subindo nas pausas (ducking); o render sai em -14 LUFS. fonte: a chave da música no projeto ou o m3 da Mídia (acervo do cliente).", argumentos: '{"fonte": string, "abaixo_da_voz_db"?: number}', leitura: false },
   { nome: "logo", descricao: "Logo do cliente (do kit da marca) acompanhando: canto (o vídeo todo), cartao_final ou sting (abertura).", argumentos: '{"onde": "canto"|"cartao_final"|"sting"}', leitura: false },
   { nome: "cartao_final", descricao: "Cartão final nos últimos 3,5 s com a chamada e a logo do cliente.", argumentos: '{"titulo": string, "botao"?: string}', leitura: false },
   { nome: "amostra", descricao: "Renderiza uma amostra de 8 a 15 s no worker (sem custo) para o dono conferir antes do vídeo inteiro.", argumentos: '{"inicio_s": number, "fim_s": number}', leitura: true },
   { nome: "gerar_broll", descricao: "B-roll gerado (Mesa Vídeos) para cobrir um trecho. PAGO: vira cartão com o custo antes e o Confirmar do dono.", argumentos: '{"de_s": number, "ate_s": number, "prompt": string, "motor"?: string}', leitura: true },
   { nome: "gerar_elemento", descricao: "Ícone ou objeto gerado com fundo transparente, por cima do vídeo num trecho. PAGO: cartão com o custo antes e Confirmar.", argumentos: '{"tipo": "icone"|"objeto", "prompt": string, "inicio_s": number, "duracao_s"?: number}', leitura: true },
+  // 02/10 (dono: "o agente não edita de verdade, só o básico, não usa o motor nem as skills"): tudo o que a tela faz.
+  { nome: "entender_video", descricao: "Entendimento do vídeo feito pelo código: seções, pausas, ênfases, dados ditos (número, preço, lista), perguntas, rosto e o que já está montado.", argumentos: "{}", leitura: true },
+  {
+    nome: "edicao_completa",
+    descricao:
+      'EDIT IA PRO: o motor de edição inteiro de uma vez (erros e pausas cortados, ritmo do Brabo com punch-in alternado, legenda na cor da marca, zoom nos momentos fortes, animações na fala, B-roll do acervo, transições na troca de plano, cor, música abaixo da voz com ducking, sons, logo e cartão final). receita: dinamico (padrão de talking head), anuncio, aula, depoimento, podcast, institucional. plano muda peças, ex.: {"legenda": {"estilo": "impacto", "palavras": 2}, "cor": {"look": "quente"}, "textos": {"gancho": "frase dita"}, "broll": {"ligado": false}, "formato": "9:16"}. musica: m3 da Mídia, nome ou "nenhuma".',
+    argumentos: '{"receita"?: string, "plano"?: object, "ritmo"?: boolean, "batida_s"?: number, "musica"?: string}',
+    leitura: false,
+  },
+  { nome: "aplicar_referencia", descricao: "Copia a edição de um vídeo de referência do painel Referências (ritmo de corte, zoom, legenda, cor). referencia: r1, r2 (lista no contexto) ou o nome. fidelidade: identica, proxima, inspirada ou criativa.", argumentos: '{"referencia"?: string, "fidelidade"?: string}', leitura: false },
+  { nome: "editar_clipe", descricao: "Edita um clipe de texto, legenda, cena ou peça de motion: texto, estilo (preset de texto ou de legenda), params da peça (só os que mudam; o código confere), fundo da cena (#hex) e duracao_s.", argumentos: '{"clipe": "c9", "texto"?: string, "estilo"?: string, "params"?: object, "fundo"?: string, "duracao_s"?: number}', leitura: false },
+  { nome: "transicao", descricao: 'Transição num clipe ou em todos da trilha de vídeo (clipe "todos"). tipo: corte (tira), fade, dissolver, whip, flash, desfoque, zoom, deslizar.', argumentos: '{"clipe": "c3"|"todos", "tipo": string, "lado"?: "entrada"|"saida"|"ambos", "duracao_s"?: number}', leitura: false },
+  { nome: "mixagem", descricao: "Mixagem do render: música abaixo da voz (12 a 36 dB), subida nas pausas (0 a 12 dB), ducking e o volume final (-23 a -9 LUFS).", argumentos: '{"abaixo_da_voz_db"?: number, "subida_nas_pausas_db"?: number, "duck"?: boolean, "lufs_alvo"?: number}', leitura: false },
+  { nome: "cena", descricao: 'Cena do zero na trilha de vídeo: fundo liso ou degradê (#hex ou "marca"), com título e peça de motion opcionais. Para começar um vídeo sem gravação, abrir ou fechar com arte. Sem inicio_s: no fim.', argumentos: '{"duracao_s": number, "inicio_s"?: number, "fundo"?: string, "fundo2"?: string, "titulo"?: string, "estilo"?: string, "peca"?: string, "params"?: object}', leitura: false },
+  { nome: "trocar_cenario", descricao: "Abre o painel Trocar cenário com o clipe escolhido e o cenário escrito. PAGO: o painel mostra a amostra e o custo antes, e o dono gera.", argumentos: '{"clipe": "c2", "cenario": string}', leitura: true },
+  { nome: "abrir_painel", descricao: "Abre um painel do editor para o dono: timestamp (marcar a fala), formato (rastrear o rosto), gerar (câmera, continuar, transição), referencias, cor (LUT), som, motion, textos, exportar, cenario, capitulos, midia.", argumentos: '{"painel": string}', leitura: true },
+  { nome: "pesquisar", descricao: "Pesquisa na web (fatos, dados, ideias visuais) e devolve as fontes. Conta no teto do pedido. Só quando o dono pedir pesquisa ou um dado que a fala não tem; número sem fonte nunca vai para a tela.", argumentos: '{"pergunta": string}', leitura: true },
 ];
+
+/** 02/10: ferramentas que abrem um painel na tela do dono (não mudam a linha do tempo; o pago tem custo antes no painel). */
+export const FERRAMENTAS_DE_PAINEL = ["trocar_cenario", "abrir_painel"];
+/** Painéis que o agente pode abrir (mesmos ids das abas do editor). */
+export const PAINEIS_DO_EDITOR = ["ia", "midia", "corte", "textos", "motion", "zoom", "cor", "formato", "som", "capitulos", "exportar", "gerar", "cenario", "timestamp", "referencias", "skills"];
 
 /** Ferramenta que não muda a linha do tempo, mas sai da tela (vira cartão com Confirmar). */
 export const FERRAMENTAS_DE_SAIDA = ["exportar", "renderizar", "gerar_broll", "gerar_elemento"];
 
 /** Frente EDT: ferramentas que a tela roda chamando o servidor (sem custo para o cliente) dentro do laço. */
-export const FERRAMENTAS_DO_SERVIDOR = ["sugerir_animacoes", "medir_onda", "amostra", "zoom_momentos", "capitulos"];
+export const FERRAMENTAS_DO_SERVIDOR = ["sugerir_animacoes", "medir_onda", "amostra", "zoom_momentos", "capitulos", "edicao_completa", "pesquisar"];
 
 export const NOMES_DAS_FERRAMENTAS = FERRAMENTAS_DO_AGENTE.map((f) => f.nome);
 
@@ -194,7 +220,9 @@ export function lerPasso(bruto: unknown, cabem: number): RespostaDoPasso {
 export function podeAplicarDireto(r: { operacoes: number; falhas: number; recusadas: number; parado: boolean; ordemClara: boolean }): { direto: boolean; motivo: string } {
   if (!r.operacoes) return { direto: false, motivo: "nada para mudar" };
   if (r.parado) return { direto: false, motivo: "parado no meio" };
-  if (r.falhas || r.recusadas) return { direto: false, motivo: "algo não deu no caminho" };
+  // 02/10: ferramenta que falhou não mudou nada (cada uma entra inteira ou não entra); o que entrou vale e a
+  // falha vai dita na mensagem. Antes uma falha no caminho jogava a edição inteira para o Confirmar.
+  if (r.recusadas) return { direto: false, motivo: "algo não deu no caminho" };
   if (!r.ordemClara) return { direto: false, motivo: "o pedido não é uma ordem clara" };
   return { direto: true, motivo: "ordem clara, sem custo e com Desfazer" };
 }
@@ -202,6 +230,11 @@ export function podeAplicarDireto(r: { operacoes: number; falhas: number; recusa
 /** Resposta que promete ("vou cortar") sem ter mudado nada. */
 export function respostaPromete(texto: string): boolean {
   return /\b(vou|irei|vamos) (fazer|cortar|editar|aplicar|legendar|gerar|preparar|reordenar|exportar|tirar|ajustar|montar|deixar)\b/i.test(String(texto || ""));
+}
+
+/** 02/10: resposta que AFIRMA ter mudado algo ("cortei", "pus a música"). Só vale se o código conferiu a mudança. */
+export function respostaAfirma(texto: string): boolean {
+  return /\b(fiz|cortei|apliquei|legendei|coloquei|pus|adicionei|inseri|tirei|removi|ajustei|mudei|deixei|montei|editei|gerei|exportei|renderizei|troquei|acrescentei|animei)\b/i.test(String(texto || ""));
 }
 
 export interface LimitesDoPedido {
@@ -230,23 +263,39 @@ export function sistemaDoAgente(): string {
     "Você edita SÓ com as ferramentas abaixo. Quem mexe nos tempos é o código; você escolhe e parametriza.",
     "Regras: fale português do Brasil, frases curtas, sem travessão. Clipes são citados SÓ por apelido (c1, c2); nunca invente id.",
     "Use tempos exatos que você leu (ler_projeto, ler_fala). Sobre imagem, só afirme o que está em ler_visao, citando o tempo. Não viu: diga que não viu.",
-    "Planeje, chame as ferramentas, confira o resultado que volta e termine. Prefira uma skill determinística quando ela faz o pedido inteiro.",
-    "Pedido de editar (editar, edição dinâmica, Brabo, deixar dinâmico, cortar, legendar) só termina depois de ferramentas que MUDAM o projeto. Nunca responda só com texto nem diga que abriu algo: edite.",
-    "Edição dinâmica = aplicar_skill brabo. Silêncios = cortar_silencios. Legenda = legendas. Ganchos = punch_in. Sem fala marcada as skills ainda rodam (tempo exato); avise na resposta.",
+    "Planeje, chame as ferramentas, confira o resultado que volta (linha \"Conferido\", feita pelo código) e siga até o pedido estar feito. Prefira o motor ou uma skill determinística quando eles fazem o pedido inteiro.",
+    "Pedido de editar (editar, edição completa, dinâmica, Brabo, deixar dinâmico, cortar, legendar) só termina depois de ferramentas que MUDAM o projeto. Nunca responda só com texto nem diga que abriu algo: edite.",
+    "Edição dinâmica ou completa = edicao_completa (EDIT IA PRO: corte, ritmo do Brabo, legenda, zoom, motion, B-roll, música com ducking, cor, cartão final), receita dinamico para pessoa falando para a câmera. Só o ritmo do Brabo (batidas e zoom alternado) = aplicar_skill brabo. Silêncios = cortar_silencios. Legenda = legendas. Ganchos = punch_in. Sem fala marcada as skills ainda rodam (tempo exato); avise.",
+    "Depois da edicao_completa, cumpra o que o dono pediu a mais (texto, peça, cor, efeito num trecho) com as outras ferramentas. Use o Entendimento do vídeo: ênfase = efeito zoom ou animar lettering; dado dito = animar contador, barra, preco, lista ou passos com palavra_ref; troca de seção = transicao ou capitulos; pergunta = inserir_texto manchete.",
+    "Referência (copiar a edição de um vídeo) = aplicar_referencia. Editar texto, legenda ou peça já na linha = editar_clipe. Do zero (sem gravação) = cena, inserir_texto, animar com inicio_s, inserir_midia, gerar_broll e musica. Trocar o cenário = trocar_cenario (pago, o painel mostra o custo). Pesquisa ou dado de fora = pesquisar (cite a fonte; sem fonte não vai para a tela).",
+    "Não descreva na resposta o que fez: a tela mostra o que mudou, contado pelo código. Use resposta só para uma pergunta, para o que faltou ou para o próximo passo sugerido.",
     "Tirar, apagar ou excluir = remover (vários de uma vez em clipes; ondular true encosta o resto). Takes, vídeos ou clipes repetidos ou duplicados = remover_duplicados (o código acha; não escolha à mão). Vãos = fechar_buracos. Achar, mostrar ou filtrar = buscar (muda o filtro na tela do dono). Pôr mídia = inserir_midia com o m1, m2 que buscar devolveu.",
     "Os apelidos ficam FIXOS até o fim do pedido: o clipe que saiu não volta e clipe novo ganha número novo. Ordem do dono (remova, apague, tira, corta, pode fazer) se cumpre com as ferramentas no mesmo passo, sem perguntar de novo.",
     "Reordenar = reordenar com TODOS os apelidos da trilha de vídeo. Música: volume por clipe (ajustar volume), tirar o som da trilha inteira (trilha muda). Exportar ou renderizar = exportar (vira um cartão com Confirmar; nunca diga que já exportou).",
     "Corte de verdade: tirar pausas/respiros = cortar_pela_onda (sem onda: medir_onda e avise que volta em ~30 s); erros, repetição e falso começo = ficar_com_melhor_tomada; depois de cortar, conferir_corte e CONTE o resultado (é aviso, não refaça em laço).",
     "Legenda padrão: 3 palavras por vez (legendar); o dono muda a quantidade. Animação na palavra dita = animar; momentos pela fala = sugerir_animacoes; som = sons (depois das animações); música = musica; marca = logo e cartao_final.",
-    "Editor completo: formato (9:16, 1:1, 16:9) = formato; cor, look ou LUT = cor; momentos fortes = zoom_momentos; tremor, flash, desfoque ou zoom num trecho = efeito; título, gancho, chamada e nome na tela = inserir_texto com estilo; capítulos = capitulos. Para a edição inteira de uma vez, sugira o painel Editar com IA.",
+    "Editor completo: formato (9:16, 1:1, 16:9) = formato; cor ou look = cor (LUT do arquivo: abrir_painel cor); momentos fortes = zoom_momentos; tremor, flash, desfoque ou zoom num trecho = efeito; título, gancho, chamada e nome na tela = inserir_texto com estilo; capítulos = capitulos; transição = transicao; volume da música e LUFS = mixagem. A edição inteira de uma vez = edicao_completa (você mesmo roda; não mande o dono para o painel).",
     "Amostra (8 a 15 s) antes do vídeo inteiro quando o dono quer conferir o estilo. B-roll e elementos gerados são PAGOS: só gerar_broll/gerar_elemento (cartão com custo); nunca diga que gerou.",
     "\"Esse\", \"este corte\", \"o selecionado\" = os clipes em \"Selecionados na tela\"; \"aqui\" = o cursor. \"O segundo clipe\" conta na ordem da trilha de vídeo. \"Todos\" = todos os da trilha de vídeo.",
     "Dúvida real (não dá para saber qual clipe, qual trecho ou o que o dono quer): não mude nada; termine com UMA pergunta curta em resposta e até 4 respostas curtas em opcoes (ex.: [\"c2\", \"c3\"]). Sem dúvida, opcoes vazio.",
     "Nunca prometa (\"vou cortar\"): ou chama a ferramenta agora, ou pergunta. Nunca cite clipe, trecho ou fala que não está no projeto.",
     `Limites: até ${MAX_PASSOS} passos e ${MAX_FERRAMENTAS} ferramentas por pedido. Ordem clara é aplicada na hora, com Desfazer; o resto vai para o dono confirmar.`,
-    "Responda sempre no JSON pedido: plano (uma frase), chamadas (ferramenta + argumentos_json), resposta (o que fez ou o que falta, curto; quando mudou algo, diga o que mudou com apelidos e tempos), terminou e opcoes.",
+    "Responda sempre no JSON pedido: plano (uma frase), chamadas (ferramenta + argumentos_json), resposta (pergunta, o que falta ou o próximo passo, curto; nunca \"fiz\" ou \"apliquei\": quem conta o que mudou é o código), terminou e opcoes.",
     "Ferramentas:",
     ...FERRAMENTAS_DO_AGENTE.map((f) => `- ${f.nome} ${f.argumentos}: ${f.descricao}`),
+  ].join("\n");
+}
+
+// ------------------------------------------------------------------ pesquisa do agente (02/10)
+
+export const MAX_PERGUNTA_DA_PESQUISA = 600;
+
+/** Sistema da pesquisa na web do agente editor: fatos e ideias com fonte, curto. */
+export function sistemaDaPesquisa(): string {
+  return [
+    "Você pesquisa na web para o editor de vídeo da Aceleriq (fatos, dados, referências visuais, ideias de arte e B-roll).",
+    "Português do Brasil, frases curtas, sem travessão. Até 8 linhas.",
+    "Todo número, lei, data ou nome vem com a fonte. O que não achou, diga que não achou; não invente.",
   ].join("\n");
 }
 

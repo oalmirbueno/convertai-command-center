@@ -5,7 +5,7 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { useLargo } from "@/components/sistema/AreaDeTrabalho";
-import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { gravarEstadoDaTela, useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, juntar, texto } from "@/components/sistema/estilos";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { textoDoErro } from "@/lib/mesa/api";
@@ -40,7 +40,7 @@ import EstadoDaMaquina from "./EstadoDaMaquina";
 import TrilhoDeFerramentas from "./TrilhoDeFerramentas";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import type { ContextoDoPainel } from "./apoioDosPaineis";
-import { publicarNaPonte, tirarDaPonte } from "./ponteDoAgente";
+import { ouvirPedidosDePainel, publicarNaPonte, tirarDaPonte } from "./ponteDoAgente";
 
 /**
  * Editor de vídeo da Mesa Edição (frente V-B). Carregado sob demanda (lazy)
@@ -249,6 +249,20 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
     publicarNaPonte({ clientId, versaoId, projeto, controle, aplicarProjeto, urls, selecao, cursor: relogio.get });
   }, [agenteNaLateral, clientId, versaoId, projeto, controle, aplicarProjeto, urls, selecao, relogio]);
   useEffect(() => (agenteNaLateral ? () => tirarDaPonte(versaoId) : undefined), [agenteNaLateral, versaoId]);
+  // 02/10: o agente abre um painel (trocar cenário com o clipe e o cenário escritos, timestamp, formato...).
+  // O painel abre de novo (chave nova) para ler o que o agente deixou; nada pago roda sem o clique do dono.
+  const [aberturaDoPainel, setAberturaDoPainel] = useState(0);
+  useEffect(
+    () =>
+      ouvirPedidosDePainel((cid, p) => {
+        if (cid !== clientId || !ABAS_COM_AJUSTES.some((x) => x.valor === p.aba)) return;
+        if (p.aba === "cenario" && p.cenario) gravarEstadoDaTela(`mesa-edicao:cenario:texto:${clientId}`, p.cenario);
+        if (p.clipe && hRef.current.presente.projeto.trilhas.some((t) => t.clipes.some((c) => c.id === p.clipe))) setSelecao([p.clipe]);
+        setAba(p.aba as AbaEsquerda);
+        setAberturaDoPainel((n) => n + 1);
+      }),
+    [clientId, setAba],
+  );
 
   const principal = trilhaPrincipal(projeto);
   const dividirNoCursor = () => {
@@ -573,7 +587,9 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
               {descricaoDaAba && <AjudaRecolhida rotulo={`O que é ${rotuloDaAba}?`}>{descricaoDaAba}</AjudaRecolhida>}
             </div>
             <RegiaoRolavel modo="sempre" className="scrollbar-hidden mt-2 min-h-0 flex-1" memoria={`mesa-edicao:editor:rolagem:${abaVisivel}:${clientId}`}>
-              {painelEsquerdo}
+              <div key={`${abaVisivel}:${aberturaDoPainel}`} className="min-w-0">
+                {painelEsquerdo}
+              </div>
             </RegiaoRolavel>
           </div>
         </div>

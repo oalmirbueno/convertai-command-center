@@ -80,3 +80,29 @@ export function pegarPedidoPendente(clientId: string): string | null {
 }
 
 export const temPedidoPendente = (clientId: string) => !!pendentes[clientId];
+
+// ------------------------------------------------------------------ painel pedido pelo agente (02/10)
+
+/** Painel que o agente pede para abrir (trocar cenário com o clipe e o cenário escritos, timestamp...). */
+export interface PainelPedido {
+  aba: string;
+  clipe?: string | null;
+  cenario?: string | null;
+}
+
+const ouvintesDePainel: Array<(clientId: string, p: PainelPedido) => void> = [];
+
+/** O agente (lateral ou coluna) pede; o editor aberto do mesmo cliente abre. */
+export function pedirPainel(clientId: string, p: PainelPedido) {
+  if (!clientId || !p || !p.aba) return;
+  ouvintesDePainel.slice().forEach((f) => f(clientId, p));
+}
+
+/** O editor ouve os pedidos de painel do agente (devolve o "parar de ouvir"). */
+export function ouvirPedidosDePainel(f: (clientId: string, p: PainelPedido) => void): () => void {
+  ouvintesDePainel.push(f);
+  return () => {
+    const i = ouvintesDePainel.indexOf(f);
+    if (i >= 0) ouvintesDePainel.splice(i, 1);
+  };
+}

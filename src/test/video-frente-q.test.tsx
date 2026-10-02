@@ -200,7 +200,8 @@ describe("etapa Editar: editor completo e agente editor na lateral", () => {
     expect(familiaDoModelo({ modelo_api: "anthropic/claude-opus-5.5", provedor: "openrouter" })).toBe("Claude (Anthropic)");
     expect(precoDoModelo({ preco_entrada_1m: 0.1, preco_saida_1m: 0.5 })).toBe("US$ 0,1/0,5 por 1M");
     expect(custoDoPedido(0.1, 0.5)).toEqual({ tipico: 0.2, maximo: 0.5 });
-    expect(custoDoPedido(0.01, 0.5)).toEqual({ tipico: 0.02, maximo: 0.06 });
+    // 02/10: até 10 passos por pedido (a edição inteira com conferência).
+    expect(custoDoPedido(0.01, 0.5)).toEqual({ tipico: 0.02, maximo: 0.1 });
   });
 
   it("pedido deixado pelo agente de edição de outra etapa entra no campo do agente editor (nada roda sozinho)", async () => {
@@ -218,10 +219,12 @@ describe("etapa Editar: editor completo e agente editor na lateral", () => {
 
 describe("agente editor edita de verdade", () => {
   it("o pedido leva a dica da skill e o laço aplica o Brabo numa cópia: operações aplicáveis", async () => {
-    expect(pedidoComDica("edite com a skill do Brabo")).toContain('skill "brabo"');
+    // 02/10: "com o Brabo" e "pode editar ele" são a edição inteira (EDIT IA PRO, que já traz o ritmo do Brabo).
+    expect(pedidoComDica("edite com a skill do Brabo")).toContain("edicao_completa");
     expect(pedidoComDica("deixa mais bonito")).toBe("deixa mais bonito");
-    expect(pedidoComDica("pode editar ele")).toContain('skill "brabo"');
-    expect(sistemaDoAgente()).toContain("Edição dinâmica = aplicar_skill brabo");
+    expect(pedidoComDica("pode editar ele")).toContain("edicao_completa");
+    expect(pedidoComDica("só o ritmo do brabo")).toContain('skill "brabo"');
+    expect(sistemaDoAgente()).toContain("Só o ritmo do Brabo (batidas e zoom alternado) = aplicar_skill brabo");
     const base = projeto();
     const chamar = vi.fn().mockResolvedValueOnce({ passo: { plano: "Aplicar o Brabo.", chamadas: [{ ferramenta: "aplicar_skill", argumentos: { skill: "brabo" } }], resposta: "Apliquei a edição dinâmica.", terminou: true, recusadas: [] }, gasto_usd: 0.002 });
     const r = await rodarAgente({ chamar, clientId: CLIENTE, sessao: "s1", pedido: pedidoComDica("edite com a skill do Brabo"), projeto: base, modeloId: "openrouter:openai/gpt-6-luna", tetoUsd: 0.5, agora: "2026-09-26T12:00:00Z" });
@@ -253,7 +256,7 @@ describe("agente editor edita de verdade", () => {
     expect(corpos("editor-video", "agente_passo")).toHaveLength(0);
     fireEvent.click(within(lateral).getByRole("button", { name: "Sem marcar" }));
     await waitFor(() => expect(corpos("editor-video", "agente_passo")).toHaveLength(1));
-    expect(corpos("editor-video", "agente_passo")[0].pedido).toContain('skill "brabo"');
+    expect(corpos("editor-video", "agente_passo")[0].pedido).toContain("edicao_completa");
     fireEvent.click(await within(lateral).findByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(document.querySelectorAll("[data-apelido]").length).toBeGreaterThan(antes));
   }, 25000);

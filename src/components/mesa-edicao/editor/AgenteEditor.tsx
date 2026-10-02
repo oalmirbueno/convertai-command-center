@@ -17,7 +17,6 @@ import {
   MAX_QUADROS_POR_CHAMADA,
   MAX_TEXTO_DO_PEDIDO,
   podeAplicarDireto,
-  respostaPromete,
   sugerirModeloMaisBarato,
   temposDeAmostra,
   TETO_PADRAO_USD,
@@ -35,20 +34,20 @@ import { definirFiltro, destacar } from "./buscaDoEditor";
 import { custoDaFala, fontesSemFala, lerFalaDaEntrada, marcarFalaDoProjeto, pedidoPrecisaDeFala, skillPrecisaDeFala } from "@/lib/editor/fala";
 import { tempoFino } from "@/lib/editor/tempo";
 import { aplicarOperacoes } from "@/lib/editor/operacoes";
-import { fontesSemOnda, pedirRender, uidDoClique, useFilaDeRender, type PedidoNaFila } from "@/lib/editor/render";
-import { acaoDaSaida, confirmarBroll, confirmarElemento, estimarBroll, estimarElemento, opsDoArquivoNoTrecho, sugerirAnimacoesNaTela, type ArquivoGerado } from "@/lib/editor/geracaoDoAgente";
-import type { MarcaParaOAgente, ResultadoDaFerramenta, SaidaDoAgente } from "@/lib/editor/agente";
+import { pedirRender, uidDoClique, useFilaDeRender, type PedidoNaFila } from "@/lib/editor/render";
+import { acaoDaSaida, confirmarBroll, confirmarElemento, opsDoArquivoNoTrecho, type ArquivoGerado } from "@/lib/editor/geracaoDoAgente";
+import type { MarcaParaOAgente, SaidaDoAgente } from "@/lib/editor/agente";
 import { useKitDaMesa } from "@/components/mesa/kitDaMesa";
 import { chamarMesaVideos } from "@/components/mesa-videos/videosApi";
 import { supabase } from "@/integrations/supabase/client";
-import { janelaDaAmostra } from "../../../../supabase/functions/_shared/render-do-editor";
 import MensagemPadrao, { estilosLigados, lerMensagensPadrao, TIPO_DO_PADRAO, type MensagemPadraoDoEditor } from "./MensagemPadrao";
 import type { ControleDePropostas } from "./PainelDeSkills";
 import { pegarPedidoPendente, temPedidoPendente } from "./ponteDoAgente";
-import { Montador } from "@/lib/editor/skills/tipos";
-import { capitulosEm, frasesDoProjeto, notasPorRegra, zoomNosMomentosEm } from "@/lib/editor/skills/pecasDaEdicao";
-import { comRegraNoResto } from "@/lib/editor/editarComIa";
-import { capitulosEmBlocos, momentosEmBlocos } from "@/lib/editor/julgarEmBlocos";
+import { criarFerramentasDoServidor, edicaoCompletaDoAgente } from "@/lib/editor/ferramentasDoServidor";
+import { mensagemFinalDoAgente, pedidoDeEdicaoCompleta } from "@/lib/editor/agente";
+import { mensagemDoQueMudou } from "@/lib/editor/relatorio";
+import { corDaPaleta, useMarcaDoEditor } from "./marcaDoEditor";
+import { pedirPainel } from "./ponteDoAgente";
 
 /**
  * Agente editor (frente V-B; frente Q, 26/09: virou a lateral fixa da etapa
@@ -88,10 +87,14 @@ interface Preparo {
   conversa: string;
   /** O que já foi feito antes do agente (Timestamp pago): entra na resposta guardada. */
   antes?: ItemDoLog[];
+  /** 02/10: atalho "Edição completa" (EDIT IA PRO sem modelo). */
+  completa?: boolean;
 }
 
-const ATALHOS: { skill: IdDaSkill; rotulo: string }[] = [
-  { skill: "brabo", rotulo: "Edição dinâmica" },
+const ATALHOS: { skill: IdDaSkill | "edicao_completa"; rotulo: string }[] = [
+  // 02/10 (dono: "quero que edite completo, com o motor de verdade"): o EDIT IA PRO inteiro num clique.
+  { skill: "edicao_completa", rotulo: "Edição completa" },
+  { skill: "brabo", rotulo: "Ritmo do Brabo" },
   { skill: "cortar_silencios", rotulo: "Cortar silêncios" },
   { skill: "legendas", rotulo: "Legendas" },
   { skill: "punch_in", rotulo: "Punch-in" },
@@ -190,13 +193,16 @@ export function pedidoComDica(pedido: string): string {
   if (pedidoDeTakesRepetidos(pedido)) {
     return `${pedido.slice(0, MAX_TEXTO_DO_PEDIDO - 220)}\n\n(Dica da tela: takes ou vídeos repetidos saem com remover_duplicados (o código acha, fica o primeiro). Chame, confira e termine; faça também o resto do pedido.)`;
   }
+  const base = pedido.slice(0, MAX_TEXTO_DO_PEDIDO - 260);
+  // 02/10 (dono: "só edita o básico"): edição inteira, dinâmica ou "com o Brabo" é o EDIT IA PRO (edicao_completa),
+  // não mais só a skill de ritmo. O resto do pedido se cumpre depois, com as outras ferramentas.
+  if (pedidoDeEdicaoCompleta(pedido)) return `${base}\n\n(Dica da tela: edição inteira. Chame edicao_completa (receita dinamico para pessoa falando para a câmera; ajuste o plano ao que o dono disse), confira e cumpra o resto do pedido com as outras ferramentas.)`;
   const s = skillPorPalavras(pedido);
   const skill = s ? skillPorId(s) : null;
-  const base = pedido.slice(0, MAX_TEXTO_DO_PEDIDO - 220);
   if (skill) return `${base}\n\n(Dica da tela: a skill "${skill.id}" (${skill.rotulo}) faz esse pedido. Chame aplicar_skill com ela, confira o resultado e termine.)`;
-  // Pedido geral de editar ("pode editar ele"): o método da Mesa Edição é a edição dinâmica.
+  // Outro pedido com "editar" (ex.: "edita o texto do c5"): cumpre o que foi pedido; a edição inteira só se for o caso.
   const t = pedido.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-  if (/\bedit|\bedicao\b/.test(t)) return `${base}\n\n(Dica da tela: pedido geral de edição. O método da casa é a edição dinâmica, skill "brabo". Aplique e ajuste só o que o pedido disser.)`;
+  if (/\bedit|\bedicao\b/.test(t)) return `${base}\n\n(Dica da tela: cumpra exatamente o que o dono pediu com as ferramentas; se ele quer o vídeo todo editado, chame edicao_completa.)`;
   return base;
 }
 
@@ -292,12 +298,8 @@ const ehExportar = (a: AcaoDoAgente) => a.itens.length > 0 && a.itens.every((i) 
 const ehGeracao = (a: AcaoDoAgente) => a.itens.length > 0 && a.itens.every((i) => i.operacao === "gerar_broll" || i.operacao === "gerar_elemento");
 const saidaDaAcao = (a: AcaoDoAgente): SaidaDoAgente | null => (a.contexto && (a.contexto as { saida?: unknown }).saida ? ((a.contexto as { saida: SaidaDoAgente }).saida) : null);
 
-/** Cor de destaque da marca aberta: a primária da paleta (ou a primeira). */
-export function corDaPaleta(paleta: { hex: string; papel: string }[] | null | undefined): string | null {
-  const l = (paleta || []).filter((c) => /^#[0-9a-fA-F]{6}$/.test(String(c.hex || "")));
-  const p = l.find((c) => /prim|principal|destaque/i.test(String(c.papel || ""))) || l[0];
-  return p ? p.hex : null;
-}
+/** Cor de destaque da marca aberta (02/10: mora em marcaDoEditor.ts). */
+export { corDaPaleta };
 
 /**
  * B-roll pedido (frente EDT, F4): consultar o andamento só no clique (15 s entre
@@ -404,6 +406,8 @@ export default function AgenteEditor({
   const arquivos = (arquivosQ.data && arquivosQ.data.arquivos) || null;
   const midias = useMemo(() => (arquivos ? itensDaBiblioteca(arquivos) : []), [arquivos]);
   const assinaturas = useMemo(() => (arquivos ? assinaturasDosArquivos(arquivos) : {}), [arquivos]);
+  // 02/10: a marca completa (cores, letra e logo) para o EDIT IA PRO do agente.
+  const marcaDaEdicao = useMarcaDoEditor();
   const marca: MarcaParaOAgente = { logo_path: (kit.data && kit.data.logo_path) || null, cor: corDaPaleta(kit.data ? kit.data.paleta : null), nome: kit.marca ? kit.marca.nome : null };
   const filaDeRender = useFilaDeRender(clientId, versaoId || null, chamarEditorVideo, (p: PedidoNaFila) => {
     if (p.estado !== "pronto" || p.tipo === "onda") return;
@@ -635,65 +639,39 @@ export default function AgenteEditor({
     });
   };
 
-  /** Frente EDT: ferramentas que chamam o servidor no meio do laço (sem custo) e as estimativas das gerações pagas. */
-  const ferramentaNoServidor = async (nome: string, a: Record<string, unknown>, trab: ProjetoDeEdicao): Promise<ResultadoDaFerramenta> => {
-    const nada = (texto: string, ok = true): ResultadoDaFerramenta => ({ projeto: trab, operacoes: [], texto, ok });
-    if (nome === "sugerir_animacoes") return sugerirAnimacoesNaTela(chamarEditorVideo, clientId, trab, a.densidade === "poucas" ? "poucas" : "medias");
-    if (nome === "medir_onda") {
-      if (!versaoId) return nada("Abra a versão no editor para medir a onda.", false);
-      const fontes = fontesSemOnda(trab);
-      if (!fontes.length) return nada("Todas as fontes já têm a onda medida.");
-      const r = await pedirRender(chamarEditorVideo, { clientId, versaoId, tipo: "onda", uid: uidDoClique(), fontes });
-      const texto = maquinaDesligadaRef.current
-        ? `Pedi a onda de ${fontes.length} ${fontes.length === 1 ? "fonte" : "fontes"} (sem custo).${quandoAMaquinaLigar}`
-        : `Pedi a onda de ${fontes.length} ${fontes.length === 1 ? "fonte" : "fontes"} à máquina da agência (uns 30 s, sem custo). Quando voltar, o corte pela onda pode rodar.`;
-      return { ...nada(texto), naFila: { tipo: "onda", pedido_id: r.pedido.id } };
-    }
-    if (nome === "amostra") {
-      const j = janelaDaAmostra(a.inicio_s, a.fim_s, trab.duracao_s);
-      return { ...nada(`Amostra de ${tempoFino(j.inicio_s)} a ${tempoFino(j.fim_s)}: vai para a fila depois de aplicar o que mudou.`), naFila: { tipo: "amostra", pedido_id: "", inicio_s: j.inicio_s, fim_s: j.fim_s } };
-    }
-    // Rodada 2: o Jev julga a força das frases e os capítulos; o código põe no tempo (sem custo para o cliente).
-    if (nome === "zoom_momentos" || nome === "capitulos") {
-      const frases = frasesDoProjeto(trab);
-      if (!frases.length) return nada("Sem fala marcada: não há frase para julgar (Timestamp).", false);
-      const m = new Montador(trab);
-      if (nome === "zoom_momentos") {
-        let notas: { k: string; nota: number }[];
-        let fonte = "Jev";
-        try {
-          const r = await momentosEmBlocos(chamarEditorVideo, { clientId, titulo: trab.titulo, frases, forca: true, virais: false });
-          notas = comRegraNoResto(frases, r.forca);
-          if (r.aviso) fonte = `Jev; ${r.aviso} O resto seguiu a regra da casa`;
-        } catch (e) {
-          console.error("[agente editor] momentos fortes pelo Jev", e);
-          notas = notasPorRegra(frases);
-          fonte = "regra da casa (o Jev não respondeu)";
-        }
-        const n = zoomNosMomentosEm(m, frases, notas, a.intensidade === "suave" || a.intensidade === "forte" ? String(a.intensidade) : "media");
-        return { projeto: m.projeto, operacoes: m.operacoes, texto: n ? `${n} ${n === 1 ? "zoom" : "zooms"} nos momentos fortes (${fonte}).` : "Nenhuma frase forte o bastante.", ok: true };
-      }
-      const r = await capitulosEmBlocos(chamarEditorVideo, { clientId, frases });
-      const n = capitulosEm(m, r.capitulos);
-      return { projeto: m.projeto, operacoes: m.operacoes, texto: `${n ? `${n} ${n === 1 ? "capítulo" : "capítulos"}: ${r.capitulos.map((c) => `${tempoFino(c.inicio_s)} ${c.titulo}`).join("; ")}.` : "Um assunto só: sem capítulos."}${r.aviso ? ` ${r.aviso}` : ""}`, ok: true };
-    }
-    if (nome === "gerar_broll" || nome === "gerar_elemento") {
-      const s = nome === "gerar_broll" ? await estimarBroll(chamarMesaVideos, clientId, trab, a) : await estimarElemento(chamarEditorVideo, clientId, a);
-      return { ...nada(`Cartão pronto para o dono confirmar${s.custo_usd !== null ? ` (US$ ${s.custo_usd.toFixed(2)})` : " (sem custo conhecido: não gera)"}. Nada foi gerado ainda.`), saida: s };
-    }
-    return nada(`Ferramenta desconhecida: ${nome}.`, false);
-  };
+  /**
+   * Ferramentas que chamam o servidor no meio do laço (02/10: moram em
+   * lib/editor/ferramentasDoServidor.ts, com o EDIT IA PRO e a pesquisa).
+   */
+  const servidorDoAgente = (sessao: string | null) =>
+    criarFerramentasDoServidor({
+      chamarEditor: chamarEditorVideo,
+      chamarVideos: chamarMesaVideos,
+      clientId,
+      versaoId: versaoId || null,
+      marca: marcaDaEdicao,
+      midias: () => midias,
+      agora: () => new Date().toISOString(),
+      maquinaDesligada: () => maquinaDesligadaRef.current,
+      quandoAMaquinaLigar,
+      pesquisa: modelo && sessao ? { modeloId: modelo.id, sessao, tetoUsd: escolha.teto } : null,
+      aoAndar: (t) => setRodando(t.slice(0, 90)),
+    });
+
+  /** Painéis que o agente abriu (trocar cenário, timestamp...): a tela do editor abre e preenche. */
+  const abrirPaineis = (paineis: { aba: string; clipe?: string | null; cenario?: string | null }[]) => paineis.forEach((p) => pedirPainel(clientId, p));
 
   const rodarPedido = async (pr: Preparo, base: ProjetoDeEdicao) => {
     if (!modelo || !pr.pedido) return;
     setRodando("Pensando");
     parar.current = false;
     const antes = gastoRef.current;
+    const sessao = novoId();
     try {
       const r = await rodarAgente({
         chamar: chamarEditorVideo,
         clientId,
-        sessao: novoId(),
+        sessao,
         pedido: pedidoComDica(pr.pedido),
         projeto: base,
         modeloId: modelo.id,
@@ -706,35 +684,35 @@ export default function AgenteEditor({
         marca,
         midias,
         assinaturas,
-        servidor: (ch, trab) => ferramentaNoServidor(ch.ferramenta, ch.argumentos || {}, trab),
+        servidor: servidorDoAgente(sessao),
         aoPasso: (log, g, passo) => {
           setGasto(antes + g);
           setRodando(`Passo ${passo} de até ${MAX_PASSOS}${log.length ? `: ${log[log.length - 1].texto.slice(0, 70)}` : ""}`);
         },
       });
       setGasto(antes + r.gasto_usd);
-      const itens = (pr.antes || []).concat(r.log);
+      // 02/10: a resposta final é a do código (o que mudou de verdade); o texto livre do modelo não vai para o dono.
+      const itens = (pr.antes || []).concat(r.log.filter((i) => i.tipo !== "resposta"));
       const acoes: AcaoDoAgente[] = [];
+      let aplicado = false;
       if (r.operacoes.length) {
-        const prop: PropostaDaSkill = { skill: "brabo", titulo: "Agente editor", resumo: r.resposta || "Proposta do agente.", operacoes: r.operacoes, avisos: [], base: assinaturaDoProjeto(base), resultado: r.resultado };
+        const resumo = mensagemDoQueMudou(base, r.resultado, r.mudancas) || "Proposta do agente.";
+        const prop: PropostaDaSkill = { skill: "brabo", titulo: r.regraDaCasa ? "Edição completa (EDIT IA PRO)" : "Agente editor", resumo, operacoes: r.operacoes, avisos: r.naoEntrou, base: assinaturaDoProjeto(base), resultado: r.resultado };
         const travas = { operacoes: r.operacoes.length, falhas: r.falhas, recusadas: r.recusadas, parado: r.parado };
         // O Jev só é perguntado quando todas as outras travas deixam ir direto.
         const clara = podeAplicarDireto({ ...travas, ordemClara: true }).direto ? await ordemClara(pr.pedido, prop.resumo) : false;
         const d = podeAplicarDireto({ ...travas, ordemClara: clara });
         const cartao = cartaoDaProposta(`agente-${Date.now().toString(36)}`, prop, base, d.direto);
         acoes.push(cartao);
-        // O que mudou, dito pelo código com os apelidos da tela (não depende do texto do modelo).
-        if (r.mudancas) itens.push({ tipo: "resposta", texto: cartao.executada_em ? `Mudei: ${r.mudancas}` : `Vou mudar (confirme no cartão): ${r.mudancas}` });
-        if (cartao.executada_em) destacar(clientId, r.tocados);
+        aplicado = !!cartao.executada_em;
+        if (aplicado) destacar(clientId, r.tocados);
       }
+      itens.push({ tipo: "resposta", texto: mensagemFinalDoAgente(r, aplicado) });
       // Busca do agente ("mostre só os gerados"): o filtro vai para a Mídia e a linha do tempo.
       if (r.filtro) definirFiltro(clientId, r.filtro);
+      if (r.paineis.length) abrirPaineis(r.paineis);
       if (r.exportar) acoes.push(acaoDeExportar(r.resultado));
       r.saidas.forEach((s) => acoes.push(acaoDaSaida(s)));
-      if (!acoes.length && !r.opcoes.length) {
-        if (!r.resposta) itens.push({ tipo: "aviso", texto: "Nada mudou na linha do tempo. Use um atalho abaixo ou diga o que mudar (ex.: corta os silêncios)." });
-        else if (respostaPromete(r.resposta)) itens.push({ tipo: "aviso", texto: "Nada mudou ainda: o agente só prometeu. Peça de novo ou use um atalho." });
-      }
       const anexos = [r.aprendido, r.seguidas, r.metodo].filter(Boolean) as unknown[];
       // Mensagens padrão (frente EDT): o cartão é o "O que mudei"; aqui vai o custo do pedido.
       const aGerar = r.saidas.reduce((x, s) => x + (s.custo_usd || 0), 0);
@@ -757,6 +735,41 @@ export default function AgenteEditor({
       const causa = e instanceof ErroDoPrimeiroPasso ? e.causa : e;
       const t = emPreparacao(causa) ? "O agente editor está em preparação: falta publicar a função editor-video." : textoDoErro(causa);
       console.error("[agente editor] pedido não andou", causa);
+      devolverAoCampo(pr.chaveDoDono, pr.texto, t);
+    } finally {
+      setRodando(null);
+      atualizarCusto();
+      rolarParaBaixo();
+    }
+  };
+
+  /**
+   * Edição completa sem modelo (02/10, atalho "Edição completa"): o EDIT IA
+   * PRO inteiro com o plano da casa (receita dinâmica e o ritmo do Brabo),
+   * julgamentos pelo Jev (sem custo para o cliente) e a regra da casa no lugar
+   * do que não responder. Ordem clara de um clique: vai na hora, com Desfazer.
+   */
+  const rodarEdicaoCompleta = async (pr: Preparo, base: ProjetoDeEdicao) => {
+    setRodando("Montando a edição completa");
+    parar.current = false;
+    try {
+      const r = await edicaoCompletaDoAgente(chamarEditorVideo, { clientId, projeto: base, args: { receita: "dinamico" }, marca: marcaDaEdicao, midias, agora: new Date().toISOString(), aoAndar: (t) => setRodando(t.slice(0, 90)) });
+      const itens: ItemDoLog[] = (pr.antes || []).concat(r.texto.split("\n").slice(1).map((l): ItemDoLog => ({ tipo: l.indexOf("aviso:") === 0 || l.indexOf("não entrou") === 0 ? "aviso" : "ferramenta", texto: l })));
+      if (!r.operacoes.length) {
+        itens.push({ tipo: "resposta", texto: "Nada mudou na linha do tempo: a edição completa não achou o que montar (veja os avisos)." });
+        responder(pr.texto, { quem: "agente", itens, acoes: [], mensagemId: null, anexos: [] });
+        return;
+      }
+      const resumo = mensagemDoQueMudou(base, r.projeto);
+      const prop: PropostaDaSkill = { skill: "brabo", titulo: "Edição completa (EDIT IA PRO)", resumo, operacoes: r.operacoes, avisos: [], base: assinaturaDoProjeto(base), resultado: r.projeto };
+      const cartao = cartaoDaProposta(`completa-${Date.now().toString(36)}`, prop, base, true);
+      const aplicado = !!cartao.executada_em;
+      if (aplicado) destacar(clientId, []);
+      itens.push({ tipo: "resposta", texto: `${aplicado ? "Mudei" : "Vou mudar (confirme no cartão)"}: ${resumo}${aplicado ? " O Desfazer volta tudo." : ""}` });
+      responder(pr.texto, { quem: "agente", itens, acoes: [cartao], mensagemId: null, anexos: [] });
+    } catch (e) {
+      const t = emPreparacao(e) ? "A edição completa está em preparação: falta publicar a função editor-video." : textoDoErro(e);
+      console.error("[agente editor] edição completa não andou", e);
       devolverAoCampo(pr.chaveDoDono, pr.texto, t);
     } finally {
       setRodando(null);
@@ -799,7 +812,8 @@ export default function AgenteEditor({
       }
       setRodando(null);
     }
-    if (pr.skill) proporDaSkill(pr.skill, base, pr.texto, pr.antes || []);
+    if (pr.completa) await rodarEdicaoCompleta(pr, base);
+    else if (pr.skill) proporDaSkill(pr.skill, base, pr.texto, pr.antes || []);
     else if (pr.pedido) await rodarPedido(pr, base);
     atualizarCusto();
     rolarParaBaixo();
@@ -842,12 +856,13 @@ export default function AgenteEditor({
   };
   const enviar = () => enviarTexto(rascunho);
 
-  const atalho = (id: IdDaSkill, rotulo: string) => {
+  const atalho = (id: IdDaSkill | "edicao_completa", rotulo: string) => {
     if (rodando || preparo || !projeto) return;
     setErroDoEnvio(null);
     const chaveDoDono = falar("dono", [{ tipo: "resposta", texto: rotulo }]);
     rolarParaBaixo();
-    comecar({ pedido: null, skill: id, texto: rotulo, chaveDoDono, conversa: "" }, skillPrecisaDeFala(id));
+    if (id === "edicao_completa") comecar({ pedido: null, skill: null, completa: true, texto: rotulo, chaveDoDono, conversa: "" }, true);
+    else comecar({ pedido: null, skill: id, texto: rotulo, chaveDoDono, conversa: "" }, skillPrecisaDeFala(id));
   };
 
   /** "Cancelar" no preparo da fala: nada foi feito, o pedido volta ao campo. */

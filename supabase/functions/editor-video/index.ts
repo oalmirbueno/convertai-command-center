@@ -25,6 +25,9 @@
  *     as regras ensinadas (regrasDaMesa "edicao") e "essa/o segundo/todos" (Jev) vão no sistema;
  *     devolve uso_id, referencia (passo 1), aprendido e regras_seguidas.
  * - agente_ordem_clara { client_id, pedido, resumo } -> { clara, fonte } (Jev; decide o "faz na hora com Desfazer")
+ * - agente_pesquisar { client_id, modelo_id, referencia_id, teto_usd, pergunta } -> { texto, fontes, custo_usd, gasto_usd }
+ *     (02/10) Pesquisa na web pelo modelo do agente; o gasto entra na MESMA sessão do pedido (o teto que o
+ *     dono viu antes de mandar vale para tudo). Passou do teto: não chama e diz por quê.
  * - conversa_ler { client_id, versao_id } -> { conversa_id, mensagens } (a conversa do editor por versão do vídeo)
  * - conversa_gravar { client_id, versao_id, usuario, agente: { conteudo, anexos }, uso_id? } -> { mensagem_id, aviso_registro }
  * - conversa_marcar { client_id, mensagem_id, cartao } -> { ok } (o cartão feito/desfeito/cancelado fica assim ao reabrir)
@@ -90,8 +93,10 @@ import {
   MAX_CONTEXTO_CHARS,
   MAX_FERRAMENTAS,
   MAX_QUADROS_POR_CHAMADA,
+  MAX_PERGUNTA_DA_PESQUISA,
   MAX_TEXTO_DO_PEDIDO,
   motivoParaParar,
+  sistemaDaPesquisa,
   PROVEDORES_DE_TIMESTAMP,
   sistemaDaVisao,
   sistemaDoAgente,
@@ -535,6 +540,54 @@ async function agentePasso(ch: Chamador, corpo: Record<string, unknown>) {
   }, corsHeaders);
 }
 
+/**
+ * Pesquisa na web do agente editor (02/10). Paga, dentro do teto do pedido: a
+ * sessão (referencia_id) é a mesma do laço, então o gasto já feito nos passos
+ * conta, e a estimativa da busca (3 buscas e 10 mil tokens de páginas) também.
+ */
+async function agentePesquisar(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id || "");
+  await garantirAcesso(ch, clientId);
+  const referencia = idDe(corpo.referencia_id, "referencia_id");
+  const modeloId = String(corpo.modelo_id || "");
+  const teto = tetoValido(corpo.teto_usd);
+  const pergunta = String(corpo.pergunta || "").replace(/\s+/g, " ").trim().slice(0, MAX_PERGUNTA_DA_PESQUISA);
+  if (pergunta.length < 4) throw new ErroHttp(400, "pergunta_vazia", "Diga o que pesquisar.");
+  const m = await carregarModelo(modeloId, "texto");
+  const sistema = sistemaDaPesquisa();
+  const gasto = await gastoDaReferencia(clientId, REF_AGENTE, referencia);
+  const estimativa = estimarComModelo(m, { tokensEntrada: Math.ceil((sistema.length + pergunta.length) / 3.5) + 10_000, tokensSaida: 2000, buscasWeb: 3 });
+  if (gasto + estimativa > teto) {
+    return json({ texto: "", fontes: [], custo_usd: 0, gasto_usd: gasto, parou: true, motivo: `A pesquisa (~US$ ${estimativa.toFixed(3)}) passaria do teto de US$ ${teto.toFixed(2)} deste pedido.` });
+  }
+  return respostaComFolego(async () => {
+    try {
+      const r = await chamarTexto({
+        clientId,
+        tarefa: "conversa",
+        agente: "diretor_arte",
+        modeloId,
+        sistema,
+        mensagens: [{ papel: "usuario", conteudo: pergunta }],
+        pesquisaWeb: true,
+        maxTokensSaida: 2000,
+        referencia: { tipo: REF_AGENTE, id: referencia },
+        criadoPor: ch.userId,
+      });
+      await auditar(ch, "editor_agente_pesquisa", { client_id: clientId, modelo_id: r.modeloId, fontes: (r.fontes || []).length }, true);
+      return json({
+        texto: String(r.texto || "").slice(0, 4000),
+        fontes: (r.fontes || []).slice(0, 8).map((f) => ({ titulo: f.titulo, url: f.url })),
+        custo_usd: r.custoUsd,
+        gasto_usd: Math.round((gasto + r.custoUsd) * 10000) / 10000,
+        uso_id: r.usoId || null,
+      });
+    } catch (e) {
+      return respostaDeErro(e);
+    }
+  }, corsHeaders);
+}
+
 /** "É uma ordem clara?" (Jev Noul, sem custo para o cliente): decide se a mudança sem custo vai direto, com Desfazer. */
 async function agenteOrdemClara(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id || "");
@@ -886,6 +939,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   alinhar_andamento: alinharAndamento,
   agente_passo: agentePasso,
   agente_ordem_clara: agenteOrdemClara,
+  agente_pesquisar: agentePesquisar,
   conversa_ler: conversaLer,
   conversa_gravar: conversaGravar,
   conversa_marcar: conversaMarcar,

@@ -211,7 +211,8 @@ describe("ferramentas novas do agente editor", () => {
     ["medir_onda", "ler_onda", "cortar_pela_onda", "ficar_com_melhor_tomada", "conferir_corte", "legendar", "animar", "sugerir_animacoes", "sons", "musica", "logo", "cartao_final", "amostra", "gerar_broll", "gerar_elemento", "renderizar"].forEach((n) => expect(NOMES_DAS_FERRAMENTAS).toContain(n));
     expect(FERRAMENTAS_DE_SAIDA).toEqual(expect.arrayContaining(["gerar_broll", "gerar_elemento", "renderizar"]));
     // Rodada 2: zoom nos momentos fortes e capítulos também vão ao servidor (Jev) dentro do laço.
-    expect(FERRAMENTAS_DO_SERVIDOR).toEqual(["sugerir_animacoes", "medir_onda", "amostra", "zoom_momentos", "capitulos"]);
+    // 02/10: o EDIT IA PRO inteiro (Jev) e a pesquisa na web também.
+    expect(FERRAMENTAS_DO_SERVIDOR).toEqual(["sugerir_animacoes", "medir_onda", "amostra", "zoom_momentos", "capitulos", "edicao_completa", "pesquisar"]);
     ["formato", "cor", "zoom_momentos", "efeito", "capitulos"].forEach((n) => expect(NOMES_DAS_FERRAMENTAS).toContain(n));
     expect(ANEXOS_ACEITOS).toContain("padrao_do_editor");
   });

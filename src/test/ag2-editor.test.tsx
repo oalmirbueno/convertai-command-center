@@ -162,7 +162,9 @@ describe("decidir e conferir", () => {
     const ok = { operacoes: 3, falhas: 0, recusadas: 0, parado: false, ordemClara: true };
     expect(podeAplicarDireto(ok).direto).toBe(true);
     expect(podeAplicarDireto({ ...ok, ordemClara: false }).direto).toBe(false);
-    expect(podeAplicarDireto({ ...ok, falhas: 1 }).direto).toBe(false);
+    // 02/10: ferramenta que falhou não mudou nada (entra inteira ou não entra); o resto vale e a falha vai dita.
+    expect(podeAplicarDireto({ ...ok, falhas: 1 }).direto).toBe(true);
+    expect(podeAplicarDireto({ ...ok, recusadas: 1 }).direto).toBe(false);
     expect(podeAplicarDireto({ ...ok, parado: true }).direto).toBe(false);
     expect(podeAplicarDireto({ ...ok, operacoes: 0 }).direto).toBe(false);
   });
