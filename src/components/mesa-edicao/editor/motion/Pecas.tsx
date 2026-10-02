@@ -105,6 +105,9 @@ export interface PropsDaPeca {
   imagem?: string | null;
   /** Cor da marca (paleta do cliente) quando a peça não traz a própria. */
   corDaMarca?: string | null;
+  /** 02/10: segunda cor da marca (identidade.cor2) e a letra da marca (família já carregada). */
+  cor2?: string | null;
+  letra?: string | null;
 }
 
 const txt = (v: unknown, padrao = "") => (typeof v === "string" && v ? v : padrao);
@@ -125,6 +128,20 @@ function entradaSaida(f: number, fps: number, duracao: number, atraso = 0) {
 }
 
 const cheio: CSSProperties = { position: "absolute", left: 0, top: 0, width: "100%", height: "100%" };
+
+/** Texto legível sobre a cor (luminância): escuro sobre cor clara, branco sobre cor escura. */
+export function tintaSobre(hex: string): string {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ""));
+  if (!m) return "#ffffff";
+  const c = [m[1], m[2], m[3]].map((x) => {
+    const v = parseInt(x, 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2] > 0.4 ? "#141414" : "#ffffff";
+}
+
+const saidaCubica = (x: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, x)), 3);
+const letraDe = (p: PropsDaPeca, reserva: string) => (p.letra ? `'${p.letra}', ${reserva}` : reserva);
 
 function Centro({ children, topo = "50%" }: { children: ReactNode; topo?: string }) {
   return (
@@ -165,7 +182,7 @@ function Lista({ params, tempos, desdeS, duracaoQuadros, cor, passos }: PropsDaP
   const itens = lista(params.itens);
   const riscada = params.modo === "riscada";
   return (
-    <Centro topo="46%">
+    <Centro topo="64%">
       <div style={{ width: "82%", opacity: s, transform: `translateY(${(1 - e) * 40}px)`, background: "rgba(12,12,12,0.82)", borderRadius: L * 0.03, padding: `${L * 0.04}px ${L * 0.05}px`, fontFamily: SANS, color: "#fff" }}>
         {txt(params.titulo) && <div style={{ fontSize: L * 0.045, fontWeight: 800, marginBottom: L * 0.02, color: cor }}>{txt(params.titulo)}</div>}
         {itens.map((it, k) => {
@@ -241,7 +258,8 @@ function Polaroide({ params, desdeS, duracaoQuadros, imagem }: PropsDaPeca) {
   );
 }
 
-function CartaoFinal({ params, desdeS, duracaoQuadros, cor, imagem }: PropsDaPeca & { cor: string }) {
+function CartaoFinal(props: PropsDaPeca & { cor: string }) {
+  const { params, desdeS, duracaoQuadros, cor, imagem } = props;
   const { f, fps, L } = useQuadro(desdeS);
   const e = spring({ frame: f, fps, config: { damping: 16, stiffness: 140 } });
   const e2 = spring({ frame: f - Math.round(0.35 * fps), fps, config: { damping: 14 } });
@@ -249,13 +267,14 @@ function CartaoFinal({ params, desdeS, duracaoQuadros, cor, imagem }: PropsDaPec
   return (
     <div style={{ ...cheio, background: `rgba(8,8,8,${0.88 * e})`, opacity: s, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: SANS }}>
       {imagem && <Img src={imagem} style={{ maxWidth: "46%", maxHeight: "18%", objectFit: "contain", marginBottom: L * 0.05, transform: `scale(${0.8 + 0.2 * e})`, opacity: e }} />}
-      <div style={{ color: "#fff", fontWeight: 900, fontSize: L * 0.075, textAlign: "center", padding: "0 8%", transform: `translateY(${(1 - e) * 40}px)`, opacity: e }}>{txt(params.titulo)}</div>
-      {txt(params.botao) && <div style={{ marginTop: L * 0.05, background: cor, color: "#0a0a0a", fontWeight: 800, fontSize: L * 0.05, padding: `${L * 0.02}px ${L * 0.06}px`, borderRadius: L * 0.06, transform: `scale(${e2})` }}>{txt(params.botao)}</div>}
+      <div style={{ color: "#fff", fontFamily: letraDe(props, SANS), fontWeight: 900, fontSize: L * 0.075, textAlign: "center", padding: "0 8%", transform: `translateY(${(1 - e) * 40}px)`, opacity: e }}>{txt(params.titulo)}</div>
+      {txt(params.botao) && <div style={{ marginTop: L * 0.05, background: cor, color: tintaSobre(cor), fontWeight: 800, fontSize: L * 0.05, padding: `${L * 0.02}px ${L * 0.06}px`, borderRadius: L * 0.06, transform: `scale(${e2})` }}>{txt(params.botao)}</div>}
     </div>
   );
 }
 
-function Lettering({ params, tempos, desdeS, duracaoQuadros, cor }: PropsDaPeca & { cor: string }) {
+function Lettering(props: PropsDaPeca & { cor: string }) {
+  const { params, tempos, desdeS, duracaoQuadros, cor } = props;
   const { f, fps, L } = useQuadro(desdeS);
   const palavras = lista(params.palavras);
   const ts = palavras.map((_, k) => Math.round(((tempos && tempos[k] !== undefined ? tempos[k] : (k * duracaoQuadros) / Math.max(1, palavras.length) / fps)) * fps));
@@ -265,7 +284,7 @@ function Lettering({ params, tempos, desdeS, duracaoQuadros, cor }: PropsDaPeca 
   const s = interpolate(f, [duracaoQuadros - Math.round(0.25 * fps), duracaoQuadros], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   return (
     <Centro topo="38%">
-      <div style={{ fontFamily: FORTE, fontSize: L * 0.14, color: atual % 2 ? cor : "#fff", transform: `scale(${0.6 + 0.4 * e})`, opacity: s, textAlign: "center", lineHeight: 1, padding: "0 6%", textShadow: "0 8px 30px rgba(0,0,0,0.55)" }}>{(palavras[atual] || "").toUpperCase()}</div>
+      <div style={{ fontFamily: letraDe(props, FORTE), fontSize: L * 0.14, color: atual % 2 ? cor : "#fff", transform: `scale(${0.6 + 0.4 * e})`, opacity: s, textAlign: "center", lineHeight: 1, padding: "0 6%", textShadow: "0 8px 30px rgba(0,0,0,0.55)" }}>{(palavras[atual] || "").toUpperCase()}</div>
     </Centro>
   );
 }
@@ -357,6 +376,129 @@ function Logo({ params, desdeS, duracaoQuadros, imagem, cor }: PropsDaPeca & { c
   );
 }
 
+// ------------------------------------------------------------------ peças de edição da casa (02/10)
+
+/**
+ * Título do gancho: as palavras-chave da primeira frase, grandes, na letra
+ * da marca, cada linha entrando (máscara de baixo para cima) quando é dita.
+ * Fica na faixa de baixo (66%): o rosto do talking head fica livre.
+ */
+function Gancho(p: PropsDaPeca & { cor: string }) {
+  const { params, tempos, desdeS, duracaoQuadros, cor } = p;
+  const { f, fps, L } = useQuadro(desdeS);
+  const linhas = lista(params.linhas).slice(0, 3);
+  const maior = linhas.reduce((n, l) => Math.max(n, l.length), 1);
+  const tamanho = Math.min(L * 0.12, (L * 0.86) / (maior * 0.56));
+  const s = interpolate(f, [duracaoQuadros - Math.round(0.25 * fps), duracaoQuadros], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const tinta = tintaSobre(cor);
+  return (
+    <div style={{ position: "absolute", left: "6%", right: "6%", top: txt(params.faixa) === "alto" ? "8%" : "60%", display: "flex", flexDirection: "column", alignItems: "center", opacity: s, transform: `scale(${0.96 + 0.04 * s})` }}>
+      {linhas.map((l, k) => {
+        const t = Math.round((tempos && tempos[k] !== undefined ? tempos[k] : k * 0.35) * fps);
+        const e = spring({ frame: f - t, fps, config: { damping: 15, stiffness: 190, mass: 0.6 } });
+        const ultima = k === linhas.length - 1 && linhas.length > 1;
+        return (
+          <div key={k} style={{ overflow: "hidden", paddingBottom: L * 0.006, marginTop: k ? L * 0.008 : 0 }}>
+            <div
+              style={{
+                transform: `translateY(${(1 - e) * 110}%)`,
+                fontFamily: letraDe(p, FORTE),
+                fontSize: tamanho,
+                lineHeight: 1.04,
+                color: ultima ? tinta : "#ffffff",
+                background: ultima ? cor : "transparent",
+                padding: ultima ? `${L * 0.004}px ${L * 0.03}px` : 0,
+                borderRadius: ultima ? L * 0.014 : 0,
+                textAlign: "center",
+                textShadow: ultima ? "none" : "0 6px 26px rgba(0,0,0,0.6)",
+                letterSpacing: "0.01em",
+              }}
+            >
+              {l}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Palavra em destaque: a barra da marca varre por trás e a palavra entra com mola, sem tapar o rosto. */
+function Destaque(p: PropsDaPeca & { cor: string }) {
+  const { params, desdeS, duracaoQuadros, cor } = p;
+  const { f, fps, L } = useQuadro(desdeS);
+  const { e, s } = entradaSaida(f, fps, duracaoQuadros);
+  const varre = saidaCubica(f / Math.max(1, Math.round(0.28 * fps)));
+  const texto = txt(params.texto);
+  const lado = txt(params.lado, "centro");
+  const tamanho = Math.min(L * 0.13, (L * 0.8) / (Math.max(4, texto.length) * 0.58));
+  const tinta = tintaSobre(cor);
+  const just = lado === "esquerda" ? "flex-start" : lado === "direita" ? "flex-end" : "center";
+  return (
+    <div style={{ position: "absolute", left: "7%", right: "7%", top: txt(params.faixa) === "alto" ? "12%" : "63%", display: "flex", justifyContent: just, opacity: s }}>
+      <div style={{ position: "relative", transform: `rotate(-2deg) scale(${0.75 + 0.25 * e})`, transformOrigin: lado === "direita" ? "100% 50%" : lado === "esquerda" ? "0% 50%" : "50% 50%" }}>
+        <div style={{ position: "absolute", left: 0, top: "8%", bottom: "8%", width: `${varre * 100}%`, background: cor, borderRadius: L * 0.012, boxShadow: "0 10px 30px rgba(0,0,0,0.35)" }} />
+        <div style={{ position: "relative", fontFamily: letraDe(p, FORTE), fontSize: tamanho, lineHeight: 1.1, color: varre > 0.55 ? tinta : "#ffffff", padding: `0 ${L * 0.03}px`, whiteSpace: "nowrap", textShadow: varre > 0.55 ? "none" : "0 4px 18px rgba(0,0,0,0.6)" }}>{texto}</div>
+      </div>
+    </div>
+  );
+}
+
+/** Nome e cargo: painel que entra da esquerda com o fio da marca, na faixa de baixo. */
+function TercoInferior(p: PropsDaPeca & { cor: string }) {
+  const { params, desdeS, duracaoQuadros, cor, cor2 } = p;
+  const { f, fps, L } = useQuadro(desdeS);
+  const e = spring({ frame: f, fps, config: { damping: 18, stiffness: 160 } });
+  const e2 = spring({ frame: f - Math.round(0.12 * fps), fps, config: { damping: 18, stiffness: 160 } });
+  const sai = interpolate(f, [duracaoQuadros - Math.round(0.3 * fps), duracaoQuadros], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  return (
+    <div style={{ position: "absolute", left: "6%", top: "74%", transform: `translateX(${(1 - e) * -120 - sai * 120}%)` }}>
+      <div style={{ display: "flex", alignItems: "stretch", background: "rgba(10,10,10,0.78)", borderRadius: L * 0.014, overflow: "hidden", boxShadow: "0 10px 30px rgba(0,0,0,0.35)" }}>
+        <div style={{ width: L * 0.012, background: cor }} />
+        <div style={{ padding: `${L * 0.018}px ${L * 0.032}px` }}>
+          <div style={{ fontFamily: letraDe(p, SANS), fontWeight: 800, fontSize: L * 0.052, color: "#fff", lineHeight: 1.1 }}>{txt(params.nome)}</div>
+          {txt(params.cargo) && <div style={{ fontFamily: TEXTO, fontWeight: 600, fontSize: L * 0.032, color: txt(cor2) || cor, marginTop: L * 0.006, opacity: e2, transform: `translateX(${(1 - e2) * -20}px)` }}>{txt(params.cargo)}</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const ICONES: Record<string, string> = {
+  salvar: "M6 3h12a1 1 0 0 1 1 1v17l-7-4.5L5 21V4a1 1 0 0 1 1-1z",
+  comentar: "M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-5 4V5a1 1 0 0 1 1-1z",
+  seguir: "M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z",
+  compartilhar: "M3 11l18-8-8 18-2-8z",
+  link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1",
+};
+
+/** Chamada dita no fim: cartão com o ícone e o botão da marca (o botão pulsa), sem tapar o rosto. */
+function Chamada(p: PropsDaPeca & { cor: string }) {
+  const { params, desdeS, duracaoQuadros, cor } = p;
+  const { f, fps, L } = useQuadro(desdeS);
+  const e = spring({ frame: f, fps, config: { damping: 14, stiffness: 170 } });
+  const pulso = 1 + 0.05 * Math.max(0, Math.sin(((f - Math.round(0.5 * fps)) / fps) * Math.PI * 2 * 1.2)) * (f > 0.5 * fps ? 1 : 0);
+  const s = interpolate(f, [duracaoQuadros - Math.round(0.2 * fps), duracaoQuadros], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const tinta = tintaSobre(cor);
+  const icone = ICONES[txt(params.icone, "salvar")] || ICONES.salvar;
+  const contorno = txt(params.icone) === "link";
+  return (
+    <div style={{ position: "absolute", left: "7%", right: "7%", top: "68%", display: "flex", justifyContent: "center", opacity: s, transform: `translateY(${(1 - e) * 60}px)` }}>
+      <div style={{ display: "flex", alignItems: "center", background: "rgba(255,255,255,0.96)", borderRadius: L * 0.05, padding: `${L * 0.02}px ${L * 0.024}px`, boxShadow: "0 16px 40px rgba(0,0,0,0.35)", maxWidth: "100%" }}>
+        <div style={{ width: L * 0.09, height: L * 0.09, borderRadius: "50%", background: cor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginRight: L * 0.024, transform: `scale(${0.6 + 0.4 * e})` }}>
+          <svg viewBox="0 0 24 24" width={L * 0.05} height={L * 0.05} aria-hidden="true">
+            <path d={icone} fill={contorno ? "none" : tinta} stroke={tinta} strokeWidth={contorno ? 2 : 0} strokeLinecap="round" />
+          </svg>
+        </div>
+        <div style={{ fontFamily: letraDe(p, SANS), fontWeight: 800, fontSize: L * 0.046, color: "#141414", lineHeight: 1.15, minWidth: 0 }}>{txt(params.texto)}</div>
+        {txt(params.botao) && (
+          <div style={{ marginLeft: L * 0.024, background: cor, color: tinta, fontFamily: SANS, fontWeight: 800, fontSize: L * 0.036, padding: `${L * 0.014}px ${L * 0.03}px`, borderRadius: L * 0.04, transform: `scale(${pulso})`, flexShrink: 0 }}>{txt(params.botao)}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** A peça pelo id (clipe da trilha de sobreposição com estilo.peca). */
 export function PecaDeMotion(p: PropsDaPeca) {
   const cor = txt(p.params.cor) || txt(p.corDaMarca) || VERDE_ACELERIQ;
@@ -389,6 +531,14 @@ export function PecaDeMotion(p: PropsDaPeca) {
       return <Selo {...p} cor={cor} />;
     case "logo":
       return <Logo {...p} cor={cor} />;
+    case "gancho":
+      return <Gancho {...p} cor={cor} />;
+    case "destaque":
+      return <Destaque {...p} cor={cor} />;
+    case "terco_inferior":
+      return <TercoInferior {...p} cor={cor} />;
+    case "chamada":
+      return <Chamada {...p} cor={cor} />;
     default:
       return null;
   }

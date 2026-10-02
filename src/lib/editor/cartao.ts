@@ -18,6 +18,7 @@ const ROTULO_CURTO: Partial<Record<Operacao["op"], string>> = {
   recortar: "Cortar",
   recortar_varios: "Cortar",
   camera: "Câmera",
+  dividir_varios: "Dividir",
   inserir: "Inserir",
   propriedades: "Ajustar",
   ondular: "Encostar",

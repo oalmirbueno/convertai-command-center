@@ -12,6 +12,8 @@ import type { AcaoDoAgente, RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
 import { useArquivosDeVideo } from "@/components/mesa-videos/videosApi";
 import type { ProjetoDeEdicao } from "../../../../supabase/functions/_shared/projeto-de-edicao";
 import { linhasDoPlano, LEGENDAS_DO_PLANO, LOOKS_DO_PLANO, planoPadrao, RECEITAS, type PlanoDaEdicao } from "../../../../supabase/functions/editor-video/modulos/plano-da-edicao";
+import { lerPedidoDoDono } from "../../../../supabase/functions/editor-video/modulos/pedido-do-dono";
+import { quemFalaDoPedido } from "@/lib/editor/ferramentasDoServidor";
 import { chamarEditorVideo, emPreparacao, novoId } from "@/lib/editor/api";
 import { acaoDaProposta, acaoFeita } from "@/lib/editor/cartao";
 import { montarEdicaoCompleta, projetoDepoisDoCorte, type PassoDaEdicao } from "@/lib/editor/edicaoCompleta";
@@ -138,7 +140,9 @@ export default function PainelEditarComIA({
     const base = projetoRef.current;
     try {
       setOcupado("Cortando e reenquadrando");
-      const cortado = projetoDepoisDoCorte(base, plano, agora);
+      // 02/10: o pedido escrito é lei também aqui (o plano da casa não passa pelo modelo).
+      const pedido = lerPedidoDoDono(instrucao);
+      const cortado = projetoDepoisDoCorte(base, plano, agora, pedido);
       setOcupado("A IA está julgando os momentos, o B-roll e as animações");
       const j = await julgar(chamarEditorVideo, clientId, cortado, plano, acervo, setOcupado).catch((e) => {
         // Função não publicada: monta pela regra da casa e avisa.
@@ -146,9 +150,10 @@ export default function PainelEditarComIA({
         throw e;
       });
       setOcupado("Montando a edição");
-      const r = montarEdicaoCompleta(base, plano, { ...j.dados, agora, marca });
+      const ritmo = plano.receita === "dinamico" || plano.receita === "anuncio" ? { batida_s: 3, zoom: 1.08 } : null;
+      const r = montarEdicaoCompleta(base, plano, { ...j.dados, agora, marca, pedido, ritmo, quemFala: quemFalaDoPedido(instrucao) });
       const id = `ia-${Date.now().toString(36)}`;
-      const avisos = j.avisos.concat(r.proposta.avisos);
+      const avisos = j.avisos.concat(r.proposta.avisos).concat(r.passos.filter((x) => x.pedido).map((x) => `${x.rotulo}: ${x.detalhe}`)).concat([`Engajamento: ${r.checklist.linhas.join("; ")}.`]);
       const acao = acaoDaProposta(id, "editor", r.proposta.resumo, r.proposta.operacoes, base, avisos);
       setMontagem({ p: r.proposta, acao, passos: r.passos, avisos, id });
       setEtapa("proposta");

@@ -190,7 +190,9 @@ describe("'edita completo e dinâmico' monta a edição inteira na linha do temp
     expect(corpos.filter((c) => c.acao === "agente_passo")).toHaveLength(1);
     // A mensagem final é o que mudou de verdade (o código conta), e o "pus B-roll e logo" do modelo não entra.
     const msg = mensagemFinalDoAgente(r, true);
-    expect(msg).toBe(`Mudei: ${[r.mudancas].concat(itensDoQueMudou(base, r.resultado)).filter(Boolean).join(" ")} O Desfazer volta tudo.`);
+    expect(msg.indexOf(`Mudei: ${[r.mudancas].concat(itensDoQueMudou(base, r.resultado)).filter(Boolean).join(" ")} O Desfazer volta tudo.`)).toBe(0);
+    // 02/10: o checklist de engajamento vai junto (gancho, ritmo, interrupções, chamada).
+    expect(msg).toMatch(/Engajamento: gancho/);
     expect(msg).not.toMatch(/B-roll e logo animada/);
     expect(msg).toMatch(/legendas/);
     expect(msg).toMatch(/Música: trilha-calma\.mp3/);
@@ -203,7 +205,10 @@ describe("'edita completo e dinâmico' monta a edição inteira na linha do temp
     const r = await edicaoCompletaDoAgente(chamar, { clientId: CLIENTE, projeto: base, args: { receita: "dinamico" }, marca: MARCA, midias: MIDIAS, agora: AGORA });
     expect(r.operacoes.length).toBeGreaterThan(10);
     expect(r.texto).toMatch(/EDIT IA PRO \(receita dinamico\)/);
-    expect(r.texto).toMatch(/feito Ritmo dinâmico \(Brabo\)/);
+    // 02/10: câmera com motivo no lugar do zoom alternado; o ritmo só divide plano acima de 4 s.
+    expect(r.texto).toMatch(/feito Câmera nos momentos fortes/);
+    expect(r.texto).toMatch(/feito Motion graphics na marca/);
+    expect(r.texto).toMatch(/engajamento: /);
     expect(mensagemDoQueMudou(base, r.projeto)).toMatch(/Corte: duração/);
   });
 

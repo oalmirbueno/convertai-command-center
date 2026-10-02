@@ -224,7 +224,7 @@ describe("agente editor edita de verdade", () => {
     expect(pedidoComDica("deixa mais bonito")).toBe("deixa mais bonito");
     expect(pedidoComDica("pode editar ele")).toContain("edicao_completa");
     expect(pedidoComDica("só o ritmo do brabo")).toContain('skill "brabo"');
-    expect(sistemaDoAgente()).toContain("Só o ritmo do Brabo (batidas e zoom alternado) = aplicar_skill brabo");
+    expect(sistemaDoAgente()).toContain("Só o ritmo do Brabo (corte limpo, planos variados e câmera com motivo) = aplicar_skill brabo");
     const base = projeto();
     const chamar = vi.fn().mockResolvedValueOnce({ passo: { plano: "Aplicar o Brabo.", chamadas: [{ ferramenta: "aplicar_skill", argumentos: { skill: "brabo" } }], resposta: "Apliquei a edição dinâmica.", terminou: true, recusadas: [] }, gasto_usd: 0.002 });
     const r = await rodarAgente({ chamar, clientId: CLIENTE, sessao: "s1", pedido: pedidoComDica("edite com a skill do Brabo"), projeto: base, modeloId: "openrouter:openai/gpt-6-luna", tetoUsd: 0.5, agora: "2026-09-26T12:00:00Z" });

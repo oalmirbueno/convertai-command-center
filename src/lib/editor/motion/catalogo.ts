@@ -29,6 +29,11 @@ export const PECAS_DE_MOTION = [
   "comentario",
   "selo",
   "logo",
+  // 02/10 (auditoria: "sem motion graphics, genérico"): peças de edição da casa, na letra e nas cores da marca.
+  "gancho",
+  "destaque",
+  "terco_inferior",
+  "chamada",
 ] as const;
 export type IdDaPeca = (typeof PECAS_DE_MOTION)[number];
 
@@ -76,6 +81,10 @@ export const CATALOGO_DE_MOTION: DefinicaoDaPeca[] = [
   { id: "comentario", rotulo: "Comentário / CTA", quando: "pedir para comentar uma palavra ou responder um comentário", duracao_s: 3, pico_s: 0.22, som: "mensagem", prioridade: 2, parametros: [{ chave: "usuario", tipo: "texto", rotulo: "Quem", max: 24, padrao: "você" }, { chave: "texto", tipo: "texto", rotulo: "Texto", obrigatorio: true, max: 90 }] },
   { id: "selo", rotulo: "Selo", quando: "garantia, prazo, frete grátis, certificado", duracao_s: 2.4, pico_s: 0.3, som: "success", prioridade: 2, parametros: [{ chave: "texto", tipo: "texto", rotulo: "Texto", obrigatorio: true, max: 16 }, { chave: "subtitulo", tipo: "texto", rotulo: "Embaixo", max: 24 }, COR] },
   { id: "logo", rotulo: "Logo", quando: "a marca do cliente acompanhando (canto, fim ou abertura)", duracao_s: 3, pico_s: 0.25, som: "glitch", prioridade: 1, parametros: [{ chave: "onde", tipo: "escolha", rotulo: "Onde", opcoes: ["canto", "cartao_final", "sting"], padrao: "canto" }, COR] },
+  { id: "gancho", rotulo: "Título do gancho", quando: "os 2 primeiros segundos: as palavras-chave da primeira frase, grandes, entrando no tempo em que são ditas", duracao_s: 2.8, pico_s: 0.22, som: "whoosh_rapido", prioridade: 3, parametros: [{ chave: "linhas", tipo: "lista", rotulo: "Linhas (ditas)", obrigatorio: true, max: 3 }, { chave: "faixa", tipo: "escolha", rotulo: "Faixa", opcoes: ["baixo", "alto"], padrao: "baixo" }, COR] },
+  { id: "destaque", rotulo: "Palavra em destaque", quando: "uma sigla, número ou termo forte dito: o cartão entra na palavra e sai", duracao_s: 1.8, pico_s: 0.2, som: "pop", prioridade: 2, parametros: [{ chave: "texto", tipo: "texto", rotulo: "Palavra dita", obrigatorio: true, max: 32 }, { chave: "lado", tipo: "escolha", rotulo: "Lado", opcoes: ["esquerda", "direita", "centro"], padrao: "centro" }, { chave: "faixa", tipo: "escolha", rotulo: "Faixa", opcoes: ["baixo", "alto"], padrao: "baixo" }, COR] },
+  { id: "terco_inferior", rotulo: "Nome e cargo", quando: "apresentar quem fala (nome e cargo), logo depois do gancho", duracao_s: 3.2, pico_s: 0.3, som: "swish", prioridade: 1, parametros: [{ chave: "nome", tipo: "texto", rotulo: "Nome", obrigatorio: true, max: 40 }, { chave: "cargo", tipo: "texto", rotulo: "Cargo", max: 40 }, COR] },
+  { id: "chamada", rotulo: "Chamada (CTA)", quando: "a chamada dita no fim (salva, comenta, segue): cartão com botão sem tapar a pessoa", duracao_s: 3, pico_s: 0.3, som: "pop_mao", prioridade: 3, parametros: [{ chave: "texto", tipo: "texto", rotulo: "Chamada dita", obrigatorio: true, max: 48 }, { chave: "botao", tipo: "texto", rotulo: "Botão", max: 24 }, { chave: "icone", tipo: "escolha", rotulo: "Ícone", opcoes: ["salvar", "comentar", "seguir", "compartilhar", "link"], padrao: "salvar" }, COR] },
 ];
 
 export const definicaoDaPeca = (id: string): DefinicaoDaPeca | null => CATALOGO_DE_MOTION.find((p) => p.id === id) || null;

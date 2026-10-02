@@ -446,7 +446,9 @@ describe("Editar com IA de ponta a ponta (sem rede)", () => {
       animacoes: [{ inicio_s: frases[2].inicio_s, peca: "contador", params: { ate: 300, sufixo: " cafés" } }],
     });
     const feitos = r.passos.filter((x) => x.feito).map((x) => x.id);
-    expect(feitos).toEqual(expect.arrayContaining(["marca", "pausas", "zoom", "legenda", "textos", "motion", "cor", "sons", "cartao", "capitulos", "virais"]));
+    // 02/10: gancho, nome e chamada saem do diretor de motion (peças na marca), não de texto solto.
+    expect(feitos).toEqual(expect.arrayContaining(["marca", "pausas", "zoom", "legenda", "diretor", "motion", "cor", "sons", "capitulos", "virais"]));
+    expect(r.checklist.linhas.length).toBe(4);
     // Um vídeo só (sem troca de plano): a transição fica de fora e diz por quê.
     expect(r.passos.find((x) => x.id === "transicoes")!.detalhe).toMatch(/troca de plano/);
     expect(r.proposta.operacoes.length).toBeGreaterThan(10);
@@ -455,7 +457,8 @@ describe("Editar com IA de ponta a ponta (sem rede)", () => {
     const q = r.proposta.resultado;
     expect(q.identidade && q.identidade.cor).toBe("#ff6600");
     expect(q.trilhas.some((t) => t.tipo === "legenda" && t.clipes.length > 0)).toBe(true);
-    expect(q.trilhas.some((t) => t.tipo === "ajuste" && t.clipes.length > 0)).toBe(true);
+    // A câmera é por plano (com motivo), não mais o empurrão da camada de ajuste que comia a cabeça.
+    expect(q.trilhas.some((t) => t.tipo === "video" && t.clipes.some((c) => !!c.zoom))).toBe(true);
     expect(q.cor.look).toBe("vivo");
     expect(q.skills_aplicadas[q.skills_aplicadas.length - 1].skill).toBe("editar_com_ia");
     expect(q.duracao_s).toBeLessThan(p.duracao_s);

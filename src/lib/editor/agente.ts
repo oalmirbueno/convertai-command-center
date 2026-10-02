@@ -27,6 +27,7 @@ import { definicaoDaPeca, parametrosDaPeca } from "./motion/catalogo";
 import { chaveNoProjeto, fonteDoItem } from "./biblioteca";
 import { textoEm } from "./skills/pecasDaEdicao";
 import { acharClipe } from "./operacoes";
+import { ferramentaBarrada, lerPedidoDoDono } from "../../../supabase/functions/editor-video/modulos/pedido-do-dono";
 
 /**
  * Agente editor, lado da tela (frente V-B). O servidor (editor-video,
@@ -703,6 +704,10 @@ export interface ResultadoDoAgente {
   paineis: PedidoDePainel[];
   /** A regra da casa rodou a edição completa porque o modelo não editou um pedido de edição completa. */
   regraDaCasa: boolean;
+  /** 02/10: o que NÃO foi feito porque o dono pediu (sem legenda, só cortes...). */
+  porPedido?: string[];
+  /** 02/10: o checklist de engajamento da edição completa (gancho, ritmo, interrupções, chamada). */
+  engajamento?: string[];
 }
 
 const semAcentoDoPedido = (t: string) =>
@@ -734,7 +739,7 @@ export function pedidoDeEdicaoCompleta(texto: string): boolean {
  * (comparando o projeto antes e depois), o que não entrou e, quando houver, a
  * pergunta. O texto livre do modelo que afirma ou promete mudança nunca entra.
  */
-export function mensagemFinalDoAgente(r: Pick<ResultadoDoAgente, "operacoes" | "itensMudados" | "mudancas" | "naoEntrou" | "pergunta" | "parado" | "regraDaCasa">, aplicado: boolean): string {
+export function mensagemFinalDoAgente(r: Pick<ResultadoDoAgente, "operacoes" | "itensMudados" | "mudancas" | "naoEntrou" | "pergunta" | "parado" | "regraDaCasa" | "porPedido" | "engajamento">, aplicado: boolean): string {
   const partes: string[] = [];
   const mudou = r.operacoes.length > 0 && (r.itensMudados.length > 0 || !!r.mudancas);
   if (mudou) {
@@ -742,6 +747,8 @@ export function mensagemFinalDoAgente(r: Pick<ResultadoDoAgente, "operacoes" | "
     partes.push(`${aplicado ? "Mudei" : "Vou mudar (confirme no cartão)"}: ${lista}${aplicado ? " O Desfazer volta tudo." : ""}`);
     if (r.regraDaCasa) partes.push("O modelo não editou: rodei a edição completa da casa (EDIT IA PRO).");
   } else partes.push(r.parado ? "Parei antes de mudar a linha do tempo." : "Nada mudou na linha do tempo.");
+  if (r.porPedido && r.porPedido.length) partes.push(`Não fiz porque você pediu: ${r.porPedido.slice(0, 8).join("; ")}.`);
+  if (r.engajamento && r.engajamento.length && mudou) partes.push(`Engajamento: ${r.engajamento.join("; ")}.`);
   if (r.naoEntrou.length) partes.push(`Não entrou: ${r.naoEntrou.slice(0, 6).join("; ")}.`);
   if (r.pergunta) partes.push(r.pergunta);
   else if (!mudou && !r.naoEntrou.length && !r.parado) partes.push("O agente não chamou nenhuma ferramenta que muda o vídeo. Diga o que mudar (ex.: edita completo e dinâmico).");
@@ -834,10 +841,23 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
   // O que o dono escreveu (sem a dica que a tela junta no fim).
   const doDono = String(e.pedido || "").split("\n\n(Dica da tela:")[0];
   const ehEdicao = pedidoDeEdicao(doDono);
+  // 02/10 (auditoria: "pedi sem legenda e veio legenda"): o pedido do dono é lei em TODA ferramenta.
+  const pedidoDoDono = lerPedidoDoDono(doDono);
+  const porPedido: string[] = [];
+  let engajamento: string[] = [];
 
   /** Roda uma chamada (aqui ou no servidor), confere e guarda; devolve a linha de resultado para o modelo. */
-  const rodar = async (c: ChamadaDeFerramenta): Promise<{ linha: string; falhou: boolean }> => {
+  const rodar = async (c0: ChamadaDeFerramenta): Promise<{ linha: string; falhou: boolean }> => {
     usadas++;
+    const barrada = ferramentaBarrada(pedidoDoDono, c0.ferramenta, c0.argumentos || {});
+    if (barrada) {
+      const motivo = /\(([^)]+)\)/.exec(barrada);
+      if (motivo && porPedido.indexOf(motivo[1]) < 0) porPedido.push(motivo[1]);
+      log.push({ tipo: "aviso", texto: `${c0.ferramenta}: ${barrada}` });
+      return { linha: `${c0.ferramenta}: ${barrada}`, falhou: false };
+    }
+    // A edição completa recebe o texto do dono (as negações valem lá dentro também).
+    const c: ChamadaDeFerramenta = c0.ferramenta === "edicao_completa" ? { ...c0, argumentos: { ...(c0.argumentos || {}), pedido_do_dono: doDono } } : c0;
     const noServidor = FERRAMENTAS_DO_SERVIDOR.indexOf(c.ferramenta) >= 0 || (FERRAMENTAS_DE_SAIDA.indexOf(c.ferramenta) >= 0 && c.ferramenta.indexOf("gerar_") === 0);
     const antes = trabalho;
     let x: ResultadoDaFerramenta;
@@ -851,6 +871,13 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
     } else x = executarFerramenta(trabalho, c, e.agora, e.marca || null, { apelidos: mapa, midias: e.midias || null, assinaturas: e.assinaturas || null, cursor_s: e.tela && typeof e.tela.cursor_s === "number" ? e.tela.cursor_s : null });
     trabalho = x.projeto;
     mapa = apelidosEstaveis(trabalho, mapa);
+    if (c.ferramenta === "edicao_completa") {
+      x.texto.split("\n").forEach((l) => {
+        const pp = /^não feito por pedido ([^:]+): Não feito: (.+)$/.exec(l);
+        if (pp && porPedido.indexOf(pp[2].replace(/\.$/, "")) < 0) porPedido.push(pp[2].replace(/\.$/, ""));
+        if (l.indexOf("engajamento: ") === 0) engajamento = l.slice(13).split("; ");
+      });
+    }
     if (x.filtro) filtro = x.filtro;
     x.operacoes.forEach((o) => operacoes.push(o));
     if (x.exportar) exportar = true;
@@ -980,9 +1007,9 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
   const tocados = clipesTocados(operacoes, trabalho, e.projeto);
   // O texto livre do modelo só fica quando é pergunta (dúvida real); afirmação ou promessa de mudança nunca.
   const pergunta = (opcoes.length || respostaEhPergunta(resposta)) && !respostaAfirma(resposta) && !respostaPromete(resposta) ? resposta : null;
-  const parcial = { operacoes, itensMudados, mudancas, naoEntrou, pergunta, parado, regraDaCasa };
+  const parcial = { operacoes, itensMudados, mudancas, naoEntrou, pergunta, parado, regraDaCasa, porPedido, engajamento };
   log.push({ tipo: "resposta", texto: mensagemFinalDoAgente(parcial, true) });
-  return { operacoes, resultado: trabalho, log, resposta, gasto_usd: gasto, passos: passo, ferramentas: usadas, falhas, recusadas, parado, exportar, opcoes, aprendido, seguidas, metodo, uso_id: usoId, saidas, naFila, filtro, mudancas, tocados, itensMudados, naoEntrou, pergunta, paineis, regraDaCasa };
+  return { operacoes, resultado: trabalho, log, resposta, gasto_usd: gasto, passos: passo, ferramentas: usadas, falhas, recusadas, parado, exportar, opcoes, aprendido, seguidas, metodo, uso_id: usoId, saidas, naFila, filtro, mudancas, tocados, itensMudados, naoEntrou, pergunta, paineis, regraDaCasa, porPedido, engajamento };
 }
 
 /** Resposta que é uma pergunta ao dono. */

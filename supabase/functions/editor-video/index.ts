@@ -50,6 +50,7 @@
  *
  * Frente EDT, rodada 2 (30/09, editor completo, edicao-com-ia.ts):
  * - edicao_planejar: o "Editar com IA" (um passo do modelo escolhido, custo antes; o plano é limpo pelo código).
+ * - pedido_julgar: o Jev julga a peça que ficou ambígua no pedido do dono ("talvez uma música").
  * - momentos_avaliar, capitulos_sugerir, broll_escolher: julgamentos do Jev (força das frases, momentos
  *   virais, capítulos e B-roll do acervo). Sem custo para o cliente.
  * - rosto_rastrear: onde está o rosto em cada quadro (modelo com imagem; pago, custo antes) para o
@@ -960,6 +961,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   capitulos_sugerir: ROTAS_DA_EDICAO.capitulos_sugerir as (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>,
   broll_escolher: ROTAS_DA_EDICAO.broll_escolher as (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>,
   rosto_rastrear: ROTAS_DA_EDICAO.rosto_rastrear as (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>,
+  pedido_julgar: ROTAS_DA_EDICAO.pedido_julgar as (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>,
 };
 
 Deno.serve(async (req) => {

@@ -10,6 +10,8 @@
  *     -> { forca: [{ k, nota }], virais: [{ k, inicio_s, fim_s, nota, texto }] } (Jev, sem custo para o cliente).
  * - capitulos_sugerir { client_id, frases } -> { capitulos: [{ inicio_s, titulo }] } (Jev: fronteiras e título escolhido entre trechos ditos).
  * - broll_escolher { client_id, frases, acervo: [{ id, descricao }], maximo } -> { escolhas } (Jev: Choice por frase).
+ * - pedido_julgar { client_id, pedido, pecas } -> { querer: { legenda: 0.12, ... } } (Jev Noul: o dono QUER a peça
+ *     que ficou ambígua no pedido? Sem custo para o cliente; a negação clara é do código, pedido-do-dono.ts).
  * - rosto_rastrear { client_id, fonte, modelo_id, quadros: [{ tempo_s, jpeg_base64 }], referencia_id, custo_maximo_usd }
  *     -> { leituras: [{ t, x, y, w }], custo_usd } (modelo com imagem; pago, custo antes).
  */
@@ -19,7 +21,8 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { jevPerguntar } from "../_shared/jev.ts";
 import { superpoderesPara } from "../_shared/superpoderes.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
-import { ESQUEMA_DO_PLANO, estimativaDoPlanoUsd, normalizarPlano, pedidoDoPlano, sistemaDoPlano, type ResumoParaOPlano } from "./modulos/plano-da-edicao.ts";
+import { ESQUEMA_DO_PLANO, estimativaDoPlanoUsd, normalizarPlano, pedidoDoPlano, planoComPedido, sistemaDoPlano, type ResumoParaOPlano } from "./modulos/plano-da-edicao.ts";
+import { lerPedidoDoDono, PECAS_DO_PEDIDO, perguntasDoPedido, receitaPeloPedido, type PecaDoPedido } from "./modulos/pedido-do-dono.ts";
 import {
   candidatosDeTitulo,
   comecosDeCapitulo,
@@ -119,7 +122,14 @@ export function rotasDaEdicaoComIa(a: ApoioDaEdicao) {
           referencia: { tipo: REF_PLANO, id: referencia },
           criadoPor: a.userId(ch),
         });
-        const { plano, avisos } = normalizarPlano(r.json, { fontesDeAudio: resumo.musicas, fala: resumo.fala });
+        // 02/10: receita calma só se o pedido pede (a profissão do cliente não escolhe edição tímida),
+        // e o pedido do dono por cima do plano (o que ele negou sai antes de a tela montar).
+        const bruto = r.json && typeof r.json === "object" ? { ...(r.json as Record<string, unknown>) } : {};
+        bruto.receita = receitaPeloPedido(String(bruto.receita || "dinamico"), instrucao);
+        const normal = normalizarPlano(bruto, { fontesDeAudio: resumo.musicas, fala: resumo.fala });
+        const comPedido = planoComPedido(normal.plano, lerPedidoDoDono(instrucao));
+        const plano = comPedido.plano;
+        const avisos = normal.avisos.concat(comPedido.fora.map((f) => `Não entra: ${f}.`));
         await a.auditar(ch, "editor_edicao_planejar", { client_id: clientId, modelo_id: r.modeloId, receita: plano.receita }, true);
         return a.json({ plano, avisos, custo_usd: r.custoUsd, saldo_usd: r.saldoUsd, modelo_id: r.modeloId, uso_id: r.usoId || null });
       } catch (e) {
@@ -184,6 +194,22 @@ export function rotasDaEdicaoComIa(a: ApoioDaEdicao) {
     return a.json({ escolhas, fonte: "jev" });
   }
 
+  async function pedidoJulgar(ch: unknown, corpo: Record<string, unknown>) {
+    const clientId = String(corpo.client_id || "");
+    await a.garantirAcesso(ch, clientId);
+    const texto = curto(corpo.pedido, 1500);
+    const pecas = (Array.isArray(corpo.pecas) ? corpo.pecas : []).map(String).filter((x): x is PecaDoPedido => (PECAS_DO_PEDIDO as readonly string[]).indexOf(x) >= 0).slice(0, PECAS_DO_PEDIDO.length);
+    if (!texto || !pecas.length) return a.json({ querer: {}, fonte: "regra" });
+    const r = await jevOuErro("pedido", clientId, () => jevPerguntar(perguntasDoPedido(texto, pecas)));
+    const querer: Record<string, number> = {};
+    pecas.forEach((p) => {
+      const x = r.answers[`quer_${p}`];
+      if (x && typeof x.noul === "number" && isFinite(x.noul)) querer[p] = Math.round(x.noul * 1000) / 1000;
+    });
+    await a.auditar(ch, "editor_pedido_julgar", { client_id: clientId, pecas: pecas.length }, true);
+    return a.json({ querer, fonte: "jev" });
+  }
+
   async function rostoRastrear(ch: unknown, corpo: Record<string, unknown>) {
     const clientId = String(corpo.client_id || "");
     await a.garantirAcesso(ch, clientId);
@@ -238,5 +264,6 @@ export function rotasDaEdicaoComIa(a: ApoioDaEdicao) {
     capitulos_sugerir: capitulosSugerir,
     broll_escolher: brollEscolher,
     rosto_rastrear: rostoRastrear,
+    pedido_julgar: pedidoJulgar,
   };
 }

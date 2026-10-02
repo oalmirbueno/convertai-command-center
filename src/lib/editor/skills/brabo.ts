@@ -2,20 +2,22 @@ import { duracaoDoClipe } from "../../../../supabase/functions/_shared/projeto-d
 import { emOrdem, fimDoClipe, trilhaPrincipal } from "../operacoes";
 import { noQuadro } from "../tempo";
 import { falaNaLinhaDoTempo } from "../transcricao";
-import { cortarSilenciosEm } from "./cortarSilencios";
+import { corteLimpoEm } from "./corteLimpo";
+import { cameraEm, momentosDaFala, ritmoEm } from "./camera";
 import { legendasEm } from "./legendas";
 import { Montador, parametrosComPadrao, type Skill, type ValorDoParametro } from "./tipos";
 
 /**
  * Edição dinâmica (Brabo), versão determinística do que o clone 03 V2 fez à
- * mão (Videos/clone-03-shopify/DECUPAGEM-DINAMICO.md):
- * 1. corta os silêncios (opcional);
- * 2. divide em batidas de ~`batida_s` (2 s), com o corte caindo numa pausa
- *    entre palavras quando há uma perto (nunca no meio de uma palavra);
- * 3. alterna o zoom 1,00 / `zoom` a cada batida, corte seco (sem transição);
+ * mão (Videos/clone-03-shopify/DECUPAGEM-DINAMICO.md), revista em 02/10
+ * (auditoria: o zoom 1,08 alternado a cada 2 s ficava robótico):
+ * 1. corte limpo (corteLimpo.ts: pausa mínima, respiro, clipe mínimo);
+ * 2. ritmo variado de 2,4 a 3,8 s, sempre num vão entre palavras (camera.ts);
+ * 3. câmera com motivo (gancho, ênfase, troca de assunto), variada, nunca
+ *    dois movimentos iguais seguidos, sem comer a cabeça;
  * 4. legenda em blocos de 4 palavras (opcional).
- * A ilustração de cada batida (a parte criativa) fica para a equipe ou para
- * o diretor: esta skill só monta o ritmo, com tempos exatos.
+ * batidasEm e zoomAlternadoEm ficam para copiar a edição de uma referência
+ * (receita.ts, "idêntica"), onde o ritmo fixo é o pedido.
  */
 
 export function batidasEm(m: Montador, batida: number): number {
@@ -73,12 +75,12 @@ export function zoomAlternadoEm(m: Montador, zoom: number): number {
 export const SKILL_BRABO: Skill = {
   id: "brabo",
   rotulo: "Edição dinâmica (Brabo)",
-  descricao: "Corta silêncios, divide em batidas de 2 s, alterna o zoom e legenda a fala.",
+  descricao: "Corta as pausas sem picotar, varia o ritmo dos planos entre palavras, mexe a câmera nas ênfases e legenda a fala.",
   referencia: "brabo-edicao-video-dinamica / clone-03-shopify V2",
   precisaDeFala: false,
   parametros: [
-    { chave: "batida_s", rotulo: "Batida (s)", tipo: "numero", padrao: 2, min: 1, max: 6, passo: 0.5 },
-    { chave: "zoom", rotulo: "Zoom alternado", tipo: "numero", padrao: 1.08, min: 1, max: 1.3, passo: 0.01 },
+    { chave: "batida_s", rotulo: "Batida média (s)", tipo: "numero", padrao: 3, min: 1.5, max: 6, passo: 0.5 },
+    { chave: "camera", rotulo: "Câmera com motivo", tipo: "sim_nao", padrao: true },
     { chave: "cortar", rotulo: "Cortar silêncios antes", tipo: "sim_nao", padrao: true },
     { chave: "legendar", rotulo: "Legendar", tipo: "sim_nao", padrao: true },
   ],
@@ -87,15 +89,18 @@ export const SKILL_BRABO: Skill = {
     const m = new Montador(p);
     const partes: string[] = [];
     if (params.cortar) {
-      const r = cortarSilenciosEm(m, { limiar_s: 0.3, respiro_depois_s: 0.1, respiro_antes_s: 0.08 });
-      if (r.cortes) partes.push(`${r.cortes} pausas cortadas`);
+      const r = corteLimpoEm(m);
+      if (r.cortes.length) partes.push(`${r.cortes.length} pausas cortadas`);
     }
-    const b = batidasEm(m, Number(params.batida_s));
+    const b = ritmoEm(m, { escala: Number(params.batida_s) / 3 });
     const t = trilhaPrincipal(m.projeto);
     const total = t ? t.clipes.length : 0;
-    if (b) partes.push(`${total} batidas`);
-    const z = zoomAlternadoEm(m, Number(params.zoom));
-    if (z) partes.push("zoom alternado");
+    if (b) partes.push(`${total} planos`);
+    if (params.camera) {
+      const cam = cameraEm(m, momentosDaFala(falaNaLinhaDoTempo(m.projeto)));
+      const tipos = cam.movimentos.map((x) => x.movimento).filter((x, i, l) => l.indexOf(x) === i);
+      if (cam.movimentos.length) partes.push(`câmera com ${tipos.length} movimentos`);
+    }
     if (params.legendar) {
       const n = legendasEm(m, { palavras_por_bloco: 4, estilo: "destaque" });
       if (n) partes.push(`${n} legendas`);

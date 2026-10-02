@@ -216,17 +216,19 @@ describe("skills determinísticas", () => {
     for (let i = 1; i < l.length; i++) expect(l[i].inicio_s).toBeGreaterThanOrEqual(fimDoClipe(l[i - 1]) - 1e-9);
   });
 
-  it("Brabo: corta, divide em batidas nas pausas, alterna o zoom e legenda", () => {
+  it("Brabo: corta, divide em planos nas pausas, câmera com motivo (nunca dois iguais seguidos) e legenda", () => {
     const longo = projetoDosTakes({ titulo: "X", fps: 25, takes: [take("a", "IMG_1.MOV", 10)], agora: AGORA });
     const segs = [] as { t: string; i: number; f: number }[];
     for (let k = 0; k < 20; k++) segs.push({ t: `p${k}`, i: k * 0.5, f: k * 0.5 + 0.4 });
     const p = aplicarOperacao(longo, { op: "transcricao", fonte: "img-1", transcricao: { segmentos: segs, por_palavra: true, origem: "t", versao: 1, em: AGORA } });
     const prop = proporSkill("brabo", p, { agora: AGORA }, { cortar: false });
     const v = trilhaPrincipal(prop.resultado)!.clipes.slice().sort((a, b) => a.inicio_s - b.inicio_s);
-    expect(v.length).toBeGreaterThanOrEqual(4);
+    expect(v.length).toBeGreaterThanOrEqual(3);
     // Corte nunca no meio de palavra: cada divisa cai num vão (x,4 a x,5).
     v.slice(1).forEach((c) => expect(((c.entrada_s % 0.5) + 0.5) % 0.5).toBeGreaterThanOrEqual(0.399));
-    expect(v.map((c) => (c.zoom ? c.zoom.para : 1))).toEqual(v.map((_, k) => (k % 2 ? 1.08 : 1)));
+    // 02/10: nada de 1,00/1,08 alternado: o gancho empurra e dois planos seguidos nunca têm a mesma câmera.
+    expect(v[0].zoom).toEqual({ de: 1, para: 1.08 });
+    for (let k = 1; k < v.length; k++) expect(JSON.stringify(v[k].zoom)).not.toBe(JSON.stringify(v[k - 1].zoom));
     expect(prop.resultado.trilhas.find((t) => t.tipo === "legenda")!.clipes.length).toBeGreaterThan(0);
     expect(prop.resultado.skills_aplicadas.map((s) => s.skill)).toEqual(["brabo"]);
   });

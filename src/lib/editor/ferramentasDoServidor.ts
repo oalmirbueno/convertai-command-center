@@ -1,6 +1,7 @@
 import type { ProjetoDeEdicao } from "../../../supabase/functions/_shared/projeto-de-edicao";
 import type { ChamadaDeFerramenta } from "../../../supabase/functions/editor-video/ferramentas";
-import { normalizarPlano, planoPadrao, RECEITAS, type PlanoDaEdicao } from "../../../supabase/functions/editor-video/modulos/plano-da-edicao";
+import { normalizarPlano, planoComPedido, planoPadrao, RECEITAS, type PlanoDaEdicao } from "../../../supabase/functions/editor-video/modulos/plano-da-edicao";
+import { comJulgamento, lerPedidoDoDono, pecaPermitida, receitaPeloPedido, type PedidoDoDono, type PecaDoPedido } from "../../../supabase/functions/editor-video/modulos/pedido-do-dono";
 import { janelaDaAmostra } from "../../../supabase/functions/_shared/render-do-editor";
 import { chaveNoProjeto, fonteDoItem, type ItemDaBiblioteca } from "./biblioteca";
 import { montarEdicaoCompleta, projetoDepoisDoCorte, type MarcaDaEdicao, type PassoDaEdicao } from "./edicaoCompleta";
@@ -40,6 +41,36 @@ export interface ArgsDaEdicaoCompleta {
   ritmo?: unknown;
   batida_s?: unknown;
   musica?: unknown;
+  /** 02/10: o texto do dono (a tela junta; o modelo não precisa mandar). O pedido é lei. */
+  pedido_do_dono?: unknown;
+  /** Nome e cargo de quem fala ("Ana Souza | advogada"), quando o dono disse. */
+  quem_fala?: unknown;
+}
+
+/** Nome e cargo ditos no pedido ("nome: Ana Souza | advogada", "ela é a Ana Souza, advogada"). */
+export function quemFalaDoPedido(texto: string): { nome: string; cargo: string } | null {
+  const t = String(texto || "");
+  const m = /\bnome\s*[:=]\s*([^|,.;\n]{3,40})(?:\s*[|,]\s*([^.;\n]{3,40}))?/i.exec(t);
+  if (!m) return null;
+  return { nome: m[1].trim(), cargo: (m[2] || "").trim() };
+}
+
+/**
+ * O pedido lido e, quando sobra dúvida ("talvez uma música"), o Jev julga no
+ * servidor (pedido_julgar, sem custo para o cliente). Sem Jev, a dúvida fica
+ * com a receita da casa e o aviso diz isso.
+ */
+export async function pedidoEntendido(chamar: Chamar, clientId: string, texto: string): Promise<{ pedido: PedidoDoDono; aviso: string | null }> {
+  const pedido = lerPedidoDoDono(texto);
+  if (!pedido.ambiguos.length) return { pedido, aviso: null };
+  try {
+    const r = await chamar({ acao: "pedido_julgar", client_id: clientId, pedido: texto, pecas: pedido.ambiguos });
+    const querer = (r && r.querer) || {};
+    return { pedido: comJulgamento(pedido, querer as Partial<Record<PecaDoPedido, number>>), aviso: null };
+  } catch (e) {
+    console.error("[agente editor] julgamento do pedido", e);
+    return { pedido, aviso: `Ficou em dúvida no pedido (${pedido.ambiguos.join(", ")}) e o Jev não respondeu: valeu a receita da casa.` };
+  }
 }
 
 const RITMO_POR_RECEITA: Record<string, boolean> = { dinamico: true, anuncio: true, podcast: false, aula: false, depoimento: false, institucional: false };
@@ -83,6 +114,9 @@ export function musicaParaAEdicao(m: Montador, midias: ItemDaBiblioteca[], pedid
 export interface EdicaoCompletaDoAgente extends ResultadoDaFerramenta {
   passos: PassoDaEdicao[];
   plano: PlanoDaEdicao;
+  /** O que NÃO foi feito por causa do pedido e o checklist de engajamento (vão na mensagem final). */
+  foraPeloPedido: string[];
+  engajamento: string[];
 }
 
 /** EDIT IA PRO pelo agente: o motor inteiro, de ponta a ponta, numa proposta só. */
@@ -90,38 +124,57 @@ export async function edicaoCompletaDoAgente(
   chamar: Chamar,
   e: { clientId: string; projeto: ProjetoDeEdicao; args: ArgsDaEdicaoCompleta; marca: MarcaDaEdicao | null; midias: ItemDaBiblioteca[]; agora: string; aoAndar?: (t: string) => void },
 ): Promise<EdicaoCompletaDoAgente> {
-  const receita = RECEITAS.some((r) => r.id === e.args.receita) ? String(e.args.receita) : "dinamico";
+  const textoDoDono = String(e.args.pedido_do_dono || "");
+  // 02/10 (dono): receita calma só quando o PEDIDO pede; a profissão do cliente nunca deixa a edição tímida.
+  const receita = receitaPeloPedido(RECEITAS.some((r) => r.id === e.args.receita) ? String(e.args.receita) : "dinamico", textoDoDono);
+  const entendido = textoDoDono ? await pedidoEntendido(chamar, e.clientId, textoDoDono) : { pedido: null, aviso: null };
+  const pedido = entendido.pedido;
   const m0 = new Montador(e.projeto);
   const musicaPedida = e.args.musica !== undefined ? e.args.musica : e.args.plano && typeof e.args.plano === "object" ? ((e.args.plano as Record<string, unknown>).musica as Record<string, unknown> | undefined || {}).fonte : undefined;
-  const mu = musicaParaAEdicao(m0, e.midias || [], musicaPedida);
+  // Sem música no pedido: nem procura (nada de mídia nova no projeto).
+  const mu = pedido && !pecaPermitida(pedido, "musica") ? { chave: null, aviso: null } : musicaParaAEdicao(m0, e.midias || [], musicaPedida);
   const projeto = m0.projeto;
   const musicas = mu.chave ? [mu.chave] : [];
   const fala = falaNaLinhaDoTempo(projeto).map((w) => w.t).join(" ");
   const bruto = mesclar(planoPadrao(receita, musicas), e.args.plano);
   if (mu.chave) bruto.musica = { ...((bruto.musica as Record<string, unknown>) || {}), fonte: mu.chave };
   const { plano, avisos } = normalizarPlano({ ...bruto, receita }, { fontesDeAudio: musicas, fala });
-  if (mu.aviso) avisos.push(mu.aviso);
+  if (mu.aviso && (!pedido || pedido.sem.indexOf("musica") < 0)) avisos.push(mu.aviso);
+  if (entendido.aviso) avisos.push(entendido.aviso);
   const querRitmo = e.args.ritmo === true || (e.args.ritmo !== false && RITMO_POR_RECEITA[receita]);
   const batida = Number(e.args.batida_s);
-  const ritmo = querRitmo ? { batida_s: isFinite(batida) && batida >= 1 ? Math.min(6, batida) : 2, zoom: 1.08 } : null;
-  const cortado = projetoDepoisDoCorte(projeto, plano, e.agora);
+  const ritmo = querRitmo ? { batida_s: isFinite(batida) && batida >= 1 ? Math.min(6, batida) : 3, zoom: 1.08 } : null;
+  const cortado = projetoDepoisDoCorte(projeto, plano, e.agora, pedido);
   const acervo = acervoParaBroll(cortado, (e.midias || []) as ItemParaBroll[]);
   let julgados: Awaited<ReturnType<typeof julgar>> = { dados: {}, avisos: [] };
   try {
-    julgados = await julgar(chamar, e.clientId, cortado, plano, acervo, e.aoAndar);
+    julgados = await julgar(chamar, e.clientId, cortado, planoComPedido(plano, pedido).plano, acervo, e.aoAndar);
   } catch (x) {
     console.error("[agente editor] julgamentos da edição completa", x);
     julgados = { dados: {}, avisos: ["Os julgamentos do Jev não responderam: valeu a regra da casa."] };
   }
-  const r = montarEdicaoCompleta(projeto, plano, { ...julgados.dados, agora: e.agora, marca: e.marca, ritmo });
+  const quem = typeof e.args.quem_fala === "string" ? quemFalaDoPedido(`nome: ${e.args.quem_fala}`) : quemFalaDoPedido(textoDoDono);
+  const r = montarEdicaoCompleta(projeto, plano, { ...julgados.dados, agora: e.agora, marca: e.marca, ritmo, pedido, quemFala: quem });
   const operacoes: Operacao[] = m0.operacoes.concat(r.proposta.operacoes);
   const feitos = r.passos.filter((p) => p.feito);
   const fora = r.passos.filter((p) => !p.feito);
   const linhas = [`EDIT IA PRO (receita ${receita}): ${feitos.length} ${feitos.length === 1 ? "peça montada" : "peças montadas"}.`];
+  if (pedido && pedido.lido.length) linhas.push(`pedido do dono: ${pedido.lido.join(", ")}`);
   feitos.forEach((p) => linhas.push(`feito ${p.rotulo}: ${p.detalhe}`));
-  fora.forEach((p) => linhas.push(`não entrou ${p.rotulo}: ${p.detalhe}`));
+  fora.filter((p) => p.pedido).forEach((p) => linhas.push(`não feito por pedido ${p.rotulo}: ${p.detalhe}`));
+  fora.filter((p) => !p.pedido).forEach((p) => linhas.push(`não entrou ${p.rotulo}: ${p.detalhe}`));
+  linhas.push(`engajamento: ${r.checklist.linhas.join("; ")}`);
   avisos.concat(julgados.avisos).concat(r.proposta.avisos).forEach((a) => linhas.push(`aviso: ${a}`));
-  return { projeto: operacoes.length ? r.proposta.resultado : e.projeto, operacoes: operacoes.length && r.proposta.operacoes.length ? operacoes : [], texto: linhas.join("\n"), ok: feitos.length > 0, passos: r.passos, plano };
+  return {
+    projeto: operacoes.length ? r.proposta.resultado : e.projeto,
+    operacoes: operacoes.length && r.proposta.operacoes.length ? operacoes : [],
+    texto: linhas.join("\n"),
+    ok: feitos.length > 0,
+    passos: r.passos,
+    plano,
+    foraPeloPedido: r.passos.filter((x) => x.pedido).map((x) => x.rotulo.toLowerCase()),
+    engajamento: r.checklist.linhas,
+  };
 }
 
 export interface DepsDoServidor {

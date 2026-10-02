@@ -135,7 +135,8 @@ describe("editor completo na tela", () => {
     await waitFor(() => expect(document.querySelector('[data-clipe^="l"]')).toBeTruthy());
     await waitFor(() => expect(ultimoSalvo()).toBeTruthy(), { timeout: 4000 });
     const salvo = ultimoSalvo();
-    expect(salvo.trilhas.some((t: any) => t.tipo === "ajuste" && t.clipes.length)).toBe(true);
+    // 02/10: a câmera é por plano (com motivo), não o empurrão da camada de ajuste.
+    expect(salvo.trilhas.some((t: any) => t.tipo === "video" && t.clipes.some((c: any) => !!c.zoom))).toBe(true);
     expect(salvo.cor.look).toBe("vivo");
     expect(salvo.skills_aplicadas.some((s: any) => s.skill === "editar_com_ia")).toBe(true);
   }, 30000);

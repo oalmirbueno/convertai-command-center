@@ -61,6 +61,8 @@ export type Operacao =
    * de_s/ate_s são da FONTE de cada clipe.
    */
   | { op: "recortar_varios"; trilha: string; cortes: { clipe: string; de_s: number; ate_s: number }[]; rotulo?: string }
+  /** 02/10: várias divisões de uma vez (o ritmo da edição): um passo, uma linha no cartão. */
+  | { op: "dividir_varios"; trilha: string; pontos: { clipe: string; em_s: number }[]; rotulo?: string }
   /** 02/10: a câmera de cada clipe de uma vez (zoom por clipe; null = enquadramento cheio). */
   | { op: "camera"; trilha: string; zooms: Record<string, { de: number; para: number } | null>; rotulo?: string }
   | { op: "inserir"; trilha: string; clipe: Partial<ClipeDoProjeto> & { inicio_s: number; entrada_s: number; saida_s: number }; empurrar?: boolean }
@@ -374,6 +376,26 @@ function recortarVarios(p: ProjetoDeEdicao, o: Extract<Operacao, { op: "recortar
   return ondular(q, { op: "ondular", trilha: o.trilha });
 }
 
+/** Várias divisões: por clipe, do ponto mais tarde para o mais cedo (o id do pedaço de antes não muda). */
+function dividirVarios(p: ProjetoDeEdicao, o: Extract<Operacao, { op: "dividir_varios" }>): ProjetoDeEdicao {
+  const ti = exigirTrilha(p, o.trilha);
+  const ids = new Set(p.trilhas[ti].clipes.map((c) => c.id));
+  const porClipe: Record<string, number[]> = {};
+  (o.pontos || []).forEach((x) => {
+    if (!ids.has(x.clipe)) throw new ErroDaOperacao("Um dos clipes da divisão não está nessa trilha.");
+    (porClipe[x.clipe] = porClipe[x.clipe] || []).push(x.em_s);
+  });
+  let q = p;
+  Object.keys(porClipe).forEach((id) => {
+    porClipe[id]
+      .sort((a, b) => b - a)
+      .forEach((em) => {
+        q = dividir(q, { op: "dividir", clipe: id, em_s: em });
+      });
+  });
+  return q;
+}
+
 /** Zoom de vários clipes de uma vez (a câmera da edição). */
 function camera(p: ProjetoDeEdicao, o: Extract<Operacao, { op: "camera" }>): ProjetoDeEdicao {
   const ti = exigirTrilha(p, o.trilha);
@@ -425,6 +447,8 @@ export function aplicarOperacao(p: ProjetoDeEdicao, o: Operacao): ProjetoDeEdica
       return recortarVarios(p, o);
     case "camera":
       return camera(p, o);
+    case "dividir_varios":
+      return dividirVarios(p, o);
     case "inserir":
       return inserir(p, o);
     case "propriedades":

@@ -125,7 +125,8 @@ describe("vigia da fila na tela (sem laço)", () => {
 
 describe("motion: catálogo, tempo da palavra e um quadro de cada peça", () => {
   it("13 peças com parâmetros tipados, mais a logo", () => {
-    expect(PECAS_DE_MOTION.length).toBe(14);
+    // 02/10: mais 4 peças de edição da casa (gancho, destaque, nome e cargo, chamada).
+    expect(PECAS_DE_MOTION.length).toBe(18);
     expect(CATALOGO_DE_MOTION.map((p) => p.id)).toEqual(PECAS_DE_MOTION.slice());
     expect(() => parametrosDaPeca("contador", {})).toThrow(/falta número dito/);
     expect(parametrosDaPeca("barra", { valor: "140" }).valor).toBe(100);
@@ -158,6 +159,10 @@ describe("motion: catálogo, tempo da palavra e um quadro de cada peça", () => 
       preco: { por: "R$ 97" },
       comentario: { texto: "EU QUERO" },
       selo: { texto: "7 dias" },
+      gancho: { linhas: ["MESMO SALÁRIO", "outro fim de mês"] },
+      destaque: { texto: "CDI" },
+      terco_inferior: { nome: "Ana Souza", cargo: "planejadora" },
+      chamada: { texto: "Salva esse vídeo", botao: "Salvar", icone: "salvar" },
     };
     const peca = id as IdDaPeca;
     const params = parametrosDaPeca(peca, exemplos[peca]);
@@ -173,7 +178,7 @@ describe("motion: catálogo, tempo da palavra e um quadro de cada peça", () => 
       } as any),
     );
     const texto = container.textContent || "";
-    const esperado: Record<string, string> = { rotulo: "Rótulo X", carimbo: "MITO", lista: "dois", passos: "fechar", contador: "clientes", notificacao: "Nova venda", cartao_final: "Chamar", lettering: "IDEIA", barra: "Concluído", preco: "R$ 97", comentario: "EU QUERO", selo: "7 dias" };
+    const esperado: Record<string, string> = { rotulo: "Rótulo X", carimbo: "MITO", lista: "dois", passos: "fechar", contador: "clientes", notificacao: "Nova venda", cartao_final: "Chamar", lettering: "IDEIA", barra: "Concluído", preco: "R$ 97", comentario: "EU QUERO", selo: "7 dias", gancho: "MESMO SALÁRIO", destaque: "CDI", terco_inferior: "Ana Souza", chamada: "Salva esse vídeo" };
     expect(texto).toContain(esperado[peca]);
   });
 });

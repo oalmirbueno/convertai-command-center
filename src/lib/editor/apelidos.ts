@@ -177,6 +177,7 @@ const ROTULO_DA_OPERACAO: Record<Operacao["op"], string> = {
   recortar: "Cortar trecho de",
   recortar_varios: "Cortar pausas na",
   camera: "Câmera na",
+  dividir_varios: "Dividir na",
   inserir: "Inserir",
   propriedades: "Ajustar",
   ondular: "Fechar buracos na",
@@ -222,6 +223,8 @@ export function rotuloDaOperacao(o: Operacao, p: ProjetoDeEdicao, a: Apelidos = 
       return `Cortar ${tempoFino(o.de_s)} a ${tempoFino(o.ate_s)} da fonte de ${nome(o.clipe)}`;
     case "recortar_varios":
       return o.rotulo || `Cortar ${o.cortes.length} ${o.cortes.length === 1 ? "trecho" : "trechos"} da ${trilha(o.trilha)} e encostar o resto`;
+    case "dividir_varios":
+      return o.rotulo || `Dividir ${o.pontos.length} ${o.pontos.length === 1 ? "vez" : "vezes"} na ${trilha(o.trilha)}`;
     case "camera":
       return o.rotulo || `Câmera em ${Object.keys(o.zooms).length} clipes da ${trilha(o.trilha)}`;
     case "marcadores":

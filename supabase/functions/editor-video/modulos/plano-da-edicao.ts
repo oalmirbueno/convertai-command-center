@@ -17,6 +17,8 @@
  *    modelo) faz o mesmo de graça.
  */
 
+import { motivoDoPedido, pecaPermitida, ROTULO_DA_PECA, type PecaDoPedido, type PedidoDoDono } from "./pedido-do-dono.ts";
+
 export const FORMATOS_DO_PLANO = ["manter", "9:16", "1:1", "4:5", "16:9"] as const;
 /** Mesmos ids de src/lib/editor/estilosDeTexto.ts (o teste confere). */
 export const LEGENDAS_DO_PLANO = ["destaque", "caixa", "caixa_palavra", "impacto", "gigante", "pulso", "fita", "papelaria", "discreta", "simples"] as const;
@@ -259,15 +261,24 @@ export const ESQUEMA_DO_PLANO = {
   },
 };
 
+/** Princípio da casa (02/10, dono): o vídeo SEMPRE engaja; o setor do cliente nunca deixa a edição tímida. */
+export const PRINCIPIO_DO_ENGAJAMENTO = [
+  "Engajamento sempre: o estilo é escolhido para prender e reter, nunca pelo setor ou pela profissão do cliente (advogado, médico, contador e qualquer outro recebem edição tão viva quanto a de um criador).",
+  "Gancho nos 2 primeiros segundos, nenhum trecho de mais de 4 s sem mudança visual, ritmo que varia, motion graphics com energia nas palavras-chave, texto grande e cinético nas frases-chave, efeito sonoro nos acentos, B-roll ou metáfora visual quando houver, e chamada no fim.",
+  "A identidade da marca (letra, cores, logo) é respeitada; o tom e a energia nunca são baixados por causa da profissão. Regras de conteúdo valem (nada de promessa ou garantia de resultado que não foi dita), mas sem timidez visual.",
+].join(" ");
+
 export function sistemaDoPlano(): string {
   return [
     "Você é o diretor de edição da Aceleriq. Recebe o pedido do dono e um resumo do vídeo e devolve UM plano de edição no JSON pedido.",
+    PRINCIPIO_DO_ENGAJAMENTO,
+    "O pedido do dono é lei: o que ele pediu para não ter (sem legenda, sem música, sem zoom) fica desligado, e o que ele pediu entra.",
     "Você não edita: escolhe peças e opções. Quem corta, mede tempo e põe na linha do tempo é o código.",
     "Regras: português do Brasil, frases curtas, sem travessão. A fala gravada manda: nada de número, preço, prazo, nome ou promessa que não esteja na fala.",
     "gancho: até 8 palavras, tirado do que foi dito, para os 3 primeiros segundos (vazio se a fala não der um gancho). chamada: até 5 palavras (ex.: comente, chame no direct), só se fizer sentido. nome: \"Nome | cargo\" só se a fala disser quem é; senão vazio.",
     "cartao_final.titulo: a promessa da marca em até 6 palavras (sem número inventado); botao: a ação (ex.: Fale com a gente).",
     "musica.fonte: o nome exato de uma das músicas listadas, ou vazio. formato: \"manter\" se o dono não pediu outro. virais e capitulos só para vídeo longo (mais de 90 s) ou se o dono pediu.",
-    "Escolha a receita mais parecida com o pedido e ajuste as peças ao que o dono disse (o que ele pediu para não ter, desligue).",
+    "Escolha a receita pelo PEDIDO (dinamico para pessoa falando para a câmera, mesmo de profissão séria; institucional, depoimento ou aula só se o dono pedir esse tom) e ajuste as peças ao que o dono disse (o que ele pediu para não ter, desligue).",
     "resumo: 2 frases com o que o plano faz, para o dono ler antes de confirmar.",
   ].join("\n");
 }
@@ -307,6 +318,55 @@ export function estimativaDoPlanoUsd(precoEntrada1m: number | null, precoSaida1m
   const saida = comRaciocinio ? 5000 : 1800;
   return Math.ceil((((Number(precoEntrada1m) || 0) * entrada + (Number(precoSaida1m) || 0) * saida) / 1e6) * 10000) / 10000;
 }
+
+/**
+ * O plano com o pedido do dono por cima (02/10, "instruções são lei"): o que
+ * ele negou desliga, o que pediu liga, "só cortes" desliga o resto, e as
+ * opções da legenda (grande, no meio, N palavras) entram. Devolve também a
+ * lista do que ficou de fora por causa do pedido (vai no relatório).
+ */
+export function planoComPedido(plano: PlanoDaEdicao, pedido: PedidoDoDono | null | undefined): { plano: PlanoDaEdicao; fora: string[] } {
+  if (!pedido) return { plano, fora: [] };
+  const p: PlanoDaEdicao = copia(plano);
+  const fora: string[] = [];
+  const nega = (peca: PecaDoPedido, desligar: () => void) => {
+    if (pecaPermitida(pedido, peca)) return;
+    desligar();
+    const m = motivoDoPedido(pedido, peca);
+    if (m) fora.push(m);
+  };
+  nega("legenda", () => (p.legenda.ligado = false));
+  nega("musica", () => (p.musica = { ligado: false, fonte: "" }));
+  nega("zoom", () => (p.zoom.ligado = false));
+  nega("cortes", () => {
+    p.cortar_pausas = false;
+    p.cortar_erros = false;
+  });
+  nega("motion", () => (p.motion.ligado = false));
+  nega("textos", () => (p.textos = { gancho: "", chamada: "", nome: "" }));
+  nega("broll", () => (p.broll = { ligado: false, maximo: 0 }));
+  nega("sons", () => (p.sons.ligado = false));
+  nega("transicoes", () => (p.transicoes.ligado = false));
+  nega("cor", () => (p.cor = { look: "natural", intensidade: 1 }));
+  nega("logo", () => (p.logo = "nenhum"));
+  nega("cartao_final", () => (p.cartao_final.ligado = false));
+  const quer = (peca: PecaDoPedido) => pedido.com.indexOf(peca) >= 0;
+  if (quer("legenda")) p.legenda.ligado = true;
+  if (quer("zoom")) p.zoom.ligado = true;
+  if (quer("motion")) p.motion.ligado = true;
+  if (quer("sons")) p.sons.ligado = true;
+  if (quer("transicoes")) p.transicoes.ligado = true;
+  if (quer("cartao_final")) p.cartao_final.ligado = true;
+  if (quer("broll")) p.broll = { ligado: true, maximo: Math.max(2, p.broll.maximo) };
+  if (quer("cortes")) p.cortar_pausas = true;
+  if (pedido.legenda.tamanho === "grande") p.legenda.estilo = "gigante";
+  if (pedido.legenda.tamanho === "pequena") p.legenda.estilo = "discreta";
+  if (pedido.legenda.posicao) p.legenda.posicao = pedido.legenda.posicao;
+  if (pedido.legenda.palavras) p.legenda.palavras = pedido.legenda.palavras;
+  return { plano: p, fora };
+}
+
+export { ROTULO_DA_PECA };
 
 /** Linhas do plano para o dono ler (a tela mostra antes de montar). */
 export function linhasDoPlano(p: PlanoDaEdicao): string[] {

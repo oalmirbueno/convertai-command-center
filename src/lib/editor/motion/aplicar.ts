@@ -69,7 +69,7 @@ export function porPeca(m: Montador, pedido: PedidoDePeca): { clipe: string; ini
     if (isFinite(n) && n > 0 && !numeroFoiDito(n, trechoDito) && !numeroFoiDito(Math.round(n), trechoDito)) throw new Error(`O preço ${params.por} não foi dito nesse trecho.`);
   }
   let tempos: number[] | undefined;
-  const itens = Array.isArray(params.itens) ? (params.itens as string[]) : Array.isArray(params.palavras) ? (params.palavras as string[]) : null;
+  const itens = Array.isArray(params.itens) ? (params.itens as string[]) : Array.isArray(params.palavras) ? (params.palavras as string[]) : Array.isArray(params.linhas) ? (params.linhas as string[]) : null;
   if (itens) tempos = temposDosItens(itens, fala, inicio, dur);
   if (pedido.fonte && !p.fontes[pedido.fonte]) throw new Error("A imagem da peça não está no projeto.");
   const trilha = trilhaLivre(m, "sobreposicao", NOME_DA_TRILHA_DE_MOTION, inicio, inicio + dur);

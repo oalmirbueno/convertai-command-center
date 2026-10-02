@@ -753,7 +753,7 @@ export default function AgenteEditor({
     setRodando("Montando a edição completa");
     parar.current = false;
     try {
-      const r = await edicaoCompletaDoAgente(chamarEditorVideo, { clientId, projeto: base, args: { receita: "dinamico" }, marca: marcaDaEdicao, midias, agora: new Date().toISOString(), aoAndar: (t) => setRodando(t.slice(0, 90)) });
+      const r = await edicaoCompletaDoAgente(chamarEditorVideo, { clientId, projeto: base, args: { receita: "dinamico", pedido_do_dono: pr.texto }, marca: marcaDaEdicao, midias, agora: new Date().toISOString(), aoAndar: (t) => setRodando(t.slice(0, 90)) });
       const itens: ItemDoLog[] = (pr.antes || []).concat(r.texto.split("\n").slice(1).map((l): ItemDoLog => ({ tipo: l.indexOf("aviso:") === 0 || l.indexOf("não entrou") === 0 ? "aviso" : "ferramenta", texto: l })));
       if (!r.operacoes.length) {
         itens.push({ tipo: "resposta", texto: "Nada mudou na linha do tempo: a edição completa não achou o que montar (veja os avisos)." });
@@ -765,7 +765,8 @@ export default function AgenteEditor({
       const cartao = cartaoDaProposta(`completa-${Date.now().toString(36)}`, prop, base, true);
       const aplicado = !!cartao.executada_em;
       if (aplicado) destacar(clientId, []);
-      itens.push({ tipo: "resposta", texto: `${aplicado ? "Mudei" : "Vou mudar (confirme no cartão)"}: ${resumo}${aplicado ? " O Desfazer volta tudo." : ""}` });
+      const porPedido = r.passos.filter((x) => x.pedido).map((x) => x.detalhe.replace(/^Não feito: /, "").replace(/\.$/, ""));
+      itens.push({ tipo: "resposta", texto: `${aplicado ? "Mudei" : "Vou mudar (confirme no cartão)"}: ${resumo}${aplicado ? " O Desfazer volta tudo." : ""}${porPedido.length ? ` Não fiz porque você pediu: ${porPedido.join("; ")}.` : ""} Engajamento: ${r.engajamento.join("; ")}.` });
       responder(pr.texto, { quem: "agente", itens, acoes: [cartao], mensagemId: null, anexos: [] });
     } catch (e) {
       const t = emPreparacao(e) ? "A edição completa está em preparação: falta publicar a função editor-video." : textoDoErro(e);
@@ -859,9 +860,13 @@ export default function AgenteEditor({
   const atalho = (id: IdDaSkill | "edicao_completa", rotulo: string) => {
     if (rodando || preparo || !projeto) return;
     setErroDoEnvio(null);
-    const chaveDoDono = falar("dono", [{ tipo: "resposta", texto: rotulo }]);
+    // 02/10 (auditoria: "pedi sem legenda"): o que está escrito no campo vai junto com o atalho e vale como lei.
+    const escrito = id === "edicao_completa" ? String(rascunho || "").trim() : "";
+    const texto = escrito ? `${rotulo}: ${escrito}` : rotulo;
+    if (escrito) setRascunho("");
+    const chaveDoDono = falar("dono", [{ tipo: "resposta", texto }]);
     rolarParaBaixo();
-    if (id === "edicao_completa") comecar({ pedido: null, skill: null, completa: true, texto: rotulo, chaveDoDono, conversa: "" }, true);
+    if (id === "edicao_completa") comecar({ pedido: null, skill: null, completa: true, texto, chaveDoDono, conversa: "" }, true);
     else comecar({ pedido: null, skill: id, texto: rotulo, chaveDoDono, conversa: "" }, skillPrecisaDeFala(id));
   };
 

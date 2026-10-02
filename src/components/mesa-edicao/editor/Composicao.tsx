@@ -337,7 +337,10 @@ function ClipeDePeca({ projeto, urls, c, corDaMarca }: { projeto: ProjetoDeEdica
   if (!params) return null;
   const tempos = Array.isArray(e.tempos) ? (e.tempos as unknown[]).map(Number).filter((n) => isFinite(n)) : undefined;
   const dur = Math.max(1, q(duracaoDoClipe(c), projeto.fps));
-  return <PecaDeMotion peca={id} params={params} tempos={tempos} desdeS={Number(e._desde_s) || 0} duracaoQuadros={dur} imagem={c.fonte ? resolverUrl(urls[c.fonte]) : null} corDaMarca={corDaMarca} />;
+  // 02/10: as peças usam a segunda cor e a letra da marca (carregada por CarregarFonteDaMarca).
+  const id2 = projeto.identidade;
+  const letra = id2 && id2.fonte && id2.fonte_path && urls[chaveDaFonteDaMarca(id2.fonte_path)] ? id2.fonte : null;
+  return <PecaDeMotion peca={id} params={params} tempos={tempos} desdeS={Number(e._desde_s) || 0} duracaoQuadros={dur} imagem={c.fonte ? resolverUrl(urls[c.fonte]) : null} corDaMarca={corDaMarca} cor2={id2 ? id2.cor2 || null : null} letra={letra} />;
 }
 
 /** Há clipe encostado antes (entra) ou depois (sai) deste, na mesma trilha? */

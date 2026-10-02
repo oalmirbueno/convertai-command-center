@@ -6,6 +6,12 @@ import { corteLimpoEm, planoDoCorteLimpo } from "@/lib/editor/skills/corteLimpo"
 import { proporSkill } from "@/lib/editor/skills";
 import { silenciosDoClipe } from "@/lib/editor/transcricao";
 import { escalaMaximaSegura, ORIGEM_SEGURA_DO_ZOOM, QUADROS_QUE_SEGURA, quadrosDosClipes, vaosDaTrilha, volumeComFade } from "@/lib/editor/sequencias";
+import { comJulgamento, ferramentaBarrada, lerPedidoDoDono, receitaPeloPedido } from "../../supabase/functions/editor-video/modulos/pedido-do-dono";
+import { sistemaDoPlano } from "../../supabase/functions/editor-video/modulos/plano-da-edicao";
+import { edicaoCompletaDoAgente } from "@/lib/editor/ferramentasDoServidor";
+import { planoDoDiretor } from "@/lib/editor/motion/diretor";
+import { trechosChave } from "@/lib/editor/skills/palavrasChave";
+import { checklistDeEngajamento } from "@/lib/editor/engajamento";
 import { AGORA_SINTETICO, falaSintetica, projetoTalkingHead } from "./fixtures/talkingHeadSintetico";
 
 /**
@@ -130,5 +136,153 @@ describe("composição sem quadro preto", () => {
     expect(0.5 * (1 - 1 / 1.15)).toBeGreaterThan(0.05);
     expect(ORIGEM_SEGURA_DO_ZOOM.y * (1 - 1 / 1.18)).toBeLessThan(0.05);
     expect(escalaMaximaSegura(ORIGEM_SEGURA_DO_ZOOM.y)).toBeGreaterThanOrEqual(1.18);
+  });
+});
+
+// ------------------------------------------------------------------ o pedido do dono é lei
+
+const semRede = async (): Promise<never> => {
+  throw new Error("sem rede no teste");
+};
+
+describe("o pedido do dono é lei", () => {
+  it("lê negações, só, opções da legenda, começo mantido e dúvida", () => {
+    expect(lerPedidoDoDono("edita completo, dinâmico, sem legenda").sem).toEqual(["legenda"]);
+    expect(lerPedidoDoDono("sem legenda nem música").sem.sort()).toEqual(["legenda", "musica"]);
+    expect(lerPedidoDoDono("não quero zoom, mas coloca legenda").sem).toEqual(["zoom"]);
+    expect(lerPedidoDoDono("não quero zoom, mas coloca legenda").com).toEqual(["legenda"]);
+    expect(lerPedidoDoDono("só cortes").so).toEqual(["cortes"]);
+    expect(lerPedidoDoDono("só corta as pausas").so).toEqual(["cortes"]);
+    expect(lerPedidoDoDono("tira os silêncios e deixa dinâmico").com).toEqual(["cortes"]);
+    expect(lerPedidoDoDono("sem cortes").sem).toEqual(["cortes"]);
+    const l = lerPedidoDoDono("legenda grande no meio, 2 palavras");
+    expect(l.legenda).toEqual({ tamanho: "grande", posicao: "meio", palavras: 2 });
+    expect(lerPedidoDoDono("mantém o começo e corta o resto").manter_comeco).toBe(true);
+    expect(lerPedidoDoDono("talvez uma música").ambiguos).toEqual(["musica"]);
+    expect(comJulgamento(lerPedidoDoDono("talvez uma música"), { musica: 0.2 }).sem).toEqual(["musica"]);
+    expect(lerPedidoDoDono("tira a legenda gravada do vídeo").sem).toEqual([]);
+  });
+
+  it("ferramenta proibida pelo pedido volta recusada ao agente", () => {
+    const p = lerPedidoDoDono("edita completo, sem legenda");
+    expect(ferramentaBarrada(p, "legendar", {})).toMatch(/Recusado pelo pedido do dono \(legenda: você pediu sem\)/);
+    expect(ferramentaBarrada(p, "aplicar_skill", { skill: "legendas" })).toMatch(/Recusado/);
+    expect(ferramentaBarrada(p, "cor", {})).toBeNull();
+    expect(ferramentaBarrada(lerPedidoDoDono("só cortes"), "musica", {})).toMatch(/você pediu só cortes/);
+  });
+
+  it("profissão não escolhe edição tímida: receita calma só se o pedido pede", () => {
+    expect(receitaPeloPedido("institucional", "edita o vídeo da advogada")).toBe("dinamico");
+    expect(receitaPeloPedido("depoimento", "edita como depoimento, calmo")).toBe("depoimento");
+    expect(receitaPeloPedido("anuncio", "qualquer")).toBe("anuncio");
+    expect(sistemaDoPlano()).toMatch(/nunca pelo setor ou pela profissão/);
+  });
+
+  it("edita completo, dinâmico, sem legenda: zero legenda, e o relatório diz o que não fez", async () => {
+    const r = await edicaoCompletaDoAgente(semRede, { clientId: "c", projeto: projetoTalkingHead(), args: { receita: "dinamico", pedido_do_dono: "edita completo, dinâmico, sem legenda" }, marca: null, midias: [], agora: AGORA_SINTETICO });
+    const legendas = r.projeto.trilhas.filter((t) => t.tipo === "legenda").reduce((n, t) => n + t.clipes.length, 0);
+    expect(legendas).toBe(0);
+    expect(r.texto).toMatch(/pedido do dono: sem legenda/);
+    expect(r.texto).toMatch(/não feito por pedido Legendas: Não feito: legenda \(você pediu sem\)/);
+    expect(r.foraPeloPedido).toContain("legendas");
+    expect(r.projeto.skills_aplicadas.map((s) => s.skill)).not.toContain("legendas");
+    // O resto da edição entrou: corte, câmera e motion.
+    expect(r.texto).toMatch(/feito Pausas e respiros/);
+    expect(r.texto).toMatch(/feito Câmera nos momentos fortes/);
+    expect(r.texto).toMatch(/feito Motion graphics na marca/);
+  });
+
+  it("só cortes: corta e mais nada (sem câmera, sem motion, sem legenda, sem cor)", async () => {
+    const r = await edicaoCompletaDoAgente(semRede, { clientId: "c", projeto: projetoTalkingHead(), args: { receita: "dinamico", pedido_do_dono: "só cortes" }, marca: null, midias: [], agora: AGORA_SINTETICO });
+    const v = trilhaPrincipal(r.projeto)!;
+    expect(v.clipes.length).toBeGreaterThan(1);
+    expect(v.clipes.every((c) => !c.zoom)).toBe(true);
+    expect(r.projeto.trilhas.filter((t) => t.tipo !== "video").every((t) => t.clipes.length === 0)).toBe(true);
+    expect(r.projeto.cor.look).toBe("natural");
+  });
+});
+
+// ------------------------------------------------------------------ câmera, motion e engajamento
+
+describe("câmera com motivo, motion na marca e checklist de engajamento", () => {
+  const editado = (pedido = "edita completo e dinâmico") =>
+    edicaoCompletaDoAgente(semRede, {
+      clientId: "c",
+      projeto: projetoTalkingHead(),
+      args: { receita: "dinamico", pedido_do_dono: pedido },
+      marca: { nome: "Marca Teste", cor: "#F1A7B4", cor2: "#FFE3E3", fonte: null, fonte_path: null, logo_path: null },
+      midias: [],
+      agora: AGORA_SINTETICO,
+    });
+
+  it("câmera variada: gancho empurra, nunca dois planos iguais seguidos, escala que não come a cabeça", async () => {
+    const r = await editado();
+    const v = emOrdem(trilhaPrincipal(r.projeto)!);
+    expect(v[0].zoom).toEqual({ de: 1, para: 1.08 });
+    for (let k = 1; k < v.length; k++) expect(JSON.stringify(v[k].zoom), `plano ${k}`).not.toBe(JSON.stringify(v[k - 1].zoom));
+    const tipos = new Set(v.map((c) => JSON.stringify(c.zoom)));
+    expect(tipos.size).toBeGreaterThanOrEqual(4);
+    v.forEach((c) => {
+      if (c.zoom) expect(Math.max(c.zoom.de, c.zoom.para)).toBeLessThanOrEqual(1.2);
+    });
+    // Nem o empurrão 1,15 da camada de ajuste nem o zoom alternado de 2 em 2.
+    expect(r.projeto.trilhas.filter((t) => t.tipo === "ajuste").reduce((n, t) => n + t.clipes.length, 0)).toBe(0);
+    // Nenhum plano curto nem buraco depois do ritmo.
+    v.forEach((c, k) => {
+      expect(duracaoDoClipe(c)).toBeGreaterThanOrEqual(0.8 - 1e-6);
+      if (k) expect(c.inicio_s).toBe(fimDoClipe(v[k - 1]));
+    });
+  });
+
+  it("diretor de motion: gancho no começo, palavra-chave dita, lista da enumeração e chamada do fim", () => {
+    const d = planoDoDiretor(projetoTalkingHead(), { motion: true, textos: true, densidade: "medias" });
+    const gancho = d.pecas.find((x) => x.peca === "gancho")!;
+    expect(gancho.inicio_s).toBeLessThanOrEqual(0.5);
+    expect((gancho.params.linhas as string[]).join(" ")).toMatch(/salário|CDI|diferentes/);
+    const lista = d.pecas.find((x) => x.peca === "lista")!;
+    expect(lista.params.itens).toEqual(["aluguel", "mercado", "transporte", "demais despesas fixas"]);
+    expect(lista.params.titulo).toBe("Separe");
+    const cta = d.pecas.find((x) => x.peca === "chamada")!;
+    expect(cta.params).toMatchObject({ botao: "Salvar", icone: "salvar" });
+    expect(d.pecas.filter((x) => x.peca === "destaque").length).toBeGreaterThanOrEqual(1);
+    expect(String(cta.params.texto)).toMatch(/^Salva esse vídeo/);
+    expect(String(cta.params.texto)).not.toMatch(/ a$/);
+    // Peças não se atropelam.
+    const l = d.pecas.slice().sort((a, b) => a.inicio_s - b.inicio_s);
+    for (let k = 1; k < l.length; k++) expect(l[k].inicio_s).toBeGreaterThanOrEqual(l[k - 1].inicio_s + l[k - 1].duracao_s - 1e-6);
+    // Sem nome dito, o lower-third fica de fora com o motivo.
+    expect(d.fora.join(" ")).toMatch(/nome e cargo/);
+  });
+
+  it("palavras-chave: sigla, número por extenso e termo longo, sem palavra comum", () => {
+    const fala = [
+      { t: "pelo", i: 0, f: 0.2, clipe: "v" },
+      { t: "CDI", i: 0.25, f: 0.6, clipe: "v" },
+      { t: "trinta", i: 1, f: 1.3, clipe: "v" },
+      { t: "planejamento", i: 2, f: 2.5, clipe: "v" },
+      { t: "financeiro", i: 2.52, f: 3, clipe: "v" },
+      { t: "você", i: 3.5, f: 3.7, clipe: "v" },
+    ];
+    expect(trechosChave(fala).map((x) => [x.texto, x.motivo])).toEqual([
+      ["CDI", "sigla"],
+      ["trinta", "numero"],
+      ["planejamento financeiro", "termo"],
+    ]);
+  });
+
+  it("checklist: o bruto falha (sem gancho, parado, sem chamada); a edição completa passa", async () => {
+    const bruto = checklistDeEngajamento(projetoTalkingHead());
+    expect(bruto.ok).toBe(false);
+    expect(bruto.gancho).toBe(false);
+    expect(bruto.maior_parado_s).toBeGreaterThan(4);
+    expect(bruto.cta).toBe(false);
+    const r = await editado();
+    const c = checklistDeEngajamento(r.projeto);
+    expect(c.gancho).toBe(true);
+    expect(c.maior_parado_s).toBeLessThanOrEqual(4);
+    expect(c.por_30s).toBeGreaterThanOrEqual(4);
+    expect(c.cta).toBe(true);
+    expect(c.ok).toBe(true);
+    expect(r.engajamento).toEqual(c.linhas);
   });
 });
