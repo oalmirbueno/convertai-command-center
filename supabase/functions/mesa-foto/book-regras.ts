@@ -233,3 +233,20 @@ export function categoriasDoAssunto(tipo: AssuntoDoBook, tipoDoKit?: string | nu
   const doKit = tipoDoKit && tipoDoKit !== "outro" && tipoDoKit !== "pessoa" ? [tipoDoKit] : [];
   return [...doKit, "produto", "ambiente", "luz", "composicao", "estilo", "cenario"].filter((x, i, l) => l.indexOf(x) === i);
 }
+
+// ------------------------------------------------------------------ erro do banco
+
+/**
+ * Erro do banco no Book (02/10, "Book de fotos: hoje é impossível criar"):
+ * antes todo erro virava "a migration 05 foi aplicada?" e a tela dizia que
+ * faltava a tabela mesmo quando o problema era outro. Agora só a tabela
+ * ausente fala da migration; o resto leva o código real do banco.
+ */
+export function erroDoBancoDoBook(error: { code?: string; message?: string } | null | undefined, oQue: string): ErroDeRegra {
+  const codigo = String(error?.code ?? "");
+  const msg = String(error?.message ?? "");
+  if (codigo === "42P01" || codigo === "PGRST205" || (/foto_books/.test(msg) && /does not exist|could not find|schema cache/i.test(msg))) {
+    return new ErroDeRegra(503, "book_sem_tabela", `Não foi possível ${oQue}: falta a tabela foto_books no banco (migration 05, supabase/migrations/20260925195654_mesa_foto_book.sql).`);
+  }
+  return new ErroDeRegra(503, "book_indisponivel", `Não foi possível ${oQue}${codigo ? ` (banco: ${codigo}${msg ? `, ${msg.slice(0, 120)}` : ""})` : ""}.`, codigo ? { codigo_banco: codigo } : {});
+}

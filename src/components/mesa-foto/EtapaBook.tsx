@@ -1,28 +1,30 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, BookImage, Check, Download, Images, Library, Loader2, Maximize2, MessageSquare, Plus, Search, Send, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { ArrowDown, ArrowUp, BookImage, Check, Download, Frame, Images, Library, Loader2, Maximize2, MessageSquare, Plus, Search, Send, Sparkles, Trash2, Upload, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Ampliar } from "@/components/mesa/Ampliar";
-import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
+import { BotaoComCusto, useAvisarErro, useEstimativa } from "@/components/mesa/Custo";
 import { imagensDoColar } from "@/components/mesa/EstudioFotos";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { SeletorDeQualidade } from "@/components/mesa/Seletores";
 import { padraoPara, textoDoErro, usd, type Qualidade } from "@/lib/mesa/api";
 import { AprovarFoto, useAcoesDeUso } from "./AcoesDeUso";
 import AcoesProDaFoto from "./AcoesProDaFoto";
-import { MiniaturaDaFoto, Moldura, Pilulas } from "./Comuns";
+import { MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto } from "./Comuns";
 import { AjudaRecolhida, BarraDeAcoes, CampoDeEscolha, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Painel, Secao, SeletorCompacto, botao, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 import { ImagemDaBiblioteca } from "./EtapaBiblioteca";
 import { ZonaDeEnvio } from "./EtapaAcervo";
 import SeletorDeFotos from "./SeletorDeFotos";
 import SeletorLateral, { type ItemDoSeletor } from "./SeletorLateral";
 import { AtalhosDaFoto, MenuDeUso } from "./UsoDaFoto";
-import { useClones } from "./clonesApi";
-import { acrescentarFotos, classeDaFoto, invalidarFotos, semearUrl, subirOriginais, useBiblioteca, useFotos, useKits, type FotoDoAcervo, type ItemDaBiblioteca } from "./fotoApi";
-import { chaveDoAndamento, emParalelo, marcarAndamento, useAndamentos, usePersonas, usePrecoNoServidor } from "./modelosApi";
+import { useClones, type Clone } from "./clonesApi";
+import { acrescentarFotos, classeDaFoto, invalidarFotos, semearUrl, subirOriginais, useBiblioteca, useFotos, useKits, type FotoDoAcervo, type ItemDaBiblioteca, type KitDeFoto } from "./fotoApi";
+import { chaveDoAndamento, emParalelo, marcarAndamento, useAndamentos, usePersonas, usePrecoNoServidor, type Persona } from "./modelosApi";
+import { custoDasTomadas, planoDoBook, type ContextoDoPlano, type ModeloDoPlano, type PlanoDoBook, type ProdutoDoPlano, type TomadaDoPlano } from "./diretorDoBook";
+import { levarAoArsenal, levarAoCanvas } from "./escolhasDaLinha";
 import {
   chaveDosBooks,
   criarBook,
@@ -363,7 +365,7 @@ function DiretorDoBook({ aberto, paraODiretor, onLimpar }: { aberto: BookAberto;
       nivel={3}
       titulo={
         <span className="inline-flex items-center">
-          <MessageSquare className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" /> Diretor do book
+          <MessageSquare className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" /> Conversa com o diretor
         </span>
       }
       recolher={`mesa-foto:book:bloco-diretor:${clientId}`}
@@ -558,7 +560,15 @@ function FilaDePedidos({ aberto }: { aberto: BookAberto }) {
 
 // ------------------------------------------------------------------ resultados
 
+/** O prompt que gerou a foto do book (o nome da foto é "<book>: <título do pedido>"). */
+export function promptDaFotoDoBook(foto: FotoDoAcervo, book: Book): string {
+  const p = book.pedidos.filter((x) => foto.nome === `${book.nome}: ${x.titulo}`.slice(0, 160) || foto.nome.slice(-x.titulo.length - 2) === `: ${x.titulo}`)[0];
+  return p ? p.prompt : foto.descricao || foto.nome;
+}
+
 function ResultadosDoBook({ aberto }: { aberto: BookAberto }) {
+  const { clientId } = useMesa();
+  const { irPara } = useMesaFoto();
   const queryClient = useQueryClient();
   const andamentos = useAndamentos();
   const gravar = useGravarBook(aberto);
@@ -570,6 +580,16 @@ function ResultadosDoBook({ aberto }: { aberto: BookAberto }) {
   const alternar = (id: string) => gravar({ selecao: noBook(id) ? selecao.filter((x) => x !== id) : selecao.concat([id]) });
   const mudou = (f: FotoDoAcervo) => mudarBookAberto(queryClient, aberto.book.id, (b) => ({ ...b, resultados: b.resultados.map((x) => (x.id === f.id ? f : x)) }));
   const fotoAberta = aberta ? aberto.resultados.find((f) => f.id === aberta) || null : null;
+  // Levar a foto escolhida ao Arsenal de prompts (com o prompt que a gerou) ou ao Canvas.
+  const levar = (destino: "arsenal" | "canvas", f: FotoDoAcervo) => {
+    if (destino === "arsenal") {
+      levarAoArsenal(clientId, [f.id], promptDaFotoDoBook(f, aberto.book));
+      irPara("biblioteca");
+    } else {
+      levarAoCanvas(clientId, [f.id]);
+      irPara("canvas");
+    }
+  };
   if (!aberto.resultados.length && !gerando) return null;
   return (
     <Secao nivel={3} divisoria titulo={`Resultados · ${aberto.resultados.length}`} descricao={`${selecao.length} no book`} ajuda="Marque as que vão para o book. A ordem do book fica no Book final." data-resultados-do-book="">
@@ -591,6 +611,14 @@ function ResultadosDoBook({ aberto }: { aberto: BookAberto }) {
               </Button>
               <AprovarFoto foto={fotoAberta} onMudou={mudou} />
               <MenuDeUso foto={fotoAberta} rotulo="Usar" variante="outline" className="mb-1.5" />
+            </div>
+            <div className="flex min-w-0 flex-wrap items-center" data-levar-do-book="">
+              <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => levar("arsenal", fotoAberta)} title="Guarda a foto e o prompt dela no Arsenal de prompts">
+                <Library className="mr-1.5 h-3.5 w-3.5" /> Arsenal
+              </Button>
+              <Button type="button" size="sm" variant="outline" className="mb-1.5 h-8 text-[12px]" onClick={() => levar("canvas", fotoAberta)} title="Abre a foto no Canvas">
+                <Frame className="mr-1.5 h-3.5 w-3.5" /> Canvas
+              </Button>
             </div>
             <div className="flex min-w-0 flex-wrap items-center">
               <AtalhosDaFoto foto={fotoAberta} />
@@ -942,6 +970,213 @@ function BookAbertoNaTela({ id, seletor }: { id: string; seletor: ReactNode }) {
   );
 }
 
+// ------------------------------------------------------------------ diretor do book (plano)
+
+const OPCOES_DE_QUANTIDADE = [4, 6, 8, 12, 16];
+
+/** O que o plano precisa saber dos produtos e modelos do cliente (com o que falta para gerar). */
+export function contextoDoPlanoDoBook(p: { kits: KitDeFoto[]; personas: Persona[]; clones: Clone[] }): { produtos: ProdutoDoPlano[]; modelos: ModeloDoPlano[] } {
+  const produtos: ProdutoDoPlano[] = p.kits
+    .filter((k) => !!k.id && k.tipo !== "pessoa" && k.status !== "arquivado")
+    .map((k) => ({
+      id: String(k.id),
+      nome: k.nome,
+      tipo: k.tipo,
+      aviso: k.frente_imagem_id || k.refs.some((r) => r.papel === "identidade" || r.papel === "detalhe" || r.papel === "rotulo" || r.papel === "verso") ? null : `${k.nome} ainda não tem foto de identidade: complete o produto em Fotos antes de gerar.`,
+    }));
+  const modelos: ModeloDoPlano[] = p.personas
+    .filter((x) => x.status !== "arquivada")
+    .map((x): ModeloDoPlano => ({ id: x.id, nome: x.nome, tipo: "persona", aviso: x.ancora_imagem_id ? null : `${x.nome} ainda não tem âncora: escolha em Modelos antes de gerar.` }))
+    .concat(
+      p.clones
+        .filter((c) => c.status !== "arquivada")
+        .map((c): ModeloDoPlano => ({ id: c.id, nome: c.nome, tipo: "clone", aviso: c.autorizacao_valida.ok ? null : `${c.nome} está sem autorização válida: confira em Clones.` })),
+    );
+  return { produtos, modelos };
+}
+
+/** Tomadas do plano viram pedidos do book (origem: diretor). */
+export function pedidosDoPlano(tomadas: TomadaDoPlano[]): PedidoDoBook[] {
+  return tomadas
+    .filter((t) => !!t.prompt.trim())
+    .map((t): PedidoDoBook => ({ id: novoIdDePedido(), titulo: t.titulo.trim() || "Foto do book", prompt: t.prompt.trim(), formato: "4:5", origem: { tipo: "diretor", id: null }, referencias: [] }));
+}
+
+/**
+ * Diretor do book (02/10): a pessoa escreve o que quer, o diretor monta o
+ * plano inteiro (assunto, tomadas, quantidade e custo) sem IA e sem gastar;
+ * "Confirmar e gerar" cria o book e gera as tomadas, com o custo antes.
+ */
+function DiretorDoPlano({ onCriado }: { onCriado: (b: Book) => void }) {
+  const { clientId, catalogo, atualizarCusto } = useMesa();
+  const queryClient = useQueryClient();
+  const andamentos = useAndamentos();
+  const kits = useKits(clientId);
+  const personas = usePersonas(clientId);
+  const clones = useClones(clientId);
+  const [pedido, setPedido] = useEstadoDaTela(`mesa-foto:book:plano-pedido:${clientId}`, "");
+  const [plano, setPlano] = useState<PlanoDoBook | null>(null);
+  const [tomadas, setTomadas] = useState<TomadaDoPlano[]>([]);
+  const [aberta, setAberta] = useState<string | null>(null);
+  const [criado, setCriado] = useState<string | null>(null);
+  const motor = padraoPara(catalogo, "imagem");
+  const motorId = motor ? motor.id : null;
+  const ctxBase = useMemo(() => contextoDoPlanoDoBook({ kits: kits.data || [], personas: personas.data || [], clones: clones.data || [] }), [kits.data, personas.data, clones.data]);
+  const assunto = plano ? plano.assunto : null;
+  const refs = !assunto ? 4 : assunto.tipo === "clone" ? 6 : assunto.tipo === "produto" ? 4 : 2;
+  const local = useEstimativa(partesDoBook(motorId, "alta", refs, 1));
+  const servidor = usePrecoNoServidor(clientId, "book_gerar", { quantidade: 1, qualidade: "alta" }, !!plano && typeof local.data !== "number");
+  const unidade = typeof local.data === "number" ? local.data : typeof servidor.data === "number" ? servidor.data : null;
+  const custo = custoDasTomadas(tomadas.length, unidade);
+  const gerando = criado ? Object.keys(andamentos).filter((k) => k.indexOf(`${criado}|book|`) === 0 && andamentos[k].estado === "gerando").length : 0;
+  const montar = (extra: { assuntoFixo?: ContextoDoPlano["assuntoFixo"]; quantidadeFixa?: number | null } = {}) => {
+    const p = planoDoBook(pedido, {
+      ...ctxBase,
+      custoPorFotoUsd: unidade,
+      assuntoFixo: extra.assuntoFixo !== undefined ? extra.assuntoFixo : plano && plano.assunto ? { tipo: plano.assunto.tipo, id: plano.assunto.id } : null,
+      quantidadeFixa: extra.quantidadeFixa !== undefined ? extra.quantidadeFixa : null,
+    });
+    setPlano(p);
+    setTomadas(p.tomadas);
+    setAberta(null);
+  };
+  const mudarTomada = (id: string, campos: Partial<TomadaDoPlano>) => setTomadas(tomadas.map((t) => (t.id === id ? { ...t, ...campos } : t)));
+  const opcoesDoAssunto = ctxBase.produtos
+    .map((p) => ({ valor: `produto:${p.id}`, rotulo: p.nome }))
+    .concat(ctxBase.modelos.map((m) => ({ valor: `${m.tipo}:${m.id}`, rotulo: `${m.nome} (${m.tipo === "clone" ? "pessoa real" : "modelo"})` })));
+  const quantidades = !tomadas.length || OPCOES_DE_QUANTIDADE.indexOf(tomadas.length) >= 0 ? OPCOES_DE_QUANTIDADE : OPCOES_DE_QUANTIDADE.concat([tomadas.length]).sort((a, b) => a - b);
+  const gerar = async () => {
+    if (!assunto) return {};
+    const pedidos = pedidosDoPlano(tomadas);
+    const r = await criarBook(clientId, { tipo: assunto.tipo, id: assunto.id });
+    if (!r.book) throw new Error("A função não devolveu o book criado.");
+    const book = r.book;
+    // A fila do book guarda o plano (dá para rever e gerar de novo); a geração não depende dela.
+    const salvo = await salvarBook(book.id, { pedidos }).catch(() => null);
+    const final = salvo || { ...book, pedidos };
+    guardarBookNaLista(queryClient, clientId, final);
+    setCriado(book.id);
+    onCriado(final);
+    void rodarPedidos({ queryClient, clientId, bookId: book.id, pedidos, qualidade: "alta", atualizar: atualizarCusto });
+    toast.message(`${book.nome} criado`, { description: `Gerando ${pedidos.length} ${pedidos.length === 1 ? "foto" : "fotos"}. Elas aparecem nos resultados assim que saem.` });
+    return {};
+  };
+  return (
+    <Secao
+      nivel={3}
+      titulo={
+        <span className="inline-flex items-center">
+          <Wand2 className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" /> Diretor do book
+        </span>
+      }
+      recolher={`mesa-foto:book:plano:${clientId}`}
+      resumo={plano && assunto ? `${tomadas.length} fotos de ${assunto.nome}` : "escreva o que quer e ele monta o plano"}
+      ajuda="Escreva o book em palavras: produto ou modelo, quantas fotos, ângulos, cenas e luz. O diretor monta o plano na hora (sem IA, sem custo). Você revisa, tira o que não quer e confirma: ele cria o book e gera as fotos, com o custo antes."
+      data-diretor-do-plano=""
+    >
+      <Textarea
+        value={pedido}
+        onChange={(e) => setPedido(e.target.value)}
+        rows={2}
+        placeholder="Ex.: 12 fotos do Mouse M720, frente, 3/4 e detalhe, na bancada e em casa, luz de fim de tarde, algumas com modelo"
+        aria-label="O que você quer no book?"
+        className="text-[13px]"
+      />
+      <div className="mt-2 flex min-w-0 flex-wrap items-center">
+        <button type="button" className={juntar(botao.secundario, "mb-1.5 mr-2 h-9 text-[13px]")} disabled={!pedido.trim() && !opcoesDoAssunto.length} onClick={() => montar({ assuntoFixo: null })}>
+          <Sparkles className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Montar o plano
+        </button>
+        <span className={juntar(texto.auxiliar, "mb-1.5")}>Montar não gasta.</span>
+      </div>
+      {plano && (
+        <div className="mt-2 min-w-0 border-t border-border pt-3" data-plano-do-book="">
+          <div className="flex min-w-0 flex-wrap items-center">
+            <label className={juntar(texto.rotulo, "mb-1.5 mr-2")} htmlFor={`assunto-do-plano-${clientId}`}>
+              Assunto
+            </label>
+            {opcoesDoAssunto.length ? (
+              <select
+                id={`assunto-do-plano-${clientId}`}
+                value={assunto ? `${assunto.tipo}:${assunto.id}` : ""}
+                onChange={(e) => {
+                  const partes = e.target.value.split(":");
+                  montar({ assuntoFixo: { tipo: partes[0] as "produto" | "persona" | "clone", id: partes[1] }, quantidadeFixa: tomadas.length || null });
+                }}
+                className={juntar("mb-1.5 mr-3 h-8 min-w-0 max-w-[260px] rounded-md border border-border bg-background px-2 text-[13px]", foco)}
+              >
+                {opcoesDoAssunto.map((o) => (
+                  <option key={o.valor} value={o.valor}>
+                    {o.rotulo}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className={juntar(texto.auxiliar, "mb-1.5 mr-3")}>nenhum</span>
+            )}
+            <span className={juntar(texto.rotulo, "mb-1.5 mr-2")}>Fotos</span>
+            <SeletorCompacto
+              rotulo="Quantas fotos no book"
+              opcoes={quantidades.map((n) => ({ valor: String(n), rotulo: String(n) }))}
+              valor={String(tomadas.length)}
+              onEscolher={(v) => montar({ quantidadeFixa: Number(v) })}
+              className="mb-1.5 mr-3"
+            />
+            <span className="mb-1.5 ml-auto text-[13px] font-medium tabular-nums" data-custo-do-plano="">
+              {tomadas.length} {tomadas.length === 1 ? "foto" : "fotos"}
+              {custo !== null ? ` · ~${usd(custo)}` : " · custo ao confirmar"}
+            </span>
+          </div>
+          {plano.avisos.map((a) => (
+            <p key={a} className="text-[12px] text-warning [overflow-wrap:anywhere]">
+              {a}
+            </p>
+          ))}
+          {tomadas.length > 0 && (
+            <ol className="scrollbar-hidden mt-2 min-w-0 divide-y divide-border lg:max-h-[360px] lg:overflow-y-auto lg:overscroll-contain" aria-label="Tomadas do plano">
+              {tomadas.map((t, i) => (
+                <li key={t.id} className="min-w-0 py-1.5" data-tomada-do-plano={t.id}>
+                  <div className="flex min-w-0 items-center">
+                    <span className="mr-1.5 w-5 shrink-0 text-center text-[11px] font-semibold tabular-nums text-muted-foreground">{i + 1}</span>
+                    <Input value={t.titulo} onChange={(e) => mudarTomada(t.id, { titulo: e.target.value })} aria-label={`Título da foto ${i + 1}`} className="mr-1.5 h-8 min-w-0 flex-1 text-[13px] font-medium" />
+                    <button type="button" className={juntar("mr-1 shrink-0 rounded px-1 text-[11px] text-muted-foreground hover:text-foreground", foco)} aria-expanded={aberta === t.id} onClick={() => setAberta(aberta === t.id ? null : t.id)}>
+                      prompt
+                    </button>
+                    <button type="button" aria-label={`Tirar a foto ${i + 1}`} className={botao.icone} onClick={() => setTomadas(tomadas.filter((x) => x.id !== t.id))}>
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <p className="mt-0.5 truncate pl-[26px] text-[11px] text-muted-foreground">
+                    {t.angulo} · {t.cena} · {t.luz} · {t.enquadramento}
+                    {t.comModelo ? " · com modelo" : ""}
+                  </p>
+                  {aberta === t.id && <Textarea value={t.prompt} onChange={(e) => mudarTomada(t.id, { prompt: e.target.value })} rows={4} aria-label={`Prompt da foto ${i + 1}`} className="mt-1.5 text-[12px]" />}
+                </li>
+              ))}
+            </ol>
+          )}
+          <BarraDeAcoes className="mt-3 border-t border-border pt-3" inicio={gerando > 0 ? `Gerando ${gerando}.` : "O custo aparece no botão antes de gastar."}>
+            <BotaoComCusto
+              rotulo={
+                <>
+                  <Check className="mr-1.5 h-3.5 w-3.5" /> Confirmar e gerar {tomadas.length} {tomadas.length === 1 ? "foto" : "fotos"}
+                </>
+              }
+              titulo="Book do diretor"
+              descricao="Cria o book com o assunto do plano e gera uma foto por tomada; cada uma aparece nos resultados assim que sai."
+              className="h-9 text-[13px]"
+              disabled={!assunto || !tomadas.length || gerando > 0}
+              sempreConfirmar
+              fecharAoConfirmar
+              partes={() => partesDoBook(motorId, "alta", refs, tomadas.length)}
+              executar={gerar}
+            />
+          </BarraDeAcoes>
+        </div>
+      )}
+    </Secao>
+  );
+}
+
 // ------------------------------------------------------------------ etapa
 
 export default function EtapaBook() {
@@ -964,7 +1199,7 @@ export default function EtapaBook() {
     estado: { rotulo: b.status === "entregue" ? "entregue" : `${b.selecao.length} no book`, ponto: b.status === "entregue" ? "bg-success" : "bg-primary" },
     nota: TIPOS_DO_ASSUNTO.find((t) => t.valor === b.assunto.tipo)?.rotulo.toLowerCase() || null,
   }));
-  const semTabela = booksQ.isError && /migration 05|foto_books/i.test(textoDoErro(booksQ.error));
+  const semTabela = booksQ.isError && /falta a tabela foto_books|migration 05/i.test(textoDoErro(booksQ.error));
   const seletor = booksQ.isLoading ? (
     <Carregando forma="lista" linhas={3} rotulo="Lendo os books" />
   ) : (
@@ -986,6 +1221,13 @@ export default function EtapaBook() {
   );
   return (
     <div className="min-w-0 space-y-4 pb-6">
+      <DiretorDoPlano
+        onCriado={(b) => {
+          setNovo(false);
+          setEscolhido(b.id);
+          void queryClient.invalidateQueries({ queryKey: chaveDosBooks(clientId) });
+        }}
+      />
       {booksQ.isError && (
         <EstadoDeErro
           titulo="Não foi possível ler os books."

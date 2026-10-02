@@ -40,6 +40,7 @@ import {
   type AssuntoDoBook,
   type AssuntoNoPrompt,
   categoriasDoAssunto,
+  erroDoBancoDoBook,
   FORMATOS_DO_BOOK,
   type IdentidadeNoPrompt,
   lerAssunto,
@@ -57,7 +58,6 @@ import {
 import type { LinhaClone } from "./clones.ts";
 
 const REF_BOOK = "foto_book";
-const MIGRATION = "a migration 05 (docs/mesa-foto/migrations/05_book.sql) foi aplicada?";
 const LADO_IDENTIDADE = 1280;
 const LADO_ESTILO = 1024;
 const QUALIDADES: Qualidade[] = ["baixa", "media", "alta"];
@@ -110,7 +110,7 @@ export function acoesDoBook(f: FerramentasDaMesa, d: DependenciasDoBook) {
 
   async function lerBook(id: string): Promise<LinhaBook> {
     const { data, error } = await db().from("foto_books").select("*").eq("id", id).maybeSingle();
-    if (error) throw new ErroDeRegra(503, "book_indisponivel", `Não foi possível ler o book (${MIGRATION}).`);
+    if (error) throw erroDoBancoDoBook(error, "ler o book");
     if (!data) throw new ErroDeRegra(404, "book_inexistente", "Book não encontrado.");
     const b = data as LinhaBook;
     b.referencias = lerReferenciasDoBook(b.referencias);
@@ -218,7 +218,7 @@ export function acoesDoBook(f: FerramentasDaMesa, d: DependenciasDoBook) {
     let q = db().from("foto_books").select("id, client_id, nome, assunto, status, selecao, custo_usd, atualizado_em, criado_em").eq("client_id", clientId).order("atualizado_em", { ascending: false }).limit(100);
     if (corpo.incluir_arquivados !== true) q = q.neq("status", "arquivado");
     const { data, error } = await q;
-    if (error) throw new ErroDeRegra(503, "book_indisponivel", `Não foi possível ler os books (${MIGRATION}).`);
+    if (error) throw erroDoBancoDoBook(error, "ler os books");
     return f.json({ books: data ?? [], custo_usd: 0 });
   }
 
@@ -239,7 +239,7 @@ export function acoesDoBook(f: FerramentasDaMesa, d: DependenciasDoBook) {
       status: "aberto",
       criado_por: ch.userId,
     }).select("*").single();
-    if (error || !data) throw new ErroDeRegra(503, "book_indisponivel", `Não foi possível criar o book (${MIGRATION}).`);
+    if (error || !data) throw erroDoBancoDoBook(error, "criar o book");
     return f.json({ book: data, assunto: await resumoComUrl(resumo), custo_usd: 0 });
   }
 
