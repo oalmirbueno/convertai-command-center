@@ -78,7 +78,7 @@ app = modal.App("aceleriq-render")
 segredos = modal.Secret.from_name("aceleriq-render")
 
 
-@app.function(image=imagem, secrets=[segredos], cpu=NUCLEOS, memory=16384, timeout=3600, max_containers=3)
+@app.function(image=imagem, secrets=[segredos], cpu=NUCLEOS, memory=32768, timeout=3600, max_containers=3)
 def processar() -> int:
     env = {
         **os.environ,

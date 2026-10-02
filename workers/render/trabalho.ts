@@ -98,6 +98,9 @@ export async function trabalharOnda(amb: Ambiente, p: PedidoDoWorker, pasta: str
 // ------------------------------------------------------------------ render (amostra e vídeo inteiro)
 
 /** Linha de progresso do Remotion ("Rendered 120/300", "Encoded 40/300"). */
+/** Render sem nenhum avanço por este tempo é interrompido (o empacotamento leva 1 a 2 min antes do 1º quadro). */
+export const SEM_AVANCO_NO_RENDER_MS = 8 * 60_000;
+
 export function progressoDoRemotion(texto: string): number | null {
   const m = /(Rendered|Encoded|Rendering frames|Stitching)[^\d]*(\d+)\s*\/\s*(\d+)/i.exec(texto);
   if (!m) return null;
@@ -200,13 +203,36 @@ export async function trabalharRender(amb: Ambiente, p: PedidoDoWorker, pasta: s
   if (amb.concorrencia) args.push(`--concurrency=${amb.concorrencia}`);
   const controle = new AbortController();
   let parouPorCancelar: Error | null = null;
+  // 02/10: o render da nuvem ficou mudo, a trava venceu, o PC assumiu e a nuvem seguiu renderizando à toa.
+  // Pulso a cada minuto (renova a trava e para se o pedido foi para outro worker) e teto sem avanço.
+  let ultimoValor = 0.12;
+  let ultimoAvanco = Date.now();
+  let ultimoLog = -1;
+  const pulso = setInterval(() => {
+    avisar("renderizando", ultimoValor, true).catch((e: Error) => {
+      parouPorCancelar = e;
+      controle.abort();
+    });
+    if (Date.now() - ultimoAvanco > SEM_AVANCO_NO_RENDER_MS) {
+      parouPorCancelar = new Error(`O render ficou ${Math.round(SEM_AVANCO_NO_RENDER_MS / 60_000)} min sem avançar e foi interrompido. Peça de novo.`);
+      controle.abort();
+    }
+  }, 60_000);
   const renderizar = () => executar(process.execPath, args, {
     cwd: PASTA_DO_WORKER,
     sinal: controle.signal,
     aoTexto: (t) => {
       const v = progressoDoRemotion(t);
       if (v === null) return;
-      avisar("renderizando", 0.12 + v * 0.7).catch((e: Error) => {
+      const valor = 0.12 + v * 0.7;
+      if (valor > ultimoValor + 1e-6) ultimoAvanco = Date.now();
+      ultimoValor = Math.max(ultimoValor, valor);
+      const dez = Math.floor(v * 10);
+      if (amb.log && dez !== ultimoLog) {
+        ultimoLog = dez;
+        amb.log(`render ${Math.round(v * 100)}%`);
+      }
+      avisar("renderizando", valor).catch((e: Error) => {
         parouPorCancelar = e;
         controle.abort();
       });
@@ -215,12 +241,18 @@ export async function trabalharRender(amb: Ambiente, p: PedidoDoWorker, pasta: s
     if (parouPorCancelar) throw parouPorCancelar;
     throw e;
   });
-  let r = await renderizar();
-  // O Chrome do Remotion tem 25 s fixos para abrir; máquina ocupada estoura. Uma segunda vez só para esse caso
-  // (infraestrutura, não correção de conteúdo); o resto do erro vai direto para o pedido.
-  if (r.codigo !== 0 && !parouPorCancelar && /trying to connect to the browser/i.test(r.erros)) {
-    if (amb.log) amb.log("o Chrome demorou para abrir; tentando uma segunda vez");
+  let r: Awaited<ReturnType<typeof renderizar>>;
+  try {
     r = await renderizar();
+    // O Chrome do Remotion tem 25 s fixos para abrir; máquina ocupada estoura. Uma segunda vez só para esse caso
+    // (infraestrutura, não correção de conteúdo); o resto do erro vai direto para o pedido.
+    if (r.codigo !== 0 && !parouPorCancelar && /trying to connect to the browser/i.test(r.erros)) {
+      if (amb.log) amb.log("o Chrome demorou para abrir; tentando uma segunda vez");
+      ultimoAvanco = Date.now();
+      r = await renderizar();
+    }
+  } finally {
+    clearInterval(pulso);
   }
   if (parouPorCancelar) throw parouPorCancelar;
   if (r.codigo !== 0) throw new Error(`O Remotion não renderizou: ${r.erros.split("\n").filter(Boolean).slice(-6).join(" | ").slice(-500)}`);
