@@ -954,7 +954,9 @@ describe("aba Canvas", () => {
 
   it("modo lista (celular): o mesmo grafo em formulário, com a frase do Resultado, e o Pedido entra já ligado", async () => {
     montar(h(EtapaCanvas));
-    fireEvent.click(await screen.findByRole("button", { name: /Modo lista/ }));
+    // 02/10: o Modo lista mora no "..." da barra do Canvas.
+    fireEvent.keyDown(await screen.findByRole("button", { name: "Mais opções do Canvas" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Modo lista/ }));
     await waitFor(() => expect(document.querySelector("[data-modo-lista]")).toBeTruthy());
     const lista = document.querySelector("[data-modo-lista]") as HTMLElement;
     expect(lista.querySelectorAll("[data-entrada-da-lista]")).toHaveLength(2);

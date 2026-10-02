@@ -56,6 +56,8 @@ import { FORMATOS, type Formato } from "./receitas.ts";
 import { BLOCO_HIPER_REALISMO, conteudoProibido, type FichaDaPersona, fichaEmTexto, garantirPermitido, normalizarFicha, PROIBICOES_DA_PERSONA } from "./personas.ts";
 import { lerDadosDoVideo, lerQuadroDaLigacao, type QuadroDaLigacao } from "./modulos/video-do-canvas.ts";
 import { normalizarQuadro } from "./modulos/quadro-animado.ts";
+// 02/10: ângulo da câmera, luz, fundo e variações por vez do Resultado (presets com frase fixa).
+import { CAMERAS_DO_RESULTADO, FUNDOS_DO_RESULTADO, lerOpcao, lerVariacoes, linhasDasOpcoes, LUZES_DO_RESULTADO } from "./modulos/opcoes-do-resultado.ts";
 
 export const TIPOS_DE_NO = ["produto", "modelo", "ambiente", "estilo", "prompt", "saida", "agente", "video", "quadro"] as const;
 export type TipoDeNo = typeof TIPOS_DE_NO[number];
@@ -489,7 +491,10 @@ export function dadosDoNo(tipo: TipoDeNo, bruto: unknown): Record<string, unknow
       const motores = Array.isArray(d.motores) ? Array.from(new Set(d.motores.map((x) => limpo(x, 120)).filter(Boolean))).slice(0, 8) : [];
       const acao = String(d.acao ?? "") in ACOES_DO_RESULTADO ? String(d.acao) : "livre";
       const pose = String(d.pose ?? "") in POSES_DO_RESULTADO ? String(d.pose) : "nenhuma";
-      return { titulo, formato, qualidade, resolucao, motores, acao, pose, carrossel: lerCarrossel(d.carrossel), resultados: resultadosDaSaida(d.resultados), cena: lerCena(d.cena) };
+      const camera = lerOpcao(CAMERAS_DO_RESULTADO, d.camera);
+      const luz = lerOpcao(LUZES_DO_RESULTADO, d.luz);
+      const fundo = lerOpcao(FUNDOS_DO_RESULTADO, d.fundo);
+      return { titulo, formato, qualidade, resolucao, motores, acao, pose, camera, luz, fundo, variacoes: lerVariacoes(d.variacoes), carrossel: lerCarrossel(d.carrossel), resultados: resultadosDaSaida(d.resultados), cena: lerCena(d.cena) };
     }
     case "agente": {
       // A conversa fica no cartão (curta); o pedido que o agente escreveu vai ao gerador.
@@ -895,6 +900,10 @@ export function promptDoCanvas(e: {
   marca?: { nome: string; paleta: string[] } | null;
   acao?: string | null;
   pose?: string | null;
+  /** 02/10: presets do Resultado (chaves de modulos/opcoes-do-resultado.ts). */
+  camera?: string | null;
+  luz?: string | null;
+  fundo?: string | null;
   angulo?: number | null;
   quadro?: { atual: number; total: number } | null;
   deResultados?: ResultadoDoPedido[];
@@ -985,6 +994,8 @@ export function promptDoCanvas(e: {
   const pose = e.pose ? POSES_DO_RESULTADO[e.pose] ?? "" : "";
   if (acao) linhas.push(`COMPOSIÇÃO: ${acao}`);
   if (pose) linhas.push(pose);
+  // Câmera, luz e fundo escolhidos no Resultado; numa série o ângulo obrigatório vence a câmera.
+  linhas.push(...linhasDasOpcoes({ camera: e.camera, luz: e.luz, fundo: e.fundo }, (e.angulo !== null && e.angulo !== undefined) || !!e.quadro));
   if (e.quadro) {
     const papel = QUADROS_DO_CARROSSEL[Math.min(e.quadro.atual, QUADROS_DO_CARROSSEL.length) - 1];
     linhas.push(`CARROSSEL: esta é a foto ${e.quadro.atual} de ${e.quadro.total} de uma sequência coerente (mesma pessoa, mesmo produto, mesmo ambiente, mesma paleta e mesma luz). Esta foto: ${papel}.`);

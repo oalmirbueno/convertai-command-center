@@ -39,6 +39,16 @@ import {
   type PersonagemCriada,
   type ResultadoDoCanvas,
 } from "../canvasApi";
+import AcoesProDaFoto from "../AcoesProDaFoto";
+import {
+  CAMERAS_DO_RESULTADO,
+  FUNDOS_DO_RESULTADO,
+  lerOpcao,
+  lerVariacoes,
+  LUZES_DO_RESULTADO,
+  MAX_VARIACOES_DO_RESULTADO,
+  MIN_VARIACOES,
+} from "../../../../supabase/functions/mesa-foto/modulos/opcoes-do-resultado";
 import { AjustesDaCena } from "./Cena";
 import { andamentoDoResultado } from "./geracao";
 import { VirarPersonagem } from "./Personagem";
@@ -51,7 +61,11 @@ import { BOTAO, CAMPO, descrever, Escolha, MiniaturaGrande, pilula, ROTULO, type
  * fotos do Resultado (aprovar, conferir, variações, usar, finalizar).
  */
 
-export const FORMATOS_DO_CANVAS = FORMATOS.filter((f) => ["1:1", "4:5", "9:16", "16:9"].indexOf(f.valor) >= 0).map((f) => ({ valor: f.valor, rotulo: f.valor }));
+// 02/10: as seis proporções que a função aceita (1:1, 4:5, 9:16, 16:9, 3:2 e 2:3).
+export const FORMATOS_DO_CANVAS = FORMATOS.filter((f) => ["1:1", "4:5", "9:16", "16:9", "3:2", "2:3"].indexOf(f.valor) >= 0).map((f) => ({ valor: f.valor, rotulo: f.valor }));
+/** Quantas variações por vez (1 a 5). */
+const OPCOES_DE_VARIACOES = Array.from({ length: MAX_VARIACOES_DO_RESULTADO - MIN_VARIACOES + 1 }, (_, i) => ({ valor: String(MIN_VARIACOES + i), rotulo: String(MIN_VARIACOES + i) }));
+const opcoesDe = (lista: { valor: string; rotulo: string; frase: string }[]) => lista.map((o) => ({ valor: o.valor, rotulo: o.rotulo, dica: o.frase || "Sai do pedido." }));
 const RESOLUCOES_DO_CANVAS: { valor: string; rotulo: string }[] = [
   { valor: "auto", rotulo: "Automática" },
   { valor: "1K", rotulo: "1K" },
@@ -291,11 +305,14 @@ export function FotoDoResultado({
   onVariacoes,
   cena,
   onPersonagemCriada,
+  vezes = VARIACOES_POR_VEZ,
 }: {
   r: ResultadoDoCanvas;
   foto: FotoDoAcervo | null;
   referencias: number;
   qualidade: Qualidade;
+  /** Quantas variações saem por vez (ajuste da caixa, 1 a 5). */
+  vezes?: number;
   onConferencia: (c: ConferenciaDaPersona | null) => void;
   onVariacoes: (r: ResultadoDoCanvas) => Promise<unknown>;
   /** Resultado que é cena: a foto pode virar a foto da cena na história. */
@@ -347,11 +364,11 @@ export function FotoDoResultado({
                   </>
                 }
                 titulo="Variações desta foto"
-                descricao={`${VARIACOES_POR_VEZ} fotos com a mesma pessoa, o mesmo produto e o mesmo estilo, cada uma num ângulo diferente.`}
+                descricao={`${vezes} ${vezes === 1 ? "foto" : "fotos"} com a mesma pessoa, o mesmo produto e o mesmo estilo, cada uma num ângulo diferente.`}
                 variant="outline"
                 className="mb-1.5 mr-1.5 h-8 text-[12px]"
                 fecharAoConfirmar
-                partes={() => partesDaSerie(r.motor_id, qualidade, referencias, VARIACOES_POR_VEZ, true)}
+                partes={() => partesDaSerie(r.motor_id, qualidade, referencias, vezes, true)}
                 executar={() => onVariacoes(r)}
               />
             )}
@@ -539,23 +556,57 @@ export function AjustesDoResultado({
   return (
     <div className="min-w-0 space-y-3.5" data-ajustes-do-resultado={no.id}>
       <AjustesDaCena canvas={canvas} no={no} onMudar={onMudar} onAnimar={onAnimar} />
-      <div className="min-w-0">
-        <p className={ROTULO}>Ação</p>
-        <Escolha rotulo="Ação do Resultado" opcoes={ACOES_DO_RESULTADO} valor={d.acao || "livre"} onEscolher={(v) => onMudar({ acao: v })} />
+      {/* 02/10: o essencial à vista (câmera, luz, fundo, proporção, variações); o resto em "Mais opções". */}
+      <div className="min-w-0" data-opcoes-da-caixa="">
+        <p className={ROTULO}>Câmera</p>
+        <Escolha rotulo="Câmera do Resultado" opcoes={opcoesDe(CAMERAS_DO_RESULTADO)} valor={lerOpcao(CAMERAS_DO_RESULTADO, d.camera)} onEscolher={(v) => onMudar({ camera: v })} />
       </div>
       <div className="min-w-0">
-        <p className={ROTULO}>Pose e intenção</p>
-        <Escolha rotulo="Pose do Resultado" opcoes={POSES_DO_RESULTADO} valor={d.pose || "nenhuma"} onEscolher={(v) => onMudar({ pose: v })} />
+        <p className={ROTULO}>Luz</p>
+        <Escolha rotulo="Luz do Resultado" opcoes={opcoesDe(LUZES_DO_RESULTADO)} valor={lerOpcao(LUZES_DO_RESULTADO, d.luz)} onEscolher={(v) => onMudar({ luz: v })} />
       </div>
       <div className="min-w-0">
-        <p className={ROTULO}>Saída</p>
-        <Escolha
-          rotulo="Saída do Resultado"
-          opcoes={OPCOES_DE_CARROSSEL.map((n) => ({ valor: String(n), rotulo: n ? `Carrossel ${n}` : "Foto", dica: n ? `${n} fotos coerentes (mesma pessoa, produto e lugar), ângulo diferente em cada, no primeiro motor.` : "Uma foto por motor ligado." }))}
-          valor={String(d.carrossel || 0)}
-          onEscolher={(v) => onMudar({ carrossel: Number(v) })}
-        />
+        <p className={ROTULO}>Fundo</p>
+        <Escolha rotulo="Fundo do Resultado" opcoes={opcoesDe(FUNDOS_DO_RESULTADO)} valor={lerOpcao(FUNDOS_DO_RESULTADO, d.fundo)} onEscolher={(v) => onMudar({ fundo: v })} />
       </div>
+      <div className="min-w-0">
+        <p className={ROTULO}>Formato</p>
+        <Escolha rotulo="Formato do Resultado" opcoes={FORMATOS_DO_CANVAS} valor={formato} onEscolher={(v) => onMudar({ formato: v })} />
+      </div>
+      <div className="min-w-0">
+        <p className={ROTULO}>Variações por vez</p>
+        <Escolha rotulo="Variações por vez" opcoes={OPCOES_DE_VARIACOES} valor={String(lerVariacoes(d.variacoes))} onEscolher={(v) => onMudar({ variacoes: Number(v) })} />
+      </div>
+      <details className="min-w-0 rounded-lg border border-white/10 px-2.5 py-1.5" data-mais-opcoes="">
+        <summary className="cursor-pointer select-none text-[11.5px] font-medium text-zinc-300 hover:text-white">Mais opções</summary>
+        <div className="mt-2 min-w-0 space-y-3">
+          <div className="min-w-0">
+            <p className={ROTULO}>Ação</p>
+            <Escolha rotulo="Ação do Resultado" opcoes={ACOES_DO_RESULTADO} valor={d.acao || "livre"} onEscolher={(v) => onMudar({ acao: v })} />
+          </div>
+          <div className="min-w-0">
+            <p className={ROTULO}>Pose e intenção</p>
+            <Escolha rotulo="Pose do Resultado" opcoes={POSES_DO_RESULTADO} valor={d.pose || "nenhuma"} onEscolher={(v) => onMudar({ pose: v })} />
+          </div>
+          <div className="min-w-0">
+            <p className={ROTULO}>Saída</p>
+            <Escolha
+              rotulo="Saída do Resultado"
+              opcoes={OPCOES_DE_CARROSSEL.map((n) => ({ valor: String(n), rotulo: n ? `Carrossel ${n}` : "Foto", dica: n ? `${n} fotos coerentes (mesma pessoa, produto e lugar), ângulo diferente em cada, no primeiro motor.` : "Uma foto por motor ligado." }))}
+              valor={String(d.carrossel || 0)}
+              onEscolher={(v) => onMudar({ carrossel: Number(v) })}
+            />
+          </div>
+          <div className="min-w-0">
+            <p className={ROTULO}>Qualidade</p>
+            <Escolha rotulo="Qualidade do Resultado" opcoes={QUALIDADES.map((q) => ({ valor: q.valor, rotulo: q.rotulo }))} valor={qualidade} onEscolher={(v) => onMudar({ qualidade: v as Qualidade })} />
+          </div>
+          <div className="min-w-0">
+            <p className={ROTULO}>Resolução</p>
+            <Escolha rotulo="Resolução do Resultado" opcoes={RESOLUCOES_DO_CANVAS} valor={d.resolucao || "auto"} onEscolher={(v) => onMudar({ resolucao: v === "auto" ? null : (v as Resolucao) })} />
+          </div>
+        </div>
+      </details>
       <div className="min-w-0">
         <div className="mb-1.5 flex items-center">
           <p className={`${ROTULO} mb-0 flex-1`}>Motores {d.carrossel ? "(o carrossel usa o 1º)" : "(uma foto por motor)"}</p>
@@ -582,20 +633,6 @@ export function AjustesDoResultado({
             {rotuloDoMotor(catalogo, x.motor)}: {x.a.erro}
           </p>
         ))}
-      </div>
-      <div className="grid min-w-0 grid-cols-1 gap-2">
-        <div className="min-w-0">
-          <p className={ROTULO}>Formato</p>
-          <Escolha rotulo="Formato do Resultado" opcoes={FORMATOS_DO_CANVAS} valor={formato} onEscolher={(v) => onMudar({ formato: v })} />
-        </div>
-        <div className="min-w-0">
-          <p className={ROTULO}>Qualidade</p>
-          <Escolha rotulo="Qualidade do Resultado" opcoes={QUALIDADES.map((q) => ({ valor: q.valor, rotulo: q.rotulo }))} valor={qualidade} onEscolher={(v) => onMudar({ qualidade: v as Qualidade })} />
-        </div>
-        <div className="min-w-0">
-          <p className={ROTULO}>Resolução</p>
-          <Escolha rotulo="Resolução do Resultado" opcoes={RESOLUCOES_DO_CANVAS} valor={d.resolucao || "auto"} onEscolher={(v) => onMudar({ resolucao: v === "auto" ? null : (v as Resolucao) })} />
-        </div>
       </div>
       <div className="flex min-w-0 items-center rounded-lg border border-white/10 bg-zinc-900/60 px-2.5 py-1.5 text-[12px]">
         <span className="min-w-0 flex-1 text-zinc-400">Custo</span>
@@ -661,6 +698,17 @@ export function AjustesDoResultado({
       {resultados.length > 0 && (
         <div className="min-w-0 space-y-2">
           <p className={ROTULO}>Fotos deste Resultado ({resultados.length})</p>
+          {(() => {
+            // 02/10: Ampliar e Tirar fundo (ferramentas pro que a função já tem) na foto mais nova da caixa.
+            const ultima = resultados.find((r) => r.status === "gerada" && !!r.imagem_id);
+            const fotoDoAcervo = ultima ? fontes.fotos.find((f) => f.id === ultima.imagem_id) || null : null;
+            return fotoDoAcervo ? (
+              <details className="min-w-0 rounded-lg border border-white/10 px-2.5 py-1.5" data-ferramentas-da-caixa="">
+                <summary className="cursor-pointer select-none text-[11.5px] font-medium text-zinc-300 hover:text-white">Ampliar ou tirar fundo da mais nova</summary>
+                <AcoesProDaFoto foto={fotoDoAcervo} className="mt-2" />
+              </details>
+            ) : null;
+          })()}
           {resultados.slice(0, 8).map((r) =>
             r.status === "falhou" ? (
               <p key={r.geracao_id} className="text-[11.5px] text-red-400">
@@ -673,6 +721,7 @@ export function AjustesDoResultado({
                 foto={r.imagem_id ? fontes.fotos.find((f) => f.id === r.imagem_id) || null : null}
                 referencias={entradas.length}
                 qualidade={qualidade}
+                vezes={lerVariacoes(d.variacoes)}
                 onVariacoes={(x) => onVariacoes(no.id, x)}
                 cena={d.cena && r.imagem_id ? { escolhida: d.cena.imagem_id === r.imagem_id, onEscolher: () => onMudar({ cena: d.cena ? { ...d.cena, imagem_id: r.imagem_id } : null }) } : null}
                 onPersonagemCriada={onPersonagemCriada}

@@ -27,6 +27,7 @@ import { CHAVES_DO_ABERTO, useContextoDoDiretor, useFocoDoDiretor } from "@/comp
 import { destinoAoEscolher, destinoDoGerar, ehObjetivo, marcadasQueContam, objetivoDaEtapa, objetivoPorValor, type ObjetivoDaFoto } from "@/components/mesa-foto/linhaDeProducao";
 import { gravarNaSessao } from "@/components/mesa-foto/sessao";
 import { CHAVE_DAS_FOTOS_DO_POST } from "@/components/mesa-foto/agendaApi";
+import { lerPecaDoEndereco, type PedidoDePeca } from "@/components/mesa-foto/pecasDeFoto";
 import { gravarEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
@@ -122,6 +123,8 @@ const EtapaAprovar = lazyComPreCarga("mesa-foto/aprovar", carregarAprovar);
 const EtapaBiblioteca = lazyComPreCarga("mesa-foto/biblioteca", carregarBiblioteca);
 const BarraDoEnsaio = lazyComPreCarga("mesa-foto/barra-do-ensaio", () => import("@/components/mesa-foto/BarraDoEnsaio"));
 const AgenteDiretor = lazyComPreCarga("mesa-foto/agente-diretor", () => import("@/components/mesa-foto/AgenteDiretor"));
+// 02/10: a esteira das peças de foto do mês no topo (e a janela da peça aberta pelo endereço ?peca= ou ?task=).
+const EsteiraDoMes = lazyComPreCarga("mesa-foto/esteira-do-mes", () => import("@/components/mesa-foto/EsteiraDoMes"));
 const ChavesECotas = lazy(() => import("@/components/mesa/ChavesECotas"));
 const ModelosDeIa = lazy(() => import("@/components/mesa/ModelosDeIa"));
 
@@ -217,7 +220,7 @@ export default function MesaFoto() {
   const [chavesUsadas, setChavesUsadas] = useState(false);
   const [modelosUsados, setModelosUsados] = useState(false);
   const [versaoCarteira, setVersaoCarteira] = useState(0);
-  const [pedidoAoDiretor, setPedidoAoDiretor] = useState<{ mensagem: string; em: number } | null>(null);
+  const [pedidoAoDiretor, setPedidoAoDiretor] = useState<{ mensagem: string; em: number; rascunho?: boolean } | null>(null);
   const telaCheia = useTelaCheiaDaMesa();
 
   const role = profile?.role || "";
@@ -308,6 +311,19 @@ export default function MesaFoto() {
     mudar({ canvas: null, book: null, clone: null, modelo: null }, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chaveDosAbertos]);
+
+  // Peça do mês pelo endereço (o planejamento liga aqui): ?peca=<proposta_id>:<indice> ou ?task=<task_id>
+  // (o task= só fora da etapa agenda, que já usa task= para o post). Guarda o pedido e limpa o endereço;
+  // a esteira abre a peça quando a lista chega.
+  const [pedidoDePeca, setPedidoDePeca] = useState<PedidoDePeca | null>(null);
+  const pecaNoEndereco = lerPecaDoEndereco(params);
+  const chaveDaPecaNoEndereco = pecaNoEndereco ? (pecaNoEndereco.tipo === "peca" ? `${pecaNoEndereco.proposta_id}:${pecaNoEndereco.indice}` : `task:${pecaNoEndereco.task_id}`) : "";
+  useEffect(() => {
+    if (!pecaNoEndereco) return;
+    setPedidoDePeca(pecaNoEndereco);
+    mudar(pecaNoEndereco.tipo === "peca" ? { peca: null } : { task: null }, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveDaPecaNoEndereco]);
 
   // Endereço só com o cliente: abre onde parou.
   useEffect(() => {
@@ -442,8 +458,8 @@ export default function MesaFoto() {
     },
     etapa,
     proximo,
-    pedirAoDiretor: (mensagem: string) => {
-      setPedidoAoDiretor({ mensagem, em: Date.now() });
+    pedirAoDiretor: (mensagem: string, opcoes?: { soRascunho?: boolean }) => {
+      setPedidoAoDiretor({ mensagem, em: Date.now(), rascunho: !!(opcoes && opcoes.soRascunho) });
       abrirLateralDaArea();
     },
     // Frente MF: de qualquer foto, um clique para o Estúdio de fotos ou para o Post na Agenda.
@@ -630,6 +646,10 @@ export default function MesaFoto() {
               }
             >
               <div key={valor.clientId} className={emColuna ? "relative flex min-w-0 flex-col lg:min-h-0 lg:flex-1" : "relative min-w-0 pb-6"} data-etapa-da-mesa-foto={etapa}>
+                {/* A faixa das peças do mês fica fora do Canvas (o quadro precisa da altura); a janela da peça vale em todas. */}
+                <Suspense fallback={null}>
+                  <EsteiraDoMes mostrarFaixa={!noCanvas} pedido={pedidoDePeca} onPedidoAtendido={() => setPedidoDePeca(null)} />
+                </Suspense>
                 <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo a etapa" />}>
                   {etapa === "acervo" && <EtapaAcervo />}
                   {etapa === "kits" && <EtapaKits />}

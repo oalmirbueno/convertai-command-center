@@ -123,8 +123,8 @@ export interface MesaFotoValor {
   etapa?: string;
   /** O próximo passo do caminho principal, sempre em destaque. */
   proximo?: ProximoPasso | null;
-  /** Abre o diretor já com um pedido (atalhos das etapas). */
-  pedirAoDiretor?: (mensagem: string) => void;
+  /** Abre o diretor já com um pedido (atalhos das etapas). `soRascunho`: o pedido fica no campo dele, para revisar e mandar. */
+  pedirAoDiretor?: (mensagem: string, opcoes?: { soRascunho?: boolean }) => void;
   /** Frente MF: abre a foto no Estúdio de fotos (ferramenta opcional já aberta). */
   abrirNoEstudio?: (imagemId: string, ferramenta?: string | null) => void;
   /** Frente MF: leva as fotos para o Post na Agenda (foto única ou carrossel). */

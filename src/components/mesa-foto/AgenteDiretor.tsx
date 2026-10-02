@@ -832,8 +832,8 @@ function Conversa({ mensagens, pendente, anexos, onOpcao }: { mensagens: Mensage
 export default function AgenteDiretor({
   pedido,
 }: {
-  /** Pedido vindo de outra etapa (atalho): vai direto ao diretor (no rascunho se ele ainda pensa). */
-  pedido?: { mensagem: string; em: number } | null;
+  /** Pedido vindo de outra etapa (atalho): vai direto ao diretor (no rascunho se ele ainda pensa ou se veio `rascunho`). */
+  pedido?: { mensagem: string; em: number; rascunho?: boolean } | null;
 } = {}) {
   const { clientId, catalogo, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
@@ -956,7 +956,8 @@ export default function AgenteDiretor({
   useEffect(() => {
     if (!pedido || pedidosVistos[clientId] === pedido.em) return;
     pedidosVistos[clientId] = pedido.em;
-    if (!pendente) {
+    // 02/10: a peça do mês chega só no campo (a pessoa revisa a direção e manda).
+    if (!pendente && !pedido.rascunho) {
       void mandar(pedido.mensagem);
       return;
     }

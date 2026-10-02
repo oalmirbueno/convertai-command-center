@@ -141,6 +141,7 @@ import { prometeuSemFazer } from "./promessa-do-diretor.ts";
 import { conhecimentoMesaFoto } from "../_shared/conhecimento-dos-agentes.ts";
 import { blocoDaDiversidadeVisual } from "../_shared/diversidade-visual.ts";
 import { variarAgoraNaFoto } from "./modulos/diversidade-da-foto.ts";
+import { acoesDasPecasDeFoto } from "./modulos/acao-pecas-de-foto.ts";
 import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import { acoesDeCampanhas, campanhaParaOContexto, type CampanhaParaFoto, lerCampanhasParaFoto } from "./campanhas.ts";
 import {
@@ -4761,6 +4762,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   ...CANVAS.acoes,
   // Ligada à Mesa (25/09): campanhas do cliente e a do mês pelo calendário (sem IA; campanhas.ts).
   campanhas_listar: CAMPANHAS.campanhas_listar,
+  // 02/10: a esteira das peças de foto do mês (direção de foto do planejamento; sem IA; modulos/acao-pecas-de-foto.ts).
+  ...acoesDasPecasDeFoto(FERRAMENTAS),
   // Clones de pessoa real com autorização (25/09; clones.ts) e a biblioteca em lote (biblioteca-lote.ts).
   ...CLONES.acoes,
   ...BIBLIOTECA_EM_LOTE.acoes,

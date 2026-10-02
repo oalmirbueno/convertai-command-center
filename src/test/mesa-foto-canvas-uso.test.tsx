@@ -301,7 +301,9 @@ describe("canvas: painéis que abrem não cobrem o quadro", () => {
 
   it("modo lista: a escolha abre como folha no pé da página", async () => {
     await abrirQuadro();
-    fireEvent.click(screen.getByRole("button", { name: /Modo lista/ }));
+    // 02/10: o Modo lista mora no "..." da barra do Canvas.
+    fireEvent.keyDown(screen.getByRole("button", { name: "Mais opções do Canvas" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Modo lista/ }));
     await waitFor(() => expect(document.querySelector("[data-modo-lista]")).toBeTruthy());
     fireEvent.click(within(document.querySelector("[data-modo-lista]") as HTMLElement).getByRole("button", { name: "Pessoa" }));
     const folha = await waitFor(() => {
@@ -418,7 +420,10 @@ describe("canvas: configuração do React Flow", () => {
     expect(quadro).toMatch(/\n\s+zoomOnPinch\n/);
     expect(quadro).toMatch(/\n\s+preventScrolling\n/);
     expect(quadro).toContain('noWheelClassName="nowheel"');
-    expect(quadro).toContain("style={{ left: 60 }}");
+    // 02/10: zoom, enquadrar e tela cheia saíram dos controles do canto e foram para a barra do quadro (fora da paleta).
+    expect(quadro).not.toContain("<Controls");
+    expect(fonte).toContain("<BarraDoQuadro");
+    expect(ler("src/components/mesa-foto/canvas/BarraDoQuadro.tsx")).toContain("paddingLeft: 72");
     // A escolha não usa mais a janela do meio da tela com véu.
     expect(ler("src/components/mesa-foto/canvas/Escolher.tsx")).not.toMatch(/@\/components\/ui\/dialog/);
   });

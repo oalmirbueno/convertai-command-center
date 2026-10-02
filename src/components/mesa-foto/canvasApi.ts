@@ -5,6 +5,7 @@ import { decidirFoto, normalizarFoto, type FotoDoAcervo } from "./fotoApi";
 import { normalizarConferenciaDaPersona, type ConferenciaDaPersona, type Persona, type Resolucao } from "./modelosApi";
 import { lerDadosDoVideo, type DadosDoVideo } from "../../../supabase/functions/mesa-foto/modulos/video-do-canvas";
 import { normalizarQuadro, type QuadroAnimado } from "../../../supabase/functions/mesa-foto/modulos/quadro-animado";
+import { CAMERAS_DO_RESULTADO, FUNDOS_DO_RESULTADO, lerOpcao, lerVariacoes, LUZES_DO_RESULTADO } from "../../../supabase/functions/mesa-foto/modulos/opcoes-do-resultado";
 
 /**
  * Canvas da Mesa Foto: o grafo (cartões e ligações) que o dono monta para
@@ -132,6 +133,11 @@ export interface DadosDoNo {
   pose?: string;
   /** 0 = foto solta; 3 a 6 = carrossel. */
   carrossel?: number;
+  /** 02/10: presets do Resultado (modulos/opcoes-do-resultado.ts): câmera, luz e fundo; variações por vez (1 a 5). */
+  camera?: string;
+  luz?: string;
+  fundo?: string;
+  variacoes?: number;
   resultados?: ResultadoDoCanvas[];
   /** Agente: o pedido que ele escreveu (vai ao gerador) e a conversa curta. */
   pedido?: string;
@@ -462,6 +468,10 @@ function normalizarDados(tipo: TipoDeNo, v: any): DadosDoNo {
     const p = texto(d.pose);
     saida.pose = POSES_DO_RESULTADO.some((x) => x.valor === p) ? p : "nenhuma";
     saida.carrossel = lerCarrossel(d.carrossel);
+    saida.camera = lerOpcao(CAMERAS_DO_RESULTADO, d.camera);
+    saida.luz = lerOpcao(LUZES_DO_RESULTADO, d.luz);
+    saida.fundo = lerOpcao(FUNDOS_DO_RESULTADO, d.fundo);
+    saida.variacoes = lerVariacoes(d.variacoes);
     const resultados: ResultadoDoCanvas[] = [];
     if (Array.isArray(d.resultados)) {
       d.resultados.forEach((x: any) => {
@@ -1344,6 +1354,10 @@ export function dadosParaAFuncao(tipo: TipoDeNo, d: DadosDoNo): Record<string, u
     resolucao: d.resolucao || null,
     acao: d.acao || "livre",
     pose: d.pose || "nenhuma",
+    camera: lerOpcao(CAMERAS_DO_RESULTADO, d.camera),
+    luz: lerOpcao(LUZES_DO_RESULTADO, d.luz),
+    fundo: lerOpcao(FUNDOS_DO_RESULTADO, d.fundo),
+    variacoes: lerVariacoes(d.variacoes),
     carrossel: d.carrossel || 0,
     cena: d.cena ? cenaParaAFuncao(d.cena) : null,
     resultados: (d.resultados || []).map((r) => ({

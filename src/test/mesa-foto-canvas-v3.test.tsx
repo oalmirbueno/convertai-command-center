@@ -506,9 +506,12 @@ describe("canvas v3: tela", () => {
     const tela = montar(h(EtapaCanvas));
     await waitFor(() => expect(document.querySelectorAll("[data-no-do-canvas]").length).toBe(2));
     expect(document.body.getAttribute("data-modo-foco")).toBe("canvas");
-    fireEvent.click(screen.getByRole("button", { name: /Mostrar menu/ }));
+    // 02/10: Mostrar menu e Só o canvas moram no "..." da barra do Canvas.
+    fireEvent.keyDown(screen.getByRole("button", { name: "Mais opções do Canvas" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Mostrar menu/ }));
     await waitFor(() => expect(document.body.hasAttribute("data-modo-foco")).toBe(false));
-    fireEvent.click(screen.getByRole("button", { name: /Só o canvas/ }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "Mais opções do Canvas" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Só o canvas/ }));
     await waitFor(() => expect(document.body.getAttribute("data-modo-foco")).toBe("canvas"));
     tela.unmount();
     expect(document.body.hasAttribute("data-modo-foco")).toBe(false);

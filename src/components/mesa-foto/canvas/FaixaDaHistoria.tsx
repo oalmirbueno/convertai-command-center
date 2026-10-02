@@ -13,6 +13,7 @@ import {
 } from "../canvasApi";
 import { BOTAO, CAMPO, FLUTUANTE, PAINEL, useRodaPresa, type Fontes } from "./comum";
 import { cenasDaHistoria, fotoDaCena, moverCena, mudarCena, pacoteDaHistoria } from "./historia";
+import { lerVariacoes } from "../../../../supabase/functions/mesa-foto/modulos/opcoes-do-resultado";
 
 /**
  * Área "História" do Canvas (storyboard): as cenas em ordem, com a foto, a
@@ -213,11 +214,11 @@ export function HistoriaDoCanvas({
                       <BotaoComCusto
                         rotulo={<Copy className="h-3.5 w-3.5" />}
                         titulo="Variações da cena"
-                        descricao={`${VARIACOES_POR_VEZ} fotos da mesma cena, com a mesma pessoa e o mesmo produto, em ângulos diferentes.`}
+                        descricao={`${lerVariacoes(h.no.dados.variacoes)} ${lerVariacoes(h.no.dados.variacoes) === 1 ? "foto" : "fotos"} da mesma cena, com a mesma pessoa e o mesmo produto, em ângulos diferentes.`}
                         variant="outline"
                         className="h-8 border-white/10 bg-white/5 px-2 text-zinc-100 hover:bg-white/10"
                         fecharAoConfirmar
-                        partes={() => partesDaSerie(foto.motor_id, h.no.dados.qualidade || "alta", entradas.length, VARIACOES_POR_VEZ, true)}
+                        partes={() => partesDaSerie(foto.motor_id, h.no.dados.qualidade || "alta", entradas.length, lerVariacoes(h.no.dados.variacoes), true)}
                         executar={() => acoes.onVariacoes(h.no.id, foto)}
                       />
                     )}

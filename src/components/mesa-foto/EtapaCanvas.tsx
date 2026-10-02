@@ -3,8 +3,6 @@ import { createPortal } from "react-dom";
 import {
   Background,
   BackgroundVariant,
-  ControlButton,
-  Controls,
   Handle,
   Position,
   ReactFlow,
@@ -37,8 +35,6 @@ import {
   Layers,
   LayoutList,
   Loader2,
-  Maximize2,
-  Minimize2,
   Plus,
   Save,
   SlidersHorizontal,
@@ -57,7 +53,7 @@ import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { ErroDaMesa, padraoPara, textoDoErro } from "@/lib/mesa/api";
 import { useModoFoco } from "@/lib/modoFoco";
-import { AjudaRecolhida, EstadoDeErro, botao, juntar, useEstadoDaTela } from "@/components/sistema";
+import { AjudaRecolhida, EstadoDeErro, MenuMais, botao, juntar, useEstadoDaTela } from "@/components/sistema";
 import { useBiblioteca, useFotos, useKits } from "./fotoApi";
 import { lerPedidoAoCanvas, motoresDaRodada, rotuloDoMotor, useAncoras, useAndamentos, usePersonas } from "./modelosApi";
 import {
@@ -128,6 +124,11 @@ import { EsteiraDeProdutos, TIPO_ARRASTADO_DA_ESTEIRA } from "./canvas/Esteira";
 import { ComoFunciona, GaleriaDeModelos } from "./canvas/Galeria";
 import { andamentoDoResultado, gerarNoResultado, gerarVariacoes, tirarPendentes, usePendentes } from "./canvas/geracao";
 import { ModoLista } from "./canvas/ModoLista";
+// 02/10: várias caixas de resultado no mesmo quadro (barra do quadro) e a peça do mês levada da esteira.
+import { BarraDoQuadro } from "./canvas/BarraDoQuadro";
+import { apagarCaixa, caixaDaPeca, conectarCaixas, duplicarCaixa, fotoDaCaixa, novaCaixa, podeConectarCaixas, variarEmCaixaNova } from "./canvas/caixas";
+import { direcaoParaOCanvas, lerPecaLevadaAoCanvas } from "./pecasDeFoto";
+import { CAMERAS_DO_RESULTADO, FUNDOS_DO_RESULTADO, lerVariacoes, LUZES_DO_RESULTADO, rotuloDaOpcao } from "../../../supabase/functions/mesa-foto/modulos/opcoes-do-resultado";
 // Frente CNV (30/09): cartões Vídeo (gera pela Mesa Vídeos) e Quadro (composição animada em camadas).
 import { AjustesDoVideo, CorpoDoVideo, JanelaDoVideo } from "./canvas/CartaoDeVideo";
 import { useVigiaDosVideos } from "./canvas/vigiaDosVideos";
@@ -375,7 +376,15 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
   const { gerando, falhas } = andamentoDoResultado(andamentos, no.id);
   const segundos = useSegundos(gerando.length > 0);
   const caminho = atual ? atual.storage_path || atual.url : "";
-  const detalhes = [no.dados.acao && no.dados.acao !== "livre" ? rotuloDaAcao(no.dados.acao) : "", no.dados.pose && no.dados.pose !== "nenhuma" ? rotuloDaPose(no.dados.pose) : "", carrossel ? `carrossel ${carrossel}` : ""].filter(Boolean);
+  const detalhes = [
+    no.dados.camera && no.dados.camera !== "livre" ? rotuloDaOpcao(CAMERAS_DO_RESULTADO, no.dados.camera) : "",
+    no.dados.luz && no.dados.luz !== "livre" ? rotuloDaOpcao(LUZES_DO_RESULTADO, no.dados.luz) : "",
+    no.dados.fundo && no.dados.fundo !== "livre" ? `fundo ${rotuloDaOpcao(FUNDOS_DO_RESULTADO, no.dados.fundo).toLowerCase()}` : "",
+    no.dados.acao && no.dados.acao !== "livre" ? rotuloDaAcao(no.dados.acao) : "",
+    no.dados.pose && no.dados.pose !== "nenhuma" ? rotuloDaPose(no.dados.pose) : "",
+    carrossel ? `carrossel ${carrossel}` : "",
+  ].filter(Boolean);
+  const vezes = lerVariacoes(no.dados.variacoes);
 
   const baixar = async () => {
     if (!atual || baixando) return;
@@ -543,12 +552,12 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
               <BotaoComCusto
                 rotulo={<Copy className="h-3 w-3" />}
                 titulo="Variações desta foto"
-                descricao={`Variações desta: ${VARIACOES_POR_VEZ} fotos com a mesma pessoa, o mesmo produto e o mesmo estilo, em ângulos diferentes.`}
+                descricao={`Variações desta: ${vezes} ${vezes === 1 ? "foto" : "fotos"} com a mesma pessoa, o mesmo produto e o mesmo estilo, em ângulos diferentes.`}
                 variant="outline"
                 className="nodrag mr-1 h-7 border-white/10 bg-white/5 px-1.5 text-[11px] text-zinc-100 hover:bg-white/15"
                 fecharAoConfirmar
                 disabled={gerando.length > 0}
-                partes={() => partesDaSerie(atual.motor_id, no.dados.qualidade || "alta", entradas, VARIACOES_POR_VEZ, true)}
+                partes={() => partesDaSerie(atual.motor_id, no.dados.qualidade || "alta", entradas, vezes, true)}
                 executar={() => ctx.variacoes(no.id, atual)}
               />
             )}
@@ -688,7 +697,7 @@ function alcasDoNo(tipo: TipoDeNo) {
 
 // ------------------------------------------------------------------ peças que flutuam sobre o quadro
 
-function Paleta({ onTipo, onAdicionar, onResultado }: { onTipo: (t: TipoDeNo) => void; onAdicionar: () => void; onResultado: () => void }) {
+function Paleta({ onTipo, onAdicionar }: { onTipo: (t: TipoDeNo) => void; onAdicionar: () => void }) {
   const roda = useRodaPresa<HTMLElement>();
   return (
     <nav
@@ -732,9 +741,6 @@ function Paleta({ onTipo, onAdicionar, onResultado }: { onTipo: (t: TipoDeNo) =>
           <Plus className="h-4 w-4" />
         </span>
         <span className="mt-0.5 text-[11px] font-medium leading-none text-zinc-200">Adicionar</span>
-      </button>
-      <button type="button" onClick={onResultado} data-paleta="gerar" className="flex w-full items-center justify-center rounded-lg px-0.5 py-1 text-[11px] text-zinc-400 hover:bg-white/10 hover:text-white" title="Outro Resultado, para outra combinação no mesmo quadro">
-        <Plus className="mr-0.5 h-3 w-3" /> Result.
       </button>
     </nav>
   );
@@ -1082,13 +1088,7 @@ function Quadro({
         style={estilo}
       >
         <Background id="fina" variant={BackgroundVariant.Dots} gap={22} size={1.4} color="#c4c7ce" />
-        {/* Os controles ficam ao lado da paleta, não debaixo dela. */}
-        <Controls showInteractive={false} position="bottom-left" style={{ left: 60 }}>
-          <ControlButton onClick={onCheia} title={cheia ? "Sair da tela cheia" : "Tela cheia"} aria-label={cheia ? "Sair da tela cheia" : "Tela cheia"}>
-            {/* O CSS do quadro pinta o ícone por dentro; ícone de traço fica sem preenchimento. */}
-            {cheia ? <Minimize2 style={{ fill: "none" }} /> : <Maximize2 style={{ fill: "none" }} />}
-          </ControlButton>
-        </Controls>
+        {/* 02/10: zoom, enquadrar e tela cheia moram na barra do quadro (BarraDoQuadro), no alto. */}
       </ReactFlow>
       <p className="pointer-events-none absolute bottom-2 left-1/2 z-[4] hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-white/70 px-2 py-0.5 text-[11px] text-zinc-500 md:block" data-ajuda-do-quadro="">
         Rolar move o quadro. Ctrl (ou Cmd) + rolar, ou pinça: zoom. Nos painéis, rola só o painel.
@@ -1395,7 +1395,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     const salvo = await garantirSalvo();
     if (!salvo || !salvo.id) throw new Error("Salve o canvas antes de gerar.");
     const g = salvo.nos.find((n) => n.id === gerarId) || atual.current.nos.find((n) => n.id === gerarId);
-    void gerarVariacoes({ queryClient, clientId, canvasId: salvo.id, gerarId, base: r, qualidade: (g && g.dados.qualidade) || "alta", atualizar: atualizarCusto });
+    void gerarVariacoes({ queryClient, clientId, canvasId: salvo.id, gerarId, base: r, qualidade: (g && g.dados.qualidade) || "alta", vezes: lerVariacoes(g ? g.dados.variacoes : null), atualizar: atualizarCusto });
     return {};
   };
 
@@ -1413,6 +1413,110 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     if (o.selecionar || tipo === "gerar") setSelecionado({ tipo: "no", id: no.id });
     return no.id;
   };
+
+  // ---------------------------------------------------------------- caixas (barra do quadro, 02/10)
+
+  const rf = useReactFlow();
+  const [conectandoDe, setConectandoDe] = useState<string | null>(null);
+  // Esc cancela o Conectar.
+  useEffect(() => {
+    if (!conectandoDe) return;
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setConectandoDe(null);
+    };
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  }, [conectandoDe]);
+
+  const escolherCaixa = (id: string) => {
+    setResultadoAtivo(id);
+    setSelecionado({ tipo: "no", id });
+  };
+
+  const caixaNova = () => {
+    const id = novoId("gerar");
+    mudar((c) => novaCaixa(c, id, { motores: padraoDaSaida ? [padraoDaSaida] : [] }));
+    escolherCaixa(id);
+  };
+
+  const duplicar = (gerarId: string) => {
+    const id = novoId("gerar");
+    mudar((c) => duplicarCaixa(c, gerarId, id));
+    escolherCaixa(id);
+    toast.success("Caixa duplicada", { description: "Mesmas entradas e ajustes, sem as fotos." });
+  };
+
+  const variarNumaCaixa = (gerarId: string) => {
+    const id = novoId("gerar");
+    mudar((c) => variarEmCaixaNova(c, gerarId, id));
+    escolherCaixa(id);
+    setRecolhida(false);
+    toast.success("Variação numa caixa nova", { description: "A foto entra como estilo e a câmera muda. Ajuste e gere com o custo à vista." });
+  };
+
+  const apagar = (gerarId: string) => {
+    mudar((c) => apagarCaixa(c, gerarId));
+    setSelecionado(null);
+    if (conectandoDe === gerarId) setConectandoDe(null);
+    toast.info("Caixa fora do quadro", { description: "As fotos que ela gerou continuam no acervo." });
+  };
+
+  const zoom = (o: "mais" | "menos" | "tudo") => {
+    const depois = () => {
+      try {
+        const v = rf.getViewport();
+        setCanvas((c) => ({ ...c, viewport: { x: v.x, y: v.y, zoom: v.zoom } }));
+      } catch {
+        /* quadro ainda sem tamanho */
+      }
+    };
+    try {
+      const p = o === "mais" ? rf.zoomIn({ duration: 200 }) : o === "menos" ? rf.zoomOut({ duration: 200 }) : rf.fitView({ padding: margensDoQuadro(folgaDireita), maxZoom: 1, duration: 300 });
+      Promise.resolve(p).then(depois, depois);
+    } catch {
+      /* quadro ainda sem tamanho */
+    }
+  };
+
+  /** Conectar: o toque na outra caixa liga a foto da escolhida nela (como personagem; o papel troca na linha). */
+  const conectarEm = (id: string) => {
+    const de = conectandoDe;
+    setConectandoDe(null);
+    if (!de || de === id) return;
+    if (podeConectarCaixas(atual.current, de, id)) {
+      mudar((c) => conectarCaixas(c, de, id, "personagem"));
+      escolherCaixa(id);
+      toast.success("Caixas ligadas", { description: "A foto entra como personagem. Troque o papel tocando na linha." });
+    } else toast.info("Essas caixas não ligam", { description: "Ligue uma caixa de resultado em outra, sem fechar um círculo." });
+  };
+
+  // Peça do mês levada da esteira (Mesa Foto, topo): caixa nova com o pedido, o cenário, a câmera e a luz.
+  // Espera os kits (o produto entra sozinho quando o cliente tem um só).
+  const pecaLevada = useRef<ReturnType<typeof lerPecaLevadaAoCanvas> | undefined>(undefined);
+  // Com o Canvas já aberto, a esteira avisa por evento que guardou outra peça.
+  const [pecasLevadas, setPecasLevadas] = useState(0);
+  useEffect(() => {
+    const ouvir = () => {
+      pecaLevada.current = undefined;
+      setPecasLevadas((n) => n + 1);
+    };
+    window.addEventListener("mesa-foto:peca-levada", ouvir);
+    return () => window.removeEventListener("mesa-foto:peca-levada", ouvir);
+  }, []);
+  useEffect(() => {
+    if (pecaLevada.current === undefined) pecaLevada.current = lerPecaLevadaAoCanvas(clientId);
+    const peca = pecaLevada.current;
+    if (!peca || (!kits.isSuccess && !kits.isError)) return;
+    pecaLevada.current = null;
+    const ids = { caixa: novoId("gerar"), pedido: novoId("texto"), ambiente: novoId("ambiente"), produto: novoId("produto") };
+    const kitsDoCliente = kitsUsaveis(fontes.kits);
+    const d = direcaoParaOCanvas(peca, kitsDoCliente.length === 1 ? String(kitsDoCliente[0].id) : null);
+    mudar((c) => caixaDaPeca(c, d, ids, padraoDaSaida ? [padraoDaSaida] : []));
+    escolherCaixa(ids.caixa);
+    setRecolhida(false);
+    toast.success(`${peca.titulo} no quadro`, { description: "Pedido, cenário, câmera e luz já na caixa. Confira e gere." });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kits.isSuccess, kits.isError, pecasLevadas]);
 
   // "Usar no Canvas" da aba Modelos: abre com a modelo já no quadro, ligada ao Resultado.
   useEffect(() => {
@@ -1644,6 +1748,8 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
   };
 
   const noAberto = selecionado && selecionado.tipo === "no" ? canvas.nos.find((n) => n.id === selecionado.id) || null : null;
+  // A caixa da barra do quadro: o Resultado escolhido (ou o aberto nos ajustes).
+  const caixaEscolhida = noAberto && noAberto.tipo === "gerar" ? noAberto : resultadoAtivo ? canvas.nos.find((n) => n.id === resultadoAtivo && n.tipo === "gerar") || null : null;
   const ligacaoAberta = selecionado && selecionado.tipo === "ligacao" ? canvas.ligacoes.find((l) => l.id === selecionado.id) || null : null;
   const idDoResultado = noAberto && noAberto.tipo === "gerar" ? noAberto.id : resultadoAlvo(canvas, resultadoAtivo);
   const resultadoDoPainel = idDoResultado ? canvas.nos.find((n) => n.id === idDoResultado) || null : null;
@@ -1850,15 +1956,17 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
         type="button"
         size="sm"
         variant="ghost"
-        className="mb-1.5 mr-1 h-8 px-2 text-[12px]"
+        className="mb-1.5 mr-1 h-8 w-8 px-0 text-[12px]"
         disabled={salvar.estado === "salvando"}
+        aria-label="Salvar agora"
+        title="Salvar agora (salva sozinho a cada mudança)"
         onClick={() =>
           salvarAgora()
             .then(() => toast.success("Canvas salvo"))
             .catch((e) => avisarErro(e, "Canvas não salvo"))
         }
       >
-        <Save className="mr-1.5 h-3.5 w-3.5" /> Salvar
+        <Save className="h-3.5 w-3.5" />
       </Button>
       {salvar.estado === "conflito" && (
         <Button
@@ -1879,20 +1987,26 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
         </Button>
       )}
       <AjudaRecolhida className="mb-1.5 mr-2">
-        Tudo o que o Canvas gera vai para o acervo como gerado. Usar na Mesa e Finalizar aprovam a foto no mesmo clique. Rolar move o quadro; Ctrl (ou Cmd) + rolar, ou pinça, dá zoom.
+        Cada caixa de resultado gera as fotos dela. A barra no alto do quadro cria, duplica, varia, liga e apaga caixas. Tudo o que o Canvas gera vai para o acervo como gerado. Usar na Mesa e Finalizar aprovam a foto no mesmo clique. Rolar move o quadro; Ctrl (ou Cmd) + rolar, ou pinça, dá zoom.
       </AjudaRecolhida>
       <span className="hidden flex-1 sm:block" />
+      {/* 02/10 (dono: "mais minimalista e organizado"): dois atalhos à vista; o resto no "...". */}
       <BotaoDaBarra ligado={historiaAberta} rotulo={`História${totalDeCenas ? ` (${totalDeCenas})` : ""}`} icone={<Clapperboard className="h-3.5 w-3.5" />} onClick={alternarHistoria} dados={{ "data-botao-historia": "" }} />
       <BotaoDaBarra ligado={prontosAbertos} rotulo="Modelos prontos" icone={<Wand2 className="h-3.5 w-3.5" />} onClick={alternarProntos} />
-      <BotaoDaBarra ligado={comoFunciona} rotulo="Como funciona" icone={<HelpCircle className="h-3.5 w-3.5" />} onClick={() => (comoFunciona ? fecharComoFunciona() : setComoFunciona(true))} />
-      <BotaoDaBarra
-        ligado={!foco}
-        rotulo={foco ? "Mostrar menu" : "Só o canvas"}
-        icone={foco ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-        onClick={alternarFoco}
-        title={foco ? "Mostrar a barra do painel e os botões flutuantes" : "Esconder a barra do painel e os botões flutuantes"}
+      <MenuMais
+        rotulo="Mais opções do Canvas"
+        className="mb-1.5"
+        itens={[
+          { rotulo: lista ? "Ver o quadro" : "Modo lista", icone: lista ? <Workflow className="h-3.5 w-3.5" /> : <LayoutList className="h-3.5 w-3.5" />, aoEscolher: () => setLista(!lista) },
+          {
+            rotulo: foco ? "Mostrar menu" : "Só o canvas",
+            icone: foco ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />,
+            aoEscolher: alternarFoco,
+            dica: foco ? "Mostrar a barra do painel e os botões flutuantes" : "Esconder a barra do painel e os botões flutuantes",
+          },
+          { rotulo: comoFunciona ? "Esconder o como funciona" : "Como funciona", icone: <HelpCircle className="h-3.5 w-3.5" />, aoEscolher: () => (comoFunciona ? fecharComoFunciona() : setComoFunciona(true)) },
+        ]}
       />
-      <BotaoDaBarra ligado={lista} rotulo={lista ? "Ver o quadro" : "Modo lista"} icone={lista ? <Workflow className="h-3.5 w-3.5" /> : <LayoutList className="h-3.5 w-3.5" />} onClick={() => setLista(!lista)} />
     </div>
   );
 
@@ -1932,7 +2046,24 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
             semTeclas={!!quadroAberto || !!videoVendo}
           />
         </ContextoDoQuadro.Provider>
-        <Paleta onTipo={aoTocarNaPaleta} onAdicionar={() => abrirEscolha("produto", null)} onResultado={() => porNoQuadro("gerar")} />
+        <Paleta onTipo={aoTocarNaPaleta} onAdicionar={() => abrirEscolha("produto", null)} />
+        <BarraDoQuadro
+          temCaixa={!!caixaEscolhida}
+          podeVariar={!!caixaEscolhida && !!fotoDaCaixa(caixaEscolhida)}
+          conectando={!!conectandoDe}
+          zoom={canvas.viewport.zoom}
+          cheia={cheia}
+          folgaDireita={folgaDireita}
+          onNova={caixaNova}
+          onDuplicar={() => caixaEscolhida && duplicar(caixaEscolhida.id)}
+          onVariar={() => caixaEscolhida && variarNumaCaixa(caixaEscolhida.id)}
+          onConectar={() => (conectandoDe ? setConectandoDe(null) : caixaEscolhida && setConectandoDe(caixaEscolhida.id))}
+          onApagar={() => caixaEscolhida && apagar(caixaEscolhida.id)}
+          onZoomMenos={() => zoom("menos")}
+          onZoomMais={() => zoom("mais")}
+          onEnquadrar={() => zoom("tudo")}
+          onCheia={alternarCheia}
+        />
         <BarraLateral
           recolhida={recolhida}
           onRecolher={setRecolhida}
