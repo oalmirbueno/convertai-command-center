@@ -14,7 +14,9 @@
  * Opcionais: RENDER_WORKER_NOME, RENDER_CHROME (Chrome Headless Shell já
  * baixado), RENDER_PASTA, RENDER_INTERVALO_S, RENDER_CONCORRENCIA,
  * RENDER_FFMPEG, RENDER_FFPROBE, RENDER_HYPERFRAMES e RENDER_GSAP (frente MOT).
- * "--uma-vez" faz um pedido e sai.
+ * "--uma-vez" faz um pedido e sai. RENDER_SAIR_OCIOSO_S (render na nuvem, 02/10):
+ * sai sozinho depois de tantos segundos sem pedido, para a máquina da nuvem
+ * desligar e não cobrar parada.
  */
 
 import { randomUUID } from "node:crypto";
@@ -30,13 +32,14 @@ import { PASTA_DO_WORKER, umPedido, type Ambiente } from "./trabalho.ts";
 // Frente TCN (01/10): "+tcn-1" = sabe a troca de cenário (o banco só entrega o tipo "cenario" a quem tem "tcn-").
 export const VERSAO_DO_WORKER = "edt-1.0+mot-1.0+mtr-1+tcn-1+mov-1";
 
-export function lerAmbiente(env: NodeJS.ProcessEnv): { url: string; chave: string; nome: string; pasta: string; intervalo: number; chrome: string | null; concorrencia: number | null } {
+export function lerAmbiente(env: NodeJS.ProcessEnv): { url: string; chave: string; nome: string; pasta: string; intervalo: number; chrome: string | null; concorrencia: number | null; sairOciosoS: number | null } {
   const url = String(env.SUPABASE_URL || env.VITE_SUPABASE_URL || "").trim();
   const chave = String(env.SUPABASE_SERVICE_ROLE_KEY || env.RENDER_CHAVE || "").trim();
   if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(url) && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(url)) throw new Error("Falta SUPABASE_URL (https://<projeto>.supabase.co).");
   if (chave.length < 20) throw new Error("Falta SUPABASE_SERVICE_ROLE_KEY na variável de ambiente (nunca em arquivo).");
   const intervalo = Math.max(5, Number(env.RENDER_INTERVALO_S) || 15);
   const conc = Number(env.RENDER_CONCORRENCIA);
+  const ocioso = Number(env.RENDER_SAIR_OCIOSO_S);
   return {
     url,
     chave,
@@ -45,6 +48,7 @@ export function lerAmbiente(env: NodeJS.ProcessEnv): { url: string; chave: strin
     intervalo,
     chrome: env.RENDER_CHROME ? String(env.RENDER_CHROME) : null,
     concorrencia: isFinite(conc) && conc > 0 ? Math.floor(conc) : null,
+    sairOciosoS: isFinite(ocioso) && ocioso > 0 ? ocioso : null,
   };
 }
 
@@ -100,6 +104,7 @@ async function principal() {
   });
   avisarSupervisor({ tipo: "pronto", motor: "render", versao: VERSAO_DO_WORKER });
   console.log(`Worker ${cfg.nome} (${VERSAO_DO_WORKER}) olhando a fila a cada ${cfg.intervalo} s. Ctrl+C para parar.`);
+  let ultimoPedido = Date.now();
   while (!parar) {
     let feito = null;
     try {
@@ -112,7 +117,12 @@ async function principal() {
     pedidoAtual = null;
     if (feito) console.log(`${feito.tipo} ${feito.id}: ${feito.estado} (${feito.detalhe})`);
     if (umaVez) break;
-    if (!feito && !parar) await soneca.esperar(cfg.intervalo * 1000);
+    if (feito) ultimoPedido = Date.now();
+    else if (cfg.sairOciosoS !== null && Date.now() - ultimoPedido >= cfg.sairOciosoS * 1000) {
+      console.log(`Fila vazia há ${cfg.sairOciosoS} s: saio (render na nuvem).`);
+      break;
+    }
+    if (!feito && !parar) await soneca.esperar((cfg.sairOciosoS !== null ? Math.min(cfg.intervalo, 5) : cfg.intervalo) * 1000);
   }
   clearInterval(relogio);
   encerrarCanal();
