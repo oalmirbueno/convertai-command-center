@@ -69,13 +69,32 @@ export interface EntradaDoPacote {
    * melhores takes inteiros (o mesmo de antes).
    */
   projeto?: ProjetoDeEdicao | null;
+  /**
+   * 02/10 (auditoria do pacote): legenda da EDIÇÃO (tempo da saída, já com os
+   * cortes), montada pela tela a partir da fala do projeto editado.
+   */
+  srt_da_edicao?: string | null;
+  /** O projeto é a edição feita no editor (não a primeira montagem): a ordem e a escolha dos takes já estão nele. */
+  projeto_editado?: boolean;
+  /** De onde veio o FPS: lido do arquivo, do projeto editado ou escolhido na tela. */
+  fps_origem?: "arquivo" | "projeto" | "escolhido" | null;
   gerado_em: string;
+}
+
+/** Pendência com o que fazer (a tela vira botão: transcrever, escolher o FPS, ligar roteiro). */
+export interface PendenciaDoPacote {
+  texto: string;
+  acao: "transcrever" | "fps" | "roteiro" | "melhor" | "sincronia" | "entrada" | null;
+  /** Takes da pendência (transcrever). */
+  takes?: string[];
 }
 
 export interface PacoteDeEdicao {
   versao: number;
   nome_do_zip: string;
   pendencias: string[];
+  /** As mesmas pendências, com a ação de cada uma. */
+  pendencias_acoes: PendenciaDoPacote[];
   /** Caminho no ZIP -> conteúdo de texto. */
   arquivos: Record<string, string>;
   resumo: { takes: number; melhores: number; cenas: number; duracao_melhores_s: number | null };
@@ -133,26 +152,35 @@ export function montarPacote(e: EntradaDoPacote): PacoteDeEdicao {
   const legendas = e.legendas || [];
   const referencias = e.referencias || [];
   const fps = typeof e.fps === "number" && e.fps > 0 ? e.fps : null;
-  const pendencias: string[] = [];
+  const acoes: PendenciaDoPacote[] = [];
+  const pendencias = {
+    push(texto: string, acao: PendenciaDoPacote["acao"] = null, ids?: string[]) {
+      acoes.push(ids ? { texto, acao, takes: ids } : { texto, acao });
+    },
+  };
 
-  if (!takes.length) pendencias.push("Nenhum take no pacote: suba os vídeos na Entrada da Mesa Edição.");
-  if (!roteiro) pendencias.push("Sem roteiro aprovado ligado: a ordem das cenas sai dos nomes e grupos dos takes.");
+  if (!takes.length) pendencias.push("Nenhum take no pacote: suba os vídeos na Entrada da Mesa Edição.", "entrada");
+  if (!roteiro && !e.projeto_editado) pendencias.push("Sem roteiro aprovado ligado: a ordem das cenas sai dos nomes e grupos dos takes.", "roteiro");
   if (roteiro) {
     roteiro.cenas
       .slice()
       .sort((a, b) => a.ordem - b.ordem)
       .forEach((c) => {
         const daCena = takes.filter((t) => t.cena_ref === c.ref);
-        if (!daCena.length) pendencias.push(`Cena ${c.ordem} (${c.titulo || "sem título"}) sem take ligado.`);
-        else if (!daCena.some((t) => t.melhor)) pendencias.push(`Cena ${c.ordem} (${c.titulo || "sem título"}) sem melhor take marcado.`);
+        if (!daCena.length) pendencias.push(`Cena ${c.ordem} (${c.titulo || "sem título"}) sem take ligado.`, "melhor");
+        else if (!daCena.some((t) => t.melhor)) pendencias.push(`Cena ${c.ordem} (${c.titulo || "sem título"}) sem melhor take marcado.`, "melhor");
       });
-  } else if (takes.length && !melhores.length) {
-    pendencias.push("Nenhum melhor take marcado: o editor escolhe entre todos.");
+  } else if (takes.length && !melhores.length && !e.projeto_editado) {
+    pendencias.push("Nenhum melhor take marcado: o editor escolhe entre todos.", "melhor");
   }
-  const semLegenda = takes.filter((t) => t.tipo !== "gerado" && !legendas.some((l) => l.arquivo_id === t.id && l.srt));
-  if (semLegenda.length) pendencias.push(`${semLegenda.length} ${semLegenda.length === 1 ? "take sem legenda pronta" : "takes sem legenda pronta"} (pedido de transcrição preparado ou a preparar).`);
-  if (!fps) pendencias.push("FPS da composição não informado: confira no arquivo antes de montar.");
-  pendencias.push("Sincronia de áudio não medida pelo painel: confira no editor (timecode ou áudio guia).");
+  // 02/10: legenda pronta = SRT do pedido de transcrição OU a fala já marcada (Entrada, Timestamp, projeto editado).
+  const semLegenda = takes.filter((t) => t.tipo !== "gerado" && t.tipo !== "audio" && !legendas.some((l) => l.arquivo_id === t.id && l.srt));
+  if (semLegenda.length) pendencias.push(`${semLegenda.length} ${semLegenda.length === 1 ? "take sem legenda pronta" : "takes sem legenda pronta"}: transcreva (com o custo antes) para o SRT entrar no pacote.`, "transcrever", semLegenda.map((t) => t.id));
+  if (!fps) pendencias.push("FPS não lido do arquivo: escolha em FPS (24, 25, 30 ou 60) antes de baixar.", "fps");
+  // Sincronia só pende com áudio gravado à parte; vídeo com o som na mesma gravação já vem em sincronia.
+  const audiosSeparados = takes.filter((t) => t.tipo === "audio");
+  if (audiosSeparados.length) pendencias.push(`${audiosSeparados.length} ${audiosSeparados.length === 1 ? "áudio gravado à parte" : "áudios gravados à parte"}: alinhe pela claquete ou pela onda no editor (o painel não mede a sincronia).`, "sincronia");
+  const listaDePendencias = acoes.map((x) => x.texto);
 
   const titulo = e.titulo.trim() || (roteiro ? roteiro.titulo : "Vídeo");
   const nomeDoZip = `pacote-${slugDoPacote(e.cliente.nome, 24)}-${slugDoPacote(titulo, 32)}.zip`;
@@ -244,6 +272,7 @@ export function montarPacote(e: EntradaDoPacote): PacoteDeEdicao {
       const t = takes.find((x) => x.id === l.arquivo_id);
       if (t) arquivos[`legendas/${t.nome.replace(/\.[a-z0-9]{2,5}$/i, "")}.srt`] = String(l.srt);
     });
+  if (e.srt_da_edicao && e.srt_da_edicao.trim()) arquivos["legendas/edicao.srt"] = e.srt_da_edicao;
   if (semLegenda.length) arquivos["legendas/PENDENTE.txt"] = `Sem legenda pronta:\n${semLegenda.map((t) => `- ${t.nome}`).join("\n")}\n`;
 
   // Projeto de edição (frente E2): o edl.json no formato dos projetos Remotion do
@@ -274,7 +303,8 @@ export function montarPacote(e: EntradaDoPacote): PacoteDeEdicao {
     roteiro_id: roteiro ? roteiro.id : null,
     canvas_id: e.historia ? e.historia.canvas_id : null,
     takes: takes.map((t) => ({ id: t.id, nome: t.nome, cena_ref: t.cena_ref, melhor: t.melhor, storage: `${t.storage_bucket}/${t.storage_path}`, sha256: t.sha256 })),
-    pendencias,
+    pendencias: listaDePendencias,
+    fps_origem: fps ? e.fps_origem || "escolhido" : null,
     direcao_blocos: k.ids,
   };
   arquivos["pacote.json"] = JSON.stringify(manifesto, null, 1);
@@ -290,12 +320,12 @@ export function montarPacote(e: EntradaDoPacote): PacoteDeEdicao {
     "- direcao.md: a direção de edição (método Brabo destilado e a nota da equipe).",
     "- edl.json: a montagem no formato dos projetos Remotion (sai do projeto de edição).",
     "- projeto.json: o projeto de edição (trilhas, clipes, textos e transições) para abrir no editor.",
-    "- legendas/: SRT prontos ou a lista do que falta.",
+    "- legendas/: SRT de cada take (fala marcada) e edicao.srt (a legenda da edição, no tempo do vídeo final), ou a lista do que falta.",
     "- links.txt: onde baixar os arquivos (quando incluído).",
     "",
     "## Pendências",
     "",
-    ...pendencias.map((p) => `- ${p}`),
+    ...(listaDePendencias.length ? listaDePendencias.map((p) => `- ${p}`) : ["Nenhuma."]),
     "",
     "O original de cada gravação nunca foi alterado. Take gerado por IA está marcado como gerado.",
   ].join("\n");
@@ -304,7 +334,8 @@ export function montarPacote(e: EntradaDoPacote): PacoteDeEdicao {
   return {
     versao: VERSAO_DO_PACOTE,
     nome_do_zip: nomeDoZip,
-    pendencias,
+    pendencias: listaDePendencias,
+    pendencias_acoes: acoes,
     arquivos,
     resumo: {
       takes: takes.length,

@@ -13,6 +13,10 @@ import { planoDoDiretor } from "@/lib/editor/motion/diretor";
 import { trechosChave } from "@/lib/editor/skills/palavrasChave";
 import { checklistDeEngajamento } from "@/lib/editor/engajamento";
 import { CANDIDATOS_DO_AGENTE_EDITOR, modeloPadraoDoEditor } from "@/lib/mesa/modelo-por-papel";
+import { montarPacote, type TakeDoPacote } from "../../supabase/functions/mesa-videos/modulos/pacote-de-edicao";
+import { entradaDoPacote } from "@/components/mesa-edicao/pacote";
+import type { ArquivoDeVideo } from "@/components/mesa-videos/videosApi";
+import { fpsDoMp4 } from "@/lib/editor/fpsDoArquivo";
 import { AGORA_SINTETICO, falaSintetica, projetoTalkingHead } from "./fixtures/talkingHeadSintetico";
 
 /**
@@ -299,5 +303,61 @@ describe("modelo padrão do agente editor", () => {
     expect(modeloPadraoDoEditor([luna, sol, { ...sonnet, ativo: false }])).toBe(sol.id);
     expect(modeloPadraoDoEditor([luna])).toBeNull();
     expect(CANDIDATOS_DO_AGENTE_EDITOR.some((x) => /luna|flash/.test(x))).toBe(false);
+  });
+});
+
+// ------------------------------------------------------------------ pacote para editar
+
+/** MP4 mínimo: ftyp, (mdat antes ou depois) e moov > trak > mdia (mdhd, hdlr vide, minf > stbl > stts). */
+function mp4Sintetico(escala: number, delta: number, moovNoFim: boolean): Uint8Array {
+  const u32 = (n: number) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+  const caixa = (t: string, corpo: number[]) => u32(8 + corpo.length).concat([t.charCodeAt(0), t.charCodeAt(1), t.charCodeAt(2), t.charCodeAt(3)], corpo);
+  const ascii = (t: string) => t.split("").map((c) => c.charCodeAt(0));
+  const mdhd = caixa("mdhd", [0, 0, 0, 0].concat(u32(0), u32(0), u32(escala), u32(escala * 10), [0, 0, 0, 0]));
+  const hdlr = caixa("hdlr", [0, 0, 0, 0].concat(u32(0), ascii("vide"), u32(0), u32(0), u32(0), [0]));
+  const stts = caixa("stts", [0, 0, 0, 0].concat(u32(1), u32(250), u32(delta)));
+  const moov = caixa("moov", caixa("trak", caixa("mdia", mdhd.concat(hdlr, caixa("minf", caixa("stbl", stts))))));
+  const ftyp = caixa("ftyp", ascii("isom").concat(u32(0)));
+  const mdat = caixa("mdat", new Array(5000).fill(7));
+  return new Uint8Array(moovNoFim ? ftyp.concat(mdat, moov) : ftyp.concat(moov, mdat));
+}
+
+describe("pacote para editar", () => {
+  const ler = (b: Uint8Array) => async (ini: number, fim: number) => b.subarray(ini, Math.min(fim, b.length));
+
+  it("FPS lido do cabeçalho do arquivo (moov no começo ou depois do mdat; 29,97 vira 30)", async () => {
+    expect(await fpsDoMp4(ler(mp4Sintetico(12800, 512, false)))).toBe(25);
+    expect(await fpsDoMp4(ler(mp4Sintetico(30000, 1001, true)))).toBe(30);
+    expect(await fpsDoMp4(ler(new Uint8Array([0, 0, 0, 8, 102, 114, 101, 101])))).toBeNull();
+  });
+
+  const take = (id: string, tipo = "bruto"): TakeDoPacote => ({ id, nome: `${id}.mp4`, nome_original: `${id}.mp4`, tipo, storage_bucket: "mesa", storage_path: `c/${id}.mp4`, grupo: null, roteiro_id: null, cena_ref: null, melhor: true, duracao_s: 30, largura: 1080, altura: 1920, bytes: 1, sha256: null });
+
+  it("pendências viram ação; com FPS lido, fala marcada e vídeo com som, só sobra o que precisa", () => {
+    const base = { cliente: { id: "c", nome: "Cliente" }, titulo: "Vídeo", formato: "9:16", gerado_em: AGORA_SINTETICO };
+    const cru = montarPacote({ ...base, takes: [take("a")], fps: null, legendas: [] });
+    expect(cru.pendencias_acoes.map((p) => p.acao)).toEqual(expect.arrayContaining(["transcrever", "fps"]));
+    expect(cru.pendencias.join(" ")).not.toMatch(/Sincronia de áudio não medida/);
+    const pronto = montarPacote({ ...base, takes: [take("a")], fps: 25, fps_origem: "arquivo", legendas: [{ arquivo_id: "a", estado: "pronto", srt: "1\n00:00:00,000 --> 00:00:01,000\nOi\n" }], projeto: projetoTalkingHead(), projeto_editado: true, srt_da_edicao: "1\n00:00:00,000 --> 00:00:01,000\nOi\n" });
+    expect(pronto.pendencias).toEqual([]);
+    expect(Object.keys(pronto.arquivos)).toEqual(expect.arrayContaining(["edl.json", "projeto.json", "legendas/a.srt", "legendas/edicao.srt", "LEIA-ME.md", "pacote.json"]));
+    expect(JSON.parse(pronto.arquivos["pacote.json"]).fps_origem).toBe("arquivo");
+    const comAudio = montarPacote({ ...base, takes: [take("a"), take("som", "audio")], fps: 25, legendas: [{ arquivo_id: "a", estado: "pronto", srt: "x" }] });
+    expect(comAudio.pendencias_acoes.find((p) => p.acao === "sincronia")).toBeTruthy();
+  });
+
+  it("o pacote sai da edição aberta: edl com os cortes, SRT de cada take pela fala marcada e a legenda da edição", () => {
+    const p = proporSkill("cortar_silencios", projetoTalkingHead(), { agora: AGORA_SINTETICO }).resultado;
+    const fonte = Object.keys(p.fontes)[0];
+    const editado = { ...p, fontes: { ...p.fontes, [fonte]: { ...p.fontes[fonte], arquivo_id: "a" } } };
+    const arq = { id: "a", client_id: "c", nome: "a.mp4", nome_original: "a.mp4", storage_bucket: "mesa", storage_path: "c/a.mp4", tipo: "bruto", mime: "video/mp4", bytes: 1, duracao_s: 42, largura: 1080, altura: 1920, sha256: null, gravado_em: null, roteiro_id: null, cena_ref: null, grupo: null, melhor: true, nota: null, estado: "novo", criado_em: AGORA_SINTETICO } as ArquivoDeVideo;
+    const e = entradaDoPacote({ clienteId: "c", clienteNome: "Cliente", titulo: "Vídeo", arquivos: [arq], quais: "melhores", roteiro: null, historia: null, pedidos: [], destino: "remotion", fps: 25, fpsOrigem: "arquivo", formato: "9:16", direcao: "", agora: AGORA_SINTETICO, projetoEditado: editado });
+    const pac = montarPacote(e);
+    const edl = JSON.parse(pac.arquivos["edl.json"]);
+    expect(edl.ranges.length).toBe(trilhaPrincipal(editado)!.clipes.length);
+    expect(edl.ranges.length).toBeGreaterThan(1);
+    expect(pac.arquivos["legendas/a.srt"]).toMatch(/-->/);
+    expect(pac.arquivos["legendas/edicao.srt"]).toMatch(/-->/);
+    expect(pac.pendencias).toEqual([]);
   });
 });

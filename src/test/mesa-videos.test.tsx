@@ -353,14 +353,16 @@ describe("pacote para editar", () => {
     expect(edl.total_duration_s).toBe(7.5);
   });
 
-  it("pendências honestas: cena sem melhor take, legenda faltando e sincronia não medida", () => {
+  it("pendências honestas e com ação: cena sem melhor take, legenda faltando (transcrever) e FPS (escolher)", () => {
     const p = montarPacote(entrada);
     expect(p.pendencias.join(" | ")).toContain("Cena 2 (Produto) sem melhor take marcado");
     expect(p.pendencias.join(" | ")).toContain("sem legenda pronta");
-    expect(p.pendencias.join(" | ")).toContain("Sincronia de áudio não medida");
+    expect(p.pendencias_acoes.find((x) => x.acao === "transcrever")).toBeTruthy();
+    // 02/10: vídeo com o som na mesma gravação já vem em sincronia; só áudio gravado à parte pende.
+    expect(p.pendencias.join(" | ")).not.toContain("Sincronia de áudio não medida");
     const vazio = montarPacote({ ...entrada, roteiro: null, takes: [], fps: null });
     expect(vazio.pendencias.join(" | ")).toContain("Nenhum take no pacote");
-    expect(vazio.pendencias.join(" | ")).toContain("FPS da composição não informado");
+    expect(vazio.pendencias.join(" | ")).toContain("FPS não lido do arquivo");
     expect(JSON.parse(vazio.arquivos["edl.json"]).note).toContain("FPS 25 provisório");
   });
 
@@ -836,7 +838,8 @@ describe("tela da Mesa Edição", () => {
     montar(h(MesaProvider, { valor: valorDaMesa(), children: h(EtapaEditar, { irPara: vi.fn() }) }));
     await waitFor(() => expect(document.querySelector('[data-area-do-editor="reservada"]')).toBeTruthy());
     expect(document.querySelectorAll("[data-trilha]").length).toBe(5);
-    expect(document.querySelector("[data-previa-do-pacote]")!.textContent).toContain("Sincronia de áudio não medida");
+    expect(document.querySelector("[data-previa-do-pacote]")!.textContent).toContain("FPS não lido do arquivo");
+    expect(document.querySelector("[data-previa-do-pacote]")!.textContent).not.toContain("Sincronia de áudio não medida");
     expect(document.querySelector('[data-computador-do-agente="desligado"]')).toBeTruthy();
     expect(screen.getByRole("button", { name: "Pedir tarefa" }).hasAttribute("disabled")).toBe(true);
     // Salvar versão leva o projeto junto.

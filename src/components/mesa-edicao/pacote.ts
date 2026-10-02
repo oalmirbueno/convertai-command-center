@@ -2,6 +2,8 @@ import type { ArquivoDeVideo, PedidoDeVideo } from "@/components/mesa-videos/vid
 import { takesNaOrdem, type EntradaDoPacote, type TakeDoPacote } from "../../../supabase/functions/mesa-videos/modulos/pacote-de-edicao";
 import { projetoDosTakes, type ProjetoDeEdicao } from "../../../supabase/functions/_shared/projeto-de-edicao";
 import { agruparVariantes } from "../../../supabase/functions/mesa-videos/modulos/organizador-da-entrada";
+import { linhasDeLegenda, srtDasLinhas, type PalavraComTempo } from "../../../supabase/functions/editor-video/ferramentas";
+import { falaNaLinhaDoTempo, palavrasDaTranscricao } from "@/lib/editor/transcricao";
 
 /**
  * Entrada do "Pacote para editar" e do projeto de edição a partir do que a
@@ -65,6 +67,15 @@ export function entradaDoPacote(p: {
   direcao: string;
   urls?: Record<string, string>;
   agora: string;
+  /**
+   * 02/10 (auditoria do pacote): a edição feita no editor (a versão aberta). O
+   * edl.json, o projeto.json e a legenda da edição saem dela; sem ela, a
+   * primeira montagem de sempre.
+   */
+  projetoEditado?: ProjetoDeEdicao | null;
+  /** Fala já marcada por take (Entrada ou Timestamp): vira o SRT do take, sem novo pedido. */
+  falas?: Record<string, PalavraComTempo[] | null>;
+  fpsOrigem?: EntradaDoPacote["fps_origem"];
 }): EntradaDoPacote {
   const ativos = materialDaEdicao(p.arquivos.filter((a) => a.estado !== "arquivado" && (a.tipo !== "gerado" || !!a.edicao_desde)));
   const doRoteiro = p.roteiro ? ativos.filter((a) => a.roteiro_id === (p.roteiro as { id: string }).id) : ativos;
@@ -88,8 +99,31 @@ export function entradaDoPacote(p: {
       }),
     referencias: [],
     direcao: p.direcao,
+    fps_origem: p.fps ? p.fpsOrigem || "escolhido" : null,
     gerado_em: p.agora,
   };
-  entrada.projeto = projetoDaEntrada(entrada);
+  // Legenda pronta de cada take: o SRT do pedido, a fala marcada na Entrada ou a do projeto editado.
+  const legendas = entrada.legendas || [];
+  const comSrt = (id: string) => legendas.some((l) => l.arquivo_id === id && !!l.srt);
+  const doProjeto: Record<string, PalavraComTempo[]> = {};
+  if (p.projetoEditado) {
+    Object.keys(p.projetoEditado.fontes).forEach((k) => {
+      const f = p.projetoEditado!.fontes[k];
+      const tr = p.projetoEditado!.transcricoes[k];
+      if (f && f.arquivo_id && tr && tr.segmentos.length) doProjeto[f.arquivo_id] = palavrasDaTranscricao(tr);
+    });
+  }
+  takes.forEach((t) => {
+    if (comSrt(t.id)) return;
+    const fala = (p.falas && p.falas[t.id]) || doProjeto[t.id] || null;
+    if (fala && fala.length) legendas.push({ arquivo_id: t.id, estado: "pronto", srt: srtDasLinhas(linhasDeLegenda(fala)) });
+  });
+  entrada.legendas = legendas;
+  if (p.projetoEditado && p.projetoEditado.trilhas.some((t) => t.clipes.length)) {
+    entrada.projeto = p.projetoEditado;
+    entrada.projeto_editado = true;
+    const fala = falaNaLinhaDoTempo(p.projetoEditado);
+    if (fala.length) entrada.srt_da_edicao = srtDasLinhas(linhasDeLegenda(fala));
+  } else entrada.projeto = projetoDaEntrada(entrada);
   return entrada;
 }

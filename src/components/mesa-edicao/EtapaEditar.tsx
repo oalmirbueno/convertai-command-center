@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Clapperboard, Download, History, Loader2, Monitor, Package, Save } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useMesa } from "@/components/mesa/MesaContexto";
-import { textoDoErro } from "@/lib/mesa/api";
+import { textoDoErro, usd } from "@/lib/mesa/api";
+import { migrarProjeto } from "../../../supabase/functions/_shared/projeto-de-edicao";
+import { custoDoTimestamp, type PalavraComTempo } from "../../../supabase/functions/editor-video/ferramentas";
+import { lerFalaDaEntrada } from "@/lib/editor/fala";
+import { fpsDoMp4, lerPorUrl } from "@/lib/editor/fpsDoArquivo";
 import Secao from "@/components/sistema/Secao";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
@@ -26,6 +30,7 @@ import {
   useHistorias,
   usePedidos,
   useRoteirosAprovados,
+  useVersoes,
 } from "@/components/mesa-videos/videosApi";
 import AreaDoEditor from "./AreaDoEditor";
 import { entradaDoPacote } from "./pacote";
@@ -127,6 +132,46 @@ export default function EtapaEditar({ irPara }: { irPara: IrPara }) {
   const arquivos = ((arquivosQ.data && arquivosQ.data.arquivos) || []).filter(naEntradaDaEdicao);
   const pedidos = (pedidosQ.data && pedidosQ.data.itens) || [];
 
+  // 02/10 (auditoria do pacote): o pacote sai da EDIÇÃO feita no editor (a versão aberta), não só da primeira montagem.
+  const versoesQ = useVersoes(clientId);
+  const [versaoAberta] = useEstadoDaTela<string>(`mesa-edicao:editor:versao:${clientId}`, "");
+  const projetoEditado = useMemo(() => {
+    const vs = ((versoesQ.data && versoesQ.data.itens) || []).filter((v) => !!v.projeto).sort((a, b) => (a.criado_em < b.criado_em ? 1 : -1));
+    const v = vs.find((x) => x.id === versaoAberta) || vs[0] || null;
+    return v ? migrarProjeto(v.projeto).projeto : null;
+  }, [versoesQ.data, versaoAberta]);
+
+  // FPS lido do próprio arquivo (só o cabeçalho, por Range): a pendência "FPS não informado" some sozinha.
+  const [fpsLido, setFpsLido] = useState<number | null>(null);
+  const primeiroVideo = arquivos.find((a) => a.tipo !== "audio" && /\.(mp4|mov|m4v)$/i.test(a.storage_path || ""));
+  const caminhoDoPrimeiro = primeiroVideo ? primeiroVideo.storage_path : "";
+  useEffect(() => {
+    if (e.fps || !caminhoDoPrimeiro) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const { data } = await supabase.storage.from(BUCKET_DOS_VIDEOS).createSignedUrl(caminhoDoPrimeiro, 600);
+        if (!data || !data.signedUrl) return;
+        const f = await fpsDoMp4(lerPorUrl(data.signedUrl));
+        if (vivo && f) setFpsLido(f);
+      } catch (err) {
+        console.error("[pacote] FPS não lido do arquivo", err);
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [caminhoDoPrimeiro, e.fps]);
+  const fpsEscolhido = Number(e.fps) > 0 ? Number(e.fps) : null;
+  const fpsDoProjeto = projetoEditado && projetoEditado.fps_informado ? projetoEditado.fps : null;
+  const fps = fpsEscolhido || fpsDoProjeto || fpsLido;
+  const fpsOrigem = fpsEscolhido ? "escolhido" : fpsDoProjeto ? "projeto" : fpsLido ? "arquivo" : null;
+  // Fala já marcada na Entrada (sem custo): vira o SRT do take no pacote.
+  const falas = arquivos.reduce<Record<string, PalavraComTempo[] | null>>((m, a) => {
+    m[a.id] = lerFalaDaEntrada(clientId, a.id);
+    return m;
+  }, {});
+
   const entrada = (urls?: Record<string, string>) =>
     entradaDoPacote({
       clienteId: clientId,
@@ -140,10 +185,13 @@ export default function EtapaEditar({ irPara }: { irPara: IrPara }) {
         : null,
       pedidos,
       destino: e.destino,
-      fps: Number(e.fps) > 0 ? Number(e.fps) : null,
+      fps,
+      fpsOrigem,
       formato: e.formato,
       direcao: e.direcao,
       urls,
+      projetoEditado,
+      falas,
       agora: new Date().toISOString(),
     });
   const previa = entrada();
@@ -335,10 +383,31 @@ export default function EtapaEditar({ irPara }: { irPara: IrPara }) {
               {pacote.resumo.melhores ? `, ${pacote.resumo.melhores} ${pacote.resumo.melhores === 1 ? "melhor" : "melhores"}` : ""}
               {pacote.resumo.duracao_melhores_s ? ` (${duracaoCurta(pacote.resumo.duracao_melhores_s)})` : ""}
             </p>
-            <ul className={juntar(texto.auxiliar, "mt-1 space-y-0.5 leading-5")}>
-              {pacote.pendencias.map((p) => (
-                <li key={p}>{p}</li>
-              ))}
+            {fps && fpsOrigem !== "escolhido" && (
+              <p className={juntar(texto.auxiliar, "mt-0.5")} data-fps-lido="">
+                {fps} fps {fpsOrigem === "arquivo" ? "lido do arquivo" : "do projeto editado"}.
+              </p>
+            )}
+            {projetoEditado && <p className={juntar(texto.auxiliar, "mt-0.5")}>O edl.json, o projeto.json e a legenda da edição saem da versão aberta no editor.</p>}
+            <ul className={juntar(texto.auxiliar, "mt-1 space-y-1 leading-5")} data-pendencias-do-pacote="">
+              {pacote.pendencias_acoes.map((p) => {
+                const custo = p.acao === "transcrever" ? (p.takes || []).reduce((s, id) => s + custoDoTimestamp("transcrever", (arquivos.find((a) => a.id === id) || { duracao_s: 0 }).duracao_s || 0), 0) : 0;
+                return (
+                  <li key={p.texto} className="flex min-w-0 flex-wrap items-center" data-pendencia={p.acao || ""}>
+                    <span className="mr-2 min-w-0">{p.texto}</span>
+                    {p.acao === "transcrever" && (
+                      <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} onClick={() => irPara("entrada")}>
+                        Transcrever na Entrada ({usd(custo)})
+                      </button>
+                    )}
+                    {(p.acao === "entrada" || p.acao === "melhor") && (
+                      <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} onClick={() => irPara(p.acao === "entrada" ? "entrada" : "organizar")}>
+                        {p.acao === "entrada" ? "Entrada" : "Organizar"}
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
           <ComputadorDoAgente />
