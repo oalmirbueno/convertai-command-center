@@ -213,7 +213,8 @@ describe("Estúdio: marketing do diretor, legenda, cérebro e dossiê", () => {
     expect(l.tamanho).toBeLessThanOrEqual(TETO_ESTUDIO.legenda);
     const INSTRUCOES_DIRECAO = constante(estudio, "INSTRUCOES_DIRECAO");
     // Antes: base de design (39.760) + instruções (cerca de 6.150). Depois: mais o marketing (até 6.700 com a imagem e título da Frente W) e a frase de prioridade.
-    expect(CONHECIMENTO_DIRETOR.length + d.texto.length + INSTRUCOES_DIRECAO.length).toBeLessThanOrEqual(53_300);
+    // 02/10: mais a seção 20 (diversidade visual: cor como acento, sem repetir, menos cara de IA) e as regras novas da arte rápida.
+    expect(CONHECIMENTO_DIRETOR.length + d.texto.length + INSTRUCOES_DIRECAO.length).toBeLessThanOrEqual(57_000);
     // Frente W: a legenda ganhou a revisão em sete passadas (copy-editing).
     expect(l.texto.length + constante(estudio, "INSTRUCOES_LEGENDA").length).toBeLessThanOrEqual(6_400);
   });

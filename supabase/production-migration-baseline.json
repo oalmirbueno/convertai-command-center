@@ -1985,6 +1985,14 @@
       "remote_name": "render_na_nuvem",
       "remote_statements_sha256": "390b946f6829e80eb3777b5e552150808826990de824af3c97a924208cb4e918",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261002110000",
+      "path": "supabase/migrations/20261002110000_avisos_com_cliente.sql",
+      "local_sha256": "540a5c16d41ac9f3068790b5320b67c7a1dd922d7b9e8919e7d844aab44fe616",
+      "remote_name": "avisos_com_cliente",
+      "remote_statements_sha256": "11f936d333f88adb79a7dceb0616473d2c9e9c0f9ba3698c9c2582f80120c65a",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

@@ -360,7 +360,8 @@ describe("selo da campanha: servidor, Estúdio e SQL", () => {
     expect(estudio).not.toContain("colarSeloNaArte");
     expect(estudio).not.toContain("aplicarSelo");
     expect(estudio).not.toContain("aplicarLogo(");
-    expect(corpo("gravarVersao")).not.toMatch(/colar|aplicarSelo|seloPedido/);
+    // 02/10: a vitrine de logos de parceiros (arte rápida) é colada aqui de propósito; o selo da campanha, nunca.
+    expect(corpo("gravarVersao")).not.toMatch(/colarSelo|aplicarSelo|seloPedido/);
     expect(fonte("supabase/functions/_shared/imagem-local.ts")).not.toContain("aplicarSelo");
     expect(fonte("supabase/functions/_shared/imagem-sob-demanda.ts")).not.toContain("aplicarSelo");
     // Ajuste: o mesmo selo da versão vai anexado de novo, com a instrução de manter.

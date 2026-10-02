@@ -339,7 +339,9 @@ describe("carrossel contínuo: auditoria de 25/09", () => {
     const g = corpoDe(estudio, "gerarCard");
     // 26/09: a logo é gerada junto com a arte também no contínuo, dentro da área reservada (aberta na colagem).
     expect(g).toContain("const caixaDaLogoAqui = mascaraComLogo && comLogo ? caixaDaLogoNoQuadro(zonaDoTexto, capaDaSerie, quadro, aspectoDaLogo) : null;");
-    expect(g).toContain("const areasComLogo = caixaDaLogoAqui ? areasDoTexto.concat([ampliar(caixaDaLogoAqui, 0.02)]) : areasDoTexto;");
+    // 02/10: o selo da campanha é desenhado pelo gerador, então a área dele também abre no contínuo.
+    expect(g).toContain(".concat(caixaDaLogoAqui ? [ampliar(caixaDaLogoAqui, 0.02)] : [])");
+    expect(g).toContain(".concat(seloAqui && seloAqui.caixa ? [ampliar(seloAqui.caixa, 0.02)] : []);");
     expect(g).not.toContain("logosNoCodigo");
     expect(imagem).toContain("export async function colarMudancasNaBase(");
     // O gerado vai para o enquadramento da base (inverso do devolverOriginalAlinhado).
