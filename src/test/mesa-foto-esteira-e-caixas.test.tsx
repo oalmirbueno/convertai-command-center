@@ -445,7 +445,7 @@ describe("esteira das peças do mês na tela", () => {
     expect(atendido).toHaveBeenCalled();
   });
 
-  it("sem peças, uma linha só; erro na leitura não mostra nada", async () => {
+  it("sem peças, uma linha só; erro na leitura não mostra lista nem contagem (o Preparar imagens fica)", async () => {
     mock.invoke.mockImplementation(async () => ({ data: { pecas: [], banco: true }, error: null }));
     const t = montar();
     expect(await screen.findByText("Nenhuma peça de foto no planejamento deste mês e do próximo.")).toBeTruthy();
@@ -453,6 +453,8 @@ describe("esteira das peças do mês na tela", () => {
     mock.invoke.mockImplementation(async () => ({ data: null, error: { message: "falhou" } }));
     montar();
     await new Promise((r) => setTimeout(r, 50));
-    expect(document.querySelector("[data-esteira-do-mes]")).toBeNull();
+    expect(document.querySelector("[data-lista-de-pecas]")).toBeNull();
+    expect(document.querySelector("[data-pecas-a-fazer]")).toBeNull();
+    expect(screen.getByRole("button", { name: /Preparar imagens/ })).toBeTruthy();
   });
 });

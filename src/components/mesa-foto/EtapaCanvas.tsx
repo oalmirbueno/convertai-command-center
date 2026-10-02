@@ -126,8 +126,9 @@ import { andamentoDoResultado, gerarNoResultado, gerarVariacoes, tirarPendentes,
 import { ModoLista } from "./canvas/ModoLista";
 // 02/10: várias caixas de resultado no mesmo quadro (barra do quadro) e a peça do mês levada da esteira.
 import { BarraDoQuadro } from "./canvas/BarraDoQuadro";
-import { apagarCaixa, caixaDaPeca, conectarCaixas, duplicarCaixa, fotoDaCaixa, novaCaixa, podeConectarCaixas, variarEmCaixaNova } from "./canvas/caixas";
+import { apagarCaixa, caixaDaEscolha, caixaDaPeca, conectarCaixas, duplicarCaixa, fotoDaCaixa, novaCaixa, podeConectarCaixas, variarEmCaixaNova } from "./canvas/caixas";
 import { direcaoParaOCanvas, lerPecaLevadaAoCanvas } from "./pecasDeFoto";
+import { lerSelecaoLevadaAoCanvas } from "./preparar/preparo";
 import { CAMERAS_DO_RESULTADO, FUNDOS_DO_RESULTADO, lerVariacoes, LUZES_DO_RESULTADO, rotuloDaOpcao } from "../../../supabase/functions/mesa-foto/modulos/opcoes-do-resultado";
 // Frente CNV (30/09): cartões Vídeo (gera pela Mesa Vídeos) e Quadro (composição animada em camadas).
 import { AjustesDoVideo, CorpoDoVideo, JanelaDoVideo } from "./canvas/CartaoDeVideo";
@@ -1504,13 +1505,22 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     return () => window.removeEventListener("mesa-foto:peca-levada", ouvir);
   }, []);
   useEffect(() => {
+    // Escolha do Preparar imagens (produtos, pessoa e imagens): caixa nova já ligada.
+    const escolha = lerSelecaoLevadaAoCanvas(clientId);
+    if (escolha) {
+      const caixa = novoId("gerar");
+      mudar((c) => caixaDaEscolha(c, escolha, { caixa, cartao: (tipo) => novoId(tipo) }, padraoDaSaida ? [padraoDaSaida] : []));
+      escolherCaixa(caixa);
+      setRecolhida(false);
+      toast.success("Escolha no quadro", { description: "Produtos, pessoa e imagens já ligados a uma caixa nova. Confira e gere." });
+    }
     if (pecaLevada.current === undefined) pecaLevada.current = lerPecaLevadaAoCanvas(clientId);
     const peca = pecaLevada.current;
     if (!peca || (!kits.isSuccess && !kits.isError)) return;
     pecaLevada.current = null;
-    const ids = { caixa: novoId("gerar"), pedido: novoId("texto"), ambiente: novoId("ambiente"), produto: novoId("produto") };
+    const ids = { caixa: novoId("gerar"), pedido: novoId("texto"), ambiente: novoId("ambiente"), produto: novoId("produto"), pessoa: novoId("modelo") };
     const kitsDoCliente = kitsUsaveis(fontes.kits);
-    const d = direcaoParaOCanvas(peca, kitsDoCliente.length === 1 ? String(kitsDoCliente[0].id) : null);
+    const d = direcaoParaOCanvas(peca, kitsDoCliente.length === 1 ? String(kitsDoCliente[0].id) : null, peca.pessoa);
     mudar((c) => caixaDaPeca(c, d, ids, padraoDaSaida ? [padraoDaSaida] : []));
     escolherCaixa(ids.caixa);
     setRecolhida(false);

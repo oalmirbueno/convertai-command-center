@@ -152,6 +152,8 @@ export interface DirecaoParaACaixa {
   /** Produto do cliente, quando ele tem um só. */
   kit_id: string | null;
   titulo: string;
+  /** A pessoa escolhida no seletor de modelo (cartão Pessoa) ou null. */
+  pessoa?: DadosDoNo | null;
 }
 
 /**
@@ -159,7 +161,7 @@ export interface DirecaoParaACaixa {
  * há cenário) e o Produto (quando o cliente tem um só), tudo já ligado, e os
  * presets de câmera e luz. A pessoa revisa e gera.
  */
-export function caixaDaPeca(c: Canvas, d: DirecaoParaACaixa, ids: { caixa: string; pedido: string; ambiente: string; produto: string }, motores: string[]): Canvas {
+export function caixaDaPeca(c: Canvas, d: DirecaoParaACaixa, ids: { caixa: string; pedido: string; ambiente: string; produto: string; pessoa?: string }, motores: string[]): Canvas {
   let novo = novaCaixa(c, ids.caixa, { motores: motores.slice(), camera: d.camera, luz: d.luz, variacoes: lerVariacoes(d.variacoes) });
   const pedido = { ...novoNo("texto", 0, 0, { texto: d.pedido.slice(0, 2900), papel: "pedido" }), id: ids.pedido };
   novo = porCartao(novo, pedido, { gerarId: ids.caixa });
@@ -171,5 +173,36 @@ export function caixaDaPeca(c: Canvas, d: DirecaoParaACaixa, ids: { caixa: strin
     const produto = { ...novoNo("produto", 0, 0, { kit_id: d.kit_id, titulo: "" }), id: ids.produto };
     novo = porCartao(novo, produto, { gerarId: ids.caixa });
   }
+  if (d.pessoa) {
+    const pessoa = { ...novoNo("modelo", 0, 0, d.pessoa), id: ids.pessoa || `${ids.caixa}-pessoa` };
+    novo = porCartao(novo, pessoa, { gerarId: ids.caixa });
+  }
+  return novo;
+}
+
+// ------------------------------------------------------------------ escolha do Preparar imagens no quadro
+
+/** O que o Preparar imagens leva para o quadro: produtos, a pessoa e imagens de referência. */
+export interface EscolhaParaACaixa {
+  kit_ids: string[];
+  imagem_ids: string[];
+  pessoa: DadosDoNo | null;
+}
+
+/**
+ * Uma caixa nova com a escolha do Preparar imagens: um cartão Produto por
+ * produto, o cartão Pessoa (modelo da IA ou clone autorizado) e até 3
+ * imagens como Estilo (referência de pegada), tudo já ligado. Os ids vêm de
+ * fora (a tela escolhe a caixa nova).
+ */
+export function caixaDaEscolha(c: Canvas, e: EscolhaParaACaixa, ids: { caixa: string; cartao: (tipo: string, i: number) => string }, motores: string[]): Canvas {
+  let novo = novaCaixa(c, ids.caixa, { motores: motores.slice() });
+  e.kit_ids.slice(0, 6).forEach((kit, i) => {
+    novo = porCartao(novo, { ...novoNo("produto", 0, 0, { kit_id: kit, titulo: "" }), id: ids.cartao("produto", i) }, { gerarId: ids.caixa });
+  });
+  if (e.pessoa) novo = porCartao(novo, { ...novoNo("modelo", 0, 0, e.pessoa), id: ids.cartao("modelo", 0) }, { gerarId: ids.caixa });
+  e.imagem_ids.slice(0, 3).forEach((imagem, i) => {
+    novo = porCartao(novo, { ...novoNo("estilo", 0, 0, { imagem_id: imagem }), id: ids.cartao("estilo", i) }, { gerarId: ids.caixa });
+  });
   return novo;
 }

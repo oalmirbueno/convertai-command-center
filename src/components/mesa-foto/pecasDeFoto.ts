@@ -9,6 +9,7 @@ import {
 } from "../../../supabase/functions/mesa-foto/modulos/pecas-de-foto";
 import { cameraPeloTexto, lerVariacoes, luzPeloTexto } from "../../../supabase/functions/mesa-foto/modulos/opcoes-do-resultado";
 import type { DirecaoParaACaixa } from "./canvas/caixas";
+import type { DadosDoNo } from "./canvasApi";
 
 export type { DirecaoDaFoto, PecaDeFoto };
 
@@ -93,7 +94,7 @@ export function resumoDaDirecao(f: DirecaoDaFoto): string {
 }
 
 /** O pedido ao diretor de fotografia com a direção da peça (vai para o campo dele, para revisar). */
-export function pedidoAoDiretorDaPeca(p: PecaDeFoto): string {
+export function pedidoAoDiretorDaPeca(p: PecaDeFoto, modelo: string | null = null): string {
   const f = p.foto;
   const linhas = [`Peça de foto do mês${p.data ? ` (${dataCurta(p.data)})` : ""}: ${p.titulo}.`];
   linhas.push(`Assunto: ${f.assunto}.`);
@@ -101,7 +102,8 @@ export function pedidoAoDiretorDaPeca(p: PecaDeFoto): string {
   linhas.push(`Quantidade: ${f.quantidade} ${f.quantidade === 1 ? "foto" : "fotos"}, nos ângulos: ${f.angulos.join(", ")}.`);
   if (f.cenario) linhas.push(`Cenário: ${f.cenario}.`);
   if (f.luz) linhas.push(`Luz: ${f.luz}.`);
-  linhas.push(f.pessoa ? `Pessoa: ${f.pessoa}.` : "Sem pessoa na foto.");
+  if (modelo) linhas.push(`Pessoa: use a modelo ${modelo}${f.pessoa ? ` (${f.pessoa})` : ""}.`);
+  else linhas.push(f.pessoa ? `Pessoa: ${f.pessoa}.` : "Sem pessoa na foto.");
   if (f.texto_na_foto) linhas.push(`Deixe respiro para o texto "${f.texto_na_foto}" (não escreva o texto na foto).`);
   if (f.referencias.length) linhas.push(`Referências: ${f.referencias.join("; ")}.`);
   linhas.push("Monte o plano com o produto do cliente e me mostre o custo antes de gerar.");
@@ -109,7 +111,7 @@ export function pedidoAoDiretorDaPeca(p: PecaDeFoto): string {
 }
 
 /** A direção da peça para uma caixa nova do Canvas (pedido, cenário, câmera, luz, variações). */
-export function direcaoParaOCanvas(p: PecaDeFoto, kitId: string | null = null): DirecaoParaACaixa {
+export function direcaoParaOCanvas(p: PecaDeFoto, kitId: string | null = null, pessoa: DadosDoNo | null = null): DirecaoParaACaixa {
   const f = p.foto;
   const pedido = [
     f.assunto,
@@ -128,6 +130,7 @@ export function direcaoParaOCanvas(p: PecaDeFoto, kitId: string | null = null): 
     variacoes: lerVariacoes(Math.max(1, f.quantidade - 1)),
     kit_id: kitId,
     titulo: p.titulo,
+    pessoa,
   };
 }
 
@@ -135,22 +138,26 @@ export function direcaoParaOCanvas(p: PecaDeFoto, kitId: string | null = null): 
 
 export const chaveDaPecaNoCanvas = (clientId: string) => `mesa-foto:canvas:peca:${clientId}`;
 
-/** Guarda a peça para o Canvas abrir com ela numa caixa nova (vale por 10 minutos). */
-export function levarPecaAoCanvas(clientId: string, p: PecaDeFoto) {
+/** A peça guardada para o Canvas, com a pessoa escolhida no seletor de modelo (ou null). */
+export type PecaLevada = PecaDeFoto & { pessoa: DadosDoNo | null };
+
+/** Guarda a peça (e a pessoa escolhida) para o Canvas abrir com ela numa caixa nova (vale por 10 minutos). */
+export function levarPecaAoCanvas(clientId: string, p: PecaDeFoto, pessoa: DadosDoNo | null = null) {
   try {
-    window.sessionStorage.setItem(chaveDaPecaNoCanvas(clientId), JSON.stringify({ peca: p, em: Date.now() }));
+    window.sessionStorage.setItem(chaveDaPecaNoCanvas(clientId), JSON.stringify({ peca: p, pessoa, em: Date.now() }));
   } catch {
     /* sem armazenamento: a pessoa monta a caixa à mão */
   }
 }
 
 /** A peça guardada para o Canvas (lê uma vez só). */
-export function lerPecaLevadaAoCanvas(clientId: string): PecaDeFoto | null {
+export function lerPecaLevadaAoCanvas(clientId: string): PecaLevada | null {
   try {
     const v = JSON.parse(window.sessionStorage.getItem(chaveDaPecaNoCanvas(clientId)) || "null");
     window.sessionStorage.removeItem(chaveDaPecaNoCanvas(clientId));
     if (!v || Date.now() - Number(v.em || 0) > 10 * 60_000) return null;
-    return normalizarPecaDeFoto(v.peca);
+    const peca = normalizarPecaDeFoto(v.peca);
+    return peca ? { ...peca, pessoa: v.pessoa && typeof v.pessoa === "object" ? (v.pessoa as DadosDoNo) : null } : null;
   } catch {
     return null;
   }

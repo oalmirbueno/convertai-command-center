@@ -7,6 +7,8 @@ import { textoDoErro } from "@/lib/mesa/api";
 import { Moldura, useMesaFoto } from "../Comuns";
 import { acrescentarFotos, invalidarFotos, rotuloDoTipo, subirOriginais } from "../fotoApi";
 import { STATUS_DA_PERSONA } from "../modelosApi";
+import { useClones } from "../clonesApi";
+import { dadosDaPessoa, modelosParaEscolher } from "../seletores/seletores";
 import { TIPOS_DE_NO, type DadosDoNo, type ModoDoAmbiente } from "../canvasApi";
 import { BOTAO, CAMPO, capaDoKit, daFoto, Escolha, Gaveta, ICONES, kitsUsaveis, MiniaturaGrande, personaSemAncora, ROTULO, rostoDaPersona, type Fontes, type LugarDaGaveta, type Miniatura } from "./comum";
 
@@ -99,12 +101,16 @@ export function EscolherCartao({
   onEscolher: (tipo: AbaDaEscolha, dados: DadosDoNo, trocarId: string | null) => void;
 }) {
   const { irPara } = useMesaFoto();
+  const { clientId } = useMesa();
   const [aba, setAba] = useState<AbaDaEscolha>("produto");
   const [texto, setTexto] = useState("");
   const [busca, setBusca] = useState("");
   const [modo, setModo] = useState<ModoDoAmbiente>("foto");
   const [usoDaFoto, setUsoDaFoto] = useState<"usar" | "complementar">("complementar");
   const [pessoaReal, setPessoaReal] = useState(false);
+  // 02/10: clones de pessoa real (com autorização válida) na mesma escolha da Pessoa.
+  const [pessoaClone, setPessoaClone] = useState(false);
+  const clonesQ = useClones(clientId, !!pedido && aba === "modelo" && pessoaClone);
   const [autorizada, setAutorizada] = useState(false);
   useEffect(() => {
     if (!pedido) return;
@@ -113,6 +119,7 @@ export function EscolherCartao({
     setBusca("");
     setModo("foto");
     setPessoaReal(false);
+    setPessoaClone(false);
     setAutorizada(false);
   }, [pedido]);
   const trocando = !!(pedido && pedido.trocarId);
@@ -214,12 +221,45 @@ export function EscolherCartao({
               rotulo="Tipo de pessoa"
               opcoes={[
                 { valor: "modelo", rotulo: "Modelo sintética" },
+                { valor: "clone", rotulo: "Clone" },
                 { valor: "real", rotulo: "Foto real" },
               ]}
-              valor={pessoaReal ? "real" : "modelo"}
-              onEscolher={(v) => setPessoaReal(v === "real")}
+              valor={pessoaClone ? "clone" : pessoaReal ? "real" : "modelo"}
+              onEscolher={(v) => {
+                setPessoaReal(v === "real");
+                setPessoaClone(v === "clone");
+              }}
             />
-            {!pessoaReal ? (
+            {pessoaClone ? (
+              (() => {
+                const clones = modelosParaEscolher([], clonesQ.data || []);
+                return clonesQ.isLoading ? (
+                  <p className="text-[11.5px] text-zinc-400">Lendo os clones...</p>
+                ) : clones.length ? (
+                  <div className={grade} aria-label="Clones">
+                    {clones.map((o) => (
+                      <Opcao
+                        key={o.chave}
+                        atributo={o.id}
+                        miniatura={o.imagem_id ? daFoto(fontes.fotos.find((f) => f.id === o.imagem_id) || null) : null}
+                        titulo={o.nome}
+                        subtitulo={o.pronto ? "Pessoa real, autorizada" : undefined}
+                        aviso={o.pronto ? undefined : o.motivo || undefined}
+                        desligada={!o.pronto}
+                        onEscolher={() => escolher(dadosDaPessoa(o))}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-white/15 p-4 text-center">
+                    <p className="text-[12.5px] font-medium">Nenhum clone ainda.</p>
+                    <button type="button" className={`${BOTAO} mt-2`} onClick={() => { onFechar(); irPara("clones"); }}>
+                      Ir para Clones
+                    </button>
+                  </div>
+                );
+              })()
+            ) : !pessoaReal ? (
               personas.length ? (
                 <div className={grade} aria-label="Modelos">
                   {personas.map((p) => (
