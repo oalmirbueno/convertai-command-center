@@ -161,8 +161,8 @@ describe("etapa Editar: editor completo e agente editor na lateral", () => {
     expect(opcoes.some((o) => o.indexOf("GPT-6 Sol · OpenAI") === 0)).toBe(true);
     expect(opcoes.some((o) => o.indexOf("Astra") >= 0)).toBe(false); // desligado no catálogo
     expect(Array.prototype.map.call(seletor.querySelectorAll("optgroup"), (g: HTMLOptGroupElement) => g.label)).toEqual(["GPT (OpenAI)", "Claude (Anthropic)"]);
-    // Padrão: o modelo do papel diretor_arte (GPT-6 Luna); custo por pedido à vista.
-    expect(seletor.value).toBe("openrouter:openai/gpt-6-luna");
+    // 02/10 (auditoria): padrão é um modelo forte (Sonnet 5.5, Sol 6.1 ou Opus 5.5), nunca o mais barato; custo por pedido à vista.
+    expect(seletor.value).toBe("openrouter:anthropic/claude-opus-5.5");
     expect(within(lateral).getByRole("combobox", { name: "Esforço de raciocínio" })).toBeTruthy();
     expect((lateral.querySelector("[data-custo-do-pedido]") as HTMLElement).textContent).toMatch(/^Pedido ~US\$ .+ \(máx\. US\$ .+\) · gasto aqui US\$ 0,00$/);
     fireEvent.change(seletor, { target: { value: "openrouter:anthropic/claude-opus-5.5" } });
