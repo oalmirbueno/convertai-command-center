@@ -181,6 +181,12 @@ function ClipeVisual({ projeto, urls, trilha, c, filtroCss }: { projeto: Projeto
   const dur = Math.max(1, q(duracaoDoClipe(c), fps));
   const { flash, ...mov } = movimento(c, frame, dur, fps);
   if (filtroCss) mov.filter = mov.filter ? `${filtroCss} ${mov.filter}` : filtroCss;
+  // 02/10: cena do zero (clipe sem mídia com estilo.fundo): fundo liso ou degradê, na prévia e no render.
+  const fundo = !c.fonte ? estiloTxt(c, "fundo", "") : "";
+  if (/^#[0-9a-fA-F]{6}$/.test(fundo)) {
+    const fundo2 = estiloTxt(c, "fundo2", "");
+    return <AbsoluteFill style={{ background: /^#[0-9a-fA-F]{6}$/.test(fundo2) ? `linear-gradient(160deg, ${fundo} 0%, ${fundo2} 100%)` : fundo, ...mov }} data-cena-de-fundo="" />;
+  }
   const sobre = trilha.tipo === "sobreposicao";
   const rec = recorteDoClipe(projeto, c, c.entrada_s + (frame / fps) * c.velocidade);
   const clarao = flash && flash > 0.001 ? <div style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", background: "#ffffff", opacity: Math.min(1, flash * 1.1) }} /> : null;

@@ -1,6 +1,6 @@
 # Editor de vídeo (Mesa Edição): o que está ativo de verdade
 
-Conferido em 02/10/2026 no código e nos testes (vitest). Legenda:
+Conferido em 02/10/2026 no código e nos testes (vitest); revisado no mesmo dia com o agente que edita completo (seção 1). Legenda:
 
 - **Ativo**: roda na tela, sem depender de nada fora do navegador (desfaz com Ctrl+Z).
 - **Ativo (servidor)**: precisa da função publicada (editor-video ou mesa-videos) ou do worker de render. Sem ela, a tela diz "em preparação" ou usa a regra da casa; nada finge que fez.
@@ -10,7 +10,20 @@ Conferido em 02/10/2026 no código e nos testes (vitest). Legenda:
 
 | Funcionalidade | Estado |
 | --- | --- |
-| Pedido livre ao modelo escolhido (custo antes, teto por pedido, até 6 passos e 12 ferramentas) | Ativo (servidor: `agente_passo`) (ag2-editor, editor-de-video) |
+| Pedido livre ao modelo escolhido (custo antes, teto por pedido, até 10 passos e 30 ferramentas) | Ativo (servidor: `agente_passo`) (ag2-editor, editor-de-video) |
+| Resposta final feita pelo CÓDIGO: o que mudou de verdade (antes e depois, contado), o que não entrou e a pergunta; o texto do modelo que afirma ou promete sem ter feito nunca aparece | Ativo (editor-agente-edita-completo, editor-agente-edita-completo-tela) |
+| Laço que confere: cada ferramenta que muda volta com "Conferido" (o que entrou); "terminei" com ferramenta que falhou ganha mais um passo para corrigir; pedido de edição sem mudança ganha um lembrete | Ativo (editor-agente-edita-completo) |
+| Edição completa (EDIT IA PRO) pelo agente: `edicao_completa` roda o motor inteiro (erros e pausas, ritmo do Brabo, legenda na cor da marca, zoom nos momentos, animações, B-roll do acervo, transições, cor, música do acervo com ducking, sons, cartão final) num passo do Ctrl+Z; o agente ajusta o plano (receita, legenda, cor, gancho, música) | Ativo (servidor: Jev para momentos, B-roll e animações; sem ele, a regra da casa) (editor-agente-edita-completo) |
+| "Edita completo e dinâmico" que o modelo não editou: a regra da casa roda o EDIT IA PRO sozinha | Ativo (editor-agente-edita-completo) |
+| Atalho "Edição completa": EDIT IA PRO sem modelo (plano da casa), na hora, com Desfazer | Ativo (editor-agente-edita-completo-tela) |
+| Entendimento do vídeo em todo passo (código, sem custo): tipo, seções, pausas, ênfases, dados ditos (número, preço, lista), perguntas, rosto e o que já está montado; `entender_video` mostra inteiro | Ativo (editor-agente-edita-completo) |
+| Copiar a edição de uma referência medida (`aplicar_referencia`, r1, r2, com a fidelidade) | Ativo (editor-agente-edita-completo) |
+| Editar texto, legenda, cena e os parâmetros de uma peça de motion (`editar_clipe`; parâmetro inválido não grava) | Ativo (editor-agente-edita-completo) |
+| Transição num clipe ou em todos, mixagem (dB abaixo da voz, subida nas pausas, ducking, LUFS), música do acervo pelo m1 | Ativo (editor-agente-edita-completo) |
+| Começar do zero: `cena` (fundo liso ou degradê, título, peça), texto, motion com tempo, mídia, música, B-roll gerado | Ativo (editor-agente-edita-completo) |
+| Trocar cenário e painéis pagos (Timestamp, rosto, gerar, LUT, ler referência): o agente abre o painel já preenchido; o custo aparece lá antes de gerar | Ativo (editor-agente-edita-completo-tela) |
+| Pesquisar na web com fontes (`pesquisar`), dentro do teto do pedido | Ativo (servidor: `agente_pesquisar`) |
+| Mapa de cobertura: toda capacidade da tela tem ferramenta do agente (src/lib/editor/capacidades.ts) | Ativo (editor-agente-edita-completo) |
 | Apelidos fixos no pedido inteiro (c3 é o mesmo c3 do começo ao fim) | Ativo (editor-agente-edita-de-verdade) |
 | Tirar um ou vários clipes (`remover` com `clipes`), com ou sem puxar o resto | Ativo (editor-agente-edita-de-verdade) |
 | Tirar takes repetidos (`remover_duplicados`: mesma mídia e mesmo trecho; fica o primeiro) | Ativo (editor-agente-edita-de-verdade) |
@@ -24,7 +37,7 @@ Conferido em 02/10/2026 no código e nos testes (vitest). Legenda:
 | Zoom nos momentos fortes, capítulos, sugerir animações | Ativo (servidor: Jev; sem ele, a regra da casa) |
 | Medir a onda, amostra de 8 a 15 s, render do vídeo inteiro | Ativo (servidor e worker de render) |
 | B-roll e elemento gerados (pagos: cartão com o custo antes) | Ativo (servidor: mesa-videos e `elemento_gerar`) |
-| Ordem clara vai na hora (um passo do Ctrl+Z, com Desfazer); dúvida pede Confirmar | Ativo (ag2-editor) |
+| Ordem clara vai na hora (um passo do Ctrl+Z, com Desfazer); dúvida, recusa ou parada pedem Confirmar; ferramenta que falhou não trava o resto (é dita na resposta) | Ativo (ag2-editor) |
 | Sem resposta do Jev: a regra do verbo decide ("apague o c3" vai; "será que tiro?" pergunta) | Ativo (editor-agente-edita-de-verdade) |
 | "O que mudei" dito pelo código com os apelidos ("Mudei: Tirei c5, c3.") | Ativo (editor-agente-edita-de-verdade) |
 | O que o agente mexeu brilha na linha do tempo por 6 s | Ativo |
@@ -32,7 +45,7 @@ Conferido em 02/10/2026 no código e nos testes (vitest). Legenda:
 | Conversa guardada na versão, volta ao reabrir com os cartões no estado certo | Ativo (servidor: `conversa_ler`, `conversa_gravar`) (ag2-editor) |
 | Seleção e cursor viram "esse" e "aqui"; pergunta com opções vira botões | Ativo (ag2-editor) |
 | Assistir o vídeo (quadros para um modelo com imagem) | Ativo (servidor: `visao_descrever`) |
-| Atalhos: Edição dinâmica, Cortar silêncios, Legendas, Punch-in, Tirar repetidos | Ativo |
+| Atalhos: Edição completa, Ritmo do Brabo, Cortar silêncios, Legendas, Punch-in, Tirar repetidos | Ativo |
 | Aprendizado (Aprendi / Segui) | Ativo (servidor) |
 
 ## 2. Linha do tempo
@@ -94,6 +107,8 @@ As que precisam da fala aparecem com "sem fala" até o Timestamp marcar.
 | Timestamp: transcrever ou alinhar (pago), fala da Entrada (grátis) | Ativo (servidor: `timestamp_parte`, `alinhar_*`) |
 | Referências: link, mídia ou arquivo, medir, ler a edição, aplicar, templates | Ativo (servidor: `receita_*`, tabela `video_receitas`) |
 | Ajustes (Inspector): tempos, texto, velocidade, volume, zoom, transições, antes e depois, nota, comparar | Ativo (editor-de-video-tela) |
+| Ajustes (Inspector): parâmetros da peça de motion campo por campo e fundo da cena do zero | Ativo (sem teste de tela) |
+| Começar do zero (versão vazia no Editar, também sem vídeo na Entrada) | Ativo (servidor: `versao_registrar` da mesa-videos, já publicado) |
 
 ## 6. Prévia e tela cheia
 
@@ -107,8 +122,11 @@ As que precisam da fala aparecem com "sem fala" até o Timestamp marcar.
 
 ## 7. O que foi corrigido ou continua com limite (auditoria 02/10)
 
+- Corrigido (02/10, tarde): o agente "alucinava" (a resposta era o texto do modelo, mesmo sem mudança), não tinha o motor (o sistema mandava sugerir o painel Editar com IA e todo "edita" virava só a skill de ritmo), faltavam ferramentas (referência, transição, mixagem, peça, cena, cenário, pesquisa), o contexto não entendia o vídeo, o laço parava no "terminei" com falha e uma falha mandava tudo para o Confirmar.
 - Corrigido: o agente não tirava os takes repetidos (apelidos que mudavam no meio do pedido; skill sem nada a mudar contava como falha; "takes repetidos" caía na skill de fala; sem Jev tudo virava Confirmar).
 - Corrigido: polaroide sem foto; "Parar" que não parava em Referências (agora só aparece na medição); "Lado a lado" agora diz que compara com o clipe bruto.
 - Limite: o resultado de Gerar (câmera, continuar, transição, cena) chega na Mídia; pôr na linha do tempo é um clique (ou o agente com `inserir_midia`).
 - Limite: o aviso do Exportar sobre a máquina usa a última leitura do estado da máquina.
+- Limite: a cena do zero (fundo) e a peça editada aparecem na prévia na hora; o render da nuvem desenha a cena só depois de publicar o pacote de render novo (Composicao.tsx mudou).
+- Limite: pesquisar usa o modelo escolhido no agente (precisa aceitar busca na web) e cobra a busca dentro do teto do pedido.
 - Sem teste de tela ainda: Formato, Zoom, Textos, Som, Motion, Capítulos, Troca de cenário, Referências, Gerar e Timestamp (a lógica deles tem teste; a tela não).

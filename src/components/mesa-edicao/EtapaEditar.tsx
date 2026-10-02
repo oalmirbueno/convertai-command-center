@@ -223,15 +223,20 @@ export default function EtapaEditar({ irPara }: { irPara: IrPara }) {
         {arquivosQ.isLoading ? (
           <div className="h-48 animate-pulse rounded-md bg-muted" aria-busy="true" aria-label="Lendo os vídeos" />
         ) : !arquivos.length ? (
-          <EstadoVazio
-            compacto
-            titulo="Nenhum vídeo na Entrada."
-            acao={
-              <button type="button" className={botao.secundario} onClick={() => irPara("entrada")}>
-                Entrada
-              </button>
-            }
-          />
+          // 02/10: sem vídeo na Entrada dá para começar do zero (cenas, textos, motion, mídia e música com o agente).
+          <div className="min-w-0 space-y-3">
+            <EstadoVazio
+              compacto
+              titulo="Nenhum vídeo na Entrada."
+              descricao="Suba na Entrada ou comece um vídeo do zero aqui."
+              acao={
+                <button type="button" className={botao.secundario} onClick={() => irPara("entrada")}>
+                  Entrada
+                </button>
+              }
+            />
+            <AreaDoEditor projeto={projeto} roteiroId={null} cenas={null} />
+          </div>
         ) : (
           <AreaDoEditor
             projeto={projeto}

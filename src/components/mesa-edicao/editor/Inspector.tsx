@@ -18,6 +18,7 @@ import { apelidosDoProjeto, rotuloDoClipe } from "@/lib/editor/apelidos";
 import { segundosDoTexto, tempoFino } from "@/lib/editor/tempo";
 import { EFEITOS_DE_AJUSTE, MODOS_DE_ZOOM, ROTULO_DO_EFEITO, efeitoDoClipe } from "@/lib/editor/efeitos";
 import { LOOKS } from "@/lib/editor/cor";
+import { definicaoDaPeca, parametrosDaPeca } from "@/lib/editor/motion/catalogo";
 import { FONTES_DE_TEXTO, POSICOES_DE_TEXTO, PRESETS_DE_LEGENDA, PRESETS_DE_TEXTO } from "@/lib/editor/estilosDeTexto";
 
 /**
@@ -267,6 +268,8 @@ export default function Inspector({
         </div>
       )}
       {trilha.tipo === "ajuste" && <AjusteDoEfeito c={c} mudar={mudar} />}
+      {typeof estiloDe(c).peca === "string" && <ParametrosDaPecaNoClipe c={c} mudar={mudar} />}
+      {!c.fonte && typeof estiloDe(c).fundo === "string" && <FundoDaCena c={c} mudar={mudar} />}
       {temTexto && <EstiloDoTexto c={c} legenda={trilha.tipo === "legenda"} mudar={mudar} letraDaMarca={projeto.identidade && projeto.identidade.fonte ? projeto.identidade.fonte : null} />}
       {trilha.tipo === "video" && fonte && fonte.midia !== "audio" && <FocoDoRecorte c={c} mudar={mudar} temRosto={!!(projeto.rostos || {})[fonte.chave]} />}
       <label className="block">
@@ -441,6 +444,111 @@ function FocoDoRecorte({ c, mudar, temRosto }: { c: ClipeDoProjeto; mudar: Mudar
       {manual && (
         <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} onClick={automatico}>
           {temRosto ? "Voltar a seguir o rosto" : "Voltar ao centro"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- 02/10: peça de motion e cena editáveis
+
+/**
+ * Os parâmetros da peça de motion escolhida, campo por campo pela definição
+ * do catálogo (texto, número, lista, escolha, cor). Grava ao sair do campo
+ * (um passo do Ctrl+Z); valor que a peça não aceita mostra o motivo e não grava.
+ */
+function ParametrosDaPecaNoClipe({ c, mudar }: { c: ClipeDoProjeto; mudar: Mudar }) {
+  const e = estiloDe(c);
+  const def = definicaoDaPeca(String(e.peca));
+  const [erro, setErro] = useState<string | null>(null);
+  if (!def) return null;
+  const params = (e.params && typeof e.params === "object" ? e.params : {}) as Record<string, unknown>;
+  const gravar = (k: string, v: unknown) => {
+    const novos = { ...params, [k]: v };
+    try {
+      parametrosDaPeca(def.id, novos);
+    } catch (x) {
+      setErro(x instanceof Error ? x.message : "Valor inválido.");
+      return;
+    }
+    setErro(null);
+    if (JSON.stringify(params[k]) === JSON.stringify(v)) return;
+    mudar({ estilo: { ...e, params: novos } }, `${def.rotulo}:`);
+  };
+  return (
+    <div className="space-y-2 border-t border-border pt-3" data-parametros-da-peca={def.id}>
+      <p className={texto.rotulo}>{def.rotulo}</p>
+      {def.parametros.map((p) => {
+        const atual = params[p.chave];
+        const chave = `${c.id}:${p.chave}:${JSON.stringify(atual)}`;
+        if (p.tipo === "escolha")
+          return (
+            <label key={p.chave} className="block min-w-0">
+              <span className={texto.rotulo}>{p.rotulo}</span>
+              <select className={juntar(campo, "mt-1 h-8")} value={String(atual === undefined || atual === null ? p.padrao || "" : atual)} onChange={(ev) => gravar(p.chave, ev.target.value)}>
+                {(p.opcoes || []).map((o) => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+              </select>
+            </label>
+          );
+        if (p.tipo === "cor")
+          return (
+            <label key={p.chave} className="flex min-w-0 items-center">
+              <span className={juntar(texto.rotulo, "mr-2")}>{p.rotulo}</span>
+              <input type="color" className="h-7 w-10 cursor-pointer rounded border border-border bg-transparent" defaultValue={typeof atual === "string" ? atual : "#ffffff"} key={chave} onBlur={(ev) => gravar(p.chave, ev.target.value)} aria-label={p.rotulo} />
+            </label>
+          );
+        if (p.tipo === "lista")
+          return (
+            <label key={p.chave} className="block min-w-0">
+              <span className={texto.rotulo}>{p.rotulo} (um por linha)</span>
+              <textarea
+                className={juntar(campo, "mt-1 h-20 py-1.5")}
+                defaultValue={Array.isArray(atual) ? (atual as unknown[]).map(String).join("\n") : ""}
+                key={chave}
+                onBlur={(ev) => gravar(p.chave, ev.target.value.split("\n").map((x) => x.trim()).filter(Boolean))}
+              />
+            </label>
+          );
+        return (
+          <label key={p.chave} className="block min-w-0">
+            <span className={texto.rotulo}>{p.rotulo}</span>
+            <input
+              className={juntar(campo, "mt-1 h-8")}
+              type={p.tipo === "numero" ? "number" : "text"}
+              defaultValue={atual === undefined || atual === null ? "" : String(atual)}
+              key={chave}
+              maxLength={p.max && p.tipo === "texto" ? p.max : undefined}
+              onBlur={(ev) => gravar(p.chave, p.tipo === "numero" ? (ev.target.value === "" ? null : Number(ev.target.value)) : ev.target.value)}
+            />
+          </label>
+        );
+      })}
+      {erro && (
+        <p className="text-[12px] text-destructive" role="alert">
+          {erro}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Cena do zero: a cor do fundo e a segunda cor do degradê. */
+function FundoDaCena({ c, mudar }: { c: ClipeDoProjeto; mudar: Mudar }) {
+  const e = estiloDe(c);
+  const cor = (k: string, v: string) => mudar({ estilo: { ...e, [k]: v || undefined } }, "Fundo de");
+  return (
+    <div className="flex min-w-0 flex-wrap items-center border-t border-border pt-3" data-fundo-da-cena="">
+      <span className={juntar(texto.rotulo, "mr-2")}>Fundo</span>
+      <input type="color" className="mr-3 h-7 w-10 cursor-pointer rounded border border-border bg-transparent" defaultValue={String(e.fundo)} key={`${c.id}:f:${String(e.fundo)}`} onBlur={(ev) => ev.target.value !== e.fundo && cor("fundo", ev.target.value)} aria-label="Cor do fundo" />
+      <span className={juntar(texto.rotulo, "mr-2")}>Degradê</span>
+      <input type="color" className="mr-2 h-7 w-10 cursor-pointer rounded border border-border bg-transparent" defaultValue={typeof e.fundo2 === "string" ? e.fundo2 : String(e.fundo)} key={`${c.id}:f2:${String(e.fundo2)}`} onBlur={(ev) => ev.target.value !== e.fundo2 && ev.target.value !== e.fundo && cor("fundo2", ev.target.value)} aria-label="Segunda cor do degradê" />
+      {typeof e.fundo2 === "string" && (
+        <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} onClick={() => cor("fundo2", "")}>
+          Sem degradê
         </button>
       )}
     </div>

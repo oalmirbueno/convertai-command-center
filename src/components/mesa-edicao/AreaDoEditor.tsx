@@ -1,7 +1,7 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { Film, Loader2, Pencil, Plus } from "lucide-react";
+import { Film, Loader2, Pencil, Plus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa, useUrlDaMesa } from "@/components/mesa/MesaContexto";
 import { EstadoVazio } from "@/components/sistema/Estados";
@@ -12,6 +12,7 @@ import { chamarMesaVideos, chaveDasVersoes, useVersoes } from "@/components/mesa
 import { motivoParaNaoMudar, type VersaoDeVideo } from "../../../supabase/functions/mesa-videos/modulos/memoria-de-video";
 import { duracaoDoClipe, migrarProjeto, ROTULO_DA_TRILHA, type ClipeDoProjeto, type ProjetoDeEdicao } from "../../../supabase/functions/_shared/projeto-de-edicao";
 import { navegadorDoEditor } from "./editor/apoio";
+import { projetoDoZero } from "@/lib/editor/doZero";
 import type { CenaDoRoteiro } from "@/lib/editor/skills";
 
 /**
@@ -176,18 +177,20 @@ export default function AreaDoEditor({ projeto, cenas, roteiroId, agenteNaLatera
   const migrado = versao ? migrarProjeto(versao.projeto) : null;
   const temClipe = projeto.trilhas.some((t) => t.clipes.length);
 
-  const comecar = async () => {
+  // 02/10 (dono: "quero começar um vídeo do zero no Editar"): versão com o projeto vazio (sem custo).
+  const comecar = async (doZero = false) => {
     setCriando(true);
     setFalhouCriar(null);
     try {
+      const base = doZero ? projetoDoZero("Vídeo do zero", projeto.formato || "9:16", new Date().toISOString()) : projeto;
       const r = await chamarMesaVideos<{ versao: VersaoDeVideo }>({
         acao: "versao_registrar",
         client_id: clientId,
-        titulo: projeto.titulo,
-        roteiro_id: roteiroId || null,
-        nota: "Projeto aberto no editor da Mesa Edição.",
+        titulo: base.titulo,
+        roteiro_id: doZero ? null : roteiroId || null,
+        nota: doZero ? "Vídeo começado do zero no editor da Mesa Edição." : "Projeto aberto no editor da Mesa Edição.",
         estado: "rascunho",
-        projeto,
+        projeto: base,
       });
       await queryClient.invalidateQueries({ queryKey: chaveDasVersoes(clientId) });
       if (r && r.versao) setEscolhida(r.versao.id);
@@ -230,6 +233,12 @@ export default function AreaDoEditor({ projeto, cenas, roteiroId, agenteNaLatera
               </button>
             )
           )}
+          {!lendo && navegador.ok && (
+            <button type="button" className={juntar(botao.secundario, "mb-1 ml-1 h-8")} onClick={() => void comecar(true)} disabled={criando} data-comecar-do-zero="">
+              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+              Começar do zero
+            </button>
+          )}
           {!navegador.ok && <span className={juntar(texto.auxiliar, "mb-1")}>O editor pede um navegador atualizado (Chrome, Edge ou Safari 14+).</span>}
           {falhouCriar && <span className="mb-1 ml-2 text-[12px] text-destructive">{falhouCriar}</span>}
           {versoesQ.isError && <span className="mb-1 ml-2 text-[12px] text-destructive">Não deu para ler as versões. Recarregue a página.</span>}
@@ -261,6 +270,10 @@ export default function AreaDoEditor({ projeto, cenas, roteiroId, agenteNaLatera
         <button type="button" className={juntar(botao.discreto, "ml-auto h-8 shrink-0")} onClick={() => void comecar()} disabled={criando || !temClipe} title="Cria outra versão com a montagem de agora (takes e ordem de Organizar)" aria-label="Nova versão" data-nova-versao="">
           {criando ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <Plus className="h-3.5 w-3.5 sm:mr-1.5" />}
           <span className="hidden sm:inline">Nova versão</span>
+        </button>
+        <button type="button" className={juntar(botao.discreto, "ml-1 h-8 shrink-0")} onClick={() => void comecar(true)} disabled={criando} title="Cria uma versão vazia para montar do zero (cenas, textos, motion, mídia e música)" aria-label="Do zero" data-comecar-do-zero="">
+          <Sparkles className="h-3.5 w-3.5 sm:mr-1.5" />
+          <span className="hidden sm:inline">Do zero</span>
         </button>
       </div>
       <LimiteDoEditor
