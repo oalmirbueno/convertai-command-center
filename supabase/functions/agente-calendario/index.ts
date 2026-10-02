@@ -7399,7 +7399,9 @@ async function refazerPropostaInterno(servico: SupabaseClient, corpo: Record<str
       .limit(6);
     pedidos = ((data ?? []) as Array<{ papel: string; conteudo: string }>).reverse();
   }
-  const cadencia = normalizarCadencia(corpo.cadencia) ?? cadenciaDoPlanejamento("", pedidos, [blocoDoPlano(ctx, inicio)], null);
+  // 02/10: o pedido que gerou a proposta (parametros.mensagem) é a fonte mais forte; antes só a conversa e o plano entravam.
+  const pedidoOriginal = typeof (antiga.parametros as Record<string, unknown> | null)?.mensagem === "string" ? String((antiga.parametros as Record<string, unknown>).mensagem) : "";
+  const cadencia = normalizarCadencia(corpo.cadencia) ?? cadenciaDoPlanejamento(pedidoOriginal, pedidos, [blocoDoPlano(ctx, inicio)], null);
   const marcar = async (novas: string[]) => {
     await servico
       .from("calendario_propostas")
