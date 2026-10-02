@@ -5,6 +5,7 @@ import { Montador } from "@/lib/editor/skills/tipos";
 import { corteLimpoEm, planoDoCorteLimpo } from "@/lib/editor/skills/corteLimpo";
 import { proporSkill } from "@/lib/editor/skills";
 import { silenciosDoClipe } from "@/lib/editor/transcricao";
+import { escalaMaximaSegura, ORIGEM_SEGURA_DO_ZOOM, QUADROS_QUE_SEGURA, quadrosDosClipes, vaosDaTrilha, volumeComFade } from "@/lib/editor/sequencias";
 import { AGORA_SINTETICO, falaSintetica, projetoTalkingHead } from "./fixtures/talkingHeadSintetico";
 
 /**
@@ -98,5 +99,36 @@ describe("fechar buracos em quadros inteiros", () => {
       expect(l[k].inicio_s).toBe(fimDoClipe(l[k - 1]));
       expect(naGrade(l[k].inicio_s)).toBe(true);
     }
+  });
+});
+
+describe("composição sem quadro preto", () => {
+  const clipe = (id: string, inicio_s: number, entrada_s: number, saida_s: number) => ({ id, inicio_s, entrada_s, saida_s, fonte: "f", velocidade: 1, volume: 1, texto: null, estilo: null, transicao_entrada: null, transicao_saida: null, zoom: null, cena_ref: null, nota: null, comparar: null, origem: null }) as unknown as Parameters<typeof quadrosDosClipes>[0][number];
+
+  it("4,12 + 2,98 (ponto flutuante) não deixa o quadro 177 preto; vão de meio quadro (7,10 a 7,12) é segurado", () => {
+    // Caso real da auditoria: clipe acaba em 7,10 (fora da grade) e o seguinte começa em 7,12.
+    const l = [clipe("a", 4.12, 4.12, 7.1), clipe("b", 7.12, 7.3, 9.34)];
+    expect(vaosDaTrilha(l, 25, 0).length).toBeLessThanOrEqual(1);
+    expect(vaosDaTrilha(l, 25, QUADROS_QUE_SEGURA)).toEqual([]);
+    const q = quadrosDosClipes(l, 25, QUADROS_QUE_SEGURA);
+    expect(q.a.de + q.a.d).toBe(q.b.de);
+  });
+
+  it("vão de verdade (mais de 2 quadros) continua vão: a composição não inventa imagem", () => {
+    const l = [clipe("a", 0, 0, 2), clipe("b", 2.2, 3, 5)];
+    expect(vaosDaTrilha(l, 25, QUADROS_QUE_SEGURA)).toEqual([{ em_quadro: 50, quadros: 5 }]);
+  });
+
+  it("micro fade só no primeiro e no último quadro do corte encostado", () => {
+    const v = volumeComFade(1, 50, true, true);
+    expect([v(0), v(1), v(48), v(49)]).toEqual([0.5, 1, 1, 0.5]);
+  });
+
+  it("zoom sem rosto: origem acima do centro e escala que não come a cabeça", () => {
+    expect(ORIGEM_SEGURA_DO_ZOOM.y).toBeLessThan(0.5);
+    // Com a origem no centro, 1,15x comia 6,5% de cima; com a origem segura, menos de 5%.
+    expect(0.5 * (1 - 1 / 1.15)).toBeGreaterThan(0.05);
+    expect(ORIGEM_SEGURA_DO_ZOOM.y * (1 - 1 / 1.18)).toBeLessThan(0.05);
+    expect(escalaMaximaSegura(ORIGEM_SEGURA_DO_ZOOM.y)).toBeGreaterThanOrEqual(1.18);
   });
 });

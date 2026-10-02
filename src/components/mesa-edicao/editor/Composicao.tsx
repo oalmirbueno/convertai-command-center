@@ -8,6 +8,7 @@ import { CarregarFonteDaMarca, CarregarFontes, PecaDeMotion } from "./motion/Pec
 import { filtroDaCor, type FiltroDaCor } from "../../../lib/editor/cor";
 import { cameraNoTempo } from "../../../lib/editor/efeitos";
 import { recortePara, rostoNoTempo } from "../../../lib/editor/reenquadre";
+import { ORIGEM_SEGURA_DO_ZOOM, QUADROS_QUE_SEGURA, quadrosDosClipes, volumeComFade } from "../../../lib/editor/sequencias";
 import TextoNaTela from "./TextoNaTela";
 // Frente CNV: camada do Quadro animado do Canvas (clipe com estilo.camada).
 import { CamadaNaComposicao } from "../../mesa-foto/canvas/quadro/CamadaNaComposicao";
@@ -57,7 +58,7 @@ const estiloTxt = (c: ClipeDoProjeto, k: string, padrao: string) => {
 };
 
 /** Opacidade, deslocamento e escala de entrada/saída + zoom do clipe, no quadro local. */
-function movimento(c: ClipeDoProjeto, frame: number, dur: number, fps: number): CSSProperties & { flash?: number } {
+function movimento(c: ClipeDoProjeto, frame: number, dur: number, fps: number, origem: { x: number; y: number } = ORIGEM_SEGURA_DO_ZOOM): CSSProperties & { flash?: number } {
   let opacidade = 1;
   let x = 0;
   let desfoque = 0;
@@ -92,7 +93,8 @@ function movimento(c: ClipeDoProjeto, frame: number, dur: number, fps: number): 
     }
     if (sai.tipo === "desfoque") desfoque = Math.max(desfoque, (1 - t) * 30);
   }
-  return { opacity: opacidade, transform: `translateX(${x}%) scale(${escala})`, transformOrigin: "50% 50%", filter: desfoque > 0.3 ? `blur(${Math.round(desfoque)}px)` : undefined, flash };
+  // 02/10 (auditoria: zoom "comendo a cabeça"): a origem do zoom é o rosto rastreado ou, sem ele, um pouco acima do centro.
+  return { opacity: opacidade, transform: `translateX(${x}%) scale(${escala})`, transformOrigin: `${Math.round(origem.x * 1000) / 10}% ${Math.round(origem.y * 1000) / 10}%`, filter: desfoque > 0.3 ? `blur(${Math.round(desfoque)}px)` : undefined, flash };
 }
 
 const cheio: CSSProperties = { position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover" };
@@ -122,7 +124,7 @@ export function recorteDoClipe(projeto: ProjetoDeEdicao, c: ClipeDoProjeto, tFon
   return { posicao: `${Math.round(rc.x * 100) / 100}% ${Math.round(rc.y * 100) / 100}%`, focoX: rc.focoX, focoY: rc.focoY, meiaAltura };
 }
 
-function Midia({ projeto, urls, fonte, entrada_s, velocidade, volume, muda, estilo, posicao }: { projeto: ProjetoDeEdicao; urls: Record<string, string>; fonte: string | null; entrada_s: number; velocidade: number; volume: number; muda: boolean; estilo?: CSSProperties; posicao?: string }) {
+function Midia({ projeto, urls, fonte, entrada_s, velocidade, volume, muda, estilo, posicao, fade }: { projeto: ProjetoDeEdicao; urls: Record<string, string>; fonte: string | null; entrada_s: number; velocidade: number; volume: number; muda: boolean; estilo?: CSSProperties; posicao?: string; fade?: { quadros: number; entra: boolean; sai: boolean } | null }) {
   const f = fonte ? projeto.fontes[fonte] : null;
   const url = fonte ? resolverUrl(urls[fonte]) : null;
   if (posicao) estilo = { ...estilo, objectPosition: posicao };
@@ -134,18 +136,20 @@ function Midia({ projeto, urls, fonte, entrada_s, velocidade, volume, muda, esti
     );
   }
   if (f.midia === "imagem") return <Img src={url} style={{ ...cheio, ...estilo }} />;
+  // 02/10 (video-use, regra 3): micro fade de um quadro nos cortes encostados, sem estalo.
+  const som = fade && fade.quadros > 2 && (fade.entra || fade.sai) ? volumeComFade(volume, fade.quadros, fade.entra, fade.sai) : volume;
   // No render (worker), o vídeo sai quadro a quadro exato pelo OffthreadVideo; na prévia, o Html5Video.
   if (getRemotionEnvironment().isRendering) {
     // Frente MOT: a cena da Mesa Motion vem em WebM com alfa; o quadro sai em PNG para a transparência passar.
     const alfa = /\.webm$/i.test(f.storage_path || "");
-    return <OffthreadVideo src={url} transparent={alfa} trimBefore={Math.max(0, Math.round(entrada_s * projeto.fps))} playbackRate={velocidade} volume={muda ? 0 : volume} muted={muda} style={{ ...cheio, ...estilo }} />;
+    return <OffthreadVideo src={url} transparent={alfa} trimBefore={Math.max(0, Math.round(entrada_s * projeto.fps))} playbackRate={velocidade} volume={muda ? 0 : som} muted={muda} style={{ ...cheio, ...estilo }} />;
   }
   return (
     <Html5Video
       src={url}
       trimBefore={Math.max(0, Math.round(entrada_s * projeto.fps))}
       playbackRate={velocidade}
-      volume={muda ? 0 : volume}
+      volume={muda ? 0 : som}
       muted={muda}
       style={{ ...cheio, ...estilo }}
       pauseWhenBuffering
@@ -175,11 +179,12 @@ function Rotulo({ lado, children, largura }: { lado: "esq" | "dir"; children: Re
   );
 }
 
-function ClipeVisual({ projeto, urls, trilha, c, filtroCss }: { projeto: ProjetoDeEdicao; urls: Record<string, string>; trilha: TrilhaDoProjeto; c: ClipeDoProjeto; filtroCss?: string }) {
+function ClipeVisual({ projeto, urls, trilha, c, filtroCss, quadros, fade }: { projeto: ProjetoDeEdicao; urls: Record<string, string>; trilha: TrilhaDoProjeto; c: ClipeDoProjeto; filtroCss?: string; quadros?: number; fade?: { quadros: number; entra: boolean; sai: boolean } | null }) {
   const frame = useCurrentFrame();
   const fps = projeto.fps;
-  const dur = Math.max(1, q(duracaoDoClipe(c), fps));
-  const { flash, ...mov } = movimento(c, frame, dur, fps);
+  const dur = quadros && quadros > 0 ? quadros : Math.max(1, q(duracaoDoClipe(c), fps));
+  const rostoAqui = c.zoom && trilha.tipo === "video" ? rostoNaSaida(projeto, c.inicio_s + frame / fps) : null;
+  const { flash, ...mov } = movimento(c, frame, dur, fps, rostoAqui ? { x: rostoAqui.x, y: rostoAqui.y } : ORIGEM_SEGURA_DO_ZOOM);
   if (filtroCss) mov.filter = mov.filter ? `${filtroCss} ${mov.filter}` : filtroCss;
   // 02/10: cena do zero (clipe sem mídia com estilo.fundo): fundo liso ou degradê, na prévia e no render.
   const fundo = !c.fonte ? estiloTxt(c, "fundo", "") : "";
@@ -273,7 +278,7 @@ function ClipeVisual({ projeto, urls, trilha, c, filtroCss }: { projeto: Projeto
   return (
     <>
       <div style={{ ...caixa, ...mov }}>
-        <Midia projeto={projeto} urls={urls} fonte={c.fonte} entrada_s={c.entrada_s} velocidade={c.velocidade} volume={c.volume} muda={trilha.muda} posicao={rec.posicao} />
+        <Midia projeto={projeto} urls={urls} fonte={c.fonte} entrada_s={c.entrada_s} velocidade={c.velocidade} volume={c.volume} muda={trilha.muda} posicao={rec.posicao} fade={fade} />
       </div>
       {clarao}
     </>
@@ -333,6 +338,20 @@ function ClipeDePeca({ projeto, urls, c, corDaMarca }: { projeto: ProjetoDeEdica
   const tempos = Array.isArray(e.tempos) ? (e.tempos as unknown[]).map(Number).filter((n) => isFinite(n)) : undefined;
   const dur = Math.max(1, q(duracaoDoClipe(c), projeto.fps));
   return <PecaDeMotion peca={id} params={params} tempos={tempos} desdeS={Number(e._desde_s) || 0} duracaoQuadros={dur} imagem={c.fonte ? resolverUrl(urls[c.fonte]) : null} corDaMarca={corDaMarca} />;
+}
+
+/** Há clipe encostado antes (entra) ou depois (sai) deste, na mesma trilha? */
+function fadeDoCorte(clipes: ClipeDoProjeto[], id: string, de: number, d: number, fps: number): { quadros: number; entra: boolean; sai: boolean } {
+  let entra = false;
+  let sai = false;
+  clipes.forEach((o) => {
+    if (o.id === id) return;
+    const ini = q(o.inicio_s, fps);
+    const fim = q(o.inicio_s + duracaoDoClipe(o), fps);
+    if (Math.abs(fim - de) <= QUADROS_QUE_SEGURA) entra = true;
+    if (Math.abs(ini - (de + d)) <= QUADROS_QUE_SEGURA) sai = true;
+  });
+  return { quadros: d, entra, sai };
 }
 
 const ORDEM: Record<string, number> = { video: 0, sobreposicao: 1, texto: 2, legenda: 3, audio: 4, ajuste: 5 };
@@ -395,7 +414,7 @@ function GrupoDeVideo({ projeto, children, corBase, filtroBase }: { projeto: Pro
       <AbsoluteFill
         style={{
           transform: `translate(${Math.round(cam.dx * 10000) / 100}%, ${Math.round(cam.dy * 10000) / 100}%) scale(${Math.round(cam.escala * 10000) / 10000})`,
-          transformOrigin: rosto ? `${Math.round(rosto.x * 1000) / 10}% ${Math.round(rosto.y * 1000) / 10}%` : "50% 50%",
+          transformOrigin: rosto ? `${Math.round(rosto.x * 1000) / 10}% ${Math.round(rosto.y * 1000) / 10}%` : `${ORIGEM_SEGURA_DO_ZOOM.x * 100}% ${ORIGEM_SEGURA_DO_ZOOM.y * 100}%`,
           filter: filtros.length ? filtros.join(" ") : undefined,
         }}
       >
@@ -450,13 +469,24 @@ export function ComposicaoDoProjeto({ projeto, urls, publico, mix, cor_da_marca 
     .filter((x) => !x.t.oculta && x.t.tipo !== "ajuste")
     // Vídeo principal (a primeira trilha de vídeo) embaixo; as outras por cima, na ordem do projeto.
     .sort((a, b) => ORDEM[a.t.tipo] - ORDEM[b.t.tipo] || a.i - b.i);
+  // 02/10 (auditoria: quadro preto entre clipes): começo e fim no quadro; na trilha de vídeo, vão de até 2 quadros é segurado.
+  const quadrosPorTrilha = useMemo(() => {
+    const m: Record<string, ReturnType<typeof quadrosDosClipes>> = {};
+    projeto.trilhas.forEach((t) => {
+      m[t.id] = quadrosDosClipes(t.clipes, fps, t.tipo === "video" ? QUADROS_QUE_SEGURA : 0);
+    });
+    return m;
+  }, [projeto.trilhas, fps]);
   const camada = (tipos: string[]) =>
     trilhas
       .filter(({ t }) => tipos.indexOf(t.tipo) >= 0)
       .map(({ t }) =>
         t.clipes.map((c) => {
-          const de = q(c.inicio_s, fps);
-          const d = Math.max(1, q(duracaoDoClipe(c), fps));
+          const qd = quadrosPorTrilha[t.id] && quadrosPorTrilha[t.id][c.id];
+          const de = qd ? qd.de : q(c.inicio_s, fps);
+          const d = qd ? qd.d : Math.max(1, q(duracaoDoClipe(c), fps));
+          // Corte encostado na mesma trilha de vídeo: micro fade no som de entrada e de saída.
+          const fade = t.tipo === "video" && c.fonte ? fadeDoCorte(t.clipes, c.id, de, d, fps) : null;
           const peca = c.estilo && typeof (c.estilo as Record<string, unknown>).peca === "string";
           return (
             <Sequence key={`${t.id}:${c.id}`} from={de} durationInFrames={d} layout="none" name={`${t.nome} ${c.id}`}>
@@ -465,7 +495,7 @@ export function ComposicaoDoProjeto({ projeto, urls, publico, mix, cor_da_marca 
               ) : peca && t.tipo !== "audio" && t.tipo !== "video" ? (
                 <ClipeDePeca projeto={projeto} urls={urls} c={c} corDaMarca={corDaMarca} />
               ) : t.tipo === "video" || t.tipo === "sobreposicao" ? (
-                <ClipeVisual projeto={projeto} urls={urls} trilha={t} c={c} filtroCss={t.tipo === "sobreposicao" && c.fonte && projeto.fontes[c.fonte] && projeto.fontes[c.fonte].midia !== "imagem" ? filtroBase || undefined : undefined} />
+                <ClipeVisual projeto={projeto} urls={urls} trilha={t} c={c} quadros={d} fade={fade} filtroCss={t.tipo === "sobreposicao" && c.fonte && projeto.fontes[c.fonte] && projeto.fontes[c.fonte].midia !== "imagem" ? filtroBase || undefined : undefined} />
               ) : t.tipo === "audio" ? (
                 <ClipeDeAudio projeto={projeto} urls={urls} trilha={t} c={c} fala={fala} ganhoMedidoDb={typeof ganhos[c.id] === "number" ? ganhos[c.id] : null} />
               ) : (
