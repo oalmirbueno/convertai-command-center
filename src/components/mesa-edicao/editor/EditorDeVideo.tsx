@@ -36,6 +36,8 @@ import { PainelDeCor, PainelDeFormato, PainelDeZoom } from "./PaineisDeImagem";
 import { PainelDeMotion, PainelDeSom, PainelDeTextos } from "./PaineisDeTextoESom";
 import { PainelDeCapitulos, PainelDeExportar } from "./PaineisDeSaida";
 import EstadoDaMaquina from "./EstadoDaMaquina";
+import TrilhoDeFerramentas from "./TrilhoDeFerramentas";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import type { ContextoDoPainel } from "./apoioDosPaineis";
 import { publicarNaPonte, tirarDaPonte } from "./ponteDoAgente";
 
@@ -431,6 +433,9 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
   );
 
   const abaVisivel: AbaEsquerda = aba === "ajustes" && !ajustesNaEsquerda ? "ia" : aba;
+  const abaAtual = abasDaEsquerda.find((a) => a.valor === abaVisivel) as { valor: AbaEsquerda; rotulo: string; descricao?: string } | undefined;
+  const rotuloDaAba = abaAtual ? abaAtual.rotulo : "";
+  const descricaoDaAba = abaAtual ? abaAtual.descricao || "" : "";
   const contextoDasSkills = { agora: new Date().toISOString(), cenas: cenas || null, selecionados: selecao };
   const painelEsquerdo =
     abaVisivel === "ia" ? (
@@ -534,18 +539,26 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
         className={juntar(
           "grid min-h-0 min-w-0 gap-3",
           !agenteNaLateral
-            ? "lg:grid-cols-[280px_minmax(0,1fr)_300px] xl:grid-cols-[320px_minmax(0,1fr)_340px] desk:grid-cols-[360px_minmax(0,1fr)_380px]"
+            ? "lg:grid-cols-[340px_minmax(0,1fr)_300px] xl:grid-cols-[380px_minmax(0,1fr)_340px] desk:grid-cols-[420px_minmax(0,1fr)_380px]"
             : ajustesNaEsquerda
-              ? "lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)] desk:grid-cols-[340px_minmax(0,1fr)]"
-              : "lg:grid-cols-[320px_minmax(0,1fr)_300px]",
+              ? "lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)] desk:grid-cols-[400px_minmax(0,1fr)]"
+              : "lg:grid-cols-[380px_minmax(0,1fr)_300px]",
         )}
         data-agente-na-lateral={agenteNaLateral ? "" : undefined}
       >
-        <div className="flex min-h-0 min-w-0 flex-col">
-          <SeletorCompacto rotulo="Painel do editor" valor={abaVisivel} onEscolher={(v) => setAba(v as AbaEsquerda)} opcoes={abasDaEsquerda} larguraTotal />
-          <RegiaoRolavel modo="sempre" className="mt-2 min-h-0 flex-1 pr-1" memoria={`mesa-edicao:editor:rolagem:${abaVisivel}:${clientId}`}>
-            {painelEsquerdo}
-          </RegiaoRolavel>
+        <div className="flex min-h-0 min-w-0 gap-2">
+          <TrilhoDeFerramentas ferramentas={abasDaEsquerda} valor={abaVisivel} onEscolher={(v) => setAba(v as AbaEsquerda)} />
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-border pl-2" role="tabpanel" aria-label={rotuloDaAba}>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <h3 className="min-w-0 truncate text-[14px] font-semibold" data-titulo-do-painel="">
+                {rotuloDaAba}
+              </h3>
+              {descricaoDaAba && <AjudaRecolhida rotulo={`O que é ${rotuloDaAba}?`}>{descricaoDaAba}</AjudaRecolhida>}
+            </div>
+            <RegiaoRolavel modo="sempre" className="mt-2 min-h-0 flex-1 pr-1" memoria={`mesa-edicao:editor:rolagem:${abaVisivel}:${clientId}`}>
+              {painelEsquerdo}
+            </RegiaoRolavel>
+          </div>
         </div>
         <div className="flex min-h-0 min-w-0 flex-col">
           {barra}

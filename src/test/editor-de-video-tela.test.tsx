@@ -139,8 +139,7 @@ describe("tela do editor de vídeo", () => {
 
   it("skills: a proposta aparece no cartão e só muda com Confirmar", async () => {
     montar();
-    fireEvent.click(screen.getByRole("button", { name: /Painel do editor/ }));
-    fireEvent.click(await screen.findByRole("option", { name: /Skills/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Skills/ }));
     const cartao = document.querySelector('[data-skill="fechar_buracos"]') as HTMLElement;
     expect(cartao).toBeTruthy();
     fireEvent.click(document.querySelector('[data-skill="punch_in"] button:last-child') as HTMLElement);

@@ -94,8 +94,7 @@ const ultimoSalvo = () => {
 };
 
 async function abrirPainel(nome: RegExp) {
-  fireEvent.click(screen.getByRole("button", { name: /Painel do editor/ }));
-  fireEvent.click(await screen.findByRole("option", { name: nome }));
+  fireEvent.click(await screen.findByRole("tab", { name: nome }));
 }
 
 beforeEach(() => {
