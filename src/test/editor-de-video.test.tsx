@@ -183,7 +183,10 @@ describe("skills determinísticas", () => {
     ]);
     const p = comFala(base());
     const prop = proporSkill("cortar_silencios", p, { agora: AGORA });
-    expect(prop.operacoes.filter((o) => o.op === "recortar")).toHaveLength(4);
+    // 02/10: o corte limpo sai numa operação só (corta e encosta em quadros inteiros).
+    const lote = prop.operacoes.filter((o) => o.op === "recortar_varios");
+    expect(lote).toHaveLength(1);
+    expect((lote[0] as Extract<(typeof lote)[number], { op: "recortar_varios" }>).cortes.length).toBeGreaterThanOrEqual(3);
     const v = trilhaPrincipal(prop.resultado)!;
     const palavras = falaNaLinhaDoTempo(prop.resultado).map((w) => w.t);
     expect(palavras).toEqual(["Olá", "pessoal.", "Hoje", "vamos", "cortar.", "Fim"]);
@@ -563,7 +566,7 @@ describe("receita de edição da referência", () => {
     expect(c).toMatchObject({ batida_s: null, zoom: null, legendar: true, estilo_legenda: "destaque" });
     // Aplicar: só a edição, pelas skills, com tempos do código.
     const prop = proporReceita(comFala(base()), comLegenda, "identica", { agora: AGORA }, "ref");
-    expect(prop.operacoes.some((o) => o.op === "recortar")).toBe(true);
+    expect(prop.operacoes.some((o) => o.op === "recortar_varios")).toBe(true);
     expect(prop.resultado.trilhas.find((t) => t.tipo === "legenda")!.clipes.length).toBeGreaterThan(0);
     expect(batidas(new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0]), 0.2).batidas_por_minuto).toBe(100);
   });

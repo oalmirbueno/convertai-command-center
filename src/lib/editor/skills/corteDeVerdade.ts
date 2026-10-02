@@ -26,7 +26,8 @@ export function cortarPelaOndaEm(m: Montador, pausaMax: number, emenda: number):
   let cortes = 0;
   let tirado = 0;
   let semOnda = 0;
-  // Do último clipe para o primeiro, e dentro do clipe do fim para o começo: o id do pedaço de antes não muda.
+  const lote: { clipe: string; de_s: number; ate_s: number }[] = [];
+  // 02/10: todos os cortes numa operação só (recortar_varios corta e encosta em quadros inteiros).
   emOrdem(t)
     .slice()
     .reverse()
@@ -40,12 +41,12 @@ export function cortarPelaOndaEm(m: Montador, pausaMax: number, emenda: number):
         .slice()
         .reverse()
         .forEach((s) => {
-          m.aplicar({ op: "recortar", clipe: c.id, de_s: s.de_s, ate_s: s.ate_s });
+          lote.push({ clipe: c.id, de_s: s.de_s, ate_s: s.ate_s });
           cortes++;
           tirado += (s.ate_s - s.de_s) / c.velocidade;
         });
     });
-  if (cortes) m.aplicar({ op: "ondular", trilha: t.id });
+  if (cortes) m.aplicar({ op: "recortar_varios", trilha: t.id, cortes: lote, rotulo: `Cortar ${cortes} ${cortes === 1 ? "pausa" : "pausas"} pela onda e encostar o resto` });
   if (semOnda) m.avisar(`${semOnda} ${semOnda === 1 ? "clipe ficou" : "clipes ficaram"} de fora: falta medir a onda (o worker mede, sem custo).`);
   if (cortes) m.avisar("Legendas e peças não andam junto com o corte: refaça as legendas depois.");
   return { cortes, tirado_s: Math.round(tirado * 100) / 100, sem_onda: semOnda };
@@ -91,6 +92,7 @@ export const SKILL_MELHOR_TOMADA: Skill = {
     let saiu = 0;
     let tirado = 0;
     const lista: string[] = [];
+    const lote: { clipe: string; de_s: number; ate_s: number }[] = [];
     if (t) {
       emOrdem(t)
         .slice()
@@ -104,13 +106,13 @@ export const SKILL_MELHOR_TOMADA: Skill = {
               const de = Math.max(x.de_s, c.entrada_s);
               const ate = Math.min(x.ate_s, c.saida_s);
               if (ate - de < 0.04) return;
-              m.aplicar({ op: "recortar", clipe: c.id, de_s: de, ate_s: ate });
+              lote.push({ clipe: c.id, de_s: de, ate_s: ate });
               saiu++;
               tirado += (ate - de) / c.velocidade;
               lista.unshift(`${x.motivo === "falso_comeco" ? "Falso começo" : x.motivo === "repeticao" ? "Repetição" : "Gagueira"}: "${x.texto.slice(0, 50)}" (ficou "${x.ficou.slice(0, 50)}")`);
             });
         });
-      if (saiu) m.aplicar({ op: "ondular", trilha: t.id });
+      if (saiu) m.aplicar({ op: "recortar_varios", trilha: t.id, cortes: lote, rotulo: `Tirar ${saiu} ${saiu === 1 ? "tomada repetida" : "tomadas repetidas"} e encostar o resto` });
     }
     lista.slice(0, 12).forEach((l) => m.avisar(l));
     if (lista.length > 12) m.avisar(`E mais ${lista.length - 12}.`);

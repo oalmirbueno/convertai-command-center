@@ -55,6 +55,14 @@ export type Operacao =
   | { op: "mover"; clipe: string; inicio_s: number; trilha?: string }
   | { op: "remover"; clipe: string; ondular?: boolean }
   | { op: "recortar"; clipe: string; de_s: number; ate_s: number }
+  /**
+   * 02/10 (auditoria da Mesa Edição): vários cortes de uma vez numa trilha, e o
+   * resto encostado (um passo, uma linha no cartão, em vez de 100 "Cortar").
+   * de_s/ate_s são da FONTE de cada clipe.
+   */
+  | { op: "recortar_varios"; trilha: string; cortes: { clipe: string; de_s: number; ate_s: number }[]; rotulo?: string }
+  /** 02/10: a câmera de cada clipe de uma vez (zoom por clipe; null = enquadramento cheio). */
+  | { op: "camera"; trilha: string; zooms: Record<string, { de: number; para: number } | null>; rotulo?: string }
   | { op: "inserir"; trilha: string; clipe: Partial<ClipeDoProjeto> & { inicio_s: number; entrada_s: number; saida_s: number }; empurrar?: boolean }
   | { op: "propriedades"; clipe: string; campos: CamposDoClipe }
   | { op: "ondular"; trilha: string }
@@ -319,18 +327,69 @@ function propriedades(p: ProjetoDeEdicao, o: Extract<Operacao, { op: "propriedad
   return comClipe(p, ti, ci, novo);
 }
 
+/**
+ * Encosta os clipes da trilha, em quadros inteiros (02/10: "fechar buracos").
+ * O clipe com duração fora da grade (2,98 s a 25 fps = 74,5 quadros) tem a
+ * saída acertada para o quadro inteiro mais perto (menos de meio quadro) antes
+ * de encostar: assim o fim de um é sempre o começo do outro, sem quadro preto.
+ */
 function ondular(p: ProjetoDeEdicao, o: Extract<Operacao, { op: "ondular" }>): ProjetoDeEdicao {
   const ti = exigirTrilha(p, o.trilha);
   const t = p.trilhas[ti];
   const ordem = emOrdem(t);
   if (!ordem.length) return p;
-  let cursor = noQuadro(ordem[0].inicio_s, p.fps);
+  const fps = p.fps > 0 ? p.fps : 25;
+  let cursor = Math.round(ordem[0].inicio_s * fps);
   const novos = ordem.map((c) => {
-    const n = { ...c, inicio_s: cursor };
-    cursor = noQuadro(cursor + duracaoDoClipe(c), p.fps);
+    const dur = duracaoDoClipe(c);
+    const quadros = Math.max(1, Math.round(dur * fps - 1e-6));
+    let n: ClipeDoProjeto = { ...c, inicio_s: arred(cursor / fps) };
+    if (Math.abs(quadros / fps - dur) > 1e-4) {
+      const saida = arred(c.entrada_s + (quadros / fps) * c.velocidade);
+      if (saida <= fimDaFonte(p, c) + 1e-6) n = { ...n, saida_s: saida };
+    }
+    cursor += quadros;
     return n;
   });
   return comTrilha(p, ti, { ...t, clipes: novos });
+}
+
+/** Vários cortes numa trilha: por clipe, do último trecho para o primeiro (o id do pedaço de antes não muda); depois encosta. */
+function recortarVarios(p: ProjetoDeEdicao, o: Extract<Operacao, { op: "recortar_varios" }>): ProjetoDeEdicao {
+  const ti = exigirTrilha(p, o.trilha);
+  const ids = new Set(p.trilhas[ti].clipes.map((c) => c.id));
+  const porClipe: Record<string, { de_s: number; ate_s: number }[]> = {};
+  (o.cortes || []).forEach((x) => {
+    if (!ids.has(x.clipe)) throw new ErroDaOperacao("Um dos clipes do corte não está nessa trilha.");
+    (porClipe[x.clipe] = porClipe[x.clipe] || []).push({ de_s: x.de_s, ate_s: x.ate_s });
+  });
+  let q = p;
+  Object.keys(porClipe).forEach((id) => {
+    porClipe[id]
+      .sort((a, b) => b.de_s - a.de_s)
+      .forEach((x) => {
+        q = recortar(q, { op: "recortar", clipe: id, de_s: x.de_s, ate_s: x.ate_s });
+      });
+  });
+  return ondular(q, { op: "ondular", trilha: o.trilha });
+}
+
+/** Zoom de vários clipes de uma vez (a câmera da edição). */
+function camera(p: ProjetoDeEdicao, o: Extract<Operacao, { op: "camera" }>): ProjetoDeEdicao {
+  const ti = exigirTrilha(p, o.trilha);
+  const t = p.trilhas[ti];
+  const zooms = o.zooms || {};
+  Object.keys(zooms).forEach((id) => {
+    if (!t.clipes.some((c) => c.id === id)) throw new ErroDaOperacao("Um dos clipes da câmera não está nessa trilha.");
+    const z = zooms[id];
+    if (z && !(z.de >= 0.5 && z.de <= 4 && z.para >= 0.5 && z.para <= 4)) throw new ErroDaOperacao("Zoom vai de 0,5x a 4x.");
+  });
+  const clipes = t.clipes.map((c) => {
+    if (!(c.id in zooms)) return c;
+    const z = zooms[c.id];
+    return { ...c, zoom: z ? { de: Math.round(z.de * 1000) / 1000, para: Math.round(z.para * 1000) / 1000 } : null };
+  });
+  return comTrilha(p, ti, { ...t, clipes });
 }
 
 function reordenar(p: ProjetoDeEdicao, o: Extract<Operacao, { op: "reordenar" }>): ProjetoDeEdicao {
@@ -362,6 +421,10 @@ export function aplicarOperacao(p: ProjetoDeEdicao, o: Operacao): ProjetoDeEdica
       return remover(p, o);
     case "recortar":
       return recortar(p, o);
+    case "recortar_varios":
+      return recortarVarios(p, o);
+    case "camera":
+      return camera(p, o);
     case "inserir":
       return inserir(p, o);
     case "propriedades":

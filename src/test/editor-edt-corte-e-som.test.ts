@@ -140,7 +140,9 @@ describe("skills do corte de verdade", () => {
   it("cortar_pela_onda recorta pelas pausas medidas e registra; sem onda, avisa", () => {
     const p = projetoComOnda();
     const prop = proporSkill("cortar_pela_onda", p, { agora: AGORA });
-    expect(prop.operacoes.filter((o) => o.op === "recortar").length).toBe(3);
+    // 02/10: os cortes saem numa operação só (corta e encosta em quadros inteiros).
+    const lote = prop.operacoes.find((o) => o.op === "recortar_varios") as { cortes: unknown[] } | undefined;
+    expect(lote && lote.cortes.length).toBe(3);
     const t = trilhaPrincipal(prop.resultado)!;
     const total = t.clipes.reduce((s, c) => s + (c.saida_s - c.entrada_s), 0);
     expect(Math.round(total * 100) / 100).toBe(3.64);
@@ -155,7 +157,7 @@ describe("skills do corte de verdade", () => {
     let p = projetoComOnda();
     p = aplicarOperacao(p, { op: "transcricao", fonte: "fala", transcricao: { por_palavra: true, origem: "t", versao: 1, em: AGORA, segmentos: [{ t: "eu", i: 0.5, f: 0.7 }, { t: "queria", i: 0.75, f: 1.1 }, { t: "eu", i: 2.3, f: 2.5 }, { t: "queria", i: 2.55, f: 2.9 }, { t: "falar", i: 2.95, f: 3.3 }] } });
     const prop = proporSkill("ficar_com_melhor_tomada", p, { agora: AGORA });
-    expect(prop.operacoes.some((o) => o.op === "recortar")).toBe(true);
+    expect(prop.operacoes.some((o) => o.op === "recortar_varios")).toBe(true);
     expect(prop.avisos[0]).toMatch(/^Falso começo: "eu queria" \(ficou "eu queria falar"\)/);
   });
 
