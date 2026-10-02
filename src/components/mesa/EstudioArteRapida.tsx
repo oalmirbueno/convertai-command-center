@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
-import { Archive, CalendarPlus, FileText, ImagePlus, ListChecks, Loader2, Paperclip, Plus, Sparkles, Wand2, X, Zap } from "lucide-react";
+import { Archive, CalendarPlus, FileText, ImagePlus, Link2, ListChecks, Loader2, Paperclip, Plus, Sparkles, Wand2, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,10 +42,12 @@ import {
   lerArteRapida,
   lerArtesRapidas,
   lerFotosDoAcervo,
+  lerPostDoInstagramNaMesa,
   levarArteRapidaParaAgenda,
   miniaturaDaArteRapida,
   prepararArteRapida,
   situacaoDaArteRapida,
+  type PostLidoNaTela,
 } from "./arteRapidaApi";
 import {
   corpoDaArteRapida,
@@ -53,12 +55,15 @@ import {
   linkDoItemNoEstudio,
   MAX_DOCUMENTOS_DA_ARTE_RAPIDA,
   MAX_IMAGENS_DA_ARTE_RAPIDA,
+  MAX_IMAGENS_VISTAS_PELO_DIRETOR,
   NOVA_ARTE_RAPIDA,
-  PAPEIS_DO_ARQUIVO,
+  PAPEIS_NA_TELA,
   papelPeloNome,
   pedidoProntoParaIr,
+  ROTULO_CURTO_DO_PAPEL,
   ROTULO_DA_PECA,
   ROTULO_DO_PAPEL,
+  tituloDoAviso,
   type ArquivoPedido,
   type DocumentoDaArteRapida,
   type PapelPedido,
@@ -67,6 +72,15 @@ import {
 import { horarioSugerido, localParaIso, partesNoFuso, problemaNoHorario } from "../../../supabase/functions/estudio-arte/modulos/entrega-na-agenda";
 import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
 import { AJUDA_DO_USO } from "../../../supabase/functions/estudio-arte/modulos/uso-da-foto";
+import {
+  codigoDoPostDoInstagram,
+  DICA_DO_MODO_DO_POST,
+  MODOS_DO_POST,
+  type ModoDoPost,
+  ROTULO_DO_MODO_DO_POST,
+  usaConteudoDoPost,
+  usaImagensDoPost,
+} from "../../../supabase/functions/estudio-arte/modulos/post-do-instagram";
 
 /**
  * Arte rápida (frente AE, 28/09): a arte avulsa, fora do plano do mês, no
@@ -199,8 +213,8 @@ function SeletorDoPapel({ valor, onValor, rotulo }: { valor: PapelPedido; onValo
       className="mt-1 h-8 w-full min-w-0 rounded-md border border-border bg-background px-1.5 text-[11.5px]"
     >
       <option value="auto">Automático</option>
-      {PAPEIS_DO_ARQUIVO.map((p) => (
-        <option key={p} value={p}>{ROTULO_DO_PAPEL[p]}</option>
+      {PAPEIS_NA_TELA.map((p) => (
+        <option key={p} value={p} title={DICA_DO_PAPEL[p]}>{ROTULO_CURTO_DO_PAPEL[p]}</option>
       ))}
     </select>
   );
@@ -221,10 +235,17 @@ function PedidoDaArteRapida({
   /** Tela larga: a prévia "Como vai sair" ao lado. */
   largo: boolean;
 }) {
-  const { clientId, catalogo } = useMesa();
+  const { clientId, clientName, catalogo } = useMesa();
   const { marca } = useMarcaDaMesa();
   const queryClient = useQueryClient();
-  const anexos = useAnexos(clientId);
+  // 02/10: a arte rápida tem o próprio teto (16); as outras mesas seguem com o delas.
+  const anexos = useAnexos(clientId, { max: MAX_IMAGENS_DA_ARTE_RAPIDA });
+  const aviso = (t: string) => tituloDoAviso(t, clientName);
+  // 02/10: post do Instagram colado (link, como usar e o que o servidor leu).
+  const [linkDoPost, setLinkDoPost] = useState("");
+  const [modoDoPost, setModoDoPost] = useState<ModoDoPost>("referencia_e_conteudo");
+  const [postLido, setPostLido] = useState<PostLidoNaTela | null>(null);
+  const [lendoPost, setLendoPost] = useState(false);
   const [emUso, setEmUso] = useCampanhaEmUso(clientId);
   const campanhas = useQuery({ queryKey: chaves.campanhas(clientId), queryFn: () => lerCampanhas(clientId) });
   // Frente AE: só as campanhas da marca aberta (Acerbi ou CME).
@@ -276,7 +297,10 @@ function PedidoDaArteRapida({
   };
 
   const imagensProntas = anexos.lista.filter((a) => a.estado === "pronto" && a.caminho);
-  const totalDeImagens = anexos.lista.length + fotosDoAcervo.length;
+  // As imagens do post contam no teto, depois das que a equipe pôs (as que passam ficam de fora).
+  const vagasParaOPost = Math.max(0, MAX_IMAGENS_DA_ARTE_RAPIDA - anexos.lista.length - fotosDoAcervo.length);
+  const imagensDoPost = postLido && usaImagensDoPost(modoDoPost) ? postLido.imagens.slice(0, vagasParaOPost) : [];
+  const totalDeImagens = anexos.lista.length + fotosDoAcervo.length + imagensDoPost.length;
   const cheio = totalDeImagens >= MAX_IMAGENS_DA_ARTE_RAPIDA;
 
   const adicionarArquivos = async (arquivos: File[]) => {
@@ -305,12 +329,32 @@ function PedidoDaArteRapida({
   const papelDe = (id: string, nome: string): PapelPedido => (Object.prototype.hasOwnProperty.call(papeis, id) ? papeis[id] : papelPeloNome(nome) || "auto");
   const arquivos: ArquivoPedido[] = fotosDoAcervo
     .map((f) => ({ imagem_id: f.id, nome: f.nome, papel: f.papel }) as ArquivoPedido)
-    .concat(imagensProntas.map((a) => ({ caminho: a.caminho as string, nome: a.nome, papel: papelDe(a.id, a.nome) })));
+    .concat(imagensProntas.map((a) => ({ caminho: a.caminho as string, nome: a.nome, papel: papelDe(a.id, a.nome) })))
+    .concat(imagensDoPost.map((i) => ({ caminho: i.caminho, nome: i.nome, papel: "referencia" as PapelPedido })));
+  const codigoDoLink = codigoDoPostDoInstagram(linkDoPost);
+  const postDoPedido = postLido
+    ? { url: postLido.post.url, codigo: postLido.post.codigo, autor: postLido.post.autor, legenda: postLido.post.legenda, modo: modoDoPost }
+    : null;
+
+  const lerPost = async () => {
+    if (!codigoDoLink || lendoPost) return;
+    setLendoPost(true);
+    try {
+      const r = await lerPostDoInstagramNaMesa(clientId, linkDoPost.trim());
+      setPostLido(r);
+      if (r.avisos && r.avisos.length) toast.info(aviso("Post lido"), { description: r.avisos.join(" ").slice(0, 300) });
+    } catch (e) {
+      setPostLido(null);
+      toast.error(aviso("Não deu para ler o post"), { description: textoDoErro(e), duration: 10000 });
+    } finally {
+      setLendoPost(false);
+    }
+  };
 
   const diretor = padraoPara(catalogo, "diretor_arte");
   const leitor = padraoPara(catalogo, "leitura");
   const imagem = padraoPara(catalogo, "imagem");
-  const vistas = Math.min(4, arquivos.filter((a) => a.papel !== "logo").length);
+  const vistas = Math.min(MAX_IMAGENS_VISTAS_PELO_DIRETOR, arquivos.filter((a) => a.papel !== "logo").length);
   const geraJunto = gerarLogo && peca !== "carrossel";
   const partes = (): ParteDaEstimativa[] => {
     const p: ParteDaEstimativa[] = [
@@ -323,7 +367,7 @@ function PedidoDaArteRapida({
     return p;
   };
 
-  const pronto = pedidoProntoParaIr(pedido, arquivos.length, documentos.length) && !anexos.subindo && !lendo;
+  const pronto = pedidoProntoParaIr(pedido, arquivos.length, documentos.length, !!(postDoPedido && postDoPedido.legenda && usaConteudoDoPost(modoDoPost))) && !anexos.subindo && !lendo && !lendoPost;
 
   const criar = async () => {
     const r = await prepararArteRapida(
@@ -339,6 +383,7 @@ function PedidoDaArteRapida({
         marcaId: marca ? marca.id : null,
         modeloImagemId: imagem ? imagem.id : null,
         qualidade: "media",
+        post: postDoPedido,
       }),
     );
     const t = r && r.trabalho ? (r.trabalho as Trabalho) : null;
@@ -347,7 +392,7 @@ function PedidoDaArteRapida({
       try {
         await gerarNaFila(t.id, [1], marca ? marca.id : null);
       } catch (e) {
-        toast.info("A direção está pronta", { description: `Clique em Gerar no Estúdio. ${textoDoErro(e)}`.slice(0, 240) });
+        toast.info(aviso("A direção está pronta"), { description: `Clique em Gerar no Estúdio. ${textoDoErro(e)}`.slice(0, 240) });
       }
     }
     return r;
@@ -356,7 +401,7 @@ function PedidoDaArteRapida({
   const concluir = (r: any) => {
     const t = r && r.trabalho ? (r.trabalho as Trabalho) : null;
     const avisos: string[] = r && Array.isArray(r.avisos) ? r.avisos : [];
-    if (avisos.length) toast.info("Sobre o pedido", { description: avisos.join(" ").slice(0, 400), duration: 10000 });
+    if (avisos.length) toast.info(aviso("Sobre o pedido"), { description: avisos.join(" ").slice(0, 400), duration: 10000 });
     if (!t) return;
     gravarArteRapidaNoCache(queryClient, clientId, t);
     void queryClient.invalidateQueries({ queryKey: chavesDaArteRapida.todas(clientId) });
@@ -364,6 +409,8 @@ function PedidoDaArteRapida({
     setDocumentos([]);
     setPedido("");
     setPapeis({});
+    setLinkDoPost("");
+    setPostLido(null);
     onCriada(t);
   };
 
@@ -478,6 +525,85 @@ function PedidoDaArteRapida({
         </div>
       </div>
 
+      {/* 02/10: post do Instagram colado, com 3 modos (referência e conteúdo, só o conteúdo, só a referência). */}
+      <div className="min-w-0" data-post-do-instagram={postLido ? postLido.post.codigo : ""}>
+        <div className="mb-1.5 flex items-center">
+          <label htmlFor="post-da-arte-rapida" className="block text-[12px] font-medium text-muted-foreground">
+            Post do Instagram (opcional)
+          </label>
+          <AjudaRecolhida className="ml-1.5" rotulo="Como o post entra" titulo="Post do Instagram">
+            O agente se inspira no post e refaz com a marca do cliente, sem copiar. Para reproduzir igual, diga no pedido "faça igual a este post". Se o Instagram não liberar, envie um print do post.
+          </AjudaRecolhida>
+        </div>
+        <div className="flex min-w-0 items-center">
+          <Input
+            id="post-da-arte-rapida"
+            value={linkDoPost}
+            onChange={(e) => {
+              setLinkDoPost(e.target.value);
+              const novo = codigoDoPostDoInstagram(e.target.value);
+              if (postLido && (!novo || novo.codigo !== postLido.post.codigo)) setPostLido(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void lerPost();
+              }
+            }}
+            placeholder="Cole o link do post ou do reel"
+            className="h-9 min-w-0 flex-1 text-[13px]"
+            aria-label="Link do post do Instagram"
+          />
+          <Button type="button" size="sm" variant="secondary" className="ml-2 h-9 shrink-0 px-3 text-[12.5px]" disabled={!codigoDoLink || lendoPost} onClick={() => void lerPost()}>
+            {lendoPost ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Link2 className="mr-1.5 h-3.5 w-3.5" />} {postLido ? "Ler de novo" : "Ler o post"}
+          </Button>
+        </div>
+        {linkDoPost.trim() && !codigoDoLink && <p className="mt-1 text-[11.5px] text-destructive">Use o link de um post ou reel (instagram.com/p/... ou /reel/...).</p>}
+        {postLido && (
+          <div className="mt-2 space-y-2 rounded-lg bg-muted px-3 py-2.5">
+            <div role="radiogroup" aria-label="Como usar o post" className="flex min-w-0 flex-wrap" data-modo-do-post={modoDoPost}>
+              {MODOS_DO_POST.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  role="radio"
+                  aria-checked={modoDoPost === m}
+                  title={DICA_DO_MODO_DO_POST[m]}
+                  onClick={() => setModoDoPost(m)}
+                  className={juntar(
+                    "mb-1 mr-1.5 h-8 rounded-full border px-3 text-[12px] transition-colors",
+                    modoDoPost === m ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-foreground hover:border-primary/50",
+                  )}
+                >
+                  {ROTULO_DO_MODO_DO_POST[m]}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11.5px] leading-snug text-muted-foreground">{DICA_DO_MODO_DO_POST[modoDoPost]}</p>
+            {usaImagensDoPost(modoDoPost) && postLido.imagens.length > 0 && (
+              <ul className="grid grid-cols-5 gap-1.5 sm:grid-cols-8" aria-label="Imagens do post">
+                {postLido.imagens.map((i, n) => (
+                  <li key={i.caminho} className={`min-w-0 ${n >= vagasParaOPost ? "opacity-40" : ""}`} title={n >= vagasParaOPost ? "Passou do limite de imagens: fica de fora" : "Referência"}>
+                    <div className="relative overflow-hidden rounded-md border border-border bg-background" style={{ paddingBottom: "100%" }}>
+                      <ImagemDaMesa caminho={i.caminho} alt={`Imagem ${n + 1} do post`} className="absolute inset-0 h-full w-full object-cover" />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {usaConteudoDoPost(modoDoPost) && (
+              <p className="text-[12px] leading-snug [overflow-wrap:anywhere]">
+                {postLido.post.autor && <span className="font-medium">@{postLido.post.autor}: </span>}
+                {postLido.post.legenda ? `${postLido.post.legenda.slice(0, 220)}${postLido.post.legenda.length > 220 ? "..." : ""}` : "Sem legenda."}
+              </p>
+            )}
+            <button type="button" className="text-[11.5px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" onClick={() => { setPostLido(null); setLinkDoPost(""); }}>
+              Tirar o post
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* A peça: o agente reconhece sozinho; a equipe pode decidir antes. */}
       <div className="min-w-0">
         <p className="mb-1.5 text-[12px] font-medium text-muted-foreground">Peça</p>
@@ -540,7 +666,7 @@ function PedidoDaArteRapida({
       </p>
       <BotaoComCusto
         rotulo={<><Wand2 className="mr-1.5 h-4 w-4" />Criar arte</>}
-        titulo="Arte rápida criada"
+        titulo={aviso("Arte rápida criada")}
         descricao="O diretor de arte lê o pedido, as imagens e os arquivos, com a marca e a campanha, e escreve a direção."
         partes={partes}
         executar={criar}
@@ -680,11 +806,13 @@ function amanhaEmSaoPaulo(): string {
 }
 
 export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho; onAbrirItem: (taskId: string) => void }) {
-  const { clientId, catalogo, podeRecarregar } = useMesa();
+  const { clientId, clientName, catalogo, podeRecarregar } = useMesa();
   const queryClient = useQueryClient();
   const confirmar = useConfirm();
   const avisarErro = useAvisarErro();
   const a = arteDoTrabalho(trabalho);
+  // 02/10: todo aviso da arte rápida diz o cliente.
+  const aviso = (t: string) => tituloDoAviso(t, clientName);
   const [data, setData] = useState(amanhaEmSaoPaulo);
   const [hora, setHora] = useState("");
   // Frente RO (29/09, arte rápida da Acerbi que "foi" mas não chegou ao cliente): as 3 opções da entrega (EN),
@@ -770,6 +898,9 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
         }
       }
       setFim({ taskId: taskId as string, data, avisos, entregue: true });
+      toast.success(aviso(modo === "arquivos" ? "Arte em Arquivos" : "Arte na Agenda"), {
+        description: `${a ? `"${a.titulo}"` : "A arte"}${modo === "arquivos" ? " está em Arquivos." : ` está na Agenda${data ? ` em ${dataCurta(data)}` : ""}${modo === "aprovacao" ? " e foi para a aprovação do cliente." : "."}`}`,
+      });
       return { custo_usd: custo };
     } catch (e) {
       const motivo = textoDoErro(e, "Não foi possível entregar.");
@@ -796,9 +927,9 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
       const r = await arquivarArteRapida(trabalho.id);
       gravarArteRapidaNoCache(queryClient, clientId, r.trabalho);
       void queryClient.invalidateQueries({ queryKey: ["mesa", "arte-rapida", clientId] });
-      toast.success("Arte arquivada", { description: "Saiu do histórico da arte rápida." });
+      toast.success(aviso("Arte arquivada"), { description: `${a ? `"${a.titulo}" saiu` : "Saiu"} do histórico da arte rápida.` });
     } catch (e) {
-      avisarErro(e, "Não foi possível arquivar");
+      avisarErro(e, aviso("Não foi possível arquivar"));
     } finally {
       setArquivando(false);
     }
@@ -867,7 +998,7 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
           )}
           <BotaoComCusto
             rotulo={<><CalendarPlus className="mr-1.5 h-4 w-4" />Entregar de novo</>}
-            titulo="Entregar de novo"
+            titulo={aviso("Entregar de novo")}
             descricao={semLegenda ? "Escreve a legenda (a única parte que usa IA) e entrega pelo fluxo da Agenda, no mesmo item." : "Entrega pelo fluxo da Agenda, no mesmo item. Sem custo de IA."}
             partes={() => (semLegenda ? [{ modeloId: diretor ? diretor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida }] : [])}
             executar={levar}
@@ -931,7 +1062,7 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
           )}
           <BotaoComCusto
             rotulo={<><CalendarPlus className="mr-1.5 h-4 w-4" />Confirmar e levar para {data ? dataCurta(data) : "a Agenda"}</>}
-            titulo="Arte na Agenda"
+            titulo={aviso("Arte na Agenda")}
             descricao={semLegenda ? "Escreve a legenda (a única parte que usa IA), cria o item na data e entrega pelo fluxo da Agenda." : "Cria o item na data e entrega pelo fluxo da Agenda. Sem custo de IA."}
             partes={() => (semLegenda ? [{ modeloId: diretor ? diretor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida }] : [])}
             executar={levar}

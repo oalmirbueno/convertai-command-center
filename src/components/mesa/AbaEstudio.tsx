@@ -77,7 +77,7 @@ import EstudioEntrega from "./EstudioEntrega";
 import EstudioArteRapida, { type ModoRapidoDoDetalhe } from "./EstudioArteRapida";
 import { ModoDoEstudio, SeletorDeFormatoCompacto, SeletorDeQualidadeCompacto } from "./EstudioControles";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { NOVA_ARTE_RAPIDA, PARAMETRO_DA_ARTE_RAPIDA } from "../../../supabase/functions/estudio-arte/modulos/arte-rapida";
+import { NOVA_ARTE_RAPIDA, PARAMETRO_DA_ARTE_RAPIDA, tituloDoAviso } from "../../../supabase/functions/estudio-arte/modulos/arte-rapida";
 import EstudioFotos from "./EstudioFotos";
 import EstudioLaminaGrande from "./EstudioLaminaGrande";
 import EstudioLista, { DICA_DO_ROTEIRO, formatoDoItem, SeloDoItem, type FontesDaLista } from "./EstudioLista";
@@ -410,6 +410,8 @@ function DetalheDoItem({
 }) {
   const mesa = useMesa();
   const { clientId, catalogo } = mesa;
+  // 02/10: na arte rápida, todo aviso diz de qual cliente é a arte.
+  const avisoDaPeca = (t: string) => (rapida ? tituloDoAviso(t, mesa.clientName) : t);
   const { marca: marcaDaMesa } = useMarcaDaMesa();
   const semTipografia = useSemTipografia(clientId, marcaDaMesa);
   const queryClient = useQueryClient();
@@ -635,7 +637,7 @@ function DetalheDoItem({
       }
       atualizar();
       // Frente FS: a lâmina saiu, mas algo no caminho falhou e mudou a arte (fica também na lâmina).
-      if (g && typeof g.aviso_da_acao === "string" && g.aviso_da_acao) toast.warning(`Lâmina ${ordem} gerada com aviso`, { description: g.aviso_da_acao, duration: 12000 });
+      if (g && typeof g.aviso_da_acao === "string" && g.aviso_da_acao) toast.warning(avisoDaPeca(`Lâmina ${ordem} gerada com aviso`), { description: g.aviso_da_acao, duration: 12000 });
       return (custoDaResposta(g) || 0) + custoFundo;
     } catch (e) {
       soltar(ordem);
@@ -1357,12 +1359,12 @@ function DetalheDoItem({
           executar={() => gerarVarias(filaDeGeracao.map((c) => c.ordem))}
           aoConcluir={(data) => {
             if (data && typeof data.na_fila === "number") {
-              toast.info(data.na_fila ? "Gerando no servidor" : "Essas lâminas já estavam na fila", {
+              toast.info(avisoDaPeca(data.na_fila ? "Gerando no servidor" : "Essas lâminas já estavam na fila"), {
                 description: "Pode trocar de tela ou de cliente: a geração continua. O custo sai por lâmina, na carteira do cliente.",
               });
               return;
             }
-            toast.success(data?.parado ? "Geração parada" : "Lâminas geradas", { description: `Custo real: ${usd(custoDaResposta(data) || 0)}.` });
+            toast.success(avisoDaPeca(data?.parado ? "Geração parada" : "Lâminas geradas"), { description: `Custo real: ${usd(custoDaResposta(data) || 0)}.` });
           }}
         />
       )}

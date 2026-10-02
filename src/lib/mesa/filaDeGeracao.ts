@@ -184,7 +184,7 @@ export interface GeracaoDoCliente {
 export function geracoesPorCliente(
   itens: ItemNaFila[],
   nomes: Record<string, string>,
-  trabalhos: Record<string, { task_id: string | null; tipo: string | null }>,
+  trabalhos: Record<string, { task_id: string | null; tipo: string | null; rapida?: boolean }>,
 ): GeracaoDoCliente[] {
   const porCliente: Record<string, GeracaoDoCliente> = {};
   const ordem: string[] = [];
@@ -195,7 +195,12 @@ export function geracoesPorCliente(
       const t = trabalhos[i.trabalho_id];
       const link = t && t.tipo === "ads"
         ? `/mesa-ads?client=${i.client_id}&etapa=estudio`
-        : `/mesa?client=${i.client_id}&aba=estudio${t && t.task_id ? `&task=${t.task_id}` : ""}`;
+        : t && t.task_id
+        ? `/mesa?client=${i.client_id}&aba=estudio&task=${t.task_id}`
+        // 02/10: arte rápida ainda sem item da Agenda: o link abre a própria arte (rapida=<trabalho>).
+        : t && t.rapida
+        ? `/mesa?client=${i.client_id}&aba=estudio&rapida=${i.trabalho_id}`
+        : `/mesa?client=${i.client_id}&aba=estudio`;
       g = { client_id: i.client_id, nome: nomes[i.client_id] || "Cliente", laminas: 0, gerando: 0, link };
       porCliente[i.client_id] = g;
       ordem.push(i.client_id);
@@ -251,12 +256,13 @@ export async function lerFilaGlobal(): Promise<FilaGlobal | null> {
   const trabalhos = Array.from(new Set(itens.map((i) => i.trabalho_id)));
   const [perfis, trab] = await Promise.all([
     (supabase as any).from("profiles").select("id, company_name, full_name").in("id", clientes),
-    (supabase as any).from("estudio_trabalhos").select("id, task_id, tipo").in("id", trabalhos),
+    // Só a marca da arte rápida (a peça), não a direção inteira.
+    (supabase as any).from("estudio_trabalhos").select("id, task_id, tipo, rapida:direcao->arte_rapida->>peca").in("id", trabalhos),
   ]);
   const nomes: Record<string, string> = {};
   for (const p of (perfis && perfis.data) || []) nomes[p.id] = String(p.company_name || p.full_name || "Cliente");
-  const mapa: Record<string, { task_id: string | null; tipo: string | null }> = {};
-  for (const t of (trab && trab.data) || []) mapa[t.id] = { task_id: t.task_id || null, tipo: t.tipo || null };
+  const mapa: Record<string, { task_id: string | null; tipo: string | null; rapida?: boolean }> = {};
+  for (const t of (trab && trab.data) || []) mapa[t.id] = { task_id: t.task_id || null, tipo: t.tipo || null, rapida: !!t.rapida };
   return { itens, clientes: geracoesPorCliente(itens, nomes, mapa) };
 }
 

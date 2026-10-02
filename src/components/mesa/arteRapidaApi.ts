@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao } from "@/lib/mesa/api";
-import { arteRapidaDa, ehArteRapida, type ArteRapida } from "../../../supabase/functions/estudio-arte/modulos/arte-rapida";
+import { arteRapidaDa, ehArteRapida, MAX_IMAGENS_DA_ARTE_RAPIDA, type ArteRapida } from "../../../supabase/functions/estudio-arte/modulos/arte-rapida";
 import { ultimasVersoes, type ItemDoMes, type Trabalho } from "./useItensDoMes";
 
 /**
@@ -161,8 +161,20 @@ export async function lerFotosDoAcervo(clientId: string, ids: string[]): Promise
     .from("cliente_imagens")
     .select("id, nome, storage_bucket, storage_path")
     .eq("client_id", clientId)
-    .in("id", ids.slice(0, 6));
+    .in("id", ids.slice(0, MAX_IMAGENS_DA_ARTE_RAPIDA));
   if (error) throw error;
   const achadas = (data || []) as FotoDoPedido[];
   return ids.map((i) => achadas.filter((a) => a.id === i)[0]).filter(Boolean) as FotoDoPedido[];
 }
+
+// ------------------------------------------------------------------ post do Instagram (02/10)
+
+export interface PostLidoNaTela {
+  post: { url: string; codigo: string; autor: string | null; legenda: string };
+  imagens: { caminho: string; nome: string }[];
+  avisos: string[];
+}
+
+/** Lê o post do Instagram no servidor (sem login): legenda, autor e as imagens guardadas na pasta do cliente. */
+export const lerPostDoInstagramNaMesa = (clientId: string, url: string) =>
+  chamarFuncao<PostLidoNaTela>("estudio-arte", { acao: "rapida_instagram", client_id: clientId, url });

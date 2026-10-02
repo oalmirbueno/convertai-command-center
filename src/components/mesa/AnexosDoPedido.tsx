@@ -38,7 +38,12 @@ const soltarPrevia = (p: string | null) => {
 
 let sequencia = 0;
 
-export function useAnexos(clientId: string) {
+/**
+ * `max`: o teto deste pedido (02/10: a arte rápida aceita 16; as outras mesas
+ * seguem com MAX_ANEXOS, o padrão).
+ */
+export function useAnexos(clientId: string, opcoes: { max?: number } = {}) {
+  const max = opcoes.max && opcoes.max > 0 ? opcoes.max : MAX_ANEXOS;
   const [lista, setLista] = useState<Anexo[]>([]);
   const vivo = useRef(true);
   const atual = useRef<Anexo[]>([]);
@@ -57,12 +62,12 @@ export function useAnexos(clientId: string) {
     if (!todos.length) return;
     const aceitos = todos.filter((f) => !!extensaoDoAnexo(f));
     if (aceitos.length < todos.length) toast.error("Só imagens JPG, PNG ou WEBP.");
-    const vagas = MAX_ANEXOS - atual.current.length;
+    const vagas = max - atual.current.length;
     if (vagas <= 0) {
-      toast.error(`Até ${MAX_ANEXOS} imagens por pedido.`);
+      toast.error(`Até ${max} imagens por pedido.`);
       return;
     }
-    if (aceitos.length > vagas) toast.error(`Até ${MAX_ANEXOS} imagens por pedido: entraram as primeiras ${vagas}.`);
+    if (aceitos.length > vagas) toast.error(`Até ${max} imagens por pedido: entraram as primeiras ${vagas}.`);
     const novos: { anexo: Anexo; arquivo: File }[] = aceitos.slice(0, vagas).map((arquivo) => {
       sequencia += 1;
       return { arquivo, anexo: { id: `a${Date.now()}-${sequencia}`, nome: arquivo.name || "imagem", previa: criarPrevia(arquivo), caminho: null, estado: "subindo" } };
@@ -111,7 +116,7 @@ export function useAnexos(clientId: string) {
 
   const caminhos = lista.filter((a) => a.estado === "pronto" && a.caminho).map((a) => a.caminho as string);
   const subindo = lista.some((a) => a.estado === "subindo");
-  return { lista, adicionar, remover, limpar, tirarEnviados, caminhos, subindo, cheio: lista.length >= MAX_ANEXOS };
+  return { lista, adicionar, remover, limpar, tirarEnviados, caminhos, subindo, cheio: lista.length >= max, max };
 }
 
 export type ControleDeAnexos = ReturnType<typeof useAnexos>;
@@ -158,11 +163,11 @@ export function BotaoDeAnexar({ anexos, className = "" }: { anexos: ControleDeAn
         onClick={() => entrada.current && entrada.current.click()}
         disabled={anexos.cheio}
         aria-label="Anexar imagens"
-        title={anexos.cheio ? `Até ${MAX_ANEXOS} imagens` : "Anexar imagens ou prints (JPG, PNG, WEBP)"}
+        title={anexos.cheio ? `Até ${anexos.max} imagens` : "Anexar imagens ou prints (JPG, PNG, WEBP)"}
         className={`inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-border bg-background px-2 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50 ${className}`}
       >
         <ImagePlus className="h-4 w-4" />
-        {anexos.lista.length > 0 && <span className="ml-1 text-[11px]">{anexos.lista.length}/{MAX_ANEXOS}</span>}
+        {anexos.lista.length > 0 && <span className="ml-1 text-[11px]">{anexos.lista.length}/{anexos.max}</span>}
       </button>
       <input
         ref={entrada}

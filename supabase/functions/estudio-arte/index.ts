@@ -501,12 +501,14 @@ import {
   arteRapidaDa,
   type ArteRapida,
   type CampanhaCandidata,
+  comTituloDaArte,
   decidirArteRapida,
   descricaoDoItemDaArteRapida,
   type DocumentoDaArteRapida,
   ehArteRapida,
   INSTRUCOES_DA_ARTE_RAPIDA,
   linkDoItemNoEstudio,
+  MAX_IMAGENS_VISTAS_PELO_DIRETOR,
   normalizarPedidoDaArteRapida,
   pedidoParaODiretor,
   pedidoProntoParaIr,
@@ -514,6 +516,25 @@ import {
   type RespostaDeEscolha,
   tituloDoPedido,
 } from "./modulos/arte-rapida.ts";
+// 02/10: post do Instagram no pedido (sem login) e a vitrine de logos dos parceiros (colada pelo código).
+import {
+  caminhoDaImagemDoPost,
+  hostDaImagemPermitido,
+  lerPostDoInstagram,
+  MAX_BYTES_DA_IMAGEM_DO_POST,
+  MAX_BYTES_DA_PAGINA_DO_POST,
+  MENSAGEM_DO_POST,
+  PostBloqueado,
+  UA_DO_INSTAGRAM,
+} from "./modulos/post-do-instagram.ts";
+import {
+  areaDaVitrine,
+  areaLivreParaAVitrine,
+  laminasDoCarrosselDaVitrine,
+  type LogoDaVitrine,
+  notaDaVitrineParaOLeitor,
+} from "./modulos/vitrine-de-logos.ts";
+import { colarLogosNaGrade } from "./modulos/vitrine-na-arte.ts";
 import { criarItemDaArteRapida, dataDaAgendaValida, ErroDoItemDaArte, hojeEmSaoPaulo } from "./arte-rapida-na-agenda.ts";
 import { TONS, tomValido } from "../_shared/conhecimento-ads.ts";
 import { hostResolvePublico, imagensDoBehance, lerMetaTags, tipoDoLink, urlPublicaSegura } from "./links.ts";
@@ -975,6 +996,35 @@ function seloGravado(v: unknown): { caminho: string; selo_id: string | null; apl
 function seloDaVersao(v: unknown): { caminho: string; selo_id: string | null } | null {
   const s = seloGravado(v);
   return s && s.aplicado ? { caminho: s.caminho, selo_id: s.selo_id } : null;
+}
+
+/** 02/10: a vitrine de logos de uma lâmina (área no quadro final, as logos e a proporção do quadro). */
+type VitrineNaLamina = { area: Area; logos: LogoDaVitrine[]; proporcao: number; aplicado?: boolean; coladas?: number };
+
+/** Lê a vitrine gravada numa versão (para o ajuste colar de novo as mesmas logos, na mesma grade). */
+function vitrineDaVersao(v: unknown): VitrineNaLamina | null {
+  const s = v && typeof v === "object" ? (v as Record<string, unknown>).vitrine_de_logos : null;
+  if (!s || typeof s !== "object") return null;
+  const o = s as VitrineNaLamina;
+  if (o.aplicado !== true || !o.area || !Array.isArray(o.logos) || !o.logos.length) return null;
+  return { area: o.area, logos: o.logos, proporcao: Number(o.proporcao) > 0 ? Number(o.proporcao) : 0.8 };
+}
+
+/**
+ * Cola as logos dos parceiros na grade da área (02/10), pelo código (modulos/vitrine-na-arte.ts): cada logo
+ * inteira, sem ser redesenhada. Só logos da pasta deste cliente; a que não abre fica de fora, com o nome.
+ */
+async function colarVitrineNaArte(png: Uint8Array, v: VitrineNaLamina, clientId: string): Promise<{ png: Uint8Array; coladas: number; falharam: string[] }> {
+  const daPasta = (l: LogoDaVitrine) => !!l && typeof l.caminho === "string" && l.caminho.indexOf(`${clientId}/`) === 0 && l.caminho.indexOf("..") < 0;
+  return await colarLogosNaGrade(
+    png,
+    v,
+    async (l) => {
+      if (!daPasta(l)) throw new Error("logo_fora_da_pasta_do_cliente");
+      return (await anexoLeve("mesa", l.caminho, "logo-da-vitrine", true)).bytes;
+    },
+    (l, e) => registrarFalha("estudio-arte: logo da vitrine não colada", e, { caminho: l.caminho }),
+  );
 }
 
 async function lerCampanha(clientId: string, id: unknown): Promise<CampanhaDaLamina | null> {
@@ -3332,7 +3382,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
         legenda_prevista: texto(item.post?.default_caption, 1500) || null,
         detalhe_do_estrategista: rapida ? null : item.itemProposta ?? null,
         // Frente AE: o pedido avulso (texto, imagens por código e textos dos arquivos).
-        pedido_avulso: rapida ? pedidoParaODiretor(rapida.gravada, rapida.documentos) : undefined,
+        pedido_avulso: rapida ? pedidoParaODiretor(rapida.gravada, rapida.documentos, laminasPedidas) : undefined,
         carrossel_infinito_pedido: pedidoInfinito,
         formato_da_arte: QUADRO_DO_POST[formato].rotulo,
         // Escolhida na tela antes da direção; nula = o diretor decide pelo conteúdo.
@@ -3410,7 +3460,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     const infinito = pedidoInfinito ?? !!bruto.carrossel_infinito;
     let cards = cardsDoDiretor(bruto.cards, postUnico, marca, conceito, infinito, levaLogoFn, new Set(acervo.map((a) => a.id)), fioVisual);
     // Frente AE: as fotos do pedido (F1, F2...) que o diretor pôs em cada lâmina, as que sobraram e as logos.
-    if (rapida && cards.length) cards = aplicarArquivosNasLaminas(cards, codigosDasFotosDoDiretor(bruto.cards, postUnico), rapida.gravada.arquivos, rapida.gravada.peca);
+    if (rapida && cards.length) cards = aplicarArquivosNasLaminas(cards, codigosDasFotosDoDiretor(bruto.cards, postUnico), rapida.gravada.arquivos, rapida.gravada.peca, rapida.gravada.vitrine ?? null);
     if (!cards.length) {
       throw new ErroEstudio(502, "direcao_vazia", "O diretor de arte não devolveu nenhum card utilizável. Tente de novo.", { uso_id: r.usoId });
     }
@@ -3507,6 +3557,9 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       campanha_id: campanha ? campanha.id : null,
       textos: rapida.documentos,
     };
+    // 02/10 (dono): o nome da arte é o título que o diretor escreveu na capa, não o pedido (vale no histórico,
+    // no item da Agenda e no nome do arquivo entregue). O do pedido fica só se a capa não tiver texto.
+    direcao = comTituloDaArte(direcao);
     const marcaPedida = texto(corpo.marca_id, 64);
     const marcaAntes = existente?.direcao.marca_id ?? null;
     if (UUID.test(marcaPedida)) direcao.marca_id = marcaPedida;
@@ -3689,10 +3742,18 @@ async function campanhasParaAArteRapida(clientId: string, marca: MarcaLeve | nul
   }));
 }
 
-/** Até 4 imagens do pedido à vista do diretor (arte a melhorar, fotos e referências; as logos só entram na geração). */
+/**
+ * Até 8 imagens do pedido à vista do diretor (02/10: eram 4), na ordem do que mais pesa: Fazer igual, fotos
+ * de compor e rostos, referências (as do post do Instagram por último). As logos só entram na geração; as que
+ * passam do teto o diretor conhece pelo código, nome e papel. Cada uma vai na cópia leve (nunca o arquivo cru).
+ */
 async function imagensDoPedidoParaODiretor(a: ArteRapida, fotos: ImagemAcervo[]): Promise<{ imagens: ImagemEntrada[]; avisos: string[] }> {
   const ordem: Record<string, number> = { arte_para_melhorar: 0, foto: 1, rosto: 1, referencia: 2 };
-  const alvos = a.arquivos.filter((x) => x.papel !== "logo").sort((x, y) => ordem[x.papel] - ordem[y.papel]).slice(0, 4);
+  const doPost = (x: { caminho: string | null }) => (x.caminho && x.caminho.indexOf("/pedidos/instagram/") >= 0 ? 1 : 0);
+  const alvos = a.arquivos
+    .filter((x) => x.papel !== "logo")
+    .sort((x, y) => ordem[x.papel] - ordem[y.papel] || doPost(x) - doPost(y))
+    .slice(0, MAX_IMAGENS_VISTAS_PELO_DIRETOR);
   const imagens: ImagemEntrada[] = [];
   const avisos: string[] = [];
   for (const arq of alvos) {
@@ -3751,7 +3812,7 @@ async function rapidaPreparar(ch: Chamador, corpo: Record<string, unknown>, exis
     }
   } else {
     const pedido = normalizarPedidoDaArteRapida(corpo, clientId);
-    if (!pedidoProntoParaIr(pedido.pedido, pedido.arquivos.length, pedido.documentos.length)) {
+    if (!pedidoProntoParaIr(pedido.pedido, pedido.arquivos.length, pedido.documentos.length, !!(pedido.post && pedido.post.legenda))) {
       throw new ErroEstudio(400, "pedido_vazio", "Escreva o que precisa ou envie uma imagem ou um arquivo.");
     }
     // Fotos do acervo: só as deste cliente, ativas e publicáveis.
@@ -3800,9 +3861,14 @@ async function rapidaPreparar(ch: Chamador, corpo: Record<string, unknown>, exis
       criada_em: new Date().toISOString(),
       criada_por: ch.userId,
       avisos: d.avisos,
+      // 02/10: o post do Instagram colado e a vitrine de logos (parceiros).
+      post: pedido.post,
+      vitrine: d.vitrine,
     };
     // Carrossel com a quantidade da tela; arte única nunca leva "laminas".
     if (gravada.peca === "unica") delete corpo.laminas;
+    // Vitrine em carrossel sem quantidade da equipe: a capa e as lâminas de logos (até 9 cada).
+    else if (d.vitrine && !pedido.laminas) corpo.laminas = laminasDoCarrosselDaVitrine(d.arquivos.filter((a) => a.papel === "logo").length);
   }
 
   const idsDasFotos = gravada.arquivos.map((a) => a.imagem_id).filter((x): x is string => !!x);
@@ -3885,6 +3951,137 @@ async function rapidaArquivar(ch: Chamador, corpo: Record<string, unknown>) {
     direcao: { ...x.direcao, arte_rapida: { ...(x.direcao.arte_rapida as ArteRapida), arquivada_em: desfazer ? null : new Date().toISOString() } },
   }));
   return json({ trabalho: atualizado, arquivada: !desfazer, custo_usd: 0 });
+}
+
+/** Lê um texto (HTML) do Instagram com o robô de prévia de links, sem seguir para o login, com tempo e teto. */
+async function textoDoInstagram(url: string): Promise<string | null> {
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      redirect: "manual",
+      headers: { "User-Agent": UA_DO_INSTAGRAM, "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8", Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5" },
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    return null;
+  }
+  // Redirecionamento (para o login) ou erro: bloqueado.
+  if (!res.ok || !res.body) {
+    await res.body?.cancel().catch(() => {});
+    return null;
+  }
+  const bytes = await lerComTeto(res, MAX_BYTES_DA_PAGINA_DO_POST, true);
+  return bytes ? new TextDecoder().decode(bytes) : null;
+}
+
+/** Corpo da resposta até `max` bytes (cortar = devolve o começo; senão, null acima do teto). */
+async function lerComTeto(res: Response, max: number, cortar: boolean): Promise<Uint8Array | null> {
+  if (!res.body) return null;
+  const partes: Uint8Array[] = [];
+  let total = 0;
+  const leitor = res.body.getReader();
+  try {
+    for (;;) {
+      const { done, value } = await leitor.read();
+      if (done) break;
+      if (total + value.byteLength > max) {
+        await leitor.cancel().catch(() => {});
+        if (!cortar) return null;
+        partes.push(value.slice(0, max - total));
+        total = max;
+        break;
+      }
+      partes.push(value);
+      total += value.byteLength;
+    }
+  } catch {
+    return null;
+  }
+  const saida = new Uint8Array(total);
+  let pos = 0;
+  for (const p of partes) {
+    saida.set(p, pos);
+    pos += p.byteLength;
+  }
+  return saida;
+}
+
+/** Baixa uma imagem do post: só do CDN do Instagram ou do Facebook (conferido a cada salto), image/*, até 8 MB. */
+async function imagemDoInstagram(inicial: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  let url = inicial;
+  for (let salto = 0; salto < 4; salto++) {
+    if (!hostDaImagemPermitido(url)) return null;
+    let res: Response;
+    try {
+      res = await fetch(url, { redirect: "manual", headers: { "User-Agent": UA_DO_INSTAGRAM, Accept: "image/webp,image/jpeg,image/png;q=0.9,image/*;q=0.5" }, signal: AbortSignal.timeout(20_000) });
+    } catch {
+      return null;
+    }
+    if (res.status >= 300 && res.status < 400) {
+      const destino = res.headers.get("location");
+      await res.body?.cancel().catch(() => {});
+      if (!destino) return null;
+      try {
+        url = new URL(destino, url).toString();
+      } catch {
+        return null;
+      }
+      continue;
+    }
+    const tipo = (res.headers.get("content-type") || "").toLowerCase();
+    if (!res.ok || tipo.indexOf("image/") !== 0) {
+      await res.body?.cancel().catch(() => {});
+      return null;
+    }
+    const tamanho = Number(res.headers.get("content-length") || 0);
+    if (tamanho > MAX_BYTES_DA_IMAGEM_DO_POST) {
+      await res.body?.cancel().catch(() => {});
+      return null;
+    }
+    const bytes = await lerComTeto(res, MAX_BYTES_DA_IMAGEM_DO_POST, false);
+    const mime = bytes ? mimeDe(bytes) : null;
+    if (!bytes || !mime || mime === "image/gif") return null;
+    return { bytes, mime };
+  }
+  return null;
+}
+
+/**
+ * rapida_instagram { client_id, url } -> { post: { url, codigo, autor, legenda }, imagens: [{ caminho, nome }], avisos }
+ * (02/10, dono: "colar o link de um post do Instagram"). Sem login: a página e o embed do post pelo robô de
+ * prévia de links; as imagens (até 10, do carrossel) vão para mesa/<cliente>/pedidos/instagram/<código>/ e
+ * entram no pedido como Referência; a legenda vira o conteúdo do post. Instagram bloqueou: 422 com a mensagem
+ * para mandar um print. Sem custo de IA.
+ */
+async function rapidaInstagram(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = texto(corpo.client_id, 64);
+  await garantirAcesso(ch, clientId);
+  let post;
+  try {
+    post = await lerPostDoInstagram(texto(corpo.url, 600), textoDoInstagram);
+  } catch (e) {
+    if (e instanceof PostBloqueado) throw new ErroEstudio(e.motivo === "link_invalido" ? 400 : 422, `instagram_${e.motivo}`, MENSAGEM_DO_POST[e.motivo]);
+    throw e;
+  }
+  const avisos: string[] = [];
+  const baixadas = await Promise.all(post.imagens.map((u) => imagemDoInstagram(u).catch(() => null)));
+  const imagens: { caminho: string; nome: string }[] = [];
+  for (let i = 0; i < baixadas.length; i++) {
+    const b = baixadas[i];
+    if (!b) continue;
+    const caminho = caminhoDaImagemDoPost(clientId, post.codigo, i + 1, extensaoDe(b.mime));
+    const { error } = await servico().storage.from("mesa").upload(caminho, new Blob([new Uint8Array(b.bytes)], { type: b.mime }), { contentType: b.mime, upsert: true });
+    if (error) {
+      registrarFalha("estudio-arte: imagem do post do Instagram não gravada", error, { client_id: clientId, codigo: post.codigo });
+      continue;
+    }
+    imagens.push({ caminho, nome: `instagram-${post.codigo}-${i + 1}.${extensaoDe(b.mime)}` });
+  }
+  const faltaram = post.imagens.length - imagens.length;
+  if (faltaram > 0) avisos.push(imagens.length ? `${faltaram} ${faltaram === 1 ? "imagem do post não veio" : "imagens do post não vieram"}. Mande um print se precisar delas.` : "As imagens do post não vieram. Mande um print do post se precisar do visual.");
+  if (!imagens.length && !post.legenda) throw new ErroEstudio(422, "instagram_sem_imagem", MENSAGEM_DO_POST.sem_imagem);
+  if (!post.legenda) avisos.push("O post não tem legenda: só o visual pode ser usado.");
+  return json({ post: { url: post.url, codigo: post.codigo, autor: post.autor, legenda: post.legenda }, imagens, avisos, custo_usd: 0 });
 }
 
 // ------------------------------------------------------ referencias (Jev)
@@ -4152,13 +4349,16 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
     const semOSelo = seloGravado(t.cards.find((c) => c.storage_path === caminho))
       ? " A arte tem o selo da campanha (um emblema com o nome ou o tema da campanha): não transcreva o texto dele."
       : "";
+    // 02/10: as logos dos parceiros coladas pelo código também não são texto da lâmina.
+    const vitrineColada = vitrineDaVersao(t.cards.find((c) => c.storage_path === caminho));
+    const semAVitrine = vitrineColada ? notaDaVitrineParaOLeitor(vitrineColada.area) : "";
     const lido = await chamarTexto({
       clientId: t.client_id,
       tarefa: "verificacao",
       agente: "leitor",
       modeloId: leitor.id,
       sistema: SISTEMA_LEITURA,
-      mensagens: [{ papel: "usuario", conteudo: pedido + semOSelo, imagens: [{ bytes: recorte.bytes, mime: "image/png", nome: `card-${card.ordem}.png` }] }],
+      mensagens: [{ papel: "usuario", conteudo: pedido + semOSelo + semAVitrine, imagens: [{ bytes: recorte.bytes, mime: "image/png", nome: `card-${card.ordem}.png` }] }],
       esquemaJson: ESQUEMA_LEITURA,
       maxTokensSaida: 6_000,
       referencia: { tipo: "estudio_trabalho", id: t.id },
@@ -5428,6 +5628,15 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       });
     }
   }
+  // 02/10: vitrine de logos (parceiros) desta lâmina da arte rápida. As logos NUNCA vão ao gerador (ele redesenharia
+  // marca de terceiro): o prompt pede só a área lisa e gravarVersao cola as logos numa grade, pelo código.
+  const logosDaVitrine = ads ? [] : ((card as CardDirecao & { vitrine_de_logos?: LogoDaVitrine[] }).vitrine_de_logos ?? [])
+    .filter((l) => l && typeof l.caminho === "string" && l.caminho.indexOf(`${t.client_id}/`) === 0)
+    .slice(0, 12);
+  const vitrineAqui: VitrineNaLamina | null = logosDaVitrine.length
+    ? { area: areaDaVitrine(total === 1), logos: logosDaVitrine, proporcao: quadro.final.largura / quadro.final.altura }
+    : null;
+
   // Imagem editada (foto, fatia ou tela do recorte) é a imagem 1 e empurra os anexos.
   const temBase = (!!baseFoto && !replicar) || !!recorteNaLamina;
   const deslocamento = temBase ? 1 : 0;
@@ -5703,6 +5912,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     blocoDaTipografiaAqui,
     // Selo da campanha desenhado pelo gerador junto com a arte, grande e fiel ao anexo.
     blocoDoSelo,
+    vitrineAqui ? areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length) : "",
     // Frente RO, fase 2: o que a equipe mandou NUNCA fazer (aprendido na conversa e nos ajustes).
     blocoDoEvitarAprendido,
     blocoDoEstiloPedido(t.direcao.estilo_pedido),
@@ -5768,6 +5978,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     ...(partesDaLamina ? { texto_em_partes: partesDaLamina } : {}),
     // O selo da campanha que foi ao gerador (o ajuste anexa o mesmo de novo; a troca de selo conta por ele).
     ...(seloAqui ? { selo_da_campanha: seloAqui } : {}),
+    // 02/10: a vitrine de logos que gravarVersao cola por cima (e o ajuste cola de novo, igual).
+    ...(vitrineAqui ? { vitrine_de_logos: vitrineAqui } : {}),
   };
 
   // 0) Replicar a referência escolhida pela equipe (27/09): prompt PRÓPRIO, sem
@@ -5852,6 +6064,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       blocoDaTipografiaAqui,
       // Também no replicar o selo é desenhado pelo gerador, integrado ao layout da referência.
       blocoDoSelo,
+      vitrineAqui ? areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length) : "",
       soltaAComposicao(fidelidade) ? blocoDeVariacao(versoesAntes, false, false, ordem, false) : blocoDeVariacao(versoesAntes, false, true, ordem, false),
       blocoDoEstilo,
       blocoDoTemplate,
@@ -6095,11 +6308,29 @@ async function gravarVersao(
   meta: { origem: "gerar" | "ajuste"; instrucao?: string; referencias?: string[]; custoExtraUsd?: number; extra?: Record<string, unknown>; avisos?: string[]; regras?: { id: string; tipo: string; texto: string }[] },
 ) {
   // O selo da campanha já vem na arte, desenhado pelo gerador (dono, 02/10): nada é colado aqui.
+  const avisosDoSelo: string[] = [];
+  let pngFinal = img.png;
+  // 02/10: a vitrine de logos dos parceiros entra aqui, pelo código, intacta (o gerador só deixou o painel liso).
+  const vitrinePedida = meta.extra ? (meta.extra.vitrine_de_logos as VitrineNaLamina | undefined) : undefined;
+  let vitrineGravada: VitrineNaLamina | null = null;
+  if (vitrinePedida && vitrinePedida.area && Array.isArray(vitrinePedida.logos) && vitrinePedida.logos.length) {
+    try {
+      const r = await colarVitrineNaArte(pngFinal, vitrinePedida, t.client_id);
+      pngFinal = r.png;
+      vitrineGravada = { ...vitrinePedida, aplicado: r.coladas > 0, coladas: r.coladas };
+      if (r.falharam.length) avisosDoSelo.push(`${r.falharam.length === 1 ? "Uma logo ficou" : `${r.falharam.length} logos ficaram`} de fora da grade (não abriram): ${r.falharam.slice(0, 4).join(", ")}. Envie de novo em PNG ou JPG.`);
+    } catch (e) {
+      const motivo = registrarFalha("estudio-arte: vitrine de logos não colada", e, { trabalho_id: t.id, ordem: card.ordem });
+      avisosDoSelo.push(`As logos dos parceiros não entraram nesta lâmina (${motivo}). Gere de novo.`);
+      vitrineGravada = { ...vitrinePedida, aplicado: false };
+    }
+  }
   // Frente FS (29/09): o que falhou no caminho e mudou a arte (logo não lida, referência que não abriu,
   // molde não medido...) fica na versão (a tela mostra na lâmina) e volta em aviso_da_acao.
-  const avisos = [...new Set((meta.avisos ?? []).filter(Boolean))].slice(0, 6);
+  const avisos = [...new Set((meta.avisos ?? []).concat(avisosDoSelo).filter(Boolean))].slice(0, 6);
   const proxima = Math.max(0, ...t.cards.filter((c) => c.ordem === card.ordem).map((c) => c.versao)) + 1;
-  const { caminho, versao } = await salvarNaMesa(t, card.ordem, proxima, img.png, img.mime);
+  const colouPeloCodigo = !!(vitrineGravada && vitrineGravada.aplicado);
+  const { caminho, versao } = await salvarNaMesa(t, card.ordem, proxima, pngFinal, colouPeloCodigo ? "image/png" : img.mime);
   const custo = arred(img.custoUsd);
   const nova: VersaoCard = {
     ordem: card.ordem,
@@ -6114,6 +6345,7 @@ async function gravarVersao(
     criado_em: new Date().toISOString(),
     criado_por: ch.userId,
     ...(meta.extra ?? {}),
+    ...(vitrineGravada ? { vitrine_de_logos: vitrineGravada } : {}),
     ...(avisos.length ? { avisos_da_geracao: avisos } : {}),
     // Frente RO, fase 2: as regras ensinadas que esta geração seguiu ("Segui: ...").
     ...(meta.regras && meta.regras.length ? { regras_seguidas: meta.regras } : {}),
@@ -6356,7 +6588,7 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
   let base = t;
   if (novoTexto !== card.texto_exato) {
     base = await mutarTrabalho(t.id, (x) => ({
-      direcao: { ...x.direcao, duvida_do_ajuste: null, cards: x.direcao.cards.map((c) => (c.ordem === ordem ? { ...c, texto_exato: novoTexto } : c)) },
+      direcao: comTituloDaArte({ ...x.direcao, duvida_do_ajuste: null, cards: x.direcao.cards.map((c) => (c.ordem === ordem ? { ...c, texto_exato: novoTexto } : c)) }),
       custo_usd: arred(num(x.custo_usd) + custoDaLeitura),
     }));
   } else {
@@ -6597,6 +6829,8 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
       versao_editada: atualVersao.versao,
       // O selo da versão editada segue na arte (anexado de novo à edição; nada colado por cima).
       ...(seloDoAjuste ? { selo_da_campanha: { ...seloDoAjuste, modo: "gerador", indice: null, caixa: null, aplicado: true } } : {}),
+      // 02/10: a versão editada tinha a vitrine de logos colada pelo código: cola de novo as mesmas logos, na mesma grade.
+      ...(vitrineDaVersao(atualVersao) ? { vitrine_de_logos: vitrineDaVersao(atualVersao) } : {}),
       // Frente RO, fase 2: o que o ajuste aprendeu (Aprendi, com Esquecer) e as imagens anexadas com o papel.
       ...(aprendido ? { aprendido } : {}),
       ...(anexosDoAjuste.length ? { anexos_do_ajuste: anexosDoAjuste.map((x) => ({ nome: x.nome, papel: x.papel, papel_por: x.papel_por })) } : {}),
@@ -8413,6 +8647,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
       ultimo_pedido_ao_diretor: t.direcao.pedido ?? null,
       // Frente AG: o pedido que deu origem ao trabalho (arte rápida) e o que a conferência avisou.
       pedido_original: arteRapida ? arteRapida.pedido : null,
+      // 02/10: o pedido da arte rápida inteiro: o papel de cada imagem, o post do Instagram (modo e conteúdo) e a vitrine de logos.
+      arte_rapida: arteRapida ? pedidoParaODiretor(arteRapida, [], total) : null,
       avisos_da_conferencia_do_pedido: t.direcao.conferencia_do_pedido?.avisos ?? [],
       campanha: campanha
         ? { nome: campanha.nome, conceito: campanha.conceito, identidade: campanha.identidade, oferta: briefingDaCampanha(campanha).oferta || null }
@@ -8845,7 +9081,8 @@ async function aplicarMudancas(ch: Chamador, corpo: Record<string, unknown>) {
   let r: ResultadoDaAplicacao = { direcao: t.direcao, afetadas: [], fundoApagado: false, textoMudou: [] };
   const gravado = await mutarTrabalho(t.id, (x) => {
     r = aplicarNaDirecao<Direcao>(x.direcao, mudancas);
-    return { direcao: r.direcao };
+    // 02/10: o diretor reescreveu a headline da capa da arte rápida: o nome da arte acompanha.
+    return { direcao: comTituloDaArte(r.direcao) };
   });
   const ordensValidas = new Set(gravado.direcao.cards.map((c) => c.ordem));
   const regerar = corpo.regerar === true
@@ -9714,6 +9951,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   rapida_preparar: (ch, corpo) => rapidaPreparar(ch, corpo, null),
   rapida_para_agenda: rapidaParaAgenda,
   rapida_arquivar: rapidaArquivar,
+  // 02/10: o post do Instagram colado no pedido (sem login), com as imagens guardadas na pasta do cliente.
+  rapida_instagram: rapidaInstagram,
   // Frente MF: fotos_preparar (post de fotos da Mesa Foto, sem gerar arte).
   ...acoesDasFotosNaAgenda({ servico, garantirAcesso, json, erro: (status, codigo, mensagem) => new ErroEstudio(status, codigo, mensagem) }).acoes,
   // Frente AP: perfis da peça, "não vai postar" e o pedido do cliente entendido (Jev, sem gerar).

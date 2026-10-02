@@ -429,7 +429,8 @@ describe("6. Tela", () => {
     expect(aba).toContain("f.caminho === alvo.caminho ? { ...f, uso, uso_por: \"equipe\" as const } : f");
     const rapida = ler("src/components/mesa/EstudioArteRapida.tsx");
     expect(rapida).toContain("{AJUDA_DO_USO} Em Automático, o agente decide pelo pedido");
-    expect(rapida).toContain("{PAPEIS_DO_ARQUIVO.map((p) => (");
+    // 02/10: o seletor mostra os papéis em palavras simples (Referência, Fazer igual, Compor, Logo, Rosto).
+    expect(rapida).toContain("{PAPEIS_NA_TELA.map((p) => (");
     expect(AJUDA_DO_USO).toMatch(/Foto exata: .*Usar o rosto: /);
     // Servidor: configurar aceita uso_do_acervo e fotos_livres com uso (recorte nunca vira rosto).
     expect(servidor).toContain("if (uso === \"rosto\" && !saida[saida.length - 1].recortada) {");
