@@ -83,6 +83,8 @@ export function trechosChave(fala: PalavraNaLinha[], pausaQuebra = 0.25): Trecho
     while (j + 1 < fala.length && j + 1 - k < 3) {
       const prox = pesoDaPalavra(fala[j + 1].t);
       if (prox.peso <= 0 || fala[j + 1].i - fala[j].f > pausaQuebra) break;
+      // Fim de frase: pontuação ou a próxima começa com maiúscula (o transcritor marca assim o começo da frase).
+      if (/[.!?,;:]$/.test(fala[j].t) || (/^[A-ZÀ-Ý][a-zà-ÿ]/.test(fala[j + 1].t) && prox.motivo !== "sigla")) break;
       // Sigla e número ficam sozinhos (o cartão fica forte); o termo junta com o vizinho de conteúdo.
       if (p0.motivo === "sigla" || prox.motivo === "sigla") break;
       j++;

@@ -394,7 +394,9 @@ function Gancho(p: PropsDaPeca & { cor: string }) {
   return (
     <div style={{ position: "absolute", left: "6%", right: "6%", top: txt(params.faixa) === "alto" ? "8%" : "60%", display: "flex", flexDirection: "column", alignItems: "center", opacity: s, transform: `scale(${0.96 + 0.04 * s})` }}>
       {linhas.map((l, k) => {
-        const t = Math.round((tempos && tempos[k] !== undefined ? tempos[k] : k * 0.35) * fps);
+        // A primeira linha entra já no começo (o gancho é dos 2 primeiros segundos); as outras, quando são ditas.
+        const dito = tempos && tempos[k] !== undefined ? tempos[k] : k * 0.35;
+        const t = Math.round((k === 0 ? Math.min(dito, 0.25) : dito) * fps);
         const e = spring({ frame: f - t, fps, config: { damping: 15, stiffness: 190, mass: 0.6 } });
         const ultima = k === linhas.length - 1 && linhas.length > 1;
         return (

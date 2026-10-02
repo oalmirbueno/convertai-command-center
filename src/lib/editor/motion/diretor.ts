@@ -64,8 +64,11 @@ interface Pedaco {
   f: number;
 }
 
-/** Pedaços de fala separados por pausa (ou vírgula). */
-function pedacos(fala: PalavraNaLinha[], pausa = 0.25): Pedaco[] {
+/**
+ * Pedaços de fala separados por pausa (ou vírgula). 0,17 s: depois do corte
+ * limpo, a pausa entre os itens de uma lista vira o respiro de 0,2 s.
+ */
+function pedacos(fala: PalavraNaLinha[], pausa = 0.17): Pedaco[] {
   const saida: Pedaco[] = [];
   let atual: PalavraNaLinha[] = [];
   fala.forEach((w, k) => {
@@ -138,7 +141,9 @@ export function planoDoDiretor(p: ProjetoDeEdicao, o: OpcoesDoDiretor): PlanoDoD
   const frases = frasesDaFala(fala);
   const faixa = o.comLegenda ? "alto" : "baixo";
   const ocupado: { de: number; ate: number }[] = (o.ocupado || []).slice();
-  const livre = (de: number, ate: number) => !ocupado.some((x) => de < x.ate + ESPACO_S * 0.5 && ate > x.de - ESPACO_S * 0.5);
+  // Uma peça de cada vez: entre duas peças, pelo menos 0,4 s de tela limpa.
+  const FOLGA = 0.4;
+  const livre = (de: number, ate: number) => !ocupado.some((x) => de < x.ate + FOLGA && ate > x.de - FOLGA);
   const por = (x: PecaPlanejada) => {
     pecas.push({ ...x, inicio_s: arred(x.inicio_s), duracao_s: arred(x.duracao_s) });
     ocupado.push({ de: x.inicio_s, ate: x.inicio_s + x.duracao_s });
@@ -220,7 +225,7 @@ export function planoDoDiretor(p: ProjetoDeEdicao, o: OpcoesDoDiretor): PlanoDoD
     const cada = o.densidade === "poucas" ? 12 : 7;
     const maximo = Math.max(1, Math.floor(fim / cada));
     const fortes = chaves.filter((t) => t.peso >= 1.2 && t.texto.length >= 3);
-    const escolhidas: TrechoChave[] = melhoresTrechos(fortes, { espaco_s: ESPACO_S, maximo: maximo * 2, fora: ocupado.map((x) => ({ de: x.de - ESPACO_S * 0.5, ate: x.ate + ESPACO_S * 0.5 })) });
+    const escolhidas: TrechoChave[] = melhoresTrechos(fortes, { espaco_s: ESPACO_S, maximo: maximo * 2, fora: ocupado.map((x) => ({ de: x.de - FOLGA, ate: x.ate + FOLGA })) });
     const lados = ["centro", "esquerda", "direita"];
     let n = 0;
     escolhidas.forEach((t) => {

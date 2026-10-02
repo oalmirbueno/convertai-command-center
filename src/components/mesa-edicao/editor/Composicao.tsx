@@ -491,8 +491,12 @@ export function ComposicaoDoProjeto({ projeto, urls, publico, mix, cor_da_marca 
           // Corte encostado na mesma trilha de vídeo: micro fade no som de entrada e de saída.
           const fade = t.tipo === "video" && c.fonte ? fadeDoCorte(t.clipes, c.id, de, d, fps) : null;
           const peca = c.estilo && typeof (c.estilo as Record<string, unknown>).peca === "string";
+          // 02/10 (auditoria: preto no corte da prévia): o vídeo do próximo plano monta e busca o quadro 1 s antes
+          // (premount pede a camada cheia; o clipe visual já ocupa a tela toda, então a geometria não muda).
+          const premontar = (t.tipo === "video" || t.tipo === "sobreposicao") && !!c.fonte;
+          const camadaDaSequencia = premontar ? { premountFor: fps } : { layout: "none" as const };
           return (
-            <Sequence key={`${t.id}:${c.id}`} from={de} durationInFrames={d} layout="none" name={`${t.nome} ${c.id}`}>
+            <Sequence key={`${t.id}:${c.id}`} from={de} durationInFrames={d} name={`${t.nome} ${c.id}`} {...camadaDaSequencia}>
               {c.estilo && typeof (c.estilo as Record<string, unknown>).camada === "object" && t.tipo === "sobreposicao" ? (
                 <CamadaNaComposicao estilo={c.estilo as Record<string, unknown>} url={c.fonte ? urls[c.fonte] : null} entrada_s={c.entrada_s} duracao_s={duracaoDoClipe(c)} />
               ) : peca && t.tipo !== "audio" && t.tipo !== "video" ? (
