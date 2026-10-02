@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, ClipboardCheck, Download, FileText, Loader2, Plus, Save, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
@@ -40,6 +40,9 @@ import {
   type ObjetivoDaBase,
 } from "../../../supabase/functions/mesa-roteiros/modulos/roteiros-validados";
 import { baixarBytes, itemSolto, montarPdf } from "./pdfNoNavegador";
+// Ideias com o agente (02/10): o tema do roteiro avulso nasce de uma conversa com o mundo real.
+import IdeiasDeTema from "./IdeiasDeTema";
+import type { IdeiaDeTema, PreenchimentoDoRoteiro } from "../../../supabase/functions/mesa-roteiros/modulos/ideias-de-tema";
 
 /**
  * Etapa 2: o roteiro. Sem roteiro, o formulário (tipo, duração, objetivo,
@@ -118,13 +121,76 @@ export default function EtapaRoteiro({
       />
     );
   }
+  return <FormularioComIdeias tarefaId={tarefaId} modeloId={modeloId} baseId={baseId} indisponivel={!!(roteirosQ.data && roteirosQ.data.indisponivel)} onAberto={onAberto} onSolto={setSolto} />;
+}
+
+/**
+ * Roteiro avulso: as ideias com o agente em cima e o formulário embaixo.
+ * "Usar este tema" (ou o Confirmar do cartão do agente) preenche o
+ * formulário; Desfazer volta o que estava antes. Peça da agenda: só o
+ * formulário (o tema já vem da peça).
+ */
+function FormularioComIdeias({
+  tarefaId,
+  modeloId,
+  baseId,
+  indisponivel,
+  onAberto,
+  onSolto,
+}: {
+  tarefaId: string | null;
+  modeloId: string | null;
+  baseId: string | null;
+  indisponivel: boolean;
+  onAberto: (id: string) => void;
+  onSolto: (r: Roteiro) => void;
+}) {
+  const [preencher, setPreencher] = useState<PedidoDePreencher | null>(null);
+  // O formulário de antes da primeira ideia: o Desfazer volta para ele.
+  const antes = useRef<PreenchimentoDoRoteiro | null>(null);
+  const [preenchidoCom, setPreenchidoCom] = useState<string | null>(null);
+  const aplicar = (valores: PreenchimentoDoRoteiro, ideia: IdeiaDeTema) => {
+    setPreencher((p) => ({ nonce: (p ? p.nonce : 0) + 1, valores, apelido: ideia.apelido }));
+    setPreenchidoCom(ideia.apelido);
+    toast.success(`Formulário preenchido com a ideia ${ideia.apelido.replace(/^i/, "")}`, {
+      description: "Confira e clique em Gerar roteiro.",
+      duration: 8000,
+      action: { label: "Desfazer", onClick: () => desfazer() },
+    });
+    window.requestAnimationFrame(() => {
+      const alvo = document.querySelector("[data-formulario-de-roteiro]") as HTMLElement | null;
+      if (alvo && typeof alvo.scrollIntoView === "function") alvo.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+  function desfazer() {
+    const a = antes.current;
+    antes.current = null;
+    if (a) setPreencher((p) => ({ nonce: (p ? p.nonce : 0) + 1, valores: a, apelido: null }));
+    setPreenchidoCom(null);
+  }
   return (
     <div className="min-w-0 space-y-4">
-      {roteirosQ.data && roteirosQ.data.indisponivel && <AvisoDoBanco />}
-      <FormularioDeGeracao tarefaId={tarefaId} modeloInicial={modeloId} baseInicial={baseId} onGerado={(id) => onAberto(id)} onSolto={setSolto} />
+      {indisponivel && <AvisoDoBanco />}
+      {!tarefaId && <IdeiasDeTema preenchidoCom={preenchidoCom} onPreencher={aplicar} onDesfazer={desfazer} />}
+      <FormularioDeGeracao
+        tarefaId={tarefaId}
+        modeloInicial={modeloId}
+        baseInicial={baseId}
+        onGerado={(id) => onAberto(id)}
+        onSolto={onSolto}
+        preencher={preencher}
+        onPreenchido={(p, anteriores) => {
+          // Só o preenchimento por ideia guarda o "antes" (o Desfazer não guarda a si mesmo).
+          if (p.apelido && !antes.current) antes.current = anteriores;
+        }}
+        onEditado={() => setPreenchidoCom(null)}
+      />
     </div>
   );
 }
+
+/** Pedido de preenchimento vindo das ideias (nonce muda a cada pedido; apelido null é o Desfazer). */
+type PedidoDePreencher = { nonce: number; valores: PreenchimentoDoRoteiro; apelido: string | null };
 
 // ------------------------------------------------------------------ formulário de geração
 
@@ -136,12 +202,21 @@ function FormularioDeGeracao({
   baseInicial,
   onGerado,
   onSolto,
+  preencher = null,
+  onPreenchido,
+  onEditado,
 }: {
   tarefaId: string | null;
   modeloInicial: string | null;
   baseInicial: string | null;
   onGerado: (id: string) => void;
   onSolto: (r: Roteiro) => void;
+  /** Ideias com o agente: os valores a pôr no formulário (o nonce muda a cada pedido). */
+  preencher?: PedidoDePreencher | null;
+  /** Depois de preencher: o que estava antes (para o Desfazer). */
+  onPreenchido?: (p: PedidoDePreencher, anteriores: PreenchimentoDoRoteiro) => void;
+  /** A equipe mexeu no tema depois de preencher. */
+  onEditado?: () => void;
 }) {
   const mesa = useMesa();
   const qc = useQueryClient();
@@ -189,6 +264,21 @@ function FormularioDeGeracao({
     setTipo(t);
     setDuracao(modoDoTipo(t).duracao_padrao_s);
   };
+
+  // Ideias com o agente: preenche tudo de uma vez e devolve o que havia (Desfazer).
+  useEffect(() => {
+    if (!preencher) return;
+    const anteriores: PreenchimentoDoRoteiro = { tema, objetivo, modeloBase, tipo, duracao_s: duracao, pedido };
+    const v = preencher.valores;
+    setTipo(v.tipo);
+    setDuracao(v.duracao_s);
+    setObjetivo(v.objetivo);
+    setModeloBase(v.modeloBase);
+    setTema(v.tema);
+    setPedido(v.pedido);
+    if (onPreenchido) onPreenchido(preencher, anteriores);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preencher ? preencher.nonce : 0]);
 
   const semTema = !tarefaId && !tema.trim();
   const corpo = {
@@ -349,7 +439,7 @@ function FormularioDeGeracao({
           </CampoDeFormulario>
           {!tarefaId && (
             <CampoDeFormulario rotulo="Tema do vídeo" obrigatorio largo apoio={semTema ? "Escreva o tema para o roteiro avulso." : undefined}>
-              <input value={tema} onChange={(e) => setTema(e.target.value)} maxLength={300} placeholder="Ex.: como funciona o período de graça do INSS" className={campo} />
+              <input value={tema} onChange={(e) => { setTema(e.target.value); if (onEditado) onEditado(); }} maxLength={300} placeholder="Ex.: como funciona o período de graça do INSS" className={campo} />
             </CampoDeFormulario>
           )}
           <CampoDeFormulario rotulo="Pedido da equipe" ajuda="Opcional. Como gravar, o que evitar, o que destacar." largo>

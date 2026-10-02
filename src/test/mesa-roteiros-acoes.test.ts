@@ -165,7 +165,7 @@ describe("a função mesa-roteiros segue o contrato", () => {
   });
 
   it("ações longas com fôlego, verify_jwt no config e o motor registrado", () => {
-    expect(fonte).toContain('const ACOES_LONGAS = new Set(["gerar", "gancho_refazer", "tom_mudar", "agente_conversar", "executar_acao_agente", "pdf_compartilhar"]);');
+    expect(fonte).toContain('const ACOES_LONGAS = new Set(["gerar", "gancho_refazer", "tom_mudar", "agente_conversar", "ideias_conversar", "executar_acao_agente", "pdf_compartilhar"]);');
     expect(fonte).toContain("respostaComFolego(rodar, corsHeaders)");
     expect(ler("supabase/config.toml")).toMatch(/\[functions\.mesa-roteiros\]\s+verify_jwt = true/);
     expect(motor("mesa_roteiros.roteirista")!.funcao).toBe("mesa-roteiros");

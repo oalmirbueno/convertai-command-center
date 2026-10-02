@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { CalendarDays, FileText, Plus, Sparkles } from "lucide-react";
+import { CalendarDays, FileText, Lightbulb, Plus, Sparkles } from "lucide-react";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { dataCurta, textoDoErro } from "@/lib/mesa/api";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
@@ -60,10 +60,17 @@ export default function EtapaAgenda({
         estado={pecasQ.isSuccess ? `${pecas.length} ${pecas.length === 1 ? "peça" : "peças"}` : undefined}
         resumo={pecasQ.isSuccess ? `${pecas.length} ${pecas.length === 1 ? "peça" : "peças"}` : undefined}
         acoes={
-          <button type="button" className={botao.secundario} onClick={onAvulso} aria-label="Roteiro avulso">
-            <Plus className="h-3.5 w-3.5" />
-            <RotuloLargo>Roteiro avulso</RotuloLargo>
-          </button>
+          <>
+            {/* 02/10: sem tema? O roteiro avulso abre com as Ideias com o agente em cima. */}
+            <button type="button" className={juntar(botao.secundario, "mr-1.5")} onClick={onAvulso} aria-label="Ideias de tema com o agente">
+              <Lightbulb className="h-3.5 w-3.5" />
+              <RotuloLargo>Ideias de tema</RotuloLargo>
+            </button>
+            <button type="button" className={botao.secundario} onClick={onAvulso} aria-label="Roteiro avulso">
+              <Plus className="h-3.5 w-3.5" />
+              <RotuloLargo>Roteiro avulso</RotuloLargo>
+            </button>
+          </>
         }
       >
         {pecasQ.isLoading && <Carregando forma="lista" linhas={4} rotulo="Lendo a agenda" />}
