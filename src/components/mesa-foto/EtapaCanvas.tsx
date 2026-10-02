@@ -126,6 +126,8 @@ import { andamentoDoResultado, gerarNoResultado, gerarVariacoes, tirarPendentes,
 import { ModoLista } from "./canvas/ModoLista";
 // 02/10: várias caixas de resultado no mesmo quadro (barra do quadro) e a peça do mês levada da esteira.
 import { BarraDoQuadro } from "./canvas/BarraDoQuadro";
+import { EVENTO_LEVAR_AO_CANVAS, SESSAO_DO_CANVAS } from "./escolhasDaLinha";
+import { gravarNaSessao, lerDaSessao } from "./sessao";
 import { apagarCaixa, caixaDaEscolha, caixaDaPeca, conectarCaixas, duplicarCaixa, fotoDaCaixa, novaCaixa, podeConectarCaixas, variarEmCaixaNova } from "./canvas/caixas";
 import { direcaoParaOCanvas, lerPecaLevadaAoCanvas } from "./pecasDeFoto";
 import { lerSelecaoLevadaAoCanvas } from "./preparar/preparo";
@@ -1504,6 +1506,23 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     window.addEventListener("mesa-foto:peca-levada", ouvir);
     return () => window.removeEventListener("mesa-foto:peca-levada", ouvir);
   }, []);
+  // 02/10: fotos levadas do Book, do Arsenal ou de um resultado ("Levar ao Canvas") viram uma caixa nova, ligadas como estilo.
+  useEffect(() => {
+    const trazer = () => {
+      const ids = (lerDaSessao<string[]>(clientId, SESSAO_DO_CANVAS) || []).filter((x) => typeof x === "string" && !!x).slice(0, 12);
+      if (!ids.length) return;
+      gravarNaSessao(clientId, SESSAO_DO_CANVAS, null);
+      const caixa = novoId("gerar");
+      mudar((c) => caixaDaEscolha(c, { kit_ids: [], imagem_ids: ids, pessoa: null }, { caixa, cartao: (tipo) => novoId(tipo) }, padraoDaSaida ? [padraoDaSaida] : []));
+      escolherCaixa(caixa);
+      setRecolhida(false);
+      toast.success("Fotos no quadro", { description: `${ids.length === 1 ? "A foto entrou" : `As ${ids.length} fotos entraram`} numa caixa nova. Escreva o pedido e gere.` });
+    };
+    trazer();
+    window.addEventListener(EVENTO_LEVAR_AO_CANVAS, trazer);
+    return () => window.removeEventListener(EVENTO_LEVAR_AO_CANVAS, trazer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
   useEffect(() => {
     // Escolha do Preparar imagens (produtos, pessoa e imagens): caixa nova já ligada.
     const escolha = lerSelecaoLevadaAoCanvas(clientId);
