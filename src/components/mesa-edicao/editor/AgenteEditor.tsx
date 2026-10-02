@@ -1010,6 +1010,106 @@ export default function AgenteEditor({
     </div>
   );
 
+  // A conversa só redesenha quando ela (ou o estado do pedido) muda; digitar no campo não redesenha as mensagens.
+  const conversaNaTela = useMemo(() => (
+          mensagens.map((m) => (
+            <div key={m.chave} className="min-w-0 space-y-1.5" data-mensagem-do-editor={m.quem}>
+              <div className={juntar(conversa.balao, "space-y-1", m.quem === "dono" ? conversa.doUsuario : conversa.doAgente)}>
+                {m.itens.map((i, j) => (
+                  <p key={j} className={juntar("[overflow-wrap:anywhere]", i.tipo === "ferramenta" && "text-[13px] text-muted-foreground", i.tipo === "aviso" && "text-[13px] text-amber-500", i.tipo === "plano" && "italic text-muted-foreground")}>
+                    {i.texto}
+                  </p>
+                ))}
+                {m.quem === "agente" && lerMensagensPadrao(m.anexos).map((x, k) => <MensagemPadrao key={k} m={x} />)}
+                {m.quem === "agente" && (
+                  <AprendizadoDoAgente
+                    anexos={m.anexos}
+                    onEsquecer={(id) => chamarEditorVideo({ acao: "aprendizado_esquecer", client_id: clientId, id, mensagem_id: m.mensagemId })}
+                    onGuardar={(texto, tipo) => chamarEditorVideo({ acao: "aprendizado_guardar", client_id: clientId, texto, tipo, mensagem_id: m.mensagemId })}
+                  />
+                )}
+                {m.aviso && <p className="text-[11px] text-amber-500" data-aviso-registro="">{m.aviso}</p>}
+              </div>
+              {m.opcoes && m.opcoes.length > 0 && (
+                <div className="flex flex-wrap" role="group" aria-label="Respostas para o agente" data-opcoes-do-editor="">
+                  {m.opcoes.map((o) => (
+                    <button
+                      key={o}
+                      type="button"
+                      disabled={!!rodando || !!preparo || !modelo || !projeto}
+                      onClick={() => enviarTexto(o)}
+                      className="mb-1 mr-1 max-w-full truncate rounded-full border border-border bg-background px-2.5 py-1 text-[12px] transition-colors hover:border-primary/50 disabled:opacity-50"
+                    >
+                      {o}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {m.acoes.map((a) => (
+                <div key={a.id} className="min-w-0 space-y-1">
+                  <CartaoDeAcao
+                    acao={a}
+                    titulo={ehExportar(a) ? "Renderizar" : ehGeracao(a) ? "Gerar (pago)" : a.executada_direto ? "O que mudei" : "O que vou mudar"}
+                    onPedido={aoPedidoDe(m.chave, a)}
+                    recemFeita={m.recemFeita}
+                    itensAVista={6}
+                    renderConfirmar={
+                      ehExportar(a)
+                        ? (confirmar, ocupado) => (
+                            <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => void confirmar()} disabled={ocupado} data-confirmar-render="">
+                              {ocupado ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Film className="mr-1.5 h-3.5 w-3.5" />}
+                              Renderizar
+                            </button>
+                          )
+                        : ehGeracao(a)
+                          ? (confirmar, ocupado) => (
+                              <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => void confirmar()} disabled={ocupado || a.custo_estimado_usd === null || a.custo_estimado_usd === undefined} data-confirmar-geracao="">
+                                {ocupado ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Wand2 className="mr-1.5 h-3.5 w-3.5" />}
+                                {typeof a.custo_estimado_usd === "number" ? `Gerar por ${usd(a.custo_estimado_usd)}` : "Sem custo conhecido"}
+                              </button>
+                            )
+                          : undefined
+                    }
+                    observacao={ehExportar(a) ? "Sem custo. Vai para a fila da máquina da agência." : ehGeracao(a) ? "Custo na carteira do cliente. Só gera com o seu clique." : "Nada muda até confirmar. O Desfazer volta o pedido inteiro."}
+                  />
+                  {ehExportar(a) && (
+                    <button
+                      type="button"
+                      className={juntar(botao.discreto, "h-8 text-[12px]")}
+                      onClick={() => {
+                        const p = projetoRef.current;
+                        if (!p) return toast.info("Abra o vídeo no editor para baixar.");
+                        baixarExportacao(p, urls, new Date().toISOString()).catch((e) => toast.error("O ZIP não saiu", { description: textoDoErro(e) }));
+                      }}
+                      data-baixar-zip=""
+                      title="Projeto, edl.json e o passo a passo para renderizar à mão na máquina da agência."
+                    >
+                      <Download className="mr-1.5 h-3.5 w-3.5" />
+                      Baixar ZIP
+                    </button>
+                  )}
+                  {ehGeracao(a) && a.itens[0] && a.itens[0].operacao === "gerar_broll" && (
+                    <AcompanharBroll
+                      acao={a}
+                      onPor={(arq, s) => {
+                        const p = projetoRef.current;
+                        if (!p || !onAplicarProjeto) return;
+                        try {
+                          onAplicarProjeto(aplicarOperacoes(p, opsDoArquivoNoTrecho(p, arq, { tipo: "broll", inicio_s: Number(s.argumentos.de_s) || 0, duracao_s: Math.max(0.5, (Number(s.argumentos.ate_s) || 0) - (Number(s.argumentos.de_s) || 0)) })), "B-roll no trecho");
+                          toast.success("B-roll no trecho", { description: "Ctrl+Z tira." });
+                        } catch (e) {
+                          toast.error("Não coube no trecho", { description: textoDoErro(e) });
+                        }
+                      }}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          ))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [mensagens, rodando, preparo, modelo, projeto, urls, clientId, versaoId]);
+
   return (
     <PainelDoAgente
       titulo="Agente editor"
@@ -1103,101 +1203,7 @@ export default function AgenteEditor({
     >
       {!projeto && <div className={juntar(texto.auxiliar, "px-1 py-2")} data-agente-sem-editor="">{semEditor || "Abra um vídeo no editor para o agente editar."}</div>}
       {projeto && !mensagens.length && !rodando && <p className={juntar(conversa.apoio, "px-1 py-2")}>{lendo ? "Lendo a conversa desta versão." : "Peça uma edição ou use um atalho. Ordem clara vai na hora, com Desfazer; o resto você confirma."}</p>}
-      {mensagens.map((m) => (
-        <div key={m.chave} className="min-w-0 space-y-1.5" data-mensagem-do-editor={m.quem}>
-          <div className={juntar(conversa.balao, "space-y-1", m.quem === "dono" ? conversa.doUsuario : conversa.doAgente)}>
-            {m.itens.map((i, j) => (
-              <p key={j} className={juntar("[overflow-wrap:anywhere]", i.tipo === "ferramenta" && "text-[13px] text-muted-foreground", i.tipo === "aviso" && "text-[13px] text-amber-500", i.tipo === "plano" && "italic text-muted-foreground")}>
-                {i.texto}
-              </p>
-            ))}
-            {m.quem === "agente" && lerMensagensPadrao(m.anexos).map((x, k) => <MensagemPadrao key={k} m={x} />)}
-            {m.quem === "agente" && (
-              <AprendizadoDoAgente
-                anexos={m.anexos}
-                onEsquecer={(id) => chamarEditorVideo({ acao: "aprendizado_esquecer", client_id: clientId, id, mensagem_id: m.mensagemId })}
-                onGuardar={(texto, tipo) => chamarEditorVideo({ acao: "aprendizado_guardar", client_id: clientId, texto, tipo, mensagem_id: m.mensagemId })}
-              />
-            )}
-            {m.aviso && <p className="text-[11px] text-amber-500" data-aviso-registro="">{m.aviso}</p>}
-          </div>
-          {m.opcoes && m.opcoes.length > 0 && (
-            <div className="flex flex-wrap" role="group" aria-label="Respostas para o agente" data-opcoes-do-editor="">
-              {m.opcoes.map((o) => (
-                <button
-                  key={o}
-                  type="button"
-                  disabled={!!rodando || !!preparo || !modelo || !projeto}
-                  onClick={() => enviarTexto(o)}
-                  className="mb-1 mr-1 max-w-full truncate rounded-full border border-border bg-background px-2.5 py-1 text-[12px] transition-colors hover:border-primary/50 disabled:opacity-50"
-                >
-                  {o}
-                </button>
-              ))}
-            </div>
-          )}
-          {m.acoes.map((a) => (
-            <div key={a.id} className="min-w-0 space-y-1">
-              <CartaoDeAcao
-                acao={a}
-                titulo={ehExportar(a) ? "Renderizar" : ehGeracao(a) ? "Gerar (pago)" : a.executada_direto ? "O que mudei" : "O que vou mudar"}
-                onPedido={aoPedidoDe(m.chave, a)}
-                recemFeita={m.recemFeita}
-                itensAVista={6}
-                renderConfirmar={
-                  ehExportar(a)
-                    ? (confirmar, ocupado) => (
-                        <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => void confirmar()} disabled={ocupado} data-confirmar-render="">
-                          {ocupado ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Film className="mr-1.5 h-3.5 w-3.5" />}
-                          Renderizar
-                        </button>
-                      )
-                    : ehGeracao(a)
-                      ? (confirmar, ocupado) => (
-                          <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => void confirmar()} disabled={ocupado || a.custo_estimado_usd === null || a.custo_estimado_usd === undefined} data-confirmar-geracao="">
-                            {ocupado ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Wand2 className="mr-1.5 h-3.5 w-3.5" />}
-                            {typeof a.custo_estimado_usd === "number" ? `Gerar por ${usd(a.custo_estimado_usd)}` : "Sem custo conhecido"}
-                          </button>
-                        )
-                      : undefined
-                }
-                observacao={ehExportar(a) ? "Sem custo. Vai para a fila da máquina da agência." : ehGeracao(a) ? "Custo na carteira do cliente. Só gera com o seu clique." : "Nada muda até confirmar. O Desfazer volta o pedido inteiro."}
-              />
-              {ehExportar(a) && (
-                <button
-                  type="button"
-                  className={juntar(botao.discreto, "h-8 text-[12px]")}
-                  onClick={() => {
-                    const p = projetoRef.current;
-                    if (!p) return toast.info("Abra o vídeo no editor para baixar.");
-                    baixarExportacao(p, urls, new Date().toISOString()).catch((e) => toast.error("O ZIP não saiu", { description: textoDoErro(e) }));
-                  }}
-                  data-baixar-zip=""
-                  title="Projeto, edl.json e o passo a passo para renderizar à mão na máquina da agência."
-                >
-                  <Download className="mr-1.5 h-3.5 w-3.5" />
-                  Baixar ZIP
-                </button>
-              )}
-              {ehGeracao(a) && a.itens[0] && a.itens[0].operacao === "gerar_broll" && (
-                <AcompanharBroll
-                  acao={a}
-                  onPor={(arq, s) => {
-                    const p = projetoRef.current;
-                    if (!p || !onAplicarProjeto) return;
-                    try {
-                      onAplicarProjeto(aplicarOperacoes(p, opsDoArquivoNoTrecho(p, arq, { tipo: "broll", inicio_s: Number(s.argumentos.de_s) || 0, duracao_s: Math.max(0.5, (Number(s.argumentos.ate_s) || 0) - (Number(s.argumentos.de_s) || 0)) })), "B-roll no trecho");
-                      toast.success("B-roll no trecho", { description: "Ctrl+Z tira." });
-                    } catch (e) {
-                      toast.error("Não coube no trecho", { description: textoDoErro(e) });
-                    }
-                  }}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      ))}
+      {conversaNaTela}
       {rodando && (
         <p className={juntar(conversa.apoio, "flex items-center")}>
           <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />

@@ -28,6 +28,8 @@ const LARGURA_DO_CABECALHO = 116;
 const IMA_PX = 8;
 export const ZOOM_MIN = 4;
 export const ZOOM_MAX = 400;
+/** Acima disto, só os clipes perto da parte visível são desenhados (rolar puxa o resto). */
+export const LIMITE_SEM_RECORTE = 100;
 
 const COR: Record<TipoDeTrilha, string> = {
   video: "bg-primary/25 border-primary/50",
@@ -296,6 +298,40 @@ export default function LinhaDoTempo({
   const achados = useMemo(() => (buscaLigada ? clipesQueBatem(projeto, filtroDaLinha, apelidos, assinaturas || null) : null), [buscaLigada, projeto, filtroDaLinha, apelidos, assinaturas]);
   const conjuntoDosAchados = useMemo(() => (achados ? new Set(achados) : null), [achados]);
   const destaque = useMemo(() => new Set(busca.destaque), [busca.destaque]);
+  // Linha longa (mais de 100 clipes): desenha só a parte visível e uma tela de cada lado.
+  const totalDeClipes = useMemo(() => projeto.trilhas.reduce((n, t) => n + t.clipes.length, 0), [projeto]);
+  const recortar = totalDeClipes > LIMITE_SEM_RECORTE;
+  const [faixaVisivel, setFaixaVisivel] = useState<{ de: number; ate: number } | null>(null);
+  useEffect(() => {
+    const el = rolagem.current;
+    if (!el || !recortar) {
+      setFaixaVisivel(null);
+      return;
+    }
+    let quadro = 0;
+    const medir = () => {
+      quadro = 0;
+      const tela = el.clientWidth || 1600;
+      const passo = 400;
+      const ini = Math.floor(el.scrollLeft / passo) * passo;
+      const de = Math.max(0, (ini - tela) / px);
+      const ate = (ini + tela * 2 + passo) / px;
+      setFaixaVisivel((f) => (f && f.de === de && f.ate === ate ? f : { de, ate }));
+    };
+    const rolar = () => {
+      if (!quadro) quadro = window.requestAnimationFrame(medir);
+    };
+    medir();
+    el.addEventListener("scroll", rolar, { passive: true });
+    window.addEventListener("resize", rolar);
+    return () => {
+      el.removeEventListener("scroll", rolar);
+      window.removeEventListener("resize", rolar);
+      if (quadro) window.cancelAnimationFrame(quadro);
+    };
+  }, [recortar, px]);
+  const desenhar = (c: ClipeDoProjeto) => !faixaVisivel || (c.inicio_s < faixaVisivel.ate && fimDoClipe(c) > faixaVisivel.de) || selecao.indexOf(c.id) >= 0 || (!!arrasto && arrasto.id === c.id);
+
   useEffect(() => {
     if (!busca.destaque.length || !clientId) return;
     const t = window.setTimeout(() => destacar(clientId, []), 6000);
@@ -504,7 +540,7 @@ export default function LinhaDoTempo({
                   onSelecionar([]);
                 }}
               >
-                {t.clipes.map((c) => (
+                {(faixaVisivel ? t.clipes.filter(desenhar) : t.clipes).map((c) => (
                   <ClipeNaFaixa
                     key={c.id}
                     projeto={projeto}

@@ -211,7 +211,8 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
   }, [setH]);
   const aplicarProjeto = useCallback((p: ProjetoDeEdicao, rotulo: string) => setH((atual) => fazer(atual, p, rotulo)), [setH]);
 
-  const controle: ControleDePropostas = {
+  // Estável (só usa refs): a lateral do agente e os painéis não redesenham por causa dele.
+  const controle = useMemo<ControleDePropostas>(() => ({
     aplicar: (prop, rotulo) => {
       const atual = hRef.current.presente.projeto;
       let novo: ProjetoDeEdicao;
@@ -239,13 +240,14 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
       await new Promise((r) => window.setTimeout(r, 60));
       if (salvador.current) await salvador.current.agora();
     },
-  };
+  }), [setH]);
 
-  // Agente na lateral da mesa: publica o projeto e o jeito de aplicar a cada mudança.
+  // Agente na lateral da mesa: publica o projeto e o jeito de aplicar quando algo que ele usa muda
+  // (antes, a cada desenho do editor; a lateral inteira redesenhava junto).
   useEffect(() => {
     if (!agenteNaLateral) return;
     publicarNaPonte({ clientId, versaoId, projeto, controle, aplicarProjeto, urls, selecao, cursor: relogio.get });
-  });
+  }, [agenteNaLateral, clientId, versaoId, projeto, controle, aplicarProjeto, urls, selecao, relogio]);
   useEffect(() => (agenteNaLateral ? () => tirarDaPonte(versaoId) : undefined), [agenteNaLateral, versaoId]);
 
   const principal = trilhaPrincipal(projeto);

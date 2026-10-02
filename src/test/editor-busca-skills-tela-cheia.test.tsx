@@ -171,3 +171,21 @@ describe("tela cheia do editor", () => {
     expect(document.querySelector("[data-player-falso]")!.getAttribute("data-controles")).toBe("nao");
   });
 });
+
+describe("leve: linha do tempo longa", () => {
+  it("com mais de 100 clipes, só desenha a parte visível (e o escolhido); com poucos, desenha todos", async () => {
+    const { default: LinhaDoTempo } = await import("@/components/mesa-edicao/editor/LinhaDoTempo");
+    const { criarRelogio } = await import("@/components/mesa-edicao/editor/apoio");
+    const { clipeNovo } = await import("../../supabase/functions/_shared/projeto-de-edicao");
+    const base = projeto();
+    const fonte = base.trilhas[0].clipes[0].fonte as string;
+    const longo = { ...base, duracao_s: 300, trilhas: [{ ...base.trilhas[0], clipes: Array.from({ length: 150 }).map((_, k) => clipeNovo({ id: `v${k + 1}`, fonte, inicio_s: k * 2, entrada_s: 0, saida_s: 2 })) }] } as ProjetoDeEdicao;
+    const props = { relogio: criarRelogio(0), px: 40, setPx: vi.fn(), onSelecionar: vi.fn(), onOps: vi.fn(), urls: {} };
+    const { container, rerender } = render(h(LinhaDoTempo, { ...props, projeto: longo, selecao: ["v150"] }));
+    await waitFor(() => expect(container.querySelectorAll("[data-clipe]").length).toBeLessThan(150));
+    expect(container.querySelectorAll("[data-clipe]").length).toBeGreaterThan(20);
+    expect(container.querySelector('[data-clipe="v150"]')).toBeTruthy(); // o escolhido sempre aparece
+    rerender(h(LinhaDoTempo, { ...props, projeto: base, selecao: [] }));
+    await waitFor(() => expect(container.querySelectorAll("[data-clipe]")).toHaveLength(4));
+  });
+});
