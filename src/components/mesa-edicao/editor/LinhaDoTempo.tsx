@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, EyeOff, Film, Image as IconeImagem, Minus, Plus, Volume2, VolumeX } from "lucide-react";
+import { Eye, EyeOff, Film, Image as IconeImagem, Minus, MousePointerClick, Plus, Search, Volume2, VolumeX } from "lucide-react";
 import { botao, juntar, texto } from "@/components/sistema/estilos";
 import { duracaoDoClipe, ROTULO_DA_TRILHA, type ClipeDoProjeto, type ProjetoDeEdicao, type TipoDeTrilha, type TrilhaDoProjeto } from "../../../../supabase/functions/_shared/projeto-de-edicao";
 import { apelidosDoProjeto, rotuloDoClipe } from "@/lib/editor/apelidos";
@@ -7,6 +7,11 @@ import { fimDoClipe, trilhasCompativeis, type Operacao } from "@/lib/editor/oper
 import { extrairQuadro, tempoDoQuadro } from "@/lib/editor/quadros";
 import { noQuadro, tempoCurto, tempoFino } from "@/lib/editor/tempo";
 import { useTempo, type Relogio } from "./apoio";
+import { useMesaOpcional } from "@/components/mesa/MesaContexto";
+import { clipesQueBatem, filtroAtivo, type FiltroDaBusca } from "@/lib/editor/busca";
+import type { AssinaturasDosArquivos } from "@/lib/editor/duplicados";
+import BuscaComFiltros from "./BuscaComFiltros";
+import { destacar, useBuscaDoEditor } from "./buscaDoEditor";
 
 /**
  * Linha do tempo (frente V-B): régua, trilhas, clipes com miniaturas, cursor,
@@ -171,7 +176,7 @@ type Comecar = (e: { clientX: number; clientY: number; ctrlKey?: boolean; metaKe
  * Um clipe na faixa. Com memo: durante o arrasto só o clipe arrastado
  * redesenha (antes, cada movimento do mouse redesenhava todos os clipes).
  */
-const ClipeNaFaixa = memo(function ClipeNaFaixa({ projeto, t, c, ativo, a, px, fps, url, apelido, comecar }: { projeto: ProjetoDeEdicao; t: TrilhaDoProjeto; c: ClipeDoProjeto; ativo: boolean; a: Arrasto | null; px: number; fps: number; url: string | null; apelido: string | undefined; comecar: Comecar }) {
+const ClipeNaFaixa = memo(function ClipeNaFaixa({ projeto, t, c, ativo, a, px, fps, url, apelido, comecar, apagado, destacado }: { projeto: ProjetoDeEdicao; t: TrilhaDoProjeto; c: ClipeDoProjeto; ativo: boolean; a: Arrasto | null; px: number; fps: number; url: string | null; apelido: string | undefined; comecar: Comecar; /** Fora da busca: fica apagado. */ apagado?: boolean; /** Mudado ou achado pelo agente agora. */ destacado?: boolean }) {
   let esquerda = c.inicio_s * px;
   let w = Math.max(2, duracaoDoClipe(c) * px);
   if (a && a.tipo === "mover") esquerda += a.dx;
@@ -186,11 +191,13 @@ const ClipeNaFaixa = memo(function ClipeNaFaixa({ projeto, t, c, ativo, a, px, f
   const rotulo = rotuloDoClipe(projeto, c);
   return (
     <div
-      className={juntar("group absolute top-1 bottom-1 overflow-hidden rounded border text-left", COR[t.tipo], ativo && "ring-2 ring-primary", a && "z-20 opacity-90 shadow-lg")}
+      className={juntar("group absolute top-1 bottom-1 overflow-hidden rounded border text-left transition-opacity", COR[t.tipo], ativo && "ring-2 ring-primary", destacado && !ativo && "ring-2 ring-amber-400", apagado && !ativo && "opacity-25", a && "z-20 opacity-90 shadow-lg")}
       style={{ left: esquerda, width: Math.max(2, w), transform: a && a.tipo === "mover" ? `translateY(${a.dy}px)` : undefined, cursor: "grab" }}
       title={`${apelido} · ${rotulo} · ${tempoFino(c.inicio_s)} a ${tempoFino(fimDoClipe(c))}`}
       data-clipe={c.id}
       data-apelido={apelido}
+      data-achado={apagado === false ? "" : undefined}
+      data-destacado={destacado ? "" : undefined}
       onMouseDown={(e) => {
         e.stopPropagation();
         e.preventDefault();
@@ -260,6 +267,7 @@ export default function LinhaDoTempo({
   onSelecionar,
   onOps,
   urls,
+  assinaturas,
 }: {
   projeto: ProjetoDeEdicao;
   relogio: Relogio;
@@ -269,12 +277,30 @@ export default function LinhaDoTempo({
   onSelecionar: (ids: string[]) => void;
   onOps: (ops: Operacao[], rotulo: string) => void;
   urls: Record<string, string>;
+  /** Sha256 dos arquivos da Entrada: "só repetidos" acha o mesmo take subido duas vezes. */
+  assinaturas?: AssinaturasDosArquivos | null;
 }) {
   const rolagem = useRef<HTMLDivElement | null>(null);
   const [arrasto, setArrasto] = useState<Arrasto | null>(null);
   const arrastoRef = useRef<Arrasto | null>(null);
   const apelidos = useMemo(() => apelidosDoProjeto(projeto), [projeto]);
   const largura = Math.max(600, (projeto.duracao_s + 10) * px);
+
+  // 02/10: busca com filtros (a mesma da Mídia e do agente). Fora da busca o clipe fica apagado; o que o agente mexeu brilha uns segundos.
+  const mesa = useMesaOpcional();
+  const clientId = mesa ? mesa.clientId : "";
+  const busca = useBuscaDoEditor(clientId);
+  const [buscando, setBuscando] = useState(false);
+  const filtroDaLinha = useMemo<FiltroDaBusca>(() => ({ ...busca.filtro, uso: "todos" }), [busca.filtro]);
+  const buscaLigada = filtroAtivo(filtroDaLinha);
+  const achados = useMemo(() => (buscaLigada ? clipesQueBatem(projeto, filtroDaLinha, apelidos, assinaturas || null) : null), [buscaLigada, projeto, filtroDaLinha, apelidos, assinaturas]);
+  const conjuntoDosAchados = useMemo(() => (achados ? new Set(achados) : null), [achados]);
+  const destaque = useMemo(() => new Set(busca.destaque), [busca.destaque]);
+  useEffect(() => {
+    if (!busca.destaque.length || !clientId) return;
+    const t = window.setTimeout(() => destacar(clientId, []), 6000);
+    return () => window.clearTimeout(t);
+  }, [busca.destaque, clientId]);
   const fps = projeto.fps;
 
   // Bordas para o ímã: início e fim de todos os clipes.
@@ -425,6 +451,11 @@ export default function LinhaDoTempo({
         <span className={juntar(texto.auxiliar, "mr-auto tabular-nums")}>
           {tempoFino(projeto.duracao_s)} · {projeto.fps} fps{projeto.fps_informado ? "" : " (provisório)"}
         </span>
+        {clientId && (
+          <button type="button" className={juntar(botao.icone, (buscando || buscaLigada) && "text-primary")} onClick={() => setBuscando((x) => !x)} aria-expanded={buscando || buscaLigada} aria-label="Buscar na linha do tempo" title="Buscar na linha do tempo">
+            <Search className="h-3.5 w-3.5" />
+          </button>
+        )}
         <button type="button" className={botao.icone} onClick={() => zoom(1 / 1.5)} aria-label="Afastar a linha do tempo">
           <Minus className="h-3.5 w-3.5" />
         </button>
@@ -436,6 +467,26 @@ export default function LinhaDoTempo({
           Caber
         </button>
       </div>
+      {clientId && (buscando || buscaLigada) && (
+        <div className="mb-1.5 max-w-xl" data-busca-da-linha="">
+          <BuscaComFiltros
+            filtro={busca.filtro}
+            mudar={busca.mudar}
+            limpar={busca.limpar}
+            rotulo="Buscar na linha do tempo"
+            comUso={false}
+            contagem={achados ? `${achados.length} ${achados.length === 1 ? "clipe achado" : "clipes achados"}${achados.length ? `: ${achados.slice(0, 8).map((id) => apelidos.porId[id]).join(", ")}${achados.length > 8 ? "..." : ""}` : ""}` : null}
+            extra={
+              achados && achados.length > 0 ? (
+                <button type="button" className={juntar(botao.barra, "gap-1")} onClick={() => onSelecionar(achados)} title="Escolher os achados (Delete tira)" data-escolher-achados="">
+                  <MousePointerClick className="h-3.5 w-3.5" />
+                  Escolher
+                </button>
+              ) : null
+            }
+          />
+        </div>
+      )}
       <div ref={rolagem} className="relative min-h-0 flex-1 overflow-auto rounded-md border border-border [overscroll-behavior:contain]" data-rolagem-da-linha="">
         <div className="relative" style={{ width: LARGURA_DO_CABECALHO + largura }}>
           <Regua px={px} largura={largura} relogio={relogio} marcadores={projeto.marcadores} aoBuscar={(s) => relogio.set(noQuadro(s, fps))} />
@@ -466,6 +517,8 @@ export default function LinhaDoTempo({
                     url={c.fonte ? urls[c.fonte] || null : null}
                     apelido={apelidos.porId[c.id]}
                     comecar={comecar}
+                    apagado={conjuntoDosAchados ? !conjuntoDosAchados.has(c.id) : undefined}
+                    destacado={destaque.has(c.id)}
                   />
                 ))}
               </div>

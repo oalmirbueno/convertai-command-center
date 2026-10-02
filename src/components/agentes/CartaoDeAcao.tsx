@@ -42,6 +42,7 @@ export default function CartaoDeAcao({
   renderConfirmar,
   observacao,
   recemFeita = false,
+  itensAVista,
 }: {
   acao: AcaoDoAgente;
   onPedido: (pedido: PedidoDaAcao) => Promise<RespostaDaAcao>;
@@ -58,7 +59,13 @@ export default function CartaoDeAcao({
    * conversa não passa isto, então não navega.
    */
   recemFeita?: boolean;
+  /**
+   * 02/10 (editor de vídeo, dono: "fica gigante"): com muitos itens, mostra só
+   * estes primeiros e "Ver os N"; sem isto, a lista inteira (como sempre foi).
+   */
+  itensAVista?: number;
 }) {
+  const [verTodos, setVerTodos] = useState(false);
   // O último estado conhecido desta proposta (mesma lista, mesmo id) vale sobre o que o pai guardou:
   // o pai remonta o cartão com o anexo antigo (lateral que recolhe, conversa relida) e o cartão não pode
   // voltar a oferecer Confirmar do que já foi feito.
@@ -188,7 +195,7 @@ export default function CartaoDeAcao({
       )}
       {total > 0 && (
         <ul className="mt-2 max-h-72 divide-y divide-border overflow-y-auto rounded-lg border border-border bg-background px-2.5 py-1">
-          {atual.itens.map((i) => {
+          {(itensAVista && !verTodos && atual.itens.length > itensAVista + 1 ? atual.itens.slice(0, itensAVista) : atual.itens).map((i) => {
             const r = resultadoDe(i);
             const motivo = r && !r.ok ? r.motivo || "Não foi possível." : null;
             const para = i.para_rotulo || (i.para !== null && i.para !== undefined && i.para !== "" ? String(i.para) : "");
@@ -210,6 +217,13 @@ export default function CartaoDeAcao({
               </li>
             );
           })}
+          {!!itensAVista && atual.itens.length > itensAVista + 1 && (
+            <li className="py-1">
+              <button type="button" className="text-[12px] text-primary hover:underline" onClick={() => setVerTodos((v) => !v)} aria-expanded={verTodos} data-ver-todos-os-itens="">
+                {verTodos ? "Ver menos" : `Ver os ${atual.itens.length} itens`}
+              </button>
+            </li>
+          )}
         </ul>
       )}
       {atual.recusados.length > 0 && (

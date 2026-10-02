@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
-import { Expand, Maximize2, Minimize2, Pause, Play, SkipBack, SkipForward } from "lucide-react";
+import { Expand, Maximize2, Minimize2, MonitorPlay, Pause, Play, Shrink, SkipBack, SkipForward } from "lucide-react";
 import { botao, juntar, texto } from "@/components/sistema/estilos";
 import type { ProjetoDeEdicao } from "../../../../supabase/functions/_shared/projeto-de-edicao";
 import { tempoComQuadro } from "@/lib/editor/tempo";
@@ -43,8 +43,16 @@ const Previa = forwardRef<
     /** Vídeo grande: o editor esconde as laterais (o botão só aparece quando o editor passa isto). */
     ampliada?: boolean;
     onAmpliar?: () => void;
+    /**
+     * 02/10: "Tela cheia" é o EDITOR na tela inteira (prévia, linha do tempo,
+     * ferramentas e o agente), sem o menu do painel. "Só o vídeo" é o player
+     * sozinho, agora com controles (antes a tela cheia era só o vídeo, sem
+     * botão nenhum para pausar ou voltar).
+     */
+    telaCheia?: boolean;
+    onTelaCheia?: () => void;
   }
->(function Previa({ projeto, urls, relogio, compacta, ampliada, onAmpliar }, ref) {
+>(function Previa({ projeto, urls, relogio, compacta, ampliada, onAmpliar, telaCheia, onTelaCheia }, ref) {
   const player = useRef<PlayerRef | null>(null);
   const [tocando, setTocando] = useState(false);
   const [taxa, setTaxa] = useState(1);
@@ -52,6 +60,21 @@ const Previa = forwardRef<
   const fps = projeto.fps;
   const total = quadrosDoProjeto(projeto);
   const props = useMemo(() => ({ projeto, urls }), [projeto, urls]);
+  // O player sozinho na tela cheia do navegador ganha os controles dele (fora dela, os controles são os de baixo).
+  const [soVideo, setSoVideo] = useState(false);
+  useEffect(() => {
+    const mudou = () => {
+      const d = document as unknown as { fullscreenElement?: Element | null; webkitFullscreenElement?: Element | null };
+      const el = d.fullscreenElement || d.webkitFullscreenElement || null;
+      setSoVideo(!!el && !!caixa.current && caixa.current.contains(el));
+    };
+    document.addEventListener("fullscreenchange", mudou);
+    document.addEventListener("webkitfullscreenchange", mudou);
+    return () => {
+      document.removeEventListener("fullscreenchange", mudou);
+      document.removeEventListener("webkitfullscreenchange", mudou);
+    };
+  }, []);
 
   useImperativeHandle(ref, () => ({
     tocarOuPausar: () => player.current && player.current.toggle(),
@@ -140,6 +163,7 @@ const Previa = forwardRef<
             compositionWidth={projeto.largura}
             compositionHeight={projeto.altura}
             playbackRate={taxa}
+            controls={soVideo}
             style={{ width: larguraDoPlayer, height: alturaDoPlayer }}
             clickToPlay={false}
             // Licença gratuita do Remotion: a gestão da Aceleriq tem 2 pessoas (dono, 26/09/2026).
@@ -168,8 +192,13 @@ const Previa = forwardRef<
                 {ampliada ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </button>
             )}
-            <button type="button" className={juntar(botao.icone, "ml-1")} onClick={() => player.current && player.current.requestFullscreen()} aria-label="Tela cheia" title="Tela cheia" data-tela-cheia="">
-              <Expand className="h-4 w-4" />
+            {onTelaCheia && (
+              <button type="button" className={juntar(botao.icone, "ml-1")} onClick={onTelaCheia} aria-pressed={!!telaCheia} aria-label={telaCheia ? "Sair da tela cheia (Esc)" : "Tela cheia"} title={telaCheia ? "Sair da tela cheia (Esc)" : "Tela cheia: o editor e o agente na tela inteira"} data-tela-cheia="">
+                {telaCheia ? <Shrink className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
+              </button>
+            )}
+            <button type="button" className={juntar(botao.icone, "ml-1")} onClick={() => player.current && player.current.requestFullscreen()} aria-label="Só o vídeo" title="Só o vídeo, com controles (Esc volta). Dois cliques no vídeo também." data-so-o-video="">
+              <MonitorPlay className="h-4 w-4" />
             </button>
           </span>
         )}

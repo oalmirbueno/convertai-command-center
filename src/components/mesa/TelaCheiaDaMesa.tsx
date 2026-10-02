@@ -194,3 +194,22 @@ export function BotaoDeTelaCheia({ tela, className = "" }: { tela: TelaCheiaDaMe
     </button>
   );
 }
+
+/**
+ * Lê e alterna a tela cheia da mesa SEM contar como mesa montada (02/10): o
+ * editor de vídeo usa no botão "Tela cheia" da prévia (editor, linha do tempo
+ * e agente na tela inteira, sem o menu do painel).
+ */
+export function useTelaCheiaSemContar(): TelaCheiaDaMesa {
+  const [cheia, setCheia] = useState(cheiaAgora);
+  useEffect(() => {
+    ouvintes.add(setCheia);
+    setCheia(cheiaAgora);
+    return () => {
+      ouvintes.delete(setCheia);
+    };
+  }, []);
+  const alternar = useCallback(() => definirTelaCheia(!cheiaAgora), []);
+  const sair = useCallback(() => definirTelaCheia(false), []);
+  return { cheia, alternar, sair };
+}

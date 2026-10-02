@@ -1143,6 +1143,7 @@ export default function AgenteEditor({
                 titulo={ehExportar(a) ? "Renderizar" : ehGeracao(a) ? "Gerar (pago)" : a.executada_direto ? "O que mudei" : "O que vou mudar"}
                 onPedido={aoPedidoDe(m.chave, a)}
                 recemFeita={m.recemFeita}
+                itensAVista={6}
                 renderConfirmar={
                   ehExportar(a)
                     ? (confirmar, ocupado) => (

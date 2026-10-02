@@ -9,12 +9,13 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, juntar, texto } from "@/components/sistema/estilos";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { textoDoErro } from "@/lib/mesa/api";
-import { chamarMesaVideos } from "@/components/mesa-videos/videosApi";
+import { chamarMesaVideos, useArquivosDeVideo } from "@/components/mesa-videos/videosApi";
+import { useTelaCheiaSemContar } from "@/components/mesa/TelaCheiaDaMesa";
 import type { ProjetoDeEdicao } from "../../../../supabase/functions/_shared/projeto-de-edicao";
 import { comecarHistorico, desfazer, fazer, refazer, type Historico } from "@/lib/editor/historico";
 import { acharClipe, aplicarOperacoes, assinaturaDoProjeto, ErroDaOperacao, fimDoClipe, trilhaPrincipal, type Operacao } from "@/lib/editor/operacoes";
 import { criarSalvador, type EstadoDoSalvamento, type Salvador } from "@/lib/editor/autosave";
-import { opsParaInserir, type ItemDaBiblioteca } from "@/lib/editor/biblioteca";
+import { assinaturasDosArquivos, opsParaInserir, type ItemDaBiblioteca } from "@/lib/editor/biblioteca";
 import { apelidosDoProjeto } from "@/lib/editor/apelidos";
 import type { CenaDoRoteiro, PropostaDaSkill } from "@/lib/editor/skills";
 import { noQuadro, tempoFino } from "@/lib/editor/tempo";
@@ -99,7 +100,7 @@ const ABAS_ESQUERDA: { valor: AbaEsquerda; rotulo: string; descricao?: string }[
   { valor: "cenario", rotulo: "Trocar cenário", descricao: "Pessoa fixa, cenário novo" },
   { valor: "timestamp", rotulo: "Timestamp", descricao: "Fala palavra por palavra" },
   { valor: "referencias", rotulo: "Referências", descricao: "Copiar a edição de um vídeo" },
-  { valor: "skills", rotulo: "Skills (todas)" },
+  { valor: "skills", rotulo: "Skills", descricao: "Todas as skills por objetivo: Aplicar mostra o que muda e Confirmar faz" },
 ];
 
 /** Com o agente na lateral da mesa e a janela estreita, os Ajustes viram uma aba da esquerda. */
@@ -153,6 +154,12 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
   const [px, setPx] = useEstadoDaTela<number>(`mesa-edicao:editor:zoom:${clientId}`, 40, { validar: (v) => typeof v === "number" && v > 0 });
   // Vídeo grande (02/10): esconde as laterais; Esc volta.
   const [ampliada, setAmpliada] = useState(false);
+  // Tela cheia (02/10): o editor e o agente da lateral na tela inteira (a tela cheia da mesa), sem o menu do painel.
+  const telaDaMesa = useTelaCheiaSemContar();
+  // Sha256 dos arquivos da Entrada: acha o mesmo take subido duas vezes (busca "só repetidos" e a skill).
+  const arquivosQ = useArquivosDeVideo(clientId);
+  const arquivosDaEntrada = arquivosQ.data && arquivosQ.data.arquivos;
+  const assinaturas = useMemo(() => assinaturasDosArquivos(arquivosDaEntrada || []), [arquivosDaEntrada]);
   const [aba, setAba] = useEstadoDaTela<AbaEsquerda>(`mesa-edicao:editor:aba2:${clientId}`, "ia", { validar: (v) => ABAS_COM_AJUSTES.some((a) => a.valor === v) });
   const [abaDireita, setAbaDireita] = useEstadoDaTela<AbaDireita>(`mesa-edicao:editor:lado:${clientId}`, "ajustes", { validar: (v) => v === "ajustes" || v === "agente" });
   const [geracao, setGeracao] = useState<PedidoDeGeracao>({ tipo: "angulo_gerar", clipe: null });
@@ -365,7 +372,7 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
     revisao: () => (salvador.current ? salvador.current.revisao() : null),
     estadoDoSalvamento: () => (salvador.current ? salvador.current.estado() : "salvo"),
   };
-  const contextoDaSkill = { agora: new Date().toISOString(), cenas: cenas || null, selecionados: selecao };
+  const contextoDaSkill = { agora: new Date().toISOString(), cenas: cenas || null, selecionados: selecao, assinaturas };
 
   // ---------------------------------------------------------------- partes da tela
   const barra = (
@@ -442,7 +449,7 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
   const abaAtual = abasDaEsquerda.find((a) => a.valor === abaVisivel) as { valor: AbaEsquerda; rotulo: string; descricao?: string } | undefined;
   const rotuloDaAba = abaAtual ? abaAtual.rotulo : "";
   const descricaoDaAba = abaAtual ? abaAtual.descricao || "" : "";
-  const contextoDasSkills = { agora: new Date().toISOString(), cenas: cenas || null, selecionados: selecao };
+  const contextoDasSkills = { agora: new Date().toISOString(), cenas: cenas || null, selecionados: selecao, assinaturas };
   const painelEsquerdo =
     abaVisivel === "ia" ? (
       <PainelEditarComIA projeto={projeto} controle={controle} versaoId={versaoId} irPara={ctx.irPara} />
@@ -540,7 +547,7 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
 
   // ---------------------------------------------------------------- computador e notebook
   return (
-    <div className="grid min-w-0 gap-3" style={{ gridTemplateRows: "minmax(0,1fr) 250px", height: "calc(100vh - 150px)", minHeight: 620, maxHeight: 1200 }} data-editor-de-video="completo">
+    <div className="grid min-w-0 gap-3" style={{ gridTemplateRows: "minmax(0,1fr) 250px", height: telaDaMesa.cheia ? "calc(100vh - 96px)" : "calc(100vh - 150px)", minHeight: 620, maxHeight: telaDaMesa.cheia ? undefined : 1200 }} data-editor-de-video="completo" data-tela-cheia-do-editor={telaDaMesa.cheia ? "" : undefined}>
       <div
         className={juntar(
           "grid min-h-0 min-w-0 gap-3",
@@ -571,7 +578,7 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
         <div className="flex min-h-0 min-w-0 flex-col">
           {barra}
           <div className="mt-2 min-h-0 flex-1">
-            <Previa ref={previa} projeto={projeto} urls={urls} relogio={relogio} ampliada={ampliada} onAmpliar={() => setAmpliada((x) => !x)} />
+            <Previa ref={previa} projeto={projeto} urls={urls} relogio={relogio} ampliada={ampliada} onAmpliar={() => setAmpliada((x) => !x)} telaCheia={telaDaMesa.cheia} onTelaCheia={telaDaMesa.alternar} />
           </div>
         </div>
         {ampliada ? null : agenteNaLateral ? (
@@ -608,7 +615,7 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
         )}
       </div>
       <div className="min-h-0 min-w-0">
-        <LinhaDoTempo projeto={projeto} relogio={relogio} px={px} setPx={setPx} selecao={selecao} onSelecionar={setSelecao} onOps={aplicarOps} urls={urls} />
+        <LinhaDoTempo projeto={projeto} relogio={relogio} px={px} setPx={setPx} selecao={selecao} onSelecionar={setSelecao} onOps={aplicarOps} urls={urls} assinaturas={assinaturas} />
       </div>
       {janelaDeComparar}
     </div>
