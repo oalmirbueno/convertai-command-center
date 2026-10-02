@@ -15,6 +15,7 @@
 
 import { type Resolucao } from "../_shared/capacidades-imagem.ts";
 import { ErroDeRegra, IDADE_MINIMA_MODELO, limpo, listaDeTextos, semTravessao, UUID } from "./calculos.ts";
+import { FOLHA_DAS_6_VISTAS, IDENTIDADE_EM_UMA_FRASE, REGRAS_DA_FOLHA, regrasDeIdentidade } from "./modelos-folha.ts";
 
 // ------------------------------------------------------------------ vocabulário
 
@@ -23,11 +24,23 @@ export const VISTAS_DA_PERSONA = [
 ] as const;
 export type VistaDaPersona = typeof VISTAS_DA_PERSONA[number];
 
-/** Folha padrão: 6 vistas, uma imagem por chamada (não uma folha única). */
-export const FOLHA_PADRAO: VistaDaPersona[] = ["frente", "tres_quartos_esq", "tres_quartos_dir", "perfil_esq", "meio_corpo", "corpo_inteiro"];
+/**
+ * A folha das 6 vistas (dono, 02/10: "a criação do modelo segue a folha das 6
+ * vistas, com a pessoa EXATAMENTE igual em todas"): frente, 3/4 esquerda, 3/4
+ * direita, perfil, meio corpo e corpo inteiro. Uma imagem por chamada (não uma
+ * folha única num quadro só: o gerador copia a grade). Rosto em 4 ângulos e o
+ * corpo em 2 distâncias: é o que as gerações seguintes usam como identidade.
+ * perfil_dir e maos continuam aceitas (vistas extras), fora da folha.
+ */
+export const FOLHA_PADRAO: VistaDaPersona[] = [...FOLHA_DAS_6_VISTAS];
 
-/** Aprovadas da folha (além da âncora) para a persona ficar pronta. */
-export const VISTAS_PARA_PRONTA = 3;
+/** Pronta = as 6 vistas da folha aprovadas (antes eram 3). Com âncora, a persona já é usável, com aviso. */
+export const VISTAS_PARA_PRONTA = FOLHA_PADRAO.length;
+
+/** Teto de imagens de identidade numa vista da folha: âncora + até 4 vistas aprovadas (MODELOS-E-CANVAS.md, 4.2). */
+export const TETO_IDENTIDADES_DA_FOLHA = 5;
+/** Teto de imagens de identidade nas gerações seguintes (Canvas, Book, detalhe): âncora + até 3 vistas. */
+export const TETO_IDENTIDADES_NO_USO = 4;
 
 export const DESCRICAO_DA_VISTA: Record<VistaDaPersona, string> = {
   frente: "retrato de frente, rosto e ombros, olhando para a câmera, cabeça reta",
@@ -323,8 +336,17 @@ export function invariantesDaFicha(f: FichaDaPersona, extras: unknown = []): str
   return Array.from(new Set([...lista, ...daEquipe])).slice(0, 24);
 }
 
-/** Ficha em uma frase para o prompt (sempre com "adulta de N anos"). */
+/**
+ * Ficha em uma frase para o prompt (sempre com "adulta de N anos") e a frase
+ * de identidade travada: é o que o Canvas e o Book mandam junto com a âncora e
+ * as vistas aprovadas da folha.
+ */
 export function fichaEmTexto(f: FichaDaPersona): string {
+  return `${descricaoDaFicha(f)} ${IDENTIDADE_EM_UMA_FRASE}`;
+}
+
+/** Só a ficha em uma frase (a candidata e a folha levam as regras de identidade inteiras à parte). */
+export function descricaoDaFicha(f: FichaDaPersona): string {
   const partes = [
     `Pessoa adulta de ${f.idade_aparente} anos de idade aparente`,
     f.genero_apresentado ? `gênero aparente ${f.genero_apresentado}` : "",
@@ -364,6 +386,9 @@ export const PROIBICOES_DA_PERSONA = [
   "não copiar rosto, corpo, tatuagem nem identidade de pessoas das imagens de referência",
 ];
 
+// Regras de identidade e da folha: em modelos-folha.ts (sem dependência; o index e o teste importam direto).
+export { IDENTIDADE_EM_UMA_FRASE, REGRAS_DA_FOLHA, REGRAS_DE_IDENTIDADE, regrasDeIdentidade, textoDeIdentidadeParaGeracao } from "./modelos-folha.ts";
+
 const LEGENDA_DO_USO: Record<UsoDeReferencia, string> = {
   estilo: "SÓ ESTILO (paleta, clima, figurino de referência)",
   pose: "SÓ POSE (postura e gesto)",
@@ -385,10 +410,11 @@ const FORMATO_DA_PERSONA = "retrato vertical 4:5";
 export function promptDaCandidata(e: { nome: string; ficha: FichaDaPersona; invariantes: string[]; usos: UsoDeReferencia[]; pedido?: string | null }): string {
   const linhas: string[] = [];
   linhas.push("FOTOGRAFIA REAL de uma pessoa sintética (gerada, não existe), retrato editorial para Instagram, sem retoque de beleza.");
-  linhas.push(`PERSONA "${e.nome}": ${fichaEmTexto(e.ficha)}`);
+  linhas.push(`PERSONA "${e.nome}": ${descricaoDaFicha(e.ficha)}`);
   linhas.push(`INVARIANTES DA PERSONA (repetir exatamente): ${e.invariantes.join("; ")}.`);
   if (e.ficha.notas) linhas.push(`NOTAS DA FICHA: ${e.ficha.notas}`);
   linhas.push(`ENQUADRAMENTO: ${FORMATO_DA_PERSONA}, meio corpo, olhando para a câmera, expressão serena e natural, fundo neutro liso claro, luz natural suave.`);
+  linhas.push("ESTA FOTO PODE VIRAR A ÂNCORA da folha de 6 vistas: rosto inteiro visível e bem iluminado, sem óculos escuros, chapéu, máscara ou mão no rosto, cabelo sem cobrir os olhos, roupa simples do estilo da ficha sem estampa chamativa.");
   if (e.usos.length) linhas.push("IMAGENS ANEXADAS, NA ORDEM:", ...legendasDasReferencias(e.usos));
   if (e.pedido) linhas.push(`PEDIDO DA EQUIPE: ${e.pedido}`);
   linhas.push(...BLOCO_HIPER_REALISMO);
@@ -396,18 +422,28 @@ export function promptDaCandidata(e: { nome: string; ficha: FichaDaPersona; inva
   return semTravessao(linhas.join("\n"));
 }
 
+/** "vista 2 de 6 da folha" ou "vista extra, fora da folha de 6". */
+export function posicaoNaFolha(vista: VistaDaPersona): string {
+  const i = FOLHA_PADRAO.indexOf(vista);
+  return i >= 0 ? `vista ${i + 1} de ${FOLHA_PADRAO.length} da folha` : `vista extra, fora da folha de ${FOLHA_PADRAO.length}`;
+}
+
 /**
- * Prompt de uma vista da folha: a âncora (e as vistas já aprovadas) como
- * identidade da mesma pessoa, a ficha repetida e a vista pedida.
+ * Prompt de uma vista da folha das 6 vistas: a âncora e as vistas já
+ * aprovadas como identidade da mesma pessoa (identidadesDaVista), as regras
+ * de identidade travada, as regras da folha, a ficha repetida e a vista
+ * pedida. Só a câmera muda.
  */
 export function promptDaVista(e: { nome: string; ficha: FichaDaPersona; invariantes: string[]; vista: VistaDaPersona; identidades: string[] }): string {
   const linhas: string[] = [];
-  linhas.push(`FOTOGRAFIA REAL da MESMA pessoa sintética "${e.nome}" das imagens anexadas (gerada, não existe), sem retoque de beleza.`);
+  linhas.push(`FOTOGRAFIA REAL da MESMA pessoa sintética "${e.nome}" das imagens anexadas (gerada, não existe), sem retoque de beleza. FOLHA DE ${FOLHA_PADRAO.length} VISTAS da persona: esta é a ${posicaoNaFolha(e.vista)}.`);
   linhas.push("IMAGENS ANEXADAS, NA ORDEM:");
   e.identidades.forEach((legenda, i) => linhas.push(`Imagem ${i + 1}: ${legenda}. IDENTIDADE da persona: mesmo rosto, formato do rosto, olhos, nariz, lábios, tom de pele, marcas e cabelo; não mude a pessoa.`));
-  linhas.push(`FICHA: ${fichaEmTexto(e.ficha)}`);
+  linhas.push(regrasDeIdentidade(e));
+  linhas.push(`FICHA: ${descricaoDaFicha(e.ficha)}`);
   linhas.push(`INVARIANTES DA PERSONA (repetir exatamente): ${e.invariantes.join("; ")}.`);
-  linhas.push(`VISTA PEDIDA: ${DESCRICAO_DA_VISTA[e.vista]}. Mesmo fundo neutro liso claro e mesma luz natural suave da âncora, para a folha ficar coerente.`);
+  linhas.push(`VISTA PEDIDA: ${DESCRICAO_DA_VISTA[e.vista]}.`);
+  linhas.push(`REGRAS DA FOLHA: ${REGRAS_DA_FOLHA.join("; ")}.`);
   linhas.push(...BLOCO_HIPER_REALISMO);
   linhas.push(`REGRAS: ${PROIBICOES_DA_PERSONA.join("; ")}.`);
   return semTravessao(linhas.join("\n"));
@@ -425,7 +461,8 @@ export function promptDoDetalhe(e: { alvo: AlvoDoDetalhe; nome?: string | null; 
     linhas.push(`Imagens 2 a ${e.comIdentidade + 1}: a mesma pessoa sintética${e.nome ? ` "${e.nome}"` : ""} (identidade): mantenha rosto, formato do rosto, olhos, nariz, lábios, tom de pele, marcas e cabelo exatamente iguais.`);
   }
   if (e.alvo === "pessoa") {
-    if (e.ficha) linhas.push(`FICHA: ${fichaEmTexto(e.ficha)}`);
+    if (e.nome && (e.comIdentidade > 0 || e.ficha)) linhas.push(regrasDeIdentidade({ nome: e.nome }));
+    if (e.ficha) linhas.push(`FICHA: ${descricaoDaFicha(e.ficha)}`);
     if (e.invariantes?.length) linhas.push(`INVARIANTES DA PERSONA: ${e.invariantes.join("; ")}.`);
     linhas.push(BLOCO_HIPER_REALISMO[0]);
     linhas.push("Nitidez natural de fotografia (sem contorno artificial), grão fino de filme, cor natural.");
@@ -454,38 +491,62 @@ export function ordenarPorProximidade<T extends { vista: string | null }>(pedida
 }
 
 /**
- * Identidades que vão ao gerador numa vista: a âncora primeiro, depois as
- * vistas APROVADAS mais perto da pedida, até o limite (e até 4 no total).
+ * A folha aprovada: a vista aprovada mais nova de cada vista (uma por vista),
+ * as 6 da folha antes das extras. É o que vale como identidade da persona.
  */
-export function identidadesDaVista<T extends ImagemDaPersonaResumo>(ancora: T, imagens: T[], vista: VistaDaPersona, limite: number): T[] {
-  const aprovadas = imagens.filter((i) => i.id !== ancora.id && i.papel === "vista" && i.aprovada === true);
-  const max = Math.max(1, Math.min(4, Math.floor(limite)));
-  return [ancora, ...ordenarPorProximidade(vista, aprovadas)].slice(0, max);
+export function folhaAprovada<T extends ImagemDaPersonaResumo>(imagens: T[], excluir: string | null = null): T[] {
+  const porVista = new Map<string, T>();
+  for (const i of imagens) {
+    if (i.papel !== "vista" || i.aprovada !== true || i.id === excluir || !i.vista) continue;
+    porVista.set(i.vista, i);
+  }
+  const daFolha = FOLHA_PADRAO.map((v) => porVista.get(v)).filter((x): x is T => !!x);
+  const extras = Array.from(porVista.values()).filter((i) => !daFolha.includes(i));
+  return [...daFolha, ...extras];
+}
+
+/**
+ * Identidades que vão ao gerador (vista da folha e toda geração seguinte com a
+ * persona: Canvas, Book, detalhe 4K): a âncora primeiro, depois a folha
+ * APROVADA (uma imagem por vista, as 6 da folha antes das extras), as mais
+ * perto do ângulo pedido primeiro, até o limite do gerador e o teto (4 no
+ * uso; 5 na própria folha).
+ */
+export function identidadesDaVista<T extends ImagemDaPersonaResumo>(ancora: T, imagens: T[], vista: VistaDaPersona, limite: number, teto = TETO_IDENTIDADES_NO_USO): T[] {
+  const folha = folhaAprovada(imagens, ancora.id);
+  const daFolha = folha.filter((i) => (FOLHA_PADRAO as string[]).includes(String(i.vista)));
+  const extras = folha.filter((i) => !daFolha.includes(i));
+  const max = Math.max(1, Math.min(Math.max(1, Math.floor(teto)), Math.floor(limite)));
+  return [ancora, ...ordenarPorProximidade(vista, daFolha), ...ordenarPorProximidade(vista, extras)].slice(0, max);
+}
+
+/** Vistas da folha (das 6) com imagem aprovada. */
+export function vistasAprovadasDaFolha(imagens: ImagemDaPersonaResumo[]): VistaDaPersona[] {
+  return FOLHA_PADRAO.filter((v) => imagens.some((i) => i.papel === "vista" && i.vista === v && i.aprovada === true));
 }
 
 export function resumoDaFolha(imagens: ImagemDaPersonaResumo[]) {
   const vistas = FOLHA_PADRAO.map((v) => {
     const dela = imagens.filter((i) => i.papel === "vista" && i.vista === v);
-    const aprovada = dela.find((i) => i.aprovada === true) ?? null;
+    const aprovada = dela.filter((i) => i.aprovada === true).pop() ?? null;
     return { vista: v, descricao: DESCRICAO_DA_VISTA[v], geradas: dela.length, aprovada_id: aprovada?.id ?? null };
   });
-  const aprovadas = imagens.filter((i) => i.papel === "vista" && i.aprovada === true).length;
+  const aprovadas = vistasAprovadasDaFolha(imagens).length;
   return { vistas, aprovadas, total: FOLHA_PADRAO.length, minimo_para_pronta: VISTAS_PARA_PRONTA, pronta: aprovadas >= VISTAS_PARA_PRONTA };
 }
 
-/** Status pelo que existe (a arquivada fica arquivada). */
+/** Status pelo que existe (a arquivada fica arquivada). Pronta = as 6 vistas da folha aprovadas. */
 export function statusDaPersona(p: { status: string; ancora_imagem_id: string | null }, imagens: ImagemDaPersonaResumo[]): StatusDaPersona {
   if (p.status === "arquivada") return "arquivada";
   if (!p.ancora_imagem_id) return imagens.some((i) => i.papel === "candidata") ? "candidatos" : "rascunho";
-  const vistas = imagens.filter((i) => i.papel === "vista");
-  if (vistas.filter((i) => i.aprovada === true).length >= VISTAS_PARA_PRONTA) return "pronta";
-  return vistas.length ? "folha" : "ancora";
+  if (vistasAprovadasDaFolha(imagens).length >= VISTAS_PARA_PRONTA) return "pronta";
+  return imagens.some((i) => i.papel === "vista") ? "folha" : "ancora";
 }
 
 /** Persona que pode entrar no Canvas (pessoa com âncora); folha incompleta vira aviso. */
 export function personaUsavel(status: string): { ok: boolean; aviso: string | null } {
   if (status === "pronta") return { ok: true, aviso: null };
-  if (status === "ancora" || status === "folha") return { ok: true, aviso: "Folha da persona incompleta: a identidade vem só da âncora e pode variar mais." };
+  if (status === "ancora" || status === "folha") return { ok: true, aviso: "Folha das 6 vistas incompleta: a identidade vem da âncora e das vistas já aprovadas, e pode variar mais." };
   return { ok: false, aviso: null };
 }
 

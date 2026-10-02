@@ -556,7 +556,8 @@ export function useImagensDaPersona(modeloId: string | null) {
       const saida: ImagemDaPersona[] = [];
       for (const b of (data || []) as any[]) {
         const i = normalizarImagemDaPersona(b, String(modeloId));
-        if (i) saida.push(i);
+        // Só as imagens desta persona (a folha de uma nunca vira identidade de outra).
+        if (i && i.modelo_id === String(modeloId)) saida.push(i);
       }
       return saida;
     },
@@ -586,6 +587,8 @@ export interface ResumoDaPersona {
   /** Última imagem de cada vista da folha (a mais nova). */
   vistas: Record<string, ImagemDaPersona | null>;
   vistasProntas: number;
+  /** Vistas da folha (das 6) com imagem aprovada: 6 deixam a persona pronta. */
+  vistasAprovadas: number;
   detalhes: ImagemDaPersona[];
   referencias: ImagemDaPersona[];
 }
@@ -602,6 +605,7 @@ export function resumoDaPersona(p: Persona | null, imagens: ImagemDaPersona[]): 
     ancora,
     vistas,
     vistasProntas: VISTAS_DA_FOLHA.filter((v) => !!vistas[v.valor]).length,
+    vistasAprovadas: VISTAS_DA_FOLHA.filter((v) => imagens.some((i) => i.papel === "vista" && i.vista === v.valor && i.aprovada === true)).length,
     detalhes: imagens.filter((i) => i.papel === "detalhe"),
     referencias: imagens.filter((i) => i.papel === "referencia_dono"),
   };
@@ -812,7 +816,7 @@ export async function detalharImagem(p: { clientId: string; modeloId: string; im
   return { imagem, antes, custo_usd: data && data.custo_usd };
 }
 
-/** Aprovar ou rejeitar uma imagem da persona (vista da folha): 3 vistas aprovadas deixam a persona pronta. */
+/** Aprovar ou rejeitar uma imagem da persona (vista da folha): as 6 vistas da folha aprovadas deixam a persona pronta. */
 export async function decidirImagemDaPersona(imagemId: string, decisao: "aprovar" | "rejeitar", motivo?: string): Promise<{ imagem: ImagemDaPersona | null; persona: Persona | null }> {
   const corpo: Record<string, unknown> = { acao: "modelo_imagem_decidir", imagem_id: imagemId, decisao };
   if (motivo && motivo.trim()) corpo.motivo = motivo.trim();
@@ -856,6 +860,57 @@ export async function emParalelo<T>(itens: T[], aoMesmoTempo: number, fazer: (it
   const lista: Promise<void>[] = [];
   for (let i = 0; i < n; i++) lista.push(trabalhador());
   await Promise.all(lista);
+}
+
+/**
+ * Persona que já serve para foto (Foto com modelo, Canvas, Book): tem âncora e
+ * não está arquivada. A folha incompleta vale, com aviso (personaUsavel na função).
+ */
+export const personaUsavelNaTela = (p: Pick<Persona, "status" | "ancora_imagem_id">) =>
+  !!p.ancora_imagem_id && (p.status === "ancora" || p.status === "folha" || p.status === "pronta");
+
+/** Arquivar ou restaurar (modelo_editar com arquivar): "apagar" na tela é arquivar, nada some do banco. */
+export async function arquivarPersona(modeloId: string, arquivar: boolean): Promise<Persona | null> {
+  const data = await chamarFuncao<any>("mesa-foto", { acao: "modelo_editar", modelo_id: modeloId, arquivar });
+  return normalizarPersona(data && (data.modelo || data.persona));
+}
+
+/** Prefixo da chave do progresso das folhas (invalidar depois de aprovar uma vista). */
+export const CHAVE_DAS_FOLHAS = ["mesa-foto", "persona-folhas"];
+
+/** Quantas das 6 vistas da folha cada persona tem aprovadas (uma por vista). */
+export function progressoDasFolhas(ids: string[], linhas: any[]): Record<string, number> {
+  const saida: Record<string, number> = {};
+  ids.forEach((id) => {
+    saida[id] = VISTAS_DA_FOLHA.filter((v) =>
+      (linhas || []).some((l) => l && String(l.modelo_id) === id && l.papel === "vista" && l.vista === v.valor && booleanoOuNulo(l.aprovada) === true),
+    ).length;
+  });
+  return saida;
+}
+
+/** Progresso das folhas da galeria, numa ida só ao banco (só as vistas aprovadas). */
+export function useProgressoDasFolhas(ids: string[]) {
+  const lista = ids.filter(Boolean).slice().sort();
+  return useQuery({
+    queryKey: CHAVE_DAS_FOLHAS.concat([lista.join(",")]),
+    enabled: lista.length > 0,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+    retry: 1,
+    queryFn: async (): Promise<Record<string, number>> => {
+      const { data, error } = await (supabase as any)
+        .from("foto_modelo_imagens")
+        .select("id, modelo_id, papel, vista, aprovada")
+        .in("modelo_id", lista)
+        .eq("papel", "vista")
+        .eq("aprovada", true)
+        .limit(2000);
+      if (error) throw erroDeTabela(error, "foto_modelo_imagens");
+      return progressoDasFolhas(lista, data || []);
+    },
+  });
 }
 
 /** As âncoras das personas da galeria, numa ida só ao banco. */

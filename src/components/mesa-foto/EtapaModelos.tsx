@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, ChevronsUpDown, Crown, Images, Loader2, Maximize2, Plus, RefreshCw, ScanSearch, ShieldCheck, Sparkles, UserRound, Wand2, Workflow, X, ZoomIn } from "lucide-react";
+import { AlertTriangle, Archive, ArchiveRestore, Check, ChevronsUpDown, Crown, Images, Loader2, Maximize2, Package, Plus, RefreshCw, ScanSearch, ShieldCheck, Sparkles, UserCheck, UserRound, Wand2, Workflow, X, ZoomIn } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -14,10 +14,10 @@ import { SeletorDeQualidade } from "@/components/mesa/Seletores";
 import { padraoPara, precoDoModelo, textoDoErro, usd, type Qualidade } from "@/lib/mesa/api";
 import { useCampanhaEscolhida } from "./CampanhaDaMesa";
 import { MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto } from "./Comuns";
-import { AjudaRecolhida, BarraDeAcoes, CampoDeEscolha, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, Secao, SeletorCompacto, botao, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
+import { AjudaRecolhida, BarraDeAcoes, CampoDeEscolha, CampoDeFormulario, Carregando, EstadoDeErro, EstadoVazio, GrupoDeCampos, JanelaCentral, Secao, SeletorCompacto, botao, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 import { ZonaDeEnvio } from "./EtapaAcervo";
 import SeletorDeFotos from "./SeletorDeFotos";
-import SeletorLateral, { type ItemDoSeletor } from "./SeletorLateral";
+import { gravarModeloEscolhido } from "./escolhasDaLinha";
 import { acrescentarFotos, invalidarFotos, normalizarFoto, semearUrl, subirOriginais, useFotos, type FotoDoAcervo } from "./fotoApi";
 import AcoesProDaFoto from "./AcoesProDaFoto";
 import { useLevarParaAsMesas } from "./UsoDaFoto";
@@ -25,6 +25,8 @@ import { levarFotoDaPersonaAoAcervo } from "./agendaApi";
 import {
   acharNoCatalogo,
   aplicarSugestaoNaPersona,
+  arquivarPersona,
+  CHAVE_DAS_FOLHAS,
   candidatasPorMotor,
   caminhoDaImagem,
   chaveDasImagensDaPersona,
@@ -54,6 +56,7 @@ import {
   partesDaSugestaoDePersona,
   partesDaVista,
   pedirAoCanvas,
+  personaUsavelNaTela,
   problemasDaPersona,
   proporcaoDaImagem,
   rascunhoVazio,
@@ -67,6 +70,7 @@ import {
   useImagensDaPersona,
   usePersonas,
   usePrecoNoServidor,
+  useProgressoDasFolhas,
   USOS_DA_REFERENCIA,
   VISTAS_DA_FOLHA,
   type ConferenciaDaPersona,
@@ -90,6 +94,13 @@ import {
  * na tela ficam nome, idade, apresentação e estilo, e o resto em "Mais
  * detalhes".
  *
+ * 02/10 (dono: "gosto desta área; organizar melhor"): a galeria vira uma
+ * grade de cartões compactos (âncora, nome, estado, "4 de 6 vistas") com
+ * "Usar como modelo" e "Combinar com produto", que levam à Foto com modelo
+ * com a persona já escolhida (escolhasDaLinha). A ficha nova abre numa janela
+ * central. A folha é a faixa das 6 vistas; a função manda a âncora e a folha
+ * aprovada em toda geração seguinte, com a identidade travada.
+ *
  * Regras: pessoa sintética e adulta (idade aparente mínima 21), sem
  * semelhança com pessoa real (referência do dono só como estilo, pose, luz ou
  * roupa), toda imagem com o selo de gerada, conferência só como aviso (sem
@@ -101,6 +112,7 @@ const FILTROS = [
   { valor: "todas" as const, rotulo: "Todas" },
   { valor: "cliente" as const, rotulo: "Cliente" },
   { valor: "agencia" as const, rotulo: "Agência" },
+  { valor: "arquivadas" as const, rotulo: "Arquivadas" },
 ];
 type Filtro = (typeof FILTROS)[number]["valor"];
 
@@ -252,7 +264,41 @@ async function rodarVistas(p: { queryClient: QueryClient; clientId: string; pers
 
 // ------------------------------------------------------------------ galeria
 
-/** Ponto de cor de cada estado da persona (o seletor compacto não usa pílula grande). */
+/**
+ * "Usar como modelo" e "Combinar com produto" (dono, 02/10): grava a persona
+ * como o modelo escolhido da linha (a Foto com modelo lê e já abre com ela),
+ * marca o objetivo "foto com modelo" e abre a etapa. Com produto escolhido,
+ * ele vai junto; sem produto, a Foto com modelo pede o produto.
+ */
+export function useUsarPersona() {
+  const { clientId } = useMesa();
+  const { irPara, escolherObjetivo, kitId } = useMesaFoto();
+  return (p: Pick<Persona, "id" | "nome">, comProduto: boolean) => {
+    gravarModeloEscolhido(clientId, { tipo: "persona", id: p.id, nome: p.nome });
+    if (escolherObjetivo) escolherObjetivo("modelo");
+    if (comProduto && kitId) irPara("campanha", { kit: kitId });
+    else irPara("campanha");
+    if (comProduto && !kitId) toast.info(`${p.nome} escolhida`, { description: "Agora escolha o produto na Foto com modelo." });
+    else toast.success(`${p.nome} escolhida`, { description: "A Foto com modelo já abre com ela." });
+  };
+}
+
+/** As duas ações de uso da persona: ícone e nome, mesmo tamanho no cartão e na persona aberta. */
+function BotoesDeUso({ persona, className = "" }: { persona: Persona; className?: string }) {
+  const usar = useUsarPersona();
+  return (
+    <div className={juntar("-m-0.5 flex min-w-0 flex-wrap items-center [&>*]:m-0.5", className)} data-uso-da-persona={persona.id}>
+      <button type="button" className={juntar(botao.secundario, "h-7 px-2 text-[11.5px]")} onClick={() => usar(persona, false)}>
+        <UserCheck className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Usar como modelo
+      </button>
+      <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[11.5px]")} onClick={() => usar(persona, true)}>
+        <Package className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Combinar com produto
+      </button>
+    </div>
+  );
+}
+
+/** Ponto de cor de cada estado da persona (o cartão não usa pílula grande). */
 const PONTO_DO_STATUS: Record<string, string> = {
   rascunho: "bg-muted-foreground/40",
   candidatos: "bg-primary/60",
@@ -262,50 +308,95 @@ const PONTO_DO_STATUS: Record<string, string> = {
   arquivada: "bg-muted-foreground/30",
 };
 
-/**
- * Personas no seletor lateral compacto (pedido do dono, 26/09: "muito
- * grande, toma espaço; deixar pequeno, minimalista, com seletor"): seletor em
- * cima e, no computador, a lista curta com a âncora em miniatura.
- */
-function Galeria({ personas, escolhida, onEscolher, onNova, novaAberta }: { personas: Persona[]; escolhida: string | null; onEscolher: (id: string) => void; onNova: () => void; novaAberta: boolean }) {
-  const { clientId } = useMesa();
-  const [filtro, setFiltro] = useEstadoDaTela<Filtro>(`mesa-foto:modelos:filtro:${clientId}`, "todas", { validar: ehFiltro });
-  const lista = personas.filter((p) => (filtro === "todas" ? p.status !== "arquivada" : filtro === "cliente" ? !!p.client_id : !p.client_id));
-  const ancoras = useAncoras(personas.map((p) => p.ancora_imagem_id || ""));
-  const itens: ItemDoSeletor[] = lista.map((p) => {
-    const ancora = (ancoras.data || []).find((i) => i.id === p.ancora_imagem_id) || null;
-    return {
-      id: p.id,
-      nome: p.nome,
-      miniatura: (
-        <span className="block h-full w-full" data-persona={p.id}>
+const TOTAL_DA_FOLHA = VISTAS_DA_FOLHA.length;
+
+function CartaoDaPersona({ persona, ancora, vistas, aberta, onAbrir }: { persona: Persona; ancora: ImagemDaPersona | null; vistas: number; aberta: boolean; onAbrir: () => void }) {
+  const status = STATUS_DA_PERSONA[persona.status];
+  return (
+    <li
+      className={juntar("min-w-0 rounded-lg border bg-card p-2 transition-colors", aberta ? "border-primary" : "border-border hover:border-primary/40")}
+      data-persona={persona.id}
+      data-cartao-da-persona=""
+    >
+      <button type="button" className="flex w-full min-w-0 items-center text-left" aria-current={aberta ? "true" : undefined} onClick={onAbrir}>
+        <span className="mr-2.5 block h-[60px] w-12 shrink-0 overflow-hidden rounded-md bg-muted">
           {ancora ? (
-            <ImagemDaPersonaNaTela imagem={ancora} alt={p.nome} />
+            <ImagemDaPersonaNaTela imagem={ancora} alt={persona.nome} />
           ) : (
             <span className="flex h-full w-full items-center justify-center text-muted-foreground">
-              <UserRound className="h-4 w-4" />
+              <UserRound className="h-4 w-4" aria-hidden="true" />
             </span>
           )}
         </span>
-      ),
-      estado: { rotulo: STATUS_DA_PERSONA[p.status].rotulo, ponto: PONTO_DO_STATUS[p.status] || "bg-muted-foreground/40" },
-      nota: p.client_id ? null : "da agência",
-    };
-  });
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-semibold">{persona.nome}</span>
+          <span className="mt-0.5 flex min-w-0 items-center text-[11.5px] text-muted-foreground">
+            <span className={`mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${PONTO_DO_STATUS[persona.status] || "bg-muted-foreground/40"}`} aria-hidden="true" />
+            <span className="truncate">
+              {status.rotulo}
+              {persona.client_id ? "" : " · da agência"}
+            </span>
+          </span>
+          <span className="mt-0.5 block truncate text-[11.5px] tabular-nums text-muted-foreground" data-progresso-da-folha={vistas}>
+            {vistas} de {TOTAL_DA_FOLHA} vistas
+          </span>
+        </span>
+      </button>
+      {personaUsavelNaTela(persona) && <BotoesDeUso persona={persona} className="mt-1.5 border-t border-border pt-1.5" />}
+    </li>
+  );
+}
+
+/**
+ * Grade de cartões das personas (dono, 02/10: "organizar melhor, menos espaço
+ * vazio, grade de cartões"). Lista longa rola dentro da própria área no
+ * computador; no celular segue a página (sem rolagem dentro de rolagem).
+ */
+function GradeDePersonas({ personas, escolhida, onEscolher, onNova }: { personas: Persona[]; escolhida: string | null; onEscolher: (id: string) => void; onNova: () => void }) {
+  const { clientId } = useMesa();
+  const [filtro, setFiltro] = useEstadoDaTela<Filtro>(`mesa-foto:modelos:filtro:${clientId}`, "todas", { validar: ehFiltro });
+  const lista = personas.filter((p) =>
+    filtro === "arquivadas" ? p.status === "arquivada" : p.status !== "arquivada" && (filtro === "todas" || (filtro === "cliente" ? !!p.client_id : !p.client_id)),
+  );
+  const ancoras = useAncoras(personas.map((p) => p.ancora_imagem_id || ""));
+  const folhas = useProgressoDasFolhas(personas.filter((p) => !!p.ancora_imagem_id).map((p) => p.id));
+  const ativas = personas.filter((p) => p.status !== "arquivada").length;
   return (
-    <SeletorLateral
+    <Secao
       titulo="Personas"
-      recolher={`mesa-foto:modelos:lista:${clientId}`}
-      itens={itens}
-      escolhido={escolhida}
-      onEscolher={onEscolher}
-      onNovo={onNova}
-      novoRotulo="Nova persona"
-      novoAberto={novaAberta}
-      vazio={personas.length ? "Nenhuma persona neste filtro." : "Nenhuma persona ainda."}
-      ajuda="Pessoas sintéticas do cliente e da agência. Abra uma para gerar candidatas, escolher a âncora, montar a folha e detalhar em 4K."
-      filtro={<SeletorCompacto rotulo="Filtrar personas" opcoes={FILTROS} valor={filtro} onEscolher={(v) => setFiltro(v as Filtro)} larguraTotal />}
-    />
+      recolher={`mesa-foto:modelos:personas:${clientId}`}
+      resumo={`${ativas} ${ativas === 1 ? "persona" : "personas"}`}
+      ajuda="Pessoas sintéticas do cliente e da agência. Abra uma para a rodada, a âncora e a folha das 6 vistas. Com âncora, ela já serve para a Foto com modelo."
+      acao={
+        <button type="button" className={juntar(botao.primario, "h-8 px-2.5 text-[12.5px]")} onClick={onNova}>
+          <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Nova persona
+        </button>
+      }
+      data-grade-de-personas=""
+    >
+      <div className="mb-2 w-full sm:w-auto sm:max-w-[420px]">
+        <SeletorCompacto rotulo="Filtrar personas" opcoes={FILTROS} valor={filtro} onEscolher={(v) => setFiltro(v as Filtro)} listaQuandoNaoCabe />
+      </div>
+      {lista.length ? (
+        <ul
+          className="grid min-w-0 grid-cols-1 gap-2 scrollbar-hidden sm:grid-cols-[repeat(auto-fill,minmax(250px,1fr))] lg:max-h-[300px] lg:overflow-y-auto lg:overscroll-contain"
+          aria-label="Lista de personas"
+        >
+          {lista.map((p) => (
+            <CartaoDaPersona
+              key={p.id}
+              persona={p}
+              ancora={(ancoras.data || []).find((i) => i.id === p.ancora_imagem_id) || null}
+              vistas={(folhas.data && folhas.data[p.id]) || 0}
+              aberta={escolhida === p.id}
+              onAbrir={() => onEscolher(p.id)}
+            />
+          ))}
+        </ul>
+      ) : (
+        <p className={texto.auxiliar}>{personas.length ? "Nenhuma persona neste filtro." : "Nenhuma persona ainda."}</p>
+      )}
+    </Secao>
   );
 }
 
@@ -394,7 +485,7 @@ function ReferenciasDeEstilo({ refs, onMudar }: { refs: RascunhoDaPersona["refer
 
 const ehRascunhoDaPersona = (v: unknown) => !!v && typeof v === "object" && typeof (v as RascunhoDaPersona).nome === "string" && !!(v as RascunhoDaPersona).ficha && Array.isArray((v as RascunhoDaPersona).referencias);
 
-function NovaPersona({ onCriada, onCancelar }: { onCriada: (p: Persona) => void; onCancelar: () => void }) {
+function NovaPersona({ aberta, onCriada, onCancelar }: { aberta: boolean; onCriada: (p: Persona) => void; onCancelar: () => void }) {
   const { clientId, isAdmin, catalogo } = useMesa();
   const avisarErro = useAvisarErro();
   const campanha = useCampanhaEscolhida();
@@ -433,10 +524,30 @@ function NovaPersona({ onCriada, onCancelar }: { onCriada: (p: Persona) => void;
     }
   };
 
+  const cancelar = () => {
+    esquecerRascunho();
+    onCancelar();
+  };
+
   return (
-    <Secao
+    <JanelaCentral
+      aberta={aberta}
+      onFechar={onCancelar}
       titulo="Nova persona"
+      icone={<UserRound className="h-4 w-4" />}
       ajuda="Uma pessoa que não existe. Comece pelo brief: a ficha sai pronta do contexto do cliente (público, marca, campanha da Mesa) e você só ajusta. Criar não gasta; o custo aparece antes de cada geração."
+      rotuloDaAjuda="Sobre a persona nova"
+      largura="lg"
+      rodape={
+        <BarraDeAcoes className="w-full" inicio="Criar não gasta.">
+          <button type="button" className={botao.discreto} onClick={cancelar}>
+            Cancelar
+          </button>
+          <button type="button" className={botao.primario} onClick={() => void criar()} disabled={criando}>
+            {criando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />} Criar persona
+          </button>
+        </BarraDeAcoes>
+      }
       data-nova-persona=""
     >
       <div className={juntar(superficie.poco, "min-w-0 p-3")} data-sugerir-pelo-brief="">
@@ -567,22 +678,7 @@ function NovaPersona({ onCriada, onCancelar }: { onCriada: (p: Persona) => void;
           ))}
         </ul>
       )}
-      <BarraDeAcoes className="mt-4 border-t border-border pt-3" inicio="Criar não gasta.">
-        <button
-          type="button"
-          className={botao.discreto}
-          onClick={() => {
-            esquecerRascunho();
-            onCancelar();
-          }}
-        >
-          Cancelar
-        </button>
-        <button type="button" className={botao.primario} onClick={() => void criar()} disabled={criando}>
-          {criando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />} Criar persona
-        </button>
-      </BarraDeAcoes>
-    </Secao>
+    </JanelaCentral>
   );
 }
 
@@ -925,7 +1021,7 @@ function Rodada({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerso
 
 /**
  * Aprovar a vista (modelo_imagem_decidir): só a vista aprovada vira identidade
- * nas próximas vistas e no Canvas; 3 aprovadas deixam a persona pronta.
+ * nas próximas vistas e em toda foto seguinte; as 6 aprovadas deixam a persona pronta.
  */
 function AprovarVista({ persona, imagem }: { persona: Persona; imagem: ImagemDaPersona }) {
   const { clientId } = useMesa();
@@ -947,6 +1043,7 @@ function AprovarVista({ persona, imagem }: { persona: Persona; imagem: ImagemDaP
       if (r.persona) guardarPersona(queryClient, clientId, r.persona);
       void queryClient.invalidateQueries({ queryKey: chaveDasPersonas(clientId) });
       void queryClient.invalidateQueries({ queryKey: chaveDasImagensDaPersona(persona.id) });
+      void queryClient.invalidateQueries({ queryKey: CHAVE_DAS_FOLHAS });
     } catch (e) {
       avisarErro(e, "Vista não aprovada");
     } finally {
@@ -983,11 +1080,15 @@ function Folha({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerson
   return (
     <Secao
       divisoria
-      titulo="2. Folha de 6 vistas"
-      descricao={semAncora ? "Escolha a âncora na rodada primeiro." : `${resumo.vistasProntas} de 6 prontas`}
+      titulo="2. Folha das 6 vistas"
+      descricao={semAncora ? "Escolha a âncora na rodada primeiro." : `${resumo.vistasAprovadas} de 6 aprovadas`}
       recolher={`mesa-foto:modelos:folha:${clientId}`}
-      resumo={semAncora ? "sem âncora ainda" : `${resumo.vistasProntas} de 6 prontas`}
-      ajuda={semAncora ? "A folha parte da âncora escolhida na rodada." : `A mesma pessoa em 6 vistas, com o motor da âncora (${rotuloDoMotor(catalogo, motorId)}). Trocar de motor aumenta a deriva do rosto.`}
+      resumo={semAncora ? "sem âncora ainda" : `${resumo.vistasAprovadas} de 6 aprovadas`}
+      ajuda={
+        semAncora
+          ? "A folha parte da âncora escolhida na rodada."
+          : `A mesma pessoa, idêntica, em 6 vistas: só a câmera muda. Cada vista leva a âncora e as vistas já aprovadas, com o motor da âncora (${rotuloDoMotor(catalogo, motorId)}). Aprove as que ficaram iguais: a folha aprovada vai junto em toda foto com esta persona.`
+      }
       acao={
         !semAncora && faltam.length > 0 ? (
           <BotaoComCusto
@@ -1000,7 +1101,7 @@ function Folha({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerson
             className="h-9 text-[13px]"
             disabled={gerandoAlguma}
             fecharAoConfirmar
-            partes={() => partesDaVista(motorId, qualidade, 1 + resumo.vistasProntas, faltam.length)}
+            partes={() => partesDaVista(motorId, qualidade, Math.min(5, 1 + resumo.vistasAprovadas), faltam.length)}
             executar={() => rodar(faltam)}
           />
         ) : undefined
@@ -1009,7 +1110,7 @@ function Folha({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerson
       <div className="mb-2 w-full sm:w-56">
         <SeletorDeQualidade valor={qualidade} onChange={setQualidade} disabled={semAncora} />
       </div>
-      <ul className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-6 xl:grid-cols-3" aria-label="Vistas da folha">
+      <ul className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-6" aria-label="Vistas da folha" data-faixa-da-folha="">
         {VISTAS_DA_FOLHA.map((v) => {
           const img = resumo.vistas[v.valor];
           const a = andamentos[chaveDoAndamento(persona.id, "vista", v.valor)];
@@ -1021,7 +1122,7 @@ function Folha({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerson
                     <ImagemDaPersonaNaTela imagem={img} alt={`${persona.nome}, ${v.rotulo}`} />
                   </button>
                 ) : (
-                  <span className={`flex h-full w-full items-center justify-center text-[10.5px] text-muted-foreground ${a && a.estado === "gerando" ? "animate-pulse bg-muted" : ""}`}>
+                  <span className={`flex h-full w-full items-center justify-center text-[10.5px] text-muted-foreground ${a && a.estado === "gerando" ? "animate-pulse bg-muted" : "bg-muted/40"}`}>
                     {a && a.estado === "gerando" ? "gerando" : "vazia"}
                   </span>
                 )}
@@ -1041,7 +1142,7 @@ function Folha({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerson
                 className="h-7 w-full px-1 text-[11px]"
                 disabled={semAncora || (!!a && a.estado === "gerando")}
                 fecharAoConfirmar
-                partes={() => partesDaVista(motorId, qualidade, 1 + resumo.vistasProntas)}
+                partes={() => partesDaVista(motorId, qualidade, Math.min(5, 1 + resumo.vistasAprovadas))}
                 executar={() => rodar([v.valor])}
               />
             </li>
@@ -1283,8 +1384,26 @@ function Detalhar({ persona, imagens }: { persona: Persona; imagens: ImagemDaPer
  * ações. A rodada, a folha e o detalhe 4K ficam à direita.
  */
 function PersonaLateral({ persona }: { persona: Persona }) {
-  const { clientId } = useMesa();
+  const { clientId, isAdmin } = useMesa();
   const { irPara } = useMesaFoto();
+  const queryClient = useQueryClient();
+  const avisarErro = useAvisarErro();
+  const [arquivando, setArquivando] = useState(false);
+  const arquivada = persona.status === "arquivada";
+  const podeArquivar = !!persona.client_id || isAdmin;
+  const alternarArquivo = async () => {
+    setArquivando(true);
+    try {
+      const nova = await arquivarPersona(persona.id, !arquivada);
+      guardarPersona(queryClient, clientId, nova || { ...persona, status: arquivada ? "ancora" : "arquivada" });
+      void queryClient.invalidateQueries({ queryKey: chaveDasPersonas(clientId) });
+      toast.success(arquivada ? `${persona.nome} restaurada` : `${persona.nome} arquivada`, { description: arquivada ? undefined : "Fica em Arquivadas; nada foi apagado." });
+    } catch (e) {
+      avisarErro(e, arquivada ? "Persona não restaurada" : "Persona não arquivada");
+    } finally {
+      setArquivando(false);
+    }
+  };
   const imagensQ = useImagensDaPersona(persona.id);
   const imagens = imagensQ.data || [];
   const resumo = resumoDaPersona(persona, imagens);
@@ -1333,25 +1452,40 @@ function PersonaLateral({ persona }: { persona: Persona }) {
             )}
             <div className="flex min-w-0">
               <dt className="mr-1 text-muted-foreground">Folha:</dt>
-              <dd>{resumo.vistasProntas} de 6 vistas</dd>
+              <dd data-folha-aprovada={resumo.vistasAprovadas}>{resumo.vistasAprovadas} de 6 vistas aprovadas</dd>
             </div>
             <div className="flex min-w-0 flex-wrap text-muted-foreground">
               {persona.client_id ? "Deste cliente" : "Da agência"} · versão {persona.versao}
               {persona.custo_usd ? ` · ${usd(persona.custo_usd)} gasto` : ""}
             </div>
           </dl>
-          {resumo.ancora && (
-            <button
-              type="button"
-              className={juntar(botao.secundario, "mt-2 h-8 px-2.5 text-[12px]")}
-              onClick={() => {
-                pedirAoCanvas(clientId, persona.id);
-                irPara("canvas");
-              }}
-            >
-              <Workflow className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Usar no Canvas
-            </button>
-          )}
+          {personaUsavelNaTela(persona) && <BotoesDeUso persona={persona} className="mt-2.5" />}
+          <div className="-m-0.5 mt-1 flex min-w-0 flex-wrap items-center [&>*]:m-0.5">
+            {resumo.ancora && (
+              <button
+                type="button"
+                className={juntar(botao.discreto, "h-7 px-2 text-[11.5px]")}
+                onClick={() => {
+                  pedirAoCanvas(clientId, persona.id);
+                  irPara("canvas");
+                }}
+              >
+                <Workflow className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Usar no Canvas
+              </button>
+            )}
+            {podeArquivar && (
+              <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[11.5px]")} disabled={arquivando} onClick={() => void alternarArquivo()}>
+                {arquivando ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                ) : arquivada ? (
+                  <ArchiveRestore className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <Archive className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                )}{" "}
+                {arquivada ? "Restaurar" : "Arquivar"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
       <p className={juntar(texto.auxiliar, "mt-2")}>{resumo.ancora ? "Ao publicar, ligue o rótulo de IA." : "Sem âncora: gere a rodada."}</p>
@@ -1378,11 +1512,10 @@ function PersonaAberta({ persona }: { persona: Persona }) {
           }
         />
       )}
+      {/* 02/10 (dono): rodada, a faixa das 6 vistas e o 4K, cada um na largura toda (antes a folha ficava espremida ao lado do 4K). */}
       <Rodada persona={persona} imagens={imagens} />
-      <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2" data-folha-e-detalhe="">
-        <Folha persona={persona} imagens={imagens} />
-        <Detalhar persona={persona} imagens={imagens} />
-      </div>
+      <Folha persona={persona} imagens={imagens} />
+      <Detalhar persona={persona} imagens={imagens} />
     </div>
   );
 }
@@ -1397,7 +1530,7 @@ export default function EtapaModelos() {
   // A persona aberta e a ficha nova aberta ficam lembradas por cliente (sair e voltar não perde).
   const [escolhida, setEscolhida] = useEstadoDaTela<string | null>(`mesa-foto:modelos:aberta:${clientId}`, null, { validar: ehTextoOuNulo });
   const [nova, setNova] = useEstadoDaTela<boolean>(`mesa-foto:modelos:nova:${clientId}`, false, { validar: (v) => typeof v === "boolean" });
-  const aberta = personas.find((p) => p.id === escolhida) || (nova ? null : personas.find((p) => p.status !== "arquivada") || null);
+  const aberta = personas.find((p) => p.id === escolhida) || personas.find((p) => p.status !== "arquivada") || null;
 
   const escolher = (id: string) => {
     setNova(false);
@@ -1418,45 +1551,46 @@ export default function EtapaModelos() {
           }
         />
       )}
-      {/* Coluna da esquerda estreita (26/09): seletor compacto e a persona em resumo; o trabalho fica à direita. */}
-      <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[250px_minmax(0,1fr)]" data-modelos-layout="">
-        <div className="min-w-0 space-y-4">
-          {personasQ.isLoading ? (
-            <Carregando forma="lista" linhas={4} rotulo="Lendo as personas" />
-          ) : (
-            <Galeria personas={personas} escolhida={aberta ? aberta.id : null} onEscolher={escolher} onNova={() => setNova(true)} novaAberta={nova} />
-          )}
-          {!nova && aberta && <PersonaLateral key={`lateral-${aberta.id}`} persona={aberta} />}
-        </div>
-        <div className="min-w-0">
-          {nova ? (
-            <NovaPersona
-              onCancelar={() => setNova(false)}
-              onCriada={(p) => {
-                guardarPersona(queryClient, clientId, p);
-                void queryClient.invalidateQueries({ queryKey: chaveDasPersonas(clientId) });
-                setNova(false);
-                setEscolhida(p.id);
-              }}
-            />
-          ) : aberta ? (
+      {personasQ.isLoading ? (
+        <Carregando forma="lista" linhas={3} rotulo="Lendo as personas" />
+      ) : (
+        <GradeDePersonas personas={personas} escolhida={aberta ? aberta.id : null} onEscolher={escolher} onNova={() => setNova(true)} />
+      )}
+      {/* A persona aberta: âncora, ficha curta e ações à esquerda (estreita); rodada, folha e 4K à direita. */}
+      {aberta ? (
+        <div className="mt-6 grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[250px_minmax(0,1fr)]" data-modelos-layout="">
+          <div className="min-w-0">
+            <PersonaLateral key={`lateral-${aberta.id}`} persona={aberta} />
+          </div>
+          <div className="min-w-0">
             <PersonaAberta key={aberta.id} persona={aberta} />
-          ) : personasQ.isLoading ? (
-            <Carregando forma="aba" rotulo="Lendo as personas" />
-          ) : (
-            <EstadoVazio
-              icone={<UserRound className="h-5 w-5" />}
-              titulo="Crie a primeira persona"
-              descricao="Candidatas em vários motores, a âncora, a folha e o 4K."
-              acao={
-                <button type="button" className={botao.primario} onClick={() => setNova(true)}>
-                  <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Nova persona
-                </button>
-              }
-            />
-          )}
+          </div>
         </div>
-      </div>
+      ) : personasQ.isLoading ? null : (
+        <EstadoVazio
+          className="mt-6"
+          icone={<UserRound className="h-5 w-5" />}
+          titulo="Crie a primeira persona"
+          descricao="Candidatas em vários motores, a âncora, a folha das 6 vistas e o 4K."
+          acao={
+            <button type="button" className={botao.primario} onClick={() => setNova(true)}>
+              <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Nova persona
+            </button>
+          }
+        />
+      )}
+      {nova && (
+        <NovaPersona
+          aberta={nova}
+          onCancelar={() => setNova(false)}
+          onCriada={(p) => {
+            guardarPersona(queryClient, clientId, p);
+            void queryClient.invalidateQueries({ queryKey: chaveDasPersonas(clientId) });
+            setNova(false);
+            setEscolhida(p.id);
+          }}
+        />
+      )}
     </div>
   );
 }

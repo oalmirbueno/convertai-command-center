@@ -16,6 +16,7 @@
  *     -> { imagem, url, modelo, custo_usd, saldo_usd, reserva_usada, avisos } (UMA candidata por chamada)
  * - modelo_ancora_escolher { modelo_id, imagem_id } -> { modelo, imagem, folha }
  * - modelo_vista_gerar { modelo_id, vista, qualidade?, resolucao?, seed?, client_id? } -> { imagem, url, modelo, folha, custo_usd, ... }
+ *     (folha das 6 vistas: âncora + vistas aprovadas como identidade e as regras de identidade travada; personas.ts)
  * - modelo_imagem_decidir { imagem_id, decisao: 'aprovar'|'rejeitar', motivo? } -> { imagem, modelo, folha }
  * - modelo_detalhar { modelo_id?, imagem_id, alvo: 'pessoa'|'produto', modelo_imagem_id?, client_id? }
  *     -> { imagem, url, antes, depois, origem, custo_usd, ... } (geração nova em 4K, derivada; nunca sobrescreve)
@@ -83,11 +84,16 @@ import {
   resumoDaFolha,
   RODADA_PADRAO,
   statusDaPersona,
+  TETO_IDENTIDADES_DA_FOLHA,
   type UsoDeReferencia,
+  type VistaDaPersona,
   VISTAS_DA_PERSONA,
 } from "./personas.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { autorizacaoValida, type AutorizacaoDoClone, identidadesDoClone, ORIGEM_CLONE as ORIGEM_DO_CLONE } from "./clones-regras.ts";
+import { type EntradaReal, vistaArquivada, vistaDesatualizada } from "./clones-edicao.ts";
 
 export const REF_MODELO = "foto_modelo";
 /** referencia_tipo de ia_usos da sugestão pelo brief (o id é o do cliente: a persona ainda não existe). */
@@ -593,9 +599,11 @@ export function acoesDeModelos(f: FerramentasDaMesa) {
     const imagens = await imagensDaPersona(p.id);
     const ancora = imagens.find((i) => i.id === p.ancora_imagem_id);
     if (!ancora) throw new ErroDeRegra(409, "sem_ancora", "A âncora desta persona sumiu. Escolha outra.");
-    const identidades = identidadesDaVista(ancora, imagens, vista, limiteDeReferencias(m));
+    // Folha das 6 vistas (dono, 02/10): toda vista leva a âncora e as vistas já aprovadas da folha
+    // (uma por vista, as mais perto do ângulo pedido), até o limite do gerador e o teto da folha.
+    const identidades = identidadesDaVista(ancora, imagens, vista, limiteDeReferencias(m), TETO_IDENTIDADES_DA_FOLHA);
     const baixadas = await f.emParalelo(identidades, 3, (i) => f.baixarReduzida(i.storage_bucket, i.storage_path, LADO_REFERENCIA, `persona-${i.vista ?? i.papel}`));
-    const legendas = identidades.map((i) => (i.id === ancora.id ? "âncora da persona (retrato aprovado)" : `vista aprovada: ${DESCRICAO_DA_VISTA[lerVista(i.vista) ?? "frente"]}`));
+    const legendas = identidades.map((i) => (i.id === ancora.id ? "âncora da persona (retrato aprovado)" : `vista aprovada da folha: ${DESCRICAO_DA_VISTA[lerVista(i.vista) ?? "frente"]}`));
     const qualidade = lerQualidade(corpo.qualidade, lerQualidade(ancora.qualidade, padraoDoMotor(m.id).qualidade));
     const resolucao = lerResolucao(corpo.resolucao) ?? lerResolucao(ancora.resolucao) ?? padraoDoMotor(m.id).resolucao;
     const prompt = promptDaVista({ nome: p.nome, ficha: p.ficha, invariantes: p.invariantes, vista, identidades: legendas });
@@ -639,13 +647,13 @@ export function acoesDeModelos(f: FerramentasDaMesa) {
     return f.json({ imagem: await comUrl(data as LinhaImagemPersona), modelo: atual, folha: resumoDaFolha(imagens), custo_usd: 0 });
   }
 
-  /** Âncora e até 2 vistas aprovadas (identidade da pessoa no detalhe). */
-  async function identidadesParaDetalhe(p: LinhaPersona, excluir: string, max: number): Promise<{ imagens: ImagemEntrada[]; ids: string[] }> {
+  /** Âncora e até 2 vistas aprovadas da folha, as mais perto do ângulo da imagem detalhada (identidade da pessoa no detalhe). */
+  async function identidadesParaDetalhe(p: LinhaPersona, excluir: string, max: number, vista: VistaDaPersona = "frente"): Promise<{ imagens: ImagemEntrada[]; ids: string[] }> {
     if (!p.ancora_imagem_id || max <= 0) return { imagens: [], ids: [] };
     const todas = await imagensDaPersona(p.id);
     const ancora = todas.find((i) => i.id === p.ancora_imagem_id);
     if (!ancora) return { imagens: [], ids: [] };
-    const lista = identidadesDaVista(ancora, todas, "frente", Math.min(3, max)).filter((i) => i.id !== excluir);
+    const lista = identidadesDaVista(ancora, todas, vista, Math.min(3, max)).filter((i) => i.id !== excluir);
     const imagens = await f.emParalelo(lista, 3, (i) => f.baixarReduzida(i.storage_bucket, i.storage_path, 1024, `identidade-${i.vista ?? i.papel}`));
     return { imagens, ids: lista.map((i) => i.id) };
   }
@@ -692,7 +700,7 @@ export function acoesDeModelos(f: FerramentasDaMesa) {
       const origem = await imagemDaPersona(p.id, imagemId);
       const pagador = await clienteQuePaga(ch, p, corpo.client_id);
       const base = await f.baixarReduzida(origem.storage_bucket, origem.storage_path, LADO_ORIGEM_DETALHE, "origem");
-      const ident = alvo === "pessoa" ? await identidadesParaDetalhe(p, origem.id, limite - 1) : { imagens: [], ids: [] };
+      const ident = alvo === "pessoa" ? await identidadesParaDetalhe(p, origem.id, limite - 1, lerVista(origem.vista) ?? "frente") : { imagens: [], ids: [] };
       const prompt = promptDoDetalhe({ alvo, nome: p.nome, ficha: p.ficha, invariantes: p.invariantes, comIdentidade: ident.imagens.length });
       const { linha, saida } = await gerarImagemDaPersona({
         ch, p, pagador, m, qualidade, resolucao: "4K",
@@ -944,7 +952,7 @@ Não julgue beleza. Português do Brasil, sem travessão. Responda só com o JSO
       const m = await carregarModelo(p.motor_preferido_id, "imagem");
       const padrao = padraoDoMotor(m.id);
       const r = lerResolucao(corpo.resolucao) ?? padrao.resolucao;
-      const uma = estimativaDeUmaImagem(m, lerQualidade(corpo.qualidade, padrao.qualidade), r, 4);
+      const uma = estimativaDeUmaImagem(m, lerQualidade(corpo.qualidade, padrao.qualidade), r, TETO_IDENTIDADES_DA_FOLHA);
       const quantas = Math.max(1, Math.min(8, Math.floor(Number(corpo.quantidade) || 1)));
       return f.json({ estimativa_usd: arred6(uma * quantas), por_vista_usd: uma, quantidade: quantas, modelo_imagem_id: m.id, custo_usd: 0 });
     }
@@ -1123,6 +1131,77 @@ ${JSON.stringify({ cliente: contexto.dados, pedido_da_equipe: pedido || null })}
     lerPersona,
     imagensDaPersona,
   };
+}
+
+/** Imagem de identidade de uma pessoa escolhida (para baixar e mandar ao gerador, nesta ordem). */
+export type ImagemDeIdentidade = { storage_bucket: string; storage_path: string; legenda: string };
+
+/** A pessoa escolhida para uma geração: nome, traços que não mudam, tipo e as imagens de identidade. */
+export type IdentidadeParaGeracao = { nome: string; invariantes: string[]; tipo: "persona" | "clone"; imagens: ImagemDeIdentidade[] };
+
+/**
+ * Identidade de uma pessoa escolhida (Foto com modelo, campanha, ensaio):
+ * - persona sintética: a âncora e a folha APROVADA (uma imagem por vista, as 6
+ *   da folha antes das extras, as mais perto da vista pedida), até `max`;
+ * - clone (pessoa real com autorização): as fotos reais (a principal na
+ *   frente) e as vistas aprovadas da folha que valem (não apagadas, não feitas
+ *   com fotos antigas), como clones.ts manda na folha, até `max` (e até 5).
+ * Confere que o modelo é do cliente (persona da agência, client_id nulo,
+ * serve a qualquer cliente). Modelo que não existe: null. Arquivado, de outro
+ * cliente, persona sem âncora ou clone com autorização inválida: ErroDeRegra.
+ * Junto com o texto de textoDeIdentidadeParaGeracao (modelos-folha.ts).
+ */
+export async function identidadeParaGeracao(db: SupabaseClient, clientId: string, modeloId: string, max: number, vista: VistaDaPersona = "frente"): Promise<IdentidadeParaGeracao | null> {
+  if (!UUID.test(String(clientId ?? "")) || !UUID.test(String(modeloId ?? ""))) return null;
+  const teto = Math.max(1, Math.floor(Number(max) || 1));
+  const { data, error } = await db.from("foto_modelos").select("*").eq("id", modeloId).maybeSingle();
+  if (error) throw new ErroDeRegra(503, "modelos_indisponivel", "Não foi possível ler o modelo escolhido.");
+  if (!data) return null;
+  const linha = data as LinhaPersona & { identidade_real?: EntradaReal[] | null; autorizacao?: AutorizacaoDoClone | null };
+  if (linha.client_id && linha.client_id !== clientId) throw new ErroDeRegra(409, "modelo_de_outro_cliente", "O modelo escolhido é de outro cliente.");
+  if (linha.status === "arquivada") throw new ErroDeRegra(409, "modelo_arquivado", `O modelo ${linha.nome} está arquivado.`);
+  const invariantes = Array.isArray(linha.invariantes) ? linha.invariantes.map(String) : [];
+  const { data: imgs, error: e2 } = await db.from("foto_modelo_imagens").select("*").eq("modelo_id", linha.id).order("criado_em", { ascending: true }).limit(500);
+  if (e2) throw new ErroDeRegra(503, "modelos_indisponivel", "Não foi possível ler a folha do modelo escolhido.");
+  const todas = (imgs as (LinhaImagemPersona & { arquivada_em?: string | null })[] | null) ?? [];
+
+  if (linha.origem === ORIGEM_DO_CLONE) {
+    const v = autorizacaoValida(linha.autorizacao ?? null);
+    if (!v.ok) throw new ErroDeRegra(422, "autorizacao_invalida", v.motivo ?? "A autorização deste clone não vale mais.");
+    const identidade = Array.isArray(linha.identidade_real) ? linha.identidade_real : [];
+    const ids = identidade.map((r) => r.imagem_id).filter((x) => UUID.test(String(x)));
+    const { data: reaisLidas } = ids.length
+      ? await db.from("cliente_imagens").select("id, storage_bucket, storage_path, ativa").eq("client_id", linha.client_id ?? clientId).in("id", ids)
+      : { data: [] };
+    const reais = ((reaisLidas as { id: string; storage_bucket: string; storage_path: string; ativa?: boolean | null }[] | null) ?? []).filter((r) => r.ativa !== false);
+    if (!reais.length) throw new ErroDeRegra(409, "sem_fotos_reais", `As fotos reais do clone ${linha.nome} saíram do acervo.`);
+    const aprovadas = todas.filter((i) => i.papel === "vista" && i.aprovada === true && !vistaArquivada(i) && !vistaDesatualizada(i, identidade));
+    const fontes = identidadesDoClone(
+      reais.map((r) => ({ id: r.id, tipo: "real" as const, vista: null, principal: identidade.some((x) => x.imagem_id === r.id && x.principal) })),
+      aprovadas.map((a) => ({ id: a.id, tipo: "folha" as const, vista: a.vista })),
+      vista,
+      teto,
+    );
+    const imagens = fontes.map((fo) => {
+      if (fo.tipo === "real") {
+        const r = reais.find((x) => x.id === fo.id)!;
+        return { storage_bucket: r.storage_bucket, storage_path: r.storage_path, legenda: `foto real da pessoa${fo.principal ? " (a principal)" : ""}` };
+      }
+      const a = aprovadas.find((x) => x.id === fo.id)!;
+      return { storage_bucket: a.storage_bucket, storage_path: a.storage_path, legenda: `vista aprovada da folha de identidade: ${DESCRICAO_DA_VISTA[lerVista(a.vista) ?? "frente"]}` };
+    });
+    return { nome: linha.nome, invariantes, tipo: "clone", imagens };
+  }
+
+  const ancora = linha.ancora_imagem_id ? todas.find((i) => i.id === linha.ancora_imagem_id) : null;
+  if (!ancora || !personaUsavel(linha.status).ok) throw new ErroDeRegra(409, "sem_ancora", `A persona ${linha.nome} ainda não tem âncora: escolha a âncora em Modelos.`);
+  const lista = identidadesDaVista(ancora, todas, vista, teto, teto);
+  const imagens = lista.map((i) => ({
+    storage_bucket: i.storage_bucket,
+    storage_path: i.storage_path,
+    legenda: i.id === ancora.id ? "âncora da persona (retrato aprovado)" : `vista aprovada da folha: ${DESCRICAO_DA_VISTA[lerVista(i.vista) ?? "frente"]}`,
+  }));
+  return { nome: linha.nome, invariantes: invariantes.length ? invariantes : invariantesDaFicha(linha.ficha), tipo: "persona", imagens };
 }
 
 /** Ações de Modelos que chamam IA ou baixam imagens (respondem com fôlego). */
