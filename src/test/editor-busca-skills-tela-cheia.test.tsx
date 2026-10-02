@@ -189,3 +189,15 @@ describe("leve: linha do tempo longa", () => {
     await waitFor(() => expect(container.querySelectorAll("[data-clipe]")).toHaveLength(4));
   });
 });
+
+describe("o que parecia falso foi ligado ou corrigido (auditoria 02/10)", () => {
+  const ler = (p: string) => require("node:fs").readFileSync(require("node:path").resolve(process.cwd(), p), "utf8") as string;
+  it("polaroide leva a foto escolhida; Parar só aparece onde para; Lado a lado diz que é o bruto", () => {
+    const motion = ler("src/components/mesa-edicao/editor/PaineisDeTextoESom.tsx");
+    expect(motion).toContain('fonte: d.id === "polaroide" ? fotoEscolhida : undefined');
+    expect(motion).toContain('aria-label="Foto da polaroide"');
+    const refs = ler("src/components/mesa-edicao/editor/PainelDeReferencias.tsx");
+    expect(refs).toContain("{podeParar && (");
+    expect(refs).toContain('rotulo: "Clipe do cliente (bruto)"');
+  });
+});

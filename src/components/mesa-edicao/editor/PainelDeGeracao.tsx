@@ -22,8 +22,9 @@ import { duracaoNoMotor, duracoesDoMotor, motorDoNivel, motorPorId, type NivelDo
  * mesmo personagem de outro ângulo), continuar a partir do último quadro,
  * transição entre dois clipes e virar clipe a partir de imagem. O quadro sai
  * do navegador no tempo exato (meio do quadro), sobe só na hora de Preparar,
- * e nada gasta antes do "Gerar por US$ X". O resultado entra na Mídia e dali
- * vai para a linha do tempo (depois do clipe atual).
+ * e nada gasta antes do "Gerar por US$ X". O resultado entra na Mídia (não
+ * vai sozinho para a linha do tempo): de lá, "Pôr no cursor" ou "Fim", ou o
+ * agente com inserir_midia.
  */
 
 export type PedidoDeGeracao =

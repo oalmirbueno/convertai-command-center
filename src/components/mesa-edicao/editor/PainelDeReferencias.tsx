@@ -71,6 +71,7 @@ function Referencia({
   const queryClient = useQueryClient();
   const url = useUrlDaMesa(r.storage_path, r.storage_bucket || "mesa");
   const [ocupado, setOcupado] = useState<string | null>(null);
+  const podeParar = !!ocupado && ocupado !== "Lendo a edição" && ocupado !== "Salvando template";
   const [proposta, setProposta] = useState<{ acao: AcaoDoAgente; p: PropostaDaSkill } | null>(null);
   const [comparando, setComparando] = useState(false);
   const [confirmarLeitura, setConfirmarLeitura] = useState(false);
@@ -208,9 +209,12 @@ function Referencia({
         <p className={juntar(texto.auxiliar, "mt-2 flex items-center")}>
           <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
           <span className="mr-auto">{ocupado}</span>
-          <button type="button" className="underline" onClick={() => (cancelado.current = true)}>
-            Parar
-          </button>
+          {/* Só a medição para no meio (02/10: ler a edição e salvar o template não param; o botão não aparece neles). */}
+          {podeParar && (
+            <button type="button" className="underline" onClick={() => (cancelado.current = true)}>
+              Parar
+            </button>
+          )}
         </p>
       ) : (
         <div className="mt-2 flex flex-wrap">
@@ -277,7 +281,7 @@ function Referencia({
         <DialogContent className="max-w-4xl">
           <DialogTitle className="text-[15px]">Referência e o vídeo do cliente</DialogTitle>
           {url.data && urlDoProjeto && (
-            <ComparadorAntesDepois tipo="video" antes={{ src: url.data, rotulo: "Referência" }} depois={{ src: urlDoProjeto, rotulo: "Vídeo do cliente" }} modoInicial="lado_a_lado" proporcao={projeto.altura / projeto.largura / 2 + 0.05} />
+            <ComparadorAntesDepois tipo="video" antes={{ src: url.data, rotulo: "Referência" }} depois={{ src: urlDoProjeto, rotulo: "Clipe do cliente (bruto)" }} modoInicial="lado_a_lado" proporcao={projeto.altura / projeto.largura / 2 + 0.05} />
           )}
         </DialogContent>
       </Dialog>

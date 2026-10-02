@@ -274,6 +274,10 @@ export function PainelDeMotion({ ctx }: { ctx: ContextoDoPainel }) {
   const [sugerindo, setSugerindo] = useState(false);
 
   const pecas = CATALOGO_DE_MOTION.filter((d) => d.id !== "logo");
+  // 02/10: a polaroide mostra uma foto de verdade (antes saía o quadro cinza vazio): a foto vem da mídia do projeto.
+  const fotos = Object.keys(p.fontes).filter((k) => p.fontes[k].midia === "imagem" || p.fontes[k].midia === "video");
+  const [foto, setFoto] = useState<string>("");
+  const fotoEscolhida = foto && p.fontes[foto] ? foto : fotos.find((k) => p.fontes[k].midia === "imagem") || fotos[0] || "";
   const por = (d: DefinicaoDaPeca) =>
     aplicarMontando(ctx, d.rotulo, (m) => {
       const params: Record<string, unknown> = {};
@@ -283,7 +287,8 @@ export function PainelDeMotion({ ctx }: { ctx: ContextoDoPainel }) {
         params[x.chave] = x.tipo === "lista" ? v.split(/\s*;\s*/).filter(Boolean) : v;
       });
       if (!params.cor && marca && marca.cor && d.parametros.some((x) => x.chave === "cor")) params.cor = marca.cor;
-      const r = porPeca(m, { peca: d.id, inicio_s: ctx.cursor(), params });
+      if (d.id === "polaroide" && !fotoEscolhida) throw new Error("Ponha uma foto na linha do tempo ou na Mídia do projeto antes da polaroide.");
+      const r = porPeca(m, { peca: d.id, inicio_s: ctx.cursor(), params, fonte: d.id === "polaroide" ? fotoEscolhida : undefined });
       setAberta(null);
       setValores({});
       return `${d.rotulo} em ${tempoFino(r.inicio_s)}.`;
@@ -350,7 +355,20 @@ export function PainelDeMotion({ ctx }: { ctx: ContextoDoPainel }) {
               <>
                 <p className={juntar(texto.auxiliar, "mt-1")}>{d.quando}</p>
                 <CamposDaPeca d={d} valores={valores} mudar={(k, v) => setValores((x) => ({ ...x, [k]: v }))} />
-                <button type="button" className={juntar(botao.secundario, "mt-2 h-8")} onClick={() => por(d)}>
+                {d.id === "polaroide" && (
+                  <label className="mt-2 block min-w-0">
+                    <span className={texto.rotulo}>Foto</span>
+                    <select className={juntar(campo, "mt-1 h-8")} value={fotoEscolhida} onChange={(e) => setFoto(e.target.value)} aria-label="Foto da polaroide" disabled={!fotos.length}>
+                      {!fotos.length && <option value="">Sem foto no projeto</option>}
+                      {fotos.map((k) => (
+                        <option key={k} value={k}>
+                          {p.fontes[k].nome}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <button type="button" className={juntar(botao.secundario, "mt-2 h-8")} onClick={() => por(d)} disabled={d.id === "polaroide" && !fotos.length}>
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
                   Pôr no cursor
                 </button>
