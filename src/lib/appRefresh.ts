@@ -250,6 +250,12 @@ let updatePending = false;
  */
 let atualizandoVersao = false;
 
+/** Troca de tela com versão nova pendente: a recarga sai aqui, junto com a navegação que a pessoa já pediu. */
+export function atualizarNaTrocaDeTela(): boolean {
+  if (!updatePending) return false;
+  return updateReload();
+}
+
 export function atualizandoPorVersao(): boolean {
   return atualizandoVersao;
 }
@@ -262,19 +268,22 @@ export function atualizandoPorVersao(): boolean {
 export function startVersionWatch() {
   if (BUILD_ID === "dev") return;
 
+  // 02/10: o dono via a tela "reiniciar" ao voltar para a aba ou logo depois de abrir. Agora só recarrega
+  // nos primeiros segundos da abertura (antes de qualquer trabalho); depois disso a versão nova fica
+  // pendente e entra na próxima troca de tela (atualizarNaTrocaDeTela), sem interromper o que está aberto.
+  const abertoEm = Date.now();
   const check = async (reloadNow: boolean) => {
     const latest = await fetchLatestBuildId();
     if (!latest || latest === BUILD_ID) return;
     updatePending = true;
-    if (reloadNow) updateReload();
+    if (reloadNow && Date.now() - abertoEm < 8_000) updateReload();
   };
 
   void check(true);
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "visible") return;
-    if (updatePending) updateReload();
-    else void check(true);
+    if (!updatePending) void check(false);
   });
 
   // Pega quem deixa o painel aberto na frente o dia todo.

@@ -1,5 +1,6 @@
 import { Toaster as Sonner } from "@/components/ui/sonner";
-import { lazy, Suspense, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, type ReactNode } from "react";
+import { atualizarNaTrocaDeTela } from "@/lib/appRefresh";
 import DownloadProgressOverlay from "@/components/shared/DownloadProgressOverlay";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
@@ -246,6 +247,15 @@ function ProfileErrorScreen() {
 export function AppRoutes() {
   const { user, profile, loading, profileError } = useAuth();
   const { pathname } = useLocation();
+  // 02/10: versão nova publicada enquanto o painel estava aberto entra na próxima troca de tela, nunca no meio do trabalho.
+  const primeiraTela = useRef(true);
+  useEffect(() => {
+    if (primeiraTela.current) {
+      primeiraTela.current = false;
+      return;
+    }
+    atualizarNaTrocaDeTela();
+  }, [pathname]);
   // Link público por token (contrato, briefing, proposta...) não precisa de
   // login: abre sem esperar a sessão, que com o token vencido podia segurar a
   // logo até 8 s. A árvore abaixo é a MESMA com loading verdadeiro ou falso,

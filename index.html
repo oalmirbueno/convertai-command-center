@@ -247,8 +247,17 @@
           return String(value);
         }
 
+        // So arquivo de modulo do painel. "Failed to fetch" e "Load failed" sozinhos sao qualquer chamada de rede
+        // (login, banco) e faziam a tela recarregar sem motivo (02/10).
         function isMissingFile(message) {
-          return /Importing a module script failed|Failed to fetch dynamically imported module|error loading dynamically imported module|Loading chunk|Load failed|Failed to fetch/i.test(message);
+          return /Importing a module script failed|Failed to fetch dynamically imported module|error loading dynamically imported module|Loading chunk/i.test(message);
+        }
+
+        // Script ou estilo de outro site (estatistica da Cloudflare, extensao, anuncio) nao e arquivo do painel:
+        // bloqueado por bloqueador ou rede, nao derruba nada (02/10: o beacon.min.js da Cloudflare abria esta tela).
+        function isOurFile(url) {
+          if (!url) return false;
+          try { return new URL(url, window.location.href).origin === window.location.origin; } catch (e) { return false; }
         }
 
         function failedToStart(message) {
@@ -268,6 +277,7 @@
           var target = event && event.target;
           var tag = target && target.tagName ? String(target.tagName).toUpperCase() : "";
           if (tag === "SCRIPT" || tag === "LINK") {
+            if (!isOurFile((target && target.src) || (target && target.href) || "")) return;
             // Um arquivo do painel nao baixou (publicacao saindo agora, cache
             // velho ou rede instavel).
             if (autoRetry()) return;
