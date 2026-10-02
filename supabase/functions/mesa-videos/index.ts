@@ -62,7 +62,8 @@
  *   organização no Workspace, com a sessão de quem chamou, sem copiar), final_legenda_gerar
  *   (SRT/VTT do corte final ao lado do vídeo), final_legenda_versao (versão com a legenda gravada),
  *   tratamento_amostra/final/status/descartar (tirar a legenda gravada e melhorar a qualidade); o
- *   cron gerar_coletar também anda os tratamentos em curso.
+ *   cron gerar_coletar também anda os tratamentos em curso. final_para_workspace põe o vídeo
+ *   pronto em "Vídeos / <título> / Finais" no Workspace (o worker faz o mesmo ao concluir).
  *
  * Sem travessão.
  */
@@ -186,7 +187,7 @@ import {
   templateSalvar,
 } from "./diretor.ts";
 // Mesa Edição (02/10): organizar a Entrada, espelhar no Workspace, legenda do vídeo pronto e tratar vídeo.
-import { entradaOrganizarPropor, finalLegendaGerar, lerFinal, linhasDoCorpo, workspaceEspelhoConfirmar, workspaceEspelhoDesfazer, workspaceEspelhoPropor } from "./edicao.ts";
+import { entradaOrganizarPropor, finalLegendaGerar, finalParaWorkspace, lerFinal, linhasDoCorpo, workspaceEspelhoConfirmar, workspaceEspelhoDesfazer, workspaceEspelhoPropor } from "./edicao.ts";
 import { projetoComLegenda } from "./modulos/legenda-do-final.ts";
 import { tratamentoAmostra, tratamentoDescartar, tratamentoFinal, tratamentosColetar, tratamentoStatus } from "./tratamento.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
@@ -1387,6 +1388,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   // Gerador de legenda do vídeo pronto (SRT e VTT ao lado do vídeo) e a versão com a legenda gravada.
   final_legenda_gerar: direto(finalLegendaGerar),
   final_legenda_versao: finalLegendaVersao,
+  // O vídeo pronto no Workspace (Vídeos / título / Finais), idempotente; a tela chama ao ver o render pronto.
+  final_para_workspace: direto(finalParaWorkspace),
   // Tratar vídeo: tirar a legenda gravada e melhorar a qualidade (amostra, comparar, vídeo inteiro).
   tratamento_amostra: comFolego(tratamentoAmostra),
   tratamento_final: comFolego(tratamentoFinal),

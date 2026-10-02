@@ -17,7 +17,13 @@
  * - final_legenda_gerar { arquivo_id, palavras? } -> { linhas, origem, srt, vtt, urls, precisa_transcrever? }
  *   SRT e VTT ao lado do vídeo pronto (mesma pasta no bucket mesa) e anotados
  *   na origem do arquivo. Sem fala no projeto: a tela transcreve o vídeo pronto
- *   (custo antes) e manda as palavras.
+ *   (custo antes) e manda as palavras. A legenda também vai para o Workspace,
+ *   ao lado do vídeo em "Vídeos / <título> / Finais" (o MP4 vai junto se faltava).
+ * - final_para_workspace { arquivo_id } -> { workspace: { estado, pasta_id, node_id, nome, caminho }, client_id }
+ *   O vídeo pronto no Workspace do cliente (_shared/final-no-workspace.ts): pastas
+ *   criadas uma vez, cópia do bucket mesa para o workspace pelo servidor,
+ *   idempotente pela origem do arquivo. A tela chama ao ver o render pronto e
+ *   no "Abrir no Workspace"; o worker de render faz o mesmo ao concluir.
  */
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
@@ -31,6 +37,7 @@ import { type ArquivoDaEntrada, brutosDe, decisoesDoJev, modoDaEntrada, paresEmD
 import { ehVideoDoWorkspace, planoDoEspelho, type NoDoWorkspaceParaEspelho } from "./modulos/espelho-no-workspace.ts";
 import { aplicarOrganizacao, type BancoDoWorkspace, desfazerOrganizacao, normalizarRegistro, type NoDoIndice } from "../workspace-organizar/aplicar.ts";
 import { normalizarConfirmacao } from "../workspace-organizar/organizador.ts";
+import { finalParaOWorkspace, legendaParaOWorkspace, portaDoSupabase } from "../_shared/final-no-workspace.ts";
 import { caminhosDaLegenda, legendaDoFinal, type LinhaDaLegenda, linhasDasPalavras, type PalavraComTempo, recortarLinhas, srtDe, vttDe, type ProjetoParaLegenda } from "./modulos/legenda-do-final.ts";
 
 const BUCKET = "mesa";
@@ -292,8 +299,30 @@ export async function finalLegendaGerar(b: BaseDaFuncao, corpo: Record<string, u
     if (x.path === caminhos.srt) urls.srt = x.signedUrl;
     if (x.path === caminhos.vtt) urls.vtt = x.signedUrl;
   });
-  await b.auditar("video_final_legenda", { client_id: arquivo.client_id, arquivo_id: arquivo.id, origem, linhas: linhas.length }, true, arquivo.id);
-  return b.json({ linhas, origem, srt, vtt, urls, caminhos, precisa_transcrever: false });
+  // No Workspace, ao lado do vídeo (nunca derruba a legenda: a falha fica registrada).
+  const noWorkspace = await legendaParaOWorkspace(portaDoSupabase(b.servico()), { arquivoId: arquivo.id, srt, vtt, criadoPor: UUID.test(b.userId) ? b.userId : null });
+  if (noWorkspace.estado === "erro") registrarFalha("mesa-videos: legenda não foi para o Workspace", new Error(noWorkspace.motivo || "falhou"), { arquivo_id: arquivo.id });
+  await b.auditar("video_final_legenda", { client_id: arquivo.client_id, arquivo_id: arquivo.id, origem, linhas: linhas.length, workspace: noWorkspace.estado }, true, arquivo.id);
+  return b.json({ linhas, origem, srt, vtt, urls, caminhos, precisa_transcrever: false, workspace: { estado: noWorkspace.estado, pasta_id: noWorkspace.pasta_id } });
+}
+
+// ------------------------------------------------------------------ vídeo pronto no Workspace
+
+export async function finalParaWorkspace(b: BaseDaFuncao, corpo: Record<string, unknown>) {
+  const arquivoId = idDe(b, corpo.arquivo_id, "arquivo_id");
+  const { data, error } = await b.servico().from("video_arquivos").select("id, client_id").eq("id", arquivoId).maybeSingle();
+  if (error) throw semTabela(b, error, "video_arquivos");
+  if (!data) throw b.erro(404, "arquivo_inexistente", "Vídeo não encontrado.");
+  const clientId = String((data as { client_id: string }).client_id);
+  await b.garantirAcesso(clientId);
+  const r = await finalParaOWorkspace(portaDoSupabase(b.servico()), { arquivoId, criadoPor: UUID.test(b.userId) ? b.userId : null, automatico: corpo.automatico === true });
+  if (r.estado === "erro") {
+    registrarFalha("mesa-videos: vídeo pronto não foi para o Workspace", new Error(r.motivo || "falhou"), { arquivo_id: arquivoId });
+    await b.auditar("video_final_workspace", { client_id: clientId, arquivo_id: arquivoId, estado: r.estado }, false, arquivoId);
+    throw b.erro(502, "workspace_falhou", "Não foi possível pôr o vídeo no Workspace agora. Tente de novo.");
+  }
+  if (r.estado === "pronto") await b.auditar("video_final_workspace", { client_id: clientId, arquivo_id: arquivoId, estado: r.estado, via: r.via }, true, arquivoId);
+  return b.json({ workspace: r, client_id: clientId });
 }
 
 /** Linhas que a tela mandou para gravar no vídeo (texto curto, tempos conferidos). */

@@ -34,6 +34,12 @@ export interface Ambiente {
   chrome?: string | null;
   concorrencia?: number | null;
   log?: (t: string) => void;
+  /**
+   * Mesa Edição (02/10): o render_final pronto vai para o Workspace do cliente
+   * ("Vídeos / <título> / Finais"), mesmo com o editor fechado. Falha aqui
+   * nunca derruba o render (só fica no log e na origem do arquivo).
+   */
+  finalNoWorkspace?: (arquivoId: string) => Promise<{ estado: string; motivo?: string }>;
 }
 
 class Parado extends Error {}
@@ -304,6 +310,17 @@ export async function trabalharRender(amb: Ambiente, p: PedidoDoWorker, pasta: s
 
 // ------------------------------------------------------------------ um pedido
 
+/** Só o render_final que concluiu vai para o Workspace; erro aqui só vai para o log. */
+export async function levarAoWorkspace(amb: Ambiente, p: Pick<PedidoDoWorker, "id" | "tipo">, arquivoId: string | null): Promise<void> {
+  if (p.tipo !== "render_final" || !arquivoId || !amb.finalNoWorkspace) return;
+  try {
+    const w = await amb.finalNoWorkspace(arquivoId);
+    if (amb.log) amb.log(`workspace: ${w.estado}${w.motivo ? ` (${w.motivo})` : ""}`);
+  } catch (e) {
+    if (amb.log) amb.log(`workspace falhou: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
 /** Pega UM pedido e faz. Devolve o que fez (ou null quando a fila está vazia). */
 export async function umPedido(amb: Ambiente, worker: string, versao: string): Promise<{ id: string; tipo: string; estado: "pronto" | "erro" | "parado"; detalhe: string } | null> {
   const p = await amb.fila.pegar(amb.token, worker, versao);
@@ -352,6 +369,7 @@ export async function umPedido(amb: Ambiente, worker: string, versao: string): P
     const ok = await amb.fila.concluir(p.id, amb.token, r.saida, r.arquivoId, r.resultado);
     if (!ok) return { id: p.id, tipo: p.tipo, estado: "parado", detalhe: "O pedido não era mais deste worker na hora de concluir." };
     log(`pronto: ${r.saida} (${JSON.stringify(r.resultado)})`);
+    await levarAoWorkspace(amb, p, r.arquivoId);
     return { id: p.id, tipo: p.tipo, estado: "pronto", detalhe: r.saida };
   } catch (e) {
     if (e instanceof Parado) {

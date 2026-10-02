@@ -28,6 +28,7 @@ import { armazemSupabase } from "./armazem.ts";
 import { baterPonto, capacidadesDoWorker, INTERVALO_DA_BATIDA_MS } from "./batida.ts";
 import { filaSupabase, type Fila } from "./fila.ts";
 import { PASTA_DO_WORKER, umPedido, type Ambiente } from "./trabalho.ts";
+import { finalParaOWorkspace, portaDoSupabase } from "../../supabase/functions/_shared/final-no-workspace.ts";
 
 // Frente TCN (01/10): "+tcn-1" = sabe a troca de cenário (o banco só entrega o tipo "cenario" a quem tem "tcn-").
 // Mesa Edição (02/10): "+trt-1" = sabe tratar vídeo (tirar legenda, melhorar qualidade; o banco só entrega o tipo "tratamento" a quem tem "trt-").
@@ -88,6 +89,8 @@ async function principal() {
     chrome: cfg.chrome,
     concorrencia: cfg.concorrencia,
     log: (t) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${t}`),
+    // Mesa Edição (02/10): o vídeo pronto entra no Workspace do cliente (Vídeos / título / Finais).
+    finalNoWorkspace: (arquivoId) => finalParaOWorkspace(portaDoSupabase(db), { arquivoId, automatico: true }),
   };
   const umaVez = process.argv.indexOf("--uma-vez") >= 0;
   let parar = false;
