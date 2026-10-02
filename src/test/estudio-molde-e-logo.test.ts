@@ -188,7 +188,7 @@ describe("3. modos: técnicas de volta, imagem primeiro, proibições que não e
   };
 
   it("padrão com as técnicas de 23 e 24/09 (sem a linha que proibia o nome da marca)", () => {
-    for (const t of ["rei da lâmina", "planos (fundo, texto, sujeito)", "recorte intencional", "cores da foto puxadas para a paleta", "mesmo eixo e na mesma margem", "sombra de contato"]) expect(PADRAO_DA_LAMINA).toContain(t);
+    for (const t of ["rei da lâmina", "planos (fundo, texto, sujeito)", "recorte intencional", "a foto conversando com a paleta", "mesmo eixo e na mesma margem", "sombra de contato"]) expect(PADRAO_DA_LAMINA).toContain(t);
     expect(PADRAO_DA_LAMINA).not.toContain("Nunca escreva o nome da marca");
   });
 

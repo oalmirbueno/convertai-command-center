@@ -1382,7 +1382,7 @@ export function promptDaTomada(e: EntradaPromptTomada): string {
   if (tomada.espaco_para_texto) linhas.push("COMPOSIÇÃO: deixe uma área limpa de cerca de um terço do quadro para texto, sem escrever nada nela.");
   if (e.marca.estilo || e.marca.paleta?.length) {
     linhas.push(
-      `MARCA: ${e.marca.estilo ? `${e.marca.estilo}. ` : ""}${e.marca.paleta?.length ? `Paleta de apoio ${e.marca.paleta.join(", ")} só no cenário e nos objetos de cena, nunca no assunto.` : ""}`.trim(),
+      `MARCA: ${e.marca.estilo ? `${e.marca.estilo}. ` : ""}${e.marca.paleta?.length ? `Paleta de apoio ${e.marca.paleta.join(", ")} como acento em um ou dois objetos de cena ou num detalhe do cenário, nunca no assunto e nunca tingindo a foto inteira.` : ""}`.trim(),
     );
   }
   if (e.guiaDeEstilo) linhas.push(`GUIA DE ESTILO DO ENSAIO: ${guiaDeEstiloEmTexto(e.guiaDeEstilo)} Só direção: não copie foto, marca nem pessoa das referências.`);
@@ -1456,7 +1456,8 @@ export function promptDaCampanha(e: EntradaPromptTomada): string {
   const lacunas = tomada.foco === "embalagem" ? [] : kit.lacunas;
   if (lacunas.length) linhas.push(`NÃO DOCUMENTADO NO KIT (não invente; deixe fora do quadro ou discreto): ${lacunas.join("; ")}.`);
   if (tomada.espaco_para_texto) linhas.push("COMPOSIÇÃO: deixe uma área limpa de cerca de um terço do quadro para texto, sem escrever nada nela.");
-  if (e.marca.paleta?.length) linhas.push(`MARCA: paleta de apoio ${e.marca.paleta.join(", ")} no cenário, no figurino e nos objetos de cena, nunca no produto.`);
+  // 02/10 (dono: "a pessoa roxa, o cenário roxo"): a paleta é acento; o figurino fica natural, salvo o figurino da cena.
+  if (e.marca.paleta?.length) linhas.push(`MARCA: paleta de apoio ${e.marca.paleta.join(", ")} como acento em um ou dois objetos de cena ou num detalhe do cenário, nunca no produto; figurino em tons naturais e variados (a cor da marca na roupa só se o figurino da cena pedir); pessoa, roupa, cenário e fundo nunca todos na cor da marca.`);
   if (e.guiaTexto) linhas.push(`DIREÇÃO DE ESTILO: ${e.guiaTexto} Esta direção não muda as invariantes nem as proibições acima.`);
   const variacao = blocoDeVariacao(e.versoesAntes, e.rejeicoes);
   if (variacao) linhas.push(variacao);

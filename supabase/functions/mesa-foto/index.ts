@@ -139,6 +139,8 @@ import { AVISO_SEM_REGISTRO, blocoDaReferencia, gravarTroca, referenciaDoPedido 
 import { anexoDasRegrasSeguidas, aprenderDoPedido, CAMPOS_DO_APRENDIZADO, regrasDaMesa, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
 import { prometeuSemFazer } from "./promessa-do-diretor.ts";
 import { conhecimentoMesaFoto } from "../_shared/conhecimento-dos-agentes.ts";
+import { blocoDaDiversidadeVisual } from "../_shared/diversidade-visual.ts";
+import { variarAgoraNaFoto } from "./modulos/diversidade-da-foto.ts";
 import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import { acoesDeCampanhas, campanhaParaOContexto, type CampanhaParaFoto, lerCampanhasParaFoto } from "./campanhas.ts";
 import {
@@ -971,10 +973,12 @@ const ESTETICA_ATUAL = `ESTÉTICA ATUAL (2025/2026), o padrão de toda direção
 const PADRAO_PUBLICITARIO = `PADRÃO DE FOTOGRAFIA PUBLICITÁRIA:
 - Cada foto tem intenção: para que serve (anúncio, feed, catálogo, capa) e o que o olhar vê primeiro.
 - Luz descrita como fotógrafo: fonte e tamanho (softbox, octabox, janela, sol filtrado), direção, altura, qualidade (dura ou suave), temperatura de cor, preenchimento e recorte.
-- Cenário concreto: superfície e material, fundo, planos de profundidade, props com função (nunca aleatórios, sem marca de terceiros, sem texto), paleta do cliente no cenário e nunca no produto.
+- Cenário concreto: superfície e material, fundo, planos de profundidade, props com função (nunca aleatórios, sem marca de terceiros, sem texto), paleta do cliente como acento no cenário (um objeto, um tecido, um papel de fundo), nunca no produto e nunca tingindo a cena inteira.
 - Variações diferentes de verdade: não repita a mesma combinação de câmera, cenário, luz e paleta; cada uma responde a um uso diferente.
 - Produto fiel: formato, cor, texto e proporções do kit; escala real em relação às mãos e ao cenário.
-${ESTETICA_ATUAL}`;
+${ESTETICA_ATUAL}
+${blocoDaDiversidadeVisual("foto")}
+- Quando vier variar_agora nos dados, ele é o histórico real dos ensaios deste cliente: mude o que ele aponta.`;
 
 /**
  * Frente H (25/09): base de marca e criativo do diretor de campanha e do
@@ -2054,6 +2058,8 @@ async function ensaioPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
     pedido_da_equipe: pedido,
     tomadas_mantidas_pela_equipe: pedidas && pedidas.size ? Array.from(pedidas) : "todas",
     presets: PRESETS.map((p) => ({ id: p.id, nome: p.nome })),
+    // 02/10: o que os últimos ensaios deste cliente já usaram (nunca lança).
+    variar_agora: await variarAgoraNaFoto(servico(), clientId, { pedido, paleta: contexto.marca?.paleta }),
   };
   const saida = await chamarTexto({
     clientId,
@@ -2328,6 +2334,7 @@ async function variacoesPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
       formato_sugerido: v.tipo.formato,
       mudanca_da_rodada: v.mudanca,
     })),
+    variar_agora: await variarAgoraNaFoto(servico(), clientId, { pedido, paleta: contexto.marca?.paleta }),
   };
   const legenda = [
     ...doProduto.map((f, i) => `Imagem ${i + 1}: o produto do kit (${f.papel}${f.origem_web ? ", referência da internet" : ""}).`),
@@ -2500,6 +2507,7 @@ async function campanhaPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
     modelo_pedido_pela_equipe: { perfil: pedidoModelo.perfil || null, idade_aprox: corpo.modelo ? pedidoModelo.idade_aprox : null, estilo: pedidoModelo.estilo || null },
     pedido_da_equipe: pedido,
     presets: PRESETS.filter((p) => p.elevacao_graus <= 30).map((p) => p.id),
+    variar_agora: await variarAgoraNaFoto(servico(), clientId, { pedido: [pedido, pedidoModelo.estilo, pedidoModelo.perfil].filter(Boolean).join(" "), paleta: contexto.marca?.paleta }),
   };
   const legenda = [
     ...doProduto.map((f, i) => `Imagem ${i + 1}: IDENTIDADE do produto (${f.papel}${f.origem_web ? ", referência da internet" : ""}).`),

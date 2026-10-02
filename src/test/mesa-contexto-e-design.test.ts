@@ -163,7 +163,8 @@ describe("base de conhecimento do diretor", () => {
     expect(CONHECIMENTO_DIRETOR).toContain("90 px");
     expect(CONHECIMENTO_DIRETOR).toContain("60-30-10");
     // Teto subiu de 6.500 para 7.000 em 25/09 (dono: "reforçar o designer"): logo sem caixa, série pela capa, recorte, variedade.
-    expect(CONHECIMENTO_DIRETOR.split(/\s+/).length).toBeLessThanOrEqual(7000);
+    // 02/10 subiu para 7.600 (dono: "tudo roxo, não repetir"): seção 20, diversidade visual e realismo (_shared/diversidade-visual.ts).
+    expect(CONHECIMENTO_DIRETOR.split(/\s+/).length).toBeLessThanOrEqual(7600);
     expect(PADRAO_NA_IMAGEM.split("\n").length).toBeLessThanOrEqual(14);
     for (const t of [CONHECIMENTO_DIRETOR, PADRAO_NA_IMAGEM]) {
       expect(t).not.toContain("—");

@@ -14,9 +14,15 @@
  * CONHECIMENTO_DIRETOR entra no início do sistema do diretor (prefixo fixo:
  * o provedor reaproveita o cache e o custo cai). PADRAO_NA_IMAGEM vai no fim
  * de cada prompt de imagem e no sistema do ajuste de lâmina.
+ *
+ * 02/10 (dono: "o perfil está todo roxo, a pessoa, o cenário, o texto e a
+ * logo"): a seção 20 (diversidade visual, cor como acento e realismo, de
+ * _shared/diversidade-visual.ts) fecha a base e vale sobre a seção 6.
  */
 
-export const VERSAO_CONHECIMENTO = "2026-09-25.1";
+import { blocoDaDiversidadeVisual } from "../../_shared/diversidade-visual.ts";
+
+export const VERSAO_CONHECIMENTO = "2026-10-02.1";
 
 export const CONHECIMENTO_DIRETOR = `BASE DE CONHECIMENTO DO DIRETOR DE ARTE (versão ${VERSAO_CONHECIMENTO})
 
@@ -120,7 +126,7 @@ Formato: post e carrossel do Instagram em 4:5, 1080 x 1350 px, por padrão; a eq
 
 6. COR
 - Instagram é RGB: toda cor vai com hex, papel e proporção. Nome sozinho ("azul") não serve.
-- Ordem de decisão: (1) kit do cliente: a cor principal da marca é dominante ou secundária e nunca é trocada por gosto; (2) emoção do post (confiança, alegria, expectativa, urgência, surpresa); (3) dominante da lâmina entre as cores da marca que servem ao tom; (4) apoio por monocromia (versões claras e escuras da dominante) ou pelas análogas do kit; (5) acento: a cor de destaque do kit ou, sem ela, a complementar ou complementar dividida da dominante; (6) neutros com tempero da marca (off-white levemente quente ou frio, quase preto puxado para a matiz, ex.: #0E1624 para marca azul); (7) com foto, apoio puxado da própria foto; (8) teste de contraste.
+- Ordem de decisão: (1) kit do cliente: a cor principal da marca é dominante ou secundária e nunca é trocada por gosto; (2) emoção do post (confiança, alegria, expectativa, urgência, surpresa); (3) dominante da lâmina entre as cores da marca que servem ao tom; (4) apoio por neutros, pelas análogas do kit ou pelas cores naturais da foto (monocromia só em peça tipográfica sem pessoa nem cena); (5) acento: a cor de destaque do kit ou, sem ela, a complementar ou complementar dividida da dominante; (6) neutros com tempero da marca (off-white levemente quente ou frio, quase preto puxado para a matiz, ex.: #0E1624 para marca azul); (7) com foto, apoio puxado da própria foto; (8) teste de contraste.
 - 60-30-10: 60% dominante (fundo ou maior massa, pode ser a foto), 30% apoio (blocos, faixas, imagem tratada), 10% acento (palavra-chave, número, selo, seta, CTA). Acento no máximo em 10% da área, idealmente 3 a 8% (um selo de 220 px de diâmetro tem cerca de 2,6%). Desfocando a lâmina, o acento não pode virar mancha grande. Nunca divisão igual (33/33/33 ou meio a meio entre complementares).
 - No máximo 3 cores com função por lâmina (dominante, apoio, acento) mais neutros de texto. Um acento só; se dois acentos concorrem, um sai. O acento aparece em no máximo 2 pontos e com o mesmo significado no carrossel inteiro (ex.: acento = benefício ou o certo; cinza = problema ou o errado).
 - Harmonia pelo objetivo: monocromática ou análoga fria para institucional, confiança, saúde e sofisticação; complementar dividida (família análoga mais um acento complementar) como padrão para educativo e conversão; complementar pura para oferta e urgência, sempre na proporção 90 para 10; tríade dessaturada com uma dominante para infantil, festivo e açaí; tétrade só se a marca já tem 4 cores, uma dominando cada lâmina; neutros dominantes (preto, off-white, bege) mais um acento metálico ou da marca para luxo e premium. A roda é ponto de partida: ajuste matiz, luz e saturação a olho.
@@ -238,7 +244,9 @@ Formato: post e carrossel do Instagram em 4:5, 1080 x 1350 px, por padrão; a eq
 - Em 3 segundos quem olha diz o ponto focal, a frase e o que fazer; se não diz, simplifique antes de enfeitar. Escala antes de cor, cor antes de efeito. Sem boa foto, a tipografia em escala máxima vira a imagem.
 
 19. O QUE O CLIENTE JÁ PEDIU
-- Regras aprendidas com o cliente (ajustes da equipe, reprovações) valem como regra da marca: acima desta base, abaixo do texto exato, da paleta e da logo. Aplique sem que peçam de novo.`;
+- Regras aprendidas com o cliente (ajustes da equipe, reprovações) valem como regra da marca: acima desta base, abaixo do texto exato, da paleta e da logo. Aplique sem que peçam de novo.
+
+20. ${blocoDaDiversidadeVisual("arte")}`;
 
 /** Regras curtas que acompanham todo prompt de imagem (o gerador lê isso por último). */
 export const PADRAO_NA_IMAGEM = [
@@ -251,7 +259,7 @@ export const PADRAO_NA_IMAGEM = [
   "- Letras nítidas e íntegras, no máximo 2 famílias, sem esticar, sem contorno, sem sombra pesada; ortografia e acentos do português exatos (ã, õ, ç, é, ê, á, ó).",
   "- Escreva só o texto entre aspas, com as quebras de linha indicadas; nenhuma palavra sozinha na última linha, nenhum acento encostando na linha de cima.",
   "- Paleta da marca em 60-30-10 com uma única cor de destaque (até 10% da área), só na palavra-chave, no número ou no CTA.",
-  "- Foto e texto na mesma cena: planos de profundidade (fundo, texto, sujeito), recorte intencional, uma luz coerente e cores da foto puxadas para a paleta; recorte sem fundo com sombra de contato, sem halo nem caixa, e nada por cima dele.",
+  "- Foto e texto na mesma cena: planos de profundidade (fundo, texto, sujeito), recorte intencional, uma luz coerente e a foto conversando com a paleta por um ou dois tons, sem tingir a cena; recorte sem fundo com sombra de contato, sem halo nem caixa, e nada por cima dele.",
   "- Acabamento de agência premium: foto real do nicho, pele, mãos e rostos naturais, sombras coerentes, grão sutil só se o estilo pedir.",
   "- Nunca escreva o nome da marca ou da empresa na arte (ela aparece só pela logo); nenhum texto além do pedido. Logo sem caixa, cartão ou fundo branco: o canto dela fica limpo.",
   "- Evite: tudo centralizado e do mesmo tamanho, texto sobre área carregada, faixa preta genérica, gradiente roxo-azul, neon, brilho, 3D plástico, ícones de banco, logo redesenhada.",

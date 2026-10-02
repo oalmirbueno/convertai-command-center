@@ -230,6 +230,7 @@ import {
   perguntasDeRepeticao,
   type RespostaDeChoice,
 } from "./modulos/memoria-editorial.ts";
+import { DIVERSIDADE_NO_PLANO, variarAgoraNoMes } from "./modulos/diversidade-do-mes.ts";
 import {
   diagnosticoDasFrentes,
   type DiagnosticoEstruturado,
@@ -1236,7 +1237,9 @@ function contextoEmTexto(ctx: Contexto, p: { inicio: string; fim: string; parame
   };
   // Frente AP: memória editorial (sem histórico, vazia: o pedido fica como antes).
   const memoria = blocoDaMemoriaEditorial(ctx.memoriaEditorial, { enxuto });
-  return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados)}${ctx.mcp ? `\n${ctx.mcp}` : ""}${memoria ? `\n\n${memoria}` : ""}`;
+  // 02/10: a forma também não repete (formato das últimas pautas; regras em modulos/diversidade-do-mes.ts).
+  const variar = variarAgoraNoMes(ctx.memoriaEditorial);
+  return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados)}${ctx.mcp ? `\n${ctx.mcp}` : ""}${memoria ? `\n\n${memoria}` : ""}${variar ? `\n\n${variar}` : ""}`;
 }
 
 /** Relógio simples das etapas de uma ação (vai na resposta como tempos_ms e no log). */
@@ -1269,6 +1272,7 @@ REGRAS DESTA EXECUÇÃO NO PAINEL:
 - Todo tema e todo conteúdo declara tipo_editorial e framework (ids da base de técnica) e o roteiro segue a estrutura do framework.
 - CONTEXTO VINDO DO MCP (itens ativos) vale como contexto do cliente: siga as orientações.
 ${REGRA_DE_MENOS_TEXTO}
+${DIVERSIDADE_NO_PLANO}
 - Responda somente com o JSON pedido.`;
 
 /** Base de marketing de cada momento (Frente H), com teto: calendário editorial ou plano de campanha, voz, títulos, CTA e anti-genérico. */
@@ -3464,7 +3468,7 @@ const resumoDaCampanha = (c: Campanha, fotos: { imagem: ImagemDaCampanha; foto: 
 
 const REGRAS_DOS_ITENS = `Regras dos itens:
 - formato: carrossel ou estatico. Estático tem exatamente 1 card.
-- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim, variando só a pose, o gesto e o enquadramento; prefira foto real do cliente quando o contexto tiver. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6. Nunca escreva o nome da marca no texto dos cards.
+- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim, variando só a pose, o gesto e o enquadramento; prefira foto real do cliente quando o contexto tiver. Entre itens diferentes do plano, a ilustracao e o estilo mudam (cenário, roupa, luz, tipo de peça), com a cor da marca só como acento. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6. Nunca escreva o nome da marca no texto dos cards.
 - carrossel_infinito: true quando o carrossel for uma cena panorâmica contínua e isso fizer sentido.
 - copy: a legenda completa do post. O texto longo (explicação, detalhes, lista) mora aqui, nunca nas lâminas. ${REGRA_DA_LEGENDA_NO_PLANO}
 - Menos texto nas lâminas: capa só com o gancho curto (até ${PALAVRAS_DA_CAPA} palavras); cada lâmina seguinte com UMA ideia, título curto (até ${PALAVRAS_DO_TITULO} palavras) na 1ª linha e apoio curto (até ${PALAVRAS_DO_APOIO} palavras) na 2ª, em sequência passo a passo até o CTA; linguagem clara para o cliente final, sem jargão. Confira cada lâmina antes de responder e reescreva agora a que passar.

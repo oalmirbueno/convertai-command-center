@@ -114,6 +114,7 @@ import {
 } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar, notaScore, type PerguntaJev, probabilidadeNoul } from "../_shared/jev.ts";
 import { CONHECIMENTO_DIRETOR, PADRAO_NA_IMAGEM } from "./modulos/conhecimento-design.ts";
+import { variarAgoraNoEstudio } from "./modulos/diversidade-do-estudio.ts";
 import {
   blocoDaSerie,
   blocoDasPreferencias,
@@ -3035,7 +3036,7 @@ const INSTRUCOES_DIRECAO = `COMO ENTREGAR A DIREÇÃO (regras técnicas do estú
 Um gerador de imagem desenha cada lâmina INTEIRA numa imagem só, texto incluído. O estúdio monta o prompt final em código a partir do que você devolver, já com a área útil, as margens do grid, os tamanhos de letra, a paleta e as fontes da marca. Por isso você decide só o essencial, com precisão:
 
 - conceito: a ideia visual do conjunto em até 3 frases.
-- fio_visual: o que se repete em TODAS as lâminas para o carrossel ser uma série só, em 2 a 5 frases concretas: a protagonista (quem é, idade aproximada, cabelo, roupa) ou o objeto protagonista, o cenário (lugar, cores, objetos fixos), a luz (hora, direção, temperatura), o tratamento de foto e o SISTEMA GRÁFICO da capa que as outras lâminas repetem (linhas e fios, formas, cantos, textura, caixa e peso da headline, onde fica o destaque). Se as artes já publicadas da marca têm uma protagonista e um cenário, siga os mesmos.
+- fio_visual: o que se repete em TODAS as lâminas para o carrossel ser uma série só, em 2 a 5 frases concretas: a protagonista (quem é, idade aproximada, cabelo, roupa) ou o objeto protagonista, o cenário (lugar, cores, objetos fixos), a luz (hora, direção, temperatura), o tratamento de foto e o SISTEMA GRÁFICO da capa que as outras lâminas repetem (linhas e fios, formas, cantos, textura, caixa e peso da headline, onde fica o destaque). Se as artes já publicadas da marca têm uma protagonista real (a dona, a equipe), ela pode voltar; cenário, roupa, luz e enquadramento mudam em relação aos posts anteriores (veja \`variar_agora\`).
 - carrossel_infinito: siga \`item.carrossel_infinito_pedido\` quando vier (a equipe decidiu no começo). Verdadeiro: o conjunto é UMA cena panorâmica que atravessa as lâminas (o fundo de uma continua na outra); escreva cada layout.imagem como o trecho seguinte da mesma cena, da esquerda para a direita.
 - cards: uma entrada por lâmina, na ordem do roteiro. Post único tem um card só. Quantidade pelo conteúdo: o mínimo que conta a história inteira, em geral 4 a 6 lâminas; 7 ou mais só quando o conteúdo pede (lista longa, passo a passo). Menos lâminas custa menos. Se \`item.quantidade_de_laminas_pedida\` vier, use exatamente essa quantidade.
   - funcao: capa, conteudo ou cta (o último card de carrossel é cta).
@@ -3046,7 +3047,7 @@ Um gerador de imagem desenha cada lâmina INTEIRA numa imagem só, texto incluí
   - layout.ponto_focal: o que domina a lâmina e onde fica.
   - layout.fundo: o que ocupa o fundo e como o texto ganha área calma.
   - layout.tratamento: técnica de composição da base de conhecimento aplicada nesta lâmina (planos, recorte, escala, espaço negativo).
-  - layout.cor_fundo, cor_texto, cor_destaque: hex da paleta da marca (string vazia se não houver paleta).
+  - layout.cor_fundo, cor_texto, cor_destaque: hex da paleta da marca (string vazia se não houver paleta). cor_fundo da cor principal só quando o fundo é painel ou cor lisa; com foto ou cena real, um neutro da paleta. Siga \`variar_agora\` (o que as últimas peças deste cliente já usaram).
   - evitar: o que não pode acontecer nesta lâmina (repetição de lâmina anterior, elemento genérico, cor fora da paleta).
   - imagem_acervo: o id de uma foto REAL do cliente em \`acervo\` que serve de base para esta lâmina (ambiente, antes e depois, equipe, produto), ou string vazia. A foto é usada como está, sem ser refeita: escolha só quando ela combina com o texto e tem área calma para o texto na zona escolhida. Nunca a mesma foto em duas lâminas. Prefira foto real a imagem inventada sempre que houver uma boa.
 
@@ -3284,6 +3285,8 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     // Mesma regra do gravar (agente-calendario): a foto do plano de imagens vai para a lâmina.
     if (campanha && plano.pecas.length) aplicarFotosDoPlano(direcao, plano.tema, plano.pecas, plano.fotos);
   } else {
+    // 02/10 (dono: "não repetir, não tudo roxo"): o que as últimas peças deste cliente já usaram (nunca lança).
+    const variarAgoraP = variarAgoraNoEstudio(db, clientId, { excluirId: existente?.id ?? null, marca: marcaDoItem, paleta: marca.paleta, pedido: [instrucao, item.tarefa.title, item.tarefa.description].filter(Boolean).join(" ") });
     const modeloDiretor = await modeloDoPapel("diretor_arte");
     const [prompt, memoria, acervo, refsRes, artesRes, preferencias] = await Promise.all([
       promptDoDiretor(clientId),
@@ -3375,6 +3378,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
           cards: existente.direcao.cards.map((c) => ({ ordem: c.ordem, funcao: c.funcao, texto_exato: c.texto_exato, imagem: c.layout?.imagem ?? c.ilustracao })),
         }
         : null,
+      variar_agora: await variarAgoraP,
     };
     const r = await chamarTexto({
       clientId,

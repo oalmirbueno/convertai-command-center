@@ -24,6 +24,7 @@ import { type AcaoDoAgente, type Alvo, comApelido, normalizarAcaoDoAgente, type 
 import { type CenaDoKit, type KitDeVideo, kitPorId, lacunasDoTexto, preencherPrompt, REGRAS_GERAIS_DE_CONSISTENCIA } from "./video-kits.ts";
 import { custoDoMotor, duracaoNoMotor, type MotorDeVideo, motorDoPapel, MOTORES_DE_VIDEO, motorPorId } from "./modelos-de-video.ts";
 import { clipeNovo, projetoDosTakes, type ProjetoDeEdicao, type TakeParaProjeto } from "../../_shared/projeto-de-edicao.ts";
+import { blocoDaDiversidadeVisual } from "../../_shared/diversidade-visual.ts";
 
 export const MODELO_DO_DIRETOR = "openrouter:openai/gpt-6-luna";
 export const RACIOCINIO_DO_DIRETOR = "max";
@@ -609,6 +610,9 @@ REGRAS
 - Trocar plano (motor, ângulo, cena, duração, enquadramento): devolva o \`roteiro\` completo com a troca; não gere junto se a equipe não pediu.
 - Nunca diga que vai gerar, refazer ou mandar ao editor sem pôr a \`acao\` na mesma resposta. Sem ação, diga o que falta (ex.: "p2 precisa do quadro inicial"). Use o ESTADO REAL abaixo: não proponha gerar plano que o estado diz que não está pronto.
 - Resposta curta e específica (até 4 frases). Dúvida real: UMA pergunta curta com as opções em \`perguntas\`.
+
+${blocoDaDiversidadeVisual("video")}
+- Na bíblia: estilo.paleta com a cor da marca como acento e neutros e cores naturais no resto; personagens[].roupa natural e diferente da dos filmes anteriores (O QUE VARIAR AGORA), salvo pedido de uniforme. Nos prompts dos planos, luz e pele reais e textura de câmera de verdade.
 
 MOTORES DISPONÍVEIS (id; durações; capacidades; papéis):
 ${motoresParaOPrompt(motores)}

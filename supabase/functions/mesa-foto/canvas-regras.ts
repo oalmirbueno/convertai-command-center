@@ -1010,7 +1010,7 @@ export function promptDoCanvas(e: {
   if (lacunas.length) linhas.push(`NÃO DOCUMENTADO NO KIT (não invente; deixe fora do quadro ou discreto): ${lacunas.join("; ")}.`);
   const restricoes = e.textos.filter((t) => t.papel === "restricao" && t.texto);
   if (restricoes.length) linhas.push(`RESTRIÇÕES DA EQUIPE: ${restricoes.map((t) => t.texto).join(" ")}`);
-  if (e.marca?.paleta?.length) linhas.push(`MARCA: paleta de apoio ${e.marca.paleta.join(", ")} no cenário e nos objetos de cena, nunca no produto.`);
+  if (e.marca?.paleta?.length) linhas.push(`MARCA: paleta de apoio ${e.marca.paleta.join(", ")} como acento em um ou dois objetos de cena ou num detalhe do cenário, nunca no produto; roupa em tons naturais (salvo o pedido), sem tingir a foto inteira na cor da marca.`);
   linhas.push("PROIBIDO: texto inventado, marca d'água, logotipo de terceiros, produto duplicado ou deformado, ilustração ou 3D, escurecer a foto para dar destaque.");
   return semTravessao(linhas.join("\n"));
 }

@@ -30,6 +30,7 @@
 
 import { regrasDoCriativo, TAMANHO_DO_FORMATO, ZONA_SEGURA, type FormatoAds } from "./conhecimento-ads.ts";
 import { type FidelidadeDaReferencia, FIDELIDADES } from "./fidelidade-da-referencia.ts";
+import { BLOCO_DE_COR_E_REALISMO_NA_IMAGEM } from "./diversidade-visual.ts";
 import {
   blocosDecorativos,
   blocosDeLeitura,
@@ -757,7 +758,7 @@ export const PADRAO_DA_LAMINA = [
   "PADRÃO DE DESIGN (técnicas que valem em toda lâmina)",
   "- Hierarquia: no máximo 3 níveis e um só ponto focal (o rei da lâmina); a headline domina, com pelo menos 3 vezes a altura do apoio, e o segundo maior elemento tem no máximo metade do primeiro.",
   "- Grid: todos os blocos no mesmo eixo e na mesma margem; texto do mesmo assunto agrupado e blocos diferentes bem afastados; pelo menos 30% da arte em respiro ou fundo calmo.",
-  "- Profundidade: foto e texto na mesma cena, em planos (fundo, texto, sujeito), com recorte intencional, uma luz coerente e as cores da foto puxadas para a paleta; objeto recortado pousa com sombra de contato, sem halo nem caixa.",
+  "- Profundidade: foto e texto na mesma cena, em planos (fundo, texto, sujeito), com recorte intencional, uma luz coerente e a foto conversando com a paleta por um ou dois tons, sem tingir a cena; objeto recortado pousa com sombra de contato, sem halo nem caixa.",
   "- Leitura: texto só sobre área calma e uniforme da foto, painel sólido do grid ou gradiente local suave; contraste forte, legível até em preto e branco e no tamanho da miniatura do feed.",
   "- Letras nítidas e íntegras, no máximo 2 famílias, sem esticar, sem contorno, sem sombra pesada, nada justificado nem hifenizado; acentos do português exatos (ã, õ, ç, é, ê, á, ó); nenhuma palavra sozinha na última linha.",
   "- Cor: paleta da marca em 60-30-10; a cor de destaque (até 10% da área) só na palavra-chave, no número ou no CTA.",
@@ -939,7 +940,8 @@ export function promptDaLamina(
     }),
     "",
     "4. MARCA",
-    `- Paleta (use só estas cores, na proporção 60-30-10, com um destaque único): ${paletaTxt}.`,
+    // 02/10 (dono: "tudo roxo"): a paleta manda nos elementos gráficos, no texto e na logo; a foto e a roupa ficam com as cores naturais.
+    `- Paleta (cores gráficas, do texto e dos painéis só destas, na proporção 60-30-10, com um destaque único; a foto, a pessoa e a roupa ficam com as cores naturais da cena): ${paletaTxt}.`,
     fonteTitulo || fonteTexto
       ? `- Tipografia: títulos em ${fonteTitulo || fonteTexto}, texto em ${fonteTexto || fonteTitulo}. Se houver amostra da fonte anexada, siga o desenho exato das letras da amostra.`
       : "- Tipografia: siga a tipografia das artes da marca anexadas (mesma classificação, peso e caixa).",
@@ -978,6 +980,8 @@ export function promptDaLamina(
       ]),
     "",
     PADRAO_DA_LAMINA,
+    "",
+    BLOCO_DE_COR_E_REALISMO_NA_IMAGEM,
     "",
     blocoDasProibicoes({ serie }),
     card.evitar ? `\nEVITAR NESTA LÂMINA: ${card.evitar}` : "",

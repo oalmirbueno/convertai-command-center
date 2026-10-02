@@ -120,6 +120,7 @@ import { AVISO_SEM_REGISTRO, blocoDaReferencia, gravarTroca, referenciaDoPedido 
 import { anexoDasRegrasSeguidas, aprenderDoPedido, type Aprendido, CAMPOS_DO_APRENDIZADO, regrasDaMesa, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
 import { alvosDaPublicidade, type CustosDaPublicidade, itensDaReferenciaDaPublicidade, respostaPromete } from "./acoes-da-publicidade.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
+import { blocoDaDiversidadeVisual } from "../_shared/diversidade-visual.ts";
 
 /** Cérebro e dossiê do cliente para o agente (cache curto; padrão do diretor de fotografia). */
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
@@ -159,9 +160,11 @@ REGRAS DA SAÍDA
 - Português do Brasil, frases curtas, sem travessão.
 - Exatamente três territórios, com nomes curtos e distintos. Cada um muda a motivação do comprador.
 - Casting sempre de pessoa sintética adulta (idade_aprox 21 ou mais), sem parecer pessoa real ou famosa.
-- paleta: até 5 cores em hexadecimal (#RRGGBB) coerentes com a marca.
+- paleta: até 5 cores em hexadecimal (#RRGGBB) coerentes com a marca: neutros e cores naturais do território, com a cor da marca como acento (nunca a paleta inteira da marca em pessoa, roupa e cenário).
 - Não invente preço, desconto, prazo, estoque, depoimento, prêmio nem benefício técnico. O que falta vai em lacunas.
 - O produto nunca muda: respeite as restrições do briefing e os invariantes do kit.
+
+${blocoDaDiversidadeVisual("campanha")}
 Responda só com o JSON pedido.`;
 
 const SISTEMA_DO_AGENTE = `Você é o agente da Mesa Publicidade do painel Aceleriq: ajuda a equipe a dirigir campanhas de produto (briefing, três territórios, seis tomadas pedidas à Mesa Foto, revisão do produto e envio para a Mesa e a Mesa Ads). Responda em português do Brasil, curto e direto, sem travessão. Você não gera imagem: quem produz é a Mesa Foto. Aprovar foto não aprova anúncio nem verba.

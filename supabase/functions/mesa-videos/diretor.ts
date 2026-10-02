@@ -64,6 +64,7 @@ import {
 } from "./modulos/diretor-de-video.ts";
 import { caminhoDaMesaDeVideo } from "./modulos/agente-de-video.ts";
 import { kitPorId } from "./modulos/video-kits.ts";
+import { variarAgoraNoVideo } from "./modulos/diversidade-do-video.ts";
 import { MAX_BYTES_DO_PROJETO, tamanhoDoProjeto } from "../_shared/projeto-de-edicao.ts";
 import { type BaseDaFuncao, catalogo, enviarGeracao, motoresProntosDoCatalogo, motorPronto } from "./geracao.ts";
 // Frente VGN (30/09): o prompt do motor pelo diretor, com a marca e o contexto completo.
@@ -255,6 +256,8 @@ export async function diretorConversar(b: BaseDaFuncao, corpo: Record<string, un
   const selecionados = (Array.isArray(corpo.selecionados) ? (corpo.selecionados as unknown[]) : []).map((x) => String(x).toLowerCase()).filter((x) => itens.some((i) => i.ref === x));
   // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
   const spP = superpoderesPara(b.servico(), { agente: "videos.diretor", pedido: texto });
+  // 02/10 (dono: "não repetir pessoa, roupa e cenário"): o que os últimos filmes deste cliente já usaram (nunca lança).
+  const variarP = variarAgoraNoVideo(b.servico(), clientId, { excluirId: atual.id, pedido: texto });
   // Tudo o que é lido corre junto (contexto, regras ensinadas, catálogo, conversa + referência, andamento).
   const [contexto, regras, cat, conversa, andamento] = await Promise.all([
     contextoDoCliente(b, clientId, corpo.marca_id),
@@ -273,6 +276,7 @@ export async function diretorConversar(b: BaseDaFuncao, corpo: Record<string, un
   const sistema = [
     // Frente VGN: o diretor só propõe motor que gera hoje (chave existe, com preço, ligado).
     sistemaDoDiretor({ fase, kit, contexto, motores: motoresProntosDoCatalogo(cat) }),
+    `\n${await variarP}`,
     blocoDoEstadoReal(atual, andamento, cat.motores),
     blocoDaReferencia(conversa.referencia, itens),
     regras.bloco ? `\n${regras.bloco}` : "",
