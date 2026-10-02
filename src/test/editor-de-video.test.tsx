@@ -248,7 +248,7 @@ describe("skills determinísticas", () => {
   });
 
   it("catálogo e palavras (reserva sem IA)", () => {
-    expect(SKILLS_DO_EDITOR.map((s) => s.id)).toEqual(["brabo", "cortar_pela_onda", "ficar_com_melhor_tomada", "cortar_silencios", "legendas", "punch_in", "zoom_nos_momentos", "reenquadrar", "cor", "organizar_por_roteiro", "antes_depois", "fechar_buracos", "transicoes_suaves", "efeitos_sonoros"]);
+    expect(SKILLS_DO_EDITOR.map((s) => s.id)).toEqual(["brabo", "cortar_pela_onda", "ficar_com_melhor_tomada", "cortar_silencios", "legendas", "punch_in", "zoom_nos_momentos", "reenquadrar", "cor", "organizar_por_roteiro", "antes_depois", "fechar_buracos", "transicoes_suaves", "efeitos_sonoros", "remover_duplicados"]);
     expect(skillPorPalavras("corta os silêncios")).toBe("cortar_silencios");
     expect(skillPorPalavras("edição dinâmica estilo brabo")).toBe("brabo");
     expect(skillPorPalavras("sei lá")).toBeNull();
@@ -499,7 +499,8 @@ describe("agente editor: laço com limites", () => {
     expect(chamar.mock.calls[0][0]).toMatchObject({ acao: "agente_passo", passo: 1, ferramentas_usadas: 0 });
     expect(chamar.mock.calls[1][0]).toMatchObject({ passo: 2, ferramentas_usadas: 2 });
     expect(r.operacoes.map((o) => o.op)).toEqual(["dividir", "remover"]);
-    expect(trilhaPrincipal(r.resultado)!.clipes.map((c) => c.id).sort()).toEqual(["v1", "v3"]);
+    // 02/10: apelidos fixos no pedido. O c1 dividido ganhou o c3 (o pedaço novo); o v2 continua c2. Tirar o c3 tira o fim do c1.
+    expect(trilhaPrincipal(r.resultado)!.clipes.map((c) => c.id).sort()).toEqual(["v1", "v2"]);
     expect(trilhaPrincipal(p)!.clipes).toHaveLength(2); // nada aplicado sem o dono
     expect(r.resposta).toBe("Pronto.");
   });

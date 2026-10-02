@@ -1,6 +1,9 @@
 import { duracaoDoClipe, type ProjetoDeEdicao } from "../../../supabase/functions/_shared/projeto-de-edicao";
 import { FERRAMENTAS_DE_SAIDA, FERRAMENTAS_DO_SERVIDOR, MAX_FERRAMENTAS, MAX_PASSOS, type ChamadaDeFerramenta, type RespostaDoPasso } from "../../../supabase/functions/editor-video/ferramentas";
-import { apelidosDoProjeto, ErroDeApelido, resolverApelidos, resumoParaOAgente } from "./apelidos";
+import { apelidosDoProjeto, apelidosEstaveis, ErroDeApelido, resolverApelidos, resumoParaOAgente, type Apelidos } from "./apelidos";
+import { acharDuplicados, idsRepetidos, opsDeRemoverDuplicados, textoDosDuplicados, type AssinaturasDosArquivos } from "./duplicados";
+import { clipesQueBatem, filtrarMidia, lerFiltro, origemDoArquivo, textoDoFiltro, type FiltroDaBusca } from "./busca";
+import { opsParaInserir, type ItemDaBiblioteca } from "./biblioteca";
 import { aplicarOperacao, emOrdem, ErroDaOperacao, trilhaPrincipal, type Operacao } from "./operacoes";
 import { proporSkill, skillPorId, type IdDaSkill } from "./skills";
 import { tempoFino } from "./tempo";
@@ -14,7 +17,7 @@ import { EFEITOS_DE_AJUSTE, clipeDeZoom, type ModoDeZoom } from "./efeitos";
 import { LOOKS } from "./cor";
 import { corEm, NOME_DA_TRILHA_DE_AJUSTE, reenquadrarEm } from "./skills/pecasDaEdicao";
 import { trilhaLivre } from "./motion/aplicar";
-import { FORMATOS_DO_PROJETO, type CorDoProjeto } from "../../../supabase/functions/_shared/projeto-de-edicao";
+import { FORMATOS_DO_PROJETO, midiaDaFonte, type CorDoProjeto } from "../../../supabase/functions/_shared/projeto-de-edicao";
 
 /**
  * Agente editor, lado da tela (frente V-B). O servidor (editor-video,
@@ -42,6 +45,41 @@ export interface ResultadoDaFerramenta {
   saida?: SaidaDoAgente | null;
   /** Frente EDT: pedido que já foi para a fila do worker (amostra, onda). */
   naFila?: { tipo: "amostra" | "onda"; pedido_id: string; inicio_s?: number; fim_s?: number } | null;
+  /** 02/10: filtro que o agente pôs na tela (buscar). */
+  filtro?: FiltroDaBusca | null;
+}
+
+/**
+ * O que a ferramenta precisa além do projeto (02/10): os apelidos ESTÁVEIS do
+ * pedido (c3 é o mesmo c3 do começo ao fim), a Mídia do cliente (m1, m2...),
+ * o sha256 dos arquivos (takes repetidos) e o cursor.
+ */
+export interface OpcoesDaFerramenta {
+  apelidos?: Apelidos | null;
+  midias?: ItemDaBiblioteca[] | null;
+  assinaturas?: AssinaturasDosArquivos | null;
+  cursor_s?: number | null;
+}
+
+export const MAX_MIDIAS_PARA_O_AGENTE = 80;
+
+/** Linha de uma mídia para o modelo ("m3: praia.mp4 (video, bruto, 0:06, fora da linha)"). */
+function linhaDaMidia(i: ItemDaBiblioteca, k: number, usados: Set<string>): string {
+  const midia = midiaDaFonte(i.tipo, i.nome, i.storage_path);
+  const usado = (i.arquivo_id && usados.has(i.arquivo_id)) || usados.has(i.storage_path);
+  return `m${k + 1}: ${i.nome} (${midia}, ${origemDoArquivo(i.tipo, i.storage_path, i.origem)}${i.duracao_s ? `, ${tempoFino(i.duracao_s)}` : ""}, ${usado ? "na linha do tempo" : "fora da linha"})`;
+}
+
+function usadosDoProjeto(p: ProjetoDeEdicao): Set<string> {
+  const s = new Set<string>();
+  p.trilhas.forEach((t) =>
+    t.clipes.forEach((c) => {
+      const f = c.fonte ? p.fontes[c.fonte] : null;
+      if (f && f.arquivo_id) s.add(f.arquivo_id);
+      if (f && f.storage_path) s.add(f.storage_path);
+    }),
+  );
+  return s;
 }
 
 /** Saída paga que o agente preparou (a tela mostra o cartão com custo e Confirmar). */
@@ -92,8 +130,8 @@ export interface EstadoDaTela {
 }
 
 /** Linhas do estado da tela para o modelo (apelidos, nunca id). */
-export function linhasDaTela(p: ProjetoDeEdicao, tela: EstadoDaTela = {}): string[] {
-  const a = apelidosDoProjeto(p);
+export function linhasDaTela(p: ProjetoDeEdicao, tela: EstadoDaTela = {}, apelidos?: Apelidos | null): string[] {
+  const a = apelidos || apelidosDoProjeto(p);
   const t = trilhaPrincipal(p);
   const linhas: string[] = [];
   const ordem = t ? emOrdem(t).map((c) => a.porId[c.id]).filter(Boolean) : [];
@@ -119,8 +157,17 @@ export function itensDaReferencia(p: ProjetoDeEdicao): { ref: string; titulo: st
 }
 
 /** Contexto que vai ao modelo: projeto com apelidos, estado da tela, fala resumida e o que foi visto. */
-export function contextoDoAgente(p: ProjetoDeEdicao, limite = 50000, tela: EstadoDaTela = {}): string {
-  const partes = [resumoParaOAgente(p), linhasDaTela(p, tela).join("\n")];
+export function contextoDoAgente(p: ProjetoDeEdicao, limite = 50000, tela: EstadoDaTela = {}, extra: OpcoesDaFerramenta = {}): string {
+  const a = extra.apelidos || apelidosDoProjeto(p);
+  const partes = [resumoParaOAgente(p, a), linhasDaTela(p, tela, a).join("\n")];
+  // 02/10: os takes repetidos já vão contados (o dono pede "tira os duplicados" e o modelo não precisa adivinhar).
+  const repetidos = acharDuplicados(p, extra.assinaturas || null);
+  partes.push(repetidos.length ? `Takes repetidos (regra fixa): ${textoDosDuplicados(repetidos, a.porId)} remover_duplicados tira.` : "Takes repetidos: nenhum.");
+  const midias = (extra.midias || []).slice(0, MAX_MIDIAS_PARA_O_AGENTE);
+  if (midias.length) {
+    const usados = usadosDoProjeto(p);
+    partes.push(`Mídia do cliente (inserir_midia; buscar filtra):\n${midias.map((i, k) => linhaDaMidia(i, k, usados)).join("\n")}`);
+  }
   const fala = falaNaLinhaDoTempo(p);
   if (fala.length) {
     const linhas: string[] = [];
@@ -148,17 +195,18 @@ export function contextoDoAgente(p: ProjetoDeEdicao, limite = 50000, tela: Estad
 }
 
 /** Roda UMA ferramenta na cópia de trabalho. Nunca lança: erro volta como texto para o modelo conferir. */
-export function executarFerramenta(p: ProjetoDeEdicao, ch: ChamadaDeFerramenta, agora: string, marca: MarcaParaOAgente | null = null): ResultadoDaFerramenta {
+export function executarFerramenta(p: ProjetoDeEdicao, ch: ChamadaDeFerramenta, agora: string, marca: MarcaParaOAgente | null = null, opcoes: OpcoesDaFerramenta = {}): ResultadoDaFerramenta {
   const a = ch.argumentos || {};
+  const ap = opcoes.apelidos || apelidosDoProjeto(p);
   const aplicar = (ops: Operacao[], texto: string): ResultadoDaFerramenta => {
-    const resolvidas = resolverApelidos(p, ops);
+    const resolvidas = resolverApelidos(p, ops, ap);
     const novo = resolvidas.reduce((acc, o) => aplicarOperacao(acc, o), p);
     return { projeto: novo, operacoes: resolvidas, texto, ok: true };
   };
   try {
     switch (ch.ferramenta) {
       case "ler_projeto":
-        return { projeto: p, operacoes: [], texto: resumoParaOAgente(p), ok: true };
+        return { projeto: p, operacoes: [], texto: resumoParaOAgente(p, ap), ok: true };
       case "ler_fala": {
         const de = num(a.de_s);
         const ate = num(a.ate_s);
@@ -174,9 +222,58 @@ export function executarFerramenta(p: ProjetoDeEdicao, ch: ChamadaDeFerramenta, 
       case "aparar":
         return aplicar([{ op: "aparar", clipe: String(a.clipe), lado: a.lado === "inicio" ? "inicio" : "fim", tempo_s: num(a.tempo_s) }], `Aparado ${a.clipe}.`);
       case "mover":
-        return aplicar([{ op: "mover", clipe: String(a.clipe), inicio_s: num(a.inicio_s) }], `Movido ${a.clipe}.`);
-      case "remover":
-        return aplicar([{ op: "remover", clipe: String(a.clipe), ondular: a.ondular === true }], `Tirado ${a.clipe}.`);
+        return aplicar([{ op: "mover", clipe: String(a.clipe), inicio_s: num(a.inicio_s), trilha: a.trilha ? String(a.trilha) : undefined }], `Movido ${a.clipe}.`);
+      case "remover": {
+        // Um ou vários (clipes): todos com os apelidos do começo do pedido.
+        const lista = (Array.isArray(a.clipes) ? (a.clipes as unknown[]) : []).concat(a.clipe !== undefined && a.clipe !== null && a.clipe !== "" ? [a.clipe] : []).map(String);
+        const unicos = lista.filter((x, i) => lista.indexOf(x) === i);
+        if (!unicos.length) throw new ErroDaOperacao("Diga qual clipe tirar (clipe ou clipes).");
+        return aplicar(unicos.map((c): Operacao => ({ op: "remover", clipe: c, ondular: a.ondular === true })), `Tirado ${unicos.join(", ")}.`);
+      }
+      case "remover_duplicados": {
+        const grupos = acharDuplicados(p, opcoes.assinaturas || null);
+        if (!grupos.length) return { projeto: p, operacoes: [], texto: "Nenhum take repetido na trilha de vídeo (mesma mídia e mesmo trecho). Nada saiu.", ok: true };
+        const ops = opsDeRemoverDuplicados(grupos, a.ondular !== false);
+        const novo = ops.reduce((acc, o) => aplicarOperacao(acc, o), p);
+        const ids = idsRepetidos(grupos);
+        return { projeto: novo, operacoes: ops, texto: `Tirei ${ids.length} ${ids.length === 1 ? "take repetido" : "takes repetidos"}: ${textoDosDuplicados(grupos, ap.porId)}${a.ondular !== false ? " O resto encostou." : ""}`, ok: true };
+      }
+      case "buscar": {
+        const filtro = lerFiltro(a);
+        const clipes = clipesQueBatem(p, filtro, ap, opcoes.assinaturas || null).map((id) => ap.porId[id]).filter(Boolean);
+        const todas = (opcoes.midias || []).slice(0, MAX_MIDIAS_PARA_O_AGENTE);
+        const achadas = filtrarMidia(todas, p, filtro, opcoes.assinaturas || null);
+        const usados = usadosDoProjeto(p);
+        const linhas = achadas.slice(0, 30).map((i) => linhaDaMidia(i, todas.indexOf(i), usados));
+        return {
+          projeto: p,
+          operacoes: [],
+          texto: `Filtro na tela: ${textoDoFiltro(filtro)}. Clipes: ${clipes.length ? clipes.join(", ") : "nenhum"}. Mídias: ${achadas.length}${linhas.length ? `\n${linhas.join("\n")}` : ""}${achadas.length > linhas.length ? `\n(mais ${achadas.length - linhas.length})` : ""}`,
+          ok: true,
+          filtro,
+        };
+      }
+      case "inserir_midia": {
+        const ref = String(a.midia || "");
+        const todas = opcoes.midias || [];
+        let item: ItemDaBiblioteca | null = null;
+        if (/^m\d+$/.test(ref)) item = todas[Number(ref.slice(1)) - 1] || null;
+        else if (p.fontes[ref]) {
+          const f = p.fontes[ref];
+          item = { id: f.chave, arquivo_id: f.arquivo_id, nome: f.nome, tipo: f.tipo, storage_bucket: f.storage_bucket || "mesa", storage_path: f.storage_path || "", duracao_s: f.duracao_s, largura: f.largura, altura: f.altura, origem: "enviado" };
+        }
+        if (!item) throw new ErroDaOperacao(`Não achei a mídia ${ref || "sem nome"}. Use o m1, m2 de buscar.`);
+        const depois = a.onde === "depois" && a.depois_de ? ap.porApelido[String(a.depois_de)] : null;
+        if (a.onde === "depois" && !depois) throw new ErroDaOperacao(`Não existe ${String(a.depois_de || "o clipe de referência")}.`);
+        let ops: Operacao[];
+        try {
+          ops = opsParaInserir(p, item, depois ? { depoisDe: depois } : a.onde === "cursor" ? "cursor" : "fim", typeof opcoes.cursor_s === "number" ? opcoes.cursor_s : 0, { tipo: "manual", ref: "agente" });
+        } catch (e) {
+          throw new ErroDaOperacao(e instanceof Error ? e.message : "Não deu para pôr na linha do tempo.");
+        }
+        const novo = ops.reduce((acc, o) => aplicarOperacao(acc, o), p);
+        return { projeto: novo, operacoes: ops, texto: `Pus ${item.nome} ${depois ? `depois do ${String(a.depois_de)}` : a.onde === "cursor" ? "no cursor" : "no fim"}.`, ok: true };
+      }
       case "recortar":
         return aplicar([{ op: "recortar", clipe: String(a.clipe), de_s: num(a.de_s), ate_s: num(a.ate_s) }], `Trecho cortado de ${a.clipe}.`);
       case "ajustar": {
@@ -252,7 +349,8 @@ export function executarFerramenta(p: ProjetoDeEdicao, ch: ChamadaDeFerramenta, 
           });
         }
         const prop = proporSkill(id, p, { agora }, params);
-        if (!prop.operacoes.length) return { projeto: p, operacoes: [], texto: `${prop.titulo}: ${prop.resumo}${prop.avisos.length ? ` ${prop.avisos.join(" ")}` : ""}`, ok: false };
+        // Nada a mudar (sem buraco, sem repetido) não é falha; sem conseguir rodar (aviso) é.
+        if (!prop.operacoes.length) return { projeto: p, operacoes: [], texto: `${prop.titulo}: ${prop.resumo}${prop.avisos.length ? ` ${prop.avisos.join(" ")}` : ""}`, ok: !prop.avisos.length };
         return { projeto: prop.resultado, operacoes: prop.operacoes, texto: `${prop.titulo}: ${prop.resumo}${prop.avisos.length ? ` ${prop.avisos.join(" ")}` : ""}`, ok: true };
       }
       case "formato": {
@@ -327,10 +425,10 @@ export function executarFerramenta(p: ProjetoDeEdicao, ch: ChamadaDeFerramenta, 
       case "aplicar_skill": {
         const id = (ch.ferramenta === "fechar_buracos" ? "fechar_buracos" : String(a.skill || "")) as IdDaSkill;
         if (!skillPorId(id)) throw new ErroDaOperacao(`Skill desconhecida: ${id}.`);
-        const ap = apelidosDoProjeto(p);
         const selecionados = Array.isArray(a.selecionados) ? (a.selecionados as unknown[]).map((x) => ap.porApelido[String(x)]).filter(Boolean) : [];
-        const prop = proporSkill(id, p, { agora, selecionados }, (a.parametros && typeof a.parametros === "object" ? a.parametros : {}) as Record<string, string | number | boolean>);
-        if (!prop.operacoes.length) return { projeto: p, operacoes: [], texto: `${prop.titulo}: ${prop.resumo}${prop.avisos.length ? ` ${prop.avisos.join(" ")}` : ""}`, ok: false };
+        const prop = proporSkill(id, p, { agora, selecionados, assinaturas: opcoes.assinaturas || null }, (a.parametros && typeof a.parametros === "object" ? a.parametros : {}) as Record<string, string | number | boolean>);
+        // Nada a mudar (sem buraco, sem repetido) não é falha; sem conseguir rodar (aviso) é.
+        if (!prop.operacoes.length) return { projeto: p, operacoes: [], texto: `${prop.titulo}: ${prop.resumo}${prop.avisos.length ? ` ${prop.avisos.join(" ")}` : ""}`, ok: !prop.avisos.length };
         return { projeto: prop.resultado, operacoes: prop.operacoes, texto: `${prop.titulo}: ${prop.resumo}${prop.avisos.length ? ` Avisos: ${prop.avisos.join(" ")}` : ""}`, ok: true };
       }
       default:
@@ -363,6 +461,9 @@ export interface PedidoAoAgente {
   conversa?: string;
   /** Frente EDT: marca aberta (logo e cor do kit). */
   marca?: MarcaParaOAgente | null;
+  /** 02/10: a Mídia do cliente (m1, m2...) e o sha256 dos arquivos (takes repetidos). */
+  midias?: ItemDaBiblioteca[] | null;
+  assinaturas?: AssinaturasDosArquivos | null;
   /**
    * Frente EDT: ferramentas que chamam o servidor (sugerir_animacoes, medir_onda,
    * amostra) e as saídas pagas (gerar_broll, gerar_elemento: só estimam o custo).
@@ -397,6 +498,12 @@ export interface ResultadoDoAgente {
   /** Frente EDT: cartões pagos preparados (custo antes) e pedidos já na fila do worker. */
   saidas: SaidaDoAgente[];
   naFila: NonNullable<ResultadoDaFerramenta["naFila"]>[];
+  /** 02/10: filtro que o agente pôs na tela (o último buscar). */
+  filtro: FiltroDaBusca | null;
+  /** 02/10: o que mudou, em apelidos ("Tirei c3, c5. Movi c2."), feito pelo código e não pelo modelo. */
+  mudancas: string;
+  /** Clipes que o pedido mexeu e ainda estão na linha do tempo (destaque na tela). */
+  tocados: string[];
 }
 
 /** O que o servidor devolve num passo (agente_passo). */
@@ -428,6 +535,9 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
   const log: ItemDoLog[] = [];
   const historico: { papel: "usuario" | "agente"; conteudo: string }[] = [];
   const ap = apelidosDoProjeto(e.projeto);
+  // Apelidos estáveis no pedido inteiro (o c3 do passo 1 é o c3 do passo 4).
+  let mapa: Apelidos = ap;
+  let filtro: FiltroDaBusca | null = null;
   const selecionados = ((e.tela && e.tela.selecionados) || []).map((id) => ap.porId[id]).filter(Boolean);
   const itens = itensDaReferencia(e.projeto);
   let referencia: unknown = null;
@@ -466,7 +576,7 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
         ferramentas_usadas: usadas,
         teto_usd: e.tetoUsd,
         pedido: e.pedido,
-        contexto: contextoDoAgente(trabalho, 50000, { ...(e.tela || {}), selecionados: (e.tela && e.tela.selecionados) || [] }),
+        contexto: contextoDoAgente(trabalho, 50000, { ...(e.tela || {}), selecionados: (e.tela && e.tela.selecionados) || [] }, { apelidos: mapa, midias: e.midias || null, assinaturas: e.assinaturas || null }),
         historico,
         conversa: e.conversa || undefined,
         itens_referencia: itens,
@@ -511,8 +621,10 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
           console.error("[agente editor] ferramenta do servidor falhou", c.ferramenta, err);
           x = { projeto: trabalho, operacoes: [], texto: `Erro em ${c.ferramenta}: ${err instanceof Error ? err.message.slice(0, 160) : "falhou"}`, ok: false };
         }
-      } else x = executarFerramenta(trabalho, c, e.agora, e.marca || null);
+      } else x = executarFerramenta(trabalho, c, e.agora, e.marca || null, { apelidos: mapa, midias: e.midias || null, assinaturas: e.assinaturas || null, cursor_s: e.tela && typeof e.tela.cursor_s === "number" ? e.tela.cursor_s : null });
       trabalho = x.projeto;
+      mapa = apelidosEstaveis(trabalho, mapa);
+      if (x.filtro) filtro = x.filtro;
       x.operacoes.forEach((o) => operacoes.push(o));
       if (x.exportar) exportar = true;
       if (x.saida) saidas.push(x.saida);
@@ -540,14 +652,87 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
       break;
     }
     historico.push({ papel: "agente", conteudo: JSON.stringify({ plano: p.plano, chamadas: p.chamadas }) });
-    historico.push({ papel: "usuario", conteudo: `Resultados:\n${resultados.join("\n")}\n\nClipes agora:\n${resumoParaOAgente(trabalho)}` });
+    historico.push({ papel: "usuario", conteudo: `Resultados:\n${resultados.join("\n")}\n\nClipes agora (apelidos fixos neste pedido):\n${resumoParaOAgente(trabalho, mapa)}` });
   }
   if (!terminouBem && !parado && passo >= MAX_PASSOS) {
     parado = true;
     log.push({ tipo: "aviso", texto: `Parou no limite de ${MAX_PASSOS} passos sem o agente dizer que terminou. Confira o que já saiu.` });
   }
   if (resposta) log.push({ tipo: "resposta", texto: resposta });
-  return { operacoes, resultado: trabalho, log, resposta, gasto_usd: gasto, passos: passo, ferramentas: usadas, falhas, recusadas, parado, exportar, opcoes, aprendido, seguidas, metodo, uso_id: usoId, saidas, naFila };
+  const mudancas = resumoDoQueMudou(e.projeto, operacoes, mapa);
+  const tocados = clipesTocados(operacoes, trabalho, e.projeto);
+  return { operacoes, resultado: trabalho, log, resposta, gasto_usd: gasto, passos: passo, ferramentas: usadas, falhas, recusadas, parado, exportar, opcoes, aprendido, seguidas, metodo, uso_id: usoId, saidas, naFila, filtro, mudancas, tocados };
+}
+
+const VERBO_DO_RESUMO: Partial<Record<Operacao["op"], string>> = {
+  remover: "Tirei",
+  mover: "Movi",
+  dividir: "Dividi",
+  aparar: "Aparei",
+  recortar: "Cortei um trecho de",
+  propriedades: "Ajustei",
+  inserir: "Pus",
+  reordenar: "Reordenei",
+  ondular: "Encostei",
+};
+
+/**
+ * O que mudou, dito pelo CÓDIGO (02/10): o dono quer ver o que o agente fez com
+ * os apelidos que ele vê na linha do tempo. "Tirei c3, c5. Movi c2. Pus 2 clipes."
+ */
+export function resumoDoQueMudou(antes: ProjetoDeEdicao, ops: Operacao[], apelidos?: Apelidos | null): string {
+  // Os apelidos do fim do pedido (clipe novo) e os do começo (o que saiu).
+  const a = { porId: { ...apelidosDoProjeto(antes).porId, ...(apelidos ? apelidos.porId : {}) } };
+  const porVerbo: Record<string, string[]> = {};
+  let inseridos = 0;
+  let outras = 0;
+  const trilhas: string[] = [];
+  ops.forEach((o) => {
+    if (o.op === "inserir") {
+      inseridos++;
+      return;
+    }
+    if (o.op === "ondular" || o.op === "reordenar") {
+      const t = antes.trilhas.find((x) => x.id === o.trilha);
+      const nome = t ? (t.nome || t.id).toLowerCase() : o.trilha;
+      if (trilhas.indexOf(`${o.op}:${nome}`) < 0) trilhas.push(`${o.op}:${nome}`);
+      return;
+    }
+    const verbo = VERBO_DO_RESUMO[o.op];
+    const clipe = "clipe" in o ? String((o as { clipe: string }).clipe) : "";
+    if (!verbo || !clipe) {
+      if (o.op !== "registrar_skill" && o.op !== "fonte" && o.op !== "trilha_nova") outras++;
+      return;
+    }
+    const ap = a.porId[clipe] || "clipe novo";
+    porVerbo[verbo] = porVerbo[verbo] || [];
+    if (porVerbo[verbo].indexOf(ap) < 0) porVerbo[verbo].push(ap);
+  });
+  const frases = Object.keys(porVerbo).map((v) => `${v} ${porVerbo[v].join(", ")}.`);
+  trilhas.forEach((x) => {
+    const [op, nome] = x.split(":");
+    frases.push(op === "ondular" ? `Encostei a ${nome}.` : `Reordenei a ${nome}.`);
+  });
+  if (inseridos) frases.push(`Pus ${inseridos} ${inseridos === 1 ? "clipe novo" : "clipes novos"}.`);
+  if (outras) frases.push(`Mais ${outras} ${outras === 1 ? "ajuste" : "ajustes"} (cor, formato, trilhas ou marcadores).`);
+  return frases.join(" ");
+}
+
+/** Clipes mexidos que continuam no projeto (para destacar na linha do tempo). */
+export function clipesTocados(ops: Operacao[], depois: ProjetoDeEdicao, antes?: ProjetoDeEdicao | null): string[] {
+  const existe = new Set<string>();
+  depois.trilhas.forEach((t) => t.clipes.forEach((c) => existe.add(c.id)));
+  const ids: string[] = [];
+  if (antes) {
+    const velhos = new Set<string>();
+    antes.trilhas.forEach((t) => t.clipes.forEach((c) => velhos.add(c.id)));
+    existe.forEach((id) => !velhos.has(id) && ids.push(id));
+  }
+  ops.forEach((o) => {
+    const id = "clipe" in o && typeof (o as { clipe: unknown }).clipe === "string" ? (o as { clipe: string }).clipe : o.op === "inserir" && o.clipe.id ? String(o.clipe.id) : null;
+    if (id && existe.has(id) && ids.indexOf(id) < 0) ids.push(id);
+  });
+  return ids;
 }
 
 /** Pedido que é só exportar/renderizar (regra fixa, sem modelo e sem custo): vira o cartão direto. */

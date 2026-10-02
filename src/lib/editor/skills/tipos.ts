@@ -25,7 +25,8 @@ export type IdDaSkill =
   | "reenquadrar"
   | "cor"
   | "zoom_nos_momentos"
-  | "editar_com_ia";
+  | "editar_com_ia"
+  | "remover_duplicados";
 
 export interface CenaDoRoteiro {
   ref: string;
@@ -39,6 +40,8 @@ export interface ContextoDaSkill {
   cenas?: CenaDoRoteiro[] | null;
   /** Ids dos clipes selecionados na tela (antes e depois, punch-in no trecho). */
   selecionados?: string[];
+  /** Sha256 e tamanho dos arquivos da Entrada (por arquivo_id): acha o mesmo take subido duas vezes. */
+  assinaturas?: Record<string, { sha256?: string | null; bytes?: number | null }> | null;
 }
 
 export type ValorDoParametro = number | string | boolean;

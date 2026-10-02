@@ -24,6 +24,8 @@ export interface Apelidos {
   lista: ClipeApelidado[];
   porApelido: Record<string, string>;
   porId: Record<string, string>;
+  /** Apelidos que saíram do projeto durante o pedido (só nos apelidos estáveis). */
+  saidos?: string[];
 }
 
 export function rotuloDoClipe(p: ProjetoDeEdicao, c: ClipeDoProjeto): string {
@@ -52,9 +54,44 @@ export function apelidosDoProjeto(p: ProjetoDeEdicao): Apelidos {
   return { lista, porApelido, porId };
 }
 
+/**
+ * Apelidos ESTÁVEIS durante um pedido ao agente (02/10, dono: "pedi para tirar
+ * os takes duplicados e ele não mexeu em nada"). Antes, cada ferramenta
+ * renumerava c1, c2... depois de mudar o projeto: "remover c3" e "remover c5"
+ * no mesmo passo tirava o c3 e depois o clipe que ERA o c6 (ou falhava com
+ * "Não existe c5"), e a falha mandava tudo para o Confirmar. Agora quem já tinha
+ * apelido fica com ele até o fim do pedido; clipe novo (divisão, inserção)
+ * ganha o próximo número livre; o que saiu do projeto some da lista.
+ */
+export function apelidosEstaveis(p: ProjetoDeEdicao, anterior: Apelidos | null | undefined): Apelidos {
+  if (!anterior) return apelidosDoProjeto(p);
+  let maior = 0;
+  anterior.lista.forEach((x) => {
+    const n = Number(x.apelido.slice(1));
+    if (isFinite(n) && n > maior) maior = n;
+  });
+  Object.keys(anterior.porApelido).forEach((ap) => {
+    const n = Number(ap.slice(1));
+    if (isFinite(n) && n > maior) maior = n;
+  });
+  const lista: ClipeApelidado[] = [];
+  const porApelido: Record<string, string> = {};
+  const porId: Record<string, string> = {};
+  p.trilhas.forEach((t) =>
+    emOrdem(t).forEach((c) => {
+      const apelido = anterior.porId[c.id] || `c${++maior}`;
+      lista.push({ apelido, id: c.id, trilha: t.id, tipo: t.tipo, rotulo: rotuloDoClipe(p, c), inicio_s: c.inicio_s, fim_s: fimDoClipe(c) });
+      porApelido[apelido] = c.id;
+      porId[c.id] = apelido;
+    }),
+  );
+  const saidos = (anterior.saidos || []).concat(anterior.lista.filter((x) => !porId[x.id]).map((x) => x.apelido));
+  return { lista, porApelido, porId, saidos };
+}
+
 /** O que o agente lê do projeto: uma linha por clipe, com apelido e tempos exatos. */
-export function resumoParaOAgente(p: ProjetoDeEdicao): string {
-  const a = apelidosDoProjeto(p);
+export function resumoParaOAgente(p: ProjetoDeEdicao, apelidos?: Apelidos | null): string {
+  const a = apelidos || apelidosDoProjeto(p);
   const linhas = [`Projeto "${p.titulo}", ${p.formato}, ${p.fps} fps, ${tempoFino(p.duracao_s)} no total.`];
   p.trilhas.forEach((t) => {
     linhas.push(`Trilha ${t.id} (${ROTULO_DA_TRILHA[t.tipo]}${t.muda ? ", muda" : ""}${t.oculta ? ", oculta" : ""}):`);
@@ -79,8 +116,8 @@ const CAMPOS_DE_CLIPE = ["clipe"] as const;
  * Operações do agente (com apelidos) viram operações do código (com ids).
  * Recusa id cru e apelido desconhecido: o agente só mexe no que viu.
  */
-export function resolverApelidos(p: ProjetoDeEdicao, ops: Operacao[]): Operacao[] {
-  const a = apelidosDoProjeto(p);
+export function resolverApelidos(p: ProjetoDeEdicao, ops: Operacao[], apelidos?: Apelidos | null): Operacao[] {
+  const a = apelidos || apelidosDoProjeto(p);
   return ops.map((o) => {
     const copia = { ...(o as Record<string, unknown>) };
     CAMPOS_DE_CLIPE.forEach((k) => {
@@ -88,13 +125,14 @@ export function resolverApelidos(p: ProjetoDeEdicao, ops: Operacao[]): Operacao[
       const v = String(copia[k]);
       if (!/^c\d+$/.test(v)) throw new ErroDeApelido(`Use o apelido do clipe (c1, c2...), não "${v}".`);
       const id = a.porApelido[v];
+      if (!id && a.saidos && a.saidos.indexOf(v) >= 0) throw new ErroDeApelido(`O ${v} já saiu do projeto neste pedido.`);
       if (!id) throw new ErroDeApelido(`Não existe ${v}. Clipes: ${a.lista.map((x) => x.apelido).join(", ") || "nenhum"}.`);
       copia[k] = id;
     });
     if (copia.op === "reordenar" && Array.isArray(copia.ordem)) {
       copia.ordem = (copia.ordem as unknown[]).map((v) => {
         const id = a.porApelido[String(v)];
-        if (!id) throw new ErroDeApelido(`Não existe ${String(v)}.`);
+        if (!id) throw new ErroDeApelido(`Não existe ${String(v)}. Clipes: ${a.lista.map((x) => x.apelido).join(", ") || "nenhum"}.`);
         return id;
       });
     }

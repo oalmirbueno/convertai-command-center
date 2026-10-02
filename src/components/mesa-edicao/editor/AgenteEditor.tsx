@@ -22,13 +22,16 @@ import {
   temposDeAmostra,
   TETO_PADRAO_USD,
 } from "../../../../supabase/functions/editor-video/ferramentas";
-import { contextoDoAgente, conversaParaOModelo, ErroDoPrimeiroPasso, pedidoDeExportar, provaDaMudanca, rodarAgente, type ItemDoLog } from "@/lib/editor/agente";
+import { contextoDoAgente, conversaParaOModelo, ErroDoPrimeiroPasso, pedidoDeExportar, provaDaMudanca, resumoDoQueMudou, rodarAgente, type ItemDoLog } from "@/lib/editor/agente";
 import { acaoDeExportar, AGENTE_DO_EDITOR, baixarExportacao } from "@/lib/editor/exportar";
 import { acaoDaProposta, acaoFeita } from "@/lib/editor/cartao";
 import { chamarEditorVideo, emPreparacao, novoId } from "@/lib/editor/api";
 import { aplicarOperacao, assinaturaDoProjeto, trilhaPrincipal, type Operacao } from "@/lib/editor/operacoes";
 import { base64DoDataUrl, extrairQuadro, tempoDoQuadro } from "@/lib/editor/quadros";
-import { proporSkill, skillPorId, skillPorPalavras, type IdDaSkill, type PropostaDaSkill } from "@/lib/editor/skills";
+import { pedidoDeTakesRepetidos, proporSkill, skillPorId, skillPorPalavras, type IdDaSkill, type PropostaDaSkill } from "@/lib/editor/skills";
+import { assinaturasDosArquivos, itensDaBiblioteca } from "@/lib/editor/biblioteca";
+import { useArquivosDeVideo } from "@/components/mesa-videos/videosApi";
+import { definirFiltro, destacar } from "./buscaDoEditor";
 import { custoDaFala, fontesSemFala, lerFalaDaEntrada, marcarFalaDoProjeto, pedidoPrecisaDeFala, skillPrecisaDeFala } from "@/lib/editor/fala";
 import { tempoFino } from "@/lib/editor/tempo";
 import { aplicarOperacoes } from "@/lib/editor/operacoes";
@@ -92,7 +95,43 @@ const ATALHOS: { skill: IdDaSkill; rotulo: string }[] = [
   { skill: "cortar_silencios", rotulo: "Cortar silêncios" },
   { skill: "legendas", rotulo: "Legendas" },
   { skill: "punch_in", rotulo: "Punch-in" },
+  { skill: "remover_duplicados", rotulo: "Tirar repetidos" },
 ];
+
+const semAcento = (t: string) =>
+  String(t || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+
+/**
+ * "Remova os takes duplicados" sozinho (02/10): regra fixa, sem modelo e sem
+ * custo, como o exportar. Ordem ("remova", "tira", "apaga") vai na hora com
+ * Desfazer; pergunta ("tem take duplicado?", "ache os repetidos") mostra a
+ * proposta com Confirmar e os repetidos em destaque. Pedido que junta outra
+ * coisa ("tira os duplicados e legenda") vai ao modelo.
+ */
+export function pedidoDeTakesRepetidosDireto(texto: string): { direto: boolean; ordem: boolean } {
+  const t = semAcento(texto).replace(/\s+/g, " ").replace(/[.!]+$/, "").trim();
+  if (!pedidoDeTakesRepetidos(t)) return { direto: false, ordem: false };
+  const alvo = "(?:os |as |esses |essas |todos os |todas as )?(?:takes? |videos? |clipes? |cortes? )?(?:duplicad|repetid)[a-z]*";
+  const fim = "(?: (?:por favor|pra mim|para mim|da linha do tempo|do video|de uma vez))?";
+  if (new RegExp(`^(?:por favor,? )?(?:pode |agora )?(?:remov|tir|apag|exclu|delet|limp)[a-z]*(?: os| as)? ${alvo}${fim}$`).test(t)) return { direto: true, ordem: true };
+  const sem = t.replace(/\?+$/, "").trim();
+  if (new RegExp(`^(?:tem|ha|existe|existem|acha|ache|mostra|mostre|quais sao|quais|veja|ve) (?:algum |alguns |os |as )?(?:takes? |videos? |clipes? )?(?:duplicad|repetid)[a-z]*${fim}$`).test(sem)) return { direto: true, ordem: false };
+  return { direto: false, ordem: false };
+}
+
+/**
+ * Ordem explícita do dono pela regra do verbo (02/10): vale quando o Jev não
+ * responde (antes, sem Jev tudo virava Confirmar, até "apague o c3").
+ * Pergunta, "talvez" e "será que" nunca valem.
+ */
+export function ordemExplicita(pedido: string): boolean {
+  const t = semAcento(pedido).replace(/\s+/g, " ").trim();
+  if (!t || /\?\s*$/.test(t) || /^(sera|talvez|acha|voce acha|e se|posso|devo|qual|quais|como|por que|porque)\b/.test(t)) return false;
+  return /\b(remova|remove|tira|tire|apaga|apague|exclui|exclua|deleta|delete|corta|corte|divide|divida|move|mova|coloca|coloque|poe|ponha|encosta|encoste|junta|junte|reordena|reordene|aplica|aplique|fecha|feche|limpa|limpe|legenda|legende|pode (fazer|tirar|remover|apagar|aplicar|cortar|mover|seguir|mandar|editar))\b/.test(t);
+}
 
 export const aceitaImagem = (m: ModeloIa) => {
   const mod = (m as unknown as { modalidades?: { entrada?: string[] } | null }).modalidades;
@@ -148,6 +187,9 @@ export function custoDoPedido(porPasso: number, teto: number): { tipico: number;
 
 /** Pedido que vai ao modelo: com a dica da skill quando as palavras apontam uma (regra fixa, sem IA). */
 export function pedidoComDica(pedido: string): string {
+  if (pedidoDeTakesRepetidos(pedido)) {
+    return `${pedido.slice(0, MAX_TEXTO_DO_PEDIDO - 220)}\n\n(Dica da tela: takes ou vídeos repetidos saem com remover_duplicados (o código acha, fica o primeiro). Chame, confira e termine; faça também o resto do pedido.)`;
+  }
   const s = skillPorPalavras(pedido);
   const skill = s ? skillPorId(s) : null;
   const base = pedido.slice(0, MAX_TEXTO_DO_PEDIDO - 220);
@@ -357,6 +399,11 @@ export default function AgenteEditor({
   mensagensRef.current = mensagens;
   // Frente EDT: a marca aberta (logo e cor do kit) e a fila de render desta versão.
   const kit = useKitDaMesa();
+  // 02/10: a Mídia do cliente (o agente busca e põe na linha) e o sha256 dos arquivos (takes repetidos).
+  const arquivosQ = useArquivosDeVideo(clientId);
+  const arquivos = (arquivosQ.data && arquivosQ.data.arquivos) || null;
+  const midias = useMemo(() => (arquivos ? itensDaBiblioteca(arquivos) : []), [arquivos]);
+  const assinaturas = useMemo(() => (arquivos ? assinaturasDosArquivos(arquivos) : {}), [arquivos]);
   const marca: MarcaParaOAgente = { logo_path: (kit.data && kit.data.logo_path) || null, cor: corDaPaleta(kit.data ? kit.data.paleta : null), nome: kit.marca ? kit.marca.nome : null };
   const filaDeRender = useFilaDeRender(clientId, versaoId || null, chamarEditorVideo, (p: PedidoNaFila) => {
     if (p.estado !== "pronto" || p.tipo === "onda") return;
@@ -484,8 +531,9 @@ export default function AgenteEditor({
       const r = await chamarEditorVideo<{ clara?: boolean }>({ acao: "agente_ordem_clara", client_id: clientId, pedido, resumo });
       return !!(r && r.clara === true);
     } catch (e) {
-      if (!emPreparacao(e)) console.warn("[agente editor] ordem clara sem resposta (vai para Confirmar)", e);
-      return false;
+      // Sem Jev: a regra do verbo decide ("apague o c3" vai; "será que tiro?" pede Confirmar).
+      if (!emPreparacao(e)) console.warn("[agente editor] ordem clara sem resposta (vale a regra do verbo)", e);
+      return ordemExplicita(pedido);
     }
   };
 
@@ -567,16 +615,24 @@ export default function AgenteEditor({
     rolarParaBaixo();
   };
 
-  const proporDaSkill = (id: IdDaSkill, base: ProjetoDeEdicao, pedidoTexto: string, antes: ItemDoLog[] = []) => {
-    const prop = proporSkill(id, base, { agora: new Date().toISOString(), selecionados: selecao || [] });
+  const proporDaSkill = (id: IdDaSkill, base: ProjetoDeEdicao, pedidoTexto: string, antes: ItemDoLog[] = [], direto = true) => {
+    const prop = proporSkill(id, base, { agora: new Date().toISOString(), selecionados: selecao || [], assinaturas });
     if (!prop.operacoes.length) {
       responder(pedidoTexto, { quem: "agente", itens: antes.concat([{ tipo: "aviso", texto: `${prop.titulo}: ${prop.resumo}${prop.avisos.length ? ` ${prop.avisos.join(" ")}` : ""}` }]), acoes: [], mensagemId: null, anexos: [] });
       return;
     }
     // Atalho é ordem clara (um clique), sem custo e com Desfazer: vai na hora.
-    const acao = cartaoDaProposta(`skill-${id}-${Date.now().toString(36)}`, prop.base ? prop : { ...prop, base: assinaturaDoProjeto(base) }, base, true);
+    const acao = cartaoDaProposta(`skill-${id}-${Date.now().toString(36)}`, prop.base ? prop : { ...prop, base: assinaturaDoProjeto(base) }, base, direto);
     const feita = !!acao.executada_em;
-    responder(pedidoTexto, { quem: "agente", itens: antes.concat([{ tipo: "resposta", texto: `${prop.titulo}: ${prop.resumo}${feita ? " Feito; o Desfazer volta tudo." : " Confira a lista e confirme."}` }]), acoes: [acao], mensagemId: null, anexos: [] });
+    const mudou = resumoDoQueMudou(base, prop.operacoes);
+    if (feita) destacar(clientId, []);
+    responder(pedidoTexto, {
+      quem: "agente",
+      itens: antes.concat([{ tipo: "resposta", texto: `${prop.titulo}: ${prop.resumo}${feita ? ` Mudei: ${mudou || "nada na linha do tempo"} O Desfazer volta tudo.` : ` Vou mudar: ${mudou || "nada"} Confira e confirme.`}` }]),
+      acoes: [acao],
+      mensagemId: null,
+      anexos: [],
+    });
   };
 
   /** Frente EDT: ferramentas que chamam o servidor no meio do laço (sem custo) e as estimativas das gerações pagas. */
@@ -648,6 +704,8 @@ export default function AgenteEditor({
         tela: { selecionados: selecao || [], cursor_s: cursor ? cursor() : null },
         conversa: pr.conversa,
         marca,
+        midias,
+        assinaturas,
         servidor: (ch, trab) => ferramentaNoServidor(ch.ferramenta, ch.argumentos || {}, trab),
         aoPasso: (log, g, passo) => {
           setGasto(antes + g);
@@ -663,8 +721,14 @@ export default function AgenteEditor({
         // O Jev só é perguntado quando todas as outras travas deixam ir direto.
         const clara = podeAplicarDireto({ ...travas, ordemClara: true }).direto ? await ordemClara(pr.pedido, prop.resumo) : false;
         const d = podeAplicarDireto({ ...travas, ordemClara: clara });
-        acoes.push(cartaoDaProposta(`agente-${Date.now().toString(36)}`, prop, base, d.direto));
+        const cartao = cartaoDaProposta(`agente-${Date.now().toString(36)}`, prop, base, d.direto);
+        acoes.push(cartao);
+        // O que mudou, dito pelo código com os apelidos da tela (não depende do texto do modelo).
+        if (r.mudancas) itens.push({ tipo: "resposta", texto: cartao.executada_em ? `Mudei: ${r.mudancas}` : `Vou mudar (confirme no cartão): ${r.mudancas}` });
+        if (cartao.executada_em) destacar(clientId, r.tocados);
       }
+      // Busca do agente ("mostre só os gerados"): o filtro vai para a Mídia e a linha do tempo.
+      if (r.filtro) definirFiltro(clientId, r.filtro);
       if (r.exportar) acoes.push(acaoDeExportar(r.resultado));
       r.saidas.forEach((s) => acoes.push(acaoDaSaida(s)));
       if (!acoes.length && !r.opcoes.length) {
@@ -765,6 +829,13 @@ export default function AgenteEditor({
     // Só exportar: regra fixa, sem modelo e sem custo; vira o cartão com Confirmar.
     if (pedidoDeExportar(pedido)) {
       responder(pedido, { quem: "agente", itens: [{ tipo: "resposta", texto: "Pronto para exportar como está na linha do tempo. Confirme para baixar." }], acoes: [acaoDeExportar(projeto)], mensagemId: null, anexos: [] });
+      return;
+    }
+    // Só tirar/achar takes repetidos: regra fixa, sem modelo e sem custo.
+    const dup = pedidoDeTakesRepetidosDireto(pedido);
+    if (dup.direto) {
+      if (!dup.ordem) definirFiltro(clientId, { duplicados: true });
+      proporDaSkill("remover_duplicados", projeto, pedido, [], dup.ordem);
       return;
     }
     comecar({ pedido, skill: null, texto: pedido, chaveDoDono, conversa: conversaAntes }, pedidoPrecisaDeFala(pedido));

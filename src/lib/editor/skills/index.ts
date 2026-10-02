@@ -9,6 +9,7 @@ import { SKILL_PUNCH_IN } from "./punchIn";
 import { SKILL_CORTAR_PELA_ONDA, SKILL_MELHOR_TOMADA } from "./corteDeVerdade";
 import { SKILL_EFEITOS_SONOROS } from "./efeitosSonoros";
 import { SKILL_COR, SKILL_REENQUADRAR, SKILL_ZOOM_NOS_MOMENTOS } from "./pecasDaEdicao";
+import { SKILL_REMOVER_DUPLICADOS } from "./removerDuplicados";
 import type { ContextoDaSkill, IdDaSkill, PropostaDaSkill, Skill, ValorDoParametro } from "./tipos";
 
 export * from "./tipos";
@@ -29,6 +30,7 @@ export const SKILLS_DO_EDITOR: Skill[] = [
   SKILL_FECHAR_BURACOS,
   SKILL_TRANSICOES,
   SKILL_EFEITOS_SONOROS,
+  SKILL_REMOVER_DUPLICADOS,
 ];
 
 export const skillPorId = (id: string): Skill | null => SKILLS_DO_EDITOR.find((s) => s.id === id) || null;
@@ -51,6 +53,13 @@ const sem = (t: string) =>
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase();
 
+/** O pedido fala de takes, vídeos ou clipes duplicados/repetidos (não de fala repetida). */
+export function pedidoDeTakesRepetidos(texto: string): boolean {
+  const t = sem(texto);
+  if (/duplicad|duplicat/.test(t)) return true;
+  return /\b(takes?|videos?|clipes?|arquivos?|cortes?|cenas?)\b[^.?!]{0,30}\b(repetid|iguais|igual|dobrad|em dobro)/.test(t) || /\b(repetid|iguais|dobrad)[a-z]*\b[^.?!]{0,12}\b(takes?|videos?|clipes?)\b/.test(t);
+}
+
 /**
  * Reserva sem IA para escolher a skill por palavras (quando o servidor não
  * responde a editor_escolher_skill, que usa o Jev). Ordem importa: o pedido
@@ -58,6 +67,8 @@ const sem = (t: string) =>
  */
 export function skillPorPalavras(texto: string): IdDaSkill | null {
   const t = sem(texto);
+  // Antes de "repeti" (melhor tomada é FALA repetida; take/vídeo repetido é outro arquivo igual).
+  if (pedidoDeTakesRepetidos(t)) return "remover_duplicados";
   if (/brabo|dinamic/.test(t)) return "brabo";
   if (/antes e depois|antes\/depois|comparar|cortina/.test(t)) return "antes_depois";
   if (/tomada|falso comeco|repeti|gaguej/.test(t)) return "ficar_com_melhor_tomada";

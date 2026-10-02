@@ -122,3 +122,52 @@ export const listaDeCortes = (p: ProjetoDeEdicao) => {
   const t = trilhaPrincipal(p);
   return t ? emOrdem(t) : [];
 };
+
+/** O mínimo de um arquivo da Entrada (video_arquivos) que a Mídia do editor usa. */
+export interface ArquivoParaABiblioteca {
+  id: string;
+  nome: string;
+  tipo: string;
+  estado?: string | null;
+  storage_bucket: string;
+  storage_path: string;
+  duracao_s: number | null;
+  largura: number | null;
+  altura: number | null;
+  sha256?: string | null;
+  bytes?: number | null;
+  so_no_storage?: boolean;
+}
+
+/** Arquivo da Entrada vira item da Mídia (o mesmo para a tela e para o agente). */
+export function itemDoArquivo(a: ArquivoParaABiblioteca): ItemDaBiblioteca {
+  return {
+    id: a.id,
+    arquivo_id: a.so_no_storage ? null : a.id,
+    nome: a.nome,
+    tipo: a.tipo,
+    storage_bucket: a.storage_bucket,
+    storage_path: a.storage_path,
+    duracao_s: a.duracao_s,
+    largura: a.largura,
+    altura: a.altura,
+    origem: a.tipo === "gerado" || a.tipo === "angulo" || a.tipo === "quadro" ? "gerado" : "enviado",
+  };
+}
+
+/** A Mídia inteira: arquivos (menos os arquivados) e o que os pedidos devolveram, sem repetir caminho. */
+export function itensDaBiblioteca(arquivos: ArquivoParaABiblioteca[], pedidos: { id: string; tipo?: string; resultado?: unknown; estado?: string }[] = []): ItemDaBiblioteca[] {
+  const lista = arquivos.filter((a) => a.estado !== "arquivado").map(itemDoArquivo);
+  const dosPedidos = pedidos.reduce((l, p) => l.concat(midiasDoPedido(p)), [] as ItemDaBiblioteca[]);
+  const vistos: Record<string, boolean> = {};
+  return lista.concat(dosPedidos).filter((i) => (vistos[i.storage_path] ? false : (vistos[i.storage_path] = true)));
+}
+
+/** Sha256 e tamanho por arquivo_id (acha o mesmo take subido duas vezes). */
+export function assinaturasDosArquivos(arquivos: ArquivoParaABiblioteca[]): Record<string, { sha256: string | null; bytes: number | null }> {
+  const saida: Record<string, { sha256: string | null; bytes: number | null }> = {};
+  arquivos.forEach((a) => {
+    if (a.sha256 || a.bytes) saida[a.id] = { sha256: a.sha256 || null, bytes: typeof a.bytes === "number" ? a.bytes : null };
+  });
+  return saida;
+}
