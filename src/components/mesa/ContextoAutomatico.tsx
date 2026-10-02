@@ -37,6 +37,7 @@ import {
   type SugestaoDaMarcaMontada,
   type SugestoesDoContexto,
 } from "./contextoDoCliente";
+import { linhasDasDiretrizesParaTela } from "../../../supabase/functions/_shared/diretrizes-da-marca";
 
 // ------------------------------------------------------------------ checklist
 
@@ -267,8 +268,10 @@ export function camposDoConsolidado(kit: KitDoContexto | null | undefined): { ch
     { chave: "estilo", rotulo: "Estilo", texto: (kit && kit.estilo) || "", editavel: true },
     { chave: "regras", rotulo: "Regras", texto: (kit && kit.regras) || "", editavel: true },
   ];
+  // Frente CI: as diretrizes do dono aparecem só quando existem (não entram em "Ainda sem").
+  const diretrizes: CampoDoConsolidado[] = linhasDasDiretrizesParaTela(c && c.diretrizes).map((l) => ({ chave: l.chave, rotulo: l.rotulo, texto: l.texto }));
   return {
-    cheios: todos.filter((t) => temTexto(t.texto)),
+    cheios: todos.filter((t) => temTexto(t.texto)).concat(diretrizes),
     vazios: todos.filter((t) => !temTexto(t.texto)).map((t) => t.rotulo),
   };
 }

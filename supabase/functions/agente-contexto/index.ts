@@ -15,7 +15,16 @@
  *   contexto consolidado no kit. Campos que a equipe já preencheu não são
  *   sobrescritos: viram sugestão (a não ser com forcar).
  * - conversar { client_id, mensagem }: conversa com o agente sobre a marca;
- *   ele aplica as mudanças pedidas no kit e na memória dos agentes.
+ *   ele aplica as mudanças pedidas no kit e na memória dos agentes. Frente CI
+ *   (02/10): preferência, reclamação, "o cliente não gostou de X" e "não
+ *   quero que siga aquele perfil" viram diretrizes da marca
+ *   (contexto.diretrizes: evitar, preferir, perfis que a marca não segue),
+ *   feitas na hora com Desfazer (o Jev confere que é ajuste duradouro e
+ *   resolve qual perfil); o agente TESTA (relê o banco e o bloco que cada
+ *   mesa lê) e diz o resultado. A identidade dos perfis de referência
+ *   (visual, vídeo e pegada, tom, formatos) sai da ação x3
+ *   sintetizar_perfis, com Confirmar. Todas as mesas leem as diretrizes pelo
+ *   contexto completo da marca (_shared/diretrizes-da-marca.ts).
  * - fontes_da_biblioteca { client_id, marca_id?, previa?, gravar? }: escolhe
  *   (Jev) um par de fontes da biblioteca global da agência quando a marca do
  *   pedido ainda não tem fonte. Frente T2 (26/09): previa: true só sugere
@@ -55,7 +64,7 @@ import {
   type ImagemEntrada,
   type ModeloIa,
 } from "../_shared/ia-motor.ts";
-import { JevErro, jevPerguntar } from "../_shared/jev.ts";
+import { JevErro, jevPerguntar, type RespostaJev } from "../_shared/jev.ts";
 // Frente T2: a fonte sugerida da biblioteca vai para o kit da marca do pedido (sem misturar marcas).
 import {
   blocoDaMarca,
@@ -71,7 +80,7 @@ import {
   marcaParaGravar,
   marcasDoCliente,
 } from "../_shared/marca.ts";
-import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
+import { contextoCompletoParaPrompt, esquecerContextoCompleto, lerContextoCompletoDaMarca } from "../_shared/contexto-completo-da-marca.ts";
 // Frente MC (29/09): a regra única de herança e a logo achada no que já existe.
 import { linhaDaMarca, projetoDaMarcaAberta } from "../_shared/heranca-da-marca.ts";
 import { type ArquivoLeve, candidatosDaMarca, escolhaDaLogo, type NoDoWorkspaceLeve, perguntaDaLogo } from "./logo-da-marca.ts";
@@ -166,6 +175,36 @@ import { anexoDasRegrasSeguidas, esquemaComAprendizado, REGRA_DO_APRENDIZADO_NO_
 import { aprenderComOPedido, lerRegrasDoDono } from "../_shared/aprendizado-nos-agentes.ts";
 import { OPERACOES_COM_CUSTO_DO_CONTEXTO } from "./acoes-do-contexto.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
+// Frente CI (02/10): o que o dono manda vira diretriz da marca (feita na hora, com Desfazer), o agente
+// testa no banco e no que as mesas leem, e a identidade dos perfis de referência vira base de todas as mesas.
+import { handleDoPerfil, type MudancasNasDiretrizes, normalizarDiretrizes, perfilExcluido } from "../_shared/diretrizes-da-marca.ts";
+import {
+  acaoDasDiretrizes,
+  conferirKit,
+  conferirNasMesas,
+  conferirNoBanco,
+  entradaDaSintese,
+  ESQUEMA_DA_SINTESE,
+  ESQUEMA_DAS_DIRETRIZES,
+  executarAjusteDasDiretrizes,
+  gravarIdentidade,
+  identidadeDaSintese,
+  MAX_ITENS_DAS_DIRETRIZES,
+  MAX_PERFIS_NA_SINTESE,
+  mudancasComOJev,
+  mudancasDoModelo,
+  mudancasFeitas,
+  OPERACAO_DAS_DIRETRIZES,
+  type PerfilDaMarca,
+  type PerfilParaSintese,
+  perguntasDoJev,
+  REGRAS_DAS_DIRETRIZES,
+  REGRAS_DAS_DIRETRIZES_NO_PROMPT,
+  reverterAjusteDasDiretrizes,
+  sintesePrecisaRefazer,
+  SISTEMA_DA_SINTESE,
+  textoDoTeste,
+} from "./modulos/diretrizes-na-conversa.ts";
 
 /**
  * Frente H (25/09): voz de marca, posicionamento, objeções e identidade
@@ -894,7 +933,8 @@ async function montar(ch: Chamador, corpo: Record<string, unknown>) {
   // Frente C: o que o agente do cliente guardou no contexto (nicho, posicionamento,
   // estágio, caminho, identidade) não é refeito pela montagem: fica como estava.
   const extras: Record<string, unknown> = {};
-  if (antigo) for (const k of CHAVES_DO_PLANO_NO_CONTEXTO) if ((antigo as Record<string, unknown>)[k] != null) extras[k] = (antigo as Record<string, unknown>)[k];
+  // Frente CI: as diretrizes do dono (evitar, preferir, perfis que a marca não segue, identidade das referências) também ficam.
+  if (antigo) for (const k of CHAVES_DO_PLANO_NO_CONTEXTO.concat(["diretrizes"])) if ((antigo as Record<string, unknown>)[k] != null) extras[k] = (antigo as Record<string, unknown>)[k];
   const patch: Record<string, unknown> = {
     client_id: clientId,
     contexto: { ...extras, ...mesclado },
@@ -1198,9 +1238,11 @@ const ESQUEMA_CONVERSA = {
   schema: esquemaComAprendizado({
     type: "object",
     additionalProperties: false,
-    required: ["resposta", "estilo", "regras", "paleta", "contexto", "memoria", "acoes"],
+    required: ["resposta", "estilo", "regras", "paleta", "contexto", "memoria", "acoes", "diretrizes"],
     properties: {
       resposta: { type: "string" },
+      // Frente CI: preferência, reclamação e "o cliente não gostou" viram diretriz da marca (todas as mesas leem).
+      diretrizes: ESQUEMA_DAS_DIRETRIZES,
       // Logos, referências, acervo e workspace: só a lista; a equipe confirma (acoes-do-contexto.ts).
       acoes: ESQUEMA_DAS_ACOES_DO_CONTEXTO,
       estilo: { type: ["string", "null"] },
@@ -1317,6 +1359,157 @@ async function gravarPedidoDoContexto(conversaId: string, clientId: string, mens
 
 const ESQUEMA_CONVERSA_COM_METODO = comMetodosUsados(ESQUEMA_CONVERSA);
 
+// ------------------------------------------------------------------ frente CI: diretrizes, teste e perfis de referência
+
+type PerfilDeReferencia = PerfilDaMarca & { id: string; resumo: Record<string, unknown> | null };
+
+/**
+ * Perfis de referência da marca aberta (cliente_perfis_instagram, papel
+ * referencia, não arquivados), com o "a marca não segue" das diretrizes.
+ * Pela herança: a outra marca só os dela. Nunca lança (tabela ausente: []).
+ */
+async function perfisDeReferenciaDaMarca(clientId: string, marca: MarcaDoCliente | null, diretrizes: unknown): Promise<PerfilDeReferencia[]> {
+  const db = servico();
+  const d = normalizarDiretrizes(diretrizes);
+  const base = () => db.from("cliente_perfis_instagram").select("id, handle, nome, resumo, marca_id").eq("client_id", clientId).eq("papel", "referencia").is("arquivado_em", null).order("criado_em", { ascending: true }).limit(40);
+  try {
+    let r: { data: unknown; error: unknown } = await base();
+    let semMarca = false;
+    if (r.error) {
+      // Banco sem a coluna marca_id: só o cliente e a principal enxergam (a outra marca nunca herda).
+      r = await db.from("cliente_perfis_instagram").select("id, handle, nome, resumo").eq("client_id", clientId).eq("papel", "referencia").is("arquivado_em", null).limit(40);
+      semMarca = true;
+      if (r.error) return [];
+    }
+    const linhas = ((r.data as Array<{ id: string; handle: string; nome: string | null; resumo: Record<string, unknown> | null; marca_id?: string | null }> | null) ?? [])
+      .filter((p) => (semMarca ? !marca || marca.principal : linhaDaMarca(p.marca_id ?? null, marca)));
+    return linhas.map((p) => ({ id: p.id, handle: p.handle, nome: p.nome, resumo: p.resumo && typeof p.resumo === "object" ? p.resumo : null, excluido: perfilExcluido(d, p.handle) }));
+  } catch (e) {
+    registrarFalha("agente-contexto: perfis de referência não lidos", e, { client_id: clientId });
+    return [];
+  }
+}
+
+/**
+ * O que a mensagem pede sobre as diretrizes da marca vira ação JÁ FEITA,
+ * com Desfazer (sem custo e com reverso). O Jev confere que é ajuste
+ * duradouro e resolve "aquele perfil". Com outra marca aberta, grava na
+ * linha dela; nunca no kit do cliente.
+ */
+async function diretrizesDaConversa(
+  ch: Chamador,
+  a: { clientId: string; mensagem: string; anteriores: string[]; bruto: unknown; perfis: PerfilDaMarca[]; marca: MarcaDoCliente | null },
+): Promise<{ feita: AcaoDoAgente | null; paraConfirmar: AcaoDoAgente | null; mudancas: MudancasNasDiretrizes | null; motivo: string | null }> {
+  const pedidas = mudancasDoModelo(a.bruto);
+  if (!pedidas) return { feita: null, paraConfirmar: null, mudancas: null, motivo: null };
+  let respostas: Record<string, RespostaJev> | null = null;
+  let perfilDaPergunta: Record<string, string> = {};
+  try {
+    const q = perguntasDoJev(a.mensagem, a.anteriores, pedidas, a.perfis);
+    perfilDaPergunta = q.perfilDaPergunta;
+    const r = await jevPerguntar({ state: q.state, questions: q.questions });
+    await cobrarJev(r, { clientId: a.clientId, tarefa: "contexto", referencia: { tipo: REF_TIPO, id: a.clientId }, criadoPor: ch.userId }).catch((e) => (registrarFalha("agente-contexto: cobrança do Jev das diretrizes falhou", e), null));
+    respostas = r.answers;
+  } catch (e) {
+    // Sem o Jev: segue com o que o modelo pediu (com Desfazer); @ fora da lista só se a equipe escreveu.
+    registrarFalha("agente-contexto: Jev das diretrizes", e, { client_id: a.clientId });
+  }
+  const { mudancas, motivo } = mudancasComOJev(pedidas, a.mensagem, a.perfis, respostas, perfilDaPergunta);
+  if (!mudancas) return { feita: null, paraConfirmar: null, mudancas: null, motivo };
+  const outra = ehOutraMarca(a.marca) ? a.marca : null;
+  const acao = acaoDasDiretrizes(mudancas, { clientId: a.clientId, marcaId: outra ? outra.id : null, marcaNome: a.marca ? a.marca.nome : null });
+  if (!acao) return { feita: null, paraConfirmar: null, mudancas: null, motivo: null };
+  const direto = podeExecutarDireto(acao, REGRAS_DAS_DIRETRIZES, { pedidoClaro: true, maxItens: MAX_ITENS_DAS_DIRETRIZES });
+  if (!direto.direto) return { feita: null, paraConfirmar: acao, mudancas: null, motivo: direto.motivo };
+  const db = servico();
+  const feita = await executarDireto(acao, (item, ac) => executarAjusteDasDiretrizes(db, a.clientId, item, ac, { userId: ch.userId }), { userId: ch.userId });
+  const falhas = (feita.resultados || []).filter((x) => !x.ok);
+  if (falhas.length) console.error("agente-contexto: parte das diretrizes nao gravou", { client_id: a.clientId, falhas: falhas.length });
+  // As mesas desta instância releem já; as outras funções em até 90 s (cache curto do contexto completo).
+  esquecerContextoCompleto(a.clientId);
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "contexto_diretrizes_na_conversa", origin: "mesa:agente-contexto",
+    keyId: `mesa:agente-contexto:${ch.userId}`, scopes: ["files:write"],
+    input: { client_id: a.clientId, marca_id: outra ? outra.id : null, itens: feita.itens.map((i) => i.titulo) },
+    success: falhas.length === 0, statusCode: 200, durationMs: 0, resultRef: feita.id,
+  }).catch((e) => registrarFalha("agente-contexto: auditoria das diretrizes", e));
+  return { feita, paraConfirmar: null, mudancas: mudancasFeitas(feita), motivo: null };
+}
+
+/**
+ * O agente TESTA o que fez: relê o contexto da marca no banco, confere o kit
+ * e monta o bloco que cada mesa lê (contexto completo relido, sem cache).
+ * Nunca lança: falha vira frase no teste.
+ */
+async function testarMudancas(clientId: string, marca: MarcaDoCliente | null, mudancas: MudancasNasDiretrizes | null, kitFeito: AcaoDoAgente | null) {
+  const db = servico();
+  const outra = ehOutraMarca(marca) ? marca : null;
+  try {
+    esquecerContextoCompleto(clientId);
+    const banco = mudancas ? await conferirNoBanco(db, clientId, outra ? outra.id : null, mudancas) : null;
+    // Pelo id: a marca relida do banco (a que a conversa tinha na mão é de antes da gravação).
+    const mesas = mudancas && (mudancas.evitar.length || mudancas.preferir.length || mudancas.excluir_perfis.length || mudancas.voltar_a_seguir.length)
+      ? conferirNasMesas(await lerContextoCompletoDaMarca(db, clientId, marca ? marca.id : null, { semCache: true }), mudancas)
+      : null;
+    const kit = kitFeito ? conferirKit(await lerKit(clientId), kitFeito) : null;
+    const ok = (!banco || banco.ok) && (!mesas || mesas.ok) && (!kit || kit.ok);
+    return { ok, texto: textoDoTeste(banco, mesas, kit), banco, mesas, kit };
+  } catch (e) {
+    registrarFalha("agente-contexto: teste das mudanças falhou", e, { client_id: clientId });
+    return { ok: false, texto: "Teste: não consegui reler o banco agora; confira no Contexto.", banco: null, mesas: null, kit: null };
+  }
+}
+
+/**
+ * x3 sintetizar_perfis (com custo, depois do Confirmar): lê o resumo e os
+ * posts que a perfis-instagram já guardou dos perfis de referência que a
+ * marca SEGUE (o excluído não entra) e grava a identidade de referência
+ * (visual, vídeo e pegada, tom, formatos) nas diretrizes da marca. Nada é
+ * raspado e nenhum login é usado.
+ */
+async function sintetizarPerfis(ch: Chamador, clientId: string, marca: MarcaDoCliente | null): Promise<{ desfazer: Record<string, unknown>; aviso?: string }> {
+  const db = servico();
+  const outra = ehOutraMarca(marca) ? marca : null;
+  const kit = await lerKitDaMarca(clientId, marca);
+  const diretrizes = ((kit?.contexto ?? {}) as Record<string, unknown>).diretrizes;
+  const seguidos = (await perfisDeReferenciaDaMarca(clientId, marca, diretrizes)).filter((p) => !p.excluido).slice(0, MAX_PERFIS_NA_SINTESE);
+  if (!seguidos.length) throw new Error("A marca não tem perfil de referência que ela segue. Adicione em Contexto, Perfis do Instagram.");
+  const { data, error } = await db
+    .from("cliente_perfis_posts")
+    .select("perfil_id, formato, formato_editorial, legenda, leitura, engajamento, fora_da_curva")
+    .in("perfil_id", seguidos.map((p) => p.id))
+    .eq("client_id", clientId)
+    .is("arquivado_em", null)
+    .order("engajamento", { ascending: false, nullsFirst: false })
+    .limit(400);
+  if (error) throw new Error("Não foi possível ler os posts dos perfis de referência.");
+  const posts = (data as Array<{ perfil_id: string; formato: string | null; formato_editorial: string | null; legenda: string | null; leitura: string | null; engajamento: number | null; fora_da_curva: boolean | null }> | null) ?? [];
+  const perfis: PerfilParaSintese[] = seguidos.map((p) => ({ handle: p.handle, nome: p.nome, resumo: p.resumo, posts: posts.filter((x) => x.perfil_id === p.id) }));
+  if (!perfis.some((p) => p.posts.length || p.resumo)) throw new Error("Os perfis de referência ainda não têm posts capturados. Capture em Contexto, Perfis do Instagram.");
+  const modelo = await modeloDoContexto();
+  const r = await chamarTexto({
+    clientId,
+    tarefa: "contexto",
+    agente: "contexto",
+    modeloId: modelo.id,
+    raciocinio: raciocinioPara(modelo, ["low", "medium"]),
+    sistema: SISTEMA_DA_SINTESE,
+    mensagens: [{ papel: "usuario", conteudo: `${entradaDaSintese(perfis, marca ? marca.nome : await nomeDoCliente(clientId))}\n\nEscreva a identidade de referência.` }],
+    esquemaJson: ESQUEMA_DA_SINTESE,
+    maxTokensSaida: 2000,
+    timeoutMs: 100_000,
+    referencia: { tipo: REF_TIPO, id: clientId },
+    criadoPor: ch.userId,
+  });
+  const identidade = identidadeDaSintese(r.json, perfis, new Date().toISOString());
+  if (!identidade) throw new Error("A síntese voltou vazia. Tente de novo.");
+  const { antes } = await gravarIdentidade(db, clientId, outra ? outra.id : null, identidade, { userId: ch.userId });
+  esquecerContextoCompleto(clientId);
+  const semLeitura = posts.filter((x) => !x.leitura).length;
+  const aviso = `${identidade.perfis.length} ${identidade.perfis.length === 1 ? "perfil" : "perfis"} e ${identidade.posts} posts${semLeitura ? `; ${semLeitura} posts ainda sem leitura visual (ler em Perfis do Instagram afina a síntese)` : ""}`;
+  return { desfazer: { marca_id: outra ? outra.id : null, identidade_antes: antes }, aviso: aviso.slice(0, 300) };
+}
+
 async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = texto(corpo.client_id, 64);
   await garantirAcesso(ch, clientId);
@@ -1348,9 +1541,12 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   ]);
   const completoDaMarca = await completoP;
   const anteriores = historicoParaOModelo(linhas, { excluir: pedido.id, max: 16, maxChars: 2500 });
+  // Frente CI: as diretrizes da marca aberta e os perfis de referência dela (com o "a marca não segue").
+  const diretrizesAtuais = normalizarDiretrizes(((kit?.contexto ?? {}) as Record<string, unknown>).diretrizes);
+  const perfisDaMarca = await perfisDeReferenciaDaMarca(clientId, marcaDaConversa, diretrizesAtuais);
 
   // Pedido de mexer em logo, referência, foto, arquivo, leitura ou montagem: as listas entram no prompt (com apelidos, nunca id).
-  const dadosDasAcoes = pedeAcaoNoContexto(mensagem) ? await dadosParaAcoes(clientId).catch((e) => (registrarFalha("agente-contexto: dadosParaAcoes falhou", e), null)) : null;
+  const dadosDasAcoes = pedeAcaoNoContexto(mensagem) ? await dadosParaAcoes(clientId, marcaDaConversa).catch((e) => (registrarFalha("agente-contexto: dadosParaAcoes falhou", e), null)) : null;
   // Papel próprio do agente de contexto no catálogo (padrão barato); sem ele, o de leitura.
   const estrategista = await modeloDoContexto();
   const hoje = hojeParaOAgente();
@@ -1370,6 +1566,15 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     fontes: fontes.data ?? [],
     memoria_dos_agentes: memoria.data ?? [],
     referencias_lidas: ((refs.data as { papel: string; leitura: string; tags: string[] }[] | null) ?? []).map((r) => ({ papel: r.papel, tecnica: texto(r.leitura, 400) })),
+    diretrizes_da_marca: {
+      evitar: diretrizesAtuais.evitar.map((i) => `${i.texto}${i.area !== "geral" ? ` (${i.area})` : ""}`),
+      preferir: diretrizesAtuais.preferir.map((i) => `${i.texto}${i.area !== "geral" ? ` (${i.area})` : ""}`),
+      perfis_que_a_marca_nao_segue: diretrizesAtuais.perfis_excluidos.map((p) => `@${p.handle}`),
+      identidade_de_referencia: diretrizesAtuais.identidade_referencia
+        ? { perfis: diretrizesAtuais.identidade_referencia.perfis.map((h) => `@${h}`), gerada_em: diretrizesAtuais.identidade_referencia.gerado_em }
+        : null,
+    },
+    perfis_de_referencia_da_marca: perfisDaMarca.map((p) => ({ handle: `@${p.handle}`, nome: p.nome, a_marca_segue: !p.excluido })),
   };
   const r = await chamarTexto({
     clientId,
@@ -1383,6 +1588,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
       CONHECIMENTO_DO_CONTEXTO,
       blocoDasRegras(regras),
       `CONTEXTO ATUAL (JSON):\n${JSON.stringify(estado)}`,
+      // Frente CI: preferência, reclamação e "o cliente não gostou" viram diretriz aplicada (todas as mesas).
+      REGRAS_DAS_DIRETRIZES_NO_PROMPT,
       completoDaMarca,
       dadosDasAcoes
         ? blocoDasAcoesDoContexto(dadosDasAcoes)
@@ -1415,7 +1622,19 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   }
   const memoriasEnsinadas = kitFeito ? (kitFeito.resultados || []).filter((x) => x.ok && x.operacao === "gravar_decisao").length : 0;
 
-  const acaoProposta = dadosDasAcoes ? normalizarAcoesDoContexto(o.acoes, dadosDasAcoes, clientId) : null;
+  // Frente CI: evitar, preferir e perfis que a marca não segue, feitos na hora (também na outra marca, na linha dela).
+  const dir = await diretrizesDaConversa(ch, { clientId, mensagem, anteriores: anteriores.map((m) => m.conteudo), bruto: o.diretrizes, perfis: perfisDaMarca, marca: marcaDaConversa })
+    .catch((e) => (registrarFalha("agente-contexto: diretrizes da conversa falharam", e, { client_id: clientId }), { feita: null, paraConfirmar: null, mudancas: null, motivo: null }));
+  if (dir.feita && (dir.feita.resultados || []).some((x) => x.ok)) mudou.push("diretrizes");
+  // O agente testa: relê o banco e o que as mesas leem (só quando algo mudou).
+  const teste = dir.mudancas || kitFeito ? await testarMudancas(clientId, marcaDaConversa, dir.mudancas, kitFeito) : null;
+
+  let acaoProposta = dadosDasAcoes ? normalizarAcoesDoContexto(o.acoes, dadosDasAcoes, clientId) : null;
+  // Tirou um perfil que estava na identidade de referência: a síntese é refeita (com custo, pede Confirmar).
+  if (!acaoProposta && dir.mudancas && sintesePrecisaRefazer(diretrizesAtuais.identidade_referencia ? diretrizesAtuais.identidade_referencia.perfis : null, dir.mudancas)) {
+    const dados = await dadosParaAcoes(clientId, marcaDaConversa).catch((e) => (registrarFalha("agente-contexto: dadosParaAcoes (síntese) falhou", e), null));
+    if (dados) acaoProposta = normalizarAcoesDoContexto({ resumo: "Refazer a identidade de referência sem o perfil que saiu.", itens: [{ operacao: "sintetizar_perfis", ref: "x3", para: "" }] }, dados, clientId);
+  }
   // Aprender: a regra que o pedido ensina (o Jev decide se vale para sempre) e as regras do dono que o agente seguiu.
   const aprendizado = await aprenderComOPedido(db, {
     clientId, mensagem, regra: regraDoModelo(o.regra), agente: "contexto", areas: ["geral", "arte", "copy", "conta"], areaPadrao: "geral",
@@ -1429,13 +1648,16 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   let resposta = pediuMudarKit && marcaDaConversa
     ? `${respostaBase}\n\nCom a ${marcaDaConversa.nome} aberta, eu não gravo no kit do cliente. Para mudar o kit da ${marcaDaConversa.nome}, use Contexto, Editar em detalhe, Marca (ou Montar contexto da ${marcaDaConversa.nome}).`
     : respostaBase;
+  // Frente CI: o resultado do teste vai na resposta (prova do que mudou, ou do que não gravou).
+  if (teste && teste.texto) resposta = `${resposta}\n\n${teste.texto}`;
+  if (!dir.feita && dir.paraConfirmar) resposta = `${resposta}\n\nAs diretrizes ficaram na lista para você confirmar (${dir.motivo || "mais itens que o normal"}).`;
   // Frente SPP: "pronto" sem ação feita ganha o aviso (sem refazer); o método vira a linha "Método:".
-  const fechado = await fecharComMetodo(db, { usoId: r.usoId, metodo: sp, resposta, declarados: o.metodos_usados, acaoFeita: !!kitFeito, resultados: kitFeito ? kitFeito.resultados : null });
+  const fechado = await fecharComMetodo(db, { usoId: r.usoId, metodo: sp, resposta, declarados: o.metodos_usados, acaoFeita: !!(kitFeito || dir.feita), resultados: kitFeito || dir.feita ? (kitFeito ? kitFeito.resultados || [] : []).concat(dir.feita ? dir.feita.resultados || [] : []) : null });
   resposta = fechado.resposta;
   // Frente AG (27/09): cada cartão leva o "Ir para" (kit na aba Contexto, foto no acervo, arquivo no Workspace);
   // sem cartão, a área que a resposta citou. "Faz e me leva" abre sozinho ao terminar.
   const anexosDaResposta = anexosComCaminho(
-    caminhoNasAcoes([kitFeito, acaoProposta].filter((x): x is AcaoDoAgente => !!x), (a) => caminhoDoContexto(clientId, a), { abrirSozinho: pedeParaLevar(mensagem) }),
+    caminhoNasAcoes([kitFeito, dir.feita, dir.paraConfirmar, acaoProposta].filter((x): x is AcaoDoAgente => !!x), (a) => caminhoDoContexto(clientId, a), { abrirSozinho: pedeParaLevar(mensagem) }),
     caminhoDaResposta(resposta, clientId, { abrirSozinho: pedeParaAbrir(mensagem) || pedeParaLevar(mensagem) }),
   );
   if (aprendizado.anexo) anexosDaResposta.push(aprendizado.anexo);
@@ -1457,6 +1679,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     pedido_id: pedido.id,
     aviso: mensagemId ? null : AVISO_RESPOSTA_NAO_GUARDADA,
     memorias: memoriasEnsinadas,
+    // Frente CI: o teste do que mudou (banco, kit e o que cada mesa lê).
+    teste: teste ? { ok: teste.ok, texto: teste.texto, mesas: teste.mesas ? teste.mesas.mesas : [], faltaram: teste.mesas ? teste.mesas.faltaram : [] } : null,
     aprendizado: aprendizado.anexo,
     seguiu: seguidas,
     kit: await lerKitDaMarca(clientId, marcaDaConversa),
@@ -1787,8 +2011,16 @@ async function sugerirKitDaMarca(ch: Chamador, corpo: Record<string, unknown>) {
 const comoErroDoContexto = (e: unknown) => (e instanceof ErroDaAcao ? new ErroContexto(e.status, e.codigo, e.message) : e);
 
 /** O que o agente de contexto pode mexer: logos do kit, referências, acervo e workspace do cliente. */
-async function dadosParaAcoes(clientId: string): Promise<DadosDoContexto> {
+async function dadosParaAcoes(clientId: string, marca: MarcaDoCliente | null = null): Promise<DadosDoContexto> {
   const db = servico();
+  // Frente CI (x3): perfis de referência da marca aberta, os que ela não segue e quando a identidade foi gerada.
+  const perfisP = lerKitDaMarca(clientId, marca)
+    .then(async (k) => {
+      const d = normalizarDiretrizes(((k?.contexto ?? {}) as Record<string, unknown>).diretrizes);
+      const lista = await perfisDeReferenciaDaMarca(clientId, marca, d);
+      return { seguidos: lista.filter((p) => !p.excluido).length, excluidos: d.perfis_excluidos.length, identidade_em: d.identidade_referencia ? d.identidade_referencia.gerado_em || null : null };
+    })
+    .catch((e) => (registrarFalha("agente-contexto: perfis para as ações falharam", e), null));
   const [kit, refs, fotos, nos] = await Promise.all([
     lerKit(clientId),
     db.from("cliente_referencias").select("id, papel, origem, tags, leitura, destaque").eq("client_id", clientId).eq("ativa", true).order("criado_em", { ascending: false }).limit(60),
@@ -1815,11 +2047,12 @@ async function dadosParaAcoes(clientId: string): Promise<DadosDoContexto> {
     nos: (nosOk.data ?? []) as NoDoWorkspace[],
     pendentes,
     montado_em: kit?.contexto_atualizado_em ?? null,
+    perfis: await perfisP,
   };
 }
 
 /** Uma operação do agente de contexto, já confirmada. */
-async function executarItemDoContexto(ch: Chamador, clientId: string, item: ItemDaAcaoDoAgente, marca: MarcaDoCliente | null = null): Promise<{ desfazer?: Record<string, unknown> | null; aviso?: string }> {
+async function executarItemDoContexto(ch: Chamador, clientId: string, item: ItemDaAcaoDoAgente, marca: MarcaDoCliente | null = null, acao: Pick<AcaoDoAgente, "contexto"> = {}): Promise<{ desfazer?: Record<string, unknown> | null; aviso?: string }> {
   const db = servico();
   // Frente MC: confirmado com outra marca aberta (CME), a logo vai para a linha dela; nunca para o kit do cliente.
   const outra = ehOutraMarca(marca) ? marca : null;
@@ -1855,6 +2088,9 @@ async function executarItemDoContexto(ch: Chamador, clientId: string, item: Item
     const frase = `${l.lidas} de ${l.tentadas} lidas${l.restantes ? `, ${l.restantes} ainda na fila` : ""}${l.motivo ? `. ${l.motivo}` : ""}`;
     return { aviso: frase.slice(0, 300) };
   }
+  // Frente CI: diretrizes (quando ficaram para Confirmar) e a síntese dos perfis de referência.
+  if (item.operacao === OPERACAO_DAS_DIRETRIZES) return executarAjusteDasDiretrizes(db, clientId, item, acao, { userId: ch.userId }).finally(() => esquecerContextoCompleto(clientId));
+  if (item.operacao === "sintetizar_perfis") return sintetizarPerfis(ch, clientId, marca);
   if (item.operacao === "montar_contexto") {
     if (outra) throw new Error(`Com a ${outra.nome} aberta, o contexto dela sai pelo botão Montar contexto da ${outra.nome} (vira sugestão para confirmar); o do cliente não muda.`);
     const antes = await lerKit(clientId);
@@ -1870,9 +2106,21 @@ async function executarItemDoContexto(ch: Chamador, clientId: string, item: Item
   throw new Error("Operação desconhecida.");
 }
 
-async function desfazerItemDoContexto(clientId: string, r: ResultadoDoItem) {
+async function desfazerItemDoContexto(clientId: string, r: ResultadoDoItem, userId = "") {
   const db = servico();
   const d = (r.desfazer ?? {}) as Record<string, unknown>;
+  // Frente CI: diretrizes voltam item a item; a identidade de referência volta à de antes.
+  if (r.operacao === OPERACAO_DAS_DIRETRIZES) {
+    await reverterAjusteDasDiretrizes(db, clientId, r, { userId });
+    esquecerContextoCompleto(clientId);
+    return;
+  }
+  if (r.operacao === "sintetizar_perfis") {
+    const marcaId = typeof d.marca_id === "string" && UUID.test(d.marca_id) ? d.marca_id : null;
+    await gravarIdentidade(db, clientId, marcaId, (d.identidade_antes ?? null) as Parameters<typeof gravarIdentidade>[3], { userId });
+    esquecerContextoCompleto(clientId);
+    return;
+  }
   if (r.operacao === "trocar_logo" && typeof d.marca_id === "string" && UUID.test(d.marca_id)) {
     // Frente MC: a logo trocada era da outra marca; volta na linha dela.
     const alternativa = d.alternativa === true;
@@ -1939,7 +2187,7 @@ async function executarAcaoDoContexto(ch: Chamador, corpo: Record<string, unknow
           ? Promise.reject(new Error(`Com a ${marcaDaAcao.nome} aberta, o kit muda em Contexto, Marca (só na ${marcaDaAcao.nome}); o kit do cliente não muda.`))
           : ehOperacaoDoPlano(item.operacao) || ehOperacaoDoKit(item.operacao)
           ? executarItemDoPlano(servico(), clientId, item, acao, memoria, deps)
-          : executarItemDoContexto(ch, clientId, item, marcaDaAcao),
+          : executarItemDoContexto(ch, clientId, item, marcaDaAcao, acao),
       // Frente AG (27/09): acervo e workspace vão em passos de 6 (andamento e Parar na tela). O plano
       // fica numa chamada só: a memória do plano (o projeto novo antes das tarefas) vive nesta chamada.
       {
@@ -1974,7 +2222,7 @@ async function desfazerAcaoDoContexto(ch: Chamador, corpo: Record<string, unknow
     const deps = dependenciasDoExecutor(ch, clientId);
     r = await desfazerAcaoGuardada(
       guardada,
-      (x) => (ehOperacaoDoPlano(x.operacao) || ehOperacaoDoKit(x.operacao) ? reverterItemDoPlano(servico(), clientId, x, deps) : desfazerItemDoContexto(clientId, x)),
+      (x) => (ehOperacaoDoPlano(x.operacao) || ehOperacaoDoKit(x.operacao) ? reverterItemDoPlano(servico(), clientId, x, deps) : desfazerItemDoContexto(clientId, x, ch.userId)),
       { userId: ch.userId },
     );
   } catch (e) {

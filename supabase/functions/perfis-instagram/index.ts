@@ -132,6 +132,8 @@ import { anexoDasRegrasSeguidas, blocoDasRegras, esquemaComAprendizado, REGRA_DO
 import { aprenderComOPedido, lerRegrasDoDono } from "../_shared/aprendizado-nos-agentes.ts";
 import { acaoDaAnalise, analiseDoModelo, ANALISES_DO_PERFIL, PROPRIEDADE_DA_ANALISE, REGRA_DA_ANALISE_NO_PROMPT } from "./analises-na-conversa.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
+// Frente CI (02/10): perfil que a marca não segue (diretriz do dono pelo agente de contexto) não vira plano, ideia nem estilo.
+import { type DiretrizesDaMarca, normalizarDiretrizes, perfilExcluido } from "../_shared/diretrizes-da-marca.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -420,6 +422,31 @@ async function carregarPerfil(clientId: string, perfilId: unknown, opcoes: { arq
   const p = data as Perfil;
   if (p.arquivado_em && !opcoes.arquivado) throw new ErroHttp(409, "perfil_arquivado", "Este perfil está arquivado.");
   return p;
+}
+
+/** Diretrizes da marca do perfil (pela herança: a outra marca só as dela). Nunca lança: sem leitura, vazias. */
+async function diretrizesDaMarca(clientId: string, marca: MarcaDoCliente | null): Promise<DiretrizesDaMarca> {
+  try {
+    const c = (marca ? await lerContextoDaMarca(servico(), clientId, marca) : await lerContextoConsolidado(servico(), clientId)) as Record<string, unknown>;
+    return normalizarDiretrizes(c.diretrizes);
+  } catch (e) {
+    registrarFalha("perfis-instagram: diretrizes da marca não lidas", e, { client_id: clientId });
+    return normalizarDiretrizes(null);
+  }
+}
+
+/**
+ * Frente CI: o dono disse que a marca não segue este perfil ("não quero que
+ * o perfil siga aquele"). Plano igual, ideias e levar ao estilo param aqui,
+ * com o caminho de volta na frase.
+ */
+async function garantirQueAMarcaSegue(clientId: string, perfil: Perfil) {
+  if (perfil.papel !== "referencia") return;
+  const marcaId = (perfil as Perfil & { marca_id?: string | null }).marca_id ?? null;
+  const marca = await marcaDoCorpo(clientId, marcaId ? { marca_id: marcaId } : null);
+  if (perfilExcluido(await diretrizesDaMarca(clientId, marca), perfil.handle)) {
+    throw new ErroHttp(409, "perfil_nao_seguido", `A marca não segue mais o @${perfil.handle} (diretriz do dono). Para usar de novo, diga ao agente de contexto: pode voltar a seguir @${perfil.handle}.`);
+  }
 }
 
 async function postsDoPerfil(perfilId: string, limite = 80): Promise<Post[]> {
@@ -894,6 +921,7 @@ async function listar(ch: Chamador, corpo: Record<string, unknown>) {
   // Frente MC: referências e concorrentes da marca aberta (marca_id nulo = do cliente, só na principal).
   const marcaDaLista = await marcaDoCorpo(clientId, corpo);
   const perfis = ((data as (Perfil & { marca_id?: string | null })[] | null) ?? []).filter((p) => linhaDaMarca(p.marca_id, marcaDaLista));
+  const diretrizes = await diretrizesDaMarca(clientId, marcaDaLista);
   const ids = perfis.map((p) => p.id);
   const [contagem, rodadas, tokens] = await Promise.all([
     ids.length
@@ -932,6 +960,8 @@ async function listar(ch: Chamador, corpo: Record<string, unknown>) {
       resumo: p.resumo,
       metricas: p.metricas,
       contagem: porPerfil[p.id] || { posts: 0, sem_leitura: 0, fora: 0 },
+      // Frente CI: a marca não segue este perfil (diretriz do dono); não entra na identidade nem nas mesas.
+      nao_seguir: p.papel === "referencia" && perfilExcluido(diretrizes, p.handle),
     })),
     mudancas: (((rodadas.data as Array<Record<string, unknown>> | null) ?? []).map((r) => ({ ...r, handle: handles[String(r.perfil_id)] || null }))),
     custo_usd: 0,
@@ -1357,6 +1387,7 @@ async function planoIgual(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await garantirAcesso(ch, clientId);
   const perfil = await carregarPerfil(clientId, corpo.perfil_id);
+  await garantirQueAMarcaSegue(clientId, perfil);
   const posts = comApelidosDosPosts(await postsDoPerfil(perfil.id, 40));
   if (!posts.length) throw new ErroHttp(409, "perfil_sem_posts", "Capture ou envie posts do perfil antes do plano.");
   const quantas = quantasPautas(corpo.quantidade);
@@ -1422,6 +1453,7 @@ async function ideiasResposta(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await garantirAcesso(ch, clientId);
   const perfil = await carregarPerfil(clientId, corpo.perfil_id);
+  await garantirQueAMarcaSegue(clientId, perfil);
   const ctx = await contextoDoCliente(clientId, await marcaDoCorpo(clientId, corpo));
   const g = await gerarIdeias(perfil, ctx, ch.userId, null);
   if (!g.ideias.length && !g.bloqueadas.length) throw new ErroHttp(409, "perfil_sem_posts", "Capture ou envie posts do perfil antes das ideias.");
@@ -1525,6 +1557,7 @@ async function proporEstilo(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await garantirAcesso(ch, clientId);
   const perfil = await carregarPerfil(clientId, corpo.perfil_id);
+  await garantirQueAMarcaSegue(clientId, perfil);
   const ids = (Array.isArray(corpo.post_ids) ? corpo.post_ids : []).map((x) => String(x ?? "")).filter((x) => UUID.test(x));
   if (!ids.length) throw new ErroHttp(400, "nenhum_post", "Escolha os posts que vão para o estilo.");
   const posts = comApelidosDosPosts(await postsDoPerfil(perfil.id, 80));
@@ -1712,6 +1745,11 @@ async function executarLevarAoEstilo(ch: Chamador, acao: AcaoDoAgente, clientId:
   const ids = itens.map((i) => i.alvo_id);
   const { data } = await servico().from("cliente_perfis_posts").select("*").in("id", ids).eq("client_id", clientId).is("arquivado_em", null);
   const porId = new Map(((data as Post[] | null) ?? []).map((p) => [p.id, p]));
+  // Frente CI: post de perfil que a marca não segue não vai ao estilo (nem pela conversa).
+  for (const perfilId of Array.from(new Set(((data as Post[] | null) ?? []).map((p) => p.perfil_id)))) {
+    const perfil = await carregarPerfil(clientId, perfilId, { arquivado: true }).catch(() => null);
+    if (perfil) await garantirQueAMarcaSegue(clientId, perfil);
+  }
   const resultados: ResultadoDoItem[] = [];
   const anexos: Array<{ nome: string; mime: string; base64: string }> = [];
   const levados: typeof itens = [];

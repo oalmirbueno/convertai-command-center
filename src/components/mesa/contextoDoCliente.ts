@@ -26,6 +26,8 @@ export interface ContextoConsolidado {
   logo?: { descricao?: string | null } | null;
   lacunas?: string[] | null;
   fontes_lidas?: string[] | null;
+  /** Frente CI: evitar, preferir, perfis que a marca não segue e a identidade das referências (agente de contexto). */
+  diretrizes?: unknown;
 }
 
 export interface KitDoContexto {
@@ -237,6 +239,7 @@ export const ROTULOS_DO_QUE_MUDOU: Record<string, string> = {
   publico: "público",
   oferta: "oferta",
   tom_de_voz: "tom de voz",
+  diretrizes: "diretrizes da marca",
 };
 
 export const temTexto = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;

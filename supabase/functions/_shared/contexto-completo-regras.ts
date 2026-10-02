@@ -22,6 +22,8 @@
  */
 
 import { estrategiaParaBrandbook, normalizarEstrategia } from "./estrategia-de-marca.ts";
+// Frente CI (02/10): as diretrizes do dono entram em TODO bloco, em qualquer área (todas as mesas).
+import { type DiretrizesDaMarca, secaoDasDiretrizes, temDiretrizes } from "./diretrizes-da-marca.ts";
 
 // ------------------------------------------------------------------ vocabulário
 
@@ -149,6 +151,12 @@ export type PacoteDaMarca = {
   decisoes: DecisaoDoPacote[];
   instagram: { contas: string[]; seguidores: number | null; alcance: number | null; semana: string | null } | null;
   referencias: { referencias: number; acervo: number; categorias: Record<string, number> } | null;
+  /**
+   * Frente CI (02/10): evitar, preferir, perfis que a marca não segue e a
+   * identidade dos perfis de referência (contexto.diretrizes da marca aberta,
+   * pela regra da herança). Vai em todo bloco, mesmo com `partes`.
+   */
+  diretrizes?: DiretrizesDaMarca | null;
   /** Partes que não foram lidas (falha de banco). Vão para o log e para a linha "Usando". */
   avisos: string[];
   lido_em: string;
@@ -168,6 +176,7 @@ export function pacoteVazio(clientId: string, nomeCliente = "cliente"): PacoteDa
     decisoes: [],
     instagram: null,
     referencias: null,
+    diretrizes: null,
     avisos: [],
     lido_em: new Date(0).toISOString(),
   };
@@ -361,7 +370,7 @@ function valorEmTexto(v: unknown): string {
 
 function linhasDoContexto(c: Record<string, unknown>): string[] {
   const linhas: string[] = [];
-  const usados: Record<string, true> = { fontes_lidas: true, lacunas: true, marca: true, atualizado_por_sincronia: true };
+  const usados: Record<string, true> = { fontes_lidas: true, lacunas: true, marca: true, atualizado_por_sincronia: true, diretrizes: true };
   for (const [k, rotulo] of ROTULOS_DO_CONTEXTO) {
     usados[k] = true;
     const t = limpa(valorEmTexto(c[k]), 700);
@@ -470,7 +479,12 @@ export type OpcoesDoBloco = {
   partes?: ParteDoContexto[];
   /** Sem o título (quem chama já tem o dele). */
   semTitulo?: boolean;
+  /** Sem as diretrizes do dono (só quem já as põe no prompt por conta própria). */
+  semDiretrizes?: boolean;
 };
+
+/** Parte do teto garantida às diretrizes do dono (vêm primeiro: valem sobre o resto). */
+export const PARTE_DAS_DIRETRIZES_NO_TETO = 0.35;
 
 /** Teto seguro (dentro do mínimo e do máximo). */
 export function tetoDoContexto(area: AreaDoContexto, teto?: number): number {
@@ -489,11 +503,16 @@ export function montarBlocoDoPacote(p: PacoteDaMarca, opcoes: OpcoesDoBloco = {}
   const pedidas = opcoes.partes && opcoes.partes.length ? opcoes.partes : PARTES_DO_CONTEXTO.slice();
   const ordem = ORDEM_DA_AREA[area].filter((x) => pedidas.indexOf(x) >= 0);
   const textos = ordem.map((parte) => ({ parte, texto: secaoDoPacote(p, parte) })).filter((s) => s.texto);
-  if (!textos.length) return "";
+  // Frente CI: as diretrizes do dono vêm sempre (qualquer área, quaisquer partes), logo depois do título.
+  const diretrizes = opcoes.semDiretrizes ? "" : secaoDasDiretrizes(p.diretrizes, area);
+  if (!textos.length && !diretrizes) return "";
   const titulo = opcoes.semTitulo ? "" : TITULO_DO_CONTEXTO_COMPLETO;
   const separador = 2;
-  const disponivel = teto - (titulo ? titulo.length + separador : 0) - separador * (textos.length - 1);
-  if (disponivel < 100) return cortarNoTeto(titulo ? `${titulo}\n\n${textos[0].texto}` : textos[0].texto, teto);
+  const dir = diretrizes ? cortarNoTeto(diretrizes, Math.max(200, Math.floor(teto * PARTE_DAS_DIRETRIZES_NO_TETO))) : "";
+  const cabeca = [titulo, dir].filter(Boolean).join("\n\n");
+  if (!textos.length) return cortarNoTeto(cabeca, teto);
+  const disponivel = teto - (cabeca ? cabeca.length + separador : 0) - separador * (textos.length - 1);
+  if (disponivel < 100) return cortarNoTeto(cabeca ? `${cabeca}\n\n${textos[0].texto}` : textos[0].texto, teto);
   const somaDosPesos = textos.reduce((s, x) => s + PESO[x.parte], 0) || 1;
   // 1ª passada: cada parte até a sua fatia.
   const fatia = textos.map((x) => Math.floor((disponivel * PESO[x.parte]) / somaDosPesos));
@@ -510,13 +529,13 @@ export function montarBlocoDoPacote(p: PacoteDaMarca, opcoes: OpcoesDoBloco = {}
   const pecas = textos
     .map((x, i) => (usado[i] >= x.texto.length ? x.texto : usado[i] >= 40 ? cortarNoTeto(x.texto, usado[i]) : ""))
     .filter(Boolean);
-  const bloco = [titulo].concat(pecas).filter(Boolean).join("\n\n");
+  const bloco = [cabeca].concat(pecas).filter(Boolean).join("\n\n");
   return cortarNoTeto(bloco, teto);
 }
 
 // ------------------------------------------------------------------ "Usando: ..."
 
-export type ItemUsado = { parte: ParteDoContexto; rotulo: string };
+export type ItemUsado = { parte: ParteDoContexto | "diretrizes"; rotulo: string };
 
 /**
  * O que o agente leu, em palavras do dono, na ordem: contexto da marca,
@@ -533,6 +552,12 @@ export function itensUsados(p: PacoteDaMarca, partes?: ParteDoContexto[]): ItemU
     itens.push({ parte: temContexto ? "contexto" : "kit", rotulo: `contexto da marca ${nome}${temKit && quer("kit") ? " (com o kit)" : ""}` });
   } else if (quer("marca")) {
     itens.push({ parte: "marca", rotulo: `marca ${nome} (contexto ainda vazio)` });
+  }
+  // Frente CI: as diretrizes entram em todo bloco; a linha diz quantas.
+  if (temDiretrizes(p.diretrizes)) {
+    const d = p.diretrizes as DiretrizesDaMarca;
+    const n = d.evitar.length + d.preferir.length + d.perfis_excluidos.length;
+    itens.push({ parte: "diretrizes", rotulo: `diretrizes do dono${n ? ` (${n})` : ""}${d.identidade_referencia ? " e identidade das referências" : ""}` });
   }
   if (quer("briefing") && p.briefing && p.briefing.linhas.length) {
     const d = dataCurta(p.briefing.data);

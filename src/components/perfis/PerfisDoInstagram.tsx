@@ -91,6 +91,11 @@ function LinhaDoPerfil({
         <span className="ml-3 min-w-0 flex-1">
           <span className="flex min-w-0 items-center">
             <span className="truncate text-[13px] font-medium text-foreground">@{p.handle}</span>
+            {p.nao_seguir && (
+              <span className={juntar(etiqueta, "ml-2 bg-muted text-muted-foreground")} title="O dono pediu para a marca não seguir este perfil. Ele não entra na identidade de referência nem nas mesas. Para voltar, diga ao agente de contexto.">
+                não seguir
+              </span>
+            )}
             {p.contagem.fora > 0 && (
               <span className={juntar(etiqueta, "ml-2 bg-primary/15 text-foreground")} title="Posts fora da curva (2x a mediana ou mais)">
                 {p.contagem.fora} fora da curva

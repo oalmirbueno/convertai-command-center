@@ -644,6 +644,8 @@ export const CHAMADAS_SEM_METODO: Record<string, string> = {
   "agente-contexto/index.ts#importarBrandBook": "leituras",
   "agente-contexto/index.ts#lerComOLeitor/lerLote": "leituras",
   "agente-contexto/index.ts#pacoteExterno": "contexto.pedido_externo",
+  // Frente CI (02/10): a síntese dos perfis de referência resume o que a perfis-instagram já leu (extração).
+  "agente-contexto/index.ts#sintetizarPerfis": "leituras",
   "agente-estilo/index.ts#lerReferencias": "leituras",
   "agente-estilo/templates.ts#combinarInterno": "estilo.templates",
   "agente-estilo/templates.ts#laminasDoPrint": "leituras",

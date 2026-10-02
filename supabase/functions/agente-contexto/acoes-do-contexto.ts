@@ -19,6 +19,11 @@
  * - x2 (contexto consolidado): montar_contexto, com custo, pede Confirmar.
  *   O kit de antes (contexto, paleta, estilo, regras) fica guardado e o
  *   Desfazer volta para ele (29/09: "ler pendentes, montar e atualizar").
+ * - x3 (identidade dos perfis de referência): sintetizar_perfis, com custo,
+ *   pede Confirmar. Lê o que a função perfis-instagram já guardou (resumo e
+ *   posts lidos) dos perfis que a marca ainda segue e grava a identidade
+ *   (visual, vídeo e pegada, tom, formatos) nas diretrizes da marca; o
+ *   Desfazer volta a de antes (frente CI, 02/10).
  *
  * Sem import de Deno: os testes (vitest) leem este arquivo.
  */
@@ -49,10 +54,11 @@ export const OPERACOES_DO_CONTEXTO = [
   "arquivar",
   "ler_referencias",
   "montar_contexto",
+  "sintetizar_perfis",
 ];
 
 /** Operações com custo de IA: nunca vão direto, o cartão mostra o custo e pede Confirmar. */
-export const OPERACOES_COM_CUSTO_DO_CONTEXTO = ["ler_referencias", "montar_contexto"];
+export const OPERACOES_COM_CUSTO_DO_CONTEXTO = ["ler_referencias", "montar_contexto", "sintetizar_perfis"];
 
 /** Custo estimado em US$ (medido em ia_usos, 29/09: leitura até US$ 0,005 por imagem; montagem até US$ 0,02). */
 export function custoEstimadoDoContexto(itens: Array<{ operacao: string }>, pendentes: number): number {
@@ -60,6 +66,7 @@ export function custoEstimadoDoContexto(itens: Array<{ operacao: string }>, pend
   for (const i of itens) {
     if (i.operacao === "ler_referencias") custo += Math.max(1, Math.min(12, pendentes || 0)) * 0.005;
     if (i.operacao === "montar_contexto") custo += 0.02 + Math.max(0, Math.min(12, pendentes || 0)) * 0.005;
+    if (i.operacao === "sintetizar_perfis") custo += 0.02;
   }
   return Math.round(custo * 10000) / 10000;
 }
@@ -78,6 +85,8 @@ export type DadosDoContexto = {
   pendentes?: number;
   /** Quando o contexto foi montado pela última vez (x2); null: nunca. */
   montado_em?: string | null;
+  /** Perfis de referência da marca (x3): quantos seguem, quantos a marca não segue e quando a identidade foi gerada. */
+  perfis?: { seguidos: number; excluidos: number; identidade_em: string | null } | null;
 };
 
 const umaLinha = (v: unknown, max: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -101,9 +110,16 @@ export function alvosDoContexto(d: DadosDoContexto) {
   const nos = alvosDoWorkspace(d.nos, 150);
   const pendentes = Math.max(0, Number(d.pendentes) || 0);
   const montado = d.montado_em && /^\d{4}-\d{2}-\d{2}/.test(d.montado_em) ? `montado em ${d.montado_em.slice(8, 10)}/${d.montado_em.slice(5, 7)}` : "nunca montado";
+  const perfis = d.perfis || { seguidos: 0, excluidos: 0, identidade_em: null };
+  const gerada = perfis.identidade_em && /^\d{4}-\d{2}-\d{2}/.test(perfis.identidade_em) ? `gerada em ${perfis.identidade_em.slice(8, 10)}/${perfis.identidade_em.slice(5, 7)}` : "nunca gerada";
   const tarefas: Array<AlvoComApelido<AlvoLivre>> = [
     { ref: "x1", id: "referencias_pendentes", titulo: "Referências sem leitura", detalhe: pendentes ? `${pendentes} ${pendentes === 1 ? "pendente" : "pendentes"} (lê até 12 por vez)` : "nenhuma pendente", dados: { pendentes } },
     { ref: "x2", id: "contexto_consolidado", titulo: "Contexto consolidado da marca", detalhe: montado, dados: {} },
+    {
+      ref: "x3", id: "identidade_referencia", titulo: "Identidade dos perfis de referência",
+      detalhe: `${perfis.seguidos} ${perfis.seguidos === 1 ? "perfil seguido" : "perfis seguidos"}${perfis.excluidos ? `, ${perfis.excluidos} que a marca não segue` : ""}; ${gerada}`,
+      dados: { seguidos: perfis.seguidos },
+    },
   ];
   return { logos, referencias, fotos, nos, tarefas };
 }
@@ -132,6 +148,11 @@ export function regrasDoContexto(alvos: ReturnType<typeof alvosDoContexto>): Rec
       rotulo: "montar de novo",
       alvos: ["x"],
       trava: (alvo) => (alvo.id !== "contexto_consolidado" ? "Só o contexto consolidado pode ser montado." : null),
+    },
+    sintetizar_perfis: {
+      rotulo: "gerar a identidade",
+      alvos: ["x"],
+      trava: (alvo) => (alvo.id !== "identidade_referencia" ? "Só a identidade dos perfis de referência pode ser gerada." : Number((alvo.dados || {}).seguidos) > 0 ? null : "A marca não tem perfil de referência seguido. Adicione em Contexto, Perfis do Instagram."),
     },
     ...acervo,
     ...workspace,
@@ -164,7 +185,7 @@ export function normalizarAcoesDoContexto(bruto: unknown, d: DadosDoContexto, cl
  * listas entram no prompt (são grandes; conversa sobre estilo não paga por elas).
  */
 export function pedeAcaoNoContexto(mensagem: string): boolean {
-  return /(arquiv|apag|tir[ae]|remov|mov[ae]|mover|mude de pasta|pasta|renome|organiz|etiquet|marque|tag|troqu?e a logo|trocar a logo|logo|refer[êe]ncia|acervo|workspace|foto|imagem|imagens|pendente|leia|ler |l[êe] as|mont[ae]|remont|atualiz[ae] o contexto|refa[çc]a o contexto|consolid)/i.test(String(mensagem || ""));
+  return /(arquiv|apag|tir[ae]|remov|mov[ae]|mover|mude de pasta|pasta|renome|organiz|etiquet|marque|tag|troqu?e a logo|trocar a logo|logo|refer[êe]ncia|acervo|workspace|foto|imagem|imagens|pendente|leia|ler |l[êe] as|mont[ae]|remont|atualiz[ae] o contexto|refa[çc]a o contexto|consolid|perfi|pegada|identidade|sintet|@[a-z0-9._]{2,})/i.test(String(mensagem || ""));
 }
 
 /** Bloco do prompt com as listas e a regra das ações. */
@@ -188,6 +209,7 @@ export function blocoDasAcoesDoContexto(d: DadosDoContexto): string {
       arquivar: DESCRICOES_DO_WORKSPACE.arquivar,
       ler_referencias: "ref x1; lê com IA as referências pendentes (até 12 por vez), com custo. para vazio.",
       montar_contexto: "ref x2; monta de novo o contexto da marca a partir dos documentos, dossiê e artes (atualizar), com custo; o kit de antes fica guardado para Desfazer. para vazio.",
+      sintetizar_perfis: "ref x3; lê os perfis de referência que a marca segue (resumo e posts já capturados) e gera a identidade de referência (visual, vídeo e pegada, tom, formatos) que todas as mesas usam, com custo; a de antes fica guardada para Desfazer. Use quando pedirem para ler os perfis, gerar a base pelas referências ou refazer depois de tirar um perfil. para vazio.",
     }),
   ].join("");
 }

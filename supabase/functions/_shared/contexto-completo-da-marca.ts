@@ -50,6 +50,8 @@ import { fotoDaMarcaAberta, projetoDaMarcaAberta } from "./heranca-da-marca.ts";
 import { type AreaDoCerebro, AREAS_DO_CEREBRO, type BancoDoCerebro, type FatoDoCerebro, faltaNoBancoDoCerebro, lerCerebro, resumoParaPrompt } from "./cerebro-do-cliente.ts";
 import { linhasDoBriefing } from "./pacote-externo.ts";
 import { registrarFalha } from "./falha-registrada.ts";
+// Frente CI (02/10): evitar, preferir, perfis que a marca não segue e a identidade das referências.
+import { normalizarDiretrizes, temDiretrizes } from "./diretrizes-da-marca.ts";
 import { normalizarEstrategia } from "./estrategia-de-marca.ts";
 import {
   type AreaDoContexto,
@@ -267,6 +269,8 @@ async function lerTudo(db: Banco, clientId: string, alvo: AlvoDoContexto): Promi
     decisoes,
     instagram,
     referencias: { referencias: referencias as number, acervo: acervo.total, categorias: acervo.cats },
+    // As diretrizes vêm do contexto JÁ pela herança: a outra marca só tem as dela.
+    diretrizes: temDiretrizes(normalizarDiretrizes(contexto.diretrizes)) ? normalizarDiretrizes(contexto.diretrizes) : null,
     avisos,
     lido_em: new Date().toISOString(),
   };

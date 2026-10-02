@@ -71,6 +71,8 @@ export interface PerfilNaLista {
   resumo: ResumoDoPerfil | null;
   metricas: MetricasDoPerfil | null;
   contagem: { posts: number; sem_leitura: number; fora: number };
+  /** Frente CI: o dono disse que a marca não segue este perfil (não entra na identidade nem nas mesas). */
+  nao_seguir?: boolean;
 }
 
 export interface MudancaNosConcorrentes {
