@@ -12,6 +12,7 @@ import {
   atualizarAgenda,
   chaves,
   diaCurto,
+  editarItemDaProposta,
   gravarProposta,
   laminasDoItem,
   lerProjetosDoCliente,
@@ -24,6 +25,8 @@ import {
 import { avisoDaPauta, chaveDaLinhaDeEvolucao, SeloDaPauta, useTrocarAngulo } from "./MemoriaEditorialNoMes";
 // Frente CPY: os avisos do texto (motor de copy e lâminas) à vista no cartão, recolhidos.
 import { AvisosDoTexto } from "@/components/sistema/OpcoesDaCopy";
+// 02/10: o mês por semana (uma linha por conteúdo, formato que troca, Mesa Foto ou Estúdio).
+import SemanasDoMes from "./SemanasDoMes";
 
 /**
  * Conteúdos que o agente do mês ou a campanha propõem, em cartões enxutos
@@ -205,10 +208,27 @@ export function BlocoDaProposta({
     }
   };
 
+  /** Edição à mão (título e formato), sem IA; a proposta volta atualizada. */
+  const editarNaLinha = async (it: ItemProposto, campos: Parameters<typeof editarItemDaProposta>[2]) => {
+    if (!it.tema_id) return;
+    try {
+      const r = await editarItemDaProposta(proposta.id, it.tema_id, campos);
+      if (r && r.proposta) queryClient.setQueryData(chaves.proposta(proposta.id), r.proposta);
+      const aviso = r && Array.isArray(r.avisos) ? r.avisos.find((a: unknown) => typeof a === "string") : null;
+      if (aviso) toast(aviso);
+    } catch (e) {
+      avisarErro(e, "Não foi possível mudar o conteúdo");
+    } finally {
+      void queryClient.invalidateQueries({ queryKey: chaves.proposta(proposta.id) });
+      void queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) });
+    }
+  };
+  const editavel = !gravada && proposta.status !== "descartada";
+
   return (
     <div className="min-w-0 space-y-2">
-      {!compacto && (
-        <div className={grade ? "grid grid-cols-1 gap-2 md:grid-cols-2 2xl:grid-cols-3" : "space-y-1.5"}>
+      {!compacto && grade && (
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 2xl:grid-cols-3">
           {itens.map((it, i) => (
             <CartaoDoConteudo
               key={it.tema_id || i}
@@ -219,6 +239,28 @@ export function BlocoDaProposta({
             />
           ))}
         </div>
+      )}
+      {!compacto && !grade && (
+        <SemanasDoMes
+          itens={itens}
+          itensDaProposta={proposta.itens || []}
+          clientId={clientId}
+          propostaId={proposta.id}
+          editavel={editavel}
+          acoes={{
+            onAbrirNoEstudio,
+            onEditar: editarNaLinha,
+            onRefazer: (it) => trocarAngulo(proposta.id, it.tema_id as string),
+            apagar: (it) => apagarDoCartao(it),
+            extra: (it) =>
+              it.evolucao || (it.avisos_de_texto && it.avisos_de_texto.length) ? (
+                <div className="flex min-w-0 flex-wrap items-center">
+                  <SeloDaPauta evolucao={it.evolucao} className="mr-2" />
+                  <AvisosDoTexto avisos={it.avisos_de_texto} />
+                </div>
+              ) : null,
+          }}
+        />
       )}
       {gravada ? (
         <div className="flex flex-wrap items-center rounded-lg bg-muted px-3 py-2 text-[12px]">

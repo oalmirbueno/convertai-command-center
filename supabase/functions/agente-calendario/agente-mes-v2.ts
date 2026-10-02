@@ -23,6 +23,9 @@
 
 import { TIPO_DA_ACAO, type AcaoDoAgente } from "../_shared/acoes-do-agente.ts";
 import type { PerguntaNoul, RespostaJev } from "../_shared/jev.ts";
+// 02/10: peça de foto (Mesa Foto) e as regras de conteúdo do dono no Mês.
+import { type DirecaoDeFoto, formatoDoMes, normalizarDirecaoDeFoto, resumoDaDirecaoDeFoto } from "./modulos/peca-de-foto.ts";
+import { REGRAS_DE_CONTEUDO_DO_MES } from "./modulos/cadencia-do-mes.ts";
 
 // ------------------------------------------------------------------ modelo
 
@@ -209,7 +212,7 @@ export function resumoDosArquivos(lidos: ArquivoLido[], naoLidos: ArquivoNaoLido
 
 // ------------------------------------------------------------------ criar conteúdos (colagem estruturada)
 
-export const FORMATOS_DA_CRIACAO = ["carrossel", "estatico"] as const;
+export const FORMATOS_DA_CRIACAO = ["carrossel", "estatico", "foto"] as const;
 export type FormatoDaCriacao = typeof FORMATOS_DA_CRIACAO[number];
 export const MAX_ITENS_DA_CRIACAO = 180;
 /** Uma geração do pedido livre por lote (igual ao refazer). */
@@ -223,6 +226,8 @@ export type ItemParaCriar = {
   tema: string;
   /** O que o material colado diz desta linha (copy, roteiro, legenda), adaptado ao cliente pelo gerador. */
   referencia: string;
+  /** Peça de foto (formato "foto"): a direção para a Mesa Foto (contrato em modulos/peca-de-foto.ts). */
+  foto?: DirecaoDeFoto | null;
 };
 
 export type CriacaoDeConteudos = {
@@ -232,6 +237,11 @@ export type CriacaoDeConteudos = {
   orientacao: string;
   itens: ItemParaCriar[];
   ignorados: number;
+  /**
+   * 02/10: a conferência da cadência pedida (por semana ISO) depois do ajuste:
+   * { ok, frase: "12 posts: 8 fotos e 4 carrosséis, 3 por semana.", semanas, problemas, cadencia }.
+   */
+  conferencia?: Record<string, unknown> | null;
 };
 
 const DATA = /^\d{4}-\d{2}-\d{2}$/;
@@ -243,17 +253,19 @@ function somarDias(data: string, n: number): string {
 }
 
 function formatoDaCriacao(v: unknown): { formato: FormatoDaCriacao; pedido: string | null } {
-  const s = String(v ?? "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  if (s.indexOf("estat") >= 0 || s === "static" || s === "post" || s.indexOf("imagem") >= 0 || s.indexOf("foto") >= 0) return { formato: "estatico", pedido: null };
-  if (!s || s.indexOf("carross") >= 0 || s.indexOf("carous") >= 0) return { formato: "carrossel", pedido: null };
+  // 02/10: "foto", "fotos", "ensaio", "foto de produto" são peça de foto (antes viravam estático).
+  const f = formatoDoMes(v);
+  if (f) return { formato: f, pedido: null };
+  if (!String(v ?? "").trim()) return { formato: "carrossel", pedido: null };
   // Vídeo, reels e story viram carrossel (a Mesa produz arte); o formato pedido fica anotado.
   return { formato: "carrossel", pedido: String(v).trim().slice(0, 40) };
 }
 
 /**
  * Lê criar_conteudos da resposta: datas AAAA-MM-DD de hoje até 13 meses à
- * frente, formato carrossel ou estático (o resto vira carrossel, anotado),
- * tema obrigatório. Null quando não sobra linha.
+ * frente, formato carrossel, estático ou foto (o resto vira carrossel,
+ * anotado), tema obrigatório; foto leva a direção do contrato. Null quando não
+ * sobra linha.
  */
 export function normalizarCriacao(bruto: unknown, hoje: string): CriacaoDeConteudos | null {
   if (!bruto || typeof bruto !== "object") return null;
@@ -270,7 +282,9 @@ export function normalizarCriacao(bruto: unknown, hoje: string): CriacaoDeConteu
       continue;
     }
     const f = formatoDaCriacao(m.formato);
-    itens.push({ data, formato: f.formato, formato_pedido: f.pedido, tema, referencia: String(m.referencia ?? "").trim().slice(0, 1500) });
+    const item: ItemParaCriar = { data, formato: f.formato, formato_pedido: f.pedido, tema, referencia: String(m.referencia ?? "").trim().slice(0, 1500) };
+    if (f.formato === "foto") item.foto = normalizarDirecaoDeFoto(m.foto, { tema });
+    itens.push(item);
   }
   if (!itens.length) return null;
   itens.sort((a, b) => a.data.localeCompare(b.data));
@@ -296,15 +310,19 @@ export function lotesDaCriacao<T>(itens: T[], tamanho = LOTE_DA_CRIACAO): T[][] 
  * livre estica a janela até a última data citada), o formato, o tema e a
  * referência do material. Espelho em src/components/mesa/planoDoMes.ts.
  */
-export function pedidoParaCriar(itens: Array<Pick<ItemParaCriar, "data" | "formato" | "tema" | "referencia">>, orientacao?: string | null): string {
+export function pedidoParaCriar(itens: Array<Pick<ItemParaCriar, "data" | "formato" | "tema" | "referencia" | "foto">>, orientacao?: string | null): string {
   const linhas = itens.map((i) => {
     const ref = String(i.referencia || "").replace(/\s+/g, " ").trim();
-    return `- ${i.data} · ${i.formato === "estatico" ? "estático" : "carrossel"} · ${String(i.tema || "").replace(/\s+/g, " ").trim()}${ref ? `\n  Referência do material: ${ref}` : ""}`;
+    const foto = i.formato === "foto" && i.foto ? `\n  Direção da foto: ${resumoDaDirecaoDeFoto(i.foto)}` : "";
+    return `- ${i.data} · ${ROTULO_DA_LINHA[i.formato] || "carrossel"} · ${String(i.tema || "").replace(/\s+/g, " ").trim()}${ref ? `\n  Referência do material: ${ref}` : ""}${foto}`;
   });
   const base = `Crie estes conteúdos, um para cada linha, exatamente na data e no formato indicados. Siga o tema e a referência do material de cada linha, adaptando ao cliente (negócio, oferta, público e tom de voz do contexto):\n${linhas.join("\n")}`;
   const o = String(orientacao || "").replace(/\s+/g, " ").trim().slice(0, 600);
   return o ? `${base}\nOrientação da equipe para todos: ${o}` : base;
 }
+
+/** Como o formato aparece na linha do pedido (foto: peça de foto da Mesa Foto). */
+const ROTULO_DA_LINHA: Record<string, string> = { carrossel: "carrossel", estatico: "estático", foto: "foto" };
 
 // ------------------------------------------------------------------ público do prompt (Jev)
 
@@ -444,4 +462,6 @@ export const REGRAS_DO_AGENTE_DO_MES = `COMO VOCÊ TRABALHA (agente do mês):
 - Material colado ou anexado (pautas, calendário de outra agência, legendas, planilha, roteiro): reconheça a estrutura (datas, formatos, temas, copy) e reproduza EXATAMENTE aquilo, adaptado ao cliente. Linha com data vira um item de criar_conteudos com a mesma data, o mesmo formato, o tema e a referência (o texto daquela linha). Sem data no material, distribua nos dias úteis do mês em conversa, na ordem do material. Se o material pede para trocar peças que já estão na agenda gravada, use acoes_na_agenda (refazer ou editar_textos) nas peças que casam.
 - Pedido amplo ("revise todos os meses", "tudo que fala com agência", "troque o público de tudo"): aplique a TODAS as peças que casam na AGENDA GRAVADA (leia público, gancho, lâminas e legenda de cada uma). Nunca diga que faz uma parte agora e o resto depois: ou a lista tem tudo (o painel executa em lotes) ou você pergunta.
 - Na dúvida de verdade sobre o que o dono quer, faça UMA pergunta objetiva e devolva as ações null.
-- Use o CONTEXTO VINDO DO MCP (orientações, dossiê, memórias e arquivos ativos) como parte do contexto do cliente.`;
+- Use o CONTEXTO VINDO DO MCP (orientações, dossiê, memórias e arquivos ativos) como parte do contexto do cliente.
+- Cadência e mistura pedidas pelo dono ("3 por semana", "2 fotos e 1 carrossel") são exatas: o painel confere semana a semana e devolve o que faltar para você completar.
+${REGRAS_DE_CONTEUDO_DO_MES}`;

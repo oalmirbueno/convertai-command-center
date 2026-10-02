@@ -128,6 +128,52 @@ import {
 // Frente CPY: o motor de copy da casa (limpeza e conferência da legenda, sem rede).
 import { REGRA_DA_LEGENDA_NO_PLANO } from "../_shared/motor-de-copy.ts";
 import { legendaDoItem } from "./modulos/legenda-do-item.ts";
+// 02/10: refazer uma proposta no servidor (chamada interna com a chave de serviço e o x-cron-secret).
+import {
+  ACAO_REFAZER_INTERNO,
+  autorizarChamadaInterna,
+  corpoDoLoteRefeito,
+  criadorPodeRefazer,
+  type ItemAntigo,
+  type LinhaRefeita,
+  linhasDaPropostaAntiga,
+  orientacaoDaMensagem,
+} from "./modulos/refazer-interno.ts";
+import { chave } from "../_shared/chaves.ts";
+// 02/10: peça de foto (formato "foto", contrato com a Mesa Foto) e cadência pedida conferida semana a semana.
+import {
+  direcaoDeFotoCompleta,
+  type DirecaoDeFoto,
+  entregaDaPecaDeFoto,
+  ESQUEMA_DA_DIRECAO_DE_FOTO,
+  faltasDaDirecao,
+  formatoDoMes,
+  FORMATOS_DO_MES,
+  linhasDaDirecaoDeFoto,
+  normalizarDirecaoDeFoto,
+  tituloDaPecaDeFoto,
+} from "./modulos/peca-de-foto.ts";
+import {
+  type CadenciaDoMes,
+  cadenciaDasFontes,
+  cadenciaDosNumeros,
+  conferirPlano,
+  type ConferenciaDoMes,
+  encaixarNaGrade,
+  fraseDaCadencia,
+  gradeDoMes,
+  pareceTutorial,
+  pendenciasDosItens,
+  REGRAS_DE_CONTEUDO_DO_MES,
+  textoDoAjuste,
+  type VagaDoMes,
+  formatoParaVaga,
+  normalizarCadencia,
+  temasNasVagas,
+  aplicarAjusteDoPlano,
+  formatoDaVaga,
+  type ItemDoAjuste,
+} from "./modulos/cadencia-do-mes.ts";
 import {
   acaoDeAtualizarPublico,
   blocoDaDecisaoDoPublico,
@@ -143,8 +189,10 @@ import {
   MAX_MENSAGENS_DO_HISTORICO,
   MESES_DA_AGENDA_LONGA,
   MODELO_DO_AGENTE_DO_MES,
+  lotesDaCriacao,
   normalizarArquivos,
   normalizarCriacao,
+  pedidoParaCriar,
   PAPEL_DO_AGENTE_DO_MES,
   PERGUNTAS_DO_PUBLICO,
   raciocinioDoMes,
@@ -153,7 +201,9 @@ import {
   TETO_TOKENS_DO_PEDIDO,
   TURNOS_COM_ARQUIVOS,
   type ArquivoLido,
+  type CriacaoDeConteudos,
   type DecisaoDoPublico,
+  type ItemParaCriar,
 } from "./agente-mes-v2.ts";
 import { contextoMcpAtivo, itensMcpDoCliente, paraATela, FONTES_MCP, TABELA_DOS_ITENS_MCP, type FonteMcp } from "../_shared/contexto-mcp.ts";
 import {
@@ -280,7 +330,7 @@ const RACIOCINIO_RAPIDO = "low";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   ...PREFLIGHT_CACHE,
 };
@@ -312,9 +362,13 @@ const GRAVACOES_EM_PARALELO = 5;
 // Limite da descricao do item editorial (createEditorialItemSchema).
 const LIMITE_DESCRICAO = 4000;
 
-export const FORMATOS = ["carrossel", "estatico"] as const;
+// 02/10: "foto" é a peça de foto feita na Mesa Foto (modulos/peca-de-foto.ts); a entrega da tarefa
+// segue a lista do MCP (sem "foto"): entregaDaPecaDeFoto escolhe carrossel ou post único.
+export const FORMATOS = ["carrossel", "estatico", "foto"] as const;
 type Formato = typeof FORMATOS[number];
-const FORMATO_PARA_ENTREGA: Record<Formato, "carousel" | "static"> = { carrossel: "carousel", estatico: "static" };
+const FORMATO_PARA_ENTREGA: Record<Formato, "carousel" | "static"> = { carrossel: "carousel", estatico: "static", foto: "carousel" };
+/** Entrega da tarefa do item na Agenda. */
+const entregaDoItem = (item: Pick<Item, "formato" | "foto">) => (item.formato === "foto" ? entregaDaPecaDeFoto(item.foto) : FORMATO_PARA_ENTREGA[item.formato === "estatico" ? "estatico" : "carrossel"]);
 
 const OBJETIVOS = [
   "viralizacao_descoberta",
@@ -399,6 +453,10 @@ type Item = {
   continua_de?: string | null;
   /** Frente AP: tema novo, ângulo novo de um post anterior ou repetição (código + Jev). */
   evolucao?: EvolucaoDaPauta;
+  /** 02/10: peça de foto (formato "foto"): a direção para a Mesa Foto, no contrato de modulos/peca-de-foto.ts. */
+  foto?: DirecaoDeFoto | null;
+  /** Título do item (peça de foto: o tema, como a Mesa Foto lê). */
+  titulo?: string;
 };
 
 type Proposta = {
@@ -421,7 +479,12 @@ type Proposta = {
   atualizado_em?: string;
 };
 
-type Chamador = { userId: string; token: string };
+/**
+ * Quem chamou. `interno`: chamada interna (refazer_proposta_interno), sem
+ * sessão; o acesso do autor ao cliente já foi conferido do lado do serviço e
+ * vale só para esse cliente.
+ */
+type Chamador = { userId: string; token: string; interno?: { clientId: string } };
 
 class ErroHttp extends Error {
   constructor(public status: number, public codigo: string, mensagem: string, public extra: Record<string, unknown> = {}) {
@@ -493,9 +556,9 @@ export function distribuirDatas(n: number, uteis: string[], ocupados: Set<string
 const texto = (v: unknown, max = 2000) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
 function normalizarFormato(v: unknown, cards: unknown[]): Formato {
-  const s = String(v ?? "").toLowerCase();
-  if (s.includes("carross") || s.includes("carous")) return "carrossel";
-  if (s.includes("estat") || s.includes("static")) return "estatico";
+  // 02/10: foto, fotos, ensaio e foto de produto são peça de foto (Mesa Foto).
+  const f = formatoDoMes(v);
+  if (f) return f;
   // Qualquer outro formato (reels, video, story) nunca passa: vira carrossel
   // quando ha mais de um card, senao estatico.
   return cards.length > 1 ? "carrossel" : "estatico";
@@ -583,7 +646,35 @@ export function normalizarItem(bruto: unknown, uteis: string[], dataPadrao?: str
     ...(texto(o.angulo, 120) ? { angulo: texto(o.angulo, 120) } : {}),
     ...(/^E\d{1,3}$/i.test(texto(o.continua_de, 8)) ? { continua_de: texto(o.continua_de, 8).toUpperCase() } : {}),
     ...(normalizarEvolucao(o.evolucao) ? { evolucao: normalizarEvolucao(o.evolucao)! } : {}),
+    // 02/10: peça de foto vai para a Mesa Foto com a direção do contrato (e o título, como os outros itens).
+    ...(formato === "foto"
+      ? { mesa: "foto" as const, titulo: texto(o.tema, 200), foto: normalizarDirecaoDeFoto(o.foto, { tema: texto(o.tema, 200), objetivo: texto(o.resumo, 300) }) }
+      : {}),
   };
+}
+
+/**
+ * Troca o formato de um item (sem IA): foto ganha a direção (a que tinha ou um
+ * ponto de partida concreto pelo tema) e vai para a Mesa Foto; carrossel e
+ * estático voltam para o Estúdio. Estático fica com uma lâmina.
+ */
+export function itemNoFormato(item: Item, formato: Formato): Item {
+  const novo: Item = { ...item, formato };
+  if (formato === "foto") {
+    novo.mesa = "foto";
+    novo.titulo = item.tema;
+    novo.foto = direcaoDeFotoCompleta(normalizarDirecaoDeFoto(item.foto, { tema: item.tema, objetivo: item.resumo }), item.tema);
+    novo.carrossel_infinito = false;
+    return novo;
+  }
+  delete novo.foto;
+  delete novo.titulo;
+  if (item.mesa === "foto") novo.mesa = null;
+  if (formato === "estatico") {
+    novo.cards = item.cards.slice(0, 1);
+    novo.carrossel_infinito = false;
+  }
+  return novo;
 }
 
 /**
@@ -606,13 +697,17 @@ export function manterDoAnterior(itens: Item[], anteriores: Item[]): Item[] {
     // Frente AP: a checagem da memória editorial fica enquanto o tema e o gancho não mudam.
     if (!out.evolucao && a.evolucao && out.tema === a.tema && out.gancho === a.gancho) out.evolucao = a.evolucao;
     if (!out.angulo && a.angulo) out.angulo = a.angulo;
+    // 02/10: a direção da foto que a equipe ou o ajuste já fecharam segue quando o modelo volta sem ela.
+    if (out.formato === "foto" && a.formato === "foto" && a.foto && faltasDaDirecao(out.foto).length && !faltasDaDirecao(a.foto).length) out.foto = a.foto;
     return out;
   });
 }
 
 function normalizarTema(bruto: unknown, id: string, anterior?: Tema): Tema {
   const o = (bruto ?? {}) as Record<string, unknown>;
-  const fmt = String(o.formato_sugerido ?? "").toLowerCase().includes("estat") ? "estatico" : "carrossel";
+  // 02/10: o tema pode sugerir peça de foto (Mesa Foto).
+  const sugerido = formatoDoMes(o.formato_sugerido);
+  const fmt: Formato = sugerido === "foto" || sugerido === "estatico" ? sugerido : "carrossel";
   return {
     id,
     tema: texto(o.tema, 200),
@@ -686,8 +781,10 @@ const ESQUEMA_ITEM = obj({
   tipo_editorial: S("string", { enum: [...IDS_DOS_TIPOS] }),
   framework: S("string", { enum: [...IDS_DOS_FRAMEWORKS] }),
   // Frente AP: o ângulo do conteúdo e a relação com a memória editorial (sequência de evolução).
-  angulo: S("string", { description: "O ângulo deste conteúdo em poucas palavras (ex.: passo a passo, erro comum, caso real, objeção, prova, aprofundamento)." }),
+  angulo: S("string", { description: "O ângulo deste conteúdo em poucas palavras (ex.: desejo, decisão, objeção, ocasião, erro comum, caso real, prova)." }),
   continua_de: S(["string", "null"], { description: "Apelido do item da MEMÓRIA EDITORIAL que este conteúdo continua com ângulo novo (ex.: E7); null quando é tema novo." }),
+  // 02/10: peça de foto (formato foto): a direção para a Mesa Foto; null nos outros formatos.
+  foto: { ...ESQUEMA_DA_DIRECAO_DE_FOTO, type: ["object", "null"], description: "Só no formato foto: a direção concreta da foto real (produto, ângulos, cenário, luz). Nos outros formatos, null." },
 });
 
 export const ESQUEMA_TEMAS = {
@@ -748,6 +845,11 @@ async function identificar(req: Request, servico: SupabaseClient): Promise<Chama
 /** Equipe com acesso ao cliente, conferido no banco com o JWT de quem chamou. */
 async function exigirAcessoAoCliente(chamador: Chamador, clientId: string) {
   if (!UUID.test(clientId)) throw new ErroHttp(400, "client_id_invalido", "client_id precisa ser um UUID.");
+  // Chamada interna: o autor foi conferido no serviço (is_staff e a regra de can_access_client) só para este cliente.
+  if (chamador.interno) {
+    if (chamador.interno.clientId === clientId) return;
+    throw new ErroHttp(403, "sem_acesso_ao_cliente", "A chamada interna vale só para o cliente da proposta.");
+  }
   const { data, error } = await clienteDoChamador(chamador.token).rpc("can_access_client", { _client_id: clientId });
   if (error) throw new ErroHttp(503, "autorizacao_indisponivel", "Não foi possível conferir o acesso ao cliente agora.");
   if (data !== true) throw new ErroHttp(403, "sem_acesso_ao_cliente", "Você não tem acesso a este cliente.");
@@ -1700,6 +1802,9 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
 
   const ctx = await montarContexto(servico, clientId, inicio, fim, marcaDaProposta);
   tempo.marcar("contexto");
+  // 02/10: a cadência pedida (tela ou plano combinado do mês) vira a grade de datas e formatos do detalhar.
+  const cadenciaDoMes = normalizarCadencia(corpo.cadencia) ?? cadenciaDasFontes([{ texto: blocoDoPlano(ctx, inicio), fonte: "plano" }]);
+  if (cadenciaDoMes) parametros.cadencia = cadenciaDoMes;
 
   // A proposta e a conversa nascem antes das chamadas: o uso de IA ja fica
   // ligado a proposta e a tela acompanha os temas chegando (status temas).
@@ -1740,7 +1845,12 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
   const pedido = `Proponha de 8 a ${maxTemas} temas para o período de ${inicio} a ${fim}, com ${parametros.frequencia} publicações no período.`
     + (parametros.objetivo ? ` Objetivo principal: ${parametros.objetivo}.` : "")
     + (parametros.oferta ? ` Oferta principal: ${parametros.oferta}.` : "")
-    + (parametros.regiao ? ` Região: ${parametros.regiao}.` : "");
+    + (parametros.regiao ? ` Região: ${parametros.regiao}.` : "")
+    + (cadenciaDoMes && cadenciaDoMes.mix && cadenciaDoMes.mix.foto
+      ? ` Cadência pedida: ${fraseDaCadencia(cadenciaDoMes)}; proponha temas de foto real (formato_sugerido foto) e de arte nessa proporção.`
+      : "")
+    + `
+${REGRAS_DE_CONTEUDO_DO_MES}`;
 
   // Três frentes em paralelo (uma por fase), cada uma com a sua parte dos
   // temas: cada resposta é um terço do tamanho e as três correm juntas.
@@ -1775,7 +1885,7 @@ Devolva:
 - publicos_prioritarios e pilares.
 - pesquisa: o que a pesquisa na web trouxe de útil para esta fase, com as fontes (links) usadas.
 - hipoteses: o que precisou ser suposto por falta de dado.
-- temas: cada um com id (t1, t2, ...), tema, pilar, fase (${f.fase}), objetivo (um só), por_que (ligado a dado real ou à pesquisa), formato_sugerido (carrossel ou estatico; estático para aviso, oferta e prova), sazonal, data_sazonal (AAAA-MM-DD ou null), tipo_editorial e framework.
+- temas: cada um com id (t1, t2, ...), tema, pilar, fase (${f.fase}), objetivo (um só), por_que (ligado a dado real ou à pesquisa), formato_sugerido (carrossel, estatico ou foto; estático para aviso, oferta e prova; foto para produto, pessoa ou ambiente real), sazonal, data_sazonal (AAAA-MM-DD ou null), tipo_editorial e framework.
 Varie tipo, framework, gancho e ângulo entre os temas; nada genérico que serviria para qualquer empresa.
 
 ${blocoEditorial}`;
@@ -1973,6 +2083,68 @@ async function escolherTemas(servico: SupabaseClient, chamador: Chamador, corpo:
   return json({ proposta: atualizada });
 }
 
+const ESQUEMA_SEM_TUTORIAL = {
+  nome: "temas_sem_tutorial",
+  schema: obj({ itens: { type: "array", items: obj({ tema_id: S("string"), tema: S("string"), gancho: S("string") }) } }),
+};
+
+/**
+ * Tema ou gancho com cara de tutorial ("entenda", "o que é", "como funciona",
+ * "passo a passo"...) volta para o modelo rápido reescrever direto, no desejo,
+ * decisão, objeção ou ocasião do cliente. Uma chamada, só os marcados; falha
+ * não trava (fica como estava e vai para o log).
+ */
+async function corrigirTutoriais(
+  chamador: Chamador,
+  clientId: string,
+  itens: Item[],
+  referencia: { tipo: string; id: string },
+  alvo: (i: Item) => boolean = () => true,
+): Promise<{ itens: Item[]; custo: number; reescritos: number }> {
+  const marcados = itens.filter((i) => alvo(i) && (pareceTutorial(i.tema) || pareceTutorial(i.gancho)));
+  if (!marcados.length) return { itens, custo: 0, reescritos: 0 };
+  try {
+    const { modelo, raciocinio } = await resolverModeloRapido(undefined);
+    const s = await chamarTexto({
+      clientId,
+      tarefa: "calendario",
+      agente: AGENTE,
+      modeloId: modelo.id,
+      timeoutMs: TIMEOUT_CALENDARIO_MS,
+      sistema: "Você reescreve títulos de posts do Instagram. Responda só o JSON pedido, em português do Brasil, sem travessão.",
+      mensagens: [{
+        papel: "usuario",
+        conteudo: `${REGRAS_DE_CONTEUDO_DO_MES}
+
+Estes títulos têm cara de tutorial. Reescreva cada tema e gancho direto, na linguagem do cliente, no que ele procura (desejo, decisão, objeção, ocasião), mantendo o assunto e o tema_id:
+${marcados.map((i) => `- ${i.tema_id} · ${i.formato} · tema "${i.tema}" · gancho "${i.gancho}"`).join("\n")}`,
+      }],
+      raciocinio,
+      esquemaJson: ESQUEMA_SEM_TUTORIAL,
+      referencia,
+      criadoPor: chamador.userId,
+    });
+    const novos = new Map<string, { tema: string; gancho: string }>();
+    const brutos = Array.isArray((s.json as Record<string, unknown>)?.itens) ? (s.json as { itens: unknown[] }).itens : [];
+    for (const b of brutos) {
+      const o = (b ?? {}) as Record<string, unknown>;
+      const tema = texto(o.tema, 200);
+      if (tema && !pareceTutorial(tema)) novos.set(texto(o.tema_id, 40), { tema, gancho: texto(o.gancho, 400) });
+    }
+    let reescritos = 0;
+    const saida = itens.map((i) => {
+      const n = marcados.indexOf(i) >= 0 ? novos.get(i.tema_id) : undefined;
+      if (!n) return i;
+      reescritos++;
+      return { ...i, tema: n.tema, gancho: n.gancho && !pareceTutorial(n.gancho) ? n.gancho : i.gancho, ...(i.formato === "foto" ? { titulo: n.tema } : {}) };
+    });
+    return { itens: saida, custo: s.custoUsd, reescritos };
+  } catch (e) {
+    registrarFalha("agente-calendario: reescrever títulos de tutorial falhou", e, { client_id: clientId });
+    return { itens, custo: 0, reescritos: 0 };
+  }
+}
+
 async function detalhar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const tempo = relogio();
   const p = await carregarProposta(servico, corpo.proposta_id);
@@ -1998,6 +2170,19 @@ async function detalhar(servico: SupabaseClient, chamador: Chamador, corpo: Reco
     const d = t.sazonal && t.data_sazonal && uteis.includes(t.data_sazonal) ? t.data_sazonal : datas[i];
     dataDoTema.set(t.id, d);
   });
+  // 02/10: com cadência pedida (parametros.cadencia), datas e formatos saem da grade (3 por semana:
+  // segunda, quarta e sexta; 2 fotos e 1 carrossel) e o item segue a vaga.
+  const cadencia = normalizarCadencia(p.parametros.cadencia);
+  const grade = cadencia ? gradeDoMes(cadencia, p.periodo_inicio, p.periodo_fim, hojeSaoPaulo()) : [];
+  const formatoDoTema = new Map<string, Formato>();
+  if (grade.length) {
+    const vagas = temasNasVagas(ordenados, grade);
+    vagas.forEach((v, id) => {
+      dataDoTema.set(id, v.data);
+      const t = ordenados.find((x) => x.id === id);
+      formatoDoTema.set(id, formatoParaVaga(t ? t.formato_sugerido : null, v));
+    });
+  }
 
   const jaFeitos = new Map(p.itens.filter((i) => escolhidos.some((t) => t.id === i.tema_id)).map((i) => [i.tema_id, i]));
   const pendentes = ordenados.filter((t) => !jaFeitos.has(t.id));
@@ -2036,10 +2221,10 @@ ${p.temas.filter((t) => !t.escolhido).map((t) => `- ${t.tema}`).join("\n") || "-
   const rodarLote = async (lote: Tema[]) => {
     const pedido = `${base}
 
-TAREFA: detalhe uma publicação para cada tema abaixo, com todos os campos do calendário.
-${lote.map((t) => `- tema_id ${t.id}: "${t.tema}" | pilar ${t.pilar} | fase ${t.fase} | objetivo ${t.objetivo} | formato sugerido ${t.formato_sugerido} | data ${dataDoTema.get(t.id)} | tipo_editorial ${t.tipo_editorial || AGENTE_ESCOLHE} | framework ${t.framework || AGENTE_ESCOLHE} | por que: ${t.por_que}\n  Estrutura: ${estruturaDoConteudo(t.tipo_editorial ?? "", t.framework ?? "", t.formato_sugerido)}`).join("\n")}
+TAREFA: detalhe uma publicação para cada tema abaixo, com todos os campos do calendário, no formato e na data indicados.
+${lote.map((t) => `- tema_id ${t.id}: "${t.tema}" | pilar ${t.pilar} | fase ${t.fase} | objetivo ${t.objetivo} | formato ${formatoDoTema.get(t.id) ?? `sugerido ${t.formato_sugerido}`} | data ${dataDoTema.get(t.id)} | tipo_editorial ${t.tipo_editorial || AGENTE_ESCOLHE} | framework ${t.framework || AGENTE_ESCOLHE} | por que: ${t.por_que}\n  Estrutura: ${estruturaDoConteudo(t.tipo_editorial ?? "", t.framework ?? "", t.formato_sugerido)}`).join("\n")}
 Regras dos itens:
-- formato: carrossel ou estatico. Estático tem exatamente 1 card.
+- formato: o indicado no tema: carrossel, estatico ou foto (peça de foto real feita na Mesa Foto: produto, pessoa ou ambiente, sem arte; preencha foto com a direção concreta e use os cards para descrever cada foto, uma por card). Fora do formato foto, foto é null. Estático tem exatamente 1 card.
 - cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao que acompanha, estilo visual respeitando o kit de marca). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim (descreva a protagonista igual em todos os cards), variando só a pose, o gesto e o enquadramento (nunca a mesma pose em dois cards seguidos); prefira foto real do cliente quando o contexto tiver. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6; 7 ou mais só quando o conteúdo pede. Nunca escreva o nome da marca no texto dos cards. Não repita tema, gancho nem imagem de posts recentes.
 - tipo_editorial e framework: os do tema (ou, com "${AGENTE_ESCOLHE}", o que mais serve); a funcao de cada card nomeia o passo do framework (ex.: "capa: atenção", "desejo", "CTA").
 - ${REGRA_DO_CARROSSEL}
@@ -2048,7 +2233,8 @@ Regras dos itens:
 - copy: a legenda completa do post. ${REGRA_DA_LEGENDA_NO_PLANO}
 - data: use exatamente a data indicada para o tema.
 - tipo_conteudo: extra_sazonal só para conteúdo de data sazonal marcado como extra; senão principal.
-- status: planejado.`;
+- status: planejado.
+${REGRAS_DE_CONTEUDO_DO_MES}`;
     const s = await chamarTexto({
       clientId: p.client_id,
       tarefa: "calendario",
@@ -2071,7 +2257,10 @@ Regras dos itens:
     for (const t of lote) {
       const bruto = brutos.find((b) => String((b as Record<string, unknown>)?.tema_id ?? "") === t.id) ?? brutos[lote.indexOf(t)];
       if (!bruto) continue;
-      const item = normalizarItem(bruto, uteis, dataDoTema.get(t.id));
+      const lido = normalizarItem(bruto, uteis, dataDoTema.get(t.id));
+      // 02/10: o formato da vaga vale (foto vira peça de foto com direção; arte volta ao Estúdio).
+      const formatoDaGrade = formatoDoTema.get(t.id);
+      const item = formatoDaGrade && lido.formato !== formatoDaGrade ? itemNoFormato(lido, formatoDaGrade) : lido;
       item.tema_id = t.id;
       if (!item.tema) item.tema = t.tema;
       if (!item.tipo_editorial) item.tipo_editorial = t.tipo_editorial ?? "";
@@ -2108,13 +2297,22 @@ Regras dos itens:
   tempo.marcar("memoria");
   const faltam = ordenados.filter((t) => !itens.some((i) => i.tema_id === t.id)).map((t) => t.id);
   const status = faltam.length === 0 ? "pronta" : "detalhando";
-  const atualizada = await salvarProposta(servico, p, { itens, status });
+  // 02/10: título com cara de tutorial volta para o modelo rápido reescrever (uma vez, sem laço).
+  const semTutorial = await corrigirTutoriais(chamador, p.client_id, itens, { tipo: REF_TIPO, id: p.id }, (i) => temasNovos.has(i.tema_id));
+  custo += semTutorial.custo;
+  // 02/10: a conferência da cadência (por semana ISO) fica na proposta e na conversa.
+  const conferencia = cadencia && faltam.length === 0 ? conferirPlano(semTutorial.itens, cadencia, grade.length ? grade : null) : null;
+  const atualizada = await salvarProposta(servico, p, {
+    itens: semTutorial.itens,
+    status,
+    ...(conferencia ? { parametros: { ...p.parametros, conferencia: { ok: conferencia.ok, frase: conferencia.frase, problemas: conferencia.problemas } } } : {}),
+  });
 
   const conversaId = await garantirConversa(servico, atualizada, chamador.userId);
   await registrarMensagens(servico, conversaId, p.client_id, [
     {
       papel: "agente",
-      conteudo: `Detalhei ${novos.length} publicação(ões).${faltam.length ? ` Faltam: ${faltam.join(", ")}.` : " Proposta pronta para revisar e gravar."}`,
+      conteudo: `Detalhei ${novos.length} publicação(ões).${faltam.length ? ` Faltam: ${faltam.join(", ")}.` : " Proposta pronta para revisar e gravar."}${conferencia ? ` Conferido: ${conferencia.frase}` : ""}`,
       uso_id: usos[0] ?? null,
       anexos: usos.slice(1).map((id) => ({ uso_id: id })),
     },
@@ -2128,7 +2326,7 @@ Regras dos itens:
     const corpoErro = await resposta.json();
     return json({ ...corpoErro, proposta: atualizada, faltam, custo_usd: custo, saldo_usd: saldo, tempos_ms: tempos }, resposta.status);
   }
-  return json({ proposta: atualizada, faltam, custo_usd: custo, saldo_usd: saldo, tempos_ms: tempos, parou_pelo_tempo: parouPeloTempo });
+  return json({ proposta: atualizada, faltam, conferencia, custo_usd: custo, saldo_usd: saldo, tempos_ms: tempos, parou_pelo_tempo: parouPeloTempo });
 }
 
 async function conversar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
@@ -2169,7 +2367,7 @@ Aplique o pedido na proposta. Devolva:
 - diagnostico: o novo texto só se ele mudou; senão null.
 - temas: a lista COMPLETA de temas atualizada só se algum tema mudou (mantenha os ids; tema novo recebe id novo); senão null.
 - itens: a lista COMPLETA de itens atualizada só se algum item mudou; senão null.
-Datas só de segunda a sexta entre ${p.periodo_inicio} e ${p.periodo_fim}. Formato só carrossel ou estatico.`;
+Datas só de segunda a sexta entre ${p.periodo_inicio} e ${p.periodo_fim}. Formato carrossel, estatico ou foto (peça de foto da Mesa Foto, com a direção em foto).`;
 
   const saida = await chamarTexto({
     clientId: p.client_id,
@@ -2284,7 +2482,7 @@ export type CampanhaNoItem = { linhas: string[]; fotoDoCard: (temaId: string, or
 export function descricaoDoItem(item: Item, propostaId: string, indice: number, campanha?: CampanhaNoItem | null): string {
   const linhas: string[] = [
     `Tema: ${item.tema}`,
-    `Formato: ${item.formato === "carrossel" ? `Carrossel${item.carrossel_infinito ? " (carrossel infinito)" : ""}` : "Post estático"}`,
+    `Formato: ${item.formato === "foto" ? `Peça de foto (Mesa Foto, ${item.foto ? item.foto.quantidade : 4} fotos)` : item.formato === "carrossel" ? `Carrossel${item.carrossel_infinito ? " (carrossel infinito)" : ""}` : "Post estático"}`,
     `Tipo: ${item.tipo_conteudo === "extra_sazonal" ? "extra sazonal" : "conteúdo principal"}`,
     `${ROTULO_FASE[item.fase] ?? `Fase ${item.fase}`}`,
     `Pilar: ${item.pilar}`,
@@ -2300,7 +2498,9 @@ export function descricaoDoItem(item: Item, propostaId: string, indice: number, 
   linhas.push("", `Gancho: ${item.gancho}`, "", `Resumo: ${item.resumo}`);
   if (item.instrucao_arte) linhas.push("", `Instrução de arte da equipe: ${item.instrucao_arte}`);
   if (campanha && campanha.linhas.length) linhas.push("", ...campanha.linhas);
-  linhas.push("", "Roteiro dos cards:");
+  // 02/10: peça de foto leva a direção para a Mesa Foto (assunto, ângulos, cenário, luz, pessoa, quantidade).
+  if (item.formato === "foto" && item.foto) linhas.push("", "Direção da foto (Mesa Foto):", ...linhasDaDirecaoDeFoto(item.foto));
+  if (item.formato !== "foto" || item.cards.length) linhas.push("", item.formato === "foto" ? "Fotos do post:" : "Roteiro dos cards:");
   for (const c of item.cards) {
     linhas.push(`Card ${c.ordem}${c.funcao ? ` (${c.funcao})` : ""}: ${c.texto}`);
     if (c.ilustracao) linhas.push(`  Ilustração: ${c.ilustracao}`);
@@ -2400,7 +2600,8 @@ async function gravarItens(
 
   const gravarUm = async (i: number) => {
     const item = p.itens[i];
-    const titulo = (item.tema || `Publicação ${i + 1}`).slice(0, 200);
+    // 02/10: a peça de foto entra na Agenda como "Peça de foto: ..." (a lista de entregas não tem "foto").
+    const titulo = item.formato === "foto" ? tituloDaPecaDeFoto(item.tema || `Publicação ${i + 1}`) : (item.tema || `Publicação ${i + 1}`).slice(0, 200);
     // Já está na agenda (gravado antes, inclusive por seleção): não mexe.
     if (item.task_id) {
       resultado.push({ indice: i, tema: titulo, data: item.data, task_id: item.task_id, situacao: "ja_gravado" });
@@ -2425,7 +2626,7 @@ async function gravarItens(
       project_id: projectId,
       title: titulo,
       description: descricaoDoItem({ ...item, data }, p.id, i, campanhaNoItem),
-      format: FORMATO_PARA_ENTREGA[item.formato === "estatico" ? "estatico" : "carrossel"],
+      format: entregaDoItem(item),
       due_date: data,
       priority: "medium" as const,
       idempotency_key: idempotencyKey,
@@ -2474,6 +2675,11 @@ async function gravarItens(
   // task_id dentro de cada item: criado, ja gravado ou ja existente; null so
   // quando nada foi criado nem encontrado. O estudio acha o roteiro por aqui.
   const itensComTarefa = itensComTaskId(p.itens, resultado);
+  // 02/10: plano com peça de foto tem a mistura decidida (pedido do dono): foto vai para a Mesa Foto e o
+  // resto fica no Estúdio, sem o equilíbrio do perfil trocar a mesa de um carrossel pedido.
+  if (itensComTarefa.some((i) => i.formato === "foto")) {
+    for (const i of itensComTarefa) if (!i.mesa) i.mesa = i.formato === "foto" ? "foto" : "arte";
+  }
   // Frente MF: cada item ganha a mesa que o faz, pelo formato do perfil (alternar: o Jev escolhe, o código equilibra).
   const mesasDoPlano = await marcarMesasDoPlano(servico, p.client_id, itensComTarefa, { referencia: { tipo: REF_TIPO, id: p.id }, criadoPor: chamador.userId })
     .catch((e) => {
@@ -3467,7 +3673,7 @@ const resumoDaCampanha = (c: Campanha, fotos: { imagem: ImagemDaCampanha; foto: 
 };
 
 const REGRAS_DOS_ITENS = `Regras dos itens:
-- formato: carrossel ou estatico. Estático tem exatamente 1 card.
+- formato: carrossel, estatico ou foto (peça de foto real feita na Mesa Foto: produto, pessoa ou ambiente, sem arte; preencha foto com a direção concreta e use os cards para descrever cada foto, uma por card). Fora do formato foto, foto é null. Estático tem exatamente 1 card.
 - cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim, variando só a pose, o gesto e o enquadramento; prefira foto real do cliente quando o contexto tiver. Entre itens diferentes do plano, a ilustracao e o estilo mudam (cenário, roupa, luz, tipo de peça), com a cor da marca só como acento. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6. Nunca escreva o nome da marca no texto dos cards.
 - carrossel_infinito: true quando o carrossel for uma cena panorâmica contínua e isso fizer sentido.
 - copy: a legenda completa do post. O texto longo (explicação, detalhes, lista) mora aqui, nunca nas lâminas. ${REGRA_DA_LEGENDA_NO_PLANO}
@@ -3476,7 +3682,8 @@ const REGRAS_DOS_ITENS = `Regras dos itens:
 - status: planejado.
 - tipo_editorial e framework: um de cada, pela base de técnica; a funcao de cada card nomeia o passo do framework.
 - ${REGRA_DO_CARROSSEL}
-- ${REGRA_DO_ESTATICO}`;
+- ${REGRA_DO_ESTATICO}
+${REGRAS_DE_CONTEUDO_DO_MES}`;
 
 const ESQUEMA_PEDIDO = {
   nome: "pedido_do_mes",
@@ -3486,8 +3693,48 @@ const ESQUEMA_PEDIDO = {
   })),
 };
 
+type PecaDoLote = { data: string; formato: Formato; tema: string; foto: DirecaoDeFoto | null };
+
+/** As linhas do lote do "Criar conteúdos" (corpo.pecas): data, formato, tema e a direção da foto. */
+export function lerPecasDoLote(bruto: unknown): PecaDoLote[] {
+  const saida: PecaDoLote[] = [];
+  for (const b of (Array.isArray(bruto) ? bruto : []).slice(0, 12)) {
+    const o = (b ?? {}) as Record<string, unknown>;
+    const data = texto(o.data, 10);
+    const formato = formatoDoMes(o.formato);
+    if (!DATA.test(data) || !formato) continue;
+    const tema = texto(o.tema, 200);
+    saida.push({ data, formato, tema, foto: formato === "foto" ? normalizarDirecaoDeFoto(o.foto, { tema }) : null });
+  }
+  return saida.sort((a, b) => a.data.localeCompare(b.data));
+}
+
 /**
- * pedido_livre { client_id, mensagem, anexos?, data_inicio?, campanha_id? }:
+ * Cada item do lote fica na data e no formato da sua linha (na ordem das
+ * datas); a peça de foto leva a direção da linha (ou a do modelo, se a da
+ * linha estiver incompleta) e sempre sai concreta.
+ */
+export function aplicarPecasDoLote(itens: Item[], pecas: PecaDoLote[], uteis: string[]): Item[] {
+  const ordenados = itens.slice().sort((a, b) => a.data.localeCompare(b.data));
+  return ordenados.map((item, k) => {
+    const peca = pecas[k];
+    if (!peca) return item;
+    let novo: Item = { ...item, data: normalizarDataUtil(peca.data, uteis) };
+    if (novo.formato !== peca.formato) novo = itemNoFormato(novo, peca.formato);
+    if (peca.formato === "foto") {
+      const daLinha = peca.foto;
+      const doModelo = novo.foto ?? null;
+      const melhor = daLinha && faltasDaDirecao(daLinha).length <= faltasDaDirecao(doModelo).length ? daLinha : doModelo ?? daLinha;
+      novo.foto = direcaoDeFotoCompleta(normalizarDirecaoDeFoto(melhor, { tema: novo.tema }), novo.tema);
+      novo.mesa = "foto";
+      novo.titulo = novo.tema;
+    }
+    return novo;
+  });
+}
+
+/**
+ * pedido_livre { client_id, mensagem, anexos?, data_inicio?, campanha_id?, pecas? }:
  * o agente do mês. A equipe pede em linguagem livre ("prepare três conteúdos
  * para a campanha X", "a agenda de hoje", "arte de depoimentos com estes
  * prints do Google") e o estrategista devolve os itens prontos numa proposta
@@ -3576,6 +3823,13 @@ ${REGRAS_DOS_ITENS}`;
   }).filter((i) => i.tema);
   if (!itens.length) throw new ErroHttp(502, "pedido_sem_itens", "O agente não devolveu nenhum conteúdo. Tente descrever de novo.", { uso_id: s.usoId });
   itens.sort((a, b) => a.data.localeCompare(b.data));
+  // 02/10: lote do "Criar conteúdos" do agente do Mês: data, formato e direção da foto de cada linha valem
+  // exatamente (o modelo escreve o conteúdo; a cadência conferida não muda no caminho).
+  const pecasDoLote = lerPecasDoLote(corpo.pecas);
+  if (pecasDoLote.length) itens.splice(0, itens.length, ...aplicarPecasDoLote(itens, pecasDoLote, uteis));
+  // 02/10: título com cara de tutorial volta para o modelo rápido reescrever (uma vez).
+  const semTutorial = await corrigirTutoriais(chamador, clientId, itens, { tipo: REF_AGENTE_DO_MES, id: conversaId });
+  if (semTutorial.reescritos) itens.splice(0, itens.length, ...semTutorial.itens);
   // Frente AP: cada conteúdo passa pela memória editorial (tema novo, ângulo novo ou repetição), antes de guardar.
   const checagem = await checarEvolucao(itens, ctx.memoriaEditorial, { clientId, referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId }, criadoPor: chamador.userId });
 
@@ -3624,7 +3878,7 @@ ${REGRAS_DOS_ITENS}`;
     },
     { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: anexosDoAgente },
   ]);
-  return json({ proposta, resposta, aprendizado: aprendizado.anexo, avisos: anexos.aviso ? [anexos.aviso] : [], conversa_id: conversaId, project_id: projectId, custo_usd: Math.round((s.custoUsd + checagem.custo) * 1e6) / 1e6, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+  return json({ proposta, resposta, aprendizado: aprendizado.anexo, avisos: anexos.aviso ? [anexos.aviso] : [], conversa_id: conversaId, project_id: projectId, custo_usd: Math.round((s.custoUsd + checagem.custo + semTutorial.custo) * 1e6) / 1e6, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
 }
 
 // ------------------------------------------------ conteúdo rápido (25/09)
@@ -3804,13 +4058,18 @@ export function editarUmItem(antigo: Item, campos: Record<string, unknown>, utei
     novo.data = normalizarDataUtil(campos.data, uteis);
     if (novo.data !== campos.data) avisos.push(`A data foi para ${novo.data} (só segunda a sexta dentro do período).`);
   }
-  if (campos.formato === "carrossel" || campos.formato === "estatico") {
-    novo.formato = campos.formato;
-    if (novo.formato === "estatico") {
-      if (novo.cards.length > 1) avisos.push("No estático fica só a primeira lâmina.");
-      novo.cards = novo.cards.slice(0, 1);
-      novo.carrossel_infinito = false;
-    }
+  if (campos.formato === "carrossel" || campos.formato === "estatico" || campos.formato === "foto") {
+    if (campos.formato === "estatico" && novo.cards.length > 1) avisos.push("No estático fica só a primeira lâmina.");
+    // 02/10: trocar o formato pela lista do Mês (foto vai para a Mesa Foto com a direção pronta para ajustar).
+    const trocado = itemNoFormato(novo, campos.formato);
+    for (const k of Object.keys(novo)) delete (novo as Record<string, unknown>)[k];
+    Object.assign(novo, trocado);
+    if (campos.formato === "foto" && antigo.formato !== "foto") avisos.push("Virou peça de foto: confira a direção (ângulos, cenário e luz) antes de gravar.");
+  }
+  // 02/10: a direção da foto editada à mão (contrato da Mesa Foto); vazio fica com o que já tinha.
+  if (novo.formato === "foto" && campos.foto && typeof campos.foto === "object") {
+    const atual = (novo.foto || {}) as Record<string, unknown>;
+    novo.foto = normalizarDirecaoDeFoto({ ...atual, ...(campos.foto as Record<string, unknown>) }, { tema: novo.tema, objetivo: novo.resumo });
   }
   for (const k of ["tema", "gancho", "copy", "cta", "resumo"] as const) {
     if (typeof campos[k] === "string") {
@@ -3923,15 +4182,10 @@ ${REGRAS_DOS_ITENS}`;
   const novo = normalizarItem(bruto, uteis, antigo.data);
   novo.tema_id = antigo.tema_id;
   if (!novo.tema) novo.tema = antigo.tema;
-  if (novo.formato !== antigo.formato) {
-    novo.formato = antigo.formato;
-    if (novo.formato === "estatico") {
-      novo.cards = novo.cards.slice(0, 1);
-      novo.carrossel_infinito = false;
-    }
-  }
+  // 02/10: o formato fica (foto continua peça de foto, com a direção que tinha ou a nova).
+  const noFormato = novo.formato !== antigo.formato ? itemNoFormato({ ...novo, foto: novo.foto ?? antigo.foto }, antigo.formato) : novo;
   // O que a equipe pôs no item segue; a checagem antiga (a repetição) não.
-  const item = manterDoAnterior([novo], [{ ...antigo, evolucao: undefined }])[0];
+  const item = manterDoAnterior([noFormato], [{ ...antigo, evolucao: undefined }])[0];
   delete item.evolucao;
   const checagem = await checarEvolucao([item], ctx.memoriaEditorial, { clientId: p.client_id, propostaId: p.id, referencia: { tipo: REF_TIPO, id: p.id }, criadoPor: chamador.userId });
   const itens = p.itens.map((i, k) => (k === indice ? item : i));
@@ -5059,6 +5313,8 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
 const ESQUEMA_PLANO_DO_MES = obj({
   resumo: S("string"),
   frequencia_semanal: S(["integer", "null"]),
+  // 02/10: a mistura pedida por semana (ex.: 2 fotos e 1 carrossel); null quando não foi combinada.
+  mistura_semanal: { ...obj({ fotos: S("integer"), carrosseis: S("integer"), estaticos: S("integer") }), type: ["object", "null"] },
   pilares: { type: "array", items: S("string") },
   formatos: S("string"),
   datas: { type: "array", items: S("string") },
@@ -5117,7 +5373,17 @@ export const ESQUEMA_PLANEJAMENTO = {
       ...obj({
         resumo: S("string"),
         orientacao: S("string"),
-        itens: { type: "array", items: obj({ data: S("string"), formato: S("string"), tema: S("string"), referencia: S("string") }) },
+        itens: {
+          type: "array",
+          items: obj({
+            data: S("string"),
+            formato: S("string"),
+            tema: S("string"),
+            referencia: S("string"),
+            // 02/10: peça de foto (formato foto): a direção para a Mesa Foto; null nos outros formatos.
+            foto: { ...ESQUEMA_DA_DIRECAO_DE_FOTO, type: ["object", "null"] },
+          }),
+        },
       }),
       type: ["object", "null"],
     },
@@ -5162,6 +5428,9 @@ export function textoDoPlano(mes: string, bruto: unknown): string | null {
   const linhas = [`${PREFIXO_PLANO}${mes}: ${resumo}`];
   const freq = Number(o.frequencia_semanal);
   if (Number.isFinite(freq) && freq > 0) linhas.push(`Frequência: ${Math.min(14, Math.round(freq))} publicações por semana.`);
+  // 02/10: a mistura por semana vira texto que lerCadencia lê de volta ("2 fotos e 1 carrossel").
+  const mistura = textoDaMistura(o.mistura_semanal);
+  if (mistura) linhas.push(`Mistura por semana: ${mistura}.`);
   const pilares = listaDeTextos(o.pilares, 8);
   if (pilares.length) linhas.push(`Pilares: ${pilares.join("; ")}.`);
   const formatos = texto(o.formatos, 400);
@@ -5171,6 +5440,13 @@ export function textoDoPlano(mes: string, bruto: unknown): string | null {
   const campanhas = listaDeTextos(o.campanhas, 8);
   if (campanhas.length) linhas.push(`Campanhas: ${campanhas.join("; ")}.`);
   return linhas.join("\n").slice(0, 3500);
+}
+
+/** "2 fotos e 1 carrossel" a partir de { fotos, carrosseis, estaticos }; vazio quando não há. */
+export function textoDaMistura(bruto: unknown): string {
+  const o = (bruto && typeof bruto === "object" ? bruto : {}) as Record<string, unknown>;
+  const c = cadenciaDosNumeros({ fotos: o.fotos, carrosseis: o.carrosseis, estaticos: o.estaticos });
+  return c && c.mix ? fraseDaCadencia({ ...c, mix: { ...c.mix, arte: 0 } }).replace(/^\d+ por semana: /, "") : "";
 }
 
 /** Troca o plano ativo do mês pelo novo (o anterior fica inativo, como histórico). */
@@ -5664,6 +5940,126 @@ export function fraseDaTroca(acao: AcaoComAlvo | null): string {
  */
 const ESQUEMA_PLANEJAMENTO_COM_METODO = comMetodosUsados(ESQUEMA_PLANEJAMENTO);
 
+// ------------------------------------------ cadência pedida: conferir e completar (02/10)
+
+const ESQUEMA_DO_AJUSTE = {
+  nome: "ajuste_do_plano",
+  schema: obj({
+    novos: {
+      type: "array",
+      items: obj({ vaga: S("integer"), tema: S("string"), referencia: S("string"), foto: { ...ESQUEMA_DA_DIRECAO_DE_FOTO, type: ["object", "null"] } }),
+    },
+    ajustes: {
+      type: "array",
+      items: obj({ item: S("integer"), tema: S("string"), referencia: S("string"), foto: { ...ESQUEMA_DA_DIRECAO_DE_FOTO, type: ["object", "null"] } }),
+    },
+  }),
+};
+
+/**
+ * Confere a criação do agente do Mês contra a cadência pedida e completa:
+ * encaixa os itens nas vagas (semana ISO e formato), tira o que passa da
+ * cadência, pede ao modelo rápido UMA vez para preencher as vagas e refazer o
+ * que é tutorial, repetido ou peça de foto sem direção concreta; o que ainda
+ * faltar fecha em código (direção de partida) e fica escrito na conferência.
+ * Nunca lança: sem o modelo, devolve o encaixe com a conferência honesta.
+ */
+async function ajustarCriacao(
+  chamador: Chamador,
+  a: { clientId: string; criacao: CriacaoDeConteudos; cadencia: CadenciaDoMes | null; inicio: string; fim: string; hoje: string; contexto: string; conversaId: string },
+): Promise<{ criacao: CriacaoDeConteudos; conferencia: ConferenciaDoMes; custo: number; avisos: string[] }> {
+  const avisos: string[] = [];
+  const noMes = (d: string) => d >= a.inicio && d <= a.fim;
+  const fora = a.criacao.itens.filter((i) => !noMes(i.data));
+  let itens: ItemDoAjuste[] = a.criacao.itens.filter((i) => noMes(i.data)).map((i) => ({ ...i }));
+  const grade = a.cadencia ? gradeDoMes(a.cadencia, a.inicio, a.fim, a.hoje) : [];
+  let vagas: VagaDoMes[] = [];
+  if (a.cadencia && grade.length) {
+    const e = encaixarNaGrade(itens, grade);
+    itens = e.itens.map((x) => {
+      const item: ItemDoAjuste = { ...x.item, data: x.vaga.data, formato: x.formato, trocou_formato: x.trocou_formato };
+      if (x.formato === "foto" && !item.foto) item.foto = normalizarDirecaoDeFoto(null, { tema: item.tema });
+      if (x.formato !== "foto") delete item.foto;
+      return item;
+    });
+    vagas = e.vagas_livres;
+    if (e.sobras.length) avisos.push(`Tirei ${e.sobras.length} ${e.sobras.length === 1 ? "conteúdo que passava" : "conteúdos que passavam"} da cadência pedida.`);
+  }
+  const pendencias = pendenciasDosItens(itens);
+  let custo = 0;
+  if (vagas.length || pendencias.length) {
+    try {
+      const { modelo, raciocinio } = await resolverModeloRapido(undefined);
+      const pedido = `${a.contexto}
+
+${REGRAS_DE_CONTEUDO_DO_MES}
+${a.cadencia ? `\nCADÊNCIA PEDIDA PELO DONO: ${fraseDaCadencia(a.cadencia)} (o painel já pôs datas e formatos nas vagas).\n` : ""}${a.criacao.orientacao ? `ORIENTAÇÃO DA EQUIPE: ${a.criacao.orientacao}\n` : ""}
+${textoDoAjuste(vagas.map((v) => ({ data: v.data, formato: formatoDaVaga(v) })), itens, pendencias)}
+
+TAREFA: preencha cada vaga com um conteúdo novo (novos: vaga, tema, referencia com a ideia em até 400 caracteres e, no formato foto, foto com a direção concreta; nos outros, foto null) e refaça cada item listado (ajustes: item, tema, referencia, foto). Temas no que o cliente deste nicho procura (desejo, decisão, objeção, ocasião), sem tutorial e sem repetir os temas do plano.`;
+      const s = await chamarTexto({
+        clientId: a.clientId,
+        tarefa: "calendario",
+        agente: AGENTE,
+        modeloId: modelo.id,
+        timeoutMs: TIMEOUT_CALENDARIO_MS,
+        sistema: "Você é o estrategista de conteúdo do Instagram deste cliente. Responda só o JSON pedido, em português do Brasil, sem travessão.",
+        mensagens: [{ papel: "usuario", conteudo: pedido }],
+        raciocinio,
+        esquemaJson: ESQUEMA_DO_AJUSTE,
+        referencia: { tipo: REF_AGENTE_DO_MES, id: a.conversaId },
+        criadoPor: chamador.userId,
+      });
+      custo = s.custoUsd;
+      itens = aplicarAjusteDoPlano(itens, vagas, s.json).itens;
+    } catch (e) {
+      registrarFalha("agente-calendario: ajuste da cadência falhou (segue o encaixe)", e, { client_id: a.clientId });
+      avisos.push("Não consegui completar o plano agora: confira as vagas na conferência.");
+    }
+  }
+  // Peça de foto sai sempre com direção concreta (o que o modelo não fechou ganha um ponto de partida).
+  let completadas = 0;
+  itens = itens.map((i) => {
+    if (i.formato !== "foto") return i;
+    const d = i.foto ?? normalizarDirecaoDeFoto(null, { tema: i.tema });
+    if (!faltasDaDirecao(d).length) return { ...i, foto: d };
+    completadas++;
+    return { ...i, foto: direcaoDeFotoCompleta(d, i.tema) };
+  });
+  if (completadas) avisos.push(`${completadas} ${completadas === 1 ? "peça de foto ganhou" : "peças de foto ganharam"} direção de partida: confira ângulos, cenário e luz.`);
+  const tutoriais = itens.filter((i) => pareceTutorial(i.tema)).length;
+  if (tutoriais) avisos.push(`${tutoriais} ${tutoriais === 1 ? "tema ainda parece" : "temas ainda parecem"} tutorial: reescreva antes de criar.`);
+  const conferencia = conferirPlano(itens, a.cadencia, a.cadencia && grade.length ? grade : null);
+  const finais: ItemParaCriar[] = itens
+    .map((i) => {
+      const { trocou_formato: _trocou, ...resto } = i;
+      return resto as ItemParaCriar;
+    })
+    .concat(fora)
+    .sort((x, y) => x.data.localeCompare(y.data));
+  return {
+    criacao: { ...a.criacao, itens: finais, conferencia: { ...conferencia, cadencia: a.cadencia, avisos } },
+    conferencia,
+    custo,
+    avisos,
+  };
+}
+
+/** A cadência que vale para o mês: a mensagem, os pedidos anteriores, o plano combinado e, por último, os números do modelo. */
+export function cadenciaDoPlanejamento(
+  mensagem: string,
+  anteriores: Array<{ papel: string; conteudo: string }>,
+  planos: Array<string | null>,
+  doModelo: Record<string, unknown> | null,
+): CadenciaDoMes | null {
+  const pedidos = anteriores.filter((m) => m.papel === "usuario").slice(-3).reverse().map((m) => ({ texto: m.conteudo, fonte: "conversa" }));
+  const lida = cadenciaDasFontes([{ texto: mensagem, fonte: "pedido" }, ...pedidos, ...planos.map((t) => (t ? { texto: t, fonte: "plano" } : null))]);
+  if (lida) return lida;
+  if (!doModelo) return null;
+  const mistura = (doModelo.mistura_semanal && typeof doModelo.mistura_semanal === "object" ? doModelo.mistura_semanal : {}) as Record<string, unknown>;
+  return cadenciaDosNumeros({ por_semana: doModelo.frequencia_semanal, fotos: mistura.fotos, carrosseis: mistura.carrosseis, estaticos: mistura.estaticos }, "modelo");
+}
+
 async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
@@ -5790,10 +6186,10 @@ Devolva:
     ? `só quando a equipe pedir para mudar a proposta do mês (trocar, tirar ou acrescentar temas ou conteúdos, mudar datas). resumo: o que muda, em 1 a 3 frases. temas: só os temas novos ou alterados (mantenha o id do alterado; tema novo recebe id novo). temas_removidos: ids dos temas que saem. itens: só os conteúdos novos ou alterados, completos (mantenha o tema_id do alterado). itens_removidos: tema_id dos conteúdos que saem. Conteúdo com "gravado": true já está na agenda e não muda aqui. A equipe vê a mudança antes de aplicar. Sem pedido de mudança, null.`
     : "sempre null (não há proposta aberta para este mês; para gerar o mês, a equipe usa o gerador de meses, que segue o plano combinado)."}
 ${REGRA_DAS_ACOES_NA_AGENDA}
-- criar_conteudos: quando a equipe colar ou anexar material com vários conteúdos (pautas, calendário, legendas, planilha) ou pedir conteúdos novos em datas certas. itens: um por conteúdo, na ordem do material: data AAAA-MM-DD (a do material; sem data, os dias úteis do mês em conversa, na ordem), formato (carrossel ou estatico; reels, vídeo e story viram carrossel e você avisa), tema e referencia (o que o material diz daquele conteúdo: ideia, copy, roteiro, fiel e resumido em até 600 caracteres). orientacao: o porquê que vale para todos (ex.: falar com o cliente final). resumo: 1 frase. Todos os conteúdos do material entram (o painel cria em lotes). Sem pedido desse tipo, null.
+- criar_conteudos: quando a equipe colar ou anexar material com vários conteúdos (pautas, calendário, legendas, planilha) ou pedir conteúdos novos em datas certas. itens: um por conteúdo, na ordem do material: data AAAA-MM-DD (a do material; sem data, os dias úteis do mês em conversa, na ordem), formato (carrossel, estatico ou foto; foto é post de foto real feito na Mesa Foto, com foto preenchida: assunto, objetivo, angulos, cenario, luz, pessoa, quantidade, texto_na_foto e referencias; nos outros formatos foto é null; reels, vídeo e story viram carrossel e você avisa), tema e referencia (o que o material diz daquele conteúdo: ideia, copy, roteiro, fiel e resumido em até 600 caracteres). Pedido de cadência ("3 por semana", "2 fotos e 1 carrossel") sem material: um item por post do mês em conversa, exatamente na cadência e na mistura pedidas, espalhados (3 por semana: segunda, quarta e sexta). orientacao: o porquê que vale para todos (ex.: falar com o cliente final). resumo: 1 frase. Todos os conteúdos do material entram (o painel cria em lotes). Sem pedido desse tipo, null.
 - atualizar_publico: só quando a DECISÃO SOBRE O PÚBLICO mandar adaptar: { publico (o público novo, completo, como deve ficar no contexto), motivo (1 frase) }. Senão null.
 ${REGRA_DO_APRENDIZADO_NO_PROMPT}
-Datas de conteúdos novos: as do material, como estão; sem data no material, só de segunda a sexta. Formato só carrossel ou estatico.
+Datas de conteúdos novos: as do material, como estão; sem data no material, só de segunda a sexta. Formato carrossel, estatico ou foto.
 ${editavel ? REGRAS_DOS_ITENS : ""}`;
 
   const tokensDoHistorico = anteriores.reduce((n, m) => n + estimarTokens(m.conteudo), 0);
@@ -5864,7 +6260,31 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   // Gerar meses inteiros: só a proposta com o projeto; a tela mostra o custo e roda o gerador de meses.
   const geracao = normalizarGeracao(r.gerar_conteudos, mesDeHoje, acoesCtx.projeto, acoesCtx.frequencia ?? 3);
   // Material colado ou anexado: conteúdos novos nas datas e formatos dele (a tela cria em lotes, com custo antes).
-  const criacao = normalizarCriacao(r.criar_conteudos, hoje);
+  let criacao = normalizarCriacao(r.criar_conteudos, hoje);
+  // 02/10: a cadência e a mistura pedidas ("3 por semana, 2 fotos e 1 carrossel") são conferidas semana a
+  // semana; o que falta o modelo rápido completa e a resposta diz a conta ("12 posts: 8 fotos e 4 carrosséis").
+  const cadencia = cadenciaDoPlanejamento(mensagem, anteriores, [doMes, blocoDoPlano(ctx, inicio)], (r.plano_do_mes ?? null) as Record<string, unknown> | null);
+  let conferencia: ConferenciaDoMes | null = null;
+  let custoDoAjuste = 0;
+  const avisosDoAjuste: string[] = [];
+  if (criacao) {
+    const ajuste = await ajustarCriacao(chamador, {
+      clientId,
+      criacao,
+      cadencia,
+      inicio,
+      fim,
+      hoje,
+      conversaId,
+      contexto: contextoEmTexto(ctx, { inicio, fim, parametros: proposta?.parametros ?? {} }, { enxuto: true }),
+    });
+    criacao = ajuste.criacao;
+    conferencia = ajuste.conferencia;
+    custoDoAjuste = ajuste.custo;
+    avisosDoAjuste.push(...ajuste.avisos);
+  }
+  // O gerador de meses recebe a cadência (propor_temas e detalhar seguem a grade de datas e formatos).
+  if (geracao && cadencia) (geracao as unknown as Record<string, unknown>).cadencia = cadencia;
   // Público novo e real: proposta de atualizar o contexto (Confirmar e Desfazer).
   const acaoDoPublico = acaoDeAtualizarPublico(r.atualizar_publico, publicoAtual, decisaoDoPublico, clientId);
 
@@ -5874,7 +6294,8 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   const fechadoDoMes = await fecharComMetodo(servico, {
     usoId: s.usoId,
     metodo: await spMesP,
-    resposta: respostaComAvisos(respostaComAvisos(texto(r.resposta, 6000) || "Anotado.", [imagens.aviso]), [fraseDaTroca(acaoNaAgenda)]),
+    // 02/10: a conferência da cadência entra na fala ("Conferido: 12 posts: 8 fotos e 4 carrosséis, 3 por semana.").
+    resposta: respostaComAvisos(respostaComAvisos(texto(r.resposta, 6000) || "Anotado.", [imagens.aviso]), [fraseDaTroca(acaoNaAgenda), conferencia ? `Conferido: ${conferencia.frase}` : null, ...avisosDoAjuste]),
     declarados: r.metodos_usados,
     acaoFeita: false,
   });
@@ -5952,6 +6373,8 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     aprendizado: aprendizado.anexo,
     gerar_conteudos: geracao,
     criar_conteudos: criacao,
+    conferencia,
+    cadencia,
     acao_publico: acaoDoPublico,
     decisao_publico: decisaoDoPublico,
     contexto_usado: contextoUsado,
@@ -5960,7 +6383,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     mensagem_id: (msgAgente as { id: string }).id,
     conversa_id: conversaId,
     proposta_id: proposta?.id ?? null,
-    custo_usd: s.custoUsd,
+    custo_usd: Math.round((s.custoUsd + custoDoAjuste) * 1e6) / 1e6,
     saldo_usd: s.saldoUsd,
     reserva_usada: s.reservaUsada ?? null,
   });
@@ -6916,15 +7339,164 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
 /** Ações com IA: a resposta começa na hora para a plataforma não derrubar com 504 aos 150 s. */
 const ACOES_LONGAS = new Set(["executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", ...selo.longas]);
 
+// ------------------------------------------ refazer uma proposta no servidor (02/10, chamada interna)
+
+/**
+ * O autor da proposta assina a proposta nova: precisa ser da equipe
+ * (is_staff) e ter acesso ao cliente pela mesma regra de can_access_client
+ * (admin; ou manager, design e traffic atribuídos ao cliente), conferida aqui
+ * do lado do serviço porque não há sessão dele.
+ */
+async function chamadorDoAutor(servico: SupabaseClient, autor: string | null, clientId: string): Promise<Chamador> {
+  if (!autor || !UUID.test(autor)) throw new ErroHttp(409, "proposta_sem_autor", "A proposta não tem autor para assinar a nova.");
+  const [staff, papeis, atribuicao] = await Promise.all([
+    servico.rpc("is_staff", { _user_id: autor }),
+    servico.from("user_roles").select("role").eq("user_id", autor),
+    servico.from("team_client_assignments").select("client_id").eq("user_id", autor).eq("client_id", clientId).limit(1),
+  ]);
+  if (staff.error || papeis.error || atribuicao.error) throw new ErroHttp(503, "autorizacao_indisponivel", "Não foi possível conferir o autor da proposta agora.");
+  const decisao = criadorPodeRefazer({
+    staff: staff.data === true,
+    papeis: ((papeis.data ?? []) as Array<{ role: string }>).map((r) => String(r.role)),
+    atribuido: ((atribuicao.data ?? []) as unknown[]).length > 0,
+  });
+  if (!decisao.ok) throw new ErroHttp(403, "autor_sem_acesso", decisao.motivo || "O autor da proposta não tem acesso a este cliente.");
+  return { userId: autor, token: "", interno: { clientId } };
+}
+
+/**
+ * refazer_proposta_interno { proposta_id, cadencia? } (chamada interna): faz
+ * uma proposta NOVA (pronta, sem gravar) a partir da antiga, pelo mesmo
+ * caminho do pedido normal e com as regras novas:
+ * - pedido livre (criar conteúdos do agente do Mês): as linhas da antiga
+ *   passam pela cadência do mês (conversa do agente e plano combinado),
+ *   ganham vagas, formatos, direção da foto e títulos sem tutorial, e cada
+ *   lote de 12 vira um pedido_livre com os parâmetros guardados;
+ * - proposta do estrategista: os mesmos temas, na grade da cadência, pelo
+ *   detalhar.
+ * A antiga não é apagada nem gravada: ganha parametros.substituida_por.
+ */
+async function refazerPropostaInterno(servico: SupabaseClient, corpo: Record<string, unknown>) {
+  const antiga = await carregarProposta(servico, corpo.proposta_id);
+  const chamador = await chamadorDoAutor(servico, antiga.criado_por, antiga.client_id);
+  const origem = String(antiga.parametros.origem ?? "");
+  const mes = String(antiga.periodo_inicio).slice(0, 7);
+  const inicio = `${mes}-01`;
+  const fim = fimDoMes(mes);
+  const hoje = hojeSaoPaulo();
+  const ctx = await montarContexto(servico, antiga.client_id, inicio, fim, marcaDaChamada(servico, antiga.client_id, { project_id: antiga.project_id }, antiga.project_id));
+  // A cadência: a mandada na chamada, senão a da conversa do agente do Mês e do plano combinado.
+  let pedidos: Array<{ papel: string; conteudo: string }> = [];
+  if (antiga.conversa_id) {
+    const { data } = await servico
+      .from("agente_mensagens")
+      .select("papel, conteudo")
+      .eq("conversa_id", antiga.conversa_id)
+      .eq("client_id", antiga.client_id)
+      .eq("papel", "usuario")
+      .lte("criado_em", antiga.criado_em)
+      .order("criado_em", { ascending: false })
+      .limit(6);
+    pedidos = ((data ?? []) as Array<{ papel: string; conteudo: string }>).reverse();
+  }
+  const cadencia = normalizarCadencia(corpo.cadencia) ?? cadenciaDoPlanejamento("", pedidos, [blocoDoPlano(ctx, inicio)], null);
+  const marcar = async (novas: string[]) => {
+    await servico
+      .from("calendario_propostas")
+      .update({ parametros: { ...antiga.parametros, substituida_por: novas, substituida_em: new Date().toISOString() } })
+      .eq("id", antiga.id)
+      .eq("client_id", antiga.client_id);
+  };
+
+  if (origem === "pedido_livre" || origem === "pedido_livre_gravada") {
+    const linhas = linhasDaPropostaAntiga(antiga.itens as unknown as ItemAntigo[]);
+    if (!linhas.length) throw new ErroHttp(409, "proposta_sem_itens", "A proposta não tem conteúdos para refazer.");
+    const orientacao = orientacaoDaMensagem(antiga.parametros.mensagem);
+    const ajuste = await ajustarCriacao(chamador, {
+      clientId: antiga.client_id,
+      criacao: { tipo: "criar_conteudos", resumo: "", orientacao, itens: linhas, ignorados: 0 },
+      cadencia,
+      inicio,
+      fim,
+      hoje,
+      conversaId: antiga.conversa_id ?? antiga.id,
+      contexto: contextoEmTexto(ctx, { inicio, fim, parametros: {} }, { enxuto: true }),
+    });
+    const novas: string[] = [];
+    let custo = ajuste.custo;
+    for (const lote of lotesDaCriacao(ajuste.criacao.itens)) {
+      const r = await pedidoLivre(servico, chamador, corpoDoLoteRefeito(antiga, pedidoParaCriar(lote, orientacao), lote as LinhaRefeita[]));
+      const dados = (await r.json()) as Record<string, unknown>;
+      if (r.status !== 200) return json({ ...dados, propostas: novas, conferencia: ajuste.conferencia }, r.status);
+      const id = String(((dados.proposta ?? {}) as Record<string, unknown>).id ?? "");
+      if (id) novas.push(id);
+      custo += Number(dados.custo_usd) || 0;
+    }
+    await marcar(novas);
+    return json({ proposta_id: novas[0] ?? null, propostas: novas, origem, cadencia, conferencia: ajuste.conferencia, avisos: ajuste.avisos, custo_usd: Math.round(custo * 1e6) / 1e6 });
+  }
+
+  if (origem) throw new ErroHttp(409, "origem_nao_refeita", "Esta proposta veio de outro caminho (campanha ou conteúdo rápido) e não é refeita por aqui.");
+  // Proposta do estrategista: os mesmos temas na grade da cadência, pelo detalhar.
+  const grade = cadencia ? gradeDoMes(cadencia, antiga.periodo_inicio, antiga.periodo_fim, hoje) : [];
+  const nota = (t: Tema) => (t.jev?.aderencia ?? 0) + (t.jev?.potencial ?? 0);
+  const ordem = antiga.temas.map((t, i) => ({ t, i })).sort((a, b) => Number(b.t.escolhido) - Number(a.t.escolhido) || nota(b.t) - nota(a.t) || a.i - b.i);
+  const quantos = grade.length || antiga.temas.filter((t) => t.escolhido).length;
+  const escolhidos = new Set(ordem.slice(0, quantos).map((x) => x.t.id));
+  if (!escolhidos.size) throw new ErroHttp(409, "sem_tema_escolhido", "A proposta não tem temas para refazer.");
+  const novaId = crypto.randomUUID();
+  const { error } = await servico.from("calendario_propostas").insert({
+    id: novaId,
+    client_id: antiga.client_id,
+    project_id: antiga.project_id,
+    periodo_inicio: antiga.periodo_inicio,
+    periodo_fim: antiga.periodo_fim,
+    parametros: { ...antiga.parametros, cadencia: cadencia ?? undefined, conferencia: undefined, refeita_de: antiga.id, substituida_por: undefined },
+    status: "temas",
+    diagnostico: antiga.diagnostico,
+    temas: antiga.temas.map((t) => ({ ...t, escolhido: escolhidos.has(t.id) })),
+    itens: [],
+    task_ids: [],
+    conversa_id: null,
+    criado_por: antiga.criado_por,
+  });
+  if (error) throw new ErroHttp(503, "proposta_nao_salva", "Não foi possível abrir a proposta nova.");
+  let r = await detalhar(servico, chamador, { proposta_id: novaId });
+  let dados = (await r.json()) as Record<string, unknown>;
+  if (r.status === 200 && Array.isArray(dados.faltam) && dados.faltam.length) {
+    r = await detalhar(servico, chamador, { proposta_id: novaId });
+    dados = (await r.json()) as Record<string, unknown>;
+  }
+  await marcar([novaId]);
+  return json({ ...dados, proposta_id: novaId, propostas: [novaId], origem: "estrategista", cadencia }, r.status);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "metodo_nao_permitido" }, 405);
   try {
     const servico = clienteServico();
-    const chamador = await identificar(req, servico);
     let corpo: Record<string, unknown> = {};
     try { corpo = await req.json(); } catch { /* corpo vazio */ }
     const acao = String(corpo.acao ?? corpo.action ?? "");
+    // 02/10: refazer uma proposta no servidor. Só com a chave de serviço no Authorization e o x-cron-secret.
+    if (acao === ACAO_REFAZER_INTERNO) {
+      const autorizado = autorizarChamadaInterna({
+        authorization: req.headers.get("Authorization"),
+        cronSecretDoPedido: req.headers.get("x-cron-secret"),
+        chavesDeServico: [Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"), Deno.env.get("SUPABASE_SECRET_KEY")],
+        cronSecret: await chave("CRON_SECRET").catch(() => ""),
+      });
+      if (!autorizado.ok) return json({ error: autorizado.codigo, mensagem: autorizado.mensagem }, autorizado.status);
+      return respostaComFolego(async () => {
+        try {
+          return await refazerPropostaInterno(servico, corpo);
+        } catch (err) {
+          return respostaDeErro(err);
+        }
+      }, corsHeaders);
+    }
+    const chamador = await identificar(req, servico);
     const fn = ACOES[acao];
     if (!fn) return json({ error: "acao_desconhecida", aceitas: Object.keys(ACOES) }, 400);
     if (ACOES_LONGAS.has(acao)) {

@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarCheck2, CalendarRange, Check, ChevronDown, Loader2, MessageSquare, MessagesSquare, Plus, Send, Sparkles, X, Zap } from "lucide-react";
+import { CalendarCheck2, CalendarRange, Check, Loader2, MessageSquare, MessagesSquare, Plus, Send, Sparkles, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -33,12 +32,15 @@ import DiagnosticoDoMes from "./DiagnosticoDoMes";
 import AgenteDoMes, { type PedidoEmAndamento } from "./AgenteDoMes";
 import HypesDaSemana from "./HypesDaSemana";
 import PlanejamentoAutomatico from "./PlanejamentoAutomatico";
-import { atualizarAgenda, novoIdDaProposta, type ItemProposto } from "./mesaV4Api";
+import { atualizarAgenda, editarItemDaProposta, novoIdDaProposta, type CamposDoItem, type ItemProposto } from "./mesaV4Api";
+// 02/10: as publicações por semana (formato que troca, Mesa Foto ou Estúdio, título que edita no lugar).
+import SemanasDoMes from "./SemanasDoMes";
+import { AvisosDoTexto } from "@/components/sistema/OpcoesDaCopy";
 import MesConteudoRapido from "./MesConteudoRapido";
 import MesEscolhaEditorial from "./MesEscolhaEditorial";
 import { corpoDaEscolha, escolhaLivre, raciocinioPadraoDaTela, rotuloEditorial, type EscolhaEditorial } from "./MesConhecimento";
 import { Cronometro } from "./Cronometro";
-import { BotaoDeApagar, useApagarConteudo, type ResultadoDoApagar } from "./ApagarConteudo";
+import { useApagarConteudo } from "./ApagarConteudo";
 import {
   chavesDoPlano,
   corpoDoPlano,
@@ -58,10 +60,10 @@ import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import Painel from "@/components/sistema/Painel";
-import { conversa, juntar, lista as estiloDeLista, superficie, texto as estiloDeTexto } from "@/components/sistema/estilos";
+import { conversa, juntar, superficie, texto as estiloDeTexto } from "@/components/sistema/estilos";
 import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
 // Frente AP (27/09): selo da memória editorial, "Trocar ângulo" e a linha de evolução por pilar.
-import LinhaDeEvolucaoDoMes, { avisoDaPauta, BotaoDeTrocarAngulo, chaveDaLinhaDeEvolucao, SeloDaPauta, useTrocarAngulo } from "./MemoriaEditorialNoMes";
+import LinhaDeEvolucaoDoMes, { chaveDaLinhaDeEvolucao, SeloDaPauta, useTrocarAngulo } from "./MemoriaEditorialNoMes";
 
 /**
  * Aba Mês. No alto, o plano combinado do mês e os Hypes da semana
@@ -198,73 +200,6 @@ function CartaoDeTema({ tema, marcado, onToggle }: { tema: Tema; marcado: boolea
   );
 }
 
-function LinhaDoItem({
-  item,
-  apagar,
-  onTrocarAngulo,
-}: {
-  item: Item;
-  apagar?: (confirmarExtra: boolean) => Promise<ResultadoDoApagar>;
-  /** Frente AP: refaz só esta pauta com outro ângulo (na pauta repetida). */
-  onTrocarAngulo?: () => Promise<void>;
-}) {
-  const texto = item.copy || item.legenda || item.resumo;
-  const avisosDoItem = Array.isArray(item.avisos_de_texto) ? item.avisos_de_texto.filter((a) => typeof a === "string" && a.trim() !== "") : [];
-  return (
-    <Collapsible className="min-w-0">
-      <div className="flex min-w-0 items-start rounded-lg transition-colors hover:bg-muted/40">
-        <CollapsibleTrigger className="flex min-w-0 flex-1 items-start px-2 py-2.5 text-left">
-          <div className="mr-3 w-16 shrink-0 text-[12px] text-muted-foreground">
-            <p className="font-medium text-foreground">{dataCurta(item.data)}</p>
-            <p>{item.formato === "estatico" ? "estático" : item.formato || "formato?"}</p>
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{item.gancho || item.tema || "Sem gancho"}</p>
-            {item.tema && item.gancho && <p className="mt-0.5 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">{item.tema}</p>}
-            {item.evolucao ? <SeloDaPauta evolucao={item.evolucao} className="mt-1" /> : null}
-            {avisoDaPauta(item.evolucao) && <p className="mt-0.5 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{avisoDaPauta(item.evolucao)}</p>}
-            {/* Frente CPY: quantos avisos o texto tem; a lista abre no detalhe do item. */}
-            {avisosDoItem.length > 0 && (
-              <p className="mt-0.5 text-[11px] text-warning" data-conta-avisos-do-texto="">
-                {avisosDoItem.length === 1 ? "1 aviso no texto" : `${avisosDoItem.length} avisos no texto`}
-              </p>
-            )}
-          </div>
-          <ChevronDown className="ml-3 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-        </CollapsibleTrigger>
-        {onTrocarAngulo ? <BotaoDeTrocarAngulo evolucao={item.evolucao} onTrocarAngulo={onTrocarAngulo} className="mr-1 mt-2.5 shrink-0" /> : null}
-        {apagar && <BotaoDeApagar onApagar={apagar} className="mr-2 mt-2.5 shrink-0" />}
-      </div>
-      <CollapsibleContent className="space-y-3 px-2 pb-3 sm:pl-[84px]">
-        {avisosDoItem.length > 0 && (
-          <ul className={juntar(estiloDeLista.divisoria, "min-w-0")} aria-label="Avisos do texto" data-avisos-do-texto="">
-            {avisosDoItem.map((a, i) => (
-              <li key={i} className="break-words py-1 text-[12px] leading-snug text-warning">{a}</li>
-            ))}
-          </ul>
-        )}
-        {texto && <p className="whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">{texto}</p>}
-        <p className="text-[12px] text-muted-foreground">
-          {[rotuloEditorial(item.tipo_editorial, item.framework) || null, item.pilar, item.fase ? `fase ${item.fase}` : null, item.objetivo, item.cta ? `CTA: ${item.cta}` : null, item.carrossel_infinito ? "carrossel infinito" : null].filter(Boolean).join(" · ")}
-        </p>
-        {(item.cards || []).length > 0 && (
-          <ol className="space-y-2">
-            {(item.cards || []).slice().sort((a, b) => a.ordem - b.ordem).map((c) => (
-              <li key={c.ordem} className={juntar(superficie.poco, "p-2.5")}>
-                <p className="text-[11px] font-medium text-muted-foreground">Card {c.ordem}{c.funcao ? ` · ${c.funcao}` : ""}</p>
-                {c.texto && <p className="mt-0.5 text-[13px] [overflow-wrap:anywhere]">{c.texto}</p>}
-                {(c.ilustracao || c.estilo) && (
-                  <p className="mt-1 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">{[c.ilustracao, c.estilo].filter(Boolean).join(" · ")}</p>
-                )}
-              </li>
-            ))}
-          </ol>
-        )}
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
 function ConversaDoMes({ proposta, modeloId, onAtualizou }: { proposta: Proposta; modeloId: string; onAtualizou: () => void }) {
   const mesa = useMesa();
   const queryClient = useQueryClient();
@@ -351,7 +286,7 @@ function ConversaDoMes({ proposta, modeloId, onAtualizou }: { proposta: Proposta
   );
 }
 
-function PlanejarComEstrategista() {
+function PlanejarComEstrategista({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (taskId: string, mes: string) => void } = {}) {
   const mesa = useMesa();
   const { clientId, catalogo } = mesa;
   const queryClient = useQueryClient();
@@ -456,6 +391,20 @@ function PlanejarComEstrategista() {
   }, [projetos.data, projetoId]);
 
   const atualizar = () => void queryClient.invalidateQueries({ queryKey: ["mesa", "propostas", clientId] });
+
+  /** Título e formato mudados na própria linha (sem IA). */
+  const editarNaLinha = async (it: ItemProposto, campos: CamposDoItem) => {
+    if (!proposta || !it.tema_id) return;
+    try {
+      const r = await editarItemDaProposta(proposta.id, it.tema_id, campos);
+      const aviso = r && Array.isArray(r.avisos) ? r.avisos.find((a: unknown) => typeof a === "string") : null;
+      if (aviso) toast(aviso);
+    } catch (e) {
+      toast.error("Não foi possível mudar o conteúdo", { description: textoDoErro(e) });
+    } finally {
+      atualizar();
+    }
+  };
   const trocarAngulo = useTrocarAngulo([["mesa", "propostas", clientId], chaveDaLinhaDeEvolucao(clientId)]);
 
   const trocarModelo = (id: string) => {
@@ -598,6 +547,10 @@ function PlanejarComEstrategista() {
 
   const temas = proposta.temas || [];
   const itens = (proposta.itens || []).slice().sort((a, b) => String(a.data || "").localeCompare(String(b.data || "")));
+  // 02/10: a conferência da cadência pedida, gravada pelo detalhar ("12 posts: 8 fotos e 4 carrosséis, 3 por semana.").
+  const conferencia = proposta.parametros && proposta.parametros.conferencia && typeof proposta.parametros.conferencia.frase === "string"
+    ? (proposta.parametros.conferencia as { ok?: boolean; frase: string })
+    : null;
   // "detalhando" também: detalhar parcial ou que caiu no meio deixa a
   // proposta assim, e o servidor refaz só os temas que faltam.
   const podeDetalhar =
@@ -703,23 +656,37 @@ function PlanejarComEstrategista() {
               nivel={3}
               titulo={`Publicações (${itens.length})`}
               recolher={`mesa:mes:proposta:publicacoes:${clientId}`}
-              resumo={`${dataCurta(proposta.periodo_inicio)} a ${dataCurta(proposta.periodo_fim)}`}
+              // 02/10: o resumo é a conta do mês (antes repetia o período do cabeçalho).
+              resumo={conferencia ? conferencia.frase : undefined}
             >
-              {/* Lista com traço leve entre as linhas (sem caixa por linha). */}
-              <div className="-mx-2 min-w-0 divide-y divide-border/50">
-                {itens.map((it, i) => (
-                  <LinhaDoItem
-                    key={it.tema_id || it.id || i}
-                    item={it}
-                    onTrocarAngulo={proposta.status !== "gravada" && proposta.status !== "descartada" && !it.task_id && it.tema_id ? () => trocarAngulo(proposta.id, it.tema_id as string) : undefined}
-                    apagar={
-                      proposta.status !== "gravada" && !it.task_id && it.tema_id
-                        ? () => apagarConteudo.daProposta(proposta.id, it as ItemProposto, (proposta.itens || []).indexOf(it))
-                        : undefined
-                    }
-                  />
-                ))}
-              </div>
+              {conferencia && conferencia.frase && (
+                <p className={`mb-2 text-[12px] ${conferencia.ok ? "text-muted-foreground" : "text-warning"}`} data-conferencia-do-mes={conferencia.ok ? "ok" : "falta"}>
+                  {conferencia.frase}
+                </p>
+              )}
+              <SemanasDoMes
+                itens={itens as ItemProposto[]}
+                itensDaProposta={(proposta.itens || []) as ItemProposto[]}
+                clientId={clientId}
+                propostaId={proposta.id}
+                editavel={proposta.status !== "gravada" && proposta.status !== "descartada"}
+                acoes={{
+                  onAbrirNoEstudio,
+                  onEditar: editarNaLinha,
+                  onRefazer: (it) => trocarAngulo(proposta.id, it.tema_id as string),
+                  apagar: (it) =>
+                    proposta.status !== "gravada" && !it.task_id && it.tema_id
+                      ? () => apagarConteudo.daProposta(proposta.id, it, (proposta.itens || []).indexOf(it as Item))
+                      : undefined,
+                  extra: (it) =>
+                    it.evolucao || (it.avisos_de_texto && it.avisos_de_texto.length) ? (
+                      <div className="flex min-w-0 flex-wrap items-center">
+                        <SeloDaPauta evolucao={it.evolucao} className="mr-2" />
+                        <AvisosDoTexto avisos={it.avisos_de_texto} />
+                      </div>
+                    ) : null,
+                }}
+              />
             </Secao>
           )}
 
@@ -1020,7 +987,7 @@ export default function AbaMes({
           />
         }
       >
-        {modo === "automatico" ? <PlanejamentoAutomatico /> : <PlanejarComEstrategista />}
+        {modo === "automatico" ? <PlanejamentoAutomatico /> : <PlanejarComEstrategista onAbrirNoEstudio={abrirNaMesaCerta} />}
       </Secao>
       </div>
       </AreaDeTrabalho>

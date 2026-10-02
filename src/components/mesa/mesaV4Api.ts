@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
+import type { DirecaoDeFoto } from "../../../supabase/functions/agente-calendario/modulos/peca-de-foto";
 import {
   chamarFuncao,
   extensao,
@@ -58,6 +59,10 @@ export interface ItemProposto {
   evolucao?: unknown;
   /** Avisos da conferência do texto (lâminas e legenda pelo motor de copy). Aviso, nunca bloqueio. */
   avisos_de_texto?: string[];
+  /** 02/10: peça de foto (formato "foto"): a direção para a Mesa Foto e a mesa que faz o item. */
+  foto?: DirecaoDeFoto | null;
+  mesa?: "foto" | "arte" | null;
+  titulo?: string;
 }
 
 export interface PropostaV4 {
@@ -413,6 +418,8 @@ export interface CorpoDoPedido {
   anexos?: string[];
   campanhaId?: string | null;
   dataInicio?: string;
+  /** 02/10: as linhas do lote do "Criar conteúdos" (data, formato e direção da foto valem exatamente). */
+  pecas?: Array<{ data: string; formato: string; tema: string; foto?: DirecaoDeFoto | null }>;
   /**
    * Mensagem digitada pela equipe no modo Criar: o servidor pergunta ao Jev se
    * ela muda o que já está na agenda e, se mudar, responde pelo agente que
@@ -427,6 +434,7 @@ export function corpoDoPedidoLivre(p: CorpoDoPedido): Record<string, unknown> {
   if (p.campanhaId) corpo.campanha_id = p.campanhaId;
   if (p.dataInicio) corpo.data_inicio = p.dataInicio;
   if (p.rotear) corpo.rotear = true;
+  if (p.pecas && p.pecas.length) corpo.pecas = p.pecas.slice(0, 12);
   return corpo;
 }
 
@@ -450,7 +458,9 @@ export const gravarSelecionados = (propostaId: string, temaIds: string[], projec
 /** Campos que a equipe muda à mão num conteúdo da proposta (sem IA). */
 export interface CamposDoItem {
   data?: string;
-  formato?: "carrossel" | "estatico";
+  formato?: "carrossel" | "estatico" | "foto";
+  /** Direção da peça de foto (contrato da Mesa Foto); só os campos mudados. */
+  foto?: Partial<DirecaoDeFoto>;
   tema?: string;
   gancho?: string;
   copy?: string;
@@ -642,7 +652,7 @@ export const laminasDoItem = (item: ItemProposto) => {
   return item.formato === "estatico" ? 1 : 0;
 };
 
-export const rotuloDoFormato = (f?: string) => (f === "estatico" ? "Estático" : f === "carrossel" ? "Carrossel" : f || "Formato livre");
+export const rotuloDoFormato = (f?: string) => (f === "estatico" ? "Estático" : f === "carrossel" ? "Carrossel" : f === "foto" ? "Foto" : f || "Formato livre");
 
 // ------------------------------------------------------------------ tela
 

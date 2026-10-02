@@ -30,6 +30,8 @@ import { corpoDaEscolha, escolhaLivre, raciocinioPadraoDaTela, type EscolhaEdito
 import { useKitDaMesa } from "./kitDaMesa";
 import { chavesDoPlano, lerPlanosCombinados } from "./planoDoMes";
 import { Campo, SeletorDeModelo, SeletorDeRaciocinio } from "./Seletores";
+// 02/10: a cadência pedida (por semana, mistura e dias) vira a grade de datas e formatos do mês.
+import { gradeDoMes, type CadenciaDoMes } from "../../../supabase/functions/agente-calendario/modulos/cadencia-do-mes";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 
 /**
@@ -68,6 +70,8 @@ interface ConfigDoPlano {
   raciocinio?: string;
   projetoId: string;
   escolha?: EscolhaEditorial;
+  /** 02/10: a cadência pedida no agente do Mês (o servidor monta a grade de datas e formatos). */
+  cadencia?: CadenciaDoMes | null;
 }
 
 interface Execucao {
@@ -139,12 +143,19 @@ function diasUteis(inicio: string, fim: string): number {
   return n;
 }
 
-/** Publicações do mês: frequência por semana vezes as semanas úteis do período. */
-function publicacoesDoMes(mes: string, porSemana: number): number {
+/**
+ * Publicações do mês (02/10): as vagas da grade da cadência, a mesma conta do
+ * servidor (semana com 3 ou mais dias úteis recebe a cadência inteira; ponta
+ * do mês com 1 ou 2 dias fica livre). Sem vaga nenhuma, a conta antiga.
+ */
+export function publicacoesDoMes(mes: string, porSemana: number, cadencia?: CadenciaDoMes | null): number {
   const p = periodoDoMes(mes);
   const uteis = diasUteis(p.inicio, p.fim);
   if (uteis === 0) return 0;
-  return Math.max(1, Math.round((porSemana * uteis) / 5));
+  if (!cadencia && porSemana > 5) return Math.max(1, Math.round((porSemana * uteis) / 5));
+  const c: CadenciaDoMes = cadencia || { por_semana: Math.max(1, Math.round(porSemana) || 3), mix: null, dias: [], fonte: "tela" };
+  const vagas = gradeDoMes(c, p.inicio, p.fim).length;
+  return vagas || Math.max(1, Math.round((porSemana * uteis) / 5));
 }
 
 function mesesEntre(de: string, ate: string): string[] {
@@ -238,6 +249,7 @@ async function rodarMes(f: Ferramentas, mes: string): Promise<{ ok: boolean; par
         periodo_inicio: periodo.inicio,
         periodo_fim: periodo.fim,
         frequencia: estado.alvo,
+        ...(cfg.cadencia ? { cadencia: cfg.cadencia } : {}),
         objetivo: cfg.objetivo,
         oferta: cfg.oferta,
         modelo_id: cfg.modeloId,
@@ -501,12 +513,14 @@ export interface GeracaoPeloAgente {
   modeloId: string;
   raciocinio?: string;
   projetoId: string;
+  /** 02/10: a cadência pedida no agente do Mês. */
+  cadencia?: CadenciaDoMes | null;
 }
 
 /** Publicações de cada mês e a estimativa de custo (temas e detalhe de cada mês). */
-export function estimativaDaGeracao(g: Pick<GeracaoPeloAgente, "meses" | "frequenciaSemanal" | "modeloId" | "raciocinio">) {
+export function estimativaDaGeracao(g: Pick<GeracaoPeloAgente, "meses" | "frequenciaSemanal" | "modeloId" | "raciocinio" | "cadencia">) {
   const porSemana = Math.max(1, Math.min(14, Math.round(g.frequenciaSemanal) || 3));
-  const alvos = g.meses.map((m) => publicacoesDoMes(m, porSemana));
+  const alvos = g.meses.map((m) => publicacoesDoMes(m, porSemana, g.cadencia));
   const partes = alvos.reduce((acc: ParteDaEstimativa[], alvo) => acc.concat(partesDoMes({ modeloId: g.modeloId, raciocinio: g.raciocinio }, alvo, null)), []);
   return { alvos, total: alvos.reduce((t, n) => t + n, 0), partes };
 }
@@ -532,6 +546,7 @@ export function iniciarGeracaoPeloAgente(
       raciocinio: g.raciocinio || undefined,
       projetoId: g.projetoId,
       escolha: escolhaLivre(),
+      cadencia: g.cadencia ?? null,
     },
     rodando: false,
     parar: false,

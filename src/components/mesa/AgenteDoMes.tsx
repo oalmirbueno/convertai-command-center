@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarRange, Check, ChevronDown, Eye, FileText, Loader2, MessagesSquare, Minus, PenLine, Plus, RefreshCw, Sparkles, Trash2, Undo2, Users, Wand2, X } from "lucide-react";
+import { AlertTriangle, CalendarRange, Check, ChevronDown, Eye, FileText, Loader2, MessagesSquare, Minus, PenLine, Plus, RefreshCw, Sparkles, Trash2, Undo2, Users, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,6 +16,7 @@ import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "./Custo";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { MiniaturasDosAnexos, useAnexos, ZonaDeAnexos } from "./AnexosDoPedido";
 import { BlocoDaProposta } from "./ConteudosPropostos";
+import SemanasDoMes from "./SemanasDoMes";
 import { Cronometro } from "./Cronometro";
 import { Ditado } from "./Ditado";
 import { CompositorDoAgente, MensagensDoAgente } from "@/components/sistema/PainelDoAgente";
@@ -576,14 +577,15 @@ export function CartaoDaCriacao({ mensagemId, criacao }: { mensagemId: string; c
   const lotes = lotesDoRefazer(criacao.itens, LOTE_DA_CRIACAO);
   const faltam = lotes.map((_, i) => i).filter((i) => feitos.indexOf(i) < 0);
   const estado = faltam.length === 0 ? "feita" : feitos.length ? "parcial" : "aberta";
-  const visiveis = aberta ? criacao.itens : criacao.itens.slice(0, 6);
+  const visiveis = aberta ? criacao.itens : criacao.itens.slice(0, 12);
 
   const criar = async () => {
     let nova: any = null;
     const jaFeitos = feitos.slice();
     for (const n of faltam) {
       setAndando(n);
-      nova = await pedidoLivre({ clientId, mensagem: pedidoParaCriar(lotes[n], criacao.orientacao), anexos: [], campanhaId: null });
+      // 02/10: as linhas do lote vão junto (data, formato e direção da foto valem exatamente).
+      nova = await pedidoLivre({ clientId, mensagem: pedidoParaCriar(lotes[n], criacao.orientacao), anexos: [], campanhaId: null, pecas: lotes[n] });
       jaFeitos.push(n);
       setFeitos(jaFeitos.slice());
       gravarLotesFeitos(mensagemId, jaFeitos);
@@ -601,21 +603,20 @@ export function CartaoDaCriacao({ mensagemId, criacao }: { mensagemId: string; c
         Criar conteúdos · {criacao.itens.length}
       </p>
       {criacao.resumo && <p className="mt-1 text-[13px] leading-relaxed [overflow-wrap:anywhere]">{criacao.resumo}</p>}
-      <ul className="mt-2 divide-y divide-border/50">
-        {visiveis.map((i, k) => (
-          <li key={`${i.data}-${k}`} className="flex min-w-0 items-start py-1 text-[13px] leading-snug">
-            <Plus className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
-            <span className="min-w-0 [overflow-wrap:anywhere]">
-              <span className="font-medium">{i.tema}</span>
-              <span className="text-muted-foreground">
-                {" "}· {diaCurto(i.data)} · {i.formato === "estatico" ? "estático" : "carrossel"}
-                {i.formato_pedido ? ` (pedido: ${i.formato_pedido})` : ""}
-              </span>
-            </span>
-          </li>
-        ))}
-      </ul>
-      {criacao.itens.length > 6 && (
+      {/* 02/10: a conta contra a cadência pedida ("12 posts: 8 fotos e 4 carrosséis, 3 por semana."). */}
+      {criacao.conferencia && criacao.conferencia.frase && (
+        <p className={`mt-1.5 flex min-w-0 items-start text-[12px] ${criacao.conferencia.ok ? "text-foreground" : "text-warning"}`} data-conferencia-do-mes={criacao.conferencia.ok ? "ok" : "falta"}>
+          {criacao.conferencia.ok ? <Check className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0 text-success" /> : <AlertTriangle className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" />}
+          <span className="[overflow-wrap:anywhere]">{criacao.conferencia.frase}</span>
+        </p>
+      )}
+      <SemanasDoMes
+        className="mt-2"
+        clientId={clientId}
+        itens={visiveis.map((i, k) => ({ tema_id: `c${k}`, data: i.data, formato: i.formato, tema: i.tema, resumo: i.referencia, foto: i.foto ?? null }))}
+        esperadoPorSemana={criacao.conferencia && criacao.conferencia.cadencia ? criacao.conferencia.cadencia.por_semana : null}
+      />
+      {criacao.itens.length > 12 && (
         <button type="button" onClick={() => setAberta((v) => !v)} className="mt-1 text-[11.5px] text-muted-foreground hover:text-foreground" aria-expanded={aberta}>
           {aberta ? "Mostrar menos" : `Ver todos (${criacao.itens.length})`}
         </button>
@@ -676,7 +677,7 @@ export function CartaoDaGeracao({ mensagemId, geracao }: { mensagemId: string; g
   const modeloId = padrao ? padrao.id : "";
   const raciocinio = padrao ? raciocinioPadraoDaTela(padrao.raciocinio) : undefined;
   const meses = atual.meses.map((m) => `${m.slice(0, 7)}-01`);
-  const estimativa = estimativaDaGeracao({ meses, frequenciaSemanal: atual.frequencia_semanal, modeloId, raciocinio });
+  const estimativa = estimativaDaGeracao({ meses, frequenciaSemanal: atual.frequencia_semanal, modeloId, raciocinio, cadencia: atual.cadencia ?? null });
   const estado = atual.executada_em ? "feita" : atual.descartada_em ? "descartada" : "aberta";
 
   const comecar = async () => {
@@ -685,7 +686,7 @@ export function CartaoDaGeracao({ mensagemId, geracao }: { mensagemId: string; g
     if (data && data.anexo) setAtual({ ...atual, ...(data.anexo as GeracaoDeConteudos) });
     const rodada = iniciarGeracaoPeloAgente(
       { clientId, queryClient, atualizarCusto: mesa.atualizarCusto },
-      { meses, frequenciaSemanal: atual.frequencia_semanal, modeloId, raciocinio, projetoId: atual.project_id },
+      { meses, frequenciaSemanal: atual.frequencia_semanal, modeloId, raciocinio, projetoId: atual.project_id, cadencia: atual.cadencia ?? null },
     );
     if (!rodada) throw new Error("Já há uma geração de meses em andamento para este cliente. Espere terminar.");
     void rodada.then((r) => {

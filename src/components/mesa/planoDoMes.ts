@@ -9,6 +9,9 @@ import {
   type ParteDaEstimativa,
 } from "@/lib/mesa/api";
 import { MAX_ANEXOS, type ItemProposto } from "./mesaV4Api";
+// 02/10: peça de foto (Mesa Foto) e a conferência da cadência pedida, do mesmo módulo do servidor.
+import { resumoDaDirecaoDeFoto, type DirecaoDeFoto } from "../../../supabase/functions/agente-calendario/modulos/peca-de-foto";
+import type { CadenciaDoMes, ConferenciaDoMes } from "../../../supabase/functions/agente-calendario/modulos/cadencia-do-mes";
 
 /**
  * Aba Mês, versão 6 (24/09): o agente do mês planeja o mês conversando e a
@@ -221,10 +224,12 @@ export const partesDoPlanejamento = (catalogo: ModeloIa[], anexos: number, carac
 /** Conteúdos novos a partir de material colado ou anexado (anexo "criar_conteudos" de planejar_mes). */
 export interface ItemParaCriar {
   data: string;
-  formato: "carrossel" | "estatico";
+  formato: "carrossel" | "estatico" | "foto";
   formato_pedido?: string | null;
   tema: string;
   referencia: string;
+  /** Peça de foto: a direção para a Mesa Foto (contrato em modulos/peca-de-foto.ts). */
+  foto?: DirecaoDeFoto | null;
 }
 
 export interface CriacaoDeConteudos {
@@ -233,6 +238,8 @@ export interface CriacaoDeConteudos {
   orientacao: string;
   itens: ItemParaCriar[];
   ignorados?: number;
+  /** 02/10: a conta por semana contra a cadência pedida ("12 posts: 8 fotos e 4 carrosséis, 3 por semana."). */
+  conferencia?: (Partial<ConferenciaDoMes> & { cadencia?: CadenciaDoMes | null; avisos?: string[] }) | null;
 }
 
 export function criacaoDaMensagem(anexos: unknown[] | null | undefined): CriacaoDeConteudos | null {
@@ -252,10 +259,12 @@ export const LOTE_DA_CRIACAO = 12;
  * Texto do pedido livre de um lote da criação. Espelho de pedidoParaCriar em
  * supabase/functions/agente-calendario/agente-mes-v2.ts.
  */
-export function pedidoParaCriar(itens: Array<Pick<ItemParaCriar, "data" | "formato" | "tema" | "referencia">>, orientacao?: string | null): string {
+export function pedidoParaCriar(itens: Array<Pick<ItemParaCriar, "data" | "formato" | "tema" | "referencia" | "foto">>, orientacao?: string | null): string {
   const linhas = itens.map((i) => {
     const ref = String(i.referencia || "").replace(/\s+/g, " ").trim();
-    return `- ${i.data} · ${i.formato === "estatico" ? "estático" : "carrossel"} · ${String(i.tema || "").replace(/\s+/g, " ").trim()}${ref ? `\n  Referência do material: ${ref}` : ""}`;
+    const foto = i.formato === "foto" && i.foto ? `\n  Direção da foto: ${resumoDaDirecaoDeFoto(i.foto)}` : "";
+    const rotulo = i.formato === "estatico" ? "estático" : i.formato === "foto" ? "foto" : "carrossel";
+    return `- ${i.data} · ${rotulo} · ${String(i.tema || "").replace(/\s+/g, " ").trim()}${ref ? `\n  Referência do material: ${ref}` : ""}${foto}`;
   });
   const base = `Crie estes conteúdos, um para cada linha, exatamente na data e no formato indicados. Siga o tema e a referência do material de cada linha, adaptando ao cliente (negócio, oferta, público e tom de voz do contexto):\n${linhas.join("\n")}`;
   const o = String(orientacao || "").replace(/\s+/g, " ").trim().slice(0, 600);
@@ -528,6 +537,8 @@ export interface GeracaoDeConteudos {
   projeto_nome: string | null;
   executada_em?: string;
   descartada_em?: string;
+  /** 02/10: a cadência pedida (por semana, mistura e dias); o gerador segue a grade dela. */
+  cadencia?: CadenciaDoMes | null;
 }
 
 export function geracaoDaMensagem(anexos: unknown[] | null | undefined): GeracaoDeConteudos | null {
