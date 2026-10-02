@@ -312,7 +312,7 @@ describe("Renderizar (Mesa Edição): clique que salva antes, marca do pedido e 
   it("'Salvando em instantes' não trava: o clique grava antes e pede com a revisão salva; em erro, não pede", async () => {
     mock.invoke.mockImplementation(async (_f: string, { body }: { body: Record<string, unknown> }) => ({ data: body.acao === "render_pedir" ? { pedido: { id: "r1", tipo: "render_final", estado: "fila", criado_em: new Date().toISOString() }, ja_existia: false } : { pedidos: [] }, error: null }));
     const p = props();
-    const { unmount } = render(h(Renderizar, p));
+    const { unmount } = render(h(MemoryRouter, null, h(Renderizar, p)));
     const botaoRender = document.querySelector("[data-botao-renderizar]") as HTMLButtonElement;
     expect(botaoRender.disabled).toBe(false);
     expect(botaoRender.getAttribute("aria-label")).toBe("Renderizar");
@@ -326,7 +326,7 @@ describe("Renderizar (Mesa Edição): clique que salva antes, marca do pedido e 
     _limparVigias();
     mock.invoke.mockClear();
     const q = props({ estadoDoSalvamento: () => "erro" as const });
-    render(h(Renderizar, q));
+    render(h(MemoryRouter, null, h(Renderizar, q)));
     await waitFor(() => expect(corpos("render_status")).toHaveLength(1));
     // A leitura voltou sem pedido ativo: a marca some (a próxima abertura não consulta).
     expect(temRenderAtivo(VERSAO)).toBe(false);
@@ -339,11 +339,11 @@ describe("Renderizar (Mesa Edição): clique que salva antes, marca do pedido e 
     const falhou = { id: "a1", tipo: "amostra", estado: "erro", etapa: null, progresso: 0, entrada: { inicio_s: 3, fim_s: 13 }, resultado: null, erro_mensagem: "O worker não achou a fonte do clipe 2.", criado_em: new Date().toISOString(), concluido_em: null, arquivo_id: null, url: null };
     mock.invoke.mockImplementation(async (_f: string, { body }: { body: Record<string, unknown> }) => ({ data: body.acao === "render_pedir" ? { pedido: { ...falhou, id: "a2", estado: "fila" }, ja_existia: false } : { pedidos: [falhou] }, error: null }));
     marcarRenderAtivo(VERSAO);
-    const { rerender } = render(h(Renderizar, props({ salvamento: "conflito" as const })));
+    const { rerender } = render(h(MemoryRouter, null, h(Renderizar, props({ salvamento: "conflito" as const }))));
     const botaoRender = document.querySelector("[data-botao-renderizar]") as HTMLButtonElement;
     expect(botaoRender.disabled).toBe(true);
     expect(botaoRender.getAttribute("title")).toBe("Mudou em outro lugar: use Recarregar");
-    rerender(h(Renderizar, props()));
+    rerender(h(MemoryRouter, null, h(Renderizar, props())));
     const etiqueta = await screen.findByRole("button", { name: /O render não saiu: O worker não achou a fonte/ });
     fireEvent.click(etiqueta);
     fireEvent.click(await screen.findByRole("button", { name: "Tentar de novo" }));
