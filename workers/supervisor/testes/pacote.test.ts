@@ -28,6 +28,7 @@ describe("pacote dos motores", () => {
       "supabase/functions/computador-do-agente/modulos/navegador.ts",
       "supabase/functions/_shared/motor-codigo.ts",
       "src/components/mesa-edicao/editor/Composicao.tsx",
+      "public/editor/fontes",
     ]) assert.ok(existsSync(path.join(x, f)), `faltou ${f}`);
   });
 });

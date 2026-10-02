@@ -67,6 +67,8 @@ imagem = (
     .add_local_dir(RAIZ / "workers/supervisor", f"{APP}/workers/supervisor", copy=True, ignore=ignorar)
     .add_local_dir(RAIZ / "src", f"{APP}/src", copy=True, ignore=ignorar)
     .add_local_dir(RAIZ / "supabase/functions", f"{APP}/supabase/functions", copy=True, ignore=ignorar)
+    # Fontes livres e sons do editor (o worker copia de public/editor; sem isto o render final dava ENOENT, 02/10).
+    .add_local_dir(RAIZ / "public/editor", f"{APP}/public/editor", copy=True)
     .run_commands(f"ln -sfn {DEPS}/node_modules {APP}/workers/render/node_modules")
 )
 

@@ -36,6 +36,12 @@ describe("render na nuvem", () => {
     expect(sql).toMatch(/ligada boolean NOT NULL DEFAULT false/);
   });
 
+  it("a imagem da nuvem leva tudo que o worker lê fora de workers/ (02/10: faltava public/editor e o render final dava ENOENT)", () => {
+    for (const pasta of ["workers/render", "workers/supervisor", "src", "supabase/functions", "public/editor"]) {
+      expect(app).toContain(`RAIZ / "${pasta}"`);
+    }
+  });
+
   it("a Modal confere o segredo em tempo constante e nenhum valor mora no repositório", () => {
     expect(app).toMatch(/hmac\.compare_digest/);
     expect(app).toMatch(/modal\.Secret\.from_name\("aceleriq-render"\)/);

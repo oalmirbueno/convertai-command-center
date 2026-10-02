@@ -30,7 +30,8 @@ function git(repo: string, args: string[]): string {
 }
 
 /** O que vai no pacote: os workers e o código de fora que eles importam por caminho relativo. */
-export const PASTAS_DO_PACOTE = ["workers", "src", "supabase/functions"] as const;
+// public/editor: fontes livres e sons que o render copia (02/10: sem ela o render final dava ENOENT).
+export const PASTAS_DO_PACOTE = ["workers", "src", "supabase/functions", "public/editor"] as const;
 
 const raizDe = (repo: string, deOnde: "HEAD" | "indice") => (deOnde === "indice" ? git(repo, ["write-tree"]) : "HEAD");
 
