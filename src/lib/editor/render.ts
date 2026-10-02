@@ -25,6 +25,8 @@ export interface PedidoNaFila {
   concluido_em: string | null;
   arquivo_id: string | null;
   url: string | null;
+  /** Caminho do MP4 no bucket mesa (para baixar com o nome certo). */
+  saida_path?: string | null;
 }
 
 export interface EstadoDaFila {

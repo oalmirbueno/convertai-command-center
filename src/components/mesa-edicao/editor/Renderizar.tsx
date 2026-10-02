@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
-import { AlertTriangle, AudioWaveform, Clapperboard, Download, Film, Loader2, RefreshCw, X } from "lucide-react";
+import { AlertTriangle, AudioWaveform, Clapperboard, Download, Film, FolderOpen, Loader2, RefreshCw, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import BotaoComIcone from "@/components/sistema/BotaoComIcone";
@@ -12,6 +13,9 @@ import { cancelarRender, fontesSemOnda, lerFilaAgora, opsDaOnda, pedirRender, ro
 import type { Operacao } from "@/lib/editor/operacoes";
 import { janelaDaAmostra, ROTULO_DO_TIPO, type TipoDeRender } from "../../../../supabase/functions/_shared/render-do-editor";
 import type { ProjetoDeEdicao } from "../../../../supabase/functions/_shared/projeto-de-edicao";
+import { lerEstadoDaTela, useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
+import { baixarAoTerminar, CHAVE_DO_BAIXAR_SOZINHO, enderecoDoWorkspace, finalParaOWorkspace, nomeDoPedido, ROTA_DO_BAIXAR_SOZINHO } from "@/lib/edicao/baixarFinal";
+import BotoesDoFinal from "../BotoesDoFinal";
 
 /**
  * Renderizar pela fila (frente EDT, F1): o botão que troca o ZIP (o ZIP
@@ -26,7 +30,14 @@ import type { ProjetoDeEdicao } from "../../../../supabase/functions/_shared/pro
  * uma etiqueta que abre a mensagem inteira, com "Tentar de novo" quando
  * repetir resolve e "Dispensar". Um pedido desta versão reaberta (ou depois de
  * recarregar) é lido uma vez ao abrir; sem pedido, abrir não consulta nada.
+ *
+ * Vídeo inteiro pronto com o editor aberto (02/10): baixa sozinho (preferência
+ * "Baixar sozinho ao terminar", ligada por padrão), vai para o Workspace
+ * (Vídeos / título / Finais; o worker também faz) e o aviso abre a pasta. A
+ * barra mostra Baixar, Salvar no celular e Abrir no Workspace.
  */
+
+const ehBooleano = (v: unknown) => typeof v === "boolean";
 
 const CODIGOS_EM_PREPARACAO = ["funcao_indisponivel", "acao_desconhecida", "servico_indisponivel"];
 
@@ -59,6 +70,31 @@ export default function Renderizar({
 }) {
   const projetoRef = useRef(projeto);
   projetoRef.current = projeto;
+  const navigate = useNavigate();
+  const [baixarSozinho, setBaixarSozinho] = useEstadoDaTela<boolean>(CHAVE_DO_BAIXAR_SOZINHO, true, { validar: ehBooleano, rota: ROTA_DO_BAIXAR_SOZINHO });
+
+  /** Vídeo inteiro pronto: baixa (se ligado), põe no Workspace e avisa com o atalho para a pasta. */
+  async function finalPronto(p: PedidoNaFila) {
+    const nome = nomeDoPedido(projetoRef.current.titulo, p);
+    // A preferência lida agora (o aviso chega minutos depois; a pessoa pode ter mudado).
+    const ligado = lerEstadoDaTela<boolean>(CHAVE_DO_BAIXAR_SOZINHO, true, ehBooleano, ROTA_DO_BAIXAR_SOZINHO);
+    const baixou = await baixarAoTerminar(p, nome, ligado).catch(() => false);
+    let pasta: string | null = null;
+    if (p.arquivo_id) {
+      try {
+        const r = await finalParaOWorkspace(p.arquivo_id, true);
+        pasta = r.workspace.pasta_id;
+      } catch (e) {
+        console.warn("[editor] o vídeo pronto não foi para o Workspace agora", e);
+      }
+    }
+    const partes = [baixou ? `Baixando ${nome}.` : "Use Baixar na barra do editor.", pasta ? "Também está no Workspace, em Vídeos / Finais." : ""].filter(Boolean);
+    toast.success("Vídeo inteiro pronto", {
+      description: partes.join(" "),
+      action: pasta ? { label: "Abrir no Workspace", onClick: () => navigate(enderecoDoWorkspace(clientId, pasta)) } : undefined,
+      duration: 12000,
+    });
+  }
   // Havia pedido desta versão (desta aba, de outra ou do agente): lê a fila uma vez ao abrir.
   const lerAoAbrir = useMemo(() => temRenderAtivo(versaoId), [versaoId]);
   const fila = useFilaDeRender(
@@ -74,6 +110,8 @@ export default function Renderizar({
         const ops = opsDaOnda(projetoRef.current, p, new Date().toISOString());
         if (ops.length) onOps(ops, "Onda medida");
         toast.success("Onda do áudio medida", { description: "O corte pela onda já pode rodar." });
+      } else if (p.tipo === "render_final") {
+        void finalPronto(p);
       } else toast.success(`${ROTULO_DO_TIPO[p.tipo]} pronto`, { description: "O MP4 está na barra do editor e na Mídia." });
     },
     lerAoAbrir,
@@ -161,6 +199,18 @@ export default function Renderizar({
             <X className="h-3.5 w-3.5" />
           </button>
         </span>
+      ) : ultimoPronto && ultimoPronto.saida_path ? (
+        <span className="mr-1 flex items-center" data-render-pronto="" title={`${ROTULO_DO_TIPO[ultimoPronto.tipo]} pronto`}>
+          <span className="mr-0.5 hidden text-[12px] text-muted-foreground lg:inline">{ultimoPronto.tipo === "amostra" ? "Amostra" : "MP4"}</span>
+          <BotoesDoFinal
+            clientId={clientId}
+            arquivoId={ultimoPronto.arquivo_id}
+            bucket="mesa"
+            caminho={ultimoPronto.saida_path}
+            nome={nomeDoPedido(projeto.titulo, ultimoPronto)}
+            semWorkspace={ultimoPronto.tipo === "amostra"}
+          />
+        </span>
       ) : ultimoPronto ? (
         <a
           className={juntar(botao.barra, "mr-1")}
@@ -236,6 +286,24 @@ export default function Renderizar({
         itens={[
           { rotulo: "Amostra de 12 s no cursor", icone: <Clapperboard className="h-4 w-4" />, aoEscolher: () => void pedir("amostra"), desativado: !!pedindo || bloqueado, dica: motivoDoBloqueio || "8 a 15 s com legenda, animação e som, antes do vídeo inteiro." },
           { rotulo: "Ver o andamento", icone: <RefreshCw className="h-4 w-4" />, aoEscolher: () => lerFilaAgora(clientId, versaoId, chamarEditorVideo), dica: "Lê a fila de render desta versão (o último MP4 pronto aparece na barra)." },
+          {
+            rotulo: baixarSozinho ? "Baixar sozinho ao terminar: ligado" : "Baixar sozinho ao terminar: desligado",
+            icone: <Download className="h-4 w-4" />,
+            aoEscolher: () => setBaixarSozinho(!baixarSozinho),
+            dica: "Com o editor aberto, o vídeo inteiro baixa sozinho quando a máquina terminar.",
+            separadorAntes: true,
+          },
+          ultimoPronto && ultimoPronto.tipo === "render_final" && ultimoPronto.arquivo_id && {
+            rotulo: "Abrir no Workspace",
+            icone: <FolderOpen className="h-4 w-4" />,
+            aoEscolher: () => {
+              const id = ultimoPronto.arquivo_id as string;
+              void finalParaOWorkspace(id)
+                .then((r) => (r.workspace.pasta_id ? navigate(enderecoDoWorkspace(clientId, r.workspace.pasta_id)) : toast.info("O vídeo está indo para o Workspace", { description: "Tente de novo em instantes." })))
+                .catch((e) => toast.error("Não foi possível abrir no Workspace", { description: textoDoErro(e) }));
+            },
+            dica: "A pasta Vídeos / título / Finais do cliente.",
+          },
           semOnda.length > 0 && { rotulo: `Medir a onda (${semOnda.length})`, icone: <AudioWaveform className="h-4 w-4" />, aoEscolher: () => void pedir("onda"), desativado: !!pedindo || bloqueado, dica: motivoDoBloqueio || "O worker lê o áudio em janelas de 10 ms: base do corte pela onda." },
         ]}
       />

@@ -15,6 +15,8 @@ import { transcreverMidia } from "@/lib/editor/fala";
 import { pedirRender, uidDoClique } from "@/lib/editor/render";
 import { chaveDasVersoes, chaveDosArquivos, duracaoCurta, naEntradaDaEdicao, useArquivosDeVideo, type ArquivoDeVideo } from "@/components/mesa-videos/videosApi";
 import { gerarLegendaDoFinal, gravarLegendaNoVideo, type LegendaGerada } from "@/lib/edicao/acoesDaEdicao";
+import { baixarPeloLink, linkParaBaixar, nomeParaBaixar } from "@/lib/edicao/baixarFinal";
+import BotoesDoFinal from "./BotoesDoFinal";
 import { agruparVariantes, antesDoTratado, categoriaDoArquivo, rotuloDaVariante } from "../../../supabase/functions/mesa-videos/modulos/organizador-da-entrada";
 
 /**
@@ -26,6 +28,9 @@ import { agruparVariantes, antesDoTratado, categoriaDoArquivo, rotuloDaVariante 
  * - "Gravar no vídeo": registra a próxima versão com a legenda gravada e pede
  *   o render (worker da agência, sem custo de IA).
  * - Tratados: comparar o antes e o depois.
+ * - Baixar (com o nome do final), Salvar no celular (compartilhamento do
+ *   sistema) e Abrir no Workspace (Vídeos / título / Finais); SRT e VTT
+ *   também baixam com o nome do vídeo.
  */
 
 const ESTILOS = [
@@ -33,15 +38,15 @@ const ESTILOS = [
   { valor: "caixa", rotulo: "Caixa" },
 ];
 
-function baixar(url: string | null | undefined) {
-  if (!url) return;
-  const a = document.createElement("a");
-  a.href = url;
-  a.rel = "noopener";
-  a.target = "_blank";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+/** Baixa a legenda pelo caminho no bucket (com o nome do vídeo); sem caminho, pelo link que a função devolveu. */
+async function baixarLegenda(arquivo: ArquivoDeVideo, ext: "srt" | "vtt", caminho: string | null, url: string | null) {
+  const nome = nomeParaBaixar(arquivo.nome, ext);
+  try {
+    if (caminho) baixarPeloLink(await linkParaBaixar(arquivo.storage_bucket || "mesa", caminho, nome), nome);
+    else if (url) baixarPeloLink(url, nome);
+  } catch (e) {
+    toast.error("Não foi possível baixar a legenda", { description: textoDoErro(e) });
+  }
 }
 
 function Comparar({ antes, depois }: { antes: ArquivoDeVideo; depois: ArquivoDeVideo }) {
@@ -67,7 +72,9 @@ function LinhaDoFinal({ arquivo, variantes, antes }: { arquivo: ArquivoDeVideo; 
   const [estilo, setEstilo] = useState<"simples" | "caixa">("simples");
   const doEditor = !!(arquivo.origem && arquivo.origem.render_pedido_id);
   const amostra = arquivo.tipo === "amostra";
-  const jaTem = arquivo.origem && arquivo.origem.legenda && typeof arquivo.origem.legenda === "object" ? (arquivo.origem.legenda as { linhas?: number }) : null;
+  const jaTem = arquivo.origem && arquivo.origem.legenda && typeof arquivo.origem.legenda === "object" ? (arquivo.origem.legenda as { linhas?: number; srt_path?: string; vtt_path?: string }) : null;
+  const caminhoDaLegenda = (ext: "srt" | "vtt") => (legenda && legenda.caminhos ? legenda.caminhos[ext] : jaTem ? (ext === "srt" ? jaTem.srt_path : jaTem.vtt_path) || null : null);
+  const urlDaLegenda = (ext: "srt" | "vtt") => (legenda && legenda.urls ? legenda.urls[ext] : null);
 
   const gerar = async (palavras?: { t: string; i: number; f: number }[]) => {
     setOcupado("gerar");
@@ -151,7 +158,8 @@ function LinhaDoFinal({ arquivo, variantes, antes }: { arquivo: ArquivoDeVideo; 
           </p>
           <p className={juntar(texto.auxiliar, "truncate")}>{antes ? `Antes: ${antes.nome}` : detalhes}</p>
         </div>
-        <div className="ml-2 flex shrink-0 items-center">{acoes}</div>
+        <BotoesDoFinal className="ml-1" clientId={clientId} arquivoId={arquivo.id} bucket={arquivo.storage_bucket} caminho={arquivo.storage_path} nome={nomeParaBaixar(arquivo.nome)} origem={arquivo.origem} semWorkspace={amostra} />
+        <div className="ml-1 flex shrink-0 items-center">{acoes}</div>
       </div>
       {aberto === "ver" && (
         <div className="mt-2">
@@ -161,6 +169,22 @@ function LinhaDoFinal({ arquivo, variantes, antes }: { arquivo: ArquivoDeVideo; 
       {aberto === "comparar" && antes && (
         <div className="mt-2">
           <Comparar antes={antes} depois={arquivo} />
+        </div>
+      )}
+      {!legenda && jaTem && (jaTem.srt_path || jaTem.vtt_path) && (
+        <div className="mt-1 flex min-w-0 flex-wrap items-center" data-legenda-guardada="">
+          {jaTem.srt_path && (
+            <button type="button" className={juntar(botao.discreto, "mr-1 h-8 px-2 text-[12px]")} onClick={() => void baixarLegenda(arquivo, "srt", jaTem.srt_path || null, null)} aria-label="Baixar SRT">
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              SRT
+            </button>
+          )}
+          {jaTem.vtt_path && (
+            <button type="button" className={juntar(botao.discreto, "h-8 px-2 text-[12px]")} onClick={() => void baixarLegenda(arquivo, "vtt", jaTem.vtt_path || null, null)} aria-label="Baixar VTT">
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              VTT
+            </button>
+          )}
         </div>
       )}
       {legenda && !legenda.precisa_transcrever && legenda.linhas.length > 0 && (
@@ -174,11 +198,11 @@ function LinhaDoFinal({ arquivo, variantes, antes }: { arquivo: ArquivoDeVideo; 
             ))}
           </ol>
           <div className="flex min-w-0 flex-wrap items-center">
-            <button type="button" className={juntar(botao.discreto, "mb-1 mr-1 h-8 px-2 text-[12px]")} onClick={() => baixar(legenda.urls && legenda.urls.srt)} disabled={!legenda.urls || !legenda.urls.srt}>
+            <button type="button" className={juntar(botao.discreto, "mb-1 mr-1 h-8 px-2 text-[12px]")} onClick={() => void baixarLegenda(arquivo, "srt", caminhoDaLegenda("srt"), urlDaLegenda("srt"))} disabled={!caminhoDaLegenda("srt") && !urlDaLegenda("srt")} aria-label="Baixar SRT">
               <Download className="mr-1.5 h-3.5 w-3.5" />
               SRT
             </button>
-            <button type="button" className={juntar(botao.discreto, "mb-1 mr-3 h-8 px-2 text-[12px]")} onClick={() => baixar(legenda.urls && legenda.urls.vtt)} disabled={!legenda.urls || !legenda.urls.vtt}>
+            <button type="button" className={juntar(botao.discreto, "mb-1 mr-3 h-8 px-2 text-[12px]")} onClick={() => void baixarLegenda(arquivo, "vtt", caminhoDaLegenda("vtt"), urlDaLegenda("vtt"))} disabled={!caminhoDaLegenda("vtt") && !urlDaLegenda("vtt")} aria-label="Baixar VTT">
               <Download className="mr-1.5 h-3.5 w-3.5" />
               VTT
             </button>
@@ -209,7 +233,7 @@ export default function Finais({ troca }: { troca?: ReactNode } = {}) {
     <Secao
       titulo="Finais"
       descricao={dados ? `${finais.length} ${finais.length === 1 ? "vídeo pronto" : "vídeos prontos"}` : undefined}
-      ajuda="Os vídeos prontos (render do editor e entregas) e o antes e depois dos tratados. Gerar legenda faz o SRT e o VTT do corte final, com os tempos certos depois dos cortes, e guarda ao lado do vídeo. Gravar no vídeo faz uma nova versão com a legenda gravada, renderizada pela máquina da agência."
+      ajuda="Os vídeos prontos (render do editor e entregas) e o antes e depois dos tratados. Baixar salva o vídeo no computador; no celular, Salvar no celular guarda na galeria. Abrir no Workspace leva à pasta Vídeos / título / Finais, onde o vídeo pronto entra sozinho. Gerar legenda faz o SRT e o VTT do corte final, com os tempos certos depois dos cortes, e guarda ao lado do vídeo e no Workspace. Gravar no vídeo faz uma nova versão com a legenda gravada, renderizada pela máquina da agência."
       divisoria
       acao={troca}
     >

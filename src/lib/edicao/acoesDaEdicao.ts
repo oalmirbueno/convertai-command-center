@@ -78,6 +78,10 @@ export interface LegendaGerada {
   srt?: string;
   vtt?: string;
   urls?: { srt: string | null; vtt: string | null };
+  /** Caminhos no bucket mesa (ao lado do vídeo). */
+  caminhos?: { srt: string; vtt: string };
+  /** A legenda também foi para o Workspace (Vídeos / título / Finais). */
+  workspace?: { estado: string; pasta_id: string | null };
   precisa_transcrever: boolean;
   custo_transcricao_usd?: number;
   duracao_s?: number | null;

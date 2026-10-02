@@ -365,15 +365,19 @@ export default function Workspace() {
   // do endereço depois de lido, para voltar ao comportamento de sempre.
   const [parametros, setParametros] = useSearchParams();
   const clienteDoEndereco = parametros.get("client");
+  // "Abrir no Workspace" da Mesa Edição (02/10): &pasta=<id> abre a pasta do vídeo pronto.
+  const [pastaDoEndereco, setPastaDoEndereco] = useState<string | null>(null);
   useEffect(() => {
     if (!clienteDoEndereco || !clients) return;
     const existe = (clients as any[]).some((c) => c.id === clienteDoEndereco);
     if (existe && clientId !== clienteDoEndereco) nav.setClient(clienteDoEndereco);
     // "Organizar o workspace" (agente de contexto): /workspace?client=<id>&organizar=1 abre o organizador na raiz do cliente.
     if (existe && parametros.get("organizar") === "1") setOrganizadorAberto(true);
+    if (existe && parametros.get("pasta")) setPastaDoEndereco(parametros.get("pasta"));
     const resto = new URLSearchParams(parametros);
     resto.delete("client");
     resto.delete("organizar");
+    resto.delete("pasta");
     setParametros(resto, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clienteDoEndereco, clients]);
@@ -728,6 +732,13 @@ export default function Workspace() {
     }
     if (caminho.length) nav.abrirCaminho(caminho);
   }
+
+  useEffect(() => {
+    if (!pastaDoEndereco || !allFolders.some((f) => f.id === pastaDoEndereco)) return;
+    abrirPastaDaArvore(pastaDoEndereco);
+    setPastaDoEndereco(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pastaDoEndereco, allFolders]);
 
   const filtered = useMemo(() => {
     const candidates = parent?.id?.startsWith(VIRT_PREFIX)
