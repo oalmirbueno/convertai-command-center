@@ -46,7 +46,9 @@ export function autorizarChamadaInterna(e: {
   }
   const token = String(e.authorization || "").replace(/^Bearer\s+/i, "").trim();
   const chaves = e.chavesDeServico.map((c) => String(c || "").trim()).filter(Boolean);
-  if (!token || !chaves.some((c) => iguaisEmTempoConstante(token, c))) {
+  // 02/10: a chave de serviço pode estar noutra versão que a do ambiente (as duas valem). A função tem
+  // verify_jwt = true: o gateway já conferiu a assinatura, então um JWT com role service_role também serve.
+  if (!token || !(chaves.some((c) => iguaisEmTempoConstante(token, c)) || papelDoJwt(token) === "service_role")) {
     return { ok: false, status: 403, codigo: "chamada_interna_sem_servico", mensagem: "Chamada interna só com a chave de serviço no Authorization." };
   }
   return { ok: true };
@@ -107,4 +109,17 @@ export function corpoDoLoteRefeito(
   if (typeof p.modelo === "string" && p.modelo) corpo.modelo_id = p.modelo;
   if (antiga.project_id) corpo.project_id = antiga.project_id;
   return corpo;
+}
+
+/** Papel ("role") do JWT, sem conferir assinatura (quem confere é o gateway, verify_jwt = true). */
+export function papelDoJwt(token: string): string | null {
+  const partes = String(token || "").split(".");
+  if (partes.length !== 3) return null;
+  try {
+    const b64 = partes[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = JSON.parse(atob(b64 + "===".slice((b64.length + 3) % 4)));
+    return typeof json.role === "string" ? json.role : null;
+  } catch {
+    return null;
+  }
 }

@@ -178,3 +178,12 @@ describe("refazer_proposta_interno", () => {
     expect(fonte).toContain("if (chamador.interno.clientId === clientId) return;");
   });
 });
+
+import { papelDoJwt } from "../../supabase/functions/agente-calendario/modulos/refazer-interno";
+describe("refazer interno: JWT de serviço em outra versão", () => {
+  it("lê o papel do JWT (o gateway confere a assinatura)", () => {
+    const corpo = btoa(JSON.stringify({ role: "service_role", iss: "supabase" })).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+    expect(papelDoJwt(`eyJhbGciOiJIUzI1NiJ9.${corpo}.assinatura`)).toBe("service_role");
+    expect(papelDoJwt("nao-e-jwt")).toBeNull();
+  });
+});
