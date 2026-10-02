@@ -1,6 +1,7 @@
 import type { ArquivoDeVideo, PedidoDeVideo } from "@/components/mesa-videos/videosApi";
 import { takesNaOrdem, type EntradaDoPacote, type TakeDoPacote } from "../../../supabase/functions/mesa-videos/modulos/pacote-de-edicao";
 import { projetoDosTakes, type ProjetoDeEdicao } from "../../../supabase/functions/_shared/projeto-de-edicao";
+import { agruparVariantes } from "../../../supabase/functions/mesa-videos/modulos/organizador-da-entrada";
 
 /**
  * Entrada do "Pacote para editar" e do projeto de edição a partir do que a
@@ -24,6 +25,31 @@ export function projetoDaEntrada(e: Pick<EntradaDoPacote, "titulo" | "formato" |
   });
 }
 
+/** O que não é material de edição: amostra, still, render pronto, entrega e imagens do gerador. */
+const FORA_DA_EDICAO = ["amostra", "still", "render", "entrega", "quadro", "elemento", "angulo"];
+
+/**
+ * Material da edição (02/10, "organizar no Editar também"): sem amostras,
+ * stills e renders prontos, e cada cena do Motion uma vez só (a variante
+ * principal, não as 3 a 5 de cada formato).
+ */
+export function materialDaEdicao(arquivos: ArquivoDeVideo[]): ArquivoDeVideo[] {
+  const uteis = arquivos.filter((a) => FORA_DA_EDICAO.indexOf(a.tipo) < 0);
+  const principais = new Set(agruparVariantes(uteis).map((g) => g.principal.id));
+  return uteis.filter((a) => principais.has(a.id));
+}
+
+/** O tratado (sem legenda, melhorado) entra no lugar do antes, quando existe. */
+export function trocarPeloTratado(escolhidos: ArquivoDeVideo[], todos: ArquivoDeVideo[]): ArquivoDeVideo[] {
+  const ids = new Set(escolhidos.map((a) => a.id));
+  return escolhidos.map((a) => {
+    const depois = todos
+      .filter((x) => x.origem && x.origem.tipo === "tratamento" && x.origem.de_arquivo_id === a.id && !ids.has(x.id))
+      .sort((x, y) => (x.criado_em < y.criado_em ? 1 : -1))[0];
+    return depois ? { ...depois, melhor: a.melhor, roteiro_id: a.roteiro_id, cena_ref: a.cena_ref } : a;
+  });
+}
+
 export function entradaDoPacote(p: {
   clienteId: string;
   clienteNome: string;
@@ -40,10 +66,10 @@ export function entradaDoPacote(p: {
   urls?: Record<string, string>;
   agora: string;
 }): EntradaDoPacote {
-  const ativos = p.arquivos.filter((a) => a.estado !== "arquivado" && (a.tipo !== "gerado" || !!a.edicao_desde));
+  const ativos = materialDaEdicao(p.arquivos.filter((a) => a.estado !== "arquivado" && (a.tipo !== "gerado" || !!a.edicao_desde)));
   const doRoteiro = p.roteiro ? ativos.filter((a) => a.roteiro_id === (p.roteiro as { id: string }).id) : ativos;
   const base = doRoteiro.length ? doRoteiro : ativos;
-  const escolhidos = p.quais === "melhores" && base.some((a) => a.melhor) ? base.filter((a) => a.melhor) : base;
+  const escolhidos = trocarPeloTratado(p.quais === "melhores" && base.some((a) => a.melhor) ? base.filter((a) => a.melhor) : base, ativos);
   const takes: TakeDoPacote[] = escolhidos.map((a) => ({ ...a, url: p.urls ? p.urls[a.storage_path] || null : null }));
   const entrada: EntradaDoPacote = {
     cliente: { id: p.clienteId, nome: p.clienteNome || "Cliente" },

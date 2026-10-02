@@ -6,8 +6,8 @@
 
 export const ETAPAS_DA_MESA_EDICAO = [
   { valor: "entrada", rotulo: "Entrada", dica: "Subir vídeos de fora e os aprovados da Mesa Vídeos; transcrição." },
-  { valor: "organizar", rotulo: "Organizar", dica: "Separar por roteiro, cena e tomada, com os melhores takes." },
-  { valor: "editar", rotulo: "Editar", dica: "Edição dinâmica: projeto, pacote para editar e versões." },
+  { valor: "organizar", rotulo: "Organizar", dica: "Um vídeo ou vários clipes: pastas, cenas na ordem, melhores takes e o antes e depois." },
+  { valor: "editar", rotulo: "Editar", dica: "Edição dinâmica: projeto, pacote para editar, versões e finais com legenda." },
 ] as const;
 
 export type EtapaDaMesaEdicao = (typeof ETAPAS_DA_MESA_EDICAO)[number]["valor"];

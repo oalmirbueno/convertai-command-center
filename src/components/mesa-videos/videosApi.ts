@@ -66,6 +66,8 @@ export interface ArquivoDeVideo {
   criado_em: string;
   /** Vídeo gerado aprovado e mandado para a Mesa Edição (SQL E2-01). */
   edicao_desde?: string | null;
+  /** De onde veio (worker, gerador, tratamento): cena e versão do Motion e do render, antes do tratado (02/10). */
+  origem?: Record<string, unknown> | null;
   /** Veio só da pasta do Storage (sem o SQL V2-01): não dá para organizar. */
   so_no_storage?: boolean;
 }
@@ -170,6 +172,7 @@ export function normalizarArquivo(v: unknown): ArquivoDeVideo | null {
     estado: texto(o.estado) || "ativo",
     criado_em: texto(o.criado_em),
     edicao_desde: o.edicao_desde ? String(o.edicao_desde) : null,
+    origem: o.origem && typeof o.origem === "object" && !Array.isArray(o.origem) ? (o.origem as Record<string, unknown>) : null,
     so_no_storage: o.so_no_storage === true ? true : undefined,
   };
 }
