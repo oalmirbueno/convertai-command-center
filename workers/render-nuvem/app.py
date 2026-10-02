@@ -84,7 +84,9 @@ def processar() -> int:
         **os.environ,
         "RENDER_WORKER_NOME": "nuvem-render",
         "RENDER_SAIR_OCIOSO_S": "20",
-        "RENDER_CONCORRENCIA": str(int(NUCLEOS * 2)),
+        # O Remotion recusa concorrência acima dos núcleos que o contêiner enxerga (02/10: pedia 16, havia 8).
+        # os.cpu_count() devolve os núcleos do servidor inteiro (24); o contêiner tem exatamente NUCLEOS.
+        "RENDER_CONCORRENCIA": str(int(NUCLEOS)),
         "RENDER_PASTA": "/tmp/aceleriq-render",
     }
     env.pop("RENDER_NUVEM_SEGREDO", None)
