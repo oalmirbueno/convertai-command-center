@@ -1993,6 +1993,14 @@
       "remote_name": "avisos_com_cliente",
       "remote_statements_sha256": "11f936d333f88adb79a7dceb0616473d2c9e9c0f9ba3698c9c2582f80120c65a",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261002160000",
+      "path": "supabase/migrations/20261002160000_edicao_organizar.sql",
+      "local_sha256": "e7feeaab4554808089a98034bc91f327b2fa7cadb98a06f70369281cf16a6479",
+      "remote_name": "edicao_organizar",
+      "remote_statements_sha256": "adb1e4bf32276e1c0ec945ff9939deb6b6e3593c9a5c7273d2cec8a2c660414c",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
