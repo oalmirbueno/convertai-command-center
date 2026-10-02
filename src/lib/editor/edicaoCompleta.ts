@@ -235,6 +235,13 @@ export function montarEdicaoCompleta(
     });
   }
 
+  // "Refaz do zero": volta ao vídeo inteiro (cada fonte da trilha principal, na ordem) e tira as camadas
+  // automáticas de antes (legenda, textos, sobreposições, ajustes e os efeitos sonoros da casa). Música e áudio
+  // que a equipe pôs ficam. Sem isso, a edição nova cortava em cima dos cortes velhos (02/10, vídeo da Thainá).
+  if (pedido && pedido.refazer) {
+    rodar(m, passos, "bruto", "Voltar ao vídeo bruto", (x) => voltarAoBruto(x));
+  }
+
   faseDeCorte(m, plano, agora, passos, pedido);
   foraPeloPedido(passos, pedido, "cortes", "pausas", "Pausas e respiros");
 
@@ -412,4 +419,39 @@ export function montarEdicaoCompleta(
   if (feitos.length) m.aplicar({ op: "registrar_skill", skill: "editar_com_ia", resumo: feitos.map((x) => x.rotulo).join(", ").slice(0, 190), em: agora });
   const resumo = feitos.length ? `${feitos.length} ${feitos.length === 1 ? "peça montada" : "peças montadas"}: ${feitos.map((x) => x.rotulo.toLowerCase()).join(", ")}.` : "Nada a montar com este plano.";
   return { proposta: m.proposta("editar_com_ia", "Editar com IA", resumo), passos, checklist, foraPeloPedido: fora };
+}
+
+/** Volta a trilha principal ao vídeo inteiro de cada fonte (na ordem em que aparecem) e limpa o automático de antes. */
+function voltarAoBruto(x: Montador): string | null {
+  const p = x.projeto;
+  const principal = p.trilhas.find((t) => t.tipo === "video");
+  if (!principal || !principal.clipes.length) return null;
+  const fps = p.fps > 0 ? p.fps : 25;
+  const ordem: string[] = [];
+  principal.clipes
+    .slice()
+    .sort((a, b) => a.inicio_s - b.inicio_s)
+    .forEach((c) => {
+      if (c.fonte && ordem.indexOf(c.fonte) < 0 && p.fontes[c.fonte] && p.fontes[c.fonte].midia === "video") ordem.push(c.fonte);
+    });
+  const inteiras = ordem.filter((f) => Number(p.fontes[f].duracao_s) > 0);
+  if (!inteiras.length) return null;
+  const automatico = (c: { origem?: { tipo?: string } | null }) => !!c.origem && (c.origem.tipo === "skill" || c.origem.tipo === "diretor" || c.origem.tipo === "motion");
+  let limpas = 0;
+  p.trilhas.forEach((t) => {
+    if (t.id === principal.id || !t.clipes.length) return;
+    const tudoAutomatico = t.clipes.every((c) => automatico(c as { origem?: { tipo?: string } | null }));
+    if (t.tipo === "legenda" || t.tipo === "texto" || t.tipo === "ajuste" || t.tipo === "sobreposicao" || (t.tipo === "audio" && tudoAutomatico)) {
+      x.aplicar({ op: "limpar_trilha", trilha: t.id });
+      limpas++;
+    }
+  });
+  x.aplicar({ op: "limpar_trilha", trilha: principal.id });
+  let cursor = 0;
+  inteiras.forEach((f) => {
+    const dur = Math.floor(Number(p.fontes[f].duracao_s) * fps) / fps;
+    x.aplicar({ op: "inserir", trilha: principal.id, clipe: { fonte: f, inicio_s: cursor, entrada_s: 0, saida_s: dur, origem: { tipo: "manual", ref: "bruto" } } });
+    cursor = Math.round((cursor + dur) * fps) / fps;
+  });
+  return `Voltei ao vídeo bruto (${inteiras.length === 1 ? "1 vídeo inteiro" : `${inteiras.length} vídeos inteiros`})${limpas ? ` e tirei ${limpas} ${limpas === 1 ? "camada automática" : "camadas automáticas"} de antes` : ""}.`;
 }

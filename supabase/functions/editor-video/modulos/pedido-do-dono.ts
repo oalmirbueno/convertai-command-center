@@ -38,6 +38,8 @@ export interface PedidoDoDono {
   so: PecaDoPedido[] | null;
   legenda: { tamanho: "grande" | "pequena" | null; posicao: "topo" | "meio" | "base" | null; palavras: number | null };
   manter_comeco: boolean;
+  /** "refaz do zero", "a partir do bruto", "começa de novo": a edição volta ao vídeo inteiro antes de cortar (02/10). */
+  refazer: boolean;
   /** Citadas sem negação nem pedido claro ("talvez", "se precisar"): o Jev julga. */
   ambiguos: PecaDoPedido[];
   /** O que o código entendeu, em frases curtas (vai no relatório). */
@@ -74,7 +76,7 @@ const SO = /\b(so|apenas|somente|unicamente)\b/;
 /** Lê o pedido do dono. Texto vazio: nada proibido, nada exigido. */
 export function lerPedidoDoDono(texto: string): PedidoDoDono {
   const t = semAcento(texto);
-  const r: PedidoDoDono = { sem: [], com: [], so: null, legenda: { tamanho: null, posicao: null, palavras: null }, manter_comeco: false, ambiguos: [], lido: [] };
+  const r: PedidoDoDono = { sem: [], com: [], so: null, legenda: { tamanho: null, posicao: null, palavras: null }, manter_comeco: false, refazer: false, ambiguos: [], lido: [] };
   if (!t.trim()) return r;
   const juntar = (l: PecaDoPedido[], p: PecaDoPedido) => {
     if (l.indexOf(p) < 0) l.push(p);
@@ -124,6 +126,7 @@ export function lerPedidoDoDono(texto: string): PedidoDoDono {
       juntar(r.so, "cortes");
     }
     if (/\b(mant(em|enha|er)|deix[ae]|preserv\w*|nao (corta|corte|mexe|mexa) n?o?)\s+(o |a )?(comeco|inicio|abertura)\b/.test(o)) r.manter_comeco = true;
+    if (/\b(refaz\w*|refazer|recomec\w*|do zero|desde o (comeco|inicio)|(a partir )?do (video )?bruto|(comeca|comece|comecar|faz|faca|fazer) de novo|de novo do (comeco|inicio))\b/.test(o)) r.refazer = true;
     // Opções da legenda: na oração que fala dela ou na seguinte ("legenda grande no meio, 2 palavras").
     if (legendaCitada && r.sem.indexOf("legenda") < 0) {
       if (/\b(grande|gigante|enorme)\b/.test(o)) r.legenda.tamanho = "grande";
@@ -146,6 +149,7 @@ export function lerPedidoDoDono(texto: string): PedidoDoDono {
   if (r.legenda.posicao) r.lido.push(`legenda ${r.legenda.posicao === "meio" ? "no meio" : r.legenda.posicao === "base" ? "embaixo" : "em cima"}`);
   if (r.legenda.palavras) r.lido.push(`legenda de ${r.legenda.palavras} ${r.legenda.palavras === 1 ? "palavra" : "palavras"}`);
   if (r.manter_comeco) r.lido.push("mantém o começo");
+  if (r.refazer) r.lido.push("refaz do zero, a partir do vídeo bruto");
   return r;
 }
 
