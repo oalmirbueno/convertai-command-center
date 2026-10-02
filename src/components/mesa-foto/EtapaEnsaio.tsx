@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Camera as IconeCamera, ClipboardCheck, Loader2, Lock, Plus, RefreshCw, Sparkles } from "lucide-react";
+import { AlertTriangle, BookImage, Camera as IconeCamera, ClipboardCheck, Loader2, Lock, Plus, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,6 +14,10 @@ import { estimarLocal, padraoPara, usd, type Qualidade } from "@/lib/mesa/api";
 import { AndamentoDoLote, BotaoDoLote } from "./AndamentoDoLote";
 import { SeletorDaCampanha, useCampanhaEscolhida } from "./CampanhaDaMesa";
 import { AtalhosDaFoto, DecisaoRapida, MenuDeUso } from "./UsoDaFoto";
+import EscolhaDoProduto from "./EscolhaDoProduto";
+import PainelDoArsenal from "./PainelDoArsenal";
+import { direcaoDoPreenchimento, usePreenchimentoDaLinha } from "./escolhasDaLinha";
+import DepoisDeAprovar, { fotosAprovadasDoEnsaio } from "./DepoisDeAprovar";
 import { Cartao, ListaCurta, MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto, Vazio } from "./Comuns";
 import { geraNoLote, useLote } from "./lote";
 import SeletorDeGuia from "./SeletorDeGuia";
@@ -136,9 +140,23 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
   const [receitaId, setReceitaId] = useState<string>("");
   const receita: Receita | null = lista.find((r) => r.id === receitaId) || combinam[0] || null;
   const [fora, setFora] = useState<string[]>([]);
+  const [arsenal, setArsenal] = useState(false);
   const [finalidade, setFinalidade] = useState("catalogo");
   const [formatos, setFormatos] = useState<string[]>(["1:1", "4:5"]);
   const [pedido, setPedido] = useEstadoDaTela(`mesa-foto:ensaio:pedido:${clientId}`, "");
+  // 02/10: o diretor deixou as fotos do produto preenchidas (produto, quantas, ângulos, cenas, luz): aplica uma vez.
+  const [preenchimento, setPreenchimento] = usePreenchimentoDaLinha(clientId);
+  useEffect(() => {
+    if (!preenchimento || preenchimento.objetivo !== "variacoes") return;
+    if (preenchimento.kitId && preenchimento.kitId !== kitId) escolherKit(preenchimento.kitId);
+    if (preenchimento.quantidade) setQuantidade(limitarQuantidade(preenchimento.quantidade));
+    const direcao = direcaoDoPreenchimento(preenchimento);
+    if (direcao) setPedido(direcao);
+    setModo("variacoes");
+    setPreenchimento(null);
+    toast.success("O diretor preencheu as fotos do produto", { description: "Confira e toque em Planejar." });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preenchimento && preenchimento.em]);
   const campanha = useCampanhaEscolhida();
   // "fora" guarda ids de tomada da receita: é o que ensaio_planejar aceita em tomadas_pedidas.
   const tomadas = receita ? receita.tomadas.filter((t) => fora.indexOf(t.id) < 0) : [];
@@ -183,19 +201,8 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
   return (
     <div className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 xl:grid-cols-[minmax(0,1fr)_320px] desk:grid-cols-[minmax(0,1fr)_360px]">
       <div className="min-w-0 space-y-5">
-        <Cartao titulo="Produto" recolher={`mesa-foto:ensaio:produto:${clientId}`} resumo={kit ? kit.nome : "nenhum escolhido"}>
-          <Select value={kit && kit.id ? kit.id : ""} onValueChange={(v) => escolherKit(v)}>
-            <SelectTrigger className="h-9 min-w-0 text-[12.5px]" aria-label="Produto das variações">
-              <SelectValue placeholder="Escolha o produto" />
-            </SelectTrigger>
-            <SelectContent>
-              {kits.map((k) => (
-                <SelectItem key={String(k.id)} value={String(k.id)}>
-                  {k.nome} · {rotuloDoTipo(k.tipo)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <Cartao titulo="Produto" recolher={`mesa-foto:ensaio:produto:${clientId}`} resumo={kit ? kit.nome || "Produto sem nome" : "nenhum escolhido"}>
+          <EscolhaDoProduto rotulo="O produto das fotos" />
           {kit && (
             <div className="mt-3">
               <ResumoDoKit kit={kit} />
@@ -299,13 +306,27 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
 
       <div className="min-w-0 space-y-5">
         {modo === "variacoes" && (
-          <Cartao titulo="Montar" dica="O diretor monta as fotos com o produto e a marca. Nenhuma imagem é gerada agora: o total para gerar aparece antes.">
+          <Cartao
+            titulo="Montar"
+            dica="O diretor monta as fotos com o produto e a marca. Nenhuma imagem é gerada agora: o total para gerar aparece antes."
+            acao={
+              <Button type="button" size="sm" variant={arsenal ? "default" : "ghost"} className="h-8 text-[12px]" onClick={() => setArsenal(!arsenal)} aria-expanded={arsenal} data-abrir-arsenal="">
+                <BookImage className="mr-1.5 h-3.5 w-3.5" /> Arsenal
+              </Button>
+            }
+          >
             <div className="relative min-w-0">
               <CampoDeFormulario rotulo="Pedido ao diretor (opcional)">
                 <textarea value={pedido} onChange={(e) => setPedido(e.target.value)} rows={3} placeholder="Ex.: fundo verde da marca, mesa de escritório clara" className={juntar(campoTexto, "pr-10")} aria-label="Pedido das variações" />
               </CampoDeFormulario>
               <Ditado valor={pedido} onChange={setPedido} className="absolute bottom-1.5 right-1.5" />
             </div>
+            {/* 02/10: o Arsenal de prompts ao lado do pedido (copiar e colar sem sair daqui). */}
+            {arsenal && (
+              <div className="mt-2 min-w-0" data-arsenal-na-geracao="">
+                <PainelDoArsenal produtoNome={kit ? kit.nome : null} tipo={kit ? kit.tipo : null} onUsarPrompt={(t) => setPedido(pedido.trim() ? `${pedido.trim()} ${t}` : t)} />
+              </div>
+            )}
             <BotaoComCusto
               rotulo={
                 <>
@@ -636,6 +657,7 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
   const [filtro, setFiltro] = useState<FiltroDoResultado>("todas");
   const [ampliada, setAmpliada] = useState<string | null>(null);
   const lote = useLote(ensaio.id);
+  const fotosDoAcervo = useFotos(clientId);
   const modelo = modeloId || (padrao ? padrao.id : "");
   const resumo = resumoDoEnsaio(ensaio);
   const finalidade = FINALIDADES.find((f) => f.valor === ensaio.finalidade);
@@ -710,12 +732,9 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
               Aprovar {resumo.paraRevisar} {resumo.paraRevisar === 1 ? "foto" : "fotos"}
             </Button>
           )}
-          {resumo.aprovadas > 0 && (
-            <Button type="button" size="sm" variant="outline" className="mb-1 ml-1 h-8 text-[12px]" onClick={() => irPara("usar", { ensaio: ensaio.id })}>
-              Usar as {resumo.aprovadas} aprovadas
-            </Button>
-          )}
         </div>
+        {/* 02/10: as aprovadas seguem daqui mesmo (Agenda, Estúdio, Mesa, Ads, Kit, Variar). */}
+        {resumo.aprovadas > 0 && <DepoisDeAprovar fotos={fotosAprovadasDoEnsaio(ensaio, fotosDoAcervo.data || [])} />}
         <Pilulas
           rotulo="Mostrar"
           opcoes={[

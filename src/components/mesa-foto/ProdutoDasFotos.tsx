@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, Loader2, PackageSearch } from "lucide-react";
+import { Check, Images, Loader2, Megaphone, PackageSearch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
@@ -46,7 +46,7 @@ export function fotosParaIdentificar(todas: FotoDoAcervo[], selecionadas: string
     .map((f) => f.id);
 }
 
-function ChipDoProduto({ kit, capa, ativo, onEscolher }: { kit: KitDeFoto; capa: FotoDoAcervo | null; ativo: boolean; onEscolher: () => void }) {
+function ChipDoProduto({ kit, capa, ativo, onEscolher, grande = false }: { kit: KitDeFoto; capa: FotoDoAcervo | null; ativo: boolean; onEscolher: () => void; grande?: boolean }) {
   const { clientId } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
@@ -65,7 +65,7 @@ function ChipDoProduto({ kit, capa, ativo, onEscolher }: { kit: KitDeFoto; capa:
   return (
     <li className={`flex min-w-0 items-center rounded-lg border p-1.5 ${ativo ? "border-primary" : "border-border"}`} data-produto={kit.id}>
       <button type="button" onClick={onEscolher} className="flex min-w-0 flex-1 items-center text-left" aria-pressed={ativo} aria-label={`Escolher o produto ${kit.nome}`}>
-        <span className="mr-2 w-10 shrink-0">{capa ? <MiniaturaDaFoto foto={capa} selo={false} /> : <span className="block h-10 w-10 rounded-lg bg-muted" />}</span>
+        <span className={`mr-2 shrink-0 ${grande ? "w-14" : "w-10"}`}>{capa ? <MiniaturaDaFoto foto={capa} selo={false} /> : <span className={`block rounded-lg bg-muted ${grande ? "h-14 w-14" : "h-10 w-10"}`} />}</span>
         <span className="min-w-0">
           <span className="block truncate text-[12.5px] font-semibold">{kit.nome || "Produto sem nome"}</span>
           <span className="block truncate text-[11px] text-muted-foreground">
@@ -88,10 +88,10 @@ function ChipDoProduto({ kit, capa, ativo, onEscolher }: { kit: KitDeFoto; capa:
   );
 }
 
-export default function ProdutoDasFotos({ fotos, recolhidoDeInicio = false }: { fotos: FotoDoAcervo[]; recolhidoDeInicio?: boolean }) {
+export default function ProdutoDasFotos({ fotos, recolhidoDeInicio = false, coluna = false }: { fotos: FotoDoAcervo[]; recolhidoDeInicio?: boolean; /** Coluna própria ao lado da grade (02/10): sem linha em cima, lista em uma coluna e capa grande. */ coluna?: boolean }) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
-  const { kitId, escolherKit, irPara, selecionadas } = useMesaFoto();
+  const { kitId, escolherKit, irPara, selecionadas, escolherObjetivo } = useMesaFoto();
   // Frente FTL (30/09): com o objetivo que pede o produto, o botão segue para gerar.
   const { objetivo } = useSeguirNaLinha();
   const [identificacao, setIdentificacaoNaTela] = useState<IdentificacaoDoProduto | null>(() => {
@@ -118,7 +118,7 @@ export default function ProdutoDasFotos({ fotos, recolhidoDeInicio = false }: { 
   const resumo = kit ? kit.nome || "produto escolhido" : kits.length ? `${kits.length} ${kits.length === 1 ? "produto" : "produtos"}` : "nenhum ainda";
 
   return (
-    <section className="min-w-0 border-t border-border pt-4" aria-label="O produto" data-produto-das-fotos="" data-recolhido={recolhido ? "sim" : "nao"}>
+    <section className={coluna ? "min-w-0 p-0.5" : "min-w-0 border-t border-border pt-4"} aria-label="O produto" data-produto-das-fotos="" data-coluna={coluna ? "" : undefined} data-recolhido={recolhido ? "sim" : "nao"}>
       <div className={recolhido ? "flex min-w-0 flex-wrap items-center justify-between" : "mb-2.5 flex min-w-0 flex-wrap items-center justify-between"}>
         <div className="mr-2 flex min-w-0 flex-1 items-center">
           <TituloRecolhivel titulo="O produto" recolhido={recolhido} onAlternar={() => setRecolhido(!recolhido)} resumo={resumo} />
@@ -158,9 +158,9 @@ export default function ProdutoDasFotos({ fotos, recolhidoDeInicio = false }: { 
       {kits.length > 0 && (
         // 28/09: sem rolagem própria aqui dentro; quem rola é o topo da etapa (uma rolagem por região).
         <div className="min-w-0">
-          <ul className="grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className={coluna ? "grid min-w-0 grid-cols-1 gap-1.5" : "grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-2 xl:grid-cols-3"}>
             {kits.map((k) => (
-              <ChipDoProduto key={String(k.id)} kit={k} capa={capaDe(k)} ativo={k.id === kitId} onEscolher={() => escolherKit(k.id)} />
+              <ChipDoProduto key={String(k.id)} kit={k} capa={capaDe(k)} ativo={k.id === kitId} onEscolher={() => escolherKit(k.id)} grande={coluna} />
             ))}
           </ul>
         </div>
@@ -193,10 +193,36 @@ export default function ProdutoDasFotos({ fotos, recolhidoDeInicio = false }: { 
       {kit && (
         <div className="mt-3 flex min-w-0 flex-wrap items-center">
           {/* Com o objetivo que pede o produto, o "seguir" já está na faixa do passo (GuiaDaLinha), no alto. */}
+          {/* 02/10 (dono: "fica em laço"): daqui só para frente, direto na ferramenta, já com este produto. */}
           {!(objetivo && objetivo.requisito === "produto") && (
-            <Button type="button" size="sm" variant="outline" className="mb-1 mr-2 h-8 text-[12px]" onClick={() => irPara("criar")} data-criar-deste-produto="">
-              O que fazer com {kit.nome || "este produto"} <ArrowRight className="ml-1 h-3.5 w-3.5" />
-            </Button>
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="mb-1 mr-1.5 h-8 text-[12px]"
+                onClick={() => {
+                  if (escolherObjetivo) escolherObjetivo("variacoes");
+                  irPara("ensaio");
+                }}
+                data-criar-deste-produto="variacoes"
+              >
+                <Images className="mr-1.5 h-3.5 w-3.5" /> Fotos do produto
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="mb-1 mr-2 h-8 text-[12px]"
+                onClick={() => {
+                  if (escolherObjetivo) escolherObjetivo("modelo");
+                  irPara("campanha");
+                }}
+                data-criar-deste-produto="modelo"
+              >
+                <Megaphone className="mr-1.5 h-3.5 w-3.5" /> Foto com modelo
+              </Button>
+            </>
           )}
           <button type="button" className="mb-1 text-[12px] text-muted-foreground hover:text-foreground" onClick={() => irPara("kits", { kit: kit.id })}>
             Detalhes do produto

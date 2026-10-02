@@ -57,6 +57,7 @@ import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao"
 import CaminhoPronto from "@/components/agentes/CaminhoPronto";
 import { chamarAcaoDoAgente, caminhoSeguro, type AcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import CartaoDaGeracao from "./CartaoDaGeracao";
+import PropostaAoVivo from "./PropostaAoVivo";
 import ProvaDoDiretor from "./ProvaDoDiretor";
 import { atualizarTelasDepoisDoDiretor, CHAVES_DO_ABERTO, focoDaTela, useContextoDoDiretor, useFocoDoDiretor } from "./diretorApi";
 
@@ -1073,6 +1074,8 @@ export default function AgenteDiretor({
                 <span className="mb-1 text-[11px] text-muted-foreground">estilo, não é o produto</span>
               </div>
             )}
+            {/* 02/10: o diretor preenche enquanto a pessoa escreve (produto, modelo, quantas, ângulos, cenas, luz). */}
+            <PropostaAoVivo texto={texto} onConfirmado={() => setTexto("")} />
             <form
               onSubmit={(e) => {
                 e.preventDefault();

@@ -210,7 +210,8 @@ describe("linha de produção: regras", () => {
     // Rodada 2: a Agenda é do passo 5; chegar nela nunca vira "Post com fotos" sozinho.
     expect(objetivoDaEtapa("agenda")).toBeNull();
     expect(objetivoDaEtapa("usar")).toBeNull();
-    expect(etapaDeGerar(null)).toBe("criar");
+    // 02/10: sem objetivo, o Gerar vai para frente (Fotos do produto), nunca de volta ao passo 1.
+    expect(etapaDeGerar(null)).toBe("ensaio");
     expect(etapaDeGerar("modelo")).toBe("campanha");
     expect(ehObjetivo("post")).toBe(true);
     expect(ehObjetivo("qualquer")).toBe(false);

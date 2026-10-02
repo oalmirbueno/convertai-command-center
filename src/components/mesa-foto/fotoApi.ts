@@ -16,7 +16,7 @@ import { invalidarAcervo } from "@/components/mesa/contextoDoCliente";
 import { useMarcaDaMesa } from "@/components/mesa/MesaContexto";
 import { fotoDaMarcaAberta } from "../../../supabase/functions/_shared/heranca-da-marca";
 import { novoId } from "@/components/mesa/estudioUtil";
-import { objetivoPorValor, type ObjetivoDaFoto } from "./linhaDeProducao";
+import { OBJETIVOS, objetivoPorValor, type Objetivo, type ObjetivoDaFoto } from "./linhaDeProducao";
 
 /**
  * Mesa Foto: a ponte da tela com a função mesa-foto e as tabelas
@@ -2576,6 +2576,8 @@ export async function planejarCampanha(p: {
   pedido: string;
   /** Campanha da Mesa (mesa_campanhas) que orienta o plano; sem ela, a função usa a do mês. */
   campanhaId?: string | null;
+  /** 02/10: quem aparece (persona de Modelos ou clone de Clones); sem ela, a IA cria pelo perfil. */
+  pessoa?: { tipo: "persona" | "clone"; id: string; nome: string } | null;
 }): Promise<{ ensaio: Ensaio | null; guia_de_estilo: GuiaDeEstilo | null; estimativa_usd: number | null; lacunas: string[]; promessa: string; custo_usd?: number }> {
   const corpo: Record<string, unknown> = { acao: "campanha_planejar", client_id: p.clientId, kit_id: p.kitId, quantidade: limitarQuantidade(p.quantidade) };
   if (p.campanhaId) corpo.campanha_id = p.campanhaId;
@@ -2587,6 +2589,7 @@ export async function planejarCampanha(p: {
   if (p.modelo.estilo.trim()) modelo.estilo = p.modelo.estilo.trim();
   if (Object.keys(modelo).length) corpo.modelo = modelo;
   if (p.pedido.trim()) corpo.pedido = p.pedido.trim();
+  if (p.pessoa && p.pessoa.id) corpo.pessoa_escolhida = { tipo: p.pessoa.tipo, id: p.pessoa.id, nome: p.pessoa.nome };
   const data = await chamarFuncao<any>("mesa-foto", corpo);
   const ensaio = normalizarEnsaio(data && data.ensaio);
   const guia = normalizarGuiaDeEstilo(data && data.guia_de_estilo) || (ensaio ? ensaio.direcao.guia_de_estilo : null);
@@ -2775,6 +2778,9 @@ export interface ProximoPasso {
  * com aprovada, Usar. `selecionadas` conta só as marcadas que valem
  * (marcadasQueContam).
  */
+/** A ferramenta de gerar aberta diz o objetivo (para o Próximo não voltar ao passo 1). */
+const OBJETIVOS_POR_ETAPA: Record<string, Objetivo> = OBJETIVOS.reduce((m, o) => ({ ...m, [o.etapa]: o }), {} as Record<string, Objetivo>);
+
 export function proximoPasso(e: {
   fotos: number;
   kits: KitDeFoto[];
@@ -2800,13 +2806,16 @@ export function proximoPasso(e: {
     if (faltam) return { etapa: ehCampanha(e.ensaio) ? "campanha" : "ensaio", rotulo: `Gerar ${faltam} ${faltam === 1 ? "foto" : "fotos"}`, extras: { ensaio: e.ensaio.id } };
     if (r.aprovadas) return { etapa: "usar", rotulo: `Usar ${r.aprovadas} ${r.aprovadas === 1 ? "aprovada" : "aprovadas"}`, extras: { ensaio: e.ensaio.id } };
   }
-  const o = objetivoPorValor(e.objetivo || null);
+  // 02/10 (dono: "fica em laço"): dentro de uma ferramenta de gerar, o objetivo é o dela; o próximo nunca volta ao passo 1.
+  const naFerramenta = e.etapa === "ensaio" || e.etapa === "campanha" || e.etapa === "estudio" || e.etapa === "preparar";
+  const o = objetivoPorValor(e.objetivo || null) || (naFerramenta ? OBJETIVOS_POR_ETAPA[e.etapa as string] || null : null);
   if (!o) return { etapa: "criar", rotulo: e.ensaio ? "Criar mais fotos" : "Escolher o que fazer" };
   if (o.requisito === "produto") {
     if (!e.kits.length) {
       return { etapa: "acervo", rotulo: e.selecionadas ? `Identificar o produto (${e.selecionadas} ${e.selecionadas === 1 ? "foto" : "fotos"})` : "Identificar o produto" };
     }
-    if (!e.kitId) return { etapa: "acervo", rotulo: "Escolher o produto" };
+    // Fotos do produto e Foto com modelo têm o seletor de produto na própria tela: escolhe lá, sem voltar.
+    if (!e.kitId) return naFerramenta ? { etapa: o.etapa, rotulo: "Escolher o produto" } : { etapa: "acervo", rotulo: "Escolher o produto" };
     return { etapa: o.etapa, rotulo: o.valor === "modelo" ? "Montar a foto com modelo" : "Montar as fotos do produto" };
   }
   if (o.requisito === "uma_foto") {

@@ -24,7 +24,7 @@ import {
 } from "@/components/mesa-foto/Comuns";
 import { classeDaFoto, proximoPasso, useEnsaios, useFotos, useKits } from "@/components/mesa-foto/fotoApi";
 import { CHAVES_DO_ABERTO, useContextoDoDiretor, useFocoDoDiretor } from "@/components/mesa-foto/diretorApi";
-import { ehObjetivo, etapaDeGerar, marcadasQueContam, objetivoDaEtapa, objetivoPorValor, type ObjetivoDaFoto } from "@/components/mesa-foto/linhaDeProducao";
+import { destinoAoEscolher, destinoDoGerar, ehObjetivo, marcadasQueContam, objetivoDaEtapa, objetivoPorValor, type ObjetivoDaFoto } from "@/components/mesa-foto/linhaDeProducao";
 import { gravarNaSessao } from "@/components/mesa-foto/sessao";
 import { CHAVE_DAS_FOTOS_DO_POST } from "@/components/mesa-foto/agendaApi";
 import { gravarEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
@@ -455,7 +455,14 @@ export default function MesaFoto() {
     objetivo,
     escolherObjetivo: (o: ObjetivoDaFoto | null, ir?: boolean) => {
       setObjetivoGuardado(o);
-      if (ir) mudar({ etapa: "acervo" });
+      if (!ir) return;
+      // 02/10: com o que precisa em mãos, vai direto para gerar (nunca volta ao passo 1).
+      const d = o ? destinoAoEscolher(o, { marcadas, kitId: kitUrl, produtos: listaDeKits.filter((k) => k.status !== "arquivado").length }) : null;
+      if (d && d.levarAoPost && clientId) {
+        gravarNaSessao(clientId, CHAVE_DAS_FOTOS_DO_POST, marcadas.slice(0, 20));
+        mudar({ etapa: "agenda", task: null, trabalho: null });
+      } else if (d) mudar(d.imagem ? { etapa: d.etapa, imagem: d.imagem } : { etapa: d.etapa });
+      else mudar({ etapa: "acervo" });
     },
   };
   const passoAtual = passoDaEtapa(etapa);
@@ -468,10 +475,11 @@ export default function MesaFoto() {
       mudar({ etapa: p.etapa });
       return;
     }
-    const destino = etapaDeGerar(objetivo) as EtapaDaMesaFoto;
-    if (destino === "agenda" && marcadas.length && valorDaFoto.prepararNaAgenda) valorDaFoto.prepararNaAgenda(marcadas);
-    else if ((destino === "estudio" || destino === "preparar") && marcadas.length) mudar({ etapa: destino, imagem: marcadas[0] });
-    else mudar({ etapa: destino });
+    // 02/10: o Gerar sempre vai para frente (sem objetivo, deduz pelo produto ou pela foto marcada).
+    const d = destinoDoGerar({ objetivo, marcadas, kitId: kitUrl });
+    if (!objetivo) setObjetivoGuardado(d.objetivo);
+    if (d.levarAoPost && valorDaFoto.prepararNaAgenda) valorDaFoto.prepararNaAgenda(marcadas);
+    else mudar(d.imagem ? { etapa: d.etapa, imagem: d.imagem } : { etapa: d.etapa });
   };
   // Ferramentas de apoio (aba com disponivel false em ABAS_FUTURAS some).
   const apoios = ETAPAS_DE_APOIO.filter((e) => ABAS_FUTURAS.every((a) => a.etapa !== e.etapa || a.disponivel));

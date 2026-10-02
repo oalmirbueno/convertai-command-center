@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { BookImage, Check, ClipboardCheck, Images, Megaphone, Plus, RefreshCw, Sparkles, Upload, X } from "lucide-react";
 import { toast } from "sonner";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Ampliar } from "@/components/mesa/Ampliar";
-import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
+import { AvisoDeErro, BotaoComCusto, EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
 import { Ditado } from "@/components/mesa/Ditado";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { SeletorDeModelo, SeletorDeQualidade } from "@/components/mesa/Seletores";
@@ -24,6 +24,12 @@ import { EstadoVazio } from "@/components/sistema/Estados";
 import { campo, campoTexto, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import SeletorDeFotos from "./SeletorDeFotos";
+import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import EscolhaDoProduto from "./EscolhaDoProduto";
+import DepoisDeAprovar, { fotosAprovadasDoEnsaio } from "./DepoisDeAprovar";
+import EscolhaDoModeloDaFoto from "./EscolhaDoModeloDaFoto";
+import PainelDoArsenal from "./PainelDoArsenal";
+import { direcaoDoPreenchimento, useModeloEscolhido, usePreenchimentoDaLinha, type ModeloEscolhido } from "./escolhasDaLinha";
 import {
   acrescentarFotos,
   chaveDosEnsaios,
@@ -123,7 +129,7 @@ function BlocoDoEstilo({ refs, onMudar }: { refs: RefDeEstilo[]; onMudar: (r: Re
   };
 
   return (
-    <Cartao titulo="3. Referência de estilo" dica="Print de perfil, moodboard ou referência da biblioteca. O diretor tira só a direção: paleta, luz, cenários, clima. Nunca copia foto, marca ou pessoa.">
+    <Cartao titulo="Referência de estilo" recolher={`mesa-foto:campanha:estilo:${clientId}`} recolhidoDeInicio resumo={refs.length ? `${refs.length} escolhidas` : "opcional"} dica="Print de perfil, moodboard ou referência da biblioteca. O diretor tira só a direção: paleta, luz, cenários, clima. Nunca copia foto, marca ou pessoa.">
       {refs.length > 0 && (
         <ul className="mb-2 flex min-w-0 flex-wrap" aria-label="Referências de estilo escolhidas">
           {refs.map((r) => {
@@ -214,17 +220,17 @@ function BlocoDoEstilo({ refs, onMudar }: { refs: RefDeEstilo[]; onMudar: (r: Re
   );
 }
 
-function BlocoDoModelo({ modelo, onMudar }: { modelo: PerfilDoModelo; onMudar: (m: PerfilDoModelo) => void }) {
+function PerfilDaPessoaNova({ modelo, onMudar }: { modelo: PerfilDoModelo; onMudar: (m: PerfilDoModelo) => void }) {
   return (
-    <Cartao titulo="4. Modelo sintético" dica="Pessoa criada pela IA: adulta, sem parecer com ninguém real, sem sexualização. Sempre marcada como gerada.">
-      <p className="mb-1.5 text-[12px] font-medium text-muted-foreground">Perfil</p>
+    <div className="mt-3 min-w-0" data-perfil-da-pessoa-nova="">
+      <p className="mb-1.5 text-[12px] font-medium text-muted-foreground">Perfil da pessoa nova</p>
       <Pilulas rotulo="Perfil do modelo" opcoes={PERFIS} valor={PERFIS.some((p) => p.valor === modelo.perfil) ? modelo.perfil : null} onEscolher={(v) => onMudar({ ...modelo, perfil: v })} />
       <p className="mb-1.5 mt-1 text-[12px] font-medium text-muted-foreground">Idade aproximada</p>
       <Pilulas rotulo="Idade aproximada do modelo" opcoes={IDADES} valor={modelo.idade_aprox || null} onEscolher={(v) => onMudar({ ...modelo, idade_aprox: v })} />
       <CampoDeFormulario rotulo="Estilo (opcional)" className="mt-1">
         <input value={modelo.estilo} onChange={(e) => onMudar({ ...modelo, estilo: e.target.value })} placeholder="Ex.: urbano, minimalista, roupa neutra" aria-label="Estilo do modelo" className={campo} />
       </CampoDeFormulario>
-    </Cartao>
+    </div>
   );
 }
 
@@ -299,7 +305,8 @@ function FotoDaCampanha({ ensaio, tomada, modeloId, qualidade, onAmpliar }: { en
 }
 
 function CampanhaAberta({ ensaio }: { ensaio: Ensaio }) {
-  const { catalogo } = useMesa();
+  const { catalogo, clientId } = useMesa();
+  const fotosDoAcervo = useFotos(clientId);
   const { irPara } = useMesaFoto();
   const padrao = padraoPara(catalogo, "imagem");
   const [modeloId, setModeloId] = useState("");
@@ -350,12 +357,8 @@ function CampanhaAberta({ ensaio }: { ensaio: Ensaio }) {
               Aprovar {r.paraRevisar} {r.paraRevisar === 1 ? "foto" : "fotos"}
             </Button>
           )}
-          {r.aprovadas > 0 && (
-            <Button type="button" size="sm" variant="ghost" className="mb-1 h-9 text-[12.5px]" onClick={() => irPara("usar", { ensaio: ensaio.id })}>
-              Usar as {r.aprovadas} aprovadas
-            </Button>
-          )}
         </div>
+        {r.aprovadas > 0 && <DepoisDeAprovar className="mt-2" fotos={fotosAprovadasDoEnsaio(ensaio, fotosDoAcervo.data || [])} />}
       </Cartao>
       <Ampliar
         imagens={comVersao.map((t) => {
@@ -367,6 +370,13 @@ function CampanhaAberta({ ensaio }: { ensaio: Ensaio }) {
       />
     </div>
   );
+}
+
+/** O que a foto com modelo vai fazer, em uma linha (quantas fotos, quem aparece). Pura: os testes usam. */
+export function resumoDaFotoComModelo(p: { quantidade: number; pessoa: ModeloEscolhido | null; produto: string | null }): string {
+  const n = limitarQuantidade(p.quantidade);
+  const quem = p.pessoa ? `com ${p.pessoa.nome}` : "com uma pessoa nova criada pela IA";
+  return `${n} ${n === 1 ? "foto" : "fotos"}${p.produto ? ` de ${p.produto}` : ""} ${quem}`;
 }
 
 export default function EtapaCampanha() {
@@ -384,7 +394,27 @@ export default function EtapaCampanha() {
   const [modelo, setModelo] = useState<PerfilDoModelo>({ perfil: "Variar os perfis", idade_aprox: "25 a 35", estilo: "" });
   const [quantidade, setQuantidade] = useState(6);
   const [pedido, setPedido] = useEstadoDaTela(`mesa-foto:campanha:pedido:${clientId}`, "");
+  // 02/10: quem aparece vem de Modelos ou Clones ("Usar como modelo") e fica guardado por cliente.
+  const [pessoa, setPessoa] = useModeloEscolhido(clientId);
+  const [arsenal, setArsenal] = useState(false);
   const campanhaDaMesa = useCampanhaEscolhida();
+  const imagem = padraoPara(catalogo, "imagem");
+
+  // O diretor deixou a foto com modelo preenchida (produto, quem, quantas, cenas): aplica uma vez.
+  const [preenchimento, setPreenchimento] = usePreenchimentoDaLinha(clientId);
+  useEffect(() => {
+    if (!preenchimento || preenchimento.objetivo !== "modelo") return;
+    if (preenchimento.kitId && preenchimento.kitId !== kitId) escolherKit(preenchimento.kitId);
+    if (preenchimento.modelo) setPessoa(preenchimento.modelo);
+    if (preenchimento.quantidade) setQuantidade(limitarQuantidade(preenchimento.quantidade));
+    const direcao = direcaoDoPreenchimento(preenchimento);
+    if (direcao) setPedido(direcao);
+    setNova(true);
+    escolherEnsaio(null);
+    setPreenchimento(null);
+    toast.success("O diretor preencheu a foto com modelo", { description: "Confira e toque em Planejar." });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preenchimento && preenchimento.em]);
 
   if (kits.isSuccess && !listaDeKits.length) {
     return (
@@ -401,45 +431,47 @@ export default function EtapaCampanha() {
     );
   }
 
+  const anteriores = campanhas.map((e) => {
+    const k = listaDeKits.find((x) => x.id === e.kit_id);
+    const quem = e.direcao && (e.direcao as any).pessoa_escolhida && (e.direcao as any).pessoa_escolhida.nome ? ` · ${(e.direcao as any).pessoa_escolhida.nome}` : "";
+    return { valor: e.id, rotulo: `${k ? k.nome : "Foto com modelo"}${quem}`, descricao: `${e.tomadas.length} fotos · ${rotuloDoEstadoDoEnsaio(e.status)}` };
+  });
+
   return (
-    <div className="min-w-0 space-y-4">
-      <div className="flex min-w-0 flex-wrap items-center">
-        <Select
-          value={aberta ? aberta.id : ""}
-          onValueChange={(v) => {
-            setNova(false);
-            escolherEnsaio(v);
-          }}
-        >
-          <SelectTrigger className="mb-1.5 mr-2 h-9 w-full min-w-0 text-[12.5px] sm:w-[340px]" aria-label="Campanha aberta">
-            <SelectValue placeholder={campanhas.length ? "Abrir uma campanha" : "Nenhuma campanha ainda"} />
-          </SelectTrigger>
-          <SelectContent>
-            {campanhas.map((e) => {
-              const k = listaDeKits.find((x) => x.id === e.kit_id);
-              return (
-                <SelectItem key={e.id} value={e.id}>
-                  Campanha{k ? ` · ${k.nome}` : ""} · {e.tomadas.length} fotos · {rotuloDoEstadoDoEnsaio(e.status)}
-                </SelectItem>
-              );
-            })}
-          </SelectContent>
-        </Select>
-        {aberta && (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="mb-1.5 h-9 text-[12.5px]"
-            onClick={() => {
-              setNova(true);
-              escolherEnsaio(null);
-            }}
-          >
-            <Plus className="mr-1 h-3.5 w-3.5" /> Nova campanha
-          </Button>
-        )}
-      </div>
+    <div className="min-w-0 space-y-4" data-foto-com-modelo="">
+      {/* 02/10 (dono: "não pode pedir para abrir campanha"): a tela abre já montando; as feitas ficam num seletor pequeno. */}
+      {(anteriores.length > 0 || aberta) && (
+        <div className="flex min-w-0 flex-wrap items-center">
+          {anteriores.length > 0 && (
+            <SeletorCompacto
+              modo="lista"
+              rotulo="Feitas"
+              icone={<Images className="h-4 w-4" />}
+              opcoes={anteriores}
+              valor={aberta ? aberta.id : ""}
+              onEscolher={(v) => {
+                setNova(false);
+                escolherEnsaio(v);
+              }}
+              className="mb-1.5 mr-2 h-8 text-[12px]"
+            />
+          )}
+          {aberta && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mb-1.5 h-8 text-[12px]"
+              onClick={() => {
+                setNova(true);
+                escolherEnsaio(null);
+              }}
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" /> Nova foto com modelo
+            </Button>
+          )}
+        </div>
+      )}
       {(kits.isError || ensaios.isError) && <AvisoDeErro erro={kits.error || ensaios.error} />}
 
       {aberta ? (
@@ -447,27 +479,28 @@ export default function EtapaCampanha() {
       ) : (
         <div className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 xl:grid-cols-2">
           <div className="min-w-0 space-y-5">
-            <Cartao titulo="1. Produto">
-              <Select value={kit && kit.id ? kit.id : ""} onValueChange={(v) => escolherKit(v)}>
-                <SelectTrigger className="h-9 min-w-0 text-[12.5px]" aria-label="Produto da campanha">
-                  <SelectValue placeholder="Escolha o produto" />
-                </SelectTrigger>
-                <SelectContent>
-                  {listaDeKits.map((k) => (
-                    <SelectItem key={String(k.id)} value={String(k.id)}>
-                      {k.nome} · {rotuloDoTipo(k.tipo)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <Cartao titulo="1. Produto" recolher={false}>
+              <EscolhaDoProduto rotulo="O produto da foto" />
               {kit && kit.invariantes.length > 0 && <p className="mt-2 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">Não muda: {kit.invariantes.join(", ")}.</p>}
             </Cartao>
-            <SeletorDaCampanha escolhida={campanhaDaMesa} titulo="2. Campanha da Mesa" />
+            <Cartao titulo="2. Quem aparece" recolher={false} dica="Modelo pronto (Modelos) ou clone com autorização (Clones) mantêm o mesmo rosto em todas as fotos. Pessoa nova: a IA cria pelo perfil, adulta e sem parecer com ninguém real.">
+              <EscolhaDoModeloDaFoto valor={pessoa} onEscolher={setPessoa} />
+              {!pessoa && <PerfilDaPessoaNova modelo={modelo} onMudar={setModelo} />}
+            </Cartao>
             <BlocoDoEstilo refs={refs} onMudar={setRefs} />
+            <SeletorDaCampanha escolhida={campanhaDaMesa} titulo="Campanha da Mesa (opcional)" />
           </div>
           <div className="min-w-0 space-y-5">
-            <BlocoDoModelo modelo={modelo} onMudar={setModelo} />
-            <Cartao titulo="5. Fotos" dica="O diretor lê as referências, escreve o guia de estilo e monta as fotos. Cada foto gerada se aprova, refaz ou usa no próprio resultado: Mesa, Mesa Ads, baixar ou aprovação.">
+            <Cartao
+              titulo="3. Fotos"
+              recolher={false}
+              dica="O diretor monta as fotos (cena, luz, ação). Planejar não gera imagem: depois de planejar, Gerar todas mostra o total antes. Cada foto se aprova, refaz ou usa no próprio resultado."
+              acao={
+                <Button type="button" size="sm" variant={arsenal ? "default" : "ghost"} className="h-8 text-[12px]" onClick={() => setArsenal(!arsenal)} aria-expanded={arsenal} data-abrir-arsenal="">
+                  <BookImage className="mr-1.5 h-3.5 w-3.5" /> Arsenal
+                </Button>
+              }
+            >
               <Pilulas rotulo="Quantas fotos da campanha" opcoes={QUANTIDADES} valor={quantidade} onEscolher={(n) => setQuantidade(limitarQuantidade(n))} />
               <div className="relative mt-1 min-w-0">
                 <CampoDeFormulario rotulo="Pedido ao diretor (opcional)">
@@ -481,6 +514,18 @@ export default function EtapaCampanha() {
                   />
                 </CampoDeFormulario>
                 <Ditado valor={pedido} onChange={setPedido} className="absolute bottom-1.5 right-1.5" />
+              </div>
+              {arsenal && (
+                <div className="mt-2 min-w-0" data-arsenal-na-geracao="">
+                  <PainelDoArsenal produtoNome={kit ? kit.nome : null} tipo={kit ? kit.tipo : null} onUsarPrompt={(t) => setPedido(pedido.trim() ? `${pedido.trim()} ${t}` : t)} />
+                </div>
+              )}
+              {/* Quantas fotos e quanto custa, antes de tudo (dono, 02/10). */}
+              <div className="mt-3 rounded-md bg-muted/50 px-3 py-2 text-[12px]" data-resumo-da-foto-com-modelo="">
+                <p className="font-medium text-foreground">{resumoDaFotoComModelo({ quantidade, pessoa, produto: kit ? kit.nome : null })}</p>
+                <p className="mt-0.5 text-muted-foreground">
+                  Planejar: <EstimativaInline partes={partesDoPlanoDeLote(catalogo, refs.length)} /> · Gerar as {limitarQuantidade(quantidade)}: <EstimativaInline partes={partesDaGeracao(imagem ? imagem.id : null, "alta", limitarQuantidade(quantidade))} />
+                </p>
               </div>
               <BotaoComCusto
                 rotulo={
@@ -502,6 +547,7 @@ export default function EtapaCampanha() {
                     modelo,
                     pedido,
                     campanhaId: campanhaDaMesa.campanhaId,
+                    pessoa,
                   })
                 }
                 aoConcluir={(data) => {

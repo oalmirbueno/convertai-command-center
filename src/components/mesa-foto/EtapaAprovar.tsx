@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, ClipboardCheck, Maximize2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, Check, ClipboardCheck, Loader2, Maximize2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Ampliar } from "@/components/mesa/Ampliar";
-import { AvisoDeErro } from "@/components/mesa/Custo";
+import { AvisoDeErro, useAvisarErro } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { Carregando } from "@/components/sistema/Estados";
 import { juntar, superficie } from "@/components/sistema/estilos";
 import { AprovarFoto } from "./AcoesDeUso";
 import { Cartao, MiniaturaDaFoto, Moldura, useMesaFoto, Vazio } from "./Comuns";
-import { classeDaFoto, fotosParaRevisar, proporcaoDoFormato, useEnsaios, useFotos, type FotoDoAcervo } from "./fotoApi";
+import { acrescentarFotos, classeDaFoto, decidirFoto, decidirVersao, fotosParaRevisar, guardarEnsaio, invalidarFotos, proporcaoDoFormato, useEnsaios, useFotos, type FotoDoAcervo, type FotoParaRevisar } from "./fotoApi";
+import DepoisDeAprovar from "./DepoisDeAprovar";
 import { DecisaoRapida, MenuDeUso, precisaAprovar } from "./UsoDaFoto";
 
 /**
@@ -30,7 +33,24 @@ import { DecisaoRapida, MenuDeUso, precisaAprovar } from "./UsoDaFoto";
  * Agenda). A conferência automática, quando existe, é aviso e nunca decide.
  */
 
-function DoLote() {
+/** Chave de uma versão do lote na seleção. */
+export const chaveDaPendente = (p: Pick<FotoParaRevisar, "ensaio" | "tomada" | "versao">) => `lote:${p.ensaio.id}:${p.tomada.id}:${p.versao.versao}`;
+
+interface Selecao {
+  marcadas: string[];
+  alternar: (chave: string) => void;
+  onAprovada: (imagem: FotoDoAcervo | null) => void;
+}
+
+function CaixaDeMarcar({ chave, nome, selecao }: { chave: string; nome: string; selecao: Selecao }) {
+  return (
+    <label className="absolute right-1.5 top-1.5 z-10 flex h-5 w-5 cursor-pointer items-center justify-center rounded-md border border-border bg-card shadow-sm">
+      <input type="checkbox" checked={selecao.marcadas.indexOf(chave) >= 0} onChange={() => selecao.alternar(chave)} className="h-3.5 w-3.5 accent-[hsl(var(--primary))]" aria-label={`Marcar ${nome}`} />
+    </label>
+  );
+}
+
+function DoLote({ selecao }: { selecao: Selecao }) {
   const { clientId } = useMesa();
   const { ensaioId, irPara } = useMesaFoto();
   const ensaios = useEnsaios(clientId);
@@ -53,7 +73,8 @@ function DoLote() {
     >
       <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" data-para-revisar="" data-aprovar-do-lote="">
         {pendentes.map((p, i) => (
-          <li key={`${p.ensaio.id}-${p.tomada.id}-${p.versao.versao}`} className={juntar(superficie.painel, "min-w-0 p-1.5")} data-pendente={p.tomada.id}>
+          <li key={`${p.ensaio.id}-${p.tomada.id}-${p.versao.versao}`} className={juntar(superficie.painel, "relative min-w-0 p-1.5")} data-pendente={p.tomada.id}>
+            <CaixaDeMarcar chave={chaveDaPendente(p)} nome={p.tomada.nome} selecao={selecao} />
             <button type="button" className="block w-full cursor-zoom-in" onClick={() => setAmpliada(i)} aria-label={`Ver grande: ${p.tomada.nome}`}>
               <Moldura proporcao={proporcaoDoFormato(p.tomada.formato)} className="border border-border">
                 <ImagemDaMesa caminho={p.versao.storage_path || ""} alt={p.tomada.nome} className="h-full w-full !object-contain" />
@@ -66,7 +87,7 @@ function DoLote() {
               {p.tomada.nome} <span className="font-normal text-muted-foreground">v{p.versao.versao}</span>
             </p>
             <div className="mt-1 flex min-w-0 flex-wrap items-center">
-              <DecisaoRapida ensaio={p.ensaio} tomada={p.tomada} versao={p.versao} compacta />
+              <DecisaoRapida ensaio={p.ensaio} tomada={p.tomada} versao={p.versao} compacta onDecidiu={(d, img) => d === "aprovar" && selecao.onAprovada(img)} />
               <MenuDeUso pendente={p} variante="outline" className="mb-1" />
             </div>
           </li>
@@ -86,7 +107,7 @@ export function geradasParaAprovar(fotos: FotoDoAcervo[], vistas: string[]): Fot
   return fotos.filter((f) => !f.referencia_web && classeDaFoto(f) === "gerada" && (precisaAprovar(f) || vistas.indexOf(f.id) >= 0));
 }
 
-function DoAcervo() {
+function DoAcervo({ selecao }: { selecao: Selecao }) {
   const { clientId } = useMesa();
   const fotos = useFotos(clientId);
   const todas = useMemo(() => fotos.data || [], [fotos.data]);
@@ -109,7 +130,8 @@ function DoAcervo() {
     >
       <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" data-aprovar-do-acervo="">
         {lista.map((f, i) => (
-          <li key={f.id} className={juntar(superficie.painel, "min-w-0 p-1.5", f.aprovada && "border-success/50")} data-gerada-para-aprovar={f.id}>
+          <li key={f.id} className={juntar(superficie.painel, "relative min-w-0 p-1.5", f.aprovada && "border-success/50")} data-gerada-para-aprovar={f.id}>
+            {!f.aprovada && <CaixaDeMarcar chave={f.id} nome={f.nome} selecao={selecao} />}
             <div className="relative min-w-0">
               <MiniaturaDaFoto foto={f} />
               <button
@@ -125,7 +147,7 @@ function DoAcervo() {
               {f.nome}
             </p>
             <div className="mt-1 flex min-w-0 flex-wrap items-center">
-              <AprovarFoto foto={f} />
+              <AprovarFoto foto={f} onMudou={(nova) => nova.aprovada && selecao.onAprovada(nova)} />
               <MenuDeUso foto={f} variante="outline" className="mb-1" />
             </div>
           </li>
@@ -142,18 +164,84 @@ function DoAcervo() {
 
 export default function EtapaAprovar() {
   const { clientId } = useMesa();
+  const queryClient = useQueryClient();
+  const avisarErro = useAvisarErro();
   const { ensaioId, irPara } = useMesaFoto();
   const fotos = useFotos(clientId);
   const ensaios = useEnsaios(clientId);
   const todas = fotos.data || [];
-  const doLote = fotosParaRevisar(ensaios.data || [], ensaioId).length;
+  const pendentesDoLote = useMemo(() => fotosParaRevisar(ensaios.data || [], ensaioId), [ensaios.data, ensaioId]);
+  const doLote = pendentesDoLote.length;
   const doAcervo = todas.filter((f) => !f.referencia_web && precisaAprovar(f)).length;
   const aprovadas = todas.filter((f) => f.aprovada && !f.referencia_web).length;
   const carregando = fotos.isLoading || ensaios.isLoading;
   const nada = !carregando && fotos.isSuccess && ensaios.isSuccess && doLote === 0 && doAcervo === 0;
+  // 02/10 (dono: "Aprovar não tem lógica"): marcar, aprovar as marcadas e seguir com as aprovadas agora.
+  const [marcadas, setMarcadas] = useState<string[]>([]);
+  const [recemAprovadas, setRecemAprovadas] = useState<string[]>([]);
+  const [aprovando, setAprovando] = useState(false);
+  const selecao: Selecao = {
+    marcadas,
+    alternar: (k) => setMarcadas((m) => (m.indexOf(k) >= 0 ? m.filter((x) => x !== k) : m.concat([k]))),
+    onAprovada: (img) => {
+      if (img) setRecemAprovadas((l) => (l.indexOf(img.id) >= 0 ? l : l.concat([img.id])));
+    },
+  };
+  const chavesPendentes = pendentesDoLote.map(chaveDaPendente).concat(todas.filter((f) => !f.referencia_web && precisaAprovar(f)).map((f) => f.id));
+  const marcadasValidas = marcadas.filter((k) => chavesPendentes.indexOf(k) >= 0);
+  const fotosRecem = todas.filter((f) => recemAprovadas.indexOf(f.id) >= 0 && f.aprovada);
+
+  const aprovarMarcadas = async () => {
+    if (aprovando || !marcadasValidas.length) return;
+    setAprovando(true);
+    const novas: string[] = [];
+    let falhas = 0;
+    for (const k of marcadasValidas) {
+      try {
+        if (k.indexOf("lote:") === 0) {
+          const p = pendentesDoLote.find((x) => chaveDaPendente(x) === k);
+          if (!p) continue;
+          const r = await decidirVersao({ ensaioId: p.ensaio.id, tomadaId: p.tomada.id, versao: p.versao.versao, decisao: "aprovar" });
+          if (r.ensaio) guardarEnsaio(queryClient, clientId, r.ensaio);
+          if (r.imagem) {
+            acrescentarFotos(queryClient, clientId, [r.imagem]);
+            novas.push(r.imagem.id);
+          }
+        } else {
+          const nova = await decidirFoto(clientId, k, "aprovar");
+          if (nova) acrescentarFotos(queryClient, clientId, [nova]);
+          novas.push(k);
+        }
+      } catch (e) {
+        falhas++;
+        if (falhas === 1) avisarErro(e, "Uma foto não foi aprovada");
+      }
+    }
+    invalidarFotos(queryClient, clientId);
+    setMarcadas([]);
+    setRecemAprovadas((l) => l.concat(novas.filter((id) => l.indexOf(id) < 0)));
+    setAprovando(false);
+    if (novas.length) toast.success(`${novas.length} ${novas.length === 1 ? "foto aprovada" : "fotos aprovadas"}`, { description: "Escolha logo acima para onde elas vão." });
+  };
 
   return (
     <div className="min-w-0 space-y-5" data-etapa-aprovar="">
+      {fotosRecem.length > 0 && <DepoisDeAprovar fotos={fotosRecem} onFeito={() => setRecemAprovadas([])} />}
+      {chavesPendentes.length > 0 && (
+        <div className="flex min-w-0 flex-wrap items-center" data-barra-de-aprovar="">
+          <button
+            type="button"
+            className="mb-1 mr-3 text-[12px] font-medium text-primary hover:underline"
+            onClick={() => setMarcadas(marcadasValidas.length === chavesPendentes.length ? [] : chavesPendentes.slice())}
+          >
+            {marcadasValidas.length === chavesPendentes.length ? "Desmarcar todas" : `Marcar todas (${chavesPendentes.length})`}
+          </button>
+          <Button type="button" size="sm" className="mb-1 h-8 text-[12px]" disabled={!marcadasValidas.length || aprovando} onClick={() => void aprovarMarcadas()} data-aprovar-marcadas={marcadasValidas.length}>
+            {aprovando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
+            Aprovar {marcadasValidas.length ? `${marcadasValidas.length} ${marcadasValidas.length === 1 ? "marcada" : "marcadas"}` : "as marcadas"}
+          </Button>
+        </div>
+      )}
       <p className="text-[12px] text-muted-foreground" data-resumo-da-aprovacao="">
         {carregando
           ? "Lendo o que foi gerado."
@@ -163,8 +251,8 @@ export default function EtapaAprovar() {
       </p>
       {fotos.isError && <AvisoDeErro erro={fotos.error} />}
 
-      <DoLote />
-      <DoAcervo />
+      <DoLote selecao={selecao} />
+      <DoAcervo selecao={selecao} />
 
       {nada && (
         <Vazio

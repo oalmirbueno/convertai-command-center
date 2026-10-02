@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { Cartao, MiniaturaDaFoto, useMesaFoto, type EtapaDaMesaFoto } from "./Comuns";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { foco, juntar, superficie } from "@/components/sistema/estilos";
+import { foco, juntar } from "@/components/sistema/estilos";
 import { fotosParaRevisar, periodoDaCampanha, rotuloDoTipo, useCampanhasDaMesa, useEnsaios, useFotos, useKits } from "./fotoApi";
 import { ICONES_DOS_OBJETIVOS, useSeguirNaLinha } from "./GuiaDaLinha";
 import { OBJETIVOS } from "./linhaDeProducao";
@@ -77,44 +77,40 @@ export default function EtapaCriar() {
         titulo="O que você quer produzir?"
         recolher={false}
         className="border-t-0 pt-0"
-        dica="Escolha e a mesa leva você pelos passos: fotos, gerar, aprovar e usar. Cada cartão diz o que precisa. A escolha fica guardada para este cliente."
+        dica="Escolha e a mesa segue para frente: com a foto ou o produto já em mãos, abre direto a ferramenta; senão, as Fotos pedem o que falta. A escolha fica guardada para este cliente."
       >
-        <ul className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 desk:grid-cols-5" data-objetivos="">
+        {/* 02/10 (dono: "só ícone e nome; a explicação no ?"): cada opção é ícone + nome; o que faz e o que precisa ficam no "?". */}
+        <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5" data-objetivos="">
           {OBJETIVOS.map((o) => {
             const Icone = ICONES_DOS_OBJETIVOS[o.valor];
             const escolhido = !!objetivo && objetivo.valor === o.valor;
             return (
-              <li key={o.valor} className="min-w-0">
+              <li key={o.valor} className="relative min-w-0">
                 <button
                   type="button"
                   onClick={() => escolher(o.valor)}
                   aria-pressed={escolhido}
+                  title={`${o.texto} Precisa: ${o.precisa}.`}
                   className={juntar(
-                    superficie.painel,
-                    "flex h-full w-full min-w-0 flex-col p-4 text-left transition-colors hover:border-primary/50",
-                    escolhido && "border-primary ring-1 ring-primary",
+                    "flex h-full w-full min-w-0 flex-col items-center justify-center rounded-lg border px-2 pb-3 pt-4 text-center transition-colors hover:border-primary/50 hover:bg-muted/40",
+                    escolhido ? "border-primary bg-primary/[0.06]" : "border-border",
                     foco,
                   )}
                   data-objetivo={o.valor}
                   data-forma-de-criar={o.etapa}
                 >
-                  <span className="flex min-w-0 items-center">
-                    <Icone className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
-                    {escolhido && (
-                      <span className="ml-auto inline-flex items-center rounded-full bg-primary/10 px-2 py-px text-[11px] font-semibold text-primary">
-                        <Check className="mr-0.5 h-3 w-3" aria-hidden="true" /> escolhido
-                      </span>
-                    )}
-                  </span>
-                  <span className="mt-2 block text-[14px] font-semibold">{o.titulo}</span>
-                  <span className="mt-1 block text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{o.texto}</span>
-                  <span className="mt-auto block pt-3 text-[11px] text-muted-foreground">
-                    Precisa: <span className="font-medium text-foreground">{o.precisa}</span>
-                  </span>
-                  <span className="mt-1.5 inline-flex items-center text-[12px] font-medium text-primary">
-                    {o.requisito === "fotos" ? "Escolher as fotos" : o.requisito === "produto" ? "Escolher o produto" : "Escolher a foto"} <ArrowRight className="ml-1 h-3.5 w-3.5" />
-                  </span>
+                  <Icone className="h-6 w-6 shrink-0 text-primary" aria-hidden="true" />
+                  <span className="mt-2 block text-[13px] font-semibold leading-tight">{o.titulo}</span>
+                  {escolhido && (
+                    <span className="mt-1 inline-flex items-center text-[11px] font-medium text-primary">
+                      <Check className="mr-0.5 h-3 w-3" aria-hidden="true" /> escolhido
+                    </span>
+                  )}
+                  <span className="sr-only">{`${o.texto} Precisa: ${o.precisa}.`}</span>
                 </button>
+                <AjudaRecolhida className="absolute right-1 top-1" rotulo={`Sobre ${o.titulo}`}>
+                  {`${o.texto} Precisa: ${o.precisa}.`}
+                </AjudaRecolhida>
               </li>
             );
           })}
@@ -181,13 +177,11 @@ export default function EtapaCriar() {
                   type="button"
                   onClick={() => irPara(a.etapa)}
                   className={juntar("flex w-full min-w-0 items-center rounded-md px-2 py-2 text-left hover:bg-muted", foco)}
+                  title={a.texto}
                   data-avancada={a.etapa}
                 >
                   <Icone className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                  <span className="min-w-0">
-                    <span className="block truncate text-[13px] font-medium">{a.rotulo}</span>
-                    <span className="block truncate text-[12px] text-muted-foreground">{a.texto}</span>
-                  </span>
+                  <span className="block min-w-0 truncate text-[13px] font-medium">{a.rotulo}</span>
                 </button>
               </li>
             );

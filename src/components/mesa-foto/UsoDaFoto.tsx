@@ -331,7 +331,20 @@ export const MOTIVOS_RAPIDOS = ["Produto diferente", "Texto ou rótulo errado", 
  * no resultado. Aprovar trava a versão e põe a foto no acervo; rejeitar
  * guarda o motivo para a próxima variação. Sem laço: nada refaz sozinho.
  */
-export function DecisaoRapida({ ensaio, tomada, versao, compacta = false }: { ensaio: Ensaio; tomada: Tomada; versao: VersaoDaTomada; compacta?: boolean }) {
+export function DecisaoRapida({
+  ensaio,
+  tomada,
+  versao,
+  compacta = false,
+  onDecidiu,
+}: {
+  ensaio: Ensaio;
+  tomada: Tomada;
+  versao: VersaoDaTomada;
+  compacta?: boolean;
+  /** 02/10: a tela de Aprovar mostra a próxima ação com a foto aprovada. */
+  onDecidiu?: (decisao: "aprovar" | "rejeitar", imagem: FotoDoAcervo | null) => void;
+}) {
   const { clientId } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
@@ -347,6 +360,7 @@ export function DecisaoRapida({ ensaio, tomada, versao, compacta = false }: { en
       if (r.imagem) acrescentarFotos(queryClient, clientId, [r.imagem]);
       invalidarFotos(queryClient, clientId);
       setRejeitando(false);
+      if (onDecidiu) onDecidiu(decisao, r.imagem);
       toast.success(decisao === "aprovar" ? "Foto aprovada" : "Foto rejeitada", {
         description: decisao === "aprovar" ? "Já está no acervo: use na Mesa, na Mesa Ads, baixe ou mande ao cliente." : "O motivo fica guardado para a próxima variação.",
       });

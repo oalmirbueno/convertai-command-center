@@ -450,11 +450,13 @@ describe("rota, casca e troca entre mesas", () => {
     fireEvent.click(await screen.findByRole("option", { name: /^Biblioteca/ }));
     await waitFor(() => expect(apoio.getAttribute("data-ferramenta")).toBe("biblioteca"), { timeout: 5000 });
     expect(within(apoio).getByRole("button", { name: "Mais: Biblioteca" })).toBeTruthy();
-    // Passo 1: escolher o que produzir guarda o objetivo e leva ao passo 2 (Fotos).
+    // Passo 1 (02/10: sempre para frente): escolher o que produzir guarda o objetivo e, com produto no cliente, vai direto ao passo 3.
     fireEvent.click(within(nav).getByRole("button", { name: "1. O que fazer" }));
     await waitFor(() => expect(document.querySelector('[data-objetivo="variacoes"]')).toBeTruthy(), { timeout: 5000 });
     fireEvent.click(document.querySelector('[data-objetivo="variacoes"]') as HTMLElement);
-    await waitFor(() => expect(within(nav).getByRole("button", { name: "2. Fotos" }).getAttribute("aria-current")).toBe("page"), { timeout: 5000 });
+    await waitFor(() => expect(within(nav).getByRole("button", { name: "3. Gerar" }).getAttribute("aria-current")).toBe("page"), { timeout: 5000 });
+    // O passo 2 (Fotos) mostra a faixa do que está fazendo.
+    fireEvent.click(within(nav).getByRole("button", { name: "2. Fotos" }));
     expect((await screen.findByText("Fazendo:", {}, { timeout: 5000 })).closest("[data-guia-da-linha]")!.getAttribute("data-guia-da-linha")).toBe("variacoes");
     // Passo 3 (Gerar) abre a ferramenta do objetivo; a barra mostra a forma num seletor com nome simples.
     fireEvent.click(within(nav).getByRole("button", { name: "3. Gerar" }));
@@ -1384,7 +1386,9 @@ describe("v2: campanha com modelo", () => {
     const escolherEnsaio = vi.fn();
     montar(h(EtapaCampanha), { kitId: KIT, escolherEnsaio });
     expect(await screen.findByText(/Não muda: logo no topo/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /Do acervo/ }));
+    // 02/10: a referência de estilo é opcional e começa recolhida.
+    fireEvent.click(screen.getByRole("button", { name: /Referência de estilo/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Do acervo/ }));
     fireEvent.click(await screen.findByRole("button", { name: "mouse-caixa.jpg" }));
     fireEvent.click(screen.getByRole("button", { name: /Usar 1 foto/ }));
     expect(document.querySelector(`[data-ref-de-estilo="${F2}"]`)).toBeTruthy();
@@ -2052,10 +2056,10 @@ describe("25/09: Modelos ocupam o espaço", () => {
   it("persona e âncora à esquerda; rodada, folha e detalhe 4K à direita, folha e detalhe lado a lado", () => {
     const t = ler("src/components/mesa-foto/EtapaModelos.tsx");
     expect(t).toContain("data-persona-lateral");
-    expect(t).toContain('className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2" data-folha-e-detalhe=""');
-    // 26/09: coluna da esquerda estreita, com o seletor compacto (antes 4 de 12 colunas com cartões grandes).
+    // 02/10: coluna da esquerda estreita; as personas viram uma grade de cartões e a folha uma faixa de 6 espaços.
     expect(t).toContain("lg:grid-cols-[250px_minmax(0,1fr)]");
-    expect(t).toContain("<SeletorLateral");
+    expect(t).toContain("data-grade-de-personas");
+    expect(t).toContain('aria-label="Vistas da folha" data-faixa-da-folha=""');
     // 25/09 (dono): a âncora não fica mais espremida ao lado do texto; imagem em cima, ficha embaixo.
     expect(t).toContain("data-persona-lateral-empilhada");
     expect(t).not.toContain("grid-cols-[64px_minmax(0,1fr)]");
@@ -2081,26 +2085,26 @@ describe("26/09: Fotos com rolagem própria e painel organizado", () => {
   it("a grade e o painel rolam sozinhos só no computador (celular segue a página); o painel tem seções e as ferramentas pro", async () => {
     montar(h(EtapaAcervo), { imagemId: F1 });
     const detalhe = await screen.findByRole("region", { name: /Foto mouse-frente.jpg/ });
-    const area = document.querySelector("[data-area-das-fotos]") as HTMLElement;
-    // A etapa organiza a própria coluna na área de trabalho: a área das fotos ocupa o resto da altura (sem calc à mão).
+    // 02/10: a área das fotos e a coluna do produto ocupam o resto da altura; a foto aberta abre numa janela central.
+    const area = document.querySelector("[data-fotos-e-produto]") as HTMLElement;
     expect(area.className).toContain("lg:flex-1");
-    expect(area.className).toContain("lg:min-h-[240px]");
+    expect(area.className).toContain("lg:min-h-0");
     expect(area.className).not.toContain("100vh");
     const rolagem = document.querySelector("[data-rolagem-das-fotos]") as HTMLElement;
     expect(rolagem.className).toContain("lg:overflow-y-auto");
-    expect(rolagem.className).not.toMatch(/(^|\s)overflow-y-auto/);
-    const painel = document.querySelector("[data-painel-da-foto]") as HTMLElement;
-    expect(painel.className).toContain("lg:overflow-y-auto");
+    expect(rolagem.className).not.toMatch(/(^|s)overflow-y-auto/);
+    expect(document.querySelector("[data-coluna-do-produto]")).toBeTruthy();
     // Barra de filtros fixa em cima da grade (fora da rolagem).
-    expect((document.querySelector("[data-barra-das-fotos]") as HTMLElement).contains(screen.getByLabelText("Buscar no acervo"))).toBe(true);
-    expect(rolagem.contains(screen.getByLabelText("Buscar no acervo"))).toBe(false);
+    const busca = document.querySelector('[aria-label="Buscar no acervo"]') as HTMLElement;
+    expect((document.querySelector("[data-barra-das-fotos]") as HTMLElement).contains(busca)).toBe(true);
+    expect(rolagem.contains(busca)).toBe(false);
+    expect(detalhe.closest("[data-janela-da-foto]")).toBeTruthy();
     for (const secao of ["Ampliar e tirar fundo (pro)", "Mais ferramentas", "Sobre a foto"]) expect(within(detalhe).getByText(secao)).toBeTruthy();
     expect(detalhe.querySelector(`[data-ferramentas-pro="${F1}"]`)).toBeTruthy();
-    // Lupa de ver grande em cada foto da grade.
-    expect(screen.getByRole("button", { name: "Ver grande mouse-caixa.jpg" })).toBeTruthy();
-    fireEvent.click(within(detalhe).getByRole("button", { name: "Fechar o detalhe" }));
-    expect(await screen.findByText("Nenhuma foto aberta")).toBeTruthy();
-    expect(document.querySelectorAll("[data-guia-das-fotos] li")).toHaveLength(4);
+    // Lupa de ver grande em cada foto da grade (a grade fica atrás da janela aberta).
+    expect(screen.getByRole("button", { name: "Ver grande mouse-caixa.jpg", hidden: true })).toBeTruthy();
+    // Mover de lado (produto ou modelo) no detalhe.
+    expect(detalhe.querySelector("[data-mover-de-lado]")).toBeTruthy();
   });
 
   it("baixar sem ZIP: uma a uma, com a URL de download da função (tamanho original)", async () => {
@@ -2360,7 +2364,7 @@ describe("28/09: Fotos organizada (barra numa linha e blocos que recolhem)", () 
     expect(barra.textContent).toContain("2 marcadas");
   });
 
-  it("Suas fotos e O produto recolhem, mostram o resumo e lembram a escolha", async () => {
+  it("O produto recolhe na coluna própria e Suas fotos fica sempre à vista", async () => {
     window.localStorage.clear();
     montar(h(EtapaAcervo));
     await screen.findByText("mouse-frente.jpg");
@@ -2370,10 +2374,8 @@ describe("28/09: Fotos organizada (barra numa linha e blocos que recolhem)", () 
     expect(within(produto).getByRole("button", { name: /O produto/ }).getAttribute("aria-expanded")).toBe("false");
     // O botão Identificar continua à vista com o bloco recolhido.
     expect(within(produto).getByRole("button", { name: /Identificar o produto/ })).toBeTruthy();
-    // 30/09 (frente FTL): o bloco de envio virou "Suas fotos" ("Fotos do produto" é agora um objetivo da linha).
-    const envio = screen.getByRole("button", { name: /Suas fotos/ });
-    fireEvent.click(envio);
-    await waitFor(() => expect(envio.getAttribute("aria-expanded")).toBe("false"));
-    expect(envio.textContent).toMatch(/fotos no acervo/);
+    // 02/10: as fotos não recolhem mais (a grade é a área grande); o produto mora na coluna própria.
+    expect(produto.closest("[data-coluna-do-produto]")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Suas fotos" })).toBeTruthy();
   });
 });

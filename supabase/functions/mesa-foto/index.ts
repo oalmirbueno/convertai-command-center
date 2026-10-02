@@ -242,7 +242,9 @@ import {
   type VersaoTomada,
 } from "./calculos.ts";
 import { SEMENTE_DA_BIBLIOTECA, VERSAO_DA_SEMENTE } from "./biblioteca-semente.ts";
-import { ACOES_LONGAS_DE_MODELOS, acoesDeModelos, ALVOS_DE_ESTIMATIVA_DE_MODELOS } from "./modelos.ts";
+import { ACOES_LONGAS_DE_MODELOS, acoesDeModelos, ALVOS_DE_ESTIMATIVA_DE_MODELOS, identidadeParaGeracao } from "./modelos.ts";
+import { textoDeIdentidadeParaGeracao } from "./modelos-folha.ts";
+import { lerPessoaEscolhida, MAX_FOTOS_DA_PESSOA, type PessoaEscolhida, tagsDaPessoaNaFoto } from "./pessoa-escolhida.ts";
 import { ACOES_LONGAS_DO_CANVAS, acoesDoCanvas, ALVOS_DE_ESTIMATIVA_DO_CANVAS } from "./canvas.ts";
 import { ACOES_LONGAS_DE_CLONES, acoesDeClones, ALVOS_DE_ESTIMATIVA_DE_CLONES } from "./clones.ts";
 import { ACOES_LONGAS_DO_BOOK, acoesDoBook, ALVOS_DE_ESTIMATIVA_DO_BOOK } from "./book.ts";
@@ -301,6 +303,7 @@ import {
   TAGS_DO_RECORTE_ACEITO,
 } from "./recorte-do-gerador.ts";
 import { blocoDaIdentificacaoNoPedido, kitsComIdentificacao, legendaDaReferenciaWeb, produtoDaTela, referenciasWebDaTela } from "./kit-sugerir.ts";
+import { categoriaDoLadoPedido, lerSeparacao, MAX_FOTOS_POR_SEPARACAO, perguntasDaSeparacao } from "./fotos-separar.ts";
 import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
@@ -1377,6 +1380,98 @@ async function acervoDecidir(ch: Chamador, corpo: Record<string, unknown>) {
     .eq("id", imagem.id).eq("client_id", clientId).select(CAMPOS_IMAGEM).single();
   if (error || !data) throw new ErroHttp(503, "gravacao_falhou", "Não foi possível gravar a decisão.");
   return json({ imagem: await comUrl(data as LinhaImagem), custo_usd: 0 });
+}
+
+/**
+ * acervo_importar_url { client_id, url, lado? ("produto" | "modelo") } -> { imagem, ja_existia, custo_usd: 0 }
+ * 02/10 (dono: "subir, colar e colar link têm que ser claros"): a foto de um
+ * link https público entra no acervo como original (busca segura: sem host
+ * interno, até 25 MB, JPEG, PNG ou WebP). Mesmo conteúdo já no acervo não
+ * duplica. O lado aberto na tela vira a categoria (produto ou pessoa).
+ */
+async function acervoImportarUrl(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = idDe(corpo.client_id, "client_id");
+  await garantirAcesso(ch, clientId);
+  const bruta = String(corpo.url ?? "").trim().slice(0, 2000);
+  if (!urlPublicaSegura(bruta)) throw new ErroHttp(400, "link_invalido", "Cole um link https público de uma imagem.");
+  const buscado = await buscarSeguro(bruta, { maxBytes: 25 * 1024 * 1024, aceitar: "image/avif,image/webp,image/png,image/jpeg,image/*", timeoutMs: 15_000 });
+  if (!buscado) throw new ErroHttp(422, "link_sem_imagem", "Não deu para baixar uma imagem deste link. Abra a imagem, copie o endereço dela e cole de novo.");
+  const mime = mimeDe(buscado.bytes);
+  if (!mime) throw new ErroHttp(415, "tipo_nao_suportado", "O link precisa ser de uma imagem JPEG, PNG ou WebP.");
+  let dim = dimensoesDaImagem(buscado.bytes);
+  if (!dim) dim = await dimensoesDecodificando(buscado.bytes).catch(() => null);
+  if (!dim) throw new ErroHttp(422, "imagem_corrompida", "Não foi possível abrir esta imagem.");
+  const sha = await sha256Hex(buscado.bytes);
+  const { data: ja } = await servico().from("cliente_imagens").select(CAMPOS_IMAGEM).eq("client_id", clientId).eq("sha256", sha).limit(1);
+  const existente = ((ja as LinhaImagem[] | null) ?? [])[0];
+  if (existente) return json({ imagem: await comUrl(existente), ja_existia: true, custo_usd: 0 });
+  const host = buscado.url.hostname.replace(/^www\./, "").slice(0, 60);
+  const caminho = `${clientId}/foto/originais/${crypto.randomUUID()}.${extensaoDe(mime)}`;
+  await salvarNoMesa(caminho, buscado.bytes, mime);
+  let ultimo = "";
+  try {
+    ultimo = decodeURIComponent(buscado.url.pathname.split("/").pop() || "").replace(/\.[a-z0-9]{2,5}$/i, "");
+  } catch {
+    ultimo = "";
+  }
+  const { data, error } = await servico().from("cliente_imagens").insert({
+    client_id: clientId,
+    origem: "mesa_foto",
+    storage_bucket: "mesa",
+    storage_path: caminho,
+    nome: limpo(ultimo, 160) || `Foto de ${host}`,
+    pasta: "Mesa Foto / Originais",
+    categoria: categoriaDoLadoPedido(corpo.lado),
+    tags: ["mesa_foto", "original", "de_link", `fonte:${host}`],
+    sha256: sha,
+    largura: dim.largura,
+    altura: dim.altura,
+    gerada: false,
+    aprovada: false,
+    modo: null,
+    derivada_de: null,
+  }).select(CAMPOS_IMAGEM).single();
+  if (error || !data) {
+    await servico().storage.from("mesa").remove([caminho]).catch(() => {});
+    throw new ErroHttp(503, "gravacao_falhou", "Não foi possível guardar a foto no acervo.");
+  }
+  return json({ imagem: await comUrl(data as LinhaImagem), ja_existia: false, custo_usd: 0 });
+}
+
+/**
+ * fotos_separar { client_id, imagem_ids[] (até 20) } -> { separadas: [{ id, lado, confianca, categoria }], custo_usd }
+ * 02/10: só as fotos sem nenhum sinal (a tela separa o resto pelos metadados,
+ * src/components/mesa-foto/tipoDaFoto.ts). O Jev escolhe produto, modelo ou
+ * arte; com confiança de 0,6 para cima a categoria é gravada. Sem o Jev, nada
+ * muda (a foto fica em Produto e a pessoa move pelo menu da foto).
+ */
+async function fotosSeparar(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = idDe(corpo.client_id, "client_id");
+  await garantirAcesso(ch, clientId);
+  const ids = Array.isArray(corpo.imagem_ids) ? Array.from(new Set(corpo.imagem_ids.map(String))).slice(0, MAX_FOTOS_POR_SEPARACAO) : [];
+  if (!ids.length) throw new ErroHttp(400, "sem_imagens", "Nenhuma foto para separar.");
+  // Só as que continuam sem categoria (outra aba pode ter separado antes).
+  const fotos = (await lerImagens(clientId, ids)).filter((f) => !f.categoria && !f.gerada);
+  if (!fotos.length) return json({ separadas: [], custo_usd: 0 });
+  const paraSeparar = fotos.map((f) => ({ id: f.id, nome: f.nome, pasta: f.pasta, descricao: f.descricao, tags: f.tags, origem: f.origem }));
+  const { state, questions } = perguntasDaSeparacao(paraSeparar);
+  let res: Awaited<ReturnType<typeof jevPerguntar>>;
+  try {
+    res = await jevPerguntar({ state, questions });
+  } catch (e) {
+    if (e instanceof JevErro) throw new ErroHttp(503, "separacao_indisponivel", "A separação automática está indisponível agora. Mova as fotos à mão, pelo menu da foto.");
+    throw e;
+  }
+  let custo = 0;
+  const cobrado = await cobrarJev(res, { clientId, tarefa: TAREFA_LEITURA, referencia: { tipo: REF_IMAGEM, id: fotos[0].id }, criadoPor: ch.userId });
+  if (cobrado) custo += cobrado.custoUsd;
+  const decididas = lerSeparacao(paraSeparar, res.answers);
+  for (const d of decididas) {
+    if (!d.categoria) continue;
+    const { error } = await servico().from("cliente_imagens").update({ categoria: d.categoria }).eq("id", d.id).eq("client_id", clientId).is("categoria", null);
+    if (error) registrarFalha("mesa-foto: categoria da separação não gravada", error, { imagem_id: d.id });
+  }
+  return json({ separadas: decididas, custo_usd: custo });
 }
 
 // ------------------------------------------------------------------ kits
@@ -2486,6 +2581,11 @@ async function campanhaPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
   const finalidade = limpo(corpo.finalidade, 200) || "campanha e feed";
   const pedido = limpoOuNulo(corpo.pedido, 2000);
   const estiloIds = Array.isArray(corpo.referencias_estilo_ids) ? corpo.referencias_estilo_ids.map(String) : [];
+  // 02/10: quem aparece (persona de Modelos ou clone de Clones). Conferida agora: do cliente, usável, com a folha.
+  const pedidaPessoa = lerPessoaEscolhida(corpo.pessoa_escolhida);
+  const identidade = pedidaPessoa ? await identidadeParaGeracao(servico(), clientId, pedidaPessoa.id, 1) : null;
+  if (pedidaPessoa && !identidade) throw new ErroHttp(404, "modelo_inexistente", "O modelo escolhido não existe mais. Escolha outro em Quem aparece.");
+  const pessoaEscolhida: PessoaEscolhida | null = pedidaPessoa && identidade ? { tipo: identidade.tipo, id: pedidaPessoa.id, nome: identidade.nome } : null;
   const [contexto, diretor, estilos, regrasEnsinadas] = await Promise.all([
     contextoDoCliente(clientId, corpo.campanha_id, corpo.marca_id),
     modeloDeTexto("diretor_arte", corpo.modelo_id),
@@ -2504,7 +2604,9 @@ async function campanhaPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
     quantidade,
     formatos,
     finalidade,
-    modelo_pedido_pela_equipe: { perfil: pedidoModelo.perfil || null, idade_aprox: corpo.modelo ? pedidoModelo.idade_aprox : null, estilo: pedidoModelo.estilo || null },
+    modelo_pedido_pela_equipe: pessoaEscolhida
+      ? { pessoa_escolhida: pessoaEscolhida.nome, tipo: pessoaEscolhida.tipo === "clone" ? "pessoa real com autorização" : "modelo sintético pronto", regra: "a MESMA pessoa em todas as fotos com pessoa; não descreva rosto, só roupa, ação e expressão" }
+      : { perfil: pedidoModelo.perfil || null, idade_aprox: corpo.modelo ? pedidoModelo.idade_aprox : null, estilo: pedidoModelo.estilo || null },
     pedido_da_equipe: pedido,
     presets: PRESETS.filter((p) => p.elevacao_graus <= 30).map((p) => p.id),
     variar_agora: await variarAgoraNaFoto(servico(), clientId, { pedido: [pedido, pedidoModelo.estilo, pedidoModelo.perfil].filter(Boolean).join(" "), paleta: contexto.marca?.paleta }),
@@ -2564,6 +2666,7 @@ async function campanhaPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
     qualidade: lerQualidade(corpo.qualidade),
     modeloImagemId: corpo.modelo_imagem_id,
     campanhaMesa: contexto.campanha,
+    pessoaEscolhida,
   });
   return json({ ...resultado, campanha_mesa: contexto.campanha, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd, reserva_usada: saida.reservaUsada ?? null });
 }
@@ -2587,6 +2690,7 @@ async function criarEnsaioDeCampanha(ch: Chamador, d: {
   qualidade?: Qualidade;
   modeloImagemId?: unknown;
   campanhaMesa?: ContextoFoto["campanha"];
+  pessoaEscolhida?: PessoaEscolhida | null;
 }) {
   const tomadas = tomadasDaCampanha(d.fotos, { kit: d.kit, refs: d.refs, formatos: d.formatos });
   const estilos = d.estilos.slice(0, MAX_ESTILOS_NO_GERADOR);
@@ -2611,6 +2715,7 @@ async function criarEnsaioDeCampanha(ch: Chamador, d: {
       estimativa,
       promessa: PROMESSA_CAMPANHA,
       campanha_mesa: d.campanhaMesa ?? null,
+      pessoa_escolhida: d.pessoaEscolhida ?? null,
     },
     pedido: d.pedido,
     custoUsd: d.custoUsd,
@@ -2708,10 +2813,17 @@ async function tomadaGerar(ch: Chamador, corpo: Record<string, unknown>) {
   const aprovadaComPessoa = tomada.campanha?.com_pessoa
     ? ensaio.tomadas.filter((t) => t.campanha?.com_pessoa).flatMap((t) => t.versoes).find((v) => v.aprovada === true) ?? null
     : null;
-  const pessoaAprovada = aprovadaComPessoa ? [await baixarReduzida("mesa", aprovadaComPessoa.storage_path, 1024, "pessoa-sintetica-aprovada")] : [];
+  // 02/10: com a pessoa escolhida (Modelos ou Clones), a folha dela é a identidade; a aprovada antes não precisa.
+  const escolhida = tomada.campanha?.com_pessoa ? lerPessoaEscolhida((ensaio.direcao as Record<string, unknown>).pessoa_escolhida) : null;
+  const identidadeDaPessoa = escolhida ? await identidadeParaGeracao(servico(), ensaio.client_id, escolhida.id, MAX_FOTOS_DA_PESSOA) : null;
+  if (escolhida && !identidadeDaPessoa) throw new ErroHttp(404, "modelo_inexistente", "O modelo escolhido para esta campanha não existe mais.");
+  const fotosDaPessoa = identidadeDaPessoa
+    ? await emParalelo(identidadeDaPessoa.imagens, 3, (i, n) => baixarReduzida(i.storage_bucket, i.storage_path, 1024, `pessoa-${n + 1}`))
+    : [];
+  const pessoaAprovada = aprovadaComPessoa && !fotosDaPessoa.length ? [await baixarReduzida("mesa", aprovadaComPessoa.storage_path, 1024, "pessoa-sintetica-aprovada")] : [];
   const mImg = await modeloDeImagem(corpo.modelo_imagem_id);
   const qualidade = lerQualidade(corpo.qualidade);
-  const limite = Math.max(1, Math.min(limiteDeFontesDoMotor(mImg), LIMITE_PRATICO_DE_FONTES) - estilos.length - pessoaAprovada.length);
+  const limite = Math.max(1, Math.min(limiteDeFontesDoMotor(mImg), LIMITE_PRATICO_DE_FONTES) - estilos.length - pessoaAprovada.length - fotosDaPessoa.length);
   const fontes = fontesDaTomada(refs, tomada, limite);
   const imagensFontes = await emParalelo(fontes, 4, (f) => {
     const r = f as RefDoKit & { imagem: LinhaImagem };
@@ -2732,9 +2844,14 @@ async function tomadaGerar(ch: Chamador, corpo: Record<string, unknown>) {
     versoesAntes: tomada.versoes.length,
     rejeicoes,
     guiaDeEstilo: normalizarGuiaDeEstilo(direcao.guia_de_estilo),
-    modelo: tomada.campanha ? lerModeloSintetico(direcao.modelo) : null,
+    modelo: tomada.campanha && !identidadeDaPessoa ? lerModeloSintetico(direcao.modelo) : null,
     pessoaAprovada: pessoaAprovada.length > 0,
-  });
+  }) + (identidadeDaPessoa
+    ? `
+
+PESSOA ESCOLHIDA: as ${fotosDaPessoa.length} imagens que vêm logo depois das fontes do produto são a identidade de ${identidadeDaPessoa.nome}: ${identidadeDaPessoa.imagens.map((i, n) => `imagem de pessoa ${n + 1} = ${i.legenda}`).join("; ")}.
+${textoDeIdentidadeParaGeracao({ nome: identidadeDaPessoa.nome, invariantes: identidadeDaPessoa.invariantes, tipo: identidadeDaPessoa.tipo })}`
+    : "");
   const tamanho = TAMANHO_DO_FORMATO[tomada.formato] ?? TAMANHO_DO_FORMATO["4:5"];
   /** A tomada gravada com os campos recalculados, as versões de agora e o status pedido. */
   const comStatus = (t: Tomada, status: Tomada["status"], extra: Partial<Tomada> = {}): Tomada => ({ ...tomada, versoes: t.versoes, status, ...extra });
@@ -2750,7 +2867,7 @@ async function tomadaGerar(ch: Chamador, corpo: Record<string, unknown>) {
       clientId: ensaio.client_id,
       modeloId: mImg.id,
       prompt,
-      referencias: [...imagensFontes, ...pessoaAprovada, ...estilos.map((e) => e.imagem)],
+      referencias: [...imagensFontes, ...fotosDaPessoa, ...pessoaAprovada, ...estilos.map((e) => e.imagem)],
       qualidade,
       tamanho,
       referencia: { tipo: REF_ENSAIO, id: ensaio.id },
@@ -2939,7 +3056,7 @@ async function versaoDecidir(ch: Chamador, corpo: Record<string, unknown>) {
             "mesa_foto", "ensaio", "gerada", `tomada:${tomada.id}`, `ensaio:${ensaio.id}`,
             ...(tomada.angulo_novo ? ["novo_angulo"] : []),
             ...(tomada.campanha ? ["campanha"] : []),
-            ...(tomada.campanha?.com_pessoa || tipoDeVariacaoPorId(tomada.tipo_variacao)?.com_maos ? ["pessoa_sintetica"] : []),
+            ...tagsDaPessoaNaFoto(tomada.campanha?.com_pessoa ? lerPessoaEscolhida((ensaio.direcao as Record<string, unknown>).pessoa_escolhida) : null, !!tomada.campanha?.com_pessoa || !!tipoDeVariacaoPorId(tomada.tipo_variacao)?.com_maos),
             ...(tomada.tipo_variacao ? [`variacao:${tomada.tipo_variacao}`] : []),
           ],
           descricao: `${tomada.campanha ? PROMESSA_CAMPANHA : PROMESSA_DO_MODO[v.modo]} Ensaio ${ensaio.id}, tomada ${tomada.nome}.`.slice(0, 1000),
@@ -4606,6 +4723,9 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   acervo_registrar: acervoRegistrar,
   acervo_ler_foto: acervoLerFoto,
   acervo_decidir: acervoDecidir,
+  // 02/10: foto de um link e a separação produto, modelo ou arte (Jev) das fotos sem sinal.
+  acervo_importar_url: acervoImportarUrl,
+  fotos_separar: fotosSeparar,
   kit_sugerir: kitSugerir,
   kit_salvar: kitSalvar,
   receitas: () => Promise.resolve(receitas()),
@@ -4658,7 +4778,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
  * vai no corpo.
  */
 const ACOES_LONGAS = new Set([
-  "acervo_registrar", "acervo_ler_foto", "kit_sugerir", "kit_salvar", "ensaio_planejar", "tomada_gerar", "versao_conferir",
+  "acervo_registrar", "acervo_importar_url", "fotos_separar", "acervo_ler_foto", "kit_sugerir", "kit_salvar", "ensaio_planejar", "tomada_gerar", "versao_conferir",
   "versao_decidir", "preparar", "enviar", "referencia_importar", "agente_conversar", "agente_aplicar", "estimar",
   "produto_identificar", "variacoes_planejar", "campanha_planejar", "biblioteca_ilustrar", "biblioteca_exemplo_gerar",
   ...ACOES_LONGAS_DE_MODELOS, ...ACOES_LONGAS_DO_CANVAS, ...ACOES_LONGAS_DE_CLONES, ...ACOES_LONGAS_DA_BIBLIOTECA, ...ACOES_LONGAS_DO_BOOK,

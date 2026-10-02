@@ -602,7 +602,8 @@ describe("função mesa-foto (contrato pelo código)", () => {
   it("fontes do kit na ordem e referência de estilo depois delas", () => {
     const gerar = corpoDe(fonte, "tomadaGerar");
     expect(gerar).toContain("fontesDaTomada(refs, tomada, limite)");
-    expect(gerar).toContain("referencias: [...imagensFontes, ...pessoaAprovada, ...estilos.map((e) => e.imagem)]");
+    // 02/10: a folha da pessoa escolhida (Modelos ou Clones) entra logo depois das fontes do produto.
+    expect(gerar).toContain("referencias: [...imagensFontes, ...fotosDaPessoa, ...pessoaAprovada, ...estilos.map((e) => e.imagem)]");
     // Bloqueio recalculado com o kit de agora, e a câmera escolhida na tela vale para a tomada.
     expect(gerar).toContain("cameraPedida ?? salva.camera");
     expect(gerar).toContain("lerCamera(corpo.camera)");
@@ -1104,7 +1105,8 @@ describe("v2: contratos da função pelo código", () => {
 
   it("referência da internet não sai para o cliente; foto aprovada de campanha é marcada pessoa sintética", () => {
     expect(corpoDe(fonte, "enviar")).toContain('"referencia_web_nao_publica"');
-    expect(corpoDe(fonte, "versaoDecidir")).toContain('"pessoa_sintetica"');
+    // 02/10: a etiqueta sai de tagsDaPessoaNaFoto (pessoa_sintetica sem escolha; persona ou clone escolhidos ficam rastreáveis).
+    expect(corpoDe(fonte, "versaoDecidir")).toContain("tagsDaPessoaNaFoto(");
   });
 
   it("biblioteca: ilustrar é só admin, sem IA paga, com pausa pelo limite do Openverse; exemplo gerado cobra uma imagem", () => {
@@ -1253,12 +1255,14 @@ describe("personas: rodada, folha, status e aviso de realismo", () => {
     expect(statusDaPersona({ status: "rascunho", ancora_imagem_id: null }, [])).toBe("rascunho");
     expect(statusDaPersona({ status: "rascunho", ancora_imagem_id: null }, [{ id: "1", papel: "candidata", vista: null, aprovada: null }])).toBe("candidatos");
     expect(statusDaPersona({ status: "candidatos", ancora_imagem_id: "1" }, [{ id: "1", papel: "candidata", vista: null, aprovada: true }])).toBe("ancora");
-    const tres = ["frente", "perfil_esq", "meio_corpo"].map((v, i) => ({ id: `v${i}`, papel: "vista", vista: v, aprovada: true }));
-    expect(statusDaPersona({ status: "folha", ancora_imagem_id: "1" }, tres)).toBe("pronta");
-    expect(statusDaPersona({ status: "folha", ancora_imagem_id: "1" }, tres.slice(0, 1))).toBe("folha");
-    expect(statusDaPersona({ status: "arquivada", ancora_imagem_id: "1" }, tres)).toBe("arquivada");
+    // 02/10 (dono): pronta = as 6 vistas da folha aprovadas (antes bastavam 3).
+    const seis = FOLHA_PADRAO.map((v, i) => ({ id: `v${i}`, papel: "vista", vista: v, aprovada: true }));
+    expect(statusDaPersona({ status: "folha", ancora_imagem_id: "1" }, seis)).toBe("pronta");
+    expect(statusDaPersona({ status: "folha", ancora_imagem_id: "1" }, seis.slice(0, 3))).toBe("folha");
+    expect(statusDaPersona({ status: "folha", ancora_imagem_id: "1" }, seis.slice(0, 1))).toBe("folha");
+    expect(statusDaPersona({ status: "arquivada", ancora_imagem_id: "1" }, seis)).toBe("arquivada");
     expect(personaUsavel("candidatos").ok).toBe(false);
-    expect(personaUsavel("ancora").aviso).toMatch(/Folha da persona incompleta/);
+    expect(personaUsavel("ancora").aviso).toMatch(/Folha das 6 vistas incompleta/);
   });
 
   it("aviso composto do Jev: só alerta, com nota ponderada", () => {

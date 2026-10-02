@@ -160,8 +160,46 @@ export function prontidaoDasFotos(e: EstadoDaLinha): Prontidao {
   return { pronto: true, falta: "", seguir: e.selecionadas > 1 ? `Montar o carrossel (${Math.min(e.selecionadas, 20)})` : "Montar o post" };
 }
 
-/** Para onde vai o passo 3 (Gerar) no cabeçalho: a ferramenta do objetivo; sem objetivo, escolher. */
+/** Para onde vai o passo 3 (Gerar) no cabeçalho: a ferramenta do objetivo; sem objetivo, Fotos do produto (nunca volta ao passo 1). */
 export function etapaDeGerar(objetivo: ObjetivoDaFoto | null): string {
   const o = objetivoPorValor(objetivo);
-  return o ? o.etapa : "criar";
+  return o ? o.etapa : "ensaio";
+}
+
+/**
+ * 02/10 (dono: "Escolher e Gerar abrem de novo o O que fazer, fica em
+ * laço"): o passo 3 (Gerar) sempre vai PARA FRENTE. Sem objetivo escolhido,
+ * vale o que já existe: produto escolhido leva às Fotos do produto, foto
+ * marcada abre no Estúdio; sem nada, Fotos do produto (que tem o seletor de
+ * produto). Nunca devolve "criar".
+ */
+export interface DestinoDoPasso {
+  etapa: "estudio" | "ensaio" | "campanha" | "preparar" | "agenda";
+  imagem: string | null;
+  /** O post leva as marcadas para a Agenda. */
+  levarAoPost: boolean;
+  /** O objetivo que vale daqui para frente (o escolhido ou o deduzido). */
+  objetivo: ObjetivoDaFoto;
+}
+
+export function destinoDoGerar(e: { objetivo: ObjetivoDaFoto | null; marcadas: string[]; kitId: string | null }): DestinoDoPasso {
+  const escolhido = objetivoPorValor(e.objetivo);
+  const o = escolhido || objetivoPorValor(e.kitId ? "variacoes" : e.marcadas.length ? "melhorar" : "variacoes")!;
+  if (o.etapa === "agenda") return { etapa: "agenda", imagem: null, levarAoPost: e.marcadas.length > 0, objetivo: o.valor };
+  if (o.requisito === "uma_foto") return { etapa: o.etapa, imagem: e.marcadas[0] || null, levarAoPost: false, objetivo: o.valor };
+  return { etapa: o.etapa, imagem: null, levarAoPost: false, objetivo: o.valor };
+}
+
+/**
+ * Ao escolher o que produzir (passo 1): com o que precisa já em mãos (produto
+ * escolhido para fotos do produto e com modelo, foto marcada para melhorar e
+ * tirar fundo), vai direto para gerar; senão, para as Fotos com o pedido
+ * certo. Fotos do produto e Foto com modelo têm o seletor de produto na
+ * própria tela: com algum produto no cliente, vão direto.
+ */
+export function destinoAoEscolher(valor: ObjetivoDaFoto, e: { marcadas: string[]; kitId: string | null; produtos: number }): { etapa: string; imagem: string | null; levarAoPost: boolean } {
+  const o = objetivoPorValor(valor)!;
+  if (o.requisito === "produto") return e.kitId || e.produtos > 0 ? { etapa: o.etapa, imagem: null, levarAoPost: false } : { etapa: "acervo", imagem: null, levarAoPost: false };
+  if (o.requisito === "uma_foto") return e.marcadas.length ? { etapa: o.etapa, imagem: e.marcadas[0], levarAoPost: false } : { etapa: "acervo", imagem: null, levarAoPost: false };
+  return e.marcadas.length ? { etapa: "agenda", imagem: null, levarAoPost: true } : { etapa: "acervo", imagem: null, levarAoPost: false };
 }

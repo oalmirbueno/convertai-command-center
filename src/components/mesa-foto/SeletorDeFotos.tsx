@@ -6,6 +6,13 @@ import { MiniaturaDaFoto, Pilulas } from "./Comuns";
 import { classeDaFoto, type FotoDoAcervo } from "./fotoApi";
 import { juntar, superficie } from "@/components/sistema/estilos";
 import { FILTROS_DA_CLASSE, filtrarFotos, type FiltroDaClasse } from "./EtapaAcervo";
+import { ehSoFoto, ladoDaFoto, type LadoDaFoto } from "./tipoDaFoto";
+
+const LADOS: { valor: "todos" | LadoDaFoto; rotulo: string }[] = [
+  { valor: "todos", rotulo: "Todas" },
+  { valor: "produto", rotulo: "Produto" },
+  { valor: "modelo", rotulo: "Modelo" },
+];
 
 /**
  * Escolher fotos do acervo sem sair da etapa (painel no lugar, sem janela):
@@ -31,7 +38,10 @@ export default function SeletorDeFotos({
   const [busca, setBusca] = useState("");
   const [classe, setClasse] = useState<FiltroDaClasse>(filtroInicial);
   const [marcadas, setMarcadas] = useState<string[]>([]);
-  const lista = useMemo(() => filtrarFotos(fotos, classe, "todos", [], busca).slice(0, 120), [fotos, classe, busca]);
+  const [lado, setLado] = useState<"todos" | LadoDaFoto>("todos");
+  // 02/10: só fotos (artes, carrosséis e logos ficam na Mesa), com o lado produto ou modelo.
+  const soFotos = useMemo(() => fotos.filter((f) => ehSoFoto(f) && (lado === "todos" || ladoDaFoto(f) === lado)), [fotos, lado]);
+  const lista = useMemo(() => filtrarFotos(soFotos, classe, "todos", [], busca).slice(0, 240), [soFotos, classe, busca]);
 
   const alternar = (id: string) => {
     if (!multiplas) {
@@ -65,11 +75,14 @@ export default function SeletorDeFotos({
         <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar no acervo" className="h-9 pl-8" aria-label="Buscar foto" />
       </div>
-      <Pilulas rotulo="Tipo de foto" opcoes={FILTROS_DA_CLASSE} valor={classe} onEscolher={setClasse} />
+      <div className="flex min-w-0 flex-wrap items-center">
+        <Pilulas rotulo="Lado das fotos" opcoes={LADOS} valor={lado} onEscolher={setLado} className="mr-2" />
+        <Pilulas rotulo="Tipo de foto" opcoes={FILTROS_DA_CLASSE} valor={classe} onEscolher={setClasse} />
+      </div>
       {lista.length === 0 ? (
         <p className="text-[12px] text-muted-foreground">Nenhuma foto com esse filtro.</p>
       ) : (
-        <div className="grid min-w-0 grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6">
+        <div className="grid min-w-0 grid-cols-3 gap-1.5 scrollbar-hidden sm:grid-cols-4 md:grid-cols-6 lg:max-h-[50vh] lg:overflow-y-auto lg:overscroll-contain" data-rolagem-do-seletor="">
           {lista.map((f) => {
             const ja = jaEscolhidas.indexOf(f.id) >= 0;
             const marcada = marcadas.indexOf(f.id) >= 0;
