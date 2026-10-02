@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, History, Loader2, Monitor, Package, Save } from "lucide-react";
+import { Clapperboard, Download, History, Loader2, Monitor, Package, Save } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useMesa } from "@/components/mesa/MesaContexto";
@@ -30,6 +30,7 @@ import {
 import AreaDoEditor from "./AreaDoEditor";
 import { entradaDoPacote } from "./pacote";
 import Versoes from "./Versoes";
+import Finais from "./Finais";
 import { useParte } from "./useParte";
 
 /**
@@ -44,7 +45,7 @@ import { useParte } from "./useParte";
  * agente (desligada). Nada aqui gasta.
  */
 
-const PARTES = ["pacote", "versoes"] as const;
+const PARTES = ["pacote", "versoes", "finais"] as const;
 type ParteDoEditar = (typeof PARTES)[number];
 
 interface Escolhas {
@@ -207,6 +208,7 @@ export default function EtapaEditar({ irPara }: { irPara: IrPara }) {
       opcoes={[
         { valor: "pacote", rotulo: "Pacote", icone: <Package className="h-3.5 w-3.5" /> },
         { valor: "versoes", rotulo: "Versões", icone: <History className="h-3.5 w-3.5" /> },
+        { valor: "finais", rotulo: "Finais", icone: <Clapperboard className="h-3.5 w-3.5" /> },
       ]}
     />
   );
@@ -338,6 +340,7 @@ export default function EtapaEditar({ irPara }: { irPara: IrPara }) {
         </Secao>
       )}
       {parte === "versoes" && <Versoes troca={trocaDeParte} />}
+      {parte === "finais" && <Finais troca={trocaDeParte} />}
     </div>
   );
 }

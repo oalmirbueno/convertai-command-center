@@ -1,6 +1,10 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Copy, Film, Loader2, Music, Play, Star, Subtitles, Upload } from "lucide-react";
+import { ChevronDown, Copy, Eraser, Film, Loader2, Music, Play, Sparkles, Star, Subtitles, Upload } from "lucide-react";
+import MenuMais from "@/components/sistema/MenuMais";
+import JanelaDeTratamento from "./JanelaDeTratamento";
+import { agruparVariantes, categoriaDoArquivo, modoDaEntrada, rotuloDaVariante, type GrupoDeVariantes } from "../../../supabase/functions/mesa-videos/modulos/organizador-da-entrada";
+import type { AcaoDoTratamento } from "../../../supabase/functions/mesa-videos/modulos/tratamento-de-video";
 import { copiarTexto as copiarParaAArea } from "@/components/mesa/estudioUtil";
 import { toast } from "sonner";
 import { useMesa, useUrlDaMesa } from "@/components/mesa/MesaContexto";
@@ -54,7 +58,7 @@ function PlayerDoArquivo({ arquivo }: { arquivo: ArquivoDeVideo }) {
   );
 }
 
-export function LinhaDoArquivo({ arquivo, aberto, onAbrir }: { arquivo: ArquivoDeVideo; aberto: boolean; onAbrir: () => void }) {
+export function LinhaDoArquivo({ arquivo, aberto, onAbrir, selo, acoes, abaixo }: { arquivo: ArquivoDeVideo; aberto: boolean; onAbrir: () => void; selo?: ReactNode; acoes?: ReactNode; abaixo?: ReactNode }) {
   const audio = arquivo.tipo === "audio" || String(arquivo.mime || "").indexOf("audio/") === 0;
   const detalhes = [duracaoCurta(arquivo.duracao_s), arquivo.largura && arquivo.altura ? `${arquivo.largura}x${arquivo.altura}` : "", tamanhoCurto(arquivo.bytes)].filter(Boolean);
   return (
@@ -76,14 +80,67 @@ export function LinhaDoArquivo({ arquivo, aberto, onAbrir }: { arquivo: ArquivoD
             {detalhes.length > 0 && <span className="truncate tabular-nums">{detalhes.join(" · ")}</span>}
           </p>
         </div>
-        {arquivo.tipo === "gerado" && <span className={juntar(etiqueta, "ml-2 bg-primary/10 text-primary")}>Da Mesa Vídeos</span>}
+        {selo}
+        {arquivo.tipo === "gerado" && !(arquivo.origem && arquivo.origem.tipo === "tratamento") && <span className={juntar(etiqueta, "ml-2 bg-primary/10 text-primary")}>Da Mesa Vídeos</span>}
+        {arquivo.origem && arquivo.origem.tipo === "tratamento" && <span className={juntar(etiqueta, "ml-2 bg-primary/10 text-primary")}>Depois</span>}
+        {acoes}
       </div>
       {aberto && (
         <div className="mt-2">
           <PlayerDoArquivo arquivo={arquivo} />
         </div>
       )}
+      {abaixo}
     </li>
+  );
+}
+
+/** Dá para tratar (tirar legenda, melhorar): vídeo de verdade do acervo, com duração. */
+export const podeTratar = (a: ArquivoDeVideo) => !a.so_no_storage && a.tipo !== "audio" && String(a.mime || "").indexOf("audio/") !== 0 && ["quadro", "still", "elemento", "angulo"].indexOf(a.tipo) < 0;
+
+/**
+ * Uma linha por grupo de variantes (02/10): a mesma cena do Motion em 9:16,
+ * 16:9, amostra e still vira UMA linha com o selo "+3"; as variantes abrem
+ * embaixo. "..." da linha: Tirar legenda e Melhorar qualidade.
+ */
+export function LinhaDoGrupo({ grupo, aberto, onAbrir, onTratar }: { grupo: GrupoDeVariantes<ArquivoDeVideo>; aberto: string | null; onAbrir: (id: string) => void; onTratar: (a: ArquivoDeVideo, acao: AcaoDoTratamento) => void }) {
+  const [variantes, setVariantes] = useState(false);
+  const p = grupo.principal;
+  const outras = grupo.variantes.slice(1);
+  const menu = (a: ArquivoDeVideo) =>
+    podeTratar(a) ? (
+      <MenuMais
+        rotulo={`Mais ações de ${a.nome}`}
+        itens={[
+          { rotulo: "Tirar legenda", icone: <Eraser className="h-3.5 w-3.5" />, dica: "Tira a legenda que já veio gravada, sem mudar o resto", aoEscolher: () => onTratar(a, "tirar_legenda"), desativado: !a.duracao_s },
+          { rotulo: "Melhorar qualidade", icone: <Sparkles className="h-3.5 w-3.5" />, dica: "Mais nitidez e pele real, sem trocar o rosto", aoEscolher: () => onTratar(a, "melhorar"), desativado: !a.duracao_s },
+        ]}
+      />
+    ) : null;
+  return (
+    <LinhaDoArquivo
+      arquivo={p}
+      aberto={aberto === p.id}
+      onAbrir={() => onAbrir(p.id)}
+      selo={
+        outras.length > 0 ? (
+          <button type="button" className={juntar(etiqueta, "ml-2 bg-muted text-muted-foreground hover:text-foreground")} onClick={() => setVariantes(!variantes)} aria-expanded={variantes} aria-label={`${outras.length} ${outras.length === 1 ? "variante" : "variantes"} de ${grupo.base}`} data-variantes={outras.length}>
+            +{outras.length}
+            <ChevronDown className={juntar("ml-0.5 h-3 w-3 transition-transform", variantes && "rotate-180")} />
+          </button>
+        ) : undefined
+      }
+      acoes={menu(p)}
+      abaixo={
+        variantes && outras.length > 0 ? (
+          <ul className="mt-1 border-l border-border pl-3" aria-label={`Variantes de ${grupo.base}`}>
+            {outras.map((v) => (
+              <LinhaDoArquivo key={v.id} arquivo={v} aberto={aberto === v.id} onAbrir={() => onAbrir(v.id)} selo={<span className={juntar(etiqueta, "ml-2 bg-muted text-muted-foreground")}>{rotuloDaVariante(v)}</span>} acoes={menu(v)} />
+            ))}
+          </ul>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -229,7 +286,11 @@ export default function EtapaEntrada({ irPara }: { irPara: IrPara }) {
   const arquivos = (arquivosQ.data && arquivosQ.data.arquivos) || [];
   const degradado = !!(arquivosQ.data && arquivosQ.data.degradado);
   const videos = arquivos.filter(naEntradaDaEdicao);
-  const daMesaVideos = videos.filter((a) => a.tipo === "gerado").length;
+  const daMesaVideos = videos.filter((a) => a.tipo === "gerado" && !(a.origem && a.origem.tipo === "tratamento")).length;
+  // 02/10: a mesma cena em várias variantes vira uma linha; um vídeo ou vários clipes na descrição.
+  const grupos = useMemo(() => agruparVariantes(videos), [videos]);
+  const leitura = useMemo(() => modoDaEntrada(videos), [videos]);
+  const [tratar, setTratar] = useState<{ arquivo: ArquivoDeVideo; acao: AcaoDoTratamento } | null>(null);
 
   // Subindo: avisa antes de fechar ou recarregar a aba (o envio pararia no meio).
   useEffect(() => {
@@ -317,7 +378,7 @@ export default function EtapaEntrada({ irPara }: { irPara: IrPara }) {
       {parte === "videos" && (
         <Secao
           titulo="Vídeos"
-          descricao={arquivosQ.data ? `${videos.length} na Entrada${daMesaVideos ? ` · ${daMesaVideos} da Mesa Vídeos` : ""}` : undefined}
+          descricao={arquivosQ.data ? `${videos.length} na Entrada${videos.length ? ` · ${leitura.resumo}` : ""}${daMesaVideos ? ` · ${daMesaVideos} da Mesa Vídeos` : ""}` : undefined}
           ajuda="Arraste os vídeos para cá ou use Subir (até 4 GB cada). A duração e o tamanho do quadro são lidos no seu navegador. Os vídeos aprovados na Mesa Vídeos chegam sozinhos."
           acao={
             videos.length > 0 ? (
@@ -339,9 +400,9 @@ export default function EtapaEntrada({ irPara }: { irPara: IrPara }) {
               }
             />
           ) : videos.length ? (
-            <ul className="divide-y divide-border" aria-label="Vídeos da Entrada">
-              {videos.map((a) => (
-                <LinhaDoArquivo key={a.id} arquivo={a} aberto={aberto === a.id} onAbrir={() => setAberto(aberto === a.id ? null : a.id)} />
+            <ul className="divide-y divide-border" aria-label="Vídeos da Entrada" data-modo-da-entrada={leitura.modo}>
+              {grupos.map((g) => (
+                <LinhaDoGrupo key={g.chave} grupo={g} aberto={aberto} onAbrir={(id) => setAberto(aberto === id ? null : id)} onTratar={(arquivo, acao) => setTratar({ arquivo, acao })} />
               ))}
             </ul>
           ) : (
@@ -353,7 +414,8 @@ export default function EtapaEntrada({ irPara }: { irPara: IrPara }) {
           )}
         </Secao>
       )}
-      {parte === "transcricao" && <Transcricao videos={videos} />}
+      {parte === "transcricao" && <Transcricao videos={videos.filter((v) => categoriaDoArquivo(v) === "bruto" || categoriaDoArquivo(v) === "audio" || categoriaDoArquivo(v) === "tratado")} />}
+      {tratar && <JanelaDeTratamento key={`${tratar.arquivo.id}-${tratar.acao}`} arquivo={tratar.arquivo} acao={tratar.acao} aberta onFechar={() => setTratar(null)} />}
     </div>
   );
 }

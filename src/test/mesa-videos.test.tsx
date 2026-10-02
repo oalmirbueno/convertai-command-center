@@ -849,7 +849,7 @@ describe("tela da Mesa Edição", () => {
 
   it("Organizar: o organizador propõe, a equipe confirma no cartão", async () => {
     mock.invoke.mockImplementation((_f: string, { body }: any) => {
-      if (body.acao === "takes_organizar_propor") {
+      if (body.acao === "entrada_organizar_propor") {
         return Promise.resolve({
           data: {
             mensagem_id: "33333333-3333-4333-8333-333333333333",
@@ -871,8 +871,8 @@ describe("tela da Mesa Edição", () => {
     });
     montar(h(MesaProvider, { valor: valorDaMesa(), children: h(EtapaOrganizar, { irPara: vi.fn() }) }));
     expect((await screen.findAllByText("IMG_1.MOV")).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: /Organizar por roteiro e cena/ }));
-    await waitFor(() => expect(chamadas("takes_organizar_propor")).toEqual([{ acao: "takes_organizar_propor", client_id: CLIENTE }]));
+    fireEvent.click(screen.getByRole("button", { name: "Organizar tudo" }));
+    await waitFor(() => expect(chamadas("entrada_organizar_propor")).toEqual([{ acao: "entrada_organizar_propor", client_id: CLIENTE, falas: {}, arquivar_ruido: false, melhores: true }]));
     expect(await screen.findByText("take_t01.mov", { exact: false })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     await waitFor(() => expect(chamadas("executar_acao_agente")).toEqual([{ acao: "executar_acao_agente", mensagem_id: "33333333-3333-4333-8333-333333333333", acao_id: "org-1" }]));
