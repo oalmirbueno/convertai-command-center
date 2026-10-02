@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
-import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
+import { Expand, Maximize2, Minimize2, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { botao, juntar, texto } from "@/components/sistema/estilos";
 import type { ProjetoDeEdicao } from "../../../../supabase/functions/_shared/projeto-de-edicao";
 import { tempoComQuadro } from "@/lib/editor/tempo";
@@ -13,6 +13,17 @@ import { useTempo, type Relogio } from "./apoio";
  * cada quadro e obedece quando alguém muda o tempo (linha do tempo, atalhos).
  */
 
+/** Só o relógio da prévia redesenha a cada quadro (antes, a prévia inteira redesenhava 25 vezes por segundo). */
+function TempoDaPrevia({ relogio, fps, duracao, taxa }: { relogio: Relogio; fps: number; duracao: number; taxa: number }) {
+  const tempo = useTempo(relogio, 1 / fps);
+  return (
+    <span className={juntar(texto.auxiliar, "ml-2 tabular-nums")}>
+      {tempoComQuadro(tempo, fps)} / {tempoComQuadro(duracao, fps)}
+      {taxa !== 1 ? ` · ${taxa}x` : ""}
+    </span>
+  );
+}
+
 export interface ControleDaPrevia {
   tocarOuPausar: () => void;
   tocar: () => void;
@@ -22,7 +33,18 @@ export interface ControleDaPrevia {
   velocidade: (v: number) => void;
 }
 
-const Previa = forwardRef<ControleDaPrevia, { projeto: ProjetoDeEdicao; urls: Record<string, string>; relogio: Relogio; compacta?: boolean }>(function Previa({ projeto, urls, relogio, compacta }, ref) {
+const Previa = forwardRef<
+  ControleDaPrevia,
+  {
+    projeto: ProjetoDeEdicao;
+    urls: Record<string, string>;
+    relogio: Relogio;
+    compacta?: boolean;
+    /** Vídeo grande: o editor esconde as laterais (o botão só aparece quando o editor passa isto). */
+    ampliada?: boolean;
+    onAmpliar?: () => void;
+  }
+>(function Previa({ projeto, urls, relogio, compacta, ampliada, onAmpliar }, ref) {
   const player = useRef<PlayerRef | null>(null);
   const [tocando, setTocando] = useState(false);
   const [taxa, setTaxa] = useState(1);
@@ -30,7 +52,6 @@ const Previa = forwardRef<ControleDaPrevia, { projeto: ProjetoDeEdicao; urls: Re
   const fps = projeto.fps;
   const total = quadrosDoProjeto(projeto);
   const props = useMemo(() => ({ projeto, urls }), [projeto, urls]);
-  const tempo = useTempo(relogio, 1 / fps);
 
   useImperativeHandle(ref, () => ({
     tocarOuPausar: () => player.current && player.current.toggle(),
@@ -130,19 +151,28 @@ const Previa = forwardRef<ControleDaPrevia, { projeto: ProjetoDeEdicao; urls: Re
         </div>
       </div>
       <div className={juntar("mt-2 flex min-w-0 items-center", compacta && "justify-center")}>
-        <button type="button" className={botao.icone} onClick={() => relogio.set(Math.max(0, tempo - 1))} aria-label="Voltar 1 segundo (J)">
+        <button type="button" className={botao.icone} onClick={() => relogio.set(Math.max(0, relogio.get() - 1))} aria-label="Voltar 1 segundo (J)">
           <SkipBack className="h-4 w-4" />
         </button>
         <button type="button" className={juntar(botao.icone, "mx-1")} onClick={() => player.current && player.current.toggle()} aria-label={tocando ? "Pausar (espaço)" : "Tocar (espaço)"}>
           {tocando ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
         </button>
-        <button type="button" className={botao.icone} onClick={() => relogio.set(Math.min((total - 1) / fps, tempo + 1))} aria-label="Avançar 1 segundo">
+        <button type="button" className={botao.icone} onClick={() => relogio.set(Math.min((total - 1) / fps, relogio.get() + 1))} aria-label="Avançar 1 segundo">
           <SkipForward className="h-4 w-4" />
         </button>
-        <span className={juntar(texto.auxiliar, "ml-2 tabular-nums")}>
-          {tempoComQuadro(tempo, fps)} / {tempoComQuadro(projeto.duracao_s, fps)}
-          {taxa !== 1 ? ` · ${taxa}x` : ""}
-        </span>
+        <TempoDaPrevia relogio={relogio} fps={fps} duracao={projeto.duracao_s} taxa={taxa} />
+        {!compacta && (
+          <span className="ml-auto flex items-center">
+            {onAmpliar && (
+              <button type="button" className={botao.icone} onClick={onAmpliar} aria-label={ampliada ? "Voltar ao tamanho normal (Esc)" : "Ampliar o vídeo"} title={ampliada ? "Voltar ao tamanho normal (Esc)" : "Ampliar o vídeo"} data-ampliar-previa="">
+                {ampliada ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
+            )}
+            <button type="button" className={juntar(botao.icone, "ml-1")} onClick={() => player.current && player.current.requestFullscreen()} aria-label="Tela cheia" title="Tela cheia" data-tela-cheia="">
+              <Expand className="h-4 w-4" />
+            </button>
+          </span>
+        )}
       </div>
     </div>
   );

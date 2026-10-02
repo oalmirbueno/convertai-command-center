@@ -1,6 +1,5 @@
 import type { ComponentType } from "react";
 import { Bot, Captions, Clapperboard, Clock, Copy, Crop, FolderOpen, LayoutGrid, ListVideo, Mountain, Music, Palette, Scissors, SlidersHorizontal, Sparkles, Upload, Wand2, ZoomIn } from "lucide-react";
-import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { juntar } from "@/components/sistema/estilos";
 
 /**
@@ -84,7 +83,8 @@ export function gruposPara(ferramentas: FerramentaDoTrilho[]): FerramentaDoTrilh
 export default function TrilhoDeFerramentas({ ferramentas, valor, onEscolher }: { ferramentas: FerramentaDoTrilho[]; valor: string; onEscolher: (v: string) => void }) {
   const grupos = gruposPara(ferramentas);
   return (
-    <RegiaoRolavel modo="sempre" className="w-[60px] shrink-0">
+    // Largura fixa e rolagem invisível: a RegiaoRolavel estica (flex-1) e abria um vão de ~120 px (02/10).
+    <div className="scrollbar-hidden h-full w-14 shrink-0 overflow-y-auto overscroll-contain">
       <div role="tablist" aria-orientation="vertical" aria-label="Ferramentas do editor" className="flex flex-col items-stretch gap-0.5 py-0.5" data-trilho-de-ferramentas="">
         {grupos.map((g, i) => (
           <div key={i} className={juntar("flex flex-col gap-0.5", i > 0 && "mt-1 border-t border-border pt-1")}>
@@ -114,6 +114,6 @@ export default function TrilhoDeFerramentas({ ferramentas, valor, onEscolher }: 
           </div>
         ))}
       </div>
-    </RegiaoRolavel>
+    </div>
   );
 }

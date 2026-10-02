@@ -151,6 +151,8 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
   const previa = useRef<ControleDaPrevia | null>(null);
   const [selecao, setSelecao] = useState<string[]>([]);
   const [px, setPx] = useEstadoDaTela<number>(`mesa-edicao:editor:zoom:${clientId}`, 40, { validar: (v) => typeof v === "number" && v > 0 });
+  // Vídeo grande (02/10): esconde as laterais; Esc volta.
+  const [ampliada, setAmpliada] = useState(false);
   const [aba, setAba] = useEstadoDaTela<AbaEsquerda>(`mesa-edicao:editor:aba2:${clientId}`, "ia", { validar: (v) => ABAS_COM_AJUSTES.some((a) => a.valor === v) });
   const [abaDireita, setAbaDireita] = useEstadoDaTela<AbaDireita>(`mesa-edicao:editor:lado:${clientId}`, "ajustes", { validar: (v) => v === "ajustes" || v === "agente" });
   const [geracao, setGeracao] = useState<PedidoDeGeracao>({ tipo: "angulo_gerar", clipe: null });
@@ -272,6 +274,10 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
       if (ctrl && (k === "y" || k === "Y")) {
         e.preventDefault();
         setH((x) => refazer(x));
+        return;
+      }
+      if (k === "Escape" && ampliada) {
+        setAmpliada(false);
         return;
       }
       if (ctrl) return;
@@ -538,7 +544,9 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
       <div
         className={juntar(
           "grid min-h-0 min-w-0 gap-3",
-          !agenteNaLateral
+          ampliada
+            ? "grid-cols-1"
+            : !agenteNaLateral
             ? "lg:grid-cols-[340px_minmax(0,1fr)_300px] xl:grid-cols-[380px_minmax(0,1fr)_340px] desk:grid-cols-[420px_minmax(0,1fr)_380px]"
             : ajustesNaEsquerda
               ? "lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)] desk:grid-cols-[400px_minmax(0,1fr)]"
@@ -546,7 +554,7 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
         )}
         data-agente-na-lateral={agenteNaLateral ? "" : undefined}
       >
-        <div className="flex min-h-0 min-w-0 gap-2">
+        <div className={juntar("flex min-h-0 min-w-0 gap-2", ampliada && "hidden")}>
           <TrilhoDeFerramentas ferramentas={abasDaEsquerda} valor={abaVisivel} onEscolher={(v) => setAba(v as AbaEsquerda)} />
           <div className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-border pl-2" role="tabpanel" aria-label={rotuloDaAba}>
             <div className="flex min-w-0 items-center gap-1.5">
@@ -555,7 +563,7 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
               </h3>
               {descricaoDaAba && <AjudaRecolhida rotulo={`O que é ${rotuloDaAba}?`}>{descricaoDaAba}</AjudaRecolhida>}
             </div>
-            <RegiaoRolavel modo="sempre" className="mt-2 min-h-0 flex-1 pr-1" memoria={`mesa-edicao:editor:rolagem:${abaVisivel}:${clientId}`}>
+            <RegiaoRolavel modo="sempre" className="scrollbar-hidden mt-2 min-h-0 flex-1" memoria={`mesa-edicao:editor:rolagem:${abaVisivel}:${clientId}`}>
               {painelEsquerdo}
             </RegiaoRolavel>
           </div>
@@ -563,14 +571,14 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
         <div className="flex min-h-0 min-w-0 flex-col">
           {barra}
           <div className="mt-2 min-h-0 flex-1">
-            <Previa ref={previa} projeto={projeto} urls={urls} relogio={relogio} />
+            <Previa ref={previa} projeto={projeto} urls={urls} relogio={relogio} ampliada={ampliada} onAmpliar={() => setAmpliada((x) => !x)} />
           </div>
         </div>
-        {agenteNaLateral ? (
+        {ampliada ? null : agenteNaLateral ? (
           !ajustesNaEsquerda && (
             <div className="flex min-h-0 min-w-0 flex-col">
               <p className={juntar(texto.rotulo, "mb-2")}>Ajustes</p>
-              <RegiaoRolavel modo="sempre" className="min-h-0 flex-1 pr-1">
+              <RegiaoRolavel modo="sempre" className="scrollbar-hidden min-h-0 flex-1">
                 {inspector}
               </RegiaoRolavel>
             </div>
@@ -589,7 +597,7 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
             />
             <div className="mt-2 flex min-h-0 flex-1 flex-col">
               {abaDireita === "ajustes" ? (
-                <RegiaoRolavel modo="sempre" className="pr-1">
+                <RegiaoRolavel modo="sempre" className="scrollbar-hidden">
                   {inspector}
                 </RegiaoRolavel>
               ) : (

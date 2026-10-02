@@ -161,8 +161,18 @@ const RegiaoRolavel = forwardRef<
     window.addEventListener("resize", medir);
     let obs: MutationObserver | null = null;
     const el = interno.current;
+    // Uma medida por quadro no máximo: o editor muda o DOM várias vezes por segundo e cada medida força layout (02/10).
+    let quadro: number | null = null;
+    const agendar = () => {
+      if (quadro !== null) return;
+      const raf = typeof window.requestAnimationFrame === "function" ? window.requestAnimationFrame.bind(window) : (f: () => void) => window.setTimeout(f, 16);
+      quadro = raf(() => {
+        quadro = null;
+        medir();
+      }) as unknown as number;
+    };
     if (el && typeof MutationObserver !== "undefined") {
-      obs = new MutationObserver(() => medir());
+      obs = new MutationObserver(agendar);
       obs.observe(el, { childList: true, subtree: true });
     }
     const t = window.setTimeout(medir, 400);
@@ -170,6 +180,10 @@ const RegiaoRolavel = forwardRef<
       window.removeEventListener("resize", medir);
       if (obs) obs.disconnect();
       window.clearTimeout(t);
+      if (quadro !== null) {
+        if (typeof window.cancelAnimationFrame === "function") window.cancelAnimationFrame(quadro);
+        else window.clearTimeout(quadro);
+      }
     };
   }, [medir, sombras]);
 
