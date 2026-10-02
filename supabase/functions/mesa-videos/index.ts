@@ -56,6 +56,13 @@
  * - Troca de cenário com a pessoa fixa (frente TCN, 01/10; cenario.ts, SQL 20260930327000):
  *   cenario_amostra, cenario_gerar, cenario_status, cenario_inserido, cenario_descartar; o cron
  *   gerar_coletar também anda as trocas em curso.
+ * - Mesa Edição (02/10; edicao.ts e tratamento.ts, SQL 20261002160000):
+ *   entrada_organizar_propor (um vídeo ou vários clipes, pastas, variantes, Jev nos pares em dúvida;
+ *   confirma pelo executar_acao_agente), workspace_espelho_propor/confirmar/desfazer (a mesma
+ *   organização no Workspace, com a sessão de quem chamou, sem copiar), final_legenda_gerar
+ *   (SRT/VTT do corte final ao lado do vídeo), final_legenda_versao (versão com a legenda gravada),
+ *   tratamento_amostra/final/status/descartar (tirar a legenda gravada e melhorar a qualidade); o
+ *   cron gerar_coletar também anda os tratamentos em curso.
  *
  * Sem travessão.
  */
@@ -178,6 +185,10 @@ import {
   templateArquivar,
   templateSalvar,
 } from "./diretor.ts";
+// Mesa Edição (02/10): organizar a Entrada, espelhar no Workspace, legenda do vídeo pronto e tratar vídeo.
+import { entradaOrganizarPropor, finalLegendaGerar, lerFinal, linhasDoCorpo, workspaceEspelhoConfirmar, workspaceEspelhoDesfazer, workspaceEspelhoPropor } from "./edicao.ts";
+import { projetoComLegenda } from "./modulos/legenda-do-final.ts";
+import { tratamentoAmostra, tratamentoDescartar, tratamentoFinal, tratamentosColetar, tratamentoStatus } from "./tratamento.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
@@ -1263,6 +1274,33 @@ async function motoresSincronizarDaEquipe(ch: Chamador) {
   return await motoresSincronizar(baseDa(ch));
 }
 
+/**
+ * A versão com a legenda gravada (02/10): a mesma edição do vídeo pronto com a
+ * trilha de legenda preenchida, registrada como a próxima versão do mesmo
+ * vídeo. A tela pede o render dessa versão (editor-video render_pedir) e o
+ * worker grava a legenda como sempre.
+ */
+async function finalLegendaVersao(ch: Chamador, corpo: Record<string, unknown>) {
+  const f = await lerFinal(baseDa(ch), idDe(corpo.arquivo_id, "arquivo_id"));
+  if (!f.projeto) throw new ErroHttp(409, "sem_projeto", "Este vídeo não saiu de uma edição do painel: a legenda gravada sai pelo editor.");
+  if (f.janela) throw new ErroHttp(409, "e_amostra", "Esta é uma amostra. Grave a legenda no vídeo inteiro.");
+  const linhas = linhasDoCorpo(corpo.linhas, f.arquivo.duracao_s);
+  if (!linhas.length) throw new ErroHttp(400, "sem_linhas", "Gere a legenda antes de gravar no vídeo.");
+  const comLegenda = projetoComLegenda(f.projeto, linhas, corpo.estilo === "caixa" ? "caixa" : "simples", `lg${Date.now().toString(36)}`);
+  let titulo = f.arquivo.nome.replace(/\s*\((?:render|amostra)[^)]*\)\s*$/i, "").replace(/\s+v\d+$/i, "").trim() || "Vídeo";
+  let videoId: string | null = null;
+  let roteiroId: string | null = null;
+  if (f.versao_id) {
+    const v = await lerVersao(f.versao_id).catch(() => null);
+    if (v && v.client_id === f.arquivo.client_id) {
+      titulo = v.titulo;
+      videoId = v.video_id;
+      roteiroId = v.roteiro_id;
+    }
+  }
+  return versaoRegistrar(ch, { client_id: f.arquivo.client_id, video_id: videoId, titulo, roteiro_id: roteiroId, projeto: comLegenda, nota: "Com a legenda gravada no vídeo (gerador de legenda)." });
+}
+
 // ------------------------------------------------------------------ aprendizado (AG2, 29/09)
 
 // "Esquecer" e "Guardar como regra": o diretor e o agente da Mesa Vídeos gravam na mesa "video";
@@ -1340,6 +1378,20 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   cenario_status: comFolego(cenarioStatus),
   cenario_inserido: direto(cenarioInserido),
   cenario_descartar: direto(cenarioDescartar),
+  // Mesa Edição (02/10): organizar a Entrada (um vídeo ou vários, pastas, variantes; Jev nos clipes em dúvida).
+  entrada_organizar_propor: comFolego(entradaOrganizarPropor),
+  // Espelho no Workspace: com a sessão de quem chamou (as regras do Workspace valem); nunca copia nem apaga.
+  workspace_espelho_propor: (ch, corpo) => workspaceEspelhoPropor(baseDa(ch), ch.doChamador, corpo),
+  workspace_espelho_confirmar: (ch, corpo) => workspaceEspelhoConfirmar(baseDa(ch), ch.doChamador, corpo),
+  workspace_espelho_desfazer: (ch, corpo) => workspaceEspelhoDesfazer(baseDa(ch), ch.doChamador, corpo),
+  // Gerador de legenda do vídeo pronto (SRT e VTT ao lado do vídeo) e a versão com a legenda gravada.
+  final_legenda_gerar: direto(finalLegendaGerar),
+  final_legenda_versao: finalLegendaVersao,
+  // Tratar vídeo: tirar a legenda gravada e melhorar a qualidade (amostra, comparar, vídeo inteiro).
+  tratamento_amostra: comFolego(tratamentoAmostra),
+  tratamento_final: comFolego(tratamentoFinal),
+  tratamento_status: comFolego(tratamentoStatus),
+  tratamento_descartar: direto(tratamentoDescartar),
 };
 
 Deno.serve(async (req) => {
@@ -1367,8 +1419,15 @@ Deno.serve(async (req) => {
         } catch (e) {
           trocas = { erro: e instanceof Error ? e.message.slice(0, 200) : "falhou" };
         }
+        // 02/10: e os tratamentos de vídeo em curso (tirar legenda, melhorar qualidade).
+        let tratamentos: Record<string, unknown> = {};
+        try {
+          tratamentos = await tratamentosColetar(baseDoCron);
+        } catch (e) {
+          tratamentos = { erro: e instanceof Error ? e.message.slice(0, 200) : "falhou" };
+        }
         const corpoDosPedidos = await pedidos.json().catch(() => ({}));
-        return json({ ...corpoDosPedidos, trocas_de_cenario: trocas }, pedidos.status);
+        return json({ ...corpoDosPedidos, trocas_de_cenario: trocas, tratamentos }, pedidos.status);
       }
       if (acaoDoCron !== "motores_sincronizar") return json({ error: "nao_autorizado", mensagem: "O cron só sincroniza o catálogo e coleta os pedidos." }, 403);
       return await motoresSincronizar(baseDoCron);

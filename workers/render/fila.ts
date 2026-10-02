@@ -15,7 +15,9 @@ export interface PedidoDoWorker {
   motion_id?: string | null;
   /** Frente TCN: a troca de cenário (preparar o trecho e compor a final). */
   cenario_id?: string | null;
-  tipo: "render_final" | "amostra" | "onda" | "cena_hf" | "batidas" | "cenario";
+  /** Mesa Edição (02/10): tratar vídeo (tirar a legenda gravada, melhorar a qualidade). */
+  tratamento_id?: string | null;
+  tipo: "render_final" | "amostra" | "onda" | "cena_hf" | "batidas" | "cenario" | "tratamento";
   projeto: Record<string, unknown> | null;
   revisao: number | null;
   entrada: Record<string, unknown>;
