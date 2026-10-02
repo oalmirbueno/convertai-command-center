@@ -103,10 +103,11 @@ export function useEntradaDasTrocas(o: { clientId: string; versaoId: string; pro
         const p = projetoRef.current;
         o.onOps(opsParaInserir(p, item, ondeEntra(p, t), 0, { tipo: "cena", ref: `cenario:${t.id.slice(0, 8)}` }), "Cenário novo");
         toast.success("Cenário novo na linha do tempo.", { action: { label: "Desfazer", onClick: () => o.desfazer() } });
+        // Só marca como inserida quando entrou de verdade (02/10: marcava mesmo quando a inserção falhava).
+        void chamarMesaVideos({ acao: "cenario_inserido", cenario_id: t.id }).catch(() => undefined);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "O cenário novo não entrou na linha do tempo. Ele está na Mídia.");
+        toast.error(`${e instanceof Error ? e.message : "O cenário novo não entrou na linha do tempo."} Use "Pôr na linha do tempo" na troca de cenário.`);
       }
-      void chamarMesaVideos({ acao: "cenario_inserido", cenario_id: t.id }).catch(() => undefined);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q.data, o.versaoId]);
@@ -185,12 +186,15 @@ export default function PainelTrocaDeCenario({
   selecao,
   versaoId,
   irParaTempo,
+  onOps,
 }: {
   projeto: ProjetoDeEdicao;
   urls: Record<string, string>;
   selecao: string[];
   versaoId: string;
   irParaTempo: (s: number) => void;
+  /** Pôr na linha do tempo à mão a troca pronta que não entrou sozinha. */
+  onOps?: (ops: Operacao[], rotulo: string) => void;
 }) {
   const { clientId } = useMesa();
   const queryClient = useQueryClient();
@@ -432,7 +436,7 @@ export default function PainelTrocaDeCenario({
         }}
       />
 
-      {atual && <TrocaAtual troca={atual} escolha={escolha} setEscolha={setEscolha} qualidade={qualidade} layout={layout} atualizar={atualizar} irParaTempo={irParaTempo} projeto={projeto} />}
+      {atual && <TrocaAtual troca={atual} escolha={escolha} setEscolha={setEscolha} qualidade={qualidade} layout={layout} atualizar={atualizar} irParaTempo={irParaTempo} projeto={projeto} onOps={onOps} />}
 
       {trocas.length > 1 && (
         <div className="space-y-1">
@@ -462,6 +466,7 @@ function TrocaAtual({
   atualizar,
   irParaTempo,
   projeto,
+  onOps,
 }: {
   troca: TrocaNaTela;
   escolha: number;
@@ -471,6 +476,7 @@ function TrocaAtual({
   atualizar: (t: TrocaNaTela) => void;
   irParaTempo: (s: number) => void;
   projeto: ProjetoDeEdicao;
+  onOps?: (ops: Operacao[], rotulo: string) => void;
 }) {
   const t = troca;
   const corpoDaFinal = (): Record<string, unknown> => ({ acao: "cenario_gerar", cenario_id: t.id, escolha, qualidade, layout });
@@ -478,6 +484,17 @@ function TrocaAtual({
   const idDoResultado = t.resultado ? t.resultado.id : "";
   const clipeNaLinha = idDoResultado ? projeto.trilhas.reduce<{ inicio_s: number } | null>((achado, tr) => achado || tr.clipes.find((c) => !!c.fonte && !!projeto.fontes[c.fonte] && projeto.fontes[c.fonte].arquivo_id === idDoResultado) || null, null) : null;
   const naLinha = !!clipeNaLinha;
+  const porNaLinha = () => {
+    const item = itemDoResultado(t);
+    if (!item || !onOps) return;
+    try {
+      onOps(opsParaInserir(projeto, item, ondeEntra(projeto, t), 0, { tipo: "cena", ref: `cenario:${t.id.slice(0, 8)}` }), "Cenário novo");
+      toast.success("Cenário novo na linha do tempo.");
+      void chamarMesaVideos({ acao: "cenario_inserido", cenario_id: t.id }).catch(() => undefined);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não deu para pôr na linha do tempo.");
+    }
+  };
   return (
     <div className="space-y-2 border-t border-border pt-3" data-troca={t.id} data-estado-da-troca={t.estado}>
       <div className="flex min-w-0 items-center">
@@ -540,7 +557,12 @@ function TrocaAtual({
       {t.estado === "pronto" && (
         <p className="flex items-center text-[12px]" data-pronta="">
           <Check className="mr-1.5 h-3.5 w-3.5 text-primary" />
-          {naLinha ? "Na linha do tempo." : "Pronto. Entra na linha do tempo em instantes (também está na Mídia)."}
+          {naLinha ? "Na linha do tempo." : "Pronto (também está na Mídia)."}
+          {!naLinha && onOps && (
+            <button type="button" className="ml-1.5 font-medium text-primary underline-offset-2 hover:underline" onClick={porNaLinha} data-por-na-linha="">
+              Pôr na linha do tempo
+            </button>
+          )}
           {naLinha && (
             <button type="button" className="ml-1.5 underline-offset-2 hover:underline" onClick={() => clipeNaLinha && irParaTempo(clipeNaLinha.inicio_s)}>
               Ver

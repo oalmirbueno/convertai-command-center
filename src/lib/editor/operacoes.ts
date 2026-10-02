@@ -272,7 +272,11 @@ function inserir(p: ProjetoDeEdicao, o: Extract<Operacao, { op: "inserir" }>): P
   const dur = duracaoDoClipe(clipe);
   let clipes = trilha.clipes;
   if (o.empurrar) {
-    clipes = clipes.map((x) => (x.inicio_s >= clipe.inicio_s - 1e-6 ? { ...x, inicio_s: noQuadro(x.inicio_s + dur, p.fps) } : x));
+    // Empurra por quadros inteiros, para cima: um clipe de 2,133 s a 25 fps empurra 54 quadros (2,16 s).
+    // Arredondar o empurrão para o quadro mais perto deixava 1 quadro sobreposto e a inserção falhava (02/10).
+    const fps = p.fps > 0 ? p.fps : 25;
+    const passo = Math.ceil(dur * fps - 1e-6) / fps;
+    clipes = clipes.map((x) => (x.inicio_s >= clipe.inicio_s - 1e-6 ? { ...x, inicio_s: noQuadro(x.inicio_s + passo, p.fps) } : x));
   }
   const provisoria = { ...trilha, clipes };
   if (colide(provisoria, clipe.inicio_s, fimDoClipe(clipe))) throw new ErroDaOperacao("Ali já tem outro clipe.");

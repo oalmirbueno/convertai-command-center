@@ -465,7 +465,7 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
         {(cursor) => <PainelDeGeracao projeto={projeto} urls={urls} urlsExtras={urls} pedido={geracao} selecao={selecao} cursor={cursor} onOps={aplicarOps} />}
       </ComCursor>
     ) : abaVisivel === "cenario" ? (
-      <PainelTrocaDeCenario projeto={projeto} urls={urls} selecao={selecao} versaoId={versaoId} irParaTempo={ctx.irParaTempo} />
+      <PainelTrocaDeCenario projeto={projeto} urls={urls} selecao={selecao} versaoId={versaoId} irParaTempo={ctx.irParaTempo} onOps={aplicarOps} />
     ) : abaVisivel === "timestamp" ? (
       <PainelTimestamp projeto={projeto} urls={urls} onAplicarProjeto={aplicarProjeto} />
     ) : abaVisivel === "ajustes" ? (
