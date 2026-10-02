@@ -12,6 +12,7 @@ import { edicaoCompletaDoAgente } from "@/lib/editor/ferramentasDoServidor";
 import { planoDoDiretor } from "@/lib/editor/motion/diretor";
 import { trechosChave } from "@/lib/editor/skills/palavrasChave";
 import { checklistDeEngajamento } from "@/lib/editor/engajamento";
+import { CANDIDATOS_DO_AGENTE_EDITOR, modeloPadraoDoEditor } from "@/lib/mesa/modelo-por-papel";
 import { AGORA_SINTETICO, falaSintetica, projetoTalkingHead } from "./fixtures/talkingHeadSintetico";
 
 /**
@@ -284,5 +285,19 @@ describe("câmera com motivo, motion na marca e checklist de engajamento", () =>
     expect(c.cta).toBe(true);
     expect(c.ok).toBe(true);
     expect(r.engajamento).toEqual(c.linhas);
+  });
+});
+
+// ------------------------------------------------------------------ modelo do agente editor
+
+describe("modelo padrão do agente editor", () => {
+  it("forte por padrão (Sonnet 5.5, depois Sol 6.1, depois Opus 5.5), nunca o mais barato; o dono continua escolhendo", () => {
+    const luna = { id: "openrouter:openai/gpt-6-luna", ativo: true };
+    const sonnet = { id: "openrouter:anthropic/claude-sonnet-5.5", ativo: true };
+    const sol = { id: "openrouter:openai/gpt-6.1-sol", ativo: true };
+    expect(modeloPadraoDoEditor([luna, sol, sonnet])).toBe(sonnet.id);
+    expect(modeloPadraoDoEditor([luna, sol, { ...sonnet, ativo: false }])).toBe(sol.id);
+    expect(modeloPadraoDoEditor([luna])).toBeNull();
+    expect(CANDIDATOS_DO_AGENTE_EDITOR.some((x) => /luna|flash/.test(x))).toBe(false);
   });
 });

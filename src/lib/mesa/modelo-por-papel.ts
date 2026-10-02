@@ -202,6 +202,26 @@ export const RECOMENDACOES_POR_PAPEL: RecomendacaoDoPapel[] = [
   },
 ];
 
+/**
+ * Agente editor da Mesa Edição (02/10, auditoria: "não é inteligente, edita
+ * genérico"; o padrão caía no mais barato da lista, o GPT-6 Luna). O editor
+ * decide corte, ritmo, câmera e motion em vários passos com ferramentas: vale
+ * um modelo forte. Primeiro o Claude Sonnet 5.5 (OpenRouter ou direto pela
+ * Anthropic), depois o GPT-6.1 Sol, depois o Opus 5.5. O seletor continua
+ * com o dono, com o custo antes de mandar; isto só escolhe o padrão quando
+ * ele ainda não escolheu.
+ */
+export const CANDIDATOS_DO_AGENTE_EDITOR: string[] = [SONNET_55, SONNET_55_DIRETO, SOL_61, SOL_61_DIRETO, OPUS_55, OPUS_55_DIRETO];
+
+/** O padrão do agente editor entre os modelos ligados (null = nenhum candidato ligado). */
+export function modeloPadraoDoEditor(modelos: { id: string; ativo?: boolean | null; disponivel?: boolean | null }[]): string | null {
+  for (const id of CANDIDATOS_DO_AGENTE_EDITOR) {
+    const m = modelos.find((x) => x.id === id);
+    if (m && m.ativo !== false && m.disponivel !== false) return m.id;
+  }
+  return null;
+}
+
 export type LinhaParaRecomendar = {
   id: string;
   tipo: string;

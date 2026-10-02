@@ -26,6 +26,7 @@ import { LOOKS } from "@/lib/editor/cor";
 import type { ControleDePropostas } from "./PainelDeSkills";
 import { modelosDoAgente } from "./AgenteEditor";
 import { useMarcaDoEditor } from "./marcaDoEditor";
+import { modeloPadraoDoEditor } from "@/lib/mesa/modelo-por-papel";
 
 /**
  * Editar com IA (frente EDT, rodada 2): uma instrução monta a edição inteira
@@ -93,7 +94,8 @@ export default function PainelEditarComIA({
   const projetoRef = useRef(projeto);
   projetoRef.current = projeto;
 
-  const modelo = modelos.find((m) => m.id === modeloId) || modelos.find((m) => (m.padrao_para || []).indexOf("diretor_arte") >= 0) || modelos[0] || null;
+  const padraoDoEditor = modeloPadraoDoEditor(modelos);
+  const modelo = modelos.find((m) => m.id === modeloId) || modelos.find((m) => m.id === padraoDoEditor) || modelos.find((m) => (m.padrao_para || []).indexOf("diretor_arte") >= 0) || modelos[modelos.length - 1] || null;
   const acervo = useMemo(() => {
     const itens: ItemParaBroll[] = ((arquivosQ.data && arquivosQ.data.arquivos) || [])
       .filter((a) => a.estado !== "arquivado")

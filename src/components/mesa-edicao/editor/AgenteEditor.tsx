@@ -48,6 +48,7 @@ import { mensagemFinalDoAgente, pedidoDeEdicaoCompleta } from "@/lib/editor/agen
 import { mensagemDoQueMudou } from "@/lib/editor/relatorio";
 import { corDaPaleta, useMarcaDoEditor } from "./marcaDoEditor";
 import { pedirPainel } from "./ponteDoAgente";
+import { modeloPadraoDoEditor } from "@/lib/mesa/modelo-por-papel";
 
 /**
  * Agente editor (frente V-B; frente Q, 26/09: virou a lateral fixa da etapa
@@ -426,7 +427,9 @@ export default function AgenteEditor({
   maquinaDesligadaRef.current = !!filaDeRender.worker && filaDeRender.worker.situacao !== "ligado";
   const quandoAMaquinaLigar = " A máquina da agência está desligada: o pedido espera na fila e roda quando ela ligar.";
 
-  const modelo = modelos.find((m) => m.id === escolha.modelo) || modelos.find((m) => (m.padrao_para || []).indexOf("diretor_arte") >= 0) || modelos[0] || null;
+  // 02/10 (auditoria): sem escolha do dono, um modelo forte (Sonnet 5.5, Sol 6.1, Opus 5.5), nunca o mais barato da lista.
+  const padraoDoEditor = modeloPadraoDoEditor(modelos);
+  const modelo = modelos.find((m) => m.id === escolha.modelo) || modelos.find((m) => m.id === padraoDoEditor) || modelos.find((m) => (m.padrao_para || []).indexOf("diretor_arte") >= 0) || modelos[modelos.length - 1] || null;
   const raciocinios = (modelo && modelo.raciocinio) || [];
   const raciocinio = raciocinios.indexOf(escolha.raciocinio) >= 0 ? escolha.raciocinio : "";
   const contexto = useMemo(() => (projeto ? contextoDoAgente(projeto) : ""), [projeto]);
