@@ -1,7 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Check, ImageIcon, Loader2, Upload, Wand2 } from "lucide-react";
 import { toast } from "sonner";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useMesa, useMesaOpcional } from "@/components/mesa/MesaContexto";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
@@ -70,15 +69,24 @@ export function BotaoDeGerar({
       <span className={juntar(texto.auxiliar, "mr-3 min-w-0 flex-1 truncate")} title={motivo || custo.detalhe}>
         {motivo || (semPreco ? "Sem preço conferido: não gera." : custo.detalhe)}
       </span>
-      <Popover open={aberto} onOpenChange={setAberto}>
-        <PopoverTrigger asChild>
-          <button type="button" className={botao.primario} disabled={bloqueado || fazendo}>
-            {fazendo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : icone || <Wand2 className="mr-1.5 h-3.5 w-3.5" />}
-            {rotulo}
-            <span className="ml-1.5 text-[11.5px] font-normal opacity-80">{textoDoCusto(custo)}</span>
-          </button>
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-72 p-3">
+      {/* 02/10: a confirmação abre no lugar do botão. O balão (Popover) dentro do Canvas com zoom abria fora da tela
+          e o dono via "não gera": o Confirmar estava 234 px acima do topo. */}
+      {!aberto ? (
+        <button type="button" className={botao.primario} disabled={bloqueado || fazendo} onClick={() => setAberto(true)}>
+          {fazendo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : icone || <Wand2 className="mr-1.5 h-3.5 w-3.5" />}
+          {rotulo}
+          <span className="ml-1.5 text-[11.5px] font-normal opacity-80">{textoDoCusto(custo)}</span>
+        </button>
+      ) : (
+        <div
+          className="mt-2 w-full min-w-0 rounded-md border border-primary/40 bg-primary/5 p-3"
+          role="group"
+          aria-label="Confirmar o custo"
+          data-confirmacao-de-custo=""
+          ref={(el) => {
+            if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "nearest" });
+          }}
+        >
           <p className={texto.tituloSecao}>Confirmar o custo</p>
           <p className={juntar(texto.corpo, "mt-1")}>
             {textoDoCusto(custo)} na carteira do cliente{custo.incerto ? " (preço estimado)" : ""}.
@@ -90,13 +98,13 @@ export function BotaoDeGerar({
             <button type="button" className={juntar(botao.discreto, "mr-1")} onClick={() => setAberto(false)} disabled={fazendo}>
               Cancelar
             </button>
-            <button type="button" className={botao.primario} onClick={() => void confirmar()} disabled={fazendo} data-confirmar-custo="">
+            <button type="button" className={botao.primario} onClick={() => void confirmar()} disabled={fazendo} data-confirmar-custo="" autoFocus>
               {fazendo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-              Confirmar
+              {fazendo ? "Enviando" : "Confirmar"}
             </button>
           </div>
-        </PopoverContent>
-      </Popover>
+        </div>
+      )}
     </div>
   );
 }
