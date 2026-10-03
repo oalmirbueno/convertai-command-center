@@ -176,7 +176,8 @@ describe("arte rápida: pedido, Jev e regras fixas", () => {
       { id: CAMP_B, nome: "Dia das Crianças" },
     ]);
     // Frente RO: a foto em Automático leva junto a pergunta do uso (exata ou só o rosto).
-    expect(Object.keys(q.questions).sort()).toEqual(["campanha", "papel_1", "peca", "uso_1"]);
+    // 02/10: quando as palavras não decidem se é produto/app real (pesquisa na web e logo real), o Jev julga na mesma chamada.
+    expect(Object.keys(q.questions).sort()).toEqual(["campanha", "mundo_real", "papel_1", "peca", "uso_1"]);
     expect(q.campanhas).toEqual({ c1: CAMP_A, c2: CAMP_B });
     expect(JSON.stringify(q.questions.campanha.criteria.c1)).toContain("promoção");
     expect(Object.keys(q.questions.peca.criteria)).toEqual(["unica", "carrossel"]);
