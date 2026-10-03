@@ -56,12 +56,15 @@ import {
 } from "../_shared/acoes-do-agente.ts";
 import { blocosDoTexto, FORMATOS_DO_POST, QUADRO_DO_POST, type FormatoDoPost } from "../_shared/direcao-arte.ts";
 import { caminhoDaResposta, caminhoNaArea, pedeParaAbrir, pedeParaLevar } from "../_shared/mapa-do-painel.ts";
+import { fidelidadeValida, ROTULO_DA_FIDELIDADE, type Fidelidade } from "./modulos/fidelidade-do-conteudo.ts";
 
 export const OPERACOES_DO_DIRETOR = [
   "reordenar", "mudar_formato", "trocar_texto", "arquivar_versoes", "refazer",
   // Frente RO, fase 2.
   "mudar_qualidade", "tirar_lamina", "duplicar_lamina", "trocar_logo", "tirar_referencias",
   "ajustar_texto", "variacoes", "entregar", "agendar",
+  // 02/10: lâmina nova com outro texto (não a cópia) e a fidelidade da arte rápida ao post ou ao "Fazer igual".
+  "adicionar_lamina", "mudar_fidelidade",
 ];
 
 /** Operações feitas pela tela, com custo ou para fora do Estúdio: nunca direto (viram passos do plano). */
@@ -271,6 +274,30 @@ export function regrasDoDiretor(t: TrabalhoParaAcoes): Record<string, RegraDaOpe
       },
       trava: travaGeral,
     },
+    // 02/10: lâmina NOVA com o texto em `para` (duplicar_lamina copia o mesmo texto).
+    adicionar_lamina: {
+      rotulo: "lâmina nova",
+      alvos: ["l"],
+      direta: true,
+      para: (bruto) => {
+        const limpo = String(bruto ?? "").replace(/\s*[\u2014\u2013]\s*/g, ", ").replace(/[ \t]+/g, " ").trim().slice(0, 1200);
+        return limpo.replace(/\s/g, "").length >= 3 ? limpo : null;
+      },
+      trava: () => travaGeral() || (continuo ? MOTIVO_CONTINUO_LAMINAS : null) || (ordens.length >= 10 ? "O carrossel já tem 10 lâminas." : null),
+    },
+    // 02/10: Idêntico, Próximo ou Criativo (só na arte rápida); o texto novo vem nas mudanças da mesma resposta.
+    mudar_fidelidade: {
+      rotulo: "mudar a fidelidade",
+      alvos: ["t"],
+      combina: true,
+      direta: true,
+      para: (bruto) => {
+        const f = fidelidadeValida(String(bruto ?? "").trim().toLowerCase().replace("ê", "e").replace("ó", "o").replace("í", "i"));
+        const atual = fidelidadeDoTrabalho(t);
+        return f && f !== atual ? f : null;
+      },
+      trava: () => travaGeral() || (t.direcao.arte_rapida && typeof t.direcao.arte_rapida === "object" ? null : "A fidelidade vale para a arte rápida (post do Instagram ou Fazer igual)."),
+    },
     tirar_referencias: {
       rotulo: "tirar referências",
       combina: true,
@@ -312,6 +339,12 @@ export function regrasDoDiretor(t: TrabalhoParaAcoes): Record<string, RegraDaOpe
 
 export const MOTIVO_CONTINUO_LAMINAS = "No carrossel contínuo a cena atravessa as lâminas: tirar ou duplicar lâmina fica travado.";
 
+/** A fidelidade gravada na arte rápida (02/10), ou null. */
+export function fidelidadeDoTrabalho(t: Pick<TrabalhoParaAcoes, "direcao">): Fidelidade | null {
+  const a = t.direcao.arte_rapida as { fidelidade?: unknown } | undefined;
+  return a && typeof a === "object" ? fidelidadeValida(a.fidelidade) : null;
+}
+
 /**
  * Separa a proposta em duas: o que o diretor faz sem custo (vai direto numa
  * ordem clara, com Desfazer) e os passos com custo ou que saem para o mundo
@@ -339,10 +372,10 @@ export function normalizarAcoesDoDiretor(bruto: unknown, t: TrabalhoParaAcoes, i
     id: id || `estudio-${Date.now().toString(36)}`,
     contexto: { trabalho_id: t.id },
     semDesfazer: (lista) => lista.length > 0 && lista.every((i) => i.operacao === "refazer"),
-    rotuloDoPara: (op, para) => (op === "mudar_formato" && para ? QUADRO_DO_POST[para as FormatoDoPost]?.proporcao ?? null : op === "reordenar" && para ? `nova ordem ${para}` : null),
+    rotuloDoPara: (op, para) => (op === "mudar_formato" && para ? QUADRO_DO_POST[para as FormatoDoPost]?.proporcao ?? null : op === "reordenar" && para ? `nova ordem ${para}` : op === "mudar_fidelidade" && para ? ROTULO_DA_FIDELIDADE[para as Fidelidade] ?? null : op === "adicionar_lamina" && para ? String(para).split("\n")[0].slice(0, 60) : null),
   });
   if (!acao) return null;
-  const soDoTrabalho = ["reordenar", "mudar_formato", "mudar_qualidade", "entregar", "agendar"];
+  const soDoTrabalho = ["reordenar", "mudar_formato", "mudar_qualidade", "entregar", "agendar", "mudar_fidelidade"];
   const temLamina = acao.itens.some((i) => soDoTrabalho.indexOf(i.operacao) < 0);
   if (temLamina && acao.itens.some((i) => i.operacao === "reordenar")) {
     acao.ignorados.push(...acao.itens.filter((i) => i.operacao === "reordenar").map((i) => i.ref));
@@ -350,15 +383,16 @@ export function normalizarAcoesDoDiretor(bruto: unknown, t: TrabalhoParaAcoes, i
   }
   // Frente RO: tirar e duplicar lâmina mudam a numeração; com outra operação de lâmina no mesmo pedido, as
   // referências l1..lN mudariam no meio. Vale uma coisa só: essas duas ficam de fora (a equipe pede de novo).
-  const mexeNaNumeracao = acao.itens.filter((i) => i.operacao === "tirar_lamina" || i.operacao === "duplicar_lamina");
-  const outrasDeLamina = acao.itens.filter((i) => soDoTrabalho.indexOf(i.operacao) < 0 && i.operacao !== "tirar_lamina" && i.operacao !== "duplicar_lamina");
+  const numeracao = ["tirar_lamina", "duplicar_lamina", "adicionar_lamina"];
+  const mexeNaNumeracao = acao.itens.filter((i) => numeracao.indexOf(i.operacao) >= 0);
+  const outrasDeLamina = acao.itens.filter((i) => soDoTrabalho.indexOf(i.operacao) < 0 && numeracao.indexOf(i.operacao) < 0);
   if (mexeNaNumeracao.length && (outrasDeLamina.length || mexeNaNumeracao.length > 1)) {
     acao.ignorados.push(...mexeNaNumeracao.map((i) => i.ref));
     acao.itens = acao.itens.filter((i) => mexeNaNumeracao.indexOf(i) < 0);
   }
   // Troca de texto antes de refazer: a lâmina nova já sai com o texto novo. Tirar e duplicar lâmina mudam a
   // numeração: vão por último entre as sem custo (a ordem das outras já foi aplicada).
-  const peso: Record<string, number> = { aplicar_mudanca: 0, trocar_texto: 0, trocar_logo: 1, tirar_referencias: 1, arquivar_versoes: 1, mudar_qualidade: 2, mudar_formato: 2, reordenar: 3, duplicar_lamina: 4, tirar_lamina: 5, ajustar_texto: 6, refazer: 7, variacoes: 8, entregar: 9, agendar: 10 };
+  const peso: Record<string, number> = { mudar_fidelidade: 0, adicionar_lamina: 4, aplicar_mudanca: 0, trocar_texto: 0, trocar_logo: 1, tirar_referencias: 1, arquivar_versoes: 1, mudar_qualidade: 2, mudar_formato: 2, reordenar: 3, duplicar_lamina: 4, tirar_lamina: 5, ajustar_texto: 6, refazer: 7, variacoes: 8, entregar: 9, agendar: 10 };
   acao.itens.sort((a, b) => (peso[a.operacao] ?? 9) - (peso[b.operacao] ?? 9));
   if (!acao.itens.length && !acao.recusados.length) return null;
   // Só refazer (gerar de novo): não tem volta; a tela avisa antes.
@@ -378,7 +412,9 @@ ${regraDasAcoes({
     refazer: "ref de cada lâmina a gerar de novo pelo caminho de sempre (tem custo, mostrado antes). para vazio.",
     mudar_qualidade: 'ref t1; para "baixa", "media" ou "alta" (qualidade da imagem nas próximas gerações).',
     tirar_lamina: "ref da lâmina a tirar do carrossel (fica guardada; Desfazer devolve). para vazio. Sozinha no pedido.",
-    duplicar_lamina: "ref da lâmina a copiar; a cópia entra logo depois dela, sem arte, para a equipe mudar o texto. para vazio. Sozinha no pedido.",
+    duplicar_lamina: "ref da lâmina a copiar; a cópia (com o MESMO texto) entra logo depois dela, sem arte. Só quando a equipe pede cópia. para vazio. Sozinha no pedido.",
+    adicionar_lamina: "ref da lâmina depois da qual entra uma lâmina NOVA; para com o texto completo dela (outro conteúdo, nunca o da lâmina copiada). Sozinha no pedido.",
+    mudar_fidelidade: 'ref t1; para "identico", "proximo" ou "criativo" (só na arte rápida com post ou Fazer igual). Junto, as mudanças de texto de todas as lâminas nessa fidelidade.',
     trocar_logo: 'ref da lâmina (ou t1 para todas); para "principal", "alternativa" ou "auto" (a que contrasta com o fundo).',
     tirar_referencias: "ref da lâmina; tira as referências escolhidas só para ela (volta a seguir o conjunto). para vazio.",
     ajustar_texto: "ref da lâmina com arte; muda só a área do texto na arte depois de uma mudança de texto ou cor (custo pequeno). para vazio.",
@@ -502,6 +538,30 @@ export function duplicarLaminaDoTrabalho(t: TrabalhoParaAcoes, ordem: number) {
   const cards = t.direcao.cards
     .map((c) => (c.ordem > ordem ? { ...c, ordem: c.ordem + 1 } : c))
     .concat([copia])
+    .map((c) => ({ ...c, funcao: funcaoNaPosicao(c.ordem, total) }))
+    .sort((a, b) => a.ordem - b.ordem);
+  const versoes = t.cards.map((v) => (v.ordem > ordem ? { ...v, ordem: v.ordem + 1 } : v));
+  return { patch: { direcao: { ...t.direcao, cards }, cards: versoes }, desfazer: { ordem: ordem + 1, total_depois: total } };
+}
+
+/**
+ * 02/10: lâmina NOVA depois de `ordem`, com o texto dado (não a cópia): o
+ * layout da lâmina de origem serve de ponto de partida, sem a foto de fundo
+ * dela (a foto não se repete). Desfazer: tirarCopiaDoTrabalho.
+ */
+export function adicionarLaminaNoTrabalho(t: TrabalhoParaAcoes, ordem: number, textoNovo: string) {
+  const card = t.direcao.cards.find((c) => c.ordem === ordem);
+  if (!card) throw new Error(`A lâmina ${ordem} não existe mais.`);
+  const texto = String(textoNovo || "").trim();
+  if (!texto) throw new Error("A lâmina nova precisa de texto.");
+  const total = t.direcao.cards.length + 1;
+  const funcao = funcaoNaPosicao(ordem + 1, total);
+  const fotos = Array.isArray(card.fotos_livres) ? (card.fotos_livres as Array<{ papel?: string }>).filter((f) => f && f.papel !== "fundo") : undefined;
+  const nova: LaminaDoTrabalho = { ...card, ordem: ordem + 1, funcao, texto_exato: texto, blocos: blocosDoTexto(texto, funcao), imagens_ids: [], ...(fotos ? { fotos_livres: fotos } : {}) };
+  delete (nova as Record<string, unknown>).vitrine_de_logos;
+  const cards = t.direcao.cards
+    .map((c) => (c.ordem > ordem ? { ...c, ordem: c.ordem + 1 } : c))
+    .concat([nova])
     .map((c) => ({ ...c, funcao: funcaoNaPosicao(c.ordem, total) }))
     .sort((a, b) => a.ordem - b.ordem);
   const versoes = t.cards.map((v) => (v.ordem > ordem ? { ...v, ordem: v.ordem + 1 } : v));

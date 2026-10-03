@@ -289,6 +289,8 @@ export function textoDoAjusteFiel(
   pedido: string,
   marca: string[],
   confirmados: string[] = [],
+  /** 02/10: reescrita de todo o conteúdo pedida pela equipe: palavras novas valem; só fato novo e o nome da marca saem. */
+  reescrita = false,
 ): { texto: string; removidas: string[] } {
   const base = conjunto([atual, pedido]);
   const fontes: Record<string, true> = {};
@@ -305,7 +307,7 @@ export function textoDoAjusteFiel(
     const ps = palavrasDe(limpa).filter(significativa);
     const soMarca = ehSoNomeDaMarca(limpa, marca);
     const estranhas = ps.filter((p) => !conhecida(p, base.mapa, base.lista) && marca.indexOf(p) < 0);
-    const letrasDoProduto = ps.length > 0 && ps.length <= 2 && estranhas.length === ps.length;
+    const letrasDoProduto = !reescrita && ps.length > 0 && ps.length <= 2 && estranhas.length === ps.length;
     const fatoNovo = fatosDoTexto(limpa).some((f) => !fontes[f.chave]);
     if (soMarca || letrasDoProduto || fatoNovo) {
       removidas.push(limpa);

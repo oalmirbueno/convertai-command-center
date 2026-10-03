@@ -187,7 +187,13 @@ AJUSTE FINO (frente AG, 28/09: o dono pediu um agente que entende o ajuste e faz
 - "Deixa o selo menor", "logo maior", "sobe o texto": tratamento ou zona_texto da lâmina, com a instrução concreta (ex.: "selo da campanha pequeno, cerca de 12% da largura, no canto de baixo"). "Mais minimalista", "mais elegante": estilo (conjunto) ou tratamento (lâmina) com menos elementos e mais respiro, sem mudar texto nem foto.
 - Na dúvida, pergunte UMA coisa só, curta, e não proponha mudança: palavra que não faz sentido aqui (provável erro do ditado por voz, como "select" no lugar de "selo"), ou nome de loja, site, marketplace, marca ou produto que não aparece no trabalho, na marca nem na campanha.
 - Nunca invente preço, desconto, prazo, produto, loja, site ou promessa que não estejam no pedido, no texto atual, na campanha ou na marca. Letras da logo e letras impressas no produto da foto nunca entram no texto_exato.
-- Na resposta, diga em uma frase o que vai mudar e o que fica igual.`;
+- Na resposta, diga em uma frase o que vai mudar e o que fica igual.
+
+OPERAÇÕES DE CONTEÚDO (dono, 02/10: "pedi para mudar todo o conteúdo e ele só acrescentou um card com o mesmo conteúdo")
+- \`operacao_de_conteudo\` diz o que o código leu no pedido. "reescrever_tudo" ("muda todo o conteúdo", "refaz o texto de tudo", "troca o tema"): uma mudança com texto_exato NOVO em CADA lâmina, a mesma quantidade de lâminas; nunca duplicar_lamina, adicionar_lamina nem tirar_lamina. "reescrever_lamina": texto_exato novo só na lâmina citada (ou em foco). "adicionar_lamina": a ação adicionar_lamina com o texto da lâmina nova em para (nunca a cópia). "tirar_lamina" e "reordenar": as ações de mesmo nome.
+- duplicar_lamina copia o MESMO texto: só quando a pessoa pede cópia ou duplicar.
+- \`trabalho.fidelidade\` (arte rápida com post ou "Fazer igual"): Idêntico mantém estrutura, lâminas, gancho e conteúdo da referência em \`trabalho.arte_rapida.conteudo_dos_cards\`; Próximo mantém estrutura e gancho e reescreve na voz do cliente; Criativo muda ângulo, gancho e layout. Com \`fidelidade_pedida\` na mensagem, reescreva todas as lâminas nessa fidelidade.
+- Texto novo sempre específico do nicho do cliente, com exemplo, passo ou situação real, sem clichê e sem fato inventado.`;
 
 // ------------------------------------------------------------------ utilidades
 
@@ -254,7 +260,7 @@ export function pedidoMexeNoTexto(mensagem: string): boolean {
   const m = String(mensagem || "");
   const verbo = /(^|[^a-zà-ú])(mud|troc|troq|reescrev|escrev|corrig|corrij|encurt|diminu|aument|tir|remov|acrescent|coloc|ponh|p[oô]r|ajust|alter|substitu|edit|refa)[a-zà-ú]*/i;
   // Frente AG: "tira o preço", "muda a data", "troca o selo" também mexem no texto escrito na arte.
-  const alvo = /(^|[^a-zà-ú])(textos?|frases?|t[ií]tulos?|headline|palavras?|chamada|cta|subt[ií]tulos?|escrita|copy|ortografia|acentos?|acentua[cç][aã]o|pre[cç]os?|valor(es)?|ofertas?|descontos?|promo[cç][aã]o|datas?|hor[aá]rios?|telefone|whatsapp|endere[cç]o|site|selos?)([^a-zà-ú]|$)/i;
+  const alvo = /(^|[^a-zà-ú])(textos?|frases?|t[ií]tulos?|headline|palavras?|chamada|cta|subt[ií]tulos?|escrita|copy|ortografia|acentos?|acentua[cç][aã]o|pre[cç]os?|valor(es)?|ofertas?|descontos?|promo[cç][aã]o|datas?|hor[aá]rios?|telefone|whatsapp|endere[cç]o|site|selos?|conte[uú]dos?|temas?|assuntos?|roteiro|mensagem)([^a-zà-ú]|$)/i;
   return (verbo.test(m) && alvo.test(m)) || /"[^"]{2,}"|“[^”]{2,}”/.test(m);
 }
 
@@ -281,6 +287,10 @@ export type ContextoDasMudancas = {
    * não ganha fato inventado, letras da logo nem letras lidas do produto.
    */
   fontesDoTexto?: { atual: Record<number, string>; pedido: string; confirmados: string[]; marca: string[] };
+  /** 02/10: a equipe pediu para reescrever o conteúdo (operacoes-de-conteudo.ts): palavras novas valem, fato novo não. */
+  reescrita?: boolean;
+  /** 02/10: teto de mudanças desta resposta (reescrever tudo: uma por lâmina, até 10). Sem ele, MAX_MUDANCAS. */
+  maxMudancas?: number;
 };
 
 const TEXTOS_LIVRES: (keyof CamposDaMudanca)[] = ["conceito", "fio_visual", "estilo", "imagem", "ponto_focal", "fundo", "tratamento", "evitar"];
@@ -304,7 +314,8 @@ export function normalizarMudancas(bruto: unknown, ctx: ContextoDasMudancas): { 
   const ordens = ctx.ordens.slice().sort((a, b) => a - b);
   const paleta = ctx.paleta.map((h) => String(h).toUpperCase());
 
-  for (const item of lista.slice(0, MAX_MUDANCAS * 2)) {
+  const teto = Math.max(1, Math.min(12, ctx.maxMudancas || MAX_MUDANCAS));
+  for (const item of lista.slice(0, teto * 2)) {
     if (!item || typeof item !== "object") continue;
     const alvo: "conjunto" | "lamina" = item.alvo === "lamina" ? "lamina" : "conjunto";
     const ordemBruta = Number(item.ordem);
@@ -372,7 +383,7 @@ export function normalizarMudancas(bruto: unknown, ctx: ContextoDasMudancas): { 
         if (f && ordem !== null) {
           // Frente AG: sem fato inventado, letras da logo ou do produto no texto novo.
           const atual = (f.atual[ordem] || "").trim();
-          const fiel = textoDoAjusteFiel(atual, valor, f.pedido, f.marca, f.confirmados);
+          const fiel = textoDoAjusteFiel(atual, valor, f.pedido, f.marca, f.confirmados, !!ctx.reescrita);
           if (fiel.removidas.length) {
             avisar(`Tirei do texto novo o que não veio do pedido nem do texto atual: ${fiel.removidas.map((r) => `"${r}"`).join(", ")}.`);
           }
@@ -407,7 +418,7 @@ export function normalizarMudancas(bruto: unknown, ctx: ContextoDasMudancas): { 
       campos,
       regerar,
     });
-    if (saida.length >= MAX_MUDANCAS) break;
+    if (saida.length >= teto) break;
   }
   return { mudancas: saida, avisos };
 }
