@@ -182,7 +182,8 @@ describe("arte rápida: pedido, Jev e regras fixas", () => {
     expect(JSON.stringify(q.questions.campanha.criteria.c1)).toContain("promoção");
     expect(Object.keys(q.questions.peca.criteria)).toEqual(["unica", "carrossel"]);
     const tudoDecidido = perguntasDaArteRapida({ ...p, peca: "unica", campanha: null, arquivos: [{ caminho: "x", nome: "x", papel: "foto" }] }, []);
-    expect(Object.keys(tudoDecidido.questions)).toEqual([]);
+    // O "é produto/app real?" vem do texto do pedido (cita um mouse), não das escolhas manuais: continua.
+    expect(Object.keys(tudoDecidido.questions)).toEqual(["mundo_real"]);
   });
 
   it("decide: a equipe vale sobre o Jev; o Jev com confiança; sem o Jev, regra fixa; avisos claros", () => {
