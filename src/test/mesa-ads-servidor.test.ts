@@ -126,7 +126,8 @@ describe("honestidade", () => {
       expect(trecho).toContain("tarefa: TAREFA,");
       // v5: o agente sênior de tráfego tem o sistema próprio (a mesma base inteira + os blocos de conta e estratégia).
       // Frente AG3: o sênior soma as regras que o dono ensinou (blocoDasRegras) depois do sistema próprio.
-      expect(trecho).toMatch(/sistema: (sistemaDoEstrategista\("(angulos|copy|pacote|oferta|conta)"[^\n]*\)|SISTEMA_DO_LEITOR|sistemaDoAgenteSenior\(objetivo\)(?: \+ blocoDasRegras\(regrasEnsinadas\))?),/);
+      // 02/10: o leitor do texto da imagem da referência e a pesquisa do mundo real têm sistema fixo próprio.
+      expect(trecho).toMatch(/sistema: (sistemaDoEstrategista\("(angulos|copy|pacote|oferta|conta)"[^\n]*\)|SISTEMA_DO_LEITOR|SISTEMA_DO_LEITOR_DE_TEXTO|SISTEMA_DA_PESQUISA|sistemaDoAgenteSenior\(objetivo\)(?: \+ blocoDasRegras\(regrasEnsinadas\))?),/);
     }
     const senior = corpoDe(fonte, "sistemaDoAgenteSenior");
     expect(senior).toContain("${CONHECIMENTO_ESTRATEGISTA_ADS}");

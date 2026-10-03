@@ -431,14 +431,17 @@ import {
   blocoDaReplicacao,
   type FidelidadeAds,
   fidelidadeAds,
+  ESQUEMA_TEXTO_DA_REFERENCIA,
   lerTextoDaReferencia,
   ROTULO_DA_FIDELIDADE_ADS,
+  SISTEMA_DO_LEITOR_DE_TEXTO,
   type TextoLido,
   textoLidoDaFicha,
 } from "./modulos/replicar-referencia.ts";
 import {
   blocoDoMundoReal,
   entidadesReais,
+  ESQUEMA_PESQUISA_REAL,
   type LogoReal,
   type MarcaReal,
   mundoRealParaGravar,
@@ -448,6 +451,7 @@ import {
   precisaPesquisar,
   regraDosLogosParaArte,
   resolverLogosReais,
+  SISTEMA_DA_PESQUISA,
 } from "./modulos/mundo-real.ts";
 import {
   cardsComTextoNovo,
@@ -1979,10 +1983,10 @@ async function textoLidoDaReferenciaAds(servico: SupabaseClient, chamador: Chama
       tarefa: TAREFA,
       agente: AGENTE_LEITOR,
       modeloId: modelo.id,
-      sistema: q.sistema,
+      sistema: SISTEMA_DO_LEITOR_DE_TEXTO,
       mensagens: [{ papel: "usuario", conteudo: q.texto, imagens: q.imagens }],
       raciocinio,
-      esquemaJson: q.esquema,
+      esquemaJson: ESQUEMA_TEXTO_DA_REFERENCIA,
       referencia: { tipo: REF_REFERENCIA, id: ref.id },
       criadoPor: chamador.userId,
     });
@@ -2057,11 +2061,11 @@ async function mundoRealDoAssunto(
         tarefa: TAREFA,
         agente: AGENTE_LEITOR,
         modeloId: modelo.id,
-        sistema: q.sistema,
+        sistema: SISTEMA_DA_PESQUISA,
         mensagens: [{ papel: "usuario", conteudo: q.texto }],
         raciocinio,
         pesquisaWeb: true,
-        esquemaJson: q.esquema,
+        esquemaJson: ESQUEMA_PESQUISA_REAL,
         referencia,
         criadoPor: chamador.userId,
       });
@@ -2088,6 +2092,41 @@ function regrasDoMundoRealParaArte(logos: LogoReal[], pesquisa: PesquisaReal | n
     regraDosLogosParaArte(logos),
     pesquisa && pesquisa.nomes_exatos.length ? `TELA DE APP (recrie idêntica, com estes nomes exatos): ${pesquisa.nomes_exatos.join(", ")}.` : "",
   ].filter(Boolean).join("\n\n");
+}
+
+/**
+ * A reescrita ÚNICA das variações reprovadas (02/10): a mesma conversa (o
+ * pedido e a resposta) e o pedido da reescrita, no mesmo esquema. Chamada no
+ * máximo uma vez por pedido (reescreverReprovadas), nunca em laço.
+ */
+async function chamarReescrita(e: {
+  clientId: string;
+  modeloId: string;
+  objetivo: unknown;
+  raciocinio: string | undefined;
+  pedido: string;
+  escritas: Record<string, unknown>[];
+  pedidoDaReescrita: string;
+  /** true: o esquema do refino (copy_variar); false: o da produção e da troca. */
+  variar: boolean;
+  referencia: { tipo: string; id: string };
+  criadoPor: string;
+}): Promise<{ variacoes: Record<string, unknown>[]; custo: number; saldo: number }> {
+  const r = await chamarTexto({
+    timeoutMs: TIMEOUT_TEXTO_ADS_MS,
+    clientId: e.clientId,
+    tarefa: TAREFA,
+    agente: AGENTE,
+    modeloId: e.modeloId,
+    sistema: sistemaDoEstrategista("copy", e.objetivo),
+    mensagens: [{ papel: "usuario", conteudo: e.pedido }, { papel: "agente", conteudo: JSON.stringify({ variacoes: e.escritas }).slice(0, 20000) }, { papel: "usuario", conteudo: e.pedidoDaReescrita }],
+    raciocinio: e.raciocinio,
+    esquemaJson: e.variar ? ESQUEMA_VARIAR : ESQUEMA_COPIES,
+    referencia: e.referencia,
+    criadoPor: e.criadoPor,
+  });
+  const novas = (r.json as Record<string, unknown> | undefined)?.variacoes;
+  return { variacoes: Array.isArray(novas) ? novas as Record<string, unknown>[] : [], custo: r.custoUsd, saldo: r.saldoUsd };
 }
 
 /** Texto inteiro de uma variação bruta (para achar marca citada e conferir). */
@@ -3250,23 +3289,10 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
     const escritas = (Array.isArray(brutas) ? brutas as Record<string, unknown>[] : []).slice(0, escrever);
     // 02/10: conferente anti-genérico em código; as reprovadas vão para UMA reescrita (mesma conversa, uma chamada).
     const revisao = await reescreverReprovadas(async (pedidoDaReescrita) => {
-      const r = await chamarTexto({
-        timeoutMs: TIMEOUT_TEXTO_ADS_MS,
-        clientId: p.client_id,
-        tarefa: TAREFA,
-        agente: AGENTE,
-        modeloId: modelo.id,
-        sistema: sistemaDoEstrategista("copy", objetivo),
-        mensagens: [{ papel: "usuario", conteudo: pedido }, { papel: "agente", conteudo: JSON.stringify({ variacoes: escritas }).slice(0, 20000) }, { papel: "usuario", conteudo: pedidoDaReescrita }],
-        raciocinio,
-        esquemaJson: ESQUEMA_COPIES,
-        referencia: { tipo: REF_PLANO, id: p.id },
-        criadoPor: chamador.userId,
-      });
-      custo += r.custoUsd;
-      saldo = r.saldoUsd;
-      const novas = (r.json as Record<string, unknown> | undefined)?.variacoes;
-      return Array.isArray(novas) ? novas as Record<string, unknown>[] : [];
+      const r = await chamarReescrita({ clientId: p.client_id, modeloId: modelo.id, objetivo, raciocinio, pedido, escritas, pedidoDaReescrita, variar: false, referencia: { tipo: REF_PLANO, id: p.id }, criadoPor: chamador.userId });
+      custo += r.custo;
+      saldo = r.saldo;
+      return r.variacoes;
     }, escritas, fatos, angulosDeVenda);
     if (revisao.erro) avisos.push(`${a.nome}: a reescrita das copies reprovadas falhou; ficaram as primeiras, com aviso.`);
     const variacoes = revisao.variacoes as Record<string, unknown>[];
@@ -3522,22 +3548,20 @@ o_que_mudou: uma frase dizendo a variável que mudou.`;
   const escritas = (((s.json as Record<string, unknown>)?.variacoes as Record<string, unknown>[] | undefined) ?? []).slice(0, qtd);
   // 02/10: conferente anti-genérico em código e UMA reescrita das reprovadas.
   const revisao = await reescreverReprovadas(async (pedidoDaReescrita) => {
-    const r = await chamarTexto({
-      timeoutMs: TIMEOUT_TEXTO_ADS_MS,
+    const r = await chamarReescrita({
       clientId: c.client_id,
-      tarefa: TAREFA,
-      agente: AGENTE,
       modeloId: modelo.id,
-      sistema: sistemaDoEstrategista("copy", objetivoPorId(plano?.estrutura?.objetivo) ?? objetivoPorId((briefing?.objetivo ?? {}).acao)),
-      mensagens: [{ papel: "usuario", conteudo: pedidoDaVariacao }, { papel: "agente", conteudo: JSON.stringify({ variacoes: escritas }).slice(0, 20000) }, { papel: "usuario", conteudo: pedidoDaReescrita }],
+      objetivo: objetivoPorId(plano?.estrutura?.objetivo) ?? objetivoPorId((briefing?.objetivo ?? {}).acao),
       raciocinio,
-      esquemaJson: ESQUEMA_VARIAR,
+      pedido: pedidoDaVariacao,
+      escritas,
+      pedidoDaReescrita,
+      variar: true,
       referencia: { tipo: REF_CRIATIVO, id: c.id },
       criadoPor: chamador.userId,
     });
-    custoExtra += r.custoUsd;
-    const novas = (r.json as Record<string, unknown> | undefined)?.variacoes;
-    return Array.isArray(novas) ? novas as Record<string, unknown>[] : [];
+    custoExtra += r.custo;
+    return r.variacoes;
   }, escritas, fatos, angulosDeVenda);
   if (revisao.erro) avisos.push("A reescrita das variações reprovadas falhou; ficaram as primeiras, com aviso.");
   const brutas = revisao.variacoes as Record<string, unknown>[];
@@ -3709,14 +3733,14 @@ PEDIDO DA EQUIPE: ${pedidoEquipe}
 TAREFA: reescreva TODO o conteúdo das ${n} variação(ões) acima, NO LUGAR: a variação k substitui a variação k (mesma quantidade e mesma ordem; nunca acrescente variação nem card). Conteúdo novo de verdade: outro gancho, outra situação, outro argumento e outra frase da arte; nada de paráfrase do atual nem da mesma ideia com outras palavras. Mantenha o objetivo, a oferta e os formatos de cada variação.
 Para cada variação (variacao = 1, 2, ...): framework, angulo_de_venda, texto_principal (até 125 caracteres), texto_principal_longo, titulo (até 40), descricao, cta_meta, headline_arte (até ${regrasTom.headline_max_palavras} palavras), apoio_arte, cta_arte, gancho_visual, estilo_visual (null para manter) e carrossel: nas variações com cards_do_carrossel, exatamente essa quantidade de cards (tensão, explicação, demonstração, objeção, próximo passo), texto_exato curto e a ilustracao de cada um; nas outras, null.
 Nada de número, depoimento, prazo, preço ou urgência fora dos FATOS.`;
-  const sistema = sistemaDoEstrategista("copy", objetivoPorId(plano?.estrutura?.objetivo) ?? objetivoPorId((briefing?.objetivo ?? {}).acao));
+  const objetivoDaTroca = objetivoPorId(plano?.estrutura?.objetivo) ?? objetivoPorId((briefing?.objetivo ?? {}).acao);
   const s = await chamarTexto({
     timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId,
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modelo.id,
-    sistema,
+    sistema: sistemaDoEstrategista("copy", objetivoDaTroca),
     metodo: await metodoDoEstrategista(servico, "gerar"),
     mensagens: [{ papel: "usuario", conteudo: pedido }],
     raciocinio,
@@ -3731,23 +3755,10 @@ Nada de número, depoimento, prazo, preço ou urgência fora dos FATOS.`;
   if (!escritas.length) throw new ErroHttp(502, "sem_copy", "O estrategista não devolveu o conteúdo novo.", { custo_usd: arred6(custo) });
   if (escritas.length < n) avisos.push(`Vieram ${escritas.length} de ${n} variações; as outras ficam como estão.`);
   const revisao = await reescreverReprovadas(async (pedidoDaReescrita) => {
-    const r = await chamarTexto({
-      timeoutMs: TIMEOUT_TEXTO_ADS_MS,
-      clientId,
-      tarefa: TAREFA,
-      agente: AGENTE,
-      modeloId: modelo.id,
-      sistema,
-      mensagens: [{ papel: "usuario", conteudo: pedido }, { papel: "agente", conteudo: JSON.stringify({ variacoes: escritas }).slice(0, 20000) }, { papel: "usuario", conteudo: pedidoDaReescrita }],
-      raciocinio,
-      esquemaJson: ESQUEMA_COPIES,
-      referencia: cobrarEm,
-      criadoPor: chamador.userId,
-    });
-    custo += r.custoUsd;
-    saldo = r.saldoUsd;
-    const novas = (r.json as Record<string, unknown> | undefined)?.variacoes;
-    return Array.isArray(novas) ? novas as Record<string, unknown>[] : [];
+    const r = await chamarReescrita({ clientId, modeloId: modelo.id, objetivo: objetivoDaTroca, raciocinio, pedido, escritas, pedidoDaReescrita, variar: false, referencia: cobrarEm, criadoPor: chamador.userId });
+    custo += r.custo;
+    saldo = r.saldo;
+    return r.variacoes;
   }, escritas, fatos, angulosDeVenda);
   if (revisao.erro) avisos.push("A reescrita das variações reprovadas falhou; ficaram as primeiras, com aviso.");
   const variacoes = revisao.variacoes as Record<string, unknown>[];
@@ -10485,8 +10496,9 @@ const ACOES_LONGAS = new Set([
   // Frente AD (28/09): a ação da equipe relê antes e depois. gerenciador_ler NÃO entra: leva ~4 s (medido
   // na Verzelo, 93 ms de CPU), tem teto de 20 s na Meta e responde com JSON direto, sem streaming.
   "gerenciador_acao",
-  "referencia_para_estudio",
+  // 02/10: a troca de todo o conteúdo, a leitura do texto da referência e o mundo real chamam IA.
   "criativos_reescrever", "referencia_ler_texto", "mundo_real_ler",
+  "referencia_para_estudio",
 ]);
 
 Deno.serve(async (req) => {
