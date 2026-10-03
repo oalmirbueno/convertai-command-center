@@ -72,6 +72,9 @@ import {
   MIN_LOGOS_PARA_VITRINE,
   pedeVitrinePelaRegra,
 } from "./vitrine-de-logos.ts";
+import { type LeituraDosCards, leituraGravada, leituraParaODiretor, MAX_CARDS_LIDOS } from "./leitura-dos-cards.ts";
+import { type Fidelidade, fidelidadeValida, ROTULO_DA_FIDELIDADE } from "./fidelidade-do-conteudo.ts";
+import { mundoRealPelaRegra, perguntaDoMundoReal } from "./mundo-real.ts";
 
 // ------------------------------------------------------------------ constantes
 
@@ -175,6 +178,8 @@ export interface PostDoPedido {
   autor: string | null;
   legenda: string;
   modo: ModoDoPost;
+  /** 02/10: as imagens do post (caminhos na pasta do cliente) para ler o texto dos cards, em qualquer modo que usa o conteúdo. */
+  imagens?: string[];
 }
 
 /** Vitrine de logos (02/10): o pedido apresenta parceiros e as logos entram numa grade, pelo código. */
@@ -207,6 +212,12 @@ export interface ArteRapida {
   /** 02/10: o post do Instagram do pedido e a vitrine de logos (parceiros). */
   post?: PostDoPedido | null;
   vitrine?: VitrineDaArteRapida | null;
+  /** 02/10: Idêntico, Próximo ou Criativo ao conteúdo de referência (post ou Fazer igual) e o texto lido dos cards. */
+  fidelidade?: Fidelidade | null;
+  fidelidade_por?: QuemDecidiu | null;
+  leitura_dos_cards?: LeituraDosCards | null;
+  /** 02/10: o pedido fala de produto, app, marca ou tela real (pesquisa ligada e logos reais). */
+  mundo_real?: { por: QuemDecidiu; marcas: string[]; tutorial: boolean } | null;
 }
 
 /** Pedido já limpo (o que a função aceita). */
@@ -219,6 +230,8 @@ export interface PedidoDaArteRapida {
   documentos: DocumentoDaArteRapida[];
   laminas: number | null;
   post: PostDoPedido | null;
+  /** 02/10: a fidelidade escolhida na tela (null: o padrão pelo pedido). */
+  fidelidade: Fidelidade | null;
 }
 
 // ------------------------------------------------------------------ leitura
@@ -285,6 +298,20 @@ export function arteRapidaDa(direcao: unknown): ArteRapida | null {
         logos: Math.max(0, Math.round(Number(v.logos) || 0)),
       }
       : null,
+    fidelidade: fidelidadeValida(o.fidelidade),
+    fidelidade_por: o.fidelidade_por === "jev" || o.fidelidade_por === "regra" ? (o.fidelidade_por as QuemDecidiu) : o.fidelidade ? "equipe" : null,
+    leitura_dos_cards: leituraGravada(o.leitura_dos_cards),
+    mundo_real: mundoRealGravado(o.mundo_real),
+  };
+}
+
+function mundoRealGravado(v: unknown): ArteRapida["mundo_real"] {
+  if (!v || typeof v !== "object") return null;
+  const m = v as Record<string, unknown>;
+  return {
+    por: m.por === "jev" ? "jev" : "regra",
+    marcas: (Array.isArray(m.marcas) ? m.marcas : []).map((x) => texto(x, 60)).filter(Boolean).slice(0, 6),
+    tutorial: m.tutorial === true,
   };
 }
 
@@ -336,7 +363,13 @@ export function postDoCorpo(v: unknown): PostDoPedido | null {
   const modo = modoDoPostValido(o.modo);
   if (!c || !modo) return null;
   const autor = typeof o.autor === "string" && /^[A-Za-z0-9._]{1,30}$/.test(o.autor) ? o.autor : null;
-  return { url: `https://www.instagram.com/${c.tipo}/${c.codigo}/`, codigo: c.codigo, autor, legenda: textoLongo(o.legenda, MAX_CHARS_DA_LEGENDA), modo };
+  // 02/10: só imagens da pasta deste post (a função confere ainda que são da pasta do cliente).
+  const imagens = (Array.isArray(o.imagens) ? o.imagens : [])
+    .filter((x): x is string => typeof x === "string" && x.indexOf(`/pedidos/instagram/${c.codigo}/`) > 0 && x.indexOf("..") < 0 && x.length <= 300)
+    .slice(0, MAX_CARDS_LIDOS);
+  const post: PostDoPedido = { url: `https://www.instagram.com/${c.tipo}/${c.codigo}/`, codigo: c.codigo, autor, legenda: textoLongo(o.legenda, MAX_CHARS_DA_LEGENDA), modo };
+  if (imagens.length) post.imagens = imagens;
+  return post;
 }
 
 /** Título curto a partir do pedido: a primeira frase, até 60 caracteres, sem travessão. */
@@ -403,7 +436,12 @@ export function normalizarPedidoDaArteRapida(corpo: Record<string, unknown>, cli
   }
   const n = Number(corpo.laminas);
   const laminas = Number.isInteger(n) && n >= 2 && n <= 10 ? n : null;
-  return { pedido, peca, campanha, arquivos, documentos, laminas, post };
+  // A imagem do post para a leitura dos cards tem que ser da pasta do cliente.
+  if (post && post.imagens) {
+    post.imagens = post.imagens.filter((c) => ehImagemDoPost(clientId, c));
+    if (!post.imagens.length) delete post.imagens;
+  }
+  return { pedido, peca, campanha, arquivos, documentos, laminas, post, fidelidade: fidelidadeValida(corpo.fidelidade) };
 }
 
 // ------------------------------------------------------------------ Jev
@@ -412,6 +450,14 @@ export interface PerguntaDeEscolha {
   type: "choice";
   instructions: unknown;
   criteria: Record<string, unknown>;
+}
+
+/** 02/10: mundo real pela regra ou pelo Jev (Noul em `respostas.mundo_real`). Null: não é. */
+export function decidirMundoReal(p: Pick<PedidoDaArteRapida, "pedido" | "post">, resposta: { noul?: number } | null | undefined, limiar = 0.6): { por: QuemDecidiu; marcas: string[]; tutorial: boolean } | null {
+  const regra = mundoRealPelaRegra([p.pedido, p.post && usaConteudoDoPost(p.post.modo) ? p.post.legenda : ""]);
+  if (regra.real) return { por: "regra", marcas: regra.marcas, tutorial: regra.tutorial };
+  const prob = resposta && typeof resposta.noul === "number" && isFinite(resposta.noul) ? resposta.noul : null;
+  return prob !== null && prob >= limiar ? { por: "jev", marcas: [], tutorial: false } : null;
 }
 
 export interface CampanhaCandidata {
@@ -545,6 +591,10 @@ export function perguntasDaArteRapida(p: PedidoDaArteRapida, campanhas: Campanha
     questions[idUso] = perguntaDoUso({ caminhoDaFoto: `arquivos[${i}]`, nome: a.nome }) as PerguntaDeEscolha;
   });
 
+  // 02/10: o pedido fala de produto, app, marca ou tela real? Só quando as palavras não decidem (com texto para ler).
+  const textoDoPedido = [p.pedido, p.post && usaConteudoDoPost(p.post.modo) ? p.post.legenda : ""].filter(Boolean).join("\n");
+  if (textoDoPedido.trim().length >= 12 && !mundoRealPelaRegra([textoDoPedido]).real) questions.mundo_real = perguntaDoMundoReal() as unknown as PerguntaDeEscolha;
+
   return { state, questions, campanhas: mapaCampanhas, papeis, usos };
 }
 
@@ -561,6 +611,8 @@ export interface RespostaDeEscolha {
   choice?: string;
   confidence?: number;
   probabilities?: Record<string, number>;
+  /** Noul (mundo_real). */
+  noul?: number;
 }
 
 export interface DecisoesDaArteRapida {
@@ -703,7 +755,7 @@ export const INSTRUCOES_DA_ARTE_RAPIDA = `ARTE RÁPIDA (pedido avulso, fora do p
 O PEDIDO DA EQUIPE É A FONTE DA VERDADE (frente AG, 28/09: a arte do mouse pediu "90% off, oferta por tempo limitado, algo bem agressivo, com selo" e a direção escreveu o contrário).
 - Ordem de quem vale: 1) \`item.pedido_avulso.pedido\` (o que a equipe pediu, com as palavras dela); 2) a campanha em \`item.campanha\`; 3) a marca. O que o pedido manda pôr ENTRA na arte (desconto, percentual, prazo, preço, selo, tom agressivo), mesmo que a campanha ou uma regra da marca diga outra coisa; nunca escreva o oposto do pedido. Quando o pedido bater numa regra da marca ou da campanha (ex.: "sem urgência"), siga o pedido e diga o conflito em \`avisos_para_a_equipe\`.
 - Só entra o que está no pedido, nos textos dos arquivos, na campanha escolhida ou na marca: preço, percentual, data, hora, local, loja, site, nome de pessoa, produto, especificação e promessa (frete, parcelamento, garantia, brinde) exatamente como vieram. Nunca invente um dado que falta: deixe de fora e diga em \`avisos_para_a_equipe\` o que faltou.
-- Você não pesquisa na internet: se o pedido pede especificações ou dados que não vieram (ex.: "pesquisa o que esse mouse faz"), não invente; peça em \`avisos_para_a_equipe\` (ex.: "Mande as especificações do mouse para entrarem na arte").
+- Sem o bloco MUNDO REAL nesta mensagem, você não pesquisa na internet: se o pedido pede especificações ou dados que não vieram (ex.: "pesquisa o que esse mouse faz"), não invente; peça em \`avisos_para_a_equipe\` (ex.: "Mande as especificações do mouse para entrarem na arte"). Com o bloco MUNDO REAL, pesquise e cite as fontes.
 - O pedido pode vir do ditado por voz, com palavras trocadas pelo som ("sell" ou "seleo" = selo; "shop" = a loja da marca). Entenda pelo contexto; se uma palavra não fizer sentido, deixe a parte dela de fora e pergunte em \`avisos_para_a_equipe\`. Nome de loja, site ou marketplace que não aparece no pedido escrito com clareza nem no contexto nunca vai para a arte.
 - Peça: \`item.pedido_avulso.peca\` manda. "unica" é exatamente 1 card. "carrossel" é a quantidade que o conteúdo pede (3 a 7) ou \`item.quantidade_de_laminas_pedida\`.
 - Fotos do pedido (códigos F1, F2..., papel "Compor"): fotos reais que entram como estão (Foto exata), nunca refeitas e nunca escurecidas. Para usar uma numa lâmina, ponha o código em imagem_acervo (ex.: "F1") e escreva o layout com o texto na área calma da foto. Toda foto do pedido aparece em alguma lâmina; em arte única, a F1 é a base. Letras impressas no produto da foto (modelo, marca do fabricante) nunca viram texto da arte.
@@ -712,12 +764,13 @@ O PEDIDO DA EQUIPE É A FONTE DA VERDADE (frente AG, 28/09: a arte do mouse pedi
 - Fazer igual (A1...): a arte que a equipe quer reproduzida. Mantenha o layout, a estrutura, a hierarquia e todo o conteúdo dela (textos e informações) e melhore os detalhes: alinhamento, acabamento, legibilidade e a identidade da marca do cliente (fontes, cores, logo). Não invente outra composição.
 - Referência (R1...): INSPIRE, NUNCA COPIE. Use a ideia, a composição ou o clima e recrie com a marca do cliente (cores, fontes, logo, voz); nunca copie texto, logo, marca nem pessoas dela. Exceção: quando o pedido manda fazer igual ("faça exatamente como está aqui", "igual", "do mesmo jeito"), reproduza a referência com fidelidade e melhore os detalhes, como em Fazer igual, sempre com a marca do cliente.
 - Post do Instagram (\`item.pedido_avulso.post_do_instagram\`): post de outro perfil colado pela equipe. Com \`conteudo\`, use a ideia e as informações dele reescritas na voz da marca do cliente (nunca a legenda copiada, nunca o @ nem o nome do autor na arte). As imagens do post (R...) seguem a regra da Referência. Modo "so_conteudo": só o texto vale. Modo "so_referencia": só o visual vale; o texto vem do pedido.
+- Conteúdo dos cards (\`item.pedido_avulso.conteudo_dos_cards\`, 02/10): o texto escrito em cada lâmina da referência (post ou Fazer igual), lido das imagens, com o gancho, o CTA e a estrutura. É o CONTEÚDO da peça, mais forte que a legenda. A \`fidelidade\` diz o quanto pode mudar (bloco FIDELIDADE): fora do Criativo, o gancho da capa fica.
 - Vitrine de logos (\`item.pedido_avulso.vitrine_de_logos\`): a peça apresenta parceiros. As logos (L1...) entram depois, coladas pelo código numa grade organizada; você NÃO desenha nem descreve logo nenhuma e não escreve o nome das empresas. Nas lâminas de \`laminas_com_logos\`, escreva só um título curto (ex.: "Nossos parceiros") e no máximo uma linha de apoio, com o texto no topo, e peça na cena um painel liso e claro na parte de baixo, sem foto, ícone ou objeto. No carrossel, a capa apresenta o tema.
 - Campanha: com \`item.campanha\`, a peça é daquela campanha (tema, cores de apoio e selo) e o selo é desenhado na arte pelo gerador, integrado à composição e com destaque, sem poluir (nunca um carimbo pequeno no canto). O preço e a oferta da campanha entram quando o pedido não disser outra coisa; o que o pedido disser vale sobre a campanha.`;
 
 /** Contexto do pedido para o diretor (vai em item.pedido_avulso). */
 export function pedidoParaODiretor(
-  arte: Pick<ArteRapida, "pedido" | "peca" | "arquivos"> & Partial<Pick<ArteRapida, "post" | "vitrine">>,
+  arte: Pick<ArteRapida, "pedido" | "peca" | "arquivos"> & Partial<Pick<ArteRapida, "post" | "vitrine" | "fidelidade" | "leitura_dos_cards">>,
   documentos: DocumentoDaArteRapida[],
   laminas?: number | null,
 ) {
@@ -727,6 +780,9 @@ export function pedidoParaODiretor(
     imagens: arte.arquivos.map((a) => ({ codigo: a.codigo, papel: ROTULO_DO_PAPEL[a.papel], nome: a.nome })),
     textos_dos_arquivos: documentos.map((d) => ({ nome: d.nome, texto: d.texto })),
   };
+  // 02/10: o texto dos cards da referência e a fidelidade (Idêntico, Próximo ou Criativo).
+  if (arte.leitura_dos_cards) saida.conteudo_dos_cards = leituraParaODiretor(arte.leitura_dos_cards);
+  if (arte.fidelidade) saida.fidelidade = ROTULO_DA_FIDELIDADE[arte.fidelidade];
   const post = arte.post;
   if (post) {
     saida.post_do_instagram = {
@@ -912,6 +968,8 @@ export function corpoDaArteRapida(c: {
   qualidade?: string | null;
   /** 02/10: o post do Instagram lido na tela (link, autor, legenda e modo). */
   post?: PostDoPedido | null;
+  /** 02/10: Idêntico, Próximo ou Criativo (null: o padrão pelo pedido). */
+  fidelidade?: Fidelidade | null;
 }): Record<string, unknown> {
   const corpo: Record<string, unknown> = {
     acao: "rapida_preparar",
@@ -927,7 +985,12 @@ export function corpoDaArteRapida(c: {
   if (c.marcaId) corpo.marca_id = c.marcaId;
   if (c.modeloImagemId) corpo.modelo_imagem_id = c.modeloImagemId;
   if (c.qualidade) corpo.qualidade = c.qualidade;
-  if (c.post) corpo.post_do_instagram = { url: c.post.url, autor: c.post.autor, legenda: c.post.legenda.slice(0, MAX_CHARS_DA_LEGENDA), modo: c.post.modo };
+  if (c.post) {
+    const post: Record<string, unknown> = { url: c.post.url, autor: c.post.autor, legenda: c.post.legenda.slice(0, MAX_CHARS_DA_LEGENDA), modo: c.post.modo };
+    if (c.post.imagens && c.post.imagens.length) post.imagens = c.post.imagens.slice(0, MAX_CARDS_LIDOS);
+    corpo.post_do_instagram = post;
+  }
+  if (c.fidelidade) corpo.fidelidade = c.fidelidade;
   return corpo;
 }
 
