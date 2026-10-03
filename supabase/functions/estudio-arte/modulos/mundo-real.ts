@@ -66,9 +66,12 @@ export const MARCAS_CONHECIDAS: Array<[RegExp, string]> = [
 ];
 
 /** Sinal forte de tela real: configuração de app, toque e clique, versão. */
-const TELA_REAL = /configurac(ao|oes) d[oae]|toque em|clique em|abra o (app|aplicativo)|no (app|aplicativo|celular)\b|atualizac(ao|oes) do (app|sistema)|versao [0-9]/;
-/** Sinal fraco (passo a passo de maquiagem também é passo a passo): só vale com uma marca citada. */
-const TUTORIAL = /como (configurar|ativar|desativar|usar|instalar|mudar|alterar|cadastrar|criar|fazer|baixar|emitir|agendar|liberar|bloquear|conectar|recuperar|limpar)|passo a passo|tutorial/;
+const TELA_REAL = /configurac(ao|oes) d[oae]|toque em|clique em|abra o (app|aplicativo)|atualizac(ao|oes) do (app|sistema)|versao [0-9]/;
+/**
+ * Sinal fraco (passo a passo de maquiagem também é passo a passo): só vale com uma marca citada. Marca sozinha
+ * ("chame no WhatsApp", "siga no Instagram") é CTA, não mundo real: quem decide esse caso é o Jev (arte rápida).
+ */
+const TUTORIAL = /como (configurar|ativar|desativar|usar|instalar|mudar|alterar|cadastrar|criar|fazer|baixar|emitir|agendar|liberar|bloquear|conectar|recuperar|limpar)|passo a passo|tutorial|no (app|aplicativo)\b|configurac/;
 
 export interface PedidoDoMundoReal {
   real: boolean;
@@ -83,7 +86,7 @@ export function mundoRealPelaRegra(textos: Array<string | null | undefined>): Pe
   for (const [re, nome] of MARCAS_CONHECIDAS) if (re.test(s) && marcas.indexOf(nome) < 0) marcas.push(nome);
   const tela = TELA_REAL.test(s);
   const tutorial = tela || (marcas.length > 0 && TUTORIAL.test(s));
-  return { real: tela || marcas.length > 0, tutorial, marcas: marcas.slice(0, 6) };
+  return { real: tutorial, tutorial, marcas: marcas.slice(0, 6) };
 }
 
 /** A pergunta ao Jev (Noul) quando as palavras não decidem: o pedido depende de informação real e atual de um produto, app, marca ou tela? */

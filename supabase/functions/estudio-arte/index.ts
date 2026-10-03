@@ -308,7 +308,59 @@ import {
   separarDoPlano,
   tirarCopiaDoTrabalho,
   tirarLaminaDoTrabalho,
+  // 02/10: lâmina nova com outro texto e a fidelidade da arte rápida.
+  adicionarLaminaNoTrabalho,
 } from "./acoes-do-diretor.ts";
+// 02/10 (dono: "o conteúdo está genérico", "não lê os cards nem puxa o gancho", "Idêntico, Próximo ou Criativo",
+// "pesquisar e usar logos reais", "mudar todo o conteúdo"): leitura dos cards, fidelidade, conteúdo específico,
+// mundo real e as operações de conteúdo da conversa.
+import { lerCardsDoPost, type LeituraDosCards, leituraGravada, textoDaLeitura, VERSAO_DA_LEITURA_DOS_CARDS, ESQUEMA_LEITURA_DOS_CARDS } from "./modulos/leitura-dos-cards.ts";
+import {
+  conferirFidelidade,
+  devolverGanchoNaCapa,
+  estadoDoGancho,
+  type Fidelidade,
+  fidelidadeNaMensagem,
+  fidelidadePadrao,
+  fidelidadeValida,
+  ganchoPeloJev,
+  instrucoesDaFidelidade,
+  laminasPelaFidelidade,
+  perguntaDoGancho,
+  ROTULO_DA_FIDELIDADE,
+} from "./modulos/fidelidade-do-conteudo.ts";
+import { ESQUEMA_REVISAO_DO_CONTEUDO, instrucoesDoConteudo, revisarConteudo } from "./modulos/conteudo-especifico.ts";
+import {
+  AREA_DA_LOGO_REAL,
+  arquivoDoCommons,
+  CAMPOS_DO_MUNDO_REAL,
+  escolherNaBusca,
+  fraseDaLogoReal,
+  hostDoCommonsPermitido,
+  INSTRUCOES_DO_MUNDO_REAL,
+  LIMIAR_DO_MUNDO_REAL,
+  lerInfoDoCommons,
+  type LogoDoCommons,
+  MAX_BYTES_DA_LOGO_REAL,
+  mundoRealPelaRegra,
+  normalizarMarcasReais,
+  notaDasFontes,
+  slugDoSimpleIcons,
+  urlDaBuscaNoCommons,
+  urlDaInfoDoCommons,
+  urlDoSimpleIcons,
+} from "./modulos/mundo-real.ts";
+import {
+  acoesSemMudarQuantidade,
+  blocoDaReescritaTotal,
+  coberturaDaReescrita,
+  ESQUEMA_DA_REESCRITA,
+  INSTRUCOES_DA_REESCRITA,
+  intencaoDeConteudo,
+  mudancasDaReescrita,
+  pedidoDaReescrita,
+  ROTULO_DA_INTENCAO,
+} from "./operacoes-de-conteudo.ts";
 import { AREAS_DO_AGENTE, contextoParaAgente, lerCerebro, resumoParaPrompt } from "../_shared/cerebro-do-cliente.ts";
 import { gravarNoCerebro, resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 // Frente AP (27/09): aprendizado contínuo com as entregas (memória da entrega, números reais, o que funcionou).
@@ -503,6 +555,7 @@ import {
   type CampanhaCandidata,
   comTituloDaArte,
   decidirArteRapida,
+  decidirMundoReal,
   descricaoDoItemDaArteRapida,
   type DocumentoDaArteRapida,
   ehArteRapida,
@@ -526,6 +579,7 @@ import {
   MENSAGEM_DO_POST,
   PostBloqueado,
   UA_DO_INSTAGRAM,
+  usaConteudoDoPost,
 } from "./modulos/post-do-instagram.ts";
 import {
   areaDaVitrine,
@@ -926,6 +980,12 @@ type Direcao = {
    * e nota do Jev) e o que o diretor avisou. Só aviso: nada é gerado de novo.
    */
   conferencia_do_pedido?: { avisos: string[]; nota: number | null; confianca: number | null; em: string } | null;
+  /** 02/10: de onde veio a informação (pesquisa da web, logos reais com licença, SVG oficial). */
+  fontes_da_pesquisa?: Array<{ titulo: string; url: string; tipo: string; licenca?: string | null }> | null;
+  /** 02/10: a direção contra a referência (Idêntico, Próximo ou Criativo): lâminas e gancho. */
+  conferencia_da_fidelidade?: Record<string, unknown> | null;
+  /** 02/10: as lâminas genéricas reescritas pelo redator (uma chamada) e as que ficaram. */
+  conteudo_revisado?: { genericas: number[]; reescritas: number[]; em: string } | null;
   /** Frente AG: pergunta pendente de um ajuste (a resposta "sim" retoma o pedido). */
   duvida_do_ajuste?: DuvidaGuardada | null;
 };
@@ -999,7 +1059,7 @@ function seloDaVersao(v: unknown): { caminho: string; selo_id: string | null } |
 }
 
 /** 02/10: a vitrine de logos de uma lâmina (área no quadro final, as logos e a proporção do quadro). */
-type VitrineNaLamina = { area: Area; logos: LogoDaVitrine[]; proporcao: number; aplicado?: boolean; coladas?: number };
+type VitrineNaLamina = { area: Area; logos: LogoDaVitrine[]; proporcao: number; aplicado?: boolean; coladas?: number; tipo?: "marca_real" };
 
 /** Lê a vitrine gravada numa versão (para o ajuste colar de novo as mesmas logos, na mesma grade). */
 function vitrineDaVersao(v: unknown): VitrineNaLamina | null {
@@ -1007,7 +1067,7 @@ function vitrineDaVersao(v: unknown): VitrineNaLamina | null {
   if (!s || typeof s !== "object") return null;
   const o = s as VitrineNaLamina;
   if (o.aplicado !== true || !o.area || !Array.isArray(o.logos) || !o.logos.length) return null;
-  return { area: o.area, logos: o.logos, proporcao: Number(o.proporcao) > 0 ? Number(o.proporcao) : 0.8 };
+  return { area: o.area, logos: o.logos, proporcao: Number(o.proporcao) > 0 ? Number(o.proporcao) : 0.8, ...(o.tipo === "marca_real" ? { tipo: "marca_real" as const } : {}) };
 }
 
 /**
@@ -3028,8 +3088,10 @@ const ESQUEMA_DIRECAO = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["conceito", "fio_visual", "carrossel_infinito", "cards", "avisos_para_a_equipe"],
+    required: ["conceito", "fio_visual", "carrossel_infinito", "cards", "avisos_para_a_equipe", "marcas_reais", "fontes_da_pesquisa"],
     properties: {
+      // 02/10: marcas de outras empresas na peça (logo colada pelo código) e as fontes da pesquisa (vazios fora do mundo real).
+      ...CAMPOS_DO_MUNDO_REAL,
       conceito: { type: "string" },
       fio_visual: { type: "string" },
       carrossel_infinito: { type: "boolean" },
@@ -3324,6 +3386,12 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
   let reserva: string | null = null;
   // Frente AG: o que o diretor avisou (dado que faltou, conflito resolvido a favor do pedido).
   let avisosDoDiretor: string[] = [];
+  // 02/10: mundo real (pesquisa e logos reais) e o que o diretor devolveu para ele.
+  let mundoReal = false;
+  let marcasCitadas: string[] = [];
+  let regraDoTutorial = false;
+  let brutoDoDiretor: Record<string, any> | null = null;
+  let fontesDaWeb: Array<{ url: string; titulo?: string; title?: string }> = [];
 
   if (modoPedido === "roteiro" && roteiro.length) {
     direcao = direcaoDoRoteiro(roteiro as any, marca, {
@@ -3371,6 +3439,13 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       // Frente H: regras aprendidas (cérebro) e dossiê atual do cliente, numa leitura só.
       cerebroEDossieDoDiretor(clientId).catch((e) => (registrarFalha("estudio-arte: cérebro do diretor não lido", e, { client_id: clientId }), { texto: "", usouCerebro: false })),
     ]);
+    // 02/10: mundo real (produto, app, marca ou tela de outra empresa): a pesquisa liga e as logos vêm do Commons.
+    const leituraDaRapida = rapida ? rapida.gravada.leitura_dos_cards ?? null : null;
+    const fidelidadeDaRapida = rapida ? rapida.gravada.fidelidade ?? null : null;
+    const regraDoMundo = mundoRealPelaRegra([instrucao, rapida ? rapida.gravada.pedido : item.tarefa.title, rapida ? "" : item.tarefa.description, textoDaLeitura(leituraDaRapida), rapida && rapida.gravada.post ? rapida.gravada.post.legenda : ""]);
+    mundoReal = !!(rapida && rapida.gravada.mundo_real) || regraDoMundo.real;
+    regraDoTutorial = regraDoMundo.tutorial || !!(rapida && rapida.gravada.mundo_real && rapida.gravada.mundo_real.tutorial);
+    marcasCitadas = Array.from(new Set([...(rapida && rapida.gravada.mundo_real ? rapida.gravada.mundo_real.marcas : []), ...regraDoMundo.marcas]));
     const contexto = {
       item: {
         titulo: item.tarefa.title,
@@ -3439,16 +3514,19 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       // Base de conhecimento primeiro: prefixo fixo, reaproveitado pelo cache do provedor.
       // As regras aprendidas com o cliente vêm por último: o prefixo fixo continua no cache do provedor.
       // Frente H: base de marketing do diretor (com teto) logo depois da base de design; cérebro e dossiê no fim.
-      sistema: [CONHECIMENTO_DIRETOR, CONHECIMENTO_DA_DIRECAO, prompt, INSTRUCOES_DIRECAO, preferencias.texto].filter(Boolean).join("\n\n"),
+      // 02/10: as regras de conteúdo (específico, do nicho, sem clichê) com o motor de copy da casa, em todo o Estúdio.
+      sistema: [CONHECIMENTO_DIRETOR, CONHECIMENTO_DA_DIRECAO, prompt, INSTRUCOES_DIRECAO, instrucoesDoConteudo(objetivoDaCopy(item.post?.objective ?? (rapida ? rapida.gravada.pedido : item.tarefa.title))), preferencias.texto].filter(Boolean).join("\n\n"),
       // Frente AE: as regras da arte rápida vão na mensagem (o sistema fica igual e segue no cache do provedor).
       mensagens: [{
         papel: "usuario",
-        conteudo: `${rapida ? `${INSTRUCOES_DA_ARTE_RAPIDA}\n\n` : ""}Escreva a direção de arte deste item. Contexto em JSON:\n${JSON.stringify(contexto)}${rapida && rapida.imagens.length ? `\n\nAs imagens anexadas são as do pedido, nomeadas pelo código (${rapida.imagens.map((i) => (i.nome || "").split(".")[0]).join(", ")}).` : ""}`,
+        conteudo: `${rapida ? `${INSTRUCOES_DA_ARTE_RAPIDA}\n\n` : ""}${rapida && fidelidadeDaRapida ? `${instrucoesDaFidelidade(fidelidadeDaRapida, leituraDaRapida)}\n\n` : ""}${mundoReal ? `${INSTRUCOES_DO_MUNDO_REAL}${marcasCitadas.length ? `\nMarcas citadas: ${marcasCitadas.join(", ")}.` : ""}\n\n` : ""}Escreva a direção de arte deste item. Contexto em JSON:\n${JSON.stringify(contexto)}${rapida && rapida.imagens.length ? `\n\nAs imagens anexadas são as do pedido, nomeadas pelo código (${rapida.imagens.map((i) => (i.nome || "").split(".")[0]).join(", ")}).` : ""}`,
         imagens: rapida && rapida.imagens.length ? rapida.imagens : undefined,
       }],
       esquemaJson: ESQUEMA_DIRECAO,
       maxTokensSaida: 12_000,
       metodo: await superpoderesPara(servico(), { agente: "estudio.direcao", momento: existente ? "ajustar" : "gerar" }),
+      // 02/10: tutorial, configuração ou marca real: o diretor pesquisa na web (as fontes voltam na resposta).
+      pesquisaWeb: mundoReal || undefined,
       // Chamada longa (diretor com a base de conhecimento inteira): 5 min antes de desistir.
       timeoutMs: 300_000,
       referencia: { tipo: "estudio_trabalho", id: trabalhoId },
@@ -3470,6 +3548,99 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     usoId = r.usoId;
     saldo = r.saldoUsd;
     reserva = r.reservaUsada ?? null;
+    brutoDoDiretor = bruto;
+    fontesDaWeb = r.fontes ?? [];
+
+    // 02/10 (dono: "não puxa o gancho"): a direção contra a referência. Idêntico: o gancho volta à capa em
+    // código; Próximo: a capa entra na revisão; zona cinzenta: o Jev (Noul) decide se manteve.
+    const refazerPrompts = (ordens: number[]) => {
+      const n = direcao.cards.length;
+      direcao.cards = direcao.cards.map((c) =>
+        ordens.indexOf(c.ordem) < 0
+          ? c
+          : { ...c, prompt_imagem: promptDaLamina(c, marca, { total: n, carrosselInfinito: direcao.carrossel_infinito, levaLogo: levaLogoFn(c.ordem, n), conceito: direcao.conceito, fioVisual: direcao.fio_visual ?? null }) }
+      );
+    };
+    let capaParaRevisar: string | null = null;
+    if (rapida && fidelidadeDaRapida && leituraDaRapida) {
+      const pedidasPelaEquipe = laminasPedidas && laminasPedidas !== leituraDaRapida.cards.length ? laminasPedidas : null;
+      const conf = conferirFidelidade(direcao.cards, leituraDaRapida, fidelidadeDaRapida, pedidasPelaEquipe);
+      if (conf.pergunta_ao_jev) {
+        try {
+          const rj = await jevPerguntar({ state: estadoDoGancho(leituraDaRapida, direcao.cards), questions: { gancho: perguntaDoGancho() as PerguntaJev } });
+          const cobrado = await cobrarJev(rj, { clientId, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: trabalhoId }, criadoPor: ch.userId }).catch(() => null);
+          custo = arred(custo + (cobrado?.custoUsd ?? 0));
+          conf.gancho_mantido = ganchoPeloJev(rj.answers.gancho ? rj.answers.gancho.noul : null);
+        } catch (err) {
+          if (!(err instanceof JevErro)) throw err;
+        }
+      }
+      if (conf.gancho_mantido === false && fidelidadeDaRapida === "identico") {
+        const volta = devolverGanchoNaCapa(direcao.cards, leituraDaRapida.gancho);
+        if (volta.mudou) {
+          direcao.cards = volta.cards;
+          refazerPrompts([direcao.cards[0].ordem]);
+          conf.avisos.push("O gancho original voltou para a capa (Idêntico).");
+          conf.gancho_mantido = true;
+        }
+      } else if (conf.gancho_mantido === false && fidelidadeDaRapida === "proximo") {
+        capaParaRevisar = `perdeu o gancho do original ("${leituraDaRapida.gancho}"): reescreva a capa com o mesmo gancho, adaptado à voz do cliente`;
+      }
+      avisosDoDiretor = [...avisosDoDiretor, ...conf.avisos];
+      direcao.conferencia_da_fidelidade = { ...conf, em: new Date().toISOString() } as unknown as Record<string, unknown>;
+    }
+
+    // 02/10 (dono: "o conteúdo está genérico"): as lâminas genéricas (clichê, frase vazia, nada concreto) numa
+    // chamada só ao redator; Idêntico não muda o texto da referência; fora do Criativo a capa (o gancho) fica.
+    if (fidelidadeDaRapida !== "identico" && corpo.revisar_conteudo !== false) {
+      const fatos = [
+        rapida ? rapida.gravada.pedido : "",
+        instrucao,
+        textoDaLeitura(leituraDaRapida),
+        rapida && rapida.gravada.post ? rapida.gravada.post.legenda : "",
+        ...fontesConfirmadas(campanha, rapida ? rapida.documentos : [], marca.nomeCliente, rapida ? null : item),
+      ].filter(Boolean);
+      const capa = direcao.cards.length ? direcao.cards[0].ordem : 1;
+      const revisao = await revisarConteudo(direcao.cards, {
+        conceito: direcao.conceito,
+        fatos,
+        marca: marca.nomeCliente,
+        pular: fidelidadeDaRapida && fidelidadeDaRapida !== "criativo" && !capaParaRevisar ? [capa] : [],
+        forcar: capaParaRevisar ? [{ ordem: capa, motivos: [capaParaRevisar] }] : [],
+      }, async (sistema, pedido) => {
+        const redator = await modeloDoPapel("diretor_arte");
+        const rr = await chamarTexto({
+          clientId,
+          tarefa: "estudio",
+          agente: "diretor_arte",
+          modeloId: redator.id,
+          raciocinio: raciocinioPara(redator, ["low", "medium"]),
+          sistema,
+          mensagens: [{ papel: "usuario", conteudo: pedido }],
+          esquemaJson: ESQUEMA_REVISAO_DO_CONTEUDO,
+          maxTokensSaida: 3_000,
+          timeoutMs: 90_000,
+          referencia: { tipo: "estudio_trabalho", id: trabalhoId },
+          criadoPor: ch.userId,
+        });
+        if (typeof rr.saldoUsd === "number") saldo = rr.saldoUsd;
+        if (rr.reservaUsada) reserva = rr.reservaUsada;
+        return { json: rr.json, custoUsd: rr.custoUsd };
+      }, erroQueSobe);
+      custo = arred(custo + revisao.custoUsd);
+      if (revisao.genericas.length) {
+        direcao.cards = revisao.cards;
+        refazerPrompts(revisao.mudou);
+        const ficaram = revisao.genericas.map((g) => g.ordem).filter((o) => revisao.mudou.indexOf(o) < 0);
+        if (ficaram.length) avisosDoDiretor = [...avisosDoDiretor, `Texto ainda genérico ${ficaram.length === 1 ? "na lâmina" : "nas lâminas"} ${ficaram.join(", ")}${revisao.erro ? ` (${revisao.erro})` : ""}: mande um detalhe do negócio (número, exemplo, caso) ou peça ao diretor.`];
+        direcao.conteudo_revisado = { genericas: revisao.genericas.map((g) => g.ordem), reescritas: revisao.mudou, em: new Date().toISOString() };
+      }
+      if (capaParaRevisar && leituraDaRapida && direcao.conferencia_da_fidelidade) {
+        const de_novo = conferirFidelidade(direcao.cards, leituraDaRapida, "proximo");
+        (direcao.conferencia_da_fidelidade as Record<string, unknown>).gancho_depois_da_revisao = de_novo.semelhanca_do_gancho;
+        if (de_novo.gancho_mantido === false) avisosDoDiretor = [...avisosDoDiretor, `A capa ainda não traz o gancho do original ("${leituraDaRapida.gancho}"). Peça ao diretor: "mantém o gancho".`];
+      }
+    }
   }
 
   // Frente R3 (dono, 26/09: "o texto tem que chegar ENXUTO sempre"): as lâminas 2 em diante acima do
@@ -3541,6 +3712,38 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     : null;
   if (rapida && avisosDoPedido.length) rapida.avisos.push(...avisosDoPedido);
 
+  // 02/10 (dono: "logos reais, pesquisar na internet"): as logos das marcas citadas vêm do Wikimedia Commons (PNG
+  // com licença) e entram coladas pelo código num canto (vitrine-na-arte); as fontes ficam na direção.
+  if (modoPedido === "diretor" && mundoReal) {
+    const ordens = direcao.cards.map((c) => c.ordem);
+    let marcas = normalizarMarcasReais(brutoDoDiretor ? brutoDoDiretor.marcas_reais : null, ordens);
+    // Sem a lista do diretor: só as marcas de um tutorial citado (marca sozinha é CTA, não logo).
+    if (!marcas.length && marcasCitadas.length && regraDoTutorial) marcas = normalizarMarcasReais(marcasCitadas.map((nome) => ({ nome, arquivo_wikimedia: "", laminas: [] })), ordens);
+    const logos: LogoDoCommons[] = [];
+    const icones: Array<{ nome: string; url: string }> = [];
+    for (const m of marcas) {
+      icones.push({ nome: m.nome, url: urlDoSimpleIcons(slugDoSimpleIcons(m.nome)) });
+      const achada = await logoRealDoCommons(clientId, m.nome, m.arquivo).catch((e) => (registrarFalha("estudio-arte: logo real não veio", e, { marca: m.nome }), null));
+      if (!achada) {
+        avisosDoDiretor = [...avisosDoDiretor, `A logo oficial de ${m.nome} não foi achada com licença: a arte sai sem ela. Envie a logo como Logo se precisar.`];
+        continue;
+      }
+      logos.push(achada.logo);
+      direcao.cards = direcao.cards.map((c) => {
+        const x = c as CardDirecao & { vitrine_de_logos?: LogoDaVitrine[]; vitrine_area?: unknown; vitrine_tipo?: string };
+        if (m.laminas.indexOf(c.ordem) < 0) return c;
+        // A vitrine de parceiros da lâmina tem a vez; no canto cabem até 2 marcas.
+        if (x.vitrine_de_logos && x.vitrine_de_logos.length && x.vitrine_tipo !== "marca_real") return c;
+        const atuais = x.vitrine_tipo === "marca_real" ? x.vitrine_de_logos ?? [] : [];
+        if (atuais.length >= 2 || atuais.some((l) => l.caminho === achada.caminho)) return c;
+        return { ...c, vitrine_de_logos: atuais.concat([{ caminho: achada.caminho, nome: m.nome }]), vitrine_area: AREA_DA_LOGO_REAL, vitrine_tipo: "marca_real" } as CardDirecao;
+      });
+    }
+    const fontes = notaDasFontes({ daWeb: fontesDaWeb, doDiretor: brutoDoDiretor ? brutoDoDiretor.fontes_da_pesquisa : null, logos, icones });
+    direcao.fontes_da_pesquisa = fontes.length ? fontes : null;
+    if (!fontes.some((f) => f.tipo === "pesquisa")) avisosDoDiretor = [...avisosDoDiretor, "O diretor não trouxe fonte da pesquisa: confira menus, botões e passos antes de publicar."];
+  }
+
   // Formato escolhido na tela (o 4:5 fica sem o campo, como sempre foi).
   if (formato !== "feed_4x5") direcao.formato = formato;
   if (campanha) {
@@ -3568,6 +3771,8 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
   }
   // A resposta da arte rápida leva o que foi decidido (sem os textos longos) e os avisos.
   const extraDaRapida = rapida && direcao.arte_rapida ? { arte_rapida: { ...direcao.arte_rapida, textos: undefined }, avisos: rapida.avisos } : {};
+  // 02/10: de onde veio a informação, a conferência da fidelidade e o conteúdo revisado (a tela mostra).
+  const extraDoConteudo = { fontes: direcao.fontes_da_pesquisa ?? [], conferencia_da_fidelidade: direcao.conferencia_da_fidelidade ?? null, conteudo_revisado: direcao.conteudo_revisado ?? null };
 
   if (existente) {
     // Mantém o que a equipe escolheu na tela (referências do conjunto e de cada
@@ -3605,7 +3810,7 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
       },
       custo_usd: arred(num(x.custo_usd) + custo),
     }));
-    return json({ trabalho: atualizado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo, dividir_em_duas: dividirEmDuas, avisos_do_pedido: avisosDoPedido, ...extraDaRapida });
+    return json({ trabalho: atualizado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo, dividir_em_duas: dividirEmDuas, avisos_do_pedido: avisosDoPedido, ...extraDaRapida, ...extraDoConteudo });
   }
 
   const { data: criado, error } = await db
@@ -3626,7 +3831,50 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     .single();
   if (error) throw new ErroEstudio(503, "gravacao_falhou", "A direção foi escrita, mas o trabalho não foi gravado.", { uso_id: usoId });
 
-  return json({ trabalho: criado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo, dividir_em_duas: dividirEmDuas, avisos_do_pedido: avisosDoPedido, ...extraDaRapida });
+  return json({ trabalho: criado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido, miolo_enxuto: mioloEnxuto, miolo_longo: mioloLongo, dividir_em_duas: dividirEmDuas, avisos_do_pedido: avisosDoPedido, ...extraDaRapida, ...extraDoConteudo });
+}
+
+// ------------------------------------------------------ mundo real (02/10)
+
+/** Busca JSON do Commons (só a API do Commons, com tempo e teto). */
+async function jsonDoCommons(url: string): Promise<unknown> {
+  const res = await fetch(url, { headers: { "User-Agent": "AceleriqEstudio/1.0 (https://aceleriq.com.br)", Accept: "application/json" }, signal: AbortSignal.timeout(12_000), redirect: "error" });
+  if (!res.ok) {
+    await res.body?.cancel().catch(() => {});
+    throw new Error(`commons_${res.status}`);
+  }
+  const bytes = await lerComTeto(res, 1024 * 1024, false);
+  if (!bytes) throw new Error("commons_grande");
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+/**
+ * A logo oficial da marca no Wikimedia Commons: o arquivo que o diretor achou na pesquisa ou, sem ele, o da busca
+ * do Commons escolhido em código (nome da marca e "logo" no título); a miniatura PNG que o Commons gera, baixada
+ * só de upload.wikimedia.org (até 3 MB) e guardada na pasta do cliente. Null sem uma que sirva.
+ */
+async function logoRealDoCommons(clientId: string, nome: string, arquivoDoDiretor: string | null): Promise<{ caminho: string; logo: LogoDoCommons } | null> {
+  const slug = slugDoSimpleIcons(nome) || "marca";
+  let arquivo = arquivoDoDiretor ? arquivoDoCommons(arquivoDoDiretor) : null;
+  let info = arquivo ? lerInfoDoCommons(await jsonDoCommons(urlDaInfoDoCommons(arquivo)), arquivo) : null;
+  if (!info) {
+    arquivo = escolherNaBusca(await jsonDoCommons(urlDaBuscaNoCommons(nome)), nome);
+    info = arquivo ? lerInfoDoCommons(await jsonDoCommons(urlDaInfoDoCommons(arquivo)), arquivo) : null;
+  }
+  if (!info || !hostDoCommonsPermitido(info.url)) return null;
+  const res = await fetch(info.url, { headers: { "User-Agent": "AceleriqEstudio/1.0 (https://aceleriq.com.br)", Accept: "image/png,image/*;q=0.8" }, signal: AbortSignal.timeout(15_000), redirect: "error" });
+  const tipo = (res.headers.get("content-type") || "").toLowerCase();
+  if (!res.ok || tipo.indexOf("image/") !== 0) {
+    await res.body?.cancel().catch(() => {});
+    return null;
+  }
+  const bytes = await lerComTeto(res, MAX_BYTES_DA_LOGO_REAL, false);
+  const mime = bytes ? mimeDe(bytes) : null;
+  if (!bytes || !mime || mime === "image/gif") return null;
+  const caminho = `${clientId}/pedidos/marcas/${slug}-${(await sha256Hex(new TextEncoder().encode(info.url))).slice(0, 10)}.${extensaoDe(mime)}`;
+  const { error } = await servico().storage.from("mesa").upload(caminho, new Blob([new Uint8Array(bytes)], { type: mime }), { contentType: mime, upsert: true });
+  if (error) throw error;
+  return { caminho, logo: info };
 }
 
 // ------------------------------------------------------ fiel ao pedido (frente AG)
@@ -3773,6 +4021,83 @@ async function imagensDoPedidoParaODiretor(a: ArteRapida, fotos: ImagemAcervo[])
 }
 
 /**
+ * 02/10: a fidelidade do pedido. Só existe com conteúdo de referência (post com conteúdo, "Fazer igual" ou
+ * referência). A da tela vale; senão o padrão pelo pedido (Fazer igual = Idêntico; "outra ideia" = Criativo;
+ * o resto, Próximo). `comLeitura`: os cards foram lidos (vale mesmo sem post nem Fazer igual).
+ */
+function fidelidadeDoPedido(
+  daTela: Fidelidade | null,
+  pedido: string,
+  arquivos: ArteRapida["arquivos"],
+  post: ArteRapida["post"] | null,
+  comLeitura = false,
+): Pick<ArteRapida, "fidelidade" | "fidelidade_por"> {
+  const temFazerIgual = arquivos.some((a) => a.papel === "arte_para_melhorar");
+  const temReferencia = comLeitura || temFazerIgual || arquivos.some((a) => a.papel === "referencia") || !!(post && usaConteudoDoPost(post.modo));
+  if (!temReferencia) return { fidelidade: null, fidelidade_por: null };
+  if (daTela) return { fidelidade: daTela, fidelidade_por: "equipe" };
+  return { fidelidade: fidelidadePadrao({ temFazerIgual, pedido }), fidelidade_por: "regra" };
+}
+
+/**
+ * 02/10: lê o texto dos cards da referência (as imagens do post, em qualquer modo que usa o conteúdo, e as de
+ * "Fazer igual"), pelo modelo de leitura (visão, barato), numa chamada; guardado pelos caminhos (ler de novo
+ * não paga). Falha: segue sem a leitura, com aviso. Saldo, cota e chave sobem.
+ */
+async function lerCardsDaReferencia(clientId: string, trabalhoId: string, a: ArteRapida, fotos: ImagemAcervo[], userId: string | null): Promise<{ leitura: LeituraDosCards | null; custo: number; aviso?: string }> {
+  const alvos: { bucket: string; caminho: string; nome: string }[] = [];
+  const post = a.post ?? null;
+  if (post && usaConteudoDoPost(post.modo)) {
+    const doPost = (post.imagens && post.imagens.length ? post.imagens : a.arquivos.filter((x) => x.caminho && x.caminho.indexOf(`/pedidos/instagram/${post.codigo}/`) >= 0).map((x) => x.caminho as string))
+      .filter((c) => c.indexOf(`${clientId}/`) === 0 && c.indexOf("..") < 0);
+    doPost.forEach((c, i) => alvos.push({ bucket: "mesa", caminho: c, nome: `card-${i + 1}` }));
+  }
+  for (const arq of a.arquivos.filter((x) => x.papel === "arte_para_melhorar")) {
+    const f = arq.imagem_id ? fotos.find((x) => x.id === arq.imagem_id) : null;
+    if (f) alvos.push({ bucket: f.storage_bucket || "mesa", caminho: f.storage_path, nome: arq.codigo });
+    else if (arq.caminho) alvos.push({ bucket: "mesa", caminho: arq.caminho, nome: arq.codigo });
+  }
+  const lista = alvos.slice(0, 10);
+  if (!lista.length) return { leitura: null, custo: 0 };
+  const chave = (await sha256Hex(new TextEncoder().encode(lista.map((x) => `${x.bucket}:${x.caminho}`).join("|")))).slice(0, 24);
+  const caminho = `${pastaDasLeituras(clientId)}/cards-${chave}.json`;
+  const guardada = await leituraGuardada(caminho);
+  if (guardada && guardada.versao === VERSAO_DA_LEITURA_DOS_CARDS) {
+    const l = leituraGravada(guardada.leitura);
+    if (l) return { leitura: l, custo: 0 };
+  }
+  const imagens: ImagemEntrada[] = [];
+  for (const x of lista) {
+    try {
+      imagens.push(await anexoLeve(x.bucket, x.caminho, x.nome));
+    } catch (e) {
+      registrarFalha("estudio-arte: card da referência não abriu para a leitura", e, { caminho: x.caminho });
+    }
+  }
+  if (!imagens.length) return { leitura: null, custo: 0, aviso: "As imagens do post não abriram para ler o texto dos cards: a arte seguiu pela legenda." };
+  const leitor = await modeloDoPapel("leitura");
+  const r = await lerCardsDoPost(imagens, post ? post.legenda : null, async (sistema, pedido, imgs) => {
+    const x = await chamarTexto({
+      clientId,
+      tarefa: "leitura_referencia",
+      agente: "leitor",
+      modeloId: leitor.id,
+      sistema,
+      mensagens: [{ papel: "usuario", conteudo: pedido, imagens: imgs }],
+      esquemaJson: ESQUEMA_LEITURA_DOS_CARDS,
+      maxTokensSaida: 4_000,
+      timeoutMs: 120_000,
+      referencia: { tipo: "estudio_trabalho", id: trabalhoId },
+      criadoPor: userId,
+    });
+    return { json: x.json, custoUsd: x.custoUsd };
+  }, erroQueSobe);
+  if (r.leitura) await guardarLeitura(caminho, { versao: VERSAO_DA_LEITURA_DOS_CARDS, lido_em: new Date().toISOString(), leitura: r.leitura });
+  else if (r.erro) registrarFalha("estudio-arte: leitura dos cards falhou", new Error(r.erro), { trabalho_id: trabalhoId });
+  return { leitura: r.leitura, custo: r.custoUsd, aviso: r.leitura ? undefined : "Não deu para ler o texto dos cards agora: a arte seguiu pela legenda e pelas imagens." };
+}
+
+/**
  * rapida_preparar { client_id, pedido, peca?, campanha_id?, arquivos?, documentos?, formato?, laminas?, marca_id?, modelo_imagem_id?, qualidade? }
  *   -> o mesmo retorno do preparar ({ trabalho, custo_usd, ... }) mais { arte_rapida, avisos }.
  * A arte avulsa, fora do plano do mês: o Jev decide o que ficou em
@@ -3810,6 +4135,9 @@ async function rapidaPreparar(ch: Chamador, corpo: Record<string, unknown>, exis
       campanhaId = pedida && (await lerCampanha(clientId, pedida)) ? pedida : null;
       gravada = { ...gravada, campanha_id: campanhaId, campanha_por: campanhaId ? "equipe" : null };
     }
+    // 02/10: refazer com outra fidelidade (Idêntico, Próximo ou Criativo).
+    const fidelidadeNova = fidelidadeValida(corpo.fidelidade);
+    if (fidelidadeNova) gravada = { ...gravada, fidelidade: fidelidadeNova, fidelidade_por: "equipe" };
   } else {
     const pedido = normalizarPedidoDaArteRapida(corpo, clientId);
     if (!pedidoProntoParaIr(pedido.pedido, pedido.arquivos.length, pedido.documentos.length, !!(pedido.post && pedido.post.legenda))) {
@@ -3864,6 +4192,9 @@ async function rapidaPreparar(ch: Chamador, corpo: Record<string, unknown>, exis
       // 02/10: o post do Instagram colado e a vitrine de logos (parceiros).
       post: pedido.post,
       vitrine: d.vitrine,
+      // 02/10: a fidelidade ao conteúdo de referência (a da tela; senão pelo pedido) e o mundo real (regra ou Jev).
+      ...fidelidadeDoPedido(pedido.fidelidade, pedido.pedido, d.arquivos, pedido.post),
+      mundo_real: decidirMundoReal(pedido, respostas ? (respostas as Record<string, { noul?: number }>).mundo_real : null, LIMIAR_DO_MUNDO_REAL),
     };
     // Carrossel com a quantidade da tela; arte única nunca leva "laminas".
     if (gravada.peca === "unica") delete corpo.laminas;
@@ -3873,6 +4204,24 @@ async function rapidaPreparar(ch: Chamador, corpo: Record<string, unknown>, exis
 
   const idsDasFotos = gravada.arquivos.map((a) => a.imagem_id).filter((x): x is string => !!x);
   const fotosDoAcervo = idsDasFotos.length ? await imagensDoAcervo(clientId, idsDasFotos) : [];
+  // 02/10 (dono: "não está lendo o conteúdo dos cards nem puxando o gancho"): o texto de cada lâmina do post e da
+  // arte em "Fazer igual", lido por visão (modelo de leitura, barato, guardado), vira o conteúdo da peça.
+  if (!gravada.leitura_dos_cards) {
+    const lida = await lerCardsDaReferencia(clientId, trabalhoId, gravada, fotosDoAcervo, ch.userId);
+    custoJev = arred(custoJev + lida.custo);
+    if (lida.aviso) avisos.push(lida.aviso);
+    if (lida.leitura) {
+      gravada = { ...gravada, leitura_dos_cards: lida.leitura };
+      if (!gravada.fidelidade) gravada = { ...gravada, ...fidelidadeDoPedido(null, gravada.pedido, gravada.arquivos, gravada.post ?? null, true) };
+    }
+  }
+  // Idêntico e Próximo seguem a estrutura da referência: carrossel com as mesmas lâminas (a equipe decide antes, se quiser).
+  const leituraAqui = gravada.leitura_dos_cards ?? null;
+  if (leituraAqui && gravada.fidelidade && gravada.fidelidade !== "criativo" && leituraAqui.cards.length > 1) {
+    if (gravada.peca !== "carrossel" && gravada.peca_por !== "equipe") gravada = { ...gravada, peca: "carrossel", peca_por: "regra" };
+    const pedidas = Number.isInteger(Number(corpo.laminas)) && Number(corpo.laminas) >= 2 ? Number(corpo.laminas) : null;
+    if (gravada.peca === "carrossel" && !pedidas) corpo.laminas = laminasPelaFidelidade(gravada.fidelidade as Fidelidade, leituraAqui, null) ?? undefined;
+  }
   const vistas = await imagensDoPedidoParaODiretor(gravada, fotosDoAcervo);
   avisos.push(...vistas.avisos);
   const item = itemSinteticoDaArteRapida(clientId, gravada, campanhaId);
@@ -5630,11 +5979,14 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   }
   // 02/10: vitrine de logos (parceiros) desta lâmina da arte rápida. As logos NUNCA vão ao gerador (ele redesenharia
   // marca de terceiro): o prompt pede só a área lisa e gravarVersao cola as logos numa grade, pelo código.
-  const logosDaVitrine = ads ? [] : ((card as CardDirecao & { vitrine_de_logos?: LogoDaVitrine[] }).vitrine_de_logos ?? [])
+  const cardDaVitrine = card as CardDirecao & { vitrine_de_logos?: LogoDaVitrine[]; vitrine_tipo?: string };
+  const logosDaVitrine = ads ? [] : (cardDaVitrine.vitrine_de_logos ?? [])
     .filter((l) => l && typeof l.caminho === "string" && l.caminho.indexOf(`${t.client_id}/`) === 0)
     .slice(0, 12);
+  // 02/10: a logo real da marca citada (mundo real) vai no canto, pequena; a vitrine de parceiros, na grade de sempre.
+  const marcaReal = cardDaVitrine.vitrine_tipo === "marca_real";
   const vitrineAqui: VitrineNaLamina | null = logosDaVitrine.length
-    ? { area: areaDaVitrine(total === 1), logos: logosDaVitrine, proporcao: quadro.final.largura / quadro.final.altura }
+    ? { area: marcaReal ? AREA_DA_LOGO_REAL : areaDaVitrine(total === 1), logos: marcaReal ? logosDaVitrine.slice(0, 2) : logosDaVitrine, proporcao: quadro.final.largura / quadro.final.altura, ...(marcaReal ? { tipo: "marca_real" as const } : {}) }
     : null;
 
   // Imagem editada (foto, fatia ou tela do recorte) é a imagem 1 e empurra os anexos.
@@ -5912,7 +6264,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     blocoDaTipografiaAqui,
     // Selo da campanha desenhado pelo gerador junto com a arte, grande e fiel ao anexo.
     blocoDoSelo,
-    vitrineAqui ? areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length) : "",
+    vitrineAqui ? (vitrineAqui.tipo === "marca_real" ? fraseDaLogoReal(vitrineAqui.area, vitrineAqui.logos.map((l) => l.nome)) : areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length)) : "",
     // Frente RO, fase 2: o que a equipe mandou NUNCA fazer (aprendido na conversa e nos ajustes).
     blocoDoEvitarAprendido,
     blocoDoEstiloPedido(t.direcao.estilo_pedido),
@@ -6064,7 +6416,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       blocoDaTipografiaAqui,
       // Também no replicar o selo é desenhado pelo gerador, integrado ao layout da referência.
       blocoDoSelo,
-      vitrineAqui ? areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length) : "",
+      vitrineAqui ? (vitrineAqui.tipo === "marca_real" ? fraseDaLogoReal(vitrineAqui.area, vitrineAqui.logos.map((l) => l.nome)) : areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length)) : "",
       soltaAComposicao(fidelidade) ? blocoDeVariacao(versoesAntes, false, false, ordem, false) : blocoDeVariacao(versoesAntes, false, true, ordem, false),
       blocoDoEstilo,
       blocoDoTemplate,
@@ -8515,8 +8867,13 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     : t.direcao.cards.length === 1
       ? t.direcao.cards[0].ordem
       : null;
-  const textoPodeMudar = pedidoMexeNoTexto(mensagem);
   const arteRapida = arteRapidaDa(t.direcao);
+  // 02/10 (dono: "pedi para mudar TODO o conteúdo e ele só acrescentou um card igual"): a intenção de conteúdo em
+  // código (reescrever tudo, uma lâmina, adicionar, tirar, reordenar) e o comando de fidelidade da arte rápida.
+  const intencao = intencaoDeConteudo(mensagem);
+  const fidelidadePedida = arteRapida ? fidelidadeNaMensagem(mensagem) : null;
+  const reescreverTudo = intencao === "reescrever_tudo" || !!fidelidadePedida;
+  const textoPodeMudar = pedidoMexeNoTexto(mensagem) || reescreverTudo || intencao === "reescrever_lamina" || intencao === "adicionar_lamina";
   // Frente RO, fase 2: imagem sem texto vira uma pergunta curta (sem custo): o que fazer com ela.
   if (!mensagem) {
     const pergunta = perguntaSobreImagens({ quantas: anexosDaConversa.length, emFoco });
@@ -8636,6 +8993,9 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const contexto = {
     tipo: ehAds(t) ? "criativo de anúncio (Mesa Ads)" : "post da agenda",
     texto_pode_mudar: textoPodeMudar,
+    // 02/10: o que o código leu no pedido e a fidelidade pedida (Idêntico, Próximo ou Criativo).
+    operacao_de_conteudo: intencao,
+    fidelidade_pedida: fidelidadePedida ? ROTULO_DA_FIDELIDADE[fidelidadePedida] : null,
     lamina_em_foco: emFoco,
     trabalho: {
       status: t.status,
@@ -8649,6 +9009,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
       pedido_original: arteRapida ? arteRapida.pedido : null,
       // 02/10: o pedido da arte rápida inteiro: o papel de cada imagem, o post do Instagram (modo e conteúdo) e a vitrine de logos.
       arte_rapida: arteRapida ? pedidoParaODiretor(arteRapida, [], total) : null,
+      fidelidade: arteRapida && arteRapida.fidelidade ? ROTULO_DA_FIDELIDADE[arteRapida.fidelidade] : null,
       avisos_da_conferencia_do_pedido: t.direcao.conferencia_do_pedido?.avisos ?? [],
       campanha: campanha
         ? { nome: campanha.nome, conceito: campanha.conceito, identidade: campanha.identidade, oferta: briefingDaCampanha(campanha).oferta || null }
@@ -8730,6 +9091,9 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     `CONTEÚDO DO TRABALHO (JSON):\n${JSON.stringify(contexto)}`,
     emFoco !== null ? `Lâmina em foco: ${emFoco}${imagens ? " (a imagem anexada é a versão atual dela)" : versaoEmFoco ? "" : " (ainda sem arte gerada)"}.` : "",
     `MENSAGEM DA EQUIPE: ${mensagem}`,
+    // 02/10: reescrever tudo (ou mudar a fidelidade): uma mudança de texto por lâmina, sem mudar a quantidade.
+    reescreverTudo ? blocoDaReescritaTotal(total, t.direcao.cards.map((c) => c.ordem).sort((a, b) => a - b)) : "",
+    fidelidadePedida && arteRapida ? instrucoesDaFidelidade(fidelidadePedida, arteRapida.leitura_dos_cards ?? null) : "",
     anexosLidos.length
       ? `IMAGENS ANEXADAS AGORA (depois da lâmina em foco, na ordem): ${anexosDaConversa.map((a, i) => `N${i + 1} = ${a.nome}${a.papel !== "auto" ? ` (${ROTULO_DO_PAPEL_DO_ANEXO[a.papel]})` : ""}`).join("; ")}. Para usar uma como a foto de uma lâmina, foto_acervo com o apelido (N1); só o rosto da pessoa: também uso_da_foto "rosto". Referência de estilo: descreva em estilo ou tratamento o que levar dela.`
       : "",
@@ -8754,7 +9118,54 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const bruto = (r.json ?? {}) as Record<string, unknown>;
   const textoAtualPorLamina: Record<number, string> = {};
   for (const c of t.direcao.cards) textoAtualPorLamina[c.ordem] = c.texto_exato || "";
-  const normalizadas = normalizarMudancas(traduzirApelidosDeFoto(bruto.mudancas, apelidos), {
+  // 02/10: reescrever tudo: nada de duplicar, adicionar ou tirar lâmina; a lâmina que o diretor esqueceu é reescrita
+  // numa chamada só ao redator (sem laço). Fidelidade pedida: a ação mudar_fidelidade entra junto, com Desfazer.
+  let custoDaReescrita = 0;
+  const avisosDaReescrita: string[] = [];
+  let mudancasBrutas: unknown = bruto.mudancas;
+  let acoesBrutas: unknown = bruto.acoes;
+  if (reescreverTudo) {
+    const sem = acoesSemMudarQuantidade(acoesBrutas);
+    acoesBrutas = sem.acoes;
+    if (sem.tiradas.length) avisosDaReescrita.push("Para mudar todo o conteúdo, as lâminas ficam as mesmas: o texto de cada uma foi reescrito (sem lâmina nova nem cópia).");
+    const cobertura = coberturaDaReescrita(mudancasBrutas, textoAtualPorLamina);
+    if (cobertura.faltam.length) {
+      const novos: Record<number, string> = {};
+      for (const m of (Array.isArray(mudancasBrutas) ? mudancasBrutas : []) as Array<{ ordem?: unknown; campos?: { texto_exato?: unknown } }>) {
+        const o = Number(m && m.ordem);
+        if (cobertura.cobertas.indexOf(o) >= 0 && m.campos && typeof m.campos.texto_exato === "string") novos[o] = m.campos.texto_exato;
+      }
+      try {
+        const redator = await modeloDoPapel("diretor_arte");
+        const rr = await chamarTexto({
+          clientId: t.client_id,
+          tarefa: "estudio",
+          agente: "diretor_arte",
+          modeloId: redator.id,
+          raciocinio: raciocinioPara(redator, ["low", "medium"]),
+          sistema: [INSTRUCOES_DA_REESCRITA, fidelidadePedida && arteRapida ? instrucoesDaFidelidade(fidelidadePedida, arteRapida.leitura_dos_cards ?? null) : "", instrucoesDoConteudo()].filter(Boolean).join("\n\n"),
+          mensagens: [{ papel: "usuario", conteudo: pedidoDaReescrita({ mensagem, cards: t.direcao.cards, novos, faltam: cobertura.faltam, marca: marca.nomeCliente, conceito: t.direcao.conceito }) }],
+          esquemaJson: ESQUEMA_DA_REESCRITA,
+          maxTokensSaida: 3_000,
+          timeoutMs: 90_000,
+          referencia: { tipo: REFERENCIA_DA_CONVERSA, id: t.id },
+          criadoPor: ch.userId,
+        });
+        custoDaReescrita = rr.custoUsd;
+        mudancasBrutas = ((Array.isArray(mudancasBrutas) ? mudancasBrutas : []) as unknown[]).concat(mudancasDaReescrita(rr.json, cobertura.faltam, textoAtualPorLamina));
+      } catch (err) {
+        if (erroQueSobe(err)) throw err;
+        const motivo = registrarFalha("estudio-arte: reescrita das lâminas que faltaram falhou", err, { trabalho_id: t.id });
+        avisosDaReescrita.push(`O texto ${cobertura.faltam.length === 1 ? "da lâmina" : "das lâminas"} ${cobertura.faltam.join(", ")} não foi reescrito agora (${motivo}). Peça de novo só para ${cobertura.faltam.length === 1 ? "ela" : "elas"}.`);
+      }
+    }
+  }
+  if (fidelidadePedida && arteRapida) {
+    const base = acoesBrutas && typeof acoesBrutas === "object" ? (acoesBrutas as { resumo?: unknown; itens?: unknown }) : { resumo: "", itens: [] };
+    const itens = (Array.isArray(base.itens) ? base.itens : []).filter((i) => !(i && (i as { operacao?: string }).operacao === "mudar_fidelidade"));
+    acoesBrutas = { resumo: String(base.resumo || `Fidelidade ${ROTULO_DA_FIDELIDADE[fidelidadePedida]} com o texto de todas as lâminas.`), itens: [{ operacao: "mudar_fidelidade", ref: "t1", para: fidelidadePedida }, ...itens] };
+  }
+  const normalizadas = normalizarMudancas(traduzirApelidosDeFoto(mudancasBrutas, apelidos), {
     ordens: t.direcao.cards.map((c) => c.ordem),
     paleta: hexDaPaleta(kit),
     acervo: new Set(acervo.map((a) => a.id).concat(fotosEmUso.map((a) => a.id)).concat(anexosDaConversa.map((a) => a.imagem_id || "").filter(Boolean))),
@@ -8766,11 +9177,14 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     fontesDoTexto: {
       atual: textoAtualPorLamina,
       pedido: mensagem,
-      confirmados: [arteRapida ? arteRapida.pedido : "", ...fontesConfirmadas(campanha, [], "", item)].filter(Boolean),
+      confirmados: [arteRapida ? arteRapida.pedido : "", arteRapida ? textoDaLeitura(arteRapida.leitura_dos_cards) : "", ...fontesConfirmadas(campanha, [], "", item)].filter(Boolean),
       marca: palavrasDaMarca([marca.nomeCliente]),
     },
+    // 02/10: reescrita pedida: palavras novas valem (fato novo, não); uma mudança por lâmina, até 10.
+    reescrita: reescreverTudo || intencao === "reescrever_lamina",
+    maxMudancas: reescreverTudo ? Math.max(6, total + 2) : undefined,
   });
-  const avisos = normalizadas.avisos;
+  const avisos = normalizadas.avisos.concat(avisosDaReescrita);
   // Frente RO: "usa só o rosto dele, em outra pose" ou "coloca a foto exatamente como está" que o diretor
   // não virou mudança: o Jev (Choice com "nenhum") e as palavras fortes decidem; vira uma mudança de um clique.
   const mudancaDoUso = await mudancaDeUsoNaConversa(t, mensagem, emFoco, normalizadas.mudancas, ch.userId);
@@ -8789,7 +9203,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   let resposta = limparTexto(bruto.resposta, 4000);
   const memoriaNova = limparTexto(bruto.memoria, 400);
   // Organizar e executar (reordenar, formato, trocar texto, arquivar versões, refazer...).
-  const acaoProposta = comCaminhoDoDiretor(normalizarAcoesDoDiretor(bruto.acoes, t as unknown as TrabalhoParaAcoes), t, mensagem);
+  const acaoProposta = comCaminhoDoDiretor(normalizarAcoesDoDiretor(acoesBrutas, t as unknown as TrabalhoParaAcoes), t, mensagem);
   // Frente RO, fase 2: na dúvida real (ambíguo, lâmina que o pedido não diz, diretor e Jev discordando), uma pergunta
   // curta com opções clicáveis, e nada muda.
   const duvida = precisaPerguntar(entendimento, { total, emFoco, ordensDasMudancas: mudancas.filter((m) => m.alvo === "lamina" && m.ordem !== null).map((m) => m.ordem as number) });
@@ -8831,16 +9245,19 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
         ...(segui ? [segui] : []),
         ...(fechado.anexo ? [fechado.anexo] : []),
         { tipo: "entendimento", pedido: entendimento.tipo, claro: entendimento.claro, alvo: entendimento.alvo, confianca: entendimento.confianca, por: entendimento.por },
+        ...(intencao || fidelidadePedida ? [{ tipo: "operacao_de_conteudo", operacao: intencao, rotulo: intencao ? ROTULO_DA_INTENCAO[intencao] : null, fidelidade: fidelidadePedida }] : []),
         ...imagensDaMensagem,
       ], resposta, t.client_id, mensagem),
       uso_id: r.usoId,
     },
   ]);
-  await mutarTrabalho(t.id, (x) => ({ custo_usd: arred(num(x.custo_usd) + r.custoUsd) }));
+  await mutarTrabalho(t.id, (x) => ({ custo_usd: arred(num(x.custo_usd) + r.custoUsd + custoDaReescrita) }));
 
   return json({
     trabalho_id: t.id,
     conversa_id: conversaId,
+    operacao_de_conteudo: intencao,
+    fidelidade_pedida: fidelidadePedida,
     mensagem_id: mensagemId ?? null,
     resposta: resposta || (pergunta ? pergunta.pergunta : "Seguem as mudanças que eu sugiro."),
     mudancas,
@@ -8855,7 +9272,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     trabalho: execucao.feitoAgora ? await lerTrabalho(t.id) : undefined,
     em_foco: emFoco,
     texto_pode_mudar: textoPodeMudar,
-    custo_usd: r.custoUsd,
+    custo_usd: arred(r.custoUsd + custoDaReescrita),
     saldo_usd: r.saldoUsd,
     reserva_usada: r.reservaUsada ?? null,
   });
@@ -9328,6 +9745,31 @@ async function executarItemDoDiretor(trabalhoId: string, item: ItemDaAcaoDoAgent
       });
       return { desfazer: d };
     }
+    // 02/10: lâmina NOVA com outro texto (não a cópia); Desfazer tira, como a cópia.
+    case "adicionar_lamina": {
+      let d: Record<string, unknown> = {};
+      await mutarTrabalho(trabalhoId, (x) => {
+        exigirTrabalhoAberto(x);
+        if (!ehAds(x) && x.direcao.carrossel_infinito && x.direcao.cards.length > 1) throw new Error(MOTIVO_CONTINUO_LAMINAS);
+        if (x.direcao.cards.length >= 10) throw new Error("O carrossel já tem 10 lâminas.");
+        const r = adicionarLaminaNoTrabalho(x as unknown as TrabalhoParaAcoes, ordem, String(item.para ?? ""));
+        d = r.desfazer;
+        return r.patch as unknown as Record<string, unknown>;
+      });
+      return { desfazer: d };
+    }
+    // 02/10: Idêntico, Próximo ou Criativo na arte rápida (o texto novo vem nas mudanças da mesma resposta).
+    case "mudar_fidelidade": {
+      let de: string | null = null;
+      await mutarTrabalho(trabalhoId, (x) => {
+        exigirTrabalhoAberto(x);
+        const a = x.direcao.arte_rapida;
+        if (!a) throw new Error("A fidelidade vale para a arte rápida.");
+        de = fidelidadeValida((a as { fidelidade?: unknown }).fidelidade);
+        return { direcao: { ...x.direcao, arte_rapida: { ...a, fidelidade: String(item.para) } } };
+      });
+      return { desfazer: { fidelidade: de } };
+    }
     case "trocar_logo": {
       const escolha = escolhaDaLogo(item.para);
       if (!escolha) throw new Error("Logo inválida. Use principal, alternativa ou auto.");
@@ -9446,6 +9888,14 @@ async function desfazerItemDoDiretor(trabalhoId: string, r: ResultadoDoItem) {
       });
       return;
     }
+    case "mudar_fidelidade": {
+      await mutarTrabalho(trabalhoId, (x) => {
+        const a = x.direcao.arte_rapida;
+        if (!a) return {};
+        return { direcao: { ...x.direcao, arte_rapida: { ...a, fidelidade: fidelidadeValida(d.fidelidade) } } };
+      });
+      return;
+    }
     case "mudar_qualidade": {
       await mutarTrabalho(trabalhoId, () => ({ qualidade: typeof d.qualidade === "string" && d.qualidade ? d.qualidade : QUALIDADE_PADRAO }));
       return;
@@ -9454,6 +9904,7 @@ async function desfazerItemDoDiretor(trabalhoId: string, r: ResultadoDoItem) {
       await mutarTrabalho(trabalhoId, (x) => devolverLaminaAoTrabalho(x as unknown as TrabalhoParaAcoes, String(d.chave || ""), typeof d.total_depois === "number" ? d.total_depois : undefined) as unknown as Record<string, unknown>);
       return;
     }
+    case "adicionar_lamina":
     case "duplicar_lamina": {
       await mutarTrabalho(trabalhoId, (x) => tirarCopiaDoTrabalho(x as unknown as TrabalhoParaAcoes, ordem, typeof d.total_depois === "number" ? d.total_depois : undefined) as unknown as Record<string, unknown>);
       return;
