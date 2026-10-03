@@ -73,6 +73,14 @@ import { horarioSugerido, localParaIso, partesNoFuso, problemaNoHorario } from "
 import { rotuloDoTipo, tipoDaCampanha } from "../../../supabase/functions/_shared/tipos-de-campanha";
 import { AJUDA_DO_USO } from "../../../supabase/functions/estudio-arte/modulos/uso-da-foto";
 import {
+  DICA_DA_FIDELIDADE,
+  type Fidelidade,
+  FIDELIDADES,
+  fidelidadePadrao,
+  ROTULO_DA_FIDELIDADE,
+} from "../../../supabase/functions/estudio-arte/modulos/fidelidade-do-conteudo";
+import { ROTULO_DA_ESTRUTURA } from "../../../supabase/functions/estudio-arte/modulos/leitura-dos-cards";
+import {
   codigoDoPostDoInstagram,
   DICA_DO_MODO_DO_POST,
   MODOS_DO_POST,
@@ -246,6 +254,8 @@ function PedidoDaArteRapida({
   const [modoDoPost, setModoDoPost] = useState<ModoDoPost>("referencia_e_conteudo");
   const [postLido, setPostLido] = useState<PostLidoNaTela | null>(null);
   const [lendoPost, setLendoPost] = useState(false);
+  // 02/10 (dono: "Idêntico, Próximo ou Criativo"): null = o padrão pelo pedido (Fazer igual vira Idêntico).
+  const [fidelidade, setFidelidade] = useState<Fidelidade | null>(null);
   const [emUso, setEmUso] = useCampanhaEmUso(clientId);
   const campanhas = useQuery({ queryKey: chaves.campanhas(clientId), queryFn: () => lerCampanhas(clientId) });
   // Frente AE: só as campanhas da marca aberta (Acerbi ou CME).
@@ -332,9 +342,16 @@ function PedidoDaArteRapida({
     .concat(imagensProntas.map((a) => ({ caminho: a.caminho as string, nome: a.nome, papel: papelDe(a.id, a.nome) })))
     .concat(imagensDoPost.map((i) => ({ caminho: i.caminho, nome: i.nome, papel: "referencia" as PapelPedido })));
   const codigoDoLink = codigoDoPostDoInstagram(linkDoPost);
+  // 02/10: as imagens do post vão junto para a leitura do texto dos cards (mesmo em "Só o conteúdo").
   const postDoPedido = postLido
-    ? { url: postLido.post.url, codigo: postLido.post.codigo, autor: postLido.post.autor, legenda: postLido.post.legenda, modo: modoDoPost }
+    ? { url: postLido.post.url, codigo: postLido.post.codigo, autor: postLido.post.autor, legenda: postLido.post.legenda, modo: modoDoPost, imagens: postLido.imagens.map((i) => i.caminho) }
     : null;
+  // A fidelidade aparece quando há conteúdo de referência: o post (com conteúdo), "Fazer igual" ou uma referência.
+  const temFazerIgual = arquivos.some((a) => a.papel === "arte_para_melhorar");
+  const comReferencia = !!(postLido && usaConteudoDoPost(modoDoPost)) || temFazerIgual || arquivos.some((a) => a.papel === "referencia");
+  const fidelidadeNaTela: Fidelidade = fidelidade || fidelidadePadrao({ temFazerIgual, pedido });
+  // Cards a ler por visão (post com conteúdo e "Fazer igual"): entram na estimativa.
+  const cardsParaLer = (postLido && usaConteudoDoPost(modoDoPost) ? postLido.imagens.length : 0) + arquivos.filter((a) => a.papel === "arte_para_melhorar").length;
 
   const lerPost = async () => {
     if (!codigoDoLink || lendoPost) return;
@@ -364,6 +381,10 @@ function PedidoDaArteRapida({
       p.push({ modeloId: imagem.id, tipo: "imagem", imagens: 1, qualidade: "media", tokensEntrada: TAMANHOS.imagemAnexos.entrada });
       p.push({ modeloId: leitor ? leitor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.leituraDoCard.entrada, tokensSaida: TAMANHOS.leituraDoCard.saida });
     }
+    // 02/10: a leitura do texto dos cards (uma chamada ao modelo de leitura, com as imagens).
+    if (cardsParaLer > 0) {
+      p.push({ modeloId: leitor ? leitor.id : null, tipo: "texto", tokensEntrada: Math.min(10, cardsParaLer) * TAMANHOS.imagemAnexos.entrada, tokensSaida: TAMANHOS.leituraDoCard.saida });
+    }
     return p;
   };
 
@@ -384,6 +405,7 @@ function PedidoDaArteRapida({
         modeloImagemId: imagem ? imagem.id : null,
         qualidade: "media",
         post: postDoPedido,
+        fidelidade: comReferencia ? fidelidade : null,
       }),
     );
     const t = r && r.trabalho ? (r.trabalho as Trabalho) : null;
@@ -411,6 +433,7 @@ function PedidoDaArteRapida({
     setPapeis({});
     setLinkDoPost("");
     setPostLido(null);
+    setFidelidade(null);
     onCriada(t);
   };
 
@@ -580,6 +603,7 @@ function PedidoDaArteRapida({
               ))}
             </div>
             <p className="text-[11.5px] leading-snug text-muted-foreground">{DICA_DO_MODO_DO_POST[modoDoPost]}</p>
+            {usaConteudoDoPost(modoDoPost) && <SeletorDeFidelidade valor={fidelidadeNaTela} escolhida={!!fidelidade} onValor={setFidelidade} />}
             {usaImagensDoPost(modoDoPost) && postLido.imagens.length > 0 && (
               <ul className="grid grid-cols-5 gap-1.5 sm:grid-cols-8" aria-label="Imagens do post">
                 {postLido.imagens.map((i, n) => (
@@ -603,6 +627,9 @@ function PedidoDaArteRapida({
           </div>
         )}
       </div>
+
+      {/* 02/10: sem post, a fidelidade aparece com "Fazer igual" ou uma referência. */}
+      {comReferencia && !(postLido && usaConteudoDoPost(modoDoPost)) && <SeletorDeFidelidade valor={fidelidadeNaTela} escolhida={!!fidelidade} onValor={setFidelidade} />}
 
       {/* A peça: o agente reconhece sozinho; a equipe pode decidir antes. */}
       <div className="min-w-0">
@@ -981,6 +1008,7 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
             {a.arquivos.length ? ` · ${a.arquivos.map((x) => `${x.nome} (${ROTULO_DO_PAPEL[x.papel].toLowerCase()}${x.papel_por !== "equipe" && (x.papel === "foto" || x.papel === "rosto") ? ", pelo agente" : ""})`).join(", ")}` : ""}
           </p>
           {a.avisos.length > 0 && <p className="mt-1 text-[11.5px] text-warning">{a.avisos.join(" ")}</p>}
+          <ConteudoDaReferencia arte={a} fontes={fontesDoTrabalho(trabalho)} />
         </div>
       )}
 
@@ -1287,6 +1315,82 @@ export default function EstudioArteRapida({
         {!historicoRecolhido && <div className="mt-2">{listaDoHistorico}</div>}
       </div>
       {conteudo}
+    </div>
+  );
+}
+
+/** 02/10: Idêntico, Próximo ou Criativo ao conteúdo de referência (post ou "Fazer igual"). */
+function SeletorDeFidelidade({ valor, escolhida, onValor }: { valor: Fidelidade; escolhida: boolean; onValor: (f: Fidelidade) => void }) {
+  return (
+    <div className="min-w-0" data-fidelidade={valor}>
+      <p className="mb-1.5 flex items-center text-[12px] font-medium text-muted-foreground">
+        Fidelidade ao conteúdo
+        <AjudaRecolhida className="ml-1.5" rotulo="Idêntico, Próximo ou Criativo" titulo="Fidelidade">
+          {FIDELIDADES.map((f) => `${ROTULO_DA_FIDELIDADE[f]}: ${DICA_DA_FIDELIDADE[f]}`).join(" ")}
+        </AjudaRecolhida>
+      </p>
+      <div role="radiogroup" aria-label="Fidelidade ao conteúdo" className="inline-flex min-w-0 rounded-lg border border-border bg-background p-0.5">
+        {FIDELIDADES.map((f) => (
+          <button
+            key={f}
+            type="button"
+            role="radio"
+            aria-checked={valor === f}
+            title={DICA_DA_FIDELIDADE[f]}
+            onClick={() => onValor(f)}
+            className={juntar(
+              "toque-compacto h-8 min-w-0 rounded-md px-3 text-[12.5px] font-medium transition-colors",
+              valor === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+            )}
+          >
+            {ROTULO_DA_FIDELIDADE[f]}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1 text-[11.5px] leading-snug text-muted-foreground">
+        {DICA_DA_FIDELIDADE[valor]}
+        {!escolhida && " (pelo pedido)"}
+      </p>
+    </div>
+  );
+}
+
+type FonteNaTela = { titulo: string; url: string; tipo?: string; licenca?: string | null };
+
+/** As fontes gravadas na direção (pesquisa, logos com licença), só endereços http(s). */
+function fontesDoTrabalho(t: Trabalho | null | undefined): FonteNaTela[] {
+  const d = t && t.direcao ? (t.direcao as unknown as { fontes_da_pesquisa?: unknown }) : null;
+  const lista = d && Array.isArray(d.fontes_da_pesquisa) ? (d.fontes_da_pesquisa as FonteNaTela[]) : [];
+  return lista.filter((f) => f && typeof f.url === "string" && /^https?:\/\//i.test(f.url)).slice(0, 12);
+}
+
+/** 02/10: o que foi lido da referência (gancho, lâminas, estrutura), a fidelidade e de onde veio a informação. */
+function ConteudoDaReferencia({ arte, fontes }: { arte: { fidelidade?: Fidelidade | null; leitura_dos_cards?: { gancho: string; cards: unknown[]; estrutura: keyof typeof ROTULO_DA_ESTRUTURA } | null; mundo_real?: { marcas: string[] } | null }; fontes: FonteNaTela[] }) {
+  const l = arte.leitura_dos_cards;
+  if (!arte.fidelidade && !l && !fontes.length) return null;
+  return (
+    <div className="mt-1.5 space-y-1 text-[11.5px] leading-snug text-muted-foreground" data-conteudo-da-referencia="">
+      {(arte.fidelidade || l) && (
+        <p className="[overflow-wrap:anywhere]">
+          {arte.fidelidade ? `Fidelidade: ${ROTULO_DA_FIDELIDADE[arte.fidelidade]}` : ""}
+          {l ? `${arte.fidelidade ? " · " : ""}${l.cards.length} ${l.cards.length === 1 ? "lâmina lida" : "lâminas lidas"} (${ROTULO_DA_ESTRUTURA[l.estrutura] || "conteúdo"})${l.gancho ? `, gancho: "${l.gancho}"` : ""}` : ""}
+        </p>
+      )}
+      {fontes.length > 0 && (
+        <div>
+          <p className="font-medium text-foreground">Fontes</p>
+          <ul className="mt-0.5 space-y-0.5">
+            {fontes.map((f) => (
+              <li key={f.url} className="min-w-0 truncate">
+                <a href={f.url} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:text-foreground hover:underline">
+                  {f.titulo}
+                </a>
+                {f.licenca ? ` (${f.licenca})` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
