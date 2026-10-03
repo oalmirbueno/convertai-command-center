@@ -329,6 +329,18 @@ export interface CopyDoAnuncio {
   variacao?: number | null;
   jev?: NotasDoJev | null;
   alternativas?: unknown[];
+  /** 02/10: ângulo de venda (dor, desejo, prova, objeção, urgência) e a conferência da casa contra o genérico. */
+  angulo_de_venda?: string | null;
+  conferencia_casa?: { reprovada?: boolean; reescrita?: boolean; motivos?: string[]; citados?: string[]; resumo?: string } | null;
+  /** 02/10: referência replicada com Fidelidade (Idêntico, Próximo, Criativo). */
+  referencia_replicada?: { id?: string; titulo?: string; fidelidade?: string; gancho_lido?: string | null; avisos?: string[] } | null;
+  /** 02/10: marcas reais citadas, pesquisa web, logos reais (com licença) e as fontes. */
+  mundo_real?: MundoRealAds | null;
+  /** 02/10: arte com os logos reais postos por código (bucket mesa). */
+  arte_com_logos?: { caminho: string; logos: string[]; origem: string | null; criado_em: string } | null;
+  /** 02/10: "muda todo o conteúdo": proposta esperando o Confirmar e a troca feita (para o Desfazer). */
+  reescrita_pendente?: { lote?: string; pedido?: string; depois?: Record<string, unknown>; criado_em?: string } | null;
+  reescrita_feita?: { lote?: string; feito_em?: string } | null;
 }
 
 /** Por que esta copy virou criativo (servidor, melhores-criativos.ts). */
@@ -2256,4 +2268,116 @@ export function ordenarParaOCriativo(refs: ReferenciaAds[], estiloDoCriativo: st
     if (forte(a) !== forte(b)) return forte(b) - forte(a);
     return (b.criado_em || "").localeCompare(a.criado_em || "");
   });
+}
+
+// ------------------------------------------------------------------ conteúdo inteligente (02/10)
+
+// Os mesmos arquivos que o servidor usa (puros): o pedido de "muda todo o conteúdo" e os níveis da Fidelidade.
+export { pedeRefazerTudo } from "../../../supabase/functions/mesa-ads/modulos/conteudo-do-estudio";
+export { FIDELIDADES_ADS, ROTULO_DA_FIDELIDADE_ADS, type FidelidadeAds } from "../../../supabase/functions/mesa-ads/modulos/replicar-referencia";
+
+/** Rótulo do ângulo de venda gravado na copy. */
+export const ROTULO_DO_ANGULO_DE_VENDA: Record<string, string> = { dor: "Dor", desejo: "Desejo", prova: "Prova", objecao: "Objeção", urgencia: "Urgência" };
+export const rotuloDoAnguloDeVenda = (v: unknown) => (typeof v === "string" && ROTULO_DO_ANGULO_DE_VENDA[v]) || null;
+
+export interface LogoRealAds {
+  marca: string;
+  nome: string;
+  fonte: string;
+  url: string;
+  png_url: string | null;
+  licenca: string;
+  autor: string | null;
+  pagina: string;
+}
+
+export interface MundoRealAds {
+  entidades: string[];
+  pesquisa: { fatos: string[]; passos: string[]; nomes_exatos: string[]; alertas: string[]; fontes: { titulo: string; url: string }[]; pesquisado_em: string } | null;
+  logos: LogoRealAds[];
+  fontes: string[];
+}
+
+/** Um criativo na troca de conteúdo: o antes e o depois do que se vê. */
+export interface PropostaDeReescrita {
+  criativo_id: string;
+  nome: string | null;
+  formato: string;
+  variacao: number;
+  angulo_de_venda: string | null;
+  antes: { texto_principal: string; titulo: string; headline_arte: string; cta_meta: string; angulo_de_venda: string | null };
+  depois: { texto_principal: string; titulo: string; headline_arte: string; cta_meta: string; angulo_de_venda: string | null };
+}
+
+export interface RespostaDaReescrita {
+  refazer_tudo: true;
+  lote_id: string;
+  propostas: PropostaDeReescrita[];
+  avisos: string[];
+  custo_usd?: number;
+}
+
+export const ehRespostaDaReescrita = (v: unknown): v is RespostaDaReescrita =>
+  !!v && typeof v === "object" && (v as { refazer_tudo?: unknown }).refazer_tudo === true && Array.isArray((v as { propostas?: unknown }).propostas);
+
+/**
+ * A troca guardada nos criativos do cache (para o Confirmar e o Desfazer
+ * continuarem depois de fechar e abrir): a pendente do lote do criativo
+ * aberto, com os irmãos do mesmo lote; ou a última troca feita.
+ */
+export function trocaGuardada(criativo: CriativoAds, todos: CriativoAds[]): { tipo: "pendente" | "feita"; lote: string; ids: string[]; propostas: PropostaDeReescrita[] } | null {
+  const pend = criativo.copy.reescrita_pendente;
+  const feita = criativo.copy.reescrita_feita;
+  const lote = pend && pend.lote ? pend.lote : feita && feita.lote ? feita.lote : null;
+  if (!lote) return null;
+  const tipo: "pendente" | "feita" = pend && pend.lote ? "pendente" : "feita";
+  const doLote = (todos.length ? todos : [criativo]).filter((c) => (tipo === "pendente" ? c.copy.reescrita_pendente?.lote : c.copy.reescrita_feita?.lote) === lote);
+  const lista = doLote.length ? doLote : [criativo];
+  const campo = (o: Record<string, unknown> | undefined, k: string) => (o && typeof o[k] === "string" ? String(o[k]) : "");
+  const resumo = (o: Record<string, unknown> | undefined) => ({
+    texto_principal: campo(o, "texto_principal"),
+    titulo: campo(o, "titulo"),
+    headline_arte: campo(o, "headline_arte"),
+    cta_meta: campo(o, "cta_meta"),
+    angulo_de_venda: campo(o, "angulo_de_venda") || null,
+  });
+  const propostas: PropostaDeReescrita[] = tipo === "pendente"
+    ? lista.map((c) => {
+      const depois = resumo(c.copy.reescrita_pendente && c.copy.reescrita_pendente.depois);
+      return { criativo_id: c.id, nome: c.nome, formato: c.formato, variacao: Number(c.copy.variacao) || 1, angulo_de_venda: depois.angulo_de_venda, antes: resumo(c.copy as Record<string, unknown>), depois };
+    })
+    : [];
+  return { tipo, lote, ids: lista.map((c) => c.id), propostas };
+}
+
+/** Canto da arte onde o logo real entra. */
+export type CantoDoLogo = "sup_esq" | "sup_dir" | "inf_esq" | "inf_dir";
+export const CANTOS_DO_LOGO: { valor: CantoDoLogo; rotulo: string }[] = [
+  { valor: "sup_esq", rotulo: "Em cima, à esquerda" },
+  { valor: "sup_dir", rotulo: "Em cima, à direita" },
+  { valor: "inf_esq", rotulo: "Embaixo, à esquerda" },
+  { valor: "inf_dir", rotulo: "Embaixo, à direita" },
+];
+
+/**
+ * Caixa do logo real na arte, em pixels: 14% da largura (ou 9% da altura, o
+ * que for menor), margem de 5% e a proporção do próprio logo (nunca
+ * distorce). No Stories, fora dos 14% de cima e dos 20% de baixo.
+ */
+export function caixaDoLogo(canto: CantoDoLogo, arte: { largura: number; altura: number }, logo: { largura: number; altura: number }, stories = false): { x: number; y: number; w: number; h: number } {
+  const proporcao = logo.altura > 0 ? logo.largura / logo.altura : 1;
+  const maxW = arte.largura * 0.14;
+  const maxH = arte.altura * 0.09;
+  let w = maxW;
+  let h = w / proporcao;
+  if (h > maxH) {
+    h = maxH;
+    w = h * proporcao;
+  }
+  const margem = arte.largura * 0.05;
+  const topo = stories ? arte.altura * 0.14 + margem * 0.5 : margem;
+  const base = stories ? arte.altura * 0.8 - margem * 0.5 : arte.altura - margem;
+  const x = canto === "sup_esq" || canto === "inf_esq" ? margem : arte.largura - margem - w;
+  const y = canto === "sup_esq" || canto === "sup_dir" ? topo : base - h;
+  return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
 }

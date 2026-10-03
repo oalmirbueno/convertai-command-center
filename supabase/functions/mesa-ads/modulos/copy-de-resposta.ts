@@ -229,7 +229,7 @@ export type ConferenciaDoAnuncio = {
 };
 
 /** Abertura vazia de anúncio na primeira linha. */
-const ABERTURA_FRACA = /^(voce sabia|descubra|conheca|apresentamos|ola|oi\b|venha|confira|chegou|atencao|novidade|e hoje|imagine|ja pensou|sabe aquele|quer saber)/;
+const ABERTURA_FRACA = /^(voce sabia|descubra|conheca|apresentamos|ola|oi\b|venha|confira|chegou|atencao|novidade|e hoje|quer saber)/;
 
 /**
  * Atributo pessoal afirmado ou insinuado na segunda pessoa (política da Meta).

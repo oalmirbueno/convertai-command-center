@@ -411,6 +411,56 @@ import { registrarFalha, registrarSeFalhar } from "../_shared/falha-registrada.t
 import { anexosDoAprendizado, blocoDasRegras, esquecerRegra, type RegraAtiva, regrasDoAgente, regrasSeguidas } from "../_shared/aprender-com-o-dono.ts";
 import { aprenderNoServidor, guardarNoServidor } from "../_shared/aprender-no-servidor.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
+// 02/10 (dono: "o conteúdo está genérico"): resposta direta com ângulos de venda e conferente anti-genérico
+// (uma reescrita só), referência com Fidelidade lida na imagem, mundo real (pesquisa, logos reais, fontes)
+// e o "muda todo o conteúdo" que troca no lugar, com Confirmar e Desfazer.
+import {
+  type AnguloDeVenda,
+  ANGULOS_DE_VENDA_IDS,
+  anguloDeVenda,
+  angulosParaVariacoes,
+  blocoDeRespostaDireta,
+  type ConferenciaDoAnuncio,
+  type FatosDaOferta,
+  fatosDaOferta,
+  motivosDePolitica,
+  resumoDaConferencia,
+} from "./modulos/copy-de-resposta.ts";
+import {
+  avisosDaFidelidade,
+  blocoDaReplicacao,
+  type FidelidadeAds,
+  fidelidadeAds,
+  lerTextoDaReferencia,
+  ROTULO_DA_FIDELIDADE_ADS,
+  type TextoLido,
+  textoLidoDaFicha,
+} from "./modulos/replicar-referencia.ts";
+import {
+  blocoDoMundoReal,
+  entidadesReais,
+  type LogoReal,
+  type MarcaReal,
+  mundoRealParaGravar,
+  pedeTutorial,
+  type PesquisaReal,
+  pesquisarFatosReais,
+  precisaPesquisar,
+  regraDosLogosParaArte,
+  resolverLogosReais,
+} from "./modulos/mundo-real.ts";
+import {
+  cardsComTextoNovo,
+  copyComProposta,
+  copyConfirmada,
+  copyDesfeita,
+  pedeRefazerTudo,
+  propostaDoLote,
+  type ReescritaPendente,
+  reescreverReprovadas,
+  resumoDaProposta,
+  type VariacaoBruta,
+} from "./modulos/conteudo-do-estudio.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -771,6 +821,8 @@ const ESQUEMA_COPIES = {
       // Frente CR: a estrutura de copy da variação (cada variação usa uma diferente).
       framework: S("string", { enum: [...FRAMEWORKS_IDS] }),
       ...ESQUEMA_COPY_CAMPOS,
+      // 02/10: o ângulo de venda da variação (dor, desejo, prova, objeção, urgência), com rótulo na tela.
+      angulo_de_venda: S("string", { enum: [...ANGULOS_DE_VENDA_IDS] }),
       headline_arte: S("string"),
       apoio_arte: S(["string", "null"]),
       cta_arte: S("string"),
@@ -786,7 +838,7 @@ const ESQUEMA_COPIES = {
 
 const ESQUEMA_VARIAR = {
   nome: "variacoes_de_copy",
-  schema: obj({ variacoes: lista(obj({ ...ESQUEMA_COPY_CAMPOS, framework: S("string", { enum: [...FRAMEWORKS_IDS] }), o_que_mudou: S("string") })) }),
+  schema: obj({ variacoes: lista(obj({ ...ESQUEMA_COPY_CAMPOS, framework: S("string", { enum: [...FRAMEWORKS_IDS] }), angulo_de_venda: S("string", { enum: [...ANGULOS_DE_VENDA_IDS] }), o_que_mudou: S("string") })) }),
 };
 
 const ESQUEMA_APRENDIZADO = { nome: "aprendizado", schema: obj({ texto: S("string") }) };
@@ -1893,6 +1945,162 @@ function roteiroDaVariacao(v: Record<string, unknown>, formato: FormatoAds, ganc
   return cards.map((c, i) => ({ ...c, funcao: i === 0 ? "capa" : i === cards.length - 1 ? "cta" : "conteudo" }));
 }
 
+// ------------------------------------------------------------ conteúdo inteligente (02/10)
+
+/**
+ * Fatos concretos da oferta do plano (ads_ofertas, pela estrutura.oferta_id)
+ * e do briefing. Sem oferta (ou sem conseguir ler), só o briefing.
+ */
+async function fatosDoPlano(servico: SupabaseClient, clientId: string, plano: Plano | null, briefing: Briefing | null): Promise<FatosDaOferta> {
+  const id = plano && typeof plano.estrutura?.oferta_id === "string" ? plano.estrutura.oferta_id : null;
+  const oferta = id
+    ? await carregarOferta(servico, clientId, id).then(ofertaDaLinha).catch((e) => (registrarFalha("mesa-ads: oferta do plano não lida (segue o briefing)", e), null))
+    : null;
+  return fatosDaOferta(oferta, briefing as never);
+}
+
+/**
+ * O texto escrito na imagem da referência: o já lido (ficha.texto_lido) ou a
+ * leitura com o leitor barato (padrão de leitura, raciocínio baixo), gravada
+ * na ficha para não cobrar de novo. Sem imagem: null, sem custo.
+ */
+async function textoLidoDaReferenciaAds(servico: SupabaseClient, chamador: Chamador, clientId: string, ref: LinhaReferencia, forcar = false): Promise<{ lido: TextoLido | null; custo: number; saldo: number | null }> {
+  const ficha = (ref.ficha ?? {}) as Record<string, unknown>;
+  const ja = forcar ? null : textoLidoDaFicha(ficha);
+  if (ja) return { lido: ja, custo: 0, saldo: null };
+  const imagens = await imagensDaReferencia(servico, clientId, ref);
+  if (!imagens.length) return { lido: null, custo: 0, saldo: null };
+  const { modelo, raciocinio } = await resolverModelo(undefined, undefined, "leitura", "low");
+  const copyDoAnuncio = ref.ad_id ? [ficha.gancho_verbal, ficha.texto_apoio].filter((x) => typeof x === "string" && x).join(" ") : null;
+  const r = await lerTextoDaReferencia(async (q) => {
+    const s = await chamarTexto({
+      timeoutMs: TIMEOUT_TEXTO_ADS_MS,
+      clientId,
+      tarefa: TAREFA,
+      agente: AGENTE_LEITOR,
+      modeloId: modelo.id,
+      sistema: q.sistema,
+      mensagens: [{ papel: "usuario", conteudo: q.texto, imagens: q.imagens }],
+      raciocinio,
+      esquemaJson: q.esquema,
+      referencia: { tipo: REF_REFERENCIA, id: ref.id },
+      criadoPor: chamador.userId,
+    });
+    return { json: s.json, custoUsd: s.custoUsd, saldoUsd: s.saldoUsd, modeloId: s.modeloId };
+  }, imagens, { titulo: ref.titulo, copyDoAnuncio });
+  if (r.lido) {
+    await gravarReferencia(servico, ref, { ficha: { ...ficha, texto_lido: r.lido } }).catch((e) => registrarFalha("mesa-ads: texto lido da referência não gravado", e, { referencia_id: ref.id }));
+  }
+  return { lido: r.lido, custo: r.custoUsd, saldo: r.saldoUsd };
+}
+
+type ReplicacaoAds = { ref: LinhaReferencia; fidelidade: FidelidadeAds; lido: TextoLido | null; bloco: string };
+
+/**
+ * A referência a replicar (com Fidelidade): lê o texto da imagem quando
+ * ainda não foi lido. Leitura que falha não derruba a produção: segue a ficha,
+ * com aviso. Sem fidelidade ou sem referência: null.
+ */
+async function replicacaoDaReferencia(
+  servico: SupabaseClient,
+  chamador: Chamador,
+  clientId: string,
+  refId: unknown,
+  fidelidadeBruta: unknown,
+): Promise<{ rep: ReplicacaoAds | null; custo: number; saldo: number | null; aviso: string | null }> {
+  const fidelidade = fidelidadeAds(fidelidadeBruta) ?? (refId ? "proximo" : null);
+  if (!fidelidade || typeof refId !== "string" || !UUID.test(refId)) return { rep: null, custo: 0, saldo: null, aviso: null };
+  let ref: LinhaReferencia;
+  try {
+    ref = await carregarReferencia(servico, clientId, refId);
+  } catch (e) {
+    if (!(e instanceof ErroHttp)) throw e;
+    return { rep: null, custo: 0, saldo: null, aviso: `A referência escolhida não foi achada para este cliente (${e.message}): segui sem ela.` };
+  }
+  let lido: TextoLido | null = null;
+  let custo = 0;
+  let saldo: number | null = null;
+  let aviso: string | null = null;
+  try {
+    const t = await textoLidoDaReferenciaAds(servico, chamador, clientId, ref);
+    lido = t.lido;
+    custo = t.custo;
+    saldo = t.saldo;
+    if (!lido) aviso = `A referência "${ref.titulo}" não tem imagem com texto lido: segui a ficha dela.`;
+  } catch (e) {
+    registrarFalha("mesa-ads: leitura do texto da referência falhou (segue a ficha)", e, { referencia_id: ref.id });
+    aviso = `Não consegui ler o texto da imagem de "${ref.titulo}": segui a ficha dela.`;
+  }
+  return { rep: { ref, fidelidade, lido, bloco: blocoDaReplicacao({ fidelidade, titulo: ref.titulo, lido, ficha: ref.ficha }) }, custo, saldo, aviso };
+}
+
+/**
+ * Mundo real do assunto: as marcas citadas e, quando o assunto é tutorial ou
+ * marca real, UMA pesquisa com busca web (leitor barato, custo contado).
+ * Pesquisa que falha segue sem fatos, com aviso (a copy não cita passo nem botão).
+ */
+async function mundoRealDoAssunto(
+  chamador: Chamador,
+  clientId: string,
+  assunto: string,
+  pesquisar: boolean,
+  referencia: { tipo: string; id: string },
+): Promise<{ entidades: MarcaReal[]; pesquisa: PesquisaReal | null; custo: number; saldo: number | null; aviso: string | null }> {
+  const entidades = entidadesReais(assunto);
+  if (!pesquisar || !precisaPesquisar(assunto)) return { entidades, pesquisa: null, custo: 0, saldo: null, aviso: null };
+  try {
+    const { modelo, raciocinio } = await resolverModelo(undefined, undefined, "leitura", "low");
+    const r = await pesquisarFatosReais(async (q) => {
+      const s = await chamarTexto({
+        timeoutMs: TIMEOUT_TEXTO_ADS_MS,
+        clientId,
+        tarefa: TAREFA,
+        agente: AGENTE_LEITOR,
+        modeloId: modelo.id,
+        sistema: q.sistema,
+        mensagens: [{ papel: "usuario", conteudo: q.texto }],
+        raciocinio,
+        pesquisaWeb: true,
+        esquemaJson: q.esquema,
+        referencia,
+        criadoPor: chamador.userId,
+      });
+      return { json: s.json, custoUsd: s.custoUsd, saldoUsd: s.saldoUsd, fontes: s.fontes };
+    }, { assunto, entidades, tutorial: pedeTutorial(assunto) });
+    return { entidades, pesquisa: r.pesquisa, custo: r.custoUsd, saldo: r.saldoUsd, aviso: null };
+  } catch (e) {
+    registrarFalha("mesa-ads: pesquisa do mundo real falhou (segue sem fatos pesquisados)", e, { client_id: clientId });
+    return { entidades, pesquisa: null, custo: 0, saldo: null, aviso: "A pesquisa na web não respondeu: a copy não cita passo, botão nem número de app." };
+  }
+}
+
+/** Logos reais das marcas citadas no texto e no assunto (Simple Icons e Wikimedia Commons; grátis). */
+async function logosDoTexto(textoDoCriativo: string, doAssunto: MarcaReal[]): Promise<LogoReal[]> {
+  const marcas: MarcaReal[] = [];
+  for (const m of [...doAssunto, ...entidadesReais(textoDoCriativo)]) if (!marcas.some((x) => x.id === m.id)) marcas.push(m);
+  if (!marcas.length) return [];
+  return await resolverLogosReais((url) => buscarJson(url), marcas).catch((e) => (registrarFalha("mesa-ads: logos reais não resolvidos", e), [] as LogoReal[]));
+}
+
+/** As regras da arte com o mundo real: logo de terceiro entra por código e os nomes exatos da tela. */
+function regrasDoMundoRealParaArte(logos: LogoReal[], pesquisa: PesquisaReal | null): string {
+  return [
+    regraDosLogosParaArte(logos),
+    pesquisa && pesquisa.nomes_exatos.length ? `TELA DE APP (recrie idêntica, com estes nomes exatos): ${pesquisa.nomes_exatos.join(", ")}.` : "",
+  ].filter(Boolean).join("\n\n");
+}
+
+/** Texto inteiro de uma variação bruta (para achar marca citada e conferir). */
+function textoDaVariacao(v: VariacaoBruta): string {
+  const carrossel = Array.isArray(v.carrossel) ? (v.carrossel as Record<string, unknown>[]).map((c) => String(c?.texto_exato ?? "")).join("\n") : "";
+  return [v.texto_principal, v.texto_principal_longo, v.titulo, v.descricao, v.headline_arte, v.apoio_arte, v.cta_arte, carrossel].filter((x) => typeof x === "string" && x).join("\n");
+}
+
+/** O que fica na copy do criativo sobre a conferência da casa (aviso, ângulo e se foi reescrita). */
+function conferenciaParaGravar(angulo: AnguloDeVenda | null, conf: ConferenciaDoAnuncio, reescrita: boolean) {
+  return { reprovada: conf.reprovada, reescrita, motivos: conf.motivos.map((m) => m.texto), citados: conf.citados.slice(0, 8), resumo: resumoDaConferencia(angulo, conf, reescrita) };
+}
+
 // ------------------------------------------------------------ ações
 
 /** briefing_sugerir { client_id, modelo_id?, raciocinio? } -> { sugestao, lacunas, observacoes, custo_usd, saldo_usd } */
@@ -2961,11 +3169,39 @@ async function criativosProduzir(servico: SupabaseClient, chamador: Chamador, co
   const extras = Number.isFinite(Number(corpo.extras)) ? Math.min(MAX_COPIES_A_MAIS, Math.max(0, Math.round(Number(corpo.extras)))) : MAX_COPIES_A_MAIS;
   const ordemDosEstilos = estilosSalvos(p.estrutura);
 
+  // 02/10: os fatos concretos da oferta, o mundo real do assunto (uma pesquisa para a chamada inteira)
+  // e a referência com Fidelidade (a escolhida ou, com fidelidade pedida, a 1ª do ângulo; lida uma vez).
+  const fatos = await fatosDoPlano(servico, p.client_id, p, briefing);
+  const assunto = [texto(corpo.pedido, 1000), ...angulos.map((a) => `${a.nome}. ${a.situacao} ${a.mecanismo} ${a.gancho_verbal}`)].filter(Boolean).join("\n");
+  const mundo = await mundoRealDoAssunto(chamador, p.client_id, assunto, corpo.pesquisar !== false, { tipo: REF_PLANO, id: p.id });
+  custo += mundo.custo;
+  if (mundo.saldo != null) saldo = mundo.saldo;
+  if (mundo.aviso) avisos.push(mundo.aviso);
+  const blocoMundo = blocoDoMundoReal(mundo.pesquisa, mundo.entidades);
+  const replicacoes = new Map<string, ReturnType<typeof replicacaoDaReferencia>>();
+  const replicacaoDoAngulo = (a: Angulo) => {
+    const refId = typeof corpo.referencia_id === "string" && corpo.referencia_id ? corpo.referencia_id : fidelidadeAds(corpo.fidelidade) ? a.referencia_ids[0] : null;
+    if (!refId) return Promise.resolve({ rep: null, custo: 0, saldo: null, aviso: null } as Awaited<ReturnType<typeof replicacaoDaReferencia>>);
+    if (!replicacoes.has(refId)) {
+      const lendo = replicacaoDaReferencia(servico, chamador, p.client_id, refId, corpo.fidelidade);
+      replicacoes.set(refId, lendo);
+      // O custo da leitura entra uma vez só, quando a leitura é nova.
+      lendo.then((r) => {
+        custo += r.custo;
+        if (r.saldo != null) saldo = r.saldo;
+        if (r.aviso) avisos.push(r.aviso);
+      }).catch(() => {});
+    }
+    return replicacoes.get(refId)!;
+  };
+
   const produzirAngulo = async (a: Angulo) => {
     const formatos = formatosDo(a);
     const estilo = estiloPorId(a.estilo_visual);
     const objetivo = objetivoPorId(a.objetivo) ?? objetivoDoPlano;
     const escrever = a.variacoes + extras;
+    const { rep } = await replicacaoDoAngulo(a);
+    const angulosDeVenda = angulosParaVariacoes(escrever, fatos);
     const pedido = `BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
 MARCA: ${JSON.stringify({ nome: marca.nomeCliente, tom_de_voz: marca.tomDeVoz, regras: marca.regras })}
 ÂNGULO: ${JSON.stringify({ nome: a.nome, situacao: a.situacao, mecanismo: a.mecanismo, tecnica: a.tecnica, prova: a.prova, gancho_visual: a.gancho_visual, gancho_verbal: a.gancho_verbal, hipotese: a.hipotese, estagio: a.estagio_consciencia })}
@@ -2975,6 +3211,8 @@ OBJETIVO DA CAMPANHA: ${JSON.stringify(objetivo ? { id: objetivo.id, nome: objet
 FORMATOS: ${formatos.join(", ")}
 NÚMEROS REAIS DA OFERTA (os únicos que podem aparecer): ${JSON.stringify(numerosDaOferta)}
 
+${blocoDeRespostaDireta({ fatos, angulos: angulosDeVenda })}
+${rep ? `\n${rep.bloco}\n` : ""}${blocoMundo ? `\n${blocoMundo}\n` : ""}
 ${copyQueConverteParaOPrompt({ comLayout: true })}
 
 ${regrasDoTomParaCopy(tom)}
@@ -2982,6 +3220,7 @@ ${regrasDoTomParaCopy(tom)}
 TAREFA: escreva ${escrever} variação(ões) de anúncio para este ângulo${extras ? ` (a conferência escolhe as ${a.variacoes} melhores; capriche em todas)` : ""}, no tom ${regrasTom.nome.toLowerCase()} e vendedoras dentro da política da Meta, feitas para parar a rolagem e converter no objetivo acima. Nada genérico: cada peça tem a situação concreta do público e a promessa concreta da oferta. Mantenha o mecanismo do ângulo; entre uma variação e outra mude o gancho, a estrutura de copy E a execução visual (composição, escala, estilo), para que as peças NÃO fiquem parecidas entre si nem com o "mais do mesmo" da categoria.
 Para cada variação (variacao = 1, 2, ...):
 - framework: o id da estrutura de copy usada; cada variação usa uma estrutura diferente, a que melhor serve ao estágio do público e à prova disponível.
+- angulo_de_venda: o id do ângulo de venda pedido para a variação na COPY DE RESPOSTA DIRETA.
 - estilo_visual: a variação 1 usa o estilo do ângulo (se houver); as outras podem usar outro estilo da ORDEM DE RESULTADO que sirva ao mesmo mecanismo. Evite estilo de risco de política alto.
 - texto_principal: a ideia inteira em até 125 caracteres (o que aparece antes do "ver mais").
 - texto_principal_longo: a versão completa do texto do anúncio (pode repetir o início do texto_principal).
@@ -3008,7 +3247,29 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
     custo += s.custoUsd;
     saldo = s.saldoUsd;
     const brutas = (s.json as Record<string, unknown> | undefined)?.variacoes;
-    const variacoes = (Array.isArray(brutas) ? brutas as Record<string, unknown>[] : []).slice(0, escrever);
+    const escritas = (Array.isArray(brutas) ? brutas as Record<string, unknown>[] : []).slice(0, escrever);
+    // 02/10: conferente anti-genérico em código; as reprovadas vão para UMA reescrita (mesma conversa, uma chamada).
+    const revisao = await reescreverReprovadas(async (pedidoDaReescrita) => {
+      const r = await chamarTexto({
+        timeoutMs: TIMEOUT_TEXTO_ADS_MS,
+        clientId: p.client_id,
+        tarefa: TAREFA,
+        agente: AGENTE,
+        modeloId: modelo.id,
+        sistema: sistemaDoEstrategista("copy", objetivo),
+        mensagens: [{ papel: "usuario", conteudo: pedido }, { papel: "agente", conteudo: JSON.stringify({ variacoes: escritas }).slice(0, 20000) }, { papel: "usuario", conteudo: pedidoDaReescrita }],
+        raciocinio,
+        esquemaJson: ESQUEMA_COPIES,
+        referencia: { tipo: REF_PLANO, id: p.id },
+        criadoPor: chamador.userId,
+      });
+      custo += r.custoUsd;
+      saldo = r.saldoUsd;
+      const novas = (r.json as Record<string, unknown> | undefined)?.variacoes;
+      return Array.isArray(novas) ? novas as Record<string, unknown>[] : [];
+    }, escritas, fatos, angulosDeVenda);
+    if (revisao.erro) avisos.push(`${a.nome}: a reescrita das copies reprovadas falhou; ficaram as primeiras, com aviso.`);
+    const variacoes = revisao.variacoes as Record<string, unknown>[];
     const copies = variacoes.map((v) => normalizarCopy(v));
     const conferencia = await conferirCopiesComJev(
       copies.map((c, i) => ({
@@ -3027,7 +3288,7 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
     if (conferencia.jev_erro) jevErro = conferencia.jev_erro;
     // As melhores pela nota composta do Jev (política como trava); as outras ficam guardadas como alternativas.
     const escolha = escolherMelhores(conferencia.notas, a.variacoes);
-    return { angulo: a, formatos, variacoes, copies, notas: conferencia.notas, escolha, usoId: s.usoId, estilo, objetivo };
+    return { angulo: a, formatos, variacoes, copies, notas: conferencia.notas, escolha, usoId: s.usoId, estilo, objetivo, revisao, angulosDeVenda, rep };
   };
 
   // Pool simples: até ANGULOS_EM_PARALELO chamadas ao mesmo tempo.
@@ -3053,6 +3314,9 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
 
   const trabalhos: Record<string, unknown>[] = [];
   const criativos: Record<string, unknown>[] = [];
+  // 02/10: logos reais das marcas citadas (assunto e copies escolhidas), resolvidos uma vez para a chamada (grátis).
+  const textoEscolhido = feitos.map((f) => f.escolha.escolhidos.map((k) => textoDaVariacao(f.variacoes[k])).join("\n")).join("\n");
+  const logosDaChamada = await logosDoTexto(textoEscolhido, mundo.entidades);
   for (const f of feitos) {
     const a = f.angulo;
     const escritas = f.variacoes.length;
@@ -3078,6 +3342,18 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
       if (nota?.cliche_ia) avisosTom.unshift("Soa como texto genérico de IA pela conferência do Jev.");
       if (typeof nota?.tom === "number" && nota.tom < 6) avisosTom.unshift(`Abaixo do tom ${regrasTom.nome.toLowerCase()} pedido (nota ${String(nota.tom).replace(".", ",")}).`);
       for (const x of avisosTom) avisos.push(`${a.nome}, variação ${i + 1}: ${x}`);
+      // 02/10: ângulo de venda, conferência da casa (com a reescrita única), fidelidade à referência e mundo real.
+      const anguloVenda = anguloDeVenda(v.angulo_de_venda) ?? f.angulosDeVenda[k] ?? null;
+      const confCasa = f.revisao.conferencias[k];
+      const reescrita = f.revisao.reescritas.indexOf(k) >= 0;
+      if (confCasa && confCasa.reprovada) avisos.push(`${a.nome}, variação ${i + 1}: ${resumoDaConferencia(anguloVenda, confCasa, reescrita)}`);
+      if (confCasa && motivosDePolitica(confCasa).length) avisos.push(`${a.nome}, variação ${i + 1}: revise a política antes de subir (${motivosDePolitica(confCasa).map((m) => m.texto).join(" ")}).`);
+      const avisosFidelidade = f.rep ? avisosDaFidelidade({ fidelidade: f.rep.fidelidade, lido: f.rep.lido, headline: texto(v.headline_arte, 120), textoNaArte: [texto(v.headline_arte, 120), texto(v.apoio_arte, 160), texto(v.cta_arte, 60)], textoPrincipal: copy.texto_principal }) : [];
+      for (const x of avisosFidelidade) avisos.push(`${a.nome}, variação ${i + 1} (${ROTULO_DA_FIDELIDADE_ADS[f.rep!.fidelidade]}): ${x}`);
+      const textoDaPeca = textoDaVariacao(v);
+      const logos = logosDaChamada.filter((l) => mundo.entidades.some((m) => m.id === l.marca) || entidadesReais(textoDaPeca).some((m) => m.id === l.marca));
+      const mundoReal = mundoRealParaGravar([...mundo.entidades, ...entidadesReais(textoDaPeca)].filter((m, n, l) => l.findIndex((x) => x.id === m.id) === n), mundo.pesquisa, logos);
+      const regrasDoMundo = regrasDoMundoRealParaArte(logos, mundo.pesquisa);
       const gancho = texto(v.gancho_visual, 600) || a.gancho_visual;
       const estiloDaVariacao = estiloPorId(v.estilo_visual) ?? f.estilo;
       for (const formato of f.formatos) {
@@ -3096,6 +3372,11 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
         direcao.ads = { criativo_id: criativoId, plano_id: p.id, angulo_id: a.id, variacao: i + 1 };
         // O Estúdio lê a marca do trabalho de anúncio por aqui (não há item da agenda).
         if (marcaDosCriativos) (direcao as Record<string, unknown>).marca_id = marcaDosCriativos.id;
+        // 02/10: logo de terceiro nunca desenhado (entra por código) e a tela do app com os nomes exatos.
+        if (regrasDoMundo) direcao.regras_do_criativo = `${direcao.regras_do_criativo}
+
+${regrasDoMundo}`;
+        if (logos.length) direcao.logos_reais = logos;
         trabalhos.push({
           id: trabalhoId,
           client_id: p.client_id,
@@ -3128,6 +3409,10 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
             tom,
             variacao: i + 1,
             avisos_tom: avisosTom,
+            angulo_de_venda: anguloVenda,
+            conferencia_casa: confCasa ? conferenciaParaGravar(anguloVenda, confCasa, reescrita) : null,
+            ...(f.rep ? { referencia_replicada: { id: f.rep.ref.id, titulo: f.rep.ref.titulo, fidelidade: f.rep.fidelidade, gancho_lido: f.rep.lido ? f.rep.lido.gancho : null, avisos: avisosFidelidade } } : {}),
+            ...(mundoReal ? { mundo_real: mundoReal } : {}),
             // Frente CR: prova do porquê, em uma linha cada (estilo com o dado real ou padrão do nicho; copy com a nota do Jev).
             framework: doEnum(v.framework, FRAMEWORKS_IDS),
             porque_do_estilo: (porqueDoEstilo(estiloDaVariacao?.id, ordemDosEstilos) ?? { porque: a.porque_do_estilo ?? null }).porque,
@@ -3178,17 +3463,48 @@ function caminhoDaMesaAds(rotulo: string, clientId: string, alvo: { etapa: strin
   return { rotulo, destino: `/mesa-ads?${q.toString()}`, ...(abrirSozinho ? { abrir_sozinho: true } : {}) };
 }
 
-/** copy_variar { criativo_id, pedido?, quantidade? (1 a 5), modelo_id? } -> { criativo, variacoes, custo_usd, saldo_usd, jev_erro } */
+/**
+ * copy_variar { criativo_id, pedido?, quantidade? (1 a 5), modelo_id?, referencia_id?, fidelidade?, pesquisar? }
+ * -> { criativo, variacoes, avisos, custo_usd, saldo_usd, jev_erro }
+ * 02/10: pedido de trocar TODO o conteúdo ("muda todo o conteúdo", "refaz tudo") não acrescenta variação:
+ * vira a proposta de criativos_reescrever (todas as variações e cards no lugar, com Confirmar e Desfazer).
+ */
 async function copyVariar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const c = await carregarCriativo(servico, corpo.criativo_id);
   await exigirAcessoAoCliente(chamador, c.client_id);
   const qtd = Math.min(5, Math.max(1, Math.round(Number(corpo.quantidade) || 3)));
   const pedidoEquipe = texto(corpo.pedido, 1500);
+  if (pedeRefazerTudo(pedidoEquipe)) return await criativosReescrever(servico, chamador, { ...corpo, criativo_id: c.id, plano_id: undefined });
   const plano = c.plano_id ? await carregarPlano(servico, c.plano_id).catch((e) => (registrarFalha("mesa-ads: carregarPlano falhou", e), null)) : null;
   const angulo = plano?.angulos.find((a) => a.id === c.angulo_id) ?? null;
   const briefing = await carregarBriefing(servico, c.client_id, plano?.briefing_id ?? undefined).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null));
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista");
   const tom: TomDoCriativo = tomValido(corpo.tom) ?? tomDoPedido(pedidoEquipe, tomValido(c.copy.tom) ?? tomValido(plano?.estrutura.tom) ?? "direto");
+  // 02/10: fatos da oferta, ângulos de venda, referência com Fidelidade e mundo real do pedido.
+  const avisos: string[] = [];
+  let custoExtra = 0;
+  const fatos = await fatosDoPlano(servico, c.client_id, plano, briefing);
+  const angulosDeVenda = angulosParaVariacoes(qtd, fatos);
+  const replicacao = await replicacaoDaReferencia(servico, chamador, c.client_id, corpo.referencia_id, corpo.fidelidade);
+  custoExtra += replicacao.custo;
+  if (replicacao.aviso) avisos.push(replicacao.aviso);
+  const assunto = [pedidoEquipe, angulo ? `${angulo.nome}. ${angulo.situacao} ${angulo.mecanismo}` : ""].filter(Boolean).join("\n");
+  const mundo = await mundoRealDoAssunto(chamador, c.client_id, assunto, corpo.pesquisar !== false, { tipo: REF_CRIATIVO, id: c.id });
+  custoExtra += mundo.custo;
+  if (mundo.aviso) avisos.push(mundo.aviso);
+  const blocoMundo = blocoDoMundoReal(mundo.pesquisa, mundo.entidades);
+  const pedidoDaVariacao = `BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
+ÂNGULO: ${JSON.stringify(angulo ? { nome: angulo.nome, situacao: angulo.situacao, mecanismo: angulo.mecanismo, prova: angulo.prova, hipotese: angulo.hipotese } : null)}
+COPY ATUAL: ${JSON.stringify({ texto_principal: c.copy.texto_principal, titulo: c.copy.titulo, descricao: c.copy.descricao, cta_meta: c.copy.cta_meta, framework: c.copy.framework ?? null })}
+
+${blocoDeRespostaDireta({ fatos, angulos: angulosDeVenda })}
+${replicacao.rep ? `\n${replicacao.rep.bloco}\n` : ""}${blocoMundo ? `\n${blocoMundo}\n` : ""}
+${copyQueConverteParaOPrompt()}
+
+${regrasDoTomParaCopy(tom)}
+
+TAREFA: escreva ${qtd} variação(ões) de texto principal (até 125 caracteres), texto principal longo, título (até 40), descrição e CTA do botão, no tom ${TONS[tom].nome.toLowerCase()}, mudando uma coisa por vez e mantendo o mecanismo do ângulo. Cada variação usa uma estrutura de copy diferente (framework, id da lista), de preferência diferente da atual, e o ângulo de venda pedido (angulo_de_venda). Nada genérico.${pedidoEquipe ? ` Pedido da equipe: ${pedidoEquipe}` : ""}
+o_que_mudou: uma frase dizendo a variável que mudou.`;
   const s = await chamarTexto({
     timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId: c.client_id,
@@ -3197,26 +3513,48 @@ async function copyVariar(servico: SupabaseClient, chamador: Chamador, corpo: Re
     modeloId: modelo.id,
     sistema: sistemaDoEstrategista("copy", objetivoPorId(plano?.estrutura?.objetivo) ?? objetivoPorId((briefing?.objetivo ?? {}).acao)),
     metodo: await metodoDoEstrategista(servico, "gerar"),
-    mensagens: [{
-      papel: "usuario",
-      conteudo: `BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
-ÂNGULO: ${JSON.stringify(angulo ? { nome: angulo.nome, situacao: angulo.situacao, mecanismo: angulo.mecanismo, prova: angulo.prova, hipotese: angulo.hipotese } : null)}
-COPY ATUAL: ${JSON.stringify({ texto_principal: c.copy.texto_principal, titulo: c.copy.titulo, descricao: c.copy.descricao, cta_meta: c.copy.cta_meta, framework: c.copy.framework ?? null })}
-
-${copyQueConverteParaOPrompt()}
-
-${regrasDoTomParaCopy(tom)}
-
-TAREFA: escreva ${qtd} variação(ões) de texto principal (até 125 caracteres), texto principal longo, título (até 40), descrição e CTA do botão, no tom ${TONS[tom].nome.toLowerCase()}, mudando uma coisa por vez e mantendo o mecanismo do ângulo. Cada variação usa uma estrutura de copy diferente (framework, id da lista), de preferência diferente da atual. Nada genérico.${pedidoEquipe ? ` Pedido da equipe: ${pedidoEquipe}` : ""}
-o_que_mudou: uma frase dizendo a variável que mudou.`,
-    }],
+    mensagens: [{ papel: "usuario", conteudo: pedidoDaVariacao }],
     raciocinio,
     esquemaJson: ESQUEMA_VARIAR,
     referencia: { tipo: REF_CRIATIVO, id: c.id },
     criadoPor: chamador.userId,
   });
-  const brutas = (((s.json as Record<string, unknown>)?.variacoes as Record<string, unknown>[] | undefined) ?? []).slice(0, qtd);
-  const copies = brutas.map((v) => ({ ...normalizarCopy(v), framework: doEnum(v.framework, FRAMEWORKS_IDS), o_que_mudou: texto(v.o_que_mudou, 300) }));
+  const escritas = (((s.json as Record<string, unknown>)?.variacoes as Record<string, unknown>[] | undefined) ?? []).slice(0, qtd);
+  // 02/10: conferente anti-genérico em código e UMA reescrita das reprovadas.
+  const revisao = await reescreverReprovadas(async (pedidoDaReescrita) => {
+    const r = await chamarTexto({
+      timeoutMs: TIMEOUT_TEXTO_ADS_MS,
+      clientId: c.client_id,
+      tarefa: TAREFA,
+      agente: AGENTE,
+      modeloId: modelo.id,
+      sistema: sistemaDoEstrategista("copy", objetivoPorId(plano?.estrutura?.objetivo) ?? objetivoPorId((briefing?.objetivo ?? {}).acao)),
+      mensagens: [{ papel: "usuario", conteudo: pedidoDaVariacao }, { papel: "agente", conteudo: JSON.stringify({ variacoes: escritas }).slice(0, 20000) }, { papel: "usuario", conteudo: pedidoDaReescrita }],
+      raciocinio,
+      esquemaJson: ESQUEMA_VARIAR,
+      referencia: { tipo: REF_CRIATIVO, id: c.id },
+      criadoPor: chamador.userId,
+    });
+    custoExtra += r.custoUsd;
+    const novas = (r.json as Record<string, unknown> | undefined)?.variacoes;
+    return Array.isArray(novas) ? novas as Record<string, unknown>[] : [];
+  }, escritas, fatos, angulosDeVenda);
+  if (revisao.erro) avisos.push("A reescrita das variações reprovadas falhou; ficaram as primeiras, com aviso.");
+  const brutas = revisao.variacoes as Record<string, unknown>[];
+  const copies = brutas.map((v, k) => {
+    const anguloVenda = anguloDeVenda(v.angulo_de_venda) ?? angulosDeVenda[k] ?? null;
+    const conf = revisao.conferencias[k];
+    const reescrita = revisao.reescritas.indexOf(k) >= 0;
+    if (conf && conf.reprovada) avisos.push(`Variação ${k + 1}: ${resumoDaConferencia(anguloVenda, conf, reescrita)}`);
+    return {
+      ...normalizarCopy(v),
+      framework: doEnum(v.framework, FRAMEWORKS_IDS),
+      o_que_mudou: texto(v.o_que_mudou, 300),
+      angulo_de_venda: anguloVenda,
+      conferencia_casa: conf ? conferenciaParaGravar(anguloVenda, conf, reescrita) : null,
+      ...(replicacao.rep ? { referencia_replicada: { id: replicacao.rep.ref.id, titulo: replicacao.rep.ref.titulo, fidelidade: replicacao.rep.fidelidade, gancho_lido: replicacao.rep.lido ? replicacao.rep.lido.gancho : null } } : {}),
+    };
+  });
   const conferencia = await conferirCopiesComJev(copies, briefing, { clientId: c.client_id, referencia: { tipo: REF_CRIATIVO, id: c.id }, criadoPor: chamador.userId }, tom === "direto" ? null : tom, { parada: true });
   // Frente CR: a melhor primeiro pela nota composta do Jev (política como trava), com o porquê em uma linha.
   const ordem = escolherMelhores(conferencia.notas, copies.length).ordem;
@@ -3232,9 +3570,378 @@ o_que_mudou: uma frase dizendo a variável que mudou.`,
   const alternativas = [...variacoes, ...(Array.isArray(c.copy.alternativas) ? c.copy.alternativas : [])].slice(0, 10);
   const { data: criativo, error } = await servico.from("ads_criativos").update({ copy: { ...c.copy, alternativas } }).eq("id", c.id).eq("client_id", c.client_id).select("*").single();
   if (error || !criativo) throw new ErroHttp(503, "variacoes_nao_salvas", "As variações foram escritas, mas não foram salvas.", { variacoes, uso_id: s.usoId });
-  const custo = arred6(s.custoUsd + conferencia.custo);
+  const custo = arred6(s.custoUsd + conferencia.custo + custoExtra);
   await somarCustoDoPlano(servico, c.plano_id, c.client_id, custo);
-  return json({ criativo, variacoes, custo_usd: custo, saldo_usd: s.saldoUsd, jev_erro: conferencia.jev_erro });
+  return json({ criativo, variacoes, avisos, custo_usd: custo, saldo_usd: s.saldoUsd, jev_erro: conferencia.jev_erro });
+}
+
+// ------------------------------------------------------------ "muda todo o conteúdo" (02/10)
+
+/** Criativos por chamada no "muda todo o conteúdo" (um ângulo inteiro com os formatos irmãos). */
+const MAX_REESCRITA_POR_VEZ = 24;
+
+/** Parecida demais com a anterior (palavras de 4+ letras em comum): paráfrase, não conteúdo novo. */
+function parecidaDemais(nova: string, antiga: string): boolean {
+  const palavras = (t: string) => new Set(t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4));
+  const a = palavras(nova), b = palavras(antiga);
+  if (a.size < 4 || b.size < 4) return false;
+  let comum = 0;
+  a.forEach((w) => { if (b.has(w)) comum++; });
+  return comum / Math.min(a.size, b.size) >= 0.6;
+}
+
+type TrabalhoDoCriativo = { id: string; direcao: Record<string, unknown> | null; legenda: string | null; status: string | null };
+
+async function trabalhosDosCriativos(servico: SupabaseClient, clientId: string, ids: (string | null)[]): Promise<Map<string, TrabalhoDoCriativo>> {
+  const validos = [...new Set(ids.filter((x): x is string => !!x && UUID.test(x)))];
+  const mapa = new Map<string, TrabalhoDoCriativo>();
+  if (!validos.length) return mapa;
+  const { data, error } = await servico.from("estudio_trabalhos").select("id, direcao, legenda, status").eq("client_id", clientId).in("id", validos);
+  if (error) throw new ErroHttp(503, "trabalhos_indisponiveis", "Não foi possível ler as artes dos criativos.");
+  for (const t of (data ?? []) as TrabalhoDoCriativo[]) mapa.set(t.id, t);
+  return mapa;
+}
+
+/**
+ * criativos_reescrever { criativo_id | plano_id, angulo_id?, pedido?, referencia_id?, fidelidade?, tom?, pesquisar?, modelo_id?, raciocinio? }
+ * -> { refazer_tudo: true, lote_id, propostas: [{ criativo_id, nome, formato, variacao, antes, depois }], avisos, custo_usd, saldo_usd, jev_erro }
+ *
+ * "Muda todo o conteúdo" / "refaz tudo" (dono, 02/10: "pedi para mudar todo o conteúdo e ele só
+ * acrescentou um card com o mesmo conteúdo"): reescreve TODAS as variações do ângulo numa chamada,
+ * no lugar. A variação k substitui a variação k; os formatos irmãos dividem a copy nova; o carrossel
+ * mantém a quantidade de cards. Nada muda até o Confirmar (criativos_reescrever_confirmar); o
+ * Desfazer volta o conteúdo de antes. Criativo ligado a anúncio da Meta fica como está (aviso).
+ */
+async function criativosReescrever(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  let base: Criativo | null = null;
+  let plano: Plano | null = null;
+  if (typeof corpo.criativo_id === "string" && corpo.criativo_id) {
+    base = await carregarCriativo(servico, corpo.criativo_id);
+    await exigirAcessoAoCliente(chamador, base.client_id);
+    plano = base.plano_id ? await carregarPlano(servico, base.plano_id).catch((e) => (registrarFalha("mesa-ads: carregarPlano falhou", e), null)) : null;
+  } else {
+    plano = await carregarPlano(servico, corpo.plano_id);
+    await exigirAcessoAoCliente(chamador, plano.client_id);
+  }
+  const clientId = base ? base.client_id : plano!.client_id;
+  const anguloId = typeof corpo.angulo_id === "string" && corpo.angulo_id ? corpo.angulo_id : base ? base.angulo_id : null;
+  let q = servico.from("ads_criativos").select("*").eq("client_id", clientId);
+  q = plano ? q.eq("plano_id", plano.id) : q.eq("id", base!.id);
+  if (plano && anguloId) q = q.eq("angulo_id", anguloId);
+  const { data, error } = await q.order("criado_em", { ascending: true }).limit(MAX_REESCRITA_POR_VEZ);
+  if (error) throw new ErroHttp(503, "criativos_indisponiveis", "Não foi possível ler os criativos para reescrever.");
+  const lidos = (data ?? []) as Criativo[];
+  const avisos: string[] = [];
+  const naMeta = lidos.filter((c) => c.ad_id);
+  if (naMeta.length) avisos.push(`${naMeta.length} criativo(s) ligado(s) a anúncio na Meta ficaram como estão.`);
+  const todos = lidos.filter((c) => !c.ad_id);
+  if (!todos.length) throw new ErroHttp(409, "nada_para_reescrever", naMeta.length ? "Todos os criativos deste ângulo estão ligados a anúncios na Meta: crie novas variações em vez de trocar." : "Nenhum criativo para reescrever.");
+  // Grupos por variação: os formatos irmãos (mesmo ângulo e variação) dividem a mesma copy.
+  const grupos: Criativo[][] = [];
+  const porChave = new Map<string, Criativo[]>();
+  for (const c of todos) {
+    const v = Number(c.copy?.variacao);
+    const chave = v > 0 ? `${c.angulo_id}|${v}` : `so|${c.id}`;
+    if (!porChave.has(chave)) {
+      porChave.set(chave, []);
+      grupos.push(porChave.get(chave)!);
+    }
+    porChave.get(chave)!.push(c);
+  }
+  const n = grupos.length;
+  const trabalhos = await trabalhosDosCriativos(servico, clientId, todos.map((c) => c.trabalho_id));
+  const briefing = await carregarBriefing(servico, clientId, plano?.briefing_id ?? undefined).catch((e) => (registrarFalha("mesa-ads: carregarBriefing falhou", e), null));
+  const pedidoEquipe = texto(corpo.pedido, 1500) || "muda todo o conteúdo";
+  const tom: TomDoCriativo = tomValido(corpo.tom) ?? tomDoPedido(pedidoEquipe, tomValido(base?.copy.tom) ?? tomValido(plano?.estrutura.tom) ?? "direto");
+  const regrasTom = TONS[tom];
+  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista");
+  const marca = await lerMarcaParaDirecaoDaMarca(servico, clientId, null).catch((e) => (registrarFalha("mesa-ads: marca não lida na reescrita", e), null));
+  let custo = 0;
+  let saldo: number | null = null;
+  const fatos = await fatosDoPlano(servico, clientId, plano, briefing);
+  const angulosDeVenda = angulosParaVariacoes(n, fatos);
+  const replicacao = await replicacaoDaReferencia(servico, chamador, clientId, corpo.referencia_id, corpo.fidelidade);
+  custo += replicacao.custo;
+  if (replicacao.aviso) avisos.push(replicacao.aviso);
+  const anguloDe = (c: Criativo) => (plano ? plano.angulos.find((a) => a.id === c.angulo_id) ?? null : null);
+  const angulosDoLote = grupos.map((g) => anguloDe(g[0])).filter((a, i, l): a is Angulo => !!a && l.findIndex((x) => x && x.id === a.id) === i);
+  const assunto = [pedidoEquipe, ...angulosDoLote.map((a) => `${a.nome}. ${a.situacao} ${a.mecanismo}`)].join("\n");
+  const cobrarEm = { tipo: REF_CRIATIVO, id: grupos[0][0].id };
+  const mundo = await mundoRealDoAssunto(chamador, clientId, assunto, corpo.pesquisar !== false, cobrarEm);
+  custo += mundo.custo;
+  if (mundo.saldo != null) saldo = mundo.saldo;
+  if (mundo.aviso) avisos.push(mundo.aviso);
+  const blocoMundo = blocoDoMundoReal(mundo.pesquisa, mundo.entidades);
+  const cardsDoCarrossel = (g: Criativo[]) => {
+    const c = g.find((x) => x.formato === "carrossel");
+    const t = c && c.trabalho_id ? trabalhos.get(c.trabalho_id) : null;
+    const cards = t && t.direcao && Array.isArray(t.direcao.cards) ? (t.direcao.cards as unknown[]).length : 0;
+    return c ? Math.max(3, Math.min(5, cards || 3)) : null;
+  };
+  const atuais = grupos.map((g, k) => {
+    const cp = g[0].copy ?? {};
+    const a = anguloDe(g[0]);
+    return {
+      variacao: k + 1,
+      angulo: a ? { nome: a.nome, situacao: a.situacao, mecanismo: a.mecanismo } : null,
+      formatos: g.map((x) => x.formato),
+      cards_do_carrossel: cardsDoCarrossel(g),
+      texto_principal: cp.texto_principal ?? null,
+      titulo: cp.titulo ?? null,
+      headline_arte: cp.headline_arte ?? null,
+      apoio_arte: cp.apoio_arte ?? null,
+      cta_arte: cp.cta_arte ?? null,
+      cta_meta: cp.cta_meta ?? null,
+    };
+  });
+  const pedido = `BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
+MARCA: ${JSON.stringify(marca ? { nome: marca.nomeCliente, tom_de_voz: marca.tomDeVoz, regras: marca.regras } : null)}
+CONTEÚDO ATUAL (vai ser TROCADO; não repita nem parafraseie): ${JSON.stringify(atuais)}
+
+${blocoDeRespostaDireta({ fatos, angulos: angulosDeVenda })}
+${replicacao.rep ? `\n${replicacao.rep.bloco}\n` : ""}${blocoMundo ? `\n${blocoMundo}\n` : ""}
+${copyQueConverteParaOPrompt({ comLayout: true })}
+
+${regrasDoTomParaCopy(tom)}
+
+PEDIDO DA EQUIPE: ${pedidoEquipe}
+
+TAREFA: reescreva TODO o conteúdo das ${n} variação(ões) acima, NO LUGAR: a variação k substitui a variação k (mesma quantidade e mesma ordem; nunca acrescente variação nem card). Conteúdo novo de verdade: outro gancho, outra situação, outro argumento e outra frase da arte; nada de paráfrase do atual nem da mesma ideia com outras palavras. Mantenha o objetivo, a oferta e os formatos de cada variação.
+Para cada variação (variacao = 1, 2, ...): framework, angulo_de_venda, texto_principal (até 125 caracteres), texto_principal_longo, titulo (até 40), descricao, cta_meta, headline_arte (até ${regrasTom.headline_max_palavras} palavras), apoio_arte, cta_arte, gancho_visual, estilo_visual (null para manter) e carrossel: nas variações com cards_do_carrossel, exatamente essa quantidade de cards (tensão, explicação, demonstração, objeção, próximo passo), texto_exato curto e a ilustracao de cada um; nas outras, null.
+Nada de número, depoimento, prazo, preço ou urgência fora dos FATOS.`;
+  const sistema = sistemaDoEstrategista("copy", objetivoPorId(plano?.estrutura?.objetivo) ?? objetivoPorId((briefing?.objetivo ?? {}).acao));
+  const s = await chamarTexto({
+    timeoutMs: TIMEOUT_TEXTO_ADS_MS,
+    clientId,
+    tarefa: TAREFA,
+    agente: AGENTE,
+    modeloId: modelo.id,
+    sistema,
+    metodo: await metodoDoEstrategista(servico, "gerar"),
+    mensagens: [{ papel: "usuario", conteudo: pedido }],
+    raciocinio,
+    esquemaJson: ESQUEMA_COPIES,
+    referencia: cobrarEm,
+    criadoPor: chamador.userId,
+  });
+  custo += s.custoUsd;
+  saldo = s.saldoUsd;
+  const brutas = (s.json as Record<string, unknown> | undefined)?.variacoes;
+  const escritas = (Array.isArray(brutas) ? brutas as Record<string, unknown>[] : []).slice(0, n);
+  if (!escritas.length) throw new ErroHttp(502, "sem_copy", "O estrategista não devolveu o conteúdo novo.", { custo_usd: arred6(custo) });
+  if (escritas.length < n) avisos.push(`Vieram ${escritas.length} de ${n} variações; as outras ficam como estão.`);
+  const revisao = await reescreverReprovadas(async (pedidoDaReescrita) => {
+    const r = await chamarTexto({
+      timeoutMs: TIMEOUT_TEXTO_ADS_MS,
+      clientId,
+      tarefa: TAREFA,
+      agente: AGENTE,
+      modeloId: modelo.id,
+      sistema,
+      mensagens: [{ papel: "usuario", conteudo: pedido }, { papel: "agente", conteudo: JSON.stringify({ variacoes: escritas }).slice(0, 20000) }, { papel: "usuario", conteudo: pedidoDaReescrita }],
+      raciocinio,
+      esquemaJson: ESQUEMA_COPIES,
+      referencia: cobrarEm,
+      criadoPor: chamador.userId,
+    });
+    custo += r.custoUsd;
+    saldo = r.saldoUsd;
+    const novas = (r.json as Record<string, unknown> | undefined)?.variacoes;
+    return Array.isArray(novas) ? novas as Record<string, unknown>[] : [];
+  }, escritas, fatos, angulosDeVenda);
+  if (revisao.erro) avisos.push("A reescrita das variações reprovadas falhou; ficaram as primeiras, com aviso.");
+  const variacoes = revisao.variacoes as Record<string, unknown>[];
+  const copies = variacoes.map((v) => normalizarCopy(v));
+  const conferencia = await conferirCopiesComJev(
+    copies.map((c, i) => ({ texto_principal: c.texto_principal, titulo: c.titulo, descricao: c.descricao, cta_meta: c.cta_meta, texto_na_arte: [texto(variacoes[i].headline_arte, 120), texto(variacoes[i].apoio_arte, 160), texto(variacoes[i].cta_arte, 60)].filter(Boolean).join(" / ") })),
+    briefing,
+    { clientId, referencia: cobrarEm, criadoPor: chamador.userId },
+    tom === "direto" ? null : tom,
+    { parada: true },
+  );
+  custo += conferencia.custo;
+  const logos = await logosDoTexto(variacoes.map(textoDaVariacao).join("\n"), mundo.entidades);
+  const lote = crypto.randomUUID();
+  const agora = new Date().toISOString();
+  const propostas: Record<string, unknown>[] = [];
+  for (let k = 0; k < grupos.length; k++) {
+    const v = variacoes[k];
+    if (!v) continue;
+    const copy = normalizarCopy(v);
+    const nota = conferencia.notas[k] ?? null;
+    const anguloVenda = anguloDeVenda(v.angulo_de_venda) ?? angulosDeVenda[k] ?? null;
+    const conf = revisao.conferencias[k];
+    const reescrita = revisao.reescritas.indexOf(k) >= 0;
+    if (conf && conf.reprovada) avisos.push(`Variação ${k + 1}: ${resumoDaConferencia(anguloVenda, conf, reescrita)}`);
+    if (nota?.alerta_politica) avisos.push(`Variação ${k + 1}: o Jev viu risco de política. Revise antes de subir.`);
+    const antes = grupos[k][0].copy ?? {};
+    if (parecidaDemais(textoDaVariacao(v), textoDaVariacao(antes as VariacaoBruta))) avisos.push(`Variação ${k + 1}: ficou parecida com o conteúdo atual.`);
+    const textoDaPeca = textoDaVariacao(v);
+    const logosDaPeca = logos.filter((l) => mundo.entidades.some((m) => m.id === l.marca) || entidadesReais(textoDaPeca).some((m) => m.id === l.marca));
+    const mundoReal = mundoRealParaGravar([...mundo.entidades, ...entidadesReais(textoDaPeca)].filter((m, i, l) => l.findIndex((x) => x.id === m.id) === i), mundo.pesquisa, logosDaPeca);
+    const depois: Record<string, unknown> = {
+      texto_principal: copy.texto_principal,
+      texto_principal_longo: copy.texto_principal_longo,
+      titulo: copy.titulo,
+      descricao: copy.descricao,
+      cta_meta: copy.cta_meta,
+      headline_arte: texto(v.headline_arte, 120),
+      apoio_arte: textoOuNulo(v.apoio_arte, 160),
+      cta_arte: texto(v.cta_arte, 60),
+      framework: doEnum(v.framework, FRAMEWORKS_IDS),
+      angulo_de_venda: anguloVenda,
+      jev: nota,
+      avisos_tom: copy.avisos,
+      conferencia_casa: conf ? conferenciaParaGravar(anguloVenda, conf, reescrita) : null,
+      escolha: { posicao: k + 1, de: n, nota: notaDaCopy(nota), porque: `Reescrita a pedido da equipe (${pedidoEquipe.slice(0, 80)}).` },
+      ...(replicacao.rep ? { referencia_replicada: { id: replicacao.rep.ref.id, titulo: replicacao.rep.ref.titulo, fidelidade: replicacao.rep.fidelidade, gancho_lido: replicacao.rep.lido ? replicacao.rep.lido.gancho : null } } : {}),
+      ...(mundoReal ? { mundo_real: mundoReal } : {}),
+    };
+    for (const c of grupos[k]) {
+      const gancho = texto(v.gancho_visual, 600) || String((c.copy && c.copy.gancho_visual) || "");
+      const textos = roteiroDaVariacao(v, c.formato, gancho, regrasTom.headline_max_caracteres).map((r) => r.texto);
+      const pendente: ReescritaPendente = { lote, pedido: pedidoEquipe, depois, textos_dos_cards: textos, criado_em: agora };
+      const { error: e } = await servico.from("ads_criativos").update({ copy: copyComProposta(c.copy ?? {}, pendente) }).eq("id", c.id).eq("client_id", clientId);
+      if (e) throw new ErroHttp(503, "proposta_nao_salva", "O conteúdo novo foi escrito, mas a proposta não foi salva.", { custo_usd: arred6(custo) });
+      propostas.push({ criativo_id: c.id, nome: c.nome, formato: c.formato, variacao: k + 1, angulo_de_venda: anguloVenda, ...resumoDaProposta(c.copy ?? {}, depois) });
+    }
+  }
+  const custoFinal = arred6(custo);
+  await somarCustoDoPlano(servico, plano ? plano.id : null, clientId, custoFinal);
+  return json({ refazer_tudo: true, lote_id: lote, propostas, avisos, custo_usd: custoFinal, saldo_usd: saldo, jev_erro: conferencia.jev_erro });
+}
+
+/** Os criativos do lote pedidos pela tela (só os do cliente). */
+async function criativosDoLote(servico: SupabaseClient, clientId: string, bruto: unknown): Promise<Criativo[]> {
+  const ids = [...new Set((Array.isArray(bruto) ? bruto : []).map(String).filter((x) => UUID.test(x)))].slice(0, MAX_REESCRITA_POR_VEZ);
+  if (!ids.length) throw new ErroHttp(400, "criativo_ids_vazio", "Diga quais criativos fazem parte da troca.");
+  const { data, error } = await servico.from("ads_criativos").select("*").eq("client_id", clientId).in("id", ids);
+  if (error) throw new ErroHttp(503, "criativos_indisponiveis", "Não foi possível ler os criativos.");
+  return (data ?? []) as Criativo[];
+}
+
+function loteValido(v: unknown): string {
+  const lote = String(v ?? "");
+  if (!UUID.test(lote)) throw new ErroHttp(400, "lote_id_invalido", "lote_id precisa ser um UUID.");
+  return lote;
+}
+
+/**
+ * criativos_reescrever_confirmar { client_id, lote_id, criativo_ids[] } -> { criativos, aplicados, aviso, custo_usd: 0 }
+ * Troca NO LUGAR: a copy de cada criativo e o texto dos cards da arte (mesmos cards, mesma ordem,
+ * layout intacto). O antes fica guardado para o Desfazer. Sem IA.
+ */
+async function criativosReescreverConfirmar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const lote = loteValido(corpo.lote_id);
+  const criativos = await criativosDoLote(servico, clientId, corpo.criativo_ids);
+  const trabalhos = await trabalhosDosCriativos(servico, clientId, criativos.map((c) => c.trabalho_id));
+  const aplicados: unknown[] = [];
+  let artesSemTexto = 0;
+  const agora = new Date().toISOString();
+  for (const c of criativos) {
+    const p = propostaDoLote(c.copy, lote);
+    if (!p) continue;
+    const t = c.trabalho_id ? trabalhos.get(c.trabalho_id) ?? null : null;
+    const cardsAntes = t && t.direcao && Array.isArray(t.direcao.cards) ? t.direcao.cards as Record<string, unknown>[] : null;
+    const nova = copyConfirmada(c.copy, p, { cards: cardsAntes, legenda: t ? t.legenda : null }, agora);
+    const { data, error } = await servico.from("ads_criativos").update({ copy: nova }).eq("id", c.id).eq("client_id", clientId).select("*").single();
+    if (error || !data) throw new ErroHttp(503, "reescrita_nao_aplicada", "Não foi possível trocar o conteúdo de um dos criativos. O que já foi trocado pode ser desfeito.");
+    if (t && cardsAntes) {
+      const mundo = p.depois.mundo_real as { logos?: LogoReal[] } | undefined;
+      const direcao: Record<string, unknown> = { ...t.direcao, cards: cardsComTextoNovo(cardsAntes, p.textos_dos_cards, String(p.depois.cta_arte ?? "")), conteudo_trocado_em: agora };
+      if (mundo && Array.isArray(mundo.logos) && mundo.logos.length) direcao.logos_reais = mundo.logos;
+      const { error: e } = await servico.from("estudio_trabalhos").update({ direcao, legenda: String(p.depois.texto_principal_longo ?? t.legenda ?? "") }).eq("id", t.id).eq("client_id", clientId);
+      if (e) {
+        registrarFalha("mesa-ads: texto novo não foi para a direção da arte", e, { trabalho_id: t.id });
+        artesSemTexto++;
+      }
+    }
+    aplicados.push(data);
+  }
+  if (!aplicados.length) throw new ErroHttp(409, "proposta_inexistente", "Esta troca já foi confirmada, descartada ou substituída por outra.");
+  return json({
+    criativos: aplicados,
+    aplicados: aplicados.length,
+    aviso: artesSemTexto ? `A copy foi trocada, mas ${artesSemTexto} arte(s) não receberam o texto novo.` : "Conteúdo trocado no lugar. Gere a arte de novo para o texto novo entrar na peça.",
+    custo_usd: 0,
+  });
+}
+
+/** criativos_reescrever_desfazer { client_id, lote_id, criativo_ids[] } -> { criativos, desfeitos, custo_usd: 0 } (sem IA). */
+async function criativosReescreverDesfazer(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const lote = loteValido(corpo.lote_id);
+  const criativos = await criativosDoLote(servico, clientId, corpo.criativo_ids);
+  const trabalhos = await trabalhosDosCriativos(servico, clientId, criativos.map((c) => c.trabalho_id));
+  const desfeitos: unknown[] = [];
+  for (const c of criativos) {
+    const volta = copyDesfeita(c.copy ?? {}, lote);
+    if (!volta) continue;
+    const { data, error } = await servico.from("ads_criativos").update({ copy: volta.copy }).eq("id", c.id).eq("client_id", clientId).select("*").single();
+    if (error || !data) throw new ErroHttp(503, "desfazer_falhou", "Não foi possível voltar o conteúdo de um dos criativos.");
+    const t = c.trabalho_id ? trabalhos.get(c.trabalho_id) ?? null : null;
+    if (t && volta.cards) {
+      const direcao: Record<string, unknown> = { ...t.direcao, cards: volta.cards };
+      delete direcao.conteudo_trocado_em;
+      const { error: e } = await servico.from("estudio_trabalhos").update({ direcao, legenda: volta.legenda ?? t.legenda }).eq("id", t.id).eq("client_id", clientId);
+      if (e) registrarFalha("mesa-ads: texto antigo não voltou para a direção da arte", e, { trabalho_id: t.id });
+    }
+    desfeitos.push(data);
+  }
+  if (!desfeitos.length) throw new ErroHttp(409, "nada_para_desfazer", "Não há troca confirmada deste lote para desfazer.");
+  return json({ criativos: desfeitos, desfeitos: desfeitos.length, custo_usd: 0 });
+}
+
+/** criativos_reescrever_descartar { client_id, lote_id, criativo_ids[] } -> { descartados, custo_usd: 0 }: apaga a proposta sem mudar nada. */
+async function criativosReescreverDescartar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const lote = loteValido(corpo.lote_id);
+  const criativos = await criativosDoLote(servico, clientId, corpo.criativo_ids);
+  let descartados = 0;
+  for (const c of criativos) {
+    if (!propostaDoLote(c.copy, lote)) continue;
+    const copy = { ...c.copy };
+    delete copy.reescrita_pendente;
+    const { error } = await servico.from("ads_criativos").update({ copy }).eq("id", c.id).eq("client_id", clientId);
+    if (error) throw new ErroHttp(503, "descartar_falhou", "Não foi possível descartar a proposta.");
+    descartados++;
+  }
+  return json({ descartados, custo_usd: 0 });
+}
+
+/** referencia_ler_texto { client_id, referencia_id, forcar? } -> { referencia_id, texto_lido, custo_usd, saldo_usd }: o texto escrito na imagem (leitor barato). */
+async function referenciaLerTexto(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const ref = await carregarReferencia(servico, clientId, corpo.referencia_id);
+  const r = await textoLidoDaReferenciaAds(servico, chamador, clientId, ref, corpo.forcar === true);
+  if (!r.lido) throw new ErroHttp(422, "referencia_sem_imagem", "Esta referência não tem imagem guardada para ler o texto. Abra a referência e suba um print.");
+  return json({ referencia_id: ref.id, texto_lido: r.lido, custo_usd: arred6(r.custo), saldo_usd: r.saldo });
+}
+
+/**
+ * mundo_real_ler { criativo_id, pesquisar? } -> { criativo, mundo_real, avisos, custo_usd, saldo_usd }
+ * Logos reais das marcas citadas no criativo (grátis) e, só com pesquisar: true, a pesquisa web
+ * (fatos, passos e fontes; leitor barato, custo contado). Grava em copy.mundo_real.
+ */
+async function mundoRealLer(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const c = await carregarCriativo(servico, corpo.criativo_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  const textoDoCriativo = textoDaVariacao(c.copy as VariacaoBruta);
+  const mundo = await mundoRealDoAssunto(chamador, c.client_id, textoDoCriativo, corpo.pesquisar === true, { tipo: REF_CRIATIVO, id: c.id });
+  const logos = await logosDoTexto(textoDoCriativo, mundo.entidades);
+  const anterior = (c.copy.mundo_real ?? null) as { pesquisa?: PesquisaReal | null } | null;
+  const mundoReal = mundoRealParaGravar(mundo.entidades, mundo.pesquisa ?? (anterior && anterior.pesquisa) ?? null, logos);
+  const avisos = mundo.aviso ? [mundo.aviso] : [];
+  if (!mundoReal) return json({ criativo: c, mundo_real: null, avisos: [...avisos, "Nenhuma marca ou app real citado neste criativo."], custo_usd: arred6(mundo.custo), saldo_usd: mundo.saldo });
+  const { data, error } = await servico.from("ads_criativos").update({ copy: { ...c.copy, mundo_real: mundoReal } }).eq("id", c.id).eq("client_id", c.client_id).select("*").single();
+  if (error || !data) throw new ErroHttp(503, "mundo_real_nao_salvo", "Os logos e as fontes foram achados, mas não foram salvos.", { custo_usd: arred6(mundo.custo) });
+  if (mundo.custo) await somarCustoDoPlano(servico, c.plano_id, c.client_id, arred6(mundo.custo));
+  return json({ criativo: data, mundo_real: mundoReal, avisos, custo_usd: arred6(mundo.custo), saldo_usd: mundo.saldo });
 }
 
 /** Período pedido: periodo_inicio/periodo_fim ou os últimos `dias` (padrão 30), fechando hoje em São Paulo. */
@@ -9753,6 +10460,14 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   // Frente AG3 (29/09): "Esquecer" e "Guardar como regra" da linha "Aprendi" dos agentes de tráfego.
   esquecer_regra: esquecerRegraDoTrafego,
   guardar_regra: guardarRegraDoTrafego,
+  // 02/10 (dono: "o conteúdo está genérico"): "muda todo o conteúdo" no lugar, com Confirmar e Desfazer;
+  // texto lido na imagem da referência; logos reais, fontes e pesquisa do mundo real.
+  criativos_reescrever: criativosReescrever,
+  criativos_reescrever_confirmar: criativosReescreverConfirmar,
+  criativos_reescrever_desfazer: criativosReescreverDesfazer,
+  criativos_reescrever_descartar: criativosReescreverDescartar,
+  referencia_ler_texto: referenciaLerTexto,
+  mundo_real_ler: mundoRealLer,
 };
 
 /**
@@ -9771,6 +10486,7 @@ const ACOES_LONGAS = new Set([
   // na Verzelo, 93 ms de CPU), tem teto de 20 s na Meta e responde com JSON direto, sem streaming.
   "gerenciador_acao",
   "referencia_para_estudio",
+  "criativos_reescrever", "referencia_ler_texto", "mundo_real_ler",
 ]);
 
 Deno.serve(async (req) => {

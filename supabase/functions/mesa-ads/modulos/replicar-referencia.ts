@@ -91,7 +91,7 @@ export function normalizarTextoLido(bruto: unknown, modelo: string | null, agora
     .map((t, i) => ({
       ordem: Number.isFinite(Number(t && t.ordem)) ? Number(t.ordem) : i + 1,
       texto: String((t && t.texto) || "").replace(/\s+/g, " ").trim().slice(0, 400),
-      papel: (PAPEIS.indexOf(t && t.papel as PapelDoTexto) >= 0 ? t.papel : "outro") as PapelDoTexto,
+      papel: (PAPEIS.indexOf(String((t && t.papel) || "") as PapelDoTexto) >= 0 ? t.papel : "outro") as PapelDoTexto,
     }))
     .filter((t) => t.texto)
     .sort((a, b) => a.ordem - b.ordem)

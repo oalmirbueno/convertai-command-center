@@ -289,18 +289,20 @@ export type BuscarJson = (url: string) => Promise<unknown | null>;
  * Busca que falha não derruba nada: fica só o que veio.
  */
 export async function resolverLogosReais(buscar: BuscarJson, marcas: MarcaReal[], max = 4): Promise<LogoReal[]> {
-  const saida: LogoReal[] = [];
-  for (const m of marcas.slice(0, max)) {
+  // As buscas correm juntas; a ordem da saída segue a das marcas.
+  const porMarca = await Promise.all(marcas.slice(0, max).map(async (m) => {
+    const daMarca: LogoReal[] = [];
     const si = logoDoSimpleIcons(m);
-    if (si) saida.push(si);
+    if (si) daMarca.push(si);
     try {
       const commons = logoDaRespostaDoCommons(m, await buscar(urlDaBuscaNoCommons(m)));
-      if (commons) saida.push(commons);
+      if (commons) daMarca.push(commons);
     } catch {
       // Sem o Commons, fica o Simple Icons (ou nada) para esta marca.
     }
-  }
-  return saida;
+    return daMarca;
+  }));
+  return porMarca.reduce((a, b) => a.concat(b), [] as LogoReal[]);
 }
 
 /** O que a direção de arte leva: não desenhar logo de terceiro (entra por código). */

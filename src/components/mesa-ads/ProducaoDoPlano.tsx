@@ -26,6 +26,8 @@ import { gerarKit, kitDoAngulo, partesDoKit } from "./acoesDoAgenteApi";
 import { pedirArteDoPlano, type AndamentoDoLote } from "./loteDoEstudio";
 import { resumoDoModelo, SeletorDoModeloDaCopy, useModeloDaCopy } from "./ModeloDaCopy";
 import ProgressoComParada from "./ProgressoComParada";
+import { SeletorDeFidelidade } from "./PainelDaCopy";
+import type { FidelidadeAds } from "./adsApi";
 
 /**
  * Criar criativos em um clique (frente CR, pedido do dono em 27/09: "do Plano
@@ -115,6 +117,8 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
   const [formatosEscolhidos, setFormatosEscolhidos] = useState<FormatoAds[] | null>(null);
   const [comKit, setComKit] = useState(true);
   const [comArte, setComArte] = useState(true);
+  // 02/10: seguir a referência do ângulo com a Fidelidade (Idêntico, Próximo, Criativo); vazio = não seguir.
+  const [fidelidade, setFidelidade] = useState<FidelidadeAds | "">("");
   const [trocando, setTrocando] = useState(false);
   const [andamento, setAndamento] = useState<AndamentoDoLote | null>(null);
   const [fim, setFim] = useState<FimDaCriacao | null>(null);
@@ -165,7 +169,9 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
         const a = lista[i];
         setAndamento((x) => (x ? { ...x, atual: a.nome } : x));
         try {
-          const data = await chamarAds<RespostaDaProducao>("criativos_produzir", corpoDaProducao(plano, [a.id], formatosDaVez[i], tomDaVez, corpoDoModelo));
+          const corpo = corpoDaProducao(plano, [a.id], formatosDaVez[i], tomDaVez, corpoDoModelo);
+          if (fidelidade && (a.referencia_ids || []).length) corpo.fidelidade = fidelidade;
+          const data = await chamarAds<RespostaDaProducao>("criativos_produzir", corpo);
           custo += custoDaResposta(data) || 0;
           const novos = data && Array.isArray(data.criativos) ? data.criativos : [];
           novos.forEach((c) => c && c.id && ids.push(String(c.id)));
@@ -318,6 +324,18 @@ export default function ProducaoDoPlano({ plano, marcados, onProduzido }: { plan
             <p className="mb-1 text-[11.5px] font-medium text-muted-foreground">Tom</p>
             <SeletorDeTom valor={tom} onMudar={setTom} rotulo="Tom dos criativos" />
           </div>
+          {angulos.some((a) => (a.referencia_ids || []).length > 0) && (
+            <div className="min-w-0">
+              <p className="mb-1 text-[11.5px] font-medium text-muted-foreground">Referência do ângulo</p>
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <label className="inline-flex items-center text-[12px] text-muted-foreground">
+                  <input type="checkbox" className="mr-1.5" checked={!!fidelidade} onChange={(e) => setFidelidade(e.target.checked ? "proximo" : "")} />
+                  Seguir a referência
+                </label>
+                {fidelidade && <SeletorDeFidelidade valor={fidelidade} onMudar={setFidelidade} />}
+              </div>
+            </div>
+          )}
           <div className="min-w-0">
             <p className="mb-1 text-[11.5px] font-medium text-muted-foreground">Modelo da copy</p>
             <SeletorDoModeloDaCopy estado={modelo} />

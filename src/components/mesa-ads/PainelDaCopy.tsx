@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Globe, Loader2, MoreHorizontal, Shuffle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,18 @@ import {
   TAMANHOS_ADS,
   type CopyDoAnuncio,
   type CriativoAds,
+  ehRespostaDaReescrita,
+  FIDELIDADES_ADS,
+  lerReferencias,
+  ordenarReferencias,
+  pedeRefazerTudo,
+  ROTULO_DA_FIDELIDADE_ADS,
+  rotuloDoAnguloDeVenda,
+  trocaGuardada,
+  type FidelidadeAds,
 } from "./adsApi";
+import TrocaDeConteudo, { type TrocaParaATela } from "./TrocaDeConteudo";
+import LogosReais from "./LogosReais";
 import { Andamento, useAndamento } from "./Comuns";
 import { SeletorDoModeloDaCopy, useModeloDaCopy } from "./ModeloDaCopy";
 import PacoteDaCopy from "./PacoteDaCopy";
@@ -39,10 +50,38 @@ import PosicionamentosDoAnuncio from "./PosicionamentosDoAnuncio";
  * primeiro, com o porquê. O pacote completo (PacoteDaCopy) traz todos os
  * estilos, títulos, descrições, CTAs, ganchos e a orientação ao gestor, com
  * "Usar" para trazer ao formulário. A prévia mostra o feed.
+ *
+ * 02/10 (dono: "o conteúdo está genérico"; "pedi para mudar todo o conteúdo
+ * e ele só acrescentou um card"): cada variação diz o ângulo de venda (dor,
+ * desejo, prova, objeção, urgência); "Seguir referência" com a Fidelidade
+ * (Idêntico, Próximo, Criativo) vale para o refino e para a troca; pedido de
+ * trocar TUDO ("muda todo o conteúdo", "refaz tudo") vira a troca no lugar de
+ * todas as variações, com Confirmar e Desfazer (TrocaDeConteudo). Abaixo, as
+ * marcas reais, as fontes e os logos reais (LogosReais).
  */
 
 /** Variação que o refino devolve: a copy, a estrutura, se é a melhor e o porquê. */
 type VariacaoDoRefino = CopyDoAnuncio & { melhor?: boolean; porque?: string; o_que_mudou?: string };
+
+/** Seletor da Fidelidade à referência (Idêntico, Próximo, Criativo). */
+export function SeletorDeFidelidade({ valor, onMudar }: { valor: FidelidadeAds; onMudar: (f: FidelidadeAds) => void }) {
+  return (
+    <div className="inline-flex h-8 min-w-0 max-w-full items-center rounded-md bg-muted p-0.5" role="radiogroup" aria-label="Fidelidade à referência">
+      {FIDELIDADES_ADS.map((f) => (
+        <button
+          key={f}
+          type="button"
+          role="radio"
+          aria-checked={valor === f}
+          onClick={() => onMudar(f)}
+          className={`inline-flex h-7 min-w-0 items-center justify-center whitespace-nowrap rounded px-2.5 text-[12px] font-medium transition-colors ${valor === f ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          {ROTULO_DA_FIDELIDADE_ADS[f]}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const limpa = (c: CopyDoAnuncio): CopyDoAnuncio => ({
   texto_principal: c.texto_principal || "",
@@ -128,6 +167,15 @@ export default function PainelDaCopy({
   const [salvando, setSalvando] = useState(false);
   const [pedido, setPedido] = useState("");
   const [variacoes, setVariacoes] = useState<VariacaoDoRefino[]>([]);
+  // 02/10: a troca de todo o conteúdo (proposta ou feita), a referência a seguir e a Fidelidade.
+  const [troca, setTroca] = useState<TrocaParaATela | null>(null);
+  const [referenciaId, setReferenciaId] = useState("");
+  const [fidelidade, setFidelidade] = useState<FidelidadeAds>("proximo");
+  const referencias = useQuery({ queryKey: chavesAds.referencias(clientId), queryFn: () => lerReferencias(clientId) });
+  const refsComImagem = ordenarReferencias(referencias.data || []).slice(0, 60);
+  const refazerTudo = pedeRefazerTudo(pedido);
+  const comReferencia = referenciaId ? { referencia_id: referenciaId, fidelidade } : {};
+  const anguloAtual = rotuloDoAnguloDeVenda(criativo.copy.angulo_de_venda);
   // Por que esta copy virou criativo (gravado na produção): uma linha, com a nota do Jev.
   const porqueDaCopy = criativo.copy.escolha && typeof criativo.copy.escolha.porque === "string" ? criativo.copy.escolha.porque : "";
   const [desde, rodar] = useAndamento();
@@ -138,6 +186,14 @@ export default function PainelDaCopy({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [criativo.id, salvo]);
   useEffect(() => setVariacoes([]), [criativo.id]);
+  // A troca que ficou esperando o Confirmar (ou a última feita) volta ao abrir o criativo.
+  const lotePendente = criativo.copy.reescrita_pendente ? criativo.copy.reescrita_pendente.lote : "";
+  useEffect(() => {
+    const guardada = trocaGuardada(criativo, queryClient.getQueryData<CriativoAds[]>(chavesAds.criativos(clientId)) || []);
+    setTroca(guardada && guardada.tipo === "pendente" ? guardada : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [criativo.id, lotePendente]);
+  const loteFeito = !troca && criativo.copy.reescrita_feita && criativo.copy.reescrita_feita.lote ? criativo.copy.reescrita_feita.lote : "";
 
   const mudou = JSON.stringify(limpa(copy)) !== salvo;
   useEffect(() => {
@@ -184,6 +240,15 @@ export default function PainelDaCopy({
             {porqueDaCopy}
           </p>
         )}
+        {(anguloAtual || (criativo.copy.conferencia_casa && criativo.copy.conferencia_casa.reprovada) || criativo.copy.referencia_replicada) && (
+          <p className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground" data-angulo-de-venda={criativo.copy.angulo_de_venda || ""}>
+            {anguloAtual && <span className="rounded-full bg-primary/10 px-1.5 py-px font-medium text-primary">Ângulo: {anguloAtual}</span>}
+            {criativo.copy.referencia_replicada && criativo.copy.referencia_replicada.fidelidade && (
+              <span>Segue "{criativo.copy.referencia_replicada.titulo}" ({ROTULO_DA_FIDELIDADE_ADS[criativo.copy.referencia_replicada.fidelidade as FidelidadeAds] || criativo.copy.referencia_replicada.fidelidade})</span>
+            )}
+            {criativo.copy.conferencia_casa && criativo.copy.conferencia_casa.reprovada && <span className="text-warning [overflow-wrap:anywhere]">{criativo.copy.conferencia_casa.resumo}</span>}
+          </p>
+        )}
         <label className="block">
           <span className="mb-1 flex items-center text-[11.5px] font-medium text-foreground/80">
             <span className="flex-1">Texto principal</span>
@@ -227,31 +292,65 @@ export default function PainelDaCopy({
 
         <div className="border-t border-border pt-3">
           <div className="flex min-w-0 items-center">
-            <Input aria-label="Pedido para refinar a copy" className="mr-2 h-9 min-w-0 flex-1 text-[12.5px]" value={pedido} onChange={(e) => setPedido(e.target.value)} placeholder="Pedido opcional (tom, objeção, prova)" />
+            <Input aria-label="Pedido para refinar a copy" className="mr-2 h-9 min-w-0 flex-1 text-[12.5px]" value={pedido} onChange={(e) => setPedido(e.target.value)} placeholder="Pedido (tom, objeção, prova) ou muda todo o conteúdo" />
             <BotaoComCusto
-              rotulo={<><Shuffle className="mr-1 h-3.5 w-3.5" /> Refinar copy</>}
-              titulo="Refinar a copy"
-              descricao="Variações de texto principal, título e CTA no modelo escolhido, cada uma numa estrutura de copy; o Jev confere (política, clareza, parada) e a melhor vem primeiro."
+              rotulo={<><Shuffle className="mr-1 h-3.5 w-3.5" /> {refazerTudo ? "Refazer tudo" : "Refinar copy"}</>}
+              titulo={refazerTudo ? "Trocar todo o conteúdo" : "Refinar a copy"}
+              descricao={refazerTudo
+                ? "Reescreve todas as variações deste ângulo e o texto dos cards, no lugar, sem criar card novo. Você vê o antes e o depois e confirma; dá para desfazer."
+                : "Variações de texto principal, título e CTA no modelo escolhido, cada uma numa estrutura de copy e num ângulo de venda; o Jev confere (política, clareza, parada) e a melhor vem primeiro."}
               variant="outline"
               className="h-9 shrink-0"
-              partes={() => [parteDeTexto(modelo, TAMANHOS_ADS.variarCopy.entrada + 3000, TAMANHOS_ADS.variarCopy.saida)]}
-              executar={() => rodar(() => chamarAds<any>("copy_variar", { criativo_id: criativo.id, pedido: pedido.trim() || undefined, ...modelo.corpo }))}
+              partes={() => [refazerTudo
+                ? parteDeTexto(modelo, TAMANHOS_ADS.produzirPorPeca.entrada + 6000, TAMANHOS_ADS.produzirPorPeca.saida * 2)
+                : parteDeTexto(modelo, TAMANHOS_ADS.variarCopy.entrada + 3000, TAMANHOS_ADS.variarCopy.saida)]}
+              executar={() => rodar(() => chamarAds<any>(refazerTudo ? "criativos_reescrever" : "copy_variar", { criativo_id: criativo.id, pedido: pedido.trim() || undefined, ...comReferencia, ...modelo.corpo }))}
               aoConcluir={(data) => {
+                setPedido("");
+                if (ehRespostaDaReescrita(data)) {
+                  // A troca não acrescenta variação: mostra o antes e o depois de todas, para confirmar.
+                  setVariacoes([]);
+                  setTroca({ tipo: "pendente", lote: data.lote_id, ids: data.propostas.map((p) => p.criativo_id).filter((id, i, l) => l.indexOf(id) === i), propostas: data.propostas, avisos: data.avisos });
+                  void queryClient.invalidateQueries({ queryKey: chavesAds.criativos(clientId) });
+                  return;
+                }
                 const lista = Array.isArray(data?.variacoes) ? data.variacoes : Array.isArray(data) ? data : [];
                 setVariacoes(lista.filter((v: unknown) => v && typeof v === "object"));
-                setPedido("");
+                if (Array.isArray(data?.avisos) && data.avisos.length) toast.info("Conferência da copy", { description: String(data.avisos[0]) });
               }}
             />
           </div>
+          <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-2">
+            <select
+              aria-label="Seguir referência"
+              value={referenciaId}
+              onChange={(e) => setReferenciaId(e.target.value)}
+              className="h-8 min-w-0 max-w-full flex-1 rounded-md border border-input bg-background px-2 text-[12px]"
+            >
+              <option value="">Sem referência</option>
+              {refsComImagem.map((r) => <option key={r.id} value={r.id}>{r.titulo || "Referência"}</option>)}
+            </select>
+            {referenciaId && <SeletorDeFidelidade valor={fidelidade} onMudar={setFidelidade} />}
+          </div>
           <SeletorDoModeloDaCopy estado={modelo} className="mt-1.5" />
-          <div className="mt-1"><Andamento desde={desde} rotulo="Escrevendo variações" /></div>
+          <div className="mt-1"><Andamento desde={desde} rotulo={refazerTudo ? "Reescrevendo todo o conteúdo" : "Escrevendo variações"} /></div>
+          {troca && <div className="mt-2"><TrocaDeConteudo troca={troca} onFechar={() => setTroca(null)} /></div>}
+          {loteFeito && (
+            <button type="button" className="mt-1.5 text-[11.5px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" onClick={() => {
+              const guardada = trocaGuardada(criativo, queryClient.getQueryData<CriativoAds[]>(chavesAds.criativos(clientId)) || []);
+              if (guardada) setTroca(guardada);
+            }}>
+              Desfazer a última troca de conteúdo
+            </button>
+          )}
           {variacoes.length > 0 && (
             <ul className="mt-2 space-y-2" aria-label="Variações de copy">
               {variacoes.map((v, i) => (
                 <li key={i} className={`rounded-lg border bg-background p-2.5 ${v.melhor ? "border-primary/50" : "border-border"}`}>
-                  {(v.melhor || v.framework) && (
+                  {(v.melhor || v.framework || rotuloDoAnguloDeVenda(v.angulo_de_venda)) && (
                     <p className="mb-1 flex min-w-0 flex-wrap items-center text-[10.5px]">
                       {v.melhor && <span className="mr-1.5 rounded-full bg-primary px-1.5 py-px font-medium text-primary-foreground">Melhor</span>}
+                      {rotuloDoAnguloDeVenda(v.angulo_de_venda) && <span className="mr-1.5 rounded-full bg-primary/10 px-1.5 py-px font-medium text-primary" data-angulo-da-variacao={v.angulo_de_venda}>{rotuloDoAnguloDeVenda(v.angulo_de_venda)}</span>}
                       {v.framework && <span className="text-muted-foreground">{ESTRUTURAS_DE_COPY[v.framework] || v.framework}</span>}
                       {v.jev && notaCurta(v.jev.clareza) ? <span className="ml-1.5 text-muted-foreground">{`· clareza ${notaCurta(v.jev.clareza)}`}</span> : null}
                     </p>
@@ -281,6 +380,8 @@ export default function PainelDaCopy({
           toast.info("Texto no formulário", { description: "Confira e salve a copy." });
         }}
       />
+
+      <LogosReais criativo={criativo} caminhoDaArte={caminhoDaArte} />
 
       {!aoMudarCopy && <PosicionamentosDoAnuncio copy={copy} caminho={caminhoDaArte} formato={criativo.formato} nome={clientName} />}
     </div>
