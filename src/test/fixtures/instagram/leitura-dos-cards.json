@@ -1,0 +1,13 @@
+{
+  "tema": "Como ativar a confirmação em duas etapas no WhatsApp",
+  "gancho": "Seu WhatsApp pode ser clonado hoje",
+  "cta": "Salve e mande para quem precisa",
+  "estrutura": "passo_a_passo",
+  "cards": [
+    { "ordem": 1, "titulo": "Seu WhatsApp pode ser clonado hoje", "texto": "Ative isto em 1 minuto\n@perfil.exemplo" },
+    { "ordem": 2, "titulo": "Passo 1", "texto": "Abra o WhatsApp e toque em Configurações" },
+    { "ordem": 3, "titulo": "Passo 2", "texto": "Toque em Conta > Confirmação em duas etapas" },
+    { "ordem": 4, "titulo": "Passo 3", "texto": "Toque em Ativar e crie um PIN de 6 dígitos" },
+    { "ordem": 5, "titulo": "Pronto", "texto": "Salve e mande para quem precisa" }
+  ]
+}

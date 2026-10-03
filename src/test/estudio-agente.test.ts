@@ -281,7 +281,7 @@ describe("estudio-arte: ações conversar e aplicar_mudancas", () => {
     expect(c).toContain("pedidoMexeNoTexto(mensagem)");
     expect(c).toContain('new ErroEstudio(400, "mensagem_vazia"');
     // Nada muda na direção durante a conversa: só o custo é somado ao trabalho.
-    expect(c).toContain("mutarTrabalho(t.id, (x) => ({ custo_usd: arred(num(x.custo_usd) + r.custoUsd) }))");
+    expect(c).toContain("mutarTrabalho(t.id, (x) => ({ custo_usd: arred(num(x.custo_usd) + r.custoUsd + custoDaReescrita) }))");
     expect(c).not.toContain("direcao:");
     expect(estudio).toContain('const REFERENCIA_DA_CONVERSA = "estudio_trabalho";');
     const conversa = corpoDe("conversaDoTrabalho");

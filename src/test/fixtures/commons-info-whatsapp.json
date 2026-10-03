@@ -1,0 +1,27 @@
+{
+  "batchcomplete": true,
+  "query": {
+    "pages": [
+      {
+        "ns": 6,
+        "title": "File:WhatsApp.svg",
+        "missing": false,
+        "imagerepository": "local",
+        "imageinfo": [
+          {
+            "thumburl": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/WhatsApp.svg/640px-WhatsApp.svg.png",
+            "thumbwidth": 640,
+            "thumbheight": 642,
+            "url": "https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg",
+            "descriptionurl": "https://commons.wikimedia.org/wiki/File:WhatsApp.svg",
+            "mime": "image/svg+xml",
+            "extmetadata": {
+              "LicenseShortName": { "value": "Public domain", "source": "commons-desc-page" },
+              "Artist": { "value": "<a href=\"https://www.whatsapp.com\">WhatsApp</a>", "source": "commons-desc-page" }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

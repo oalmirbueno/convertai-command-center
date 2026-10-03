@@ -233,13 +233,14 @@ describe("o pedido manda na direção", () => {
   it("a arte rápida põe o pedido acima da campanha e da marca e proíbe inventar", () => {
     expect(INSTRUCOES_DA_ARTE_RAPIDA).toContain("O PEDIDO DA EQUIPE É A FONTE DA VERDADE");
     expect(INSTRUCOES_DA_ARTE_RAPIDA).toContain("nunca escreva o oposto do pedido");
-    expect(INSTRUCOES_DA_ARTE_RAPIDA).toContain("Você não pesquisa na internet");
+    // 02/10: sem o bloco MUNDO REAL continua sem pesquisa; com ele, pesquisa e cita as fontes.
+    expect(INSTRUCOES_DA_ARTE_RAPIDA).toContain("você não pesquisa na internet");
     expect(INSTRUCOES_DA_ARTE_RAPIDA).toContain('"sell" ou "seleo" = selo');
     expect(INSTRUCOES_DA_ARTE_RAPIDA).not.toContain("a peça é daquela campanha (tema, oferta, preço");
   });
 
   it("o diretor devolve avisos para a equipe e tira o nome da marca dos blocos", () => {
-    expect(estudio).toContain('required: ["conceito", "fio_visual", "carrossel_infinito", "cards", "avisos_para_a_equipe"]');
+    expect(estudio).toContain('required: ["conceito", "fio_visual", "carrossel_infinito", "cards", "avisos_para_a_equipe", "marcas_reais", "fontes_da_pesquisa"]');
     expect(estudio).toContain("O PEDIDO DA EQUIPE É A FONTE DA VERDADE (\\`pedido_da_equipe\\`");
     expect(estudio).toContain("blocosSemNomeDaMarca(");
   });
@@ -376,7 +377,8 @@ describe("o agente do lado entende o ajuste fino", () => {
 
   it("a conversa manda fotos por apelido, o estado da lâmina e o pedido original; nunca o id", () => {
     const c = estudio.slice(estudio.indexOf("async function conversar("), estudio.indexOf("function resumoDasPropostas("));
-    expect(c).toContain("traduzirApelidosDeFoto(bruto.mudancas, apelidos)");
+    // 02/10: as mudanças do diretor (mais as que o redator completou na reescrita total) passam pelos apelidos.
+    expect(c).toContain("traduzirApelidosDeFoto(mudancasBrutas, apelidos)");
     expect(c).toContain("texto_lido_na_arte:");
     expect(c).toContain("leva_logo: levaLogo(t, c.ordem)");
     expect(c).toContain("pedido_original: arteRapida ? arteRapida.pedido : null");

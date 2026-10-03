@@ -360,7 +360,7 @@ describe("5. vitrine de logos (parceiros)", () => {
     expect(ctx.vitrine_de_logos).toEqual({ total_de_logos: 10, laminas_com_logos: [{ ordem: 2, logos: 5 }, { ordem: 3, logos: 5 }] });
     expect(INSTRUCOES_DA_ARTE_RAPIDA).toContain("Vitrine de logos (`item.pedido_avulso.vitrine_de_logos`)");
     const fonte = ler("supabase/functions/estudio-arte/index.ts");
-    expect(fonte).toContain("vitrineAqui ? areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length) : \"\",");
+    expect(fonte).toContain("areaLivreParaAVitrine(vitrineAqui.area, vitrineAqui.logos.length)) : \"\",");
     expect(fonte).toContain("const r = await colarVitrineNaArte(pngFinal, vitrinePedida, t.client_id);");
     expect(fonte).toContain("...(vitrineDaVersao(atualVersao) ? { vitrine_de_logos: vitrineDaVersao(atualVersao) } : {}),");
     expect(fonte).toContain("notaDaVitrineParaOLeitor(vitrineColada.area)");
