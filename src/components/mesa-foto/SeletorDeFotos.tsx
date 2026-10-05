@@ -85,8 +85,8 @@ export default function SeletorDeFotos({
           <X className="h-4 w-4" />
         </button>
       </div>
-      <label className="block text-xs">Pasta do Workspace ou acervo<select aria-label="Pasta das fotos" className="mt-1 w-full rounded-md border bg-background p-2" value={pasta} onChange={(e) => { setPasta(e.target.value); setLimite(120); }}><option value="__todas">Todas as pastas ({soFotos.length} fotos)</option><option value="">Raiz do Workspace</option>{espelho.pastas.map((p) => <option key={p.id} value={p.id}>{trilhaAte(arvore, p.id).map((x) => x.nome).join(" / ")}</option>)}</select></label>
-      {workspace.isError && <p role="alert" className="text-xs">Não foi possível ler as pastas. <button type="button" onClick={() => void workspace.refetch()}>Recarregar</button></p>}
+      <label className="block text-[12px]">Pasta do Workspace ou acervo<select aria-label="Pasta das fotos" className="mt-1 w-full rounded-md border bg-background p-2" value={pasta} onChange={(e) => { setPasta(e.target.value); setLimite(120); }}><option value="__todas">Todas as pastas ({soFotos.length} fotos)</option><option value="">Raiz do Workspace</option>{espelho.pastas.map((p) => <option key={p.id} value={p.id}>{trilhaAte(arvore, p.id).map((x) => x.nome).join(" / ")}</option>)}</select></label>
+      {workspace.isError && <p role="alert" className="text-[12px]">Não foi possível ler as pastas. <button type="button" onClick={() => void workspace.refetch()}>Recarregar</button></p>}
       <div className="relative min-w-0">
         <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar no acervo" className="h-9 pl-8" aria-label="Buscar foto" />
@@ -95,7 +95,7 @@ export default function SeletorDeFotos({
         <Pilulas rotulo="Lado das fotos" opcoes={LADOS} valor={lado} onEscolher={setLado} className="mr-2" />
         <Pilulas rotulo="Tipo de foto" opcoes={FILTROS_DA_CLASSE} valor={classe} onEscolher={setClasse} />
       </div>
-      {multiplas && filtradas.length > 0 && <button type="button" className="text-xs text-primary" onClick={() => setMarcadas(filtradas.filter((f) => !jaEscolhidas.includes(f.id)).map((f) => f.id))}>Selecionar as {filtradas.length} fotos deste filtro</button>}
+      {multiplas && filtradas.length > 0 && <button type="button" className="text-[12px] text-primary" onClick={() => setMarcadas(filtradas.filter((f) => !jaEscolhidas.includes(f.id)).map((f) => f.id))}>Selecionar as {filtradas.length} fotos deste filtro</button>}
       {lista.length === 0 ? (
         <p className="text-[12px] text-muted-foreground">Nenhuma foto com esse filtro.</p>
       ) : (
@@ -125,7 +125,7 @@ export default function SeletorDeFotos({
           })}
         </div>
       )}
-      {filtradas.length > limite && <button type="button" className="text-xs text-primary" onClick={() => setLimite((n) => n + 120)}>Mostrar mais ({filtradas.length - limite} fotos)</button>}
+      {filtradas.length > limite && <button type="button" className="text-[12px] text-primary" onClick={() => setLimite((n) => n + 120)}>Mostrar mais ({filtradas.length - limite} fotos)</button>}
     </section>
   );
 }

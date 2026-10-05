@@ -175,8 +175,8 @@ export function LinhaDoFinal({ arquivo, variantes, antes }: { arquivo: ArquivoDe
           <Comparar antes={antes} depois={arquivo} />
         </div>
       )}
-      {fila.erro && <p role="alert" className="text-xs">{fila.erro}</p>}
-      {fila.pedidos.map((p) => <p key={p.id} role="status" className="text-xs">Legenda: {rotuloDoPedido(p, Date.now(), fila.worker)}{p.erro_mensagem ? ` · ${p.erro_mensagem}` : ""}</p>)}
+      {fila.erro && <p role="alert" className="text-[12px]">{fila.erro}</p>}
+      {fila.pedidos.map((p) => <p key={p.id} role="status" className="text-[12px]">Legenda: {rotuloDoPedido(p, Date.now(), fila.worker)}{p.erro_mensagem ? ` · ${p.erro_mensagem}` : ""}</p>)}
       {!legenda && jaTem && (jaTem.srt_path || jaTem.vtt_path) && (
         <div className="mt-1 flex min-w-0 flex-wrap items-center" data-legenda-guardada="">
           {jaTem.srt_path && (

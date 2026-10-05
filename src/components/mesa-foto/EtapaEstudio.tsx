@@ -498,7 +498,7 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
             </div>
           </Grupo>
 
-          <div className="px-3 pt-3"><p className="mb-1 text-xs font-medium">Gerador das novas versões</p><SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modeloId} onChange={setMotorEscolhido} /></div>
+          <div className="px-3 pt-3"><p className="mb-1 text-[12px] font-medium">Gerador das novas versões</p><SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modeloId} onChange={setMotorEscolhido} /></div>
           <Grupo id="melhorar" titulo="Melhorar" icone={<SunMedium className="h-4 w-4" />} destaque={destaque === "melhorar"} ajuda="Luz e cor sem mudar forma, texto nem rosto; limpar tira poeira e reflexo. A nitidez vem do Ampliar fiel (pro), que não redesenha a foto.">
             <div className="flex min-w-0 flex-wrap items-center">
               {preparar("luz_cor", "Luz e cor", <SunMedium className="mr-1.5 h-3.5 w-3.5" />, { instrucao: ajuste })}

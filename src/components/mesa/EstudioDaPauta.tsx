@@ -16,9 +16,9 @@ export default function EstudioDaPauta({ item, trabalho, foco, onFoco, children 
   const protegido = !!trabalho;
   return <section className="flex min-h-0 min-w-0 flex-1 flex-col" data-modo-da-pauta={modo}>
     <header className="mb-2 flex flex-wrap items-center gap-2 border-b pb-2">
-      <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{item.title}</p><p className="text-xs text-muted-foreground">Ferramentas desta pauta · {item.due_date?.slice(0, 10) || 'sem data'}</p></div>
+      <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-semibold">{item.title}</p><p className="text-[12px] text-muted-foreground">Ferramentas desta pauta · {item.due_date?.slice(0, 10) || 'sem data'}</p></div>
       <div role="group" aria-label="Formato do estúdio" className="flex rounded-lg bg-muted p-1">
-        {MODOS.map(({ id, nome, Icone }) => <button key={id} type="button" aria-pressed={modo === id} disabled={protegido && id !== automatico} title={protegido && id !== automatico ? 'Esta pauta já tem um trabalho. Crie outra pauta para mudar o tipo sem substituir o conteúdo.' : nome} onClick={() => setEscolha(id)} className={`flex items-center gap-1 rounded-md px-2 py-1.5 text-xs disabled:opacity-40 ${modo === id ? 'bg-card shadow-sm' : ''}`}><Icone className="h-3.5 w-3.5" />{nome}</button>)}
+        {MODOS.map(({ id, nome, Icone }) => <button key={id} type="button" aria-pressed={modo === id} disabled={protegido && id !== automatico} title={protegido && id !== automatico ? 'Esta pauta já tem um trabalho. Crie outra pauta para mudar o tipo sem substituir o conteúdo.' : nome} onClick={() => setEscolha(id)} className={`flex items-center gap-1 rounded-md px-2 py-1.5 text-[12px] disabled:opacity-40 ${modo === id ? 'bg-card shadow-sm' : ''}`}><Icone className="h-3.5 w-3.5" />{nome}</button>)}
       </div>
       {modo !== "arte" && <button type="button" className="rounded-md border p-2" aria-label={foco ? 'Sair da tela cheia' : 'Tela cheia'} onClick={() => onFoco(!foco)}>{foco ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>}
     </header>

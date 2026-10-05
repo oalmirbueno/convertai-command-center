@@ -67,10 +67,10 @@ export default function EstudioDeFotosDaPauta({ item }: { item: ItemDoMes }) {
     <div className="flex min-h-0 flex-1 flex-col" data-estudio-fotos-da-pauta={item.id}>
       <nav aria-label="Ferramentas de fotos da pauta" className="flex flex-wrap gap-1 border-b pb-2">
         {([['agenda', 'Fotos e carrossel'], ['estudio', 'Melhorar foto'], ['compor', 'Compor'], ['acervo', 'Acervo'], ['modelos', 'Modelos'], ['clones', 'Clones']] as const).map(([e, nome]) =>
-          <button key={e} type="button" aria-pressed={etapa === e} onClick={() => setEtapa(e)} className={`rounded-md px-3 py-2 text-xs ${etapa === e ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}>{nome}</button>)}
-        <button type="button" aria-expanded={diretor} onClick={() => setDiretor(!diretor)} className="ml-auto rounded-md border px-3 text-xs">Diretor de fotos</button>
+          <button key={e} type="button" aria-pressed={etapa === e} onClick={() => setEtapa(e)} className={`rounded-md px-3 py-2 text-[12px] ${etapa === e ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}>{nome}</button>)}
+        <button type="button" aria-expanded={diretor} onClick={() => setDiretor(!diretor)} className="ml-auto rounded-md border px-3 text-[12px]">Diretor de fotos</button>
       </nav>
-      {selecionadas.length > 0 && <button type="button" className="my-2 text-left text-xs text-primary" onClick={() => { setTrocando(true); setEtapa("agenda"); }}>Conferir as {selecionadas.length} fotos selecionadas para esta pauta</button>}
+      {selecionadas.length > 0 && <button type="button" className="my-2 text-left text-[12px] text-primary" onClick={() => { setTrocando(true); setEtapa("agenda"); }}>Conferir as {selecionadas.length} fotos selecionadas para esta pauta</button>}
       <div className={`grid min-h-0 flex-1 gap-4 ${diretor ? 'lg:grid-cols-[minmax(0,1fr)_320px]' : ''}`}>
         <div key={navegacao} className="min-h-0 min-w-0 overflow-y-auto p-2">
           <Suspense fallback={<p role="status">Abrindo ferramentas…</p>}>

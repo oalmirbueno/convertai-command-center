@@ -60,7 +60,7 @@ export default function ComposicaoRapida({ escopo }: { escopo?: string } = {}) {
   const retrato = retratos.data?.find((i) => i.id === persona?.ancora_imagem_id);
   const cloneFoto = fotos.find((f) => f.id === (clone?.identidade_real.find((i) => i.principal) || clone?.identidade_real[0])?.imagem_id);
   const faltaPessoa = r.pessoa?.tipo === "clone" ? !clone?.autorizacao_valida.ok : r.pessoa?.tipo === "persona" ? !persona?.ancora_imagem_id : false;
-  const imagem = (foto: FotoDoAcervo | null | undefined, grande = false) => foto ? <ImagemDaMesa caminho={foto.storage_path} bucket={foto.storage_bucket || "mesa"} alt={foto.nome} className={`w-full rounded-lg object-contain ${grande ? 'max-h-[48vh]' : 'max-h-64'}`} /> : <div className="flex min-h-40 items-center justify-center rounded-lg bg-muted p-4 text-center text-sm text-muted-foreground">Escolha as imagens para compor</div>;
+  const imagem = (foto: FotoDoAcervo | null | undefined, grande = false) => foto ? <ImagemDaMesa caminho={foto.storage_path} bucket={foto.storage_bucket || "mesa"} alt={foto.nome} className={`w-full rounded-lg object-contain ${grande ? 'max-h-[48vh]' : 'max-h-64'}`} /> : <div className="flex min-h-40 items-center justify-center rounded-lg bg-muted p-4 text-center text-[13px] text-muted-foreground">Escolha as imagens para compor</div>;
   const montar = (): Canvas => {
     let c = canvasVazio(clientId, `Composição · ${kit?.nome || 'Foto'} · ${new Date().toLocaleDateString('pt-BR')}`);
     const saida = novoNo("gerar", 500, 0, { motores: [motor], formato: r.formato, qualidade: "alta" });
@@ -74,21 +74,21 @@ export default function ComposicaoRapida({ escopo }: { escopo?: string } = {}) {
   };
   const estilo = (qual: Foco) => `min-w-0 rounded-xl border p-3 transition-[flex-grow] duration-300 motion-reduce:transition-none ${foco === qual ? 'border-primary/50 bg-card lg:flex-[2]' : 'lg:flex-1'}`;
   return <div className="space-y-3" data-composicao-rapida="">
-    <p className="text-xs text-muted-foreground">Pessoa à esquerda, composição no centro e produto à direita. Clique no título para ampliar a área.</p>
+    <p className="text-[12px] text-muted-foreground">Clique no título de pessoa, composição ou produto para ampliar.</p>
     <div className="flex flex-col gap-3 lg:flex-row">
       <section className={estilo("pessoa")} aria-label="Modelo ou clone">
-        <button className="mb-3 w-full text-left text-sm font-semibold" type="button" aria-pressed={foco === 'pessoa'} onClick={() => setFoco('pessoa')}>1. Modelos e clones</button>
+        <button className="mb-3 w-full text-left text-[13px] font-semibold" type="button" aria-pressed={foco === 'pessoa'} onClick={() => setFoco('pessoa')}>1. Modelos e clones</button>
         <EscolhaDoModeloDaFoto semPessoa valor={r.pessoa} onEscolher={(pessoa) => mudar({ pessoa })} />
-        {retrato && <div className="mt-3"><ImagemDaMesa caminho={retrato.storage_path} bucket={retrato.storage_bucket || "mesa"} alt={persona?.nome || "Modelo"} className="max-h-[48vh] w-full rounded-lg object-contain" /><button type="button" className="mt-2 text-xs text-primary" onClick={() => { setEditarPessoa(!editarPessoa); setFoco("pessoa"); }}>Variações, outros geradores e upscale do modelo</button></div>}
+        {retrato && <div className="mt-3"><ImagemDaMesa caminho={retrato.storage_path} bucket={retrato.storage_bucket || "mesa"} alt={persona?.nome || "Modelo"} className="max-h-[48vh] w-full rounded-lg object-contain" /><button type="button" className="mt-2 text-[12px] text-primary" onClick={() => { setEditarPessoa(!editarPessoa); setFoco("pessoa"); }}>Variações, outros geradores e upscale do modelo</button></div>}
         {editarPessoa && persona && <Suspense fallback={<p role="status">Abrindo versões do modelo…</p>}><FerramentasDaPersona key={persona.id} persona={persona} /></Suspense>}
-        {cloneFoto && <div className="mt-3">{imagem(cloneFoto, foco === "pessoa")}<AcoesProDaFoto foto={cloneFoto} mostrarCriativo={false} onPronta={(nova) => { acrescentarFotos(cache, clientId, [nova]); abrirNoEstudio?.(nova.id); }} /><button type="button" className="mt-2 text-xs text-primary" onClick={() => irPara("clones", { imagem: cloneFoto.id })}>Fotos e variações deste clone</button></div>}
-        <p className="mt-2 text-xs text-muted-foreground">Sem pessoa escolhida, o produto fica sozinho. Para incluir uma pessoa nova, descreva no pedido.</p>
+        {cloneFoto && <div className="mt-3">{imagem(cloneFoto, foco === "pessoa")}<AcoesProDaFoto foto={cloneFoto} mostrarCriativo={false} onPronta={(nova) => { acrescentarFotos(cache, clientId, [nova]); abrirNoEstudio?.(nova.id); }} /><button type="button" className="mt-2 text-[12px] text-primary" onClick={() => irPara("clones", { imagem: cloneFoto.id })}>Fotos e variações deste clone</button></div>}
+        <p className="mt-2 text-[12px] text-muted-foreground">Produto sozinho ou com pessoa: escolha um modelo ou descreva uma pessoa nova.</p>
       </section>
       <section className={estilo("composicao")} aria-label="Composição principal">
-        <button className="mb-3 w-full text-left text-sm font-semibold" type="button" aria-pressed={foco === 'composicao'} onClick={() => setFoco('composicao')}>2. Sua composição</button>
+        <button className="mb-3 w-full text-left text-[13px] font-semibold" type="button" aria-pressed={foco === 'composicao'} onClick={() => setFoco('composicao')}>2. Sua composição</button>
         {imagem(atual || ambiente, true)}
-        <div className="my-3 flex flex-wrap gap-2"><button type="button" className="rounded border px-2 py-1 text-xs" onClick={() => setEscolhendo(true)}>{ambiente ? 'Trocar ambiente' : 'Escolher foto do ambiente'}</button>{ambiente && <button type="button" className="text-xs" onClick={() => mudar({ ambiente: null })}>Retirar ambiente</button>}</div>
-        <label className="block text-xs">Ambiente, ação e acabamento<textarea aria-label="Pedido da composição" className={campoTexto} rows={3} value={r.pedido} onChange={(e) => mudar({ pedido: e.target.value })} placeholder="Ex.: produto sobre mármore claro, luz suave de janela, textura realista…" /></label>
+        <div className="my-3 flex flex-wrap gap-2"><button type="button" className="rounded border px-2 py-1 text-[12px]" onClick={() => setEscolhendo(true)}>{ambiente ? 'Trocar ambiente' : 'Escolher foto do ambiente'}</button>{ambiente && <button type="button" className="text-[12px]" onClick={() => mudar({ ambiente: null })}>Retirar ambiente</button>}</div>
+        <label className="block text-[12px]">Ambiente, ação e acabamento<textarea aria-label="Pedido da composição" className={campoTexto} rows={3} value={r.pedido} onChange={(e) => mudar({ pedido: e.target.value })} placeholder="Ex.: produto sobre mármore claro, luz suave de janela, textura realista…" /></label>
         <div className="my-2 flex gap-2"><select aria-label="Proporção da composição" className={campo} value={r.formato} onChange={(e) => mudar({ formato: e.target.value })}>{['4:5','1:1','9:16','16:9'].map((f) => <option key={f}>{f}</option>)}</select><SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={motor} onChange={(v) => mudar({ motor: v })} /></div>
         <BotaoComCusto rotulo="Gerar composição" titulo="Gerar composição" descricao="Uma nova foto, preservando produto e pessoa escolhidos." disabled={ocupado || !kit || !motor || !r.pedido.trim() || faltaPessoa} partes={() => partesDoGerar([motor], "alta", Math.min(14, (kit?.refs.length || 0) + (persona ? 5 : clone ? 1 : 0) + (ambiente ? 1 : 0)))} executar={async () => {
           setOcupado(true);
@@ -102,15 +102,15 @@ export default function ComposicaoRapida({ escopo }: { escopo?: string } = {}) {
             return { ...resposta, grupo };
           } finally { setOcupado(false); }
         }} aoConcluir={(resposta) => { if (resposta.imagem) { acrescentarFotos(cache, clientId, [resposta.imagem]); registrar(resposta.imagem.id, resposta.grupo); } atualizarCusto(); }} />
-        {!kitId && <p className="mt-2 text-xs">Escolha o produto à direita para começar.</p>}
-        {atual && <div className="mt-3 flex flex-wrap gap-2"><button type="button" className="rounded border px-2 py-1 text-xs" onClick={() => abrirNoEstudio?.(atual.id)}>Melhorar esta foto</button><button type="button" className="rounded border px-2 py-1 text-xs" onClick={() => prepararNaAgenda?.([atual.id])}>Usar no post</button><AcoesProDaFoto foto={atual} onPronta={(nova) => { acrescentarFotos(cache, clientId, [nova]); registrar(nova.id); }} /></div>}
+        {!kitId && <p className="mt-2 text-[12px]">Escolha o produto à direita para começar.</p>}
+        {atual && <div className="mt-3 flex flex-wrap gap-2"><button type="button" className="rounded border px-2 py-1 text-[12px]" onClick={() => abrirNoEstudio?.(atual.id)}>Melhorar esta foto</button><button type="button" className="rounded border px-2 py-1 text-[12px]" onClick={() => prepararNaAgenda?.([atual.id])}>Usar no post</button><AcoesProDaFoto foto={atual} onPronta={(nova) => { acrescentarFotos(cache, clientId, [nova]); registrar(nova.id); }} /></div>}
       </section>
       <section className={estilo("produto")} aria-label="Produto e ferramentas">
-        <button className="mb-3 w-full text-left text-sm font-semibold" type="button" aria-pressed={foco === 'produto'} onClick={() => setFoco('produto')}>3. Produto</button>
+        <button className="mb-3 w-full text-left text-[13px] font-semibold" type="button" aria-pressed={foco === 'produto'} onClick={() => setFoco('produto')}>3. Produto</button>
         <EscolhaDoProduto />
         <div className="mt-3">{imagem(produto)}</div>
-        {produto && <div className="mt-3"><AcoesProDaFoto foto={produto} onPronta={(nova) => { mudar({ produtoTratado: nova.id, origemKit: kitId }); toast.info('Confira a versão tratada e use o botão para aplicá-la à composição.'); }} /><button type="button" className="mt-2 text-xs text-primary" onClick={() => abrirNoEstudio?.(produto.id)}>Luz, cor e realismo</button></div>}
-        {produto && produto.id !== capa?.id && kit && <button type="button" disabled={ocupado || (r.fotoDoKitTratado === produto.id && !!r.kitTratado)} className="mt-3 rounded-md border px-3 py-2 text-xs" onClick={async () => {
+        {produto && <div className="mt-3"><AcoesProDaFoto foto={produto} onPronta={(nova) => { mudar({ produtoTratado: nova.id, origemKit: kitId }); toast.info('Confira a versão tratada e use o botão para aplicá-la à composição.'); }} /><button type="button" className="mt-2 text-[12px] text-primary" onClick={() => abrirNoEstudio?.(produto.id)}>Luz, cor e realismo</button></div>}
+        {produto && produto.id !== capa?.id && kit && <button type="button" disabled={ocupado || (r.fotoDoKitTratado === produto.id && !!r.kitTratado)} className="mt-3 rounded-md border px-3 py-2 text-[12px]" onClick={async () => {
           setOcupado(true);
           try {
             const aprovada = await decidirFoto(clientId, produto.id, "aprovar");
@@ -127,6 +127,6 @@ export default function ComposicaoRapida({ escopo }: { escopo?: string } = {}) {
       </section>
     </div>
     {escolhendo && <SeletorDeFotos fotos={fotos} titulo="Foto real do ambiente" multiplas={false} onUsar={(ids) => { mudar({ ambiente: ids[0] || null }); setEscolhendo(false); }} onFechar={() => setEscolhendo(false)} />}
-    {resultados.length > 0 && <section aria-label="Versões da composição"><h3 className="mb-2 text-sm font-semibold">Versões desta composição</h3><div className="flex gap-2 overflow-x-auto">{resultados.map((id) => { const f = fotos.find((x) => x.id === id); return f ? <button key={id} type="button" aria-label={`Abrir ${f.nome}`} aria-pressed={atual?.id === id} onClick={() => setAtualPorGrupo((a) => ({ ...a, [grupo]: id }))} className="w-24 shrink-0 rounded border p-1">{imagem(f)}</button> : null; })}</div><button type="button" className="mt-2 text-xs text-primary" onClick={() => prepararNaAgenda?.(resultados.slice().reverse().slice(0, 10))}>Montar carrossel com estas fotos</button></section>}
+    {resultados.length > 0 && <section aria-label="Versões da composição"><h3 className="mb-2 text-[13px] font-semibold">Versões desta composição</h3><div className="flex gap-2 overflow-x-auto">{resultados.map((id) => { const f = fotos.find((x) => x.id === id); return f ? <button key={id} type="button" aria-label={`Abrir ${f.nome}`} aria-pressed={atual?.id === id} onClick={() => setAtualPorGrupo((a) => ({ ...a, [grupo]: id }))} className="w-24 shrink-0 rounded border p-1">{imagem(f)}</button> : null; })}</div><button type="button" className="mt-2 text-[12px] text-primary" onClick={() => prepararNaAgenda?.(resultados.slice().reverse().slice(0, 10))}>Montar carrossel com estas fotos</button></section>}
   </div>;
 }
