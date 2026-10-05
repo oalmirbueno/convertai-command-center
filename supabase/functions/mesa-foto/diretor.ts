@@ -1,3 +1,4 @@
+import { resolverPastasCitadas, type PastaNomeada } from "./modulos/selecao-do-workspace.ts";
 /**
  * Diretor de fotografia agêntico (pedido do dono, 26/09): banco,
  * armazenamento e execução. As regras puras (pacote com apelidos, propostas,
@@ -350,6 +351,32 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
       : lerFoco({ etapa: "acervo", kit_id: corpo.kit_id, ensaio_id: corpo.ensaio_id, imagem_ids: anexos });
     const contexto = await contextoSemFalhar(clientId, corpo.campanha_id, corpo.marca_id);
     let entrada = await entradaDoPacote(clientId, focoBruto, contexto);
+    let pacoteEspecifico = !!corpo.pauta_id;
+    let selecaoDaPasta: string[] | null = null;
+    let avisoWorkspace = "";
+    if (corpo.pauta_id) entrada = { ...entrada, posts: (entrada.posts || []).filter((p) => p.task_id === corpo.pauta_id) };
+    // Explicit folder retrieval brings older Workspace photos into the bounded agent pack.
+    const { data: pastas, error: erroPastas } = await db().from("workspace_nodes").select("id, name, parent_id").eq("client_id", clientId).eq("kind", "folder").limit(1000);
+    if (erroPastas) { selecaoDaPasta = []; avisoWorkspace = "Não foi possível consultar as pastas do Workspace. Não diga que buscou ou selecionou fotos delas."; }
+    if (!erroPastas) {
+      const resolucao = resolverPastasCitadas(String(corpo.mensagem || ""), (pastas || []) as PastaNomeada[]);
+      const ids = resolucao.ids;
+      if (resolucao.estado === "ambigua") { selecaoDaPasta = []; avisoWorkspace = "A pasta citada é ambígua. Peça o caminho completo. Não selecione fotos de outra pasta."; }
+      if (ids.length) {
+        pacoteEspecifico = true;
+        selecaoDaPasta = [];
+        avisoWorkspace = "Use somente as fotos recuperadas da pasta citada. Se não houver fotos indexadas nela, informe isso sem selecionar outras.";
+        const { data: nos, error: erroNos } = await db().from("workspace_nodes").select("id").eq("client_id", clientId).eq("kind", "file").in("parent_id", ids).limit(500);
+        if (erroNos) throw new Error("Não foi possível ler a pasta pedida do Workspace.");
+        if (nos?.length) {
+          const { data: daPasta, error: erroFotos } = await db().from("cliente_imagens").select(CAMPOS_DA_IMAGEM).eq("client_id", clientId).eq("ativa", true).in("workspace_node_id", nos.map((n: { id: string }) => n.id)).order("nome").limit(60);
+          if (erroFotos) throw new Error("Não foi possível carregar as fotos da pasta pedida.");
+          const fotos = (daPasta || []) as ImagemBruta[];
+          selecaoDaPasta = fotos.map((i) => i.id);
+          entrada = { ...entrada, imagens: [...fotos, ...entrada.imagens.filter((i) => !fotos.some((f) => f.id === i.id))], foco: { ...entrada.foco, imagem_ids: [...fotos.map((i) => i.id), ...entrada.foco.imagem_ids].slice(0, 60) } };
+        }
+      }
+    }
     let pacote = montarPacote(entrada);
     const faltam = paraLer(pacote, anexos);
     let custoLeituras = 0;
@@ -373,11 +400,11 @@ export function acoesDoDiretor(f: FerramentasDaMesa, d: DepsDoDiretor) {
       });
       if (Object.keys(novas).length) {
         entrada = comLeituras(entrada, novas);
-        cacheDoPacote.gravar(`${clientId}|${chaveDoFoco(focoBruto)}`, entrada);
+        if (!pacoteEspecifico) cacheDoPacote.gravar(`${clientId}|${chaveDoFoco(focoBruto)}`, entrada);
         pacote = montarPacote(entrada);
       }
     }
-    return { pacote, bloco: blocoDoPacote(pacote), custoLeituras: Math.round(custoLeituras * 1e6) / 1e6, lidas: Object.keys(novas).length };
+    return { pacote, selecaoDaPasta, bloco: `${blocoDoPacote(pacote)}\n${avisoWorkspace}`, custoLeituras: Math.round(custoLeituras * 1e6) / 1e6, lidas: Object.keys(novas).length };
   }
 
   // ---------------------------------------------------------------- propostas

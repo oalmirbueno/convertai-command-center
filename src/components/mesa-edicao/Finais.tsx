@@ -1,3 +1,4 @@
+import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Captions, Download, Film, Loader2, Play } from "lucide-react";
@@ -12,7 +13,7 @@ import { useMesa, useUrlDaMesa } from "@/components/mesa/MesaContexto";
 import { textoDoErro, usd } from "@/lib/mesa/api";
 import { chamarEditorVideo, emPreparacao } from "@/lib/editor/api";
 import { transcreverMidia } from "@/lib/editor/fala";
-import { pedirRender, uidDoClique } from "@/lib/editor/render";
+import { pedirRender, uidDoClique, useFilaDeRender, rotuloDoPedido } from "@/lib/editor/render";
 import { chaveDasVersoes, chaveDosArquivos, duracaoCurta, naEntradaDaEdicao, useArquivosDeVideo, type ArquivoDeVideo } from "@/components/mesa-videos/videosApi";
 import { gerarLegendaDoFinal, gravarLegendaNoVideo, type LegendaGerada } from "@/lib/edicao/acoesDaEdicao";
 import { baixarPeloLink, linkParaBaixar, nomeParaBaixar } from "@/lib/edicao/baixarFinal";
@@ -63,14 +64,16 @@ function Player({ arquivo }: { arquivo: ArquivoDeVideo }) {
   return <video src={url.data} controls preload="metadata" playsInline className="max-h-[60vh] w-full rounded-md bg-black object-contain" />;
 }
 
-function LinhaDoFinal({ arquivo, variantes, antes }: { arquivo: ArquivoDeVideo; variantes: ArquivoDeVideo[]; antes: ArquivoDeVideo | null }) {
+export function LinhaDoFinal({ arquivo, variantes, antes }: { arquivo: ArquivoDeVideo; variantes: ArquivoDeVideo[]; antes: ArquivoDeVideo | null }) {
   const { clientId, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
   const [aberto, setAberto] = useState<"ver" | "comparar" | null>(null);
   const [legenda, setLegenda] = useState<LegendaGerada | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
+  const [versaoRender, setVersaoRender] = useEstadoDaTela<string | null>(`mesa:legenda-render:${clientId}:${arquivo.id}`, null);
+  const fila = useFilaDeRender(clientId, versaoRender, chamarEditorVideo, () => { void queryClient.invalidateQueries({ queryKey: chaveDosArquivos(clientId) }); void queryClient.invalidateQueries({ queryKey: chaveDasVersoes(clientId) }); }, !!versaoRender);
   const [estilo, setEstilo] = useState<"simples" | "caixa">("simples");
-  const doEditor = !!(arquivo.origem && arquivo.origem.render_pedido_id);
+  const doEditor = !!(arquivo.origem && arquivo.origem.render_pedido_id) || (arquivo.tipo === "gerado" && !!arquivo.duracao_s);
   const amostra = arquivo.tipo === "amostra";
   const jaTem = arquivo.origem && arquivo.origem.legenda && typeof arquivo.origem.legenda === "object" ? (arquivo.origem.legenda as { linhas?: number; srt_path?: string; vtt_path?: string }) : null;
   const caminhoDaLegenda = (ext: "srt" | "vtt") => (legenda && legenda.caminhos ? legenda.caminhos[ext] : jaTem ? (ext === "srt" ? jaTem.srt_path : jaTem.vtt_path) || null : null);
@@ -111,6 +114,7 @@ function LinhaDoFinal({ arquivo, variantes, antes }: { arquivo: ArquivoDeVideo; 
     setOcupado("gravar");
     try {
       const r = await gravarLegendaNoVideo(arquivo.id, legenda.linhas, estilo);
+      setVersaoRender(r.versao.id);
       const revisao = r.versao.projeto && typeof r.versao.projeto.revisao === "number" ? r.versao.projeto.revisao : null;
       await pedirRender(chamarEditorVideo, { clientId, versaoId: r.versao.id, tipo: "render_final", uid: uidDoClique(), revisao });
       void queryClient.invalidateQueries({ queryKey: chaveDasVersoes(clientId) });
@@ -171,6 +175,8 @@ function LinhaDoFinal({ arquivo, variantes, antes }: { arquivo: ArquivoDeVideo; 
           <Comparar antes={antes} depois={arquivo} />
         </div>
       )}
+      {fila.erro && <p role="alert" className="text-[12px]">{fila.erro}</p>}
+      {fila.pedidos.map((p) => <p key={p.id} role="status" className="text-[12px]">Legenda: {rotuloDoPedido(p, Date.now(), fila.worker)}{p.erro_mensagem ? ` · ${p.erro_mensagem}` : ""}</p>)}
       {!legenda && jaTem && (jaTem.srt_path || jaTem.vtt_path) && (
         <div className="mt-1 flex min-w-0 flex-wrap items-center" data-legenda-guardada="">
           {jaTem.srt_path && (

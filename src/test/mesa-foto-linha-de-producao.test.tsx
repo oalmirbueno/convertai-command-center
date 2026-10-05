@@ -199,6 +199,7 @@ describe("linha de produção: regras", () => {
 
   it("cada objetivo aponta a ferramenta do passo 3, e a ferramenta aberta diz o objetivo", () => {
     expect(OBJETIVOS.map((o) => [o.valor, o.etapa])).toEqual([
+      ["compor", "compor"],
       ["melhorar", "estudio"],
       ["variacoes", "ensaio"],
       ["modelo", "campanha"],
@@ -216,7 +217,7 @@ describe("linha de produção: regras", () => {
     expect(ehObjetivo("post")).toBe(true);
     expect(ehObjetivo("qualquer")).toBe(false);
     // Termos simples: o nome da forma é o do objetivo (a ferramenta fica na dica).
-    expect(FORMAS_DE_CRIAR.map((f) => f.rotulo)).toEqual(["Melhorar uma foto", "Fotos do produto", "Foto com modelo", "Tirar fundo e ajustes"]);
+    expect(FORMAS_DE_CRIAR.map((f) => f.rotulo)).toEqual(["Compor foto", "Melhorar uma foto", "Fotos do produto", "Foto com modelo", "Tirar fundo e ajustes"]);
   });
 
   it("prontidão do passo 2: diz o que falta em uma frase e o texto do botão de seguir", () => {
@@ -240,12 +241,12 @@ describe("linha de produção: regras", () => {
 // ------------------------------------------------------------------ passo 2: a faixa das Fotos
 
 describe("passo 2: a faixa da linha (GuiaDaLinha)", () => {
-  it("sem objetivo, as 5 opções em pílulas escolhem sem sair da tela", async () => {
+  it("sem objetivo, as opções em pílulas escolhem sem sair da tela", async () => {
     const foto = valorDaFoto();
     montar(h(GuiaDaLinha), foto);
     const faixa = await esperar('[data-guia-da-linha="sem-objetivo"]');
     const pilulas = Array.from(faixa.querySelectorAll("[data-objetivo-rapido]")).map((b) => b.getAttribute("data-objetivo-rapido"));
-    expect(pilulas).toEqual(["melhorar", "variacoes", "modelo", "fundo", "post"]);
+    expect(pilulas).toEqual(["compor", "melhorar", "variacoes", "modelo", "fundo", "post"]);
     fireEvent.click(faixa.querySelector('[data-objetivo-rapido="post"]') as HTMLElement);
     expect(foto.escolherObjetivo).toHaveBeenCalledWith("post");
   });

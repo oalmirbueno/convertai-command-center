@@ -46,7 +46,7 @@ function RostoDaPersona({ persona }: { persona: Persona }) {
   return ancora.storage_path ? <ImagemDaMesa caminho={ancora.storage_path} bucket={ancora.storage_bucket || "mesa"} alt={persona.nome} className="h-full w-full object-cover" /> : <img src={ancora.url} alt={persona.nome} className="h-full w-full object-cover" />;
 }
 
-export default function EscolhaDoModeloDaFoto({ valor, onEscolher }: { valor: ModeloEscolhido | null; onEscolher: (m: ModeloEscolhido | null) => void }) {
+export default function EscolhaDoModeloDaFoto({ valor, onEscolher, semPessoa = false }: { semPessoa?: boolean; valor: ModeloEscolhido | null; onEscolher: (m: ModeloEscolhido | null) => void }) {
   const { clientId } = useMesa();
   const { irPara } = useMesaFoto();
   const personas = usePersonas(clientId);
@@ -71,7 +71,7 @@ export default function EscolhaDoModeloDaFoto({ valor, onEscolher }: { valor: Mo
                 <Sparkles className="h-5 w-5" />
               </span>
             </Moldura>
-            <span className="mt-1 block truncate text-[12px] font-medium">Pessoa nova</span>
+            <span className="mt-1 block truncate text-[12px] font-medium">{semPessoa ? "Sem pessoa" : "Pessoa nova"}</span>
           </button>
         </li>
         {opcoes.map((o) => {

@@ -1,3 +1,4 @@
+import { SeletorDeModelo } from "@/components/mesa/Seletores";
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -239,7 +240,7 @@ function FotoNoPalco({ foto, rotulo, formato, mostrarRecorte, velada, largura }:
   );
 }
 
-export default function EtapaEstudio() {
+export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
   const { imagemId, irPara, setSelecionadas, pedirAoDiretor, prepararNaAgenda, kitId } = useMesaFoto();
@@ -253,13 +254,14 @@ export default function EtapaEstudio() {
   const [escolhendo, setEscolhendo] = useState(false);
   const [ampliada, setAmpliada] = useState<number | null>(null);
   const [trabalhando, setTrabalhando] = useState<string | null>(null);
-  const [cenario, setCenario] = useEstadoDaTela(`mesa-foto:estudio:cenario:${clientId}`, "");
-  const [ajuste, setAjuste] = useEstadoDaTela(`mesa-foto:estudio:ajuste:${clientId}`, "");
-  const [formatoBruto, setFormato] = useEstadoDaTela<string>(`mesa-foto:estudio:formato:${clientId}`, "feed_4x5");
+  const [cenario, setCenario] = useEstadoDaTela(escopo ? `${escopo}:cenario` : `mesa-foto:estudio:cenario:${clientId}`, "");
+  const [ajuste, setAjuste] = useEstadoDaTela(escopo ? `${escopo}:ajuste` : `mesa-foto:estudio:ajuste:${clientId}`, "");
+  const [formatoBruto, setFormato] = useEstadoDaTela<string>(escopo ? `${escopo}:formato` : `mesa-foto:estudio:formato:${clientId}`, "feed_4x5");
   const formato = formatoDoPostDeFotos(formatoBruto);
-  const [mostrarRecorte, setMostrarRecorte] = useEstadoDaTela<boolean>(`mesa-foto:estudio:recorte:${clientId}`, true, { validar: (v) => typeof v === "boolean" });
+  const [mostrarRecorte, setMostrarRecorte] = useEstadoDaTela<boolean>(escopo ? `${escopo}:recorte` : `mesa-foto:estudio:recorte:${clientId}`, true, { validar: (v) => typeof v === "boolean" });
   const padrao = padraoPara(catalogo, "imagem");
-  const modeloId = padrao ? padrao.id : "";
+  const [motorEscolhido, setMotorEscolhido] = useEstadoDaTela<string>(escopo ? `${escopo}:motor` : `mesa-foto:estudio:motor:${clientId}`, "");
+  const modeloId = motorEscolhido || (padrao ? padrao.id : "");
   const ferramentas = useRef<HTMLDivElement>(null);
   const areaDoPalco = useRef<HTMLDivElement>(null);
   const palco = useTamanhoDoPalco(areaDoPalco);
@@ -332,7 +334,7 @@ export default function EtapaEstudio() {
       executar={async () => {
         setTrabalhando(modo);
         try {
-          return await prepararFoto({ clientId, imagemId: atual.id, modo, areas: [], cenario: extra.cenario || "", instrucao: extra.instrucao || "" });
+          return await prepararFoto({ clientId, imagemId: atual.id, modeloImagemId: modeloId, modo, areas: [], cenario: extra.cenario || "", instrucao: extra.instrucao || "" });
         } finally {
           setTrabalhando(null);
         }
@@ -496,6 +498,7 @@ export default function EtapaEstudio() {
             </div>
           </Grupo>
 
+          <div className="px-3 pt-3"><p className="mb-1 text-[12px] font-medium">Gerador das novas versões</p><SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modeloId} onChange={setMotorEscolhido} /></div>
           <Grupo id="melhorar" titulo="Melhorar" icone={<SunMedium className="h-4 w-4" />} destaque={destaque === "melhorar"} ajuda="Luz e cor sem mudar forma, texto nem rosto; limpar tira poeira e reflexo. A nitidez vem do Ampliar fiel (pro), que não redesenha a foto.">
             <div className="flex min-w-0 flex-wrap items-center">
               {preparar("luz_cor", "Luz e cor", <SunMedium className="mr-1.5 h-3.5 w-3.5" />, { instrucao: ajuste })}

@@ -75,7 +75,7 @@ function marcarMiniatura(id: string) {
   }
 }
 
-export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVideo[] }) {
+export default function GeracoesRecentes({ arquivos, taskId, pedidosIds = [] }: { arquivos: ArquivoDeVideo[]; taskId?: string; pedidosIds?: string[] }) {
   const { clientId, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
   const pedidosQ = usePedidos(clientId);
@@ -83,7 +83,7 @@ export default function GeracoesRecentes({ arquivos }: { arquivos: ArquivoDeVide
   // Sobe a cada conferência automática que falha: reagenda mesmo sem a lista mudar.
   const [falhasDaConferencia, setFalhasDaConferencia] = useState(0);
   const jaConferiu = useRef(false);
-  const pedidos = ((pedidosQ.data && pedidosQ.data.itens) || []).filter((p) => TIPOS_DO_GERADOR.indexOf(p.tipo as string) >= 0).slice(0, 30);
+  const pedidos = ((pedidosQ.data && pedidosQ.data.itens) || []).filter((p) => TIPOS_DO_GERADOR.indexOf(p.tipo as string) >= 0 && (!taskId || p.parametros.task_id === taskId || pedidosIds.includes(p.id))).slice(0, 30);
   const emAndamento = pedidos.filter((p) => ESTADOS_EM_ANDAMENTO.indexOf(p.estado as string) >= 0);
 
   const cancelar = async (pedidoId: string) => {

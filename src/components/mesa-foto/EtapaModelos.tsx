@@ -1496,7 +1496,7 @@ function PersonaLateral({ persona }: { persona: Persona }) {
   );
 }
 
-function PersonaAberta({ persona }: { persona: Persona }) {
+export function PersonaAberta({ persona }: { persona: Persona }) {
   const imagensQ = useImagensDaPersona(persona.id);
   const imagens = imagensQ.data || [];
   return (

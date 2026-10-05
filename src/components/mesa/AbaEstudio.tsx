@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -192,6 +192,8 @@ import {
  * no conjunto; referência na hora (arrastar, arquivo, colar imagem ou link);
  * e "Refinar texto" no texto exato e na legenda.
  */
+
+const EstudioDaPauta = lazy(() => import("./EstudioDaPauta"));
 
 const CODIGOS_QUE_NAO_PARAM_A_FILA = ["acao_desconhecida", "servico_indisponivel"];
 const CODIGOS_QUE_PARAM_TUDO = ["saldo_insuficiente", "cota_da_chave_esgotada", "cliente_sem_chave", "provedor_sem_chave"];
@@ -2350,7 +2352,7 @@ export default function AbaEstudio({
   const [recolhida, setRecolhida] = useEstadoGuardado<boolean>("mesa:estudio:pautas-recolhidas", typeof window !== "undefined" && (window.innerHeight || 900) < 760);
   const filtro = filtroValido(filtroGuardado);
   const janela = modoDaLista === "proximos" ? PROXIMOS_DIAS : mes;
-  const dados = useItensDoMes(clientId, janela);
+  const dados = useItensDoMes(clientId, janela, true);
   const itens = dados.data?.itens || [];
   const listaPronta = !!dados.data && !dados.isPlaceholderData;
 
@@ -2588,6 +2590,8 @@ export default function AbaEstudio({
   );
 
   const detalhe = selecionado ? (
+    <Suspense fallback={<p role="status">Abrindo o estúdio…</p>}>
+    <EstudioDaPauta key={selecionado.id} item={selecionado} trabalho={trabalhoDe(selecionado)} foco={focoLigado} onFoco={setFoco}>
     <DetalheDoItem
       key={selecionado.id}
       item={selecionado}
@@ -2600,6 +2604,8 @@ export default function AbaEstudio({
       foco={focoLigado}
       onFoco={setFoco}
     />
+    </EstudioDaPauta>
+    </Suspense>
   ) : null;
 
   const carregando = dados.isLoading || (!!tarefaId && !selecionado && (avulso.isLoading || avulso.isFetching));

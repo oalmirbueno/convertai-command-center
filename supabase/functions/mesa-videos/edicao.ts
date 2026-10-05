@@ -214,11 +214,11 @@ export async function workspaceEspelhoDesfazer(b: BaseDaFuncao, db: SupabaseClie
 
 // ------------------------------------------------------------------ legenda do vídeo pronto
 
-type ArquivoFinal = { id: string; client_id: string; nome: string; tipo: string; storage_bucket: string; storage_path: string; duracao_s: number | null; origem: Record<string, unknown> | null };
+type ArquivoFinal = { id: string; client_id: string; nome: string; tipo: string; storage_bucket: string; storage_path: string; duracao_s: number | null; largura?: number | null; altura?: number | null; origem: Record<string, unknown> | null };
 
 /** O vídeo pronto (render, amostra, entrega ou gerado) com o projeto do render, quando houver. */
 export async function lerFinal(b: BaseDaFuncao, arquivoId: string): Promise<{ arquivo: ArquivoFinal; projeto: ProjetoParaLegenda | null; janela: { inicio_s: number; fim_s: number } | null; versao_id: string | null }> {
-  const { data, error } = await b.servico().from("video_arquivos").select("id, client_id, nome, tipo, storage_bucket, storage_path, duracao_s, origem").eq("id", arquivoId).maybeSingle();
+  const { data, error } = await b.servico().from("video_arquivos").select("id, client_id, nome, tipo, storage_bucket, storage_path, duracao_s, largura, altura, origem").eq("id", arquivoId).maybeSingle();
   if (error) throw semTabela(b, error, "video_arquivos");
   const a = data as ArquivoFinal | null;
   if (!a) throw b.erro(404, "arquivo_inexistente", "Vídeo não encontrado.");

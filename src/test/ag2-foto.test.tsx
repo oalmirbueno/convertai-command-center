@@ -204,7 +204,7 @@ describe("promete e não faz: causa e trava", () => {
     expect(conv).not.toContain("id: k.id,");
     expect(conv).toContain("const sugestoesBrutas = sugestoesComIds(r.sugestoes, pacote, anexosForaDoPacote);");
     // A trava só roda sem nada anexado e registra no log.
-    expect(conv).toContain("if (!acaoProposta && !geracao && !sugestoes.length) {");
+    expect(conv).toContain("if (!acaoProposta && !geracao && !sugestoes.length && !selecaoFotos.length) {");
     expect(conv).toContain('registrarFalha("mesa-foto: diretor prometeu sem ação (resposta trocada por aviso)"');
     expect(indice).toContain("pergunta: S([\"string\", \"null\"]),");
     expect(indice).toContain("opcoes: lista(S(\"string\")),");
@@ -636,7 +636,7 @@ describe("tela do diretor", () => {
 
   it("fonte da tela: a bolha otimista sai pelo id no erro e o histórico só entra com a lista vazia", () => {
     const tela = ler("src/components/mesa-foto/AgenteDiretor.tsx");
-    expect(tela).toContain("mudarConversa(alvo, (st) => ({ mensagens: st.mensagens.filter((x) => x.id !== idDaBolha) }));");
+    expect(tela).toContain("mudarConversa(memoria, (st) => ({ mensagens: st.mensagens.filter((x) => x.id !== idDaBolha) }));");
     expect(tela).toContain("setTexto((t) => t || msg);");
     expect(tela).toContain("e.mensagens.length || e.pendente || e.novaConversa ? {} : { mensagens: r.mensagens, conversaId: r.conversa_id || e.conversaId }");
     expect(tela).toContain("<AprendizadoDoAgente");

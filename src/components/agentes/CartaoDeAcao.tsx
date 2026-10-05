@@ -43,7 +43,9 @@ export default function CartaoDeAcao({
   observacao,
   recemFeita = false,
   itensAVista,
+  navegar,
 }: {
+  navegar?: (destino: string) => void;
   acao: AcaoDoAgente;
   onPedido: (pedido: PedidoDaAcao) => Promise<RespostaDaAcao>;
   /** Depois de confirmar ou desfazer (ex.: reler a lista da tela). */
@@ -293,7 +295,7 @@ export default function CartaoDeAcao({
               {parada ? `Parado · ${resultados.filter((r) => r.ok).length} de ${total} feitos` : atual.executada_direto ? "Feito na hora" : "Feito"}
               {falhas ? ` · ${falhas} não ${falhas === 1 ? "pôde" : "puderam"}` : ""}
             </span>
-            <CaminhoPronto caminho={atual.caminho} abrirSozinho={acabouAgora && !falhas && !parada && !!atual.caminho && atual.caminho.abrir_sozinho === true} />
+            <CaminhoPronto navegar={navegar} caminho={atual.caminho} abrirSozinho={acabouAgora && !falhas && !parada && !!atual.caminho && atual.caminho.abrir_sozinho === true} />
             {temReverso && (
               <Button type="button" size="sm" variant="outline" className="mb-1 h-8" onClick={() => void agir("desfazer")} disabled={!!fazendo}>
                 {fazendo === "desfazer" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Undo2 className="mr-1.5 h-3.5 w-3.5" />}

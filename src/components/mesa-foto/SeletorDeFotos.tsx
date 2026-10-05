@@ -8,6 +8,9 @@ import { juntar, superficie } from "@/components/sistema/estilos";
 import { FILTROS_DA_CLASSE, filtrarFotos, type FiltroDaClasse } from "./EtapaAcervo";
 import { ehSoFoto, ladoDaFoto, type LadoDaFoto } from "./tipoDaFoto";
 
+import { useMesa } from "@/components/mesa/MesaContexto";
+import { useArvoreDoWorkspace, pastasDoAcervo, pastaDaFoto, montarArvore, trilhaAte } from "@/lib/mesa/pastas";
+
 const LADOS: { valor: "todos" | LadoDaFoto; rotulo: string }[] = [
   { valor: "todos", rotulo: "Todas" },
   { valor: "produto", rotulo: "Produto" },
@@ -35,13 +38,24 @@ export default function SeletorDeFotos({
   onUsar: (ids: string[]) => void;
   onFechar: () => void;
 }) {
+  const { clientId } = useMesa();
+  const workspace = useArvoreDoWorkspace(clientId);
+  const [pasta, setPasta] = useState("__todas");
+  const [limite, setLimite] = useState(120);
+  const espelho = useMemo(() => pastasDoAcervo(workspace.data || [], fotos), [workspace.data, fotos]);
+  const arvore = useMemo(() => montarArvore(espelho.pastas, {}), [espelho]);
   const [busca, setBusca] = useState("");
   const [classe, setClasse] = useState<FiltroDaClasse>(filtroInicial);
   const [marcadas, setMarcadas] = useState<string[]>([]);
   const [lado, setLado] = useState<"todos" | LadoDaFoto>("todos");
   // 02/10: só fotos (artes, carrosséis e logos ficam na Mesa), com o lado produto ou modelo.
   const soFotos = useMemo(() => fotos.filter((f) => ehSoFoto(f) && (lado === "todos" || ladoDaFoto(f) === lado)), [fotos, lado]);
-  const lista = useMemo(() => filtrarFotos(soFotos, classe, "todos", [], busca).slice(0, 240), [soFotos, classe, busca]);
+  const filtradas = useMemo(() => filtrarFotos(soFotos, classe, "todos", [], busca).filter((f) => {
+    if (pasta === "__todas") return true;
+    const id = pastaDaFoto(f, espelho.pastaDoNo);
+    return id === pasta || trilhaAte(arvore, id).some((p) => p.id === pasta);
+  }), [soFotos, classe, busca, pasta, espelho, arvore]);
+  const lista = filtradas.slice(0, limite);
 
   const alternar = (id: string) => {
     if (!multiplas) {
@@ -71,6 +85,8 @@ export default function SeletorDeFotos({
           <X className="h-4 w-4" />
         </button>
       </div>
+      <label className="block text-[12px]">Pasta do Workspace ou acervo<select aria-label="Pasta das fotos" className="mt-1 w-full rounded-md border bg-background p-2" value={pasta} onChange={(e) => { setPasta(e.target.value); setLimite(120); }}><option value="__todas">Todas as pastas ({soFotos.length} fotos)</option><option value="">Raiz do Workspace</option>{espelho.pastas.map((p) => <option key={p.id} value={p.id}>{trilhaAte(arvore, p.id).map((x) => x.nome).join(" / ")}</option>)}</select></label>
+      {workspace.isError && <p role="alert" className="text-[12px]">Não foi possível ler as pastas. <button type="button" onClick={() => void workspace.refetch()}>Recarregar</button></p>}
       <div className="relative min-w-0">
         <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar no acervo" className="h-9 pl-8" aria-label="Buscar foto" />
@@ -79,6 +95,7 @@ export default function SeletorDeFotos({
         <Pilulas rotulo="Lado das fotos" opcoes={LADOS} valor={lado} onEscolher={setLado} className="mr-2" />
         <Pilulas rotulo="Tipo de foto" opcoes={FILTROS_DA_CLASSE} valor={classe} onEscolher={setClasse} />
       </div>
+      {multiplas && filtradas.length > 0 && <button type="button" className="text-[12px] text-primary" onClick={() => setMarcadas(filtradas.filter((f) => !jaEscolhidas.includes(f.id)).map((f) => f.id))}>Selecionar as {filtradas.length} fotos deste filtro</button>}
       {lista.length === 0 ? (
         <p className="text-[12px] text-muted-foreground">Nenhuma foto com esse filtro.</p>
       ) : (
@@ -108,6 +125,7 @@ export default function SeletorDeFotos({
           })}
         </div>
       )}
+      {filtradas.length > limite && <button type="button" className="text-[12px] text-primary" onClick={() => setLimite((n) => n + 120)}>Mostrar mais ({filtradas.length - limite} fotos)</button>}
     </section>
   );
 }
