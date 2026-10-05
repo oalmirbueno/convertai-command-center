@@ -1,3 +1,4 @@
+import { baseDoVideoRapido } from "./modulos/video-rapido-legendado.ts";
 /**
  * mesa-videos: escrita da Mesa Vídeos (Frente V2, 25/09/2026).
  * Contrato: docs/mesa-videos/CONTRATO.md (seção "V2: o que foi construído").
@@ -1283,11 +1284,11 @@ async function motoresSincronizarDaEquipe(ch: Chamador) {
  */
 async function finalLegendaVersao(ch: Chamador, corpo: Record<string, unknown>) {
   const f = await lerFinal(baseDa(ch), idDe(corpo.arquivo_id, "arquivo_id"));
-  if (!f.projeto) throw new ErroHttp(409, "sem_projeto", "Este vídeo não saiu de uma edição do painel: a legenda gravada sai pelo editor.");
+  const base = f.projeto || baseDoVideoRapido(f.arquivo);
   if (f.janela) throw new ErroHttp(409, "e_amostra", "Esta é uma amostra. Grave a legenda no vídeo inteiro.");
   const linhas = linhasDoCorpo(corpo.linhas, f.arquivo.duracao_s);
   if (!linhas.length) throw new ErroHttp(400, "sem_linhas", "Gere a legenda antes de gravar no vídeo.");
-  const comLegenda = projetoComLegenda(f.projeto, linhas, corpo.estilo === "caixa" ? "caixa" : "simples", `lg${Date.now().toString(36)}`);
+  const comLegenda = projetoComLegenda(base, linhas, corpo.estilo === "caixa" ? "caixa" : "simples", `lg${Date.now().toString(36)}`);
   let titulo = f.arquivo.nome.replace(/\s*\((?:render|amostra)[^)]*\)\s*$/i, "").replace(/\s+v\d+$/i, "").trim() || "Vídeo";
   let videoId: string | null = null;
   let roteiroId: string | null = null;

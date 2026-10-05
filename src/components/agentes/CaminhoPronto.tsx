@@ -43,9 +43,10 @@ export function CaminhoDaMensagem({ anexos, recente = false, className = "" }: {
  * `abrirSozinho`, vai sozinho uma vez (pedido "faz e me leva"). Qualquer
  * agente usa: no CartaoDeAcao depois de feito, ou solto depois da resposta.
  */
-export default function CaminhoPronto({ caminho, abrirSozinho = false, className = "" }: { caminho: CaminhoDoAgente | null | undefined; abrirSozinho?: boolean; className?: string }) {
+export default function CaminhoPronto({ caminho, abrirSozinho = false, className = "", navegar }: { navegar?: (destino: string) => void; caminho: CaminhoDoAgente | null | undefined; abrirSozinho?: boolean; className?: string }) {
   const c = caminhoSeguro(caminho);
   const noRoteador = useInRouterContext();
+  if (c && navegar) return <Botao caminho={c} abrirSozinho={abrirSozinho} className={className} ir={() => navegar(c.destino)} />;
   return c ? <BotaoDoCaminho caminho={c} abrirSozinho={abrirSozinho} noRoteador={noRoteador} className={className} /> : null;
 }
 

@@ -117,14 +117,16 @@ function publicacaoDoInstagram(pubs: PublicacaoDoPostDeFotos[]): PublicacaoDoPos
 }
 
 /** Os posts de fotos do cliente (os mais novos primeiro), com o item e a publicação. */
-export async function lerPostsDeFotos(clientId: string): Promise<PostDeFotos[]> {
-  const { data, error } = await (supabase as any)
+export async function lerPostsDeFotos(clientId: string, taskId?: string): Promise<PostDeFotos[]> {
+  let consulta = (supabase as any)
     .from("estudio_trabalhos")
     .select(CAMPOS_DO_POST)
     .eq("client_id", clientId)
     .eq("direcao->>so_fotos", "true")
     .order("atualizado_em", { ascending: false })
     .limit(60);
+  if (taskId) consulta = consulta.eq("task_id", taskId);
+  const { data, error } = await consulta;
   if (error) throw error;
   const trabalhos = lista<any>(data).filter((t) => ehPostDeFotos(t.direcao) && t.task_id);
   if (!trabalhos.length) return [];
@@ -152,8 +154,8 @@ export async function lerPostsDeFotos(clientId: string): Promise<PostDeFotos[]> 
     .sort((a, b) => String((a.item && a.item.due_date) || "9999").localeCompare(String((b.item && b.item.due_date) || "9999")));
 }
 
-export function usePostsDeFotos(clientId: string) {
-  return useQuery({ queryKey: chaveDosPostsDeFotos(clientId), enabled: !!clientId, staleTime: 20_000, queryFn: () => lerPostsDeFotos(clientId) });
+export function usePostsDeFotos(clientId: string, taskId?: string) {
+  return useQuery({ queryKey: taskId ? [...chaveDosPostsDeFotos(clientId), taskId] : chaveDosPostsDeFotos(clientId), enabled: !!clientId, staleTime: 20_000, queryFn: () => lerPostsDeFotos(clientId, taskId) });
 }
 
 const hojeISO = () => {

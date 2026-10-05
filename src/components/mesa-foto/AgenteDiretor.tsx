@@ -563,7 +563,9 @@ function CartaoIdentificar({ sugestao, anexos }: { sugestao: SugestaoDoAgente; a
  * sozinha uma vez, só com a resposta nova (reabrir a conversa não navega).
  */
 function IrSozinho({ destino }: { destino: string }) {
+  const { navegarNoEstudio } = useMesaFoto();
   const noRoteador = useInRouterContext();
+  if (navegarNoEstudio) return <CaminhoPronto navegar={navegarNoEstudio} caminho={{ destino, rotulo: "Continuar no estúdio" }} abrirSozinho />;
   return noRoteador ? <IrSozinhoNoRoteador destino={destino} /> : <IrSozinhoSemRoteador destino={destino} />;
 }
 
@@ -618,7 +620,7 @@ function OpcoesDoDiretor({ opcoes, onOpcao, ocupado }: { opcoes: OpcaoDoDiretor[
 }
 
 function Mensagem({ m, anexosDaConversa, onOpcao, ocupado }: { m: MensagemDoDiretor; anexosDaConversa: string[]; onOpcao?: (mensagem: string) => void; ocupado?: boolean }) {
-  const { irPara } = useMesaFoto();
+  const { irPara, navegarNoEstudio } = useMesaFoto();
   const { clientId } = useMesa();
   const queryClient = useQueryClient();
   const irSozinhoPara = caminhoParaIrSozinho(m);
@@ -695,6 +697,7 @@ function Mensagem({ m, anexosDaConversa, onOpcao, ocupado }: { m: MensagemDoDire
       {m.acao && m.mensagemId && (
         <div className="mt-2">
           <CartaoDeAcao
+            navegar={navegarNoEstudio}
             acao={m.acao}
             titulo={m.acao.executada_direto ? "O diretor já fez nas fotos" : "O diretor vai fazer nas fotos"}
             observacao="Sem custo. Nenhuma foto é apagada, e dá para desfazer."
@@ -727,7 +730,7 @@ function Mensagem({ m, anexosDaConversa, onOpcao, ocupado }: { m: MensagemDoDire
       {/* O caminho da resposta: a área onde a equipe continua (vai sozinho no "faz e me leva"). */}
       {m.caminho && !(m.acao && m.acao.executada_direto && m.acao.caminho) && (
         <div className="mt-2 flex min-w-0 flex-wrap items-center" data-caminho-da-resposta="">
-          <CaminhoPronto caminho={m.caminho} abrirSozinho={!!m.nova && !m.geracao && m.caminho.abrir_sozinho === true} />
+          <CaminhoPronto navegar={navegarNoEstudio} caminho={m.caminho} abrirSozinho={!!m.nova && !m.geracao && m.caminho.abrir_sozinho === true} />
         </div>
       )}
       {/* AG2: "Aprendi" (com Esquecer) e "Segui" do que a equipe ensinou. */}
@@ -831,22 +834,31 @@ function Conversa({ mensagens, pendente, anexos, onOpcao }: { mensagens: Mensage
  */
 export default function AgenteDiretor({
   pedido,
+  escopo,
+  pautaId = escopo,
+  aoSelecionarFotos,
 }: {
+  escopo?: string;
+  pautaId?: string;
+  aoSelecionarFotos?: (ids: string[]) => Promise<void>;
   /** Pedido vindo de outra etapa (atalho): vai direto ao diretor (no rascunho se ele ainda pensa ou se veio `rascunho`). */
   pedido?: { mensagem: string; em: number; rascunho?: boolean } | null;
 } = {}) {
   const { clientId, catalogo, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
-  const { kitId, ensaioId, selecionadas, etapa } = useMesaFoto();
+  const { kitId, ensaioId, selecionadas, etapa, setSelecionadas } = useMesaFoto();
   const fotos = useFotos(clientId);
   // Contexto automático: o que está aberto na tela e o pacote do cliente (sem IA; a página já carrega com a lateral recolhida).
   const focoNaTela = useFocoDoDiretor(clientId, etapa || "acervo", selecionadas, kitId, ensaioId);
   const contextoDoDiretor = useContextoDoDiretor(clientId, focoNaTela);
   const aoGravarKits = useAoGravarKits();
-  const conversa = useConversaGuardada(clientId);
+  const memoria = escopo ? `${clientId}:${escopo}` : clientId;
+  const clienteAtual = useRef(clientId);
+  clienteAtual.current = clientId;
+  const conversa = useConversaGuardada(memoria);
   const { mensagens, conversaId, novaConversa, pendente } = conversa;
-  const [texto, setTexto] = useEstadoDaTela<string>(`mesa-foto:diretor:rascunho:${clientId}`, "");
+  const [texto, setTexto] = useEstadoDaTela<string>(`mesa-foto:diretor:rascunho:${memoria}`, "");
   const [erro, setErro] = useState<unknown>(null);
   const [comFotos, setComFotos] = useState(true);
   const [estilos, setEstilos] = useState<string[]>([]);
@@ -864,23 +876,24 @@ export default function AgenteDiretor({
   // em que estão. Só com a lista vazia e sem "Nova conversa" pedida; o que chegou enquanto lia não é trocado.
   useEffect(() => {
     const alvo = clientId;
-    if (!alvo || historicoPedido[alvo]) return;
-    const atual = conversaGuardada(alvo);
-    if (atual.mensagens.length || atual.pendente || atual.novaConversa || novaPedida(alvo)) return;
-    historicoPedido[alvo] = true;
+    if (!alvo || historicoPedido[memoria]) return;
+    const atual = conversaGuardada(memoria);
+    if (atual.mensagens.length || atual.pendente || atual.novaConversa || novaPedida(memoria)) return;
+    if (escopo && !atual.conversaId) return;
+    historicoPedido[memoria] = true;
     lerHistoricoDoDiretor({ clientId: alvo, conversaId: atual.conversaId, kitId, ensaioId })
       .then((r) => {
         if (!r.mensagens.length) return;
-        if (r.conversa_id) gravarConversa(alvo, r.conversa_id);
-        mudarConversa(alvo, (e) => (e.mensagens.length || e.pendente || e.novaConversa ? {} : { mensagens: r.mensagens, conversaId: r.conversa_id || e.conversaId }));
+        if (r.conversa_id) gravarConversa(memoria, r.conversa_id);
+        mudarConversa(memoria, (e) => (e.mensagens.length || e.pendente || e.novaConversa ? {} : { mensagens: r.mensagens, conversaId: r.conversa_id || e.conversaId }));
       })
       .catch((e) => {
         // Não trava a conversa nova: o aviso diz que a anterior não voltou (e o próximo abrir tenta de novo).
-        historicoPedido[alvo] = false;
+        historicoPedido[memoria] = false;
         setErro(e);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId]);
+  }, [clientId, memoria]);
 
   // A conversa desce até a última mensagem (só a lista rola; a página não se mexe).
   useEffect(() => {
@@ -896,7 +909,7 @@ export default function AgenteDiretor({
     if (mensagem === undefined) setTexto("");
     // AG2: a bolha otimista tem id próprio; se o envio falhar, ela sai (o texto volta ao campo, sem duplicar no reenvio).
     const idDaBolha = idLocal();
-    mudarConversa(alvo, (e) => ({
+    mudarConversa(memoria, (e) => ({
       pendente: msg,
       mensagens: e.mensagens.concat([{ id: idDaBolha, papel: "usuario", texto: msg, sugestoes: [], custo_usd: null, anexos: anexos.length + estilosQueCabem.length, estilos: estilosQueCabem.length }]),
     }));
@@ -905,12 +918,23 @@ export default function AgenteDiretor({
       const campanhaId = lerDaSessao<string>(alvo, "campanha");
       // O foco da tela vai junto (etapa, clone, book, produto e o que está marcado): o diretor trabalha nisso.
       const focoAgora = focoDaTela({ clientId: alvo, etapa: etapa || "acervo", selecionadas: comFotos ? selecionadas : [], kitId, ensaioId });
-      const r = await conversarComDiretor({ clientId: alvo, mensagem: msg, conversaId, kitId, ensaioId, anexos, anexosDeEstilo: estilosQueCabem, novaConversa, campanhaId, foco: { ...focoAgora } });
-      if (r.conversa_id) gravarConversa(alvo, r.conversa_id);
-      marcarNova(alvo, false);
+      const r = await conversarComDiretor({ clientId: alvo, pautaId, mensagem: msg, conversaId, kitId, ensaioId, anexos, anexosDeEstilo: estilosQueCabem, novaConversa: novaConversa || (!!escopo && !conversaId), campanhaId, foco: { ...focoAgora } });
+      if (r.selecao_fotos?.length && clienteAtual.current === alvo) {
+        const relidas = await fotos.refetch();
+        if (clienteAtual.current === alvo) {
+          const ids = r.selecao_fotos.filter((id) => relidas.data?.some((f) => f.id === id && f.ativa && !f.referencia_web));
+          if (ids.length) {
+            if (aoSelecionarFotos) await aoSelecionarFotos(ids);
+            else { setSelecionadas(ids); toast.success(`${ids.length} fotos selecionadas no estúdio`, { description: "Confira as imagens antes de gerar ou montar o post." }); }
+          }
+          else toast.error("As fotos retornadas não estão disponíveis no acervo desta tela.");
+        }
+      }
+      if (r.conversa_id) gravarConversa(memoria, r.conversa_id);
+      marcarNova(memoria, false);
       if (r.kit_ids.length) aoGravarKits(r.kit_ids);
       if (r.identificacao) invalidarFotos(queryClient, alvo);
-      mudarConversa(alvo, (e) => ({
+      mudarConversa(memoria, (e) => ({
         novaConversa: false,
         conversaId: r.conversa_id || e.conversaId,
         mensagens: e.mensagens.concat([
@@ -937,15 +961,15 @@ export default function AgenteDiretor({
         ]),
       }));
       // O que vai sozinho (ir para a área, começar a geração barata) só vale agora: depois, só com o clique.
-      window.setTimeout(() => mudarConversa(alvo, (e) => ({ mensagens: e.mensagens.map((x) => (x.nova ? { ...x, nova: false } : x)) })), 2500);
+      window.setTimeout(() => mudarConversa(memoria, (e) => ({ mensagens: e.mensagens.map((x) => (x.nova ? { ...x, nova: false } : x)) })), 2500);
       if (r.acao && r.acao.executada_direto) atualizarTelasDepoisDoDiretor(queryClient, alvo, r.acao);
       if (estilosQueCabem.length) setEstilos((l) => l.filter((id) => estilosQueCabem.indexOf(id) < 0));
     } catch (e) {
       setErro(e);
-      mudarConversa(alvo, (st) => ({ mensagens: st.mensagens.filter((x) => x.id !== idDaBolha) }));
+      mudarConversa(memoria, (st) => ({ mensagens: st.mensagens.filter((x) => x.id !== idDaBolha) }));
       setTexto((t) => t || msg);
     } finally {
-      mudarConversa(alvo, () => ({ pendente: null }));
+      mudarConversa(memoria, () => ({ pendente: null }));
       atualizarCusto();
     }
   };
@@ -970,10 +994,10 @@ export default function AgenteDiretor({
   }, [pedido ? pedido.em : 0, clientId]);
 
   const comecarDeNovo = () => {
-    mudarConversa(clientId, () => ({ mensagens: [], conversaId: null, novaConversa: true }));
-    marcarNova(clientId, true);
+    mudarConversa(memoria, () => ({ mensagens: [], conversaId: null, novaConversa: true }));
+    marcarNova(memoria, true);
     try {
-      window.sessionStorage.removeItem(chaveDaConversa(clientId));
+      window.sessionStorage.removeItem(chaveDaConversa(memoria));
     } catch {
       /* nada guardado */
     }

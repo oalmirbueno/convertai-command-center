@@ -601,14 +601,14 @@ describe("telas da frente MF", () => {
     }
   });
 
-  it("O que fazer (passo 1): cinco objetivos em termos simples; escolher guarda e leva às Fotos; o avançado fica recolhido", async () => {
+  it("O que fazer (passo 1): objetivos em termos simples; escolher guarda e leva às Fotos; o avançado fica recolhido", async () => {
     mock.tabelas.foto_kits = [];
     const escolherObjetivo = vi.fn();
     const foto = valorDaFoto({ selecionadas: [F1], escolherObjetivo });
     montar(h(EtapaCriar), foto);
     expect(await screen.findByText("O que você quer produzir?")).toBeTruthy();
     const objetivos = Array.from(document.querySelectorAll("[data-objetivo]")).map((b) => b.getAttribute("data-objetivo"));
-    expect(objetivos).toEqual(["melhorar", "variacoes", "modelo", "fundo", "post"]);
+    expect(objetivos).toEqual(["compor", "melhorar", "variacoes", "modelo", "fundo", "post"]);
     // Nenhum cartão travado: cada um diz o que precisa, e o passo 2 pede.
     expect(Array.from(document.querySelectorAll("[data-objetivo]")).every((b) => !(b as HTMLButtonElement).disabled)).toBe(true);
     expect((document.querySelector('[data-objetivo="variacoes"]') as HTMLElement).textContent).toContain("Precisa: fotos do produto");

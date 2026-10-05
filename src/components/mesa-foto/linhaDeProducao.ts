@@ -17,7 +17,7 @@
  * Arquivo puro (sem React): a página, as etapas e os testes usam as mesmas regras.
  */
 
-export type ObjetivoDaFoto = "melhorar" | "variacoes" | "modelo" | "fundo" | "post";
+export type ObjetivoDaFoto = "melhorar" | "variacoes" | "modelo" | "fundo" | "post" | "compor";
 
 /** O que o objetivo pede no passo 2 (Fotos). */
 export type RequisitoDasFotos = "uma_foto" | "produto" | "fotos";
@@ -32,12 +32,13 @@ export interface Objetivo {
   precisa: string;
   requisito: RequisitoDasFotos;
   /** A etapa do passo 3 (Gerar). O post não gera: vai direto ao passo 5. */
-  etapa: "estudio" | "ensaio" | "campanha" | "preparar" | "agenda";
+  etapa: "estudio" | "ensaio" | "campanha" | "preparar" | "agenda" | "compor";
   /** Rótulo da ferramenta, para quem já conhece a mesa. */
   ferramenta: string;
 }
 
 export const OBJETIVOS: Objetivo[] = [
+  { valor: "compor", titulo: "Compor foto", texto: "Produto, modelo ou clone e ambiente, com tratamento e versões no mesmo lugar.", precisa: "fotos do produto", requisito: "produto", etapa: "compor", ferramenta: "Composição" },
   {
     valor: "melhorar",
     titulo: "Melhorar uma foto",
@@ -92,7 +93,7 @@ export const ehObjetivo = (v: unknown): v is ObjetivoDaFoto => typeof v === "str
 export const objetivoPorValor = (v: ObjetivoDaFoto | null | undefined): Objetivo | null => (v ? OBJETIVOS.find((o) => o.valor === v) || null : null);
 
 /** Etapas do passo 3 (Gerar). */
-export const ETAPAS_DE_GERAR = ["estudio", "ensaio", "campanha", "preparar"] as const;
+export const ETAPAS_DE_GERAR = ["estudio", "ensaio", "campanha", "preparar", "compor"] as const;
 
 /**
  * A ferramenta do passo 3 diz o objetivo (quem chega de fora, por um link do
@@ -174,7 +175,7 @@ export function etapaDeGerar(objetivo: ObjetivoDaFoto | null): string {
  * produto). Nunca devolve "criar".
  */
 export interface DestinoDoPasso {
-  etapa: "estudio" | "ensaio" | "campanha" | "preparar" | "agenda";
+  etapa: "estudio" | "ensaio" | "campanha" | "preparar" | "agenda" | "compor";
   imagem: string | null;
   /** O post leva as marcadas para a Agenda. */
   levarAoPost: boolean;

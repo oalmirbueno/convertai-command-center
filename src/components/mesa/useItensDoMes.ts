@@ -1,3 +1,4 @@
+import { FORMATOS_DE_VIDEO_NO_ESTUDIO } from "./modoDaPauta";
 import { useCallback } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -570,7 +571,7 @@ export function paraMapas(d: DadosDosItens): ItensDoMes {
   };
 }
 
-async function lerItensDaJanela(clientId: string, mes: string): Promise<DadosDosItens> {
+async function lerItensDaJanela(clientId: string, mes: string, incluirVideos = false): Promise<DadosDosItens> {
   const { data: projetos, error: erroProjetos } = await (supabase as any)
     .from("projects")
     .select("id")
@@ -585,7 +586,7 @@ async function lerItensDaJanela(clientId: string, mes: string): Promise<DadosDos
     .from("tasks")
     .select(COLUNAS_DA_TAREFA)
     .in("project_id", ids)
-    .in("delivery_type", FORMATOS_DE_ARTE)
+    .in("delivery_type", incluirVideos ? [...FORMATOS_DE_ARTE, ...FORMATOS_DE_VIDEO_NO_ESTUDIO] : FORMATOS_DE_ARTE)
     .is("deleted_at", null)
     .gte("due_date", janela.inicio)
     .lt("due_date", janela.fimExclusivo)
@@ -601,7 +602,7 @@ async function lerItensDaJanela(clientId: string, mes: string): Promise<DadosDos
  * Agenda. `mes` é o primeiro dia do mês (AAAA-MM-01) ou "proximos" (hoje até
  * 60 dias). Trocar a janela mantém a lista anterior na tela até a nova chegar.
  */
-export function useItensDoMes(clientId: string, mes: string) {
+export function useItensDoMes(clientId: string, mes: string, incluirVideos = false) {
   // Marca por projeto (Acerbi e CME): só os itens da marca aberta (filtro na tela,
   // a leitura e o cache são os mesmos). Sem marca, paraMapas como antes.
   const { marca, marcas } = useMarcaDaMesa();
@@ -613,10 +614,10 @@ export function useItensDoMes(clientId: string, mes: string) {
     [chaveDoFiltro],
   );
   return useQuery({
-    queryKey: chaveDosItens(clientId, mes),
+    queryKey: incluirVideos ? [...chaveDosItens(clientId, mes), "todos-os-formatos"] : chaveDosItens(clientId, mes),
     enabled: !!clientId,
     placeholderData: keepPreviousData,
-    queryFn: () => lerItensDaJanela(clientId, mes),
+    queryFn: () => lerItensDaJanela(clientId, mes, incluirVideos),
     select: filtro ? daMarca : paraMapas,
   });
 }

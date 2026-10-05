@@ -402,6 +402,12 @@ async function entradaDoCorpo(b: BaseDaFuncao, clientId: string, corpo: Record<s
 export async function gerarVideo(b: BaseDaFuncao, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id || "");
   await b.garantirAcesso(clientId);
+  const taskId = corpo.task_id == null ? null : String(corpo.task_id);
+  if (taskId) {
+    if (!UUID.test(taskId)) throw b.erro(400, "pauta_invalida", "Escolha uma pauta válida.");
+    const { data: tarefa, error } = await b.servico().from("tasks").select("id, projects!inner(client_id)").eq("id", taskId).eq("projects.client_id", clientId).is("deleted_at", null).maybeSingle();
+    if (error || !tarefa) throw b.erro(404, "pauta_inexistente", "Esta pauta não pertence ao cliente aberto.");
+  }
   const { motor } = await motorPronto(b, linha(corpo.motor, 60));
   if (motor.familia !== "video") throw b.erro(400, "motor_nao_e_de_video", `${motor.rotulo} não gera vídeo.`);
   const modo = MODOS.indexOf(corpo.modo as ModoDaGeracao) >= 0 ? (corpo.modo as ModoDaGeracao) : corpo.quadro_inicial_path ? "primeiro_quadro" : "texto";
@@ -419,6 +425,7 @@ export async function gerarVideo(b: BaseDaFuncao, corpo: Record<string, unknown>
     projetoId: UUID.test(String(corpo.projeto_id || "")) ? String(corpo.projeto_id) : null,
     planoRef: linha(corpo.plano_ref, 8) || null,
     titulo: linha(corpo.titulo, 120) || null,
+    extras: taskId ? { task_id: taskId } : undefined,
   });
   return b.json(r);
 }

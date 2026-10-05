@@ -55,6 +55,7 @@ export interface FotoDoAcervo {
   storage_bucket: string;
   storage_path: string;
   origem: string;
+  workspace_node_id?: string | null;
   pasta: string | null;
   categoria: string | null;
   tags: string[];
@@ -639,6 +640,7 @@ export function normalizarFoto(bruta: any): FotoDoAcervo | null {
     storage_bucket: texto(bruta.storage_bucket) || "mesa",
     storage_path: texto(bruta.storage_path),
     origem: texto(bruta.origem) || "upload",
+    workspace_node_id: textoOuNulo(bruta.workspace_node_id),
     pasta: textoOuNulo(bruta.pasta),
     categoria: textoOuNulo(bruta.categoria),
     tags: listaDeTextos(bruta.tags),
@@ -1362,6 +1364,7 @@ export async function editarTomada(
 
 export async function prepararFoto(p: {
   clientId: string;
+  modeloImagemId?: string;
   imagemId: string;
   modo: ModoDePreparo;
   areas: Area[];
@@ -1370,6 +1373,7 @@ export async function prepararFoto(p: {
   guia?: Guia | null;
 }): Promise<{ imagem: FotoDoAcervo | null; custo_usd?: number }> {
   const corpo: Record<string, unknown> = { acao: "preparar", client_id: p.clientId, imagem_id: p.imagemId, modo: p.modo, guia: guiaParaEnviar(p.guia) };
+  if (p.modeloImagemId) corpo.modelo_imagem_id = p.modeloImagemId;
   if (p.areas.length) corpo.areas_protegidas = p.areas;
   if (p.modo === "cenario" && p.cenario.trim()) corpo.cenario = p.cenario.trim();
   if (p.instrucao.trim()) corpo.instrucao = p.instrucao.trim();
@@ -2182,6 +2186,7 @@ export function normalizarSugestoes(v: unknown): SugestaoDoAgente[] {
 export const MAX_ANEXOS_DO_DIRETOR = 4;
 
 export interface RespostaDoDiretor {
+  selecao_fotos?: string[];
   resposta: string;
   /** O que o diretor entendeu do pedido (ex.: "vi caixas do mouse NTC X, vou trabalhar com ele"). */
   entendi: string;
@@ -2214,6 +2219,7 @@ export interface RespostaDoDiretor {
 
 export async function conversarComDiretor(p: {
   clientId: string;
+  pautaId?: string;
   mensagem: string;
   conversaId: string | null;
   kitId: string | null;
@@ -2230,6 +2236,7 @@ export async function conversarComDiretor(p: {
 }): Promise<RespostaDoDiretor> {
   const corpo: Record<string, unknown> = { acao: "agente_conversar", client_id: p.clientId, mensagem: p.mensagem.trim() };
   if (p.foco) corpo.foco = p.foco;
+  if (p.pautaId) corpo.pauta_id = p.pautaId;
   if (p.campanhaId) corpo.campanha_id = p.campanhaId;
   if (p.conversaId) corpo.conversa_id = p.conversaId;
   else if (p.novaConversa) corpo.nova_conversa = true;
@@ -2246,6 +2253,7 @@ export async function conversarComDiretor(p: {
   if (data && data.kit && data.kit.id && kitIds.indexOf(String(data.kit.id)) < 0) kitIds.push(String(data.kit.id));
   const ident = data && (data.identificacao || (data.produto && typeof data.produto === "object" ? data : null));
   return {
+    selecao_fotos: listaDeTextos(data && data.selecao_fotos),
     resposta: texto(data && (data.resposta || data.texto)),
     entendi: texto(data && (data.entendi || data.entendimento)),
     proximo_passo: texto(data && data.proximo_passo),

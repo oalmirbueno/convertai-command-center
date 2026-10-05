@@ -404,8 +404,8 @@ describe("rota, casca e troca entre mesas", () => {
     // entra no passo 2 (Criar) e o Post na Agenda no passo 3 (Usar). Mudança de propósito: as etapas
     // antigas continuam todas, na mesma ordem relativa.
     // 30/09 (frente FTL): a etapa nova "aprovar" (conferir e aprovar num lugar só); nenhuma antiga saiu.
-    expect(ETAPAS_DA_MESA_FOTO.map((e) => e.valor)).toEqual(["acervo", "kits", "criar", "estudio", "ensaio", "campanha", "preparar", "revisar", "aprovar", "usar", "agenda", "biblioteca", "modelos", "clones", "book", "canvas"]);
-    expect(PASSOS_PRINCIPAIS.map((p) => p.inclui)).toEqual([["criar"], ["acervo", "kits"], ["estudio", "ensaio", "campanha", "preparar"], ["aprovar", "revisar"], ["usar", "agenda"]]);
+    expect(ETAPAS_DA_MESA_FOTO.map((e) => e.valor)).toEqual(["acervo", "kits", "criar", "estudio", "compor", "ensaio", "campanha", "preparar", "revisar", "aprovar", "usar", "agenda", "biblioteca", "modelos", "clones", "book", "canvas"]);
+    expect(PASSOS_PRINCIPAIS.map((p) => p.inclui)).toEqual([["criar"], ["acervo", "kits"], ["estudio", "ensaio", "campanha", "preparar", "compor"], ["aprovar", "revisar"], ["usar", "agenda"]]);
     // Modelos e Canvas já têm tela: aparecem como abas avançadas.
     expect(ABAS_FUTURAS.map((a) => [a.etapa, a.disponivel])).toEqual([["modelos", true], ["clones", true], ["book", true], ["canvas", true]]);
     // Celular: a linha em uma faixa (só o passo aberto mostra o nome) e o seletor ao lado, sem rolagem lateral.

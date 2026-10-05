@@ -154,11 +154,11 @@ describe("a lista não some ao clicar num item", () => {
   it("a chave é só cliente e janela; o item aberto nunca entra nela", () => {
     expect(chaveDosItens(CLIENTE, "proximos")).toEqual(["mesa", "itens-do-mes", CLIENTE, "proximos"]);
     expect(chaveDosItens(CLIENTE, "2026-10-01")).toEqual(["mesa", "itens-do-mes", CLIENTE, "2026-10-01"]);
-    expect(hook).toContain("export function useItensDoMes(clientId: string, mes: string) {");
-    expect(hook).toContain("queryKey: chaveDosItens(clientId, mes),");
+    expect(hook).toContain("export function useItensDoMes(clientId: string, mes: string, incluirVideos = false) {");
+    expect(hook).toContain('queryKey: incluirVideos ? [...chaveDosItens(clientId, mes), "todos-os-formatos"] : chaveDosItens(clientId, mes),');
     expect(hook).toContain("placeholderData: keepPreviousData,");
     expect(hook).not.toContain("tarefaExtra");
-    expect(estudio).toContain("useItensDoMes(clientId, janela);");
+    expect(estudio).toContain("useItensDoMes(clientId, janela, true);");
     // O item fora da janela vem de uma consulta pequena à parte, só quando não está na lista.
     expect(estudio).toContain("useItemAvulso(clientId, tarefaId, !!tarefaId && listaPronta && !naLista)");
   });

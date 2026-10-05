@@ -1,3 +1,4 @@
+import { fotosSelecionadas } from "./modulos/selecao-do-workspace.ts";
 /**
  * mesa-foto: o estúdio fotográfico da Mesa (docs/mesa-foto/CONTRATO.md e a
  * pesquisa em docs/mesa-foto/pesquisa/).
@@ -891,6 +892,7 @@ const esquemaConferencia = (criterios: string[]) => ({
 const ESQUEMA_AGENTE = {
   nome: "resposta_do_diretor_de_fotografia",
   schema: obj({
+    selecao_fotos: lista(S("string")),
     resposta: S("string"),
     sugestoes: lista(obj({
       tipo: S("string", { enum: ["identificar_produto", "plano_de_variacoes", "campanha", "tomada_nova", "ajuste_tomada", "prompt", "busca_referencia"] }),
@@ -947,6 +949,7 @@ const ESQUEMA_AGENTE = {
 // ------------------------------------------------------------------ sistemas
 
 const REGRAS_DA_CASA = `REGRAS DA CASA (Mesa Foto):
+- Quando pedirem para buscar, escolher ou usar fotos do Workspace/acervo, devolva selecao_fotos com os apelidos i# reais do pacote, na ordem de uso. A tela aplica a seleção e mostra as fotos. Sem pedido de seleção, lista vazia. Não invente fotos ou pastas; se o acervo não as contém ou o nome é ambíguo, pergunte pelo caminho completo. Selecionar não significa gerar, salvar post, aprovar ou publicar. Nunca afirme essas ações sem execução comprovada.
 - Original é imutável; o que se gera é derivada rastreável.
 - Identidade do assunto (produto, pessoa, alimento) vem só das fotos de evidência do kit; estilo, cenário e pose só orientam.
 - A embalagem não mostra o formato do produto, mas identifica marca, modelo e variante: use a caixa para identificar e pesquisar o produto real. Com foto do produto (real ou referência oficial da internet), o produto pode sair fora da caixa; sem ela, a caixa é o assunto. Nunca desenhe o produto a partir da arte da caixa. Lacuna fica escrita.
@@ -3867,6 +3870,11 @@ const ESQUEMA_AGENTE_COM_METODO = comMetodosUsados(ESQUEMA_AGENTE);
 async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
+  const pautaId = corpo.pauta_id == null ? null : idDe(corpo.pauta_id, "pauta_id");
+  if (pautaId) {
+    const { data, error } = await servico().from("tasks").select("id, projects!inner(client_id)").eq("id", pautaId).eq("projects.client_id", clientId).is("deleted_at", null).maybeSingle();
+    if (error || !data) throw new ErroHttp(404, "pauta_inexistente", "Esta pauta não pertence ao cliente aberto.");
+  }
   const mensagem = limpo(corpo.mensagem, 4000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva a mensagem para o diretor de fotografia.");
   // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (sem laço em foto; nunca lança).
@@ -3931,6 +3939,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     .map((p) => ({ ref: refDoPrompt.get(p.id) ?? null, titulo: p.titulo, categoria: p.categoria, do_cliente: !!p.client_id }));
   const kitSemId = kit ? (({ id: _id, ...resto }) => resto)(resumoDoKit(kit, refs)) : null;
   const dados = {
+    pauta_aberta: pautaId ? "Trabalhe somente nesta pauta. Selecione fotos reais em selecao_fotos para a equipe conferir no post. Não crie outra pauta. Só use post_na_agenda para o post listado neste pacote." : null,
     cliente: contexto.dados,
     kit: kit && kitSemId ? { ref: refDoKit.get(kit.id) ?? null, ...kitSemId } : null,
     ensaio: ensaio
@@ -4003,6 +4012,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     criadoPor: ch.userId,
   });
   const r = (saida.json ?? {}) as Record<string, unknown>;
+  const selecaoFotos = fotosSelecionadas(r.selecao_fotos, preparo.selecaoDaPasta === null ? pacote.imagens : pacote.imagens.filter((i) => preparo.selecaoDaPasta!.includes(i.id)));
   let resposta = limpo(r.resposta, 6000) || "Sem resposta do diretor.";
   const kitsValidos = Array.from(new Set([...(kit ? [kit.id] : []), ...kitsDoCli.map((k) => k.id)]));
   const sugestoesBrutas = sugestoesComIds(r.sugestoes, pacote, anexosForaDoPacote);
@@ -4037,6 +4047,11 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     aprenderDoPedido(servico(), { clientId, mesa: "foto", pedido: mensagem, regraSugerida: r.regra_aprendida, marcaId, userId: ch.userId, ultimaResposta }),
   ]);
   let acaoProposta = propostas.acao;
+  // Na pauta, o diretor seleciona fotos ou complementa o post aberto; nunca cria outra pauta.
+  if (pautaId && acaoProposta) {
+    const itens = acaoProposta.itens.filter((i) => i.operacao !== "post_na_agenda" || (String(i.para || "").startsWith("post:") && String(i.para).endsWith(`|${pautaId}`)));
+    acaoProposta = itens.length ? { ...acaoProposta, itens } : null;
+  }
   let geracao = propostas.geracao;
   // AG2: o que a equipe ensinou a EVITAR vai junto da geração (entra no pedido de cada foto).
   const evitar = regras.regras.filter((g) => g.tipo === "evitar").map((g) => g.texto);
@@ -4044,7 +4059,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   // Frente MF (27/09, "diretor que faz"): pedido "faz e me leva" abre sozinho a área quando termina.
   const levar = pedeParaLevar(mensagem);
   if (geracao && geracao.itens.length) {
-    const destino = destinoDoPost(r.agenda_das_fotos, pacote);
+    const destinoBruto = destinoDoPost(r.agenda_das_fotos, pacote);
+    const destino = !pautaId || (String(destinoBruto || "").startsWith("post:") && String(destinoBruto).endsWith(`|${pautaId}`)) ? destinoBruto : null;
     geracao = { ...geracao, contexto: { ...(geracao.contexto || {}), ...(destino ? { agenda_das_fotos: destino } : {}), ...(levar ? { abrir_sozinho: true } : {}) } };
   }
   if (acaoProposta && levar) acaoProposta = { ...acaoProposta, contexto: { ...(acaoProposta.contexto || {}), abrir_sozinho: true } };
@@ -4065,7 +4081,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   let opcoes = normalizarOpcoes(r.opcoes);
   // AG2, trava da promessa vazia: resposta que diz que fez ou deixou pronto sem trazer nada vira aviso honesto.
   let prometeuSemAcao = false;
-  if (!acaoProposta && !geracao && !sugestoes.length) {
+  if (!acaoProposta && !geracao && !sugestoes.length && !selecaoFotos.length) {
     const promessa = await prometeuSemFazer(resposta, mensagem);
     if (promessa.prometeu) {
       prometeuSemAcao = true;
@@ -4075,13 +4091,14 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     }
   }
   // Frente SPP: "pronto" sem nada feito agora ganha o aviso (sem refazer; foto nunca entra em laço).
-  const fechado = await fecharComMetodo(servico(), { usoId: saida.usoId, metodo: await spP, resposta, declarados: r.metodos_usados, acaoFeita: vaiDireto || (sozinha && ordemClara) });
+  const fechado = await fecharComMetodo(servico(), { usoId: saida.usoId, metodo: await spP, resposta, declarados: r.metodos_usados, acaoFeita: vaiDireto || (sozinha && ordemClara) || selecaoFotos.length > 0 });
   resposta = fechado.resposta;
   // Caminho da resposta: a área onde a equipe continua (o apelido vira id aqui; o modelo nunca vê id).
   const caminhoDaMensagem = caminhoDaResposta(r.ir_para, r.ir_para_ref, pacote, levar && !vaiDireto && !geracao);
   const seguidas = anexoDasRegrasSeguidas(r.regras_seguidas, regras.regras);
   const anexosDaResposta = (): unknown[] => {
     const lista: unknown[] = sugestoes.length ? [{ tipo: "sugestoes", sugestoes }] : [];
+    if (selecaoFotos.length) lista.push({ tipo: "selecao_fotos", imagem_ids: selecaoFotos });
     if (acaoProposta) lista.push(acaoProposta);
     if (geracao) lista.push(geracao);
     if (opcoes.length) lista.push({ tipo: "opcoes_do_diretor", pergunta: pergunta || null, opcoes });
@@ -4120,6 +4137,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const guardou = !!troca.agenteId;
   return json({
     conversa_id: conversaId,
+    selecao_fotos: selecaoFotos,
     resposta,
     ...blocosDaResposta(resposta),
     sugestoes,

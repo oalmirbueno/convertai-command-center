@@ -102,6 +102,8 @@ interface EditorialEditorProps {
   defaultScheduledAt?: string;
   defaultTaskId?: string;
   defaultTitle?: string;
+  /** Arquivo preparado pelo estúdio; só inicializa uma peça nova ou revisão. */
+  defaultPrimaryFileId?: string;
   defaultContext?: string;
   defaultContentType?: string;
   defaultResponsibleId?: string;
@@ -180,6 +182,7 @@ export default function EditorialEditor({
   defaultScheduledAt = "",
   defaultTaskId = "",
   defaultTitle = "",
+  defaultPrimaryFileId = "",
   defaultContext = "",
   defaultContentType = "static",
   defaultResponsibleId = "",
@@ -358,7 +361,7 @@ export default function EditorialEditor({
       setObjective(post.post.objective || "");
       setDefaultCaption(post.post.default_caption || "");
       setProductionStatus(post.post.production_status);
-      setPrimaryFileId(post.post.primary_file_id || "");
+      setPrimaryFileId(post.post.primary_file_id || defaultPrimaryFileId);
       setTaskId(post.internal?.task_id || "");
       setResponsibleId(post.internal?.responsible_id || "");
       setInternalNotes(post.internal?.internal_notes || "");
@@ -400,7 +403,7 @@ export default function EditorialEditor({
     setObjective(revisionOf?.post.objective || defaultContext);
     setDefaultCaption(revisionOf?.post.default_caption || "");
     setProductionStatus(revisionOf ? "draft" : defaultProductionStatus);
-    setPrimaryFileId("");
+    setPrimaryFileId(defaultPrimaryFileId);
     setTaskId(revisionOf ? revisionOf.internal?.task_id || "" : defaultTaskId);
     setResponsibleId(
       revisionOf
@@ -422,6 +425,7 @@ export default function EditorialEditor({
     defaultScheduledAt,
     defaultTaskId,
     defaultTitle,
+    defaultPrimaryFileId,
     open,
     post,
     revisionOf,

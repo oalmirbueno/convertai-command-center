@@ -1,0 +1,26 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import ComposicaoRapida from "@/components/mesa-foto/ComposicaoRapida";
+const m = vi.hoisted(() => ({ kitId: "produto-a", fotos: [{id:"foto-a",nome:"Produto original",storage_path:"c/a.jpg",client_id:"c"}], salvar: vi.fn(), gerar: vi.fn(), agenda: vi.fn(), aprovar: vi.fn() }));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({invalidateQueries:vi.fn()}) }));
+vi.mock("@/components/mesa/MesaContexto", () => ({ useMesa: () => ({clientId:"c",catalogo:[],atualizarCusto:vi.fn()}), ImagemDaMesa: ({alt}:{alt:string}) => <div role="img" aria-label={alt} /> }));
+vi.mock("@/components/mesa-foto/Comuns", () => ({ useMesaFoto: () => ({kitId:m.kitId,prepararNaAgenda:m.agenda,irPara:vi.fn(),abrirNoEstudio:vi.fn()}) }));
+vi.mock("@/components/mesa-foto/EscolhaDoProduto", () => ({ default: () => <div>Escolher produto</div>, capaDoKit: () => m.fotos[0] }));
+vi.mock("@/components/mesa-foto/EscolhaDoModeloDaFoto", () => ({default:()=> <div>Escolher pessoa</div>}));
+vi.mock("@/components/mesa-foto/AcoesProDaFoto", () => ({default:()=> null}));
+vi.mock("@/components/mesa-foto/SeletorDeFotos", () => ({default:()=> null}));
+vi.mock("@/components/mesa-foto/clonesApi", () => ({useClones:()=>({data:[]})}));
+vi.mock("@/components/mesa-foto/modelosApi", () => ({usePersonas:()=>({data:[]}),useImagensDaPersona:()=>({data:[]})}));
+vi.mock("@/components/mesa-foto/fotoApi", () => ({useFotos:()=>({data:m.fotos}),useKits:()=>({data:[{id:"produto-a",nome:"A",refs:[]},{id:"produto-b",nome:"B",refs:[]}]}),acrescentarFotos:(_q:unknown,_c:string,fs:typeof m.fotos)=>m.fotos.push(...fs),salvarKit:vi.fn(),decidirFoto:m.aprovar,chaveDosKits:()=>[]}));
+vi.mock("@/components/mesa/Seletores",()=>({SeletorDeModelo:()=>null}));
+vi.mock("@/lib/mesa/api",()=>({padraoPara:()=>({id:"motor"})}));
+vi.mock("@/components/mesa-foto/canvasApi",()=>({canvasVazio:()=>({nos:[]}),novoNo:(tipo:string,_x:number,_y:number,dados:unknown)=>({id:tipo,tipo,dados}),porCartao:(c:{nos:unknown[]},no:unknown)=>({...c,nos:[...c.nos,no]}),salvarCanvas:m.salvar,gerarNoCanvas:m.gerar,partesDoGerar:()=>[]}));
+vi.mock("@/components/mesa/Custo",()=>({BotaoComCusto:({executar,aoConcluir,disabled}:{executar:()=>Promise<unknown>;aoConcluir:(r:unknown)=>void;disabled:boolean})=><button disabled={disabled} onClick={()=>{void executar().then(aoConcluir).catch(()=>{});}}>Gerar composição</button>}));
+const gerar = async () => { fireEvent.change(screen.getByRole("textbox",{name:"Pedido da composição"}),{target:{value:"Luz suave"}}); fireEvent.click(screen.getByRole("button",{name:"Gerar composição"})); await waitFor(()=>expect(m.salvar).toHaveBeenCalled()); };
+beforeEach(()=>{ localStorage.clear(); m.kitId="produto-a"; m.fotos.splice(1); vi.clearAllMocks(); m.salvar.mockImplementation(async(c)=>({...c,id:"canvas-novo"})); m.gerar.mockResolvedValue({imagem:{id:"resultado-1",nome:"Resultado confirmado",storage_path:"c/r.jpg",client_id:"c"}}); });
+describe("Composição: executar, conferir e preservar",()=>{
+ it("salva um Canvas novo e só mostra a imagem confirmada pelo servidor",async()=>{render(<ComposicaoRapida/>);await gerar();expect(await screen.findByRole("button",{name:"Usar no post"})).toBeEnabled();expect(m.salvar.mock.calls[0][0].nos).toEqual(expect.arrayContaining([expect.objectContaining({tipo:"produto",dados:{kit_id:"produto-a"}})]));expect(m.gerar).toHaveBeenCalledWith(expect.objectContaining({canvasId:"canvas-novo",motorId:"motor"}));expect(m.aprovar).not.toHaveBeenCalled();fireEvent.click(screen.getByRole("button",{name:"Usar no post"}));expect(m.agenda).toHaveBeenCalledWith(["resultado-1"]);});
+ it("não dispara cobrança de geração quando salvar o Canvas falha",async()=>{m.salvar.mockResolvedValue({id:null,nos:[]});render(<ComposicaoRapida/>);await gerar();await waitFor(()=>expect(screen.getByRole("button",{name:"Gerar composição"})).toBeEnabled());expect(m.gerar).not.toHaveBeenCalled();expect(screen.queryByRole("button",{name:"Usar no post"})).not.toBeInTheDocument();});
+ it("não inventa resultado quando a geração não devolve imagem",async()=>{m.gerar.mockResolvedValue({});render(<ComposicaoRapida/>);await gerar();await waitFor(()=>expect(m.gerar).toHaveBeenCalled());expect(screen.queryByRole("button",{name:"Usar no post"})).not.toBeInTheDocument();});
+ it("trocar de produto separa as versões e voltar recupera as anteriores",async()=>{const view=render(<ComposicaoRapida/>);await gerar();await screen.findByRole("button",{name:"Usar no post"});m.kitId="produto-b";view.rerender(<ComposicaoRapida/>);expect(screen.queryByRole("region",{name:"Versões da composição"})).not.toBeInTheDocument();m.kitId="produto-a";view.rerender(<ComposicaoRapida/>);expect(screen.getByRole("region",{name:"Versões da composição"})).toBeInTheDocument();});
+});

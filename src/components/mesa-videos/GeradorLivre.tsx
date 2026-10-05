@@ -1,3 +1,9 @@
+import { lazy, Suspense, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useFotos } from "@/components/mesa-foto/fotoApi";
+import { subirQuadro } from "@/lib/mesa-videos/quadros";
+const DiretorDeFotos = lazy(() => import("@/components/mesa-foto/AgenteDiretor"));
+const SeletorDeFotos = lazy(() => import("@/components/mesa-foto/SeletorDeFotos"));
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
@@ -7,7 +13,7 @@ import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulari
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campo, campoTexto, juntar, texto } from "@/components/sistema/estilos";
 import { custoNaTela, novoUid, useMotoresDaMesa } from "@/lib/mesa-videos/api";
-import { duracaoNoMotor, duracoesDoMotor, motorDoNivel, motorPorId, type NivelDoMotor, resolucaoNoMotor } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
+import { atende, duracaoNoMotor, duracoesDoMotor, motorDoNivel, motorPorId, type NivelDoMotor, resolucaoNoMotor } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
 import { BotaoDeGerar, EscolherImagem, SeletorDeCamera, SeletorDeMotor } from "./PecasDoGerador";
 import DiretorDoPrompt from "./DiretorDoPrompt";
 import { chamarMesaVideos, chaveDosPedidos } from "./videosApi";
@@ -36,15 +42,21 @@ interface Rascunho {
   referencias: string[];
   /** Movimento pronto de câmera (Higgsfield). */
   camera?: string;
+  narracao?: string;
 }
 
 const INICIAL: Rascunho = { nivel: "normal", motor: "", prompt: "", negativo: "", duracao: 5, formato: "9:16", resolucao: "", audio: false, variacoes: 1, inicial: null, final: null, referencias: [], camera: "" };
 
-export default function GeradorLivre() {
+export default function GeradorLivre({ escopo, pauta, promptInicial = "", aoGerar }: { escopo?: string; pauta?: { id: string; title: string }; promptInicial?: string; aoGerar?: (id: string) => void } = {}) {
   const { clientId, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
   const motores = useMotoresDaMesa();
-  const [r, setR] = useEstadoDaTela<Rascunho>(`mesa-videos:livre:${clientId}`, INICIAL, { validar: (v) => !!v && typeof v === "object", esperaMs: 300 });
+  const fotosQ = useFotos(clientId);
+  const [buscandoFoto, setBuscandoFoto] = useState<"inicial" | "final" | "referencia" | null>(null);
+  const [copiando, setCopiando] = useState(false);
+  const [diretorAberto, setDiretorAberto] = useState(false);
+  const [destinoDoDiretor, setDestinoDoDiretor] = useState<"inicial" | "final" | "referencia">("inicial");
+  const [r, setR] = useEstadoDaTela<Rascunho>(escopo || `mesa-videos:livre:${clientId}`, { ...INICIAL, prompt: promptInicial }, { validar: (v) => !!v && typeof v === "object", esperaMs: 300 });
   const mudar = (m: Partial<Rascunho>) => setR((x) => ({ ...x, ...m }));
   const modo = r.inicial && r.final ? "primeiro_ultimo" : r.inicial ? "primeiro_quadro" : r.referencias.length ? "referencia" : "texto";
   const requisito = { modo, formato: r.formato, referencias: r.referencias.length || undefined } as const;
@@ -52,15 +64,36 @@ export default function GeradorLivre() {
   const duracoes = motor ? duracoesDoMotor(motor) : [5];
   const duracao = motor ? duracaoNoMotor(motor, r.duracao) : r.duracao;
   const resolucao = motor ? resolucaoNoMotor(motor, r.resolucao) : "";
-  const custo = custoNaTela(motor, { duracao_s: duracao, resolucao, audio: r.audio, variacoes: r.variacoes, referencias: r.referencias.length });
+  const custo = custoNaTela(motor, { duracao_s: duracao, resolucao, audio: !!(motor?.cap.audio && r.audio), variacoes: r.variacoes, referencias: r.referencias.length });
   const estado = motor ? motores.lista.find((x) => x.motor.id === motor.id) : null;
-  const motivo = !motor
+  const motivo = copiando ? "Aguarde o carregamento da foto." : r.final && !r.inicial ? "Escolha a foto inicial para usar a foto final." : !motor
     ? "Nenhum motor faz isso neste nível."
-    : estado && estado.estado !== "pronto"
+    : !atende(motor, requisito) ? "Escolha um motor compatível com estas fotos e formato." : estado && estado.estado !== "pronto"
       ? `${motor.rotulo}: ${estado.estado_rotulo.toLowerCase()}${estado.chave ? ` (${estado.chave})` : ""}.`
       : !r.prompt.trim()
         ? "Escreva o que acontece."
         : null;
+
+  const usarFotos = async (ids: string[], destino: "inicial" | "final" | "referencia") => {
+        const foto = fotosQ.data?.find((f) => f.id === ids[0]);
+        if (!foto || foto.client_id !== clientId || copiando) throw new Error("A foto não está disponível para este cliente.");
+        setCopiando(true);
+        try {
+          let path = foto.storage_path;
+          if ((foto.storage_bucket || "mesa") !== "mesa" || !path.startsWith(`${clientId}/`)) {
+            const { data, error } = await supabase.storage.from(foto.storage_bucket || "mesa").download(path);
+            if (error || !data) throw new Error("A foto do Workspace não pôde ser carregada.");
+            if (data.size > 20 * 1024 * 1024) throw new Error("Use uma foto de até 20 MB.");
+            path = await subirQuadro(clientId, data, foto.nome);
+          }
+          if (destino === "referencia") mudar({ referencias: Array.from(new Set([...r.referencias, path])) });
+          else if (destino === "inicial") mudar({ inicial: path });
+          else if (destino === "final") mudar({ final: path });
+          setBuscandoFoto(null);
+          toast.success(`${foto.nome} carregada no vídeo.`);
+        } finally { setCopiando(false); }
+
+  };
 
   const gerar = async (usd: number) => {
     if (!motor) return;
@@ -70,12 +103,14 @@ export default function GeradorLivre() {
       client_id: clientId,
       motor: motor.id,
       modo,
-      prompt: r.prompt,
+      prompt: motor.cap.audio && r.audio && r.narracao?.trim() ? `${r.prompt}\nNarração em português brasileiro, voz natural e clara, sem alterar o texto: ${r.narracao.trim()}` : r.prompt,
+      task_id: pauta?.id,
+      titulo: pauta?.title,
       negativo: r.negativo,
       duracao_s: duracao,
       formato: r.formato,
       resolucao,
-      audio: r.audio,
+      audio: !!(motor?.cap.audio && r.audio),
       variacoes: r.variacoes,
       quadro_inicial_path: r.inicial,
       quadro_final_path: r.final,
@@ -84,6 +119,8 @@ export default function GeradorLivre() {
       uid: novoUid(),
       custo_confirmado_usd: usd,
     });
+    if (!resp.pedido_id) throw new Error("O servidor não confirmou o pedido de geração.");
+    aoGerar?.(resp.pedido_id);
     void queryClient.invalidateQueries({ queryKey: chaveDosPedidos(clientId) });
     atualizarCusto();
     toast.success("Vídeo enviado para gerar", { description: `Pedido ${String(resp.pedido_id || "").slice(0, 8)}. Acompanhe nos Resultados.` });
@@ -91,6 +128,10 @@ export default function GeradorLivre() {
 
   return (
     <div className="min-w-0 space-y-5" data-gerador-livre="">
+      {pauta && <div className="space-y-2"><p className="text-xs font-medium">Fotos reais do Workspace</p><div className="flex flex-wrap gap-2">{([['inicial','Foto inicial'],['final','Foto final'],['referencia','Referência']] as const).map(([id,nome]) => <button type="button" className="rounded-md border px-2 py-1 text-xs" key={id} disabled={copiando} onClick={() => setBuscandoFoto(id)}>{nome}</button>)}</div></div>}
+      {buscandoFoto && <Suspense fallback={<p role="status">Lendo as pastas…</p>}><SeletorDeFotos fotos={(fotosQ.data || []).filter((f) => !f.referencia_web)} titulo="Fotos reais do Workspace" multiplas={false} onFechar={() => setBuscandoFoto(null)} onUsar={(ids) => { void usarFotos(ids, buscandoFoto).catch((e) => toast.error(e instanceof Error ? e.message : "Não foi possível usar a foto.")); }} /></Suspense>}
+      {pauta && <div className="rounded-lg border p-3"><button type="button" className="text-xs text-primary" aria-expanded={diretorAberto} onClick={() => setDiretorAberto(!diretorAberto)}>Pedir ao diretor para buscar fotos numa pasta</button>{diretorAberto && <><label className="my-2 block text-xs">Usar a foto encontrada como<select className={campo} value={destinoDoDiretor} onChange={(e) => setDestinoDoDiretor(e.target.value as typeof destinoDoDiretor)}><option value="inicial">Quadro inicial</option><option value="final">Quadro final</option><option value="referencia">Referência</option></select></label><p className="text-xs text-muted-foreground">Diga o nome ou caminho da pasta. A primeira foto selecionada será carregada no campo escolhido; confira antes de gerar.</p><Suspense fallback={<p role="status">Abrindo diretor…</p>}><DiretorDeFotos escopo={`${pauta.id}:video:${escopo || "livre"}`} pautaId={pauta.id} aoSelecionarFotos={(ids) => usarFotos(ids, destinoDoDiretor)} /></Suspense></>}</div>}
+      {copiando && <p role="status">Preparando a foto real para o vídeo…</p>}
       <SeletorDeMotor lista={motores.lista} requisito={requisito} valor={motor ? motor.id : ""} nivel={r.nivel} onNivel={(n) => mudar({ nivel: n, motor: "" })} onEscolher={(id) => mudar({ motor: id })} />
       <GrupoDeCampos colunas={3}>
         <EscolherImagem rotulo="Quadro inicial" opcional valor={r.inicial} onEscolher={(c) => mudar({ inicial: c })} />
@@ -173,6 +214,7 @@ export default function GeradorLivre() {
           <input className={campo} value={r.negativo} maxLength={600} onChange={(e) => mudar({ negativo: e.target.value })} placeholder="Opcional" />
         </CampoDeFormulario>
       </GrupoDeCampos>
+      {motor?.cap.audio && r.audio && <CampoDeFormulario rotulo="Narração (opcional)"><textarea aria-label="Texto da narração" className={campoTexto} rows={2} maxLength={600} value={r.narracao || ""} onChange={(e) => mudar({ narracao: e.target.value })} placeholder="Texto curto para o motor narrar neste vídeo" /><p className="text-xs text-muted-foreground">Confira a fala no resultado antes de enviar.</p></CampoDeFormulario>}
       <BotaoDeGerar custo={custo} motivo={motivo} onConfirmar={gerar} icone={<Plus className="mr-1.5 h-3.5 w-3.5" />} extra={`${motor ? motor.rotulo : ""}, ${duracao} s, ${r.variacoes} ${r.variacoes === 1 ? "variação" : "variações"}`} />
     </div>
   );

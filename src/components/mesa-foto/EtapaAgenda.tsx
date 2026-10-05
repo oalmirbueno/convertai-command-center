@@ -121,16 +121,18 @@ function LinhaDoPost({ post, aberto, onAbrir }: { post: PostDeFotos; aberto: boo
 }
 
 /** Montar o post: as fotos na ordem, o formato e onde entra (item da Agenda ou post novo). */
-function MontarOPost({
+export function MontarOPost({
   fotosIniciais,
   post,
   taskInicial,
+  destinoFixo = false,
   onPronto,
   onCancelar,
 }: {
   fotosIniciais: string[];
   post: PostDeFotos | null;
   taskInicial: string | null;
+  destinoFixo?: boolean;
   onPronto: (trabalhoId: string, taskId: string | null) => void;
   onCancelar: () => void;
 }) {
@@ -287,7 +289,7 @@ function MontarOPost({
             ))}
           </div>
         </div>
-        {!post && (
+        {!post && !destinoFixo && (
           <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
             <CampoDeFormulario rotulo="Onde entra na Agenda">
               <SeletorCompacto modo="lista" rotulo="Item da Agenda" opcoes={opcoesDeDestino} valor={destino} onEscolher={setDestino} className="w-full" />
@@ -317,7 +319,7 @@ function MontarOPost({
 }
 
 /** O post aberto: fotos, legenda, data e envio, em 4 passos. */
-function PostAberto({ post, onTrocarFotos }: { post: PostDeFotos; onTrocarFotos: () => void }) {
+export function PostAberto({ post, onTrocarFotos }: { post: PostDeFotos; onTrocarFotos: () => void }) {
   const { clientId, catalogo, podeRecarregar, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
