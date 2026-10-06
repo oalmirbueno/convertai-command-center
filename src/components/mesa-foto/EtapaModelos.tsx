@@ -25,10 +25,10 @@ import { partesDoPreparo, prepararFoto } from "./fotoApi";
 import AcoesProDaFoto from "./AcoesProDaFoto";
 import { useLevarParaAsMesas } from "./UsoDaFoto";
 import { levarFotoDaPersonaAoAcervo } from "./agendaApi";
+import ExcluirModelo from "./ExcluirModelo";
 import {
   acharNoCatalogo,
   aplicarSugestaoNaPersona,
-  arquivarPersona,
   CHAVE_DAS_FOLHAS,
   candidatasPorMotor,
   caminhoDaImagem,
@@ -346,6 +346,7 @@ function CartaoDaPersona({ persona, ancora, vistas, aberta, onAbrir }: { persona
         </span>
       </button>
       {personaUsavelNaTela(persona) && <BotoesDeUso persona={persona} className="mt-1.5 border-t border-border pt-1.5" />}
+      <div className="mt-1 flex justify-end"><ExcluirModelo persona={persona} /></div>
     </li>
   );
 }
@@ -1415,26 +1416,8 @@ function Detalhar({ persona, imagens }: { persona: Persona; imagens: ImagemDaPer
  * ações. A rodada, a folha e o detalhe 4K ficam à direita.
  */
 function PersonaLateral({ persona }: { persona: Persona }) {
-  const { clientId, isAdmin } = useMesa();
+  const { clientId } = useMesa();
   const { irPara } = useMesaFoto();
-  const queryClient = useQueryClient();
-  const avisarErro = useAvisarErro();
-  const [arquivando, setArquivando] = useState(false);
-  const arquivada = persona.status === "arquivada";
-  const podeArquivar = !!persona.client_id || isAdmin;
-  const alternarArquivo = async () => {
-    setArquivando(true);
-    try {
-      const nova = await arquivarPersona(persona.id, !arquivada);
-      guardarPersona(queryClient, clientId, nova || { ...persona, status: arquivada ? "ancora" : "arquivada" });
-      void queryClient.invalidateQueries({ queryKey: chaveDasPersonas(clientId) });
-      toast.success(arquivada ? `${persona.nome} restaurada` : `${persona.nome} arquivada`, { description: arquivada ? undefined : "Fica em Arquivadas; nada foi apagado." });
-    } catch (e) {
-      avisarErro(e, arquivada ? "Persona não restaurada" : "Persona não arquivada");
-    } finally {
-      setArquivando(false);
-    }
-  };
   const imagensQ = useImagensDaPersona(persona.id);
   const imagens = imagensQ.data || [];
   const resumo = resumoDaPersona(persona, imagens);
@@ -1492,7 +1475,7 @@ function PersonaLateral({ persona }: { persona: Persona }) {
           </dl>
           {personaUsavelNaTela(persona) && <BotoesDeUso persona={persona} className="mt-2.5" />}
           <div className="-m-0.5 mt-1 flex min-w-0 flex-wrap items-center [&>*]:m-0.5">
-            {resumo.ancora && (
+            {resumo.ancora && persona.status !== "arquivada" && (
               <button
                 type="button"
                 className={juntar(botao.discreto, "h-7 px-2 text-[12px]")}
@@ -1504,18 +1487,7 @@ function PersonaLateral({ persona }: { persona: Persona }) {
                 <Workflow className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Usar no Canvas
               </button>
             )}
-            {podeArquivar && (
-              <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} disabled={arquivando} onClick={() => void alternarArquivo()}>
-                {arquivando ? (
-                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                ) : arquivada ? (
-                  <ArchiveRestore className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                ) : (
-                  <Archive className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                )}{" "}
-                {arquivada ? "Restaurar" : "Arquivar"}
-              </button>
-            )}
+            <ExcluirModelo persona={persona} />
           </div>
         </div>
       </div>
@@ -1562,6 +1534,7 @@ export function PersonaAberta({ persona }: { persona: Persona }) {
   const imagens = imagensQ.data || [];
   const [aba, setAba] = useState(persona.ancora_imagem_id ? "fotos" : "gerar");
   useEffect(() => setAba(persona.ancora_imagem_id ? "fotos" : "gerar"), [persona.id]);
+  if (persona.status === "arquivada") return <div className="space-y-4"><p className="text-[13px] text-muted-foreground">Modelo excluído da seleção. As fotos estão preservadas; restaure para voltar a gerar.</p><ExcluirModelo persona={persona} /><FotosDoModelo persona={persona} imagens={imagens} /></div>;
   return (
     <div className="min-w-0 space-y-4" data-persona-aberta={persona.id}>
       {imagensQ.isError && <EstadoDeErro titulo="Não foi possível ler as imagens da persona." descricao={textoDoErro(imagensQ.error)} acao={<button type="button" className={botao.secundario} onClick={() => void imagensQ.refetch()}>Tentar de novo</button>} />}

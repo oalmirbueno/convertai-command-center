@@ -1,4 +1,4 @@
-import { organizacaoDoProduto } from "../../../supabase/functions/mesa-foto/modulos/pastas-produtos";
+import { organizacaoDoProduto, type OrganizacaoProduto } from "../../../supabase/functions/mesa-foto/modulos/pastas-produtos";
 import { acaoDoAnexo, caminhoDosAnexos, caminhoSeguro, type AcaoDoAgente, type CaminhoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -75,7 +75,7 @@ export interface FotoDoAcervo {
 }
 
 export interface Atributos {
-  organizacao?: { pasta: string };
+  organizacao?: OrganizacaoProduto;
   observado: string[];
   informado: string[];
   inferido: string[];
@@ -1308,7 +1308,8 @@ export async function salvarKit(clientId: string, kit: KitDeFoto, marcarComoProd
     ...(marcarComoProduto ? { marcar_como_produto: true } : {}),
   });
   const salvo = normalizarKit(data && data.kit, data && Array.isArray(data.refs) ? data.refs : kit.refs);
-  return salvo || kit;
+  if (!salvo?.id || salvo.client_id !== clientId) throw new Error("O produto não foi confirmado pelo servidor.");
+  return salvo;
 }
 
 export async function planejarEnsaio(p: {

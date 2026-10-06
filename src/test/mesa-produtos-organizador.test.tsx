@@ -24,7 +24,7 @@ beforeEach(() => {
   m.fotos = [normalizarFoto({ id: "f1", client_id: "c1", nome: "Óculos solar", ativa: true, storage_path: "c1/f1.png" })!, normalizarFoto({ id: "f2", client_id: "c1", nome: "Caixa", ativa: true, storage_path: "c1/f2.png" })!];
   m.kits = [normalizarKit({ id: "p1", client_id: "c1", nome: "Óculos solar", tipo: "produto", frente_imagem_id: "f1", atributos: { organizacao: { pasta: "Ótica / Sol" } }, refs: [{ imagem_id: "f1", papel: "identidade" }] })!];
   m.org = organizarFotosPorProduto("c1", m.fotos, m.kits, [], []);
-  m.mover.mockResolvedValue({ pasta: "Coleção" }); m.salvar.mockResolvedValue({ ...m.kits[0] });
+  m.mover.mockResolvedValue({ pasta: "Coleção", kit: m.kits[0] }); m.salvar.mockResolvedValue({ ...m.kits[0] });
 });
 describe("organizador de produtos", () => {
   it("o acesso direto pré-carrega o mesmo organizador do seletor", async () => {
@@ -65,6 +65,7 @@ describe("organizador de produtos", () => {
     fireEvent.click(screen.getByRole("button", { name: "Escolher duas fotos" }));
     fireEvent.change(screen.getByLabelText("O que aparece nas fotos"), { target: { value: "embalagem" } });
     fireEvent.change(screen.getByLabelText("Pasta"), { target: { value: "Ótica / Caixas" } });
+    fireEvent.change(screen.getByLabelText("Público do novo produto"), { target: { value: "nao_identificado" } });
     fireEvent.click(screen.getByRole("button", { name: "Marcar e salvar produto" }));
     await waitFor(() => expect(m.salvar).toHaveBeenCalled());
     expect(m.salvar.mock.calls[0][1].refs.every((r: any) => r.papel === "embalagem")).toBe(true);
