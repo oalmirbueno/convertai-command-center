@@ -325,7 +325,7 @@ export function MontarOPost({
       </div></PainelDaBancada>
     </Cartao>
   );
-  return estudio ? <BancadaDeFotos seletor={seletor} extras={estudio.extras} onDerivada={(antiga, nova) => setIds((atuais) => atuais.map((id) => id === antiga ? nova.id : id))} titulo={estudio.titulo} fotos={fotos.map((f) => ({ id: f.id, nome: f.nome, caminho: f.storage_path, bucket: f.storage_bucket }))} onEscolher={() => setEscolhendo(true)} onMover={mover} onRemover={(id) => setIds(ids.filter((x) => x !== id))}>{estudio.ferramentas}{conteudo}</BancadaDeFotos> : conteudo;
+  return estudio ? <BancadaDeFotos seletor={seletor} extras={estudio.extras} onDerivada={(antiga, nova) => setIds((atuais) => atuais.map((id) => id === antiga ? nova.id : id))} titulo={estudio.titulo} fotos={fotos.map((f) => ({ id: f.id, nome: f.nome, caminho: f.storage_path, bucket: f.storage_bucket }))} onEscolher={() => setEscolhendo(true)} onMover={mover} onRemover={(id) => setIds(ids.filter((x) => x !== id))}>{estudio.ferramentas}<PainelDaBancada id={["gerar", "legenda", "entrega"]}>{conteudo}</PainelDaBancada></BancadaDeFotos> : conteudo;
 }
 
 /** O post aberto: fotos, legenda, data e envio, em 4 passos. */
@@ -611,7 +611,7 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
       />
     </Cartao>
   );
-  return estudio ? <BancadaDeFotos pronta extras={estudio.extras} titulo={post.item?.title || "Fotos da pauta"} fotos={post.cards.map((c) => ({ id: c.imagem_id || c.storage_path, nome: `Foto ${c.ordem}`, caminho: c.storage_path }))} onEscolher={trocaFotos ? onTrocarFotos : undefined} onEditar={trocaFotos ? (id) => abrirNoEstudio?.(id) : undefined}>{estudio.ferramentas}{conteudo}</BancadaDeFotos> : conteudo;
+  return estudio ? <BancadaDeFotos pronta extras={estudio.extras} titulo={post.item?.title || "Fotos da pauta"} fotos={post.cards.map((c) => ({ id: c.imagem_id || c.storage_path, nome: `Foto ${c.ordem}`, caminho: c.storage_path }))} onEscolher={trocaFotos ? onTrocarFotos : undefined} onEditar={trocaFotos ? (id) => abrirNoEstudio?.(id) : undefined}>{estudio.ferramentas}<PainelDaBancada id={["gerar", "legenda", "entrega"]}>{conteudo}</PainelDaBancada></BancadaDeFotos> : conteudo;
 }
 
 export default function EtapaAgenda() {

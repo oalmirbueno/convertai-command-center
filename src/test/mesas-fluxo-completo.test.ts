@@ -3,7 +3,7 @@ import { incluirPautasPlanejadas, type PropostaNaEsteira } from "@/components/me
 import { resultadosDeVideoDaPauta } from "@/components/mesa/resultadosDeVideoDaPauta";
 import { videoComTrilha } from "@/components/mesa/videoComTrilha";
 import type { DadosDosItens } from "@/components/mesa/useItensDoMes";
-import { semPassadoVazio } from "@/components/mesa/useItensDoMes";
+import { semPassadoVazio, paraMapas } from "@/components/mesa/useItensDoMes";
 import type { ArquivoDeVideo, PedidoDeVideo } from "@/components/mesa-videos/videosApi";
 import type { VersaoDeVideo } from "../../supabase/functions/mesa-videos/modulos/memoria-de-video";
 import { ESTILOS_DE_VIDEO_DA_PAUTA, normalizarVideoDaPauta } from "../../supabase/functions/_shared/video-da-pauta";
@@ -11,6 +11,16 @@ import { ESTILOS_DE_VIDEO_DA_PAUTA, normalizarVideoDaPauta } from "../../supabas
 const vazio = (): DadosDosItens => ({ itens: [], trabalhos: {}, roteiros: {}, artes: {}, publicacoes: {} });
 const proposta = (extra: Partial<PropostaNaEsteira> = {}): PropostaNaEsteira => ({ id: "plano", project_id: "projeto", status: "pronta", itens: [{ tema_id: "foto", tema: "Produto real", formato: "foto", data: "2026-10-09", foto: { referencias: ["real-1"], quantidade: 3 } }, { tema_id: "arte", tema: "Arte", formato: "estatico", data: "2026-10-10" }], ...extra });
 describe("Esteira do planejamento", () => {
+  it("reconhece direção de foto e vídeo sem exigir lâminas de arte", () => {
+    const d = vazio();
+    d.roteiros = {
+      foto: { laminas: 0, continuo: false, modo_estudio: "fotos", direcao_foto: { assunto: "Óculos reais" } },
+      video: { laminas: 0, continuo: false, modo_estudio: "video", video: normalizarVideoDaPauta({ estilo: "loja", prompt: "Apresentar a loja real" }) },
+      vazio: { laminas: 0, continuo: false, modo_estudio: "fotos", direcao_foto: {} },
+      quantidade: { laminas: 0, continuo: false, modo_estudio: "fotos", direcao_foto: { quantidade: 4 } },
+    };
+    expect([...paraMapas(d).roteiros]).toEqual(["foto", "video"]);
+  });
   it("foto preparada continua na esteira após a data até concluir o trabalho", () => {
     const d = vazio(); d.itens = [{ id: "foto", project_id: "projeto", title: "Foto", delivery_type: "static", due_date: "2026-10-05", status: "todo", modo_estudio: "fotos" }];
     expect(semPassadoVazio(d, "2026-10-06").itens).toHaveLength(1);
