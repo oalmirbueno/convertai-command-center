@@ -91,7 +91,7 @@ const CombinarFotos = lazyComPreCarga("mesa-foto/combinar", () => import("@/comp
 const ComposicaoRapida = lazyComPreCarga("mesa-foto/compor", () => import("@/components/mesa-foto/ComposicaoRapida"));
 
 const carregarAcervo = () => import("@/components/mesa-foto/EtapaAcervo");
-const carregarKits = () => import("@/components/mesa-foto/EtapaKits");
+const carregarKits = () => import("@/components/mesa-foto/OrganizadorDeProdutos");
 const carregarPreparar = () => import("@/components/mesa-foto/EtapaPreparar");
 const carregarEnsaio = () => import("@/components/mesa-foto/EtapaEnsaio");
 const carregarRevisar = () => import("@/components/mesa-foto/EtapaRevisar");
@@ -655,7 +655,7 @@ export default function MesaFoto() {
                 </Suspense>
                 <Suspense fallback={<Carregando forma="aba" rotulo="Abrindo a etapa" />}>
                   {etapa === "acervo" && <EtapaAcervo />}
-                  {etapa === "kits" && <EtapaKits />}
+                  {etapa === "kits" && <EtapaKits key={clientId} />}
                   {etapa === "criar" && <EtapaCriar />}
                   {etapa === "estudio" && <EtapaEstudio />}
                   {etapa === "compor" && <ComposicaoRapida />}

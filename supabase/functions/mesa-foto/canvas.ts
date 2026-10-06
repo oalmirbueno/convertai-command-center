@@ -279,6 +279,7 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     /** Kits deste cliente (os de outro cliente só entram como etiqueta). */
     kitIdsDoCliente: string[];
     personaIds: string[];
+    cloneIds: string[];
     primeiraDoProduto: string | null;
     estimativa_usd: number;
     limite: number;
@@ -316,6 +317,7 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     const kitIds: string[] = [];
     const kitIdsDoCliente: string[] = [];
     const personaIds: string[] = [];
+    const cloneIds: string[] = [];
     let primeiraDoProduto: string | null = null;
 
     // Produto do kit: identidade invariante (a vista escolhida no cartão ou a ordem de prioridade do kit).
@@ -349,11 +351,18 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     // Pessoa real (foto do acervo deste cliente, com autorização marcada no cartão).
     const reais = entradas.modelo.filter((n) => !n.dados.modelo_id && n.dados.imagem_id);
     const fotosReais = reais.length ? await f.lerImagens(canvas.client_id, reais.map((n) => String(n.dados.imagem_id))) : [];
+    const clonesReais = reais.length ? await db().from("foto_modelos").select("id,identidade_real")
+      .eq("client_id", canvas.client_id).eq("origem", "clone_de_foto_real") : { data: [], error: null };
+    if (clonesReais.error) throw new ErroDeRegra(503, "clones_indisponivel", "Não foi possível confirmar o clone desta composição. Tente novamente.");
     for (const no of reais) {
       const img = fotosReais.find((x) => x.id === String(no.dados.imagem_id));
       if (!img) throw new ErroDeRegra(409, "id_fora_do_cliente", "A foto da pessoa não está no acervo deste cliente.", { no_id: no.id });
       candidatas.push({ papel: "pessoa", origem: { tipo: "acervo", id: img.id, no_id: no.id }, imagem_id: img.id, titulo: img.nome, legenda: "pessoa real" });
       fontes.set(`acervo:${img.id}`, { tipo: "acervo", bucket: img.storage_bucket, caminho: img.storage_path, nome: img.nome });
+      const compativeis = (clonesReais.data || []).filter((p: { id: string; identidade_real: unknown }) => Array.isArray(p.identidade_real) && p.identidade_real.some((i: { imagem_id: string }) => i.imagem_id === img.id));
+      const clone = no.dados.clone_id ? compativeis.find((p: { id: string }) => p.id === no.dados.clone_id) : compativeis.length === 1 ? compativeis[0] : null;
+      if (no.dados.clone_id && !clone) throw new ErroDeRegra(409, "clone_incompativel", "A foto escolhida não pertence ao clone deste cliente.");
+      if (clone && !cloneIds.includes(clone.id)) cloneIds.push(clone.id);
       pessoasReais.push({ no_id: no.id, nome: limpo(no.dados.titulo, 60) });
     }
 
@@ -561,6 +570,7 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
       kitIds,
       kitIdsDoCliente,
       personaIds,
+      cloneIds,
       primeiraDoProduto,
       estimativa_usd: estimativa,
       limite,
@@ -819,6 +829,7 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
       cena: mt.cena ? { numero: mt.cena.numero, total: mt.cena.total } : null,
       de_resultados: mt.deResultados,
       pessoa_real: mt.comReal,
+      clone_ids: mt.cloneIds,
     };
     const { data: criada, error: e0 } = await db().from("foto_canvas_geracoes").insert({
       canvas_id: c.id,
@@ -881,6 +892,7 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
         "mesa_foto", "canvas", "gerada", `canvas:${c.id}`,
         ...mt.kitIds.map((k) => `kit:${k}`),
         ...mt.personaIds.map((p) => `persona:${p}`),
+        ...mt.cloneIds.map((p) => `clone:${p}`),
         ...(comPessoa ? ["pessoa_sintetica"] : []),
         // Pessoa real com autorização (direta ou herdada da cena anterior): a próxima cena sabe que é real.
         ...(mt.comReal ? ["pessoa_real_autorizada"] : []),

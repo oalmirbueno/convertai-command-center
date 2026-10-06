@@ -1,3 +1,4 @@
+import { organizacaoDoProduto } from "./modulos/pastas-produtos.ts";
 /**
  * Cálculos da Mesa Foto, puros e sem IA (docs/mesa-foto/CONTRATO.md).
  *
@@ -325,7 +326,7 @@ export function normalizarIdentificacao(bruto: unknown): Identificacao | null {
   };
 }
 
-export type Atributos = { observado: string[]; informado: string[]; inferido: string[]; identificacao?: Identificacao };
+export type Atributos = { observado: string[]; informado: string[]; inferido: string[]; identificacao?: Identificacao; organizacao?: { pasta: string } };
 
 export type Autorizacao = {
   confirmada: boolean;
@@ -466,12 +467,12 @@ export type KitExistente = { id: string; status: string; nome: string; variante:
  * Kit rascunho do mesmo produto (mesmo nome e variante, ou alguma foto de
  * evidência em comum). Kit confirmado ou arquivado nunca é reaproveitado.
  */
-export function kitParecido(existentes: KitExistente[], novo: { nome: string; variante: string | null; refs: { imagem_id: string; papel: string }[] }): KitExistente | null {
+export function kitParecido(existentes: KitExistente[], novo: { nome: string; variante: string | null; refs: { imagem_id: string; papel: string }[] }, permitirNome = true): KitExistente | null {
   const evid = new Set(novo.refs.filter((r) => PAPEIS_DE_EVIDENCIA.includes(r.papel as PapelRef)).map((r) => r.imagem_id));
   const chave = chaveDoProduto(novo);
   const rascunhos = existentes.filter((k) => k.status === "rascunho")
     .slice().sort((a, b) => String(b.atualizado_em ?? "").localeCompare(String(a.atualizado_em ?? "")));
-  return rascunhos.find((k) => chaveDoProduto(k) === chave) ??
+  return (permitirNome ? rascunhos.find((k) => chaveDoProduto(k) === chave) : null) ??
     rascunhos.find((k) => k.refs.some((r) => evid.has(r.imagem_id) && PAPEIS_DE_EVIDENCIA.includes(r.papel as PapelRef))) ??
     null;
 }
@@ -503,6 +504,7 @@ export function mesclarKit(
     atributos: {
       observado: unir(existente.atributos.observado, novo.atributos.observado, 30),
       informado: existente.atributos.informado,
+      ...(existente.atributos.organizacao ? { organizacao: existente.atributos.organizacao } : {}),
       inferido: unir(existente.atributos.inferido, novo.atributos.inferido, 30),
       ...(identificacao ? { identificacao } : {}),
     },
@@ -564,6 +566,7 @@ export function normalizarKit(bruto: unknown): KitFoto {
       observado: listaDeTextos(at.observado, 30, 300),
       informado: listaDeTextos(at.informado, 30, 300),
       inferido: listaDeTextos(at.inferido, 30, 300),
+      ...(organizacaoDoProduto(at.organizacao) ? { organizacao: organizacaoDoProduto(at.organizacao) } : {}),
       ...(identificacao ? { identificacao } : {}),
     },
     invariantes: listaDeTextos(r.invariantes, 20, 200),

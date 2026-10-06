@@ -1,3 +1,4 @@
+import { useOrganizacaoDeProdutos } from "./useOrganizacaoDeProdutos";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode, type UIEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CalendarPlus, CheckSquare, ClipboardPaste, Eye, Filter, Link2, Loader2, Maximize2, Megaphone, MoreHorizontal, MousePointerClick, Package, PackagePlus, PackageSearch, PenTool, ScanSearch, Scissors, Search, SlidersHorizontal, Sparkles, Upload, UserRound, UsersRound, Wand2, X } from "lucide-react";
@@ -640,7 +641,11 @@ export default function EtapaAcervo() {
     if (imagemId) setAberta(imagemId);
   }, [imagemId]);
 
-  const brutas = useMemo(() => fotos.data || [], [fotos.data]);
+  const organizacao = useOrganizacaoDeProdutos(clientId, fotos.data || []);
+  const brutas = useMemo(() => (fotos.data || []).map((f) => {
+    const organizada = organizacao.organizadas.find((o) => o.foto.id === f.id);
+    return organizada && (organizada.geracao || organizada.produtoIds.length) ? { ...f, pasta: organizada.pasta } : f;
+  }), [fotos.data, organizacao.organizadas]);
   const listaDeKits = useMemo(() => kits.data || [], [kits.data]);
   // Só fotos, separadas em produto e modelo (artes, carrosséis e logos ficam fora).
   const separadas = useMemo(() => separarFotos(brutas, listaDeKits), [brutas, listaDeKits]);

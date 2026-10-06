@@ -1,3 +1,4 @@
+import { limparPastaDeProdutos } from "./modulos/pastas-produtos.ts";
 import { referenciaAprovadaMaisRecente } from "./modulos/referencia-aprovada.ts";
 import { fotosSelecionadas } from "./modulos/selecao-do-workspace.ts";
 /**
@@ -1085,6 +1086,7 @@ ${CONHECIMENTO_DA_FOTO}
 Responda só com o JSON pedido.`;
 
 const SISTEMA_IDENTIFICAR = `Você identifica produtos para o estúdio fotográfico da agência Aceleriq. Recebe fotos de uma embalagem ou do próprio produto.
+Reconheça qualquer categoria de produto: artesanal ou industrializado, alimento, peça, móvel, roupa, serviço materializado ou objeto sem marca. Não exija caixa, código ou marca para reconhecer o que aparece. Se não houver marca/modelo verificáveis, deixe esses campos vazios, informe a categoria e descreva o objeto observado. Não escolha um parecido da internet como se fosse o mesmo. Uma embalagem opaca não comprova detalhes do objeto dentro; mantenha a lacuna e diferencie embalagem de identidade.
 1. LEIA as fotos: todo texto visível (marca, modelo, variante, cor, códigos, EAN, especificações impressas) em texto_lido, exatamente como está; observado com fatos visíveis. Em fotos, diga para cada imagem_id se é embalagem (caixa, blister, pacote) ou o produto em si, e a vista.
 2. PESQUISE NA INTERNET o produto real: página oficial do fabricante primeiro, depois lojas grandes. Confirme marca, modelo e variante; traga especificações objetivas (dimensões, peso, conexão, material, cores) e forma_do_produto (como o produto é por fora: formato, cor, botões, peças, acabamento, logotipo e onde fica).
 3. IMAGENS: endereços diretos de imagem (jpg, png ou webp) do PRODUTO em si, de preferência fundo limpo, da página oficial ou de lojas grandes. Só endereços que você viu nos resultados da busca; nunca invente nem monte endereço. Nada de foto da caixa, de montagem com vários produtos, de outro modelo ou de outra cor.
@@ -1679,7 +1681,7 @@ async function salvarKitRascunho(
   ch: Chamador,
   clientId: string,
   novo: KitFoto & { refs: RefDoKit[] },
-  opcoes: { preferirNomeNovo?: boolean; refsWeb?: string[] } = {},
+  opcoes: { preferirNomeNovo?: boolean; refsWeb?: string[]; permitirNome?: boolean } = {},
 ): Promise<{ kit: LinhaKit; acao: "criado" | "atualizado" | "ja_confirmado" }> {
   const imagens = await lerImagens(clientId, novo.refs.map((r) => r.imagem_id));
   // Imagem gerada sem aprovação nunca vira evidência; foto fora do cliente sai.
@@ -1691,9 +1693,9 @@ async function salvarKitRascunho(
     });
   const existentes = await kitsDoCliente(clientId);
   const alvo = { ...novo, refs };
-  const achado = kitParecido(existentes, alvo);
+  const achado = kitParecido(existentes, alvo, opcoes.permitirNome !== false);
   if (!achado) {
-    const confirmado = existentes.find((k) => k.status === "confirmado" && chaveDoProduto(k) === chaveDoProduto(alvo));
+    const confirmado = existentes.find((k) => k.status === "confirmado" && (k.refs.some((r) => alvo.refs.some((n) => n.imagem_id === r.imagem_id)) || (opcoes.permitirNome !== false && chaveDoProduto(k) === chaveDoProduto(alvo))));
     if (confirmado) return { kit: await lerKit(ch, confirmado.id), acao: "ja_confirmado" };
     const kit = { ...alvo, status: "rascunho" as const, lacunas: lacunasDaEvidencia(alvo, refs, opcoes.refsWeb ?? []) };
     return { kit: await gravarKit(ch, clientId, kit, refs, null), acao: "criado" };
@@ -1722,7 +1724,7 @@ async function kitSalvar(ch: Chamador, corpo: Record<string, unknown>) {
   } else if (kit.tipo !== "pessoa") {
     // Kit novo do mesmo produto de um rascunho que já existe (ex.: a sugestão já
     // salva aberta de novo na tela): atualiza o rascunho em vez de duplicar.
-    const parecido = kitParecido(await kitsDoCliente(clientId), { nome: kit.nome, variante: kit.variante, refs });
+    const parecido = kitParecido(await kitsDoCliente(clientId), { nome: kit.nome, variante: kit.variante, refs }, corpo.marcar_como_produto !== true);
     if (parecido) {
       anterior = await lerKit(ch, parecido.id);
       atualizouRascunho = true;
@@ -1732,6 +1734,8 @@ async function kitSalvar(ch: Chamador, corpo: Record<string, unknown>) {
   if (!kit.atributos.identificacao && anterior?.atributos.identificacao) {
     kit.atributos = { ...kit.atributos, identificacao: anterior.atributos.identificacao };
   }
+  // Editores anteriores não conhecem a organização e não podem apagá-la.
+  if (!kit.atributos.organizacao && anterior?.atributos.organizacao) kit.atributos.organizacao = anterior.atributos.organizacao;
   // Autorização de pessoa: quem confirmou e quando ficam registrados pelo servidor.
   let autorizacao = kit.autorizacao;
   if (autorizacao?.confirmada) {
@@ -1745,7 +1749,7 @@ async function kitSalvar(ch: Chamador, corpo: Record<string, unknown>) {
   // Referências: o conjunto enviado substitui o anterior (gravarKit).
   const salvo = await gravarKit(ch, clientId, { ...kit, autorizacao }, refs, anterior?.id ?? null);
   if (corpo.marcar_como_produto === true && salvo.tipo !== "pessoa" && salvo.frente_imagem_id) {
-    const { error: erroCategoria } = await servico().from("cliente_imagens").update({ categoria: "produto" }).eq("id", salvo.frente_imagem_id).eq("client_id", clientId);
+    const { error: erroCategoria } = await servico().from("cliente_imagens").update({ categoria: "produto" }).in("id", refs.filter((r) => ["identidade", "embalagem", "detalhe", "verso", "rotulo"].includes(r.papel)).map((r) => r.imagem_id)).eq("client_id", clientId);
     if (erroCategoria) throw new ErroHttp(503, "categoria_nao_salva", "Produto salvo, mas a categoria da foto não foi atualizada. Tente novamente.");
   }
   const refsLidas = await lerRefs(salvo);
@@ -1755,6 +1759,22 @@ async function kitSalvar(ch: Chamador, corpo: Record<string, unknown>) {
     atualizou_rascunho_existente: atualizouRascunho,
     custo_usd: 0,
   });
+}
+
+/** Muda somente a organização, sem regravar referências ou direção do produto. */
+async function produtoOrganizar(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = idDe(corpo.client_id, "client_id");
+  await garantirAcesso(ch, clientId);
+  const kit = await lerKit(ch, idDe(corpo.kit_id, "kit_id"));
+  if (kit.client_id !== clientId || kit.tipo === "pessoa") throw new ErroHttp(409, "produto_invalido", "Escolha um produto deste cliente.");
+  if (typeof corpo.pasta !== "string") throw new ErroHttp(400, "pasta_invalida", "Informe a pasta do produto.");
+  const pasta = limparPastaDeProdutos(corpo.pasta);
+  const { data, error } = await servico().from("foto_kits").update({
+    atributos: { ...kit.atributos, organizacao: { pasta } },
+  }).eq("id", kit.id).eq("client_id", clientId).eq("atualizado_em", kit.atualizado_em).select("id").maybeSingle();
+  if (error) throw new ErroHttp(503, "pasta_nao_salva", "Não foi possível mover o produto. Tente novamente.");
+  if (!data) throw new ErroHttp(409, "produto_mudou", "O produto mudou em outra tela. Recarregue e tente novamente.");
+  return json({ kit_id: kit.id, pasta, custo_usd: 0 });
 }
 
 // ------------------------------------------------------------------ identificar o produto
@@ -1980,7 +2000,7 @@ async function produtoIdentificar(ch: Chamador, corpo: Record<string, unknown>) 
     const forma = listaDeTextos(p.forma_do_produto, 12, 200);
     const novo: KitFoto & { refs: RefDoKit[] } = {
       tipo,
-      nome: limpo(nomeProduto, 120) || limpo(ordem[0].nome, 120) || "Produto",
+      nome: limpo(nomeProduto, 120) || limpo(p.categoria, 120) || limpo(ordem[0].nome, 120) || "Produto",
       variante: identificacao?.variante ?? null,
       atributos: {
         observado: listaDeTextos(r.observado, 20, 300),
@@ -1999,7 +2019,7 @@ async function produtoIdentificar(ch: Chamador, corpo: Record<string, unknown>) 
       refs,
     };
     try {
-      const salvo = await salvarKitRascunho(ch, clientId, novo, { preferirNomeNovo: !!identificacao, refsWeb: referencias.map((x) => x.imagem_id) });
+      const salvo = await salvarKitRascunho(ch, clientId, novo, { preferirNomeNovo: !!identificacao, refsWeb: referencias.map((x) => x.imagem_id), permitirNome: !!identificacao?.marca && !!identificacao?.modelo && identificacao?.confianca === "alta" });
       kit = await kitComRefs(salvo.kit);
       acaoKit = salvo.acao;
     } catch (e) {
@@ -4795,6 +4815,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   desfazer_acao_agente: desfazerAcaoNasFotos,
   // v2 (docs/mesa-foto/CONTRATO-V2.md)
   produto_identificar: produtoIdentificar,
+  produto_organizar: produtoOrganizar,
   variacoes_planejar: variacoesPlanejar,
   campanha_planejar: campanhaPlanejar,
   biblioteca_ilustrar: bibliotecaIlustrar,

@@ -74,7 +74,7 @@ export default function CombinarFotos({ escopo }: { escopo?: string } = {}) {
             let c = { ...canvasVazio(clientId, `Combinar · ${kit?.nome} · ${cenario.nome} · ${i + 1}`), nos: [saida] };
             c = porCartao(c, novoNo("produto", 0, 0, { kit_id: kitDeGeracao }), { gerarId: saida.id });
             if (modelo) c = porCartao(c, novoNo("modelo", 0, 0, { modelo_id: modelo.id, versao: modelo.versao }), { gerarId: saida.id });
-            if (clone?.autorizacao_valida.ok) c = porCartao(c, novoNo("modelo", 0, 0, { imagem_id: (clone.identidade_real.find((i) => i.principal) || clone.identidade_real[0])?.imagem_id, autorizada: true, titulo: clone.nome }), { gerarId: saida.id });
+            if (clone?.autorizacao_valida.ok) c = porCartao(c, novoNo("modelo", 0, 0, { imagem_id: (clone.identidade_real.find((i) => i.principal) || clone.identidade_real[0])?.imagem_id, autorizada: true, titulo: clone.nome, clone_id: clone.id }), { gerarId: saida.id });
             if (ambiente) c = porCartao(c, novoNo("ambiente", 0, 0, { imagem_id: ambiente.id, modo: "foto", uso: "usar" }), { gerarId: saida.id });
             c = porCartao(c, novoNo("texto", 0, 0, { texto: `${cenario.pedido}\n${r.pedido}\n${VARIACOES[i]} Preserve a identidade, forma, cor e proporção do produto.` }), { gerarId: saida.id });
             const salvo = await salvarCanvas(c);

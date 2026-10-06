@@ -190,7 +190,7 @@ describe("linha de produção: regras", () => {
     expect(noCaminho.length + emMais.length).toBe(ETAPAS_DA_MESA_FOTO.length);
     expect(passoDaEtapa("revisar")!.rotulo).toBe("Aprovar");
     expect(passoDaEtapa("agenda")!.rotulo).toBe("Usar");
-    expect(passoDaEtapa("kits")!.rotulo).toBe("Fotos");
+    expect(passoDaEtapa("kits")).toBeNull();
     expect(passoDaEtapa("canvas")).toBeNull();
     // A mesa abre no passo 1.
     expect(MESAS_DO_PAINEL["/mesa-foto"].padrao).toBe("criar");

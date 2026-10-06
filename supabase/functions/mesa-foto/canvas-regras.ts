@@ -458,6 +458,7 @@ export function dadosDoNo(tipo: TipoDeNo, bruto: unknown): Record<string, unknow
         versao: Number.isFinite(versao) && versao > 0 ? versao : null,
         imagem_id: modeloId ? null : idOuNulo(d.imagem_id),
         autorizada: !modeloId && d.autorizada === true,
+        ...(!modeloId && idOuNulo(d.clone_id) ? { clone_id: idOuNulo(d.clone_id) } : {}),
       };
     }
     case "ambiente": {
