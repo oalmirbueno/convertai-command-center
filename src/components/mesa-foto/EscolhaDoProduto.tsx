@@ -1,6 +1,7 @@
 import { pastaDoProduto } from "./pastasDosProdutos";
-import { toast } from "sonner";
-import SeletorDeFotos from "./SeletorDeFotos";
+import MarcarProdutos from "./MarcarProdutos";
+import PublicoDoProduto from "./PublicoDoProduto";
+import { guardarProdutoConfirmado } from "./cacheProdutos";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { lazy, Suspense, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -11,7 +12,7 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { campo, foco, juntar } from "@/components/sistema/estilos";
 import { MiniaturaDaFoto, useMesaFoto } from "./Comuns";
-import { kitVazio, chaveDasFotos, chaveDosKits, rotuloDoTipo, salvarKit, useFotos, useKits, type FotoDoAcervo, type KitDeFoto } from "./fotoApi";
+import { rotuloDoTipo, salvarKit, useFotos, useKits, type FotoDoAcervo, type KitDeFoto } from "./fotoApi";
 
 const OrganizadorDeProdutos = lazy(() => import("./OrganizadorDeProdutos"));
 
@@ -49,27 +50,13 @@ export default function EscolhaDoProduto({ rotulo = "Produto", className = "" }:
   const listaAberta = aberta || !kit;
   const [marcandoProduto, setMarcandoProduto] = useState(false);
   const [salvandoProduto, setSalvandoProduto] = useState(false);
-  const marcarProduto = async (ids: string[]) => {
-    const foto = fotos.find((f) => f.id === ids[0] && f.client_id === clientId && !f.referencia_web);
-    if (!foto || salvandoProduto) return;
-    setSalvandoProduto(true);
-    try {
-      const existente = kits.find((k) => k.frente_imagem_id === foto.id || k.refs.some((r) => r.imagem_id === foto.id));
-      const salvo = await salvarKit(clientId, existente || { ...kitVazio(clientId), nome: foto.nome || "Meu produto", frente_imagem_id: foto.id, refs: [{ imagem_id: foto.id, papel: "identidade", vista: "frente", prioridade: 0 }] }, true);
-      if (!salvo.id) throw new Error("O produto não foi confirmado.");
-      await queryClient.invalidateQueries({ queryKey: chaveDosKits(clientId) });
-      void queryClient.invalidateQueries({ queryKey: chaveDasFotos(clientId) });
-      escolherKit(salvo.id); setMarcandoProduto(false); setAberta(false);
-      toast.success(existente ? "Produto selecionado" : "Foto marcada como produto");
-    } catch (e) { avisarErro(e, "Produto não salvo"); } finally { setSalvandoProduto(false); }
-  };
   const visiveis = kits.filter((k) => `${nomeDoKit(k)} ${k.variante || ""} ${pastaDoProduto(k)}`.toLocaleLowerCase("pt-BR").includes(busca.toLocaleLowerCase("pt-BR")) && (!pasta || (pasta === "__sem" ? !pastaDoProduto(k) : pastaDoProduto(k) === pasta)));
 
   const darNome = async () => {
     if (!kit || nome === null || !nome.trim()) return;
     try {
-      await salvarKit(clientId, { ...kit, nome: nome.trim().slice(0, 120) });
-      void queryClient.invalidateQueries({ queryKey: chaveDosKits(clientId) });
+      const salvo = await salvarKit(clientId, { ...kit, nome: nome.trim().slice(0, 120) });
+      await guardarProdutoConfirmado(queryClient, clientId, salvo);
       setNome(null);
     } catch (e) {
       avisarErro(e, "Nome não gravado");
@@ -117,6 +104,7 @@ export default function EscolhaDoProduto({ rotulo = "Produto", className = "" }:
           </Button>
         </div>
       ) : null}
+      {kit && <PublicoDoProduto key={kit.id} kit={kit} />}
       {listaAberta && <label className="mt-3 block text-[12px]">Produtos do cliente · {kits.length}<input className={juntar(campo, "mt-1")} ref={buscaRef} aria-label="Buscar produto do cliente" placeholder="Buscar pelo nome ou variante" value={busca} onChange={(e) => setBusca(e.target.value)} /></label>}
       {listaAberta && <select aria-label="Filtrar produtos por pasta" className={juntar(campo, "mt-2 h-8 text-[12px]")} value={pasta} onChange={(e) => setPasta(e.target.value)}><option value="">Todas as pastas</option><option value="__sem">Sem pasta</option>{Array.from(new Set(kits.map(pastaDoProduto))).filter(Boolean).sort().map((p) => <option key={p} value={p}>{p}</option>)}</select>}
       {listaAberta && (
@@ -142,7 +130,7 @@ export default function EscolhaDoProduto({ rotulo = "Produto", className = "" }:
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[12px] font-medium">{nomeDoKit(k)}</span>
                     <span className="block truncate text-[11px] text-muted-foreground">
-                      {rotuloDoTipo(k.tipo)}
+                      {pastaDoProduto(k) || rotuloDoTipo(k.tipo)}
                       {k.status === "rascunho" ? " · rascunho" : ""}
                     </span>
                   </span>
@@ -157,7 +145,7 @@ export default function EscolhaDoProduto({ rotulo = "Produto", className = "" }:
       <JanelaCentral aberta={organizando} onFechar={() => setOrganizando(false)} titulo="Produtos do cliente" largura="tela" corpo="fixo"><Suspense fallback={<p role="status">Abrindo organizador…</p>}><OrganizadorDeProdutos key={clientId} onEscolher={() => setOrganizando(false)} /></Suspense></JanelaCentral>
       <button type="button" className="mt-2 text-[12px] text-primary" disabled={salvandoProduto} onClick={() => setMarcandoProduto(true)}><PackagePlus className="mr-1 inline h-3.5 w-3.5" />Marcar foto como produto</button>
       <JanelaCentral aberta={marcandoProduto} onFechar={() => !salvandoProduto && setMarcandoProduto(false)} titulo="Marcar foto como produto" largura="xl">
-        {salvandoProduto ? <p role="status">Salvando produto…</p> : <SeletorDeFotos fotos={fotos.filter((f) => !f.referencia_web && f.ativa)} titulo="Escolha a foto principal do produto" multiplas={false} onUsar={(ids) => void marcarProduto(ids)} onFechar={() => setMarcandoProduto(false)} />}
+        {marcandoProduto && <MarcarProdutos fotos={fotos} kits={kits} onOcupado={setSalvandoProduto} onSalvo={(salvo) => { escolherKit(salvo.id); setAberta(true); setPasta(""); setBusca(""); }} onFechar={() => setMarcandoProduto(false)} />}
       </JanelaCentral>
     </div>
   );

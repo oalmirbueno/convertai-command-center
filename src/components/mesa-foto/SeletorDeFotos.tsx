@@ -28,6 +28,8 @@ export default function SeletorDeFotos({
   multiplas = true,
   jaEscolhidas = [],
   filtroInicial = "todas",
+  produtosMarcados = {},
+  limiteSelecao,
   onUsar,
   onFechar,
 }: {
@@ -36,6 +38,8 @@ export default function SeletorDeFotos({
   multiplas?: boolean;
   jaEscolhidas?: string[];
   filtroInicial?: FiltroDaClasse;
+  produtosMarcados?: Record<string, string>;
+  limiteSelecao?: number;
   onUsar: (ids: string[]) => void;
   onFechar: () => void;
 }) {
@@ -62,11 +66,12 @@ export default function SeletorDeFotos({
   const lista = filtradas.slice(0, limite);
 
   const alternar = (id: string) => {
+    if (produtosMarcados[id] || jaEscolhidas.includes(id)) return;
     if (!multiplas) {
       onUsar([id]);
       return;
     }
-    setMarcadas((m) => (m.indexOf(id) >= 0 ? m.filter((x) => x !== id) : m.concat([id])));
+    setMarcadas((m) => (m.indexOf(id) >= 0 ? m.filter((x) => x !== id) : limiteSelecao && m.length >= limiteSelecao ? m : m.concat([id])));
   };
 
   return (
@@ -99,13 +104,14 @@ export default function SeletorDeFotos({
         <Pilulas rotulo="Lado das fotos" opcoes={LADOS} valor={lado} onEscolher={setLado} className="mr-2" />
         <Pilulas rotulo="Tipo de foto" opcoes={FILTROS_DA_CLASSE} valor={classe} onEscolher={setClasse} />
       </div>
-      {multiplas && filtradas.length > 0 && <button type="button" className="text-[12px] text-primary" onClick={() => setMarcadas(filtradas.filter((f) => !jaEscolhidas.includes(f.id)).map((f) => f.id))}>Selecionar as {filtradas.length} fotos deste filtro</button>}
+      {multiplas && filtradas.length > 0 && <button type="button" className="text-[12px] text-primary" onClick={() => setMarcadas(filtradas.filter((f) => !jaEscolhidas.includes(f.id) && !produtosMarcados[f.id]).slice(0, limiteSelecao).map((f) => f.id))}>Selecionar as {filtradas.filter((f) => !jaEscolhidas.includes(f.id) && !produtosMarcados[f.id]).slice(0, limiteSelecao).length} fotos disponíveis</button>}
       {lista.length === 0 ? (
         <p className="text-[12px] text-muted-foreground">Nenhuma foto com esse filtro.</p>
       ) : (
         <div className="grid min-w-0 grid-cols-[repeat(auto-fill,minmax(96px,1fr))] gap-3 lg:max-h-[50vh] lg:overflow-y-auto lg:overscroll-contain" data-rolagem-do-seletor="">
           {lista.map((f) => {
-            const ja = jaEscolhidas.indexOf(f.id) >= 0;
+            const produtoMarcado = produtosMarcados[f.id];
+            const ja = jaEscolhidas.indexOf(f.id) >= 0 || !!produtoMarcado;
             const marcada = marcadas.indexOf(f.id) >= 0;
             return (
               <button
@@ -113,17 +119,19 @@ export default function SeletorDeFotos({
                 type="button"
                 disabled={ja}
                 onClick={() => alternar(f.id)}
-                aria-pressed={marcada}
-                aria-label={`${ja ? "Já no kit: " : ""}${f.nome}${classeDaFoto(f) === "gerada" ? " (gerada)" : ""}`}
+                aria-pressed={marcada || ja}
+                title={produtoMarcado ? `Já cadastrado em ${produtoMarcado}` : undefined}
+                aria-label={`${produtoMarcado ? "Já é produto: " : ja ? "Já no kit: " : ""}${f.nome}${classeDaFoto(f) === "gerada" ? " (gerada)" : ""}`}
                 className={`relative min-w-0 rounded-lg p-0.5 text-left ${marcada ? "ring-1 ring-primary" : "hover:bg-muted/40"} ${ja ? "opacity-40" : ""}`}
               >
                 <MiniaturaDaFoto foto={f} />
-                {marcada && (
+                {(marcada || ja) && (
                   <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
                     <Check className="h-3 w-3" />
                   </span>
                 )}
                 <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{f.nome}</span>
+                {produtoMarcado && <span className="block truncate text-[11px] font-medium text-primary">Já é produto</span>}
               </button>
             );
           })}

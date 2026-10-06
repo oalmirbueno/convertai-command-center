@@ -1,4 +1,4 @@
-import { organizacaoDoProduto } from "./modulos/pastas-produtos.ts";
+import { organizacaoDoProduto, type OrganizacaoProduto } from "./modulos/pastas-produtos.ts";
 /**
  * Cálculos da Mesa Foto, puros e sem IA (docs/mesa-foto/CONTRATO.md).
  *
@@ -326,7 +326,7 @@ export function normalizarIdentificacao(bruto: unknown): Identificacao | null {
   };
 }
 
-export type Atributos = { observado: string[]; informado: string[]; inferido: string[]; identificacao?: Identificacao; organizacao?: { pasta: string } };
+export type Atributos = { observado: string[]; informado: string[]; inferido: string[]; identificacao?: Identificacao; organizacao?: OrganizacaoProduto };
 
 export type Autorizacao = {
   confirmada: boolean;
@@ -504,7 +504,7 @@ export function mesclarKit(
     atributos: {
       observado: unir(existente.atributos.observado, novo.atributos.observado, 30),
       informado: existente.atributos.informado,
-      ...(existente.atributos.organizacao ? { organizacao: existente.atributos.organizacao } : {}),
+      ...(novo.atributos.organizacao || existente.atributos.organizacao ? { organizacao: { ...novo.atributos.organizacao, ...existente.atributos.organizacao, pasta: existente.atributos.organizacao?.pasta ?? novo.atributos.organizacao?.pasta ?? "", publico: existente.atributos.organizacao?.publico ?? novo.atributos.organizacao?.publico } } : {}),
       inferido: unir(existente.atributos.inferido, novo.atributos.inferido, 30),
       ...(identificacao ? { identificacao } : {}),
     },

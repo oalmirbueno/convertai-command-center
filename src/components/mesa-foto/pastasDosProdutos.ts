@@ -1,7 +1,7 @@
-import { limparPastaDeProdutos } from "../../../supabase/functions/mesa-foto/modulos/pastas-produtos";
+import { limparPastaDeProdutos, pastaOrganizadaDoProduto } from "../../../supabase/functions/mesa-foto/modulos/pastas-produtos";
 import type { FotoDoAcervo, KitDeFoto } from "./fotoApi";
 
-export const pastaDoProduto = (k: KitDeFoto) => limparPastaDeProdutos(k.atributos.organizacao?.pasta);
+export const pastaDoProduto = (k: KitDeFoto) => pastaOrganizadaDoProduto(k.atributos.organizacao);
 export type PessoaDaPasta = { id: string; client_id: string | null; nome: string; tipo: "modelo" | "clone"; identidade_real?: { imagem_id: string }[] };
 export type ReferenciaDaGeracao = { papel: string; imagem_id?: string; origem?: { tipo: string; id: string } };
 export type VinculoDaGeracao = { imagem_id: string; referencias: ReferenciaDaGeracao[] };
