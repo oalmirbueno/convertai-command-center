@@ -1,4 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { useContext } from "react";
+import { ControlesDaPauta } from "@/components/mesa/ControlesDaPauta";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { modoDaPauta, chaveDoEstudioDaPauta } from "@/components/mesa/modoDaPauta";
 import EstudioDaPauta from "@/components/mesa/EstudioDaPauta";
@@ -8,7 +10,8 @@ import { baseDoVideoRapido } from "../../supabase/functions/mesa-videos/modulos/
 vi.mock("@/components/mesa/EstudioDeFotosDaPauta", () => ({ default: ({ item }: { item: ItemDoMes }) => <div>Fotos da pauta {item.id}</div> }));
 vi.mock("@/components/mesa/EstudioDeVideoDaPauta", () => ({ default: ({ item }: { item: ItemDoMes }) => <div>Vídeo da pauta {item.id}</div> }));
 const item: ItemDoMes = { id: "pauta-1", delivery_type: "static", title: "Foto ou vídeo no título não define o formato", project_id: "projeto", due_date: "2026-10-10", status: "pending" };
-const renderStudio = (extra: Partial<{ item: ItemDoMes; trabalho: Trabalho | null }> = {}) => render(<EstudioDaPauta item={item} trabalho={null} foco={false} onFoco={vi.fn()} {...extra}><button>Arte existente</button></EstudioDaPauta>);
+function ArteExistente() { return <header>{useContext(ControlesDaPauta)}<button>Arte existente</button></header>; }
+const renderStudio = (extra: Partial<{ item: ItemDoMes; trabalho: Trabalho | null }> = {}) => render(<EstudioDaPauta item={item} trabalho={null} foco={false} onFoco={vi.fn()} {...extra}><ArteExistente /></EstudioDaPauta>);
 
 beforeEach(() => localStorage.clear());
 
