@@ -1,3 +1,5 @@
+import JeitosDeCriarVideo from "./JeitosDeCriarVideo";
+import "./mesaVideo.css";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -160,17 +162,19 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
   const rc: Rascunho = { ...RASCUNHO_VAZIO, ...r };
   const mudar = (m: Partial<Rascunho>) => setR((x) => ({ ...RASCUNHO_VAZIO, ...x, ...m }));
   // Frente V-A: jeito de gerar (cena do roteiro, livre, ângulo, continuar, antes e depois).
-  const [modoGuardado, setModo] = useEstadoDaTela<ModoDoGerar>(`mesa-videos:gerar:modo:${clientId}`, "cena", { validar: (v) => typeof v === "string" });
+  const [modoGuardado, setModo] = useEstadoDaTela<ModoDoGerar>(`mesa-videos:gerar:modo:${clientId}`, "livre", { validar: (v) => typeof v === "string" });
+  const [modoEscolhido, setModoEscolhido] = useState(false);
+  const escolherModo = (v: ModoDoGerar) => { setModoEscolhido(true); setModo(v); };
   const modoNaUrl = params.get("modo");
   useEffect(() => {
     if (!modoNaUrl) return;
-    setModo(modoDoGerarValido(modoNaUrl));
+    escolherModo(modoDoGerarValido(modoNaUrl));
     const next = new URLSearchParams(params);
     next.delete("modo");
     setParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modoNaUrl]);
-  const modo = modoDoGerarValido(modoGuardado);
+  const modoPedido = modoDoGerarValido(modoNaUrl || (params.get("origem") ? "cena" : modoGuardado));
 
   const origens = useMemo<Origem[]>(() => {
     const saida: Origem[] = [];
@@ -201,7 +205,7 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
     if (!pedidaNaUrl) return;
     const o = origens.find((x) => x.valor === pedidaNaUrl);
     if (!o && (historiasQ.isLoading || roteirosQ.isLoading || fotosQ.isLoading)) return;
-    if (o) mudar({ origem: o.valor, fala: o.fala });
+    if (o) { mudar({ origem: o.valor, fala: o.fala }); setModo("cena"); }
     const next = new URLSearchParams(params);
     next.delete("origem");
     setParams(next, { replace: true });
@@ -232,6 +236,8 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
     (p) => (ehPedidoDeVideo(p.tipo) && p.estado !== "cancelado") || (TIPOS_DO_GERADOR.indexOf(p.tipo as string) >= 0 && ESTADOS_EM_ANDAMENTO.indexOf(p.estado as string) >= 0),
   );
   const carregando = historiasQ.isLoading || roteirosQ.isLoading;
+  // Uma preferência antiga sem cena não deve prender a pessoa numa tela vazia.
+  const modo = modoPedido === "cena" && !modoEscolhido && !modoNaUrl && !pedidaNaUrl && !rc.origem && !carregando && !fotosQ.isLoading && !origens.length ? "livre" : modoPedido;
 
   const gerar = async (usd: number) => {
     if (!origem || !motor) return;
@@ -260,27 +266,24 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
     toast.success("Cena enviada para gerar", { description: `Pedido ${String(resp.pedido_id || "").slice(0, 8)}. Acompanhe nos Resultados.` });
   };
 
-  const seletorDoModo = (
-    <SeletorCompacto rotulo="Jeito de gerar" icone={<Clapperboard className="h-3.5 w-3.5" />} opcoes={MODOS_DO_GERAR.map((m) => ({ valor: m.valor, rotulo: m.rotulo, descricao: m.descricao }))} valor={modo} onEscolher={(v) => setModo(modoDoGerarValido(v))} />
-  );
   const outroModo = MODOS_DO_GERAR.find((m) => m.valor === modo && m.valor !== "cena") || null;
 
   return (
-    <div className="grid min-w-0 gap-6 pb-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
+    <div className="min-w-0 space-y-4 pb-4">
+      <JeitosDeCriarVideo modo={modo} onEscolher={escolherModo} />
       {outroModo ? (
-        <Secao titulo={outroModo.titulo} ajuda={outroModo.ajuda} acao={seletorDoModo} data-gerar-modo={modo}>
+        <section aria-label={outroModo.titulo} data-gerar-modo={modo}>
           <Suspense fallback={<Carregando linhas={4} rotulo="Abrindo" />}>
-            {modo === "livre" && <GeradorLivre />}
+            {modo === "livre" && <GeradorLivre simplificado irResultados={() => irPara("resultados")} />}
             {modo === "angulo" && <FerramentaDeAngulo />}
             {modo === "continuar" && <ContinuarVideo />}
             {modo === "antes_depois" && <AntesEDepois />}
             {modo === "avatar" && <AvatarFalando />}
             {modo === "labial" && <FotoQueFala />}
           </Suspense>
-        </Secao>
+        </section>
       ) : (
         <Secao
-          acao={seletorDoModo}
           titulo="Gerar vídeo"
           descricao={motor ? `${motor.rotulo}${estado ? ` · ${estado.estado_rotulo}` : ""}` : undefined}
           ajuda="Escolha a cena, o motor e a câmera. A foto da cena é o primeiro quadro; sem foto, o motor gera pelo texto da cena. O custo aparece antes e só é cobrado o que ficar pronto."
@@ -296,8 +299,8 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
               titulo="Nenhuma cena para gerar"
               descricao="Monte a História no Canvas, aprove um roteiro ou use o modo Livre."
               acao={
-                <button type="button" className={botao.secundario} onClick={() => irPara("base")}>
-                  Abrir a Base
+                <button type="button" className={botao.secundario} onClick={() => setModo("livre")}>
+                  Criar com foto ou descrição
                 </button>
               }
             />
@@ -435,7 +438,9 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
         </Secao>
       )}
 
-      <div className="min-w-0 space-y-6">
+      <details className="video-detalhes" data-video-conexoes="">
+      <summary>Conexões e andamento <span className="text-xs text-muted-foreground">{fila.length ? `${fila.length} na fila` : "sem pedidos na fila"}</span></summary>
+      <div className="grid min-w-0 gap-5 pt-3 lg:grid-cols-2">
       {/* Frente VGN: o que falta para gerar (chave do provedor, carteira do cliente), antes do clique. */}
       <SituacaoDoGerador />
       <Secao
@@ -462,6 +467,7 @@ export default function EtapaGerar({ irPara }: { irPara: IrPara }) {
         )}
       </Secao>
       </div>
+      </details>
     </div>
   );
 }

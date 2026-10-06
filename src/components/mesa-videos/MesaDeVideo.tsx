@@ -1,3 +1,4 @@
+import NavegacaoVideo from "./NavegacaoVideo";
 import { lazy, Suspense, useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -165,7 +166,7 @@ export default function MesaDeVideo({
   // O filme aberto (?filme=, Mesa Motion) também sai: o filme de um cliente nunca abre com o cabeçalho de outro.
   const trocarCliente = (id: string) => {
     const o = lerOnde(chaveOnde(id), etapas);
-    mudar({ client: id, etapa: o.etapa || etapas[0].valor, marca: null, origem: null, filme: null });
+    mudar({ client: id, etapa: o.etapa || (mesa === "videos" ? "gerar" : etapas[0].valor), marca: null, origem: null, filme: null });
   };
 
   const [redirecionando, setRedirecionando] = useState(false);
@@ -270,7 +271,7 @@ export default function MesaDeVideo({
       marca={clientId && marca ? <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id, filme: null }, true)} /> : null}
       etapas={
         clientId ? (
-          <Etapas rotulo={`Etapas da ${titulo}`} numerar itens={etapas.map((e) => ({ valor: e.valor, rotulo: e.rotulo, dica: e.dica }))} valor={etapa} onEscolher={(v) => mudar({ etapa: v })} />
+          mesa === "videos" ? <NavegacaoVideo etapa={etapa} onEscolher={(v) => mudar({ etapa: v })} /> : <Etapas rotulo={`Etapas da ${titulo}`} numerar itens={etapas.map((e) => ({ valor: e.valor, rotulo: e.rotulo, dica: e.dica }))} valor={etapa} onEscolher={(v) => mudar({ etapa: v })} />
         ) : null
       }
       acoes={
@@ -295,6 +296,7 @@ export default function MesaDeVideo({
         <MesaProvider valor={valor}>
           <div key={marca ? `${valor.clientId}:${marca.id}` : valor.clientId} className="min-w-0">
             <AreaDeTrabalho
+              nasceRecolhida={mesa === "videos"}
               memoria={`${mesa === "edicao" ? "mesa-edicao" : mesa === "motion" ? "mesa-motion" : "mesa-videos"}-agente`}
               rotuloDaLateral={typeof rotuloDoAgente === "function" ? rotuloDoAgente(etapa) : rotuloDoAgente}
               iconeDaLateral={icone}
