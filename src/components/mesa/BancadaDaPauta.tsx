@@ -1,3 +1,4 @@
+import { superficie, juntar } from "@/components/sistema/estilos";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Camera, Film, ImagePlus, Maximize2, Wand2, Type, Send, PenLine, Image, type LucideIcon } from "lucide-react";
@@ -41,7 +42,7 @@ export default function BancadaDaPauta({ tipo, titulo, acoes, prancheta, previa,
   const [destino, setDestino] = useState<HTMLDivElement | null>(null);
   const [destinoSelecao, setDestinoSelecao] = useState<HTMLDivElement | null>(null);
   const [selecaoAberta, setSelecaoAberta] = useState(false);
-  return <SelecaoContexto.Provider value={{ destino: destinoSelecao, abrir: setSelecaoAberta }}><AcoesContexto.Provider value={destino}><PainelContexto.Provider value={ativa}><section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card" data-bancada-da-pauta={tipo}>
+  return <SelecaoContexto.Provider value={{ destino: destinoSelecao, abrir: setSelecaoAberta }}><AcoesContexto.Provider value={destino}><PainelContexto.Provider value={ativa}><section className={juntar(superficie.painel, "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden")} data-bancada-da-pauta={tipo}>
     <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-primary px-4 py-3">
       <Icone className="h-4 w-4 shrink-0 text-primary" /><p className="min-w-0 flex-1 truncate text-[13px] font-semibold">{titulo}</p>
       <span className="rounded-full bg-primary/10 px-2 py-1 text-[12px] font-medium text-primary">{tipo === "fotos" ? "Fotos e carrossel" : "Vídeo rápido"}</span>{acoes}<div ref={setDestino} className="flex min-w-0 flex-wrap items-center" />

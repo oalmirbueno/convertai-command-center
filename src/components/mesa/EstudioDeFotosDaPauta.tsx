@@ -1,3 +1,4 @@
+import { superficie, juntar } from "@/components/sistema/estilos";
 import { Images, Layers, FolderOpen, UsersRound, UserRound, MessageSquare } from "lucide-react";
 import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import { useMesa } from "./MesaContexto";
@@ -96,7 +97,7 @@ export default function EstudioDeFotosDaPauta({ item, roteiro, arte }: { item: I
         post?.cards.length && !trocando ? <PostAberto post={post} estudio={{ ferramentas, extras }} onTrocarFotos={() => { setSelecionadas(post.imagem_ids); setTrocando(true); }} /> :
         !post && arte && fonte.caminho ? <BancadaDeFotos titulo={item.title} fotos={[{ id: arte.capa!.id, nome: item.title, caminho: fonte.caminho, bucket: fonte.bucket }]}>{ferramentas}<p className="text-[13px] font-semibold">Fotos já vinculadas à Agenda</p><p className="my-3 whitespace-pre-wrap text-[13px]">{arte.legenda}</p><a href="/calendario" className="text-[13px] text-primary">Conferir na Agenda</a></BancadaDeFotos> :
         <MontarOPost key={post?.id || item.id} fotosIniciais={trocando || selecionadas.length ? selecionadas : post?.imagem_ids || []} post={post} taskInicial={item.id} destinoFixo estudio={{ taskId: item.id, onSelecionadas: setSelecionadas, titulo: item.title, direcao: roteiro?.direcao_foto, ferramentas, extras }} onPronto={() => { setTrocando(false); void posts.refetch(); }} onCancelar={() => setTrocando(false)} />}</div>
-      {ferramentaAberta && <section className="min-h-0 flex-1 overflow-y-auto rounded-xl border bg-card p-4"><header className="mb-4 flex items-center justify-between border-b pb-3"><strong className="text-[13px]">{ETAPAS_DA_MESA_FOTO.find((e) => e.valor === etapa)?.rotulo} · {item.title}</strong><button type="button" className="rounded-md border px-3 py-2 text-[12px]" onClick={() => setFerramentaAberta(false)}>Voltar à prancheta</button></header>
+      {ferramentaAberta && <section className={juntar(superficie.painel, "min-h-0 flex-1 overflow-y-auto p-4")}><header className="mb-4 flex items-center justify-between border-b pb-3"><strong className="text-[13px]">{ETAPAS_DA_MESA_FOTO.find((e) => e.valor === etapa)?.rotulo} · {item.title}</strong><button type="button" className="rounded-md border px-3 py-2 text-[12px]" onClick={() => setFerramentaAberta(false)}>Voltar à prancheta</button></header>
         <div key={navegacao}><Suspense fallback={<p role="status">Abrindo ferramentas…</p>}>
             {etapa === "estudio" && <Estudio escopo={chave("edicao")} />}
             {etapa === "combinar" && <Combinar escopo={chave("combinar")} />}
@@ -115,7 +116,7 @@ export default function EstudioDeFotosDaPauta({ item, roteiro, arte }: { item: I
             {etapa === "campanha" && <Campanha />}
         </Suspense></div>
       </section>}
-      {diretor && <section className="flex min-h-0 flex-1 flex-col rounded-xl border bg-card p-4"><header className="mb-4 flex justify-between border-b pb-3"><strong className="text-[13px]">Diretor · {item.title}</strong><button type="button" className="text-[12px] text-primary" onClick={() => setDiretor(false)}>Voltar à prancheta</button></header>
+      {diretor && <section className={juntar(superficie.painel, "flex min-h-0 flex-1 flex-col p-4")}><header className="mb-4 flex justify-between border-b pb-3"><strong className="text-[13px]">Diretor · {item.title}</strong><button type="button" className="text-[12px] text-primary" onClick={() => setDiretor(false)}>Voltar à prancheta</button></header>
         <Suspense fallback={null}><Diretor escopo={item.id} pautaId={item.id} pedido={pedido} /></Suspense>
       </section>}
     </div>
