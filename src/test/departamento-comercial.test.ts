@@ -85,7 +85,7 @@ describe("acesso: gestão da casa, não da equipe inteira", () => {
 
   it("o menu não oferece porta que não abre", () => {
     expect(layout).toContain('soGestao: true');
-    expect(layout).toContain("const gruposPorPapel = (podeGestao: boolean)");
+    expect(layout).toContain("const gruposPorPapel = (podeGestao: boolean, podeCriacao = true)");
     // A peneira é uma só: os grupos do desktop e a lista do celular saem dela.
     expect(layout).toContain("gruposDoMenu.flatMap((grupo) => grupo.items)");
   });
