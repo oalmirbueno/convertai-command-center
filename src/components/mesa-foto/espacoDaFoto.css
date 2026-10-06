@@ -1,0 +1,107 @@
+/* A largura da ferramenta, incluindo o espaço ocupado pelo diretor, decide as colunas. */
+.foto-area {
+  container: ferramentas-foto / inline-size;
+  min-width: 0;
+}
+
+.foto-colunas {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.foto-coluna {
+  min-width: 0;
+  flex-shrink: 0;
+  padding: 16px;
+}
+
+/* A prévia não vira uma miniatura para acomodar controles ou o histórico. */
+.foto-coluna [data-previa-da-pauta] {
+  height: 360px;
+}
+
+.foto-rodape {
+  flex-shrink: 0;
+  min-height: 0;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+@media (min-width: 1024px) {
+  .foto-palco {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .foto-palco [data-area-da-foto] {
+    min-height: 340px;
+    flex-shrink: 0;
+  }
+}
+
+@container ferramentas-foto (min-width: 1060px) {
+  .foto-colunas {
+    display: grid;
+    grid-template-columns: minmax(280px, 1fr) minmax(400px, 1.6fr) minmax(280px, 1fr);
+    transition: grid-template-columns 180ms ease;
+    overflow: hidden;
+  }
+
+  .foto-colunas[data-foco="pessoa"] {
+    grid-template-columns: minmax(340px, 1.4fr) minmax(400px, 1.4fr) minmax(280px, 1fr);
+  }
+
+  .foto-colunas[data-foco="produto"] {
+    grid-template-columns: minmax(280px, 1fr) minmax(400px, 1.4fr) minmax(340px, 1.4fr);
+  }
+
+  .foto-coluna {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .foto-colunas { transition: none; }
+}
+
+/* Abaixo do limite, a ferramenta ganha uma rolagem própria em vez de esmagar os campos. */
+@container ferramentas-foto (max-width: 1059px) {
+  .foto-colunas > .foto-coluna:nth-child(2) {
+    order: -1;
+  }
+}
+
+@container ferramentas-foto (max-width: 899px) {
+  .foto-area > .foto-grade-dupla,
+  .foto-area > .foto-editor {
+    display: block;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .foto-area > .foto-grade-dupla > *,
+  .foto-area > .foto-editor > * {
+    height: auto;
+    overflow: visible;
+  }
+
+  .foto-grade-dupla > * + * {
+    margin-top: 24px;
+  }
+
+  @media (min-width: 1024px) {
+    .foto-editor [data-area-da-foto] {
+      height: 420px;
+    }
+  }
+
+  .foto-editor .foto-palco {
+    border-right: 0;
+  }
+}

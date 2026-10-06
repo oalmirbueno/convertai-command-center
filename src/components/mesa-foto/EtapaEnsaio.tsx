@@ -1,3 +1,4 @@
+import "./espacoDaFoto.css";
 import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -201,7 +202,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
   const tipos = tiposEscolhidos;
 
   return (
-    <div ref={area.ref} style={area.altura ? { height: area.altura } : undefined} className="grid min-h-0 min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:overflow-hidden">
+    <div className="foto-area"><div ref={area.ref} style={area.altura ? { height: area.altura } : undefined} className="foto-grade-dupla grid min-h-0 min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:overflow-hidden">
       <div className="min-h-0 min-w-0 space-y-3 lg:overflow-y-auto lg:overscroll-contain">
         <Cartao titulo="Produto" recolher={`mesa-foto:ensaio:produto:${clientId}`} resumo={kit ? kit.nome || "Produto sem nome" : "nenhum escolhido"}>
           <EscolhaDoProduto rotulo="O produto das fotos" />
@@ -415,7 +416,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
           </Cartao>
         )}
       </div>
-    </div>
+    </div></div>
   );
 }
 

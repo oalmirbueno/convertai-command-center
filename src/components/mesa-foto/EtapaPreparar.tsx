@@ -1,3 +1,4 @@
+import "./espacoDaFoto.css";
 import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -99,7 +100,7 @@ export default function EtapaPreparar() {
 
   if (!foto) {
     return (
-      <div className="min-w-0 space-y-4">
+      <div className="foto-area min-w-0 space-y-4">
         {fotos.isSuccess && todas.length === 0 ? (
           <Vazio
             titulo="Nenhuma foto no acervo"
@@ -129,7 +130,7 @@ export default function EtapaPreparar() {
       <p className="mb-1 flex items-center text-[12px] font-medium text-muted-foreground">
         Antes <span className="ml-1.5"><SeloDaFoto foto={foto} compacto /></span>
       </p>
-      <AreasNaFoto alturaMaxima={Math.max(180, Math.min(420, (area.altura || 600) - 150))} foto={foto} areas={areas} onMudar={setAreas} marcando={marcando} disabled={preparando} />
+      <AreasNaFoto alturaMaxima={Math.max(320, Math.min(520, (area.altura || 600) - 100))} foto={foto} areas={areas} onMudar={setAreas} marcando={marcando} disabled={preparando} />
     </div>
   );
   const Depois = (
@@ -138,7 +139,7 @@ export default function EtapaPreparar() {
         Depois {depois && <span className="ml-1.5"><SeloDaFoto foto={depois} compacto /></span>}
       </p>
       {preparando ? (
-        <AreasNaFoto alturaMaxima={Math.max(180, Math.min(420, (area.altura || 600) - 150))} foto={foto} areas={[]} onMudar={() => undefined} marcando={false} estiloDaImagem={VELADO}>
+        <AreasNaFoto alturaMaxima={Math.max(320, Math.min(520, (area.altura || 600) - 100))} foto={foto} areas={[]} onMudar={() => undefined} marcando={false} estiloDaImagem={VELADO}>
           <div className="absolute inset-0 flex items-center justify-center p-2" aria-live="polite">
             <span className="inline-flex items-center rounded-full bg-card px-3 py-1.5 text-[13px] font-medium shadow-sm">
               <span className="mr-2 h-2 w-2 animate-pulse rounded-full bg-primary" /> Preparando: {modoAtual.rotulo.toLowerCase()}
@@ -147,7 +148,7 @@ export default function EtapaPreparar() {
         </AreasNaFoto>
       ) : depois ? (
         <>
-          <AreasNaFoto alturaMaxima={Math.max(180, Math.min(420, (area.altura || 600) - 150))} foto={depois} areas={[]} onMudar={() => undefined} marcando={false} />
+          <AreasNaFoto alturaMaxima={Math.max(320, Math.min(520, (area.altura || 600) - 100))} foto={depois} areas={[]} onMudar={() => undefined} marcando={false} />
           <div className="mt-2 flex min-w-0 flex-wrap items-center">
             <AprovarFoto foto={depois} />
           </div>
@@ -161,9 +162,9 @@ export default function EtapaPreparar() {
   );
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="foto-area min-w-0 space-y-4">
       {escolhendo && <SeletorDeFotos fotos={todas} titulo="Trocar a foto" multiplas={false} filtroInicial="original" onUsar={(ids) => ids[0] && escolherFoto(ids[0])} onFechar={() => setEscolhendo(false)} />}
-      <div ref={area.ref} style={area.altura ? { height: area.altura } : undefined} className="grid min-h-0 min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:overflow-hidden">
+      <div ref={area.ref} style={area.altura ? { height: area.altura } : undefined} className="foto-grade-dupla grid min-h-0 min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:overflow-hidden">
         <Cartao
           className="lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain" titulo={<span className="block truncate" title={foto.nome}>{foto.nome}</span>}
           recolher={`mesa-foto:preparar:foto:${clientId}`}

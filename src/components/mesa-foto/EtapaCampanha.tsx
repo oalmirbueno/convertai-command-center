@@ -1,3 +1,4 @@
+import "./espacoDaFoto.css";
 import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -479,7 +480,7 @@ export default function EtapaCampanha() {
       {aberta ? (
         <CampanhaAberta key={aberta.id} ensaio={aberta} />
       ) : (
-        <div ref={area.ref} style={area.altura ? { height: area.altura } : undefined} className="grid min-h-0 min-w-0 grid-cols-1 gap-4 lg:grid-cols-2 lg:overflow-hidden">
+        <div className="foto-area"><div ref={area.ref} style={area.altura ? { height: area.altura } : undefined} className="foto-grade-dupla grid min-h-0 min-w-0 grid-cols-1 gap-4 lg:grid-cols-2 lg:overflow-hidden">
           <div className="min-h-0 min-w-0 space-y-3 lg:overflow-y-auto lg:overscroll-contain">
             <Cartao titulo="1. Produto" recolher={false}>
               <EscolhaDoProduto rotulo="O produto da foto" />
@@ -566,7 +567,7 @@ export default function EtapaCampanha() {
               {!kit && <p className="mt-2 text-[12px] text-muted-foreground">Escolha o produto.</p>}
             </Cartao>
           </div>
-        </div>
+        </div></div>
       )}
     </div>
   );

@@ -46,6 +46,20 @@ describe("Inspeção da foto", () => {
 
 const fotos: FotoNaGaleria[] = Array.from({ length: 42 }, (_, i) => ({ id: `${i}`, caminho: `${i}.jpg`, titulo: `Foto ${i}`, grupo: i === 0 ? "Original" : "Versões", aprovada: i === 41 }));
 describe("Galeria sem versões escondidas", () => {
+  it("libera o palco ao recolher, mantendo seleção e acesso às versões distantes", () => {
+    const selecionar = vi.fn();
+    render(<GaleriaDeFotos recolhivel titulo="Versões" fotos={fotos} atualId="41" onSelecionar={selecionar} />);
+    const alternar = screen.getByRole("button", { name: "Versões · 42" });
+    expect(alternar).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: "Abrir Foto 41" })).not.toBeInTheDocument();
+    fireEvent.click(alternar);
+    expect(screen.getByRole("button", { name: "Abrir Foto 41" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Foto 40" }));
+    expect(selecionar).toHaveBeenCalledWith("40");
+    fireEvent.click(alternar);
+    fireEvent.click(screen.getByRole("button", { name: "Organizar fotos" }));
+    expect(screen.getByRole("textbox", { name: "Buscar nas fotos" })).toBeInTheDocument();
+  });
   it("acessa a foto 42 por busca e mantém a ordem escolhida para o carrossel", () => {
     const usar = vi.fn();
     render(<GaleriaDeFotos titulo="Fotos do produto" fotos={fotos} atualId="0" onSelecionar={vi.fn()} onUsar={usar} />);

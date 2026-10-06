@@ -1,7 +1,8 @@
+import "./espacoDaFoto.css";
 import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import LogoNaFoto from "@/components/mesa/LogoNaFoto";
 import { SeletorDeModelo } from "@/components/mesa/Seletores";
-import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -135,17 +136,19 @@ export function recorteDoFormato(proporcaoDaFoto: number, formato: FormatoDoPost
  * janela e, onde existe, ResizeObserver: a lateral do diretor abre e fecha sem
  * resize). No celular devolve null e a foto segue a largura, como antes.
  */
-function useTamanhoDoPalco(ref: RefObject<HTMLDivElement>): { largura: number; altura: number } | null {
+export function useTamanhoDoPalco(ref: RefObject<HTMLDivElement>, ativo: boolean): { largura: number; altura: number } | null {
   const [tamanho, setTamanho] = useState<{ largura: number; altura: number } | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (!ativo) { setTamanho(null); return; }
     const medir = () => {
       const el = ref.current;
       if (!el || typeof window === "undefined" || window.innerWidth < 1024) {
         setTamanho(null);
         return;
       }
-      const largura = el.clientWidth;
-      const altura = el.clientHeight;
+      // p-3 do palco: a foto precisa caber na área de conteúdo, sem invadir os recuos.
+      const largura = el.clientWidth - 24;
+      const altura = el.clientHeight - 24;
       setTamanho((antes) => (largura > 0 && altura > 0 ? (antes && antes.largura === largura && antes.altura === altura ? antes : { largura, altura }) : null));
     };
     medir();
@@ -159,7 +162,7 @@ function useTamanhoDoPalco(ref: RefObject<HTMLDivElement>): { largura: number; a
       window.removeEventListener("resize", medir);
       if (obs) obs.disconnect();
     };
-  }, [ref]);
+  }, [ref, ativo]);
   return tamanho;
 }
 
@@ -272,8 +275,9 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
   const modeloId = motorEscolhido || (padrao ? padrao.id : "");
   const ferramentas = useRef<HTMLDivElement>(null);
   const areaDoPalco = useRef<HTMLDivElement>(null);
-  const palco = useTamanhoDoPalco(areaDoPalco);
-  const area = useAlturaQueCabe(!!atualId);
+  const atual = atualId ? todas.find((f) => f.id === atualId) || null : null;
+  const palco = useTamanhoDoPalco(areaDoPalco, !!atual);
+  const area = useAlturaQueCabe(!!atual);
 
   useEffect(() => {
     if (imagemId) setAtualId(imagemId);
@@ -286,7 +290,6 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
     if (alvo && typeof (alvo as HTMLElement).scrollIntoView === "function") (alvo as HTMLElement).scrollIntoView({ block: "nearest" });
   }, [ferramentaPedida, atualId]);
 
-  const atual = atualId ? todas.find((f) => f.id === atualId) || null : null;
   // O diretor trabalha na foto aberta ("melhora a luz desta", "tira o fundo") sem a equipe explicar.
   useSelecaoParaODiretor(clientId, "estudio", atual ? [atual.id] : []);
   const raiz = raizDaLinhagem(todas, atualId);
@@ -386,18 +389,18 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
      * foto em cima, a foto inteira na altura que sobra, as versões numa tira embaixo) e à direita
      * as ferramentas, que rolam por dentro. No celular tudo segue a página, como antes.
      */
-    <div ref={area.ref} style={area.altura ? { height: area.altura } : undefined} className="flex min-w-0 flex-col lg:min-h-0 lg:overflow-hidden" data-estudio-de-fotos={atual.id}>
+    <div ref={area.ref} style={area.altura ? { height: area.altura } : undefined} className="foto-area flex min-w-0 flex-col lg:min-h-0 lg:overflow-hidden" data-estudio-de-fotos={atual.id}>
       {escolhendo && (
         <div className="mb-3 min-w-0 lg:max-h-[45%] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain">
           <SeletorDeFotos fotos={todas.filter((f) => !ehReferenciaWeb(f))} titulo="Trocar a foto do Estúdio" multiplas={false} filtroInicial="todas" onUsar={(ids) => ids[0] && escolher(ids[0])} onFechar={() => setEscolhendo(false)} />
         </div>
       )}
       <section
-        className={juntar(superficie.painel, "flex min-w-0 flex-col overflow-hidden lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[minmax(0,1fr)] desk:grid-cols-[minmax(0,1fr)_360px]")}
+        className={juntar(superficie.painel, "foto-editor flex min-w-0 flex-col overflow-hidden lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[minmax(0,1fr)] desk:grid-cols-[minmax(0,1fr)_360px]")}
         aria-label="Estúdio de fotos"
       >
         {/* Palco: a barra da foto, a foto inteira e as versões. */}
-        <div className="flex min-w-0 flex-col lg:min-h-0 lg:border-r lg:border-border" data-palco-do-estudio="">
+        <div className="foto-palco flex min-w-0 flex-col lg:min-h-0 lg:border-r lg:border-border" data-palco-do-estudio="">
           <div className="flex min-w-0 shrink-0 flex-wrap items-center border-b border-border px-3 pb-1 pt-2" data-barra-do-palco="">
             <p className="mb-1 mr-2 min-w-0 flex-1 truncate text-[13px] font-semibold" title={atual.nome}>
               {atual.nome}
@@ -447,7 +450,7 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
             </div>
           </div>
           <div className="min-h-0 min-w-0 shrink-0 overflow-y-auto border-t border-border px-3 py-2 lg:max-h-44" data-versoes-da-foto="" data-tira-de-versoes="">
-            <GaleriaDeFotos titulo="Versões desta foto" fotos={linhagem.map((f) => fotoNaGaleria(f, f.id === raiz?.id ? "Original" : "Versões"))}
+            <GaleriaDeFotos recolhivel titulo="Versões desta foto" fotos={linhagem.map((f) => fotoNaGaleria(f, f.id === raiz?.id ? "Original" : "Versões"))}
               atualId={atual.id} onSelecionar={(id) => { escolher(id); setVista("depois"); }} onUsar={prepararNaAgenda} />
           </div>
         </div>

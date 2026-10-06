@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createElement as h } from "react";
+import { createElement as h, useRef } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
@@ -54,7 +54,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: v
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
 import { MesaFotoProvider, type MesaFotoValor } from "@/components/mesa-foto/Comuns";
 import EtapaCriar from "@/components/mesa-foto/EtapaCriar";
-import EtapaEstudio, { larguraQueCabe, raizDaLinhagem, recorteDoFormato, versoesDaLinhagem } from "@/components/mesa-foto/EtapaEstudio";
+import EtapaEstudio, { larguraQueCabe, raizDaLinhagem, recorteDoFormato, versoesDaLinhagem, useTamanhoDoPalco } from "@/components/mesa-foto/EtapaEstudio";
 import EtapaAgenda from "@/components/mesa-foto/EtapaAgenda";
 import { MenuDeUso } from "@/components/mesa-foto/UsoDaFoto";
 import { AmpliarEUsarDaPersona } from "@/components/mesa-foto/EtapaModelos";
@@ -794,6 +794,24 @@ describe("textos de tela e compatibilidade (Safari 11)", () => {
 });
 
 describe("27/09: Estúdio de fotos organizado, com rolagem própria", () => {
+  it("mede quando a primeira foto chega depois do seletor e acompanha o redimensionamento", () => {
+    const largura = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(824);
+    const altura = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(424);
+    function Palco({ ativo }: { ativo: boolean }) {
+      const ref = useRef<HTMLDivElement>(null);
+      const tamanho = useTamanhoDoPalco(ref, ativo);
+      return <>{ativo && <div ref={ref} />}<output>{tamanho ? `${tamanho.largura} x ${tamanho.altura}` : "sem foto"}</output></>;
+    }
+    const tela = render(<Palco ativo={false} />);
+    try {
+      expect(screen.getByText("sem foto")).toBeInTheDocument();
+      tela.rerender(<Palco ativo />);
+      expect(screen.getByText("800 x 400")).toBeInTheDocument();
+      altura.mockReturnValue(624);
+      fireEvent(window, new Event("resize"));
+      expect(screen.getByText("800 x 600")).toBeInTheDocument();
+    } finally { tela.unmount(); largura.mockRestore(); altura.mockRestore(); }
+  });
   it("a foto cabe inteira na altura do palco; lado a lado divide a largura; no celular segue a largura", () => {
     expect(larguraQueCabe(null, 0.8, 1)).toBeNull();
     // Retrato 4:5 num palco largo e baixo: quem manda é a altura (500 de foto * 0,8).
