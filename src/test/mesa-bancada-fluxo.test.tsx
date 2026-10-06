@@ -21,9 +21,9 @@ function Exemplo() {
 describe("Bancada: continuidade real entre ferramentas", () => {
   it("troca pelo ícone e preserva o rascunho", () => {
     render(<Exemplo />); fireEvent.change(screen.getByLabelText("Direção"), { target: { value: "Óculos na loja" } });
-    fireEvent.click(screen.getByRole("button", { name: "Aprovação", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Aprovação" }));
     expect(screen.getByText("Legenda e aprovação")).toBeVisible(); expect(screen.getByLabelText("Direção")).not.toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Gerar", exact: true })); expect(screen.getByLabelText("Direção")).toHaveValue("Óculos na loja");
+    fireEvent.click(screen.getByRole("button", { name: "Gerar" })); expect(screen.getByLabelText("Direção")).toHaveValue("Óculos na loja");
   });
   it("escolhe fotos à esquerda e devolve a prancheta ao concluir", () => {
     render(<Exemplo />); fireEvent.click(screen.getByText("Escolher referências"));

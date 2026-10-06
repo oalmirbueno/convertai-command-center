@@ -47,7 +47,7 @@ describe("Resultados de vídeo por pauta", () => {
   });
   it("inclui a cadeia de versões com trilha e legenda", () => {
     const files = [arquivo("resultado"), arquivo("trilha", { origem: { versao_id: "v1" } }), arquivo("legenda", { origem: { versao_id: "v2" } })];
-    const v = (id: string, fonte: string) => ({ id, client_id: "cliente", projeto: { fontes: { fonte: { arquivo_id: fonte } } } }) as VersaoDeVideo;
+    const v = (id: string, fonte: string) => ({ id, client_id: "cliente", projeto: { fontes: { fonte: { arquivo_id: fonte } } } }) as unknown as VersaoDeVideo;
     expect(resultadosDeVideoDaPauta("cliente", "pauta", files, [pedido()], [v("v1", "resultado"), v("v2", "trilha")])).toHaveLength(3);
   });
   it("aceita vínculo pelo alvo, mas não importa música como resultado", () => {
