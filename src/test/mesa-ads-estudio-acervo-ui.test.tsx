@@ -56,6 +56,8 @@ vi.mock("@/components/mesa-ads/ArteDoCriativo", async (original) => {
   return { ...real, default: () => h("div", { "data-arte-falsa": "" }, "arte") };
 });
 
+vi.mock("@/components/mesa-ads/VideoDoCriativo", () => ({ default: () => h("div", null, "Bancada de vídeo") }));
+
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
 import AbaEstudioAds, { TODOS_NA_SITUACAO } from "@/components/mesa-ads/AbaEstudioAds";
@@ -153,6 +155,23 @@ beforeEach(() => {
 });
 
 describe("Estúdio Ads mais limpo (AD4)", () => {
+  it("no vídeo separa estados reais e filtros das artes entregues", async () => {
+    mock.tabelas.video_pedidos = [{ id: "p1", client_id: CLIENTE, estado: "pronto", parametros: { ads_criativo_id: "c-1" }, criado_em: "2026-10-06" }];
+    mock.tabelas.video_arquivos = [{ id: "v1", client_id: CLIENTE, pedido_id: "p1", estado: "ativo", mime: "video/mp4", storage_path: "video.mp4", criado_em: "2026-10-06" }];
+    montar();
+    await screen.findByText(TODOS_NA_SITUACAO.entregue);
+    fireEvent.click(screen.getByRole("button", { name: "Vídeo", exact: true }));
+    await screen.findByText("Bancada de vídeo");
+    const coluna = screen.getByRole("complementary", { name: "Criativos de vídeo" });
+    expect(within(coluna).queryByText("Entregue")).toBeNull();
+    expect(within(coluna).getByText(/Para revisar.*1 versão/)).toBeInTheDocument();
+    expect(within(coluna).getByText(/Para criar.*sem vídeo/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Situação dos vídeos: Todos (2)" }));
+    fireEvent.click(screen.getByRole("option", { name: "Para criar (1)" }));
+    expect(within(coluna).queryByText(/Para revisar.*1 versão/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Arte", exact: true }));
+    expect(await screen.findByText(TODOS_NA_SITUACAO.entregue)).toBeInTheDocument();
+  });
   it("todos entregues: selo compacto na linha de estado, sem o filtro; um primário (Enviar para a conta) e o resto no ...", async () => {
     montar();
     const linha = await screen.findByText(TODOS_NA_SITUACAO.entregue);

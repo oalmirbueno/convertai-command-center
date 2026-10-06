@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { CriativoAds } from "@/components/mesa-ads/adsApi";
+import { ErroDaMesa } from "@/lib/mesa/api";
 const mock = vi.hoisted(() => ({ enviar: vi.fn(), estado: "pronto", uid: 0, success: vi.fn() }));
 vi.mock("@/components/mesa/MesaContexto", () => ({ useMesa: () => ({ clientId: "cliente", clientName: "Marca", userId: "user", atualizarCusto: vi.fn(), abrirChaves: vi.fn() }) }));
 vi.mock("@/components/sistema/useEstadoDaTela", () => ({ useEstadoDaTela: (_: string, inicial: unknown) => useState(inicial) }));
@@ -42,5 +43,25 @@ it("não chama o provedor sem chave; mantém direção e áudio editáveis", () 
   fireEvent.click(screen.getByRole("button", { name: "Câmera e áudio" }));
   fireEvent.click(screen.getByLabelText("Gerar áudio com o vídeo"));
   expect(screen.getByLabelText(/Narração sugerida/)).toBeInTheDocument();
+  expect(mock.enviar).not.toHaveBeenCalled();
+});
+it("recusa confirmada fica visível e permite novo pedido após corrigir o saldo", async () => {
+  mock.enviar.mockRejectedValueOnce(new ErroDaMesa("provedor_recusou", "Saldo insuficiente na Higgsfield")).mockResolvedValueOnce({ pedido_id: "novo" }); abrir();
+  fireEvent.click(screen.getByRole("button", { name: "Gerar vídeo" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Saldo insuficiente");
+  expect(mock.success).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Gerar vídeo" }));
+  await waitFor(() => expect(mock.enviar).toHaveBeenCalledTimes(2));
+  expect(mock.enviar.mock.calls[0][0].uid).not.toBe(mock.enviar.mock.calls[1][0].uid);
+});
+it("aplica um formato ao contexto sem cobrar nem gerar e mantém a direção editável", () => {
+  abrir();
+  fireEvent.click(screen.getByRole("button", { name: "Formatos de referência" }));
+  fireEvent.click(screen.getByRole("button", { name: /Passo a passo/ }));
+  expect((screen.getByLabelText("Direção do vídeo") as HTMLTextAreaElement).value).toContain("Passo a passo");
+  expect((screen.getByLabelText("Direção do vídeo") as HTMLTextAreaElement).value).toContain("Oferta real");
+  fireEvent.change(screen.getByLabelText("Direção do vídeo"), { target: { value: "Minha direção" } });
+  fireEvent.click(screen.getByRole("button", { name: "Inteligência Ads" }));
+  expect(screen.getByText("Oferta real")).toBeInTheDocument();
   expect(mock.enviar).not.toHaveBeenCalled();
 });

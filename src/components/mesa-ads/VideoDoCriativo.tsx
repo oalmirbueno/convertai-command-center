@@ -1,6 +1,6 @@
 import { lazy, Suspense, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Clapperboard, ImagePlus, Settings2, Send, X } from "lucide-react";
+import { Clapperboard, ImagePlus, Settings2, Send, X, BrainCircuit, Library } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { PreviaDaPauta } from "@/components/mesa/BancadaDaPauta";
@@ -13,16 +13,18 @@ import { chamarMesaVideos, chaveDosPedidos, useArquivosDeVideo, usePedidos } fro
 import { custoNaTela, novoUid, useMotoresDaMesa } from "@/lib/mesa-videos/api";
 import { subirQuadro } from "@/lib/mesa-videos/quadros";
 import { supabase } from "@/integrations/supabase/client";
+import { ErroDaMesa, textoDoErro } from "@/lib/mesa/api";
 import { handoffWorkspaceFileToFiles, type WorkspaceFileForHandoff } from "@/lib/workspaceFileHandoff";
 import { requestFileAgencyReview } from "@/lib/fileApprovalActions";
 import { MOVIMENTOS_DA_HIGGSFIELD } from "../../../supabase/functions/mesa-videos/modulos/video-provedor-higgsfield";
 import { CONCEITOS_DE_VIDEO_ADS, conceitoDeVideo, direcaoDoVideoAds, resultadosDoVideoAds } from "./videoDoAnuncio";
-import type { CriativoAds } from "./adsApi";
+import { FORMATOS_VIDEO_ADS, formatoVideoAds, FONTE_FORMATOS_VIDEO } from "../../../supabase/functions/mesa-ads/modulos/formatos-video-ads";
+import type { Angulo, PlanoAds, CriativoAds } from "./adsApi";
 const SeletorDeFotos = lazy(() => import("@/components/mesa-foto/SeletorDeFotos"));
 
-interface Rascunho { conceito: string; prompt: string; referencias: string[]; formato: string; duracao: number; resolucao: string; audio: boolean; narracao: string; camera: string }
+interface Rascunho { formatoCriativo?: string; conceito: string; prompt: string; referencias: string[]; formato: string; duracao: number; resolucao: string; audio: boolean; narracao: string; camera: string }
 
-export default function VideoDoCriativo({ criativo, referencia }: { criativo: CriativoAds; referencia?: string | null }) {
+export default function VideoDoCriativo({ criativo, referencia, plano, angulo }: { criativo: CriativoAds; referencia?: string | null; plano?: PlanoAds | null; angulo?: Angulo | null }) {
   const { clientId, clientName, userId, isAdmin, atualizarCusto } = useMesa();
   const cache = useQueryClient();
   const motores = useMotoresDaMesa();
@@ -30,11 +32,13 @@ export default function VideoDoCriativo({ criativo, referencia }: { criativo: Cr
   const arquivos = useArquivosDeVideo(clientId);
   const pedidos = usePedidos(clientId);
   const fotos = useFotos(clientId);
-  const [r, setR] = useEstadoDaTela<Rascunho>(`ads:video:v1:${clientId}:${criativo.id}`, { conceito: "produto", prompt: direcaoDoVideoAds(criativo, clientName, "produto"), referencias: referencia?.startsWith(`${clientId}/`) ? [referencia] : [], formato: "9:16", duracao: 6, resolucao: "720p", audio: false, narracao: "", camera: "slow-zoom-in" });
+  const contextoAds = { plano, angulo };
+  const [r, setR] = useEstadoDaTela<Rascunho>(`ads:video:v1:${clientId}:${criativo.id}`, { formatoCriativo: "narrado", conceito: "demonstracao", prompt: direcaoDoVideoAds(criativo, clientName, "demonstracao", { ...contextoAds, formatoId: "narrado" }), referencias: referencia?.startsWith(`${clientId}/`) ? [referencia] : [], formato: "9:16", duracao: 6, resolucao: "720p", audio: false, narracao: "", camera: "tracking" });
   const mudar = (v: Partial<Rascunho>) => setR((p) => ({ ...p, ...v }));
   const [aba, setAba] = useState("direcao");
   const [buscando, setBuscando] = useState(false);
   const [ocupado, setOcupado] = useState(false);
+  const [erroGeracao, setErroGeracao] = useState<string | null>(null);
   const [vista, setVista] = useState<string | null>(null);
   const tentativa = useRef<{ assinatura: string; uid: string } | null>(null);
   const resultados = resultadosDoVideoAds(clientId, criativo.id, arquivos.data?.arquivos || [], pedidos.data?.itens || []);
@@ -42,7 +46,10 @@ export default function VideoDoCriativo({ criativo, referencia }: { criativo: Cr
   const custo = custoNaTela(entrada?.motor || null, { duracao_s: r.duracao, resolucao: r.resolucao, audio: r.audio, referencias: r.referencias.length, variacoes: 1 });
   const prompt = [r.prompt, r.audio && r.narracao.trim() && `Narração em português brasileiro, natural e clara: ${r.narracao.trim()}`].filter(Boolean).join("\n");
   const motivo = ocupado ? "Aguarde o arquivo." : entrada?.estado !== "pronto" ? "Conecte a Higgsfield em Configurações → Chaves e custos." : !prompt.trim() ? "Descreva o vídeo." : prompt.length > 2400 ? "Reduza a direção e a narração para até 2.400 caracteres." : null;
+  const atualizarDirecao = (conceito = r.conceito, formatoId = r.formatoCriativo) => mudar({ conceito, formatoCriativo: formatoId, prompt: direcaoDoVideoAds(criativo, clientName, conceito, { ...contextoAds, formatoId }), camera: conceitoDeVideo(conceito).camera });
   const gerar = async (usd: number) => {
+    setErroGeracao(null);
+    try {
     const corpo = { acao: "gerar_video", client_id: clientId, ads_criativo_id: criativo.id, motor: "higgsfield-cinema-4", tipo: "gerar_livre", modo: r.referencias.length ? "referencia" : "texto", prompt, titulo: `${criativo.nome || criativo.copy.titulo || "Anúncio"} · ${conceitoDeVideo(r.conceito).nome}`, formato: r.formato, duracao_s: r.duracao, resolucao: r.resolucao, audio: r.audio, referencias_paths: r.referencias, camera: r.camera, variacoes: 1, custo_confirmado_usd: usd };
     const assinatura = JSON.stringify(corpo);
     if (tentativa.current?.assinatura !== assinatura) tentativa.current = { assinatura, uid: novoUid() };
@@ -52,6 +59,14 @@ export default function VideoDoCriativo({ criativo, referencia }: { criativo: Cr
     atualizarCusto();
     tentativa.current = null;
     toast.success("Pedido registrado", { description: "Acompanhe o andamento no histórico deste criativo." });
+    } catch (e) {
+      // O servidor confirmou recusa de todos os envios: uma nova tentativa pode ter novo id.
+      // Em queda de rede a situação é incerta; preserve a idempotência para não cobrar duas vezes.
+      if (e instanceof ErroDaMesa && e.codigo === "provedor_recusou") tentativa.current = null;
+      setErroGeracao(textoDoErro(e));
+      await cache.invalidateQueries({ queryKey: chaveDosPedidos(clientId) });
+      throw e;
+    }
   };
   const usarFotos = async (ids: string[]) => {
     setOcupado(true);
@@ -85,19 +100,24 @@ export default function VideoDoCriativo({ criativo, referencia }: { criativo: Cr
     } catch (e) { toast.error(e instanceof Error ? e.message : "Revisão não confirmada."); }
     finally { setOcupado(false); }
   };
-  const abas = [{ id: "direcao", nome: "Direção", Icone: Clapperboard }, { id: "fotos", nome: "Referências", Icone: ImagePlus }, { id: "camera", nome: "Câmera e áudio", Icone: Settings2 }];
+  const abas = [{ id: "inteligencia", nome: "Inteligência Ads", Icone: BrainCircuit }, { id: "formatos", nome: "Formatos de referência", Icone: Library }, { id: "direcao", nome: "Direção", Icone: Clapperboard }, { id: "fotos", nome: "Referências", Icone: ImagePlus }, { id: "camera", nome: "Câmera e áudio", Icone: Settings2 }];
   return <div className="space-y-3" data-ads-video="">
     <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-medium">Higgsfield · Cinema Studio 4.0</span><BotaoDeGerar custo={custo} motivo={motivo} rotulo="Gerar vídeo" onConfirmar={gerar} /></div>
+    {erroGeracao && <p role="alert" className="rounded-md border border-destructive/30 p-3 text-xs">{erroGeracao}</p>}
     {entrada?.estado !== "pronto" && <div className="flex items-center justify-between rounded-lg border p-3 text-xs" role="status"><span>{motores.carregando ? "Conferindo conexão…" : entrada?.estado_rotulo || "Conexão indisponível"} · A direção pode ser preparada agora.</span><div className="flex shrink-0 items-center">{isAdmin && <a className={botao.discreto} href="/config?secao=chaves&chave=higgsfield" target="_blank" rel="noopener noreferrer">Conectar</a>}<button className={botao.discreto} onClick={motores.recarregar}>Conferir conexão</button></div></div>}
     <div className="ads-stage">
       <div className="ads-stage-preview rounded-xl border bg-card p-3">
-        {buscando ? <div className="min-h-0 flex-1 overflow-y-auto"><Suspense fallback={<p>Carregando fotos…</p>}><SeletorDeFotos fotos={(fotos.data || []).filter((f) => !f.referencia_web)} titulo="Referências do cliente" multiplas={false} onFechar={() => setBuscando(false)} onUsar={(ids) => void usarFotos(ids)} /></Suspense></div> : video ? <PreviaDaPauta key={video.id} caminho={video.storage_path} bucket={video.storage_bucket} nome={video.nome} video /> : <div className="flex flex-1 flex-col items-center justify-center gap-4 p-5 text-center"><Clapperboard className="h-10 w-10 text-primary" /><p className="font-medium">{conceitoDeVideo(r.conceito).nome}</p><p className="max-w-lg text-sm text-muted-foreground">{conceitoDeVideo(r.conceito).texto}</p><span className="text-xs text-muted-foreground">{r.duracao}s · {r.formato} · {r.resolucao} · {r.referencias.length} referência(s)</span></div>}
+        {buscando ? <div className="min-h-0 flex-1 overflow-y-auto"><Suspense fallback={<p>Carregando fotos…</p>}><SeletorDeFotos fotos={(fotos.data || []).filter((f) => !f.referencia_web)} titulo="Referências do cliente" multiplas={false} onFechar={() => setBuscando(false)} onUsar={(ids) => void usarFotos(ids)} /></Suspense></div> : video ? <PreviaDaPauta key={video.id} caminho={video.storage_path} bucket={video.storage_bucket} nome={video.nome} video /> : <div className="flex flex-1 flex-col items-center justify-center gap-4 p-5 text-center"><Clapperboard className="h-10 w-10 text-primary" /><p className="font-medium">{conceitoDeVideo(r.conceito).nome}</p><p className="max-w-lg text-sm text-muted-foreground">{conceitoDeVideo(r.conceito).texto}</p><span className="text-xs text-muted-foreground">Português brasileiro · {r.duracao}s · {r.formato} · {r.resolucao} · {r.referencias.length} referência(s)</span></div>}
         {!!resultados.length && <div className="flex items-center gap-2 border-t pt-2"><select aria-label="Versão do vídeo" className={campo} value={video?.id || ""} onChange={(e) => setVista(e.target.value)}>{resultados.map((a, i) => <option key={a.id} value={a.id}>Versão {resultados.length - i} · {a.nome}</option>)}</select><button title="Enviar esta versão para revisão da agência em Arquivos" className={botao.discreto} disabled={ocupado} onClick={() => void entregar()}><Send className="mr-1 h-4 w-4" />Revisão</button></div>}
       </div>
       <div className="ads-stage-tools rounded-xl border bg-card">
         <nav className="flex border-b p-1" aria-label="Ferramentas do vídeo">{abas.map(({ id, nome, Icone }) => <button key={id} title={nome} aria-label={nome} aria-pressed={aba === id} onClick={() => setAba(id)} className={`flex h-9 flex-1 items-center justify-center rounded-md ${aba === id ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}><Icone className="h-4 w-4" /></button>)}</nav>
         <div className="space-y-4 p-3">
-          {aba === "direcao" && <><label className="block text-xs">Conceito<select className={campo} value={r.conceito} onChange={(e) => { const c = conceitoDeVideo(e.target.value); mudar({ conceito: c.id, prompt: direcaoDoVideoAds(criativo, clientName, c.id), camera: c.camera }); }}>{CONCEITOS_DE_VIDEO_ADS.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></label><label className="block text-xs">Direção do vídeo<textarea className={`${campo} mt-1 min-h-[200px] resize-y`} value={r.prompt} onChange={(e) => mudar({ prompt: e.target.value })} /></label><div className="ads-video-options"><label className="text-xs">Formato<select className={campo} value={r.formato} onChange={(e) => mudar({ formato: e.target.value })}>{["9:16", "16:9", "1:1", "3:4"].map((f) => <option key={f}>{f}</option>)}</select></label><label className="text-xs">Duração<select className={campo} value={r.duracao} onChange={(e) => mudar({ duracao: Number(e.target.value) })}>{[4, 6, 8, 10, 15, 20, 30].map((s) => <option key={s} value={s}>{s}s</option>)}</select></label><label className="text-xs">Qualidade<select className={campo} value={r.resolucao} onChange={(e) => mudar({ resolucao: e.target.value })}><option>480p</option><option>720p</option></select></label></div></>}
+          {aba === "inteligencia" && <><h3 className="text-sm font-medium">Inteligência do anúncio</h3><dl className="space-y-3 text-xs">{[
+            ["Campanha", plano?.nome], ["Objetivo", angulo?.objetivo], ["Ângulo", angulo?.nome || criativo.copy.angulo_de_venda], ["Gancho", angulo?.gancho_verbal || criativo.copy.titulo], ["Oferta", criativo.copy.texto_principal], ["Prova informada", angulo?.prova], ["Hipótese", angulo?.hipotese], ["Medir depois", angulo?.metrica], ["Chamada", criativo.copy.cta_meta],
+          ].filter(([,v]) => v).map(([k,v]) => <div key={k}><dt className="text-muted-foreground">{k}</dt><dd className="mt-1 leading-relaxed">{v}</dd></div>)}</dl><button className={botao.secundario} onClick={() => { atualizarDirecao(); toast.success("Direção atualizada com o plano e a copy atuais."); }}>Atualizar pela inteligência Ads</button><p className="text-xs text-muted-foreground">Substitui a direção editável. Usa o plano e a copy da campanha; a conversão do vídeo precisa ser medida após veicular.</p></>}
+          {aba === "formatos" && <><h3 className="text-sm font-medium">Formatos para testar</h3><div className="grid gap-2">{FORMATOS_VIDEO_ADS.map((f) => <button key={f.id} aria-pressed={r.formatoCriativo === f.id} onClick={() => { atualizarDirecao(f.conceito, f.id); setAba("direcao"); }} className={`rounded-lg border p-3 text-left text-xs ${r.formatoCriativo === f.id ? "border-primary bg-primary/5" : "hover:bg-muted"}`}><strong>{f.nome}</strong><span className="mt-1 block text-muted-foreground">{f.estrutura}</span></button>)}</div><a href={FONTE_FORMATOS_VIDEO} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">Referência: guia VK Metrics</a><p className="text-xs text-muted-foreground">Mecanismos adaptados ao seu anúncio. A referência não comprova conversão e não copia vídeos de terceiros.</p></>}
+          {aba === "direcao" && <><label className="block text-xs">Conceito<select className={campo} value={r.conceito} onChange={(e) => { const c = conceitoDeVideo(e.target.value); mudar({ conceito: c.id, formatoCriativo: undefined, prompt: direcaoDoVideoAds(criativo, clientName, c.id, contextoAds), camera: c.camera }); }}>{CONCEITOS_DE_VIDEO_ADS.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>{r.formatoCriativo && <div className="flex items-center justify-between text-xs"><span>{formatoVideoAds(r.formatoCriativo).nome}</span><button className="text-primary" onClick={() => setAba("formatos")}>Trocar formato</button></div>}<button className="text-xs text-primary" onClick={() => atualizarDirecao()}>Atualizar com o plano e a copy</button><label className="block text-xs">Direção do vídeo<textarea className={`${campo} mt-1 min-h-[200px] resize-y`} value={r.prompt} onChange={(e) => mudar({ prompt: e.target.value })} /></label><div className="ads-video-options"><label className="text-xs">Formato<select className={campo} value={r.formato} onChange={(e) => mudar({ formato: e.target.value })}>{["9:16", "16:9", "1:1", "3:4"].map((f) => <option key={f}>{f}</option>)}</select></label><label className="text-xs">Duração<select className={campo} value={r.duracao} onChange={(e) => mudar({ duracao: Number(e.target.value) })}>{[4, 6, 8, 10, 15, 20, 30].map((s) => <option key={s} value={s}>{s}s</option>)}</select></label><label className="text-xs">Qualidade<select className={campo} value={r.resolucao} onChange={(e) => mudar({ resolucao: e.target.value })}><option>480p</option><option>720p</option></select></label></div></>}
           {aba === "fotos" && <><h3 className="text-sm font-medium">Referências · {r.referencias.length}/4</h3>{r.referencias.map((path, i) => <div key={path} className="flex items-center gap-2"><EscolherImagem rotulo={`Referência ${i + 1}`} valor={path} onEscolher={(p) => mudar({ referencias: r.referencias.map((x) => x === path && p ? p : x) })} /><button aria-label={`Remover referência ${i + 1}`} className={botao.icone} onClick={() => mudar({ referencias: r.referencias.filter((x) => x !== path) })}><X className="h-4 w-4" /></button></div>)}{r.referencias.length < 4 && <><EscolherImagem rotulo="Adicionar imagem" valor={null} onEscolher={(p) => p && mudar({ referencias: Array.from(new Set([...r.referencias, p])) })} /><button className={botao.discreto} disabled={ocupado} onClick={() => setBuscando(true)}>Fotos e Workspace do cliente</button></>}<p className="text-xs text-muted-foreground">As imagens orientam o produto, a pessoa e o cenário. Não fixam um quadro exato.</p></>}
           {aba === "camera" && <><label className="block text-xs">Movimento<select className={campo} value={r.camera} onChange={(e) => mudar({ camera: e.target.value })}>{MOVIMENTOS_DA_HIGGSFIELD.map((m) => <option key={m.valor} value={m.valor}>{m.rotulo}</option>)}</select></label><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={r.audio} onChange={(e) => mudar({ audio: e.target.checked })} />Gerar áudio com o vídeo</label>{r.audio && <label className="block text-xs">Narração sugerida (opcional)<textarea className={`${campo} mt-1 min-h-[100px]`} value={r.narracao} onChange={(e) => mudar({ narracao: e.target.value })} /><span className="mt-2 block text-muted-foreground">O motor compõe voz e som. Confira fala e pronúncia na prévia antes de aprovar.</span></label>}</>}
         </div>

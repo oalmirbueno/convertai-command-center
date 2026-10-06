@@ -1,3 +1,4 @@
+import { CONHECIMENTO_FORMATOS_VIDEO_ADS } from "./formatos-video-ads.ts";
 /**
  * Base "criativo que converte" da Mesa Ads (frente CR, pedido do dono em 27/09/2026):
  * "aumentar a inteligência do estúdio do criativo, a base por baixo, repositório,
@@ -351,6 +352,7 @@ export const CONHECIMENTO_CRIATIVO_QUE_CONVERTE = [
   FRAMEWORKS_RESUMO,
   TAMANHOS_DA_COPY,
   SINAIS_DE_FADIGA,
+  CONHECIMENTO_FORMATOS_VIDEO_ADS,
 ].join("\n\n");
 
 /**
@@ -365,11 +367,12 @@ export function formatosParaOPlano(): string {
     ...FORMATOS_QUE_CONVERTEM.map((f) => `- ${f.nome} [${f.estilos.join(", ")}], público ${f.publico}: ${f.quando} Gancho: ${f.gancho}`),
     `Exigem prova real: ${Object.keys(REQUISITOS_DO_ESTILO).map((k) => `${k} (${REQUISITOS_DO_ESTILO[k].map((r) => ROTULO_DO_REQUISITO[r]).join(" e ")})`).join("; ")}.`,
     GANCHOS_DO_PRIMEIRO_SEGUNDO,
+    CONHECIMENTO_FORMATOS_VIDEO_ADS,
   ].join("\n");
 }
 
 export function copyQueConverteParaOPrompt(opcoes: { comLayout?: boolean } = {}): string {
-  return [REGRAS_DA_COPY_QUE_CONVERTE, FRAMEWORKS_RESUMO, TAMANHOS_DA_COPY, opcoes.comLayout ? LAYOUT_QUE_CONVERTE : ""].filter(Boolean).join("\n\n");
+  return [CONHECIMENTO_FORMATOS_VIDEO_ADS, REGRAS_DA_COPY_QUE_CONVERTE, FRAMEWORKS_RESUMO, TAMANHOS_DA_COPY, opcoes.comLayout ? LAYOUT_QUE_CONVERTE : ""].filter(Boolean).join("\n\n");
 }
 
 /** O formato que converte do estilo, em duas linhas para o pedido da copy e da arte. */
