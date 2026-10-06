@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Images, ZoomIn } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Images, ZoomIn } from "lucide-react";
 import { ImagemDaMesa } from "@/components/mesa/MesaContexto";
 import { Ampliar, type ImagemAmpliavel } from "@/components/mesa/Ampliar";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
@@ -10,9 +10,10 @@ const POR_FAIXA = 6;
 const POR_GRADE = 36;
 
 /** Uma faixa curta e uma biblioteca pesquisável; nenhuma versão fica descartada. */
-export default function GaleriaDeFotos({ titulo, fotos, atualId, onSelecionar, onUsar }: {
-  titulo: string; fotos: FotoNaGaleria[]; atualId?: string | null; onSelecionar: (id: string) => void; onUsar?: (ids: string[]) => void;
+export default function GaleriaDeFotos({ titulo, fotos, atualId, onSelecionar, onUsar, recolhivel = false }: {
+  titulo: string; fotos: FotoNaGaleria[]; atualId?: string | null; onSelecionar: (id: string) => void; onUsar?: (ids: string[]) => void; recolhivel?: boolean;
 }) {
+  const [recolhida, setRecolhida] = useState(recolhivel);
   const [pagina, setPagina] = useState(0);
   const [aberta, setAberta] = useState(false);
   const [busca, setBusca] = useState("");
@@ -45,16 +46,16 @@ export default function GaleriaDeFotos({ titulo, fotos, atualId, onSelecionar, o
     {grade && onUsar && <label className={juntar(texto.auxiliar, "mt-1 flex items-center")}><input type="checkbox" className="mr-2" aria-label={`Selecionar ${f.titulo || f.grupo} para o post`} checked={selecao.includes(f.id)} disabled={!selecao.includes(f.id) && selecao.length >= 10} onChange={(e) => setMarcadas((ids) => e.target.checked ? [...ids, f.id] : ids.filter((id) => id !== f.id))} />{selecao.includes(f.id) ? `Posição ${selecao.indexOf(f.id) + 1}` : "Usar no post"}</label>}
   </div>;
   return <section aria-label={titulo} className="min-w-0" data-galeria-de-fotos="">
-    <div className="mb-2 flex flex-wrap items-center justify-between">
-      <h3 className={texto.rotulo}>{titulo} · {fotos.length}</h3>
+    <div className={juntar("flex flex-wrap items-center justify-between gap-2", !recolhida && "mb-2")}>
+      <h3 className={texto.rotulo}>{recolhivel ? <button type="button" className="flex items-center gap-2 py-2 text-foreground" aria-expanded={!recolhida} onClick={() => setRecolhida(!recolhida)}><ChevronDown className={juntar("h-4 w-4 transition-transform", recolhida && "-rotate-90")} />{titulo} · {fotos.length}</button> : <>{titulo} · {fotos.length}</>}</h3>
       <div className="flex items-center space-x-1">
         <button type="button" className={botao.barra} onClick={() => { setAberta(true); setLimite(POR_GRADE); }}><Images className="mr-1 h-3.5 w-3.5" />Organizar fotos</button>
-        <button type="button" className={botao.icone} aria-label="Fotos anteriores" disabled={!paginaVisivel} onClick={() => setPagina(paginaVisivel - 1)}><ChevronLeft className="h-4 w-4" /></button>
+        {!recolhida && <><button type="button" className={botao.icone} aria-label="Fotos anteriores" disabled={!paginaVisivel} onClick={() => setPagina(paginaVisivel - 1)}><ChevronLeft className="h-4 w-4" /></button>
         <span className={texto.etiqueta}>{paginaVisivel + 1}/{ultima + 1}</span>
-        <button type="button" className={botao.icone} aria-label="Próximas fotos" disabled={paginaVisivel === ultima} onClick={() => setPagina(paginaVisivel + 1)}><ChevronRight className="h-4 w-4" /></button>
+        <button type="button" className={botao.icone} aria-label="Próximas fotos" disabled={paginaVisivel === ultima} onClick={() => setPagina(paginaVisivel + 1)}><ChevronRight className="h-4 w-4" /></button></>}
       </div>
     </div>
-    <div className="flex min-w-0 space-x-2 overflow-x-auto pb-1" data-tira-de-versoes="">{faixa.map((f) => miniatura(f))}</div>
+    {!recolhida && <div className="flex min-w-0 space-x-2 overflow-x-auto pb-1" data-tira-de-versoes="">{faixa.map((f) => miniatura(f))}</div>}
     <JanelaCentral aberta={aberta} onFechar={() => setAberta(false)} titulo={titulo} largura="xl" descricao={`${filtradas.length} de ${fotos.length} imagens`}
       abaixoDoTitulo={<div className="flex flex-wrap items-center gap-2">
         <input className={juntar(campo, "w-48 flex-1")} aria-label="Buscar nas fotos" placeholder="Buscar foto, versão ou gerador" value={busca} onChange={(e) => { setBusca(e.target.value); setLimite(POR_GRADE); }} />

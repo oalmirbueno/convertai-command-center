@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
+import "./espacoDaFoto.css";
 
 /** Cada coluna rola na área disponível; a faixa de versões continua acessível. */
-export default function ColunasDaFoto({ children, rodape }: { children: ReactNode; rodape?: ReactNode }) {
+export default function ColunasDaFoto({ children, rodape, foco }: { children: ReactNode; rodape?: ReactNode; foco?: string }) {
   const { ref, altura } = useAlturaQueCabe(true);
-  return <div ref={ref} style={altura ? { height: altura } : undefined} className="flex min-h-0 min-w-0 flex-col gap-3 lg:overflow-hidden" data-colunas-da-foto="">
-    <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row lg:overflow-hidden">{children}</div>
-    {rodape && <div className="min-h-0 shrink-0 overflow-y-auto lg:max-h-52">{rodape}</div>}
+  return <div ref={ref} style={altura ? { height: altura } : undefined} className="foto-area flex min-h-0 flex-col gap-3 lg:overflow-hidden" data-colunas-da-foto="">
+    <div className="foto-colunas" data-foco={foco}>{children}</div>
+    {rodape && <div className="foto-rodape">{rodape}</div>}
   </div>;
 }
