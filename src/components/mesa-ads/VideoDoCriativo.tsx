@@ -23,7 +23,7 @@ const SeletorDeFotos = lazy(() => import("@/components/mesa-foto/SeletorDeFotos"
 interface Rascunho { conceito: string; prompt: string; referencias: string[]; formato: string; duracao: number; resolucao: string; audio: boolean; narracao: string; camera: string }
 
 export default function VideoDoCriativo({ criativo, referencia }: { criativo: CriativoAds; referencia?: string | null }) {
-  const { clientId, clientName, userId, abrirChaves, atualizarCusto } = useMesa();
+  const { clientId, clientName, userId, isAdmin, atualizarCusto } = useMesa();
   const cache = useQueryClient();
   const motores = useMotoresDaMesa();
   const entrada = motores.lista.find((m) => m.motor.id === "higgsfield-cinema-4");
@@ -88,7 +88,7 @@ export default function VideoDoCriativo({ criativo, referencia }: { criativo: Cr
   const abas = [{ id: "direcao", nome: "Direção", Icone: Clapperboard }, { id: "fotos", nome: "Referências", Icone: ImagePlus }, { id: "camera", nome: "Câmera e áudio", Icone: Settings2 }];
   return <div className="space-y-3" data-ads-video="">
     <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-medium">Higgsfield · Cinema Studio 4.0</span><BotaoDeGerar custo={custo} motivo={motivo} rotulo="Gerar vídeo" onConfirmar={gerar} /></div>
-    {entrada?.estado !== "pronto" && <div className="flex items-center justify-between rounded-lg border p-3 text-xs" role="status"><span>{motores.carregando ? "Conferindo conexão…" : entrada?.estado_rotulo || "Conexão indisponível"} · A direção pode ser preparada agora.</span><div className="flex shrink-0 items-center"><button className={botao.discreto} onClick={abrirChaves}>Conectar</button><button className={botao.discreto} onClick={motores.recarregar}>Conferir conexão</button></div></div>}
+    {entrada?.estado !== "pronto" && <div className="flex items-center justify-between rounded-lg border p-3 text-xs" role="status"><span>{motores.carregando ? "Conferindo conexão…" : entrada?.estado_rotulo || "Conexão indisponível"} · A direção pode ser preparada agora.</span><div className="flex shrink-0 items-center">{isAdmin && <a className={botao.discreto} href="/config?secao=chaves&chave=higgsfield" target="_blank" rel="noopener noreferrer">Conectar</a>}<button className={botao.discreto} onClick={motores.recarregar}>Conferir conexão</button></div></div>}
     <div className="ads-stage">
       <div className="ads-stage-preview rounded-xl border bg-card p-3">
         {buscando ? <div className="min-h-0 flex-1 overflow-y-auto"><Suspense fallback={<p>Carregando fotos…</p>}><SeletorDeFotos fotos={(fotos.data || []).filter((f) => !f.referencia_web)} titulo="Referências do cliente" multiplas={false} onFechar={() => setBuscando(false)} onUsar={(ids) => void usarFotos(ids)} /></Suspense></div> : video ? <PreviaDaPauta key={video.id} caminho={video.storage_path} bucket={video.storage_bucket} nome={video.nome} video /> : <div className="flex flex-1 flex-col items-center justify-center gap-4 p-5 text-center"><Clapperboard className="h-10 w-10 text-primary" /><p className="font-medium">{conceitoDeVideo(r.conceito).nome}</p><p className="max-w-lg text-sm text-muted-foreground">{conceitoDeVideo(r.conceito).texto}</p><span className="text-xs text-muted-foreground">{r.duracao}s · {r.formato} · {r.resolucao} · {r.referencias.length} referência(s)</span></div>}
