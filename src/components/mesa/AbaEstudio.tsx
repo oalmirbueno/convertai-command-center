@@ -1,4 +1,6 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ControlesDaPauta } from "./ControlesDaPauta";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -20,6 +22,7 @@ import {
   RotateCcw,
   Send,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   Square,
   Star,
@@ -410,6 +413,7 @@ function DetalheDoItem({
   /** Frente AE: arte rápida (sem item da Agenda): a barra mostra o pedido e a Entrega vira "Levar para a Agenda". */
   rapida?: ModoRapidoDoDetalhe | null;
 }) {
+  const controlesDaPauta = useContext(ControlesDaPauta);
   const mesa = useMesa();
   const { clientId, catalogo } = mesa;
   // 02/10: na arte rápida, todo aviso diz de qual cliente é a arte.
@@ -1382,7 +1386,7 @@ function DetalheDoItem({
   // o item, os ajustes da geração, a ação principal e a tela cheia (só o ícone) numa faixa só, que quebra
   // em duas quando não cabe. Nenhuma função saiu: a explicação de cada chave está no "?" ou na dica.
   const barraDoItem = (
-    <div className="shrink-0 border-b border-border">
+    <div className="shrink-0 border-b border-primary">
       <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 px-3 py-1.5" data-barra-do-item="">
         <div className="flex min-w-[140px] flex-1 basis-[150px] items-center">
           {temRoteiro && (
@@ -1409,11 +1413,18 @@ function DetalheDoItem({
             </div>
             {seletorDeQualidade}
             {seletorDeGerador}
-            {chaveCorrigirSozinho}
             {botaoDoDiretor}
-            {trabalho && <BotaoDoEstilo compacto trabalhoIds={[trabalho.id]} modeloImagemId={modeloImagem || null} className="shrink-0" />}
+            <Popover>
+              <PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Ajustes da geração" title="Correção automática e estilo do cliente"><SlidersHorizontal className="h-4 w-4" /></Button></PopoverTrigger>
+              <PopoverContent align="end" className="w-80 space-y-3">
+                <p className="text-[13px] font-semibold">Ajustes da geração</p>
+                {chaveCorrigirSozinho}
+                {trabalho && <BotaoDoEstilo compacto trabalhoIds={[trabalho.id]} modeloImagemId={modeloImagem || null} className="shrink-0" />}
+              </PopoverContent>
+            </Popover>
           </div>
         )}
+        {controlesDaPauta}
         {estado === "producao" && acaoPrincipal}
         {/* Frente AP: arte entregue → Agendar (data do conteúdo, perfil e se vai postar), só admin e gestor. */}
         {trabalho && <AgendarDoEstudio trabalho={trabalho} item={item} className="shrink-0 px-2.5" />}
