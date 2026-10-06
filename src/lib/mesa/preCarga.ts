@@ -80,7 +80,7 @@ export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/me
     campoOnde: "etapa",
     etapas: {
       acervo: () => import("@/components/mesa-foto/EtapaAcervo"),
-      kits: () => import("@/components/mesa-foto/EtapaKits"),
+      kits: () => import("@/components/mesa-foto/OrganizadorDeProdutos"),
       compor: () => import("@/components/mesa-foto/ComposicaoRapida"),
       combinar: () => import("@/components/mesa-foto/CombinarFotos"),
       preparar: () => import("@/components/mesa-foto/EtapaPreparar"),

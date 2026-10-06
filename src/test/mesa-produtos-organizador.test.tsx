@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import OrganizadorDeProdutos from "@/components/mesa-foto/OrganizadorDeProdutos";
 import { normalizarFoto, normalizarKit } from "@/components/mesa-foto/fotoApi";
 import { organizarFotosPorProduto } from "@/components/mesa-foto/pastasDosProdutos";
+import { MESAS_DO_PAINEL } from "@/lib/mesa/preCarga";
+import { preCarregarModulo } from "@/lib/lazyComPreCarga";
 
 const m = vi.hoisted(() => ({ fotos: [] as any[], kits: [] as any[], org: [] as any[], mover: vi.fn(), salvar: vi.fn(), escolher: vi.fn(), navegar: vi.fn(), refetch: vi.fn(), erro: vi.fn() }));
 vi.mock("@/components/mesa/MesaContexto", () => ({ useMesa: () => ({ clientId: "c1", catalogo: {} }) }));
@@ -25,6 +27,10 @@ beforeEach(() => {
   m.mover.mockResolvedValue({ pasta: "Coleção" }); m.salvar.mockResolvedValue({ ...m.kits[0] });
 });
 describe("organizador de produtos", () => {
+  it("o acesso direto pré-carrega o mesmo organizador do seletor", async () => {
+    const modulo = await preCarregarModulo("mesa-foto/kits", MESAS_DO_PAINEL["/mesa-foto"].etapas.kits);
+    expect(modulo.default).toBe(OrganizadorDeProdutos);
+  });
   it("seleciona o produto da pasta e leva o ID à ferramenta existente", () => {
     montar(); fireEvent.click(screen.getByRole("button", { name: "Usar produto" }));
     expect(m.escolher).toHaveBeenCalledWith("p1");
