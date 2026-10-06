@@ -18,7 +18,7 @@ describe("Vídeos dos criativos Ads", () => {
     }
   });
   it("isola resultados por cliente e criativo, exclui imagens e arquivos arquivados", () => {
-    const pedidos = [{ id: "p1", client_id: "c1", parametros: { ads_criativo_id: "a1" } }, { id: "p2", client_id: "c1", parametros: { ads_criativo_id: "a2" } }, { id: "p3", client_id: "c2", parametros: { ads_criativo_id: "a1" } }] as PedidoDeVideo[];
+    const pedidos = [{ id: "p1", client_id: "c1", parametros: { ads_criativo_id: "a1" } }, { id: "p2", client_id: "c1", parametros: { ads_criativo_id: "a2" } }, { id: "p3", client_id: "c2", parametros: { ads_criativo_id: "a1" } }] as unknown as PedidoDeVideo[];
     const base = { client_id: "c1", pedido_id: "p1", estado: "pronto", mime: "video/mp4", criado_em: "2026-10-06" };
     const arquivos = [{ ...base, id: "ok" }, { ...base, id: "other", pedido_id: "p2" }, { ...base, id: "tenant", pedido_id: "p3", client_id: "c2" }, { ...base, id: "image", mime: "image/png" }, { ...base, id: "deleted", estado: "arquivado" }] as ArquivoDeVideo[];
     expect(resultadosDoVideoAds("c1", "a1", arquivos, pedidos).map((a) => a.id)).toEqual(["ok"]);
@@ -35,4 +35,10 @@ describe("Vídeos dos criativos Ads", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(fetchImpl.mock.calls[0][1].headers).toMatchObject({ "Idempotency-Key": "pedido-1-0", Authorization: "Key fixture-id:fixture-secret" });
   });
+  it("aceita a chave copiada inteira, sem exigir ou anexar um segundo segredo", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ request_id: "req-full", status: "queued" }), { status: 200 }));
+    await enviarNaHiggsfield("higgsfield/cinema-studio/4.0", { prompt: "Produto" }, { chave: "fixture-id:fixture-secret", segredo: "legacy", fetchImpl });
+    expect(fetchImpl.mock.calls[0][1].headers.Authorization).toBe("Key fixture-id:fixture-secret");
+  });
+
 });

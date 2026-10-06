@@ -112,7 +112,7 @@ export function corpoDaHiggsfield(m: MotorDeVideo, e: EntradaDaGeracao): Record<
 }
 
 const cabecalhos = (c: Credenciais, json = true): Record<string, string> => {
-  const h: Record<string, string> = { Authorization: `Key ${c.chave}:${c.segredo || ""}` };
+  const h: Record<string, string> = { Authorization: `Key ${c.chave.includes(":") || !c.segredo ? c.chave : `${c.chave}:${c.segredo}`}` };
   if (json) h["Content-Type"] = "application/json";
   return h;
 };
@@ -161,7 +161,7 @@ const urlDoStatus = (id: string) => `${HIGGSFIELD_BASE}/requests/${encodeURIComp
 
 /** Envia UM pedido. Não repete. */
 export async function enviarNaHiggsfield(endpoint: string, corpo: Record<string, unknown>, c: Credenciais, opcoes?: { idempotencia?: string | null }): Promise<EnviadoAoProvedor> {
-  if (!c.chave || !c.segredo) throw new ErroDoProvedor("chave_invalida", `Falta a chave da Higgsfield (${CHAVES}).`);
+  if (!c.chave) throw new ErroDoProvedor("chave_invalida", `Falta a chave da Higgsfield (${CHAVES}).`);
   if (ROTAS_DA_HIGGSFIELD.indexOf(endpoint) < 0) throw new ErroDoProvedor("parametros", "Rota da Higgsfield fora da lista.");
   const r = await pedirJson(c.fetchImpl || fetch, `${HIGGSFIELD_BASE}/${endpoint}`, { method: "POST", headers: { ...cabecalhos(c), ...(opcoes?.idempotencia ? { "Idempotency-Key": opcoes.idempotencia } : {}) }, body: JSON.stringify(corpo) });
   if (r.status < 200 || r.status >= 300 || !r.corpo) throw erroDaHiggsfield(r.status, r.corpo);

@@ -602,7 +602,7 @@ export default function AbaEstudioAds({
         </div>
         {/* O "...": o secundário num lugar só (estilo, importar, copy do plano e o que não é o primário agora). */}
         {midia === "arte" && maisAberto && (
-          <div className="mt-2 flex min-w-0 flex-wrap items-center border-t border-border pt-2" hidden={midia === "video"}
+          <div className="mt-2 flex min-w-0 flex-wrap items-center border-t border-border pt-2"
                 aria-label="Mais ações do Estúdio Ads" role="group" data-menu-mais="">
             {primario !== "gerar" && laminasPendentes > 0 && <span className="mb-1 mr-2 inline-flex items-center">{botaoGerar(false)}</span>}
             {primario !== "entregar" && prontos.length > 0 && <span className="mb-1 mr-2 inline-flex items-center">{botaoEntregar(false)}</span>}
@@ -822,7 +822,7 @@ export default function AbaEstudioAds({
                 </div>
               </div>
               {midia === "arte" && maisDoCriativo && (
-                <div className="mt-1 flex min-w-0 flex-wrap items-center" role="group" hidden={midia === "video"}
+                <div className="mt-1 flex min-w-0 flex-wrap items-center" role="group"
                     aria-label="Mais do criativo">
                   <label className="mb-1 mr-3 flex items-center text-[11.5px] text-muted-foreground">
                     <span className="mr-1.5">Status</span>

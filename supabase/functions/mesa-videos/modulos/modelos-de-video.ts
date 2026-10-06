@@ -729,6 +729,7 @@ export const ROTULO_DO_ESTADO_DO_MOTOR: Record<EstadoDoMotor, string> = {
 /** Nomes dos segredos que o motor pede e que não existem (nunca o valor). */
 export function chavesQueFaltam(m: MotorDeVideo, temChave: (nome: string) => boolean): string[] {
   if (m.provedor === "painel") return [];
+  if (m.provedor === "higgsfield") return temChave(m.chave_env) ? [] : [m.chave_env];
   return [m.chave_env, m.segredo_env || ""].filter((n) => !!n && !temChave(n));
 }
 

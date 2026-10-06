@@ -18,7 +18,7 @@ Fontes conferidas:
 
 - `gerar_video` aceita `ads_criativo_id` opcional. O servidor valida UUID e vínculo ao cliente autorizado antes de gerar. Não usa tarefa fictícia.
 - Histórico e resultados usam `video_pedidos.parametros.ads_criativo_id`, além do cliente e pedido. Rascunhos locais usam cliente + criativo.
-- Higgsfield: Authorization Key com o par de credenciais, somente no servidor; Idempotency-Key por pedido/variação. Tela mantém UID quando a resposta se perde.
+- Higgsfield: Authorization Key com a API Key completa copiada de open.higgsfield.ai/api-keys, somente no servidor; compatibilidade com o par legado de ID/segredo; Idempotency-Key por pedido/variação. Tela mantém UID quando a resposta se perde.
 - Duração 4–30 s; 480p/720p. Formato 3:4 explícito, mantendo compatibilidade do antigo 4:5 convertido para 3:4.
 - Custo estimado sem vídeo de entrada: 0,2057 USD/s em 480p e 0,4623 USD/s em 720p. A API cobra tokens; o preço segue sinalizado como estimativa.
 - Referências: arte atual, acervo, upload ou Workspace. Imagens orientam o modelo; não garantem quadro exato. Áudio/narração são gerados pelo modelo e exigem conferência humana.
@@ -32,3 +32,5 @@ Testes cobrem conceitos, isolamento, custo por resolução, payload do provedor,
 No início da implementação não havia chave Higgsfield no cofre nem nos secrets. Almir informou que irá cadastrá-la no painel. Até a conexão ser confirmada, o botão Gerar fica bloqueado; não declarar geração real validada. Após cadastrar, usar Conferir conexão e validar um vídeo com custo confirmado, prévia, persistência e revisão.
 
 Rollback: reverter o commit do lote e republicar o frontend; restaurar o bundle anterior de mesa-videos se necessário. Os campos opcionais são compatíveis com pedidos antigos.
+
+Cadastro atualizado: um campo API Key completa no painel, com link para a tela oficial. Cole o valor de Copy API key; os trechos Python/TypeScript são exemplos, não credenciais.

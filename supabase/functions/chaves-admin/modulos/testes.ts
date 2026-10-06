@@ -236,10 +236,10 @@ const TESTADORES: Record<IdDoProvedor, Testador> = {
   },
 
   async higgsfield(v, buscar) {
-    if (!v.HIGGSFIELD_API_KEY || !v.HIGGSFIELD_API_SECRET) return semTeste("A Higgsfield precisa do id da chave e do segredo.");
+    if (!v.HIGGSFIELD_API_KEY) return semTeste("Cole a API Key completa da Higgsfield.");
     const r = await pedir(buscar, "https://api.higgsfield.ai/requests/00000000-0000-4000-8000-000000000000/status", {
       method: "GET",
-      headers: { Authorization: `Key ${v.HIGGSFIELD_API_KEY}:${v.HIGGSFIELD_API_SECRET}` },
+      headers: { Authorization: `Key ${v.HIGGSFIELD_API_KEY.includes(":") || !v.HIGGSFIELD_API_SECRET ? v.HIGGSFIELD_API_KEY : `${v.HIGGSFIELD_API_KEY}:${v.HIGGSFIELD_API_SECRET}`}` },
     });
     // O pedido não existe de propósito: 404 (ou 422) quer dizer que a chave passou.
     if (r.status === 404 || r.status === 422 || r.status === 400) return valida("Chave válida.", { sem_saldo_pela_api: true }, r.status);
