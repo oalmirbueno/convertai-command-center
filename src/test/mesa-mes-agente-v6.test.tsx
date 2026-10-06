@@ -158,8 +158,21 @@ describe("agente do mês: planejar o mês conversando", () => {
       client_id: CLIENTE,
       mensagem: "Quero focar em pedidos pelo WhatsApp",
       mes: "2026-10",
+      aplicar_direto: true,
     });
     expect(chamadasDe("pedido_livre").length).toBe(0);
+  });
+
+  it("Criar também recebe novembro selecionado e nunca cai no pedido avulso de um item", async () => {
+    mock.invoke.mockResolvedValue({ data: { resposta: "Proposta pronta", mensagem_id: "m1" }, error: null });
+    montar(h(AgenteDoMes, { mesInicial: "2026-11-01", modoInicial: "criar" }));
+    fireEvent.change(screen.getByLabelText("Pedido ao agente do mês"), { target: { value: "Coloque fotos e vídeos no meio dos conteúdos do mês" } });
+    const enviar = screen.getByRole("button", { name: /Enviar/ });
+    await waitFor(() => expect(enviar).not.toBeDisabled());
+    fireEvent.click(enviar);
+    await waitFor(() => expect(chamadasDe("planejar_mes")).toHaveLength(1));
+    expect(chamadasDe("planejar_mes")[0]).toMatchObject({ mes: "2026-11", aplicar_direto: true });
+    expect(chamadasDe("pedido_livre")).toHaveLength(0);
   });
 
   it("os atalhos mudam com o modo e só preenchem o campo", () => {

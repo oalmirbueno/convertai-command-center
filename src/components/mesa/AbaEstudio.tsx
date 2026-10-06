@@ -2348,8 +2348,8 @@ export default function AbaEstudio({
   // A lista abre nos próximos 60 dias; escolher um mês muda para aquele mês (e a URL acompanha).
   const [modoDaLista, setModoDaLista] = useEstadoGuardado<"proximos" | "mes">(`mesa:estudio:lista:${clientId}`, "proximos");
   const [filtroGuardado, setFiltro] = useEstadoGuardado<Filtro>(`mesa:estudio:filtro:${clientId}`, "a_fazer");
-  // Frente AE-2: em tela baixa (menos de 760 px de altura), a faixa já abre recolhida (a pauta troca pelo seletor da barra).
-  const [recolhida, setRecolhida] = useEstadoGuardado<boolean>("mesa:estudio:pautas-recolhidas", typeof window !== "undefined" && (window.innerHeight || 900) < 760);
+  // Mesmo padrão em todos os clientes e alturas: esteira aberta. Recolher é escolha explícita da pessoa.
+  const [recolhida, setRecolhida] = useEstadoGuardado<boolean>("mesa:estudio:pautas-recolhidas:v2", false);
   const filtro = filtroValido(filtroGuardado);
   const janela = modoDaLista === "proximos" ? PROXIMOS_DIAS : mes;
   const dados = useItensDoMes(clientId, janela, true);

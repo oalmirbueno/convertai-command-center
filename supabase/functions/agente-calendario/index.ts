@@ -1,3 +1,6 @@
+import { criarLoteNaAgenda } from "./criar-lote-na-agenda.ts";
+import { camposDoFormato, gravarPassosDoFormato, desfazerPassosDoFormato, type PassoDoFormato } from "./mudanca-de-formato.ts";
+import { promptAtualDoMes, CAPACIDADES_DO_MES, podeAplicarDireto, atualizarConfirmado } from "./execucao-do-mes.ts";
 import { normalizarVideoDaPauta, ESQUEMA_VIDEO_DA_PAUTA, ORIENTACAO_VIDEO_DA_PAUTA, type DirecaoDeVideoDaPauta } from "../_shared/video-da-pauta.ts";
 /**
  * agente-calendario: o estrategista editorial da Mesa do cliente
@@ -713,7 +716,7 @@ function normalizarTema(bruto: unknown, id: string, anterior?: Tema): Tema {
   const o = (bruto ?? {}) as Record<string, unknown>;
   // 02/10: o tema pode sugerir peça de foto (Mesa Foto).
   const sugerido = formatoDoMes(o.formato_sugerido);
-  const fmt: Formato = sugerido === "foto" || sugerido === "estatico" ? sugerido : "carrossel";
+  const fmt: Formato = sugerido === "foto" || sugerido === "estatico" || sugerido === "video" ? sugerido : "carrossel";
   return {
     id,
     tema: texto(o.tema, 200),
@@ -1372,6 +1375,7 @@ function relogio() {
 const REGRAS_DE_SAIDA = `
 REGRAS DESTA EXECUÇÃO NO PAINEL:
 - Use somente os dados reais recebidos e o que a pesquisa na web trouxer. Nunca invente métrica, resultado, diferencial ou informação local. Dado ausente vira hipótese declarada.
+${CAPACIDADES_DO_MES}
 - Formatos permitidos: carrossel, post estático, foto e vídeo rápido. Respeite o formato pedido.
 ${ORIENTACAO_VIDEO_DA_PAUTA}
 - Publicações só de segunda a sexta, dentro do período.
@@ -1409,8 +1413,8 @@ const MAPA_DO_PAINEL_NA_CONVERSA = blocoDoMapaDoPainel("mes");
  * do painel entra antes das regras de saída.
  */
 function sistemaDoCalendario(ctx: Pick<Contexto, "prompt">, momento: MomentoDoCalendario, uso: "geracao" | "conversa" = "geracao"): string {
-  if (uso === "conversa") return `${ctx.prompt}\n\n${CONHECIMENTO_DO_CALENDARIO[momento]}\n\n${MAPA_DO_PAINEL_NA_CONVERSA}\n${REGRAS_DE_SAIDA}`;
-  return `${ctx.prompt}\n\n${CONHECIMENTO_DO_CALENDARIO[momento]}\n${REGRAS_DE_SAIDA}`;
+  if (uso === "conversa") return `${promptAtualDoMes(ctx.prompt)}\n\n${CONHECIMENTO_DO_CALENDARIO[momento]}\n\n${MAPA_DO_PAINEL_NA_CONVERSA}\n${REGRAS_DE_SAIDA}`;
+  return `${promptAtualDoMes(ctx.prompt)}\n\n${CONHECIMENTO_DO_CALENDARIO[momento]}\n${REGRAS_DE_SAIDA}`;
 }
 
 /**
@@ -3769,7 +3773,7 @@ async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: R
   if (corpo.rotear === true) {
     const rota = await rotaDoPedidoLivre(servico, chamador, clientId, mensagem);
     if (rota.mudar) {
-      const r = await planejarMes(servico, chamador, { ...corpo, acao: "planejar_mes", mes: hojeSaoPaulo().slice(0, 7), roteado: true });
+      const r = await planejarMes(servico, chamador, { ...corpo, acao: "planejar_mes", mes: mesDoPedido(corpo.mes) || hojeSaoPaulo().slice(0, 7), roteado: true });
       const dados = (await r.json()) as Record<string, unknown>;
       return json({ ...dados, roteado_para: "planejar_mes", rota });
     }
@@ -3857,7 +3861,7 @@ ${REGRAS_DOS_ITENS}`;
       project_id: projectId,
       periodo_inicio: itens[0].data,
       periodo_fim: itens[itens.length - 1].data,
-      parametros: { origem: "pedido_livre", mensagem, anexos: anexos.caminhos, campanha_id: campanha?.id ?? null, modelo: modelo.id },
+      parametros: { origem: "pedido_livre", mensagem, anexos: anexos.caminhos, campanha_id: campanha?.id ?? null, modelo: modelo.id, ...(corpo.criacao_ref ? { criacao_ref: String(corpo.criacao_ref) } : {}) },
       status: "pronta",
       diagnostico: null,
       temas: [],
@@ -5333,7 +5337,7 @@ const ESQUEMA_PLANO_DO_MES = obj({
   resumo: S("string"),
   frequencia_semanal: S(["integer", "null"]),
   // 02/10: a mistura pedida por semana (ex.: 2 fotos e 1 carrossel); null quando não foi combinada.
-  mistura_semanal: { ...obj({ fotos: S("integer"), carrosseis: S("integer"), estaticos: S("integer") }), type: ["object", "null"] },
+  mistura_semanal: { ...obj({ fotos: S("integer"), carrosseis: S("integer"), estaticos: S("integer"), videos: S("integer") }), type: ["object", "null"] },
   pilares: { type: "array", items: S("string") },
   formatos: S("string"),
   datas: { type: "array", items: S("string") },
@@ -5363,7 +5367,7 @@ export const ESQUEMA_PLANEJAMENTO = {
         apagar: { type: "array", items: S("string") },
         refazer: { type: "array", items: S("string") },
         mudar_data: { type: "array", items: obj({ ref: S("string"), data: S("string") }) },
-        mudar_formato: { type: "array", items: obj({ ref: S("string"), formato: S("string") }) },
+        mudar_formato: { type: "array", items: obj({ ref: S("string"), formato: S("string"), video: ESQUEMA_VIDEO_DA_PAUTA, foto: { ...ESQUEMA_DA_DIRECAO_DE_FOTO, type: ["object", "null"] } }) },
         editar_campanhas: {
           type: "array",
           items: obj({ ref: S("string"), nome: S("string"), status: S("string"), periodo_inicio: S("string"), periodo_fim: S("string") }),
@@ -5465,7 +5469,7 @@ export function textoDoPlano(mes: string, bruto: unknown): string | null {
 /** "2 fotos e 1 carrossel" a partir de { fotos, carrosseis, estaticos }; vazio quando não há. */
 export function textoDaMistura(bruto: unknown): string {
   const o = (bruto && typeof bruto === "object" ? bruto : {}) as Record<string, unknown>;
-  const c = cadenciaDosNumeros({ fotos: o.fotos, carrosseis: o.carrosseis, estaticos: o.estaticos });
+  const c = cadenciaDosNumeros({ fotos: o.fotos, carrosseis: o.carrosseis, estaticos: o.estaticos, videos: o.videos });
   return c && c.mix ? fraseDaCadencia({ ...c, mix: { ...c.mix, arte: 0 } }).replace(/^\d+ por semana: /, "") : "";
 }
 
@@ -6078,7 +6082,7 @@ export function cadenciaDoPlanejamento(
   if (lida) return lida;
   if (!doModelo) return null;
   const mistura = (doModelo.mistura_semanal && typeof doModelo.mistura_semanal === "object" ? doModelo.mistura_semanal : {}) as Record<string, unknown>;
-  return cadenciaDosNumeros({ por_semana: doModelo.frequencia_semanal, fotos: mistura.fotos, carrosseis: mistura.carrosseis, estaticos: mistura.estaticos }, "modelo");
+  return cadenciaDosNumeros({ por_semana: doModelo.frequencia_semanal, fotos: mistura.fotos, carrosseis: mistura.carrosseis, estaticos: mistura.estaticos, videos: mistura.videos }, "modelo");
 }
 
 async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
@@ -6385,13 +6389,29 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   if (erroMsg || !msgAgente) {
     throw new ErroHttp(503, "resposta_nao_guardada", "O agente respondeu, mas a resposta não foi guardada. Tente de novo.", { uso_id: s.usoId, custo_usd: s.custoUsd });
   }
+  let execucao: Record<string, unknown> | null = null;
+  if (corpo.aplicar_direto === true && podeAplicarDireto(acaoNaAgenda)) {
+    try {
+      const feita = await executarAcaoNaAgenda(servico, chamador, { mensagem_id: msgAgente.id });
+      execucao = await feita.json();
+    } catch (e) {
+      execucao = { falhas: 1, erro: e instanceof Error ? e.message : "A alteração não foi aplicada." };
+      await registrarMensagens(servico, conversaId, clientId, [{ papel: "sistema", conteudo: `Não concluído: ${String(execucao!.erro)} A proposta de alteração está no cartão; não envie o pedido novamente para gerar outra cobrança.` }]);
+    }
+  }
+  if (!acaoNaAgenda && !criacao && !geracao && !mudanca) {
+    await registrarMensagens(servico, conversaId, clientId, [{ papel: "sistema", conteudo: "Nenhum conteúdo foi criado ou alterado na agenda nesta resposta. O plano/conversa não é uma execução." }]);
+  }
   console.log("[agente-calendario] planejar_mes v2", { client_id: clientId, modelo: modelo.id, raciocinio, tokens: orcamento.tokens, cortes: orcamento.cortes, pecas: pecasDaAgenda.length, mcp: mcp.ativos, arquivos: arquivos.lidos.length, publico: decisaoDoPublico.decisao });
 
   return json({
     resposta,
     planos,
     mudanca,
-    acao_agenda: acaoNaAgenda ? { ...acaoNaAgenda, mes, pedido: mensagem.slice(0, 1500) } : null,
+    acao_agenda: execucao?.anexo || (acaoNaAgenda ? { ...acaoNaAgenda, mes, pedido: mensagem.slice(0, 1500) } : null),
+    execucao,
+    ...(Number(execucao?.falhas) > 0 ? { parcial: true, motivo: "Nem todas as alterações foram confirmadas. Confira o resultado no cartão da agenda antes de continuar." } : {}),
+    ...(!acaoNaAgenda && !criacao && !geracao && !mudanca && pedeMudanca ? { falhou: true, motivo: "Esta resposta não trouxe uma alteração executável. Nenhum conteúdo foi criado ou alterado na agenda." } : {}),
     aprendizado: aprendizado.anexo,
     gerar_conteudos: geracao,
     criar_conteudos: criacao,
@@ -6712,7 +6732,7 @@ async function acaoDaMensagem(servico: SupabaseClient, chamador: Chamador, mensa
   return { m, acao, gravar };
 }
 
-type ResultadoDaAcao = { task_id: string; titulo: string; ok: boolean; motivo?: string; memoria_id?: string | null; de?: string | null; para?: string };
+type ResultadoDaAcao = { task_id: string; titulo: string; ok: boolean; motivo?: string; memoria_id?: string | null; de?: string | null; para?: string; passos?: PassoDoFormato[] };
 type ResultadoDaCampanha = { campanha_id: string; titulo: string; ok: boolean; motivo?: string; antes?: Record<string, unknown>; depois?: Record<string, unknown> };
 
 /** Motivo que impede mexer numa peça gravada (publicação agendada ou no ar, arte aprovada ou agendada). Null quando pode. */
@@ -6891,15 +6911,15 @@ async function reescreverTextos(servico: SupabaseClient, clientId: string, edico
         const mudar: Record<string, unknown> = {};
         if (titulo) mudar.title = titulo.slice(0, 200);
         if (ed.campos.copy) mudar.default_caption = ed.campos.copy;
-        if (post && Object.keys(mudar).length) await servico.from("editorial_posts").update(mudar).eq("id", x.postId);
+        if (post && Object.keys(mudar).length) await atualizarConfirmado(servico.from("editorial_posts").update(mudar).eq("id", x.postId).eq("client_id", clientId));
       }
       const mudarTarefa: Record<string, unknown> = { description: descricao };
       if (titulo) mudarTarefa.title = titulo.slice(0, 200);
-      const { error } = await servico.from("tasks").update(mudarTarefa).eq("id", tarefa.id).is("deleted_at", null);
-      if (error) throw new Error("Não foi possível reescrever esta peça. Tente de novo.");
+      await atualizarConfirmado(servico.from("tasks").update(mudarTarefa).eq("id", tarefa.id).is("deleted_at", null));
       // Prova: relê a peça gravada (o cartão mostra o antes e o depois). O antes fica guardado para o Desfazer.
       const { data: relida } = await servico.from("tasks").select("title, description").eq("id", tarefa.id).maybeSingle();
       const depois = (relida as DepoisDoTexto | null) ?? null;
+      if (!depois || depois.description !== descricao || (titulo && depois.title !== titulo.slice(0, 200))) throw new Error("A reescrita não foi confirmada no banco. Confira a peça antes de repetir.");
       resultados.push({
         task_id: tarefa.id,
         titulo: ed.titulo,
@@ -6923,8 +6943,11 @@ async function reescreverTextos(servico: SupabaseClient, clientId: string, edico
   for (const id of tocadas) {
     const prop = propostas.get(id);
     if (!prop) continue;
-    const { error } = await servico.from("calendario_propostas").update({ itens: prop.itens }).eq("id", id).eq("client_id", clientId);
-    if (error) console.error("[agente-calendario] roteiro reescrito nao gravado na proposta", { proposta_id: id, code: error.code });
+    try {
+      await atualizarConfirmado(servico.from("calendario_propostas").update({ itens: prop.itens }).eq("id", id).eq("client_id", clientId));
+    } catch {
+      for (const r of resultados.filter((r) => r.antes?.proposta_id === id)) { r.ok = false; r.motivo = "Alteração parcial: o texto da tarefa mudou, mas o roteiro não foi salvo. Confira a proposta antes de continuar."; }
+    }
   }
   return resultados;
 }
@@ -6964,6 +6987,32 @@ async function desfazerTextos(servico: SupabaseClient, clientId: string, lista: 
  * guardada no Estúdio. Cada item responde por si; o que não pôde volta com o
  * motivo. Dá para desfazer (desfazer_acao_agenda).
  */
+async function criarLoteConfirmado(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const id = String(corpo.mensagem_id || "");
+  if (!UUID.test(id)) throw new ErroHttp(400, "mensagem_invalida", "Informe a mensagem da criação.");
+  const { data: mensagem, error } = await servico.from("agente_mensagens").select("id, client_id, anexos").eq("id", id).single();
+  if (error || !mensagem) throw new ErroHttp(404, "mensagem_inexistente", "A proposta de criação não foi encontrada.");
+  await exigirAcessoAoCliente(chamador, mensagem.client_id);
+  let r;
+  try { r = await criarLoteNaAgenda(servico, mensagem, Number(corpo.lote), {
+    criar: async (pedido) => {
+      const resposta = await pedidoLivre(servico, chamador, { ...pedido, marca_id: corpo.marca_id });
+      if (!resposta.ok) throw new Error("Não foi possível preparar o lote.");
+      return resposta.json();
+    },
+    gravar: async (p) => {
+      const resposta = await gravar(servico, chamador, { proposta_id: p.id, project_id: p.project_id });
+      const dados = await resposta.json();
+      if (!resposta.ok) throw new Error(dados.message || "Não foi possível gravar o lote.");
+      return dados;
+    },
+  }); } catch (e) {
+    if (e instanceof ErroHttp) throw e;
+    throw new ErroHttp(409, "lote_nao_concluido", e instanceof Error ? e.message : "O lote não foi concluído. Confira o cartão.");
+  }
+  return json(r);
+}
+
 async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const lida = await acaoDaMensagem(servico, chamador, corpo.mensagem_id);
   const { m, gravar } = lida;
@@ -6974,6 +7023,11 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
   const escolhida = acaoComEscolha(lida.acao as AcaoComAlvo & Record<string, unknown>, corpo.escolha);
   if (!escolhida.ok) throw new ErroHttp(400, "escolha_invalida", escolhida.motivo);
   const acao = escolhida.acao;
+  if (lida.acao.executando_em) throw new ErroHttp(409, "acao_em_andamento", "Esta alteração já está em andamento. Confira o resultado no cartão antes de repetir.");
+  const anexosAntes = m.anexos as any[];
+  const anexosExecutando = anexosAntes.map((a) => a && a.tipo === "acao_agenda" ? { ...a, executando_em: new Date().toISOString() } : a);
+  await atualizarConfirmado(servico.from("agente_mensagens").update({ anexos: anexosExecutando }).eq("id", m.id).eq("anexos", JSON.stringify(anexosAntes)));
+
 
   const apagar = Array.isArray(acao.apagar) ? acao.apagar : [];
   const refazer = Array.isArray(acao.refazer) ? acao.refazer : [];
@@ -6991,9 +7045,14 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
         const { data: pubs } = await servico.from("editorial_publications").select("status").eq("post_id", postId).in("status", ["scheduled", "published"]).limit(1);
         if ((pubs ?? []).length) throw new Error("A publicação desta peça já está agendada ou no ar. Mude pela Agenda.");
       }
-      const { error } = await servico.from("tasks").update({ due_date: it.para }).eq("id", t.id).is("deleted_at", null);
-      if (error) throw new Error("Não foi possível mudar a data. Tente de novo.");
-      mudancas.push({ task_id: t.id, titulo: it.titulo, ok: true, de: t.due_date, para: it.para });
+      const { data: props, error: erroProps } = await servico.from("calendario_propostas").select("id, itens").eq("client_id", m.client_id).contains("task_ids", [t.id]).order("criado_em", { ascending: false }).limit(1);
+      if (erroProps) throw new Error("Não foi possível conferir o roteiro da peça.");
+      const p = (props as any[])?.[0];
+      const passos: PassoDoFormato[] = [];
+      if (p) passos.push({ tabela: "calendario_propostas", id: p.id, antes: { itens: p.itens }, depois: { itens: p.itens.map((i: any) => i.task_id === t.id ? { ...i, data: it.para } : i) } });
+      passos.push({ tabela: "tasks", id: t.id, antes: { due_date: t.due_date }, depois: { due_date: it.para } });
+      await gravarPassosDoFormato(servico, passos, m.client_id);
+      mudancas.push({ task_id: t.id, titulo: it.titulo, ok: true, de: t.due_date, para: it.para, passos });
     } catch (e) {
       mudancas.push({ task_id: it.task_id, titulo: it.titulo, ok: false, motivo: e instanceof Error ? e.message : "Não foi possível mudar a data.", para: it.para });
     }
@@ -7006,18 +7065,38 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
       if (t.deleted_at) throw new Error("Esta peça não está mais na agenda.");
       const trava = await travaDaPeca(servico, m.client_id, t.id);
       if (trava) throw new Error(trava);
-      const { data: antes } = await servico.from("tasks").select("delivery_type").eq("id", t.id).maybeSingle();
-      const de = (antes as { delivery_type?: string | null } | null)?.delivery_type ?? null;
-      const { error } = await servico.from("tasks").update({ delivery_type: it.formato_para }).eq("id", t.id).is("deleted_at", null);
-      if (error) throw new Error("Não foi possível mudar o formato. Tente de novo.");
-      formatos.push({ task_id: t.id, titulo: it.titulo, ok: true, de, para: it.formato_para });
+      const leituras = await Promise.all([
+        servico.from("tasks").select("delivery_type, title, description").eq("id", t.id).single(),
+        servico.from("calendario_propostas").select("id, itens").eq("client_id", m.client_id).contains("task_ids", [t.id]).order("criado_em", { ascending: false }).limit(1),
+        servico.from("estudio_trabalhos").select("id, direcao, status, cards, entrega_status").eq("client_id", m.client_id).eq("task_id", t.id),
+        servico.from("editorial_post_internal").select("post_id").eq("task_id", t.id),
+      ]);
+      if (leituras.some((r) => r.error)) throw new Error("Não foi possível conferir todo o conteúdo. Nada foi convertido.");
+      const antes = leituras[0].data as any;
+      const p = (leituras[1].data as any[])?.[0];
+      const trabalhos = (leituras[2].data || []) as any[];
+      if ((leituras[3].data as any[])?.length || trabalhos.some((w) => w.entrega_status || ["gerando", "pronto", "entregue"].includes(w.status) || w.cards?.length)) throw new Error("Este conteúdo já tem mídia ou entrega. Crie uma variação para preservar a produção existente.");
+      const indice = p?.itens?.findIndex((i: any) => i.task_id === t.id) ?? -1;
+      const item = indice >= 0 ? p.itens[indice] : null;
+      const campos = camposDoFormato(antes, it, item);
+      const passos: PassoDoFormato[] = [];
+      if (item) {
+        const itens = p.itens.map((i: any, k: number) => k === indice ? campos.novo : i);
+        passos.push({ tabela: "calendario_propostas", id: p.id, antes: { itens: p.itens }, depois: { itens } });
+      }
+      for (const w of trabalhos) passos.push({ tabela: "estudio_trabalhos", id: w.id, antes: { direcao: w.direcao, status: w.status }, depois: { direcao: campos.direcao, status: "rascunho" } });
+      const description = item ? descricaoDoItem(campos.novo as Item, p.id, indice) : `${antes.description || ""}\nFormato atualizado: ${it.formato_para_nome}.`;
+      passos.push({ tabela: "tasks", id: t.id, antes: { delivery_type: antes.delivery_type, title: antes.title, description: antes.description }, depois: { ...campos.tarefa, description } });
+      await gravarPassosDoFormato(servico, passos, m.client_id);
+      formatos.push({ task_id: t.id, titulo: it.titulo, ok: true, de: antes.delivery_type, para: campos.tarefa.delivery_type, passos });
     } catch (e) {
       formatos.push({ task_id: it.task_id, titulo: it.titulo, ok: false, motivo: e instanceof Error ? e.message : "Não foi possível mudar o formato.", para: it.formato_para });
     }
   }
 
   // Reescrever textos (sem gerar do zero): título, tema, gancho, lâminas, copy, CTA e público.
-  const textos = await reescreverTextos(servico, m.client_id, Array.isArray(acao.editar_textos) ? acao.editar_textos : []);
+  const formatosFalhos = new Set(formatos.filter((r) => !r.ok).map((r) => r.task_id));
+  const textos = await reescreverTextos(servico, m.client_id, (Array.isArray(acao.editar_textos) ? acao.editar_textos : []).filter((e) => !formatosFalhos.has(e.task_id)));
 
   const campanhas: ResultadoDaCampanha[] = [];
   for (const ed of Array.isArray(acao.editar_campanhas) ? acao.editar_campanhas : []) {
@@ -7100,15 +7179,22 @@ async function desfazerAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
       // segue com as outras
     }
   }
-  for (const r of lista(acao.mudancas).filter((x) => x.ok && x.de)) {
-    const { error } = await servico.from("tasks").update({ due_date: r.de }).eq("id", r.task_id).eq("due_date", r.para as string);
-    if (!error) voltaram++;
-  }
-  for (const r of lista(acao.formatos).filter((x) => x.ok && x.de)) {
+  voltaram += await desfazerTextos(servico, m.client_id, (Array.isArray(acao.textos) ? acao.textos : []) as ResultadoDoTexto[]);
+  for (const r of lista(acao.formatos).filter((x) => x.ok && x.de).reverse()) {
+    if (r.passos?.length) {
+      await tarefaDoCliente(servico, r.task_id, m.client_id);
+      await desfazerPassosDoFormato(servico, r.passos, m.client_id);
+      voltaram++;
+      continue;
+    }
     const { error } = await servico.from("tasks").update({ delivery_type: r.de }).eq("id", r.task_id).eq("delivery_type", r.para as string);
     if (!error) voltaram++;
   }
-  voltaram += await desfazerTextos(servico, m.client_id, (Array.isArray(acao.textos) ? acao.textos : []) as ResultadoDoTexto[]);
+
+  for (const r of lista(acao.mudancas).filter((x) => x.ok && x.de).reverse()) {
+    if (r.passos?.length) { await tarefaDoCliente(servico, r.task_id, m.client_id); await desfazerPassosDoFormato(servico, r.passos, m.client_id); voltaram++; }
+    else { const { error } = await servico.from("tasks").update({ due_date: r.de }).eq("id", r.task_id).eq("due_date", r.para as string); if (!error) voltaram++; }
+  }
   for (const r of ((Array.isArray(acao.campanhas_editadas) ? acao.campanhas_editadas : []) as ResultadoDaCampanha[]).filter((x) => x.ok && x.antes)) {
     const { error } = await servico.from("mesa_campanhas").update(r.antes as Record<string, unknown>).eq("id", r.campanha_id).eq("client_id", m.client_id);
     if (!error) voltaram++;
@@ -7330,6 +7416,7 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   executar_acao_agente: executarAcaoDoMes,
   desfazer_acao_agente: desfazerAcaoDoMes,
   executar_acao_agenda: executarAcaoNaAgenda,
+  criar_lote_agenda: criarLoteConfirmado,
   desfazer_acao_agenda: desfazerAcaoNaAgenda,
   registrar_geracao: registrarGeracao,
   planejar_mes: planejarMes,
@@ -7359,7 +7446,7 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
 };
 
 /** Ações com IA: a resposta começa na hora para a plataforma não derrubar com 504 aos 150 s. */
-const ACOES_LONGAS = new Set(["executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", ...selo.longas]);
+const ACOES_LONGAS = new Set(["criar_lote_agenda", "executar_acao_agenda", "planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos", "trocar_angulo", "executar_acao_agente", ...selo.longas]);
 
 // ------------------------------------------ refazer uma proposta no servidor (02/10, chamada interna)
 
