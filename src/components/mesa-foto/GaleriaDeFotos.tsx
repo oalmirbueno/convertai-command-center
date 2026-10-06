@@ -62,7 +62,7 @@ export default function GaleriaDeFotos({ titulo, fotos, atualId, onSelecionar, o
         <label className={juntar(texto.auxiliar, "flex items-center")}><input type="checkbox" className="mr-2" checked={aprovadas} onChange={(e) => { setAprovadas(e.target.checked); setLimite(POR_GRADE); }} />Só aprovadas</label>
       </div>}
       rodape={onUsar && <div className="flex flex-wrap items-center justify-between gap-2"><span className={texto.auxiliar}>{selecao.length}/10 escolhidas · na ordem da seleção</span><button type="button" className={botao.primario} disabled={!selecao.length} onClick={() => { onUsar(selecao); setAberta(false); }}>Preparar {selecao.length > 1 ? "carrossel" : "foto"} na Agenda</button></div>}>
-      {filtradas.length ? <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">{filtradas.slice(0, limite).map((f) => miniatura(f, true))}</div> : <p className={texto.auxiliar}>Nenhuma foto neste filtro.</p>}
+      {filtradas.length ? <div className="grid min-w-0 grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">{filtradas.slice(0, limite).map((f) => miniatura(f, true))}</div> : <p className={texto.auxiliar}>Nenhuma foto neste filtro.</p>}
       {filtradas.length > limite && <button type="button" className={juntar(botao.secundario, "mt-4")} onClick={() => setLimite((n) => n + POR_GRADE)}>Mostrar mais {Math.min(POR_GRADE, filtradas.length - limite)} fotos</button>}
     </JanelaCentral>
     <Ampliar imagens={fotos} indice={indiceZoom >= 0 ? indiceZoom : null} onFechar={() => setZoomId(null)} />
