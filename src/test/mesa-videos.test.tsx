@@ -664,6 +664,7 @@ describe("Mesa Vídeos e Mesa Edição no esqueleto das mesas", () => {
     expect(montarClientesDaMesa("videos", [{ id: CLIENTE, company_name: "A", plan_status: "active" }], []).visiveis).toHaveLength(1);
     expect(montarClientesDaMesa("edicao", [{ id: CLIENTE, company_name: "A", plan_status: "active" }], []).visiveis).toHaveLength(1);
     // Etapas antigas: acervo, história e roteiros viram a Base; edição e versões vão para a Mesa Edição.
+    expect(etapaValida(null)).toBe("gerar");
     expect(etapaValida("nada")).toBe("base");
     expect(etapaValida("acervo")).toBe("base");
     expect(etapaAntigaDaEdicao("edicao")).toBe("organizar");
@@ -757,19 +758,22 @@ beforeEach(() => {
 });
 
 describe("tela da Mesa Vídeos (geração)", () => {
-  it("abre com as três etapas, a troca de mesas, o agente fixo e sem chamar a função (nada gasta ao abrir)", async () => {
+  it("abre direto para criar; planejamento e agente continuam acessíveis sem gerar ao navegar", async () => {
     montar(h(MesaVideos));
-    expect(await screen.findByRole("navigation", { name: "Etapas da Mesa Vídeos" })).toBeTruthy();
-    for (const e of ETAPAS_DA_MESA_VIDEOS) expect(screen.getByRole("button", { name: new RegExp(e.rotulo) })).toBeTruthy();
+    const nav = await screen.findByRole("navigation", { name: "Etapas da Mesa Vídeos" });
+    expect(nav.textContent).toContain("Criar vídeo");
+    expect(await screen.findByRole("textbox", { name: "Descreva seu vídeo" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Planejamento: escolher" }));
+    for (const nome of ["Materiais", "Modelos prontos", "Identidade do vídeo", "Roteiro"]) expect(screen.getByRole("option", { name: new RegExp(nome) })).toBeTruthy();
+    fireEvent.click(screen.getByRole("option", { name: /Materiais/ }));
+    expect(await screen.findByRole("tab", { name: /Cenas/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir agente de vídeo" }));
+    expect(await screen.findByRole("textbox", { name: "Pedido para o agente" })).toBeTruthy();
+    expect(chamadas("gerar_video")).toHaveLength(0);
+    expect(chamadas("cena_gerar")).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: /Mesa aberta: Mesa Vídeos/ }));
     const troca = await screen.findByRole("navigation", { name: "Trocar de mesa" });
     expect(troca.querySelectorAll("[data-item-de-mesa], a").length).toBeGreaterThanOrEqual(7);
-    fireEvent.keyDown(document.activeElement || document.body, { key: "Escape" });
-    // A lista das mesas (popover) pode seguir aberta: consulta também o que ela esconde.
-    expect(await screen.findByRole("tab", { name: /Cenas/, hidden: true }, { timeout: 5000 })).toBeTruthy();
-    expect(await screen.findByText("Agente de vídeo", undefined, { timeout: 5000 })).toBeTruthy();
-    expect(screen.getByRole("textbox", { name: "Pedido para o agente", hidden: true })).toBeTruthy();
-    expect(mock.invoke).not.toHaveBeenCalled();
   }, 20000);
 
   it("endereço antigo de edição abre a Mesa Edição no Organizar", async () => {

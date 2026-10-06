@@ -304,6 +304,34 @@ describe("Mesa Vídeos: motores do fal sem semente", () => {
     expect(motorDoNivel("normal", { modo: "texto", formato: "9:16" }, c.motores)).toBeTruthy();
   });
 
+  it("entrada direta: descreve e gera sem roteiro, mantém custo e leva aos resultados", async () => {
+    mock.tabelas.foto_cenas_da_historia = [];
+    mock.tabelas.cliente_imagens = [];
+    mock.invoke.mockImplementation((_f: string, { body }: any) => {
+      if (body.acao === "motores_estado") return Promise.resolve({ data: { motores: MOTORES_DE_VIDEO.map((m) => ({ id: m.id, estado: m.situacao || (m.provedor === "fal" && m.preco ? "pronto" : "sem_preco"), estado_rotulo: "Pronto", nivel: "normal", novo: false, chave: null })) }, error: null });
+      if (body.acao === "gerar_video") return Promise.resolve({ data: { pedido_id: "pedido-simulado" }, error: null });
+      return Promise.resolve({ data: {}, error: null });
+    });
+    const irPara = vi.fn();
+    montar(h(EtapaGerar, { irPara }));
+    const descricao = await screen.findByRole("textbox", { name: "Descreva seu vídeo" });
+    expect(document.querySelector('[data-video-conexoes]')).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByRole("button", { name: "Destacar produto" }));
+    expect((descricao as HTMLTextAreaElement).value).toContain("produto da referência");
+    fireEvent.change(descricao, { target: { value: "Produto da marca em luz natural, aproximação suave." } });
+    const gerar = await screen.findByRole("button", { name: /^Gerar vídeo/ });
+    await waitFor(() => expect(gerar).not.toBeDisabled());
+    expect(corpos("mesa-videos", "gerar_video")).toHaveLength(0);
+    fireEvent.click(gerar);
+    expect(corpos("mesa-videos", "gerar_video")).toHaveLength(0);
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar", exact: true }));
+    await waitFor(() => expect(corpos("mesa-videos", "gerar_video")).toHaveLength(1));
+    expect(corpos("mesa-videos", "gerar_video")[0]).toMatchObject({ client_id: CLIENTE, tipo: "gerar_livre", modo: "texto", prompt: "Produto da marca em luz natural, aproximação suave.", variacoes: 1 });
+    expect(corpos("mesa-videos", "gerar_video")[0].custo_confirmado_usd).toBeGreaterThan(0);
+    fireEvent.click(await screen.findByRole("button", { name: "Ver resultado", exact: true }));
+    expect(irPara).toHaveBeenCalledWith("resultados");
+  }, 20000);
+
   it("Gerar > Cena do roteiro gera de verdade: motor pronto, custo antes e cena_gerar com o custo confirmado (nada de 'em breve')", async () => {
     const CANVAS = "44444444-4444-4444-8444-444444444444";
     mock.tabelas.video_pedidos = [];
@@ -317,6 +345,7 @@ describe("Mesa Vídeos: motores do fal sem semente", () => {
     mock.tabelas.foto_cenas_da_historia = [{ canvas_id: CANVAS, client_id: CLIENTE, canvas_nome: "Reel da loja", historia: {}, no_id: "n1", numero: 1, titulo: "Chegada", acao: "A dona abre a loja", enquadramento: "livre", cenario: "", narrativa: "Bom dia", imagem_id: "55555555-5555-4555-8555-555555555555", resultados: [] }];
     montar(h(EtapaGerar, { irPara: vi.fn() }));
     await waitFor(() => expect(corpos("mesa-videos", "motores_estado")).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "Cena do roteiro", exact: true }));
     const cena = (await screen.findByRole("combobox", { name: "Cena" }, { timeout: 8000 })) as HTMLSelectElement;
     expect(document.body.textContent).not.toMatch(/em breve|a ligar|Preparar pedido/i);
     fireEvent.change(cena, { target: { value: `cena:${CANVAS}:n1` } });

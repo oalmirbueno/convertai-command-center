@@ -29,7 +29,7 @@ const ANTIGAS_DA_BASE = ["acervo", "historia", "roteiros"];
 const ANTIGAS_DA_EDICAO: Record<string, string> = { edicao: "organizar", memoria: "editar" };
 
 export const etapaValida = (v: string | null | undefined): EtapaDaMesaVideos =>
-  ETAPAS_DA_MESA_VIDEOS.some((e) => e.valor === v) ? (v as EtapaDaMesaVideos) : "base";
+  !v ? "gerar" : ETAPAS_DA_MESA_VIDEOS.some((e) => e.valor === v) ? (v as EtapaDaMesaVideos) : "base";
 
 /** Etapa antiga da Mesa Vídeos que virou etapa da Mesa Edição (ou null). */
 export const etapaAntigaDaEdicao = (v: string | null | undefined): string | null => (v && ANTIGAS_DA_EDICAO[v]) || null;

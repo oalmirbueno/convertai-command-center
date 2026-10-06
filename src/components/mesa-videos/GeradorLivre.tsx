@@ -1,3 +1,4 @@
+import BancadaVideoLivre from "./BancadaVideoLivre";
 import type { DirecaoDeVideoDaPauta } from "../../../supabase/functions/_shared/video-da-pauta";
 import { AcoesDaBancada, SelecaoDaBancada } from "@/components/mesa/BancadaDaPauta";
 import { useEffect, useRef, lazy, Suspense, useState } from "react";
@@ -14,7 +15,7 @@ import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campo, campoTexto, juntar, texto } from "@/components/sistema/estilos";
-import { custoNaTela, novoUid, useMotoresDaMesa } from "@/lib/mesa-videos/api";
+import { custoNaTela, motoresProntos, novoUid, useMotoresDaMesa } from "@/lib/mesa-videos/api";
 import { atende, duracaoNoMotor, duracoesDoMotor, motorDoNivel, motorPorId, type NivelDoMotor, resolucaoNoMotor } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
 import { BotaoDeGerar, EscolherImagem, SeletorDeCamera, SeletorDeMotor } from "./PecasDoGerador";
 import DiretorDoPrompt from "./DiretorDoPrompt";
@@ -29,7 +30,7 @@ import { chamarMesaVideos, chaveDosPedidos } from "./videosApi";
  * manual); com a Higgsfield aparece a câmera pronta (33 movimentos).
  */
 
-interface Rascunho {
+export interface RascunhoLivre {
   acabamento?: string;
   movimento?: string;
   nivel: NivelDoMotor;
@@ -49,19 +50,20 @@ interface Rascunho {
   narracao?: string;
 }
 
-const INICIAL: Rascunho = { nivel: "normal", motor: "", prompt: "", negativo: "", duracao: 5, formato: "9:16", resolucao: "", audio: false, variacoes: 1, inicial: null, final: null, referencias: [], camera: "" };
+const INICIAL: RascunhoLivre = { nivel: "normal", motor: "", prompt: "", negativo: "", duracao: 5, formato: "9:16", resolucao: "", audio: false, variacoes: 1, inicial: null, final: null, referencias: [], camera: "" };
 
-export default function GeradorLivre({ escopo, pauta, direcaoInicial, promptInicial = "", aoGerar }: { escopo?: string; pauta?: { id: string; title: string }; direcaoInicial?: DirecaoDeVideoDaPauta; promptInicial?: string; aoGerar?: (id: string) => void } = {}) {
+export default function GeradorLivre({ escopo, pauta, direcaoInicial, promptInicial = "", aoGerar, simplificado = false, irResultados }: { escopo?: string; pauta?: { id: string; title: string }; direcaoInicial?: DirecaoDeVideoDaPauta; promptInicial?: string; aoGerar?: (id: string) => void; simplificado?: boolean; irResultados?: () => void } = {}) {
   const { clientId, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
   const motores = useMotoresDaMesa();
   const fotosQ = useFotos(clientId);
+  const [pedidoEnviado, setPedidoEnviado] = useState(false);
   const [buscandoFoto, setBuscandoFoto] = useState<"inicial" | "final" | "referencia" | null>(null);
   const [copiando, setCopiando] = useState(false);
   const [diretorAberto, setDiretorAberto] = useState(false);
   const [destinoDoDiretor, setDestinoDoDiretor] = useState<"inicial" | "final" | "referencia">("inicial");
-  const [r, setR] = useEstadoDaTela<Rascunho>(escopo || `mesa-videos:livre:${clientId}`, { ...INICIAL, prompt: promptInicial, ...(direcaoInicial ? { narracao: direcaoInicial.narracao, audio: !!direcaoInicial.narracao, formato: direcaoInicial.formato } : {}) }, { validar: (v) => !!v && typeof v === "object", esperaMs: 300 });
-  const mudar = (m: Partial<Rascunho>) => setR((x) => ({ ...x, ...m }));
+  const [r, setR] = useEstadoDaTela<RascunhoLivre>(escopo || `mesa-videos:livre:${clientId}`, { ...INICIAL, prompt: promptInicial, ...(direcaoInicial ? { narracao: direcaoInicial.narracao, audio: !!direcaoInicial.narracao, formato: direcaoInicial.formato } : {}) }, { validar: (v) => !!v && typeof v === "object", esperaMs: 300 });
+  const mudar = (m: Partial<RascunhoLivre>) => setR((x) => ({ ...x, ...m }));
   const fotosDaDirecao = (direcaoInicial?.referencias || []).map((id) => fotosQ.data?.find((f) => f.client_id === clientId && f.ativa && !f.referencia_web && (f.id === id || f.workspace_node_id === id || f.storage_path === id))).filter((f) => f && (f.storage_bucket || "mesa") === "mesa" && f.storage_path.startsWith(`${clientId}/`));
   const preCarregou = useRef(false);
   useEffect(() => {
@@ -74,7 +76,7 @@ export default function GeradorLivre({ escopo, pauta, direcaoInicial, promptInic
   }, [fotosQ.data, direcaoInicial, r.inicial, r.final, r.referencias.length]);
   const modo = r.inicial && r.final ? "primeiro_ultimo" : r.inicial ? "primeiro_quadro" : r.referencias.length ? "referencia" : "texto";
   const requisito = { modo, formato: r.formato, referencias: r.referencias.length || undefined } as const;
-  const motor = motorPorId(r.motor, motores.motores) || motorDoNivel(r.nivel, requisito, motores.motores);
+  const motor = motorPorId(r.motor, motores.motores) || motorDoNivel(r.nivel, requisito, motores.motores, simplificado && !motores.carregando && !motores.semFuncao ? motoresProntos(motores.lista) : undefined);
   const duracoes = motor ? duracoesDoMotor(motor) : [5];
   const duracao = motor ? duracaoNoMotor(motor, r.duracao) : r.duracao;
   const resolucao = motor ? resolucaoNoMotor(motor, r.resolucao) : "";
@@ -135,11 +137,22 @@ export default function GeradorLivre({ escopo, pauta, direcaoInicial, promptInic
       custo_confirmado_usd: usd,
     });
     if (!resp.pedido_id) throw new Error("O servidor não confirmou o pedido de geração.");
+    setPedidoEnviado(true);
     aoGerar?.(resp.pedido_id);
     void queryClient.invalidateQueries({ queryKey: chaveDosPedidos(clientId) });
     atualizarCusto();
     toast.success("Vídeo enviado para gerar", { description: `Pedido ${String(resp.pedido_id || "").slice(0, 8)}. Acompanhe nos Resultados.` });
   };
+
+  if (simplificado && !pauta) return <BancadaVideoLivre
+    r={r} mudar={mudar} motor={motor} duracao={duracao} duracoes={duracoes} resolucao={resolucao}
+    buscando={!!buscandoFoto} aoBuscar={() => setBuscandoFoto("inicial")} copiando={copiando}
+    seletorFotos={<Suspense fallback={<p role="status">Lendo fotos e pastas…</p>}><SeletorDeFotos fotos={(fotosQ.data || []).filter((f) => !f.referencia_web)} titulo="Fotos do cliente" multiplas={false} onFechar={() => setBuscandoFoto(null)} onUsar={(ids) => { void usarFotos(ids, buscandoFoto || "inicial").catch((e) => toast.error(e instanceof Error ? e.message : "Não foi possível usar a foto.")); }} /></Suspense>}
+    seletorMotor={<SeletorDeMotor lista={motores.lista} requisito={requisito} valor={motor?.id || ""} nivel={r.nivel} onNivel={(nivel) => mudar({ nivel, motor: "" })} onEscolher={(id) => mudar({ motor: id })} />}
+    diretor={<DiretorDoPrompt motor={motor} modo={modo} formato={r.formato} duracao={duracao} audio={!!(motor?.cap.audio && r.audio)} referencias={r.referencias.length} temInicial={!!r.inicial} temFinal={!!r.final} texto={r.prompt} atual={{ prompt: r.prompt, negativo: r.negativo }} onAplicar={(p) => mudar({ prompt: p.prompt, negativo: p.negativo })} />}
+    gerar={<BotaoDeGerar custo={custo} motivo={motivo} rotulo="Gerar vídeo" onConfirmar={gerar} extra={`${motor?.rotulo || ""}, ${duracao} s, ${r.variacoes} variações`} />}
+    resultado={pedidoEnviado && <div role="status" className="mb-3 flex items-center justify-between text-sm"><span>Pedido enviado. Acompanhe seu vídeo nos resultados.</span>{irResultados && <button type="button" className={botao.secundario} onClick={irResultados}>Ver resultado</button>}</div>}
+  />;
 
   return (
     <div className="min-w-0 space-y-5" data-gerador-livre="">
