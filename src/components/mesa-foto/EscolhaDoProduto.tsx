@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, PackagePlus, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,9 +34,12 @@ export default function EscolhaDoProduto({ rotulo = "Produto", className = "" }:
   const kits = useMemo(() => (kitsQ.data || []).filter((k) => k.status !== "arquivado" && !!k.id), [kitsQ.data]);
   const fotos = fotosQ.data || [];
   const kit = kitId ? kits.find((k) => k.id === kitId) || null : null;
+  const buscaRef = useRef<HTMLInputElement>(null);
+  const [busca, setBusca] = useState("");
   const [aberta, setAberta] = useState(false);
   const [nome, setNome] = useState<string | null>(null);
-  const listaAberta = aberta || (!kit && kits.length > 0);
+  const listaAberta = aberta || kits.length > 0;
+  const visiveis = kits.filter((k) => `${nomeDoKit(k)} ${k.variante || ""}`.toLocaleLowerCase("pt-BR").includes(busca.toLocaleLowerCase("pt-BR")));
 
   const darNome = async () => {
     if (!kit || nome === null || !nome.trim()) return;
@@ -85,7 +88,7 @@ export default function EscolhaDoProduto({ rotulo = "Produto", className = "" }:
               {kit.variante ? ` · ${kit.variante}` : ""} · {kit.refs.length} {kit.refs.length === 1 ? "foto" : "fotos"}
             </p>
           </div>
-          <Button type="button" size="sm" variant="outline" className="ml-2 h-8 shrink-0 text-[12px]" onClick={() => setAberta(!aberta)} aria-expanded={listaAberta} data-trocar-produto="">
+          <Button type="button" size="sm" variant="outline" className="ml-2 h-8 shrink-0 text-[12px]" onClick={() => { setAberta(true); buscaRef.current?.focus(); }} aria-expanded={listaAberta} data-trocar-produto="">
             Trocar <ChevronDown className="ml-1 h-3.5 w-3.5" />
           </Button>
         </div>
@@ -94,9 +97,10 @@ export default function EscolhaDoProduto({ rotulo = "Produto", className = "" }:
           <PackagePlus className="mr-1.5 h-3.5 w-3.5" /> Identificar o produto nas fotos
         </Button>
       ) : null}
+      {listaAberta && <label className="mt-3 block text-[12px]">Produtos do cliente · {kits.length}<input className={juntar(campo, "mt-1")} ref={buscaRef} aria-label="Buscar produto do cliente" placeholder="Buscar pelo nome ou variante" value={busca} onChange={(e) => setBusca(e.target.value)} /></label>}
       {listaAberta && (
         <ul className="mt-2 min-w-0 rounded-lg scrollbar-hidden lg:max-h-64 lg:overflow-y-auto lg:overscroll-contain border border-border p-1" role="listbox" aria-label="Escolher o produto" data-lista-de-produtos="">
-          {kits.map((k) => {
+          {visiveis.map((k) => {
             const capa = capaDoKit(k, fotos);
             const ativo = k.id === kitId;
             return (

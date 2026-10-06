@@ -1,4 +1,4 @@
-import { BancadaDeFotos } from "@/components/mesa/BancadaDaPauta";
+import { BancadaDeFotos, PainelDaBancada, type FerramentaDaBancada } from "@/components/mesa/BancadaDaPauta";
 import GerarFotosDaPauta from "@/components/mesa/GerarFotosDaPauta";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -136,7 +136,7 @@ export function MontarOPost({
   post: PostDeFotos | null;
   taskInicial: string | null;
   destinoFixo?: boolean;
-  estudio?: { taskId: string; onSelecionadas: (ids: string[]) => void; titulo: string; direcao?: Record<string, unknown>; ferramentas?: React.ReactNode };
+  estudio?: { taskId: string; onSelecionadas: (ids: string[]) => void; titulo: string; direcao?: Record<string, unknown>; ferramentas?: React.ReactNode; extras?: FerramentaDaBancada[] };
   onPronto: (trabalhoId: string, taskId: string | null) => void;
   onCancelar: () => void;
 }) {
@@ -220,18 +220,7 @@ export function MontarOPost({
     }
   };
 
-  const conteudo = (
-    <Cartao
-      titulo={post ? "Trocar as fotos do post" : "Montar o post"}
-      recolher={estudio ? false : undefined}
-      dica="Foto única ou carrossel (até 10), na ordem do post. As fotos vão como estão: nada é gerado nem redesenhado. Foto gerada sai marcada e passa pela aprovação da equipe antes do cliente."
-      acao={
-        <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" onClick={onCancelar}>
-          Cancelar
-        </Button>
-      }
-    >
-      {escolhendo && (
+  const seletor = escolhendo ? (
         <SeletorDeFotos
           fotos={todas.filter((f) => !ehReferenciaWeb(f))}
           titulo="Fotos do post"
@@ -245,9 +234,21 @@ export function MontarOPost({
           }}
           onFechar={() => setEscolhendo(false)}
         />
-      )}
-      {estudio && <GerarFotosDaPauta taskId={estudio.taskId} titulo={estudio.titulo} direcao={estudio.direcao} ids={ids} onFotos={setIds} />}
-      <div className="min-w-0 space-y-3" data-montar-post="">
+) : null;
+  const conteudo = (
+    <Cartao
+      titulo={post ? "Trocar as fotos do post" : "Montar o post"}
+      recolher={estudio ? false : undefined}
+      dica="Foto única ou carrossel (até 10), na ordem do post. As fotos vão como estão: nada é gerado nem redesenhado. Foto gerada sai marcada e passa pela aprovação da equipe antes do cliente."
+      acao={
+        <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" onClick={onCancelar}>
+          Cancelar
+        </Button>
+      }
+    >
+      {!estudio && seletor}
+      {estudio && <PainelDaBancada id="gerar"><GerarFotosDaPauta taskId={estudio.taskId} titulo={estudio.titulo} direcao={estudio.direcao} ids={ids} onFotos={setIds} /></PainelDaBancada>}
+      <PainelDaBancada id={["gerar", "legenda", "entrega"]} quando={!!estudio}><div className="min-w-0 space-y-3" data-montar-post="">
         <div className="min-w-0">
           <p className="mb-1.5 text-[12px] text-muted-foreground">
             {ids.length === 0 ? "Escolha as fotos." : ids.length === 1 ? "Foto única." : `Carrossel com ${ids.length} fotos (a primeira é a capa).`} {ids.length}/{MAX_FOTOS_NO_POST}
@@ -321,14 +322,14 @@ export function MontarOPost({
           </Button>
           <span className="mb-1 text-[11.5px] text-muted-foreground">Sem custo: nada é gerado. Nada vai ao cliente até você enviar.</span>
         </div>
-      </div>
+      </div></PainelDaBancada>
     </Cartao>
   );
-  return estudio ? <BancadaDeFotos titulo={estudio.titulo} fotos={fotos.map((f) => ({ id: f.id, nome: f.nome, caminho: f.storage_path, bucket: f.storage_bucket }))} onEscolher={() => setEscolhendo(true)} onMover={mover} onRemover={(id) => setIds(ids.filter((x) => x !== id))}>{estudio.ferramentas}{conteudo}</BancadaDeFotos> : conteudo;
+  return estudio ? <BancadaDeFotos seletor={seletor} extras={estudio.extras} onDerivada={(antiga, nova) => setIds((atuais) => atuais.map((id) => id === antiga ? nova.id : id))} titulo={estudio.titulo} fotos={fotos.map((f) => ({ id: f.id, nome: f.nome, caminho: f.storage_path, bucket: f.storage_bucket }))} onEscolher={() => setEscolhendo(true)} onMover={mover} onRemover={(id) => setIds(ids.filter((x) => x !== id))}>{estudio.ferramentas}{conteudo}</BancadaDeFotos> : conteudo;
 }
 
 /** O post aberto: fotos, legenda, data e envio, em 4 passos. */
-export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos; onTrocarFotos: () => void; estudio?: { ferramentas?: React.ReactNode } }) {
+export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos; onTrocarFotos: () => void; estudio?: { ferramentas?: React.ReactNode; extras?: FerramentaDaBancada[] } }) {
   const { clientId, catalogo, podeRecarregar, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
@@ -464,6 +465,7 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
           )}
         </section>
 
+        <PainelDaBancada id="legenda" quando={!!estudio}>
         {/* 2. Legenda */}
         <section className="min-w-0 border-t border-border pt-3" aria-label="2. Legenda">
           <div className="mb-1.5 flex min-w-0 items-center">
@@ -535,6 +537,8 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
           {travado && <p className="mt-1 text-[11.5px] text-muted-foreground">Legenda travada: o post já foi entregue ou está com o cliente.</p>}
         </section>
 
+        </PainelDaBancada>
+        <PainelDaBancada id="entrega" quando={!!estudio}>
         {/* 3. Data */}
         <section className="min-w-0 border-t border-border pt-3" aria-label="3. Data">
           <div className="flex min-w-0 flex-wrap items-center">
@@ -578,6 +582,8 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
             </Link>
           </div>
         </section>
+        </PainelDaBancada>
+        {estudio && <PainelDaBancada id="gerar"><p className="text-[13px]">{post.cards.length} fotos preparadas. Escolha uma na prancheta para conferir.</p>{trocaFotos && <button type="button" className="mt-3 rounded-md border p-2 text-[12px]" onClick={onTrocarFotos}>Trocar ou gerar fotos</button>}</PainelDaBancada>}
       </div>
       <JanelaDaPublicacao
         aberta={janela}
@@ -605,7 +611,7 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
       />
     </Cartao>
   );
-  return estudio ? <BancadaDeFotos titulo={post.item?.title || "Fotos da pauta"} fotos={post.cards.map((c) => ({ id: c.imagem_id || c.storage_path, nome: `Foto ${c.ordem}`, caminho: c.storage_path }))} onEscolher={trocaFotos ? onTrocarFotos : undefined} onEditar={trocaFotos ? (id) => abrirNoEstudio?.(id) : undefined}>{estudio.ferramentas}{conteudo}</BancadaDeFotos> : conteudo;
+  return estudio ? <BancadaDeFotos pronta extras={estudio.extras} titulo={post.item?.title || "Fotos da pauta"} fotos={post.cards.map((c) => ({ id: c.imagem_id || c.storage_path, nome: `Foto ${c.ordem}`, caminho: c.storage_path }))} onEscolher={trocaFotos ? onTrocarFotos : undefined} onEditar={trocaFotos ? (id) => abrirNoEstudio?.(id) : undefined}>{estudio.ferramentas}{conteudo}</BancadaDeFotos> : conteudo;
 }
 
 export default function EtapaAgenda() {

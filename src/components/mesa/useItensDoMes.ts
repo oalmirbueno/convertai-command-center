@@ -1,4 +1,5 @@
 import { normalizarVideoDaPauta, type DirecaoDeVideoDaPauta } from "../../../supabase/functions/_shared/video-da-pauta";
+import { incluirPautasPlanejadas, type PropostaNaEsteira } from "./pautasPlanejadas";
 import { FORMATOS_DE_VIDEO_NO_ESTUDIO, type ModoDaPauta } from "./modoDaPauta";
 import { useCallback } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -13,6 +14,7 @@ import { laminasLongasDoRoteiro } from "../../../supabase/functions/estudio-arte
 
 /** Item editorial da agenda (tarefa com entrega de arte) e o trabalho do estúdio dele. */
 export interface ItemDoMes {
+  planejamento?: { proposta_id: string; tema_id: string };
   id: string;
   title: string;
   due_date: string | null;
@@ -305,7 +307,7 @@ export function semPassadoVazio(dados: DadosDosItens, hoje: string): DadosDosIte
   return {
     ...dados,
     itens: dados.itens.filter(
-      (i) => !i.due_date || i.due_date.slice(0, 10) >= hoje || tem.call(dados.trabalhos, i.id) || tem.call(dados.artes, i.id),
+      (i) => !!i.planejamento || !i.due_date || i.due_date.slice(0, 10) >= hoje || tem.call(dados.trabalhos, i.id) || tem.call(dados.artes, i.id),
     ),
   };
 }
@@ -491,7 +493,7 @@ async function lerRoteiros(clientId: string, taskIds: string[]): Promise<Record<
     .from("calendario_propostas")
     .select("task_ids, itens")
     .eq("client_id", clientId)
-    .eq("status", "gravada")
+    .in("status", ["pronta", "gravada"])
     .overlaps("task_ids", taskIds)
     .order("criado_em", { ascending: false });
   if (error) return roteiros;
@@ -642,6 +644,13 @@ async function lerItensDaJanela(clientId: string, mes: string, incluirVideos = f
     }
   }
   const dados = await lerDetalhesDosItens(clientId, itens, incluirVideos);
+  if (incluirVideos) {
+    const { data: propostas, error: erro } = await (supabase as any).from("calendario_propostas")
+      .select("id, project_id, status, itens").eq("client_id", clientId)
+      .in("status", ["pronta", "gravada"]).lt("periodo_inicio", janela.fimExclusivo).gte("periodo_fim", janela.inicio);
+    if (erro) throw erro;
+    incluirPautasPlanejadas(dados, (propostas || []) as PropostaNaEsteira[], ids, janela.inicio, janela.fimExclusivo);
+  }
   return mes === PROXIMOS_DIAS ? semPassadoVazio(dados, dataLocal(agora)) : dados;
 }
 

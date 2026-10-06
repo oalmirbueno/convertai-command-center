@@ -2437,6 +2437,7 @@ export default function AbaEstudio({
   const arquivarPautas = async (ids: string[]) => {
     const alvos = ids.map((id) => itens.filter((i) => i.id === id)[0] || (itemFora && itemFora.id === id ? itemFora : null)).filter(Boolean) as ItemDoMes[];
     if (!alvos.length) return;
+    if (alvos.some((i) => i.planejamento)) { toast.info("Abra a pauta planejada antes de arquivá-la. Ela será vinculada à agenda automaticamente."); return; }
     const comArte = alvos.filter((i) => !!fontes.trabalhoDe(i)).length;
     const ok = await confirmarDaFaixa({
       title: alvos.length === 1 ? `Arquivar "${alvos[0].title}"?` : `Arquivar ${alvos.length} pautas?`,
@@ -2591,7 +2592,7 @@ export default function AbaEstudio({
 
   const detalhe = selecionado ? (
     <Suspense fallback={<p role="status">Abrindo o estúdio…</p>}>
-    <EstudioDaPauta key={selecionado.id} item={selecionado} trabalho={trabalhoDe(selecionado)} roteiro={roteiroDe(selecionado)} arte={arteDe(selecionado)} foco={focoLigado} onFoco={setFoco}>
+    <EstudioDaPauta onPautaPronta={(id) => { onTarefa(id); void dados.refetch(); }} key={selecionado.id} item={selecionado} trabalho={trabalhoDe(selecionado)} roteiro={roteiroDe(selecionado)} arte={arteDe(selecionado)} foco={focoLigado} onFoco={setFoco}>
     <DetalheDoItem
       key={selecionado.id}
       item={selecionado}

@@ -81,6 +81,8 @@ export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/me
     etapas: {
       acervo: () => import("@/components/mesa-foto/EtapaAcervo"),
       kits: () => import("@/components/mesa-foto/EtapaKits"),
+      compor: () => import("@/components/mesa-foto/ComposicaoRapida"),
+      combinar: () => import("@/components/mesa-foto/CombinarFotos"),
       preparar: () => import("@/components/mesa-foto/EtapaPreparar"),
       ensaio: () => import("@/components/mesa-foto/EtapaEnsaio"),
       revisar: () => import("@/components/mesa-foto/EtapaRevisar"),

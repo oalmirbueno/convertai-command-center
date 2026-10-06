@@ -22,6 +22,7 @@ import { marcadasQueContam, OBJETIVOS, objetivoPorValor, prontidaoDasFotos, type
 
 export const ICONES_DOS_OBJETIVOS: Record<ObjetivoDaFoto, typeof Wand2> = {
   compor: Images,
+  combinar: Images,
   melhorar: Wand2,
   variacoes: Images,
   modelo: Megaphone,

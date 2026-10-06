@@ -87,7 +87,8 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
  * que foi feito e tira o parâmetro do endereço.
  */
 
-const ComposicaoRapida = lazy(() => import("@/components/mesa-foto/ComposicaoRapida"));
+const CombinarFotos = lazyComPreCarga("mesa-foto/combinar", () => import("@/components/mesa-foto/CombinarFotos"));
+const ComposicaoRapida = lazyComPreCarga("mesa-foto/compor", () => import("@/components/mesa-foto/ComposicaoRapida"));
 
 const carregarAcervo = () => import("@/components/mesa-foto/EtapaAcervo");
 const carregarKits = () => import("@/components/mesa-foto/EtapaKits");
@@ -510,7 +511,7 @@ export default function MesaFoto() {
   const emColuna = ETAPAS_EM_COLUNA.indexOf(etapa) >= 0;
   const rotuloDaEtapa = (ETAPAS_DA_MESA_FOTO.find((e) => e.valor === etapa) || { rotulo: "Etapa" }).rotulo;
   // Passo 2: as formas de criar vão na barra do kit e do ensaio (cabeçalho), sem linha própria na etapa.
-  const formaDeCriar = etapa === "compor" || etapa === "ensaio" || etapa === "campanha" || etapa === "preparar" || etapa === "estudio";
+  const formaDeCriar = etapa === "combinar" || etapa === "compor" || etapa === "ensaio" || etapa === "campanha" || etapa === "preparar" || etapa === "estudio";
   // Etapa nova sem posição guardada começa no topo: a RegiaoRolavel do sistema
   // faz isso sozinha ao trocar a chave de memória (mesa-foto:<etapa>:<cliente>).
 
@@ -658,6 +659,7 @@ export default function MesaFoto() {
                   {etapa === "criar" && <EtapaCriar />}
                   {etapa === "estudio" && <EtapaEstudio />}
                   {etapa === "compor" && <ComposicaoRapida />}
+                  {etapa === "combinar" && <CombinarFotos />}
                   {etapa === "agenda" && <EtapaAgenda />}
                   {etapa === "preparar" && <EtapaPreparar />}
                   {etapa === "ensaio" && <EtapaEnsaio />}

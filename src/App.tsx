@@ -1,3 +1,4 @@
+import Mesas from "./pages/Mesas";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { lazy, Suspense, useEffect, useRef, type ReactNode } from "react";
 import { atualizarNaTrocaDeTela } from "@/lib/appRefresh";
@@ -366,6 +367,7 @@ export function AppRoutes() {
         <Route path="/mesa-site" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaSite /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
         {/* Mesa Motion (frente MOT): apresentação em motion e filme da marca; cenas HyperFrames pela fila (workers/render). Mesmos papéis das mesas de vídeo. */}
         <Route path="/mesa-motion" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaMotion /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
+        <Route path="/mesas" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Mesas /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/central" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminExperience /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/onde-estamos" element={<ClientJourneyUpdates />} />
         <Route path="/novidades" element={<Novidades />} />

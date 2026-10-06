@@ -1,3 +1,4 @@
+import LogoNaFoto from "@/components/mesa/LogoNaFoto";
 import { SeletorDeModelo } from "@/components/mesa/Seletores";
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -504,6 +505,7 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
             )}
           </Grupo>
 
+          <Grupo id="logo" titulo="Logo da marca" icone={<Images className="h-4 w-4" />} destaque={destaque === "logo"}>{!daInternet && <LogoNaFoto key={atual.id} foto={atual} onPronta={(nova) => { setAtualId(nova.id); setVista("lado"); }} />}</Grupo>
           <Grupo id="fundo" titulo="Fundo e cenário" icone={<Layers className="h-4 w-4" />} destaque={destaque === "fundo" || destaque === "cenario"} ajuda="O assunto fica com os pixels originais; muda só o que está em volta.">
             <div className="flex min-w-0 flex-wrap items-center">
               {preparar("fundo_branco", "Fundo branco", <Wand2 className="mr-1.5 h-3.5 w-3.5" />)}

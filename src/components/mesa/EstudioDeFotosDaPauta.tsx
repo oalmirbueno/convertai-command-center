@@ -1,3 +1,4 @@
+import { Images, Layers, FolderOpen, UsersRound, UserRound, MessageSquare } from "lucide-react";
 import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import { useMesa } from "./MesaContexto";
 import { CHAVES_DO_ABERTO } from "@/components/mesa-foto/diretorApi";
@@ -6,13 +7,13 @@ import { ETAPAS_DA_MESA_FOTO, MesaFotoProvider, type EtapaDaMesaFoto, type MesaF
 import { MontarOPost, PostAberto } from "@/components/mesa-foto/EtapaAgenda";
 import { usePostsDeFotos } from "@/components/mesa-foto/agendaApi";
 import { chaveDoEstudioDaPauta } from "./modoDaPauta";
-import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { useFotos } from "@/components/mesa-foto/fotoApi";
-import { BancadaDeFotos } from "./BancadaDaPauta";
+import { BancadaDeFotos, type FerramentaDaBancada } from "./BancadaDaPauta";
 import { fonteDoArquivo } from "./useItensDoMes";
 import type { ItemDoMes, InfoDoRoteiro, ArteNaAgenda } from "./useItensDoMes";
 
 const Estudio = lazy(() => import("@/components/mesa-foto/EtapaEstudio"));
+const Combinar = lazy(() => import("@/components/mesa-foto/CombinarFotos"));
 const Compor = lazy(() => import("@/components/mesa-foto/ComposicaoRapida"));
 const Fotos = lazy(() => import("@/components/mesa-foto/EtapaAcervo"));
 const Modelos = lazy(() => import("@/components/mesa-foto/EtapaModelos"));
@@ -79,23 +80,26 @@ export default function EstudioDeFotosDaPauta({ item, roteiro, arte }: { item: I
     abrirNoEstudio: (id) => { setImagemId(id); setEtapa("estudio"); },
     prepararNaAgenda: (ids) => { setSelecionadas(ids); setTrocando(true); setEtapa("agenda"); },
   };
-  const ferramentas = <div className="mb-4 space-y-3 border-b pb-3">
-    <p className="text-[13px] font-semibold">Ferramentas da foto</p>
-    <nav aria-label="Ferramentas de fotos da pauta" className="flex flex-wrap gap-2">
-      {([['estudio', 'Melhorar foto'], ['compor', 'Compor'], ['acervo', 'Acervo e Workspace'], ['modelos', 'Modelos'], ['clones', 'Clones']] as const).map(([e, nome]) => <button key={e} type="button" onClick={() => setEtapa(e)} className="rounded-md border px-2 py-1.5 text-[12px]">{nome}</button>)}
-      <button type="button" onClick={() => setDiretor(true)} className="rounded-md border px-2 py-1.5 text-[12px]">Diretor de fotos</button>
-    </nav>
-  </div>;
+  const extras: FerramentaDaBancada[] = [
+    { id: "compor", nome: "Compor foto", icone: Images, onAbrir: () => setEtapa("compor") },
+    { id: "combinar", nome: "Combinar produtos e cenários", icone: Layers, onAbrir: () => setEtapa("combinar") },
+    { id: "acervo", nome: "Acervo e Workspace", icone: FolderOpen, onAbrir: () => setEtapa("acervo") },
+    { id: "modelos", nome: "Modelos", icone: UsersRound, onAbrir: () => setEtapa("modelos") },
+    { id: "clones", nome: "Clones", icone: UserRound, onAbrir: () => setEtapa("clones") },
+    { id: "diretor", nome: "Diretor de fotos", icone: MessageSquare, onAbrir: () => setDiretor(true) },
+  ];
+  const ferramentas = null;
   const fonte = fonteDoArquivo(arte?.capa);
   return <MesaFotoProvider valor={valor}>
     <div className="flex min-h-0 flex-1 flex-col" data-estudio-fotos-da-pauta={item.id}>
-      {posts.isLoading ? <p role="status">Lendo as fotos desta pauta…</p> : posts.isError ? <p role="alert">Não foi possível ler este post. <button onClick={() => void posts.refetch()}>Tentar novamente</button></p> :
-        post?.cards.length && !trocando ? <PostAberto post={post} estudio={{ ferramentas }} onTrocarFotos={() => { setSelecionadas(post.imagem_ids); setTrocando(true); }} /> :
+      <div hidden={ferramentaAberta || diretor} className="flex min-h-0 flex-1 flex-col">{posts.isLoading ? <p role="status">Lendo as fotos desta pauta…</p> : posts.isError ? <p role="alert">Não foi possível ler este post. <button onClick={() => void posts.refetch()}>Tentar novamente</button></p> :
+        post?.cards.length && !trocando ? <PostAberto post={post} estudio={{ ferramentas, extras }} onTrocarFotos={() => { setSelecionadas(post.imagem_ids); setTrocando(true); }} /> :
         !post && arte && fonte.caminho ? <BancadaDeFotos titulo={item.title} fotos={[{ id: arte.capa!.id, nome: item.title, caminho: fonte.caminho, bucket: fonte.bucket }]}>{ferramentas}<p className="text-[13px] font-semibold">Fotos já vinculadas à Agenda</p><p className="my-3 whitespace-pre-wrap text-[13px]">{arte.legenda}</p><a href="/calendario" className="text-[13px] text-primary">Conferir na Agenda</a></BancadaDeFotos> :
-        <MontarOPost key={post?.id || item.id} fotosIniciais={trocando || selecionadas.length ? selecionadas : post?.imagem_ids || []} post={post} taskInicial={item.id} destinoFixo estudio={{ taskId: item.id, onSelecionadas: setSelecionadas, titulo: item.title, direcao: roteiro?.direcao_foto, ferramentas }} onPronto={() => { setTrocando(false); void posts.refetch(); }} onCancelar={() => setTrocando(false)} />}
-      <JanelaCentral aberta={ferramentaAberta} onFechar={() => setFerramentaAberta(false)} titulo="Ferramentas de fotos da pauta" largura="tela">
+        <MontarOPost key={post?.id || item.id} fotosIniciais={trocando || selecionadas.length ? selecionadas : post?.imagem_ids || []} post={post} taskInicial={item.id} destinoFixo estudio={{ taskId: item.id, onSelecionadas: setSelecionadas, titulo: item.title, direcao: roteiro?.direcao_foto, ferramentas, extras }} onPronto={() => { setTrocando(false); void posts.refetch(); }} onCancelar={() => setTrocando(false)} />}</div>
+      {ferramentaAberta && <section className="min-h-0 flex-1 overflow-y-auto rounded-xl border bg-card p-4"><header className="mb-4 flex items-center justify-between border-b pb-3"><strong className="text-[13px]">{ETAPAS_DA_MESA_FOTO.find((e) => e.valor === etapa)?.rotulo} · {item.title}</strong><button type="button" className="rounded-md border px-3 py-2 text-[12px]" onClick={() => setFerramentaAberta(false)}>Voltar à prancheta</button></header>
         <div key={navegacao}><Suspense fallback={<p role="status">Abrindo ferramentas…</p>}>
             {etapa === "estudio" && <Estudio escopo={chave("edicao")} />}
+            {etapa === "combinar" && <Combinar escopo={chave("combinar")} />}
             {etapa === "compor" && <Compor escopo={chave("composicao")} />}
             {etapa === "acervo" && <Fotos />}
             {etapa === "modelos" && <Modelos />}
@@ -110,10 +114,10 @@ export default function EstudioDeFotosDaPauta({ item, roteiro, arte }: { item: I
             {etapa === "canvas" && <Canvas />}
             {etapa === "campanha" && <Campanha />}
         </Suspense></div>
-      </JanelaCentral>
-      <JanelaCentral aberta={diretor} onFechar={() => setDiretor(false)} titulo="Diretor de fotos desta pauta" largura="xl">
+      </section>}
+      {diretor && <section className="flex min-h-0 flex-1 flex-col rounded-xl border bg-card p-4"><header className="mb-4 flex justify-between border-b pb-3"><strong className="text-[13px]">Diretor · {item.title}</strong><button type="button" className="text-[12px] text-primary" onClick={() => setDiretor(false)}>Voltar à prancheta</button></header>
         <Suspense fallback={null}><Diretor escopo={item.id} pautaId={item.id} pedido={pedido} /></Suspense>
-      </JanelaCentral>
+      </section>}
     </div>
   </MesaFotoProvider>;
 }

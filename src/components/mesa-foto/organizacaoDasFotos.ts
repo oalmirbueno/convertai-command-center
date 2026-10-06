@@ -23,9 +23,9 @@ export function fotosComDescendentes(fotos: FotoDoAcervo[], origens: string[]): 
 }
 
 /** Histórico confirmado no servidor, compatível com as composições já salvas. */
-export function historicoDaComposicao(fotos: FotoDoAcervo[], canvases: Canvas[], clientId: string, kitIds: string[], pessoa: { tipo: string; id: string } | null, cloneFotoId?: string): FotoDoAcervo[] {
+export function historicoDaComposicao(fotos: FotoDoAcervo[], canvases: Canvas[], clientId: string, kitIds: string[], pessoa: { tipo: string; id: string } | null, cloneFotoId?: string, prefixo = "Composição · "): FotoDoAcervo[] {
   const ids = new Set(canvases.filter((c) => {
-    if (c.client_id !== clientId || !c.nome.startsWith("Composição · ")) return false;
+    if (c.client_id !== clientId || !c.nome.startsWith(prefixo)) return false;
     if (!c.nos.some((n) => n.tipo === "produto" && kitIds.includes(n.dados.kit_id || ""))) return false;
     const modelos = c.nos.filter((n) => n.tipo === "modelo");
     if (!pessoa) return modelos.length === 0;

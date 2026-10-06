@@ -1215,6 +1215,9 @@ function resumoDoKit(kit: LinhaKit, refs: (RefDoKit & { imagem: LinhaImagem })[]
 async function acervoRegistrar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
+  // Acabamento local: preserve procedência, geração e a necessidade de revisão.
+  const fonte = corpo.derivada_de ? await lerImagem(clientId, idDe(corpo.derivada_de, "derivada_de")) : null;
+  if (fonte && (fonte.ativa === false || corpo.acabamento !== "logo" || (fonte.tags ?? []).includes(TAG_REFERENCIA_WEB))) throw new ErroHttp(400, "acabamento_invalido", "Use uma foto ativa do cliente e um acabamento válido.");
   const nomesBrutos = Array.isArray(corpo.nomes) ? corpo.nomes : [];
   // O mesmo caminho repetido conta uma vez (e nunca é apagado como duplicata de si mesmo).
   const pares = new Map<string, unknown>();
@@ -1286,16 +1289,16 @@ async function acervoRegistrar(ch: Chamador, corpo: Record<string, unknown>) {
       storage_bucket: "mesa",
       storage_path: caminho,
       nome: nomeDoArquivo(caminho, nomes[i]),
-      pasta: "Mesa Foto / Originais",
+      pasta: fonte ? "Mesa Foto / Com logo" : "Mesa Foto / Originais",
       categoria: null,
-      tags: ["mesa_foto", "original"],
+      tags: fonte ? [...new Set([...(fonte.tags ?? []).filter((t) => t !== "original"), "mesa_foto", "com_logo", `origem:${fonte.id}`])] : ["mesa_foto", "original"],
       sha256: sha,
       largura: dim.largura,
       altura: dim.altura,
-      gerada: false,
+      gerada: fonte ? !!fonte.gerada : false,
       aprovada: false,
-      modo: null,
-      derivada_de: null,
+      modo: fonte?.modo ?? null,
+      derivada_de: fonte?.id ?? null,
     }).select(CAMPOS_IMAGEM).single();
     if (error || !data) {
       // Corrida com outra chamada que registrou o mesmo conteúdo (índice único por sha256).

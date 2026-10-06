@@ -608,7 +608,7 @@ describe("telas da frente MF", () => {
     montar(h(EtapaCriar), foto);
     expect(await screen.findByText("O que você quer produzir?")).toBeTruthy();
     const objetivos = Array.from(document.querySelectorAll("[data-objetivo]")).map((b) => b.getAttribute("data-objetivo"));
-    expect(objetivos).toEqual(["compor", "melhorar", "variacoes", "modelo", "fundo", "post"]);
+    expect(objetivos).toEqual(["combinar", "compor", "melhorar", "variacoes", "modelo", "fundo", "post"]);
     // Nenhum cartão travado: cada um diz o que precisa, e o passo 2 pede.
     expect(Array.from(document.querySelectorAll("[data-objetivo]")).every((b) => !(b as HTMLButtonElement).disabled)).toBe(true);
     expect((document.querySelector('[data-objetivo="variacoes"]') as HTMLElement).textContent).toContain("Precisa: fotos do produto");
@@ -656,7 +656,7 @@ describe("telas da frente MF", () => {
     expect(await screen.findByText("Antes (original)")).toBeTruthy();
     expect(document.querySelector("[data-versoes-da-foto]")!.textContent).toContain("Versões desta foto · 2");
     const grupos = Array.from(document.querySelectorAll("[data-grupo-do-estudio]")).map((g) => g.getAttribute("data-grupo-do-estudio"));
-    expect(grupos).toEqual(["usar", "melhorar", "fundo", "angulo", "formato"]);
+    expect(grupos).toEqual(["usar", "melhorar", "logo", "fundo", "angulo", "formato"]);
     // Foto deitada (4:3) no post 4:5: a moldura mostra o recorte, sem véu escuro.
     expect(document.querySelector('[data-recorte-do-post="feed_4x5"]')).toBeTruthy();
     expect(document.querySelector("[data-estudio-de-fotos]")!.innerHTML).not.toMatch(/bg-black|bg-foreground\/[0-9]/);
