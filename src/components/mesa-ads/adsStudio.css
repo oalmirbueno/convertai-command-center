@@ -16,3 +16,5 @@
 .ads-stage-tools { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }
 .ads-stage-tools::-webkit-scrollbar { width: 4px; }
 .ads-stage-tools::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 9px; }
+
+.ads-creative-list { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }

@@ -33,6 +33,8 @@ import {
 } from "./adsApi";
 const VideoDoCriativo = lazy(() => import("./VideoDoCriativo"));
 import "./adsStudio.css";
+import { useArquivosDeVideo, usePedidos } from "../mesa-videos/videosApi";
+import { ESTADOS_VIDEO_ADS, resumoVideoAds, nomeBaseVideo, type EstadoVideoAds } from "./videoDoAnuncio";
 import ArteDoCriativo, { capaDoTrabalho } from "./ArteDoCriativo";
 import { ImportarPacote } from "./PacoteDeOtimizacao";
 import ResultadoDoCriativo from "./ResultadoDoCriativo";
@@ -220,6 +222,11 @@ export default function AbaEstudioAds({
   const modeloDaCopy = useModeloDaCopy();
   // Frente AD4: o que ver (criativos ou acervo) lembrado por cliente; os "..." e as prévias recolhidas.
   const [midia, setMidia] = useEstadoDaTela<"arte" | "video">(`ads:midia:${clientId}`, "arte");
+  const pedidosDeVideo = usePedidos(clientId);
+  const arquivosDeVideo = useArquivosDeVideo(clientId);
+  const videoDe = (c: CriativoAds) => resumoVideoAds(clientId, c.id, arquivosDeVideo.data?.arquivos || [], pedidosDeVideo.data?.itens || []);
+  const [filtroVideo, setFiltroVideo] = useEstadoDaTela<EstadoVideoAds | "">(`ads:video:filtro:${clientId}`, "");
+  const [buscaVideo, setBuscaVideo] = useState("");
   const [vista, setVista] = useEstadoDaTela<"criativos" | "acervo">(`mesa-ads:estudio:vista:${clientId}`, "criativos", { validar: (v) => v === "criativos" || v === "acervo", esperaMs: 0 });
   const [maisAberto, setMaisAberto] = useState(false);
   const [maisDoCriativo, setMaisDoCriativo] = useState(false);
@@ -255,8 +262,10 @@ export default function AbaEstudioAds({
   const presentes = SITUACOES.filter((s) => contagem(s.valor) > 0);
   const unica = presentes.length === 1 ? presentes[0] : null;
   const filtroEfetivo: SituacaoDoCriativo | "" = unica ? "" : filtro;
-  const filtrados = filtroEfetivo ? visiveis.filter((c) => situacao(c) === filtroEfetivo) : visiveis;
-  const aberto = visiveis.find((c) => c.id === criativoId) || filtrados[0] || visiveis[0] || null;
+  const filtrados = midia === "video"
+    ? visiveis.filter((c) => (!filtroVideo || videoDe(c).estado === filtroVideo) && `${c.nome} ${c.copy.titulo}`.toLocaleLowerCase("pt-BR").includes(buscaVideo.toLocaleLowerCase("pt-BR")))
+    : filtroEfetivo ? visiveis.filter((c) => situacao(c) === filtroEfetivo) : visiveis;
+  const aberto = midia === "video" ? filtrados.find((c) => c.id === criativoId) || filtrados[0] || null : visiveis.find((c) => c.id === criativoId) || filtrados[0] || visiveis[0] || null;
   const trabalho = aberto ? trabalhoDe(aberto) : null;
   const grupos = agrupar(filtrados, listaDePlanos);
   const planoEmFoco = planoId && doPlano.length ? planoId : visiveis.length && visiveis.every((c) => c.plano_id === visiveis[0].plano_id) ? visiveis[0].plano_id : null;
@@ -544,12 +553,12 @@ export default function AbaEstudioAds({
                   </button>
                 </>
               )}
-              {selo && (
+              {midia === "arte" && selo && (
                 <span className={juntar("ml-1.5 inline-flex h-5 items-center rounded-full px-2 align-middle text-[10.5px] font-medium", unica ? unica.tom : "")} data-selo-da-situacao={unica ? unica.valor : ""}>
                   {selo}
                 </span>
               )}
-              {naContaN > 0 && <span className="ml-1.5">· {naContaN} na conta</span>}
+              {midia === "arte" && naContaN > 0 && <span className="ml-1.5">· {naContaN} na conta</span>}
             </span>
           }
           acao={
@@ -587,7 +596,7 @@ export default function AbaEstudioAds({
           {vista === "criativos" && <div className="mb-1 mr-2 inline-flex rounded-lg border bg-secondary/40 p-1" role="group" aria-label="Formato do estúdio">
             {([['arte', 'Arte', ImageIcon], ['video', 'Vídeo', Clapperboard]] as const).map(([id, nome, Icone]) => <button key={id} type="button" aria-pressed={midia === id} title={nome} onClick={() => setMidia(id)} className={`inline-flex items-center rounded-md px-3 py-1.5 text-xs ${midia === id ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground'}`}><Icone className="mr-1.5 h-3.5 w-3.5" />{nome}</button>)}
           </div>}
-          {vista === "criativos" && !unica && (
+          {vista === "criativos" && midia === "arte" && !unica && (
             <SeletorCompacto
               rotulo="Filtrar por situação"
               className="mb-1"
@@ -599,6 +608,7 @@ export default function AbaEstudioAds({
               onEscolher={(v) => setFiltro(v as SituacaoDoCriativo | "")}
             />
           )}
+          {vista === "criativos" && midia === "video" && <SeletorCompacto rotulo="Situação dos vídeos" className="mb-1" valor={filtroVideo} onEscolher={(v) => setFiltroVideo(v as EstadoVideoAds | "")} opcoes={[{ valor: "", rotulo: `Todos (${visiveis.length})` }, ...ESTADOS_VIDEO_ADS.map((e) => ({ valor: e.id, rotulo: `${e.nome} (${visiveis.filter((c) => videoDe(c).estado === e.id).length})` }))]} />}
         </div>
         {/* O "...": o secundário num lugar só (estilo, importar, copy do plano e o que não é o primário agora). */}
         {midia === "arte" && maisAberto && (
@@ -686,15 +696,17 @@ export default function AbaEstudioAds({
         className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[220px_minmax(0,1fr)] min-[1800px]:grid-cols-[260px_minmax(0,1fr)_400px]"
         data-estudio-ads-grade=""
       >
-        <aside className="min-w-0 lg:h-full lg:overflow-y-auto lg:overscroll-contain" aria-label="Criativos">
+        <aside className="ads-creative-list min-w-0 lg:h-full lg:overflow-y-auto lg:overscroll-contain" aria-label={midia === "video" ? "Criativos de vídeo" : "Criativos"}>
+          {midia === "video" && <div className="sticky top-0 z-10 space-y-2 bg-background pb-3"><p className="text-xs font-semibold">Vídeos por campanha</p><input className="w-full rounded-md border bg-background px-2 py-1.5 text-xs" aria-label="Buscar base do vídeo" placeholder="Buscar anúncio…" value={buscaVideo} onChange={(e) => setBuscaVideo(e.target.value)} /><p className="text-[11px] text-muted-foreground">Escolha a base. Cada vídeo tem seu próprio andamento.</p>{(pedidosDeVideo.isError || arquivosDeVideo.isError) && <p role="alert" className="text-xs">Histórico indisponível. <button onClick={() => { void pedidosDeVideo.refetch(); void arquivosDeVideo.refetch(); }}>Conferir</button></p>}</div>}
           {grupos.length === 0 && <p className="px-1 text-[12px] text-muted-foreground">Nenhum criativo nessa situação.</p>}
           {grupos.map((g) => {
             // Frente CR: a melhor variação do ângulo à vista (marcada); as outras recolhidas.
-            const { melhores, outros } = melhoresDoAngulo(g.criativos);
+            const { melhores, outros } = midia === "video" ? { melhores: g.criativos, outros: [] as CriativoAds[] } : melhoresDoAngulo(g.criativos);
             const outrosAbertos = abertosOutros.indexOf(g.chave) >= 0 || (!!aberto && outros.some((c) => c.id === aberto.id));
             const item = (c: CriativoAds) => {
               const ativo = aberto && aberto.id === c.id;
               const capa = capaDoTrabalho(trabalhoDe(c));
+              const videoResumo = videoDe(c);
               const nota = notaCurta(c.copy.escolha ? c.copy.escolha.nota : null);
               return (
                 <li key={c.id}>
@@ -704,21 +716,21 @@ export default function AbaEstudioAds({
                     aria-current={ativo ? "true" : undefined}
                     className={`flex w-full min-w-0 items-center rounded-lg border p-1.5 text-left transition-colors ${ativo ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted"}`}
                   >
-                    <span className="mr-2 block h-12 w-10 shrink-0 overflow-hidden rounded-md bg-secondary">{capa ? <ImagemDaMesa caminho={capa} alt="" className="h-full w-full" /> : null}</span>
+                    <span className="mr-2 block h-12 w-10 shrink-0 overflow-hidden rounded-md bg-secondary">{midia === "video" ? <Clapperboard className={`mx-auto mt-3 h-6 w-6 ${videoResumo.quantidade ? "text-primary" : "text-muted-foreground"}`} /> : capa ? <ImagemDaMesa caminho={capa} alt="" className="h-full w-full" /> : null}</span>
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-center text-[12px] font-medium">
-                        <span className="min-w-0 truncate">{formatoDe(c.formato).rotulo}</span>
-                        {ehOMelhor(c) && (
+                        <span className="min-w-0 truncate">{midia === "video" ? nomeBaseVideo(c) : formatoDe(c.formato).rotulo}</span>
+                        {midia === "arte" && ehOMelhor(c) && (
                           <span className="ml-1 inline-flex shrink-0 items-center text-[10.5px] font-medium text-primary" title="Melhor variação do ângulo pela conferência do Jev">
                             <Star className="mr-0.5 h-3 w-3" /> melhor
                           </span>
                         )}
-                        {nota && <span className="ml-1 shrink-0 text-[10.5px] tabular-nums text-muted-foreground" title="Nota do Jev da copy">{nota}</span>}
+                        {midia === "arte" && nota && <span className="ml-1 shrink-0 text-[10.5px] tabular-nums text-muted-foreground" title="Nota do Jev da copy">{nota}</span>}
                       </span>
                       <span className="mt-0.5 flex min-w-0 flex-wrap items-center">
-                        <SeloDaSituacao situacao={situacao(c)} />
-                        {estaNaConta(c) && <span className="ml-1 text-[10.5px] font-medium text-primary" title="Na conta: o agente sênior enxerga">na conta</span>}
-                        {c.ad_id && <Link2 className="ml-1 h-3 w-3 text-success" aria-label="ligado a um anúncio" />}
+                        {midia === "video" ? <span className="text-[11px] text-primary">{pedidosDeVideo.isLoading || arquivosDeVideo.isLoading ? "Conferindo…" : pedidosDeVideo.isError || arquivosDeVideo.isError ? "Sem leitura" : `${videoResumo.nome} · ${videoResumo.quantidade ? `${videoResumo.quantidade} versão(ões)` : "sem vídeo"}`}</span> : <SeloDaSituacao situacao={situacao(c)} />}
+                        {midia === "arte" && estaNaConta(c) && <span className="ml-1 text-[10.5px] font-medium text-primary" title="Na conta: o agente sênior enxerga">na conta</span>}
+                        {midia === "arte" && c.ad_id && <Link2 className="ml-1 h-3 w-3 text-success" aria-label="ligado a um anúncio" />}
                       </span>
                     </span>
                   </button>
@@ -761,19 +773,19 @@ export default function AbaEstudioAds({
                 <div className="mb-1 mr-3 min-w-0 flex-1">
                   <div className="flex min-w-0 items-center">
                     <h2 className="min-w-0 truncate text-[15px] font-semibold" title={nomeDoCriativo(aberto, listaDePlanos)}>
-                      {nomeDoCriativo(aberto, listaDePlanos)}
+                      {midia === "video" ? nomeBaseVideo(aberto) : nomeDoCriativo(aberto, listaDePlanos)}
                     </h2>
                     <span className="ml-2 inline-flex shrink-0" title={situacaoAberta === "entregue" ? AVISO_DA_ENTREGA : undefined}>
-                      <SeloDaSituacao situacao={situacaoAberta} />
+                      {midia === "video" ? <span className="text-xs text-primary">{videoDe(aberto).nome}</span> : <SeloDaSituacao situacao={situacaoAberta} />}
                     </span>
-                    {estaNaConta(aberto) && <span className="ml-1.5 inline-flex h-5 shrink-0 items-center rounded-full bg-primary/15 px-2 text-[10.5px] font-medium text-primary">{aberto.status === "no_ar" ? "No ar" : "Na conta"}</span>}
+                    {midia === "arte" && estaNaConta(aberto) && <span className="ml-1.5 inline-flex h-5 shrink-0 items-center rounded-full bg-primary/15 px-2 text-[10.5px] font-medium text-primary">{aberto.status === "no_ar" ? "No ar" : "Na conta"}</span>}
                   </div>
                   <p className="truncate text-[12px] text-muted-foreground">
-                    {formatoDe(aberto.formato).rotulo}
-                    {anuncioLigado ? ` · no Meta: ${nomeDoAnuncio(anuncioLigado)}` : aberto.ad_id ? ` · no Meta: ${aberto.ad_id}` : " · sem anúncio ligado"}
+                    {midia === "video" ? "Vídeo · base e copy da campanha" : formatoDe(aberto.formato).rotulo}
+                    {midia === "video" ? "" : anuncioLigado ? ` · no Meta: ${nomeDoAnuncio(anuncioLigado)}` : aberto.ad_id ? ` · no Meta: ${aberto.ad_id}` : " · sem anúncio ligado"}
                   </p>
                   {/* Frente CR: por que este criativo, em uma linha (estilo com o dado real ou padrão do nicho, e o Jev). */}
-                  {porqueDoCriativo(aberto, anguloAberto) && (
+                  {midia === "arte" && porqueDoCriativo(aberto, anguloAberto) && (
                     <p className="truncate text-[12px] leading-snug" data-porque-do-criativo="" title={porqueDoCriativo(aberto, anguloAberto)}>
                       <span className="font-medium">Por que este: </span>
                       <span className="text-muted-foreground">{porqueDoCriativo(aberto, anguloAberto)}</span>
@@ -867,7 +879,7 @@ export default function AbaEstudioAds({
               )}
             </div>
 
-            {midia === "video" ? <Suspense fallback={<p role="status">Abrindo estúdio de vídeo…</p>}><VideoDoCriativo key={aberto.id} criativo={aberto} referencia={trabalho ? capaDoTrabalho(trabalho) : null} /></Suspense> : trabalho ? (
+            {midia === "video" ? <Suspense fallback={<p role="status">Abrindo estúdio de vídeo…</p>}><VideoDoCriativo key={aberto.id} criativo={copyAoVivo?.id === aberto.id ? { ...aberto, copy: copyAoVivo.copy } : aberto} plano={planoAberto} angulo={anguloAberto} referencia={trabalho ? capaDoTrabalho(trabalho) : null} /></Suspense> : trabalho ? (
               <ArteDoCriativo key={aberto.id} criativo={aberto} trabalho={trabalho} onAtualizar={atualizarTrabalhos} irmaos={irmaos} />
             ) : aberto.trabalho_id && (trabalhos.isLoading || trabalhos.isFetching) ? (
               <div className="h-[50vh] animate-pulse rounded-lg bg-muted/70" />
