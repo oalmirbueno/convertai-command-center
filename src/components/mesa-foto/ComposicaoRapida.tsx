@@ -1,3 +1,6 @@
+import ColunasDaFoto from "./ColunasDaFoto";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { superficie, juntar } from "@/components/sistema/estilos";
 import { lazy, Suspense, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -11,7 +14,7 @@ import { useMesaFoto } from "./Comuns";
 import EscolhaDoProduto, { capaDoKit } from "./EscolhaDoProduto";
 import EscolhaDoModeloDaFoto from "./EscolhaDoModeloDaFoto";
 import { type ModeloEscolhido } from "./escolhasDaLinha";
-import { acrescentarFotos, useFotos, useKits, salvarKit, decidirFoto, chaveDosKits, type FotoDoAcervo } from "./fotoApi";
+import { acrescentarFotos, useFotos, useKits, decidirFoto, chaveDosKits, type FotoDoAcervo } from "./fotoApi";
 import { useClones } from "./clonesApi";
 import { usePersonas, useImagensDaPersona } from "./modelosApi";
 import { useCanvases, chaveDosCanvases, canvasVazio, novoNo, porCartao, salvarCanvas, gerarNoCanvas, partesDoGerar, type Canvas } from "./canvasApi";
@@ -25,7 +28,7 @@ import AcoesProDaFoto from "./AcoesProDaFoto";
 const FerramentasDaPersona = lazy(() => import("./EtapaModelos").then((m) => ({ default: m.PersonaAberta })));
 
 type Foco = "pessoa" | "composicao" | "produto";
-interface Rascunho { pessoa: ModeloEscolhido | null; ambiente: string | null; pedido: string; formato: string; motor: string; resultados: string[]; grupos?: Record<string, string[]>; produtoTratado: string | null; origemKit?: string | null; kitTratado?: string | null; fotoDoKitTratado?: string | null }
+interface Rascunho { luz?: string; enquadramento?: string; pose?: string; pessoa: ModeloEscolhido | null; ambiente: string | null; pedido: string; formato: string; motor: string; resultados: string[]; grupos?: Record<string, string[]>; produtoTratado: string | null; origemKit?: string | null; kitTratado?: string | null; fotoDoKitTratado?: string | null }
 const INICIAL: Rascunho = { pessoa: null, ambiente: null, pedido: "", formato: "4:5", motor: "", resultados: [], produtoTratado: null };
 
 /** Três áreas com foco fluido; cada geração grava um Canvas próprio e preserva as fontes. */
@@ -56,7 +59,7 @@ export default function ComposicaoRapida({ escopo }: { escopo?: string } = {}) {
   const kit = kits.data?.find((k) => k.id === kitId);
   const capa = kit ? capaDoKit(kit, fotos) : null;
   const produto = r.origemKit === kitId ? fotos.find((f) => f.id === r.produtoTratado) || capa : capa;
-  const kitDeGeracao = r.origemKit === kitId && r.fotoDoKitTratado === produto?.id && r.kitTratado ? r.kitTratado : kitId;
+  const kitDeGeracao = kitId;
   const ambiente = fotos.find((f) => f.id === r.ambiente);
   const motor = r.motor || padraoPara(catalogo, "imagem")?.id || "";
   const clone = r.pessoa?.tipo === "clone" ? clones.data?.find((c) => c.id === r.pessoa?.id) : null;
@@ -69,7 +72,7 @@ export default function ComposicaoRapida({ escopo }: { escopo?: string } = {}) {
   const fotosDoGrupo = resultados.map((id) => fotos.find((f) => f.id === id && f.ativa)).filter((f): f is FotoDoAcervo => !!f);
   const atual = fotosDoGrupo.find((f) => f.id === atualPorGrupo[grupo]) || fotosDoGrupo[0] || null;
   const faltaPessoa = r.pessoa?.tipo === "clone" ? !clone?.autorizacao_valida.ok : r.pessoa?.tipo === "persona" ? !persona?.ancora_imagem_id : false;
-  const imagem = (foto: FotoDoAcervo | null | undefined, grande = false) => foto ? <button type="button" className="block w-full cursor-zoom-in rounded-lg focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Ampliar ${foto.nome}`} onClick={() => setZoom(fotoNaGaleria(foto))}><ImagemDaMesa caminho={foto.storage_path} bucket={foto.storage_bucket || "mesa"} alt={foto.nome} className={`w-full rounded-lg object-contain ${grande ? 'max-h-[48vh]' : 'max-h-64'}`} /><span className="mt-1 block text-[12px] text-muted-foreground">Ampliar e conferir</span></button> : <div className="flex min-h-40 items-center justify-center rounded-lg bg-muted p-4 text-center text-[13px] text-muted-foreground">Escolha as imagens para compor</div>;
+  const imagem = (foto: FotoDoAcervo | null | undefined, grande = false) => foto ? <button type="button" className="block w-full cursor-zoom-in rounded-lg focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Ampliar ${foto.nome}`} onClick={() => setZoom(fotoNaGaleria(foto))}><ImagemDaMesa caminho={foto.storage_path} bucket={foto.storage_bucket || "mesa"} alt={foto.nome} className={`w-full rounded-lg object-contain ${grande ? 'max-h-80' : 'max-h-64'}`} /></button> : <div className="flex min-h-40 items-center justify-center rounded-lg bg-muted p-4 text-center text-[13px] text-muted-foreground">Escolha as imagens para compor</div>;
   const montar = (): Canvas => {
     let c = canvasVazio(clientId, `Composição · ${kit?.nome || 'Foto'} · ${new Date().toLocaleDateString('pt-BR')}`);
     const saida = novoNo("gerar", 500, 0, { motores: [motor], formato: r.formato, qualidade: "alta" });
@@ -78,26 +81,25 @@ export default function ComposicaoRapida({ escopo }: { escopo?: string } = {}) {
     if (persona) c = porCartao(c, novoNo("modelo", 0, 0, { modelo_id: persona.id, versao: persona.versao }), { gerarId: saida.id });
     if (clone?.autorizacao_valida.ok) c = porCartao(c, novoNo("modelo", 0, 0, { imagem_id: (clone.identidade_real.find((i) => i.principal) || clone.identidade_real[0])?.imagem_id, autorizada: true, titulo: clone.nome }), { gerarId: saida.id });
     if (r.ambiente) c = porCartao(c, novoNo("ambiente", 0, 0, { imagem_id: r.ambiente, modo: "foto", uso: "usar" }), { gerarId: saida.id });
-    c = porCartao(c, novoNo("texto", 0, 0, { texto: r.pedido }), { gerarId: saida.id });
+    c = porCartao(c, novoNo("texto", 0, 0, { texto: [r.pedido, r.luz && `Luz: ${r.luz}`, r.enquadramento && `Enquadramento: ${r.enquadramento}`, r.pose && `Pose/ação: ${r.pose}`].filter(Boolean).join(". ") }), { gerarId: saida.id });
     return c;
   };
-  const estilo = (qual: Foco) => `min-w-0 rounded-xl border p-3 transition-[flex-grow] duration-300 motion-reduce:transition-none ${foco === qual ? 'border-primary/50 bg-card lg:flex-[2]' : 'lg:flex-1'}`;
+  const estilo = (qual: Foco) => `min-h-0 min-w-0 p-3 lg:overflow-y-auto lg:overscroll-contain transition-[flex-grow] duration-300 motion-reduce:transition-none ${foco === qual ? 'border-primary/50 bg-card lg:flex-[2]' : 'lg:flex-1'}`;
   return <div className="space-y-3" data-composicao-rapida="">
-    <p className="text-[12px] text-muted-foreground">Clique no título de pessoa, composição ou produto para ampliar.</p>
-    <div className="flex flex-col gap-3 lg:flex-row">
-      <section className={estilo("pessoa")} aria-label="Modelo ou clone">
+    <ColunasDaFoto rodape={fotosDoGrupo.length > 0 && <GaleriaDeFotos key={grupo} titulo="Fotos desta composição" fotos={fotosDoGrupo.map((f) => fotoNaGaleria(f, f.modo === "canvas" ? "Composições" : "Tratamentos"))} atualId={atual?.id} onSelecionar={(id) => setAtualPorGrupo((a) => ({ ...a, [grupo]: id }))} onUsar={prepararNaAgenda} />}>
+      <section className={juntar(superficie.painel, estilo("pessoa"))} aria-label="Modelo ou clone">
         <button className="mb-3 w-full text-left text-[13px] font-semibold" type="button" aria-pressed={foco === 'pessoa'} onClick={() => setFoco('pessoa')}>1. Modelos e clones</button>
         <EscolhaDoModeloDaFoto semPessoa valor={r.pessoa} onEscolher={(pessoa) => mudar({ pessoa })} />
-        {retrato && <div className="mt-3"><button type="button" className="block w-full cursor-zoom-in" aria-label="Ampliar modelo" onClick={() => setZoom({ caminho: retrato.storage_path, bucket: retrato.storage_bucket || "mesa", titulo: persona?.nome || "Modelo" })}><ImagemDaMesa caminho={retrato.storage_path} bucket={retrato.storage_bucket || "mesa"} alt={persona?.nome || "Modelo"} className="max-h-[48vh] w-full rounded-lg object-contain" /></button><button type="button" className="mt-2 text-[12px] text-primary" onClick={() => { setEditarPessoa(!editarPessoa); setFoco("pessoa"); }}>Variações, outros geradores e upscale do modelo</button></div>}
+        {retrato && <div className="mt-3"><button type="button" className="block w-full cursor-zoom-in" aria-label="Ampliar modelo" onClick={() => setZoom({ caminho: retrato.storage_path, bucket: retrato.storage_bucket || "mesa", titulo: persona?.nome || "Modelo" })}><ImagemDaMesa caminho={retrato.storage_path} bucket={retrato.storage_bucket || "mesa"} alt={persona?.nome || "Modelo"} className="max-h-80 w-full rounded-lg object-contain" /></button><button type="button" className="mt-2 text-[12px] text-primary" onClick={() => { setEditarPessoa(!editarPessoa); setFoco("pessoa"); }}>Variações, outros geradores e upscale do modelo</button></div>}
         {cloneFoto && <div className="mt-3">{imagem(cloneFoto, foco === "pessoa")}<AcoesProDaFoto foto={cloneFoto} mostrarCriativo={false} onPronta={(nova) => { acrescentarFotos(cache, clientId, [nova]); abrirNoEstudio?.(nova.id); }} /><button type="button" className="mt-2 text-[12px] text-primary" onClick={() => irPara("clones", { imagem: cloneFoto.id })}>Fotos e variações deste clone</button></div>}
-        <p className="mt-2 text-[12px] text-muted-foreground">Produto sozinho ou com pessoa: escolha um modelo ou descreva uma pessoa nova.</p>
+
       </section>
-      <section className={estilo("composicao")} aria-label="Composição principal">
-        <button className="mb-3 w-full text-left text-[13px] font-semibold" type="button" aria-pressed={foco === 'composicao'} onClick={() => setFoco('composicao')}>2. Sua composição</button>
+      <section className={juntar(superficie.painel, estilo("composicao"))} aria-label="Composição principal">
+        <button className="mb-3 w-full text-left text-[13px] font-semibold" type="button" aria-pressed={foco === 'composicao'} onClick={() => setFoco('composicao')}>2. Sua composição</button><AjudaRecolhida rotulo="Como compor">Direção de uma foto: ajuste pose, luz e enquadramento. Para produzir uma série com vários cenários, use Combinar.</AjudaRecolhida>
         {imagem(atual || ambiente, true)}
         <div className="my-3 flex flex-wrap gap-2"><button type="button" className="rounded border px-2 py-1 text-[12px]" onClick={() => setEscolhendo(true)}>{ambiente ? 'Trocar ambiente' : 'Escolher foto do ambiente'}</button>{ambiente && <button type="button" className="text-[12px]" onClick={() => mudar({ ambiente: null })}>Retirar ambiente</button>}</div>
         <label className="block text-[12px]">Ambiente, ação e acabamento<textarea aria-label="Pedido da composição" className={campoTexto} rows={3} value={r.pedido} onChange={(e) => mudar({ pedido: e.target.value })} placeholder="Ex.: produto sobre mármore claro, luz suave de janela, textura realista…" /></label>
-        <div className="my-2 flex gap-2"><select aria-label="Proporção da composição" className={campo} value={r.formato} onChange={(e) => mudar({ formato: e.target.value })}>{['4:5','1:1','9:16','16:9'].map((f) => <option key={f}>{f}</option>)}</select><SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={motor} onChange={(v) => mudar({ motor: v })} /></div>
+        <div className="my-3 grid grid-cols-2 gap-2">{([{ campo: "luz", nome: "Luz", opcoes: ["Natural de janela", "Estúdio suave", "Fim de tarde", "Lateral dramática"] }, { campo: "enquadramento", nome: "Enquadramento", opcoes: ["Plano médio", "Retrato próximo", "Corpo inteiro", "Detalhe do produto"] }] as const).map((c) => <label key={c.campo} className="text-[12px]">{c.nome}<select className={campo} value={r[c.campo] || ""} onChange={(e) => mudar({ [c.campo]: e.target.value })}><option value="">Pela direção</option>{c.opcoes.map((o) => <option key={o}>{o}</option>)}</select></label>)}<label className="col-span-2 text-[12px]">Pose ou ação<input className={campo} value={r.pose || ""} onChange={(e) => mudar({ pose: e.target.value })} placeholder="Ex.: de perfil, segurando o produto à altura do peito" /></label></div><div className="my-2 flex gap-2"><select aria-label="Proporção da composição" className={campo} value={r.formato} onChange={(e) => mudar({ formato: e.target.value })}>{['4:5','1:1','9:16','16:9'].map((f) => <option key={f}>{f}</option>)}</select><SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={motor} onChange={(v) => mudar({ motor: v })} /></div>
         <BotaoComCusto rotulo="Gerar composição" titulo="Gerar composição" descricao="Uma nova foto, preservando produto e pessoa escolhidos." disabled={ocupado || !kit || !motor || !r.pedido.trim() || faltaPessoa} partes={() => partesDoGerar([motor], "alta", Math.min(14, (kit?.refs.length || 0) + (persona ? 5 : clone ? 1 : 0) + (ambiente ? 1 : 0)))} executar={async () => {
           setOcupado(true);
           try {
@@ -113,7 +115,7 @@ export default function ComposicaoRapida({ escopo }: { escopo?: string } = {}) {
         {!kitId && <p className="mt-2 text-[12px]">Escolha o produto à direita para começar.</p>}
         {atual && <div className="mt-3 flex flex-wrap gap-2"><button type="button" className="rounded border px-2 py-1 text-[12px]" onClick={() => abrirNoEstudio?.(atual.id)}>Melhorar esta foto</button><button type="button" className="rounded border px-2 py-1 text-[12px]" onClick={() => prepararNaAgenda?.([atual.id])}>Usar no post</button><AcoesProDaFoto foto={atual} onPronta={(nova) => { acrescentarFotos(cache, clientId, [nova]); registrar(nova.id); }} /></div>}
       </section>
-      <section className={estilo("produto")} aria-label="Produto e ferramentas">
+      <section className={juntar(superficie.painel, estilo("produto"))} aria-label="Produto e ferramentas">
         <button className="mb-3 w-full text-left text-[13px] font-semibold" type="button" aria-pressed={foco === 'produto'} onClick={() => setFoco('produto')}>3. Produto</button>
         <EscolhaDoProduto />
         <div className="mt-3">{imagem(produto)}</div>
@@ -124,18 +126,16 @@ export default function ComposicaoRapida({ escopo }: { escopo?: string } = {}) {
             const aprovada = await decidirFoto(clientId, produto.id, "aprovar");
             if (!aprovada?.aprovada) throw new Error("A aprovação da referência não foi confirmada.");
             acrescentarFotos(cache, clientId, [aprovada]);
-            const copia = await salvarKit(clientId, { ...kit, id: null, nome: `${kit.nome} · versão tratada`, frente_imagem_id: produto.id, refs: [{ imagem_id: produto.id, papel: "identidade", vista: "frente", prioridade: 0 }, ...kit.refs.filter((ref) => ref.imagem_id !== capa?.id)] });
-            if (!copia.id || copia.id === kit.id) throw new Error("Não foi possível salvar a referência sem alterar o produto original.");
-            mudar({ kitTratado: copia.id, fotoDoKitTratado: produto.id, origemKit: kitId });
+            mudar({ kitTratado: kit.id, fotoDoKitTratado: produto.id, origemKit: kitId });
             void cache.invalidateQueries({ queryKey: chaveDosKits(clientId) });
             toast.success("Esta versão será usada na próxima composição.");
           } catch (e) { toast.error(e instanceof Error ? e.message : "Não foi possível usar esta versão."); }
           finally { setOcupado(false); }
         }}>{r.fotoDoKitTratado === produto.id && r.kitTratado ? "Versão tratada em uso" : "Aprovar e usar esta versão"}</button>}
       </section>
-    </div>
+    </ColunasDaFoto>
     {escolhendo && <SeletorDeFotos fotos={fotos} titulo="Foto real do ambiente" multiplas={false} onUsar={(ids) => { mudar({ ambiente: ids[0] || null }); setEscolhendo(false); }} onFechar={() => setEscolhendo(false)} />}
-    {fotosDoGrupo.length > 0 && <GaleriaDeFotos key={grupo} titulo="Fotos desta composição" fotos={fotosDoGrupo.map((f) => fotoNaGaleria(f, f.modo === "canvas" ? "Composições" : "Tratamentos"))} atualId={atual?.id} onSelecionar={(id) => setAtualPorGrupo((a) => ({ ...a, [grupo]: id }))} onUsar={prepararNaAgenda} />}
+
     {canvases.isError && <p role="status" className="text-[12px] text-muted-foreground">Histórico remoto indisponível. As fotos desta sessão continuam acessíveis.</p>}
     <Ampliar imagens={zoom ? [zoom] : []} indice={zoom ? 0 : null} onFechar={() => setZoom(null)} />
     <JanelaCentral aberta={editarPessoa && !!persona} onFechar={() => setEditarPessoa(false)} titulo={`Fotos de ${persona?.nome || "modelo"}`} largura="xl">

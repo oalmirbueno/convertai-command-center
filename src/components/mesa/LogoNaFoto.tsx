@@ -10,7 +10,7 @@ import { acrescentarFotos, normalizarFotos, type FotoDoAcervo } from "@/componen
 
 const carregar = (url: string) => new Promise<HTMLImageElement>((ok, erro) => { const i = new window.Image(); i.crossOrigin = "anonymous"; i.onload = () => ok(i); i.onerror = () => erro(new Error("Não foi possível carregar a imagem ou logo.")); i.src = url; });
 /** Composição de pixels no navegador; a API registra a derivada e preserva a origem. */
-export default function LogoNaFoto({ foto, onPronta }: { foto: FotoDoAcervo; onPronta: (f: FotoDoAcervo) => void }) {
+export default function LogoNaFoto({ foto, onPronta }: { foto: FotoDoAcervo; onPronta: (f: FotoDoAcervo) => void | Promise<void> }) {
   const { clientId } = useMesa(); const kit = useKitDaMesa(); const cache = useQueryClient();
   const [qual, setQual] = useState("principal"); const [posicao, setPosicao] = useState("inferior-direita"); const [tamanho, setTamanho] = useState(18);
   const [ocupado, setOcupado] = useState(false); const [pronto, setPronto] = useState(false); const [erro, setErro] = useState("");
@@ -38,6 +38,6 @@ export default function LogoNaFoto({ foto, onPronta }: { foto: FotoDoAcervo; onP
       const { error } = await supabase.storage.from("mesa").upload(caminho, blob, { contentType: "image/png", upsert: false }); if (error) throw error;
       const r = await chamarFuncao<{ imagens: unknown[] }>("mesa-foto", { acao: "acervo_registrar", client_id: clientId, caminhos: [caminho], nomes: [`${foto.nome} · logo`], derivada_de: foto.id, acabamento: "logo" });
       const nova = normalizarFotos(r.imagens)[0]; if (!nova) throw new Error("Não foi confirmada uma nova versão no acervo.");
-      acrescentarFotos(cache, clientId, [nova]); onPronta(nova); toast.success("Foto com logo salva no acervo.");
+      acrescentarFotos(cache, clientId, [nova]); await onPronta(nova); toast.success("Foto com logo salva no acervo.");
     } catch (e) { toast.error(e instanceof Error ? e.message : "Não foi possível salvar."); } finally { setOcupado(false); } }}>{ocupado ? "Salvando…" : "Aplicar logo e usar esta versão"}</button></div>;
 }

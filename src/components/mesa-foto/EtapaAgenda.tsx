@@ -276,20 +276,20 @@ export function MontarOPost({
             ))}
             {ids.length < MAX_FOTOS_NO_POST && (
               <li className="mb-2 mr-2 w-24">
-                <button type="button" onClick={() => setEscolhendo(true)} className={juntar("flex w-full flex-col items-center justify-center rounded-lg border border-dashed border-border py-6 text-[11.5px] text-muted-foreground hover:border-primary/50 hover:text-foreground", foco)}>
+                <button type="button" onClick={() => setEscolhendo(true)} className={juntar("flex w-full flex-col items-center justify-center rounded-lg border border-dashed border-border py-6 text-[12px] text-muted-foreground hover:border-primary/50 hover:text-foreground", foco)}>
                   <ImagePlus className="mb-1 h-4 w-4" /> Escolher
                 </button>
               </li>
             )}
           </ol>
           {geradasSemAprovar > 0 && (
-            <p className="text-[11.5px] text-muted-foreground">
+            <p className="text-[12px] text-muted-foreground">
               {geradasSemAprovar} {geradasSemAprovar === 1 ? "foto gerada" : "fotos geradas"} ainda sem a aprovação da equipe: entram no rascunho e são aprovadas no envio.
             </p>
           )}
         </div>
         <div className="min-w-0">
-          <p className="mb-1 text-[11.5px] font-medium text-muted-foreground">Formato</p>
+          <p className="mb-1 text-[12px] font-medium text-muted-foreground">Formato</p>
           <div role="radiogroup" aria-label="Formato do post" className="inline-grid grid-cols-3 gap-0.5 rounded-md bg-muted p-0.5">
             {FORMATOS_DO_POST_DE_FOTOS.map((f) => (
               <button key={f} type="button" role="radio" aria-checked={formato === f} onClick={() => setFormato(f)} className={juntar("rounded px-2 py-1 text-[12px]", foco, formato === f ? "bg-card font-medium shadow-sm" : "text-muted-foreground")}>
@@ -316,11 +316,11 @@ export function MontarOPost({
           </div>
         )}
         <div className="flex min-w-0 flex-wrap items-center">
-          <Button type="button" size="sm" className="mb-1 mr-2 h-9 text-[12.5px]" disabled={!ids.length || preparando} onClick={() => void preparar()} data-preparar-na-agenda="">
+          <Button type="button" size="sm" className="mb-1 mr-2 h-9 text-[13px]" disabled={!ids.length || preparando} onClick={() => void preparar()} data-preparar-na-agenda="">
             {preparando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />}
             {post ? "Trocar as fotos" : "Preparar na Agenda"}
           </Button>
-          <span className="mb-1 text-[11.5px] text-muted-foreground">Sem custo: nada é gerado. Nada vai ao cliente até você enviar.</span>
+          <span className="mb-1 text-[12px] text-muted-foreground">Sem custo: nada é gerado. Nada vai ao cliente até você enviar.</span>
         </div>
       </div></PainelDaBancada>
     </Cartao>
@@ -360,7 +360,7 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
   const geradasSemAprovar = fotosDoPost.filter((f) => precisaDaEquipe(f));
   const semFotos = !post.cards.length;
 
-  const salvar = async (silencioso = false) => {
+  const salvar = async (silencioso = false, propagar = false) => {
     setSalvando(true);
     try {
       await salvarLegendaDoPost(post.id, legenda, hashtags);
@@ -368,6 +368,7 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
       if (!silencioso) toast.success("Legenda salva");
     } catch (e) {
       avisarErro(e, "Legenda não salva");
+      if (propagar) throw e;
     } finally {
       setSalvando(false);
     }
@@ -377,9 +378,9 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
   const abrirData = async () => {
     if (semFotos) return;
     if (!post.post_id) {
-      if (mudou) await salvar(true);
       setEntregando(true);
       try {
+        if (mudou) await salvar(true, true);
         await repetirEntregaEmPartes(() => chamarFuncao("estudio-arte", { acao: "entregar", trabalho_id: post.id }));
         invalidarPostsDeFotos(queryClient, clientId);
       } catch (e) {
@@ -397,7 +398,7 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
     if (semFotos || enviando) return;
     setEnviando(true);
     try {
-      if (mudou) await salvar(true);
+      if (mudou) await salvar(true, true);
       for (const f of geradasSemAprovar) {
         const nova = await decidirFoto(clientId, f.id, "aprovar");
         if (nova) acrescentarFotos(queryClient, clientId, [nova]);
@@ -405,9 +406,9 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
       if (geradasSemAprovar.length) invalidarFotos(queryClient, clientId);
       const r = await entregarEEnviar(post);
       invalidarPostsDeFotos(queryClient, clientId);
-      const res = (r.resultado || {}) as { situacao?: string; mensagem?: string };
+      const res = r.resultado as { estado?: string };
       toast.success("Enviado para aprovação", {
-        description: res.mensagem || "A agência revisa e o cliente aprova. Com a data confirmada, publica sozinho depois da aprovação.",
+        description: res.estado === "aguardando_revisao" ? "Aguardando revisão da agência, antes de seguir ao cliente." : "Confira o andamento na Entrega. A publicação depende da aprovação e da data confirmada.",
         duration: 9000,
       });
     } catch (e) {
@@ -419,10 +420,10 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
 
   const conteudo = (
     <Cartao
-      titulo={<span className="block truncate">{post.item ? post.item.title : "Post de fotos"}</span>}
+      titulo={estudio ? "" : <span className="block truncate">{post.item ? post.item.title : "Post de fotos"}</span>}
       recolher={estudio ? false : `mesa-foto:agenda:post:${post.id}`}
       resumo={estado.rotulo}
-      acao={<span className={`rounded-full px-2 py-0.5 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>}
+      acao={estudio ? undefined : <span className={`rounded-full px-2 py-0.5 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>}
     >
       <div className="min-w-0 space-y-4" data-post-aberto={post.id}>
         <p className="text-[12px] text-muted-foreground">
@@ -439,7 +440,7 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
           <div className="mb-1.5 flex min-w-0 items-center">
             <p className="flex-1 text-[12px] font-semibold">1. Fotos</p>
             {trocaFotos && (
-              <Button type="button" size="sm" variant="ghost" className="h-7 text-[11.5px]" onClick={onTrocarFotos}>
+              <Button type="button" size="sm" variant="ghost" className="h-7 text-[12px]" onClick={onTrocarFotos}>
                 <PenLine className="mr-1 h-3.5 w-3.5" /> {semFotos ? "Escolher fotos" : "Trocar fotos"}
               </Button>
             )}
@@ -524,17 +525,17 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
                 {salvando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />} Salvar legenda
               </Button>
             ) : (
-              <span className="mb-1 mr-2 inline-flex items-center text-[11.5px] text-muted-foreground">
+              <span className="mb-1 mr-2 inline-flex items-center text-[12px] text-muted-foreground">
                 <Check className="mr-1 h-3.5 w-3.5 text-success" /> {legenda ? "salva" : "sem legenda ainda"}
               </span>
             )}
             {legenda && (
-              <button type="button" className="mb-1 inline-flex items-center text-[11.5px] text-primary hover:underline" onClick={() => void copiarTexto(legendaParaCopiar(legenda, hashtags)).then((ok) => (ok ? toast.success("Legenda copiada") : toast.error("Não foi possível copiar")))}>
+              <button type="button" className="mb-1 inline-flex items-center text-[12px] text-primary hover:underline" onClick={() => void copiarTexto(legendaParaCopiar(legenda, hashtags)).then((ok) => (ok ? toast.success("Legenda copiada") : toast.error("Não foi possível copiar")))}>
                 <Hash className="mr-1 h-3.5 w-3.5" /> Copiar com as hashtags
               </button>
             )}
           </div>
-          {travado && <p className="mt-1 text-[11.5px] text-muted-foreground">Legenda travada: o post já foi entregue ou está com o cliente.</p>}
+          {travado && <p className="mt-1 text-[12px] text-muted-foreground">Legenda travada: o post já foi entregue ou está com o cliente.</p>}
         </section>
 
         </PainelDaBancada>
@@ -548,7 +549,7 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
               {post.publicacao && post.publicacao.scheduled_at ? "Reagendar" : "Publicar em"}
             </Button>
           </div>
-          <p className="text-[11.5px] text-muted-foreground">
+          <p className="text-[12px] text-muted-foreground">
             {post.publicacao && post.publicacao.scheduled_at
               ? `Confirmada para ${dataCurta(post.publicacao.scheduled_at)}. Publica sozinho depois da aprovação do cliente.`
               : post.post_id
@@ -568,7 +569,7 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
               </Button>
             )}
           </div>
-          <p className="text-[11.5px] text-muted-foreground">
+          <p className="text-[12px] text-muted-foreground">
             {post.entrega_status
               ? estado.proximo
               : "A agência revisa, o cliente aprova no portal e o post publica sozinho na data confirmada. Pedido de ajuste do cliente volta para cá."}
@@ -611,7 +612,17 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
       />
     </Cartao>
   );
-  return estudio ? <BancadaDeFotos pronta extras={estudio.extras} titulo={post.item?.title || "Fotos da pauta"} fotos={post.cards.map((c) => ({ id: c.imagem_id || c.storage_path, nome: `Foto ${c.ordem}`, caminho: c.storage_path }))} onEscolher={trocaFotos ? onTrocarFotos : undefined} onEditar={trocaFotos ? (id) => abrirNoEstudio?.(id) : undefined}>{estudio.ferramentas}<PainelDaBancada id={["gerar", "legenda", "entrega"]}>{conteudo}</PainelDaBancada></BancadaDeFotos> : conteudo;
+  const substituirFoto = async (antiga: string, nova: FotoDoAcervo) => {
+    if (!trocaFotos) throw new Error("Este post já foi enviado. Prepare uma revisão para trocar as fotos.");
+    const ids = post.cards.map((c) => c.imagem_id === antiga ? nova.id : c.imagem_id).filter((id): id is string => !!id);
+    if (ids.length !== post.cards.length) throw new Error("Confira as fotos do post antes de substituir a versão.");
+    if (mudou) await salvar(true, true);
+    const preparo = await prepararPostDeFotos({ clientId, trabalhoId: post.id, taskId: post.item?.id, imagemIds: ids, formato: post.formato });
+    if (preparo.trabalho?.id !== post.id || !preparo.trabalho?.cards?.some((c: { imagem_id?: string }) => c.imagem_id === nova.id) || preparo.recusadas.some((f) => f.id === nova.id)) throw new Error(preparo.recusadas.find((f) => f.id === nova.id)?.motivo || "O post não confirmou a nova versão.");
+    invalidarPostsDeFotos(queryClient, clientId);
+    toast.success("Foto atualizada neste post", { description: "A versão anterior continua no acervo." });
+  };
+  return estudio ? <BancadaDeFotos pronta onDerivada={trocaFotos ? substituirFoto : undefined} extras={estudio.extras} titulo={post.item?.title || "Fotos da pauta"} fotos={post.cards.map((c) => ({ id: c.imagem_id || c.storage_path, nome: porId.get(c.imagem_id || "")?.nome || `Foto ${c.ordem}`, caminho: c.storage_path, bucket: "mesa" }))} onEscolher={trocaFotos ? onTrocarFotos : undefined} onEditar={trocaFotos ? (id) => abrirNoEstudio?.(id) : undefined}>{estudio.ferramentas}<PainelDaBancada id={["gerar", "legenda", "entrega"]}>{conteudo}</PainelDaBancada></BancadaDeFotos> : conteudo;
 }
 
 export default function EtapaAgenda() {

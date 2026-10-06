@@ -1,3 +1,4 @@
+import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Crop, Images, Maximize2, Wand2 } from "lucide-react";
@@ -58,6 +59,7 @@ export default function EtapaPreparar() {
   const fotos = useFotos(clientId);
   const todas = useMemo(() => fotos.data || [], [fotos.data]);
   const [fotoId, setFotoId] = useState<string | null>(imagemId);
+  const area = useAlturaQueCabe(!!fotoId);
   const [escolhendo, setEscolhendo] = useState(false);
   const [modo, setModo] = useEstadoDaTela<ModoDePreparo>(`mesa-foto:preparar:modo:${clientId}`, "limpar", { validar: (v) => MODOS_DE_PREPARO.some((m) => m.valor === v) });
   const [areas, setAreas] = useState<Area[]>([]);
@@ -124,28 +126,28 @@ export default function EtapaPreparar() {
 
   const Antes = (
     <div className="min-w-0">
-      <p className="mb-1 flex items-center text-[11.5px] font-medium text-muted-foreground">
+      <p className="mb-1 flex items-center text-[12px] font-medium text-muted-foreground">
         Antes <span className="ml-1.5"><SeloDaFoto foto={foto} compacto /></span>
       </p>
-      <AreasNaFoto foto={foto} areas={areas} onMudar={setAreas} marcando={marcando} disabled={preparando} />
+      <AreasNaFoto alturaMaxima={Math.max(180, Math.min(420, (area.altura || 600) - 150))} foto={foto} areas={areas} onMudar={setAreas} marcando={marcando} disabled={preparando} />
     </div>
   );
   const Depois = (
     <div className="min-w-0">
-      <p className="mb-1 flex items-center text-[11.5px] font-medium text-muted-foreground">
+      <p className="mb-1 flex items-center text-[12px] font-medium text-muted-foreground">
         Depois {depois && <span className="ml-1.5"><SeloDaFoto foto={depois} compacto /></span>}
       </p>
       {preparando ? (
-        <AreasNaFoto foto={foto} areas={[]} onMudar={() => undefined} marcando={false} estiloDaImagem={VELADO}>
+        <AreasNaFoto alturaMaxima={Math.max(180, Math.min(420, (area.altura || 600) - 150))} foto={foto} areas={[]} onMudar={() => undefined} marcando={false} estiloDaImagem={VELADO}>
           <div className="absolute inset-0 flex items-center justify-center p-2" aria-live="polite">
-            <span className="inline-flex items-center rounded-full bg-card px-3 py-1.5 text-[12.5px] font-medium shadow-sm">
+            <span className="inline-flex items-center rounded-full bg-card px-3 py-1.5 text-[13px] font-medium shadow-sm">
               <span className="mr-2 h-2 w-2 animate-pulse rounded-full bg-primary" /> Preparando: {modoAtual.rotulo.toLowerCase()}
             </span>
           </div>
         </AreasNaFoto>
       ) : depois ? (
         <>
-          <AreasNaFoto foto={depois} areas={[]} onMudar={() => undefined} marcando={false} />
+          <AreasNaFoto alturaMaxima={Math.max(180, Math.min(420, (area.altura || 600) - 150))} foto={depois} areas={[]} onMudar={() => undefined} marcando={false} />
           <div className="mt-2 flex min-w-0 flex-wrap items-center">
             <AprovarFoto foto={depois} />
           </div>
@@ -161,9 +163,9 @@ export default function EtapaPreparar() {
   return (
     <div className="min-w-0 space-y-4">
       {escolhendo && <SeletorDeFotos fotos={todas} titulo="Trocar a foto" multiplas={false} filtroInicial="original" onUsar={(ids) => ids[0] && escolherFoto(ids[0])} onFechar={() => setEscolhendo(false)} />}
-      <div className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 xl:grid-cols-[minmax(0,1fr)_320px] desk:grid-cols-[minmax(0,1fr)_360px]">
+      <div ref={area.ref} style={area.altura ? { height: area.altura } : undefined} className="grid min-h-0 min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:overflow-hidden">
         <Cartao
-          titulo={<span className="block truncate">{foto.nome}</span>}
+          className="lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain" titulo={<span className="block truncate" title={foto.nome}>{foto.nome}</span>}
           recolher={`mesa-foto:preparar:foto:${clientId}`}
           resumo={areas.length ? `${areas.length} ${areas.length === 1 ? "área protegida" : "áreas protegidas"}` : undefined}
           acao={
@@ -256,14 +258,14 @@ export default function EtapaPreparar() {
           )}
         </Cartao>
 
-        <div className="min-w-0 space-y-5">
+        <div className="min-h-0 min-w-0 space-y-3 lg:overflow-y-auto lg:overscroll-contain">
           <Cartao
-            titulo="O que fazer com a foto"
+            titulo="Ajustes"
             recolher={`mesa-foto:preparar:o-que-fazer:${clientId}`}
             resumo={modoAtual.rotulo}
             dica="Cada modo diz o que muda e o que fica. As áreas protegidas voltam com os pixels originais."
-            acao={podeTirarFundo(foto) ? <BotaoTirarFundo foto={foto} onPronta={(id) => setDepoisId(id)} /> : undefined}
           >
+            {podeTirarFundo(foto) && <div className="mb-3"><BotaoTirarFundo foto={foto} onPronta={(id) => setDepoisId(id)} /></div>}
             <div role="radiogroup" aria-label="Modo de preparo" className="space-y-1.5">
               {MODOS_DE_PREPARO.map((m) => (
                 <button
@@ -326,7 +328,7 @@ export default function EtapaPreparar() {
               }
               titulo="Foto preparada"
               descricao="Gera uma derivada nova no acervo. O original não muda."
-              className="mt-3 h-9 w-full text-[12.5px]"
+              className="mt-3 h-9 w-full text-[13px]"
               disabled={preparando || faltaCenario || !modeloEscolhido}
               partes={() => partesDoPreparo(modeloEscolhido, qualidade)}
               executar={async () => {

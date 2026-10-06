@@ -627,7 +627,7 @@ describe("etapa 3, preparar", () => {
     expect(chamadasDe("preparar")[0].areas_protegidas).toEqual([{ x0: 0.1, y0: 0.1, x1: 0.6, y1: 0.6 }]);
   });
 
-  it("a derivada aparece com Aprovar esta foto (acervo_decidir); aprovada, pode tirar a aprovação", async () => {
+  it("a derivada aparece com Aprovar para o acervo (acervo_decidir); aprovada, pode tirar a aprovação", async () => {
     const D = "aaaaaaaa-0000-4000-8000-0000000000d1";
     // A derivada mais nova vem primeiro (o acervo é lido do mais novo para o mais antigo).
     mock.tabelas.cliente_imagens = [fotoBruta(D, { nome: "mouse-frente (fundo branco)", derivada_de: F1, gerada: true, modo: "preservar", storage_path: `${CLIENTE}/foto/derivadas/d1.png` })].concat(FOTOS);
@@ -637,7 +637,7 @@ describe("etapa 3, preparar", () => {
       return { imagem: (mock.tabelas.cliente_imagens as any[]).find((f) => f.id === D), custo_usd: 0 };
     };
     montar(h(EtapaPreparar), { imagemId: F1 });
-    fireEvent.click(await screen.findByRole("button", { name: /Aprovar esta foto/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Aprovar para o acervo/ }));
     await waitFor(() => expect(chamadasDe("acervo_decidir")).toHaveLength(1));
     expect(chamadasDe("acervo_decidir")[0]).toEqual({ acao: "acervo_decidir", client_id: CLIENTE, imagem_id: D, decisao: "aprovar" });
     expect(await screen.findByText(/Aprovada pela equipe/)).toBeTruthy();
@@ -826,6 +826,8 @@ describe("etapa 6, usar", () => {
     expect(await screen.findByText("mouse-tres-quartos.png")).toBeTruthy();
     expect(screen.queryByText("mouse-frente.jpg")).toBeNull();
     expect(screen.getByRole("button", { name: /Baixar em ZIP/ })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Marcar mouse-tres-quartos.png" })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Marcar mouse-tres-quartos.png" }));
     fireEvent.click(screen.getByRole("button", { name: /Enviar para Arquivos/ }));
     await waitFor(() => expect(chamadasDe("enviar")).toHaveLength(1));
     expect(chamadasDe("enviar")[0]).toEqual({ acao: "enviar", client_id: CLIENTE, imagem_ids: [F3], destino: "arquivos" });

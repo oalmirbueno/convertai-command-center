@@ -38,6 +38,7 @@ export default function AreasNaFoto({
   disabled,
   estiloDaImagem,
   children,
+  alturaMaxima,
 }: {
   foto: FotoDoAcervo;
   areas: Area[];
@@ -46,6 +47,7 @@ export default function AreasNaFoto({
   disabled?: boolean;
   estiloDaImagem?: Record<string, string>;
   children?: ReactNode;
+  alturaMaxima?: number;
 }) {
   const url = useUrlDaMesa(foto.storage_path, foto.storage_bucket || "mesa");
   const { proporcao, aoCarregar } = useProporcaoReal(foto);
@@ -139,7 +141,7 @@ export default function AreasNaFoto({
   const estilo = (a: Area) => ({ left: `${a.x0 * 100}%`, top: `${a.y0 * 100}%`, width: `${(a.x1 - a.x0) * 100}%`, height: `${(a.y1 - a.y0) * 100}%` });
 
   return (
-    <Moldura proporcao={proporcao} className={`border select-none ${marcando ? "border-primary/70" : "border-border"}`}>
+    <div className="mx-auto max-w-full" style={alturaMaxima ? { width: alturaMaxima * proporcao } : undefined}><Moldura proporcao={proporcao} className={`border select-none ${marcando ? "border-primary/70" : "border-border"}`}>
       {url.data ? (
         <img src={url.data} alt={foto.nome} onLoad={(e) => aoCarregar(e.currentTarget)} className="h-full w-full object-contain" style={estiloDaImagem} draggable={false} />
       ) : (
@@ -178,6 +180,6 @@ export default function AreasNaFoto({
         </div>
       )}
       {children}
-    </Moldura>
+    </Moldura></div>
   );
 }

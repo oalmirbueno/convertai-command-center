@@ -1,3 +1,4 @@
+import { referenciaAprovadaMaisRecente } from "./modulos/referencia-aprovada.ts";
 import { fotosSelecionadas } from "./modulos/selecao-do-workspace.ts";
 /**
  * mesa-foto: o estúdio fotográfico da Mesa (docs/mesa-foto/CONTRATO.md e a
@@ -1386,6 +1387,22 @@ async function acervoDecidir(ch: Chamador, corpo: Record<string, unknown>) {
   const { data, error } = await servico().from("cliente_imagens").update({ aprovada: decisao === "aprovar" })
     .eq("id", imagem.id).eq("client_id", clientId).select(CAMPOS_IMAGEM).single();
   if (error || !data) throw new ErroHttp(503, "gravacao_falhou", "Não foi possível gravar a decisão.");
+  if (decisao === "aprovar" && imagem.derivada_de) {
+    const { data: fotos, error: erroFotos } = await servico().from("cliente_imagens").select(CAMPOS_IMAGEM).eq("client_id", clientId).order("criado_em", { ascending: false }).limit(3000);
+    const { data: produtos, error: erroProdutos } = await servico().from("foto_kits").select("*").eq("client_id", clientId).neq("tipo", "pessoa").neq("status", "arquivado");
+    if (erroFotos || erroProdutos) throw new ErroHttp(503, "referencia_indisponivel", "Foto aprovada, mas não foi possível atualizar o produto. Tente aprovar novamente.");
+    for (const produto of (produtos || []) as LinhaKit[]) {
+      if (!produto.frente_imagem_id) continue;
+      const atual = referenciaAprovadaMaisRecente((fotos || []) as LinhaImagem[], produto.frente_imagem_id, clientId);
+      const aprovada = referenciaAprovadaMaisRecente((fotos || []) as LinhaImagem[], imagem.id, clientId);
+      if (!atual || atual.id === produto.frente_imagem_id || atual.id !== aprovada?.id) continue;
+      const refs = await lerRefs(produto);
+      await gravarKit(ch, clientId, { ...produto, frente_imagem_id: atual.id }, [
+        { imagem_id: atual.id, papel: "identidade", vista: "frente", prioridade: 0 },
+        ...refs.filter((r) => r.imagem_id !== produto.frente_imagem_id && r.imagem_id !== atual.id),
+      ], produto.id);
+    }
+  }
   return json({ imagem: await comUrl(data as LinhaImagem), custo_usd: 0 });
 }
 
@@ -1727,6 +1744,10 @@ async function kitSalvar(ch: Chamador, corpo: Record<string, unknown>) {
   }
   // Referências: o conjunto enviado substitui o anterior (gravarKit).
   const salvo = await gravarKit(ch, clientId, { ...kit, autorizacao }, refs, anterior?.id ?? null);
+  if (corpo.marcar_como_produto === true && salvo.tipo !== "pessoa" && salvo.frente_imagem_id) {
+    const { error: erroCategoria } = await servico().from("cliente_imagens").update({ categoria: "produto" }).eq("id", salvo.frente_imagem_id).eq("client_id", clientId);
+    if (erroCategoria) throw new ErroHttp(503, "categoria_nao_salva", "Produto salvo, mas a categoria da foto não foi atualizada. Tente novamente.");
+  }
   const refsLidas = await lerRefs(salvo);
   return json({
     kit: salvo,

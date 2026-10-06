@@ -277,7 +277,9 @@ export async function entregarEEnviar(post: Pick<PostDeFotos, "id" | "status" | 
     entregue = true;
   }
   const r = await enviarParaAprovacao([post.id]);
-  return { entregue, enviado: true, resultado: r && r[0] ? r[0] : null };
+  const resultado = r.find((item) => item.trabalho_id === post.id);
+  if (!resultado?.ok) throw new Error(resultado?.erro || "O envio não foi confirmado. Confira a entrega e tente novamente.");
+  return { entregue, enviado: true, resultado };
 }
 
 /** A foto da persona (aba Modelos) vira foto do acervo: é o que liga Ampliar fiel, Estúdio, Mesa e Agenda. */

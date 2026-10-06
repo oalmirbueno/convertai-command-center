@@ -1009,7 +1009,8 @@ Regras:
 - Adulta, com idade aparente de 21 anos ou mais; sem sexualização.
 - Escolha pelo público do cliente e pelo que a marca vende: quem compra ou usa o produto, no estilo da marca.
 - Ficha em traços concretos e fotográficos (tom de pele com subtom, formato do rosto, olhos, cabelo com cor, comprimento e textura, marcas naturais pequenas, corpo, estilo de roupa), sem adjetivo de perfeição.
-- Nome fictício curto e comum no Brasil.
+- Pessoa brasileira fictícia, de contexto contemporâneo brasileiro; não atribua uma aparência única à nacionalidade. Nome fictício curto e comum no Brasil.
+- Consulte os perfis já existentes e a sugestão anterior. Proponha outra identidade: varie idade adulta, formato facial, cabelo, tom de pele, marcas naturais, porte e estilo. Não repita nome nem apenas mude a roupa. Evite aparência genérica de banco de imagens e estereótipos. Respeite o público e as características explicitamente pedidas.
 - invariantes: de 3 a 6 traços que nunca mudam entre as fotos.
 - porque: uma ou duas frases dizendo por que esta pessoa conversa com o público e a campanha.
 - Se a equipe mandou um pedido, ele vale sobre a sua escolha (menos quando fere as regras).
@@ -1083,6 +1084,9 @@ Português do Brasil, sem travessão. Responda só com o JSON pedido.`;
     garantirPermitido(pedido);
     if (!f.contextoDoCliente) throw new ErroDeRegra(503, "contexto_indisponivel", "O contexto do cliente não está disponível nesta função.");
     const [contexto, diretor] = await Promise.all([f.contextoDoCliente(clientId, corpo.campanha_id, corpo.marca_id), f.modeloDeTexto("diretor_arte", corpo.modelo_id)]);
+    const { data: existentes, error: erroModelos } = await db().from("foto_modelos").select("nome, ficha, invariantes").eq("client_id", clientId).neq("status", "arquivado").order("atualizado_em", { ascending: false }).limit(30);
+    if (erroModelos) throw new ErroDeRegra(503, "historico_indisponivel", "Não foi possível conferir os modelos já criados. Tente novamente.");
+    const evitar = Array.isArray(corpo.evitar) ? corpo.evitar.slice(-8).map((p) => limpo(JSON.stringify(p), 1500)) : [];
     const saida = await chamarTexto({
       clientId,
       tarefa: "estudio",
@@ -1092,7 +1096,7 @@ Português do Brasil, sem travessão. Responda só com o JSON pedido.`;
       mensagens: [{
         papel: "usuario",
         conteudo: `Sugira a persona com os dados reais do cliente:
-${JSON.stringify({ cliente: contexto.dados, pedido_da_equipe: pedido || null })}`,
+${JSON.stringify({ cliente: contexto.dados, pedido_da_equipe: pedido || null, modelos_ja_criados: existentes || [], sugestoes_anteriores_a_evitar: evitar })}`,
       }],
       esquemaJson: ESQUEMA_SUGESTAO_PERSONA,
       maxTokensSaida: 3_000,

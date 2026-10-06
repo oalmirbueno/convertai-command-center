@@ -336,7 +336,7 @@ describe("passo 4: Aprovar (conferir e aprovar num lugar só)", () => {
     fireEvent.click(screen.getByRole("button", { name: /Comparar com as fontes/ }));
     expect(foto.irPara).toHaveBeenCalledWith("revisar", { ensaio: ENSAIO });
     // Aprovar a gerada do acervo: continua na lista, agora aprovada.
-    fireEvent.click(within(acervo).getByRole("button", { name: /Aprovar esta foto/ }));
+    fireEvent.click(within(acervo).getByRole("button", { name: /Aprovar para o acervo/ }));
     await waitFor(() => expect(within(acervo).getByText("Aprovada pela equipe")).toBeTruthy());
     expect(acervo.querySelector(`[data-gerada-para-aprovar="${G1}"]`)).toBeTruthy();
     // O passo seguinte: Usar as aprovadas.

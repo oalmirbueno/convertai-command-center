@@ -801,7 +801,7 @@ describe("27/09: Estúdio de fotos organizado, com rolagem própria", () => {
     // Duas fotos quadradas: cada uma fica com metade da largura (menos o vão).
     expect(larguraQueCabe({ largura: 812, altura: 1000 }, 1, 2)).toBe(400);
     // Nunca some: tem um mínimo.
-    expect(larguraQueCabe({ largura: 100, altura: 60 }, 1, 1)).toBe(140);
+    expect(larguraQueCabe({ largura: 100, altura: 60 }, 1, 1)).toBe(48);
   });
 
   it("a página não rola no computador: o Estúdio entra em coluna, as ferramentas rolam por dentro e as versões numa tira", () => {

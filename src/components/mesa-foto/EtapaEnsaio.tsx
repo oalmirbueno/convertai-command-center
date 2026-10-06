@@ -1,3 +1,4 @@
+import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, BookImage, Camera as IconeCamera, ClipboardCheck, Loader2, Lock, Plus, RefreshCw, Sparkles } from "lucide-react";
@@ -194,19 +195,18 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
     );
   }
 
+  const area = useAlturaQueCabe(true);
   const imagem = padraoPara(catalogo, "imagem");
   // Todos os tipos escolhidos vão: com menos fotos que tipos, o diretor escolhe os que mais servem.
   const tipos = tiposEscolhidos;
 
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 xl:grid-cols-[minmax(0,1fr)_320px] desk:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="min-w-0 space-y-5">
+    <div ref={area.ref} style={area.altura ? { height: area.altura } : undefined} className="grid min-h-0 min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:overflow-hidden">
+      <div className="min-h-0 min-w-0 space-y-3 lg:overflow-y-auto lg:overscroll-contain">
         <Cartao titulo="Produto" recolher={`mesa-foto:ensaio:produto:${clientId}`} resumo={kit ? kit.nome || "Produto sem nome" : "nenhum escolhido"}>
           <EscolhaDoProduto rotulo="O produto das fotos" />
           {kit && (
-            <div className="mt-3">
-              <ResumoDoKit kit={kit} />
-            </div>
+            <details className="mt-2 text-[12px]"><summary className="cursor-pointer text-muted-foreground">Referências e detalhes do produto</summary><ResumoDoKit kit={kit} /></details>
           )}
         </Cartao>
         <SeletorDaCampanha escolhida={campanha} />
@@ -269,9 +269,9 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
                     onClick={() => setReceitaId(r.id)}
                     className={`min-w-0 rounded-md border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${ativa ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"} ${combina ? "" : "opacity-60"}`}
                   >
-                    <span className="block truncate text-[12.5px] font-semibold">{r.nome}</span>
-                    <span className="block text-[11.5px] leading-snug text-muted-foreground">{r.direcao}</span>
-                    <span className="mt-0.5 block text-[10.5px] text-muted-foreground">
+                    <span className="block truncate text-[13px] font-semibold">{r.nome}</span>
+                    <span className="block text-[12px] leading-snug text-muted-foreground">{r.direcao}</span>
+                    <span className="mt-0.5 block text-[11px] text-muted-foreground">
                       {r.tomadas.length} tomadas{combina ? "" : " · outro tipo de assunto"}
                     </span>
                   </button>
@@ -297,14 +297,14 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
                     );
                   })}
                 </div>
-                {receita.atributos_criticos.length > 0 && <p className="text-[11.5px] text-muted-foreground">Conferência olha: {receita.atributos_criticos.join(", ")}.</p>}
+                {receita.atributos_criticos.length > 0 && <p className="text-[12px] text-muted-foreground">Conferência olha: {receita.atributos_criticos.join(", ")}.</p>}
               </div>
             )}
           </Cartao>
         )}
       </div>
 
-      <div className="min-w-0 space-y-5">
+      <div className="min-h-0 min-w-0 space-y-3 lg:overflow-y-auto lg:overscroll-contain">
         {modo === "variacoes" && (
           <Cartao
             titulo="Montar"
@@ -335,7 +335,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
               }
               titulo="Variações planejadas"
               descricao="O diretor monta as fotos com o produto e a marca. Nenhuma imagem é gerada agora: o total para gerar aparece antes."
-              className="mt-3 h-9 w-full text-[12.5px]"
+              className="mt-3 h-9 w-full text-[13px]"
               disabled={!kit || !kit.id}
               partes={() => partesDoPlanoDeLote(catalogo)}
               executar={() => planejarVariacoes({ clientId, kitId: String(kit && kit.id), quantidade, tipos, pedido, campanhaId: campanha.campanhaId })}
@@ -386,7 +386,7 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
               }
               titulo="Lote planejado"
               descricao="O diretor de fotografia monta as fotos com o produto, a receita, a campanha da Mesa e o contexto do cliente. Nenhuma imagem é gerada agora."
-              className="mt-3 h-9 w-full text-[12.5px]"
+              className="mt-3 h-9 w-full text-[13px]"
               disabled={!kit || !kit.id || !receita || tomadas.length === 0 || !receitaServeParaKit(receita, kit.tipo)}
               partes={() => partesDoPlanejamento(catalogo)}
               executar={() =>
@@ -450,7 +450,7 @@ function SeletorDeCamera({
           type="button"
           aria-pressed={!camera}
           onClick={() => onMudar(null)}
-          className={`mb-1.5 mr-1.5 h-7 rounded-full border px-2.5 text-[11.5px] ${!camera ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background"}`}
+          className={`mb-1.5 mr-1.5 h-7 rounded-full border px-2.5 text-[12px] ${!camera ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background"}`}
         >
           Câmera do plano
         </button>
@@ -537,7 +537,7 @@ function CartaoDaTomada({
           </button>
         ) : (
           <Moldura proporcao={proporcaoDoFormato(tomada.formato)} className="border border-dashed border-border">
-            <span className="flex h-full w-full items-center justify-center p-1 text-center text-[10.5px] text-muted-foreground">
+            <span className="flex h-full w-full items-center justify-center p-1 text-center text-[11px] text-muted-foreground">
               {bloqueada ? <Lock className="h-4 w-4" /> : <IconeCamera className="h-4 w-4" />}
             </span>
           </Moldura>
@@ -552,14 +552,14 @@ function CartaoDaTomada({
       </div>
       <div className="mt-1.5 min-w-0 space-y-1">
         <div className="flex min-w-0 flex-wrap items-center">
-          <p className="mr-1.5 min-w-0 truncate text-[12.5px] font-semibold" title={tomada.nome}>
+          <p className="mr-1.5 min-w-0 truncate text-[13px] font-semibold" title={tomada.nome}>
             {tomada.nome}
           </p>
-          <span className={`mr-1 rounded-full px-1.5 py-px text-[10px] font-medium ${estado.cor}`}>{estado.rotulo}</span>
-          {mostrada && <span className="text-[10.5px] text-muted-foreground">v{mostrada.versao}</span>}
+          <span className={`mr-1 rounded-full px-1.5 py-px text-[11px] font-medium ${estado.cor}`}>{estado.rotulo}</span>
+          {mostrada && <span className="text-[11px] text-muted-foreground">v{mostrada.versao}</span>}
         </div>
         {bloqueada && (
-          <p className="flex items-start rounded-md bg-warning/10 px-2 py-1.5 text-[11.5px] leading-snug">
+          <p className="flex items-start rounded-md bg-warning/10 px-2 py-1.5 text-[12px] leading-snug">
             <AlertTriangle className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
             <span className="min-w-0 [overflow-wrap:anywhere]">
               {tomada.motivo_bloqueio || "Falta evidência no produto para esta foto."} Complete o produto para liberar.{" "}
@@ -572,7 +572,7 @@ function CartaoDaTomada({
           </p>
         )}
         {tomada.status === "falhou" && !gerando && (
-          <p className="flex items-start rounded-md bg-destructive/10 px-2 py-1.5 text-[11.5px] leading-snug" data-falhou="">
+          <p className="flex items-start rounded-md bg-destructive/10 px-2 py-1.5 text-[12px] leading-snug" data-falhou="">
             <AlertTriangle className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
             <span className="min-w-0 [overflow-wrap:anywhere]">{tomada.ultimo_erro || "A geração falhou."} Pode gerar de novo.</span>
           </p>
@@ -584,11 +584,11 @@ function CartaoDaTomada({
           <p className="text-[11px] leading-snug text-primary">Novo ângulo: partes que não aparecem nas fotos serão criadas. Fica marcada como gerada, sem garantia de fidelidade.</p>
         )}
         <div className="flex min-w-0 flex-wrap items-center">
-          <button type="button" className="mr-3 text-[11.5px] text-muted-foreground hover:text-foreground" onClick={() => setDetalhes(!detalhes)} aria-expanded={detalhes}>
+          <button type="button" className="mr-3 text-[12px] text-muted-foreground hover:text-foreground" onClick={() => setDetalhes(!detalhes)} aria-expanded={detalhes}>
             {detalhes ? "Menos" : "Detalhes"}
           </button>
           {!bloqueada && !aprovada && (
-            <button type="button" className="text-[11.5px] font-medium text-primary hover:underline" onClick={() => setAbrirCamera(!abrirCamera)} aria-expanded={abrirCamera}>
+            <button type="button" className="text-[12px] font-medium text-primary hover:underline" onClick={() => setAbrirCamera(!abrirCamera)} aria-expanded={abrirCamera}>
               {abrirCamera ? "Fechar câmera" : "Mudar a câmera"}
             </button>
           )}
@@ -714,7 +714,7 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
       <div className="min-w-0 space-y-3">
         <AndamentoDoLote ensaioId={ensaio.id} />
         <div className="flex min-w-0 flex-wrap items-center">
-          <p className="mb-1 mr-auto min-w-0 text-[12.5px] text-muted-foreground">
+          <p className="mb-1 mr-auto min-w-0 text-[13px] text-muted-foreground">
             <span className="font-semibold text-foreground">{receita ? receita.nome : nomeDaReceita(null, ensaio.receita_id)}</span>
             {finalidade ? ` · ${finalidade.rotulo}` : ""} · {resumo.aprovadas} de {resumo.total} aprovadas
             {resumo.paraRevisar ? ` · ${resumo.paraRevisar} para revisar` : ""}
@@ -793,7 +793,7 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
             qualidade={qualidade}
             guia={guia}
             cameras={cameras}
-            className="mt-3 h-9 w-full text-[12.5px]"
+            className="mt-3 h-9 w-full text-[13px]"
             rotulo={(n) => (
               <>
                 <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Gerar {n} {n === 1 ? "foto" : "fotos"}, uma por vez
@@ -846,7 +846,7 @@ export default function EtapaEnsaio() {
             escolherEnsaio(v);
           }}
         >
-          <SelectTrigger className="mb-1.5 mr-2 h-9 w-full min-w-0 text-[12.5px] sm:w-[340px]" aria-label="Lote aberto">
+          <SelectTrigger className="mb-1.5 mr-2 h-9 w-full min-w-0 text-[13px] sm:w-[340px]" aria-label="Lote aberto">
             <SelectValue placeholder={lista.length ? "Abrir um lote" : "Nenhum lote ainda"} />
           </SelectTrigger>
           <SelectContent>

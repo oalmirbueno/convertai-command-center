@@ -1,3 +1,4 @@
+import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { BookImage, Check, ClipboardCheck, Images, Megaphone, Plus, RefreshCw, Sparkles, Upload, X } from "lucide-react";
@@ -350,7 +351,7 @@ function CampanhaAberta({ ensaio }: { ensaio: Ensaio }) {
           <SeletorDeQualidade valor={qualidade} onChange={setQualidade} />
         </div>
         <div className="mt-2 flex min-w-0 flex-wrap items-center">
-          <BotaoDoLote ensaio={ensaio} modeloId={modelo} qualidade={qualidade} className="mb-1 mr-1.5 h-9 text-[12.5px]" />
+          <BotaoDoLote ensaio={ensaio} modeloId={modelo} qualidade={qualidade} className="mb-1 mr-1.5 h-9 text-[13px]" />
           {/* Linha de produção (frente FTL, 30/09): o passo seguinte é Aprovar (4). */}
           {r.paraRevisar > 0 && (
             <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-9 text-[13px]" onClick={() => irPara("aprovar", { ensaio: ensaio.id })} data-seguir-para-aprovar="">
@@ -388,10 +389,11 @@ export default function EtapaCampanha() {
   const listaDeKits = useMemo(() => kits.data || [], [kits.data]);
   const campanhas = useMemo(() => (ensaios.data || []).filter((e) => ehCampanha(e)), [ensaios.data]);
   const [nova, setNova] = useState(false);
+  const area = useAlturaQueCabe(true);
   const aberta = !nova && ensaioId ? campanhas.find((e) => e.id === ensaioId) || null : null;
   const kit = kitId ? listaDeKits.find((k) => k.id === kitId) || null : null;
   const [refs, setRefs] = useState<RefDeEstilo[]>([]);
-  const [modelo, setModelo] = useState<PerfilDoModelo>({ perfil: "Variar os perfis", idade_aprox: "25 a 35", estilo: "" });
+  const [modelo, setModelo] = useState<PerfilDoModelo>({ perfil: "Adultos brasileiros, variar idades e aparências sem estereótipos", idade_aprox: "25 a 35", estilo: "" });
   const [quantidade, setQuantidade] = useState(6);
   const [pedido, setPedido] = useEstadoDaTela(`mesa-foto:campanha:pedido:${clientId}`, "");
   // 02/10: quem aparece vem de Modelos ou Clones ("Usar como modelo") e fica guardado por cliente.
@@ -477,8 +479,8 @@ export default function EtapaCampanha() {
       {aberta ? (
         <CampanhaAberta key={aberta.id} ensaio={aberta} />
       ) : (
-        <div className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-5 xl:grid-cols-2">
-          <div className="min-w-0 space-y-5">
+        <div ref={area.ref} style={area.altura ? { height: area.altura } : undefined} className="grid min-h-0 min-w-0 grid-cols-1 gap-4 lg:grid-cols-2 lg:overflow-hidden">
+          <div className="min-h-0 min-w-0 space-y-3 lg:overflow-y-auto lg:overscroll-contain">
             <Cartao titulo="1. Produto" recolher={false}>
               <EscolhaDoProduto rotulo="O produto da foto" />
               {kit && kit.invariantes.length > 0 && <p className="mt-2 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">Não muda: {kit.invariantes.join(", ")}.</p>}
@@ -490,7 +492,7 @@ export default function EtapaCampanha() {
             <BlocoDoEstilo refs={refs} onMudar={setRefs} />
             <SeletorDaCampanha escolhida={campanhaDaMesa} titulo="Campanha da Mesa (opcional)" />
           </div>
-          <div className="min-w-0 space-y-5">
+          <div className="min-h-0 min-w-0 space-y-3 lg:overflow-y-auto lg:overscroll-contain">
             <Cartao
               titulo="3. Fotos"
               recolher={false}
@@ -535,7 +537,7 @@ export default function EtapaCampanha() {
                 }
                 titulo="Campanha planejada"
                 descricao="O diretor lê as referências, escreve o guia de estilo e monta as fotos. Nenhuma imagem é gerada agora: o total para gerar aparece antes."
-                className="mt-3 h-9 w-full text-[12.5px]"
+                className="mt-3 h-9 w-full text-[13px]"
                 disabled={!kit || !kit.id}
                 partes={() => partesDoPlanoDeLote(catalogo, refs.length)}
                 executar={() =>

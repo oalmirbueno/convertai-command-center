@@ -1050,8 +1050,9 @@ export function partesDaSugestaoDePersona(diretor: ModeloIa | null): ParteDaEsti
   return [{ modeloId: diretor ? diretor.id : null, tipo: "texto", tokensEntrada: TAMANHO_DA_SUGESTAO_DE_PERSONA.entrada, tokensSaida: TAMANHO_DA_SUGESTAO_DE_PERSONA.saida }];
 }
 
-export async function sugerirPersona(clientId: string, pedido: string, campanhaId?: string | null): Promise<SugestaoDePersona & { custo_usd?: number }> {
+export async function sugerirPersona(clientId: string, pedido: string, campanhaId?: string | null, evitar: unknown[] = []): Promise<SugestaoDePersona & { custo_usd?: number }> {
   const corpo: Record<string, unknown> = { acao: "modelo_sugerir", client_id: clientId };
+  if (evitar.length) corpo.evitar = evitar.slice(-8);
   if (pedido.trim()) corpo.pedido = pedido.trim();
   if (campanhaId) corpo.campanha_id = campanhaId;
   const data = await chamarFuncao<any>("mesa-foto", corpo);
