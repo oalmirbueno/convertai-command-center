@@ -370,5 +370,5 @@ Devolva:
 - sinais_para_medir: de 2 a 4 métricas do mês, ligadas às recomendações.
 - limites: o que faltou de dado ou o que é hipótese.
 - fontes: os links usados (título curto e url).
-Tudo em frases curtas, sem parágrafo longo, específico deste cliente. Formatos do calendário: só carrossel ou post estático.`;
+Tudo em frases curtas, sem parágrafo longo, específico deste cliente. Formatos do calendário: carrossel, post estático, foto real ou carrossel de fotos e vídeo rápido. Respeite a mistura pedida.`;
 }

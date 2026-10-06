@@ -40,6 +40,7 @@ import {
   partesDoPedido,
 } from "./mesaV4Api";
 import {
+  criarLoteNaAgenda,
   acaoComEscolha,
   acaoNaAgendaDaMensagem,
   aplicarMudanca,
@@ -325,7 +326,7 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
           data.campanhas ? `${data.campanhas} ${data.campanhas === 1 ? "campanha editada" : "campanhas editadas"}` : "",
           data.textos ? `${data.textos} ${data.textos === 1 ? "peça reescrita" : "peças reescritas"}` : "",
         ].filter(Boolean);
-        toast.success(partes.join(" e ") || "Nada mudou", {
+        (data.falhas ? toast.warning : toast.success)(partes.join(" e ") || "Nada mudou", {
           description: data.falhas ? `${data.falhas} não ${data.falhas === 1 ? "pôde ser feita" : "puderam ser feitas"}. O motivo está na lista.` : "Dá para desfazer no cartão.",
         });
       } else {
@@ -540,7 +541,7 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
           <>
             <span className="mb-1 mr-2 inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[11.5px] text-foreground">
               <Check className="mr-1 h-3 w-3" />
-              Feito{falhas ? ` · ${falhas} não ${falhas === 1 ? "pôde" : "puderam"}` : ""}
+              {falhas ? "Não concluído integralmente" : "Feito"}{falhas ? ` · ${falhas} não ${falhas === 1 ? "pôde" : "puderam"}` : ""}
             </span>
             <Button type="button" size="sm" variant="outline" className="mb-1 h-8" onClick={() => void agir("desfazer")} disabled={!!fazendo}>
               {fazendo === "desfazer" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Undo2 className="mr-1.5 h-3.5 w-3.5" />}
@@ -571,7 +572,11 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
 export function CartaoDaCriacao({ mensagemId, criacao }: { mensagemId: string; criacao: CriacaoDeConteudos }) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
-  const [feitos, setFeitos] = useState<number[]>(() => lerLotesFeitos(mensagemId));
+  const [feitos, setFeitos] = useState<number[]>(() => Object.entries(criacao.lotes || {}).filter(([, v]) => v.estado === "gravado").map(([k]) => Number(k)));
+  useEffect(() => {
+    const gravados = Object.entries(criacao.lotes || {}).filter(([, v]) => v.estado === "gravado").map(([k]) => Number(k));
+    if (gravados.length) setFeitos((atuais) => Array.from(new Set([...atuais, ...gravados])));
+  }, [criacao.lotes]);
   const [andando, setAndando] = useState<number | null>(null);
   const [aberta, setAberta] = useState(false);
   const lotes = lotesDoRefazer(criacao.itens, LOTE_DA_CRIACAO);
@@ -581,19 +586,22 @@ export function CartaoDaCriacao({ mensagemId, criacao }: { mensagemId: string; c
 
   const criar = async () => {
     let nova: any = null;
+    try {
     const jaFeitos = feitos.slice();
     for (const n of faltam) {
       setAndando(n);
       // 02/10: as linhas do lote vão junto (data, formato e direção da foto valem exatamente).
-      nova = await pedidoLivre({ clientId, mensagem: pedidoParaCriar(lotes[n], criacao.orientacao), anexos: [], campanhaId: null, pecas: lotes[n] });
+      nova = await criarLoteNaAgenda(mensagemId, n);
+      if (!nova.gravado && !nova.ja_gravado) throw new Error("O lote ainda não foi confirmado na agenda.");
       jaFeitos.push(n);
       setFeitos(jaFeitos.slice());
-      gravarLotesFeitos(mensagemId, jaFeitos);
+      atualizarAgenda(queryClient, clientId);
       await queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) });
     }
     setAndando(null);
-    toast.success(`${criacao.itens.length} ${criacao.itens.length === 1 ? "conteúdo criado" : "conteúdos criados"}`, { description: "Revise e grave na agenda nas propostas da conversa." });
+    toast.success(`${criacao.itens.length} ${criacao.itens.length === 1 ? "conteúdo criado" : "conteúdos criados"}`, { description: "Gravados na agenda. A produção e a aprovação continuam no Estúdio." });
     return nova;
+    } finally { setAndando(null); atualizarAgenda(queryClient, clientId); }
   };
 
   return (
@@ -630,9 +638,9 @@ export function CartaoDaCriacao({ mensagemId, criacao }: { mensagemId: string; c
         {estado !== "feita" ? (
           <>
             <BotaoComCusto
-              rotulo={estado === "parcial" ? `Continuar (${faltam.length} ${faltam.length === 1 ? "lote" : "lotes"})` : `Confirmar e criar ${criacao.itens.length}`}
+              rotulo={estado === "parcial" ? `Continuar (${faltam.length} ${faltam.length === 1 ? "lote" : "lotes"})` : `Criar e gravar ${criacao.itens.length} na agenda`}
               titulo="Criar conteúdos"
-              descricao="O agente cria cada conteúdo na data e no formato do material, adaptado ao cliente, em lotes de 12. Cada lote chega pronto para gravar."
+              descricao="O agente cria cada conteúdo na data e no formato do material, adaptado ao cliente, em lotes de 12. Cada lote é gravado na agenda e aparece no Estúdio."
               partes={() => {
                 const uma = partesDoPedidoLivre(catalogo, 0);
                 const todas: typeof uma = [];
@@ -644,12 +652,12 @@ export function CartaoDaCriacao({ mensagemId, criacao }: { mensagemId: string; c
               disabled={andando !== null}
               className="mb-1 mr-1.5 h-8"
             />
-            <span className="mb-1 ml-auto text-[11px] text-muted-foreground">Nada vai para a agenda sem você gravar.</span>
+            <span className="mb-1 ml-auto text-[11px] text-muted-foreground">Cria pautas na agenda; não gera mídia nem publica.</span>
           </>
         ) : (
           <span className="inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[11.5px] text-foreground">
             <Check className="mr-1 h-3 w-3" />
-            Criados: revise e grave nas propostas
+            Gravados na agenda · continuar no Estúdio
           </span>
         )}
       </div>
@@ -954,14 +962,7 @@ export default function AgenteDoMes({
         },
       ];
 
-  const partes = () =>
-    ajustando
-      ? partesDoAjuste(catalogo)
-      : planejando
-        ? partesDoPlanejamento(catalogo, anexos.caminhos.length, texto.length + arquivos.caracteres)
-        : arquivos.lidos.length
-          ? partesDoPlanejamento(catalogo, anexos.caminhos.length, texto.length + arquivos.caracteres)
-          : partesDoPedido(catalogo, anexos.caminhos.length);
+  const partes = () => ajustando ? partesDoAjuste(catalogo) : partesDoPlanejamento(catalogo, anexos.caminhos.length, texto.length + arquivos.caracteres);
 
   const enviar = async () => {
     const mensagem = texto.trim();
@@ -975,17 +976,18 @@ export default function AgenteDoMes({
       // Apagar, limpar, mudar a data, reescrever, e todo pedido com arquivos:
       // quem faz é o agente que planeja o mês (ele lê a agenda inteira, o MCP e
       // os arquivos e prepara o cartão para confirmar).
-      const naAgenda = !ajustando && !planejando && (ehPedidoNaAgenda(mensagem) || !!doEnvio.corpo);
+      const naAgenda = !ajustando; // Toda conversa do Mês conhece a agenda e o mês selecionado.
       const data = ajustando
         ? await ajustarProposta(ajustando.id, mensagem)
         : planejando || naAgenda
-          ? await planejarMes({ clientId, mensagem, mes, anexos: caminhos, arquivos: doEnvio.corpo })
-          : await pedidoLivre({ clientId, mensagem, anexos: caminhos, campanhaId: campanhaEscolhida ? campanhaEscolhida.id : null, rotear: true });
+          ? await planejarMes({ clientId, mensagem, mes, anexos: caminhos, arquivos: doEnvio.corpo, aplicarDireto: true })
+          : await pedidoLivre({ clientId, mensagem, mes, anexos: caminhos, campanhaId: campanhaEscolhida ? campanhaEscolhida.id : null, rotear: true });
       // "Mude / troque / corrija esse conteúdo" no modo Criar: o servidor (Jev) manda para o agente que mexe na agenda.
       const roteado = !!data && (data as { roteado_para?: string }).roteado_para === "planejar_mes";
       // A resposta entra na conversa antes de o "Preparando" sair da tela.
       await queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) });
       if (planejando || naAgenda || roteado) void queryClient.invalidateQueries({ queryKey: chavesDoPlano.planos(clientId) });
+      atualizarAgenda(queryClient, clientId);
       return data;
     } catch (e) {
       setTexto((t) => t || mensagem);
@@ -1024,7 +1026,7 @@ export default function AgenteDoMes({
         <div className="mr-3 min-w-0 flex-1">
           <h2 className="truncate text-[15px] font-semibold leading-5">Agente do mês</h2>
           <p className="truncate text-[12.5px] leading-[18px] text-muted-foreground">
-            {planejando ? "Planeja com você, seguindo o prompt geral do cliente" : "Cria conteúdos prontos para gravar na agenda"}
+            {planejando ? "Planeja com você, seguindo o prompt geral do cliente" : "Cria e organiza fotos, vídeos e artes no mês escolhido"}
           </p>
         </div>
         <div role="tablist" aria-label="O que fazer com o agente" className="mt-2 flex w-full shrink-0 rounded-lg bg-muted p-0.5 sm:mt-0 sm:w-auto">
@@ -1052,8 +1054,8 @@ export default function AgenteDoMes({
         {acaoDoCabecalho}
       </div>
 
-      {/* Planejar: o mês em conversa e o que já está combinado para ele. */}
-      {planejando && (
+      {/* O mês alvo fica visível em ambos os modos. */}
+      {(
         <div className="shrink-0 border-b border-border bg-muted/40 px-4 py-2">
           <div className="flex min-w-0 flex-wrap items-center">
             <CalendarRange className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -1307,7 +1309,7 @@ export default function AgenteDoMes({
                       descricao={
                         planejando
                           ? "Uma chamada do agente do mês (GPT-6 Sol, raciocínio alto) com o contexto do cliente, a agenda dos próximos 12 meses, o MCP, a conversa e os arquivos."
-                          : "Uma chamada do estrategista com o contexto do cliente."
+                          : "Planeja a criação no mês escolhido. Alterações simples são aplicadas; criação e refação mostram o custo antes de confirmar."
                       }
                       partes={partes}
                       executar={enviar}

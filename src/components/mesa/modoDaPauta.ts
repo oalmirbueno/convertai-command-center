@@ -7,6 +7,7 @@ export const FORMATOS_DE_VIDEO_NO_ESTUDIO = ["reel", "video", "short"];
 /** Usa os dados já definidos pela pauta, sem adivinhar o formato pelo título. */
 export function modoDaPauta(item: { delivery_type: string; title?: string; modo_estudio?: ModoDaPauta }, trabalho?: { direcao?: unknown } | null): ModoDaPauta {
   if (ehPostDeFotos(trabalho?.direcao)) return "fotos";
+  if ((trabalho?.direcao as { mesa?: string } | null)?.mesa === "video") return "video";
   // Um trabalho de arte existente nunca é convertido por uma mudança do plano.
   if (trabalho) return "arte";
   if (item.modo_estudio) return item.modo_estudio;

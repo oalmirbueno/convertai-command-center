@@ -417,7 +417,7 @@ describe("material colado vira ações com apelidos", () => {
     expect(calendario).toContain("criar_conteudos: {");
     expect(calendario).toContain("atualizar_publico: {");
     expect(corpoDe("reescreverTextos")).toContain("travaDaPeca(servico, clientId, t.id)");
-    expect(calendario).toContain('const ACOES_LONGAS = new Set(["executar_acao_agenda",');
+    expect(calendario).toContain('const ACOES_LONGAS = new Set(["criar_lote_agenda", "executar_acao_agenda",');
     // Uma proposta é regravada uma vez (várias peças dela não se atropelam).
     expect(corpoDe("reescreverTextos")).toContain("for (const id of tocadas)");
   });

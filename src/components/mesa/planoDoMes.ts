@@ -135,6 +135,7 @@ export async function esquecerPlano(id: string, clientId: string): Promise<void>
 // ------------------------------------------------------------------ ações
 
 export interface CorpoDoPlanejamento {
+  aplicarDireto?: boolean;
   clientId: string;
   mensagem: string;
   /** "AAAA-MM-01" ou "AAAA-MM" */
@@ -149,6 +150,7 @@ export function corpoDoPlanejamento(p: CorpoDoPlanejamento): Record<string, unkn
   const corpo: Record<string, unknown> = { acao: "planejar_mes", client_id: p.clientId, mensagem: p.mensagem, mes: String(p.mes).slice(0, 7) };
   if (p.anexos && p.anexos.length) corpo.anexos = p.anexos.slice(0, MAX_ANEXOS);
   if (p.propostaId) corpo.proposta_id = p.propostaId;
+  if (p.aplicarDireto) corpo.aplicar_direto = true;
   if (p.arquivos && (p.arquivos.lidos.length || p.arquivos.nao_lidos.length)) corpo.arquivos = p.arquivos;
   return corpo;
 }
@@ -235,6 +237,7 @@ export interface ItemParaCriar {
 }
 
 export interface CriacaoDeConteudos {
+  lotes?: Record<string, { estado: string; proposta_id?: string; quantidade?: number }>;
   tipo: "criar_conteudos";
   resumo: string;
   orientacao: string;
@@ -565,3 +568,5 @@ const PEDIDO_DE_AGENDA =
   /(^|[^a-zà-ú])(apag|limp[ae]|remov|exclu|delet|mud[ae]\S* (a |as |o |os )?(datas?|formatos?)|mov[ae] |refa[çc]a|refazer|gere de novo|troque o formato|(crie|gere|preencha) (todos os|todo o|os) (conte[úu]dos|m[êe]s|pr[óo]ximos)|revis[ae]\S* (todos|todas|tudo|os meses|a agenda)|reescrev|troque o p[úu]blico)/i;
 
 export const ehPedidoNaAgenda = (mensagem: string) => PEDIDO_DE_AGENDA.test(String(mensagem || ""));
+
+export const criarLoteNaAgenda = (mensagemId: string, lote: number) => chamarFuncao<any>("agente-calendario", { acao: "criar_lote_agenda", mensagem_id: mensagemId, lote });

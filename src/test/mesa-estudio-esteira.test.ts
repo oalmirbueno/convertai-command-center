@@ -560,12 +560,13 @@ describe("estúdio com a altura de uma tela (dono, 23/09 noite)", () => {
   // Frente AE-3 (dono, 28/09: "nenhum espaço sobrando no fim e nada cortado"): a altura passou a ser a que cabe
   // na janela a partir de onde o Estúdio começa (useAlturaQueCabe do sistema, a mesma medida da AreaDeTrabalho),
   // em vez da conta com o cabeçalho; na tela cheia quem manda é a janela. A faixa ficou mais baixa (mt-1.5).
-  it("faixa e estúdio na altura da tela; cada região rola por dentro; tela baixa abre com a faixa recolhida", () => {
+  it("faixa e estúdio na altura da tela; cada região rola por dentro; todos os clientes abrem com a faixa visível", () => {
     expect(aba).toContain('<div ref={cabe.ref} className="flex min-h-0 min-w-0 flex-col" style={altura ? { height: altura } : undefined} data-estudio-tela="colunas">');
     expect(aba).toContain('<div ref={areaDoEstudio} className="mt-1.5 flex min-h-0 min-w-0 flex-1 flex-col">');
     expect(aba).toContain("const cabe = useAlturaQueCabe(colunas && !focoLigado);");
     expect(aba).toContain("refDaAltura={cabe.ref}");
-    expect(aba).toContain('(window.innerHeight || 900) < 760');
+    expect(aba).not.toContain('(window.innerHeight || 900) < 760');
+    expect(aba).toContain('"mesa:estudio:pautas-recolhidas:v2", false');
     expect(aba).toContain("encaixarNaJanela(areaDoEstudio.current)");
   });
 });
