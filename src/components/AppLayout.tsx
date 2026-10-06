@@ -16,7 +16,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Bell, LogOut, Menu, X, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles, Bot } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
-  LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
+  LayoutGrid, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
   HeartPulse, Megaphone, Briefcase, Target, KanbanSquare, CalendarClock, Timer,
@@ -41,6 +41,7 @@ interface NavItem {
   icon: React.FC<{ className?: string }>;
   /** Item de gestão: só admin e manager enxergam. */
   soGestao?: boolean;
+  soCriacao?: boolean;
   /** Acende só na rota exata. Sem isto, a entrada "/comercial" ficaria
       acesa em todas as áreas do departamento ao mesmo tempo. */
   fimExato?: boolean;
@@ -64,6 +65,7 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     label: "Operação da semana",
     items: [
       { title: "Central", url: "/central", icon: HeartPulse },
+      { title: "Mesas", url: "/mesas", icon: LayoutGrid, soCriacao: true },
       { title: "Ciclo", url: "/ciclo", icon: CheckSquare },
       { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
       { title: "Execução da equipe", url: "/execucao", icon: Bot },
@@ -126,11 +128,11 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
  * A trava de verdade é a rota e o RLS; isto é para não oferecer porta que
  * não abre.
  */
-const gruposPorPapel = (podeGestao: boolean) =>
+const gruposPorPapel = (podeGestao: boolean, podeCriacao = true) =>
   adminMoreGroups
     .map((grupo) => ({
       ...grupo,
-      items: grupo.items.filter((item) => podeGestao || !item.soGestao),
+      items: grupo.items.filter((item) => (podeGestao || !item.soGestao) && (podeCriacao || !item.soCriacao)),
     }))
     .filter((grupo) => grupo.items.length > 0);
 
@@ -179,7 +181,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isTeam = ["design", "traffic", "manager"].includes(role);
   const isAdminOrTeam = isAdmin || isTeam;
   const podeGestao = isAdmin || role === "manager";
-  const gruposDoMenu = gruposPorPapel(podeGestao);
+  const gruposDoMenu = gruposPorPapel(podeGestao, podeGestao || role === "design");
   const mainNav = isAdminOrTeam ? adminMainNav : clientMainNav;
   const moreNav = isAdminOrTeam
     ? gruposDoMenu.flatMap((grupo) => grupo.items)

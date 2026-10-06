@@ -9,7 +9,9 @@ import { BancadaDeFotos, AcoesDaBancada } from "@/components/mesa/BancadaDaPauta
 
 const mock = vi.hoisted(() => ({ from: vi.fn() }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: mock.from } }));
-vi.mock("@/components/mesa/MesaContexto", () => ({ useUrlDaMesa: () => ({ data: "https://example.test/foto.jpg" }), ImagemDaMesa: ({ alt }: { alt: string }) => <img alt={alt} />, useMarcaDaMesa: () => ({ marca: null, marcas: [] }) }));
+vi.mock("@/components/mesa/MesaContexto", () => ({ useMesa: () => ({ clientId: "cliente" }), useUrlDaMesa: () => ({ data: "https://example.test/foto.jpg" }), ImagemDaMesa: ({ alt }: { alt: string }) => <img alt={alt} />, useMarcaDaMesa: () => ({ marca: null, marcas: [] }) }));
+vi.mock("@/components/mesa-foto/fotoApi", () => ({ useFotos: () => ({ data: [] }) }));
+vi.mock("@/components/mesa-foto/Comuns", () => ({ useMesaFoto: () => ({}) }));
 vi.mock("@/components/mesa/ImagemComZoom", () => ({ default: ({ alt }: { alt: string }) => <div role="img" aria-label={`Prévia: ${alt}`} /> }));
 const item: ItemDoMes = { id: "t1", project_id: "p1", title: "Produto da pauta", due_date: "2026-10-12", delivery_type: "carousel", status: "pending" };
 function banco(tabelas: Record<string, unknown[]>) {
@@ -65,7 +67,7 @@ describe("Bancada de fotos mantém prancheta, prévia e ferramentas", () => {
   it("seleciona a foto na prancheta e muda a prévia central sem sair do estúdio", () => {
     const mover = vi.fn();
     render(<BancadaDeFotos titulo="Fotos da pauta" fotos={[{ id: "a", nome: "Antes", caminho: "a.jpg" }, { id: "b", nome: "Depois", caminho: "b.jpg" }]} onMover={mover}><AcoesDaBancada><button>Gerar fotos</button></AcoesDaBancada></BancadaDeFotos>);
-    expect(screen.getByRole("button", { name: "Gerar fotos" }).closest("header")).not.toBeNull();
+    expect(screen.getAllByRole("button", { name: "Gerar fotos" }).some((b) => b.closest("header"))).toBe(true);
     expect(screen.getByRole("complementary", { name: "Prancheta" })).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "Ferramentas de fotos" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Ver foto 2: Depois" }));

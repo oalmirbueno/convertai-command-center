@@ -79,7 +79,7 @@ describe("o menu ficou organizado", () => {
     // desktop. É isso que importa — duas peneiras deixariam o item vazar em
     // uma das saídas no primeiro conserto distraído.
     expect(layout).toContain("gruposDoMenu.flatMap((grupo) => grupo.items)");
-    expect(layout).toContain("const gruposPorPapel = (podeGestao: boolean)");
+    expect(layout).toContain("const gruposPorPapel = (podeGestao: boolean, podeCriacao = true)");
   });
 });
 

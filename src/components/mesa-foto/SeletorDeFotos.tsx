@@ -99,7 +99,7 @@ export default function SeletorDeFotos({
       {lista.length === 0 ? (
         <p className="text-[12px] text-muted-foreground">Nenhuma foto com esse filtro.</p>
       ) : (
-        <div className="grid min-w-0 grid-cols-3 gap-1.5 scrollbar-hidden sm:grid-cols-4 md:grid-cols-6 lg:max-h-[50vh] lg:overflow-y-auto lg:overscroll-contain" data-rolagem-do-seletor="">
+        <div className="grid min-w-0 grid-cols-[repeat(auto-fill,minmax(96px,1fr))] gap-3 lg:max-h-[50vh] lg:overflow-y-auto lg:overscroll-contain" data-rolagem-do-seletor="">
           {lista.map((f) => {
             const ja = jaEscolhidas.indexOf(f.id) >= 0;
             const marcada = marcadas.indexOf(f.id) >= 0;

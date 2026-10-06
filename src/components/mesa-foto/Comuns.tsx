@@ -39,6 +39,7 @@ export const ETAPAS_DA_MESA_FOTO = [
   { valor: "criar", rotulo: "O que fazer" },
   { valor: "estudio", rotulo: "Estúdio de fotos" },
   { valor: "compor", rotulo: "Compor foto" },
+  { valor: "combinar", rotulo: "Combinar produtos e cenários" },
   { valor: "ensaio", rotulo: "Fotos do produto" },
   { valor: "campanha", rotulo: "Foto com modelo" },
   { valor: "preparar", rotulo: "Tirar fundo e ajustes" },
@@ -64,7 +65,7 @@ export type EtapaDaMesaFoto = (typeof ETAPAS_DA_MESA_FOTO)[number]["valor"];
 export const PASSOS_PRINCIPAIS: { passo: number; etapa: EtapaDaMesaFoto; rotulo: string; dica: string; inclui: EtapaDaMesaFoto[] }[] = [
   { passo: 1, etapa: "criar", rotulo: "O que fazer", dica: "Escolha o que produzir: melhorar uma foto, fotos do produto, foto com modelo, tirar fundo ou post", inclui: ["criar"] },
   { passo: 2, etapa: "acervo", rotulo: "Fotos", dica: "Suba ou marque as fotos; o produto é identificado ali mesmo", inclui: ["acervo", "kits"] },
-  { passo: 3, etapa: "estudio", rotulo: "Gerar", dica: "A ferramenta do que você escolheu: Estúdio, fotos do produto, foto com modelo ou ajustes", inclui: ["estudio", "ensaio", "campanha", "preparar", "compor"] },
+  { passo: 3, etapa: "estudio", rotulo: "Gerar", dica: "A ferramenta do que você escolheu: Estúdio, fotos do produto, foto com modelo ou ajustes", inclui: ["estudio", "ensaio", "campanha", "preparar", "compor", "combinar"] },
   { passo: 4, etapa: "aprovar", rotulo: "Aprovar", dica: "Confira cada foto gerada e aprove ou refaça", inclui: ["aprovar", "revisar"] },
   { passo: 5, etapa: "usar", rotulo: "Usar", dica: "Post na Agenda para o cliente aprovar, Mesa, Mesa Ads ou baixar", inclui: ["usar", "agenda"] },
 ];
@@ -96,6 +97,7 @@ export const ABAS_FUTURAS: { etapa: string; rotulo: string; disponivel: boolean;
 
 /** As ferramentas do passo 3 (Gerar), com o nome simples do que produzem. */
 export const FORMAS_DE_CRIAR: { etapa: EtapaDaMesaFoto; rotulo: string; dica: string }[] = [
+  { etapa: "combinar", rotulo: "Combinar", dica: "Produtos e cenários com ou sem modelo, em séries de variações." },
   { etapa: "compor", rotulo: "Compor foto", dica: "Pessoa, foto principal e produto em três áreas; ambiente, upscale e versões." },
   { etapa: "estudio", rotulo: "Melhorar uma foto", dica: "Estúdio: uma foto grande e as ferramentas ao lado: luz, cor, fundo, cenário, ângulo, ampliar e o recorte do post." },
   { etapa: "ensaio", rotulo: "Fotos do produto", dica: "Várias fotos do produto: fundo de cor, lifestyle, na mão, flat lay, macro." },

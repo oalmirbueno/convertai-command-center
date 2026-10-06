@@ -5,6 +5,14 @@ export const ESTILOS_DE_VIDEO_DA_PAUTA = [
   { id: "jardim", nome: "Jardim: antes e depois", texto: "Mostre a transformação do jardim, do quadro inicial antes ao quadro final depois. Câmera estável, mesmo ponto de vista, resultado fiel às fotos." },
   { id: "moveis", nome: "Móveis: antes e depois", texto: "Mostre a transformação dos móveis e do ambiente do quadro inicial ao final, preservando medidas, texturas e acabamento das referências." },
   { id: "materiais", nome: "Mármore e sob medida", texto: "Apresente os detalhes reais de acabamento, veios e materiais das fotos, com câmera lenta, luz lateral e aparência elegante." },
+  { id: "loja", nome: "Apresentação da loja", texto: "Apresente o espaço real da loja e seus expositores com movimento suave de câmera. Use apenas ambientes e produtos presentes nas referências, sem inventar ofertas." },
+  { id: "colecao", nome: "Coleção e vitrine", texto: "Apresente a coleção em uma sequência de detalhes e planos gerais, mantendo forma e cores de cada produto real, com ritmo elegante." },
+  { id: "demonstracao", nome: "Produto em uso", texto: "Mostre como o produto é usado em uma situação cotidiana plausível. Preserve suas funções, dimensões e identidade visual reais." },
+  { id: "bastidores", nome: "Bastidores e processo", texto: "Valorize o processo de trabalho mostrado nas referências, com câmera discreta e aparência documental, sem inventar etapas ou equipamentos." },
+  { id: "gastronomia", nome: "Gastronomia e detalhes", texto: "Apresente o prato ou bebida real das referências com luz natural, close de textura e movimento delicado. Não adicione ingredientes ausentes." },
+  { id: "moda", nome: "Moda e acessórios", texto: "Valorize caimento, textura e detalhes reais de roupas ou acessórios, preservando a identidade da pessoa e do produto nas referências." },
+  { id: "transformacao", nome: "Antes e depois", texto: "Mostre a transformação do primeiro quadro (antes) ao último (depois), mantendo o ponto de vista e a fidelidade às fotos reais." },
+  { id: "institucional", nome: "Apresentação da marca", texto: "Apresente a marca com cenas reais do espaço, equipe ou produtos fornecidos, com luz natural, câmera suave e tom coerente com a pauta." },
 ] as const;
 export type EstiloDeVideoDaPauta = typeof ESTILOS_DE_VIDEO_DA_PAUTA[number]["id"];
 export interface DirecaoDeVideoDaPauta { estilo: EstiloDeVideoDaPauta; prompt: string; referencias: string[]; narracao: string; formato: "4:5" | "9:16" | "16:9" | "1:1" }

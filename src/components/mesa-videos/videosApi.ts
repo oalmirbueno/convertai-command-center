@@ -43,6 +43,7 @@ const EXTENSOES: Record<string, string> = {
 };
 
 export interface ArquivoDeVideo {
+  pedido_id?: string | null;
   id: string;
   client_id: string;
   nome: string;
@@ -103,6 +104,7 @@ export interface HistoriaNoBanco {
 }
 
 export interface PedidoDeVideo {
+  resultado?: { envios?: { arquivo_id?: string | null }[] };
   id: string;
   client_id: string;
   tipo: TipoDePedido;
@@ -153,6 +155,7 @@ export function normalizarArquivo(v: unknown): ArquivoDeVideo | null {
     id: String(o.id),
     client_id: texto(o.client_id),
     nome: texto(o.nome) || texto(o.nome_original) || "video",
+    pedido_id: o.pedido_id ? String(o.pedido_id) : null,
     nome_original: texto(o.nome_original) || texto(o.nome),
     storage_bucket: texto(o.storage_bucket) || BUCKET_DOS_VIDEOS,
     storage_path: String(o.storage_path),
