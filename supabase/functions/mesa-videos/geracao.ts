@@ -384,7 +384,7 @@ async function entradaDoCorpo(b: BaseDaFuncao, clientId: string, corpo: Record<s
     prompt: String(corpo.prompt || "").replace(/\s+/g, " ").trim().slice(0, 2400),
     negativo: linha(corpo.negativo, 600) || null,
     duracao_s: numero(corpo.duracao_s, 5),
-    formato: ["9:16", "16:9", "1:1", "4:5"].indexOf(String(corpo.formato)) >= 0 ? String(corpo.formato) : "9:16",
+    formato: ["9:16", "16:9", "1:1", "4:5", "3:4"].indexOf(String(corpo.formato)) >= 0 ? String(corpo.formato) : "9:16",
     resolucao: linha(corpo.resolucao, 10) || null,
     audio: corpo.audio === true,
     seed: corpo.seed === undefined || corpo.seed === null || corpo.seed === "" ? null : numero(corpo.seed, 0),
@@ -408,6 +408,12 @@ export async function gerarVideo(b: BaseDaFuncao, corpo: Record<string, unknown>
     const { data: tarefa, error } = await b.servico().from("tasks").select("id, projects!inner(client_id)").eq("id", taskId).eq("projects.client_id", clientId).is("deleted_at", null).maybeSingle();
     if (error || !tarefa) throw b.erro(404, "pauta_inexistente", "Esta pauta não pertence ao cliente aberto.");
   }
+  const criativoId = corpo.ads_criativo_id == null ? null : String(corpo.ads_criativo_id);
+  if (criativoId) {
+    if (!UUID.test(criativoId)) throw b.erro(400, "criativo_invalido", "Escolha um criativo válido.");
+    const { data, error } = await b.servico().from("ads_criativos").select("id").eq("id", criativoId).eq("client_id", clientId).maybeSingle();
+    if (error || !data) throw b.erro(404, "criativo_inexistente", "Este criativo não pertence ao cliente aberto.");
+  }
   const { motor } = await motorPronto(b, linha(corpo.motor, 60));
   if (motor.familia !== "video") throw b.erro(400, "motor_nao_e_de_video", `${motor.rotulo} não gera vídeo.`);
   const modo = MODOS.indexOf(corpo.modo as ModoDaGeracao) >= 0 ? (corpo.modo as ModoDaGeracao) : corpo.quadro_inicial_path ? "primeiro_quadro" : "texto";
@@ -425,7 +431,7 @@ export async function gerarVideo(b: BaseDaFuncao, corpo: Record<string, unknown>
     projetoId: UUID.test(String(corpo.projeto_id || "")) ? String(corpo.projeto_id) : null,
     planoRef: linha(corpo.plano_ref, 8) || null,
     titulo: linha(corpo.titulo, 120) || null,
-    extras: taskId ? { task_id: taskId } : undefined,
+    extras: { ...(taskId ? { task_id: taskId } : {}), ...(criativoId ? { ads_criativo_id: criativoId } : {}) },
   });
   return b.json(r);
 }

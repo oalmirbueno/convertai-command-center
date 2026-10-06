@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bookmark, ChevronLeft, ChevronRight, Copy, ImagePlus, Maximize2, MessageSquare, PenLine, RefreshCw, ScanLine, ShieldCheck, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -159,10 +159,21 @@ function PreviaNoFormato({
   const ultima = ordenadas[ordenadas.length - 1] || null;
   const vista = ordenadas.find((v) => v.versao === versaoVista) || ultima;
   const posicao = vista ? ordenadas.indexOf(vista) : -1;
-  const larguraMaxima = f.valor === "stories_9x16" ? 340 : 520;
+  const area = useRef<HTMLDivElement>(null);
+  const [altura, setAltura] = useState(480);
+  useEffect(() => {
+    const el = area.current;
+    if (!el) return;
+    const medir = () => setAltura(Math.max(200, el.clientHeight - 42));
+    medir();
+    const observer = new ResizeObserver(medir);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const larguraMaxima = Math.min(f.valor === "stories_9x16" ? 340 : 520, altura * f.largura / f.altura);
   const velada = !!andamento && andamento.etapa !== "fila";
   return (
-    <div className="flex min-w-0 flex-col">
+    <div ref={area} className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
       <div className="mb-2 flex h-8 min-w-0 items-center">
         <p className="min-w-0 flex-1 truncate text-[13px] font-semibold">
           {f.rotulo} <span className="font-normal text-muted-foreground">· {f.largura}×{f.altura}</span>
@@ -674,8 +685,8 @@ export default function ArteDoCriativo({
 
       {/* Ferramentas ao lado da arte a partir de 1280 px: a arte não passa de
           520 px de largura, e embaixo dela sobrava um vazio grande. */}
-      <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="min-w-0">
+      <div className="ads-stage">
+        <div className="ads-stage-preview">
           {card && noQuatroPorCinco ? (
             <EstudioLaminaGrande
               card={card}
@@ -689,7 +700,7 @@ export default function ArteDoCriativo({
               ocupado={ocupada(card.ordem)}
               andamento={andamento[card.ordem]}
               onAmpliar={() => ampliar(card.ordem)}
-              soPelaLargura
+              soPelaLargura={false}
             />
           ) : card ? (
             <PreviaNoFormato
@@ -709,7 +720,7 @@ export default function ArteDoCriativo({
           ) : null}
         </div>
 
-        <div className="min-w-0 rounded-xl border border-border bg-card">
+        <div className="ads-stage-tools min-w-0 rounded-xl border border-border bg-card">
           <nav aria-label="Ferramentas da arte" className="flex border-b border-border p-1">
             {FERRAMENTAS.map((t) => {
               const Icone = t.icone;
@@ -720,10 +731,11 @@ export default function ArteDoCriativo({
                   type="button"
                   aria-pressed={ativa}
                   onClick={() => setFerramenta(t.valor)}
-                  title={t.valor === "diretor" ? "Conversar com o diretor de arte sobre estilo, cenário, luz e cores" : undefined}
+                  title={t.rotulo}
+                  aria-label={t.rotulo}
                   className={`mr-1 inline-flex h-8 min-w-0 flex-1 items-center justify-center rounded-md px-1 text-[12px] ${ativa ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
                 >
-                  <Icone className="mr-1 h-3.5 w-3.5 shrink-0" /> <span className="truncate">{t.rotulo}</span>
+                  <Icone className="h-4 w-4 shrink-0" />
                 </button>
               );
             })}

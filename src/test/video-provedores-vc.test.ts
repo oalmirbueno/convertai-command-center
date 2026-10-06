@@ -93,7 +93,7 @@ describe("catálogo: Runway, Higgsfield e HeyGen", () => {
     ["runway-gen4.5", "runway-gen4-turbo", "higgsfield-cinema-4", "heygen-avatar-iv", "heygen-foto"].forEach((id) => {
       const m = motorPorId(id)!;
       expect(m.preco!.fonte, id).toMatch(/^https:\/\//);
-      expect(m.preco!.conferido_em, id).toBe("2026-09-26");
+      expect(m.preco!.conferido_em, id).toBe(id === "higgsfield-cinema-4" ? "2026-10-06" : "2026-09-26");
       expect(m.escolha_manual, id).toBe(true);
     });
     expect(custoDoMotor(motorPorId("runway-gen4.5")!, { duracao_s: 5 }).usd).toBe(0.6);
@@ -198,7 +198,7 @@ describe("Higgsfield", () => {
   const hf = motorPorId("higgsfield-cinema-4")!;
   it("corpo com a câmera pronta; 4:5 vira 3:4; câmera desconhecida é recusada", () => {
     const c = corpoDaGeracao(hf, { ...base, formato: "4:5", camera: "dolly-in", audio: false, duracao_s: 20 });
-    expect(c).toEqual(expect.objectContaining({ image_urls: ["https://x.supabase.co/q.png"], camera_movement: "dolly-in", aspect_ratio: "3:4", duration: 15, resolution: "720p", generate_audio: false }));
+    expect(c).toEqual(expect.objectContaining({ image_urls: ["https://x.supabase.co/q.png"], camera_movement: "dolly-in", aspect_ratio: "3:4", duration: 20, resolution: "720p", generate_audio: false }));
     expect(faltaParaGerar(hf, { ...base, camera: "voar-alto" })).toMatch(/desconhecido/);
     expect(faltaParaGerar(motorPorId("runway-gen4.5")!, { ...base, camera: "dolly-in" })).toMatch(/não tem movimentos/);
     expect(MOVIMENTOS_DA_HIGGSFIELD.length).toBe(33);

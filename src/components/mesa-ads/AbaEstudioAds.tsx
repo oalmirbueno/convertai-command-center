@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Clapperboard, Filter, Link2, Loader2, MoreHorizontal, PackageCheck, Send, Sparkles, Star, Undo2 } from "lucide-react";
+import { ChevronDown, ImageIcon, Clapperboard, Filter, Link2, Loader2, MoreHorizontal, PackageCheck, Send, Sparkles, Star, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -31,6 +31,8 @@ import {
   type PlanoAds,
   type StatusDoCriativo,
 } from "./adsApi";
+const VideoDoCriativo = lazy(() => import("./VideoDoCriativo"));
+import "./adsStudio.css";
 import ArteDoCriativo, { capaDoTrabalho } from "./ArteDoCriativo";
 import { ImportarPacote } from "./PacoteDeOtimizacao";
 import ResultadoDoCriativo from "./ResultadoDoCriativo";
@@ -217,6 +219,7 @@ export default function AbaEstudioAds({
   const [abertosOutros, setAbertosOutros] = useState<string[]>([]);
   const modeloDaCopy = useModeloDaCopy();
   // Frente AD4: o que ver (criativos ou acervo) lembrado por cliente; os "..." e as prévias recolhidas.
+  const [midia, setMidia] = useEstadoDaTela<"arte" | "video">(`ads:midia:${clientId}`, "arte");
   const [vista, setVista] = useEstadoDaTela<"criativos" | "acervo">(`mesa-ads:estudio:vista:${clientId}`, "criativos", { validar: (v) => v === "criativos" || v === "acervo", esperaMs: 0 });
   const [maisAberto, setMaisAberto] = useState(false);
   const [maisDoCriativo, setMaisDoCriativo] = useState(false);
@@ -551,12 +554,13 @@ export default function AbaEstudioAds({
           }
           acao={
             <>
-              {primario === "gerar" && botaoGerar(true)}
-              {primario === "entregar" && botaoEntregar(true)}
-              {primario === "conta" && botaoConta(true)}
+              {midia === "arte" && primario === "gerar" && botaoGerar(true)}
+              {midia === "arte" && primario === "entregar" && botaoEntregar(true)}
+              {midia === "arte" && primario === "conta" && botaoConta(true)}
               <button
                 type="button"
                 className={botao.icone}
+                hidden={midia === "video"}
                 aria-label="Mais ações do Estúdio Ads"
                 aria-expanded={maisAberto}
                 title="Mais ações"
@@ -580,6 +584,9 @@ export default function AbaEstudioAds({
             valor={vista}
             onEscolher={(v) => setVista(v === "acervo" ? "acervo" : "criativos")}
           />
+          {vista === "criativos" && <div className="mb-1 mr-2 inline-flex rounded-lg border bg-secondary/40 p-1" role="group" aria-label="Formato do estúdio">
+            {([['arte', 'Arte', ImageIcon], ['video', 'Vídeo', Clapperboard]] as const).map(([id, nome, Icone]) => <button key={id} type="button" aria-pressed={midia === id} title={nome} onClick={() => setMidia(id)} className={`inline-flex items-center rounded-md px-3 py-1.5 text-xs ${midia === id ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground'}`}><Icone className="mr-1.5 h-3.5 w-3.5" />{nome}</button>)}
+          </div>}
           {vista === "criativos" && !unica && (
             <SeletorCompacto
               rotulo="Filtrar por situação"
@@ -594,8 +601,9 @@ export default function AbaEstudioAds({
           )}
         </div>
         {/* O "...": o secundário num lugar só (estilo, importar, copy do plano e o que não é o primário agora). */}
-        {maisAberto && (
-          <div className="mt-2 flex min-w-0 flex-wrap items-center border-t border-border pt-2" aria-label="Mais ações do Estúdio Ads" role="group" data-menu-mais="">
+        {midia === "arte" && maisAberto && (
+          <div className="mt-2 flex min-w-0 flex-wrap items-center border-t border-border pt-2" hidden={midia === "video"}
+                aria-label="Mais ações do Estúdio Ads" role="group" data-menu-mais="">
             {primario !== "gerar" && laminasPendentes > 0 && <span className="mb-1 mr-2 inline-flex items-center">{botaoGerar(false)}</span>}
             {primario !== "entregar" && prontos.length > 0 && <span className="mb-1 mr-2 inline-flex items-center">{botaoEntregar(false)}</span>}
             {primario !== "conta" && aptosParaConta.length > 0 && <span className="mb-1 mr-2 inline-flex items-center">{botaoConta(false)}</span>}
@@ -675,7 +683,7 @@ export default function AbaEstudioAds({
       <div
         ref={refDaGrade}
         style={alturaDaGrade ? { height: `${alturaDaGrade}px` } : undefined}
-        className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[250px_minmax(0,1fr)] min-[1800px]:grid-cols-[260px_minmax(0,1fr)_400px]"
+        className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[220px_minmax(0,1fr)] min-[1800px]:grid-cols-[260px_minmax(0,1fr)_400px]"
         data-estudio-ads-grade=""
       >
         <aside className="min-w-0 lg:h-full lg:overflow-y-auto lg:overscroll-contain" aria-label="Criativos">
@@ -746,7 +754,7 @@ export default function AbaEstudioAds({
         </aside>
 
         {aberto && (
-          <div className="min-w-0 space-y-4 lg:h-full lg:overflow-y-auto lg:overscroll-contain lg:pr-1" data-coluna-principal="">
+          <div className="ads-studio-area min-w-0 space-y-3 lg:h-full lg:overflow-y-auto lg:overscroll-contain lg:pr-1" data-coluna-principal="">
             {/* 28/09 (frente AD4): o cabeçalho do criativo sem caixa; Status e Anúncio no "...". */}
             <div className="min-w-0" data-cabecalho-do-criativo="">
               <div className="flex min-w-0 flex-wrap items-start">
@@ -773,7 +781,7 @@ export default function AbaEstudioAds({
                   )}
                 </div>
                 <div className="mb-1 flex shrink-0 items-center">
-                  {situacaoAberta === "pronto" && aberto.trabalho_id && (
+                  {midia === "arte" && situacaoAberta === "pronto" && aberto.trabalho_id && (
                     <Button
                       type="button"
                       size="sm"
@@ -786,7 +794,7 @@ export default function AbaEstudioAds({
                       {armado === aberto.id ? "Confirmar entrega" : "Entregar ao cliente"}
                     </Button>
                   )}
-                  {situacaoAberta === "entregue" && !estaNaConta(aberto) && (
+                  {midia === "arte" && situacaoAberta === "entregue" && !estaNaConta(aberto) && (
                     <Button
                       type="button"
                       size="sm"
@@ -803,6 +811,7 @@ export default function AbaEstudioAds({
                   <button
                     type="button"
                     className={botao.icone}
+                    hidden={midia === "video"}
                     aria-label="Mais do criativo"
                     aria-expanded={maisDoCriativo}
                     title="Status, anúncio ligado e conta"
@@ -812,8 +821,9 @@ export default function AbaEstudioAds({
                   </button>
                 </div>
               </div>
-              {maisDoCriativo && (
-                <div className="mt-1 flex min-w-0 flex-wrap items-center" role="group" aria-label="Mais do criativo">
+              {midia === "arte" && maisDoCriativo && (
+                <div className="mt-1 flex min-w-0 flex-wrap items-center" role="group" hidden={midia === "video"}
+                    aria-label="Mais do criativo">
                   <label className="mb-1 mr-3 flex items-center text-[11.5px] text-muted-foreground">
                     <span className="mr-1.5">Status</span>
                     <select
@@ -857,14 +867,7 @@ export default function AbaEstudioAds({
               )}
             </div>
 
-            {/* Resultado e kit recolhidos por padrão, sem caixa: uma linha de resumo cada. */}
-            <div className="min-w-0 divide-y divide-border border-y border-border [&>*]:py-3">
-              <ResultadoDoCriativo criativo={aberto} angulo={anguloAberto} />
-              {/* 25/09: o que recebe quem clica neste anúncio (post de recepção e roteiro de vendas do ângulo). */}
-              {planoAberto && anguloAberto && <KitDeRecepcao key={`${planoAberto.id}:${anguloAberto.id}`} plano={planoAberto} angulo={anguloAberto} compacto />}
-            </div>
-
-            {trabalho ? (
+            {midia === "video" ? <Suspense fallback={<p role="status">Abrindo estúdio de vídeo…</p>}><VideoDoCriativo key={aberto.id} criativo={aberto} referencia={trabalho ? capaDoTrabalho(trabalho) : null} /></Suspense> : trabalho ? (
               <ArteDoCriativo key={aberto.id} criativo={aberto} trabalho={trabalho} onAtualizar={atualizarTrabalhos} irmaos={irmaos} />
             ) : aberto.trabalho_id && (trabalhos.isLoading || trabalhos.isFetching) ? (
               <div className="h-[50vh] animate-pulse rounded-lg bg-muted/70" />
@@ -874,6 +877,13 @@ export default function AbaEstudioAds({
                 <p className="mt-1 text-[12.5px] text-muted-foreground">Produza este ângulo de novo pelo Plano de teste para o diretor montar a direção.</p>
               </div>
             )}
+            {/* Resultado e kit recolhidos por padrão, sem caixa: uma linha de resumo cada. */}
+            <div className="min-w-0 divide-y divide-border border-y border-border [&>*]:py-3">
+              <ResultadoDoCriativo criativo={aberto} angulo={anguloAberto} />
+              {/* 25/09: o que recebe quem clica neste anúncio (post de recepção e roteiro de vendas do ângulo). */}
+              {planoAberto && anguloAberto && <KitDeRecepcao key={`${planoAberto.id}:${anguloAberto.id}`} plano={planoAberto} angulo={anguloAberto} compacto />}
+            </div>
+
             {!telaGrande && colunaDaCopy}
 
             {/* Posicionamentos na coluna da arte, lado a lado, em tamanho de celular. Recolhidos por padrão, sem caixa. */}

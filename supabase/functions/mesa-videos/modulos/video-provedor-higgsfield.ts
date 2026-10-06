@@ -12,8 +12,7 @@
  * (a antiga lista /v1/motions do DoP saiu da API atual). Sem 402 nem 429: 403 é
  * falta de crédito e 400 "concurrent" é o limite de 4 pedidos ao mesmo tempo.
  * Falha e conteúdo recusado (nsfw) não são cobrados pela Higgsfield.
- * SEM LAÇO: uma chamada por função, nenhuma nova tentativa (a API não tem
- * chave de idempotência: reenviar poderia cobrar duas vezes).
+ * Uma chamada por função, com Idempotency-Key por pedido/variação.
  */
 
 import { duracaoNoMotor, type MotorDeVideo, resolucaoNoMotor } from "./modelos-de-video.ts";
@@ -93,7 +92,7 @@ const DA_MESA: Record<string, string> = { parada: "static-shot", travelling: "tr
 export const movimentoDaMesaNaHiggsfield = (v: string | null | undefined): string | null => (v && DA_MESA[v]) || null;
 
 /** Formato da mesa na proporção da Higgsfield (4:5 não existe: vai 3:4). */
-const PROPORCAO: Record<string, string> = { "9:16": "9:16", "16:9": "16:9", "1:1": "1:1", "4:5": "3:4" };
+const PROPORCAO: Record<string, string> = { "9:16": "9:16", "16:9": "16:9", "1:1": "1:1", "4:5": "3:4", "3:4": "3:4", "4:3": "4:3", "21:9": "21:9" };
 
 /** Corpo do pedido do Cinema Studio 4.0. A imagem entra como referência (image_urls). */
 export function corpoDaHiggsfield(m: MotorDeVideo, e: EntradaDaGeracao): Record<string, unknown> {
@@ -161,10 +160,10 @@ export function lerStatusDaHiggsfield(corpo: Record<string, unknown> | null): Si
 const urlDoStatus = (id: string) => `${HIGGSFIELD_BASE}/requests/${encodeURIComponent(id)}/status`;
 
 /** Envia UM pedido. Não repete. */
-export async function enviarNaHiggsfield(endpoint: string, corpo: Record<string, unknown>, c: Credenciais): Promise<EnviadoAoProvedor> {
+export async function enviarNaHiggsfield(endpoint: string, corpo: Record<string, unknown>, c: Credenciais, opcoes?: { idempotencia?: string | null }): Promise<EnviadoAoProvedor> {
   if (!c.chave || !c.segredo) throw new ErroDoProvedor("chave_invalida", `Falta a chave da Higgsfield (${CHAVES}).`);
   if (ROTAS_DA_HIGGSFIELD.indexOf(endpoint) < 0) throw new ErroDoProvedor("parametros", "Rota da Higgsfield fora da lista.");
-  const r = await pedirJson(c.fetchImpl || fetch, `${HIGGSFIELD_BASE}/${endpoint}`, { method: "POST", headers: cabecalhos(c), body: JSON.stringify(corpo) });
+  const r = await pedirJson(c.fetchImpl || fetch, `${HIGGSFIELD_BASE}/${endpoint}`, { method: "POST", headers: { ...cabecalhos(c), ...(opcoes?.idempotencia ? { "Idempotency-Key": opcoes.idempotencia } : {}) }, body: JSON.stringify(corpo) });
   if (r.status < 200 || r.status >= 300 || !r.corpo) throw erroDaHiggsfield(r.status, r.corpo);
   const id = idDoPedidoSeguro(r.corpo.request_id);
   if (!id) throw new ErroDoProvedor("provedor", "A Higgsfield não devolveu o número do pedido.");
@@ -206,7 +205,7 @@ export async function cancelarNaHiggsfield(e: RefDoEnvio, c: Credenciais): Promi
 export const EXECUTOR_DA_HIGGSFIELD: ExecutorDoProvedor = {
   provedor: "higgsfield",
   rotulo: "Higgsfield",
-  enviar: (endpoint, corpo, c) => enviarNaHiggsfield(endpoint, corpo, c),
+  enviar: (endpoint, corpo, c, opcoes) => enviarNaHiggsfield(endpoint, corpo, c, opcoes),
   consultar: consultarNaHiggsfield,
   resultado: resultadoDaHiggsfield,
   cancelar: cancelarNaHiggsfield,
