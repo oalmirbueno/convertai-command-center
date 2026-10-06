@@ -1,4 +1,5 @@
-import { FORMATOS_DE_VIDEO_NO_ESTUDIO } from "./modoDaPauta";
+import { normalizarVideoDaPauta, type DirecaoDeVideoDaPauta } from "../../../supabase/functions/_shared/video-da-pauta";
+import { FORMATOS_DE_VIDEO_NO_ESTUDIO, type ModoDaPauta } from "./modoDaPauta";
 import { useCallback } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +19,8 @@ export interface ItemDoMes {
   delivery_type: string;
   status: string;
   project_id: string;
+  modo_estudio?: ModoDaPauta;
+  video?: DirecaoDeVideoDaPauta;
 }
 
 export interface Verificacao {
@@ -171,6 +174,7 @@ export interface PublicacaoDoPost {
 
 /** Arquivo de Arquivos (files) que a Agenda usa como arte do post. */
 export interface ArquivoDaAgenda {
+  tipo_midia?: "image" | "video";
   id: string;
   nome: string | null;
   bucket: string | null;
@@ -202,6 +206,9 @@ export interface ArteNaAgenda {
 
 /** Roteiro do estrategista (proposta gravada) do item. */
 export interface InfoDoRoteiro {
+  modo_estudio?: ModoDaPauta;
+  direcao_foto?: Record<string, unknown>;
+  video?: DirecaoDeVideoDaPauta;
   /** Lâminas detalhadas no roteiro; 0 = só o tema, a direção sai do diretor. */
   laminas: number;
   /** Contínuo pedido pelo estrategista (null = não disse). */
@@ -339,6 +346,7 @@ interface LinhaDoArquivo {
 const COLUNAS_DO_ARQUIVO = "id, file_name, file_url, storage_bucket, storage_path, mime_type, extension, created_at";
 
 const paraArquivo = (f: LinhaDoArquivo): ArquivoDaAgenda => ({
+  tipo_midia: mediaKindFromFile(f.file_name, f.file_url, f.mime_type, f.extension) === "video" ? "video" : "image",
   id: f.id,
   nome: f.file_name || null,
   bucket: f.storage_bucket || null,
@@ -377,6 +385,7 @@ interface PostDaAgenda {
 async function lerArtesDaAgenda(
   taskIds: string[],
   trabalhos: Record<string, Trabalho>,
+  incluirVideos = false,
 ): Promise<Record<string, ArteNaAgenda>> {
   const artes: Record<string, ArteNaAgenda> = {};
   if (!taskIds.length) return artes;
@@ -422,7 +431,7 @@ async function lerArtesDaAgenda(
     if (ids.length) {
       const { data: arquivos } = await sb.from("staff_files_secure").select(COLUNAS_DO_ARQUIVO).in("id", ids);
       for (const f of (arquivos || []) as LinhaDoArquivo[]) {
-        if (arquivoEhImagem(f)) arquivoPorId[f.id] = paraArquivo(f);
+        if (arquivoEhImagem(f) || (incluirVideos && mediaKindFromFile(f.file_name, f.file_url, f.mime_type, f.extension) === "video")) arquivoPorId[f.id] = paraArquivo(f);
         else naoImagem[f.id] = true;
       }
     }
@@ -494,6 +503,10 @@ async function lerRoteiros(clientId: string, taskIds: string[]): Promise<Record<
       const cards = doItem && Array.isArray(doItem.cards) ? (doItem.cards as unknown[]) : [];
       const continuo = doItem && typeof doItem.carrossel_infinito === "boolean" ? (doItem.carrossel_infinito as boolean) : null;
       roteiros[id] = { laminas: cards.length, continuo, longas: laminasLongasDoRoteiro(cards).length };
+      if (doItem?.formato === "foto" || doItem?.mesa === "foto") {
+        roteiros[id].modo_estudio = "fotos";
+        if (doItem.foto && typeof doItem.foto === "object" && !Array.isArray(doItem.foto)) roteiros[id].direcao_foto = doItem.foto as Record<string, unknown>;
+      } else if (doItem && FORMATOS_DE_VIDEO_NO_ESTUDIO.includes(String(doItem.formato))) { roteiros[id].modo_estudio = "video"; roteiros[id].video = normalizarVideoDaPauta(doItem.video); }
     }
   }
   return roteiros;
@@ -504,7 +517,7 @@ async function lerRoteiros(clientId: string, taskIds: string[]): Promise<Record<
  * a arte que já está na Agenda, o roteiro do estrategista e a publicação dos
  * posts. Devolve JSON puro (vai para o cache persistido).
  */
-export async function lerDetalhesDosItens(clientId: string, itens: ItemDoMes[]): Promise<DadosDosItens> {
+export async function lerDetalhesDosItens(clientId: string, itens: ItemDoMes[], incluirVideos = false): Promise<DadosDosItens> {
   const dados = vazio();
   dados.itens = itens;
   if (!itens.length) return dados;
@@ -525,7 +538,11 @@ export async function lerDetalhesDosItens(clientId: string, itens: ItemDoMes[]):
     if (t.task_id && !dados.trabalhos[t.task_id]) dados.trabalhos[t.task_id] = t;
   }
   dados.roteiros = roteiros;
-  dados.artes = await lerArtesDaAgenda(ids, dados.trabalhos).catch(() => ({} as Record<string, ArteNaAgenda>));
+  dados.artes = await lerArtesDaAgenda(ids, dados.trabalhos, incluirVideos).catch(() => ({} as Record<string, ArteNaAgenda>));
+  dados.itens = itens.map((item) => {
+    const modo = dados.artes[item.id]?.capa?.tipo_midia === "video" ? "video" : roteiros[item.id]?.modo_estudio;
+    return modo ? { ...item, modo_estudio: modo, ...(roteiros[item.id]?.video ? { video: roteiros[item.id].video } : {}) } : item;
+  });
 
   // Estado da publicação na Agenda (agendado, publicado, falhou) dos posts
   // que nasceram das artes aprovadas e dos que já tinham arte na Agenda.
@@ -586,13 +603,45 @@ async function lerItensDaJanela(clientId: string, mes: string, incluirVideos = f
     .from("tasks")
     .select(COLUNAS_DA_TAREFA)
     .in("project_id", ids)
-    .in("delivery_type", incluirVideos ? [...FORMATOS_DE_ARTE, ...FORMATOS_DE_VIDEO_NO_ESTUDIO] : FORMATOS_DE_ARTE)
+    .in("delivery_type", incluirVideos ? [...FORMATOS_DE_ARTE, ...FORMATOS_DE_VIDEO_NO_ESTUDIO, "story", "google_post"] : FORMATOS_DE_ARTE)
     .is("deleted_at", null)
     .gte("due_date", janela.inicio)
     .lt("due_date", janela.fimExclusivo)
     .order("due_date", { ascending: true });
   if (error) throw error;
-  const dados = await lerDetalhesDosItens(clientId, (data || []) as ItemDoMes[]);
+  let itens = (data || []) as ItemDoMes[];
+  if (incluirVideos) {
+    // A data editorial pode mudar sem alterar o vencimento da tarefa. Leia também
+    // os vínculos publicados/agendados na janela, sempre no cliente e projetos atuais.
+    const sb = supabase as any;
+    const { data: publicacoes, error: erroPublicacoes } = await sb.from("editorial_publications")
+      .select("post_id, scheduled_at").eq("client_id", clientId).in("project_id", ids)
+      .neq("status", "cancelled").gte("scheduled_at", janela.inicio).lt("scheduled_at", janela.fimExclusivo);
+    if (erroPublicacoes) throw erroPublicacoes;
+    const postsIds = unicos((publicacoes || []).map((p: { post_id: string }) => p.post_id));
+    if (postsIds.length) {
+      const { data: posts, error: erroPosts } = await sb.from("editorial_posts").select("id")
+        .eq("client_id", clientId).in("id", postsIds).is("archived_at", null);
+      if (erroPosts) throw erroPosts;
+      const vivos = (posts || []).map((p: { id: string }) => p.id);
+      if (vivos.length) {
+        const { data: vinculos, error: erroVinculos } = await sb.from("editorial_post_internal").select("post_id, task_id").in("post_id", vivos);
+        if (erroVinculos) throw erroVinculos;
+        const fora = unicos((vinculos || []).map((v: { task_id: string }) => v.task_id)).filter((id) => !itens.some((i) => i.id === id));
+        if (fora.length) {
+          const { data: tarefas, error: erroTarefas } = await sb.from("tasks").select(COLUNAS_DA_TAREFA).in("id", fora).in("project_id", ids).is("deleted_at", null)
+            .in("delivery_type", [...FORMATOS_DE_ARTE, ...FORMATOS_DE_VIDEO_NO_ESTUDIO, "story", "google_post"]);
+          if (erroTarefas) throw erroTarefas;
+          itens = itens.concat((tarefas || []).map((i: ItemDoMes) => {
+            const post = vinculos.find((v: { task_id: string }) => v.task_id === i.id)?.post_id;
+            const dia = publicacoes.find((p: { post_id: string }) => p.post_id === post)?.scheduled_at;
+            return { ...i, due_date: dia?.slice(0, 10) || i.due_date };
+          }));
+        }
+      }
+    }
+  }
+  const dados = await lerDetalhesDosItens(clientId, itens, incluirVideos);
   return mes === PROXIMOS_DIAS ? semPassadoVazio(dados, dataLocal(agora)) : dados;
 }
 
@@ -616,7 +665,10 @@ export function useItensDoMes(clientId: string, mes: string, incluirVideos = fal
   return useQuery({
     queryKey: incluirVideos ? [...chaveDosItens(clientId, mes), "todos-os-formatos"] : chaveDosItens(clientId, mes),
     enabled: !!clientId,
-    placeholderData: keepPreviousData,
+    placeholderData: (previous, query) => query?.queryKey[2] === clientId ? keepPreviousData(previous) : undefined,
+    refetchOnWindowFocus: true,
+    staleTime: incluirVideos ? 10_000 : undefined,
+    refetchInterval: incluirVideos ? 30_000 : false,
     queryFn: () => lerItensDaJanela(clientId, mes, incluirVideos),
     select: filtro ? daMarca : paraMapas,
   });
@@ -647,7 +699,7 @@ export function useItemAvulso(clientId: string, tarefaId: string | null, ativo: 
         .is("deleted_at", null)
         .maybeSingle();
       if (!projeto) return vazio();
-      return lerDetalhesDosItens(clientId, [data as ItemDoMes]);
+      return lerDetalhesDosItens(clientId, [data as ItemDoMes], true);
     },
     select: paraMapas,
   });

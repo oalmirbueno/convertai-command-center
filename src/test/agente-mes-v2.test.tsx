@@ -343,7 +343,7 @@ const PECAS = pecasComApelido([
 ]);
 
 describe("material colado vira ações com apelidos", () => {
-  it("criar_conteudos: datas e formatos do material, reels vira carrossel anotado, data passada fica de fora", () => {
+  it("criar_conteudos: datas e formatos do material, reels continua vídeo, data passada fica de fora", () => {
     const c = normalizarCriacao({
       resumo: "",
       orientacao: "Falar com o cliente final",
@@ -356,7 +356,7 @@ describe("material colado vira ações com apelidos", () => {
     }, "2026-09-26")!;
     expect(c.itens.map((i) => [i.data, i.formato, i.formato_pedido])).toEqual([
       ["2026-10-07", "estatico", null],
-      ["2026-10-09", "carrossel", "Reels"],
+      ["2026-10-09", "video", null],
     ]);
     expect(c.ignorados).toBe(2);
     expect(c.resumo).toContain("2 conteúdos");

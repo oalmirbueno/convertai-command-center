@@ -1,3 +1,4 @@
+import type { DirecaoDeVideoDaPauta } from "../../../supabase/functions/_shared/video-da-pauta";
 import { supabase } from "@/integrations/supabase/client";
 import {
   chamarFuncao,
@@ -224,12 +225,13 @@ export const partesDoPlanejamento = (catalogo: ModeloIa[], anexos: number, carac
 /** Conteúdos novos a partir de material colado ou anexado (anexo "criar_conteudos" de planejar_mes). */
 export interface ItemParaCriar {
   data: string;
-  formato: "carrossel" | "estatico" | "foto";
+  formato: "carrossel" | "estatico" | "foto" | "video";
   formato_pedido?: string | null;
   tema: string;
   referencia: string;
   /** Peça de foto: a direção para a Mesa Foto (contrato em modulos/peca-de-foto.ts). */
   foto?: DirecaoDeFoto | null;
+  video?: DirecaoDeVideoDaPauta | null;
 }
 
 export interface CriacaoDeConteudos {
@@ -259,11 +261,11 @@ export const LOTE_DA_CRIACAO = 12;
  * Texto do pedido livre de um lote da criação. Espelho de pedidoParaCriar em
  * supabase/functions/agente-calendario/agente-mes-v2.ts.
  */
-export function pedidoParaCriar(itens: Array<Pick<ItemParaCriar, "data" | "formato" | "tema" | "referencia" | "foto">>, orientacao?: string | null): string {
+export function pedidoParaCriar(itens: Array<Pick<ItemParaCriar, "data" | "formato" | "tema" | "referencia" | "foto" | "video">>, orientacao?: string | null): string {
   const linhas = itens.map((i) => {
-    const ref = String(i.referencia || "").replace(/\s+/g, " ").trim();
+    const ref = String((i.referencia || "") + (i.video ? ` Direção do vídeo: ${JSON.stringify(i.video)}` : "")).replace(/\s+/g, " ").trim();
     const foto = i.formato === "foto" && i.foto ? `\n  Direção da foto: ${resumoDaDirecaoDeFoto(i.foto)}` : "";
-    const rotulo = i.formato === "estatico" ? "estático" : i.formato === "foto" ? "foto" : "carrossel";
+    const rotulo = i.formato === "video" ? "vídeo rápido" : i.formato === "estatico" ? "estático" : i.formato === "foto" ? "foto" : "carrossel";
     return `- ${i.data} · ${rotulo} · ${String(i.tema || "").replace(/\s+/g, " ").trim()}${ref ? `\n  Referência do material: ${ref}` : ""}${foto}`;
   });
   const base = `Crie estes conteúdos, um para cada linha, exatamente na data e no formato indicados. Siga o tema e a referência do material de cada linha, adaptando ao cliente (negócio, oferta, público e tom de voz do contexto):\n${linhas.join("\n")}`;

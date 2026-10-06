@@ -37,7 +37,7 @@ describe("formato foto no Mês", () => {
     expect(formatoDoMes("carrossel")).toBe("carrossel");
     expect(formatoDoMes("Estático")).toBe("estatico");
     expect(formatoDoMes("imagem")).toBe("estatico");
-    expect(formatoDoMes("reels")).toBeNull();
+    expect(formatoDoMes("reels")).toBe("video");
     expect(formatoDoMes("")).toBeNull();
   });
 

@@ -1,3 +1,4 @@
+import { normalizarVideoDaPauta, ESQUEMA_VIDEO_DA_PAUTA, ORIENTACAO_VIDEO_DA_PAUTA, type DirecaoDeVideoDaPauta } from "../_shared/video-da-pauta.ts";
 /**
  * agente-calendario: o estrategista editorial da Mesa do cliente
  * (docs/mesa-do-cliente/SPEC.md, secao 4).
@@ -364,11 +365,11 @@ const LIMITE_DESCRICAO = 4000;
 
 // 02/10: "foto" é a peça de foto feita na Mesa Foto (modulos/peca-de-foto.ts); a entrega da tarefa
 // segue a lista do MCP (sem "foto"): entregaDaPecaDeFoto escolhe carrossel ou post único.
-export const FORMATOS = ["carrossel", "estatico", "foto"] as const;
+export const FORMATOS = ["carrossel", "estatico", "foto", "video"] as const;
 type Formato = typeof FORMATOS[number];
-const FORMATO_PARA_ENTREGA: Record<Formato, "carousel" | "static"> = { carrossel: "carousel", estatico: "static", foto: "carousel" };
+const FORMATO_PARA_ENTREGA: Record<Formato, "carousel" | "static" | "video"> = { carrossel: "carousel", estatico: "static", foto: "carousel", video: "video" };
 /** Entrega da tarefa do item na Agenda. */
-const entregaDoItem = (item: Pick<Item, "formato" | "foto">) => (item.formato === "foto" ? entregaDaPecaDeFoto(item.foto) : FORMATO_PARA_ENTREGA[item.formato === "estatico" ? "estatico" : "carrossel"]);
+const entregaDoItem = (item: Pick<Item, "formato" | "foto">) => (item.formato === "foto" ? entregaDaPecaDeFoto(item.foto) : FORMATO_PARA_ENTREGA[item.formato]);
 
 const OBJETIVOS = [
   "viralizacao_descoberta",
@@ -413,7 +414,7 @@ type Card = { ordem: number; funcao: string; texto: string; ilustracao: string; 
 
 type Item = {
   /** Frente MF: a mesa que faz o item (foto: Mesa Foto; arte: Estúdio), pelo formato do perfil. */
-  mesa?: "foto" | "arte" | null;
+  mesa?: "foto" | "arte" | "video" | null;
   tema_id: string;
   data: string;
   formato: Formato;
@@ -455,6 +456,7 @@ type Item = {
   evolucao?: EvolucaoDaPauta;
   /** 02/10: peça de foto (formato "foto"): a direção para a Mesa Foto, no contrato de modulos/peca-de-foto.ts. */
   foto?: DirecaoDeFoto | null;
+  video?: DirecaoDeVideoDaPauta | null;
   /** Título do item (peça de foto: o tema, como a Mesa Foto lê). */
   titulo?: string;
 };
@@ -559,7 +561,7 @@ function normalizarFormato(v: unknown, cards: unknown[]): Formato {
   // 02/10: foto, fotos, ensaio e foto de produto são peça de foto (Mesa Foto).
   const f = formatoDoMes(v);
   if (f) return f;
-  // Qualquer outro formato (reels, video, story) nunca passa: vira carrossel
+  // Outro formato sem contrato (como story) vira carrossel
   // quando ha mais de um card, senao estatico.
   return cards.length > 1 ? "carrossel" : "estatico";
 }
@@ -647,6 +649,7 @@ export function normalizarItem(bruto: unknown, uteis: string[], dataPadrao?: str
     ...(/^E\d{1,3}$/i.test(texto(o.continua_de, 8)) ? { continua_de: texto(o.continua_de, 8).toUpperCase() } : {}),
     ...(normalizarEvolucao(o.evolucao) ? { evolucao: normalizarEvolucao(o.evolucao)! } : {}),
     // 02/10: peça de foto vai para a Mesa Foto com a direção do contrato (e o título, como os outros itens).
+    ...(formato === "video" ? { mesa: "video" as const, video: normalizarVideoDaPauta(o.video) } : {}),
     ...(formato === "foto"
       ? { mesa: "foto" as const, titulo: texto(o.tema, 200), foto: normalizarDirecaoDeFoto(o.foto, { tema: texto(o.tema, 200), objetivo: texto(o.resumo, 300) }) }
       : {}),
@@ -660,6 +663,9 @@ export function normalizarItem(bruto: unknown, uteis: string[], dataPadrao?: str
  */
 export function itemNoFormato(item: Item, formato: Formato): Item {
   const novo: Item = { ...item, formato };
+  if (formato === "video") { novo.mesa = "video"; novo.video = normalizarVideoDaPauta(item.video); novo.cards = []; novo.carrossel_infinito = false; delete novo.foto; return novo; }
+  delete novo.video;
+  if (novo.mesa === "video") novo.mesa = null;
   if (formato === "foto") {
     novo.mesa = "foto";
     novo.titulo = item.tema;
@@ -784,6 +790,7 @@ const ESQUEMA_ITEM = obj({
   angulo: S("string", { description: "O ângulo deste conteúdo em poucas palavras (ex.: desejo, decisão, objeção, ocasião, erro comum, caso real, prova)." }),
   continua_de: S(["string", "null"], { description: "Apelido do item da MEMÓRIA EDITORIAL que este conteúdo continua com ângulo novo (ex.: E7); null quando é tema novo." }),
   // 02/10: peça de foto (formato foto): a direção para a Mesa Foto; null nos outros formatos.
+  video: ESQUEMA_VIDEO_DA_PAUTA,
   foto: { ...ESQUEMA_DA_DIRECAO_DE_FOTO, type: ["object", "null"], description: "Só no formato foto: a direção concreta da foto real (produto, ângulos, cenário, luz). Nos outros formatos, null." },
 });
 
@@ -1365,7 +1372,8 @@ function relogio() {
 const REGRAS_DE_SAIDA = `
 REGRAS DESTA EXECUÇÃO NO PAINEL:
 - Use somente os dados reais recebidos e o que a pesquisa na web trouxer. Nunca invente métrica, resultado, diferencial ou informação local. Dado ausente vira hipótese declarada.
-- Formatos permitidos: somente carrossel ou post estático. Nunca reels, vídeo, stories ou live.
+- Formatos permitidos: carrossel, post estático, foto e vídeo rápido. Respeite o formato pedido.
+${ORIENTACAO_VIDEO_DA_PAUTA}
 - Publicações só de segunda a sexta, dentro do período.
 - Evite repetir temas que já estão na agenda do período ou nos títulos recentes.
 - Siga a memória do estrategista (preferências, aprendizados e o que evitar).
@@ -1850,7 +1858,8 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
       ? ` Cadência pedida: ${fraseDaCadencia(cadenciaDoMes)}; proponha temas de foto real (formato_sugerido foto) e de arte nessa proporção.`
       : "")
     + `
-${REGRAS_DE_CONTEUDO_DO_MES}`;
+${REGRAS_DE_CONTEUDO_DO_MES}
+${ORIENTACAO_VIDEO_DA_PAUTA}`;
 
   // Três frentes em paralelo (uma por fase), cada uma com a sua parte dos
   // temas: cada resposta é um terço do tamanho e as três correm juntas.
@@ -1885,7 +1894,7 @@ Devolva:
 - publicos_prioritarios e pilares.
 - pesquisa: o que a pesquisa na web trouxe de útil para esta fase, com as fontes (links) usadas.
 - hipoteses: o que precisou ser suposto por falta de dado.
-- temas: cada um com id (t1, t2, ...), tema, pilar, fase (${f.fase}), objetivo (um só), por_que (ligado a dado real ou à pesquisa), formato_sugerido (carrossel, estatico ou foto; estático para aviso, oferta e prova; foto para produto, pessoa ou ambiente real), sazonal, data_sazonal (AAAA-MM-DD ou null), tipo_editorial e framework.
+- temas: cada um com id (t1, t2, ...), tema, pilar, fase (${f.fase}), objetivo (um só), por_que (ligado a dado real ou à pesquisa), formato_sugerido (carrossel, estatico, foto ou video; estático para aviso, oferta e prova; foto para produto, pessoa ou ambiente real), sazonal, data_sazonal (AAAA-MM-DD ou null), tipo_editorial e framework.
 Varie tipo, framework, gancho e ângulo entre os temas; nada genérico que serviria para qualquer empresa.
 
 ${blocoEditorial}`;
@@ -2115,6 +2124,7 @@ async function corrigirTutoriais(
       mensagens: [{
         papel: "usuario",
         conteudo: `${REGRAS_DE_CONTEUDO_DO_MES}
+${ORIENTACAO_VIDEO_DA_PAUTA}
 
 Estes títulos têm cara de tutorial. Reescreva cada tema e gancho direto, na linguagem do cliente, no que ele procura (desejo, decisão, objeção, ocasião), mantendo o assunto e o tema_id:
 ${marcados.map((i) => `- ${i.tema_id} · ${i.formato} · tema "${i.tema}" · gancho "${i.gancho}"`).join("\n")}`,
@@ -2224,7 +2234,8 @@ ${p.temas.filter((t) => !t.escolhido).map((t) => `- ${t.tema}`).join("\n") || "-
 TAREFA: detalhe uma publicação para cada tema abaixo, com todos os campos do calendário, no formato e na data indicados.
 ${lote.map((t) => `- tema_id ${t.id}: "${t.tema}" | pilar ${t.pilar} | fase ${t.fase} | objetivo ${t.objetivo} | formato ${formatoDoTema.get(t.id) ?? `sugerido ${t.formato_sugerido}`} | data ${dataDoTema.get(t.id)} | tipo_editorial ${t.tipo_editorial || AGENTE_ESCOLHE} | framework ${t.framework || AGENTE_ESCOLHE} | por que: ${t.por_que}\n  Estrutura: ${estruturaDoConteudo(t.tipo_editorial ?? "", t.framework ?? "", t.formato_sugerido)}`).join("\n")}
 Regras dos itens:
-- formato: o indicado no tema: carrossel, estatico ou foto (peça de foto real feita na Mesa Foto: produto, pessoa ou ambiente, sem arte; preencha foto com a direção concreta e use os cards para descrever cada foto, uma por card). Fora do formato foto, foto é null. Estático tem exatamente 1 card.
+${ORIENTACAO_VIDEO_DA_PAUTA}
+- formato: o indicado no tema: carrossel, estatico, foto ou video (peça de foto real feita na Mesa Foto: produto, pessoa ou ambiente, sem arte; preencha foto com a direção concreta e use os cards para descrever cada foto, uma por card). Fora do formato foto, foto é null. Estático tem exatamente 1 card.
 - cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao que acompanha, estilo visual respeitando o kit de marca). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim (descreva a protagonista igual em todos os cards), variando só a pose, o gesto e o enquadramento (nunca a mesma pose em dois cards seguidos); prefira foto real do cliente quando o contexto tiver. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6; 7 ou mais só quando o conteúdo pede. Nunca escreva o nome da marca no texto dos cards. Não repita tema, gancho nem imagem de posts recentes.
 - tipo_editorial e framework: os do tema (ou, com "${AGENTE_ESCOLHE}", o que mais serve); a funcao de cada card nomeia o passo do framework (ex.: "capa: atenção", "desejo", "CTA").
 - ${REGRA_DO_CARROSSEL}
@@ -2234,7 +2245,8 @@ Regras dos itens:
 - data: use exatamente a data indicada para o tema.
 - tipo_conteudo: extra_sazonal só para conteúdo de data sazonal marcado como extra; senão principal.
 - status: planejado.
-${REGRAS_DE_CONTEUDO_DO_MES}`;
+${REGRAS_DE_CONTEUDO_DO_MES}
+${ORIENTACAO_VIDEO_DA_PAUTA}`;
     const s = await chamarTexto({
       clientId: p.client_id,
       tarefa: "calendario",
@@ -2367,7 +2379,7 @@ Aplique o pedido na proposta. Devolva:
 - diagnostico: o novo texto só se ele mudou; senão null.
 - temas: a lista COMPLETA de temas atualizada só se algum tema mudou (mantenha os ids; tema novo recebe id novo); senão null.
 - itens: a lista COMPLETA de itens atualizada só se algum item mudou; senão null.
-Datas só de segunda a sexta entre ${p.periodo_inicio} e ${p.periodo_fim}. Formato carrossel, estatico ou foto (peça de foto da Mesa Foto, com a direção em foto).`;
+Datas só de segunda a sexta entre ${p.periodo_inicio} e ${p.periodo_fim}. Formato carrossel, estatico, foto ou video (peça de foto da Mesa Foto, com a direção em foto).`;
 
   const saida = await chamarTexto({
     clientId: p.client_id,
@@ -2482,7 +2494,7 @@ export type CampanhaNoItem = { linhas: string[]; fotoDoCard: (temaId: string, or
 export function descricaoDoItem(item: Item, propostaId: string, indice: number, campanha?: CampanhaNoItem | null): string {
   const linhas: string[] = [
     `Tema: ${item.tema}`,
-    `Formato: ${item.formato === "foto" ? `Peça de foto (Mesa Foto, ${item.foto ? item.foto.quantidade : 4} fotos)` : item.formato === "carrossel" ? `Carrossel${item.carrossel_infinito ? " (carrossel infinito)" : ""}` : "Post estático"}`,
+    `Formato: ${item.formato === "video" ? "Vídeo rápido (Estúdio)" : item.formato === "foto" ? `Peça de foto (Mesa Foto, ${item.foto ? item.foto.quantidade : 4} fotos)` : item.formato === "carrossel" ? `Carrossel${item.carrossel_infinito ? " (carrossel infinito)" : ""}` : "Post estático"}`,
     `Tipo: ${item.tipo_conteudo === "extra_sazonal" ? "extra sazonal" : "conteúdo principal"}`,
     `${ROTULO_FASE[item.fase] ?? `Fase ${item.fase}`}`,
     `Pilar: ${item.pilar}`,
@@ -2499,6 +2511,7 @@ export function descricaoDoItem(item: Item, propostaId: string, indice: number, 
   if (item.instrucao_arte) linhas.push("", `Instrução de arte da equipe: ${item.instrucao_arte}`);
   if (campanha && campanha.linhas.length) linhas.push("", ...campanha.linhas);
   // 02/10: peça de foto leva a direção para a Mesa Foto (assunto, ângulos, cenário, luz, pessoa, quantidade).
+  if (item.formato === "video" && item.video) linhas.push("", `Estilo de vídeo: ${item.video.estilo}`, `Direção do vídeo: ${item.video.prompt}`, `Narração: ${item.video.narracao}`, `Referências: ${item.video.referencias.join(", ")}`);
   if (item.formato === "foto" && item.foto) linhas.push("", "Direção da foto (Mesa Foto):", ...linhasDaDirecaoDeFoto(item.foto));
   if (item.formato !== "foto" || item.cards.length) linhas.push("", item.formato === "foto" ? "Fotos do post:" : "Roteiro dos cards:");
   for (const c of item.cards) {
@@ -2681,7 +2694,7 @@ async function gravarItens(
     for (const i of itensComTarefa) if (!i.mesa) i.mesa = i.formato === "foto" ? "foto" : "arte";
   }
   // Frente MF: cada item ganha a mesa que o faz, pelo formato do perfil (alternar: o Jev escolhe, o código equilibra).
-  const mesasDoPlano = await marcarMesasDoPlano(servico, p.client_id, itensComTarefa, { referencia: { tipo: REF_TIPO, id: p.id }, criadoPor: chamador.userId })
+  const mesasDoPlano = await marcarMesasDoPlano(servico, p.client_id, itensComTarefa.filter((i) => i.formato !== "video"), { referencia: { tipo: REF_TIPO, id: p.id }, criadoPor: chamador.userId })
     .catch((e) => {
       // Frente LR: sem a marcação, todos os itens ficam "arte"; a falha vai para o log.
       console.error("agente-calendario: mesas do plano não marcadas (itens ficam como arte)", { clientId: p.client_id, erro: String((e as Error)?.message ?? e) });
@@ -2743,7 +2756,7 @@ async function gravarItens(
   }
   // Cada item com roteiro já chega dirigido no Estúdio (sem custo de IA). Frente MF: item de fotos
   // não ganha direção de arte; ganha o post de fotos reservado, que abre na Mesa Foto.
-  const direcoes = await criarDirecoesDoRoteiro(servico, p.client_id, itensComTarefa.filter((i) => i.mesa !== "foto"), chamador.userId);
+  const direcoes = await criarDirecoesDoRoteiro(servico, p.client_id, itensComTarefa.filter((i) => i.mesa !== "foto" && i.formato !== "video"), chamador.userId);
   const postsDeFotos = await reservarPostsDoPlano(servico, p.client_id, itensComTarefa, chamador.userId);
   tempo.marcar("direcoes");
 
@@ -2920,6 +2933,7 @@ async function completarItens(servico: SupabaseClient, chamador: Chamador, corpo
 TAREFA: estes itens JÁ ESTÃO na agenda do cliente. Complete cada um com todos os campos do calendário, mantendo o tema, a data e o formato de cada item (não troque o assunto). O roteiro de cada card precisa estar pronto para o diretor de arte: texto exato de cada card (curto, com hierarquia clara), ilustração concreta e estilo visual no sistema da marca.
 ${validas.map((t, i) => `- tema_id i${i}: "${t.title}" | formato ${t.delivery_type === "carousel" ? "carrossel" : "estatico"} | data ${t.due_date ?? inicio} | o que já existe: ${(t.description ?? "").replace(/\s+/g, " ").slice(0, 900) || "só o título"}`).join("\n")}
 Regras dos itens:
+${ORIENTACAO_VIDEO_DA_PAUTA}
 - formato: carrossel ou estatico, igual ao do item. Estático tem exatamente 1 card.
 - cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim (descreva a protagonista igual em todos os cards), variando só a pose, o gesto e o enquadramento (nunca a mesma pose em dois cards seguidos); prefira foto real do cliente quando o contexto tiver. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6; 7 ou mais só quando o conteúdo pede. Nunca escreva o nome da marca no texto dos cards. Não repita tema, gancho nem imagem de posts recentes.
 - carrossel_infinito: true quando o carrossel for uma cena panorâmica contínua (o fundo atravessa os cards e o último se liga ao primeiro) e isso fizer sentido.
@@ -3673,7 +3687,8 @@ const resumoDaCampanha = (c: Campanha, fotos: { imagem: ImagemDaCampanha; foto: 
 };
 
 const REGRAS_DOS_ITENS = `Regras dos itens:
-- formato: carrossel, estatico ou foto (peça de foto real feita na Mesa Foto: produto, pessoa ou ambiente, sem arte; preencha foto com a direção concreta e use os cards para descrever cada foto, uma por card). Fora do formato foto, foto é null. Estático tem exatamente 1 card.
+${ORIENTACAO_VIDEO_DA_PAUTA}
+- formato: carrossel, estatico, foto ou video (peça de foto real feita na Mesa Foto: produto, pessoa ou ambiente, sem arte; preencha foto com a direção concreta e use os cards para descrever cada foto, uma por card). Fora do formato foto, foto é null. Estático tem exatamente 1 card.
 - cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim, variando só a pose, o gesto e o enquadramento; prefira foto real do cliente quando o contexto tiver. Entre itens diferentes do plano, a ilustracao e o estilo mudam (cenário, roupa, luz, tipo de peça), com a cor da marca só como acento. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6. Nunca escreva o nome da marca no texto dos cards.
 - carrossel_infinito: true quando o carrossel for uma cena panorâmica contínua e isso fizer sentido.
 - copy: a legenda completa do post. O texto longo (explicação, detalhes, lista) mora aqui, nunca nas lâminas. ${REGRA_DA_LEGENDA_NO_PLANO}
@@ -3683,7 +3698,8 @@ const REGRAS_DOS_ITENS = `Regras dos itens:
 - tipo_editorial e framework: um de cada, pela base de técnica; a funcao de cada card nomeia o passo do framework.
 - ${REGRA_DO_CARROSSEL}
 - ${REGRA_DO_ESTATICO}
-${REGRAS_DE_CONTEUDO_DO_MES}`;
+${REGRAS_DE_CONTEUDO_DO_MES}
+${ORIENTACAO_VIDEO_DA_PAUTA}`;
 
 const ESQUEMA_PEDIDO = {
   nome: "pedido_do_mes",
@@ -3693,7 +3709,7 @@ const ESQUEMA_PEDIDO = {
   })),
 };
 
-type PecaDoLote = { data: string; formato: Formato; tema: string; foto: DirecaoDeFoto | null };
+type PecaDoLote = { data: string; formato: Formato; tema: string; foto: DirecaoDeFoto | null; video?: DirecaoDeVideoDaPauta | null };
 
 /** As linhas do lote do "Criar conteúdos" (corpo.pecas): data, formato, tema e a direção da foto. */
 export function lerPecasDoLote(bruto: unknown): PecaDoLote[] {
@@ -3704,7 +3720,7 @@ export function lerPecasDoLote(bruto: unknown): PecaDoLote[] {
     const formato = formatoDoMes(o.formato);
     if (!DATA.test(data) || !formato) continue;
     const tema = texto(o.tema, 200);
-    saida.push({ data, formato, tema, foto: formato === "foto" ? normalizarDirecaoDeFoto(o.foto, { tema }) : null });
+    saida.push({ data, formato, tema, ...(formato === "video" ? { video: normalizarVideoDaPauta(o.video) } : {}), foto: formato === "foto" ? normalizarDirecaoDeFoto(o.foto, { tema }) : null });
   }
   return saida.sort((a, b) => a.data.localeCompare(b.data));
 }
@@ -3721,6 +3737,7 @@ export function aplicarPecasDoLote(itens: Item[], pecas: PecaDoLote[], uteis: st
     if (!peca) return item;
     let novo: Item = { ...item, data: normalizarDataUtil(peca.data, uteis) };
     if (novo.formato !== peca.formato) novo = itemNoFormato(novo, peca.formato);
+    if (peca.formato === "video") { novo.video = peca.video || novo.video || normalizarVideoDaPauta(null); novo.mesa = "video"; }
     if (peca.formato === "foto") {
       const daLinha = peca.foto;
       const doModelo = novo.foto ?? null;
@@ -3922,7 +3939,7 @@ async function conteudoRapido(servico: SupabaseClient, chamador: Chamador, corpo
   if (!pedidoTexto) throw new ErroHttp(400, "pedido_vazio", "Escreva o que o conteúdo precisa dizer.");
   const campanha = corpo.campanha_id ? await carregarCampanha(servico, corpo.campanha_id) : null;
   if (campanha && campanha.client_id !== clientId) throw new ErroHttp(403, "campanha_de_outro_cliente", "A campanha não é deste cliente.");
-  const formatoPedido: Formato | null = corpo.formato === "carrossel" || corpo.formato === "estatico" ? corpo.formato : null;
+  const formatoPedido: Formato | null = formatoDoMes(corpo.formato);
   const tipo = normalizarTipo(corpo.tipo);
   const framework = normalizarFramework(corpo.framework);
 
@@ -3946,6 +3963,7 @@ ${campanha ? `\nCAMPANHA DESTE CONTEÚDO (siga o conceito, a identidade e o brie
 PEDIDO RÁPIDO DA EQUIPE: ${pedidoTexto}
 
 TAREFA: UM conteúdo só, pronto para o Estúdio, para ${data}. Faça exatamente o que o pedido diz, sem enrolar.
+${ORIENTACAO_VIDEO_DA_PAUTA}
 - formato: ${formatoPedido ?? "escolha: estático para aviso, oferta, novidade ou prova (mensagem única); carrossel para ensinar, contar história ou comparar"}.
 - tipo_editorial: ${tipo || "o que mais serve ao pedido"}; framework: ${framework || "o que mais serve ao pedido"}.
 - Estrutura: ${estruturaDoConteudo(tipo, framework, formatoPedido ?? "")}.
@@ -4058,7 +4076,7 @@ export function editarUmItem(antigo: Item, campos: Record<string, unknown>, utei
     novo.data = normalizarDataUtil(campos.data, uteis);
     if (novo.data !== campos.data) avisos.push(`A data foi para ${novo.data} (só segunda a sexta dentro do período).`);
   }
-  if (campos.formato === "carrossel" || campos.formato === "estatico" || campos.formato === "foto") {
+  if (campos.formato === "carrossel" || campos.formato === "estatico" || campos.formato === "foto" || campos.formato === "video") {
     if (campos.formato === "estatico" && novo.cards.length > 1) avisos.push("No estático fica só a primeira lâmina.");
     // 02/10: trocar o formato pela lista do Mês (foto vai para a Mesa Foto com a direção pronta para ajustar).
     const trocado = itemNoFormato(novo, campos.formato);
@@ -4224,7 +4242,7 @@ async function campanhaConteudos(servico: SupabaseClient, chamador: Chamador, co
   const c = await carregarCampanha(servico, corpo.campanha_id);
   await exigirAcessoAoCliente(chamador, c.client_id);
   const escolha = lerEscolhaEditorial(corpo);
-  const formatoPedido: Formato | null = corpo.formato === "carrossel" || corpo.formato === "estatico" ? corpo.formato : null;
+  const formatoPedido: Formato | null = formatoDoMes(corpo.formato);
 
   const hoje = hojeSaoPaulo();
   const { inicio, fim } = periodoDosConteudosDaCampanha(c.periodo_inicio, c.periodo_fim, hoje);
@@ -4459,6 +4477,7 @@ Para cada um:
 - titulo curto; o_que_e em 1 a 2 frases; por_que_agora (o que está acontecendo, com data); fonte: um link real da pesquisa.
 - janela: hoje, esta_semana ou proximas_semanas.
 - como_usar: a ideia de conteúdo concreta para este cliente (gancho e ângulo), ligada à oferta dele.
+${ORIENTACAO_VIDEO_DA_PAUTA}
 - formato: carrossel ou estatico.
 - cuidado: o que evitar para a marca não parecer oportunista ou errar o tom (vazio se não houver).
 - resumo: 1 frase sobre o clima da semana para este nicho.
@@ -5381,6 +5400,7 @@ export const ESQUEMA_PLANEJAMENTO = {
             tema: S("string"),
             referencia: S("string"),
             // 02/10: peça de foto (formato foto): a direção para a Mesa Foto; null nos outros formatos.
+            video: ESQUEMA_VIDEO_DA_PAUTA,
             foto: { ...ESQUEMA_DA_DIRECAO_DE_FOTO, type: ["object", "null"] },
           }),
         },
@@ -5947,11 +5967,11 @@ const ESQUEMA_DO_AJUSTE = {
   schema: obj({
     novos: {
       type: "array",
-      items: obj({ vaga: S("integer"), tema: S("string"), referencia: S("string"), foto: { ...ESQUEMA_DA_DIRECAO_DE_FOTO, type: ["object", "null"] } }),
+      items: obj({ vaga: S("integer"), tema: S("string"), referencia: S("string"), video: ESQUEMA_VIDEO_DA_PAUTA, foto: { ...ESQUEMA_DA_DIRECAO_DE_FOTO, type: ["object", "null"] } }),
     },
     ajustes: {
       type: "array",
-      items: obj({ item: S("integer"), tema: S("string"), referencia: S("string"), foto: { ...ESQUEMA_DA_DIRECAO_DE_FOTO, type: ["object", "null"] } }),
+      items: obj({ item: S("integer"), tema: S("string"), referencia: S("string"), video: ESQUEMA_VIDEO_DA_PAUTA, foto: { ...ESQUEMA_DA_DIRECAO_DE_FOTO, type: ["object", "null"] } }),
     },
   }),
 };
@@ -5993,6 +6013,7 @@ async function ajustarCriacao(
       const pedido = `${a.contexto}
 
 ${REGRAS_DE_CONTEUDO_DO_MES}
+${ORIENTACAO_VIDEO_DA_PAUTA}
 ${a.cadencia ? `\nCADÊNCIA PEDIDA PELO DONO: ${fraseDaCadencia(a.cadencia)} (o painel já pôs datas e formatos nas vagas).\n` : ""}${a.criacao.orientacao ? `ORIENTAÇÃO DA EQUIPE: ${a.criacao.orientacao}\n` : ""}
 ${textoDoAjuste(vagas.map((v) => ({ data: v.data, formato: formatoDaVaga(v) })), itens, pendencias)}
 
@@ -6186,10 +6207,11 @@ Devolva:
     ? `só quando a equipe pedir para mudar a proposta do mês (trocar, tirar ou acrescentar temas ou conteúdos, mudar datas). resumo: o que muda, em 1 a 3 frases. temas: só os temas novos ou alterados (mantenha o id do alterado; tema novo recebe id novo). temas_removidos: ids dos temas que saem. itens: só os conteúdos novos ou alterados, completos (mantenha o tema_id do alterado). itens_removidos: tema_id dos conteúdos que saem. Conteúdo com "gravado": true já está na agenda e não muda aqui. A equipe vê a mudança antes de aplicar. Sem pedido de mudança, null.`
     : "sempre null (não há proposta aberta para este mês; para gerar o mês, a equipe usa o gerador de meses, que segue o plano combinado)."}
 ${REGRA_DAS_ACOES_NA_AGENDA}
-- criar_conteudos: quando a equipe colar ou anexar material com vários conteúdos (pautas, calendário, legendas, planilha) ou pedir conteúdos novos em datas certas. itens: um por conteúdo, na ordem do material: data AAAA-MM-DD (a do material; sem data, os dias úteis do mês em conversa, na ordem), formato (carrossel, estatico ou foto; foto é post de foto real feito na Mesa Foto, com foto preenchida: assunto, objetivo, angulos, cenario, luz, pessoa, quantidade, texto_na_foto e referencias; nos outros formatos foto é null; reels, vídeo e story viram carrossel e você avisa), tema e referencia (o que o material diz daquele conteúdo: ideia, copy, roteiro, fiel e resumido em até 600 caracteres). Pedido de cadência ("3 por semana", "2 fotos e 1 carrossel") sem material: um item por post do mês em conversa, exatamente na cadência e na mistura pedidas, espalhados (3 por semana: segunda, quarta e sexta). orientacao: o porquê que vale para todos (ex.: falar com o cliente final). resumo: 1 frase. Todos os conteúdos do material entram (o painel cria em lotes). Sem pedido desse tipo, null.
+${ORIENTACAO_VIDEO_DA_PAUTA}
+- criar_conteudos: quando a equipe colar ou anexar material com vários conteúdos (pautas, calendário, legendas, planilha) ou pedir conteúdos novos em datas certas. itens: um por conteúdo, na ordem do material: data AAAA-MM-DD (a do material; sem data, os dias úteis do mês em conversa, na ordem), formato (carrossel, estatico, foto ou video; foto é post de foto real feito na Mesa Foto, com foto preenchida: assunto, objetivo, angulos, cenario, luz, pessoa, quantidade, texto_na_foto e referencias; nos outros formatos foto é null; reels e vídeo permanecem video e levam a direção estruturada em video), tema e referencia (o que o material diz daquele conteúdo: ideia, copy, roteiro, fiel e resumido em até 600 caracteres). Pedido de cadência ("3 por semana", "2 fotos e 1 carrossel") sem material: um item por post do mês em conversa, exatamente na cadência e na mistura pedidas, espalhados (3 por semana: segunda, quarta e sexta). orientacao: o porquê que vale para todos (ex.: falar com o cliente final). resumo: 1 frase. Todos os conteúdos do material entram (o painel cria em lotes). Sem pedido desse tipo, null.
 - atualizar_publico: só quando a DECISÃO SOBRE O PÚBLICO mandar adaptar: { publico (o público novo, completo, como deve ficar no contexto), motivo (1 frase) }. Senão null.
 ${REGRA_DO_APRENDIZADO_NO_PROMPT}
-Datas de conteúdos novos: as do material, como estão; sem data no material, só de segunda a sexta. Formato carrossel, estatico ou foto.
+Datas de conteúdos novos: as do material, como estão; sem data no material, só de segunda a sexta. Formato carrossel, estatico, foto ou video.
 ${editavel ? REGRAS_DOS_ITENS : ""}`;
 
   const tokensDoHistorico = anteriores.reduce((n, m) => n + estimarTokens(m.conteudo), 0);

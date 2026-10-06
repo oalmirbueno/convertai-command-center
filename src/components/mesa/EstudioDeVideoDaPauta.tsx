@@ -1,3 +1,4 @@
+import { ESTILOS_DE_VIDEO_DA_PAUTA } from "../../../supabase/functions/_shared/video-da-pauta";
 import EntregaDoVideoDaPauta from "./EntregaDoVideoDaPauta";
 import { useState } from "react";
 import { useMesa } from "./MesaContexto";
@@ -7,20 +8,16 @@ import GeracoesRecentes from "@/components/mesa-videos/GeracoesRecentes";
 import { useArquivosDeVideo, usePedidos, useVersoes } from "@/components/mesa-videos/videosApi";
 import { LinhaDoFinal } from "@/components/mesa-edicao/Finais";
 import { chaveDoEstudioDaPauta } from "./modoDaPauta";
-import type { ItemDoMes } from "./useItensDoMes";
+import BancadaDaPauta, { PreviaDaPauta } from "./BancadaDaPauta";
+import { fonteDoArquivo } from "./useItensDoMes";
+import type { ItemDoMes, ArteNaAgenda } from "./useItensDoMes";
 
-const BASES = [
-  { id: "produto", nome: "Produto elegante", texto: "Apresente o produto das fotos com movimento de câmera suave, iluminação de estúdio e acabamento realista. Preserve o produto e seus materiais." },
-  { id: "imovel", nome: "Apresentação de imóvel", texto: "Apresente este imóvel a partir das fotos reais. Travelling suave, luz natural e proporções fiéis. Não invente cômodos, móveis ou características." },
-  { id: "jardim", nome: "Jardim: antes e depois", texto: "Mostre a transformação do jardim, do quadro inicial antes ao quadro final depois. Câmera estável, mesmo ponto de vista, resultado fiel às fotos." },
-  { id: "moveis", nome: "Móveis: antes e depois", texto: "Mostre a transformação dos móveis e do ambiente do quadro inicial ao final, preservando medidas, texturas e acabamento das referências." },
-  { id: "materiais", nome: "Mármore e sob medida", texto: "Apresente os detalhes reais de acabamento, veios e materiais das fotos, com câmera lenta, luz lateral e aparência elegante." },
-] as const;
+const BASES = ESTILOS_DE_VIDEO_DA_PAUTA;
 
-export default function EstudioDeVideoDaPauta({ item }: { item: ItemDoMes }) {
+export default function EstudioDeVideoDaPauta({ item, arte }: { item: ItemDoMes; arte?: ArteNaAgenda | null }) {
   const { clientId } = useMesa();
   const chave = (parte: string) => chaveDoEstudioDaPauta(clientId, item.id, parte);
-  const [base, setBase] = useEstadoDaTela(chave("base-video"), "produto");
+  const [base, setBase] = useEstadoDaTela<string>(chave("base-video"), item.video?.estilo || "produto");
   const [ids, setIds] = useEstadoDaTela<string[]>(chave("pedidos-video"), [], { validar: Array.isArray });
   const [aba, setAba] = useState("gerar");
   const arquivosQ = useArquivosDeVideo(clientId);
@@ -32,16 +29,20 @@ export default function EstudioDeVideoDaPauta({ item }: { item: ItemDoMes }) {
   const fontes = new Set(originais.map((a) => a.id));
   const versoes = new Set((versoesQ.data?.itens || []).filter((v) => v.projeto && Object.values(v.projeto.fontes).some((f) => !!f.arquivo_id && fontes.has(f.arquivo_id))).map((v) => v.id));
   const arquivos = (arquivosQ.data?.arquivos || []).filter((a) => a.estado !== 'arquivado' && (fontes.has(a.id) || (typeof a.origem?.versao_id === 'string' && versoes.has(a.origem.versao_id))));
+  const [vendo, setVendo] = useState<string | null>(null);
+  const atual = arquivos.find((a) => a.id === vendo) || arquivos[0];
+  const agenda = fonteDoArquivo(arte?.capa);
   const tema = BASES.find((b) => b.id === base) || BASES[0];
-  return <div className="min-h-0 flex-1 overflow-y-auto space-y-4 p-2" data-video-da-pauta={item.id}>
-    <nav className="flex gap-2" aria-label="Produção do vídeo">{[['gerar','Gerar vídeo'],['resultados','Resultados e legendas']].map(([id, nome]) => <button type="button" key={id} aria-pressed={aba === id} className={`rounded-md border px-3 py-2 text-[12px] ${aba === id ? 'bg-primary text-primary-foreground' : ''}`} onClick={() => setAba(id)}>{nome}</button>)}</nav>
-    {aba === 'gerar' && <>
-      <div className="flex flex-wrap gap-2" aria-label="Base do vídeo">{BASES.map((b) => <button key={b.id} type="button" aria-pressed={base === b.id} onClick={() => setBase(b.id)} className={`rounded-full border px-3 py-1.5 text-[12px] ${base === b.id ? 'border-primary text-primary' : ''}`}>{b.nome}</button>)}</div>
-      <p className="text-[12px] text-muted-foreground">Antes e depois: escolha as fotos nos quadros inicial e final.</p>
-      <GeradorLivre key={`${item.id}:${base}`} escopo={chave(`video:${base}`)} pauta={item} promptInicial={`${tema.texto}\nPauta: ${item.title}`} aoGerar={(id) => { setIds((antes) => Array.from(new Set([...antes, id]))); setAba('resultados'); }} />
-    </>}
-    {(arquivosQ.isError || pedidosQ.isError) && <p role="alert">Não foi possível ler os resultados. <button type="button" onClick={() => { void arquivosQ.refetch(); void pedidosQ.refetch(); }}>Recarregar</button></p>}
-    <GeracoesRecentes arquivos={arquivos} taskId={item.id} pedidosIds={ids} />
-    {aba === 'resultados' && <><p className="text-[12px] text-muted-foreground">Confira o vídeo, gere a legenda da fala e baixe ou guarde no Workspace.</p><div className="space-y-4">{arquivos.map((a) => <section key={a.id} className="rounded-lg border p-3" aria-label={a.nome}><ul><LinhaDoFinal arquivo={a} variantes={[]} antes={null} /></ul><EntregaDoVideoDaPauta item={item} arquivo={a} /></section>)}</div>{!arquivos.length && <p role="status" className="text-[13px] text-muted-foreground">Os vídeos prontos desta pauta aparecerão aqui.</p>}</>}
+  return <div className="flex min-h-0 flex-1 flex-col" data-video-da-pauta={item.id}>
+    <BancadaDaPauta tipo="video" titulo={item.title}
+      acoes={<span className="text-[12px] text-muted-foreground">{tema.nome}</span>}
+      prancheta={<div className="space-y-2"><button type="button" aria-pressed={aba === 'gerar'} className="w-full rounded-lg border border-dashed px-2 py-5 text-[12px]" onClick={() => setAba('gerar')}>+ Gerar vídeo</button>{arquivos.map((a, i) => <button type="button" key={a.id} aria-pressed={atual?.id === a.id} onClick={() => { setVendo(a.id); setAba('resultados'); }} className={`w-full rounded-lg border px-2 py-4 text-left text-[12px] ${atual?.id === a.id ? 'border-primary bg-primary/10' : ''}`}>Vídeo {i + 1}<span className="mt-2 block truncate">{a.nome}</span></button>)}{arte?.capa?.tipo_midia === "video" && <p className="rounded-lg border p-3 text-[12px] text-primary">Vídeo na Agenda</p>}</div>}
+      previa={<><p className="mb-3 text-[13px] font-semibold">{atual?.nome || tema.nome}</p>{atual ? <PreviaDaPauta key={atual.id} caminho={atual.storage_path} bucket={atual.storage_bucket} nome={atual.nome} video /> : agenda.caminho && arte?.capa?.tipo_midia === 'video' ? <PreviaDaPauta caminho={agenda.caminho} bucket={agenda.bucket} nome={item.title} video /> : <div className="flex min-h-[400px] flex-1 flex-col items-center justify-center rounded-lg border border-dashed p-6 text-center"><p className="text-[13px] font-medium">{tema.nome}</p><p className="mt-3 max-w-md text-[13px] text-muted-foreground">{tema.texto}</p><p className="mt-3 text-[12px] text-primary">A direção já está preparada. Confira as fotos e gere nas ferramentas ao lado.</p></div>}
+        <div className="mt-3 max-h-52 overflow-y-auto"><GeracoesRecentes arquivos={arquivos} taskId={item.id} pedidosIds={ids} /></div>
+      </>}
+      ferramentas={<div className="space-y-4"><nav className="flex gap-2" aria-label="Produção do vídeo">{[['gerar','Gerar vídeo'],['resultados','Legenda e entrega']].map(([id, nome]) => <button type="button" key={id} aria-pressed={aba === id} className={`rounded-md border px-3 py-2 text-[12px] ${aba === id ? 'bg-primary text-primary-foreground' : ''}`} onClick={() => setAba(id)}>{nome}</button>)}</nav>
+      {aba === 'gerar' ? <><label className="block text-[13px] font-medium">Estilo do vídeo<select aria-label="Estilo do vídeo" className="mt-2 w-full rounded-md border bg-background p-2 text-[13px]" value={base} onChange={(e) => setBase(e.target.value)}>{BASES.map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}</select></label><GeradorLivre key={`${item.id}:${base}`} escopo={chave(`video:${base}`)} pauta={item} direcaoInicial={item.video} promptInicial={`${base === item.video?.estilo ? item.video.prompt : tema.texto}\nPauta: ${item.title}`} aoGerar={(id) => { setIds((antes) => Array.from(new Set([...antes, id]))); setAba('resultados'); }} /></> : atual ? <><ul><LinhaDoFinal arquivo={atual} variantes={[]} antes={null} /></ul><EntregaDoVideoDaPauta item={item} arquivo={atual} /></> : <p role="status" className="text-[13px] text-muted-foreground">{arte ? 'Este vídeo já está na Agenda. Confira a legenda e a publicação na Agenda.' : 'O resultado aparece aqui assim que a geração terminar.'}</p>}
+      {(arquivosQ.isError || pedidosQ.isError) && <p role="alert">Não foi possível ler os resultados. <button type="button" onClick={() => { void arquivosQ.refetch(); void pedidosQ.refetch(); }}>Recarregar</button></p>}
+      </div>} />
   </div>;
 }

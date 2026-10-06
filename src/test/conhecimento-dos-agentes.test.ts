@@ -194,7 +194,7 @@ describe("Calendário e campanhas: marketing por momento e cérebro", () => {
     expect(calendario.match(/sistema: sistemaDoCalendario\(e\.ctx, "diagnostico"\)/g)?.length).toBe(1);
     expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "campanha"\)/g)?.length).toBe(2);
     expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "campanha", "conversa"\)/g)?.length).toBe(1);
-    for (const r of ["somente carrossel ou post estático", "Nunca reels, vídeo, stories ou live", "segunda a sexta", "sem travessões", "tipo_editorial e framework"]) expect(REGRAS_DE_SAIDA).toContain(r);
+    for (const r of ["carrossel, post estático, foto e vídeo rápido", "Respeite o formato pedido", "segunda a sexta", "sem travessões", "tipo_editorial e framework"]) expect(REGRAS_DE_SAIDA).toContain(r);
     expect(calendario).toContain("${BASE_DO_ESTRATEGISTA}");
   });
 

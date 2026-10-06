@@ -146,7 +146,7 @@ describe("prompt do calendário reforçado sem tirar regra", () => {
   it("as regras antigas de saída continuam todas", () => {
     for (const regra of [
       "Use somente os dados reais recebidos e o que a pesquisa na web trouxer.",
-      "Formatos permitidos: somente carrossel ou post estático. Nunca reels, vídeo, stories ou live.",
+      "Formatos permitidos: carrossel, post estático, foto e vídeo rápido. Respeite o formato pedido.",
       "Publicações só de segunda a sexta, dentro do período.",
       "Evite repetir temas que já estão na agenda do período ou nos títulos recentes.",
       "Siga a memória do estrategista",

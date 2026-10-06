@@ -21,10 +21,11 @@
  */
 
 import { faltasDaDirecao, type DirecaoDeFoto, type FormatoDoMes, normalizarDirecaoDeFoto, PLURAL_DO_FORMATO } from "./peca-de-foto.ts";
+import { normalizarVideoDaPauta, type DirecaoDeVideoDaPauta } from "../../_shared/video-da-pauta.ts";
 
 // ------------------------------------------------------------------ leitura da cadência
 
-export type MixDaSemana = { foto: number; carrossel: number; estatico: number; arte: number };
+export type MixDaSemana = { foto: number; carrossel: number; estatico: number; video?: number; arte: number };
 
 export type CadenciaDoMes = {
   /** Posts por semana (1 a 5: o Mês publica de segunda a sexta, um por dia). */
@@ -58,17 +59,18 @@ export function textoParaCadencia(t: unknown): string {
 const QUALIFICADOR = "(?:posts?|postagens?|publicacoes|publicacao|conteudos?|pecas?|vezes|x)";
 const POR_SEMANA = new RegExp(`(\\d{1,2})\\s*${QUALIFICADOR}?\\s*(?:no feed\\s*)?(?:por|na|da|a cada|cada|\\/)\\s*semana`, "g");
 const SEMANAIS = new RegExp(`(\\d{1,2})\\s*${QUALIFICADOR}?\\s*semanais`, "g");
-const MIX = /(\d{1,2})\s+(?:(?:posts?|postagens?|pecas?|conteudos?|publicacoes|publicacao)\s+)?(?:(?:de|em|com|do tipo)\s+)?(fotos?|fotografias?|ensaios?|carross\w*|carrocel\w*|carousel\w*|estatic\w*|artes?)\b(?!\s*(?:por|em cada|cada|no|na|dentro)\s+(?:post|carrossel|peca|publicacao))/g;
+const MIX = /(\d{1,2})\s+(?:(?:posts?|postagens?|pecas?|conteudos?|publicacoes|publicacao)\s+)?(?:(?:de|em|com|do tipo)\s+)?(fotos?|fotografias?|ensaios?|carross\w*|carrocel\w*|carousel\w*|estatic\w*|videos?|reels?|artes?)\b(?!\s*(?:por|em cada|cada|no|na|dentro)\s+(?:post|carrossel|peca|publicacao))/g;
 const LISTA_DE_DIAS = /\b(segunda|terca|quarta|quinta|sexta)(?:-feira)?s?(?:\s*(?:,|e|\/)\s*(?:a\s+)?(?:segunda|terca|quarta|quinta|sexta)(?:-feira)?s?)+/;
 
 function categoria(palavra: string): keyof MixDaSemana {
+  if (/^video|^reel/.test(palavra)) return "video";
   if (/^fot|^ensai/.test(palavra)) return "foto";
   if (/^carro|^carou/.test(palavra)) return "carrossel";
   if (/^estat/.test(palavra)) return "estatico";
   return "arte";
 }
 
-const somaDoMix = (m: MixDaSemana) => m.foto + m.carrossel + m.estatico + m.arte;
+const somaDoMix = (m: MixDaSemana) => m.foto + m.carrossel + m.estatico + (m.video || 0) + m.arte;
 
 /**
  * A cadência pedida no texto, ou null quando ele não fala de cadência.
@@ -95,7 +97,7 @@ export function lerCadencia(texto: unknown, fonte = "pedido"): CadenciaDoMes | n
   while ((m = MIX.exec(t))) {
     const n = Number(m[1]);
     if (n < 1 || n > 14) continue;
-    mix[categoria(m[2])] += n;
+    mix[categoria(m[2])] = (mix[categoria(m[2])] || 0) + n;
     achou = true;
   }
   const lista = LISTA_DE_DIAS.exec(t);
@@ -103,7 +105,7 @@ export function lerCadencia(texto: unknown, fonte = "pedido"): CadenciaDoMes | n
 
   let mixFinal: MixDaSemana | null = achou ? mix : null;
   if (mixFinal) {
-    const semArte = mixFinal.foto + mixFinal.carrossel + mixFinal.estatico;
+    const semArte = mixFinal.foto + mixFinal.carrossel + mixFinal.estatico + (mixFinal.video || 0);
     // "1 arte, um carrossel normal": a arte é o carrossel (aposto), conta uma vez.
     if (mixFinal.arte > 0 && mixFinal.carrossel + mixFinal.estatico > 0 && (porSemana === semArte || (porSemana === null && mixFinal.arte === mixFinal.carrossel + mixFinal.estatico))) {
       mixFinal = { ...mixFinal, arte: 0 };
@@ -133,9 +135,9 @@ export function cadenciaDasFontes(fontes: Array<{ texto: unknown; fonte: string 
 }
 
 /** Cadência a partir de números do modelo (plano do mês): por semana e quantos de cada. */
-export function cadenciaDosNumeros(o: { por_semana?: unknown; fotos?: unknown; carrosseis?: unknown; estaticos?: unknown }, fonte = "modelo"): CadenciaDoMes | null {
+export function cadenciaDosNumeros(o: { por_semana?: unknown; fotos?: unknown; carrosseis?: unknown; estaticos?: unknown; videos?: unknown }, fonte = "modelo"): CadenciaDoMes | null {
   const n = (v: unknown) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.round(Number(v)) : 0);
-  const mix: MixDaSemana = { foto: n(o.fotos), carrossel: n(o.carrosseis), estatico: n(o.estaticos), arte: 0 };
+  const mix: MixDaSemana = { foto: n(o.fotos), carrossel: n(o.carrosseis), estatico: n(o.estaticos), ...(n(o.videos) ? { video: n(o.videos) } : {}), arte: 0 };
   let ps = n(o.por_semana);
   const soma = somaDoMix(mix);
   if (!ps && !soma) return null;
@@ -154,11 +156,11 @@ export function normalizarCadencia(bruto: unknown): CadenciaDoMes | null {
   if (!bruto || typeof bruto !== "object") return null;
   const o = bruto as Record<string, unknown>;
   const mix = (o.mix && typeof o.mix === "object" ? o.mix : null) as Record<string, unknown> | null;
-  const base = cadenciaDosNumeros({ por_semana: o.por_semana, fotos: mix?.foto, carrosseis: mix?.carrossel, estaticos: mix?.estatico }, String(o.fonte || "pedido").slice(0, 20));
+  const base = cadenciaDosNumeros({ por_semana: o.por_semana, fotos: mix?.foto, carrosseis: mix?.carrossel, estaticos: mix?.estatico, videos: mix?.video }, String(o.fonte || "pedido").slice(0, 20));
   if (!base) return null;
   if (base.mix && mix && Number(mix.arte) > 0) {
     const arte = Math.round(Number(mix.arte));
-    const soma = base.mix.foto + base.mix.carrossel + base.mix.estatico;
+    const soma = base.mix.foto + base.mix.carrossel + base.mix.estatico + (base.mix.video || 0);
     if (soma + arte === base.por_semana) base.mix = { ...base.mix, arte };
   }
   const dias = (Array.isArray(o.dias) ? o.dias : []).map(Number).filter((d) => d >= 1 && d <= 5);
@@ -174,7 +176,7 @@ export function temasNasVagas<T extends { id: string; formato_sugerido?: string 
   const livres = grade.slice();
   const mapa = new Map<string, VagaDoMes>();
   const cabe = (t: T, v: VagaDoMes) => {
-    const f = t.formato_sugerido === "foto" || t.formato_sugerido === "estatico" || t.formato_sugerido === "carrossel" ? t.formato_sugerido : "carrossel";
+    const f = t.formato_sugerido === "video" || t.formato_sugerido === "foto" || t.formato_sugerido === "estatico" || t.formato_sugerido === "carrossel" ? t.formato_sugerido : "carrossel";
     return formatoCabeNaVaga(f, v.formato);
   };
   for (const exato of [true, false]) {
@@ -190,7 +192,7 @@ export function temasNasVagas<T extends { id: string; formato_sugerido?: string 
 
 /** Formato do item que ocupa a vaga ("arte" e livre ficam com o sugerido, se não for foto). */
 export function formatoParaVaga(sugerido: unknown, vaga: VagaDoMes): FormatoDoMes {
-  const f: FormatoDoMes = sugerido === "foto" || sugerido === "estatico" ? sugerido : "carrossel";
+  const f: FormatoDoMes = sugerido === "video" || sugerido === "foto" || sugerido === "estatico" ? sugerido : "carrossel";
   return formatoNaVaga(f, vaga.formato);
 }
 
@@ -198,7 +200,7 @@ export function formatoParaVaga(sugerido: unknown, vaga: VagaDoMes): FormatoDoMe
 export function fraseDaCadencia(c: CadenciaDoMes): string {
   const partes: string[] = [];
   if (c.mix) {
-    for (const k of ["foto", "carrossel", "estatico"] as const) if (c.mix[k]) partes.push(contagem(c.mix[k], k));
+    for (const k of ["foto", "carrossel", "estatico", "video"] as const) if (c.mix[k]) partes.push(contagem(c.mix[k], k));
     if (c.mix.arte) partes.push(`${c.mix.arte} ${c.mix.arte === 1 ? "arte" : "artes"}`);
   }
   return `${c.por_semana} por semana${partes.length ? `: ${juntarComE(partes)}` : ""}`;
@@ -246,13 +248,13 @@ export type FormatoDaVaga = FormatoDoMes | "arte" | null;
 
 export type VagaDoMes = { data: string; semana: string; formato: FormatoDaVaga };
 
-const ORDEM_DO_MIX: Array<keyof MixDaSemana> = ["foto", "carrossel", "estatico", "arte"];
+const ORDEM_DO_MIX: Array<keyof MixDaSemana> = ["foto", "carrossel", "estatico", "video", "arte"];
 
 /** Mix escalado para n posts (maior resto), na proporção do pedido. */
 export function escalarMix(mix: MixDaSemana, n: number): MixDaSemana {
   const soma = somaDoMix(mix);
   if (!soma || n === soma) return { ...mix };
-  const exatos = ORDEM_DO_MIX.map((k) => (mix[k] * n) / soma);
+  const exatos = ORDEM_DO_MIX.map((k) => ((mix[k] || 0) * n) / soma);
   const base = exatos.map(Math.floor);
   let resto = n - base.reduce((a, b) => a + b, 0);
   const ordem = exatos.map((x, i) => ({ i, f: x - Math.floor(x) })).sort((a, b) => b.f - a.f || a.i - b.i);
@@ -261,7 +263,7 @@ export function escalarMix(mix: MixDaSemana, n: number): MixDaSemana {
     base[o.i]++;
     resto--;
   }
-  return { foto: base[0], carrossel: base[1], estatico: base[2], arte: base[3] };
+  return { foto: base[0], carrossel: base[1], estatico: base[2], ...(base[3] ? { video: base[3] } : {}), arte: base[4] };
 }
 
 /** Formatos das vagas da semana, intercalados (2 fotos e 1 carrossel: foto, carrossel, foto). */
@@ -276,7 +278,7 @@ export function formatosDaSemana(mix: MixDaSemana | null, n: number, porSemana: 
     for (const k of ORDEM_DO_MIX) {
       if (!alvo[k] || !restante[k]) continue;
       const r = restante[k] / alvo[k];
-      if (r > nota || (r === nota && melhor !== null && alvo[k] > alvo[melhor])) {
+      if (r > nota || (r === nota && melhor !== null && alvo[k] > (alvo[melhor] || 0))) {
         melhor = k;
         nota = r;
       }
@@ -321,7 +323,7 @@ export function gradeDoMes(cad: CadenciaDoMes, inicio: string, fim: string, hoje
 // ------------------------------------------------------------------ encaixe
 
 export const formatoCabeNaVaga = (formato: FormatoDoMes, vaga: FormatoDaVaga) =>
-  vaga === null || formato === vaga || (vaga === "arte" && formato !== "foto");
+  vaga === null || formato === vaga || (vaga === "arte" && (formato === "carrossel" || formato === "estatico"));
 
 /** O formato que o item fica ao ocupar a vaga (vaga "arte" com item de foto vira carrossel). */
 export function formatoNaVaga(formato: FormatoDoMes, vaga: FormatoDaVaga): FormatoDoMes {
@@ -380,6 +382,7 @@ export type SemanaConferida = {
   foto: number;
   carrossel: number;
   estatico: number;
+  video?: number;
   ok: boolean;
 };
 
@@ -410,7 +413,7 @@ const dataCurta = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
  * só a contagem). Frase: "12 posts: 8 fotos e 4 carrosséis, 3 por semana".
  */
 export function conferirPlano(itens: Array<{ data: string; formato: FormatoDoMes }>, cad: CadenciaDoMes | null, grade: VagaDoMes[] | null): ConferenciaDoMes {
-  const formatos: Record<FormatoDoMes, number> = { foto: 0, carrossel: 0, estatico: 0 };
+  const formatos: Record<FormatoDoMes, number> = { foto: 0, carrossel: 0, estatico: 0, video: 0 };
   for (const i of itens) if (formatos[i.formato] !== undefined) formatos[i.formato]++;
   const porSemana = new Map<string, SemanaConferida>();
   const pegar = (data: string) => {
@@ -426,7 +429,7 @@ export function conferirPlano(itens: Array<{ data: string; formato: FormatoDoMes
   for (const v of grade || []) {
     const x = pegar(v.data);
     x.esperado++;
-    const e = esperadoPorFormato.get(x.semana) || { foto: 0, carrossel: 0, estatico: 0, arte: 0, livre: 0 };
+    const e = esperadoPorFormato.get(x.semana) || { foto: 0, carrossel: 0, estatico: 0, video: 0, arte: 0, livre: 0 };
     e[v.formato || "livre"]++;
     esperadoPorFormato.set(x.semana, e);
   }
@@ -434,6 +437,7 @@ export function conferirPlano(itens: Array<{ data: string; formato: FormatoDoMes
     if (!DATA.test(String(i.data))) continue;
     const x = pegar(i.data);
     x.total++;
+    if (i.formato === "video") x.video = (x.video || 0) + 1;
     if (i.formato === "foto" || i.formato === "carrossel" || i.formato === "estatico") x[i.formato]++;
   }
   const semanas = Array.from(porSemana.values()).sort((a, b) => a.inicio.localeCompare(b.inicio));
@@ -451,7 +455,7 @@ export function conferirPlano(itens: Array<{ data: string; formato: FormatoDoMes
       }
       const okTotal = s.total === s.esperado;
       // Vaga livre aceita qualquer formato; "arte" aceita carrossel ou estático.
-      const okMix = s.foto >= e.foto && s.foto <= e.foto + e.livre && s.carrossel >= e.carrossel && s.estatico >= e.estatico;
+      const okMix = (s.video || 0) >= e.video && (s.video || 0) <= e.video + e.livre && s.foto >= e.foto && s.foto <= e.foto + e.livre && s.carrossel >= e.carrossel && s.estatico >= e.estatico;
       if (!okTotal) problemas.push(`semana de ${dataCurta(s.inicio)} com ${s.total} de ${s.esperado}`);
       else if (!okMix) problemas.push(`semana de ${dataCurta(s.inicio)} fora da mistura (${resumoDaSemana(s)})`);
       s.ok = okTotal && okMix;
@@ -459,7 +463,7 @@ export function conferirPlano(itens: Array<{ data: string; formato: FormatoDoMes
   }
   const esperado = grade ? grade.length : itens.length;
   const ok = problemas.length === 0 && (!grade || itens.length === grade.length);
-  const partes = (["foto", "carrossel", "estatico"] as const).filter((f) => formatos[f] > 0).map((f) => contagem(formatos[f], f));
+  const partes = (["foto", "carrossel", "estatico", "video"] as const).filter((f) => formatos[f] > 0).map((f) => contagem(formatos[f], f));
   const total = itens.length;
   let frase = `${total} ${total === 1 ? "post" : "posts"}${partes.length ? `: ${juntarComE(partes)}` : ""}${cad ? `, ${cad.por_semana} por semana` : ""}`;
   if (grade && total !== esperado) frase += ` (o pedido dá ${esperado})`;
@@ -467,8 +471,8 @@ export function conferirPlano(itens: Array<{ data: string; formato: FormatoDoMes
   return { ok, total, esperado, por_semana: cad ? cad.por_semana : null, formatos, semanas, problemas, frase: `${frase}.` };
 }
 
-export function resumoDaSemana(s: Pick<SemanaConferida, "foto" | "carrossel" | "estatico">): string {
-  const partes = (["foto", "carrossel", "estatico"] as const).filter((f) => s[f] > 0).map((f) => contagem(s[f], f));
+export function resumoDaSemana(s: Pick<SemanaConferida, "foto" | "carrossel" | "estatico" | "video">): string {
+  const partes = (["foto", "carrossel", "estatico", "video"] as const).filter((f) => (s[f] || 0) > 0).map((f) => contagem(s[f] || 0, f));
   return partes.length ? juntarComE(partes) : "nada";
 }
 
@@ -585,6 +589,7 @@ export function textoDoAjuste(
 
 /** Item da criação que passa pelo ajuste (data, formato, tema, referência e a direção da foto). */
 export type ItemDoAjuste = {
+  video?: DirecaoDeVideoDaPauta | null;
   data: string;
   formato: FormatoDoMes;
   formato_pedido: string | null;
@@ -595,7 +600,7 @@ export type ItemDoAjuste = {
 };
 
 /** Formato da vaga vazia para o modelo preencher ("arte" e livre viram carrossel). */
-export const formatoDaVaga = (v: VagaDoMes): FormatoDoMes => (v.formato === "foto" || v.formato === "estatico" || v.formato === "carrossel" ? v.formato : "carrossel");
+export const formatoDaVaga = (v: VagaDoMes): FormatoDoMes => (v.formato === "video" || v.formato === "foto" || v.formato === "estatico" || v.formato === "carrossel" ? v.formato : "carrossel");
 
 const textoCurto = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
@@ -617,6 +622,7 @@ export function aplicarAjusteDoPlano<T extends ItemDoAjuste>(itens: T[], vagas: 
     if (tema) alvo.tema = tema;
     const ref = textoCurto(x.referencia, 1500);
     if (ref) alvo.referencia = ref;
+    if (alvo.formato === "video" && x.video) alvo.video = normalizarVideoDaPauta(x.video);
     if (alvo.formato === "foto" && x.foto && typeof x.foto === "object") {
       const nova = normalizarDirecaoDeFoto(x.foto, { tema: alvo.tema });
       alvo.foto = faltasDaDirecao(nova).length <= faltasDaDirecao(alvo.foto ?? null).length ? nova : alvo.foto;
@@ -634,6 +640,7 @@ export function aplicarAjusteDoPlano<T extends ItemDoAjuste>(itens: T[], vagas: 
     const formato = formatoDaVaga(vagas[k]);
     const item: ItemDoAjuste = { data: vagas[k].data, formato, formato_pedido: null, tema, referencia: textoCurto(x.referencia, 1500) };
     if (formato === "foto") item.foto = normalizarDirecaoDeFoto(x.foto, { tema });
+    if (formato === "video") item.video = normalizarVideoDaPauta(x.video);
     saida.push(item);
     preenchidas++;
   }

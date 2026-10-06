@@ -54,6 +54,8 @@ export default function EntregaDoVideoDaPauta({ item, arquivo }: { item: ItemDoM
   };
   const salvo = async (id: string) => {
     setEditor(false);
+    void cache.invalidateQueries({ queryKey: ["mesa", "itens-do-mes", clientId] });
+    void cache.invalidateQueries({ queryKey: ["mesa", "item-avulso", clientId] });
     try { setPost(await loadEditorialPostForMutation(id, clientId)); setDetalhe(true); }
     catch (e) { toast.error("Post salvo. Não foi possível abrir a conferência agora; consulte a Agenda."); }
   };
