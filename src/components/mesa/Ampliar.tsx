@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import ImagemComZoom from "./ImagemComZoom";
 import { useUrlDaMesa } from "./MesaContexto";
 
 /**
@@ -30,7 +31,7 @@ export const PROPORCAO_PADRAO = 0.8;
 /** Respiro interno da janela (px de cada lado). */
 const RESPIRO = 16;
 /** Altura da linha de baixo (título, contagem e pontos). */
-const RODAPE = 52;
+const RODAPE = 100;
 
 /**
  * Tamanho da imagem no Ampliar: cabe em 94% da largura e 90% da altura da
@@ -81,19 +82,8 @@ function ImagemGrande({
     );
   }
   if (!url) return <div className="animate-pulse rounded-lg bg-secondary/60" style={caixa} />;
-  return (
-    <div className="overflow-hidden rounded-lg bg-secondary/40" style={caixa} data-ampliar-quadro="">
-      <img
-        src={url}
-        alt={imagem.titulo || "Imagem"}
-        className="block h-full w-full object-contain"
-        onLoad={(e) => {
-          const img = e.currentTarget;
-          if (img.naturalWidth > 0 && img.naturalHeight > 0) onProporcao(img.naturalWidth / img.naturalHeight);
-        }}
-      />
-    </div>
-  );
+  return <ImagemComZoom src={url} alt={imagem.titulo || "Imagem"} largura={tamanho.largura} altura={tamanho.altura} onProporcao={onProporcao} />;
+
 }
 
 export function Ampliar({

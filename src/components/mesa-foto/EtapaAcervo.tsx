@@ -624,6 +624,7 @@ export default function EtapaAcervo() {
   const [classe, setClasse] = useEstadoDaTela<FiltroDaClasse>(`mesa-foto:acervo:classe:${clientId}`, "todas", { validar: (v) => CLASSES_VALIDAS.indexOf(String(v)) >= 0 });
   const [kitFiltro, setKitFiltro] = useEstadoDaTela(`mesa-foto:acervo:produto:${clientId}`, TODOS_OS_KITS, { validar: (v) => typeof v === "string" && !!v });
   const [busca, setBusca] = useEstadoDaTela(`mesa-foto:acervo:busca:${clientId}`, "");
+  const [pasta, setPasta] = useState("");
   const [aberta, setAberta] = useState<string | null>(imagemId);
   const [limite, setLimite] = useState(POR_PAGINA);
   const [ampliada, setAmpliada] = useState<number | null>(null);
@@ -646,7 +647,9 @@ export default function EtapaAcervo() {
   const todas = useMemo(() => separadas.produto.concat(separadas.modelo), [separadas]);
   const doLado = lado === "modelo" ? separadas.modelo : separadas.produto;
   const kitValido = kitFiltro === TODOS_OS_KITS || kitFiltro === SEM_KIT || !kits.isSuccess || listaDeKits.some((k) => k.id === kitFiltro) ? kitFiltro : TODOS_OS_KITS;
-  const filtradas = useMemo(() => filtrarFotos(doLado, classe, kitValido, listaDeKits, busca), [doLado, classe, kitValido, listaDeKits, busca]);
+  const pastas = Array.from(new Set(doLado.map((f) => f.pasta || "Sem pasta"))).sort();
+  const pastaValida = pastas.includes(pasta) ? pasta : "";
+  const filtradas = useMemo(() => filtrarFotos(doLado, classe, kitValido, listaDeKits, busca).filter((f) => !pastaValida || (f.pasta || "Sem pasta") === pastaValida), [doLado, classe, kitValido, listaDeKits, busca, pastaValida]);
   const visiveis = filtradas.slice(0, limite);
   const fotoAberta = aberta ? brutas.find((f) => f.id === aberta) || null : null;
   const escolhidas = useMemo(() => todas.filter((f) => selecionadas.indexOf(f.id) >= 0), [todas, selecionadas]);
@@ -893,6 +896,13 @@ export default function EtapaAcervo() {
                   valor={classe}
                   onEscolher={(v) => setClasse(v as FiltroDaClasse)}
                 />
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <label className="text-[12px]" htmlFor="pasta-do-acervo">Pasta</label>
+                <select id="pasta-do-acervo" className={juntar(campo, "max-w-sm")} value={pastaValida} onChange={(e) => { setPasta(e.target.value); setLimite(POR_PAGINA); }}>
+                  <option value="">Todas as pastas</option>
+                  {pastas.map((p) => <option key={p}>{p}</option>)}
+                </select>
               </div>
               <div className="mt-1.5 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground">
                 <span className="mr-3 tabular-nums" data-contagem-das-fotos="">

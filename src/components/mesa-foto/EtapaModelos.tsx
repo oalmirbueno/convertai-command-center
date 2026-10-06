@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Ampliar, type ImagemAmpliavel } from "@/components/mesa/Ampliar";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
-import { SeletorDeQualidade } from "@/components/mesa/Seletores";
+import { SeletorDeModelo, SeletorDeQualidade } from "@/components/mesa/Seletores";
 import { padraoPara, precoDoModelo, textoDoErro, usd, type Qualidade } from "@/lib/mesa/api";
 import { useCampanhaEscolhida } from "./CampanhaDaMesa";
 import { MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto } from "./Comuns";
@@ -19,6 +19,9 @@ import { ZonaDeEnvio } from "./EtapaAcervo";
 import SeletorDeFotos from "./SeletorDeFotos";
 import { gravarModeloEscolhido } from "./escolhasDaLinha";
 import { acrescentarFotos, invalidarFotos, normalizarFoto, semearUrl, subirOriginais, useFotos, type FotoDoAcervo } from "./fotoApi";
+import GaleriaDeFotos, { type FotoNaGaleria } from "./GaleriaDeFotos";
+import { fotoNaGaleria, fotosComDescendentes } from "./organizacaoDasFotos";
+import { partesDoPreparo, prepararFoto } from "./fotoApi";
 import AcoesProDaFoto from "./AcoesProDaFoto";
 import { useLevarParaAsMesas } from "./UsoDaFoto";
 import { levarFotoDaPersonaAoAcervo } from "./agendaApi";
@@ -1183,6 +1186,7 @@ export function AntesEDepois({ antes, depois, proporcao }: { antes: ImagemDaPers
  */
 function AntesEDepoisComZoom({ antes, depois, proporcao }: { antes: ImagemDaPersona; depois: ImagemDaPersona; proporcao: number }) {
   const [grande, setGrande] = useState(false);
+  const [zoom, setZoom] = useState<number | null>(null);
   return (
     <div className="min-w-0" data-antes-e-depois-com-zoom="">
       <div className="mx-auto w-full max-w-[380px]">
@@ -1199,8 +1203,13 @@ function AntesEDepoisComZoom({ antes, depois, proporcao }: { antes: ImagemDaPers
           <div className="mx-auto" style={{ width: `min(90vw, calc(80vh * ${proporcao}))` }}>
             <AntesEDepois antes={antes} depois={depois} proporcao={proporcao} />
           </div>
+          <div className="flex items-center space-x-2">
+            <button type="button" className={botao.barra} onClick={() => setZoom(0)}>Zoom no original</button>
+            <button type="button" className={botao.barra} onClick={() => setZoom(1)}>Zoom no detalhe 4K</button>
+          </div>
         </DialogContent>
       </Dialog>
+      <Ampliar imagens={[ampliavel(antes, "Original"), ampliavel(depois, "Detalhe 4K")]} indice={zoom} onFechar={() => setZoom(null)} />
     </div>
   );
 }
@@ -1213,13 +1222,17 @@ function AntesEDepoisComZoom({ antes, depois, proporcao }: { antes: ImagemDaPers
  * Mesa, a Mesa Ads e o post na Agenda. O custo aparece antes de ampliar.
  */
 export function AmpliarEUsarDaPersona({ persona, imagem }: { persona: Persona; imagem: ImagemDaPersona }) {
-  const { clientId } = useMesa();
+  const { clientId, catalogo, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const { abrirNoEstudio, prepararNaAgenda } = useMesaFoto();
   const levar = useLevarParaAsMesas();
   const [noAcervo, setNoAcervo] = useState<FotoDoAcervo | null>(null);
   const [levando, setLevando] = useState(false);
+  const [pedido, setPedido] = useState("");
+  const [motor, setMotor] = useState("");
+  const [gerando, setGerando] = useState(false);
+  const motorId = motor || padraoPara(catalogo, "imagem")?.id || "";
   useEffect(() => setNoAcervo(null), [imagem.id]);
 
   const garantir = async (): Promise<FotoDoAcervo | null> => {
@@ -1244,6 +1257,22 @@ export function AmpliarEUsarDaPersona({ persona, imagem }: { persona: Persona; i
 
   return (
     <div className="min-w-0 space-y-2 border-t border-border pt-3" data-ampliar-e-usar-da-persona={imagem.id}>
+      <div className="space-y-2" data-variacao-do-modelo="">
+        <label className={texto.rotulo}>Variação desta foto
+          <Textarea value={pedido} onChange={(e) => setPedido(e.target.value)} placeholder="Mudar cenário, luz ou acabamento, preservando a pessoa…" aria-label="Variação do modelo" className="mt-1 text-[13px]" rows={2} />
+        </label>
+        <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={motorId} onChange={setMotor} />
+        <BotaoComCusto rotulo="Gerar variação desta foto" titulo="Nova variação do modelo" descricao="Usa esta foto como referência e salva uma versão nova." disabled={gerando || levando || !pedido.trim() || !motorId} partes={() => partesDoPreparo(motorId, "alta")} executar={async () => {
+          setGerando(true);
+          try {
+            const fonte = await garantir();
+            if (!fonte) throw new Error("Não foi possível preparar a referência. Nenhuma geração foi iniciada.");
+            const resposta = await prepararFoto({ clientId, imagemId: fonte.id, modeloImagemId: motorId, modo: "cenario", areas: [], cenario: pedido, instrucao: "Preserve a identidade, os traços e o realismo da pessoa. " + pedido });
+            if (!resposta.imagem) throw new Error("A geração não devolveu uma imagem pronta. Confira o acervo antes de repetir.");
+            return resposta;
+          } finally { setGerando(false); }
+        }} aoConcluir={(r) => { if (r.imagem) { acrescentarFotos(queryClient, clientId, [r.imagem]); setNoAcervo(r.imagem); } invalidarFotos(queryClient, clientId); atualizarCusto(); }} />
+      </div>
       <p className="flex min-w-0 items-center">
         <span className={texto.rotulo}>Ampliar fiel e usar esta imagem</span>
         <AjudaRecolhida className="ml-1.5" rotulo="Sobre ampliar e usar">
@@ -1496,26 +1525,51 @@ function PersonaLateral({ persona }: { persona: Persona }) {
   );
 }
 
+function FotosDoModelo({ persona, imagens }: { persona: Persona; imagens: ImagemDaPersona[] }) {
+  const { clientId } = useMesa();
+  const { abrirNoEstudio, prepararNaAgenda } = useMesaFoto();
+  const acervo = useFotos(clientId);
+  const [escolhida, setEscolhida] = useState<string | null>(null);
+  const [zoom, setZoom] = useState<number | null>(null);
+  const fontes = (acervo.data || []).filter((f) => f.tags?.includes(`persona:${persona.id}`) && f.tags.some((t) => t.startsWith("persona_imagem:")));
+  const copias = new Set(fontes.map((f) => f.id));
+  const derivadas = fotosComDescendentes(acervo.data || [], [...copias]).filter((f) => !copias.has(f.id));
+  const grupos: Record<string, string> = { candidata: "Candidatas", ancora: "Âncora", vista: "Vistas", detalhe: "Detalhes", referencia: "Referências" };
+  const lista: FotoNaGaleria[] = [
+    ...imagens.slice().reverse().map((i) => ({ ...ampliavel(i, `${persona.nome} · ${rotuloDaVista(i.vista) || i.papel}`), id: i.id, grupo: i.id === persona.ancora_imagem_id ? "Âncora" : grupos[i.papel] || "Fotos", aprovada: i.aprovada, legenda: i.id === persona.ancora_imagem_id ? "Âncora" : grupos[i.papel] || "Foto", detalhe: i.motor_id })),
+    ...derivadas.map((f) => fotoNaGaleria(f, "Variações e tratamentos")),
+  ];
+  const atual = lista.find((f) => f.id === escolhida) || lista.find((f) => f.id === persona.ancora_imagem_id) || lista[0];
+  const original = imagens.find((i) => i.id === atual?.id);
+  const derivada = derivadas.find((i) => i.id === atual?.id);
+  return <div className="space-y-3" data-pasta-do-modelo={persona.id}>
+    {atual ? <>
+      <button type="button" className="mx-auto block w-full max-w-sm cursor-zoom-in rounded focus-visible:ring-2 focus-visible:ring-primary" aria-label="Ampliar foto do modelo" onClick={() => setZoom(lista.indexOf(atual))}>
+        <ImagemDaMesa caminho={atual.caminho} bucket={atual.bucket || "mesa"} alt={atual.titulo || persona.nome} className="max-h-[38vh] w-full !object-contain" />
+      </button>
+      <GaleriaDeFotos titulo={`Pasta de ${persona.nome}`} fotos={lista} atualId={atual.id} onSelecionar={setEscolhida} />
+      {original && <AmpliarEUsarDaPersona key={original.id} persona={persona} imagem={original} />}
+      {derivada && <div className="flex flex-wrap gap-2"><button type="button" className={botao.secundario} onClick={() => abrirNoEstudio?.(derivada.id)}>Editar esta variação</button><button type="button" className={botao.secundario} onClick={() => prepararNaAgenda?.([derivada.id])}>Preparar na Agenda</button></div>}
+    </> : <p className={texto.auxiliar}>Crie opções para começar a pasta deste modelo.</p>}
+    <Ampliar imagens={lista} indice={zoom} onFechar={() => setZoom(null)} />
+  </div>;
+}
+
 export function PersonaAberta({ persona }: { persona: Persona }) {
   const imagensQ = useImagensDaPersona(persona.id);
   const imagens = imagensQ.data || [];
+  const [aba, setAba] = useState(persona.ancora_imagem_id ? "fotos" : "gerar");
+  useEffect(() => setAba(persona.ancora_imagem_id ? "fotos" : "gerar"), [persona.id]);
   return (
-    <div className="min-w-0 space-y-6" data-persona-aberta={persona.id}>
-      {imagensQ.isError && (
-        <EstadoDeErro
-          titulo="Não foi possível ler as imagens da persona."
-          descricao={textoDoErro(imagensQ.error)}
-          acao={
-            <button type="button" className={botao.secundario} onClick={() => void imagensQ.refetch()}>
-              Tentar de novo
-            </button>
-          }
-        />
-      )}
-      {/* 02/10 (dono): rodada, a faixa das 6 vistas e o 4K, cada um na largura toda (antes a folha ficava espremida ao lado do 4K). */}
-      <Rodada persona={persona} imagens={imagens} />
-      <Folha persona={persona} imagens={imagens} />
-      <Detalhar persona={persona} imagens={imagens} />
+    <div className="min-w-0 space-y-4" data-persona-aberta={persona.id}>
+      {imagensQ.isError && <EstadoDeErro titulo="Não foi possível ler as imagens da persona." descricao={textoDoErro(imagensQ.error)} acao={<button type="button" className={botao.secundario} onClick={() => void imagensQ.refetch()}>Tentar de novo</button>} />}
+      <div role="group" aria-label="Ferramentas do modelo" className="flex flex-wrap gap-1 border-b border-border pb-2">
+        {[['fotos','Fotos e versões'],['gerar','Criar opções'],['vistas','Vistas do modelo'],['detalhes','Detalhes em 4K']].map(([id, titulo]) => <button key={id} type="button" aria-pressed={aba === id} onClick={() => setAba(id)} className={juntar(botao.barra, aba === id && "bg-primary/10 text-primary")}>{titulo}</button>)}
+      </div>
+      <div hidden={aba !== "fotos"}><FotosDoModelo key={persona.id} persona={persona} imagens={imagens} /></div>
+      <div hidden={aba !== "gerar"}><Rodada persona={persona} imagens={imagens} /></div>
+      <div hidden={aba !== "vistas"}><Folha persona={persona} imagens={imagens} /></div>
+      <div hidden={aba !== "detalhes"}><Detalhar persona={persona} imagens={imagens} /></div>
     </div>
   );
 }

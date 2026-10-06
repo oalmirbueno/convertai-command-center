@@ -31,8 +31,10 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { AprovarFoto } from "./AcoesDeUso";
 import AcoesProDaFoto from "./AcoesProDaFoto";
-import { MiniaturaDaFoto, Moldura, SeloDaFoto, useMesaFoto, Vazio } from "./Comuns";
+import { Moldura, SeloDaFoto, useMesaFoto, Vazio } from "./Comuns";
 import SeletorDeFotos from "./SeletorDeFotos";
+import GaleriaDeFotos from "./GaleriaDeFotos";
+import { fotoNaGaleria } from "./organizacaoDasFotos";
 import { useSelecaoParaODiretor } from "./diretorApi";
 import { MenuDeUso, precisaAprovar, useLevarParaAsMesas } from "./UsoDaFoto";
 import {
@@ -78,14 +80,14 @@ import {
 
 type Vista = "depois" | "lado" | "antes";
 
-const MAX_SUBIDA = 12;
-
 /** A foto original da linhagem (sobe por derivada_de dentro do que está carregado). */
 export function raizDaLinhagem(fotos: FotoDoAcervo[], id: string | null): FotoDoAcervo | null {
   if (!id) return null;
   const porId = new Map(fotos.map((f) => [f.id, f]));
   let atual = porId.get(id) || null;
-  for (let i = 0; atual && atual.derivada_de && i < MAX_SUBIDA; i++) {
+  const visitadas = new Set<string>();
+  while (atual?.derivada_de && !visitadas.has(atual.id)) {
+    visitadas.add(atual.id);
     const pai = porId.get(atual.derivada_de);
     if (!pai) break;
     atual = pai;
@@ -99,7 +101,9 @@ export function versoesDaLinhagem(fotos: FotoDoAcervo[], raiz: FotoDoAcervo | nu
   const porId = new Map(fotos.map((f) => [f.id, f]));
   const desce = (f: FotoDoAcervo) => {
     let atual: FotoDoAcervo | undefined = f;
-    for (let i = 0; atual && i < MAX_SUBIDA; i++) {
+    const visitadas = new Set<string>();
+    while (atual && !visitadas.has(atual.id)) {
+      visitadas.add(atual.id);
       if (atual.id === raiz.id) return true;
       atual = atual.derivada_de ? porId.get(atual.derivada_de) : undefined;
     }
@@ -207,7 +211,7 @@ function Grupo({ titulo, icone, ajuda, destaque, id, children }: { titulo: strin
 }
 
 /** A foto na proporção real, sem corte, com a moldura do recorte do post por cima (linha tracejada, sem véu). */
-function FotoNoPalco({ foto, rotulo, formato, mostrarRecorte, velada, largura }: { foto: FotoDoAcervo; rotulo: string; formato: FormatoDoPostDeFotos; mostrarRecorte: boolean; velada?: boolean; largura?: number | null }) {
+function FotoNoPalco({ foto, rotulo, formato, mostrarRecorte, velada, largura, onAmpliar }: { onAmpliar: () => void; foto: FotoDoAcervo; rotulo: string; formato: FormatoDoPostDeFotos; mostrarRecorte: boolean; velada?: boolean; largura?: number | null }) {
   const p = proporcaoDaFoto(foto);
   const r = recorteDoFormato(p, formato);
   const cheio = r.largura >= 0.999 && r.altura >= 0.999;
@@ -217,6 +221,7 @@ function FotoNoPalco({ foto, rotulo, formato, mostrarRecorte, velada, largura }:
         <span className="mr-1.5 shrink-0">{rotulo}</span>
         <SeloDaFoto foto={foto} compacto />
       </p>
+      <button type="button" className="block w-full cursor-zoom-in rounded focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Ampliar ${rotulo}: ${foto.nome}`} onClick={onAmpliar}>
       <Moldura proporcao={p} className="border border-border">
         <ImagemDaMesa
           caminho={foto.storage_path}
@@ -236,6 +241,7 @@ function FotoNoPalco({ foto, rotulo, formato, mostrarRecorte, velada, largura }:
           </span>
         )}
       </Moldura>
+      </button>
     </div>
   );
 }
@@ -411,7 +417,7 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
             <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 px-2 text-[12px]" onClick={() => setEscolhendo(true)}>
               <Images className="mr-1 h-3.5 w-3.5" /> Trocar foto
             </Button>
-            <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 px-2 text-[12px]" onClick={() => setAmpliada(0)}>
+            <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 px-2 text-[12px]" onClick={() => setAmpliada(vista === "antes" ? 0 : imagensDoAmpliar.length - 1)}>
               <Maximize2 className="mr-1 h-3.5 w-3.5" /> Ver grande
             </Button>
           </div>
@@ -422,12 +428,12 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
             <div className={juntar("grid min-w-0 gap-3", ladoALado ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1", "lg:h-full lg:content-center")}>
               {temDepois && raiz && (vista === "lado" || vista === "antes") && (
                 <div className={vista === "antes" ? "mx-auto w-full max-w-[720px] lg:max-w-none" : "min-w-0"}>
-                  <FotoNoPalco foto={raiz} rotulo="Antes (original)" formato={formato} mostrarRecorte={false} largura={larguraAntes} />
+                  <FotoNoPalco onAmpliar={() => setAmpliada(0)} foto={raiz} rotulo="Antes (original)" formato={formato} mostrarRecorte={false} largura={larguraAntes} />
                 </div>
               )}
               {(!temDepois || vista !== "antes") && (
                 <div className={!temDepois || vista === "depois" ? "mx-auto w-full max-w-[720px] lg:max-w-none" : "min-w-0"}>
-                  <FotoNoPalco foto={atual} rotulo={temDepois ? "Depois" : "Foto aberta"} formato={formato} mostrarRecorte={mostrarRecorte} velada={!!trabalhando} largura={larguraDepois} />
+                  <FotoNoPalco onAmpliar={() => setAmpliada(imagensDoAmpliar.length - 1)} foto={atual} rotulo={temDepois ? "Depois" : "Foto aberta"} formato={formato} mostrarRecorte={mostrarRecorte} velada={!!trabalhando} largura={larguraDepois} />
                   {trabalhando && (
                     <p role="status" className="mt-1 text-center text-[12px] text-muted-foreground">
                       Preparando a versão nova. O original fica como está.
@@ -437,30 +443,10 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
               )}
             </div>
           </div>
-          {linhagem.length > 1 && (
-            <div className="min-w-0 shrink-0 border-t border-border px-3 pb-1 pt-2" data-versoes-da-foto="">
-              <p className="mb-1 text-[12px] font-medium text-muted-foreground">Versões desta foto ({linhagem.length})</p>
-              {/* Tira que rola de lado: as versões nunca empurram a foto para baixo. */}
-              <div className="flex min-w-0 flex-nowrap overflow-x-auto overscroll-contain pb-1" data-tira-de-versoes="">
-                {linhagem.slice(0, 16).map((f, i) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => {
-                      setAtualId(f.id);
-                      if (i > 0) setVista("depois");
-                    }}
-                    aria-pressed={f.id === atual.id}
-                    title={i === 0 ? `Original: ${f.nome}` : f.nome}
-                    className={juntar("mr-1.5 w-14 shrink-0 rounded-md border p-0.5", foco, f.id === atual.id ? "border-primary" : "border-transparent hover:border-border")}
-                  >
-                    <MiniaturaDaFoto foto={f} />
-                    <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{i === 0 ? "original" : `versão ${linhagem.length - i}`}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          <div className="min-w-0 shrink-0 border-t border-border px-3 py-2" data-versoes-da-foto="" data-tira-de-versoes="">
+            <GaleriaDeFotos titulo="Versões desta foto" fotos={linhagem.map((f) => fotoNaGaleria(f, f.id === raiz?.id ? "Original" : "Versões"))}
+              atualId={atual.id} onSelecionar={(id) => { escolher(id); setVista("depois"); }} onUsar={prepararNaAgenda} />
+          </div>
         </div>
 
         {/* Ferramentas ao lado, com rolagem própria no computador (no celular, embaixo da foto). */}

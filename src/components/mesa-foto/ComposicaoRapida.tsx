@@ -14,8 +14,12 @@ import { type ModeloEscolhido } from "./escolhasDaLinha";
 import { acrescentarFotos, useFotos, useKits, salvarKit, decidirFoto, chaveDosKits, type FotoDoAcervo } from "./fotoApi";
 import { useClones } from "./clonesApi";
 import { usePersonas, useImagensDaPersona } from "./modelosApi";
-import { canvasVazio, novoNo, porCartao, salvarCanvas, gerarNoCanvas, partesDoGerar, type Canvas } from "./canvasApi";
+import { useCanvases, chaveDosCanvases, canvasVazio, novoNo, porCartao, salvarCanvas, gerarNoCanvas, partesDoGerar, type Canvas } from "./canvasApi";
 import SeletorDeFotos from "./SeletorDeFotos";
+import { Ampliar, type ImagemAmpliavel } from "@/components/mesa/Ampliar";
+import JanelaCentral from "@/components/sistema/JanelaCentral";
+import GaleriaDeFotos from "./GaleriaDeFotos";
+import { fotoNaGaleria, historicoDaComposicao } from "./organizacaoDasFotos";
 import AcoesProDaFoto from "./AcoesProDaFoto";
 
 const FerramentasDaPersona = lazy(() => import("./EtapaModelos").then((m) => ({ default: m.PersonaAberta })));
@@ -31,6 +35,8 @@ export default function ComposicaoRapida({ escopo }: { escopo?: string } = {}) {
   const cache = useQueryClient();
   const fotosQ = useFotos(clientId);
   const kits = useKits(clientId);
+  const canvases = useCanvases(clientId);
+  const [zoom, setZoom] = useState<ImagemAmpliavel | null>(null);
   const clones = useClones(clientId);
   const personas = usePersonas(clientId);
   const [r, setR] = useEstadoDaTela<Rascunho>(escopo || `mesa-foto:composicao:${clientId}`, INICIAL);
@@ -41,7 +47,7 @@ export default function ComposicaoRapida({ escopo }: { escopo?: string } = {}) {
   const [ocupado, setOcupado] = useState(false);
   const [atualPorGrupo, setAtualPorGrupo] = useState<Record<string, string>>({});
   const grupo = `${kitId || "sem-produto"}:${r.pessoa?.tipo || "sem-pessoa"}:${r.pessoa?.id || ""}`;
-  const resultados = r.grupos?.[grupo] || [];
+  const resultadosLocais = r.grupos?.[grupo] || [];
   const registrar = (id: string, noGrupo = grupo) => {
     setR((a) => ({ ...a, grupos: { ...a.grupos, [noGrupo]: Array.from(new Set([id, ...(a.grupos?.[noGrupo] || [])])).slice(0, 50) } }));
     setAtualPorGrupo((a) => ({ ...a, [noGrupo]: id }));
@@ -51,7 +57,6 @@ export default function ComposicaoRapida({ escopo }: { escopo?: string } = {}) {
   const capa = kit ? capaDoKit(kit, fotos) : null;
   const produto = r.origemKit === kitId ? fotos.find((f) => f.id === r.produtoTratado) || capa : capa;
   const kitDeGeracao = r.origemKit === kitId && r.fotoDoKitTratado === produto?.id && r.kitTratado ? r.kitTratado : kitId;
-  const atual = fotos.find((f) => f.id === (atualPorGrupo[grupo] || resultados[0])) || null;
   const ambiente = fotos.find((f) => f.id === r.ambiente);
   const motor = r.motor || padraoPara(catalogo, "imagem")?.id || "";
   const clone = r.pessoa?.tipo === "clone" ? clones.data?.find((c) => c.id === r.pessoa?.id) : null;
@@ -59,8 +64,12 @@ export default function ComposicaoRapida({ escopo }: { escopo?: string } = {}) {
   const retratos = useImagensDaPersona(persona?.id || null);
   const retrato = retratos.data?.find((i) => i.id === persona?.ancora_imagem_id);
   const cloneFoto = fotos.find((f) => f.id === (clone?.identidade_real.find((i) => i.principal) || clone?.identidade_real[0])?.imagem_id);
+  const historico = historicoDaComposicao(fotos, canvases.data || [], clientId, [kitId, kitDeGeracao].filter((id): id is string => !!id), r.pessoa, cloneFoto?.id);
+  const resultados = Array.from(new Set([...resultadosLocais, ...historico.map((f) => f.id)]));
+  const fotosDoGrupo = resultados.map((id) => fotos.find((f) => f.id === id && f.ativa)).filter((f): f is FotoDoAcervo => !!f);
+  const atual = fotosDoGrupo.find((f) => f.id === atualPorGrupo[grupo]) || fotosDoGrupo[0] || null;
   const faltaPessoa = r.pessoa?.tipo === "clone" ? !clone?.autorizacao_valida.ok : r.pessoa?.tipo === "persona" ? !persona?.ancora_imagem_id : false;
-  const imagem = (foto: FotoDoAcervo | null | undefined, grande = false) => foto ? <ImagemDaMesa caminho={foto.storage_path} bucket={foto.storage_bucket || "mesa"} alt={foto.nome} className={`w-full rounded-lg object-contain ${grande ? 'max-h-[48vh]' : 'max-h-64'}`} /> : <div className="flex min-h-40 items-center justify-center rounded-lg bg-muted p-4 text-center text-[13px] text-muted-foreground">Escolha as imagens para compor</div>;
+  const imagem = (foto: FotoDoAcervo | null | undefined, grande = false) => foto ? <button type="button" className="block w-full cursor-zoom-in rounded-lg focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Ampliar ${foto.nome}`} onClick={() => setZoom(fotoNaGaleria(foto))}><ImagemDaMesa caminho={foto.storage_path} bucket={foto.storage_bucket || "mesa"} alt={foto.nome} className={`w-full rounded-lg object-contain ${grande ? 'max-h-[48vh]' : 'max-h-64'}`} /><span className="mt-1 block text-[12px] text-muted-foreground">Ampliar e conferir</span></button> : <div className="flex min-h-40 items-center justify-center rounded-lg bg-muted p-4 text-center text-[13px] text-muted-foreground">Escolha as imagens para compor</div>;
   const montar = (): Canvas => {
     let c = canvasVazio(clientId, `Composição · ${kit?.nome || 'Foto'} · ${new Date().toLocaleDateString('pt-BR')}`);
     const saida = novoNo("gerar", 500, 0, { motores: [motor], formato: r.formato, qualidade: "alta" });
@@ -79,8 +88,7 @@ export default function ComposicaoRapida({ escopo }: { escopo?: string } = {}) {
       <section className={estilo("pessoa")} aria-label="Modelo ou clone">
         <button className="mb-3 w-full text-left text-[13px] font-semibold" type="button" aria-pressed={foco === 'pessoa'} onClick={() => setFoco('pessoa')}>1. Modelos e clones</button>
         <EscolhaDoModeloDaFoto semPessoa valor={r.pessoa} onEscolher={(pessoa) => mudar({ pessoa })} />
-        {retrato && <div className="mt-3"><ImagemDaMesa caminho={retrato.storage_path} bucket={retrato.storage_bucket || "mesa"} alt={persona?.nome || "Modelo"} className="max-h-[48vh] w-full rounded-lg object-contain" /><button type="button" className="mt-2 text-[12px] text-primary" onClick={() => { setEditarPessoa(!editarPessoa); setFoco("pessoa"); }}>Variações, outros geradores e upscale do modelo</button></div>}
-        {editarPessoa && persona && <Suspense fallback={<p role="status">Abrindo versões do modelo…</p>}><FerramentasDaPersona key={persona.id} persona={persona} /></Suspense>}
+        {retrato && <div className="mt-3"><button type="button" className="block w-full cursor-zoom-in" aria-label="Ampliar modelo" onClick={() => setZoom({ caminho: retrato.storage_path, bucket: retrato.storage_bucket || "mesa", titulo: persona?.nome || "Modelo" })}><ImagemDaMesa caminho={retrato.storage_path} bucket={retrato.storage_bucket || "mesa"} alt={persona?.nome || "Modelo"} className="max-h-[48vh] w-full rounded-lg object-contain" /></button><button type="button" className="mt-2 text-[12px] text-primary" onClick={() => { setEditarPessoa(!editarPessoa); setFoco("pessoa"); }}>Variações, outros geradores e upscale do modelo</button></div>}
         {cloneFoto && <div className="mt-3">{imagem(cloneFoto, foco === "pessoa")}<AcoesProDaFoto foto={cloneFoto} mostrarCriativo={false} onPronta={(nova) => { acrescentarFotos(cache, clientId, [nova]); abrirNoEstudio?.(nova.id); }} /><button type="button" className="mt-2 text-[12px] text-primary" onClick={() => irPara("clones", { imagem: cloneFoto.id })}>Fotos e variações deste clone</button></div>}
         <p className="mt-2 text-[12px] text-muted-foreground">Produto sozinho ou com pessoa: escolha um modelo ou descreva uma pessoa nova.</p>
       </section>
@@ -101,7 +109,7 @@ export default function ComposicaoRapida({ escopo }: { escopo?: string } = {}) {
             if (!resposta.imagem) throw new Error('A geração não devolveu uma imagem pronta. Consulte o Canvas antes de tentar novamente.');
             return { ...resposta, grupo };
           } finally { setOcupado(false); }
-        }} aoConcluir={(resposta) => { if (resposta.imagem) { acrescentarFotos(cache, clientId, [resposta.imagem]); registrar(resposta.imagem.id, resposta.grupo); } atualizarCusto(); }} />
+        }} aoConcluir={(resposta) => { if (resposta.imagem) { acrescentarFotos(cache, clientId, [resposta.imagem]); registrar(resposta.imagem.id, resposta.grupo); void cache.invalidateQueries({ queryKey: chaveDosCanvases(clientId) }); } atualizarCusto(); }} />
         {!kitId && <p className="mt-2 text-[12px]">Escolha o produto à direita para começar.</p>}
         {atual && <div className="mt-3 flex flex-wrap gap-2"><button type="button" className="rounded border px-2 py-1 text-[12px]" onClick={() => abrirNoEstudio?.(atual.id)}>Melhorar esta foto</button><button type="button" className="rounded border px-2 py-1 text-[12px]" onClick={() => prepararNaAgenda?.([atual.id])}>Usar no post</button><AcoesProDaFoto foto={atual} onPronta={(nova) => { acrescentarFotos(cache, clientId, [nova]); registrar(nova.id); }} /></div>}
       </section>
@@ -127,6 +135,11 @@ export default function ComposicaoRapida({ escopo }: { escopo?: string } = {}) {
       </section>
     </div>
     {escolhendo && <SeletorDeFotos fotos={fotos} titulo="Foto real do ambiente" multiplas={false} onUsar={(ids) => { mudar({ ambiente: ids[0] || null }); setEscolhendo(false); }} onFechar={() => setEscolhendo(false)} />}
-    {resultados.length > 0 && <section aria-label="Versões da composição"><h3 className="mb-2 text-[13px] font-semibold">Versões desta composição</h3><div className="flex gap-2 overflow-x-auto">{resultados.map((id) => { const f = fotos.find((x) => x.id === id); return f ? <button key={id} type="button" aria-label={`Abrir ${f.nome}`} aria-pressed={atual?.id === id} onClick={() => setAtualPorGrupo((a) => ({ ...a, [grupo]: id }))} className="w-24 shrink-0 rounded border p-1">{imagem(f)}</button> : null; })}</div><button type="button" className="mt-2 text-[12px] text-primary" onClick={() => prepararNaAgenda?.(resultados.slice().reverse().slice(0, 10))}>Montar carrossel com estas fotos</button></section>}
+    {fotosDoGrupo.length > 0 && <GaleriaDeFotos key={grupo} titulo="Fotos desta composição" fotos={fotosDoGrupo.map((f) => fotoNaGaleria(f, f.modo === "canvas" ? "Composições" : "Tratamentos"))} atualId={atual?.id} onSelecionar={(id) => setAtualPorGrupo((a) => ({ ...a, [grupo]: id }))} onUsar={prepararNaAgenda} />}
+    {canvases.isError && <p role="status" className="text-[12px] text-muted-foreground">Histórico remoto indisponível. As fotos desta sessão continuam acessíveis.</p>}
+    <Ampliar imagens={zoom ? [zoom] : []} indice={zoom ? 0 : null} onFechar={() => setZoom(null)} />
+    <JanelaCentral aberta={editarPessoa && !!persona} onFechar={() => setEditarPessoa(false)} titulo={`Fotos de ${persona?.nome || "modelo"}`} largura="xl">
+      {persona && <Suspense fallback={<p role="status">Abrindo versões do modelo…</p>}><FerramentasDaPersona key={persona.id} persona={persona} /></Suspense>}
+    </JanelaCentral>
   </div>;
 }
