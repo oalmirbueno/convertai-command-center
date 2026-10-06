@@ -578,7 +578,9 @@ export function paraMapas(d: DadosDosItens): ItensDoMes {
   const infoDoRoteiro = mapa(d.roteiros);
   const roteiros = new Set<string>();
   infoDoRoteiro.forEach((info, id) => {
-    if (info.laminas > 0) roteiros.add(id);
+    const fotoPreparada = info.modo_estudio === "fotos" && Object.values(info.direcao_foto || {}).some((v) => typeof v === "string" ? !!v.trim() : Array.isArray(v) && v.length > 0);
+    const videoPreparado = info.modo_estudio === "video" && !!info.video?.prompt?.trim();
+    if (info.laminas > 0 || fotoPreparada || videoPreparado) roteiros.add(id);
   });
   return {
     itens: d.itens || [],
