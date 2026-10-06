@@ -678,6 +678,7 @@ export const CHAMADAS_SEM_METODO: Record<string, string> = {
   "mesa-foto/index.ts#kitSugerir": "mesa_foto.leitores_e_conferencias",
   "mesa-foto/index.ts#leituraPorVisao": "mesa_foto.leitores_e_conferencias",
   "mesa-foto/index.ts#produtoIdentificar": "mesa_foto.leitores_e_conferencias",
+  "mesa-foto/index.ts#produtoPublico": "mesa_foto.leitores_e_conferencias",
   "mesa-foto/index.ts#variacoesPlanejar": "mesa_foto.diretor_e_variacoes",
   "mesa-foto/index.ts#versaoConferir": "mesa_foto.leitores_e_conferencias",
   "mesa-foto/modelos.ts#modeloConferir": "mesa_foto.leitores_e_conferencias",
