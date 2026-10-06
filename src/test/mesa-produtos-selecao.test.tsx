@@ -83,13 +83,13 @@ describe("excluir modelos com retorno confirmado", () => {
     const cache = new QueryClient(); cache.setQueryData(chaveDasPersonas("c1"), [persona]); cache.setQueryData(chaveDasPersonas("c2"), [persona]);
     m.arquivar.mockResolvedValue({ ...persona, status: "arquivada" }); montar(<ExcluirModelo persona={persona} />, cache);
     fireEvent.click(screen.getByRole("button", { name: "Excluir modelo Lia" })); fireEvent.click(screen.getByText("Cancelar")); expect(m.arquivar).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Excluir modelo Lia" })); fireEvent.click(screen.getByRole("button", { name: "Excluir modelo", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Excluir modelo Lia" })); fireEvent.click(screen.getByRole("button", { name: "Excluir modelo" }));
     await waitFor(() => expect(cache.getQueryData<any[]>(chaveDasPersonas("c1"))?.[0].status).toBe("arquivada"));
     expect(cache.getQueryData<any[]>(chaveDasPersonas("c2"))?.[0].status).toBe("arquivada"); expect(m.arquivar).toHaveBeenCalledWith("m1", true);
   });
   it("falha não inventa exclusão; restaurar usa o status devolvido", async () => {
     const cache = new QueryClient(); cache.setQueryData(chaveDasPersonas("c1"), [persona]); m.arquivar.mockResolvedValue(null);
-    const view = montar(<ExcluirModelo persona={persona} />, cache); fireEvent.click(screen.getByRole("button", { name: "Excluir modelo Lia" })); fireEvent.click(screen.getByRole("button", { name: "Excluir modelo", exact: true }));
+    const view = montar(<ExcluirModelo persona={persona} />, cache); fireEvent.click(screen.getByRole("button", { name: "Excluir modelo Lia" })); fireEvent.click(screen.getByRole("button", { name: "Excluir modelo" }));
     await waitFor(() => expect(m.erro).toHaveBeenCalled()); expect(cache.getQueryData<any[]>(chaveDasPersonas("c1"))?.[0].status).toBe("pronta"); view.unmount();
     m.arquivar.mockResolvedValue({ ...persona, status: "rascunho" }); montar(<ExcluirModelo persona={{ ...persona, status: "arquivada" }} />, cache); fireEvent.click(screen.getByRole("button", { name: "Restaurar modelo Lia" }));
     await waitFor(() => expect(cache.getQueryData<any[]>(chaveDasPersonas("c1"))?.[0].status).toBe("rascunho")); expect(m.arquivar).toHaveBeenLastCalledWith("m1", false);
