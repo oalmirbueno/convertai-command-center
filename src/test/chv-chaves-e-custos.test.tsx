@@ -41,7 +41,7 @@ import ChavesECustos from "@/components/config/ChavesECustos";
 import EstadoDosMotores from "@/components/config/EstadoDosMotores";
 import SettingsPage from "@/pages/SettingsPage";
 
-const ler = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
+const ler = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8").replace(/\r\n/g, "\n");
 const SEGREDO = "sk-or-v1-SEGREDO-DE-TESTE-0123456789abcd";
 const resposta = (status: number, corpo: unknown) => new Response(typeof corpo === "string" ? corpo : JSON.stringify(corpo), { status, headers: { "content-type": "application/json" } });
 
@@ -211,9 +211,16 @@ describe("teste de chave: só leitura, sem custo, nada da chave no resultado", (
     expect((buscar.mock.calls[0] as unknown as [string, RequestInit])[1].headers).toEqual({ Authorization: "Key fal-chave-de-teste" });
   });
 
-  it("Higgsfield: 404 no pedido inexistente quer dizer chave aceita; sem o segredo nem testa", async () => {
+  it("Higgsfield: chave completa ou par legado; sem chave não testa", async () => {
     expect((await testarChave("higgsfield", { HIGGSFIELD_API_KEY: "id-da-chave", HIGGSFIELD_API_SECRET: "segredo-higgs" }, um(404, {}))).estado).toBe("valida");
-    expect((await testarChave("higgsfield", { HIGGSFIELD_API_KEY: "id-da-chave" }, um(404, {}))).estado).toBe("nao_testada");
+    expect((await testarChave("higgsfield", { }, um(404, {}))).estado).toBe("nao_testada");
+  });
+
+  it("Higgsfield usa a chave completa sem anexar outro segredo", async () => {
+    const buscar = vi.fn(async () => resposta(404, {}));
+    const r = await testarChave("higgsfield", { HIGGSFIELD_API_KEY: "fixture-id:fixture-secret", HIGGSFIELD_API_SECRET: "legacy" }, buscar);
+    expect(r.estado).toBe("valida");
+    expect((buscar.mock.calls[0] as unknown as [string, RequestInit])[1].headers).toEqual({ Authorization: "Key fixture-id:fixture-secret" });
   });
 
   it("Runway: créditos viram saldo em dólar (1 crédito = US$ 0,01)", async () => {

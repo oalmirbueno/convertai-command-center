@@ -1,0 +1,18 @@
+.ads-studio-area { container-type: inline-size; container-name: ads-studio; }
+.ads-stage { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; }
+.ads-stage-preview { display: flex; flex-direction: column; min-width: 0; min-height: 320px; height: min(640px, 65vh); }
+.ads-stage-tools { min-width: 0; }
+.ads-stage-tools nav { position: sticky; top: 0; z-index: 5; background: hsl(var(--card)); }
+.ads-video-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@container ads-studio (min-width: 780px) {
+  .ads-stage { grid-template-columns: minmax(0, 1fr) 340px; height: 500px; height: clamp(320px, calc(100vh - 365px), 680px); min-height: 320px; overflow: hidden; }
+  .ads-stage-preview { height: 100%; min-height: 0; overflow: hidden; }
+  .ads-stage-tools { height: 100%; overflow-y: auto; overscroll-behavior: contain; }
+}
+@media (max-width: 639px) {
+  .ads-stage-preview { height: 420px; }
+}
+
+.ads-stage-tools { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }
+.ads-stage-tools::-webkit-scrollbar { width: 4px; }
+.ads-stage-tools::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 9px; }

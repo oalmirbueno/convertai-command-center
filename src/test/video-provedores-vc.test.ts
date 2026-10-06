@@ -76,14 +76,14 @@ const base: EntradaDaGeracao = { modo: "primeiro_quadro", prompt: "a mulher abre
 
 describe("catálogo: Runway, Higgsfield e HeyGen", () => {
   const semChave = () => false;
-  it("sem a chave: 'precisa de chave' com o NOME do segredo; Higgsfield pede o par", () => {
+  it("sem a chave: 'precisa de chave' com o NOME do segredo; Higgsfield aceita a chave completa", () => {
     expect(estadoDoMotor(motorPorId("runway-gen4.5")!, { temChave: semChave })).toBe("precisa_chave");
     expect(estadoDoMotor(motorPorId("heygen-avatar-iv")!, { temChave: semChave })).toBe("precisa_chave");
     const hf = motorPorId("higgsfield-cinema-4")!;
-    expect(chavesQueFaltam(hf, semChave)).toEqual(["HIGGSFIELD_API_KEY", "HIGGSFIELD_API_SECRET"]);
+    expect(chavesQueFaltam(hf, semChave)).toEqual(["HIGGSFIELD_API_KEY"]);
     const soId = (n: string) => n === "HIGGSFIELD_API_KEY";
-    expect(estadoDoMotor(hf, { temChave: soId })).toBe("precisa_chave");
-    expect(chavesQueFaltam(hf, soId)).toEqual(["HIGGSFIELD_API_SECRET"]);
+    expect(estadoDoMotor(hf, { temChave: soId })).toBe("pronto");
+    expect(chavesQueFaltam(hf, soId)).toEqual([]);
     const todas = () => true;
     ["runway-gen4.5", "runway-gen4-turbo", "higgsfield-cinema-4", "heygen-avatar-iv", "heygen-foto"].forEach((id) => expect(estadoDoMotor(motorPorId(id)!, { temChave: todas }), id).toBe("pronto"));
     expect(motorPorId("runway-gen4.5")!.situacao).toBeUndefined();
@@ -93,7 +93,7 @@ describe("catálogo: Runway, Higgsfield e HeyGen", () => {
     ["runway-gen4.5", "runway-gen4-turbo", "higgsfield-cinema-4", "heygen-avatar-iv", "heygen-foto"].forEach((id) => {
       const m = motorPorId(id)!;
       expect(m.preco!.fonte, id).toMatch(/^https:\/\//);
-      expect(m.preco!.conferido_em, id).toBe("2026-09-26");
+      expect(m.preco!.conferido_em, id).toBe(id === "higgsfield-cinema-4" ? "2026-10-06" : "2026-09-26");
       expect(m.escolha_manual, id).toBe(true);
     });
     expect(custoDoMotor(motorPorId("runway-gen4.5")!, { duracao_s: 5 }).usd).toBe(0.6);
@@ -198,7 +198,7 @@ describe("Higgsfield", () => {
   const hf = motorPorId("higgsfield-cinema-4")!;
   it("corpo com a câmera pronta; 4:5 vira 3:4; câmera desconhecida é recusada", () => {
     const c = corpoDaGeracao(hf, { ...base, formato: "4:5", camera: "dolly-in", audio: false, duracao_s: 20 });
-    expect(c).toEqual(expect.objectContaining({ image_urls: ["https://x.supabase.co/q.png"], camera_movement: "dolly-in", aspect_ratio: "3:4", duration: 15, resolution: "720p", generate_audio: false }));
+    expect(c).toEqual(expect.objectContaining({ image_urls: ["https://x.supabase.co/q.png"], camera_movement: "dolly-in", aspect_ratio: "3:4", duration: 20, resolution: "720p", generate_audio: false }));
     expect(faltaParaGerar(hf, { ...base, camera: "voar-alto" })).toMatch(/desconhecido/);
     expect(faltaParaGerar(motorPorId("runway-gen4.5")!, { ...base, camera: "dolly-in" })).toMatch(/não tem movimentos/);
     expect(MOVIMENTOS_DA_HIGGSFIELD.length).toBe(33);
@@ -211,7 +211,7 @@ describe("Higgsfield", () => {
     expect(chamada(ok).url).toBe("https://api.higgsfield.ai/higgsfield/cinema-studio/4.0");
     expect(chamada(ok).init.headers.Authorization).toBe("Key id1:seg1");
     expect(r.request_id).toBe("req-abc-123");
-    await expect(enviarNaHiggsfield("higgsfield/cinema-studio/4.0", {}, { chave: "id1", segredo: "" })).rejects.toThrow(/HIGGSFIELD_API_SECRET/);
+    await expect(enviarNaHiggsfield("higgsfield/cinema-studio/4.0", {}, { chave: "", segredo: "" })).rejects.toThrow(/HIGGSFIELD_API_KEY/);
     expect(erroDaHiggsfield(403, { detail: "Not enough credits" }).tipo).toBe("sem_credito");
     expect(erroDaHiggsfield(400, { detail: "Maximum number of concurrent requests (4) has been reached" }).tipo).toBe("limite_de_uso");
     expect(erroDaHiggsfield(401, null).message).toMatch(/HIGGSFIELD_API_KEY e HIGGSFIELD_API_SECRET/);

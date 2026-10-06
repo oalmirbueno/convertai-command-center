@@ -598,10 +598,10 @@ export const MOTORES_DE_VIDEO: MotorDeVideo[] = [
   // Higgsfield: api.higgsfield.ai, chave em par (id e segredo); movimentos de câmera do Cinema Studio 4.0.
   {
     id: "higgsfield-cinema-4", rotulo: "Higgsfield Cinema Studio 4.0", familia: "video", linha: "higgsfield", versao: "4.0", principal: true, provedor: "higgsfield", chave_env: "HIGGSFIELD_API_KEY", segredo_env: "HIGGSFIELD_API_SECRET", escolha_manual: true,
-    endpoints: { texto: "higgsfield/cinema-studio/4.0", imagem: "higgsfield/cinema-studio/4.0", referencia: "higgsfield/cinema-studio/4.0" }, dialeto: "higgsfield", duracoes: faixa(4, 15), resolucoes: ["480p", "720p"], resolucao_padrao: "720p", formatos: TODOS,
+    endpoints: { texto: "higgsfield/cinema-studio/4.0", imagem: "higgsfield/cinema-studio/4.0", referencia: "higgsfield/cinema-studio/4.0" }, dialeto: "higgsfield", duracoes: faixa(4, 30), resolucoes: ["480p", "720p"], resolucao_padrao: "720p", formatos: ["9:16", "16:9", "1:1", "3:4", "4:5"],
     cap: cap({ texto: true, primeiro_quadro: true, referencias: 4, audio: true, camera: true }),
-    preco: { por_segundo: { padrao: 0.2057 }, fonte: "https://console.higgsfield.ai/explore", conferido_em: HOJE, incerto: true },
-    papeis: ["movimento", "hero"], prazo_min: 30, nota: "33 movimentos de câmera prontos (dolly, grua, órbita de drone, bullet time). A imagem entra como referência, não como quadro exato. Preço promocional do console: conferir no primeiro uso.",
+    preco: { por_segundo: { "480p": 0.2057, "720p": 0.4623 }, fonte: "https://open.higgsfield.ai/models/higgsfield/cinema-studio/4.0/playground", conferido_em: "2026-10-06", incerto: true },
+    papeis: ["movimento", "hero"], prazo_min: 30, nota: "33 movimentos de câmera prontos (dolly, grua, órbita de drone, bullet time). A imagem entra como referência, não como quadro exato. Estimativa por resolução, sem vídeo de entrada; cobrança por tokens do provedor.",
   },
   // HeyGen: api.heygen.com/v3 (v1 e v2 saem do ar em 31/10/2026). Avatar IV cobra por segundo do vídeo pronto.
   {
@@ -729,6 +729,7 @@ export const ROTULO_DO_ESTADO_DO_MOTOR: Record<EstadoDoMotor, string> = {
 /** Nomes dos segredos que o motor pede e que não existem (nunca o valor). */
 export function chavesQueFaltam(m: MotorDeVideo, temChave: (nome: string) => boolean): string[] {
   if (m.provedor === "painel") return [];
+  if (m.provedor === "higgsfield") return temChave(m.chave_env) ? [] : [m.chave_env];
   return [m.chave_env, m.segredo_env || ""].filter((n) => !!n && !temChave(n));
 }
 

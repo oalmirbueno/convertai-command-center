@@ -69,10 +69,9 @@ export const PROVEDORES: ProvedorDoPainel[] = [
     nome: "Higgsfield",
     serve: "Vídeo Higgsfield",
     campos: [
-      { nome: "HIGGSFIELD_API_KEY", rotulo: "Id da chave" },
-      { nome: "HIGGSFIELD_API_SECRET", rotulo: "Segredo" },
+      { nome: "HIGGSFIELD_API_KEY", rotulo: "API Key completa", exemplo: "Cole a chave completa, como foi copiada" },
     ],
-    onde: "cloud.higgsfield.ai",
+    onde: "open.higgsfield.ai/api-keys",
     saldoPelaApi: false,
     recarga: "https://open.higgsfield.ai/",
     grupo: "midia",
@@ -122,7 +121,7 @@ export function provedorDoSegredo(nome: string): ProvedorDoPainel | null {
 }
 
 /** Todos os segredos do catálogo (tem de bater com NOMES_DAS_CHAVES e o CHECK do banco). */
-export const SEGREDOS_DO_CATALOGO: string[] = PROVEDORES.reduce<string[]>((a, p) => a.concat(p.campos.map((c) => c.nome)), []);
+export const SEGREDOS_DO_CATALOGO: string[] = PROVEDORES.reduce<string[]>((a, p) => a.concat(p.campos.map((c) => c.nome)), []).concat(["HIGGSFIELD_API_SECRET"]);
 
 export { NOMES_DAS_CHAVES };
 

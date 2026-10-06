@@ -246,6 +246,7 @@ function JanelaDeCadastro({ linha, onFechar, onSalvo }: { linha: LinhaDaChave; o
           if (pronto && !salvando && !recusada) void enviar(false);
         }}
       >
+        {p.id === "higgsfield" && <p className="mb-3 text-xs text-muted-foreground">Use <a href="https://open.higgsfield.ai/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary underline">Copy API key na Higgsfield</a> e cole o valor completo abaixo. Não copie o código de exemplo nem acrescente Key ou Bearer.</p>}
         {p.campos.map((c, i) => (
           <label key={c.nome} className={juntar("block min-w-0", i > 0 && "mt-3")}>
             <span className={juntar(texto.rotulo, "mb-1 block")}>{c.rotulo}</span>

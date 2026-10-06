@@ -123,6 +123,12 @@ async function testar(admin: Admin, corpo: Record<string, unknown>) {
     if (v) valores[n] = v;
   });
   if (Object.keys(valores).length < nomes.length) throw new ErroHttp(409, "sem_chave", `O ${p.nome} ainda não tem chave. Cadastre antes de testar.`);
+  // Legacy split credentials remain valid when testing an existing account.
+  if (p.id === "higgsfield") {
+    await carregarChaves(["HIGGSFIELD_API_SECRET"]);
+    const legado = chaveCarregada("HIGGSFIELD_API_SECRET");
+    if (legado) valores.HIGGSFIELD_API_SECRET = legado;
+  }
   const origem = nomes.some((n) => !lerAmbiente(n)) ? "painel" : "servidor";
   const r = await testarChave(p.id, valores, (u, i) => fetch(u, i));
   const { error } = await servico().rpc("chaves_admin_registrar_teste", {
@@ -142,6 +148,7 @@ async function testar(admin: Admin, corpo: Record<string, unknown>) {
 function valoresDoPedido(p: ReturnType<typeof exigirProvedor>, bruto: unknown): Record<string, string> {
   const entrada = bruto && typeof bruto === "object" && !Array.isArray(bruto) ? (bruto as Record<string, unknown>) : {};
   const permitidos = new Set(p.campos.map((c) => c.nome as string));
+  if (p.id === "higgsfield") permitidos.add("HIGGSFIELD_API_SECRET");
   const saida: Record<string, string> = {};
   for (const [nome, v] of Object.entries(entrada)) {
     if (!permitidos.has(nome)) throw new ErroHttp(400, "campo_invalido", "Esse campo não é deste provedor.");
@@ -166,6 +173,7 @@ async function salvar(admin: Admin, corpo: Record<string, unknown>) {
     const v = novos[n] || chaveCarregada(n);
     if (v) completos[n] = v;
   });
+  if (p.id === "higgsfield" && novos.HIGGSFIELD_API_SECRET) completos.HIGGSFIELD_API_SECRET = novos.HIGGSFIELD_API_SECRET;
   const r = await testarChave(p.id, completos, (u, i) => fetch(u, i));
   if (r.estado === "invalida" && corpo.confirmar !== true) {
     return json({ salva: false, precisa_confirmar: true, teste: semAChave({ estado: r.estado, mensagem: r.mensagem, numeros: r.numeros }, completos) });
