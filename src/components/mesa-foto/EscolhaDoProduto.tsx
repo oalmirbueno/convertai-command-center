@@ -1,9 +1,10 @@
+import { pastaDoProduto } from "./pastasDosProdutos";
 import { toast } from "sonner";
 import SeletorDeFotos from "./SeletorDeFotos";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
-import { useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, PackagePlus, Pencil } from "lucide-react";
+import { Check, ChevronDown, FolderOpen, PackagePlus, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
@@ -11,6 +12,8 @@ import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { campo, foco, juntar } from "@/components/sistema/estilos";
 import { MiniaturaDaFoto, useMesaFoto } from "./Comuns";
 import { kitVazio, chaveDasFotos, chaveDosKits, rotuloDoTipo, salvarKit, useFotos, useKits, type FotoDoAcervo, type KitDeFoto } from "./fotoApi";
+
+const OrganizadorDeProdutos = lazy(() => import("./OrganizadorDeProdutos"));
 
 /**
  * O produto da geração (02/10, dono: "aparece uma moldura de tartaruga como
@@ -39,6 +42,8 @@ export default function EscolhaDoProduto({ rotulo = "Produto", className = "" }:
   const kit = kitId ? kits.find((k) => k.id === kitId) || null : null;
   const buscaRef = useRef<HTMLInputElement>(null);
   const [busca, setBusca] = useState("");
+  const [pasta, setPasta] = useState("");
+  const [organizando, setOrganizando] = useState(false);
   const [aberta, setAberta] = useState(false);
   const [nome, setNome] = useState<string | null>(null);
   const listaAberta = aberta || !kit;
@@ -58,7 +63,7 @@ export default function EscolhaDoProduto({ rotulo = "Produto", className = "" }:
       toast.success(existente ? "Produto selecionado" : "Foto marcada como produto");
     } catch (e) { avisarErro(e, "Produto não salvo"); } finally { setSalvandoProduto(false); }
   };
-  const visiveis = kits.filter((k) => `${nomeDoKit(k)} ${k.variante || ""}`.toLocaleLowerCase("pt-BR").includes(busca.toLocaleLowerCase("pt-BR")));
+  const visiveis = kits.filter((k) => `${nomeDoKit(k)} ${k.variante || ""} ${pastaDoProduto(k)}`.toLocaleLowerCase("pt-BR").includes(busca.toLocaleLowerCase("pt-BR")) && (!pasta || (pasta === "__sem" ? !pastaDoProduto(k) : pastaDoProduto(k) === pasta)));
 
   const darNome = async () => {
     if (!kit || nome === null || !nome.trim()) return;
@@ -113,8 +118,10 @@ export default function EscolhaDoProduto({ rotulo = "Produto", className = "" }:
         </div>
       ) : null}
       {listaAberta && <label className="mt-3 block text-[12px]">Produtos do cliente · {kits.length}<input className={juntar(campo, "mt-1")} ref={buscaRef} aria-label="Buscar produto do cliente" placeholder="Buscar pelo nome ou variante" value={busca} onChange={(e) => setBusca(e.target.value)} /></label>}
+      {listaAberta && <select aria-label="Filtrar produtos por pasta" className={juntar(campo, "mt-2 h-8 text-[12px]")} value={pasta} onChange={(e) => setPasta(e.target.value)}><option value="">Todas as pastas</option><option value="__sem">Sem pasta</option>{Array.from(new Set(kits.map(pastaDoProduto))).filter(Boolean).sort().map((p) => <option key={p} value={p}>{p}</option>)}</select>}
       {listaAberta && (
         <ul className="mt-2 min-w-0 rounded-lg scrollbar-hidden max-h-64 overflow-y-auto lg:overscroll-contain border border-border p-1" role="listbox" aria-label="Escolher o produto" data-lista-de-produtos="">
+          {!visiveis.length && <li className="p-2 text-[12px] text-muted-foreground">Nenhum produto neste filtro.</li>}
           {visiveis.map((k) => {
             const capa = capaDoKit(k, fotos);
             const ativo = k.id === kitId;
@@ -146,6 +153,8 @@ export default function EscolhaDoProduto({ rotulo = "Produto", className = "" }:
           })}
         </ul>
       )}
+      <button type="button" className="mt-3 mr-3 text-[12px] text-primary" onClick={() => setOrganizando(true)}><FolderOpen className="mr-1 inline h-3.5 w-3.5" />Organizar produtos</button>
+      <JanelaCentral aberta={organizando} onFechar={() => setOrganizando(false)} titulo="Produtos do cliente" largura="tela" corpo="fixo"><Suspense fallback={<p role="status">Abrindo organizador…</p>}><OrganizadorDeProdutos key={clientId} onEscolher={() => setOrganizando(false)} /></Suspense></JanelaCentral>
       <button type="button" className="mt-2 text-[12px] text-primary" disabled={salvandoProduto} onClick={() => setMarcandoProduto(true)}><PackagePlus className="mr-1 inline h-3.5 w-3.5" />Marcar foto como produto</button>
       <JanelaCentral aberta={marcandoProduto} onFechar={() => !salvandoProduto && setMarcandoProduto(false)} titulo="Marcar foto como produto" largura="xl">
         {salvandoProduto ? <p role="status">Salvando produto…</p> : <SeletorDeFotos fotos={fotos.filter((f) => !f.referencia_web && f.ativa)} titulo="Escolha a foto principal do produto" multiplas={false} onUsar={(ids) => void marcarProduto(ids)} onFechar={() => setMarcandoProduto(false)} />}

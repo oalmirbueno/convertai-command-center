@@ -79,7 +79,7 @@ export default function ComposicaoRapida({ escopo }: { escopo?: string } = {}) {
     c = { ...c, nos: [saida] };
     c = porCartao(c, novoNo("produto", 0, 0, { kit_id: kitDeGeracao }), { gerarId: saida.id });
     if (persona) c = porCartao(c, novoNo("modelo", 0, 0, { modelo_id: persona.id, versao: persona.versao }), { gerarId: saida.id });
-    if (clone?.autorizacao_valida.ok) c = porCartao(c, novoNo("modelo", 0, 0, { imagem_id: (clone.identidade_real.find((i) => i.principal) || clone.identidade_real[0])?.imagem_id, autorizada: true, titulo: clone.nome }), { gerarId: saida.id });
+    if (clone?.autorizacao_valida.ok) c = porCartao(c, novoNo("modelo", 0, 0, { imagem_id: (clone.identidade_real.find((i) => i.principal) || clone.identidade_real[0])?.imagem_id, autorizada: true, titulo: clone.nome, clone_id: clone.id }), { gerarId: saida.id });
     if (r.ambiente) c = porCartao(c, novoNo("ambiente", 0, 0, { imagem_id: r.ambiente, modo: "foto", uso: "usar" }), { gerarId: saida.id });
     c = porCartao(c, novoNo("texto", 0, 0, { texto: [r.pedido, r.luz && `Luz: ${r.luz}`, r.enquadramento && `Enquadramento: ${r.enquadramento}`, r.pose && `Pose/ação: ${r.pose}`].filter(Boolean).join(". ") }), { gerarId: saida.id });
     return c;

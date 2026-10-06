@@ -1,0 +1,14 @@
+.organizador-produtos { container: produtos / inline-size; }
+.produtos-espaco { display: flex; min-width: 0; min-height: 280px; gap: 24px; }
+.produtos-pastas { width: 190px; flex-shrink: 0; overflow-y: auto; overscroll-behavior: contain; }
+.produtos-pasta { display: flex; width: 100%; align-items: center; gap: 8px; padding: 10px 8px; border-radius: 8px; font-size: 13px; text-align: left; }
+.produtos-pasta:hover { background: hsl(var(--muted)); }
+.produtos-conteudo { flex: 1; min-width: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 8px 24px 0; }
+.produtos-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 24px 16px; align-items: start; }
+.produtos-grade img { object-fit: contain !important; }
+@container produtos (max-width: 700px) {
+  .produtos-espaco { flex-direction: column; gap: 16px; }
+  .produtos-pastas { display: flex; width: 100%; overflow-x: auto; flex-shrink: 0; }
+  .produtos-pasta { width: auto; white-space: nowrap; flex-shrink: 0; gap: 8px; }
+  .produtos-grade { grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); }
+}

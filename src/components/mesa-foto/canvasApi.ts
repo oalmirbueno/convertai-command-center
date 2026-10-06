@@ -116,6 +116,7 @@ export interface DadosDoNo {
   titulo?: string;
   kit_id?: string | null;
   modelo_id?: string | null;
+  clone_id?: string | null;
   versao?: number | null;
   imagem_id?: string | null;
   /** Pessoa real: a equipe confirmou a autorização de uso da imagem. */
@@ -428,6 +429,7 @@ function normalizarDados(tipo: TipoDeNo, v: any): DadosDoNo {
     // Pessoa real (foto do acervo) só quando não há persona.
     saida.imagem_id = saida.modelo_id ? null : textoOuNulo(d.imagem_id);
     saida.autorizada = !saida.modelo_id && d.autorizada === true;
+    if (!saida.modelo_id && d.clone_id) saida.clone_id = textoOuNulo(d.clone_id);
     saida.titulo = texto(d.titulo);
   }
   if (tipo === "ambiente" || tipo === "estilo") {
@@ -1333,7 +1335,7 @@ export const TIPO_NA_FUNCAO: Record<TipoDeNo, string> = {
 export function dadosParaAFuncao(tipo: TipoDeNo, d: DadosDoNo): Record<string, unknown> {
   if (tipo === "produto") return { kit_id: d.kit_id || null, titulo: (d.titulo || "").trim() || null };
   if (tipo === "modelo") {
-    return { modelo_id: d.modelo_id || null, versao: d.versao || null, imagem_id: d.modelo_id ? null : d.imagem_id || null, autorizada: !d.modelo_id && !!d.autorizada, titulo: (d.titulo || "").trim() || null };
+    return { modelo_id: d.modelo_id || null, versao: d.versao || null, imagem_id: d.modelo_id ? null : d.imagem_id || null, autorizada: !d.modelo_id && !!d.autorizada, ...(!d.modelo_id && d.clone_id ? { clone_id: d.clone_id } : {}), titulo: (d.titulo || "").trim() || null };
   }
   if (tipo === "ambiente") {
     return { imagem_id: d.imagem_id || null, biblioteca_id: d.biblioteca_id || null, texto: (d.texto || "").trim() || null, modo: d.modo || (d.imagem_id ? "foto" : "descrever"), uso: d.uso === "usar" ? "usar" : "complementar" };

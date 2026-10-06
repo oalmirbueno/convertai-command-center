@@ -149,6 +149,7 @@ export default function ProdutoDasFotos({ fotos, recolhidoDeInicio = false, colu
           }}
         />
       </div>
+      {!recolhido && <Button size="sm" variant="outline" className="mb-3" onClick={() => irPara("kits")}>Organizar produtos e pastas</Button>}
       {!recolhido && (
       <>
       {!selecionadas.length && paraLer.length > 0 && !kits.length && (

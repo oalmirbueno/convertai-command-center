@@ -1,3 +1,4 @@
+import { useOrganizacaoDeProdutos } from "./useOrganizacaoDeProdutos";
 import { useMemo, useState } from "react";
 import { Check, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,8 @@ export default function SeletorDeFotos({
 }) {
   const { clientId } = useMesa();
   const workspace = useArvoreDoWorkspace(clientId);
+  const organizacao = useOrganizacaoDeProdutos(clientId, fotos);
+  const pastasOrganizadas = Array.from(new Map(organizacao.organizadas.filter((g) => g.geracao || g.produtoIds.length).map((g) => [g.chave, g.pasta])).entries());
   const [pasta, setPasta] = useState("__todas");
   const [limite, setLimite] = useState(120);
   const espelho = useMemo(() => pastasDoAcervo(workspace.data || [], fotos), [workspace.data, fotos]);
@@ -52,9 +55,10 @@ export default function SeletorDeFotos({
   const soFotos = useMemo(() => fotos.filter((f) => ehSoFoto(f) && (lado === "todos" || ladoDaFoto(f) === lado)), [fotos, lado]);
   const filtradas = useMemo(() => filtrarFotos(soFotos, classe, "todos", [], busca).filter((f) => {
     if (pasta === "__todas") return true;
+    if (pasta.startsWith("organizada:")) return organizacao.organizadas.some((g) => g.foto.id === f.id && `organizada:${g.chave}` === pasta);
     const id = pastaDaFoto(f, espelho.pastaDoNo);
     return id === pasta || trilhaAte(arvore, id).some((p) => p.id === pasta);
-  }), [soFotos, classe, busca, pasta, espelho, arvore]);
+  }), [soFotos, classe, busca, pasta, espelho, arvore, organizacao.organizadas]);
   const lista = filtradas.slice(0, limite);
 
   const alternar = (id: string) => {
@@ -85,7 +89,7 @@ export default function SeletorDeFotos({
           <X className="h-4 w-4" />
         </button>
       </div>
-      <label className="block text-[12px]">Pasta do Workspace ou acervo<select aria-label="Pasta das fotos" className="mt-1 w-full rounded-md border bg-background p-2" value={pasta} onChange={(e) => { setPasta(e.target.value); setLimite(120); }}><option value="__todas">Todas as pastas ({soFotos.length} fotos)</option><option value="">Raiz do Workspace</option>{espelho.pastas.map((p) => <option key={p.id} value={p.id}>{trilhaAte(arvore, p.id).map((x) => x.nome).join(" / ")}</option>)}</select></label>
+      <label className="block text-[12px]">Pasta do Workspace ou acervo<select aria-label="Pasta das fotos" className="mt-1 w-full rounded-md border bg-background p-2" value={pasta} onChange={(e) => { setPasta(e.target.value); setLimite(120); }}><option value="__todas">Todas as pastas ({soFotos.length} fotos)</option><option value="">Raiz do Workspace</option>{pastasOrganizadas.length > 0 && <optgroup label="Produtos, modelos e clones">{pastasOrganizadas.map(([id, nome]) => <option key={id} value={`organizada:${id}`}>{nome}</option>)}</optgroup>}{espelho.pastas.map((p) => <option key={p.id} value={p.id}>{trilhaAte(arvore, p.id).map((x) => x.nome).join(" / ")}</option>)}</select></label>
       {workspace.isError && <p role="alert" className="text-[12px]">Não foi possível ler as pastas. <button type="button" onClick={() => void workspace.refetch()}>Recarregar</button></p>}
       <div className="relative min-w-0">
         <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

@@ -1,3 +1,4 @@
+import { organizacaoDoProduto } from "../../../supabase/functions/mesa-foto/modulos/pastas-produtos";
 import { acaoDoAnexo, caminhoDosAnexos, caminhoSeguro, type AcaoDoAgente, type CaminhoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -74,6 +75,7 @@ export interface FotoDoAcervo {
 }
 
 export interface Atributos {
+  organizacao?: { pasta: string };
   observado: string[];
   informado: string[];
   inferido: string[];
@@ -689,7 +691,7 @@ export const proporcaoDaFoto = (f: Pick<FotoDoAcervo, "largura" | "altura"> | nu
 
 function normalizarAtributos(v: any): Atributos {
   const a = v && typeof v === "object" && !Array.isArray(v) ? v : {};
-  return { observado: listaDeTextos(a.observado), informado: listaDeTextos(a.informado), inferido: listaDeTextos(a.inferido) };
+  return { observado: listaDeTextos(a.observado), informado: listaDeTextos(a.informado), inferido: listaDeTextos(a.inferido), ...(organizacaoDoProduto(a.organizacao) ? { organizacao: organizacaoDoProduto(a.organizacao) } : {}) };
 }
 
 /**
@@ -1268,6 +1270,7 @@ export function corpoDoKit(kit: KitDeFoto) {
       observado: listaDeTextos(kit.atributos.observado),
       informado: listaDeTextos(kit.atributos.informado),
       inferido: listaDeTextos(kit.atributos.inferido),
+      ...(kit.atributos.organizacao ? { organizacao: organizacaoDoProduto(kit.atributos.organizacao) } : {}),
     },
     invariantes: listaDeTextos(kit.invariantes),
     lacunas: listaDeTextos(kit.lacunas),

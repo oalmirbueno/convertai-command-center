@@ -398,14 +398,14 @@ describe("rota, casca e troca entre mesas", () => {
     expect(apoio.closest("[data-caminho-principal]")).toBeNull();
     fireEvent.click(within(apoio).getByRole("button", { name: /^Mais/ }));
     const ferramentas = await screen.findByRole("listbox", { name: "Mais" });
-    expect(within(ferramentas).getAllByRole("option").map((o) => (o.querySelector(".truncate") as HTMLElement).textContent)).toEqual(["Biblioteca", "Modelos", "Clones", "Book", "Canvas"]);
+    expect(within(ferramentas).getAllByRole("option").map((o) => (o.querySelector(".truncate") as HTMLElement).textContent)).toEqual(["Organizar produtos", "Biblioteca", "Modelos", "Clones", "Book", "Canvas"]);
     fireEvent.keyDown(ferramentas, { key: "Escape" });
     // 27/09 (frente MF, dono: "ainda está confuso, não está tão facilitado pra criar"): o Estúdio de fotos
     // entra no passo 2 (Criar) e o Post na Agenda no passo 3 (Usar). Mudança de propósito: as etapas
     // antigas continuam todas, na mesma ordem relativa.
     // 30/09 (frente FTL): a etapa nova "aprovar" (conferir e aprovar num lugar só); nenhuma antiga saiu.
     expect(ETAPAS_DA_MESA_FOTO.map((e) => e.valor)).toEqual(["acervo", "kits", "criar", "estudio", "compor", "combinar", "ensaio", "campanha", "preparar", "revisar", "aprovar", "usar", "agenda", "biblioteca", "modelos", "clones", "book", "canvas"]);
-    expect(PASSOS_PRINCIPAIS.map((p) => p.inclui)).toEqual([["criar"], ["acervo", "kits"], ["estudio", "ensaio", "campanha", "preparar", "compor", "combinar"], ["aprovar", "revisar"], ["usar", "agenda"]]);
+    expect(PASSOS_PRINCIPAIS.map((p) => p.inclui)).toEqual([["criar"], ["acervo"], ["estudio", "ensaio", "campanha", "preparar", "compor", "combinar"], ["aprovar", "revisar"], ["usar", "agenda"]]);
     // Modelos e Canvas já têm tela: aparecem como abas avançadas.
     expect(ABAS_FUTURAS.map((a) => [a.etapa, a.disponivel])).toEqual([["modelos", true], ["clones", true], ["book", true], ["canvas", true]]);
     // Celular: a linha em uma faixa (só o passo aberto mostra o nome) e o seletor ao lado, sem rolagem lateral.
