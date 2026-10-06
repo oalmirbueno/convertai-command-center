@@ -1,3 +1,4 @@
+import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import LogoNaFoto from "@/components/mesa/LogoNaFoto";
 import { SeletorDeModelo } from "@/components/mesa/Seletores";
 import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
@@ -170,7 +171,7 @@ export function larguraQueCabe(palco: { largura: number; altura: number } | null
   const rotulo = 24;
   const porColuna = (palco.largura - vao * (quantas - 1)) / quantas;
   const pelaAltura = (palco.altura - rotulo) * p;
-  return Math.max(140, Math.floor(Math.min(porColuna, pelaAltura)));
+  return Math.max(48, Math.floor(Math.min(porColuna, pelaAltura)));
 }
 
 function Grupo({ titulo, icone, ajuda, destaque, id, children }: { titulo: string; icone: ReactNode; ajuda?: ReactNode; destaque?: boolean; id: string; children: ReactNode }) {
@@ -272,6 +273,7 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
   const ferramentas = useRef<HTMLDivElement>(null);
   const areaDoPalco = useRef<HTMLDivElement>(null);
   const palco = useTamanhoDoPalco(areaDoPalco);
+  const area = useAlturaQueCabe(!!atualId);
 
   useEffect(() => {
     if (imagemId) setAtualId(imagemId);
@@ -384,14 +386,14 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
      * foto em cima, a foto inteira na altura que sobra, as versões numa tira embaixo) e à direita
      * as ferramentas, que rolam por dentro. No celular tudo segue a página, como antes.
      */
-    <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1" data-estudio-de-fotos={atual.id}>
+    <div ref={area.ref} style={area.altura ? { height: area.altura } : undefined} className="flex min-w-0 flex-col lg:min-h-0 lg:overflow-hidden" data-estudio-de-fotos={atual.id}>
       {escolhendo && (
         <div className="mb-3 min-w-0 lg:max-h-[45%] lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain">
           <SeletorDeFotos fotos={todas.filter((f) => !ehReferenciaWeb(f))} titulo="Trocar a foto do Estúdio" multiplas={false} filtroInicial="todas" onUsar={(ids) => ids[0] && escolher(ids[0])} onFechar={() => setEscolhendo(false)} />
         </div>
       )}
       <section
-        className={juntar(superficie.painel, "flex min-w-0 flex-col overflow-hidden lg:grid lg:min-h-[320px] lg:flex-1 lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[minmax(0,1fr)] desk:grid-cols-[minmax(0,1fr)_360px]")}
+        className={juntar(superficie.painel, "flex min-w-0 flex-col overflow-hidden lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[minmax(0,1fr)] desk:grid-cols-[minmax(0,1fr)_360px]")}
         aria-label="Estúdio de fotos"
       >
         {/* Palco: a barra da foto, a foto inteira e as versões. */}
@@ -444,7 +446,7 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
               )}
             </div>
           </div>
-          <div className="min-w-0 shrink-0 border-t border-border px-3 py-2" data-versoes-da-foto="" data-tira-de-versoes="">
+          <div className="min-h-0 min-w-0 shrink-0 overflow-y-auto border-t border-border px-3 py-2 lg:max-h-44" data-versoes-da-foto="" data-tira-de-versoes="">
             <GaleriaDeFotos titulo="Versões desta foto" fotos={linhagem.map((f) => fotoNaGaleria(f, f.id === raiz?.id ? "Original" : "Versões"))}
               atualId={atual.id} onSelecionar={(id) => { escolher(id); setVista("depois"); }} onUsar={prepararNaAgenda} />
           </div>
@@ -496,7 +498,7 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
             </CampoDeFormulario>
             {!daInternet && (
               <div className="mt-2 border-t border-border pt-2" data-grupo-do-estudio-pro="">
-                <p className="mb-1 text-[11px] font-medium text-muted-foreground">Nitidez e tamanho (pro): ampliar fiel ou criativo, tirar fundo</p>
+                <p className="mb-1 text-[11px] font-medium text-muted-foreground">Upscale · ampliar 2x / 4x e tirar fundo</p>
                 <AcoesProDaFoto foto={atual} onPronta={(nova) => {
                   setAtualId(nova.id);
                   setVista("lado");

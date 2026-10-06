@@ -1,3 +1,4 @@
+import { ControlesDaPauta } from "./ControlesDaPauta";
 import { superficie, juntar } from "@/components/sistema/estilos";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -5,7 +6,7 @@ import { Camera, Film, ImagePlus, Maximize2, Wand2, Type, Send, PenLine, Image, 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { useFotos, type FotoDoAcervo } from "@/components/mesa-foto/fotoApi";
-import AcoesProDaFoto from "@/components/mesa-foto/AcoesProDaFoto";
+import MelhorarFotoNaBancada from "./MelhorarFotoNaBancada";
 import { useMesaFoto } from "@/components/mesa-foto/Comuns";
 import { useMesa } from "./MesaContexto";
 import { ImagemDaMesa, useUrlDaMesa } from "./MesaContexto";
@@ -38,14 +39,15 @@ export default function BancadaDaPauta({ tipo, titulo, acoes, prancheta, previa,
   tipo: "fotos" | "video"; titulo: string; acoes?: ReactNode; prancheta: ReactNode; previa: ReactNode; ferramentas: ReactNode;
   abas?: FerramentaDaBancada[]; ativa?: string; onAba?: (id: string) => void; escolhendo?: boolean;
 }) {
+  const controles = useContext(ControlesDaPauta);
   const Icone = tipo === "fotos" ? Camera : Film;
   const [destino, setDestino] = useState<HTMLDivElement | null>(null);
   const [destinoSelecao, setDestinoSelecao] = useState<HTMLDivElement | null>(null);
   const [selecaoAberta, setSelecaoAberta] = useState(false);
   return <SelecaoContexto.Provider value={{ destino: destinoSelecao, abrir: setSelecaoAberta }}><AcoesContexto.Provider value={destino}><PainelContexto.Provider value={ativa}><section className={juntar(superficie.painel, "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden")} data-bancada-da-pauta={tipo}>
-    <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-primary px-4 py-3">
+    <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-primary px-3 py-2">
       <Icone className="h-4 w-4 shrink-0 text-primary" /><p className="min-w-0 flex-1 truncate text-[13px] font-semibold">{titulo}</p>
-      <span className="rounded-full bg-primary/10 px-2 py-1 text-[12px] font-medium text-primary">{tipo === "fotos" ? "Fotos e carrossel" : "Vídeo rápido"}</span>{acoes}<div ref={setDestino} className="flex min-w-0 flex-wrap items-center" />
+      {controles}{acoes}<div ref={setDestino} className="flex min-w-0 flex-wrap items-center" />
     </header>
     <div className={`grid min-h-0 flex-1 grid-cols-1 lg:overflow-hidden ${escolhendo || selecaoAberta ? 'lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)_minmax(290px,360px)]' : 'lg:grid-cols-[144px_minmax(0,1fr)_minmax(290px,400px)]'}`} style={{ minHeight: 480 }}>
       <aside aria-label="Prancheta" className="min-h-0 min-w-0 border-b p-3 lg:overflow-y-auto lg:border-b-0 lg:border-r">
@@ -60,7 +62,7 @@ export default function BancadaDaPauta({ tipo, titulo, acoes, prancheta, previa,
 
 export interface FotoDaPrancheta { id: string; nome: string; caminho: string; bucket?: string }
 
-export function PreviaDaPauta({ caminho, bucket = "mesa", nome, video = false }: { caminho: string; bucket?: string; nome: string; video?: boolean }) {
+export function PreviaDaPauta({ caminho, bucket = "mesa", nome, video = false, compacta = false }: { caminho: string; bucket?: string; nome: string; video?: boolean; compacta?: boolean }) {
   const { data: url, isError } = useUrlDaMesa(caminho, bucket);
   const area = useRef<HTMLDivElement>(null);
   const [medidas, setMedidas] = useState({ largura: 320, altura: 400 });
@@ -73,10 +75,10 @@ export function PreviaDaPauta({ caminho, bucket = "mesa", nome, video = false }:
     const observer = new ResizeObserver(medir); observer.observe(el);
     return () => observer.disconnect();
   }, []);
-  return <div ref={area} className="relative flex min-h-[360px] min-w-0 flex-1 items-center justify-center" data-previa-da-pauta="">
+  return <div ref={area} className={`relative flex min-w-0 items-center justify-center overflow-hidden ${compacta ? "h-64 shrink-0" : "min-h-[240px] flex-1"}`} data-previa-da-pauta="">
     {url && <button type="button" aria-label="Ver grande" onClick={() => setGrande(true)} className="absolute right-2 top-2 z-10 rounded-md border bg-card p-2"><Maximize2 className="h-4 w-4" /></button>}
     {isError ? <p role="alert">Não foi possível abrir este arquivo.</p> : !url ? <p role="status">Carregando prévia…</p> : video ?
-      <video key={url} src={url} controls playsInline preload="metadata" aria-label={nome} className="max-h-full max-w-full rounded-lg" /> :
+      <video key={url} src={url} controls playsInline preload="metadata" aria-label={nome} className="h-full w-full rounded-lg object-contain" /> :
       <ImagemComZoom src={url} alt={nome} {...medidas} onProporcao={() => undefined} />}
     <JanelaCentral aberta={grande} onFechar={() => setGrande(false)} titulo={nome} largura="tela">{url && (video ? <video src={url} controls playsInline className="mx-auto max-h-[80vh] max-w-full" /> : <ImagemComZoom src={url} alt={nome} largura={Math.max(320, window.innerWidth - 120)} altura={Math.max(300, window.innerHeight - 160)} onProporcao={() => undefined} />)}</JanelaCentral>
   </div>;
@@ -85,7 +87,7 @@ export function PreviaDaPauta({ caminho, bucket = "mesa", nome, video = false }:
 export function BancadaDeFotos({ titulo, fotos, children, onEscolher, onMover, onRemover, onEditar, seletor, extras = [], pronta = false, onDerivada }: {
   titulo: string; fotos: FotoDaPrancheta[]; children: ReactNode; onEscolher?: () => void;
   onMover?: (indice: number, direcao: number) => void; onRemover?: (id: string) => void; onEditar?: (id: string) => void;
-  seletor?: ReactNode; extras?: FerramentaDaBancada[]; pronta?: boolean; onDerivada?: (antiga: string, nova: FotoDoAcervo) => void;
+  seletor?: ReactNode; extras?: FerramentaDaBancada[]; pronta?: boolean; onDerivada?: (antiga: string, nova: FotoDoAcervo) => void | Promise<void>;
 }) {
   const { clientId } = useMesa();
   const acervo = useFotos(clientId);
@@ -113,5 +115,5 @@ export function BancadaDeFotos({ titulo, fotos, children, onEscolher, onMover, o
       {onMover && <div className="flex items-center justify-between text-[12px]"><button type="button" disabled={!i} aria-label={`Mover foto ${i + 1} para antes`} onClick={() => onMover(i, -1)}>←</button><button type="button" aria-label={`Remover foto ${i + 1}`} onClick={() => onRemover?.(f.id)}>Remover</button><button type="button" disabled={i === fotos.length - 1} aria-label={`Mover foto ${i + 1} para depois`} onClick={() => onMover(i, 1)}>→</button></div>}
     </li>)}</ol>{onEscolher && <button type="button" onClick={onEscolher} className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg border border-dashed px-2 py-5 text-[12px]"><ImagePlus className="h-4 w-4" />Adicionar</button>}</>}
     previa={<><div className="flex items-center justify-between text-[13px]"><strong>{foto ? `Foto ${fotos.indexOf(foto) + 1} de ${fotos.length}` : "Foto da pauta"}</strong>{foto && onEditar && <button type="button" onClick={() => onEditar(foto.id)} className="text-primary">Melhorar esta foto</button>}</div>{foto ? <PreviaDaPauta key={foto.id} {...foto} /> : <div className="flex min-h-[400px] flex-1 flex-col items-center justify-center rounded-lg border border-dashed text-center"><Camera className="mb-3 h-8 w-8 text-muted-foreground" /><p className="text-[13px]">Escolha as fotos para montar esta pauta.</p>{onEscolher && <button type="button" onClick={onEscolher} className="mt-4 rounded-md bg-primary px-4 py-2 text-[13px] text-primary-foreground">Escolher fotos do cliente</button>}</div>}</>}
-    ferramentas={<>{children}<PainelDaBancada id="logo">{original && onDerivada ? <LogoNaFoto key={original.id} foto={original} onPronta={(nova) => { onDerivada(original.id, nova); setAtiva(nova.id); }} /> : <p className="text-[13px]">{pronta ? "Use Trocar fotos para aplicar a logo em uma nova versão antes de enviar." : "Escolha uma foto na prancheta para aplicar a logo."}</p>}</PainelDaBancada><PainelDaBancada id="melhorar">{original ? <><p className="mb-3 text-[12px] text-muted-foreground">{foto.nome} · O resultado é salvo como outra versão.</p><AcoesProDaFoto foto={original} onPronta={(nova) => { onDerivada?.(original.id, nova); setAtiva(nova.id); }} />{editar && <button type="button" className="mt-4 rounded-md border p-2 text-[12px]" onClick={() => editar(original.id)}>Luz, cor, cenário e recorte</button>}</> : <p className="text-[13px]">Escolha uma foto na prancheta para melhorar.</p>}</PainelDaBancada></>} />;
+    ferramentas={<>{children}<PainelDaBancada id="logo">{original && onDerivada ? <LogoNaFoto key={original.id} foto={original} onPronta={async (nova) => { await onDerivada(original.id, nova); setAtiva(nova.id); }} /> : <p className="text-[13px]">{pronta ? "Use Trocar fotos para aplicar a logo em uma nova versão antes de enviar." : "Escolha uma foto na prancheta para aplicar a logo."}</p>}</PainelDaBancada><PainelDaBancada id="melhorar">{original && onDerivada ? <><MelhorarFotoNaBancada key={original.id} foto={original} onPronta={async (nova) => { await onDerivada(original.id, nova); setAtiva(nova.id); }} />{editar && <button type="button" className="mt-4 rounded-md border p-2 text-[12px]" onClick={() => editar(original.id)}>Luz, cor, cenário e recorte</button>}</> : <p className="text-[13px]">Escolha uma foto editável na prancheta. Posts enviados mantêm a versão aprovada.</p>}</PainelDaBancada></>} />;
 }

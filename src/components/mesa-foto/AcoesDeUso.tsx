@@ -119,7 +119,7 @@ export function AprovarFoto({ foto, onMudou }: { foto: FotoDoAcervo; onMudou?: (
       }
       invalidarFotos(queryClient, clientId);
       toast.success(decisao === "aprovar" ? "Foto aprovada pela equipe" : "Aprovação retirada", {
-        description: decisao === "aprovar" ? "Agora ela pode ir para a aprovação do cliente e para as mesas." : "A foto continua no acervo, sem o selo de aprovada.",
+        description: decisao === "aprovar" ? "Salva no acervo deste cliente e disponível em Usar. Nada foi enviado ao cliente." : "A foto continua no acervo, sem o selo de aprovada.",
       });
     } catch (e) {
       acrescentarFotos(queryClient, clientId, [antes]);
@@ -145,7 +145,7 @@ export function AprovarFoto({ foto, onMudou }: { foto: FotoDoAcervo; onMudou?: (
     // 28/09 (um primário por área): aprovar é secundário, com a cor do "aprovada".
     <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 border-success/50 text-[12px] text-success hover:bg-success/10 hover:text-success" disabled={decidindo} onClick={() => void decidir("aprovar")} data-aprovar-foto="">
       {decidindo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-      Aprovar esta foto
+      Aprovar para o acervo
     </Button>
   );
 }

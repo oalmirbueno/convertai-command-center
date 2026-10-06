@@ -25,19 +25,19 @@ export default function AcoesProDaFoto({
   foto: Pick<FotoDoAcervo, "id" | "tags" | "referencia_web">;
   mostrarCriativo?: boolean;
   /** A derivada pronta (para abrir ou marcar na tela). */
-  onPronta?: (nova: FotoDoAcervo) => void;
+  onPronta?: (nova: FotoDoAcervo) => void | Promise<void>;
   className?: string;
 }) {
   const { clientId, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
   // Referência da internet é uso interno: não vira foto de entrega.
   if (foto.referencia_web) return null;
-  const aoConcluir = (r: ResultadoDaFerramenta) => {
+  const aoConcluir = async (r: ResultadoDaFerramenta) => {
     const nova = normalizarFoto(r.imagem);
     if (nova) {
       semearUrl(queryClient, nova.storage_bucket, nova.storage_path, r.url || r.imagem.url || null);
       acrescentarFotos(queryClient, clientId, [nova]);
-      if (onPronta) onPronta(nova);
+      if (onPronta) { try { await onPronta(nova); } catch (e) { toast.error("Foto salva no acervo, mas não aplicada", { description: e instanceof Error ? e.message : "Tente escolher esta versão novamente." }); } }
     }
     invalidarFotos(queryClient, clientId);
     atualizarCusto();

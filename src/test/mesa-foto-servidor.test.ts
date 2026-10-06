@@ -124,7 +124,7 @@ import {
  * Mesa Foto, frente A (docs/mesa-foto/CONTRATO.md): lógica pura executando de
  * verdade, contratos da função pelo código-fonte e o SQL da migration.
  */
-const ler = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
+const ler = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8").replace(/\r\n/g, "\n");
 const fonte = ler("supabase/functions/mesa-foto/index.ts");
 const calculosFonte = ler("supabase/functions/mesa-foto/calculos.ts");
 const receitasFonte = ler("supabase/functions/mesa-foto/receitas.ts");

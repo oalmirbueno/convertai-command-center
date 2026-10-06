@@ -30,6 +30,8 @@ import { chamarMesaVideos, chaveDosPedidos } from "./videosApi";
  */
 
 interface Rascunho {
+  acabamento?: string;
+  movimento?: string;
   nivel: NivelDoMotor;
   motor: string;
   prompt: string;
@@ -76,6 +78,7 @@ export default function GeradorLivre({ escopo, pauta, direcaoInicial, promptInic
   const duracoes = motor ? duracoesDoMotor(motor) : [5];
   const duracao = motor ? duracaoNoMotor(motor, r.duracao) : r.duracao;
   const resolucao = motor ? resolucaoNoMotor(motor, r.resolucao) : "";
+  const direcaoVisual = [r.prompt, r.acabamento && `Acabamento: ${r.acabamento}. Preserve texturas, proporções e cores reais.`, r.movimento && `Movimento de câmera: ${r.movimento}.`].filter(Boolean).join("\n");
   const custo = custoNaTela(motor, { duracao_s: duracao, resolucao, audio: !!(motor?.cap.audio && r.audio), variacoes: r.variacoes, referencias: r.referencias.length });
   const estado = motor ? motores.lista.find((x) => x.motor.id === motor.id) : null;
   const motivo = copiando ? "Aguarde o carregamento da foto." : r.final && !r.inicial ? "Escolha a foto inicial para usar a foto final." : !motor
@@ -115,7 +118,7 @@ export default function GeradorLivre({ escopo, pauta, direcaoInicial, promptInic
       client_id: clientId,
       motor: motor.id,
       modo,
-      prompt: motor.cap.audio && r.audio && r.narracao?.trim() ? `${r.prompt}\nNarração em português brasileiro, voz natural e clara, sem alterar o texto: ${r.narracao.trim()}` : r.prompt,
+      prompt: motor.cap.audio && r.audio && r.narracao?.trim() ? `${direcaoVisual}\nNarração em português brasileiro, voz natural e clara, sem alterar o texto: ${r.narracao.trim()}` : direcaoVisual,
       task_id: pauta?.id,
       titulo: pauta?.title,
       negativo: r.negativo,
@@ -144,7 +147,7 @@ export default function GeradorLivre({ escopo, pauta, direcaoInicial, promptInic
       {buscandoFoto && <SelecaoDaBancada><Suspense fallback={<p role="status">Lendo as pastas…</p>}><SeletorDeFotos fotos={(fotosQ.data || []).filter((f) => !f.referencia_web)} titulo="Fotos reais do Workspace" multiplas={false} onFechar={() => setBuscandoFoto(null)} onUsar={(ids) => { void usarFotos(ids, buscandoFoto).catch((e) => toast.error(e instanceof Error ? e.message : "Não foi possível usar a foto.")); }} /></Suspense></SelecaoDaBancada>}
       {pauta && <div className="rounded-lg border p-3"><button type="button" className="text-[12px] text-primary" aria-expanded={diretorAberto} onClick={() => setDiretorAberto(!diretorAberto)}>Pedir ao diretor para buscar fotos numa pasta</button>{diretorAberto && <><label className="my-2 block text-[12px]">Usar a foto encontrada como<select className={campo} value={destinoDoDiretor} onChange={(e) => setDestinoDoDiretor(e.target.value as typeof destinoDoDiretor)}><option value="inicial">Quadro inicial</option><option value="final">Quadro final</option><option value="referencia">Referência</option></select></label><p className="text-[12px] text-muted-foreground">Diga a pasta. Confira a primeira foto encontrada no campo escolhido antes de gerar.</p><Suspense fallback={<p role="status">Abrindo diretor…</p>}><DiretorDeFotos escopo={`${pauta.id}:video:${escopo || "livre"}`} pautaId={pauta.id} aoSelecionarFotos={(ids) => usarFotos(ids, destinoDoDiretor)} /></Suspense></>}</div>}
       {copiando && <p role="status">Preparando a foto real para o vídeo…</p>}
-      <SeletorDeMotor lista={motores.lista} requisito={requisito} valor={motor ? motor.id : ""} nivel={r.nivel} onNivel={(n) => mudar({ nivel: n, motor: "" })} onEscolher={(id) => mudar({ motor: id })} />
+      {!pauta && <SeletorDeMotor lista={motores.lista} requisito={requisito} valor={motor ? motor.id : ""} nivel={r.nivel} onNivel={(n) => mudar({ nivel: n, motor: "" })} onEscolher={(id) => mudar({ motor: id })} />}
       <GrupoDeCampos colunas={pauta ? 1 : 3}>
         <EscolherImagem rotulo="Quadro inicial" opcional valor={r.inicial} onEscolher={(c) => mudar({ inicial: c })} />
         {(!motor || motor.cap.ultimo_quadro) && <EscolherImagem rotulo="Último quadro" opcional valor={r.final} onEscolher={(c) => mudar({ final: c })} />}
@@ -189,6 +192,8 @@ export default function GeradorLivre({ escopo, pauta, direcaoInicial, promptInic
         <textarea className={juntar(campoTexto, "min-h-[96px]")} value={r.prompt} maxLength={2400} onChange={(e) => mudar({ prompt: e.target.value })} placeholder="Ex.: a mulher da foto abre a porta da cozinha nova e sorri, câmera lenta de frente" />
       </CampoDeFormulario>
       <GrupoDeCampos>
+        <CampoDeFormulario rotulo="Acabamento visual"><select className={campo} value={r.acabamento || ""} onChange={(e) => mudar({ acabamento: e.target.value })}><option value="">Pela pauta</option>{["Natural e realista", "Comercial de produto", "Cinematográfico suave", "Catálogo com fundo limpo", "Documental de bastidores"].map((v) => <option key={v}>{v}</option>)}</select></CampoDeFormulario>
+        <CampoDeFormulario rotulo="Movimento"><select className={campo} value={r.movimento || ""} onChange={(e) => mudar({ movimento: e.target.value })}><option value="">Pela pauta</option>{["Câmera fixa", "Aproximação lenta", "Deslocamento lateral suave", "Órbita lenta do produto", "Revelação do ambiente"].map((v) => <option key={v}>{v}</option>)}</select></CampoDeFormulario>
         <CampoDeFormulario rotulo="Duração">
           <select className={campo} value={duracao} onChange={(e) => mudar({ duracao: Number(e.target.value) })}>
             {duracoes.map((d) => (
@@ -227,7 +232,7 @@ export default function GeradorLivre({ escopo, pauta, direcaoInicial, promptInic
         </CampoDeFormulario>
       </GrupoDeCampos>
       {motor?.cap.audio && r.audio && <CampoDeFormulario rotulo="Narração (opcional)"><textarea aria-label="Texto da narração" className={campoTexto} rows={2} maxLength={600} value={r.narracao || ""} onChange={(e) => mudar({ narracao: e.target.value })} placeholder="Texto curto para o motor narrar neste vídeo" /><p className="text-[12px] text-muted-foreground">Confira a fala no resultado antes de enviar.</p></CampoDeFormulario>}
-      <AcoesDaBancada><BotaoDeGerar custo={custo} motivo={motivo} onConfirmar={gerar} icone={<Plus className="mr-1.5 h-3.5 w-3.5" />} extra={`${motor ? motor.rotulo : ""}, ${duracao} s, ${r.variacoes} ${r.variacoes === 1 ? "variação" : "variações"}`} /></AcoesDaBancada>
+      <AcoesDaBancada>{pauta && <select aria-label="Modelo de vídeo" title="Escolher modelo de geração de vídeo" className={juntar(campo, "mr-2 h-9 w-40")} value={motor?.id || ""} onChange={(e) => mudar({ motor: e.target.value })}>{!motor && <option value="">Modelo de vídeo</option>}{motores.lista.filter((x) => x.motor.id === motor?.id || (atende(x.motor, requisito) && !x.motor.situacao)).map((x) => <option key={x.motor.id} value={x.motor.id} disabled={x.estado !== "pronto" && x.estado !== "a_conferir"}>{x.motor.rotulo}</option>)}</select>}<BotaoDeGerar custo={custo} motivo={motivo} onConfirmar={gerar} icone={<Plus className="mr-1.5 h-3.5 w-3.5" />} extra={`${motor ? motor.rotulo : ""}, ${duracao} s, ${r.variacoes} ${r.variacoes === 1 ? "variação" : "variações"}`} /></AcoesDaBancada>
     </div>
   );
 }

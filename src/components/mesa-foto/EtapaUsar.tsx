@@ -68,7 +68,7 @@ export default function EtapaUsar() {
   const todas = useMemo(() => fotos.data || [], [fotos.data]);
   const ensaio = ensaioId ? (ensaios.data || []).find((e) => e.id === ensaioId) || null : null;
   const [origem, setOrigem] = useState<Origem>(ensaio ? "ensaio" : "aprovadas");
-  const [marcadas, setMarcadas] = useState<string[] | null>(null);
+  const [marcadas, setMarcadas] = useState<string[]>([]);
   const [ampliada, setAmpliada] = useState<number | null>(null);
 
   const idsDoEnsaio = useMemo(() => {
@@ -87,9 +87,9 @@ export default function EtapaUsar() {
     return todas.filter((f) => f.aprovada);
   }, [todas, origem, idsDoEnsaio, ensaio]);
 
-  // Começa com todas as da lista marcadas; trocar a lista marca de novo.
-  useEffect(() => setMarcadas(null), [origem]);
-  const escolhidasIds = marcadas === null ? lista.map((f) => f.id) : marcadas.filter((id) => lista.some((f) => f.id === id));
+  // A escolha é explícita; trocar o filtro limpa a seleção anterior.
+  useEffect(() => setMarcadas([]), [origem]);
+  const escolhidasIds = marcadas.filter((id) => lista.some((f) => f.id === id));
   const escolhidas = lista.filter((f) => escolhidasIds.indexOf(f.id) >= 0);
   const geradas = escolhidas.filter((f) => classeDaFoto(f) === "gerada").length;
 
@@ -107,8 +107,8 @@ export default function EtapaUsar() {
       <EsperandoAprovacao />
 
       <Cartao
-        titulo="Prontas para usar"
-        dica="Cada foto tem o menu Usar. Marque várias para levar juntas. Aprovar a foto não aprova a arte ou o anúncio feito com ela; foto gerada sai sempre marcada."
+        titulo="Acervo aprovado"
+        dica="Escolha as fotos e o destino. Preparar na Agenda abre um rascunho com legenda e data; o envio para aprovação é uma ação separada. Cada foto tem o menu Usar. Marque várias para levar juntas. Aprovar a foto não aprova a arte ou o anúncio feito com ela; foto gerada sai sempre marcada."
         acao={
           <>
             {/* 28/09: o atalho para os posts de fotos sai da linha própria e vem para a linha do título. */}

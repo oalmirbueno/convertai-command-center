@@ -147,7 +147,7 @@ const ampliavel = (i: ImagemDaPersona, titulo: string): ImagemAmpliavel => ({
 
 function NotasDaConferencia({ conferencia }: { conferencia: ConferenciaDaPersona }) {
   return (
-    <div className="mt-1.5 min-w-0 rounded-md border border-border bg-background p-1.5 text-[10.5px] leading-snug" data-conferencia="">
+    <div className="mt-1.5 min-w-0 rounded-md border border-border bg-background p-1.5 text-[11px] leading-snug" data-conferencia="">
       <p className="mb-0.5 font-medium text-muted-foreground">Conferência (aviso, você decide)</p>
       {conferencia.alertas.map((a) => (
         <p key={a} className="flex items-start text-warning [overflow-wrap:anywhere]">
@@ -291,10 +291,10 @@ function BotoesDeUso({ persona, className = "" }: { persona: Persona; className?
   const usar = useUsarPersona();
   return (
     <div className={juntar("-m-0.5 flex min-w-0 flex-wrap items-center [&>*]:m-0.5", className)} data-uso-da-persona={persona.id}>
-      <button type="button" className={juntar(botao.secundario, "h-7 px-2 text-[11.5px]")} onClick={() => usar(persona, false)}>
+      <button type="button" className={juntar(botao.secundario, "h-7 px-2 text-[12px]")} onClick={() => usar(persona, false)}>
         <UserCheck className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Usar como modelo
       </button>
-      <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[11.5px]")} onClick={() => usar(persona, true)}>
+      <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} onClick={() => usar(persona, true)}>
         <Package className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Combinar com produto
       </button>
     </div>
@@ -333,14 +333,14 @@ function CartaoDaPersona({ persona, ancora, vistas, aberta, onAbrir }: { persona
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-semibold">{persona.nome}</span>
-          <span className="mt-0.5 flex min-w-0 items-center text-[11.5px] text-muted-foreground">
+          <span className="mt-0.5 flex min-w-0 items-center text-[12px] text-muted-foreground">
             <span className={`mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${PONTO_DO_STATUS[persona.status] || "bg-muted-foreground/40"}`} aria-hidden="true" />
             <span className="truncate">
               {status.rotulo}
               {persona.client_id ? "" : " · da agência"}
             </span>
           </span>
-          <span className="mt-0.5 block truncate text-[11.5px] tabular-nums text-muted-foreground" data-progresso-da-folha={vistas}>
+          <span className="mt-0.5 block truncate text-[12px] tabular-nums text-muted-foreground" data-progresso-da-folha={vistas}>
             {vistas} de {TOTAL_DA_FOLHA} vistas
           </span>
         </span>
@@ -371,7 +371,7 @@ function GradeDePersonas({ personas, escolhida, onEscolher, onNova }: { personas
       resumo={`${ativas} ${ativas === 1 ? "persona" : "personas"}`}
       ajuda="Pessoas sintéticas do cliente e da agência. Abra uma para a rodada, a âncora e a folha das 6 vistas. Com âncora, ela já serve para a Foto com modelo."
       acao={
-        <button type="button" className={juntar(botao.primario, "h-8 px-2.5 text-[12.5px]")} onClick={onNova}>
+        <button type="button" className={juntar(botao.primario, "h-8 px-2.5 text-[13px]")} onClick={onNova}>
           <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Nova persona
         </button>
       }
@@ -503,6 +503,7 @@ function NovaPersona({ aberta, onCriada, onCancelar }: { aberta: boolean; onCria
   const [avancado, setAvancado] = useState(false);
   const [pedido, setPedido] = useEstadoDaTela(`mesa-foto:modelos:pedido-da-sugestao:${clientId}`, "");
   const [porque, setPorque] = useState("");
+  const [sugestoesAnteriores, setSugestoesAnteriores] = useEstadoDaTela<unknown[]>(`mesa-foto:modelos:sugestoes:${clientId}`, [], { validar: Array.isArray });
   const [avisos, setAvisos] = useState<string[]>([]);
   const problemas = problemasDaPersona(r);
   const ficha = (campo: keyof RascunhoDaPersona["ficha"], valor: string | number | null) => setR({ ...r, ficha: { ...r.ficha, [campo]: valor } });
@@ -572,10 +573,11 @@ function NovaPersona({ aberta, onCriada, onCancelar }: { aberta: boolean; onCria
             descricao="O diretor lê o contexto do cliente que a Mesa usa (brief, público, marca e campanha) e preenche a ficha. Não cria nada: você confere e cria."
             className="mb-1.5 h-9 text-[13px]"
             partes={() => partesDaSugestaoDePersona(padraoPara(catalogo, "diretor_arte"))}
-            executar={() => sugerirPersona(clientId, pedido, campanha.campanhaId)}
+            executar={() => sugerirPersona(clientId, pedido, campanha.campanhaId, sugestoesAnteriores)}
             aoConcluir={(s: SugestaoDePersona) => {
               if (!s) return;
               setR((atual) => aplicarSugestaoNaPersona(atual, s));
+              setSugestoesAnteriores((lista) => [...lista, { nome: s.nome, ficha: s.ficha }].slice(-8));
               setPorque(s.porque);
               setAvisos(s.avisos);
             }}
@@ -709,7 +711,7 @@ function LinhaDoMotor({ motor, ligado, qualidade, onAlternar }: { motor: OpcaoDe
         className={`flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted ${ligado ? "text-foreground" : "text-foreground/80"}`}
       >
         <span className={`mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${ligado ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>{ligado && <Check className="h-2.5 w-2.5" />}</span>
-        <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium">
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
           {motor.rotulo}
           {motor.resolucao ? <span className="ml-1 text-[11px] font-normal text-muted-foreground">{motor.resolucao}</span> : null}
         </span>
@@ -759,7 +761,7 @@ function SeletorDeMotores({
           ))}
         </ul>
         {opcoes.length > visiveis.length && (
-          <button type="button" className="mt-0.5 w-full rounded-md px-2 py-1.5 text-left text-[11.5px] font-medium text-primary hover:bg-muted" onClick={onVerTodos}>
+          <button type="button" className="mt-0.5 w-full rounded-md px-2 py-1.5 text-left text-[12px] font-medium text-primary hover:bg-muted" onClick={onVerTodos}>
             Ver todos os geradores ({opcoes.length})
           </button>
         )}
@@ -1033,7 +1035,7 @@ function AprovarVista({ persona, imagem }: { persona: Persona; imagem: ImagemDaP
   const [salvando, setSalvando] = useState(false);
   if (imagem.aprovada === true) {
     return (
-      <p className="inline-flex items-center text-[10.5px] font-medium text-success" data-vista-aprovada={imagem.id}>
+      <p className="inline-flex items-center text-[11px] font-medium text-success" data-vista-aprovada={imagem.id}>
         <Check className="mr-0.5 h-3 w-3" /> aprovada
       </p>
     );
@@ -1125,7 +1127,7 @@ function Folha({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerson
                     <ImagemDaPersonaNaTela imagem={img} alt={`${persona.nome}, ${v.rotulo}`} />
                   </button>
                 ) : (
-                  <span className={`flex h-full w-full items-center justify-center text-[10.5px] text-muted-foreground ${a && a.estado === "gerando" ? "animate-pulse bg-muted" : "bg-muted/40"}`}>
+                  <span className={`flex h-full w-full items-center justify-center text-[11px] text-muted-foreground ${a && a.estado === "gerando" ? "animate-pulse bg-muted" : "bg-muted/40"}`}>
                     {a && a.estado === "gerando" ? "gerando" : "vazia"}
                   </span>
                 )}
@@ -1134,7 +1136,7 @@ function Folha({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerson
               <p className="mt-1 truncate text-[11px] font-medium">{v.rotulo}</p>
               {img && <AprovarVista persona={persona} imagem={img} />}
               {a && a.estado === "falhou" && (
-                <p className="text-[10.5px] leading-snug text-destructive [overflow-wrap:anywhere]" role="alert">
+                <p className="text-[11px] leading-snug text-destructive [overflow-wrap:anywhere]" role="alert">
                   {a.erro}
                 </p>
               )}
@@ -1375,7 +1377,7 @@ function Detalhar({ persona, imagens }: { persona: Persona; imagens: ImagemDaPer
               }
               titulo="Detalhe em 4K"
               descricao={`${motor ? MOTOR_DO_DETALHE.rotulo : "Gerador 4K padrão da função"}: a imagem escolhida vai como primeira referência, com a âncora.`}
-              className="h-9 w-full text-[12.5px] sm:w-auto"
+              className="h-9 w-full text-[13px] sm:w-auto"
               partes={() => partesDaVista(motorId, "alta", 2)}
               executar={() => detalharImagem({ clientId, modeloId: persona.id, imagemId: fonte.id, motorId })}
               aoConcluir={(data) => {
@@ -1461,9 +1463,9 @@ function PersonaLateral({ persona }: { persona: Persona }) {
         <div className="mt-2.5 min-w-0">
           <div className="flex min-w-0 flex-wrap items-center">
             <p className={juntar(texto.tituloSecao, "mr-2 min-w-0 truncate")}>{persona.nome}</p>
-            <span className={`mr-1.5 rounded-full px-1.5 py-px text-[10.5px] font-medium ${status.cor}`}>{status.rotulo}</span>
+            <span className={`mr-1.5 rounded-full px-1.5 py-px text-[11px] font-medium ${status.cor}`}>{status.rotulo}</span>
           </div>
-          <span className="mt-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[10.5px] font-semibold text-primary" data-selo="gerada">
+          <span className="mt-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[11px] font-semibold text-primary" data-selo="gerada">
             <Sparkles className="mr-0.5 h-2.5 w-2.5" /> pessoa sintética
           </span>
           <dl className="mt-2 space-y-0.5 text-[12px] leading-snug">
@@ -1493,7 +1495,7 @@ function PersonaLateral({ persona }: { persona: Persona }) {
             {resumo.ancora && (
               <button
                 type="button"
-                className={juntar(botao.discreto, "h-7 px-2 text-[11.5px]")}
+                className={juntar(botao.discreto, "h-7 px-2 text-[12px]")}
                 onClick={() => {
                   pedirAoCanvas(clientId, persona.id);
                   irPara("canvas");
@@ -1503,7 +1505,7 @@ function PersonaLateral({ persona }: { persona: Persona }) {
               </button>
             )}
             {podeArquivar && (
-              <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[11.5px]")} disabled={arquivando} onClick={() => void alternarArquivo()}>
+              <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} disabled={arquivando} onClick={() => void alternarArquivo()}>
                 {arquivando ? (
                   <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                 ) : arquivada ? (

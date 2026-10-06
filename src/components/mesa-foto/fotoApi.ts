@@ -1163,6 +1163,7 @@ export function invalidarFotos(queryClient: QueryClient, clientId: string) {
   invalidarAcervo(queryClient, clientId);
   // "Fotos da Mesa Foto" no Estúdio (EstudioFotos, chaveDaMesaFoto): a foto aprovada agora aparece já.
   void queryClient.invalidateQueries({ queryKey: ["mesa", "acervo-mesa-foto", clientId] });
+  void queryClient.invalidateQueries({ queryKey: chaveDosKits(clientId) });
 }
 
 /** Põe fotos novas no topo do acervo em cache (antes da releitura chegar). */
@@ -1295,12 +1296,13 @@ export function faltaAutorizacao(kit: Pick<KitDeFoto, "tipo" | "autorizacao">): 
   return kit.tipo === "pessoa" && !(kit.autorizacao && kit.autorizacao.confirmada);
 }
 
-export async function salvarKit(clientId: string, kit: KitDeFoto): Promise<KitDeFoto> {
+export async function salvarKit(clientId: string, kit: KitDeFoto, marcarComoProduto = false): Promise<KitDeFoto> {
   const data = await chamarFuncao<any>("mesa-foto", {
     acao: "kit_salvar",
     client_id: clientId,
     kit: corpoDoKit(kit),
     refs: refsParaSalvar(kit.refs),
+    ...(marcarComoProduto ? { marcar_como_produto: true } : {}),
   });
   const salvo = normalizarKit(data && data.kit, data && Array.isArray(data.refs) ? data.refs : kit.refs);
   return salvo || kit;
