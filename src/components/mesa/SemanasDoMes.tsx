@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
+import { ESTILOS_DE_VIDEO_DA_PAUTA } from "../../../supabase/functions/_shared/video-da-pauta";
 import { Link, useLocation } from "react-router-dom";
-import { Camera, Check, ChevronDown, ExternalLink, GalleryHorizontal, Loader2, Pencil, RefreshCw, Square, X } from "lucide-react";
+import { Camera, Film, Check, ChevronDown, ExternalLink, GalleryHorizontal, Loader2, Pencil, RefreshCw, Square, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { juntar, lista as estiloDeLista } from "@/components/sistema/estilos";
@@ -19,13 +20,13 @@ import { contagem, juntarComE, segundaDaSemana, semanaIso } from "../../../supab
  * e a direção da foto) abre na própria linha. Sem caixa dentro de caixa.
  */
 
-export type FormatoDaLinha = "foto" | "carrossel" | "estatico";
+export type FormatoDaLinha = "foto" | "carrossel" | "estatico" | "video";
 
-const FORMATOS: FormatoDaLinha[] = ["foto", "carrossel", "estatico"];
+const FORMATOS: FormatoDaLinha[] = ["foto", "carrossel", "estatico", "video"];
 
-const ICONE: Record<FormatoDaLinha, typeof Camera> = { foto: Camera, carrossel: GalleryHorizontal, estatico: Square };
+const ICONE: Record<FormatoDaLinha, typeof Camera> = { foto: Camera, carrossel: GalleryHorizontal, estatico: Square, video: Film };
 
-const formatoDaLinha = (f?: string | null): FormatoDaLinha => (f === "foto" || f === "estatico" ? f : "carrossel");
+const formatoDaLinha = (f?: string | null): FormatoDaLinha => (f === "video" || f === "foto" || f === "estatico" ? f : "carrossel");
 
 export interface SemanaDoMes<T> {
   semana: string;
@@ -44,7 +45,7 @@ export function semanasDosItens<T extends { data?: string | null; formato?: stri
     const chave = valida ? semanaIso(data) : "sem-data";
     let s = mapa.get(chave);
     if (!s) {
-      s = { semana: chave, inicio: valida ? segundaDaSemana(data) : "", itens: [], formatos: { foto: 0, carrossel: 0, estatico: 0 } };
+      s = { semana: chave, inicio: valida ? segundaDaSemana(data) : "", itens: [], formatos: { foto: 0, carrossel: 0, estatico: 0, video: 0 } };
       mapa.set(chave, s);
     }
     s.itens.push(i);
@@ -55,7 +56,7 @@ export function semanasDosItens<T extends { data?: string | null; formato?: stri
 
 /** "3 posts · 2 fotos e 1 carrossel". */
 export function resumoDaMistura(formatos: Record<FormatoDaLinha, number>): string {
-  const total = formatos.foto + formatos.carrossel + formatos.estatico;
+  const total = formatos.foto + formatos.carrossel + formatos.estatico + (formatos.video || 0);
   const partes = FORMATOS.filter((f) => formatos[f] > 0).map((f) => contagem(formatos[f], f));
   return `${total} ${total === 1 ? "post" : "posts"}${partes.length ? ` · ${juntarComE(partes)}` : ""}`;
 }
@@ -104,6 +105,7 @@ export function DetalheDoConteudo({ item }: { item: ItemProposto }) {
   const foto = item.formato === "foto" ? normalizarDirecaoDeFoto(item.foto, { tema: item.tema }) : null;
   return (
     <div className="min-w-0 space-y-2 pb-3 pl-2 pr-2 sm:pl-[92px]">
+      {item.formato === "video" && item.video && <section aria-label="Direção do vídeo" className="space-y-2 text-[12px]"><p className="font-semibold">{ESTILOS_DE_VIDEO_DA_PAUTA.find((e) => e.id === item.video?.estilo)?.nome || "Vídeo rápido"} · {item.video.formato}</p><p>{item.video.prompt}</p>{item.video.narracao && <p>Narração: {item.video.narracao}</p>}</section>}
       {foto && (
         <ul className="min-w-0 text-[12px] leading-relaxed" aria-label="Direção da foto" data-direcao-da-foto="">
           {linhasDaDirecaoDeFoto(foto).map((l) => (
@@ -165,7 +167,7 @@ function LinhaDoConteudo({
   const podeEditar = editavel && !item.task_id && !!item.tema_id && !!acoes.onEditar;
   const volta = `${local.pathname}${local.search}`;
   // Só com a peça guardada (proposta ou tarefa): o cartão do agente antes de criar não tem para onde levar.
-  const linkDaFoto = f === "foto" && (propostaId || item.task_id) ? linkDaPecaNaMesaFoto(clientId, { propostaId: propostaId || null, indice: indice >= 0 ? indice : null, taskId: item.task_id || null, volta }) : null;
+  const linkDaFoto = item.task_id && (f === "foto" || f === "video") ? `/mesa?client=${encodeURIComponent(clientId)}&aba=estudio&task=${encodeURIComponent(item.task_id)}` : f === "foto" && (propostaId || item.task_id) ? linkDaPecaNaMesaFoto(clientId, { propostaId: propostaId || null, indice: indice >= 0 ? indice : null, taskId: item.task_id || null, volta }) : null;
   const apagar = acoes.apagar ? acoes.apagar(item) : undefined;
 
   const editar = async (campos: CamposDoItem, qual: "formato" | "titulo") => {
@@ -254,8 +256,8 @@ function LinhaDoConteudo({
             </button>
           )}
           {linkDaFoto ? (
-            <Link to={linkDaFoto} className="inline-flex items-center rounded-md px-1.5 py-1 text-[11.5px] font-medium text-primary hover:bg-muted" aria-label="Abrir na Mesa Foto">
-              Mesa Foto <ExternalLink className="ml-1 h-3 w-3" />
+            <Link to={linkDaFoto} className="inline-flex items-center rounded-md px-1.5 py-1 text-[11.5px] font-medium text-primary hover:bg-muted" aria-label={item.task_id ? "Abrir no Estúdio" : "Abrir na Mesa Foto"}>
+              {item.task_id ? "Estúdio" : "Mesa Foto"} <ExternalLink className="ml-1 h-3 w-3" />
             </Link>
           ) : item.task_id && acoes.onAbrirNoEstudio ? (
             <button

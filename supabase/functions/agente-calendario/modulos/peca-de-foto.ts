@@ -27,18 +27,20 @@
  * este arquivo.
  */
 
-export const FORMATOS_DO_MES = ["carrossel", "estatico", "foto"] as const;
+export const FORMATOS_DO_MES = ["carrossel", "estatico", "foto", "video"] as const;
 export type FormatoDoMes = (typeof FORMATOS_DO_MES)[number];
 
 export const ROTULO_DO_FORMATO_DO_MES: Record<FormatoDoMes, string> = {
   carrossel: "Carrossel",
   estatico: "Estático",
   foto: "Foto",
+  video: "Vídeo rápido",
 };
 
 /** Plural curto para a conferência ("8 fotos e 4 carrosséis"). */
 export const PLURAL_DO_FORMATO: Record<FormatoDoMes, [string, string]> = {
   foto: ["foto", "fotos"],
+  video: ["vídeo", "vídeos"],
   carrossel: ["carrossel", "carrosséis"],
   estatico: ["estático", "estáticos"],
 };
@@ -55,6 +57,7 @@ const umaLinha = (v: unknown, max: number) => String(v == null ? "" : v).replace
 export function formatoDoMes(v: unknown): FormatoDoMes | null {
   const s = semAcento(String(v == null ? "" : v).trim().toLowerCase());
   if (!s) return null;
+  if (/\bvideo\b|\bvideos\b|\breels?\b|\bshorts?\b/.test(s)) return "video";
   if (/\bfotos?\b|fotograf|\bensaios?\b|\bphotos?\b/.test(s)) return "foto";
   if (s.indexOf("carross") >= 0 || s.indexOf("carous") >= 0 || s.indexOf("carrocel") >= 0) return "carrossel";
   if (s.indexOf("estat") >= 0 || s.indexOf("static") >= 0 || s === "post" || s.indexOf("imagem") >= 0) return "estatico";

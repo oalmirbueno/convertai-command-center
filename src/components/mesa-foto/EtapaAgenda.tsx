@@ -1,3 +1,5 @@
+import { BancadaDeFotos } from "@/components/mesa/BancadaDaPauta";
+import GerarFotosDaPauta from "@/components/mesa/GerarFotosDaPauta";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -126,6 +128,7 @@ export function MontarOPost({
   post,
   taskInicial,
   destinoFixo = false,
+  estudio,
   onPronto,
   onCancelar,
 }: {
@@ -133,6 +136,7 @@ export function MontarOPost({
   post: PostDeFotos | null;
   taskInicial: string | null;
   destinoFixo?: boolean;
+  estudio?: { taskId: string; onSelecionadas: (ids: string[]) => void; titulo: string; direcao?: Record<string, unknown>; ferramentas?: React.ReactNode };
   onPronto: (trabalhoId: string, taskId: string | null) => void;
   onCancelar: () => void;
 }) {
@@ -159,6 +163,8 @@ export function MontarOPost({
     setIds(fotosIniciais.slice(0, MAX_FOTOS_NO_POST));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fotosIniciais.join(",")]);
+
+  useEffect(() => { estudio?.onSelecionadas(ids); }, [ids.join(",")]);
 
   const mover = (i: number, d: number) => {
     const j = i + d;
@@ -214,9 +220,10 @@ export function MontarOPost({
     }
   };
 
-  return (
+  const conteudo = (
     <Cartao
       titulo={post ? "Trocar as fotos do post" : "Montar o post"}
+      recolher={estudio ? false : undefined}
       dica="Foto única ou carrossel (até 10), na ordem do post. As fotos vão como estão: nada é gerado nem redesenhado. Foto gerada sai marcada e passa pela aprovação da equipe antes do cliente."
       acao={
         <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" onClick={onCancelar}>
@@ -239,12 +246,13 @@ export function MontarOPost({
           onFechar={() => setEscolhendo(false)}
         />
       )}
+      {estudio && <GerarFotosDaPauta taskId={estudio.taskId} titulo={estudio.titulo} direcao={estudio.direcao} ids={ids} onFotos={setIds} />}
       <div className="min-w-0 space-y-3" data-montar-post="">
         <div className="min-w-0">
           <p className="mb-1.5 text-[12px] text-muted-foreground">
             {ids.length === 0 ? "Escolha as fotos." : ids.length === 1 ? "Foto única." : `Carrossel com ${ids.length} fotos (a primeira é a capa).`} {ids.length}/{MAX_FOTOS_NO_POST}
           </p>
-          <ol className="flex min-w-0 flex-wrap" aria-label="Fotos do post, na ordem">
+          <ol className={estudio ? "hidden" : "flex min-w-0 flex-wrap"} aria-label="Fotos do post, na ordem">
             {fotos.map((f, i) => (
               <li key={f.id} className="mb-2 mr-2 w-24 min-w-0" data-foto-do-post={f.id}>
                 <Moldura proporcao={PROPORCAO_DO_FORMATO_DE_FOTOS[formato]} className="border border-border">
@@ -316,10 +324,11 @@ export function MontarOPost({
       </div>
     </Cartao>
   );
+  return estudio ? <BancadaDeFotos titulo={estudio.titulo} fotos={fotos.map((f) => ({ id: f.id, nome: f.nome, caminho: f.storage_path, bucket: f.storage_bucket }))} onEscolher={() => setEscolhendo(true)} onMover={mover} onRemover={(id) => setIds(ids.filter((x) => x !== id))}>{estudio.ferramentas}{conteudo}</BancadaDeFotos> : conteudo;
 }
 
 /** O post aberto: fotos, legenda, data e envio, em 4 passos. */
-export function PostAberto({ post, onTrocarFotos }: { post: PostDeFotos; onTrocarFotos: () => void }) {
+export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos; onTrocarFotos: () => void; estudio?: { ferramentas?: React.ReactNode } }) {
   const { clientId, catalogo, podeRecarregar, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
@@ -407,10 +416,10 @@ export function PostAberto({ post, onTrocarFotos }: { post: PostDeFotos; onTroca
     }
   };
 
-  return (
+  const conteudo = (
     <Cartao
       titulo={<span className="block truncate">{post.item ? post.item.title : "Post de fotos"}</span>}
-      recolher={`mesa-foto:agenda:post:${post.id}`}
+      recolher={estudio ? false : `mesa-foto:agenda:post:${post.id}`}
       resumo={estado.rotulo}
       acao={<span className={`rounded-full px-2 py-0.5 text-[11px] ${TOM_DO_ESTADO[estado.tom]}`}>{estado.rotulo}</span>}
     >
@@ -425,7 +434,7 @@ export function PostAberto({ post, onTrocarFotos }: { post: PostDeFotos; onTroca
         )}
 
         {/* 1. Fotos */}
-        <section className="min-w-0" aria-label="1. Fotos">
+        <section className={estudio ? "hidden" : "min-w-0"} aria-label="1. Fotos">
           <div className="mb-1.5 flex min-w-0 items-center">
             <p className="flex-1 text-[12px] font-semibold">1. Fotos</p>
             {trocaFotos && (
@@ -596,6 +605,7 @@ export function PostAberto({ post, onTrocarFotos }: { post: PostDeFotos; onTroca
       />
     </Cartao>
   );
+  return estudio ? <BancadaDeFotos titulo={post.item?.title || "Fotos da pauta"} fotos={post.cards.map((c) => ({ id: c.imagem_id || c.storage_path, nome: `Foto ${c.ordem}`, caminho: c.storage_path }))} onEscolher={trocaFotos ? onTrocarFotos : undefined} onEditar={trocaFotos ? (id) => abrirNoEstudio?.(id) : undefined}>{estudio.ferramentas}{conteudo}</BancadaDeFotos> : conteudo;
 }
 
 export default function EtapaAgenda() {

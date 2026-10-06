@@ -18,7 +18,7 @@ export type ItemComMesa = {
   instrucao_arte?: string;
   task_id?: string | null;
   cards?: Array<{ texto?: string; ilustracao?: string }>;
-  mesa?: MesaDoItem | null;
+  mesa?: MesaDoItem | "video" | null;
 };
 
 /** O que o planejador lê do perfil (só quando não é "artes": o padrão fica como sempre foi). */

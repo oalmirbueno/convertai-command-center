@@ -1,5 +1,6 @@
+import { modoDaPauta } from "./modoDaPauta";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, Check, ChevronDown, Copy, ImageOff, ListChecks, Loader2, PanelTopClose, PanelTopOpen, Send, Star } from "lucide-react";
+import { Archive, Camera, Film, Check, ChevronDown, Copy, ImageOff, ListChecks, Loader2, PanelTopClose, PanelTopOpen, Send, Star } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DropdownMenu,
@@ -45,7 +46,7 @@ export function SeloDoItem({ tom, children, className = "" }: { tom: TomDoSelo; 
   );
 }
 
-export const formatoDoItem = (i: ItemDoMes) => TASK_DELIVERY_TYPE_LABELS[i.delivery_type as TaskDeliveryType] || i.delivery_type;
+export const formatoDoItem = (i: ItemDoMes) => modoDaPauta(i) === "fotos" ? "Fotos" : TASK_DELIVERY_TYPE_LABELS[i.delivery_type as TaskDeliveryType] || i.delivery_type;
 
 export const DICA_DO_ROTEIRO = "Roteiro do estrategista: a direção sai dele, sem custo de IA";
 
@@ -213,6 +214,7 @@ function CartaoDoItem({
       aria-current={ativo ? "true" : undefined}
       aria-pressed={selecionando ? marcado : undefined}
       title={item.title}
+      data-formato={modoDaPauta(item, t)}
       data-item-id={item.id}
       style={{ width: LARGURA_DO_CARTAO }}
       className={`flex min-w-0 items-center rounded-lg border px-1.5 py-1 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
@@ -228,7 +230,7 @@ function CartaoDoItem({
           {marcado && <Check className="h-3 w-3" />}
         </span>
       )}
-      {capaDoEstudio ? (
+      {modoDaPauta(item, t) === "video" ? <span className="flex shrink-0 items-center justify-center rounded bg-primary/10 text-primary" style={capa}><Film className="h-4 w-4" aria-label="Vídeo rápido" /></span> : capaDoEstudio ? (
         <span className="block shrink-0 overflow-hidden rounded" style={capa}>
           <ImagemDaMesa caminho={capaDoEstudio.storage_path} alt="" className="h-full w-full" />
         </span>
@@ -238,13 +240,13 @@ function CartaoDoItem({
         </span>
       ) : (
         <span className="flex shrink-0 items-center justify-center rounded border border-dashed border-border bg-secondary text-muted-foreground" style={capa}>
-          <ImageOff className="h-3 w-3" />
+          {modoDaPauta(item, t) === "fotos" ? <Camera className="h-4 w-4 text-primary" aria-label="Fotos" /> : <ImageOff className="h-3 w-3" />}
         </span>
       )}
       <span className="ml-2 min-w-0 flex-1">
         <span className="block truncate text-[12px] font-medium leading-4 text-foreground">{item.title}</span>
         <span className="mt-0.5 flex min-w-0 items-center text-[10.5px] leading-4 text-muted-foreground">
-          <span className="min-w-0 truncate">{dataCurta(item.due_date)} · {formatoDoItem(item)}</span>
+          <span className="min-w-0 truncate">{dataCurta(item.due_date)} · {modoDaPauta(item, t) === "fotos" ? "Fotos" : formatoDoItem(item)}</span>
           {roteiro && (
             <span title={DICA_DO_ROTEIRO} className="ml-1 shrink-0">
               <Star className="h-3 w-3 fill-warning text-warning" aria-label={DICA_DO_ROTEIRO} />

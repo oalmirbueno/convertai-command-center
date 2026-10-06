@@ -1,3 +1,4 @@
+import type { DirecaoDeVideoDaPauta } from "../../../supabase/functions/_shared/video-da-pauta";
 import { useEffect, useState } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -61,7 +62,8 @@ export interface ItemProposto {
   avisos_de_texto?: string[];
   /** 02/10: peça de foto (formato "foto"): a direção para a Mesa Foto e a mesa que faz o item. */
   foto?: DirecaoDeFoto | null;
-  mesa?: "foto" | "arte" | null;
+  video?: DirecaoDeVideoDaPauta | null;
+  mesa?: "foto" | "arte" | "video" | null;
   titulo?: string;
 }
 
@@ -419,7 +421,7 @@ export interface CorpoDoPedido {
   campanhaId?: string | null;
   dataInicio?: string;
   /** 02/10: as linhas do lote do "Criar conteúdos" (data, formato e direção da foto valem exatamente). */
-  pecas?: Array<{ data: string; formato: string; tema: string; foto?: DirecaoDeFoto | null }>;
+  pecas?: Array<{ data: string; formato: string; tema: string; foto?: DirecaoDeFoto | null; video?: DirecaoDeVideoDaPauta | null }>;
   /**
    * Mensagem digitada pela equipe no modo Criar: o servidor pergunta ao Jev se
    * ela muda o que já está na agenda e, se mudar, responde pelo agente que
@@ -458,7 +460,7 @@ export const gravarSelecionados = (propostaId: string, temaIds: string[], projec
 /** Campos que a equipe muda à mão num conteúdo da proposta (sem IA). */
 export interface CamposDoItem {
   data?: string;
-  formato?: "carrossel" | "estatico" | "foto";
+  formato?: "carrossel" | "estatico" | "foto" | "video";
   /** Direção da peça de foto (contrato da Mesa Foto); só os campos mudados. */
   foto?: Partial<DirecaoDeFoto>;
   tema?: string;
@@ -652,7 +654,7 @@ export const laminasDoItem = (item: ItemProposto) => {
   return item.formato === "estatico" ? 1 : 0;
 };
 
-export const rotuloDoFormato = (f?: string) => (f === "estatico" ? "Estático" : f === "carrossel" ? "Carrossel" : f === "foto" ? "Foto" : f || "Formato livre");
+export const rotuloDoFormato = (f?: string) => (f === "estatico" ? "Estático" : f === "carrossel" ? "Carrossel" : f === "video" ? "Vídeo rápido" : f === "foto" ? "Foto" : f || "Formato livre");
 
 // ------------------------------------------------------------------ tela
 

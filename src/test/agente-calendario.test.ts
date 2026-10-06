@@ -120,11 +120,11 @@ describe("agente-calendario: detalhar e conversar", () => {
   });
 
   it("formato carrossel, estatico ou foto (02/10: peça de foto da Mesa Foto), e estatico tem um card", () => {
-    expect(fonte).toContain('export const FORMATOS = ["carrossel", "estatico", "foto"] as const;');
+    expect(fonte).toContain('export const FORMATOS = ["carrossel", "estatico", "foto", "video"] as const;');
     expect(fonte).toContain('formato: S("string", { enum: [...FORMATOS] })');
     expect(fonte).toContain('if (formato === "estatico") cards = cards.slice(0, 1);');
     // A lista de entregas do MCP não tem "foto": a peça de foto entra como carrossel (ou post único com 1 foto).
-    expect(fonte).toContain('const FORMATO_PARA_ENTREGA: Record<Formato, "carousel" | "static"> = { carrossel: "carousel", estatico: "static", foto: "carousel" };');
+    expect(fonte).toContain('const FORMATO_PARA_ENTREGA: Record<Formato, "carousel" | "static" | "video"> = { carrossel: "carousel", estatico: "static", foto: "carousel", video: "video" };');
     expect(fonte).toContain("format: entregaDoItem(item),");
   });
 

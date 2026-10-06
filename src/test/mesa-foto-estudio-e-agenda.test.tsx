@@ -348,8 +348,8 @@ describe("formato do perfil no plano do mês", () => {
   it("o agente do Mês marca a mesa ao gravar, reserva o post de fotos e não dá direção de arte ao item de fotos", () => {
     const f = ler("supabase/functions/agente-calendario/index.ts");
     const gravar = f.slice(f.indexOf("async function gravarItens("), f.indexOf("async function registrarMemoriaDaEscolha("));
-    expect(gravar).toContain("await marcarMesasDoPlano(servico, p.client_id, itensComTarefa,");
-    expect(gravar).toContain('criarDirecoesDoRoteiro(servico, p.client_id, itensComTarefa.filter((i) => i.mesa !== "foto"), chamador.userId)');
+    expect(gravar).toContain('await marcarMesasDoPlano(servico, p.client_id, itensComTarefa.filter((i) => i.formato !== "video"),');
+    expect(gravar).toContain('criarDirecoesDoRoteiro(servico, p.client_id, itensComTarefa.filter((i) => i.mesa !== "foto" && i.formato !== "video"), chamador.userId)');
     expect(gravar).toContain("await reservarPostsDoPlano(servico, p.client_id, itensComTarefa, chamador.userId)");
     expect(gravar.indexOf("marcarMesasDoPlano")).toBeLessThan(gravar.indexOf("salvarProposta(servico, p,"));
     // O Jev do "alternar" mora fora do index (as contagens do index ficam as mesmas).

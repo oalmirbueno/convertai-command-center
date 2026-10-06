@@ -1,3 +1,4 @@
+import { normalizarVideoDaPauta, type DirecaoDeVideoDaPauta } from "../_shared/video-da-pauta.ts";
 /**
  * Agente do Mês v2 (dono, 26/09): "entender e aplicar o que eu mandar; dá pra
  * enviar zip e ele lê, e arquivos; mais de 1 milhão de tokens e o Sol 6 alto;
@@ -212,7 +213,7 @@ export function resumoDosArquivos(lidos: ArquivoLido[], naoLidos: ArquivoNaoLido
 
 // ------------------------------------------------------------------ criar conteúdos (colagem estruturada)
 
-export const FORMATOS_DA_CRIACAO = ["carrossel", "estatico", "foto"] as const;
+export const FORMATOS_DA_CRIACAO = ["carrossel", "estatico", "foto", "video"] as const;
 export type FormatoDaCriacao = typeof FORMATOS_DA_CRIACAO[number];
 export const MAX_ITENS_DA_CRIACAO = 180;
 /** Uma geração do pedido livre por lote (igual ao refazer). */
@@ -228,6 +229,7 @@ export type ItemParaCriar = {
   referencia: string;
   /** Peça de foto (formato "foto"): a direção para a Mesa Foto (contrato em modulos/peca-de-foto.ts). */
   foto?: DirecaoDeFoto | null;
+  video?: DirecaoDeVideoDaPauta | null;
 };
 
 export type CriacaoDeConteudos = {
@@ -283,6 +285,7 @@ export function normalizarCriacao(bruto: unknown, hoje: string): CriacaoDeConteu
     }
     const f = formatoDaCriacao(m.formato);
     const item: ItemParaCriar = { data, formato: f.formato, formato_pedido: f.pedido, tema, referencia: String(m.referencia ?? "").trim().slice(0, 1500) };
+    if (f.formato === "video") item.video = normalizarVideoDaPauta(m.video);
     if (f.formato === "foto") item.foto = normalizarDirecaoDeFoto(m.foto, { tema });
     itens.push(item);
   }
@@ -310,9 +313,9 @@ export function lotesDaCriacao<T>(itens: T[], tamanho = LOTE_DA_CRIACAO): T[][] 
  * livre estica a janela até a última data citada), o formato, o tema e a
  * referência do material. Espelho em src/components/mesa/planoDoMes.ts.
  */
-export function pedidoParaCriar(itens: Array<Pick<ItemParaCriar, "data" | "formato" | "tema" | "referencia" | "foto">>, orientacao?: string | null): string {
+export function pedidoParaCriar(itens: Array<Pick<ItemParaCriar, "data" | "formato" | "tema" | "referencia" | "foto" | "video">>, orientacao?: string | null): string {
   const linhas = itens.map((i) => {
-    const ref = String(i.referencia || "").replace(/\s+/g, " ").trim();
+    const ref = String((i.referencia || "") + (i.video ? ` Direção do vídeo: ${JSON.stringify(i.video)}` : "")).replace(/\s+/g, " ").trim();
     const foto = i.formato === "foto" && i.foto ? `\n  Direção da foto: ${resumoDaDirecaoDeFoto(i.foto)}` : "";
     return `- ${i.data} · ${ROTULO_DA_LINHA[i.formato] || "carrossel"} · ${String(i.tema || "").replace(/\s+/g, " ").trim()}${ref ? `\n  Referência do material: ${ref}` : ""}${foto}`;
   });
@@ -322,7 +325,7 @@ export function pedidoParaCriar(itens: Array<Pick<ItemParaCriar, "data" | "forma
 }
 
 /** Como o formato aparece na linha do pedido (foto: peça de foto da Mesa Foto). */
-const ROTULO_DA_LINHA: Record<string, string> = { carrossel: "carrossel", estatico: "estático", foto: "foto" };
+const ROTULO_DA_LINHA: Record<string, string> = { carrossel: "carrossel", estatico: "estático", foto: "foto", video: "vídeo rápido" };
 
 // ------------------------------------------------------------------ público do prompt (Jev)
 

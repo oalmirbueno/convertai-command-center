@@ -1,4 +1,6 @@
-import { lazy, Suspense, useState } from "react";
+import type { DirecaoDeVideoDaPauta } from "../../../supabase/functions/_shared/video-da-pauta";
+import { AcoesDaBancada } from "@/components/mesa/BancadaDaPauta";
+import { useEffect, useRef, lazy, Suspense, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useFotos } from "@/components/mesa-foto/fotoApi";
 import { subirQuadro } from "@/lib/mesa-videos/quadros";
@@ -47,7 +49,7 @@ interface Rascunho {
 
 const INICIAL: Rascunho = { nivel: "normal", motor: "", prompt: "", negativo: "", duracao: 5, formato: "9:16", resolucao: "", audio: false, variacoes: 1, inicial: null, final: null, referencias: [], camera: "" };
 
-export default function GeradorLivre({ escopo, pauta, promptInicial = "", aoGerar }: { escopo?: string; pauta?: { id: string; title: string }; promptInicial?: string; aoGerar?: (id: string) => void } = {}) {
+export default function GeradorLivre({ escopo, pauta, direcaoInicial, promptInicial = "", aoGerar }: { escopo?: string; pauta?: { id: string; title: string }; direcaoInicial?: DirecaoDeVideoDaPauta; promptInicial?: string; aoGerar?: (id: string) => void } = {}) {
   const { clientId, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
   const motores = useMotoresDaMesa();
@@ -56,8 +58,18 @@ export default function GeradorLivre({ escopo, pauta, promptInicial = "", aoGera
   const [copiando, setCopiando] = useState(false);
   const [diretorAberto, setDiretorAberto] = useState(false);
   const [destinoDoDiretor, setDestinoDoDiretor] = useState<"inicial" | "final" | "referencia">("inicial");
-  const [r, setR] = useEstadoDaTela<Rascunho>(escopo || `mesa-videos:livre:${clientId}`, { ...INICIAL, prompt: promptInicial }, { validar: (v) => !!v && typeof v === "object", esperaMs: 300 });
+  const [r, setR] = useEstadoDaTela<Rascunho>(escopo || `mesa-videos:livre:${clientId}`, { ...INICIAL, prompt: promptInicial, ...(direcaoInicial ? { narracao: direcaoInicial.narracao, audio: !!direcaoInicial.narracao, formato: direcaoInicial.formato } : {}) }, { validar: (v) => !!v && typeof v === "object", esperaMs: 300 });
   const mudar = (m: Partial<Rascunho>) => setR((x) => ({ ...x, ...m }));
+  const fotosDaDirecao = (direcaoInicial?.referencias || []).map((id) => fotosQ.data?.find((f) => f.client_id === clientId && f.ativa && !f.referencia_web && (f.id === id || f.workspace_node_id === id || f.storage_path === id))).filter((f) => f && (f.storage_bucket || "mesa") === "mesa" && f.storage_path.startsWith(`${clientId}/`));
+  const preCarregou = useRef(false);
+  useEffect(() => {
+    if (!fotosQ.data || preCarregou.current) return;
+    if (r.inicial || r.final || r.referencias.length) { preCarregou.current = true; return; }
+    if (fotosDaDirecao[0]) {
+      preCarregou.current = true;
+      mudar({ inicial: fotosDaDirecao[0].storage_path, ...(fotosDaDirecao[1] ? { final: fotosDaDirecao[1].storage_path } : {}) });
+    }
+  }, [fotosQ.data, direcaoInicial, r.inicial, r.final, r.referencias.length]);
   const modo = r.inicial && r.final ? "primeiro_ultimo" : r.inicial ? "primeiro_quadro" : r.referencias.length ? "referencia" : "texto";
   const requisito = { modo, formato: r.formato, referencias: r.referencias.length || undefined } as const;
   const motor = motorPorId(r.motor, motores.motores) || motorDoNivel(r.nivel, requisito, motores.motores);
@@ -133,7 +145,7 @@ export default function GeradorLivre({ escopo, pauta, promptInicial = "", aoGera
       {pauta && <div className="rounded-lg border p-3"><button type="button" className="text-[12px] text-primary" aria-expanded={diretorAberto} onClick={() => setDiretorAberto(!diretorAberto)}>Pedir ao diretor para buscar fotos numa pasta</button>{diretorAberto && <><label className="my-2 block text-[12px]">Usar a foto encontrada como<select className={campo} value={destinoDoDiretor} onChange={(e) => setDestinoDoDiretor(e.target.value as typeof destinoDoDiretor)}><option value="inicial">Quadro inicial</option><option value="final">Quadro final</option><option value="referencia">Referência</option></select></label><p className="text-[12px] text-muted-foreground">Diga a pasta. Confira a primeira foto encontrada no campo escolhido antes de gerar.</p><Suspense fallback={<p role="status">Abrindo diretor…</p>}><DiretorDeFotos escopo={`${pauta.id}:video:${escopo || "livre"}`} pautaId={pauta.id} aoSelecionarFotos={(ids) => usarFotos(ids, destinoDoDiretor)} /></Suspense></>}</div>}
       {copiando && <p role="status">Preparando a foto real para o vídeo…</p>}
       <SeletorDeMotor lista={motores.lista} requisito={requisito} valor={motor ? motor.id : ""} nivel={r.nivel} onNivel={(n) => mudar({ nivel: n, motor: "" })} onEscolher={(id) => mudar({ motor: id })} />
-      <GrupoDeCampos colunas={3}>
+      <GrupoDeCampos colunas={pauta ? 1 : 3}>
         <EscolherImagem rotulo="Quadro inicial" opcional valor={r.inicial} onEscolher={(c) => mudar({ inicial: c })} />
         {(!motor || motor.cap.ultimo_quadro) && <EscolherImagem rotulo="Último quadro" opcional valor={r.final} onEscolher={(c) => mudar({ final: c })} />}
         {motor && motor.cap.referencias > 0 && (
@@ -215,7 +227,7 @@ export default function GeradorLivre({ escopo, pauta, promptInicial = "", aoGera
         </CampoDeFormulario>
       </GrupoDeCampos>
       {motor?.cap.audio && r.audio && <CampoDeFormulario rotulo="Narração (opcional)"><textarea aria-label="Texto da narração" className={campoTexto} rows={2} maxLength={600} value={r.narracao || ""} onChange={(e) => mudar({ narracao: e.target.value })} placeholder="Texto curto para o motor narrar neste vídeo" /><p className="text-[12px] text-muted-foreground">Confira a fala no resultado antes de enviar.</p></CampoDeFormulario>}
-      <BotaoDeGerar custo={custo} motivo={motivo} onConfirmar={gerar} icone={<Plus className="mr-1.5 h-3.5 w-3.5" />} extra={`${motor ? motor.rotulo : ""}, ${duracao} s, ${r.variacoes} ${r.variacoes === 1 ? "variação" : "variações"}`} />
+      <AcoesDaBancada><BotaoDeGerar custo={custo} motivo={motivo} onConfirmar={gerar} icone={<Plus className="mr-1.5 h-3.5 w-3.5" />} extra={`${motor ? motor.rotulo : ""}, ${duracao} s, ${r.variacoes} ${r.variacoes === 1 ? "variação" : "variações"}`} /></AcoesDaBancada>
     </div>
   );
 }

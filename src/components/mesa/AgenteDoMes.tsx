@@ -613,7 +613,7 @@ export function CartaoDaCriacao({ mensagemId, criacao }: { mensagemId: string; c
       <SemanasDoMes
         className="mt-2"
         clientId={clientId}
-        itens={visiveis.map((i, k) => ({ tema_id: `c${k}`, data: i.data, formato: i.formato, tema: i.tema, resumo: i.referencia, foto: i.foto ?? null }))}
+        itens={visiveis.map((i, k) => ({ tema_id: `c${k}`, data: i.data, formato: i.formato, tema: i.tema, resumo: i.referencia, foto: i.foto ?? null, video: i.video ?? null }))}
         esperadoPorSemana={criacao.conferencia && criacao.conferencia.cadencia ? criacao.conferencia.cadencia.por_semana : null}
       />
       {criacao.itens.length > 12 && (

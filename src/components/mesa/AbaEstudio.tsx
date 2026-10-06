@@ -2591,7 +2591,7 @@ export default function AbaEstudio({
 
   const detalhe = selecionado ? (
     <Suspense fallback={<p role="status">Abrindo o estúdio…</p>}>
-    <EstudioDaPauta key={selecionado.id} item={selecionado} trabalho={trabalhoDe(selecionado)} foco={focoLigado} onFoco={setFoco}>
+    <EstudioDaPauta key={selecionado.id} item={selecionado} trabalho={trabalhoDe(selecionado)} roteiro={roteiroDe(selecionado)} arte={arteDe(selecionado)} foco={focoLigado} onFoco={setFoco}>
     <DetalheDoItem
       key={selecionado.id}
       item={selecionado}
