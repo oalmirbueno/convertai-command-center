@@ -565,6 +565,7 @@ describe("aba Modelos", () => {
     mock.tabelas.foto_modelo_imagens = [imagemBruta(ANCORA, { papel: "ancora", motor_id: GPT })];
     respostas.modelo_vista_gerar = (b: any) => ({ imagem: imagemBruta(`vista-${b.vista}`, { papel: "vista", vista: b.vista, motor_id: GPT }), custo_usd: 0.1 });
     montar(h(EtapaModelos));
+    fireEvent.click(await screen.findByRole("button", { name: "Vistas do modelo" }));
     const gerarFolha = await screen.findByRole("button", { name: /Gerar a folha/ });
     fireEvent.click(gerarFolha);
     await waitFor(() => expect(chamadasDe("modelo_vista_gerar")).toHaveLength(6));
@@ -581,6 +582,7 @@ describe("aba Modelos", () => {
       (mock.tabelas.foto_modelo_imagens as any[]).push({ ...imagem, derivada_de: ANCORA });
       return { origem: "modelo", imagem, url: "https://arquivo.test/d.png", antes: { imagem_id: ANCORA, url: "https://arquivo.test/a.png" }, depois: { imagem_id: "detalhe-1", url: "https://arquivo.test/d.png" }, custo_usd: 0.24 };
     };
+    fireEvent.click(screen.getByRole("button", { name: "Detalhes em 4K" }));
     const detalhar = screen.getByRole("button", { name: /Detalhar em 4K/ });
     fireEvent.click(detalhar);
     // Sem estimativa local (gerador escolhido pela função), o botão pede o segundo clique.
@@ -1226,5 +1228,26 @@ describe("contrato tela x função: nomes de ação e de campo", () => {
     expect(doCanvas.pontos[0]).toEqual({ criterio: "cor e acabamento do produto", ok: false, nota: "mais escura" });
     expect(doCanvas.observado[0]).toBe("produto fiel");
     expect(doCanvas.notas).toEqual([{ criterio: "divergencia critica", valor: 0.2 }, { criterio: "realismo pele", valor: 0.5 }]);
+  });
+});
+
+
+describe("Pasta do modelo e variação da foto escolhida", () => {
+  it("usa a imagem escolhida como referência e confirma a derivada no acervo", async () => {
+    mock.tabelas.foto_modelos = [{ ...PERSONA_BRUTA, status: "ancora", ancora_imagem_id: ANCORA, motor_preferido_id: GPT }];
+    mock.tabelas.foto_modelo_imagens = [imagemBruta(ANCORA, { papel: "ancora", motor_id: GPT })];
+    const base = { id: F1, client_id: CLIENTE, nome: "Modelo base", storage_bucket: "mesa", storage_path: "modelo/base.png", ativa: true, tags: [`persona:${P1}`, `persona_imagem:${ANCORA}`] };
+    respostas.modelo_imagem_para_acervo = { imagem: base };
+    respostas.preparar = { imagem: { ...base, id: "variacao-confirmada", derivada_de: F1, nome: "Nova iluminação", storage_path: "modelo/variacao.png" } };
+    montar(h(EtapaModelos));
+    const pasta = await screen.findByRole("region", { name: "Pasta de Marina" });
+    expect(pasta).toBeTruthy();
+    fireEvent.change(screen.getByRole("textbox", { name: "Variação do modelo" }), { target: { value: "Luz suave de janela e fundo claro" } });
+    fireEvent.click(screen.getByRole("button", { name: /Gerar variação desta foto/ }));
+    await waitFor(() => expect(chamadasDe("preparar")).toHaveLength(1));
+    expect(chamadasDe("modelo_imagem_para_acervo")[0]).toMatchObject({ client_id: CLIENTE, modelo_id: P1, imagem_id: ANCORA });
+    expect(chamadasDe("preparar")[0]).toMatchObject({ imagem_id: F1, modo: "cenario", cenario: "Luz suave de janela e fundo claro" });
+    expect(chamadasDe("preparar")[0].modelo_imagem_id).toBeTruthy();
+    expect(chamadasDe("modelo_ancora_escolher")).toHaveLength(0);
   });
 });

@@ -283,6 +283,7 @@ describe("aba Modelos: grade de cartões com Usar como modelo e Combinar com pro
     fireEvent.click(within(lista.querySelector(`[data-persona="${P1}"]`) as HTMLElement).getByRole("button", { name: /Combinar com produto/ }));
     expect(irPara).toHaveBeenCalledWith("campanha", { kit: KIT });
     // A primeira persona abre sozinha, com a folha como faixa de 6 espaços.
+    fireEvent.click(await screen.findByRole("button", { name: "Vistas do modelo" }));
     const faixa = await screen.findByRole("list", { name: "Vistas da folha" });
     expect(faixa.querySelectorAll("[data-vista]").length).toBe(6);
     await waitFor(() => expect(document.querySelector("[data-folha-aprovada]")?.getAttribute("data-folha-aprovada")).toBe("4"));

@@ -654,7 +654,7 @@ describe("telas da frente MF", () => {
     expect(screen.queryByText("Antes (original)")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Lado a lado" }));
     expect(await screen.findByText("Antes (original)")).toBeTruthy();
-    expect(document.querySelector("[data-versoes-da-foto]")!.textContent).toContain("Versões desta foto (2)");
+    expect(document.querySelector("[data-versoes-da-foto]")!.textContent).toContain("Versões desta foto · 2");
     const grupos = Array.from(document.querySelectorAll("[data-grupo-do-estudio]")).map((g) => g.getAttribute("data-grupo-do-estudio"));
     expect(grupos).toEqual(["usar", "melhorar", "fundo", "angulo", "formato"]);
     // Foto deitada (4:3) no post 4:5: a moldura mostra o recorte, sem véu escuro.
@@ -809,7 +809,23 @@ describe("27/09: Estúdio de fotos organizado, com rolagem própria", () => {
     const fonte = ler("src/components/mesa-foto/EtapaEstudio.tsx");
     expect(fonte).toContain('rotulo="Ferramentas do Estúdio"');
     expect(fonte).toContain("data-tira-de-versoes");
-    expect(fonte).toContain("flex-nowrap overflow-x-auto");
+    expect(ler("src/components/mesa-foto/GaleriaDeFotos.tsx")).toContain("overflow-x-auto");
     expect(fonte).toContain("data-barra-do-palco");
+  });
+});
+
+
+describe("Galeria de versões profundas", () => {
+  it("mantém a origem e todas as versões depois de mais de 16 tratamentos", () => {
+    const cadeia = Array.from({ length: 25 }, (_, i) => ({ id: `v${i}`, derivada_de: i ? `v${i - 1}` : null, ativa: true, criado_em: String(i).padStart(2, '0') })) as FotoDoAcervo[];
+    const raiz = raizDaLinhagem(cadeia, "v24");
+    expect(raiz?.id).toBe("v0");
+    expect(versoesDaLinhagem(cadeia, raiz)).toHaveLength(25);
+    expect(versoesDaLinhagem(cadeia, raiz)[1].id).toBe("v24");
+  });
+  it("interrompe uma linhagem circular sem travar a tela", () => {
+    const ciclo = [{ id: "a", derivada_de: "b" }, { id: "b", derivada_de: "a" }] as FotoDoAcervo[];
+    expect(raizDaLinhagem(ciclo, "a")?.id).toBe("a");
+    expect(versoesDaLinhagem(ciclo, { id: "outra" } as FotoDoAcervo)).toHaveLength(1);
   });
 });
