@@ -328,6 +328,20 @@ export function normalizarIdentificacao(bruto: unknown): Identificacao | null {
 
 export type Atributos = { observado: string[]; informado: string[]; inferido: string[]; identificacao?: Identificacao; organizacao?: OrganizacaoProduto };
 
+/** Mesmo contrato na gravação e na releitura: pasta e público não podem sumir. */
+export function normalizarAtributosDoKit(bruto: unknown): Atributos {
+  const at = (bruto && typeof bruto === "object" ? bruto : {}) as Record<string, unknown>;
+  const identificacao = normalizarIdentificacao(at.identificacao);
+  const organizacao = organizacaoDoProduto(at.organizacao);
+  return {
+    observado: listaDeTextos(at.observado, 30, 300),
+    informado: listaDeTextos(at.informado, 30, 300),
+    inferido: listaDeTextos(at.inferido, 30, 300),
+    ...(organizacao ? { organizacao } : {}),
+    ...(identificacao ? { identificacao } : {}),
+  };
+}
+
 export type Autorizacao = {
   confirmada: boolean;
   /** Quem autorizou (a própria pessoa ou o responsável), como a tela registra. */
@@ -562,13 +576,7 @@ export function normalizarKit(bruto: unknown): KitFoto {
     tipo,
     nome,
     variante: limpoOuNulo(r.variante, 120),
-    atributos: {
-      observado: listaDeTextos(at.observado, 30, 300),
-      informado: listaDeTextos(at.informado, 30, 300),
-      inferido: listaDeTextos(at.inferido, 30, 300),
-      ...(organizacaoDoProduto(at.organizacao) ? { organizacao: organizacaoDoProduto(at.organizacao) } : {}),
-      ...(identificacao ? { identificacao } : {}),
-    },
+    atributos: normalizarAtributosDoKit(at),
     invariantes: listaDeTextos(r.invariantes, 20, 200),
     lacunas: listaDeTextos(r.lacunas, 20, 300),
     autorizacao: tipo === "pessoa" ? lerAutorizacao(r.autorizacao) : null,

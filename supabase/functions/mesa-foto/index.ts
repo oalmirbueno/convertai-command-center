@@ -1,4 +1,5 @@
 import { limparPastaDeProdutos, normalizarPublicoProduto, PUBLICOS_DO_PRODUTO } from "./modulos/pastas-produtos.ts";
+import { normalizarAtributosDoKit } from "./calculos.ts";
 import { referenciaAprovadaMaisRecente } from "./modulos/referencia-aprovada.ts";
 import { fotosSelecionadas } from "./modulos/selecao-do-workspace.ts";
 /**
@@ -638,13 +639,7 @@ async function lerKitSemConferir(kitId: string): Promise<LinhaKit> {
   if (error) throw new ErroHttp(503, "kit_indisponivel", "Não foi possível ler o kit.");
   if (!data) throw new ErroHttp(404, "kit_inexistente", "Kit não encontrado.");
   const k = data as LinhaKit;
-  const identificacao = normalizarIdentificacao(k.atributos?.identificacao);
-  k.atributos = {
-    observado: listaDeTextos(k.atributos?.observado, 30, 300),
-    informado: listaDeTextos(k.atributos?.informado, 30, 300),
-    inferido: listaDeTextos(k.atributos?.inferido, 30, 300),
-    ...(identificacao ? { identificacao } : {}),
-  };
+  k.atributos = normalizarAtributosDoKit(k.atributos);
   k.invariantes = k.invariantes ?? [];
   k.lacunas = k.lacunas ?? [];
   return k;
