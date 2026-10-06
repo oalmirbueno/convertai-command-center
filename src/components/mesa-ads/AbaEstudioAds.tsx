@@ -560,7 +560,7 @@ export default function AbaEstudioAds({
               <button
                 type="button"
                 className={botao.icone}
-                hidden={midia === "video"}
+                style={midia === "video" ? { display: "none" } : undefined}
                 aria-label="Mais ações do Estúdio Ads"
                 aria-expanded={maisAberto}
                 title="Mais ações"
@@ -811,7 +811,7 @@ export default function AbaEstudioAds({
                   <button
                     type="button"
                     className={botao.icone}
-                    hidden={midia === "video"}
+                    style={midia === "video" ? { display: "none" } : undefined}
                     aria-label="Mais do criativo"
                     aria-expanded={maisDoCriativo}
                     title="Status, anúncio ligado e conta"
