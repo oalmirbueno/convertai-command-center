@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { limparPastaDeProdutos } from "../../supabase/functions/mesa-foto/modulos/pastas-produtos";
-import { kitParecido, mesclarKit, normalizarKit as kitDoServidor } from "../../supabase/functions/mesa-foto/calculos";
+import { kitParecido, mesclarKit, normalizarAtributosDoKit, normalizarKit as kitDoServidor } from "../../supabase/functions/mesa-foto/calculos";
 import { normalizarFoto, normalizarKit, corpoDoKit } from "@/components/mesa-foto/fotoApi";
 import { organizarFotosPorProduto, type PessoaDaPasta } from "@/components/mesa-foto/pastasDosProdutos";
 import { normalizarNo, corpoDoCanvas, canvasVazio } from "@/components/mesa-foto/canvasApi";
@@ -11,6 +11,13 @@ const foto = (id = "f1", extra = {}) => normalizarFoto({ id, client_id: CLIENTE,
 const pessoas: PessoaDaPasta[] = [{ id: "m1", client_id: CLIENTE, nome: "Lia", tipo: "modelo" }, { id: "r1", client_id: CLIENTE, nome: "Ana", tipo: "clone", identidade_real: [{ imagem_id: "retrato" }] }];
 
 describe("organização por produto e pessoa", () => {
+  it("reler o produto depois de classificar preserva pasta, público e informação da equipe", () => {
+    const original = { observado: ["armação"], informado: ["catálogo do cliente"], inferido: [], organizacao: { pasta: "Óculos", publico: { valor: "feminino", origem: "equipe", confianca: 1, evidencia: "Catálogo" } } };
+    const lido = normalizarAtributosDoKit(original);
+    expect(lido).toEqual(original);
+    expect(normalizarAtributosDoKit(lido)).toEqual(original);
+    expect(kitDoServidor(corpoDoKit(produto("p1", { atributos: original }))).atributos).toEqual(original);
+  });
   it("mantém o clone escolhido ao salvar e reler a composição", () => {
     const cloneId = "01234567-1234-4234-8234-123456789012";
     const no = normalizarNo({ id: "pessoa", tipo: "modelo", dados: { imagem_id: "retrato", autorizada: true, clone_id: cloneId } })!;
