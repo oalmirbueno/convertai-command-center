@@ -1,3 +1,4 @@
+import SugestoesDoAgente from "@/components/agentes/SugestoesDoAgente";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
@@ -654,7 +655,7 @@ export default function AgenteSenior({
                 <Sparkles className="mr-1 h-3.5 w-3.5" /> Otimizar agora
               </Button>
             </span>
-            <div className="mb-1 flex min-w-0 flex-wrap" role="group" aria-label="Atalhos para o agente sênior">
+            <SugestoesDoAgente><div className="mb-1 flex min-w-0 flex-wrap" role="group" aria-label="Atalhos para o agente sênior">
               {ATALHOS.map((a) => (
                 <button
                   key={a.rotulo}
@@ -666,7 +667,7 @@ export default function AgenteSenior({
                   {a.rotulo}
                 </button>
               ))}
-            </div>
+            </div></SugestoesDoAgente>
           </div>
           <div className="rounded-md border border-input bg-background p-2 focus-within:border-primary/60">
             <Textarea

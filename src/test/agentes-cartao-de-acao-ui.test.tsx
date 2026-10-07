@@ -96,6 +96,7 @@ describe("CartaoDeAcao", () => {
   it("a linha do que o agente pode fazer leva aos atalhos (sem prometer confirmação: há ação que é feita na hora)", () => {
     const onAtalho = vi.fn();
     render(h(OQuePossoFazer, { capacidades: ["apagar", "refazer"], atalhos: [{ rotulo: "Refazer conteúdos", texto: "Refaça os conteúdos " }], onAtalho }));
+    fireEvent.click(screen.getByRole("button", { name: "Sugestões" }));
     expect(screen.getByText(/apagar, refazer\./)).toBeTruthy();
     expect(screen.queryByText(/Confirmo com você antes/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Refazer conteúdos" }));
@@ -106,11 +107,13 @@ describe("CartaoDeAcao", () => {
     const onAtalho = vi.fn();
     const atalhos = (n: number) => Array.from({ length: n }, (_, i) => ({ rotulo: `Atalho ${i + 1}`, texto: `Pedido ${i + 1} ` }));
     const quatro = render(h(OQuePossoFazer, { capacidades: ["x"], atalhos: atalhos(4), onAtalho }));
+    fireEvent.click(screen.getByRole("button", { name: "Sugestões" }));
     expect(within(screen.getByRole("group", { name: "Atalhos de ação" })).getAllByRole("button").map((b) => b.textContent)).toEqual(["Atalho 1", "Atalho 2", "Atalho 3", "Atalho 4"]);
     expect(screen.queryByRole("button", { name: "Mais atalhos" })).toBeNull();
     quatro.unmount();
 
     render(h(OQuePossoFazer, { capacidades: ["x"], atalhos: atalhos(7), onAtalho }));
+    fireEvent.click(screen.getByRole("button", { name: "Sugestões" }));
     const grupo = screen.getByRole("group", { name: "Atalhos de ação" });
     expect(within(grupo).getAllByRole("button").length).toBe(4);
     expect(screen.queryByRole("button", { name: "Atalho 4" })).toBeNull();
@@ -123,6 +126,7 @@ describe("CartaoDeAcao", () => {
 
   it("sem a linha Posso (a lista foi para o \"?\"): ficam só os atalhos; a lista inteira mora em CapacidadesDoAgente", () => {
     render(h(OQuePossoFazer, { capacidades: ["apagar", "refazer"], mostrarCapacidades: false, atalhos: [{ rotulo: "Refazer", texto: "Refaça" }], onAtalho: vi.fn() }));
+    fireEvent.click(screen.getByRole("button", { name: "Sugestões" }));
     expect(screen.queryByText(/Posso:/)).toBeNull();
     expect(screen.getByRole("button", { name: "Refazer" })).toBeTruthy();
     render(h(CapacidadesDoAgente, { capacidades: ["apagar (na hora)", "refazer (com Confirmar)"] }));

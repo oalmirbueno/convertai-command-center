@@ -15,7 +15,7 @@ export function camposDoFormato(tarefa: Registro, pedido: Registro, item?: Regis
   else if (formato === "estatico") novo.cards = (item?.cards || []).slice(0, 1);
   const delivery_type = formato === "foto" ? entregaDaPecaDeFoto(foto) : para;
   const title = formato === "foto" ? `Peça de foto: ${tema}` : String(tarefa.title || "").replace(/^Peça de foto: /, "");
-  const direcao = formato === "foto" ? { so_fotos: true, conceito: tema, fotos: { imagem_ids: [] }, cards: [], carrossel_infinito: false } : formato === "video" ? { mesa: "video", video, cards: [] } : null;
+  const direcao: Registro = formato === "foto" ? { so_fotos: true, conceito: tema, fotos: { imagem_ids: [] }, cards: [], carrossel_infinito: false } : formato === "video" ? { mesa: "video", video, cards: [] } : { conceito: tema, cards: [], carrossel_infinito: false };
   return { novo, tarefa: { delivery_type, title }, direcao };
 }
 

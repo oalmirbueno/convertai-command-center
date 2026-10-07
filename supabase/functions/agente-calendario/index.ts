@@ -1,4 +1,6 @@
-import { PERGUNTAS_DO_MES, contratoDoPedido, pecasNoEscopo, formatosAusentes, PRIORIDADE_DO_PEDIDO } from "./pedido-do-mes.ts";
+import { direcaoComRoteiro } from "./roteiro-no-estudio.ts";
+import { resumoDoRecibo } from "./resultado-da-agenda.ts";
+import { ORIENTACAO_DA_REVISAO, PERGUNTAS_DO_MES, contratoDoPedido, pecasNoEscopo, formatosAusentes, PRIORIDADE_DO_PEDIDO } from "./pedido-do-mes.ts";
 import { gravarAnexosConfirmados } from "./gravacao-confirmada.ts";
 import { criarLoteNaAgenda } from "./criar-lote-na-agenda.ts";
 import { camposDoFormato, tituloDaReescrita, gravarPassosDoFormato, desfazerPassosDoFormato, type PassoDoFormato } from "./mudanca-de-formato.ts";
@@ -5625,7 +5627,8 @@ async function pecasDaAgendaParaAcoes(
   const inicio = `${desde}-01`;
   const ate = fimDoMes(somarMesesAoMes(desde, opcoes.meses ?? 3));
   const limite = Math.min(1000, Math.max(400, (opcoes.max ?? 0) + 50));
-  const { data: projetos } = await servico.from("projects").select("id, name, project_type").eq("client_id", clientId).is("deleted_at", null).order("created_at", { ascending: false }).limit(200);
+  const { data: projetos, error: erroProjetos } = await servico.from("projects").select("id, name, project_type").eq("client_id", clientId).is("deleted_at", null).order("created_at", { ascending: false }).limit(200);
+  if (erroProjetos) throw new ErroHttp(503, "agenda_indisponivel", "Não consegui ler os projetos da agenda. Nenhum conteúdo foi alterado.");
   const listaDeProjetos = (projetos ?? []) as Array<{ id: string; name: string | null; project_type: string | null }>;
   const ids = await projetosDoClienteNaMarca(servico, clientId, marca, listaDeProjetos.map((p) => p.id));
   const naMarca = listaDeProjetos.filter((p) => ids.indexOf(p.id) >= 0);
@@ -5636,11 +5639,12 @@ async function pecasDaAgendaParaAcoes(
     ids.length
       ? servico.from("tasks").select("id, title, due_date, delivery_type, status").in("project_id", ids).is("deleted_at", null)
         .gte("due_date", inicio).lte("due_date", ate).order("due_date").limit(limite)
-      : Promise.resolve({ data: [] as unknown[] }),
+      : Promise.resolve({ data: [] as unknown[], error: null }),
     servico.from("mesa_campanhas").select("id, nome, status, periodo_inicio, periodo_fim, identidade").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(60),
     servico.from("calendario_propostas").select("parametros, itens, task_ids").eq("client_id", clientId).not("parametros->>campanha_id", "is", null)
       .order("criado_em", { ascending: false }).limit(100),
   ]);
+  if (tarefas.error || campanhas.error || propostas.error) throw new ErroHttp(503, "agenda_indisponivel", "Não consegui ler a agenda completa. Nenhum conteúdo foi alterado; tente novamente quando a leitura estiver disponível.");
   const listaDeCampanhas = ((campanhas.data ?? []) as (CampanhaDaAgenda & { identidade?: unknown })[])
     .filter((c) => c && UUID.test(String(c.id)) && campanhaDaMarca(c.identidade, marca))
     .slice(0, 30);
@@ -5922,13 +5926,13 @@ async function rotaDoPedidoLivre(servico: SupabaseClient, chamador: Chamador, cl
 async function julgarPedidoNaAgenda(
   mensagem: string,
   pecas: PecaComApelido[],
-  c: { clientId: string; conversaId: string; criadoPor: string; mes?: string },
+  c: { clientId: string; conversaId: string; criadoPor: string; mes?: string; recentes?: Array<{ papel: string; conteudo: string }> },
 ): Promise<{ rota: DecisaoDoRoteamento; alvo: AlvoDoPedido; erro: string | null; contrato: ReturnType<typeof contratoDoPedido> }> {
   const candidatas = candidatasDoPedido(mensagem, pecas);
   const { state, questions } = perguntasDoPedido(mensagem, candidatas);
   Object.assign(questions, PERGUNTAS_DO_MES);
   try {
-    const r = await jevPerguntar({ state: { ...(state as Record<string, unknown>), mes_aberto: c.mes }, questions }, { timeoutMs: JEV_DO_PEDIDO_MS });
+    const r = await jevPerguntar({ state: { ...(state as Record<string, unknown>), mes_aberto: c.mes, conversa_recente: c.recentes || [] }, questions }, { timeoutMs: JEV_DO_PEDIDO_MS });
     await cobrarJev(r, { clientId: c.clientId, tarefa: "calendario", referencia: { tipo: REF_AGENTE_DO_MES, id: c.conversaId }, criadoPor: c.criadoPor }).catch(() => null);
     return {
       contrato: contratoDoPedido(r.answers),
@@ -6122,7 +6126,7 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
       meses: MESES_DA_AGENDA_LONGA - 1,
       max: MAX_PECAS_NA_AGENDA_LONGA,
       detalhe: true,
-    })).catch((): ContextoDasAcoes => ({ pecas: [], campanhas: [], projeto: null, frequencia: null })),
+    })),
     contextoMcpAtivo(servico, clientId, MAX_CHARS_DO_MCP_NO_MES),
     servico.from("cliente_kit_marca").select("contexto").eq("client_id", clientId).maybeSingle(),
   ]);
@@ -6178,7 +6182,7 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
       ],
     }, conversaId, chamador.userId),
     // Frente AM: o pedido muda peças gravadas? E qual peça ele cita? (Jev, em paralelo; menos de 1 s)
-    julgarPedidoNaAgenda(mensagem, pecasDaAgenda, { clientId, conversaId, criadoPor: chamador.userId, mes }),
+    julgarPedidoNaAgenda(mensagem, pecasDaAgenda, { clientId, conversaId, criadoPor: chamador.userId, mes, recentes: anteriores.slice(-4) }),
   ]);
   pecasDaAgenda = pecasNoEscopo(pecasDaAgenda, mes, julgamento.contrato.outrosMeses);
   const { modelo, raciocinio } = modeloDoMes;
@@ -6216,6 +6220,7 @@ ${pedeMudanca ? `
 A MENSAGEM PEDE PARA MUDAR CONTEÚDOS QUE JÁ ESTÃO NA AGENDA: responda com acoes_na_agenda (editar_textos, refazer, datas ou formatos) nas peças que casam; não crie conteúdo novo no lugar e não diga que não consegue mudar o painel (a lista com Confirmar é a mudança). Peça repetida ou parecida é aviso, nunca motivo para não fazer.
 ` : ""}${blocoDoAlvo(alvoDoPedido)}${imagens.imagens.length ? `\nA equipe anexou ${imagens.imagens.length} imagem(ns) (prints de métricas, referências, fotos ou páginas de material). Use o conteúdo delas com fidelidade.\n` : ""}${notaDoSistema(imagens.aviso)}
 ${REGRAS_DO_AGENTE_DO_MES}
+${ORIENTACAO_DA_REVISAO}
 
 TAREFA: você é o estrategista planejando e executando o mês junto com a equipe. Siga o prompt geral do cliente e use os dados reais acima: o que já foi publicado e aprovado, as métricas do Instagram, as campanhas, os hypes, a agenda, o plano combinado, o MCP e os arquivos.
 - Nunca invente dado, resultado, data ou evento. Traga números reais quando existirem e diga quando um dado não existe.
@@ -6283,6 +6288,11 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     });
     custoDoReparo = reparo.custoUsd;
     r = (reparo.json ?? {}) as Record<string, unknown>;
+  }
+  if (r.acoes_na_agenda && typeof r.acoes_na_agenda === "object") {
+    const a = r.acoes_na_agenda as Record<string, unknown>;
+    if (julgamento.contrato.mudarDatas === false) a.mudar_data = [];
+    if (julgamento.contrato.mudarFormatos === false && !julgamento.contrato.formatos.length) a.mudar_formato = [];
   }
   if (!julgamento.contrato.outrosMeses && r.criar_conteudos) {
     const c = r.criar_conteudos as Record<string, any>;
@@ -6381,7 +6391,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     declarados: r.metodos_usados,
     acaoFeita: false,
   });
-  const resposta = fechadoDoMes.resposta;
+  let resposta = fechadoDoMes.resposta;
   const anexosDaResposta: Record<string, unknown>[] = planos.map((p) => ({ tipo: "plano", mes: p.mes }));
   if (rascunhoNaoAplicado) anexosDaResposta.push({ tipo: "rascunho_nao_aplicado", formatos_faltantes: falhaDosFormatos, rascunho: rascunhoNaoAplicado });
   if (mudanca) anexosDaResposta.push(mudanca);
@@ -6451,6 +6461,12 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     try {
       const feita = await executarAcaoNaAgenda(servico, chamador, { mensagem_id: msgAgente.id });
       execucao = await feita.json();
+      const resumo = resumoDoRecibo(execucao?.anexo as Parameters<typeof resumoDoRecibo>[0]);
+      if (resumo) {
+        resposta = resumo;
+        const { error } = await servico.from("agente_mensagens").update({ conteudo: resposta }).eq("id", msgAgente.id).eq("client_id", clientId);
+        if (error) registrarFalha("agente-calendario: resumo final não salvo; recibo preservado", error);
+      }
     } catch (e) {
       execucao = { falhas: 1, erro: e instanceof Error ? e.message : "A alteração não foi aplicada." };
       await registrarMensagens(servico, conversaId, clientId, [{ papel: "sistema", conteudo: `Não concluído: ${String(execucao!.erro)} A proposta de alteração está no cartão; não envie o pedido novamente para gerar outra cobrança.` }]);
@@ -6837,7 +6853,7 @@ type AntesDoTexto = {
 };
 /** Prova do que mudou: a peça relida do banco depois de gravar (frente AM). */
 type DepoisDoTexto = { title: string | null; description: string | null };
-type ResultadoDoTexto = { task_id: string; titulo: string; ok: boolean; motivo?: string; antes?: AntesDoTexto; depois?: DepoisDoTexto; campos?: string[] };
+type ResultadoDoTexto = { task_id: string; titulo: string; ok: boolean; motivo?: string; antes?: AntesDoTexto; depois?: DepoisDoTexto; campos?: string[]; passos_estudio?: PassoDoFormato[]; aviso?: string };
 
 /** Item de proposta com os textos novos (lâminas conferidas pela regra de menos texto). */
 export function itemComTextosNovos(item: Record<string, unknown>, campos: CamposDeTexto): Record<string, unknown> {
@@ -7007,6 +7023,26 @@ async function reescreverTextos(servico: SupabaseClient, clientId: string, edico
       for (const r of resultados.filter((r) => r.antes?.proposta_id === id)) { r.ok = false; r.motivo = "Alteração parcial: o texto da tarefa mudou, mas o roteiro não foi salvo. Confira a proposta antes de continuar."; }
     }
   }
+  // Roteiro salvo também atualiza a direção ainda sem mídia; antes o Estúdio ficava na copy antiga.
+  for (const r of resultados.filter(r => r.ok && r.antes?.proposta_id)) {
+    const prop = propostas.get(r.antes!.proposta_id!);
+    const item = prop?.itens.find(i => i.task_id === r.task_id);
+    if (!item || !Array.isArray(item.cards) || !item.cards.length || !r.campos?.includes("cards")) continue;
+    try {
+      const { data: trabalhos, error } = await servico.from("estudio_trabalhos").select("id, direcao, status, cards, entrega_status").eq("client_id", clientId).eq("task_id", r.task_id);
+      if (error) throw new Error("Não foi possível atualizar a direção do Estúdio.");
+      const livres = (trabalhos || []).filter(w => !w.entrega_status && !["gerando", "pronto", "entregue"].includes(w.status) && !w.cards?.length);
+      if (livres.length !== (trabalhos || []).length) r.aviso = "O texto da pauta foi salvo. A mídia existente foi preservada e precisa ser revisada no Estúdio.";
+      if (!livres.length) continue;
+      const marca = await resolverMarca(servico, clientId, { task_id: r.task_id }).then(m => lerMarcaParaDirecaoDaMarca(servico, clientId, m));
+      const passos = livres.map(w => ({ tabela: "estudio_trabalhos", id: w.id,
+        antes: { direcao: w.direcao, status: w.status },
+        depois: { direcao: direcaoComRoteiro(w.direcao || {}, item, marca), status: "dirigido" } }));
+      r.passos_estudio = await gravarPassosDoFormato(servico, passos, clientId);
+    } catch (e) {
+      r.aviso = `Texto salvo na agenda; sincronização do Estúdio pendente: ${e instanceof Error ? e.message : "falha de leitura"}`;
+    }
+  }
   return resultados;
 }
 
@@ -7015,6 +7051,7 @@ async function desfazerTextos(servico: SupabaseClient, clientId: string, lista: 
   let voltaram = 0;
   const porProposta = new Map<string, Array<{ indice: number; task_id: string; item: Record<string, unknown> }>>();
   for (const r of lista.filter((x) => x.ok && x.antes)) {
+    if (r.passos_estudio?.length) await desfazerPassosDoFormato(servico, r.passos_estudio, clientId);
     const a = r.antes as AntesDoTexto;
     const { error } = await servico.from("tasks").update({ title: a.title, description: a.description }).eq("id", r.task_id);
     if (!error) voltaram++;
@@ -7140,6 +7177,13 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
       const indice = p?.itens?.findIndex((i: any) => i.task_id === t.id) ?? -1;
       const item = indice >= 0 ? p.itens[indice] : null;
       const campos = camposDoFormato(antes, it, item);
+      if (["estatico", "carrossel"].includes(campos.novo.formato) && trabalhos.length) {
+        const marca = await resolverMarca(servico, m.client_id, { task_id: t.id }).then(r => lerMarcaParaDirecaoDaMarca(servico, m.client_id, r));
+        campos.direcao = direcaoDoRoteiro(campos.novo.cards || [], marca, {
+          postUnico: campos.novo.formato === "estatico", carrosselInfinito: false,
+          conceito: String(campos.novo.tema || antes.title), levaLogo: (ordem, total) => ordem === 1 || ordem === total,
+        });
+      }
       const passos: PassoDoFormato[] = [];
       if (item) {
         const itens = p.itens.map((i: any, k: number) => k === indice ? campos.novo : i);

@@ -1,3 +1,4 @@
+import SugestoesDoAgente from "@/components/agentes/SugestoesDoAgente";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Sparkles } from "lucide-react";
@@ -245,7 +246,7 @@ export default function CampanhaAgente({
       </div>
 
       <div className="shrink-0 space-y-2 border-t border-border px-3 pb-3 pt-2.5">
-        <div className="flex flex-wrap" role="group" aria-label="Atalhos para o agente">
+        <SugestoesDoAgente><div className="flex flex-wrap" role="group" aria-label="Atalhos para o agente">
           {ATALHOS.map((a) => (
             <button
               key={a.rotulo}
@@ -256,7 +257,7 @@ export default function CampanhaAgente({
               {a.rotulo}
             </button>
           ))}
-        </div>
+        </div></SugestoesDoAgente>
         <ZonaDeAnexos anexos={anexos}>
           <div className="rounded-xl border border-border bg-background p-2 focus-within:border-primary/60">
             <MiniaturasDosAnexos anexos={anexos} />

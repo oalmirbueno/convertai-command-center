@@ -230,6 +230,12 @@ export const chaves = {
 
 /** Depois de gravar: a agenda, o Estúdio e as propostas relêem já. */
 export function atualizarAgenda(qc: QueryClient, clientId: string) {
+  void qc.invalidateQueries({ queryKey: ["mesa", "item-avulso", clientId] });
+  void qc.invalidateQueries({ queryKey: ["mesa", "agente-do-mes", clientId, "propostas"] });
+  // Detalhes usam IDs de proposta, sem clientId na chave; reler evita roteiro antigo aberto.
+  void qc.invalidateQueries({ queryKey: ["mesa", "proposta-v4"] });
+  void qc.invalidateQueries({ queryKey: ["editorial-calendar"] });
+
   void qc.invalidateQueries({ queryKey: ["mesa", "agenda-do-mes", clientId] });
   void qc.invalidateQueries({ queryKey: ["mesa", "itens-do-mes", clientId] });
   void qc.invalidateQueries({ queryKey: ["mesa", "propostas", clientId] });

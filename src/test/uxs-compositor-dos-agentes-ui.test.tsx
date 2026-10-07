@@ -199,6 +199,7 @@ describe("agente de contratos (fora da Mesa): modelo no rodapé, Nova conversa c
   it("atalho pelo chip e pelo \"...\": preenche, dá foco e põe o cursor no fim (o do CNPJ espera o número)", async () => {
     montar();
     const campo = await screen.findByRole("textbox", { name: "Mensagem ao agente de contratos" });
+    fireEvent.click(screen.getByRole("button", { name: "Sugestões" }));
     fireEvent.click(screen.getByRole("button", { name: "O que falta?" }));
     await waitFor(() => expect(cursorNoFim(campo as HTMLTextAreaElement)).toBe(true));
     expect((campo as HTMLTextAreaElement).value).toBe("O que falta para assinar este contrato?"); // CON-12: "Assinar pela agência" no lugar de "congelar"

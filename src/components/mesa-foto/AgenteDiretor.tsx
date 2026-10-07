@@ -1060,7 +1060,7 @@ export default function AgenteDiretor({
                 "aprovar, arquivar, organizar, montar book e levar ao Canvas",
                 "montar o ensaio (variações ou campanha) sem gerar, renomear o produto e trocar as fotos dele",
               ]}
-            />
+            >
             <div className="flex min-w-0 flex-wrap items-center" role="group" aria-label="Atalhos do diretor">
               {ATALHOS_DO_DIRETOR.map((a) => {
                 const Icone = a.icone;
@@ -1081,6 +1081,7 @@ export default function AgenteDiretor({
                 );
               })}
             </div>
+          </OQuePossoFazer>
             {fotosDosEstilos.length > 0 && (
               <div className="flex min-w-0 flex-wrap items-center" aria-label="Prints de referência anexados">
                 {fotosDosEstilos.map((f) => (

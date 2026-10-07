@@ -1,3 +1,4 @@
+import { resumoDoRecibo } from "../../../supabase/functions/agente-calendario/resultado-da-agenda";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CalendarRange, Check, ChevronDown, Eye, FileText, Loader2, MessagesSquare, Minus, PenLine, Plus, RefreshCw, Sparkles, Trash2, Undo2, Users, Wand2, X } from "lucide-react";
@@ -987,13 +988,14 @@ export default function AgenteDoMes({
       // A resposta entra na conversa antes de o "Preparando" sair da tela.
       await queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) });
       if (planejando || naAgenda || roteado) void queryClient.invalidateQueries({ queryKey: chavesDoPlano.planos(clientId) });
-      atualizarAgenda(queryClient, clientId);
       return data;
     } catch (e) {
       setTexto((t) => t || mensagem);
       throw e;
     } finally {
       setEnvio(null);
+      atualizarAgenda(queryClient, clientId);
+      void queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) });
     }
   };
 
@@ -1135,7 +1137,7 @@ export default function AgenteDoMes({
                 <div key={m.id} className="min-w-0 space-y-2">
                   {m.conteudo && (
                     <Bolha papel={m.papel === "usuario" ? "usuario" : "agente"}>
-                      <p className="whitespace-pre-wrap">{m.conteudo}</p>
+                      <p className="whitespace-pre-wrap">{resumoDoRecibo(acaoNaAgenda) || m.conteudo}</p>
                     </Bolha>
                   )}
                   {arquivosDoPedido && (arquivosDoPedido.lidos.length > 0 || arquivosDoPedido.nao_lidos.length > 0) && (
@@ -1240,23 +1242,9 @@ export default function AgenteDoMes({
             {!ajustando && (
               <OQuePossoFazer
                 capacidades={["criar os conteúdos do mês", "ler arquivos e ZIP", "reescrever textos", "apagar", "refazer", "mudar data e formato", "editar campanhas"]}
-                atalhos={planejando ? [] : ATALHOS_DE_ACAO(nome)}
+                atalhos={[...(planejando ? [] : ATALHOS_DE_ACAO(nome)), ...atalhos]}
                 onAtalho={preencher}
               />
-            )}
-            {!ajustando && (
-              <div className="flex flex-wrap" role="group" aria-label="Atalhos de pedido">
-                {atalhos.map((a) => (
-                  <button
-                    key={a.rotulo}
-                    type="button"
-                    onClick={() => preencher(a.texto)}
-                    className="mb-1 mr-1 max-w-full truncate rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
-                  >
-                    {a.rotulo}
-                  </button>
-                ))}
-              </div>
             )}
             <ZonaDeAnexos anexos={arquivos.comoAnexos()} rotulo="Solte os arquivos aqui">
               <div className="rounded-xl border border-border bg-background p-2 focus-within:border-primary/60">

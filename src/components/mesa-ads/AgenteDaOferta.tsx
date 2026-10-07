@@ -1,3 +1,4 @@
+import SugestoesDoAgente from "@/components/agentes/SugestoesDoAgente";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
@@ -197,7 +198,7 @@ export default function AgenteDaOferta({
       rotuloDasMensagens="Conversa com o agente de oferta"
       compositor={
         <>
-          <div className="flex min-w-0 flex-wrap" role="group" aria-label="Atalhos para o agente de oferta">
+          <SugestoesDoAgente><div className="flex min-w-0 flex-wrap" role="group" aria-label="Atalhos para o agente de oferta">
             {ATALHOS.map((a) => (
               <button
                 key={a.rotulo}
@@ -208,7 +209,7 @@ export default function AgenteDaOferta({
                 {a.rotulo}
               </button>
             ))}
-          </div>
+          </div></SugestoesDoAgente>
           {foco && (
             <div className="flex min-w-0 items-center rounded-md bg-primary/10 px-2.5 py-1.5 text-[12px]" role="note">
               <span className="min-w-0 flex-1 truncate">

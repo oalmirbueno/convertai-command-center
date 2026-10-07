@@ -1,3 +1,4 @@
+import SugestoesDoAgente from "./SugestoesDoAgente";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowRight, Check, Loader2, Square, Undo2, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -378,21 +379,23 @@ export function OQuePossoFazer({
   onAtalho,
   mostrarCapacidades = true,
   className = "",
+  children,
 }: {
   capacidades: string[];
   atalhos?: { rotulo: string; texto: string }[];
   onAtalho?: (texto: string) => void;
   mostrarCapacidades?: boolean;
   className?: string;
+  children?: ReactNode;
 }) {
   if (!capacidades.length) return null;
   const comAtalhos = atalhos.length > 0 && !!onAtalho;
-  if (!mostrarCapacidades && !comAtalhos) return null;
+  if (!mostrarCapacidades && !comAtalhos && !children) return null;
   const muitos = atalhos.length > MAX_ATALHOS_A_VISTA;
   const aVista = muitos ? atalhos.slice(0, MAX_ATALHOS_A_VISTA - 1) : atalhos;
   const noMais = muitos ? atalhos.slice(MAX_ATALHOS_A_VISTA - 1) : [];
   return (
-    <div className={`min-w-0 ${className}`}>
+    <div className={`min-w-0 ${className}`}><SugestoesDoAgente>
       {mostrarCapacidades && (
         <p className="truncate text-[11px] text-muted-foreground" title={`Posso: ${capacidades.join(", ")}.`}>
           <span className="font-medium text-foreground">Posso:</span> {capacidades.join(", ")}.
@@ -422,7 +425,8 @@ export function OQuePossoFazer({
           )}
         </div>
       )}
-    </div>
+      {children}
+    </SugestoesDoAgente></div>
   );
 }
 

@@ -1,3 +1,4 @@
+import SugestoesDoAgente from "@/components/agentes/SugestoesDoAgente";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Bot, Loader2, Send } from "lucide-react";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
@@ -125,7 +126,7 @@ export default function AgenteDoPerfil({
   const refs = posts.filter((p) => escolhidos.indexOf(p.id) >= 0).map((p) => p.ref);
 
   const atalhos = (
-    <div className="flex min-w-0 flex-wrap" role="group" aria-label="Ações do agente do perfil">
+    <SugestoesDoAgente><div className="flex min-w-0 flex-wrap" role="group" aria-label="Ações do agente do perfil">
       <button
         type="button"
         className={juntar(botao.secundario, "mb-1.5 mr-1.5 h-8 px-2.5 text-[12px]")}
@@ -144,7 +145,7 @@ export default function AgenteDoPerfil({
       <button type="button" className={juntar(botao.secundario, "mb-1.5 h-8 px-2.5 text-[12px]")} disabled={!!trabalhando} onClick={() => void pedir("ideias_resposta", "Ideias de resposta", {}, "Ideias de resposta")}>
         Ideias de resposta
       </button>
-    </div>
+    </div></SugestoesDoAgente>
   );
 
   const topo = (
