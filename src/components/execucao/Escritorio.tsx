@@ -253,7 +253,7 @@ export default function Escritorio({
             </span>
           </div>
           {aberta && (
-            <ul className={juntar(superficie.painel, "mt-2 divide-y divide-border overflow-hidden")}>
+            <ul className={juntar(superficie.painel, "mt-3 grid gap-3 border-0 bg-transparent sm:grid-cols-2 xl:grid-cols-3")}>
               {doGrupo.map((a) => {
                 const meus = porAgente.get(a.id) ?? [];
                 const estado = estadoQueManda(meus);
@@ -268,14 +268,14 @@ export default function Escritorio({
                   : null;
 
                 return (
-                  <li key={a.id} className={juntar("min-w-0 px-3.5 py-3", pausado && "opacity-60")}>
+                  <li key={a.id} className={juntar("min-w-0 rounded-xl border border-border bg-card px-3.5 py-4", pausado && "opacity-60")}>
                     <div className="flex min-w-0 items-start">
                       <button
                         type="button"
                         onClick={() => aoAbrirAgente(a)}
                         className={juntar("flex min-w-0 flex-1 items-center rounded-md text-left", foco)}
                       >
-                        <span className="mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                        <span className="mr-2.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
                           <Bot className="h-4 w-4 text-primary" aria-hidden="true" />
                         </span>
                         <span className="min-w-0 flex-1">
@@ -325,7 +325,7 @@ export default function Escritorio({
                       </span>
                     </div>
 
-                    {!tarefa && emFoco?.last_action && <p className="mt-2 text-[13px] text-foreground/85">{emFoco.last_action}</p>}
+                    {!tarefa && emFoco?.last_action && <p className="mt-3 line-clamp-3 text-[13px] text-foreground/85">{emFoco.last_action}</p>}
                     {/* PARA QUEM. Era isto que faltava para o quadro fazer sentido. */}
                     {tarefa && (
                       <button

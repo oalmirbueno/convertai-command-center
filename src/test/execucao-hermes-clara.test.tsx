@@ -78,7 +78,7 @@ describe("Comprovações e isolamento das notificações", () => {
       const q = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue(resposta) };
       (supabase as any).from = vi.fn(() => q);
       render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><EvidenciaVisual url="aceleriq-file://00000000-0000-0000-0000-000000000001" /></QueryClientProvider>);
-      expect(await screen.findByText(/Não foi possível abrir esta comprovação/)).toBeInTheDocument();
+      expect(await screen.findByText(/Não foi possível abrir com seu acesso atual/)).toBeInTheDocument();
       expect(resolveFileUrl).not.toHaveBeenCalled();
     }
   });

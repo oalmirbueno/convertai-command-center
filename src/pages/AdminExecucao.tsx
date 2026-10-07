@@ -1,3 +1,4 @@
+import { incluirConcluidas } from "@/lib/cadernoExecucao";
 import { contextoDasExecucoes } from "@/lib/execucaoHistorico";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -402,7 +403,7 @@ export default function AdminExecucao() {
     return {
       fila: por("queued") + por("in_progress"),
       andamento: por("in_progress"),
-      feitas: vinculosAtivos.filter((v) => v.status === "done" && v.last_evidence).length,
+      feitas: vinculos.filter((v) => v.status === "done" && v.last_evidence).length,
       revisao: por("review"),
       aguardando: por("awaiting_input"),
       bloqueadas: por("blocked"),
@@ -478,7 +479,7 @@ export default function AdminExecucao() {
   // O filtro roda ANTES das visoes: quadro, fila e listas enxergam o
   // mesmo recorte, senao o numero da aba discorda do conteudo dela.
   const vinculosVisiveis = useMemo(() => {
-    const base = mostrarEncerradas ? vinculos : vinculosAtivos;
+    const base = incluirConcluidas(visao, mostrarEncerradas) ? vinculos : vinculosAtivos;
     if (!busca.trim() && !filtroCliente && filtroPrazo === "todas") return base;
     return base.filter((v) => {
       const t = tarefaDoVinculo(v, tarefas);
@@ -496,7 +497,7 @@ export default function AdminExecucao() {
         statusFinal: v.status === "done",
       });
     });
-  }, [vinculos, vinculosAtivos, mostrarEncerradas, tarefas, busca, filtroCliente, filtroPrazo, hoje]);
+  }, [vinculos, vinculosAtivos, mostrarEncerradas, visao, tarefas, busca, filtroCliente, filtroPrazo, hoje]);
 
   const contagemDaVisao = useMemo(() => {
     const base = vinculosVisiveis;
@@ -573,6 +574,7 @@ export default function AdminExecucao() {
 
   /** Vai direto a uma visao (linha de "O que pede a sua atencao"), com a aba dona. */
   const irParaVisao = (id: (typeof VISOES)[number]["id"]) => {
+    setBusca(""); setFiltroCliente(""); setFiltroPrazo("todas");
     setVisao(id);
     const dona = ABAS.find((a) => (a.visoes as readonly string[]).includes(id));
     if (dona) setAba(dona.id);

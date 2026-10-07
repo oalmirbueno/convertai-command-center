@@ -1,3 +1,4 @@
+import { sincronizarReferenciasDoWorkspace } from "../_shared/referencias-workspace.ts";
 /**
  * agente-estilo (frente S2, 26/09/2026): o agente de estilo de design do
  * cliente, aberto pelo botão "Estilo" dentro do Estúdio e do Estúdio Ads.
@@ -499,24 +500,32 @@ async function guardarAnexos(ch: Chamador, p: Pedido, anexos: AnexoRecebido[]): 
 
 /** Referências do cliente (arte aprovada primeiro) e fotos aprovadas do acervo que podem entrar no estilo. */
 async function candidatasDoCliente(p: Pedido): Promise<{ candidatas: CandidataDeReferencia[]; aprovadas: string[] }> {
+  await sincronizarReferenciasDoWorkspace(servico(), p.clientId, p.marca);
   const [refs, imgs] = await Promise.all([
     filtrarReferenciasDaMarca(
-      servico().from("cliente_referencias").select("id, storage_path, leitura, tags, papel, destaque, criado_em").eq("client_id", p.clientId).eq("ativa", true).not("storage_path", "is", null),
+      servico().from("cliente_referencias").select("id, storage_path, workspace_node_id, leitura, tags, papel, destaque, criado_em").eq("client_id", p.clientId).eq("ativa", true),
       p.marca,
     ).order("criado_em", { ascending: false }).limit(30),
     // Frente MC: só as fotos aprovadas da marca aberta (tags marca:<id>).
     servico().from("cliente_imagens").select("id, nome, storage_bucket, storage_path, descricao, tags").eq("client_id", p.clientId).eq("ativa", true).eq("aprovada", true).order("criado_em", { ascending: false }).limit(24)
       .then((r) => ({ ...r, data: ((r.data as { tags?: string[] | null }[] | null) ?? []).filter((f) => fotoDaMarca(f.tags ?? null, p.marca)).slice(0, 12) })),
   ]);
-  const linhas = ((refs.data as Array<{ id: string; storage_path: string; leitura: string | null; tags: string[] | null; papel: string; destaque: boolean }> | null) ?? []);
+  if (refs.error || imgs.error) throw new ErroHttp(503, "referencias_indisponiveis", "Não consegui consultar os materiais do cliente. A leitura será retomada sem inventar ausência de referências.");
+  const linhas = ((refs.data as Array<{ id: string; storage_path: string | null; workspace_node_id: string | null; leitura: string | null; tags: string[] | null; papel: string; destaque: boolean }> | null) ?? []);
+  const nodeIds = linhas.map(r => r.workspace_node_id).filter(Boolean) as string[];
+  const nodes = nodeIds.length ? await servico().from("workspace_nodes").select("id,name,storage_path").eq("client_id", p.clientId).in("id", nodeIds) : { data: [], error: null };
+  if (nodes.error) throw new ErroHttp(503, "referencias_indisponiveis", "Não consegui abrir as referências do Workspace.");
+  const locais = new Map((nodes.data || []).map(n => [n.id, n]));
   const aprovada = (r: { tags: string[] | null; papel: string }) => (r.tags || []).indexOf("arte-aprovada") >= 0 || r.papel === "identidade";
   const ordenadas = linhas.filter(aprovada).concat(linhas.filter((r) => !aprovada(r)));
-  const candidatas: CandidataDeReferencia[] = ordenadas.map((r) => ({
-    id: r.id,
-    titulo: aprovada(r) ? "arte da marca" : "referência",
-    detalhe: r.leitura ? r.leitura.replace(/\s+/g, " ").slice(0, 150) : (r.tags || []).join(", ") || null,
-    dados: { origem: "referencia", bucket: BUCKET_DO_ESTILO, caminho: r.storage_path, leitura: r.leitura },
-  }));
+  const candidatas: CandidataDeReferencia[] = ordenadas.flatMap((r) => {
+    const node = r.workspace_node_id ? locais.get(r.workspace_node_id) : null;
+    const caminho = node?.storage_path || r.storage_path;
+    if (!caminho) return [];
+    return [{ id: r.id, titulo: node?.name || (aprovada(r) ? "arte da marca" : "referência"),
+      detalhe: r.leitura ? r.leitura.replace(/\s+/g, " ").slice(0, 150) : (r.tags || []).join(", ") || null,
+      dados: { origem: "referencia", bucket: node ? "workspace" : BUCKET_DO_ESTILO, caminho, leitura: r.leitura } }];
+  });
   for (const i of ((imgs.data as Array<{ id: string; nome: string; storage_bucket: string; storage_path: string; descricao: string | null }> | null) ?? [])) {
     candidatas.push({ id: i.id, titulo: i.nome || "foto aprovada", detalhe: i.descricao ? i.descricao.slice(0, 150) : "foto aprovada do acervo", dados: { origem: "acervo", bucket: i.storage_bucket, caminho: i.storage_path } });
   }
@@ -612,11 +621,22 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   if (historico.error) registrarFalha("agente-estilo: histórico da conversa não lido", historico.error, { conversa_id: conversaId });
   // Anexos: guardados e lidos juntos (várias referências de uma vez).
   const novas = await guardarAnexos(ch, p, anexos);
+  const pendentes = doCliente.candidatas.filter(c => c.dados.origem === "referencia" && !c.dados.leitura).slice(0, Math.max(0, 6 - novas.length));
+  const avisosReferencias: string[] = [];
+  const abertas = await Promise.all(pendentes.map(async c => {
+    try { return { candidata: c, imagem: await baixarImagem(String(c.dados.bucket), String(c.dados.caminho), c.titulo || "referencia") }; }
+    catch (e) {
+      registrarFalha("agente-estilo: referência não abriu", e, { referencia_id: c.id });
+      avisosReferencias.push(`Não foi possível abrir a referência ${c.titulo || "do Workspace"}. Não afirme que ela foi analisada.`);
+      return null;
+    }
+  }));
+  const legiveis = abertas.filter((a): a is NonNullable<typeof a> => !!a);
   const imagensNovas = anexos.map((a) => ({ bytes: a.bytes, mime: a.mime, nome: `${a.nome}.${extensao(a.mime)}` }));
   const alvosBase = alvosDoEstilo(estiloAntes, [...novas, ...doCliente.candidatas]);
   // A leitura das anexadas e os templates (t*, carrossel m1) andam juntos: um não espera o outro.
   const [leitura, tpl] = await Promise.all([
-    lerReferencias(ch, p, conversaId, novas, imagensNovas),
+    lerReferencias(ch, p, conversaId, [...novas, ...legiveis.map(a => a.candidata)], [...imagensNovas, ...legiveis.map(a => a.imagem)]),
     templatesNaConversa(DEPS_DOS_TEMPLATES, ch, p, { novas, imagens: imagensNovas, mensagem, candidatas: alvosBase.candidatas }).catch((e) => (registrarFalha("agente-estilo: templatesNaConversa falhou", e), null)),
   ]);
   const templatesAtivos = tpl ? tpl.templates : [];
@@ -662,7 +682,9 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     aprendizados: estiloAntes.aprendizados.slice(-12).map((a) => `${a.tipo === "gostou" ? "gostou" : "não gostou"} (${a.em.slice(0, 10)}): ${a.texto}`),
     artes_aprovadas_lidas: doCliente.aprovadas,
     referencias_novas_nesta_mensagem: novas.length,
+    avisos_referencias: avisosReferencias,
     leitura_das_referencias_novas: leitura.texto || null,
+    workspace: { consultado: true, referencias_disponiveis: doCliente.candidatas.length, estudadas_agora: legiveis.filter(a => !!a.candidata.dados.leitura).length, ainda_sem_leitura: doCliente.candidatas.filter(c => c.dados.origem === "referencia" && !c.dados.leitura).length },
     ...(tpl ? tpl.dados : {}),
   };
   const cerebroTexto = (cerebro as { texto?: string }).texto || "";
@@ -674,7 +696,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
     pesquisaWeb: PEDE_PESQUISA.test(textoDoPedido),
-    sistema: `${SISTEMA_DO_ESTILO}\n\n${CONHECIMENTO_DO_ESTILO}\n\n${blocoDoMapaDoPainel("estilo")}\n\n${cerebroTexto ? `${cerebroTexto}\n\n` : ""}${completoDaMarca ? `${completoDaMarca}\n\n` : ""}${ensinadas.bloco ? `${ensinadas.bloco}\n\n` : ""}DADOS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${blocoDosAlvosDoEstilo(alvos)}${tpl ? tpl.texto : ""}${blocoDaReferencia(referencia, itensReferiveis)}`,
+    sistema: `${SISTEMA_DO_ESTILO}\n\n${CONHECIMENTO_DO_ESTILO}\n\n${blocoDoMapaDoPainel("estilo")}\n\n${cerebroTexto ? `${cerebroTexto}\n\n` : ""}${completoDaMarca ? `${completoDaMarca}\n\n` : ""}${ensinadas.bloco ? `${ensinadas.bloco}\n\n` : ""}As referências do Workspace foram consultadas pelo sistema. Use as leituras disponíveis e seus nomes; não diga que não pode acessar o Workspace quando há candidatas. Não invente uma leitura de imagens ainda não estudadas.\nDADOS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${blocoDosAlvosDoEstilo(alvos)}${tpl ? tpl.texto : ""}${blocoDaReferencia(referencia, itensReferiveis)}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: textoDoPedido }],
     // O ternário fica por fora (revisão 30/09): o contrato dos esquemas (esq-esquemas-compativeis) avalia cada ramo.
     esquemaJson: tpl ? comMetodosUsados(esquemaComTemplates(ESQUEMA_DO_AGENTE_DE_ESTILO)) : comMetodosUsados(ESQUEMA_DO_AGENTE_DE_ESTILO),

@@ -119,7 +119,7 @@ export default function AprovacoesExplicadas({
     refetchInterval: 30_000,
   });
 
-  const aprovacoes = todasAprovacoes.filter(a => !filtroCliente || a.id === destaqueId || (a.client?.company_name || a.client?.full_name) === filtroCliente);
+  const aprovacoes = todasAprovacoes.filter(a => !filtroCliente || a.id === destaqueId || (a.client?.company_name || a.client?.full_name) === filtroCliente).sort((a, b) => (a.client?.company_name || a.client?.full_name || "Operação interna").localeCompare(b.client?.company_name || b.client?.full_name || "Operação interna"));
 
   const decidir = useMutation({
     mutationFn: async ({ id, decisao }: { id: string; decisao: string }) => {
@@ -134,6 +134,8 @@ export default function AprovacoesExplicadas({
       return data;
     },
     onSuccess: (_d, vars) => {
+      // Só retirar depois do recibo do servidor; não aguardar outra leitura para atualizar a lista.
+      if (vars.decisao !== "adiado") queryClient.setQueryData<Aprovacao[]>(["aprovacoes-explicadas"], anterior => anterior?.filter(a => a.id !== vars.id));
       queryClient.invalidateQueries({ queryKey: ["aprovacoes-explicadas"] });
       queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
       queryClient.invalidateQueries({ queryKey: ["execucao-pedidos"] });
@@ -189,6 +191,7 @@ export default function AprovacoesExplicadas({
               key={a.id}
               className={juntar("min-w-0 px-4 py-4", destacada && "bg-primary/10 ring-2 ring-inset ring-primary/50")}
             >
+              {(i === 0 || a.client_id !== aprovacoes[i - 1].client_id) && <h3 className="mb-4 border-b border-border pb-2 text-base font-semibold">{a.client?.company_name || a.client?.full_name || "Operação interna"}</h3>}
               <div className="-m-0.5 flex min-w-0 flex-wrap items-center [&>*]:m-0.5">
                 <span className={juntar(etiqueta, "bg-warning/15 text-warning")}>
                   <ShieldAlert className="mr-1 h-3 w-3" aria-hidden="true" />
@@ -296,7 +299,7 @@ export default function AprovacoesExplicadas({
                     className={principal ? botao.primario : juntar(botao.secundario, "text-success")}
                   >
                     {decidir.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
-                    Aprovar
+                    {decidir.isPending && decidir.variables?.id === a.id ? "Confirmando decisão…" : "Aprovar"}
                   </button>
                   <button
                     type="button"
