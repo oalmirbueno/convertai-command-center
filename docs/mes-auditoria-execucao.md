@@ -25,3 +25,16 @@ Não houve geração paga real neste lote. A interpretação do modelo ainda pod
 Publicar somente agente-calendario e frontend no ambiente existente. Sem migrations nem mudanças de credenciais, aprovação ou publicação social. Backend deve preservar dependências da versão viva e trocar apenas os seis arquivos de agente-calendario deste lote. JWT permanece ligado.
 
 Rollback: reverter o commit do lote, republicar frontend e restaurar a versão anterior do endpoint. Dados criados ficam preservados; nenhum replay de mensagens antigas. Claude deve continuar da main integrada e não repor a antiga limitação de dois formatos nem o recolhimento automático por altura.
+
+## Auditoria complementar — 06/10/2026
+
+A confirmação de cartões extensos enviava `anexos` inteiro no filtro de igualdade do PostgREST. A requisição crescia com os textos e falhava antes de aplicar o lote. Um teste HTTP somente de leitura, com conteúdo sintético acentuado, reproduziu 414 com URL de 74.330 caracteres. O cartão real relatado tinha 21.195 bytes de JSON antes do URL encoding.
+
+- Recibos de ação e criação agora usam uma revisão curta por anexo. Todos os recibos participam da checagem concorrente, sem roteiro na URL.
+- Conversões com snapshot comparam o JSON localmente e usam `updated_at`/`atualizado_em`, mantidos pelos triggers existentes. Compensação e Desfazer continuam conferindo o conteúdo atual; não há mudança de schema.
+- O pedido atual prevalece sobre uma mistura editorial antiga. Três julgamentos entram na chamada Jev existente: outros meses, pedido de foto e pedido de vídeo. Escopo conservador mantém o mês aberto; menção explícita permite trabalhar outros meses.
+- A conferência olha as ações normalizadas de formato, não palavras no título ou no plano. Uma tentativa curta corrige uma resposta incompleta; se continuar incompleta, não executa nem altera o plano, e guarda o rascunho e o uso para revisão.
+- Criação, geração e ações respeitam o mês selecionado. Cartões novos registram seu escopo; cartões históricos continuam compatíveis.
+- Falha do banco e conflito de revisão retornam mensagens específicas, sem expor payloads ou credenciais.
+
+Validação: 99 testes focados; testes usando o transporte real do SDK com payload de 200 KB e URL menor que 2 KB; cinco pedidos sintéticos na API TypeSafe (inclusão, cobrança, negação, referência e vários meses), todos com resultado esperado após ajustar as perguntas; Deno check. Rollback: reimplantar o bundle v67 preservado, sem reverter dados. A revisão de texto já preparada pode ser retomada pela confirmação do cartão, sem regenerar a resposta paga.

@@ -7,14 +7,17 @@ import { modoDaPauta } from "@/components/mesa/modoDaPauta";
 
 function banco(seed: Record<string, any[]>) {
   const tabelas = structuredClone(seed);
+  for (const rows of Object.values(tabelas)) for (const r of rows) { r.updated_at ??= "2026-10-06T00:00:00Z"; r.atualizado_em ??= "2026-10-06T00:00:00Z"; }
+  const valor = (r: any, k: string) => k.split(/->>?/).reduce((v, parte) => v?.[parte], r) ?? null;
   let falhar = "";
   const db = { from(t: string) {
     let campos: any, filtros: Array<(r: any) => boolean> = [];
     const q: any = {
       update(v: any) { campos = v; return q; },
-      eq(k: string, v: any) { filtros.push(r => { const a = k.includes("->>") ? r[k.split("->>")[0]]?.[k.split("->>")[1]] : r[k]; return typeof a === "object" && a !== null ? JSON.stringify(a) === v : a === v; }); return q; },
-      is(k: string, v: any) { filtros.push(r => r[k] === v); return q; },
+      eq(k: string, v: any) { filtros.push(r => { const a = valor(r, k); return typeof a === "object" && a !== null ? JSON.stringify(a) === v : a === v; }); return q; },
+      is(k: string, v: any) { filtros.push(r => valor(r, k) === v); return q; },
       order() { return q; }, limit() { return q; }, select() { return q; },
+      async maybeSingle() { const r = await q; return { ...r, data: r.data?.[0] ?? null }; },
       then(ok: any, err: any) {
         if (campos && falhar === t) { falhar = ""; return Promise.resolve({ data: null, error: { message: "falhou" } }).then(ok, err); }
         const rows = (tabelas[t] || []).filter(r => filtros.every(f => f(r)));

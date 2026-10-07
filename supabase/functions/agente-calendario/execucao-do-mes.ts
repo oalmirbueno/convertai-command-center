@@ -16,8 +16,15 @@ export function podeAplicarDireto(a: any): boolean {
 }
 
 /** Gravação confirmada por RETURNING: zero linhas nunca significa sucesso. */
+export class ErroDeGravacao extends Error {
+  constructor(public status: number, public codigo: string, mensagem: string) { super(mensagem); }
+}
 export async function atualizarConfirmado(q: any, campos: string = "id") {
-  const { data, error } = await q.select(campos);
-  if (error || !Array.isArray(data) || data.length !== 1) throw new Error("A alteração não foi confirmada. Atualize a agenda antes de tentar novamente.");
+  const { data, error, status } = await q.select(campos);
+  if (error) {
+    console.error("[calendario] gravacao recusada", { status, codigo: error.code || "sem_codigo" });
+    throw new ErroDeGravacao(503, "gravacao_indisponivel", "O banco não confirmou a gravação. O cartão foi preservado; tente confirmar novamente, sem gerar outro pedido.");
+  }
+  if (!Array.isArray(data) || data.length !== 1) throw new ErroDeGravacao(409, "gravacao_conflito", "A alteração não foi confirmada. Atualize a agenda antes de tentar novamente.");
   return data[0];
 }
