@@ -13,6 +13,7 @@ import {
 import OrganogramaAgentes, { type NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
 import ExecucoesRecentes from "@/components/execucao/ExecucoesRecentes";
 import RelatorioVisual from "@/components/execucao/RelatorioVisual";
+import CentralPerformanceMeta from "@/components/execucao/CentralPerformanceMeta";
 import Departamentos from "@/components/execucao/Departamentos";
 import PerfilDoAgente from "@/components/execucao/PerfilDoAgente";
 import DiarioDaExecucao from "@/components/execucao/DiarioDaExecucao";
@@ -134,6 +135,7 @@ type Operador = {
  * A aba não é decoração: ela é a resposta a "onde eu olho agora".
  */
 const ABAS = [
+  { id: "performance", rotulo: "Performance Meta", visoes: ["performance"] },
   { id: "pessoas", rotulo: "Escritório", visoes: ["escritorio", "hierarquia"] },
   { id: "trabalho", rotulo: "Trabalho", visoes: ["atividade", "quadro", "execucoes", "fila", "in_progress", "done", "review"] },
   { id: "decisoes", rotulo: "Precisa de você", visoes: ["aprovacao", "awaiting_input", "blocked"] },
@@ -142,6 +144,7 @@ const ABAS = [
 ] as const;
 
 const VISOES = [
+  { id: "performance", rotulo: "Performance Meta" },
   { id: "escritorio", rotulo: "Escritório" },
   { id: "atividade", rotulo: "Visão geral" },
   { id: "quadro", rotulo: "Tarefas" },
@@ -440,6 +443,7 @@ export default function AdminExecucao() {
     if (aprovacaoAlvo || propostaAlvo) setVisao("aprovacao");
   }, [aprovacaoAlvo, propostaAlvo]);
   useEffect(() => {
+    if (abaAlvo === "performance") { setAba("performance"); setVisao("performance"); }
     if (abaAlvo === "diario" && vinculoAlvo) {
       setDiarioAberto({ linkId: vinculoAlvo });
     }
@@ -1392,6 +1396,8 @@ export default function AdminExecucao() {
   /** A visão aberta: o conteúdo que rola na região principal. */
   const conteudoDaVisao = carregandoVinculos && vinculos.length === 0 ? (
     <Carregando linhas={4} rotulo="Carregando o trabalho dos agentes" />
+  ) : visao === "performance" ? (
+    <CentralPerformanceMeta aoAbrir={(id, titulo) => setDiarioAberto({ linkId: id, titulo })} />
   ) : visao === "escritorio" ? (
     <Escritorio
       agentes={operadores}
@@ -1575,7 +1581,7 @@ export default function AdminExecucao() {
   );
 
   const filtrosAtivos = Boolean(busca.trim() || filtroCliente || filtroPrazo !== "todas");
-  const mostraFiltros = aba !== "feito" && visao !== "relatorios" && visao !== "hierarquia";
+  const mostraFiltros = aba !== "performance" && aba !== "feito" && visao !== "relatorios" && visao !== "hierarquia";
   /** Quantos recortes da linha 2 estão ligados (o número do botão "Filtros"). */
   const recortesLigados = (filtroCliente ? 1 : 0) + (filtroPrazo !== "todas" ? 1 : 0);
 
@@ -1605,7 +1611,7 @@ export default function AdminExecucao() {
             // A aba "O que foi feito" nao tem visao nenhuma, e uma lista vazia
             // faz o TypeScript inferir never[]. O tipo explicito resolve sem
             // obrigar a aba a inventar uma visao que ela nao tem.
-            const quantos = contagemDasAbas[x.id];
+            const quantos = x.id === "performance" ? undefined : contagemDasAbas[x.id];
             return { valor: x.id, rotulo: x.rotulo, contador: quantos };
           })}
         />
@@ -1773,7 +1779,7 @@ export default function AdminExecucao() {
         memoria="execucao-resumo"
         rotuloDaLateral="Atenção"
         iconeDaLateral={<ListChecks className="h-4 w-4" />}
-        lateral={
+        lateral={aba === "performance" ? undefined :
           <>
             <FecharResumo />
             <RegiaoRolavel modo="sempre" rotulo="Áreas e incidentes" memoria="execucao:areas" className="lg:pr-1">

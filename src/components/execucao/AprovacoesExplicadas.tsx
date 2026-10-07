@@ -92,11 +92,13 @@ export default function AprovacoesExplicadas({
   destaqueId,
   aoAbrirDiario,
   filtroCliente = "",
+  filtroVinculos,
 }: {
   nomesDeAgentes: Map<string, string>;
   titulosDeTarefas: Map<string, string>;
   destaqueId: string | null;
   filtroCliente?: string;
+  filtroVinculos?: string[];
   aoAbrirDiario: (linkId: string) => void;
 }) {
   const queryClient = useQueryClient();
@@ -105,21 +107,28 @@ export default function AprovacoesExplicadas({
   const [payloadAberto, setPayloadAberto] = useState<Record<string, boolean>>({});
 
   const { data: todasAprovacoes = [], error, isLoading, refetch } = useQuery({
-    queryKey: ["aprovacoes-explicadas"],
+    queryKey: ["aprovacoes-explicadas", filtroVinculos],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      if (filtroVinculos && !filtroVinculos.length) return [];
+      const todas: Aprovacao[] = [];
+      for (let offset = 0; ; offset += 200) {
+      let query = (supabase as any)
         .from("operator_approvals")
         .select("*, client:profiles!operator_approvals_client_id_fkey(company_name,full_name)")
         .in("status", ["pendente", "adiado"])
         .order("created_at", { ascending: false })
-        .limit(50);
+        .order("id").range(offset, offset + 199);
+      if (filtroVinculos) query = query.in("task_link_id", filtroVinculos);
+      const { data, error } = await query;
       if (error) throw new Error(error.message);
-      return (data || []) as Aprovacao[];
+      todas.push(...(data || []));
+      if ((data || []).length < 200) return todas;
+      }
     },
     refetchInterval: 30_000,
   });
 
-  const aprovacoes = todasAprovacoes.filter(a => !filtroCliente || a.id === destaqueId || (a.client?.company_name || a.client?.full_name) === filtroCliente).sort((a, b) => (a.client?.company_name || a.client?.full_name || "Operação interna").localeCompare(b.client?.company_name || b.client?.full_name || "Operação interna"));
+  const aprovacoes = todasAprovacoes.filter(a => (!filtroVinculos || filtroVinculos.includes(a.task_link_id || "")) && (!filtroCliente || a.id === destaqueId || (a.client?.company_name || a.client?.full_name) === filtroCliente)).sort((a, b) => (a.client?.company_name || a.client?.full_name || "Operação interna").localeCompare(b.client?.company_name || b.client?.full_name || "Operação interna"));
 
   const decidir = useMutation({
     mutationFn: async ({ id, decisao }: { id: string; decisao: string }) => {
@@ -135,7 +144,8 @@ export default function AprovacoesExplicadas({
     },
     onSuccess: (_d, vars) => {
       // Só retirar depois do recibo do servidor; não aguardar outra leitura para atualizar a lista.
-      if (vars.decisao !== "adiado") queryClient.setQueryData<Aprovacao[]>(["aprovacoes-explicadas"], anterior => anterior?.filter(a => a.id !== vars.id));
+      if (vars.decisao !== "adiado") queryClient.setQueryData<Aprovacao[]>(["aprovacoes-explicadas", filtroVinculos], anterior => anterior?.filter(a => a.id !== vars.id));
+      queryClient.invalidateQueries({ queryKey: ["execucao-performance-meta"] });
       queryClient.invalidateQueries({ queryKey: ["aprovacoes-explicadas"] });
       queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
       queryClient.invalidateQueries({ queryKey: ["execucao-pedidos"] });
@@ -220,6 +230,7 @@ export default function AprovacoesExplicadas({
                 <Campo rotulo="Dados usados">{a.dados_usados}</Campo>
                 <Campo rotulo="Para onde vai">{a.destino}</Campo>
                 <Campo rotulo="Impacto">{a.impacto}</Campo>
+                <Campo rotulo="Como medir">{typeof a.payload?.como_medir === "string" ? a.payload.como_medir : typeof a.payload?.measurement_plan === "string" ? a.payload.measurement_plan : "Critério de medição não informado nesta proposta."}</Campo>
                 <Campo rotulo="Risco">{a.risco}</Campo>
                 <Campo rotulo="Evidência">
                   {a.evidencia
