@@ -70,6 +70,7 @@ export interface RitualDoAgente {
 }
 
 export interface Aplicado {
+  leitura?: LeituraDaSemana;
   avisos?: string[];
   client_id: string;
   nome: string;

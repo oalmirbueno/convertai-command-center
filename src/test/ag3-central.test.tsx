@@ -89,7 +89,7 @@ describe("aplicar de novo sem duplicar o dossiê", () => {
     const a = item({ situacao: "perguntas", reportId: null });
     const b = item({ cliente: { ...a.cliente, id: "b", nome: "Outro cliente" }, situacao: "perguntas", aplicado: null, reportId: null });
     window.localStorage.setItem(CHAVE_LOCAL, JSON.stringify({ ...rodada([a, b]), publicar: false }));
-    mock.aplicar.mockResolvedValue({ ...aplicado(ritual("Atualizado com a correção.")), confirmacoes: ["Vídeos são prioridade."] });
+    mock.aplicar.mockResolvedValue({ ...aplicado(ritual("Atualizado com a correção.")), leitura: { ...preparo.leitura, onde_estamos: "Prioridade atual: vídeos do evento." }, confirmacoes: ["Vídeos são prioridade."] });
     mock.publicar.mockResolvedValue({ reportId: "novo", publicado: false, avisos: [] });
     montar();
     fireEvent.click(screen.getByRole("button", { name: /Atualizar todos/ }));
@@ -102,6 +102,7 @@ describe("aplicar de novo sem duplicar o dossiê", () => {
     expect(mock.reescrever).not.toHaveBeenCalled();
     expect(mock.publicar).toHaveBeenCalledWith(expect.objectContaining({ publicar: false, reportId: null }));
     await screen.findByText("O que foi incorporado (1)");
+    expect(screen.getByText("Prioridade atual: vídeos do evento.")).toBeInTheDocument();
   });
 
   it("falha ao incorporar resposta não publica nem mostra cliente concluído", async () => {

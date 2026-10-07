@@ -422,7 +422,11 @@ export default function AgenteDaCentral() {
             respostas: item.respostas, contextoExtra: contexto, envioId: atual.iniciadaEm, pesquisar: atual.pesquisar, dossieVersao: preparo.dossie_versao,
           });
         }
-        atualizarItem(c.id, (i) => ({ ...i, aplicado: ap, aplicadoPara: assinatura, situacao: ap.ritual ? "publicando" : "erro", aprendizado: ap.aprendizado?.length ? ap.aprendizado : i.aprendizado }));
+        atualizarItem(c.id, (i) => ({
+          ...i, aplicado: ap, aplicadoPara: assinatura,
+          preparo: i.preparo ? { ...i.preparo, leitura: ap.leitura ?? i.preparo.leitura, dossie_versao: ap.dossie_versao, dossie_aviso: ap.dossie_aviso } : i.preparo,
+          situacao: ap.ritual ? "publicando" : "erro", aprendizado: ap.aprendizado?.length ? ap.aprendizado : i.aprendizado,
+        }));
         // Frente FS: a IA que não organizou as respostas não some em silêncio.
         if (ap.ia_erro) toast.warning(`${c.nome}: a IA não organizou as respostas agora; elas entraram como foram escritas.`, { description: `Motivo: ${ap.ia_erro}` });
         if (ap.avisos?.length) toast.warning(`${c.nome}: ${ap.avisos.join(" ")}`);
