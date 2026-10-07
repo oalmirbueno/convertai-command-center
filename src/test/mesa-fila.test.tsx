@@ -327,13 +327,26 @@ const dadosDaTela = resposta([
 ]);
 
 describe("tela da fila", () => {
+  it("busca sem acento mantém o cliente e Começar abre sua próxima ação", async () => {
+    mock.rpc.mockResolvedValue({ data: dadosDaTela, error: null });
+    const onAbrir = vi.fn();
+    montar(<FilaDePrioridades clientes={[]} clientesProntos onAbrir={onAbrir} />);
+    await screen.findAllByRole("heading", { level: 3 });
+    fireEvent.change(screen.getByRole("textbox", { name: "Buscar cliente nas prioridades" }), { target: { value: "otica" } });
+    expect(screen.getAllByRole("heading", { level: 3 }).map(h => h.textContent)).toEqual(["Ótica Visão"]);
+    fireEvent.click(screen.getByRole("button", { name: "Começar" }));
+    expect(onAbrir).toHaveBeenCalledWith(B, "estudio", "2026-09-01");
+    fireEvent.click(screen.getByRole("button", { name: "Abrir conhecimento de Ótica Visão" }));
+    expect(onAbrir).toHaveBeenLastCalledWith(B, "contexto", null);
+  });
   it("agrupada por cliente, o mais urgente primeiro, e 'Abrir' leva à aba certa", async () => {
     mock.rpc.mockResolvedValue({ data: dadosDaTela, error: null });
     const onAbrir = vi.fn();
     montar(<FilaDePrioridades clientes={[]} clientesProntos onAbrir={onAbrir} />);
     const grupos = await screen.findAllByRole("heading", { level: 3 });
     expect(grupos.map((g) => g.textContent)).toEqual(["Ótica Visão", "Padaria São João"]);
-    expect(screen.getByText("O calendário de outubro está vazio e começa em 7 dias")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Mais 1 ação deste cliente" }));
+    expect(screen.getAllByText("O calendário de outubro está vazio e começa em 7 dias").length).toBeGreaterThan(0);
     expect(screen.getByText("2 posts esperando aprovação há 4 dias; último acesso há 14 dias")).toBeTruthy();
     expect(screen.getByText("1 cliente em dia")).toBeTruthy();
 
@@ -405,6 +418,7 @@ describe("Mesa: fila na entrada e botões no topo", () => {
     // O número do botão é o que está para agora.
     await waitFor(() => expect(screen.getByRole("button", { name: "Prioridades: 2 para agora" })).toBeTruthy());
 
+    fireEvent.click(await screen.findByRole("button", { name: "Mais 1 ação deste cliente" }));
     fireEvent.click(await screen.findByRole("button", { name: "Gerar o mês: abrir Ótica Visão" }));
     await waitFor(() => expect(screen.getByTestId("endereco").textContent).toContain(`client=${B}`));
     const endereco = screen.getByTestId("endereco").textContent || "";

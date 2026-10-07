@@ -17,6 +17,8 @@ import {
   Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { filtrarPrioridades, normalizarBusca, useRevisoesDoDossie } from "@/lib/mesa/prioridadesConhecimento";
 import { rotuloDoMes, textoDoErro } from "@/lib/mesa/api";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
@@ -182,6 +184,9 @@ export default function FilaDePrioridades({
   onAbrir: (clientId: string, aba: AbaDaMesa, mes: string | null) => void;
 }) {
   const consulta = useFilaDePrioridades(clientes, clientesProntos);
+  const revisoes = useRevisoesDoDossie(clientes, clientesProntos);
+  const [busca, setBusca] = useState("");
+  const [expandidos, setExpandidos] = useState<Record<string, boolean>>({});
   const [filtro, setFiltro] = useState<Filtro>("tudo");
   const [verEmDia, setVerEmDia] = useState(false);
   const [verMarcados, setVerMarcados] = useState(false);
@@ -217,11 +222,9 @@ export default function FilaDePrioridades({
   };
 
   const contagem = (f: Filtro) => (fila ? fila.grupos.reduce((s, g) => s + g.acoes.filter((a) => noFiltro(f, a)).length, 0) : 0);
-  const grupos = fila
-    ? fila.grupos
-        .map((g) => ({ ...g, acoes: g.acoes.filter((a) => noFiltro(filtro, a)) }))
-        .filter((g) => g.acoes.length > 0)
-    : [];
+  const grupos = fila ? filtrarPrioridades(fila.grupos, busca, FILTROS.find(f => f.chave === filtro)?.tipos) : [];
+  const primeiro = grupos[0];
+  const revisoesVisiveis = (revisoes.data || []).filter(c => normalizarBusca(c.nome).includes(normalizarBusca(busca)));
 
   return (
     <section aria-label="Prioridades" className="min-w-0 space-y-4">
@@ -245,7 +248,7 @@ export default function FilaDePrioridades({
           )}
           <button
             type="button"
-            onClick={() => void consulta.refetch()}
+            onClick={() => { void consulta.refetch(); void revisoes.refetch(); }}
             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
             aria-label="Atualizar prioridades"
             title="Atualizar"
@@ -255,6 +258,14 @@ export default function FilaDePrioridades({
         </div>
         }
       />
+      <div className="flex flex-wrap items-center gap-2">
+        <Input aria-label="Buscar cliente nas prioridades" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar cliente" className="h-9 max-w-xs" />
+        {consulta.dataUpdatedAt > 0 && <span className="ml-auto text-[11px] text-muted-foreground">Conferido às {new Date(consulta.dataUpdatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>}
+      </div>
+      {primeiro && !consulta.isError && <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4" aria-label="Próxima ação recomendada">
+        <div className="min-w-0 flex-1"><p className="text-xs font-medium text-primary">Comece por aqui · {primeiro.nome}</p><p className="mt-1 text-sm font-semibold">{tituloComMes(primeiro.acoes[0])}</p><p className="mt-1 text-xs text-muted-foreground">{primeiro.acoes[0].motivo}</p></div>
+        <button type="button" className={juntar(botao.primario, "h-9 px-3 text-xs")} onClick={() => onAbrir(primeiro.client_id, primeiro.acoes[0].aba, primeiro.acoes[0].mes)}>Começar <ArrowRight className="ml-2 h-4 w-4" /></button>
+      </div>}
 
       {fila && fila.grupos.length > 0 && (
         <div role="group" aria-label="Filtrar por ação" className="flex flex-wrap">
@@ -312,6 +323,7 @@ export default function FilaDePrioridades({
                   <div className="flex min-w-0 items-center">
                     <span className="mr-2 w-5 shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground">{i + 1}</span>
                     <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold">{g.nome}</h3>
+                    <button type="button" className="ml-2 text-xs text-muted-foreground hover:text-primary" aria-label={`Abrir conhecimento de ${g.nome}`} onClick={() => onAbrir(g.client_id, "contexto", null)}>Contexto</button>
                     <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${nivel.selo}`}>{nivel.rotulo}</span>
                   </div>
                   {g.pronto && (
@@ -321,7 +333,7 @@ export default function FilaDePrioridades({
                     </p>
                   )}
                   <ul className="mt-1 divide-y divide-border">
-                    {g.acoes.map((a) => (
+                    {(expandidos[g.client_id] ? g.acoes : g.acoes.slice(0, 1)).map((a) => (
                       <LinhaDaAcao
                         key={`${a.tipo}-${a.mes || ""}`}
                         acao={a}
@@ -332,6 +344,7 @@ export default function FilaDePrioridades({
                       />
                     ))}
                   </ul>
+                  {g.acoes.length > 1 && <button type="button" aria-expanded={!!expandidos[g.client_id]} className="mb-2 ml-11 text-xs text-muted-foreground hover:text-foreground" onClick={() => setExpandidos(v => ({ ...v, [g.client_id]: !v[g.client_id] }))}>{expandidos[g.client_id] ? "Recolher outras ações" : `Mais ${g.acoes.length - 1} ${g.acoes.length === 2 ? "ação" : "ações"} deste cliente`}</button>}
                 </div>
               </li>
             );
@@ -367,6 +380,13 @@ export default function FilaDePrioridades({
           )}
         </div>
       )}
+
+      {revisoes.isError && <p className="text-xs text-muted-foreground">A revisão dos dossiês não pôde ser consultada. Atualize para tentar novamente.</p>}
+      {revisoesVisiveis.length > 0 && <details className="rounded-lg border border-border p-3">
+        <summary className="cursor-pointer text-sm font-medium">Contextos a conferir <span className="text-muted-foreground">({revisoesVisiveis.length})</span></summary>
+        <p className="mt-2 text-xs text-muted-foreground">A data sinaliza uma revisão; não significa que as informações estejam erradas.</p>
+        <ul className="mt-2 divide-y divide-border">{revisoesVisiveis.map(c => <li key={c.id} className="flex items-center gap-3 py-2"><div className="min-w-0 flex-1"><p className="truncate text-sm">{c.nome}</p><p className="text-xs text-muted-foreground">{c.motivo}</p></div><button className={juntar(botao.secundario, "h-8 px-3 text-xs")} onClick={() => onAbrir(c.id, "contexto", null)}>Revisar</button></li>)}</ul>
+      </details>}
 
       {fila && fila.marcados.length > 0 && (
         <div className="text-[12.5px] text-muted-foreground">

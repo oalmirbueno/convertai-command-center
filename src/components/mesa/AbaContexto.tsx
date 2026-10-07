@@ -1,6 +1,7 @@
 import { lazy, Suspense, useRef, useState } from "react";
 import AgenteDeContexto from "./AgenteDeContexto";
 import ContextoAutomatico from "./ContextoAutomatico";
+import CerebroDoCliente from "./CerebroDoCliente";
 import ContextoMarca from "./ContextoMarca";
 import ContextoKitDaMarca from "./ContextoKitDaMarca";
 import { useMarcaDaMesa } from "./MesaContexto";
@@ -90,7 +91,7 @@ function DetalhesDoContexto({ parte }: { parte: ParteDoContexto }) {
  */
 export default function AbaContexto() {
   // A parte aberta e o modo do agente ficam guardados por cliente (sair e voltar mantém).
-  const { clientId } = useMesa();
+  const { clientId, userId } = useMesa();
   const [parte, setParte] = useEstadoDaTela<ParteDoContexto>(`mesa:contexto:parte:${clientId}`, "marca", {
     validar: (v) => PARTES.some((p) => p.valor === v),
   });
@@ -146,6 +147,7 @@ export default function AbaContexto() {
           </div>
         )}
         <ContextoAutomatico onIrPara={irPara} />
+        {(!marca || marca.principal) && <CerebroDoCliente key={clientId} clientId={clientId} userId={userId} onRevisar={pedirAoAgente} />}
         <div className="min-w-0">
           <Hub
             id="ctx-plano"

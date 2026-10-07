@@ -8,6 +8,7 @@ import {
 } from "@/lib/contextoDoCliente";
 import { AO_VIVO_CALMO } from "@/lib/consultaAoVivo";
 import EntregasNoDossie from "@/components/admin/EntregasNoDossie";
+import CerebroDoCliente from "@/components/mesa/CerebroDoCliente";
 import { EstadoVazio, Secao, botao, etiqueta, foco, juntar, texto } from "@/components/sistema";
 
 /**
@@ -52,6 +53,7 @@ export default function DossieDoCliente({ clientId, clientName }: Props) {
   const queryClient = useQueryClient();
   const [aberto, setAberto] = useState(false);
   const [historicoAberto, setHistoricoAberto] = useState(false);
+  const [memoriaAberta, setMemoriaAberta] = useState(false);
 
   const chave = ["dossie-cliente", clientId];
   const { data, isFetching, refetch } = useQuery({
@@ -279,6 +281,10 @@ export default function DossieDoCliente({ clientId, clientName }: Props) {
       {/* A outra metade do dossiê: quem é o cliente E o que já foi feito
           para ele. Vem da mesma memória que o Ciclo e a Central leem. */}
       <EntregasNoDossie clientId={clientId} />
+      <div className="mt-3 border-t border-border pt-3">
+        <button type="button" className="text-xs font-medium text-primary" aria-expanded={memoriaAberta} onClick={() => setMemoriaAberta(v => !v)}>{memoriaAberta ? "Recolher segundo cérebro" : "Abrir memória e aprendizados"}</button>
+        {memoriaAberta && <div className="mt-3"><CerebroDoCliente key={clientId} clientId={clientId} somenteMemoria /></div>}
+      </div>
     </Secao>
   );
 }
