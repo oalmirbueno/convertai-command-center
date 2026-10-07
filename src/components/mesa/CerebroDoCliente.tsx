@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Brain, Plus, RefreshCw, Search, Archive, RotateCcw, BookOpen } from "lucide-react";
 import { toast } from "sonner";
@@ -28,7 +29,7 @@ export default function CerebroDoCliente({ clientId, userId, somenteMemoria = fa
   const [validade, setValidade] = useState("90");
   const [gravando, setGravando] = useState(false);
   const consulta = useQuery({
-    queryKey: ["mesa", "cerebro-organizado", clientId], enabled: !!clientId, staleTime: 30_000,
+    queryKey: ["mesa", "cerebro-organizado", clientId], enabled: !!clientId, staleTime: 30_000, refetchOnWindowFocus: true,
     queryFn: async () => {
       const [memorias, dossies, atual] = await Promise.all([
         supabase.from("agente_memoria").select("id,client_id,texto,agente,tipo,ativa,area,categoria,fonte,origem,evidencia,motivo,criado_em,valido_ate,substituida_por,reforcos,chave").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(500),
@@ -106,7 +107,7 @@ export default function CerebroDoCliente({ clientId, userId, somenteMemoria = fa
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><BookOpen className="h-3.5 w-3.5" />{atual ? `Dossiê v${atual.version} · ${dataCurta(atual.updated_at)} · ${atual.source || "Origem não informada"}` : "Dossiê ainda não registrado"}{onRevisar && <button className="ml-auto text-primary" onClick={() => onRevisar("Revise o dossiê e o conhecimento deste cliente com base nas fontes disponíveis. Separe fatos, decisões, pendências e dúvidas. Preserve o histórico e não apresente hipótese como fato confirmado.")}>Revisar com o agente</button>}</div>
       {atual?.summary && <p className="text-sm leading-relaxed">{atual.summary}</p>}
       {contagem("revisar") > 0 && <button className="text-left text-xs text-amber-500" onClick={() => setAba("revisar")}>{contagem("revisar")} registros precisam de revisão de validade ou período</button>}
-      {secoesDoDossie(atual?.content || "").map((s,i) => <details key={i} className="rounded-lg border border-border p-3" open={i === 0}><summary className="cursor-pointer text-sm font-medium">{s.titulo}</summary><p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground break-words">{s.texto}</p></details>)}
+      {secoesDoDossie(atual?.content || "").map((s,i) => <details key={i} className="rounded-lg border border-border p-3" open={i === 0}><summary className="cursor-pointer text-sm font-medium">{s.titulo}</summary><div className="prose prose-sm dark:prose-invert mt-2 max-w-none break-words text-muted-foreground"><ReactMarkdown skipHtml components={{ img: ({ alt }) => <span>{alt}</span> }}>{s.texto}</ReactMarkdown></div></details>)}
       {!atual && <p className="text-xs text-muted-foreground">Registre informações confirmadas ou peça ao agente para organizar as fontes existentes.</p>}
     </div>}
     {dados && ["uso","revisar","historico"].includes(aba) && <>

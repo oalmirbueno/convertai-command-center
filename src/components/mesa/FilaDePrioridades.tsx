@@ -221,9 +221,11 @@ export default function FilaDePrioridades({
     }
   };
 
-  const contagem = (f: Filtro) => (fila ? fila.grupos.reduce((s, g) => s + g.acoes.filter((a) => noFiltro(f, a)).length, 0) : 0);
+  const contagem = (f: Filtro) => (fila ? fila.grupos.filter(g => normalizarBusca(g.nome).includes(normalizarBusca(busca))).reduce((s, g) => s + g.acoes.filter((a) => noFiltro(f, a)).length, 0) : 0);
   const grupos = fila ? filtrarPrioridades(fila.grupos, busca, FILTROS.find(f => f.chave === filtro)?.tipos) : [];
   const primeiro = grupos[0];
+  const emDia = (fila?.emDia || []).filter(c => normalizarBusca(c.nome).includes(normalizarBusca(busca)));
+  const marcados = (fila?.marcados || []).filter(c => normalizarBusca(c.nome).includes(normalizarBusca(busca)));
   const revisoesVisiveis = (revisoes.data || []).filter(c => normalizarBusca(c.nome).includes(normalizarBusca(busca)));
 
   return (
@@ -356,15 +358,15 @@ export default function FilaDePrioridades({
         <p className="rounded-lg border border-dashed border-border p-5 text-center text-[13px] text-muted-foreground">Nada com esse filtro.</p>
       )}
 
-      {fila && fila.emDia.length > 0 && (
+      {fila && emDia.length > 0 && (
         <div className="text-[12.5px] text-muted-foreground">
           <button type="button" onClick={() => setVerEmDia((v) => !v)} className="inline-flex items-center hover:text-foreground" aria-expanded={verEmDia}>
             <CheckCircle2 className="mr-1.5 h-3.5 w-3.5 text-success" />
-            {fila.emDia.length === 1 ? "1 cliente em dia" : `${fila.emDia.length} clientes em dia`}
+            {emDia.length === 1 ? "1 cliente em dia" : `${emDia.length} clientes em dia`}
           </button>
           {verEmDia && (
             <ul className="mt-2 flex flex-wrap">
-              {fila.emDia.map((c) => (
+              {emDia.map((c) => (
                 <li key={c.client_id} className="mb-1.5 mr-1.5">
                   <button
                     type="button"
@@ -388,15 +390,15 @@ export default function FilaDePrioridades({
         <ul className="mt-2 divide-y divide-border">{revisoesVisiveis.map(c => <li key={c.id} className="flex items-center gap-3 py-2"><div className="min-w-0 flex-1"><p className="truncate text-sm">{c.nome}</p><p className="text-xs text-muted-foreground">{c.motivo}</p></div><button className={juntar(botao.secundario, "h-8 px-3 text-xs")} onClick={() => onAbrir(c.id, "contexto", null)}>Revisar</button></li>)}</ul>
       </details>}
 
-      {fila && fila.marcados.length > 0 && (
+      {fila && marcados.length > 0 && (
         <div className="text-[12.5px] text-muted-foreground">
           <button type="button" onClick={() => setVerMarcados((v) => !v)} className="inline-flex items-center hover:text-foreground" aria-expanded={verMarcados}>
             <Check className="mr-1.5 h-3.5 w-3.5 text-success" />
-            {fila.marcados.length === 1 ? "1 marcado como feito" : `${fila.marcados.length} marcados como feito`}
+            {marcados.length === 1 ? "1 marcado como feito" : `${marcados.length} marcados como feito`}
           </button>
           {verMarcados && (
             <ul className={juntar(lista.aberta, lista.divisoria, "mt-2")} aria-label="Marcados como feito">
-              {fila.marcados.map((m: MarcadoDaFila) => (
+              {marcados.map((m: MarcadoDaFila) => (
                 <li key={m.feito.id} className={lista.linha}>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] text-foreground">
