@@ -913,7 +913,7 @@ describe("agente de edição na tela", () => {
       return Promise.resolve({ data: {}, error: null });
     });
     montar(h(MesaEdicao), `/mesa-edicao?client=${CLIENTE}`);
-    fireEvent.click(await screen.findByRole("button", { name: "Sugestões", exact: true }));
+    fireEvent.click(await screen.findByRole("button", { name: "Sugestões" }));
     fireEvent.click(await screen.findByRole("button", { name: "Organizar tudo" }));
     await waitFor(() => expect(chamadas("takes_organizar_propor")).toHaveLength(1));
     expect(chamadas("agente_entender")).toHaveLength(0);
