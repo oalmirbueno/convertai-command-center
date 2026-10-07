@@ -32,6 +32,8 @@ import { importarDriveNoContexto, temLinkDoDrive } from "./importarDriveNoContex
 import { PEDIDO_DO_COMECO } from "./ContextoPlanoDoCliente";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 
+const temLinkNoPedido = (texto: string) => /(?:https?:\/\/|www\.)\S+/i.test(texto);
+
 /**
  * Conversa com o agente de contexto: a equipe conta o que sabe da marca e o
  * agente grava no kit (estilo, regras, paleta, contexto) e na memória do
@@ -101,7 +103,7 @@ function ConversaDeContexto({
     if (!msg || enviando || preparando) return;
     const enviados = [...anexos.caminhos];
     const documentos = arquivos.paraOEnvio();
-    const modoDoPedido = modo === "plano" || temMaterial || temLinkDoDrive(msg) ? "plano" : "marca";
+    const modoDoPedido = modo === "plano" || temMaterial || temLinkNoPedido(msg) ? "plano" : "marca";
     const alvo = clientId;
     setEnviando({ clientId: alvo, mensagem: msg });
     setErro(null);
@@ -114,7 +116,7 @@ function ConversaDeContexto({
         corpoDosDocumentos = { lidos: [...(documentos.corpo?.lidos || []), ...drive.arquivos.lidos], nao_lidos: [...(documentos.corpo?.nao_lidos || []), ...drive.arquivos.nao_lidos] };
         invalidar(alvo);
       }
-      setProgresso("Analisando o contexto e executando o pedido…");
+      setProgresso(temLinkNoPedido(msg) ? "Lendo os links e organizando o contexto…" : "Analisando o contexto e executando o pedido…");
       const data = await chamarFuncao<RespostaDaConversa>("agente-contexto", { acao: "conversar", client_id: alvo, mensagem: msg, ...(modoDoPedido === "plano" ? { modo: "plano", executar, pesquisar_web: pesquisarWeb, anexos: enviados, arquivos: corpoDosDocumentos } : {}), ...marcaDaRegra(alvo) });
       // 29/09: todos os anexos (cartões, caminho, "Aprendi", "Segui"); antes só as propostas.
       const anexosDaResposta = data && Array.isArray(data.anexos) ? data.anexos : data && Array.isArray(data.acoes) ? data.acoes : data && data.acao ? [data.acao] : [];
@@ -176,7 +178,7 @@ function ConversaDeContexto({
       acoes={
         <AjudaRecolhida rotulo="Como o agente de contexto funciona">
           {modo === "plano"
-            ? "Converse, entregue documentos e peça o que precisa. O agente lê o material, organiza o contexto e aplica projetos e tarefas quando você manda fazer. Você pode escolher revisar antes e desfazer as ações. Links do Drive são importados para o Workspace. A pesquisa externa complementa lacunas quando necessária; desligue a opção para usar só o material do cliente."
+            ? "Converse, entregue documentos ou cole links. O agente lê o conteúdo acessível, organiza o contexto e aplica projetos e tarefas quando você manda fazer. Você pode revisar antes e desfazer. O Drive guarda arquivos; sites e artigos guardam o texto lido no Workspace. Links enviados são lidos mesmo com a pesquisa desligada. Páginas com login ou bloqueio são sinalizadas. A pesquisa externa complementa lacunas quando permitida."
             : "Conte o que sabe da marca ou corrija o que estiver errado. O agente grava no kit e ensina o estrategista e o diretor de arte."}
         </AjudaRecolhida>
       }
@@ -237,7 +239,7 @@ function ConversaDeContexto({
             disabled={!!pendente}
           />
           </ZonaDeAnexos>
-          {(modo === "plano" || temMaterial || temLinkDoDrive(texto)) && <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {(modo === "plano" || temMaterial || temLinkNoPedido(texto)) && <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <label className="flex items-center gap-1.5"><input type="checkbox" checked={executar} onChange={e => setExecutar(e.target.checked)} disabled={!!pendente} /> Aplicar meus pedidos</label>
             <label className="flex items-center gap-1.5" title="Consulta fontes externas quando necessário; prioriza seus documentos"><input type="checkbox" checked={pesquisarWeb} onChange={e => setPesquisarWeb(e.target.checked)} disabled={!!pendente} /> Pesquisar quando necessário</label>
           </div>}

@@ -30,3 +30,14 @@ O Plano do cliente aceita conversa, documentos, imagens e links do Google Drive.
 Testes de contexto-plano-execucao, contexto-drive, contexto-materiais, agente-do-cliente, ci-contexto-inteligente, mesa-contexto-organizado, ag3-workspace e agente-mes-v2. Deno check no agente-contexto; tipos app/node; build e compatibilidade MCP. Conferir controles e anexos na aba Contexto após publicar.
 
 Deploy somente de agente-contexto no Supabase jjjtkowvxemvituvywvf, com JWT preservado, e do frontend no Worker aceleriq-painel. Sem migração. Backend anterior v42 foi baixado e comparado com main antes da edição. Em rollback, restaurar o bundle anterior e o Worker anterior; não remover arquivos ou reverter dados dos clientes automaticamente. Preservar o trabalho do Claude e continuar da revisão integrada.
+# Leitura de links externos (07/10/2026)
+
+O Plano do cliente lê URLs coladas no pedido antes da chamada do modelo, independentemente de `pesquisar_web`. O frontend também encaminha pedidos com links HTTP(S) ou `www.` ao Plano. Drive continua no importador especializado existente.
+
+- Até quatro URLs externas distintas por pedido, em paralelo, 25 segundos e 512 KiB por resposta, 15 mil caracteres por fonte. Falhas e cortes são explicitados. O teto combinado de documentos de 90 mil caracteres permanece.
+- Sites, artigos e PDFs textuais públicos usam **Jina Reader** (`https://r.jina.ai/`, documentação: https://jina.ai/reader/). É um novo processador externo de páginas públicas, acessado sem chave na modalidade pública, sujeito a limites do fornecedor. `DNT: 1`, sem cookies, sessões ou credenciais. Não usa uma conta do navegador e não contorna login.
+- O servidor só faz fetch no host fixo `r.jina.ai`, com redirecionamentos de transporte proibidos. URLs de origem/destino são validadas como HTTPS público, inclusive DNS; portas não padrão, IPs literais, credenciais em URL e parâmetros de autenticação/assinatura são recusados. Não ampliar a allowlist do helper compartilhado para hosts fornecidos pelo usuário.
+- HTTP tenta a versão HTTPS. Áudio/vídeo e documentos Office/ZIP diretos pedem anexo/transcrição; não simulam leitura. Links sociais usam apenas texto público acessível, nunca prometem assistir ao vídeo. URLs com acesso restrito podem não ser lidas.
+- Textos extraídos passam pela mesma sanitização, persistência por cliente, histórico e arquivo no Workspace → Contexto do cliente → Documentos. Guardam URL de origem e limites da leitura. Não afirmam baixar o original de um site.
+- O prompt distingue material do cliente, referência, concorrente e evento. Fontes externas são dados não confiáveis; não autorizam ações e não substituem fatos aprovados sem evidência.
+- Reverter este lote desfaz o módulo `links-do-contexto`, sua chamada em `conversarNoPlano`, o roteamento/ajuda do frontend e as duas orientações adicionais do prompt. Nenhuma migração ou mudança nas Mesas de criação.

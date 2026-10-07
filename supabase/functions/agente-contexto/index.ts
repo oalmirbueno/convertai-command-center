@@ -138,6 +138,7 @@ import { AREAS_DO_CEREBRO } from "../_shared/cerebro-do-cliente.ts";
 import { blocoDoMetodoParaPrompt, faseDoCliente, METODO_ACELERA } from "../_shared/metodo-acelera.ts";
 import { OPERACAO_DO_PLANO, podeAplicarPlano, aplicarPlanoEmPassos, memoriaDosResultados } from "./modulos/operacao-do-plano.ts";
 import { importarDrive } from "./modulos/importar-drive.ts";
+import { lerLinksDoContexto } from "./modulos/links-do-contexto.ts";
 import { materiaisDoPlano, recuperarMateriais, arquivarMateriais } from "./modulos/materiais-do-plano.ts";
 import { conhecimentoDoPlano } from "./modulos/conhecimento-do-plano.ts";
 import { blocoDasFerramentas, ESQUEMA_DO_LER, executarLeituras, normalizarPedidosDeLeitura } from "./modulos/ferramentas-do-cliente.ts";
@@ -2381,7 +2382,13 @@ async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): P
   const db = servico();
   const marcaAberta = await marcaDoPedido(db, clientId, corpo);
   if (ehOutraMarca(marcaAberta)) throw new ErroContexto(400, "plano_marca_secundaria", "Abra o contexto principal do cliente para planejar projetos. O contexto desta marca continua separado.");
-  const materiais = await materiaisDoPlano(db, clientId, ch.userId, corpo);
+  // Ler o link entregue é parte do pedido; não depende da opção de pesquisar a web.
+  const links = await lerLinksDoContexto(mensagem);
+  const arquivosRecebidos = corpo.arquivos && typeof corpo.arquivos === "object" ? corpo.arquivos as Record<string, unknown> : {};
+  const materiais = await materiaisDoPlano(db, clientId, ch.userId, { ...corpo, arquivos: {
+    ...arquivosRecebidos, lidos: [...(Array.isArray(arquivosRecebidos.lidos) ? arquivosRecebidos.lidos : []), ...links.lidos],
+  } });
+  materiais.avisos.push(...links.avisos);
   const conversaId = await garantirConversa(clientId, ch.userId);
   // 29/09: o pedido é gravado antes da IA; se a IA falhar, ele sai e o texto volta ao campo.
   const pedido = await gravarPedidoDoContexto(conversaId, clientId, mensagem, materiais.anexos);
@@ -2467,7 +2474,7 @@ async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): P
   const soltar = comPedidoSolto<never>(pedido.id, clientId);
   let r = await chamar(mensagens).catch(soltar);
   let custo = r.custoUsd;
-  const fontesPesquisadas = [...(r.fontes || [])];
+  const fontesPesquisadas = [...links.fontes.map(f => ({ url: f.url, titulo: f.titulo })), ...(r.fontes || [])];
   let o = (r.json ?? {}) as Record<string, any>;
   // Busca -> leitura do arquivo encontrado -> resposta. Nunca repete a mesma leitura.
   const pedidos: ReturnType<typeof normalizarPedidosDeLeitura> = [];
