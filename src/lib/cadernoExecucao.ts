@@ -14,6 +14,14 @@ export function prepararEntrada(body: string, attachments: AnexoDoCaderno[] = []
   });
   texto = texto.replace(/\b(?:sha256|hash)\s*[:=]\s*[a-f0-9]{32,64}\b/gi, "integridade registrada");
   texto = texto.replace(new RegExp(UUID, "gi"), "registro vinculado");
+  // Caminhos do servidor não são links públicos. O original continua disponível.
+  texto = texto.replace(/\/root\/[^\s;,]+/g, "arquivo técnico no servidor");
+  texto = texto.replace(/\bsnapshot\d{8}T\d+\b/gi, "coleta identificada");
+  // Corrige palavras coladas a quantidades, sem alterar URLs, datas ou códigos.
+  texto = texto.replace(/(^|[\s,:;])(de|com|e|carteira)(\d+)/gi, "$1$2 $3");
+  if (!/[\n]|^\s*[#>*-]/m.test(texto)) {
+    texto = texto.replace(/([.!?])\s+(?=[A-ZÀ-Ú])/g, "$1\n\n");
+  }
   return { texto, anexos: [...anexos.values()], temDetalhes: texto !== body };
 }
 

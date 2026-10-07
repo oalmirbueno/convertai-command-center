@@ -1,6 +1,7 @@
 export interface OperatorProgressDetail {
   title?: string;
   summary?: string;
+  work_kind?: "documental" | "execucao";
   page_url?: string;
   attachments?: { name: string; url: string }[];
 }
@@ -28,7 +29,8 @@ export function progressDetail(input: OperatorProgressDetail | undefined, action
   }
   if (nextStep?.trim()) detail.next_step = nextStep.trim().slice(0, 300);
   if (input?.title?.trim()) detail.title = input.title.trim().slice(0, 200);
-  if (input?.summary?.trim()) detail.summary = input.summary.trim().slice(0, 3000);
+  if (input?.summary?.trim()) detail.summary = input.summary.trim().slice(0, 32000);
+  if (input?.work_kind) detail.work_kind = input.work_kind;
   if (input?.page_url) detail.page_url = evidenceLocation(input.page_url);
   if (input?.attachments) {
     if (input.attachments.length > 12) throw new Error('Envie até 12 comprovações por atualização.');

@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
+import DocumentoDaExecucao from "./DocumentoDaExecucao";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,7 +26,7 @@ import { Carregando, botao, etiqueta, juntar, superficie, texto } from "@/compon
 
 const ROTULO_ESTADO: Record<string, string> = {
   queued: "na fila",
-  in_progress: "trabalhando agora",
+  in_progress: "em andamento",
   done: "entregue",
   review: "esperando sua revisão",
   awaiting_input: "esperando algo de você",
@@ -258,13 +260,10 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
                     aconteceu, mas não o que fazer com isso. */}
                 <div className="mt-2 space-y-1.5">
                   {l.last_action && (
-                    <p className="text-[12.5px] leading-relaxed text-foreground/90">{l.last_action}</p>
+                    <DocumentoDaExecucao texto={l.last_action} compacto />
                   )}
                   {l.next_step && (
-                    <p className="text-[12px] text-muted-foreground">
-                      <span className="font-medium">próximo passo: </span>
-                      {l.next_step}
-                    </p>
+                    <div className="border-l-2 border-primary/40 pl-3"><span className="text-xs font-semibold">Próximo passo</span><DocumentoDaExecucao texto={l.next_step} compacto /></div>
                   )}
                   {l.block_reason && (
                     <p className="text-[12px] text-destructive">
@@ -285,29 +284,7 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
                     <p className="mb-1 inline-flex items-center text-[12px] font-medium text-success">
                       <FileText className="mr-1 h-3 w-3" aria-hidden="true" /> Entrega
                     </p>
-                    {ehLink(l.last_evidence) ? (
-                      <>
-                        <a
-                          href={String(l.last_evidence).trim()}
-                          target="_blank" rel="noopener noreferrer"
-                          className="block break-all text-[12px] text-primary underline"
-                        >
-                          {String(l.last_evidence).trim()}
-                          <ExternalLink className="ml-1 inline h-3 w-3 align-[-2px]" aria-hidden="true" />
-                        </a>
-                        {ehImagem(String(l.last_evidence)) && (
-                          <img
-                            src={String(l.last_evidence).trim()}
-                            alt="Comprovação da entrega"
-                            loading="lazy"
-                            referrerPolicy="no-referrer"
-                            className="mt-2 max-h-56 w-auto rounded-md border border-border"
-                          />
-                        )}
-                      </>
-                    ) : (
-                      <p className="break-words text-[12px] text-foreground/90">{l.last_evidence}</p>
-                    )}
+                    <DocumentoDaExecucao texto={l.last_evidence} />
                   </div>
                 )}
 
@@ -345,6 +322,7 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
         </section>
       )}
 
+      {data?.links?.some((l: any) => /meta|campanha/i.test(`${l.last_action || ""} ${l.next_step || ""}`)) && <Link className={botao.primario} to="/execucao?aba=performance">Abrir Central de Performance Meta Ads</Link>}
       {/* O que você escreveu, junto do que o agente respondeu. */}
       {(data?.diario?.length ?? 0) > 0 && (
         <section className="border-t border-border pt-3">
@@ -363,7 +341,7 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
                   {String(d.entry_type).replace(/_/g, " ")} · {quando(d.created_at)}
                 </p>
                 {d.title && <p className="text-[12.5px] font-semibold text-foreground">{d.title}</p>}
-                <p className="whitespace-pre-wrap break-words text-[12.5px] text-foreground/90">{d.body}</p>
+                <DocumentoDaExecucao texto={d.body} compacto />
               </div>
             ))}
           </div>

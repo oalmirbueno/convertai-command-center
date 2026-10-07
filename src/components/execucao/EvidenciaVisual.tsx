@@ -6,6 +6,21 @@ import { supabase } from "@/integrations/supabase/client";
 import { destinoDaEvidencia } from "@/lib/execucaoApresentacao";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+function RelatorioDeTexto({ href }: { href: string }) {
+  const leitura = useQuery({ queryKey: ["relatorio-texto-privado", href], queryFn: async () => {
+    const resposta = await fetch(href);
+    if (!resposta.ok) throw new Error("Arquivo indisponível");
+    const blob = await resposta.blob();
+    if (blob.size > 1024 * 1024) throw new Error("Arquivo grande demais para a leitura rápida");
+    return blob.text();
+  } });
+  if (leitura.isLoading) return <p className="p-4 text-sm text-muted-foreground">Abrindo relatório…</p>;
+  if (leitura.error) return <p className="p-4 text-sm">Não foi possível mostrar o texto. <a className="text-primary" href={href} target="_blank" rel="noopener noreferrer">Abrir arquivo</a></p>;
+  return <article className="prose prose-sm dark:prose-invert mx-auto w-full max-w-4xl overflow-x-auto break-words px-4 py-6 leading-7 prose-p:my-3"><ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>{leitura.data || "Arquivo vazio."}</ReactMarkdown></article>;
+}
 
 export default function EvidenciaVisual({ url, nome = "Comprovação" }: { url: string; nome?: string }) {
   const [aberto, setAberto] = useState(false);
@@ -40,7 +55,7 @@ export default function EvidenciaVisual({ url, nome = "Comprovação" }: { url: 
       <DialogContent className="max-h-[95vh] w-[96vw] max-w-6xl overflow-y-auto">
         <DialogTitle className="pr-8 break-words">{titulo}</DialogTitle>
         <DialogDescription>{imagem ? "Clique na imagem para ampliar ou reduzir." : "Visualização dentro do painel."}</DialogDescription>
-        {arquivo ? <FilePreviewContent fileName={formato} fileUrl={href} fileId={tipo === "arquivo" ? url.slice("aceleriq-file://".length) : undefined} /> : <>
+        {tipo !== "web" && /\.(md|txt)(?:[?#]|$)/i.test(formato) ? <RelatorioDeTexto href={href} /> : arquivo ? <FilePreviewContent fileName={formato} fileUrl={href} fileId={tipo === "arquivo" ? url.slice("aceleriq-file://".length) : undefined} /> : <>
           <iframe title={titulo} src={href} sandbox="allow-scripts allow-forms allow-popups" referrerPolicy="no-referrer" className="h-[70vh] w-full rounded-lg border border-border bg-white" />
           <p className="text-xs text-muted-foreground">Alguns sites bloqueiam a exibição incorporada. <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary">Abrir o site</a></p>
         </>}

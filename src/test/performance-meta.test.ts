@@ -1,0 +1,20 @@
+import { describe, it, expect } from "vitest";
+import { carteiraPerformance, execucaoReal } from "@/lib/performanceMeta";
+import { prepararEntrada } from "@/lib/cadernoExecucao";
+import { progressDetail } from "../../supabase/functions/_shared/operator-progress-detail";
+import type { AdsCampaign, AdsDaily } from "@/hooks/useAdsMetrics";
+const now = Date.parse("2026-10-07T21:00:00Z");
+const c = { id: "a", client_id: "cliente", external_account_id: "conta", campaign_id: "1", status: "ACTIVE", updated_at: "2026-10-07T20:00:00Z" } as AdsCampaign;
+const d = { ...c, day: "2026-10-07", captured_at: "2026-10-07T20:00:00Z", spend: 2, impressions: 50, actions: [] } as unknown as AdsDaily;
+describe("Performance com evidência", () => {
+  it("ACTIVE sozinho não comprova entrega e não vira zero gasto", () => { const [x] = carteiraPerformance([c], [], now); expect(x.situacao).toBe("desatualizada"); expect(x.resumo).toBeNull(); });
+  it("separa cadastro ativo de zero observado", () => { const [x] = carteiraPerformance([c], [{ ...d, spend: 0, impressions: 0 }], now); expect(x.situacao).toBe("sem_entrega"); expect(x.divergencia).toBe(true); });
+  it("não mistura a mesma campanha de outra conta ou cliente", () => { const [x] = carteiraPerformance([c], [{ ...d, client_id: "outro" }, { ...d, external_account_id: "outra" }], now); expect(x.resumo).toBeNull(); });
+  it("coleta velha não comprova entrega atual", () => { expect(carteiraPerformance([c], [{ ...d, captured_at: "2026-10-01T10:00:00Z" }], now)[0].situacao).toBe("desatualizada"); });
+  it("captura recente de dia antigo continua desatualizada", () => { expect(carteiraPerformance([c], [{ ...d, day: "2026-09-01" }], now)[0].situacao).toBe("desatualizada"); });
+  it("avalia entrega no último dia e soma gastos no período", () => { const [x] = carteiraPerformance([c], [{ ...d, day: "2026-10-06" }, { ...d, spend: 0, impressions: 0 }], now); expect(x.situacao).toBe("sem_entrega"); expect(x.resumo?.investido).toBe(2); });
+  it("prazo vencido diverge mesmo com entrega observada", () => { const [x] = carteiraPerformance([{ ...c, stop_time: "2026-10-06T12:00:00Z" }], [d], now); expect(x.situacao).toBe("entrega"); expect(x.divergencia).toBe(true); expect(x.proxima).toBe(false); });
+  it("operador ativo sem execução viva não é trabalhando agora", () => { expect(execucaoReal([], now)).toBe(false); expect(execucaoReal([{ status: "review", heartbeat_at: d.captured_at }], now)).toBe(false); expect(execucaoReal([{ status: "progress", heartbeat_at: "2026-10-07T20:59:00Z" }], now)).toBe(true); expect(execucaoReal([{ status: "progress", heartbeat_at: d.captured_at }], now)).toBe(false); });
+  it("relatório completo e tipo documental sobrevivem ao contrato MCP", () => { const text = "Relatório real. ".repeat(500); expect(progressDetail({ summary: text, work_kind: "documental" })).toMatchObject({ summary: text.trim(), work_kind: "documental" }); });
+  it("separa comprovante, parágrafos e códigos preservando o original", () => { const body = "Análise de59 campanhas com22 clientes. Sem alteração Meta. aceleriq-file://2a555840-a059-438b-ba0d-93b770347d63; /root/.hermes/outputs/manifesto.json"; const x = prepararEntrada(body); expect(x.texto).toContain("de 59 campanhas com 22 clientes"); expect(x.texto).toContain("\n\nSem alteração"); expect(x.texto).not.toContain("/root/"); expect(x.anexos).toHaveLength(1); expect(x.temDetalhes).toBe(true); expect(body).toContain("/root/"); });
+});
