@@ -178,8 +178,11 @@ export const ESQUEMA_DO_PLANO = {
 export const ESQUEMA_DO_CONTEXTO_NOVO = {
   type: ["object", "null"],
   additionalProperties: false,
-  required: [...CAMPOS_DO_CONTEXTO_DO_PLANO],
-  properties: Object.fromEntries(CAMPOS_DO_CONTEXTO_DO_PLANO.map((k) => [k, textoOuNulo])),
+  required: [...CAMPOS_DO_CONTEXTO_DO_PLANO, "diferenciais", "lacunas"],
+  properties: { ...Object.fromEntries(CAMPOS_DO_CONTEXTO_DO_PLANO.map((k) => [k, textoOuNulo])),
+    diferenciais: { type: ["array", "null"], items: { type: "string" } },
+    lacunas: { type: ["array", "null"], items: { type: "string" } },
+  },
 };
 
 export const ESQUEMA_DAS_DECISOES = {
@@ -480,6 +483,13 @@ export function normalizarPlanoDoCliente(bruto: RespostaDoPlano | null | undefin
       if (atual === valor) return;
       add({ ref: `c${i + 1}`, alvo_id: campo, titulo: ROTULO_DO_CAMPO[campo], detalhe: atual ? "substitui o atual" : "estava vazio", operacao: "preencher_contexto", rotulo: "preencher", para_rotulo: umaLinha(valor, 140) }, { campo, valor });
     });
+  }
+
+  for (const campo of ["diferenciais", "lacunas"] as const) {
+    if (!ctx || !Array.isArray(ctx[campo])) continue;
+    const valor = [...new Set((ctx[campo] as unknown[]).filter(v => typeof v === "string").map(v => umaLinha(v, 400)).filter(Boolean))].slice(0, 12);
+    if (JSON.stringify(valor) === JSON.stringify(d.contexto[campo] || [])) continue;
+    add({ ref: `ctx_${campo}`, alvo_id: campo, titulo: campo === "diferenciais" ? "Diferenciais" : "O que falta confirmar", detalhe: "atualiza a lista do contexto", operacao: "preencher_contexto", rotulo: "preencher", para_rotulo: valor.join("; ").slice(0, 140) }, { campo, valor });
   }
 
   // Decisões para o cérebro do cliente.

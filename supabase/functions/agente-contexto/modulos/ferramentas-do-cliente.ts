@@ -77,13 +77,13 @@ export function normalizarPedidosDeLeitura(bruto: unknown): PedidoDeLeitura[] {
 /** Texto do prompt com as ferramentas e a regra de uso. */
 export function blocoDasFerramentas(): string {
   const linhas = NOMES_DAS_FERRAMENTAS.map((n) => `  - ${n}: ${FERRAMENTAS_DO_CLIENTE[n].descricao}. argumento: ${FERRAMENTAS_DO_CLIENTE[n].argumento}.`);
-  return `\nFERRAMENTAS DE LEITURA (campo ler): quando precisar de um fato que não está acima, peça até ${MAX_LEITURAS_POR_RODADA} leituras em ler e deixe plano, contexto, decisoes e caminho vazios nesta resposta (resposta curta dizendo o que vai ler). Você recebe o resultado e responde de vez. Sem precisar ler, ler vazio.\n${linhas.join("\n")}\n`;
+  return `\nFERRAMENTAS DE LEITURA (campo ler): quando precisar de um fato que não está acima, peça até ${MAX_LEITURAS_POR_RODADA} leituras em ler e deixe plano, contexto, decisoes e caminho vazios nesta resposta (resposta curta dizendo o que vai ler). Você recebe o resultado e pode ler o arquivo encontrado na busca antes de finalizar; não repita uma leitura recebida. Sem precisar ler, ler vazio.\n${linhas.join("\n")}\n`;
 }
 
 // ------------------------------------------------------------------ execução
 
 // deno-lint-ignore no-explicit-any
-export type BancoDasFerramentas = { from: (tabela: string) => any };
+export type BancoDasFerramentas = { from: (tabela: string) => any; storage?: { from: (bucket: string) => any } };
 
 export type DependenciasDasFerramentas = {
   lerDossie: (clientId: string) => Promise<string | null>;
@@ -143,7 +143,15 @@ async function executarUma(db: BancoDasFerramentas, clientId: string, p: PedidoD
       const nome = termoDeBusca(p.argumento);
       const { data } = await db.from("files").select("id, file_name").eq("client_id", clientId).is("archived_at", null).ilike("file_name", `%${nome}%`).order("created_at", { ascending: false }).limit(1);
       const f = ((data ?? []) as Array<{ id: string; file_name: string }>)[0];
-      if (!f) return `Arquivo "${nome}" não encontrado em Arquivos (arquivo só do workspace não tem texto extraído).`;
+      if (!f) {
+        const r = await db.from("workspace_nodes").select("name, storage_path, mime").eq("client_id", clientId).eq("scope", "client").eq("kind", "file").ilike("name", `%${nome}%`).order("created_at", { ascending: false }).limit(5);
+        const w = (r.data || []).find((n: { storage_path?: string; mime?: string }) => n.storage_path?.startsWith(`client/${clientId}/contexto/`) && n.mime === "text/plain");
+        if (w && db.storage && !w.storage_path.includes("..")) {
+          const arquivo = await db.storage.from("workspace").download(w.storage_path);
+          if (!arquivo.error && arquivo.data && arquivo.data.size <= 500_000) return `Texto extraído de "${w.name}":\n${await arquivo.data.text()}`;
+        }
+        return `Arquivo "${nome}" não encontrado com texto disponível. Não presuma o conteúdo.`;
+      }
       const { data: pedacos } = await db.from("file_content_chunks").select("chunk_index, text").eq("file_id", f.id).order("chunk_index", { ascending: true }).limit(20);
       const corpo = ((pedacos ?? []) as Array<{ text: string | null }>).map((x) => x.text || "").join("\n").trim();
       return corpo ? `Arquivo "${f.file_name}":\n${corpo}` : `O arquivo "${f.file_name}" ainda não tem texto extraído.`;

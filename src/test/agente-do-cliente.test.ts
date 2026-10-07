@@ -274,6 +274,9 @@ describe("plano do cliente: execução confirmada e desfazer", () => {
       const r = await executarItemDoPlano(db, CLIENTE, item, acao, memoria, deps());
       resultados.push({ item, desfazer: r.desfazer });
     }
+    const repetida = await executarItemDoPlano(db, CLIENTE, acao.itens[0], acao, new Map(), deps());
+    expect(repetida.aviso).toContain("recuperado");
+    expect(db.tabelas.projects).toHaveLength(1);
     const [projeto] = db.tabelas.projects;
     const [marco] = db.tabelas.milestones;
     const [tarefa] = db.tabelas.tasks;
@@ -572,7 +575,7 @@ describe("índice dos motores e ligação no código", () => {
 
   it("a tela manda o modo plano na mesma conversa e mostra o cartão de cada proposta", () => {
     const agente = ler("src/components/mesa/AgenteDeContexto.tsx");
-    expect(agente).toContain('...(modo === "plano" ? { modo: "plano" } : {})');
+    expect(agente).toContain('modoDoPedido === "plano" ? { modo: "plano", executar, pesquisar_web: pesquisarWeb, anexos: enviados, arquivos: corpoDosDocumentos }');
     // 29/09 (AG1): a mensagem do agente leva todos os anexos (cartões, caminho, "Aprendi" e "Segui").
     expect(agente).toContain("anexos: anexosDaResposta");
     const aba = ler("src/components/mesa/AbaContexto.tsx");

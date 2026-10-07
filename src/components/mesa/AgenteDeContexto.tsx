@@ -26,6 +26,10 @@ import PainelDoAgente, { BalaoDaConversa } from "@/components/sistema/PainelDoAg
 import { conversa, juntar } from "@/components/sistema/estilos";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
+import { useAnexos, MiniaturasDosAnexos, ZonaDeAnexos } from "./AnexosDoPedido";
+import { useArquivosDoAgente, BotaoDeAnexarArquivos, ListaDeArquivos } from "./ArquivosDoAgente";
+import { importarDriveNoContexto, temLinkDoDrive } from "./importarDriveNoContexto";
+import { PEDIDO_DO_COMECO } from "./ContextoPlanoDoCliente";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 
 /**
@@ -45,13 +49,20 @@ import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 /** O atalho abre o organizador do Workspace (lê as imagens, prévia, Confirmar e Desfazer). */
 const ORGANIZAR_O_WORKSPACE = "Organize os arquivos do workspace deste cliente em pastas por assunto.";
 
-export default function AgenteDeContexto({
+function ConversaDeContexto({
   preencher = false,
   modo = "marca",
   onModo,
   pedido = null,
 }: { preencher?: boolean; modo?: ModoDoAgente; onModo?: (m: ModoDoAgente) => void; pedido?: { texto: string; n: number } | null } = {}) {
   const { clientId, catalogo, atualizarCusto } = useMesa();
+  const anexos = useAnexos(clientId);
+  const arquivos = useArquivosDoAgente(anexos);
+  const [executar, setExecutar] = useState(true);
+  const [pesquisarWeb, setPesquisarWeb] = useState(true);
+  const [progresso, setProgresso] = useState("");
+  const preparando = anexos.subindo || arquivos.lendo;
+  const temMaterial = anexos.caminhos.length > 0 || arquivos.lidos.length > 0;
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const historico = useHistoricoDoContexto(clientId);
@@ -86,14 +97,25 @@ export default function AgenteDeContexto({
   }, [mensagens.length, pendente]);
 
   const enviar = async () => {
-    const msg = texto.trim();
-    if (!msg || enviando) return;
+    const msg = texto.trim() || (temMaterial ? "Leia os materiais anexados e organize o contexto deste cliente. Diga o que entendeu e o que falta para preparar o projeto." : "");
+    if (!msg || enviando || preparando) return;
+    const enviados = [...anexos.caminhos];
+    const documentos = arquivos.paraOEnvio();
+    const modoDoPedido = modo === "plano" || temMaterial || temLinkDoDrive(msg) ? "plano" : "marca";
     const alvo = clientId;
     setEnviando({ clientId: alvo, mensagem: msg });
     setErro(null);
     setTexto("");
     try {
-      const data = await chamarFuncao<RespostaDaConversa>("agente-contexto", { acao: "conversar", client_id: alvo, mensagem: msg, ...(modo === "plano" ? { modo: "plano" } : {}), ...marcaDaRegra(alvo) });
+      let corpoDosDocumentos = documentos.corpo;
+      if (temLinkDoDrive(msg)) {
+        const drive = await importarDriveNoContexto(alvo, msg, Math.max(0, 6 - enviados.length), documentos.corpo?.lidos.reduce((n, a) => n + a.texto.length, 0) || 0, setProgresso);
+        enviados.push(...drive.imagens);
+        corpoDosDocumentos = { lidos: [...(documentos.corpo?.lidos || []), ...drive.arquivos.lidos], nao_lidos: [...(documentos.corpo?.nao_lidos || []), ...drive.arquivos.nao_lidos] };
+        invalidar(alvo);
+      }
+      setProgresso("Analisando o contexto e executando o pedido…");
+      const data = await chamarFuncao<RespostaDaConversa>("agente-contexto", { acao: "conversar", client_id: alvo, mensagem: msg, ...(modoDoPedido === "plano" ? { modo: "plano", executar, pesquisar_web: pesquisarWeb, anexos: enviados, arquivos: corpoDosDocumentos } : {}), ...marcaDaRegra(alvo) });
       // 29/09: todos os anexos (cartões, caminho, "Aprendi", "Segui"); antes só as propostas.
       const anexosDaResposta = data && Array.isArray(data.anexos) ? data.anexos : data && Array.isArray(data.acoes) ? data.acoes : data && data.acao ? [data.acao] : [];
       const agora = new Date().toISOString();
@@ -104,6 +126,9 @@ export default function AgenteDeContexto({
           { id: data && data.mensagem_id ? String(data.mensagem_id) : undefined, papel: "agente", conteudo: resposta, criado_em: agora, anexos: anexosDaResposta },
         ]),
       );
+      anexos.tirarEnviados(enviados);
+      arquivos.tirarEnviados(documentos.ids);
+      void queryClient.invalidateQueries({ queryKey: chaveDoPlano(alvo) });
       setUltimo({ clientId: alvo, mudou: Array.isArray(data?.mudou) ? data.mudou : [], memorias: Number(data?.memorias || 0) });
       setRecebida(data && data.mensagem_id ? String(data.mensagem_id) : null);
       avisarCustoReal("Agente de contexto respondeu", data, atualizarCusto);
@@ -119,6 +144,7 @@ export default function AgenteDeContexto({
       setTexto((t) => t || msg);
     } finally {
       setEnviando(null);
+      setProgresso("");
     }
   };
 
@@ -150,7 +176,7 @@ export default function AgenteDeContexto({
       acoes={
         <AjudaRecolhida rotulo="Como o agente de contexto funciona">
           {modo === "plano"
-            ? "Planeje o cliente de ponta a ponta: nicho, posicionamento, projeto, marcos, tarefas e caminho. O agente lê briefing, dossiê e arquivos quando precisa e só muda algo depois que você confirma."
+            ? "Converse, entregue documentos e peça o que precisa. O agente lê o material, organiza o contexto e aplica projetos e tarefas quando você manda fazer. Você pode escolher revisar antes e desfazer as ações. Links do Drive são importados para o Workspace. A pesquisa externa complementa lacunas quando necessária; desligue a opção para usar só o material do cliente."
             : "Conte o que sabe da marca ou corrija o que estiver errado. O agente grava no kit e ensina o estrategista e o diretor de arte."}
         </AjudaRecolhida>
       }
@@ -162,7 +188,7 @@ export default function AgenteDeContexto({
           <>
             {mudanca && (
               <p className="rounded-md bg-muted/60 px-3 py-2 text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-                {nomesDoQueMudou.length ? `Mudou no kit: ${nomesDoQueMudou.join(", ")}.` : "Nada mudou no kit."}
+                {nomesDoQueMudou.length ? `Atualizado: ${nomesDoQueMudou.join(", ")}.` : "Conversa registrada. As ações e os materiais aparecem na resposta."}
                 {mudanca.memorias > 0 && ` ${mudanca.memorias === 1 ? "1 memória guardada" : `${mudanca.memorias} memórias guardadas`} para os agentes.`}
               </p>
             )}
@@ -176,7 +202,7 @@ export default function AgenteDeContexto({
             <OQuePossoFazer
               capacidades={["criar ou ajustar projeto, marcos e tarefas com dono e prazo", "preencher nicho, posicionamento e estágio", "guardar decisões no cérebro", "gravar o caminho e o tech stack", "organizar arquivos"]}
               atalhos={[
-                { rotulo: "Começar o plano", texto: "Comece o plano deste cliente: leia o briefing, o dossiê, o cérebro e os arquivos, proponha o nicho realista para o estágio dele, o posicionamento e o plano do projeto pelo método Acelera, com marcos e tarefas com dono e prazo." },
+                { rotulo: "Começar o plano", texto: PEDIDO_DO_COMECO },
                 { rotulo: "Caminho e stack", texto: "Proponha o caminho deste cliente: o que fazer primeiro, as ferramentas e o tech stack recomendados, com custo aproximado só quando houver fonte, e por quê." },
                 { rotulo: "Google Meu Negócio", texto: "Coloque no plano a tarefa de criar o Perfil da Empresa no Google deste cliente, com dono e prazo." },
               ]}
@@ -192,6 +218,10 @@ export default function AgenteDeContexto({
               onAtalho={(t) => (t === ORGANIZAR_O_WORKSPACE ? navigate(`/workspace?client=${clientId}&organizar=1`) : setTexto(t))}
             />
           )}
+          {pendente && progresso && <p role="status" className="text-xs text-muted-foreground">{progresso}</p>}
+          <ZonaDeAnexos anexos={arquivos.comoAnexos()} rotulo="Solte os documentos e imagens do cliente">
+          <MiniaturasDosAnexos anexos={anexos} />
+          <ListaDeArquivos arquivos={arquivos} />
           <Textarea
             className="shrink-0 resize-none"
             value={texto}
@@ -203,18 +233,24 @@ export default function AgenteDeContexto({
               }
             }}
             rows={3}
-            placeholder="O que o agente precisa saber? Digite ou toque no microfone para falar."
+            placeholder={modo === "plano" ? "Conte o trabalho do cliente ou anexe o briefing. Ex.: prepare este evento com projeto, posts e vídeos." : "Conte o que sabe da marca ou anexe documentos e imagens."}
             disabled={!!pendente}
           />
+          </ZonaDeAnexos>
+          {(modo === "plano" || temMaterial || temLinkDoDrive(texto)) && <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <label className="flex items-center gap-1.5"><input type="checkbox" checked={executar} onChange={e => setExecutar(e.target.checked)} disabled={!!pendente} /> Aplicar meus pedidos</label>
+            <label className="flex items-center gap-1.5" title="Consulta fontes externas quando necessário; prioriza seus documentos"><input type="checkbox" checked={pesquisarWeb} onChange={e => setPesquisarWeb(e.target.checked)} disabled={!!pendente} /> Pesquisar quando necessário</label>
+          </div>}
           <div className="flex min-w-0 flex-wrap items-center justify-between">
             <div className="mr-2 min-w-0">
               <EstimativaInline partes={partes} />
               <p className="hidden text-[11px] text-muted-foreground sm:block">Ctrl+Enter envia</p>
             </div>
             <div className="ml-auto flex min-w-0 max-w-full items-center justify-end">
+              <BotaoDeAnexarArquivos arquivos={arquivos} anexos={anexos} className="mr-1.5" />
               {/* Microfone grátis: o navegador transcreve enquanto a pessoa fala. */}
               <Ditado valor={texto} onChange={setTexto} disabled={!!pendente} className="mr-1.5 min-w-0" />
-              <Button type="button" size="sm" className="shrink-0" onClick={() => void enviar()} disabled={!!enviando || !texto.trim()}>
+              <Button type="button" size="sm" className="shrink-0" onClick={() => void enviar()} disabled={!!enviando || preparando || (!texto.trim() && !temMaterial)}>
                 {pendente ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
                 Enviar
               </Button>
@@ -281,4 +317,10 @@ export default function AgenteDeContexto({
       )}
     </PainelDoAgente>
   );
+}
+
+/** Remontar ao trocar de cliente impede levar anexos/estado de um cliente para outro. */
+export default function AgenteDeContexto(props: { preencher?: boolean; modo?: ModoDoAgente; onModo?: (m: ModoDoAgente) => void; pedido?: { texto: string; n: number } | null } = {}) {
+  const { clientId } = useMesa();
+  return <ConversaDeContexto key={clientId} {...props} />;
 }

@@ -41,7 +41,7 @@ import {
  */
 
 export const PEDIDO_DO_COMECO =
-  "Comece o plano deste cliente: leia o briefing, o dossiê, o cérebro e os arquivos, proponha o nicho realista para o estágio dele, o posicionamento e o plano do projeto pelo método Acelera, com marcos e tarefas com dono e prazo.";
+  "Organize o trabalho deste cliente com o briefing, documentos e contexto já entregues. Crie ou complete o projeto pertinente, com marcos, tarefas, responsáveis existentes e prazos coerentes. Inclua as entregas reais do escopo, sem pesquisas genéricas nem repetir o que já está pronto. Pergunte apenas o que bloquear a execução.";
 export const PEDIDO_DO_CAMINHO =
   "Proponha o caminho deste cliente: o que fazer primeiro, as ferramentas e o tech stack recomendados, com custo aproximado só quando houver fonte, e por quê.";
 
