@@ -16,6 +16,7 @@ export interface ItemDaRodada {
   respostas: string[];
   contexto: string;
   aplicado: Aplicado | null;
+  aplicadoPara?: string;
   reportId: string | null;
   publicado: boolean;
   tarefasCriadas: number[];
@@ -27,6 +28,7 @@ export interface ItemDaRodada {
 }
 
 export interface Rodada {
+  pesquisar?: boolean;
   ritual: string;
   publicar: boolean;
   contextoGeral: string;

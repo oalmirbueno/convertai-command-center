@@ -70,6 +70,7 @@ export interface RitualDoAgente {
 }
 
 export interface Aplicado {
+  avisos?: string[];
   client_id: string;
   nome: string;
   dossie_versao: number | null;
@@ -123,11 +124,13 @@ export function prepararCliente(clientId: string, ritual: string): Promise<Prepa
 
 export function aplicarRespostas(input: {
   clientId: string; ritual: string; leitura: LeituraDaSemana; perguntas: PerguntaDoAgente[];
-  respostas: string[]; contextoExtra: string;
+  respostas: string[]; contextoExtra: string; envioId?: string; pesquisar?: boolean; dossieVersao?: number | null;
 }): Promise<Aplicado> {
   return chamar<Aplicado>({
     action: "aplicar", client_id: input.clientId, ritual: input.ritual, leitura: input.leitura,
-    perguntas: input.perguntas, respostas: input.respostas, contexto_extra: input.contextoExtra,
+    perguntas: input.perguntas, respostas: input.respostas, contexto_extra: input.contextoExtra, envio_id: input.envioId,
+    pesquisar: input.pesquisar === true,
+    dossie_versao: input.dossieVersao,
   });
 }
 

@@ -63,6 +63,8 @@ export function rotuloDoModelo(id: string): string {
 }
 
 export interface PedidoDeEscrita {
+  /** Habilita pesquisa real do provedor, sem usar reserva que não pesquisa. */
+  pesquisaWeb?: boolean;
   clientId: string;
   /** Frente SPP (30/09): o método da casa (superpoderes-catalogo.ts); vai no fim do sistema no motor e na reserva. */
   metodo?: MetodoInjetado | null;
@@ -96,6 +98,7 @@ export interface TextoEscrito {
 
 /** O motor, injetável para teste. Em produção vem de ia-motor.ts (import dinâmico). */
 export type ChamadaDoMotor = (e: {
+  pesquisaWeb?: boolean;
   clientId: string;
   modeloId: string;
   raciocinio: string;
@@ -118,6 +121,7 @@ async function motorDeVerdade(e: Parameters<ChamadaDoMotor>[0]) {
     modeloId: e.modeloId,
     raciocinio: e.raciocinio,
     sistema: e.sistema,
+    pesquisaWeb: e.pesquisaWeb,
     mensagens: [{ papel: "usuario", conteudo: e.usuario }],
     criadoPor: e.criadoPor ?? null,
     referencia: e.referencia,
@@ -180,6 +184,7 @@ export async function escreverComModeloDaCentral(
         raciocinio: escolha.raciocinio,
         sistema: p.sistema,
         usuario: p.usuario,
+        ...(p.pesquisaWeb ? { pesquisaWeb: true } : {}),
         criadoPor: p.criadoPor,
         referencia: p.referencia,
         ...(p.metodo ? { metodo: p.metodo } : {}),
@@ -194,6 +199,8 @@ export async function escreverComModeloDaCentral(
     }
   }
 
+  // Não apresentar texto da reserva sem navegação como pesquisa realizada.
+  if (p.pesquisaWeb) return null;
   // Frente FS: a reserva que também falha fica no log com o motivo (antes: null em silêncio).
   const antigo = await legado(juntarMetodoAoSistema(p.sistema, p.metodo), p.usuario, temperatura).catch((e) => {
     console.error("[modelo-da-central] reserva (GPT-4.1) falhou", { motivo: motivoLegivel(e), antes: reserva });

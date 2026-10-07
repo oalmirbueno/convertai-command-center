@@ -24,6 +24,7 @@ vi.mock("@/components/central/agenteCentralApi", () => ({
 }));
 
 import AgenteDaCentral from "@/components/central/AgenteDaCentral";
+import { assinaturaDasRespostas } from "@/components/central/filaDaCentral";
 import { CHAVE_LOCAL, type ItemDaRodada, type Rodada } from "@/components/central/rodadaDoAgente";
 
 const ritual = (body: string) => ({ tipo: "meio_semana", title: "Meio da semana", body, next_steps: "", alertas: [], tarefas_sugeridas: [], model: null, repeticao: null, fase: null });
@@ -35,7 +36,7 @@ const preparo = {
 const aplicado = (r: ReturnType<typeof ritual> | null) => ({ client_id: "a", nome: "Verzelo", dossie_versao: 4, dossie_aviso: null, confirmacoes: [], aprovacao: { por: "u1", em: "", via: "" }, ritual: r });
 const item = (mudar: Partial<ItemDaRodada>): ItemDaRodada => ({
   cliente: { id: "a", nome: "Verzelo", contato: "", dossie_versao: 3, dossie_em: null }, incluir: true, situacao: "pronto", preparo,
-  respostas: ["Sim."], contexto: "", aplicado: aplicado(ritual("Oi, Verzelo.")), reportId: "rep-1", publicado: false, tarefasCriadas: [], erro: null, ...mudar,
+  respostas: ["Sim."], contexto: "", aplicado: aplicado(ritual("Oi, Verzelo.")), aplicadoPara: assinaturaDasRespostas(["Sim."], "", ""), reportId: "rep-1", publicado: false, tarefasCriadas: [], erro: null, ...mudar,
 });
 const rodada = (itens: ItemDaRodada[]): Rodada => ({ ritual: "meio_semana", publicar: true, contextoGeral: "", itens, iniciadaEm: "2026-09-29T10:00:00Z" });
 
@@ -84,6 +85,36 @@ describe("ritual pronto: ações sem sair do agente", () => {
 });
 
 describe("aplicar de novo sem duplicar o dossiê", () => {
+  it("salva resposta editada diretamente, sem reaproveitar ritual antigo nem aplicar outro cliente", async () => {
+    const a = item({ situacao: "perguntas", reportId: null });
+    const b = item({ cliente: { ...a.cliente, id: "b", nome: "Outro cliente" }, situacao: "perguntas", aplicado: null, reportId: null });
+    window.localStorage.setItem(CHAVE_LOCAL, JSON.stringify({ ...rodada([a, b]), publicar: false }));
+    mock.aplicar.mockResolvedValue({ ...aplicado(ritual("Atualizado com a correção.")), confirmacoes: ["Vídeos são prioridade."] });
+    mock.publicar.mockResolvedValue({ reportId: "novo", publicado: false, avisos: [] });
+    montar();
+    fireEvent.click(screen.getByRole("button", { name: /Atualizar todos/ }));
+    await screen.findByRole("dialog");
+    fireEvent.change(await screen.findByRole("textbox", { name: "A verba foi reposta?" }), { target: { value: "Não. Priorize vídeos." } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar e atualizar cliente" }));
+    await waitFor(() => expect(mock.publicar).toHaveBeenCalledTimes(1));
+    expect(mock.aplicar).toHaveBeenCalledTimes(1);
+    expect(mock.aplicar).toHaveBeenCalledWith(expect.objectContaining({ clientId: "a", respostas: ["Não. Priorize vídeos."], envioId: "2026-09-29T10:00:00Z" }));
+    expect(mock.reescrever).not.toHaveBeenCalled();
+    expect(mock.publicar).toHaveBeenCalledWith(expect.objectContaining({ publicar: false, reportId: null }));
+    await screen.findByText("O que foi incorporado (1)");
+  });
+
+  it("falha ao incorporar resposta não publica nem mostra cliente concluído", async () => {
+    window.localStorage.setItem(CHAVE_LOCAL, JSON.stringify(rodada([item({ situacao: "perguntas", aplicado: null, reportId: null })])));
+    mock.aplicar.mockRejectedValue(new Error("Suas respostas estão guardadas. Tente novamente."));
+    montar();
+    fireEvent.click(screen.getByRole("button", { name: /Atualizar todos/ }));
+    await screen.findByRole("dialog");
+    fireEvent.click(await screen.findByRole("button", { name: "Salvar, atualizar e publicar" }));
+    await screen.findByText("Suas respostas estão guardadas. Tente novamente.");
+    expect(mock.publicar).not.toHaveBeenCalled();
+  });
+
   it("já aplicado e sem ritual: Aplicar só escreve o ritual (não chama aplicar de novo) e publica", async () => {
     window.localStorage.setItem(CHAVE_LOCAL, JSON.stringify(rodada([item({ situacao: "erro", aplicado: aplicado(null), reportId: null, erro: "sem ritual" })])));
     mock.reescrever.mockResolvedValue({ ritual: ritual("Agora saiu."), ritual_erro: null });

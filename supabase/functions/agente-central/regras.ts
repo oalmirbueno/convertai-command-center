@@ -159,7 +159,13 @@ export function comporDossie(atual: string, novo: { leitura?: string | null; con
   humano = semConf.resto.trimEnd();
   const antigas = semConf.corpo.split(/\r?\n/).slice(1).map((l) => l.trim()).filter((l) => l.startsWith("- "));
   const todas = [...(novo.confirmacoes ?? []), ...antigas];
-  const unicas = todas.filter((l, i) => todas.indexOf(l) === i).slice(0, MAX_CONFIRMACOES);
+  const vistas = new Set<string>();
+  const unicas = todas.filter((l) => {
+    const fato = l.replace(/^- \d{2}\/\d{2}\/\d{4} · /, "").toLocaleLowerCase("pt-BR").trim();
+    if (vistas.has(fato)) return false;
+    vistas.add(fato);
+    return true;
+  }).slice(0, MAX_CONFIRMACOES);
 
   const leitura = (novo.leitura ?? leituraAntiga).trim();
   return [
