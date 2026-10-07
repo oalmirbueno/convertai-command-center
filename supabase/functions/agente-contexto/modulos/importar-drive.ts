@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import type { BancoDeMateriais } from "./materiais-do-plano.ts";
 import { baixarDrive, itensDaPastaPublica, linksDoDrive, urlDeDownload, type LinkDrive } from "./links-do-drive.ts";
 
 export function nomeDoDownload(link: LinkDrive, headers: Headers): string {
@@ -18,7 +18,7 @@ export function categoriaDoDrive(mime: string): string {
 export type ArquivoImportado = { nome: string; mime: string; caminho: string; fonte: string; id: string };
 
 /** Importação por cliente, somente leitura no Drive. Não interpreta HTML de login como arquivo. */
-export async function importarDrive(db: SupabaseClient, clientId: string, userId: string, mensagem: string) {
+export async function importarDrive(db: BancoDeMateriais, clientId: string, userId: string, mensagem: string) {
   const fila = linksDoDrive(mensagem);
   const arquivos: ArquivoImportado[] = [];
   const avisos: string[] = [];

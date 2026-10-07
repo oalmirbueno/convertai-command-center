@@ -1,4 +1,6 @@
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+/** Interface estrutural para o backend Deno e testes Node usarem o mesmo código. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type BancoDeMateriais = { from: (tabela: string) => any; storage: { from: (bucket: string) => any } };
 import type { ImagemEntrada } from "../../_shared/ia-motor.ts";
 import { normalizarArquivos, blocoDosArquivos, resumoDosArquivos } from "../../agente-calendario/agente-mes-v2.ts";
 import { limparSegredos } from "../../_shared/pacote-externo.ts";
@@ -24,7 +26,7 @@ export function documentosDoPlano(bruto: unknown) {
 }
 
 /** Arquiva leitura e imagens por cliente. Originais de documentos não são simulados. */
-export async function materiaisDoPlano(db: SupabaseClient, clientId: string, userId: string, corpo: Record<string, unknown>) {
+export async function materiaisDoPlano(db: BancoDeMateriais, clientId: string, userId: string, corpo: Record<string, unknown>) {
   const arquivos = documentosDoPlano(corpo.arquivos);
   const avisos: string[] = arquivos.nao_lidos.map(a => `${a.nome}: ${a.motivo}`);
   if (arquivos.cortados.length) avisos.push(`Leitura parcial: ${arquivos.cortados.join(", ")}. Envie os trechos restantes em outro pedido.`);
@@ -33,7 +35,7 @@ export async function materiaisDoPlano(db: SupabaseClient, clientId: string, use
   let bytes = 0;
   for (const caminho of caminhos) {
     try {
-      const r = await reduzidaSemTransformacao(db, "mesa", caminho, 2048, 2048, { maxBytes: 12 * 1024 * 1024, pedirCopia: true, maxPixels: 6_000_000 });
+      const r = await reduzidaSemTransformacao(db as Parameters<typeof reduzidaSemTransformacao>[0], "mesa", caminho, 2048, 2048, { maxBytes: 12 * 1024 * 1024, pedirCopia: true, maxPixels: 6_000_000 });
       const mime = r?.cabe ? mimeDaImagem(r.bytes) : null;
       if (!r || !mime || bytes + r.bytes.length > 16 * 1024 * 1024) throw new Error("imagem indisponível ou acima do limite de leitura");
       bytes += r.bytes.length;
@@ -55,7 +57,7 @@ export async function materiaisDoPlano(db: SupabaseClient, clientId: string, use
 }
 
 /** Recupera somente leituras desta conversa e deste cliente, com teto explícito. */
-export async function recuperarMateriais(db: SupabaseClient, clientId: string, linhas: Array<{ anexos?: unknown }>): Promise<string> {
+export async function recuperarMateriais(db: BancoDeMateriais, clientId: string, linhas: Array<{ anexos?: unknown }>): Promise<string> {
   const caminhos = linhas.flatMap(l => Array.isArray(l.anexos) ? l.anexos : [])
     .filter(a => a?.tipo === "arquivos_lidos" && typeof a.caminho_texto === "string")
     .map(a => String(a.caminho_texto)).filter(c => c.startsWith(`${clientId}/pedidos/contexto-leitura-`) && !/[\\%?#]|\.\./.test(c));
@@ -72,7 +74,7 @@ export async function recuperarMateriais(db: SupabaseClient, clientId: string, l
 }
 
 /** Cópias identificadas por hash: reenviar o mesmo documento não multiplica arquivos. */
-export async function arquivarMateriais(db: SupabaseClient, clientId: string, userId: string, materiais: Awaited<ReturnType<typeof materiaisDoPlano>>) {
+export async function arquivarMateriais(db: BancoDeMateriais, clientId: string, userId: string, materiais: Awaited<ReturnType<typeof materiaisDoPlano>>) {
   const avisos: string[] = [];
   let guardados = 0;
   const pasta = async (name: string, parent: string | null): Promise<string> => {
