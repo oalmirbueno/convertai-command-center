@@ -3491,7 +3491,7 @@ const operatorDiaryTool: ToolDefinition = {
       entry_type: { type: 'string', description: 'comentario, instrucao, decisao, contexto, evidencia, correcao, pedido_revisao, pedido_insumo ou resposta_insumo.' },
       title: { type: 'string', description: 'Titulo curto da entrada.' },
       body: { type: 'string', description: 'O texto. Presente = escrever; ausente = listar.' },
-      attachments: { type: 'array', maxItems: 12, description: 'Comprovações visuais: nome e URL HTTPS sem segredo, files://task-attachments/... ou mcp-files://caminho privado retornado pelo upload. Não coloque apenas o código do arquivo no texto.', items: { type: 'object', properties: { name: { type: 'string' }, url: { type: 'string' } }, required: ['name', 'url'], additionalProperties: false } },
+      attachments: { type: 'array', maxItems: 12, description: 'Comprovações visuais: nome e url. Para arquivo salvo no painel, prefira aceleriq-file://<file_id UUID retornado pelo upload>; a tela resolve o arquivo com acesso do leitor. Também aceita HTTPS sem segredo, files://task-attachments/... ou mcp-files://caminho real. Não invente caminho pelo ID e não coloque só códigos no texto.', items: { type: 'object', properties: { name: { type: 'string' }, url: { type: 'string' } }, required: ['name', 'url'], additionalProperties: false } },
       limit: { type: 'number', description: 'Ao listar, quantas entradas (max 100).' },
     },
     required: ['link_id'],

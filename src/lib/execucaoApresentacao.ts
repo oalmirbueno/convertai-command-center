@@ -30,7 +30,8 @@ export function falhaDaExecucao(erro: unknown): string {
 }
 
 /** Somente destinos navegáveis; anexos privados são assinados sob a sessão do leitor. */
-export function destinoDaEvidencia(url: string): "privado" | "web" | null {
+export function destinoDaEvidencia(url: string): "arquivo" | "privado" | "web" | null {
+  if (/^aceleriq-file:\/\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(url)) return "arquivo";
   if (/^mcp-files:\/\/[a-zA-Z0-9_/-]+\.[a-zA-Z0-9]+$/.test(url) && !url.includes("..")) return "privado";
   if (/^files:\/\/(?:task-attachments|clients)\//.test(url) && !url.includes("..")) return "privado";
   try { const u = new URL(url); return u.protocol === "https:" && !u.username && !u.password ? "web" : null; } catch { return null; }

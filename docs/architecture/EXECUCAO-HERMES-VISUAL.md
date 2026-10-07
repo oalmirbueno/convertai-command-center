@@ -26,6 +26,8 @@ Rollback: publicar a versão anterior do Worker e as duas funções MCP do commi
 
 ## Complemento 2.5.1 e verificação do host
 
+Em 2.5.2, anexos podem apontar para `aceleriq-file://<file_id>`: a tela consulta o registro sob RLS, exige estado pronto/não arquivado e assina seu caminho real. Esse é o destino preferido quando o agente possui o ID devolvido pelo upload; não precisa recuperar ou inventar um caminho de Storage. Esse protocolo não é um link público.
+
 - O diário também aceita `attachments: [{ name, url }]`. O caminho `mcp-files://...` retornado pelo upload privado é aceito no diário e no relato; a interface reutiliza a assinatura autenticada de Arquivos. Texto com apenas `file_id` não constitui prévia visual.
 - Execuções anteriores ao campo `detail` recuperam o título da auditoria do mesmo agente e mesma execução. A projeção não modifica o histórico nem o estado.
 - Hermes informou instalação do consumidor de entradas humanas no job `cdd3966dd810` (a cada minuto, sem despertar o modelo na fila vazia); a resposta a entrada humana real deve ser validada antes de considerar o circuito completo.

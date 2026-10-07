@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { comandoDaAprovacao, contagensDasAbas, destinoDaEvidencia } from "@/lib/execucaoApresentacao";
 import { progressDetail } from "../../supabase/functions/_shared/operator-progress-detail";
@@ -7,8 +7,12 @@ import { destinoOperacional } from "@/components/execucao/ContextoDoAviso";
 import ExecucoesRecentes from "@/components/execucao/ExecucoesRecentes";
 import { filtrarArea } from "@/hooks/useAvisosPorArea";
 import { completarContextoAntigo } from "@/lib/execucaoHistorico";
+import EvidenciaVisual from "@/components/execucao/EvidenciaVisual";
+import { supabase } from "@/integrations/supabase/client";
+import { resolveFileUrl } from "@/lib/fileUrls";
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: {} }));
+vi.mock("@/lib/fileUrls", () => ({ resolveFileUrl: vi.fn() }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "teste" } }) }));
 
 describe("Histórico anterior ao relato estruturado", () => {
@@ -67,6 +71,17 @@ describe("Contagem e abertura sem perder o contexto", () => {
   });
 });
 describe("Comprovações e isolamento das notificações", () => {
+  it("não tenta assinar um arquivo negado pelo acesso do leitor ou em quarentena", async () => {
+    for (const resposta of [{ data: null, error: { message: "Sem acesso" } }, { data: { status: "quarantined" }, error: null }]) {
+      cleanup();
+      vi.mocked(resolveFileUrl).mockClear();
+      const q = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue(resposta) };
+      (supabase as any).from = vi.fn(() => q);
+      render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><EvidenciaVisual url="aceleriq-file://00000000-0000-0000-0000-000000000001" /></QueryClientProvider>);
+      expect(await screen.findByText(/Não foi possível abrir esta comprovação/)).toBeInTheDocument();
+      expect(resolveFileUrl).not.toHaveBeenCalled();
+    }
+  });
   it("aceita print privado e recusa credencial e script em URL", () => {
     const url = "files://task-attachments/00000000-0000-0000-0000-000000000001/execucao/print.png";
     expect(progressDetail({ attachments: [{ name: "Resultado", url }] }).attachments).toEqual([{ name: "Resultado", url }]);
@@ -78,6 +93,11 @@ describe("Comprovações e isolamento das notificações", () => {
     expect(destinoDaEvidencia(mcp)).toBe("privado");
     expect(progressDetail({ attachments: [{ name: "Página consultada", url: mcp }] }).attachments).toEqual([{ name: "Página consultada", url: mcp }]);
     expect(() => progressDetail({ attachments: [{ name: "Inválido", url: "mcp-files://../print.png" }] })).toThrow();
+    const registrado = "aceleriq-file://00000000-0000-0000-0000-000000000001";
+    expect(destinoDaEvidencia(registrado)).toBe("arquivo");
+    expect(progressDetail({ attachments: [{ name: "Resultado", url: registrado }] }).attachments).toEqual([{ name: "Resultado", url: registrado }]);
+    expect(destinoDaEvidencia(registrado + "/outro")).toBeNull();
+    expect(() => progressDetail({ attachments: [{ name: "Inválido", url: registrado + "?token=teste" }] })).toThrow();
   });
   it("a marcação em lote usa o recorte da aba", () => {
     const q = { or: vi.fn().mockReturnThis(), not: vi.fn().mockReturnThis() };
