@@ -23,3 +23,11 @@ Sem migração de banco, sem credencial no navegador e sem remoção de permiss�
 O código deste repositório não instala sozinho os serviços do host Hermes. Configuração de consumidor, rotinas e testes reais do host deve ser comprovada separadamente, com seus IDs e resultados, antes de anunciar operação automática. Não transformar execução de transporte, coleta ou teste em campanha otimizada.
 
 Rollback: publicar a versão anterior do Worker e as duas funções MCP do commit anterior. `detail` é aditivo e permanece legível no banco; não apagar histórico ou evidências.
+
+## Complemento 2.5.1 e verificação do host
+
+- O diário também aceita `attachments: [{ name, url }]`. O caminho `mcp-files://...` retornado pelo upload privado é aceito no diário e no relato; a interface reutiliza a assinatura autenticada de Arquivos. Texto com apenas `file_id` não constitui prévia visual.
+- Execuções anteriores ao campo `detail` recuperam o título da auditoria do mesmo agente e mesma execução. A projeção não modifica o histórico nem o estado.
+- Hermes informou instalação do consumidor de entradas humanas no job `cdd3966dd810` (a cada minuto, sem despertar o modelo na fila vazia); a resposta a entrada humana real deve ser validada antes de considerar o circuito completo.
+- Jobs de dossiê criados no Hermes: `11f2dca8be04` segunda/sexta 09h e `757cc36b2a41` quarta 15h, America/Sao_Paulo. Rituais administrativos anteriores preservados.
+- A ponte Meta registra coleta de dados como revisão, com relatório como prova. Isso não comprova otimização de campanhas nem substitui a análise especializada.

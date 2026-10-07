@@ -1,3 +1,4 @@
+import { contextoDasExecucoes } from "@/lib/execucaoHistorico";
 import { useMemo, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -104,7 +105,7 @@ export default function PerfilDoAgente({
         .order("started_at", { ascending: false })
         .limit(30);
       if (error) throw new Error(error.message);
-      return (data || []) as Array<Record<string, any>>;
+      return contextoDasExecucoes(data || []);
     },
     enabled: Boolean(operador?.id),
   });

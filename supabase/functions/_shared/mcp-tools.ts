@@ -3491,6 +3491,7 @@ const operatorDiaryTool: ToolDefinition = {
       entry_type: { type: 'string', description: 'comentario, instrucao, decisao, contexto, evidencia, correcao, pedido_revisao, pedido_insumo ou resposta_insumo.' },
       title: { type: 'string', description: 'Titulo curto da entrada.' },
       body: { type: 'string', description: 'O texto. Presente = escrever; ausente = listar.' },
+      attachments: { type: 'array', maxItems: 12, description: 'Comprovações visuais: nome e URL HTTPS sem segredo, files://task-attachments/... ou mcp-files://caminho privado retornado pelo upload. Não coloque apenas o código do arquivo no texto.', items: { type: 'object', properties: { name: { type: 'string' }, url: { type: 'string' } }, required: ['name', 'url'], additionalProperties: false } },
       limit: { type: 'number', description: 'Ao listar, quantas entradas (max 100).' },
     },
     required: ['link_id'],
@@ -3504,6 +3505,7 @@ const operatorDiaryTool: ToolDefinition = {
         'correcao', 'pedido_revisao', 'pedido_insumo', 'resposta_insumo']).optional(),
       title: z.string().max(200).optional(),
       body: z.string().max(8000).optional(),
+      attachments: z.array(z.object({ name: z.string().max(120), url: z.string().max(2000) }).strict()).max(12).optional(),
       limit: limite(100),
     }).strict();
     const parsed = schema.safeParse(input ?? {});

@@ -6,9 +6,29 @@ import { progressDetail } from "../../supabase/functions/_shared/operator-progre
 import { destinoOperacional } from "@/components/execucao/ContextoDoAviso";
 import ExecucoesRecentes from "@/components/execucao/ExecucoesRecentes";
 import { filtrarArea } from "@/hooks/useAvisosPorArea";
+import { completarContextoAntigo } from "@/lib/execucaoHistorico";
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: {} }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "teste" } }) }));
+
+describe("Histórico anterior ao relato estruturado", () => {
+  it("recupera a ação apenas da mesma execução e do mesmo agente, sem alterar o estado", () => {
+    const run = { operator_id: "a", run_key: "r", status: "failed", detail: {} };
+    const resultado = completarContextoAntigo([run], [
+      { operator_id: "b", run_key: "r", action: "Outro agente" },
+      { operator_id: "a", run_key: "outra", action: "Outra execução" },
+      { operator_id: "a", run_key: "r", action: "heartbeat" },
+      { operator_id: "a", run_key: "r", action: "Conferiu a página", evidence: "Página consultada" },
+    ]);
+    expect(resultado[0]).toMatchObject({ status: "failed", detail: { title: "Conferiu a página", evidence: "Página consultada" } });
+    expect(run.detail).toEqual({});
+  });
+  it("preserva o relato novo e não inventa ação quando não há auditoria", () => {
+    const novo = { operator_id: "a", run_key: "r", detail: { title: "Relato atual" } };
+    const antigo = { operator_id: "c", run_key: "s", detail: {} };
+    expect(completarContextoAntigo([novo, antigo], [{ operator_id: "a", run_key: "r", action: "Antigo" }])).toEqual([novo, antigo]);
+  });
+});
 
 describe("Aprovação encaminhada ao contrato correto", () => {
   const a = { id: "a", origin: "central", report_id: "r", client_id: "c", payload_hash: "versao", payload_version: 3, status: "pendente", payload: { report: { summary: "Texto real", next_steps: "Conferir amanhã" } } };
@@ -54,6 +74,10 @@ describe("Comprovações e isolamento das notificações", () => {
     expect(() => progressDetail({ page_url: "javascript:alert(1)" })).toThrow();
     expect(destinoDaEvidencia("javascript:alert(1)")).toBeNull();
     expect(destinoDaEvidencia("files://task-attachments/../outro.png")).toBeNull();
+    const mcp = "mcp-files://cliente/arquivo/print.png";
+    expect(destinoDaEvidencia(mcp)).toBe("privado");
+    expect(progressDetail({ attachments: [{ name: "Página consultada", url: mcp }] }).attachments).toEqual([{ name: "Página consultada", url: mcp }]);
+    expect(() => progressDetail({ attachments: [{ name: "Inválido", url: "mcp-files://../print.png" }] })).toThrow();
   });
   it("a marcação em lote usa o recorte da aba", () => {
     const q = { or: vi.fn().mockReturnThis(), not: vi.fn().mockReturnThis() };

@@ -1,3 +1,4 @@
+import { contextoDasExecucoes } from "@/lib/execucaoHistorico";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
@@ -293,7 +294,7 @@ export default function AdminExecucao() {
         if (focused.error) throw focused.error;
         if (focused.data) data.unshift(focused.data);
       }
-      return (data || []) as Array<Record<string, any>>;
+      return contextoDasExecucoes(data || []);
     },
     enabled: flag === "on",
     refetchInterval: 10_000,
