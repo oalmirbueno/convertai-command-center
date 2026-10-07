@@ -348,7 +348,7 @@ describe("Estudio: rascunho sim, publicar nao", () => {
     // tela do cliente.
     const payload = bloco.slice(bloco.indexOf("const campos"), bloco.indexOf(".upsert("));
     expect(payload).not.toMatch(/campos\.published|published\s*[:=]/);
-    expect(bloco).toContain("nao pode\n  // criar um documento ja publicado");
+    expect(bloco).toMatch(/nao pode\r?\n  \/\/ criar um documento ja publicado/);
   });
 
   it("a leitura avisa em qual dos dois estados o documento esta", () => {
@@ -842,13 +842,10 @@ describe("a Central deixa de ser uma parede de cartoes", () => {
   });
 
   it("evidencia com endereco vira link; sem endereco, vira texto", () => {
-    // String.raw porque a barra invertida sobrevive: numa string comum o
-    // JavaScript come cada `\` e a comparação passa a procurar outra coisa.
-    expect(perfil).toContain(
-      String.raw`/^https?:\/\//.test(String(v.last_evidence).trim())`,
-    );
-    expect(perfil).toContain('target="_blank"');
-    expect(perfil).toContain('rel="noreferrer noopener"');
+    const visual = readFileSync(resolve(raiz, "src/components/execucao/EvidenciaVisual.tsx"), "utf8");
+    expect(perfil).toContain('EvidenciaVisual url={String(v.last_evidence)}');
+    expect(visual).toContain('target="_blank"');
+    expect(visual).toContain('rel="noopener noreferrer"');
   });
 
   it("concluida sem evidencia e denunciada na propria lista", () => {
@@ -856,7 +853,7 @@ describe("a Central deixa de ser uma parede de cartoes", () => {
     expect(perfil).toContain("concluída sem evidência");
   });
 
-  it("da para abrir a tarefa no Kanban a partir do agente", () => {
-    expect(perfil).toContain("/kanban?task=${tarefaId}");
+  it("abre o trabalho e a conversa sem sair da Execução", () => {
+    expect(perfil).toContain("aoAbrirDiario(v.id, t?.title || v.last_action)");
   });
 });

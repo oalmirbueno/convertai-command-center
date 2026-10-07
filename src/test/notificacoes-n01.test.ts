@@ -183,7 +183,7 @@ describe("o sino: contagem certa, tempo real, marcar tudo de uma vez", () => {
 
   it("marcar todas é uma chamada só, e o botão do navegador é só da equipe", () => {
     const painel = ler("src/components/NotificationsPanel.tsx");
-    expect(painel).toContain("await marcarTodasComoLidas(user.id)");
+    expect(painel).toContain("await marcarAreaComoLida(user.id, area)");
     expect(painel).not.toContain("for (const n of unread)");
     expect(painel).toContain('eEquipe && avisosDoNavegador === "pedir"');
     expect(painel).toContain("eAdmin && <TesteDeAvisos");

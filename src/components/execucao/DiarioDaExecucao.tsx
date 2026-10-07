@@ -1,3 +1,4 @@
+import EvidenciaVisual from "./EvidenciaVisual";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -100,7 +101,7 @@ export default function DiarioDaExecucao({
       return (data || []) as Entrada[];
     },
     enabled: aberto && Boolean(linkId),
-    refetchInterval: 20_000,
+    refetchInterval: 8_000,
   });
 
   /* Nomes dos autores humanos, resolvidos uma vez. */
@@ -142,20 +143,6 @@ export default function DiarioDaExecucao({
     }
   };
 
-  /** Abre o anexo: caminho privado (files://) pede um link assinado curto; link antigo abre como estava. */
-  const abrirAnexo = async (url: string) => {
-    if (!url.startsWith("files://")) {
-      window.open(url, "_blank", "noopener,noreferrer");
-      return;
-    }
-    const { data, error } = await supabase.storage.from("files").createSignedUrl(url.slice("files://".length), 600);
-    if (error || !data?.signedUrl) {
-      toast.error(`Não abriu o anexo: ${error?.message || "tente de novo"}`);
-      return;
-    }
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-  };
-
   const enviar = useMutation({
     mutationFn: async () => {
       if (!texto.trim()) throw new Error("Escreva o texto da entrada.");
@@ -180,7 +167,7 @@ export default function DiarioDaExecucao({
 
   return (
     <Dialog open={aberto} onOpenChange={(v) => { if (!v) aoFechar(); }}>
-      <DialogContent className="flex max-h-[85vh] max-w-lg flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col gap-0 overflow-hidden p-0">
         <div className="shrink-0 border-b border-border px-5 pb-3 pt-5 pr-12">
           <DialogTitle className={juntar(estiloTexto.tituloSecao, "text-left")}>Diário da execução</DialogTitle>
           <DialogDescription className={juntar(estiloTexto.auxiliar, "mt-1 truncate text-left")}>
@@ -236,16 +223,9 @@ export default function DiarioDaExecucao({
                     {e.body}
                   </p>
                   {Array.isArray(e.attachments) && e.attachments.length > 0 && (
-                    <div className="-m-0.5 mt-1 flex flex-wrap [&>*]:m-0.5">
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {e.attachments.map((a, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => void abrirAnexo(String(a.url || ""))}
-                          className="inline-flex items-center rounded-md border border-border bg-transparent px-2 py-0.5 text-[11.5px] text-primary hover:underline"
-                        >
-                          <Paperclip className="mr-1 h-3 w-3" aria-hidden="true" /> {a.name || "anexo"}
-                        </button>
+                        <EvidenciaVisual key={i} url={String(a.url || "")} nome={a.name || "Comprovação"} />
                       ))}
                     </div>
                   )}

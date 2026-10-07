@@ -2,6 +2,10 @@ import { useMemo, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import ExecucoesRecentes from "./ExecucoesRecentes";
+import { falarComoGente } from "@/lib/falarComoGente";
+import EvidenciaVisual from "./EvidenciaVisual";
+import { estadoDaExecucao, falhaDaExecucao } from "@/lib/execucaoApresentacao";
 import { precisaDecisao } from "@/lib/precisaDecisao";
 import {
   Dialog,
@@ -40,6 +44,7 @@ type Operador = {
   status: string;
   is_coordinator: boolean;
   last_run_at: string | null;
+  area?: string | null;
 };
 
 /* A ordem em que os estados pedem atenção: o que trava vem primeiro, o
@@ -75,11 +80,13 @@ export default function PerfilDoAgente({
   vinculos,
   tarefas,
   aoFechar,
+  aoAbrirDiario,
 }: {
   operador: Operador | null;
   vinculos: Array<Record<string, any>>;
   tarefas: Map<string, any>;
   aoFechar: () => void;
+  aoAbrirDiario: (id: string, titulo?: string) => void;
 }) {
   const meus = useMemo(
     () => vinculos.filter((v) => v.operator_id === operador?.id),
@@ -92,7 +99,7 @@ export default function PerfilDoAgente({
       // Frente AG3: a leitura que falha vira erro na tela (antes dizia "Nada a corrigir").
       const { data, error } = await (supabase as any)
         .from("operator_runs")
-        .select("id, run_key, status, attempt, started_at, heartbeat_at, finished_at, error")
+        .select("id, operator_id, task_link_id, run_key, status, attempt, started_at, heartbeat_at, finished_at, error, detail")
         .eq("operator_id", operador!.id)
         .order("started_at", { ascending: false })
         .limit(30);
@@ -168,13 +175,13 @@ export default function PerfilDoAgente({
     if (numeros.semEvidencia > 0) {
       lista.push({
         grave: true,
-        texto: `${numeros.semEvidencia} conclusão(ões) sem evidência foram rebaixadas para revisão. Anexe link ou descrição verificável no evento done.`,
+        texto: `${numeros.semEvidencia} conclusão(ões) sem evidência foram rebaixadas para revisão. Anexe um link ou uma descrição verificável do resultado.`,
       });
     }
     if (numeros.falhas > 0) {
       lista.push({
         grave: true,
-        texto: `${numeros.falhas} execução(ões) falharam ou expiraram. Mande heartbeat em tarefas longas para a run não morrer por silêncio.`,
+        texto: `${numeros.falhas} execução(ões) falharam ou expiraram. O agente precisa registrar o andamento durante tarefas longas.`,
       });
     }
     if (numeros.semProximoPasso > 0) {
@@ -192,7 +199,7 @@ export default function PerfilDoAgente({
     if (numeros.total === 0) {
       lista.push({
         grave: false,
-        texto: "Nenhuma execução ainda. Leia o quadro, escolha uma tarefa da lista de disponíveis e reporte started.",
+        texto: "Nenhuma execução ainda. Escolha uma tarefa disponível para iniciar o trabalho.",
       });
     }
     // Frente AG3: sem conseguir ler as execuções, não dá para dizer que está tudo certo.
@@ -361,35 +368,11 @@ export default function PerfilDoAgente({
                                   {v.updated_at && ` · ${quando(v.updated_at)}`}
                                 </p>
                               </div>
-                              {tarefaId && (
-                                <a
-                                  href={`/kanban?task=${tarefaId}`}
-                                  className={juntar(botao.discreto, "ml-2 h-7 px-2 text-[12px]")}
-                                >
-                                  abrir
-                                </a>
-                              )}
+                              <button type="button" onClick={() => aoAbrirDiario(v.id, t?.title || v.last_action)} className={juntar(botao.discreto, "ml-2 h-7 px-2 text-[12px]")}>Ver trabalho e conversar</button>
                             </div>
 
                             <div className="pl-3.5">
-                              {v.last_evidence && (
-                                <p className="mt-1 truncate text-[12px]">
-                                  {/^https?:\/\//.test(String(v.last_evidence).trim()) ? (
-                                    <a
-                                      href={String(v.last_evidence).trim()}
-                                      target="_blank"
-                                      rel="noreferrer noopener"
-                                      className="text-info underline underline-offset-2"
-                                    >
-                                      evidência: {String(v.last_evidence).trim()}
-                                    </a>
-                                  ) : (
-                                    <span className="text-muted-foreground">
-                                      evidência: {String(v.last_evidence)}
-                                    </span>
-                                  )}
-                                </p>
-                              )}
+                              {v.last_evidence && <EvidenciaVisual url={String(v.last_evidence)} />}
 
                               {v.status === "done" && !v.last_evidence && (
                                 <p className="mt-1 text-[12px] text-warning">
@@ -439,7 +422,8 @@ export default function PerfilDoAgente({
               </section>
 
               {/* O comando pronto: o Hermes recebe o estado sem redigitar. */}
-              <section>
+              <details>
+                <summary className="cursor-pointer text-[12px] text-muted-foreground">Instruções de retomada no Hermes</summary>
                 <Titulo
                   icone={ClipboardCopy}
                   acao={
@@ -457,36 +441,11 @@ export default function PerfilDoAgente({
                 <pre className={juntar(superficie.poco, "whitespace-pre-wrap p-3 font-sans text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]")}>
                   {comandoDeAcionamento}
                 </pre>
-              </section>
+              </details>
 
-              {/* Execuções: onde a falha aparece com nome e tentativa. */}
               <section>
                 <Titulo icone={AlertTriangle}>Execuções recentes</Titulo>
-                {runs.length === 0 ? (
-                  <p className={texto.auxiliar}>Nenhuma execução registrada ainda.</p>
-                ) : (
-                  <ul className="divide-y divide-border border-y border-border">
-                    {runs.map((r) => (
-                      <li key={String(r.id)} className="flex min-w-0 items-baseline py-1.5 text-[12px]">
-                        <span className={juntar(
-                          "mr-2 shrink-0 font-medium",
-                          r.status === "done" ? "text-success"
-                            : ["failed", "timeout"].includes(String(r.status)) ? "text-destructive"
-                            : "text-muted-foreground",
-                        )}>
-                          {({ started: "começou", progress: "em andamento", done: "concluída", review: "para revisar", awaiting_input: "esperando você", failed: "falhou", timeout: "parou sem sinal" } as Record<string, string>)[String(r.status)] ?? String(r.status)}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-muted-foreground" title={`execução ${String(r.run_key)}`}>
-                          {r.error ? String(r.error) : r.status === "done" ? "sem ocorrências" : ""}
-                          {r.attempt > 1 ? ` (${r.attempt}ª tentativa)` : ""}
-                        </span>
-                        <span className="ml-2 shrink-0 tabular-nums text-muted-foreground">
-                          {quando(r.finished_at || r.started_at)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <ExecucoesRecentes runs={runs} agentes={[operador]} vinculos={vinculos} tarefas={tarefas} aoConversar={aoAbrirDiario} />
               </section>
 
               {/* A trilha imutável: o histórico que ninguém conserta. */}
@@ -499,16 +458,17 @@ export default function PerfilDoAgente({
                     {trilha.map((a) => (
                       <li key={String(a.id)} className="min-w-0 py-2">
                         <p className="text-[12.5px] text-foreground/85 [overflow-wrap:anywhere]">
-                          {String(a.action)}
+                          {falarComoGente(String(a.action)).humano}
                           {a.old_status && a.new_status && a.old_status !== a.new_status && (
-                            <span className="text-muted-foreground"> · {String(a.old_status)} para {String(a.new_status)}</span>
+                            <span className="text-muted-foreground"> · {estadoDaExecucao(a.old_status)} → {estadoDaExecucao(a.new_status)}</span>
                           )}
                         </p>
                         <p className={juntar(texto.auxiliar, "mt-0.5")}>
-                          {quando(a.occurred_at)} · {String(a.actor)}
-                          {a.from_cron ? " · via cron" : ""}
-                          {a.evidence ? " · com evidência" : ""}
+                          {quando(a.occurred_at)}
+                          {a.from_cron ? " · rotina automática" : ""}
+                          {a.evidence ? " · com comprovação" : ""}
                         </p>
+                        {a.evidence && <EvidenciaVisual url={String(a.evidence)} />}
                       </li>
                     ))}
                   </ul>
