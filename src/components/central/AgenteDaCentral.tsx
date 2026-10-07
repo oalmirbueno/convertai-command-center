@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { emLotes, assinaturaDasRespostas } from "./filaDaCentral";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -32,7 +33,7 @@ import {
  * Responder, 3 Aplicar e publicar, 4 Copiar rituais.
  *
  * Para cada cliente ativo (régua do Ciclo), o agente lê tudo, atualiza o
- * dossiê geral com a leitura organizada da semana e faz DUAS perguntas. O
+ * dossiê geral com a leitura da semana e pergunta somente o que falta. O
  * dono responde (pode colar contexto), o agente incorpora no dossiê, grava no
  * diário e no cérebro, escreve o ritual com memória, publica no portal e
  * deixa pronto para copiar.
@@ -102,11 +103,6 @@ async function copiar(texto: string): Promise<boolean> {
   }
 }
 
-async function emLotes<T>(lista: T[], tamanho: number, fazer: (item: T) => Promise<void>) {
-  for (let i = 0; i < lista.length; i += tamanho) {
-    await Promise.all(lista.slice(i, i + tamanho).map(fazer));
-  }
-}
 
 function TarefasDoRitual({ clientId, reportId, tarefas, criadas, onCriada }: {
   clientId: string; reportId: string; tarefas: TarefaSugerida[]; criadas: number[]; onCriada: (i: number) => void;
@@ -371,7 +367,7 @@ export default function AgenteDaCentral() {
     void abrir(true);
   };
 
-  // Passo 1: ler todo mundo e trazer as duas perguntas de cada um.
+  // Passo 1: consultar memória e trazer apenas decisões ainda abertas.
   const lerTodos = async () => {
     const atual = rodadaRef.current;
     if (!atual || rodando) return;
@@ -391,42 +387,47 @@ export default function AgenteDaCentral() {
     });
     setRodando(null);
     setEtapa((e) => (e === "ler" && rodadaRef.current?.itens.some((i) => i.incluir && i.preparo) ? "responder" : e));
-    void queryClient.invalidateQueries({ queryKey: ["dossie-cliente"] });
-    toast.success("Leitura feita. Responda as perguntas e aplique.");
+    for (const queryKey of [["dossie-cliente"], ["exp-dossies"], ["exp-dossie-versoes"], ["mesa", "contexto"]]) {
+      void queryClient.invalidateQueries({ queryKey });
+    }
+    toast.success("Leitura concluída. Só as decisões que faltam aparecem como perguntas.");
   };
 
   // Passo 3: aplicar as respostas, escrever o ritual e publicar.
-  const aplicarTodos = async () => {
+  const aplicarTodos = async (clientId?: string) => {
     const atual = rodadaRef.current;
     if (!atual || rodando || !user) return;
-    const alvos = atual.itens.filter((i) => i.incluir && i.preparo && i.situacao !== "pronto");
+    const alvos = atual.itens.filter((i) => i.incluir && i.preparo && i.situacao !== "pronto" && (!clientId || i.cliente.id === clientId));
     if (!alvos.length) { toast.info("Nada para aplicar: leia os clientes primeiro."); return; }
     setRodando("aplicando");
     await emLotes(alvos, LOTE, async (item) => {
       const c = item.cliente;
       const preparo = item.preparo!;
+      const assinatura = assinaturaDasRespostas(item.respostas, item.contexto, atual.contextoGeral, atual.pesquisar);
+      const reutilizar = item.aplicadoPara === assinatura;
       atualizarItem(c.id, (i) => ({ ...i, situacao: "aplicando", erro: null }));
       try {
         // Frente AG3: a nova tentativa não reaplica o que já entrou no dossiê (duplicaria as confirmações).
         // Já aplicado sem ritual: só escreve o ritual. Já com ritual e sem rascunho: só salva e publica.
         let ap: Aplicado;
-        if (item.aplicado && !item.aplicado.ritual) {
+        if (reutilizar && item.aplicado && !item.aplicado.ritual) {
           const rr = await reescreverRitual({ clientId: c.id, ritual: atual.ritual });
           ap = { ...item.aplicado, ritual: rr.ritual, ritual_erro: rr.ritual_erro };
-        } else if (item.aplicado && item.aplicado.ritual) {
+        } else if (reutilizar && item.aplicado && item.aplicado.ritual) {
           ap = item.aplicado;
         } else {
           const contexto = [item.contexto.trim(), atual.contextoGeral.trim() ? `Para todos: ${atual.contextoGeral.trim()}` : ""].filter(Boolean).join("\n");
           ap = await aplicarRespostas({
             clientId: c.id, ritual: atual.ritual, leitura: preparo.leitura, perguntas: preparo.perguntas,
-            respostas: item.respostas, contextoExtra: contexto,
+            respostas: item.respostas, contextoExtra: contexto, envioId: atual.iniciadaEm, pesquisar: atual.pesquisar, dossieVersao: preparo.dossie_versao,
           });
         }
-        atualizarItem(c.id, (i) => ({ ...i, aplicado: ap, situacao: ap.ritual ? "publicando" : "erro", aprendizado: ap.aprendizado?.length ? ap.aprendizado : i.aprendizado }));
+        atualizarItem(c.id, (i) => ({ ...i, aplicado: ap, aplicadoPara: assinatura, situacao: ap.ritual ? "publicando" : "erro", aprendizado: ap.aprendizado?.length ? ap.aprendizado : i.aprendizado }));
         // Frente FS: a IA que não organizou as respostas não some em silêncio.
         if (ap.ia_erro) toast.warning(`${c.nome}: a IA não organizou as respostas agora; elas entraram como foram escritas.`, { description: `Motivo: ${ap.ia_erro}` });
+        if (ap.avisos?.length) toast.warning(`${c.nome}: ${ap.avisos.join(" ")}`);
         if (ap.ritual) {
-          const pub = await salvarEPublicarRitual({ clientId: c.id, ritual: ap.ritual, publicar: atual.publicar, userId: user.id, reportId: item.reportId });
+          const pub = await salvarEPublicarRitual({ clientId: c.id, ritual: ap.ritual, publicar: atual.publicar, userId: user.id, reportId: reutilizar ? item.reportId : null });
           atualizarItem(c.id, (i) => ({ ...i, reportId: pub.reportId, publicado: pub.publicado, canal: pub.publicado ? "portal" : null, situacao: "pronto" }));
           if (pub.avisos.length) toast.warning(`${c.nome}: ${pub.avisos.join(" ")}`);
         } else {
@@ -446,8 +447,12 @@ export default function AgenteDaCentral() {
     for (const k of ["exp-reports", "reports", "exp-memory", "cycle-rituals-central", "dossie-cliente", "agente-central-tarefas-sugeridas"]) {
       void queryClient.invalidateQueries({ queryKey: [k] });
     }
+    for (const queryKey of [["exp-dossies"], ["exp-dossie-versoes"], ["dossie-historico"], ["client-memory-timeline"],
+      ["mesa", "contexto"], ["mesa", "memoria"], ["mesa", "cerebro-organizado"], ["mesa", "saude-conhecimento"]]) {
+      void queryClient.invalidateQueries({ queryKey });
+    }
     if (comErro) toast.warning(`${comErro} cliente(s) não deram certo. O motivo está na lista; toque em Aplicar de novo para tentar só o que faltou.`);
-    else toast.success("Rodada aplicada. Os rituais estão prontos para copiar.");
+    else toast.success(clientId ? "Cliente atualizado. Respostas incorporadas ao dossiê e à memória." : "Rodada aplicada. Os rituais estão prontos para copiar.");
   };
 
   const itens = rodada?.itens ?? [];
@@ -580,12 +585,23 @@ export default function AgenteDaCentral() {
       </p>
       <textarea
         value={rodada?.contextoGeral ?? ""}
+        disabled={!!rodando}
         onChange={(e) => setRodada((r) => (r ? { ...r, contextoGeral: e.target.value } : r))}
         placeholder="Contexto que vale para todos (opcional)"
         aria-label="Contexto que vale para todos"
         rows={2}
         className={juntar(campoTexto, conversa.campo, "min-h-[64px]")}
       />
+      <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
+        <input type="checkbox" checked={rodada?.publicar ?? false} disabled={!!rodando}
+          onChange={(e) => setRodada((r) => r ? { ...r, publicar: e.target.checked } : r)} />
+        Publicar a atualização no portal ao salvar
+      </label>
+      <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
+        <input type="checkbox" checked={rodada?.pesquisar ?? false} disabled={!!rodando}
+          onChange={(e) => setRodada((r) => r ? { ...r, pesquisar: e.target.checked } : r)} />
+        Complementar respostas com pesquisa na internet quando útil
+      </label>
       <ul className="space-y-2">
         {lidos.map((i) => {
           const abertoAqui = clienteAberto === i.cliente.id;
@@ -604,7 +620,7 @@ export default function AgenteDaCentral() {
                   <span className="block truncate text-[14px] font-semibold text-foreground">{i.cliente.nome}</span>
                   <span className={juntar("block text-[12px]", corDaSituacao(i.situacao))}>
                     {i.situacao === "perguntas"
-                      ? faltam === 0 ? `${qtd} de ${qtd} respondidas` : `${qtd - faltam} de ${qtd} respondidas`
+                      ? qtd === 0 ? "Contexto suficiente, sem perguntas" : faltam === 0 ? `${qtd} de ${qtd} respondidas` : `${qtd - faltam} de ${qtd} respondidas`
                       : ROTULO[i.situacao]}
                   </span>
                 </span>
@@ -657,6 +673,15 @@ export default function AgenteDaCentral() {
                     className={juntar(campoTexto, conversa.campo, "mt-3 min-h-[64px]")}
                   />
                   {i.erro && <p className="mt-1 text-[12px] text-destructive">{i.erro}</p>}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <button type="button" className={botao.primario} disabled={travado} onClick={() => void aplicarTodos(i.cliente.id)}>
+                      {rodada?.publicar ? "Salvar, atualizar e publicar" : "Salvar e atualizar cliente"}
+                    </button>
+                    {i.aplicado?.confirmacoes?.length ? <details className="text-[12px] text-muted-foreground">
+                      <summary className="cursor-pointer">O que foi incorporado ({i.aplicado.confirmacoes.length})</summary>
+                      <ul>{i.aplicado.confirmacoes.map((c, k) => <li key={k}>{c}</li>)}</ul>
+                    </details> : null}
+                  </div>
                 </div>
               )}
             </li>
@@ -882,7 +907,7 @@ export default function AgenteDaCentral() {
           <PainelDoAgente
             semMoldura
             titulo="Atualizar todos"
-            descricao="Dossiê, duas perguntas e ritual de cada cliente ativo."
+            descricao="Memória do cliente, decisões que faltam e atualização confirmada."
             icone={<Bot className="h-4 w-4" />}
             acoes={
               <button type="button" onClick={() => setAberto(false)} aria-label="Fechar" title="Fechar" className={juntar(botao.icone, "h-9 w-9")}>

@@ -37,6 +37,7 @@ import { METODO_ACELERA } from "../_shared/metodo-acelera.ts";
 // Frente AG (26/09): mapa mínimo do painel, só com os nomes (roda em lote; a leitura pode chegar ao cliente, então sem rota).
 import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import { recortarDossie } from "../_shared/dossie-recortado.ts";
+import { contextoDasRespostas, juntarRespostas, perguntasAindaAbertas, idDaResposta, guardarEConferirResposta } from "./continuidade.ts";
 import { contextoCompletoParaPrompt } from "../_shared/contexto-completo-da-marca.ts";
 import { lerContextoDoRitual } from "../ritual-writer/contexto.ts";
 import { conferirRepeticao, escreverRitual, extractJson, RITUAL_BRIEF } from "../ritual-writer/escritor.ts";
@@ -71,15 +72,17 @@ const SERVICOS: Record<string, string> = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-const SISTEMA_PREPARAR = `Você é o agente da Central da Aceleriq, agência de growth marketing que conduz cada cliente pelo método ACELERA (Analisar, Clarear, Estruturar, Lançar, Executar, Revisar, Acelerar). Você lê o dossiê geral de UM cliente, a memória dos rituais enviados, o que mudou desde o último, as pendências, os números, o cérebro do cliente e a fase do método. Devolve a leitura organizada da semana (interna, para o dossiê) e DUAS perguntas para o dono da agência.
+const SISTEMA_PREPARAR = `Você é o agente da Central da Aceleriq, agência de growth marketing que conduz cada cliente pelo método ACELERA (Analisar, Clarear, Estruturar, Lançar, Executar, Revisar, Acelerar). Leia o estado atual, dossiê, memória, decisões, regras, resultados e mudanças de UM cliente. Atualize a leitura com os fatos e as respostas já disponíveis. Faça ZERO a DUAS perguntas, somente para decisões realmente bloqueadas que dependem do dono. Sem lacuna material, devolva perguntas: []. Não é um formulário obrigatório.
 
-As duas perguntas são as que mais mudam a condução deste cliente nesta semana: o que o dossiê e o painel NÃO dizem e só o dono sabe (uma decisão em aberto, uma conversa com o cliente, verba, prioridade, resultado que aconteceu fora do painel, se um combinado do último ritual andou). Cada pergunta é curta, específica, com nome (campanha X, post Y, combinado Z), respondível em uma ou duas frases. Nunca pergunte o que já está no dossiê ou nos fatos. Nunca pergunte algo genérico ("como está o cliente?").
+Antes de perguntar, confronte a lacuna com as RESPOSTAS JÁ REGISTRADAS e o estado real. Uma resposta pode resolver várias frentes: incorpore suas consequências em pendências, próximos passos e lacunas. Não repita perguntas nem paráfrases de algo respondido. Por_que deve explicar o bloqueio concreto e por que as fontes não o resolvem. Perguntas devem mencionar a decisão e o período. Não volte a perguntar se nada mudou. Nunca pergunte algo genérico ("como está o cliente?"). Não invente pesquisa externa ou execução: distinga proposta de ação comprovada.
 
 Regras: use só os fatos; nada inventado. Português do Brasil, sem travessão (use vírgula ou ponto). Conteúdo (Instagram, posts) e anúncios são frentes separadas. "o_que_andou" só com evidência. "proximos" nasce do dossiê ou de um fato, com QUAL peça, QUAL campanha, QUAL decisão. "lacunas" é o que falta no painel para conduzir com firmeza (até 4).
 
-Responda SOMENTE JSON: {"leitura":{"onde_estamos":"2 a 3 frases","fase":{"nome":"nome da fase ACELERA","motivo":"por que","proximo_degrau":"o que falta para subir"},"o_que_andou":["..."],"pendencias":["..."],"proximos":[{"frente":"social|trafego|geral","passo":"..."}],"lacunas":["..."]},"perguntas":[{"pergunta":"...?","por_que":"o que a resposta muda"},{"pergunta":"...?","por_que":"..."}]}`;
+Quando houver versões conflitantes, compare datas, fontes e escopo: decisão explícita mais recente prevalece sobre resumo antigo ou ritual gerado pela IA. Não confunda pendência histórica com bloqueio atual. Pergunte sobre uma contradição somente se ela realmente continuar sem solução, citando as duas versões.
 
-const SISTEMA_APLICAR = `Você é o agente da Central da Aceleriq. Recebe a leitura da semana de UM cliente, as duas perguntas feitas ao dono da agência, as respostas dele e um contexto extra que ele pode ter colado. A resposta do dono vale sobre o que o painel sugeria.
+Responda SOMENTE JSON: {"leitura":{"onde_estamos":"2 a 3 frases","fase":{"nome":"nome da fase ACELERA","motivo":"por que","proximo_degrau":"o que falta para subir"},"o_que_andou":["..."],"pendencias":["..."],"proximos":[{"frente":"social|trafego|geral","passo":"..."}],"lacunas":[]},"perguntas":[]}. Se houver bloqueio real, inclua até duas entradas em perguntas, cada uma {"pergunta":"decisão específica e período?","por_que":"bloqueio que não foi resolvido pelas fontes"}.`;
+
+const SISTEMA_APLICAR = `Você é o agente da Central da Aceleriq. Recebe o dossiê atual do servidor, a leitura da semana, perguntas opcionais, respostas e contexto livre do dono. A resposta nova do dono prevalece sobre inferências anteriores, dentro do período e escopo informados. Entenda o conjunto, não apenas uma resposta por pergunta. Uma mensagem pode resolver várias perguntas e corrigir várias frentes. Remova pendências e lacunas resolvidas, atualize próximos passos afetados e preserve fatos ainda válidos. Não invente execução externa. Texto livre também deve gerar confirmações, mesmo quando há respostas às perguntas.
 
 Devolva:
 - "leitura": a leitura da semana atualizada com as respostas (mesmo formato), sem perder o que continua certo.
@@ -106,10 +109,10 @@ export const LIMITE_FATOS = 9000;
 // Frente SPP (revisão 30/09): usoId do motor (null na reserva), para o método fechar a resposta.
 type RespostaDaIA = { dados: Record<string, unknown>; modelo: string; erro: null; usoId: string | null } | { dados: null; modelo: null; erro: string };
 
-async function perguntarIA(sistema: string, usuario: string, clientId: string, uid: string, escolha: EscolhaDoModelo, metodo: MetodoInjetado | null = null): Promise<RespostaDaIA> {
-  const r = await escreverComModeloDaCentral({ clientId, sistema, usuario, escolha, temperatura: 0.3, criadoPor: uid, metodo });
+async function perguntarIA(sistema: string, usuario: string, clientId: string, uid: string, escolha: EscolhaDoModelo, metodo: MetodoInjetado | null = null, pesquisaWeb = false): Promise<RespostaDaIA> {
+  const r = await escreverComModeloDaCentral({ clientId, sistema, usuario, escolha, temperatura: 0.3, criadoPor: uid, metodo, pesquisaWeb });
   if (!r) {
-    const erro = "nenhum modelo respondeu (nem o escolhido nem o de reserva)";
+    const erro = pesquisaWeb ? "o modelo com pesquisa não respondeu; a reserva sem navegação não foi usada" : "nenhum modelo respondeu (nem o escolhido nem o de reserva)";
     console.error("[agente-central] IA sem resposta", { clientId, erro });
     return { dados: null, modelo: null, erro };
   }
@@ -148,9 +151,18 @@ function registrarMetodoDoRitual(metodo: MetodoInjetado | null, escrito: { uso_i
 type Dossie = { id: string; version: number; content: string; summary: string | null; metadata: Record<string, unknown> } | null;
 
 async function lerDossie(db: SupabaseClient, clientId: string): Promise<Dossie> {
-  const { data } = await db.from("client_dossiers").select("id, version, content, summary, metadata")
+  const { data, error } = await db.from("client_dossiers").select("id, version, content, summary, metadata")
     .eq("client_id", clientId).eq("dossier_type", "contexto").is("project_id", null).eq("is_current", true).maybeSingle();
+  if (error) throw new Error("Não consegui consultar o dossiê atual. A atualização foi interrompida para preservar a memória.");
   return data ? { id: String(data.id), version: Number(data.version), content: String(data.content ?? ""), summary: data.summary ?? null, metadata: (data.metadata && typeof data.metadata === "object" ? data.metadata : {}) as Record<string, unknown> } : null;
+}
+
+async function historicoDoDono(db: SupabaseClient, clientId: string): Promise<string> {
+  const { data, error } = await db.from("project_memory").select("content, created_at")
+    .eq("client_id", clientId).eq("source", "agente-central").eq("kind", "decisao")
+    .order("created_at", { ascending: false }).limit(30);
+  if (error) throw new Error("Não consegui consultar as respostas anteriores. Tente novamente para evitar perguntas repetidas.");
+  return (data ?? []).map((r) => `${r.created_at}: ${r.content}`).join("\n\n").slice(0, 10000);
 }
 
 /** Grava a versão nova pelo RPC de sempre, com a versão lida (sem regressão silenciosa). */
@@ -171,6 +183,8 @@ async function gravarDossie(db: SupabaseClient, clientId: string, atual: Dossie,
     _expected_version: atual ? atual.version : 0,
   });
   if (error) throw new Error(/version_conflict/.test(error.message) ? "O dossiê mudou enquanto o agente lia. Tente de novo este cliente." : `dossiê: ${error.message}`);
+  const confirmado = await lerDossie(db, clientId);
+  if (!confirmado || confirmado.content.trim() !== conteudo.trim()) throw new Error("A gravação do dossiê não pôde ser confirmada. Tente novamente este cliente.");
   return { versao: Number((data as Record<string, unknown> | null)?.version ?? (atual?.version ?? 0) + 1), gravou: true };
 }
 
@@ -230,16 +244,18 @@ async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, r
     .then((c) => c.bloco, (e) => (registrarFalha("agente-central: contexto completo não lido", e), ""));
   // Frente SPP: a leitura da semana é um lote de frentes (plano, frentes e prova); o código escolhe.
   const spP = superpoderesPara(db, { agente: "central.agente", momento: "lote" });
-  const [perfil, dossie, contexto, estado, regras] = await Promise.all([
+  const [perfil, dossie, contexto, estado, regras, historico] = await Promise.all([
     perfilDe(db, clientId),
     lerDossie(db, clientId),
     lerContextoDoRitual(db, clientId, { ritual, limite: LIMITE_CONTEXTO_PREPARAR }),
     // O estado real (orgânico e pago separados, com período): o mesmo leitor dos rituais.
     lerEstadoReal(db, clientId).catch((e) => (registrarFalha("agente-central: lerEstadoReal falhou", e), null)),
     regrasDaCentral(db, clientId),
+    historicoDoDono(db, clientId),
   ]);
   const n = nomes(perfil);
   const fase = METODO_ACELERA[contexto.fase];
+  const respostasGuardadas = juntarRespostas(dossie?.metadata.central_respostas, []);
   const r = await perguntarIA(`${SISTEMA_PREPARAR}${MAPA_DA_CENTRAL}${blocoDasRegras(regras)}`, [
     `HOJE: ${hojeEmSaoPaulo()}`,
     `CLIENTE: ${n.nome}`,
@@ -248,27 +264,27 @@ async function acaoPreparar(db: SupabaseClient, uid: string, clientId: string, r
     `MEMÓRIA, MUDANÇAS, PENDÊNCIAS, NÚMEROS, CÉREBRO E MÉTODO:\n${contexto.texto}`,
     estado ? estadoRealComoTexto(estado, { ritual, limite: 5000 }) : "",
     dossie ? `DOSSIÊ GERAL ATUAL v${dossie.version}:\n${recortarDossie(dossie.content, LIMITE_DOSSIE_PREPARAR)}` : "DOSSIÊ GERAL: não existe ainda.",
+    contextoDasRespostas(dossie?.content ?? "", respostasGuardadas),
+    historico ? `HISTÓRICO DAS RESPOSTAS DO DONO (mais recente primeiro):\n${historico}` : "",
     await completoP,
   ].filter(Boolean).join("\n\n"), clientId, uid, escolha, await spP);
   if (!r.dados) return json({ error: `A IA não respondeu agora (${r.erro}). Tente este cliente de novo.`, ia_erro: r.erro }, 502);
   const leitura = normalizarLeitura(r.dados.leitura);
   if (!leitura.fase.nome) leitura.fase = { nome: fase.nome, motivo: contexto.motivoDaFase, proximo_degrau: fase.sinalDeAvanco };
-  const perguntas = normalizarPerguntas(r.dados.perguntas);
+  const perguntas = perguntasAindaAbertas(normalizarPerguntas(r.dados.perguntas), respostasGuardadas);
   const agora = new Date();
 
   // O dossiê já sai atualizado com a leitura organizada (antes das respostas).
   let versao = dossie?.version ?? null;
   let dossieAviso: string | null = null;
-  if (dossie) {
+  {
     try {
-      const g = await gravarDossie(db, clientId, dossie, comporDossie(dossie.content, { leitura: secaoDaLeitura(leitura, agora) }),
+      const g = await gravarDossie(db, clientId, dossie, comporDossie(dossie?.content ?? "", { leitura: secaoDaLeitura(leitura, agora) }),
         "Agente da Central: leitura organizada da semana", { agente_central: { etapa: "leitura", por: uid, em: agora.toISOString(), ritual } });
       versao = g.versao;
     } catch (e) {
       dossieAviso = e instanceof Error ? e.message : "Não foi possível gravar a leitura no dossiê.";
     }
-  } else {
-    dossieAviso = "Cliente sem dossiê geral: a leitura fica só aqui até a equipe criar o dossiê.";
   }
 
   // Frente SPP (revisão 30/09): o método fecha a leitura. A ação feita é o dossiê gravado; a linha "Método:" vai junto do "Segui".
@@ -299,16 +315,45 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
   const agora = new Date();
   const temResposta = respostas.some((r) => r.resposta) || !!contextoExtra;
 
+  // A resposta fica no servidor antes de qualquer chamada longa de IA.
+  // Repetir o mesmo envio, inclusive após recarregar, conserva uma única entrada.
+  let dossieBase = await lerDossie(db, clientId);
+  const precisaConsolidar = temResposta || body.pesquisar === true ||
+    (typeof body.dossie_versao === "number" && body.dossie_versao !== (dossieBase?.version ?? 0));
+  let diarioGravado = false;
+  const respostasNovas = [
+    ...respostas.filter((r) => r.resposta),
+    ...(contextoExtra ? [{ pergunta: "Contexto livre do dono", resposta: contextoExtra }] : []),
+  ].map((r) => ({ ...r, em: agora.toISOString() }));
+  const memoriaRespostas = juntarRespostas(dossieBase?.metadata.central_respostas, respostasNovas);
+  if (temResposta) {
+    const conteudo = respostasNovas.map((r) => `${r.pergunta}\n${r.resposta}`).join("\n\n");
+    const id = await idDaResposta(clientId, String(body.envio_id ?? hojeEmSaoPaulo()), conteudo);
+    await guardarEConferirResposta(conteudo, {
+      inserir: () => db.from("project_memory").insert({
+        id, client_id: clientId, kind: "decisao", title: "Respostas ao agente da Central", content: conteudo,
+        source: "agente-central", tags: ["agente-central", ritual], created_by: uid,
+        metadata: { client_visible: false, aprovado_por: uid, aprovado_em: agora.toISOString(), respostas: respostasNovas },
+      }),
+      reler: () => db.from("project_memory").select("id, content").eq("id", id).eq("client_id", clientId).maybeSingle(),
+    });
+    diarioGravado = true;
+    await gravarDossie(db, clientId, dossieBase,
+      comporDossie(dossieBase?.content ?? "", { confirmacoes: linhasDeConfirmacao(agora, respostasNovas.map((r) => `${r.pergunta} ${r.resposta}`)) }),
+      "Agente da Central: respostas recebidas e preservadas", { central_respostas: memoriaRespostas });
+    dossieBase = await lerDossie(db, clientId);
+  }
+
   let leitura: LeituraDaSemana = leituraAntes;
   let confirmacoes: string[] = [];
   let aprendizados: Array<{ texto: string; area: AreaDoCerebro; categoria: "preferencia" | "evitar" | "aprendizado" }> = [];
-  // Frente FS: a IA que não organizou as respostas tem motivo na resposta (as respostas entram como o dono escreveu).
-  let iaErro: string | null = null;
+  // Mantém o contrato das versões anteriores; falha de consolidação retorna erro.
+  const iaErro: string | null = null;
   // Frente AG3: o que o dono respondeu também ensina ("nunca prometa prazo para este cliente"). Corre junto.
   const textoDoDono = [...respostas.filter((x) => x.resposta).map((x) => x.resposta), contextoExtra].filter(Boolean).join("\n");
   // Frente SPP (revisão 30/09): o Jev escolhe o método pelo que o dono respondeu, junto com a leitura das regras
   // (antes esperava sozinho, até 3,5 s, antes do modelo). Nunca lança.
-  const spAplicarP = temResposta ? superpoderesPara(db, { agente: "central.agente", pedido: textoDoDono || contextoExtra }) : Promise.resolve(null);
+  const spAplicarP = precisaConsolidar ? superpoderesPara(db, { agente: "central.agente", pedido: textoDoDono || "Reconciliar o contexto atual do cliente" }) : Promise.resolve(null);
   const regras = await regrasDaCentral(db, clientId);
   const aprendizado = textoDoDono
     ? aprenderNoServidor(db as never, { texto: textoDoDono, agente: "central", clientId, donoId: uid, contexto: respostas.map((x) => x.pergunta).join(" | ") })
@@ -316,19 +361,29 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
   let seguidas: ReturnType<typeof regrasSeguidas> = null;
   // O que o modelo respondeu, para o método fechar depois das gravações (a prova é a ação feita de verdade).
   let respostaDoModelo: { usoId: string | null; declarados: unknown } | null = null;
-  if (temResposta) {
+  if (precisaConsolidar) {
     const spAplicar = await spAplicarP;
-    const r = await perguntarIA(`${SISTEMA_APLICAR}${blocoDasRegras(regras)}`, [
+    const pesquisa = body.pesquisar === true;
+    const r = await perguntarIA(`${SISTEMA_APLICAR}${blocoDasRegras(regras)}${pesquisa ? "\nPode consultar a internet para complementar oportunidades relevantes ao pedido. Priorize contexto e documentos existentes. Pesquise só lacunas externas úteis; jamais procure decisões privadas do cliente na web. Qualquer fato externo incluído deve ter URL verificável junto, sem virar confirmação do dono ou aprendizado permanente. Não diga que pesquisou se não usou a ferramenta." : ""}`, [
+      `DOSSIÊ ATUAL DO SERVIDOR:\n${recortarDossie(dossieBase?.content ?? "", LIMITE_DOSSIE_PREPARAR)}`,
+      contextoDasRespostas(dossieBase?.content ?? "", memoriaRespostas),
       `LEITURA DA SEMANA:\n${JSON.stringify(leituraAntes)}`,
       `PERGUNTAS E RESPOSTAS DO DONO:\n${respostas.map((x) => `- ${x.pergunta}\n  Resposta: ${x.resposta || "(sem resposta)"}`).join("\n")}`,
       contextoExtra ? `CONTEXTO EXTRA DO DONO:\n${contextoExtra}` : "",
-    ].filter(Boolean).join("\n\n"), clientId, uid, escolha, spAplicar);
-    if (!r.dados) iaErro = r.erro;
+    ].filter(Boolean).join("\n\n"), clientId, uid, escolha, spAplicar, pesquisa);
+    if (!r.dados) {
+      await aprendizado;
+      return json({ error: `${temResposta ? "Suas respostas estão guardadas na memória. " : ""}A IA não conseguiu consolidar o contexto agora; tente novamente para concluir. Nada foi publicado.`, ia_erro: r.erro }, 502);
+    }
     if (r.dados) seguidas = regrasSeguidas(r.dados.regras_seguidas, regras);
     if (r.dados) respostaDoModelo = { usoId: r.usoId, declarados: r.dados.metodos_usados };
     if (r.dados) {
       const nova = normalizarLeitura(r.dados.leitura);
-      if (nova.onde_estamos) leitura = nova;
+      if (!nova.onde_estamos) {
+        await aprendizado;
+        return json({ error: `${temResposta ? "Suas respostas estão salvas. " : ""}A IA não devolveu uma atualização válida. Tente novamente; nada foi publicado.` }, 502);
+      }
+      leitura = nova;
       confirmacoes = (Array.isArray(r.dados.confirmacoes) ? r.dados.confirmacoes : []).map((c) => String(c)).filter((c) => c.trim().length > 3).slice(0, 4);
       aprendizados = (Array.isArray(r.dados.aprendizados) ? r.dados.aprendizados : [])
         .map((a) => a && typeof a === "object" ? a as Record<string, unknown> : {})
@@ -340,48 +395,31 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
         .filter((a) => a.texto.length > 5)
         .slice(0, 3);
     }
-    // Sem IA, a resposta do dono entra do jeito que ele escreveu.
+    // Se o modelo não resumiu as confirmações, preserva o texto do dono.
     if (!confirmacoes.length) confirmacoes = respostas.filter((x) => x.resposta).map((x) => `${x.pergunta} ${x.resposta}`);
     if (!confirmacoes.length && contextoExtra) confirmacoes = [contextoExtra.slice(0, 380)];
   }
 
   // 1) Dossiê: leitura nova + o que o dono confirmou, pelo RPC de sempre.
   const dossie = await lerDossie(db, clientId);
+  if ((dossie?.version ?? 0) !== (dossieBase?.version ?? 0)) {
+    await aprendizado;
+    throw new Error("O contexto mudou durante a atualização. Suas respostas estão preservadas; tente novamente para incorporar a versão atual.");
+  }
   let versao = dossie?.version ?? null;
   let dossieAviso: string | null = null;
   const aprovacao = { por: uid, em: agora.toISOString(), via: "agente_central" };
-  if (dossie) {
+  {
     try {
       const g = await gravarDossie(db, clientId, dossie,
-        comporDossie(dossie.content, { leitura: secaoDaLeitura(leitura, agora), confirmacoes: linhasDeConfirmacao(agora, confirmacoes) }),
+        comporDossie(dossie?.content ?? "", { leitura: secaoDaLeitura(leitura, agora), confirmacoes: linhasDeConfirmacao(agora, confirmacoes) }),
         temResposta ? "Agente da Central: respostas do dono incorporadas" : "Agente da Central: leitura da semana confirmada",
-        { agente_central: { etapa: "respostas", ...aprovacao, perguntas: respostas.map((x) => x.pergunta), ritual } });
+        { central_respostas: memoriaRespostas, agente_central: { etapa: "respostas", ...aprovacao, perguntas: respostas.map((x) => x.pergunta), ritual } });
       versao = g.versao;
     } catch (e) {
-      dossieAviso = e instanceof Error ? e.message : "Não foi possível gravar no dossiê.";
+      await aprendizado;
+      throw e;
     }
-  } else {
-    dossieAviso = "Cliente sem dossiê geral: as respostas ficaram no diário.";
-  }
-
-  // 2) Diário: as respostas são decisão do dono, com quem aprovou.
-  let diarioGravado = false;
-  if (temResposta) {
-    const { error } = await db.from("project_memory").insert({
-      client_id: clientId,
-      kind: "decisao",
-      title: "Respostas ao agente da Central",
-      content: [
-        ...respostas.filter((x) => x.resposta).map((x) => `${x.pergunta}\n${x.resposta}`),
-        contextoExtra ? `Contexto: ${contextoExtra}` : "",
-      ].filter(Boolean).join("\n\n").slice(0, 8000),
-      source: "agente-central",
-      tags: ["agente-central", ritual],
-      metadata: { client_visible: false, aprovado_por: uid, aprovado_em: aprovacao.em, aprovado_via: aprovacao.via, perguntas: respostas.map((x) => x.pergunta) },
-      created_by: uid,
-    });
-    if (error) console.warn(`[agente-central] diário não gravado: ${error.message}`);
-    else diarioGravado = true;
   }
 
   // 3) Cérebro: o que vale para as próximas semanas (sem duplicar; o Jev julga).
@@ -453,6 +491,7 @@ async function acaoAplicar(db: SupabaseClient, uid: string, clientId: string, ri
     client_id: clientId, nome: n.nome, contato: n.contato,
     dossie_versao: dossieNovo?.version ?? versao, dossie_aviso: dossieAviso,
     leitura, confirmacoes, cerebro, aprovacao,
+    avisos: cerebro.some((c) => c.erro) ? ["Dossiê e respostas salvos. Parte dos aprendizados duradouros não entrou no cérebro compartilhado; confira antes de considerar a atualização completa."] : [],
     ritual: escrito
       ? {
         tipo: ritual, title: escrito.title, body: escrito.body, next_steps: escrito.next_steps, alertas: escrito.alertas,
