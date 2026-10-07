@@ -221,6 +221,9 @@ export function useInvalidarContexto() {
       ["mesa", "fontes", clientId],
       ["mesa", "referencias", clientId],
       ["mesa", "memoria", clientId],
+      ["mesa", "cerebro-organizado", clientId],
+      ["mesa", "sinais-conhecimento", clientId],
+      ["mesa", "saude-conhecimento"],
       ["mesa", "prompts", clientId],
       // As duas leituras do acervo: a desta aba e a do Estúdio (SeletorDoAcervo).
       chaveDoAcervo(clientId),

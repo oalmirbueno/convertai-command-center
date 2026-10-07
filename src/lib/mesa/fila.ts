@@ -251,6 +251,8 @@ export interface AcaoDaFila {
   quantidade: number;
   /** Só em "cobrar": dias de espera do pedido mais antigo. */
   diasEsperando?: number;
+  /** Data real do próximo item pendente; desempata ações com a mesma urgência. */
+  prazo?: string | null;
   /** Mês a que o "Feito" se prende (AAAA-MM-01): o mês da ação ou o mês corrente. */
   periodo: string;
   /** Só em "cobrar": o pedido de aprovação mais novo (pedido novo faz a ação voltar). */
@@ -385,6 +387,7 @@ export function acoesDoCliente(c: ClienteDaFila, hoje: string, acessoConhecido: 
         tipo: "gerar_artes",
         motivo: `${plural(total, "item sem arte", "itens sem arte")} (${porMes}); o próximo ${textoDoPrazo(prazo)}, ${dataCurtinha(primeiro.proximo_sem_arte as string)}`,
         pontos: pontosDoPrazo(prazo),
+        prazo: primeiro.proximo_sem_arte,
         aba: "estudio",
         mes: primeiro.mes,
         quantidade: total,
@@ -906,6 +909,9 @@ export function useFilaDePrioridades(clientes: { id: string; nome: string }[], a
     queryKey: CHAVE_DA_FILA,
     enabled: ativo,
     queryFn: () => lerFila(clientes),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
 }
 
