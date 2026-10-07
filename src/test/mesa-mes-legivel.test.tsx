@@ -129,6 +129,23 @@ afterEach(() => {
 });
 
 describe("agenda do mês legível", () => {
+  it.each([
+    ["video", "Transformação do jardim", "Vídeo"],
+    ["carousel", "Peça de foto: Jardim", "Carrossel de fotos"],
+  ])("abre %s do mês no Estúdio com a pauta e o mês corretos", async (delivery_type, title, rotulo) => {
+    mock.tabelas.tasks = [{ id: "formato", title, delivery_type, due_date: "2026-09-12", description: null, status: "todo", project_id: "proj" }];
+    mock.tabelas.estudio_trabalhos = [];
+    const abrir = vi.fn();
+    const { container } = montar(h(AgendaDoMes, { onAbrirNoEstudio: abrir }));
+    await waitFor(() => expect(container.querySelector('[data-cartao="item"]')).toBeTruthy());
+    const cartao = container.querySelector('[data-cartao="item"]') as HTMLElement;
+    expect(cartao.textContent).toContain(rotulo);
+    fireEvent.click(cartao);
+    fireEvent.click(screen.getAllByRole("button", { name: "Abrir no Estúdio" })[0]);
+    expect(abrir).toHaveBeenCalledWith("formato", "2026-09-01");
+    expect(mock.invoke).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     mock.tabelas.tasks = [
       { id: "t1", title: TITULO_LONGO, description: "Contexto do item", due_date: "2026-09-15", delivery_type: "carousel", status: "doing", project_id: "proj" },
