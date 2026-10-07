@@ -23,3 +23,7 @@ A ponte existente recebe uma projeção legível do relatório Markdown já prod
 Testes de estado/entrega/frescor/isolamento/prazos/atividade, leitura de evidência e compatibilidade MCP. Testar a interface publicada com dados reais sem aprovar propostas nem alterar Meta. A visualização não corrige retroativamente divergências nas campanhas: registra a necessidade de decisão.
 
 Validação executada: 18 testes Vitest; 10 testes de ponte em arquivo na VPS; tipos app e Node; Deno no catálogo MCP; compatibilidade Lovable; dois testes transacionais de banco com rollback (preservação de tarefa/responsável/vínculo e deduplicação). Oito relatórios existentes importados e relidos no banco com conteúdo de 7.455 a 21.237 caracteres, todos documentais. Um teste antigo de lease do diário está desatualizado e fora deste lote; os testes específicos da ponte passaram.
+
+Publicado: revisão 373ff125185c98333bfd8b4fbfb6188ffced7c25, Cloudflare 7f9259e7-8d57-466a-b5d8-9d2e2f8f6d6e, confirmado em version.json. Conferência visual não concluída: Chrome desconectou e o navegador integrado não anexou a página. Não há captura visual final validada.
+
+A CI geral identificou falta das duas migrações na production-migration-baseline, corrigida no complemento de verificação. Contrato Node conferiu 252 migrations forward, 348 versões e reconciliação dos históricos completo e antigo. Há falhas de testes antigos de calendário/vídeo/mocks e de tipagem abrangente fora deste lote; não declarar a suíte geral integralmente verde.

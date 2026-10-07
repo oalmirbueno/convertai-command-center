@@ -2001,6 +2001,22 @@
       "remote_name": "edicao_organizar",
       "remote_statements_sha256": "adb1e4bf32276e1c0ec945ff9939deb6b6e3593c9a5c7273d2cec8a2c660414c",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261007230000",
+      "path": "supabase/migrations/20261007230000_operator_documental_review.sql",
+      "local_sha256": "469ce79ee9cc66e688ef3143da690e19707ab2e4a97d43d78313e3295bed25b9",
+      "remote_name": "operator_documental_review",
+      "remote_statements_sha256": "8adad7e861a6bd3f9bd8d5fe31f1e5da28a262746ed7525386870b45837acb6a",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261007230100",
+      "path": "supabase/migrations/20261007230100_operator_documental_preserve_run.sql",
+      "local_sha256": "6b552de5a83df565ceb0211cf5062c3ce88ad234838b28ba1b55b805e40b67dd",
+      "remote_name": "operator_documental_preserve_run",
+      "remote_statements_sha256": "1fa241b18bf3d2ad930f855810e5ad80ee5f4d390faa65d405c2b882240abea6",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
