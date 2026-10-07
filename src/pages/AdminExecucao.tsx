@@ -1849,7 +1849,11 @@ export default function AdminExecucao() {
 
       <DiarioDaExecucao
         linkId={diarioAberto?.linkId ?? null}
-        titulo={diarioAberto?.titulo}
+        titulo={diarioAberto?.titulo || (() => {
+          const v = vinculos.find(v => v.id === diarioAberto?.linkId);
+          const t = v ? tarefaDoVinculo(v, tarefas) : null;
+          return t ? [t.project?.client?.company_name || t.project?.client?.full_name, t.title].filter(Boolean).join(" · ") : undefined;
+        })()}
         nomesDeAgentes={nomesDeAgentes}
         aberto={Boolean(diarioAberto)}
         aoFechar={() => setDiarioAberto(null)}
