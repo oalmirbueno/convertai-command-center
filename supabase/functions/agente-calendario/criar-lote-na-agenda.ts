@@ -1,4 +1,4 @@
-import { atualizarConfirmado } from "./execucao-do-mes.ts";
+import { gravarAnexosConfirmados } from "./gravacao-confirmada.ts";
 import { lotesDaCriacao, pedidoParaCriar, type CriacaoDeConteudos } from "./agente-mes-v2.ts";
 
 /** Um lote confirmado: reutiliza proposta persistida, grava e só então marca como concluído. */
@@ -17,8 +17,7 @@ export async function criarLoteNaAgenda(db: any, mensagem: any, lote: number, de
   if (anterior?.estado === "gerando" && Date.now() - Date.parse(anterior.desde) < 15 * 60_000) throw new Error("Este lote já está sendo processado. Aguarde a atualização, sem confirmar novamente.");
   const registrar = async (estado: Record<string, unknown>) => {
     const novo = anexos.map((a: any, k: number) => k === indice ? { ...a, lotes: { ...a.lotes, [lote]: estado } } : a);
-    await atualizarConfirmado(db.from("agente_mensagens").update({ anexos: novo }).eq("id", mensagem.id).eq("client_id", mensagem.client_id).eq("anexos", JSON.stringify(anexos)));
-    anexos = novo;
+    anexos = await gravarAnexosConfirmados(db, mensagem, anexos, novo);
   };
   await registrar({ estado: "gerando", desde: new Date().toISOString() });
   let custo = 0;

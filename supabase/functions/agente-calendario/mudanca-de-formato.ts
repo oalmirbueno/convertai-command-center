@@ -1,6 +1,6 @@
 import { normalizarDirecaoDeFoto, entregaDaPecaDeFoto } from "./modulos/peca-de-foto.ts";
 import { normalizarVideoDaPauta } from "../_shared/video-da-pauta.ts";
-import { atualizarConfirmado } from "./execucao-do-mes.ts";
+import { gravarSnapshotConfirmado } from "./gravacao-confirmada.ts";
 
 type Registro = Record<string, any>;
 export type PassoDoFormato = { tabela: string; id: string; antes: Registro; depois: Registro };
@@ -36,12 +36,14 @@ export async function gravarPassosDoFormato(db: any, passos: PassoDoFormato[], c
 }
 async function aplicarPasso(db: any, p: PassoDoFormato, clientId: string, desfazer: boolean) {
   const de = desfazer ? p.depois : p.antes, para = desfazer ? p.antes : p.depois;
-  let q = db.from(p.tabela).update(para).eq("id", p.id);
-  if (p.tabela !== "tasks") q = q.eq("client_id", clientId);
-  else q = q.is("deleted_at", null);
-  for (const [k, v] of Object.entries(de)) q = v === null ? q.is(k, null) : q.eq(k, typeof v === "object" ? JSON.stringify(v) : v);
-  return atualizarConfirmado(q);
+  return gravarSnapshotConfirmado(db, p.tabela, p.id, clientId, de, para);
 }
 export async function desfazerPassosDoFormato(db: any, passos: PassoDoFormato[], clientId: string) {
   for (const p of passos.slice().reverse()) await aplicarPasso(db, p, clientId, true);
+}
+
+/** O prefixo formal identifica fotos no enum legado da agenda. Uma reescrita não pode removê-lo. */
+export function tituloDaReescrita(titulo: string, item: any, tarefa: { title: string }): string {
+  const foto = item?.formato === "foto" || (!item && tarefa.title.startsWith("Peça de foto: "));
+  return titulo && foto ? `Peça de foto: ${titulo.replace(/^Peça de foto: /, "")}` : titulo;
 }

@@ -1,6 +1,8 @@
+import { PERGUNTAS_DO_MES, contratoDoPedido, pecasNoEscopo, formatosAusentes, PRIORIDADE_DO_PEDIDO } from "./pedido-do-mes.ts";
+import { gravarAnexosConfirmados } from "./gravacao-confirmada.ts";
 import { criarLoteNaAgenda } from "./criar-lote-na-agenda.ts";
-import { camposDoFormato, gravarPassosDoFormato, desfazerPassosDoFormato, type PassoDoFormato } from "./mudanca-de-formato.ts";
-import { promptAtualDoMes, CAPACIDADES_DO_MES, podeAplicarDireto, atualizarConfirmado } from "./execucao-do-mes.ts";
+import { camposDoFormato, tituloDaReescrita, gravarPassosDoFormato, desfazerPassosDoFormato, type PassoDoFormato } from "./mudanca-de-formato.ts";
+import { promptAtualDoMes, CAPACIDADES_DO_MES, podeAplicarDireto, atualizarConfirmado, ErroDeGravacao } from "./execucao-do-mes.ts";
 import { normalizarVideoDaPauta, ESQUEMA_VIDEO_DA_PAUTA, ORIENTACAO_VIDEO_DA_PAUTA, type DirecaoDeVideoDaPauta } from "../_shared/video-da-pauta.ts";
 /**
  * agente-calendario: o estrategista editorial da Mesa do cliente
@@ -1545,6 +1547,7 @@ const MENSAGEM_ERRO_MOTOR: Record<string, { status: number; mensagem: string }> 
 };
 
 function respostaDeErro(err: unknown): Response {
+  if (err instanceof ErroDeGravacao) return json({ error: err.codigo, mensagem: err.message }, err.status);
   if (err instanceof ErroHttp) return json({ error: err.codigo, mensagem: err.message, ...err.extra }, err.status);
   if (err instanceof IaMotorErro) {
     const conhecido = MENSAGEM_ERRO_MOTOR[err.codigo];
@@ -5919,14 +5922,16 @@ async function rotaDoPedidoLivre(servico: SupabaseClient, chamador: Chamador, cl
 async function julgarPedidoNaAgenda(
   mensagem: string,
   pecas: PecaComApelido[],
-  c: { clientId: string; conversaId: string; criadoPor: string },
-): Promise<{ rota: DecisaoDoRoteamento; alvo: AlvoDoPedido; erro: string | null }> {
+  c: { clientId: string; conversaId: string; criadoPor: string; mes?: string },
+): Promise<{ rota: DecisaoDoRoteamento; alvo: AlvoDoPedido; erro: string | null; contrato: ReturnType<typeof contratoDoPedido> }> {
   const candidatas = candidatasDoPedido(mensagem, pecas);
   const { state, questions } = perguntasDoPedido(mensagem, candidatas);
+  Object.assign(questions, PERGUNTAS_DO_MES);
   try {
-    const r = await jevPerguntar({ state, questions }, { timeoutMs: JEV_DO_PEDIDO_MS });
+    const r = await jevPerguntar({ state: { ...(state as Record<string, unknown>), mes_aberto: c.mes }, questions }, { timeoutMs: JEV_DO_PEDIDO_MS });
     await cobrarJev(r, { clientId: c.clientId, tarefa: "calendario", referencia: { tipo: REF_AGENTE_DO_MES, id: c.conversaId }, criadoPor: c.criadoPor }).catch(() => null);
     return {
+      contrato: contratoDoPedido(r.answers),
       rota: decidirRoteamento(r.answers.intencao, mensagem),
       alvo: resolverAlvo(r.answers.alvo, candidatas, pecas, r.answers.alvo_claro, r.answers.uma_so),
       erro: null,
@@ -5934,7 +5939,7 @@ async function julgarPedidoNaAgenda(
   } catch (e) {
     const codigo = e instanceof JevErro ? e.codigo : "jev_indisponivel";
     console.error("[agente-calendario] peca citada sem Jev", { codigo });
-    return { rota: decidirRoteamento(null, mensagem), alvo: { tipo: "nenhum" }, erro: codigo };
+    return { rota: decidirRoteamento(null, mensagem), alvo: { tipo: "nenhum" }, erro: codigo, contrato: contratoDoPedido() };
   }
 }
 
@@ -6121,7 +6126,7 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
     contextoMcpAtivo(servico, clientId, MAX_CHARS_DO_MCP_NO_MES),
     servico.from("cliente_kit_marca").select("contexto").eq("client_id", clientId).maybeSingle(),
   ]);
-  const pecasDaAgenda = acoesCtx.pecas;
+  let pecasDaAgenda = acoesCtx.pecas;
   // Frente MC: o público atual é o do contexto da marca aberta (a CME não parte do público da Acerbi).
   const contextoDoKit = ((kitComMarca({ contexto: (kit.data as { contexto?: Record<string, unknown> | null } | null)?.contexto ?? {} }, await marcaP) as { contexto?: Record<string, unknown> }).contexto ?? {}) as Record<string, unknown>;
   const publicoAtual = textoDoCampo(contextoDoKit.publico).trim();
@@ -6173,12 +6178,20 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
       ],
     }, conversaId, chamador.userId),
     // Frente AM: o pedido muda peças gravadas? E qual peça ele cita? (Jev, em paralelo; menos de 1 s)
-    julgarPedidoNaAgenda(mensagem, pecasDaAgenda, { clientId, conversaId, criadoPor: chamador.userId }),
+    julgarPedidoNaAgenda(mensagem, pecasDaAgenda, { clientId, conversaId, criadoPor: chamador.userId, mes }),
   ]);
+  pecasDaAgenda = pecasNoEscopo(pecasDaAgenda, mes, julgamento.contrato.outrosMeses);
   const { modelo, raciocinio } = modeloDoMes;
   // Pedido que veio do modo Criar já passou pelo roteamento: é de mudar o que existe.
   const pedeMudanca = corpo.roteado === true || julgamento.rota.mudar;
-  const alvoDoPedido: AlvoDoPedido = pedeMudanca ? julgamento.alvo : { tipo: "nenhum" };
+  let alvoDoPedido: AlvoDoPedido = pedeMudanca ? julgamento.alvo : { tipo: "nenhum" };
+  if (!julgamento.contrato.outrosMeses) {
+    if (alvoDoPedido.tipo === "um" && alvoDoPedido.peca.due_date?.slice(0, 7) !== mes) alvoDoPedido = { tipo: "nenhum" };
+    if (alvoDoPedido.tipo === "qual") {
+      const opcoes = pecasNoEscopo(alvoDoPedido.opcoes, mes, false);
+      alvoDoPedido = opcoes.length > 1 ? { ...alvoDoPedido, opcoes } : opcoes.length === 1 ? { tipo: "um", peca: opcoes[0], prob: 1 } : { tipo: "nenhum" };
+    }
+  }
 
   const blocoDaProposta = proposta
     ? `\nPROPOSTA DO ESTRATEGISTA PARA ESTE MÊS (JSON; ${editavel ? "pode sugerir mudanças" : "já gravada na agenda: não muda por aqui"}):\n${JSON.stringify({
@@ -6192,6 +6205,9 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
 
   const tarefa = `
 MÊS EM CONVERSA: ${mes} (de ${inicio} a ${fim}). Hoje é ${hoje}.
+${PRIORIDADE_DO_PEDIDO}
+Escopo autorizado: ${julgamento.contrato.outrosMeses ? "os meses explicitamente pedidos pela equipe" : `SOMENTE ${mes}; todos os conteúdos significa todos deste mês`}.
+Formatos pedidos que precisam de ações executáveis: ${julgamento.contrato.formatos.join(", ") || "seguir a mensagem"}.
 ${hojeParaOAgente().texto}
 ${blocoDasRegras(regras)}
 ${blocoDaDecisaoDoPublico(decisaoDoPublico)}MENSAGEM DA EQUIPE (inteira, sem corte):
@@ -6222,7 +6238,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   const orcamento = caberNoOrcamento([
     { chave: "arquivos", texto: blocoDosArquivos(arquivos.lidos), prioridade: 95, minimo: 60_000 },
     { chave: "contexto", texto: `${contextoEmTexto(ctx, { inicio, fim, parametros: proposta?.parametros ?? {} })}${blocoDoPlano(ctx, inicio)}`, prioridade: 90, minimo: 24_000 },
-    { chave: "agenda", texto: blocoDaAgendaParaAcoes(pecasDaAgenda, acoesCtx.campanhas, "dos próximos 12 meses"), prioridade: 85, minimo: 40_000 },
+    { chave: "agenda", texto: blocoDaAgendaParaAcoes(pecasDaAgenda, acoesCtx.campanhas, julgamento.contrato.outrosMeses ? "dos meses pedidos" : `de ${mes}`), prioridade: 85, minimo: 40_000 },
     { chave: "proposta", texto: blocoDaProposta, prioridade: 80, minimo: 8_000 },
     { chave: "mcp", texto: mcp.texto, prioridade: 70, minimo: 8_000 },
     { chave: "planejamento", texto: `\nCONTEXTO DO PLANEJAMENTO (JSON, lido do painel agora; vazio significa que o dado não existe):\n${JSON.stringify(extra)}`, prioridade: 50, minimo: 4_000 },
@@ -6236,7 +6252,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     agente: AGENTE,
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
-    sistema: sistemaDoCalendario(ctx, "mes", "conversa"),
+    sistema: `${sistemaDoCalendario(ctx, "mes", "conversa")}\n${PRIORIDADE_DO_PEDIDO}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: imagens.imagens.length ? imagens.imagens : undefined }],
     raciocinio,
     // Lista longa de conteúdos (criar_conteudos, editar_textos) cabe inteira na resposta.
@@ -6246,7 +6262,40 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     criadoPor: chamador.userId,
     metodo: await spMesP,
   });
-  const r = (s.json ?? {}) as Record<string, unknown>;
+  let r = (s.json ?? {}) as Record<string, unknown>;
+  let custoDoReparo = 0;
+  const faltantes = (saida: Record<string, unknown>) => formatosAusentes(julgamento.contrato.formatos,
+    normalizarAcoesNaAgenda(saida.acoes_na_agenda, pecasDaAgenda, acoesCtx.campanhas),
+    normalizarCriacao(saida.criar_conteudos, hoje));
+  if (faltantes(r).length) {
+    // Uma única correção curta, sem reenviar 12 meses, arquivos ou histórico obsoleto.
+    const reparo = await chamarTexto({
+      clientId, tarefa: "conversa", agente: AGENTE, modeloId: modelo.id,
+      timeoutMs: TIMEOUT_CALENDARIO_MS, raciocinio, maxTokensSaida: 24_000,
+      sistema: `${PRIORIDADE_DO_PEDIDO}\n${REGRA_DAS_ACOES_NA_AGENDA}\n${ORIENTACAO_VIDEO_DA_PAUTA}`,
+      mensagens: [{ papel: "usuario", conteudo: JSON.stringify({
+        instrucao: "Corrija a resposta abaixo: faltam ações executáveis para os formatos pedidos. Devolva a resposta completa corrigida. Não preserve proibições antigas de foto/vídeo. Alterne formatos nas semanas pedidas mantendo as datas; use mudar_formato para itens existentes e criar_conteudos apenas para inclusões. Não diga que salvou, a execução vem depois. Preserve títulos e legendas já preparados quando adequados. Não amplie o período.",
+        mes, pedido: mensagem, formatos_obrigatorios: julgamento.contrato.formatos,
+        agenda: pecasDaAgenda, resposta_anterior: r,
+      }) }],
+      esquemaJson: ESQUEMA_PLANEJAMENTO_COM_METODO,
+      referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId }, criadoPor: chamador.userId,
+    });
+    custoDoReparo = reparo.custoUsd;
+    r = (reparo.json ?? {}) as Record<string, unknown>;
+  }
+  if (!julgamento.contrato.outrosMeses && r.criar_conteudos) {
+    const c = r.criar_conteudos as Record<string, any>;
+    c.itens = (Array.isArray(c.itens) ? c.itens : []).filter((i: any) => String(i.data).slice(0, 7) === mes);
+  }
+  const falhaDosFormatos = faltantes(r);
+  const rascunhoNaoAplicado = falhaDosFormatos.length ? r : null;
+  if (falhaDosFormatos.length) {
+    // O pedido pago continua registrado mesmo se a conferência impedir sua execução.
+    r = { ...r, plano_do_mes: null, proximos_meses: null, acoes_na_agenda: null, criar_conteudos: null, gerar_conteudos: null, mudancas: null,
+      resposta: `Não concluí a inclusão de ${falhaDosFormatos.join(" e ")}. Nenhuma peça foi alterada. O rascunho foi guardado para revisão; não considere o plano executado.` };
+    alvoDoPedido = { tipo: "nenhum" };
+  }
 
   // Plano combinado do mês e dos próximos meses: vai para a memória do estrategista.
   const planos: Array<{ mes: string; texto: string; id: string | null }> = [];
@@ -6255,7 +6304,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   for (const x of (Array.isArray(r.proximos_meses) ? r.proximos_meses : []).slice(0, 12)) {
     const o = (x ?? {}) as Record<string, unknown>;
     const m = mesDoPedido(o.mes);
-    if (!m || m <= mes || planos.some((p) => p.mes === m)) continue;
+    if (!julgamento.contrato.outrosMeses || !m || m <= mes || planos.some((p) => p.mes === m)) continue;
     const t = textoDoPlano(m, o.plano);
     if (t) planos.push({ mes: m, texto: t, id: await salvarPlano(servico, clientId, m, t, conversaId) });
   }
@@ -6283,8 +6332,15 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   // Frente AM: a peça citada entra na ação ("Qual delas?" quando há iguais ou parecidas; refazer quando o
   // agente não mexeu nela) e peça repetida vira aviso no cartão, nunca motivo para não fazer.
   const acaoNaAgenda = juntarAlvoNaAcao(normalizarAcoesNaAgenda(r.acoes_na_agenda, pecasDaAgenda, acoesCtx.campanhas), alvoDoPedido, pecasDaAgenda, mensagem);
+  if (acaoNaAgenda && !julgamento.contrato.outrosMeses) {
+    for (const k of ["apagar", "refazer", "mudar_data", "mudar_formato", "editar_textos"] as const) {
+      (acaoNaAgenda as any)[k] = acaoNaAgenda[k].filter(i => i.data?.slice(0, 7) === mes);
+    }
+  }
   // Gerar meses inteiros: só a proposta com o projeto; a tela mostra o custo e roda o gerador de meses.
-  const geracao = normalizarGeracao(r.gerar_conteudos, mesDeHoje, acoesCtx.projeto, acoesCtx.frequencia ?? 3);
+  const pedidoDeGeracao = r.gerar_conteudos as Record<string, any> | null;
+  if (pedidoDeGeracao && !julgamento.contrato.outrosMeses) pedidoDeGeracao.meses = (pedidoDeGeracao.meses || []).filter((m: string) => m.slice(0, 7) === mes);
+  const geracao = normalizarGeracao(pedidoDeGeracao, mes, acoesCtx.projeto, acoesCtx.frequencia ?? 3);
   // Material colado ou anexado: conteúdos novos nas datas e formatos dele (a tela cria em lotes, com custo antes).
   let criacao = normalizarCriacao(r.criar_conteudos, hoje);
   // 02/10: a cadência e a mistura pedidas ("3 por semana, 2 fotos e 1 carrossel") são conferidas semana a
@@ -6327,10 +6383,11 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   });
   const resposta = fechadoDoMes.resposta;
   const anexosDaResposta: Record<string, unknown>[] = planos.map((p) => ({ tipo: "plano", mes: p.mes }));
+  if (rascunhoNaoAplicado) anexosDaResposta.push({ tipo: "rascunho_nao_aplicado", formatos_faltantes: falhaDosFormatos, rascunho: rascunhoNaoAplicado });
   if (mudanca) anexosDaResposta.push(mudanca);
   // 29/09: o pedido do dono vai junto: o refazer em lotes usa as palavras dele como orientação
   // (antes usava o resumo do agente e a direção pedida, "menos texto, jardinagem, poda", se perdia).
-  if (acaoNaAgenda) anexosDaResposta.push({ ...acaoNaAgenda, mes, pedido: mensagem.slice(0, 1500) });
+  if (acaoNaAgenda) anexosDaResposta.push({ ...acaoNaAgenda, mes, outros_meses: julgamento.contrato.outrosMeses, pedido: mensagem.slice(0, 1500) });
   if (geracao) anexosDaResposta.push(geracao);
   if (criacao) anexosDaResposta.push(criacao);
   if (acaoDoPublico) anexosDaResposta.push(acaoDoPublico as unknown as Record<string, unknown>);
@@ -6411,7 +6468,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     acao_agenda: execucao?.anexo || (acaoNaAgenda ? { ...acaoNaAgenda, mes, pedido: mensagem.slice(0, 1500) } : null),
     execucao,
     ...(Number(execucao?.falhas) > 0 ? { parcial: true, motivo: "Nem todas as alterações foram confirmadas. Confira o resultado no cartão da agenda antes de continuar." } : {}),
-    ...(!acaoNaAgenda && !criacao && !geracao && !mudanca && pedeMudanca ? { falhou: true, motivo: "Esta resposta não trouxe uma alteração executável. Nenhum conteúdo foi criado ou alterado na agenda." } : {}),
+    ...(falhaDosFormatos.length || (!acaoNaAgenda && !criacao && !geracao && !mudanca && pedeMudanca) ? { falhou: true, motivo: "Esta resposta não trouxe uma alteração executável. Nenhum conteúdo foi criado ou alterado na agenda." } : {}),
     aprendizado: aprendizado.anexo,
     gerar_conteudos: geracao,
     criar_conteudos: criacao,
@@ -6425,7 +6482,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     mensagem_id: (msgAgente as { id: string }).id,
     conversa_id: conversaId,
     proposta_id: proposta?.id ?? null,
-    custo_usd: Math.round((s.custoUsd + custoDoAjuste) * 1e6) / 1e6,
+    custo_usd: Math.round((s.custoUsd + custoDoAjuste + custoDoReparo) * 1e6) / 1e6,
     saldo_usd: s.saldoUsd,
     reserva_usada: s.reservaUsada ?? null,
   });
@@ -6719,15 +6776,15 @@ async function acaoDaMensagem(servico: SupabaseClient, chamador: Chamador, mensa
   if (!msg) throw new ErroHttp(404, "mensagem_inexistente", "Mensagem não encontrada.");
   const m = msg as { id: string; client_id: string; conversa_id: string; anexos: unknown };
   await exigirAcessoAoCliente(chamador, m.client_id);
-  const anexos = Array.isArray(m.anexos) ? (m.anexos as Record<string, unknown>[]) : [];
+  let anexos = Array.isArray(m.anexos) ? (m.anexos as Record<string, unknown>[]) : [];
   const i = anexos.findIndex((a) => a && a.tipo === "acao_agenda");
   if (i < 0) throw new ErroHttp(404, "acao_inexistente", "Esta mensagem não tem ação na agenda.");
   const acao = anexos[i] as AcaoNaAgenda & Record<string, unknown>;
   const gravar = async (novo: Record<string, unknown>) => {
     const lista = anexos.slice();
     lista[i] = novo;
-    await servico.from("agente_mensagens").update({ anexos: lista }).eq("id", m.id).eq("client_id", m.client_id);
-    return novo;
+    anexos = await gravarAnexosConfirmados(servico, m, anexos, lista);
+    return anexos[i];
   };
   return { m, acao, gravar };
 }
@@ -6904,6 +6961,7 @@ async function reescreverTextos(servico: SupabaseClient, clientId: string, edico
         if (!titulo && ed.campos.tema) titulo = ed.campos.tema;
         descricao = descricaoComTextosNovos(tarefa.description, ed.campos);
       }
+      titulo = tituloDaReescrita(titulo, itemAntes, tarefa);
       let post: AntesDoTexto["post"] = null;
       if (x.postId && (titulo || ed.campos.copy)) {
         const { data: p } = await servico.from("editorial_posts").select("title, default_caption").eq("id", x.postId).maybeSingle();
@@ -7023,10 +7081,13 @@ async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador,
   const escolhida = acaoComEscolha(lida.acao as AcaoComAlvo & Record<string, unknown>, corpo.escolha);
   if (!escolhida.ok) throw new ErroHttp(400, "escolha_invalida", escolhida.motivo);
   const acao = escolhida.acao;
+  if (typeof acao.mes === "string" && acao.outros_meses === false) {
+    for (const k of ["apagar", "refazer", "mudar_data", "mudar_formato", "editar_textos"] as const) {
+      (acao as any)[k] = (acao[k] || []).filter(i => i.data?.slice(0, 7) === acao.mes);
+    }
+  }
   if (lida.acao.executando_em) throw new ErroHttp(409, "acao_em_andamento", "Esta alteração já está em andamento. Confira o resultado no cartão antes de repetir.");
-  const anexosAntes = m.anexos as any[];
-  const anexosExecutando = anexosAntes.map((a) => a && a.tipo === "acao_agenda" ? { ...a, executando_em: new Date().toISOString() } : a);
-  await atualizarConfirmado(servico.from("agente_mensagens").update({ anexos: anexosExecutando }).eq("id", m.id).eq("anexos", JSON.stringify(anexosAntes)));
+  await gravar({ ...lida.acao, executando_em: new Date().toISOString() });
 
 
   const apagar = Array.isArray(acao.apagar) ? acao.apagar : [];

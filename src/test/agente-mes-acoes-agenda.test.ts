@@ -77,8 +77,8 @@ describe("ações do agente do mês na agenda gravada", () => {
     expect(fonte).toContain("executar_acao_agenda: executarAcaoNaAgenda");
     expect(fonte).toContain("desfazer_acao_agenda: desfazerAcaoNaAgenda");
     expect(fonte).toContain("acoes_na_agenda: {");
-    // v2 (26/09): a agenda dos próximos 12 meses, com o detalhe de cada peça.
-    expect(fonte).toContain('blocoDaAgendaParaAcoes(pecasDaAgenda, acoesCtx.campanhas, "dos próximos 12 meses")');
+    // A leitura pode cobrir 12 meses; só o escopo autorizado entra nas ações.
+    expect(fonte).toContain('pecasNoEscopo(pecasDaAgenda, mes, julgamento.contrato.outrosMeses)');
     expect(fonte).toContain("registrar_geracao: registrarGeracao");
     expect(fonte).toContain("gerar_conteudos: {");
   });
