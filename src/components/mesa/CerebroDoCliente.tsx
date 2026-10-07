@@ -18,6 +18,8 @@ export default function CerebroDoCliente({ clientId, userId, somenteMemoria = fa
   const qc = useQueryClient();
   const [aba, setAba] = useState(somenteMemoria ? "uso" : "visao");
   const [busca, setBusca] = useState("");
+  const [buscaDossie, setBuscaDossie] = useState("");
+  const [limiteDossie, setLimiteDossie] = useState(6);
   const [area, setArea] = useState("todas");
   const [tipoFiltro, setTipoFiltro] = useState("todos");
   const [limite, setLimite] = useState(15);
@@ -46,6 +48,8 @@ export default function CerebroDoCliente({ clientId, userId, somenteMemoria = fa
   const dados = consulta.data;
   const registros = dados?.registros || [];
   const atual = dados?.atual;
+  const normalizar = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+  const secoes = secoesDoDossie(atual?.content || "").filter(s => normalizar(`${s.titulo} ${s.texto}`).includes(normalizar(buscaDossie.trim())));
   const contagem = (estado: string) => registros.filter(r => estadoDoRegistro(r) === estado).length;
   const lista = filtrarConhecimento(registros, clientId, aba, busca, area).filter(r => tipoFiltro === "todos" || categoriaDoRegistro(r) === tipoFiltro);
   const atualizar = async () => {
@@ -107,7 +111,10 @@ export default function CerebroDoCliente({ clientId, userId, somenteMemoria = fa
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><BookOpen className="h-3.5 w-3.5" />{atual ? `Dossiê v${atual.version} · ${dataCurta(atual.updated_at)} · ${atual.source || "Origem não informada"}` : "Dossiê ainda não registrado"}{onRevisar && <button className="ml-auto text-primary" onClick={() => onRevisar("Revise o dossiê e o conhecimento deste cliente com base nas fontes disponíveis. Separe fatos, decisões, pendências e dúvidas. Preserve o histórico e não apresente hipótese como fato confirmado.")}>Revisar com o agente</button>}</div>
       {atual?.summary && <p className="text-sm leading-relaxed">{atual.summary}</p>}
       {contagem("revisar") > 0 && <button className="text-left text-xs text-amber-500" onClick={() => setAba("revisar")}>{contagem("revisar")} registros precisam de revisão de validade ou período</button>}
-      {secoesDoDossie(atual?.content || "").map((s,i) => <details key={i} className="rounded-lg border border-border p-3" open={i === 0}><summary className="cursor-pointer text-sm font-medium">{s.titulo}</summary><div className="prose prose-sm dark:prose-invert mt-2 max-w-none break-words text-muted-foreground"><ReactMarkdown skipHtml components={{ img: ({ alt }) => <span>{alt}</span> }}>{s.texto}</ReactMarkdown></div></details>)}
+      {atual && <Input aria-label="Buscar no dossiê" placeholder="Encontrar no dossiê: público, decisões, oferta…" value={buscaDossie} onChange={e => { setBuscaDossie(e.target.value); setLimiteDossie(6); }} />}
+      {secoes.slice(0,limiteDossie).map((s,i) => <details key={`${s.titulo}-${i}`} className="rounded-lg border border-border p-3"><summary className="cursor-pointer text-sm font-medium">{s.titulo}</summary><div className="prose prose-sm dark:prose-invert mt-2 max-w-none break-words text-muted-foreground"><ReactMarkdown skipHtml components={{ img: ({ alt }) => <span>{alt}</span> }}>{s.texto}</ReactMarkdown></div></details>)}
+      {secoes.length > limiteDossie && <Button size="sm" variant="ghost" onClick={() => setLimiteDossie(v => v + 6)}>Mais seções ({secoes.length - limiteDossie})</Button>}
+      {atual && !secoes.length && <p className="text-xs text-muted-foreground">Nenhuma seção encontrada com essa busca.</p>}
       {!atual && <p className="text-xs text-muted-foreground">Registre informações confirmadas ou peça ao agente para organizar as fontes existentes.</p>}
     </div>}
     {dados && ["uso","revisar","historico"].includes(aba) && <>
