@@ -216,6 +216,13 @@ export function useInvalidarContexto() {
   const queryClient = useQueryClient();
   return (clientId: string, opcoes: { historico?: boolean } = {}) => {
     const chaves: unknown[][] = [
+      ["mesa", "plano-do-cliente", clientId],
+      ["milestones"],
+      ["milestones-all"],
+      ["workspace-index"],
+      ["projects"],
+      ["tasks"],
+      ["workspace-nodes"],
       chaveDoContexto(clientId),
       ["mesa", "kit", clientId],
       ["mesa", "fontes", clientId],
@@ -235,6 +242,7 @@ export function useInvalidarContexto() {
 }
 
 export const ROTULOS_DO_QUE_MUDOU: Record<string, string> = {
+  plano: "projeto e plano do cliente",
   estilo: "estilo",
   regras: "regras",
   paleta: "paleta",

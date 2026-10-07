@@ -100,7 +100,7 @@ export default function AbaContexto() {
   const atual = PARTES.find((p) => p.valor === parte) || PARTES[0];
   const { marca } = useMarcaDaMesa();
   // Frente C: o agente ao lado vira o agente do cliente (modo plano); o Hub do plano preenche o pedido.
-  const [modoDoAgente, setModoDoAgente] = useEstadoDaTela<ModoDoAgente>(`mesa:contexto:modo:${clientId}`, "marca", {
+  const [modoDoAgente, setModoDoAgente] = useEstadoDaTela<ModoDoAgente>(`mesa:contexto:modo:${clientId}`, marca?.principal === false ? "marca" : "plano", {
     validar: (v) => v === "marca" || v === "plano",
   });
   const [pedido, setPedido] = useState<{ texto: string; n: number } | null>(null);

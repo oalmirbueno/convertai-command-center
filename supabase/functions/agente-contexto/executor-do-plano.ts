@@ -103,19 +103,40 @@ async function mudarNoContexto(db: ServicoDoPlano, clientId: string, chave: stri
   return antes;
 }
 
+/** ID estável da criação: uma retomada após queda entre escrita e recibo não duplica. */
+async function idDaCriacao(clientId: string, acaoId: string | undefined, item: ItemDaAcaoDoAgente): Promise<string | null> {
+  if (!acaoId) return null; // compatibilidade com propostas antigas
+  const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${clientId}:${acaoId}:${item.operacao}:${item.ref}`)));
+  bytes[6] = (bytes[6] & 15) | 80;
+  bytes[8] = (bytes[8] & 63) | 128;
+  const h = Array.from(bytes.slice(0, 16)).map(x => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
 /** Uma operação do plano ou do kit, já confirmada. */
 export async function executarItemDoPlano(
   db: ServicoDoPlano,
   clientId: string,
   item: ItemDaAcaoDoAgente,
-  acao: Pick<AcaoDoAgente, "contexto">,
+  acao: Pick<AcaoDoAgente, "contexto"> & { id?: string },
   memoria: MemoriaDoPlano,
   deps: DependenciasDoExecutor,
 ): Promise<{ desfazer?: Record<string, unknown> | null; aviso?: string }> {
   const carga = cargaDoItem(acao, item);
+  const idEstavel = item.operacao.startsWith("criar_") ? await idDaCriacao(clientId, acao.id, item) : null;
   switch (item.operacao) {
     case "criar_projeto": {
+      if (idEstavel) {
+        const r = await db.from("projects").select("id, client_id, deleted_at").eq("id", idEstavel).maybeSingle();
+        if (r.error) throw new Error("Não foi possível conferir a criação anterior do projeto.");
+        if (r.data) {
+          if (r.data.client_id !== clientId || r.data.deleted_at) throw new Error("A criação anterior deste projeto foi alterada; revise o plano.");
+          memoria.set(item.ref, idEstavel);
+          return { desfazer: { projeto_id: idEstavel }, aviso: "projeto recuperado desta mesma execução" };
+        }
+      }
       const linha = {
+        ...(idEstavel ? { id: idEstavel } : {}),
         client_id: clientId,
         name: String(carga.name || "").slice(0, 200),
         description: carga.description ?? null,
@@ -150,9 +171,18 @@ export async function executarItemDoPlano(
     }
     case "criar_marco": {
       const projetoId = await projetoDoItem(db, clientId, carga, memoria);
+      if (idEstavel) {
+        const r = await db.from("milestones").select("id, project_id, deleted_at").eq("id", idEstavel).maybeSingle();
+        if (r.error) throw new Error("Não foi possível conferir o marco anterior.");
+        if (r.data) {
+          if (r.data.project_id !== projetoId || r.data.deleted_at) throw new Error("O marco desta execução foi alterado.");
+          memoria.set(item.ref, idEstavel);
+          return { desfazer: { marco_id: idEstavel, projeto_id: projetoId }, aviso: "marco recuperado desta mesma execução" };
+        }
+      }
       const { data, error } = await db
         .from("milestones")
-        .insert({ project_id: projetoId, title: String(carga.title || "").slice(0, 200), description: carga.description ?? null, target_date: carga.target_date, status: "pending", milestone_order: Number(carga.ordem) || null })
+        .insert({ ...(idEstavel ? { id: idEstavel } : {}), project_id: projetoId, title: String(carga.title || "").slice(0, 200), description: carga.description ?? null, target_date: carga.target_date, status: "pending", milestone_order: Number(carga.ordem) || null })
         .select("id")
         .single();
       if (error || !data) throw new Error("Não foi possível criar o marco.");
@@ -162,6 +192,15 @@ export async function executarItemDoPlano(
     }
     case "criar_tarefa": {
       const projetoId = await projetoDoItem(db, clientId, carga, memoria);
+      if (idEstavel) {
+        const r = await db.from("tasks").select("id, project_id, deleted_at").eq("id", idEstavel).maybeSingle();
+        if (r.error) throw new Error("Não foi possível conferir a tarefa anterior.");
+        if (r.data) {
+          if (r.data.project_id !== projetoId || r.data.deleted_at) throw new Error("A tarefa desta execução foi alterada.");
+          memoria.set(item.ref, idEstavel);
+          return { desfazer: { tarefa_id: idEstavel, projeto_id: projetoId }, aviso: "tarefa recuperada desta mesma execução" };
+        }
+      }
       let marcoId: string | null = null;
       let aviso: string | undefined;
       if (carga.marco_novo) {
@@ -181,6 +220,7 @@ export async function executarItemDoPlano(
       const { data, error } = await db
         .from("tasks")
         .insert({
+          ...(idEstavel ? { id: idEstavel } : {}),
           project_id: projetoId,
           milestone_id: marcoId,
           title: String(carga.title || "").slice(0, 200),
@@ -223,8 +263,12 @@ export async function executarItemDoPlano(
     }
     case "preencher_contexto": {
       const campo = String(carga.campo || "");
-      if (["negocio", "publico", "oferta", "tom_de_voz", "nicho", "posicionamento", "estagio"].indexOf(campo) < 0) throw new Error("Campo do contexto desconhecido.");
-      const antes = await mudarNoContexto(db, clientId, campo, String(carga.valor || "").slice(0, 1200), deps);
+      if (["negocio", "publico", "oferta", "tom_de_voz", "nicho", "posicionamento", "estagio", "diferenciais", "lacunas"].indexOf(campo) < 0) throw new Error("Campo do contexto desconhecido.");
+      const valor = campo === "diferenciais" || campo === "lacunas"
+        ? (Array.isArray(carga.valor) ? carga.valor.filter(v => typeof v === "string").map(v => v.slice(0, 400)).slice(0, 12) : null)
+        : String(carga.valor || "").slice(0, 1200);
+      if (valor === null) throw new Error("A lista do contexto está inválida.");
+      const antes = await mudarNoContexto(db, clientId, campo, valor, deps);
       return { desfazer: { campo, antes } };
     }
     case "gravar_decisao": {

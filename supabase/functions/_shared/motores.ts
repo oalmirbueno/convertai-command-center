@@ -894,7 +894,7 @@ export const MOTORES: readonly Motor[] = [
     funcao: "agente-contexto",
     ligacao: {
       arquivo: CONTEXTO,
-      trechos: ["const CONHECIMENTO_DO_PLANO = conhecimentoDoPlano().texto;", "    SISTEMA_DO_PLANO,", "    CONHECIMENTO_DO_PLANO,", "blocoDasFerramentas(),", "executarLeituras(db, clientId, pedidos"],
+      trechos: ["const CONHECIMENTO_DO_PLANO = conhecimentoDoPlano().texto;", "    SISTEMA_DO_PLANO,", "    CONHECIMENTO_DO_PLANO,", "blocoDasFerramentas(),", "executarLeituras(db, clientId, novos"],
     },
     bases: ["agente-contexto: SISTEMA_DO_PLANO", "metodo-acelera.ts: blocoDoMetodoParaPrompt (fase do cliente)", "plano-do-cliente.ts: apelidos de projetos, marcos, tarefas e equipe"],
     montar: () => conhecimentoDoPlano(),

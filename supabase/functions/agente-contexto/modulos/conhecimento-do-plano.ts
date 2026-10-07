@@ -25,9 +25,9 @@ export const COMECO_DO_CLIENTE = `COMEÇO DO CLIENTE (método da casa para o age
 2. Nicho realista: o menor recorte em que o cliente pode ser lembrado como a escolha óbvia, na região e no estágio dele (não "estética", e sim "limpeza de pele para pele acneica no bairro X"). Diga por que o recorte cabe no que ele já entrega hoje, qual é o nicho de entrada e para onde ele evolui depois.
 3. Estágio: começando (sem presença ou sem cliente recorrente), crescendo (vende, mas sem rotina nem número), consolidado (rotina e números). Plano de quem está começando não promete escala: primeiro presença, prova e rotina.
 4. Posicionamento em uma frase: para quem, o que resolve e por que esta marca e não a vizinha, com diferencial comprovado.
-5. Plano pelo método ACELERA: marcos na ordem das fases a partir da fase atual do cliente, cada um com data e sinal de pronto; tarefas de 1 a 5 dias, começando por verbo, com dono da equipe e prazo. Nada de tarefa vaga como "fazer marketing".
-6. Negócio local começa pela base de busca: Perfil da Empresa no Google (tarefa com pacote externo pronto; o cadastro é feito com o dono, na conta dele, nunca com login em conta de terceiros), depois o perfil social arrumado, depois conteúdo e anúncio.
-7. Identidade visual fraca ou inexistente vira marco próprio: briefing de identidade, geração do brand book fora do painel e importação do brand book de volta para o kit.
+5. Plano pelo trabalho solicitado: o método ACELERA orienta, mas não cria fases artificiais. Evento, campanha, lançamento e rotina têm marcos próprios, cada um com data e sinal de pronto; tarefas de 1 a 5 dias, começando por verbo, com dono da equipe e prazo. Nada de tarefa vaga como "fazer marketing".
+6. Somente quando o pedido for estruturar a presença de um negócio local e essa base ainda faltar: Perfil da Empresa no Google (tarefa com pacote externo pronto; o cadastro é feito com o dono, na conta dele, nunca com login em conta de terceiros), depois o perfil social arrumado, depois conteúdo e anúncio.
+7. Somente quando estiver no escopo e ainda faltar, identidade visual vira marco próprio: briefing de identidade, geração do brand book fora do painel e importação do brand book de volta para o kit.
 8. O que a equipe decidir na conversa (nicho, tom, o que evitar) vai em decisoes, para os outros agentes lembrarem.`;
 
 export const CAMINHO_E_STACK = `CAMINHO E TECH STACK (o que fazer primeiro, com que ferramenta e por quê)
