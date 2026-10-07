@@ -1,10 +1,11 @@
-import { Check, CheckCircle2, Clock, FileText, Images, Palette, Video } from "lucide-react";
+import { Camera, Check, CheckCircle2, Clock, FileText, Images, Palette, Video } from "lucide-react";
 import { EditorialFileThumbnail, seloDaArteDoEstudio } from "@/components/editorial/EditorialCalendarViews";
 import type { ArteDoEstudioNaAgenda } from "@/hooks/useEditorialCalendar";
 import { editorialVisualStage, EDITORIAL_VISUAL_STAGE_LABELS, type EditorialVisualStage } from "@/lib/editorial";
 import { corDaEtapa } from "@/lib/editorialCores";
 import { TASK_DELIVERY_TYPE_LABELS, type TaskDeliveryType } from "@/lib/taskDeliveryTypes";
 import { rotuloDaPublicacao, type ItemDaAgenda, type PostDaAgenda, type Selo, type TomDoSelo } from "./useAgendaDoMes";
+import { modoDaPauta } from "./modoDaPauta";
 
 /**
  * Cartões da Agenda do mês, com as mesmas cores e selos da Agenda do painel:
@@ -16,8 +17,13 @@ import { rotuloDaPublicacao, type ItemDaAgenda, type PostDaAgenda, type Selo, ty
 
 export type TamanhoDoCartao = "mes" | "grande";
 
-export const formatoDoItem = (tipo: string | null | undefined) =>
-  TASK_DELIVERY_TYPE_LABELS[String(tipo || "") as TaskDeliveryType] || String(tipo || "Conteúdo");
+export function formatoDoItem(item: string | null | undefined | Pick<ItemDaAgenda, "delivery_type" | "title">) {
+  if (item && typeof item === "object" && modoDaPauta(item) === "fotos") {
+    return item.delivery_type === "carousel" || item.delivery_type === "photo_carousel" ? "Carrossel de fotos" : "Foto";
+  }
+  const tipo = item && typeof item === "object" ? item.delivery_type : item;
+  return TASK_DELIVERY_TYPE_LABELS[String(tipo || "") as TaskDeliveryType] || String(tipo || "Conteúdo");
+}
 
 const ROTULO_DO_CONTEUDO: Record<string, string> = {
   static: "Estático",
@@ -39,6 +45,7 @@ export const formatoDoPost = (tipo: string | null | undefined) => {
 /** Ícone do formato, igual à Agenda (carrossel, vídeo, texto). */
 export function IconeDoFormato({ tipo, className = "h-3 w-3" }: { tipo: string | null | undefined; className?: string }) {
   const t = String(tipo || "");
+  if (t === "photo" || t === "photos" || t === "photo_carousel") return <Camera className={className} aria-hidden />;
   if (t === "carousel") return <Images className={className} aria-hidden />;
   if (t === "reel" || t === "video" || t === "short" || t === "story") return <Video className={className} aria-hidden />;
   return <FileText className={className} aria-hidden />;
@@ -109,7 +116,7 @@ export const COR_DO_PRAZO = { borda: "border-violet-500/25", fundo: "bg-violet-5
 
 /** Texto inteiro do tooltip do item: título, formato, estado, roteiro. */
 export function tooltipDoItem(item: ItemDaAgenda, selo: Selo, extra?: string | null) {
-  const partes = [item.title, `${formatoDoItem(item.delivery_type)} · ${selo.rotulo}`];
+  const partes = [item.title, `${formatoDoItem(item)} · ${selo.rotulo}`];
   if (extra) partes.push(extra);
   return partes.join("\n");
 }
@@ -168,8 +175,8 @@ export function CartaoDoItem({
 
   const linhaDoFormato = (
     <span className="flex min-w-0 items-center text-[11px] text-muted-foreground">
-      <IconeDoFormato tipo={item.delivery_type} className="mr-1 h-3 w-3 shrink-0" />
-      <span className="truncate">{formatoDoItem(item.delivery_type)}</span>
+      <IconeDoFormato tipo={modoDaPauta(item) === "fotos" ? "photo" : item.delivery_type} className="mr-1 h-3 w-3 shrink-0" />
+      <span className="truncate">{formatoDoItem(item)}</span>
     </span>
   );
 
