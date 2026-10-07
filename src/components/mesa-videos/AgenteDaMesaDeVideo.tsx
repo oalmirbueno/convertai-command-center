@@ -350,7 +350,7 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
       rotuloDasMensagens={mesa === "edicao" ? "Conversa com o agente de edição" : "Conversa com o agente de vídeo"}
       compositor={
         <>
-          <OQuePossoFazer capacidades={CAPACIDADES[mesa]} />
+          <OQuePossoFazer capacidades={CAPACIDADES[mesa]} >
           <div className="flex flex-wrap" role="group" aria-label="Atalhos do agente">
             {ATALHOS[mesa].map((v) => intencoes.find((i) => i.valor === v)).filter((i): i is (typeof intencoes)[number] => !!i).map((i) => (
               <button
@@ -364,6 +364,7 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
               </button>
             ))}
           </div>
+          </OQuePossoFazer>
           {erro && (
             <p role="alert" className="mb-1 text-[12px] leading-4 text-destructive" data-erro-do-agente="">
               Não foi: {erro}

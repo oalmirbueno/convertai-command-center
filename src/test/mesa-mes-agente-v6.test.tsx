@@ -177,10 +177,12 @@ describe("agente do mês: planejar o mês conversando", () => {
 
   it("os atalhos mudam com o modo e só preenchem o campo", () => {
     montar(h(AgenteDoMes, { mesInicial: "2026-10-01" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sugestões", exact: true }));
     fireEvent.click(screen.getByRole("button", { name: "Frequência e formatos" }));
     expect((screen.getByLabelText("Pedido ao agente do mês") as HTMLTextAreaElement).value).toContain("outubro de 2026");
     fireEvent.click(screen.getByRole("tab", { name: /Criar conteúdos/ }));
-    expect(screen.getByRole("button", { name: "Prepare a agenda de hoje" })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("button", { name: "Mais atalhos" }), { key: "Enter" });
+    expect(screen.getByRole("menuitem", { name: "Prepare a agenda de hoje" })).toBeTruthy();
     expect(mock.invoke).not.toHaveBeenCalled();
     // O modo escolhido fica guardado para a próxima abertura.
     expect(window.localStorage.getItem("mesa:agente:modo")).toBe("criar");

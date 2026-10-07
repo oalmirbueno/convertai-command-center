@@ -1,3 +1,4 @@
+import SugestoesDoAgente from "@/components/agentes/SugestoesDoAgente";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { campo, foco, juntar } from "@/components/sistema/estilos";
@@ -187,7 +188,7 @@ export function AtalhosDoAgente({
   onAtalho: (chave: AtalhoDoAgente) => void;
 }) {
   return (
-    <div className="flex min-w-0 flex-wrap" role="group" aria-label="Atalhos do agente" data-atalhos-do-agente="">
+    <SugestoesDoAgente><div className="flex min-w-0 flex-wrap" role="group" aria-label="Atalhos do agente" data-atalhos-do-agente="">
       {ATALHOS_DO_AGENTE.map((a) => {
         const desligado = ocupado || (a.precisaCliente && !temCliente);
         return (
@@ -207,6 +208,6 @@ export function AtalhosDoAgente({
           </button>
         );
       })}
-    </div>
+    </div></SugestoesDoAgente>
   );
 }

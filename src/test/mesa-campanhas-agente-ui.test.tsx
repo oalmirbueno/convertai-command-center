@@ -189,6 +189,7 @@ describe("agente da campanha", () => {
 
   it("os atalhos só preenchem o campo, sem gastar", () => {
     montar(h(CampanhaAgente, { campanha }));
+    fireEvent.click(screen.getByRole("button", { name: "Sugestões", exact: true }));
     fireEvent.click(screen.getByRole("button", { name: "Mude o tom para…" }));
     expect((screen.getByLabelText("Pedido ao agente da campanha") as HTMLTextAreaElement).value).toBe("Mude o tom para ");
     for (const rotulo of ["Acrescente um conteúdo de…", "Troque as cores de apoio", "Deixe o selo mais…"]) {

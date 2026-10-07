@@ -1,3 +1,4 @@
+import SugestoesDoAgente from "@/components/agentes/SugestoesDoAgente";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Bot, Download, Eye, Film, Loader2, Send, Square, Timer, Wand2 } from "lucide-react";
 import { toast } from "sonner";
@@ -1171,7 +1172,7 @@ export default function AgenteEditor({
       }
       compositor={
         <div className="min-w-0">
-          <div className="flex flex-wrap" role="group" aria-label="Atalhos do agente editor">
+          <SugestoesDoAgente><div className="flex flex-wrap" role="group" aria-label="Atalhos do agente editor">
             {ATALHOS.map((a) => (
               <button
                 key={a.skill}
@@ -1184,7 +1185,7 @@ export default function AgenteEditor({
                 {a.rotulo}
               </button>
             ))}
-          </div>
+          </div></SugestoesDoAgente>
           <form
             className="flex min-w-0 items-end"
             onSubmit={(e) => {

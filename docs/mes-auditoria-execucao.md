@@ -38,3 +38,17 @@ A confirmação de cartões extensos enviava `anexos` inteiro no filtro de igual
 - Falha do banco e conflito de revisão retornam mensagens específicas, sem expor payloads ou credenciais.
 
 Validação: 99 testes focados; testes usando o transporte real do SDK com payload de 200 KB e URL menor que 2 KB; cinco pedidos sintéticos na API TypeSafe (inclusão, cobrança, negação, referência e vários meses), todos com resultado esperado após ajustar as perguntas; Deno check. Rollback: reimplantar o bundle v67 preservado, sem reverter dados. A revisão de texto já preparada pode ser retomada pela confirmação do cartão, sem regenerar a resposta paga.
+
+
+## Auditoria global — 07/10/2026
+
+A conversa podia dizer que nada foi alterado mesmo com recibos concluídos. Conversões para arte tentavam gravar direção nula no Estúdio, violando NOT NULL (23502 confirmado nos logs). A reescrita atualizava o roteiro sem atualizar a direção ainda não produzida. Detalhes de proposta abertos e item avulso não eram invalidados.
+
+- Conversões têm direção válida; arte recompõe a direção com o roteiro e marca reais. Foto e vídeo mantêm seus contratos.
+- Respostas de conclusão vêm dos recibos; a interface também interpreta cartões históricos já executados. Falhas parciais e mídia preservada ficam explícitas.
+- Reescritas atualizam as direções sem mídia com snapshot e Desfazer; imagens prontas e trabalhos em geração ficam preservados com aviso. Texto não significa mídia regenerada.
+- Jev lê conversa recente para referências e distingue revisão textual de autorização para novas datas/formatos. Meses citados como etapa futura não ampliam a execução atual. Sem resposta do classificador, a orientação editorial permanece no modelo principal; não presumir autorização pela ausência.
+- Sugestões do compositor começam recolhidas nos agentes compartilhados e nos grupos próprios de Mês, campanhas, redes, Ads, fotos, vídeo, edição e administração. Campo, anexos, respostas necessárias e envio ficam visíveis. Abrir sugestões não chama IA.
+- Atualização invalida agenda, roteiro detalhado, item avulso e calendário; ocorre também no encerramento de envio com falha, para buscar recibos que possam ter sido persistidos.
+
+Aplicação global por código, sem condicionais de cliente, mudança de schema, chaves ou modelo. Não repetir nem executar cartões antigos automaticamente. Publicar agente-calendario e frontend Cloudflare; rollback por revisão anterior sem alterar dados. Validação inclui conversão arte/foto/vídeo, recibos parciais, direção/copy, cache e componentes de vários agentes. Interpretação semântica não é garantia universal; não gerar nem aprovar mídia sem o fluxo existente.

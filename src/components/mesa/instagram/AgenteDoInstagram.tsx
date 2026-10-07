@@ -1,3 +1,4 @@
+import SugestoesDoAgente from "@/components/agentes/SugestoesDoAgente";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Instagram, Loader2, Send, Wand2 } from "lucide-react";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
@@ -134,13 +135,13 @@ export default function AgenteDoInstagram({
       rotuloDasMensagens="Conversa com o agente das redes"
       compositor={
         <>
-          <div className="flex min-w-0 flex-wrap" role="group" aria-label="Atalhos do agente do Instagram">
+          <SugestoesDoAgente><div className="flex min-w-0 flex-wrap" role="group" aria-label="Atalhos do agente do Instagram">
             {ATALHOS.map((a) => (
               <button key={a.rotulo} type="button" className={juntar(botao.secundario, "mb-1.5 mr-1.5 h-8 px-2.5 text-[12px]")} disabled={trabalhando} onClick={() => void enviar(a.texto)}>
                 {a.rotulo}
               </button>
             ))}
-          </div>
+          </div></SugestoesDoAgente>
           <div className="flex min-w-0 items-end">
             <textarea
               className={juntar(campoTexto, "min-h-[40px] flex-1 resize-none")}

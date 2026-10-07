@@ -606,7 +606,7 @@ export default function DiretorDoEstudio({
       <CompositorDoAgente>
         <OQuePossoFazer
           capacidades={["mudar texto, cor e cena (faz na hora, com Desfazer)", "trocar ou tirar a foto e usar só o rosto", "reordenar, tirar ou duplicar lâminas", "o mesmo ajuste em todas", "formato e qualidade", "refazer e gerar variações (com o custo antes)", "entregar e agendar (com confirmação)"]}
-          atalhos={[
+          atalhos={[...ATALHOS_DO_DIRETOR,
             { rotulo: "Reorganizar as lâminas", texto: "Reorganize a ordem das lâminas para a história fluir melhor." },
             { rotulo: "Mudar para 9:16", texto: "Mude o formato deste trabalho para 9:16." },
           ]}
@@ -626,16 +626,7 @@ export default function DiretorDoEstudio({
               {falarDaLamina ? `Sobre a lâmina ${ordemEmFoco}` : "Sobre o conjunto"}
             </button>
           ) : null}
-          {ATALHOS_DO_DIRETOR.map((a) => (
-            <button
-              key={a.rotulo}
-              type="button"
-              onClick={() => preencher(a.texto)}
-              className="mb-1 mr-1 max-w-full truncate rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
-            >
-              {a.rotulo}
-            </button>
-          ))}
+
         </div>
         <ZonaDeAnexos anexos={anexosDoCampo} className="min-w-0" rotulo="Solte as imagens para o diretor">
         <div className="rounded-xl border border-border bg-background p-2 focus-within:border-primary/60">
