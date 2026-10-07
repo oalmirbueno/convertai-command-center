@@ -939,7 +939,7 @@ export async function operatorDiary(input: {
   entry_type?: string;
   title?: string;
   body?: string;
-  attachments?: unknown[];
+  attachments?: { name: string; url: string }[];
   limit?: number;
 }) {
   if (!isUuid(input.link_id)) throw new Error('link_id must be a UUID');
@@ -954,7 +954,7 @@ export async function operatorDiary(input: {
       _entry_type: texto(input.entry_type) ?? 'comentario',
       _body: String(input.body),
       _title: texto(input.title),
-      _attachments: Array.isArray(input.attachments) ? input.attachments : [],
+      _attachments: progressDetail({ attachments: input.attachments }).attachments || [],
     }));
     if (error) throw new Error(`operator_participar: ${error.message}`);
     return data;

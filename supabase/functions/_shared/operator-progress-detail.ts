@@ -6,6 +6,7 @@ export interface OperatorProgressDetail {
 }
 
 export function evidenceLocation(raw: string): string {
+  if (/^mcp-files:\/\/[a-zA-Z0-9_/-]+\.[a-zA-Z0-9]+$/.test(raw) && !raw.includes('..')) return raw;
   if (/^files:\/\/task-attachments\/[a-f0-9-]{36}\//i.test(raw) && !raw.includes('..')) return raw;
   let u: URL;
   try { u = new URL(raw); } catch { throw new Error('Comprovação precisa de um endereço HTTPS ou arquivo privado da tarefa.'); }

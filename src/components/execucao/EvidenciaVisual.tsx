@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { resolveFileUrl } from "@/lib/fileUrls";
 import { destinoDaEvidencia } from "@/lib/execucaoApresentacao";
 
 export default function EvidenciaVisual({ url, nome = "Abrir comprovação" }: { url: string; nome?: string }) {
@@ -7,9 +7,7 @@ export default function EvidenciaVisual({ url, nome = "Abrir comprovação" }: {
   const { data: assinado, isError } = useQuery({
     queryKey: ["evidencia-assinada", url], enabled: tipo === "privado", staleTime: 240_000,
     queryFn: async () => {
-      const { data, error } = await supabase.storage.from("files").createSignedUrl(url.slice(8), 600);
-      if (error || !data?.signedUrl) throw error || new Error("Anexo indisponível");
-      return data.signedUrl;
+      return resolveFileUrl({ fileUrl: url, expiresIn: 600 });
     },
   });
   if (!tipo) return <p className="whitespace-pre-wrap break-words text-[13px] text-muted-foreground">{url}</p>;
