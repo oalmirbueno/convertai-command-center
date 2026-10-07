@@ -3186,6 +3186,10 @@ const operatorReportTool: ToolDefinition = {
       from_cron: { type: 'boolean', default: false },
       attempt: { type: 'integer', minimum: 1, maximum: 50, description: 'Numero da tentativa (retry com backoff e do chamador; aqui fica o registro).' },
       timeout_seconds: { type: 'integer', minimum: 30, maximum: 21600, default: 900 },
+      detail: { type: 'object', additionalProperties: false, description: 'Progresso visual da execução externa. Sem segredos, cookies ou dumps. Use a mesma run_key e tarefa em todos os eventos.', properties: {
+        title: { type: 'string', maxLength: 200 }, summary: { type: 'string', maxLength: 3000 }, page_url: { type: 'string', maxLength: 2000 },
+        attachments: { type: 'array', maxItems: 12, items: { type: 'object', additionalProperties: false, required: ['name', 'url'], properties: { name: { type: 'string', maxLength: 120 }, url: { type: 'string', maxLength: 2000 } } } },
+      } },
     },
     required: ['operator', 'event', 'run_key'],
     additionalProperties: false,
@@ -3206,6 +3210,7 @@ const operatorReportTool: ToolDefinition = {
       from_cron: z.boolean().optional(),
       attempt: limite(50),
       timeout_seconds: limite(21600, 30),
+      detail: z.object({ title: z.string().max(200).optional(), summary: z.string().max(3000).optional(), page_url: z.string().max(2000).optional(), attachments: z.array(z.object({ name: z.string().max(120), url: z.string().max(2000) }).strict()).max(12).optional() }).strict().optional(),
     }).strict();
     const parsed = schema.safeParse(input ?? {});
     if (!parsed.success) {

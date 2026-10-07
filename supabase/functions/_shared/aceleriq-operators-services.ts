@@ -22,6 +22,7 @@
  */
 
 import { db, isUuid, READ_LIMITS } from './aceleriq-read-services.ts';
+import { progressDetail, type OperatorProgressDetail } from './operator-progress-detail.ts';
 import { operatorRunIsStale } from './operator-freshness.ts';
 
 const texto = (v: unknown): string | null => {
@@ -51,9 +52,9 @@ async function comPrazo<T>(p: PromiseLike<T>, ms = READ_LIMITS.queryTimeoutMs): 
  * funciona até alguém clicar.
  */
 export function deepLinkDoVinculo(linkId?: string | null, runId?: string | null) {
-  if (!linkId) return null;
+  if (!linkId && !runId) return null;
   const base = (Deno.env.get('PAINEL_ORIGIN') ?? 'https://aceleriq.online').replace(/\/+$/, '');
-  return `${base}/execucao?vinculo=${linkId}${runId ? `&run=${runId}` : ''}`;
+  return `${base}/execucao?${linkId ? `vinculo=${linkId}&aba=diario` : ""}${runId ? `${linkId ? "&" : ""}run=${runId}` : ""}`;
 }
 
 export const OPERATOR_EVENTS = [
@@ -154,6 +155,7 @@ export interface OperatorReportInput {
   from_cron?: boolean;
   attempt?: number;
   timeout_seconds?: number;
+  detail?: OperatorProgressDetail;
 }
 
 export async function operatorReport(input: OperatorReportInput, actor: string) {
@@ -162,6 +164,21 @@ export async function operatorReport(input: OperatorReportInput, actor: string) 
   }
   if (input.painel_task_id && !isUuid(input.painel_task_id)) {
     throw new Error('painel_task_id must be a UUID');
+  }
+  const detail = progressDetail(input.detail, input.action, input.evidence, input.next_step);
+  const taskId = input.kanban_task_id || input.painel_task_id;
+  if (taskId) {
+    const context = await comPrazo(db().from('tasks')
+      .select('title, project:projects!tasks_project_id_fkey(name, client_id, client:profiles!projects_client_id_fkey(company_name, full_name))')
+      .eq('id', taskId).maybeSingle());
+    if (context.error) throw new Error('Não foi possível confirmar o contexto da tarefa antes de registrar a execução.');
+    if (context.data) {
+      const t = context.data as unknown as { title: string; project?: { name?: string; client_id?: string; client?: { company_name?: string; full_name?: string } } };
+      detail.title ||= t.title;
+      detail.client_id = t.project?.client_id ?? null;
+      detail.client_name = t.project?.client?.company_name || t.project?.client?.full_name || null;
+      detail.project_name = t.project?.name ?? null;
+    }
   }
 
   // Retomada é uma escrita explícita. A leitura do quadro nunca expira registros.
@@ -185,7 +202,7 @@ export async function operatorReport(input: OperatorReportInput, actor: string) 
     _from_cron: input.from_cron === true,
     _attempt: Math.max(1, Math.floor(Number(input.attempt) || 1)),
     _timeout_seconds: Math.min(Math.max(Math.floor(Number(input.timeout_seconds) || 900), 30), 21600),
-    _detail: {},
+    _detail: detail,
   }));
   if (error) {
     // A colisão da trava de execução simultânea sai como violação do
@@ -219,7 +236,7 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
       .order('updated_at', { ascending: false })
       .limit(limit)),
     comPrazo(db().from('operator_runs')
-      .select('id, operator_id, run_key, task_link_id, status, attempt, started_at, heartbeat_at, timeout_seconds, finished_at, error')
+      .select('id, operator_id, run_key, task_link_id, status, attempt, started_at, heartbeat_at, timeout_seconds, finished_at, error, detail')
       .order('started_at', { ascending: false })
       .limit(limit)),
   ]);
@@ -460,6 +477,9 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
       run_key: r.run_key, status: r.status, tentativa: r.attempt,
       inicio: r.started_at, heartbeat: r.heartbeat_at, fim: r.finished_at, erro: r.error,
       sem_heartbeat: operatorRunIsStale(r),
+      detalhe: r.detail ?? {},
+      link_id: r.task_link_id ?? null,
+      deep_link: deepLinkDoVinculo(texto(r.task_link_id), texto(r.id)),
     })),
     incidentes: incidentes.slice(0, 10).map((r) => ({
       operador: porId.get(String(r.operator_id))?.slug ?? null,

@@ -9,10 +9,14 @@ import {
   FileCheck2, ListChecks, PauseCircle, RefreshCw, ShieldAlert, Wrench, X, XCircle,
 } from "lucide-react";
 import OrganogramaAgentes, { type NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
+import ExecucoesRecentes from "@/components/execucao/ExecucoesRecentes";
+import RelatorioVisual from "@/components/execucao/RelatorioVisual";
+import Departamentos from "@/components/execucao/Departamentos";
 import PerfilDoAgente from "@/components/execucao/PerfilDoAgente";
 import DiarioDaExecucao from "@/components/execucao/DiarioDaExecucao";
 import Escritorio from "@/components/execucao/Escritorio";
 import DefinirResponsavel from "@/components/execucao/DefinirResponsavel";
+import { contagensDasAbas, falhaDaExecucao } from "@/lib/execucaoApresentacao";
 import { falarComoGente } from "@/lib/falarComoGente";
 import { precisaDecisao } from "@/lib/precisaDecisao";
 import { vinculoEncerrado } from "@/lib/execucaoVinculos";
@@ -129,7 +133,7 @@ type Operador = {
  */
 const ABAS = [
   { id: "pessoas", rotulo: "Escritório", visoes: ["escritorio", "hierarquia"] },
-  { id: "trabalho", rotulo: "Trabalho", visoes: ["quadro", "fila", "in_progress", "done", "review"] },
+  { id: "trabalho", rotulo: "Trabalho", visoes: ["atividade", "quadro", "execucoes", "fila", "in_progress", "done", "review"] },
   { id: "decisoes", rotulo: "Precisa de você", visoes: ["aprovacao", "awaiting_input", "blocked"] },
   { id: "feito", rotulo: "O que foi feito", visoes: [] },
   { id: "relatorios", rotulo: "Relatórios", visoes: ["relatorios"] },
@@ -137,7 +141,9 @@ const ABAS = [
 
 const VISOES = [
   { id: "escritorio", rotulo: "Escritório" },
-  { id: "quadro", rotulo: "Quadro" },
+  { id: "atividade", rotulo: "Visão geral" },
+  { id: "quadro", rotulo: "Tarefas" },
+  { id: "execucoes", rotulo: "Execuções externas" },
   { id: "fila", rotulo: "Fila por operador" },
   { id: "in_progress", rotulo: "Em andamento" },
   { id: "done", rotulo: "Concluídas com evidência" },
@@ -170,6 +176,8 @@ export default function AdminExecucao() {
   const vinculoAlvo = searchParams.get("vinculo");
   const aprovacaoAlvo = searchParams.get("aprovacao");
   const propostaAlvo = searchParams.get("proposta");
+  const runAlvo = searchParams.get("run") || searchParams.get("execucao");
+  const agenteAlvo = searchParams.get("agente");
   const abaAlvo = searchParams.get("aba");
   // Aba e visão ficam guardadas (sair e voltar mantém). O padrão continua
   // sendo o Escritório: é a porta de entrada.
@@ -246,31 +254,55 @@ export default function AdminExecucao() {
   });
 
   const { data: vinculos = [], dataUpdatedAt, error: erroVinculos, isLoading: carregandoVinculos } = useQuery({
-    queryKey: ["operador-vinculos"],
+    queryKey: ["operador-vinculos", vinculoAlvo],
     queryFn: async () => {
       // Consultar e atualizar a tela não alteram execuções nem ordens.
       const { data, error } = await (supabase as any)
         .from("operator_task_links").select("*").order("updated_at", { ascending: false }).limit(300);
       if (error) throw error;
+      if (vinculoAlvo && !(data || []).some((v: any) => v.id === vinculoAlvo)) {
+        const focused = await (supabase as any).from("operator_task_links").select("*").eq("id", vinculoAlvo).maybeSingle();
+        if (focused.error) throw focused.error;
+        if (focused.data) data.unshift(focused.data);
+      }
       return (data || []) as Vinculo[];
     },
     enabled: flag === "on",
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
+  });
+
+  const { data: pedidos = [] } = useQuery({
+    queryKey: ["execucao-pedidos"], enabled: flag === "on",
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("operator_approvals").select("id,task_link_id,client:profiles!operator_approvals_client_id_fkey(company_name,full_name)").in("status", ["pendente", "adiado"]).limit(100);
+      if (error) throw error;
+      return data || [];
+    }, refetchInterval: 15_000,
   });
 
   const { data: runs = [], error: erroRuns } = useQuery({
-    queryKey: ["operador-runs"],
+    queryKey: ["operador-runs", runAlvo],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("operator_runs")
-        .select("id, operator_id, run_key, task_link_id, status, attempt, started_at, heartbeat_at, timeout_seconds, finished_at, error")
+        .select("id, operator_id, run_key, task_link_id, status, attempt, started_at, heartbeat_at, timeout_seconds, finished_at, error, detail")
         .order("started_at", { ascending: false }).limit(200);
       if (error) throw error;
+      if (runAlvo && !(data || []).some((r: any) => r.id === runAlvo)) {
+        const focused = await (supabase as any).from("operator_runs").select("*").eq("id", runAlvo).maybeSingle();
+        if (focused.error) throw focused.error;
+        if (focused.data) data.unshift(focused.data);
+      }
       return (data || []) as Array<Record<string, any>>;
     },
     enabled: flag === "on",
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
   });
+
+  useEffect(() => {
+    if (runAlvo && !vinculoAlvo) { setVisao("execucoes"); setBusca(""); setFiltroCliente(""); setFiltroPrazo("todas"); }
+    if (agenteAlvo) { const op = operadores.find(o => o.id === agenteAlvo || o.slug === agenteAlvo); if (op) setAgenteAberto(op); }
+  }, [runAlvo, vinculoAlvo, agenteAlvo, operadores]);
 
   // Os dois campos: um vinculo criado pelo painel_task_id tem tarefa, e
   // ignora-lo devolvia uma linha sem contexto nenhum.
@@ -298,7 +330,7 @@ export default function AdminExecucao() {
       return mapa;
     },
     enabled: flag === "on" && taskIds.length > 0,
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
     refetchOnWindowFocus: true,
   });
 
@@ -416,6 +448,8 @@ export default function AdminExecucao() {
     if (!vinculoAlvo || vinculos.length === 0) return;
     const alvo = vinculos.find((v) => v.id === vinculoAlvo);
     if (!alvo) return;
+    setBusca(""); setFiltroCliente(""); setFiltroPrazo("todas"); setMostrarEncerradas(true);
+    if (["queued", "in_progress"].includes(alvo.status)) setVisao("quadro");
     if (alvo.status !== "in_progress" && alvo.status !== "queued") {
       const direto = VISOES.find((x) => x.id === alvo.status);
       if (direto) setVisao(direto.id);
@@ -432,23 +466,6 @@ export default function AdminExecucao() {
    * numero ao lado do rotulo e o que faz valer a pena arrastar ate ela, em
    * vez de arrastar para descobrir que estava vazia.
    */
-  const contagemDaVisao = useMemo(() => {
-    const base = mostrarEncerradas ? vinculos : vinculosAtivos;
-    const conta = (fn: (v: Vinculo) => boolean) => base.filter(fn).length;
-    return {
-      quadro: base.length,
-      fila: conta((v) => ["queued", "in_progress"].includes(v.status)),
-      in_progress: conta((v) => v.status === "in_progress"),
-      done: conta((v) => v.status === "done"),
-      review: conta((v) => v.status === "review"),
-      awaiting_input: conta((v) => v.status === "awaiting_input"),
-      blocked: conta((v) => v.status === "blocked"),
-      aprovacao: conta((v) => precisaDecisao(v)),
-      hierarquia: operadores.length,
-      // Relatorios nao e uma lista de vinculos: numero ali seria invencao.
-      relatorios: 0,
-    } as Record<string, number>;
-  }, [vinculos, vinculosAtivos, mostrarEncerradas, operadores]);
 
   /*
    * Quando a visao muda sozinha (notificacao apontando para um vinculo), a
@@ -479,6 +496,35 @@ export default function AdminExecucao() {
       });
     });
   }, [vinculos, vinculosAtivos, mostrarEncerradas, tarefas, busca, filtroCliente, filtroPrazo, hoje]);
+
+  const contagemDaVisao = useMemo(() => {
+    const base = vinculosVisiveis;
+    const conta = (fn: (v: Vinculo) => boolean) => base.filter(fn).length;
+    return {
+      quadro: base.length,
+      execucoes: runs.length,
+      fila: conta((v) => ["queued", "in_progress"].includes(v.status)),
+      in_progress: conta((v) => v.status === "in_progress"),
+      done: conta((v) => v.status === "done"),
+      review: conta((v) => v.status === "review"),
+      awaiting_input: conta((v) => v.status === "awaiting_input"),
+      blocked: conta((v) => v.status === "blocked"),
+      aprovacao: conta((v) => precisaDecisao(v)),
+      hierarquia: operadores.length,
+      // Relatorios nao e uma lista de vinculos: numero ali seria invencao.
+      relatorios: 0,
+    } as Record<string, number>;
+  }, [vinculosVisiveis, operadores, runs]);
+
+  const contagemDasAbas = contagensDasAbas(vinculosVisiveis, operadores.length);
+  contagemDasAbas.trabalho += !filtroCliente && filtroPrazo === "todas" ? runs.filter(r => !r.task_link_id && (!busca.trim() || JSON.stringify([r.detail, opDe(r.operator_id)?.display_name]).toLocaleLowerCase().includes(busca.trim().toLocaleLowerCase()))).length : 0;
+
+  const pedidosVisiveis = pedidos.filter((p: any) => !filtroCliente || (p.client?.company_name || p.client?.full_name) === filtroCliente);
+  contagemDasAbas.decisoes = new Set([
+    ...vinculosVisiveis.filter(v => ["awaiting_input", "blocked"].includes(v.status) || precisaDecisao(v)).map(v => v.id),
+    ...pedidosVisiveis.map((p: any) => p.task_link_id || p.id),
+  ]).size;
+  contagemDaVisao.aprovacao = pedidosVisiveis.length;
 
   const clientesDoQuadro = useMemo(() => {
     const nomes = new Set<string>();
@@ -604,7 +650,7 @@ export default function AdminExecucao() {
       bloco("Aprovacoes pendentes", vinculosAtivos.filter((v) => precisaDecisao(v))),
       incidentes.length
         ? `Falhas de execucao (${incidentes.length})\n` + incidentes.slice(0, 10).map((r) =>
-            `- ${opDe(String(r.operator_id))?.display_name || "Um agente"} ${runEmPalavras(r.status)}${r.error ? ": " + falarComoGente(String(r.error)).humano : ""}`,
+            `- ${opDe(String(r.operator_id))?.display_name || "Um agente"} ${runEmPalavras(r.status)}${r.error ? ": " + falhaDaExecucao(r.error) : ""}`,
           ).join("\n")
         : "Falhas de execucao: nenhuma",
     ].join("\n\n");
@@ -742,6 +788,7 @@ export default function AdminExecucao() {
       toast.success("Movido.");
     }
     await queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
+      queryClient.invalidateQueries({ queryKey: ["execucao-pedidos"] });
   };
 
   const resolverAprovacao = async (v: Vinculo) => {
@@ -751,6 +798,7 @@ export default function AdminExecucao() {
     if (error) { toast.error(error.message || "Não foi possível resolver."); return; }
     toast.success("Aprovação resolvida.");
     await queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
+      queryClient.invalidateQueries({ queryKey: ["execucao-pedidos"] });
   };
 
   const itensDoCartao = (v: Vinculo): ItemDeMenu[] => {
@@ -1184,7 +1232,7 @@ export default function AdminExecucao() {
                 <span className="min-w-0 [overflow-wrap:anywhere]">
                   <strong className="font-medium text-foreground/85">{opDe(String(r.operator_id))?.display_name || "Um agente"}</strong>{" "}
                   {runEmPalavras(r.status)} {dataCurta(String(r.finished_at || r.started_at))}
-                  {r.error ? `: ${falarComoGente(String(r.error)).humano}` : ""}
+                  {r.error ? `: ${falhaDaExecucao(r.error)}` : ""}
                   {r.attempt > 1 ? ` (${r.attempt}ª tentativa)` : ""}
                 </span>
               </li>
@@ -1344,7 +1392,8 @@ export default function AdminExecucao() {
   ) : visao === "escritorio" ? (
     <Escritorio
       agentes={operadores}
-      trabalhos={vinculosVisiveis as any}
+      pendencias={contagemDasAbas.decisoes}
+      trabalhos={[...vinculosVisiveis, ...(!filtroCliente && filtroPrazo === "todas" ? [...new Map([...runs].reverse().filter(r => !r.task_link_id).map(r => [r.operator_id, r])).values()].filter(r => ["started", "progress", "review", "awaiting_input", "blocked"].includes(r.status)).map(r => ({ operator_id: r.operator_id, status: ["started", "progress"].includes(r.status) ? "in_progress" : r.status, last_action: r.detail?.title || r.detail?.action || "Execução externa — abra o agente para conferir", updated_at: r.heartbeat_at })) : [])] as any}
       tarefas={tarefas}
       humanos={humanos}
       aoAbrirAgente={(a) => {
@@ -1367,45 +1416,19 @@ export default function AdminExecucao() {
         );
       }}
     />
-  ) : visao === "relatorios" ? (
-    <div className="grid gap-4 md:grid-cols-2">
-      {[
-        { titulo: "Abertura do dia", texto: relatorio.abertura, icone: Activity },
-        { titulo: "Checkpoint de exceções", texto: relatorio.excecoes, icone: AlertTriangle },
-        { titulo: "Fechamento do dia", texto: relatorio.fechamento, icone: CheckCircle2 },
-        { titulo: "Semana do piloto", texto: relatorio.semanal, icone: FileCheck2 },
-      ].map((r) => (
-        /* Cada relatório é um item da grade (cartão com função): o Painel do
-           sistema, que já recolhe. O ícone vai junto do título, então a chave
-           de recolher é escolhida aqui. */
-        <Painel
-          key={r.titulo}
-          as="section"
-          aria-label={r.titulo}
-          semEspaco
-          recolher={`execucao:relatorio:${r.titulo}`}
-          titulo={
-            <span className="inline-flex min-w-0 max-w-full items-center">
-              <r.icone className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
-              <span className="truncate">{r.titulo}</span>
-            </span>
-          }
-          acao={
-            <button
-              type="button"
-              onClick={() => void copiar(r.texto, r.titulo)}
-              className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}
-            >
-              <ClipboardCopy className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Copiar
-            </button>
-          }
-        >
-          <pre className="whitespace-pre-wrap px-4 py-3 font-sans text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-            {r.texto}
-          </pre>
-        </Painel>
-      ))}
+  ) : visao === "atividade" ? (
+    <div className="space-y-5">
+      <ListaDeCartoes lista={vinculosVisiveis} rotulo="Tarefas dos agentes" />
+      {!filtroCliente && filtroPrazo === "todas" && <section><h3 className="mb-3 text-[15px] font-semibold">Execuções sem tarefa vinculada</h3><ExecucoesRecentes runs={runs.filter(r => !r.task_link_id && (!busca.trim() || JSON.stringify([r.detail, opDe(r.operator_id)?.display_name]).toLocaleLowerCase().includes(busca.trim().toLocaleLowerCase())))} agentes={operadores} vinculos={vinculos} tarefas={tarefas} destaque={runAlvo} aoConversar={(id, titulo) => setDiarioAberto({ linkId: id, titulo })} /></section>}
     </div>
+  ) : visao === "execucoes" ? (
+    <ExecucoesRecentes runs={runs.filter(r => {
+      const v = vinculos.find(v => v.id === r.task_link_id);
+      if (filtroCliente || filtroPrazo !== "todas") return !!v && vinculosVisiveis.some(x => x.id === v.id);
+      return !busca.trim() || JSON.stringify([r.detail, opDe(r.operator_id)?.display_name]).toLocaleLowerCase().includes(busca.trim().toLocaleLowerCase());
+    })} agentes={operadores} vinculos={vinculos} tarefas={tarefas} destaque={runAlvo} aoConversar={(id, titulo) => setDiarioAberto({ linkId: id, titulo })} />
+  ) : visao === "relatorios" ? (
+    <RelatorioVisual vinculos={vinculosAtivos} runs={runs} agentes={operadores} tarefas={tarefas} aoAbrir={(id, titulo) => setDiarioAberto({ linkId: id, titulo })} />
   ) : visao === "fila" ? (
     <div className="space-y-6">
       {operadores.filter((o) => !o.is_coordinator).map((o) => {
@@ -1479,6 +1502,7 @@ export default function AdminExecucao() {
           carregam o selo antigo — visiveis para nada ficar invisivel
           enquanto o agente ainda nao migrou para o pedido explicado. */}
       <AprovacoesExplicadas
+        filtroCliente={filtroCliente}
         nomesDeAgentes={nomesDeAgentes}
         titulosDeTarefas={titulosDeTarefas}
         destaqueId={aprovacaoAlvo}
@@ -1578,8 +1602,7 @@ export default function AdminExecucao() {
             // A aba "O que foi feito" nao tem visao nenhuma, e uma lista vazia
             // faz o TypeScript inferir never[]. O tipo explicito resolve sem
             // obrigar a aba a inventar uma visao que ela nao tem.
-            const quantos = (x.visoes as readonly string[])
-              .reduce((s, id) => s + (contagemDaVisao[id] ?? 0), 0);
+            const quantos = contagemDasAbas[x.id];
             return { valor: x.id, rotulo: x.rotulo, contador: quantos };
           })}
         />
@@ -1678,6 +1701,8 @@ export default function AdminExecucao() {
         acoes={
           <>
             {profile?.role === "admin" && (
+              <>
+              <Departamentos agentes={operadores} />
               <button
                 type="button"
                 onClick={() => void reconciliarExecucoes()}
@@ -1689,6 +1714,7 @@ export default function AdminExecucao() {
                 <Wrench className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
                 <span className="hidden sm:inline">{reconciliando ? "Reconciliando…" : "Reconciliar"}</span>
               </button>
+              </>
             )}
             <button
               type="button"
@@ -1797,6 +1823,7 @@ export default function AdminExecucao() {
         operador={agenteAberto}
         vinculos={vinculos}
         tarefas={tarefas}
+        aoAbrirDiario={(id, titulo) => { setAgenteAberto(null); setDiarioAberto({ linkId: id, titulo }); }}
         aoFechar={() => setAgenteAberto(null)}
       />
 

@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { comandoDaAprovacao } from "@/lib/execucaoApresentacao";
+import { centralReviewError } from "@/lib/centralReview";
 import { supabase } from "@/integrations/supabase/client";
 import {
   AlertTriangle, Ban, CheckCircle2, ChevronDown, Clock, HandCoins,
@@ -24,6 +26,11 @@ import { Carregando, EstadoDeErro, Secao, botao, campo, etiqueta, foco, juntar, 
 
 type Aprovacao = {
   id: string;
+  origin?: string;
+  report_id?: string;
+  client_id?: string;
+  payload_hash?: string;
+  client?: { company_name?: string; full_name?: string };
   operator_id: string;
   task_link_id: string | null;
   kanban_task_id: string | null;
@@ -84,22 +91,25 @@ export default function AprovacoesExplicadas({
   titulosDeTarefas,
   destaqueId,
   aoAbrirDiario,
+  filtroCliente = "",
 }: {
   nomesDeAgentes: Map<string, string>;
   titulosDeTarefas: Map<string, string>;
   destaqueId: string | null;
+  filtroCliente?: string;
   aoAbrirDiario: (linkId: string) => void;
 }) {
   const queryClient = useQueryClient();
+  const chaves = useRef(new Map<string, string>());
   const [notaPor, setNotaPor] = useState<Record<string, string>>({});
   const [payloadAberto, setPayloadAberto] = useState<Record<string, boolean>>({});
 
-  const { data: aprovacoes = [], error, isLoading, refetch } = useQuery({
+  const { data: todasAprovacoes = [], error, isLoading, refetch } = useQuery({
     queryKey: ["aprovacoes-explicadas"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("operator_approvals")
-        .select("*")
+        .select("*, client:profiles!operator_approvals_client_id_fkey(company_name,full_name)")
         .in("status", ["pendente", "adiado"])
         .order("created_at", { ascending: false })
         .limit(50);
@@ -109,22 +119,29 @@ export default function AprovacoesExplicadas({
     refetchInterval: 30_000,
   });
 
+  const aprovacoes = todasAprovacoes.filter(a => !filtroCliente || a.id === destaqueId || (a.client?.company_name || a.client?.full_name) === filtroCliente);
+
   const decidir = useMutation({
     mutationFn: async ({ id, decisao }: { id: string; decisao: string }) => {
-      const { data, error } = await (supabase as any).rpc("operator_approval_decidir", {
-        _approval_id: id,
-        _decisao: decisao,
-        _nota: notaPor[id]?.trim() || null,
-      });
+      const aprovacao = aprovacoes.find(a => a.id === id);
+      if (!aprovacao) throw new Error("Atualize a lista antes de decidir.");
+      const nota = notaPor[id]?.trim() || "";
+      const identidade = JSON.stringify([id, aprovacao.payload_version, decisao, nota]);
+      if (!chaves.current.has(identidade)) chaves.current.set(identidade, crypto.randomUUID());
+      const comando = comandoDaAprovacao(aprovacao, decisao, nota, chaves.current.get(identidade)!);
+      const { data, error } = await (supabase as any).rpc(comando.rpc, comando.args);
       if (error) throw new Error(error.message);
       return data;
     },
     onSuccess: (_d, vars) => {
       queryClient.invalidateQueries({ queryKey: ["aprovacoes-explicadas"] });
       queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
+      queryClient.invalidateQueries({ queryKey: ["execucao-pedidos"] });
+      queryClient.invalidateQueries({ queryKey: ["central-review-approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
       toast.success(
         vars.decisao === "aprovado"
-          ? "Aprovado. O agente só pode executar exatamente este payload."
+          ? "Aprovado. O envio ainda precisa ser executado e confirmado pelo agente."
           : vars.decisao === "rejeitado"
             ? "Rejeitado. O agente não executa e fica registrado o porquê."
             : vars.decisao === "alteracoes_pedidas"
@@ -132,7 +149,7 @@ export default function AprovacoesExplicadas({
               : "Adiado. Volta à fila até você decidir.",
       );
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+    onError: (e) => toast.error(centralReviewError(e)),
   });
 
   if (error) {
@@ -160,6 +177,8 @@ export default function AprovacoesExplicadas({
     >
       <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")} aria-label="Pedidos de aprovação">
         {aprovacoes.map((a, i) => {
+          const relatorio = a.payload?.report as Record<string, any> | undefined;
+          const destino = a.payload?.destination as Record<string, any> | undefined;
           const destacada = a.id === destaqueId;
           // Um primário por área (SISTEMA.md seção 6): o pedido em destaque
           // (ou o primeiro, sem destaque) leva o verde; os outros, borda.
@@ -184,11 +203,12 @@ export default function AprovacoesExplicadas({
                   </span>
                 )}
                 <span className={juntar(texto.auxiliar, "min-w-0")}>
-                  pedido por <strong className="font-medium text-foreground/90">{nomesDeAgentes.get(a.operator_id) || "operador"}</strong>
+                  pedido por <strong className="font-medium text-foreground/90">{a.origin === "central" ? "Central do cliente" : nomesDeAgentes.get(a.operator_id) || "agente"}</strong>
                   {" · "}{quando(a.created_at)}
                 </span>
               </div>
 
+              {a.client && <p className="mt-2 text-[12px] font-medium text-primary">{a.client.company_name || a.client.full_name}</p>}
               <p className="mt-2 text-[14px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{a.o_que}</p>
               {a.por_que && <p className={juntar(texto.corpo, "mt-1 text-foreground/85")}>{a.por_que}</p>}
 
@@ -227,6 +247,17 @@ export default function AprovacoesExplicadas({
                 )}
               </div>
 
+              {relatorio && (
+                <section className="mt-3 space-y-3 rounded-lg border border-border bg-background p-4" aria-label="Conteúdo para aprovação">
+                  <h4 className="text-sm font-semibold">{String(relatorio.title || "Mensagem para o cliente")}</h4>
+                  <Campo rotulo="Canal">{destino?.channel === "whatsapp" ? "WhatsApp" : destino?.channel === "portal" ? "Portal do cliente" : a.destino}</Campo>
+                  <Campo rotulo="Destinatário">{typeof destino?.recipient === "string" ? destino.recipient : null}</Campo>
+                  {[["Mensagem", relatorio.summary], ["Destaques", relatorio.highlights], ["Próximos passos", relatorio.next_steps]].map(([nome, valor]) => typeof valor === "string" && valor.trim() ? (
+                    <div key={nome}><p className="text-xs font-medium text-muted-foreground">{nome}</p><p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">{valor}</p></div>
+                  ) : null)}
+                  {!relatorio.summary && <p className="text-sm text-warning">A mensagem ainda não foi preparada. Peça alterações antes de aprovar.</p>}
+                </section>
+              )}
               {temPayload && (
                 <div className="mt-2">
                   <button
@@ -236,7 +267,7 @@ export default function AprovacoesExplicadas({
                     className={juntar("inline-flex items-center rounded text-[12px] font-medium text-muted-foreground hover:text-foreground", foco)}
                   >
                     <ChevronDown className={juntar("mr-1 h-3 w-3 transition-transform", payloadAberto[a.id] && "rotate-180")} aria-hidden="true" />
-                    ver exatamente o que será executado se você aprovar (uso técnico)
+                    Detalhes técnicos da versão
                   </button>
                   {payloadAberto[a.id] && (
                     <pre className={juntar(superficie.poco, "mt-1 overflow-x-auto p-2 text-[11px] leading-relaxed text-foreground/90")}>
@@ -289,7 +320,7 @@ export default function AprovacoesExplicadas({
                   >
                     <PencilLine className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Pedir alterações
                   </button>
-                  {a.status !== "adiado" && (
+                  {a.status !== "adiado" && a.origin !== "central" && !a.report_id && (
                     <button
                       type="button"
                       disabled={decidir.isPending}

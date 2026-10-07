@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Bot, Clock, PauseCircle, ShieldAlert, UserRound } from "lucide-react";
+import { Bot, FolderOpen, Clock, PauseCircle, ShieldAlert, UserRound } from "lucide-react";
 import { esperandoVoce, precisaDecisao } from "@/lib/precisaDecisao";
 import { etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 import TituloRecolhivel from "@/components/sistema/TituloRecolhivel";
@@ -148,7 +148,9 @@ export default function Escritorio({
   humanos,
   aoAbrirAgente,
   aoAbrirTarefa,
+  pendencias,
 }: {
+  pendencias?: number;
   agentes: AgenteNoEscritorio[];
   trabalhos: TrabalhoDoAgente[];
   /** task_id -> { title, project, assigned_to } */
@@ -202,11 +204,11 @@ export default function Escritorio({
     setEscolhas((atual) => ({ ...atual, [area]: !(atual[area] ?? urgencia < 90) }));
 
   const totalEsperandoVoce = useMemo(
-    () => trabalhos.filter(
+    () => pendencias ?? trabalhos.filter(
       // Concluido nao espera nada, mesmo que tenha esperado no passado.
       (t) => esperandoVoce(t),
     ).length,
-    [trabalhos],
+    [trabalhos, pendencias],
   );
 
   return (
@@ -233,11 +235,12 @@ export default function Escritorio({
       {areas.map(({ area, agentes: doGrupo, urgencia }) => {
         const aberta = estaAberta(area, urgencia);
         return (
-        <section key={area} aria-label={area} className="min-w-0">
+        <section key={area} aria-label={area} className="min-w-0 rounded-lg border border-border p-3">
           {/* O nome da área, discreto: separa sem competir com a lista. O
               título recolhe pelo componente do sistema (setinha + título); a
               contagem fica à vista nos dois estados. */}
           <div className="flex min-w-0 items-center">
+            <FolderOpen className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
             <TituloRecolhivel
               titulo={area}
               recolhido={!aberta}
@@ -322,6 +325,7 @@ export default function Escritorio({
                       </span>
                     </div>
 
+                    {!tarefa && emFoco?.last_action && <p className="mt-2 text-[13px] text-foreground/85">{emFoco.last_action}</p>}
                     {/* PARA QUEM. Era isto que faltava para o quadro fazer sentido. */}
                     {tarefa && (
                       <button

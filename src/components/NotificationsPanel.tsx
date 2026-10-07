@@ -1,6 +1,7 @@
+import ContextoDoAviso, { destinoOperacional } from "@/components/execucao/ContextoDoAviso";
 import { useState } from "react";
-import { useNotifications } from "@/hooks/useSupabaseData";
-import { useAvisosNaoLidos, useContagemDeNaoLidas, marcarTodasComoLidas } from "@/hooks/useAvisos";
+import { useAvisosPorArea, marcarAreaComoLida, type AreaDosAvisos } from "@/hooks/useAvisosPorArea";
+
 import { useAuth } from "@/contexts/AuthContext";
 import {
   AlertTriangle, BarChart3, Bell, Bot, Briefcase, CheckCircle, CreditCard, FileArchive,
@@ -83,23 +84,23 @@ interface Props {
 
 export default function NotificationsPanel({ open, onOpenChange }: Props) {
   const { user, profile } = useAuth();
-  const { data: notifications } = useNotifications();
+  const [area, setArea] = useState<AreaDosAvisos>("painel");
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [tab, setTab] = useState<"all" | "unread">("all");
   const [avisosDoNavegador, setAvisosDoNavegador] = useState<EstadoDoAviso>(() => estadoDosAvisos());
-  const { data: contagem } = useContagemDeNaoLidas();
-  const { data: naoLidas } = useAvisosNaoLidos(open && tab === "unread");
+  const { data: avisos, isError, refetch } = useAvisosPorArea(area, tab === "unread", open);
   const papel = profile?.role || "client";
   const eEquipe = ["admin", "manager", "design", "traffic"].includes(papel);
   const eAdmin = papel === "admin";
 
   const handleClick = async (n: any) => {
     if (!n.read) {
-      await supabase.from("notifications").update({ read: true }).eq("id", n.id);
+      const { error } = await supabase.from("notifications").update({ read: true }).eq("id", n.id);
+      if (error) toast.error("O aviso abriu, mas não foi possível marcá-lo como lido.");
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
-    const destination = safeInternalPath(n.link);
+    const destination = safeInternalPath(typeof n.link === "string" ? destinoOperacional(n.link) : n.link);
     if (destination) {
       navigate(destination);
       onOpenChange(false);
@@ -119,21 +120,17 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
   const markAllRead = async () => {
     if (!user?.id || unreadCount === 0) return;
     try {
-      await marcarTodasComoLidas(user.id);
+      await marcarAreaComoLida(user.id, area);
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      toast.success("Todas marcadas como lidas");
+      toast.success(`Avisos de ${area === "agentes" ? "agentes" : "painel"} marcados como lidos`);
     } catch {
       toast.error("Não consegui marcar agora. Tente de novo.");
     }
   };
 
-  const listaCarregada = notifications || [];
-  const unreadCount = typeof contagem === "number"
-    ? contagem
-    : listaCarregada.filter((n: any) => !n.read).length;
-  const displayNotifs = tab === "unread"
-    ? (naoLidas || listaCarregada.filter((n: any) => !n.read))
-    : listaCarregada;
+  const listaCarregada = avisos?.lista || [];
+  const unreadCount = avisos?.naoLidas || 0;
+  const displayNotifs = listaCarregada;
   const groups = groupNotifications(displayNotifs);
 
   return (
@@ -150,6 +147,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
       abaixoDoTitulo={
         // Filtro (segmentado do sistema, sem pílulas verdes) e "marcar todas" na mesma linha.
         <div className="space-y-3">
+          {eEquipe && <SeletorCompacto rotulo="Área das notificações" modo="segmentado" valor={area} onEscolher={v => setArea(v as AreaDosAvisos)} opcoes={[{ valor: "painel", rotulo: "Painel" }, { valor: "agentes", rotulo: "Agentes e execução" }]} />}
           <div className="flex min-w-0 items-center">
             <SeletorCompacto
               rotulo="Filtrar notificações"
@@ -163,7 +161,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
             />
             {unreadCount > 0 && (
               <button type="button" onClick={markAllRead} className={juntar(botao.discreto, "ml-auto h-8 px-2 text-[12px] text-primary hover:text-primary")}>
-                Marcar todas como lidas
+                Marcar esta aba como lida
               </button>
             )}
           </div>
@@ -202,7 +200,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
     >
         {/* Lista: a única rolagem da janela */}
         <div className="pb-2">
-          {groups.length === 0 ? (
+          {isError ? <button type="button" className="m-5 text-[13px] text-warning" onClick={() => void refetch()}>Não foi possível ler os avisos. Tentar novamente</button> : groups.length === 0 ? (
             <p className="py-8 text-center text-[13px] text-muted-foreground">Nenhuma notificação.</p>
           ) : (
             groups.map((group) => (
@@ -228,6 +226,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
                           <p className={`text-[13px] leading-snug ${n.read ? "text-muted-foreground" : "text-foreground font-medium"}`}>
                             {n.message}
                           </p>
+                          {area === "agentes" && n.link && <ContextoDoAviso link={n.link} />}
                           <p className="text-[11px] text-muted-foreground/60 mt-1">{timeAgo(n.created_at)}</p>
                           {n.link && (
                             <p className="text-[11px] text-primary mt-1">{getLinkLabel(n)}</p>
