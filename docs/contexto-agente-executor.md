@@ -41,3 +41,11 @@ O Plano do cliente lê URLs coladas no pedido antes da chamada do modelo, indepe
 - Textos extraídos passam pela mesma sanitização, persistência por cliente, histórico e arquivo no Workspace → Contexto do cliente → Documentos. Guardam URL de origem e limites da leitura. Não afirmam baixar o original de um site.
 - O prompt distingue material do cliente, referência, concorrente e evento. Fontes externas são dados não confiáveis; não autorizam ações e não substituem fatos aprovados sem evidência.
 - Reverter este lote desfaz o módulo `links-do-contexto`, sua chamada em `conversarNoPlano`, o roteamento/ajuda do frontend e as duas orientações adicionais do prompt. Nenhuma migração ou mudança nas Mesas de criação.
+
+## Resposta do Plano após timeout (07/10/2026)
+
+O erro observado no pedido com imagens era `provedor_timeout`: o corpo da resposta OpenRouter não terminou no prazo de 110 s. A configuração anterior sempre preferia `high` e oferecia busca web desde a primeira chamada quando o checkbox estava ligado.
+
+O Plano preserva o modelo escolhido e passa a preferir `low` (ou o nível aceito mais próximo). A primeira chamada usa materiais/contexto sem web; o modelo solicita `pesquisa: {consulta, motivo}` somente para lacunas externas concretas. Código exige a permissão do usuário e habilita a ferramenta em no máximo uma rodada adicional, dentro das duas rodadas de leitura já existentes. Sem lacuna, conclui na primeira chamada. Memória, modelo e inventário de ações são buscados em paralelo com os demais dados. O limite de resposta não foi aumentado; não há retry automático pago por timeout.
+
+Falha antes da conclusão não executa o plano e devolve orientação para reenviar o texto/anexos preservados pela tela existente. Não promete estorno nem ausência de custo do fornecedor. Toda ação continua depois da resposta completa e normalizada, com recibos e Desfazer. Este ajuste é só backend, compatível com o frontend publicado.
