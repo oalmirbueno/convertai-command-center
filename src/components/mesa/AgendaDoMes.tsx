@@ -16,6 +16,7 @@ import {
 import { BotaoDeApagar, useApagarConteudo, type ResultadoDoApagar } from "./ApagarConteudo";
 import { AvisoDeErro, BotaoComCusto, avisarCustoReal } from "./Custo";
 import { useMesa } from "./MesaContexto";
+import { FORMATOS_DE_VIDEO_NO_ESTUDIO } from "./modoDaPauta";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import Painel from "@/components/sistema/Painel";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
@@ -63,6 +64,8 @@ import {
  * O mês mora no endereço (?mes=AAAA-MM-01), igual às outras abas, e a
  * seleção fica guardada por cliente e mês na sessão do navegador.
  */
+
+const abreNoEstudio = (tipo: string) => ehFormatoDeArte(tipo) || FORMATOS_DE_VIDEO_NO_ESTUDIO.includes(tipo) || ["photo", "photos", "photo_carousel"].includes(tipo);
 
 const MAX_COMPLETAR = 12;
 /** Quantas entradas cada dia mostra na grade do mês antes do "+N". */
@@ -207,7 +210,7 @@ function ItemSelecionado({
   onApagar?: (confirmarArte: boolean) => Promise<ResultadoDoApagar>;
 }) {
   const [aberto, setAberto] = useState(abertoDeInicio);
-  const deArte = ehFormatoDeArte(item.delivery_type);
+  const doEstudio = abreNoEstudio(item.delivery_type);
   return (
     <li className={juntar(superficie.poco, "min-w-0")}>
       <div className="flex min-w-0 items-start px-3 py-2.5">
@@ -242,7 +245,7 @@ function ItemSelecionado({
             </p>
           )}
           <div className="flex min-w-0 flex-wrap items-center">
-            {deArte ? (
+            {doEstudio ? (
               onAbrir && (
                 <Button type="button" size="sm" variant="outline" className="mb-1 mr-2 h-8 text-[12px]" onClick={onAbrir}>
                   <Palette className="mr-1.5 h-3.5 w-3.5" /> Abrir no Estúdio
@@ -429,7 +432,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
     }
   };
 
-  const unicoDeArte = deArte.length === 1 ? deArte[0] : null;
+  const unicoDoEstudio = escolhidos.length === 1 && abreNoEstudio(escolhidos[0].delivery_type) ? escolhidos[0] : null;
 
   /** Cartões de um dia: itens primeiro, depois os posts soltos. */
   const entradasDoDia = (dia: string, tamanho: TamanhoDoCartao, limitar: boolean) => {
@@ -774,8 +777,8 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
                   avisarCustoReal(`${n} roteiro(s) pronto(s), ${m} direção(ões) pronta(s) no Estúdio`, data, mesa.atualizarCusto);
                 }}
               />
-              {unicoDeArte && (
-                <Button type="button" size="sm" variant="outline" className="my-0.5 mr-1.5 h-8 text-[12px]" onClick={() => abrirNoEstudio(unicoDeArte)}>
+              {unicoDoEstudio && (
+                <Button type="button" size="sm" variant="outline" className="my-0.5 mr-1.5 h-8 text-[12px]" onClick={() => abrirNoEstudio(unicoDoEstudio)}>
                   <Palette className="mr-1.5 h-3.5 w-3.5" /> Abrir no Estúdio
                 </Button>
               )}
@@ -800,9 +803,9 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
                 {demais && <p className="text-[12px] text-muted-foreground">O agente completa até {MAX_COMPLETAR} itens por vez. Tire alguns da seleção.</p>}
                 {foraDoEstudio > 0 && (
                   <p className="flex items-center text-[12px] text-muted-foreground">
-                    {foraDoEstudio} item(ns) fora do estúdio
+                    {foraDoEstudio} item(ns) para ajustar pelo Agente do mês
                     <AjudaRecolhida className="ml-1" rotulo="O que o agente completa">
-                      O agente completa só carrossel, post estático e design.
+                      Este atalho completa carrossel, post estático e design. Para vídeos, use o Agente do mês ou abra a pauta no Estúdio.
                     </AjudaRecolhida>
                   </p>
                 )}
@@ -820,7 +823,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
                   posts={postsPorItem.get(i.id) || []}
                   abertoDeInicio={escolhidos.length === 1}
                   onTirar={() => alternar(i.id)}
-                  onAbrir={ehFormatoDeArte(i.delivery_type) ? () => abrirNoEstudio(i) : null}
+                  onAbrir={abreNoEstudio(i.delivery_type) ? () => abrirNoEstudio(i) : null}
                   onApagar={async (confirmarArte) => {
                     const r = await apagarConteudo.daAgenda(i.id, i.title, confirmarArte);
                     if (r.ok) mudarSelecao((s) => s.filter((x) => x !== i.id));
