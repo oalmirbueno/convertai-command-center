@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { promptAtualDoMes, podeAplicarDireto, atualizarConfirmado } from "../../supabase/functions/agente-calendario/execucao-do-mes";
-import { camposDoFormato, gravarPassosDoFormato, desfazerPassosDoFormato } from "../../supabase/functions/agente-calendario/mudanca-de-formato";
+import { camposDoFormato, tituloDaReescrita, gravarPassosDoFormato, desfazerPassosDoFormato } from "../../supabase/functions/agente-calendario/mudanca-de-formato";
 import { criarLoteNaAgenda } from "../../supabase/functions/agente-calendario/criar-lote-na-agenda";
 import { normalizarAcoesNaAgenda, pecasComApelido } from "../../supabase/functions/agente-calendario/acoes-agenda";
 import { modoDaPauta } from "@/components/mesa/modoDaPauta";
@@ -55,6 +55,10 @@ describe("auditoria do mês: formato e execução real", () => {
     expect(v.novo.video.estilo).toBe("jardim");
     expect(v.novo.cards).toEqual([]);
     expect(modoDaPauta(v.tarefa, { direcao: v.direcao })).toBe("video");
+  });
+  it("reescrever uma foto preserva sua identificação no calendário", () => {
+    expect(tituloDaReescrita("Jardim limpo", { formato: "foto" }, task)).toBe("Peça de foto: Jardim limpo");
+    expect(tituloDaReescrita("Novo vídeo", { formato: "video" }, task)).toBe("Novo vídeo");
   });
   it("não relata sucesso se o banco não retornou uma linha", async () => {
     await expect(atualizarConfirmado({ select: async () => ({ data: [], error: null }) })).rejects.toThrow("não foi confirmada");

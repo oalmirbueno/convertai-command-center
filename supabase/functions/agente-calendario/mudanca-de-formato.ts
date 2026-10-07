@@ -41,3 +41,9 @@ async function aplicarPasso(db: any, p: PassoDoFormato, clientId: string, desfaz
 export async function desfazerPassosDoFormato(db: any, passos: PassoDoFormato[], clientId: string) {
   for (const p of passos.slice().reverse()) await aplicarPasso(db, p, clientId, true);
 }
+
+/** O prefixo formal identifica fotos no enum legado da agenda. Uma reescrita não pode removê-lo. */
+export function tituloDaReescrita(titulo: string, item: any, tarefa: { title: string }): string {
+  const foto = item?.formato === "foto" || (!item && tarefa.title.startsWith("Peça de foto: "));
+  return titulo && foto ? `Peça de foto: ${titulo.replace(/^Peça de foto: /, "")}` : titulo;
+}

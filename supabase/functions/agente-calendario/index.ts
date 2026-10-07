@@ -1,7 +1,7 @@
 import { PERGUNTAS_DO_MES, contratoDoPedido, pecasNoEscopo, formatosAusentes, PRIORIDADE_DO_PEDIDO } from "./pedido-do-mes.ts";
 import { gravarAnexosConfirmados } from "./gravacao-confirmada.ts";
 import { criarLoteNaAgenda } from "./criar-lote-na-agenda.ts";
-import { camposDoFormato, gravarPassosDoFormato, desfazerPassosDoFormato, type PassoDoFormato } from "./mudanca-de-formato.ts";
+import { camposDoFormato, tituloDaReescrita, gravarPassosDoFormato, desfazerPassosDoFormato, type PassoDoFormato } from "./mudanca-de-formato.ts";
 import { promptAtualDoMes, CAPACIDADES_DO_MES, podeAplicarDireto, atualizarConfirmado, ErroDeGravacao } from "./execucao-do-mes.ts";
 import { normalizarVideoDaPauta, ESQUEMA_VIDEO_DA_PAUTA, ORIENTACAO_VIDEO_DA_PAUTA, type DirecaoDeVideoDaPauta } from "../_shared/video-da-pauta.ts";
 /**
@@ -6961,6 +6961,7 @@ async function reescreverTextos(servico: SupabaseClient, clientId: string, edico
         if (!titulo && ed.campos.tema) titulo = ed.campos.tema;
         descricao = descricaoComTextosNovos(tarefa.description, ed.campos);
       }
+      titulo = tituloDaReescrita(titulo, itemAntes, tarefa);
       let post: AntesDoTexto["post"] = null;
       if (x.postId && (titulo || ed.campos.copy)) {
         const { data: p } = await servico.from("editorial_posts").select("title, default_caption").eq("id", x.postId).maybeSingle();
