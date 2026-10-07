@@ -1,11 +1,16 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Expand, FileText } from "lucide-react";
 import { resolveFileUrl } from "@/lib/fileUrls";
 import { supabase } from "@/integrations/supabase/client";
 import { destinoDaEvidencia } from "@/lib/execucaoApresentacao";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import FilePreviewContent from "@/components/shared/FilePreviewContent";
 
-export default function EvidenciaVisual({ url, nome = "Abrir comprovação" }: { url: string; nome?: string }) {
+export default function EvidenciaVisual({ url, nome = "Comprovação" }: { url: string; nome?: string }) {
+  const [aberto, setAberto] = useState(false);
   const tipo = destinoDaEvidencia(url);
-  const { data: assinado, isError } = useQuery({
+  const { data: assinado, isError, refetch } = useQuery({
     queryKey: ["evidencia-assinada", url], enabled: tipo === "privado" || tipo === "arquivo", staleTime: 240_000,
     queryFn: async () => {
       if (tipo === "arquivo") {
@@ -18,18 +23,28 @@ export default function EvidenciaVisual({ url, nome = "Abrir comprovação" }: {
       return { href: await resolveFileUrl({ fileUrl: url, expiresIn: 600 }), nome: url };
     },
   });
-  if (!tipo) return <p className="whitespace-pre-wrap break-words text-[13px] text-muted-foreground">{url}</p>;
-  if (isError) return <p className="text-[12px] text-warning">Não foi possível abrir esta comprovação com seu acesso atual.</p>;
-  const href = tipo === "privado" || tipo === "arquivo" ? assinado?.href : url;
-  if (!href) return <p className="text-[12px] text-muted-foreground">Carregando comprovação…</p>;
+  if (!tipo) return <p className="text-xs text-muted-foreground">A comprovação precisa de um arquivo ou link válido.</p>;
+  if (isError) return <button onClick={() => void refetch()} className="text-xs text-warning">Não foi possível abrir com seu acesso atual. Tentar novamente</button>;
+  const href = tipo === "web" ? url : assinado?.href;
+  if (!href) return <p className="text-xs text-muted-foreground">Carregando comprovação…</p>;
   const formato = assinado?.nome || url;
   const imagem = /\.(png|jpe?g|webp|gif)(?:[?#]|$)/i.test(formato);
-  const video = /\.(mp4|webm)(?:[?#]|$)/i.test(formato);
-  return <div className="min-w-0 space-y-1">
-    {video && <video controls preload="metadata" src={href} className="max-h-72 w-full rounded-md bg-background object-contain" />}
-    <a href={href} target="_blank" rel="noopener noreferrer" className="block rounded-md text-[13px] text-primary underline-offset-2 hover:underline">
-      {imagem && <img src={href} loading="lazy" referrerPolicy="no-referrer" alt={nome} className="mb-1 max-h-72 w-full rounded-md border border-border bg-background object-contain" />}
-      {nome}
-    </a>
-  </div>;
+  const arquivo = tipo !== "web" || /\.(png|jpe?g|webp|gif|pdf|mp4|webm|mp3|wav|docx?|xlsx?|pptx?)(?:[?#]|$)/i.test(formato);
+  const titulo = nome === "Arquivo da execução" && assinado?.nome ? assinado.nome : nome;
+  return <>
+    <button type="button" onClick={() => setAberto(true)} className="group block w-full overflow-hidden rounded-xl border border-border bg-background text-left hover:border-primary/60" aria-label={`Ver ${titulo}`}>
+      {imagem && <img src={href} loading="lazy" referrerPolicy="no-referrer" alt={titulo} className="max-h-[400px] w-full object-contain" />}
+      <span className="flex items-center gap-2 px-3 py-2 text-sm"><FileText className="h-4 w-4 shrink-0 text-primary" /><span className="min-w-0 flex-1 truncate">{titulo}</span><Expand className="h-4 w-4 text-muted-foreground" /></span>
+    </button>
+    <Dialog open={aberto} onOpenChange={setAberto}>
+      <DialogContent className="max-h-[95vh] w-[96vw] max-w-6xl overflow-y-auto">
+        <DialogTitle className="pr-8 break-words">{titulo}</DialogTitle>
+        <DialogDescription>{imagem ? "Clique na imagem para ampliar ou reduzir." : "Visualização dentro do painel."}</DialogDescription>
+        {arquivo ? <FilePreviewContent fileName={formato} fileUrl={href} fileId={tipo === "arquivo" ? url.slice("aceleriq-file://".length) : undefined} /> : <>
+          <iframe title={titulo} src={href} sandbox="allow-scripts allow-forms allow-popups" referrerPolicy="no-referrer" className="h-[70vh] w-full rounded-lg border border-border bg-white" />
+          <p className="text-xs text-muted-foreground">Alguns sites bloqueiam a exibição incorporada. <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary">Abrir o site</a></p>
+        </>}
+      </DialogContent>
+    </Dialog>
+  </>;
 }

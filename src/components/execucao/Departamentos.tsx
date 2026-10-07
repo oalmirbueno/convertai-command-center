@@ -1,3 +1,4 @@
+import CreateProjectModal from "@/components/admin/CreateProjectModal";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus } from "lucide-react";
@@ -7,6 +8,7 @@ import { JanelaCentral, botao, campo } from "@/components/sistema";
 
 export default function Departamentos({ agentes }: { agentes: { slug: string; display_name: string; area?: string | null }[] }) {
   const [aberto, setAberto] = useState(false);
+  const [projetoAberto, setProjetoAberto] = useState(false);
   const [agente, setAgente] = useState("");
   const [nome, setNome] = useState("");
   const qc = useQueryClient();
@@ -20,6 +22,8 @@ export default function Departamentos({ agentes }: { agentes: { slug: string; di
     onError: e => toast.error(e.message),
   });
   return <>
+    <button type="button" className={botao.secundario} onClick={() => setProjetoAberto(true)}><FolderPlus className="mr-1.5 h-3.5 w-3.5" />Novo projeto</button>
+    <CreateProjectModal open={projetoAberto} onClose={() => setProjetoAberto(false)} />
     <button type="button" className={botao.secundario} onClick={() => setAberto(true)}><FolderPlus className="mr-1.5 h-3.5 w-3.5" />Departamentos</button>
     <JanelaCentral aberta={aberto} onMudar={setAberto} titulo="Organizar departamentos" largura="md">
       <form className="space-y-4" onSubmit={e => { e.preventDefault(); salvar.mutate(); }}>

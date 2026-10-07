@@ -1,3 +1,4 @@
+import { fotosOriginaisDoAjuste, pedidoDiretoNoAjuste } from "./identidade-no-ajuste.ts";
 /**
  * estudio-arte: diretor de arte e gerador da Mesa do cliente
  * (docs/mesa-do-cliente/SPEC.md, secao 5).
@@ -6988,7 +6989,7 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
       try {
         referencias.push(await imagemDaReferencia(ref));
         idsReferencias.push(ref.id);
-        legendas.push(`imagem ${referencias.length + 1}: referência ESCOLHIDA PELA EQUIPE: ao aplicar o ajuste, siga de perto a estrutura de layout, a hierarquia, a escala da tipografia e o tratamento desta peça, com as cores, as fontes e a logo desta marca; não copie o texto nem a marca dela`);
+        legendas.push(`imagem ${referencias.length + 1}: referência ESCOLHIDA PELA EQUIPE: use somente para a mudança solicitada. Preserve composição, pessoa, texto e elementos não mencionados no pedido; não copie rosto, texto ou marca desta referência`);
       } catch (e) {
         // Referência sem arquivo fica de fora do ajuste. Frente FS: com log e aviso (o ajuste não segue ela).
         if (erroQueSobe(e)) throw e;
@@ -7011,6 +7012,35 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
     legendas.push(`imagem ${referencias.length + 1}: ${legenda}`);
     if (x.papel === "rosto") comRostoAnexado = true;
   });
+  // O ajuste precisa da identidade original; editar apenas uma imagem gerada acumula desvio do rosto.
+  const rostoAnterior = (atualVersao as unknown as { rosto?: Record<string, unknown> }).rosto;
+  let fontesDoRosto = comRostoAnexado ? [] : fotosOriginaisDoAjuste(rostoAnterior);
+  if (!auto && !comRostoAnexado && !fontesDoRosto.length) {
+    const livres = (card.fotos_livres || []).filter(f => usoDaFotoLivre(f) === "rosto" && !f.recortada);
+    fontesDoRosto = livres.map((f, i) => ({ bucket: "mesa", caminho: f.caminho, nome: `identidade-da-lamina-${i + 1}` }));
+    if (usoDoAcervo(card) === "rosto" && card.imagens_ids?.length) {
+      const fotos = await imagensDoAcervo(t.client_id, card.imagens_ids);
+      fontesDoRosto.unshift(...fotos.slice(0, 1).map(f => ({ bucket: f.storage_bucket || "mesa", caminho: f.storage_path, nome: "identidade-do-acervo" })));
+    }
+  }
+  fontesDoRosto = fontesDoRosto.slice(0, 3);
+  const originaisDoRosto = await Promise.all(fontesDoRosto.map(f => imagemReduzida(f.bucket, f.caminho, f.nome)));
+  // Antes das referências de estilo: a identidade não pode perder a vaga para decoração.
+  referencias.unshift(...originaisDoRosto);
+  if (originaisDoRosto.length) {
+    for (let i = 1; i < legendas.length; i++) legendas[i] = legendas[i].replace(/^imagem (\d+):/, (_, n) => `imagem ${Number(n) + originaisDoRosto.length}:`);
+    legendas.splice(1, 0, ...originaisDoRosto.map((_, i) => `imagem ${i + 2}: rosto ORIGINAL da pessoa. Preserve identidade, idade, traços e proporções; a arte anterior não substitui estas fotos.`));
+  }
+  if (comRostoAnexado) {
+    const rostosNovos = anexosDoAjuste.filter(x => x.papel === "rosto");
+    const idsNovos = rostosNovos.flatMap(x => x.imagem_id ? [x.imagem_id] : []);
+    const acervoNovo = idsNovos.length ? await imagensDoAcervo(t.client_id, idsNovos) : [];
+    fontesDoRosto = rostosNovos.flatMap(x => {
+      const f = acervoNovo.find(f => f.id === x.imagem_id);
+      return f ? [{ bucket: f.storage_bucket || "mesa", caminho: f.storage_path, nome: x.nome }] : x.caminho ? [{ bucket: "mesa", caminho: x.caminho, nome: x.nome }] : [];
+    }).slice(0, 3);
+  }
+  const temIdentidadeNoAjuste = comRostoAnexado || originaisDoRosto.length > 0;
   // A edição mantém o formato da versão editada.
   const tamanhoAtual = String((atualVersao as { tamanho?: string }).tamanho || (card.layout ? quadro.tamanho : TAMANHO_2X3));
   const dims = dimensoesPng(atual);
@@ -7026,9 +7056,9 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
     naEmenda
       ? `${NAO_REENQUADRAR} As faixas das bordas esquerda e direita (${Math.round(INTERIOR_DA_LAMINA.x0 * 100)}% de cada lado) emendam com as lâminas vizinhas: não mude nada nelas. A cena é o fundo contínuo e não muda; o texto continua na mesma área da lâmina.`
       : "",
-    instrucaoEdicao,
+    pedidoDiretoNoAjuste(pedido, instrucaoEdicao, auto ? "" : preferencias),
     // Frente RO, fase 2: rosto anexado no Ajustar = só a identidade (a frase do dono).
-    comRostoAnexado ? linhasDaIdentidadeDaFoto().join("\n") : "",
+    temIdentidadeNoAjuste ? linhasDaIdentidadeDaFoto().join("\n") : "",
     regrasDeRender(base, cardAjustado, legendas, levaLogo(base, ordem) ? "manter" : false, false, naEmenda),
     marcaDaVersao.recorte ? "A pessoa ou o produto recortado desta lâmina fica exatamente como está, no mesmo lugar e tamanho; nada por cima dele." : "",
   ].filter(Boolean).join("\n\n");
@@ -7173,6 +7203,7 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
       ...logoDoAjuste,
       ...(emenda ?? {}),
       ...acabamentoDoAjuste,
+      ...(fontesDoRosto.length ? { rosto: { ...rostoAnterior, aplicado: true, fotos_usadas: fontesDoRosto.map(({ bucket, caminho }) => ({ bucket, caminho })), fotos: fontesDoRosto.length } } : {}),
       ...(auto ? { autocorrecao: auto } : {}),
       instrucao_edicao: instrucaoEdicao,
       // Frente AG: o que o leitor entendeu e o que saiu do texto combinado (letras da logo, do produto, fato novo).

@@ -1,3 +1,4 @@
+import { organizarArquivosDaExecucao } from "./arquivos-da-execucao.ts";
 /**
  * Operadores internos (Hermes) — a ponte entre execução e painel.
  *
@@ -343,6 +344,7 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
         tarefa: t.title,
         projeto: projeto?.name ?? null,
         cliente: cliente ? (texto(cliente.company_name) ?? texto(cliente.full_name)) : null,
+        client_id: projeto?.client_id ?? null,
         prazo: t.due_date ?? null,
         coluna: t.status,
         tem_responsavel_humano: Boolean(t.assigned_to),
@@ -460,6 +462,7 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
         deep_link: deepLinkDoVinculo(texto(l.id), texto(runDoVinculo?.id)),
         projeto: projeto?.name ?? null,
         cliente: cliente ? (texto(cliente.company_name) ?? texto(cliente.full_name)) : null,
+        client_id: projeto?.client_id ?? null,
         // O responsável HUMANO, sempre visível e nunca alterado por aqui.
         responsavel_humano: t?.assigned_to ? humanos.get(String(t.assigned_to)) ?? null : null,
         status: l.status,
@@ -957,18 +960,19 @@ export async function operatorDiary(input: {
       _attachments: progressDetail({ attachments: input.attachments }).attachments || [],
     }));
     if (error) throw new Error(`operator_participar: ${error.message}`);
-    return data;
+    const workspace = await organizarArquivosDaExecucao(db(), input.link_id, input.attachments || []).catch(() => ({ organizados: 0, avisos: ["O diário foi salvo; a organização dos arquivos não foi confirmada no Workspace."] }));
+    return { ...data, workspace };
   }
 
   const limit = Math.min(Math.max(Number(input.limit) || 50, 1), READ_LIMITS.maxPageSize);
   const { data, error } = await comPrazo(db().from('operator_participations')
     .select('id, entry_type, title, body, attachments, author_kind, author_id, operator_id, created_at')
     .eq('task_link_id', input.link_id)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(limit));
   if (error) throw new Error(`operator_participations: ${error.message}`);
 
-  const linhas = (data ?? []) as Array<Record<string, unknown>>;
+  const linhas = [...(data ?? [])].reverse() as Array<Record<string, unknown>>;
 
   // Nome de autor resolvido aqui para o leitor nao receber UUID cru.
   const humanos = [...new Set(linhas.map((l) => texto(l.author_id)).filter(Boolean))] as string[];
