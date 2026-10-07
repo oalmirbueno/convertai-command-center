@@ -7,9 +7,9 @@ export default function RelatorioVisual({ vinculos, runs, agentes, tarefas, aoAb
   tarefas: Map<string, any>; aoAbrir: (id: string, titulo: string) => void;
 }) {
   const grupos = [
-    { nome: "Em andamento", icone: Clock, lista: vinculos.filter(v => ["queued", "in_progress"].includes(v.status)) },
-    { nome: "Precisa de você", icone: CircleAlert, lista: vinculos.filter(v => ["blocked", "awaiting_input", "review"].includes(v.status)) },
-    { nome: "Concluído com prova", icone: CheckCircle2, lista: vinculos.filter(v => v.status === "done" && v.last_evidence) },
+    { nome: "Tarefas em andamento", icone: Clock, lista: vinculos.filter(v => ["queued", "in_progress"].includes(v.status)) },
+    { nome: "Tarefas para revisar ou destravar", icone: CircleAlert, lista: vinculos.filter(v => ["blocked", "awaiting_input", "review"].includes(v.status)) },
+    { nome: "Tarefas concluídas com prova", icone: CheckCircle2, lista: vinculos.filter(v => v.status === "done" && v.last_evidence) },
   ];
   const recentes = runs.filter(r => Date.parse(r.started_at) >= Date.now() - 7 * 86400000);
   const incidentes = recentes.filter(r => ["failed", "timeout"].includes(r.status));

@@ -6,6 +6,7 @@ export interface OperatorProgressDetail {
 }
 
 export function evidenceLocation(raw: string): string {
+  if (/^aceleriq-file:\/\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(raw)) return raw;
   if (/^mcp-files:\/\/[a-zA-Z0-9_/-]+\.[a-zA-Z0-9]+$/.test(raw) && !raw.includes('..')) return raw;
   if (/^files:\/\/task-attachments\/[a-f0-9-]{36}\//i.test(raw) && !raw.includes('..')) return raw;
   let u: URL;
