@@ -146,8 +146,8 @@ export default function AbaContexto() {
             </button>
           </div>
         )}
-        <ContextoAutomatico onIrPara={irPara} />
         {(!marca || marca.principal) && <CerebroDoCliente key={clientId} clientId={clientId} userId={userId} onRevisar={pedirAoAgente} />}
+        <ContextoAutomatico onIrPara={irPara} />
         <div className="min-w-0">
           <Hub
             id="ctx-plano"
