@@ -112,7 +112,15 @@ export function separarResposta(texto: string, opcoes: { fontesConhecidas?: stri
     const { blocos, recusados: r } = validarBlocos(json, { fontesConhecidas, hostsPermitidos: opcoes.hostsPermitidos });
     for (const x of r) recusados.push(x.motivo);
     // Fluxo é desenho do agente: sempre "Proposta" (estado do sistema vem de progresso/entrega, conferidos à parte).
-    const ajustados = blocos.map((b) => (b.tipo === "fluxo" ? { ...b, natureza: "proposta" as const, passos: b.passos.map((p) => ({ ...p, estado: "planejado" as const })) } : b));
+    // Sem fontes conhecidas (resposta não conferida no servidor), só fica o que não afirma dado: texto e fluxo.
+    // Entrega, progresso e arquivo precisam de id/estado conferidos (servidor), senão saem.
+    const semConferencia = !fontesConhecidas.length;
+    const ajustados = blocos
+      .filter((b) => {
+        if (semConferencia && (b.tipo === "entrega" || b.tipo === "progresso" || b.tipo === "arquivo")) { recusados.push(`${b.tipo} sem conferência no servidor`); return false; }
+        return true;
+      })
+      .map((b) => (b.tipo === "fluxo" ? { ...b, natureza: "proposta" as const, passos: b.passos.map((p) => ({ ...p, estado: "planejado" as const })) } : b));
     for (const b of ajustados) for (const f of ("fontes" in b && b.fontes) || []) fontes.add(String(f));
     if (ajustados.length) partes.push({ tipo: "blocos", blocos: ajustados });
   }

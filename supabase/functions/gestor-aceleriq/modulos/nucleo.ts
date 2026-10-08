@@ -299,7 +299,7 @@ ABRIR ("abrir")
 
 APRESENTAÇÃO ("blocos"; quase sempre [])
 - Só quando ajuda a entender. Nunca transforme toda resposta em cartão.
-- "fluxo": quando ele pedir um processo, plano, passo a passo ou diagrama. natureza "proposta" (é o seu desenho, não estado do sistema); estado só "planejado".
+- "fluxo": quando ele pedir um processo, plano, passo a passo ou diagrama. Se ele pedir DIAGRAMA, DESENHO ou FLUXO, inclua SEMPRE um bloco fluxo (além de qualquer tabela). natureza "proposta" (é o seu desenho, não estado do sistema); estado só "planejado".
 - "tabela": para comparar itens das FONTES (ex.: tarefas por estado, entregas por cliente). Cada célula sai do que está nas fontes, e o bloco cita em "fontes" os apelidos usados. Sem fonte, sem tabela.
 - Métricas e gráficos de contagem o sistema monta sozinho quando mostrar_numeros = true; não escreva números em bloco.
 
@@ -649,7 +649,9 @@ const ROTULO_DA_CONTAGEM: Array<[SecaoDaResposta, string]> = [
 async function blocosDaResposta(red: Redacao, fontes: Fonte[], contagem: Record<string, number>, o: { agencia: string | null; userId: string; avisos: string[]; recusados?: string[] }): Promise<BlocoDeResposta[]> {
   const saida: BlocoDeResposta[] = [];
   if (red.bruto && Array.isArray(red.bruto.blocos) && red.bruto.blocos.length) {
-    const { blocos, recusados } = validarBlocos({ blocos: red.bruto.blocos }, { fontesConhecidas: fontes.map((f) => f.apelido) });
+    // Apelido com sujeira do modelo ("F21»,") vira o apelido limpo; o que não for apelido sai na validação.
+    const limpos = (red.bruto.blocos as Array<Record<string, unknown>>).map((x) => (x && Array.isArray(x.fontes) ? { ...x, fontes: (x.fontes as unknown[]).map((f) => { const m = String(f).match(/[FLA]\d+/i); return m ? m[0].toUpperCase() : String(f); }) } : x));
+    const { blocos, recusados } = validarBlocos({ blocos: limpos }, { fontesConhecidas: fontes.map((f) => f.apelido) });
     if (recusados.length) {
       o.avisos.push(`${recusados.length} ${recusados.length === 1 ? "quadro saiu" : "quadros saíram"} na conferência (sem fonte ou fora do formato).`);
       o.recusados?.push(...recusados.map((r) => r.motivo));
