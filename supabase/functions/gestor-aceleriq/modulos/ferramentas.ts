@@ -119,7 +119,8 @@ export const PARA = {
   aprovar_solicitacao(bruto: unknown): string | null {
     const o = lerJson(bruto) || {};
     const nota = String(o.nota ?? "").trim().slice(0, 1500);
-    return JSON.stringify(nota ? { nota } : {});
+    // O escopo vai escrito no cartão de Confirmar: aprova esta versão, não envia nem publica.
+    return JSON.stringify({ escopo: "aprova esta versão; enviar ou publicar é etapa à parte", ...(nota ? { nota } : {}) });
   },
   pedir_alteracao(bruto: unknown): string | null {
     const o = lerJson(bruto);

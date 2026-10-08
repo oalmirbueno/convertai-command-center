@@ -93,9 +93,18 @@ function marcarBody(delta: number) {
 }
 
 /** Altura (px) da área para caber na janela a partir de onde ela começa; null abaixo de 1024 px. */
-export function alturaDaArea(alturaDaJanela: number, topoNaPagina: number): number {
-  return Math.max(ALTURA_MINIMA, Math.round(alturaDaJanela - topoNaPagina - FOLGA_EMBAIXO));
+export function alturaDaArea(alturaDaJanela: number, topoNaPagina: number, minima = ALTURA_MINIMA): number {
+  return Math.max(minima, Math.round(alturaDaJanela - topoNaPagina - FOLGA_EMBAIXO));
 }
+
+/**
+ * Dentro da Central (página embutida num quadro, 09/10/2026) a janela é o
+ * quadro, que pode ser baixo: o mínimo de 300 px empurrava a área para baixo
+ * do fim do quadro e cortava o fim (a rolagem parecia travada). Embutido, a
+ * área cabe no quadro; o mínimo só evita área de altura zero.
+ */
+const ALTURA_MINIMA_EMBUTIDA = 160;
+const embutida = () => typeof document !== "undefined" && !!document.body && document.body.hasAttribute("data-embutido");
 
 function useAlturaDaArea(largo: boolean): { ref: RefObject<HTMLDivElement>; altura: number | null; medir: () => void } {
   const ref = useRef<HTMLDivElement>(null);
@@ -110,7 +119,7 @@ function useAlturaDaArea(largo: boolean): { ref: RefObject<HTMLDivElement>; altu
     const rolador = typeof el.closest === "function" ? (el.closest(".mesa-tela-cheia") as HTMLElement | null) : null;
     const rolado = rolador ? rolador.scrollTop : window.pageYOffset || (document.documentElement && document.documentElement.scrollTop) || 0;
     const topo = el.getBoundingClientRect().top + rolado;
-    const nova = alturaDaArea(window.innerHeight || 800, topo);
+    const nova = alturaDaArea(window.innerHeight || 800, topo, embutida() ? ALTURA_MINIMA_EMBUTIDA : ALTURA_MINIMA);
     // Só muda quando a medida muda de verdade (tela parada = nada se mexe).
     setAltura((a) => (a !== null && Math.abs(a - nova) < 2 ? a : nova));
   }, []);

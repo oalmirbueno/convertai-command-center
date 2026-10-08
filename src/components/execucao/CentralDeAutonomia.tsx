@@ -1,6 +1,6 @@
-import { Fragment, type ReactNode, useEffect, useMemo, useState } from "react";
+import { Fragment, type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Bot, ChevronDown, ChevronRight, FileCheck2, LayoutGrid, Maximize2, MessagesSquare, Minimize2, NotebookPen, PanelRightOpen, Sparkles, X } from "lucide-react";
+import { BarChart3, Bot, ChevronDown, ChevronRight, FileCheck2, FileText, History, LayoutGrid, Maximize2, MessagesSquare, Minimize2, NotebookPen, PanelRightOpen, Scale, Sparkles, X } from "lucide-react";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { LateralEsquerda } from "@/components/workspace/LateralEsquerda";
 import { chamarFuncao } from "@/lib/mesa/api";
@@ -264,6 +264,22 @@ function useAlturaNoCelular(): number {
   return altura;
 }
 
+/** Largura atual de um elemento (ResizeObserver; sem ele, o resize da janela). */
+function useLargura(ref: RefObject<HTMLElement>): number {
+  const [largura, setLargura] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const medir = () => setLargura(el.getBoundingClientRect().width);
+    medir();
+    const RO = (window as unknown as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+    if (RO) { const o = new RO(medir); o.observe(el); return () => o.disconnect(); }
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  });
+  return largura;
+}
+
 /** Tirinha de 32 px (padrão da AreaDeTrabalho): o painel recolhido, nome em pé. Clicar abre. */
 function Tirinha({ rotulo, icone, onAbrir }: { rotulo: string; icone: ReactNode; onAbrir: () => void }) {
   return (
@@ -304,6 +320,10 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
   const [diario, setDiario] = useState(false);
   const [menuAberto, setMenuAberto] = useState(false);
   const alturaNoCelular = useAlturaNoCelular();
+  const refDaArea = useRef<HTMLElement>(null);
+  const larguraDaArea = useLargura(refDaArea);
+  // Área estreita: as abas viram ícones (nome no title e no leitor de tela), sem cortar palavra.
+  const areaEstreita = larguraDaArea > 0 && larguraDaArea < 360;
   const dados = useDadosDaCentral(periodo);
   const decisoesPendentes = dados.data?.aprovacoes ?? 0;
 
@@ -389,15 +409,15 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
     />
   ) : null;
 
-  const abasDaArea: Array<{ id: AbaDaArea; rotulo: string; contador?: number }> = [
-    { id: "resumo", rotulo: "Resumo" },
-    { id: "historico", rotulo: "Histórico" },
-    { id: "decisoes", rotulo: "Decisões", contador: decisoesPendentes },
-    { id: "arquivos", rotulo: "Arquivos" },
+  const abasDaArea: Array<{ id: AbaDaArea; rotulo: string; icone: typeof History; contador?: number }> = [
+    { id: "resumo", rotulo: "Resumo", icone: BarChart3 },
+    { id: "historico", rotulo: "Histórico", icone: History },
+    { id: "decisoes", rotulo: "Decisões", icone: Scale, contador: decisoesPendentes },
+    { id: "arquivos", rotulo: "Arquivos", icone: FileText },
   ];
   const ferramentaNaLateral = ferramenta && ferramenta.modo === "lateral" ? ferramenta : null;
   const area = (
-    <aside aria-label="Área ao lado das conversas" className={juntar(superficie.painel, "flex h-full min-h-0 min-w-0 flex-col overflow-hidden")}>
+    <aside ref={refDaArea} aria-label="Área ao lado das conversas" className={juntar(superficie.painel, "flex h-full min-h-0 min-w-0 flex-col overflow-hidden")}>
       {objeto ? (
         <ObjetoDaCentral key={`${objeto.tipo}-${objeto.id}`} objeto={objeto} aoFechar={() => setObjeto(null)} aoAbrirFerramenta={(caminho, rotulo) => abrirFerramenta(rotulo, caminho)} aoAbrirDiario={aoAbrirDiario} />
       ) : ferramentaNaLateral ? (
@@ -421,9 +441,11 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
                   role="tab"
                   aria-selected={aba === a.id}
                   onClick={() => setAba(a.id)}
+                  aria-label={a.rotulo}
+                  title={a.rotulo}
                   className={juntar("flex min-w-0 items-center justify-center gap-1 rounded-lg px-1 py-1.5 text-[12px] font-medium transition-colors", aba === a.id ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50")}
                 >
-                  <span className="truncate">{a.rotulo}</span>
+                  {areaEstreita ? <a.icone className="h-4 w-4 shrink-0" aria-hidden="true" /> : <span className="truncate">{a.rotulo}</span>}
                   {!!a.contador && <span className="rounded-full bg-warning/15 px-1.5 text-[10px] text-warning">{a.contador}</span>}
                 </button>
               ))}
