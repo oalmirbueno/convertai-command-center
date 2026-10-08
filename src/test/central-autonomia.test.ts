@@ -112,6 +112,18 @@ describe("Gestor Aceleriq: ficha e resposta sem IA no cenário real da Acerbi", 
     expect(ficha.fontes.find((f) => f.tipo === "publicacao")!.estado).toBe("agendado");
   });
 
+  it("tarefa concluída sem prova + publicação com link do mesmo título viram uma fonte só, feita com prova", () => {
+    const e = cenarioAcerbi();
+    e.tarefas.push({ id: "post1", title: "[EXTRA | 05/10] Post estático: Pequena empresa, impacto grande", status: "done", updated_at: "2026-10-05T19:04:00Z", cliente: "Acerbi" });
+    e.tarefas.push({ id: "post2", title: "[ENCERRADA | LIMPEZA 09/09] Carrossel sem publicação", status: "done", updated_at: "2026-10-06T19:05:00Z", cliente: "Acerbi" });
+    e.publicacoes.push({ id: "pub1", post_id: "p1", status: "published", published_at: "2026-10-05T19:00:00Z", scheduled_at: null, permalink: "https://www.instagram.com/p/DeH6WM6lYDs/", platform: "instagram", titulo: "[EXTRA | 05/10] Post estático: Pequena empresa, impacto grande", cliente: "Acerbi" });
+    const f = montarFicha(e).fontes;
+    const post = f.filter((x) => x.titulo.includes("Pequena empresa"));
+    expect(post).toHaveLength(1);
+    expect(post[0]).toMatchObject({ tipo: "tarefa", estado: "feito_com_prova", link: "https://www.instagram.com/p/DeH6WM6lYDs/" });
+    expect(f.find((x) => x.ids.tarefa === "post2")!.estado).toBe("concluido_sem_prova");
+  });
+
   it("a resposta do motor só põe em 'feito' o que tem prova", () => {
     const itens = respostaDoMotor(ficha.fontes);
     const feitos = itens.filter((i) => i.secao === "feito").map((i) => i.texto).join(" | ");

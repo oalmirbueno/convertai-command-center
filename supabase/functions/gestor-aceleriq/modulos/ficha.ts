@@ -228,6 +228,15 @@ export function estadoDaExecucao(r: Pick<RunBruto, "status">): EstadoDaFonte {
 }
 
 const dentro = (iso: string | null | undefined, p: { desde: string; ate: string }) => !!iso && iso >= p.desde && iso < p.ate;
+/** Data e hora de São Paulo ("08/10 16:00"), para o modelo e a tela não falarem em UTC. */
+export function horaSP(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  const l = new Date(d.getTime() + FUSO_SP * 3_600_000);
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  return `${p2(l.getUTCDate())}/${p2(l.getUTCMonth() + 1)} ${p2(l.getUTCHours())}:${p2(l.getUTCMinutes())} (horário de Brasília)`;
+}
 const corta = (s: string | null | undefined, n: number) => String(s || "").replace(/\s+/g, " ").trim().slice(0, n);
 
 export type EntradaDaFicha = {
@@ -291,7 +300,7 @@ export function montarFicha(e: EntradaDaFicha, teto = 80): Ficha {
     const titulo = corta((r.detail?.title as string) || (r.detail?.action as string) || t?.title || r.run_key, 160);
     brutas.push({
       tipo: "execucao", estado: estadoDaExecucao(r), titulo, quando: r.finished_at || r.heartbeat_at || r.started_at,
-      texto: [`Execução ${r.run_key} do agente ${e.nomeDoAgente(r.operator_id) || "?"}: status ${r.status}.`, r.started_at ? `Início ${r.started_at}.` : "", r.finished_at ? `Fim ${r.finished_at}.` : "", r.error ? `Erro: ${corta(r.error, 200)}` : "", t ? `Tarefa: ${corta(t.title, 140)} (Kanban: ${t.status}).` : ""].filter(Boolean).join(" "),
+      texto: [`Execução ${r.run_key} do agente ${e.nomeDoAgente(r.operator_id) || "?"}: status ${r.status}.`, r.started_at ? `Início ${horaSP(r.started_at)}.` : "", r.finished_at ? `Fim ${horaSP(r.finished_at)}.` : "", r.error ? `Erro: ${corta(r.error, 200)}` : "", t ? `Tarefa: ${corta(t.title, 140)} (Kanban: ${t.status}).` : ""].filter(Boolean).join(" "),
       cliente: t?.cliente ?? null, agente: e.nomeDoAgente(r.operator_id), ids: { execucao: r.id, vinculo: v?.id, tarefa: t?.id }, peso: 1,
     });
   }
@@ -314,7 +323,7 @@ export function montarFicha(e: EntradaDaFicha, teto = 80): Ficha {
     brutas.push({
       tipo: "publicacao", estado: publicada ? "feito_com_prova" : pub.status === "failed" ? "falhou" : "agendado",
       titulo: corta(pub.titulo || "Publicação", 160), quando: pub.published_at || pub.scheduled_at,
-      texto: publicada ? `Publicado em ${pub.platform || "rede"} em ${pub.published_at}. Link: ${pub.permalink}` : `Publicação com status ${pub.status}${pub.scheduled_at ? `, agendada para ${pub.scheduled_at}` : ""}. Sem link de publicação.`,
+      texto: publicada ? `Publicado em ${pub.platform || "rede"} em ${horaSP(pub.published_at)}. Link: ${pub.permalink}` : `Publicação com status ${pub.status}${pub.scheduled_at ? `, agendada para ${horaSP(pub.scheduled_at)}` : ""}. Sem link de publicação.`,
       cliente: pub.cliente ?? null, agente: null, ids: { publicacao: pub.id }, link: pub.permalink, peso: 2,
     });
   }
@@ -336,6 +345,25 @@ export function montarFicha(e: EntradaDaFicha, teto = 80): Ficha {
       cliente: a.cliente ?? null, agente: e.nomeDoAgente(a.operator_id), ids: { aprovacao: a.id, vinculo: a.task_link_id || undefined, tarefa: a.kanban_task_id || undefined }, peso: 3,
     });
   }
+
+  // Tarefa concluída sem prova no vínculo + publicação com link do mesmo título: o link é a prova.
+  // Vira uma fonte só (feita com prova), em vez de aparecer duas vezes com estados diferentes.
+  const titulo = (s: string) => semAcento(s).replace(/\s+/g, " ").trim();
+  const publicadas = new Map<string, number>();
+  brutas.forEach((b, i) => { if (b.tipo === "publicacao" && b.estado === "feito_com_prova") publicadas.set(titulo(b.titulo), i); });
+  const absorvidas = new Set<number>();
+  for (const b of brutas) {
+    if (b.tipo !== "tarefa" || b.estado !== "concluido_sem_prova") continue;
+    const i = publicadas.get(titulo(b.titulo));
+    if (i === undefined || absorvidas.has(i)) continue;
+    const pub = brutas[i];
+    b.estado = "feito_com_prova";
+    b.texto = `${b.texto} Publicação: ${pub.texto}`;
+    b.link = pub.link;
+    b.ids = { ...b.ids, publicacao: pub.ids.publicacao };
+    absorvidas.add(i);
+  }
+  if (absorvidas.size) for (const i of [...absorvidas].sort((a, b) => b - a)) brutas.splice(i, 1);
 
   brutas.sort((a, b) => b.peso - a.peso || String(b.quando || "").localeCompare(String(a.quando || "")));
   const ficam = brutas.slice(0, teto);
