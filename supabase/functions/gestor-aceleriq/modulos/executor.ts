@@ -40,9 +40,63 @@ async function tarefaDoCliente(db: SupabaseClient, tarefaId: string, ctx: Contex
   return t;
 }
 
-export async function executarItem(db: SupabaseClient, item: ItemDaAcaoDoAgente, acao: AcaoDoAgente, userId: string): Promise<{ desfazer?: Record<string, unknown> | null; aviso?: string }> {
+/** Erros do mecanismo oficial de decisão, em português. */
+const ERROS_DA_DECISAO: Record<string, string> = {
+  CENTRAL_SOURCE_STALE: "Os dados do relatório mudaram depois que ele foi preparado. Atualize a revisão antes de aprovar.",
+  CENTRAL_REPORT_VERSION_CONFLICT: "A versão desta solicitação mudou. Abra de novo para decidir a versão atual.",
+  CENTRAL_ALREADY_DECIDED: "Esta solicitação já foi decidida.",
+  CENTRAL_APPROVAL_EXPIRED: "Esta solicitação venceu. Peça uma versão nova.",
+  CENTRAL_REPORT_NOT_DRAFT: "O relatório não está mais em rascunho.",
+  CENTRAL_SUMMARY_REQUIRED: "O relatório está sem a mensagem. Complete o rascunho antes de aprovar.",
+  CENTRAL_NEXT_STEPS_REQUIRED: "O relatório está sem o próximo passo. Complete o rascunho antes de aprovar.",
+  CENTRAL_CLIENT_MISMATCH: "Esta solicitação é de outro cliente.",
+  CENTRAL_COMMENT_REQUIRED: "Escreva o que precisa mudar.",
+  ja_decidida: "Esta solicitação já foi decidida; decisão não volta atrás.",
+  apenas_admin: "Só o admin decide aprovações.",
+};
+
+function erroDaDecisao(mensagem: string): ErroDaAcao {
+  const chave = Object.keys(ERROS_DA_DECISAO).find((k) => mensagem.includes(k));
+  return new ErroDaAcao(409, "decisao_recusada", chave ? ERROS_DA_DECISAO[chave] : `O mecanismo de aprovação recusou: ${mensagem}`);
+}
+
+/**
+ * Decide uma solicitação existente pelo MESMO mecanismo da tela de Decisões
+ * (src/lib/execucaoApresentacao.ts: central_review_decide para relatórios da
+ * Central, operator_approval_decidir para os demais), com a sessão do dono
+ * (as funções conferem auth.uid()). Fica registrado quem, quando e a versão.
+ */
+async function decidirSolicitacao(db: SupabaseClient, comoDono: SupabaseClient | null, item: ItemDaAcaoDoAgente, acao: AcaoDoAgente, ctx: Contexto, p: Record<string, unknown>) {
+  if (!comoDono) throw new ErroDaAcao(401, "sessao_do_dono", "Aprovar precisa da sua sessão. Atualize a tela e confirme de novo.");
+  const { data, error } = await db.from("operator_approvals").select("id, status, origin, report_id, client_id, payload, payload_hash, payload_version, valid_until, o_que").eq("id", item.alvo_id).maybeSingle();
+  if (error) throw new Error(error.message);
+  const a = data as { id: string; status: string; origin: string | null; report_id: string | null; client_id: string | null; payload: Record<string, unknown> | null; payload_hash: string | null; payload_version: number; valid_until: string | null; o_que: string } | null;
+  if (!a) throw new ErroDaAcao(404, "solicitacao_inexistente", "Essa solicitação não existe mais.");
+  if (ctx.client_id && a.client_id && a.client_id !== ctx.client_id) throw new ErroDaAcao(403, "outro_cliente", "Essa solicitação é de outro cliente: nada foi feito.");
+  if (a.status !== "pendente" && a.status !== "adiado") throw new ErroDaAcao(409, "ja_decidida", `Esta solicitação já está como ${a.status}.`);
+  const decisao = item.operacao === "aprovar_solicitacao" ? "aprovado" : "alteracoes_pedidas";
+  const nota = String(p.nota || "").trim();
+  let r;
+  if (a.origin === "central" || a.report_id) {
+    if (!a.client_id || !a.payload_hash || !Number.isInteger(a.payload_version)) throw new ErroDaAcao(409, "sem_identidade", "Solicitação sem identidade completa. Atualize a revisão.");
+    r = await comoDono.rpc("central_review_decide", {
+      _approval_id: a.id, _expected_client_id: a.client_id, _expected_version: a.payload_version, _expected_payload_hash: a.payload_hash,
+      _decision: decisao, _comment: nota || null, _idempotency_key: `gestor-${acao.id}-${item.ref}`.slice(0, 128),
+    });
+  } else {
+    r = await comoDono.rpc("operator_approval_decidir", { _approval_id: a.id, _decisao: decisao, _nota: nota || `Decidido pelo dono na Central (Gestor Aceleriq).` });
+  }
+  if (r.error) throw erroDaDecisao(r.error.message);
+  return { desfazer: { approval_id: a.id, decisao, versao: a.payload_version } };
+}
+
+export async function executarItem(db: SupabaseClient, item: ItemDaAcaoDoAgente, acao: AcaoDoAgente, userId: string, comoDono: SupabaseClient | null = null): Promise<{ desfazer?: Record<string, unknown> | null; aviso?: string }> {
   const ctx = contextoDa(acao);
   const p = paraDoItem(item);
+
+  if (item.operacao === "aprovar_solicitacao" || item.operacao === "pedir_alteracao") {
+    return await decidirSolicitacao(db, comoDono, item, acao, ctx, p);
+  }
 
   if (item.operacao === "criar_tarefa") {
     const projeto = await projetoDoCliente(db, item.alvo_id, ctx);
@@ -177,7 +231,7 @@ export async function entregasDaAcao(db: SupabaseClient, acao: AcaoDoAgente): Pr
           proxima = "O agente pega na próxima rodada do Hermes; a resposta volta no diário e aqui no Histórico.";
           tipo = "fila_do_agente";
         }
-        saida.push({ ref: r.ref, nome: t.title, tipo, cliente: t.project?.client?.company_name || t.project?.client?.full_name || null, projeto: t.project?.name || null, estado, id: t.id, link, proxima });
+        saida.push({ ref: r.ref, nome: t.title, tipo, objeto: { tipo: "tarefa", id: t.id, titulo: t.title, client_id: null }, cliente: t.project?.client?.company_name || t.project?.client?.full_name || null, projeto: t.project?.name || null, estado, id: t.id, link, proxima });
       } else if (r.operacao === "registrar_memoria") {
         const tabela = String(d.tabela);
         const { data } = tabela === "agente_memoria"
@@ -189,8 +243,19 @@ export async function entregasDaAcao(db: SupabaseClient, acao: AcaoDoAgente): Pr
         const cli = c as { company_name: string | null; full_name: string | null } | null;
         saida.push({
           ref: r.ref, nome: String(m.texto || m.title || "Memória"), tipo: "memoria", cliente: cli?.company_name || cli?.full_name || null, projeto: null,
+          objeto: { tipo: tabela === "agente_memoria" ? "memoria_agente" : "memoria_projeto", id: String(m.id), titulo: String(m.texto || m.title || "Memória").slice(0, 120), client_id: String(m.client_id) },
           estado: tabela === "agente_memoria" ? (m.ativa ? `${m.tipo} ativa` : "desativada") : `${m.kind} registrada`, id: String(m.id),
           link: `/mesa?client=${m.client_id}&aba=contexto`, proxima: "Os agentes das Mesas já leem isto no próximo pedido.",
+        });
+      } else if (r.operacao === "aprovar_solicitacao" || r.operacao === "pedir_alteracao") {
+        const { data } = await db.from("operator_approvals").select("id, o_que, status, decided_at, payload_version, client_id, client:profiles!operator_approvals_client_id_fkey(company_name, full_name)").eq("id", String(d.approval_id || r.alvo_id)).maybeSingle();
+        const a = data as unknown as { id: string; o_que: string; status: string; decided_at: string | null; payload_version: number; client_id: string | null; client: { company_name: string | null; full_name: string | null } | null } | null;
+        if (!a) continue;
+        saida.push({
+          ref: r.ref, nome: a.o_que, tipo: "aprovacao", objeto: { tipo: "aprovacao", id: a.id, titulo: a.o_que, client_id: a.client_id },
+          cliente: a.client?.company_name || a.client?.full_name || null, projeto: null,
+          estado: `${a.status} (versão ${a.payload_version})`, id: a.id, link: "/execucao?aba=decisoes",
+          proxima: a.status === "aprovado" ? "Aprovado não é enviado: o envio é a próxima etapa, no fluxo de envio." : "O agente recebe o pedido de alteração e prepara outra versão.",
         });
       }
     } catch {

@@ -32,9 +32,10 @@ const resposta = {
   tipo: "resposta",
   origem: "ia_conferida",
   cabecalho: "Acerbi · esta semana (05/10 a 08/10)",
-  abertura: "Dei uma olhada em Acerbi (esta semana). Achei 9 registros no OS; vou te contar o que importa.",
-  fechamento: "Tem 1 decisão esperando você. Quer ver agora?",
-  sugestoes: ["O que espera a minha decisão?", "E Acerbi nos últimos 30 dias?"],
+  abertura: null,
+  fechamento: null,
+  mostrar_numeros: false,
+  sugestoes: ["E Acerbi nos últimos 30 dias?"],
   contagem: { feito: 1, em_revisao: 1, em_andamento: 1, bloqueado: 0, decisao: 1, concluido_sem_prova: 0, lacuna: 0, proximo: 0 },
   cliente: { id: "39ebda82", nome: "Acerbi", projeto_id: null },
   itens: [
@@ -71,21 +72,39 @@ describe("Central de Autonomia na tela", () => {
     m.chamar.mockImplementation(async (_f: string, corpo: { acao: string }) => (corpo.acao === "conversa" ? { mensagens: [] } : resposta));
   });
 
-  it("pergunta ao Gestor: conversa em balões curtos, cartão com os números e fonte que abre o diário", async () => {
+  it("pergunta ao Gestor: conversa direta, sem abertura, rótulos ou cartão fixos; a fonte abre o diário e o objeto ao lado", async () => {
     const { aoAbrirDiario } = montar();
     fireEvent.click(await screen.findByRole("button", { name: "O que aconteceu com a Acerbi nesta semana?" }));
-    await screen.findByText("Conferido nas fontes");
+    expect(await screen.findByText(/Atlas concluiu a conciliação/)).toBeTruthy();
     expect(m.chamar).toHaveBeenCalledWith("gestor-aceleriq", expect.objectContaining({ acao: "perguntar", pergunta: "O que aconteceu com a Acerbi nesta semana?", periodo: null }));
-    expect(screen.getByText(/Dei uma olhada em Acerbi/)).toBeTruthy();
-    expect(screen.getByText("Tem 1 decisão esperando você. Quer ver agora?")).toBeTruthy();
-    // Cada item é um balão próprio, com o rótulo do assunto (sem textão).
-    expect(screen.getByText(/Atlas concluiu a conciliação/)).toBeTruthy();
     expect(screen.getByText(/Os vídeos do evento seguem em edição/)).toBeTruthy();
-    expect(screen.getAllByText("Feito com prova").length).toBeGreaterThan(0);
-    expect(screen.getByText("Pendências e lacunas")).toBeTruthy();
+    // Nada de template: sem "Dei uma olhada", sem rótulo de seção e sem o cartão de números quando o Gestor não marca.
+    expect(screen.queryByText(/Dei uma olhada/)).toBeNull();
+    expect(screen.queryByText("Pendências e lacunas")).toBeNull();
+    expect(screen.queryByText("Conferido nas fontes")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "F1" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Abrir diário da execução" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Diário da execução" }));
     expect(aoAbrirDiario).toHaveBeenCalledWith("4d586b2e", "Conciliar publicações confirmadas");
+    // A fonte abre a tarefa na lateral nativa (sem iframe).
+    fireEvent.click(screen.getByRole("button", { name: "Abrir tarefa ao lado" }));
+    expect(await screen.findByRole("button", { name: "Fechar" })).toBeTruthy();
+    expect(document.querySelector("iframe")).toBeNull();
+  });
+
+  it("panorama: o cartão de números aparece só quando o Gestor marca mostrar_numeros", async () => {
+    m.chamar.mockImplementation(async (_f: string, corpo: { acao: string }) => (corpo.acao === "conversa" ? { mensagens: [] } : { ...resposta, mostrar_numeros: true }));
+    montar();
+    fireEvent.click(await screen.findByRole("button", { name: "O que aconteceu com a Acerbi nesta semana?" }));
+    expect(await screen.findByText("Conferido nas fontes")).toBeTruthy();
+  });
+
+  it("'abre o que você fez': o objeto pedido abre sozinho na área ao lado", async () => {
+    m.chamar.mockImplementation(async (_f: string, corpo: { acao: string }) => (corpo.acao === "conversa" ? { mensagens: [] } : { ...resposta, abrir: { tipo: "tarefa", id: "045c27a1-0000-4000-8000-000000000001", titulo: "Registrar desempenho" } }));
+    montar();
+    fireEvent.click(await screen.findByRole("button", { name: "O que aconteceu com a Acerbi nesta semana?" }));
+    expect(await screen.findByText(/aberta ao lado/)).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Fechar" })).toBeTruthy();
+    expect(document.querySelector("iframe")).toBeNull();
   });
 
   it("a sugestão de próxima pergunta já vai com o cliente da resposta", async () => {
@@ -109,9 +128,11 @@ describe("Central de Autonomia na tela", () => {
     m.papel = "design";
     montar();
     expect(await screen.findByText("O Gestor Aceleriq é do admin.")).toBeTruthy();
-    expect(screen.getByRole("complementary", { name: "Painel ao lado do chat" })).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "Área ao lado das conversas" })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: /Decisões/ }));
-    expect(await screen.findByText(/Pedidos de aprovação dos agentes/)).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Decisões/ }).getAttribute("aria-selected")).toBe("true");
+    // Sem admin: nem o Gestor nem o Hermes aparecem (nada é chamado).
+    expect(screen.queryByRole("region", { name: "Hermes" })).toBeNull();
     await waitFor(() => expect(m.chamar).not.toHaveBeenCalled());
   });
 });
@@ -124,17 +145,21 @@ describe("Central de Autonomia: espaço, tela cheia e anexos", () => {
     m.chamar.mockImplementation(async (_f: string, corpo: { acao: string }) => (corpo.acao === "conversa" ? { mensagens: [] } : resposta));
   });
 
-  it("tela cheia ocupa a janela e sai com Esc; ampliar o chat esconde a coluna ao lado", async () => {
+  it("tela cheia ocupa a janela e sai com Esc; ampliar o Gestor recolhe o Hermes e a área, e a tirinha traz de volta", async () => {
     montar();
     await screen.findByText("O que você quer saber da operação?");
     fireEvent.click(screen.getByRole("button", { name: "Tela cheia" }));
     expect(screen.getByRole("dialog", { name: "Central de Autonomia em tela cheia" })).toBeTruthy();
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Central de Autonomia em tela cheia" })).toBeNull());
-    fireEvent.click(screen.getByRole("button", { name: "Ampliar o chat" }));
-    expect(screen.queryByRole("complementary", { name: "Painel ao lado do chat" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Mostrar o painel ao lado" }));
-    expect(screen.getByRole("complementary", { name: "Painel ao lado do chat" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Hermes" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Ampliar Gestor" }));
+    expect(screen.queryByRole("complementary", { name: "Área ao lado das conversas" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Hermes" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Área" }));
+    expect(screen.getByRole("complementary", { name: "Área ao lado das conversas" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Hermes" }));
+    expect(screen.getByRole("region", { name: "Hermes" })).toBeTruthy();
   });
 
   it("arquivo anexado é lido na tela e vai como texto junto da pergunta", async () => {
@@ -180,7 +205,7 @@ describe("Central de Autonomia: conversas, ações, Hermes e Mesas", () => {
   };
   const entregue = {
     ...acao, executada_em: "2026-10-08T12:01:00Z", resultados: [{ ref: "p1", alvo_id: "proj-1", titulo: "Institucional", operacao: "criar_tarefa", ok: true, desfazer: { task_id: "t-nova" } }],
-    entregas: [{ ref: "p1", nome: "Roteiro do vídeo da palestra", tipo: "tarefa", cliente: "Acerbi", projeto: "Institucional", estado: "todo", id: "t-nova-0000-0000", link: "/kanban?task=t-nova", proxima: "Peça aqui para mandar a um agente, ou abra no Kanban." }],
+    entregas: [{ ref: "p1", nome: "Roteiro do vídeo da palestra", tipo: "tarefa", objeto: { tipo: "tarefa", id: "a1b2c3d4-0000-4000-8000-000000000001", titulo: "Roteiro do vídeo da palestra" }, cliente: "Acerbi", projeto: "Institucional", estado: "todo", id: "a1b2c3d4-0000-4000-8000-000000000001", link: "/kanban?task=a1b2c3d4-0000-4000-8000-000000000001", proxima: "Peça aqui para mandar a um agente, ou abra no Kanban." }],
   };
   beforeEach(() => {
     m.papel = "admin";
@@ -203,32 +228,40 @@ describe("Central de Autonomia: conversas, ações, Hermes e Mesas", () => {
     expect(screen.getAllByText(/Acerbi · tudo com prova no OS/).length).toBeGreaterThan(0);
   });
 
-  it("ação proposta: Confirmar executa pela função e o cartão de entrega mostra estado real, id e atalho", async () => {
+  it("ação proposta: Confirmar executa pela função e o cartão compacto da entrega abre a tarefa na lateral nativa", async () => {
     montar();
     fireEvent.click(await abrirConversa("Campanha de outubro"));
     fireEvent.click(await screen.findByRole("button", { name: /Confirmar/ }));
     await waitFor(() => expect(m.chamar).toHaveBeenCalledWith("gestor-aceleriq", expect.objectContaining({ acao: "executar_acao", mensagem_id: "m2", acao_id: "gestor-1" })));
-    expect(await screen.findByText("Roteiro do vídeo da palestra")).toBeTruthy();
-    expect(screen.getByText(/Estado:/).textContent).toContain("todo");
-    expect(screen.getAllByRole("link", { name: /Aba nova/ }).map((l) => l.getAttribute("href"))).toContain("/kanban?task=t-nova");
+    const cartao = await screen.findByRole("button", { name: "Abrir Roteiro do vídeo da palestra" });
+    expect(cartao.textContent).toContain("todo");
+    fireEvent.click(cartao);
+    // Abre na área ao lado, nativo (sem iframe com outra cópia do painel).
+    expect(await screen.findByRole("button", { name: "Fechar" })).toBeTruthy();
+    expect(document.querySelector("iframe")).toBeNull();
     // Pedido sensível vira decisão, nunca execução.
     expect(screen.getByText("Publicar o post amanhã")).toBeTruthy();
   });
 
-  it("Hermes sem a ponte ligada: o painel diz isso e usa o diário da coordenação (nada simulado)", async () => {
+  it("Hermes ao lado sem a ponte respondendo: diz isso, não mostra campo de mensagem e abre o diário em janela", async () => {
     montar();
-    fireEvent.click(await screen.findByRole("tab", { name: "Hermes" }));
-    expect(await screen.findByText(/abrem aqui quando a ponte do painel for ligada/)).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "Sessões do Hermes" }).hasAttribute("disabled")).toBe(true);
+    expect(await screen.findByText("A ponte com o Hermes não respondeu agora.")).toBeTruthy();
+    expect(screen.queryByLabelText("Mensagem para o Hermes")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir o diário da coordenação" }));
+    expect(await screen.findByRole("dialog", { name: /Diário da coordenação/ })).toBeTruthy();
   });
 
-  it("Mesas abrem dentro do painel com o cliente da conversa e sem o menu do app", async () => {
+  it("ferramentas abrem em pop-up interno com o cliente da conversa e passam para a lateral sem o menu do app", async () => {
     montar();
     fireEvent.click(await abrirConversa("Campanha de outubro"));
-    fireEvent.click(await screen.findByRole("tab", { name: "Mesas" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ferramentas" }));
     fireEvent.click(await screen.findByRole("button", { name: /Mesa Ads/ }));
     const quadro = await screen.findByTitle("Mesa Ads");
     expect(quadro.getAttribute("src")).toBe("/mesa-ads?client=39ebda82&embutido=1");
+    expect(screen.getByRole("dialog", { name: /Mesa Ads/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir na lateral" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /Mesa Ads/ })).toBeNull());
+    expect((await screen.findByTitle("Mesa Ads")).closest("[data-ferramenta-aberta]")?.getAttribute("data-ferramenta-aberta")).toBe("lateral");
   });
 });
 

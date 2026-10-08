@@ -27,6 +27,8 @@ PrivateTmp=yes
 PrivateDevices=yes
 ProtectSystem=strict
 ProtectHome=tmpfs
+# O node do Hermes mora em /root/.hermes/node (mesma montagem da ponte MCP).
+BindReadOnlyPaths=/root/.hermes/node:/opt/aceleriq-hermes-node
 ProtectControlGroups=yes
 ProtectKernelModules=yes
 ProtectKernelTunables=yes

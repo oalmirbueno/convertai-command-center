@@ -16,7 +16,6 @@ import {
   clienteDaPergunta,
   conferirContraAFicha,
   contagemDoRecorte,
-  conversaDoRecorte,
   type ArquivoDoDono,
   fontesDosAnexos,
   type DiarioBruto,
@@ -24,18 +23,19 @@ import {
   type Fonte,
   type ItemDaResposta,
   montarFicha,
-  ORDEM_DAS_SECOES,
   type Periodo,
   periodoDaPergunta,
   type PublicacaoBruta,
   respostaDoMotor,
+  respostaEmConversa,
   respostaEmTexto,
+  SECOES_DA_RESPOSTA,
   type RunBruto,
   type SecaoDaResposta,
   type TarefaBruta,
   type VinculoBruto,
 } from "./ficha.ts";
-import { aplicarConferencia, perguntasDeConferencia, type RespostaChoice } from "./conferencia.ts";
+import { aplicarConferencia, aplicarConferenciaDaConversa, perguntasDeConferencia, perguntasDeConversa, type RespostaChoice } from "./conferencia.ts";
 import {
   type AcaoDoAgente,
   blocoDosAlvos,
@@ -48,11 +48,11 @@ import {
   regraDasAcoes,
 } from "../../_shared/acoes-do-agente.ts";
 import { ehOrdemClara } from "../../_shared/ordem-clara.ts";
-import { AGENTE_DO_GESTOR, alvoDaTarefa, type AlvoDoGestor, DESCRICOES_DAS_OPERACOES, type EntregaDoGestor, regrasDoGestor } from "./ferramentas.ts";
+import { AGENTE_DO_GESTOR, alvoDaTarefa, type AlvoDoGestor, DESCRICOES_DAS_OPERACOES, type EntregaDoGestor, type ObjetoDoGestor, OPERACOES_DE_DECISAO, regrasDoGestor } from "./ferramentas.ts";
 import { entregasDaAcao, executarItem } from "./executor.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_TOKENS_SAIDA = 1400;
+const MAX_TOKENS_SAIDA = 1800;
 
 export class ErroHttp extends Error {
   constructor(public status: number, public codigo: string, mensagem: string) { super(mensagem); }
@@ -214,24 +214,29 @@ export async function lerFatos(r: Recorte) {
 
 // ------------------------------------------------------------------ cliente por Jev (só quando o nome não bateu)
 
-async function clientePorJev(pergunta: string, clientes: ClienteBase[], agencia: string | null, userId: string): Promise<ClienteBase | null> {
+async function clientePorJev(pergunta: string, clientes: ClienteBase[], agencia: string | null, userId: string, anterior: ClienteBase | null = null): Promise<ClienteBase | null> {
   const principais = clientes.filter((c) => !c.projetoId);
-  if (!principais.length || principais.length > 40) return null;
-  const criteria: Record<string, string> = { geral: "a pergunta não cita um cliente específico desta lista (fala da agência, de todos, de um agente ou de outro assunto)" };
+  if (!principais.length) return anterior;
+  if (principais.length > 40) return anterior;
+  const criteria: Record<string, string> = { geral: "a pergunta fala da agência toda, de todos os clientes, de um agente ou de outro assunto, sem cliente específico" };
+  // Continuidade: "qual depende de mim?" logo depois de falar da Acerbi continua sendo da Acerbi.
+  if (anterior) criteria.mesmo = `a pergunta continua falando de "${anterior.nome}", o cliente tratado na conversa até aqui (referência implícita como "essa", "dela", "qual depende de mim", "continua"), sem nomear outro cliente`;
   principais.forEach((c, i) => { criteria[`c${i}`] = `a pergunta é sobre o cliente "${c.nome}" (mesmo escrito com erro, abreviado ou sem acento)`; });
   try {
     const r = await jevPerguntar({
-      state: { pergunta: pergunta.slice(0, 600) },
-      questions: { cliente: { type: "choice", instructions: "Qual cliente da agência a `pergunta` cita?", criteria } },
+      state: { pergunta: pergunta.slice(0, 600), cliente_da_conversa_ate_aqui: anterior ? anterior.nome : null },
+      questions: { cliente: { type: "choice", instructions: "Qual cliente da agência a `pergunta` trata? Considere `cliente_da_conversa_ate_aqui` para perguntas de continuidade.", criteria } },
     }, { timeoutMs: 6_000 });
     if (agencia) void cobrarJev(r, { clientId: agencia, tarefa: "conversa", criadoPor: userId });
     const a = r.answers.cliente as RespostaChoice | undefined;
     const p = a?.choice ? Number(a.probabilities?.[a.choice] ?? a.confidence ?? 0) : 0;
-    if (!a?.choice || a.choice === "geral" || p < 0.85) return null;
+    if (!a?.choice || a.choice === "geral") return null;
+    if (a.choice === "mesmo") return p >= 0.5 ? anterior : null;
+    if (p < 0.85) return null;
     return principais[Number(a.choice.slice(1))] || null;
   } catch (e) {
-    registrarFalha("gestor-aceleriq: jev do cliente fora (segue sem cliente)", e);
-    return null;
+    registrarFalha("gestor-aceleriq: jev do cliente fora (segue com o cliente anterior)", e);
+    return anterior;
   }
 }
 
@@ -245,29 +250,54 @@ export async function carteiraDaAgencia(): Promise<string | null> {
   return c ? c.client_id : ids[0];
 }
 
-// ------------------------------------------------------------------ redação (IA) com as duas barreiras
+// ------------------------------------------------------------------ redação (IA) com as barreiras
 
-const SISTEMA = `Você é o Gestor Aceleriq: responde ao dono da agência (o Almir) sobre a operação real, em português do Brasil, direto.
-Regras duras:
-- Você só pode afirmar o que está nas FONTES. Cada item cita os apelidos das fontes (F1, F2...) que o sustentam. Item sem fonte é descartado.
-- O ESTADO de cada fonte já foi decidido pelo sistema. Respeite: "em_revisao" e "execucao_feita_entrega_em_revisao" NÃO são concluídos; "agendado" NÃO é publicado; "concluido_sem_prova" NÃO é "feito com prova"; "divergente" quer dizer que a execução do agente e o card da tarefa estão em estados diferentes, diga isso.
-- Seções: feito (só fontes feito_com_prova), concluido_sem_prova, em_revisao, em_andamento, bloqueado (bloqueado, falhou, aguardando insumo, divergente), decisao (decisao_pendente), lacuna (o que falta ou não tem prova), proximo (próximas ações a partir de "Próximo passo" ou do que está pendente).
-- Se uma fonte diz que algo NÃO aconteceu (ex.: vídeo ainda em edição, sem publicação), diga isso como lacuna; nunca transforme em feito.
-- Escreva como uma pessoa conversando no chat com o dono, não como relatório. Cada item vira UMA mensagem curta na tela: 1 ou 2 frases, no máximo 220 caracteres, linguagem simples e direta ("Vi que...", "Ainda falta...", "O Atlas fechou...").
-- Comece pelo que mais importa para a pergunta. Junte fontes parecidas numa mensagem só. No máximo 8 itens; o resto fica nas contagens da tela.
-- Sem markdown, sem listas, sem travessão, sem repetir o apelido no texto, sem saudação nem despedida (a abertura e o fechamento são do sistema).
-- Fontes A1, A2... são arquivos, imagens ou áudios que o dono mandou AGORA (não são registros do OS). O que vem deles vai na seção "anexo" (ou vira próximo passo, pendência ou decisão). Um anexo nunca prova que algo aconteceu no OS: se ele contradiz o OS, diga as duas coisas.
-- Se o dono pedir para resumir, ler ou analisar o anexo, responda sobre o anexo primeiro.
-- AÇÕES: quando o dono PEDIR para fazer algo (criar tarefa, ajustar prazo, registrar preferência ou decisão, mandar para um agente), devolva em "acoes" usando só os apelidos das listas. Não diga que fez: o sistema confere, executa e mostra o cartão com o estado real. Conversa ou pergunta sem pedido: acoes = null.
-- Distinga: preferência do cliente, decisão que o dono aprovou, instrução operacional nova, tarefa pedida, aprendizado com evidência. Hipótese ou opinião sua NÃO vira memória.
-- SENSÍVEL (publicar, mandar mensagem ou e-mail a cliente, mexer em campanha, anúncio ou verba, gastar, contrato, excluir de vez, mudar acesso): você NÃO executa. Liste em "bloqueadas" {pedido, motivo, onde}. Sem nada assim, [].`;
+/**
+ * Conversa contínua (09/10/2026, pedido do dono): sem abertura, fechamento e
+ * sugestões fixas; o modelo lê o histórico e responde só ao que foi pedido,
+ * do tamanho que a pergunta pede. A liberdade é de redação, não de fato:
+ * fato da operação só com fonte (barreira de código + Jev); frase sem fonte só
+ * na seção "conversa", e o Jev tira a que afirmar fato.
+ */
+const SISTEMA = `Você é o Gestor Aceleriq, o braço direito do Almir (dono da agência) dentro do painel. Converse como uma pessoa competente no chat: natural, direta, em português do Brasil. A conversa é contínua: leia o HISTÓRICO e responda à ÚLTIMA MENSAGEM levando em conta tudo o que já foi dito e feito.
+
+COMO RESPONDER
+- Responda exatamente ao que foi perguntado ou pedido agora. Se uma frase resolve, uma frase. Vá longe só quando o assunto pedir. Não repita o que já foi dito no histórico.
+- Perguntas de continuidade ("qual depende de mim?", "e essa?", "pode aprovar", "abre o que você fez", "continua de onde parou", "isso", "aquela tarefa", "esse cliente") falam do que acabou de ser tratado: use o HISTÓRICO e os OBJETOS DA CONVERSA para saber exatamente qual. Pergunte de volta só se houver ambiguidade real.
+- Correção ou mudança de direção do dono vale mais do que o que veio antes. Confirmação ("isso", "pode", "sim") confirma a última proposta.
+- Pedido claro: faça (proponha em "acoes"). Não explique o que você pode fazer em vez de fazer.
+- Varie a forma. Nada de abertura fixa ("Dei uma olhada..."), fechamento fixo, saudação, markdown, listas ou travessão.
+- Cada item de "itens" é UMA mensagem no chat, de 1 a 3 frases. Quase sempre 1 a 3 mensagens; mais só quando ele pedir um panorama.
+
+VERDADE (regras duras)
+- Fato da operação só com fonte: o item cita os apelidos F1, F2... que o sustentam, numa seção que combina com o estado da fonte. Pode citar fonte também numa mensagem de seção "conversa" quando a frase só retoma o que a fonte diz.
+- Mensagem sem fonte só na seção "conversa", e ela NÃO pode afirmar fato (estado, número, prazo, decisão, resultado de ação). Só perguntar, confirmar o que entendeu, dizer o que está propondo ou o que precisa da confirmação dele.
+- O ESTADO de cada fonte foi decidido pelo sistema: em_revisao e execucao_feita_entrega_em_revisao NÃO são concluídos; agendado NÃO é publicado; concluido_sem_prova NÃO é feito com prova; divergente = a execução do agente e o card estão em estados diferentes.
+- Seções: conversa, feito (só feito_com_prova), concluido_sem_prova, em_revisao, em_andamento, bloqueado (bloqueado, falhou, aguardando insumo, divergente), decisao (decisao_pendente), lacuna, proximo, anexo.
+- Nunca diga que fez, aprovou, criou ou mandou: o sistema executa ou pede Confirmar e mostra o cartão com o estado real logo abaixo. Diga o que está propondo ("Deixei a aprovação pronta para você confirmar.").
+- Fontes A1, A2... são o que o dono mandou agora; não provam nada no OS.
+
+AÇÕES ("acoes"; null quando não há pedido)
+- Só apelidos das listas: cN cliente, pN projeto, tN tarefa, aN solicitação de aprovação pendente.
+- "Pode aprovar" / "aprova essa" = aprovar_solicitacao no aN certo (o que acabou de ser tratado). Registrar decisão na memória NÃO é aprovar e não substitui. Se não existe aN correspondente, diga isso numa mensagem de conversa e não invente.
+- Aprovar não envia nem publica. Pedido de enviar ou publicar vai em "bloqueadas".
+- "Continua organizando o cliente" = use pendências, bloqueios e próximos passos das fontes e proponha as próximas ações permitidas (criar tarefa, ajustar tarefa, mandar a um agente), várias de uma vez se fizer sentido.
+- registrar_memoria só quando ele disser algo que deve valer daqui para frente (preferência, regra, decisão dele). Nunca como substituto de executar.
+- SENSÍVEL (publicar, mandar mensagem ou e-mail a cliente, mexer em campanha, anúncio ou verba, gastar, contrato, excluir de vez, mudar acesso): não executa; vai em "bloqueadas" {pedido, motivo, onde}. Sem nada assim, [].
+
+ABRIR ("abrir")
+- Se ele pedir para abrir ou ver um objeto ("abre o que você fez", "abre essa tarefa", "mostra a aprovação"), devolva o apelido dele (F, t, p, a ou o). Senão "".
+
+NÚMEROS E SUGESTÕES
+- mostrar_numeros = true só quando ele pedir panorama geral ou resumo do período; pergunta específica = false.
+- sugestoes: 0 a 3 próximas perguntas curtas, só se forem úteis de verdade e diferentes das que já apareceram. Quase sempre nenhuma.`;
 
 const ESQUEMA = {
   nome: "resposta_do_gestor",
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["itens", "acoes", "bloqueadas"],
+    required: ["itens", "acoes", "bloqueadas", "abrir", "mostrar_numeros", "sugestoes"],
     properties: {
       acoes: esquemaDasAcoes(Object.keys(DESCRICOES_DAS_OPERACOES)),
       bloqueadas: {
@@ -290,21 +320,23 @@ const ESQUEMA = {
           additionalProperties: false,
           required: ["secao", "texto", "fontes"],
           properties: {
-            secao: { type: "string", enum: ORDEM_DAS_SECOES },
+            secao: { type: "string", enum: SECOES_DA_RESPOSTA },
             texto: { type: "string" },
             fontes: { type: "array", items: { type: "string" } },
           },
         },
       },
+      abrir: { type: "string" },
+      mostrar_numeros: { type: "boolean" },
+      sugestoes: { type: "array", items: { type: "string" } },
     },
   },
 };
 
 type Redacao = { bruto: Record<string, unknown> | null; itens: ItemDaResposta[]; origem: "ia_conferida" | "motor"; avisos: string[]; custo: number; usoId: string | null; modelo: string | null; recusados: number; contestados: number };
 
-async function redigir(pergunta: string, cabecalho: string, fontes: Fonte[], o: { agencia: string | null; userId: string; semIa: boolean; historico: string; imagens?: ImagemEntrada[]; blocoDeAcoes?: string }): Promise<Redacao> {
+async function redigir(pergunta: string, cabecalho: string, fontes: Fonte[], o: { agencia: string | null; userId: string; semIa: boolean; historico: string; imagens?: ImagemEntrada[]; blocoDeAcoes?: string; blocoDeObjetos?: string }): Promise<Redacao> {
   const motor = (aviso?: string): Redacao => ({ bruto: null, itens: respostaDoMotor(fontes), origem: "motor", avisos: aviso ? [aviso] : [], custo: 0, usoId: null, modelo: null, recusados: 0, contestados: 0 });
-  if (!fontes.length && !o.blocoDeAcoes) return motor();
   if (o.semIa) return motor();
   if (!o.agencia) return motor("Sem carteira de IA da agência: respondi só com os fatos registrados.");
   const modelo = (await modeloPadrao("estrategista"))?.id || null;
@@ -321,9 +353,10 @@ async function redigir(pergunta: string, cabecalho: string, fontes: Fonte[], o: 
       mensagens: [{
         papel: "usuario",
         conteudo: [
-          o.historico ? `CONVERSA ATÉ AQUI (só contexto, não é fonte):\n${o.historico}` : "",
-          `PERGUNTA DO DONO: ${pergunta}`,
-          `RECORTE: ${cabecalho}`,
+          o.historico ? `HISTÓRICO DESTA CONVERSA (mais antigo primeiro; contexto, não é fonte):\n${o.historico}` : "HISTÓRICO: esta é a primeira mensagem da conversa.",
+          o.blocoDeObjetos || "",
+          `ÚLTIMA MENSAGEM DO DONO (responda a esta): ${pergunta}`,
+          `RECORTE DOS DADOS: ${cabecalho}`,
           `FONTES (JSON; só isto pode ser afirmado):\n${JSON.stringify(fontes.map((f) => ({ apelido: f.apelido, tipo: f.tipo, estado: f.estado, titulo: f.titulo, quando: f.quando, cliente: f.cliente, agente: f.agente, texto: f.texto })))}`,
           o.blocoDeAcoes || "",
         ].filter(Boolean).join("\n\n"),
@@ -342,49 +375,95 @@ async function redigir(pergunta: string, cabecalho: string, fontes: Fonte[], o: 
   const brutos = Array.isArray((saida.json as { itens?: unknown } | undefined)?.itens) ? (saida.json as { itens: unknown[] }).itens : [];
   const itens: ItemDaResposta[] = brutos.map((x) => {
     const i = x as { secao?: string; texto?: string; fontes?: unknown };
-    return { secao: String(i.secao || "") as SecaoDaResposta, texto: String(i.texto || "").replace(/—|–/g, ",").trim().slice(0, 600), fontes: Array.isArray(i.fontes) ? i.fontes.map(String) : [] };
+    return { secao: String(i.secao || "") as SecaoDaResposta, texto: String(i.texto || "").replace(/\s*[—–]\s*/g, ", ").trim().slice(0, 900), fontes: Array.isArray(i.fontes) ? i.fontes.map(String) : [] };
   }).filter((i) => i.texto);
 
-  // Barreira 1 (código): fonte existe e o estado cabe na seção.
+  // Barreira 1 (código): fonte existe e o estado cabe na seção; conversa sem fonte passa para a barreira 3.
   const { aceitos, recusados } = conferirContraAFicha(itens, fontes);
   const avisos: string[] = [];
   if (recusados.length) avisos.push(`${recusados.length} ${recusados.length === 1 ? "frase da IA saiu" : "frases da IA saíram"} por não ter fonte ou por chamar de feito o que não está feito.`);
 
-  // Barreira 2 (Jev): a afirmação bate com a fonte citada?
-  let finais = aceitos;
-  let contestados = 0;
-  // Frase que só cita imagem anexada não tem texto para o Jev comparar: fica com a conferência de fonte.
   const tipoDe = new Map(fontes.map((f) => [f.apelido.toUpperCase(), f.tipo]));
-  const soImagem = (i: ItemDaResposta) => i.fontes.every((a) => tipoDe.get(a.toUpperCase()) === "anexo_imagem");
-  const paraOJev = aceitos.filter((i) => !soImagem(i));
-  if (paraOJev.length) {
-    try {
-      const { state, questions } = perguntasDeConferencia(paraOJev, fontes);
-      const r = await jevPerguntar({ state, questions }, { timeoutMs: 15_000 });
-      void cobrarJev(r, { clientId: o.agencia, tarefa: "verificacao", criadoPor: o.userId });
-      const c = aplicarConferencia(paraOJev, r.answers as Record<string, RespostaChoice>);
-      const conferidos = new Map(c.ficam.map((i) => [i.texto, i]));
-      finais = aceitos.filter((i) => soImagem(i) || conferidos.has(i.texto)).map((i) => conferidos.get(i.texto) || i);
-      contestados = c.sairam.length;
+  const soImagem = (i: ItemDaResposta) => i.fontes.length > 0 && i.fontes.every((a) => tipoDe.get(a.toUpperCase()) === "anexo_imagem");
+  const semFonte = (i: ItemDaResposta) => i.secao === "conversa" && !i.fontes.length;
+  const paraOJev = aceitos.filter((i) => !soImagem(i) && !semFonte(i));
+  const conversas = aceitos.filter(semFonte);
+  const fica = new Set<ItemDaResposta>(aceitos);
+  const trocado = new Map<ItemDaResposta, ItemDaResposta>();
+  let contestados = 0;
+
+  // Barreira 2 (Jev): a afirmação bate com a fonte citada? Barreira 3 (Jev): a frase sem fonte não afirma fato?
+  try {
+    const [r2, r3] = await Promise.all([
+      paraOJev.length ? jevPerguntar(perguntasDeConferencia(paraOJev, fontes), { timeoutMs: 15_000 }) : Promise.resolve(null),
+      conversas.length ? jevPerguntar(perguntasDeConversa(conversas), { timeoutMs: 12_000 }) : Promise.resolve(null),
+    ]);
+    if (r2) {
+      void cobrarJev(r2, { clientId: o.agencia, tarefa: "verificacao", criadoPor: o.userId });
+      const c = aplicarConferencia(paraOJev, r2.answers as Record<string, RespostaChoice>);
+      const ficam = new Set(c.ficam.map((i) => i.texto));
+      for (const i of paraOJev) if (!ficam.has(i.texto)) fica.delete(i);
+      for (const i of c.ficam) { const orig = paraOJev.find((x) => x.texto === i.texto); if (orig) trocado.set(orig, i); }
+      contestados += c.sairam.length;
       if (c.sairam.length) avisos.push(`${c.sairam.length} ${c.sairam.length === 1 ? "frase saiu" : "frases saíram"} na conferência com as fontes.`);
       if (c.fracos) avisos.push(`${c.fracos} ${c.fracos === 1 ? "frase ficou" : "frases ficaram"} com conferência fraca: abra a fonte.`);
-    } catch (e) {
-      registrarFalha("gestor-aceleriq: jev da conferência fora", e);
-      avisos.push("A conferência semântica (Jev) não rodou agora: os itens passaram só pela conferência de fontes.");
     }
+    if (r3) {
+      void cobrarJev(r3, { clientId: o.agencia, tarefa: "verificacao", criadoPor: o.userId });
+      const c = aplicarConferenciaDaConversa(conversas, r3.answers as Record<string, RespostaChoice>);
+      for (const i of c.sairam) fica.delete(i);
+      contestados += c.sairam.length;
+      if (c.sairam.length) avisos.push(`${c.sairam.length} ${c.sairam.length === 1 ? "frase saiu porque afirmava" : "frases saíram porque afirmavam"} fato sem fonte.`);
+    }
+  } catch (e) {
+    registrarFalha("gestor-aceleriq: jev da conferência fora", e);
+    // Sem Jev, frase sem fonte não tem como ser conferida: só ficam as que citam fonte.
+    for (const i of conversas) fica.delete(i);
+    avisos.push("A conferência semântica (Jev) não rodou agora: ficaram só as frases com fonte.");
   }
+  const finais = aceitos.filter((i) => fica.has(i)).map((i) => trocado.get(i) || i);
 
-  if (!finais.length) {
+  const temAcaoOuBloqueio = !!(saida.json as { acoes?: unknown; bloqueadas?: unknown[] } | undefined) && (!!(saida.json as { acoes?: unknown }).acoes || ((saida.json as { bloqueadas?: unknown[] }).bloqueadas || []).length > 0 || !!(saida.json as { abrir?: string }).abrir);
+  if (!finais.length && !temAcaoOuBloqueio) {
     return { ...motor("A redação da IA não passou na conferência: respondi só com os fatos registrados."), bruto: (saida.json as Record<string, unknown>) || null, custo: saida.custoUsd, usoId: saida.usoId, modelo: saida.modeloId, recusados: recusados.length, contestados };
   }
   return { bruto: (saida.json as Record<string, unknown>) || null, itens: finais, origem: "ia_conferida", avisos, custo: saida.custoUsd, usoId: saida.usoId, modelo: saida.modeloId, recusados: recusados.length, contestados };
+}
+
+// ------------------------------------------------------------------ referências da conversa ("isso", "aquela tarefa", "o que você fez")
+
+/** Um objeto do OS citado, aberto, proposto ou criado na conversa. Persistido em gestor_mensagens.dados.referencias. */
+export type ReferenciaDoGestor = ObjetoDoGestor & { origem: "citado" | "aberto" | "proposto" | "criado" | "decidido"; estado?: string | null };
+
+const ROTULO_DO_OBJETO: Record<ObjetoDoGestor["tipo"], string> = {
+  tarefa: "tarefa", memoria_agente: "memória", memoria_projeto: "memória", aprovacao: "solicitação de aprovação", projeto: "projeto", arquivo: "arquivo", publicacao: "publicação", vinculo: "execução de agente",
+};
+
+/** O objeto que uma fonte da ficha representa (para abrir na lateral e lembrar na conversa). */
+export function objetoDaFonte(f: Fonte): ObjetoDoGestor | null {
+  const titulo = f.titulo.slice(0, 140);
+  if (f.tipo === "aprovacao" && f.ids.aprovacao) return { tipo: "aprovacao", id: f.ids.aprovacao, titulo };
+  if (f.tipo === "publicacao" && f.ids.publicacao) return { tipo: "publicacao", id: f.ids.publicacao, titulo };
+  if ((f.tipo === "tarefa" || f.tipo === "entrega") && f.ids.tarefa) return { tipo: "tarefa", id: f.ids.tarefa, titulo };
+  if ((f.tipo === "execucao" || f.tipo === "diario") && f.ids.vinculo) return { tipo: "vinculo", id: f.ids.vinculo, titulo };
+  if (f.ids.tarefa) return { tipo: "tarefa", id: f.ids.tarefa, titulo };
+  return null;
 }
 
 // ------------------------------------------------------------------ a resposta inteira
 
 export type ConversaDoGestor = { id: string; client_id: string | null; project_id: string | null };
 
-export type EntradaDoResponder = { conversa?: ConversaDoGestor | null; arquivos?: ArquivoDoDono[]; imagens?: ImagemEntrada[]; pergunta: string; clienteId?: string | null; periodo?: string | null; userId: string; semIa: boolean; historico: string; tetoAtingido?: boolean; tetoPorDia?: number };
+export type EntradaDoResponder = {
+  conversa?: ConversaDoGestor | null; arquivos?: ArquivoDoDono[]; imagens?: ImagemEntrada[]; pergunta: string; clienteId?: string | null; periodo?: string | null;
+  userId: string; semIa: boolean; historico: string; tetoAtingido?: boolean; tetoPorDia?: number;
+  /** Objetos da conversa (mais recente primeiro), lidos das mensagens anteriores. */
+  referencias?: ReferenciaDoGestor[];
+  /** Cliente da resposta anterior (conversa geral): perguntas de continuidade ficam nele. */
+  clienteAnterior?: string | null;
+  /** Só o teste de ponta: mostra a proposta sem executar direto (nada gravado no cliente real). */
+  semExecutarDireto?: boolean;
+};
 
 export type Respondido =
   | { tipo: "esclarecer"; texto: string; opcoes: Array<{ id: string; nome: string }> }
@@ -394,9 +473,8 @@ export async function responder(e: EntradaDoResponder): Promise<Respondido> {
   const periodo = periodoDaPergunta(e.pergunta, new Date(), e.periodo || null);
   const [clientes, agencia] = await Promise.all([lerClientes(), carteiraDaAgencia()]);
 
-  // Cliente: o escolhido na tela vale; senão o nome na pergunta; senão o Jev na lista real.
+  // Cliente: o da conversa (isolamento) > o escolhido na tela > o nome na pergunta > o anexo > continuidade (Jev) > Jev na lista.
   let cliente: ClienteBase | null = null;
-  // Conversa de um cliente: o recorte é dele, sempre (isolamento entre clientes).
   const daConversa = e.conversa?.client_id ? clientes.find((c) => c.id === e.conversa!.client_id && !c.projetoId) || null : null;
   const escolhido = daConversa || (e.clienteId && UUID.test(e.clienteId) ? clientes.find((c) => c.id === e.clienteId && !c.projetoId) : null);
   if (!daConversa && e.clienteId && !escolhido) throw new ErroHttp(400, "cliente_invalido", "Esse cliente não existe no cadastro.");
@@ -406,11 +484,11 @@ export async function responder(e: EntradaDoResponder): Promise<Respondido> {
     if (achado.tipo === "ambiguo") {
       return { tipo: "esclarecer", texto: `Achei mais de um cliente com esse nome: ${achado.opcoes.map((c) => c.nome).join(", ")}. Qual deles?`, opcoes: achado.opcoes.map((c) => ({ id: c.id, nome: c.nome })) };
     }
-    // Sem nome na pergunta: o anexo pode dizer de quem é (só vale se citar um cliente só).
     const doAnexo = achado.tipo === "nenhum" && (e.arquivos || []).length
       ? clienteDaPergunta((e.arquivos || []).map((x) => `${x.nome} ${x.texto.slice(0, 3000)}`).join(" "), clientes)
       : null;
-    cliente = achado.tipo === "um" ? achado.cliente : doAnexo && doAnexo.tipo === "um" ? doAnexo.cliente : await clientePorJev(e.pergunta, clientes, agencia, e.userId);
+    const anterior = e.clienteAnterior ? clientes.find((c) => c.id === e.clienteAnterior && !c.projetoId) || null : null;
+    cliente = achado.tipo === "um" ? achado.cliente : doAnexo && doAnexo.tipo === "um" ? doAnexo.cliente : await clientePorJev(e.pergunta, clientes, agencia, e.userId, anterior);
   }
 
   const nomes = new Map(clientes.filter((c) => !c.projetoId).map((c) => [c.id, c.nome]));
@@ -420,40 +498,44 @@ export async function responder(e: EntradaDoResponder): Promise<Respondido> {
   const nomeRecorte = cliente ? (cliente.marca ? `${cliente.marca} (marca de ${nomes.get(cliente.id) || "cliente"})` : cliente.nome) : "Todos os clientes";
   const cabecalho = `${nomeRecorte} · ${periodo.rotulo}`;
 
-  // Ferramentas: o modelo só vê apelidos (c cliente, p projeto, t tarefa) e a lista de agentes.
-  const alvos = await alvosDoGestor(cliente, clientes, fatos.tarefas, e.conversa?.project_id || null);
+  // Ferramentas e objetos: o modelo só vê apelidos (c, p, t, a, o) e a lista de agentes.
+  const referencias = (e.referencias || []).filter((r) => !cliente || !r.client_id || r.client_id === cliente.id);
+  const alvos = await alvosDoGestor(cliente, clientes, fatos.tarefas, fatos.aprovacoes, e.conversa?.project_id || null, referencias);
   const blocoDeAcoes = e.semIa ? "" : [
     blocoDosAlvos("CLIENTES", alvos.clientes),
     blocoDosAlvos("PROJETOS DO CLIENTE", alvos.projetos, cliente ? "nenhum projeto ativo." : "nenhum (conversa geral: para criar tarefa, pergunte de qual cliente; não use outro)."),
-    blocoDosAlvos("TAREFAS QUE PODEM SER AJUSTADAS OU MANDADAS A UM AGENTE", alvos.tarefas),
+    blocoDosAlvos("TAREFAS (ajustar ou mandar a um agente)", alvos.tarefas),
+    blocoDosAlvos("SOLICITAÇÕES DE APROVAÇÃO PENDENTES (aprovar ou devolver)", alvos.aprovacoes, "nenhuma pendente neste recorte."),
     `\nAGENTES (slug: nome): ${alvos.agentes.map((a) => `${a.slug}: ${a.nome}`).join("; ") || "nenhum ativo"}\n`,
     regraDasAcoes(DESCRICOES_DAS_OPERACOES),
   ].join("\n");
+  const blocoDeObjetos = alvos.objetosDaConversa.length
+    ? `OBJETOS DA CONVERSA (mais recente primeiro; use estes apelidos para "isso", "essa", "o que você fez"):\n${alvos.objetosDaConversa.map((o) => `${o.apelido} | ${ROTULO_DO_OBJETO[o.objeto.tipo]} | ${(o.objeto.titulo || "").slice(0, 120)} | ${o.origem}${o.estado ? ` · ${o.estado}` : ""}`).join("\n")}`
+    : "";
 
-  // Anexos do dono viram fontes A1..An, antes das do OS (o modelo responde sobre eles primeiro).
   const anexos = fontesDosAnexos(e.arquivos || [], (e.imagens || []).map((i) => ({ nome: i.nome })));
   const todas = [...anexos.fontes, ...ficha.fontes];
-  const red = await redigir(e.pergunta, cabecalho, todas, { agencia, userId: e.userId, semIa: e.semIa || !!e.tetoAtingido, historico: e.historico, imagens: e.imagens, blocoDeAcoes });
+  const red = await redigir(e.pergunta, cabecalho, todas, { agencia, userId: e.userId, semIa: e.semIa || !!e.tetoAtingido, historico: e.historico, imagens: e.imagens, blocoDeAcoes, blocoDeObjetos });
   const avisos = [...fatos.avisos, ...red.avisos];
   if (e.tetoAtingido && !e.semIa) avisos.push(`Teto de ${e.tetoPorDia ?? 60} respostas com IA por dia atingido: respondi só com os fatos registrados.`);
-  if (ficha.cortadas) avisos.push(`${ficha.cortadas} fatos a mais no período ficaram fora desta resposta: refine por cliente ou período.`);
-  if (!ficha.fontes.length) avisos.push("Nada registrado no OS para este recorte. Isso não prova que nada aconteceu fora do painel.");
+  if (ficha.cortadas && red.origem === "motor") avisos.push(`${ficha.cortadas} fatos a mais no período ficaram fora desta resposta: refine por cliente ou período.`);
+  if (!ficha.fontes.length && red.origem === "motor") avisos.push("Nada registrado no OS para este recorte. Isso não prova que nada aconteceu fora do painel.");
 
-  // A ação proposta: apelido vira id real, `para` validado, travas aplicadas. Direto só com ordem clara.
+  // A ação proposta: apelido vira id real, `para` validado, travas aplicadas. Direto só com ordem clara e sem decisão.
   let acao: AcaoDoAgente | null = null;
   if (red.bruto && !e.semIa) {
     const regras = regrasDoGestor(alvos.agentes.map((a) => a.slug));
-    acao = normalizarAcaoDoAgente<AlvoDoGestor>(red.bruto.acoes, [...alvos.clientes, ...alvos.projetos, ...alvos.tarefas], regras, {
+    acao = normalizarAcaoDoAgente<AlvoDoGestor>(red.bruto.acoes, [...alvos.clientes, ...alvos.projetos, ...alvos.tarefas, ...alvos.aprovacoes], regras, {
       agente: AGENTE_DO_GESTOR,
       id: `gestor-${Date.now().toString(36)}`,
       contexto: { client_id: cliente?.id || null, conversa_id: e.conversa?.id || null, pergunta: e.pergunta.slice(0, 600) },
-      semDesfazer: (itens) => itens.some((i) => i.operacao === "pedir_ao_agente"),
+      semDesfazer: (itens) => itens.some((i) => i.operacao === "pedir_ao_agente" || OPERACOES_DE_DECISAO.includes(i.operacao)),
     });
     if (acao) {
       let clara = pareceOrdem(e.pergunta);
       try { clara = (await ehOrdemClara(e.pergunta, { agente: "Gestor Aceleriq", resumo: acao.resumo })).clara; } catch { /* vale a regra do verbo */ }
       const decisao = podeExecutarDireto(acao, regras, { pedidoClaro: clara });
-      if (decisao.direto) {
+      if (decisao.direto && !e.semExecutarDireto) {
         acao = await executarDireto(acao, (it, a) => executarItem(servico(), it, a, e.userId), { userId: e.userId });
         (acao as AcaoDoAgente & { entregas?: EntregaDoGestor[] }).entregas = await entregasDaAcao(servico(), acao);
       }
@@ -465,20 +547,37 @@ export async function responder(e: EntradaDoResponder): Promise<Respondido> {
   })).filter((b) => b.pedido);
 
   // Só as fontes citadas vão para a tela e para a conversa (o resto fica no total).
-  const citadas = new Set(red.itens.flatMap((i) => i.fontes));
-  const fontesUsadas = todas.filter((f) => citadas.has(f.apelido));
+  const citadas = new Set(red.itens.flatMap((i) => i.fontes.map((a) => a.toUpperCase())));
+  const fontesUsadas = todas.filter((f) => citadas.has(f.apelido.toUpperCase()));
   if (anexos.cortados.length) avisos.push(`Li só o começo de ${anexos.cortados.join(", ")}: o texto passou do limite de uma pergunta.`);
-  const conversa = conversaDoRecorte({ nome: nomeRecorte, periodo: periodo.rotulo, contagem, totalDeFontes: ficha.fontes.length, temCliente: !!cliente });
-  if (anexos.fontes.length) {
-    const n = anexos.fontes.length;
-    conversa.abertura = `Li ${n === 1 ? "o que você mandou" : `os ${n} anexos que você mandou`}. ${conversa.abertura}`;
-  }
-  const dados = {
-    tipo: "resposta", origem: red.origem, cabecalho, periodo, abertura: conversa.abertura, fechamento: conversa.fechamento, sugestoes: conversa.sugestoes, cliente: cliente ? { id: cliente.id, nome: nomeRecorte, projeto_id: cliente.projetoId || null } : null,
-    acoes: acao ? [acao] : [], bloqueadas,
-    itens: red.itens, fontes: fontesUsadas, contagem, total_de_fontes: ficha.fontes.length, avisos, modelo: red.modelo, recusados: red.recusados, contestados: red.contestados,
+
+  // Abrir: o apelido pedido vira o objeto real (lateral nativa), nunca um id do modelo.
+  const pedidoDeAbrir = String(red.bruto?.abrir || "").trim();
+  const abrir = pedidoDeAbrir ? objetoDoApelido(pedidoDeAbrir, todas, alvos) : null;
+
+  // Referências desta resposta: o que foi citado, aberto, proposto ou criado (para a próxima mensagem).
+  const novas: ReferenciaDoGestor[] = [];
+  const junta = (o: ObjetoDoGestor | null | undefined, origem: ReferenciaDoGestor["origem"], estado?: string | null) => {
+    if (o && !novas.some((x) => x.tipo === o.tipo && x.id === o.id)) novas.push({ ...o, client_id: o.client_id ?? cliente?.id ?? null, origem, estado: estado ?? null });
   };
-  return { tipo: "resposta", texto: respostaEmTexto(cabecalho, red.itens), clienteId: cliente?.id || null, custo: red.custo, usoId: red.usoId, dados, acao };
+  for (const ent of ((acao as AcaoDoAgente & { entregas?: EntregaDoGestor[] } | null)?.entregas || [])) junta(ent.objeto, ent.tipo === "aprovacao" ? "decidido" : "criado", ent.estado);
+  for (const it of acao?.itens || []) {
+    const alvo = [...alvos.tarefas, ...alvos.aprovacoes].find((a) => a.id === it.alvo_id);
+    if (alvo) junta({ tipo: it.operacao === "aprovar_solicitacao" || it.operacao === "pedir_alteracao" ? "aprovacao" : "tarefa", id: alvo.id, titulo: alvo.titulo }, "proposto", String(alvo.dados?.status || "") || null);
+  }
+  if (abrir) junta(abrir, "aberto");
+  for (const f of fontesUsadas) junta(objetoDaFonte(f), "citado", f.estado);
+
+  const sugestoes = (Array.isArray(red.bruto?.sugestoes) ? (red.bruto!.sugestoes as unknown[]) : []).map((x) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3);
+  const dados = {
+    tipo: "resposta", origem: red.origem, cabecalho, periodo, abertura: null, fechamento: null, sugestoes,
+    mostrar_numeros: red.origem === "motor" ? true : red.bruto?.mostrar_numeros === true,
+    cliente: cliente ? { id: cliente.id, nome: nomeRecorte, projeto_id: cliente.projetoId || null } : null,
+    acoes: acao ? [acao] : [], bloqueadas, abrir, referencias: novas.slice(0, 16),
+    itens: red.itens, fontes: fontesUsadas, contagem, total_de_fontes: ficha.fontes.length, avisos, modelo: red.modelo, recusados: red.recusados, contestados: red.contestados,
+    relatorio: respostaEmTexto(cabecalho, red.itens),
+  };
+  return { tipo: "resposta", texto: respostaEmConversa(red.itens) || (acao ? acao.resumo : ""), clienteId: cliente?.id || null, custo: red.custo, usoId: red.usoId, dados, acao };
 }
 
 /** Onde decidir um pedido sensível (com o cliente na rota quando dá). */
@@ -495,8 +594,32 @@ export function linkDoLugar(onde: string, clientId: string | null): string | nul
   }
 }
 
-/** Alvos das ferramentas: cliente(s), projetos ativos do cliente, tarefas do recorte e agentes ativos. */
-async function alvosDoGestor(cliente: ClienteBase | null, clientes: ClienteBase[], tarefas: TarefaBruta[], projetoDaConversa: string | null) {
+type AlvosDoGestor = Awaited<ReturnType<typeof alvosDoGestor>>;
+
+/** Apelido (F, t, p, a, o) → objeto real. Apelido desconhecido: null (nada abre). */
+export function objetoDoApelido(apelido: string, fontes: Fonte[], alvos: Pick<AlvosDoGestor, "tarefas" | "projetos" | "aprovacoes" | "objetosDaConversa">): ObjetoDoGestor | null {
+  const a = apelido.trim().toLowerCase();
+  if (/^f\d+$/.test(a)) {
+    const f = fontes.find((x) => x.apelido.toLowerCase() === a);
+    return f ? objetoDaFonte(f) : null;
+  }
+  const t = alvos.tarefas.find((x) => x.ref.toLowerCase() === a);
+  if (t) return { tipo: "tarefa", id: t.id, titulo: t.titulo };
+  const p = alvos.projetos.find((x) => x.ref.toLowerCase() === a);
+  if (p) return { tipo: "projeto", id: p.id, titulo: p.titulo };
+  const ap = alvos.aprovacoes.find((x) => x.ref.toLowerCase() === a);
+  if (ap) return { tipo: "aprovacao", id: ap.id, titulo: ap.titulo };
+  const o = alvos.objetosDaConversa.find((x) => x.apelido.toLowerCase() === a);
+  return o ? o.objeto : null;
+}
+
+/**
+ * Alvos das ferramentas: cliente(s), projetos ativos do cliente, tarefas do
+ * recorte, solicitações pendentes e agentes ativos. Os objetos da conversa
+ * (tarefas e solicitações citadas antes) entram nas listas mesmo fora do
+ * período, para "essa tarefa" e "pode aprovar" acharem o alvo certo.
+ */
+async function alvosDoGestor(cliente: ClienteBase | null, clientes: ClienteBase[], tarefas: TarefaBruta[], aprovacoes: AprovacaoBruta[], projetoDaConversa: string | null, referencias: ReferenciaDoGestor[]) {
   const s = servico();
   const principais = clientes.filter((c) => !c.projetoId);
   const listaClientes: AlvoDoGestor[] = cliente ? [{ id: cliente.id, titulo: principais.find((c) => c.id === cliente.id)?.nome || cliente.nome }] : principais.slice(0, 40).map((c) => ({ id: c.id, titulo: c.nome }));
@@ -509,12 +632,66 @@ async function alvosDoGestor(cliente: ClienteBase | null, clientes: ClienteBase[
     linhas.sort((a, b) => Number(b.id === projetoDaConversa) - Number(a.id === projetoDaConversa));
     projetos = linhas.map((p) => ({ id: p.id, titulo: p.name, detalhe: [p.status, p.id === projetoDaConversa ? "projeto desta conversa" : ""].filter(Boolean).join(" · ") }));
   }
-  const abertasPrimeiro = [...tarefas].sort((a, b) => Number(a.status === "done") - Number(b.status === "done"));
+
+  // Tarefas: as da conversa primeiro (mesmo fora do período), depois as abertas do recorte.
+  const idsDaConversa = referencias.filter((r) => r.tipo === "tarefa").map((r) => r.id).filter((id) => UUID.test(id));
+  const faltam = idsDaConversa.filter((id) => !tarefas.some((t) => t.id === id));
+  const extras: TarefaBruta[] = [];
+  if (faltam.length) {
+    const { data } = await s.from("tasks").select("id, title, status, updated_at, due_date, deleted_at, project:projects!tasks_project_id_fkey(client_id, client:profiles!projects_client_id_fkey(company_name, full_name))").in("id", faltam.slice(0, 20));
+    for (const t of (data || []) as unknown as Array<{ id: string; title: string; status: string; updated_at: string; due_date: string | null; deleted_at: string | null; project: { client_id: string | null; client: { company_name: string | null; full_name: string | null } | null } | null }>) {
+      if (t.deleted_at || (cliente && t.project?.client_id !== cliente.id)) continue;
+      extras.push({ id: t.id, title: t.title, status: t.status, updated_at: t.updated_at, due_date: t.due_date, cliente: t.project?.client?.company_name || t.project?.client?.full_name || null });
+    }
+  }
+  const ordemDaConversa = (id: string) => { const i = idsDaConversa.indexOf(id); return i < 0 ? 999 : i; };
+  const todasTarefas = [...extras, ...tarefas].sort((a, b) => ordemDaConversa(a.id) - ordemDaConversa(b.id) || Number(a.status === "done") - Number(b.status === "done"));
+
+  // Solicitações pendentes: as da conversa primeiro, depois as do recorte.
+  const idsAprov = referencias.filter((r) => r.tipo === "aprovacao").map((r) => r.id).filter((id) => UUID.test(id));
+  const aprovs: Array<{ id: string; o_que: string; status: string; cliente: string | null; valid_until?: string | null; payload_version?: number | null; client_id?: string | null }> = aprovacoes.map((a) => ({ id: a.id, o_que: a.o_que, status: a.status, cliente: a.cliente || null }));
+  const faltamAprov = idsAprov.filter((id) => !aprovs.some((a) => a.id === id));
+  const todosIdsAprov = [...new Set([...aprovs.map((a) => a.id), ...faltamAprov])].slice(0, 80);
+  if (todosIdsAprov.length) {
+    const { data } = await s.from("operator_approvals").select("id, o_que, status, valid_until, payload_version, client_id, client:profiles!operator_approvals_client_id_fkey(company_name, full_name)").in("id", todosIdsAprov);
+    const porId = new Map(((data || []) as unknown as Array<{ id: string; o_que: string; status: string; valid_until: string | null; payload_version: number | null; client_id: string | null; client: { company_name: string | null; full_name: string | null } | null }>).map((a) => [a.id, a]));
+    for (let i = aprovs.length - 1; i >= 0; i--) {
+      const x = porId.get(aprovs[i].id);
+      if (x) Object.assign(aprovs[i], { valid_until: x.valid_until, payload_version: x.payload_version, client_id: x.client_id, status: x.status });
+    }
+    for (const id of faltamAprov) {
+      const x = porId.get(id);
+      if (x && (!cliente || x.client_id === cliente.id)) aprovs.push({ id: x.id, o_que: x.o_que, status: x.status, cliente: x.client?.company_name || x.client?.full_name || null, valid_until: x.valid_until, payload_version: x.payload_version, client_id: x.client_id });
+    }
+  }
+  const ordemAprov = (id: string) => { const i = idsAprov.indexOf(id); return i < 0 ? 999 : i; };
+  aprovs.sort((a, b) => ordemAprov(a.id) - ordemAprov(b.id));
+  const quando = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" }) : "");
+  const alvosAprov: AlvoDoGestor[] = aprovs.map((a) => ({
+    id: a.id, titulo: a.o_que,
+    detalhe: [a.status, a.cliente, a.payload_version ? `versão ${a.payload_version}` : "", a.valid_until ? `vence ${quando(a.valid_until)}` : "", idsAprov.includes(a.id) ? "citada nesta conversa" : ""].filter(Boolean).join(" · "),
+    dados: { status: a.status, valid_until: a.valid_until || null },
+  }));
+
   const { data: ops } = await s.from("internal_operators").select("slug, display_name, status").eq("status", "active").limit(60);
+  const tarefasComApelido = comApelido(todasTarefas.slice(0, 60).map((t) => alvoDaTarefa(t)), "t");
+  const aprovComApelido = comApelido(alvosAprov, "a");
+
+  // Objetos da conversa: tarefas e solicitações usam o apelido da lista (t/a); o resto ganha oN (só para abrir).
+  const objetosDaConversa: Array<{ apelido: string; objeto: ObjetoDoGestor; origem: string; estado: string | null }> = [];
+  let n = 0;
+  for (const r of referencias.slice(0, 16)) {
+    const daLista = r.tipo === "tarefa" ? tarefasComApelido.find((t) => t.id === r.id) : r.tipo === "aprovacao" ? aprovComApelido.find((a) => a.id === r.id) : null;
+    if ((r.tipo === "tarefa" || r.tipo === "aprovacao") && !daLista) continue; // fora do cliente, apagada ou decidida e fora da lista
+    const apelido = daLista ? daLista.ref : `o${++n}`;
+    objetosDaConversa.push({ apelido, objeto: { tipo: r.tipo, id: r.id, titulo: r.titulo || null, client_id: r.client_id || null }, origem: r.origem, estado: r.estado || (daLista ? String(daLista.dados?.status || "") : null) });
+  }
   return {
     clientes: comApelido(listaClientes, "c"),
     projetos: comApelido(projetos, "p"),
-    tarefas: comApelido(abertasPrimeiro.slice(0, 60).map((t) => alvoDaTarefa(t)), "t"),
+    tarefas: tarefasComApelido,
+    aprovacoes: aprovComApelido,
     agentes: ((ops || []) as Array<{ slug: string; display_name: string }>).map((o) => ({ slug: o.slug, nome: o.display_name })),
+    objetosDaConversa,
   };
 }

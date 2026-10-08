@@ -85,3 +85,33 @@ Toda gravação leva origem `gestor-aceleriq`, autor, conversa e a frase do pedi
 ### Mesas e navegador
 - Mesas/Workspace/Kanban/Calendário/Arquivos/Clientes abrem dentro da Central em iframe da própria origem com `?embutido=1` (sem casca; `src/main.tsx` + `src/index.css`), com `?client=`/`?project=` da conversa.
 - Navegador integrado: só o que o site permite embutir; sem contornar bloqueio, sem copiar cookies/senhas. Navegador remoto isolado (sites que bloqueiam iframe) exige infraestrutura à parte; opções a decidir: Browserbase/Steel (cerca de US$ 0,10/h de sessão) ou Cloudflare Browser Rendering (cobrado por minuto de navegador), com sessão de login própria por cliente.
+
+## 6. Etapa 2c (08–09/10/2026): Hermes real, Gestor conversacional, objetos nativos
+
+### Hermes lado a lado (ponte instalada com autorização do Almir)
+- `hermes-painel-ponte.service` no srv1769409 (172.16.0.1:9121, usuário `aceleriq-tunnel`, node montado de `/root/.hermes/node` como a ponte MCP), token próprio no cofre do systemd (`aceleriq-painel-ponte-token.cred`), rota `/painel-api/` no Traefik do proxy (sem token: 401; dashboard e MCP intactos). Segredo `HERMES_PAINEL_TOKEN` nas funções.
+- Envio pelo stream do Hermes (`/chat/stream`): a ponte guarda o parcial do turno (texto que vai chegando, ferramentas rodando/feitas/falhas, comentários, pedido de aprovação de comando) e a tela lê a cada 1 s. Raciocínio interno nunca sai. Texto até 60 mil caracteres; imagens (data URL, até 4) vão como conteúdo multimodal; arquivos de texto no corpo; outros tipos são recusados na tela.
+- Tela: `central/ChatDoHermes.tsx` (seletor de sessões com busca, Conversas/Rotinas, nova conversa, continuar sessão de outro app por cópia, contexto do cliente opcional, arrastar arquivos). Diário da coordenação em janela (`central/DiarioDaCoordenacao.tsx`) com seletor pesquisável (cliente, agente, título curto, estado).
+- Teste real: sessão `api_1791477275_be50cc87` ("Central · Teste da Central (interno)"): ida e volta e texto chegando aos poucos (391 → 850 caracteres).
+
+### Gestor conversacional
+- Sem abertura/fechamento/sugestões fixas (`conversaDoRecorte` não é mais usada); o modelo lê as últimas 30 mensagens (com o que aconteceu nas ações) e os OBJETOS DA CONVERSA (`modulos/historico.ts`, `dados.referencias`), e responde do tamanho da pergunta. Cartão de números só com `mostrar_numeros`.
+- Verdade: seção `conversa` aceita frase sem fonte, e o Jev (`perguntasDeConversa`) tira a que afirma fato da operação; fato continua exigindo fonte (barreira de código + Jev).
+- Cliente da conversa geral continua entre mensagens (Jev com o cliente anterior: "qual depende de mim?").
+- Aprovar é ferramenta própria (`aprovar_solicitacao`, `pedir_alteracao`) sobre a solicitação real (`aN`), sempre Confirmar, pelo mecanismo oficial (`central_review_decide` / `operator_approval_decidir`) com a sessão do dono. Registrar decisão na memória não substitui aprovar; aprovar não envia nem publica.
+- `abrir`: "abre o que você fez" abre o objeto real na lateral nativa.
+- Comparação (mesma conversa, banco real, sem executar nada no cliente): antes, toda resposta abria com "Dei uma olhada... Achei 80 registros", o cliente se perdia ("Todos os clientes") e "pode aprovar essa" virava ajuste de tarefa; depois, respostas diretas no recorte da Acerbi, "pode aprovar essa" propõe `aprovar_solicitacao` da abertura da semana, "abre o que você fez" abre a tarefa. Custo ~US$ 0,028 por mensagem.
+
+### Objetos nativos e ferramentas
+- `central/ObjetoDaCentral.tsx`: tarefa, memória, aprovação (decidir com Confirmar), projeto, arquivo (prévia por link assinado), publicação e execução, sem iframe.
+- Ferramentas (Workspace, Arquivos, Mesa Ads, Mesa do Cliente, Design, Calendário, Projetos, Dossiê, Kanban, Fotos, Vídeos, CRM): pop-up interno grande por padrão, ou lateral na altura exata, ou área maior; modo embutido esconde a casca e o seletor de mesa/cliente.
+- Arquivos do cliente na área ao lado: clicar abre; arrastar leva o arquivo (link assinado de 15 min) ao Gestor ou ao Hermes.
+
+### Navegador remoto (a decidir; nada contratado)
+| Opção | Custo | Encaixe |
+|---|---|---|
+| Browserbase Developer | US$ 20/mês com ~100 h; depois ~US$ 0,12/h | sessões com contexto persistente por cliente, live view embutível e controle manual; serviço pronto |
+| Steel (Launch) | sem mensalidade, ~US$ 0,10/h (crédito inicial) | parecido, sessões curtas (15 min) no plano de entrada |
+| Cloudflare Browser Rendering | Workers Paid: 10 h/mês incluídas, depois US$ 0,09/h | já usamos Cloudflare; é headless (automação), sem tela ao vivo para controle manual |
+| VPS própria (Chromium + noVNC/CDP) | ~US$ 7–15/mês de VPS nova | tudo nosso, perfis cifrados por cliente; mais manutenção; NÃO no servidor do Hermes (2 vCPU) |
+Senhas nunca em texto: login feito pelo próprio dono dentro da sessão remota; o perfil (cookies) fica cifrado no provedor/volume, por cliente.

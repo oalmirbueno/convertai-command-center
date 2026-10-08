@@ -12,6 +12,8 @@ import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
 import { Carregando, EstadoDeErro, botao, juntar, useEstadoDaTela } from "@/components/sistema";
 import { ROLAGEM_OPERACAO } from "@/components/execucao/CarteiraDaOperacao";
 import { ROTULO_DO_ESTADO, type Fonte, type ItemDaResposta, type SecaoDaResposta } from "../../../supabase/functions/gestor-aceleriq/modulos/ficha";
+import { objetoDaFonte, objetoValido, ROTULO_DO_TIPO, type ObjetoAberto } from "@/lib/centralObjetos";
+import { arquivosDoWorkspace, TIPO_ARQUIVO_DO_WORKSPACE } from "@/lib/centralArrastar";
 
 /**
  * A conversa do Gestor Aceleriq (Central de Autonomia, 08/10/2026).
@@ -21,17 +23,20 @@ import { ROTULO_DO_ESTADO, type Fonte, type ItemDaResposta, type SecaoDaResposta
  * inteligente (cartão visual com os números, sugestões de próxima pergunta,
  * como no ChatGPT atual). Limpa, com espaço para conversar.
  *
- * A régua de prova não muda: cada balão de fato cita fontes clicáveis; a
- * abertura, o fechamento e as sugestões são montados em código a partir das
- * contagens (sem fato novo).
+ * A régua de prova não muda: cada balão de fato cita fontes clicáveis.
+ * 09/10: conversa contínua. Sem abertura, fechamento, rótulos de seção e
+ * sugestões fixas; o cartão de números só aparece quando o Gestor marca
+ * (panorama). Entregas e objetos abrem na lateral nativa (aoAbrirObjeto).
  */
 
 export type RespostaDoGestor = {
   tipo?: "resposta" | "esclarecer";
   origem?: "ia_conferida" | "motor";
   cabecalho?: string;
-  abertura?: string;
+  abertura?: string | null;
   fechamento?: string | null;
+  mostrar_numeros?: boolean;
+  abrir?: ObjetoAberto | null;
   sugestoes?: string[];
   itens?: ItemDaResposta[];
   fontes?: Fonte[];
@@ -49,28 +54,29 @@ export type RespostaDoGestor = {
 };
 
 /** O que a ação feita entregou, relido do banco pela função (estado real, id gravado e atalho). */
-type Entrega = { ref: string; nome: string; tipo: "tarefa" | "memoria" | "fila_do_agente"; cliente: string | null; projeto: string | null; estado: string; id: string; link: string; proxima: string };
+type Entrega = { ref: string; nome: string; tipo: "tarefa" | "memoria" | "fila_do_agente" | "aprovacao"; objeto?: ObjetoAberto; cliente: string | null; projeto: string | null; estado: string; id: string; link: string; proxima: string };
 
-const ROTULO_DA_ENTREGA: Record<Entrega["tipo"], string> = { tarefa: "Tarefa", memoria: "Memória do cliente", fila_do_agente: "Na fila do agente" };
+const ROTULO_DA_ENTREGA: Record<Entrega["tipo"], string> = { tarefa: "Tarefa", memoria: "Memória do cliente", fila_do_agente: "Na fila do agente", aprovacao: "Decisão registrada" };
 
-function CartaoDeEntrega({ e, aoAbrirNoPainel }: { e: Entrega; aoAbrirNoPainel?: (caminho: string, rotulo: string) => void }) {
-  return (
-    <div className="w-full max-w-[560px] rounded-2xl border border-success/30 bg-background p-3 shadow-sm" data-entrega={e.tipo}>
-      <div className="flex items-start gap-2">
-        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-success">{ROTULO_DA_ENTREGA[e.tipo]}</p>
-          <p className="text-[14px] font-medium leading-snug text-foreground">{e.nome}</p>
-          <p className="mt-0.5 text-[12px] text-muted-foreground">{[e.cliente, e.projeto].filter(Boolean).join(" · ")}{e.cliente || e.projeto ? " · " : ""}Estado: <span className="text-foreground">{e.estado}</span></p>
-          <p className="mt-0.5 font-mono text-[10px] text-muted-foreground" title={e.id}>id {e.id.slice(0, 8)}</p>
-          <p className="mt-1.5 text-[12px] text-muted-foreground">Próximo: {e.proxima}</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {aoAbrirNoPainel && <button type="button" onClick={() => aoAbrirNoPainel(e.link, e.nome)} className="inline-flex items-center rounded-full bg-primary px-3 py-1 text-[12px] font-medium text-primary-foreground">Abrir aqui</button>}
-            <a href={e.link} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-full border border-border px-3 py-1 text-[12px] hover:bg-muted"><ExternalLink className="mr-1 h-3 w-3" />Aba nova</a>
-          </div>
-        </div>
-      </div>
-    </div>
+/** Cartão compacto do que foi feito (relido do banco). Clicar abre o objeto na lateral nativa. */
+function CartaoDeEntrega({ e, aoAbrirObjeto }: { e: Entrega; aoAbrirObjeto?: (o: ObjetoAberto) => void }) {
+  const objeto = objetoValido(e.objeto) || (e.tipo === "tarefa" || e.tipo === "fila_do_agente" ? objetoValido({ tipo: "tarefa", id: e.id, titulo: e.nome }) : null);
+  const corpo = (
+    <>
+      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px] font-medium leading-snug text-foreground">{e.nome}</span>
+        <span className="block truncate text-[12px] text-muted-foreground">{ROTULO_DA_ENTREGA[e.tipo]} · {e.estado}{e.cliente ? ` · ${e.cliente}` : ""}</span>
+      </span>
+      {objeto && aoAbrirObjeto ? <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
+    </>
+  );
+  return objeto && aoAbrirObjeto ? (
+    <button type="button" onClick={() => aoAbrirObjeto(objeto)} title={`${e.proxima} (id ${e.id.slice(0, 8)})`} aria-label={`Abrir ${e.nome}`} className="flex w-full max-w-[520px] items-start gap-2 rounded-lg border border-success/30 bg-background px-3 py-2.5 text-left shadow-sm transition-colors hover:border-success/60 hover:bg-muted/40" data-entrega={e.tipo}>
+      {corpo}
+    </button>
+  ) : (
+    <div className="flex w-full max-w-[520px] items-start gap-2 rounded-lg border border-success/30 bg-background px-3 py-2.5 shadow-sm" title={e.proxima} data-entrega={e.tipo}>{corpo}</div>
   );
 }
 type Mensagem = { id: string; papel: "usuario" | "gestor" | "sistema"; conteudo: string; dados?: RespostaDoGestor; criado_em: string; pendente?: boolean; nova?: boolean; pedido?: { anexos?: Array<{ nome: string; tipo: string; caracteres: number }>; nao_lidos?: Array<{ nome: string; motivo: string }>; imagens?: Array<{ nome: string }>; audio?: { segundos: number } | null; previas?: string[] } };
@@ -99,6 +105,7 @@ const SECAO: Record<SecaoDaResposta, { rotulo: string; cor: string; barra: strin
   decisao: { rotulo: "Sua decisão", cor: "text-destructive", barra: "bg-destructive" },
   lacuna: { rotulo: "Pendências e lacunas", cor: "text-muted-foreground", barra: "bg-muted-foreground/30" },
   proximo: { rotulo: "Próximos passos", cor: "text-primary", barra: "bg-primary" },
+  conversa: { rotulo: "Conversa", cor: "text-foreground", barra: "bg-muted-foreground/30" },
 };
 const NUMEROS: SecaoDaResposta[] = ["feito", "em_revisao", "em_andamento", "bloqueado", "decisao", "concluido_sem_prova"];
 
@@ -143,26 +150,29 @@ function CartaoDoRecorte({ d }: { d: RespostaDoGestor }) {
   );
 }
 
-function FonteAberta({ f, aoAbrirDiario }: { f: Fonte; aoAbrirDiario: (linkId: string, titulo?: string) => void }) {
+function FonteAberta({ f, aoAbrirDiario, aoAbrirObjeto }: { f: Fonte; aoAbrirDiario: (linkId: string, titulo?: string) => void; aoAbrirObjeto?: (o: ObjetoAberto) => void }) {
+  const objeto = objetoDaFonte(f);
   return (
     <div className="w-full max-w-[560px] rounded-2xl border border-border bg-background p-3 text-[12px] shadow-sm">
       <p className="font-medium text-foreground"><span className="mr-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">{f.apelido}</span>{f.titulo}</p>
       <p className="mt-1 text-muted-foreground">{ROTULO_DO_ESTADO[f.estado]}{f.cliente ? ` · ${f.cliente}` : ""}{f.agente ? ` · ${f.agente}` : ""}</p>
       <p className="mt-2 line-clamp-6 whitespace-pre-wrap break-words text-foreground/85">{f.texto}</p>
       <div className="mt-2 flex flex-wrap gap-2">
-        {f.ids.vinculo && <button type="button" className={juntar(botao.discreto, "h-7 rounded-full px-3 text-[12px]")} onClick={() => aoAbrirDiario(f.ids.vinculo!, f.titulo)}>Abrir diário da execução</button>}
+        {objeto && aoAbrirObjeto && <button type="button" className={juntar(botao.discreto, "h-7 rounded-full px-3 text-[12px]")} onClick={() => aoAbrirObjeto(objeto)}>Abrir {ROTULO_DO_TIPO[objeto.tipo].toLowerCase()} ao lado</button>}
+        {f.ids.vinculo && <button type="button" className={juntar(botao.discreto, "h-7 rounded-full px-3 text-[12px]")} onClick={() => aoAbrirDiario(f.ids.vinculo!, f.titulo)}>Diário da execução</button>}
         {f.link && <a href={f.link} target="_blank" rel="noreferrer" className={juntar(botao.discreto, "h-7 rounded-full px-3 text-[12px]")}>Abrir publicação <ArrowUpRight className="ml-1 h-3 w-3" /></a>}
       </div>
     </div>
   );
 }
 
-/** Uma resposta do Gestor: abertura, cartão, balões por assunto, fechamento e o que fazer a seguir. */
-function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemId, aoAbrirNoPainel, aoMudou }: {
+/** Uma resposta do Gestor: as mensagens dele, o cartão de números quando ele marca, ações, entregas e o objeto aberto. */
+function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemId, aoAbrirNoPainel, aoAbrirObjeto, aoMudou }: {
   d: RespostaDoGestor;
   nova: boolean;
   mensagemId?: string | null;
   aoAbrirNoPainel?: (caminho: string, rotulo: string) => void;
+  aoAbrirObjeto?: (o: ObjetoAberto) => void;
   aoMudou?: () => void;
   aoAbrirDiario: (linkId: string, titulo?: string) => void;
   aoEncaminhar: (p: PedidoAoHermes) => void;
@@ -174,15 +184,16 @@ function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemI
   const fontes = useMemo(() => new Map((d.fontes || []).map((f) => [f.apelido, f])), [d.fontes]);
   const itens = d.itens || [];
 
-  // A sequência que "chega": abertura, cartão, cada balão, fechamento.
+  // A sequência que "chega": cada balão (e o cartão de números só quando o Gestor marca; respostas antigas sem a marca mantêm o cartão).
+  const comNumeros = d.mostrar_numeros === true || (d.mostrar_numeros === undefined && !!d.abertura);
   const passos = useMemo(() => {
     const p: Array<{ tipo: "abertura" | "cartao" | "item" | "fechamento"; item?: ItemDaResposta; i?: number }> = [];
     if (d.abertura) p.push({ tipo: "abertura" });
-    if (d.contagem && Object.values(d.contagem).some((v) => (v || 0) > 0)) p.push({ tipo: "cartao" });
+    if (comNumeros && d.contagem && Object.values(d.contagem).some((v) => (v || 0) > 0)) p.push({ tipo: "cartao" });
     itens.forEach((item, i) => p.push({ tipo: "item", item, i }));
     if (d.fechamento) p.push({ tipo: "fechamento" });
     return p;
-  }, [d, itens]);
+  }, [d, itens, comNumeros]);
   const [vistos, setVistos] = useState(nova && PAUSA_MS > 0 ? 1 : passos.length);
   useEffect(() => {
     if (vistos >= passos.length) return;
@@ -190,6 +201,12 @@ function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemI
     return () => clearTimeout(t);
   }, [vistos, passos.length]);
   const terminou = vistos >= passos.length;
+  // "Abre o que você fez": o objeto pedido abre sozinho na lateral (uma vez, só na resposta nova).
+  const abrirPedido = objetoValido(d.abrir);
+  const jaAbriu = useRef(false);
+  useEffect(() => {
+    if (nova && terminou && abrirPedido && aoAbrirObjeto && !jaAbriu.current) { jaAbriu.current = true; aoAbrirObjeto(abrirPedido); }
+  }, [nova, terminou, abrirPedido, aoAbrirObjeto]);
   // A rolagem acompanha cada balão que chega (só na resposta nova; o histórico fica onde está).
   const fimDaResposta = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -208,7 +225,6 @@ function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemI
   }
 
   const proximas = itens.filter((i) => i.secao === "proximo").map((i) => `- ${i.texto}`);
-  let secaoAnterior: SecaoDaResposta | null = null;
   return (
     <div className="flex flex-col items-start gap-1.5">
       {passos.slice(0, vistos).map((p, k) => {
@@ -216,17 +232,10 @@ function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemI
         if (p.tipo === "fechamento") return <div key="fe" className={BALAO_GESTOR}>{d.fechamento}</div>;
         if (p.tipo === "cartao") return <div key="ca" className="my-1 w-full"><CartaoDoRecorte d={d} /></div>;
         const item = p.item!;
-        const novaSecao = item.secao !== secaoAnterior;
-        secaoAnterior = item.secao;
         const abertaAqui = item.fontes.find((a) => a === aberta && fontes.get(a));
         return (
           <Fragment key={`it-${p.i}`}>
-            {novaSecao && (
-              <p className={juntar("mt-2 flex items-center gap-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide", SECAO[item.secao].cor)}>
-                <span className={juntar("h-1.5 w-1.5 rounded-full", SECAO[item.secao].barra)} aria-hidden="true" />{SECAO[item.secao].rotulo}
-              </p>
-            )}
-            <div className={BALAO_GESTOR}>
+            <div className={BALAO_GESTOR} data-secao={item.secao}>
               {item.texto}
               <span className="ml-1.5 inline-flex flex-wrap gap-1 align-middle">
                 {item.fontes.map((a) => fontes.get(a) ? (
@@ -234,7 +243,7 @@ function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemI
                 ) : null)}
               </span>
             </div>
-            {abertaAqui && <FonteAberta f={fontes.get(abertaAqui)!} aoAbrirDiario={aoAbrirDiario} />}
+            {abertaAqui && <FonteAberta f={fontes.get(abertaAqui)!} aoAbrirDiario={aoAbrirDiario} aoAbrirObjeto={aoAbrirObjeto} />}
           </Fragment>
         );
       })}
@@ -259,7 +268,7 @@ function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemI
                     onFeito={(_p, r) => { const novo = r.anexo as AcaoDoAgente | undefined; if (novo && novo.id) setAcoesAtuais((x) => ({ ...x, [novo.id]: novo })); aoMudou?.(); }}
                   />
                 ) : <p className="text-[12px] text-muted-foreground">A conversa não foi gravada: abra de novo para confirmar esta ação.</p>}
-                {entregas.map((e) => <CartaoDeEntrega key={`${e.ref}-${e.id}`} e={e} aoAbrirNoPainel={aoAbrirNoPainel} />)}
+                {entregas.map((e) => <CartaoDeEntrega key={`${e.ref}-${e.id}`} e={e} aoAbrirObjeto={aoAbrirObjeto} />)}
               </div>
             );
           })}
@@ -270,8 +279,7 @@ function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemI
               <p className="mt-0.5 text-[12px] text-muted-foreground">{b.motivo}</p>
               {b.link && (
                 <div className="mt-2 flex gap-1.5">
-                  {aoAbrirNoPainel && <button type="button" onClick={() => aoAbrirNoPainel(b.link!, b.pedido)} className="rounded-full bg-warning/90 px-3 py-1 text-[12px] font-medium text-background">Decidir aqui</button>}
-                  <a href={b.link} target="_blank" rel="noreferrer" className="rounded-full border border-border px-3 py-1 text-[12px] hover:bg-muted">Aba nova</a>
+                  {aoAbrirNoPainel && <button type="button" onClick={() => aoAbrirNoPainel(b.link!, b.pedido)} className="rounded-full bg-warning/90 px-3 py-1 text-[12px] font-medium text-background">Decidir</button>}
                 </div>
               )}
             </div>
@@ -281,19 +289,27 @@ function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemI
               {d.avisos.map((a, k) => <li key={k} className="flex gap-1.5"><CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />{a}</li>)}
             </ul>
           )}
-          {itens.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="inline-flex items-center rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-[13px] font-medium text-primary hover:bg-primary/10"
-                title="Abre o diário da coordenação com o pedido pronto. Você revisa e envia; o Hermes lê o diário."
-                onClick={() => aoEncaminhar({
-                  cliente: d.cliente ? { id: d.cliente.id, nome: d.cliente.nome } : null,
-                  texto: [`Pedido do Gestor Aceleriq (${d.cabecalho}).`, proximas.length ? `Próximas ações apontadas:\n${proximas.join("\n")}` : "Revise a situação abaixo e diga o próximo passo.", "", d.texto || ""].join("\n").trim(),
-                })}
-              >
-                <Bot className="mr-1.5 h-3.5 w-3.5" />Encaminhar ao Hermes
-              </button>
+          {abrirPedido && aoAbrirObjeto && (
+            <button type="button" onClick={() => aoAbrirObjeto(abrirPedido)} className="mt-1 inline-flex max-w-[520px] items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-[12px] text-muted-foreground hover:bg-muted" data-objeto-aberto="">
+              <ArrowUpRight className="h-3.5 w-3.5" /><span className="truncate">{ROTULO_DO_TIPO[abrirPedido.tipo]} aberta ao lado: <span className="text-foreground">{abrirPedido.titulo || "abrir"}</span></span>
+            </button>
+          )}
+          {(itens.length > 0 || (d.sugestoes || []).length > 0) && (
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              {itens.length > 0 && (
+                <button
+                  type="button"
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                  title="Levar esta resposta ao Hermes (você revisa antes de enviar)"
+                  aria-label="Encaminhar ao Hermes"
+                  onClick={() => aoEncaminhar({
+                    cliente: d.cliente ? { id: d.cliente.id, nome: d.cliente.nome } : null,
+                    texto: [`Pedido do Gestor Aceleriq (${d.cabecalho}).`, proximas.length ? `Próximas ações apontadas:\n${proximas.join("\n")}` : "Revise a situação abaixo e diga o próximo passo.", "", d.texto || ""].join("\n").trim(),
+                  })}
+                >
+                  <Bot className="h-3.5 w-3.5" />
+                </button>
+              )}
               {(d.sugestoes || []).map((s) => (
                 <button key={s} type="button" className="rounded-full border border-border bg-background px-3 py-1.5 text-[13px] text-foreground hover:bg-muted" onClick={() => aoPerguntar(s, d.cliente && !/cliente precisa/i.test(s) ? d.cliente.id : undefined)}>{s}</button>
               ))}
@@ -331,12 +347,14 @@ type Gravando = { inicio: number; segundos: number };
 
 export type ContextoDaConversa = { conversaId: string | null; cliente: { id: string; nome: string } | null; projeto: { id: string; nome: string } | null; titulo?: string | null };
 
-export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncaminhar, acoes, className, contexto, aoConversaCriada, aoAbrirNoPainel }: {
+export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncaminhar, acoes, className, contexto, aoConversaCriada, aoAbrirNoPainel, aoAbrirObjeto }: {
   periodoDaTela: string;
   /** A conversa aberta e o recorte dela (cliente e projeto). Sem conversa: a primeira pergunta cria uma. */
   contexto?: ContextoDaConversa;
   aoConversaCriada?: (id: string) => void;
   aoAbrirNoPainel?: (caminho: string, rotulo: string) => void;
+  /** Abre um objeto do OS (tarefa, memória, aprovação...) na lateral nativa da Central. */
+  aoAbrirObjeto?: (o: ObjetoAberto) => void;
   aoAbrirDiario: (linkId: string, titulo?: string) => void;
   aoEncaminhar: (p: PedidoAoHermes) => void;
   /** Botões do cabeçalho (ampliar, tela cheia), da tela que contém o chat. */
@@ -561,9 +579,19 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
     <section
       aria-label="Gestor Aceleriq"
       className={juntar("relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card", className || "h-full min-h-[480px]")}
-      onDragOver={(e) => { if (e.dataTransfer?.types?.indexOf("Files") >= 0) { e.preventDefault(); setSoltando(true); } }}
+      onDragOver={(e) => { const t = e.dataTransfer?.types; if (t && (t.indexOf("Files") >= 0 || t.indexOf(TIPO_ARQUIVO_DO_WORKSPACE) >= 0)) { e.preventDefault(); setSoltando(true); } }}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setSoltando(false); }}
-      onDrop={(e) => { e.preventDefault(); setSoltando(false); adicionar(e.dataTransfer?.files); }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setSoltando(false);
+        const doWorkspace = e.dataTransfer?.getData?.(TIPO_ARQUIVO_DO_WORKSPACE);
+        if (doWorkspace) {
+          setLendo((n) => n + 1);
+          void arquivosDoWorkspace(doWorkspace).then((lista) => adicionar(lista)).catch(() => toast.error("Não consegui baixar o arquivo do Workspace.")).finally(() => setLendo((n) => n - 1));
+          return;
+        }
+        adicionar(e.dataTransfer?.files);
+      }}
     >
       {soltando && (
         <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary bg-background/90 text-[14px] font-medium text-primary">
@@ -613,6 +641,7 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
                 aoPerguntar={(p, clienteId) => enviar(p, clienteId)}
                 mensagemId={m.dados.mensagem_id || (m.id && !String(m.id).startsWith("r-") ? m.id : null)}
                 aoAbrirNoPainel={aoAbrirNoPainel}
+                aoAbrirObjeto={aoAbrirObjeto}
                 aoMudou={atualizarConversa}
               />
             ) : m.papel === "sistema" ? (

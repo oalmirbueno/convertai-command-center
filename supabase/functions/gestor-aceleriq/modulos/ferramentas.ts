@@ -11,6 +11,12 @@
  * - execução interna (aqui): criar e ajustar tarefa, registrar memória,
  *   pedir trabalho a um agente. Reversível e registrado; vai direto só com
  *   ordem clara (regra 6 do contrato), senão Confirmar;
+ * - decisão do dono: aprovar ou devolver uma solicitação que JÁ existe
+ *   (operator_approvals) pelo mecanismo oficial (central_review_decide ou
+ *   operator_approval_decidir), com a sessão do próprio dono. Sempre
+ *   Confirmar, sem Desfazer (decisão é final). Aprovar não envia nem publica:
+ *   executar o que foi aprovado é etapa à parte. Registrar uma decisão na
+ *   memória NÃO substitui aprovar;
  * - sensível: publicar, mandar mensagem a cliente, mexer em campanha ou
  *   verba, contrato, excluir. NUNCA é ferramenta: o modelo devolve em
  *   `bloqueadas` e a tela mostra onde decidir.
@@ -110,6 +116,18 @@ export const PARA = {
     if (evidencia) saida.evidencia = evidencia;
     return JSON.stringify(saida);
   },
+  aprovar_solicitacao(bruto: unknown): string | null {
+    const o = lerJson(bruto) || {};
+    const nota = String(o.nota ?? "").trim().slice(0, 1500);
+    return JSON.stringify(nota ? { nota } : {});
+  },
+  pedir_alteracao(bruto: unknown): string | null {
+    const o = lerJson(bruto);
+    if (!o) return null;
+    const nota = String(o.nota ?? "").trim().slice(0, 1500);
+    if (nota.length < 5) return null;
+    return JSON.stringify({ nota });
+  },
   pedir_ao_agente(bruto: unknown, agentes: string[]): string | null {
     const o = lerJson(bruto);
     if (!o) return null;
@@ -145,14 +163,36 @@ export function regrasDoGestor(agentes: string[]): Record<string, RegraDaOperaca
       rotulo: "pedir a um agente", alvos: ["t"], para: (b) => PARA.pedir_ao_agente(b, agentes),
       trava: (alvo) => ((alvo.dados?.status as string) === "done" ? "A tarefa já está concluída." : null),
     },
+    // Decisão do dono sobre uma solicitação existente: nunca direta (sempre Confirmar), sem Desfazer.
+    aprovar_solicitacao: {
+      rotulo: "aprovar a solicitação", alvos: ["a"], para: (b) => PARA.aprovar_solicitacao(b),
+      trava: (alvo) => travaDaSolicitacao(alvo),
+    },
+    pedir_alteracao: {
+      rotulo: "devolver com pedido de alteração", alvos: ["a"], para: (b) => PARA.pedir_alteracao(b),
+      trava: (alvo) => travaDaSolicitacao(alvo),
+    },
   };
 }
+
+function travaDaSolicitacao(alvo: AlvoDoGestor): string | null {
+  const st = String(alvo.dados?.status || "");
+  if (st && st !== "pendente" && st !== "adiado") return `Esta solicitação já foi decidida (${st}); decisão não volta atrás.`;
+  const validade = alvo.dados?.valid_until ? Date.parse(String(alvo.dados.valid_until)) : NaN;
+  if (Number.isFinite(validade) && validade <= Date.now()) return "Esta solicitação venceu; peça uma versão nova ao agente.";
+  return null;
+}
+
+/** Operações de decisão: pedem a sessão do dono e nunca vão direto. */
+export const OPERACOES_DE_DECISAO = ["aprovar_solicitacao", "pedir_alteracao"];
 
 export const DESCRICOES_DAS_OPERACOES: Record<string, string> = {
   criar_tarefa: 'cria uma tarefa no projeto pN. para = JSON {"titulo","descricao"?,"prazo"?:"AAAA-MM-DD","prioridade"?:"low|medium|high|urgent"}. Uma por tarefa pedida.',
   atualizar_tarefa: 'ajusta a tarefa tN. para = JSON com só o que muda: {"status"?:"backlog|todo|doing|review","prazo"?,"prioridade"?,"titulo"?,"nota"?}. Nunca "done": concluir é na revisão com prova.',
   registrar_memoria: 'grava na memória do cliente cN. para = JSON {"tipo":"preferencia|evitar|decisao|instrucao|aprendizado","texto","area"?:"geral|calendario|campanha|arte|foto|ads|copy|conta","evidencia"?}. Preferência e evitar = gosto do cliente; decisão = algo que o dono APROVOU; instrução = regra operacional nova; aprendizado só com evidência medida. Hipótese não é memória.',
   pedir_ao_agente: 'manda a tarefa tN para a fila de um agente e deixa a instrução no diário dele. para = JSON {"agente":"<slug da lista>","instrucao"}. Pede Confirmar.',
+  aprovar_solicitacao: 'aprova a solicitação aN (pedido real de aprovação do OS) pelo mecanismo oficial. para = JSON {"nota"?}. Use quando o dono disser para aprovar ("pode aprovar", "aprova essa"). Sempre pede Confirmar. Aprovar NÃO envia nem publica: o envio é etapa à parte. NUNCA troque isto por registrar_memoria.',
+  pedir_alteracao: 'devolve a solicitação aN ao agente pedindo alteração. para = JSON {"nota":"o que mudar"} (obrigatório). Sempre pede Confirmar.',
 };
 
 /** Tarefa → alvo tN (sem id no prompt). */
@@ -160,10 +200,14 @@ export function alvoDaTarefa(t: { id: string; title: string; status: string; cli
   return { id: t.id, titulo: t.title, detalhe: [t.status, t.cliente, t.due_date ? `prazo ${t.due_date}` : ""].filter(Boolean).join(" · "), dados: { status: t.status } };
 }
 
+/** Objeto do OS que a Central abre na lateral nativa (sem iframe). */
+export type ObjetoDoGestor = { tipo: "tarefa" | "memoria_agente" | "memoria_projeto" | "aprovacao" | "projeto" | "arquivo" | "publicacao" | "vinculo"; id: string; titulo?: string | null; client_id?: string | null };
+
 export type EntregaDoGestor = {
   ref: string;
   nome: string;
-  tipo: "tarefa" | "memoria" | "fila_do_agente";
+  tipo: "tarefa" | "memoria" | "fila_do_agente" | "aprovacao";
+  objeto?: ObjetoDoGestor;
   cliente: string | null;
   projeto: string | null;
   estado: string;

@@ -80,7 +80,9 @@ describe("atalhos e navegador", () => {
     const a = atalhosDaCentral({ clientId: "c1", projectId: "p1" });
     expect(a.find((x) => x.id === "mesa-ads")!.caminho).toBe("/mesa-ads?client=c1");
     expect(a.find((x) => x.id === "kanban")!.caminho).toBe("/kanban?client=c1&project=p1");
-    expect(a.find((x) => x.id === "mesa")!.caminho).toBe("/mesa?client=c1&aba=contexto");
+    expect(a.find((x) => x.id === "mesa")!.caminho).toBe("/mesa?client=c1");
+    expect(a.find((x) => x.id === "dossie")!.caminho).toBe("/mesa?client=c1&aba=contexto");
+    expect(a.find((x) => x.id === "design")!.caminho).toBe("/mesa-identidade?client=c1");
     expect(caminhoEmbutido("/workspace?client=c1")).toBe("/workspace?client=c1&embutido=1");
     expect(caminhoEmbutido("https://evil.test")).toBeNull();
     expect(caminhoEmbutido("//evil.test")).toBeNull();
@@ -90,5 +92,54 @@ describe("atalhos e navegador", () => {
     expect(enderecoExterno("instagram.com/acerbi")).toBe("https://instagram.com/acerbi");
     expect(enderecoExterno("javascript:alert(1)")).toBeNull();
     expect(enderecoExterno("https://user:senha@site.com")).toBeNull();
+  });
+});
+
+import { conferirContraAFicha } from "../../supabase/functions/gestor-aceleriq/modulos/ficha";
+import { aplicarConferenciaDaConversa, perguntasDeConversa } from "../../supabase/functions/gestor-aceleriq/modulos/conferencia";
+import { objetoDaFonte, objetoValido } from "@/lib/centralObjetos";
+import { lerArrastado } from "@/lib/centralArrastar";
+
+describe("Gestor conversa (09/10): liberdade de redação, não de fato", () => {
+  const fontes = [{ apelido: "F1", tipo: "aprovacao", estado: "decisao_pendente", titulo: "Abertura da semana", quando: null, texto: "aguarda aprovação", cliente: "Acerbi", agente: null, ids: { aprovacao: "ap-1" } }] as any;
+
+  it("frase de conversa sem fonte passa a barreira de código; fato sem fonte não", () => {
+    const { aceitos, recusados } = conferirContraAFicha([
+      { secao: "conversa", texto: "Deixei a aprovação pronta para você confirmar.", fontes: [] },
+      { secao: "feito", texto: "Publicamos tudo.", fontes: [] },
+      { secao: "conversa", texto: "A que depende de você é a abertura da semana.", fontes: ["F1"] },
+      { secao: "feito", texto: "A abertura foi aprovada.", fontes: ["F1"] },
+    ], fontes);
+    expect(aceitos.map((i) => i.texto)).toEqual(["Deixei a aprovação pronta para você confirmar.", "A que depende de você é a abertura da semana."]);
+    expect(recusados.map((r) => r.motivo)).toEqual(["sem_fonte", "estado_incompativel"]);
+  });
+
+  it("o Jev tira a frase sem fonte que afirma fato da operação", () => {
+    const itens = [{ secao: "conversa" as const, texto: "Quer que eu prepare a aprovação?", fontes: [] }, { secao: "conversa" as const, texto: "Já aprovei e enviei ao cliente.", fontes: [] }];
+    const { questions } = perguntasDeConversa(itens);
+    expect(Object.keys(questions)).toEqual(["c0", "c1"]);
+    const r = aplicarConferenciaDaConversa(itens, { c0: { choice: "conversa", probabilities: { conversa: 0.9, afirma_fato: 0.1 } }, c1: { choice: "afirma_fato", probabilities: { conversa: 0.05, afirma_fato: 0.95 } } });
+    expect(r.ficam.map((i) => i.texto)).toEqual(["Quer que eu prepare a aprovação?"]);
+    expect(r.sairam.map((i) => i.texto)).toEqual(["Já aprovei e enviei ao cliente."]);
+  });
+
+  it("aprovar é uma operação própria sobre a solicitação real: nunca vai direto e recusa a já decidida", () => {
+    const alvosA = comApelido([{ id: "ap-1", titulo: "Abertura da semana", dados: { status: "pendente" } }, { id: "ap-2", titulo: "Antiga", dados: { status: "aprovado" } }], "a");
+    const r = regrasDoGestor(["atlas"]);
+    const acao = normalizarAcaoDoAgente({ resumo: "x", itens: [{ operacao: "aprovar_solicitacao", ref: "a1", para: "{}" }, { operacao: "aprovar_solicitacao", ref: "a2", para: "{}" }, { operacao: "aprovar_solicitacao", ref: "t1", para: "{}" }] }, [...alvosA, ...comApelido([{ id: "task-1", titulo: "x", dados: { status: "doing" } }], "t")], r, { agente: "gestor", semDesfazer: () => true })!;
+    expect(acao.itens.map((i) => i.alvo_id)).toEqual(["ap-1"]);
+    expect(acao.recusados[0].motivo).toMatch(/já foi decidida/);
+    expect(acao.ignorados).toEqual(["t1"]);
+    expect(podeExecutarDireto(acao, r, { pedidoClaro: true }).direto).toBe(false);
+    expect(PARA.pedir_alteracao('{"nota":""}')).toBeNull();
+  });
+
+  it("objetos da conversa: fonte vira objeto nativo; dado gravado malformado não abre nada; arraste só com link seguro", () => {
+    expect(objetoDaFonte(fontes[0])).toEqual({ tipo: "aprovacao", id: "ap-1", titulo: "Abertura da semana" });
+    expect(objetoValido({ tipo: "tarefa", id: "a1b2c3d4-0000-4000-8000-000000000001" })).toMatchObject({ tipo: "tarefa" });
+    expect(objetoValido({ tipo: "pagina", id: "a1b2c3d4-0000-4000-8000-000000000001" })).toBeNull();
+    expect(objetoValido({ tipo: "tarefa", id: "../../x" })).toBeNull();
+    expect(lerArrastado(JSON.stringify({ nome: "a.pdf", mime: "application/pdf", url: "https://x.supabase.co/storage/v1/object/sign/a.pdf?token=t" }))).toHaveLength(1);
+    expect(lerArrastado(JSON.stringify({ nome: "a", url: "javascript:alert(1)" }))).toHaveLength(0);
   });
 });

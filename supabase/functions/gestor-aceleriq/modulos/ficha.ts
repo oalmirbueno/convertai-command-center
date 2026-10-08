@@ -384,7 +384,7 @@ export function montarFicha(e: EntradaDaFicha, teto = 80): Ficha {
 
 // ------------------------------------------------------------------ resposta
 
-export type SecaoDaResposta = "anexo" | "feito" | "concluido_sem_prova" | "em_revisao" | "em_andamento" | "bloqueado" | "decisao" | "proximo" | "lacuna";
+export type SecaoDaResposta = "anexo" | "feito" | "concluido_sem_prova" | "em_revisao" | "em_andamento" | "bloqueado" | "decisao" | "proximo" | "lacuna" | "conversa";
 
 export const ORDEM_DAS_SECOES: SecaoDaResposta[] = ["anexo", "feito", "concluido_sem_prova", "em_revisao", "em_andamento", "bloqueado", "decisao", "lacuna", "proximo"];
 
@@ -398,9 +398,13 @@ export const ROTULO_DA_SECAO: Record<SecaoDaResposta, string> = {
   lacuna: "Pendências e lacunas",
   proximo: "Próximas ações",
   anexo: "Do material que você mandou",
+  conversa: "Conversa",
 };
 
-export type ItemDaResposta = { secao: SecaoDaResposta; texto: string; fontes: string[]; conferido?: "fonte" | "jev" | "motor" };
+/** Seções aceitas na resposta do modelo: as do relatório + "conversa" (frase sem fato do OS, conferida à parte). */
+export const SECOES_DA_RESPOSTA: SecaoDaResposta[] = ["conversa", ...ORDEM_DAS_SECOES];
+
+export type ItemDaResposta = { secao: SecaoDaResposta; texto: string; fontes: string[]; conferido?: "fonte" | "jev" | "motor" | "conversa" };
 
 /** Em que seção cada estado pode aparecer. É isto que impede "revisão" de virar "feito". */
 const SECOES_DO_ESTADO: Record<EstadoDaFonte, SecaoDaResposta[]> = {
@@ -438,11 +442,13 @@ export function conferirContraAFicha(itens: ItemDaResposta[], fontes: Fonte[]): 
   const recusados: ItemRecusado[] = [];
   for (const bruto of itens) {
     const item = { ...bruto, fontes: [...new Set((bruto.fontes || []).map((x) => String(x).trim().toUpperCase()))] };
-    if (!ORDEM_DAS_SECOES.includes(item.secao)) { recusados.push({ item, motivo: "secao_invalida" }); continue; }
+    if (!SECOES_DA_RESPOSTA.includes(item.secao)) { recusados.push({ item, motivo: "secao_invalida" }); continue; }
+    // Conversa (pergunta, confirmação, o que vai fazer): sem fonte é permitido; o Jev confere que não afirma fato do OS.
+    if (item.secao === "conversa" && !item.fontes.length) { aceitos.push({ ...item, conferido: "conversa" }); continue; }
     if (!item.fontes.length) { recusados.push({ item, motivo: "sem_fonte" }); continue; }
     const citadas = item.fontes.map((a) => porApelido.get(a));
     if (citadas.some((f) => !f)) { recusados.push({ item, motivo: "fonte_inexistente" }); continue; }
-    if (citadas.some((f) => !SECOES_DO_ESTADO[f!.estado].includes(item.secao))) { recusados.push({ item, motivo: "estado_incompativel" }); continue; }
+    if (item.secao !== "conversa" && citadas.some((f) => !SECOES_DO_ESTADO[f!.estado].includes(item.secao))) { recusados.push({ item, motivo: "estado_incompativel" }); continue; }
     aceitos.push({ ...item, conferido: "fonte" });
   }
   return { aceitos, recusados };
@@ -471,12 +477,17 @@ export function respostaDoMotor(fontes: Fonte[], limitePorSecao = 8): ItemDaResp
 export type ContagemDoRecorte = Record<SecaoDaResposta, number>;
 
 export function contagemDoRecorte(fontes: Fonte[]): ContagemDoRecorte {
-  const c = { anexo: 0, feito: 0, concluido_sem_prova: 0, em_revisao: 0, em_andamento: 0, bloqueado: 0, decisao: 0, proximo: 0, lacuna: 0 } as ContagemDoRecorte;
+  const c = { anexo: 0, feito: 0, concluido_sem_prova: 0, em_revisao: 0, em_andamento: 0, bloqueado: 0, decisao: 0, proximo: 0, lacuna: 0, conversa: 0 } as ContagemDoRecorte;
   for (const f of fontes) if (f.tipo !== "diario" && f.tipo !== "execucao" && f.tipo !== "anexo" && f.tipo !== "anexo_imagem") c[secaoDoEstado(f.estado)]++;
   return c;
 }
 
-/** O texto corrido da resposta (o que fica gravado na conversa e vai ao Hermes). */
+/** A resposta como conversa (o que fica gravado e volta ao modelo no histórico): as mensagens na ordem. */
+export function respostaEmConversa(itens: ItemDaResposta[]): string {
+  return itens.map((i) => i.texto).join("\n");
+}
+
+/** O texto corrido da resposta em forma de relatório (vai ao Hermes quando o dono encaminha). */
 export function respostaEmTexto(cabecalho: string, itens: ItemDaResposta[]): string {
   const linhas = [cabecalho];
   for (const secao of ORDEM_DAS_SECOES) {

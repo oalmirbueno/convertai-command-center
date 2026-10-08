@@ -442,6 +442,15 @@ body[data-embutido] [data-casca="conteudo"] header.sticky,
 body[data-embutido] [data-casca="conteudo"] header[data-cabecalho-da-mesa] {
   top: 0 !important;
 }
+/* 09/10: dentro da Central a mesa já vem com o cliente da conversa; o seletor
+   de mesa e de cliente (mais uma navegação dentro da navegação) some. Ficam as
+   etapas e as ações da própria mesa. */
+body[data-embutido] [data-casca-identidade] {
+  display: none !important;
+}
+body[data-embutido] [data-casca-acoes] {
+  margin-left: auto !important;
+}
 /* ── Tela cheia da Mesa (Mesa, Mesa Ads, Mesa Foto e as próximas) ──
    src/components/mesa/TelaCheiaDaMesa.tsx liga data-tela-cheia-da-mesa no
    body e põe .mesa-tela-cheia na raiz da página. Em qualquer largura some a

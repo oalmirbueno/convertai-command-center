@@ -18,9 +18,11 @@
  * 5. sem IA (sem crédito, fora do ar, teto do dia, "sem_ia"), a resposta sai
  *    da própria ficha. Nada é inventado nos dois caminhos.
  *
- * O Gestor NÃO executa nada: não move tarefa, não aprova, não publica. Levar
- * um pedido ao Hermes é feito na tela, pelo diário do vínculo (o canal que o
- * consumidor do Hermes já lê), com o dono enviando.
+ * Ações (modulos/ferramentas.ts): tarefa, memória e fila de agente vão pelo
+ * contrato comum (direto só com ordem clara, com Desfazer); aprovar ou
+ * devolver uma solicitação existente usa o mecanismo oficial com a sessão
+ * do dono, sempre com Confirmar. Publicar, falar com cliente, verba e
+ * contrato nunca: viram "bloqueadas" com o lugar de decidir.
  *
  * Ações: perguntar { pergunta, cliente_id?, periodo?, sem_ia? } · conversa {}
  */
@@ -30,7 +32,8 @@ import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { IaMotorErro } from "../_shared/ia-motor.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
-import { carteiraDaAgencia, type ConversaDoGestor, ErroHttp, lerClientes, responder, usarBanco } from "./modulos/nucleo.ts";
+import { carteiraDaAgencia, type ConversaDoGestor, ErroHttp, lerClientes, type ReferenciaDoGestor, responder, usarBanco } from "./modulos/nucleo.ts";
+import { contextoDaConversa } from "./modulos/historico.ts";
 import { type AcaoDoAgente, acaoDoAnexo, type AcaoGuardada, confirmarAcaoGuardada, desfazerAcaoGuardada, ErroDaAcao, textoDoResultado } from "../_shared/acoes-do-agente.ts";
 import { entregasDaAcao, executarItem, reverterItem } from "./modulos/executor.ts";
 import { ACOES_DO_HERMES, ErroDoHermes, hermesAcao } from "./modulos/hermes.ts";
@@ -64,7 +67,12 @@ function servico(): SupabaseClient {
   return servicoCache;
 }
 
-async function identificar(req: Request): Promise<{ userId: string }> {
+/** Cliente do banco COM a sessão do dono (auth.uid() = ele): para os mecanismos oficiais que conferem quem decide. */
+function comoDono(token: string): SupabaseClient {
+  return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } } });
+}
+
+async function identificar(req: Request): Promise<{ userId: string; token: string }> {
   const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
   if (!token) throw new ErroHttp(401, "sessao_expirada", "Sessão expirada. Entre de novo no painel.");
   const { data: user } = await servico().auth.getUser(token);
@@ -73,7 +81,7 @@ async function identificar(req: Request): Promise<{ userId: string }> {
   const admin = await servico().rpc("has_role", { _user_id: userId, _role: "admin" });
   if (admin.error) throw new ErroHttp(503, "autorizacao_indisponivel", "Não foi possível conferir a permissão agora.");
   if (admin.data !== true) throw new ErroHttp(403, "somente_admin", "O Gestor Aceleriq é do admin.");
-  return { userId };
+  return { userId, token };
 }
 
 // ------------------------------------------------------------------ ações
@@ -103,30 +111,6 @@ async function mensagensDaConversa(conversaId: string, n: number) {
   const { data, error } = await servico().from("gestor_mensagens").select("id, papel, conteudo, dados, client_id, custo_usd, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(n);
   if (error) throw new ErroHttp(503, "conversa_indisponivel", `Não consegui ler a conversa: ${error.message}`);
   return ((data || []) as Array<Record<string, unknown>>).reverse();
-}
-
-/** Palavras da pergunta que valem para achar trocas antigas da MESMA conversa (sem mandar o histórico inteiro). */
-function palavrasDeBusca(t: string): string[] {
-  const pare = new Set(["que", "com", "para", "uma", "dos", "das", "como", "esta", "essa", "isso", "aqui", "tem", "foi", "nos", "nas", "pelo", "pela", "mais", "sobre", "qual", "quais", "quando", "onde"]);
-  return [...new Set(String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !pare.has(w)))].slice(0, 5);
-}
-
-/** Contexto da conversa para o modelo: resumo + últimas trocas + até 3 trechos antigos que casam com a pergunta. */
-async function contextoDaConversa(c: Conversa, pergunta: string): Promise<string> {
-  const ultimas = await mensagensDaConversa(c.id, 6);
-  const recentes = new Set(ultimas.map((m) => String(m.id)));
-  const partes: string[] = [];
-  if (c.resumo) partes.push(`Resumo da conversa: ${c.resumo}`);
-  const palavras = palavrasDeBusca(pergunta);
-  if (palavras.length) {
-    const ou = palavras.map((w) => `conteudo.ilike.%${w}%`).join(",");
-    const { data } = await servico().from("gestor_mensagens").select("id, papel, conteudo, criado_em").eq("conversa_id", c.id).or(ou).order("criado_em", { ascending: false }).limit(8);
-    const antigas = ((data || []) as Array<Record<string, unknown>>).filter((m) => !recentes.has(String(m.id))).slice(0, 3);
-    if (antigas.length) partes.push(`Trechos antigos desta conversa que tocam no assunto:\n${antigas.map((m) => `${m.papel === "usuario" ? "Dono" : "Gestor"} (${String(m.criado_em).slice(0, 10)}): ${String(m.conteudo || "").slice(0, 280)}`).join("\n")}`);
-  }
-  const trocas = ultimas.filter((t) => t.papel !== "sistema").slice(-4).map((t) => `${t.papel === "usuario" ? "Dono" : "Gestor"}: ${String(t.conteudo || "").slice(0, 300)}`).join("\n");
-  if (trocas) partes.push(trocas);
-  return partes.join("\n\n");
 }
 
 /** Título curto a partir da primeira pergunta (sem IA). */
@@ -263,8 +247,8 @@ async function perguntar(ch: { userId: string }, corpo: Record<string, unknown>)
     if (error || !data) throw new ErroHttp(503, "conversa_nao_criada", "Não consegui abrir a conversa.");
     conversa = data as Conversa;
   }
-  const [historico, usadasHoje] = await Promise.all([
-    contextoDaConversa(conversa, pergunta).catch(() => ""),
+  const [contexto, usadasHoje] = await Promise.all([
+    contextoDaConversa(servico(), conversa).catch((e) => { registrarFalha("gestor-aceleriq: histórico não lido", e); return { historico: "", referencias: [] as ReferenciaDoGestor[], clienteAnterior: null }; }),
     perguntasDeHoje(ch.userId).catch(() => 0),
   ]);
   usarBanco(servico());
@@ -277,7 +261,9 @@ async function perguntar(ch: { userId: string }, corpo: Record<string, unknown>)
     semIa: corpo.sem_ia === true,
     tetoAtingido: usadasHoje >= PERGUNTAS_COM_IA_POR_DIA,
     tetoPorDia: PERGUNTAS_COM_IA_POR_DIA,
-    historico,
+    historico: contexto.historico,
+    referencias: contexto.referencias,
+    clienteAnterior: conversa.client_id ? null : contexto.clienteAnterior,
     arquivos,
     imagens,
   });
@@ -331,9 +317,10 @@ async function acaoGuardada(userId: string, mensagemId: unknown, acaoId: unknown
   return { mensagem: { id: m.id, client_id: m.client_id || "", conversa_id: m.conversa_id }, acao, gravar: gravarNova };
 }
 
-async function executarAcao(ch: { userId: string }, corpo: Record<string, unknown>): Promise<Response> {
+async function executarAcao(ch: { userId: string; token: string }, corpo: Record<string, unknown>): Promise<Response> {
   const guardada = await acaoGuardada(ch.userId, corpo.mensagem_id, corpo.acao_id);
-  const r = await confirmarAcaoGuardada(guardada, (item, acao) => executarItem(servico(), item, acao, ch.userId), { descartar: corpo.descartar === true, parar: corpo.parar === true, userId: ch.userId, lote: 1 });
+  const dono = comoDono(ch.token);
+  const r = await confirmarAcaoGuardada(guardada, (item, acao) => executarItem(servico(), item, acao, ch.userId, dono), { descartar: corpo.descartar === true, parar: corpo.parar === true, userId: ch.userId, lote: 1 });
   let anexo = r.anexo;
   if (r.terminou && anexo.executada_em && !anexo.descartada_em) {
     // A entrega sai da releitura do banco (estado real, id gravado e atalho), nunca da proposta.
@@ -359,7 +346,7 @@ async function registrarNaConversa(userId: string, g: AcaoGuardada, texto: strin
   if (error) registrarFalha("gestor-aceleriq: trilha não gravada", error);
 }
 
-const ACOES: Record<string, (ch: { userId: string }, corpo: Record<string, unknown>) => Promise<Response>> = {
+const ACOES: Record<string, (ch: { userId: string; token: string }, corpo: Record<string, unknown>) => Promise<Response>> = {
   perguntar,
   conversas: listarConversas,
   criar_conversa: criarConversa,

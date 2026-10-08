@@ -11,7 +11,9 @@
 //   GET  /painel-api/sessoes/:id/estado
 //   POST /painel-api/sessoes                 { titulo }
 //   POST /painel-api/sessoes/:id/continuar   (fork de sessão do Desktop ou outra; a original fica intacta)
-//   POST /painel-api/sessoes/:id/enviar      { texto } -> 202; a resposta chega nas mensagens
+//   POST /painel-api/sessoes/:id/enviar      { texto, imagens? } -> 202; o turno corre pelo
+//                                            stream do Hermes e o parcial sai em /estado
+//                                            (texto que vai chegando + ferramentas em uso)
 // Regras:
 // - conversas do WhatsApp (clientes) e de Telegram não aparecem;
 // - só se escreve em sessão criada pela API (as do painel); sessão do Desktop
@@ -35,10 +37,12 @@ const PREFIXO = "/painel-api";
 export const ORIGENS_VISIVEIS = new Set(["desktop", "api_server", "cli", "cron", "kanban", "subagent", "tool", "oneshot"]);
 export const ORIGENS_QUE_RECEBEM = new Set(["api_server"]);
 const ID_VALIDO = /^[A-Za-z0-9_.:-]{1,160}$/;
-const MAX_TEXTO = 12000;
+const MAX_TEXTO = 60000;
+const MAX_CORPO = 10 * 1024 * 1024; // até 4 imagens pequenas em data URL
+const MAX_IMAGENS = 4;
 const TEMPO_DO_TURNO_MS = 30 * 60_000;
 
-/** sessão -> { desde, erro, fim } */
+/** sessão -> { desde, erro, fim, parcial, ferramentas[], comentarios[], aprovacao } */
 const turnos = new Map();
 
 function seguro(a, b) {
@@ -72,7 +76,7 @@ function lerCorpo(req) {
     const partes = [];
     req.on("data", (c) => {
       total += c.length;
-      if (total > 64 * 1024) { falha(new Error("grande")); req.destroy(); return; }
+      if (total > MAX_CORPO) { falha(new Error("grande")); req.destroy(); return; }
       partes.push(c);
     });
     req.on("end", () => {
@@ -116,6 +120,105 @@ export function mensagemParaOPainel(m) {
     chamadas,
     quando: m.timestamp ?? null,
   };
+}
+
+export function imagensValidas(v) {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((u) => typeof u === "string" && /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(u) && u.length <= 2_500_000)
+    .slice(0, MAX_IMAGENS);
+}
+
+function novoTurno() {
+  return { desde: new Date().toISOString(), fim: null, erro: null, parcial: "", ferramentas: [], comentarios: [], aprovacao: null, run: null };
+}
+
+export function estadoDoTurno(t) {
+  return {
+    ocupada: !!t && !t.fim,
+    desde: t?.desde || null,
+    fim: t?.fim || null,
+    erro: t?.erro || null,
+    parcial: t ? t.parcial.slice(-20_000) : "",
+    ferramentas: t ? t.ferramentas.slice(-30) : [],
+    comentarios: t ? t.comentarios.slice(-10) : [],
+    aguardando_aprovacao: !!t?.aprovacao,
+  };
+}
+
+/** Aplica um evento do stream do Hermes ao turno. Raciocínio interno (_thinking) nunca entra. */
+export function aplicarEvento(turno, nome, dados) {
+  if (!dados || typeof dados !== "object") return;
+  if (dados.run_id && !turno.run) turno.run = String(dados.run_id);
+  if (nome === "assistant.delta" && typeof dados.delta === "string") {
+    turno.parcial = (turno.parcial + dados.delta).slice(-40_000);
+  } else if (nome === "assistant.completed" && typeof dados.content === "string" && dados.content) {
+    turno.parcial = dados.content.slice(-40_000);
+  } else if (nome === "assistant.commentary" && typeof dados.text === "string") {
+    turno.comentarios.push(dados.text.slice(0, 1500));
+  } else if (nome === "tool.started" || nome === "tool.completed" || nome === "tool.failed") {
+    const ferramenta = String(dados.tool_name || "");
+    if (!ferramenta || ferramenta.startsWith("_")) return;
+    const estado = nome === "tool.started" ? "rodando" : nome === "tool.completed" ? "feita" : "falhou";
+    const aberta = [...turno.ferramentas].reverse().find((f) => f.nome === ferramenta && f.estado === "rodando");
+    if (aberta && estado !== "rodando") { aberta.estado = estado; aberta.fim = new Date().toISOString(); }
+    else turno.ferramentas.push({ nome: ferramenta, estado, resumo: typeof dados.preview === "string" ? dados.preview.slice(0, 160) : "", desde: new Date().toISOString() });
+  } else if (nome === "approval.request") {
+    turno.aprovacao = true;
+  } else if (nome === "error") {
+    turno.erro = "hermes_erro";
+  } else if (nome.startsWith("run.") && nome !== "run.started" && nome !== "run.completed") {
+    if (nome === "run.failed" || nome === "run.cancelled") turno.erro = nome === "run.failed" ? "turno_falhou" : "turno_cancelado";
+  }
+}
+
+/** Lê o SSE do Hermes (eventos separados por linha em branco). */
+export function lerQuadros(buffer) {
+  const quadros = [];
+  let resto = buffer;
+  let i;
+  while ((i = resto.indexOf("\n\n")) >= 0) {
+    const bloco = resto.slice(0, i);
+    resto = resto.slice(i + 2);
+    let nome = "message";
+    const dados = [];
+    for (const linha of bloco.split("\n")) {
+      if (linha.startsWith("event:")) nome = linha.slice(6).trim();
+      else if (linha.startsWith("data:")) dados.push(linha.slice(5).replace(/^ /, ""));
+    }
+    if (!dados.length) continue;
+    let json = null;
+    try { json = JSON.parse(dados.join("\n")); } catch { json = null; }
+    quadros.push([nome, json]);
+  }
+  return { quadros, resto };
+}
+
+async function rodarTurno(id, turno, mensagem) {
+  try {
+    const r = await fetch(`${API}/api/sessions/${encodeURIComponent(id)}/chat/stream`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${API_KEY}`, "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify({ message: mensagem, author: { name: "Almir (painel Aceleriq)" } }),
+      signal: AbortSignal.timeout(TEMPO_DO_TURNO_MS),
+    });
+    if (r.status !== 200 || !r.body) { turno.erro = `hermes_${r.status}`; return; }
+    const leitor = r.body.getReader();
+    const dec = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await leitor.read();
+      if (done) break;
+      buffer += dec.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+      const { quadros, resto } = lerQuadros(buffer);
+      buffer = resto;
+      for (const [nome, dados] of quadros) aplicarEvento(turno, nome, dados);
+    }
+  } catch (e) {
+    turno.erro = e && e.name === "TimeoutError" ? "tempo_esgotado" : "falha_de_rede";
+  } finally {
+    turno.fim = new Date().toISOString();
+  }
 }
 
 async function sessaoVisivel(id) {
@@ -180,8 +283,7 @@ async function rota(req, res) {
   }
 
   if (metodo === "GET" && partes[2] === "estado") {
-    const t = turnos.get(id);
-    return responder(res, 200, { ocupada: !!t && !t.fim, desde: t?.desde || null, fim: t?.fim || null, erro: t?.erro || null });
+    return responder(res, 200, estadoDoTurno(turnos.get(id)));
   }
 
   if (metodo === "POST" && partes[2] === "continuar") {
@@ -198,13 +300,12 @@ async function rota(req, res) {
     const corpo = await lerCorpo(req);
     const texto = String((corpo && corpo.texto) || "").trim().slice(0, MAX_TEXTO);
     if (!texto) return responder(res, 400, { error: "texto_vazio" });
-    const turno = { desde: new Date().toISOString(), fim: null, erro: null };
+    const imagens = imagensValidas(corpo && corpo.imagens);
+    const mensagem = imagens.length ? [{ type: "text", text: texto }, ...imagens.map((url) => ({ type: "image_url", image_url: { url } }))] : texto;
+    const turno = novoTurno();
     turnos.set(id, turno);
-    // O turno roda em segundo plano (pode levar minutos); a resposta aparece nas mensagens da sessão.
-    hermes(`/api/sessions/${encodeURIComponent(id)}/chat`, { method: "POST", body: { message: texto, author: { name: "Almir (painel Aceleriq)" } }, tempo: TEMPO_DO_TURNO_MS })
-      .then((r) => { turno.erro = r.status === 200 ? null : `hermes_${r.status}`; })
-      .catch((e) => { turno.erro = e && e.name === "TimeoutError" ? "tempo_esgotado" : "falha_de_rede"; })
-      .finally(() => { turno.fim = new Date().toISOString(); });
+    // O turno roda em segundo plano (pode levar minutos), lendo o stream do Hermes.
+    rodarTurno(id, turno, mensagem);
     return responder(res, 202, { aceito: true, desde: turno.desde });
   }
 

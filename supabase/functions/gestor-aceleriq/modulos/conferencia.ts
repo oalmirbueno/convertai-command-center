@@ -73,3 +73,44 @@ export function aplicarConferencia(
   });
   return { ficam, sairam, fracos };
 }
+
+/**
+ * Frases de conversa (seção "conversa", sem fonte): podem perguntar, confirmar
+ * o pedido, dizer o que o Gestor vai propor ou comentar a conversa. Não podem
+ * afirmar fato da operação (estado de tarefa, publicação, prazo, número,
+ * decisão, resultado de ação). O Jev classifica; "afirma_fato" sai.
+ */
+export const LIMIAR_AFIRMA_FATO = 0.5;
+
+export function perguntasDeConversa(itens: ItemDaResposta[]): {
+  state: { frases: string[] };
+  questions: Record<string, PerguntaDeConferencia>;
+} {
+  const frases = itens.slice(0, MAX_CONFERIDAS).map((i) => i.texto);
+  const questions: Record<string, PerguntaDeConferencia> = {};
+  frases.forEach((_, k) => {
+    questions[`c${k}`] = {
+      type: "choice",
+      instructions: `\`frases[${k}]\` é uma frase do assistente de gestão de uma agência, numa conversa com o dono, escrita SEM citar registro do sistema. Ela pode conversar, mas não pode afirmar fatos da operação sem fonte.`,
+      criteria: {
+        conversa: "pergunta, confirma o que entendeu do pedido, oferece ou anuncia o que vai propor, explica o que precisa de confirmação, ou comenta a própria conversa, sem afirmar estado ou resultado da operação",
+        afirma_fato: "afirma algo sobre a operação real como fato: estado de tarefa, cliente, publicação, campanha, prazo, número, decisão tomada, aprovação feita ou ação já executada",
+      },
+    };
+  });
+  return { state: { frases }, questions };
+}
+
+export function aplicarConferenciaDaConversa(itens: ItemDaResposta[], respostas: Record<string, RespostaChoice> | null): { ficam: ItemDaResposta[]; sairam: ItemDaResposta[] } {
+  if (!respostas) return { ficam: itens, sairam: [] };
+  const ficam: ItemDaResposta[] = [];
+  const sairam: ItemDaResposta[] = [];
+  itens.forEach((item, k) => {
+    const r = respostas[`c${k}`];
+    if (k >= MAX_CONFERIDAS || !r || !r.choice) { ficam.push(item); return; }
+    const p = typeof r.probabilities?.afirma_fato === "number" ? r.probabilities.afirma_fato : r.choice === "afirma_fato" ? Number(r.confidence ?? 1) : 0;
+    if (r.choice === "afirma_fato" && p >= LIMIAR_AFIRMA_FATO) sairam.push(item);
+    else ficam.push(item);
+  });
+  return { ficam, sairam };
+}

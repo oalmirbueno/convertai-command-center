@@ -19,6 +19,15 @@ export class ErroDoHermes extends Error {
 }
 
 const ID = /^[A-Za-z0-9_.:-]{1,160}$/;
+/** Sessões de conversa (o resto são rotinas: cron, kanban, subagente...). */
+export const ORIGENS_DE_CONVERSA = new Set(["desktop", "api_server", "cli"]);
+/** O Hermes recebe texto e imagens (conteúdo multimodal da API de sessões); arquivos de texto vão no corpo. */
+export const MAX_TEXTO_AO_HERMES = 58_000;
+
+export function imagensParaOHermes(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((u): u is string => typeof u === "string" && /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(u) && u.length <= 2_500_000).slice(0, 4);
+}
 
 async function configuracao(): Promise<{ url: string; token: string } | null> {
   const url = (await chave("HERMES_PAINEL_URL")).trim().replace(/\/+$/, "") || "https://hermes.aceleriq.com.br";
@@ -79,17 +88,22 @@ export async function hermesAcao(acao: string, corpo: Record<string, unknown>): 
   }
   if (acao === "hermes_sessoes") {
     const busca = encodeURIComponent(String(corpo.busca ?? "").slice(0, 80));
-    return (await ponte(`/sessoes?limite=40${busca ? `&busca=${busca}` : ""}`)).json || {};
+    const r = (await ponte(`/sessoes?limite=100${busca ? `&busca=${busca}` : ""}`)).json || {};
+    const origem = String(corpo.origem || "todas");
+    const lista = Array.isArray(r.sessoes) ? (r.sessoes as Array<{ origem?: string }>) : [];
+    const filtrada = origem === "conversas" ? lista.filter((x) => ORIGENS_DE_CONVERSA.has(String(x.origem))) : origem === "rotinas" ? lista.filter((x) => !ORIGENS_DE_CONVERSA.has(String(x.origem))) : lista;
+    return { sessoes: filtrada.slice(0, 60) };
   }
   if (acao === "hermes_sessao") return (await ponte(`/sessoes/${idDa(corpo.sessao_id)}/mensagens?limite=120`)).json || {};
   if (acao === "hermes_estado_da_sessao") return (await ponte(`/sessoes/${idDa(corpo.sessao_id)}/estado`)).json || {};
   if (acao === "hermes_criar") return (await ponte("/sessoes", { method: "POST", body: { titulo: String(corpo.titulo ?? "").slice(0, 100) } })).json || {};
   if (acao === "hermes_continuar") return (await ponte(`/sessoes/${idDa(corpo.sessao_id)}/continuar`, { method: "POST" })).json || {};
   if (acao === "hermes_enviar") {
-    const texto = String(corpo.texto ?? "").trim().slice(0, 11_000);
+    const texto = String(corpo.texto ?? "").trim().slice(0, MAX_TEXTO_AO_HERMES);
     if (!texto) throw new ErroDoHermes(400, "texto_vazio", "Escreva a mensagem para o Hermes.");
     const ctx = linhaDeContexto(corpo.contexto as Parameters<typeof linhaDeContexto>[0]);
-    return (await ponte(`/sessoes/${idDa(corpo.sessao_id)}/enviar`, { method: "POST", body: { texto: ctx ? `${ctx}\n\n${texto}` : texto } })).json || {};
+    const imagens = imagensParaOHermes(corpo.imagens);
+    return (await ponte(`/sessoes/${idDa(corpo.sessao_id)}/enviar`, { method: "POST", body: { texto: ctx ? `${ctx}\n\n${texto}` : texto, imagens }, tempo: 40_000 })).json || {};
   }
   throw new ErroDoHermes(400, "acao_desconhecida", "Ação do Hermes desconhecida.");
 }

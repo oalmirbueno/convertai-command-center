@@ -1,8 +1,14 @@
 /**
- * Atalhos da Central de Autonomia (08/10/2026): as Mesas e ferramentas do
- * painel com o cliente (e o projeto, quando a rota aceita) da conversa.
- * Rotas e parâmetros reais (App.tsx e as páginas): ?client= em todas,
- * project= no Kanban, Calendário e Arquivos, aba= na Mesa do Cliente.
+ * Atalhos da Central de Autonomia (08/10/2026; 09/10: design, dossiê e
+ * diário): as Mesas e ferramentas do painel com o cliente (e o projeto,
+ * quando a rota aceita) da conversa. Rotas e parâmetros reais (App.tsx e as
+ * páginas): ?client= em todas, project= no Kanban, Calendário e Arquivos,
+ * aba= na Mesa do Cliente.
+ *
+ * Abrem num pop-up interno grande (padrão), na lateral ou na área maior, em
+ * modo embutido (?embutido=1: sem a casca do painel e sem o seletor de mesa e
+ * de cliente, que vêm da conversa). Objetos (tarefa, memória, aprovação,
+ * arquivo...) não passam por aqui: abrem na lateral nativa.
  */
 
 export type Atalho = { id: string; rotulo: string; descricao: string; caminho: string; precisaCliente: boolean };
@@ -18,16 +24,17 @@ export function atalhosDaCentral(c: ContextoDoAtalho): Atalho[] {
   const client = c.clientId || null;
   const project = c.projectId || null;
   return [
-    { id: "mesa", rotulo: "Mesa do Cliente", descricao: "Contexto, Instagram, mês, campanhas, estúdio e entrega", caminho: comParams("/mesa", { client, aba: client ? "contexto" : null }), precisaCliente: true },
-    { id: "mesa-ads", rotulo: "Mesa Ads", descricao: "Oferta, plano, criativos e campanhas", caminho: comParams("/mesa-ads", { client }), precisaCliente: true },
-    { id: "mesa-foto", rotulo: "Produção de fotos", descricao: "Acervo, kits, ensaios e canvas", caminho: comParams("/mesa-foto", { client }), precisaCliente: true },
-    { id: "mesa-videos", rotulo: "Produção de vídeos", descricao: "Roteiros, geração e resultados", caminho: comParams("/mesa-videos", { client }), precisaCliente: true },
-    { id: "calendario", rotulo: "Calendário editorial", descricao: "Posts, datas e aprovações", caminho: comParams("/calendario", { client, project }), precisaCliente: false },
     { id: "workspace", rotulo: "Workspace", descricao: "Pastas e arquivos do cliente", caminho: comParams("/workspace", { client }), precisaCliente: false },
-    { id: "arquivos", rotulo: "Arquivos e documentos", descricao: "Materiais, entregas e versões", caminho: comParams("/arquivos", { client, project }), precisaCliente: false },
+    { id: "arquivos", rotulo: "Arquivos", descricao: "Materiais, entregas e versões", caminho: comParams("/arquivos", { client, project }), precisaCliente: false },
+    { id: "mesa-ads", rotulo: "Mesa Ads", descricao: "Oferta, plano, criativos e campanhas", caminho: comParams("/mesa-ads", { client }), precisaCliente: true },
+    { id: "mesa", rotulo: "Mesa do Cliente", descricao: "Instagram, mês, campanhas, estúdio e entrega", caminho: comParams("/mesa", { client }), precisaCliente: true },
+    { id: "design", rotulo: "Design", descricao: "Identidade, mockups e naming", caminho: comParams("/mesa-identidade", { client }), precisaCliente: true },
+    { id: "calendario", rotulo: "Calendário", descricao: "Posts, datas e aprovações", caminho: comParams("/calendario", { client, project }), precisaCliente: false },
+    { id: "projetos", rotulo: "Projetos", descricao: "Ficha do cliente, projetos e contas", caminho: client ? comParams("/clientes", { client, project }) : "/projetos", precisaCliente: false },
+    { id: "dossie", rotulo: "Dossiê", descricao: "Segundo cérebro e dossiê do cliente", caminho: comParams("/mesa", { client, aba: client ? "contexto" : null }), precisaCliente: true },
     { id: "kanban", rotulo: "Kanban", descricao: "Tarefas do cliente e do projeto", caminho: comParams("/kanban", { client, project }), precisaCliente: false },
-    { id: "projetos", rotulo: "Projetos e dossiê", descricao: "Ficha do cliente, projetos e contas", caminho: client ? comParams("/clientes", { client, project }) : "/projetos", precisaCliente: false },
-    { id: "execucao", rotulo: "Execução dos agentes", descricao: "Trabalho, diário e decisões", caminho: "/execucao?aba=trabalho", precisaCliente: false },
+    { id: "mesa-foto", rotulo: "Fotos", descricao: "Acervo, kits, ensaios e canvas", caminho: comParams("/mesa-foto", { client }), precisaCliente: true },
+    { id: "mesa-videos", rotulo: "Vídeos", descricao: "Roteiros, geração e resultados", caminho: comParams("/mesa-videos", { client }), precisaCliente: true },
     { id: "crm", rotulo: "CRM", descricao: "Oportunidades e agenda comercial", caminho: "/comercial/crm", precisaCliente: false },
   ];
 }
