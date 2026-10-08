@@ -1,8 +1,11 @@
-import { Link, useInRouterContext } from "react-router-dom";
+import { useMemo } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { pedacosComLinks, type DestinoDoAgente } from "@/lib/agentes/mapaDoPainel";
 import { clienteDaRota } from "@/lib/lancador";
 import { conversa, juntar } from "@/components/sistema/estilos";
+import TextoFormatado from "@/components/agentes/respostas/TextoFormatado";
+import BlocosDeResposta from "@/components/agentes/respostas/BlocosDeResposta";
+import { separarResposta } from "../../../supabase/functions/_shared/resposta-em-partes";
 
 /** O cliente do endereço atual (?client= ou /clientes/<id>), sem depender do roteador. */
 function clienteDoEndereco(): string | null {
@@ -11,38 +14,33 @@ function clienteDoEndereco(): string | null {
 }
 
 /**
- * Texto do agente com as rotas do mapa do painel viradas em link (com o
- * cliente da tela). O agente responde "Isso é na Mesa Ads (/mesa-ads). Abro
- * para você?" e a pessoa clica. Rota fora do mapa fica como texto. Sem
- * `clientId`, vale o cliente do endereço (?client=), como no lançador. Fora
- * do roteador (testes, prévias), o link vira âncora comum.
- *
- * Tamanho da conversa (14 px, altura de linha folgada) em todo agente, sem
- * cada um repetir: `className` com outro tamanho ainda vence (juntar).
+ * Texto do agente (núcleo comum de apresentação, 09/10/2026): o MESMO jeito de
+ * mostrar do Gestor em todos os agentes que usam este componente (Contexto,
+ * Mês, Ads, Foto, Estúdio, Roteiros, Marca, Site, Motion, Proposta,
+ * Contratos, Instagram, Perfis, Estilo, CFO, lançador...):
+ * - markdown seguro (listas, tabelas, títulos; sem HTML cru);
+ * - texto longo em partes (sem bloco gigante, sem "Claro! Aqui está...");
+ * - quadros validados (fluxo, tabela, gráfico, métricas, progresso, entrega)
+ *   quando o agente manda o trecho marcado (_shared/resposta-em-partes.ts);
+ *   número sem fonte verificável não vira quadro;
+ * - as rotas do mapa do painel viram atalho (com o cliente da tela), como antes.
+ * Tamanho da conversa (14 px) em todo agente; `className` ainda vence.
  */
 export default function TextoDoAgente({ texto, clientId, className = "" }: { texto: string; clientId?: string | null; className?: string }) {
-  const noRoteador = useInRouterContext();
   const cliente = clientId !== undefined ? clientId : clienteDoEndereco();
-  const pedacos = pedacosComLinks(texto, cliente);
-  const classeDoLink = "font-medium text-primary underline-offset-2 hover:underline";
+  const r = useMemo(() => {
+    // Rota do mapa vira link markdown; o resto do texto fica como veio.
+    const md = pedacosComLinks(texto, cliente).map((p) => (p.tipo === "link" ? `[${p.nome}](${p.link})` : p.texto)).join("");
+    // Os agentes quebram linha simples para separar itens: vira quebra visível (o markdown juntaria as linhas).
+    return separarResposta(md.replace(/([^\n])\n(?!\n)/g, "$1  \n"));
+  }, [texto, cliente]);
   return (
-    <p className={juntar("whitespace-pre-wrap [overflow-wrap:anywhere]", conversa.mensagem, className)} data-texto-do-agente="">
-      {pedacos.map((p, i) =>
-        p.tipo === "link" ? (
-          noRoteador ? (
-            <Link key={i} to={p.link} className={classeDoLink} title={`Abrir ${p.nome}`}>
-              {p.nome}
-            </Link>
-          ) : (
-            <a key={i} href={p.link} className={classeDoLink} title={`Abrir ${p.nome}`}>
-              {p.nome}
-            </a>
-          )
-        ) : (
-          <span key={i}>{p.texto}</span>
-        ),
-      )}
-    </p>
+    <div className={juntar("min-w-0 space-y-2 [overflow-wrap:anywhere]", conversa.mensagem, className)} data-texto-do-agente="">
+      {r.partes.map((p, i) => p.tipo === "texto"
+        ? <TextoFormatado key={`t-${i}`} texto={p.texto} className={className} />
+        : <BlocosDeResposta key={`b-${i}`} blocos={p.blocos} />)}
+      {r.recusados.length > 0 && <p className="text-[11px] text-muted-foreground" title={r.recusados.join(" · ")}>{r.recusados.length === 1 ? "1 quadro ficou de fora" : `${r.recusados.length} quadros ficaram de fora`} (sem fonte verificável)</p>}
+    </div>
   );
 }
 

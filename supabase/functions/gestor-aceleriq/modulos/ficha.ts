@@ -160,9 +160,10 @@ export type EstadoDaFonte =
   | "agendado"
   | "falhou"
   | "divergente" // execução e tarefa contam histórias diferentes
-  | "material_do_dono"; // arquivo, imagem ou áudio que o dono mandou agora (não é registro do OS)
+  | "material_do_dono" // arquivo, imagem ou áudio que o dono mandou agora (não é registro do OS)
+  | "lido_no_os"; // o que uma consulta leu agora no OS (briefing, contexto da Mesa, arquivo, agenda...)
 
-export type TipoDaFonte = "tarefa" | "execucao" | "diario" | "publicacao" | "entrega" | "aprovacao" | "anexo" | "anexo_imagem";
+export type TipoDaFonte = "tarefa" | "execucao" | "diario" | "publicacao" | "entrega" | "aprovacao" | "anexo" | "anexo_imagem" | "leitura";
 
 export type Fonte = {
   apelido: string; // F1, F2...
@@ -193,6 +194,7 @@ export const ROTULO_DO_ESTADO: Record<EstadoDaFonte, string> = {
   falhou: "Falhou",
   divergente: "Execução e tarefa divergem",
   material_do_dono: "Material que você mandou",
+  lido_no_os: "Lido agora no OS",
 };
 
 export type TarefaBruta = { id: string; title: string; status: string; updated_at: string; due_date?: string | null; cliente?: string | null; description?: string | null };
@@ -423,6 +425,8 @@ const SECOES_DO_ESTADO: Record<EstadoDaFonte, SecaoDaResposta[]> = {
   divergente: ["bloqueado", "lacuna", "proximo"],
   // O que veio no anexo fala na seção própria (ou vira próximo passo/pendência); nunca vira "feito" do OS.
   material_do_dono: ["anexo", "proximo", "lacuna", "decisao"],
+  // O que a consulta leu (ex.: o briefing tem X, falta Y): conversa, pendência e próximo passo. Nunca "feito" de entrega.
+  lido_no_os: ["anexo", "lacuna", "proximo", "decisao"],
 };
 
 export function secaoDoEstado(estado: EstadoDaFonte): SecaoDaResposta {

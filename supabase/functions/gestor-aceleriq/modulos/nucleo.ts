@@ -49,11 +49,12 @@ import {
 } from "../../_shared/acoes-do-agente.ts";
 import { ehOrdemClara } from "../../_shared/ordem-clara.ts";
 import { type BlocoDeResposta, type BlocoTabela, ESQUEMA_FLUXO, ESQUEMA_TABELA, validarBlocos } from "../../_shared/blocos-de-resposta.ts";
+import { blocoDasConsultas, ESQUEMA_DAS_CONSULTAS, executarConsultas, normalizarConsultas } from "../../_shared/consultas-do-agente.ts";
 import { AGENTE_DO_GESTOR, alvoDaTarefa, type AlvoDoGestor, DESCRICOES_DAS_OPERACOES, type EntregaDoGestor, type ObjetoDoGestor, OPERACOES_DE_DECISAO, regrasDoGestor } from "./ferramentas.ts";
 import { entregasDaAcao, executarItem } from "./executor.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_TOKENS_SAIDA = 1800;
+const MAX_TOKENS_SAIDA = 4000;
 
 export class ErroHttp extends Error {
   constructor(public status: number, public codigo: string, mensagem: string) { super(mensagem); }
@@ -278,6 +279,13 @@ VERDADE (regras duras)
 - Nunca diga que fez, aprovou, criou ou mandou: o sistema executa ou pede Confirmar e mostra o cartão com o estado real logo abaixo. Diga o que está propondo ("Deixei a aprovação pronta para você confirmar.").
 - Fontes A1, A2... são o que o dono mandou agora; não provam nada no OS.
 
+CONSULTAR ANTES DE AGIR ("consultas")
+- Consultar → compreender → executar → verificar → responder. Antes de perguntar algo ao dono, criar tarefa ou mandar a um agente, veja se uma CONSULTA resolve.
+- Pedido de conferir, ler, resumir, verificar ou comparar algo que as consultas alcançam (briefing, contexto da Mesa, arquivos, agenda, métricas, cérebro, dossiê): peça as consultas (até 4) e responda com o que leu. NUNCA crie tarefa "conferir/verificar/ler X" para isso.
+- O resultado volta como fontes L1, L2... (estado lido_no_os). Cite-as. O que leu pode ir em "conversa" (com a fonte L), "lacuna" (o que falta) e "proximo".
+- Se você já recebeu o resultado das consultas nesta rodada, consultas = [] e responda.
+- Consulta precisa de cliente: na conversa geral sem cliente claro, pergunte qual.
+
 AÇÕES ("acoes"; null quando não há pedido)
 - Só apelidos das listas: cN cliente, pN projeto, tN tarefa, aN solicitação de aprovação pendente.
 - "Pode aprovar" / "aprova essa" = aprovar_solicitacao no aN certo (o que acabou de ser tratado). Registrar decisão na memória NÃO é aprovar e não substitui. Se não existe aN correspondente, diga isso numa mensagem de conversa e não invente.
@@ -304,7 +312,7 @@ const ESQUEMA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["itens", "acoes", "bloqueadas", "abrir", "mostrar_numeros", "sugestoes", "blocos"],
+    required: ["itens", "acoes", "bloqueadas", "abrir", "mostrar_numeros", "sugestoes", "blocos", "consultas"],
     properties: {
       acoes: esquemaDasAcoes(Object.keys(DESCRICOES_DAS_OPERACOES)),
       bloqueadas: {
@@ -337,23 +345,24 @@ const ESQUEMA = {
       mostrar_numeros: { type: "boolean" },
       sugestoes: { type: "array", items: { type: "string" } },
       blocos: { type: "array", maxItems: 3, items: { anyOf: [ESQUEMA_FLUXO, ESQUEMA_TABELA] } },
+      consultas: ESQUEMA_DAS_CONSULTAS,
     },
   },
 };
 
 type Redacao = { bruto: Record<string, unknown> | null; itens: ItemDaResposta[]; origem: "ia_conferida" | "motor"; avisos: string[]; custo: number; usoId: string | null; modelo: string | null; recusados: number; contestados: number };
 
-async function redigir(pergunta: string, cabecalho: string, fontes: Fonte[], o: { agencia: string | null; userId: string; semIa: boolean; historico: string; imagens?: ImagemEntrada[]; blocoDeAcoes?: string; blocoDeObjetos?: string }): Promise<Redacao> {
-  const motor = (aviso?: string): Redacao => ({ bruto: null, itens: respostaDoMotor(fontes), origem: "motor", avisos: aviso ? [aviso] : [], custo: 0, usoId: null, modelo: null, recusados: 0, contestados: 0 });
+async function redigir(pergunta: string, cabecalho: string, fontes: Fonte[], o: { agencia: string | null; userId: string; semIa: boolean; historico: string; imagens?: ImagemEntrada[]; blocoDeAcoes?: string; blocoDeObjetos?: string; aviso?: string }): Promise<Redacao> {
+  const motor = (aviso?: string): Redacao => ({ bruto: null, itens: respostaDoMotor(fontes, 2).filter((i) => !/^e mais \d+ no período$/.test(i.texto)), origem: "motor", avisos: aviso ? [aviso] : [], custo: 0, usoId: null, modelo: null, recusados: 0, contestados: 0 });
   if (o.semIa) return motor();
   if (!o.agencia) return motor("Sem carteira de IA da agência: respondi só com os fatos registrados.");
   const modelo = (await modeloPadrao("estrategista"))?.id || null;
   if (!modelo) return motor("Nenhum modelo de texto ligado: respondi só com os fatos registrados.");
 
   let saida;
-  try {
-    saida = await chamarTexto({
-      clientId: o.agencia,
+  const agenciaDaChamada = o.agencia;
+  const chamar = (aviso: string) => chamarTexto({
+      clientId: agenciaDaChamada,
       tarefa: "conversa",
       agente: "estrategista",
       modeloId: modelo,
@@ -364,6 +373,8 @@ async function redigir(pergunta: string, cabecalho: string, fontes: Fonte[], o: 
           o.historico ? `HISTÓRICO DESTA CONVERSA (mais antigo primeiro; contexto, não é fonte):\n${o.historico}` : "HISTÓRICO: esta é a primeira mensagem da conversa.",
           o.blocoDeObjetos || "",
           `ÚLTIMA MENSAGEM DO DONO (responda a esta): ${pergunta}`,
+          o.aviso ? `AVISO DO SISTEMA: ${o.aviso}` : "",
+          aviso ? `AVISO DO SISTEMA: ${aviso}` : "",
           `RECORTE DOS DADOS: ${cabecalho}`,
           `FONTES (JSON; só isto pode ser afirmado):\n${JSON.stringify(fontes.map((f) => ({ apelido: f.apelido, tipo: f.tipo, estado: f.estado, titulo: f.titulo, quando: f.quando, cliente: f.cliente, agente: f.agente, texto: f.texto })))}`,
           o.blocoDeAcoes || "",
@@ -375,6 +386,14 @@ async function redigir(pergunta: string, cabecalho: string, fontes: Fonte[], o: 
       timeoutMs: 90_000,
       criadoPor: o.userId,
     });
+  try {
+    try {
+      saida = await chamar("");
+    } catch (e) {
+      // Resposta grande demais (JSON cortado no teto de saída): uma nova tentativa, mais curta.
+      if (!(e instanceof IaMotorErro) || e.codigo !== "json_invalido") throw e;
+      saida = await chamar("Sua resposta anterior passou do tamanho e foi cortada. Responda MAIS CURTO: no máximo 5 mensagens, no máximo 2 quadros e sem repetir fontes.");
+    }
   } catch (e) {
     registrarFalha("gestor-aceleriq: IA indisponível (valeu a ficha)", e);
     return motor(e instanceof IaMotorErro ? `IA indisponível (${e.codigo}): respondi só com os fatos registrados.` : "IA indisponível: respondi só com os fatos registrados.");
@@ -515,6 +534,7 @@ export async function responder(e: EntradaDoResponder): Promise<Respondido> {
     blocoDosAlvos("TAREFAS (ajustar ou mandar a um agente)", alvos.tarefas),
     blocoDosAlvos("SOLICITAÇÕES DE APROVAÇÃO PENDENTES (aprovar ou devolver)", alvos.aprovacoes, "nenhuma pendente neste recorte."),
     `\nAGENTES (slug: nome): ${alvos.agentes.map((a) => `${a.slug}: ${a.nome}`).join("; ") || "nenhum ativo"}\n`,
+    cliente ? blocoDasConsultas() : "CONSULTAS: precisam de um cliente no recorte.",
     regraDasAcoes(DESCRICOES_DAS_OPERACOES),
   ].join("\n");
   const blocoDeObjetos = alvos.objetosDaConversa.length
@@ -523,7 +543,23 @@ export async function responder(e: EntradaDoResponder): Promise<Respondido> {
 
   const anexos = fontesDosAnexos(e.arquivos || [], (e.imagens || []).map((i) => ({ nome: i.nome })));
   const todas = [...anexos.fontes, ...ficha.fontes];
-  const red = await redigir(e.pergunta, cabecalho, todas, { agencia, userId: e.userId, semIa: e.semIa || !!e.tetoAtingido, historico: e.historico, imagens: e.imagens, blocoDeAcoes, blocoDeObjetos });
+  let red = await redigir(e.pergunta, cabecalho, todas, { agencia, userId: e.userId, semIa: e.semIa || !!e.tetoAtingido, historico: e.historico, imagens: e.imagens, blocoDeAcoes, blocoDeObjetos });
+  // Consultar antes de agir: o modelo pediu leituras reais do cliente; elas viram fontes L1.. e ele redige de novo com o que leu.
+  const consultas = cliente && red.bruto ? normalizarConsultas(red.bruto.consultas) : [];
+  const leituras: Array<{ apelido: string; ferramenta: string; argumento: string }> = [];
+  if (consultas.length && cliente) {
+    const lidas = await executarConsultas(servico(), cliente.id, consultas);
+    for (const l of lidas) {
+      todas.push({ apelido: l.apelido, tipo: "leitura", estado: "lido_no_os", titulo: `${l.ferramenta}${l.argumento ? ` (${l.argumento})` : ""}`, quando: new Date().toISOString(), texto: l.texto, cliente: nomeRecorte, agente: null, ids: {} });
+      leituras.push({ apelido: l.apelido, ferramenta: l.ferramenta, argumento: l.argumento });
+    }
+    const custoDaPrimeira = red.custo;
+    red = await redigir(e.pergunta, cabecalho, todas, {
+      agencia, userId: e.userId, semIa: e.semIa || !!e.tetoAtingido, historico: e.historico, imagens: e.imagens, blocoDeAcoes, blocoDeObjetos,
+      aviso: `Você pediu ${lidas.length} ${lidas.length === 1 ? "consulta" : "consultas"} e o resultado já está nas FONTES (${lidas.map((l) => l.apelido).join(", ")}). Agora responda ao dono com o que leu (o que temos, o que falta), cite as fontes L e devolva consultas = [].`,
+    });
+    red.custo += custoDaPrimeira;
+  }
   const avisos = [...fatos.avisos, ...red.avisos];
   if (e.tetoAtingido && !e.semIa) avisos.push(`Teto de ${e.tetoPorDia ?? 60} respostas com IA por dia atingido: respondi só com os fatos registrados.`);
   if (ficha.cortadas && red.origem === "motor") avisos.push(`${ficha.cortadas} fatos a mais no período ficaram fora desta resposta: refine por cliente ou período.`);
@@ -587,12 +623,17 @@ export async function responder(e: EntradaDoResponder): Promise<Respondido> {
     tipo: "resposta", origem: red.origem, cabecalho, periodo, abertura: null, fechamento: null, sugestoes,
     mostrar_numeros: red.origem === "motor" ? true : red.bruto?.mostrar_numeros === true,
     cliente: cliente ? { id: cliente.id, nome: nomeRecorte, projeto_id: cliente.projetoId || null } : null,
-    acoes: acao ? [acao] : [], bloqueadas, abrir, referencias: novas.slice(0, 16), blocos, blocos_recusados: blocosRecusados,
+    acoes: acao ? [acao] : [], bloqueadas, abrir, referencias: novas.slice(0, 16), blocos, blocos_recusados: blocosRecusados, consultas: leituras,
     itens: red.itens, fontes: fontesUsadas, contagem, total_de_fontes: ficha.fontes.length, avisos, modelo: red.modelo, recusados: red.recusados, contestados: red.contestados,
     relatorio: respostaEmTexto(cabecalho, red.itens),
   };
   return { tipo: "resposta", texto: respostaEmConversa(red.itens) || (acao ? acao.resumo : ""), clienteId: cliente?.id || null, custo: red.custo, usoId: red.usoId, dados, acao };
 }
+
+const ROTULO_DO_ESTADO_CURTO: Record<string, string> = {
+  feito_com_prova: "Feito com prova", concluido_sem_prova: "Concluído sem prova", execucao_feita_entrega_em_revisao: "Em revisão", em_revisao: "Em revisão", em_andamento: "Em andamento",
+  bloqueado: "Bloqueado", aguardando_insumo: "Aguardando insumo", na_fila: "Na fila", pendente: "Pendente", decisao_pendente: "Sua decisão", agendado: "Agendado", falhou: "Falhou", divergente: "Divergente",
+};
 
 const ROTULO_DA_CONTAGEM: Array<[SecaoDaResposta, string]> = [
   ["feito", "Feito com prova"], ["em_revisao", "Em revisão"], ["em_andamento", "Em andamento"], ["bloqueado", "Bloqueado"], ["decisao", "Sua decisão"], ["concluido_sem_prova", "Concluído sem prova"],
@@ -620,6 +661,10 @@ async function blocosDaResposta(red: Redacao, fontes: Fonte[], contagem: Record<
         if (conferida) saida.push(conferida);
       }
     }
+  }
+  if (red.origem === "motor") {
+    const linhas = fontes.filter((f) => f.tipo !== "diario" && f.tipo !== "execucao").slice(0, 50).map((f) => [f.titulo.slice(0, 120), ROTULO_DO_ESTADO_CURTO[f.estado] || f.estado, f.cliente || "", f.quando ? f.quando.slice(0, 10) : null]);
+    if (linhas.length > 3) saida.push({ tipo: "tabela", titulo: "O que está registrado no recorte", colunas: ["Item", "Situação", "Cliente", "Quando"], linhas, fontes: fontes.slice(0, 50).map((f) => f.apelido) });
   }
   if (red.bruto?.mostrar_numeros === true || red.origem === "motor") {
     const pontos = ROTULO_DA_CONTAGEM.map(([k, rotulo]) => ({ x: rotulo, y: Number(contagem[k] || 0) })).filter((p) => p.y > 0);

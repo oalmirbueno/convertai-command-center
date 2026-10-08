@@ -1,17 +1,29 @@
 import type { ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Link, useInRouterContext } from "react-router-dom";
 import { conversa, juntar, superficie } from "@/components/sistema/estilos";
 
 /**
  * Texto de agente em markdown (o Hermes responde assim), desenhado com
  * segurança: HTML cru é descartado (skipHtml), link só abre se for http ou
- * https (nova aba, rel="noopener noreferrer"), imagem só https e sem enviar
+ * https (nova aba, rel="noopener noreferrer") ou rota do próprio painel
+ * (mesma aba, pelo roteador), imagem só https e sem enviar
  * referer. Tabela rola por dentro na horizontal; código em bloco também.
  * Tamanho da conversa (14 px) em todo agente.
  */
 
 const ehLinkWeb = (href: unknown): href is string => typeof href === "string" && /^https?:\/\//i.test(href.trim());
+/** Rota do próprio painel ("/mesa-ads?client=..."), nunca "//host". */
+const ehRotaInterna = (href: unknown): href is string => typeof href === "string" && /^\/[^/\\]/.test(href.trim());
+
+const CLASSE_DO_LINK = "font-medium text-primary underline underline-offset-2 hover:no-underline";
+
+function LinkInterno({ para, children }: { para: string; children?: ReactNode }) {
+  const noRoteador = useInRouterContext();
+  return noRoteador ? <Link to={para} className={CLASSE_DO_LINK}>{children}</Link> : <a href={para} className={CLASSE_DO_LINK}>{children}</a>;
+}
+
 const ehHttps = (src: unknown): src is string => typeof src === "string" && /^https:\/\//i.test(src.trim());
 
 function Titulo({ nivel, children }: { nivel: number; children?: ReactNode }) {
@@ -31,7 +43,7 @@ const componentes: Components = {
   h6: ({ children }) => <Titulo nivel={6}>{children}</Titulo>,
   p: ({ children }) => <p className="min-w-0">{children}</p>,
   a: ({ href, children }) =>
-    ehLinkWeb(href) ? (
+    ehRotaInterna(href) ? <LinkInterno para={href.trim()}>{children}</LinkInterno> : ehLinkWeb(href) ? (
       <a href={href} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline underline-offset-2 hover:no-underline">
         {children}
       </a>

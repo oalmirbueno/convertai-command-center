@@ -40,7 +40,7 @@ export function perguntasDeConferencia(itens: ItemDaResposta[], fontes: Fonte[])
   afirmacoes.forEach((_, k) => {
     questions[`a${k}`] = {
       type: "choice",
-      instructions: `Compare \`afirmacoes[${k}].afirmacao\` (escrita na seção \`afirmacoes[${k}].secao\` de um relatório ao dono da agência) com o texto das fontes em \`afirmacoes[${k}].fontes\`. As fontes contêm tudo o que pode ser afirmado. Afirmar que algo foi publicado, concluído ou entregue exige que a fonte diga isso; "em revisão", "em edição" ou "agendado" não é publicado nem concluído.`,
+      instructions: `Compare \`afirmacoes[${k}].afirmacao\` (escrita na seção \`afirmacoes[${k}].secao\` de um relatório ao dono da agência) com o texto das fontes em \`afirmacoes[${k}].fontes\`. As fontes contêm tudo o que pode ser afirmado. Afirmar que algo foi publicado, concluído ou entregue exige que a fonte diga isso; "em revisão", "em edição" ou "agendado" não é publicado nem concluído. Fonte com estado "lido_no_os" é a leitura COMPLETA de um registro (briefing, contexto da Mesa, arquivo, agenda): uma afirmação de AUSÊNCIA ("falta X", "não tem X", "X não foi informado") é sustentada quando esse texto não traz X.`,
       criteria: {
         sustenta: "as fontes dizem a afirmação ou a implicam diretamente, inclusive estados, datas, números e nomes",
         contradiz: "as fontes dizem o contrário ou um estado diferente (ex.: a afirmação diz publicado/concluído e a fonte diz revisão, edição, bloqueio ou agendado)",
