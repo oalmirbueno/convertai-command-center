@@ -1,4 +1,5 @@
 import EvidenciaVisual from "./EvidenciaVisual";
+import { contextoDoPedido } from '@/lib/carteiraOperacao';
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -74,6 +75,7 @@ export default function DiarioDaExecucao({
   nomesDeAgentes,
   aberto,
   aoFechar,
+  contextoInicial,
 }: {
   linkId: string | null;
   titulo?: string;
@@ -81,6 +83,7 @@ export default function DiarioDaExecucao({
   nomesDeAgentes: Map<string, string>;
   aberto: boolean;
   aoFechar: () => void;
+  contextoInicial?: { cliente: { id: string; nome: string }; pedido: string };
 }) {
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
@@ -88,13 +91,25 @@ export default function DiarioDaExecucao({
   const [tipo, setTipo] = useEstadoDaTela<string>(`execucao:diario:tipo:${linkId || ""}`, "comentario", {
     validar: (v) => typeof v === "string" && TIPOS_HUMANOS.some((t) => t.id === v),
   });
-  const [tituloEntrada, setTituloEntrada] = useEstadoDaTela<string>(`execucao:diario:titulo:${linkId || ""}`, "");
-  const [texto, setTexto] = useEstadoDaTela<string>(`execucao:diario:texto:${linkId || ""}`, "");
+  const [tituloEntrada, setTituloEntrada] = useEstadoDaTela<string>(`execucao:diario:titulo:${linkId || ""}${contextoInicial ? `:${contextoInicial.cliente.id}` : ''}`, "");
+  const [texto, setTexto] = useEstadoDaTela<string>(`execucao:diario:texto:${linkId || ""}${contextoInicial ? `:${contextoInicial.cliente.id}` : ''}`, contextoInicial?.pedido || "");
   const [anexos, setAnexos] = useState<Array<{ name: string; url: string }>>([]);
   const [subindo, setSubindo] = useState(false);
   const [aba, setAba] = useState("diario");
   const [limite, setLimite] = useState(40);
-  useEffect(() => { setAnexos([]); setAba("diario"); setLimite(40); }, [linkId]);
+  useEffect(() => { setAnexos([]); setAba("diario"); setLimite(40); }, [linkId, contextoInicial?.cliente.id]);
+  const contexto = useQuery({
+    queryKey: ['diario-contexto', linkId], enabled: aberto && !!linkId, staleTime: 60_000,
+    queryFn: async () => {
+      const l = await supabase.from('operator_task_links').select('kanban_task_id,painel_task_id').eq('id', linkId!).single();
+      if (l.error) throw l.error;
+      const id = l.data.kanban_task_id || l.data.painel_task_id;
+      if (!id) return null;
+      const t = await supabase.from('tasks').select('title,project:projects!tasks_project_id_fkey(name,client:profiles!projects_client_id_fkey(company_name,full_name))').eq('id', id).single();
+      if (t.error) throw t.error;
+      return t.data;
+    },
+  });
 
   const { data: entradas = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["diario", linkId, limite],
@@ -152,7 +167,7 @@ export default function DiarioDaExecucao({
         author_id: user!.id,
         entry_type: tipo,
         title: tituloEntrada.trim() || null,
-        body: texto.trim() || "Arquivos adicionados à tarefa.",
+        body: contextoInicial ? contextoDoPedido(contextoInicial.cliente, texto.trim() || "Arquivos adicionados à tarefa.") : texto.trim() || "Arquivos adicionados à tarefa.",
         attachments: anexos,
       });
       if (error) throw new Error(error.message);
@@ -171,8 +186,10 @@ export default function DiarioDaExecucao({
         <div className="shrink-0 border-b border-border px-5 pb-3 pt-5 pr-12">
           <DialogTitle className={juntar(estiloTexto.tituloSecao, "text-left")}>{titulo || "Caderno da execução"}</DialogTitle>
           <DialogDescription className={juntar(estiloTexto.auxiliar, "mt-1 truncate text-left")}>
-            Conversa, trabalho e comprovantes no mesmo lugar.
+            {contextoInicial ? `Pedido para ${contextoInicial.cliente.nome} · conversa compartilhada com a coordenação` : 'Conversa, trabalho e comprovantes no mesmo lugar.'}
           </DialogDescription>
+          {!contextoInicial && contexto.data && <p className="mt-2 text-xs text-primary">{contexto.data.project?.client?.company_name || contexto.data.project?.client?.full_name || 'Cliente não informado'} · {contexto.data.project?.name || contexto.data.title}</p>}
+          {!contextoInicial && contexto.isError && <button className="mt-2 text-xs text-warning" onClick={() => void contexto.refetch()}>Conferir cliente e projeto</button>}
         </div>
 
         <nav aria-label="Conteúdo da tarefa" className="flex shrink-0 gap-1 border-b border-border px-5 py-2">
@@ -199,7 +216,7 @@ export default function DiarioDaExecucao({
             />
           ) : (
             <div className="mx-auto max-w-3xl space-y-6">
-            <p className="text-xs text-muted-foreground">Atualizações mais recentes primeiro</p>
+            <p className="text-xs text-muted-foreground">{contextoInicial ? 'Histórico da coordenação · pode incluir outros clientes' : 'Atualizações mais recentes primeiro'}</p>
             {entradas.map((e) => {
               const documento = prepararEntrada(e.body, e.attachments || []);
               const doHumano = e.author_kind === "humano";
@@ -250,6 +267,7 @@ export default function DiarioDaExecucao({
             conversa, e o agente trata diferente, então a escolha não pode
             ser um detalhe escondido. O rascunho fica guardado por vínculo. */}
         <div className="shrink-0 space-y-2 border-t border-border px-5 py-3">
+          {contextoInicial && <p className="text-xs font-medium text-primary">Este pedido é para: {contextoInicial.cliente.nome}</p>}
           <div className="flex min-w-0 items-center">
             <SeletorCompacto
               rotulo="Tipo da entrada"
