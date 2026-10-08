@@ -448,7 +448,7 @@ export async function getProject(opts: { project_id: string }, ctx: AuthContext)
   // The service-role client must never fetch another client's related rows and
   // only then decide whether the caller was allowed to see them.
   const project = await withTimeout(
-    db().from('projects').select(F.project).eq('id', id).is('deleted_at', null).maybeSingle(),
+    db().from('projects').select(`${F.project},scope`).eq('id', id).is('deleted_at', null).maybeSingle(),
   );
   if (project.error) throw new Error(`get_project: ${project.error.message}`);
   if (!project.data) throw new Error('Project not found');

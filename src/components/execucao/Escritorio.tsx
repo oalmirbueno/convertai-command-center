@@ -112,7 +112,7 @@ const FRASE: Record<string, string> = {
   blocked: "travado, precisa de você",
   awaiting_input: "esperando algo seu",
   review: "entregou, esperando revisão",
-  in_progress: "trabalhando agora",
+  in_progress: "trabalho em andamento",
   queued: "com tarefa na fila",
   done: "entregou tudo",
 };
@@ -253,7 +253,7 @@ export default function Escritorio({
             </span>
           </div>
           {aberta && (
-            <ul className={juntar(superficie.painel, "mt-3 grid gap-3 border-0 bg-transparent sm:grid-cols-2 xl:grid-cols-3")}>
+            <ul tabIndex={0} aria-label={`Agentes de ${area}`} className={juntar(superficie.painel, "mt-3 grid max-h-[65vh] gap-3 overflow-y-auto overscroll-contain border-0 bg-transparent pr-1 [scrollbar-width:thin] sm:grid-cols-2 xl:grid-cols-3")}>
               {doGrupo.map((a) => {
                 const meus = porAgente.get(a.id) ?? [];
                 const estado = estadoQueManda(meus);

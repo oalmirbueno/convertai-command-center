@@ -99,6 +99,19 @@ def human_candidates(link: dict[str, Any], diary: dict[str, Any]) -> list[dict[s
             "entry_id": entry_id,
             "link_id": str(link_id),
             "operator": str(operator) if operator else None,
+            "task_title": _safe_text(link.get("tarefa") or ""),
+            "project_name": _safe_text(link.get("projeto") or ""),
+            "project_client": _safe_text(link.get("cliente") or ""),
+            "project_client_id": link.get("client_id"),
+            "communication": (
+                "Identifique o cliente do pedido antes de agir. O cliente do projeto pode ser "
+                "a agência coordenadora de uma carteira; use a referência explícita na mensagem "
+                "para localizar o cliente atendido e confira no painel. Responda em português claro: "
+                "Cliente e tarefa; O que fiz; O que falta; Próximo passo. Separe análise de execução "
+                "comprovada. Para criativos, consulte contexto, materiais e Mesas do cliente pelos "
+                "recursos já disponíveis; não invente acesso nem repita perguntas já respondidas. "
+                "Registre o retorno nesta conversa. Conversa não substitui aprovação de campanha."
+            ),
             "kanban_task_id": entry.get("kanban_task_id") or link.get("kanban_task_id"),
             "painel_task_id": entry.get("painel_task_id") or link.get("painel_task_id"),
             "entry_type": str(entry.get("entry_type") or entry.get("tipo") or "comentario"),
