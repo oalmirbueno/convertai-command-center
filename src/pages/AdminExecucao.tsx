@@ -14,6 +14,7 @@ import OrganogramaAgentes, { type NoDoOrganograma } from "@/components/execucao/
 import ExecucoesRecentes from "@/components/execucao/ExecucoesRecentes";
 import RelatorioVisual from "@/components/execucao/RelatorioVisual";
 import CentralPerformanceMeta from "@/components/execucao/CentralPerformanceMeta";
+import CentralDeAutonomia, { type PedidoAoHermes } from "@/components/execucao/CentralDeAutonomia";
 import Departamentos from "@/components/execucao/Departamentos";
 import PerfilDoAgente from "@/components/execucao/PerfilDoAgente";
 import DiarioDaExecucao from "@/components/execucao/DiarioDaExecucao";
@@ -135,6 +136,7 @@ type Operador = {
  * A aba não é decoração: ela é a resposta a "onde eu olho agora".
  */
 const ABAS = [
+  { id: "central", rotulo: "Central", visoes: ["central"] },
   { id: "performance", rotulo: "Performance Meta", visoes: ["performance"] },
   { id: "pessoas", rotulo: "Escritório", visoes: ["escritorio", "hierarquia"] },
   { id: "trabalho", rotulo: "Trabalho", visoes: ["atividade", "quadro", "execucoes", "fila", "in_progress", "done", "review"] },
@@ -144,6 +146,7 @@ const ABAS = [
 ] as const;
 
 const VISOES = [
+  { id: "central", rotulo: "Central de Autonomia" },
   { id: "performance", rotulo: "Performance Meta" },
   { id: "escritorio", rotulo: "Escritório" },
   { id: "atividade", rotulo: "Visão geral" },
@@ -203,7 +206,7 @@ export default function AdminExecucao() {
   const [menuEncaminhar, setMenuEncaminhar] = useState<{ x: number; y: number; tarefaId: string; titulo: string } | null>(null);
   const [atualizando, setAtualizando] = useState(false);
   const [reconciliando, setReconciliando] = useState(false);
-  const [diarioAberto, setDiarioAberto] = useState<{ linkId: string; titulo?: string } | null>(null);
+  const [diarioAberto, setDiarioAberto] = useState<{ linkId: string; titulo?: string; contextoInicial?: { cliente: { id: string; nome: string }; pedido: string }; textoInicial?: string } | null>(null);
   const [responsavelAberto, setResponsavelAberto] = useState<
     { taskId: string; titulo?: string; atual?: string | null } | null>(null);
   // Os filtros do centro de comando: 606 tarefas abertas nao cabem numa
@@ -444,6 +447,7 @@ export default function AdminExecucao() {
   }, [aprovacaoAlvo, propostaAlvo]);
   useEffect(() => {
     if (abaAlvo === "performance") { setAba("performance"); setVisao("performance"); }
+    if (abaAlvo === "central") { setAba("central"); setVisao("central"); }
     if (abaAlvo === "diario" && vinculoAlvo) {
       setDiarioAberto({ linkId: vinculoAlvo });
     }
@@ -1393,9 +1397,34 @@ export default function AdminExecucao() {
     </div>
   );
 
+  /**
+   * Gestor → Hermes: abre o diário da coordenação com o pedido pronto. O canal
+   * é o mesmo do "Pedir criativo" (o consumidor do Hermes lê o diário); quem
+   * revisa e envia é o dono. Sem vínculo aberto da coordenação, não finge envio.
+   */
+  const encaminharAoHermes = (p: PedidoAoHermes) => {
+    const coordenadores = operadores.filter((o) => o.is_coordinator || o.slug === "augusto").map((o) => o.id);
+    const link = vinculos
+      .filter((v) => coordenadores.includes(v.operator_id) && !["cancelled", "done"].includes(v.status))
+      .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))[0];
+    if (!link) { toast.error("A coordenação ainda não tem uma tarefa aberta para receber o pedido. Atribua uma tarefa ao coordenador primeiro."); return; }
+    setDiarioAberto({
+      linkId: link.id,
+      titulo: "Pedido do Gestor à coordenação",
+      ...(p.cliente ? { contextoInicial: { cliente: p.cliente, pedido: p.texto } } : { textoInicial: p.texto }),
+    });
+  };
+
   /** A visão aberta: o conteúdo que rola na região principal. */
   const conteudoDaVisao = carregandoVinculos && vinculos.length === 0 ? (
     <Carregando linhas={4} rotulo="Carregando o trabalho dos agentes" />
+  ) : visao === "central" ? (
+    <CentralDeAutonomia
+      nomesDeAgentes={nomesDeAgentes}
+      titulosDeTarefas={titulosDeTarefas}
+      aoAbrirDiario={(id, titulo) => setDiarioAberto({ linkId: id, titulo })}
+      aoEncaminhar={encaminharAoHermes}
+    />
   ) : visao === "performance" ? (
     <CentralPerformanceMeta aoAbrir={(id, titulo) => setDiarioAberto({ linkId: id, titulo })} />
   ) : visao === "escritorio" ? (
@@ -1581,7 +1610,7 @@ export default function AdminExecucao() {
   );
 
   const filtrosAtivos = Boolean(busca.trim() || filtroCliente || filtroPrazo !== "todas");
-  const mostraFiltros = aba !== "performance" && aba !== "feito" && visao !== "relatorios" && visao !== "hierarquia";
+  const mostraFiltros = aba !== "central" && aba !== "performance" && aba !== "feito" && visao !== "relatorios" && visao !== "hierarquia";
   /** Quantos recortes da linha 2 estão ligados (o número do botão "Filtros"). */
   const recortesLigados = (filtroCliente ? 1 : 0) + (filtroPrazo !== "todas" ? 1 : 0);
 
@@ -1611,7 +1640,7 @@ export default function AdminExecucao() {
             // A aba "O que foi feito" nao tem visao nenhuma, e uma lista vazia
             // faz o TypeScript inferir never[]. O tipo explicito resolve sem
             // obrigar a aba a inventar uma visao que ela nao tem.
-            const quantos = x.id === "performance" ? undefined : contagemDasAbas[x.id];
+            const quantos = x.id === "performance" || x.id === "central" ? undefined : contagemDasAbas[x.id];
             return { valor: x.id, rotulo: x.rotulo, contador: quantos };
           })}
         />
@@ -1779,7 +1808,7 @@ export default function AdminExecucao() {
         memoria="execucao-resumo"
         rotuloDaLateral="Atenção"
         iconeDaLateral={<ListChecks className="h-4 w-4" />}
-        lateral={aba === "performance" ? undefined :
+        lateral={aba === "performance" || aba === "central" ? undefined :
           <>
             <FecharResumo />
             <RegiaoRolavel modo="sempre" rotulo="Áreas e incidentes" memoria="execucao:areas" className="lg:pr-1">
@@ -1865,6 +1894,9 @@ export default function AdminExecucao() {
         nomesDeAgentes={nomesDeAgentes}
         aberto={Boolean(diarioAberto)}
         aoFechar={() => setDiarioAberto(null)}
+        contextoInicial={diarioAberto?.contextoInicial}
+        textoInicial={diarioAberto?.textoInicial}
+        substituirRascunho={Boolean(diarioAberto?.contextoInicial || diarioAberto?.textoInicial)}
       />
     </div>
   );

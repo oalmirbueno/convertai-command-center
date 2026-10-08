@@ -76,6 +76,8 @@ export default function DiarioDaExecucao({
   aberto,
   aoFechar,
   contextoInicial,
+  textoInicial,
+  substituirRascunho = false,
 }: {
   linkId: string | null;
   titulo?: string;
@@ -84,6 +86,10 @@ export default function DiarioDaExecucao({
   aberto: boolean;
   aoFechar: () => void;
   contextoInicial?: { cliente: { id: string; nome: string }; pedido: string };
+  /** Texto pronto sem cliente (pedido geral do Gestor). Não sobrescreve rascunho guardado. */
+  textoInicial?: string;
+  /** O pedido pronto (Gestor) entra no lugar do rascunho guardado, como instrução. */
+  substituirRascunho?: boolean;
 }) {
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
@@ -92,12 +98,17 @@ export default function DiarioDaExecucao({
     validar: (v) => typeof v === "string" && TIPOS_HUMANOS.some((t) => t.id === v),
   });
   const [tituloEntrada, setTituloEntrada] = useEstadoDaTela<string>(`execucao:diario:titulo:${linkId || ""}${contextoInicial ? `:${contextoInicial.cliente.id}` : ''}`, "");
-  const [texto, setTexto] = useEstadoDaTela<string>(`execucao:diario:texto:${linkId || ""}${contextoInicial ? `:${contextoInicial.cliente.id}` : ''}`, contextoInicial?.pedido || "");
+  const [texto, setTexto] = useEstadoDaTela<string>(`execucao:diario:texto:${linkId || ""}${contextoInicial ? `:${contextoInicial.cliente.id}` : ''}`, contextoInicial?.pedido || textoInicial || "");
   const [anexos, setAnexos] = useState<Array<{ name: string; url: string }>>([]);
   const [subindo, setSubindo] = useState(false);
   const [aba, setAba] = useState("diario");
   const [limite, setLimite] = useState(40);
   useEffect(() => { setAnexos([]); setAba("diario"); setLimite(40); }, [linkId, contextoInicial?.cliente.id]);
+  useEffect(() => {
+    if (!aberto || !substituirRascunho) return;
+    const pronto = contextoInicial?.pedido || textoInicial || "";
+    if (pronto) { setTexto(pronto); setTipo("instrucao"); }
+  }, [aberto, substituirRascunho, linkId, contextoInicial?.pedido, textoInicial]);
   const contexto = useQuery({
     queryKey: ['diario-contexto', linkId], enabled: aberto && !!linkId, staleTime: 60_000,
     queryFn: async () => {

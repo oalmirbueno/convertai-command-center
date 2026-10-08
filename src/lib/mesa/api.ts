@@ -13,7 +13,7 @@ import { corpoComMarca } from "@/lib/mesa/marcas";
 import type { RecursosDoModelo } from "../../../supabase/functions/_shared/recursos-dos-modelos";
 import { capacidadesNaTela, lancadoHaPouco } from "@/lib/mesa/recursos-na-tela";
 
-export type FuncaoDaMesa = "ia-gateway" | "agente-calendario" | "estudio-arte" | "agente-contexto" | "mesa-ads" | "mesa-foto" | "mesa-publicidade" | "mesa-roteiros" | "agente-estilo" | "perfis-instagram" | "mesa-instagram" | "conselho" | "documentos" | "contratos" | "mesa-identidade" | "mesa-proposta" | "proposta-biblioteca" | "mesa-site" | "motor-codigo" | "mesa-mockups" | "preencher-ia" | "mesa-motion" | "agente-cfo" | "computador-do-agente";
+export type FuncaoDaMesa = "ia-gateway" | "agente-calendario" | "estudio-arte" | "agente-contexto" | "mesa-ads" | "mesa-foto" | "mesa-publicidade" | "mesa-roteiros" | "agente-estilo" | "perfis-instagram" | "mesa-instagram" | "conselho" | "documentos" | "contratos" | "mesa-identidade" | "mesa-proposta" | "proposta-biblioteca" | "mesa-site" | "motor-codigo" | "mesa-mockups" | "preencher-ia" | "mesa-motion" | "agente-cfo" | "computador-do-agente" | "gestor-aceleriq";
 
 export type AcaoDeErro = "recarregar" | "cota" | "chave" | "modelo" | null;
 
@@ -60,6 +60,8 @@ const NOMES_DAS_FUNCOES: Record<FuncaoDaMesa, string> = {
   "preencher-ia": "preenchimento com IA",
   // Frente CFO (30/09): o agente financeiro (Assist e Financeiro › CFO).
   "agente-cfo": "CFO",
+  // Central de Autonomia (08/10): o chat do dono sobre a operação, em /execucao.
+  "gestor-aceleriq": "Gestor Aceleriq",
   // Frente MOD (30/09): o navegador do agente (computer use só de leitura, com o Confirmar do dono).
   "computador-do-agente": "navegador do agente",
 };
