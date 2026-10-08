@@ -652,7 +652,14 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
         if (podeEscrever && aberta?.pode_enviar && (tipos.indexOf("Files") >= 0 || tipos.indexOf("application/x-aceleriq-arquivo") >= 0)) { e.preventDefault(); setSoltando(true); }
       }}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setSoltando(false); }}
-      onDrop={(e) => { if (!soltando) return; e.preventDefault(); setSoltando(false); void soltar(e.dataTransfer); }}
+      onDrop={(e) => {
+        // Confere de novo aqui (não pelo estado "soltando", que pode não ter renderizado entre o dragover e o drop).
+        const tipos = Array.prototype.slice.call(e.dataTransfer?.types || []) as string[];
+        setSoltando(false);
+        if (!(podeEscrever && aberta?.pode_enviar && (tipos.indexOf("Files") >= 0 || tipos.indexOf("application/x-aceleriq-arquivo") >= 0))) return;
+        e.preventDefault();
+        void soltar(e.dataTransfer);
+      }}
     >
       {soltando && (
         <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-background/90 px-4 text-center text-[14px] font-medium text-primary">
