@@ -36,6 +36,20 @@ import {
   type VinculoBruto,
 } from "./ficha.ts";
 import { aplicarConferencia, perguntasDeConferencia, type RespostaChoice } from "./conferencia.ts";
+import {
+  type AcaoDoAgente,
+  blocoDosAlvos,
+  comApelido,
+  esquemaDasAcoes,
+  executarDireto,
+  normalizarAcaoDoAgente,
+  pareceOrdem,
+  podeExecutarDireto,
+  regraDasAcoes,
+} from "../../_shared/acoes-do-agente.ts";
+import { ehOrdemClara } from "../../_shared/ordem-clara.ts";
+import { AGENTE_DO_GESTOR, alvoDaTarefa, type AlvoDoGestor, DESCRICOES_DAS_OPERACOES, type EntregaDoGestor, regrasDoGestor } from "./ferramentas.ts";
+import { entregasDaAcao, executarItem } from "./executor.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_TOKENS_SAIDA = 1400;
@@ -243,15 +257,32 @@ Regras duras:
 - Comece pelo que mais importa para a pergunta. Junte fontes parecidas numa mensagem só. No máximo 8 itens; o resto fica nas contagens da tela.
 - Sem markdown, sem listas, sem travessão, sem repetir o apelido no texto, sem saudação nem despedida (a abertura e o fechamento são do sistema).
 - Fontes A1, A2... são arquivos, imagens ou áudios que o dono mandou AGORA (não são registros do OS). O que vem deles vai na seção "anexo" (ou vira próximo passo, pendência ou decisão). Um anexo nunca prova que algo aconteceu no OS: se ele contradiz o OS, diga as duas coisas.
-- Se o dono pedir para resumir, ler ou analisar o anexo, responda sobre o anexo primeiro.`;
+- Se o dono pedir para resumir, ler ou analisar o anexo, responda sobre o anexo primeiro.
+- AÇÕES: quando o dono PEDIR para fazer algo (criar tarefa, ajustar prazo, registrar preferência ou decisão, mandar para um agente), devolva em "acoes" usando só os apelidos das listas. Não diga que fez: o sistema confere, executa e mostra o cartão com o estado real. Conversa ou pergunta sem pedido: acoes = null.
+- Distinga: preferência do cliente, decisão que o dono aprovou, instrução operacional nova, tarefa pedida, aprendizado com evidência. Hipótese ou opinião sua NÃO vira memória.
+- SENSÍVEL (publicar, mandar mensagem ou e-mail a cliente, mexer em campanha, anúncio ou verba, gastar, contrato, excluir de vez, mudar acesso): você NÃO executa. Liste em "bloqueadas" {pedido, motivo, onde}. Sem nada assim, [].`;
 
 const ESQUEMA = {
   nome: "resposta_do_gestor",
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["itens"],
+    required: ["itens", "acoes", "bloqueadas"],
     properties: {
+      acoes: esquemaDasAcoes(Object.keys(DESCRICOES_DAS_OPERACOES)),
+      bloqueadas: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["pedido", "motivo", "onde"],
+          properties: {
+            pedido: { type: "string" },
+            motivo: { type: "string" },
+            onde: { type: "string", enum: ["mesa_ads", "calendario", "kanban", "execucao", "contratos", "clientes", "outro"] },
+          },
+        },
+      },
       itens: {
         type: "array",
         items: {
@@ -269,11 +300,11 @@ const ESQUEMA = {
   },
 };
 
-type Redacao = { itens: ItemDaResposta[]; origem: "ia_conferida" | "motor"; avisos: string[]; custo: number; usoId: string | null; modelo: string | null; recusados: number; contestados: number };
+type Redacao = { bruto: Record<string, unknown> | null; itens: ItemDaResposta[]; origem: "ia_conferida" | "motor"; avisos: string[]; custo: number; usoId: string | null; modelo: string | null; recusados: number; contestados: number };
 
-async function redigir(pergunta: string, cabecalho: string, fontes: Fonte[], o: { agencia: string | null; userId: string; semIa: boolean; historico: string; imagens?: ImagemEntrada[] }): Promise<Redacao> {
-  const motor = (aviso?: string): Redacao => ({ itens: respostaDoMotor(fontes), origem: "motor", avisos: aviso ? [aviso] : [], custo: 0, usoId: null, modelo: null, recusados: 0, contestados: 0 });
-  if (!fontes.length) return motor();
+async function redigir(pergunta: string, cabecalho: string, fontes: Fonte[], o: { agencia: string | null; userId: string; semIa: boolean; historico: string; imagens?: ImagemEntrada[]; blocoDeAcoes?: string }): Promise<Redacao> {
+  const motor = (aviso?: string): Redacao => ({ bruto: null, itens: respostaDoMotor(fontes), origem: "motor", avisos: aviso ? [aviso] : [], custo: 0, usoId: null, modelo: null, recusados: 0, contestados: 0 });
+  if (!fontes.length && !o.blocoDeAcoes) return motor();
   if (o.semIa) return motor();
   if (!o.agencia) return motor("Sem carteira de IA da agência: respondi só com os fatos registrados.");
   const modelo = (await modeloPadrao("estrategista"))?.id || null;
@@ -294,6 +325,7 @@ async function redigir(pergunta: string, cabecalho: string, fontes: Fonte[], o: 
           `PERGUNTA DO DONO: ${pergunta}`,
           `RECORTE: ${cabecalho}`,
           `FONTES (JSON; só isto pode ser afirmado):\n${JSON.stringify(fontes.map((f) => ({ apelido: f.apelido, tipo: f.tipo, estado: f.estado, titulo: f.titulo, quando: f.quando, cliente: f.cliente, agente: f.agente, texto: f.texto })))}`,
+          o.blocoDeAcoes || "",
         ].filter(Boolean).join("\n\n"),
         imagens: o.imagens && o.imagens.length ? o.imagens : undefined,
       }],
@@ -343,18 +375,20 @@ async function redigir(pergunta: string, cabecalho: string, fontes: Fonte[], o: 
   }
 
   if (!finais.length) {
-    return { ...motor("A redação da IA não passou na conferência: respondi só com os fatos registrados."), custo: saida.custoUsd, usoId: saida.usoId, modelo: saida.modeloId, recusados: recusados.length, contestados };
+    return { ...motor("A redação da IA não passou na conferência: respondi só com os fatos registrados."), bruto: (saida.json as Record<string, unknown>) || null, custo: saida.custoUsd, usoId: saida.usoId, modelo: saida.modeloId, recusados: recusados.length, contestados };
   }
-  return { itens: finais, origem: "ia_conferida", avisos, custo: saida.custoUsd, usoId: saida.usoId, modelo: saida.modeloId, recusados: recusados.length, contestados };
+  return { bruto: (saida.json as Record<string, unknown>) || null, itens: finais, origem: "ia_conferida", avisos, custo: saida.custoUsd, usoId: saida.usoId, modelo: saida.modeloId, recusados: recusados.length, contestados };
 }
 
 // ------------------------------------------------------------------ a resposta inteira
 
-export type EntradaDoResponder = { arquivos?: ArquivoDoDono[]; imagens?: ImagemEntrada[]; pergunta: string; clienteId?: string | null; periodo?: string | null; userId: string; semIa: boolean; historico: string; tetoAtingido?: boolean; tetoPorDia?: number };
+export type ConversaDoGestor = { id: string; client_id: string | null; project_id: string | null };
+
+export type EntradaDoResponder = { conversa?: ConversaDoGestor | null; arquivos?: ArquivoDoDono[]; imagens?: ImagemEntrada[]; pergunta: string; clienteId?: string | null; periodo?: string | null; userId: string; semIa: boolean; historico: string; tetoAtingido?: boolean; tetoPorDia?: number };
 
 export type Respondido =
   | { tipo: "esclarecer"; texto: string; opcoes: Array<{ id: string; nome: string }> }
-  | { tipo: "resposta"; texto: string; clienteId: string | null; custo: number; usoId: string | null; dados: Record<string, unknown> };
+  | { tipo: "resposta"; texto: string; clienteId: string | null; custo: number; usoId: string | null; dados: Record<string, unknown>; acao: AcaoDoAgente | null };
 
 export async function responder(e: EntradaDoResponder): Promise<Respondido> {
   const periodo = periodoDaPergunta(e.pergunta, new Date(), e.periodo || null);
@@ -362,8 +396,10 @@ export async function responder(e: EntradaDoResponder): Promise<Respondido> {
 
   // Cliente: o escolhido na tela vale; senão o nome na pergunta; senão o Jev na lista real.
   let cliente: ClienteBase | null = null;
-  const escolhido = e.clienteId && UUID.test(e.clienteId) ? clientes.find((c) => c.id === e.clienteId && !c.projetoId) : null;
-  if (e.clienteId && !escolhido) throw new ErroHttp(400, "cliente_invalido", "Esse cliente não existe no cadastro.");
+  // Conversa de um cliente: o recorte é dele, sempre (isolamento entre clientes).
+  const daConversa = e.conversa?.client_id ? clientes.find((c) => c.id === e.conversa!.client_id && !c.projetoId) || null : null;
+  const escolhido = daConversa || (e.clienteId && UUID.test(e.clienteId) ? clientes.find((c) => c.id === e.clienteId && !c.projetoId) : null);
+  if (!daConversa && e.clienteId && !escolhido) throw new ErroHttp(400, "cliente_invalido", "Esse cliente não existe no cadastro.");
   if (escolhido) cliente = escolhido;
   else {
     const achado = clienteDaPergunta(e.pergunta, clientes);
@@ -384,14 +420,49 @@ export async function responder(e: EntradaDoResponder): Promise<Respondido> {
   const nomeRecorte = cliente ? (cliente.marca ? `${cliente.marca} (marca de ${nomes.get(cliente.id) || "cliente"})` : cliente.nome) : "Todos os clientes";
   const cabecalho = `${nomeRecorte} · ${periodo.rotulo}`;
 
+  // Ferramentas: o modelo só vê apelidos (c cliente, p projeto, t tarefa) e a lista de agentes.
+  const alvos = await alvosDoGestor(cliente, clientes, fatos.tarefas, e.conversa?.project_id || null);
+  const blocoDeAcoes = e.semIa ? "" : [
+    blocoDosAlvos("CLIENTES", alvos.clientes),
+    blocoDosAlvos("PROJETOS DO CLIENTE", alvos.projetos, cliente ? "nenhum projeto ativo." : "nenhum (conversa geral: para criar tarefa, pergunte de qual cliente; não use outro)."),
+    blocoDosAlvos("TAREFAS QUE PODEM SER AJUSTADAS OU MANDADAS A UM AGENTE", alvos.tarefas),
+    `\nAGENTES (slug: nome): ${alvos.agentes.map((a) => `${a.slug}: ${a.nome}`).join("; ") || "nenhum ativo"}\n`,
+    regraDasAcoes(DESCRICOES_DAS_OPERACOES),
+  ].join("\n");
+
   // Anexos do dono viram fontes A1..An, antes das do OS (o modelo responde sobre eles primeiro).
   const anexos = fontesDosAnexos(e.arquivos || [], (e.imagens || []).map((i) => ({ nome: i.nome })));
   const todas = [...anexos.fontes, ...ficha.fontes];
-  const red = await redigir(e.pergunta, cabecalho, todas, { agencia, userId: e.userId, semIa: e.semIa || !!e.tetoAtingido, historico: e.historico, imagens: e.imagens });
+  const red = await redigir(e.pergunta, cabecalho, todas, { agencia, userId: e.userId, semIa: e.semIa || !!e.tetoAtingido, historico: e.historico, imagens: e.imagens, blocoDeAcoes });
   const avisos = [...fatos.avisos, ...red.avisos];
   if (e.tetoAtingido && !e.semIa) avisos.push(`Teto de ${e.tetoPorDia ?? 60} respostas com IA por dia atingido: respondi só com os fatos registrados.`);
   if (ficha.cortadas) avisos.push(`${ficha.cortadas} fatos a mais no período ficaram fora desta resposta: refine por cliente ou período.`);
   if (!ficha.fontes.length) avisos.push("Nada registrado no OS para este recorte. Isso não prova que nada aconteceu fora do painel.");
+
+  // A ação proposta: apelido vira id real, `para` validado, travas aplicadas. Direto só com ordem clara.
+  let acao: AcaoDoAgente | null = null;
+  if (red.bruto && !e.semIa) {
+    const regras = regrasDoGestor(alvos.agentes.map((a) => a.slug));
+    acao = normalizarAcaoDoAgente<AlvoDoGestor>(red.bruto.acoes, [...alvos.clientes, ...alvos.projetos, ...alvos.tarefas], regras, {
+      agente: AGENTE_DO_GESTOR,
+      id: `gestor-${Date.now().toString(36)}`,
+      contexto: { client_id: cliente?.id || null, conversa_id: e.conversa?.id || null, pergunta: e.pergunta.slice(0, 600) },
+      semDesfazer: (itens) => itens.some((i) => i.operacao === "pedir_ao_agente"),
+    });
+    if (acao) {
+      let clara = pareceOrdem(e.pergunta);
+      try { clara = (await ehOrdemClara(e.pergunta, { agente: "Gestor Aceleriq", resumo: acao.resumo })).clara; } catch { /* vale a regra do verbo */ }
+      const decisao = podeExecutarDireto(acao, regras, { pedidoClaro: clara });
+      if (decisao.direto) {
+        acao = await executarDireto(acao, (it, a) => executarItem(servico(), it, a, e.userId), { userId: e.userId });
+        (acao as AcaoDoAgente & { entregas?: EntregaDoGestor[] }).entregas = await entregasDaAcao(servico(), acao);
+      }
+    }
+  }
+  const bloqueadas = (Array.isArray(red.bruto?.bloqueadas) ? red.bruto!.bloqueadas as Array<Record<string, unknown>> : []).slice(0, 5).map((b) => ({
+    pedido: String(b.pedido || "").slice(0, 300), motivo: String(b.motivo || "").slice(0, 300), onde: String(b.onde || "outro"),
+    link: linkDoLugar(String(b.onde || ""), cliente?.id || null),
+  })).filter((b) => b.pedido);
 
   // Só as fontes citadas vão para a tela e para a conversa (o resto fica no total).
   const citadas = new Set(red.itens.flatMap((i) => i.fontes));
@@ -404,7 +475,46 @@ export async function responder(e: EntradaDoResponder): Promise<Respondido> {
   }
   const dados = {
     tipo: "resposta", origem: red.origem, cabecalho, periodo, abertura: conversa.abertura, fechamento: conversa.fechamento, sugestoes: conversa.sugestoes, cliente: cliente ? { id: cliente.id, nome: nomeRecorte, projeto_id: cliente.projetoId || null } : null,
+    acoes: acao ? [acao] : [], bloqueadas,
     itens: red.itens, fontes: fontesUsadas, contagem, total_de_fontes: ficha.fontes.length, avisos, modelo: red.modelo, recusados: red.recusados, contestados: red.contestados,
   };
-  return { tipo: "resposta", texto: respostaEmTexto(cabecalho, red.itens), clienteId: cliente?.id || null, custo: red.custo, usoId: red.usoId, dados };
+  return { tipo: "resposta", texto: respostaEmTexto(cabecalho, red.itens), clienteId: cliente?.id || null, custo: red.custo, usoId: red.usoId, dados, acao };
+}
+
+/** Onde decidir um pedido sensível (com o cliente na rota quando dá). */
+export function linkDoLugar(onde: string, clientId: string | null): string | null {
+  const c = clientId ? `client=${clientId}` : "";
+  switch (onde) {
+    case "mesa_ads": return `/mesa-ads${c ? `?${c}` : ""}`;
+    case "calendario": return `/calendario${c ? `?${c}` : ""}`;
+    case "kanban": return `/kanban${c ? `?${c}` : ""}`;
+    case "execucao": return "/execucao?aba=decisoes";
+    case "clientes": return clientId ? `/clientes?${c}` : "/clientes";
+    case "contratos": return "/contratos";
+    default: return null;
+  }
+}
+
+/** Alvos das ferramentas: cliente(s), projetos ativos do cliente, tarefas do recorte e agentes ativos. */
+async function alvosDoGestor(cliente: ClienteBase | null, clientes: ClienteBase[], tarefas: TarefaBruta[], projetoDaConversa: string | null) {
+  const s = servico();
+  const principais = clientes.filter((c) => !c.projetoId);
+  const listaClientes: AlvoDoGestor[] = cliente ? [{ id: cliente.id, titulo: principais.find((c) => c.id === cliente.id)?.nome || cliente.nome }] : principais.slice(0, 40).map((c) => ({ id: c.id, titulo: c.nome }));
+  let projetos: AlvoDoGestor[] = [];
+  if (cliente) {
+    let q = s.from("projects").select("id, name, status").eq("client_id", cliente.id).order("updated_at", { ascending: false }).limit(25);
+    if (cliente.projetoId) q = s.from("projects").select("id, name, status").eq("id", cliente.projetoId).limit(1);
+    const { data } = await q;
+    const linhas = ((data || []) as Array<{ id: string; name: string; status: string | null }>).filter((p) => !/arquiv|archiv|cancel/i.test(p.status || ""));
+    linhas.sort((a, b) => Number(b.id === projetoDaConversa) - Number(a.id === projetoDaConversa));
+    projetos = linhas.map((p) => ({ id: p.id, titulo: p.name, detalhe: [p.status, p.id === projetoDaConversa ? "projeto desta conversa" : ""].filter(Boolean).join(" · ") }));
+  }
+  const abertasPrimeiro = [...tarefas].sort((a, b) => Number(a.status === "done") - Number(b.status === "done"));
+  const { data: ops } = await s.from("internal_operators").select("slug, display_name, status").eq("status", "active").limit(60);
+  return {
+    clientes: comApelido(listaClientes, "c"),
+    projetos: comApelido(projetos, "p"),
+    tarefas: comApelido(abertasPrimeiro.slice(0, 60).map((t) => alvoDaTarefa(t)), "t"),
+    agentes: ((ops || []) as Array<{ slug: string; display_name: string }>).map((o) => ({ slug: o.slug, nome: o.display_name })),
+  };
 }

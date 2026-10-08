@@ -12,6 +12,17 @@ import { preCarregarTelaDoEndereco } from "./lib/preCargaDoBoot";
 import "./index.css";
 import "./styles/responsive.css";
 
+// Central de Autonomia: rota do painel aberta dentro do iframe da Central (?embutido=1) esconde a casca.
+// Só dentro de um iframe de verdade: o link copiado e aberto numa aba normal continua com o menu.
+try {
+  if (new URLSearchParams(window.location.search).get("embutido") === "1" && window.self !== window.top) {
+    document.body.setAttribute("data-embutido", "1");
+  }
+} catch {
+  /* sem acesso ao topo (outra origem): é iframe; liga igual */
+  document.body.setAttribute("data-embutido", "1");
+}
+
 // Ordem importa: primeiro os detectores de versão antiga, depois o app.
 installChunkErrorRecovery();
 startVersionWatch();

@@ -1,13 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, FileCheck2, Maximize2, Minimize2, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { ChevronDown, ChevronRight, FileCheck2, Maximize2, MessagesSquare, Minimize2, PanelRightClose, PanelRightOpen } from "lucide-react";
+import type { ImperativePanelHandle } from "react-resizable-panels";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { LateralEsquerda } from "@/components/workspace/LateralEsquerda";
+import { chamarFuncao } from "@/lib/mesa/api";
+import ConversasDoGestor, { CHAVE_DAS_CONVERSAS, type ConversaResumo, useOpcoesDeContexto } from "@/components/execucao/central/ConversasDoGestor";
+import PainelHermes from "@/components/execucao/central/PainelHermes";
+import { NavegadorIntegrado, PainelDasMesas } from "@/components/execucao/central/PainelDasMesas";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  Carregando, EstadoDeErro, EstadoVazio, FaixaDeNumeros, SeletorCompacto, botao, juntar, texto, useEstadoDaTela,
+  Carregando, EstadoDeErro, EstadoVazio, FaixaDeNumeros, SeletorCompacto, botao, juntar, texto, useEstadoDaTela, useLargo,
 } from "@/components/sistema";
 import AprovacoesExplicadas from "@/components/execucao/AprovacoesExplicadas";
-import GestorConversa, { type PedidoAoHermes } from "@/components/execucao/GestorConversa";
+import GestorConversa, { type ContextoDaConversa, type PedidoAoHermes } from "@/components/execucao/GestorConversa";
 import { ROLAGEM_OPERACAO } from "@/components/execucao/CarteiraDaOperacao";
 import {
   calcularIndicadores, divergenciaDoVinculo, execucaoNoIntervalo, PERIODOS_DA_CENTRAL, resultadoVerificado, ROTULO_DO_RESULTADO, variacao,
@@ -224,7 +231,26 @@ function Historico({ q, aoAbrirDiario }: { q: ReturnType<typeof useDadosDaCentra
 
 // ------------------------------------------------------------------ a tela
 
-type AbaLateral = "resumo" | "historico" | "decisoes";
+type AbaLateral = "resumo" | "historico" | "decisoes" | "hermes" | "mesas" | "navegador";
+const ABAS_LATERAIS: AbaLateral[] = ["resumo", "historico", "decisoes", "hermes", "mesas", "navegador"];
+
+/** Tirinha de 32 px à direita, no padrão da AreaDeTrabalho (ícone e nome em pé, um traço fino). */
+function TirinhaDireita({ rotulo, onAbrir }: { rotulo: string; onAbrir: () => void }) {
+  return (
+    <aside aria-label={rotulo} className="hidden min-h-0 lg:flex lg:flex-col lg:items-center" data-lateral-recolhida="">
+      <button
+        type="button"
+        onClick={onAbrir}
+        aria-label={`Abrir ${rotulo.toLowerCase()}`}
+        title={`Abrir ${rotulo.toLowerCase()}`}
+        className="toque-compacto flex h-full w-8 flex-col items-center rounded-md border-l border-border/60 pt-2 text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+      >
+        <PanelRightOpen className="h-4 w-4" aria-hidden="true" />
+        <span className="mt-3 text-[11px] font-medium" style={{ writingMode: "vertical-rl" }}>{rotulo}</span>
+      </button>
+    </aside>
+  );
+}
 
 export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, aoAbrirDiario, aoEncaminhar }: {
   nomesDeAgentes: Map<string, string>;
@@ -234,12 +260,36 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
 }) {
   const { profile } = useAuth();
   const ehAdmin = profile?.role === "admin";
+  const largo = useLargo();
   const [periodo, setPeriodo] = useEstadoDaTela<PeriodoDaCentral>("execucao:central:periodo", "semana", { validar: (v) => PERIODOS_DA_CENTRAL.some((p) => p.valor === v) });
-  const [aba, setAba] = useEstadoDaTela<AbaLateral>("execucao:central:aba", "resumo", { validar: (v) => v === "resumo" || v === "historico" || v === "decisoes" });
-  const [chatAmpliado, setChatAmpliado] = useEstadoDaTela<boolean>("execucao:central:chat-ampliado", false, { validar: (v) => typeof v === "boolean" });
+  const [aba, setAba] = useEstadoDaTela<AbaLateral>("execucao:central:aba", "resumo", { validar: (v) => ABAS_LATERAIS.includes(v as AbaLateral) });
+  const [lateralRecolhida, setLateralRecolhida] = useEstadoDaTela<boolean>("execucao:central:lateral-recolhida", false, { validar: (v) => typeof v === "boolean" });
+  const [conversasRecolhidas, setConversasRecolhidas] = useEstadoDaTela<boolean>("execucao:central:conversas-recolhidas", false, { validar: (v) => typeof v === "boolean" });
+  const [conversaId, setConversaId] = useEstadoDaTela<string>("execucao:central:conversa", "");
+  const [conversasNoCelular, setConversasNoCelular] = useState(false);
   const [telaCheia, setTelaCheia] = useState(false);
+  const [lateralGrande, setLateralGrande] = useState(false);
+  const [mesaAberta, setMesaAberta] = useState<{ rotulo: string; caminho: string } | null>(null);
+  const painelLateral = useRef<ImperativePanelHandle>(null);
   const dados = useDadosDaCentral(periodo);
   const decisoesPendentes = dados.data?.aprovacoes ?? 0;
+
+  // A conversa aberta e o recorte dela (cliente e projeto), lidos da lista de conversas.
+  const conversas = useQuery({
+    queryKey: [...CHAVE_DAS_CONVERSAS, ""],
+    enabled: ehAdmin,
+    queryFn: async () => (await chamarFuncao<{ conversas: ConversaResumo[] }>("gestor-aceleriq", { acao: "conversas", busca: "" })).conversas || [],
+    staleTime: 30_000,
+  });
+  const conversa = (conversas.data || []).find((c) => c.id === conversaId) || null;
+  const opcoes = useOpcoesDeContexto(conversa?.client_id || null, ehAdmin && !!conversa?.client_id);
+  const projetoNome = conversa?.project_id ? opcoes.data?.projetos.find((p) => p.id === conversa.project_id)?.nome || null : null;
+  const contextoDaConversa: ContextoDaConversa = {
+    conversaId: conversa ? conversa.id : null,
+    cliente: conversa?.client_id ? { id: conversa.client_id, nome: conversa.cliente_nome || "Cliente" } : null,
+    projeto: conversa?.project_id ? { id: conversa.project_id, nome: projetoNome || "Projeto" } : null,
+    titulo: conversa?.titulo || null,
+  };
 
   // Tela cheia: ocupa a janela inteira (sem menu nem abas do painel); Esc sai.
   useEffect(() => {
@@ -251,12 +301,30 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
     return () => { window.removeEventListener("keydown", sair); document.body.style.overflow = antes; };
   }, [telaCheia]);
 
+  const abrirNoPainel = (caminho: string, rotulo: string) => {
+    setMesaAberta({ caminho, rotulo });
+    setAba("mesas");
+    setLateralRecolhida(false);
+  };
+  const alternarTelaMaior = () => {
+    const proximo = !lateralGrande;
+    setLateralGrande(proximo);
+    painelLateral.current?.resize(proximo ? 68 : 36);
+  };
+
   const botaoIcone = "flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground";
   const acoesDoChat = (
     <>
-      <button type="button" className={botaoIcone} onClick={() => setChatAmpliado(!chatAmpliado)} aria-pressed={chatAmpliado} aria-label={chatAmpliado ? "Mostrar o painel ao lado" : "Ampliar o chat"} title={chatAmpliado ? "Mostrar resumo, histórico e decisões ao lado" : "Ampliar o chat"}>
-        {chatAmpliado ? <PanelRightOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
-      </button>
+      {!largo && ehAdmin && (
+        <button type="button" className={botaoIcone} onClick={() => setConversasNoCelular((v) => !v)} aria-expanded={conversasNoCelular} aria-label="Conversas" title="Conversas">
+          <MessagesSquare className="h-4 w-4" />
+        </button>
+      )}
+      {largo && (
+        <button type="button" className={botaoIcone} onClick={() => setLateralRecolhida(!lateralRecolhida)} aria-pressed={lateralRecolhida} aria-label={lateralRecolhida ? "Mostrar o painel ao lado" : "Ampliar o chat"} title={lateralRecolhida ? "Mostrar o painel ao lado" : "Ampliar o chat (recolhe o painel ao lado)"}>
+          {lateralRecolhida ? <PanelRightOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
+        </button>
+      )}
     </>
   );
 
@@ -264,25 +332,40 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
     { id: "resumo", rotulo: "Resumo" },
     { id: "historico", rotulo: "Histórico" },
     { id: "decisoes", rotulo: "Decisões", contador: decisoesPendentes },
+    { id: "hermes", rotulo: "Hermes" },
+    { id: "mesas", rotulo: "Mesas" },
+    { id: "navegador", rotulo: "Navegador" },
   ];
-  const lateral = (
-    <aside aria-label="Resumo, histórico e decisões" className="flex min-w-0 flex-col rounded-2xl border border-border bg-card lg:min-h-0">
-      <div className="flex shrink-0 items-center gap-1 border-b border-border/70 p-1.5" role="tablist" aria-label="Painel ao lado do chat">
-        {abas.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            role="tab"
-            aria-selected={aba === a.id}
-            onClick={() => setAba(a.id)}
-            className={juntar("flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-[13px] font-medium transition-colors", aba === a.id ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50")}
-          >
-            {a.rotulo}
-            {!!a.contador && <span className="rounded-full bg-warning/15 px-1.5 text-[11px] text-warning">{a.contador}</span>}
-          </button>
-        ))}
+  const conteudoLateral = (
+    <aside aria-label="Painel ao lado do chat" className="flex h-full min-h-0 min-w-0 flex-col rounded-2xl border border-border bg-card">
+      <div className="flex shrink-0 items-center gap-1 border-b border-border/70 p-1.5">
+        <div className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto" role="tablist" aria-label="Painel ao lado do chat">
+          {abas.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              role="tab"
+              aria-selected={aba === a.id}
+              onClick={() => setAba(a.id)}
+              className={juntar("flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-[12px] font-medium transition-colors", aba === a.id ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50")}
+            >
+              {a.rotulo}
+              {!!a.contador && <span className="rounded-full bg-warning/15 px-1.5 text-[10px] text-warning">{a.contador}</span>}
+            </button>
+          ))}
+        </div>
+        {largo && (
+          <>
+            <button type="button" onClick={alternarTelaMaior} className={juntar(botaoIcone, "h-7 w-7")} aria-pressed={lateralGrande} aria-label={lateralGrande ? "Painel ao lado menor" : "Painel ao lado maior"} title={lateralGrande ? "Menor" : "Tela maior"}>
+              {lateralGrande ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </button>
+            <button type="button" onClick={() => setLateralRecolhida(true)} className={juntar(botaoIcone, "h-7 w-7")} aria-label="Recolher o painel ao lado" title="Recolher para o lado" data-recolher-lateral="">
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </>
+        )}
       </div>
-      <div className={juntar(ROLAGEM_OPERACAO, "p-3 lg:min-h-0 lg:flex-1")}>
+      <div className={juntar("flex min-h-0 flex-1 flex-col p-3", aba === "mesas" || aba === "navegador" || aba === "hermes" ? "" : ROLAGEM_OPERACAO)} style={!largo && (aba === "mesas" || aba === "navegador" || aba === "hermes") ? { height: "75vh" } : undefined}>
         {aba === "resumo" && <Indicadores q={dados} aoVerDecisoes={() => setAba("decisoes")} />}
         {aba === "historico" && <Historico q={dados} aoAbrirDiario={aoAbrirDiario} />}
         {aba === "decisoes" && (
@@ -291,15 +374,35 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
             <AprovacoesExplicadas nomesDeAgentes={nomesDeAgentes} titulosDeTarefas={titulosDeTarefas} destaqueId={null} aoAbrirDiario={(id) => aoAbrirDiario(id)} />
           </div>
         )}
+        {aba === "hermes" && (ehAdmin ? <PainelHermes contexto={{ cliente: contextoDaConversa.cliente, projeto: contextoDaConversa.projeto }} /> : <p className="text-[12px] text-muted-foreground">A conversa com o Hermes é do admin.</p>)}
+        {aba === "mesas" && <PainelDasMesas contexto={{ clientId: contextoDaConversa.cliente?.id || null, projectId: contextoDaConversa.projeto?.id || null, clienteNome: contextoDaConversa.cliente?.nome || null }} aberto={mesaAberta} aoAbrir={setMesaAberta} />}
+        {aba === "navegador" && <NavegadorIntegrado />}
       </div>
     </aside>
   );
 
+  const chat = ehAdmin ? (
+    <GestorConversa
+      periodoDaTela={periodo}
+      aoAbrirDiario={aoAbrirDiario}
+      aoEncaminhar={aoEncaminhar}
+      acoes={acoesDoChat}
+      contexto={contextoDaConversa}
+      aoConversaCriada={(id) => setConversaId(id)}
+      aoAbrirNoPainel={abrirNoPainel}
+      className={telaCheia || largo ? "h-full min-h-0" : "h-[78vh] min-h-[480px]"}
+    />
+  ) : (
+    <section className="rounded-2xl border border-border bg-card p-4"><EstadoVazio titulo="O Gestor Aceleriq é do admin." descricao="O resumo, o histórico e as decisões ao lado continuam abertos para a equipe." /></section>
+  );
+
+  const listaDeConversas = ehAdmin ? (
+    <ConversasDoGestor ativa={conversaId || null} aoEscolher={(c) => { setConversaId(c ? c.id : ""); setConversasNoCelular(false); }} />
+  ) : null;
+
   return (
     <div
-      className={telaCheia
-        ? "fixed inset-0 z-50 flex flex-col gap-3 bg-background p-3 sm:p-4"
-        : "flex min-w-0 flex-col gap-3 lg:h-full lg:min-h-0"}
+      className={telaCheia ? "fixed inset-0 z-50 flex flex-col gap-3 bg-background p-3 sm:p-4" : "flex min-w-0 flex-col gap-3 lg:h-full lg:min-h-0"}
       role={telaCheia ? "dialog" : undefined}
       aria-modal={telaCheia || undefined}
       aria-label={telaCheia ? "Central de Autonomia em tela cheia" : undefined}
@@ -307,7 +410,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <h2 className="text-[16px] font-semibold leading-tight">Central de Autonomia</h2>
-          <p className="truncate text-[12px] text-muted-foreground">O que os agentes fizeram, com prova. Revisão não conta como feito.</p>
+          <p className="truncate text-[12px] text-muted-foreground">Converse, peça, acompanhe e receba com prova. Revisão não conta como feito.</p>
         </div>
         <div className="flex items-center gap-2">
           <SeletorCompacto rotulo="Período" valor={periodo} onEscolher={(v) => setPeriodo(v as PeriodoDaCentral)} modo="segmentado" opcoes={PERIODOS_DA_CENTRAL} />
@@ -317,20 +420,34 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
           </button>
         </div>
       </div>
-      <div className={juntar("grid min-w-0 gap-3 lg:min-h-0 lg:flex-1", chatAmpliado ? "lg:grid-cols-1" : "lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_420px] 2xl:grid-cols-[minmax(0,1fr)_480px]", telaCheia && "min-h-0 flex-1")}>
-        {ehAdmin ? (
-          <GestorConversa
-            periodoDaTela={periodo}
-            aoAbrirDiario={aoAbrirDiario}
-            aoEncaminhar={aoEncaminhar}
-            acoes={acoesDoChat}
-            className={telaCheia ? "h-full min-h-0" : "h-[78vh] min-h-[480px] lg:h-full lg:min-h-0"}
-          />
-        ) : (
-          <section className="rounded-2xl border border-border bg-card p-4"><EstadoVazio titulo="O Gestor Aceleriq é do admin." descricao="O resumo, o histórico e as decisões ao lado continuam abertos para a equipe." /></section>
-        )}
-        {(!chatAmpliado || !ehAdmin) && lateral}
-      </div>
+
+      {largo ? (
+        <div className={juntar("grid min-h-0 min-w-0 flex-1 gap-3", ehAdmin ? (conversasRecolhidas ? "grid-cols-[32px_minmax(0,1fr)]" : "grid-cols-[250px_minmax(0,1fr)] 2xl:grid-cols-[280px_minmax(0,1fr)]") : "grid-cols-1")}>
+          {ehAdmin && (
+            <LateralEsquerda rotulo="Conversas" icone={<MessagesSquare className="h-4 w-4" />} recolhida={conversasRecolhidas} onAlternar={() => setConversasRecolhidas(!conversasRecolhidas)}>
+              {listaDeConversas}
+            </LateralEsquerda>
+          )}
+          {lateralRecolhida ? (
+            <div className="grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)_32px] gap-3">
+              {chat}
+              <TirinhaDireita rotulo="Painel" onAbrir={() => setLateralRecolhida(false)} />
+            </div>
+          ) : (
+            <ResizablePanelGroup direction="horizontal" autoSaveId="central-autonomia-v1" className="min-h-0">
+              <ResizablePanel defaultSize={64} minSize={30} className="flex min-h-0 min-w-0 flex-col pr-1.5">{chat}</ResizablePanel>
+              <ResizableHandle withHandle className="mx-0.5 bg-transparent" />
+              <ResizablePanel ref={painelLateral} defaultSize={36} minSize={22} maxSize={75} className="flex min-h-0 min-w-0 flex-col pl-1.5">{conteudoLateral}</ResizablePanel>
+            </ResizablePanelGroup>
+          )}
+        </div>
+      ) : (
+        <div className="flex min-w-0 flex-col gap-3">
+          {ehAdmin && conversasNoCelular && <div className="rounded-2xl border border-border bg-card p-3">{listaDeConversas}</div>}
+          {chat}
+          {conteudoLateral}
+        </div>
+      )}
     </div>
   );
 }

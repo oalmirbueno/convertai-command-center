@@ -422,6 +422,26 @@ body[data-modo-foco] [data-casca="flutuante"] {
     top: 0 !important;
   }
 }
+/* ── Embutido (Central de Autonomia, 08/10/2026) ──
+   A Central abre rotas do próprio painel dentro de um iframe com ?embutido=1
+   (Mesas, Workspace, Kanban...). src/main.tsx liga data-embutido no body só
+   quando a página está mesmo dentro de um iframe: some a casca inteira (topo,
+   barra de baixo e o que flutua) em qualquer largura e o conteúdo ocupa tudo. */
+body[data-embutido] [data-casca="topo"],
+body[data-embutido] [data-casca="rodape"],
+body[data-embutido] [data-casca="flutuante"] {
+  display: none !important;
+}
+body[data-embutido] [data-casca="conteudo"] {
+  position: static !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+  max-width: none !important;
+}
+body[data-embutido] [data-casca="conteudo"] header.sticky,
+body[data-embutido] [data-casca="conteudo"] header[data-cabecalho-da-mesa] {
+  top: 0 !important;
+}
 /* ── Tela cheia da Mesa (Mesa, Mesa Ads, Mesa Foto e as próximas) ──
    src/components/mesa/TelaCheiaDaMesa.tsx liga data-tela-cheia-da-mesa no
    body e põe .mesa-tela-cheia na raiz da página. Em qualquer largura some a

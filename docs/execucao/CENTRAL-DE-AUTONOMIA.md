@@ -60,3 +60,28 @@ Observação menor (sem patch): em `20261007230100` a trilha de relato documenta
 - "Concluídas no período" usa a última mudança da tarefa (o banco não guarda a data de conclusão).
 - Até 80 fontes por resposta; o excedente é contado no aviso.
 - Interpretação semântica depende do modelo e do Jev; frases sem fonte não entram, mas a seleção do que citar é do modelo.
+
+## 5. Etapa 2b (08/10/2026): estação de trabalho
+
+### Conversas por cliente
+- `gestor_conversas` (migration `20261008020000`): dono, cliente e projeto (ou visão geral), título, resumo curto, arquivar (ocultar). `gestor_mensagens.conversa_id`.
+- Ações: `conversas` (busca no título e no conteúdo), `criar_conversa`, `atualizar_conversa`, `abrir_conversa`, `opcoes_de_contexto`.
+- Isolamento: conversa de cliente força o recorte daquele cliente; alvos (projetos, tarefas, memória) só dele; o executor confere de novo antes de gravar.
+- Contexto ao modelo: resumo + últimas 4 trocas + até 3 trechos antigos da MESMA conversa que casam com a pergunta (nunca o histórico inteiro).
+
+### Ferramentas (contrato `_shared/acoes-do-agente.ts`)
+| Nível | O quê | Como |
+|---|---|---|
+| Consulta | responder com fontes | sem ferramenta |
+| Execução interna | `criar_tarefa`, `atualizar_tarefa` (nunca `done`), `registrar_memoria` (preferência/evitar → `agente_memoria`; decisão/instrução/aprendizado → `project_memory`, aprendizado só com evidência), `pedir_ao_agente` (fila + diário, sempre Confirmar) | apelidos, `para` validado, travas, direto só com ordem clara (Jev), Desfazer |
+| Sensível | publicar, mensagem a cliente, campanha/verba, gasto, contrato, excluir, acesso | nunca executa: `bloqueadas` com o lugar de decidir |
+Toda gravação leva origem `gestor-aceleriq`, autor, conversa e a frase do pedido. A entrega (cartão) é relida do banco: estado real, id e atalho.
+
+### Hermes
+- Investigado: o Hermes (srv1769409) tem API de sessões completa em `127.0.0.1:8642` (listar, criar, mensagens, fork, chat), só local, com chave. O painel web nativo (`hermes.aceleriq.com.br`) usa SSO e não funciona dentro de iframe. A ponte MCP existente expõe execuções, não sessões.
+- Pronto, não ligado: `integrations/hermes-operational/painel_ponte.mjs` + `hermes-painel-ponte.service` + `instalar_ponte_painel.sh` (token próprio no cofre do systemd, rota `/painel-api/` no Traefik do proxy, 1–2 s de reinício do container do proxy). Depois: segredo `HERMES_PAINEL_TOKEN` nas funções. O modo automático bloqueou gravar o token no cofre do servidor; precisa da autorização do Almir.
+- Em uso agora: o painel do Hermes cai no diário da coordenação (canal real, o consumidor lê a cada minuto).
+
+### Mesas e navegador
+- Mesas/Workspace/Kanban/Calendário/Arquivos/Clientes abrem dentro da Central em iframe da própria origem com `?embutido=1` (sem casca; `src/main.tsx` + `src/index.css`), com `?client=`/`?project=` da conversa.
+- Navegador integrado: só o que o site permite embutir; sem contornar bloqueio, sem copiar cookies/senhas. Navegador remoto isolado (sites que bloqueiam iframe) exige infraestrutura à parte; opções a decidir: Browserbase/Steel (cerca de US$ 0,10/h de sessão) ou Cloudflare Browser Rendering (cobrado por minuto de navegador), com sessão de login própria por cliente.

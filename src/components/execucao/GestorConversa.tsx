@@ -1,8 +1,10 @@
 import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowUp, ArrowUpRight, Bot, CircleAlert, FileText, Image as ImageIcon, Loader2, Mic, Paperclip, ShieldCheck, Sparkles, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Bot, CheckCircle2, CircleAlert, ExternalLink, FileText, Image as ImageIcon, Loader2, Mic, Paperclip, ShieldAlert, ShieldCheck, Sparkles, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
+import type { AcaoDoAgente, PedidoDaAcao, RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
 import { getSupabaseFunctionErrorMessage } from "@/lib/supabaseFunctionError";
 import { arquivosParaOEnvio, lerArquivosDoAgente, type ArquivoLidoNaTela, type ArquivoNaoLidoNaTela } from "@/components/mesa/leituraDeArquivos";
 import { duracaoDoAudio, ehAudio, ehImagem, MAX_BYTES_DO_AUDIO, MAX_IMAGENS_DO_GESTOR, prepararImagem, tempoDoAudio, tipoDoAudioParaEnvio, type ImagemDoGestor } from "@/lib/gestorAnexos";
@@ -40,7 +42,37 @@ export type RespostaDoGestor = {
   texto?: string;
   total_de_fontes?: number;
   custo_usd?: number;
+  acoes?: AcaoDoAgente[];
+  bloqueadas?: Array<{ pedido: string; motivo: string; onde: string; link: string | null }>;
+  mensagem_id?: string | null;
+  conversa_id?: string | null;
 };
+
+/** O que a ação feita entregou, relido do banco pela função (estado real, id gravado e atalho). */
+type Entrega = { ref: string; nome: string; tipo: "tarefa" | "memoria" | "fila_do_agente"; cliente: string | null; projeto: string | null; estado: string; id: string; link: string; proxima: string };
+
+const ROTULO_DA_ENTREGA: Record<Entrega["tipo"], string> = { tarefa: "Tarefa", memoria: "Memória do cliente", fila_do_agente: "Na fila do agente" };
+
+function CartaoDeEntrega({ e, aoAbrirNoPainel }: { e: Entrega; aoAbrirNoPainel?: (caminho: string, rotulo: string) => void }) {
+  return (
+    <div className="w-full max-w-[560px] rounded-2xl border border-success/30 bg-background p-3 shadow-sm" data-entrega={e.tipo}>
+      <div className="flex items-start gap-2">
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-success">{ROTULO_DA_ENTREGA[e.tipo]}</p>
+          <p className="text-[14px] font-medium leading-snug text-foreground">{e.nome}</p>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">{[e.cliente, e.projeto].filter(Boolean).join(" · ")}{e.cliente || e.projeto ? " · " : ""}Estado: <span className="text-foreground">{e.estado}</span></p>
+          <p className="mt-0.5 font-mono text-[10px] text-muted-foreground" title={e.id}>id {e.id.slice(0, 8)}</p>
+          <p className="mt-1.5 text-[12px] text-muted-foreground">Próximo: {e.proxima}</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {aoAbrirNoPainel && <button type="button" onClick={() => aoAbrirNoPainel(e.link, e.nome)} className="inline-flex items-center rounded-full bg-primary px-3 py-1 text-[12px] font-medium text-primary-foreground">Abrir aqui</button>}
+            <a href={e.link} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-full border border-border px-3 py-1 text-[12px] hover:bg-muted"><ExternalLink className="mr-1 h-3 w-3" />Aba nova</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 type Mensagem = { id: string; papel: "usuario" | "gestor" | "sistema"; conteudo: string; dados?: RespostaDoGestor; criado_em: string; pendente?: boolean; nova?: boolean; pedido?: { anexos?: Array<{ nome: string; tipo: string; caracteres: number }>; nao_lidos?: Array<{ nome: string; motivo: string }>; imagens?: Array<{ nome: string }>; audio?: { segundos: number } | null; previas?: string[] } };
 
 export type PedidoAoHermes = { cliente: { id: string; nome: string } | null; texto: string };
@@ -126,14 +158,19 @@ function FonteAberta({ f, aoAbrirDiario }: { f: Fonte; aoAbrirDiario: (linkId: s
 }
 
 /** Uma resposta do Gestor: abertura, cartão, balões por assunto, fechamento e o que fazer a seguir. */
-function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar }: {
+function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemId, aoAbrirNoPainel, aoMudou }: {
   d: RespostaDoGestor;
   nova: boolean;
+  mensagemId?: string | null;
+  aoAbrirNoPainel?: (caminho: string, rotulo: string) => void;
+  aoMudou?: () => void;
   aoAbrirDiario: (linkId: string, titulo?: string) => void;
   aoEncaminhar: (p: PedidoAoHermes) => void;
   aoPerguntar: (pergunta: string, clienteId?: string) => void;
 }) {
   const [aberta, setAberta] = useState<string | null>(null);
+  // A ação muda depois de Confirmar/Desfazer: a versão gravada que a função devolve vale.
+  const [acoesAtuais, setAcoesAtuais] = useState<Record<string, AcaoDoAgente>>({});
   const fontes = useMemo(() => new Map((d.fontes || []).map((f) => [f.apelido, f])), [d.fontes]);
   const itens = d.itens || [];
 
@@ -204,6 +241,41 @@ function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar }: {
       {!terminou && <Digitando />}
       {terminou && (
         <>
+          {(d.acoes || []).map((bruta) => {
+            const a = acoesAtuais[bruta.id] || bruta;
+            const entregas = ((a as AcaoDoAgente & { entregas?: Entrega[] }).entregas || []);
+            return (
+              <div key={a.id} className="mt-1 w-full max-w-[600px] space-y-2" data-acao-do-gestor={a.id}>
+                {mensagemId ? (
+                  <CartaoDeAcao
+                    acao={a}
+                    titulo={a.executada_direto ? "Feito agora" : "Para confirmar"}
+                    observacao="Sem custo. Fica registrado com você como autor."
+                    recemFeita={!!a.executada_direto && nova}
+                    onPedido={(pedido: PedidoDaAcao) => chamarFuncao<RespostaDaAcao>("gestor-aceleriq", {
+                      acao: pedido === "desfazer" ? "desfazer_acao" : "executar_acao", mensagem_id: mensagemId, acao_id: a.id,
+                      descartar: pedido === "descartar", parar: pedido === "parar",
+                    })}
+                    onFeito={(_p, r) => { const novo = r.anexo as AcaoDoAgente | undefined; if (novo && novo.id) setAcoesAtuais((x) => ({ ...x, [novo.id]: novo })); aoMudou?.(); }}
+                  />
+                ) : <p className="text-[12px] text-muted-foreground">A conversa não foi gravada: abra de novo para confirmar esta ação.</p>}
+                {entregas.map((e) => <CartaoDeEntrega key={`${e.ref}-${e.id}`} e={e} aoAbrirNoPainel={aoAbrirNoPainel} />)}
+              </div>
+            );
+          })}
+          {(d.bloqueadas || []).map((b, i) => (
+            <div key={i} className="mt-1 w-full max-w-[560px] rounded-2xl border border-warning/40 bg-warning/5 p-3" data-decisao-do-gestor="">
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-warning"><ShieldAlert className="h-3.5 w-3.5" />Precisa da sua decisão</p>
+              <p className="mt-1 text-[14px] text-foreground">{b.pedido}</p>
+              <p className="mt-0.5 text-[12px] text-muted-foreground">{b.motivo}</p>
+              {b.link && (
+                <div className="mt-2 flex gap-1.5">
+                  {aoAbrirNoPainel && <button type="button" onClick={() => aoAbrirNoPainel(b.link!, b.pedido)} className="rounded-full bg-warning/90 px-3 py-1 text-[12px] font-medium text-background">Decidir aqui</button>}
+                  <a href={b.link} target="_blank" rel="noreferrer" className="rounded-full border border-border px-3 py-1 text-[12px] hover:bg-muted">Aba nova</a>
+                </div>
+              )}
+            </div>
+          ))}
           {!!d.avisos?.length && (
             <ul className="mt-1 space-y-0.5 px-1 text-[12px] text-muted-foreground">
               {d.avisos.map((a, k) => <li key={k} className="flex gap-1.5"><CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />{a}</li>)}
@@ -257,8 +329,14 @@ function AnexosDoPedido({ p }: { p?: PedidoDoDono | null }) {
 
 type Gravando = { inicio: number; segundos: number };
 
-export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncaminhar, acoes, className }: {
+export type ContextoDaConversa = { conversaId: string | null; cliente: { id: string; nome: string } | null; projeto: { id: string; nome: string } | null; titulo?: string | null };
+
+export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncaminhar, acoes, className, contexto, aoConversaCriada, aoAbrirNoPainel }: {
   periodoDaTela: string;
+  /** A conversa aberta e o recorte dela (cliente e projeto). Sem conversa: a primeira pergunta cria uma. */
+  contexto?: ContextoDaConversa;
+  aoConversaCriada?: (id: string) => void;
+  aoAbrirNoPainel?: (caminho: string, rotulo: string) => void;
   aoAbrirDiario: (linkId: string, titulo?: string) => void;
   aoEncaminhar: (p: PedidoAoHermes) => void;
   /** Botões do cabeçalho (ampliar, tela cheia), da tela que contém o chat. */
@@ -284,16 +362,30 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
   const pedacos = useRef<Blob[]>([]);
   const descartarGravacao = useRef(false);
 
+  const conversaId = contexto?.conversaId || null;
+  const criadaAgora = useRef<string | null>(null);
   const conversa = useQuery({
-    queryKey: ["gestor-aceleriq", "conversa"],
-    queryFn: async () => (await chamarFuncao<{ mensagens: Mensagem[] }>("gestor-aceleriq", { acao: "conversa" })).mensagens || [],
-    staleTime: 60_000,
+    queryKey: ["gestor-aceleriq", "conversa", conversaId],
+    enabled: !!conversaId || !contexto,
+    queryFn: async () => conversaId
+      ? (await chamarFuncao<{ mensagens: Mensagem[] }>("gestor-aceleriq", { acao: "abrir_conversa", conversa_id: conversaId })).mensagens || []
+      : (await chamarFuncao<{ mensagens: Mensagem[] }>("gestor-aceleriq", { acao: "conversa" })).mensagens || [],
+    staleTime: 30_000,
   });
+  // Trocou de conversa (não foi a que acabou de nascer desta pergunta): a tela local recomeça.
+  useEffect(() => {
+    if (conversaId && conversaId === criadaAgora.current) return;
+    setLocais([]);
+  }, [conversaId]);
+  const atualizarConversa = () => void queryClient.invalidateQueries({ queryKey: ["gestor-aceleriq", "conversa", conversaId] });
 
   type Envio = { pergunta: string; cliente_id?: string; audio?: { segundos: number } | null; docs?: AnexoDoc[]; naoLidos?: AnexoNaoLido[]; imagens?: ImagemDoGestor[] };
   const perguntar = useMutation({
     mutationFn: async (x: Envio) => chamarFuncao<RespostaDoGestor & { mensagem_id?: string }>("gestor-aceleriq", {
-      acao: "perguntar", pergunta: x.pergunta, cliente_id: x.cliente_id || null,
+      acao: "perguntar", pergunta: x.pergunta,
+      conversa_id: conversaId,
+      // Sem conversa aberta, a nova nasce no recorte escolhido (cliente da tela ou o da sugestão).
+      cliente_id: conversaId ? null : (x.cliente_id || contexto?.cliente?.id || null),
       // Sem período na frase, vale o da tela.
       periodo: /hoje|ontem|semana|m[eê]s|[uú]ltim[oa]s?\s+\d+\s+dias?/i.test(x.pergunta) ? null : periodoDaTela,
       arquivos: x.docs?.length || x.naoLidos?.length ? arquivosParaOEnvio(x.docs || [], x.naoLidos || []) : null,
@@ -315,7 +407,9 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
     },
     onSuccess: (d) => {
       setLocais((ls) => ls.map((m) => (m.pendente ? { ...m, pendente: false, nova: true, conteudo: d.texto || "", dados: d } : m)));
-      void queryClient.invalidateQueries({ queryKey: ["gestor-aceleriq", "conversa"] });
+      void queryClient.invalidateQueries({ queryKey: ["gestor-aceleriq", "conversas"] });
+      if (!conversaId && d.conversa_id) { criadaAgora.current = d.conversa_id; aoConversaCriada?.(d.conversa_id); }
+      else void queryClient.invalidateQueries({ queryKey: ["gestor-aceleriq", "conversa", conversaId] });
     },
     onError: (e, x) => {
       setLocais([]);
@@ -479,8 +573,10 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
       <div className="flex shrink-0 items-center gap-2.5 border-b border-border/70 px-4 py-2.5 sm:px-5">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><Sparkles className="h-4 w-4" /></span>
         <div className="min-w-0 flex-1">
-          <h3 className="text-[15px] font-semibold leading-tight">Gestor Aceleriq</h3>
-          <p className="truncate text-[12px] text-muted-foreground">Conversa com a sua operação · tudo com prova no OS</p>
+          <h3 className="truncate text-[15px] font-semibold leading-tight">{contexto?.titulo || "Gestor Aceleriq"}</h3>
+          <p className="truncate text-[12px] text-muted-foreground">
+            {contexto ? (contexto.cliente ? `${contexto.cliente.nome}${contexto.projeto ? ` · ${contexto.projeto.nome}` : ""}` : "Visão geral da Aceleriq") : "Conversa com a sua operação"} · tudo com prova no OS
+          </p>
         </div>
         {acoes && <div className="flex shrink-0 items-center gap-1">{acoes}</div>}
       </div>
@@ -515,7 +611,12 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
                 aoAbrirDiario={aoAbrirDiario}
                 aoEncaminhar={aoEncaminhar}
                 aoPerguntar={(p, clienteId) => enviar(p, clienteId)}
+                mensagemId={m.dados.mensagem_id || (m.id && !String(m.id).startsWith("r-") ? m.id : null)}
+                aoAbrirNoPainel={aoAbrirNoPainel}
+                aoMudou={atualizarConversa}
               />
+            ) : m.papel === "sistema" ? (
+              <p key={m.id} className="px-1 text-center text-[11px] text-muted-foreground">{m.conteudo} · {hora(m.criado_em)}</p>
             ) : (
               <div key={m.id} className={BALAO_GESTOR}>{m.conteudo}</div>
             )

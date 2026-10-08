@@ -109,7 +109,7 @@ describe("Central de Autonomia na tela", () => {
     m.papel = "design";
     montar();
     expect(await screen.findByText("O Gestor Aceleriq é do admin.")).toBeTruthy();
-    expect(screen.getByRole("complementary", { name: "Resumo, histórico e decisões" })).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "Painel ao lado do chat" })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: /Decisões/ }));
     expect(await screen.findByText(/Pedidos de aprovação dos agentes/)).toBeTruthy();
     await waitFor(() => expect(m.chamar).not.toHaveBeenCalled());
@@ -132,9 +132,9 @@ describe("Central de Autonomia: espaço, tela cheia e anexos", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Central de Autonomia em tela cheia" })).toBeNull());
     fireEvent.click(screen.getByRole("button", { name: "Ampliar o chat" }));
-    expect(screen.queryByRole("complementary", { name: "Resumo, histórico e decisões" })).toBeNull();
+    expect(screen.queryByRole("complementary", { name: "Painel ao lado do chat" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Mostrar o painel ao lado" }));
-    expect(screen.getByRole("complementary", { name: "Resumo, histórico e decisões" })).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "Painel ao lado do chat" })).toBeTruthy();
   });
 
   it("arquivo anexado é lido na tela e vai como texto junto da pergunta", async () => {
@@ -163,6 +163,75 @@ describe("Central de Autonomia: espaço, tela cheia e anexos", () => {
   });
 });
 
+describe("Central de Autonomia: conversas, ações, Hermes e Mesas", () => {
+  // Cada conversa tem dois botões com o título (abrir e arquivar): abre pelo que não é "Arquivar".
+  const abrirConversa = async (titulo: string) => {
+    const botoes = await screen.findAllByRole("button", { name: new RegExp(titulo) });
+    return botoes.find((b) => !/^Arquivar/.test(b.getAttribute("aria-label") || ""))!;
+  };
+  const conversas = [
+    { id: "c-acerbi", client_id: "39ebda82", project_id: null, titulo: "Campanha de outubro", resumo: null, cliente_nome: "Acerbi", arquivada_em: null, atualizado_em: "2026-10-08T12:00:00Z" },
+    { id: "c-geral", client_id: null, project_id: null, titulo: "Semana da agência", resumo: null, cliente_nome: null, arquivada_em: null, atualizado_em: "2026-10-07T12:00:00Z" },
+  ];
+  const acao = {
+    tipo: "acao_agente", agente: "gestor", id: "gestor-1", resumo: "Vou criar 1 tarefa.",
+    itens: [{ ref: "p1", alvo_id: "proj-1", titulo: "Institucional", detalhe: null, operacao: "criar_tarefa", rotulo: "criar tarefa", para: JSON.stringify({ titulo: "Roteiro do vídeo da palestra" }) }],
+    ignorados: [], recusados: [],
+  };
+  const entregue = {
+    ...acao, executada_em: "2026-10-08T12:01:00Z", resultados: [{ ref: "p1", alvo_id: "proj-1", titulo: "Institucional", operacao: "criar_tarefa", ok: true, desfazer: { task_id: "t-nova" } }],
+    entregas: [{ ref: "p1", nome: "Roteiro do vídeo da palestra", tipo: "tarefa", cliente: "Acerbi", projeto: "Institucional", estado: "todo", id: "t-nova-0000-0000", link: "/kanban?task=t-nova", proxima: "Peça aqui para mandar a um agente, ou abra no Kanban." }],
+  };
+  beforeEach(() => {
+    m.papel = "admin";
+    m.chamar.mockReset();
+    m.chamar.mockImplementation(async (_f: string, corpo: { acao: string; conversa_id?: string }) => {
+      if (corpo.acao === "conversas") return { conversas };
+      if (corpo.acao === "opcoes_de_contexto") return { clientes: [{ id: "39ebda82", nome: "Acerbi" }], projetos: [] };
+      if (corpo.acao === "abrir_conversa") return { conversa: conversas[0], mensagens: corpo.conversa_id === "c-acerbi" ? [{ id: "m1", papel: "usuario", conteudo: "Crie a tarefa do roteiro", criado_em: "2026-10-08T12:00:00Z" }, { id: "m2", papel: "gestor", conteudo: "ok", criado_em: "2026-10-08T12:00:01Z", dados: { ...resposta, acoes: [acao], bloqueadas: [{ pedido: "Publicar o post amanhã", motivo: "Publicar é sensível.", onde: "calendario", link: "/calendario?client=39ebda82" }] } }] : [] };
+      if (corpo.acao === "executar_acao") return { anexo: entregue, feitos: 1, falhas: 0 };
+      if (corpo.acao === "hermes_estado") return { configurada: false };
+      return resposta;
+    });
+  });
+
+  it("lista as conversas por cliente, abre a escolhida com o histórico e mostra o recorte no topo do chat", async () => {
+    montar();
+    fireEvent.click(await abrirConversa("Campanha de outubro"));
+    await waitFor(() => expect(m.chamar).toHaveBeenCalledWith("gestor-aceleriq", { acao: "abrir_conversa", conversa_id: "c-acerbi" }));
+    expect(await screen.findByText("Crie a tarefa do roteiro")).toBeTruthy();
+    expect(screen.getAllByText(/Acerbi · tudo com prova no OS/).length).toBeGreaterThan(0);
+  });
+
+  it("ação proposta: Confirmar executa pela função e o cartão de entrega mostra estado real, id e atalho", async () => {
+    montar();
+    fireEvent.click(await abrirConversa("Campanha de outubro"));
+    fireEvent.click(await screen.findByRole("button", { name: /Confirmar/ }));
+    await waitFor(() => expect(m.chamar).toHaveBeenCalledWith("gestor-aceleriq", expect.objectContaining({ acao: "executar_acao", mensagem_id: "m2", acao_id: "gestor-1" })));
+    expect(await screen.findByText("Roteiro do vídeo da palestra")).toBeTruthy();
+    expect(screen.getByText(/Estado:/).textContent).toContain("todo");
+    expect(screen.getAllByRole("link", { name: /Aba nova/ }).map((l) => l.getAttribute("href"))).toContain("/kanban?task=t-nova");
+    // Pedido sensível vira decisão, nunca execução.
+    expect(screen.getByText("Publicar o post amanhã")).toBeTruthy();
+  });
+
+  it("Hermes sem a ponte ligada: o painel diz isso e usa o diário da coordenação (nada simulado)", async () => {
+    montar();
+    fireEvent.click(await screen.findByRole("tab", { name: "Hermes" }));
+    expect(await screen.findByText(/abrem aqui quando a ponte do painel for ligada/)).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Sessões do Hermes" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("Mesas abrem dentro do painel com o cliente da conversa e sem o menu do app", async () => {
+    montar();
+    fireEvent.click(await abrirConversa("Campanha de outubro"));
+    fireEvent.click(await screen.findByRole("tab", { name: "Mesas" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Mesa Ads/ }));
+    const quadro = await screen.findByTitle("Mesa Ads");
+    expect(quadro.getAttribute("src")).toBe("/mesa-ads?client=39ebda82&embutido=1");
+  });
+});
+
 describe("Central de Autonomia: contratos de fonte", () => {
   const ler = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8").replace(/\r\n/g, "\n");
   it("a Execução ganha a aba Central e o diário recebe o pedido do Gestor como instrução", () => {
@@ -177,6 +246,14 @@ describe("Central de Autonomia: contratos de fonte", () => {
     expect(papel).toBeGreaterThan(0);
     expect(fn.indexOf("const chamador = await identificar(req);")).toBeLessThan(fn.indexOf("const fn = ACOES[acao];"));
   });
+  it("a conversa grava as duas linhas com as MESMAS colunas (coluna faltando vira NULL no insert múltiplo)", () => {
+    const fn = ler("supabase/functions/gestor-aceleriq/index.ts");
+    const linhas = [...fn.matchAll(/\{ dono_id: userId, conversa_id: conversa\.id, papel: "(usuario|gestor)",([^}]*)\}/g)];
+    expect(linhas).toHaveLength(2);
+    const chaves = linhas.map((l) => [...l[2].matchAll(/([a-z_]+):/g)].map((x) => x[1]).filter((k) => k !== "slice").sort().join(","));
+    expect(chaves[0]).toBe(chaves[1]);
+  });
+
   it("a correção do operator_report fica fora das migrations (proposta, sem aprovação)", () => {
     expect(ler("docs/execucao/proposta-operator-report-card-parado.sql")).toContain("NÃO APLICADA");
     const migr = ler("supabase/migrations/20261008010000_gestor_aceleriq_conversa.sql");
