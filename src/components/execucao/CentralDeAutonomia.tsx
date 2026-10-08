@@ -271,19 +271,18 @@ function useAlturaNoCelular(ref: RefObject<HTMLElement>): number {
   return altura;
 }
 
-/** Largura atual de um elemento (ResizeObserver; sem ele, o resize da janela). */
-function useLargura(ref: RefObject<HTMLElement>): number {
+/** Largura atual de um elemento (ResizeObserver; sem ele, o resize da janela). Observa uma vez por elemento. */
+function useLargura(el: HTMLElement | null): number {
   const [largura, setLargura] = useState(0);
   useEffect(() => {
-    const el = ref.current;
     if (!el) return;
-    const medir = () => setLargura(el.getBoundingClientRect().width);
+    const medir = () => { const l = Math.round(el.getBoundingClientRect().width); setLargura((x) => (x === l ? x : l)); };
     medir();
     const RO = (window as unknown as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
     if (RO) { const o = new RO(medir); o.observe(el); return () => o.disconnect(); }
     window.addEventListener("resize", medir);
     return () => window.removeEventListener("resize", medir);
-  });
+  }, [el]);
   return largura;
 }
 
@@ -328,8 +327,8 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
   const [menuAberto, setMenuAberto] = useState(false);
   const refDoCelular = useRef<HTMLDivElement>(null);
   const alturaNoCelular = useAlturaNoCelular(refDoCelular);
-  const refDaArea = useRef<HTMLElement>(null);
-  const larguraDaArea = useLargura(refDaArea);
+  const [elDaArea, setElDaArea] = useState<HTMLElement | null>(null);
+  const larguraDaArea = useLargura(elDaArea);
   // Área estreita: as abas viram ícones (nome no title e no leitor de tela), sem cortar palavra.
   const areaEstreita = larguraDaArea > 0 && larguraDaArea < 360;
   const dados = useDadosDaCentral(periodo);
@@ -425,7 +424,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
   ];
   const ferramentaNaLateral = ferramenta && ferramenta.modo === "lateral" ? ferramenta : null;
   const area = (
-    <aside ref={refDaArea} aria-label="Área ao lado das conversas" className={juntar(superficie.painel, "flex h-full min-h-0 min-w-0 flex-col overflow-hidden")}>
+    <aside ref={setElDaArea} aria-label="Área ao lado das conversas" className={juntar(superficie.painel, "flex h-full min-h-0 min-w-0 flex-col overflow-hidden")}>
       {objeto ? (
         <ObjetoDaCentral key={`${objeto.tipo}-${objeto.id}`} objeto={objeto} aoFechar={() => setObjeto(null)} aoAbrirFerramenta={(caminho, rotulo) => abrirFerramenta(rotulo, caminho)} aoAbrirDiario={aoAbrirDiario} />
       ) : ferramentaNaLateral ? (

@@ -266,6 +266,13 @@ describe("Central de Autonomia: conversas, ações, Hermes e Mesas", () => {
 });
 
 describe("Central de Autonomia: contratos de fonte", () => {
+  it("medida de largura observa uma vez por elemento (efeito sem dependências com observador congelou a página em 08/10)", () => {
+    const fonte = readFileSync(resolve(process.cwd(), "src/components/execucao/CentralDeAutonomia.tsx"), "utf8");
+    const corpo = fonte.slice(fonte.indexOf("function useLargura"), fonte.indexOf("/** Tirinha de 32 px"));
+    expect(corpo).toContain("}, [el]);");
+    expect(corpo).toContain("setLargura((x) => (x === l ? x : l))");
+  });
+
   const ler = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8").replace(/\r\n/g, "\n");
   it("a Execução ganha a aba Central e o diário recebe o pedido do Gestor como instrução", () => {
     const pagina = ler("src/pages/AdminExecucao.tsx");
