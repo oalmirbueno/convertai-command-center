@@ -187,3 +187,5 @@ project_id = "aceleriq-os"
     verify_jwt = false
   [functions.computador-do-agente]
     verify_jwt = true
+  [functions.gestor-aceleriq]
+    verify_jwt = true
