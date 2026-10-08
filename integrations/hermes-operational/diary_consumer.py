@@ -34,6 +34,22 @@ _SECRET_ASSIGNMENT = re.compile(
     r"(?i)(\b(?:access_token|refresh_token|authorization|api_key|password|senha|cookie|secret)\b\s*[:=]\s*)[^\s,;]+"
 )
 _URL_QUERY = re.compile(r"(https?://[^\s<>\"]+)\?[^\s<>\"]+")
+_CLIENT_REFERENCE = re.compile(r"(?im)^Referência do cliente:\s*([^\n\r]+)")
+_CLIENT_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+
+
+def client_target(link: dict[str, Any], body: str) -> dict[str, Any]:
+    """Routing context, not permission. Never substitute the coordinating agency."""
+    references = {v.strip().lower() for v in _CLIENT_REFERENCE.findall(body)}
+    portfolio = 'carteira meta ads' in str(link.get('projeto') or '').lower()
+    if references:
+        if len(references) != 1 or not _CLIENT_UUID.fullmatch(next(iter(references))):
+            return {'target_scope': 'unresolved', 'target_client_id': None, 'needs_client_clarification': True}
+        return {'target_scope': 'client', 'target_client_id': next(iter(references)), 'needs_client_clarification': False}
+    if portfolio:
+        return {'target_scope': 'portfolio', 'target_client_id': None, 'needs_client_clarification': False}
+    client_id = str(link.get('client_id') or '')
+    return {'target_scope': 'project', 'target_client_id': client_id if _CLIENT_UUID.fullmatch(client_id) else None, 'needs_client_clarification': False}
 
 
 def _safe_text(value: Any) -> str:
@@ -96,6 +112,7 @@ def human_candidates(link: dict[str, Any], diary: dict[str, Any]) -> list[dict[s
             continue
         operator = entry.get("operator") or entry.get("operador") or link.get("operador")
         candidates.append({
+            **client_target(link, str(entry.get("body") or entry.get("texto") or "")),
             "entry_id": entry_id,
             "link_id": str(link_id),
             "operator": str(operator) if operator else None,
@@ -106,8 +123,12 @@ def human_candidates(link: dict[str, Any], diary: dict[str, Any]) -> list[dict[s
             "communication": (
                 "Identifique o cliente do pedido antes de agir. O cliente do projeto pode ser "
                 "a agência coordenadora de uma carteira; use a referência explícita na mensagem "
-                "para localizar o cliente atendido e confira no painel. Responda em português claro: "
-                "Cliente e tarefa; O que fiz; O que falta; Próximo passo. Separe análise de execução "
+                "para localizar o cliente atendido e confira no painel. target_client_id identifica "
+                "o destino solicitado, não concede permissão: confirme que existe antes de agir. "
+                "target_scope=portfolio permite conversar e analisar a carteira, nunca substituir "
+                "o destino pelo project_client_id. Para agir num cliente, resolva seu ID no MCP. "
+                "Responda em português claro: Cliente e tarefa; O que conferi; O que fiz; "
+                "Próximo passo; Preciso de você (somente se necessário). Separe análise de execução "
                 "comprovada. Para criativos, consulte contexto, materiais e Mesas do cliente pelos "
                 "recursos já disponíveis; não invente acesso nem repita perguntas já respondidas. "
                 "Registre o retorno nesta conversa. Conversa não substitui aprovação de campanha."
@@ -333,7 +354,18 @@ def renew_leases(
 def gate_payload(messages: list[dict[str, Any]]) -> dict[str, Any]:
     if not messages:
         return {"wakeAgent": False}
-    return {"wakeAgent": True, "messages": messages}
+    safe_messages = []
+    for message in messages:
+        value = dict(message)
+        if value.get('needs_client_clarification'):
+            # The original remains in the diary. Do not dispatch ambiguous work.
+            value['title'] = 'Confirmar o cliente deste pedido'
+            value['body'] = 'Há referências de cliente inválidas ou conflitantes. Responda nesta conversa pedindo o cliente correto. Não execute o pedido original.'
+            value['dispatch_kind'] = 'clarification_only'
+        else:
+            value['dispatch_kind'] = 'portfolio_coordination' if value.get('target_scope') == 'portfolio' else 'scoped_request'
+        safe_messages.append(value)
+    return {"wakeAgent": True, "messages": safe_messages}
 
 
 def _decode_tool_result(result: Any) -> Any:
