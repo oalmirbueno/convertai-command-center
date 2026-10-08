@@ -50,6 +50,8 @@ describe("núcleo das Mesas: conferência dos quadros", () => {
     const blocos = tela.partes.filter((p) => p.tipo === "blocos");
     expect(blocos).toHaveLength(1);
     expect(tela.partes.some((p) => p.tipo === "texto" && /Falta o endereço/.test(p.texto))).toBe(true);
+    // A fonte chega à tela com o nome da leitura.
+    expect(JSON.stringify(blocos[0])).toContain("Briefing (L1)");
   });
 
   it("marca de conferido escrita pelo modelo é rebaixada e conferida de novo", async () => {

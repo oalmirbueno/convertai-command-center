@@ -143,6 +143,16 @@ type Afirmacao = { texto: string; fontes: string[] };
 
 const apelidoLimpo = (f: unknown) => { const m = String(f).match(/L\d+/i); return m ? m[0].toUpperCase() : String(f); };
 
+const ROTULO_EXTRA: Record<string, string> = { retrato_da_campanha: "Retrato da campanha" };
+
+/** "L1" -> "Briefing (L1)" pelo que foi lido. */
+export function rotuloDaFonte(apelido: string, fontes: FonteDeConsulta[]): string {
+  const f = fontes.find((x) => x.apelido === apelido);
+  if (!f) return apelido;
+  const nome = LEITURAS_PREVIAS.find((l) => l.nome === f.ferramenta)?.rotulo || ROTULO_EXTRA[f.ferramenta] || f.ferramenta;
+  return `${nome} (${apelido})`;
+}
+
 /** As afirmações de um bloco com número (uma por linha, item ou série). */
 export function afirmacoesDoBloco(b: BlocoDeResposta): Afirmacao[] {
   const fontes = (("fontes" in b && b.fontes) || []).map(apelidoLimpo);
@@ -248,6 +258,8 @@ export async function conferirApresentacao(
     }).filter(Boolean) as BlocoDeResposta[];
     if (!blocos.length) return "";
     quadros += blocos.length;
+    // Na tela, a fonte vem com o nome da leitura ("Briefing (L1)"), não só o apelido.
+    for (const bl of blocos) if ("fontes" in bl && Array.isArray(bl.fontes)) (bl as { fontes?: string[] }).fontes = bl.fontes.map((f) => rotuloDaFonte(f, fontes));
     return `\n\`\`\`${MARCA_CONFERIDA}\n${JSON.stringify({ blocos })}\n\`\`\`\n`;
   });
   return { texto: saida.join("").replace(/\n{3,}/g, "\n\n").trim(), recusados, quadros };
