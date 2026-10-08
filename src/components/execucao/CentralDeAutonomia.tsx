@@ -248,20 +248,19 @@ const PAINEIS: Painel[] = ["gestor", "hermes", "area"];
 const NOME_DO_PAINEL: Record<Painel, string> = { gestor: "Gestor", hermes: "Hermes", area: "Área" };
 
 /**
- * Altura de um painel no celular: do topo do painel até a barra de baixo do
- * app (72 px + respiro), para o campo de mensagem ficar à vista sem rolar a
- * página; nunca menos de 340 px. Medida em código: Safari 11 não tem dvh.
+ * Altura de um painel no celular: a área visível do conteúdo do app (entre a
+ * barra de cima e a de baixo). Os cabeçalhos da página sobem ao rolar e o
+ * Gestor ou o Hermes ocupam a tela inteira, com o campo de mensagem acima da
+ * barra de baixo. Medida em código: Safari 11 não tem dvh.
  */
 function useAlturaNoCelular(ref: RefObject<HTMLElement>): number {
   const [altura, setAltura] = useState(480);
   useEffect(() => {
     const medir = () => {
       const el = ref.current;
-      if (!el) return;
-      const topo = el.getBoundingClientRect().top + (window.pageYOffset || 0);
-      const casca = el.closest("[data-casca='conteudo']") as HTMLElement | null;
-      const rolado = casca ? casca.scrollTop : 0;
-      setAltura(Math.max(340, Math.round(window.innerHeight - (topo + rolado) - 84)));
+      const casca = el ? (el.closest("[data-casca='conteudo']") as HTMLElement | null) : null;
+      const visivel = casca && casca.clientHeight > 0 && casca.clientHeight < window.innerHeight ? casca.clientHeight : window.innerHeight - 152;
+      setAltura(Math.max(340, Math.round(visivel - 12)));
     };
     medir();
     const t = window.setTimeout(medir, 400);
