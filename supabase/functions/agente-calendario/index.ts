@@ -302,6 +302,7 @@ import {
 } from "./diagnostico.ts";
 // Frente FS (29/09): leitura ou gravação que falha segue opcional, mas fica no log com o motivo.
 import { registrarFalha } from "../_shared/falha-registrada.ts";
+import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 // Frente SPP (30/09): o método da casa (superpoderes) nas conversas e nas gerações do Mês e das campanhas.
 import { comMetodosUsados, fecharComMetodo, type Momento, superpoderesPara } from "../_shared/superpoderes.ts";
 // Frente AG1 (29/09): o agente aprende com cada pedido (regra duradoura pelo Jev) e diz as regras que seguiu.
@@ -6106,6 +6107,9 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
   const hoje = hojeSaoPaulo();
   // Frente SPP: o Jev escolhe o método da casa do Agente do Mês em paralelo com as leituras (nunca lança).
   const spMesP = superpoderesPara(servico, { agente: "calendario.conversa", pedido: mensagem });
+  // Núcleo comum (lote B): consultar antes de responder; a agenda o Mês já lê inteira.
+  const cobrarDoMes = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: "calendario", referencia: { tipo: REF_AGENTE_DO_MES, id: clientId }, criadoPor: chamador.userId });
+  const previasP = prepararNucleo(servico, { clientId, pedido: mensagem.slice(0, 4000), agente: "mês", ignorar: ["ler_agenda"], cobrar: cobrarDoMes });
   const mesDeHoje = hoje.slice(0, 7);
   const arquivos = normalizarArquivos(corpo.arquivos);
 
@@ -6207,7 +6211,10 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
     })}\n`
     : "\nAinda não existe proposta aberta do estrategista para este mês.\n";
 
-  const tarefa = `
+  const previas = await previasP;
+  const tarefa = `${previas.bloco ? `
+${previas.bloco}
+` : ""}
 MÊS EM CONVERSA: ${mes} (de ${inicio} a ${fim}). Hoje é ${hoje}.
 ${PRIORIDADE_DO_PEDIDO}
 Escopo autorizado: ${julgamento.contrato.outrosMeses ? "os meses explicitamente pedidos pela equipe" : `SOMENTE ${mes}; todos os conteúdos significa todos deste mês`}.
@@ -6257,7 +6264,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     agente: AGENTE,
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
-    sistema: `${sistemaDoCalendario(ctx, "mes", "conversa")}\n${PRIORIDADE_DO_PEDIDO}`,
+    sistema: `${sistemaDoCalendario(ctx, "mes", "conversa")}\n${PRIORIDADE_DO_PEDIDO}\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: imagens.imagens.length ? imagens.imagens : undefined }],
     raciocinio,
     // Lista longa de conteúdos (criar_conteudos, editar_textos) cabe inteira na resposta.
@@ -6383,11 +6390,13 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   // Imagem anexada que ficou de fora (anti-bug 26/09, AB2): a equipe lê o aviso na resposta.
   // Frente AM: com "Qual delas?" ou a troca preparada pelo painel, a fala diz o que fazer no cartão.
   // Frente SPP: tudo aqui é proposta com Confirmar; "pronto" sem ação ganha o aviso e o método vira a linha "Método:".
+  // Quadros do texto conferidos contra as leituras (o que não bate sai).
+  const apresentada = await fecharNucleo(servico, texto(r.resposta, 9000), previas, { clientId, agente: "mês", pedido: mensagem, userId: chamador.userId, cobrar: cobrarDoMes });
   const fechadoDoMes = await fecharComMetodo(servico, {
     usoId: s.usoId,
     metodo: await spMesP,
     // 02/10: a conferência da cadência entra na fala ("Conferido: 12 posts: 8 fotos e 4 carrosséis, 3 por semana.").
-    resposta: respostaComAvisos(respostaComAvisos(texto(r.resposta, 6000) || "Anotado.", [imagens.aviso]), [fraseDaTroca(acaoNaAgenda), conferencia ? `Conferido: ${conferencia.frase}` : null, ...avisosDoAjuste]),
+    resposta: respostaComAvisos(respostaComAvisos(apresentada.texto || "Anotado.", [imagens.aviso]), [fraseDaTroca(acaoNaAgenda), conferencia ? `Conferido: ${conferencia.frase}` : null, ...avisosDoAjuste]),
     declarados: r.metodos_usados,
     acaoFeita: false,
   });

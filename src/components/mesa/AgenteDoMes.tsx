@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { inicioDoMes, padraoPara, somarMeses, usd } from "@/lib/mesa/api";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import AprendizadoNaConversa from "@/components/agentes/AprendizadoNaConversa";
+import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import { BotaoDeAnexarArquivos, ListaDeArquivos, useArquivosDoAgente } from "./ArquivosDoAgente";
 import { estimativaDaGeracao, iniciarGeracaoPeloAgente, useAndamentoDaGeracao } from "./PlanejamentoAutomatico";
@@ -1137,7 +1138,9 @@ export default function AgenteDoMes({
                 <div key={m.id} className="min-w-0 space-y-2">
                   {m.conteudo && (
                     <Bolha papel={m.papel === "usuario" ? "usuario" : "agente"}>
-                      <p className="whitespace-pre-wrap">{resumoDoRecibo(acaoNaAgenda) || m.conteudo}</p>
+                      {m.papel === "agente" && !resumoDoRecibo(acaoNaAgenda)
+                        ? <TextoDoAgente texto={m.conteudo} clientId={clientId} />
+                        : <p className="whitespace-pre-wrap">{resumoDoRecibo(acaoNaAgenda) || m.conteudo}</p>}
                     </Bolha>
                   )}
                   {arquivosDoPedido && (arquivosDoPedido.lidos.length > 0 || arquivosDoPedido.nao_lidos.length > 0) && (

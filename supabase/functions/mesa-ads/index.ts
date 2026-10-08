@@ -113,6 +113,8 @@
  * nos laços (rodadas de qualidade e pacote por plano).
  */
 
+import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
+import type { FonteDeConsulta } from "../_shared/consultas-do-agente.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
   carregarModelo,
@@ -7046,6 +7048,9 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   const aprendizadoDaConta = aprenderNoServidor(servico as never, { texto: mensagem, agente: "trafego", clientId, donoId: chamador.userId, contexto: "conversa da conta de anúncios" });
   // Frente SPP: o Jev escolhe o método da casa do sênior em paralelo com a leitura da conta (nunca lança).
   const spSeniorP = superpoderesPara(servico, { agente: "ads.senior", pedido: mensagem });
+  // Núcleo comum (lote B): consultar antes de responder (briefing, contexto, métricas das redes, cérebro); a agenda não entra.
+  const cobrarDoSenior = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: TAREFA, referencia: cobranca.referencia, criadoPor: chamador.userId });
+  const previasP = prepararNucleo(servico, { clientId, pedido: mensagem, agente: "ads (sênior de tráfego)", ignorar: ["ler_agenda"], cobrar: cobrarDoSenior });
   const [c, historico, modeloBase, criativosDaMesa, rotina, feito, citados, recentes, regrasEnsinadas] = await Promise.all([
     contextoDoAgenteSenior(servico, clientId, corpo),
     mensagensDoAgenteSenior(servico, conversaId, HISTORICO_DO_AGENTE_SENIOR),
@@ -7089,6 +7094,11 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     REGRAS_DO_DONO: regrasDoDono.map((r) => regraEmTexto(r)),
     HOJE: hojeSaoPaulo(),
   };
+  // O retrato da campanha (calculado pelo painel a partir da Meta) também é fonte para os quadros.
+  const previas = await previasP;
+  const fonteDoRetrato: FonteDeConsulta = { apelido: `L${previas.fontes.length + 1}`, ferramenta: "retrato_da_campanha" as FonteDeConsulta["ferramenta"], argumento: "", texto: JSON.stringify(contexto.RETRATO_DA_CAMPANHA).slice(0, 5000) };
+  const fontesDoSenior = [...previas.fontes, fonteDoRetrato];
+  const blocoDasFontes = `${previas.bloco ? `${previas.bloco}\n\n` : ""}FONTE ${fonteDoRetrato.apelido}: o RETRATO_DA_CAMPANHA do CONTEXTO acima. Quadro com número da conta cita ${fonteDoRetrato.apelido} em "fontes".`;
   await andamento.passo("pensando", `Pensando (${modeloEscolhido.modelo.rotulo || modeloEscolhido.modelo.id}${modeloEscolhido.raciocinio ? `, raciocínio ${modeloEscolhido.raciocinio}` : ""})`);
   const tentativa = await chamarComTetoDeTempo({
     timeoutMs: TIMEOUT_TEXTO_ADS_MS,
@@ -7096,13 +7106,13 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modeloEscolhido.modelo.id,
-    sistema: sistemaDoAgenteSenior(objetivo) + blocoDasRegras(regrasEnsinadas),
+    sistema: sistemaDoAgenteSenior(objetivo) + blocoDasRegras(regrasEnsinadas) + "\n\n" + INSTRUCAO_DO_NUCLEO_DAS_MESAS,
     mensagens: [
       // A mensagem de agora já está gravada (pedidoId): vai uma vez só, no fim, com o contexto.
       ...historico.filter((m) => m.id !== pedidoId && (m.papel === "usuario" || m.papel === "agente")).map((m) => ({ papel: m.papel === "usuario" ? "usuario" as const : "agente" as const, conteudo: m.conteudo.slice(0, 3000) })),
       {
         papel: "usuario",
-        conteudo: `CONTEXTO (calculado pelo painel; use SÓ estes números):\n${JSON.stringify(contexto)}\n\nNICHO: ${achado.nicho ? textoDoNicho(achado.nicho) : "não identificado; deduza pelo contexto e diga a dúvida em perguntas"}\n\nMENSAGEM DA EQUIPE: ${mensagem}\n${blocoDosAlvos(alvos, criativosComRef)}\n${tarefaDoAgenteSenior({ pesquisaWeb: pesquisar, bibliotecaConsultada: !!(biblioteca && biblioteca.anuncios.length), temPlano: !!plano, modoAgir, assumirPlano: modoAssumir })}`,
+        conteudo: `CONTEXTO (calculado pelo painel; use SÓ estes números):\n${JSON.stringify(contexto)}\n\n${blocoDasFontes}\n\nNICHO: ${achado.nicho ? textoDoNicho(achado.nicho) : "não identificado; deduza pelo contexto e diga a dúvida em perguntas"}\n\nMENSAGEM DA EQUIPE: ${mensagem}\n${blocoDosAlvos(alvos, criativosComRef)}\n${tarefaDoAgenteSenior({ pesquisaWeb: pesquisar, bibliotecaConsultada: !!(biblioteca && biblioteca.anuncios.length), temPlano: !!plano, modoAgir, assumirPlano: modoAssumir })}`,
       },
     ],
     raciocinio: modeloEscolhido.raciocinio,
@@ -7124,7 +7134,8 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   const ads = new Map(c.conta.anuncios.map((a) => [a.ad_id, { resultados: a.metricas.resultados }]));
   const estrategia = normalizarEstrategia(s.json, ads);
   const nomes = new Map(c.conta.anuncios.map((a) => [a.ad_id, a.nome ?? `Anúncio ${a.ad_id}`]));
-  const markdown = estrategiaEmMarkdown(estrategia, (id) => nomes.get(id) ?? id);
+  // Quadros do texto conferidos contra as leituras e o retrato (o que não bate sai).
+  const markdown = (await fecharNucleo(servico, estrategiaEmMarkdown(estrategia, (id) => nomes.get(id) ?? id), { ...previas, fontes: fontesDoSenior }, { clientId, agente: "ads (sênior de tráfego)", pedido: mensagem, userId: chamador.userId, cobrar: cobrarDoSenior })).texto;
   const pedido = await pedidoP;
   const custo = arred6(s.custoUsd + achado.custo + pedido.custo);
   // Ações: a lista com o estado lido na Meta. Com o pedido de fazer, o seguro (reversível e sem aumento

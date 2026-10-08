@@ -155,7 +155,7 @@ export function normalizarEstrategia(bruto: unknown, ads: Map<string, { resultad
   const vistos = new Set<string>();
   const unico = (id: string) => (vistos.has(id) ? false : (vistos.add(id), true));
   return {
-    resposta: txt(r.resposta, 6000),
+    resposta: txt(r.resposta, 9000),
     diagnostico: arr(r.diagnostico).map((d) => ({ titulo: txt(d.titulo, 200), detalhe: txt(d.detalhe, 1500), gravidade: doEnum(d.gravidade, GRAVIDADES) ?? "media" })).filter((d) => d.titulo).slice(0, 10),
     // Um anúncio fica em um grupo só: cortar vence (o mais conservador), depois escalar, depois manter.
     cortar: arr(r.cortar).filter(conhecido).map((x) => ({ ad_id: String(x.ad_id), porque: txt(x.porque, 800) })).filter((x) => unico(x.ad_id)).slice(0, 30),

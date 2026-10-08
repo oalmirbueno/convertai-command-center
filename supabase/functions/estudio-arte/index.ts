@@ -98,6 +98,7 @@ import { fotosOriginaisDoAjuste, pedidoDiretoNoAjuste } from "./identidade-no-aj
  * confere saldo e cota e debita a carteira do cliente.
  */
 
+import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
   chamarImagem,
@@ -8903,6 +8904,9 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   // código (reescrever tudo, uma lâmina, adicionar, tirar, reordenar) e o comando de fidelidade da arte rápida.
   const intencao = intencaoDeConteudo(mensagem);
   const fidelidadePedida = arteRapida ? fidelidadeNaMensagem(mensagem) : null;
+  // Núcleo comum (lote B): consultar antes de responder (o Jev escolhe as leituras; o código lê do cliente do trabalho).
+  const cobrarDoDiretor = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: REFERENCIA_DA_CONVERSA, id: t.id }, criadoPor: ch.userId });
+  const previasP = prepararNucleo(servico(), { clientId: t.client_id, pedido: mensagem, agente: "estúdio (diretor de arte)", ignorar: ["ler_agenda"], cobrar: cobrarDoDiretor });
   const reescreverTudo = intencao === "reescrever_tudo" || !!fidelidadePedida;
   const textoPodeMudar = pedidoMexeNoTexto(mensagem) || reescreverTudo || intencao === "reescrever_lamina" || intencao === "adicionar_lamina";
   // Frente RO, fase 2: imagem sem texto vira uma pergunta curta (sem custo): o que fazer com ela.
@@ -9117,8 +9121,11 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     completoDaMarca,
     // Frente RO, fase 2: as regras que a equipe ensinou (EVITAR primeiro, com prioridade).
     regras.bloco,
+    INSTRUCAO_DO_NUCLEO_DAS_MESAS,
   ].filter(Boolean).join("\n\n");
+  const previas = await previasP;
   const pedido = [
+    previas.bloco,
     `CONTEÚDO DO TRABALHO (JSON):\n${JSON.stringify(contexto)}`,
     emFoco !== null ? `Lâmina em foco: ${emFoco}${imagens ? " (a imagem anexada é a versão atual dela)" : versaoEmFoco ? "" : " (ainda sem arte gerada)"}.` : "",
     `MENSAGEM DA EQUIPE: ${mensagem}`,
@@ -9231,7 +9238,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
       ...(foto && foto !== SEM_FOTO ? { rotulos: { foto_acervo: rotuloDoValor[foto] || "foto do acervo" } } : {}),
     };
   });
-  let resposta = limparTexto(bruto.resposta, 4000);
+  // Quadros do texto conferidos contra as leituras (o que não bate sai).
+  let resposta = (await fecharNucleo(servico(), limparTexto(bruto.resposta, 9000), previas, { clientId: t.client_id, agente: "estúdio (diretor de arte)", pedido: mensagem, userId: ch.userId, cobrar: cobrarDoDiretor })).texto;
   const memoriaNova = limparTexto(bruto.memoria, 400);
   // Organizar e executar (reordenar, formato, trocar texto, arquivar versões, refazer...).
   const acaoProposta = comCaminhoDoDiretor(normalizarAcoesDoDiretor(acoesBrutas, t as unknown as TrabalhoParaAcoes), t, mensagem);

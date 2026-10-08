@@ -19,6 +19,12 @@
 import { type BlocoDeResposta, validarBlocos } from "./blocos-de-resposta.ts";
 
 export const MARCA_DOS_BLOCOS = "aceleriq-blocos";
+/**
+ * Quadro que o servidor já conferiu contra as leituras (_shared/nucleo-das-mesas.ts,
+ * conferirApresentacao). Só o servidor escreve esta marca: a que vier do modelo
+ * é rebaixada a quadro comum antes da conferência.
+ */
+export const MARCA_CONFERIDA = "aceleriq-conferido";
 
 export type ParteDaResposta =
   | { tipo: "texto"; texto: string }
@@ -30,6 +36,16 @@ export type RespostaEmPartes = { partes: ParteDaResposta[]; recusados: string[];
 const TETO_DO_BALAO = 700;
 
 const ABRE = "```" + MARCA_DOS_BLOCOS;
+const ABRE_CONFERIDO = "```" + MARCA_CONFERIDA;
+
+/** O próximo quadro (comum ou conferido) a partir do começo do texto. */
+function proximoQuadro(t: string): { i: number; tamanho: number; conferido: boolean } | null {
+  const a = t.indexOf(ABRE);
+  const c = t.indexOf(ABRE_CONFERIDO);
+  if (a < 0 && c < 0) return null;
+  if (c >= 0 && (a < 0 || c <= a)) return { i: c, tamanho: ABRE_CONFERIDO.length, conferido: true };
+  return { i: a, tamanho: ABRE.length, conferido: false };
+}
 
 /** Divide texto em balões: por parágrafo, juntando os pequenos, sem quebrar tabela, lista ou bloco de código. */
 export function baloesDoTexto(texto: string): string[] {
@@ -74,10 +90,10 @@ export function textoParcialSemBlocos(texto: string): { texto: string; montando:
   let resto = t;
   let montando = false;
   for (;;) {
-    const i = resto.indexOf(ABRE);
-    if (i < 0) { saida += resto; break; }
-    saida += resto.slice(0, i);
-    const depois = resto.slice(i + ABRE.length);
+    const q = proximoQuadro(resto);
+    if (!q) { saida += resto; break; }
+    saida += resto.slice(0, q.i);
+    const depois = resto.slice(q.i + q.tamanho);
     const fim = depois.indexOf("```");
     if (fim < 0) { montando = true; break; }
     resto = depois.slice(fim + 3);
@@ -99,22 +115,26 @@ export function separarResposta(texto: string, opcoes: { fontesConhecidas?: stri
   const fontesConhecidas = opcoes.fontesConhecidas || [];
   const empurrarTexto = (x: string) => { for (const b of baloesDoTexto(x)) partes.push({ tipo: "texto", texto: b }); };
   for (;;) {
-    const i = resto.indexOf(ABRE);
-    if (i < 0) { empurrarTexto(resto); break; }
-    empurrarTexto(resto.slice(0, i));
-    const depois = resto.slice(i + ABRE.length);
+    const q = proximoQuadro(resto);
+    if (!q) { empurrarTexto(resto); break; }
+    empurrarTexto(resto.slice(0, q.i));
+    const depois = resto.slice(q.i + q.tamanho);
     const fim = depois.indexOf("```");
     if (fim < 0) { recusados.push("quadro sem fechamento"); break; }
     const bruto = depois.slice(0, fim).trim();
     resto = depois.slice(fim + 3);
     let json: unknown = null;
     try { json = JSON.parse(bruto); } catch { recusados.push("quadro com JSON inválido"); continue; }
-    const { blocos, recusados: r } = validarBlocos(json, { fontesConhecidas, hostsPermitidos: opcoes.hostsPermitidos });
+    // Quadro conferido no servidor: as fontes que ele cita já foram lidas e cada linha bateu com elas.
+    const citadas = q.conferido && json && typeof json === "object" && Array.isArray((json as { blocos?: unknown }).blocos)
+      ? ((json as { blocos: Array<{ fontes?: unknown }> }).blocos).flatMap((b) => (b && Array.isArray(b.fontes) ? b.fontes.map(String) : []))
+      : [];
+    const { blocos, recusados: r } = validarBlocos(json, { fontesConhecidas: q.conferido ? citadas : fontesConhecidas, hostsPermitidos: opcoes.hostsPermitidos });
     for (const x of r) recusados.push(x.motivo);
     // Fluxo é desenho do agente: sempre "Proposta" (estado do sistema vem de progresso/entrega, conferidos à parte).
     // Sem fontes conhecidas (resposta não conferida no servidor), só fica o que não afirma dado: texto e fluxo.
     // Entrega, progresso e arquivo precisam de id/estado conferidos (servidor), senão saem.
-    const semConferencia = !fontesConhecidas.length;
+    const semConferencia = !q.conferido && !fontesConhecidas.length;
     const ajustados = blocos
       .filter((b) => {
         if (semConferencia && (b.tipo === "entrega" || b.tipo === "progresso" || b.tipo === "arquivo")) { recusados.push(`${b.tipo} sem conferência no servidor`); return false; }

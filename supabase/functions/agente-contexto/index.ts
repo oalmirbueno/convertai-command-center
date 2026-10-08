@@ -179,6 +179,7 @@ import { anexoDasRegrasSeguidas, esquemaComAprendizado, REGRA_DO_APRENDIZADO_NO_
 import { aprenderComOPedido, lerRegrasDoDono } from "../_shared/aprendizado-nos-agentes.ts";
 import { OPERACOES_COM_CUSTO_DO_CONTEXTO } from "./acoes-do-contexto.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
+import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 // Frente CI (02/10): o que o dono manda vira diretriz da marca (feita na hora, com Desfazer), o agente
 // testa no banco e no que as mesas leem, e a identidade dos perfis de referência vira base de todas as mesas.
 import { handleDoPerfil, type MudancasNasDiretrizes, normalizarDiretrizes, perfilExcluido } from "../_shared/diretrizes-da-marca.ts";
@@ -1545,6 +1546,9 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   ]);
   const completoDaMarca = await completoP;
   const anteriores = historicoParaOModelo(linhas, { excluir: pedido.id, max: 16, maxChars: 2500 });
+  // Núcleo comum (lote B): consultar antes de responder (o Jev escolhe as leituras; o código lê).
+  const cobrarDoContexto = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: "contexto", referencia: { tipo: REF_TIPO, id: clientId }, criadoPor: ch.userId });
+  const previasP = prepararNucleo(db, { clientId, pedido: mensagem, agente: "contexto", ultimaResposta: [...anteriores].reverse().find((m) => m.papel === "agente")?.conteudo, cobrar: cobrarDoContexto });
   // Frente CI: as diretrizes da marca aberta e os perfis de referência dela (com o "a marca não segue").
   const diretrizesAtuais = normalizarDiretrizes(((kit?.contexto ?? {}) as Record<string, unknown>).diretrizes);
   const perfisDaMarca = await perfisDeReferenciaDaMarca(clientId, marcaDaConversa, diretrizesAtuais);
@@ -1555,6 +1559,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const estrategista = await modeloDoContexto();
   const hoje = hojeParaOAgente();
   const sp = await spP;
+  const previas = await previasP;
   const estado = {
     cliente: nome,
     kit: {
@@ -1600,6 +1605,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
         : "- acoes: sempre null nesta mensagem (para ler referências pendentes, montar o contexto de novo ou mexer em logo, referências, fotos e arquivos, a equipe pede e a lista vem na próxima).",
       REGRA_DO_APRENDIZADO_NO_PROMPT,
       blocoDoMapaDoPainel("contexto"),
+      INSTRUCAO_DO_NUCLEO_DAS_MESAS,
+      previas.bloco,
     ].filter(Boolean).join("\n\n"),
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem }],
     esquemaJson: ESQUEMA_CONVERSA_COM_METODO,
@@ -1646,7 +1653,9 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     cobrar: (j) => cobrarJev(j, { clientId, tarefa: "contexto", referencia: { tipo: REF_TIPO, id: clientId }, criadoPor: ch.userId }),
   });
   const seguidas = regrasSeguidasDoModelo(o.seguiu, regras);
-  const respostaBase = texto(o.resposta, 4000) || (acaoProposta ? "A lista está pronta para você confirmar." : kitFeito ? "Feito. Está no cartão, com Desfazer." : "Não consegui entender o pedido. Pode dizer de outro jeito?");
+  // Quadros do texto conferidos contra as leituras (o que não bate sai).
+  const apresentada = await fecharNucleo(db, texto(o.resposta, 9000), previas, { clientId, agente: "contexto", pedido: mensagem, userId: ch.userId, cobrar: cobrarDoContexto });
+  const respostaBase = apresentada.texto || (acaoProposta ? "A lista está pronta para você confirmar." : kitFeito ? "Feito. Está no cartão, com Desfazer." : "Não consegui entender o pedido. Pode dizer de outro jeito?");
   // Frente MC: com outra marca aberta, a conversa não grava no kit do cliente e diz onde mudar.
   const pediuMudarKit = soLeitura && !!(o.estilo || o.regras || o.paleta || o.contexto);
   let resposta = pediuMudarKit && marcaDaConversa
@@ -2413,6 +2422,8 @@ async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): P
   ]);
   // O histórico leva o estado de cada cartão (feito, desfeito, esperando) e os registros do painel.
   const anteriores = historicoParaOModelo(linhas, { excluir: pedido.id, max: 16, maxChars: 3000 });
+  const cobrarDoPlano = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: "contexto", referencia: { tipo: REF_TIPO, id: clientId }, criadoPor: ch.userId });
+  const previas = await prepararNucleo(db, { clientId, pedido: mensagem, agente: "contexto (plano)", ultimaResposta: [...anteriores].reverse().find((m) => m.papel === "agente")?.conteudo, cobrar: cobrarDoPlano });
   const materiaisAntes = await recuperarMateriais(db, clientId, linhas.filter(l => l.id !== pedido.id));
   const f = METODO_ACELERA[fase.fase];
   const { fontes_lidas: _lidas, caminho, identidade, ...contextoParaPrompt } = contexto as Record<string, unknown> & { fontes_lidas?: unknown; caminho?: unknown; identidade?: unknown };
@@ -2447,7 +2458,9 @@ async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): P
     blocoDasFerramentas(),
     blocoDoMapaDoPainel("contexto"),
     dadosDasAcoes ? blocoDasAcoesDoContexto(dadosDasAcoes) : "- acoes: sempre null nesta mensagem.",
-  ].join("\n\n");
+    INSTRUCAO_DO_NUCLEO_DAS_MESAS,
+    previas.bloco,
+  ].filter(Boolean).join("\n\n");
   const spPlano = await spPlanoP;
   const chamar = (mensagens: Array<{ papel: "usuario" | "agente"; conteudo: string; imagens?: ImagemEntrada[] }>, pesquisaWeb = false) =>
     chamarTexto({
@@ -2512,7 +2525,8 @@ async function conversarNoPlano(ch: Chamador, corpo: Record<string, unknown>): P
   if (visual) visual.acao.resumo = "Atualização do kit visual com base no material do cliente";
   // Frente AG (27/09): o plano e os arquivos levam o "Ir para" (Kanban com o projeto e a tarefa, aba Contexto...).
   const anexos = caminhoNasAcoes([acaoDoPlano, visual?.acao, acaoDosArquivos].filter(Boolean) as AcaoDoAgente[], (a) => caminhoDoContexto(clientId, a), { abrirSozinho: pedeParaLevar(mensagem) }) as AcaoDoAgente[];
-  let resposta = texto(o.resposta, 5000) || (anexos.length ? "Plano preparado. Confira abaixo o resultado de cada ação." : "Não consegui montar a resposta. Pode dizer de outro jeito?");
+  const apresentada = await fecharNucleo(db, texto(o.resposta, 9000), previas, { clientId, agente: "contexto (plano)", pedido: mensagem, userId: ch.userId, cobrar: cobrarDoPlano });
+  let resposta = apresentada.texto || (anexos.length ? "Plano preparado. Confira abaixo o resultado de cada ação." : "Não consegui montar a resposta. Pode dizer de outro jeito?");
   // Aprender com o pedido (Jev) e dizer quais regras do dono foram seguidas.
   const aprendizado = await aprenderComOPedido(db, {
     clientId, mensagem, regra: regraDoModelo(o.regra), agente: "contexto (plano do cliente)", areas: ["geral", "campanha", "calendario", "conta"], areaPadrao: "geral",
