@@ -345,6 +345,55 @@ Deno.serve(async (req) => {
       });
     }
 
+    /*
+     * Trocar o e-mail de login do cliente (08/10/2026): o cliente às vezes
+     * troca de e-mail e precisa entrar com o novo. Muda o login no Auth e o
+     * e-mail do perfil juntos; a senha continua a mesma e nenhum convite sai.
+     * Só conta de cliente (mesma regra do admin-reset-client-access). Ordem:
+     * Auth primeiro (é quem recusa e-mail repetido); se o perfil falhar
+     * depois, o Auth volta ao e-mail anterior para os dois nunca divergirem.
+     */
+    if (action === "update_email") {
+      const { user_id } = payload;
+      requireUuid(user_id, "user_id");
+      const novo = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(novo) || novo.length > 254) {
+        throw new Error("E-mail inválido");
+      }
+
+      const { data: papelCliente, error: papelErro } = await adminClient
+        .from("user_roles").select("role").eq("user_id", user_id).eq("role", "client").maybeSingle();
+      if (papelErro) throw new Error("Failed to verify target role");
+      if (!papelCliente) throw new HttpError("Somente o e-mail de contas de cliente pode ser trocado por aqui", 403);
+
+      const { data: atual, error: atualErro } = await adminClient
+        .from("profiles").select("email").eq("id", user_id).single();
+      if (atualErro || !atual) throw new Error("Cliente não encontrado");
+      const anterior = String(atual.email || "").trim().toLowerCase();
+      if (anterior === novo) {
+        return new Response(JSON.stringify({ success: true, email: novo, unchanged: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { error: authErro } = await adminClient.auth.admin.updateUserById(user_id, { email: novo, email_confirm: true });
+      if (authErro) {
+        const repetido = /already|registered|exists|duplicate/i.test(authErro.message || "");
+        throw new Error(repetido ? "Esse e-mail já é o login de outra conta" : `Não consegui trocar o login: ${authErro.message}`);
+      }
+
+      const { error: perfilErro } = await adminClient.from("profiles").update({ email: novo }).eq("id", user_id);
+      if (perfilErro) {
+        const { error: volta } = await adminClient.auth.admin.updateUserById(user_id, { email: anterior, email_confirm: true });
+        if (volta) console.error("manage-team update_email revert failed", { user_id, error: volta.message });
+        throw new Error("Não consegui gravar o novo e-mail no cadastro; o login continua o anterior");
+      }
+
+      return new Response(JSON.stringify({ success: true, email: novo, previous: anterior }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     throw new Error("Invalid action");
   } catch (err: any) {
     console.error("manage-team error:", err);

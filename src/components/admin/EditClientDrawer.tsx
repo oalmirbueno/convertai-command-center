@@ -457,6 +457,12 @@ export default function EditClientDrawer({
       toast.error("Preencha nome e empresa");
       return;
     }
+    const novoEmail = email.trim().toLowerCase();
+    const emailMudou = isAdmin && novoEmail !== String(client?.email || "").trim().toLowerCase();
+    if (emailMudou && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(novoEmail) || novoEmail.length > 254)) {
+      toast.error("Confira o e-mail: ele é o login do cliente");
+      return;
+    }
     if (clientPassword && !(clientPassword.length >= 12 && /[a-z]/.test(clientPassword) && /[A-Z]/.test(clientPassword) && /[0-9]/.test(clientPassword) && /[^A-Za-z0-9]/.test(clientPassword))) {
       toast.error("Senha deve ter no mínimo 12 caracteres, com maiúscula, minúscula, número e símbolo");
       return;
@@ -482,6 +488,17 @@ export default function EditClientDrawer({
         updatePayload.plan_name = planName.trim() || null;
         updatePayload.plan_value = planValue ? parseFloat(planValue) : null;
         updatePayload.plan_renewal_date = renewalDate || null;
+      }
+
+      // O e-mail é o login: troca primeiro no Auth e no perfil (manage-team, só admin). Se falhar,
+      // nada mais é salvo e o cliente continua entrando com o e-mail anterior.
+      if (emailMudou) {
+        const res = await supabase.functions.invoke("manage-team", {
+          body: { action: "update_email", user_id: client.id, email: novoEmail },
+        });
+        if (res.data?.error) throw new Error(res.data.error);
+        if (res.error) throw new Error(await getSupabaseFunctionErrorMessage(res.error, "Não foi possível trocar o e-mail de login"));
+        toast.success(`Login trocado: o cliente agora entra com ${novoEmail}. A senha continua a mesma.`);
       }
 
       const { error } = await supabase.from("profiles").update(updatePayload).eq("id", client.id);
@@ -935,8 +952,21 @@ export default function EditClientDrawer({
                 <CampoDeFormulario rotulo="Empresa" obrigatorio>
                   <input value={company} onChange={(e) => setCompany(e.target.value)} className={campo} />
                 </CampoDeFormulario>
-                <CampoDeFormulario rotulo="E-mail" apoio="É o login do cliente.">
-                  <input value={email} disabled className={juntar(campo, "text-muted-foreground")} />
+                <CampoDeFormulario
+                  rotulo="E-mail"
+                  apoio={isAdmin && email.trim().toLowerCase() !== String(client?.email || "").trim().toLowerCase()
+                    ? "Ao salvar, o cliente passa a entrar com este e-mail. A senha continua a mesma."
+                    : "É o login do cliente."}
+                >
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={!isAdmin}
+                    autoComplete="off"
+                    inputMode="email"
+                    className={juntar(campo, !isAdmin && "text-muted-foreground")}
+                  />
                 </CampoDeFormulario>
                 <CampoDeFormulario rotulo="Telefone">
                   <input value={phone} onChange={(e) => setPhone(e.target.value)} className={campo} inputMode="tel" />
