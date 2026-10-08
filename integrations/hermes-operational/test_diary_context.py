@@ -1,5 +1,5 @@
 import unittest
-from diary_consumer import human_candidates, client_target, gate_payload
+from diary_consumer import human_candidates, client_target, gate_payload, verify_client_targets
 
 A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
@@ -44,6 +44,18 @@ class ContextTest(unittest.TestCase):
     def test_normal_project_keeps_known_client_and_empty_gate_stays_cheap(self):
         self.assertEqual(client_target({'client_id': A}, 'Confira o briefing')['target_client_id'], A)
         self.assertEqual(gate_payload([]), {'wakeAgent': False})
+
+    def test_target_is_confirmed_against_real_client_roster(self):
+        messages = [{'target_client_id': A}, {'target_client_id': B}]
+        verify_client_targets(messages, {'total': 1, 'items': [{'id': A, 'company_name': 'Cliente A'}]})
+        self.assertTrue(messages[0]['target_client_verified'])
+        self.assertEqual(messages[0]['target_client_name'], 'Cliente A')
+        self.assertTrue(messages[1]['needs_client_clarification'])
+        self.assertEqual(gate_payload(messages)['messages'][1]['dispatch_kind'], 'clarification_only')
+
+    def test_incomplete_roster_stops_before_claiming_or_answering(self):
+        for roster in [{'total': 2, 'items': []}, {'total': 0, 'items': [], 'has_more': True}, {}]:
+            with self.assertRaises(RuntimeError): verify_client_targets([{'target_client_id': A}], roster)
 
 if __name__ == '__main__':
     unittest.main()

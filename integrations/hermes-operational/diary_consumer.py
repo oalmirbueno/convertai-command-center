@@ -25,7 +25,7 @@ from typing import Any, Iterable
 
 HERMES_ROOT = "/usr/local/lib/hermes-agent"
 DEFAULT_DB = Path("/root/.hermes/workflows/panel-diary-consumer-v1/diary-consumer.sqlite3")
-ALLOWED_TOOLS = {"aceleriq_operator_board", "aceleriq_operator_diary"}
+ALLOWED_TOOLS = {"aceleriq_operator_board", "aceleriq_operator_diary", "aceleriq_list_clients"}
 HUMAN_ENTRY_TYPES = {"instrucao", "decisao", "correcao"}
 HUMAN_MARKERS = {"human", "humano", "user", "almir", "almir de barros bueno"}
 LEASE_SECONDS = 900
@@ -412,7 +412,35 @@ async def collect_candidates(call, *, deadline, board_limit=500, diary_limit=DIA
                 return []
     rows = await asyncio.gather(*(read(link) for link in links[:max_links] if isinstance(link, dict) and (link.get("id") or link.get("link_id"))))
     unique = {(r["link_id"], r["entry_id"]): r for group in rows for r in group}
+    if any(r.get('target_client_id') for r in unique.values()):
+        roster = await bounded('aceleriq_list_clients', {'limit': 500, 'offset': 0})
+        verify_client_targets(list(unique.values()), roster)
     return sorted(unique.values(), key=lambda r: (r.get("created_at") or "", r["link_id"], r["entry_id"]))
+
+
+def verify_client_targets(messages, roster):
+    """Confirm the client role against the existing MCP before leasing work.
+
+    An incomplete/unavailable roster aborts this read, so the next scheduled run
+    retries without consuming or acknowledging the human message.
+    """
+    items = roster.get('items', []) if isinstance(roster, dict) else []
+    if not isinstance(roster, dict) or roster.get('has_more') or roster.get('total') != len(items):
+        raise RuntimeError('Não foi possível conferir o cadastro completo de clientes.')
+    known = {str(c.get('id')): c for c in items}
+    if len(known) != len(items):
+        raise RuntimeError('Cadastro duplicado na leitura de clientes.')
+    for message in messages:
+        target = message.get('target_client_id')
+        if not target:
+            continue
+        client = known.get(target)
+        message['target_client_verified'] = bool(client)
+        if client:
+            message['target_client_name'] = _safe_text(client.get('company_name') or client.get('full_name') or '')
+        else:
+            message['needs_client_clarification'] = True
+            message['target_scope'] = 'unresolved'
 
 
 async def _collect_candidates() -> list[dict[str, Any]]:
