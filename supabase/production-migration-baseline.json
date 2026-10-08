@@ -2017,6 +2017,14 @@
       "remote_name": "operator_documental_preserve_run",
       "remote_statements_sha256": "1fa241b18bf3d2ad930f855810e5ad80ee5f4d390faa65d405c2b882240abea6",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261008010000",
+      "path": "supabase/migrations/20261008010000_gestor_aceleriq_conversa.sql",
+      "local_sha256": "e9a4cb76000ffa809ac037930a54f0fa9fad53fe0ab2d8f84acbe9472589a102",
+      "remote_name": "gestor_aceleriq_conversa",
+      "remote_statements_sha256": "63efc74d9e9d9bdca50024441ab18f2474947394b6b249b0b80a4e1a4176cf72",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
