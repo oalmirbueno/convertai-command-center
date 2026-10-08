@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * equipe sem admin vê indicadores e histórico, mas não o chat.
  */
 
-const m = vi.hoisted(() => ({ chamar: vi.fn(), papel: "admin" as string }));
+const m = vi.hoisted(() => ({ chamar: vi.fn(), invoke: vi.fn(), papel: "admin" as string }));
 
 vi.mock("@/lib/mesa/api", async (orig) => ({ ...(await orig<typeof import("@/lib/mesa/api")>()), chamarFuncao: m.chamar }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ profile: { role: m.papel }, user: { id: "u1" } }) }));
@@ -21,8 +21,10 @@ vi.mock("@/integrations/supabase/client", () => {
     get: (_t, k) => (k === "then" ? (ok: (v: unknown) => void) => ok({ data: [], count: 0, error: null }) : cadeia),
     apply: () => cadeia,
   });
-  return { supabase: { from: () => cadeia, rpc: () => cadeia, functions: { invoke: vi.fn() } } };
+  return { supabase: { from: () => cadeia, rpc: () => cadeia, functions: { invoke: m.invoke } } };
 });
+// A duração do áudio vem do elemento <audio> (o jsdom não carrega mídia).
+vi.mock("@/lib/gestorAnexos", async (orig) => ({ ...(await orig<typeof import("@/lib/gestorAnexos")>()), duracaoDoAudio: async () => 42 }));
 
 import CentralDeAutonomia from "@/components/execucao/CentralDeAutonomia";
 
@@ -107,8 +109,57 @@ describe("Central de Autonomia na tela", () => {
     m.papel = "design";
     montar();
     expect(await screen.findByText("O Gestor Aceleriq é do admin.")).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Decisões do CEO" })).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "Resumo, histórico e decisões" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: /Decisões/ }));
+    expect(await screen.findByText(/Pedidos de aprovação dos agentes/)).toBeTruthy();
     await waitFor(() => expect(m.chamar).not.toHaveBeenCalled());
+  });
+});
+
+describe("Central de Autonomia: espaço, tela cheia e anexos", () => {
+  beforeEach(() => {
+    m.papel = "admin";
+    m.chamar.mockReset();
+    m.invoke.mockReset();
+    m.chamar.mockImplementation(async (_f: string, corpo: { acao: string }) => (corpo.acao === "conversa" ? { mensagens: [] } : resposta));
+  });
+
+  it("tela cheia ocupa a janela e sai com Esc; ampliar o chat esconde a coluna ao lado", async () => {
+    montar();
+    await screen.findByText("O que você quer saber da operação?");
+    fireEvent.click(screen.getByRole("button", { name: "Tela cheia" }));
+    expect(screen.getByRole("dialog", { name: "Central de Autonomia em tela cheia" })).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Central de Autonomia em tela cheia" })).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Ampliar o chat" }));
+    expect(screen.queryByRole("complementary", { name: "Resumo, histórico e decisões" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar o painel ao lado" }));
+    expect(screen.getByRole("complementary", { name: "Resumo, histórico e decisões" })).toBeTruthy();
+  });
+
+  it("arquivo anexado é lido na tela e vai como texto junto da pergunta", async () => {
+    montar();
+    await screen.findByText("O que você quer saber da operação?");
+    const entrada = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const arquivo = new File(["Ata da reunião: a Acerbi pediu 2 vídeos para sexta."], "ata.txt", { type: "text/plain" });
+    fireEvent.change(entrada, { target: { files: [arquivo] } });
+    expect(await screen.findByText("ata.txt")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Pergunta ao Gestor Aceleriq"), { target: { value: "O que essa ata pede?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Perguntar" }));
+    await waitFor(() => expect(m.chamar).toHaveBeenCalledWith("gestor-aceleriq", expect.objectContaining({ acao: "perguntar", pergunta: "O que essa ata pede?" })));
+    const corpo = m.chamar.mock.calls.find((c) => c[1].acao === "perguntar")![1];
+    expect(corpo.arquivos.lidos[0]).toMatchObject({ nome: "ata.txt", texto: expect.stringContaining("2 vídeos para sexta") });
+  });
+
+  it("áudio anexado é transcrito e sai como a mensagem, com a marca do áudio", async () => {
+    m.invoke.mockResolvedValue({ data: { texto: "Como está a Acerbi nesta semana?", segundos: 42 }, error: null });
+    montar();
+    await screen.findByText("O que você quer saber da operação?");
+    const entrada = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(entrada, { target: { files: [new File([new Uint8Array(2048)], "recado.m4a", { type: "audio/x-m4a" })] } });
+    await waitFor(() => expect(m.invoke).toHaveBeenCalledWith("gestor-aceleriq", expect.objectContaining({ headers: expect.objectContaining({ "x-gestor-acao": "transcrever", "Content-Type": "audio/x-m4a" }) })));
+    await waitFor(() => expect(m.chamar).toHaveBeenCalledWith("gestor-aceleriq", expect.objectContaining({ pergunta: "Como está a Acerbi nesta semana?", audio: { segundos: 42 } })));
+    expect(await screen.findByText(/Áudio 0:42/)).toBeTruthy();
   });
 });
 

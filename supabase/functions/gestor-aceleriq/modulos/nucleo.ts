@@ -8,7 +8,7 @@
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { jevPerguntar } from "../../_shared/jev.ts";
-import { chamarTexto, cobrarJev, IaMotorErro, modeloPadrao } from "../../_shared/ia-motor.ts";
+import { chamarTexto, cobrarJev, IaMotorErro, type ImagemEntrada, modeloPadrao } from "../../_shared/ia-motor.ts";
 import { registrarFalha } from "../../_shared/falha-registrada.ts";
 import {
   type AprovacaoBruta,
@@ -17,6 +17,8 @@ import {
   conferirContraAFicha,
   contagemDoRecorte,
   conversaDoRecorte,
+  type ArquivoDoDono,
+  fontesDosAnexos,
   type DiarioBruto,
   type EntregaBruta,
   type Fonte,
@@ -239,7 +241,9 @@ Regras duras:
 - Se uma fonte diz que algo NÃO aconteceu (ex.: vídeo ainda em edição, sem publicação), diga isso como lacuna; nunca transforme em feito.
 - Escreva como uma pessoa conversando no chat com o dono, não como relatório. Cada item vira UMA mensagem curta na tela: 1 ou 2 frases, no máximo 220 caracteres, linguagem simples e direta ("Vi que...", "Ainda falta...", "O Atlas fechou...").
 - Comece pelo que mais importa para a pergunta. Junte fontes parecidas numa mensagem só. No máximo 8 itens; o resto fica nas contagens da tela.
-- Sem markdown, sem listas, sem travessão, sem repetir o apelido no texto, sem saudação nem despedida (a abertura e o fechamento são do sistema).`;
+- Sem markdown, sem listas, sem travessão, sem repetir o apelido no texto, sem saudação nem despedida (a abertura e o fechamento são do sistema).
+- Fontes A1, A2... são arquivos, imagens ou áudios que o dono mandou AGORA (não são registros do OS). O que vem deles vai na seção "anexo" (ou vira próximo passo, pendência ou decisão). Um anexo nunca prova que algo aconteceu no OS: se ele contradiz o OS, diga as duas coisas.
+- Se o dono pedir para resumir, ler ou analisar o anexo, responda sobre o anexo primeiro.`;
 
 const ESQUEMA = {
   nome: "resposta_do_gestor",
@@ -267,7 +271,7 @@ const ESQUEMA = {
 
 type Redacao = { itens: ItemDaResposta[]; origem: "ia_conferida" | "motor"; avisos: string[]; custo: number; usoId: string | null; modelo: string | null; recusados: number; contestados: number };
 
-async function redigir(pergunta: string, cabecalho: string, fontes: Fonte[], o: { agencia: string | null; userId: string; semIa: boolean; historico: string }): Promise<Redacao> {
+async function redigir(pergunta: string, cabecalho: string, fontes: Fonte[], o: { agencia: string | null; userId: string; semIa: boolean; historico: string; imagens?: ImagemEntrada[] }): Promise<Redacao> {
   const motor = (aviso?: string): Redacao => ({ itens: respostaDoMotor(fontes), origem: "motor", avisos: aviso ? [aviso] : [], custo: 0, usoId: null, modelo: null, recusados: 0, contestados: 0 });
   if (!fontes.length) return motor();
   if (o.semIa) return motor();
@@ -291,6 +295,7 @@ async function redigir(pergunta: string, cabecalho: string, fontes: Fonte[], o: 
           `RECORTE: ${cabecalho}`,
           `FONTES (JSON; só isto pode ser afirmado):\n${JSON.stringify(fontes.map((f) => ({ apelido: f.apelido, tipo: f.tipo, estado: f.estado, titulo: f.titulo, quando: f.quando, cliente: f.cliente, agente: f.agente, texto: f.texto })))}`,
         ].filter(Boolean).join("\n\n"),
+        imagens: o.imagens && o.imagens.length ? o.imagens : undefined,
       }],
       esquemaJson: ESQUEMA,
       maxTokensSaida: MAX_TOKENS_SAIDA,
@@ -316,13 +321,18 @@ async function redigir(pergunta: string, cabecalho: string, fontes: Fonte[], o: 
   // Barreira 2 (Jev): a afirmação bate com a fonte citada?
   let finais = aceitos;
   let contestados = 0;
-  if (aceitos.length) {
+  // Frase que só cita imagem anexada não tem texto para o Jev comparar: fica com a conferência de fonte.
+  const tipoDe = new Map(fontes.map((f) => [f.apelido.toUpperCase(), f.tipo]));
+  const soImagem = (i: ItemDaResposta) => i.fontes.every((a) => tipoDe.get(a.toUpperCase()) === "anexo_imagem");
+  const paraOJev = aceitos.filter((i) => !soImagem(i));
+  if (paraOJev.length) {
     try {
-      const { state, questions } = perguntasDeConferencia(aceitos, fontes);
+      const { state, questions } = perguntasDeConferencia(paraOJev, fontes);
       const r = await jevPerguntar({ state, questions }, { timeoutMs: 15_000 });
       void cobrarJev(r, { clientId: o.agencia, tarefa: "verificacao", criadoPor: o.userId });
-      const c = aplicarConferencia(aceitos, r.answers as Record<string, RespostaChoice>);
-      finais = c.ficam;
+      const c = aplicarConferencia(paraOJev, r.answers as Record<string, RespostaChoice>);
+      const conferidos = new Map(c.ficam.map((i) => [i.texto, i]));
+      finais = aceitos.filter((i) => soImagem(i) || conferidos.has(i.texto)).map((i) => conferidos.get(i.texto) || i);
       contestados = c.sairam.length;
       if (c.sairam.length) avisos.push(`${c.sairam.length} ${c.sairam.length === 1 ? "frase saiu" : "frases saíram"} na conferência com as fontes.`);
       if (c.fracos) avisos.push(`${c.fracos} ${c.fracos === 1 ? "frase ficou" : "frases ficaram"} com conferência fraca: abra a fonte.`);
@@ -340,7 +350,7 @@ async function redigir(pergunta: string, cabecalho: string, fontes: Fonte[], o: 
 
 // ------------------------------------------------------------------ a resposta inteira
 
-export type EntradaDoResponder = { pergunta: string; clienteId?: string | null; periodo?: string | null; userId: string; semIa: boolean; historico: string; tetoAtingido?: boolean; tetoPorDia?: number };
+export type EntradaDoResponder = { arquivos?: ArquivoDoDono[]; imagens?: ImagemEntrada[]; pergunta: string; clienteId?: string | null; periodo?: string | null; userId: string; semIa: boolean; historico: string; tetoAtingido?: boolean; tetoPorDia?: number };
 
 export type Respondido =
   | { tipo: "esclarecer"; texto: string; opcoes: Array<{ id: string; nome: string }> }
@@ -360,7 +370,11 @@ export async function responder(e: EntradaDoResponder): Promise<Respondido> {
     if (achado.tipo === "ambiguo") {
       return { tipo: "esclarecer", texto: `Achei mais de um cliente com esse nome: ${achado.opcoes.map((c) => c.nome).join(", ")}. Qual deles?`, opcoes: achado.opcoes.map((c) => ({ id: c.id, nome: c.nome })) };
     }
-    cliente = achado.tipo === "um" ? achado.cliente : await clientePorJev(e.pergunta, clientes, agencia, e.userId);
+    // Sem nome na pergunta: o anexo pode dizer de quem é (só vale se citar um cliente só).
+    const doAnexo = achado.tipo === "nenhum" && (e.arquivos || []).length
+      ? clienteDaPergunta((e.arquivos || []).map((x) => `${x.nome} ${x.texto.slice(0, 3000)}`).join(" "), clientes)
+      : null;
+    cliente = achado.tipo === "um" ? achado.cliente : doAnexo && doAnexo.tipo === "um" ? doAnexo.cliente : await clientePorJev(e.pergunta, clientes, agencia, e.userId);
   }
 
   const nomes = new Map(clientes.filter((c) => !c.projetoId).map((c) => [c.id, c.nome]));
@@ -370,7 +384,10 @@ export async function responder(e: EntradaDoResponder): Promise<Respondido> {
   const nomeRecorte = cliente ? (cliente.marca ? `${cliente.marca} (marca de ${nomes.get(cliente.id) || "cliente"})` : cliente.nome) : "Todos os clientes";
   const cabecalho = `${nomeRecorte} · ${periodo.rotulo}`;
 
-  const red = await redigir(e.pergunta, cabecalho, ficha.fontes, { agencia, userId: e.userId, semIa: e.semIa || !!e.tetoAtingido, historico: e.historico });
+  // Anexos do dono viram fontes A1..An, antes das do OS (o modelo responde sobre eles primeiro).
+  const anexos = fontesDosAnexos(e.arquivos || [], (e.imagens || []).map((i) => ({ nome: i.nome })));
+  const todas = [...anexos.fontes, ...ficha.fontes];
+  const red = await redigir(e.pergunta, cabecalho, todas, { agencia, userId: e.userId, semIa: e.semIa || !!e.tetoAtingido, historico: e.historico, imagens: e.imagens });
   const avisos = [...fatos.avisos, ...red.avisos];
   if (e.tetoAtingido && !e.semIa) avisos.push(`Teto de ${e.tetoPorDia ?? 60} respostas com IA por dia atingido: respondi só com os fatos registrados.`);
   if (ficha.cortadas) avisos.push(`${ficha.cortadas} fatos a mais no período ficaram fora desta resposta: refine por cliente ou período.`);
@@ -378,8 +395,13 @@ export async function responder(e: EntradaDoResponder): Promise<Respondido> {
 
   // Só as fontes citadas vão para a tela e para a conversa (o resto fica no total).
   const citadas = new Set(red.itens.flatMap((i) => i.fontes));
-  const fontesUsadas = ficha.fontes.filter((f) => citadas.has(f.apelido));
+  const fontesUsadas = todas.filter((f) => citadas.has(f.apelido));
+  if (anexos.cortados.length) avisos.push(`Li só o começo de ${anexos.cortados.join(", ")}: o texto passou do limite de uma pergunta.`);
   const conversa = conversaDoRecorte({ nome: nomeRecorte, periodo: periodo.rotulo, contagem, totalDeFontes: ficha.fontes.length, temCliente: !!cliente });
+  if (anexos.fontes.length) {
+    const n = anexos.fontes.length;
+    conversa.abertura = `Li ${n === 1 ? "o que você mandou" : `os ${n} anexos que você mandou`}. ${conversa.abertura}`;
+  }
   const dados = {
     tipo: "resposta", origem: red.origem, cabecalho, periodo, abertura: conversa.abertura, fechamento: conversa.fechamento, sugestoes: conversa.sugestoes, cliente: cliente ? { id: cliente.id, nome: nomeRecorte, projeto_id: cliente.projetoId || null } : null,
     itens: red.itens, fontes: fontesUsadas, contagem, total_de_fontes: ficha.fontes.length, avisos, modelo: red.modelo, recusados: red.recusados, contestados: red.contestados,

@@ -5,6 +5,8 @@ import {
   contagemDoRecorte,
   conversaDoRecorte,
   estadoDaTarefa,
+  fontesDosAnexos,
+  MAX_CHARS_DOS_ANEXOS,
   montarFicha,
   periodoDaPergunta,
   respostaDoMotor,
@@ -47,6 +49,12 @@ describe("Gestor Aceleriq: período e cliente", () => {
     expect(clienteDaPergunta("e a para si otica?", clientes)).toEqual({ tipo: "um", cliente: clientes[2] });
     const cme = clienteDaPergunta("como foi a CME?", clientes);
     expect(cme.tipo === "um" && cme.cliente.projetoId).toBe("proj-cme");
+  });
+
+  it("nome inteiro vence pedaço de nome, e palavra comum ('evento') não acha cliente sozinha", () => {
+    const lista = [{ id: "acerbi", nome: "Acerbi" }, { id: "sub", nome: "Evento Subaftertuor" }];
+    expect(clienteDaPergunta("Ata da reunião com a Acerbi sobre o evento Reforma Tributária", lista)).toEqual({ tipo: "um", cliente: lista[0] });
+    expect(clienteDaPergunta("como foi o evento de ontem?", lista)).toEqual({ tipo: "nenhum" });
   });
 
   it("dois clientes com o mesmo trecho: pergunta de volta, sem palpite; nenhum nome: geral", () => {
@@ -229,3 +237,35 @@ describe("Gestor Aceleriq: conversa", () => {
     expect(vazio.fechamento).toBeNull();
   });
 });
+
+describe("Gestor Aceleriq: anexos do dono", () => {
+  it("arquivos e imagens viram fontes A1..An, separadas do OS e fora das contagens", () => {
+    const { fontes, cortados } = fontesDosAnexos(
+      [{ nome: "ata.txt", tipo: "texto", texto: "A Acerbi pediu 2 vídeos." }, { nome: "vazio.txt", tipo: "texto", texto: "   " }],
+      [{ nome: "print.png" }],
+    );
+    expect(fontes.map((f) => [f.apelido, f.tipo, f.estado])).toEqual([["A1", "anexo", "material_do_dono"], ["A2", "anexo_imagem", "material_do_dono"]]);
+    expect(cortados).toEqual([]);
+    expect(contagemDoRecorte(fontes)).toMatchObject({ feito: 0, anexo: 0, lacuna: 0 });
+  });
+
+  it("o texto dos anexos tem teto por pergunta, com o corte avisado", () => {
+    const grande = "x".repeat(MAX_CHARS_DOS_ANEXOS + 10);
+    const { fontes, cortados } = fontesDosAnexos([{ nome: "a.txt", tipo: "texto", texto: grande }, { nome: "b.txt", tipo: "texto", texto: "y" }], []);
+    expect(fontes).toHaveLength(1);
+    expect(fontes[0].texto.length).toBe(MAX_CHARS_DOS_ANEXOS);
+    expect(cortados).toEqual(["a.txt", "b.txt"]);
+  });
+
+  it("anexo nunca vira 'feito' do OS: só fala na seção do material, em pendência, próximo passo ou decisão", () => {
+    const { fontes } = fontesDosAnexos([{ nome: "relatorio.pdf", tipo: "pdf", texto: "Post publicado ontem." }], []);
+    const { aceitos, recusados } = conferirContraAFicha([
+      { secao: "feito", texto: "O post foi publicado", fontes: ["A1"] },
+      { secao: "anexo", texto: "O relatório diz que o post saiu ontem", fontes: ["A1"] },
+      { secao: "proximo", texto: "Conferir no OS se o post saiu", fontes: ["A1"] },
+    ], fontes);
+    expect(recusados.map((r) => r.motivo)).toEqual(["estado_incompativel"]);
+    expect(aceitos.map((a) => a.secao)).toEqual(["anexo", "proximo"]);
+  });
+});
+

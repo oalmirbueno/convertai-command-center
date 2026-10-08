@@ -34,7 +34,7 @@ export function perguntasDeConferencia(itens: ItemDaResposta[], fontes: Fonte[])
   const afirmacoes = alvo.map((i) => ({
     afirmacao: i.texto,
     secao: i.secao,
-    fontes: i.fontes.map((a) => porApelido.get(a)).filter((f): f is Fonte => !!f).map((f) => ({ apelido: f.apelido, estado: f.estado, texto: f.texto.slice(0, 1500) })),
+    fontes: i.fontes.map((a) => porApelido.get(a)).filter((f): f is Fonte => !!f).map((f) => ({ apelido: f.apelido, estado: f.estado, texto: f.texto.slice(0, f.tipo === "anexo" ? 6000 : 1500) })),
   }));
   const questions: Record<string, PerguntaDeConferencia> = {};
   afirmacoes.forEach((_, k) => {

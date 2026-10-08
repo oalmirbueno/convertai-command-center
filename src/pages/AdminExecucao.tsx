@@ -1711,6 +1711,9 @@ export default function AdminExecucao() {
       <div className="mt-4 flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
         {aba !== "feito" && visao === "quadro" ? (
           quadro
+        ) : aba === "central" ? (
+          // A Central cuida da própria altura (chat e coluna ao lado rolam cada um por conta própria).
+          <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">{conteudoDaVisao}</div>
         ) : (
           <RegiaoRolavel
             modo="lg"

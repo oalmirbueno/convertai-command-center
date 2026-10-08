@@ -30,11 +30,13 @@ import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { IaMotorErro } from "../_shared/ia-motor.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
-import { ErroHttp, responder, usarBanco } from "./modulos/nucleo.ts";
+import { carteiraDaAgencia, ErroHttp, responder, usarBanco } from "./modulos/nucleo.ts";
+import { type ArquivoDoDono, MAX_IMAGENS } from "./modulos/ficha.ts";
+import { ErroDaTranscricao, MAX_BYTES_DO_AUDIO_DO_GESTOR, transcreverAudio } from "./modulos/transcricao.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-gestor-acao, x-gestor-duracao",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   ...PREFLIGHT_CACHE,
 };
@@ -45,6 +47,7 @@ export const PERGUNTAS_COM_IA_POR_DIA = 60;
 
 function respostaDeErro(err: unknown): Response {
   if (err instanceof ErroHttp) return json({ error: err.codigo, mensagem: err.message }, err.status);
+  if (err instanceof ErroDaTranscricao) return json({ error: err.codigo, mensagem: err.message }, err.status);
   if (err instanceof IaMotorErro) return json(err.paraJson(), err.status);
   registrarFalha("gestor-aceleriq: falha", err);
   return json({ error: "falha_interna", mensagem: "O Gestor falhou ao montar a resposta. Tente de novo." }, 500);
@@ -84,9 +87,57 @@ async function ultimas(userId: string, n: number) {
   return ((data || []) as Array<Record<string, unknown>>).reverse();
 }
 
+/** Texto que o navegador leu dos arquivos (o mesmo leitor do agente do Mês). Teto bruto; o corte fino é no núcleo. */
+function arquivosDoCorpo(bruto: unknown): ArquivoDoDono[] {
+  const o = (bruto && typeof bruto === "object" ? bruto : {}) as Record<string, unknown>;
+  const lidos = Array.isArray(o.lidos) ? o.lidos.slice(0, 30) : [];
+  let total = 0;
+  const saida: ArquivoDoDono[] = [];
+  for (const a of lidos) {
+    const x = (a ?? {}) as Record<string, unknown>;
+    const texto = typeof x.texto === "string" ? x.texto.slice(0, 200_000) : "";
+    if (!texto.trim() || total > 300_000) continue;
+    total += texto.length;
+    saida.push({ nome: String(x.nome || "arquivo").slice(0, 200), tipo: String(x.tipo || "texto").slice(0, 30), texto, origem: x.origem ? String(x.origem).slice(0, 200) : null });
+  }
+  return saida;
+}
+
+const TIPOS_DE_IMAGEM = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
+/** Imagens em base64 (a tela já reduz para até 1600 px). Até 4, 5 MB cada. */
+function imagensDoCorpo(bruto: unknown): Array<{ bytes: Uint8Array; mime: string; nome?: string }> {
+  const lista = Array.isArray(bruto) ? bruto.slice(0, MAX_IMAGENS) : [];
+  const saida: Array<{ bytes: Uint8Array; mime: string; nome?: string }> = [];
+  for (const a of lista) {
+    const x = (a ?? {}) as Record<string, unknown>;
+    const mime = String(x.mime || "").toLowerCase();
+    const b64 = typeof x.base64 === "string" ? x.base64.replace(/^data:[^,]*,/, "") : "";
+    if (!TIPOS_DE_IMAGEM.has(mime) || !b64 || b64.length > 7_000_000) continue;
+    try {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      saida.push({ bytes, mime, nome: x.nome ? String(x.nome).slice(0, 120) : undefined });
+    } catch { /* base64 inválido: a imagem fica de fora */ }
+  }
+  return saida;
+}
+
 async function perguntar(ch: { userId: string }, corpo: Record<string, unknown>): Promise<Response> {
-  const pergunta = String(corpo.pergunta ?? "").trim().slice(0, 1500);
+  const arquivos = arquivosDoCorpo(corpo.arquivos);
+  const imagens = imagensDoCorpo(corpo.imagens);
+  const naoLidos = Array.isArray((corpo.arquivos as { nao_lidos?: unknown } | undefined)?.nao_lidos) ? ((corpo.arquivos as { nao_lidos: Array<Record<string, unknown>> }).nao_lidos).slice(0, 30).map((a) => ({ nome: String(a.nome || "arquivo").slice(0, 200), motivo: String(a.motivo || "").slice(0, 200) })) : [];
+  const audio = corpo.audio && typeof corpo.audio === "object" ? { segundos: Math.round(Number((corpo.audio as { segundos?: unknown }).segundos) || 0) } : null;
+  let pergunta = String(corpo.pergunta ?? "").trim().slice(0, audio ? 12_000 : 4000);
+  if (!pergunta && (arquivos.length || imagens.length)) pergunta = "Leia o que eu mandei e me diga o que importa para a operação.";
   if (!pergunta) throw new ErroHttp(400, "pergunta_vazia", "Escreva a pergunta para o Gestor.");
+  const dadosDoPedido = {
+    anexos: arquivos.map((a) => ({ nome: a.nome, tipo: a.tipo, caracteres: a.texto.length })),
+    nao_lidos: naoLidos,
+    imagens: imagens.map((i) => ({ nome: i.nome || "imagem", mime: i.mime, bytes: i.bytes.byteLength })),
+    audio,
+  };
   const [trocas, usadasHoje] = await Promise.all([
     ultimas(ch.userId, 6).catch(() => []),
     perguntasDeHoje(ch.userId).catch(() => 0),
@@ -102,19 +153,22 @@ async function perguntar(ch: { userId: string }, corpo: Record<string, unknown>)
     tetoAtingido: usadasHoje >= PERGUNTAS_COM_IA_POR_DIA,
     tetoPorDia: PERGUNTAS_COM_IA_POR_DIA,
     historico,
+    arquivos,
+    imagens,
   });
   if (r.tipo === "esclarecer") {
-    await gravar(ch.userId, pergunta, r.texto, { tipo: "esclarecer", texto: r.texto, opcoes: r.opcoes }, null, 0, null);
+    await gravar(ch.userId, pergunta, r.texto, { tipo: "esclarecer", texto: r.texto, opcoes: r.opcoes }, null, 0, null, dadosDoPedido);
     return json(r);
   }
-  const mensagemId = await gravar(ch.userId, pergunta, r.texto, r.dados, r.clienteId, r.custo, r.usoId);
-  return json({ ...r.dados, texto: r.texto, mensagem_id: mensagemId, custo_usd: r.custo });
+  const mensagemId = await gravar(ch.userId, pergunta, r.texto, r.dados, r.clienteId, r.custo, r.usoId, dadosDoPedido);
+  return json({ ...r.dados, texto: r.texto, mensagem_id: mensagemId, custo_usd: r.custo, pedido: dadosDoPedido });
 }
 
-async function gravar(userId: string, pergunta: string, resposta: string, dados: Record<string, unknown>, clientId: string | null, custo: number, usoId: string | null): Promise<string | null> {
+async function gravar(userId: string, pergunta: string, resposta: string, dados: Record<string, unknown>, clientId: string | null, custo: number, usoId: string | null, dadosDoPedido: Record<string, unknown> = {}): Promise<string | null> {
   const agora = Date.now();
   const { data, error } = await servico().from("gestor_mensagens").insert([
-    { dono_id: userId, papel: "usuario", conteudo: pergunta, client_id: clientId, criado_em: new Date(agora).toISOString() },
+    // A pergunta guarda só o resumo dos anexos (nome, tipo, tamanho); conteúdo e imagens não ficam no banco.
+    { dono_id: userId, papel: "usuario", conteudo: pergunta, dados: dadosDoPedido, client_id: clientId, criado_em: new Date(agora).toISOString() },
     { dono_id: userId, papel: "gestor", conteudo: resposta.slice(0, 12000), dados, client_id: clientId, custo_usd: custo, uso_id: usoId, criado_em: new Date(agora + 1).toISOString() },
   ]).select("id, papel");
   if (error) { registrarFalha("gestor-aceleriq: conversa não gravada", error); return null; }
@@ -131,6 +185,21 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "metodo_nao_permitido", mensagem: "Use POST." }, 405);
   try {
     const chamador = await identificar(req);
+    // Áudio: o corpo são os bytes (não JSON). Vira texto e volta para a tela, que manda a pergunta.
+    if (req.headers.get("x-gestor-acao") === "transcrever") {
+      try {
+        const tamanho = Number(req.headers.get("content-length"));
+        if (Number.isSafeInteger(tamanho) && tamanho > MAX_BYTES_DO_AUDIO_DO_GESTOR) throw new ErroDaTranscricao(413, "audio_grande", "O áudio passou de 24 MB. Mande em partes menores.");
+        usarBanco(servico());
+        const agencia = await carteiraDaAgencia();
+        if (!agencia) throw new ErroDaTranscricao(503, "sem_carteira", "Sem carteira de IA da agência para transcrever. Escreva a mensagem.");
+        const bytes = new Uint8Array(await req.arrayBuffer());
+        const r = await transcreverAudio({ bytes, contentType: req.headers.get("content-type"), segundos: Number(req.headers.get("x-gestor-duracao")) || 0, agencia, userId: chamador.userId });
+        return json({ texto: r.texto, segundos: r.segundos, custo_usd: r.custoUsd });
+      } catch (err) {
+        return respostaDeErro(err);
+      }
+    }
     let corpo: Record<string, unknown> = {};
     try { corpo = await req.json(); } catch { /* corpo vazio */ }
     const acao = String(corpo.acao ?? "");

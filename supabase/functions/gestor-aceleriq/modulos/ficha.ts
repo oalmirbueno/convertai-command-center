@@ -106,17 +106,23 @@ export type ClienteEscolhido =
   | { tipo: "nenhum" }
   | { tipo: "ambiguo"; opcoes: ClienteBase[] };
 
-const PALAVRAS_GENERICAS = new Set(["cliente", "clientes", "empresa", "agencia", "aceleriq", "loja", "o", "a", "de", "da", "do"]);
+const PALAVRAS_GENERICAS = new Set([
+  "cliente", "clientes", "empresa", "agencia", "aceleriq", "loja", "o", "a", "de", "da", "do",
+  // Começos comuns de nome de cliente que aparecem em qualquer texto ("evento", "campanha"...).
+  "evento", "eventos", "campanha", "projeto", "grupo", "instituto", "clinica", "escritorio", "studio", "estudio",
+  "comercio", "servicos", "consultoria", "academia", "advocacia", "associacao", "conselho", "centro", "casa", "rede",
+]);
 
 /** Cliente citado pelo nome (palavra inteira, sem acento). Dois nomes diferentes: pergunta de volta. */
 export function clienteDaPergunta(pergunta: string, clientes: ClienteBase[]): ClienteEscolhido {
   const t = ` ${semAcento(pergunta).replace(/[^a-z0-9]+/g, " ")} `;
-  const achados: Array<{ c: ClienteBase; tam: number }> = [];
+  const achados: Array<{ c: ClienteBase; tam: number; inteiro: boolean }> = [];
   for (const c of clientes) {
     const nomes = [c.nome, ...(c.apelidos || [])].map((x) => semAcento(x).replace(/[^a-z0-9]+/g, " ").trim()).filter((x) => x.length >= 3 && !PALAVRAS_GENERICAS.has(x));
     let melhor = 0;
+    let inteiro = false;
     for (const nome of nomes) {
-      if (t.includes(` ${nome} `)) melhor = Math.max(melhor, nome.length);
+      if (t.includes(` ${nome} `)) { melhor = Math.max(melhor, nome.length); inteiro = true; }
       else {
         // "Para Si Ótica" citado só como "Para Si": vale o primeiro trecho com 2+ palavras ou 5+ letras.
         const partes = nome.split(" ");
@@ -126,11 +132,12 @@ export function clienteDaPergunta(pergunta: string, clientes: ClienteBase[]): Cl
         }
       }
     }
-    if (melhor) achados.push({ c, tam: melhor });
+    if (melhor) achados.push({ c, tam: melhor, inteiro });
   }
   if (!achados.length) return { tipo: "nenhum" };
-  achados.sort((a, b) => b.tam - a.tam);
-  const topo = achados.filter((a) => a.tam === achados[0].tam);
+  // Nome inteiro vence pedaço de nome; entre iguais, o mais longo.
+  achados.sort((a, b) => Number(b.inteiro) - Number(a.inteiro) || b.tam - a.tam);
+  const topo = achados.filter((a) => a.inteiro === achados[0].inteiro && a.tam === achados[0].tam);
   if (topo.length === 1) return { tipo: "um", cliente: topo[0].c };
   // O mesmo cliente achado duas vezes (pelo nome e por uma marca): vale a marca, que é mais específica.
   if (new Set(topo.map((a) => a.c.id)).size === 1) return { tipo: "um", cliente: topo.find((a) => a.c.projetoId)?.c || topo[0].c };
@@ -152,9 +159,10 @@ export type EstadoDaFonte =
   | "decisao_pendente"
   | "agendado"
   | "falhou"
-  | "divergente"; // execução e tarefa contam histórias diferentes
+  | "divergente" // execução e tarefa contam histórias diferentes
+  | "material_do_dono"; // arquivo, imagem ou áudio que o dono mandou agora (não é registro do OS)
 
-export type TipoDaFonte = "tarefa" | "execucao" | "diario" | "publicacao" | "entrega" | "aprovacao";
+export type TipoDaFonte = "tarefa" | "execucao" | "diario" | "publicacao" | "entrega" | "aprovacao" | "anexo" | "anexo_imagem";
 
 export type Fonte = {
   apelido: string; // F1, F2...
@@ -184,6 +192,7 @@ export const ROTULO_DO_ESTADO: Record<EstadoDaFonte, string> = {
   agendado: "Agendado (ainda não publicado)",
   falhou: "Falhou",
   divergente: "Execução e tarefa divergem",
+  material_do_dono: "Material que você mandou",
 };
 
 export type TarefaBruta = { id: string; title: string; status: string; updated_at: string; due_date?: string | null; cliente?: string | null; description?: string | null };
@@ -375,9 +384,9 @@ export function montarFicha(e: EntradaDaFicha, teto = 80): Ficha {
 
 // ------------------------------------------------------------------ resposta
 
-export type SecaoDaResposta = "feito" | "concluido_sem_prova" | "em_revisao" | "em_andamento" | "bloqueado" | "decisao" | "proximo" | "lacuna";
+export type SecaoDaResposta = "anexo" | "feito" | "concluido_sem_prova" | "em_revisao" | "em_andamento" | "bloqueado" | "decisao" | "proximo" | "lacuna";
 
-export const ORDEM_DAS_SECOES: SecaoDaResposta[] = ["feito", "concluido_sem_prova", "em_revisao", "em_andamento", "bloqueado", "decisao", "lacuna", "proximo"];
+export const ORDEM_DAS_SECOES: SecaoDaResposta[] = ["anexo", "feito", "concluido_sem_prova", "em_revisao", "em_andamento", "bloqueado", "decisao", "lacuna", "proximo"];
 
 export const ROTULO_DA_SECAO: Record<SecaoDaResposta, string> = {
   feito: "Feito com prova",
@@ -388,6 +397,7 @@ export const ROTULO_DA_SECAO: Record<SecaoDaResposta, string> = {
   decisao: "Precisa da sua decisão",
   lacuna: "Pendências e lacunas",
   proximo: "Próximas ações",
+  anexo: "Do material que você mandou",
 };
 
 export type ItemDaResposta = { secao: SecaoDaResposta; texto: string; fontes: string[]; conferido?: "fonte" | "jev" | "motor" };
@@ -407,6 +417,8 @@ const SECOES_DO_ESTADO: Record<EstadoDaFonte, SecaoDaResposta[]> = {
   agendado: ["lacuna", "proximo", "em_andamento"],
   falhou: ["bloqueado", "lacuna", "proximo"],
   divergente: ["bloqueado", "lacuna", "proximo"],
+  // O que veio no anexo fala na seção própria (ou vira próximo passo/pendência); nunca vira "feito" do OS.
+  material_do_dono: ["anexo", "proximo", "lacuna", "decisao"],
 };
 
 export function secaoDoEstado(estado: EstadoDaFonte): SecaoDaResposta {
@@ -444,7 +456,8 @@ export function respostaDoMotor(fontes: Fonte[], limitePorSecao = 8): ItemDaResp
     const daSecao = fontes.filter((f) => secaoDoEstado(f.estado) === secao && f.tipo !== "diario" && f.tipo !== "execucao");
     for (const f of daSecao.slice(0, limitePorSecao)) {
       const extra = f.estado === "execucao_feita_entrega_em_revisao" ? " (execução concluída; a tarefa espera revisão)" : f.estado === "divergente" ? " (execução e tarefa em estados diferentes)" : "";
-      itens.push({ secao, texto: `${f.titulo}${extra}`, fontes: [f.apelido], conferido: "motor" });
+      const texto = f.estado === "material_do_dono" ? `Recebi ${f.titulo}${f.tipo === "anexo" ? ` (${f.texto.length.toLocaleString("pt-BR")} caracteres lidos)` : ""}.` : `${f.titulo}${extra}`;
+      itens.push({ secao, texto, fontes: [f.apelido], conferido: "motor" });
     }
     if (daSecao.length > limitePorSecao) itens.push({ secao, texto: `e mais ${daSecao.length - limitePorSecao} no período`, fontes: daSecao.slice(limitePorSecao).map((f) => f.apelido), conferido: "motor" });
   }
@@ -458,8 +471,8 @@ export function respostaDoMotor(fontes: Fonte[], limitePorSecao = 8): ItemDaResp
 export type ContagemDoRecorte = Record<SecaoDaResposta, number>;
 
 export function contagemDoRecorte(fontes: Fonte[]): ContagemDoRecorte {
-  const c = { feito: 0, concluido_sem_prova: 0, em_revisao: 0, em_andamento: 0, bloqueado: 0, decisao: 0, proximo: 0, lacuna: 0 } as ContagemDoRecorte;
-  for (const f of fontes) if (f.tipo !== "diario" && f.tipo !== "execucao") c[secaoDoEstado(f.estado)]++;
+  const c = { anexo: 0, feito: 0, concluido_sem_prova: 0, em_revisao: 0, em_andamento: 0, bloqueado: 0, decisao: 0, proximo: 0, lacuna: 0 } as ContagemDoRecorte;
+  for (const f of fontes) if (f.tipo !== "diario" && f.tipo !== "execucao" && f.tipo !== "anexo" && f.tipo !== "anexo_imagem") c[secaoDoEstado(f.estado)]++;
   return c;
 }
 
@@ -496,5 +509,44 @@ export function conversaDoRecorte(e: { nome: string; periodo: string; contagem: 
   if (c.concluido_sem_prova) sugestoes.push("O que foi concluído sem prova?");
   sugestoes.push(e.temCliente ? `E ${e.nome} nos últimos 30 dias?` : "Qual cliente precisa de atenção agora?");
   return { abertura, fechamento, sugestoes: sugestoes.slice(0, 4) };
+}
+
+// ------------------------------------------------------------------ anexos do dono
+
+/** Teto do texto dos anexos que vai ao modelo por pergunta (custo e contexto). */
+export const MAX_CHARS_DOS_ANEXOS = 80_000;
+export const MAX_IMAGENS = 4;
+
+export type ArquivoDoDono = { nome: string; tipo: string; texto: string; origem?: string | null };
+
+/**
+ * Os anexos viram fontes próprias (A1, A2...), separadas dos registros do OS:
+ * o que vem deles fala na seção "anexo" e nunca prova que algo aconteceu.
+ */
+export function fontesDosAnexos(arquivos: ArquivoDoDono[], imagens: Array<{ nome?: string }>): { fontes: Fonte[]; cortados: string[] } {
+  const fontes: Fonte[] = [];
+  const cortados: string[] = [];
+  let total = 0;
+  for (const a of arquivos) {
+    const cabe = MAX_CHARS_DOS_ANEXOS - total;
+    if (cabe <= 0) { cortados.push(a.nome); continue; }
+    let texto = String(a.texto || "").replace(/\u0000/g, "");
+    if (!texto.trim()) continue;
+    if (texto.length > cabe) { texto = texto.slice(0, cabe); cortados.push(a.nome); }
+    total += texto.length;
+    fontes.push({
+      apelido: `A${fontes.length + 1}`, tipo: "anexo", estado: "material_do_dono",
+      titulo: `${a.origem ? `${a.origem} / ` : ""}${a.nome} (${a.tipo || "arquivo"})`, quando: null, texto,
+      cliente: null, agente: null, ids: {},
+    });
+  }
+  imagens.slice(0, MAX_IMAGENS).forEach((img, i) => {
+    fontes.push({
+      apelido: `A${fontes.length + 1}`, tipo: "anexo_imagem", estado: "material_do_dono",
+      titulo: `imagem ${img.nome || i + 1}`, quando: null, texto: `Imagem anexada pelo dono (${img.nome || `imagem ${i + 1}`}); o conteúdo está na própria imagem enviada ao modelo.`,
+      cliente: null, agente: null, ids: {},
+    });
+  });
+  return { fontes, cortados };
 }
 
