@@ -2025,6 +2025,14 @@
       "remote_name": "gestor_aceleriq_conversa",
       "remote_statements_sha256": "63efc74d9e9d9bdca50024441ab18f2474947394b6b249b0b80a4e1a4176cf72",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261008020000",
+      "path": "supabase/migrations/20261008020000_gestor_conversas.sql",
+      "local_sha256": "023cb7dea1293dc4d62d0fea1b1b553ee73afb45c8195adbb5db2850b6080a9e",
+      "remote_name": "gestor_conversas",
+      "remote_statements_sha256": "4e31af750b4345d2c72a238a8208573dda11f45b7fc1e02c391d6084996d33e4",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
