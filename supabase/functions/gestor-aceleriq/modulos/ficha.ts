@@ -474,3 +474,27 @@ export function respostaEmTexto(cabecalho: string, itens: ItemDaResposta[]): str
   }
   return linhas.join("\n");
 }
+
+/**
+ * A abertura, o fechamento e as próximas perguntas da conversa: montados em
+ * código a partir das contagens (sem fato novo, nada a conferir).
+ */
+export function conversaDoRecorte(e: { nome: string; periodo: string; contagem: ContagemDoRecorte; totalDeFontes: number; temCliente: boolean }): { abertura: string; fechamento: string | null; sugestoes: string[] } {
+  const c = e.contagem;
+  const alvo = e.temCliente ? e.nome : "toda a operação";
+  const abertura = e.totalDeFontes
+    ? `Dei uma olhada em ${alvo} (${e.periodo}). Achei ${e.totalDeFontes} ${e.totalDeFontes === 1 ? "registro" : "registros"} no OS; vou te contar o que importa.`
+    : `Dei uma olhada em ${alvo} (${e.periodo}) e não achei nada registrado no OS.`;
+  let fechamento: string | null = null;
+  if (c.decisao) fechamento = c.decisao === 1 ? "Tem 1 decisão esperando você. Quer ver agora?" : `Tem ${c.decisao} decisões esperando você. Quer ver agora?`;
+  else if (c.bloqueado) fechamento = "Quer que eu mande os bloqueios para o Hermes resolver?";
+  else if (c.em_revisao) fechamento = "Quer que eu separe o que está em revisão para você aprovar?";
+  const sugestoes: string[] = [];
+  if (c.bloqueado) sugestoes.push("O que está bloqueado e por quê?");
+  if (c.decisao) sugestoes.push("O que espera a minha decisão?");
+  if (c.em_revisao) sugestoes.push("O que está em revisão?");
+  if (c.concluido_sem_prova) sugestoes.push("O que foi concluído sem prova?");
+  sugestoes.push(e.temCliente ? `E ${e.nome} nos últimos 30 dias?` : "Qual cliente precisa de atenção agora?");
+  return { abertura, fechamento, sugestoes: sugestoes.slice(0, 4) };
+}
+

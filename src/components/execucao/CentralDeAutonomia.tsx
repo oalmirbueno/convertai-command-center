@@ -1,22 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { ArrowUpRight, Bot, ChevronDown, CircleAlert, FileCheck2, Loader2, Send, ShieldCheck, Sparkles } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { ChevronDown, FileCheck2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
 import {
-  Carregando, EstadoDeErro, EstadoVazio, FaixaDeNumeros, SeletorCompacto, botao, campoTexto, etiqueta, juntar, texto, useEstadoDaTela,
+  Carregando, EstadoDeErro, EstadoVazio, FaixaDeNumeros, SeletorCompacto, botao, juntar, texto, useEstadoDaTela,
 } from "@/components/sistema";
 import AprovacoesExplicadas from "@/components/execucao/AprovacoesExplicadas";
+import GestorConversa, { type PedidoAoHermes } from "@/components/execucao/GestorConversa";
 import { ROLAGEM_OPERACAO } from "@/components/execucao/CarteiraDaOperacao";
 import {
   calcularIndicadores, divergenciaDoVinculo, execucaoNoIntervalo, PERIODOS_DA_CENTRAL, resultadoVerificado, ROTULO_DO_RESULTADO, variacao,
   type ExecucaoContada, type PeriodoDaCentral, type ResultadoVerificado, type VinculoContado,
 } from "@/lib/centralAutonomia";
-import {
-  ORDEM_DAS_SECOES, periodoDaPergunta, ROTULO_DA_SECAO, ROTULO_DO_ESTADO, type Fonte, type ItemDaResposta,
-} from "../../../supabase/functions/gestor-aceleriq/modulos/ficha";
+import { periodoDaPergunta } from "../../../supabase/functions/gestor-aceleriq/modulos/ficha";
 
 /**
  * Central de Autonomia (aba "Central" da Execução, 08/10/2026).
@@ -33,32 +30,7 @@ import {
  * - Decisões: as aprovações pendentes, pelo mecanismo que já existe.
  */
 
-type RespostaDoGestor = {
-  tipo?: "resposta" | "esclarecer";
-  origem?: "ia_conferida" | "motor";
-  cabecalho?: string;
-  itens?: ItemDaResposta[];
-  fontes?: Fonte[];
-  avisos?: string[];
-  cliente?: { id: string; nome: string; projeto_id: string | null } | null;
-  periodo?: { rotulo: string };
-  opcoes?: Array<{ id: string; nome: string }>;
-  texto?: string;
-  total_de_fontes?: number;
-  recusados?: number;
-  contestados?: number;
-  custo_usd?: number;
-};
-type Mensagem = { id: string; papel: "usuario" | "gestor" | "sistema"; conteudo: string; dados?: RespostaDoGestor; criado_em: string; pendente?: boolean };
-
-export type PedidoAoHermes = { cliente: { id: string; nome: string } | null; texto: string };
-
-const SUGESTOES = [
-  "O que aconteceu com a Acerbi nesta semana?",
-  "O que está bloqueado agora e por quê?",
-  "O que espera a minha decisão?",
-  "Quais entregas estão em revisão?",
-];
+export type { PedidoAoHermes } from "@/components/execucao/GestorConversa";
 
 const quando = (iso?: string | null) => (iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—");
 
@@ -73,194 +45,6 @@ const COR_DO_RESULTADO: Record<ResultadoVerificado, string> = {
   sem_sinal: "border-destructive/40 text-destructive",
   concluida_sem_prova: "border-warning/40 text-warning",
 };
-
-// ------------------------------------------------------------------ Gestor
-
-function FonteDetalhada({ f, aoAbrirDiario }: { f: Fonte; aoAbrirDiario: (linkId: string, titulo?: string) => void }) {
-  return (
-    <div className="rounded-lg border border-border bg-background p-3 text-[12px]">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className={juntar(etiqueta, "border border-primary/30 text-primary")}>{f.apelido}</span>
-        <span className="font-medium text-foreground">{f.titulo}</span>
-      </div>
-      <p className="mt-1 text-muted-foreground">
-        {ROTULO_DO_ESTADO[f.estado]} · {f.tipo}{f.cliente ? ` · ${f.cliente}` : ""}{f.agente ? ` · ${f.agente}` : ""} · {quando(f.quando)}
-      </p>
-      <p className="mt-2 whitespace-pre-wrap break-words text-foreground/90">{f.texto}</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {f.ids.vinculo && <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} onClick={() => aoAbrirDiario(f.ids.vinculo!, f.titulo)}>Abrir diário da execução</button>}
-        {f.link && <a href={f.link} target="_blank" rel="noreferrer" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")}>Abrir publicação <ArrowUpRight className="ml-1 h-3 w-3" /></a>}
-      </div>
-    </div>
-  );
-}
-
-function RespostaRenderizada({ d, aoAbrirDiario, aoEncaminhar, aoEscolherCliente }: {
-  d: RespostaDoGestor;
-  aoAbrirDiario: (linkId: string, titulo?: string) => void;
-  aoEncaminhar: (p: PedidoAoHermes) => void;
-  aoEscolherCliente: (id: string) => void;
-}) {
-  const [aberta, setAberta] = useState<string | null>(null);
-  if (d.tipo === "esclarecer") {
-    return (
-      <div>
-        <p>{d.texto}</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {(d.opcoes || []).map((o) => <button key={o.id + o.nome} type="button" className={juntar(botao.secundario, "h-8 px-3 text-[12px]")} onClick={() => aoEscolherCliente(o.id)}>{o.nome}</button>)}
-        </div>
-      </div>
-    );
-  }
-  const fontes = new Map((d.fontes || []).map((f) => [f.apelido, f]));
-  const itens = d.itens || [];
-  const proximas = itens.filter((i) => i.secao === "proximo").map((i) => `- ${i.texto}`);
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <p className="font-semibold text-foreground">{d.cabecalho}</p>
-        <span className={juntar(etiqueta, d.origem === "ia_conferida" ? "text-success" : "text-muted-foreground")} title={d.origem === "ia_conferida" ? "A IA redigiu; o código e o Jev conferiram cada frase contra as fontes." : "Montado só com os fatos registrados, sem IA."}>
-          <ShieldCheck className="mr-1 h-3 w-3" />{d.origem === "ia_conferida" ? "Conferido nas fontes" : "Só fatos registrados"}
-        </span>
-      </div>
-      {!itens.length && <p className="text-muted-foreground">Nada registrado no OS para este recorte.</p>}
-      {ORDEM_DAS_SECOES.map((secao) => {
-        const daSecao = itens.filter((i) => i.secao === secao);
-        if (!daSecao.length) return null;
-        return (
-          <div key={secao}>
-            <p className={juntar(texto.rotulo, "mb-1")}>{ROTULO_DA_SECAO[secao]}</p>
-            <ul className="space-y-1.5">
-              {daSecao.map((i, k) => (
-                <li key={k} className="leading-relaxed">
-                  <span>{i.texto}</span>{" "}
-                  {i.fontes.map((a) => fontes.get(a) ? (
-                    <button key={a} type="button" aria-expanded={aberta === a} onClick={() => setAberta(aberta === a ? null : a)} className="ml-0.5 rounded border border-primary/30 px-1 text-[11px] font-medium text-primary hover:bg-primary/10">{a}</button>
-                  ) : null)}
-                </li>
-              ))}
-            </ul>
-          </div>
-        );
-      })}
-      {aberta && fontes.get(aberta) && <FonteDetalhada f={fontes.get(aberta)!} aoAbrirDiario={aoAbrirDiario} />}
-      {!!d.avisos?.length && (
-        <ul className="space-y-1 text-[12px] text-warning">
-          {d.avisos.map((a, k) => <li key={k} className="flex gap-1.5"><CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />{a}</li>)}
-        </ul>
-      )}
-      {itens.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          <button
-            type="button"
-            className={juntar(botao.secundario, "h-8 px-3 text-[12px]")}
-            title="Abre o diário da coordenação com o pedido pronto. Você revisa e envia; o Hermes lê o diário."
-            onClick={() => aoEncaminhar({
-              cliente: d.cliente ? { id: d.cliente.id, nome: d.cliente.nome } : null,
-              texto: [`Pedido do Gestor Aceleriq (${d.cabecalho}).`, proximas.length ? `Próximas ações apontadas:\n${proximas.join("\n")}` : "Revise a situação abaixo e diga o próximo passo.", "", d.texto || ""].join("\n").trim(),
-            })}
-          >
-            <Bot className="mr-1.5 h-3.5 w-3.5" />Encaminhar ao Hermes
-          </button>
-          {typeof d.total_de_fontes === "number" && <span className="text-[11px] text-muted-foreground">{(d.fontes || []).length} de {d.total_de_fontes} fontes do período citadas{d.custo_usd ? ` · US$ ${d.custo_usd.toFixed(3)}` : ""}</span>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function GestorAceleriq({ periodoDaTela, aoAbrirDiario, aoEncaminhar }: {
-  periodoDaTela: PeriodoDaCentral;
-  aoAbrirDiario: (linkId: string, titulo?: string) => void;
-  aoEncaminhar: (p: PedidoAoHermes) => void;
-}) {
-  const queryClient = useQueryClient();
-  const [rascunho, setRascunho] = useEstadoDaTela<string>("execucao:gestor:rascunho", "");
-  const [locais, setLocais] = useState<Mensagem[]>([]);
-  const fim = useRef<HTMLDivElement>(null);
-  const conversa = useQuery({
-    queryKey: ["gestor-aceleriq", "conversa"],
-    queryFn: async () => (await chamarFuncao<{ mensagens: Mensagem[] }>("gestor-aceleriq", { acao: "conversa" })).mensagens || [],
-    staleTime: 60_000,
-  });
-  const perguntar = useMutation({
-    mutationFn: async (x: { pergunta: string; cliente_id?: string }) => chamarFuncao<RespostaDoGestor & { mensagem_id?: string }>("gestor-aceleriq", {
-      acao: "perguntar", pergunta: x.pergunta, cliente_id: x.cliente_id || null,
-      // Sem período na frase, vale o da tela.
-      periodo: /hoje|ontem|semana|m[eê]s|[uú]ltim[oa]s?\s+\d+\s+dias?/i.test(x.pergunta) ? null : periodoDaTela,
-    }),
-    onMutate: (x) => {
-      const agora = new Date().toISOString();
-      setLocais([{ id: `p-${agora}`, papel: "usuario", conteudo: x.pergunta, criado_em: agora }, { id: `r-${agora}`, papel: "gestor", conteudo: "", criado_em: agora, pendente: true }]);
-      setRascunho("");
-    },
-    onSuccess: (d) => {
-      setLocais((ls) => ls.map((m) => (m.pendente ? { ...m, pendente: false, conteudo: d.texto || "", dados: d } : m)));
-      void queryClient.invalidateQueries({ queryKey: ["gestor-aceleriq", "conversa"] });
-    },
-    onError: (e, x) => {
-      setLocais([]);
-      setRascunho(x.pergunta);
-      toast.error(textoDoErro(e, "O Gestor não respondeu. Tente de novo."));
-    },
-  });
-  // Quando a conversa gravada chega, as locais saem (já estão lá).
-  const mensagens = useMemo(() => {
-    const salvas = conversa.data || [];
-    const ultimaSalva = salvas[salvas.length - 1]?.criado_em || "";
-    return [...salvas, ...locais.filter((m) => m.pendente || m.criado_em > ultimaSalva)];
-  }, [conversa.data, locais]);
-  useEffect(() => { fim.current?.scrollIntoView?.({ block: "end" }); }, [mensagens.length, perguntar.isPending]);
-  const ultimaPergunta = [...mensagens].reverse().find((m) => m.papel === "usuario")?.conteudo || "";
-  const enviar = (pergunta: string, cliente_id?: string) => { if (pergunta.trim() && !perguntar.isPending) perguntar.mutate({ pergunta: pergunta.trim(), cliente_id }); };
-
-  return (
-    <section aria-label="Gestor Aceleriq" className="flex min-w-0 flex-col rounded-xl border border-border bg-card">
-      <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
-        <div className="min-w-0">
-          <h3 className="flex items-center text-[15px] font-semibold"><Sparkles className="mr-1.5 h-4 w-4 text-primary" />Gestor Aceleriq</h3>
-          <p className="text-[12px] text-muted-foreground">Pergunte sobre clientes, agentes e entregas. Toda frase cita a fonte no OS; o que não tem prova não entra.</p>
-        </div>
-      </div>
-      <div className={juntar(ROLAGEM_OPERACAO, "h-[min(58vh,620px)] min-h-72 space-y-4 p-4")} aria-live="polite">
-        {conversa.isLoading ? <Carregando linhas={3} rotulo="Carregando a conversa" /> : conversa.isError ? (
-          <EstadoDeErro titulo="Não foi possível ler a conversa." descricao={textoDoErro(conversa.error)} acao={<button type="button" className={botao.secundario} onClick={() => void conversa.refetch()}>Tentar de novo</button>} />
-        ) : mensagens.length === 0 ? (
-          <div className="space-y-3">
-            <p className="text-[13px] text-muted-foreground">Comece por uma destas, ou escreva a sua:</p>
-            <div className="flex flex-wrap gap-2">
-              {SUGESTOES.map((s) => <button key={s} type="button" className={juntar(botao.secundario, "h-8 px-3 text-[12px]")} onClick={() => enviar(s)}>{s}</button>)}
-            </div>
-          </div>
-        ) : mensagens.map((m) => (
-          <div key={m.id} className={m.papel === "usuario" ? "ml-auto max-w-[85%] rounded-xl bg-primary/10 px-3 py-2 text-[13px]" : "max-w-full rounded-xl border border-border bg-background px-3 py-3 text-[13px]"}>
-            {m.papel === "usuario" ? <p className="whitespace-pre-wrap break-words">{m.conteudo}</p>
-              : m.pendente ? <p className="flex items-center text-muted-foreground"><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Lendo tarefas, execuções e provas do período…</p>
-              : m.dados && (m.dados.tipo === "resposta" || m.dados.tipo === "esclarecer") ? (
-                <RespostaRenderizada d={{ ...m.dados, texto: m.dados.texto || m.conteudo }} aoAbrirDiario={aoAbrirDiario} aoEncaminhar={aoEncaminhar} aoEscolherCliente={(id) => enviar(ultimaPergunta, id)} />
-              ) : <p className="whitespace-pre-wrap break-words">{m.conteudo}</p>}
-          </div>
-        ))}
-        <div ref={fim} />
-      </div>
-      <form className="flex items-end gap-2 border-t border-border p-3" onSubmit={(e) => { e.preventDefault(); enviar(rascunho); }}>
-        <textarea
-          value={rascunho}
-          onChange={(e) => setRascunho(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(rascunho); } }}
-          rows={2}
-          maxLength={1500}
-          placeholder="Ex.: O que aconteceu com a Acerbi nesta semana?"
-          aria-label="Pergunta ao Gestor Aceleriq"
-          className={juntar(campoTexto, "min-h-[44px] flex-1 resize-none")}
-        />
-        <button type="submit" className={juntar(botao.primario, "h-10 shrink-0")} disabled={perguntar.isPending || !rascunho.trim()} aria-label="Perguntar">
-          {perguntar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-        </button>
-      </form>
-    </section>
-  );
-}
 
 // ------------------------------------------------------------------ dados dos indicadores e do histórico
 
@@ -470,7 +254,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
       </div>
       <div className="grid min-w-0 gap-4 lg:grid-cols-3">
         <div className="min-w-0 lg:col-span-2">
-          {ehAdmin ? <GestorAceleriq periodoDaTela={periodo} aoAbrirDiario={aoAbrirDiario} aoEncaminhar={aoEncaminhar} /> : (
+          {ehAdmin ? <GestorConversa periodoDaTela={periodo} aoAbrirDiario={aoAbrirDiario} aoEncaminhar={aoEncaminhar} /> : (
             <section className="rounded-xl border border-border bg-card p-4"><EstadoVazio titulo="O Gestor Aceleriq é do admin." descricao="Os indicadores, o histórico e as provas ao lado continuam abertos para a equipe." /></section>
           )}
         </div>

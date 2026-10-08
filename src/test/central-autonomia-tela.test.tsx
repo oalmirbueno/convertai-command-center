@@ -30,6 +30,10 @@ const resposta = {
   tipo: "resposta",
   origem: "ia_conferida",
   cabecalho: "Acerbi · esta semana (05/10 a 08/10)",
+  abertura: "Dei uma olhada em Acerbi (esta semana). Achei 9 registros no OS; vou te contar o que importa.",
+  fechamento: "Tem 1 decisão esperando você. Quer ver agora?",
+  sugestoes: ["O que espera a minha decisão?", "E Acerbi nos últimos 30 dias?"],
+  contagem: { feito: 1, em_revisao: 1, em_andamento: 1, bloqueado: 0, decisao: 1, concluido_sem_prova: 0, lacuna: 0, proximo: 0 },
   cliente: { id: "39ebda82", nome: "Acerbi", projeto_id: null },
   itens: [
     { secao: "feito", texto: "Atlas concluiu a conciliação: cinco publicações associadas e duas lacunas documentadas.", fontes: ["F1"], conferido: "jev" },
@@ -65,16 +69,28 @@ describe("Central de Autonomia na tela", () => {
     m.chamar.mockImplementation(async (_f: string, corpo: { acao: string }) => (corpo.acao === "conversa" ? { mensagens: [] } : resposta));
   });
 
-  it("pergunta ao Gestor, mostra seções conferidas e abre a fonte com o diário", async () => {
+  it("pergunta ao Gestor: conversa em balões curtos, cartão com os números e fonte que abre o diário", async () => {
     const { aoAbrirDiario } = montar();
     fireEvent.click(await screen.findByRole("button", { name: "O que aconteceu com a Acerbi nesta semana?" }));
     await screen.findByText("Conferido nas fontes");
     expect(m.chamar).toHaveBeenCalledWith("gestor-aceleriq", expect.objectContaining({ acao: "perguntar", pergunta: "O que aconteceu com a Acerbi nesta semana?", periodo: null }));
-    expect(screen.getByText("Feito com prova")).toBeTruthy();
+    expect(screen.getByText(/Dei uma olhada em Acerbi/)).toBeTruthy();
+    expect(screen.getByText("Tem 1 decisão esperando você. Quer ver agora?")).toBeTruthy();
+    // Cada item é um balão próprio, com o rótulo do assunto (sem textão).
+    expect(screen.getByText(/Atlas concluiu a conciliação/)).toBeTruthy();
+    expect(screen.getByText(/Os vídeos do evento seguem em edição/)).toBeTruthy();
+    expect(screen.getAllByText("Feito com prova").length).toBeGreaterThan(0);
     expect(screen.getByText("Pendências e lacunas")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "F1" }));
     fireEvent.click(await screen.findByRole("button", { name: "Abrir diário da execução" }));
     expect(aoAbrirDiario).toHaveBeenCalledWith("4d586b2e", "Conciliar publicações confirmadas");
+  });
+
+  it("a sugestão de próxima pergunta já vai com o cliente da resposta", async () => {
+    montar();
+    fireEvent.click(await screen.findByRole("button", { name: "O que aconteceu com a Acerbi nesta semana?" }));
+    fireEvent.click(await screen.findByRole("button", { name: "E Acerbi nos últimos 30 dias?" }));
+    await waitFor(() => expect(m.chamar).toHaveBeenCalledWith("gestor-aceleriq", expect.objectContaining({ pergunta: "E Acerbi nos últimos 30 dias?", cliente_id: "39ebda82" })));
   });
 
   it("encaminhar ao Hermes leva o cliente e as próximas ações (o envio é do dono, pelo diário)", async () => {

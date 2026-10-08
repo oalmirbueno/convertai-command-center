@@ -16,6 +16,7 @@ import {
   clienteDaPergunta,
   conferirContraAFicha,
   contagemDoRecorte,
+  conversaDoRecorte,
   type DiarioBruto,
   type EntregaBruta,
   type Fonte,
@@ -236,7 +237,9 @@ Regras duras:
 - O ESTADO de cada fonte já foi decidido pelo sistema. Respeite: "em_revisao" e "execucao_feita_entrega_em_revisao" NÃO são concluídos; "agendado" NÃO é publicado; "concluido_sem_prova" NÃO é "feito com prova"; "divergente" quer dizer que a execução do agente e o card da tarefa estão em estados diferentes, diga isso.
 - Seções: feito (só fontes feito_com_prova), concluido_sem_prova, em_revisao, em_andamento, bloqueado (bloqueado, falhou, aguardando insumo, divergente), decisao (decisao_pendente), lacuna (o que falta ou não tem prova), proximo (próximas ações a partir de "Próximo passo" ou do que está pendente).
 - Se uma fonte diz que algo NÃO aconteceu (ex.: vídeo ainda em edição, sem publicação), diga isso como lacuna; nunca transforme em feito.
-- Frases curtas, sem markdown, sem travessão, sem repetir o apelido no texto. Junte fontes parecidas num item só. No máximo 14 itens.`;
+- Escreva como uma pessoa conversando no chat com o dono, não como relatório. Cada item vira UMA mensagem curta na tela: 1 ou 2 frases, no máximo 220 caracteres, linguagem simples e direta ("Vi que...", "Ainda falta...", "O Atlas fechou...").
+- Comece pelo que mais importa para a pergunta. Junte fontes parecidas numa mensagem só. No máximo 8 itens; o resto fica nas contagens da tela.
+- Sem markdown, sem listas, sem travessão, sem repetir o apelido no texto, sem saudação nem despedida (a abertura e o fechamento são do sistema).`;
 
 const ESQUEMA = {
   nome: "resposta_do_gestor",
@@ -376,8 +379,9 @@ export async function responder(e: EntradaDoResponder): Promise<Respondido> {
   // Só as fontes citadas vão para a tela e para a conversa (o resto fica no total).
   const citadas = new Set(red.itens.flatMap((i) => i.fontes));
   const fontesUsadas = ficha.fontes.filter((f) => citadas.has(f.apelido));
+  const conversa = conversaDoRecorte({ nome: nomeRecorte, periodo: periodo.rotulo, contagem, totalDeFontes: ficha.fontes.length, temCliente: !!cliente });
   const dados = {
-    tipo: "resposta", origem: red.origem, cabecalho, periodo, cliente: cliente ? { id: cliente.id, nome: nomeRecorte, projeto_id: cliente.projetoId || null } : null,
+    tipo: "resposta", origem: red.origem, cabecalho, periodo, abertura: conversa.abertura, fechamento: conversa.fechamento, sugestoes: conversa.sugestoes, cliente: cliente ? { id: cliente.id, nome: nomeRecorte, projeto_id: cliente.projetoId || null } : null,
     itens: red.itens, fontes: fontesUsadas, contagem, total_de_fontes: ficha.fontes.length, avisos, modelo: red.modelo, recusados: red.recusados, contestados: red.contestados,
   };
   return { tipo: "resposta", texto: respostaEmTexto(cabecalho, red.itens), clienteId: cliente?.id || null, custo: red.custo, usoId: red.usoId, dados };

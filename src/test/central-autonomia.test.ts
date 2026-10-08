@@ -3,6 +3,7 @@ import {
   clienteDaPergunta,
   conferirContraAFicha,
   contagemDoRecorte,
+  conversaDoRecorte,
   estadoDaTarefa,
   montarFicha,
   periodoDaPergunta,
@@ -213,5 +214,18 @@ describe("Central de Autonomia: tarefa e execução separadas", () => {
     expect(ind.entregasEmRevisao).toBe(1);
     expect(ind.incidentes).toMatchObject({ falhas: 0, semSinal: 1, divergencias: 1, periodo: 2, anterior: 1 });
     expect(ind.agentesAtivos).toEqual({ periodo: 2, anterior: 1, cadastrados: 2 });
+  });
+});
+
+describe("Gestor Aceleriq: conversa", () => {
+  it("abertura, fechamento e sugestões saem das contagens (sem fato novo)", () => {
+    const base = { feito: 1, concluido_sem_prova: 0, em_revisao: 2, em_andamento: 3, bloqueado: 1, decisao: 1, lacuna: 0, proximo: 0 };
+    const c = conversaDoRecorte({ nome: "Acerbi", periodo: "esta semana (05/10 a 08/10)", contagem: base, totalDeFontes: 8, temCliente: true });
+    expect(c.abertura).toBe("Dei uma olhada em Acerbi (esta semana (05/10 a 08/10)). Achei 8 registros no OS; vou te contar o que importa.");
+    expect(c.fechamento).toBe("Tem 1 decisão esperando você. Quer ver agora?");
+    expect(c.sugestoes).toEqual(["O que está bloqueado e por quê?", "O que espera a minha decisão?", "O que está em revisão?", "E Acerbi nos últimos 30 dias?"]);
+    const vazio = conversaDoRecorte({ nome: "Todos os clientes", periodo: "hoje", contagem: { ...base, feito: 0, em_revisao: 0, em_andamento: 0, bloqueado: 0, decisao: 0 }, totalDeFontes: 0, temCliente: false });
+    expect(vazio.abertura).toContain("não achei nada registrado");
+    expect(vazio.fechamento).toBeNull();
   });
 });
