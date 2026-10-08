@@ -1,3 +1,4 @@
+import { ContainerDaArea } from "./ContainerDaArea";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { ChevronRight, MessageSquare, PanelRightOpen } from "lucide-react";
@@ -109,10 +110,20 @@ const embutida = () => typeof document !== "undefined" && !!document.body && doc
 function useAlturaDaArea(largo: boolean): { ref: RefObject<HTMLDivElement>; altura: number | null; medir: () => void } {
   const ref = useRef<HTMLDivElement>(null);
   const [altura, setAltura] = useState<number | null>(null);
+  const container = useContext(ContainerDaArea);
   const medir = useCallback(() => {
     const el = ref.current;
     if (!el || larguraAgora() < LARGO) {
       setAltura(null);
+      return;
+    }
+    // Dentro de uma ferramenta da Central: mede pela caixa dela (a janela é maior que a caixa).
+    const caixa = container && container.current;
+    if (caixa) {
+      const fundo = caixa.getBoundingClientRect().bottom;
+      const topoNaCaixa = el.getBoundingClientRect().top;
+      const nova = alturaDaArea(fundo, topoNaCaixa, ALTURA_MINIMA_EMBUTIDA);
+      setAltura((a) => (a !== null && Math.abs(a - nova) < 2 ? a : nova));
       return;
     }
     // Topo da área com a página no início: na tela cheia da mesa quem rola é a raiz da mesa.
@@ -122,7 +133,7 @@ function useAlturaDaArea(largo: boolean): { ref: RefObject<HTMLDivElement>; altu
     const nova = alturaDaArea(window.innerHeight || 800, topo, embutida() ? ALTURA_MINIMA_EMBUTIDA : ALTURA_MINIMA);
     // Só muda quando a medida muda de verdade (tela parada = nada se mexe).
     setAltura((a) => (a !== null && Math.abs(a - nova) < 2 ? a : nova));
-  }, []);
+  }, [container]);
 
   // Primeira medida antes da pintura: a área já nasce na altura certa (nada pula na tela).
   useLayoutEffect(() => {

@@ -1,4 +1,5 @@
-import { Fragment, type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, Bot, ChevronDown, ChevronRight, FileCheck2, FileText, History, LayoutGrid, Maximize2, MessagesSquare, Minimize2, NotebookPen, PanelRightOpen, Scale, Sparkles, X } from "lucide-react";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
@@ -10,6 +11,7 @@ import DiarioDaCoordenacao from "@/components/execucao/central/DiarioDaCoordenac
 import ObjetoDaCentral from "@/components/execucao/central/ObjetoDaCentral";
 import { ArquivosDoCliente, BotoesDaFerramenta, FerramentaEmbutida, type FerramentaAberta, MenuDeFerramentas, type ModoDaFerramenta, NavegadorIntegrado } from "@/components/execucao/central/PainelDasMesas";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import FerramentaNativa, { abreNativo } from "@/components/execucao/central/FerramentaNativa";
 import type { ObjetoAberto } from "@/lib/centralObjetos";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -286,6 +288,22 @@ function useLargura(el: HTMLElement | null): number {
   return largura;
 }
 
+/** Até quantas ferramentas ficam vivas (trocar de cliente e voltar mantém o rascunho). */
+const MAX_FERRAMENTAS_VIVAS = 3;
+type InstanciaDaFerramenta = { caminho: string; abertoEm: number; versao: number };
+
+/** Põe o nó da ferramenta (estável, criado uma vez) dentro desta caixa: trocar de lugar não remonta. */
+function Encaixe({ no }: { no: HTMLElement }) {
+  const caixa = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = caixa.current;
+    if (!el) return;
+    el.appendChild(no);
+    return () => { if (no.parentNode === el) el.removeChild(no); };
+  }, [no]);
+  return <div ref={caixa} className="h-full min-h-0" />;
+}
+
 /** Tirinha de 32 px (padrão da AreaDeTrabalho): o painel recolhido, nome em pé. Clicar abre. */
 function Tirinha({ rotulo, icone, onAbrir }: { rotulo: string; icone: ReactNode; onAbrir: () => void }) {
   return (
@@ -322,6 +340,13 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
   const [telaCheia, setTelaCheia] = useState(false);
   const [objeto, setObjeto] = useState<ObjetoAberto | null>(null);
   const [ferramenta, setFerramenta] = useState<FerramentaAberta | null>(null);
+  const [instancias, setInstancias] = useState<InstanciaDaFerramenta[]>([]);
+  const nos = useRef(new Map<string, HTMLDivElement>());
+  const noDe = (caminho: string) => {
+    let no = nos.current.get(caminho);
+    if (!no) { no = document.createElement("div"); no.className = "h-full min-h-0"; nos.current.set(caminho, no); }
+    return no;
+  };
   const [navegador, setNavegador] = useState(false);
   const [diario, setDiario] = useState(false);
   const [menuAberto, setMenuAberto] = useState(false);
@@ -371,9 +396,21 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
   const abrirObjeto = (o: ObjetoAberto) => { setObjeto(o); setFerramenta((f) => (f && f.modo === "lateral" ? null : f)); setNavegador(false); mostrarArea(); };
   const abrirFerramenta = (rotulo: string, caminho: string, modo: ModoDaFerramenta = "popup") => {
     setMenuAberto(false);
+    if (abreNativo(caminho)) {
+      // Nativa: a instância fica viva (as mais recentes, até o teto); reabrir a mesma não recarrega.
+      const agora = performance.now();
+      setInstancias((lista) => {
+        const ja = lista.find((i) => i.caminho === caminho);
+        const nova = [...lista.filter((i) => i.caminho !== caminho), ja || { caminho, abertoEm: agora, versao: 0 }];
+        for (const f of nova.slice(0, Math.max(0, nova.length - MAX_FERRAMENTAS_VIVAS))) nos.current.delete(f.caminho);
+        return nova.slice(-MAX_FERRAMENTAS_VIVAS);
+      });
+    }
     setFerramenta({ rotulo, caminho, modo });
     if (modo === "lateral") { setObjeto(null); setNavegador(false); mostrarArea(); }
   };
+  const recarregarFerramenta = (caminho: string) => setInstancias((l) => l.map((i) => (i.caminho === caminho ? { ...i, versao: i.versao + 1, abertoEm: performance.now() } : i)));
+  const conteudoDa = (f: FerramentaAberta | null) => (f && abreNativo(f.caminho) && instancias.some((i) => i.caminho === f.caminho) ? <Encaixe no={noDe(f.caminho)} /> : undefined);
   const mudarModo = (modo: ModoDaFerramenta) => {
     setFerramenta((f) => (f ? { ...f, modo } : f));
     if (modo === "lateral") { setObjeto(null); setNavegador(false); mostrarArea(); }
@@ -428,7 +465,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
       {objeto ? (
         <ObjetoDaCentral key={`${objeto.tipo}-${objeto.id}`} objeto={objeto} aoFechar={() => setObjeto(null)} aoAbrirFerramenta={(caminho, rotulo) => abrirFerramenta(rotulo, caminho)} aoAbrirDiario={aoAbrirDiario} />
       ) : ferramentaNaLateral ? (
-        <FerramentaEmbutida ferramenta={ferramentaNaLateral} clienteNome={contextoDoAtalho.clienteNome} aoMudarModo={mudarModo} aoFechar={() => setFerramenta(null)} />
+        <FerramentaEmbutida ferramenta={ferramentaNaLateral} clienteNome={contextoDoAtalho.clienteNome} aoMudarModo={mudarModo} aoFechar={() => setFerramenta(null)} conteudo={conteudoDa(ferramentaNaLateral)} aoRecarregar={() => recarregarFerramenta(ferramentaNaLateral.caminho)} />
       ) : navegador ? (
         <div className="flex h-full min-h-0 flex-col">
           <div className="flex shrink-0 items-center gap-1 border-b border-border/60 px-2 py-1.5">
@@ -518,7 +555,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
   const ferramentaGrande = ferramenta && ferramenta.modo === "grande" ? ferramenta : null;
   const mioloLargo = ferramentaGrande ? (
     <div className={juntar(superficie.painel, "min-h-0 min-w-0 overflow-hidden")}>
-      <FerramentaEmbutida ferramenta={ferramentaGrande} clienteNome={contextoDoAtalho.clienteNome} aoMudarModo={mudarModo} aoFechar={() => setFerramenta(null)} />
+      <FerramentaEmbutida ferramenta={ferramentaGrande} clienteNome={contextoDoAtalho.clienteNome} aoMudarModo={mudarModo} aoFechar={() => setFerramenta(null)} conteudo={conteudoDa(ferramentaGrande)} aoRecarregar={() => recarregarFerramenta(ferramentaGrande.caminho)} />
     </div>
   ) : (
     <div className="flex min-h-0 min-w-0 gap-2">
@@ -553,7 +590,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
       {ehAdmin && conversasNoCelular && <div className={juntar(superficie.painel, "p-3")}>{listaDeConversas}</div>}
       <div ref={refDoCelular} style={{ height: alturaNoCelular }}>
         {ferramentaGrande ? (
-          <div className={juntar(superficie.painel, "h-full overflow-hidden")}><FerramentaEmbutida ferramenta={ferramentaGrande} clienteNome={contextoDoAtalho.clienteNome} aoMudarModo={mudarModo} aoFechar={() => setFerramenta(null)} /></div>
+          <div className={juntar(superficie.painel, "h-full overflow-hidden")}><FerramentaEmbutida ferramenta={ferramentaGrande} clienteNome={contextoDoAtalho.clienteNome} aoMudarModo={mudarModo} aoFechar={() => setFerramenta(null)} conteudo={conteudoDa(ferramentaGrande)} aoRecarregar={() => recarregarFerramenta(ferramentaGrande.caminho)} /></div>
         ) : ehAdmin ? conteudoDe[noCelular] : area}
       </div>
     </div>
@@ -590,8 +627,11 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
         semEspaco
         classeDoCorpo="flex min-h-0 flex-1 flex-col"
       >
-        {ferramentaEmPopup && <FerramentaEmbutida ferramenta={ferramentaEmPopup} clienteNome={contextoDoAtalho.clienteNome} aoMudarModo={mudarModo} aoFechar={() => setFerramenta(null)} semCabecalho />}
+        {ferramentaEmPopup && <FerramentaEmbutida ferramenta={ferramentaEmPopup} clienteNome={contextoDoAtalho.clienteNome} aoMudarModo={mudarModo} aoFechar={() => setFerramenta(null)} semCabecalho conteudo={conteudoDa(ferramentaEmPopup)} />}
       </JanelaCentral>
+
+      {/* As ferramentas vivas: cada uma num nó estável; o Encaixe põe o nó onde ela está aberta. */}
+      {instancias.map((i) => createPortal(<FerramentaNativa key={`${i.caminho}-${i.versao}`} caminho={i.caminho} abertoEm={i.abertoEm} />, noDe(i.caminho), i.caminho))}
 
       {ehAdmin && (
         <JanelaCentral aberta={diario} onMudar={setDiario} titulo="Diário da coordenação" largura="lg" corpo="fixo" classeDoCorpo="flex min-h-0 flex-1 flex-col"

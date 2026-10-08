@@ -7,12 +7,17 @@ import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
 import type { AcaoDoAgente, PedidoDaAcao, RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
 import { getSupabaseFunctionErrorMessage } from "@/lib/supabaseFunctionError";
 import { arquivosParaOEnvio, lerArquivosDoAgente, type ArquivoLidoNaTela, type ArquivoNaoLidoNaTela } from "@/components/mesa/leituraDeArquivos";
-import { duracaoDoAudio, ehAudio, ehImagem, MAX_BYTES_DO_AUDIO, MAX_IMAGENS_DO_GESTOR, prepararImagem, tempoDoAudio, tipoDoAudioParaEnvio, type ImagemDoGestor } from "@/lib/gestorAnexos";
+import { duracaoDoAudio, ehAudio, ehImagem, MAX_IMAGENS_DO_GESTOR, prepararImagem, tempoDoAudio, type ImagemDoGestor } from "@/lib/gestorAnexos";
+import { useGravadorDeVoz, type ResultadoDaVoz } from "@/lib/voz/useGravadorDeVoz";
+import { transcreverNoServidor } from "@/lib/voz/transcreverNoServidor";
+import { BotaoDeVoz, EstadoDaVoz, PilulaDeGravacao, vozEmCurso } from "@/components/agentes/BotaoDeVoz";
 import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
 import { Carregando, EstadoDeErro, botao, juntar, useEstadoDaTela } from "@/components/sistema";
 import { ROLAGEM_OPERACAO } from "@/components/execucao/CarteiraDaOperacao";
 import { ROTULO_DO_ESTADO, type Fonte, type ItemDaResposta, type SecaoDaResposta } from "../../../supabase/functions/gestor-aceleriq/modulos/ficha";
 import { objetoDaFonte, objetoValido, ROTULO_DO_TIPO, type ObjetoAberto } from "@/lib/centralObjetos";
+import BlocosDeResposta from "@/components/agentes/respostas/BlocosDeResposta";
+import { validarBlocos } from "@/lib/agentes/blocosDeResposta";
 import { arquivosDoWorkspace, TIPO_ARQUIVO_DO_WORKSPACE } from "@/lib/centralArrastar";
 
 /**
@@ -37,6 +42,8 @@ export type RespostaDoGestor = {
   fechamento?: string | null;
   mostrar_numeros?: boolean;
   abrir?: ObjetoAberto | null;
+  /** Quadros (fluxo, tabela, gráfico): registro compartilhado, revalidado aqui antes de desenhar. */
+  blocos?: unknown[];
   sugestoes?: string[];
   itens?: ItemDaResposta[];
   fontes?: Fonte[];
@@ -182,6 +189,7 @@ function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemI
   // A ação muda depois de Confirmar/Desfazer: a versão gravada que a função devolve vale.
   const [acoesAtuais, setAcoesAtuais] = useState<Record<string, AcaoDoAgente>>({});
   const fontes = useMemo(() => new Map((d.fontes || []).map((f) => [f.apelido, f])), [d.fontes]);
+  const blocosValidos = useMemo(() => (Array.isArray(d.blocos) && d.blocos.length ? validarBlocos({ blocos: d.blocos }).blocos : []), [d.blocos]);
   const itens = d.itens || [];
 
   // A sequência que "chega": cada balão (e o cartão de números só quando o Gestor marca; respostas antigas sem a marca mantêm o cartão).
@@ -248,6 +256,12 @@ function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemI
         );
       })}
       {!terminou && <Digitando />}
+      {terminou && blocosValidos.length > 0 && (
+        <div className="my-1 w-full max-w-[640px]" data-blocos-da-resposta="">
+          <BlocosDeResposta blocos={blocosValidos} aoAbrirObjeto={(o) => { const v = objetoValido(o); if (v && aoAbrirObjeto) aoAbrirObjeto(v); }} aoAbrirFonte={(a) => setAberta(aberta === a ? null : a)} />
+        </div>
+      )}
+      {terminou && blocosValidos.length > 0 && aberta && fontes.get(aberta) && !itens.some((i) => i.fontes.includes(aberta)) && <FonteAberta f={fontes.get(aberta)!} aoAbrirDiario={aoAbrirDiario} aoAbrirObjeto={aoAbrirObjeto} />}
       {terminou && (
         <>
           {(d.acoes || []).map((bruta) => {
@@ -343,7 +357,12 @@ function AnexosDoPedido({ p }: { p?: PedidoDoDono | null }) {
   );
 }
 
-type Gravando = { inicio: number; segundos: number };
+/**
+ * O texto do campo que veio de áudio (09/10): a transcrição cai no campo, editável, e só sai quando
+ * o dono manda. A marca guarda a duração (o pedido leva audio.segundos) e o que havia antes (Descartar).
+ */
+type MarcaDoAudio = { segundos: number; antes: string; interrompida?: boolean; noTeto?: boolean };
+const marcaValida = (v: unknown) => v === null || (!!v && typeof v === "object" && typeof (v as MarcaDoAudio).segundos === "number" && typeof (v as MarcaDoAudio).antes === "string");
 
 export type ContextoDaConversa = { conversaId: string | null; cliente: { id: string; nome: string } | null; projeto: { id: string; nome: string } | null; titulo?: string | null };
 
@@ -369,16 +388,11 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
   const [naoLidos, setNaoLidos] = useState<AnexoNaoLido[]>([]);
   const [imagens, setImagens] = useState<ImagemDoGestor[]>([]);
   const [lendo, setLendo] = useState(0);
-  const [transcrevendo, setTranscrevendo] = useState(false);
-  const [gravando, setGravando] = useState<Gravando | null>(null);
+  const [doAudio, setDoAudio] = useEstadoDaTela<MarcaDoAudio | null>("execucao:gestor:audio", null, { validar: marcaValida });
   const [soltando, setSoltando] = useState(false);
   const fim = useRef<HTMLDivElement>(null);
   const campo = useRef<HTMLTextAreaElement>(null);
   const seletor = useRef<HTMLInputElement>(null);
-  const gravador = useRef<MediaRecorder | null>(null);
-  const fluxo = useRef<MediaStream | null>(null);
-  const pedacos = useRef<Blob[]>([]);
-  const descartarGravacao = useRef(false);
 
   const conversaId = contexto?.conversaId || null;
   const criadaAgora = useRef<string | null>(null);
@@ -421,6 +435,7 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
       };
       setLocais([{ id: `p-${agora}`, papel: "usuario", conteudo: x.pergunta, criado_em: agora, pedido }, { id: `r-${agora}`, papel: "gestor", conteudo: "", criado_em: agora, pendente: true }]);
       setRascunho("");
+      setDoAudio(null);
       setDocs([]); setNaoLidos([]); setImagens([]);
     },
     onSuccess: (d) => {
@@ -431,8 +446,10 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
     },
     onError: (e, x) => {
       setLocais([]);
-      setRascunho(x.audio ? "" : x.pergunta);
-      if (!x.audio) { setDocs(x.docs || []); setNaoLidos(x.naoLidos || []); setImagens(x.imagens || []); }
+      // Nada se perde: o texto (inclusive o transcrito), a marca do áudio e os anexos voltam para o campo.
+      setRascunho(x.pergunta);
+      setDoAudio(x.audio ? { segundos: x.audio.segundos, antes: "" } : null);
+      setDocs(x.docs || []); setNaoLidos(x.naoLidos || []); setImagens(x.imagens || []);
       toast.error(textoDoErro(e, "O Gestor não respondeu. Tente de novo."));
     },
   });
@@ -457,44 +474,41 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
     t.style.height = "auto";
     t.style.height = `${Math.min(t.scrollHeight, 160)}px`;
   }, [rascunho]);
-  useEffect(() => () => { fluxo.current?.getTracks().forEach((t) => t.stop()); }, []);
-  useEffect(() => {
-    if (!gravando) return;
-    const t = setInterval(() => setGravando((g) => (g ? { ...g, segundos: (Date.now() - g.inicio) / 1000 } : g)), 250);
-    return () => clearInterval(t);
-  }, [!!gravando]);
+  // Campo esvaziado à mão: o texto já não é o do áudio.
+  useEffect(() => { if (doAudio && !rascunho.trim()) setDoAudio(null); }, [rascunho, doAudio]);
 
   const ultimaPergunta = [...mensagens].reverse().find((m) => m.papel === "usuario")?.conteudo || "";
   const temAnexo = docs.length > 0 || imagens.length > 0;
+  /** Áudio (gravado ou anexado) vira texto no servidor; quem decide enviar é o dono. */
+  const transcreverNoGestor = transcreverNoServidor;
+  /** A transcrição cai no campo, editável (junto do que já estava escrito); nada sai sozinho. */
+  const aoTranscrever = (r: ResultadoDaVoz) => {
+    const anterior = rascunho;
+    const escrito = anterior.trim();
+    setRascunho(escrito ? `${escrito}\n\n${r.texto}` : r.texto);
+    setDoAudio((m) => ({
+      segundos: (m ? m.segundos : 0) + r.segundos,
+      antes: m ? m.antes : anterior,
+      interrompida: !!(m && m.interrompida) || r.interrompida,
+      noTeto: !!(m && m.noTeto) || r.noTeto,
+    }));
+    setTimeout(() => campo.current?.focus(), 0);
+  };
+  const voz = useGravadorDeVoz({ transcrever: transcreverNoGestor, aoTranscrever });
+  const descartarTranscricao = () => {
+    setRascunho(doAudio ? doAudio.antes : "");
+    setDoAudio(null);
+  };
+
+  const transcrevendo = voz.estado === "transcrevendo";
   const ocupado = perguntar.isPending || lendo > 0 || transcrevendo;
   const enviar = (pergunta: string, cliente_id?: string, audio?: { segundos: number } | null) => {
     const texto = (pergunta || (temAnexo ? "" : ultimaPergunta)).trim();
-    if ((!texto && !temAnexo) || ocupado) return;
+    if ((!texto && !temAnexo) || ocupado || vozEmCurso(voz)) return;
     perguntar.mutate({ pergunta: texto, cliente_id, audio, docs, naoLidos, imagens });
   };
-
-  /** Áudio (gravado ou anexado) vira texto e a mensagem sai na hora, com o que estiver escrito e anexado. */
-  const transcreverEEnviar = async (audio: Blob, nome: string, segundos: number) => {
-    if (audio.size > MAX_BYTES_DO_AUDIO) { toast.error("O áudio passou de 24 MB. Mande em partes menores."); return; }
-    setTranscrevendo(true);
-    try {
-      const tipo = tipoDoAudioParaEnvio({ name: nome, type: audio.type });
-      const { data, error } = await supabase.functions.invoke("gestor-aceleriq", {
-        body: audio,
-        headers: { "Content-Type": tipo, "x-gestor-acao": "transcrever", "x-gestor-duracao": String(Math.round(segundos) || 0) },
-      });
-      if (error) throw new Error(await getSupabaseFunctionErrorMessage(error, "Não deu para transcrever o áudio."));
-      const r = data as { texto?: string; segundos?: number; mensagem?: string; error?: string };
-      if (r?.error || !r?.texto) throw new Error(r?.mensagem || "Não deu para entender o áudio.");
-      const escrito = rascunho.trim();
-      const texto = escrito ? `${escrito}\n\n(áudio) ${r.texto}` : r.texto;
-      perguntar.mutate({ pergunta: texto, audio: { segundos: Math.round(r.segundos || segundos) }, docs, naoLidos, imagens });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Não deu para transcrever o áudio.");
-    } finally {
-      setTranscrevendo(false);
-    }
-  };
+  /** O que está no campo: leva a marca do áudio quando o texto veio dele. */
+  const enviarDoCampo = () => enviar(rascunho, undefined, doAudio && rascunho.trim() ? { segundos: Math.max(1, Math.round(doAudio.segundos)) } : null);
 
   const adicionar = (lista: FileList | File[] | null | undefined) => {
     const todos = lista ? (Array.prototype.slice.call(lista) as File[]) : [];
@@ -504,8 +518,11 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
     const outros = todos.filter((f) => !ehAudio(f) && !ehImagem(f));
     if (audios.length) {
       const a = audios[0];
-      if (audios.length > 1) toast.info("Mandei o primeiro áudio; envie os outros depois.");
-      void duracaoDoAudio(a).then((s) => transcreverEEnviar(a, a.name, s));
+      if (vozEmCurso(voz) || transcrevendo) toast.info("Termine o áudio em andamento antes de mandar outro.");
+      else {
+        if (audios.length > 1) toast.info("Transcrevi o primeiro áudio; mande os outros depois.");
+        void duracaoDoAudio(a).then((s) => { if (!voz.transcreverArquivo(a, a.name, s)) toast.info("Termine o áudio em andamento antes de mandar outro."); });
+      }
     }
     if (fotos.length) {
       const vagas = MAX_IMAGENS_DO_GESTOR - imagens.length;
@@ -535,45 +552,6 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
     }
   };
 
-  const gravacaoPossivel = typeof window !== "undefined" && typeof (window as unknown as { MediaRecorder?: unknown }).MediaRecorder === "function" && !!navigator.mediaDevices?.getUserMedia;
-  const comecarGravacao = async () => {
-    if (gravando || ocupado) return;
-    try {
-      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
-      fluxo.current = s;
-      const C = (window as unknown as { MediaRecorder: typeof MediaRecorder }).MediaRecorder;
-      const formato = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"].find((t) => typeof C.isTypeSupported === "function" && C.isTypeSupported(t));
-      const g = new C(s, formato ? { mimeType: formato } : undefined);
-      pedacos.current = [];
-      descartarGravacao.current = false;
-      g.ondataavailable = (e) => { if (e.data && e.data.size) pedacos.current.push(e.data); };
-      g.onstop = () => {
-        s.getTracks().forEach((t) => t.stop());
-        fluxo.current = null;
-        const inicio = gravadorInicio.current;
-        const segundos = (Date.now() - inicio) / 1000;
-        setGravando(null);
-        if (descartarGravacao.current) return;
-        const blob = new Blob(pedacos.current, { type: (g.mimeType || formato || "audio/webm").split(";")[0] });
-        if (segundos < 0.8 || !blob.size) { toast.info("Áudio curto demais."); return; }
-        void transcreverEEnviar(blob, `gravacao.${blob.type.indexOf("mp4") >= 0 ? "m4a" : "webm"}`, segundos);
-      };
-      gravador.current = g;
-      gravadorInicio.current = Date.now();
-      g.start(1000);
-      setGravando({ inicio: Date.now(), segundos: 0 });
-    } catch {
-      toast.error("O navegador não liberou o microfone.", { description: "Libere o microfone para este site e tente de novo." });
-    }
-  };
-  const gravadorInicio = useRef(0);
-  const pararGravacao = (descartar: boolean) => {
-    descartarGravacao.current = descartar;
-    const g = gravador.current;
-    if (g && g.state !== "inactive") g.stop();
-  };
-  // Teto da gravação: 10 minutos.
-  useEffect(() => { if (gravando && gravando.segundos >= 600) pararGravacao(false); }, [gravando]);
 
   return (
     <section
@@ -650,12 +628,11 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
               <div key={m.id} className={BALAO_GESTOR}>{m.conteudo}</div>
             )
           ))}
-          {transcrevendo && <div className="flex justify-end"><span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-[12px] text-primary"><Loader2 className="h-3.5 w-3.5 animate-spin" />Transcrevendo o áudio…</span></div>}
           <div ref={fim} />
         </div>
       </div>
 
-      <form className="shrink-0 border-t border-border/70 bg-card px-3 py-3 sm:px-5" onSubmit={(e) => { e.preventDefault(); enviar(rascunho); }}>
+      <form className="shrink-0 border-t border-border/70 bg-card px-3 py-3 sm:px-5" onSubmit={(e) => { e.preventDefault(); enviarDoCampo(); }}>
         <div className="mx-auto w-full max-w-3xl">
           {(temAnexo || naoLidos.length > 0 || lendo > 0) && (
             <div className="mb-2 flex flex-wrap items-center gap-1.5">
@@ -680,13 +657,20 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
               {lendo > 0 && <span className="inline-flex items-center gap-1 text-[12px] text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Lendo…</span>}
             </div>
           )}
-          {gravando ? (
-            <div className="flex items-center gap-2 rounded-[26px] border border-destructive/40 bg-background py-1.5 pl-4 pr-1.5 shadow-sm">
-              <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-destructive" aria-hidden="true" />
-              <span className="flex-1 text-[14px] tabular-nums text-foreground">Gravando {tempoDoAudio(gravando.segundos)}</span>
-              <button type="button" onClick={() => pararGravacao(true)} className="flex h-9 items-center rounded-full px-3 text-[13px] text-muted-foreground hover:bg-muted" aria-label="Cancelar a gravação">Cancelar</button>
-              <button type="button" onClick={() => pararGravacao(false)} className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-label="Enviar o áudio"><ArrowUp className="h-4 w-4" /></button>
+          {(voz.estado === "transcrevendo" || voz.estado === "erro") && <EstadoDaVoz voz={voz} className="mb-2" />}
+          {doAudio && rascunho.trim() && !vozEmCurso(voz) && (
+            <div className="mb-2 flex flex-wrap items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 py-1 pl-2.5 pr-1 text-[12px] font-medium text-primary">
+                <Mic className="h-3 w-3" />Transcrito do áudio · {tempoDoAudio(doAudio.segundos)}
+                <button type="button" onClick={descartarTranscricao} className="flex h-5 w-5 items-center justify-center rounded-full hover:bg-primary/10" aria-label="Descartar a transcrição" title="Descartar a transcrição"><X className="h-3 w-3" /></button>
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                {doAudio.noTeto ? "Parou no limite de 10 min. " : doAudio.interrompida ? "A gravação foi interrompida. " : ""}Confira e envie quando quiser.
+              </span>
             </div>
+          )}
+          {vozEmCurso(voz) ? (
+            <PilulaDeGravacao voz={voz} />
           ) : (
             <div className="flex items-end gap-1.5 rounded-[26px] border border-border bg-background py-1.5 pl-1.5 pr-1.5 shadow-sm focus-within:border-primary/50">
               <input ref={seletor} type="file" multiple className="hidden" onChange={(e) => { adicionar(e.target.files); e.target.value = ""; }} />
@@ -697,19 +681,17 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
                 ref={campo}
                 value={rascunho}
                 onChange={(e) => setRascunho(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(rascunho); } }}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviarDoCampo(); } }}
                 onPaste={(e) => { const fs = e.clipboardData?.files; if (fs && fs.length) { e.preventDefault(); adicionar(fs); } }}
                 rows={1}
-                maxLength={4000}
+                maxLength={doAudio ? 12000 : 4000}
                 placeholder={temAnexo ? "Diga o que quer saber sobre o anexo…" : "Pergunte ao Gestor…"}
                 aria-label="Pergunta ao Gestor Aceleriq"
                 className="max-h-40 min-h-[36px] flex-1 resize-none bg-transparent px-1 py-2 text-[14px] leading-5 outline-none placeholder:text-muted-foreground"
               />
-              {!rascunho.trim() && !temAnexo && gravacaoPossivel ? (
-                <button type="button" onClick={() => void comecarGravacao()} disabled={ocupado} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-40" aria-label="Gravar áudio" title="Gravar áudio">
-                  <Mic className="h-4 w-4" />
-                </button>
-              ) : (
+              {/* O microfone fica sempre à mão: a fala soma ao que já está escrito. */}
+              <BotaoDeVoz voz={voz} desabilitado={perguntar.isPending} />
+              {!rascunho.trim() && !temAnexo && voz.possivel ? null : (
                 <button type="submit" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-40" disabled={ocupado || (!rascunho.trim() && !temAnexo)} aria-label="Perguntar">
                   {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
                 </button>

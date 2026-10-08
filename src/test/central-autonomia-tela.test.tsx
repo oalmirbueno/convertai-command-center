@@ -24,6 +24,19 @@ vi.mock("@/integrations/supabase/client", () => {
   return { supabase: { from: () => cadeia, rpc: () => cadeia, functions: { invoke: m.invoke } } };
 });
 // A duração do áudio vem do elemento <audio> (o jsdom não carrega mídia).
+// A ferramenta nativa real monta a página inteira: aqui ela mostra o endereço e conta quantas vezes montou.
+const montagens = vi.hoisted(() => ({ n: 0 }));
+vi.mock("@/components/execucao/central/FerramentaNativa", async () => {
+  const React = await import("react");
+  return {
+    default: ({ caminho }: { caminho: string }) => {
+      React.useEffect(() => { montagens.n += 1; }, []);
+      return React.createElement("div", { "data-testid": "ferramenta-nativa" }, caminho);
+    },
+    abreNativo: (c: string) => c.startsWith("/mesa") || c.startsWith("/workspace") || c.startsWith("/kanban"),
+    preCarregarFerramenta: () => undefined,
+  };
+});
 vi.mock("@/lib/gestorAnexos", async (orig) => ({ ...(await orig<typeof import("@/lib/gestorAnexos")>()), duracaoDoAudio: async () => 42 }));
 
 import CentralDeAutonomia from "@/components/execucao/CentralDeAutonomia";
@@ -176,15 +189,24 @@ describe("Central de Autonomia: espaço, tela cheia e anexos", () => {
     expect(corpo.arquivos.lidos[0]).toMatchObject({ nome: "ata.txt", texto: expect.stringContaining("2 vídeos para sexta") });
   });
 
-  it("áudio anexado é transcrito e sai como a mensagem, com a marca do áudio", async () => {
-    m.invoke.mockResolvedValue({ data: { texto: "Como está a Acerbi nesta semana?", segundos: 42 }, error: null });
+  it("áudio anexado é transcrito para o campo, editável; só sai quando o dono manda, com a marca do áudio", async () => {
+    m.invoke.mockResolvedValue({ data: { texto: "Como está a Acerbi nesta semana", segundos: 42 }, error: null });
     montar();
     await screen.findByText("O que você quer saber da operação?");
     const entrada = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(entrada, { target: { files: [new File([new Uint8Array(2048)], "recado.m4a", { type: "audio/x-m4a" })] } });
     await waitFor(() => expect(m.invoke).toHaveBeenCalledWith("gestor-aceleriq", expect.objectContaining({ headers: expect.objectContaining({ "x-gestor-acao": "transcrever", "Content-Type": "audio/x-m4a" }) })));
-    await waitFor(() => expect(m.chamar).toHaveBeenCalledWith("gestor-aceleriq", expect.objectContaining({ pergunta: "Como está a Acerbi nesta semana?", audio: { segundos: 42 } })));
+    // A transcrição cai no campo, com a marca, e nada é enviado sozinho.
+    const campo = screen.getByLabelText("Pergunta ao Gestor Aceleriq") as HTMLTextAreaElement;
+    await waitFor(() => expect(campo.value).toBe("Como está a Acerbi nesta semana"));
+    expect(screen.getByText(/Transcrito do áudio · 0:42/)).toBeTruthy();
+    expect(m.chamar.mock.calls.some((c) => c[1].acao === "perguntar")).toBe(false);
+    // O dono corrige e manda: a pergunta leva o texto editado e audio.segundos.
+    fireEvent.change(campo, { target: { value: "Como está a Acerbi nesta semana?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Perguntar" }));
+    await waitFor(() => expect(m.chamar).toHaveBeenCalledWith("gestor-aceleriq", expect.objectContaining({ acao: "perguntar", pergunta: "Como está a Acerbi nesta semana?", audio: { segundos: 42 } })));
     expect(await screen.findByText(/Áudio 0:42/)).toBeTruthy();
+    expect(screen.queryByText(/Transcrito do áudio/)).toBeNull();
   });
 });
 
@@ -251,17 +273,42 @@ describe("Central de Autonomia: conversas, ações, Hermes e Mesas", () => {
     expect(await screen.findByRole("dialog", { name: /Diário da coordenação/ })).toBeTruthy();
   });
 
-  it("ferramentas abrem em pop-up interno com o cliente da conversa e passam para a lateral sem o menu do app", async () => {
+  it("ferramentas abrem nativas (sem iframe) com o cliente da conversa e trocam de lugar sem remontar", async () => {
+    montagens.n = 0;
     montar();
     fireEvent.click(await abrirConversa("Campanha de outubro"));
     fireEvent.click(screen.getByRole("button", { name: "Ferramentas" }));
     fireEvent.click(await screen.findByRole("button", { name: /Mesa Ads/ }));
-    const quadro = await screen.findByTitle("Mesa Ads");
-    expect(quadro.getAttribute("src")).toBe("/mesa-ads?client=39ebda82&embutido=1");
+    expect((await screen.findByTestId("ferramenta-nativa")).textContent).toBe("/mesa-ads?client=39ebda82");
     expect(screen.getByRole("dialog", { name: /Mesa Ads/ })).toBeTruthy();
+    expect(document.querySelector("iframe")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Abrir na lateral" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: /Mesa Ads/ })).toBeNull());
-    expect((await screen.findByTitle("Mesa Ads")).closest("[data-ferramenta-aberta]")?.getAttribute("data-ferramenta-aberta")).toBe("lateral");
+    const nativa = await screen.findByTestId("ferramenta-nativa");
+    expect(nativa.closest("[data-ferramenta-aberta]")?.getAttribute("data-ferramenta-aberta")).toBe("lateral");
+    fireEvent.click(screen.getByRole("button", { name: "Abrir na área maior" }));
+    expect((await screen.findByTestId("ferramenta-nativa")).closest("[data-ferramenta-aberta]")?.getAttribute("data-ferramenta-aberta")).toBe("grande");
+    // A mesma instância nos três lugares: montou uma vez só.
+    expect(montagens.n).toBe(1);
+  });
+
+  it("quadros da resposta: fluxo pedido aparece como Proposta", async () => {
+    try { window.localStorage.clear(); } catch { /* sem storage */ }
+    m.chamar.mockImplementation(async (_f: string, corpo: { acao: string }) => {
+      if (corpo.acao === "conversas") return { conversas: [] };
+      if (corpo.acao === "abrir_conversa") return { conversa: null, mensagens: [] };
+      if (corpo.acao === "hermes_estado") return { configurada: false };
+      if (corpo.acao === "conversa") return { mensagens: [] };
+      return { ...resposta, blocos: [
+        { tipo: "fluxo", titulo: "Como vamos organizar", natureza: "proposta", passos: [{ id: "a", rotulo: "Revisar a abertura" }, { id: "b", rotulo: "Aprovar" }], ligacoes: [{ de: "a", para: "b" }] },
+        { tipo: "tabela", colunas: ["Tarefa"], linhas: [["X"]], fontes: [] },
+      ] };
+    });
+    montar();
+    fireEvent.click(await screen.findByRole("button", { name: "O que aconteceu com a Acerbi nesta semana?" }));
+    expect(await screen.findByText("Como vamos organizar")).toBeTruthy();
+    expect(screen.getAllByText("Proposta").length).toBeGreaterThan(0);
+    expect(screen.getByText("Revisar a abertura")).toBeTruthy();
   });
 });
 

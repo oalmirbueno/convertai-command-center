@@ -1,3 +1,7 @@
+import TextoFormatado from "@/components/agentes/respostas/TextoFormatado";
+import { useGravadorDeVoz } from "@/lib/voz/useGravadorDeVoz";
+import { transcreverNoServidor } from "@/lib/voz/transcreverNoServidor";
+import { BotaoDeVoz, EstadoDaVoz, PilulaDeGravacao, vozEmCurso } from "@/components/agentes/BotaoDeVoz";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -119,12 +123,13 @@ function erroDoEnvio(e: unknown): string {
 
 // ------------------------------------------------------------------ peças pequenas
 
-function TextoLongo({ texto }: { texto: string }) {
+function TextoLongo({ texto, formatado }: { texto: string; /** Resposta do Hermes: markdown seguro (tabelas, listas, links), sem HTML cru. */ formatado?: boolean }) {
   const [aberto, setAberto] = useState(false);
   const longo = texto.length > LIMITE_DO_TEXTO;
+  const visivel = longo && !aberto ? `${texto.slice(0, LIMITE_DO_TEXTO).trimEnd()}…` : texto;
   return (
     <>
-      <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{longo && !aberto ? `${texto.slice(0, LIMITE_DO_TEXTO).trimEnd()}…` : texto}</span>
+      {formatado ? <TextoFormatado texto={visivel} /> : <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{visivel}</span>}
       {longo && (
         <button type="button" onClick={() => setAberto((a) => !a)} className="mt-1 block text-[12px] font-medium text-primary hover:underline">
           {aberto ? "ver menos" : "ver tudo"}
@@ -450,6 +455,11 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
   });
 
   type Envio = { texto: string; imagens: ImagemAnexada[]; textos: TextoAnexado[] };
+  // Voz: o mesmo gravador do Gestor; a transcrição cai no campo, editável (nada sai sozinho).
+  const voz = useGravadorDeVoz({
+    transcrever: transcreverNoServidor,
+    aoTranscrever: (r) => { setRascunho((x) => (x.trim() ? `${x.trim()}\n\n${r.texto}` : r.texto)); setTimeout(() => campo.current?.focus(), 0); },
+  });
   const enviar = useMutation({
     mutationFn: (x: Envio) => {
       const anexos = x.textos.map((t) => `\n\n[Arquivo ${t.nome}]\n${t.conteudo}`).join("");
@@ -615,7 +625,7 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
             </div>
           ) : (
             <div key={`${m.id}-${i}`} className="flex min-w-0 flex-col items-start gap-1">
-              {m.texto.trim() && <div className={BALAO_HERMES}><TextoLongo texto={m.texto} /></div>}
+              {m.texto.trim() && <div className={BALAO_HERMES}><TextoLongo texto={m.texto} formatado /></div>}
               {m.chamadas.length > 0 && (
                 <div className="flex max-w-full flex-wrap gap-1">
                   {m.chamadas.map((c, k) => <span key={`${c}-${k}`} className="inline-flex max-w-full items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"><Wrench className="h-2.5 w-2.5 shrink-0" /><span className="truncate">usou {c}</span></span>)}
@@ -716,6 +726,7 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
                   {lendo > 0 && <span className="inline-flex items-center gap-1 text-[12px] text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" />Lendo…</span>}
                 </div>
               )}
+              {(voz.estado === "transcrevendo" || voz.estado === "erro") && <EstadoDaVoz voz={voz} className="mb-2" />}
               {contexto.cliente && (
                 <button
                   type="button"
@@ -731,7 +742,7 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
                   <span className="truncate">Levar contexto: {rotuloDoContexto}</span>
                 </button>
               )}
-              <div className="flex min-w-0 items-end gap-1.5 rounded-[26px] border border-border bg-background py-1.5 pl-1.5 pr-1.5 shadow-sm focus-within:border-primary/50">
+              {vozEmCurso(voz) ? <PilulaDeGravacao voz={voz} /> : <div className="flex min-w-0 items-end gap-1.5 rounded-[26px] border border-border bg-background py-1.5 pl-1.5 pr-1.5 shadow-sm focus-within:border-primary/50">
                 <input ref={seletor} type="file" multiple accept="image/*,.txt,.md,.csv,.json,text/*" className="hidden" aria-hidden="true" tabIndex={-1} onChange={(e) => { void adicionar(e.target.files); e.target.value = ""; }} />
                 <button type="button" onClick={() => seletor.current?.click()} disabled={ocupado} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted disabled:opacity-40" aria-label="Anexar imagem ou arquivo de texto" title="Anexar imagem ou arquivo de texto (ou arraste para cá)">
                   <Paperclip className="h-4 w-4" />
@@ -747,10 +758,12 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
                   aria-label="Mensagem para o Hermes"
                   className="max-h-40 min-h-[36px] min-w-0 flex-1 resize-none bg-transparent px-1 py-2 text-[14px] leading-5 outline-none placeholder:text-muted-foreground"
                 />
-                <button type="submit" disabled={ocupado || (!rascunho.trim() && !temAnexo)} aria-label="Enviar ao Hermes" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-40">
-                  {enviar.isPending || emTurno ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
-                </button>
-              </div>
+                {!rascunho.trim() && !temAnexo && !ocupado ? <BotaoDeVoz voz={voz} /> : (
+                  <button type="submit" disabled={ocupado || (!rascunho.trim() && !temAnexo)} aria-label="Enviar ao Hermes" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-40">
+                    {enviar.isPending || emTurno ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
+                  </button>
+                )}
+              </div>}
             </div>
           </form>
         ) : (

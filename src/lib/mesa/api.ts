@@ -13,7 +13,7 @@ import { corpoComMarca } from "@/lib/mesa/marcas";
 import type { RecursosDoModelo } from "../../../supabase/functions/_shared/recursos-dos-modelos";
 import { capacidadesNaTela, lancadoHaPouco } from "@/lib/mesa/recursos-na-tela";
 
-export type FuncaoDaMesa = "ia-gateway" | "agente-calendario" | "estudio-arte" | "agente-contexto" | "mesa-ads" | "mesa-foto" | "mesa-publicidade" | "mesa-roteiros" | "agente-estilo" | "perfis-instagram" | "mesa-instagram" | "conselho" | "documentos" | "contratos" | "mesa-identidade" | "mesa-proposta" | "proposta-biblioteca" | "mesa-site" | "motor-codigo" | "mesa-mockups" | "preencher-ia" | "mesa-motion" | "agente-cfo" | "computador-do-agente" | "gestor-aceleriq";
+export type FuncaoDaMesa = "ia-gateway" | "agente-calendario" | "estudio-arte" | "agente-contexto" | "mesa-ads" | "mesa-foto" | "mesa-publicidade" | "mesa-roteiros" | "agente-estilo" | "perfis-instagram" | "mesa-instagram" | "conselho" | "documentos" | "contratos" | "mesa-identidade" | "mesa-proposta" | "proposta-biblioteca" | "mesa-site" | "motor-codigo" | "mesa-mockups" | "preencher-ia" | "mesa-motion" | "agente-cfo" | "computador-do-agente" | "gestor-aceleriq" | "navegador-remoto";
 
 export type AcaoDeErro = "recarregar" | "cota" | "chave" | "modelo" | null;
 

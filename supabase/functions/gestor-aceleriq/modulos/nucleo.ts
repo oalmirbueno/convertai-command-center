@@ -48,6 +48,7 @@ import {
   regraDasAcoes,
 } from "../../_shared/acoes-do-agente.ts";
 import { ehOrdemClara } from "../../_shared/ordem-clara.ts";
+import { type BlocoDeResposta, type BlocoTabela, ESQUEMA_FLUXO, ESQUEMA_TABELA, validarBlocos } from "../../_shared/blocos-de-resposta.ts";
 import { AGENTE_DO_GESTOR, alvoDaTarefa, type AlvoDoGestor, DESCRICOES_DAS_OPERACOES, type EntregaDoGestor, type ObjetoDoGestor, OPERACOES_DE_DECISAO, regrasDoGestor } from "./ferramentas.ts";
 import { entregasDaAcao, executarItem } from "./executor.ts";
 
@@ -288,6 +289,12 @@ AÇÕES ("acoes"; null quando não há pedido)
 ABRIR ("abrir")
 - Se ele pedir para abrir ou ver um objeto ("abre o que você fez", "abre essa tarefa", "mostra a aprovação"), devolva o apelido dele (F, t, p, a ou o). Senão "".
 
+APRESENTAÇÃO ("blocos"; quase sempre [])
+- Só quando ajuda a entender. Nunca transforme toda resposta em cartão.
+- "fluxo": quando ele pedir um processo, plano, passo a passo ou diagrama. natureza "proposta" (é o seu desenho, não estado do sistema); estado só "planejado".
+- "tabela": para comparar itens das FONTES (ex.: tarefas por estado, entregas por cliente). Cada célula sai do que está nas fontes, e o bloco cita em "fontes" os apelidos usados. Sem fonte, sem tabela.
+- Métricas e gráficos de contagem o sistema monta sozinho quando mostrar_numeros = true; não escreva números em bloco.
+
 NÚMEROS E SUGESTÕES
 - mostrar_numeros = true só quando ele pedir panorama geral ou resumo do período; pergunta específica = false.
 - sugestoes: 0 a 3 próximas perguntas curtas, só se forem úteis de verdade e diferentes das que já apareceram. Quase sempre nenhuma.`;
@@ -297,7 +304,7 @@ const ESQUEMA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["itens", "acoes", "bloqueadas", "abrir", "mostrar_numeros", "sugestoes"],
+    required: ["itens", "acoes", "bloqueadas", "abrir", "mostrar_numeros", "sugestoes", "blocos"],
     properties: {
       acoes: esquemaDasAcoes(Object.keys(DESCRICOES_DAS_OPERACOES)),
       bloqueadas: {
@@ -329,6 +336,7 @@ const ESQUEMA = {
       abrir: { type: "string" },
       mostrar_numeros: { type: "boolean" },
       sugestoes: { type: "array", items: { type: "string" } },
+      blocos: { type: "array", maxItems: 3, items: { anyOf: [ESQUEMA_FLUXO, ESQUEMA_TABELA] } },
     },
   },
 };
@@ -569,15 +577,75 @@ export async function responder(e: EntradaDoResponder): Promise<Respondido> {
   for (const f of fontesUsadas) junta(objetoDaFonte(f), "citado", f.estado);
 
   const sugestoes = (Array.isArray(red.bruto?.sugestoes) ? (red.bruto!.sugestoes as unknown[]) : []).map((x) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3);
+  const blocosRecusados: string[] = [];
+  const blocos = await blocosDaResposta(red, todas, contagem, { agencia, userId: e.userId, avisos, recusados: blocosRecusados });
+  for (const b of blocos) for (const a of ("fontes" in b && b.fontes) || []) {
+    const f = todas.find((x) => x.apelido.toUpperCase() === String(a).toUpperCase());
+    if (f && !fontesUsadas.includes(f)) fontesUsadas.push(f);
+  }
   const dados = {
     tipo: "resposta", origem: red.origem, cabecalho, periodo, abertura: null, fechamento: null, sugestoes,
     mostrar_numeros: red.origem === "motor" ? true : red.bruto?.mostrar_numeros === true,
     cliente: cliente ? { id: cliente.id, nome: nomeRecorte, projeto_id: cliente.projetoId || null } : null,
-    acoes: acao ? [acao] : [], bloqueadas, abrir, referencias: novas.slice(0, 16),
+    acoes: acao ? [acao] : [], bloqueadas, abrir, referencias: novas.slice(0, 16), blocos, blocos_recusados: blocosRecusados,
     itens: red.itens, fontes: fontesUsadas, contagem, total_de_fontes: ficha.fontes.length, avisos, modelo: red.modelo, recusados: red.recusados, contestados: red.contestados,
     relatorio: respostaEmTexto(cabecalho, red.itens),
   };
   return { tipo: "resposta", texto: respostaEmConversa(red.itens) || (acao ? acao.resumo : ""), clienteId: cliente?.id || null, custo: red.custo, usoId: red.usoId, dados, acao };
+}
+
+const ROTULO_DA_CONTAGEM: Array<[SecaoDaResposta, string]> = [
+  ["feito", "Feito com prova"], ["em_revisao", "Em revisão"], ["em_andamento", "Em andamento"], ["bloqueado", "Bloqueado"], ["decisao", "Sua decisão"], ["concluido_sem_prova", "Concluído sem prova"],
+];
+
+/**
+ * Os blocos visuais da resposta (registro compartilhado _shared/blocos-de-resposta.ts):
+ * - do modelo, só fluxo (desenho dele, sempre "Proposta") e tabela (cada linha
+ *   conferida pelo Jev contra as fontes que o bloco cita; linha que não bate sai);
+ * - do código, o gráfico das contagens quando o Gestor marca panorama (números
+ *   contados na ficha, nada do modelo).
+ */
+async function blocosDaResposta(red: Redacao, fontes: Fonte[], contagem: Record<string, number>, o: { agencia: string | null; userId: string; avisos: string[]; recusados?: string[] }): Promise<BlocoDeResposta[]> {
+  const saida: BlocoDeResposta[] = [];
+  if (red.bruto && Array.isArray(red.bruto.blocos) && red.bruto.blocos.length) {
+    const { blocos, recusados } = validarBlocos({ blocos: red.bruto.blocos }, { fontesConhecidas: fontes.map((f) => f.apelido) });
+    if (recusados.length) {
+      o.avisos.push(`${recusados.length} ${recusados.length === 1 ? "quadro saiu" : "quadros saíram"} na conferência (sem fonte ou fora do formato).`);
+      o.recusados?.push(...recusados.map((r) => r.motivo));
+    }
+    for (const b of blocos) {
+      if (b.tipo === "fluxo") saida.push({ ...b, natureza: "proposta", passos: b.passos.map((p) => ({ ...p, estado: "planejado" as const })) });
+      else if (b.tipo === "tabela") {
+        const conferida = await tabelaConferida(b, fontes, o);
+        if (conferida) saida.push(conferida);
+      }
+    }
+  }
+  if (red.bruto?.mostrar_numeros === true || red.origem === "motor") {
+    const pontos = ROTULO_DA_CONTAGEM.map(([k, rotulo]) => ({ x: rotulo, y: Number(contagem[k] || 0) })).filter((p) => p.y > 0);
+    if (pontos.length >= 2) saida.push({ tipo: "grafico", titulo: "Como está o recorte", tipo_grafico: "barras", series: [{ nome: "Registros", pontos }], unidade: "registros" });
+  }
+  return saida;
+}
+
+/** Cada linha da tabela vira uma afirmação conferida pelo Jev contra as fontes do bloco. */
+async function tabelaConferida(b: BlocoTabela, fontes: Fonte[], o: { agencia: string | null; userId: string; avisos: string[] }): Promise<BlocoTabela | null> {
+  const citadas = (b.fontes || []).map((x) => String(x).toUpperCase());
+  const linhas = b.linhas.map((l) => ({ secao: "conversa" as SecaoDaResposta, texto: b.colunas.map((c, i) => `${c}: ${l[i] ?? "s/d"}`).join("; "), fontes: citadas }));
+  try {
+    const { state, questions } = perguntasDeConferencia(linhas, fontes);
+    const r = await jevPerguntar({ state, questions }, { timeoutMs: 15_000 });
+    if (o.agencia) void cobrarJev(r, { clientId: o.agencia, tarefa: "verificacao", criadoPor: o.userId });
+    const c = aplicarConferencia(linhas, r.answers as Record<string, RespostaChoice>);
+    const ficam = new Set(c.ficam.map((i) => i.texto));
+    const novas = b.linhas.filter((_l, k) => ficam.has(linhas[k].texto));
+    if (novas.length < b.linhas.length) o.avisos.push(`${b.linhas.length - novas.length} ${b.linhas.length - novas.length === 1 ? "linha da tabela saiu" : "linhas da tabela saíram"} na conferência com as fontes.`);
+    return novas.length ? { ...b, linhas: novas } : null;
+  } catch (e) {
+    registrarFalha("gestor-aceleriq: jev da tabela fora (tabela não vai)", e);
+    o.avisos.push("A tabela não foi conferida agora e ficou de fora.");
+    return null;
+  }
 }
 
 /** Onde decidir um pedido sensível (com o cliente na rota quando dá). */

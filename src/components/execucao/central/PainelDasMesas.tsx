@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Briefcase, CalendarDays, ExternalLink, FileText, FolderOpen, Globe, Image as ImageIcon, Info, Kanban, LayoutGrid, Maximize2, Megaphone,
@@ -10,15 +10,17 @@ import { Carregando, EstadoDeErro, botao, campo, juntar } from "@/components/sis
 import { atalhosDaCentral, caminhoEmbutido, enderecoExterno, type ContextoDoAtalho } from "@/lib/centralAtalhos";
 import { TIPO_ARQUIVO_DO_WORKSPACE } from "@/lib/centralArrastar";
 import type { ObjetoAberto } from "@/lib/centralObjetos";
+import { preCarregarFerramenta } from "@/components/execucao/central/FerramentaNativa";
 
 /**
  * Ferramentas e navegador dentro da Central (08/10; refeito em 09/10).
  *
- * - Ferramentas (Mesas, Workspace, Kanban...): a rota do painel em modo
- *   embutido (?embutido=1 esconde a casca e o seletor de mesa/cliente), com o
- *   cliente e o projeto da conversa. Abre por padrão num pop-up interno grande
- *   (largura de computador, layout da própria mesa), ou na lateral ocupando
- *   a altura exata, ou na área maior. Nada duplicado: é a própria tela.
+ * - Ferramentas (Mesas, Workspace, Kanban...): a própria página renderizada
+ *   nativa dentro da Central (FerramentaNativa.tsx, 09/10: sem iframe, sem
+ *   subir o app de novo), com o cliente e o projeto da conversa. Abre por
+ *   padrão num pop-up interno grande, ou na lateral, ou na área maior, e a
+ *   instância é a mesma nos três (trocar de lugar não reinicia o trabalho).
+ *   O quadro embutido (?embutido=1) fica só para endereço que não abre nativo.
  * - Objetos (tarefa, memória, aprovação, arquivo...) NÃO passam por aqui:
  *   abrem na lateral nativa (ObjetoDaCentral).
  * - Arquivos do cliente: lista nativa; arrastar um arquivo para o Gestor ou o
@@ -46,7 +48,7 @@ export function MenuDeFerramentas({ contexto, aoAbrir, aoAbrirNavegador }: { con
           const Icone = ICONE[a.id] || LayoutGrid;
           const semCliente = a.precisaCliente && !contexto.clientId;
           return (
-            <button key={a.id} type="button" onClick={() => aoAbrir({ rotulo: a.rotulo, caminho: a.caminho })} title={semCliente ? `${a.descricao}. Abre sem cliente escolhido.` : a.descricao} className="flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2.5 text-center hover:bg-muted">
+            <button key={a.id} type="button" onMouseEnter={() => preCarregarFerramenta(a.caminho)} onFocus={() => preCarregarFerramenta(a.caminho)} onClick={() => aoAbrir({ rotulo: a.rotulo, caminho: a.caminho })} title={semCliente ? `${a.descricao}. Abre sem cliente escolhido.` : a.descricao} className="flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2.5 text-center hover:bg-muted">
               <Icone className="h-4 w-4 text-primary" aria-hidden="true" />
               <span className="w-full truncate text-[12px] font-medium">{a.rotulo}</span>
             </button>
@@ -82,7 +84,7 @@ export function BotoesDaFerramenta({ ferramenta, aoMudarModo }: { ferramenta: Fe
  * maior traz o próprio cabeçalho de uma linha; no pop-up o cabeçalho é o da
  * janela (semCabecalho), sem repetir título.
  */
-export function FerramentaEmbutida({ ferramenta, clienteNome, aoMudarModo, aoFechar, semCabecalho }: { ferramenta: FerramentaAberta; clienteNome?: string | null; aoMudarModo: (m: ModoDaFerramenta) => void; aoFechar: () => void; semCabecalho?: boolean }) {
+export function FerramentaEmbutida({ ferramenta, clienteNome, aoMudarModo, aoFechar, semCabecalho, conteudo, aoRecarregar }: { ferramenta: FerramentaAberta; clienteNome?: string | null; aoMudarModo: (m: ModoDaFerramenta) => void; aoFechar: () => void; semCabecalho?: boolean; /** A ferramenta nativa (FerramentaNativa); sem ela, quadro embutido. */ conteudo?: ReactNode; aoRecarregar?: () => void }) {
   const [versao, setVersao] = useState(0);
   const src = caminhoEmbutido(ferramenta.caminho);
   return (
@@ -91,11 +93,11 @@ export function FerramentaEmbutida({ ferramenta, clienteNome, aoMudarModo, aoFec
         <div className="flex shrink-0 items-center gap-1 border-b border-border/60 px-2 py-1.5">
           <p className="min-w-0 flex-1 truncate text-[13px] font-medium">{ferramenta.rotulo}{clienteNome ? <span className="font-normal text-muted-foreground"> · {clienteNome}</span> : null}</p>
           <BotoesDaFerramenta ferramenta={ferramenta} aoMudarModo={aoMudarModo} />
-          <button type="button" className={ICONE_DO_CABECALHO} onClick={() => setVersao((v) => v + 1)} aria-label="Recarregar" title="Recarregar"><RefreshCw className="h-3.5 w-3.5" /></button>
+          <button type="button" className={ICONE_DO_CABECALHO} onClick={() => (aoRecarregar ? aoRecarregar() : setVersao((v) => v + 1))} aria-label="Recarregar" title="Recarregar"><RefreshCw className="h-3.5 w-3.5" /></button>
           <button type="button" className={ICONE_DO_CABECALHO} onClick={aoFechar} aria-label="Fechar a ferramenta" title="Fechar"><X className="h-4 w-4" /></button>
         </div>
       )}
-      {src ? (
+      {conteudo ? <div className="min-h-0 flex-1">{conteudo}</div> : src ? (
         <iframe key={`${src}-${versao}`} src={src} title={ferramenta.rotulo} className="block min-h-0 w-full flex-1 border-0 bg-background" />
       ) : <p className="p-3 text-[12px] text-destructive">Caminho inválido.</p>}
     </div>
