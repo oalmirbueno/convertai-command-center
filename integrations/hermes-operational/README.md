@@ -21,4 +21,6 @@ O consumidor do diário inclui cliente do projeto, tarefa e projeto, além da me
 
 Após revisão consultiva do Hermes, o contrato separa `target_client_id` de `project_client_id`. Conversa geral da carteira tem `target_scope=portfolio`, nunca a agência como destino implícito. Referências inválidas ou conflitantes são substituídas na saída do gate por um pedido de esclarecimento (`clarification_only`), preservando o original no diário e a reserva/idempotência. IDs válidos ainda precisam ser conferidos no MCP; estes campos não concedem autorização. Respostas distinguem o que foi conferido, o que foi feito, próximo passo e eventual decisão necessária.
 
+Quando há alvo explícito, o consumidor confirma sua existência e papel na lista de clientes do MCP antes de reservar a mensagem. Cadastro incompleto ou falha de leitura interrompe a rodada, mantendo a mensagem para retry; alvo desconhecido vira esclarecimento. A coordenação geral da carteira segue sem presumir um cliente único. Autorização da ação permanece nas verificações existentes de cada ferramenta.
+
 Testes sem API: `python -m unittest test_portfolio_scope test_diary_context` neste diretório (Linux para o lock do consumidor). Rollback: restaurar o `coletar.py` e consumidor anteriores, preservando bancos de pendências. A seleção gravada pode ficar no projeto para retomada futura.
