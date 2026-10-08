@@ -62,6 +62,7 @@ const NOMES_DAS_FUNCOES: Record<FuncaoDaMesa, string> = {
   "agente-cfo": "CFO",
   // Central de Autonomia (08/10): o chat do dono sobre a operação, em /execucao.
   "gestor-aceleriq": "Gestor Aceleriq",
+  "navegador-remoto": "Navegador remoto",
   // Frente MOD (30/09): o navegador do agente (computer use só de leitura, com o Confirmar do dono).
   "computador-do-agente": "navegador do agente",
 };

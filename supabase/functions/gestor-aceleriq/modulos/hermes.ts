@@ -12,7 +12,9 @@
  * nunca conteúdo privado de outras conversas.
  */
 
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { chave } from "../../_shared/chaves.ts";
+import { INSTRUCAO_DE_APRESENTACAO, type ParteDaResposta, separarResposta } from "../../_shared/resposta-em-partes.ts";
 
 export class ErroDoHermes extends Error {
   constructor(public status: number, public codigo: string, mensagem: string) { super(mensagem); }
@@ -75,7 +77,77 @@ export function linhaDeContexto(c: { cliente?: { id: string; nome: string } | nu
   return partes.length ? `[Contexto do painel Aceleriq: ${partes.join(" · ")}. Confira no MCP antes de agir.]` : "";
 }
 
-export async function hermesAcao(acao: string, corpo: Record<string, unknown>): Promise<Record<string, unknown>> {
+type MensagemDoHermes = { id: unknown; papel: string; texto: string; ferramenta: string | null; chamadas: string[]; quando: unknown };
+type ObjetoCitado = { tipo: string; id: string };
+
+const TABELA_DO_OBJETO: Record<string, string> = { tarefa: "tasks", aprovacao: "operator_approvals", projeto: "projects", arquivo: "files", vinculo: "operator_task_links", memoria_agente: "agente_memoria", memoria_projeto: "project_memory", publicacao: "editorial_posts" };
+
+/**
+ * A resposta do Hermes no MESMO sistema de apresentação do Gestor
+ * (_shared/resposta-em-partes.ts): balões curtos + quadros validados.
+ * - Número em quadro só com fonte = ferramenta que o Hermes chamou no turno
+ *   (desde a última mensagem do dono); a evidência é a saída dela.
+ * - Entrega só com id que existe no banco (o resto sai).
+ * - Progresso só em turno que usou ferramenta (estado não sai do nada).
+ */
+export async function apresentarMensagens(msgs: MensagemDoHermes[], db: SupabaseClient | null): Promise<Array<MensagemDoHermes & { partes?: ParteDaResposta[]; recusados?: string[]; evidencias?: Record<string, string> }>> {
+  const saida: Array<MensagemDoHermes & { partes?: ParteDaResposta[]; recusados?: string[]; evidencias?: Record<string, string> }> = [];
+  let ferramentasDoTurno: string[] = [];
+  let evidencias: Record<string, string> = {};
+  const citados: ObjetoCitado[] = [];
+  for (const m of msgs) {
+    if (m.papel === "user") { ferramentasDoTurno = []; evidencias = {}; saida.push(m); continue; }
+    if (m.papel === "tool") {
+      if (m.ferramenta) { ferramentasDoTurno.push(m.ferramenta); evidencias[m.ferramenta] = String(m.texto || "").slice(0, 4000); }
+      saida.push(m);
+      continue;
+    }
+    for (const c of m.chamadas || []) ferramentasDoTurno.push(c);
+    if (m.papel !== "assistant" || !m.texto.trim()) { saida.push(m); continue; }
+    const r = separarResposta(m.texto, { fontesConhecidas: [...new Set(ferramentasDoTurno)] });
+    const recusados = [...r.recusados];
+    const partes = r.partes.map((p) => {
+      if (p.tipo !== "blocos") return p;
+      const blocos = p.blocos.filter((b) => {
+        if (b.tipo === "progresso" && !ferramentasDoTurno.length) { recusados.push("progresso sem ferramenta no turno"); return false; }
+        if (b.tipo === "entrega" && b.objeto) citados.push({ tipo: b.objeto.tipo, id: b.objeto.id });
+        return true;
+      });
+      return { tipo: "blocos" as const, blocos };
+    }).filter((p) => p.tipo === "texto" || p.blocos.length);
+    const usadas: Record<string, string> = {};
+    for (const f of r.fontes) if (evidencias[f] !== undefined) usadas[f] = evidencias[f];
+    saida.push({ ...m, partes, recusados, evidencias: usadas });
+  }
+  // Entregas: só objetos que existem de verdade (id inventado não vira cartão).
+  const existentes = new Set<string>();
+  if (db && citados.length) {
+    const porTabela = new Map<string, string[]>();
+    for (const c of citados) { const t = TABELA_DO_OBJETO[c.tipo]; if (t && ID_UUID.test(c.id)) porTabela.set(t, [...(porTabela.get(t) || []), c.id]); }
+    for (const [tabela, ids] of porTabela) {
+      const { data } = await db.from(tabela).select("id").in("id", [...new Set(ids)].slice(0, 50));
+      for (const x of (data || []) as Array<{ id: string }>) existentes.add(`${tabela}:${x.id}`);
+    }
+  }
+  for (const m of saida) {
+    if (!m.partes) continue;
+    m.partes = m.partes.map((p) => {
+      if (p.tipo !== "blocos") return p;
+      const blocos = p.blocos.filter((b) => {
+        if (b.tipo !== "entrega" || !b.objeto) return true;
+        const ok = existentes.has(`${TABELA_DO_OBJETO[b.objeto.tipo] || "?"}:${b.objeto.id}`);
+        if (!ok) m.recusados = [...(m.recusados || []), "entrega com id que não existe no OS"];
+        return ok;
+      });
+      return { tipo: "blocos" as const, blocos };
+    }).filter((p) => p.tipo === "texto" || p.blocos.length);
+  }
+  return saida;
+}
+
+const ID_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function hermesAcao(acao: string, corpo: Record<string, unknown>, db: SupabaseClient | null = null): Promise<Record<string, unknown>> {
   if (acao === "hermes_estado") {
     const c = await configuracao();
     if (!c) return { configurada: false };
@@ -94,7 +166,11 @@ export async function hermesAcao(acao: string, corpo: Record<string, unknown>): 
     const filtrada = origem === "conversas" ? lista.filter((x) => ORIGENS_DE_CONVERSA.has(String(x.origem))) : origem === "rotinas" ? lista.filter((x) => !ORIGENS_DE_CONVERSA.has(String(x.origem))) : lista;
     return { sessoes: filtrada.slice(0, 60) };
   }
-  if (acao === "hermes_sessao") return (await ponte(`/sessoes/${idDa(corpo.sessao_id)}/mensagens?limite=120`)).json || {};
+  if (acao === "hermes_sessao") {
+    const r = (await ponte(`/sessoes/${idDa(corpo.sessao_id)}/mensagens?limite=120`)).json || {};
+    const msgs = Array.isArray(r.mensagens) ? (r.mensagens as MensagemDoHermes[]) : [];
+    return { ...r, mensagens: await apresentarMensagens(msgs, db) };
+  }
   if (acao === "hermes_estado_da_sessao") return (await ponte(`/sessoes/${idDa(corpo.sessao_id)}/estado`)).json || {};
   if (acao === "hermes_criar") return (await ponte("/sessoes", { method: "POST", body: { titulo: String(corpo.titulo ?? "").slice(0, 100) } })).json || {};
   if (acao === "hermes_continuar") return (await ponte(`/sessoes/${idDa(corpo.sessao_id)}/continuar`, { method: "POST" })).json || {};
@@ -103,7 +179,7 @@ export async function hermesAcao(acao: string, corpo: Record<string, unknown>): 
     if (!texto) throw new ErroDoHermes(400, "texto_vazio", "Escreva a mensagem para o Hermes.");
     const ctx = linhaDeContexto(corpo.contexto as Parameters<typeof linhaDeContexto>[0]);
     const imagens = imagensParaOHermes(corpo.imagens);
-    return (await ponte(`/sessoes/${idDa(corpo.sessao_id)}/enviar`, { method: "POST", body: { texto: ctx ? `${ctx}\n\n${texto}` : texto, imagens }, tempo: 40_000 })).json || {};
+    return (await ponte(`/sessoes/${idDa(corpo.sessao_id)}/enviar`, { method: "POST", body: { texto: ctx ? `${ctx}\n\n${texto}` : texto, imagens, instrucoes: INSTRUCAO_DE_APRESENTACAO }, tempo: 40_000 })).json || {};
   }
   throw new ErroDoHermes(400, "acao_desconhecida", "Ação do Hermes desconhecida.");
 }

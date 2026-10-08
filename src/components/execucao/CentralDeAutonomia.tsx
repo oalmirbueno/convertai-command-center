@@ -448,6 +448,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
     <ChatDoHermes
       contexto={{ cliente: contextoDaConversa.cliente, projeto: contextoDaConversa.projeto }}
       aoAbrirDiario={() => setDiario(true)}
+      aoAbrirObjeto={abrirObjeto}
       acoes={botoesDoPainel("hermes")}
       className="h-full min-h-0"
     />

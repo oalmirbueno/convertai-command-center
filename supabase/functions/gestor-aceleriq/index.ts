@@ -356,7 +356,7 @@ const ACOES: Record<string, (ch: { userId: string; token: string }, corpo: Recor
   executar_acao: executarAcao,
   desfazer_acao: desfazerAcao,
   // Hermes real (pela ponte do painel no servidor do Hermes; sem ela, configurada: false).
-  ...Object.fromEntries(ACOES_DO_HERMES.map((a) => [a, async (_ch: { userId: string }, corpo: Record<string, unknown>) => json(await hermesAcao(a, corpo))])),
+  ...Object.fromEntries(ACOES_DO_HERMES.map((a) => [a, async (_ch: { userId: string }, corpo: Record<string, unknown>) => json(await hermesAcao(a, corpo, servico()))])),
   // Compatível com a tela anterior: a conversa mais recente do dono.
   conversa: async (ch) => {
     const { data } = await servico().from("gestor_conversas").select("id").eq("dono_id", ch.userId).is("arquivada_em", null).order("atualizado_em", { ascending: false }).limit(1).maybeSingle();

@@ -194,12 +194,12 @@ export function lerQuadros(buffer) {
   return { quadros, resto };
 }
 
-async function rodarTurno(id, turno, mensagem) {
+async function rodarTurno(id, turno, mensagem, instrucoes = "") {
   try {
     const r = await fetch(`${API}/api/sessions/${encodeURIComponent(id)}/chat/stream`, {
       method: "POST",
       headers: { Authorization: `Bearer ${API_KEY}`, "Content-Type": "application/json", Accept: "text/event-stream" },
-      body: JSON.stringify({ message: mensagem, author: { name: "Almir (painel Aceleriq)" } }),
+      body: JSON.stringify({ message: mensagem, author: { name: "Almir (painel Aceleriq)" }, ...(instrucoes ? { instructions: instrucoes } : {}) }),
       signal: AbortSignal.timeout(TEMPO_DO_TURNO_MS),
     });
     if (r.status !== 200 || !r.body) { turno.erro = `hermes_${r.status}`; return; }
@@ -301,11 +301,13 @@ async function rota(req, res) {
     const texto = String((corpo && corpo.texto) || "").trim().slice(0, MAX_TEXTO);
     if (!texto) return responder(res, 400, { error: "texto_vazio" });
     const imagens = imagensValidas(corpo && corpo.imagens);
+    // Instrução de apresentação da Central (somada ao prompt do Hermes só neste turno; não muda modelo, memória nem skills).
+    const instrucoes = typeof (corpo && corpo.instrucoes) === "string" ? corpo.instrucoes.slice(0, 8000) : "";
     const mensagem = imagens.length ? [{ type: "text", text: texto }, ...imagens.map((url) => ({ type: "image_url", image_url: { url } }))] : texto;
     const turno = novoTurno();
     turnos.set(id, turno);
     // O turno roda em segundo plano (pode levar minutos), lendo o stream do Hermes.
-    rodarTurno(id, turno, mensagem);
+    rodarTurno(id, turno, mensagem, instrucoes);
     return responder(res, 202, { aceito: true, desde: turno.desde });
   }
 

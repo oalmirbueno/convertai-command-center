@@ -1,4 +1,7 @@
 import TextoFormatado from "@/components/agentes/respostas/TextoFormatado";
+import RespostaEmPartes from "@/components/agentes/respostas/RespostaEmPartes";
+import { textoParcialSemBlocos, type ParteDaResposta } from "../../../../supabase/functions/_shared/resposta-em-partes";
+import type { ObjetoAberto } from "@/lib/centralObjetos";
 import { useGravadorDeVoz } from "@/lib/voz/useGravadorDeVoz";
 import { transcreverNoServidor } from "@/lib/voz/transcreverNoServidor";
 import { BotaoDeVoz, EstadoDaVoz, PilulaDeGravacao, vozEmCurso } from "@/components/agentes/BotaoDeVoz";
@@ -46,7 +49,11 @@ export type SessaoDoHermes = {
   ocupada: boolean;
 };
 
-export type MensagemDoHermes = { id: string | number | null; papel: "user" | "assistant" | "tool" | string; texto: string; ferramenta: string | null; chamadas: string[]; quando: number | string | null };
+export type MensagemDoHermes = {
+  id: string | number | null; papel: "user" | "assistant" | "tool" | string; texto: string; ferramenta: string | null; chamadas: string[]; quando: number | string | null;
+  /** A resposta já separada e validada no servidor (balões + quadros), com as evidências do turno. */
+  partes?: ParteDaResposta[]; recusados?: string[]; evidencias?: Record<string, string>;
+};
 
 export type FerramentaDoTurno = { nome: string; estado: "rodando" | "feita" | "falhou"; resumo?: string | null; desde?: number | string | null; fim?: number | string | null };
 
@@ -164,7 +171,8 @@ function ChipDaFerramenta({ f }: { f: FerramentaDoTurno }) {
 }
 
 function BalaoAoVivo({ estado }: { estado: EstadoDoTurno | undefined }) {
-  const parcial = estado?.parcial || "";
+  const vivo = textoParcialSemBlocos(estado?.parcial || "");
+  const parcial = vivo.texto;
   const ferramentas = estado?.ferramentas || [];
   const comentarios = (estado?.comentarios || []).slice(-2);
   return (
@@ -177,6 +185,7 @@ function BalaoAoVivo({ estado }: { estado: EstadoDoTurno | undefined }) {
           </span>
         ) : <Digitando />}
       </div>
+      {vivo.montando && <span className="inline-flex items-center gap-1 px-1 text-[12px] text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />Montando o quadro…</span>}
       {ferramentas.length > 0 && (
         <div className="flex max-w-full flex-wrap gap-1" aria-label="Ferramentas do turno">
           {ferramentas.map((f, i) => <ChipDaFerramenta key={`${f.nome}-${i}`} f={f} />)}
@@ -331,7 +340,9 @@ async function arquivosDoPainel(bruto: string): Promise<File[]> {
 
 // ------------------------------------------------------------------ o chat
 
-export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario }: {
+export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario, aoAbrirObjeto }: {
+  /** Entrega citada pelo Hermes abre na lateral nativa da Central. */
+  aoAbrirObjeto?: (o: ObjetoAberto) => void;
   contexto: ContextoDoHermes;
   /** Botões do cabeçalho vindos de quem contém o chat (recolher, ampliar). */
   acoes?: ReactNode;
@@ -625,7 +636,7 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
             </div>
           ) : (
             <div key={`${m.id}-${i}`} className="flex min-w-0 flex-col items-start gap-1">
-              {m.texto.trim() && <div className={BALAO_HERMES}><TextoLongo texto={m.texto} formatado /></div>}
+              {m.texto.trim() && <RespostaEmPartes texto={m.texto} partes={m.partes} recusados={m.recusados} evidencias={m.evidencias} aoAbrirObjeto={aoAbrirObjeto} classeDoBalao={BALAO_HERMES} />}
               {m.chamadas.length > 0 && (
                 <div className="flex max-w-full flex-wrap gap-1">
                   {m.chamadas.map((c, k) => <span key={`${c}-${k}`} className="inline-flex max-w-full items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"><Wrench className="h-2.5 w-2.5 shrink-0" /><span className="truncate">usou {c}</span></span>)}
