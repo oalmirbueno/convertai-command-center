@@ -248,19 +248,27 @@ const PAINEIS: Painel[] = ["gestor", "hermes", "area"];
 const NOME_DO_PAINEL: Record<Painel, string> = { gestor: "Gestor", hermes: "Hermes", area: "Área" };
 
 /**
- * Altura de um painel no celular: a janela menos o topo do painel e a barra de
- * baixo, nunca menos de 460 px (o chat precisa de altura própria para rolar
- * por dentro). Medida em código: Safari 11 não tem dvh.
+ * Altura de um painel no celular: do topo do painel até a barra de baixo do
+ * app (72 px + respiro), para o campo de mensagem ficar à vista sem rolar a
+ * página; nunca menos de 340 px. Medida em código: Safari 11 não tem dvh.
  */
-function useAlturaNoCelular(): number {
-  const medir = () => (typeof window === "undefined" ? 640 : Math.max(460, window.innerHeight - 230));
-  const [altura, setAltura] = useState(medir);
+function useAlturaNoCelular(ref: RefObject<HTMLElement>): number {
+  const [altura, setAltura] = useState(480);
   useEffect(() => {
-    const aoMudar = () => setAltura(medir());
-    window.addEventListener("resize", aoMudar);
-    window.addEventListener("orientationchange", aoMudar);
-    return () => { window.removeEventListener("resize", aoMudar); window.removeEventListener("orientationchange", aoMudar); };
-  }, []);
+    const medir = () => {
+      const el = ref.current;
+      if (!el) return;
+      const topo = el.getBoundingClientRect().top + (window.pageYOffset || 0);
+      const casca = el.closest("[data-casca='conteudo']") as HTMLElement | null;
+      const rolado = casca ? casca.scrollTop : 0;
+      setAltura(Math.max(340, Math.round(window.innerHeight - (topo + rolado) - 84)));
+    };
+    medir();
+    const t = window.setTimeout(medir, 400);
+    window.addEventListener("resize", medir);
+    window.addEventListener("orientationchange", medir);
+    return () => { window.clearTimeout(t); window.removeEventListener("resize", medir); window.removeEventListener("orientationchange", medir); };
+  }, [ref]);
   return altura;
 }
 
@@ -319,7 +327,8 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
   const [navegador, setNavegador] = useState(false);
   const [diario, setDiario] = useState(false);
   const [menuAberto, setMenuAberto] = useState(false);
-  const alturaNoCelular = useAlturaNoCelular();
+  const refDoCelular = useRef<HTMLDivElement>(null);
+  const alturaNoCelular = useAlturaNoCelular(refDoCelular);
   const refDaArea = useRef<HTMLElement>(null);
   const larguraDaArea = useLargura(refDaArea);
   // Área estreita: as abas viram ícones (nome no title e no leitor de tela), sem cortar palavra.
@@ -544,7 +553,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
         </div>
       )}
       {ehAdmin && conversasNoCelular && <div className={juntar(superficie.painel, "p-3")}>{listaDeConversas}</div>}
-      <div style={{ height: alturaNoCelular }}>
+      <div ref={refDoCelular} style={{ height: alturaNoCelular }}>
         {ferramentaGrande ? (
           <div className={juntar(superficie.painel, "h-full overflow-hidden")}><FerramentaEmbutida ferramenta={ferramentaGrande} clienteNome={contextoDoAtalho.clienteNome} aoMudarModo={mudarModo} aoFechar={() => setFerramenta(null)} /></div>
         ) : ehAdmin ? conteudoDe[noCelular] : area}
