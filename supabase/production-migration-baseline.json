@@ -2033,6 +2033,22 @@
       "remote_name": "gestor_conversas",
       "remote_statements_sha256": "4e31af750b4345d2c72a238a8208573dda11f45b7fc1e02c391d6084996d33e4",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261009020000",
+      "path": "supabase/migrations/20261009020000_historico_dos_agentes.sql",
+      "local_sha256": "723b931b626390481fc40705ac75a53fde0bc5298b2d177ee6de904022039350",
+      "remote_name": "historico_dos_agentes",
+      "remote_statements_sha256": "9afb64d9db5c730f351b7e3c5eb43b5094d0d9b790a33207aef21ffc8cd30179",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261009030000",
+      "path": "supabase/migrations/20261009030000_retorno_do_hermes_nas_mesas.sql",
+      "local_sha256": "5057a9c47052ad89c81553ec9a68755239e9b3b867e8ec8719d370189c6bc34e",
+      "remote_name": "retorno_do_hermes_nas_mesas",
+      "remote_statements_sha256": "39c3934f3082e4924da90a8935e17ea39326869821239caba833559d6b9e2b96",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
