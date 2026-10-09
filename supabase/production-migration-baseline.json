@@ -2065,6 +2065,14 @@
       "remote_name": "retorno_do_hermes_cfo_workspace",
       "remote_statements_sha256": "daeb13dab1474eb15530f30be6dd8b4b27488619864202aa878c4baf6789f51e",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261009060000",
+      "path": "supabase/migrations/20261009060000_navegador_remoto.sql",
+      "local_sha256": "18676e3ad2b3c753e6fb515e09837d0cdb140d3f112cd6e580beb3653d87cf3e",
+      "remote_name": "navegador_remoto",
+      "remote_statements_sha256": "351055887ab71a91a2a880160647e1487b1c26d25f79a0544a93fb22d952e95e",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
