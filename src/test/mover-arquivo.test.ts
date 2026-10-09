@@ -166,6 +166,8 @@ describe("CSP: so no build, com hash calculado na hora", () => {
     expect(csp).toContain("connect-src 'self' https://*.supabase.co wss://*.supabase.co");
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("base-uri 'self'");
+    // Lote C: quadro externo só https (navegador remoto ao vivo e o integrado); sem isso valia o default-src 'self'.
+    expect(csp).toContain("frame-src 'self' https: blob:");
     expect(csp).not.toContain("script-src 'self' 'unsafe-inline'");
   });
 });

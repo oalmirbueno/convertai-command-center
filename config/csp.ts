@@ -38,6 +38,10 @@ export function montarCsp(html: string): string {
     "media-src 'self' blob: https://*.supabase.co",
     "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
     "worker-src 'self' blob:",
+    // Lote C (09/10): sem frame-src valia o default-src 'self' e todo quadro externo era bloqueado
+    // (o navegador remoto ao vivo do Browserbase e o navegador integrado). Só https; os quadros
+    // da Central têm sandbox. O site embutido ainda pode recusar por conta própria (Facebook, Google).
+    "frame-src 'self' https: blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
