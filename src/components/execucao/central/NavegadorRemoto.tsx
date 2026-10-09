@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Globe, Loader2, Power, RefreshCw } from "lucide-react";
@@ -14,7 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
  * Sem a conta do provedor ligada, a tela diz isso e não finge sessão.
  */
 
-type SessaoViva = { id: string; rodando: boolean; ao_vivo?: string | null; paginas?: Array<{ titulo: string; url: string }> };
+type SessaoViva = { id: string; rodando: boolean; ao_vivo?: string | null; paginas?: Array<{ titulo: string; url: string; ao_vivo?: string | null }> };
 
 /** Clientes do painel (papel client, sem os apagados), para escolher o navegador quando a conversa não tem cliente. */
 async function lerClientes(): Promise<ClienteDoAgente[]> {
@@ -38,6 +39,7 @@ export default function NavegadorRemoto({ cliente: daConversa }: { cliente: { id
     </div>
   ) : null;
   const [sessaoId, setSessaoId] = useEstadoDaTela<string>(`execucao:central:navegador:${cliente?.id || "sem"}`, "");
+  const [aba, setAba] = useState(0);
   const estado = useQuery({
     queryKey: ["navegador-remoto", "estado"],
     queryFn: () => chamarFuncao<{ configurado: boolean }>("navegador-remoto", { acao: "estado" }),
@@ -46,7 +48,7 @@ export default function NavegadorRemoto({ cliente: daConversa }: { cliente: { id
   const sessao = useQuery({
     queryKey: ["navegador-remoto", "sessao", sessaoId],
     enabled: !!sessaoId && !!estado.data?.configurado,
-    refetchInterval: 30_000,
+    refetchInterval: 15_000,
     queryFn: async () => (await chamarFuncao<{ sessao: SessaoViva }>("navegador-remoto", { acao: "ver", sessao_id: sessaoId })).sessao,
   });
   const abrir = useMutation({
@@ -73,6 +75,11 @@ export default function NavegadorRemoto({ cliente: daConversa }: { cliente: { id
   if (!cliente) return <div className="flex flex-col">{seletor}<p className="p-3 text-[13px] text-muted-foreground">Escolha o cliente acima (ou abra uma conversa de cliente): cada cliente tem o próprio navegador (login separado).</p></div>;
 
   const viva = sessao.data && sessao.data.rodando ? sessao.data : null;
+  // Abas de verdade do navegador remoto (link aberto em nova aba vira outra): cada uma tem a própria tela ao vivo.
+  const paginas = (viva && viva.paginas) || [];
+  const abaValida = aba < paginas.length ? aba : 0;
+  const paginaAtual = paginas[abaValida] || null;
+  const telaAoVivo = (paginaAtual && paginaAtual.ao_vivo) || (viva && viva.ao_vivo) || null;
   if (!viva) {
     return (
       <div className="flex flex-col">
@@ -91,13 +98,31 @@ export default function NavegadorRemoto({ cliente: daConversa }: { cliente: { id
       {seletor}
       <div className="flex shrink-0 items-center gap-1 px-2 py-1.5 text-[12px] text-muted-foreground">
         <span className="h-2 w-2 shrink-0 rounded-full bg-success" aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate">{viva.paginas?.[0]?.titulo || viva.paginas?.[0]?.url || "Navegador ao vivo"} · {cliente.nome}</span>
+        <span className="min-w-0 flex-1 truncate">{paginaAtual?.titulo || paginaAtual?.url || "Navegador ao vivo"} · {cliente.nome}</span>
         <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => void sessao.refetch()} aria-label="Atualizar" title="Atualizar"><RefreshCw className="h-3.5 w-3.5" /></button>
         <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => encerrar.mutate()} aria-label="Fechar o navegador" title="Fechar o navegador"><Power className="h-3.5 w-3.5" /></button>
       </div>
-      {viva.ao_vivo ? (
+      {paginas.length > 1 && (
+        <div className="flex shrink-0 gap-1 overflow-x-auto px-2 pb-1.5" role="tablist" aria-label={`Abas do navegador de ${cliente.nome}`}>
+          {paginas.map((p, i) => (
+            <button
+              key={`${i}-${p.url}`}
+              type="button"
+              role="tab"
+              aria-selected={i === abaValida}
+              onClick={() => setAba(i)}
+              title={p.url}
+              className={juntar("max-w-[11rem] shrink-0 truncate rounded-md px-2 py-1 text-[11px]", i === abaValida ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50")}
+            >
+              {p.titulo || p.url || `Aba ${i + 1}`}
+            </button>
+          ))}
+        </div>
+      )}
+      {telaAoVivo ? (
         <iframe
-          src={viva.ao_vivo}
+          key={telaAoVivo}
+          src={telaAoVivo}
           title={`Navegador remoto de ${cliente.nome}`}
           className="block min-h-0 w-full flex-1 border-0 bg-background"
           sandbox="allow-same-origin allow-scripts allow-forms allow-popups"

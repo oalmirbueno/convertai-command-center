@@ -124,6 +124,9 @@ async function acao(nome: string, corpo: Record<string, unknown>, userId: string
       if (s.estado === "aberta") await servico().from("navegador_sessoes").update({ estado: "encerrada", encerrada_em: new Date().toISOString() }).eq("id", s.id);
       return { sessao: { id: s.id, rodando: false } };
     }
+    // Histórico: a página aberta fica anotada na sessão (contexto para a equipe e os agentes).
+    const atual = viva.paginas.find((p) => p.url && p.url !== "about:blank");
+    if (atual) await servico().from("navegador_sessoes").update({ ultima_url: atual.url.slice(0, 1000) }).eq("id", s.id);
     return { sessao: { id: s.id, ...viva } };
   }
 
