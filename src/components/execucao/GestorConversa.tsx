@@ -48,6 +48,8 @@ export type RespostaDoGestor = {
   itens?: ItemDaResposta[];
   fontes?: Fonte[];
   avisos?: string[];
+  /** Regra que o dono ensinou nesta mensagem e passou a valer em toda conversa. */
+  aprendi?: string | null;
   contagem?: Partial<Record<SecaoDaResposta, number>>;
   cliente?: { id: string; nome: string; projeto_id: string | null } | null;
   opcoes?: Array<{ id: string; nome: string }>;
@@ -298,6 +300,11 @@ function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemI
               )}
             </div>
           ))}
+          {d.aprendi && (
+            <p className="mt-1 flex max-w-[560px] gap-1.5 px-1 text-[12px] text-muted-foreground" data-aprendi="">
+              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />Aprendi: <span className="text-foreground">{d.aprendi}</span>
+            </p>
+          )}
           {!!d.avisos?.length && (
             <ul className="mt-1 space-y-0.5 px-1 text-[12px] text-muted-foreground">
               {d.avisos.map((a, k) => <li key={k} className="flex gap-1.5"><CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />{a}</li>)}
