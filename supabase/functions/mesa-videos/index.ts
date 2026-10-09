@@ -48,6 +48,12 @@ import { baseDoVideoRapido } from "./modulos/video-rapido-legendado.ts";
  *   -> { intencao, resposta, mensagem_id, acao, pergunta?, anexos }: entende e, para mandar à
  *   Edição, arquivar, ligar à cena ou organizar, monta a proposta com os itens que o pedido
  *   aponta (Jev sobre a lista na ordem da tela); ordem clara sem custo vai na hora com Desfazer.
+ *   Lote B (09/10): aceita conversa_id e devolve conversa_id; a troca fica em agente_conversas
+ *   (agente diretor_arte, referencia_tipo mesa_videos_agente | mesa_edicao_agente). Pergunta
+ *   livre e "peça ao Hermes" vão pelo núcleo comum (leituras, quadros conferidos, fila do Hermes).
+ *   A tela lê a conversa direto do banco (agente_conversas/agente_mensagens, permissão da equipe).
+ * - agente_anotar { client_id, mesa, conversa_id?, usuario?, texto, mensagem_id? }: a resposta que a
+ *   tela deu (atalho que abre a etapa) entra no histórico marcada como da tela.
  * - aprendizado_esquecer / aprendizado_guardar (AG2): regras que a equipe ensinou (cérebro do cliente).
  * - executar_acao_agente / desfazer_acao_agente também acham o cartão do diretor na conversa
  *   (agente_mensagens), além de video_acoes.
@@ -146,7 +152,10 @@ import { aprenderDoPedido, rotasDoAprendizado } from "../_shared/aprendizado-das
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { modelosDeVideo } from "./modulos/modelos-de-video.ts";
 import { JevErro, jevPerguntar } from "../_shared/jev.ts";
-import { cobrarJev } from "../_shared/ia-motor.ts";
+import { chamarTexto, cobrarJev, IaMotorErro, modeloPadrao } from "../_shared/ia-motor.ts";
+// Lote B (09/10): o agente da mesa no núcleo comum (leituras, quadros conferidos, Hermes) e com a conversa no banco.
+import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, pedeAoHermes, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
+import { gravarTroca } from "../_shared/conversa-das-mesas.ts";
 import { MAX_BYTES_DO_PROJETO, normalizarProjeto, type ProjetoDeEdicao, proximaRevisao, tamanhoDoProjeto } from "../_shared/projeto-de-edicao.ts";
 // Frente V-A (26/09): gerador (motores, ângulo, continuar, transição, antes e depois) e o diretor.
 import { AGENTE_DO_DIRETOR } from "./modulos/diretor-de-video.ts";
@@ -1149,12 +1158,185 @@ async function cenaDoPedido(ch: Chamador, clientId: string, texto: string, cenas
  * senão o cartão pede Confirmar. Dúvida real (qual vídeo? qual cena?): UMA
  * pergunta. Arquivar nunca pega "todos" sem a pessoa dizer.
  */
+type RespostaDoAgir = Record<string, unknown> & { intencao?: string; resposta?: string | null; mensagem_id?: string | null; acao?: unknown; anexos?: unknown[]; aviso_registro?: string };
+
+/** Onde a conversa do agente da mesa mora (lote B, 09/10): agente_conversas, uma ativa por cliente e mesa. */
+const AGENTE_DA_MESA_NA_CONVERSA = "diretor_arte";
+const referenciaDaConversaDaMesa = (mesa: MesaDoAgente) => (mesa === "edicao" ? "mesa_edicao_agente" : "mesa_videos_agente");
+
+/**
+ * A conversa do agente da mesa: a pedida (pelo Histórico) quando é deste cliente e desta
+ * mesa e não está arquivada; senão a ativa; senão uma nova. Nunca lança (null + log).
+ */
+async function conversaDoAgenteDaMesa(ch: Chamador, clientId: string, mesa: MesaDoAgente, pedida: unknown): Promise<string | null> {
+  const ref = referenciaDaConversaDaMesa(mesa);
+  try {
+    if (typeof pedida === "string" && UUID.test(pedida)) {
+      const { data } = await servico().from("agente_conversas").select("id, client_id, agente, referencia_tipo, arquivada_em").eq("id", pedida).maybeSingle();
+      const c = data as { id: string; client_id: string; agente: string; referencia_tipo: string | null; arquivada_em: string | null } | null;
+      if (c && c.client_id === clientId && c.agente === AGENTE_DA_MESA_NA_CONVERSA && c.referencia_tipo === ref && !c.arquivada_em) return c.id;
+    }
+    const { data: ativa } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE_DA_MESA_NA_CONVERSA).eq("referencia_tipo", ref).is("arquivada_em", null).order("criado_em", { ascending: false }).limit(1);
+    const achada = ((ativa as { id: string }[] | null) ?? [])[0];
+    if (achada) return achada.id;
+    const { data: nova, error } = await servico().from("agente_conversas").insert({ client_id: clientId, agente: AGENTE_DA_MESA_NA_CONVERSA, referencia_tipo: ref, referencia_id: null, criado_por: ch.userId }).select("id").single();
+    if (error) throw error;
+    return (nova as { id: string }).id;
+  } catch (e) {
+    registrarFalha("mesa-videos: conversa do agente da mesa sem registro", e, { client_id: clientId, mesa });
+    return null;
+  }
+}
+
+/** O cartão guardado em video_acoes, referenciado na mensagem (o estado vivo continua sendo o da linha). */
+function anexoDoCartao(mensagemId: unknown, acao: unknown): Record<string, unknown> | null {
+  if (typeof mensagemId !== "string" || !UUID.test(mensagemId) || !acao || typeof acao !== "object") return null;
+  return { tipo: "acao_da_mesa_de_video", tabela: TABELA_DAS_ACOES, mensagem_id: mensagemId, acao };
+}
+
+/**
+ * Pergunta livre (nenhum atalho da tela) ou "peça ao Hermes": o núcleo comum responde.
+ * Leituras do OS escolhidas pelo Jev, quadros conferidos e o encaminhamento ao Hermes
+ * (fecharNucleo). Sem saldo ou sem modelo: diz o motivo, sem fingir resposta.
+ */
+async function respostaPeloNucleo(ch: Chamador, clientId: string, mesa: MesaDoAgente, texto: string, conversaId: string | null): Promise<{ resposta: string; encaminhado: boolean }> {
+  const nomeDoAgente = mesa === "edicao" ? "agente da Mesa Edição" : "agente da Mesa Vídeos";
+  const cobrarDoNucleo = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: "conversa", criadoPor: ch.userId });
+  const historicoP = conversaId
+    ? servico().from("agente_mensagens").select("papel, conteudo").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(12).then(
+      (r) => ((r.data as { papel: string; conteudo: string }[] | null) ?? []).slice().reverse(),
+      () => [] as { papel: string; conteudo: string }[],
+    )
+    : Promise.resolve([] as { papel: string; conteudo: string }[]);
+  const [historico, arquivos, rot, modelo] = await Promise.all([
+    historicoP,
+    lerArquivosDoCliente(clientId).catch((e) => (registrarFalha("mesa-videos: arquivos para o agente da mesa", e), [] as LinhaDoArquivo[])),
+    lerRoteiros(clientId).catch((e) => (registrarFalha("mesa-videos: roteiros para o agente da mesa", e), { roteiros: [] as RoteiroAprovado[], disponivel: false })),
+    modeloPadrao("diretor_arte").then((m) => m, () => null),
+  ]);
+  const anteriores = historico.filter((m) => m.papel === "usuario" || m.papel === "agente").map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: String(m.conteudo || "").slice(0, 3000) }));
+  const ultima = anteriores.slice().reverse().find((m) => m.papel === "agente");
+  const previas = await prepararNucleo(servico(), { clientId, pedido: texto, agente: nomeDoAgente, ultimaResposta: ultima ? ultima.conteudo : null, cobrar: cobrarDoNucleo });
+  const gerados = arquivos.filter((a) => a.tipo === "gerado" && a.estado !== "arquivado");
+  const naEntrada = arquivos.filter((a) => (a.tipo !== "gerado" || !!a.edicao_desde) && ["angulo", "quadro"].indexOf(String(a.tipo)) < 0 && a.estado !== "arquivado");
+  const lista = (mesa === "videos" ? gerados : naEntrada).slice(0, 20);
+  const dados = {
+    mesa: mesa === "edicao" ? "Mesa Edição" : "Mesa Vídeos",
+    videos_gerados: gerados.length,
+    gerados_na_edicao: gerados.filter((a) => !!a.edicao_desde).length,
+    na_entrada_da_edicao: naEntrada.length,
+    entrada_sem_grupo: naEntrada.filter((a) => !a.grupo).length,
+    roteiros_aprovados: rot.roteiros.slice(0, 10).map((r) => ({ titulo: r.titulo, cenas: r.cenas.length })),
+    lista_da_etapa: lista.map((a, i) => ({ apelido: `r${i + 1}`, nome: a.nome, tipo: a.tipo, estado: a.estado, grupo: a.grupo || null, na_edicao: !!a.edicao_desde })),
+  };
+  const sistema = [
+    `Você é o ${nomeDoAgente} da Aceleriq. Responda em português, em 2 a 5 frases curtas, só com o que os DADOS e as leituras mostram; não invente vídeo, prazo ou número.`,
+    `O que você faz direto na conversa (com Desfazer): mandar vídeo gerado para a Edição, arquivar, ligar à cena de um roteiro aprovado e organizar os takes por roteiro e cena. Gerar vídeo novo é no Diretor e em Gerar (tem custo e pede confirmação). Se o pedido é uma dessas ações, diga a frase que a equipe pode mandar (ex.: "manda o r2 para a Edição").`,
+    `DADOS (estado agora):\n${JSON.stringify(dados)}`,
+    INSTRUCAO_DO_NUCLEO_DAS_MESAS,
+    previas.bloco || "",
+  ].filter(Boolean).join("\n\n");
+  let bruto = "";
+  if (!modelo) bruto = "Não há modelo de texto ativo para responder agora. Nada foi alterado.";
+  else {
+    try {
+      const saida = await chamarTexto({
+        clientId,
+        tarefa: "conversa",
+        agente: "diretor_arte",
+        modeloId: modelo.id,
+        sistema,
+        mensagens: [...anteriores, { papel: "usuario", conteudo: texto }],
+        maxTokensSaida: 900,
+        referencia: conversaId ? { tipo: referenciaDaConversaDaMesa(mesa), id: conversaId } : undefined,
+        criadoPor: ch.userId,
+      });
+      bruto = String(saida.texto || "").trim().slice(0, 6000);
+    } catch (e) {
+      const motivo = e instanceof IaMotorErro ? e.message : String((e as Error)?.message ?? e);
+      registrarFalha("mesa-videos: resposta do agente da mesa pelo núcleo", e, { client_id: clientId });
+      bruto = `Não consegui responder agora (${motivo.slice(0, 160)}). Nada foi alterado.`;
+    }
+  }
+  const fechado = await fecharNucleo(servico(), bruto, previas, { clientId, agente: nomeDoAgente, pedido: texto, userId: ch.userId, cobrar: cobrarDoNucleo });
+  return { resposta: fechado.texto || bruto, encaminhado: fechado.encaminhado };
+}
+
+/**
+ * agente_agir: entende e age (agirNoPedido) e guarda a troca na conversa do agente da mesa
+ * (lote B, 09/10). Pergunta livre e "peça ao Hermes" passam pelo núcleo comum. Quando a
+ * resposta é da tela (atalho que só abre a etapa), fica o pedido e a tela anota a resposta
+ * por agente_anotar. Falha no registro não derruba a resposta (aviso_registro).
+ */
 async function agenteAgir(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id || "");
   await garantirAcesso(ch, clientId);
   const mesa: MesaDoAgente = corpo.mesa === "edicao" ? "edicao" : "videos";
   const texto = String(corpo.texto || "").replace(/\s+/g, " ").trim().slice(0, 600);
   if (!texto) throw new ErroHttp(400, "texto_vazio", "Escreva o que precisa.");
+  const conversaId = await conversaDoAgenteDaMesa(ch, clientId, mesa, corpo.conversa_id);
+  let r: RespostaDoAgir;
+  if (pedeAoHermes(texto)) {
+    const n = await respostaPeloNucleo(ch, clientId, mesa, texto, conversaId);
+    r = { intencao: "hermes", confianca: null, via: "nucleo", anexos: [], resposta: n.resposta, encaminhado: n.encaminhado, mensagem_id: null, acao: null };
+  } else {
+    r = await agirNoPedido(ch, corpo, clientId, mesa, texto);
+    if (!r.resposta && r.intencao === NENHUMA) {
+      const n = await respostaPeloNucleo(ch, clientId, mesa, texto, conversaId);
+      r = { ...r, via: "nucleo", resposta: n.resposta, encaminhado: n.encaminhado };
+    }
+  }
+  if (!conversaId) return json({ ...r, conversa_id: null, aviso_registro: r.aviso_registro || "A resposta chegou, mas a conversa não foi guardada no histórico." });
+  let avisoRegistro: string | null = null;
+  if (r.resposta) {
+    const cartao = anexoDoCartao(r.mensagem_id, r.acao);
+    const anexos = (Array.isArray(r.anexos) ? r.anexos : []).concat(cartao ? [cartao] : []);
+    const troca = await gravarTroca(servico(), { conversaId, clientId, usuario: { conteudo: texto, anexos: [] }, agente: { conteudo: String(r.resposta), anexos }, onde: "mesa-videos agente da mesa" });
+    if (troca.erro) avisoRegistro = "A resposta chegou, mas não entrou no histórico.";
+  } else {
+    const { error } = await servico().from("agente_mensagens").insert({ conversa_id: conversaId, client_id: clientId, papel: "usuario", conteudo: texto, anexos: [] });
+    if (error) {
+      registrarFalha("mesa-videos: pedido ao agente da mesa sem registro", error, { conversa_id: conversaId });
+      avisoRegistro = "O pedido não entrou no histórico.";
+    }
+  }
+  return json({ ...r, conversa_id: conversaId, ...(avisoRegistro && !r.aviso_registro ? { aviso_registro: avisoRegistro } : {}) });
+}
+
+/**
+ * agente_anotar { client_id, mesa, conversa_id?, usuario?, texto, mensagem_id? } -> { conversa_id }
+ * A resposta que a própria tela deu (atalho que abre a etapa, situação, cartão de proposta)
+ * entra no histórico, marcada como da tela. O cartão é lido de video_acoes (nunca o da tela).
+ */
+async function agenteAnotar(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id || "");
+  await garantirAcesso(ch, clientId);
+  const mesa: MesaDoAgente = corpo.mesa === "edicao" ? "edicao" : "videos";
+  const texto = String(corpo.texto || "").trim().slice(0, 4000);
+  if (!texto) throw new ErroHttp(400, "texto_vazio", "Nada para anotar.");
+  const usuario = String(corpo.usuario || "").replace(/\s+/g, " ").trim().slice(0, 600);
+  const conversaId = await conversaDoAgenteDaMesa(ch, clientId, mesa, corpo.conversa_id);
+  if (!conversaId) throw new ErroHttp(503, "conversa_indisponivel", "A conversa do agente não pôde ser aberta agora.");
+  let cartao: Record<string, unknown> | null = null;
+  if (typeof corpo.mensagem_id === "string" && UUID.test(corpo.mensagem_id)) {
+    const { data } = await servico().from(TABELA_DAS_ACOES).select("id, client_id, anexos").eq("id", corpo.mensagem_id).maybeSingle();
+    const linha = data as { id: string; client_id: string; anexos: unknown[] } | null;
+    if (linha && linha.client_id === clientId && Array.isArray(linha.anexos) && linha.anexos[0]) cartao = anexoDoCartao(linha.id, linha.anexos[0]);
+  }
+  const daTela = { tipo: "resposta_da_tela", mesa };
+  const agora = Date.now();
+  const linhas: Record<string, unknown>[] = [];
+  if (usuario) linhas.push({ conversa_id: conversaId, client_id: clientId, papel: "usuario", conteudo: usuario, anexos: [], criado_em: new Date(agora).toISOString() });
+  linhas.push({ conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: texto, anexos: cartao ? [daTela, cartao] : [daTela], criado_em: new Date(agora + 1).toISOString() });
+  const { error } = await servico().from("agente_mensagens").insert(linhas);
+  if (error) {
+    registrarFalha("mesa-videos: resposta da tela sem registro", error, { conversa_id: conversaId });
+    throw new ErroHttp(500, "anotacao_falhou", "A resposta não entrou no histórico.");
+  }
+  return json({ conversa_id: conversaId });
+}
+
+async function agirNoPedido(ch: Chamador, corpo: Record<string, unknown>, clientId: string, mesa: MesaDoAgente, texto: string): Promise<RespostaDoAgir> {
   const [ent, aprendido] = await Promise.all([
     entenderPedido(ch, clientId, mesa, texto),
     // Aprendizado: "nunca mande X", "não gostei de Y" viram regra da mesa (nunca bloqueia).
@@ -1162,7 +1344,7 @@ async function agenteAgir(ch: Chamador, corpo: Record<string, unknown>) {
   ]);
   const anexos = aprendido ? [aprendido] : [];
   const base = { ...ent, anexos };
-  if (INTENCOES_QUE_AGEM.indexOf(ent.intencao) < 0) return json({ ...base, resposta: null, mensagem_id: null, acao: null });
+  if (INTENCOES_QUE_AGEM.indexOf(ent.intencao) < 0) return ({ ...base, resposta: null, mensagem_id: null, acao: null });
 
   const [arquivos, rot, aprovados] = await Promise.all([lerArquivosDoCliente(clientId), lerRoteiros(clientId), arquivosEmVersaoAprovada(clientId)]);
   // A lista da etapa: Mesa Vídeos = vídeos gerados (Resultados); Mesa Edição = a Entrada.
@@ -1177,21 +1359,21 @@ async function agenteAgir(ch: Chamador, corpo: Record<string, unknown>) {
   // Quais itens: apelido escrito > referência (Jev) > regra de cada intenção.
   const escritos = apelidosEscritos(texto, itens);
   const referencia = escritos.length ? null : await referenciaDoPedido(texto, itens, { agente: mesa === "edicao" ? "agente da Mesa Edição" : "agente da Mesa Vídeos", ultimaResposta: corpo.ultima_resposta ? String(corpo.ultima_resposta) : null, selecionados });
-  const pergunta = (t: string) => json({ ...base, resposta: t, pergunta: true, mensagem_id: null, acao: null });
+  const pergunta = (t: string): RespostaDoAgir => ({ ...base, resposta: t, pergunta: true, mensagem_id: null, acao: null });
   const opcoes = (refs: string[]) => refs.slice(0, 4).map((ref) => `${ref} (${(itens.find((i) => i.ref === ref) || { titulo: "" }).titulo})`).join(", ");
   let escolhidos: ResultadoGerado[] | null = null;
   if (escritos.length) escolhidos = resultados.filter((_r, i) => escritos.indexOf(itens[i].ref) >= 0);
   else if (referencia && referencia.incerta) return pergunta(`Você quer dizer ${referencia.alcance === "todas" ? "todos os vídeos da lista" : opcoes(referencia.refs)}? Responda com o apelido (ex.: "${referencia.refs[0] || "r1"}") ou "todos".`);
   else if (referencia) escolhidos = referencia.alcance === "todas" ? resultados.slice() : resultados.filter((_r, i) => referencia.refs.indexOf(itens[i].ref) >= 0);
   else if (pedidoAponta(texto) && !/\b(todos|todas|tudo)\b/i.test(texto) && ent.intencao !== "organizar") {
-    if (!itens.length) return json({ ...base, resposta: "Não há vídeo nesta etapa para isso.", mensagem_id: null, acao: null });
+    if (!itens.length) return ({ ...base, resposta: "Não há vídeo nesta etapa para isso.", mensagem_id: null, acao: null });
     return pergunta(`Qual vídeo? ${opcoes(itens.map((i) => i.ref))}${itens.length > 4 ? "..." : ""}. Responda com o apelido (ex.: "r1").`);
   }
   if (!escolhidos && (ent.intencao === "arquivar" || ent.intencao === "vincular")) {
     // Arquivar e ligar nunca pegam a lista inteira sem a pessoa dizer "todos".
     if (/\b(todos|todas|tudo)\b/i.test(texto)) escolhidos = resultados.slice();
     else if (resultados.length === 1) escolhidos = resultados.slice();
-    else if (!resultados.length) return json({ ...base, resposta: "Não há vídeo gerado nesta etapa.", mensagem_id: null, acao: null });
+    else if (!resultados.length) return ({ ...base, resposta: "Não há vídeo gerado nesta etapa.", mensagem_id: null, acao: null });
     else return pergunta(`Quais vídeos? ${opcoes(itens.map((i) => i.ref))}${itens.length > 4 ? "..." : ""}. Diga o apelido (ex.: "r2") ou "todos".`);
   }
 
@@ -1210,7 +1392,7 @@ async function agenteAgir(ch: Chamador, corpo: Record<string, unknown>) {
   } else if (ent.intencao === "vincular") {
     const cenas: CenaParaLigar[] = [];
     rot.roteiros.forEach((r) => r.cenas.forEach((c) => cenas.push({ roteiro_id: r.id, roteiro: r.titulo, cena_ref: c.ref, ordem: c.ordem, titulo: c.titulo || "" })));
-    if (!cenas.length) return json({ ...base, resposta: "Não há roteiro aprovado com cenas para ligar. Aprove um roteiro na Mesa Roteiros.", mensagem_id: null, acao: null });
+    if (!cenas.length) return ({ ...base, resposta: "Não há roteiro aprovado com cenas para ligar. Aprove um roteiro na Mesa Roteiros.", mensagem_id: null, acao: null });
     const cena = await cenaDoPedido(ch, clientId, texto, cenas);
     if (!cena) return pergunta(`Qual cena? ${cenas.slice(0, 5).map((c, i) => `c${i + 1} ${rotuloDaCena(c)}`).join("; ")}${cenas.length > 5 ? "..." : ""}.`);
     acao = acaoDeLigarACena(escolhidos || [], cena, { id });
@@ -1225,7 +1407,7 @@ async function agenteAgir(ch: Chamador, corpo: Record<string, unknown>) {
     regras = regrasDoOrganizador(roteiros);
     vazio = "Já está organizado: nomes e grupos seguem o padrão por roteiro e cena.";
   }
-  if (!acao) return json({ ...base, resposta: vazio, mensagem_id: null, acao: null });
+  if (!acao) return ({ ...base, resposta: vazio, mensagem_id: null, acao: null });
 
   // A proposta nasce guardada ANTES de qualquer execução: o Desfazer sempre tem onde morar.
   const { data: linha, error: eGravar } = await servico().from(TABELA_DAS_ACOES).insert({ client_id: clientId, anexos: [acao], criado_por: ch.userId }).select("id").single();
@@ -1249,7 +1431,7 @@ async function agenteAgir(ch: Chamador, corpo: Record<string, unknown>) {
       await auditar(ch, "video_agente_direto", { client_id: clientId, intencao: ent.intencao, itens: feita.itens.length }, (feita.resultados || []).every((x) => x.ok), mensagemId);
     }
   }
-  return json({ ...base, resposta, mensagem_id: mensagemId, acao, ...(avisoRegistro ? { aviso_registro: avisoRegistro } : {}) });
+  return ({ ...base, resposta, mensagem_id: mensagemId, acao, ...(avisoRegistro ? { aviso_registro: avisoRegistro } : {}) });
 }
 
 // ------------------------------------------------------------------ gerador e diretor (frente V-A)
@@ -1335,6 +1517,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   agente_entender: agenteEntender,
   // AG2 (29/09): o agente da mesa entende E age (arquivar, ligar à cena, mandar para a Edição, organizar).
   agente_agir: agenteAgir,
+  agente_anotar: agenteAnotar,
   aprendizado_esquecer: (ch, corpo) => aprendizadoDaMesa(corpo).aprendizado_esquecer(ch, corpo),
   aprendizado_guardar: (ch, corpo) => aprendizadoDaMesa(corpo).aprendizado_guardar(ch, corpo),
   projeto_salvar: projetoSalvar,

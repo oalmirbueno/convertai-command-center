@@ -226,7 +226,9 @@ export function resolveAiProviderChain(
 /** A cadeia com as chaves do cofre carregadas antes (o ambiente continua mandando). */
 export async function resolverCadeiaDaIa(options: AiProviderChainOptions): Promise<AiProvider[]> {
   await carregarChaves(CHAVES_DA_CADEIA_NO_COFRE);
-  return resolveAiProviderChain(options);
+  // Lote B (09/10): a conta direta do modelo devolvia 429 em toda chamada (Lançador, Workspace...).
+  // A reserva pelo OpenRouter (chave do cofre) vira o padrão; quem passar openRouterReserve: false continua sem.
+  return resolveAiProviderChain({ openRouterReserve: true, ...options });
 }
 
 export async function fetchAiChatCompletion(

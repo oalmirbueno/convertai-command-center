@@ -79,7 +79,9 @@ describe("A2: imagens por chamada no agente-calendario", () => {
     expect(livre).toContain("respostaComAvisos(texto(r.resposta, 2000)");
     expect(livre).toContain("notaDoSistema(anexos.aviso)");
     expect(livre).toContain("avisos: anexos.aviso ? [anexos.aviso] : []");
-    expect(corpoDe("planejarMes")).toContain('respostaComAvisos(texto(r.resposta, 6000) || "Anotado.", [imagens.aviso])');
+    // Lote B (09/10): a fala passa pelo núcleo comum (fecharNucleo) antes de ganhar o aviso das imagens.
+    expect(corpoDe("planejarMes")).toContain("fecharNucleo(servico, texto(r.resposta, 9000), previas,");
+    expect(corpoDe("planejarMes")).toContain('respostaComAvisos(apresentada.texto || "Anotado.", [imagens.aviso])');
     expect(corpoDe("campanhaConversar")).toContain("respostaComAvisos(texto(r.resposta, 2000)");
 
     // Seis prints de 5 MB (6,7 MB em base64 cada): três cabem, os outros três ficam de fora na ordem.

@@ -21,7 +21,9 @@ export const OPCOES_DA_INTENCAO: Record<IntencaoDoCFO, string> = {
   este_mes: "quer saber o que fazer neste mês, o limite do mês ou o que não pode gastar",
   plano: "quer um plano de crescimento, metas ou como chegar a uma receita",
   lancar: "pede para registrar ou lançar uma despesa ou conta que já decidiu fazer",
-  meta: "pede para definir ou mudar a meta mensal de receita",
+  meta: "pede para MUDAR o valor da meta mensal de receita que já existe (substitui a atual); só quando fala da meta mensal",
+  nova_meta: "pede para CRIAR uma meta nova (de economia, reserva, teste, projeto), sem mexer na meta mensal de receita",
+  simular: "pede para simular um cenário (e se...) sem gravar nada",
   erros: "quer saber onde está errando nas finanças",
   outra: "outra coisa que não é nenhuma das anteriores",
 };

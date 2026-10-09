@@ -5,6 +5,8 @@ import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { esquecerRegraAprendida, guardarRegraAprendida } from "@/lib/agentes/aprendizadoDoLancador";
 import { Sparkles } from "lucide-react";
+import { toast } from "sonner";
+import { textoDoErro } from "@/lib/mesa/api";
 import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
@@ -186,6 +188,8 @@ export default function ConversaDoPlano({ plano, className = "" }: { plano: Plan
                 <TextoDoAgente texto={m.conteudo} />
               </Bolha>
             )}
+            {/* Lote B: o que a conversa mudou no plano, com Desfazer (o antes fica guardado e a auditoria registra). */}
+            {m.papel === "agente" && <MudancaDoPlano mensagemId={m.id} anexos={m.anexos} aoDesfazer={() => { void queryClient.invalidateQueries({ queryKey: chavesAds.planos(clientId) }); void queryClient.invalidateQueries({ queryKey: chavesAds.conversa(plano.id) }); }} />}
             {/* Frente AG3: "Aprendi" (com Esquecer) e "Segui" do agente de tráfego. */}
             {m.papel === "agente" && (
               <div className="ml-8">
@@ -213,5 +217,42 @@ export default function ConversaDoPlano({ plano, className = "" }: { plano: Plan
         </div>
       )}
     </PainelDoAgente>
+  );
+}
+
+/** A mudança que a conversa fez no plano, com Desfazer (lote B, 09/10). */
+function MudancaDoPlano({ mensagemId, anexos, aoDesfazer }: { mensagemId: string; anexos: unknown[]; aoDesfazer: () => void }) {
+  const mud = (anexos || []).find((a) => !!a && typeof a === "object" && (a as { tipo?: string }).tipo === "mudanca_do_plano") as { campos?: string[]; desfeita_em?: string | null } | undefined;
+  const [desfazendo, setDesfazendo] = useState(false);
+  const [desfeita, setDesfeita] = useState<boolean>(!!(mud && mud.desfeita_em));
+  if (!mud) return null;
+  const nomes: Record<string, string> = { nome: "nome", angulos: "ângulos", estrutura: "estrutura" };
+  const campos = (mud.campos || []).map((c) => nomes[c] || c).join(", ");
+  return (
+    <p className="ml-8 flex min-w-0 flex-wrap items-center gap-2 text-[11.5px] text-muted-foreground" data-mudanca-do-plano={desfeita ? "desfeita" : "feita"}>
+      <span>{desfeita ? `Mudança desfeita (${campos}).` : `Feito no plano: ${campos}.`}</span>
+      {!desfeita && (
+        <button
+          type="button"
+          disabled={desfazendo}
+          className="font-medium text-primary hover:underline disabled:opacity-50"
+          onClick={async () => {
+            setDesfazendo(true);
+            try {
+              await chamarAds("plano_desfazer", { mensagem_id: mensagemId });
+              setDesfeita(true);
+              aoDesfazer();
+              toast.success("Mudança desfeita", { description: "O plano voltou ao que era antes desta conversa." });
+            } catch (e) {
+              toast.error(textoDoErro(e, "Não consegui desfazer."));
+            } finally {
+              setDesfazendo(false);
+            }
+          }}
+        >
+          {desfazendo ? "Desfazendo…" : "Desfazer"}
+        </button>
+      )}
+    </p>
   );
 }

@@ -122,12 +122,13 @@ describe("honestidade", () => {
     const chamadas = fonte.split("await chamarTexto({").slice(1).filter((c) => !/^\s*\.\.\.pedido,/.test(c)).concat(fonte.split("await chamarComTetoDeTempo({").slice(1));
     expect(chamadas.length).toBeGreaterThanOrEqual(14);
     for (const c of chamadas) {
-      const trecho = c.slice(0, 400);
+      const trecho = c.slice(0, 700);
       expect(trecho).toContain("tarefa: TAREFA,");
       // v5: o agente sênior de tráfego tem o sistema próprio (a mesma base inteira + os blocos de conta e estratégia).
       // Frente AG3: o sênior soma as regras que o dono ensinou (blocoDasRegras) depois do sistema próprio.
       // 02/10: o leitor do texto da imagem da referência e a pesquisa do mundo real têm sistema fixo próprio.
-      expect(trecho).toMatch(/sistema: (sistemaDoEstrategista\("(angulos|copy|pacote|oferta|conta)"[^\n]*\)|SISTEMA_DO_LEITOR|SISTEMA_DO_LEITOR_DE_TEXTO|SISTEMA_DA_PESQUISA|sistemaDoAgenteSenior\(objetivo\)(?: \+ blocoDasRegras\(regrasEnsinadas\))?),/);
+      // Lote B (09/10): a conversa do plano soma o núcleo comum (INSTRUCAO_DO_NUCLEO_DAS_MESAS e as leituras prévias) no fim.
+      expect(trecho).toMatch(/sistema: (sistemaDoEstrategista\("(angulos|copy|pacote|oferta|conta)"[^\n]*(?:\)|INSTRUCAO_DO_NUCLEO_DAS_MESAS[^\n]*`)|SISTEMA_DO_LEITOR|SISTEMA_DO_LEITOR_DE_TEXTO|SISTEMA_DA_PESQUISA|sistemaDoAgenteSenior\(objetivo\)(?: \+ blocoDasRegras\(regrasEnsinadas\))?(?: \+ "\\n\\n" \+ INSTRUCAO_DO_NUCLEO_DAS_MESAS)?),/);
     }
     const senior = corpoDe(fonte, "sistemaDoAgenteSenior");
     expect(senior).toContain("${CONHECIMENTO_ESTRATEGISTA_ADS}");

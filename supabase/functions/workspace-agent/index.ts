@@ -42,7 +42,7 @@ import { anexosDoAprendizado, blocoDasRegras, esquecerRegra, type RegraAtiva, re
 import { aprenderNoServidor, guardarNoServidor } from "../_shared/aprender-no-servidor.ts";
 import { jevPerguntar, probabilidadeNoul } from "../_shared/jev.ts";
 // Núcleo comum dos agentes das Mesas (09/10): leituras prévias, apresentação, quadros conferidos e Hermes.
-import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, type NucleoPreparado, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
+import { clienteInternoDaAgencia, encaminharAoHermes, fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, type NucleoPreparado, pedeAoHermes, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import { cobrarJev } from "../_shared/ia-motor.ts";
 
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
@@ -282,6 +282,8 @@ Deno.serve(async (req) => {
       const providers = await resolverCadeiaDaIa({
         primaryModels: [specialMode === "structure" ? "gpt-5-mini" : "gpt-4o-mini"],
         lovableModels: ["google/gemini-3-flash-preview", "google/gemini-2.5-flash", "openai/gpt-5-mini"],
+      // Lote B (09/10): a conta direta do modelo dava 429; o mesmo modelo pelo OpenRouter (cofre) entra logo depois.
+      openRouterReserve: true,
       });
       if (!providers.length) return json({ error: "sem_motor" }, 500);
 
@@ -685,6 +687,8 @@ Regras absolutas:
     const routerProviders = await resolverCadeiaDaIa({
       primaryModels: ["gpt-5-mini"],
       lovableModels: ["google/gemini-3-flash-preview", "google/gemini-2.5-flash", "openai/gpt-5-mini"],
+      // Lote B (09/10): a conta direta do modelo dava 429; o mesmo modelo pelo OpenRouter (cofre) entra logo depois.
+      openRouterReserve: true,
     });
 
     type Orq = {
@@ -836,6 +840,8 @@ Regras:
         "google/gemini-2.5-flash",
         "google/gemini-3-flash-preview",
       ],
+      // Lote B (09/10): a conta direta do modelo dava 429; o mesmo modelo pelo OpenRouter (cofre) entra logo depois.
+      openRouterReserve: true,
     });
     if (!providers.length) return json({ error: "Nenhum provedor de IA configurado" }, 500);
 
@@ -931,6 +937,18 @@ Regras:
               if (apresentada.texto.trim()) full = apresentada.texto;
             } catch (e) {
               registrarFalha("workspace-agent: conferência do núcleo falhou (grava o texto como veio)", e);
+            }
+          }
+          // Lote B (09/10): sem cliente aberto, "peça ao Hermes" vai no cliente interno da agência (mesma fila).
+          if (full.trim() && !safeClientId && pedeAoHermes(pedidoDoNucleo)) {
+            try {
+              const interno = await clienteInternoDaAgencia(admin as never);
+              if (interno) {
+                const enc = await encaminharAoHermes(admin as never, { clientId: interno, agente: "workspace", pedido: pedidoDoNucleo, contexto: full.slice(0, 1500), userId: user.id });
+                full = `${full}\n\n${enc.texto}`;
+              }
+            } catch (e) {
+              registrarFalha("workspace-agent: pedido ao Hermes sem cliente falhou", e);
             }
           }
           // persiste assistente (antes de fechar: quem recarrega logo depois já acha a resposta)

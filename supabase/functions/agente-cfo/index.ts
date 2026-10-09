@@ -57,7 +57,7 @@ import { descricaoDoGasto, lerRota, perguntasDaRota, type RotaDoCFO } from "./mo
 import { AGENTE_CFO, conferirTrava, propostaDaIntencao } from "./modulos/cfo-acoes.ts";
 import { numerosForaDaConta } from "./modulos/cfo-conferencia.ts";
 // Núcleo comum dos agentes (09/10): só a apresentação e a conferência dos quadros (o CFO é da agência, sem cliente).
-import { conferirApresentacao, INSTRUCAO_DO_NUCLEO_DAS_MESAS } from "../_shared/nucleo-das-mesas.ts";
+import { conferirApresentacao, encaminharAoHermes, INSTRUCAO_DO_NUCLEO_DAS_MESAS, pedeAoHermes, pedidosAoHermes, quadroDosPedidos } from "../_shared/nucleo-das-mesas.ts";
 import type { FonteDeConsulta } from "../_shared/consultas-do-agente.ts";
 
 const corsHeaders = {
@@ -256,11 +256,18 @@ async function perguntar(ch: Chamador, corpo: Record<string, unknown>): Promise<
   ]);
   const rota = await rotear(pedido, agencia, ch.userId);
   const descricao = descricaoDoGasto(pedido);
-  const { acao, avaliacao } = propostaDaIntencao(retrato, rota.intencao, { valor: rota.valor, recorrente: rota.recorrente, descricao, metaAnterior: metaMensal });
-  const intencaoDoTexto = (rota.intencao === "lancar" || rota.intencao === "posso_gastar") && avaliacao ? "posso_gastar" : rota.intencao === "meta" ? "plano" : rota.intencao === "lancar" ? "este_mes" : rota.intencao;
+  const { acao, avaliacao } = propostaDaIntencao(retrato, rota.intencao, { valor: rota.valor, recorrente: rota.recorrente, descricao, metaAnterior: metaMensal, pedido });
+  const intencaoDoTexto = (rota.intencao === "lancar" || rota.intencao === "posso_gastar" || rota.intencao === "simular") && avaliacao ? "posso_gastar"
+    : rota.intencao === "meta" || rota.intencao === "nova_meta" ? "plano"
+    : rota.intencao === "simular" ? "projecao"
+    : rota.intencao === "lancar" ? "este_mes" : rota.intencao;
   let base = respostaDoCFO(retrato, intencaoDoTexto, { avaliacao, meses: Number(corpo.meses) || 6 });
   if (rota.intencao === "posso_gastar" && !avaliacao) base = `Qual é o valor? Me diga quanto e se é de uma vez ou todo mês.\n${respostaDoCFO(retrato, "este_mes")}`;
-  if (rota.intencao === "meta" && acao) base = `${acao.resumo}\n${base}`;
+  if ((rota.intencao === "meta" || rota.intencao === "nova_meta") && acao) base = `${acao.resumo}\n${base}`;
+  // Editar a meta mensal sem dizer que é ela: pergunta, nada muda.
+  if (rota.intencao === "meta" && !acao) base = `Você quer mudar a meta mensal de receita (substitui a atual) ou criar uma meta nova? Nada foi alterado.\n${base}`;
+  if (rota.intencao === "nova_meta" && !acao) base = `Qual é o valor da meta nova? Nada foi criado.\n${base}`;
+  if (rota.intencao === "simular") base = `Simulação: nada foi gravado.\n${base}`;
 
   let resposta = base;
   let custo = 0;
@@ -285,11 +292,21 @@ async function perguntar(ch: Chamador, corpo: Record<string, unknown>): Promise<
     }
   }
 
+  // Lote B (09/10): o CFO também fala com o Hermes, pela fila de sempre, no cliente interno da agência.
+  // "Peça ao Hermes ..." encaminha (não é feito); perguntar pelo Hermes mostra o estado lido na fila.
+  if (agencia && pedeAoHermes(pedido)) {
+    const enc = await encaminharAoHermes(servico(), { clientId: agencia, agente: "cfo", pedido, contexto: base.slice(0, 1500), userId: ch.userId });
+    resposta = `${resposta}\n\n${enc.texto}`;
+  } else if (agencia && /\bhermes\b/i.test(pedido)) {
+    const pedidos = await pedidosAoHermes(servico(), agencia);
+    if (pedidos.length) resposta = `${resposta}\n\n${quadroDosPedidos(pedidos)}`;
+  }
+
   // A troca fica gravada; a proposta mora na mensagem do agente (Confirmar e Desfazer leem de lá).
   const agora = Date.now();
   const { data: gravadas, error } = await servico().from("cfo_mensagens").insert([
     { dono_id: ch.userId, papel: "usuario", conteudo: pedido, anexos: [], criado_em: new Date(agora).toISOString() },
-    { dono_id: ch.userId, papel: "agente", conteudo: resposta.slice(0, 6000), anexos: acao ? [acao] : [], uso_id: usoId, criado_em: new Date(agora + 1).toISOString() },
+    { dono_id: ch.userId, papel: "agente", conteudo: resposta.slice(0, 16000), anexos: acao ? [acao] : [], uso_id: usoId, criado_em: new Date(agora + 1).toISOString() },
   ]).select("id, papel");
   if (error) registrarFalha("agente-cfo: conversa não gravada", error);
   const mensagemId = (((gravadas || []) as { id: string; papel: string }[]).find((m) => m.papel === "agente") || { id: null }).id;

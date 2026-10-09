@@ -8,6 +8,8 @@ import { textoDoErro } from "@/lib/mesa/api";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
+import { supabase } from "@/integrations/supabase/client";
 import { acaoDoAnexo, type AcaoDoAgente, type PedidoDaAcao, type RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
@@ -52,6 +54,11 @@ const DiretorDoVideo = lazy(() => import("./DiretorDoVideo"));
  * sem custo vai na hora, com a prova e o Desfazer no cartão; dúvida vira UMA
  * pergunta. Os cartões voltam no estado do banco ao reabrir. Pedido que falha
  * não some: a bolha sai e o texto volta ao campo com o erro à vista.
+ *
+ * Lote B (09/10): a conversa mora no banco (agente_conversas, uma ativa por cliente
+ * e mesa) e volta dela ao abrir; o Histórico troca, busca e arquiva. Pergunta livre e
+ * "peça ao Hermes" respondem pelo núcleo comum no servidor. A resposta que a própria
+ * tela dá (atalho que abre a etapa) entra no histórico por agente_anotar.
  */
 
 interface Mensagem {
@@ -67,6 +74,24 @@ interface Mensagem {
 }
 
 const MAX_MENSAGENS = 40;
+
+type MensagemDoBanco = { id: string; papel: string; conteudo: string; anexos: unknown; criado_em: string };
+
+/** A mensagem guardada no banco do jeito da tela (o cartão vem do anexo; o estado vivo, de video_acoes). */
+export function mensagemDoBanco(m: MensagemDoBanco): Mensagem {
+  const anexos = Array.isArray(m.anexos) ? (m.anexos as unknown[]) : [];
+  const tipo = (x: unknown) => (x && typeof x === "object" ? String((x as Record<string, unknown>).tipo || "") : "");
+  const cartao = anexos.find((x) => tipo(x) === "acao_da_mesa_de_video") as { mensagem_id?: unknown; acao?: unknown } | undefined;
+  const acao = cartao ? acaoDoAnexo(cartao.acao) : null;
+  return {
+    id: m.id,
+    papel: m.papel === "usuario" ? "usuario" : "agente",
+    texto: String(m.conteudo || ""),
+    mensagem_id: acao && cartao && typeof cartao.mensagem_id === "string" ? cartao.mensagem_id : null,
+    acao,
+    anexos: anexos.filter((x) => tipo(x) !== "acao_da_mesa_de_video" && tipo(x) !== "resposta_da_tela"),
+  };
+}
 /** Até 4 atalhos por mesa (o resto o texto alcança). */
 const ATALHOS: Record<MesaDoAgente, string[]> = { videos: ["gerar", "enviar_para_edicao", "situacao"], edicao: ["organizar", "pacote", "transcrever", "situacao"] };
 let contador = 0;
@@ -94,6 +119,10 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
   const fotosQ = useFotos(clientId);
   const [mensagens, setMensagens] = useEstadoDaTela<Mensagem[]>(`${mesa}:agente:conversa:${clientId}`, [], { validar: (v) => Array.isArray(v) });
   const [texto, setTexto] = useEstadoDaTela<string>(`${mesa}:agente:rascunho:${clientId}`, "");
+  // Lote B: a conversa ativa no banco (null = a próxima mensagem abre ou retoma a ativa).
+  const [conversaId, setConversaId] = useEstadoDaTela<string | null>(`${mesa}:agente:conversa-id:${clientId}`, null, { validar: (v) => v === null || typeof v === "string" });
+  // Respostas que a própria tela deu neste pedido (vão para o histórico por agente_anotar).
+  const daTela = useRef<Mensagem[] | null>(null);
   const [pensando, setPensando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const lista = useRef<HTMLDivElement>(null);
@@ -111,7 +140,67 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
   const responder = (t: string, extra: Partial<Mensagem> = {}) => {
     const id = novoId();
     novas.current.add(id);
-    juntarMensagens([{ id, papel: "agente", texto: t, ...extra }]);
+    const m: Mensagem = { id, papel: "agente", texto: t, ...extra };
+    if (daTela.current) daTela.current.push(m);
+    juntarMensagens([m]);
+  };
+
+  /**
+   * Relê a conversa do banco (a ativa ou a escolhida no Histórico), direto na tabela com a permissão
+   * da equipe: abrir a mesa não chama a função. Sem conversa no banco ou falha: fica o que a tela tinha.
+   */
+  const relerDoBanco = async (qual: string | null) => {
+    try {
+      // As colunas novas (arquivada_em) ainda não estão nos tipos gerados.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const banco = supabase as unknown as { from: (tabela: string) => any };
+      let q = banco.from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", "diretor_arte").eq("referencia_tipo", mesa === "edicao" ? "mesa_edicao_agente" : "mesa_videos_agente").is("arquivada_em", null);
+      if (qual) q = q.eq("id", qual);
+      const { data: cs, error } = await q.order("criado_em", { ascending: false }).limit(1);
+      if (error) throw error;
+      const c = ((cs as { id: string }[] | null) || [])[0];
+      if (!c) {
+        if (qual) setConversaId(null);
+        return;
+      }
+      const { data: ms, error: e2 } = await banco.from("agente_mensagens").select("id, papel, conteudo, anexos, criado_em").eq("conversa_id", c.id).order("criado_em", { ascending: false }).limit(MAX_MENSAGENS);
+      if (e2) throw e2;
+      setConversaId(c.id);
+      setMensagens(((ms as MensagemDoBanco[] | null) || []).slice().reverse().map(mensagemDoBanco));
+    } catch (e) {
+      console.warn("[agente da mesa] conversa do banco não lida; fica a da tela", e);
+    }
+  };
+  useEffect(() => {
+    if (clientId) void relerDoBanco(conversaId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, mesa]);
+
+  /** O que a tela respondeu sozinha entra no histórico (com o pedido quando o servidor não o guardou). */
+  const anotar = async (respostas: Mensagem[], usuario: string | null) => {
+    let conversa = conversaId;
+    for (let i = 0; i < respostas.length; i++) {
+      const m = respostas[i];
+      try {
+        const r = await chamarMesaVideos<{ conversa_id: string }>({ acao: "agente_anotar", client_id: clientId, mesa, conversa_id: conversa, usuario: i === 0 ? usuario : null, texto: m.texto, mensagem_id: m.mensagem_id || null });
+        conversa = r.conversa_id;
+      } catch (e) {
+        console.warn("[agente da mesa] resposta da tela fora do histórico", e);
+        return;
+      }
+    }
+    if (conversa !== conversaId) setConversaId(conversa);
+  };
+  /** Roda um atalho da tela guardando as respostas que ele der. */
+  const executarAnotando = async (intencao: string, textoLivre: string | null, usuario: string | null) => {
+    daTela.current = [];
+    try {
+      await executar(intencao, textoLivre);
+    } finally {
+      const feitas = daTela.current || [];
+      daTela.current = null;
+      if (feitas.length) void anotar(feitas, usuario);
+    }
   };
 
   const arquivos = (arquivosQ.data && arquivosQ.data.arquivos) || [];
@@ -261,12 +350,12 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
     setPensando(true);
     try {
       if (intencaoPronta) {
-        await executar(intencaoPronta, null);
+        await executarAnotando(intencaoPronta, null, t);
         return;
       }
-      let r: { intencao: string; resposta?: string | null; mensagem_id?: string | null; acao?: unknown; anexos?: unknown[]; aviso_registro?: string } | null = null;
+      let r: { intencao: string; resposta?: string | null; mensagem_id?: string | null; acao?: unknown; anexos?: unknown[]; aviso_registro?: string; conversa_id?: string | null } | null = null;
       try {
-        r = await chamarMesaVideos({ acao: "agente_agir", client_id: clientId, mesa, texto: t, ordem: ordemDaTela(), ultima_resposta: ultima ? ultima.texto.slice(0, 1000) : null });
+        r = await chamarMesaVideos({ acao: "agente_agir", client_id: clientId, mesa, texto: t, ordem: ordemDaTela(), ultima_resposta: ultima ? ultima.texto.slice(0, 1000) : null, conversa_id: conversaId });
       } catch (e) {
         // Sem a função agora: as palavras do pedido decidem o que abrir (nada age sem o servidor).
         console.warn("[agente da mesa] agente_agir falhou; vale a palavra do pedido", e);
@@ -274,9 +363,10 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
       }
       if (!r) {
         // Frente MOT: a Mesa Motion tem agente próprio; aqui só entram Vídeos e Edição.
-        await executar(intencaoPorPalavras(mesa === "motion" ? "videos" : mesa, t), t);
+        await executarAnotando(intencaoPorPalavras(mesa === "motion" ? "videos" : mesa, t), t, t);
         return;
       }
+      if (r.conversa_id && r.conversa_id !== conversaId) setConversaId(r.conversa_id);
       const a = acaoDoAnexo(r.acao);
       const extra: Partial<Mensagem> = { anexos: r.anexos || [], aviso: r.aviso_registro || null };
       if (a && r.mensagem_id) {
@@ -288,7 +378,8 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
         responder(r.resposta, extra);
         return;
       }
-      await executar(r.intencao || NENHUMA, t);
+      // O servidor guardou o pedido; a resposta da tela vai para o histórico junto.
+      await executarAnotando(r.intencao || NENHUMA, t, null);
       const anexos = extra.anexos || [];
       if (anexos.length) setMensagens((l) => (l.length && l[l.length - 1].papel === "agente" ? l.slice(0, -1).concat([{ ...l[l.length - 1], anexos }]) : l));
     } catch (e) {
@@ -341,11 +432,22 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
       icone={icone}
       descricao={mesa === "edicao" ? "Organiza e prepara a edição" : "Gera e manda para a Edição"}
       acoes={
+        <>
+        <HistoricoDoAgente
+          chave={clientId ? { clientId, agente: "diretor_arte", referenciaTipo: mesa === "edicao" ? "mesa_edicao_agente" : "mesa_videos_agente", referenciaId: null } : null}
+          aoTrocar={(ativa) => {
+            if (ativa === undefined) return;
+            setConversaId(ativa);
+            if (ativa) void relerDoBanco(ativa);
+            else setMensagens([]);
+          }}
+        />
         <AjudaRecolhida rotulo="Como o agente funciona">
           {mesa === "edicao"
             ? "Peça para organizar: ele separa por roteiro, cena e tomada, sugere nomes e os melhores takes, e você confirma na lista. Tudo tem Desfazer. O arquivo original nunca muda."
             : "Peça para gerar a próxima cena ou mandar os vídeos aprovados para a Edição. Nada gera nem gasta sem o seu clique."}
         </AjudaRecolhida>
+        </>
       }
       refDasMensagens={lista}
       rotuloDasMensagens={mesa === "edicao" ? "Conversa com o agente de edição" : "Conversa com o agente de vídeo"}

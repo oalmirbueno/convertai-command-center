@@ -271,3 +271,37 @@ describe("CFO: contratos do código", () => {
     expect(ler("src/components/finance/FixedCosts.tsx")).toContain("await pedirLiberacao(");
   });
 });
+
+describe("CFO: criar, editar e simular são coisas diferentes (lote B, 09/10)", () => {
+  const r = retratoDoCFO(agencia());
+
+  it("'crie uma meta de teste' cria meta nova e nunca troca a meta mensal", () => {
+    const pedido = "Crie uma meta de teste chamada 'Teste lote B' de economizar R$ 100 em outubro, para eu revisar.";
+    expect(intencaoPorPalavras(pedido)).toBe("nova_meta");
+    const { acao } = propostaDaIntencao(r, "nova_meta", { valor: 100, recorrente: false, descricao: pedido, metaAnterior: 8000, pedido });
+    expect(acao!.itens.map((i) => i.operacao)).toEqual(["criar_meta"]);
+    expect(acao!.itens[0].titulo).toBe("Teste lote B");
+    expect(JSON.stringify(acao)).not.toContain("definir_meta_mensal");
+  });
+
+  it("mesmo classificada como 'meta', sem falar da meta mensal não vira cartão de substituição", () => {
+    const pedido = "Crie uma meta de teste de R$ 100.";
+    const { acao } = propostaDaIntencao(r, "meta", { valor: 100, recorrente: false, descricao: pedido, metaAnterior: 8000, pedido });
+    expect(acao).toBeNull();
+  });
+
+  it("mudar a meta mensal, dita com todas as letras, continua sendo edição (com Confirmar)", () => {
+    const pedido = "Mude a meta mensal de receita para R$ 12.000.";
+    expect(intencaoPorPalavras(pedido)).toBe("meta");
+    const { acao } = propostaDaIntencao(r, "meta", { valor: 12000, recorrente: false, descricao: pedido, metaAnterior: 8000, pedido });
+    expect(acao!.itens.map((i) => i.operacao)).toEqual(["definir_meta_mensal"]);
+  });
+
+  it("simular avalia o gasto sem cartão (nada é gravado)", () => {
+    const pedido = "E se eu contratar um editor de R$ 1.500 por mês? Só simula.";
+    expect(intencaoPorPalavras(pedido)).toBe("simular");
+    const { acao, avaliacao } = propostaDaIntencao(r, "simular", { valor: 1500, recorrente: true, descricao: pedido, metaAnterior: 8000, pedido });
+    expect(acao).toBeNull();
+    expect(avaliacao).not.toBeNull();
+  });
+});

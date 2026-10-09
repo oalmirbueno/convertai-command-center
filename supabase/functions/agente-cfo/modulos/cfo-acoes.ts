@@ -126,11 +126,35 @@ export function propostaDeMetaMensal(r: Retrato, valor: number, anterior: number
   );
 }
 
+/** O pedido fala com todas as letras da meta mensal de receita? (editar só nesse caso; regra fixa, sem julgamento) */
+export function falaDaMetaMensal(pedido: string): boolean {
+  const t = String(pedido || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return /meta (mensal|do mes)|receita mensal|meta de receita/.test(t);
+}
+
+/** Título da meta nova: o que vier entre aspas no pedido; sem aspas, o próprio pedido curto. */
+export function tituloDaNovaMeta(pedido: string): string {
+  const m = /["'“‘]([^"'”’]{3,80})["'”’]/.exec(String(pedido || ""));
+  if (m) return m[1].trim();
+  return String(pedido || "").replace(/\s+/g, " ").trim().slice(0, 80) || "Meta nova";
+}
+
+/** Meta NOVA (não substitui nada): vai para cfo_metas com o tipo "outra"; Desfazer arquiva. */
+export function propostaDeNovaMeta(r: Retrato, e: { titulo: string; valor: number; prazoMeses?: number | null }): AcaoDoAgente {
+  const alvoId = "meta-nova";
+  const prazo = e.prazoMeses && e.prazoMeses > 0 ? e.prazoMeses : null;
+  return nova(
+    `Crio a meta nova "${e.titulo}" de ${reais(e.valor)}${prazo ? ` em ${prazo} ${prazo === 1 ? "mês" : "meses"}` : ""}. A meta mensal de receita${r.carteira ? "" : ""} não muda.`,
+    [{ ref: "m1", alvo_id: alvoId, titulo: e.titulo.slice(0, 120), detalhe: `alvo ${reais(e.valor)}${prazo ? ` · ${prazo} ${prazo === 1 ? "mês" : "meses"}` : ""} · meta nova`, operacao: "criar_meta", rotulo: REGRAS_DO_CFO.criar_meta.rotulo, para: centavos(e.valor) }],
+    { metas: { [alvoId]: { tipo: "outra", titulo: e.titulo.slice(0, 200), alvo: centavos(e.valor), atual: 0, prazo_meses: prazo, como: "" } } },
+  );
+}
+
 /** A proposta certa para a intenção (null quando a pergunta é só de leitura). */
 export function propostaDaIntencao(
   r: Retrato,
   intencao: IntencaoDoCFO,
-  e: { valor: number | null; recorrente: boolean; descricao: string; metaAnterior: number | null },
+  e: { valor: number | null; recorrente: boolean; descricao: string; metaAnterior: number | null; pedido?: string },
 ): { acao: AcaoDoAgente | null; avaliacao: AvaliacaoDoGasto | null } {
   if ((intencao === "posso_gastar" || intencao === "lancar") && e.valor && e.valor > 0) {
     const p = propostaDeLancamento(r, { valor: e.valor, recorrente: e.recorrente, descricao: e.descricao });
@@ -138,7 +162,11 @@ export function propostaDaIntencao(
   }
   if (intencao === "onde_cortar") return { acao: propostaDeCortes(r), avaliacao: null };
   if (intencao === "plano") return { acao: propostaDoPlano(r), avaliacao: null };
-  if (intencao === "meta" && e.valor && e.valor > 0) return { acao: propostaDeMetaMensal(r, e.valor, e.metaAnterior), avaliacao: null };
+  // Editar a meta mensal (substitui a atual) só quando o pedido fala dela; senão nada vira cartão.
+  if (intencao === "meta" && e.valor && e.valor > 0 && falaDaMetaMensal(e.pedido || e.descricao)) return { acao: propostaDeMetaMensal(r, e.valor, e.metaAnterior), avaliacao: null };
+  if (intencao === "nova_meta" && e.valor && e.valor > 0) return { acao: propostaDeNovaMeta(r, { titulo: tituloDaNovaMeta(e.pedido || e.descricao), valor: e.valor }), avaliacao: null };
+  // Simular: a avaliação do gasto sem cartão (nada é gravado).
+  if (intencao === "simular" && e.valor && e.valor > 0) return { acao: null, avaliacao: propostaDeLancamento(r, { valor: e.valor, recorrente: e.recorrente, descricao: e.descricao }).avaliacao };
   return { acao: null, avaliacao: null };
 }
 

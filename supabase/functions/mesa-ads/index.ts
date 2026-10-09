@@ -3162,7 +3162,23 @@ Aplique o pedido. Devolva:
     const ids = new Set(((campos.angulos as Angulo[] | undefined) ?? p.angulos).map((a) => a.id));
     campos.estrutura = { ...((campos.estrutura as Record<string, unknown> | undefined) ?? p.estrutura), ...normalizarEstrutura(r.estrutura, ids) };
   }
-  const plano = Object.keys(campos).length ? await salvarPlano(servico, p, campos) : p;
+  // Lote B (09/10): toda mudança do plano pela conversa guarda o antes e o depois (Desfazer) e fica na auditoria.
+  const mudouAlgo = Object.keys(campos).length > 0;
+  const antesDoPlano: Record<string, unknown> = {};
+  for (const k of Object.keys(campos)) antesDoPlano[k] = (p as unknown as Record<string, unknown>)[k] ?? null;
+  const plano = mudouAlgo ? await salvarPlano(servico, p, campos) : p;
+  const idDaResposta = crypto.randomUUID();
+  const mudancaDoPlano = mudouAlgo
+    ? { tipo: TIPO_MUDANCA_DO_PLANO, id: `plano-${Date.now().toString(36)}`, plano_id: p.id, campos: Object.keys(campos), antes: antesDoPlano, depois: campos, executada_em: new Date().toISOString(), desfeita_em: null }
+    : null;
+  if (mudancaDoPlano) {
+    await auditLog({
+      correlationId: crypto.randomUUID(), toolName: "ads_plano_conversa_mudou", origin: "mesa:mesa-ads",
+      keyId: `mesa:mesa-ads:${chamador.userId}`, scopes: ["aceleriq:write"],
+      input: { plano_id: p.id, client_id: p.client_id, campos: Object.keys(campos), nome_antes: p.nome, nome_depois: (campos.nome as string | undefined) ?? p.nome },
+      success: true, statusCode: 200, durationMs: 0, resultRef: idDaResposta,
+    }).catch((e) => registrarFalha("mesa-ads: auditoria da mudança do plano", e));
+  }
   const custo = arred6(s.custoUsd + custoJev);
   const total = await somarCustoDoPlano(servico, p.id, p.client_id, custo);
   if (total != null) plano.custo_usd = total;
@@ -3174,9 +3190,45 @@ Aplique o pedido. Devolva:
   const aprendizado = anexosDoAprendizado(await aprendizadoDoPlano, regrasSeguidas(r.regras_seguidas, regrasDoPlano));
   await registrarMensagens(servico, conversaId, p.client_id, [
     { papel: "usuario", conteudo: mensagem, anexos: anexos.caminhos.map((x) => ({ caminho: x })) },
-    { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: fechadoDoPlano.anexo ? [...aprendizado, fechadoDoPlano.anexo] : aprendizado },
+    { id: idDaResposta, papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: [...(mudancaDoPlano ? [mudancaDoPlano] : []), ...aprendizado, ...(fechadoDoPlano.anexo ? [fechadoDoPlano.anexo] : [])] },
   ]);
-  return json({ plano, resposta, conversa_id: conversaId, custo_usd: custo, saldo_usd: s.saldoUsd, jev_erro: jevErro, aprendizado });
+  return json({ plano, resposta, conversa_id: conversaId, mensagem_id: idDaResposta, mudanca: mudancaDoPlano ? { id: mudancaDoPlano.id, campos: mudancaDoPlano.campos } : null, custo_usd: custo, saldo_usd: s.saldoUsd, jev_erro: jevErro, aprendizado });
+}
+
+const TIPO_MUDANCA_DO_PLANO = "mudanca_do_plano";
+
+/**
+ * plano_desfazer { mensagem_id } (lote B, 09/10): volta o plano ao "antes" guardado na mudança feita pela
+ * conversa. Só desfaz se o plano ainda está como a mudança deixou (mudança mais nova por cima: recusa,
+ * para não apagar trabalho de depois). Fica na auditoria.
+ */
+async function planoDesfazer(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const mensagemId = String(corpo.mensagem_id ?? "");
+  if (!UUID.test(mensagemId)) throw new ErroHttp(400, "mensagem_invalida", "Informe a mensagem da mudança.");
+  const { data: m } = await servico.from("agente_mensagens").select("id, client_id, anexos").eq("id", mensagemId).maybeSingle();
+  const msg = m as { id: string; client_id: string; anexos: unknown[] | null } | null;
+  if (!msg) throw new ErroHttp(404, "mensagem_inexistente", "Mudança não encontrada.");
+  await exigirAcessoAoCliente(chamador, msg.client_id);
+  const anexos = Array.isArray(msg.anexos) ? msg.anexos.slice() : [];
+  const i = anexos.findIndex((a) => !!a && typeof a === "object" && (a as Record<string, unknown>).tipo === TIPO_MUDANCA_DO_PLANO);
+  if (i < 0) throw new ErroHttp(404, "sem_mudanca", "Esta mensagem não mudou o plano.");
+  const mud = anexos[i] as { plano_id: string; campos: string[]; antes: Record<string, unknown>; depois: Record<string, unknown>; desfeita_em: string | null };
+  if (mud.desfeita_em) throw new ErroHttp(409, "ja_desfeita", "Esta mudança já foi desfeita.");
+  const p = await carregarPlano(servico, mud.plano_id);
+  if (p.client_id !== msg.client_id) throw new ErroHttp(403, "plano_de_outro_cliente", "Este plano é de outro cliente.");
+  const atual = p as unknown as Record<string, unknown>;
+  const mexeramDepois = mud.campos.filter((k) => JSON.stringify(atual[k] ?? null) !== JSON.stringify(mud.depois[k] ?? null));
+  if (mexeramDepois.length) throw new ErroHttp(409, "plano_mudou_depois", `O plano mudou depois desta conversa (${mexeramDepois.join(", ")}). Desfaça a mudança mais nova primeiro.`);
+  const plano = await salvarPlano(servico, p, mud.antes);
+  anexos[i] = { ...mud, desfeita_em: new Date().toISOString() };
+  await servico.from("agente_mensagens").update({ anexos }).eq("id", msg.id);
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "ads_plano_conversa_desfeita", origin: "mesa:mesa-ads",
+    keyId: `mesa:mesa-ads:${chamador.userId}`, scopes: ["aceleriq:write"],
+    input: { plano_id: p.id, client_id: p.client_id, campos: mud.campos, nome_volta_para: (mud.antes.nome as string | undefined) ?? null },
+    success: true, statusCode: 200, durationMs: 0, resultRef: msg.id,
+  }).catch((e) => registrarFalha("mesa-ads: auditoria do desfazer do plano", e));
+  return json({ plano, desfeita: true });
 }
 
 /**
@@ -10450,6 +10502,7 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   referencias_importar_proprias: referenciasImportarProprias,
   plano_gerar: planoGerar,
   plano_conversar: planoConversar,
+  plano_desfazer: planoDesfazer,
   criativos_produzir: criativosProduzir,
   copy_variar: copyVariar,
   resultados_ler: resultadosLer,

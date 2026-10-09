@@ -37,10 +37,25 @@ export const AGENTES_DAS_MESAS: Record<string, { agente: string; referencia: str
   contratos: { agente: 'contrato', referencia: 'mesa_contratos', nome: 'Agente de Contratos' },
   estilo: { agente: 'diretor_arte', referencia: 'estilo_do_cliente', nome: 'Agente de Estilo' },
   campanha: { agente: 'estrategista', referencia: 'mesa_campanha', nome: 'Agente da Campanha' },
+  lancador: { agente: 'estrategista', referencia: 'lancador', nome: 'Lançador (assistente do painel)' },
+  // Lote B (09/10): o agente fixo da Mesa Vídeos e da Mesa Edição (atalhos, mandar para a Edição, organizar) e o diretor de vídeo (por projeto).
+  videos: { agente: 'diretor_arte', referencia: 'mesa_videos_agente', nome: 'Agente da Mesa Vídeos' },
+  edicao: { agente: 'diretor_arte', referencia: 'mesa_edicao_agente', nome: 'Agente da Mesa Edição' },
+  videos_diretor: { agente: 'diretor_arte', referencia: 'mesa_videos', precisaReferencia: true, nome: 'Diretor de vídeo (projeto da Mesa Vídeos)' },
+  // Conversas fora de agente_conversas (lote B, 09/10): o CFO (cfo_mensagens, do dono, só no cliente interno
+  // da agência) e o Workspace (workspace_agent_threads/messages, a conversa mais recente do cliente).
+  cfo: { agente: 'cfo', referencia: 'cfo_mensagens', nome: 'CFO (financeiro da agência)' },
+  workspace: { agente: 'workspace', referencia: 'workspace_agent_threads', nome: 'Agente do Workspace' },
 };
 
 const UUID = z.string().uuid();
 const SLUGS = Object.keys(AGENTES_DAS_MESAS) as [string, ...string[]];
+
+/** O cliente é a empresa interna da agência (onde mora o CFO)? */
+async function ehClienteInterno(clientId: string): Promise<boolean> {
+  const { data } = await db().from('profiles').select('id').eq('id', clientId).eq('services_config->>internal_company', 'true').maybeSingle();
+  return !!data;
+}
 
 function erroDeEntrada(e: z.ZodError): Error {
   return new Error(`Invalid input: ${e.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
@@ -70,6 +85,19 @@ export const agentConversationsTool: ToolDefinition = {
     if (!p.success) throw erroDeEntrada(p.error);
     const { client_id, agente, conversa_id, busca } = p.data;
     const limite = p.data.limit ?? 30;
+    if (agente === 'cfo') {
+      if (!(await ehClienteInterno(client_id))) throw new Error('cfo_so_no_cliente_interno: o CFO é da agência; use o client_id da empresa interna.');
+      const { data } = await db().from('cfo_mensagens').select('id, papel, conteudo, criado_em').order('criado_em', { ascending: false }).limit(limite);
+      return { agente: 'cfo', mensagens: ((data ?? []) as Array<{ id: string; papel: string; conteudo: string; criado_em: string }>).reverse().map((x) => ({ ...x, conteudo: x.conteudo.slice(0, 4000) })) };
+    }
+    if (agente === 'workspace') {
+      const { data: th } = await db().from('workspace_agent_threads').select('id, title, updated_at').eq('client_id', client_id).order('updated_at', { ascending: false }).limit(10);
+      const threads = (th ?? []) as Array<{ id: string; title: string | null; updated_at: string }>;
+      const alvoTh = conversa_id ? threads.find((t) => t.id === conversa_id) : threads[0];
+      if (!alvoTh) return { agente: 'workspace', conversas: threads, mensagens: [] };
+      const { data: ms } = await db().from('workspace_agent_messages').select('id, role, content, created_at').eq('thread_id', alvoTh.id).order('created_at', { ascending: false }).limit(limite);
+      return { agente: 'workspace', conversa: alvoTh, conversas: threads, mensagens: ((ms ?? []) as Array<{ id: string; role: string; content: string; created_at: string }>).reverse().map((x) => ({ ...x, content: String(x.content || '').slice(0, 4000) })) };
+    }
     if (conversa_id) {
       const { data: c } = await db().from('agente_conversas').select('id, agente, referencia_tipo, referencia_id, titulo, arquivada_em').eq('id', conversa_id).eq('client_id', client_id).maybeSingle();
       if (!c) throw new Error('conversa_nao_encontrada: essa conversa não é deste cliente.');
@@ -96,7 +124,7 @@ export const agentHandoffTool: ToolDefinition = {
   name: 'aceleriq_agent_handoff',
   title: 'Pedir algo a um agente da Mesa (ou devolver um resultado)',
   description:
-    'O Hermes deixa um pedido ou um resultado na conversa ATIVA de um agente da Mesa de UM cliente (Contexto, Mês, Ads, Roteiros, Proposta, Identidade, Instagram, Contratos, Estilo...). A mensagem entra marcada "Pedido do Hermes" e a equipe vê no painel do agente; o agente lê no histórico e responde com as ferramentas dele na próxima rodada. Use para o que é especialidade do agente (planejar o mês, ajustar o kit, montar roteiro...). Não executa nada sozinho e não fala com cliente; ações sensíveis continuam com aprovação. Agentes por referência (site, motion, estúdio, plano de Ads, perfis) exigem referencia_id.',
+    'O Hermes deixa um pedido ou um resultado na conversa ATIVA de um agente da Mesa de UM cliente (Contexto, Mês, Ads, Roteiros, Proposta, Identidade, Instagram, Contratos, Estilo, Vídeos, Edição, CFO, Workspace...). A mensagem entra marcada "Pedido do Hermes" e a equipe vê no painel do agente; o agente lê no histórico e responde com as ferramentas dele na próxima rodada. Use para o que é especialidade do agente (planejar o mês, ajustar o kit, montar roteiro...). Não executa nada sozinho e não fala com cliente; ações sensíveis continuam com aprovação. Agentes por referência (site, motion, estúdio, plano de Ads, perfis) exigem referencia_id.',
   scopes: ['aceleriq:write'],
   annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: false },
   inputSchema: {
@@ -121,6 +149,29 @@ export const agentHandoffTool: ToolDefinition = {
     if (!p.success) throw erroDeEntrada(p.error);
     const { operator, client_id, agente, referencia_id, titulo, texto, link_id } = p.data;
     const alvo = AGENTES_DAS_MESAS[agente];
+    if (agente === 'cfo' || agente === 'workspace') {
+      const { data: opx } = await db().from('internal_operators').select('display_name, status').eq('slug', operator.trim().toLowerCase()).maybeSingle();
+      if (!opx || (opx as { status: string }).status !== 'active') throw new Error(`operador_invalido: "${operator}" não está ativo.`);
+      const quem = (opx as { display_name: string }).display_name || operator;
+      const conteudo = `Pedido do Hermes (${quem}): ${titulo}\n\n${texto}`;
+      const marca = { tipo: 'pedido_do_hermes', operador: operator, link_id: link_id ?? null, titulo };
+      if (agente === 'cfo') {
+        if (!(await ehClienteInterno(client_id))) throw new Error('cfo_so_no_cliente_interno: o CFO é da agência; use o client_id da empresa interna.');
+        const { data: ultimo } = await db().from('cfo_mensagens').select('dono_id').order('criado_em', { ascending: false }).limit(1).maybeSingle();
+        const dono = (ultimo as { dono_id: string } | null)?.dono_id;
+        if (!dono) throw new Error('cfo_sem_conversa: ninguém conversou com o CFO ainda; não há conversa para receber o pedido.');
+        const { data: m, error } = await db().from('cfo_mensagens').insert({ dono_id: dono, papel: 'agente', conteudo, anexos: [marca] }).select('id').single();
+        if (error || !m) throw new Error(`cfo_mensagens: ${error?.message || 'não gravada'}`);
+        return { entregue: true, agente: alvo.nome, mensagem_id: (m as { id: string }).id, proximo_passo: 'O pedido está na conversa do CFO. Ele responde quando o dono abrir; isto não é execução feita.' };
+      }
+      const { data: th } = await db().from('workspace_agent_threads').select('id').eq('client_id', client_id).order('updated_at', { ascending: false }).limit(1).maybeSingle();
+      const thread = (th as { id: string } | null)?.id;
+      if (!thread) throw new Error('workspace_sem_conversa: este cliente não tem conversa no Workspace; não abro conversa em nome de ninguém.');
+      const { data: wm, error: ew } = await db().from('workspace_agent_messages').insert({ thread_id: thread, role: 'assistant', content: conteudo, meta: marca }).select('id').single();
+      if (ew || !wm) throw new Error(`workspace_agent_messages: ${ew?.message || 'não gravada'}`);
+      await db().from('workspace_agent_threads').update({ updated_at: new Date().toISOString() }).eq('id', thread);
+      return { entregue: true, agente: alvo.nome, conversa_id: thread, mensagem_id: (wm as { id: string }).id, proximo_passo: 'O pedido está na conversa do Workspace deste cliente; isto não é execução feita.' };
+    }
     if (alvo.precisaReferencia && !referencia_id) throw new Error(`referencia_obrigatoria: o ${alvo.nome} trabalha por referência; mande referencia_id.`);
     const { data: op } = await db().from('internal_operators').select('id, display_name, status').eq('slug', operator.trim().toLowerCase()).maybeSingle();
     if (!op || (op as { status: string }).status !== 'active') throw new Error(`operador_invalido: "${operator}" não está ativo.`);

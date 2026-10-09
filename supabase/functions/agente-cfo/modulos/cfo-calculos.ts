@@ -1035,7 +1035,7 @@ export function avaliarGasto(r: Retrato, g: GastoProposto): AvaliacaoDoGasto {
 
 // ------------------------------------------------------------------ texto do CFO (sem IA)
 
-export type IntencaoDoCFO = "saude" | "projecao" | "posso_gastar" | "onde_cortar" | "este_mes" | "plano" | "lancar" | "meta" | "erros" | "outra";
+export type IntencaoDoCFO = "saude" | "projecao" | "posso_gastar" | "onde_cortar" | "este_mes" | "plano" | "lancar" | "meta" | "nova_meta" | "simular" | "erros" | "outra";
 
 /**
  * A resposta do CFO escrita só com o retrato (reserva quando a IA não está
@@ -1158,6 +1158,10 @@ export function parecerRecorrente(texto: string): boolean {
 export function intencaoPorPalavras(texto: string): IntencaoDoCFO {
   const t = semAcento(String(texto || "")).toLowerCase();
   if (/(posso gastar|da para gastar|cabe no|consigo pagar|posso pagar|posso comprar|posso contratar|vale gastar)/.test(t)) return "posso_gastar";
+  // Lote B (09/10): "crie uma meta de teste" virou troca da meta mensal. Criar, editar e simular são intenções separadas.
+  if (/(simul|e se eu|e se a gente|cenario|hipotetic)/.test(t)) return "simular";
+  if (/(mud|alter|defin|ajust|troc|sub).{0,30}meta (mensal|do mes)|meta (mensal|do mes).{0,20}(para|vai pra|em) /.test(t)) return "meta";
+  if (/(cri|nov|adicion|registr|guard).{0,30}meta\b/.test(t)) return "nova_meta";
   if (/(projec|proximos meses|como fecho|vai sobrar|previs)/.test(t)) return "projecao";
   if (/(corto|cortar|corte|economizar|reduzir custo|enxugar)/.test(t)) return "onde_cortar";
   if (/(plano de crescimento|crescer|meta de|metas|dobrar)/.test(t)) return "plano";

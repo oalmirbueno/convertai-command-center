@@ -333,3 +333,24 @@ export function falaDoQueFoiFeito(texto: string, feitoAgora: boolean): string {
     .trim();
   return `${sem}${sem ? "\n\n" : ""}Feito agora; o Desfazer fica no cartão.`;
 }
+
+/**
+ * O cliente interno da agência (perfil com services_config.internal_company = true; o de maior saldo
+ * na carteira de IA). É onde moram os pedidos ao Hermes que não são de um cliente: CFO (financeiro da
+ * agência) e Workspace sem cliente aberto. Lote B, 09/10.
+ */
+export async function clienteInternoDaAgencia(db: SupabaseClient): Promise<string | null> {
+  try {
+    const { data } = await db.from("profiles").select("id").eq("services_config->>internal_company", "true").limit(5);
+    const ids = ((data || []) as { id: string }[]).map((x) => x.id);
+    if (!ids.length) return null;
+    const { data: carteiras } = await db.from("ia_carteiras").select("client_id, saldo_usd").in("client_id", ids).order("saldo_usd", { ascending: false }).limit(1);
+    const c = ((carteiras || []) as { client_id: string }[])[0];
+    return c ? c.client_id : ids[0];
+  } catch (e) {
+    registrarFalha("nucleo-das-mesas: cliente interno da agência sem leitura", e);
+    return null;
+  }
+}
+
+export { encaminharAoHermes, pedeAoHermes, pedidosAoHermes, quadroDosPedidos };
