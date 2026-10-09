@@ -55,6 +55,7 @@ import {
   vaultOverview,
 } from './aceleriq-operators-services.ts';
 import { agentConversationsTool, agentHandoffTool } from './mcp-agentes-das-mesas.ts';
+import { browserActTool, browserSessionTool } from './mcp-navegador.ts';
 import {
   CLASSES_DO_LEAD,
   ETAPAS_DO_FUNIL,
@@ -4017,6 +4018,9 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   // Hermes <-> agentes das Mesas (lote B, v2.6.0)
   agentConversationsTool,
   agentHandoffTool,
+  // Navegador remoto real do cliente (lote C, v2.7.0)
+  browserSessionTool,
+  browserActTool,
   // Revisao do Ciclo como area do Hermes (v1.43.0)
   centralReviewFilaTool,
   centralReviewPrepararTool,

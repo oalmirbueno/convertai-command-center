@@ -200,6 +200,8 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_archive_opportunity',
     'aceleriq_archive_project',
     'aceleriq_audit_integrity',
+    'aceleriq_browser_act',
+    'aceleriq_browser_session',
     'aceleriq_cancel_contract',
     'aceleriq_capabilities',
     'aceleriq_central_review_decidir',

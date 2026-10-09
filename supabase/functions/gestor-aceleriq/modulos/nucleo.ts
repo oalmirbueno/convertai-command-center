@@ -49,7 +49,9 @@ import {
 } from "../../_shared/acoes-do-agente.ts";
 import { ehOrdemClara } from "../../_shared/ordem-clara.ts";
 import { type BlocoDeResposta, type BlocoTabela, ESQUEMA_FLUXO, ESQUEMA_TABELA, validarBlocos } from "../../_shared/blocos-de-resposta.ts";
-import { blocoDasConsultas, ESQUEMA_DAS_CONSULTAS, executarConsultas, normalizarConsultas } from "../../_shared/consultas-do-agente.ts";
+import { blocoDasConsultas, executarConsultas, normalizarConsultas } from "../../_shared/consultas-do-agente.ts";
+// Lote C (09/10): o Gestor lê páginas e pesquisa no navegador remoto real do cliente.
+import { ESQUEMA_DAS_CONSULTAS_DO_GESTOR, LINHA_DO_NAVEGADOR, lerPeloNavegador, pedidosDoNavegador } from "./navegador-do-gestor.ts";
 import { AGENTE_DO_GESTOR, alvoDaTarefa, type AlvoDoGestor, DESCRICOES_DAS_OPERACOES, type EntregaDoGestor, type ObjetoDoGestor, OPERACOES_DE_DECISAO, regrasDoGestor } from "./ferramentas.ts";
 import { entregasDaAcao, executarItem } from "./executor.ts";
 
@@ -345,7 +347,7 @@ const ESQUEMA = {
       mostrar_numeros: { type: "boolean" },
       sugestoes: { type: "array", items: { type: "string" } },
       blocos: { type: "array", maxItems: 3, items: { anyOf: [ESQUEMA_FLUXO, ESQUEMA_TABELA] } },
-      consultas: ESQUEMA_DAS_CONSULTAS,
+      consultas: ESQUEMA_DAS_CONSULTAS_DO_GESTOR,
     },
   },
 };
@@ -534,7 +536,7 @@ export async function responder(e: EntradaDoResponder): Promise<Respondido> {
     blocoDosAlvos("TAREFAS (ajustar ou mandar a um agente)", alvos.tarefas),
     blocoDosAlvos("SOLICITAÇÕES DE APROVAÇÃO PENDENTES (aprovar ou devolver)", alvos.aprovacoes, "nenhuma pendente neste recorte."),
     `\nAGENTES (slug: nome): ${alvos.agentes.map((a) => `${a.slug}: ${a.nome}`).join("; ") || "nenhum ativo"}\n`,
-    cliente ? blocoDasConsultas() : "CONSULTAS: precisam de um cliente no recorte.",
+    cliente ? `${blocoDasConsultas()}\n${LINHA_DO_NAVEGADOR}` : "CONSULTAS: precisam de um cliente no recorte.",
     regraDasAcoes(DESCRICOES_DAS_OPERACOES),
   ].join("\n");
   const blocoDeObjetos = alvos.objetosDaConversa.length
@@ -546,9 +548,14 @@ export async function responder(e: EntradaDoResponder): Promise<Respondido> {
   let red = await redigir(e.pergunta, cabecalho, todas, { agencia, userId: e.userId, semIa: e.semIa || !!e.tetoAtingido, historico: e.historico, imagens: e.imagens, blocoDeAcoes, blocoDeObjetos });
   // Consultar antes de agir: o modelo pediu leituras reais do cliente; elas viram fontes L1.. e ele redige de novo com o que leu.
   const consultas = cliente && red.bruto ? normalizarConsultas(red.bruto.consultas) : [];
+  const doNavegador = cliente && red.bruto ? pedidosDoNavegador(red.bruto.consultas) : [];
   const leituras: Array<{ apelido: string; ferramenta: string; argumento: string }> = [];
-  if (consultas.length && cliente) {
+  if ((consultas.length || doNavegador.length) && cliente) {
     const lidas = await executarConsultas(servico(), cliente.id, consultas);
+    // Navegador remoto real do cliente: cada leitura vira uma fonte L como as outras (com evidência registrada).
+    for (const arg of doNavegador) {
+      lidas.push({ apelido: `L${lidas.length + 1}`, ferramenta: "navegador" as never, argumento: arg, texto: await lerPeloNavegador(servico() as never, cliente.id, arg, e.pergunta) });
+    }
     for (const l of lidas) {
       todas.push({ apelido: l.apelido, tipo: "leitura", estado: "lido_no_os", titulo: `${l.ferramenta}${l.argumento ? ` (${l.argumento})` : ""}`, quando: new Date().toISOString(), texto: l.texto, cliente: nomeRecorte, agente: null, ids: {} });
       leituras.push({ apelido: l.apelido, ferramenta: l.ferramenta, argumento: l.argumento });
