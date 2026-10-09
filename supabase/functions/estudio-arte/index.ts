@@ -98,7 +98,7 @@ import { fotosOriginaisDoAjuste, pedidoDiretoNoAjuste } from "./identidade-no-aj
  * confere saldo e cota e debita a carteira do cliente.
  */
 
-import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
+import { falaDoQueFoiFeito, fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
   chamarImagem,
@@ -8766,6 +8766,7 @@ async function conversaDoTrabalho(t: Trabalho, criadoPor: string | null, criar: 
     .eq("agente", "diretor_arte")
     .eq("referencia_tipo", REFERENCIA_DA_CONVERSA)
     .eq("referencia_id", t.id)
+    .is("arquivada_em", null)
     .order("criado_em", { ascending: false })
     .limit(1);
   if (error) throw new ErroEstudio(503, "conversa_indisponivel", "Não foi possível ler a conversa com o diretor.");
@@ -9255,6 +9256,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   // Frente SPP: "pronto" sem nada feito agora ganha o aviso (sem refazer); o método vira a linha "Método:".
   const fechado = await fecharComMetodo(servico(), { usoId: r.usoId, metodo: await spP, resposta, declarados: bruto.metodos_usados, acaoFeita: !!execucao.feitoAgora });
   if (resposta) resposta = fechado.resposta;
+  // Lote B: o que foi feito agora não aparece como "pronto para confirmar" (a fala foi escrita antes da execução).
+  if (resposta) resposta = falaDoQueFoiFeito(resposta, !!execucao.feitoAgora);
   // Frente RO, fase 2 (aprender): o pedido ensina? Duradoura vira regra no cérebro (reforça se já existe).
   const marcaDoTrabalho = await marcaDoTrabalhoP;
   const aprendido = await aprenderDoPedido(servico() as never, {

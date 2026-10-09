@@ -749,7 +749,8 @@ export function aplicarRespostaDoDiretor(bruto: unknown, atual: ProjetoDoDiretor
       if (a.variacoes !== null && a.variacoes !== undefined && isFinite(v) && v >= 1) acao.variacoes = Math.max(1, Math.min(4, Math.round(v)));
     }
   }
-  return { resposta: semTravessao(String(o.resposta || "").trim().slice(0, 2400)) || "Pronto.", perguntas, projeto, avisos, acao, mudou };
+  // 9000: a resposta pode trazer quadros do núcleo comum (```aceleriq-blocos```), conferidos depois em fecharNucleo.
+  return { resposta: semTravessao(String(o.resposta || "").trim().slice(0, 9000)) || "Pronto.", perguntas, projeto, avisos, acao, mudou };
 }
 
 // ------------------------------------------------------------------ ações com confirmação

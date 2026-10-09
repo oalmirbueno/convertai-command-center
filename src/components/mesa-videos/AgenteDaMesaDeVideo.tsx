@@ -7,6 +7,7 @@ import { Ditado } from "@/components/mesa/Ditado";
 import { textoDoErro } from "@/lib/mesa/api";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
+import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { acaoDoAnexo, type AcaoDoAgente, type PedidoDaAcao, type RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
@@ -406,7 +407,7 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
       {mensagens.map((m) => (
         <div key={m.id} className="min-w-0 space-y-2">
           <div className={juntar(conversa.balao, m.papel === "usuario" ? conversa.doUsuario : conversa.doAgente)}>
-            <p className="whitespace-pre-wrap">{m.texto}</p>
+            {m.papel === "agente" ? <TextoDoAgente texto={m.texto} clientId={clientId} /> : <p className="whitespace-pre-wrap">{m.texto}</p>}
             {m.aviso && (
               <p className="mt-1 text-[12px] leading-4 text-warning" data-aviso-registro="">
                 {m.aviso}

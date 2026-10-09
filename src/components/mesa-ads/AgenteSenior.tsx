@@ -4,6 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { esquecerRegraAprendida, guardarRegraAprendida } from "@/lib/agentes/aprendizadoDoLancador";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
+import { Ditado } from "@/components/mesa/Ditado";
 import { Briefcase, Check, ChevronDown, Cpu, ExternalLink, FlaskConical, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -134,22 +136,6 @@ function Fonte({ fonte }: { fonte: string }) {
   return <span className="text-muted-foreground">{fonte}</span>;
 }
 
-/** Texto do agente curto por padrão (menos texto corrido); "Ler tudo" abre o resto. */
-function TextoCurto({ texto }: { texto: string }) {
-  const [aberto, setAberto] = useState(false);
-  const longo = texto.length > 320;
-  return (
-    <p className="whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">
-      {longo && !aberto ? `${texto.slice(0, 300).replace(/\s+\S*$/, "")}...` : texto}
-      {longo && (
-        <button type="button" className="ml-1 text-[11.5px] font-medium text-primary hover:underline" onClick={() => setAberto(!aberto)}>
-          {aberto ? "Mostrar menos" : "Ler tudo"}
-        </button>
-      )}
-    </p>
-  );
-}
-
 /** O plano de teste que o agente montou, em linhas curtas, com o botão que já cria o plano preenchido. */
 function PlanoDeTesteNaTela({ e, mensagemId, onPlanoPronto }: { e: EstrategiaSenior; mensagemId?: string; onPlanoPronto?: (planoId: string) => void }) {
   const t = e.plano_de_teste;
@@ -217,7 +203,8 @@ export function EstrategiaNaTela({
 
       <section className="min-w-0 space-y-2" aria-label="O que o agente recomenda">
         <Titulo>O que recomenda</Titulo>
-        {e.resposta && <TextoCurto texto={e.resposta} />}
+        {/* Lote B: a fala vem em balões curtos, com os quadros conferidos e as fontes que abrem a evidência. */}
+        {e.resposta && <TextoDoAgente texto={e.resposta} />}
         {e.diagnostico.length > 0 && (
           <ul className="min-w-0 space-y-1" aria-label="Diagnóstico">
             {e.diagnostico.map((d, k) => (
@@ -632,9 +619,15 @@ export default function AgenteSenior({
       descricao="Faz o seguro sozinho; o resto você confirma"
       icone={<Briefcase className="h-4 w-4" />}
       acoes={
-        <AjudaRecolhida rotulo="Como o agente sênior funciona">
-          Antes de responder, monta o retrato da campanha (cada nível com gasto, resultados, custo, CTR, CPM, frequência e fase de aprendizado), compara com o custo-alvo e a referência do nicho e lê o que já foi feito. Quando você pede para fazer, ele já faz o que é seguro (pausar o que queima, baixar verba, renomear), relendo a Meta antes e com Desfazer; ativar, subir verba e criar coisa nova esperam o seu Confirmar. Uma chamada por mensagem, com o custo à vista.
-        </AjudaRecolhida>
+        <>
+          <HistoricoDoAgente
+            chave={{ clientId, agente: "estrategista_ads", referenciaTipo: "ads_conta", referenciaId: clientId }}
+            aoTrocar={() => void queryClient.invalidateQueries({ queryKey: chavesAgente.conversa(clientId) })}
+          />
+          <AjudaRecolhida rotulo="Como o agente sênior funciona">
+            Antes de responder, monta o retrato da campanha (cada nível com gasto, resultados, custo, CTR, CPM, frequência e fase de aprendizado), compara com o custo-alvo e a referência do nicho e lê o que já foi feito. Quando você pede para fazer, ele já faz o que é seguro (pausar o que queima, baixar verba, renomear), relendo a Meta antes e com Desfazer; ativar, subir verba e criar coisa nova esperam o seu Confirmar. Uma chamada por mensagem, com o custo à vista.
+          </AjudaRecolhida>
+        </>
       }
       refDasMensagens={listaRef}
       rotuloDasMensagens="Conversa com o agente sênior"
@@ -694,6 +687,7 @@ export default function AgenteSenior({
                 <input type="checkbox" className="mr-1.5" checked={pesquisar} onChange={(e) => setPesquisar(e.target.checked)} />
                 Pesquisar na web e na Biblioteca de Anúncios
               </label>
+              <Ditado valor={texto} onChange={setTexto} disabled={!!envio} className="mb-1 mr-1.5 min-w-0" />
               <span ref={botaoRef} className="mb-1 ml-auto shrink-0">
                 <BotaoComCusto
                   rotulo="Enviar"

@@ -1463,6 +1463,9 @@ async function proximaRodada(
 
 // ------------------------------------------------------------------ conversa, nova rodada e decisão
 
+/** A fala da conversa sem os quadros do núcleo (```aceleriq-...```): o prompt e a ata ficam em texto. */
+export const semQuadrosDoNucleo = (t: string) => t.replace(/```aceleriq-[a-z]+[\s\S]*?```/g, "(quadro na Sala)").replace(/\n{3,}/g, "\n\n").trim();
+
 /** Pergunta direta a um especialista depois das rodadas (ou ao moderador). */
 export function pedidoDaConversa(sessao: SessaoDoConselho, falas: FalaDoConselho[], especialista: string, pergunta: string): { sistema: string; mensagem: string } {
   const finais = versoesFinais(falas, 99);
@@ -1470,7 +1473,7 @@ export function pedidoDaConversa(sessao: SessaoDoConselho, falas: FalaDoConselho
   const conversas = falas
     .filter((f) => f.etapa === "conversa" && f.status === "feita")
     .slice(-6)
-    .map((f) => `Pessoa para ${nomeDoEspecialista(f.especialista)}: ${String(f.pedido || "")}\n${nomeDoEspecialista(f.especialista)}: ${String(f.texto || "").slice(0, 700)}`)
+    .map((f) => `Pessoa para ${nomeDoEspecialista(f.especialista)}: ${String(f.pedido || "")}\n${nomeDoEspecialista(f.especialista)}: ${semQuadrosDoNucleo(String(f.texto || "")).slice(0, 700)}`)
     .join("\n\n");
   const r = sessao.resultado;
   const resumo = r
@@ -1627,7 +1630,7 @@ export function montarAta(sessao: SessaoDoConselho, falas: FalaDoConselho[], ext
     l.push("## Conversa com o conselho");
     conversa.forEach((f) => {
       l.push(`- Pergunta para ${nomeDoEspecialista(f.especialista)}: ${String(f.pedido || "")}`);
-      l.push(`  Resposta: ${f.status === "feita" ? String(f.texto || "") : `(${f.status})`}`);
+      l.push(`  Resposta: ${f.status === "feita" ? semQuadrosDoNucleo(String(f.texto || "")) : `(${f.status})`}`);
     });
   }
   l.push("");

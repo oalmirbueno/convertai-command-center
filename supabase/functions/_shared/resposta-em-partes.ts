@@ -30,7 +30,7 @@ export type ParteDaResposta =
   | { tipo: "texto"; texto: string }
   | { tipo: "blocos"; blocos: BlocoDeResposta[] };
 
-export type RespostaEmPartes = { partes: ParteDaResposta[]; recusados: string[]; fontes: string[] };
+export type RespostaEmPartes = { partes: ParteDaResposta[]; recusados: string[]; fontes: string[]; evidencias: Record<string, string> };
 
 /** Teto de um balão: texto maior é dividido nos parágrafos (nunca no meio de tabela, lista ou código). */
 const TETO_DO_BALAO = 700;
@@ -111,6 +111,7 @@ export function separarResposta(texto: string, opcoes: { fontesConhecidas?: stri
   const partes: ParteDaResposta[] = [];
   const recusados: string[] = [];
   const fontes = new Set<string>();
+  const evidencias: Record<string, string> = {};
   let resto = t;
   const fontesConhecidas = opcoes.fontesConhecidas || [];
   const empurrarTexto = (x: string) => { for (const b of baloesDoTexto(x)) partes.push({ tipo: "texto", texto: b }); };
@@ -129,6 +130,9 @@ export function separarResposta(texto: string, opcoes: { fontesConhecidas?: stri
     const citadas = q.conferido && json && typeof json === "object" && Array.isArray((json as { blocos?: unknown }).blocos)
       ? ((json as { blocos: Array<{ fontes?: unknown }> }).blocos).flatMap((b) => (b && Array.isArray(b.fontes) ? b.fontes.map(String) : []))
       : [];
+    // O texto lido de cada fonte vem junto do quadro conferido: o chip da fonte abre a evidência.
+    const ev = q.conferido && json && typeof json === "object" ? (json as { evidencias?: unknown }).evidencias : null;
+    if (ev && typeof ev === "object" && !Array.isArray(ev)) for (const [k, v] of Object.entries(ev as Record<string, unknown>)) if (typeof v === "string" && v.trim()) evidencias[k.slice(0, 120)] = v.slice(0, 6000);
     const { blocos, recusados: r } = validarBlocos(json, { fontesConhecidas: q.conferido ? citadas : fontesConhecidas, hostsPermitidos: opcoes.hostsPermitidos });
     for (const x of r) recusados.push(x.motivo);
     // Fluxo é desenho do agente: sempre "Proposta" (estado do sistema vem de progresso/entrega, conferidos à parte).
@@ -144,7 +148,7 @@ export function separarResposta(texto: string, opcoes: { fontesConhecidas?: stri
     for (const b of ajustados) for (const f of ("fontes" in b && b.fontes) || []) fontes.add(String(f));
     if (ajustados.length) partes.push({ tipo: "blocos", blocos: ajustados });
   }
-  return { partes, recusados, fontes: [...fontes] };
+  return { partes, recusados, fontes: [...fontes], evidencias };
 }
 
 /**

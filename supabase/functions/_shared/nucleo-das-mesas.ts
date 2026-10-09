@@ -260,7 +260,13 @@ export async function conferirApresentacao(
     quadros += blocos.length;
     // Na tela, a fonte vem com o nome da leitura ("Briefing (L1)"), não só o apelido.
     for (const bl of blocos) if ("fontes" in bl && Array.isArray(bl.fontes)) (bl as { fontes?: string[] }).fontes = bl.fontes.map((f) => rotuloDaFonte(f, fontes));
-    return `\n\`\`\`${MARCA_CONFERIDA}\n${JSON.stringify({ blocos })}\n\`\`\`\n`;
+    const evidencias: Record<string, string> = {};
+    for (const bl of blocos) for (const f of ("fontes" in bl && Array.isArray(bl.fontes) ? bl.fontes : [])) {
+      const ap = (String(f).match(/L\d+/) || [""])[0];
+      const fonte = fontes.find((x) => x.apelido === ap);
+      if (fonte && !evidencias[f]) evidencias[f] = fonte.texto.slice(0, 3000);
+    }
+    return `\n\`\`\`${MARCA_CONFERIDA}\n${JSON.stringify({ blocos, evidencias })}\n\`\`\`\n`;
   });
   return { texto: saida.join("").replace(/\n{3,}/g, "\n\n").trim(), recusados, quadros };
 }
@@ -300,11 +306,30 @@ export async function fecharNucleo(
   let encaminhado = false;
   if (o.clientId && pedeAoHermes(o.pedido)) {
     const contexto = saida.replace(/```[\s\S]*?```/g, "").trim().slice(0, 1500);
-    const r = await encaminharAoHermes(db, { clientId: o.clientId, agente: o.agente, pedido: o.pedido, contexto, userId: o.userId });
+    const r = await encaminharAoHermes(db, { clientId: o.clientId, agente: o.agente, pedido: o.pedido, contexto, userId: o.userId, cobrar: o.cobrar });
     encaminhado = r.ok;
     saida = `${saida}${saida ? "\n\n" : ""}${r.texto}`;
   } else if (prep.pedidosAoHermes.length && /\bhermes\b/i.test(o.pedido)) {
     saida = `${saida}${saida ? "\n\n" : ""}${quadroDosPedidos(prep.pedidosAoHermes)}`;
   }
   return { texto: saida, recusados: conferido.recusados, encaminhado };
+}
+
+/**
+ * A fala do modelo é escrita antes de o servidor executar o que não tem custo: quando a ação foi
+ * feita na hora, "está pronta para confirmar" vira mentira. Tira essas frases e diz o que aconteceu.
+ * (Lote B, 09/10: Estúdio trocou o texto da lâmina e respondeu "pronta para confirmar".)
+ */
+export function falaDoQueFoiFeito(texto: string, feitoAgora: boolean): string {
+  if (!feitoAgora) return texto;
+  const pendente = /(pront[ao]s?|preparad[ao]s?) para (voc[eê] )?confirmar|aguarda(m)? (a sua |sua )?confirma[cç][aã]o|s[oó] muda (ap[oó]s|depois d)a confirma[cç][aã]o|est[aá] no cart[aã]o aguardando/i;
+  // Nada prometendo confirmação e a fala já diz que fez: fica como está.
+  if (!pendente.test(String(texto || "")) && /\bfeit[oa]s?\b|\bregistrei\b|\bapliquei\b|\btroquei\b/i.test(String(texto || ""))) return texto;
+  const sem = String(texto || "")
+    .replace(/([.!?])\s+/g, "$1\u0001")
+    .split("\u0001")
+    .filter((f) => !/(pront[ao]s?|preparad[ao]s?) para (voc[eê] )?confirmar|aguarda(m)? (a sua |sua )?confirma[cç][aã]o|s[oó] muda (ap[oó]s|depois d)a confirma[cç][aã]o|est[aá] no cart[aã]o aguardando/i.test(f))
+    .join(" ")
+    .trim();
+  return `${sem}${sem ? "\n\n" : ""}Feito agora; o Desfazer fica no cartão.`;
 }

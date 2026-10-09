@@ -185,6 +185,7 @@ import {
   SISTEMA_DAS_IDEIAS,
 } from "./modulos/ideias-de-tema.ts";
 import { lerSinaisDoMundo } from "./modulos/sinais-do-mundo.ts";
+import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 
 /** Cérebro e dossiê do cliente para o agente (cache curto; padrão do diretor de fotografia). */
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
@@ -1405,13 +1406,14 @@ async function listasParaOAgente(
 async function conversaDoAgente(ch: Chamador, clientId: string, conversaId: unknown, abrirNova: boolean): Promise<string> {
   if (!abrirNova && conversaId != null && conversaId !== "") {
     const id = idDe(conversaId, "conversa_id");
-    const { data } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo").eq("id", id).maybeSingle();
-    const c = data as { id: string; client_id: string; referencia_tipo: string | null } | null;
+    const { data } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo, arquivada_em").eq("id", id).maybeSingle();
+    const c = data as { id: string; client_id: string; referencia_tipo: string | null; arquivada_em: string | null } | null;
     if (!c || c.client_id !== clientId || c.referencia_tipo !== REF_CONVERSA) throw new ErroHttp(404, "conversa_inexistente", "Conversa não encontrada para este cliente.");
-    return c.id;
+    // Conversa arquivada (Histórico, "nova conversa") nunca continua: cai na ativa ou numa nova.
+    if (!c.arquivada_em) return c.id;
   }
   if (!abrirNova) {
-    const { data } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).order("criado_em", { ascending: false }).limit(1);
+    const { data } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).is("arquivada_em", null).order("criado_em", { ascending: false }).limit(1);
     const achada = ((data as { id: string }[] | null) ?? [])[0];
     if (achada) return achada.id;
   }
@@ -1450,7 +1452,16 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const marcaDaConversa = typeof corpo.marca_id === "string" && corpo.marca_id ? corpo.marca_id : null;
   // Frente ROT: os modelos próprios entram no índice da base que o agente vê.
   const propriosP = lerProprios(clientId);
-  const [modelo, historico, listas, cliente, contextoDoCliente, regras, referencia, sp, proprios] = await Promise.all([
+  // Núcleo comum: o Jev escolhe as leituras do OS antes do modelo (em paralelo; nunca lança).
+  const cobrarDoNucleo = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: TAREFA, referencia: { tipo: REF_CONVERSA, id: conversaId }, criadoPor: ch.userId });
+  const previasP = historicoP.then((h) => prepararNucleo(servico(), {
+    clientId,
+    pedido: mensagem,
+    agente: "roteiros",
+    ultimaResposta: (((h.data as { papel: string; conteudo: string }[] | null) ?? []).find((m) => m.papel === "agente") || { conteudo: null }).conteudo,
+    cobrar: cobrarDoNucleo,
+  }));
+  const [modelo, historico, listas, cliente, contextoDoCliente, regras, referencia, sp, proprios, previas] = await Promise.all([
     modeloDeTexto(corpo.modelo_id),
     historicoP,
     listasP,
@@ -1467,6 +1478,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
       ultimaResposta: (((h.data as { papel: string; conteudo: string }[] | null) ?? []).find((m) => m.papel === "agente") || { conteudo: null }).conteudo,
     })),
     propriosP,
+    previasP,
   ]);
   if (historico.error) registrarFalha("mesa-roteiros: histórico da conversa não lido", historico.error, { conversa_id: conversaId });
   const hoje = new Date().toISOString().slice(0, 10);
@@ -1484,7 +1496,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const ultimaResposta = anteriores.slice().reverse().find((m) => m.papel === "agente");
   // O roteiro aberto vem primeiro na lista: "este roteiro" vira r1.
   const roteirosOrdenados = aberto ? [...listas.roteiros.filter((r) => r.id === aberto.id), ...listas.roteiros.filter((r) => r.id !== aberto.id)] : listas.roteiros;
-  const extras = `${blocoDaReferencia(referencia.r, referencia.itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${indiceDaBaseParaOAgente(proprios)}`;
+  // Núcleo comum: a instrução e as leituras prévias (com os pedidos ao Hermes) fecham o sistema.
+  const extras = `${blocoDaReferencia(referencia.r, referencia.itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${indiceDaBaseParaOAgente(proprios)}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`;
   const saida = await chamarTexto({
     clientId,
     tarefa: TAREFA,
@@ -1500,7 +1513,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     metodo: sp,
   });
   const j = (saida.json || {}) as Record<string, unknown>;
-  let resposta = limpo(j.resposta, 4000) || "Pronto.";
+  // Núcleo comum: quadros conferidos contra as leituras; "peça ao Hermes" vai para a fila dele.
+  let resposta = (await fecharNucleo(servico(), limpo(j.resposta, 9000), previas, { clientId, agente: "roteiros", pedido: mensagem, userId: ch.userId, cobrar: cobrarDoNucleo })).texto || "Pronto.";
   const sugestoes = (Array.isArray(j.sugestoes) ? j.sugestoes : []).map((s) => limpo(s, 140)).filter(Boolean).slice(0, 3);
   // Frente AG2: o que o pedido ensinou vira regra (o Jev decide se vale para sempre); roda junto com a ação.
   const aprendendo = aprenderDoPedido(servico(), { clientId, mesa: "roteiro", pedido: mensagem, regraSugerida: j.regra_aprendida, marcaId: marcaDaConversa, userId: ch.userId, ultimaResposta: ultimaResposta ? ultimaResposta.conteudo : null });
@@ -1569,7 +1583,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
 async function agenteHistorico(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
-  const { data, error: erroDaConversa } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).order("criado_em", { ascending: false }).limit(1);
+  const { data, error: erroDaConversa } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).is("arquivada_em", null).order("criado_em", { ascending: false }).limit(1);
   // Frente AG2: histórico que não foi lido vira erro na tela (antes voltava vazio, como se não houvesse conversa).
   if (erroDaConversa) throw new ErroHttp(503, "conversa_indisponivel", "Não foi possível ler a conversa agora.");
   const conversa = ((data as { id: string }[] | null) ?? [])[0];
@@ -1800,13 +1814,14 @@ async function desfazerAcao(ch: Chamador, corpo: Record<string, unknown>) {
 async function conversaDasIdeias(ch: Chamador, clientId: string, conversaId: unknown, abrirNova: boolean): Promise<string> {
   if (!abrirNova && conversaId != null && conversaId !== "") {
     const id = idDe(conversaId, "conversa_id");
-    const { data } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo").eq("id", id).maybeSingle();
-    const c = data as { id: string; client_id: string; referencia_tipo: string | null } | null;
+    const { data } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo, arquivada_em").eq("id", id).maybeSingle();
+    const c = data as { id: string; client_id: string; referencia_tipo: string | null; arquivada_em: string | null } | null;
     if (!c || c.client_id !== clientId || c.referencia_tipo !== REF_DAS_IDEIAS) throw new ErroHttp(404, "conversa_inexistente", "Conversa de ideias não encontrada para este cliente.");
-    return c.id;
+    // Conversa arquivada (Histórico, "nova conversa") nunca continua: cai na ativa ou numa nova.
+    if (!c.arquivada_em) return c.id;
   }
   if (!abrirNova) {
-    const { data } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_DAS_IDEIAS).order("criado_em", { ascending: false }).limit(1);
+    const { data } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_DAS_IDEIAS).is("arquivada_em", null).order("criado_em", { ascending: false }).limit(1);
     const achada = ((data as { id: string }[] | null) ?? [])[0];
     if (achada) return achada.id;
   }
@@ -1868,7 +1883,16 @@ async function ideiasConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const marcaDaConversa = typeof corpo.marca_id === "string" && corpo.marca_id ? corpo.marca_id : null;
   const marca = await resolverMarca(servico(), clientId, { marca_id: marcaDaConversa }).catch((e) => (registrarFalha("mesa-roteiros: marca das ideias falhou", e), null));
   const contasP: Promise<string[] | null> = marca && !marca.principal ? contasDaMarcaDoCliente(servico(), clientId, marca).catch(() => null) : Promise.resolve(null);
-  const [modelo, historico, ctx, proprios, regras, sp, sinais] = await Promise.all([
+  // Núcleo comum: o Jev escolhe as leituras do OS antes do modelo (em paralelo; nunca lança).
+  const cobrarDoNucleo = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: TAREFA, referencia: { tipo: REF_DAS_IDEIAS, id: conversaId }, criadoPor: ch.userId });
+  const previasP = historicoP.then((h) => prepararNucleo(servico(), {
+    clientId,
+    pedido: mensagem,
+    agente: "roteiros (ideias de tema)",
+    ultimaResposta: (((h.data as { papel: string; conteudo: string }[] | null) ?? []).find((m) => m.papel === "agente") || { conteudo: null }).conteudo,
+    cobrar: cobrarDoNucleo,
+  }));
+  const [modelo, historico, ctx, proprios, regras, sp, sinais, previas] = await Promise.all([
     modeloDeTexto(corpo.modelo_id),
     historicoP,
     contextoDaPeca(clientId, null, { tipo: "fala_camera", marcaId: marcaDaConversa }).catch((e) => (registrarFalha("mesa-roteiros: contexto das ideias não lido", e), null)),
@@ -1888,6 +1912,7 @@ async function ideiasConversar(ch: Chamador, corpo: Record<string, unknown>) {
       web: { ligada: webPedida, motivo: webPedida ? null : "desligada nesta rodada." },
       segredo: Deno.env.get("META_APP_SECRET")?.trim() || null,
     })),
+    previasP,
   ]);
   if (historico.error) registrarFalha("mesa-roteiros: histórico das ideias não lido", historico.error, { conversa_id: conversaId });
   const linhasDoHistorico = ((historico.data as { papel: string; conteudo: string; anexos: unknown }[] | null) ?? []).slice().reverse();
@@ -1913,7 +1938,7 @@ async function ideiasConversar(ch: Chamador, corpo: Record<string, unknown>) {
     numero_da_proxima_ideia: `i${proximoNumero(anteriores)}`,
   };
   const sistemaCom = (s: SinaisDoMundo) =>
-    `${SISTEMA_DAS_IDEIAS}\n\n${CONHECIMENTO_DE_TEMAS}\n\nDADOS DESTA CONVERSA (hoje ${hoje}; a equipe chama as ideias pelo número: "2" é i2):\n${JSON.stringify(dados)}\n\n${blocoDosSinais(s)}\n\n${indiceDaBaseParaOAgente(proprios)}${regras.bloco ? `\n\n${regras.bloco}` : ""}`;
+    `${SISTEMA_DAS_IDEIAS}\n\n${CONHECIMENTO_DE_TEMAS}\n\nDADOS DESTA CONVERSA (hoje ${hoje}; a equipe chama as ideias pelo número: "2" é i2):\n${JSON.stringify(dados)}\n\n${blocoDosSinais(s)}\n\n${indiceDaBaseParaOAgente(proprios)}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`;
   const pedir = (s: SinaisDoMundo) =>
     chamarTexto({
       clientId,
@@ -1942,7 +1967,8 @@ async function ideiasConversar(ch: Chamador, corpo: Record<string, unknown>) {
     saida = await pedir(usados);
   }
   const j = (saida.json || {}) as Record<string, unknown>;
-  const resposta = semTravessao(limpo(j.resposta, 3000)) || "Aqui estão as ideias.";
+  // Núcleo comum: quadros conferidos contra as leituras; "peça ao Hermes" vai para a fila dele.
+  const resposta = (await fecharNucleo(servico(), semTravessao(limpo(j.resposta, 9000)), previas, { clientId, agente: "roteiros (ideias de tema)", pedido: mensagem, userId: ch.userId, cobrar: cobrarDoNucleo })).texto || "Aqui estão as ideias.";
   const linksDoInstagram = [
     ...usados.instagram.hashtags.flatMap((h) => h.posts.map((p) => p.link)),
     ...usados.referencias.perfis.flatMap((x) => x.posts.map((p) => p.link)),
@@ -1983,7 +2009,7 @@ async function ideiasConversar(ch: Chamador, corpo: Record<string, unknown>) {
 async function ideiasHistorico(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
-  const { data, error } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_DAS_IDEIAS).order("criado_em", { ascending: false }).limit(1);
+  const { data, error } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_DAS_IDEIAS).is("arquivada_em", null).order("criado_em", { ascending: false }).limit(1);
   if (error) throw new ErroHttp(503, "conversa_indisponivel", "Não foi possível ler a conversa de ideias agora.");
   const conversa = ((data as { id: string }[] | null) ?? [])[0];
   if (!conversa) return json({ conversa_id: null, mensagens: [], custo_usd: 0 });

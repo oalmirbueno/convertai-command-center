@@ -6,6 +6,8 @@ import { chamarFuncao, lerCatalogo, modeloDoPapel, textoDoErro, usd } from "@/li
 import CartaoDeAcao, { CapacidadesDoAgente, OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import ModeloDoAgente from "@/components/agentes/ModeloDoAgente";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
+import { Ditado } from "@/components/mesa/Ditado";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente, type AcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
@@ -70,6 +72,8 @@ export default function AgenteDeContratos({ clientId, contratoId, aoAbrirContrat
   const [conversaId, setConversaId] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [nova, setNova] = useState(false);
+  // Lote B: o histórico trocou a conversa ativa; relê a conversa como na abertura.
+  const [recarga, setRecarga] = useState(0);
   const [rascunho, setRascunho] = useEstadoDaTela<string>(`contratos:agente:rascunho:${clientId}`, "");
   // Frente CON2: o modelo do agente escolhido na hora (padrão: o do papel "contrato").
   const [modeloEscolhido, setModeloEscolhido] = useEstadoDaTela<string>("contratos:agente:modelo", "", { validar: (v) => typeof v === "string" });
@@ -112,7 +116,7 @@ export default function AgenteDeContratos({ clientId, contratoId, aoAbrirContrat
     return () => {
       vivo = false;
     };
-  }, [clientId]);
+  }, [clientId, recarga]);
 
   useEffect(() => {
     if (lista.current) lista.current.scrollTop = lista.current.scrollHeight;
@@ -165,6 +169,16 @@ export default function AgenteDeContratos({ clientId, contratoId, aoAbrirContrat
         descricao={contratoId ? "Sobre o contrato aberto" : "Sobre os contratos do cliente"}
         acoes={
           <>
+            <HistoricoDoAgente
+              chave={{ clientId, agente: "contrato", referenciaTipo: "mesa_contratos", referenciaId: null }}
+              aoTrocar={() => {
+                // A conversa ativa mudou (nova ou retomada): relê como na abertura.
+                setConversaId(null);
+                setNova(false);
+                setMensagens([]);
+                setRecarga((n) => n + 1);
+              }}
+            />
             {mensagens.length > 0 && <BotaoNovaConversa onClick={novaConversa} desativado={enviando} />}
             <AjudaRecolhida rotulo="Como o agente de contratos funciona">
               Explique o serviço do jeito que falaria. Ele escolhe os blocos, cria o rascunho, preenche o que você disse e pergunta o que falta. Mudar o texto de uma cláusula sempre vem num cartão com a diferença e o Confirmar. Assinar pela agência e enviar são com você, na tela.
@@ -206,6 +220,7 @@ export default function AgenteDeContratos({ clientId, contratoId, aoAbrirContrat
                   disabled={enviando}
                 />
               </div>
+              <Ditado valor={rascunho} onChange={setRascunho} disabled={enviando} className="ml-auto mr-1.5 min-w-0" />
               <button type="button" className={juntar(botao.primario, "h-9")} onClick={() => void enviar()} disabled={enviando || !rascunho.trim()} aria-label="Enviar ao agente">
                 {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </button>

@@ -316,6 +316,7 @@ import { registrarFalha } from "../_shared/falha-registrada.ts";
 // (revisão 30/09). Diretor, variações, leitores e conferências ficam só com a técnica
 // (motores.ts: SEM_METODO_DE_PROPOSITO).
 import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
+import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
 
 const corsHeaders = {
@@ -3822,15 +3823,16 @@ type LinhaMensagem = { papel: string; conteudo: string; criado_em: string };
 async function conversaDoAgente(ch: Chamador, clientId: string, conversaId: unknown, referenciaId: string | null, abrirNova = false): Promise<string> {
   if (!abrirNova && conversaId != null && conversaId !== "") {
     const id = idDe(conversaId, "conversa_id");
-    const { data, error: erroConversa } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo").eq("id", id).maybeSingle();
+    const { data, error: erroConversa } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo, arquivada_em").eq("id", id).maybeSingle();
     // AG2: erro do banco não vira "conversa não encontrada".
     if (erroConversa) {
       registrarFalha("mesa-foto: conversa do diretor não lida", erroConversa, { conversa_id: id });
       throw new ErroHttp(503, "conversa_indisponivel", "Não foi possível ler a conversa com o diretor agora.");
     }
-    const c = data as { id: string; client_id: string; referencia_tipo: string | null } | null;
+    const c = data as { id: string; client_id: string; referencia_tipo: string | null; arquivada_em: string | null } | null;
     if (!c || c.client_id !== clientId || c.referencia_tipo !== REF_CONVERSA) throw new ErroHttp(404, "conversa_inexistente", "Conversa não encontrada para este cliente.");
-    return c.id;
+    // Histórico: conversa arquivada ("Nova conversa" no histórico) não recebe mensagem nova; segue para a ativa ou abre outra.
+    if (!c.arquivada_em) return c.id;
   }
   // "Nova conversa" na tela abre outra de verdade (antes reabria a última do mesmo kit).
   const achada = abrirNova ? null : await conversaExistente(clientId, referenciaId);
@@ -3848,7 +3850,7 @@ async function conversaDoAgente(ch: Chamador, clientId: string, conversaId: unkn
  * a conversa seguinte nascia vazia (o histórico sumia calado).
  */
 async function conversaExistente(clientId: string, referenciaId: string | null): Promise<string | null> {
-  let q = servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE_DIRETOR).eq("referencia_tipo", REF_CONVERSA);
+  let q = servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE_DIRETOR).eq("referencia_tipo", REF_CONVERSA).is("arquivada_em", null);
   q = referenciaId ? q.eq("referencia_id", referenciaId) : q.is("referencia_id", null);
   const { data, error } = await q.order("criado_em", { ascending: false }).limit(1);
   if (error) {
@@ -3892,13 +3894,14 @@ async function agenteHistorico(ch: Chamador, corpo: Record<string, unknown>) {
   let conversaId: string | null = null;
   if (corpo.conversa_id != null && corpo.conversa_id !== "") {
     const id = idDe(corpo.conversa_id, "conversa_id");
-    const { data, error } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo").eq("id", id).maybeSingle();
+    const { data, error } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo, arquivada_em").eq("id", id).maybeSingle();
     if (error) {
       registrarFalha("mesa-foto: conversa do diretor não lida (histórico)", error, { conversa_id: id });
       throw new ErroHttp(503, "conversa_indisponivel", "Não foi possível ler a conversa com o diretor agora.");
     }
-    const c = data as { id: string; client_id: string; referencia_tipo: string | null } | null;
-    if (c && c.client_id === clientId && c.referencia_tipo === REF_CONVERSA) conversaId = c.id;
+    const c = data as { id: string; client_id: string; referencia_tipo: string | null; arquivada_em: string | null } | null;
+    // Arquivada no histórico: a tela volta para a ativa (ou vazia), não para a antiga.
+    if (c && c.client_id === clientId && c.referencia_tipo === REF_CONVERSA && !c.arquivada_em) conversaId = c.id;
   }
   if (!conversaId) conversaId = await conversaExistente(clientId, await referenciaDaConversa(ch, clientId, corpo));
   if (!conversaId) return json({ conversa_id: null, mensagens: [], custo_usd: 0 });
@@ -4067,27 +4070,34 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     .filter((m) => m.papel === "usuario" || m.papel === "agente");
   const anteriores = brutos.map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: m.conteudo.slice(0, 4000) }));
   const ultimaResposta = brutos.filter((m) => m.papel === "agente").map((m) => m.conteudo).pop() ?? null;
+  // Núcleo comum das Mesas: o Jev escolhe as leituras do OS antes do modelo (nunca lança).
+  const referenciaDoUso = { tipo: ensaio ? REF_ENSAIO : kit ? REF_KIT : REF_CONVERSA, id: ensaio?.id ?? kit?.id ?? conversaId };
+  const cobrarDoNucleo = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: TAREFA_ESTUDIO, referencia: referenciaDoUso, criadoPor: ch.userId });
+  const previasP = prepararNucleo(servico(), { clientId, pedido: mensagem, agente: "diretor_arte (foto)", ultimaResposta, cobrar: cobrarDoNucleo });
   // AG2: "essa", "a segunda", "todas" contra a lista da etapa, na ordem da tela (Jev só quando o pedido aponta).
   const listaDaTela = itensDaReferencia(pacote);
   const referencia = await referenciaDoPedido(mensagem, listaDaTela.itens, { agente: "diretor de fotografia da Mesa Foto", ultimaResposta, selecionados: listaDaTela.selecionados });
+  const previas = await previasP;
   const saida = await chamarTexto({
     clientId,
     tarefa: TAREFA_ESTUDIO,
     agente: AGENTE_DIRETOR,
     modeloId: diretor.id,
     raciocinio: raciocinioPara(diretor),
-    sistema: `${SISTEMA_AGENTE}\n\n${blocoDoMapaDoPainel("foto")}\n\nDADOS REAIS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${preparo.bloco}\n${REGRA_DO_PEDIDO_DE_FAZER}${blocoDaReferencia(referencia, listaDaTela.itens)}${regras.bloco ? `\n${regras.bloco}` : ""}`,
+    sistema: `${SISTEMA_AGENTE}\n\n${blocoDoMapaDoPainel("foto")}\n\nDADOS REAIS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${preparo.bloco}\n${REGRA_DO_PEDIDO_DE_FAZER}${blocoDaReferencia(referencia, listaDaTela.itens)}${regras.bloco ? `\n${regras.bloco}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
     esquemaJson: ESQUEMA_AGENTE_COM_METODO,
     maxTokensSaida: 12_000,
     timeoutMs: TIMEOUT_TEXTO_FOTO_MS,
     metodo: await spP,
-    referencia: { tipo: ensaio ? REF_ENSAIO : kit ? REF_KIT : REF_CONVERSA, id: ensaio?.id ?? kit?.id ?? conversaId },
+    referencia: referenciaDoUso,
     criadoPor: ch.userId,
   });
   const r = (saida.json ?? {}) as Record<string, unknown>;
   const selecaoFotos = fotosSelecionadas(r.selecao_fotos, preparo.selecaoDaPasta === null ? pacote.imagens : pacote.imagens.filter((i) => preparo.selecaoDaPasta!.includes(i.id)));
-  let resposta = limpo(r.resposta, 6000) || "Sem resposta do diretor.";
+  let resposta = limpo(r.resposta, 9000) || "Sem resposta do diretor.";
+  // Núcleo: quadros conferidos contra as leituras e "peça ao Hermes ..." encaminhado (antes de gravar).
+  resposta = (await fecharNucleo(servico(), resposta, previas, { clientId, agente: "diretor_arte (foto)", pedido: mensagem, userId: ch.userId, cobrar: cobrarDoNucleo })).texto || resposta;
   const kitsValidos = Array.from(new Set([...(kit ? [kit.id] : []), ...kitsDoCli.map((k) => k.id)]));
   const sugestoesBrutas = sugestoesComIds(r.sugestoes, pacote, anexosForaDoPacote);
   const sugestoes = normalizarSugestoes(sugestoesBrutas, {

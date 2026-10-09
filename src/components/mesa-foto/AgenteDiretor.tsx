@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useInRouterContext, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Aperture, Check, ImagePlus, Loader2, Megaphone, MessageSquarePlus, PackageOpen, PackageSearch, Paperclip, Send, Sparkles, X } from "lucide-react";
@@ -48,6 +48,9 @@ import {
   type SugestaoDoAgente,
 } from "./fotoApi";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
+import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
+import { supabase } from "@/integrations/supabase/client";
 import { lerDaSessao } from "./sessao";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
@@ -147,54 +150,6 @@ export const ATALHOS_DO_DIRETOR: { rotulo: string; mensagem: string; icone: type
     icone: Megaphone,
   },
 ];
-
-/**
- * A resposta do diretor em blocos: parágrafos, listas (linhas com "-", "•"
- * ou "1.") e títulos curtos terminados em ":". Nada de uma linha só.
- */
-export function TextoOrganizado({ texto }: { texto: string }) {
-  const blocos = texto
-    .replace(/\r\n/g, "\n")
-    .split(/\n\s*\n/)
-    .map((b) => b.trim())
-    .filter(Boolean);
-  const eItem = (l: string) => /^(\s*[-*•]\s+|\s*\d+[.)]\s+)/.test(l);
-  const semMarca = (l: string) => l.replace(/^(\s*[-*•]\s+|\s*\d+[.)]\s+)/, "");
-  const saida: ReactNode[] = [];
-  blocos.forEach((b, i) => {
-    const linhas = b.split("\n").map((l) => l.trim()).filter(Boolean);
-    let lista: string[] = [];
-    let numerada = false;
-    const fecharLista = (k: string) => {
-      if (!lista.length) return;
-      const itens = lista.map((t, j) => <li key={j}>{t}</li>);
-      saida.push(
-        numerada ? (
-          <ol key={k} className="ml-4 list-decimal space-y-0.5">
-            {itens}
-          </ol>
-        ) : (
-          <ul key={k} className="ml-4 list-disc space-y-0.5">
-            {itens}
-          </ul>
-        ),
-      );
-      lista = [];
-    };
-    linhas.forEach((l, j) => {
-      if (eItem(l)) {
-        if (!lista.length) numerada = /^\s*\d/.test(l);
-        lista.push(semMarca(l));
-        return;
-      }
-      fecharLista(`l-${i}-${j}`);
-      if (l.length <= 60 && /:$/.test(l)) saida.push(<p key={`t-${i}-${j}`} className="font-semibold">{l.slice(0, -1)}</p>);
-      else saida.push(<p key={`p-${i}-${j}`}>{l}</p>);
-    });
-    fecharLista(`l-${i}-fim`);
-  });
-  return <div className="space-y-1.5">{saida}</div>;
-}
 
 /** Tira da resposta as linhas "Entendi:" e "Próximo passo:" (elas já aparecem em destaque). */
 export const semBlocos = (texto: string) =>
@@ -655,7 +610,8 @@ function Mensagem({ m, anexosDaConversa, onOpcao, ocupado }: { m: MensagemDoDire
             {m.entendi}
           </p>
         )}
-        <TextoOrganizado texto={m.entendi || m.proximo_passo ? semBlocos(m.texto) : m.texto} />
+        {/* Núcleo comum: balões, quadros conferidos e fontes clicáveis (o texto antigo sem quadro sai igual). */}
+        <TextoDoAgente texto={m.entendi || m.proximo_passo ? semBlocos(m.texto) : m.texto} clientId={clientId} />
         {m.proximo_passo && (
           <p className="rounded-md border border-primary/30 px-2.5 py-1.5 text-[13.5px]" data-proximo-do-diretor="">
             <span className="font-semibold text-primary">Próximo passo: </span>
@@ -1003,6 +959,38 @@ export default function AgenteDiretor({
     }
   };
 
+  // Histórico (Nova conversa, Continuar esta, Arquivar): limpa a tela e relê a conversa ativa do cliente.
+  // Depois da troca sobra no máximo uma ativa na Mesa Foto; sem nenhuma, a próxima mensagem abre outra.
+  const trocarConversa = async () => {
+    const alvo = clientId;
+    marcarNova(memoria, false);
+    try {
+      window.sessionStorage.removeItem(chaveDaConversa(memoria));
+    } catch {
+      /* nada guardado */
+    }
+    mudarConversa(memoria, () => ({ mensagens: [], conversaId: null, novaConversa: false, pendente: null }));
+    historicoPedido[memoria] = true;
+    try {
+      // A tabela ganhou arquivada_em/atualizado_em, que os tipos gerados ainda não têm.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const banco = supabase as unknown as { from: (tabela: string) => any };
+      const { data: ativas, error } = await banco.from("agente_conversas").select("id")
+        .eq("client_id", alvo).eq("agente", "diretor_arte").eq("referencia_tipo", "mesa_foto").is("arquivada_em", null)
+        .order("atualizado_em", { ascending: false, nullsFirst: false }).limit(1);
+      if (error) throw error;
+      const ativa = ((ativas || []) as Array<{ id: string }>)[0]?.id || null;
+      if (!ativa || clienteAtual.current !== alvo) return;
+      const r = await lerHistoricoDoDiretor({ clientId: alvo, conversaId: ativa, kitId, ensaioId });
+      if (clienteAtual.current !== alvo || !r.conversa_id) return;
+      gravarConversa(memoria, r.conversa_id);
+      mudarConversa(memoria, (e) => (e.mensagens.length || e.pendente ? {} : { mensagens: r.mensagens, conversaId: r.conversa_id }));
+    } catch (e) {
+      historicoPedido[memoria] = false;
+      setErro(e);
+    }
+  };
+
   const anexarPrints = async (arquivos: File[]) => {
     if (!arquivos.length || subindo) return;
     setSubindo(true);
@@ -1043,6 +1031,7 @@ export default function AgenteDiretor({
                 <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
               </button>
             )}
+            <HistoricoDoAgente chave={clientId ? { clientId, agente: "diretor_arte", referenciaTipo: "mesa_foto" } : null} aoTrocar={() => void trocarConversa()} />
             <AjudaRecolhida rotulo="Como o diretor funciona">
               Ele já carrega o cliente sozinho: marca, histórico, campanha da Mesa, fotos, clones, books, produtos, posts de fotos na Agenda e o que está aberto e marcado na etapa. Lê cada foto nova uma vez e guarda. Pedido claro e sem custo ele já faz (até 5 itens, com Desfazer). Geração barata (até US$ 0,40 e 4 fotos) começa sozinha com o custo à vista e o botão Parar; acima disso, espera o seu Confirmar. Nunca apaga (arquiva). Termina com o botão para ir à área certa e mostra as fotos como prova.
             </AjudaRecolhida>

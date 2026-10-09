@@ -358,7 +358,9 @@ describe("editor-video: ligações do servidor", () => {
     // Frente SYNC (30/09): as regras seguem a marca aberta na tela.
     expect(f).toContain('regrasDaMesa(servico(), { clientId, mesa: "edicao", marcaId })');
     expect(f).toContain("const sistemaCompleto = sistemaDoPasso(sistema, regras.bloco, blocoDaReferencia(ref, itens));");
-    expect(f).toContain("sistema: sistemaCompleto,");
+    // Núcleo das Mesas (09/10): a instrução comum e as leituras entram por cima do sistema completo.
+    expect(f).toContain("const sistemaComNucleo = [sistemaCompleto, INSTRUCAO_DO_NUCLEO_DAS_MESAS, nucleo.bloco].filter(Boolean).join(");
+    expect(f).toContain("sistema: sistemaComNucleo,");
     expect(f).toMatch(/const \[gasto, regras, refDoPasso1\] = await Promise\.all\(/);
     expect(f).toContain("passo === 1 && itens.length && pedidoAponta(pedido) ? referenciaDoPedido(");
     expect(f).toContain("esquemaJson: ESQUEMA_DO_PASSO_COM_APRENDIZADO");

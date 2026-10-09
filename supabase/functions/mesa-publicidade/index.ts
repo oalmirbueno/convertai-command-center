@@ -120,6 +120,7 @@ import { AVISO_SEM_REGISTRO, blocoDaReferencia, gravarTroca, referenciaDoPedido 
 import { anexoDasRegrasSeguidas, aprenderDoPedido, type Aprendido, CAMPOS_DO_APRENDIZADO, regrasDaMesa, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
 import { alvosDaPublicidade, type CustosDaPublicidade, itensDaReferenciaDaPublicidade, respostaPromete } from "./acoes-da-publicidade.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
+import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import { blocoDaDiversidadeVisual } from "../_shared/diversidade-visual.ts";
 
 /** Cérebro e dossiê do cliente para o agente (cache curto; padrão do diretor de fotografia). */
@@ -937,13 +938,14 @@ async function encaminhamentoDesfazer(ch: Chamador, corpo: Record<string, unknow
 async function conversaDoAgente(ch: Chamador, clientId: string, conversaId: unknown, campanhaId: string | null, nova: boolean): Promise<string> {
   if (!nova && conversaId) {
     const id = idDe(conversaId, "conversa_id");
-    const { data } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo").eq("id", id).maybeSingle();
+    const { data } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo, arquivada_em").eq("id", id).maybeSingle();
     const c = data as Linha | null;
     if (!c || c.client_id !== clientId || c.referencia_tipo !== REF_CONVERSA) throw new ErroHttp(404, "conversa_inexistente", "Conversa não encontrada para este cliente.");
-    return String(c.id);
+    // Conversa arquivada (Histórico, "nova conversa") nunca continua: cai na ativa ou numa nova.
+    if (!c.arquivada_em) return String(c.id);
   }
   if (!nova) {
-    let q = servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE_DIRETOR).eq("referencia_tipo", REF_CONVERSA);
+    let q = servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE_DIRETOR).eq("referencia_tipo", REF_CONVERSA).is("arquivada_em", null);
     q = campanhaId ? q.eq("referencia_id", campanhaId) : q.is("referencia_id", null);
     const { data } = await q.order("criado_em", { ascending: false }).limit(1);
     const achada = ((data || []) as Linha[])[0];
@@ -1043,7 +1045,13 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     return referenciaDoPedido(mensagem, lista.itens, { agente: "diretor de campanha da Mesa Publicidade", ultimaResposta: ultima ? String(ultima.conteudo || "") : null })
       .then((r) => ({ r, itens: lista.itens }));
   });
-  const [hist, modelo, contextoDoCliente, regras, referencia] = await Promise.all([
+  // Núcleo comum: o Jev escolhe as leituras do OS antes do modelo (em paralelo; nunca lança).
+  const cobrarDoNucleo = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: "conversa", referencia: campanha && campanha.id ? { tipo: REF_CAMPANHA, id: campanha.id } : undefined, criadoPor: ch.userId });
+  const previasP = Promise.resolve(historicoP).then((h) => {
+    const ultima = ((h.data || []) as Linha[]).find((m) => m.papel === "agente");
+    return prepararNucleo(servico(), { clientId, pedido: mensagem, agente: "publicidade (diretor de campanha)", ultimaResposta: ultima ? String(ultima.conteudo || "") : null, cobrar: cobrarDoNucleo });
+  });
+  const [hist, modelo, contextoDoCliente, regras, referencia, previas] = await Promise.all([
     historicoP,
     modeloDeTexto(corpo.modelo_id),
     // Frente SYNC: o contexto completo da marca da campanha (ou da aberta na tela): estratégia, briefing, dossiê, decisões e cérebro pela herança.
@@ -1051,12 +1059,13 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     // Frente AG2: as regras que a equipe ensinou (EVITAR primeiro). Nunca lança.
     regrasDaMesa(servico(), { clientId, mesa: "publicidade", marcaId: campanha ? campanha.marca_id : null }),
     referenciaP.catch((e) => (registrarFalha("mesa-publicidade: referência do pedido", e), { r: null, itens: [] })),
+    previasP,
   ]);
   if (hist.error) registrarFalha("mesa-publicidade: histórico da conversa não lido", hist.error, { conversa_id: conversaId });
   const historico = ((hist.data || []) as Linha[]).reverse().filter((m) => m.papel === "usuario" || m.papel === "agente")
     .map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: String(m.conteudo || "").slice(0, 4000) }));
   const ultimaResposta = historico.slice().reverse().find((m) => m.papel === "agente");
-  const extras = `${blocoDaReferencia(referencia.r, referencia.itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}`;
+  const extras = `${blocoDaReferencia(referencia.r, referencia.itens)}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`;
   const saida = await chamarTexto({
     clientId,
     tarefa: "conversa",
@@ -1073,7 +1082,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     metodo: await spP,
   });
   const r = (saida.json ?? {}) as Record<string, unknown>;
-  let resposta = limpo(r.resposta, 6000, true) || "Não consegui responder agora.";
+  // Núcleo comum: quadros conferidos contra as leituras; "peça ao Hermes" vai para a fila dele.
+  let resposta = (await fecharNucleo(servico(), limpo(r.resposta, 9000, true), previas, { clientId, agente: "publicidade (diretor de campanha)", pedido: mensagem, userId: ch.userId, cobrar: cobrarDoNucleo })).texto || "Não consegui responder agora.";
   // Frente AG2: o que o pedido ensinou vira regra (o Jev decide se vale para sempre); roda junto com a ação.
   const aprendendo = aprenderDoPedido(servico(), { clientId, mesa: "publicidade", pedido: mensagem, regraSugerida: r.regra_aprendida, marcaId: campanha ? campanha.marca_id : null, userId: ch.userId, ultimaResposta: ultimaResposta ? ultimaResposta.conteudo : null });
   let acao: AcaoDoAgente | null = comAcoes && campanha ? normalizarAcoesDaPublicidade(r.acoes, campanha, undefined, await custosDaConversa(ch, campanha, r.acoes)) : null;
@@ -1175,7 +1185,7 @@ async function agenteHistorico(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
   const campanhaId = ehUuid(corpo.campanha_id) ? String(corpo.campanha_id) : null;
-  let q = servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE_DIRETOR).eq("referencia_tipo", REF_CONVERSA);
+  let q = servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE_DIRETOR).eq("referencia_tipo", REF_CONVERSA).is("arquivada_em", null);
   q = campanhaId ? q.eq("referencia_id", campanhaId) : q.is("referencia_id", null);
   const { data, error: erroDaConversa } = await q.order("criado_em", { ascending: false }).limit(1);
   // Frente AG2: histórico que não foi lido vira erro na tela (antes voltava vazio, como se não houvesse conversa).

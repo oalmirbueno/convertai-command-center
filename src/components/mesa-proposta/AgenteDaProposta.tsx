@@ -11,6 +11,7 @@ import ModeloDoAgente from "@/components/agentes/ModeloDoAgente";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import { lerArquivosDoAgente, tamanhoLegivel } from "@/components/mesa/leituraDeArquivos";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
@@ -96,6 +97,13 @@ export default function AgenteDaProposta({
   const entrada = useRef<HTMLInputElement | null>(null);
   const campo = useRef<HTMLTextAreaElement | null>(null);
   const modelo = modeloId ? catalogo.find((x) => x.id === modeloId) || null : null;
+  // Histórico das conversas: trocar (nova, continuar uma antiga) relê a conversa ativa.
+  const [releitura, setReleitura] = useState(0);
+  const aoTrocarDeConversa = () => {
+    setConversaId(null);
+    setNova(false);
+    setReleitura((n) => n + 1);
+  };
   const novaConversa = useNovaConversa<Mensagem>({
     chave: clientId,
     enviando,
@@ -132,7 +140,7 @@ export default function AgenteDaProposta({
       vivo = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId]);
+  }, [clientId, releitura]);
 
   useEffect(() => {
     if (lista.current) lista.current.scrollTop = lista.current.scrollHeight;
@@ -212,6 +220,7 @@ export default function AgenteDaProposta({
         descricao={propostaId ? "Conversa sobre a proposta aberta" : "Crie ou abra uma proposta"}
         acoes={
           <>
+            <HistoricoDoAgente chave={{ clientId, agente: "proposta", referenciaTipo: "mesa_proposta", referenciaId: null }} aoTrocar={aoTrocarDeConversa} />
             {mensagens.length > 0 && <BotaoNovaConversa onClick={novaConversa} desativado={enviando} />}
             <AjudaRecolhida rotulo="Como o estrategista funciona">
               Mande a transcrição, as notas e os arquivos da reunião. Ele pergunta o que falta em vez de inventar. Número de mercado só com fonte e data; preço só o que você disser. Escrever, pesquisar e reescrever usam IA e pedem Confirmar com o custo. Enviar ao cliente é o Confirmar da etapa Enviar.

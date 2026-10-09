@@ -120,6 +120,11 @@ import { rotasDoElemento } from "./elemento.ts";
 import { frasesDoCorpo, sugerirAnimacoes } from "./animacoes.ts";
 import { rotasDaEdicaoComIa } from "./edicao-com-ia.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
+// Núcleo comum dos agentes das Mesas (09/10): leituras prévias no passo 1, quadros conferidos e Hermes no passo final.
+import { blocoDasLeituras, fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, LEITURAS_PREVIAS, MARCA_CONFERIDA, type NucleoPreparado, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
+import { executarConsultas, type NomeDaConsulta } from "../_shared/consultas-do-agente.ts";
+import { blocoDosPedidosAoHermes, pedidosAoHermes } from "../_shared/pedido-ao-hermes.ts";
+import { cobrarJev } from "../_shared/ia-motor.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -450,6 +455,25 @@ function ultimaFalaDoAgente(conversa: string): string | null {
   return linhas.length ? linhas[linhas.length - 1].slice(8) : null;
 }
 
+/**
+ * Núcleo nos passos 2 em diante: relê as leituras que o passo 1 escolheu (só nomes da lista do núcleo, no
+ * máximo 3; o texto é lido aqui, nunca vem da tela) e, quando o pedido fala do Hermes, o estado dos pedidos.
+ */
+async function nucleoDoPassoSeguinte(clientId: string, pedido: string, nomes: unknown): Promise<NucleoPreparado> {
+  const validos = LEITURAS_PREVIAS.map((l) => l.nome);
+  const lidas = (Array.isArray(nomes) ? nomes : []).map((x) => String(x || "") as NomeDaConsulta).filter((n, i, l) => validos.includes(n) && l.indexOf(n) === i).slice(0, 3);
+  try {
+    const [fontes, pedidos] = await Promise.all([
+      lidas.length ? executarConsultas(servico(), clientId, lidas.map((f) => ({ ferramenta: f, argumento: "" }))) : Promise.resolve([]),
+      /\bhermes\b/i.test(pedido) ? pedidosAoHermes(servico(), clientId) : Promise.resolve([]),
+    ]);
+    return { fontes, bloco: [blocoDasLeituras(fontes), blocoDosPedidosAoHermes(pedidos)].filter(Boolean).join("\n\n"), motivo: null, pedidosAoHermes: pedidos };
+  } catch (e) {
+    registrarFalha("editor-video: leituras do núcleo não relidas (segue sem)", e);
+    return { fontes: [], bloco: "", motivo: null, pedidosAoHermes: [] };
+  }
+}
+
 async function agentePasso(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id || "");
   await garantirAcesso(ch, clientId);
@@ -471,6 +495,13 @@ async function agentePasso(ch: Chamador, corpo: Record<string, unknown>) {
     .catch((e) => (registrarFalha("editor-video: contexto da marca não lido", e), ""));
   // Frente SPP: o Jev escolhe o método da casa em paralelo (o mesmo pedido em todos os passos: cache de 5 min; nunca lança).
   const spP = superpoderesPara(servico(), { agente: "edicao.agente", pedido, ultimaResposta: ultimaFalaDoAgente(conversa) });
+  // Núcleo comum (09/10): no passo 1 o Jev escolhe as leituras e o código lê; nos passos seguintes a tela
+  // devolve só os NOMES das leituras e o servidor lê de novo (a fonte nunca vem do navegador).
+  const cobrarDoNucleo = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: "conversa", referencia: { tipo: REF_AGENTE, id: referencia }, criadoPor: ch.userId });
+  const pedidoDoNucleo = pedido.split(" (Dica da tela:")[0];
+  const nucleoP = passo === 1
+    ? prepararNucleo(servico(), { clientId, pedido: pedidoDoNucleo, agente: "editor_video", ultimaResposta: ultimaFalaDoAgente(conversa), cobrar: cobrarDoNucleo })
+    : nucleoDoPassoSeguinte(clientId, pedidoDoNucleo, corpo.nucleo_leituras);
   // AG2: o que já é lido vai em paralelo (gasto da sessão, regras ensinadas e, no passo 1, "essa/o segundo/todos" pelo Jev).
   const [gasto, regras, refDoPasso1] = await Promise.all([
     gastoDaReferencia(clientId, REF_AGENTE, referencia),
@@ -491,8 +522,11 @@ async function agentePasso(ch: Chamador, corpo: Record<string, unknown>) {
   const sistema = `${sistemaDoAgente()}\n\n${blocoDoMapaDoPainel("edicao")}`;
   // AG2: as regras que a equipe ensinou (EVITAR primeiro) e a referência do pedido vão no sistema, em todo passo.
   const sistemaCompleto = sistemaDoPasso(sistema, regras.bloco, blocoDaReferencia(ref, itens));
+  // Núcleo comum: o jeito de agir e de apresentar e as leituras feitas agora (em todo passo do pedido).
+  const nucleo = await nucleoP;
+  const sistemaComNucleo = [sistemaCompleto, INSTRUCAO_DO_NUCLEO_DAS_MESAS, nucleo.bloco].filter(Boolean).join("\n\n");
   const sp = await spP;
-  const estimativa = estimarComModelo(m, { tokensEntrada: Math.ceil((sistemaCompleto.length + (sp ? sp.tamanho + 2 : 0) + mensagens.reduce((s, x) => s + x.conteudo.length, 0)) / 3.5), tokensSaida: 4000 });
+  const estimativa = estimarComModelo(m, { tokensEntrada: Math.ceil((sistemaComNucleo.length + (sp ? sp.tamanho + 2 : 0) + mensagens.reduce((s, x) => s + x.conteudo.length, 0)) / 3.5), tokensSaida: 4000 });
   if (gasto + estimativa > teto) {
     return json({ passo: { plano: "", chamadas: [], resposta: `O próximo passo passaria do teto de US$ ${teto.toFixed(2)}. Aumente o teto ou simplifique o pedido.`, terminou: true, recusadas: [], opcoes: [] }, custo_usd: 0, gasto_usd: gasto, parou: true });
   }
@@ -503,7 +537,7 @@ async function agentePasso(ch: Chamador, corpo: Record<string, unknown>) {
         tarefa: "conversa",
         agente: "diretor_arte",
         modeloId,
-        sistema: sistemaCompleto,
+        sistema: sistemaComNucleo,
         mensagens,
         raciocinio,
         esquemaJson: ESQUEMA_DO_PASSO_COM_APRENDIZADO_COM_METODO,
@@ -520,10 +554,23 @@ async function agentePasso(ch: Chamador, corpo: Record<string, unknown>) {
         ? await aprenderDoPedido(servico(), { clientId, mesa: "edicao", pedido, regraSugerida, marcaId, userId: ch.userId, ultimaResposta: ultimaFalaDoAgente(conversa) })
         : null;
       await auditar(ch, "editor_agente_passo", { client_id: clientId, passo, chamadas: lido.chamadas.length, modelo_id: r.modeloId }, true);
+      // Núcleo comum: no passo final os quadros do texto são conferidos contra as leituras e, quando a equipe
+      // pediu, o pedido vai ao Hermes (uma vez por pedido: a tela devolve nucleo_encaminhado depois).
+      const apresentada = lido.terminou
+        ? await fecharNucleo(servico(), lido.resposta, nucleo, { clientId: corpo.nucleo_encaminhado === true ? null : clientId, agente: "editor_video", pedido: pedidoDoNucleo, userId: ch.userId, cobrar: cobrarDoNucleo })
+        : null;
+      const respostaDoPasso = apresentada ? apresentada.texto : lido.resposta;
       // Frente SPP: "pronto" sem ferramenta usada nem pedida ganha o aviso (sem refazer); o método vira a linha "Método:".
-      const fechado = await fecharComMetodo(servico(), { usoId: r.usoId, metodo: sp, resposta: lido.resposta, declarados: j.metodos_usados, acaoFeita: usadas + lido.chamadas.length > 0 });
+      const fechado = await fecharComMetodo(servico(), { usoId: r.usoId, metodo: sp, resposta: respostaDoPasso, declarados: j.metodos_usados, acaoFeita: usadas + lido.chamadas.length > 0 });
       return json({
         passo: fechado.resposta === lido.resposta ? lido : { ...lido, resposta: fechado.resposta },
+        // A tela guarda os nomes das leituras do passo 1 (relidas aqui nos passos seguintes) e se já encaminhou ao Hermes.
+        nucleo: {
+          leituras: nucleo.fontes.map((f) => f.ferramenta),
+          encaminhado: !!(apresentada && apresentada.encaminhado),
+          conferido: respostaDoPasso.indexOf("```" + MARCA_CONFERIDA) >= 0,
+          recusados: apresentada ? apresentada.recusados : [],
+        },
         metodo_usado: fechado.anexo,
         custo_usd: r.custoUsd,
         gasto_usd: Math.round((gasto + r.custoUsd) * 10000) / 10000,
@@ -622,6 +669,8 @@ async function conversaDaVersao(clientId: string, versaoId: string, userId: stri
     .eq("agente", AGENTE_DA_CONVERSA)
     .eq("referencia_tipo", REF_CONVERSA)
     .eq("referencia_id", versaoId)
+    // Histórico (09/10): "Nova conversa" arquiva a atual; a próxima mensagem abre outra.
+    .is("arquivada_em", null)
     .order("criado_em", { ascending: false })
     .limit(1);
   if (error) throw new ErroHttp(503, "banco_indisponivel", "Não foi possível ler a conversa agora.");
@@ -661,7 +710,8 @@ async function conversaGravar(ch: Chamador, corpo: Record<string, unknown>) {
   const u = corpo.usuario && typeof corpo.usuario === "object" ? (corpo.usuario as Record<string, unknown>) : {};
   const a = corpo.agente && typeof corpo.agente === "object" ? (corpo.agente as Record<string, unknown>) : {};
   const doUsuario = String(u.conteudo || "").trim().slice(0, 4000);
-  const doAgente = String(a.conteudo || "").trim().slice(0, 8000);
+  // 16000: a resposta conferida pelo núcleo leva o quadro e a evidência das fontes (8000 podia cortar o bloco).
+  const doAgente = String(a.conteudo || "").trim().slice(0, 16000);
   if (!doUsuario) throw new ErroHttp(400, "pedido_vazio", "Sem o pedido para guardar.");
   await garantirVersao(clientId, versaoId);
   const conversaId = (await conversaDaVersao(clientId, versaoId, ch.userId)) as string;

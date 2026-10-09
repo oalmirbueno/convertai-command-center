@@ -708,6 +708,11 @@ export interface ResultadoDoAgente {
   porPedido?: string[];
   /** 02/10: o checklist de engajamento da edição completa (gancho, ritmo, interrupções, chamada). */
   engajamento?: string[];
+  /**
+   * Núcleo das Mesas (09/10): a resposta final quando o servidor a conferiu (quadro conferido contra as
+   * leituras do OS) ou encaminhou ao Hermes. Só isso do texto do modelo pode ir ao dono além da pergunta.
+   */
+  apresentacao?: string | null;
 }
 
 const semAcentoDoPedido = (t: string) =>
@@ -779,6 +784,8 @@ interface RespostaDoServidor {
   aprendido?: unknown;
   regras_seguidas?: unknown;
   metodo_usado?: unknown;
+  /** Núcleo das Mesas: leituras do passo 1 (nomes), se já encaminhou ao Hermes e se a resposta veio conferida. */
+  nucleo?: { leituras?: unknown; encaminhado?: boolean; conferido?: boolean };
 }
 
 /** Erro no primeiro passo (nada foi feito): quem chamou devolve o pedido ao campo. */
@@ -845,6 +852,10 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
   const pedidoDoDono = lerPedidoDoDono(doDono);
   const porPedido: string[] = [];
   let engajamento: string[] = [];
+  // Núcleo das Mesas: as leituras que o passo 1 escolheu (o servidor relê nos passos seguintes) e o Hermes (uma vez).
+  let nucleoLeituras: string[] = [];
+  let nucleoEncaminhado = false;
+  let apresentacao: string | null = null;
 
   /** Roda uma chamada (aqui ou no servidor), confere e guarda; devolve a linha de resultado para o modelo. */
   const rodar = async (c0: ChamadaDeFerramenta): Promise<{ linha: string; falhou: boolean }> => {
@@ -922,6 +933,8 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
         itens_referencia: itens,
         selecionados,
         referencia: referencia || undefined,
+        nucleo_leituras: passo > 1 && nucleoLeituras.length ? nucleoLeituras : undefined,
+        nucleo_encaminhado: nucleoEncaminhado || undefined,
       });
     } catch (err) {
       // Nada feito ainda: o pedido volta ao campo. No meio: o que já saiu fica, com o motivo.
@@ -936,6 +949,9 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
     if (r && r.aprendido) aprendido = r.aprendido;
     if (r && r.regras_seguidas) seguidas = r.regras_seguidas;
     if (r && r.metodo_usado) metodo = r.metodo_usado;
+    const nucleo = r && r.nucleo;
+    if (nucleo && passo === 1 && Array.isArray(nucleo.leituras)) nucleoLeituras = nucleo.leituras.map(String).slice(0, 3);
+    if (nucleo && nucleo.encaminhado) nucleoEncaminhado = true;
     const p = (r && r.passo) as RespostaDoPasso | undefined;
     if (!p) {
       log.push({ tipo: "aviso", texto: `O passo ${passo} voltou vazio. Parei aqui.` });
@@ -962,6 +978,8 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
       log.push({ tipo: "aviso", texto: `${chamadas.length - cabem} ${chamadas.length - cabem === 1 ? "ferramenta ficou" : "ferramentas ficaram"} de fora: limite de ${MAX_FERRAMENTAS} por pedido.` });
     }
     if (p.resposta) resposta = p.resposta;
+    // Núcleo: a resposta que o servidor conferiu (quadro do OS) ou que levou o pedido ao Hermes fica para o dono.
+    if (p.resposta && nucleo && (nucleo.conferido || nucleo.encaminhado)) apresentacao = p.resposta;
     if (Array.isArray(p.opcoes) && p.opcoes.length && !chamadas.length) opcoes = p.opcoes.slice(0, 4);
     if (e.aoPasso) e.aoPasso(log.slice(), gasto, passo);
     if (r && r.parou) {
@@ -1009,7 +1027,21 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
   const pergunta = (opcoes.length || respostaEhPergunta(resposta)) && !respostaAfirma(resposta) && !respostaPromete(resposta) ? resposta : null;
   const parcial = { operacoes, itensMudados, mudancas, naoEntrou, pergunta, parado, regraDaCasa, porPedido, engajamento };
   log.push({ tipo: "resposta", texto: mensagemFinalDoAgente(parcial, true) });
-  return { operacoes, resultado: trabalho, log, resposta, gasto_usd: gasto, passos: passo, ferramentas: usadas, falhas, recusadas, parado, exportar, opcoes, aprendido, seguidas, metodo, uso_id: usoId, saidas, naFila, filtro, mudancas, tocados, itensMudados, naoEntrou, pergunta, paineis, regraDaCasa, porPedido, engajamento };
+  return { operacoes, resultado: trabalho, log, resposta, gasto_usd: gasto, passos: passo, ferramentas: usadas, falhas, recusadas, parado, exportar, opcoes, aprendido, seguidas, metodo, uso_id: usoId, saidas, naFila, filtro, mudancas, tocados, itensMudados, naoEntrou, pergunta, paineis, regraDaCasa, porPedido, engajamento, apresentacao };
+}
+
+/**
+ * Núcleo das Mesas (09/10): a mensagem final com a resposta conferida. Sem mudança na linha do tempo, a
+ * resposta conferida (quadro do OS ou Hermes) é a mensagem; com mudança, vem depois do relatório do código.
+ * Texto que afirma ou promete mudança nunca entra (o relatório do código continua sendo a verdade).
+ */
+export function mensagemComApresentacao(final: string, r: Pick<ResultadoDoAgente, "operacoes" | "naoEntrou" | "apresentacao">): string {
+  const a = String(r.apresentacao || "").trim();
+  if (!a) return final;
+  const prosa = a.replace(/```[\s\S]*?```/g, " ");
+  if (respostaAfirma(prosa) || respostaPromete(prosa)) return final;
+  if (!r.operacoes.length && !r.naoEntrou.length) return a;
+  return `${final}\n\n${a}`;
 }
 
 /** Resposta que é uma pergunta ao dono. */

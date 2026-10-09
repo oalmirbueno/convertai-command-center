@@ -68,6 +68,7 @@ import {
 } from "../_shared/acoes-do-agente.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { AVISO_SEM_REGISTRO, gravarTroca } from "../_shared/conversa-das-mesas.ts";
+import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import { anexoDasRegrasSeguidas, aprenderDoPedido, CAMPOS_DO_APRENDIZADO, regrasDaMesa, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
 import { blocoDoMapaDoPainel } from "../_shared/mapa-do-painel.ts";
 import { blocoDoContextoDoCliente, criarContextoDoAgente, PARTES_COM_O_CONTEXTO } from "../_shared/contexto-do-agente.ts";
@@ -871,13 +872,14 @@ const raciocinioPara = (m: ModeloIa) => ["medium", "low", "high"].find((r) => (m
 async function conversaDoAgente(ch: Chamador, clientId: string, conversaId: unknown, abrirNova: boolean): Promise<string> {
   if (!abrirNova && conversaId) {
     const id = idDe(conversaId, "conversa_id");
-    const { data } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo").eq("id", id).maybeSingle();
-    const c = data as { id: string; client_id: string; referencia_tipo: string | null } | null;
+    const { data } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo, arquivada_em").eq("id", id).maybeSingle();
+    const c = data as { id: string; client_id: string; referencia_tipo: string | null; arquivada_em?: string | null } | null;
     if (!c || c.client_id !== clientId || c.referencia_tipo !== REF_CONVERSA) throw new ErroHttp(404, "conversa_inexistente", "Conversa não encontrada para este cliente.");
-    return c.id;
+    // Lote B: a conversa arquivada pelo histórico ("Nova conversa") não recebe mais mensagens: vale a ativa (ou uma nova).
+    if (!c.arquivada_em) return c.id;
   }
   if (!abrirNova) {
-    const { data } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).order("criado_em", { ascending: false }).limit(1);
+    const { data } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).is("arquivada_em", null).order("criado_em", { ascending: false }).limit(1);
     const achada = ((data as { id: string }[] | null) ?? [])[0];
     if (achada) return achada.id;
   }
@@ -921,16 +923,27 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
   const spP = superpoderesPara(servico(), { agente: "contratos.agente", pedido: mensagem });
   const conversaId = await conversaDoAgente(ch, clientId, corpo.conversa_id, corpo.nova_conversa === true);
+  // Núcleo comum (lote B): o Jev escolhe as leituras do OS antes da IA (em paralelo com as leituras da mesa).
+  const cobrarDoNucleo = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: TAREFA, referencia: { tipo: REF_CONVERSA, id: conversaId }, criadoPor: ch.userId });
+  const historicoP = Promise.resolve(servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO));
+  const previasP = historicoP.then((h) => prepararNucleo(servico(), {
+    clientId,
+    pedido: mensagem,
+    agente: "de contratos",
+    ultimaResposta: ((h.data as { papel: string; conteudo: string }[] | null) ?? []).find((m) => m.papel === "agente")?.conteudo,
+    cobrar: cobrarDoNucleo,
+  }));
   const sit = await situacaoDoCliente(ch, clientId, corpo.contract_id);
-  const [modelo, historico, cliente, contextoDoCliente, regras, julgamento, lista] = await Promise.all([
+  const [modelo, historico, cliente, contextoDoCliente, regras, julgamento, lista, previas] = await Promise.all([
     modeloDoAgente(corpo.modelo_id),
-    servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO),
+    historicoP,
     nomeDoCliente(clientId),
     // Frente SYNC: contrato é do cliente inteiro (regra da herança): sem marca pedida, vale a principal; com marca_id, a dela.
     CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["geral", "conta"], { marca: typeof corpo.marca_id === "string" && corpo.marca_id ? corpo.marca_id : null, partes: PARTES_COM_O_CONTEXTO, area: "contrato" }).catch((e) => (registrarFalha("contratos: contexto do agente não lido", e), "")),
     regrasDaMesa(servico(), { clientId, mesa: "contrato" }),
     julgarPedido(mensagem, !!sit.aberto, clientId, ch.userId, conversaId),
     selecionarContratos((campos) => servico().from("contracts").select(campos).eq("client_id", clientId).is("arquivado_em", null).order("created_at", { ascending: false }).limit(20)),
+    previasP,
   ]);
   // Frente CON2: os contratos do cliente viram alvos (c#) para aditivo e renovação; a ficha fiscal entra nos DADOS.
   const doCliente = ((lista.data as unknown[] | null) ?? []).map((d) => normalizarLinha(d)!).filter(Boolean);
@@ -996,7 +1009,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: AGENTE,
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
-    sistema: `${SISTEMA_AGENTE}\n\nDADOS (hoje ${hoje}):\n${JSON.stringify(dados)}\n${blocoDosAlvosDoContrato(alvos)}\n\n${blocoDoMapaDoPainel("contratos", { nivel: "minimo" })}${contextoDoCliente ? `\n\n${blocoDoContextoDoCliente(contextoDoCliente, cliente)}` : ""}${regras.bloco ? `\n\n${regras.bloco}` : ""}`,
+    sistema: `${SISTEMA_AGENTE}\n\nDADOS (hoje ${hoje}):\n${JSON.stringify(dados)}\n${blocoDosAlvosDoContrato(alvos)}\n\n${blocoDoMapaDoPainel("contratos", { nivel: "minimo" })}${contextoDoCliente ? `\n\n${blocoDoContextoDoCliente(contextoDoCliente, cliente)}` : ""}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem }],
     esquemaJson: ESQUEMA_AGENTE_COM_METODO,
     maxTokensSaida: 3_000,
@@ -1005,7 +1018,11 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     metodo: await spP,
   });
   const j = (saida.json || {}) as Record<string, unknown>;
-  let resposta = limpo(j.resposta, 4000) || "Pronto.";
+  // Núcleo comum: quadros do texto conferidos contra as leituras e o "peça ao Hermes" encaminhado (antes das notas abaixo).
+  const respostaBruta = limpo(j.resposta, 9000);
+  let resposta = (respostaBruta
+    ? (await fecharNucleo(servico(), respostaBruta, previas, { clientId, agente: "de contratos", pedido: mensagem, userId: ch.userId, cobrar: cobrarDoNucleo })).texto
+    : "") || "Pronto.";
   const sugestoes = (Array.isArray(j.sugestoes) ? j.sugestoes : []).map((s) => limpo(s, 140)).filter(Boolean).slice(0, 3);
   const aprendendo = aprenderDoPedido(servico(), { clientId, mesa: "contrato", pedido: mensagem, regraSugerida: j.regra_aprendida, userId: ch.userId, ultimaResposta: ultima ? ultima.conteudo : null });
 
@@ -1071,7 +1088,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
 async function agenteHistorico(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
-  const { data, error } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).order("criado_em", { ascending: false }).limit(1);
+  // Lote B: só a conversa ativa (a arquivada pelo histórico fica no histórico).
+  const { data, error } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).is("arquivada_em", null).order("criado_em", { ascending: false }).limit(1);
   if (error) throw new ErroHttp(503, "conversa_indisponivel", "Não foi possível ler a conversa agora.");
   const conversa = ((data as { id: string }[] | null) ?? [])[0];
   if (!conversa) return json({ conversa_id: null, mensagens: [], custo_usd: 0 });

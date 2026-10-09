@@ -3051,6 +3051,20 @@ async function planoConversar(servico: SupabaseClient, chamador: Chamador, corpo
   const tomAnterior = tomValido(p.estrutura.tom) ?? "direto";
   const tom: TomDoCriativo = tomValido(corpo.tom) ?? tomDoPedido(mensagem, tomAnterior);
   let conversaId = p.conversa_id;
+  // Retomada pelo Histórico: outra conversa deste mesmo plano, não arquivada, passa a ser a do plano.
+  const pedidaNoHistorico = String(corpo.conversa_id ?? "");
+  if (UUID.test(pedidaNoHistorico) && pedidaNoHistorico !== conversaId) {
+    const { data: outra } = await servico.from("agente_conversas").select("id").eq("id", pedidaNoHistorico).eq("client_id", p.client_id).eq("referencia_tipo", "ads_plano").eq("referencia_id", p.id).is("arquivada_em", null).maybeSingle();
+    if (outra) {
+      conversaId = pedidaNoHistorico;
+      await salvarPlano(servico, p, { conversa_id: conversaId });
+    }
+  }
+  if (conversaId) {
+    // Arquivada no Histórico: o plano ganha uma conversa nova (a antiga continua guardada).
+    const { data: atual } = await servico.from("agente_conversas").select("arquivada_em").eq("id", conversaId).maybeSingle();
+    if ((atual as { arquivada_em: string | null } | null)?.arquivada_em) conversaId = null;
+  }
   if (!conversaId) {
     conversaId = await abrirConversa(servico, p.client_id, p.id, chamador.userId);
     await salvarPlano(servico, p, { conversa_id: conversaId });
@@ -3084,6 +3098,9 @@ Aplique o pedido. Devolva:
 - nome: novo nome só se mudou; senão null.
 - angulos: ${podeMudar ? `a lista COMPLETA atualizada só se algum ângulo mudou, entrou ou saiu (mantenha o id dos que ficam; novo recebe id novo); senão null. Mesmas regras de ângulo, hipótese e referências.\n${REGRA_PORQUE_TESTAR}` : "sempre null."}
 - estrutura: a estrutura completa só se mudou; senão null.`;
+  // Núcleo comum (lote B): consultar antes (o Jev escolhe as leituras), instrução comum e conferência dos quadros.
+  const cobrarDoPlano = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId: p.client_id, tarefa: TAREFA, referencia: { tipo: REF_PLANO, id: p.id }, criadoPor: chamador.userId });
+  const previasDoPlano = await prepararNucleo(servico, { clientId: p.client_id, pedido: mensagem, agente: "ads (plano de teste)", ignorar: ["ler_agenda"], cobrar: cobrarDoPlano });
   let s;
   try {
     s = await chamarTexto({
@@ -3092,7 +3109,7 @@ Aplique o pedido. Devolva:
       tarefa: TAREFA,
       agente: AGENTE,
       modeloId: modelo.id,
-      sistema: sistemaDoEstrategista("angulos", p.estrutura.objetivo) + mapaDoPainelNaConversa() + blocoDasRegras(regrasDoPlano),
+      sistema: sistemaDoEstrategista("angulos", p.estrutura.objetivo) + mapaDoPainelNaConversa() + blocoDasRegras(regrasDoPlano) + `\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previasDoPlano.bloco ? `\n\n${previasDoPlano.bloco}` : ""}`,
       mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
       raciocinio,
       esquemaJson: ESQUEMA_CONVERSA_PLANO_COM_METODO,
@@ -3151,7 +3168,8 @@ Aplique o pedido. Devolva:
   if (total != null) plano.custo_usd = total;
 
   // Frente SPP: a prova confere se o que a resposta diz feito foi aplicado no plano (só aviso).
-  const fechadoDoPlano = await fecharComMetodo(servico, { usoId: s.usoId, metodo: await spPlanoP, resposta: texto(r.resposta, 2000) || "Plano atualizado.", declarados: r.metodos_usados, acaoFeita: Object.keys(campos).length > 0 });
+  const falaDoPlano = (await fecharNucleo(servico, texto(r.resposta, 9000), previasDoPlano, { clientId: p.client_id, agente: "ads (plano de teste)", pedido: mensagem, userId: chamador.userId, cobrar: cobrarDoPlano })).texto;
+  const fechadoDoPlano = await fecharComMetodo(servico, { usoId: s.usoId, metodo: await spPlanoP, resposta: falaDoPlano || "Plano atualizado.", declarados: r.metodos_usados, acaoFeita: Object.keys(campos).length > 0 });
   const resposta = fechadoDoPlano.resposta;
   const aprendizado = anexosDoAprendizado(await aprendizadoDoPlano, regrasSeguidas(r.regras_seguidas, regrasDoPlano));
   await registrarMensagens(servico, conversaId, p.client_id, [
@@ -4990,16 +5008,18 @@ async function ofertaConversar(servico: SupabaseClient, chamador: Chamador, corp
   const mensagem = texto(corpo.mensagem, 6000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva o que você quer para a oferta.");
 
-  let conversaId: string;
+  let conversaId = "";
   let conversaNova = false;
   if (corpo.conversa_id) {
     const cid = String(corpo.conversa_id);
     if (!UUID.test(cid)) throw new ErroHttp(400, "conversa_id_invalido", "conversa_id precisa ser um UUID.");
-    const { data } = await servico.from("agente_conversas").select("id, client_id, referencia_tipo").eq("id", cid).maybeSingle();
-    const c = data as { id: string; client_id: string; referencia_tipo: string | null } | null;
+    const { data } = await servico.from("agente_conversas").select("id, client_id, referencia_tipo, arquivada_em").eq("id", cid).maybeSingle();
+    const c = data as { id: string; client_id: string; referencia_tipo: string | null; arquivada_em: string | null } | null;
     if (!c || c.client_id !== clientId || c.referencia_tipo !== REF_OFERTA) throw new ErroHttp(404, "conversa_inexistente", "Conversa de oferta não encontrada para este cliente.");
-    conversaId = c.id;
-  } else {
+    // Arquivada no Histórico: a mensagem abre outra conversa (a antiga continua guardada).
+    if (!c.arquivada_em) conversaId = c.id;
+  }
+  if (!conversaId) {
     const { data, error } = await servico
       .from("agente_conversas")
       .insert({ client_id: clientId, agente: AGENTE, referencia_tipo: REF_OFERTA, referencia_id: clientId, criado_por: chamador.userId })
@@ -5059,6 +5079,9 @@ Responda como o estrategista de ofertas da agência. Devolva:
 - briefing_sugerido: o briefing COMPLETO atualizado só quando a conversa trouxe dado novo para ele; senão null.
 - ideias: de 0 a 6 ideias de criativo quando a equipe pedir criativos a partir de uma oferta ou de exemplos; cada uma com gancho verbal, gancho visual (sem escurecer a foto), estilo_visual da lista e formato.`;
 
+  // Núcleo comum (lote B): consultar antes (o Jev escolhe as leituras), instrução comum e conferência dos quadros.
+  const cobrarDaOferta = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: TAREFA, referencia: { tipo: REF_OFERTA, id: conversaId }, criadoPor: chamador.userId });
+  const previasDaOferta = await prepararNucleo(servico, { clientId, pedido: mensagem, agente: "ads (oferta)", ignorar: ["ler_agenda"], cobrar: cobrarDaOferta });
   let s;
   try {
     s = await chamarTexto({
@@ -5067,7 +5090,7 @@ Responda como o estrategista de ofertas da agência. Devolva:
       tarefa: TAREFA,
       agente: AGENTE,
       modeloId: modelo.id,
-      sistema: sistemaDoEstrategista("oferta") + mapaDoPainelNaConversa() + blocoDasRegras(regrasDaOferta),
+      sistema: sistemaDoEstrategista("oferta") + mapaDoPainelNaConversa() + blocoDasRegras(regrasDaOferta) + `\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previasDaOferta.bloco ? `\n\n${previasDaOferta.bloco}` : ""}`,
       mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
       raciocinio,
       esquemaJson: ESQUEMA_OFERTA_CONVERSA_COM_METODO,
@@ -5177,7 +5200,8 @@ Devolva cada oferta com o mesmo indice.`,
     criadas = (data as LinhaOferta[]).map(ofertaDaLinha);
   }
   // Frente SPP: "criei" só com as ofertas gravadas de fato (só aviso, sem refazer).
-  const fechadoDaOferta = await fecharComMetodo(servico, { usoId: s.usoId, metodo: await spOfertaP, resposta: texto(r.resposta, 4000) || (criadas.length ? "Ofertas criadas." : "Certo."), declarados: r.metodos_usados, acaoFeita: criadas.length > 0 });
+  const falaDaOferta = (await fecharNucleo(servico, texto(r.resposta, 9000), previasDaOferta, { clientId, agente: "ads (oferta)", pedido: mensagem, userId: chamador.userId, cobrar: cobrarDaOferta })).texto;
+  const fechadoDaOferta = await fecharComMetodo(servico, { usoId: s.usoId, metodo: await spOfertaP, resposta: falaDaOferta || (criadas.length ? "Ofertas criadas." : "Certo."), declarados: r.metodos_usados, acaoFeita: criadas.length > 0 });
   const resposta = fechadoDaOferta.resposta;
   const comAlerta = criadas.filter((o) => o.jev?.alerta_politica).map((o) => o.nome);
   const aprendizadoSemMetodo = anexosDoAprendizado(await aprendizadoDaOferta, regrasSeguidas(r.regras_seguidas, regrasDaOferta));
@@ -6793,10 +6817,11 @@ function mapaDoPainelNaConversa(): string {
 async function conversaDoAgenteSenior(servico: SupabaseClient, clientId: string, pedida: unknown, userId: string | null): Promise<string | null> {
   const id = String(pedida ?? "");
   if (UUID.test(id)) {
-    const { data } = await servico.from("agente_conversas").select("id").eq("id", id).eq("client_id", clientId).eq("referencia_tipo", REF_CONTA).maybeSingle();
+    // Conversa arquivada no Histórico não é continuada (a próxima mensagem abre outra).
+    const { data } = await servico.from("agente_conversas").select("id").eq("id", id).eq("client_id", clientId).eq("referencia_tipo", REF_CONTA).is("arquivada_em", null).maybeSingle();
     if (data) return id;
   }
-  const { data: ultima } = await servico.from("agente_conversas").select("id").eq("client_id", clientId).eq("referencia_tipo", REF_CONTA).eq("referencia_id", clientId)
+  const { data: ultima } = await servico.from("agente_conversas").select("id").eq("client_id", clientId).eq("referencia_tipo", REF_CONTA).eq("referencia_id", clientId).is("arquivada_em", null)
     .order("criado_em", { ascending: false }).limit(1);
   const achada = ((ultima as { id: string }[] | null) ?? [])[0];
   if (achada) return achada.id;
@@ -7135,7 +7160,9 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   const estrategia = normalizarEstrategia(s.json, ads);
   const nomes = new Map(c.conta.anuncios.map((a) => [a.ad_id, a.nome ?? `Anúncio ${a.ad_id}`]));
   // Quadros do texto conferidos contra as leituras e o retrato (o que não bate sai).
-  const markdown = (await fecharNucleo(servico, estrategiaEmMarkdown(estrategia, (id) => nomes.get(id) ?? id), { ...previas, fontes: fontesDoSenior }, { clientId, agente: "ads (sênior de tráfego)", pedido: mensagem, userId: chamador.userId, cobrar: cobrarDoSenior })).texto;
+  // A fala (o que a tela mostra no topo da estratégia) passa pelo núcleo: quadros conferidos e "peça ao Hermes".
+  estrategia.resposta = (await fecharNucleo(servico, estrategia.resposta, { ...previas, fontes: fontesDoSenior }, { clientId, agente: "ads (sênior de tráfego)", pedido: mensagem, userId: chamador.userId, cobrar: cobrarDoSenior })).texto;
+  const markdown = estrategiaEmMarkdown(estrategia, (id) => nomes.get(id) ?? id);
   const pedido = await pedidoP;
   const custo = arred6(s.custoUsd + achado.custo + pedido.custo);
   // Ações: a lista com o estado lido na Meta. Com o pedido de fazer, o seguro (reversível e sem aumento

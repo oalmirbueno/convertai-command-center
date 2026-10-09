@@ -128,6 +128,7 @@ import { registrarFalha } from "../_shared/falha-registrada.ts";
 import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
 // Frente AG1 (29/09): a mensagem nunca some, as análises rodam pela conversa e o agente aprende com cada pedido.
 import { AVISO_RESPOSTA_NAO_GUARDADA, ErroDaConversa, gravarPedidoAntes, gravarResposta, historicoParaOModelo, hojeParaOAgente, soltarPedido } from "../_shared/conversa-segura.ts";
+import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import { anexoDasRegrasSeguidas, blocoDasRegras, esquemaComAprendizado, REGRA_DO_APRENDIZADO_NO_PROMPT, regraDoModelo, regrasSeguidasDoModelo } from "../_shared/aprendizado-do-pedido.ts";
 import { aprenderComOPedido, lerRegrasDoDono } from "../_shared/aprendizado-nos-agentes.ts";
 import { acaoDaAnalise, analiseDoModelo, ANALISES_DO_PERFIL, PROPRIEDADE_DA_ANALISE, REGRA_DA_ANALISE_NO_PROMPT } from "./analises-na-conversa.ts";
@@ -868,8 +869,40 @@ function blocoDoPerfil(perfil: Perfil, posts: PostComApelido[]): string {
 
 // ------------------------------------------------------------------ conversa do perfil
 
+/**
+ * Lote B (histórico dos agentes): a conversa ativa do perfil. A guardada em
+ * `conversa_id` vale enquanto não foi arquivada ("Nova conversa" no
+ * histórico); arquivada, vale a que a equipe retomou ("Continuar esta") ou
+ * nenhuma (a próxima mensagem abre outra). Sem a linha ou sem a coluna, segue
+ * com a guardada, como antes.
+ */
+async function conversaAtivaDoPerfil(perfil: Perfil): Promise<string | null> {
+  if (perfil.conversa_id) {
+    const { data, error } = await servico().from("agente_conversas").select("arquivada_em").eq("id", perfil.conversa_id).eq("client_id", perfil.client_id).maybeSingle();
+    if (error || !data || !(data as { arquivada_em?: string | null }).arquivada_em) return perfil.conversa_id;
+  }
+  const { data } = await servico()
+    .from("agente_conversas")
+    .select("id")
+    .eq("client_id", perfil.client_id)
+    .eq("agente", AGENTE_DA_CONVERSA)
+    .eq("referencia_tipo", REF_CONVERSA)
+    .eq("referencia_id", perfil.id)
+    .is("arquivada_em", null)
+    .order("criado_em", { ascending: false })
+    .limit(1);
+  return ((data as Array<{ id: string }> | null) ?? [])[0]?.id ?? null;
+}
+
 async function conversaDoPerfil(ch: Chamador | null, perfil: Perfil): Promise<string> {
-  if (perfil.conversa_id) return perfil.conversa_id;
+  const ativa = await conversaAtivaDoPerfil(perfil);
+  if (ativa) {
+    if (ativa !== perfil.conversa_id) {
+      await servico().from("cliente_perfis_instagram").update({ conversa_id: ativa }).eq("id", perfil.id).eq("client_id", perfil.client_id);
+      perfil.conversa_id = ativa;
+    }
+    return ativa;
+  }
   const { data, error } = await servico()
     .from("agente_conversas")
     .insert({ client_id: perfil.client_id, agente: AGENTE_DA_CONVERSA, referencia_tipo: REF_CONVERSA, referencia_id: perfil.id, criado_por: ch ? ch.userId : null })
@@ -981,7 +1014,8 @@ async function verPerfil(ch: Chamador, corpo: Record<string, unknown>) {
       permalink: p.permalink, midia_caminho: p.midia_caminho, engajamento: p.engajamento, vezes_a_mediana: p.vezes_a_mediana, fora_da_curva: p.fora_da_curva,
       formato_editorial: p.formato_editorial, pilar: p.pilar, combina: p.combina, leitura: p.leitura, lido_em: p.lido_em, origem: p.origem,
     })),
-    mensagens: await mensagensDoPerfil(perfil.conversa_id),
+    // Lote B: a conversa ativa (a arquivada pelo histórico não volta à tela).
+    mensagens: await mensagensDoPerfil(await conversaAtivaDoPerfil(perfil)),
     custo_usd: 0,
   });
 }
@@ -1593,12 +1627,23 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   }
   // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
   const spP = superpoderesPara(servico(), { agente: "perfis.conversa", pedido: mensagem });
-  const [posts, ctx, historico, modelo, regras] = await Promise.all([
+  // Núcleo comum (lote B): o Jev escolhe as leituras do OS antes da IA (em paralelo com as leituras do perfil).
+  const cobrarDoNucleo = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: "conversa", referencia: { tipo: REF_CONVERSA, id: perfil.id }, criadoPor: ch.userId });
+  const historicoP = Promise.resolve(servico().from("agente_mensagens").select("id, papel, conteudo, anexos").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO + 6));
+  const previasP = historicoP.then((h) => prepararNucleo(servico(), {
+    clientId,
+    pedido: mensagem,
+    agente: "do perfil (Instagram)",
+    ultimaResposta: ((h.data as Array<{ papel: string; conteudo: string }> | null) ?? []).find((m) => m.papel === "agente")?.conteudo,
+    cobrar: cobrarDoNucleo,
+  }));
+  const [posts, ctx, historico, modelo, regras, previas] = await Promise.all([
     postsDoPerfil(perfil.id, 40).then(comApelidosDosPosts),
     marcaDoCorpo(clientId, corpo).then((m) => contextoDoCliente(clientId, m)),
-    servico().from("agente_mensagens").select("id, papel, conteudo, anexos").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO + 6),
+    historicoP,
     modeloDeTexto(),
     lerRegrasDoDono(servico(), clientId, { areas: ["calendario", "conta", "copy"], marcaId: corpo.marca_id }),
+    previasP,
   ]);
   // Com o estado dos cartões (levado ao estilo, agendado, desfeito) e sem o pedido que acabou de entrar.
   const anteriores = historicoParaOModelo(
@@ -1623,6 +1668,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
         blocoDasRegras(regras),
         blocoDoMapaDoPainel("perfis"),
         `REGRAS DA SAÍDA (só o JSON):\n- resposta: o que você diz à equipe.\n${regraDasAcoes({ levar_ao_estilo: DESCRICOES_DAS_OPERACOES.levar_ao_estilo })}\n${REGRA_DA_ANALISE_NO_PROMPT}\n${REGRA_DO_APRENDIZADO_NO_PROMPT}`,
+        INSTRUCAO_DO_NUCLEO_DAS_MESAS,
+        ...(previas.bloco ? [previas.bloco] : []),
       ].join("\n\n"),
       mensagens: [
         { papel: "usuario", conteudo: `DADOS DO CLIENTE:\n${ctx.texto}\n\nDADOS DO PERFIL:\n${blocoDoPerfil(perfil, posts)}\n${semLeitura ? `(${semLeitura} ${semLeitura === 1 ? "post ainda sem leitura" : "posts ainda sem leitura"}: ler_posts lê.)\n` : ""}${blocoDosAlvos("POSTS QUE PODEM IR AO ESTILO", alvos)}` },
@@ -1642,7 +1689,12 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   }
   const j = (r.json ?? {}) as Record<string, unknown>;
   // Frente SPP: aqui tudo é proposta com Confirmar; "pronto" sem ação ganha o aviso (sem refazer).
-  const fechado = await fecharComMetodo(servico(), { usoId: r.usoId, metodo: await spP, resposta: limpo(j.resposta, 3000) || "Não entendi. Pode dizer de outro jeito?", declarados: j.metodos_usados, acaoFeita: false });
+  // Núcleo comum: quadros do texto conferidos contra as leituras e o "peça ao Hermes" encaminhado.
+  const respostaBruta = limpo(j.resposta, 9000);
+  const respostaConferida = respostaBruta
+    ? (await fecharNucleo(servico(), respostaBruta, previas, { clientId, agente: "do perfil (Instagram)", pedido: mensagem, userId: ch.userId, cobrar: cobrarDoNucleo })).texto
+    : "";
+  const fechado = await fecharComMetodo(servico(), { usoId: r.usoId, metodo: await spP, resposta: respostaConferida || "Não entendi. Pode dizer de outro jeito?", declarados: j.metodos_usados, acaoFeita: false });
   const texto = fechado.resposta;
   const escolhidos = posts.filter((p) => alvos.some((a) => a.id === p.id));
   const acao = j.acoes ? propostaDeEstilo(perfil, escolhidos, "", j.acoes) : null;

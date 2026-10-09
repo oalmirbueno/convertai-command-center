@@ -9,7 +9,8 @@
  *   (área arte) e naming (área textos).
  */
 
-import { chamarTexto } from "../_shared/ia-motor.ts";
+import { chamarTexto, cobrarJev } from "../_shared/ia-motor.ts";
+import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import { registrarFalha } from "../_shared/falha-registrada.ts";
 // Frente SPP (30/09): o método da casa (superpoderes) no diretor de marca.
 import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/superpoderes.ts";
@@ -111,13 +112,14 @@ const ESQUEMA_DO_DIRETOR = {
 export async function conversaDoAgente(ch: Chamador, clientId: string, conversaId?: unknown, abrirNova = false): Promise<string> {
   if (!abrirNova && conversaId != null && conversaId !== "") {
     const id = idDe(conversaId, "conversa_id");
-    const { data } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo").eq("id", id).maybeSingle();
-    const c = data as { id: string; client_id: string; referencia_tipo: string | null } | null;
+    const { data } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo, arquivada_em").eq("id", id).maybeSingle();
+    const c = data as { id: string; client_id: string; referencia_tipo: string | null; arquivada_em: string | null } | null;
     if (!c || c.client_id !== clientId || c.referencia_tipo !== REF_CONVERSA) throw new ErroHttp(404, "conversa_inexistente", "Conversa não encontrada para este cliente.");
-    return c.id;
+    // Conversa arquivada (Histórico, "nova conversa") nunca continua: cai na ativa ou numa nova.
+    if (!c.arquivada_em) return c.id;
   }
   if (!abrirNova) {
-    const { data } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).order("criado_em", { ascending: false }).limit(1);
+    const { data } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).is("arquivada_em", null).order("criado_em", { ascending: false }).limit(1);
     const achada = ((data as { id: string }[] | null) ?? [])[0];
     if (achada) return achada.id;
   }
@@ -175,15 +177,26 @@ export async function agenteConversar(ch: Chamador, corpo: Record<string, unknow
   // Projeto de outro cliente (endereço velho) não entra na conversa.
   const projeto = lido && lido.client_id === clientId ? lido : null;
   const marcaId = projeto ? projeto.marca_id : idOuNulo(corpo.marca_id, "marca_id");
-  const [modelo, historico, nome, contextoDoCliente, regrasIdentidade, regrasNaming, estado] = await Promise.all([
+  const historicoP = servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO);
+  // Núcleo comum: o Jev escolhe as leituras do OS antes do modelo (em paralelo; nunca lança).
+  const cobrarDoNucleo = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: TAREFA, referencia: { tipo: REF_CONVERSA, id: conversaId }, criadoPor: ch.userId });
+  const previasP = historicoP.then((h) => prepararNucleo(servico(), {
+    clientId,
+    pedido: mensagem,
+    agente: "identidade (diretor de marca)",
+    ultimaResposta: (((h.data as { papel: string; conteudo: string }[] | null) ?? []).find((m) => m.papel === "agente") || { conteudo: null }).conteudo,
+    cobrar: cobrarDoNucleo,
+  }));
+  const [modelo, historico, nome, contextoDoCliente, regrasIdentidade, regrasNaming, estado, previas] = await Promise.all([
     modeloDoPapel("identidade", corpo.modelo_id),
-    servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO),
+    historicoP,
     nomeDaMarca(clientId, marcaId),
     // Frente SYNC: o contexto completo da marca do projeto (kit, contexto, estratégia aprovada, briefing, dossiê, decisões e cérebro), pela herança.
     CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["arte", "copy", "geral"], { marca: marcaId, partes: TODAS_AS_PARTES, area: "identidade" }).catch((e) => (registrarFalha("mesa-identidade: contexto do agente não lido", e), "")),
     regrasDaMesa(servico(), { clientId, mesa: "identidade", marcaId }),
     regrasDaMesa(servico(), { clientId, mesa: "naming", marcaId }),
     estadoDoProjeto(ch, projeto),
+    previasP,
   ]);
   if (historico.error) registrarFalha("mesa-identidade: histórico da conversa não lido", historico.error, { conversa_id: conversaId });
   const anteriores = (((historico.data as { papel: string; conteudo: string }[] | null) ?? []).slice().reverse())
@@ -200,7 +213,7 @@ export async function agenteConversar(ch: Chamador, corpo: Record<string, unknow
     agente: AGENTE,
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
-    sistema: `${SISTEMA_DO_DIRETOR}\n\nDADOS DESTA CONVERSA (hoje ${hoje}; marca ${nome}):\n${JSON.stringify(estado.dados)}\n${blocoDasAcoesDoDiretor(estado.alvos)}\n\n${blocoDoMapaDoPainel("identidade")}${contextoDoCliente ? `\n\n${blocoDoContextoDoCliente(contextoDoCliente, nome)}` : ""}${blocoDasRegras ? `\n\n${blocoDasRegras}` : ""}`,
+    sistema: `${SISTEMA_DO_DIRETOR}\n\nDADOS DESTA CONVERSA (hoje ${hoje}; marca ${nome}):\n${JSON.stringify(estado.dados)}\n${blocoDasAcoesDoDiretor(estado.alvos)}\n\n${blocoDoMapaDoPainel("identidade")}${contextoDoCliente ? `\n\n${blocoDoContextoDoCliente(contextoDoCliente, nome)}` : ""}${blocoDasRegras ? `\n\n${blocoDasRegras}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem }],
     esquemaJson: ESQUEMA_DO_DIRETOR_COM_METODO,
     maxTokensSaida: TAMANHO_DA_CONVERSA.saida * 2,
@@ -209,7 +222,8 @@ export async function agenteConversar(ch: Chamador, corpo: Record<string, unknow
     metodo: await spP,
   });
   const j = (saida.json || {}) as Record<string, unknown>;
-  let resposta = limpo(j.resposta, 4000) || "Pronto.";
+  // Núcleo comum: quadros conferidos contra as leituras; "peça ao Hermes" vai para a fila dele.
+  let resposta = (await fecharNucleo(servico(), limpo(j.resposta, 9000), previas, { clientId, agente: "identidade (diretor de marca)", pedido: mensagem, userId: ch.userId, cobrar: cobrarDoNucleo })).texto || "Pronto.";
   const sugestoes = (Array.isArray(j.sugestoes) ? j.sugestoes : []).map((s) => limpo(s, 140)).filter(Boolean).slice(0, 3);
   const aprendendo = aprenderDoPedido(servico(), { clientId, mesa: pedidoSobreNome(mensagem) ? "naming" : "identidade", pedido: mensagem, regraSugerida: j.regra_aprendida, marcaId, userId: ch.userId, ultimaResposta: ultimaResposta ? ultimaResposta.conteudo : null });
   const custos: Partial<Record<OperacaoDoDiretor, number>> = {};
@@ -290,7 +304,7 @@ export async function agenteConversar(ch: Chamador, corpo: Record<string, unknow
 export async function agenteHistorico(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
-  const { data, error } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).order("criado_em", { ascending: false }).limit(1);
+  const { data, error } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).is("arquivada_em", null).order("criado_em", { ascending: false }).limit(1);
   if (error) throw new ErroHttp(503, "conversa_indisponivel", "Não foi possível ler a conversa agora.");
   const conversa = ((data as { id: string }[] | null) ?? [])[0];
   if (!conversa) return json({ conversa_id: null, mensagens: [], custo_usd: 0 });

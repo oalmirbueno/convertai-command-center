@@ -7,6 +7,8 @@ import { Ditado } from "@/components/mesa/Ditado";
 import { textoDoErro } from "@/lib/mesa/api";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
+import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import { acaoDoAnexo, type AcaoDoAgente, type PedidoDaAcao, type RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
 import PainelDoAgente from "@/components/sistema/PainelDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
@@ -109,6 +111,18 @@ export default function DiretorDoVideo({ irPara, topo }: { irPara: IrPara; topo:
   }, [mensagens.length, pensando]);
   const juntarMensagens = (mais: Mensagem[]) => setMensagens((m) => m.concat(mais).slice(-MAX));
   const recarregarConversa = (projetoId: string | null) => void queryClient.invalidateQueries({ queryKey: chaveDaConversaDoDiretor(clientId, projetoId) });
+  // Histórico (Nova conversa, Continuar esta, Arquivar): limpa a tela e relê a conversa ativa do projeto.
+  const trocarConversa = async () => {
+    novas.current.clear();
+    setErro(null);
+    const r = await guardada.refetch();
+    if (r.error) {
+      setErro(textoDoErro(r.error));
+      return;
+    }
+    // Sem conversa ativa ("Nova conversa"): a tela fica vazia e a próxima mensagem abre outra.
+    setMensagens(((r.data && r.data.mensagens) || []).map(mensagemDaConversa).slice(-MAX));
+  };
 
   const pedir = async () => {
     const t = textoDoCampo.trim();
@@ -187,6 +201,7 @@ export default function DiretorDoVideo({ irPara, topo }: { irPara: IrPara; topo:
               <Undo2 className="h-3.5 w-3.5" />
             </button>
           )}
+          <HistoricoDoAgente chave={clientId && projeto.id ? { clientId, agente: "diretor_arte", referenciaTipo: "mesa_videos", referenciaId: projeto.id } : null} aoTrocar={() => void trocarConversa()} />
           <AjudaRecolhida rotulo="Como o diretor funciona">
             O diretor pesquisa (com fontes), monta a bíblia (personagens, cenários, luz, regras) e o roteiro plano a plano. Diga "troca o motor do p2", "gera a segunda", "refaz p3 mais aberto" ou "manda ao editor". Ele não inventa fato: o que não sabe vira pergunta. Gerar sempre pede a sua confirmação com o custo; mandar ao editor tem Desfazer. O que você ensinar ("nunca...", "não gostei de...") vira regra. Cada resposta custa centavos (GPT-6 Luna, raciocínio máximo) na carteira do cliente.
           </AjudaRecolhida>
@@ -245,7 +260,7 @@ export default function DiretorDoVideo({ irPara, topo }: { irPara: IrPara; topo:
       {mensagens.map((m) => (
         <div key={m.id} className="min-w-0 space-y-2">
           <div className={juntar(conversa.balao, m.papel === "usuario" ? conversa.doUsuario : conversa.doAgente)}>
-            <p className="whitespace-pre-wrap">{m.texto}</p>
+            {m.papel === "agente" ? <TextoDoAgente texto={m.texto} clientId={clientId} /> : <p className="whitespace-pre-wrap">{m.texto}</p>}
             {m.perguntas && m.perguntas.length > 0 && (
               <ul className="mt-2 list-disc space-y-0.5 pl-4">
                 {m.perguntas.map((q) => (

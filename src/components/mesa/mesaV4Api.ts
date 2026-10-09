@@ -333,6 +333,7 @@ export async function lerConversaDoAgente(clientId: string): Promise<ConversaDoA
     .select("id")
     .eq("client_id", clientId)
     .eq("referencia_tipo", "agente_do_mes")
+    .is("arquivada_em", null)
     .order("criado_em", { ascending: false })
     .limit(1);
   if (error) throw error;

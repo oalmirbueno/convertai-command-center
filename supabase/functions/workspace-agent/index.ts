@@ -41,6 +41,9 @@ import {
 import { anexosDoAprendizado, blocoDasRegras, esquecerRegra, type RegraAtiva, regrasDoAgente, regrasSeguidas, temSinalDeAprendizado } from "../_shared/aprender-com-o-dono.ts";
 import { aprenderNoServidor, guardarNoServidor } from "../_shared/aprender-no-servidor.ts";
 import { jevPerguntar, probabilidadeNoul } from "../_shared/jev.ts";
+// Núcleo comum dos agentes das Mesas (09/10): leituras prévias, apresentação, quadros conferidos e Hermes.
+import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, type NucleoPreparado, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
+import { cobrarJev } from "../_shared/ia-motor.ts";
 
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
 
@@ -499,6 +502,15 @@ Regras absolutas:
       .select("role, content").eq("thread_id", thread_id).order("created_at", { ascending: false }).limit(31);
     // A pergunta de agora já foi gravada: sai do histórico (vai uma vez só, no fim).
     const history = historicoRecente ? historicoRecente.slice(1).reverse() : historicoRecente;
+    // Núcleo comum dos agentes (09/10): com cliente no contexto, o Jev escolhe as leituras do OS e o código lê
+    // (em paralelo com o resto do contexto); os quadros da resposta são conferidos no fim do stream.
+    const pedidoDoNucleo = String(display_message || message).slice(0, 3000);
+    const cobrarDoNucleo = safeClientId
+      ? (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId: safeClientId, tarefa: "conversa", referencia: { tipo: "workspace_agent_thread", id: thread_id }, criadoPor: user.id })
+      : undefined;
+    const nucleoP: Promise<NucleoPreparado | null> = safeClientId
+      ? prepararNucleo(admin as never, { clientId: safeClientId, pedido: pedidoDoNucleo, agente: "workspace", ultimaResposta: [...(history || [])].reverse().find((m) => m.role === "assistant")?.content || null, cobrar: cobrarDoNucleo }).catch((e) => (registrarFalha("workspace-agent: núcleo não preparado (segue sem)", e), null))
+      : Promise.resolve(null);
 
     // fallback server-side: se cliente não enviou folder_contents mas temos folder_id, busca do banco
     let fc = context?.folder_contents;
@@ -787,6 +799,7 @@ Regras:
 
     const contextoDoCliente = safeClientId ? await CONTEXTO_DO_AGENTE.ler(admin, safeClientId, ["geral", "copy", "campanha"]).catch((e) => (registrarFalha("workspace-agent: contexto do agente não lido", e), "")) : "";
     const regras = await regrasP;
+    const nucleo = await nucleoP;
     const systemMsg = [
       baseIdentity,
       `Hoje: ${hoje} (horário de Brasília). Prazo antes de hoje está atrasado.`,
@@ -798,6 +811,8 @@ Regras:
       deepLines.length ? `\n---BASE COMPLETA DO CLIENTE/PROJETO---\n${deepLines.join("\n")}` : "",
       ctxLines.length ? `\n---CONTEXTO DA SESSÃO---\n${ctxLines.join("\n")}` : "",
       webBlocks.length ? `\n---PESQUISA WEB EM TEMPO REAL (${new Date().toISOString().slice(0,10)}) ---\nUse APENAS para dados atuais/externos. Cite as fontes entre parênteses (domínio) quando usar.\n${webBlocks.join("\n")}` : "",
+      nucleo ? INSTRUCAO_DO_NUCLEO_DAS_MESAS : "",
+      nucleo?.bloco || "",
     ].filter(Boolean).join("\n\n");
 
     const messages = [
@@ -907,6 +922,16 @@ Regras:
               controller.enqueue(encoder.encode(extra));
             }
             if (fechado.anexo) aprendizado.push(fechado.anexo);
+          }
+          // Núcleo comum: os quadros do texto são conferidos contra as leituras (o que não bate sai) e, quando a
+          // equipe pediu, o pedido vai ao Hermes. O stream mostrou o texto cru; a tela relê a versão gravada.
+          if (full.trim() && nucleo && safeClientId) {
+            try {
+              const apresentada = await fecharNucleo(admin as never, full, nucleo, { clientId: safeClientId, agente: "workspace", pedido: pedidoDoNucleo, userId: user.id, cobrar: cobrarDoNucleo });
+              if (apresentada.texto.trim()) full = apresentada.texto;
+            } catch (e) {
+              registrarFalha("workspace-agent: conferência do núcleo falhou (grava o texto como veio)", e);
+            }
           }
           // persiste assistente (antes de fechar: quem recarrega logo depois já acha a resposta)
           await gravarResposta(false);

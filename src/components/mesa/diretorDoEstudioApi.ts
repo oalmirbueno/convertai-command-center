@@ -227,6 +227,7 @@ export async function lerConversaDoDiretor(trabalhoId: string): Promise<Conversa
     .eq("agente", "diretor_arte")
     .eq("referencia_tipo", REFERENCIA_DA_CONVERSA_DO_ESTUDIO)
     .eq("referencia_id", trabalhoId)
+    .is("arquivada_em", null)
     .order("criado_em", { ascending: false })
     .limit(1);
   if (error) throw error;

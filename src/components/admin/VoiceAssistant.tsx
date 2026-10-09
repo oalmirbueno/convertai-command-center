@@ -6,6 +6,7 @@ import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { esquecerRegraAprendida, guardarRegraAprendida } from "@/lib/agentes/aprendizadoDoLancador";
 import TextoDoAgente, { BotaoDaArea } from "@/components/agentes/TextoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import { acaoDoAnexo, type AcaoDoAgente, type PedidoDaAcao, type RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
 import { chamarAcaoDoLancador, destinoDoAgente, type DestinoDoAgente } from "@/lib/agentes/mapaDoPainel";
 import { botao, campo, campoTexto, juntar, superficie } from "@/components/sistema/estilos";
@@ -1409,6 +1410,14 @@ export default function VoiceAssistant({
                     <h2 className="truncate text-[14px] font-semibold leading-5 text-foreground">Aceleriq</h2>
                     <p className="truncate text-[12px] leading-4 text-muted-foreground" aria-live="polite" data-estado-do-agente="">{linhaDeEstado}</p>
                   </div>
+                  {/* Histórico (09/10): as conversas do lançador com o cliente escolhido (busca, nova, continuar, arquivar). */}
+                  {answers.client_id && (
+                    <HistoricoDoAgente
+                      chave={{ clientId: answers.client_id, agente: "estrategista", referenciaTipo: "lancador" }}
+                      aoTrocar={() => { historicoRef.current = []; }}
+                      className="mr-1"
+                    />
+                  )}
                   <kbd className="mr-1 hidden shrink-0 rounded border border-border px-1 font-mono text-[10px] leading-4 text-muted-foreground md:inline" title="Atalho para abrir o agente">{ATALHO_DO_AGENTE}</kbd>
                   <button type="button" onClick={() => setOpen(false)} aria-label="Fechar" title="Fechar (Esc)" className={juntar(botao.icone, "h-9 w-9")}>
                     <X className="h-4 w-4" aria-hidden="true" />

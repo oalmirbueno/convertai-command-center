@@ -78,6 +78,7 @@ import { comMetodosUsados, fecharComMetodo, superpoderesPara } from "../_shared/
 import { AVISO_SEM_REGISTRO, blocoDaReferencia, gravarTroca, type ItemReferivel, referenciaDoPedido } from "../_shared/conversa-das-mesas.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { anexoDasRegrasSeguidas, aprenderDoPedido, CAMPOS_DO_APRENDIZADO, regrasDaMesa } from "../_shared/aprendizado-das-mesas.ts";
+import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BUCKET = "mesa";
@@ -165,6 +166,8 @@ export async function conversaDoProjeto(b: BaseDaFuncao, clientId: string, proje
       .eq("agente", AGENTE_DA_CONVERSA)
       .eq("referencia_tipo", REFERENCIA_DA_CONVERSA)
       .eq("referencia_id", projetoId)
+      // Histórico: "Nova conversa" arquiva a atual; a próxima mensagem abre outra.
+      .is("arquivada_em", null)
       .order("criado_em", { ascending: false })
       .limit(1);
     if (error) {
@@ -258,20 +261,28 @@ export async function diretorConversar(b: BaseDaFuncao, corpo: Record<string, un
   const spP = superpoderesPara(b.servico(), { agente: "videos.diretor", pedido: texto });
   // 02/10 (dono: "não repetir pessoa, roupa e cenário"): o que os últimos filmes deste cliente já usaram (nunca lança).
   const variarP = variarAgoraNoVideo(b.servico(), clientId, { excluirId: atual.id, pedido: texto });
-  // Tudo o que é lido corre junto (contexto, regras ensinadas, catálogo, conversa + referência, andamento).
-  const [contexto, regras, cat, conversa, andamento] = await Promise.all([
+  const conversaP = (async () => {
+    const conversaId = atual.id ? await conversaDoProjeto(b, clientId, atual.id, false) : null;
+    const historico = conversaId ? await historicoDaConversa(b, conversaId) : [];
+    const usado = historico.length ? historico : historicoDoCorpo(corpo.conversa);
+    const ultima = usado.slice().reverse().find((m) => m.papel === "agente");
+    const referencia = await referenciaDoPedido(texto, itens, { agente: "diretor de vídeo", ultimaResposta: ultima ? ultima.conteudo : null, selecionados });
+    return { conversaId, historico: usado, ultimaResposta: ultima ? ultima.conteudo : null, referencia };
+  })();
+  // Núcleo comum das Mesas: o Jev escolhe as leituras do OS antes do modelo (nunca lança; cobrado na mesma tarefa).
+  const cobrarDoNucleo = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: "conversa", criadoPor: b.userId });
+  const previasP = conversaP.then(
+    (c) => prepararNucleo(b.servico(), { clientId, pedido: texto, agente: "diretor_arte (vídeo)", ultimaResposta: c.ultimaResposta, cobrar: cobrarDoNucleo }),
+    () => prepararNucleo(b.servico(), { clientId, pedido: texto, agente: "diretor_arte (vídeo)", cobrar: cobrarDoNucleo }),
+  );
+  // Tudo o que é lido corre junto (contexto, regras ensinadas, catálogo, conversa + referência, andamento, leituras do núcleo).
+  const [contexto, regras, cat, conversa, andamento, previas] = await Promise.all([
     contextoDoCliente(b, clientId, corpo.marca_id),
     regrasDaMesa(b.servico(), { clientId, mesa: "video", marcaId: typeof corpo.marca_id === "string" ? corpo.marca_id : null }),
     catalogo(b),
-    (async () => {
-      const conversaId = atual.id ? await conversaDoProjeto(b, clientId, atual.id, false) : null;
-      const historico = conversaId ? await historicoDaConversa(b, conversaId) : [];
-      const usado = historico.length ? historico : historicoDoCorpo(corpo.conversa);
-      const ultima = usado.slice().reverse().find((m) => m.papel === "agente");
-      const referencia = await referenciaDoPedido(texto, itens, { agente: "diretor de vídeo", ultimaResposta: ultima ? ultima.conteudo : null, selecionados });
-      return { conversaId, historico: usado, ultimaResposta: ultima ? ultima.conteudo : null, referencia };
-    })(),
+    conversaP,
     atual.id ? andamentoDosPlanos(b, clientId, atual.id) : Promise.resolve({} as Record<string, AndamentoDoPlano>),
+    previasP,
   ]);
   const sistema = [
     // Frente VGN: o diretor só propõe motor que gera hoje (chave existe, com preço, ligado).
@@ -280,6 +291,7 @@ export async function diretorConversar(b: BaseDaFuncao, corpo: Record<string, un
     blocoDoEstadoReal(atual, andamento, cat.motores),
     blocoDaReferencia(conversa.referencia, itens),
     regras.bloco ? `\n${regras.bloco}` : "",
+    `\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`,
   ].filter(Boolean).join("\n");
   let saida;
   try {
@@ -320,7 +332,8 @@ export async function diretorConversar(b: BaseDaFuncao, corpo: Record<string, un
   ]);
   const g = gravacao;
   if (g.conflito) avisos.unshift("O projeto foi mudado em outra tela: as mudanças desta resposta não entraram. Abra de novo e peça outra vez.");
-  let resposta = r.resposta;
+  // Núcleo: quadros conferidos contra as leituras e "peça ao Hermes ..." encaminhado (antes de gravar).
+  let resposta = (await fecharNucleo(b.servico(), r.resposta, previas, { clientId, agente: "diretor_arte (vídeo)", pedido: texto, userId: b.userId, cobrar: cobrarDoNucleo })).texto || r.resposta;
   let acao: AcaoDoAgente | null = null;
   let direto: { levar: boolean } | null = null;
   if (r.acao && !g.conflito) {

@@ -172,6 +172,8 @@ export function useConversaDoDiretor(clientId: string, projetoId: string | null)
         .eq("agente", AGENTE_DA_CONVERSA_DO_DIRETOR)
         .eq("referencia_tipo", REFERENCIA_DA_CONVERSA_DO_DIRETOR)
         .eq("referencia_id", projetoId)
+        // Histórico: a conversa arquivada ("Nova conversa") não volta; a próxima mensagem abre outra.
+        .is("arquivada_em", null)
         .order("criado_em", { ascending: false })
         .limit(1);
       if (error) throw error;

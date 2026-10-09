@@ -1306,6 +1306,7 @@ async function garantirConversa(clientId: string, userId: string): Promise<strin
     .select("id")
     .eq("client_id", clientId)
     .eq("agente", "contexto")
+    .is("arquivada_em", null)
     .order("criado_em", { ascending: false })
     .limit(1);
   const existente = ((data as { id: string }[] | null) ?? [])[0];
@@ -1723,6 +1724,7 @@ async function historico(ch: Chamador, corpo: Record<string, unknown>) {
     .select("id")
     .eq("client_id", clientId)
     .eq("agente", "contexto")
+    .is("arquivada_em", null)
     .order("criado_em", { ascending: false })
     .limit(1);
   const conversa = ((data as { id: string }[] | null) ?? [])[0];

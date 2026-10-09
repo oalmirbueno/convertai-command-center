@@ -203,7 +203,8 @@ export function lerPasso(bruto: unknown, cabem: number): RespostaDoPasso {
   return {
     plano: String(o.plano || "").slice(0, 1200),
     chamadas,
-    resposta: String(o.resposta || "").slice(0, 2000),
+    // Núcleo das Mesas (09/10): a resposta pode trazer um quadro (tabela, métricas); 2000 cortava o JSON no meio.
+    resposta: String(o.resposta || "").slice(0, 6000),
     terminou: o.terminou === true || chamadas.length === 0,
     recusadas,
     // Opções só valem numa pergunta que termina o pedido (sem ferramenta junto).

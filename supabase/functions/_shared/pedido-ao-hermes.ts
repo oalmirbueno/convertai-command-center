@@ -20,6 +20,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import type { BlocoProgresso, EstadoDeEtapa } from "./blocos-de-resposta.ts";
 import { MARCA_CONFERIDA } from "./resposta-em-partes.ts";
 import { registrarFalha } from "./falha-registrada.ts";
+import { jevPerguntar, type ResultadoJev } from "./jev.ts";
 
 export const OPERADOR_HERMES = "default";
 export const FONTE_DO_PEDIDO = "agente_mesa_hermes";
@@ -42,11 +43,53 @@ const ESTADO_DO_VINCULO: Record<string, { estado: EstadoDeEtapa; rotulo: string 
 
 export type PedidoAoHermes = { tarefaId: string; linkId: string | null; titulo: string; status: string; ultimo: string | null; evidencia: string | null; proximo: string | null; bloqueio: string | null; criado: string };
 
-/** Projeto do cliente onde a tarefa do pedido mora (o mais novo que não foi apagado). */
-async function projetoDoPedido(db: SupabaseClient, clientId: string): Promise<{ id: string; name: string } | null> {
-  const { data } = await db.from("projects").select("id, name, status").eq("client_id", clientId).is("deleted_at", null).order("created_at", { ascending: false }).limit(5);
-  const lista = (data ?? []) as Array<{ id: string; name: string; status: string | null }>;
-  return lista.find((p) => !/conclu|cancel|arquiv/i.test(String(p.status || ""))) || lista[0] || null;
+/** Os projetos vivos do cliente (os mais novos primeiro). */
+async function projetosDoCliente(db: SupabaseClient, clientId: string): Promise<Array<{ id: string; name: string; status: string | null; description: string | null }>> {
+  const { data } = await db.from("projects").select("id, name, status, description").eq("client_id", clientId).is("deleted_at", null).order("created_at", { ascending: false }).limit(15);
+  const lista = (data ?? []) as Array<{ id: string; name: string; status: string | null; description: string | null }>;
+  const vivos = lista.filter((p) => !/conclu|cancel|arquiv|done|complet/i.test(String(p.status || "")));
+  return vivos.length ? vivos : lista;
+}
+
+export const LIMIAR_DO_PROJETO = 0.5;
+const NENHUM = "nenhum";
+
+/**
+ * O projeto onde o pedido mora: o Jev (Choice) escolhe entre os projetos vivos
+ * do cliente pelo assunto do pedido; com um projeto só, é ele; sem escolha
+ * segura, o mais novo, e a resposta diz qual foi.
+ */
+export async function projetoDoPedido(
+  db: SupabaseClient,
+  o: { clientId: string; pedido: string; agente: string; cobrar?: (r: ResultadoJev) => unknown; chave?: string; fetchImpl?: typeof fetch },
+): Promise<{ id: string; name: string; escolha: "unico" | "jev" | "mais_novo" } | null> {
+  const lista = await projetosDoCliente(db, o.clientId);
+  if (!lista.length) return null;
+  if (lista.length === 1) return { id: lista[0].id, name: lista[0].name, escolha: "unico" };
+  const candidatos = lista.slice(0, 10);
+  const criteria: Record<string, string> = {};
+  candidatos.forEach((p, i) => { criteria[`p${i + 1}`] = `${p.name}${p.description ? ` (${String(p.description).replace(/\s+/g, " ").slice(0, 160)})` : ""}`; });
+  criteria[NENHUM] = "nenhum destes projetos trata do assunto do pedido";
+  try {
+    const r = await jevPerguntar({
+      state: { pedido: o.pedido.slice(0, 1500), agente: o.agente, projetos: candidatos.map((p, i) => ({ apelido: `p${i + 1}`, nome: p.name, status: p.status, descricao: p.description ? String(p.description).slice(0, 300) : null })) },
+      questions: {
+        projeto: {
+          type: "choice",
+          instructions: "A equipe pediu ao Hermes (coordenador) o que está em `pedido`. A tarefa precisa morar no projeto do cliente que trata desse assunto. Qual dos `projetos` é o lugar certo? Escolha pelo assunto do pedido (site, anúncios, Instagram, identidade, conteúdo...), não pelo projeto mais recente.",
+          criteria,
+        },
+      },
+    }, { timeoutMs: 8_000, chave: o.chave, fetchImpl: o.fetchImpl });
+    if (o.cobrar) void Promise.resolve(o.cobrar(r)).catch(() => {});
+    const x = r.answers.projeto;
+    const p = x?.probabilities && x.choice ? Number(x.probabilities[x.choice] ?? x.confidence ?? 0) : 0;
+    const i = x?.choice && x.choice !== NENHUM ? Number(x.choice.slice(1)) - 1 : -1;
+    if (i >= 0 && candidatos[i] && p >= LIMIAR_DO_PROJETO) return { id: candidatos[i].id, name: candidatos[i].name, escolha: "jev" };
+  } catch (e) {
+    registrarFalha("pedido-ao-hermes: escolha do projeto sem Jev (vai o mais novo)", e, { client_id: o.clientId });
+  }
+  return { id: lista[0].id, name: lista[0].name, escolha: "mais_novo" };
 }
 
 /**
@@ -55,10 +98,10 @@ async function projetoDoPedido(db: SupabaseClient, clientId: string): Promise<{ 
  */
 export async function encaminharAoHermes(
   db: SupabaseClient,
-  o: { clientId: string; agente: string; pedido: string; contexto?: string | null; userId: string },
+  o: { clientId: string; agente: string; pedido: string; contexto?: string | null; userId: string; cobrar?: (r: ResultadoJev) => unknown },
 ): Promise<{ ok: boolean; texto: string; pedido: PedidoAoHermes | null }> {
   try {
-    const projeto = await projetoDoPedido(db, o.clientId);
+    const projeto = await projetoDoPedido(db, { clientId: o.clientId, pedido: o.pedido, agente: o.agente, cobrar: o.cobrar });
     if (!projeto) return { ok: false, texto: "Não encaminhei ao Hermes: este cliente não tem projeto no Kanban para a tarefa morar. Crie um projeto e peça de novo.", pedido: null };
     const titulo = `Hermes: ${o.pedido.replace(/\s+/g, " ").trim().slice(0, 100)}`;
     const descricao = [
@@ -86,7 +129,7 @@ export async function encaminharAoHermes(
     const pedido: PedidoAoHermes = { tarefaId, linkId, titulo, status: String((link as { status?: string } | null)?.status || "queued"), ultimo: null, evidencia: null, proximo: null, bloqueio: null, criado: new Date().toISOString() };
     return {
       ok: true,
-      texto: `Encaminhei ao Hermes, no projeto "${projeto.name}". Ainda não está feito: está na fila dele. Acompanho por aqui; quando ele relatar com evidência, o estado muda neste quadro.\n\n${quadroDosPedidos([pedido])}`,
+      texto: `Encaminhei ao Hermes, no projeto "${projeto.name}"${projeto.escolha === "mais_novo" ? " (nenhum projeto do cliente tratava do assunto com segurança; usei o mais novo, mova a tarefa se preferir)" : ""}. Ainda não está feito: está na fila dele. Acompanho por aqui; quando ele relatar, o retorno aparece nesta conversa.\n\n${quadroDosPedidos([pedido])}`,
       pedido,
     };
   } catch (e) {
@@ -133,5 +176,7 @@ export function quadroDosPedidos(pedidos: PedidoAoHermes[]): string {
       return { rotulo: p.titulo.replace(/^Hermes:\s*/, "").slice(0, 120), estado: e.estado, quando: p.criado.slice(0, 10), evidencia: (p.evidencia || p.bloqueio || e.rotulo).slice(0, 200) };
     }),
   };
-  return "```" + MARCA_CONFERIDA + "\n" + JSON.stringify({ blocos: [bloco] }) + "\n```";
+  const evidencias: Record<string, string> = {};
+  for (const p of pedidos.slice(0, 8)) if (p.linkId) evidencias[`Vínculo ${p.linkId.slice(0, 8)}`] = `Tarefa ${p.tarefaId} · vínculo ${p.linkId} na fila do Hermes Core (${(ESTADO_DO_VINCULO[p.status] || { rotulo: p.status }).rotulo}).`;
+  return "```" + MARCA_CONFERIDA + "\n" + JSON.stringify({ blocos: [bloco], evidencias, vinculos: pedidos.slice(0, 8).map((p) => p.linkId).filter(Boolean) }) + "\n```";
 }

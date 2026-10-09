@@ -10,6 +10,7 @@ import ModeloDoAgente from "@/components/agentes/ModeloDoAgente";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import CampoDoAgente, { focarNoFim } from "@/components/sistema/CampoDoAgente";
@@ -69,6 +70,13 @@ export default function AgenteDoMotion(_: PropsDoAgenteDaMesa) {
   const [rascunho, setRascunho] = useEstadoDaTela<string>(`mesa-motion:rascunho:${clientId}`, "");
   const listaRef = useRef<HTMLDivElement | null>(null);
   const campo = useRef<HTMLTextAreaElement | null>(null);
+  // Histórico das conversas: trocar (nova, continuar uma antiga) relê a conversa ativa.
+  const [releitura, setReleitura] = useState(0);
+  const aoTrocarDeConversa = () => {
+    setConversaId(null);
+    setNova(false);
+    setReleitura((n) => n + 1);
+  };
   const novaConversa = useNovaConversa<Mensagem>({
     chave: `${clientId}:${filmeId || ""}`,
     enviando,
@@ -106,7 +114,7 @@ export default function AgenteDoMotion(_: PropsDoAgenteDaMesa) {
       vivo = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filmeId]);
+  }, [filmeId, releitura]);
 
   useEffect(() => {
     if (listaRef.current) listaRef.current.scrollTop = listaRef.current.scrollHeight;
@@ -151,6 +159,7 @@ export default function AgenteDoMotion(_: PropsDoAgenteDaMesa) {
         descricao={filmeId ? "Filme aberto" : "Abra um filme"}
         acoes={
           <>
+            <HistoricoDoAgente chave={filmeId ? { clientId, agente: "motion", referenciaTipo: "mesa_motion", referenciaId: filmeId } : null} aoTrocar={aoTrocarDeConversa} />
             {mensagens.length > 0 && <BotaoNovaConversa onClick={novaConversa} desativado={enviando} />}
             <AjudaRecolhida rotulo="Como o diretor de motion funciona">
               Peça em palavras simples. Escolher storyboard, trocar a peça da cena e pedir still ou amostra ele faz na hora, com Desfazer. Gerar texto com IA, escrever cena sob medida, renderizar e montar vêm num cartão com o custo antes. O que você ensinar vira regra para os próximos filmes deste cliente.

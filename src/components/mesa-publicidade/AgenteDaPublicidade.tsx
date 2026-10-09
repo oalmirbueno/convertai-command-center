@@ -9,6 +9,7 @@ import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao"
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import CampoDoAgente, { focarNoFim } from "@/components/sistema/CampoDoAgente";
@@ -79,6 +80,13 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
   const [enviando, setEnviando] = useState(false);
   const [nova, setNova] = useState(false);
   const lista = useRef<HTMLDivElement | null>(null);
+  // Histórico das conversas: trocar (nova, continuar uma antiga) relê a conversa ativa.
+  const [releitura, setReleitura] = useState(0);
+  const aoTrocarDeConversa = () => {
+    setConversa((c) => ({ ...c, conversaId: null }));
+    setNova(false);
+    setReleitura((n) => n + 1);
+  };
 
   // Lê a conversa da campanha (a última) ao montar e ao trocar de campanha, sem custo.
   // A anterior fica na tela até a nova chegar: nada pisca.
@@ -99,7 +107,7 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
       vivo = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, campanhaId]);
+  }, [clientId, campanhaId, releitura]);
 
   const mensagens = conversa.mensagens;
   const campo = useRef<HTMLTextAreaElement | null>(null);
@@ -159,6 +167,7 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
         descricao={campanha ? campanha.nome || campanha.kit_nome || "Campanha sem nome" : "Nenhuma campanha aberta"}
         acoes={
           <>
+            <HistoricoDoAgente chave={{ clientId, agente: "diretor_arte", referenciaTipo: "mesa_publicidade", referenciaId: campanhaId ?? null }} aoTrocar={aoTrocarDeConversa} />
             {mensagens.length > 0 && <BotaoNovaConversa onClick={novaConversa} desativado={enviando} />}
             <AjudaRecolhida rotulo="Como o agente da campanha funciona">
               Converse sobre a campanha aberta. Briefing, nome e ler a revisão ele faz na hora, com Desfazer. O que gasta IA (propor territórios, pedir tomadas, refazer foto) ou não volta (aprovar e reprovar) vem num cartão com o custo para você confirmar. O que você ensinar ("nunca", "não gostei") vira regra; dá para esquecer.

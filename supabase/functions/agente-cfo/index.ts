@@ -56,6 +56,9 @@ import { caixinhasDe, COLUNAS, hojeEmSaoPaulo, montarDadosDoCFO } from "./modulo
 import { descricaoDoGasto, lerRota, perguntasDaRota, type RotaDoCFO } from "./modulos/cfo-rota.ts";
 import { AGENTE_CFO, conferirTrava, propostaDaIntencao } from "./modulos/cfo-acoes.ts";
 import { numerosForaDaConta } from "./modulos/cfo-conferencia.ts";
+// Núcleo comum dos agentes (09/10): só a apresentação e a conferência dos quadros (o CFO é da agência, sem cliente).
+import { conferirApresentacao, INSTRUCAO_DO_NUCLEO_DAS_MESAS } from "../_shared/nucleo-das-mesas.ts";
+import type { FonteDeConsulta } from "../_shared/consultas-do-agente.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -185,6 +188,9 @@ Regras duras:
 - Termine com UMA pergunta ou próxima ação concreta (ex.: "Confirmo o corte?", "Quer que eu guarde essas metas?").
 - Cobrança a cliente é ele quem faz: o painel não envia nada sozinho.`;
 
+/** O CFO não tem leitura prévia de cliente: a fonte dos quadros é a conta do motor (FATOS + RESPOSTA DO MOTOR). */
+const FONTE_DOS_QUADROS_DO_CFO = `FONTE DOS QUADROS: a RESPOSTA DO MOTOR e os FATOS são a leitura L1 (cite "L1" em "fontes"). Quadro só quando ajuda (comparação, meses, cortes); fora dele, siga as regras acima.`;
+
 async function explicar(
   agencia: string,
   e: { pedido: string; base: string; fatos: Record<string, unknown>; modeloId: string | null; historico: string; userId: string; temProposta: boolean },
@@ -203,9 +209,11 @@ async function explicar(
     tarefa: "conversa",
     agente: "estrategista",
     modeloId: modelo,
-    sistema: SISTEMA_DO_CFO,
+    // Núcleo comum (09/10): o jeito de apresentar das Mesas (balões e quadros); a fonte dos quadros é a conta do motor.
+    sistema: `${SISTEMA_DO_CFO}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}\n\n${FONTE_DOS_QUADROS_DO_CFO}`,
     mensagens: [{ papel: "usuario", conteudo }],
-    maxTokensSaida: 700,
+    // 1200 (antes 700): um quadro (tabela ou métricas) cabe sem cortar o JSON no meio.
+    maxTokensSaida: 1200,
     timeoutMs: 60_000,
     criadoPor: e.userId,
   });
@@ -215,7 +223,14 @@ async function explicar(
     if (fora.length) registrarFalha("agente-cfo: IA trouxe número fora da conta (valeu o motor)", new Error(fora.slice(0, 5).join(", ")));
     return { texto: e.base, custo: saida.custoUsd, modelo: saida.modeloId, usoId: saida.usoId, aviso: fora.length ? "A explicação da IA trouxe número fora da conta: mostrei a conta do motor." : null };
   }
-  return { texto, custo: saida.custoUsd, modelo: saida.modeloId, usoId: saida.usoId, aviso: null };
+  // Núcleo comum: cada linha de quadro com número é conferida (Jev) contra a conta do motor; a que não bate sai.
+  const fonte: FonteDeConsulta = { apelido: "L1", ferramenta: "fatos_do_cfo" as never, argumento: "", texto: JSON.stringify({ resposta_do_motor: e.base, fatos: e.fatos }).slice(0, 5000) };
+  const conferido = await conferirApresentacao(texto, [fonte], {
+    agente: "cfo",
+    cobrar: (r) => cobrarJev(r, { clientId: agencia, tarefa: "conversa", criadoPor: e.userId }),
+  }).catch((err) => (registrarFalha("agente-cfo: conferência dos quadros falhou (texto sem quadro)", err), null));
+  const final = conferido ? conferido.texto : texto.replace(/```[\s\S]*?```/g, "").trim();
+  return { texto: final || e.base, custo: saida.custoUsd, modelo: saida.modeloId, usoId: saida.usoId, aviso: null };
 }
 
 // ------------------------------------------------------------------ conversa

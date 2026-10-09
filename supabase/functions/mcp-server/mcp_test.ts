@@ -194,6 +194,8 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
   assertEquals(new Set(names).size, names.length, 'tool names must be unique');
   assertEquals(names, [
     'aceleriq_add_opportunity_note',
+    'aceleriq_agent_conversations',
+    'aceleriq_agent_handoff',
     'aceleriq_archive_file',
     'aceleriq_archive_opportunity',
     'aceleriq_archive_project',

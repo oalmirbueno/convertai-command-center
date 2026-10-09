@@ -49,6 +49,7 @@ import {
   carregarModelo,
   chamarImagem,
   chamarTexto,
+  cobrarJev,
   deBase64,
   estimarComModelo,
   IaMotorErro,
@@ -81,6 +82,7 @@ import {
 } from "../_shared/acoes-do-agente.ts";
 // Frente AG2 (29/09): conversa gravada sem sumir, "essa/a segunda/todas", ordem clara e aprendizado.
 import { AVISO_SEM_REGISTRO, blocoDaReferencia, gravarTroca, type ItemReferivel, referenciaDoPedido } from "../_shared/conversa-das-mesas.ts";
+import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import { ehOrdemClara } from "../_shared/ordem-clara.ts";
 import { type Aprendido, anexoDasRegrasSeguidas, aprenderDoPedido, type RegraDaMesa, regrasDaMesa, rotasDoAprendizado } from "../_shared/aprendizado-das-mesas.ts";
 import { lerTemplate, lerTemplates, type BancoDoTemplate } from "../_shared/templates-de-design.ts";
@@ -423,6 +425,8 @@ async function estadoParaATela(p: Pedido, e: EstiloDoCliente) {
 async function conversaAtual(clientId: string, marcaId: string | null): Promise<string | null> {
   let q = servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE_DA_CONVERSA).eq("referencia_tipo", REF_CONVERSA);
   q = marcaId ? q.eq("referencia_id", marcaId) : q.is("referencia_id", null);
+  // Lote B: "Nova conversa" no histórico arquiva a atual; a arquivada não volta sozinha.
+  q = q.is("arquivada_em", null);
   const { data, error } = await q.order("criado_em", { ascending: false }).limit(1);
   // Frente AG2: sem isto, uma leitura que falhava virava "sem conversa" e a próxima mensagem abria outra (a conversa se partia).
   if (error) throw new ErroHttp(503, "conversa_indisponivel", "Não foi possível ler a conversa do estilo agora. Tente de novo.");
@@ -573,11 +577,12 @@ async function lerReferencias(ch: Chamador, p: Pedido, conversaId: string, novas
 async function conversaDoAgente(ch: Chamador, p: Pedido, conversaId: unknown, abrirNova: boolean): Promise<string> {
   if (!abrirNova && conversaId != null && conversaId !== "") {
     const id = idDe(conversaId, "conversa_id");
-    const { data, error } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo").eq("id", id).maybeSingle();
+    const { data, error } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo, arquivada_em").eq("id", id).maybeSingle();
     if (error) throw new ErroHttp(503, "conversa_indisponivel", "Não foi possível ler a conversa do estilo agora. Tente de novo.");
-    const c = data as { id: string; client_id: string; referencia_tipo: string | null } | null;
+    const c = data as { id: string; client_id: string; referencia_tipo: string | null; arquivada_em?: string | null } | null;
     if (!c || c.client_id !== p.clientId || c.referencia_tipo !== REF_CONVERSA) throw new ErroHttp(404, "conversa_inexistente", "Conversa não encontrada para este cliente.");
-    return c.id;
+    // Lote B: a conversa arquivada pelo histórico ("Nova conversa") não recebe mais mensagens: vale a ativa (ou uma nova).
+    if (!c.arquivada_em) return c.id;
   }
   if (!abrirNova) {
     const achada = await conversaAtual(p.clientId, p.marcaId);
@@ -605,10 +610,20 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     .then((c) => c.bloco, (e) => (registrarFalha("agente-estilo: contexto completo não lido", e), ""));
   // Frente SPP: o Jev escolhe o método da casa em paralelo com as leituras (nunca lança).
   const spP = superpoderesPara(servico(), { agente: "estilo.agente", pedido: mensagem || `Mandei ${anexos.length} referências para o estilo deste cliente.` });
+  // Núcleo comum (lote B): o Jev escolhe as leituras do OS antes da IA (em paralelo com as leituras do estilo).
+  const cobrarDoNucleo = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId: p.clientId, tarefa: "estudio", referencia: { tipo: "agente_conversa", id: conversaId }, criadoPor: ch.userId });
+  const historicoP = Promise.resolve(servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO));
+  const previasP = historicoP.then((h) => prepararNucleo(servico(), {
+    clientId: p.clientId,
+    pedido: mensagem,
+    agente: "de estilo (diretor de arte)",
+    ultimaResposta: ((h.data as { papel: string; conteudo: string }[] | null) ?? []).find((m) => m.papel === "agente")?.conteudo,
+    cobrar: cobrarDoNucleo,
+  })).catch((e) => (registrarFalha("agente-estilo: núcleo sem leituras prévias", e), { fontes: [], bloco: "", motivo: null, pedidosAoHermes: [] }));
   // Frente AG2: tudo o que é lido sai junto (paleta do kit, regras ensinadas e as peças abertas no Estúdio entraram aqui).
   const [modelo, historico, cliente, estiloAntes, contexto, cerebro, doCliente, paleta, ensinadas, pecasLidas] = await Promise.all([
     modeloPorPapel("diretor_arte"),
-    servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO),
+    historicoP,
     nomeDoCliente(p.clientId),
     estiloDo(p),
     lerContextoDaMarca(servico(), p.clientId, p.marca).catch((e) => (registrarFalha("agente-estilo: lerContextoDaMarca falhou", e), ({}))),
@@ -689,6 +704,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   };
   const cerebroTexto = (cerebro as { texto?: string }).texto || "";
   const completoDaMarca = await completoP;
+  const previas = await previasP;
   const saida = await chamarTexto({
     clientId: p.clientId,
     tarefa: "estudio",
@@ -696,7 +712,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
     pesquisaWeb: PEDE_PESQUISA.test(textoDoPedido),
-    sistema: `${SISTEMA_DO_ESTILO}\n\n${CONHECIMENTO_DO_ESTILO}\n\n${blocoDoMapaDoPainel("estilo")}\n\n${cerebroTexto ? `${cerebroTexto}\n\n` : ""}${completoDaMarca ? `${completoDaMarca}\n\n` : ""}${ensinadas.bloco ? `${ensinadas.bloco}\n\n` : ""}As referências do Workspace foram consultadas pelo sistema. Use as leituras disponíveis e seus nomes; não diga que não pode acessar o Workspace quando há candidatas. Não invente uma leitura de imagens ainda não estudadas.\nDADOS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${blocoDosAlvosDoEstilo(alvos)}${tpl ? tpl.texto : ""}${blocoDaReferencia(referencia, itensReferiveis)}`,
+    sistema: `${SISTEMA_DO_ESTILO}\n\n${CONHECIMENTO_DO_ESTILO}\n\n${blocoDoMapaDoPainel("estilo")}\n\n${cerebroTexto ? `${cerebroTexto}\n\n` : ""}${completoDaMarca ? `${completoDaMarca}\n\n` : ""}${ensinadas.bloco ? `${ensinadas.bloco}\n\n` : ""}As referências do Workspace foram consultadas pelo sistema. Use as leituras disponíveis e seus nomes; não diga que não pode acessar o Workspace quando há candidatas. Não invente uma leitura de imagens ainda não estudadas.\nDADOS DESTA CONVERSA:\n${JSON.stringify(dados)}\n${blocoDosAlvosDoEstilo(alvos)}${tpl ? tpl.texto : ""}${blocoDaReferencia(referencia, itensReferiveis)}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: textoDoPedido }],
     // O ternário fica por fora (revisão 30/09): o contrato dos esquemas (esq-esquemas-compativeis) avalia cada ramo.
     esquemaJson: tpl ? comMetodosUsados(esquemaComTemplates(ESQUEMA_DO_AGENTE_DE_ESTILO)) : comMetodosUsados(ESQUEMA_DO_AGENTE_DE_ESTILO),
@@ -706,7 +722,11 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     metodo: await spP,
   });
   const j = (saida.json || {}) as Record<string, unknown>;
-  let resposta = limpo(j.resposta, 4000) || "Pronto.";
+  // Núcleo comum: quadros do texto conferidos contra as leituras e o "peça ao Hermes" encaminhado (antes das notas abaixo).
+  const respostaBruta = limpo(j.resposta, 9000);
+  let resposta = (respostaBruta
+    ? (await fecharNucleo(servico(), respostaBruta, previas, { clientId: p.clientId, agente: "de estilo (diretor de arte)", pedido: mensagem, userId: ch.userId, cobrar: cobrarDoNucleo })).texto
+    : "") || "Pronto.";
   const sugestoes = (Array.isArray(j.sugestoes) ? j.sugestoes : []).map((s) => limpo(s, 140)).filter(Boolean).slice(0, 3);
   const leituraDoAgente = limpo(j.leitura_das_referencias, 2000);
   // Aprendizado (frente AG2): começa já e corre junto com a ação e os templates (nunca lança).

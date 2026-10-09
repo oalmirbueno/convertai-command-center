@@ -10,6 +10,7 @@ import { inicioDoMes, padraoPara, somarMeses, usd } from "@/lib/mesa/api";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import AprendizadoNaConversa from "@/components/agentes/AprendizadoNaConversa";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import { BotaoDeAnexarArquivos, ListaDeArquivos, useArquivosDoAgente } from "./ArquivosDoAgente";
 import { estimativaDaGeracao, iniciarGeracaoPeloAgente, useAndamentoDaGeracao } from "./PlanejamentoAutomatico";
@@ -1032,6 +1033,12 @@ export default function AgenteDoMes({
             {planejando ? "Planeja com você, seguindo o prompt geral do cliente" : "Cria e organiza fotos, vídeos e artes no mês escolhido"}
           </p>
         </div>
+        {/* Lote B: o histórico das conversas do Mês (busca, nova conversa, retomar). */}
+        <HistoricoDoAgente
+          className="mr-2"
+          chave={{ clientId, agente: "estrategista", referenciaTipo: "agente_do_mes" }}
+          aoTrocar={() => void queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) })}
+        />
         <div role="tablist" aria-label="O que fazer com o agente" className="mt-2 flex w-full shrink-0 rounded-lg bg-muted p-0.5 sm:mt-0 sm:w-auto">
           {(
             [

@@ -12,6 +12,7 @@ import ModeloDoAgente from "@/components/agentes/ModeloDoAgente";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import BaseCitada from "./BaseCitada";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
@@ -98,6 +99,13 @@ export default function AgenteDoSite({ site, rascunho, onRascunho, onIrPara }: {
   const listaRef = useRef<HTMLDivElement | null>(null);
   const arquivo = useRef<HTMLInputElement | null>(null);
   const campo = useRef<HTMLTextAreaElement | null>(null);
+  // Histórico das conversas: trocar (nova, continuar uma antiga) relê a conversa ativa.
+  const [releitura, setReleitura] = useState(0);
+  const aoTrocarDeConversa = () => {
+    setConversaId(null);
+    setNova(false);
+    setReleitura((n) => n + 1);
+  };
   const novaConversa = useNovaConversa<Mensagem>({
     chave: `${clientId}:${site.id}`,
     enviando,
@@ -133,7 +141,7 @@ export default function AgenteDoSite({ site, rascunho, onRascunho, onIrPara }: {
       vivo = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [site.id]);
+  }, [site.id, releitura]);
 
   useEffect(() => {
     if (listaRef.current) listaRef.current.scrollTop = listaRef.current.scrollHeight;
@@ -228,6 +236,7 @@ export default function AgenteDoSite({ site, rascunho, onRascunho, onIrPara }: {
         descricao={site.nome}
         acoes={
           <>
+            <HistoricoDoAgente chave={{ clientId, agente: "site", referenciaTipo: "mesa_site", referenciaId: site.id }} aoTrocar={aoTrocarDeConversa} />
             {mensagens.length > 0 && <BotaoNovaConversa onClick={novaConversa} desativado={enviando} />}
             <AjudaRecolhida rotulo="Como o diretor de site funciona">
               Peça em palavras simples e mande prints ou fotos de referência. Escolher a opção de conteúdo ele faz na hora, com Desfazer. Mudar ou construir seção, gerar conteúdo ou imagem vêm num cartão com o custo; depois de confirmar, o motor de código faz, com prévia ao vivo e o botão Parar. O que você ensinar vira regra.

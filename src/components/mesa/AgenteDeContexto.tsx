@@ -10,6 +10,7 @@ import { Ditado } from "./Ditado";
 import { useMesa } from "./MesaContexto";
 import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import AprendizadoNaConversa, { marcaDaRegra, observacaoDoCusto } from "@/components/agentes/AprendizadoNaConversa";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
@@ -176,11 +177,14 @@ function ConversaDeContexto({
       icone={<MessageSquare className="h-4 w-4" />}
       descricao={modo === "plano" ? "Planeja o cliente de ponta a ponta" : "Conte o que sabe da marca"}
       acoes={
+        <>
+        <HistoricoDoAgente chave={{ clientId, agente: "contexto", referenciaTipo: "cliente_contexto" }} aoTrocar={() => invalidar(clientId, { historico: true })} />
         <AjudaRecolhida rotulo="Como o agente de contexto funciona">
           {modo === "plano"
             ? "Converse, entregue documentos ou cole links. O agente lê o conteúdo acessível, organiza o contexto e aplica projetos e tarefas quando você manda fazer. Você pode revisar antes e desfazer. O Drive guarda arquivos; sites e artigos guardam o texto lido no Workspace. Links enviados são lidos mesmo com a pesquisa desligada. Páginas com login ou bloqueio são sinalizadas. A pesquisa externa complementa lacunas quando permitida."
             : "Conte o que sabe da marca ou corrija o que estiver errado. O agente grava no kit e ensina o estrategista e o diretor de arte."}
         </AjudaRecolhida>
+        </>
       }
       topo={modos}
       refDasMensagens={lista}

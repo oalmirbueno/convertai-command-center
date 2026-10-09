@@ -99,8 +99,9 @@ describe("mapa do painel no sistema de cada agente", () => {
     // Os três agentes de conversa da Mesa Ads (plano, oferta e sênior) recebem o mapa; as gerações não.
     const ads = ler("supabase/functions/mesa-ads/index.ts");
     // Frente AG3: depois do mapa vêm as regras que o dono ensinou.
-    expect(ads).toContain('sistema: sistemaDoEstrategista("oferta") + mapaDoPainelNaConversa() + blocoDasRegras(regrasDaOferta),');
-    expect(ads).toContain('sistema: sistemaDoEstrategista("angulos", p.estrutura.objetivo) + mapaDoPainelNaConversa() + blocoDasRegras(regrasDoPlano),');
+    // Lote B: o núcleo comum (instrução e leituras) entra depois do mapa e das regras.
+    expect(ads).toContain('sistema: sistemaDoEstrategista("oferta") + mapaDoPainelNaConversa() + blocoDasRegras(regrasDaOferta) + `\\n\\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}');
+    expect(ads).toContain('sistema: sistemaDoEstrategista("angulos", p.estrutura.objetivo) + mapaDoPainelNaConversa() + blocoDasRegras(regrasDoPlano) + `\\n\\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}');
     expect(ads).toContain("${REGRAS_DA_EXECUCAO}${mapaDoPainelNaConversa()}");
   });
 

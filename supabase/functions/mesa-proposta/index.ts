@@ -132,6 +132,7 @@ import { avisosDaRevisao, type ConferenciaDoDado, lerConferencia, PERGUNTAS_DA_R
 import { blocoJaTem, materialDoUpsell, NOME_DO_MATERIAL_DO_UPSELL, TITULO_DO_PROXIMO_PASSO, type UpsellDaProposta } from "./modulos/proposta-upsell.ts";
 import { retratoDoCliente } from "./upsell.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
+import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
 
@@ -1171,13 +1172,14 @@ async function modeloArquivar(ch: Chamador, corpo: Record<string, unknown>) {
 async function conversaDoAgente(ch: Chamador, clientId: string, conversaId: unknown, abrirNova: boolean): Promise<string> {
   if (!abrirNova && conversaId != null && conversaId !== "") {
     const id = idDe(conversaId, "conversa_id");
-    const { data } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo").eq("id", id).maybeSingle();
-    const c = data as { id: string; client_id: string; referencia_tipo: string | null } | null;
+    const { data } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo, arquivada_em").eq("id", id).maybeSingle();
+    const c = data as { id: string; client_id: string; referencia_tipo: string | null; arquivada_em: string | null } | null;
     if (!c || c.client_id !== clientId || c.referencia_tipo !== REF_CONVERSA) throw new ErroHttp(404, "conversa_inexistente", "Conversa não encontrada para este cliente.");
-    return c.id;
+    // Conversa arquivada (Histórico, "nova conversa") nunca continua: cai na ativa ou numa nova.
+    if (!c.arquivada_em) return c.id;
   }
   if (!abrirNova) {
-    const { data } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).order("criado_em", { ascending: false }).limit(1);
+    const { data } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).is("arquivada_em", null).order("criado_em", { ascending: false }).limit(1);
     const achada = ((data as { id: string }[] | null) ?? [])[0];
     if (achada) return achada.id;
   }
@@ -1203,13 +1205,24 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const anexados = materiaisDoCorpo(corpo.arquivos);
   if (linha && anexados.length && linha.status !== "aceita") linha = await gravar(ch, linha, { contexto: comMateriais(linha.contexto, anexados) }, "manual", `arquivos da conversa: ${anexados.map((a) => a.nome).join(", ")}`);
   const conversaId = await conversaDoAgente(ch, clientId, corpo.conversa_id, corpo.nova_conversa === true);
-  const [modelo, historico, ctx, regras, semProposta] = await Promise.all([
+  const historicoP = servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO);
+  // Núcleo comum: o Jev escolhe as leituras do OS antes do modelo (em paralelo; nunca lança).
+  const cobrarDoNucleo = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: TAREFA_CONVERSA, referencia: { tipo: REF_CONVERSA, id: conversaId }, criadoPor: ch.userId });
+  const previasP = historicoP.then((h) => prepararNucleo(servico(), {
+    clientId,
+    pedido: mensagem,
+    agente: "proposta",
+    ultimaResposta: (((h.data as { papel: string; conteudo: string }[] | null) ?? []).find((m) => m.papel === "agente") || { conteudo: null }).conteudo,
+    cobrar: cobrarDoNucleo,
+  }));
+  const [modelo, historico, ctx, regras, semProposta, previas] = await Promise.all([
     modeloDeTexto(corpo.modelo_id),
-    servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO),
+    historicoP,
     linha ? contextoDaGeracao(linha) : Promise.resolve(null),
     regrasDaMesa(servico(), { clientId, mesa: "proposta", marcaId: linha ? linha.marca_id : null }),
     // Frente SYNC: sem proposta aberta, o estrategista ainda conhece a marca aberta (contexto completo).
     linha ? Promise.resolve("") : CONTEXTO_DO_AGENTE.ler(servico(), clientId, ["copy", "campanha", "geral"], { marca: typeof corpo.marca_id === "string" && corpo.marca_id ? corpo.marca_id : null, partes: PARTES_COM_O_CONTEXTO, area: "comercial" }).catch((e) => (registrarFalha("mesa-proposta: contexto sem proposta", e), "")),
+    previasP,
   ]);
   if (historico.error) registrarFalha("mesa-proposta: histórico da conversa não lido", historico.error, { conversa_id: conversaId });
   const hoje = hojeEmSaoPaulo();
@@ -1233,7 +1246,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: AGENTE,
     modeloId: modelo.id,
     raciocinio: raciocinioPara(modelo),
-    sistema: `${SISTEMA_AGENTE}\n\nDADOS DESTA CONVERSA (hoje ${hoje}):\n${JSON.stringify(dados).slice(0, 60_000)}\n${blocoAcoes}\n\n${blocoDoMapaDoPainel("proposta")}${ctx && ctx.blocoCliente ? `\n\n${ctx.blocoCliente}` : semProposta ? `\n\n${blocoDoContextoDoCliente(semProposta)}` : ""}${regras.bloco ? `\n\n${regras.bloco}` : ""}`,
+    sistema: `${SISTEMA_AGENTE}\n\nDADOS DESTA CONVERSA (hoje ${hoje}):\n${JSON.stringify(dados).slice(0, 60_000)}\n${blocoAcoes}\n\n${blocoDoMapaDoPainel("proposta")}${ctx && ctx.blocoCliente ? `\n\n${ctx.blocoCliente}` : semProposta ? `\n\n${blocoDoContextoDoCliente(semProposta)}` : ""}${regras.bloco ? `\n\n${regras.bloco}` : ""}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: anexados.length ? `${mensagem}\n\n(Anexei: ${anexados.map((a) => a.nome).join(", ")}. Já estão no material da proposta.)` : mensagem }],
     esquemaJson: ESQUEMA_AGENTE_COM_METODO,
     maxTokensSaida: 3_000,
@@ -1242,7 +1255,8 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     metodo: await spP,
   });
   const j = (saida.json || {}) as Record<string, unknown>;
-  let resposta = textoLimpo(j.resposta, 4000) || "Pronto.";
+  // Núcleo comum: quadros conferidos contra as leituras; "peça ao Hermes" vai para a fila dele.
+  let resposta = (await fecharNucleo(servico(), textoLimpo(j.resposta, 9000), previas, { clientId, agente: "proposta", pedido: mensagem, userId: ch.userId, cobrar: cobrarDoNucleo })).texto || "Pronto.";
   const sugestoes = (Array.isArray(j.sugestoes) ? j.sugestoes : []).map((s) => textoLimpo(s, 140)).filter(Boolean).slice(0, 3);
   const aprendendo = aprenderDoPedido(servico(), { clientId, mesa: "proposta", pedido: mensagem, regraSugerida: j.regra_aprendida, marcaId: linha ? linha.marca_id : typeof corpo.marca_id === "string" ? corpo.marca_id : null, userId: ch.userId, ultimaResposta: ultimaResposta ? ultimaResposta.conteudo : null });
   let acao: AcaoDoAgente | null = linha ? normalizarAcoesDaProposta(j.acoes, paraAcao(linha), mensagem, custoDe(modelo, TAMANHO_DA_GERACAO), custoDe(modelo, TAMANHO_DA_PESQUISA, 5), undefined, { resumo: custoDe(modelo, TAMANHOS_DA_EVOLUCAO.resumo), pacotes: 0.01 }) : null;
@@ -1291,7 +1305,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
 async function agenteHistorico(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = idDe(corpo.client_id, "client_id");
   await garantirAcesso(ch, clientId);
-  const { data, error: e1 } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).order("criado_em", { ascending: false }).limit(1);
+  const { data, error: e1 } = await servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE).eq("referencia_tipo", REF_CONVERSA).is("arquivada_em", null).order("criado_em", { ascending: false }).limit(1);
   if (e1) throw new ErroHttp(503, "conversa_indisponivel", "Não foi possível ler a conversa agora.");
   const conversa = ((data as { id: string }[] | null) ?? [])[0];
   if (!conversa) return json({ conversa_id: null, mensagens: [], custo_usd: 0 });

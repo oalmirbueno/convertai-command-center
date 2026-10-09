@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { pedacosComLinks, type DestinoDoAgente } from "@/lib/agentes/mapaDoPainel";
 import { clienteDaRota } from "@/lib/lancador";
@@ -34,11 +34,25 @@ export default function TextoDoAgente({ texto, clientId, className = "" }: { tex
     // Os agentes quebram linha simples para separar itens: vira quebra visível (o markdown juntaria as linhas).
     return separarResposta(md.replace(/([^\n])\n(?!\n)/g, "$1  \n"));
   }, [texto, cliente]);
+  // Fonte clicável: o quadro conferido traz o texto lido de cada fonte; o chip abre a evidência ali mesmo.
+  const [fonteAberta, setFonteAberta] = useState<string | null>(null);
+  const temEvidencia = Object.keys(r.evidencias).length > 0;
+  const abrirFonte = temEvidencia ? (f: string) => setFonteAberta((atual) => (atual === f ? null : f)) : undefined;
   return (
     <div className={juntar("min-w-0 space-y-2 [overflow-wrap:anywhere]", conversa.mensagem, className)} data-texto-do-agente="">
       {r.partes.map((p, i) => p.tipo === "texto"
         ? <TextoFormatado key={`t-${i}`} texto={p.texto} className={className} />
-        : <BlocosDeResposta key={`b-${i}`} blocos={p.blocos} />)}
+        : <BlocosDeResposta key={`b-${i}`} blocos={p.blocos} aoAbrirFonte={abrirFonte} />)}
+      {fonteAberta && r.evidencias[fonteAberta] && (
+        <div className="rounded-lg border border-border bg-background/60 p-2.5" data-evidencia-aberta={fonteAberta}>
+          <div className="mb-1.5 flex items-center gap-2">
+            <span className="text-[11px] font-semibold text-foreground">{fonteAberta}</span>
+            <span className="text-[11px] text-muted-foreground">lido agora no OS</span>
+            <button type="button" onClick={() => setFonteAberta(null)} className="ml-auto text-[11px] text-muted-foreground hover:text-foreground">Fechar</button>
+          </div>
+          <p className="max-h-60 overflow-y-auto whitespace-pre-wrap text-[12px] leading-5 text-muted-foreground">{r.evidencias[fonteAberta]}</p>
+        </div>
+      )}
       {r.recusados.length > 0 && <p className="text-[11px] text-muted-foreground" title={r.recusados.join(" · ")}>{r.recusados.length === 1 ? "1 quadro ficou de fora" : `${r.recusados.length} quadros ficaram de fora`} (sem fonte verificável)</p>}
     </div>
   );

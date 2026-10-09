@@ -45,7 +45,10 @@ import MensagemPadrao, { estilosLigados, lerMensagensPadrao, TIPO_DO_PADRAO, typ
 import type { ControleDePropostas } from "./PainelDeSkills";
 import { pegarPedidoPendente, temPedidoPendente } from "./ponteDoAgente";
 import { criarFerramentasDoServidor, edicaoCompletaDoAgente } from "@/lib/editor/ferramentasDoServidor";
-import { mensagemFinalDoAgente, pedidoDeEdicaoCompleta } from "@/lib/editor/agente";
+import { mensagemComApresentacao, mensagemFinalDoAgente, pedidoDeEdicaoCompleta } from "@/lib/editor/agente";
+import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
+import { Ditado } from "@/components/mesa/Ditado";
 import { mensagemDoQueMudou } from "@/lib/editor/relatorio";
 import { corDaPaleta, useMarcaDoEditor } from "./marcaDoEditor";
 import { pedirPainel } from "./ponteDoAgente";
@@ -448,6 +451,8 @@ export default function AgenteEditor({
 
   // ---------------------------------------------------------------- reabrir: a conversa volta do banco
   const [lendo, setLendo] = useState(false);
+  // Histórico (09/10): trocar de conversa relê a conversa ativa desta versão.
+  const [recarga, setRecarga] = useState(0);
   useEffect(() => {
     if (!versaoId || !clientId) return;
     let vivo = true;
@@ -471,7 +476,7 @@ export default function AgenteEditor({
       vivo = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, versaoId]);
+  }, [clientId, versaoId, recarga]);
 
   /** Guarda a troca (pedido + resposta com os cartões). Sem versão aberta, só na tela. */
   const gravar = async (chaveDoAgente: string, pedidoTexto: string, m: Omit<Mensagem, "chave">, usoId: string | null) => {
@@ -711,7 +716,8 @@ export default function AgenteEditor({
         aplicado = !!cartao.executada_em;
         if (aplicado) destacar(clientId, r.tocados);
       }
-      itens.push({ tipo: "resposta", texto: mensagemFinalDoAgente(r, aplicado) });
+      // Núcleo das Mesas: a resposta conferida pelo servidor (quadro do OS, Hermes) entra junto do relatório do código.
+      itens.push({ tipo: "resposta", texto: mensagemComApresentacao(mensagemFinalDoAgente(r, aplicado), r) });
       // Busca do agente ("mostre só os gerados"): o filtro vai para a Mídia e a linha do tempo.
       if (r.filtro) definirFiltro(clientId, r.filtro);
       if (r.paineis.length) abrirPaineis(r.paineis);
@@ -1040,9 +1046,14 @@ export default function AgenteEditor({
             <div key={m.chave} className="min-w-0 space-y-1.5" data-mensagem-do-editor={m.quem}>
               <div className={juntar(conversa.balao, "space-y-1", m.quem === "dono" ? conversa.doUsuario : conversa.doAgente)}>
                 {m.itens.map((i, j) => (
-                  <p key={j} className={juntar("[overflow-wrap:anywhere]", i.tipo === "ferramenta" && "text-[13px] text-muted-foreground", i.tipo === "aviso" && "text-[13px] text-amber-500", i.tipo === "plano" && "italic text-muted-foreground")}>
-                    {i.texto}
-                  </p>
+                  // Núcleo das Mesas (09/10): a resposta do agente sai em balões, com os quadros conferidos e as fontes clicáveis.
+                  m.quem === "agente" && i.tipo === "resposta" ? (
+                    <TextoDoAgente key={j} texto={i.texto} clientId={clientId} />
+                  ) : (
+                    <p key={j} className={juntar("[overflow-wrap:anywhere]", i.tipo === "ferramenta" && "text-[13px] text-muted-foreground", i.tipo === "aviso" && "text-[13px] text-amber-500", i.tipo === "plano" && "italic text-muted-foreground")}>
+                      {i.texto}
+                    </p>
+                  )
                 ))}
                 {m.quem === "agente" && lerMensagensPadrao(m.anexos).map((x, k) => <MensagemPadrao key={k} m={x} />)}
                 {m.quem === "agente" && (
@@ -1143,9 +1154,20 @@ export default function AgenteEditor({
       refDasMensagens={refMsgs}
       rotuloDasMensagens="Conversa com o agente editor"
       acoes={
-        <button type="button" className={botao.icone} onClick={() => (aVer.length ? setConfirmarVisao(true) : toast.info(projeto ? "Tudo já foi assistido." : "Abra um vídeo no editor."))} aria-label="Assistir o vídeo" title="Assistir o vídeo (quadros para um modelo com imagem)" disabled={!!rodando || !projeto}>
-          <Eye className="h-4 w-4" />
-        </button>
+        <>
+          {versaoId && (
+            <HistoricoDoAgente
+              chave={{ clientId, agente: "diretor_arte", referenciaTipo: "editor_agente", referenciaId: versaoId }}
+              aoTrocar={() => {
+                setMensagens([]);
+                setRecarga((n) => n + 1);
+              }}
+            />
+          )}
+          <button type="button" className={botao.icone} onClick={() => (aVer.length ? setConfirmarVisao(true) : toast.info(projeto ? "Tudo já foi assistido." : "Abra um vídeo no editor."))} aria-label="Assistir o vídeo" title="Assistir o vídeo (quadros para um modelo com imagem)" disabled={!!rodando || !projeto}>
+            <Eye className="h-4 w-4" />
+          </button>
+        </>
       }
       avisos={
         <>
@@ -1212,6 +1234,7 @@ export default function AgenteEditor({
               disabled={!modelo || !projeto}
               maxLength={MAX_TEXTO_DO_PEDIDO}
             />
+            <Ditado valor={rascunho} onChange={setRascunho} disabled={!modelo || !projeto || !!rodando} className="mr-1.5" />
             {rodando ? (
               <button type="button" className={botao.icone} onClick={() => (parar.current = true)} aria-label="Parar o agente">
                 <Square className="h-4 w-4" />

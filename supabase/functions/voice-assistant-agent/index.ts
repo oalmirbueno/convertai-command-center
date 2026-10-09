@@ -75,6 +75,11 @@ import { registrarFalha, registrarSeFalhar } from "../_shared/falha-registrada.t
 import { blocoDasRegras, esquecerRegra, type RegraAtiva, regrasDoAgente, regrasSeguidas } from "../_shared/aprender-com-o-dono.ts";
 import { aprenderNoServidor, guardarNoServidor } from "../_shared/aprender-no-servidor.ts";
 import { blocoDoHistorico, historicoSeguro, linhaDeHoje } from "./conversa-do-lancador.ts";
+// Núcleo comum dos agentes das Mesas (09/10): leituras prévias, apresentação, quadros conferidos e Hermes.
+// O Jev do núcleo é cobrado na carteira do cliente como "conversa" (o lançador não tem tarefa própria no motor).
+import { falaDoQueFoiFeito, fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, type NucleoPreparado, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
+import { cobrarJev } from "../_shared/ia-motor.ts";
+const cobrarDoLancador = (clientId: string) => (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: "conversa", referencia: { tipo: "lancador", id: clientId } });
 // O navegador guarda a resposta do preflight (OPTIONS) em vez de perguntar de novo a cada chamada.
 const corsHeaders = { ...corsDoSupabase, "Access-Control-Max-Age": "7200" };
 
@@ -603,6 +608,8 @@ async function conversaDoLancador(
 ): Promise<string | null> {
   const { data } = await supabase.from("agente_conversas").select("id")
     .eq("client_id", clientId).eq("agente", AGENTE_DA_CONVERSA_DO_LANCADOR).eq("referencia_tipo", REF_CONVERSA_DO_LANCADOR)
+    // Histórico (09/10): "Nova conversa" arquiva a atual; a próxima mensagem abre outra.
+    .is("arquivada_em", null)
     .order("criado_em", { ascending: false }).limit(1);
   const achada = ((data as { id: string }[] | null) ?? [])[0];
   if (achada) return achada.id;
@@ -611,6 +618,60 @@ async function conversaDoLancador(
     .select("id").single();
   if (error || !nova) return null;
   return (nova as { id: string }).id;
+}
+
+/** Núcleo comum: só com cliente escolhido (as leituras são do cliente). Nunca lança. */
+function nucleoDoLancador(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  clientId: string | null | undefined,
+  pedido: string,
+  historico: { papel: string; texto: string }[],
+): Promise<NucleoPreparado | null> {
+  if (!clientId) return Promise.resolve(null);
+  const ultima = [...historico].reverse().find((x) => x.papel === "aceleriq")?.texto || null;
+  return prepararNucleo(supabase, { clientId, pedido, agente: "lancador", ultimaResposta: ultima, cobrar: cobrarDoLancador(clientId) })
+    .catch((e) => (registrarFalha("voice-assistant-agent: núcleo não preparado (segue sem)", e), null));
+}
+
+/** Depois da IA: quadros conferidos e, quando a equipe pediu, o Hermes. Sem núcleo, o texto fica como veio. */
+async function fecharNucleoDoLancador(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  texto: string,
+  nucleo: NucleoPreparado | null,
+  o: { clientId: string | null | undefined; pedido: string; userId: string },
+): Promise<string> {
+  if (!nucleo || !o.clientId || !texto.trim()) return texto;
+  try {
+    const r = await fecharNucleo(supabase, texto, nucleo, { clientId: o.clientId, agente: "lancador", pedido: o.pedido, userId: o.userId, cobrar: cobrarDoLancador(o.clientId) });
+    return r.texto.trim() ? r.texto : texto;
+  } catch (e) {
+    registrarFalha("voice-assistant-agent: conferência do núcleo falhou (segue o texto como veio)", e);
+    return texto;
+  }
+}
+
+/** Modo conversa (09/10): a troca também fica na conversa do lançador do cliente (histórico). Devolve o id da resposta. */
+async function gravarTrocaDaConversa(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  o: { clientId: string; userId: string; pergunta: string; resposta: string },
+): Promise<string | null> {
+  try {
+    const conversaId = await conversaDoLancador(supabase, o.clientId, o.userId);
+    if (!conversaId) return null;
+    const agora = Date.now();
+    const { data, error } = await supabase.from("agente_mensagens").insert([
+      { conversa_id: conversaId, client_id: o.clientId, papel: "usuario", conteudo: o.pergunta.slice(0, 4000) || "(pergunta)", criado_em: new Date(agora).toISOString(), anexos: [] },
+      { conversa_id: conversaId, client_id: o.clientId, papel: "agente", conteudo: o.resposta.slice(0, 16000), anexos: [], criado_em: new Date(agora + 1).toISOString() },
+    ]).select("id, papel");
+    if (error) { console.error(`[assistente] conversa não gravada: ${error.message}`); return null; }
+    return (((data as { id: string; papel: string }[] | null) ?? []).find((m) => m.papel === "agente") || { id: null }).id;
+  } catch (e) {
+    console.error(`[assistente] conversa não gravada: ${e instanceof Error ? e.message : "falha"}`);
+    return null;
+  }
 }
 
 /** Dependências do executor: a nota vai pelo cérebro do cliente (sem duplicar). */
@@ -696,7 +757,8 @@ async function tratarAcoesDoLancador(
     const conversaId = await conversaDoLancador(supabase, clientId, userId);
     if (conversaId) {
       const agora = Date.now();
-      const resposta = String(parsed.resposta || parsed.narrative || acao.resumo || "Pronto.").slice(0, 2000);
+      // 16000: a resposta conferida pelo núcleo leva o quadro e a evidência das fontes (2000 cortava o bloco).
+      const resposta = String(parsed.resposta || parsed.narrative || acao.resumo || "Pronto.").slice(0, 16000);
       const { data: gravadas, error: erroGravar } = await supabase.from("agente_mensagens").insert([
         { conversa_id: conversaId, client_id: clientId, papel: "usuario", conteudo: texto.slice(0, 4000) || "(pedido por voz)", criado_em: new Date(agora).toISOString(), anexos: [] },
         { conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: resposta, anexos: [acao], criado_em: new Date(agora + 1).toISOString() },
@@ -794,6 +856,9 @@ Deno.serve(async (req) => {
     const providers = await resolverCadeiaDaIa({
       primaryModels: PRIMARY_MODEL_CHAIN,
       lovableModels: LOVABLE_COMPAT_MODEL_CHAIN,
+      // Lote B (09/10): a conta direta do modelo dava 429 em toda chamada e o lançador caía no modo local.
+      // O mesmo modelo pelo OpenRouter (chave do cofre) entra logo depois, como na Central.
+      openRouterReserve: true,
     });
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -902,6 +967,8 @@ Deno.serve(async (req) => {
       const ehLivre = !PERGUNTAS_PRONTAS[chave];
       // Frente SPP: o Jev escolhe o método da casa em paralelo com o pré-contexto (nunca lança).
       const spP = superpoderesPara(supabase, { agente: "assistente.lancador", pedido: pergunta });
+      // Núcleo comum: com cliente escolhido, o Jev escolhe as leituras do OS em paralelo com o pré-contexto.
+      const nucleoP = nucleoDoLancador(supabase, body.clientId, pergunta, historico);
       const [pre, regras] = await Promise.all([lerPreContexto(supabase, body.clientId || null, servico, tela), regrasLidas]);
       const aprendizado = ehLivre
         ? aprenderNoServidor(supabase, { texto: pergunta, agente: "geral", clientId: body.clientId || null, donoId: userData.user.id, cliente: pre.clienteNome, contexto: historico.map((x) => x.texto).join(" | ") })
@@ -919,7 +986,8 @@ Deno.serve(async (req) => {
       const pedidoDaConversa = `${hojeTexto}${blocoDoHistorico(historico)}\n\nPergunta da equipe:\n"""${pergunta}"""${pre.texto}\n\nRetorne APENAS o JSON.`;
       const erros: string[] = [];
       // O mapa do painel entra na conversa: "onde faço isso?" sai com a área certa e o link.
-      const sistemaDaConversa = `${PROMPT_DA_CONVERSA}\n\n${blocoDoMapaDoPainel(AGENTE_DO_LANCADOR)}${blocoDasRegras(regras)}`;
+      const nucleo = await nucleoP;
+      const sistemaDaConversa = `${PROMPT_DA_CONVERSA}\n\n${blocoDoMapaDoPainel(AGENTE_DO_LANCADOR)}${blocoDasRegras(regras)}${nucleo ? `\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${nucleo.bloco ? `\n\n${nucleo.bloco}` : ""}` : ""}`;
       const sp = await spP;
       const sistemaComMetodo = juntarMetodoAoSistema(sistemaDaConversa, sp);
       for (const provider of providers) {
@@ -933,11 +1001,21 @@ Deno.serve(async (req) => {
         if (j && typeof j.resposta === "string" && j.resposta.trim()) {
           const passos = Array.isArray(j.passos) ? j.passos.map((p: unknown) => String(p)).filter(Boolean).slice(0, 5) : [];
           const irPara = destinoNaResposta(`${j.resposta} ${passos.join(" ")}`, body.clientId || null);
+          // Núcleo comum: quadros conferidos contra as leituras e, quando a equipe pediu, o Hermes.
+          const apresentada = await fecharNucleoDoLancador(supabase, j.resposta.trim(), nucleo, { clientId: body.clientId, pedido: pergunta, userId: userData.user.id });
           // Frente SPP: a conversa não executa nada; "pronto" ganha o aviso (sem refazer) e o método vira a linha "Método:".
-          const fechado = await fecharComMetodo(supabase, { usoId: null, metodo: sp, resposta: j.resposta.trim(), declarados: j.metodos_usados, acaoFeita: false, clientId: body.clientId || null });
+          const fechado = await fecharComMetodo(supabase, { usoId: null, metodo: sp, resposta: apresentada, declarados: j.metodos_usados, acaoFeita: false, clientId: body.clientId || null });
+          // A troca da conversa fica guardada na conversa do lançador do cliente (antes não gravava nada).
+          const mensagemId = body.clientId
+            ? await gravarTrocaDaConversa(supabase, {
+              clientId: body.clientId, userId: userData.user.id,
+              pergunta: (body.text || "").trim() || pergunta,
+              resposta: `${fechado.resposta}${passos.length ? `\n\n${passos.map((p: string) => `- ${p}`).join("\n")}` : ""}`,
+            })
+            : null;
           return new Response(JSON.stringify({
             resposta: fechado.resposta, passos, ir_para: irPara ? { ...irPara, direto: false } : null, _model: provider.model,
-            aprendi: await aprendizado, segui: regrasSeguidas(j.regras_seguidas, regras), metodo: fechado.anexo,
+            aprendi: await aprendizado, segui: regrasSeguidas(j.regras_seguidas, regras), metodo: fechado.anexo, mensagem_id: mensagemId,
           }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -990,6 +1068,8 @@ Deno.serve(async (req) => {
     // Frente SPP: o método da casa só no pedido explícito (agir); a análise automática e silenciosa fica sem.
     // Revisão 30/09: o Jev do método corre junto com o pré-contexto (antes esperava sozinho, até 3,5 s, depois dele).
     const spAgirP = agir ? superpoderesPara(supabase, { agente: "assistente.lancador", pedido: body.text }) : Promise.resolve(null);
+    // Núcleo comum: só no pedido explícito com cliente (a análise automática e silenciosa não responde à equipe).
+    const nucleoAgirP = agir ? nucleoDoLancador(supabase, body.clientId, body.text, historico) : Promise.resolve(null);
     const [preContexto, dadosDoLancador] = await Promise.all([
       body.clientId || body.servico || tela
         ? lerPreContexto(supabase, body.clientId || null, servico, tela).then((p) => p.texto)
@@ -1015,7 +1095,9 @@ Deno.serve(async (req) => {
       attachmentBlock +
       `\n\nRetorne APENAS o JSON conforme schema, sem markdown.`;
     // O mapa do painel e a regra das ações só entram no pedido explícito (custo por mensagem).
-    const sistema = juntarMetodoAoSistema((agir ? `${SYSTEM_PROMPT}\n\n${REGRA_DO_LANCADOR}\n\n${blocoDoMapaDoPainel(AGENTE_DO_LANCADOR)}` : SYSTEM_PROMPT) + blocoDasRegras(regras), spAgir);
+    const nucleoAgir = await nucleoAgirP;
+    const blocoDoNucleo = nucleoAgir ? `\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${nucleoAgir.bloco ? `\n\n${nucleoAgir.bloco}` : ""}` : "";
+    const sistema = juntarMetodoAoSistema((agir ? `${SYSTEM_PROMPT}\n\n${REGRA_DO_LANCADOR}\n\n${blocoDoMapaDoPainel(AGENTE_DO_LANCADOR)}` : SYSTEM_PROMPT) + blocoDasRegras(regras) + blocoDoNucleo, spAgir);
 
     // Fallback degradado se não há provider configurado.
     if (!providers.length) {
@@ -1087,6 +1169,10 @@ Deno.serve(async (req) => {
     // Frente AG: ações (direto quando pode), destino no mapa e a frase para a conversa.
     if (agir) {
       const rota = await roteamento;
+      // Núcleo comum: a resposta é conferida ANTES de ir para a conversa do cliente (o que fica guardado é o conferido).
+      if (nucleoAgir && typeof parsed.resposta === "string" && parsed.resposta.trim()) {
+        parsed.resposta = await fecharNucleoDoLancador(supabase, parsed.resposta.trim(), nucleoAgir, { clientId: body.clientId, pedido: body.text, userId: userData.user.id });
+      }
       const r = await tratarAcoesDoLancador(supabase, { parsed, texto: body.text, clientId: body.clientId || null, userId: userData.user.id, alvos: alvosDoPedido, rota });
       parsed.acao = r.acao;
       parsed.mensagem_id = r.mensagemId;
@@ -1105,7 +1191,8 @@ Deno.serve(async (req) => {
       // Frente SPP: "feito" só com a ação executada (só aviso, sem refazer); o método vira a linha "Método:".
       if (parsed.resposta) {
         const fechado = await fecharComMetodo(supabase, { usoId: null, metodo: spAgir, resposta: parsed.resposta, declarados: parsed.metodos_usados, acaoFeita: !!(r.acao && r.acao.executada_em), resultados: r.acao ? r.acao.resultados : null, clientId: body.clientId || null });
-        parsed.resposta = fechado.resposta;
+        // Lote B: feito na hora não aparece como "pronta para confirmar" (a fala foi escrita antes de executar).
+        parsed.resposta = falaDoQueFoiFeito(fechado.resposta, !!(r.acao && r.acao.executada_em));
         parsed.metodo = fechado.anexo;
       }
       delete parsed.metodos_usados;

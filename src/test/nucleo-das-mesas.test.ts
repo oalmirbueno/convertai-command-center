@@ -118,3 +118,46 @@ describe("pedido ao Hermes pelas Mesas", () => {
     expect(b.etapas.map((e) => e.estado)).toEqual(["aguardando_aprovacao", "planejado"]);
   });
 });
+
+describe("fontes clicáveis e histórico", () => {
+  it("o quadro conferido leva o texto lido de cada fonte até a tela", async () => {
+    const texto = quadro([{ tipo: "tabela", colunas: ["Item", "Situação"], linhas: [["Verba", "R$ 1.000/mês"]], fontes: ["L1"] }]);
+    const r = await conferirApresentacao(texto, fontes, { agente: "teste", chave: "x", fetchImpl: jevQueResponde(["sustenta"]) });
+    const tela = separarResposta(r.texto);
+    expect(Object.keys(tela.evidencias)).toEqual(["Briefing (L1)"]);
+    expect(tela.evidencias["Briefing (L1)"]).toContain("Casa dos Assados");
+  });
+
+  it("o histórico acha os arquivos citados nos anexos, sem repetir", async () => {
+    const { arquivosDasMensagens } = await import("../components/agentes/HistoricoDoAgente");
+    const lista = arquivosDasMensagens([
+      { id: "1", papel: "usuario", conteudo: "segue", criado_em: "", anexos: [{ tipo: "pedido", arquivos: { lidos: [{ nome: "cardapio.pdf", path: "c/cardapio.pdf" }] } }] },
+      { id: "2", papel: "agente", conteudo: "ok", criado_em: "", anexos: [{ nome: "cardapio.pdf", path: "c/cardapio.pdf" }, { nome: "foto.jpg", url: "https://x.supabase.co/f.jpg" }, { nome: "sem arquivo" }] },
+    ]);
+    expect(lista).toEqual([{ nome: "cardapio.pdf", url: null }, { nome: "foto.jpg", url: "https://x.supabase.co/f.jpg" }]);
+  });
+});
+
+describe("Mês: pedido pontual não vira cadência do plano", () => {
+  it("1 post / só esse é pontual; frequência ou mês inteiro não é", async () => {
+    const { pedidoPontual } = await import("../../supabase/functions/agente-calendario/modulos/cadencia-do-mes");
+    expect(pedidoPontual("Crie 1 post estático no dia 30/10/2026 sobre anúncios. Só esse.")).toBe(true);
+    expect(pedidoPontual("faça uma arte para sexta")).toBe(true);
+    expect(pedidoPontual("apenas um carrossel no dia 12")).toBe(true);
+    expect(pedidoPontual("3 posts por semana em outubro")).toBe(false);
+    expect(pedidoPontual("complete o mês com posts")).toBe(false);
+    expect(pedidoPontual("planeje o mês todo")).toBe(false);
+  });
+});
+
+describe("fala honesta depois de executar", () => {
+  it("tira o 'pronta para confirmar' quando a ação já foi feita e diz que foi", async () => {
+    const { falaDoQueFoiFeito } = await import("../../supabase/functions/_shared/nucleo-das-mesas");
+    const t = "O contexto confirma o tom. A troca do texto da lâmina 1 está pronta para confirmar; o restante fica igual.";
+    const r = falaDoQueFoiFeito(t, true);
+    expect(r).not.toMatch(/pronta para confirmar/);
+    expect(r).toMatch(/O contexto confirma o tom\./);
+    expect(r).toMatch(/Feito agora; o Desfazer fica no cartão\./);
+    expect(falaDoQueFoiFeito(t, false)).toBe(t);
+  });
+});

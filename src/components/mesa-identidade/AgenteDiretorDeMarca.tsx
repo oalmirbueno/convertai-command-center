@@ -10,6 +10,7 @@ import ModeloDoAgente from "@/components/agentes/ModeloDoAgente";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import CampoDoAgente, { focarNoFim } from "@/components/sistema/CampoDoAgente";
@@ -86,6 +87,13 @@ export default function AgenteDiretorDeMarca({ projetoId, rascunho, onRascunho }
   const [nova, setNova] = useState(false);
   const listaRef = useRef<HTMLDivElement | null>(null);
   const campo = useRef<HTMLTextAreaElement | null>(null);
+  // Histórico das conversas: trocar (nova, continuar uma antiga) relê a conversa ativa.
+  const [releitura, setReleitura] = useState(0);
+  const aoTrocarDeConversa = () => {
+    setConversaId(null);
+    setNova(false);
+    setReleitura((n) => n + 1);
+  };
   const novaConversa = useNovaConversa<Mensagem>({
     chave: clientId,
     enviando,
@@ -121,7 +129,7 @@ export default function AgenteDiretorDeMarca({ projetoId, rascunho, onRascunho }
       vivo = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId]);
+  }, [clientId, releitura]);
 
   useEffect(() => {
     if (listaRef.current) listaRef.current.scrollTop = listaRef.current.scrollHeight;
@@ -185,6 +193,7 @@ export default function AgenteDiretorDeMarca({ projetoId, rascunho, onRascunho }
         descricao={projetoId ? "Conversa sobre o projeto aberto" : "Abra ou crie um projeto no Início"}
         acoes={
           <>
+            <HistoricoDoAgente chave={{ clientId, agente: "identidade", referenciaTipo: "mesa_identidade", referenciaId: null }} aoTrocar={aoTrocarDeConversa} />
             {mensagens.length > 0 && <BotaoNovaConversa onClick={novaConversa} desativado={enviando} />}
             <AjudaRecolhida rotulo="Como o diretor de marca funciona">
               Peça o que precisa. Fechar etapa, escolher nome ou caminho e montar o brandbook ele faz na hora, com Desfazer. Gerar nomes e caminhos, montar a estratégia, propor paletas, sugerir fontes e gerar taglines usam IA e vêm num cartão com o custo; enviar para aprovação e levar ao kit também pedem Confirmar. A logo final é sempre o arquivo da equipe. O que você ensinar vira regra; dá para esquecer.

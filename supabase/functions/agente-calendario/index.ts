@@ -181,6 +181,7 @@ import {
   aplicarAjusteDoPlano,
   formatoDaVaga,
   type ItemDoAjuste,
+  pedidoPontual,
 } from "./modulos/cadencia-do-mes.ts";
 import {
   acaoDeAtualizarPublico,
@@ -3167,6 +3168,7 @@ async function conversaDoAgenteDoMes(servico: SupabaseClient, clientId: string, 
     .eq("client_id", clientId)
     .eq("agente", AGENTE)
     .eq("referencia_tipo", REF_AGENTE_DO_MES)
+    .is("arquivada_em", null)
     .order("criado_em", { ascending: false })
     .limit(1);
   const existente = ((data as { id: string }[] | null) ?? [])[0]?.id;
@@ -6362,7 +6364,10 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
   let criacao = normalizarCriacao(r.criar_conteudos, hoje);
   // 02/10: a cadência e a mistura pedidas ("3 por semana, 2 fotos e 1 carrossel") são conferidas semana a
   // semana; o que falta o modelo rápido completa e a resposta diz a conta ("12 posts: 8 fotos e 4 carrosséis").
-  const cadencia = cadenciaDoPlanejamento(mensagem, anteriores, [doMes, blocoDoPlano(ctx, inicio)], (r.plano_do_mes ?? null) as Record<string, unknown> | null);
+  const cadenciaLida = cadenciaDoPlanejamento(mensagem, anteriores, [doMes, blocoDoPlano(ctx, inicio)], (r.plano_do_mes ?? null) as Record<string, unknown> | null);
+  // Pedido pontual ("1 post no dia 30, só esse"): nenhuma cadência completa o mês (nem a lida do próprio pedido,
+  // que entendia "1 post" como "1 por semana"). Frequência dita ("3 por semana", "o mês todo") não é pontual.
+  const cadencia = cadenciaLida && pedidoPontual(mensagem) ? null : cadenciaLida;
   let conferencia: ConferenciaDoMes | null = null;
   let custoDoAjuste = 0;
   const avisosDoAjuste: string[] = [];

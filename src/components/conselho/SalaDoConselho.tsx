@@ -15,6 +15,8 @@ import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Esta
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campo, campoTexto, conversa, juntar, lista, superficie, texto } from "@/components/sistema/estilos";
 import { useCatalogo } from "@/components/mesa/MesaContexto";
+import { Ditado } from "@/components/mesa/Ditado";
+import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { dataEHora, ErroDaMesa, nomeDoModelo, textoDoErro, usd } from "@/lib/mesa/api";
 import {
   ataEmPdf,
@@ -1012,7 +1014,9 @@ function ConversaComOConselho({
             </BalaoDaConversa>
             <BalaoDaConversa de="agente" data-resposta={f.status}>
               <span className="block text-[12px] font-medium text-foreground">{nomeDe(f.especialista, sessao)}</span>
-              <span className="whitespace-pre-line">{f.status === "feita" ? f.texto : f.status === "falando" ? "Pensando..." : f.erro_mensagem || "Não respondeu."}</span>
+              {f.status === "feita"
+                ? <TextoDoAgente texto={f.texto || ""} clientId={sessao.client_id} />
+                : <span className="whitespace-pre-line">{f.status === "falando" ? "Pensando..." : f.erro_mensagem || "Não respondeu."}</span>}
             </BalaoDaConversa>
           </div>
         ))}
@@ -1050,6 +1054,7 @@ function ConversaComOConselho({
             placeholder={ativo ? "Esperando as rodadas" : `Pergunte a ${nomeDe(quem, sessao)}`}
             aria-label="Pergunta ao conselho"
           />
+          <Ditado valor={textoDoCampo} onChange={(v) => setTextoDoCampo(v.slice(0, 2000))} disabled={ativo || enviando} className="ml-1.5 min-w-0" />
           <button type="button" className={juntar(botao.primario, "ml-2 h-11 w-11 px-0")} onClick={() => void enviar()} disabled={ativo || enviando || !textoDoCampo.trim()} aria-label="Enviar pergunta">
             {enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
           </button>

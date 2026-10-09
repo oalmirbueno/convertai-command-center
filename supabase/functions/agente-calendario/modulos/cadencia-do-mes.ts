@@ -647,3 +647,15 @@ export function aplicarAjusteDoPlano<T extends ItemDoAjuste>(itens: T[], vagas: 
   saida.sort((a, b) => a.data.localeCompare(b.data));
   return { itens: saida, preenchidas, refeitos };
 }
+
+/**
+ * Pedido pontual (09/10, lote B: "Crie 1 post estático no dia 30/10. Só esse." virou 3 posts, porque a
+ * cadência do plano do mês completava a semana): quando a equipe pede um número pequeno de peças ou diz
+ * "só esse/apenas", a cadência do plano não completa o mês. Cadência dita no próprio pedido continua valendo.
+ */
+export function pedidoPontual(texto: string): boolean {
+  const t = String(texto || "").toLowerCase();
+  if (/\bpor semana\b|\bpor m[eê]s\b|\bo m[eê]s (todo|inteiro)\b|\bcomplet[ae]r? o m[eê]s\b/.test(t)) return false;
+  return /\b(s[oó]|apenas|somente)\s+(ess[ea]s?|est[ea]s?|um|uma|dois|duas|\d)\b/.test(t)
+    || /\b(1|2|um|uma|dois|duas)\s+(post|posts|pe[cç]a|pe[cç]as|conte[uú]do|conte[uú]dos|carrossel|carross[eé]is|est[aá]tico|est[aá]ticos|foto|fotos|v[ií]deo|v[ií]deos|reels?|arte|artes)\b/.test(t);
+}

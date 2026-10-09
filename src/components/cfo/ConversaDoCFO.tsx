@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Send, Landmark } from "lucide-react";
+import { Loader2, Send, Landmark, Search } from "lucide-react";
 import { toast } from "sonner";
 import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
-import { BalaoDaConversa, CompositorDoAgente, PainelDoAgente, AjudaRecolhida, botao, campoTexto, conversa, juntar, toqueCompacto } from "@/components/sistema";
+import { BalaoDaConversa, PainelDoAgente, AjudaRecolhida, botao, campo, campoTexto, conversa, juntar, toqueCompacto } from "@/components/sistema";
+import { Ditado } from "@/components/mesa/Ditado";
 import { SeletorDeModelo } from "@/components/mesa/Seletores";
 import { useCatalogo } from "@/components/mesa/MesaContexto";
 import { padraoPara, textoDoErro } from "@/lib/mesa/api";
@@ -62,6 +63,11 @@ export default function ConversaDoCFO({ semMoldura = false, className = "", titu
   const salvas: Local[] = (conversaQ.data || []).map((m: MensagemDoCFO) => ({ id: m.id, papel: m.papel, conteudo: m.conteudo, anexos: Array.isArray(m.anexos) ? m.anexos : [] }));
   const vistas = new Set(salvas.map((m) => m.id));
   const mensagens = salvas.concat(locais.filter((m) => !vistas.has(m.id)));
+  // Busca nas mensagens (09/10): o CFO tem UMA conversa por dono (por desenho), então a busca filtra as trocas carregadas.
+  const [buscando, setBuscando] = useState(false);
+  const [busca, setBusca] = useState("");
+  const termo = busca.trim().toLowerCase();
+  const visiveis = buscando && termo.length >= 2 ? mensagens.filter((m) => m.conteudo.toLowerCase().includes(termo)) : mensagens;
 
   useEffect(() => {
     if (fim.current && typeof fim.current.scrollIntoView === "function") fim.current.scrollIntoView({ block: "end" });
@@ -142,14 +148,28 @@ export default function ConversaDoCFO({ semMoldura = false, className = "", titu
       className={className}
       rotuloDasMensagens="Conversa com o CFO"
       acoes={
+        <>
+        <button
+          type="button"
+          onClick={() => { setBuscando((b) => !b); setBusca(""); }}
+          className={juntar(botao.icone, buscando && "text-primary")}
+          aria-label="Buscar na conversa"
+          aria-pressed={buscando}
+          title="Buscar na conversa"
+          data-buscar-no-cfo=""
+        >
+          <Search className="h-4 w-4" aria-hidden="true" />
+        </button>
         <AjudaRecolhida rotulo="Como o CFO funciona" lado="left">
           Toda conta (caixa, fôlego, projeção, limite do mês, cortes e metas) é feita em código com os dados do financeiro. A IA só explica e conduz; se ela
           trouxer um número fora da conta, vale a conta. Lançar, cortar e criar meta só acontecem no Confirmar, com Desfazer. Gasto acima do limite pede a sua
           confirmação explícita. Cobrança a cliente é sempre você quem envia.
         </AjudaRecolhida>
+        </>
       }
       compositor={
-        <CompositorDoAgente>
+        // O PainelDoAgente já põe o compositor na casca (CompositorDoAgente): aqui vai só o conteúdo (antes vinha embrulhado duas vezes).
+        <>
           <div className="-m-0.5 flex min-w-0 flex-wrap">
             {PERGUNTAS_PRONTAS_DO_CFO.map((q) => (
               <button
@@ -185,6 +205,7 @@ export default function ConversaDoCFO({ semMoldura = false, className = "", titu
               className={juntar(campoTexto, "mr-2 min-h-[44px] resize-none", conversa.campo)}
               data-campo-do-cfo=""
             />
+            <Ditado valor={texto} onChange={setTexto} disabled={enviando} className="mr-2" />
             <button type="submit" disabled={enviando || !texto.trim()} className={juntar(botao.primario, "h-10")} aria-label="Enviar ao CFO">
               {enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
             </button>
@@ -192,17 +213,32 @@ export default function ConversaDoCFO({ semMoldura = false, className = "", titu
           <div className="min-w-0 max-w-[280px]">
             <SeletorDeModelo catalogo={catalogo.data || []} tipo="texto" valor={modeloId} onChange={setModeloId} rotulo="Modelo que explica" />
           </div>
-        </CompositorDoAgente>
+        </>
       }
     >
       <div className="min-w-0 space-y-3 px-3.5 py-3" data-conversa-do-cfo="">
+        {buscando && (
+          <div className="min-w-0">
+            <input
+              autoFocus
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar nas mensagens"
+              aria-label="Buscar nas mensagens do CFO"
+              className={juntar(campo, "h-8 text-[12px]")}
+            />
+            {termo.length >= 2 && (
+              <p className="mt-1 text-[11px] text-muted-foreground">{visiveis.length ? `${visiveis.length} ${visiveis.length === 1 ? "mensagem" : "mensagens"}` : "Nada encontrado"} nas últimas trocas carregadas.</p>
+            )}
+          </div>
+        )}
         {conversaQ.isError && !mensagens.length && (
           <p className={conversa.apoio}>Ainda não consegui abrir a conversa ({textoDoErro(conversaQ.error)}). O painel ao lado já mostra os números.</p>
         )}
         {!mensagens.length && !conversaQ.isError && (
           <p className={conversa.apoio}>{conversaQ.isLoading ? "Abrindo a conversa…" : "Pergunte com as suas palavras ou use um atalho abaixo."}</p>
         )}
-        {mensagens.map((m) => {
+        {visiveis.map((m) => {
           if (m.papel === "sistema") return <p key={m.id} className={conversa.apoio}>{m.conteudo}</p>;
           const acoes = acoesDaMensagem(m.anexos);
           return (

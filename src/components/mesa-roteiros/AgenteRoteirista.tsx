@@ -10,6 +10,7 @@ import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao"
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import CampoDoAgente, { focarNoFim } from "@/components/sistema/CampoDoAgente";
@@ -110,9 +111,16 @@ export default function AgenteRoteirista({
   const [conversaId, setConversaId] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [nova, setNova] = useState(false);
+  // Histórico das conversas: trocar (nova, continuar uma antiga) relê a conversa ativa.
+  const [releitura, setReleitura] = useState(0);
   const lista = useRef<HTMLDivElement | null>(null);
   const campo = useRef<HTMLTextAreaElement | null>(null);
   const texto = rascunho;
+  const aoTrocarDeConversa = () => {
+    setConversaId(null);
+    setNova(false);
+    setReleitura((n) => n + 1);
+  };
   const novaConversa = useNovaConversa<MensagemDoAgente>({
     chave: clientId,
     enviando,
@@ -149,7 +157,7 @@ export default function AgenteRoteirista({
     return () => {
       vivo = false;
     };
-  }, [clientId]);
+  }, [clientId, releitura]);
 
   useEffect(() => {
     if (lista.current) lista.current.scrollTop = lista.current.scrollHeight;
@@ -210,6 +218,7 @@ export default function AgenteRoteirista({
         descricao={roteiroId ? "Conversa sobre o roteiro aberto" : "Conversa sobre os roteiros do cliente"}
         acoes={
           <>
+            <HistoricoDoAgente chave={{ clientId, agente: "estrategista", referenciaTipo: "mesa_roteiros", referenciaId: null }} aoTrocar={aoTrocarDeConversa} />
             {mensagens.length > 0 && <BotaoNovaConversa onClick={novaConversa} desativado={enviando} />}
             <AjudaRecolhida rotulo="Como o agente de roteiros funciona">
               Peça o que precisa. Trocar texto, aprovar, arquivar e resolver comentário ele faz na hora, com Desfazer. Gerar, refazer gancho e mudar o tom usam IA e vêm num cartão com o custo; o PDF vai para Arquivos e também pede Confirmar. O que você ensinar ("nunca", "não gostei") vira regra; dá para esquecer.

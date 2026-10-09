@@ -14,6 +14,8 @@ import BotaoDoEstilo from "@/components/estilo/BotaoDoEstilo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { avisarCustoReal, useAvisarErro } from "@/components/mesa/Custo";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
+import { Ditado } from "@/components/mesa/Ditado";
 import {
   chamarPerfis,
   MAX_PAUTAS,
@@ -178,7 +180,19 @@ export default function AgenteDoPerfil({
       titulo="Agente do perfil"
       descricao={`@${perfil.handle}`}
       icone={<Bot className="h-4 w-4" />}
-      acoes={<BotaoDoEstilo />}
+      acoes={
+        <>
+          <HistoricoDoAgente
+            chave={clientId ? { clientId, agente: "estrategista", referenciaTipo: "perfil_instagram", referenciaId: perfil.id } : null}
+            aoTrocar={() => {
+              // A conversa ativa do perfil mudou (nova ou retomada): relê o perfil, que traz as mensagens dela.
+              setRecebida(null);
+              onMudou();
+            }}
+          />
+          <BotaoDoEstilo />
+        </>
+      }
       topo={topo}
       refDasMensagens={lista}
       rotuloDasMensagens={`Conversa sobre @${perfil.handle}`}
@@ -195,6 +209,7 @@ export default function AgenteDoPerfil({
               placeholder="Pergunte sobre o perfil"
               aria-label="Mensagem para o agente do perfil"
             />
+            <Ditado valor={rascunho} onChange={setRascunho} disabled={!!trabalhando} className="ml-1.5 min-w-0" />
             <button type="button" className={juntar(botao.primario, "ml-2 h-10 w-10 px-0")} onClick={enviar} disabled={!!trabalhando || !rascunho.trim()} aria-label="Enviar">
               {trabalhando === "conversar" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
             </button>

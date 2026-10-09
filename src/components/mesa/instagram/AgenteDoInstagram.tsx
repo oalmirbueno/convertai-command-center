@@ -15,6 +15,8 @@ import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import CartaoDeAcao from "@/components/agentes/CartaoDeAcao";
 import AprendizadoNaConversa, { observacaoDoCusto } from "@/components/agentes/AprendizadoNaConversa";
 import { acoesDaMensagem, chamarAcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
+import { Ditado } from "../Ditado";
 import { toast } from "sonner";
 
 /**
@@ -131,6 +133,17 @@ export default function AgenteDoInstagram({
       titulo="Agente das redes"
       descricao="Instagram, Facebook, destaques e grade"
       icone={<Instagram className="h-4 w-4" />}
+      acoes={
+        <HistoricoDoAgente
+          chave={clientId ? { clientId, agente: "estrategista", referenciaTipo: "instagram_do_cliente", referenciaId: clientId } : null}
+          aoTrocar={() => {
+            // A conversa ativa mudou (nova ou retomada): relê o painel, que traz as mensagens dela.
+            setRecebida(null);
+            if (onAcaoFeita) onAcaoFeita();
+            else onMensagens([]);
+          }}
+        />
+      }
       refDasMensagens={lista}
       rotuloDasMensagens="Conversa com o agente das redes"
       compositor={
@@ -152,6 +165,7 @@ export default function AgenteDoInstagram({
               placeholder="Peça ao agente das redes"
               aria-label="Mensagem para o agente das redes"
             />
+            <Ditado valor={rascunho} onChange={setRascunho} disabled={trabalhando} className="ml-1.5 min-w-0" />
             <button type="button" className={juntar(botao.primario, "ml-2 h-10 w-10 px-0")} onClick={() => void enviar(rascunho)} disabled={trabalhando || !rascunho.trim()} aria-label="Enviar">
               {trabalhando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
             </button>

@@ -14,6 +14,7 @@ import CartaoDeAcao, { OQuePossoFazer } from "@/components/agentes/CartaoDeAcao"
 import CaminhoPronto from "@/components/agentes/CaminhoPronto";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import { chamarAcaoDoAgente, type AcaoDoAgente, type PedidoDaAcao } from "@/lib/agentes/acoesDoAgente";
 import { CompositorDoAgente, MensagensDoAgente } from "@/components/sistema/PainelDoAgente";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
@@ -546,6 +547,13 @@ export default function DiretorDoEstudio({
 
   return (
     <div className={`flex min-h-0 min-w-0 flex-col ${className}`}>
+      {/* Lote B: o histórico das conversas deste trabalho (busca, nova conversa, retomar). */}
+      <div className="flex shrink-0 justify-end px-3 pt-1.5">
+        <HistoricoDoAgente
+          chave={{ clientId, agente: "diretor_arte", referenciaTipo: "estudio_trabalho", referenciaId: trabalho.id }}
+          aoTrocar={() => void queryClient.invalidateQueries({ queryKey: chave })}
+        />
+      </div>
       {/* Casca fixa de agente do sistema (PainelDoAgente): só a conversa rola; o campo fica embaixo. */}
       <MensagensDoAgente ref={listaRef} rotulo="Conversa com o diretor de arte" className="px-4 py-3">
         {estiloPedido && (

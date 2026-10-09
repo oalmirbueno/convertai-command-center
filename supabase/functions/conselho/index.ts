@@ -39,6 +39,7 @@ import { erroQueSobe, registrarFalha } from "../_shared/falha-registrada.ts";
 // Frente SPP (30/09): o método da casa (superpoderes) nos especialistas e na síntese do conselho.
 import { superpoderesPara } from "../_shared/superpoderes.ts";
 import { gravarTroca } from "../_shared/conversa-das-mesas.ts";
+import { fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import { MODOS, modoDe, type ModoDoConselho } from "./modulos/conselho-presets.ts";
 import { arquivarElenco, ataEmPdf, type CtxDoConselho, elencos, pautaComAnexos, salvarElenco } from "./extras.ts";
 // Frente SYNC: a decisão do dono entra no cérebro (todo agente lê) e a conversa do conselho aprende como as mesas.
@@ -563,24 +564,34 @@ async function perguntar(ch: Chamador, corpo: Record<string, unknown>) {
   // Frente SYNC: o conselho obedece as regras ensinadas (as dele e as que valem em todas as mesas). Resposta em texto: sem apelidos.
   const regras = await regrasDaMesa(servico(), { clientId: sessao.client_id, mesa: "conselho", marcaId: sessao.marca_id });
   const blocoDasRegras = regras.bloco ? `\n\n${regras.bloco.replace(/\nQuando uma regra mudar[^\n]*$/, "")}` : "";
+  // N\u00facleo comum das Mesas: o Jev escolhe as leituras do OS antes do modelo (nunca lan\u00e7a; cobrado na mesma tarefa).
+  const referenciaDoUso = { tipo: "conselho_fala", id: fala.id };
+  const cobrarDoNucleo = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId: sessao.client_id, tarefa: TAREFA, referencia: referenciaDoUso, criadoPor: ch.userId });
+  const ultimaDaConversa = falas.filter((f) => f.etapa === "conversa" && f.status === "feita").pop();
+  const previas = await prepararNucleo(servico(), { clientId: sessao.client_id, pedido: pergunta, agente: AGENTE, ultimaResposta: ultimaDaConversa ? String(ultimaDaConversa.texto || "") : null, cobrar: cobrarDoNucleo });
   try {
     const r = await chamarTexto({
-      clientId: sessao.client_id, tarefa: TAREFA, agente: AGENTE, modeloId, sistema: p.sistema + blocoDasRegras, mensagens: [{ papel: "usuario", conteudo: p.mensagem }],
-      raciocinio: raciocinioPara(modelos.get(modeloId)), referencia: { tipo: "conselho_fala", id: fala.id }, criadoPor: ch.userId,
+      clientId: sessao.client_id, tarefa: TAREFA, agente: AGENTE, modeloId,
+      sistema: `${p.sistema}${blocoDasRegras}\n\n${INSTRUCAO_DO_NUCLEO_DAS_MESAS}${previas.bloco ? `\n\n${previas.bloco}` : ""}`,
+      mensagens: [{ papel: "usuario", conteudo: p.mensagem }],
+      raciocinio: raciocinioPara(modelos.get(modeloId)), referencia: referenciaDoUso, criadoPor: ch.userId,
       metodo: await superpoderesPara(servico(), { agente: "conselho.especialista", momento: "revisar" }),
     });
+    // N\u00facleo: quadros conferidos contra as leituras e "pe\u00e7a ao Hermes ..." encaminhado (antes de gravar na sess\u00e3o e na conversa).
+    const bruto = r.texto.replace(/\u2014|\u2013/g, ",").slice(0, 9000);
+    const resposta = (await fecharNucleo(servico(), bruto, previas, { clientId: sessao.client_id, agente: AGENTE, pedido: pergunta, userId: ch.userId, cobrar: cobrarDoNucleo })).texto || bruto;
     const agora = new Date().toISOString();
     const { data: feita, error: e2 } = await servico().from("conselho_falas").update({
-      status: "feita", texto: r.texto.replace(/\u2014|\u2013/g, ",").slice(0, 6000), conteudo: { resposta: r.texto.slice(0, 6000) }, custo_usd: r.custoUsd, uso_id: r.usoId, concluido_em: agora, atualizado_em: agora,
+      status: "feita", texto: resposta, conteudo: { resposta }, custo_usd: r.custoUsd, uso_id: r.usoId, concluido_em: agora, atualizado_em: agora,
     }).eq("id", fala.id).select(CAMPOS_DA_FALA).single();
     if (e2) registrarFalha("conselho: resposta não gravada", e2, { fala_id: fala.id });
     const { error: e3 } = await servico().from("conselho_sessoes").update({ custo_usd: Math.round((sessao.custo_usd + r.custoUsd) * 1e6) / 1e6, atualizado_em: agora }).eq("id", sessao.id);
     if (e3) registrarFalha("conselho: custo da conversa não somado", e3, { sessao_id: sessao.id });
     // Frente SYNC: o que a pergunta ensina vira regra (o Jev decide se vale para sempre), como nas mesas.
     const aprendido = await aprenderDoPedido(servico(), { clientId: sessao.client_id, mesa: "conselho", pedido: pergunta, marcaId: sessao.marca_id, userId: ch.userId, ultimaResposta: r.texto });
-    const avisoDaConversa = await gravarNaConversa(ch, sessao, pergunta, especialista, r.texto, r.usoId || null, aprendido ? [aprendido] : []);
+    const avisoDaConversa = await gravarNaConversa(ch, sessao, pergunta, especialista, resposta, r.usoId || null, aprendido ? [aprendido] : []);
     return json({
-      fala: feita ? falaDaLinha(feita as Record<string, unknown>) : { ...fala, status: "feita", texto: r.texto },
+      fala: feita ? falaDaLinha(feita as Record<string, unknown>) : { ...fala, status: "feita", texto: resposta },
       aprendido,
       custo_usd: r.custoUsd,
       saldo_usd: r.saldoUsd,
@@ -603,7 +614,9 @@ async function perguntar(ch: Chamador, corpo: Record<string, unknown>) {
 async function gravarNaConversa(ch: Chamador, sessao: SessaoDoConselho, pergunta: string, especialista: string, resposta: string, usoId: string | null, anexos: unknown[] = []): Promise<string | null> {
   try {
     const db = servico();
-    const { data: achada, error } = await db.from("agente_conversas").select("id").eq("client_id", sessao.client_id).eq("agente", AGENTE).eq("referencia_tipo", "conselho_sessao").eq("referencia_id", sessao.id).limit(1);
+    // Histórico: a conversa arquivada não recebe a troca nova (a sessão abre outra conversa).
+    const { data: achada, error } = await db.from("agente_conversas").select("id").eq("client_id", sessao.client_id).eq("agente", AGENTE).eq("referencia_tipo", "conselho_sessao").eq("referencia_id", sessao.id)
+      .is("arquivada_em", null).order("criado_em", { ascending: false }).limit(1);
     if (error) throw error;
     let conversaId = achada && achada[0] ? String((achada[0] as { id: string }).id) : "";
     if (!conversaId) {

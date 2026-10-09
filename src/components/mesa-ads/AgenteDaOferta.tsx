@@ -2,6 +2,7 @@ import SugestoesDoAgente from "@/components/agentes/SugestoesDoAgente";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { esquecerRegraAprendida, guardarRegraAprendida } from "@/lib/agentes/aprendizadoDoLancador";
 import { MessageSquarePlus, Sparkles, X } from "lucide-react";
@@ -184,6 +185,16 @@ export default function AgenteDaOferta({
       icone={<Sparkles className="h-4 w-4" />}
       acoes={
         <>
+          <HistoricoDoAgente
+            chave={{ clientId, agente: "estrategista_ads", referenciaTipo: "ads_oferta", referenciaId: clientId }}
+            aoTrocar={(ativa) => {
+              if (ativa === undefined) return;
+              setConversaId(ativa);
+              setRecomecou(!ativa);
+              guardarConversa(clientId, ativa);
+              void queryClient.invalidateQueries({ queryKey: ["mesa", "ads", "conversa-oferta", clientId] });
+            }}
+          />
           {atual && (
             <button type="button" onClick={novaConversa} disabled={!!envio} className={juntar(botao.icone, "disabled:opacity-50")} aria-label="Começar uma conversa nova" title="Começar uma conversa nova">
               <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />

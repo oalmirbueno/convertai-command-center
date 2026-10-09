@@ -340,6 +340,9 @@ export default function ConvocarConselho({
     }
   };
 
+  // Busca simples nas sessões anteriores (tema e pergunta), sem ir ao banco.
+  const [buscaDasSessoes, setBuscaDasSessoes] = useState("");
+
   if (catalogoDoConselho.isLoading) return <Carregando forma="aba" rotulo="Abrindo o conselho" />;
   if (catalogoDoConselho.isError || !cat) {
     return <EstadoDeErro titulo="O conselho não abriu." descricao={textoDoErro(catalogoDoConselho.error)} acao={<button type="button" className={botao.secundario} onClick={() => void catalogoDoConselho.refetch()}>Tentar de novo</button>} />;
@@ -347,6 +350,10 @@ export default function ConvocarConselho({
 
   const anteriores = (sessoes.data || []) as SessaoDoConselho[];
   const emDebate = anteriores.filter((s) => sessaoAtiva(s));
+  const termoDasSessoes = buscaDasSessoes.trim().toLowerCase();
+  const sessoesVisiveis = termoDasSessoes
+    ? anteriores.filter((s) => `${s.tema || ""} ${s.pergunta || ""}`.toLowerCase().indexOf(termoDasSessoes) >= 0)
+    : anteriores;
   const listaDeElencos = elencos.data || [];
 
   // Rodapé: o que falta, e o custo junto (quando há).
@@ -389,8 +396,19 @@ export default function ConvocarConselho({
 
       {anteriores.length > 0 && (
         <Secao titulo="Sessões" descricao={`${anteriores.length} deste cliente`} recolher={`conselho:sessoes:${clientId}`} recolhidaDeInicio>
+          {anteriores.length > 3 && (
+            <input
+              className={juntar(campo, "mb-2 h-8 text-[12px]")}
+              value={buscaDasSessoes}
+              onChange={(e) => setBuscaDasSessoes(e.target.value)}
+              placeholder="Buscar nas sessões"
+              aria-label="Buscar nas sessões anteriores do conselho"
+              data-busca-das-sessoes=""
+            />
+          )}
+          {termoDasSessoes && !sessoesVisiveis.length && <p className={texto.auxiliar}>Nenhuma sessão com esse termo.</p>}
           <ul className={juntar(lista.aberta, lista.divisoria)}>
-            {anteriores.map((s) => (
+            {sessoesVisiveis.map((s) => (
               <li key={s.id}>
                 <button type="button" className={juntar(lista.linha, "w-full text-left")} onClick={() => onAbrir(s.id)} data-sessao-anterior={s.id}>
                   <span className="min-w-0 flex-1">

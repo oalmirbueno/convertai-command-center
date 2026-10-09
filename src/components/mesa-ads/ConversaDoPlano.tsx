@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import AprendizadoDoAgente from "@/components/agentes/AprendizadoDoAgente";
 import { esquecerRegraAprendida, guardarRegraAprendida } from "@/lib/agentes/aprendizadoDoLancador";
 import { Sparkles } from "lucide-react";
@@ -71,7 +72,7 @@ export default function ConversaDoPlano({ plano, className = "" }: { plano: Plan
     setEnvio({ mensagem, desde: Date.now() });
     setTexto("");
     try {
-      const data = await chamarAds<any>("plano_conversar", { plano_id: plano.id, mensagem, anexos: caminhos.length ? caminhos : undefined });
+      const data = await chamarAds<any>("plano_conversar", { plano_id: plano.id, mensagem, anexos: caminhos.length ? caminhos : undefined, conversa_id: conversaId || undefined });
       if (data && data.conversa_id) setConversaId(String(data.conversa_id));
       await queryClient.invalidateQueries({ queryKey: chavesAds.planos(clientId) });
       await queryClient.invalidateQueries({ queryKey: chavesAds.conversa(plano.id) });
@@ -93,9 +94,19 @@ export default function ConversaDoPlano({ plano, className = "" }: { plano: Plan
       descricao={plano.nome}
       icone={<Sparkles className="h-4 w-4" />}
       acoes={
-        <AjudaRecolhida rotulo="Como ajustar o plano conversando">
-          Peça outro ângulo, uma prova diferente, menos risco de política ou outra janela. O plano muda na tela quando a resposta chega.
-        </AjudaRecolhida>
+        <>
+          <HistoricoDoAgente
+            chave={{ clientId, agente: "estrategista_ads", referenciaTipo: "ads_plano", referenciaId: plano.id }}
+            aoTrocar={(ativa) => {
+              if (ativa === undefined) return;
+              setConversaId(ativa);
+              void queryClient.invalidateQueries({ queryKey: chavesAds.conversa(plano.id) });
+            }}
+          />
+          <AjudaRecolhida rotulo="Como ajustar o plano conversando">
+            Peça outro ângulo, uma prova diferente, menos risco de política ou outra janela. O plano muda na tela quando a resposta chega.
+          </AjudaRecolhida>
+        </>
       }
       refDasMensagens={listaRef}
       rotuloDasMensagens="Conversa com o estrategista de ads"

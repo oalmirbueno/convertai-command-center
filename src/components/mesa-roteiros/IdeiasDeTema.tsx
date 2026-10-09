@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ExternalLink, Globe, Lightbulb, Loader2, Send, Shuffle, Undo2, Wand2 } from "lucide-react";
 import { EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
+import { Ditado } from "@/components/mesa/Ditado";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { chamarFuncao, padraoPara, usd } from "@/lib/mesa/api";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
@@ -8,6 +9,7 @@ import CampoDoAgente, { focarNoFim } from "@/components/sistema/CampoDoAgente";
 import { BotaoNovaConversa, useNovaConversa } from "@/components/sistema/NovaConversa";
 import { botao, campo, conversa, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { modoDoTipo } from "../../../supabase/functions/_shared/roteiro-modelo";
 import {
@@ -120,6 +122,13 @@ export default function IdeiasDeTema({
   const [cartoes, setCartoes] = useState<Record<string, "feito" | "cancelado">>({});
   const campoRef = useRef<HTMLTextAreaElement | null>(null);
   const lista = useRef<HTMLDivElement | null>(null);
+  // Histórico das conversas: trocar (nova, continuar uma antiga) relê a conversa ativa.
+  const [releitura, setReleitura] = useState(0);
+  const aoTrocarDeConversa = () => {
+    setConversaId(null);
+    setNova(false);
+    setReleitura((n) => n + 1);
+  };
 
   const novaConversa = useNovaConversa<MensagemDasIdeias>({
     chave: `${clientId}:ideias`,
@@ -157,7 +166,7 @@ export default function IdeiasDeTema({
       vivo = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId]);
+  }, [clientId, releitura]);
 
   useEffect(() => {
     if (lista.current) lista.current.scrollTop = lista.current.scrollHeight;
@@ -227,7 +236,12 @@ export default function IdeiasDeTema({
       divisoria={false}
       resumo={todas.length ? `${todas.length} ideias` : undefined}
       ajuda="Sem tema? Converse. O agente lê o contexto da marca, os roteiros e posts do cliente, as referências e o que está em alta (web e Instagram), e traz temas que respondem a pergunta real do cliente. Peça mais assim, misture duas, mais polêmico ou foque num assunto. Usar este tema preenche o formulário abaixo; depois é só gerar."
-      acoes={mensagens.length > 0 ? <BotaoNovaConversa onClick={novaConversa} desativado={enviando} /> : undefined}
+      acoes={
+        <>
+          <HistoricoDoAgente chave={{ clientId, agente: "estrategista", referenciaTipo: "mesa_roteiros_ideias", referenciaId: null }} aoTrocar={aoTrocarDeConversa} />
+          {mensagens.length > 0 && <BotaoNovaConversa onClick={novaConversa} desativado={enviando} />}
+        </>
+      }
       data-ideias-de-tema=""
     >
       <div className="min-w-0 space-y-3">
@@ -337,6 +351,7 @@ export default function IdeiasDeTema({
           <div className="mr-2 min-w-0 flex-1 truncate">
             <EstimativaInline partes={modelo ? [{ modeloId: modelo.id, tipo: "texto", tokensEntrada: TAMANHO_DAS_IDEIAS.entrada, tokensSaida: TAMANHO_DAS_IDEIAS.saida, buscasWeb: web ? BUSCAS_NAS_IDEIAS : 0 }] : null} />
           </div>
+          <Ditado valor={rascunho} onChange={setRascunho} disabled={enviando} className="mr-1.5 min-w-0" />
           <button type="button" className={juntar(botao.primario, "h-9")} onClick={() => void enviar()} disabled={enviando} aria-label="Pedir ideias ao agente">
             {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </button>

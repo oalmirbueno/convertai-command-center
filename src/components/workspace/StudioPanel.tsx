@@ -11,7 +11,7 @@ import {
   Trash2, GitBranch, ExternalLink, Copy, Wand2, FileText, Link2, MessageSquare,
   Bot, Send, Loader2, History, Paperclip, File as FileIcon, Folder as FolderIcon,
   Columns3, Pencil, GripVertical, Settings, Check, Minimize2, Maximize2, ClipboardPaste,
-  Download, Radio, Zap, ArrowRight, ArrowLeft, Globe2, ChevronRight, RefreshCw,
+  Download, Radio, Zap, ArrowRight, ArrowLeft, Globe2, ChevronRight, RefreshCw, Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,9 @@ import {
 } from "@/components/sistema";
 import { CabecalhoDoAgente, MensagensDoAgente, CompositorDoAgente } from "@/components/sistema/PainelDoAgente";
 import { CaminhoDoTexto } from "@/components/agentes/CaminhoPronto";
+// Núcleo comum dos agentes (09/10): a resposta gravada sai em balões, com quadros conferidos e fontes clicáveis.
+import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import { Ditado } from "@/components/mesa/Ditado";
 import { NotesPreview } from "./NotesPreview";
 
 
@@ -2158,6 +2161,31 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
     setActiveId(preferred);
   }
 
+  // Busca nas conversas (09/10): o título filtra na hora; com 3+ letras, o texto das mensagens também
+  // (uma leitura em workspace_agent_messages só das conversas desta pessoa, com espera curta).
+  const [buscaNasConversas, setBuscaNasConversas] = useState("");
+  const [achadosNoTexto, setAchadosNoTexto] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    const termo = buscaNasConversas.trim();
+    if (termo.length < 3 || !threads.length) { setAchadosNoTexto(new Set()); return; }
+    let vivo = true;
+    const espera = window.setTimeout(async () => {
+      const { data, error } = await supabase.from("workspace_agent_messages")
+        .select("thread_id")
+        .in("thread_id", threads.map((t) => t.id))
+        .ilike("content", `%${termo.replace(/[%_]/g, " ")}%`)
+        .limit(300);
+      if (!vivo || error) return;
+      setAchadosNoTexto(new Set(((data || []) as { thread_id: string }[]).map((r) => r.thread_id)));
+    }, 300);
+    return () => { vivo = false; window.clearTimeout(espera); };
+  }, [buscaNasConversas, threads]);
+  const threadsVisiveis = useMemo(() => {
+    const termo = buscaNasConversas.trim().toLowerCase();
+    if (termo.length < 2) return threads;
+    return threads.filter((t) => (t.title || "").toLowerCase().includes(termo) || achadosNoTexto.has(t.id));
+  }, [threads, buscaNasConversas, achadosNoTexto]);
+
   // Persiste a última thread ativa por (escopo, cliente, pasta) para restaurar ao reabrir
   useEffect(() => {
     if (!activeId) return;
@@ -2184,6 +2212,16 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
     restaurarRolagem.current = id;
     setMsgs((data as AgentMsg[]) || []);
     setCarregadoPara(id);
+  }
+  /** Depois do stream: troca o texto cru pelo gravado (conferido), sem mexer na rolagem nem mostrar erro. */
+  async function relerConversaGravada(id: string) {
+    const { data, error } = await supabase.from("workspace_agent_messages")
+      .select("id,role,content,created_at,meta").eq("thread_id", id).order("created_at", { ascending: true });
+    if (error || !data || conversaAtiva.current !== id) return;
+    const lista = data as AgentMsg[];
+    // Só troca quando a resposta já está gravada (senão fica a da tela).
+    if (!lista.length || lista[lista.length - 1].role !== "assistant") return;
+    setMsgs(lista);
   }
 
   // Rolagem com memória por conversa: ao abrir uma conversa volta onde parou;
@@ -2677,6 +2715,9 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
       }
       setStreamBuf("");
       void loadThreads();
+      // Núcleo comum: o servidor grava a versão conferida (quadros que bateram com o OS, pedido ao Hermes);
+      // o stream mostrou o texto cru, então a conversa relê o que ficou gravado.
+      if (naMesmaConversa()) void relerConversaGravada(tid);
     } catch (e: any) {
       // Frente AG3: nada some. O que o agente já tinha escrito fica na conversa, e o texto e os anexos
       // voltam para o campo quando nada chegou (dá para mandar de novo sem redigitar).
@@ -2867,15 +2908,29 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
               <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
-          <GroupedThreadList
-            threads={threads}
+          <div className="shrink-0 border-b border-border p-1.5">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <input
+                value={buscaNasConversas}
+                onChange={(e) => setBuscaNasConversas(e.target.value)}
+                placeholder="Buscar conversas"
+                aria-label="Buscar nas conversas (título e mensagens)"
+                className={cn(campo, "h-7 pl-6 text-[12px]")}
+              />
+            </label>
+          </div>
+          {buscaNasConversas.trim().length >= 2 && threadsVisiveis.length === 0 ? (
+            <p className="px-3 py-4 text-center text-[12px] text-muted-foreground">Nada encontrado.</p>
+          ) : <GroupedThreadList
+            threads={threadsVisiveis}
             activeId={activeId}
             currentClientId={clientId ?? null}
             currentFolderPath={folderPath ?? null}
             clientNameMap={clientNameMap}
             onSelect={(id) => { setActiveId(id); if (isMobile) setSidebarOpen(false); }}
             onDelete={(id) => deleteThread(id)}
-          />
+          />}
         </aside>
       )}
 
@@ -3010,24 +3065,17 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                 </div>
               </div>
             ) : (
-              <article key={m.id} className={classeDaResposta}>
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm, remarkBreaks]}
-                  components={{
-                    a: ({ href, children, ...rest }) => {
-                      const url = String(href || "");
-                      if (!/^https?:\/\//i.test(url)) return <a href={url} {...rest}>{children}</a>;
-                      return (
-                        <a
-                          href={url}
-                          onClick={(e) => { e.preventDefault(); setLinkPreview(url); }}
-                          className="text-primary hover:underline cursor-pointer"
-                          title="Abrir dentro do chat"
-                        >{children}</a>
-                      );
-                    },
-                  }}
-                >{m.content}</ReactMarkdown>
+              <article
+                key={m.id}
+                className={classeDaResposta}
+                // Link externo da resposta continua abrindo dentro do chat (como no markdown de antes).
+                onClickCapture={(e) => {
+                  const a = (e.target as HTMLElement).closest("a");
+                  const url = a ? String(a.getAttribute("href") || "") : "";
+                  if (a && /^https?:\/\//i.test(url)) { e.preventDefault(); setLinkPreview(url); }
+                }}
+              >
+                <TextoDoAgente texto={m.content} clientId={clientId ?? null} />
                 {/* Frente AG (27/09): a área que a resposta citou vira o botão "Abrir" com o cliente. */}
                 <CaminhoDoTexto texto={m.content} clientId={clientId} />
                 {/* Frente AG3: o que o agente fez ou propõe no Workspace (Confirmar, Parar, Desfazer, Ir para). */}
@@ -3215,6 +3263,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                     </button>
                   </PopoverContent>
                 </Popover>
+                <Ditado valor={input} onChange={setInput} disabled={streaming} className="ml-1" />
                 <Button size="sm" onClick={() => send()} disabled={streaming || !input.trim()} aria-label="Enviar" className="ml-auto h-8 shrink-0 px-3">
                   {streaming ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
                 </Button>

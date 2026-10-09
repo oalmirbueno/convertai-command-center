@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
+import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
+import { Ditado } from "@/components/mesa/Ditado";
 import { CaminhoDaMensagem } from "@/components/agentes/CaminhoPronto";
 import { Check, ImagePlus, Loader2, Palette, Send, ThumbsDown, ThumbsUp, Trash2, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -144,6 +146,13 @@ export default function PainelDoEstilo({ modeloImagemId, trabalhoIds = [] }: { m
   // abrir "Nova conversa", a tela manda.
   const carregou = useRef<"nada" | "cache" | "banco">("nada");
   const mexeu = useRef(false);
+  // Lote B: o histórico trocou a conversa ativa (nova ou retomada): relê do banco como na abertura.
+  const aoTrocarConversa = () => {
+    mexeu.current = false;
+    carregou.current = "nada";
+    setNova(false);
+    void consulta.refetch();
+  };
 
   useEffect(() => {
     if (!estado || !estado.mensagens || carregou.current === "banco") return;
@@ -354,6 +363,7 @@ export default function PainelDoEstilo({ modeloImagemId, trabalhoIds = [] }: { m
           className="mr-2 min-w-0 flex-1 text-[13px]"
           aria-label="Mensagem ao agente de estilo"
         />
+        <Ditado valor={textoMsg} onChange={setTextoMsg} disabled={enviando} className="mb-1 mr-1.5 min-w-0" />
         <button type="button" className={juntar(botao.primario, "h-10 w-10 px-0")} onClick={() => void enviar()} disabled={enviando || (!textoMsg.trim() && !anexos.length)} aria-label="Enviar ao agente de estilo">
           {enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
         </button>
@@ -767,20 +777,26 @@ export default function PainelDoEstilo({ modeloImagemId, trabalhoIds = [] }: { m
         descricao={descricao}
         icone={<Palette className="h-4 w-4" />}
         acoes={
-          aba === "conversa" && mensagens.length > 0 ? (
-            <button
-              type="button"
-              className={botao.barra}
-              onClick={() => {
-                mexeu.current = true;
-                setMensagens([]);
-                setConversaId(null);
-                setNova(true);
-              }}
-            >
-              Nova conversa
-            </button>
-          ) : undefined
+          <>
+            <HistoricoDoAgente
+              chave={clientId ? { clientId, agente: "diretor_arte", referenciaTipo: "estilo_do_cliente", referenciaId: marcaId ?? null } : null}
+              aoTrocar={aoTrocarConversa}
+            />
+            {aba === "conversa" && mensagens.length > 0 ? (
+              <button
+                type="button"
+                className={botao.barra}
+                onClick={() => {
+                  mexeu.current = true;
+                  setMensagens([]);
+                  setConversaId(null);
+                  setNova(true);
+                }}
+              >
+                Nova conversa
+              </button>
+            ) : null}
+          </>
         }
         topo={
           <SeletorCompacto
