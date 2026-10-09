@@ -5,7 +5,7 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: () => ({}),
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn(), message: vi.fn() } }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ profile: { role: "admin" }, user: { id: "u-1" } }) }));
 
-import { calcularContagens, pedeContagemPorPalavras, quadroDasContagens, blocoDasContagens } from "../../supabase/functions/workspace-agent/contagens-do-workspace";
+import { calcularContagens, pedeContagemPorPalavras, quadroDasContagens, blocoDasContagens, semNumerosDoModelo } from "../../supabase/functions/workspace-agent/contagens-do-workspace";
 import { barradaPeloManter, conferirManter, operacoesDoManter, pedeManterSomente, selecionarParaManter } from "../../supabase/functions/editor-video/modulos/manter-somente";
 import { NOMES_DAS_FERRAMENTAS, sistemaDoAgente } from "../../supabase/functions/editor-video/ferramentas";
 import { projetoDosTakes, type ProjetoDeEdicao } from "../../supabase/functions/_shared/projeto-de-edicao";
@@ -73,6 +73,8 @@ describe("Workspace: contagem e ranking calculados pelo código", () => {
     expect(q).toContain("| Referencias de Design | pasta do Workspace | 108 |");
     expect(q).toContain("| materiais | seção de Arquivos | 38 |");
     expect(q).toContain('Na raiz: 8 itens (4 pastas do Workspace, 4 seções de Arquivos). Com mais itens: "Referencias de Design" (108).');
+    expect(q).toContain('Pastas do Workspace: 4. Maior: "Referencias de Design" (108). Menor: "Estáticos" (0).');
+    expect(q).toContain('Seções de Arquivos: 4. Maior: "materiais" (38). Menor: "relatorios" (2).');
   });
 
   it("o modelo recebe o quadro como fonte de verdade e, quando o quadro já abriu a resposta, não escreve outro número", () => {
@@ -82,6 +84,12 @@ describe("Workspace: contagem e ranking calculados pelo código", () => {
     expect(b).toContain("Pasta do Workspace e seção de Arquivos são coisas diferentes");
     expect(b).toContain("JÁ MOSTROU este quadro");
     expect(blocoDasContagens(calcularContagens(nos, arquivos, "AcelerIQ"), false)).not.toContain("JÁ MOSTROU");
+  });
+
+  it("depois do quadro, frase do modelo com número sai (o caso real: '8 pastas' quando eram 4 pastas e 4 seções)", () => {
+    expect(semNumerosDoModelo("Entendi.\n\n8 pastas. A com mais itens é “Referencias de Design” (108).")).toBe("Entendi.");
+    expect(semNumerosDoModelo("A maior concentra as referências visuais. Quer que eu organize as subpastas?")).toBe("A maior concentra as referências visuais. Quer que eu organize as subpastas?");
+    expect(semNumerosDoModelo("Foram 3 itens.")).toBe("");
   });
 
   it("empate e leitura incompleta ficam escritos; as palavras de contagem valem sem o Jev", () => {
@@ -158,6 +166,24 @@ describe("Editor: manter só o vídeo escolhido", () => {
     const v = trilhaPrincipal(depois)!.clipes;
     expect(v.map((c) => [depois.fontes[c.fonte as string].nome, c.inicio_s])).toEqual([["take_t02.mp4", 0]]);
     expect(depois.trilhas.find((t) => t.tipo === "legenda")!.clipes.map((c) => [c.id, c.inicio_s])).toEqual([["l3", 28]]);
+  });
+
+  it("dado real: vizinhos sobrepostos em 1 quadro (as skills de corte deixam assim) não travam o puxar para o zero", () => {
+    const p0 = projetoDeDoisVideos();
+    const v = trilhaPrincipal(p0)!;
+    const fonteT02 = v.clipes[1].fonte as string;
+    // O t02 vira dois clipes que se sobrepõem em 0,02 s (como v59/v25 no projeto 858e09b3).
+    const p = aplicarOperacoes(p0, [
+      { op: "remover", clipe: v.clipes[1].id },
+      { op: "inserir", trilha: v.id, clipe: { id: "x1", fonte: fonteT02, inicio_s: 72, entrada_s: 0, saida_s: 40 } },
+    ]);
+    const comSobreposicao: ProjetoDeEdicao = { ...p, trilhas: p.trilhas.map((t) => (t.id !== v.id ? t : { ...t, clipes: t.clipes.concat([{ ...t.clipes.find((c) => c.id === "x1")!, id: "x2", inicio_s: 111.96, entrada_s: 40, saida_s: 76 }]) })) };
+    const s = selecionarParaManter(comSobreposicao.trilhas, { fonte: fonteT02 });
+    const ops = operacoesDoManter(s);
+    expect(ops.filter((o) => o.op === "deslocar_trilha").map((o) => (o as { delta_s: number }).delta_s)).toEqual([-72, -72]);
+    const depois = aplicarOperacoes(comSobreposicao, ops as never);
+    expect(conferirManter(depois.trilhas, s)).toBeNull();
+    expect(trilhaPrincipal(depois)!.clipes.map((c) => [c.id, c.inicio_s])).toEqual([["x1", 0], ["x2", 39.96]]);
   });
 
   it("limite que corta um clipe de vídeo ao meio: nada muda e volta a pergunta com o clipe e os tempos", () => {

@@ -104,6 +104,16 @@ export function quadroDasContagens(c: Contagens): string {
     "",
     `Na raiz: ${plural(c.raiz.length, "item", "itens")} (${plural(pastas, "pasta do Workspace", "pastas do Workspace")}, ${plural(secoes, "seção de Arquivos", "seções de Arquivos")}${soltos ? `, ${plural(soltos, "arquivo solto", "arquivos soltos")}` : ""}).${maiores.length ? ` Com mais itens: ${maiores.join(" e ")} (${maior}).` : ""}`,
   ];
+  // Maior e menor de cada tipo (o código afirma; o modelo não escreve número depois do quadro).
+  const extremos = (tipo: ItemDaRaiz["tipo"], rotulo: string) => {
+    const l = comItens.filter((r) => r.tipo === tipo);
+    if (!l.length) return null;
+    const max = l[0].itens;
+    const min = l[l.length - 1].itens;
+    const nomes = (v: number) => l.filter((r) => r.itens === v).map((r) => `"${r.nome}"`).join(" e ");
+    return `${rotulo}: ${l.length}. Maior: ${nomes(max)} (${max}). Menor: ${nomes(min)} (${min}).`;
+  };
+  [extremos("pasta", "Pastas do Workspace"), extremos("secao", "Seções de Arquivos")].forEach((x) => x && partes.push(x));
   if (!c.completo) partes.push("Aviso: a leitura parou no limite de páginas; os números podem estar abaixo do real.");
   return partes.join("\n");
 }
@@ -142,6 +152,21 @@ export async function lerContagens(admin: SupabaseClient, clientId: string, clie
     registrarFalha("workspace-agent: contagens do workspace não calculadas", e, { client_id: clientId });
     return null;
   }
+}
+
+/**
+ * Com o quadro já na resposta, número de contagem é só o do quadro: as frases do modelo que trazem
+ * número saem da versão gravada (no teste real de 09/10 ele escreveu "8 pastas" quando eram 4 pastas
+ * e 4 seções). Sobrando nada, fica só o quadro.
+ */
+export function semNumerosDoModelo(texto: string): string {
+  return String(texto || "")
+    .split("\n")
+    .map((linha) => linha.replace(/([.!?])\s+/g, "$1\u0001").split("\u0001").filter((f) => !/\d/.test(f)).join(" ").trim())
+    .filter((linha, i, l) => linha || (i > 0 && l[i - 1]))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /** Reserva sem Jev: as palavras de contagem e ranking. */

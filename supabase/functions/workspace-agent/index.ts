@@ -45,7 +45,7 @@ import { jevPerguntar, probabilidadeNoul } from "../_shared/jev.ts";
 import { clienteInternoDaAgencia, encaminharAoHermes, fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, type NucleoPreparado, pedeAoHermes, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import { cobrarJev } from "../_shared/ia-motor.ts";
 // Lote B (09/10): quantidade, total e ranking do Workspace calculados pelo código (o modelo só comenta).
-import { blocoDasContagens, type Contagens, lerContagens, pedeContagem, quadroDasContagens } from "./contagens-do-workspace.ts";
+import { blocoDasContagens, type Contagens, lerContagens, pedeContagem, quadroDasContagens, semNumerosDoModelo } from "./contagens-do-workspace.ts";
 
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
 
@@ -931,6 +931,11 @@ Regras:
                 if (delta) { full += delta; controller.enqueue(encoder.encode(delta)); }
               } catch { /* ignore parse */ }
             }
+          }
+          // Lote B (09/10): com o quadro calculado na resposta, número de contagem é só o dele (a tela relê a versão gravada).
+          if (quadroInicial && full.indexOf(quadroInicial) === 0) {
+            const doModelo = semNumerosDoModelo(full.slice(quadroInicial.length));
+            full = `${quadroInicial}${doModelo}`.trim();
           }
           // Frente SPP: o stream não executa nada; "pronto" ou "salvei" ganha o aviso no fim (sem refazer).
           if (full.trim()) {

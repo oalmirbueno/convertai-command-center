@@ -68,6 +68,12 @@ export type Operacao =
   | { op: "inserir"; trilha: string; clipe: Partial<ClipeDoProjeto> & { inicio_s: number; entrada_s: number; saida_s: number }; empurrar?: boolean }
   | { op: "propriedades"; clipe: string; campos: CamposDoClipe }
   | { op: "ondular"; trilha: string }
+  /**
+   * Lote B (09/10): a trilha inteira anda junta (delta_s negativo puxa para o começo), sem mexer no
+   * espaço entre os clipes nem na sobreposição de 1 quadro que as skills de corte deixam. Base do
+   * "manter só o vídeo X" quando o que fica não começa no zero.
+   */
+  | { op: "deslocar_trilha"; trilha: string; delta_s: number }
   | { op: "reordenar"; trilha: string; ordem: string[] }
   | { op: "limpar_trilha"; trilha: string }
   | { op: "trilha_nova"; tipo: TipoDeTrilha }
@@ -455,6 +461,14 @@ export function aplicarOperacao(p: ProjetoDeEdicao, o: Operacao): ProjetoDeEdica
       return propriedades(p, o);
     case "ondular":
       return ondular(p, o);
+    case "deslocar_trilha": {
+      const ti = exigirTrilha(p, o.trilha);
+      const t = p.trilhas[ti];
+      const delta = Number(o.delta_s);
+      if (!isFinite(delta)) throw new ErroDaOperacao("Deslocamento inválido.");
+      if (t.clipes.some((c) => c.inicio_s + delta < -1e-6)) throw new ErroDaOperacao("A trilha não pode começar antes do zero.");
+      return comTrilha(p, ti, { ...t, clipes: t.clipes.map((c) => ({ ...c, inicio_s: Math.max(0, noQuadro(c.inicio_s + delta, p.fps)) })) });
+    }
     case "reordenar":
       return reordenar(p, o);
     case "limpar_trilha": {

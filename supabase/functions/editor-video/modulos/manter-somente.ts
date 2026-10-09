@@ -142,15 +142,24 @@ export function selecionarParaManter(trilhas: TrilhaParaManter[], alvo: AlvoDoMa
   return r;
 }
 
-/** Operações (remover e depois puxar para o zero) na ordem segura. Só sem cruzamento e sem erro. */
-export function operacoesDoManter(s: SelecaoDoManter): Array<{ op: "remover"; clipe: string } | { op: "mover"; clipe: string; inicio_s: number }> {
+export type OperacaoDoManter = { op: "remover"; clipe: string } | { op: "deslocar_trilha"; trilha: string; delta_s: number };
+
+/**
+ * Operações: tira o que está fora e, quando o trecho não começa no zero, puxa cada trilha que ficou
+ * com clipe pelo MESMO deslocamento (legenda e vídeo seguem juntos). Trilha inteira, não clipe a clipe:
+ * no projeto real as skills de corte deixam clipes vizinhos sobrepostos em 1 quadro, e mover um por um
+ * esbarrava na trava de colisão. Só sem cruzamento e sem erro.
+ */
+export function operacoesDoManter(s: SelecaoDoManter): OperacaoDoManter[] {
   if (s.erro || s.cruzam.length) return [];
-  const ops: Array<{ op: "remover"; clipe: string } | { op: "mover"; clipe: string; inicio_s: number }> = s.remover.map((x) => ({ op: "remover" as const, clipe: x.clipe }));
-  if (s.de_s > FOLGA_DO_LIMITE_S) {
-    s.manter
-      .slice()
-      .sort((a, b) => a.inicio_s - b.inicio_s)
-      .forEach((x) => ops.push({ op: "mover", clipe: x.clipe, inicio_s: Math.max(0, x.inicio_s - s.de_s) }));
+  const ops: OperacaoDoManter[] = s.remover.map((x) => ({ op: "remover" as const, clipe: x.clipe }));
+  if (s.de_s > FOLGA_DO_LIMITE_S && s.manter.length) {
+    const inicio = Math.min(s.de_s, ...s.manter.map((x) => x.inicio_s));
+    const trilhas: string[] = [];
+    s.manter.forEach((x) => {
+      if (trilhas.indexOf(x.trilha) < 0) trilhas.push(x.trilha);
+    });
+    trilhas.forEach((t) => ops.push({ op: "deslocar_trilha", trilha: t, delta_s: -inicio }));
   }
   return ops;
 }

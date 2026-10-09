@@ -181,6 +181,7 @@ const ROTULO_DA_OPERACAO: Record<Operacao["op"], string> = {
   inserir: "Inserir",
   propriedades: "Ajustar",
   ondular: "Fechar buracos na",
+  deslocar_trilha: "Puxar",
   reordenar: "Reordenar",
   limpar_trilha: "Esvaziar",
   trilha_nova: "Nova trilha de",
@@ -245,6 +246,8 @@ export function rotuloDaOperacao(o: Operacao, p: ProjetoDeEdicao, a: Apelidos = 
     }
     case "ondular":
       return `Fechar buracos na ${trilha(o.trilha)}`;
+    case "deslocar_trilha":
+      return `Puxar ${trilha(o.trilha)} ${Math.abs(o.delta_s).toFixed(2).replace(".", ",")} s para ${o.delta_s < 0 ? "o começo" : "a frente"}`;
     case "reordenar":
       return `Reordenar ${trilha(o.trilha)}: ${o.ordem.map(nome).join(", ")}`;
     case "limpar_trilha":

@@ -1095,7 +1095,7 @@ export function resumoDoQueMudou(antes: ProjetoDeEdicao, ops: Operacao[], apelid
       inseridos++;
       return;
     }
-    if (o.op === "ondular" || o.op === "reordenar") {
+    if (o.op === "ondular" || o.op === "reordenar" || o.op === "deslocar_trilha") {
       const t = antes.trilhas.find((x) => x.id === o.trilha);
       const nome = t ? (t.nome || t.id).toLowerCase() : o.trilha;
       if (trilhas.indexOf(`${o.op}:${nome}`) < 0) trilhas.push(`${o.op}:${nome}`);
@@ -1114,7 +1114,7 @@ export function resumoDoQueMudou(antes: ProjetoDeEdicao, ops: Operacao[], apelid
   const frases = Object.keys(porVerbo).map((v) => `${v} ${porVerbo[v].join(", ")}.`);
   trilhas.forEach((x) => {
     const [op, nome] = x.split(":");
-    frases.push(op === "ondular" ? `Encostei a ${nome}.` : `Reordenei a ${nome}.`);
+    frases.push(op === "ondular" ? `Encostei a ${nome}.` : op === "deslocar_trilha" ? `Puxei a ${nome} para o começo.` : `Reordenei a ${nome}.`);
   });
   // soClipes (02/10): o resto (legendas, peças, cor) quem conta é o relatório do antes e depois.
   if (inseridos && (!opcoes.soClipes || inseridos <= 2)) frases.push(`Pus ${inseridos} ${inseridos === 1 ? "clipe novo" : "clipes novos"}.`);

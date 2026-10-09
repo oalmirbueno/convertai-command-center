@@ -22,6 +22,7 @@ const ROTULO_CURTO: Partial<Record<Operacao["op"], string>> = {
   inserir: "Inserir",
   propriedades: "Ajustar",
   ondular: "Encostar",
+  deslocar_trilha: "Puxar",
   reordenar: "Ordem",
   limpar_trilha: "Esvaziar",
   trilha_nova: "Trilha",
