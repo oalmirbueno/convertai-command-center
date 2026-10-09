@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { comandoDaAprovacao } from "@/lib/execucaoApresentacao";
@@ -129,6 +129,13 @@ export default function AprovacoesExplicadas({
   });
 
   const aprovacoes = todasAprovacoes.filter(a => (!filtroVinculos || filtroVinculos.includes(a.task_link_id || "")) && (!filtroCliente || a.id === destaqueId || (a.client?.company_name || a.client?.full_name) === filtroCliente)).sort((a, b) => (a.client?.company_name || a.client?.full_name || "Operação interna").localeCompare(b.client?.company_name || b.client?.full_name || "Operação interna"));
+  // 09/10: o pedido em destaque (vindo do cartão do vínculo ou do endereço) rola para a vista.
+  useEffect(() => {
+    if (!destaqueId || !aprovacoes.some((a) => a.id === destaqueId)) return;
+    const el = document.querySelector(`[data-aprovacao-id="${destaqueId}"]`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [destaqueId, aprovacoes.length]);
 
   const decidir = useMutation({
     mutationFn: async ({ id, decisao }: { id: string; decisao: string }) => {
@@ -199,6 +206,7 @@ export default function AprovacoesExplicadas({
           return (
             <li
               key={a.id}
+              data-aprovacao-id={a.id}
               className={juntar("min-w-0 px-4 py-4", destacada && "bg-primary/10 ring-2 ring-inset ring-primary/50")}
             >
               {(i === 0 || a.client_id !== aprovacoes[i - 1].client_id) && <h3 className="mb-4 border-b border-border pb-2 text-base font-semibold">{a.client?.company_name || a.client?.full_name || "Operação interna"}</h3>}

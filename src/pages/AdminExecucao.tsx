@@ -183,6 +183,16 @@ export default function AdminExecucao() {
   const [searchParams] = useSearchParams();
   const vinculoAlvo = searchParams.get("vinculo");
   const aprovacaoAlvo = searchParams.get("aprovacao");
+  // 09/10: o botão "aprovação necessária: decidir" do cartão abre o pedido DAQUELE vínculo (antes só trocava para a
+  // lista em que a pessoa já estava, e nada acontecia).
+  const [aprovacaoDoCartao, setAprovacaoDoCartao] = useState<string | null>(null);
+  const abrirDecisaoDoVinculo = async (linkId: string) => {
+    const { data, error } = await (supabase as any).from("operator_approvals").select("id").eq("task_link_id", linkId).in("status", ["pendente", "adiado"]).order("created_at", { ascending: false }).limit(1);
+    const id = !error && data && data[0] ? String(data[0].id) : null;
+    setVisao("aprovacao");
+    if (id) setAprovacaoDoCartao(id);
+    else toast.info("Este vínculo só tem a marca antiga de aprovação, sem pedido explicado do agente. Abra o diário para ver o que ele precisa.");
+  };
   const propostaAlvo = searchParams.get("proposta");
   const runAlvo = searchParams.get("run") || searchParams.get("execucao");
   const agenteAlvo = searchParams.get("agente");
@@ -1158,7 +1168,7 @@ export default function AdminExecucao() {
             {precisaDecisao(v) && (
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); setVisao("aprovacao"); }}
+                onClick={(e) => { e.stopPropagation(); void abrirDecisaoDoVinculo(v.id); }}
                 className="inline-flex h-7 items-center rounded-md bg-warning/15 px-2 text-[12px] font-medium text-warning hover:bg-warning/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <ShieldAlert className="mr-1 h-3 w-3" aria-hidden="true" /> aprovação necessária: decidir
@@ -1543,7 +1553,7 @@ export default function AdminExecucao() {
         filtroCliente={filtroCliente}
         nomesDeAgentes={nomesDeAgentes}
         titulosDeTarefas={titulosDeTarefas}
-        destaqueId={aprovacaoAlvo}
+        destaqueId={aprovacaoDoCartao || aprovacaoAlvo}
         aoAbrirDiario={(linkId) => setDiarioAberto({ linkId })}
       />
       <PropostasDeResponsavel

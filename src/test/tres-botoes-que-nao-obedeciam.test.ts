@@ -61,7 +61,9 @@ describe("o cartão da Execução abre com clique", () => {
 
   it("os botões de dentro não disparam a abertura", () => {
     // Sem stopPropagation, clicar em "diário" abriria a tarefa junto.
-    expect(pagina).toContain("onClick={(e) => { e.stopPropagation(); setVisao(\"aprovacao\"); }}");
+    // 09/10: "decidir" abre o pedido de aprovação DAQUELE vínculo (antes só trocava de lista e nada acontecia).
+    expect(pagina).toContain("onClick={(e) => { e.stopPropagation(); void abrirDecisaoDoVinculo(v.id); }}");
+    expect(pagina).toContain('.from("operator_approvals").select("id").eq("task_link_id", linkId).in("status", ["pendente", "adiado"])');
     expect(pagina).toContain("e.stopPropagation(); setDiarioAberto(");
   });
 
