@@ -9,7 +9,8 @@
  * - Senha não passa pelo painel: o dono entra no site dentro da sessão.
  * - Toda sessão aberta fica registrada (navegador_sessoes) com origem e
  *   pedido; "a página está aberta" só vale com sessão verificável no provedor.
- * - Sem BROWSERBASE_API_KEY e BROWSERBASE_PROJECT_ID: configurado = false,
+ * - Sem BROWSERBASE_API_KEY: configurado = false (BROWSERBASE_PROJECT_ID é opcional; sem ele o
+ *   provedor infere o projeto pela chave),
  *   nada é simulado.
  * Só admin.
  *
@@ -44,7 +45,7 @@ async function identificar(req: Request): Promise<string> {
 function provedor(): Provedor | null {
   const chave = (Deno.env.get("BROWSERBASE_API_KEY") || "").trim();
   const projeto = (Deno.env.get("BROWSERBASE_PROJECT_ID") || "").trim();
-  return chave && projeto ? provedorBrowserbase(chave, projeto) : null;
+  return chave ? provedorBrowserbase(chave, projeto || null) : null;
 }
 
 /** Endereço inicial aceito: só http/https, sem usuário e senha na URL. */

@@ -39,6 +39,20 @@ describe("provedor Browserbase (fetch falso)", () => {
     expect((chamadas[0].init.headers as Record<string, string>)["X-BB-API-Key"]).toBe("chave-teste");
   });
 
+  it("só com a API key (sem Project ID): o corpo não leva projectId e o encerrar manda só o status", async () => {
+    const corpos: Array<{ url: string; corpo: Record<string, unknown> }> = [];
+    const f = vi.fn(async (url: string, init: RequestInit) => {
+      corpos.push({ url, corpo: init.body ? JSON.parse(String(init.body)) : {} });
+      return url.endsWith("/contexts") ? resposta(201, { id: "ctx-9" }) : resposta(201, { id: "ses-9" });
+    }) as unknown as typeof fetch;
+    const p = provedorBrowserbase("k", null, f);
+    await p.criarContexto("x");
+    await p.criarSessao("ctx-9");
+    await p.encerrar("ses-9");
+    corpos.forEach((c) => expect(c.corpo).not.toHaveProperty("projectId"));
+    expect(corpos[2].corpo).toEqual({ status: "REQUEST_RELEASE" });
+  });
+
   it("plano gratuito recusa keepAlive: abre de novo sem ele e com 15 minutos", async () => {
     const corpos: Record<string, unknown>[] = [];
     const f = vi.fn(async (_url: string, init: RequestInit) => {

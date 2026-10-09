@@ -25,7 +25,12 @@ const TEMPO_SEM_PLANO_PAGO_S = 900;
 /** A região mais perto do Brasil entre as do provedor (us-west-2, us-east-1, eu-central-1, ap-southeast-1). */
 const REGIAO = "us-east-1";
 
-export function provedorBrowserbase(chave: string, projeto: string, f: typeof fetch = fetch): Provedor {
+/**
+ * `projeto` é opcional (docs, 09/10): sem ele, o Browserbase infere o projeto pela API key.
+ * Só vai no corpo quando existe.
+ */
+export function provedorBrowserbase(chave: string, projeto: string | null, f: typeof fetch = fetch): Provedor {
+  const doProjeto = projeto ? { projectId: projeto } : {};
   const chamar = async (caminho: string, init: RequestInit = {}) => {
     const r = await f(`${API}${caminho}`, { ...init, headers: { "X-BB-API-Key": chave, "Content-Type": "application/json", ...(init.headers || {}) }, signal: AbortSignal.timeout(20_000) });
     const corpo = await r.json().catch(() => null) as Record<string, unknown> | null;
@@ -36,7 +41,7 @@ export function provedorBrowserbase(chave: string, projeto: string, f: typeof fe
   };
   return {
     async criarContexto() {
-      const c = await chamar("/contexts", { method: "POST", body: JSON.stringify({ projectId: projeto }) });
+      const c = await chamar("/contexts", { method: "POST", body: JSON.stringify({ ...doProjeto }) });
       const id = String(c.id || "");
       if (!id) throw new ErroDoProvedor("contexto_sem_id", "O provedor não devolveu o contexto.");
       return id;
@@ -44,7 +49,7 @@ export function provedorBrowserbase(chave: string, projeto: string, f: typeof fe
     async criarSessao(contexto: string) {
       const pedir = (manterViva: boolean, tempo: number) => chamar("/sessions", {
         method: "POST",
-        body: JSON.stringify({ projectId: projeto, keepAlive: manterViva, timeout: tempo, region: REGIAO, browserSettings: { context: { id: contexto, persist: true } } }),
+        body: JSON.stringify({ ...doProjeto, keepAlive: manterViva, timeout: tempo, region: REGIAO, browserSettings: { context: { id: contexto, persist: true } } }),
       });
       let s: Record<string, unknown>;
       try {
@@ -72,7 +77,7 @@ export function provedorBrowserbase(chave: string, projeto: string, f: typeof fe
       };
     },
     async encerrar(sessao: string) {
-      await chamar(`/sessions/${encodeURIComponent(sessao)}`, { method: "POST", body: JSON.stringify({ projectId: projeto, status: "REQUEST_RELEASE" }) });
+      await chamar(`/sessions/${encodeURIComponent(sessao)}`, { method: "POST", body: JSON.stringify({ status: "REQUEST_RELEASE" }) });
     },
   };
 }

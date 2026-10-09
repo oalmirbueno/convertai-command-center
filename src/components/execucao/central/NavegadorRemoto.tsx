@@ -44,7 +44,7 @@ export default function NavegadorRemoto({ cliente }: { cliente: { id: string; no
     return (
       <div className="space-y-2 p-3 text-[13px]">
         <p className="flex items-center gap-1.5 font-medium">O navegador remoto ainda não está ligado.
-          <AjudaRecolhida rotulo="O que falta?">Falta a conta do provedor (Browserbase) e as chaves no servidor. Enquanto isso, nenhuma sessão é simulada.</AjudaRecolhida>
+          <AjudaRecolhida rotulo="O que falta?">Falta a conta do provedor (Browserbase) e a chave dela no servidor. Enquanto isso, nenhuma sessão é simulada.</AjudaRecolhida>
         </p>
       </div>
     );
