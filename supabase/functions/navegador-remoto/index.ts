@@ -42,8 +42,19 @@ async function identificar(req: Request): Promise<string> {
   return id;
 }
 
+/**
+ * A chave como o onboarding do provedor costuma mostrar: às vezes a linha inteira do .env
+ * (BROWSERBASE_API_KEY="bb_live_..."), com aspas ou "export". Fica só o valor. Nunca é registrada.
+ */
+function chaveLimpa(bruta: string): string {
+  let t = String(bruta || "").trim();
+  t = t.replace(/^export\s+/i, "").replace(/^[A-Z_]*API_KEY\s*[=:]\s*/i, "").trim();
+  t = t.replace(/^["'`]+|["'`;,]+$/g, "").trim();
+  return t;
+}
+
 function provedor(): Provedor | null {
-  const chave = (Deno.env.get("BROWSERBASE_API_KEY") || "").trim();
+  const chave = chaveLimpa(Deno.env.get("BROWSERBASE_API_KEY") || "");
   const projeto = (Deno.env.get("BROWSERBASE_PROJECT_ID") || "").trim();
   return chave ? provedorBrowserbase(chave, projeto || null) : null;
 }

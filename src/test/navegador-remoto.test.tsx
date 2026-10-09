@@ -12,6 +12,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({ chamar: vi.fn() }));
 vi.mock("@/lib/mesa/api", () => ({ chamarFuncao: api.chamar, textoDoErro: (e: unknown) => String((e as Error)?.message || e) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+// Lista de clientes do seletor (quando a conversa não tem cliente): AcelerIQ só.
+vi.mock("@/integrations/supabase/client", () => {
+  const consulta = (dados: unknown[]) => {
+    const b: Record<string, unknown> = {};
+    for (const m of ["select", "eq", "in", "is"]) b[m] = () => b;
+    b.then = (ok: (v: unknown) => unknown, f: (e: unknown) => unknown) => Promise.resolve({ data: dados, error: null }).then(ok, f);
+    return b;
+  };
+  return { supabase: { from: (t: string) => consulta(t === "user_roles" ? [{ user_id: "22222222-2222-4222-8222-222222222222" }] : [{ id: "22222222-2222-4222-8222-222222222222", company_name: "AcelerIQ", full_name: null, email: null }]) } };
+});
 
 import { ErroDoProvedor, provedorBrowserbase } from "../../supabase/functions/navegador-remoto/provedor";
 import NavegadorRemoto from "@/components/execucao/central/NavegadorRemoto";
@@ -102,10 +112,13 @@ describe("tela do navegador remoto (função falsa)", () => {
     expect(api.chamar.mock.calls.every((c) => (c[1] as { acao: string }).acao === "estado")).toBe(true);
   });
 
-  it("ligado e sem cliente na conversa: pede o cliente (cada um tem o próprio navegador)", async () => {
+  it("ligado e sem cliente na conversa: pede o cliente e o seletor libera o navegador dele", async () => {
     api.chamar.mockResolvedValue({ configurado: true });
     montar(null);
     expect(await screen.findByText(/cada cliente tem o próprio navegador/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Cliente/ }));
+    fireEvent.click(await screen.findByText("AcelerIQ"));
+    expect(await screen.findByRole("button", { name: "Abrir o navegador de AcelerIQ" })).toBeTruthy();
   });
 
   it("ligado com cliente: abre a sessão do cliente e mostra a tela ao vivo isolada no iframe", async () => {

@@ -29,14 +29,24 @@ const REGIAO = "us-east-1";
  * `projeto` é opcional (docs, 09/10): sem ele, o Browserbase infere o projeto pela API key.
  * Só vai no corpo quando existe.
  */
+/** A mensagem de erro do provedor, curta e sem nada que pareça chave (a própria, bb_..., tokens longos). */
+export function motivoDoProvedor(corpo: Record<string, unknown> | null, chave: string): string {
+  const bruto = corpo ? String(corpo.message || corpo.error || corpo.detail || "") : "";
+  let t = bruto.replace(/\s+/g, " ").trim();
+  if (chave) t = t.split(chave).join("[chave]");
+  return t.replace(/\bbb_[A-Za-z0-9_-]+/g, "[chave]").replace(/[A-Za-z0-9_-]{24,}/g, "[oculto]").slice(0, 160);
+}
+
 export function provedorBrowserbase(chave: string, projeto: string | null, f: typeof fetch = fetch): Provedor {
   const doProjeto = projeto ? { projectId: projeto } : {};
   const chamar = async (caminho: string, init: RequestInit = {}) => {
     const r = await f(`${API}${caminho}`, { ...init, headers: { "X-BB-API-Key": chave, "Content-Type": "application/json", ...(init.headers || {}) }, signal: AbortSignal.timeout(20_000) });
     const corpo = await r.json().catch(() => null) as Record<string, unknown> | null;
-    if (r.status === 401 || r.status === 403) throw new ErroDoProvedor("provedor_recusou", "O provedor do navegador recusou a chave.");
-    if (r.status === 429) throw new ErroDoProvedor("limite_do_provedor", "O plano do navegador remoto chegou ao limite de sessões ou de horas.");
-    if (!r.ok) throw new ErroDoProvedor("provedor_erro", `O provedor do navegador respondeu ${r.status}.`);
+    // O motivo do provedor ajuda a resolver (chave inválida, projeto, plano); a chave nunca entra no texto.
+    const motivo = motivoDoProvedor(corpo, chave);
+    if (r.status === 401 || r.status === 403) throw new ErroDoProvedor("provedor_recusou", `O provedor do navegador recusou a chave (${r.status}${motivo ? `: ${motivo}` : ""}).`);
+    if (r.status === 429) throw new ErroDoProvedor("limite_do_provedor", `O plano do navegador remoto chegou ao limite de sessões ou de horas${motivo ? ` (${motivo})` : ""}.`);
+    if (!r.ok) throw new ErroDoProvedor("provedor_erro", `O provedor do navegador respondeu ${r.status}${motivo ? `: ${motivo}` : ""}.`);
     return corpo || {};
   };
   return {
