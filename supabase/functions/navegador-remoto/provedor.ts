@@ -15,7 +15,13 @@ export type Provedor = {
   criarSessao(contexto: string): Promise<string>;
   verSessao(sessao: string): Promise<SessaoViva>;
   encerrar(sessao: string): Promise<void>;
+  /** Endereço de conexão CDP da sessão, pedido na hora (nunca gravado nem registrado). */
+  conectar(sessao: string): Promise<string>;
+  /** Plano real da conta: projetos (limite de sessões simultâneas) e minutos usados no período. */
+  conta(): Promise<ContaDoProvedor>;
 };
+
+export type ContaDoProvedor = { projetos: Array<{ id: string; nome: string; simultaneas: number; tempo_padrao_s: number; minutos_usados: number | null }> };
 
 const API = "https://api.browserbase.com/v1";
 /** Uma hora por sessão (o dono reabre; o contexto guarda o login). */
@@ -89,5 +95,43 @@ export function provedorBrowserbase(chave: string, projeto: string | null, f: ty
     async encerrar(sessao: string) {
       await chamar(`/sessions/${encodeURIComponent(sessao)}`, { method: "POST", body: JSON.stringify({ status: "REQUEST_RELEASE" }) });
     },
+    async conectar(sessao: string) {
+      const s = await chamar(`/sessions/${encodeURIComponent(sessao)}`);
+      const url = String(s.connectUrl || "");
+      if (!/^wss:\/\//i.test(url)) throw new ErroDoProvedor("sem_conexao", "O provedor não devolveu o endereço de conexão da sessão.");
+      return url;
+    },
+    async conta() {
+      const lista = await f(`${API}/projects`, { headers: { "X-BB-API-Key": chave }, signal: AbortSignal.timeout(20_000) });
+      if (lista.status === 401 || lista.status === 403) throw new ErroDoProvedor("provedor_recusou", `O provedor do navegador recusou a chave (${lista.status}).`);
+      if (!lista.ok) throw new ErroDoProvedor("provedor_erro", `O provedor do navegador respondeu ${lista.status}.`);
+      const projetos = ((await lista.json().catch(() => [])) || []) as Array<Record<string, unknown>>;
+      const saida: ContaDoProvedor["projetos"] = [];
+      for (const pj of Array.isArray(projetos) ? projetos : []) {
+        const id = String(pj.id || "");
+        if (!id) continue;
+        const uso = await chamar(`/projects/${encodeURIComponent(id)}/usage`).catch(() => null) as Record<string, unknown> | null;
+        saida.push({ id, nome: String(pj.name || ""), simultaneas: Number(pj.concurrency || 0), tempo_padrao_s: Number(pj.defaultTimeout || 0), minutos_usados: uso && typeof uso.browserMinutes === "number" ? uso.browserMinutes : null });
+      }
+      return { projetos: saida };
+    },
   };
+}
+
+/**
+ * A chave como o onboarding do provedor costuma mostrar: às vezes a linha inteira do .env
+ * (BROWSERBASE_API_KEY="bb_live_..."), com aspas ou "export". Fica só o valor. Nunca é registrada.
+ */
+export function chaveLimpa(bruta: string): string {
+  let t = String(bruta || "").trim();
+  t = t.replace(/^export\s+/i, "").replace(/^[A-Z_]*API_KEY\s*[=:]\s*/i, "").trim();
+  t = t.replace(/^["'`]+|["'`;,]+$/g, "").trim();
+  return t;
+}
+
+/** O provedor com a chave do ambiente (função, MCP e Gestor usam o mesmo). Sem chave: null. */
+export function provedorDoAmbiente(): Provedor | null {
+  const chave = chaveLimpa(Deno.env.get("BROWSERBASE_API_KEY") || "");
+  const projeto = (Deno.env.get("BROWSERBASE_PROJECT_ID") || "").trim();
+  return chave ? provedorBrowserbase(chave, projeto || null) : null;
 }
