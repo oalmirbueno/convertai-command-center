@@ -2073,6 +2073,14 @@
       "remote_name": "navegador_remoto",
       "remote_statements_sha256": "351055887ab71a91a2a880160647e1487b1c26d25f79a0544a93fb22d952e95e",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261009070000",
+      "path": "supabase/migrations/20261009070000_navegador_operacional.sql",
+      "local_sha256": "ac9bb1d786d620f279f82215aeb602865ec55ecaa7ef1771fbf18c5fdeb0fccf",
+      "remote_name": "navegador_operacional",
+      "remote_statements_sha256": "b43fcdd1c2d7b79f9d7a2c68b286d41b2a751e0e0bfb896f877c51de7f887d28",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
