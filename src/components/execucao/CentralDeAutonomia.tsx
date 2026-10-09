@@ -7,6 +7,7 @@ import { LateralEsquerda } from "@/components/workspace/LateralEsquerda";
 import { chamarFuncao } from "@/lib/mesa/api";
 import ConversasDoGestor, { CHAVE_DAS_CONVERSAS, type ConversaResumo, useOpcoesDeContexto } from "@/components/execucao/central/ConversasDoGestor";
 import ChatDoHermes from "@/components/execucao/central/ChatDoHermes";
+import NavegadorRemoto from "@/components/execucao/central/NavegadorRemoto";
 import DiarioDaCoordenacao from "@/components/execucao/central/DiarioDaCoordenacao";
 import ObjetoDaCentral from "@/components/execucao/central/ObjetoDaCentral";
 import { ArquivosDoCliente, BotoesDaFerramenta, FerramentaEmbutida, type FerramentaAberta, MenuDeFerramentas, type ModoDaFerramenta, NavegadorIntegrado } from "@/components/execucao/central/PainelDasMesas";
@@ -348,6 +349,8 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
     return no;
   };
   const [navegador, setNavegador] = useState(false);
+  // Lote C (09/10): o navegador remoto do cliente (sessão de verdade, login separado por cliente) ao lado do integrado.
+  const [modoDoNavegador, setModoDoNavegador] = useEstadoDaTela<"remoto" | "integrado">("execucao:central:modo-do-navegador", "remoto", { validar: (v) => v === "remoto" || v === "integrado" });
   const [diario, setDiario] = useState(false);
   const [menuAberto, setMenuAberto] = useState(false);
   const refDoCelular = useRef<HTMLDivElement>(null);
@@ -471,9 +474,16 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
         <div className="flex h-full min-h-0 flex-col">
           <div className="flex shrink-0 items-center gap-1 border-b border-border/60 px-2 py-1.5">
             <p className="min-w-0 flex-1 truncate text-[13px] font-medium">Navegador</p>
+            <SeletorCompacto
+              rotulo="Tipo de navegador"
+              modo="segmentado"
+              opcoes={[{ valor: "remoto", rotulo: "Remoto do cliente" }, { valor: "integrado", rotulo: "Integrado" }]}
+              valor={modoDoNavegador}
+              onEscolher={(v) => setModoDoNavegador(v === "integrado" ? "integrado" : "remoto")}
+            />
             <button type="button" className={icone} onClick={() => setNavegador(false)} aria-label="Fechar o navegador"><X className="h-4 w-4" /></button>
           </div>
-          <NavegadorIntegrado />
+          {modoDoNavegador === "remoto" ? <NavegadorRemoto cliente={contextoDaConversa.cliente} /> : <NavegadorIntegrado />}
         </div>
       ) : (
         <>

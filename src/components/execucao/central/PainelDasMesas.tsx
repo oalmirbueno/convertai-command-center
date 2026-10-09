@@ -205,7 +205,7 @@ export function NavegadorIntegrado() {
       </form>
       {info && (
         <div className="shrink-0 rounded-lg border border-border bg-background px-3 py-2 text-[11px] leading-4 text-muted-foreground">
-          Abre aqui o que o próprio site permite embutir. Instagram, Meta, Google e bancos bloqueiam isso por segurança: use a aba nova. O painel não copia cookies, senhas nem tokens. O navegador remoto (sessões por cliente, sites que bloqueiam) depende da sua aprovação de custo.
+          Abre aqui o que o próprio site permite embutir. Instagram, Meta, Google e bancos bloqueiam isso por segurança: use a aba nova. O painel não copia cookies, senhas nem tokens. Para esses sites, use o Remoto do cliente (navegador de verdade, login separado por cliente).
         </div>
       )}
       {atual ? <Quadro src={atual} titulo="Navegador integrado" /> : (
