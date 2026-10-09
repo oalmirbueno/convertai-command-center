@@ -2049,6 +2049,22 @@
       "remote_name": "retorno_do_hermes_nas_mesas",
       "remote_statements_sha256": "39c3934f3082e4924da90a8935e17ea39326869821239caba833559d6b9e2b96",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261009040000",
+      "path": "supabase/migrations/20261009040000_uma_conversa_ativa_por_agente.sql",
+      "local_sha256": "d907304915ea7f8a135c70550655c22d51633e4b84ffb809888cee0a0f4a3963",
+      "remote_name": "uma_conversa_ativa_por_agente",
+      "remote_statements_sha256": "7063c57f4608593c21464a1561fe7ad593e362f72f5ccf9aca6538e775858f05",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261009050000",
+      "path": "supabase/migrations/20261009050000_retorno_do_hermes_cfo_workspace.sql",
+      "local_sha256": "c74bd568c111b77f5e2b0f2ccb718282e95e09aab94556d6385c2c299b25322b",
+      "remote_name": "retorno_do_hermes_cfo_workspace",
+      "remote_statements_sha256": "daeb13dab1474eb15530f30be6dd8b4b27488619864202aa878c4baf6789f51e",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
