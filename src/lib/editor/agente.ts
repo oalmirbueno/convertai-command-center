@@ -28,6 +28,7 @@ import { chaveNoProjeto, fonteDoItem } from "./biblioteca";
 import { textoEm } from "./skills/pecasDaEdicao";
 import { acharClipe } from "./operacoes";
 import { ferramentaBarrada, lerPedidoDoDono } from "../../../supabase/functions/editor-video/modulos/pedido-do-dono";
+import { barradaPeloManter, conferirManter, operacoesDoManter, pedeManterSomente, selecionarParaManter, textoDaSelecao, type AlvoDoManter } from "../../../supabase/functions/editor-video/modulos/manter-somente";
 
 /**
  * Agente editor, lado da tela (frente V-B). O servidor (editor-video,
@@ -254,6 +255,23 @@ export function executarFerramenta(p: ProjetoDeEdicao, ch: ChamadaDeFerramenta, 
         const unicos = lista.filter((x, i) => lista.indexOf(x) === i);
         if (!unicos.length) throw new ErroDaOperacao("Diga qual clipe tirar (clipe ou clipes).");
         return aplicar(unicos.map((c): Operacao => ({ op: "remover", clipe: c, ondular: a.ondular === true })), `Tirado ${unicos.join(", ")}.`);
+      }
+      case "manter_somente": {
+        // Lote B (09/10): o código escolhe e confere os clipes; clipe de mídia cortado pelo limite volta como pergunta.
+        const pedida = typeof a.fonte === "string" ? a.fonte.trim() : "";
+        let alvo: AlvoDoManter;
+        if (pedida) {
+          const chave = p.fontes[pedida] ? pedida : Object.keys(p.fontes).find((k) => String(p.fontes[k].nome || "").toLowerCase() === pedida.toLowerCase()) || pedida;
+          alvo = { fonte: chave };
+        } else alvo = { de_s: num(a.de_s), ate_s: num(a.ate_s) };
+        const sel = selecionarParaManter(p.trilhas, alvo);
+        const texto = textoDaSelecao(sel, (id) => ap.porId[id] || id);
+        const ops = operacoesDoManter(sel) as Operacao[];
+        if (!ops.length) return { projeto: p, operacoes: [], texto, ok: false };
+        const novo = ops.reduce((acc, o) => aplicarOperacao(acc, o), p);
+        const falha = conferirManter(novo.trilhas, sel);
+        if (falha) throw new ErroDaOperacao(`A conferência do código barrou o resultado (${falha}). Nada mudou.`);
+        return { projeto: novo, operacoes: ops, texto: `${texto} Conferido pelo código: só o trecho escolhido ficou.`, ok: true };
       }
       case "remover_duplicados": {
         const grupos = acharDuplicados(p, opcoes.assinaturas || null);
@@ -850,6 +868,8 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
   const ehEdicao = pedidoDeEdicao(doDono);
   // 02/10 (auditoria: "pedi sem legenda e veio legenda"): o pedido do dono é lei em TODA ferramenta.
   const pedidoDoDono = lerPedidoDoDono(doDono);
+  // Lote B (09/10): "deixe só um" (ou a resposta à pergunta de qual manter) nunca vira reenquadrar.
+  const pedeManter = pedeManterSomente(doDono);
   const porPedido: string[] = [];
   let engajamento: string[] = [];
   // Núcleo das Mesas: as leituras que o passo 1 escolheu (o servidor relê nos passos seguintes) e o Hermes (uma vez).
@@ -860,7 +880,7 @@ export async function rodarAgente(e: PedidoAoAgente): Promise<ResultadoDoAgente>
   /** Roda uma chamada (aqui ou no servidor), confere e guarda; devolve a linha de resultado para o modelo. */
   const rodar = async (c0: ChamadaDeFerramenta): Promise<{ linha: string; falhou: boolean }> => {
     usadas++;
-    const barrada = ferramentaBarrada(pedidoDoDono, c0.ferramenta, c0.argumentos || {});
+    const barrada = ferramentaBarrada(pedidoDoDono, c0.ferramenta, c0.argumentos || {}) || barradaPeloManter(pedeManter, c0.ferramenta, c0.argumentos || {});
     if (barrada) {
       const motivo = /\(([^)]+)\)/.exec(barrada);
       if (motivo && porPedido.indexOf(motivo[1]) < 0) porPedido.push(motivo[1]);

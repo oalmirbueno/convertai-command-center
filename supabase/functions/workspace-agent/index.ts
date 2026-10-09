@@ -44,6 +44,8 @@ import { jevPerguntar, probabilidadeNoul } from "../_shared/jev.ts";
 // Núcleo comum dos agentes das Mesas (09/10): leituras prévias, apresentação, quadros conferidos e Hermes.
 import { clienteInternoDaAgencia, encaminharAoHermes, fecharNucleo, INSTRUCAO_DO_NUCLEO_DAS_MESAS, type NucleoPreparado, pedeAoHermes, prepararNucleo } from "../_shared/nucleo-das-mesas.ts";
 import { cobrarJev } from "../_shared/ia-motor.ts";
+// Lote B (09/10): quantidade, total e ranking do Workspace calculados pelo código (o modelo só comenta).
+import { blocoDasContagens, type Contagens, lerContagens, pedeContagem, quadroDasContagens } from "./contagens-do-workspace.ts";
 
 const CONTEXTO_DO_AGENTE = criarContextoDoAgente();
 
@@ -513,6 +515,8 @@ Regras absolutas:
     const nucleoP: Promise<NucleoPreparado | null> = safeClientId
       ? prepararNucleo(admin as never, { clientId: safeClientId, pedido: pedidoDoNucleo, agente: "workspace", ultimaResposta: [...(history || [])].reverse().find((m) => m.role === "assistant")?.content || null, cobrar: cobrarDoNucleo }).catch((e) => (registrarFalha("workspace-agent: núcleo não preparado (segue sem)", e), null))
       : Promise.resolve(null);
+    // Pergunta de contagem/ranking (Jev Noul; sem ele, as palavras): o quadro calculado abre a resposta.
+    const contagemP: Promise<boolean> = safeClientId ? pedeContagem(pedidoDoNucleo, cobrarDoNucleo) : Promise.resolve(false);
 
     // fallback server-side: se cliente não enviou folder_contents mas temos folder_id, busca do banco
     let fc = context?.folder_contents;
@@ -531,6 +535,7 @@ Regras absolutas:
     // Contexto profundo server-side: o agente sempre lê a base do cliente/projeto,
     // não apenas a pasta aberta no Workspace.
     const deepLines: string[] = [];
+    let contagens: Contagens | null = null;
     if (safeClientId) {
       const cidDeep = safeClientId;
       const pidDeep = safeProjectId;
@@ -545,6 +550,7 @@ Regras absolutas:
         pidDeep ? admin.from("studio_docs").select("notes,published,updated_at").eq("project_id", pidDeep).maybeSingle() : Promise.resolve({ data: null } as any),
       ]);
       const prof = profRes.data as any;
+      contagens = await lerContagens(admin as never, cidDeep, prof?.company_name || prof?.full_name || "o cliente");
       if (prof) deepLines.push(`\nCLIENTE NA BASE:\n- Nome: ${prof.full_name || "-"}\n- Empresa: ${prof.company_name || "-"}\n- Plano: ${prof.plan_name || "-"} · R$ ${prof.plan_value || 0}\n- Status: ${prof.plan_status || "-"}\n- Marca/tipo: ${prof.brand || "-"} · ${prof.client_type || "-"}`);
       const projects = (projRes.data as any[]) || [];
       const selected = pidDeep ? projects.find(p => p.id === pidDeep) : null;
@@ -804,6 +810,8 @@ Regras:
     const contextoDoCliente = safeClientId ? await CONTEXTO_DO_AGENTE.ler(admin, safeClientId, ["geral", "copy", "campanha"]).catch((e) => (registrarFalha("workspace-agent: contexto do agente não lido", e), "")) : "";
     const regras = await regrasP;
     const nucleo = await nucleoP;
+    const mostrarContagem = !!contagens && (await contagemP);
+    const quadroInicial = mostrarContagem && contagens ? `${quadroDasContagens(contagens)}\n\n` : "";
     const systemMsg = [
       baseIdentity,
       `Hoje: ${hoje} (horário de Brasília). Prazo antes de hoje está atrasado.`,
@@ -814,6 +822,7 @@ Regras:
       contextoDoCliente ? blocoDoContextoDoCliente(contextoDoCliente) : "",
       deepLines.length ? `\n---BASE COMPLETA DO CLIENTE/PROJETO---\n${deepLines.join("\n")}` : "",
       ctxLines.length ? `\n---CONTEXTO DA SESSÃO---\n${ctxLines.join("\n")}` : "",
+      contagens ? `\n${blocoDasContagens(contagens, mostrarContagem)}` : "",
       webBlocks.length ? `\n---PESQUISA WEB EM TEMPO REAL (${new Date().toISOString().slice(0,10)}) ---\nUse APENAS para dados atuais/externos. Cite as fontes entre parênteses (domínio) quando usar.\n${webBlocks.join("\n")}` : "",
       nucleo ? INSTRUCAO_DO_NUCLEO_DAS_MESAS : "",
       nucleo?.bloco || "",
@@ -901,6 +910,11 @@ Regras:
       async start(controller) {
         const reader = aiRes.body!.getReader();
         let buf = "";
+        // Contagem pedida: o quadro calculado pelo código abre a resposta (fonte e escopo escritos).
+        if (quadroInicial) {
+          full += quadroInicial;
+          controller.enqueue(encoder.encode(quadroInicial));
+        }
         try {
           while (true) {
             const { done, value } = await reader.read();

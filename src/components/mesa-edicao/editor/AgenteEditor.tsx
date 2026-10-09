@@ -356,6 +356,16 @@ const textoDaMensagem = (m: Mensagem) => {
   return (r.length ? r[r.length - 1] : m.itens[m.itens.length - 1] || { texto: "" }).texto;
 };
 
+/**
+ * Lote B (09/10): a opção escolhida volta ao agente junto com a pergunta ("Qual vídeo você quer
+ * manter?"), para a intenção não se perder (antes ia só "Vídeo sobre prazo..." e virou reenquadrar).
+ */
+export function respostaAPergunta(textoDaPergunta: string, opcao: string): string {
+  const frases = String(textoDaPergunta || "").replace(/([.!?])\s+/g, "$1\u0001").split("\u0001").filter((f) => f.trim().slice(-1) === "?");
+  const pergunta = frases.length ? frases[frases.length - 1].trim() : "";
+  return pergunta ? `Resposta à sua pergunta "${pergunta}": ${opcao}` : opcao;
+}
+
 export default function AgenteEditor({
   projeto,
   controle,
@@ -1072,7 +1082,7 @@ export default function AgenteEditor({
                       key={o}
                       type="button"
                       disabled={!!rodando || !!preparo || !modelo || !projeto}
-                      onClick={() => enviarTexto(o)}
+                      onClick={() => enviarTexto(respostaAPergunta(textoDaMensagem(m), o))}
                       className="mb-1 mr-1 max-w-full truncate rounded-full border border-border bg-background px-2.5 py-1 text-[12px] transition-colors hover:border-primary/50 disabled:opacity-50"
                     >
                       {o}

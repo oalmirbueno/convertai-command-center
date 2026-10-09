@@ -346,7 +346,8 @@ describe("tela do agente editor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Mandar para o agente" }));
     const grupo = await screen.findByRole("group", { name: "Respostas para o agente" });
     fireEvent.click(within(grupo).getByRole("button", { name: "c3" }));
-    await waitFor(() => expect(corpos("agente_passo").some((b: any) => b.pedido === "c3")).toBe(true));
+    // Lote B (09/10): a opção volta com a pergunta, para a intenção não se perder.
+    await waitFor(() => expect(corpos("agente_passo").some((b: any) => b.pedido === 'Resposta à sua pergunta "Qual clipe: c2 ou c3?": c3')).toBe(true));
   }, 20000);
 });
 
