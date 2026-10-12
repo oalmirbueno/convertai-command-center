@@ -58,10 +58,12 @@ import {
   conselhoDoCliente,
   formatoDoPost,
   interacoesDoPost,
+  multiplosDosPosts,
   rankearPosts,
   totaisDosPosts,
 } from "@/lib/metricasResumo";
 import { pedirLeituraDaMesa, useDesempenhoDaMesa, useUltimaEvolucao } from "@/hooks/useConselhoDaMesa";
+import { type MultiploDoPost, textoDoMultiplo } from "../../supabase/functions/_shared/multiplo-do-post";
 
 /**
  * Métricas por cliente (pedido do dono em 26/09: "mais organizada, mais
@@ -144,9 +146,10 @@ function resumoDosAnuncios(rows: AdsDaily[]) {
 }
 
 /** Cartão de post: a miniatura manda (sem moldura); o que performou se reconhece pela imagem. */
-function CartaoDoPost({ post, posicao }: { post: SocialPostMetric; posicao: number }) {
+function CartaoDoPost({ post, posicao, multiplo }: { post: SocialPostMetric; posicao: number; multiplo?: MultiploDoPost }) {
   const imagem = post.thumbnail_url || post.media_url || "";
   const numeros = [
+    post.views != null ? `${formatMetricNumber(post.views)} views` : null,
     post.reach != null ? `${formatMetricNumber(post.reach)} alcance` : null,
     `${formatMetricNumber(interacoesDoPost(post))} interações`,
   ].filter(Boolean).join(" · ");
@@ -173,6 +176,14 @@ function CartaoDoPost({ post, posicao }: { post: SocialPostMetric; posicao: numb
         <span className="absolute left-1.5 top-1.5 rounded bg-background/90 px-1.5 py-0.5 text-[11px] font-semibold text-foreground">
           {posicao}º · {formatoDoPost(post.media_type)}
         </span>
+        {multiplo && multiplo.multiplo !== null && (
+          <span
+            title={textoDoMultiplo(multiplo)}
+            className={juntar("absolute right-1.5 top-1.5 rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums", multiplo.destaque ? "bg-primary text-primary-foreground" : "bg-background/90 text-foreground")}
+          >
+            {String(multiplo.multiplo).replace(".", ",")}x
+          </span>
+        )}
       </div>
       <p className="mt-1.5 line-clamp-2 text-[12px] leading-4 text-foreground group-hover:text-primary [overflow-wrap:anywhere]">
         {post.caption?.trim() || "(sem legenda)"}
@@ -232,6 +243,7 @@ function ClientMetricsDetail({
 
   const latest = rows[0];
   const rankedPosts = useMemo(() => rankearPosts(posts), [posts]);
+  const multiplos = useMemo(() => multiplosDosPosts(posts), [posts]);
   const totais = useMemo(() => totaisDosPosts(posts, 30), [posts]);
   const anuncios = useMemo(() => resumoDosAnuncios(adsRows), [adsRows]);
   const contasDeAds = (conexao?.contas || []).filter((c) => c.client_id === clientId && c.status === "active");
@@ -510,7 +522,7 @@ function ClientMetricsDetail({
               divisoria
               titulo="Posts que mais performaram"
               descricao={rankedPosts.length ? plural(rankedPosts.length, "publicação", "publicações") : undefined}
-              ajuda="Por interações: curtidas, comentários, salvos e compartilhamentos. Toque num post para abrir no Instagram."
+              ajuda="Pelo múltiplo: quantas vezes o post rendeu acima do normal deste perfil (views, ou alcance, ou interações, contra a mediana dos últimos 90 dias). Em verde, 1,5x ou mais. Toque num post para abrir no Instagram."
               acao={
                 rankedPosts.length > destaques.length ? (
                   <button
@@ -532,7 +544,7 @@ function ClientMetricsDetail({
                 <>
                   <div className="grid grid-cols-2 gap-x-3 gap-y-4 md:grid-cols-3 xl:grid-cols-6">
                     {destaques.map((post, i) => (
-                      <CartaoDoPost key={post.id} post={post} posicao={i + 1} />
+                      <CartaoDoPost key={post.id} post={post} posicao={i + 1} multiplo={multiplos.get(post.id)} />
                     ))}
                   </div>
                   {todosOsPosts && (
@@ -559,6 +571,7 @@ function ClientMetricsDetail({
                               <p className={juntar(texto.auxiliar, "truncate")}>
                                 {formatoDoPost(post.media_type)}
                                 {post.posted_at ? ` · ${new Date(post.posted_at).toLocaleDateString("pt-BR")}` : ""}
+                                {multiplos.get(post.id)?.multiplo != null ? ` · ${textoDoMultiplo(multiplos.get(post.id) as MultiploDoPost)}` : ""}
                                 {post.reach != null ? ` · alcance ${formatMetricNumber(post.reach)}` : ""}
                                 {post.saved != null ? ` · ${formatMetricNumber(post.saved)} salvos` : ""}
                                 {post.shares != null ? ` · ${formatMetricNumber(post.shares)} compart.` : ""}

@@ -60,6 +60,8 @@ export interface SocialPostMetric {
   saved: number | null;
   shares: number | null;
   total_interactions: number | null;
+  /** Views do post (coletadas desde 12/10/2026; nulas até o post ser recoletado). */
+  views?: number | null;
   captured_at: string;
 }
 

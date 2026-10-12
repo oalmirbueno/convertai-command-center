@@ -1,4 +1,5 @@
 import type { SocialMetricsWeek, SocialPostMetric } from "@/hooks/useSocialMetrics";
+import { basesDoPerfil, type MultiploDoPost, multiploDoPost } from "../../supabase/functions/_shared/multiplo-do-post";
 
 /**
  * Leituras da tela de métricas (/metricas), em código e sem IA: o ranking dos
@@ -25,9 +26,25 @@ export function interacoesDoPost(p: Pick<SocialPostMetric, "like_count" | "comme
   return (p.like_count || 0) + (p.comments_count || 0) + (p.saved || 0) + (p.shares || 0);
 }
 
-/** Do que mais performou para o que menos: interações e, no empate, alcance. */
-export function rankearPosts<T extends SocialPostMetric>(posts: T[] | undefined): T[] {
+/**
+ * O múltiplo de cada post contra o normal do próprio perfil (12/10/2026, yt-viral e ig-audience-insights):
+ * views (ou alcance, ou interações) dividido pela mediana dos últimos 90 dias. Um post de conta grande
+ * não vence só por ser de conta grande; o que se destaca é o que rendeu acima do normal da casa.
+ */
+export function multiplosDosPosts(posts: SocialPostMetric[] | undefined, agora: Date = new Date()): Map<string, MultiploDoPost> {
+  const lista = posts || [];
+  const bases = basesDoPerfil(lista, 90, agora);
+  return new Map(lista.map((p) => [p.id, multiploDoPost(p, bases)]));
+}
+
+/** Do que mais performou para o que menos: pelo múltiplo do perfil; sem múltiplo, interações e, no empate, alcance. */
+export function rankearPosts<T extends SocialPostMetric>(posts: T[] | undefined, agora: Date = new Date()): T[] {
+  const m = multiplosDosPosts(posts, agora);
+  const mult = (p: T) => m.get(p.id)?.multiplo ?? null;
   return (posts || []).slice().sort((a, b) => {
+    const ma = mult(a), mb = mult(b);
+    if (ma !== null && mb !== null && ma !== mb) return mb - ma;
+    if ((ma === null) !== (mb === null)) return ma === null ? 1 : -1;
     const d = interacoesDoPost(b) - interacoesDoPost(a);
     return d !== 0 ? d : (b.reach || 0) - (a.reach || 0);
   });

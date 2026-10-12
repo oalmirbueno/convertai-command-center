@@ -139,6 +139,8 @@ import { legendaDoItem } from "./modulos/legenda-do-item.ts";
 // 12/10/2026: regras do carrossel (até 10 pela API, loop na 1ª, um pedido na última) e as legendas do plano pelo Jev.
 import { avisosDoCarrossel, MAX_LAMINAS_PELA_API } from "../_shared/regras-do-carrossel.ts";
 import { conferirLegendasComJev } from "./modulos/legendas-com-jev.ts";
+// 12/10/2026: moldes dos posts que mais performaram (múltiplo do perfil + fórmula do gancho pelo Jev).
+import { blocoDosMoldes, type Molde, moldesDosVencedores, type PostDoMolde } from "./modulos/moldes.ts";
 // 02/10: refazer uma proposta no servidor (chamada interna com a chave de serviço e o x-cron-secret).
 import {
   ACAO_REFAZER_INTERNO,
@@ -980,6 +982,8 @@ type Contexto = {
   cerebro: string | null;
   /** O que a conversa com o agente do mês combinou para cada mês (o mais novo de cada mês). */
   planos: Array<{ mes: string; texto: string }>;
+  /** 12/10/2026: moldes dos posts que mais performaram (forma, não texto), para reaproveitar. */
+  moldes?: Molde[];
   datasOcupadas: Set<string>;
   prompt: string;
   /** Marca por projeto (ex.: Acerbi ou CME, _shared/marca.ts); ausente no cliente sem marca. */
@@ -1222,7 +1226,7 @@ async function montarContexto(
     // SECURITY DEFINER com confianca de backend: chamada pelo cliente de servico.
     servico.rpc("movimentos_do_cliente", { _client_id: clientId, _desde: ha60, _ate: hoje.toISOString(), _somente_visiveis: false }),
     soContas(servico.from("social_post_metrics")
-      .select("media_type, caption, permalink, posted_at, like_count, comments_count, reach, saved, shares, total_interactions")
+      .select("media_type, caption, permalink, posted_at, like_count, comments_count, reach, saved, shares, total_interactions, views")
       .eq("client_id", clientId).gte("posted_at", ha180)).order("posted_at", { ascending: false }).limit(300),
     soContas(servico.from("social_metrics_weekly")
       .select("week_start, week_end, followers, reach, profile_views, accounts_engaged, total_interactions")
@@ -1264,6 +1268,12 @@ async function montarContexto(
   // Metricas de post: melhores e piores, so dos posts que tem o numero.
   type Post = { media_type: string | null; caption: string | null; permalink: string | null; posted_at: string | null; like_count: number | null; comments_count: number | null; reach: number | null; saved: number | null; shares: number | null; total_interactions: number | null };
   const lista = ((posts.data ?? []) as Post[]).map((p) => ({ ...p, caption: corta(p.caption, 220) as string | null }));
+  // 12/10/2026: o molde dos vencedores (1,5x ou mais do normal do perfil), com a legenda inteira e o Jev da fórmula.
+  const moldesP = moldesDosVencedores((posts.data ?? []) as PostDoMolde[], async (pedido) => {
+    const r = await jevPerguntar({ state: pedido.state, questions: pedido.questions as Record<string, PerguntaJev> });
+    await cobrarJev(r, { clientId, tarefa: "calendario", referencia: { tipo: "cliente", id: clientId }, criadoPor: null }).catch(() => null);
+    return r as { answers: Record<string, unknown> };
+  });
   const comAlcance = lista.filter((p) => typeof p.reach === "number");
   const porAlcance = [...comAlcance].sort((a, b) => (b.reach ?? 0) - (a.reach ?? 0));
   const comSalvamento = lista.filter((p) => typeof p.saved === "number" || typeof p.shares === "number");
@@ -1327,6 +1337,7 @@ async function montarContexto(
     prompt,
     mcp: (await mcpP).texto,
     memoriaEditorial: await memoriaEditorialP,
+    moldes: await moldesP,
     formatoDoPerfil: await perfilP,
     contextoCompleto: await completoP,
   };
@@ -1370,7 +1381,8 @@ function contextoEmTexto(ctx: Contexto, p: { inicio: string; fim: string; parame
   const memoria = blocoDaMemoriaEditorial(ctx.memoriaEditorial, { enxuto });
   // 02/10: a forma também não repete (formato das últimas pautas; regras em modulos/diversidade-do-mes.ts).
   const variar = variarAgoraNoMes(ctx.memoriaEditorial);
-  return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados)}${ctx.mcp ? `\n${ctx.mcp}` : ""}${memoria ? `\n\n${memoria}` : ""}${variar ? `\n\n${variar}` : ""}`;
+  const moldes = blocoDosMoldes(ctx.moldes ?? []);
+  return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados)}${ctx.mcp ? `\n${ctx.mcp}` : ""}${memoria ? `\n\n${memoria}` : ""}${moldes ? `\n\n${moldes}` : ""}${variar ? `\n\n${variar}` : ""}`;
 }
 
 /** Relógio simples das etapas de uma ação (vai na resposta como tempos_ms e no log). */

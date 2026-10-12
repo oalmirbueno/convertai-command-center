@@ -30,6 +30,7 @@
  */
 
 import { recortarDossie } from './dossie-recortado.ts';
+import { basesDoPerfil, multiploDoPost, type PostParaMultiplo, textoDoMultiplo } from './multiplo-do-post.ts';
 
 // ─── Vocabulário ─────────────────────────────────────────────
 
@@ -334,20 +335,29 @@ export function fatosDaEvolucao(semanas: Linha[]): FatoDoCerebro[] {
 }
 
 /**
- * As publicações que mais geraram interação (curtidas + comentários) viram
- * fatos "performou" da área calendário, com o começo da legenda: é o que o
- * estrategista precisa para repetir o que funciona.
+ * As publicações que mais performaram viram fatos "performou" da área calendário, com o começo da
+ * legenda: é o que o estrategista precisa para repetir o que funciona. Desde 12/10/2026 pelo múltiplo
+ * do perfil (views, alcance ou interações dividido pela mediana do próprio perfil; multiplo-do-post.ts),
+ * só os que passaram de 1,5x; sem base de comparação (menos de 4 posts), volta para interações brutas.
  */
 export function fatosDasPublicacoes(posts: Linha[], quantas = 3): FatoDoCerebro[] {
+  const comoPost = (p: Linha): PostParaMultiplo => ({
+    posted_at: typeof p.posted_at === 'string' ? p.posted_at : null,
+    views: num(p.views), reach: num(p.reach), total_interactions: num(p.total_interactions),
+    like_count: num(p.like_count), comments_count: num(p.comments_count), saved: num(p.saved), shares: num(p.shares),
+  });
+  const bases = basesDoPerfil(posts.map(comoPost));
+  const temBase = bases.views !== null || bases.alcance !== null || bases.interacoes !== null;
   return posts
-    .map((p) => ({ p, total: (num(p.like_count) ?? 0) + (num(p.comments_count) ?? 0) }))
-    .filter((x) => x.total > 0)
-    .sort((a, b) => b.total - a.total)
+    .map((p) => ({ p, total: (num(p.like_count) ?? 0) + (num(p.comments_count) ?? 0), m: multiploDoPost(comoPost(p), bases) }))
+    .filter((x) => (temBase ? x.m.destaque : x.total > 0))
+    .sort((a, b) => (temBase ? (b.m.multiplo ?? 0) - (a.m.multiplo ?? 0) : b.total - a.total))
     .slice(0, quantas)
-    .map(({ p, total }) => {
+    .map(({ p, total, m }) => {
       const legenda = txt(p.caption, 120);
       const quando = typeof p.posted_at === 'string' ? p.posted_at.slice(0, 10) : null;
-      const texto = txt(`Publicação que performou${quando ? ` (${quando})` : ''}${p.media_type ? `, ${String(p.media_type).toLowerCase()}` : ''}: ${total} interações. ${legenda ? `Começo da legenda: "${legenda}"` : ''}`);
+      const quanto = temBase && m.multiplo !== null ? textoDoMultiplo(m) : `${total} interações`;
+      const texto = txt(`Publicação que performou${quando ? ` (${quando})` : ''}${p.media_type ? `, ${String(p.media_type).toLowerCase()}` : ''}: ${quanto}. ${legenda ? `Começo da legenda: "${legenda}"` : ''}`);
       return {
         id: `instagram:post:${String(p.media_id ?? p.id ?? '')}`,
         area: 'calendario' as AreaDoCerebro,
@@ -525,7 +535,7 @@ export async function lerCerebro(
     seguro('file_approval_events', () => db.from('file_approval_events').select('id, event_type, feedback, created_at, file_id').eq('client_id', clientId)
       .in('event_type', ['client_rejected', 'agency_rejected']).gte('created_at', desde).order('created_at', { ascending: false }).limit(30)),
     seguro('social_metrics_weekly', () => db.from('social_metrics_weekly').select('week_start, week_end, followers, reach').eq('client_id', clientId).order('week_start', { ascending: false }).limit(8)),
-    seguro('social_post_metrics', () => db.from('social_post_metrics').select('id, media_id, media_type, caption, permalink, posted_at, like_count, comments_count').eq('client_id', clientId)
+    seguro('social_post_metrics', () => db.from('social_post_metrics').select('id, media_id, media_type, caption, permalink, posted_at, like_count, comments_count, reach, views, total_interactions, saved, shares').eq('client_id', clientId)
       .order('posted_at', { ascending: false }).limit(40)),
   ]);
 
