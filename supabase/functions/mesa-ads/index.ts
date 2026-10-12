@@ -7191,7 +7191,7 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   const fontesDoSenior = [...previas.fontes, fonteDoRetrato];
   // A memória da conta (8 camadas) entra em toda conversa; o agente cita a camada ao decidir.
   const limitesDaMemoria = limitesParaAMemoria(memoria, c.conta, rotina, c.briefing);
-  const camadasDaMemoria = await memoriaMontada(servico, clientId, { memoria, conta: c.conta, feito, limites: limitesDaMemoria.limites, fontes: limitesDaMemoria.fontes, regrasEnsinadas, regrasDoDono: regrasDoDono.map((r) => regraEmTexto(r)) })
+  const camadasDaMemoria = await memoriaMontada(servico, clientId, { memoria, conta: c.conta, feito, limites: limitesDaMemoria.limites, fontes: limitesDaMemoria.fontes, regrasDoDono: regrasDoDono.map((r) => regraEmTexto(r)) })
     .catch((e) => (registrarFalha("mesa-ads: memória da conta não montada", e), [] as CamadaMontada[]));
   const blocoDasFontes = `${camadasDaMemoria.length ? `${blocoDaMemoria(camadasDaMemoria)}\n\n` : ""}${previas.bloco ? `${previas.bloco}\n\n` : ""}FONTE ${fonteDoRetrato.apelido}: o RETRATO_DA_CAMPANHA do CONTEXTO acima. Quadro com número da conta cita ${fonteDoRetrato.apelido} em "fontes".`;
   await andamento.passo("pensando", `Pensando (${modeloEscolhido.modelo.rotulo || modeloEscolhido.modelo.id}${modeloEscolhido.raciocinio ? `, raciocínio ${modeloEscolhido.raciocinio}` : ""})`);
@@ -9223,7 +9223,6 @@ async function memoriaMontada(servico: SupabaseClient, clientId: string, e: {
   feito: { quando: string; resumo: string; porque: string }[];
   limites: Limites;
   fontes: Record<keyof Limites, FonteDoLimite>;
-  regrasEnsinadas: { texto: string }[];
   regrasDoDono: string[];
 }): Promise<CamadaMontada[]> {
   const [aprendQ, ofertasQ, coletaQ] = await Promise.all([
@@ -9254,7 +9253,9 @@ async function memoriaMontada(servico: SupabaseClient, clientId: string, e: {
     },
     regras: {
       limites: (Object.keys(NOME_DO_LIMITE) as (keyof Limites)[]).map((k) => ({ nome: NOME_DO_LIMITE[k], valor: valorDoLimite(k, e.limites[k] as number | null), fonte: fonteDoAlvoEmTexto(e.fontes[k]) })),
-      ensinadas: [...e.regrasDoDono, ...e.regrasEnsinadas.map((r) => r.texto)].slice(0, 12),
+      // Só as regras da rotina de tráfego: as aprendidas na conversa (inclusive as gerais, de outras áreas)
+      // já vão no bloco de regras do sistema; repetir aqui só fazia ruído (teste real de 12/10).
+      ensinadas: e.regrasDoDono.slice(0, 12),
     },
     biblioteca: {
       aprendizados: ((aprendQ.data as { texto: string | null }[] | null) ?? []).map((a) => String(a.texto ?? "").slice(0, 240)).filter(Boolean),
@@ -9281,17 +9282,16 @@ function limitesParaAMemoria(memoria: MemoriaLida, conta: Awaited<ReturnType<typ
 async function memoriaLer(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
-  const [memoria, conta, rotina, briefing, feito, regrasEnsinadas] = await Promise.all([
+  const [memoria, conta, rotina, briefing, feito] = await Promise.all([
     lerMemoriaDaConta(servico, clientId),
     lerContaAoVivo(servico, clientId, 30),
     lerLinhaDaRotina(servico, clientId),
     carregarBriefing(servico, clientId).catch(() => null),
     oQueFoiFeitoParaOAgente(servico, clientId),
-    regrasDoTrafego(servico, clientId),
   ]);
   const { limites, fontes } = limitesParaAMemoria(memoria, conta, rotina, briefing);
   const regrasDoDono = regrasQueValem(configDaLinha(rotina).regras, hojeSaoPaulo()).map((x) => regraEmTexto(x));
-  const camadas = await memoriaMontada(servico, clientId, { memoria, conta, feito, limites, fontes, regrasEnsinadas, regrasDoDono });
+  const camadas = await memoriaMontada(servico, clientId, { memoria, conta, feito, limites, fontes, regrasDoDono });
   return json({ disponivel: memoria.disponivel, versao: memoria.versao, atualizada_em: memoria.atualizada_em, preenchidas: memoria.preenchidas, financas: memoria.financas, camadas, custo_usd: 0 });
 }
 
