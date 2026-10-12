@@ -16,6 +16,7 @@ import { ganhoDaTrilhaDb, MIXAGEM_PADRAO } from "../../supabase/functions/mesa-m
 import type { Armazem } from "./armazem.ts";
 import type { Fila, PedidoDoWorker } from "./fila.ts";
 import { amostrasMono, executar, FFMPEG, medirLoudness, normalizarLoudness, sondar } from "./midia.ts";
+import { avisosDa, avisosDaEntrada, conferirSaida, detectarConteudo, falhasDa, type LinhaDaConferencia, motivoDaFalha, projetoTemSom, type SondaDetalhada, sondarDetalhado } from "./conferencia.ts";
 import { trabalharBatidas, trabalharCenaHf } from "./hyperframes.ts";
 import { trabalharCenario } from "./cenario.ts";
 import { trabalharTratamento } from "./tratamento.ts";
@@ -183,6 +184,19 @@ export async function trabalharRender(amb: Ambiente, p: PedidoDoWorker, pasta: s
   // Frente MOV: a narração da Mesa Motion (trilha de áudio com papel "voz") também é voz; com ela, a voz é só ela (as cenas em código não têm som).
   const daNarracao = projeto.trilhas.filter((t) => t.tipo === "audio").reduce((l, t) => l.concat(t.clipes.filter((c) => c.estilo && c.estilo.papel === "voz").map((c) => c.fonte).filter((x): x is string => !!x)), [] as string[]);
   const fontesDaVoz = daNarracao.length ? Array.from(new Set(daNarracao)) : principal ? Array.from(new Set(principal.clipes.map((c) => c.fonte).filter((x): x is string => !!x))) : [];
+  // 12/10/2026 (ffmpeg-skill, medir antes): a sonda de cada mídia baixada; o que pode estragar o corte vira aviso.
+  const sondas: Record<string, SondaDetalhada> = {};
+  const avisosDasMidias: string[] = [];
+  for (const chave of Object.keys(locais)) {
+    try {
+      sondas[chave] = await sondarDetalhado(locais[chave]);
+      const nome = String((projeto.fontes[chave] && projeto.fontes[chave].nome) || chave).slice(0, 60);
+      avisosDasMidias.push(...avisosDaEntrada(nome, sondas[chave], fontesDaVoz.indexOf(chave) >= 0 ? "voz" : "outra"));
+    } catch {
+      // Mídia que o ffprobe não lê: o Remotion diz o erro de verdade, se houver.
+    }
+  }
+  if (amb.log) avisosDasMidias.forEach((a) => amb.log!(`aviso: ${a}`));
   const ganhos: Record<string, number> = {};
   const trilhas = projeto.trilhas.filter((t) => t.tipo === "audio").reduce((l, t) => l.concat(t.clipes.filter((c) => c.estilo && c.estilo.papel === "trilha")), [] as Projeto["trilhas"][number]["clipes"]);
   let vozLufs: number | null = null;
@@ -268,6 +282,11 @@ export async function trabalharRender(amb: Ambiente, p: PedidoDoWorker, pasta: s
   const alvo = projeto.mixagem ? projeto.mixagem.lufs_alvo : MIXAGEM_PADRAO.lufs_alvo;
   const volume = await normalizarLoudness(bruto, final, alvo);
   const sonda = await sondar(final);
+  // 12/10/2026 (ffmpeg-skill, conferir depois): o arquivo final contra o projeto, antes de subir.
+  await avisar("conferindo", 0.86, true);
+  const conferencia = await conferirArquivoFinal(final, projeto, alvo, volume, sondas, avisar);
+  if (amb.log) conferencia.filter((x) => x.estado !== "ok").forEach((x) => amb.log!(`conferência ${x.estado}: ${x.item} (${x.detalhe})`));
+  if (falhasDa(conferencia).length) throw new Error(motivoDaFalha(conferencia));
   const bytes = (await stat(final)).size;
   const saida = caminhoDaSaida(p.client_id, p.id, amostra ? "amostra" : "render_final");
   await avisar("subindo", 0.88, true);
@@ -305,7 +324,52 @@ export async function trabalharRender(amb: Ambiente, p: PedidoDoWorker, pasta: s
   });
   // Gancho do documento de entrega (frente DOC): o resumo e as provas ficam no resultado do pedido.
   const resumo = `${amostra ? "Amostra" : "Vídeo inteiro"} de ${sonda.duracao_s} s em ${sonda.largura}x${sonda.altura}, ${volume.depois !== null ? `${volume.depois} LUFS` : "sem áudio"}, ${Math.round(bytes / 1024)} KB, revisão ${p.revisao}.`;
-  return { saida, arquivoId, resultado: { resumo, miniatura_path: miniatura, duracao_s: sonda.duracao_s, largura: sonda.largura, altura: sonda.altura, bytes, lufs_antes: volume.antes, lufs_final: volume.depois, voz_lufs: vozLufs, ganhos_db: ganhos } };
+  return {
+    saida,
+    arquivoId,
+    resultado: {
+      resumo, miniatura_path: miniatura, duracao_s: sonda.duracao_s, largura: sonda.largura, altura: sonda.altura, bytes, lufs_antes: volume.antes, lufs_final: volume.depois, voz_lufs: vozLufs, ganhos_db: ganhos,
+      pico_final_db: volume.pico_depois ?? null, conferencia, avisos: [...avisosDasMidias, ...avisosDa(conferencia).map((x) => `${x.item}: ${x.detalhe}`)],
+    },
+  };
+}
+
+/**
+ * A conferência do arquivo final (conferencia.ts). A detecção de preto, imagem parada e silêncio lê o
+ * vídeo inteiro; um pulso a cada 30 s mantém a trava do pedido enquanto ela roda.
+ */
+async function conferirArquivoFinal(
+  final: string,
+  projeto: Projeto,
+  alvo: number,
+  volume: { depois: number | null; pico_depois?: number | null },
+  sondas: Record<string, SondaDetalhada>,
+  avisar: (etapa: string, valor: number, forcar?: boolean) => Promise<void>,
+): Promise<LinhaDaConferencia[]> {
+  const sonda = await sondarDetalhado(final);
+  let parou: Error | null = null;
+  const controle = new AbortController();
+  const pulso = setInterval(() => {
+    avisar("conferindo", 0.86, true).catch((e: Error) => {
+      parou = e;
+      controle.abort();
+    });
+  }, 30_000);
+  let conteudo = null;
+  try {
+    conteudo = sonda.duracao_s ? await detectarConteudo(final, sonda.duracao_s, sonda.tem_audio, controle.signal) : null;
+  } catch (e) {
+    if (parou) throw parou;
+    throw e;
+  } finally {
+    clearInterval(pulso);
+  }
+  if (parou) throw parou;
+  const quadros = Math.max(1, Math.round(projeto.duracao_s * projeto.fps));
+  return conferirSaida(
+    { sonda, lufs: volume.depois, pico_db: volume.pico_depois ?? null, conteudo },
+    { duracao_s: quadros / projeto.fps, largura: projeto.largura, altura: projeto.altura, tem_som: projetoTemSom(projeto, (k) => !!(sondas[k] && sondas[k].tem_audio)), lufs_alvo: alvo },
+  );
 }
 
 // ------------------------------------------------------------------ um pedido

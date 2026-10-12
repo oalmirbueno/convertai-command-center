@@ -72,7 +72,7 @@ export async function sondar(arquivo: string): Promise<Sonda> {
  * -14 LUFS no arquivo final (dois passos do loudnorm, linear quando dá). O
  * vídeo é copiado sem recodificar; o áudio vira AAC 192k. Sem áudio: copia.
  */
-export async function normalizarLoudness(entrada: string, saida: string, alvo: number = MIXAGEM_PADRAO.lufs_alvo, sinal?: AbortSignal): Promise<{ antes: number | null; depois: number | null }> {
+export async function normalizarLoudness(entrada: string, saida: string, alvo: number = MIXAGEM_PADRAO.lufs_alvo, sinal?: AbortSignal): Promise<{ antes: number | null; depois: number | null; pico_depois?: number | null }> {
   const m = await medirLoudness(entrada, alvo);
   if (!m) {
     const c = await executar(FFMPEG, ["-y", "-v", "error", "-i", entrada, "-c", "copy", saida], { sinal });
@@ -82,5 +82,6 @@ export async function normalizarLoudness(entrada: string, saida: string, alvo: n
   const r = await executar(FFMPEG, ["-y", "-hide_banner", "-nostats", "-i", entrada, "-c:v", "copy", "-af", `${filtroLoudnormAplicar(m, alvo)},aresample=48000`, "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", saida], { sinal });
   if (r.codigo !== 0) throw new Error(`ffmpeg não acertou o volume: ${r.erros.slice(-300)}`);
   const depois = await medirLoudness(saida, alvo);
-  return { antes: m.input_i, depois: depois ? depois.input_i : null };
+  // 12/10/2026: o pico real do arquivo final entra na conferência (conferencia.ts).
+  return { antes: m.input_i, depois: depois ? depois.input_i : null, pico_depois: depois ? depois.input_tp : null };
 }
