@@ -2097,6 +2097,14 @@
       "remote_name": "ads_memoria_da_conta",
       "remote_statements_sha256": "9578ced60900fff6c2bf9d7be98d633065cf313e786a87dfe4a4017703aa52bb",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261012020000",
+      "path": "supabase/migrations/20261012020000_ads_auditorias.sql",
+      "local_sha256": "5f17c65f1d0c1e1919f1f26da70a0bff72c7e4684fdcf7302a5007aa4840ca18",
+      "remote_name": "ads_auditorias",
+      "remote_statements_sha256": "0fe0fc6890c02169e3085c551459ff3c337246e2d1b94279d6f7334ea96e22e6",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
