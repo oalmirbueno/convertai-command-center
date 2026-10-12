@@ -41,6 +41,7 @@ import { PERIODOS_DA_CONTA_V4, type PeriodoDaConta } from "./contaApi";
 import AgenteSenior from "./AgenteSenior";
 import AtivarGestao from "./AtivarGestao";
 import RotinaDoAgente from "./RotinaDoAgente";
+import MemoriaDaConta from "./MemoriaDaConta";
 import { esquecerPlanoParaOAgente, verPlanoParaOAgente } from "./ponteDoAgente";
 import { BaixarPacoteDeOtimizacao, ImportarPacote } from "./PacoteDeOtimizacao";
 import { FiltroDeObjetivo, PainelDeResultados, ResumoDoTopo, SeletorDaAbaDeResultados, useAbaDosResultados } from "./ResultadosClaros";
@@ -446,6 +447,8 @@ export default function AbaConta({
   const { atualizando, atualizar: atualizarGerenciador } = useAtualizarGerenciador(clientId, periodo);
   const [gerRecolhido, setGerRecolhido] = useRecolhido("mesa-ads:conta:bloco:gerenciador", false);
   const [feitoRecolhido, setFeitoRecolhido] = useRecolhido("mesa-ads:conta:bloco:agente", false);
+  // 12/10/2026: memória da conta em 8 camadas (recolhida por padrão: o agente lê mesmo fechada).
+  const [memoriaRecolhida, setMemoriaRecolhida] = useRecolhido("mesa-ads:conta:bloco:memoria", true);
   const [resultadosRecolhido, setResultadosRecolhido] = useRecolhido("mesa-ads:conta:bloco:resultados", false);
   const resultadosRef = useRef<HTMLElement>(null);
   const [abaDosCriativos, setAbaDosCriativos] = useAbaDosResultados(`mesa-ads:conta:aba:${clientId}`);
@@ -685,6 +688,12 @@ export default function AbaConta({
         <section className="min-w-0" aria-label="O agente">
           <CabecalhoDaParte titulo="O que o agente faz e fez" recolher={{ recolhido: feitoRecolhido, onAlternar: () => setFeitoRecolhido(!feitoRecolhido) }} />
           {!feitoRecolhido && <RotinaDoAgente onPedirAoAgente={levarAoAgente} abrirFeito={verFeito} />}
+        </section>
+
+        {/* 3b. A memória da conta em 8 camadas, que o agente e a rotina leem (12/10/2026). */}
+        <section className="min-w-0" aria-label="Memória da conta">
+          <CabecalhoDaParte titulo="Memória da conta" recolher={{ recolhido: memoriaRecolhida, onAlternar: () => setMemoriaRecolhida(!memoriaRecolhida), resumo: "8 camadas que o agente lê em toda conversa" }} />
+          {!memoriaRecolhida && <MemoriaDaConta />}
         </section>
 
         {/* 4. Resultados e criativos (o que já existia, num bloco que recolhe). */}

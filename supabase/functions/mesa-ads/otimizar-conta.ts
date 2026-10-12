@@ -167,6 +167,7 @@ export function reguaDaConta(anuncios: AnuncioDaConta[], L: Limites, fontes: Rec
 
 const FONTE_DO_ALVO: Record<FonteDoLimite, string> = {
   dono: "definido por você",
+  financas: "custo máximo das finanças da conta (ticket x margem)",
   plano: "corte do plano de teste",
   briefing: "custo tolerável do briefing",
   conta: "média da própria conta",

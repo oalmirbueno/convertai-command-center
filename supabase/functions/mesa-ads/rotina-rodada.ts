@@ -148,6 +148,8 @@ export type DadosDoRetrato = {
   estrategia: string | null;
   custoDoPlano: number | null;
   custoDoBriefing: number | null;
+  /** Custo máximo da memória da conta (C01), já conferido contra o tipo de resultado (12/10/2026). */
+  custoDaFinanca?: number | null;
   referencia: ReferenciaDoNicho | null;
   /** Tipos de ação da Meta que contam como resultado, por tipo de resultado (evolucao.ts). */
   tiposDeAcao: (tipo: string | null) => string[];
@@ -261,6 +263,7 @@ export async function rodarRotina(deps: DepsDaRodada, opcoes: { manual?: boolean
 
   const { limites, fontes } = limitesEfetivos({
     dono: config.limites,
+    custoDaFinanca: dados.custoDaFinanca ?? null,
     custoDoPlano: dados.custoDoPlano,
     custoDoBriefing: dados.custoDoBriefing,
     custoMedioDaConta: r.totais.custo_por_resultado,

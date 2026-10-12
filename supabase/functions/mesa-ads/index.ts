@@ -239,6 +239,8 @@ import { ESQUEMA_KIT_RECEPCAO, itemDaAgendaDoKit, type KitDeRecepcao, normalizar
 import { acaoSemRisco, alvosComNomeRepetido, arquivarMontagem, ativarMontagem, completarMontagem, itemDeMontagem, montarCampanhaNaMeta, type Montagem } from "./acoes-conta.ts";
 import {
   avaliarItem,
+  type FonteDoLimite,
+  type Limites,
   limitesDoDono,
   limitesEfetivos,
   normalizarRegras,
@@ -288,6 +290,17 @@ import { montarRelatorioDeAnuncios, type MetricasParaRelatorio } from "./relator
 import { type CandidatoDaOrdem, candidatosDaOrdem, citadosNaMensagem, decidirOrdem, type EscolhaDeAlvo, pareceOrdemDireta, perguntasDaOrdem, trechoParaBuscarNaMeta } from "./ordem-direta.ts";
 import { configDaLinha, type DepsDaRodada, type LinhaDaRotina, type RegistroDaRotina, retratoDaContaAoVivo, rodarRotina } from "./rotina-rodada.ts";
 import { CONHECIMENTO_TRAFEGO, referenciaDoNicho } from "../_shared/conhecimento-trafego.ts";
+// 12/10/2026: memória da conta em 8 camadas (skill memoria-de-conta-ads); C01 calculada em código.
+import {
+  blocoDaMemoria,
+  calcularFinancas,
+  type CamadaMontada,
+  type CamadasPreenchidas,
+  custoAlvoDasFinancas,
+  type Financas,
+  montarCamadas,
+  normalizarCamadas,
+} from "./modulos/memoria-da-conta.ts";
 // Frente AD4 (28/09): "otimizar" = régua em código + Jev, troca pelo acervo com Confirmar.
 import {
   type AnuncioDaConta,
@@ -7128,7 +7141,7 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   // Núcleo comum (lote B): consultar antes de responder (briefing, contexto, métricas das redes, cérebro); a agenda não entra.
   const cobrarDoSenior = (j: Parameters<typeof cobrarJev>[0]) => cobrarJev(j, { clientId, tarefa: TAREFA, referencia: cobranca.referencia, criadoPor: chamador.userId });
   const previasP = prepararNucleo(servico, { clientId, pedido: mensagem, agente: "ads (sênior de tráfego)", ignorar: ["ler_agenda"], cobrar: cobrarDoSenior });
-  const [c, historico, modeloBase, criativosDaMesa, rotina, feito, citados, recentes, regrasEnsinadas] = await Promise.all([
+  const [c, historico, modeloBase, criativosDaMesa, rotina, feito, citados, recentes, regrasEnsinadas, memoria] = await Promise.all([
     contextoDoAgenteSenior(servico, clientId, corpo),
     mensagensDoAgenteSenior(servico, conversaId, HISTORICO_DO_AGENTE_SENIOR),
     // Padrão GPT-6 Luna no raciocínio máximo; o modelo escolhido na tela vale.
@@ -7141,6 +7154,7 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     // Frente AG3 (evidência de 28/09: "a campanha não aparece nos alvos"): pausada sem gasto também entra, depois das ativas.
     campanhasRecentesDaConta(servico, clientId).catch((e) => (registrarFalha("mesa-ads: campanhas recentes não lidas", e), [])),
     regrasDoTrafego(servico, clientId),
+    lerMemoriaDaConta(servico, clientId),
   ]);
   const leve = acaoClara ? raciocinioMaisLeve(modeloBase.modelo, modeloBase.raciocinio) : undefined;
   const modeloEscolhido = leve ? { ...modeloBase, raciocinio: leve } : modeloBase;
@@ -7167,7 +7181,7 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   // custo-alvo com a fonte, a referência do nicho e o que já foi feito (rotina-trafego.ts).
   const contexto = {
     ...contextoEmJson(c, plano, biblioteca),
-    RETRATO_DA_CAMPANHA: retratoDoAgenteSenior(c, achado.nicho, rotina, feito, plano),
+    RETRATO_DA_CAMPANHA: retratoDoAgenteSenior(c, achado.nicho, rotina, feito, plano, memoria),
     REGRAS_DO_DONO: regrasDoDono.map((r) => regraEmTexto(r)),
     HOJE: hojeSaoPaulo(),
   };
@@ -7175,7 +7189,11 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   const previas = await previasP;
   const fonteDoRetrato: FonteDeConsulta = { apelido: `L${previas.fontes.length + 1}`, ferramenta: "retrato_da_campanha" as FonteDeConsulta["ferramenta"], argumento: "", texto: JSON.stringify(contexto.RETRATO_DA_CAMPANHA).slice(0, 5000) };
   const fontesDoSenior = [...previas.fontes, fonteDoRetrato];
-  const blocoDasFontes = `${previas.bloco ? `${previas.bloco}\n\n` : ""}FONTE ${fonteDoRetrato.apelido}: o RETRATO_DA_CAMPANHA do CONTEXTO acima. Quadro com número da conta cita ${fonteDoRetrato.apelido} em "fontes".`;
+  // A memória da conta (8 camadas) entra em toda conversa; o agente cita a camada ao decidir.
+  const limitesDaMemoria = limitesParaAMemoria(memoria, c.conta, rotina, c.briefing);
+  const camadasDaMemoria = await memoriaMontada(servico, clientId, { memoria, conta: c.conta, feito, limites: limitesDaMemoria.limites, fontes: limitesDaMemoria.fontes, regrasEnsinadas, regrasDoDono: regrasDoDono.map((r) => regraEmTexto(r)) })
+    .catch((e) => (registrarFalha("mesa-ads: memória da conta não montada", e), [] as CamadaMontada[]));
+  const blocoDasFontes = `${camadasDaMemoria.length ? `${blocoDaMemoria(camadasDaMemoria)}\n\n` : ""}${previas.bloco ? `${previas.bloco}\n\n` : ""}FONTE ${fonteDoRetrato.apelido}: o RETRATO_DA_CAMPANHA do CONTEXTO acima. Quadro com número da conta cita ${fonteDoRetrato.apelido} em "fontes".`;
   await andamento.passo("pensando", `Pensando (${modeloEscolhido.modelo.rotulo || modeloEscolhido.modelo.id}${modeloEscolhido.raciocinio ? `, raciocínio ${modeloEscolhido.raciocinio}` : ""})`);
   const tentativa = await chamarComTetoDeTempo({
     timeoutMs: TIMEOUT_TEXTO_ADS_MS,
@@ -7767,6 +7785,7 @@ async function otimizarNaConversa(
   const referencia = referenciaDoNicho(achado.nicho ? achado.nicho.id : null, retrato.objetivo_tipo);
   const { limites, fontes } = limitesEfetivos({
     dono: configDaLinha(rotina).limites,
+    custoDaFinanca: custoAlvoDasFinancas((await lerMemoriaDaConta(servico, e.clientId)).financas, retrato.objetivo_tipo),
     custoDoPlano: custoDoPlanoDeTeste(plano ? { ...plano, angulos: Array.isArray(plano.angulos) ? plano.angulos : [] } : null),
     custoDoBriefing: numeroOuNulo((briefing?.objetivo ?? {}).custo_toleravel_brl),
     custoMedioDaConta: retrato.totais.custo_por_resultado,
@@ -8819,11 +8838,12 @@ function custoDoPlanoDeTeste(plano: Plano | null | undefined): number | null {
 }
 
 /** Retrato da campanha para o agente sênior (rotina-trafego.ts), com a referência do nicho e o custo-alvo com a fonte. */
-function retratoDoAgenteSenior(c: Awaited<ReturnType<typeof contextoDoAgenteSenior>>, nicho: Nicho | null, rotina: LinhaDaRotina | null, feito: { quando: string; resumo: string; porque: string }[], plano: Plano | null) {
+function retratoDoAgenteSenior(c: Awaited<ReturnType<typeof contextoDoAgenteSenior>>, nicho: Nicho | null, rotina: LinhaDaRotina | null, feito: { quando: string; resumo: string; porque: string }[], plano: Plano | null, memoria: MemoriaLida | null = null) {
   const r = retratoDaContaAoVivo(c.conta);
   const ref = referenciaDoNicho(nicho ? nicho.id : null, r.objetivo_tipo);
   const { limites, fontes } = limitesEfetivos({
     dono: configDaLinha(rotina).limites,
+    custoDaFinanca: memoria ? custoAlvoDasFinancas(memoria.financas, r.objetivo_tipo) : null,
     custoDoPlano: custoDoPlanoDeTeste(plano),
     custoDoBriefing: numeroOuNulo((c.briefing?.objetivo ?? {}).custo_toleravel_brl),
     custoMedioDaConta: r.totais.custo_por_resultado,
@@ -9161,6 +9181,143 @@ async function contaMontagemAtivar(servico: SupabaseClient, chamador: Chamador, 
   return json({ anexo: novo, caminho: caminhoSeguro({ rotulo: "Ir para a campanha", destino: `/mesa-ads?client=${m.client_id}&etapa=conta&campanha=${campanhaId}` }), custo_usd: 0 });
 }
 
+// ---- memória da conta em 8 camadas (modulos/memoria-da-conta.ts, 12/10/2026)
+
+type MemoriaLida = { disponivel: boolean; versao: number; preenchidas: CamadasPreenchidas; financas: Financas; atualizada_em: string | null };
+
+/** A versão atual do que a equipe preencheu, com as contas da C01. Nunca lança: sem tabela ou sem linha, volta vazia. */
+async function lerMemoriaDaConta(servico: SupabaseClient, clientId: string): Promise<MemoriaLida> {
+  const { data, error } = await servico.from("ads_memoria_da_conta").select("versao, camadas, criado_em").eq("client_id", clientId).eq("atual", true).maybeSingle();
+  if (error && !erroDeTabelaAusente(error)) registrarFalha("mesa-ads: memória da conta não lida", error);
+  const linha = (data as { versao: number; camadas: unknown; criado_em: string } | null) ?? null;
+  const preenchidas = normalizarCamadas(linha ? linha.camadas : {});
+  return { disponivel: !error, versao: linha ? linha.versao : 0, preenchidas, financas: calcularFinancas(preenchidas.financas), atualizada_em: linha ? linha.criado_em : null };
+}
+
+const NOME_DO_LIMITE: Record<keyof Limites, string> = {
+  custo_alvo_brl: "Custo-alvo por resultado",
+  multiplo_sem_resultado: "Pausar sem resultado depois de gastar",
+  gasto_minimo_brl: "Gasto mínimo antes de julgar",
+  multiplo_custo_alto: "Custo alto quando passa do alvo em",
+  resultados_min_para_custo: "Resultados mínimos para julgar custo",
+  ctr_minimo_pct: "CTR de link mínimo",
+  impressoes_minimas: "Impressões mínimas para julgar CTR",
+  frequencia_maxima: "Frequência de alerta (7 dias)",
+  dias_aprendizado: "Dias de aprendizado antes de julgar custo",
+};
+function valorDoLimite(k: keyof Limites, v: number | null): string {
+  if (v === null) return "sem valor";
+  const n = String(v).replace(".", ",");
+  if (k === "custo_alvo_brl" || k === "gasto_minimo_brl") return `R$ ${v.toFixed(2).replace(".", ",")}`;
+  if (k === "multiplo_sem_resultado") return `${n} vezes o custo-alvo`;
+  if (k === "multiplo_custo_alto") return `${n} vezes`;
+  if (k === "ctr_minimo_pct") return `${n}%`;
+  if (k === "dias_aprendizado") return `${n} dias`;
+  return n;
+}
+
+/** As 8 camadas montadas: o que a equipe preencheu + o que o código lê das tabelas que já existem. */
+async function memoriaMontada(servico: SupabaseClient, clientId: string, e: {
+  memoria: MemoriaLida;
+  conta: Awaited<ReturnType<typeof lerContaAoVivo>>;
+  feito: { quando: string; resumo: string; porque: string }[];
+  limites: Limites;
+  fontes: Record<keyof Limites, FonteDoLimite>;
+  regrasEnsinadas: { texto: string }[];
+  regrasDoDono: string[];
+}): Promise<CamadaMontada[]> {
+  const [aprendQ, ofertasQ, coletaQ] = await Promise.all([
+    servico.from("ads_aprendizados").select("texto").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(6),
+    servico.from("ads_ofertas").select("nome").eq("client_id", clientId).eq("status", "arquivada").order("atualizado_em", { ascending: false }).limit(5),
+    servico.from("ads_creative_daily").select("captured_at").eq("client_id", clientId).order("captured_at", { ascending: false }).limit(1),
+  ]);
+  const reais = (v: number | null) => (v === null ? "sem dado" : `R$ ${v.toFixed(2).replace(".", ",")}`);
+  const anuncios = e.conta.anuncios;
+  const comResultado = anuncios.filter((a) => a.metricas.resultados > 0 && a.metricas.gasto >= e.limites.gasto_minimo_brl && a.metricas.custo_por_resultado !== null);
+  const porCusto = [...comResultado].sort((a, b) => (a.metricas.custo_por_resultado as number) - (b.metricas.custo_por_resultado as number));
+  const linhaDoAnuncio = (a: (typeof anuncios)[number]) =>
+    `${a.nome ?? "anúncio"} (${a.metricas.resultado_rotulo}: ${reais(a.metricas.custo_por_resultado)} cada, ${a.metricas.resultados} no período, CTR ${a.metricas.ctr_saida_pct !== null ? String(a.metricas.ctr_saida_pct).replace(".", ",") + "%" : "sem dado"})`;
+  const alvo = e.limites.custo_alvo_brl;
+  const semResultado = alvo !== null
+    ? anuncios.filter((a) => a.metricas.resultados === 0 && a.metricas.gasto >= alvo * e.limites.multiplo_sem_resultado).map((a) => `${a.nome ?? "anúncio"} (gastou ${reais(a.metricas.gasto)} sem resultado)`)
+    : [];
+  const ultima = ((coletaQ.data as { captured_at: string }[] | null) ?? [])[0]?.captured_at ?? null;
+  const horas = ultima ? Math.round((Date.now() - Date.parse(ultima)) / 3600_000) : null;
+  return montarCamadas({
+    preenchidas: e.memoria.preenchidas,
+    financas: e.memoria.financas,
+    mapa: {
+      campanhas_ativas: e.conta.campanhas.filter((c) => c.status === "ACTIVE").slice(0, 8).map((c) => `${c.nome ?? c.campaign_id}${c.orcamento_diario !== null ? ` (verba diária ${reais(c.orcamento_diario / 100)})` : ""}`),
+      pausados_recentes: anuncios.filter((a) => a.status !== "ACTIVE" && a.metricas.gasto > 0).slice(0, 6).map((a) => a.nome ?? "anúncio"),
+      feito_recente: e.feito.slice(0, 6).map((f) => `${f.quando.slice(0, 10)}: ${f.resumo}`),
+      ofertas_arquivadas: ((ofertasQ.data as { nome: string | null }[] | null) ?? []).map((o) => o.nome ?? "oferta").filter(Boolean),
+    },
+    regras: {
+      limites: (Object.keys(NOME_DO_LIMITE) as (keyof Limites)[]).map((k) => ({ nome: NOME_DO_LIMITE[k], valor: valorDoLimite(k, e.limites[k] as number | null), fonte: fonteDoAlvoEmTexto(e.fontes[k]) })),
+      ensinadas: [...e.regrasDoDono, ...e.regrasEnsinadas.map((r) => r.texto)].slice(0, 12),
+    },
+    biblioteca: {
+      aprendizados: ((aprendQ.data as { texto: string | null }[] | null) ?? []).map((a) => String(a.texto ?? "").slice(0, 240)).filter(Boolean),
+      vencedores: porCusto.slice(0, 3).map(linhaDoAnuncio),
+      perdedores: [...porCusto.slice(3).slice(-2).reverse().map(linhaDoAnuncio), ...semResultado].slice(0, 4),
+    },
+    atualidade: { ultima_coleta: ultima, horas_desde_a_coleta: horas, contas_conectadas: e.conta.contas.length },
+  });
+}
+
+/** Limites efetivos para a memória (sem o Jev do nicho, que custa: a referência do nicho fica de fora aqui). */
+function limitesParaAMemoria(memoria: MemoriaLida, conta: Awaited<ReturnType<typeof lerContaAoVivo>>, rotina: LinhaDaRotina | null, briefing: { objetivo?: Record<string, unknown> | null } | null) {
+  const r = retratoDaContaAoVivo(conta);
+  return limitesEfetivos({
+    dono: configDaLinha(rotina).limites,
+    custoDaFinanca: custoAlvoDasFinancas(memoria.financas, r.objetivo_tipo),
+    custoDoBriefing: numeroOuNulo((briefing?.objetivo ?? {}).custo_toleravel_brl),
+    custoMedioDaConta: r.totais.custo_por_resultado,
+    resultadosDaConta: r.totais.resultados,
+  });
+}
+
+/** memoria_ler { client_id } -> { disponivel, versao, atualizada_em, preenchidas, financas, camadas, custo_usd: 0 }. Grátis. */
+async function memoriaLer(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const [memoria, conta, rotina, briefing, feito, regrasEnsinadas] = await Promise.all([
+    lerMemoriaDaConta(servico, clientId),
+    lerContaAoVivo(servico, clientId, 30),
+    lerLinhaDaRotina(servico, clientId),
+    carregarBriefing(servico, clientId).catch(() => null),
+    oQueFoiFeitoParaOAgente(servico, clientId),
+    regrasDoTrafego(servico, clientId),
+  ]);
+  const { limites, fontes } = limitesParaAMemoria(memoria, conta, rotina, briefing);
+  const regrasDoDono = regrasQueValem(configDaLinha(rotina).regras, hojeSaoPaulo()).map((x) => regraEmTexto(x));
+  const camadas = await memoriaMontada(servico, clientId, { memoria, conta, feito, limites, fontes, regrasEnsinadas, regrasDoDono });
+  return json({ disponivel: memoria.disponivel, versao: memoria.versao, atualizada_em: memoria.atualizada_em, preenchidas: memoria.preenchidas, financas: memoria.financas, camadas, custo_usd: 0 });
+}
+
+/**
+ * memoria_salvar { client_id, camadas, versao } -> igual ao memoria_ler.
+ * Grava uma versão nova (a anterior vira histórico). Conflito de versão: 409, a tela relê.
+ */
+async function memoriaSalvar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const camadas = normalizarCamadas(corpo.camadas);
+  const esperada = typeof corpo.versao === "number" && Number.isInteger(corpo.versao) ? corpo.versao : null;
+  const { data, error } = await servico.rpc("ads_memoria_salvar", { _client_id: clientId, _camadas: camadas, _motivo: texto(corpo.motivo, 200) || "Atualizada na Conta da Mesa Ads", _autor: chamador.userId, _versao_esperada: esperada });
+  if (error) {
+    if (erroDeTabelaAusente(error)) throw new ErroHttp(409, "memoria_em_preparacao", "A memória da conta está em preparação no banco.");
+    if (/conflict/i.test(error.message)) throw new ErroHttp(409, "memoria_mudou", "Alguém salvou a memória enquanto você editava. Abra de novo para ver a versão atual.");
+    throw new ErroHttp(503, "memoria_nao_salva", "Não foi possível salvar a memória da conta.");
+  }
+  const nova = data as { versao: number } | null;
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "mesa_ads_memoria_salvar", origin: PRINCIPAL_MESA_ADS, keyId: `${PRINCIPAL_MESA_ADS}:${chamador.userId}`, scopes: ["ads:mesa"],
+    input: { client_id: clientId, versao: nova ? nova.versao : null }, success: true, statusCode: 200, durationMs: 0, resultRef: clientId,
+  });
+  return memoriaLer(servico, chamador, { client_id: clientId });
+}
+
 // ---- rotina de monitoramento (rotina-trafego.ts e rotina-rodada.ts)
 
 const COLUNAS_DA_ROTINA = "client_id, ligada, teto_diario_brl, subida_max_pct, max_acoes_rodada, max_acoes_dia, limites, regras, estado, ultima_rodada_em, proxima_rodada_em, ligada_em, ligada_por, pausada_em, pausada_por, atualizado_em";
@@ -9345,6 +9502,7 @@ function depsDaRotina(servico: SupabaseClient, clientId: string, ator: string | 
         estrategia: plano ? `${plano.nome}${teste && typeof teste.hipotese === "string" ? `: ${teste.hipotese}` : ""}${teste && typeof teste.criterio_vitoria === "string" ? ` Critério: ${teste.criterio_vitoria}` : ""}`.slice(0, 600) : null,
         custoDoPlano: plano ? custoDoPlanoDeTeste({ ...plano, angulos: Array.isArray(plano.angulos) ? plano.angulos : [] }) : null,
         custoDoBriefing: numeroOuNulo((briefing?.objetivo ?? {}).custo_toleravel_brl),
+        custoDaFinanca: custoAlvoDasFinancas((await lerMemoriaDaConta(servico, clientId)).financas, retrato.objetivo_tipo),
         referencia: referenciaDoNicho(nicho ? nicho.id : null, retrato.objetivo_tipo),
         tiposDeAcao: (tipo) => (TIPOS_DE_RESULTADO.find((t) => t.tipo === tipo)?.acoes ?? []),
       };
@@ -10570,6 +10728,9 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   criativos_reescrever_descartar: criativosReescreverDescartar,
   referencia_ler_texto: referenciaLerTexto,
   mundo_real_ler: mundoRealLer,
+  // 12/10/2026: memória da conta em 8 camadas (skill memoria-de-conta-ads).
+  memoria_ler: memoriaLer,
+  memoria_salvar: memoriaSalvar,
 };
 
 /**

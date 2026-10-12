@@ -75,7 +75,8 @@ export type Limites = {
   dias_aprendizado: number;
 };
 
-export type FonteDoLimite = "dono" | "plano" | "briefing" | "conta" | "nicho" | "padrao";
+/** "financas": o custo máximo calculado da memória da conta (C01, ticket x margem), 12/10/2026. */
+export type FonteDoLimite = "dono" | "financas" | "plano" | "briefing" | "conta" | "nicho" | "padrao";
 
 export const LIMITES_PADRAO: Limites = {
   custo_alvo_brl: null,
@@ -133,11 +134,14 @@ export type ReferenciaDoNicho = { custo_tipico_brl: number | null; ctr_minimo_pc
 
 /**
  * Limites que valem na rodada, com a fonte de cada um. Custo-alvo, nesta
- * ordem: o dono, o critério do plano de teste, o custo tolerável do
- * briefing, a média da própria conta (com volume) e a referência do nicho.
+ * ordem: o dono, o custo máximo das finanças da memória da conta (C01), o
+ * critério do plano de teste, o custo tolerável do briefing, a média da
+ * própria conta (com volume) e a referência do nicho.
  */
 export function limitesEfetivos(e: {
   dono?: Partial<Limites> | null;
+  /** Custo máximo da memória da conta, só quando o tipo de resultado bate (custoAlvoDasFinancas). */
+  custoDaFinanca?: number | null;
   custoDoPlano?: number | null;
   custoDoBriefing?: number | null;
   custoMedioDaConta?: number | null;
@@ -160,6 +164,7 @@ export function limitesEfetivos(e: {
   }
   const alvos: [number | null | undefined, FonteDoLimite][] = [
     [dono.custo_alvo_brl, "dono"],
+    [e.custoDaFinanca, "financas"],
     [e.custoDoPlano, "plano"],
     [e.custoDoBriefing, "briefing"],
     [(e.resultadosDaConta ?? 0) >= 10 ? e.custoMedioDaConta : null, "conta"],
