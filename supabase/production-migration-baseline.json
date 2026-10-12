@@ -2113,6 +2113,14 @@
       "remote_name": "views_dos_posts",
       "remote_statements_sha256": "f6fea2b86c789eeb7816e0babb286536bd1ef4209b94f709e35eafbb72a14df1",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261012040000",
+      "path": "supabase/migrations/20261012040000_diagnostico_do_perfil.sql",
+      "local_sha256": "cd77a7ebdd2b185dc728b3c750f74aae9edfbf39fdff4afde5d08dbed279db6e",
+      "remote_name": "diagnostico_do_perfil",
+      "remote_statements_sha256": "a6f591d9a497594dfd1b898fb8fbe3c4aef90479f72e916648b35c6546d57115",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
