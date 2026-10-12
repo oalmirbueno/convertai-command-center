@@ -301,6 +301,9 @@ import {
   montarCamadas,
   normalizarCamadas,
 } from "./modulos/memoria-da-conta.ts";
+// 12/10/2026: alertas da Conta ao vivo e auditoria da conta (checklist do claude-ads adaptado à Meta).
+import { type Alerta, alertasDaConta } from "./modulos/alertas-da-conta.ts";
+import { type Controle, controlesDaConta, notaDaAuditoria } from "./modulos/auditoria-da-conta.ts";
 // Frente AD4 (28/09): "otimizar" = régua em código + Jev, troca pelo acervo com Confirmar.
 import {
   type AnuncioDaConta,
@@ -7182,6 +7185,8 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   const contexto = {
     ...contextoEmJson(c, plano, biblioteca),
     RETRATO_DA_CAMPANHA: retratoDoAgenteSenior(c, achado.nicho, rotina, feito, plano, memoria),
+    // 12/10: fadiga, custo subindo, acima do custo máximo e ROAS abaixo do equilíbrio (código, régua C01 e C04).
+    ALERTAS_DA_CONTA: alertasParaAConta(c.conta, memoria, limitesParaAMemoria(memoria, c.conta, rotina, c.briefing).limites, null).map((a) => ({ nivel: a.nivel, titulo: a.titulo, alvo: a.alvo ? a.alvo.nome : "conta toda", texto: a.texto, camada: a.camada })),
     REGRAS_DO_DONO: regrasDoDono.map((r) => regraEmTexto(r)),
     HOJE: hojeSaoPaulo(),
   };
@@ -9204,6 +9209,8 @@ const NOME_DO_LIMITE: Record<keyof Limites, string> = {
   impressoes_minimas: "Impressões mínimas para julgar CTR",
   frequencia_maxima: "Frequência de alerta (7 dias)",
   dias_aprendizado: "Dias de aprendizado antes de julgar custo",
+  queda_ctr_pct: "Fadiga: queda do CTR na semana",
+  alta_custo_pct: "Alerta: alta do custo por resultado na semana",
 };
 function valorDoLimite(k: keyof Limites, v: number | null): string {
   if (v === null) return "sem valor";
@@ -9211,7 +9218,7 @@ function valorDoLimite(k: keyof Limites, v: number | null): string {
   if (k === "custo_alvo_brl" || k === "gasto_minimo_brl") return `R$ ${v.toFixed(2).replace(".", ",")}`;
   if (k === "multiplo_sem_resultado") return `${n} vezes o custo-alvo`;
   if (k === "multiplo_custo_alto") return `${n} vezes`;
-  if (k === "ctr_minimo_pct") return `${n}%`;
+  if (k === "ctr_minimo_pct" || k === "queda_ctr_pct" || k === "alta_custo_pct") return `${n}%`;
   if (k === "dias_aprendizado") return `${n} dias`;
   return n;
 }
@@ -9246,7 +9253,7 @@ async function memoriaMontada(servico: SupabaseClient, clientId: string, e: {
     preenchidas: e.memoria.preenchidas,
     financas: e.memoria.financas,
     mapa: {
-      campanhas_ativas: e.conta.campanhas.filter((c) => c.status === "ACTIVE").slice(0, 8).map((c) => `${c.nome ?? c.campaign_id}${c.orcamento_diario !== null ? ` (verba diária ${reais(c.orcamento_diario / 100)})` : ""}`),
+      campanhas_ativas: e.conta.campanhas.filter((c) => c.status === "ACTIVE").slice(0, 8).map((c) => `${c.nome ?? c.campaign_id}${c.orcamento_diario !== null ? ` (verba diária ${reais(c.orcamento_diario)})` : ""}`),
       pausados_recentes: anuncios.filter((a) => a.status !== "ACTIVE" && a.metricas.gasto > 0).slice(0, 6).map((a) => a.nome ?? "anúncio"),
       feito_recente: e.feito.slice(0, 6).map((f) => `${f.quando.slice(0, 10)}: ${f.resumo}`),
       ofertas_arquivadas: ((ofertasQ.data as { nome: string | null }[] | null) ?? []).map((o) => o.nome ?? "oferta").filter(Boolean),
@@ -9316,6 +9323,107 @@ async function memoriaSalvar(servico: SupabaseClient, chamador: Chamador, corpo:
     input: { client_id: clientId, versao: nova ? nova.versao : null }, success: true, statusCode: 200, durationMs: 0, resultRef: clientId,
   });
   return memoriaLer(servico, chamador, { client_id: clientId });
+}
+
+// ---- alertas da Conta ao vivo e auditoria da conta (modulos/alertas-da-conta.ts e auditoria-da-conta.ts, 12/10/2026)
+
+/** Horas desde a última coleta da Meta (ads_creative_daily) e os tipos de ação que chegaram (para saber se há conversão). */
+async function coletaDaConta(servico: SupabaseClient, clientId: string): Promise<{ horas: number | null; tipos: string[] }> {
+  const desde = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10);
+  const [ultimaQ, acoesQ] = await Promise.all([
+    servico.from("ads_creative_daily").select("captured_at").eq("client_id", clientId).order("captured_at", { ascending: false }).limit(1),
+    servico.from("ads_creative_daily").select("actions").eq("client_id", clientId).gte("day", desde).limit(400),
+  ]);
+  const ultima = ((ultimaQ.data as { captured_at: string }[] | null) ?? [])[0]?.captured_at ?? null;
+  const tipos = new Set<string>();
+  for (const l of (acoesQ.data as { actions: unknown }[] | null) ?? []) {
+    if (Array.isArray(l.actions)) for (const a of l.actions) if (a && typeof a === "object" && typeof (a as { action_type?: unknown }).action_type === "string") tipos.add((a as { action_type: string }).action_type);
+  }
+  return { horas: ultima ? Math.round((Date.now() - Date.parse(ultima)) / 3600_000) : null, tipos: [...tipos] };
+}
+
+/** Os alertas da conta com a régua da memória (C01 e C04). Nunca lança. */
+function alertasParaAConta(conta: Awaited<ReturnType<typeof lerContaAoVivo>>, memoria: MemoriaLida, limites: Limites, horas: number | null): Alerta[] {
+  try {
+    return alertasDaConta({
+      retrato: retratoDaContaAoVivo(conta),
+      limites,
+      custo_maximo_brl: memoria.financas.custo_maximo_brl,
+      roas_de_equilibrio: memoria.financas.roas_de_equilibrio,
+      roas_da_conta: typeof conta.totais.roas === "number" ? conta.totais.roas : null,
+      horas_desde_a_coleta: horas,
+    });
+  } catch (e) {
+    registrarFalha("mesa-ads: alertas da conta não calculados", e);
+    return [];
+  }
+}
+
+/** conta_alertas { client_id, dias? (14) } -> { alertas, periodo, custo_usd: 0 }. Grátis, só leitura. */
+async function contaAlertas(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const dias = [7, 14, 30].includes(Number(corpo.dias)) ? Number(corpo.dias) : 14;
+  const [conta, memoria, rotina, briefing, coleta] = await Promise.all([
+    lerContaAoVivo(servico, clientId, dias),
+    lerMemoriaDaConta(servico, clientId),
+    lerLinhaDaRotina(servico, clientId),
+    carregarBriefing(servico, clientId).catch(() => null),
+    coletaDaConta(servico, clientId),
+  ]);
+  const { limites } = limitesParaAMemoria(memoria, conta, rotina, briefing);
+  return json({ alertas: alertasParaAConta(conta, memoria, limites, coleta.horas), periodo: conta.periodo, conectada: conta.conectada, custo_usd: 0 });
+}
+
+const COLUNAS_DA_AUDITORIA = "id, plataforma, nota, cobertura, faixa, categorias, controles, periodo, criado_em";
+
+/** auditoria_rodar { client_id } -> { auditoria, anterior, custo_usd: 0 }. Calculada em código (sem IA, sem custo) e guardada. */
+async function auditoriaRodar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const [conta, memoria, rotina, briefing, coleta, anteriorQ] = await Promise.all([
+    lerContaAoVivo(servico, clientId, 30),
+    lerMemoriaDaConta(servico, clientId),
+    lerLinhaDaRotina(servico, clientId),
+    carregarBriefing(servico, clientId).catch(() => null),
+    coletaDaConta(servico, clientId),
+    servico.from("ads_auditorias").select(COLUNAS_DA_AUDITORIA).eq("client_id", clientId).order("criado_em", { ascending: false }).limit(1),
+  ]);
+  if (!conta.conectada) throw new ErroHttp(409, "conta_nao_conectada", "A conta de anúncios deste cliente não está conectada.");
+  const { limites } = limitesParaAMemoria(memoria, conta, rotina, briefing);
+  const alertas = alertasParaAConta(conta, memoria, limites, coleta.horas);
+  const controles = controlesDaConta({
+    conectada: conta.conectada,
+    retrato: retratoDaContaAoVivo(conta),
+    anuncios: conta.anuncios.map((a) => ({ ad_id: a.ad_id, nome: a.nome ?? null, status: a.status ?? null, formato: a.formato ?? null, peca: a.peca ?? null, gasto: a.metricas.gasto, impressoes: a.metricas.impressoes, resultados: a.metricas.resultados, ctr_saida_pct: a.metricas.ctr_saida_pct })),
+    limites,
+    financas: { custo_maximo_brl: memoria.financas.custo_maximo_brl, faltando: memoria.financas.faltando },
+    confiabilidade: memoria.preenchidas.confiabilidade,
+    alertas,
+    mix_alertas: conta.mix_objetivos.alertas,
+    horas_desde_a_coleta: coleta.horas,
+    tipos_de_acao_vistos: coleta.tipos,
+  });
+  const nota = notaDaAuditoria(controles);
+  const linha = { client_id: clientId, plataforma: "meta", nota: nota.nota, cobertura: nota.cobertura, faixa: nota.faixa, categorias: nota.categorias, controles, periodo: conta.periodo, criado_por: chamador.userId };
+  const { data, error } = await servico.from("ads_auditorias").insert(linha).select(COLUNAS_DA_AUDITORIA).single();
+  if (error && !erroDeTabelaAusente(error)) registrarFalha("mesa-ads: auditoria não guardada", error);
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "mesa_ads_auditoria_rodar", origin: PRINCIPAL_MESA_ADS, keyId: `${PRINCIPAL_MESA_ADS}:${chamador.userId}`, scopes: ["ads:mesa"],
+    input: { client_id: clientId, nota: nota.nota, cobertura: nota.cobertura }, success: true, statusCode: 200, durationMs: 0, resultRef: clientId,
+  });
+  const anterior = ((anteriorQ.data as Record<string, unknown>[] | null) ?? [])[0] ?? null;
+  return json({ auditoria: { ...(data ?? { ...linha, criado_em: new Date().toISOString() }), prioridades: nota.prioridades }, anterior, alertas, custo_usd: 0 });
+}
+
+/** auditoria_ler { client_id } -> { ultimas: até 6 rodadas, custo_usd: 0 }. */
+async function auditoriaLer(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const { data, error } = await servico.from("ads_auditorias").select(COLUNAS_DA_AUDITORIA).eq("client_id", clientId).order("criado_em", { ascending: false }).limit(6);
+  if (error && !erroDeTabelaAusente(error)) throw new ErroHttp(503, "auditoria_indisponivel", "Não foi possível ler as auditorias agora.");
+  const ultimas = ((data as Record<string, unknown>[] | null) ?? []).map((a) => ({ ...a, prioridades: notaDaAuditoria((a.controles as Controle[]) ?? []).prioridades }));
+  return json({ ultimas, custo_usd: 0 });
 }
 
 // ---- rotina de monitoramento (rotina-trafego.ts e rotina-rodada.ts)
@@ -10731,6 +10839,10 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   // 12/10/2026: memória da conta em 8 camadas (skill memoria-de-conta-ads).
   memoria_ler: memoriaLer,
   memoria_salvar: memoriaSalvar,
+  // 12/10/2026: alertas da Conta ao vivo e a etapa Auditoria da conta.
+  conta_alertas: contaAlertas,
+  auditoria_rodar: auditoriaRodar,
+  auditoria_ler: auditoriaLer,
 };
 
 /**
@@ -10751,6 +10863,8 @@ const ACOES_LONGAS = new Set([
   // 02/10: a troca de todo o conteúdo, a leitura do texto da referência e o mundo real chamam IA.
   "criativos_reescrever", "referencia_ler_texto", "mundo_real_ler",
   "referencia_para_estudio",
+  // 12/10: a auditoria lê a conta de 30 dias e a coleta.
+  "auditoria_rodar",
 ]);
 
 Deno.serve(async (req) => {

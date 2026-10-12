@@ -73,6 +73,10 @@ export type Limites = {
   frequencia_maxima: number;
   /** Dias com entrega antes de julgar custo (fase de aprendizado). */
   dias_aprendizado: number;
+  /** Fadiga (12/10/2026): queda do CTR de link da 2ª metade da janela contra a 1ª (%) que, com frequência alta, vira alerta. */
+  queda_ctr_pct: number;
+  /** Alta do custo por resultado da 2ª metade contra a 1ª (%) que vira alerta na Conta ao vivo. */
+  alta_custo_pct: number;
 };
 
 /** "financas": o custo máximo calculado da memória da conta (C01, ticket x margem), 12/10/2026. */
@@ -88,6 +92,9 @@ export const LIMITES_PADRAO: Limites = {
   impressoes_minimas: 1000,
   frequencia_maxima: 3.5,
   dias_aprendizado: 3,
+  // Padrões iniciais editáveis por cliente (o claude-ads não fixa número universal; estes são da casa).
+  queda_ctr_pct: 25,
+  alta_custo_pct: 30,
 };
 
 /** Faixas aceitas para o que o dono edita (o resto é recusado e volta ao padrão). */
@@ -100,6 +107,8 @@ const FAIXAS: Record<keyof Omit<Limites, "custo_alvo_brl">, [number, number]> = 
   impressoes_minimas: [300, 50000],
   frequencia_maxima: [1.5, 10],
   dias_aprendizado: [1, 14],
+  queda_ctr_pct: [5, 80],
+  alta_custo_pct: [5, 200],
 };
 
 const num = (v: unknown): number | null => {

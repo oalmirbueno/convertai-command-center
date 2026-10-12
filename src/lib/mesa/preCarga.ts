@@ -67,6 +67,7 @@ export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/me
       plano: () => import("@/components/mesa-ads/AbaPlano"),
       estudio: () => import("@/components/mesa-ads/AbaEstudioAds"),
       conta: () => import("@/components/mesa-ads/AbaConta"),
+      auditoria: () => import("@/components/mesa-ads/AbaAuditoria"),
       resultados: () => import("@/components/mesa-ads/AbaResultados"),
     },
   },

@@ -42,6 +42,7 @@ import AgenteSenior from "./AgenteSenior";
 import AtivarGestao from "./AtivarGestao";
 import RotinaDoAgente from "./RotinaDoAgente";
 import MemoriaDaConta from "./MemoriaDaConta";
+import AlertasDaConta from "./AlertasDaConta";
 import { esquecerPlanoParaOAgente, verPlanoParaOAgente } from "./ponteDoAgente";
 import { BaixarPacoteDeOtimizacao, ImportarPacote } from "./PacoteDeOtimizacao";
 import { FiltroDeObjetivo, PainelDeResultados, ResumoDoTopo, SeletorDaAbaDeResultados, useAbaDosResultados } from "./ResultadosClaros";
@@ -655,6 +656,9 @@ export default function AbaConta({
             descricao="Conecte a conta da Meta no cadastro do cliente para ver campanhas, anúncios e métricas aqui."
           />
         )}
+
+        {/* 12/10/2026: alertas da conta (fadiga, custo, ROAS abaixo do equilíbrio), com a régua da memória. */}
+        {(!dados || dados.conta.conectada) && <AlertasDaConta onPedirAoAgente={levarAoAgente} />}
 
         {/* Frente ADM (01/10): os números da Meta como no Gerenciador (objetivo, nível, colunas e horário). */}
         {(!dados || dados.conta.conectada) && <MetricasDaMeta clientId={clientId} periodo={periodo} rotuloDoPeriodo={trechoDoPeriodo(periodo)} />}

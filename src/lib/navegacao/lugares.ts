@@ -92,6 +92,7 @@ const ETAPAS_DA_MESA_ADS: Record<string, string> = {
   plano: "Plano de teste",
   estudio: "Estúdio Ads",
   conta: "Conta",
+  auditoria: "Auditoria",
   resultados: "Resultados",
 };
 

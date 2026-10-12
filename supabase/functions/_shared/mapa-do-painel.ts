@@ -96,7 +96,7 @@ export const AREAS_DO_PAINEL: AreaDoPainel[] = [
     agente: "mes", palavras: ["mesa", "plano do mes", "calendario do mes", "estudio", "carrossel", "arte", "post", "lamina", "kit da marca", "contexto", "logo", "paleta", "perfis do instagram", "concorrente", "entrega", "bio", "destaque", "grade do perfil", "redes sociais", "pagina do facebook"],
   },
   {
-    chave: "mesa_ads", nome: "Mesa Ads", rota: "/mesa-ads", parametro: "etapa", etapas: ["oferta", "referencias", "plano", "estudio", "conta", "resultados"], comCliente: true,
+    chave: "mesa_ads", nome: "Mesa Ads", rota: "/mesa-ads", parametro: "etapa", etapas: ["oferta", "referencias", "plano", "estudio", "conta", "auditoria", "resultados"], comCliente: true,
     faz: "oferta, plano, criativos, conta Meta", agente: "ads",
     palavras: ["ads", "anuncio", "campanha de anuncio", "trafego", "meta ads", "verba", "orcamento", "criativo", "publico", "pixel"],
   },

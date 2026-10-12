@@ -40,6 +40,7 @@ const carregarReferencias = () => import("@/components/mesa-ads/AbaReferencias")
 const carregarPlano = () => import("@/components/mesa-ads/AbaPlano");
 const carregarEstudio = () => import("@/components/mesa-ads/AbaEstudioAds");
 const carregarConta = () => import("@/components/mesa-ads/AbaConta");
+const carregarAuditoria = () => import("@/components/mesa-ads/AbaAuditoria");
 const carregarResultados = () => import("@/components/mesa-ads/AbaResultados");
 // Mesmas chaves da pré-carga do painel (src/lib/mesa/preCarga.ts).
 const AbaOferta = lazyComPreCarga("mesa-ads/oferta", carregarOferta);
@@ -47,6 +48,7 @@ const AbaReferencias = lazyComPreCarga("mesa-ads/referencias", carregarReferenci
 const AbaPlano = lazyComPreCarga("mesa-ads/plano", carregarPlano);
 const AbaEstudioAds = lazyComPreCarga("mesa-ads/estudio", carregarEstudio);
 const AbaConta = lazyComPreCarga("mesa-ads/conta", carregarConta);
+const AbaAuditoria = lazyComPreCarga("mesa-ads/auditoria", carregarAuditoria);
 const AbaResultados = lazyComPreCarga("mesa-ads/resultados", carregarResultados);
 const ChavesECotas = lazy(() => import("@/components/mesa/ChavesECotas"));
 const ModelosDeIa = lazy(() => import("@/components/mesa/ModelosDeIa"));
@@ -57,6 +59,8 @@ export const ETAPAS_DA_MESA_ADS = [
   { valor: "plano", rotulo: "Plano de teste" },
   { valor: "estudio", rotulo: "Estúdio Ads" },
   { valor: "conta", rotulo: "Conta" },
+  // 12/10/2026: auditoria da conta (checklist do claude-ads adaptado à Meta), logo depois da Conta.
+  { valor: "auditoria", rotulo: "Auditoria" },
   { valor: "resultados", rotulo: "Resultados" },
 ] as const;
 
@@ -321,6 +325,7 @@ export default function MesaAds() {
                   onAbrirPlano={(id) => mudar({ etapa: "plano", plano: id, criativo: null })}
                 />
               )}
+              {etapa === "auditoria" && <AbaAuditoria />}
               {etapa === "resultados" && <AbaResultados />}
             </Suspense>
           </div>
