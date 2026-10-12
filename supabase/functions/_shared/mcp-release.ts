@@ -1,2 +1,2 @@
 // One version for the server and its OAuth metadata.
-export const MCP_VERSION = '2.7.0';
+export const MCP_VERSION = '2.8.0';

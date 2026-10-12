@@ -319,6 +319,9 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_get_ads_performance: 'reports:read',
   aceleriq_mesa_ads_contexto: 'reports:read',
   aceleriq_mesa_foto_contexto: 'files:read',
+  // MCP 2.8 (12/10/2026): auditoria e memória da conta de anúncios, diagnóstico do Instagram.
+  aceleriq_mesa_ads_saude: 'reports:read',
+  aceleriq_instagram_diagnostico: 'reports:read',
   // MCP 2.3: cérebro do cliente e ações nas mesas
   aceleriq_cerebro_do_cliente: 'clients:read',
   aceleriq_cerebro_registrar: 'clients:write',
@@ -2112,6 +2115,46 @@ const mesaAdsContextoTool: ToolDefinition = {
   },
 };
 
+// MCP 2.8 (12/10/2026): o serviço fica em mcp-server/modulos (fora de _shared, perto do teto).
+import { diagnosticoDoInstagram as _diagnosticoDoInstagram, saudeDaContaDeAds as _saudeDaContaDeAds } from '../mcp-server/modulos/saude-das-mesas.ts';
+
+const SO_CLIENTE = {
+  type: 'object',
+  properties: { client_id: { type: 'string', format: 'uuid', description: 'Id do cliente (aceleriq_list_clients).' } },
+  required: ['client_id'],
+  additionalProperties: false,
+} as const;
+
+const mesaAdsSaudeTool: ToolDefinition = {
+  name: 'aceleriq_mesa_ads_saude',
+  title: 'Mesa Ads: auditoria e memória da conta',
+  description:
+    'A saúde da conta de anúncios do cliente: a última auditoria (nota de 0 a 100, faixa valendo/provisoria/dado_insuficiente, cobertura, os controles que falharam com a evidência e a ação, as 5 prioridades em ordem e a evolução das últimas rodadas) e a memória da conta (finanças calculadas pelo painel: custo máximo por resultado, ROAS de equilíbrio, valor do cliente no ano e o que falta preencher; comportamento, mercado e dados). Use antes de propor otimização ou verba. Só leitura: nada muda na conta por aqui.',
+  scopes: ['reports:read'] as const,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: SO_CLIENTE,
+  handler: async (input, ctx) => {
+    const parsed = z.object({ client_id: UUID }).strict().safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    return await _saudeDaContaDeAds(parsed.data as { client_id: string }, ctx);
+  },
+};
+
+const instagramDiagnosticoTool: ToolDefinition = {
+  name: 'aceleriq_instagram_diagnostico',
+  title: 'Instagram: diagnóstico do perfil em 9 partes',
+  description:
+    'O diagnóstico do perfil do Instagram do cliente feito na aba Redes: foto, nome, @, bio, link, categoria, destaques, posts fixados e grade, cada parte com estado (passa, melhorar, falha, nao_lido), o porquê e como corrigir, a nota e os posts que mais renderam para fixar. Use para propor a pauta do perfil. Só leitura.',
+  scopes: ['reports:read'] as const,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: SO_CLIENTE,
+  handler: async (input, ctx) => {
+    const parsed = z.object({ client_id: UUID }).strict().safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    return await _diagnosticoDoInstagram(parsed.data as { client_id: string }, ctx);
+  },
+};
+
 const mesaFotoContextoTool: ToolDefinition = {
   name: 'aceleriq_mesa_foto_contexto',
   title: 'Mesa Foto: kits, ensaios e fotos aprovadas',
@@ -3422,7 +3465,7 @@ const MAPA_DO_PAINEL = [
   { area: 'Relatorios', rota: '/relatorios', para: 'Relatorios do cliente.', pelo_mcp: 'aceleriq_list_reports, aceleriq_create_report_draft' },
   { area: 'Calendario editorial', rota: '/calendario', para: 'Pautas e publicacoes.', pelo_mcp: 'aceleriq_list_editorial_calendar, aceleriq_create_editorial_item' },
   { area: 'Anuncios', rota: '/anuncios', para: 'Campanhas, criativos e desempenho de midia.', pelo_mcp: 'aceleriq_get_ads_campaigns, aceleriq_get_ads_performance, aceleriq_get_ads_creatives' },
-  { area: 'Mesa Ads', rota: '/mesa-ads', para: 'Oferta, plano de teste com angulos, porques e notas do Jev, Estudio Ads, pacote de copy e envio ao gestor de trafego (com ZIP completo). Estude aqui antes de subir campanha; aja com as ferramentas de acao (OAuth).', pelo_mcp: 'aceleriq_mesa_ads_contexto (leitura), aceleriq_mesa_ads_briefing_salvar, aceleriq_mesa_ads_oferta_salvar, aceleriq_mesa_ads_oferta_do_contexto (acao)' },
+  { area: 'Mesa Ads', rota: '/mesa-ads', para: 'Oferta, plano de teste com angulos, porques e notas do Jev, Estudio Ads, pacote de copy e envio ao gestor de trafego (com ZIP completo). Estude aqui antes de subir campanha; aja com as ferramentas de acao (OAuth).', pelo_mcp: 'aceleriq_mesa_ads_contexto e aceleriq_mesa_ads_saude (leitura), aceleriq_mesa_ads_briefing_salvar, aceleriq_mesa_ads_oferta_salvar, aceleriq_mesa_ads_oferta_do_contexto (acao)' },
   { area: 'Mesa Foto', rota: '/mesa-foto', para: 'Estudio fotografico: acervo, kits (produto, pessoa, alimento), ensaios, versoes e fotos aprovadas. Os ids das fotos aprovadas sao os que se anexam a campanha.', pelo_mcp: 'aceleriq_mesa_foto_contexto (leitura); anexar foto a campanha: aceleriq_mesa_campanha_salvar' },
   { area: 'Mesa do cliente', rota: '/mesa', para: 'Calendario do mes com o estrategista, campanhas (briefing, imagens, conteudos) e o Estudio de arte com entrega e aprovacao.', pelo_mcp: 'aceleriq_mesa_calendario_pedido, aceleriq_mesa_calendario_gravar, aceleriq_mesa_campanha_criar, aceleriq_mesa_campanha_salvar, aceleriq_mesa_enviar_para_aprovacao (acao, OAuth)' },
   { area: 'Cerebro do cliente', rota: '/mesa', para: 'O que o cliente ja ensinou por area (preferencias, o que evitar, ajustes, reprovacoes com motivo, o que performou), com o resumo que entra no prompt de cada agente.', pelo_mcp: 'aceleriq_cerebro_do_cliente (leitura), aceleriq_cerebro_registrar (escrita, sem duplicar)' },
@@ -4092,6 +4135,9 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   // Mesas (v1.46.0): estudar o que foi gerado antes de rodar tráfego.
   mesaAdsContextoTool,
   mesaFotoContextoTool,
+  // MCP 2.8: auditoria e memória da conta de anúncios, diagnóstico do Instagram.
+  mesaAdsSaudeTool,
+  instagramDiagnosticoTool,
   // MCP 2.3: o agente age nas mesas e o cérebro do cliente aprende.
   cerebroDoClienteTool,
   cerebroRegistrarTool,

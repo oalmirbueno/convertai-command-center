@@ -9377,10 +9377,8 @@ async function contaAlertas(servico: SupabaseClient, chamador: Chamador, corpo: 
 
 const COLUNAS_DA_AUDITORIA = "id, plataforma, nota, cobertura, faixa, categorias, controles, periodo, criado_em";
 
-/** auditoria_rodar { client_id } -> { auditoria, anterior, custo_usd: 0 }. Calculada em código (sem IA, sem custo) e guardada. */
-async function auditoriaRodar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
-  const clientId = String(corpo.client_id ?? "");
-  await exigirAcessoAoCliente(chamador, clientId);
+/** A auditoria de um cliente (código, sem IA, sem custo), guardada. Serve à tela (com a pessoa) e ao robô semanal (sem pessoa). */
+async function auditoriaDoCliente(servico: SupabaseClient, clientId: string, criadoPor: string | null) {
   const [conta, memoria, rotina, briefing, coleta, anteriorQ] = await Promise.all([
     lerContaAoVivo(servico, clientId, 30),
     lerMemoriaDaConta(servico, clientId),
@@ -9405,15 +9403,58 @@ async function auditoriaRodar(servico: SupabaseClient, chamador: Chamador, corpo
     tipos_de_acao_vistos: coleta.tipos,
   });
   const nota = notaDaAuditoria(controles);
-  const linha = { client_id: clientId, plataforma: "meta", nota: nota.nota, cobertura: nota.cobertura, faixa: nota.faixa, categorias: nota.categorias, controles, periodo: conta.periodo, criado_por: chamador.userId };
+  const linha = { client_id: clientId, plataforma: "meta", nota: nota.nota, cobertura: nota.cobertura, faixa: nota.faixa, categorias: nota.categorias, controles, periodo: conta.periodo, criado_por: criadoPor };
   const { data, error } = await servico.from("ads_auditorias").insert(linha).select(COLUNAS_DA_AUDITORIA).single();
   if (error && !erroDeTabelaAusente(error)) registrarFalha("mesa-ads: auditoria não guardada", error);
+  const anterior = ((anteriorQ.data as Record<string, unknown>[] | null) ?? [])[0] ?? null;
+  return { auditoria: { ...(data ?? { ...linha, criado_em: new Date().toISOString() }), prioridades: nota.prioridades }, anterior, alertas, nota };
+}
+
+/** auditoria_rodar { client_id } -> { auditoria, anterior, custo_usd: 0 }. Calculada em código (sem IA, sem custo) e guardada. */
+async function auditoriaRodar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const { auditoria, anterior, alertas, nota } = await auditoriaDoCliente(servico, clientId, chamador.userId);
   await auditLog({
     correlationId: crypto.randomUUID(), toolName: "mesa_ads_auditoria_rodar", origin: PRINCIPAL_MESA_ADS, keyId: `${PRINCIPAL_MESA_ADS}:${chamador.userId}`, scopes: ["ads:mesa"],
     input: { client_id: clientId, nota: nota.nota, cobertura: nota.cobertura }, success: true, statusCode: 200, durationMs: 0, resultRef: clientId,
   });
-  const anterior = ((anteriorQ.data as Record<string, unknown>[] | null) ?? [])[0] ?? null;
-  return json({ auditoria: { ...(data ?? { ...linha, criado_em: new Date().toISOString() }), prioridades: nota.prioridades }, anterior, alertas, custo_usd: 0 });
+  return json({ auditoria, anterior, alertas, custo_usd: 0 });
+}
+
+/** Uma auditoria por semana: o robô pula quem já foi auditado nos últimos 6 dias (na tela ou pelo robô). */
+const DIAS_ENTRE_AUDITORIAS_DO_ROBO = 6;
+
+/**
+ * auditoria_cron (só com x-cron-secret; 12/10/2026): até 2 clientes com conta de anúncios ativa e
+ * sem auditoria nos últimos 6 dias, quem nunca foi auditado primeiro. Código puro (sem IA, sem
+ * custo, sem tocar na conta); o resultado fica em ads_auditorias para a tela e para o Hermes (MCP).
+ */
+async function auditoriaCron(servico: SupabaseClient, inicioMs: number) {
+  const { data: contas, error } = await servico.from("external_accounts").select("client_id").eq("platform", "meta_ads").eq("status", "active");
+  if (error) return json({ auditorias: [], motivo: "contas_indisponiveis", custo_usd: 0 });
+  const clientes = [...new Set(((contas as { client_id: string }[] | null) ?? []).map((c) => c.client_id).filter(Boolean))];
+  if (!clientes.length) return json({ auditorias: [], custo_usd: 0 });
+  const desde = new Date(Date.now() - DIAS_ENTRE_AUDITORIAS_DO_ROBO * 86_400_000).toISOString();
+  const { data: recentes } = await servico.from("ads_auditorias").select("client_id, criado_em").in("client_id", clientes).order("criado_em", { ascending: false }).limit(500);
+  const ultima = new Map<string, string>();
+  for (const r of (recentes as { client_id: string; criado_em: string }[] | null) ?? []) if (!ultima.has(r.client_id)) ultima.set(r.client_id, r.criado_em);
+  const fila = clientes
+    .filter((c) => !ultima.has(c) || (ultima.get(c) as string) < desde)
+    .sort((a, b) => (ultima.get(a) ?? "").localeCompare(ultima.get(b) ?? ""))
+    .slice(0, CLIENTES_POR_RODADA_DO_CRON);
+  const auditorias: Record<string, unknown>[] = [];
+  for (const clientId of fila) {
+    if (Date.now() - inicioMs > 250_000) break;
+    try {
+      const r = await auditoriaDoCliente(servico, clientId, null);
+      auditorias.push({ client_id: clientId, nota: r.nota.nota, faixa: r.nota.faixa });
+    } catch (e) {
+      console.error("[mesa-ads] auditoria do robô falhou", { client_id: clientId, erro: e instanceof Error ? e.name : "desconhecido" });
+      auditorias.push({ client_id: clientId, nota: null, motivo: e instanceof ErroHttp ? e.codigo : "falha" });
+    }
+  }
+  return json({ auditorias, restam: Math.max(0, clientes.filter((c) => !ultima.has(c) || (ultima.get(c) as string) < desde).length - fila.length), custo_usd: 0 });
 }
 
 /** auditoria_ler { client_id } -> { ultimas: até 6 rodadas, custo_usd: 0 }. */
@@ -10878,10 +10919,12 @@ Deno.serve(async (req) => {
     if (segredoDoCron && (req.headers.get("x-cron-secret") || "").trim() === segredoDoCron) {
       let doCron: Record<string, unknown> = {};
       try { doCron = await req.json(); } catch { /* corpo vazio */ }
-      if (String(doCron.acao ?? "") !== "rotina_cron") return json({ error: "acao_desconhecida", mensagem: "O cron só roda a rotina de tráfego." }, 400);
+      const acaoDoCron = String(doCron.acao ?? "");
+      // 12/10/2026: o cron também roda a auditoria semanal (código, sem IA e sem custo).
+      if (acaoDoCron !== "rotina_cron" && acaoDoCron !== "auditoria_cron") return json({ error: "acao_desconhecida", mensagem: "O cron só roda a rotina de tráfego e a auditoria semanal." }, 400);
       return respostaComFolego(async () => {
         try {
-          return await rotinaCron(servico, inicioMs);
+          return acaoDoCron === "auditoria_cron" ? await auditoriaCron(servico, inicioMs) : await rotinaCron(servico, inicioMs);
         } catch (err) {
           return respostaDeErro(err);
         }
