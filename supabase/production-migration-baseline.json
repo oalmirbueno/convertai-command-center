@@ -2105,6 +2105,14 @@
       "remote_name": "ads_auditorias",
       "remote_statements_sha256": "0fe0fc6890c02169e3085c551459ff3c337246e2d1b94279d6f7334ea96e22e6",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261012030000",
+      "path": "supabase/migrations/20261012030000_views_dos_posts.sql",
+      "local_sha256": "166005afacfe1cfb4935fef3136781c58e3b82f367740a349fa42201e3d6dffa",
+      "remote_name": "views_dos_posts",
+      "remote_statements_sha256": "f6fea2b86c789eeb7816e0babb286536bd1ef4209b94f709e35eafbb72a14df1",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
