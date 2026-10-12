@@ -2089,6 +2089,14 @@
       "remote_name": "gestor_regras_do_dono",
       "remote_statements_sha256": "ed41cb218da0f1644cffe491f5556b32cab0e61b223f6f543086a2bd17f90b76",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261012010000",
+      "path": "supabase/migrations/20261012010000_ads_memoria_da_conta.sql",
+      "local_sha256": "82fb21e3f1467dfea33378522c61c7f14bcd51e684443b1d1c0f49d81154da29",
+      "remote_name": "ads_memoria_da_conta",
+      "remote_statements_sha256": "9578ced60900fff6c2bf9d7be98d633065cf313e786a87dfe4a4017703aa52bb",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
