@@ -109,11 +109,11 @@ describe("motor de copy: regras da casa, limpeza e conferência em código", () 
 });
 
 describe("motor de copy: Jev, nota e ordem", () => {
-  it("faz 5 perguntas independentes por variação, com Score em lista ordenada", () => {
+  it("faz 6 perguntas independentes por variação (12/10: + marcas de texto de IA), com Score em lista ordenada", () => {
     const q = perguntasDaConferencia(3);
-    expect(Object.keys(q)).toHaveLength(15);
+    expect(Object.keys(q)).toHaveLength(18);
     for (const i of [0, 1, 2]) {
-      for (const k of ["voz", "forca", "inventa", "promessa", "cliche"]) expect(q[`${k}_${i}`]).toBeTruthy();
+      for (const k of ["voz", "forca", "inventa", "promessa", "cliche", "marcas"]) expect(q[`${k}_${i}`]).toBeTruthy();
       const voz = q[`voz_${i}`] as { type: string; criteria: string[] };
       expect(voz.type).toBe("score");
       expect(Array.isArray(voz.criteria)).toBe(true);
@@ -132,7 +132,7 @@ describe("motor de copy: Jev, nota e ordem", () => {
       },
       3,
     );
-    expect(notas[0]).toEqual({ voz: 10, forca: 7.5, inventa: 0.1, promessa: 0.05, cliche: 0.1 });
+    expect(notas[0]).toEqual({ voz: 10, forca: 7.5, inventa: 0.1, promessa: 0.05, cliche: 0.1, marcas: null });
     const local = { nota: 10, problemas: [] };
     const c0 = notaDaCopy(local, notas[0], 0);
     const c1 = notaDaCopy(local, notas[1], 1);
@@ -157,15 +157,16 @@ describe("motor de copy ligado nas mesas", () => {
   it("fica pequeno no compartilhado e sem travessão", () => {
     const puro = fonte("supabase/functions/_shared/motor-de-copy.ts");
     const servidor = fonte("supabase/functions/_shared/motor-de-copy-servidor.ts");
-    expect(puro.length + servidor.length).toBeLessThan(30_000);
+    // 12/10/2026: as marcas de texto de IA em português (ig-humanizer) somaram cerca de 3 KB.
+    expect(puro.length + servidor.length).toBeLessThan(36_000);
     expect(puro).not.toMatch(/[\u2014\u2013]/);
     expect(servidor).not.toMatch(/[\u2014\u2013]/);
     expect(puro).not.toMatch(/from "npm:|Deno\./);
   });
 
-  it("Estúdio: legenda em 3 variações conferidas, a melhor no campo e as outras na resposta", () => {
+  it("Estúdio: legenda em 4 variações conferidas (12/10), a melhor no campo e as outras na resposta", () => {
     const e = fonte("supabase/functions/estudio-arte/index.ts");
-    expect(e).toContain("const VARIACOES_DA_LEGENDA = 3;");
+    expect(e).toContain("const VARIACOES_DA_LEGENDA = 4;");
     expect(e).toContain('motor_de_copy: blocoDoMotor({ canal: "legenda", objetivo: objetivoDoPost, variacoes: VARIACOES_DA_LEGENDA, partirDoPrevisto: temLegendaPrevista, regras: voz.regras })');
     expect(e).toContain("contexto_completo_da_marca: voz.bloco || null");
     expect(e).toContain("const conf = await conferirCopies({");

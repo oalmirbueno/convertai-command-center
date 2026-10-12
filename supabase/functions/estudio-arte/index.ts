@@ -115,6 +115,9 @@ import {
   type Qualidade,
 } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar, notaScore, type PerguntaJev, probabilidadeNoul } from "../_shared/jev.ts";
+// 12/10/2026: hashtags por tamanho (nicho, média, ampla) na mistura da skill ig-hashtag-strategist.
+import { CRITERIOS_DO_TAMANHO, misturaDeHashtags, type TamanhoDaHashtag, tamanhoEstimado } from "./modulos/hashtags-por-tamanho.ts";
+import { avisosDoCarrossel } from "../_shared/regras-do-carrossel.ts";
 import { CONHECIMENTO_DIRETOR, PADRAO_NA_IMAGEM } from "./modulos/conhecimento-design.ts";
 import { variarAgoraNoEstudio } from "./modulos/diversidade-do-estudio.ts";
 import {
@@ -3694,6 +3697,10 @@ async function prepararItem(ch: Chamador, corpo: Record<string, unknown>, item: 
     const c = direcao.cards.find((x) => x.ordem === o);
     return !!c && !!sugestaoDeDividirEmDuas(c, direcao.cards.length);
   });
+
+  // 12/10/2026: regras do carrossel (skill ig-carousel-planner): loop aberto na 1ª lâmina, um pedido só
+  // (salvar, seguir ou mandar) na última, de 3 a 10 lâminas. Aviso, nunca reescrita.
+  if (!postUnico && direcao.cards.length > 1) avisosDoDiretor = [...avisosDoDiretor, ...avisosDoCarrossel(direcao.cards.map((c) => ({ texto: c.texto_exato })))];
 
   // Frente AG (28/09): o texto da direção conferido contra o pedido (código e nota do Jev), só como aviso.
   // Na arte rápida o pedido é a fonte inteira; no item do plano, só quando a equipe pediu algo ao diretor.
@@ -7359,7 +7366,8 @@ const ESQUEMA_LEGENDA = {
 };
 
 /** Variações de legenda que o Estúdio pede (gerar a mais e escolher, sem laço). */
-const VARIACOES_DA_LEGENDA = 3;
+// 12/10/2026: 4 variações (gerar a mais e escolher; a conferência ganhou as marcas de texto de IA).
+const VARIACOES_DA_LEGENDA = 4;
 
 const INSTRUCOES_LEGENDA = `LEGENDA FINAL DO POST
 
@@ -7385,9 +7393,13 @@ function limparHashtag(h: unknown): string | null {
   return s.length >= 3 && s.length <= 40 ? `#${s}` : null;
 }
 
-/** De 4 a 5 hashtags: o Jev dá a nota de cada candidata e o código fica com as melhores. */
+/**
+ * De 3 a 5 hashtags na mistura por tamanho (12/10/2026, skill ig-hashtag-strategist): na mesma chamada,
+ * o Jev dá a nota de relevância (Score) e o tamanho estimado (Choice: nicho, média ou ampla) de cada
+ * candidata; o código monta 2 a 3 de nicho, 1 a 2 médias e no máximo 1 ampla (misturaDeHashtags).
+ */
 async function escolherHashtags(t: Trabalho, candidatas: string[], contexto: Record<string, unknown>, criadoPor: string): Promise<string[]> {
-  if (candidatas.length <= MAX_HASHTAGS) return candidatas;
+  if (candidatas.length <= 3) return candidatas;
   try {
     const questions: Record<string, PerguntaJev> = {};
     candidatas.forEach((h, i) => {
@@ -7396,21 +7408,26 @@ async function escolherHashtags(t: Trabalho, candidatas: string[], contexto: Rec
         instructions: `Quão boa é a hashtag \`hashtags.h${i}\` para este post chegar ao público que vira cliente da marca em \`marca\`, dado o tema em \`post\`?`,
         criteria: NIVEIS_HASHTAG,
       };
+      questions[`t${i}`] = {
+        type: "choice",
+        instructions: `Pelo quanto é específica, qual o tamanho provável da hashtag \`hashtags.h${i}\` no Instagram brasileiro?`,
+        criteria: CRITERIOS_DO_TAMANHO,
+      };
     });
     const res = await jevPerguntar({
       state: { ...contexto, hashtags: Object.fromEntries(candidatas.map((h, i) => [`h${i}`, h])) },
       questions,
     });
     await cobrarJev(res, { clientId: t.client_id, tarefa: "estudio", referencia: { tipo: "estudio_trabalho", id: t.id }, criadoPor });
-    return candidatas
-      .map((h, i) => ({ h, nota: notaScore(res.answers[`h${i}`]) ?? -1 }))
-      .sort((a, b) => b.nota - a.nota)
-      .slice(0, MAX_HASHTAGS)
-      .map((x) => x.h);
+    const tamanho = (i: number): TamanhoDaHashtag => {
+      const r = res.answers[`t${i}`] as { choice?: string } | undefined;
+      return r && (r.choice === "nicho" || r.choice === "media" || r.choice === "ampla") ? r.choice : tamanhoEstimado(candidatas[i]);
+    };
+    return misturaDeHashtags(candidatas.map((h, i) => ({ hashtag: h, nota: notaScore(res.answers[`h${i}`]) ?? -1, tamanho: tamanho(i) })), MAX_HASHTAGS);
   } catch (e) {
-    // Sem Jev, as primeiras sugeridas pelo diretor. Frente FS: com log.
-    registrarFalha("estudio-arte: jev das hashtags falhou (vão as primeiras sugeridas)", e, { trabalho_id: t.id });
-    return candidatas.slice(0, MAX_HASHTAGS);
+    // Sem Jev: a mistura com o tamanho estimado em código, na ordem que o diretor sugeriu. Frente FS: com log.
+    registrarFalha("estudio-arte: jev das hashtags falhou (vai a mistura estimada em código)", e, { trabalho_id: t.id });
+    return misturaDeHashtags(candidatas.map((h, i) => ({ hashtag: h, nota: candidatas.length - i, tamanho: tamanhoEstimado(h) })), MAX_HASHTAGS);
   }
 }
 

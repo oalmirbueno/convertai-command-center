@@ -137,7 +137,7 @@ describe("motor de copy no servidor: conferirCopies", () => {
     const r = await conferirCopies({ textos: [media, boa, arriscada], canal: "legenda", objetivo: "venda", cobranca, jev: jev as PedidoDaConferencia["jev"], cobrar, oferta: "Troca de óleo e revisão" });
     expect(jev).toHaveBeenCalledTimes(1);
     const pedido = (jev.mock.calls[0] as unknown as [{ state: { oferta: string; copies: Record<string, string> }; questions: Record<string, unknown> }])[0];
-    expect(Object.keys(pedido.questions)).toHaveLength(15);
+    expect(Object.keys(pedido.questions)).toHaveLength(18); // 6 por variação desde 12/10 (marcas de texto de IA)
     expect(pedido.state.oferta).toBe("Troca de óleo e revisão");
     expect(Object.keys(pedido.state.copies)).toEqual(["c0", "c1", "c2"]);
     expect(r.ordem).toEqual([1, 0, 2]);

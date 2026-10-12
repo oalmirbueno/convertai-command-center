@@ -133,6 +133,7 @@ export function blocoDoMotor(p: PedidoDoMotor): string {
     "- Fatos: só os do contexto e do pedido. Sem preço, número, prazo, depoimento, prêmio ou resultado inventado.",
     "- Sem promessa proibida: resultado garantido, cura ou efeito de saúde, ganho de dinheiro, mudança de corpo, urgência ou escassez falsa, \"o melhor\" ou \"número 1\" sem prova.",
     "- Sem clichê de IA (\"no mundo de hoje\", \"eleve\", \"desbloqueie\", \"jornada\", \"potencialize\", \"não é só X, é Y\", \"transforme sua vida\"): troque por detalhe concreto do negócio.",
+    "- Sem marca de texto de IA: pergunta-ponte (\"O resultado?\", \"A verdade?\"), contraste montado (\"não é X, é Y\", \"pare de X, comece Y\", \"menos X, mais Y\"), sinceridade encenada (\"vou ser sincero\", \"papo reto\"), três adjetivos vazios em fila (\"rápido, simples e eficiente\"), frases de uma palavra em sequência, mais de 3 emojis. Uma tríade só passa com número, nome ou detalhe real.",
     `- Português do Brasil, frases curtas, voz ativa.${p.regras && !p.regras.semTravessao ? "" : " Sem travessão."}`,
   ].join("\n");
 }
@@ -204,6 +205,33 @@ const CLICHES: Array<[RegExp, string]> = [
   [/fazer a diferenca|faz toda a diferenca/, "faz toda a diferença"],
 ];
 
+/**
+ * Marcas de texto de IA em português (12/10/2026, a partir do ig-humanizer, que é em inglês).
+ * Só o que dá para ver por padrão de texto; tríade oca e contraste montado mais sutis vão ao Jev.
+ * Comparado sem acento e em minúsculas. Safari 11: sem lookbehind, classe Unicode ou grupo nomeado.
+ */
+const MARCAS_DE_IA: Array<[RegExp, string]> = [
+  [/(^|\n|[.!?] )(o|a) (resultado|resposta|verdade|licao|segredo|detalhe|pegadinha|virada)\?/, "pergunta-ponte (\"O resultado?\")"],
+  [/aqui esta (o que|como|por que|o porque|a verdade)|spoiler:|plot twist|vamos falar sobre/, "frase-ponte (\"aqui está o que\")"],
+  [/\bpare de [^.,\n]{1,30}[.,] comece\b|\bmenos [^.,\n]{1,25}, mais [^.,\n]{1,25}[.!]|nao se trata de [^.,\n]{1,40}[,.] (se trata|e sobre)/, "contraste montado"],
+  [/vou ser (bem )?(sincero|sincera|honesto|honesta|direto|direta)|sendo (bem )?(sincero|sincera|honesto|honesta)|papo reto|real talk|sem rodeios|opiniao impopular|verdade seja dita/, "sinceridade encenada"],
+  [/no fim do dia|ao fim do dia|divisor de aguas|virada de chave|game changer|na era digital|a dura verdade|a verdade inconveniente|mergulho profundo/, "frase morta"],
+  [/(\b[a-z]{2,15}[.!] ){2,}[a-z]{2,15}[.!]/, "frases de uma palavra em sequência"],
+];
+
+/** Emojis (pares substitutos e o bloco de símbolos), sem classe Unicode por causa do Safari 11. */
+export function contarEmojis(texto: string): number {
+  return (String(texto || "").match(/[\uD83C-\uDBFF][\uDC00-\uDFFF]|[\u2600-\u27BF]/g) || []).length;
+}
+
+/** As marcas de IA que aparecem no texto (nomes, sem repetir). */
+export function marcasDeIa(texto: string): string[] {
+  const s = semAcento(String(texto || ""));
+  const achadas = MARCAS_DE_IA.filter(([re]) => re.test(s)).map(([, nome]) => nome);
+  if (contarEmojis(texto) >= 4) achadas.push("emojis demais (4 ou mais)");
+  return achadas;
+}
+
 const SAUDE = "doenca|dor|dores|ansiedade|depressao|cancer|diabetes|calvicie|queda de cabelo|insonia|gastrite|enxaqueca|acne|celulite|obesidade|vicio|alergia|rinite|sinusite|artrite|artrose|hernia|hipertensao|pressao alta|psoriase|estresse";
 
 const PROMESSAS: Array<[RegExp, string]> = [
@@ -219,7 +247,7 @@ const PROMESSAS: Array<[RegExp, string]> = [
 
 const CTA = /\b(chame|chama|agende|agenda|marque|clique|toque|comente|salve|compartilhe|envie|mande|peca|garanta|reserve|compre|acesse|visite|venha|fale|ligue|responda|baixe|inscreva|cadastre|solicite|conheca|experimente|aproveite|escolha|confira|chamar|agendar|pedir|garantir|reservar|passe|consulte|saiba|assista|leia|arraste|siga|converse)\b|link na bio|whatsapp|direct|\bdm\b/;
 
-export type ProblemaDaCopy = { tipo: "tamanho" | "primeira_linha" | "titulo" | "sem_cta" | "cliche" | "promessa" | "travessao" | "hashtag" | "vazia"; texto: string };
+export type ProblemaDaCopy = { tipo: "tamanho" | "primeira_linha" | "titulo" | "sem_cta" | "cliche" | "marca_ia" | "promessa" | "travessao" | "hashtag" | "vazia"; texto: string };
 
 /** Conferência em código (sem rede): nota de 0 a 10 e os problemas, cada um com o aviso pronto. */
 export function conferirCopy(texto: string, canal: CanalDaCopy, regras: RegrasDaCasa = { semTravessao: true }): { nota: number; problemas: ProblemaDaCopy[] } {
@@ -236,6 +264,8 @@ export function conferirCopy(texto: string, canal: CanalDaCopy, regras: RegrasDa
   if (c.pedeCta && !CTA.test(s)) { nota -= 2; problemas.push({ tipo: "sem_cta", texto: "Sem CTA claro (verbo de ação no fim)." }); }
   const cliches = CLICHES.filter(([re]) => re.test(s)).map(([, nome]) => nome);
   if (cliches.length) { nota -= Math.min(3, cliches.length); problemas.push({ tipo: "cliche", texto: `Clichê de IA: ${cliches.join(", ")}.` }); }
+  const marcas = marcasDeIa(t);
+  if (marcas.length) { nota -= Math.min(3, marcas.length); problemas.push({ tipo: "marca_ia", texto: `Marca de texto de IA: ${marcas.join(", ")}.` }); }
   const promessas = PROMESSAS.filter(([re]) => re.test(s)).map(([, nome]) => nome);
   if (promessas.length) { nota -= 3; problemas.push({ tipo: "promessa", texto: `Promessa proibida ou arriscada: ${promessas.join(", ")}. Confira antes de usar.` }); }
   if (regras.semTravessao && temTravessao(t)) { nota -= 1; problemas.push({ tipo: "travessao", texto: "Tem travessão (regra da casa)." }); }
@@ -306,11 +336,12 @@ export function perguntasDaConferencia(n: number): Record<string, { type: "score
     q[`inventa_${i}`] = { type: "noul", instructions: `A copy ${c} afirma algum fato concreto (preço, número, prazo, resultado, serviço, depoimento, prêmio ou garantia) que NÃO está em \`marca\` nem em \`oferta\`?` };
     q[`promessa_${i}`] = { type: "noul", instructions: `A copy ${c} faz promessa proibida ou arriscada: resultado garantido, cura ou efeito de saúde, ganho de dinheiro, mudança de corpo, urgência ou escassez que não está em \`oferta\`, ou superlativo sem prova (o melhor, número 1)?` };
     q[`cliche_${i}`] = perguntaDoCliche(c);
+    q[`marcas_${i}`] = { type: "noul", instructions: `A copy ${c} usa alguma destas marcas de texto montado por inteligência artificial: três adjetivos ou ideias abstratas em fila sem número, nome ou detalhe concreto (como "rápido, simples e eficiente"); contraste montado ("não é X, é Y", "menos X, mais Y", "pare de X, comece Y"); pergunta-ponte que se responde na linha seguinte ("O resultado?"); ou sinceridade encenada ("vou ser sincero")?` };
   }
   return q;
 }
 
-export type NotaDoJev = { voz: number | null; forca: number | null; inventa: number | null; promessa: number | null; cliche: number | null };
+export type NotaDoJev = { voz: number | null; forca: number | null; inventa: number | null; promessa: number | null; cliche: number | null; marcas?: number | null };
 
 type Resposta = { score?: number; noul?: number } | undefined;
 const score = (r: Resposta, niveis: number) => (r && typeof r.score === "number" && isFinite(r.score) ? Math.round((r.score / (niveis - 1)) * 100) / 10 : null);
@@ -319,19 +350,20 @@ const prob = (r: Resposta) => (r && typeof r.noul === "number" && isFinite(r.nou
 export function lerConferencia(answers: Record<string, Resposta>, n: number): NotaDoJev[] {
   const saida: NotaDoJev[] = [];
   for (let i = 0; i < n; i++) {
-    saida.push({ voz: score(answers[`voz_${i}`], NIVEIS_VOZ.length), forca: score(answers[`forca_${i}`], NIVEIS_FORCA.length), inventa: prob(answers[`inventa_${i}`]), promessa: prob(answers[`promessa_${i}`]), cliche: prob(answers[`cliche_${i}`]) });
+    saida.push({ voz: score(answers[`voz_${i}`], NIVEIS_VOZ.length), forca: score(answers[`forca_${i}`], NIVEIS_FORCA.length), inventa: prob(answers[`inventa_${i}`]), promessa: prob(answers[`promessa_${i}`]), cliche: prob(answers[`cliche_${i}`]), marcas: prob(answers[`marcas_${i}`]) });
   }
   return saida;
 }
 
 /** Limiares dos Noul (sim a partir daqui). A política fica aqui, à vista, para ajustar sem mexer nas perguntas. */
-export const LIMIARES = { inventa: 0.6, promessa: 0.5, cliche: 0.6 };
+export const LIMIARES = { inventa: 0.6, promessa: 0.5, cliche: 0.6, marcas: 0.6 };
 
 export type ConferenciaDaCopy = { indice: number; nota: number; local: number; jev: NotaDoJev | null; alerta: boolean; avisos: string[]; ajustes: string[] };
 
 /**
  * Nota de 0 a 100. Com o Jev: 40% voz, 35% força, 25% conferência em código,
- * menos 25 por fato inventado, 30 por promessa proibida e 15 por clichê de IA.
+ * menos 25 por fato inventado, 30 por promessa proibida, 15 por clichê de IA
+ * e 10 por marca de texto de IA (12/10/2026).
  * Sem o Jev: só a conferência em código. `alerta` = algo que a equipe precisa
  * olhar antes de usar (promessa ou fato inventado).
  */
@@ -344,6 +376,7 @@ export function notaDaCopy(local: { nota: number; problemas: ProblemaDaCopy[] },
     if (jev.inventa != null && jev.inventa >= LIMIARES.inventa) { nota -= 25; alerta = true; avisos.push("O Jev viu fato que não está no contexto nem na oferta: confira número, prazo e promessa."); }
     if (jev.promessa != null && jev.promessa >= LIMIARES.promessa) { nota -= 30; alerta = true; avisos.push("O Jev viu promessa proibida ou arriscada."); }
     if (jev.cliche != null && jev.cliche >= LIMIARES.cliche) { nota -= 15; avisos.push("Soa como texto genérico de IA pelo Jev."); }
+    if (jev.marcas != null && jev.marcas >= LIMIARES.marcas) { nota -= 10; avisos.push("O Jev viu marca de texto de IA (tríade vazia, contraste montado ou pergunta-ponte)."); }
     if (jev.voz != null && jev.voz < 5) avisos.push(`Pouco da voz da marca (nota ${String(jev.voz).replace(".", ",")} de 10).`);
   }
   return { indice, nota: Math.max(0, Math.min(100, Math.round(nota))), local: local.nota, jev, alerta, avisos: avisos.filter((a, i, l) => l.indexOf(a) === i), ajustes };

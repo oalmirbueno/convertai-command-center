@@ -136,6 +136,9 @@ import {
 // Frente CPY: o motor de copy da casa (limpeza e conferência da legenda, sem rede).
 import { REGRA_DA_LEGENDA_NO_PLANO } from "../_shared/motor-de-copy.ts";
 import { legendaDoItem } from "./modulos/legenda-do-item.ts";
+// 12/10/2026: regras do carrossel (até 10 pela API, loop na 1ª, um pedido na última) e as legendas do plano pelo Jev.
+import { avisosDoCarrossel, MAX_LAMINAS_PELA_API } from "../_shared/regras-do-carrossel.ts";
+import { conferirLegendasComJev } from "./modulos/legendas-com-jev.ts";
 // 02/10: refazer uma proposta no servidor (chamada interna com a chave de serviço e o x-cron-secret).
 import {
   ACAO_REFAZER_INTERNO,
@@ -601,6 +604,12 @@ function normalizarCards(v: unknown, formato: Formato, avisos: string[] = []): C
     .filter((c) => c.texto || c.ilustracao)
     .sort((a, b) => a.ordem - b.ordem);
   if (formato === "estatico") cards = cards.slice(0, 1);
+  // 12/10/2026: carrossel até 10 lâminas (a API do Instagram não publica mais que isso; a entrega travava
+  // lá na frente) e os avisos de estrutura do carrossel (aviso, nunca reescrita).
+  if (formato === "carrossel") {
+    for (const a of avisosDoCarrossel(cards)) avisos.push(a);
+    cards = cards.slice(0, MAX_LAMINAS_PELA_API);
+  }
   // Menos texto nas lâminas: o que ainda passa do limite sai cortado no fim de frase, com aviso (sem nova chamada).
   const conferido = conferirLaminas(cards.slice(0, 20).map((c, i) => ({ ...c, ordem: i + 1 })));
   for (const a of conferido.avisos) avisos.push(textoDoAviso(a));
@@ -901,6 +910,10 @@ async function carregarProposta(servico: SupabaseClient, id: unknown): Promise<P
 
 /** Atualiza a proposta sempre presa ao client_id dela. */
 async function salvarProposta(servico: SupabaseClient, p: Proposta, campos: Record<string, unknown>): Promise<Proposta> {
+  // 12/10/2026: a proposta que fica pronta tem as legendas conferidas pelo Jev (avisos, nunca reescrita).
+  if (campos.status === "pronta" && Array.isArray(campos.itens)) {
+    await conferirLegendasComJev(servico, campos.itens as Item[], { clientId: p.client_id, criadoPor: p.criado_por ?? null, referenciaId: p.id });
+  }
   const { data, error } = await servico
     .from("calendario_propostas")
     .update(campos)
@@ -3861,6 +3874,8 @@ ${REGRAS_DOS_ITENS}`;
   if (semTutorial.reescritos) itens.splice(0, itens.length, ...semTutorial.itens);
   // Frente AP: cada conteúdo passa pela memória editorial (tema novo, ângulo novo ou repetição), antes de guardar.
   const checagem = await checarEvolucao(itens, ctx.memoriaEditorial, { clientId, referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId }, criadoPor: chamador.userId });
+  // 12/10/2026: legendas conferidas pelo Jev antes de gravar (avisos no item, nunca reescrita).
+  await conferirLegendasComJev(servico, itens, { clientId, criadoPor: chamador.userId });
 
   const { data: proposta, error } = await servico
     .from("calendario_propostas")
@@ -4016,6 +4031,8 @@ ${REGRAS_DOS_ITENS}`;
   // Frente AP: o conteúdo rápido também passa pela memória editorial (selo e aviso; sem laço).
   const checagem = await checarEvolucao([item], ctx.memoriaEditorial, { clientId, referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId }, criadoPor: chamador.userId });
   tempo.marcar("memoria");
+  // 12/10/2026: legendas conferidas pelo Jev antes de gravar (avisos no item, nunca reescrita).
+  await conferirLegendasComJev(servico, [item], { clientId, criadoPor: chamador.userId });
 
   const { data: criada, error } = await servico
     .from("calendario_propostas")
@@ -4759,6 +4776,8 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
     }
   }
   const custoTotal = Math.round((s.custoUsd + custoJev) * 1e6) / 1e6;
+  // 12/10/2026: legendas conferidas pelo Jev antes de gravar (avisos no item, nunca reescrita).
+  await conferirLegendasComJev(servico, itens, { clientId, criadoPor: chamador.userId });
 
   const { data: proposta, error: erroProposta } = await servico
     .from("calendario_propostas")
