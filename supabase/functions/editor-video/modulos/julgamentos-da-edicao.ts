@@ -103,10 +103,12 @@ export const NIVEIS_DO_VIRAL = [
 ];
 
 /**
- * Janelas candidatas (código): frases seguidas que somam 15 a 60 s, começando
- * em começo de frase; uma nova janela a cada ~20 s de fala.
+ * Janelas candidatas (código): frases seguidas que somam 20 a 55 s, começando
+ * em começo de frase; uma nova janela a cada ~20 s de fala. 12/10/2026 (youtube-agent,
+ * Shorts a partir de vídeo longo): 20 a 55 s é a faixa que segura o Shorts e o Reels
+ * (era 15 a 60).
  */
-export function janelasCandidatas(frases: FraseDita[], min = 15, max = 60, passo = 20): FraseDita[] {
+export function janelasCandidatas(frases: FraseDita[], min = 20, max = 55, passo = 20): FraseDita[] {
   const janelas: FraseDita[] = [];
   let ultimoInicio = -Infinity;
   for (let i = 0; i < frases.length && janelas.length < MAX_JANELAS; i++) {
@@ -138,6 +140,12 @@ export function perguntasDeViral(titulo: string, janelas: FraseDita[]): { state:
       instructions: `Quem nunca viu o vídeo inteiro entende o trecho \`trechos[${i}].texto\` do começo ao fim, sem precisar do que veio antes?`,
       criteria: { true: "entende sozinho", false: "precisa do contexto de antes" },
     };
+    // 12/10/2026 (youtube-agent): o corte bom tem uma virada, e não só uma ideia completa.
+    questions[`virada_${i}`] = {
+      type: "noul",
+      instructions: `O trecho \`trechos[${i}].texto\` tem uma virada: uma revelação, um número que surpreende, uma quebra do que se esperava ou uma conclusão que muda a forma de ver o assunto?`,
+      criteria: { true: "tem virada", false: "segue linear, sem virada" },
+    };
   });
   return { state: { video: { titulo: limpo(titulo, 120) }, trechos: janelas.map((j) => ({ texto: j.texto })) }, questions };
 }
@@ -150,14 +158,24 @@ export interface MomentoViral {
   texto: string;
 }
 
-/** Nota final = 70% do Score + 30% do "entende sozinho"; fica o que passa de 0,55, sem se sobrepor, até 5. */
+/** O trecho fecha numa frase terminada (ponto, exclamação, interrogação ou reticências)? */
+export const terminaEmFrase = (texto: string) => /[.!?…]["')\]]*\s*$/.test(String(texto || ""));
+
+/**
+ * As 3 condições do corte (youtube-agent): pensamento completo (Jev, "entende sozinho"), virada
+ * (Jev) e fim em frase terminada (código). Nota final = 60% do Score + 20% do "entende sozinho"
+ * + 20% da virada; trecho que para no meio da frase perde 15%. Fica o que passa de 0,55, sem se
+ * sobrepor, até 5.
+ */
 export function escolherVirais(janelas: FraseDita[], respostas: Record<string, RespostaJev>, limiar = 0.55, maximo = 5): MomentoViral[] {
   const notas: MomentoViral[] = [];
   janelas.forEach((j, i) => {
     const s = notaDe0a1(respostas[`viral_${i}`], NIVEIS_DO_VIRAL.length);
     const n = probNoul(respostas[`sozinho_${i}`]);
+    const v = probNoul(respostas[`virada_${i}`]);
     if (s === null) return;
-    const nota = Math.round((0.7 * s + 0.3 * (n === null ? 0.5 : n)) * 1000) / 1000;
+    const bruta = 0.6 * s + 0.2 * (n === null ? 0.5 : n) + 0.2 * (v === null ? 0.5 : v);
+    const nota = Math.round(bruta * (terminaEmFrase(j.texto) ? 1 : 0.85) * 1000) / 1000;
     if (nota >= limiar) notas.push({ k: j.k, inicio_s: j.inicio_s, fim_s: j.fim_s, nota, texto: j.texto });
   });
   const ficam: MomentoViral[] = [];

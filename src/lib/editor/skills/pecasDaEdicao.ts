@@ -305,9 +305,41 @@ export function viraisEm(m: Montador, virais: { inicio_s: number; fim_s: number;
   return lista.length;
 }
 
-/** Capítulos no formato do YouTube ("0:00 Título"); o primeiro precisa começar em 0:00. */
-export function capitulosParaYoutube(p: ProjetoDeEdicao): string {
+/** O YouTube só mostra capítulos com cada um de pelo menos 10 s (e 3 ou mais na lista). */
+export const CAPITULO_MINIMO_S = 10;
+export const CAPITULOS_MINIMOS = 3;
+
+/** Os capítulos que o YouTube aceita: o primeiro em 0:00 e cada um com 10 s ou mais (o curto some, o anterior cresce). */
+function capitulosAceitos(p: ProjetoDeEdicao) {
   const caps = p.marcadores.filter((m) => m.tipo === "capitulo").sort((a, b) => a.tempo_s - b.tempo_s);
+  const ficam: typeof caps = [];
+  caps.forEach((c, i) => {
+    const inicio = i === 0 ? 0 : c.tempo_s;
+    if (ficam.length && inicio - (ficam.length === 1 ? 0 : ficam[ficam.length - 1].tempo_s) < CAPITULO_MINIMO_S) return;
+    if (ficam.length && p.duracao_s - inicio < CAPITULO_MINIMO_S) return;
+    ficam.push(c);
+  });
+  return ficam;
+}
+
+/**
+ * Os capítulos valem no YouTube? (12/10/2026, youtube-agent) O primeiro em 0:00, 3 ou mais, cada
+ * um com 10 s ou mais. Devolve o motivo em português quando não valem.
+ */
+export function capitulosValemNoYoutube(p: ProjetoDeEdicao): { valem: boolean; motivo: string | null } {
+  const todos = p.marcadores.filter((m) => m.tipo === "capitulo").length;
+  if (!todos) return { valem: false, motivo: null };
+  const aceitos = capitulosAceitos(p).length;
+  if (aceitos < CAPITULOS_MINIMOS) {
+    return { valem: false, motivo: `O YouTube só mostra capítulos com ${CAPITULOS_MINIMOS} ou mais, cada um com ${CAPITULO_MINIMO_S} s ou mais. Aqui ${aceitos === todos ? `há ${aceitos}` : `valem ${aceitos} de ${todos}`}.` };
+  }
+  if (aceitos < todos) return { valem: true, motivo: `${todos - aceitos} ${todos - aceitos === 1 ? "capítulo ficou de fora" : "capítulos ficaram de fora"} por ter menos de ${CAPITULO_MINIMO_S} s.` };
+  return { valem: true, motivo: null };
+}
+
+/** Capítulos no formato do YouTube ("0:00 Título"); o primeiro precisa começar em 0:00 e o de menos de 10 s sai. */
+export function capitulosParaYoutube(p: ProjetoDeEdicao): string {
+  const caps = capitulosAceitos(p);
   if (!caps.length) return "";
   const tc = (s: number) => {
     const t = Math.max(0, Math.floor(s));

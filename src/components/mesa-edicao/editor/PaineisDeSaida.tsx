@@ -12,7 +12,7 @@ import { janelaDaAmostra, ROTULO_DO_TIPO } from "../../../../supabase/functions/
 import { srtDasLinhas } from "../../../../supabase/functions/editor-video/ferramentas";
 import { chamarEditorVideo, emPreparacao } from "@/lib/editor/api";
 import { capitulosEmBlocos, momentosEmBlocos } from "@/lib/editor/julgarEmBlocos";
-import { capitulosEm, capitulosParaYoutube, frasesDoProjeto, projetoDoTrecho, viraisEm } from "@/lib/editor/skills/pecasDaEdicao";
+import { capitulosEm, capitulosParaYoutube, capitulosValemNoYoutube, frasesDoProjeto, projetoDoTrecho, viraisEm } from "@/lib/editor/skills/pecasDaEdicao";
 import { formatoDoPedido, linhasDaLegenda, pedirRender, rotuloDoPedido, uidDoClique, useFilaDeRender } from "@/lib/editor/render";
 import { tempoFino } from "@/lib/editor/tempo";
 import EstadoDaMaquina, { useEstadoDaMaquina } from "./EstadoDaMaquina";
@@ -114,6 +114,7 @@ export function PainelDeCapitulos({ ctx }: { ctx: ContextoDoPainel }) {
   };
 
   const youtube = capitulosParaYoutube(p);
+  const validade = capitulosValemNoYoutube(p);
 
   return (
     <div data-painel="capitulos">
@@ -154,6 +155,7 @@ export function PainelDeCapitulos({ ctx }: { ctx: ContextoDoPainel }) {
             <Copy className="mr-1.5 h-3.5 w-3.5" />
             Copiar para o YouTube
           </button>
+          {validade.motivo && <p className={juntar("mt-1 text-[12px] leading-4", validade.valem ? "text-muted-foreground" : "text-warning")}>{validade.motivo}</p>}
         </>
       )}
       {virais.length > 0 && (

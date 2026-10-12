@@ -17,6 +17,7 @@ import {
   perguntasDeForca,
   perguntasDeFronteira,
   perguntasDeViral,
+  terminaEmFrase,
   titulosEscolhidos,
   NIVEIS_DA_FORCA,
 } from "../../supabase/functions/editor-video/modulos/julgamentos-da-edicao";
@@ -27,7 +28,7 @@ import { PRESETS_DE_LEGENDA, PRESETS_DE_TEXTO, alturaDaPosicao, alturaDoBloco, c
 import { aplicarOperacao, aplicarOperacoes, assinaturaDoProjeto, trilhaPrincipal } from "@/lib/editor/operacoes";
 import { Montador } from "@/lib/editor/skills/tipos";
 import { proporSkill, skillPorPalavras } from "@/lib/editor/skills";
-import { brollDoAcervoEm, capitulosParaYoutube, frasesDaFala, frasesDoProjeto, notasPorRegra, projetoDoTrecho, textosEm, zoomNosMomentosEm } from "@/lib/editor/skills/pecasDaEdicao";
+import { brollDoAcervoEm, capitulosParaYoutube, capitulosValemNoYoutube, frasesDaFala, frasesDoProjeto, notasPorRegra, projetoDoTrecho, textosEm, zoomNosMomentosEm } from "@/lib/editor/skills/pecasDaEdicao";
 import { montarEdicaoCompleta, projetoDepoisDoCorte } from "@/lib/editor/edicaoCompleta";
 import { acervoParaBroll, custoDoPlano, custoDoRosto, resumoParaOPlano, temposDoRosto } from "@/lib/editor/editarComIa";
 import { linhasDaLegenda } from "@/lib/editor/render";
@@ -290,7 +291,13 @@ describe("peças da edição", () => {
 
   it("capítulos para o YouTube começam em 0:00; corte de um trecho vem para o zero", () => {
     let p = aplicarOperacao(projetoFalado(), { op: "marcadores", tipo: "capitulo", lista: [{ tempo_s: 0.3, rotulo: "Abertura" }, { tempo_s: 75, rotulo: "Fim" }] });
-    expect(capitulosParaYoutube(p)).toBe("0:00 Abertura\n1:15 Fim");
+    // 12/10/2026 (youtube-agent): o capítulo com menos de 10 s até o fim sai, e menos de 3 não vale no YouTube.
+    expect(capitulosParaYoutube({ ...p, duracao_s: 120 })).toBe("0:00 Abertura\n1:15 Fim");
+    expect(capitulosParaYoutube({ ...p, duracao_s: 80 })).toBe("0:00 Abertura");
+    expect(capitulosValemNoYoutube({ ...p, duracao_s: 120 })).toEqual({ valem: false, motivo: expect.stringContaining("3 ou mais") });
+    const tres = aplicarOperacao({ ...p, duracao_s: 120 }, { op: "marcadores", tipo: "capitulo", lista: [{ tempo_s: 0, rotulo: "A" }, { tempo_s: 5, rotulo: "Curto" }, { tempo_s: 30, rotulo: "B" }, { tempo_s: 60, rotulo: "C" }] });
+    expect(capitulosParaYoutube(tres)).toBe("0:00 A\n0:30 B\n1:00 C");
+    expect(capitulosValemNoYoutube(tres)).toEqual({ valem: true, motivo: "1 capítulo ficou de fora por ter menos de 10 s." });
     p = proporSkill("legendas", p, { agora: AGORA }, {}).resultado;
     const corte = projetoDoTrecho(p, 5, 12, "Corte");
     expect(corte.duracao_s).toBeLessThanOrEqual(7);
@@ -385,21 +392,28 @@ describe("julgamentos da edição (montagem das perguntas e composição)", () =
     expect(notasDeForca(frases.slice(0, 2), { forca_0: { score: 3 } })).toEqual([{ k: frases[0].k, nota: 0.75 }]);
   });
 
-  it("virais: janelas de 15 a 60 s, nota composta, sem sobrepor", () => {
+  it("virais: janelas de 20 a 55 s (Shorts), nota com as 3 condições, sem sobrepor", () => {
     const janelas = janelasCandidatas(frases);
     expect(janelas.length).toBeGreaterThan(0);
-    janelas.forEach((j) => expect(j.fim_s - j.inicio_s).toBeGreaterThanOrEqual(15));
-    janelas.forEach((j) => expect(j.fim_s - j.inicio_s).toBeLessThanOrEqual(60));
+    janelas.forEach((j) => expect(j.fim_s - j.inicio_s).toBeGreaterThanOrEqual(20));
+    janelas.forEach((j) => expect(j.fim_s - j.inicio_s).toBeLessThanOrEqual(55));
     const q = perguntasDeViral("Reel", janelas);
     expect(q.questions.sozinho_0.type).toBe("noul");
+    expect(q.questions.virada_0.type).toBe("noul");
     const respostas: Record<string, { score?: number; noul?: number }> = {};
     janelas.forEach((_, i) => {
       respostas[`viral_${i}`] = { score: i === 0 ? 4 : 1 };
       respostas[`sozinho_${i}`] = { noul: 0.9 };
+      respostas[`virada_${i}`] = { noul: 0.9 };
     });
     const v = escolherVirais(janelas, respostas);
     expect(v.length).toBe(1);
-    expect(v[0].nota).toBeCloseTo(0.97, 2);
+    // 0,6 x 1 + 0,2 x 0,9 + 0,2 x 0,9 = 0,96; parar no meio da frase tira 15%.
+    expect(v[0].nota).toBeCloseTo(terminaEmFrase(janelas[0].texto) ? 0.96 : 0.816, 2);
+    expect(terminaEmFrase("e foi isso que mudou tudo.")).toBe(true);
+    expect(terminaEmFrase("e foi isso que")).toBe(false);
+    const cortado = escolherVirais([{ ...janelas[0], texto: "e foi isso que" }], { viral_0: { score: 4 }, sozinho_0: { noul: 0.9 }, virada_0: { noul: 0.9 } } as never);
+    expect(cortado[0].nota).toBeCloseTo(0.816, 2);
   });
 
   it("capítulos: fronteira com Noul alto e espaço mínimo; título escolhido entre trechos ditos", () => {
