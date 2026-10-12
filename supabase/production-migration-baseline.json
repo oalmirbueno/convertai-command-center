@@ -2121,6 +2121,14 @@
       "remote_name": "diagnostico_do_perfil",
       "remote_statements_sha256": "a6f591d9a497594dfd1b898fb8fbe3c4aef90479f72e916648b35c6546d57115",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261012050000",
+      "path": "supabase/migrations/20261012050000_auditoria_semanal_ads.sql",
+      "local_sha256": "d8578f8b502f6917e0abc7d5cb4f83dbbf98ecdf972eb4e1b0a8da6a7d4a50d6",
+      "remote_name": "auditoria_semanal_ads",
+      "remote_statements_sha256": "cd503573e48612732aeadcf05491e71fdb44bc96690240de553e6d599f7f7d29",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
