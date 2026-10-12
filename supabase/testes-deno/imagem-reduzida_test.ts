@@ -6,9 +6,9 @@
  *
  *   deno test supabase/functions/_shared/imagem-reduzida_test.ts
  */
-import { Image } from "./imagescript.ts";
-import { recortarNaProporcao, reduzirParaCaber, reduzirPorArea } from "./imagem-local.ts";
-import { reduzidaSemTransformacao } from "./imagem-reduzida.ts";
+import { Image } from "../functions/_shared/imagescript.ts";
+import { recortarNaProporcao, reduzirParaCaber, reduzirPorArea } from "../functions/_shared/imagem-local.ts";
+import { reduzidaSemTransformacao } from "../functions/_shared/imagem-reduzida.ts";
 
 function assert(cond: unknown, msg: string) {
   if (!cond) throw new Error(msg);

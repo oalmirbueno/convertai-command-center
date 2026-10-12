@@ -12,7 +12,7 @@ import {
   type ArquivoDoFinal,
   type NoCriado,
   type PortaDoWorkspace,
-} from "../../supabase/functions/_shared/final-no-workspace";
+} from "../../supabase/functions/mesa-videos/modulos/final-no-workspace";
 import { levarAoWorkspace, type Ambiente } from "../../workers/render/trabalho";
 
 /**

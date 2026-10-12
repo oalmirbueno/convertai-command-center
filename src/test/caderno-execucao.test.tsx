@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { prepararEntrada, incluirConcluidas } from "@/lib/cadernoExecucao";
 import { destinoDaEvidencia } from "@/lib/execucaoApresentacao";
 import { progressDetail } from "../../supabase/functions/_shared/operator-progress-detail";
-import { imagensDasReferencias, sincronizarReferenciasDoWorkspace } from "../../supabase/functions/_shared/referencias-workspace";
+import { imagensDasReferencias, sincronizarReferenciasDoWorkspace } from "../../supabase/functions/agente-estilo/modulos/referencias-workspace";
 import { fotosOriginaisDoAjuste, pedidoDiretoNoAjuste } from "../../supabase/functions/estudio-arte/identidade-no-ajuste";
 import EvidenciaVisual from "@/components/execucao/EvidenciaVisual";
 vi.mock("@/components/shared/FilePreviewContent", () => ({ default: ({ fileName }: { fileName: string }) => <div>Visualização: {fileName}</div> }));

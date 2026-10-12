@@ -6,8 +6,8 @@
  *
  *   deno test supabase/functions/_shared/logo-contraste_test.ts
  */
-import { Image } from "./imagescript.ts";
-import { analisarLogo, logoSobreContraste } from "./imagem-local.ts";
+import { Image } from "../functions/_shared/imagescript.ts";
+import { analisarLogo, logoSobreContraste } from "../functions/_shared/imagem-local.ts";
 
 function assert(cond: unknown, msg: string) {
   if (!cond) throw new Error(msg);

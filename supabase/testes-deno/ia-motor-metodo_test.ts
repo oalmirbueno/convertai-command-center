@@ -9,7 +9,7 @@
  *   npx --yes deno test --allow-env supabase/functions/_shared/ia-motor-metodo_test.ts
  */
 import { assert, assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { montarSuperpoderes } from "./superpoderes.ts";
+import { montarSuperpoderes } from "../functions/_shared/superpoderes.ts";
 
 Deno.env.set("SUPABASE_URL", "http://banco.falso");
 Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "chave-falsa-de-teste");
@@ -51,7 +51,7 @@ globalThis.fetch = (async (entrada: string | URL | Request, init?: RequestInit) 
   return resposta({ erro: `rota falsa sem resposta: ${url}` }, 404);
 }) as typeof fetch;
 
-const { chamarTexto } = await import("./ia-motor.ts");
+const { chamarTexto } = await import("../functions/_shared/ia-motor.ts");
 
 const SISTEMA = "SISTEMA DO AGENTE: regras fixas.";
 const METODO = montarSuperpoderes({ caminho: "grande", ids: ["entender", "plano", "causa"], fonte: "jev" })!;

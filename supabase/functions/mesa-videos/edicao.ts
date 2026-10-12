@@ -20,7 +20,7 @@
  *   (custo antes) e manda as palavras. A legenda também vai para o Workspace,
  *   ao lado do vídeo em "Vídeos / <título> / Finais" (o MP4 vai junto se faltava).
  * - final_para_workspace { arquivo_id } -> { workspace: { estado, pasta_id, node_id, nome, caminho }, client_id }
- *   O vídeo pronto no Workspace do cliente (_shared/final-no-workspace.ts): pastas
+ *   O vídeo pronto no Workspace do cliente (mesa-videos/modulos/final-no-workspace.ts): pastas
  *   criadas uma vez, cópia do bucket mesa para o workspace pelo servidor,
  *   idempotente pela origem do arquivo. A tela chama ao ver o render pronto e
  *   no "Abrir no Workspace"; o worker de render faz o mesmo ao concluir.
@@ -37,7 +37,7 @@ import { type ArquivoDaEntrada, brutosDe, decisoesDoJev, modoDaEntrada, paresEmD
 import { ehVideoDoWorkspace, planoDoEspelho, type NoDoWorkspaceParaEspelho } from "./modulos/espelho-no-workspace.ts";
 import { aplicarOrganizacao, type BancoDoWorkspace, desfazerOrganizacao, normalizarRegistro, type NoDoIndice } from "../workspace-organizar/aplicar.ts";
 import { normalizarConfirmacao } from "../workspace-organizar/organizador.ts";
-import { finalParaOWorkspace, legendaParaOWorkspace, portaDoSupabase } from "../_shared/final-no-workspace.ts";
+import { finalParaOWorkspace, legendaParaOWorkspace, portaDoSupabase } from "./modulos/final-no-workspace.ts";
 import { caminhosDaLegenda, legendaDoFinal, type LinhaDaLegenda, linhasDasPalavras, type PalavraComTempo, recortarLinhas, srtDe, vttDe, type ProjetoParaLegenda } from "./modulos/legenda-do-final.ts";
 
 const BUCKET = "mesa";

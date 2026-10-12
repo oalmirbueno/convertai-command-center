@@ -5,8 +5,8 @@
  *
  *   deno test supabase/functions/_shared/metade-por-bloco_test.ts
  */
-import { Image } from "./imagescript.ts";
-import { metadePorBloco, reduzirPorArea, reduzirPorAreaRapido } from "./imagem-local.ts";
+import { Image } from "../functions/_shared/imagescript.ts";
+import { metadePorBloco, reduzirPorArea, reduzirPorAreaRapido } from "../functions/_shared/imagem-local.ts";
 
 function assert(cond: unknown, msg: string) {
   if (!cond) throw new Error(msg);

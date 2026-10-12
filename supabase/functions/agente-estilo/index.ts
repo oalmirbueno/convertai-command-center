@@ -1,4 +1,4 @@
-import { sincronizarReferenciasDoWorkspace } from "../_shared/referencias-workspace.ts";
+import { sincronizarReferenciasDoWorkspace } from "./modulos/referencias-workspace.ts";
 /**
  * agente-estilo (frente S2, 26/09/2026): o agente de estilo de design do
  * cliente, aberto pelo botão "Estilo" dentro do Estúdio e do Estúdio Ads.

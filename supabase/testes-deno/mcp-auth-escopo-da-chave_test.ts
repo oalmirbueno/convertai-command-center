@@ -27,7 +27,7 @@ globalThis.fetch = ((input: RequestInfo | URL, _init?: RequestInit) => {
   }));
 }) as typeof fetch;
 
-const { authenticate, dataScopeForApiKeyRow } = await import('./mcp-auth.ts');
+const { authenticate, dataScopeForApiKeyRow } = await import('../functions/_shared/mcp-auth.ts');
 
 function preparar(r: Record<string, Resposta>) {
   rotas = r;

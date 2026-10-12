@@ -6,7 +6,7 @@
  * imagem (3 rodadas, todas iguais). Roda sem permissão de rede:
  *   deno test supabase/functions/_shared/imagescript_test.ts
  */
-import { Image } from "./imagescript.ts";
+import { Image } from "../functions/_shared/imagescript.ts";
 
 function assert(cond: unknown, msg: string) {
   if (!cond) throw new Error(msg);
@@ -53,7 +53,7 @@ Deno.test("mesmos bytes do imagescript de deno.land: JPEG 85, PNG, decodificar e
 });
 
 Deno.test("jpegSobreBranco (documentos) dá os mesmos bytes da composição que ele substituiu", async () => {
-  const { jpegSobreBranco } = await import("./imagem-sob-demanda.ts");
+  const { jpegSobreBranco } = await import("../functions/_shared/imagem-sob-demanda.ts");
   const img = new Image(120, 80);
   for (let y = 1; y <= 80; y++) for (let x = 1; x <= 120; x++) img.setPixelAt(x, y, Image.rgbaToColor(x * 2, y * 3, 90, (x + y) % 256));
   const png = await img.encode(1);
