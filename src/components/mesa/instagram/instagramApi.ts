@@ -3,6 +3,7 @@ import { marcaAtual } from "@/lib/mesa/marcas";
 import { chamarFuncao } from "@/lib/mesa/api";
 import type { VereditoDaBio, SugestaoDeBio, SugestaoDeNome, EscolhaDoJev, CorDaPaleta, EstiloDaCapa, DestaqueProposto } from "../../../../supabase/functions/mesa-instagram/modulos/conhecimento-perfil-instagram";
 import type { ChaveDaRede, PaginaNaPrevia } from "../../../../supabase/functions/mesa-instagram/modulos/instagram-do-cliente";
+import type { DiagnosticoDoPerfil } from "../../../../supabase/functions/mesa-instagram/modulos/diagnostico-do-perfil";
 
 /**
  * Aba Instagram da Mesa (frente IG, 28/09): tipos e chamadas da função
@@ -117,6 +118,8 @@ export interface PainelDoInstagram {
   perfil: PerfilDaAba;
   grade: { itens: ItemDaGradeNaAba[]; ordem: string[] };
   bio_analise: AnaliseDaBio | null;
+  /** 12/10/2026: o diagnóstico do perfil em 9 partes (null até a primeira vez). */
+  diagnostico: DiagnosticoDoPerfil | null;
   kit: { paleta: CorDaPaleta[]; estilo: string | null; logo: { bucket: string; caminho: string } | null };
   resumo: { nome: string; negocio: string; publico: string; oferta: string; tom_de_voz: string; diferenciais: string[] };
   capas: CapaGuardada[];
@@ -178,6 +181,7 @@ export function normalizarPainel(d: any): PainelDoInstagram {
     perfil: normalizarPerfil(d && d.perfil),
     grade: { itens: lista<ItemDaGradeNaAba>(d && d.grade && d.grade.itens), ordem: lista<string>(d && d.grade && d.grade.ordem) },
     bio_analise: d && d.bio_analise && d.bio_analise.veredito ? (d.bio_analise as AnaliseDaBio) : null,
+    diagnostico: d && d.diagnostico && Array.isArray(d.diagnostico.linhas) ? (d.diagnostico as DiagnosticoDoPerfil) : null,
     kit: {
       paleta: lista<CorDaPaleta>(d && d.kit && d.kit.paleta),
       estilo: (d && d.kit && d.kit.estilo) || null,

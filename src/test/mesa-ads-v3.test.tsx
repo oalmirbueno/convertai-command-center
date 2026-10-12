@@ -364,7 +364,9 @@ describe("contratos v3 da função mesa-ads (fonte)", () => {
     expect(fonte).toMatch(/TETO_DO_MODELO_MS = 150_000/);
     expect(fonte).toMatch(/TETO_DA_SEGUNDA_TENTATIVA_MS = 90_000/);
     expect(fonte).toMatch(/TIMEOUT_TEXTO_ADS_MS = 300_000/);
-    expect(fonte).toMatch(/"referencia_para_estudio",\n\]\);/);
+    expect(fonte).toMatch(/"referencia_para_estudio",\n/);
+    // 12/10/2026: a auditoria da conta também responde com fôlego.
+    expect(fonte).toMatch(/"auditoria_rodar",\n\]\);/);
   });
 
   it("oferta em foco no agente e a oferta do contexto guarda origem, fontes e lacunas ao editar", () => {

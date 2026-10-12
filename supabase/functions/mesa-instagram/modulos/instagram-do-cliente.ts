@@ -105,11 +105,12 @@ export function laminasDoTrabalho(cards: unknown, maximo = 10): string[] {
 // ------------------------------------------------------------------ caminho do agente
 
 /** Blocos da aba (o endereço leva ?bloco= e a aba abre e rola até ele). */
-export const BLOCOS_DA_ABA = ["perfil", "bio", "destaques", "grade", "metricas", "redes"] as const;
+export const BLOCOS_DA_ABA = ["perfil", "diagnostico", "bio", "destaques", "grade", "metricas", "redes"] as const;
 export type BlocoDaAba = (typeof BLOCOS_DA_ABA)[number];
 
 export const ROTULO_DO_BLOCO: Record<BlocoDaAba, string> = {
   perfil: "Prévia do perfil",
+  diagnostico: "Diagnóstico do perfil",
   bio: "Bio e nome",
   destaques: "Destaques",
   grade: "Planejar a grade",

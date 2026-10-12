@@ -160,6 +160,21 @@ import {
   REGRAS_DAS_REDES,
 } from "./acoes-das-redes.ts";
 import { PREFLIGHT_CACHE } from "../_shared/cors.ts";
+// 12/10/2026 (ig-profile-optimizer): diagnóstico do perfil em 9 partes (código, Jev, visão e painel).
+import {
+  blocoDoDiagnostico,
+  conferirLink,
+  type DiagnosticoDoPerfil,
+  ESQUEMA_DA_VISAO,
+  formatoRepetido,
+  linhasDaVisao,
+  linhasDoPainel,
+  linhasDoTexto,
+  montarDiagnostico,
+  perguntasDoDiagnostico,
+  SISTEMA_DA_VISAO,
+} from "./modulos/diagnostico-do-perfil.ts";
+import { basesDoPerfil, multiploDoPost, textoDoMultiplo } from "../_shared/multiplo-do-post.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -706,13 +721,14 @@ async function gradePlanejada(clientId: string, marca: MarcaLeve | null = null, 
 
 // ------------------------------------------------------------------ plano, capas, redes (SQL IG-01)
 
-async function lerPlano(clientId: string, chave: string): Promise<{ ordem: string[]; bio_analise: Record<string, unknown> | null; sql_pendente: boolean }> {
-  const { data, error } = await servico().from("cliente_instagram_planos").select("ordem, bio_analise").eq("client_id", clientId).eq("conta_chave", chave).maybeSingle();
-  if (error) return { ordem: [], bio_analise: null, sql_pendente: semTabela(error) };
-  const d = (data || {}) as { ordem?: unknown; bio_analise?: unknown };
+async function lerPlano(clientId: string, chave: string): Promise<{ ordem: string[]; bio_analise: Record<string, unknown> | null; diagnostico: DiagnosticoDoPerfil | null; sql_pendente: boolean }> {
+  const { data, error } = await servico().from("cliente_instagram_planos").select("ordem, bio_analise, diagnostico").eq("client_id", clientId).eq("conta_chave", chave).maybeSingle();
+  if (error) return { ordem: [], bio_analise: null, diagnostico: null, sql_pendente: semTabela(error) };
+  const d = (data || {}) as { ordem?: unknown; bio_analise?: unknown; diagnostico?: unknown };
   return {
     ordem: Array.isArray(d.ordem) ? (d.ordem as unknown[]).map(String).filter((x) => UUID.test(x)) : [],
     bio_analise: d.bio_analise && typeof d.bio_analise === "object" ? (d.bio_analise as Record<string, unknown>) : null,
+    diagnostico: d.diagnostico && typeof d.diagnostico === "object" && Array.isArray((d.diagnostico as { linhas?: unknown }).linhas) ? (d.diagnostico as DiagnosticoDoPerfil) : null,
     sql_pendente: false,
   };
 }
@@ -902,6 +918,7 @@ async function painel(ch: Chamador, corpo: Record<string, unknown>): Promise<Res
     perfil,
     grade: { itens: grade, ordem: plano.ordem },
     bio_analise: plano.bio_analise,
+    diagnostico: plano.diagnostico,
     kit: { paleta: kit.paleta, estilo: kit.estilo, logo: kit.logo },
     resumo: { nome: negocio.nome, negocio: negocio.o_que_faz, publico: negocio.publico, oferta: negocio.oferta, tom_de_voz: negocio.tom_de_voz, diferenciais: negocio.diferenciais },
     capas,
@@ -1126,6 +1143,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>): Promise<
     `PERFIL: @${perfil.username || "?"} | Nome: ${perfil.nome || "-"} | Bio: ${perfil.bio || "(vazia)"} | Link: ${perfil.site || "-"} | Seguidores: ${perfil.seguidores ?? "?"} | Posts: ${perfil.posts ?? "?"} | Últimos formatos: ${formatos || "-"}`,
     `KIT: cores ${kit.paleta.map((x) => x.hex + (x.papel ? ` ${x.papel}` : "")).join(", ") || "sem paleta"}; estilo ${kit.estilo || "-"}; logo ${logo ? "anexada como imagem (use o que ela mostra: formas, símbolo, cores)" : kit.logo ? "existe, mas não abriu agora" : "não"}.`,
     `DESTAQUES COM CAPA JÁ GERADA: ${capas.map((x) => String(x.nome)).join(", ") || "nenhum"}.`,
+    blocoDoDiagnostico(plano.diagnostico),
     `OUTRAS CONTAS: Instagram ${c.contas.map((x) => `@${x.username}`).join(", ") || "nenhum"}; páginas do Facebook ${paginas.map((p) => p.nome).join(", ") || "nenhuma"}.`,
     await completoP,
   ].filter(Boolean).join("\n");
@@ -1560,8 +1578,135 @@ async function sugerirDestaques(ch: Chamador, corpo: Record<string, unknown>): P
   return json({ destaques, proprios: proprios.length, sem_jev: !respostas, com_ia: comIa, marca: c.marca ? c.marca.nome : null, custo_usd: arred(custo) });
 }
 
+// ------------------------------------------------------------------ diagnóstico do perfil (12/10/2026)
+
+/** Baixa uma imagem do Instagram para a visão (CDN pública, 10 s, até 4 MB). Null quando não abre. */
+async function imagemDaUrl(url: string | null, nome: string): Promise<ImagemEntrada | null> {
+  if (!url || !/^https:\/\//i.test(url)) return null;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
+      return null;
+    }
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const mime = mimeDe(bytes);
+    if (!mime || defeitoDaImagem(bytes, 4 * 1024 * 1024)) return null;
+    return { bytes, mime, nome };
+  } catch {
+    return null;
+  }
+}
+
+/** Os 3 posts que mais renderam contra o normal do perfil (180 dias), para fixar. */
+async function postsParaFixar(clientId: string, conta: ContaDoInstagram | null): Promise<DiagnosticoDoPerfil["para_fixar"]> {
+  if (!conta) return [];
+  const desde = new Date(Date.now() - 180 * 86400000).toISOString();
+  const { data, error } = await servico().from("social_post_metrics")
+    .select("permalink, caption, posted_at, views, reach, total_interactions, like_count, comments_count, saved, shares")
+    .eq("client_id", clientId).eq("external_account_id", conta.id).gte("posted_at", desde).order("posted_at", { ascending: false }).limit(200);
+  if (error || !data) return [];
+  const posts = data as Array<{ permalink: string | null; caption: string | null; posted_at: string | null }>;
+  const bases = basesDoPerfil(posts, 90);
+  return posts
+    .map((p) => ({ p, m: multiploDoPost(p, bases) }))
+    .filter((x) => x.m.destaque)
+    .sort((a, b) => (b.m.multiplo ?? 0) - (a.m.multiplo ?? 0))
+    .slice(0, 3)
+    .map((x) => ({ link: x.p.permalink, multiplo: textoDoMultiplo(x.m), legenda: umaLinha(x.p.caption, 90) }));
+}
+
+/**
+ * Diagnóstico do perfil em 9 partes: o Jev julga o texto (bio, nome, @, categoria) numa chamada,
+ * o código confere o link e a grade, a visão olha a foto e os 9 primeiros posts numa chamada, e o
+ * painel diz o que sabe de destaques e fixados. Grava no plano da conta (reabrir sem gastar de novo).
+ */
+async function diagnosticar(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
+  const c = await abrir(ch, corpo);
+  const chave = chaveDaConta(c.conta);
+  const [perfil, negocio, capas, paraFixar] = await Promise.all([
+    previaDoPerfil(c.clientId, c.conta, !!c.marcas.length),
+    negocioDoCliente(c.clientId, true, c.marca),
+    capasDoCliente(c.clientId, chave),
+    postsParaFixar(c.clientId, c.conta),
+  ]);
+  if (perfil.fonte === "nenhuma") throw new ErroHttp(404, "sem_perfil", perfil.aviso || "Não há perfil do Instagram para diagnosticar. Conecte a conta em Integrações.");
+  const pagina = c.paginas[0] ? await lerPagina(c.clientId, c.paginas[0]).catch(() => null) : null;
+  const categoria = pagina && pagina.categoria ? pagina.categoria : null;
+  let custo = 0;
+
+  // Texto: Jev (uma chamada) e o link, em paralelo.
+  const estado = {
+    negocio: { nome: negocio.nome, o_que_faz: negocio.o_que_faz, publico: negocio.publico, oferta: negocio.oferta, tom_de_voz: negocio.tom_de_voz, diferenciais: negocio.diferenciais },
+    perfil: { nome: perfil.nome, username: perfil.username, bio: perfil.bio, link: perfil.site, categoria: categoria || "" },
+  };
+  const jevP = jevPerguntar({ state: estado, questions: perguntasDoDiagnostico(temContexto(negocio), !!categoria) })
+    .then(async (r) => {
+      const cobranca = await cobrarJev(r, { clientId: c.clientId, tarefa: "contexto", referencia: { tipo: REF_CONVERSA, id: c.clientId }, criadoPor: ch.userId });
+      custo += cobranca ? cobranca.custoUsd : 0;
+      return r.answers;
+    })
+    .catch((e) => {
+      if (!(e instanceof JevErro)) throw e;
+      console.error("[mesa-instagram] Jev do diagnóstico", { codigo: e.codigo });
+      return null;
+    });
+  const linkP = conferirLink(perfil.site);
+
+  // Visão: a foto e os 9 primeiros posts com imagem, numa chamada.
+  const comImagem = perfil.midias.filter((m) => m.imagem).slice(0, 9);
+  const [foto, ...capasDosPosts] = await Promise.all([imagemDaUrl(perfil.foto_url, "foto-do-perfil"), ...comImagem.map((m, i) => imagemDaUrl(m.imagem, `post-${i + 1}`))]);
+  const posts = capasDosPosts.filter((x): x is ImagemEntrada => !!x);
+  const temGrade = posts.length >= 3;
+  let visao: unknown = null;
+  if (foto || temGrade) {
+    try {
+      const modelo = await modeloDeTexto(corpo.modelo_id);
+      const imagens = [foto, ...(temGrade ? posts : [])].filter((x): x is ImagemEntrada => !!x);
+      const r = await chamarTexto({
+        clientId: c.clientId,
+        tarefa: "contexto",
+        agente: "estrategista",
+        modeloId: modelo.id,
+        raciocinio: raciocinioBaixo(modelo),
+        sistema: SISTEMA_DA_VISAO,
+        mensagens: [{
+          papel: "usuario",
+          conteudo: `Negócio: ${negocio.nome}. ${negocio.o_que_faz || ""}\n${foto ? "A primeira imagem é a foto do perfil." : "A foto do perfil não abriu (julgue só a grade; foto com estado melhorar e detalhe 'não abriu')."}${temGrade ? ` As ${posts.length} seguintes são os posts mais recentes, na ordem da grade (da esquerda para a direita, de cima para baixo).` : " Não há posts suficientes para a grade (estado melhorar, detalhe 'poucos posts')."}`,
+          imagens,
+        }],
+        esquemaJson: ESQUEMA_DA_VISAO as unknown as Record<string, unknown>,
+        maxTokensSaida: 700,
+        referencia: { tipo: REF_CONVERSA, id: c.clientId },
+        criadoPor: ch.userId,
+      });
+      custo += r.custoUsd;
+      visao = r.json;
+    } catch (e) {
+      registrarFalha("[mesa-instagram] visão do diagnóstico", e, { client_id: c.clientId });
+    }
+  }
+  const [respostas, link] = await Promise.all([jevP, linkP]);
+  const sinais = sinaisDaBio(perfil.bio);
+  const texto = linhasDoTexto({ perfil: { nome: perfil.nome, username: perfil.username, bio: perfil.bio, site: perfil.site }, sinais, veredito: vereditoDaBio(respostas, sinais), respostas, link, categoria });
+  const daVisao = linhasDaVisao(visao, !!foto, temGrade);
+  // O código também olha a grade: o mesmo formato 3 vezes seguidas.
+  const repetido = formatoRepetido(perfil.midias.map((m) => m.formato));
+  const grade = daVisao.find((x) => x.parte === "grade");
+  if (grade && repetido && grade.estado !== "falha") {
+    grade.detalhe = `${grade.estado === "nao_lido" ? "" : `${grade.detalhe} `}Três ${repetido} seguidos nos 9 primeiros.`.trim();
+    grade.estado = "melhorar";
+    grade.como_corrigir = grade.como_corrigir || "Alterne formatos (carrossel, estático, foto real, Reels) para a grade não cansar.";
+  }
+  const diagnostico = montarDiagnostico(perfil.username, [...texto, ...daVisao, ...linhasDoPainel(capas.length, paraFixar)], paraFixar);
+  await gravarPlano(c.clientId, chave, { diagnostico }, ch.userId);
+  return json({ diagnostico, custo_usd: arred(custo) });
+}
+
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   painel,
+  // 12/10/2026: diagnóstico do perfil em 9 partes.
+  perfil_diagnosticar: diagnosticar,
   perfil: perfilAoVivo,
   pagina,
   sugerir_destaques: sugerirDestaques,
@@ -1579,7 +1724,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
 };
 
 /** Ações que chamam IA (podem passar de 150 s): a resposta começa na hora. */
-const ACOES_LONGAS = new Set(["bio", "conversar", "gerar_capa", "sugerir_destaques", "executar_acao_agente"]);
+const ACOES_LONGAS = new Set(["bio", "conversar", "gerar_capa", "sugerir_destaques", "executar_acao_agente", "perfil_diagnosticar"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

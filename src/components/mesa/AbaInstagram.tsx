@@ -14,6 +14,7 @@ import { useMesa } from "./MesaContexto";
 import PreviaDoPerfil, { ROTULO_DA_FONTE } from "./instagram/PreviaDoPerfil";
 import PreviaDaPagina from "./instagram/PreviaDaPagina";
 import BioENome from "./instagram/BioENome";
+import DiagnosticoDoPerfil from "./instagram/DiagnosticoDoPerfil";
 import GeradorDeDestaques from "./instagram/GeradorDeDestaques";
 import SugestaoDeDestaques, { useSugestaoDeDestaques } from "./instagram/SugestaoDeDestaques";
 import PlanoDaGrade from "./instagram/PlanoDaGrade";
@@ -54,11 +55,12 @@ import { ehBloco, ehRede, REDES_SOCIAIS, type ChaveDaRede } from "../../../supab
  *   Métricas), uma por vez, cada uma com blocos que recolhem.
  * O agente fica ao lado (gaveta no celular) e sempre deixa o caminho. No
  * celular tudo empilha e a página rola normal.
- * Endereço: /mesa?client=<id>&aba=instagram[&bloco=bio|destaques|grade|metricas|perfil|redes]
+ * Endereço: /mesa?client=<id>&aba=instagram[&bloco=diagnostico|bio|destaques|grade|metricas|perfil|redes]
  */
 
-type Ferramenta = "bio" | "destaques" | "grade" | "metricas";
+type Ferramenta = "diagnostico" | "bio" | "destaques" | "grade" | "metricas";
 const FERRAMENTAS: Array<{ valor: Ferramenta; rotulo: string }> = [
+  { valor: "diagnostico", rotulo: "Diagnóstico" },
   { valor: "bio", rotulo: "Bio e nome" },
   { valor: "destaques", rotulo: "Destaques" },
   { valor: "grade", rotulo: "Grade e simulador" },
@@ -553,6 +555,9 @@ export default function AbaInstagram() {
                   />
                 }
               >
+                {ferramenta === "diagnostico" && (
+                  <DiagnosticoDoPerfil perfil={perfil} diagnostico={dados.diagnostico} onDiagnostico={(d) => atualizar.mudar((p) => ({ ...p, diagnostico: d }))} />
+                )}
                 {ferramenta === "bio" && (
                   <BioENome perfil={perfil} analise={dados.bio_analise} onAnalise={(a: AnaliseDaBio) => atualizar.mudar((p) => ({ ...p, bio_analise: a }))} />
                 )}

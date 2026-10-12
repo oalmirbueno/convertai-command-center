@@ -363,16 +363,17 @@ describe("contrato da função mesa-instagram e da aba", () => {
   it("Jev em três lugares (julgar a bio, escolher entre as sugestões e pontuar os destaques), sem laço de correção", () => {
     // Rodada 2 (28/09): +1 Jev e +1 texto na sugestão de destaques (o modelo escreve
     // destaques próprios só com "Com IA"; o Jev pontua todos numa chamada só).
-    expect((f.match(/jevPerguntar\(/g) || []).length).toBe(3);
+    // 12/10/2026: +1 Jev e +1 texto (visão da foto e da grade) no diagnóstico do perfil.
+    expect((f.match(/jevPerguntar\(/g) || []).length).toBe(4);
     expect(f).not.toMatch(/while\s*\(/);
-    // O texto gera de uma vez: bio (3 bios e 3 nomes), conversa e destaques com IA.
-    expect((f.match(/chamarTexto\(/g) || []).length).toBe(3);
+    // O texto gera de uma vez: bio (3 bios e 3 nomes), conversa, destaques com IA e a visão do diagnóstico.
+    expect((f.match(/chamarTexto\(/g) || []).length).toBe(4);
     expect((f.match(/chamarImagem\(/g) || []).length).toBe(1);
   });
 
   it("ações longas com fôlego; token só no servidor; o agente monta o mapa e grava o caminho", () => {
     // 29/09 (AG1): as ações do agente das redes (capas e bio pela conversa) também com fôlego.
-    expect(f).toContain('const ACOES_LONGAS = new Set(["bio", "conversar", "gerar_capa", "sugerir_destaques", "executar_acao_agente"]);');
+    expect(f).toContain('const ACOES_LONGAS = new Set(["bio", "conversar", "gerar_capa", "sugerir_destaques", "executar_acao_agente", "perfil_diagnosticar"]);');
     expect(f).toContain('rpc("mesa_facebook_token"');
     expect(f).toContain('rpc("perfis_instagram_token"');
     expect(f).toContain('blocoDoMapaDoPainel("instagram")');
