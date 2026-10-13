@@ -1560,9 +1560,14 @@ export async function getClientDossier(opts: { client_id: string }, ctx: AuthCon
 
   const perfilData = (perfil.data ?? null) as Record<string, unknown> | null;
   const servicos = (perfilData?.services_config ?? {}) as Record<string, unknown>;
+  // 12/10/2026: o Dia Prioritário oficial (cliente_dia_prioritario); detalhes em aceleriq_dia_prioritario.
+  const diaQ = await db().from('cliente_dia_prioritario').select('dia, situacao, observacao').eq('client_id', id).maybeSingle();
+  const diaRow = (diaQ.data ?? null) as { dia: number | null; situacao: string; observacao: string | null } | null;
+  const NOMES_DIAS = ['', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira'];
 
   return {
     client: perfilData,
+    dia_prioritario: diaRow ? { dia: diaRow.dia ? NOMES_DIAS[diaRow.dia] : null, situacao: diaRow.situacao, observacao: diaRow.observacao } : null,
     // O estado atual canônico do dossiê (client_dossiers, is_current=true) —
     // leia isto como "onde o cliente está"; a `memory` abaixo é a história.
     current_dossiers: dossieAtual,

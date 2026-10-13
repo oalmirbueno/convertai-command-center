@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import CartaoDoDiaPrioritario from "@/components/dia-prioritario/CartaoDoDiaPrioritario";
+import { ehRecorrenteParaODia } from "@/lib/diaPrioritario";
 import { supabase } from "@/integrations/supabase/client";
 import { notifyAdmin } from "@/lib/notifyHelpers";
 import { toast } from "sonner";
@@ -289,6 +291,9 @@ export default function ClientJourneyDashboard({
           ))}
         </nav>
       </FadeUp>
+
+      {/* 1b · Dia Prioritário (12/10/2026): o dia fixo de atenção estratégica; sem dia confirmado, estado neutro */}
+      <CartaoDoDiaPrioritario clientId={clientId} recorrente={!!clientProfile && ehRecorrenteParaODia({ id: String(clientId), ...clientProfile })} />
 
       {/* 2 · Avisos importantes: atraso e renovação chegando */}
       {overdueBills.length > 0 && (

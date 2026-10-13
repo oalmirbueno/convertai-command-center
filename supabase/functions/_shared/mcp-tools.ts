@@ -322,6 +322,9 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   // MCP 2.8 (12/10/2026): auditoria e memória da conta de anúncios, diagnóstico do Instagram.
   aceleriq_mesa_ads_saude: 'reports:read',
   aceleriq_instagram_diagnostico: 'reports:read',
+  // MCP 2.9 (12/10/2026): Dia Prioritário do cliente.
+  aceleriq_dia_prioritario: 'clients:read',
+  aceleriq_dia_prioritario_registrar: 'clients:write',
   // MCP 2.3: cérebro do cliente e ações nas mesas
   aceleriq_cerebro_do_cliente: 'clients:read',
   aceleriq_cerebro_registrar: 'clients:write',
@@ -2155,6 +2158,69 @@ const instagramDiagnosticoTool: ToolDefinition = {
   },
 };
 
+// MCP 2.9 (12/10/2026): Dia Prioritário (fonte oficial cliente_dia_prioritario; serviço em mcp-server/modulos).
+import { diaPrioritarioLer as _diaPrioritarioLer, diaPrioritarioRegistrar as _diaPrioritarioRegistrar } from '../mcp-server/modulos/dia-prioritario.ts';
+
+const TIPOS_DO_REGISTRO_DO_DIA = ['ligacao', 'reuniao', 'alinhamento', 'mensagem', 'sem_contato'] as const;
+
+const diaPrioritarioTool: ToolDefinition = {
+  name: 'aceleriq_dia_prioritario',
+  title: 'Dia Prioritário: clientes do dia, semana e preparação',
+  description:
+    'O Dia Prioritário de cada cliente recorrente (um dia útil fixo de atenção estratégica), lido da fonte oficial do painel. Devolve a distribuição da semana (segunda a sexta, com situação confirmado ou provisório), os clientes sem dia por não terem recorrência ativa e, para a data pedida (padrão hoje em São Paulo) ou para um client_id, a preparação de cada cliente com dados reais: tarefas abertas, atrasadas e desta semana, captações que vêm aí e se caem no dia, últimos registros do Dia Prioritário, último ritual enviado e o resumo do dossiê. Leia `como_usar` (antes, durante e depois do dia). Não substitui rituais nem o atendimento da semana. Só leitura.',
+  scopes: ['clients:read'] as const,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      data: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'YYYY-MM-DD (São Paulo). Padrão: hoje.' },
+      client_id: { type: 'string', format: 'uuid', description: 'Só a preparação deste cliente, em qualquer dia.' },
+    },
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = z.object({ data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), client_id: UUID.optional() }).strict().safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    return await _diaPrioritarioLer(parsed.data, ctx);
+  },
+};
+
+const diaPrioritarioRegistrarTool: ToolDefinition = {
+  name: 'aceleriq_dia_prioritario_registrar',
+  title: 'Dia Prioritário: registrar o que aconteceu',
+  description:
+    'Registra no histórico do cliente o que aconteceu no Dia Prioritário: ligacao, reuniao, mensagem, alinhamento (interno) ou sem_contato (sem necessidade de contato nesta semana), com resumo, combinados e próximos passos. Vai para o mesmo histórico do dossiê (que se atualiza pela fila) e para a Central. Não envia nada ao cliente, não cria tarefa e não agenda nada: próximos passos viram tarefa só pelas ferramentas de tarefa, quando autorizados. Registre só o que de fato aconteceu (a data não pode ser futura).',
+  scopes: ['clients:write'] as const,
+  annotations: { ...WRITE_ANNOTATIONS, idempotentHint: true },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      tipo: { type: 'string', enum: [...TIPOS_DO_REGISTRO_DO_DIA] },
+      resumo: { type: 'string', maxLength: 2000 },
+      combinados: { type: 'string', maxLength: 2000 },
+      proximos_passos: { type: 'string', maxLength: 2000 },
+      data: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Quando aconteceu (padrão hoje, São Paulo).' },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128, description: 'Chave única da ação. Repetir a mesma chave não refaz nada (24 h, por credencial).' },
+    },
+    required: ['client_id', 'tipo', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = z.object({
+      client_id: UUID,
+      tipo: z.enum(TIPOS_DO_REGISTRO_DO_DIA),
+      resumo: z.string().max(2000).optional(),
+      combinados: z.string().max(2000).optional(),
+      proximos_passos: z.string().max(2000).optional(),
+      data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      idempotency_key: CHAVE_IDEMPOTENTE,
+    }).strict().safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    return await _diaPrioritarioRegistrar(parsed.data as Parameters<typeof _diaPrioritarioRegistrar>[0], ctx);
+  },
+};
+
 const mesaFotoContextoTool: ToolDefinition = {
   name: 'aceleriq_mesa_foto_contexto',
   title: 'Mesa Foto: kits, ensaios e fotos aprovadas',
@@ -3453,7 +3519,7 @@ const MAPA_DO_PAINEL = [
   { area: 'Esteira', rota: '/ciclo', para: 'Acoes da semana a partir do dossie geral, historico e fatos, separadas entre social e trafego.', pelo_mcp: 'aceleriq_get_client_dossier, aceleriq_get_client_context' },
   { area: 'Ciclo legado', rota: '/ciclo-antigo', para: 'Checklist historico de seis etapas; preservado para consulta.', pelo_mcp: 'aceleriq_get_weekly_cycle' },
   { area: 'Execucao da equipe', rota: '/execucao', para: 'Quadro dos operadores, hierarquia, runs e trilha.', pelo_mcp: 'aceleriq_operator_queue, aceleriq_operator_report, aceleriq_operator_board, aceleriq_operator_diary, aceleriq_operator_request_approval, aceleriq_operator_propose_assignee' },
-  { area: 'Central de experiencia', rota: '/central', para: 'Saude do cliente e rituais de relacionamento.', pelo_mcp: 'aceleriq_get_client_context' },
+  { area: 'Central de experiencia', rota: '/central', para: 'Saude do cliente, rituais de relacionamento e o Dia Prioritario de cada cliente (clientes do dia, semana, pendencias e registros).', pelo_mcp: 'aceleriq_get_client_context, aceleriq_dia_prioritario (leitura), aceleriq_dia_prioritario_registrar (acao)' },
   { area: 'Revisao do Ciclo', rota: '/ciclo/revisao', para: 'Area de trabalho do Hermes: rascunhos de ritual viram pedido, o dono decide (no painel ou no WhatsApp), quem envia registra o envio. Esta area E a aprovacao; nao existe outra fila.', pelo_mcp: 'aceleriq_central_review_fila, aceleriq_central_review_preparar, aceleriq_central_review_decidir, aceleriq_central_review_marcar_enviado' },
   { area: 'Dossie do cliente', rota: '/clientes', para: 'O retrato inteiro de um cliente.', pelo_mcp: 'aceleriq_get_client_dossier' },
   { area: 'Kanban', rota: '/kanban', para: 'Tarefas da producao.', pelo_mcp: 'aceleriq_list_tasks, aceleriq_create_task, aceleriq_update_task, aceleriq_operator_assign' },
@@ -4138,6 +4204,9 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   // MCP 2.8: auditoria e memória da conta de anúncios, diagnóstico do Instagram.
   mesaAdsSaudeTool,
   instagramDiagnosticoTool,
+  // MCP 2.9: Dia Prioritário (ler a semana e a preparação; registrar o que aconteceu).
+  diaPrioritarioTool,
+  diaPrioritarioRegistrarTool,
   // MCP 2.3: o agente age nas mesas e o cérebro do cliente aprende.
   cerebroDoClienteTool,
   cerebroRegistrarTool,

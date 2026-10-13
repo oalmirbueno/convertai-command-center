@@ -223,6 +223,8 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_create_task',
     'aceleriq_delete_opportunity',
     'aceleriq_delete_task',
+    'aceleriq_dia_prioritario',
+    'aceleriq_dia_prioritario_registrar',
     'aceleriq_fetch',
     'aceleriq_finalize_file_upload',
     'aceleriq_get_ads_campaigns',

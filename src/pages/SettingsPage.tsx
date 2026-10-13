@@ -1,10 +1,11 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Bell, Brain, Building2, ChevronRight, Cpu, KeyRound, Moon, Palette, Shield, Sparkles, Sun, User, Users } from "lucide-react";
+import { Bell, Brain, Building2, CalendarHeart, ChevronRight, Cpu, KeyRound, Moon, Palette, Shield, Sparkles, Sun, User, Users } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import DadosDaAgencia from "@/components/agencia/DadosDaAgencia";
+import VideoDoDiaPrioritarioAdmin from "@/components/dia-prioritario/VideoDoDiaPrioritarioAdmin";
 import { CabecalhoDePagina, Carregando, SeletorCompacto, espaco, foco, juntar, texto } from "@/components/sistema";
 
 // Frente SPP (30/09): a seção dos superpoderes só carrega quando a pessoa abre a linha.
@@ -106,7 +107,7 @@ function LinhaQueAbre({
   );
 }
 
-type Aberta = "chaves" | "motores" | "superpoderes";
+type Aberta = "chaves" | "motores" | "superpoderes" | "videoDoDia";
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
@@ -121,6 +122,7 @@ export default function SettingsPage() {
     chaves: secao === "chaves",
     motores: busca.get("motores") === "1" || secao === "motores",
     superpoderes: secao === "superpoderes",
+    videoDoDia: secao === "video-dia-prioritario",
   }));
   const [destaque, setDestaque] = useState<string | null>(() => busca.get("chave"));
   const [rolarPara, setRolarPara] = useState<Aberta | null>(() => (secao === "chaves" || secao === "motores" || secao === "superpoderes" ? secao : null));
@@ -223,6 +225,20 @@ export default function SettingsPage() {
         >
           <SuperpoderesDasMesas />
         </LinhaQueAbre>
+        {admin && (
+          <LinhaQueAbre
+            id="videoDoDia"
+            icone={<CalendarHeart className="h-4 w-4" />}
+            rotulo="Vídeo do Dia Prioritário"
+            apoio="O vídeo oficial que o cliente vê no cartão do Dia Prioritário"
+            aberta={abertas.videoDoDia}
+            onAlternar={() => alternar("videoDoDia")}
+            carregando="Lendo o vídeo"
+            data-linha-video-dia-prioritario=""
+          >
+            <VideoDoDiaPrioritarioAdmin />
+          </LinhaQueAbre>
+        )}
       </Grupo>
 
       <div id="dados-da-agencia" className="min-w-0">

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, useEffect, useRef } from "react";
+import DiaPrioritarioNoCadastro from "@/components/dia-prioritario/DiaPrioritarioNoCadastro";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useConfirm } from "@/components/shared/confirmDialog";
@@ -1029,6 +1030,9 @@ export default function EditClientDrawer({
                   />
                 </CampoDeFormulario>
               </GrupoDeCampos>
+
+              {/* 12/10/2026: Dia Prioritário (salva sozinho, pela RPC; só admin muda) */}
+              <DiaPrioritarioNoCadastro client={{ ...client, id: String(client.id) }} admin={isAdmin} />
 
               <Secao titulo="Serviços ativos" divisoria descricao={`${SERVICES.filter((s) => !!services[s.key]).length} de ${SERVICES.length}`}>
                 <ul className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">

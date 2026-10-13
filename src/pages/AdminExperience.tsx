@@ -21,6 +21,7 @@ import { SERVICE_LABELS as SERVICE_NAMES } from "@/lib/cycleDefs";
 import { listInWords, readableFileName, readableProjectName } from "@/lib/clientText";
 import { buildGroupMessageText, type GroupMessageContext } from "@/lib/groupMessage";
 import DossieDoCliente from "@/components/admin/DossieDoCliente";
+import DiaPrioritarioNaCentral from "@/components/dia-prioritario/DiaPrioritarioNaCentral";
 import CentralReviewQueue from "@/components/central/CentralReviewQueue";
 import AgenteDaCentral from "@/components/central/AgenteDaCentral";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
@@ -2457,6 +2458,11 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         {/* ── Carteira recorrente ── */}
         {activeTab === "carteira" && (
           <RegiaoRolavel modo="lg" rotulo="Carteira" memoria="central:carteira" className="lg:pb-4 lg:pr-1">
+            {/* 12/10/2026: Dia Prioritário (quem merece atenção estratégica hoje e na semana) */}
+            <DiaPrioritarioNaCentral
+              clientes={(clients || []).map((c: any) => ({ id: String(c.id), nome: nomeDoCliente(c) }))}
+              onAbrirPerfil={(id) => { setProfileClientId(id); setActiveTab("perfis"); }}
+            />
             <Secao
               titulo="Saúde da carteira"
               descricao={`${healthRows.length} ${healthRows.length === 1 ? "cliente recorrente" : "clientes recorrentes"}`}

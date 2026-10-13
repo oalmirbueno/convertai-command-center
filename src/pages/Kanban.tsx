@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { notifyOpsTaskUpdated } from "@/lib/opsTaskSync";
 import { excluirTarefa } from "@/lib/taskDelete";
+import { coincideComODia, diaNaOperacao, ehCaptacao, nomeDoDia } from "@/lib/diaPrioritario";
+import { useDiasPrioritarios } from "@/lib/diaPrioritarioApi";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -157,6 +159,7 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
   anexos,
   editorial,
   acoes,
+  diaPrioritario = null,
 }: {
   task: any;
   colId: string;
@@ -168,7 +171,11 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
   anexos: number;
   editorial: boolean;
   acoes: AcoesDoCartao;
+  /** 12/10/2026: o Dia Prioritário do cliente da tarefa (só para a equipe), para a captação mostrar se cai nele. */
+  diaPrioritario?: number | null;
 }) {
+  // Captação ou gravação com data: diz se cai no Dia Prioritário (preferência, nunca trava).
+  const noDia = !isClient && task.due_date && ehCaptacao(task) ? coincideComODia(task.due_date, diaPrioritario) : null;
   const podeArrastar = draggable;
   return (
       <div className="relative" data-cartao-da-tarefa={task.id}>
@@ -227,6 +234,15 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
                   </span>
                 )}
               </div>
+            )}
+            {noDia !== null && (
+              <span
+                className={juntar(etiqueta, "mt-1.5 inline-block", noDia ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}
+                title="O Dia Prioritário é a preferência para captações, não uma trava do calendário."
+                data-captacao-no-dia={noDia ? "sim" : "nao"}
+              >
+                {noDia ? "No Dia Prioritário" : `Dia Prioritário: ${nomeDoDia(diaPrioritario)}`}
+              </span>
             )}
             <div className="mt-2 flex items-center justify-between">
               <div className="flex min-w-0 items-center text-[11px] tabular-nums text-muted-foreground">
@@ -477,6 +493,12 @@ export default function Kanban() {
   const projectClientById = useMemo(
     () => new Map(projectRows.map((project) => [project.id, project.client_id])),
     [projectRows],
+  );
+  // 12/10/2026: Dia Prioritário de cada cliente (só a equipe lê), para o selo das captações.
+  const { data: diasPrioritarios } = useDiasPrioritarios(!isClient);
+  const diaDoClientePorId = useMemo(
+    () => new Map((diasPrioritarios || []).map((d) => [d.client_id, diaNaOperacao(d)])),
+    [diasPrioritarios],
   );
   const hasFilters = filterClient || filterProject || filterArea || filterDeliveryType || filterAssignee || filterPriority || filterDateFrom || filterDateTo || sortBy !== "manual";
   const dragBlockedByFilters = Boolean(
@@ -1249,6 +1271,7 @@ export default function Kanban() {
       anexos={(attachmentCounts || {})[task.id] || 0}
       editorial={isEditorialTask(task, designMemberIds)}
       acoes={acoesDoCartao}
+      diaPrioritario={diaDoClientePorId.get(projectClientById.get(task.project_id) || "") ?? null}
     />
   );
 

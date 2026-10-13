@@ -2744,6 +2744,100 @@ export type Database = {
           },
         ]
       }
+      cliente_dia_prioritario: {
+        Row: {
+          atualizado_em: string
+          client_id: string
+          criado_em: string
+          definido_por: string | null
+          dia: number | null
+          dias_indisponiveis: number[]
+          observacao: string | null
+          origem: string
+          situacao: string
+        }
+        Insert: {
+          atualizado_em?: string
+          client_id: string
+          criado_em?: string
+          definido_por?: string | null
+          dia?: number | null
+          dias_indisponiveis?: number[]
+          observacao?: string | null
+          origem?: string
+          situacao: string
+        }
+        Update: {
+          atualizado_em?: string
+          client_id?: string
+          criado_em?: string
+          definido_por?: string | null
+          dia?: number | null
+          dias_indisponiveis?: number[]
+          observacao?: string | null
+          origem?: string
+          situacao?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cliente_dia_prioritario_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cliente_dia_prioritario_historico: {
+        Row: {
+          autor: string | null
+          client_id: string
+          dia_antes: number | null
+          dia_depois: number | null
+          em: string
+          id: string
+          motivo: string | null
+          observacao: string | null
+          origem: string
+          situacao_antes: string | null
+          situacao_depois: string
+        }
+        Insert: {
+          autor?: string | null
+          client_id: string
+          dia_antes?: number | null
+          dia_depois?: number | null
+          em?: string
+          id?: string
+          motivo?: string | null
+          observacao?: string | null
+          origem: string
+          situacao_antes?: string | null
+          situacao_depois: string
+        }
+        Update: {
+          autor?: string | null
+          client_id?: string
+          dia_antes?: number | null
+          dia_depois?: number | null
+          em?: string
+          id?: string
+          motivo?: string | null
+          observacao?: string | null
+          origem?: string
+          situacao_antes?: string | null
+          situacao_depois?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cliente_dia_prioritario_historico_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cliente_estilos: {
         Row: {
           aprendizados: Json
@@ -5001,6 +5095,43 @@ export type Database = {
           week_start?: string
         }
         Relationships: []
+      }
+      dia_prioritario_video: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          capa_path: string | null
+          fonte: string | null
+          id: boolean
+          publicado: boolean
+          titulo: string
+          video_path: string | null
+          video_url: string | null
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          capa_path?: string | null
+          fonte?: string | null
+          id?: boolean
+          publicado?: boolean
+          titulo?: string
+          video_path?: string | null
+          video_url?: string | null
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          capa_path?: string | null
+          fonte?: string | null
+          id?: boolean
+          publicado?: boolean
+          titulo?: string
+          video_path?: string | null
+          video_url?: string | null
+        }
+        Relationships: [
+        ]
       }
       documentos_agenda: {
         Row: {
@@ -15107,6 +15238,32 @@ export type Database = {
       }
       dossie_avancos_texto: {
         Args: { _client_id: string; _dias?: number }
+        Returns: string
+      }
+      dia_prioritario_definir: {
+        Args: {
+          _client_id: string
+          _dia: number | null
+          _dias_indisponiveis?: number[] | null
+          _motivo?: string | null
+          _observacao?: string | null
+          _origem?: string
+          _situacao: string
+          _substituir_manual?: boolean
+        }
+        Returns: Database["public"]["Tables"]["cliente_dia_prioritario"]["Row"]
+      }
+      dia_prioritario_registrar: {
+        Args: {
+          _autor?: string | null
+          _client_id: string
+          _combinados?: string | null
+          _data?: string | null
+          _origem?: string
+          _proximos_passos?: string | null
+          _resumo?: string | null
+          _tipo: string
+        }
         Returns: string
       }
       dossie_enfileirar: {
