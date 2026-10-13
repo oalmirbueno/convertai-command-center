@@ -228,7 +228,8 @@ describe("o cartão 'Seu Dia Prioritário'", () => {
     montar({ recorrente: true, agora: SEGUNDA_MEIO_DIA });
     await screen.findByText(/Seu Dia Prioritário é toda/);
     expect(screen.getByText("terça-feira")).toBeTruthy();
-    expect(screen.getByText(/continua sendo acompanhado durante toda a semana/)).toBeTruthy();
+    expect(screen.getByText(/segue acompanhado durante toda a semana/)).toBeTruthy();
+    expect(screen.getByText(/Traga suas dúvidas/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Entenda como funciona" })).toBeTruthy();
     expect(screen.queryByText("Hoje é seu Dia Prioritário!")).toBeNull();
     expect(screen.queryByText("Assistir ao vídeo")).toBeNull();

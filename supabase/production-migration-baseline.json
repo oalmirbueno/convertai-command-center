@@ -2129,6 +2129,14 @@
       "remote_name": "auditoria_semanal_ads",
       "remote_statements_sha256": "cd503573e48612732aeadcf05491e71fdb44bc96690240de553e6d599f7f7d29",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261012060000",
+      "path": "supabase/migrations/20261012060000_dia_prioritario.sql",
+      "local_sha256": "2dccd70ff32f8e9784f23e1840df8ad1d1a6f4d3afb354d8def3c245e33d9cc3",
+      "remote_name": "dia_prioritario",
+      "remote_statements_sha256": "03db716548f8fc528150e4fd0f13a470a90e0ca30b2860e1f078e4f6931a1334",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

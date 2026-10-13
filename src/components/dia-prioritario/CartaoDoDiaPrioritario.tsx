@@ -73,14 +73,15 @@ export default function CartaoDoDiaPrioritario({ clientId, recorrente, agora }: 
               <p className="mt-1 text-[14px] leading-5 text-foreground">
                 Seu Dia Prioritário é toda <strong className="font-semibold text-primary">{nomeDoDia(dia)}</strong>.
               </p>
-              <p className="mt-1 text-[13px] leading-5 text-muted-foreground">
-                Um momento especial para conversarmos sobre resultados, ideias, necessidades e próximos passos da sua empresa. Aproveite para compartilhar suas sugestões. Seu negócio continua sendo acompanhado durante toda a semana.
-              </p>
+              <p className="mt-1 text-[13px] leading-5 text-muted-foreground">Um momento especial para falarmos de resultados, ideias e próximos passos.</p>
+              <p className="text-[13px] leading-5 text-muted-foreground">Traga suas dúvidas, necessidades e sugestões.</p>
+              <p className="text-[13px] leading-5 text-muted-foreground">Seu negócio segue acompanhado durante toda a semana.</p>
             </>
           ) : (
-            <p className="mt-1 text-[13px] leading-5 text-muted-foreground">
-              Estamos organizando o seu Dia Prioritário: um dia da semana com atenção especial ao seu negócio. Avisamos aqui quando ele estiver definido. Enquanto isso, o acompanhamento segue normalmente.
-            </p>
+            <>
+              <p className="mt-1 text-[13px] leading-5 text-muted-foreground">Estamos organizando o seu Dia Prioritário.</p>
+              <p className="text-[13px] leading-5 text-muted-foreground">Enquanto isso, o acompanhamento segue normalmente.</p>
+            </>
           )}
           <button
             type="button"

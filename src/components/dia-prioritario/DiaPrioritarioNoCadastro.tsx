@@ -155,7 +155,7 @@ export default function DiaPrioritarioNoCadastro({ client, admin }: { client: Cl
     >
       <div className="min-w-0 space-y-3" data-dia-prioritario-cadastro="">
         {!recorrente && !atual && (
-          <p className={texto.auxiliar}>Este cliente não tem recorrência ativa. O Dia Prioritário é para contrato mensal vigente; defina só se for exceção combinada.</p>
+          <p className={texto.auxiliar}>Sem recorrência ativa: o Dia Prioritário é para contrato mensal vigente.</p>
         )}
         {atual?.observacao && <p className="text-[12px] leading-4 text-warning">{atual.observacao}</p>}
 
@@ -243,7 +243,7 @@ export default function DiaPrioritarioNoCadastro({ client, admin }: { client: Cl
                   {sugestao.motivos.map((m, i) => <li key={i}>{m}</li>)}
                 </ul>
                 {manualDefinido && atual!.dia !== sugestao.dia && (
-                  <p className="mt-1 text-[12px] leading-4 text-warning">Este cliente já tem {nomeDoDia(atual!.dia)} definido à mão. Usar a sugestão substitui esse dia (fica no histórico).</p>
+                  <p className="mt-1 text-[12px] leading-4 text-warning">Substitui {nomeDoDia(atual!.dia)}, definido à mão (fica no histórico).</p>
                 )}
                 <button type="button" className={juntar(botao.secundario, "mt-2 h-8")} onClick={usarSugestao}>
                   Usar a sugestão
