@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { Secao, SeletorCompacto, botao, campoTexto, foco, juntar, texto } from "@/components/sistema";
+import { Secao, SeletorCompacto, botao, campo, foco, juntar, texto } from "@/components/sistema";
 import { useClients } from "@/hooks/useSupabaseData";
 import {
   DIAS_UTEIS,
@@ -229,11 +229,11 @@ export default function DiaPrioritarioNoCadastro({ client, admin }: { client: Cl
           <>
             <label className="block min-w-0">
               <span className={juntar(texto.rotulo, "mb-1 block")}>Observação interna</span>
-              <input className={juntar(campoTexto, "w-full")} value={observacao} maxLength={500} onChange={(e) => setObservacao(e.target.value)} placeholder="Ex.: provisório até confirmar a vigência" />
+              <input className={campo} value={observacao} maxLength={500} onChange={(e) => setObservacao(e.target.value)} placeholder="Ex.: provisório até confirmar a vigência" />
             </label>
             <label className="block min-w-0">
               <span className={juntar(texto.rotulo, "mb-1 block")}>Motivo da mudança (vai para o histórico)</span>
-              <input className={juntar(campoTexto, "w-full")} value={motivo} maxLength={500} onChange={(e) => setMotivo(e.target.value)} placeholder="Opcional" />
+              <input className={campo} value={motivo} maxLength={500} onChange={(e) => setMotivo(e.target.value)} placeholder="Opcional" />
             </label>
 
             {sugestao && (

@@ -15,7 +15,7 @@ import {
   ehCaptacao,
   nomeDoDia,
   proximaData,
-  textoDaCaptacao,
+  coincideComODia,
   type TipoDeRegistro,
 } from "@/lib/diaPrioritario";
 import { registrarNoDia, tarefasAbertasDosClientes, textoDoErroDoDia, useDiasPrioritarios, useReleDoDia, type TarefaDoDia } from "@/lib/diaPrioritarioApi";
@@ -155,7 +155,7 @@ export default function DiaPrioritarioNaCentral({ clientes, onAbrirPerfil, agora
                   {abertas.length} {abertas.length === 1 ? "tarefa aberta" : "tarefas abertas"}
                   {atrasadas.length ? <span className="text-destructive"> · {atrasadas.length} {atrasadas.length === 1 ? "atrasada" : "atrasadas"}</span> : ""}
                   {semana.length ? ` · ${semana.length} para esta semana` : ""}
-                  {captacoes[0]?.due_date ? ` · captação ${captacoes[0].due_date.slice(8, 10)}/${captacoes[0].due_date.slice(5, 7)} (${textoDaCaptacao(captacoes[0].due_date, dia).toLowerCase()})` : ""}
+                  {captacoes[0]?.due_date ? ` · captação ${captacoes[0].due_date.slice(8, 10)}/${captacoes[0].due_date.slice(5, 7)}, ${coincideComODia(captacoes[0].due_date, dia) ? "no Dia Prioritário" : "fora do Dia Prioritário"}` : ""}
                 </p>
                 <p className="mt-0.5 text-[12px] leading-4 text-muted-foreground">
                   {reg ? `Último registro: ${ROTULO_DO_REGISTRO[reg.tipo as TipoDeRegistro] || "registro"} em ${String(reg.data || ultimo!.created_at).slice(8, 10)}/${String(reg.data || ultimo!.created_at).slice(5, 7)}${reg.proximos_passos ? ` · próximos passos: ${reg.proximos_passos}` : ""}` : "Sem registro nos últimos 14 dias."}

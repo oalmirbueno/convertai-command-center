@@ -3,7 +3,7 @@ import { Loader2, PlayCircle, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Switch } from "@/components/ui/switch";
-import { SeletorCompacto, botao, campoTexto, juntar, texto } from "@/components/sistema";
+import { SeletorCompacto, botao, campo, juntar, texto } from "@/components/sistema";
 import { getVideoEmbedUrl } from "@/components/shared/FilePreviewContent";
 import { CHAVE_DO_VIDEO, enviarArquivoDoVideo, salvarVideoDoDia, useVideoDoDia, type VideoDoDia } from "@/lib/diaPrioritarioApi";
 import { PlayerDoVideoDoDia } from "./VideoDoDiaPrioritario";
@@ -81,7 +81,7 @@ export default function VideoDoDiaPrioritarioAdmin() {
       </p>
       <label className="block">
         <span className={juntar(texto.rotulo, "mb-1 block")}>Título</span>
-        <input className={juntar(campoTexto, "w-full")} value={titulo} maxLength={120} onChange={(e) => setTitulo(e.target.value)} onBlur={() => titulo.trim().length >= 3 && titulo !== video.titulo && void salvar({ titulo: titulo.trim() }, "Título salvo")} />
+        <input className={campo} value={titulo} maxLength={120} onChange={(e) => setTitulo(e.target.value)} onBlur={() => titulo.trim().length >= 3 && titulo !== video.titulo && void salvar({ titulo: titulo.trim() }, "Título salvo")} />
       </label>
       <div>
         <p className={juntar(texto.rotulo, "mb-1")}>De onde vem</p>
@@ -100,7 +100,7 @@ export default function VideoDoDiaPrioritarioAdmin() {
         <div className="flex flex-wrap items-end">
           <label className="mb-1 mr-2 block min-w-0 flex-1">
             <span className={juntar(texto.rotulo, "mb-1 block")}>Link</span>
-            <input className={juntar(campoTexto, "w-full")} value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://www.youtube.com/watch?v=..." />
+            <input className={campo} value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://www.youtube.com/watch?v=..." />
           </label>
           <button type="button" className={juntar(botao.secundario, "mb-1 h-9")} disabled={!linkValido || salvando || (!getVideoEmbedUrl(link.trim()) && !/\.mp4(\?|$)/i.test(link.trim()))} onClick={() => void salvar({ fonte: "link", video_url: link.trim() }, "Link salvo")}>
             Salvar link
