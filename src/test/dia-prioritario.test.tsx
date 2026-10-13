@@ -115,6 +115,9 @@ describe("captações", () => {
     expect(ehCaptacao({ title: "Captação de B-rolls" })).toBe(true);
     expect(ehCaptacao({ title: "Sessão de fotos dos produtos" })).toBe(true);
     expect(ehCaptacao({ title: "Carrossel de outubro" })).toBe(false);
+    expect(ehCaptacao({ title: "O que fazer logo após apagar um arquivo, evitando gravar novos dados no disco" })).toBe(false);
+    expect(ehCaptacao({ title: "Gravar vídeo de depoimento na loja" })).toBe(true);
+    expect(ehCaptacao({ title: "Agendar próximas captações de vídeo" })).toBe(true);
     expect(coincideComODia("2026-10-13", 2)).toBe(true);
     expect(coincideComODia("2026-10-14", 2)).toBe(false);
     expect(coincideComODia("2026-10-14", null)).toBeNull();

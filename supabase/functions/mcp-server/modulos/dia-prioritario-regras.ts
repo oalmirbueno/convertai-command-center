@@ -210,7 +210,8 @@ export function cargasDaSemana(entrada: {
 
 // ------------------------------------------------------------------ captações e gravações
 
-const PALAVRAS_DE_CAPTACAO = /\b(grava[cç][aã]o|gravar|capta[cç][aã]o|captar|filmagem|filmar|ensaio|sess[aã]o de fotos?|fotos? (no|na|do|da) (local|loja|empresa|cliente)|making of|b-?roll)\b/i;
+// "gravar" e "captar" sozinhos não bastam ("gravar novos dados no disco" não é gravação): só com o que se grava.
+const PALAVRAS_DE_CAPTACAO = /\b(grava[cç][aã]o|grava[cç][oõ]es|capta[cç][aã]o|capta[cç][oõ]es|filmagem|filmar|ensaio fotogr[aá]fico|sess[aã]o de fotos?|fotos? (no|na|do|da) (local|loja|empresa|cliente)|making of|b-?rolls?|(gravar|captar) (o |os |a |as |um |uma )?(v[ií]deos?|reels?|conte[uú]dos?|depoimentos?|entrevistas?|stories|imagens|fotos?))\b/i;
 
 /** A tarefa é uma gravação ou captação de foto e vídeo? (pelo título; tipo de entrega vídeo ajuda) */
 export function ehCaptacao(t: { title?: string | null; delivery_type?: string | null; workstream?: string | null }): boolean {
