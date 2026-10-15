@@ -63,6 +63,8 @@ export type RespostaChoice = { choice?: string; probabilities?: Record<string, n
  * "Contradiz" sai sempre; F, K, agenda e métricas continuam com corte duro.
  */
 export const LIMIAR_PERIGO = 0.5;
+/** TypeSafe (citation check): "contradiz" vale sozinho a partir de 0,8; abaixo disso vai para revisão ("a conferir"). */
+export const LIMIAR_CONTRADIZ = 0.8;
 type PerguntaNoul = { type: "noul"; instructions: string; criteria: { true: string; false: string } };
 export function perguntasDePerigo(ks: number[]): Record<string, PerguntaNoul> {
   const q: Record<string, PerguntaNoul> = {};
@@ -103,7 +105,9 @@ export function aplicarConferencia(
       // Sem a resposta do Noul vale o corte de antes (perigo = 1).
       const pp = respostas[`p${k}`];
       const perigo = pp && typeof pp.noul === "number" ? pp.noul : 1;
-      if (r.choice === "nao_diz" && o.podeMarcar?.(item) && !/\d/.test(item.texto) && perigo < LIMIAR_PERIGO) {
+      const pContradiz = typeof ps.contradiz === "number" ? ps.contradiz : r.choice === "contradiz" ? Number(r.confidence ?? 1) : 0;
+      const duvida = r.choice === "nao_diz" || (r.choice === "contradiz" && pContradiz < LIMIAR_CONTRADIZ);
+      if (duvida && o.podeMarcar?.(item) && !/\d/.test(item.texto) && perigo < LIMIAR_PERIGO) {
         marcados++;
         ficam.push({ ...item, conferido: "a_conferir" });
         return;

@@ -70,8 +70,14 @@ describe("conferência: 'não diz' em leitura de texto vira 'a conferir'", () =>
   it("fonte F (estado do OS) continua com corte duro", () => {
     expect(aplicarConferencia([item("A tarefa está atrasada.", ["F1"])], { a0: { choice: "nao_diz" }, p0: { noul: 0.1 } }, { podeMarcar }).sairam).toHaveLength(1);
   });
-  it("'contradiz' sempre sai", () => {
+  it("'contradiz' com confiança de 0,8 ou mais sai", () => {
+    expect(aplicarConferencia([item("O briefing está completo.")], { a0: { choice: "contradiz", probabilities: { contradiz: 0.85 } }, p0: { noul: 0.1 } }, { podeMarcar }).sairam).toHaveLength(1);
     expect(aplicarConferencia([item("O briefing está completo.")], { a0: { choice: "contradiz" }, p0: { noul: 0.1 } }, { podeMarcar }).sairam).toHaveLength(1);
+  });
+  it("'contradiz' fraco (abaixo de 0,8) em leitura de texto vira 'a conferir' (caso real de 15/10: o balão da Acerbi sumia)", () => {
+    const r = aplicarConferencia([item("A base da Acerbi está preenchida, mas o contexto mistura o público do CME.")], { a0: { choice: "contradiz", probabilities: { contradiz: 0.55, sustenta: 0.3, nao_diz: 0.15 } }, p0: { noul: 0.05 } }, { podeMarcar });
+    expect(r.ficam[0]?.conferido).toBe("a_conferir");
+    expect(aplicarConferencia([item("A tarefa está atrasada.", ["F1"])], { a0: { choice: "contradiz", probabilities: { contradiz: 0.55 } }, p0: { noul: 0.05 } }, { podeMarcar }).sairam).toHaveLength(1);
   });
   it("sem opções, igual a antes", () => {
     expect(aplicarConferencia([item("O contexto mistura as marcas.")], { a0: { choice: "nao_diz" }, p0: { noul: 0.1 } }).sairam).toHaveLength(1);
