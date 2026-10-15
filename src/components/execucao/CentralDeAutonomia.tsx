@@ -349,6 +349,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
     return no;
   };
   const [navegador, setNavegador] = useState(false);
+  const [navegadorAmpliado, setNavegadorAmpliado] = useState(false);
   // Lote C (09/10): o navegador remoto do cliente (sessão de verdade, login separado por cliente) ao lado do integrado.
   const [modoDoNavegador, setModoDoNavegador] = useEstadoDaTela<"remoto" | "integrado">("execucao:central:modo-do-navegador", "remoto", { validar: (v) => v === "remoto" || v === "integrado" });
   const [diario, setDiario] = useState(false);
@@ -481,9 +482,14 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
               valor={modoDoNavegador}
               onEscolher={(v) => setModoDoNavegador(v === "integrado" ? "integrado" : "remoto")}
             />
-            <button type="button" className={icone} onClick={() => setNavegador(false)} aria-label="Fechar o navegador"><X className="h-4 w-4" /></button>
+            {modoDoNavegador === "remoto" && <button type="button" className={icone} onClick={() => setNavegadorAmpliado(true)} aria-label="Ampliar navegador remoto" title="Abrir navegador em janela ampla"><Maximize2 className="h-4 w-4" /></button>}
+            <button type="button" className={icone} onClick={() => { setNavegador(false); setNavegadorAmpliado(false); }} aria-label="Fechar o navegador"><X className="h-4 w-4" /></button>
           </div>
-          {modoDoNavegador === "remoto" ? <NavegadorRemoto cliente={contextoDaConversa.cliente} /> : <NavegadorIntegrado />}
+          {modoDoNavegador === "remoto"
+              ? (navegadorAmpliado
+                ? <p className="p-3 text-sm text-muted-foreground">Navegador ampliado. A sessão continua no mesmo perfil do cliente.</p>
+                : <NavegadorRemoto cliente={contextoDaConversa.cliente} podeGerirCofre={ehAdmin} />)
+              : <NavegadorIntegrado />}
         </div>
       ) : (
         <>
@@ -641,6 +647,19 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
         {ferramentaEmPopup && <FerramentaEmbutida ferramenta={ferramentaEmPopup} clienteNome={contextoDoAtalho.clienteNome} aoMudarModo={mudarModo} aoFechar={() => setFerramenta(null)} semCabecalho conteudo={conteudoDa(ferramentaEmPopup)} />}
       </JanelaCentral>
 
+      <JanelaCentral
+        aberta={navegador && modoDoNavegador === "remoto" && navegadorAmpliado}
+        onMudar={setNavegadorAmpliado}
+        titulo={`Navegador remoto ${contextoDaConversa.cliente ? "· " + contextoDaConversa.cliente.nome : ""}`}
+        descricaoOculta="Navegador persistente do cliente, com abas e acesso rápido ao Cofre."
+        largura="tela"
+        corpo="fixo"
+        semEspaco
+        classeDoCorpo="flex min-h-0 flex-1 flex-col"
+      >
+        {navegador && modoDoNavegador === "remoto" && navegadorAmpliado &&
+          <div className="flex min-h-0 flex-1 flex-col"><NavegadorRemoto cliente={contextoDaConversa.cliente} podeGerirCofre={ehAdmin} /></div>}
+      </JanelaCentral>
       {/* As ferramentas vivas: cada uma num nó estável; o Encaixe põe o nó onde ela está aberta. */}
       {instancias.map((i) => createPortal(<FerramentaNativa key={`${i.caminho}-${i.versao}`} caminho={i.caminho} abertoEm={i.abertoEm} />, noDe(i.caminho), i.caminho))}
 
