@@ -2153,6 +2153,14 @@
       "remote_name": "aviso_de_post_no_ar_na_revisao",
       "remote_statements_sha256": "374343a6d43290c399438bf65e64236872b97eb70472a28f35884f8fad8ff967",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261015120000",
+      "path": "supabase/migrations/20261015120000_tirar_decisao_da_lista.sql",
+      "local_sha256": "592e34fa7b7791ea5eec695321657ea64a4d592d2ca360a9053d1f4e9c3ff336",
+      "remote_name": "tirar_decisao_da_lista",
+      "remote_statements_sha256": "1b27a50619904b1ea1dcc84e8b6c2ab26bd107ba522f937b0785941914b4e0d7",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

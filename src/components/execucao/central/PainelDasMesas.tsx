@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Briefcase, CalendarDays, ExternalLink, FileText, FolderOpen, Globe, Image as ImageIcon, Info, Kanban, LayoutGrid, Maximize2, Megaphone,
+  ArrowLeft, Briefcase, CalendarDays, ExternalLink, FileText, FolderOpen, Globe, Image as ImageIcon, Info, Kanban, LayoutGrid, Maximize2, Megaphone,
   Palette, PanelRight, PictureInPicture2, RefreshCw, Search, Sparkles, Users, Video, X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,7 +37,7 @@ const ICONE: Record<string, typeof LayoutGrid> = {
   projetos: Briefcase, dossie: Users, kanban: Kanban, "mesa-foto": ImageIcon, "mesa-videos": Video, crm: Users,
 };
 
-/** Grade de ferramentas (menu da Central). Clicar abre no modo padrão (pop-up). */
+/** Grade de ferramentas (menu da Central). Clicar abre na área ao lado (como o navegador). */
 export function MenuDeFerramentas({ contexto, aoAbrir, aoAbrirNavegador }: { contexto: ContextoDoAtalho & { clienteNome?: string | null }; aoAbrir: (a: { rotulo: string; caminho: string }) => void; aoAbrirNavegador?: () => void }) {
   const atalhos = atalhosDaCentral(contexto);
   return (
@@ -91,10 +91,12 @@ export function FerramentaEmbutida({ ferramenta, clienteNome, aoMudarModo, aoFec
     <div className="flex h-full min-h-0 min-w-0 flex-col" data-ferramenta-aberta={ferramenta.modo}>
       {!semCabecalho && (
         <div className="flex shrink-0 items-center gap-1 border-b border-border/60 px-2 py-1.5">
+          {/* Na área ao lado a ferramenta ocupa o lugar do Resumo: voltar devolve as abas. */}
+          {ferramenta.modo === "lateral" && <button type="button" className={ICONE_DO_CABECALHO} onClick={aoFechar} aria-label="Voltar" title="Voltar"><ArrowLeft className="h-4 w-4" /></button>}
           <p className="min-w-0 flex-1 truncate text-[13px] font-medium">{ferramenta.rotulo}{clienteNome ? <span className="font-normal text-muted-foreground"> · {clienteNome}</span> : null}</p>
           <BotoesDaFerramenta ferramenta={ferramenta} aoMudarModo={aoMudarModo} />
           <button type="button" className={ICONE_DO_CABECALHO} onClick={() => (aoRecarregar ? aoRecarregar() : setVersao((v) => v + 1))} aria-label="Recarregar" title="Recarregar"><RefreshCw className="h-3.5 w-3.5" /></button>
-          <button type="button" className={ICONE_DO_CABECALHO} onClick={aoFechar} aria-label="Fechar a ferramenta" title="Fechar"><X className="h-4 w-4" /></button>
+          {ferramenta.modo !== "lateral" && <button type="button" className={ICONE_DO_CABECALHO} onClick={aoFechar} aria-label="Fechar a ferramenta" title="Fechar"><X className="h-4 w-4" /></button>}
         </div>
       )}
       {conteudo ? <div className="min-h-0 flex-1">{conteudo}</div> : src ? (

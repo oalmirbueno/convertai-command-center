@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Bot, Loader2, Paperclip, Send, User } from "lucide-react";
-import { Carregando, EstadoVazio, SeletorCompacto, botao, campo, campoTexto, etiqueta, juntar, texto as estiloTexto, useEstadoDaTela } from "@/components/sistema";
+import { Carregando, EstadoVazio, SeletorCompacto, botao, campoTexto, etiqueta, juntar, texto as estiloTexto, useEstadoDaTela } from "@/components/sistema";
 
 /**
  * O diário da execução: onde o dono participa de verdade.
@@ -193,19 +193,20 @@ export default function DiarioDaExecucao({
 
   return (
     <Dialog open={aberto} onOpenChange={(v) => { if (!v) aoFechar(); }}>
-      <DialogContent className="flex h-[92vh] max-h-[92vh] w-[96vw] max-w-5xl flex-col gap-0 overflow-hidden p-0">
-        <div className="shrink-0 border-b border-border px-5 pb-3 pt-5 pr-12">
-          <DialogTitle className={juntar(estiloTexto.tituloSecao, "text-left")}>{titulo || "Caderno da execução"}</DialogTitle>
-          <DialogDescription className={juntar(estiloTexto.auxiliar, "mt-1 truncate text-left")}>
+      {/* 15/10 (dono: "está muito pequena essa parte de leitura"): janela mais larga, cabeçalho e abas numa linha, compositor de chat. */}
+      <DialogContent className="flex h-[94vh] max-h-[94vh] w-[97vw] max-w-6xl flex-col gap-0 overflow-hidden p-0">
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-5 py-3 pr-12">
+          <DialogTitle className={juntar(estiloTexto.tituloSecao, "min-w-0 truncate text-left")}>{titulo || "Caderno da execução"}</DialogTitle>
+          <DialogDescription className="sr-only">
             {contextoInicial ? `Pedido para ${contextoInicial.cliente.nome} · conversa compartilhada com a coordenação` : 'Conversa, trabalho e comprovantes no mesmo lugar.'}
           </DialogDescription>
-          {!contextoInicial && contexto.data && <p className="mt-2 text-xs text-primary">{contexto.data.project?.client?.company_name || contexto.data.project?.client?.full_name || 'Cliente não informado'} · {contexto.data.project?.name || contexto.data.title}</p>}
-          {!contextoInicial && contexto.isError && <button className="mt-2 text-xs text-warning" onClick={() => void contexto.refetch()}>Conferir cliente e projeto</button>}
+          {contextoInicial && <span className="truncate text-xs text-primary">Para {contextoInicial.cliente.nome}</span>}
+          {!contextoInicial && contexto.data && <span className="truncate text-xs text-primary">{contexto.data.project?.client?.company_name || contexto.data.project?.client?.full_name || 'Cliente não informado'} · {contexto.data.project?.name || contexto.data.title}</span>}
+          {!contextoInicial && contexto.isError && <button className="text-xs text-warning" onClick={() => void contexto.refetch()}>Conferir cliente e projeto</button>}
+          <nav aria-label="Conteúdo da tarefa" className="ml-auto flex shrink-0 gap-0.5">
+            {[["diario", "Diário"], ["tarefa", "Tarefa e checklist"], ["arquivos", "Arquivos"]].map(([id, label]) => <button key={id} type="button" aria-pressed={aba === id} className={juntar("h-7 rounded-md px-2.5 text-[12px] transition-colors", aba === id ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground")} onClick={() => setAba(id)}>{label}</button>)}
+          </nav>
         </div>
-
-        <nav aria-label="Conteúdo da tarefa" className="flex shrink-0 gap-1 border-b border-border px-5 py-2">
-          {[["diario", "Diário"], ["tarefa", "Tarefa e checklist"], ["arquivos", "Arquivos"]].map(([id, label]) => <button key={id} type="button" aria-pressed={aba === id} className={aba === id ? botao.primario : botao.discreto} onClick={() => setAba(id)}>{label}</button>)}
-        </nav>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background px-5 py-5">
           {aba === "tarefa" && linkId ? <TarefaDoCaderno key={linkId} linkId={linkId} /> : aba === "arquivos" && isLoading ? <Carregando linhas={3} rotulo="Carregando arquivos" /> : aba === "arquivos" && isError ? <div role="alert"><p>Não foi possível ler os arquivos da tarefa.</p><button className={botao.secundario} onClick={() => void refetch()}>Tentar de novo</button></div> : aba === "arquivos" ? <div className="mx-auto grid max-w-4xl gap-4 sm:grid-cols-2">
             {[...new Map(entradas.flatMap(e => prepararEntrada(e.body, e.attachments || []).anexos).map(a => [a.url, a])).values()].map(a => <EvidenciaVisual key={a.url} url={a.url!} nome={a.name || "Arquivo da tarefa"} />)}
@@ -226,7 +227,7 @@ export default function DiarioDaExecucao({
               descricao="Uma instrução sua aqui chega ao agente pelo MCP, sem depender de ninguém colar contexto no grupo."
             />
           ) : (
-            <div className="mx-auto max-w-3xl space-y-6">
+            <div className="mx-auto max-w-4xl space-y-4">
             <p className="text-xs text-muted-foreground">{contextoInicial ? 'Histórico da coordenação · pode incluir outros clientes' : 'Atualizações mais recentes primeiro'}</p>
             {entradas.map((e) => {
               const documento = prepararEntrada(e.body, e.attachments || []);
@@ -238,8 +239,8 @@ export default function DiarioDaExecucao({
                 <div
                   key={e.id}
                   className={juntar(
-                    "rounded-xl border border-border p-5 shadow-sm",
-                    doHumano ? "bg-primary/5" : "bg-card",
+                    "rounded-xl p-4",
+                    doHumano ? "ml-auto max-w-[85%] bg-primary/10" : "bg-card",
                   )}
                 >
                   <div className="flex min-w-0 items-center text-[11.5px]">
@@ -278,35 +279,23 @@ export default function DiarioDaExecucao({
             conversa, e o agente trata diferente, então a escolha não pode
             ser um detalhe escondido. O rascunho fica guardado por vínculo. */}
         <div className="shrink-0 space-y-2 border-t border-border px-5 py-3">
-          {contextoInicial && <p className="text-xs font-medium text-primary">Este pedido é para: {contextoInicial.cliente.nome}</p>}
-          <div className="flex min-w-0 items-center">
-            <SeletorCompacto
-              rotulo="Tipo da entrada"
-              valor={tipo}
-              onEscolher={setTipo}
-              modo="lista"
-              opcoes={TIPOS_HUMANOS.map((t) => ({ valor: t.id, rotulo: t.rotulo }))}
-            />
-            <label className="ml-2 min-w-0 flex-1">
-              <span className="sr-only">Título (opcional)</span>
-              <input
-                value={tituloEntrada}
-                onChange={(e) => setTituloEntrada(e.target.value)}
-                placeholder="Título (opcional)"
-                className={campo}
-              />
-            </label>
-          </div>
+          {tituloEntrada && (
+            <p className="flex min-w-0 items-center text-[12px] text-muted-foreground">
+              <span className="min-w-0 truncate">{tituloEntrada}</span>
+              <button type="button" className="ml-2 shrink-0 hover:text-foreground" onClick={() => setTituloEntrada("")} aria-label="Tirar o título">×</button>
+            </p>
+          )}
           <label className="block">
             <span className="sr-only">Texto da entrada</span>
             <textarea
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && (texto.trim() || anexos.length) && !enviar.isPending && !subindo) { e.preventDefault(); enviar.mutate(); } }}
               placeholder={tipo === "instrucao"
-                ? "O que o agente deve fazer (ou parar de fazer)…"
-                : "Escreva aqui…"}
-              rows={3}
-              className={juntar(campoTexto, "min-h-[72px] resize-y")}
+                ? `Fale com ${contextoInicial ? "a coordenação" : "o agente"} do seu jeito: o que fazer, ajustar ou parar… (Ctrl+Enter envia)`
+                : "Escreva aqui… (Ctrl+Enter envia)"}
+              rows={Math.min(8, Math.max(2, texto.split("\n").length))}
+              className={juntar(campoTexto, "min-h-[56px] resize-none")}
             />
           </label>
           {anexos.length > 0 && (
@@ -324,7 +313,14 @@ export default function DiarioDaExecucao({
               ))}
             </div>
           )}
-          <div className="flex items-center">
+          <div className="flex items-center gap-1">
+            <SeletorCompacto
+              rotulo="Tipo da entrada"
+              valor={tipo}
+              onEscolher={setTipo}
+              modo="lista"
+              opcoes={TIPOS_HUMANOS.map((t) => ({ valor: t.id, rotulo: t.rotulo }))}
+            />
             <label className={juntar(
               botao.discreto,
               "cursor-pointer",

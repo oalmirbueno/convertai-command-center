@@ -1039,12 +1039,33 @@ export default function AdminExecucao() {
     );
   }
 
+  /**
+   * O cartão do trabalho (15/10, dono: "parecem grudados; separe, igual é no
+   * Trello, mais visual e mais simples; se eu quiser ver alguma coisa, eu
+   * clico nele e abre"). À vista: estado, título, cliente, agente, prazo e um
+   * aviso só. O resto (humano, última ação, evidência, próximo passo,
+   * bloqueio) fica em "ver mais", sem abrir a tarefa.
+   */
+  const COR_DO_ESTADO: Record<string, string> = {
+    done: "bg-success", blocked: "bg-destructive", review: "bg-warning", awaiting_input: "bg-warning", in_progress: "bg-info", queued: "bg-muted-foreground/60",
+  };
   const Cartao = ({ v }: { v: Vinculo }) => {
     const t = tarefaDoVinculo(v, tarefas);
     const cliente = t?.project?.client;
     const op = opDe(v.operator_id);
     const destacado = v.id === vinculoAlvo;
     const prazoVencido = t?.due_date && String(t.due_date) <= hoje && v.status !== "done";
+    const origem = origemDaExecucao(v);
+    const cat = categoriaDaTarefa(t?.title);
+    const parado = !encerrado(v) && ["blocked", "awaiting_input", "review", "queued"].includes(v.status) && diasParado(v) >= 3;
+    const aviso = v.block_reason && !encerrado(v)
+      ? { tom: "text-destructive", texto: `bloqueio: ${falarComoGente(v.block_reason).humano}` }
+      : parado
+        ? { tom: "text-warning", texto: `parado há ${diasParado(v)} dias${v.status === "awaiting_input" ? ": o agente espera uma resposta sua" : v.status === "review" ? ": esperando sua revisão" : v.status === "queued" ? ": na fila, nenhum agente pegou" : ""}` }
+        : encerrado(v)
+          ? { tom: "text-muted-foreground", texto: "encerrado: tarefa concluída, arquivada ou excluída" }
+          : null;
+    const temMais = !!(v.last_action || v.last_evidence || v.next_step);
     return (
       <div
         ref={destacado ? destacadoRef : undefined}
@@ -1065,158 +1086,109 @@ export default function AdminExecucao() {
         }}
         onContextMenu={(e) => { e.preventDefault(); setMenuCartao({ x: e.clientX, y: e.clientY, v }); }}
         className={juntar(
-          "min-w-0 cursor-pointer px-3.5 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-          destacado && "bg-primary/10 ring-2 ring-inset ring-primary/50",
+          "flex h-full min-w-0 cursor-pointer flex-col rounded-xl border border-border/60 bg-card p-3 shadow-sm transition-colors hover:border-border hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          destacado && "ring-2 ring-primary/50",
         )}
       >
-        <p className="text-[13px] font-semibold leading-5 text-foreground [overflow-wrap:anywhere]">
-          {t?.title || v.last_action || "(sem tarefa vinculada)"}
-        </p>
-        <div className="mt-1">
-          <div className="-m-0.5 flex min-w-0 flex-wrap items-center [&>*]:m-0.5">
-            <span className={juntar(
-              etiqueta,
-              v.status === "done" ? "bg-success/15 text-success"
-                : v.status === "blocked" ? "bg-destructive/15 text-destructive"
-                : v.status === "review" ? "bg-warning/15 text-warning"
-                : "bg-muted text-muted-foreground",
-            )}>
-              {STATUS_ROTULO[v.status] || v.status}
-            </span>
-            {/* ORIGEM: isso depende de mim? CATEGORIA: que trabalho e este?
-                Sao os dois badges que faltavam para "em revisao" nao
-                parecer "arte final publicada". */}
-            {(() => {
-              const origem = origemDaExecucao(v);
-              return origem !== "interno" && (
-                <span className={juntar(
-                  etiqueta,
-                  origem === "aguardando_almir" ? "bg-warning/15 text-warning" : "bg-destructive/15 text-destructive",
-                )}>
-                  {ROTULO_ORIGEM[origem]}
-                </span>
-              );
-            })()}
-            {(() => {
-              const cat = categoriaDaTarefa(t?.title);
-              return cat !== "geral" && (
-                <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>
-                  {ROTULO_CATEGORIA[cat]}
-                </span>
-              );
-            })()}
-            <span className={juntar(texto.auxiliar, "min-w-0 truncate")}>
-              {[cliente ? (cliente.company_name || cliente.full_name) : null, t?.project?.name]
-                .filter(Boolean).join(" · ") || "sem projeto"}
-            </span>
-          </div>
-        </div>
-
-        <div className="-mx-1.5 mt-1.5 flex flex-wrap items-center text-[12px] text-muted-foreground [&>*]:mx-1.5">
-          <span className="inline-flex items-center">
-            <Bot className="mr-1 h-3 w-3" aria-hidden="true" /> {op?.display_name || "?"}
-          </span>
-          <span>
-            humano: <span className="font-medium text-foreground/80">
-              {t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}
-            </span>
-          </span>
-          {t?.due_date && (
-            <span className={juntar("inline-flex items-center tabular-nums", prazoVencido && "font-semibold text-destructive")}>
-              <Clock className="mr-1 h-3 w-3" aria-hidden="true" /> {t.due_date}
+        <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className={juntar("h-2 w-2 shrink-0 rounded-full", COR_DO_ESTADO[v.status] || "bg-muted-foreground/60")} aria-hidden="true" />
+          <span className="font-medium text-foreground/80">{STATUS_ROTULO[v.status] || v.status}</span>
+          {origem !== "interno" && (
+            <span className={juntar("rounded px-1.5 py-px font-medium", origem === "aguardando_almir" ? "bg-warning/15 text-warning" : "bg-destructive/15 text-destructive")}>
+              {ROTULO_ORIGEM[origem]}
             </span>
           )}
-          <span className="tabular-nums">{dataCurta(v.updated_at)}</span>
+          {cat !== "geral" && <span className="truncate">{ROTULO_CATEGORIA[cat]}</span>}
+          <span className="ml-auto shrink-0 tabular-nums">{dataCurta(v.updated_at)}</span>
         </div>
 
-        {v.last_action && (
-          <p className={juntar(texto.corpo, "mt-1.5 text-foreground/85")}>
-            {falarComoGente(v.last_action).humano}
-          </p>
-        )}
-        {v.last_evidence && (() => {
-          // Traduz UMA vez: o cartão é redesenhado a cada atualização da
-          // fila, e três chamadas por cartão viram trabalho à toa.
-          const ev = falarComoGente(v.last_evidence);
-          return (
-          /* A evidência em português, com o log de máquina guardado atrás de
-             um toque. Traduzir é para dar de LER; apagar o original seria
-             trocar um problema por outro pior, porque é a evidência que
-             sustenta a entrega. */
-          <details
-            className="mt-1"
-            /* Abrir o detalhe NÃO pode abrir a tarefa: o cartão inteiro é
-               clicável, e o clique aqui é outra intenção. */
-            onClick={(e) => e.stopPropagation()}
-          >
-            <summary className="cursor-pointer list-none text-[12px] text-muted-foreground marker:hidden">
-              <span className="break-words">
-                {v.last_evidence.startsWith("http")
-                  ? <a className="break-all text-primary underline" href={v.last_evidence} target="_blank" rel="noopener noreferrer">{v.last_evidence}</a>
-                  : ev.humano}
-              </span>
-              {ev.temDetalheTecnico && (
-                <span className="ml-1 whitespace-nowrap text-[11px] text-primary/80 underline">
-                  detalhe técnico
-                </span>
-              )}
-            </summary>
-            {ev.temDetalheTecnico && (
-              <p className={juntar(superficie.poco, "mt-1 break-all p-2 font-mono text-[11px] leading-relaxed text-muted-foreground")}>
-                {ev.original}
-              </p>
-            )}
-          </details>
-          );
-        })()}
-        {v.next_step && (
-          <p className="mt-1 text-[12px] text-muted-foreground">
-            próximo passo: {falarComoGente(v.next_step).humano}
-          </p>
-        )}
-        {encerrado(v) && (
-          <p className="mt-1 text-[12px] text-muted-foreground" title="A tarefa foi concluída, arquivada ou excluída; o vínculo ficou como histórico.">
-            encerrado: tarefa concluída, arquivada ou excluída
-          </p>
-        )}
-        {!encerrado(v) && ["blocked", "awaiting_input", "review", "queued"].includes(v.status) && diasParado(v) >= 3 && (
-          <p className="mt-1 text-[12px] text-warning">
-            parado há {diasParado(v)} dias{v.status === "awaiting_input" ? ": o agente espera uma resposta sua" : v.status === "review" ? ": esperando sua revisão" : v.status === "queued" ? ": na fila, nenhum agente pegou" : ""}
-          </p>
-        )}
-        {v.block_reason && !encerrado(v) && (
-          <p className="mt-1 text-[12px] text-destructive">
-            bloqueio: {falarComoGente(v.block_reason).humano}
-          </p>
-        )}
-        <div className="mt-2">
-          <div className="-m-0.5 flex flex-wrap items-center [&>*]:m-0.5">
+        <p className="mt-1.5 line-clamp-2 text-[13px] font-semibold leading-5 text-foreground [overflow-wrap:anywhere]">
+          {t?.title || v.last_action || "(sem tarefa vinculada)"}
+        </p>
+        <p className="mt-0.5 truncate text-[12px] text-primary/90">
+          {[cliente ? (cliente.company_name || cliente.full_name) : null, t?.project?.name].filter(Boolean).join(" · ") || "sem projeto"}
+        </p>
+
+        {aviso && <p className={juntar("mt-1.5 line-clamp-2 text-[12px]", aviso.tom)}>{aviso.texto}</p>}
+
+        <div className="mt-auto flex min-w-0 items-center gap-2 pt-2.5 text-[12px] text-muted-foreground">
+          <span className="inline-flex min-w-0 items-center gap-1.5" title={`humano: ${t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}`}>
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground" aria-hidden="true">{(op?.display_name || "?").slice(0, 1)}</span>
+            <span className="truncate">{op?.display_name || "?"}</span>
+          </span>
+          {t?.due_date && (
+            <span className={juntar("inline-flex shrink-0 items-center rounded-md px-1.5 tabular-nums", prazoVencido ? "bg-destructive/15 font-semibold text-destructive" : "bg-muted")} title="prazo">
+              <Clock className="mr-1 h-3 w-3" aria-hidden="true" /> {String(t.due_date).split("-").reverse().slice(0, 2).join("/")}
+            </span>
+          )}
+          <span className="ml-auto flex shrink-0 items-center gap-1">
             {precisaDecisao(v) && (
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); void abrirDecisaoDoVinculo(v.id); }}
                 className="inline-flex h-7 items-center rounded-md bg-warning/15 px-2 text-[12px] font-medium text-warning hover:bg-warning/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                title="aprovação necessária: decidir"
               >
-                <ShieldAlert className="mr-1 h-3 w-3" aria-hidden="true" /> aprovação necessária: decidir
+                <ShieldAlert className="mr-1 h-3 w-3" aria-hidden="true" /> decidir
               </button>
             )}
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined }); }}
-              className="inline-flex h-7 items-center rounded-md border border-border px-2 text-[12px] font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex h-7 items-center rounded-md px-2 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               title="Conversar com o agente nesta execução: instrução, contexto, correção"
             >
               diário
             </button>
-          </div>
+          </span>
         </div>
+
+        {temMais && (
+          <details
+            className="mt-2 border-t border-border/50 pt-1.5"
+            /* Abrir o detalhe NÃO pode abrir a tarefa: o cartão inteiro é
+               clicável, e o clique aqui é outra intenção. */
+            onClick={(e) => e.stopPropagation()}
+          >
+            <summary className="cursor-pointer list-none text-[11px] text-muted-foreground marker:hidden hover:text-foreground">ver mais</summary>
+            <div className="mt-1.5 space-y-1.5 text-[12px] text-muted-foreground">
+              <p>humano: <span className="font-medium text-foreground/80">{t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}</span></p>
+              {v.last_action && <p className="text-foreground/85">{falarComoGente(v.last_action).humano}</p>}
+              {v.last_evidence && (() => {
+                // Traduz UMA vez: o cartão é redesenhado a cada atualização da fila.
+                const ev = falarComoGente(v.last_evidence);
+                return (
+                  /* A evidência em português, com o log de máquina guardado atrás de
+                     um toque. Traduzir é para dar de LER; apagar o original seria
+                     trocar um problema por outro pior. */
+                  <details>
+                    <summary className="cursor-pointer list-none marker:hidden">
+                      <span className="break-words">
+                        evidência: {v.last_evidence.startsWith("http")
+                          ? <a className="break-all text-primary underline" href={v.last_evidence} target="_blank" rel="noopener noreferrer">{v.last_evidence}</a>
+                          : ev.humano}
+                      </span>
+                      {ev.temDetalheTecnico && <span className="ml-1 whitespace-nowrap text-[11px] text-primary/80 underline">detalhe técnico</span>}
+                    </summary>
+                    {ev.temDetalheTecnico && (
+                      <p className={juntar(superficie.poco, "mt-1 break-all p-2 font-mono text-[11px] leading-relaxed text-muted-foreground")}>
+                        {ev.original}
+                      </p>
+                    )}
+                  </details>
+                );
+              })()}
+              {v.next_step && <p>próximo passo: {falarComoGente(v.next_step).humano}</p>}
+            </div>
+          </details>
+        )}
       </div>
     );
   };
 
-  /** Lista de vínculos: linhas com divisória num painel só, sem caixa por linha. */
-  const ListaDeCartoes = ({ lista, rotulo }: { lista: Vinculo[]; rotulo: string }) => (
-    <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")} aria-label={rotulo}>
+  /** Lista de vínculos: cartões separados (grade nas listas, pilha nas colunas do quadro). */
+  const ListaDeCartoes = ({ lista, rotulo, pilha = false }: { lista: Vinculo[]; rotulo: string; pilha?: boolean }) => (
+    <ul className={pilha ? "space-y-2" : "grid gap-2.5 sm:grid-cols-2 2xl:grid-cols-3"} aria-label={rotulo}>
       {lista.map((v) => (
         <li key={v.id} className="min-w-0">
           <Cartao v={v} />
@@ -1637,7 +1609,7 @@ export default function AdminExecucao() {
               <EstadoVazio compacto titulo="Vazia" />
             ) : (
               <RegiaoRolavel modo="lg" rotulo={`Coluna ${c.titulo}`} memoria={`execucao:quadro:${c.id}`}>
-                <ListaDeCartoes lista={daColuna} rotulo={c.titulo} />
+                <ListaDeCartoes pilha lista={daColuna} rotulo={c.titulo} />
               </RegiaoRolavel>
             )}
           </section>
@@ -1677,6 +1649,8 @@ export default function AdminExecucao() {
         <BarraDeControles
           rotulo="Filtros da Execução"
           className="mt-3 shrink-0"
+          // 15/10 (dono): cliente e prazo num botão "Filtros" na linha da busca, sem a segunda linha.
+          recolherFiltros="sempre"
           inicio={
             <CampoDeBusca
               valor={busca}
@@ -1726,7 +1700,8 @@ export default function AdminExecucao() {
           ]}
         />
       ) : seletorDeVisao ? (
-        <div className="mt-3 shrink-0">{seletorDeVisao}</div>
+        // Mesmo lugar da barra de filtros (à direita): trocar Escritório por Hierarquia não muda o seletor de lado.
+        <div className="mt-3 flex shrink-0 justify-end">{seletorDeVisao}</div>
       ) : null}
 
       <div className={juntar("flex min-w-0 flex-col lg:min-h-0 lg:flex-1", (mostraFiltros || seletorDeVisao) && "mt-4")}>

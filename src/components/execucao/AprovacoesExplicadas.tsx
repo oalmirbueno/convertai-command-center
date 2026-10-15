@@ -5,7 +5,7 @@ import { comandoDaAprovacao } from "@/lib/execucaoApresentacao";
 import { centralReviewError } from "@/lib/centralReview";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  AlertTriangle, Ban, CheckCircle2, ChevronDown, Clock, HandCoins,
+  AlertTriangle, Archive, Ban, CheckCircle2, ChevronDown, Clock, HandCoins,
   Loader2, PencilLine, ShieldAlert, Timer, UserCheck,
 } from "lucide-react";
 import { Carregando, EstadoDeErro, Secao, botao, campo, etiqueta, foco, juntar, superficie, texto } from "@/components/sistema";
@@ -171,6 +171,27 @@ export default function AprovacoesExplicadas({
     onError: (e) => toast.error(centralReviewError(e)),
   });
 
+  // 15/10 (dono: "fica muito poluído, com um monte de decisões que não dá
+  // para decidir"): tirar da lista não apaga nem executa; o pedido vira
+  // 'expirado' com o motivo e quem tirou (operator_approval_retirar).
+  const retirar = useMutation({
+    mutationFn: async (ids: string[]) => {
+      for (const id of ids) {
+        const { error } = await (supabase as any).rpc("operator_approval_retirar", { _approval_id: id, _motivo: null });
+        if (error) throw new Error(error.message);
+      }
+      return ids;
+    },
+    onSuccess: (ids) => {
+      queryClient.setQueryData<Aprovacao[]>(["aprovacoes-explicadas", filtroVinculos], (anterior) => anterior?.filter((a) => !ids.includes(a.id)));
+      queryClient.invalidateQueries({ queryKey: ["aprovacoes-explicadas"] });
+      queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
+      queryClient.invalidateQueries({ queryKey: ["central-autonomia"] });
+      toast.success(ids.length === 1 ? "Tirado da lista. Fica no histórico como expirado." : `${ids.length} pedidos tirados da lista. Ficam no histórico como expirados.`);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Não consegui tirar da lista."),
+  });
+
   if (error) {
     // Falha de leitura NÃO é fila vazia: fila vazia diz "nada esperando
     // você", e isso seria mentira aqui.
@@ -187,21 +208,27 @@ export default function AprovacoesExplicadas({
   }
   if (aprovacoes.length === 0) return null;
 
+  // Vencida não aceita mais aprovar: sai da fila principal e vai para a lista curta do fim.
+  const agora = Date.now();
+  const venceu = (a: Aprovacao) => !!a.valid_until && Date.parse(a.valid_until) <= agora && a.id !== destaqueId;
+  const vencidas = aprovacoes.filter(venceu);
+  const ativas = aprovacoes.filter((a) => !venceu(a));
+
   return (
     <Secao
       nivel={3}
       titulo="Pedidos de aprovação"
-      descricao={`${aprovacoes.length} ${aprovacoes.length === 1 ? "pedido" : "pedidos"}`}
+      descricao={`${ativas.length} ${ativas.length === 1 ? "pedido" : "pedidos"}${vencidas.length ? ` · ${vencidas.length} ${vencidas.length === 1 ? "vencido" : "vencidos"}` : ""}`}
       ajuda="Cada pedido chega com o que vai acontecer, o porquê, os dados, o destino, o risco e o custo. O que for executado depois do sim é exatamente o que está aqui; mudou o plano, nasce outra versão."
     >
-      <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")} aria-label="Pedidos de aprovação">
-        {aprovacoes.map((a, i) => {
+      {ativas.length > 0 && <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")} aria-label="Pedidos de aprovação">
+        {ativas.map((a, i) => {
           const relatorio = a.payload?.report as Record<string, any> | undefined;
           const destino = a.payload?.destination as Record<string, any> | undefined;
           const destacada = a.id === destaqueId;
           // Um primário por área (SISTEMA.md seção 6): o pedido em destaque
           // (ou o primeiro, sem destaque) leva o verde; os outros, borda.
-          const principal = destacada || (!aprovacoes.some((x) => x.id === destaqueId) && i === 0);
+          const principal = destacada || (!ativas.some((x) => x.id === destaqueId) && i === 0);
           const temPayload = a.payload && Object.keys(a.payload).length > 0;
           return (
             <li
@@ -209,7 +236,7 @@ export default function AprovacoesExplicadas({
               data-aprovacao-id={a.id}
               className={juntar("min-w-0 px-4 py-4", destacada && "bg-primary/10 ring-2 ring-inset ring-primary/50")}
             >
-              {(i === 0 || a.client_id !== aprovacoes[i - 1].client_id) && <h3 className="mb-4 border-b border-border pb-2 text-base font-semibold">{a.client?.company_name || a.client?.full_name || "Operação interna"}</h3>}
+              {(i === 0 || a.client_id !== ativas[i - 1].client_id) && <h3 className="mb-4 border-b border-border pb-2 text-base font-semibold">{a.client?.company_name || a.client?.full_name || "Operação interna"}</h3>}
               <div className="-m-0.5 flex min-w-0 flex-wrap items-center [&>*]:m-0.5">
                 <span className={juntar(etiqueta, "bg-warning/15 text-warning")}>
                   <ShieldAlert className="mr-1 h-3 w-3" aria-hidden="true" />
@@ -361,12 +388,60 @@ export default function AprovacoesExplicadas({
                       <UserCheck className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Responder no diário
                     </button>
                   )}
+                  <button
+                    type="button"
+                    disabled={retirar.isPending}
+                    onClick={() => retirar.mutate([a.id])}
+                    className={juntar(botao.icone, !a.task_link_id && "sm:ml-auto")}
+                    aria-label={`Tirar da lista: ${a.o_que}`}
+                    title="Tirar da lista (fica no histórico como expirado)"
+                  >
+                    <Archive className="h-4 w-4" aria-hidden="true" />
+                  </button>
                 </div>
               </div>
             </li>
           );
         })}
-      </ul>
+      </ul>}
+
+      {vencidas.length > 0 && (
+        <div className="mt-4" aria-label="Pedidos vencidos">
+          <div className="mb-1.5 flex items-center justify-between gap-2 px-1">
+            <p className="text-[12px] text-muted-foreground">Venceram: não dá mais para aprovar</p>
+            <button
+              type="button"
+              disabled={retirar.isPending}
+              onClick={() => retirar.mutate(vencidas.map((a) => a.id))}
+              className={juntar(botao.discreto, "h-7 px-2 text-[12px]")}
+            >
+              {retirar.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Archive className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
+              Tirar todas da lista
+            </button>
+          </div>
+          <ul className="space-y-0.5">
+            {vencidas.map((a) => (
+              <li key={a.id} data-aprovacao-id={a.id} className="group flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted/50">
+                <Timer className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] text-foreground/90">{a.o_que}</span>
+                  <span className="block truncate text-[11px] text-muted-foreground">{a.client?.company_name || a.client?.full_name || "Operação interna"} · venceu {quando(a.valid_until!)}</span>
+                </span>
+                <button
+                  type="button"
+                  disabled={retirar.isPending}
+                  onClick={() => retirar.mutate([a.id])}
+                  className={botao.icone}
+                  aria-label={`Tirar da lista: ${a.o_que}`}
+                  title="Tirar da lista (fica no histórico como expirado)"
+                >
+                  <Archive className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </Secao>
   );
 }

@@ -1,10 +1,10 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Globe, KeyRound, Loader2, Maximize2, Minimize2, Plus, Power, RefreshCw } from "lucide-react";
+import { Globe, KeyRound, Loader2, Maximize2, Minimize2, Plus, Power, RefreshCw, Users } from "lucide-react";
 import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
 import { AjudaRecolhida, useEstadoDaTela, Carregando, botao, juntar } from "@/components/sistema";
-import { SeletorDeCliente, nomeDoCliente, type ClienteDoAgente } from "@/components/admin/agente/SeletoresDoAgente";
+import { nomeDoCliente, type ClienteDoAgente } from "@/components/admin/agente/SeletoresDoAgente";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
@@ -66,8 +66,18 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
   const doSeletor = !daConversa && escolhido ? (clientes.data || []).find((c) => c.id === escolhido) || null : null;
   const cliente = daConversa || (doSeletor ? { id: doSeletor.id, nome: nomeDoCliente(doSeletor) } : null);
   const seletor = !daConversa ? (
-    <div className="shrink-0 px-2 pt-2">
-      <SeletorDeCliente clientes={clientes.data || []} valor={escolhido || null} onEscolher={(id) => setEscolhido(id || "")} />
+    // 15/10 (dono: "seletor de cliente bem minimalista, que não polui"): uma linha só, sem caixa.
+    <div className="flex shrink-0 items-center gap-1.5 px-3 pt-2 text-[12px] text-muted-foreground">
+      <Users className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      <select
+        value={escolhido}
+        onChange={(e) => setEscolhido(e.target.value)}
+        aria-label="Cliente do navegador"
+        className="h-7 min-w-0 max-w-[240px] cursor-pointer truncate rounded-md bg-transparent px-1 text-[12px] text-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <option value="">Escolher cliente</option>
+        {(clientes.data || []).map((c) => <option key={c.id} value={c.id}>{nomeDoCliente(c)}</option>)}
+      </select>
     </div>
   ) : null;
   const [sessaoId, setSessaoId] = useEstadoDaTela<string>(`execucao:central:navegador:${cliente?.id || "sem"}`, "");
@@ -252,7 +262,7 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
         if (!ampliado || e.defaultPrevented || !raiz.current?.contains(e.target as Node)) return;
         if (e.key === "Escape") { e.preventDefault(); setAmpliado(false); }
         if (e.key === "Tab") {
-          const itens = [...raiz.current.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), a[href], iframe, [tabindex="0"]')];
+          const itens = [...raiz.current.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], iframe, [tabindex="0"]')];
           const primeiro = itens[0], ultimo = itens[itens.length - 1];
           if (e.shiftKey && (document.activeElement === primeiro || document.activeElement === raiz.current)) { e.preventDefault(); ultimo?.focus(); }
           else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primeiro?.focus(); }

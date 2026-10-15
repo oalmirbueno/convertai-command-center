@@ -279,13 +279,14 @@ describe("Central de Autonomia: conversas, ações, Hermes e Mesas", () => {
     fireEvent.click(await abrirConversa("Campanha de outubro"));
     fireEvent.click(screen.getByRole("button", { name: "Ferramentas" }));
     fireEvent.click(await screen.findByRole("button", { name: /Mesa Ads/ }));
-    expect((await screen.findByTestId("ferramenta-nativa")).textContent).toBe("/mesa-ads?client=39ebda82");
-    expect(screen.getByRole("dialog", { name: /Mesa Ads/ })).toBeTruthy();
-    expect(document.querySelector("iframe")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Abrir na lateral" }));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: /Mesa Ads/ })).toBeNull());
+    // 15/10: abre dentro da área ao lado (como o navegador), não em pop-up.
     const nativa = await screen.findByTestId("ferramenta-nativa");
+    expect(nativa.textContent).toBe("/mesa-ads?client=39ebda82");
     expect(nativa.closest("[data-ferramenta-aberta]")?.getAttribute("data-ferramenta-aberta")).toBe("lateral");
+    expect(screen.queryByRole("dialog", { name: /Mesa Ads/ })).toBeNull();
+    expect(document.querySelector("iframe")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir em pop-up" }));
+    expect(await screen.findByRole("dialog", { name: /Mesa Ads/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Abrir na área maior" }));
     expect((await screen.findByTestId("ferramenta-nativa")).closest("[data-ferramenta-aberta]")?.getAttribute("data-ferramenta-aberta")).toBe("grande");
     // A mesma instância nos três lugares: montou uma vez só.

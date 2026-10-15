@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Bot, ChevronDown, ChevronRight, FileCheck2, FileText, History, LayoutGrid, Maximize2, MessagesSquare, Minimize2, NotebookPen, PanelRightOpen, Scale, Sparkles, X } from "lucide-react";
+import { BarChart3, Bot, ChevronDown, ChevronRight, FileCheck2, FileText, FolderOpen, Fullscreen, History, LayoutGrid, List, Maximize2, MessagesSquare, Minimize2, NotebookPen, PanelRightOpen, Scale, Sparkles, X } from "lucide-react";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { LateralEsquerda } from "@/components/workspace/LateralEsquerda";
 import { chamarFuncao } from "@/lib/mesa/api";
@@ -46,6 +46,25 @@ import { periodoDaPergunta } from "../../../supabase/functions/gestor-aceleriq/m
 export type { PedidoAoHermes } from "@/components/execucao/GestorConversa";
 
 const quando = (iso?: string | null) => (iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—");
+
+/**
+ * Histórico em português e no horário daqui (15/10, dono: "deixar a tradução
+ * melhor; tá meio com fuso ainda"): estado do agente ou do card vira palavra,
+ * data ISO com fuso dentro do texto vira "15/10, 09:00" e o autor é o nome.
+ */
+const ESTADO_LEGIVEL: Record<string, string> = {
+  started: "iniciada", progress: "em andamento", queued: "na fila", in_progress: "em andamento", running: "rodando",
+  done: "concluída", completed: "concluída", review: "em revisão", awaiting_input: "aguardando sua resposta",
+  blocked: "bloqueada", failed: "falhou", timeout: "sem atualização no prazo", cancelled: "cancelada",
+  backlog: "backlog", todo: "a fazer", doing: "fazendo",
+};
+const estadoLegivel = (v?: string | null) => (v ? ESTADO_LEGIVEL[v] || v : "—");
+const DATA_ISO = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?/g;
+const textoLegivel = (t: string) => t.replace(DATA_ISO, (m) => { const d = new Date(m); return Number.isNaN(d.getTime()) ? m : quando(m); });
+function autorLegivel(actor: string, nomes: Map<string, string>): string {
+  if (/^painel:/.test(actor)) return "você, pelo painel";
+  return nomes.get(actor) || actor;
+}
 
 const COR_DO_RESULTADO: Record<ResultadoVerificado, string> = {
   concluida_com_prova: "border-success/40 text-success",
@@ -130,7 +149,7 @@ function Indicadores({ q, aoVerDecisoes }: { q: ReturnType<typeof useDadosDaCent
   );
 }
 
-function DetalheDaExecucao({ runKey, linkId }: { runKey: string; linkId: string | null }) {
+function DetalheDaExecucao({ runKey, linkId, nomes }: { runKey: string; linkId: string | null; nomes: Map<string, string> }) {
   const q = useQuery({
     queryKey: ["central-autonomia", "detalhe", runKey, linkId],
     queryFn: async () => {
@@ -154,9 +173,9 @@ function DetalheDaExecucao({ runKey, linkId }: { runKey: string; linkId: string 
           {q.data.trilha.length === 0 && <li className="text-muted-foreground">Sem eventos registrados.</li>}
           {q.data.trilha.map((e: any) => (
             <li key={e.id} className="border-l-2 border-border pl-2">
-              <span className="text-muted-foreground">{quando(e.occurred_at)} · {e.actor}</span>
-              <p className="break-words">{e.action}{e.old_status || e.new_status ? ` (${e.old_status || "—"} → ${e.new_status || "—"})` : ""}</p>
-              {e.evidence && <p className="break-words text-muted-foreground">Prova: {String(e.evidence).slice(0, 400)}</p>}
+              <span className="text-muted-foreground">{quando(e.occurred_at)} · {autorLegivel(String(e.actor || ""), nomes)}</span>
+              <p className="break-words">{textoLegivel(String(e.action || ""))}{e.old_status || e.new_status ? ` (${estadoLegivel(e.old_status)} → ${estadoLegivel(e.new_status)})` : ""}</p>
+              {e.evidence && <p className="line-clamp-3 break-words text-muted-foreground" title={textoLegivel(String(e.evidence))}>Prova: {textoLegivel(String(e.evidence)).slice(0, 400)}</p>}
             </li>
           ))}
         </ol>
@@ -168,7 +187,7 @@ function DetalheDaExecucao({ runKey, linkId }: { runKey: string; linkId: string 
           {q.data.diario.map((p: any) => (
             <li key={p.id} className="rounded-lg border border-border p-2">
               <p className="font-medium">{p.title || p.entry_type} <span className="font-normal text-muted-foreground">· {quando(p.created_at)}</span></p>
-              <p className="mt-1 line-clamp-6 whitespace-pre-wrap break-words text-muted-foreground">{p.body}</p>
+              <p className="mt-1 line-clamp-6 whitespace-pre-wrap break-words text-muted-foreground">{textoLegivel(String(p.body || ""))}</p>
             </li>
           ))}
         </ul>
@@ -216,14 +235,14 @@ function Historico({ q, aoAbrirDiario }: { q: ReturnType<typeof useDadosDaCentra
               {aberto && (
                 <div className="mt-3 space-y-3 pl-7 text-[12px]">
                   <dl className="grid gap-x-4 gap-y-1">
-                    <div><dt className="text-muted-foreground">Execução</dt><dd>{r.status}{r.error ? ` · ${r.error}` : ""}</dd></div>
-                    <div><dt className="text-muted-foreground">Tarefa no Kanban</dt><dd>{t ? t.status : "sem tarefa vinculada"}</dd></div>
-                    {v?.last_evidence && <div className="sm:col-span-2"><dt className="text-muted-foreground">Prova registrada</dt><dd className="break-words">{v.last_evidence}</dd></div>}
+                    <div><dt className="text-muted-foreground">Execução</dt><dd>{estadoLegivel(r.status)}{r.error ? ` · ${textoLegivel(r.error)}` : ""}</dd></div>
+                    <div><dt className="text-muted-foreground">Tarefa no Kanban</dt><dd>{t ? estadoLegivel(t.status) : "sem tarefa vinculada"}</dd></div>
+                    {v?.last_evidence && <div className="sm:col-span-2"><dt className="text-muted-foreground">Prova registrada</dt><dd className="break-words">{textoLegivel(v.last_evidence)}</dd></div>}
                     {v?.block_reason && <div className="sm:col-span-2"><dt className="text-muted-foreground">Bloqueio</dt><dd className="break-words text-warning">{v.block_reason}</dd></div>}
                     {v?.next_step && <div className="sm:col-span-2"><dt className="text-muted-foreground">Próximo passo</dt><dd className="break-words">{v.next_step}</dd></div>}
                     {divergencia && <div className="sm:col-span-2"><dt className="text-muted-foreground">Divergência</dt><dd className="text-warning">{divergencia}. O card não foi corrigido por inferência.</dd></div>}
                   </dl>
-                  <DetalheDaExecucao runKey={r.run_key} linkId={r.task_link_id} />
+                  <DetalheDaExecucao runKey={r.run_key} linkId={r.task_link_id} nomes={nomeDoAgente} />
                   {v && <button type="button" className={juntar(botao.secundario, "h-8 px-3 text-[12px]")} onClick={() => aoAbrirDiario(v.id, titulo)}><FileCheck2 className="mr-1.5 h-3.5 w-3.5" />Abrir diário</button>}
                 </div>
               )}
@@ -245,6 +264,12 @@ function Historico({ q, aoAbrirDiario }: { q: ReturnType<typeof useDadosDaCentra
  * O chat é o centro: cabeçalho de uma linha, explicação no "?".
  */
 type AbaDaArea = "resumo" | "historico" | "decisoes" | "arquivos";
+type VistaDosArquivos = "arquivos" | "workspace" | "lista";
+const VISTAS_DOS_ARQUIVOS: Array<{ id: VistaDosArquivos; rotulo: string; icone: typeof List }> = [
+  { id: "arquivos", rotulo: "Arquivos", icone: FileText },
+  { id: "workspace", rotulo: "Workspace", icone: FolderOpen },
+  { id: "lista", rotulo: "Arrastar", icone: List },
+];
 const ABAS_DA_AREA: AbaDaArea[] = ["resumo", "historico", "decisoes", "arquivos"];
 type Painel = "gestor" | "hermes" | "area";
 const PAINEIS: Painel[] = ["gestor", "hermes", "area"];
@@ -334,6 +359,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
   const ehAdmin = profile?.role === "admin";
   const largo = useLargo();
   const [periodo, setPeriodo] = useEstadoDaTela<PeriodoDaCentral>("execucao:central:periodo", "semana", { validar: (v) => PERIODOS_DA_CENTRAL.some((p) => p.valor === v) });
+  const [vistaDosArquivos, setVistaDosArquivos] = useEstadoDaTela<VistaDosArquivos>("execucao:central:vista-dos-arquivos", "arquivos", { validar: (v) => VISTAS_DOS_ARQUIVOS.some((x) => x.id === v) });
   const [aba, setAba] = useEstadoDaTela<AbaDaArea>("execucao:central:aba-da-area", "resumo", { validar: (v) => ABAS_DA_AREA.includes(v as AbaDaArea) });
   const [recolhidos, setRecolhidos] = useEstadoDaTela<Painel[]>("execucao:central:recolhidos", [], { validar: (v) => Array.isArray(v) && v.every((x) => PAINEIS.includes(x as Painel)) });
   const [conversasRecolhidas, setConversasRecolhidas] = useEstadoDaTela<boolean>("execucao:central:conversas-recolhidas", false, { validar: (v) => typeof v === "boolean" });
@@ -399,7 +425,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
   const mostrarArea = () => { alternar("area", false); if (!largo) setNoCelular("area"); };
 
   const abrirObjeto = (o: ObjetoAberto) => { setObjeto(o); setFerramenta((f) => (f && f.modo === "lateral" ? null : f)); setNavegador(false); mostrarArea(); };
-  const abrirFerramenta = (rotulo: string, caminho: string, modo: ModoDaFerramenta = "popup") => {
+  const abrirFerramenta = (rotulo: string, caminho: string, modo: ModoDaFerramenta = "lateral") => {
     setMenuAberto(false);
     if (abreNativo(caminho)) {
       // Nativa: a instância fica viva (as mais recentes, até o teto); reabrir a mesma não recarrega.
@@ -513,7 +539,24 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
             {aba === "resumo" && <Indicadores q={dados} aoVerDecisoes={() => setAba("decisoes")} />}
             {aba === "historico" && <Historico q={dados} aoAbrirDiario={aoAbrirDiario} />}
             {aba === "decisoes" && <AprovacoesExplicadas nomesDeAgentes={nomesDeAgentes} titulosDeTarefas={titulosDeTarefas} destaqueId={null} aoAbrirDiario={(id) => aoAbrirDiario(id)} />}
-            {aba === "arquivos" && <ArquivosDoCliente clientId={contextoDoAtalho.clientId} aoAbrirObjeto={abrirObjeto} aoAbrirFerramenta={(rotulo, caminho) => abrirFerramenta(rotulo, caminho)} />}
+            {aba === "arquivos" && (
+              <div className="flex min-h-0 flex-1 flex-col gap-2">
+                <div className="flex shrink-0 items-center gap-0.5" role="group" aria-label="Como ver os arquivos">
+                  {VISTAS_DOS_ARQUIVOS.map((v) => (
+                    <button key={v.id} type="button" aria-pressed={vistaDosArquivos === v.id} onClick={() => setVistaDosArquivos(v.id)} className={juntar("toque-compacto inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[12px] transition-colors", vistaDosArquivos === v.id ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                      <v.icone className="h-3.5 w-3.5" aria-hidden="true" />{v.rotulo}
+                    </button>
+                  ))}
+                </div>
+                {vistaDosArquivos === "lista" ? (
+                  <ArquivosDoCliente clientId={contextoDoAtalho.clientId} aoAbrirObjeto={abrirObjeto} aoAbrirFerramenta={(rotulo, caminho) => abrirFerramenta(rotulo, caminho)} />
+                ) : (
+                  <div className="-mx-3 -mb-3 min-h-0 flex-1 overflow-y-auto border-t border-border/60" key={vistaDosArquivos}>
+                    <FerramentaNativa caminho={vistaDosArquivos === "workspace" ? `/workspace${contextoDoAtalho.clientId ? `?client=${contextoDoAtalho.clientId}` : ""}` : `/arquivos${contextoDoAtalho.clientId ? `?client=${contextoDoAtalho.clientId}` : ""}`} />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </>
       )}
@@ -567,7 +610,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
         </button>
       )}
       <button type="button" className={botao.icone} onClick={() => setTelaCheia(!telaCheia)} aria-label={telaCheia ? "Sair da tela cheia" : "Tela cheia"} title={telaCheia ? "Sair da tela cheia" : "Tela cheia"}>
-        {telaCheia ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+        {telaCheia ? <Minimize2 className="h-4 w-4" /> : <Fullscreen className="h-4 w-4" />}
       </button>
     </div>
   );
