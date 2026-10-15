@@ -116,8 +116,9 @@ describe("tela do navegador remoto (função falsa)", () => {
     api.chamar.mockResolvedValue({ configurado: true });
     montar(null);
     expect(await screen.findByText(/cada cliente tem o próprio navegador/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /Cliente/ }));
-    fireEvent.click(await screen.findByText("AcelerIQ"));
+    // Seletor de uma linha (15/10): um select discreto com o nome dos clientes.
+    await screen.findByRole("option", { name: "AcelerIQ" });
+    fireEvent.change(screen.getByLabelText("Cliente do navegador"), { target: { value: "22222222-2222-4222-8222-222222222222" } });
     expect(await screen.findByRole("button", { name: "Abrir o navegador de AcelerIQ" })).toBeTruthy();
   });
 
