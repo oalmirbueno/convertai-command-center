@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { clearFatalCrashes, recordFatalCrash } from "@/lib/appRefresh";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { clearFatalCrashes, purgarPedacosEnvenenados, recordFatalCrash } from "@/lib/appRefresh";
 
 /**
  * A memória de quedas é o que separa "soluço passageiro" (a tela se recupera
@@ -37,5 +37,31 @@ describe("memória de quedas fatais", () => {
     expect(recordFatalCrash("v1:erro-x") <= 2).toBe(true);
     expect(recordFatalCrash("v1:erro-x") <= 2).toBe(true);
     expect(recordFatalCrash("v1:erro-x") <= 2).toBe(false);
+  });
+});
+
+describe("pedaço guardado como HTML (15/10/2026)", () => {
+  it("baixa de novo, furando o cache, só o .js que o cache devolve como HTML", async () => {
+    const entradas = [
+      { name: "https://aceleriq.online/assets/bom-AAAA1111.js" },
+      { name: "https://aceleriq.online/assets/ruim-BBBB2222.js" },
+      { name: "https://aceleriq.online/assets/estilo-CCCC3333.css" },
+    ];
+    const getEntries = vi.spyOn(performance, "getEntriesByType").mockReturnValue(entradas as unknown as PerformanceEntryList);
+    const chamadas: Array<[string, RequestInit | undefined]> = [];
+    const original = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      chamadas.push([url, init]);
+      const html = url.includes("ruim") && !init;
+      return new Response("x", { headers: { "Content-Type": html ? "text/html" : "text/javascript" } });
+    }) as unknown as typeof fetch;
+    try {
+      expect(await purgarPedacosEnvenenados()).toBe(1);
+      expect(chamadas.filter(([, i]) => i?.cache === "reload").map(([u]) => u)).toEqual(["https://aceleriq.online/assets/ruim-BBBB2222.js"]);
+      expect(chamadas.some(([u]) => u.endsWith(".css"))).toBe(false);
+    } finally {
+      globalThis.fetch = original;
+      getEntries.mockRestore();
+    }
   });
 });
