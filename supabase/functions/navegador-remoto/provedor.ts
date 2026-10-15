@@ -50,10 +50,10 @@ export function telaDaSessao(t?: Partial<Tela> | null): Tela {
   return { largura: n(t?.largura, 1024, 1600, TELA_PADRAO.largura), altura: n(t?.altura, 600, 1000, TELA_PADRAO.altura) };
 }
 /**
- * 15/10 (dono: "conecto o Facebook da Casa dos Assados e ele não entra e reinicia"): Facebook,
- * Instagram e a Meta barram login vindo de IP de datacenter fora do país e devolvem para o início.
- * Só esses domínios saem por IP residencial do Brasil (proxy do provedor, plano Developer ou
- * acima); o resto vai direto, para não gastar banda do proxy à toa.
+ * Proxy residencial do Brasil só para os domínios da Meta. DESLIGADO por padrão (liga com
+ * BROWSERBASE_PROXY_META=br). 15/10: ligado, o Facebook deslogou logo depois da verificação em duas
+ * etapas e abriu em espanhol: o IP do proxy não fica fixo, e a Meta derruba sessão que troca de IP.
+ * O "não entra e reinicia" do começo era o zelador fechando a sessão em uso (corrigido no ver).
  */
 export const DOMINIOS_DA_META = "^([a-zA-Z0-9-]+\\.)*(facebook\\.com|facebook\\.net|fbcdn\\.net|fbsbx\\.com|instagram\\.com|cdninstagram\\.com|meta\\.com|messenger\\.com|whatsapp\\.com|whatsapp\\.net)$";
 const PROXY_DA_META = [{ type: "browserbase", geolocation: { country: "BR" }, domainPattern: DOMINIOS_DA_META }];
@@ -70,7 +70,7 @@ export function motivoDoProvedor(corpo: Record<string, unknown> | null, chave: s
   return t.replace(/\bbb_[A-Za-z0-9_-]+/g, "[chave]").replace(/[A-Za-z0-9_-]{24,}/g, "[oculto]").slice(0, 160);
 }
 
-export function provedorBrowserbase(chave: string, projeto: string | null, f: typeof fetch = fetch): Provedor {
+export function provedorBrowserbase(chave: string, projeto: string | null, f: typeof fetch = fetch, opcoes: { proxyMeta?: boolean } = {}): Provedor {
   const doProjeto = projeto ? { projectId: projeto } : {};
   const chamar = async (caminho: string, init: RequestInit = {}) => {
     const r = await f(`${API}${caminho}`, { ...init, headers: { "X-BB-API-Key": chave, "Content-Type": "application/json", ...(init.headers || {}) }, signal: AbortSignal.timeout(20_000) });
@@ -101,7 +101,10 @@ export function provedorBrowserbase(chave: string, projeto: string | null, f: ty
       });
       // Do melhor para o mínimo: proxy do Brasil para a Meta (Developer+), depois sem ele, e por fim
       // sem keepAlive (só do plano Hobby para cima, docs 09/10), com 15 min. Chave recusada e limite não repetem.
-      const tentativas: Array<[boolean, number, boolean]> = [[true, TEMPO_DA_SESSAO_S, true], [true, TEMPO_DA_SESSAO_S, false], [false, TEMPO_SEM_PLANO_PAGO_S, false]];
+      const tentativas: Array<[boolean, number, boolean]> = [
+        ...(opcoes.proxyMeta ? [[true, TEMPO_DA_SESSAO_S, true] as [boolean, number, boolean]] : []),
+        [true, TEMPO_DA_SESSAO_S, false], [false, TEMPO_SEM_PLANO_PAGO_S, false],
+      ];
       let s: Record<string, unknown> = {};
       for (const [i, [manterViva, tempo, comProxy]] of tentativas.entries()) {
         try {
@@ -171,5 +174,6 @@ export function chaveLimpa(bruta: string): string {
 export function provedorDoAmbiente(): Provedor | null {
   const chave = chaveLimpa(Deno.env.get("BROWSERBASE_API_KEY") || "");
   const projeto = (Deno.env.get("BROWSERBASE_PROJECT_ID") || "").trim();
-  return chave ? provedorBrowserbase(chave, projeto || null) : null;
+  const proxyMeta = (Deno.env.get("BROWSERBASE_PROXY_META") || "").trim().toLowerCase() === "br";
+  return chave ? provedorBrowserbase(chave, projeto || null, fetch, { proxyMeta }) : null;
 }
