@@ -19,7 +19,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { ErroDoProvedor, type Provedor } from "../navegador-remoto/provedor.ts";
 
 export type AgenteDoNavegador = "hermes" | "gestor" | "equipe";
-export const ACOES_DO_NAVEGADOR = ["navegar", "ler", "pesquisar", "capturar", "clicar", "digitar", "abas", "nova_aba"] as const;
+export const ACOES_DO_NAVEGADOR = ["navegar", "ler", "pesquisar", "capturar", "clicar", "digitar", "abas", "nova_aba", "ativar_aba"] as const;
 export type AcaoDoNavegador = (typeof ACOES_DO_NAVEGADOR)[number];
 
 export class ErroDoNavegador extends Error {
@@ -313,6 +313,12 @@ export async function usarNavegador(db: SupabaseClient, p: Provedor, pedido: Ped
       }
     }
     if (!alvo) throw new ErroDoNavegador("sem_aba", "O navegador não tem aba aberta.");
+    if (pedido.acao === "ativar_aba") {
+      await c.enviar("Target.activateTarget", { targetId: alvo.id });
+      const res: ResultadoDoNavegador = { ok: true, acao: "ativar_aba", sessao_id: sessao.id, url: alvo.url, titulo: alvo.titulo, texto: null, abas: lista.map((a, i) => ({ indice: i, titulo: a.titulo, url: a.url })), evidencia: null, acao_id: null };
+      res.acao_id = await registrar(db, { ...reg, ok: true, alvo: alvo.url, url: alvo.url, titulo: alvo.titulo, resultado: "Aba ativada no navegador existente", duracao_ms: Date.now() - inicio });
+      return res;
+    }
     if (pedido.acao === "abas") {
       const res: ResultadoDoNavegador = { ok: true, acao: "abas", sessao_id: sessao.id, url: alvo.url, titulo: alvo.titulo, texto: null, abas: lista.map((a, i) => ({ indice: i, titulo: a.titulo, url: a.url })), evidencia: null, acao_id: null };
       res.acao_id = await registrar(db, { ...reg, ok: true, url: alvo.url, titulo: alvo.titulo, resultado: lista.map((a, i) => `${i}: ${a.titulo || a.url}`).join("\n").slice(0, 2000), duracao_ms: Date.now() - inicio });
