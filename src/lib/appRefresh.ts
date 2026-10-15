@@ -62,7 +62,33 @@ export function refreshExhausted(): boolean {
   return recentAttempts(Date.now()).length >= 2;
 }
 
+/**
+ * 15/10/2026: numa publicação pela metade, a hospedagem devolveu o index.html no lugar de .js com
+ * hash, com cache de 1 ano (immutable). A recarga com ?v= não fura esse cache: o pedaço continuava
+ * HTML e a Execução travava em "reading 'default'" (a borda agora dá 404, config/painel-worker.js,
+ * mas quem já guardou continua). Cada .js já pedido pela página que o cache devolve como HTML é
+ * baixado de novo direto do servidor (cache: "reload"), o que troca a cópia guardada.
+ */
+export async function purgarPedacosEnvenenados(): Promise<number> {
+  if (typeof performance === "undefined" || typeof fetch !== "function") return 0;
+  const nomes = [...new Set(performance.getEntriesByType("resource").map((e) => e.name).filter((n) => /\/assets\/[^?#]+\.m?js(?:$|[?#])/.test(n)))];
+  let trocados = 0;
+  await Promise.all(nomes.map(async (n) => {
+    try {
+      const r = await fetch(n);
+      if (/text\/html/i.test(r.headers.get("content-type") || "")) {
+        await fetch(n, { cache: "reload" });
+        trocados++;
+      }
+    } catch {
+      /* sem rede: segue a recarga */
+    }
+  }));
+  return trocados;
+}
+
 async function cleanupStaleCaches() {
+  await purgarPedacosEnvenenados();
   try {
     if ("serviceWorker" in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
@@ -113,7 +139,7 @@ export function hardRefresh(force = false): boolean {
   };
 
   // A limpeza não pode segurar a recarga para sempre.
-  Promise.race([cleanupStaleCaches(), new Promise((resolve) => setTimeout(resolve, 1_500))])
+  Promise.race([cleanupStaleCaches(), new Promise((resolve) => setTimeout(resolve, 4_000))])
     .then(go)
     .catch(go);
   return true;
@@ -154,7 +180,7 @@ export function updateReload(): boolean {
       window.location.reload();
     }
   };
-  Promise.race([cleanupStaleCaches(), new Promise((resolve) => setTimeout(resolve, 1_500))])
+  Promise.race([cleanupStaleCaches(), new Promise((resolve) => setTimeout(resolve, 4_000))])
     .then(go)
     .catch(go);
   return true;
