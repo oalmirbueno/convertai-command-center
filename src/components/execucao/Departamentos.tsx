@@ -1,7 +1,7 @@
 import CreateProjectModal from "@/components/admin/CreateProjectModal";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { FolderPlus } from "lucide-react";
+import { FolderPlus, Network } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { JanelaCentral, botao, campo } from "@/components/sistema";
@@ -22,9 +22,9 @@ export default function Departamentos({ agentes }: { agentes: { slug: string; di
     onError: e => toast.error(e.message),
   });
   return <>
-    <button type="button" className={botao.secundario} onClick={() => setProjetoAberto(true)}><FolderPlus className="mr-1.5 h-3.5 w-3.5" />Novo projeto</button>
+    <button type="button" className={botao.icone} onClick={() => setProjetoAberto(true)} aria-label="Novo projeto" title="Novo projeto"><FolderPlus className="h-4 w-4" aria-hidden="true" /></button>
     <CreateProjectModal open={projetoAberto} onClose={() => setProjetoAberto(false)} />
-    <button type="button" className={botao.secundario} onClick={() => setAberto(true)}><FolderPlus className="mr-1.5 h-3.5 w-3.5" />Departamentos</button>
+    <button type="button" className={botao.icone} onClick={() => setAberto(true)} aria-label="Departamentos" title="Departamentos"><Network className="h-4 w-4" aria-hidden="true" /></button>
     <JanelaCentral aberta={aberto} onMudar={setAberto} titulo="Organizar departamentos" largura="md">
       <form className="space-y-4" onSubmit={e => { e.preventDefault(); salvar.mutate(); }}>
         <label className="block space-y-1 text-[13px]">Agente<select required value={agente} onChange={e => { setAgente(e.target.value); setNome(agentes.find(a => a.slug === e.target.value)?.area || ""); }} className={campo}><option value="">Escolher agente</option>{agentes.map(a => <option key={a.slug} value={a.slug}>{a.display_name}</option>)}</select></label>

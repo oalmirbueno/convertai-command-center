@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Activity, AlertTriangle, Bot, Building2, CheckCircle2, ClipboardCopy, Clock,
-  FileCheck2, ListChecks, PauseCircle, RefreshCw, ShieldAlert, Wrench, X, XCircle,
+  FileCheck2, FileText, Inbox, ListChecks, PauseCircle, Radar, RefreshCw, ShieldAlert, TrendingUp, Users, Wrench, X, XCircle,
 } from "lucide-react";
 import OrganogramaAgentes, { type NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
 import ExecucoesRecentes from "@/components/execucao/ExecucoesRecentes";
@@ -145,6 +145,30 @@ const ABAS = [
   { id: "relatorios", rotulo: "Relatórios", visoes: ["relatorios"] },
 ] as const;
 
+/**
+ * As abas sobem para a linha do título (15/10, dono: "não o nome, mas sim os
+ * ícones; clica e abre com o nome"). Fechada é só o ícone; a aberta mostra o
+ * nome e o "?" com o que a aba responde.
+ */
+const ICONE_DA_ABA: Record<(typeof ABAS)[number]["id"], typeof Radar> = {
+  central: Radar,
+  performance: TrendingUp,
+  pessoas: Users,
+  trabalho: ListChecks,
+  decisoes: Inbox,
+  feito: CheckCircle2,
+  relatorios: FileText,
+};
+const AJUDA_DA_ABA: Record<(typeof ABAS)[number]["id"], string> = {
+  central: "Converse com o Gestor (dados do OS, com prova) e com o Hermes ao lado. O que for criado ou citado abre na área ao lado; as ferramentas abrem em pop-up, na lateral ou na área maior. Revisão não conta como feito.",
+  performance: "Resultado das campanhas da Meta por cliente, com o que pede ação.",
+  pessoas: "Quem são os agentes, em que departamento estão e o que cada um está fazendo.",
+  trabalho: "O trabalho dos agentes: tarefas, execuções, fila por operador e o que está em andamento ou em revisão.",
+  decisoes: "O que espera você: aprovações, insumos que faltam e tarefas bloqueadas.",
+  feito: "O que já foi entregue, com a prova registrada.",
+  relatorios: "Relatórios da operação para ler ou enviar.",
+};
+
 const VISOES = [
   { id: "central", rotulo: "Central de Autonomia" },
   { id: "performance", rotulo: "Performance Meta" },
@@ -232,6 +256,8 @@ export default function AdminExecucao() {
   const [mostrarEncerradas, setMostrarEncerradas] = useEstadoDaTela<boolean>("execucao:encerradas", false, { validar: (v) => typeof v === "boolean" });
   const queryClient = useQueryClient();
   const destacadoRef = useRef<HTMLDivElement | null>(null);
+  /** Onde a barra da Central entra, na linha do título (fica null fora da Central). */
+  const [barraDaCentral, setBarraDaCentral] = useState<HTMLDivElement | null>(null);
 
   /**
    * A flag, com a distinção que faltava: DESLIGADA e NÃO-CONSEGUI-LER são
@@ -1434,6 +1460,7 @@ export default function AdminExecucao() {
       titulosDeTarefas={titulosDeTarefas}
       aoAbrirDiario={(id, titulo) => setDiarioAberto({ linkId: id, titulo })}
       aoEncaminhar={encaminharAoHermes}
+      barraNoTopo={barraDaCentral}
     />
   ) : visao === "performance" ? (
     <CentralPerformanceMeta aoAbrir={(id, titulo) => setDiarioAberto({ linkId: id, titulo })} />
@@ -1640,22 +1667,6 @@ export default function AdminExecucao() {
 
   const principal = (
     <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
-      <div className="shrink-0 border-b border-border">
-        {/* AS ABAS: separam por pergunta, e ficam acima de tudo. */}
-        <Etapas
-          rotulo="Abas da Execução"
-          valor={aba}
-          onEscolher={(id) => irParaAba(id as (typeof ABAS)[number]["id"])}
-          itens={ABAS.map((x) => {
-            // A aba "O que foi feito" nao tem visao nenhuma, e uma lista vazia
-            // faz o TypeScript inferir never[]. O tipo explicito resolve sem
-            // obrigar a aba a inventar uma visao que ela nao tem.
-            const quantos = x.id === "performance" || x.id === "central" ? undefined : contagemDasAbas[x.id];
-            return { valor: x.id, rotulo: x.rotulo, contador: quantos };
-          })}
-        />
-      </div>
-
       {/* A visão da aba e os recortes numa BarraDeControles (no máximo duas
           linhas). Linha 1: a busca e a visão (um seletor; mais de 4 vira
           lista) e o "..." com limpar e os vínculos encerrados. Linha 2: cliente
@@ -1718,7 +1729,7 @@ export default function AdminExecucao() {
         <div className="mt-3 shrink-0">{seletorDeVisao}</div>
       ) : null}
 
-      <div className="mt-4 flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
+      <div className={juntar("flex min-w-0 flex-col lg:min-h-0 lg:flex-1", (mostraFiltros || seletorDeVisao) && "mt-4")}>
         {aba !== "feito" && visao === "quadro" ? (
           quadro
         ) : aba === "central" ? (
@@ -1747,10 +1758,27 @@ export default function AdminExecucao() {
     <div className="min-w-0">
       <CabecalhoDePagina
         titulo="Execução"
-        descricao={dataUpdatedAt ? `Atualizado ${dataCurta(new Date(dataUpdatedAt).toISOString())}` : "Aguardando a primeira leitura"}
         ajuda="Operadores internos executam e relatam; o responsável humano continua sendo quem responde. Feito só conta com evidência. A fila só anda com o Hermes ligado: o painel não dispara agente."
-        acoes={
+        aoLado={
           <>
+            {/* AS ABAS: separam por pergunta. Só o ícone; a aberta mostra o nome e o "?". */}
+            <Etapas
+              soIcone
+              rotulo="Abas da Execução"
+              valor={aba}
+              onEscolher={(id) => irParaAba(id as (typeof ABAS)[number]["id"])}
+              itens={ABAS.map((x) => {
+                const quantos = x.id === "performance" || x.id === "central" ? undefined : contagemDasAbas[x.id];
+                const Icone = ICONE_DA_ABA[x.id];
+                return { valor: x.id, rotulo: x.rotulo, contador: quantos, icone: <Icone className="h-4 w-4" />, ajuda: AJUDA_DA_ABA[x.id] };
+              })}
+            />
+            {/* A barra da Central (período, ferramentas, diário, tela cheia) sobe para cá. */}
+            {aba === "central" && <div ref={setBarraDaCentral} className="ml-auto flex min-w-0 items-center pl-3" data-barra-da-central="" />}
+          </>
+        }
+        acoes={
+          <div className="flex items-center gap-0.5">
             {profile?.role === "admin" && (
               <>
               <Departamentos agentes={operadores} />
@@ -1758,12 +1786,11 @@ export default function AdminExecucao() {
                 type="button"
                 onClick={() => void reconciliarExecucoes()}
                 disabled={reconciliando}
-                title="Registra timeout de execuções sem sinal e encerra vínculos sem tarefa ativa. Preserva o histórico."
+                title={reconciliando ? "Reconciliando…" : "Reconciliar: registra timeout de execuções sem sinal e encerra vínculos sem tarefa ativa. Preserva o histórico."}
                 aria-label="Reconciliar execuções"
-                className={botao.secundario}
+                className={botao.icone}
               >
-                <Wrench className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
-                <span className="hidden sm:inline">{reconciliando ? "Reconciliando…" : "Reconciliar"}</span>
+                <Wrench className={juntar("h-4 w-4", reconciliando && "animate-pulse")} aria-hidden="true" />
               </button>
               </>
             )}
@@ -1772,12 +1799,12 @@ export default function AdminExecucao() {
               onClick={() => void atualizarTudo()}
               disabled={atualizando}
               aria-label="Atualizar"
-              className={botao.secundario}
+              title={dataUpdatedAt ? `Atualizar · atualizado ${dataCurta(new Date(dataUpdatedAt).toISOString())}` : "Atualizar · aguardando a primeira leitura"}
+              className={botao.icone}
             >
-              <RefreshCw className={juntar("h-3.5 w-3.5 sm:mr-1.5", atualizando && "animate-spin")} aria-hidden="true" />
-              <span className="hidden sm:inline">Atualizar</span>
+              <RefreshCw className={juntar("h-4 w-4", atualizando && "animate-spin")} aria-hidden="true" />
             </button>
-          </>
+          </div>
         }
       />
 

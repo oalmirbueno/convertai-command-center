@@ -17,7 +17,7 @@ import type { ObjetoAberto } from "@/lib/centralObjetos";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  AjudaRecolhida, Carregando, EstadoDeErro, EstadoVazio, FaixaDeNumeros, JanelaCentral, SeletorCompacto, botao, juntar, superficie, texto, useEstadoDaTela, useLargo,
+  Carregando, EstadoDeErro, EstadoVazio, FaixaDeNumeros, JanelaCentral, SeletorCompacto, botao, juntar, superficie, texto, useEstadoDaTela, useLargo,
 } from "@/components/sistema";
 import AprovacoesExplicadas from "@/components/execucao/AprovacoesExplicadas";
 import GestorConversa, { type ContextoDaConversa, type PedidoAoHermes } from "@/components/execucao/GestorConversa";
@@ -108,7 +108,7 @@ function Indicadores({ q, aoVerDecisoes }: { q: ReturnType<typeof useDadosDaCent
       <p className="px-1 text-[12px] text-muted-foreground">{d.periodo.rotulo} · comparado a {d.periodo.anterior.rotulo}</p>
       <div>
         <p className={juntar(texto.rotulo, "mb-1.5 px-1")}>Tarefas (Kanban)</p>
-        <FaixaDeNumeros tamanho="compacto" colunas={2} itens={[
+        <FaixaDeNumeros semMoldura tamanho="compacto" colunas={2} itens={[
           { rotulo: "Abertas", valor: ind.tarefasAbertas.total, apoio: `${ind.tarefasAbertas.doing} em andamento · ${ind.tarefasAbertas.todo} a fazer · ${ind.tarefasAbertas.backlog} backlog` },
           { rotulo: "Concluídas no período", valor: ind.tarefasConcluidas.periodo, apoio: variacao(ind.tarefasConcluidas.periodo, ind.tarefasConcluidas.anterior), dica: "Tarefas em done cuja última mudança caiu no período." },
           { rotulo: "Entregas em revisão", valor: ind.entregasEmRevisao, ponto: ind.entregasEmRevisao ? "info" : "neutro", apoio: "Esperam revisão humana; não contam como feitas" },
@@ -117,7 +117,7 @@ function Indicadores({ q, aoVerDecisoes }: { q: ReturnType<typeof useDadosDaCent
       </div>
       <div>
         <p className={juntar(texto.rotulo, "mb-1.5 px-1")}>Execuções dos agentes</p>
-        <FaixaDeNumeros tamanho="compacto" colunas={2} itens={[
+        <FaixaDeNumeros semMoldura tamanho="compacto" colunas={2} itens={[
           { rotulo: "No período", valor: ind.execucoes.periodo, apoio: variacao(ind.execucoes.periodo, ind.execucoes.anterior) },
           { rotulo: "Concluídas", valor: ind.execucoes.concluidas, apoio: variacao(ind.execucoes.concluidas, ind.execucoes.concluidasAnterior), dica: "Execução concluída não é tarefa concluída: veja o resultado verificado no histórico." },
           { rotulo: "Em andamento agora", valor: ind.execucoes.emAndamento },
@@ -322,11 +322,13 @@ function Tirinha({ rotulo, icone, onAbrir }: { rotulo: string; icone: ReactNode;
   );
 }
 
-export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, aoAbrirDiario, aoEncaminhar }: {
+export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, aoAbrirDiario, aoEncaminhar, barraNoTopo = null }: {
   nomesDeAgentes: Map<string, string>;
   titulosDeTarefas: Map<string, string>;
   aoAbrirDiario: (linkId: string, titulo?: string) => void;
   aoEncaminhar: (p: PedidoAoHermes) => void;
+  /** Lugar na linha do título da página para a barra (período e ferramentas). Sem ele, a barra fica em cima do miolo. */
+  barraNoTopo?: HTMLElement | null;
 }) {
   const { profile } = useAuth();
   const ehAdmin = profile?.role === "admin";
@@ -522,37 +524,61 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
     <ConversasDoGestor ativa={conversaId || null} aoEscolher={(c) => { setConversaId(c ? c.id : ""); setConversasNoCelular(false); setNoCelular("gestor"); }} />
   ) : null;
 
-  // ---------------------------------------------------------------- cabeçalho de uma linha
-  const cabecalho = (
+  // ---------------------------------------------------------------- barra de uma linha
+  // 15/10 (dono: "deixar só o ícone, sem as bordinhas"): o período em texto,
+  // ferramentas, diário e tela cheia só com ícone. No computador ela sobe para
+  // a linha do título da página (o nome e o "?" da Central ficam na aba).
+  const periodos = (
+    <div className="flex items-center" role="group" aria-label="Período">
+      {PERIODOS_DA_CENTRAL.map((p) => (
+        <button
+          key={p.valor}
+          type="button"
+          aria-pressed={periodo === p.valor}
+          onClick={() => setPeriodo(p.valor)}
+          className={juntar(
+            "toque-compacto h-7 whitespace-nowrap rounded-md px-2 text-[12px] transition-colors",
+            periodo === p.valor ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {p.rotulo}
+        </button>
+      ))}
+    </div>
+  );
+  const ferramentasDaBarra = (
+    <div className="flex items-center gap-1.5">
+      {contextoDaConversa.cliente && <span className="hidden max-w-[160px] truncate rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground xl:inline">{contextoDaConversa.cliente.nome}{contextoDaConversa.projeto ? ` · ${contextoDaConversa.projeto.nome}` : ""}</span>}
+      {periodos}
+      <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-border" />
+      <Popover open={menuAberto} onOpenChange={setMenuAberto}>
+        <PopoverTrigger asChild>
+          <button type="button" className={botao.icone} aria-label="Ferramentas" title="Ferramentas">
+            <LayoutGrid className="h-4 w-4" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-auto p-2">
+          <MenuDeFerramentas contexto={contextoDoAtalho} aoAbrir={(a) => abrirFerramenta(a.rotulo, a.caminho)} aoAbrirNavegador={() => { setMenuAberto(false); setObjeto(null); setNavegador(true); mostrarArea(); }} />
+        </PopoverContent>
+      </Popover>
+      {ehAdmin && (
+        <button type="button" className={botao.icone} onClick={() => setDiario(true)} aria-label="Diário da coordenação" title="Diário da coordenação">
+          <NotebookPen className="h-4 w-4" />
+        </button>
+      )}
+      <button type="button" className={botao.icone} onClick={() => setTelaCheia(!telaCheia)} aria-label={telaCheia ? "Sair da tela cheia" : "Tela cheia"} title={telaCheia ? "Sair da tela cheia" : "Tela cheia"}>
+        {telaCheia ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+      </button>
+    </div>
+  );
+  const barraNoTitulo = !!barraNoTopo && largo && !telaCheia;
+  const cabecalho = barraNoTitulo ? createPortal(ferramentasDaBarra, barraNoTopo) : (
     <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
       <div className="flex min-w-0 items-center gap-1.5">
-        <h2 className="text-[16px] font-semibold leading-tight">Central</h2>
-        <AjudaRecolhida rotulo="O que é a Central?">
-          Converse com o Gestor (dados do OS, com prova) e com o Hermes ao lado. O que for criado ou citado abre na área ao lado; as ferramentas abrem em pop-up, na lateral ou na área maior. Revisão não conta como feito.
-        </AjudaRecolhida>
-        {contextoDaConversa.cliente && <span className="hidden truncate rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground sm:inline">{contextoDaConversa.cliente.nome}{contextoDaConversa.projeto ? ` · ${contextoDaConversa.projeto.nome}` : ""}</span>}
+        {/* Em tela cheia (ou sem a linha da página) a Central se apresenta aqui mesmo. */}
+        <h2 className="text-[15px] font-semibold leading-tight">Central</h2>
       </div>
-      <div className="flex items-center gap-1.5">
-        <SeletorCompacto rotulo="Período" valor={periodo} onEscolher={(v) => setPeriodo(v as PeriodoDaCentral)} modo="segmentado" listaQuandoNaoCabe opcoes={PERIODOS_DA_CENTRAL} />
-        <Popover open={menuAberto} onOpenChange={setMenuAberto}>
-          <PopoverTrigger asChild>
-            <button type="button" className={juntar(botao.secundario, "h-8 px-3 text-[12px]")} aria-label="Ferramentas">
-              <LayoutGrid className="h-3.5 w-3.5 sm:mr-1.5" /><span className="hidden sm:inline">Ferramentas</span>
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-auto p-2">
-            <MenuDeFerramentas contexto={contextoDoAtalho} aoAbrir={(a) => abrirFerramenta(a.rotulo, a.caminho)} aoAbrirNavegador={() => { setMenuAberto(false); setObjeto(null); setNavegador(true); mostrarArea(); }} />
-          </PopoverContent>
-        </Popover>
-        {ehAdmin && (
-          <button type="button" className={juntar(botao.secundario, "h-8 px-3 text-[12px]")} onClick={() => setDiario(true)} aria-label="Diário da coordenação">
-            <NotebookPen className="h-3.5 w-3.5 sm:mr-1.5" /><span className="hidden sm:inline">Diário</span>
-          </button>
-        )}
-        <button type="button" className={juntar(botao.secundario, "h-8 px-3 text-[12px]")} onClick={() => setTelaCheia(!telaCheia)} aria-label={telaCheia ? "Sair da tela cheia" : "Tela cheia"}>
-          {telaCheia ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-        </button>
-      </div>
+      {ferramentasDaBarra}
     </div>
   );
 
