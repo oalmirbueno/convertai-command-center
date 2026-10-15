@@ -49,8 +49,8 @@ describe("provedor Browserbase (fetch falso)", () => {
     expect(await p.criarSessao("ctx-1")).toBe("ses-1");
     const corpo = JSON.parse(String(chamadas[1].init.body));
     expect(corpo).toMatchObject({ projectId: "proj-1", keepAlive: true, timeout: 14400, region: "us-east-1", browserSettings: { context: { id: "ctx-1", persist: true }, viewport: { width: 1280, height: 720 } } });
-    // Só os domínios da Meta saem pelo IP residencial do Brasil; o resto vai direto.
-    expect(corpo.proxies).toEqual([{ type: "browserbase", geolocation: { country: "BR" }, domainPattern: DOMINIOS_DA_META }]);
+    // Proxy desligado por padrão (15/10: IP que troca derrubava a sessão da Meta).
+    expect(corpo).not.toHaveProperty("proxies");
     expect((chamadas[0].init.headers as Record<string, string>)["X-BB-API-Key"]).toBe("chave-teste");
   });
 
@@ -76,17 +76,21 @@ describe("provedor Browserbase (fetch falso)", () => {
       return b.keepAlive ? resposta(400, { message: "keepAlive requires a paid plan" }) : resposta(201, { id: "ses-2" });
     }) as unknown as typeof fetch;
     expect(await provedorBrowserbase("k", "p", f).criarSessao("ctx")).toBe("ses-2");
+    expect(corpos.map((c) => [c.keepAlive, c.timeout, "proxies" in c])).toEqual([[true, 14400, false], [false, 900, false]]);
+    corpos.length = 0;
+    expect(await provedorBrowserbase("k", "p", f, { proxyMeta: true }).criarSessao("ctx")).toBe("ses-2");
     expect(corpos.map((c) => [c.keepAlive, c.timeout, "proxies" in c])).toEqual([[true, 14400, true], [true, 14400, false], [false, 900, false]]);
   });
 
-  it("plano sem proxy: abre com keepAlive e sem o proxy, na tela pedida", async () => {
+  it("proxy ligado (BROWSERBASE_PROXY_META=br) e plano sem proxy: abre com keepAlive e sem o proxy, na tela pedida", async () => {
     const corpos: Record<string, unknown>[] = [];
     const f = vi.fn(async (_url: string, init: RequestInit) => {
       const b = JSON.parse(String(init.body));
       corpos.push(b);
       return b.proxies ? resposta(400, { message: "Proxies are not available on your plan" }) : resposta(201, { id: "ses-3" });
     }) as unknown as typeof fetch;
-    expect(await provedorBrowserbase("k", "p", f).criarSessao("ctx", { tela: { largura: 1504, altura: 591 } })).toBe("ses-3");
+    expect(await provedorBrowserbase("k", "p", f, { proxyMeta: true }).criarSessao("ctx", { tela: { largura: 1504, altura: 591 } })).toBe("ses-3");
+    expect(corpos[0].proxies).toEqual([{ type: "browserbase", geolocation: { country: "BR" }, domainPattern: DOMINIOS_DA_META }]);
     expect(corpos).toHaveLength(2);
     expect(corpos[1]).toMatchObject({ keepAlive: true, timeout: 14400, browserSettings: { viewport: { width: 1504, height: 600 } } });
     expect(corpos[1]).not.toHaveProperty("proxies");
