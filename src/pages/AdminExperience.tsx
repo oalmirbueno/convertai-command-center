@@ -24,6 +24,7 @@ import DossieDoCliente from "@/components/admin/DossieDoCliente";
 import DiaPrioritarioNaCentral from "@/components/dia-prioritario/DiaPrioritarioNaCentral";
 import CentralReviewQueue from "@/components/central/CentralReviewQueue";
 import AvisosDePublicacao from "@/components/central/AvisosDePublicacao";
+import MesaDaRevisao from "@/components/central/MesaDaRevisao";
 import AgenteDaCentral from "@/components/central/AgenteDaCentral";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { useEstadoDaTela, useRolagemDaTela } from "@/components/central/useEstadoDaTela";
@@ -3063,12 +3064,23 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                     Hermes em Ciclo > Revisao. Na Central ela so aparece quando um
                     link de pedido chega (?review=...). O resto e caminho curto:
                     gerar, aprimorar, copiar para o grupo, publicar. */}
-                {(cycleReview || new URLSearchParams(location.search).has("review")) && (
-                  <CentralReviewQueue key={reviewClientId || "all-clients"} memoria={cycleReview && user?.id ? `ciclo-revisao:${user.id}` : null} reports={reviewClientId ? reports.filter(report => report.client_id === reviewClientId) : reports} clients={reviewClientId ? (clients || []).filter(client => client.id === reviewClientId) : clients || []} isAdmin={isAdmin} onRefresh={async () => {
+                {/* Revisão do Ciclo (15/10/2026): a mesa de decisão no centro, um item
+                    por vez; a fila completa (preparar, enviar, histórico) recolhida
+                    embaixo; e os avisos de post aprovados esperando o envio. */}
+                {cycleReview && <MesaDaRevisao reports={reports} clients={clients || []} isAdmin={isAdmin} clientId={reviewClientId || ""} />}
+                {cycleReview && (
+                  <Secao titulo="Fila completa" recolher={`ciclo:revisao:fila:${reviewClientId || "todos"}`} recolhidaDeInicio resumo="Preparar rascunhos, registrar envios e ver o que já foi" divisoria>
+                    <CentralReviewQueue key={reviewClientId || "all-clients"} memoria={user?.id ? `ciclo-revisao:${user.id}` : null} reports={reviewClientId ? reports.filter(report => report.client_id === reviewClientId) : reports} clients={reviewClientId ? (clients || []).filter(client => client.id === reviewClientId) : clients || []} isAdmin={isAdmin} onRefresh={async () => {
+                      await queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
+                    }} />
+                  </Secao>
+                )}
+                {!cycleReview && new URLSearchParams(location.search).has("review") && (
+                  <CentralReviewQueue key={reviewClientId || "all-clients"} memoria={null} reports={reports} clients={clients || []} isAdmin={isAdmin} onRefresh={async () => {
                     await queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
                   }} />
                 )}
-                {cycleReview && <AvisosDePublicacao isAdmin={isAdmin} clientId={reviewClientId || ""} />}
+                {cycleReview && <AvisosDePublicacao isAdmin={isAdmin} clientId={reviewClientId || ""} semDecidir />}
                 {/* Na Revisão (Ciclo) os rascunhos já aparecem nas faixas; a lista
                     curta de mensagens geradas fica só na Central. */}
                 {!cycleReview && <Secao

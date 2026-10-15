@@ -11,6 +11,8 @@ export interface AvisoDePublicacao {
   preparado_via: string; valid_until: string; decided_at: string | null; decision_note: string | null;
   executed_at: string | null; execution_evidence: string | null; created_at: string;
   client?: { company_name: string | null; full_name: string | null } | null;
+  /** Arquivo do post (para a imagem na mesa de decisão). */
+  publicacao?: { arquivo?: { file_url: string | null; storage_bucket: string | null; storage_path: string | null; mime_type: string | null } | null } | null;
 }
 
 export const quando = (iso?: string | null) => { const d = iso ? new Date(iso) : null; return d && Number.isFinite(d.getTime()) ? d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "sem data"; };

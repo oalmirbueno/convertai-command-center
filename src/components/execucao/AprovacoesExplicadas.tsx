@@ -1,14 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { comandoDaAprovacao } from "@/lib/execucaoApresentacao";
 import { centralReviewError } from "@/lib/centralReview";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  AlertTriangle, Archive, Ban, CheckCircle2, ChevronDown, Clock, HandCoins,
-  Loader2, PencilLine, ShieldAlert, Timer, UserCheck,
-} from "lucide-react";
-import { Carregando, EstadoDeErro, Secao, botao, campo, etiqueta, foco, juntar, superficie, texto } from "@/components/sistema";
+import { AlertTriangle, Archive, Bot, Clock, HandCoins, Loader2, MessageCircle, MonitorSmartphone, Timer, UserCheck } from "lucide-react";
+import { Carregando, EstadoDeErro, Secao, botao, juntar, superficie } from "@/components/sistema";
+import MesaDeDecisao, { type DecisaoDaMesa, type ItemDaMesa } from "@/components/decisao/MesaDeDecisao";
+import FotoDoCliente from "@/components/clients/FotoDoCliente";
 
 /**
  * A aprovação explicada: o selo genérico vira um dossiê de decisão.
@@ -103,8 +102,6 @@ export default function AprovacoesExplicadas({
 }) {
   const queryClient = useQueryClient();
   const chaves = useRef(new Map<string, string>());
-  const [notaPor, setNotaPor] = useState<Record<string, string>>({});
-  const [payloadAberto, setPayloadAberto] = useState<Record<string, boolean>>({});
 
   const { data: todasAprovacoes = [], error, isLoading, refetch } = useQuery({
     queryKey: ["aprovacoes-explicadas", filtroVinculos],
@@ -129,19 +126,12 @@ export default function AprovacoesExplicadas({
   });
 
   const aprovacoes = todasAprovacoes.filter(a => (!filtroVinculos || filtroVinculos.includes(a.task_link_id || "")) && (!filtroCliente || a.id === destaqueId || (a.client?.company_name || a.client?.full_name) === filtroCliente)).sort((a, b) => (a.client?.company_name || a.client?.full_name || "Operação interna").localeCompare(b.client?.company_name || b.client?.full_name || "Operação interna"));
-  // 09/10: o pedido em destaque (vindo do cartão do vínculo ou do endereço) rola para a vista.
-  useEffect(() => {
-    if (!destaqueId || !aprovacoes.some((a) => a.id === destaqueId)) return;
-    const el = document.querySelector(`[data-aprovacao-id="${destaqueId}"]`);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [destaqueId, aprovacoes.length]);
+  // 09/10: o pedido em destaque (cartão do vínculo ou endereço) abre direto na mesa (inicialId).
 
   const decidir = useMutation({
-    mutationFn: async ({ id, decisao }: { id: string; decisao: string }) => {
+    mutationFn: async ({ id, decisao, nota }: { id: string; decisao: string; nota: string }) => {
       const aprovacao = aprovacoes.find(a => a.id === id);
       if (!aprovacao) throw new Error("Atualize a lista antes de decidir.");
-      const nota = notaPor[id]?.trim() || "";
       const identidade = JSON.stringify([id, aprovacao.payload_version, decisao, nota]);
       if (!chaves.current.has(identidade)) chaves.current.set(identidade, crypto.randomUUID());
       const comando = comandoDaAprovacao(aprovacao, decisao, nota, chaves.current.get(identidade)!);
@@ -214,196 +204,76 @@ export default function AprovacoesExplicadas({
   const vencidas = aprovacoes.filter(venceu);
   const ativas = aprovacoes.filter((a) => !venceu(a));
 
+  const mapa: Record<DecisaoDaMesa, string> = { aprovado: "aprovado", ajuste: "alteracoes_pedidas", rejeitado: "rejeitado", adiado: "adiado" };
+  // Mesa de decisão (15/10/2026): um pedido ativo por vez, o essencial à vista e o resto em "Detalhes".
+  const itens: ItemDaMesa[] = ativas.map((a) => {
+    const relatorio = a.payload?.report as Record<string, any> | undefined;
+    const destino = a.payload?.destination as Record<string, any> | undefined;
+    const cliente = a.client?.company_name || a.client?.full_name || "Operação interna";
+    const comoMedir = typeof a.payload?.como_medir === "string" ? a.payload.como_medir : typeof a.payload?.measurement_plan === "string" ? a.payload.measurement_plan : null;
+    const canal = destino?.channel === "whatsapp" ? `WhatsApp${typeof destino?.recipient === "string" ? ` · ${destino.recipient}` : ""}` : destino?.channel === "portal" ? "Portal do cliente" : a.destino;
+    return {
+      id: a.id,
+      tipo: ROTULO_ACAO[a.action_kind] || a.action_kind,
+      tomDoTipo: a.reversivel ? "aviso" : "perigo",
+      cliente,
+      avatar: <FotoDoCliente nome={cliente} foto={null} tamanho="sm" />,
+      titulo: String(relatorio?.title || a.o_que),
+      mensagem: typeof relatorio?.summary === "string" && relatorio.summary.trim() ? relatorio.summary : a.por_que,
+      passo: typeof relatorio?.next_steps === "string" && relatorio.next_steps.trim() ? relatorio.next_steps : null,
+      sinais: [
+        { icone: <Bot className="h-3 w-3" />, texto: a.origin === "central" ? "Central do cliente" : nomesDeAgentes.get(a.operator_id) || "agente" },
+        ...(canal ? [{ icone: destino?.channel === "whatsapp" ? <MessageCircle className="h-3 w-3" /> : <MonitorSmartphone className="h-3 w-3" />, texto: canal }] : []),
+        ...(typeof a.custo_previsto === "number" ? [{ icone: <HandCoins className="h-3 w-3" />, texto: a.custo_previsto.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), tom: "aviso" as const }] : []),
+        ...(a.prazo ? [{ icone: <Clock className="h-3 w-3" />, texto: `prazo ${a.prazo}` }] : []),
+        ...(a.valid_until ? [{ icone: <Timer className="h-3 w-3" />, texto: `vale até ${quando(a.valid_until)}` }] : []),
+        ...(!a.reversivel ? [{ icone: <AlertTriangle className="h-3 w-3" />, texto: "irreversível", tom: "perigo" as const }] : []),
+        ...(a.status === "adiado" ? [{ texto: "adiada" }] : []),
+      ],
+      detalhes: <div className="space-y-1">
+        {relatorio && <Campo rotulo="Por quê">{a.por_que}</Campo>}
+        <Campo rotulo="Tarefa">{a.kanban_task_id ? titulosDeTarefas.get(a.kanban_task_id) : null}</Campo>
+        <Campo rotulo="Dados usados">{a.dados_usados}</Campo>
+        <Campo rotulo="Impacto">{a.impacto}</Campo>
+        <Campo rotulo="Como medir">{comoMedir}</Campo>
+        <Campo rotulo="Risco">{a.risco}</Campo>
+        <Campo rotulo="Evidência">{a.evidencia ? (/^https?:\/\//.test(a.evidencia) ? <a className="break-all text-primary underline" href={a.evidencia} target="_blank" rel="noopener noreferrer">{a.evidencia}</a> : a.evidencia) : null}</Campo>
+        <Campo rotulo="Pedido em">{quando(a.created_at)}</Campo>
+        {a.payload && Object.keys(a.payload).length > 0 && <details className="pt-1"><summary className="cursor-pointer text-[12px] font-medium text-muted-foreground hover:text-foreground">Detalhes técnicos da versão {a.payload_version}</summary>
+          <pre className={juntar(superficie.poco, "mt-1 max-h-60 overflow-auto p-2 text-[11px] leading-relaxed text-foreground/90")}>{JSON.stringify(a.payload, null, 2)}</pre>
+        </details>}
+      </div>,
+      bloqueioDeAprovar: relatorio && !relatorio.summary ? "A mensagem ainda não foi preparada: peça ajuste." : null,
+      podeAjuste: true,
+      podeRejeitar: true,
+      // Pedido da Central (ritual) exige o motivo também na rejeição (regra do banco).
+      rejeitarPedeMotivo: a.origin === "central",
+      podeAdiar: a.status !== "adiado" && a.origin !== "central" && !a.report_id,
+      extras: <>
+        {a.task_link_id && <button type="button" onClick={() => aoAbrirDiario(a.task_link_id!)} title="Responder no diário" className={juntar(botao.discreto, "h-11 px-3")}><UserCheck className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Diário</span></button>}
+        <button type="button" disabled={retirar.isPending} onClick={() => retirar.mutate([a.id])} className={juntar(botao.icone, "h-11 w-11")} aria-label={`Tirar da lista: ${a.o_que}`} title="Tirar da lista (fica no histórico como expirado)">
+          {retirar.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Archive className="h-4 w-4" aria-hidden="true" />}
+        </button>
+      </>,
+    };
+  });
+
   return (
     <Secao
       nivel={3}
       titulo="Pedidos de aprovação"
       descricao={`${ativas.length} ${ativas.length === 1 ? "pedido" : "pedidos"}${vencidas.length ? ` · ${vencidas.length} ${vencidas.length === 1 ? "vencido" : "vencidos"}` : ""}`}
-      ajuda="Cada pedido chega com o que vai acontecer, o porquê, os dados, o destino, o risco e o custo. O que for executado depois do sim é exatamente o que está aqui; mudou o plano, nasce outra versão."
+      ajuda="Um pedido por vez. Aprovar, pedir ajuste (diga o quê) ou rejeitar; decidiu, entra o próximo. O que for executado depois do sim é exatamente o que está no cartão: mudou o plano, nasce outra versão."
     >
-      {ativas.length > 0 && <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")} aria-label="Pedidos de aprovação">
-        {ativas.map((a, i) => {
-          const relatorio = a.payload?.report as Record<string, any> | undefined;
-          const destino = a.payload?.destination as Record<string, any> | undefined;
-          const destacada = a.id === destaqueId;
-          // Um primário por área (SISTEMA.md seção 6): o pedido em destaque
-          // (ou o primeiro, sem destaque) leva o verde; os outros, borda.
-          const principal = destacada || (!ativas.some((x) => x.id === destaqueId) && i === 0);
-          const temPayload = a.payload && Object.keys(a.payload).length > 0;
-          return (
-            <li
-              key={a.id}
-              data-aprovacao-id={a.id}
-              className={juntar("min-w-0 px-4 py-4", destacada && "bg-primary/10 ring-2 ring-inset ring-primary/50")}
-            >
-              {(i === 0 || a.client_id !== ativas[i - 1].client_id) && <h3 className="mb-4 border-b border-border pb-2 text-base font-semibold">{a.client?.company_name || a.client?.full_name || "Operação interna"}</h3>}
-              <div className="-m-0.5 flex min-w-0 flex-wrap items-center [&>*]:m-0.5">
-                <span className={juntar(etiqueta, "bg-warning/15 text-warning")}>
-                  <ShieldAlert className="mr-1 h-3 w-3" aria-hidden="true" />
-                  {ROTULO_ACAO[a.action_kind] || a.action_kind}
-                </span>
-                {a.status === "adiado" && (
-                  <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>adiada</span>
-                )}
-                {!a.reversivel && (
-                  <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")}>
-                    <AlertTriangle className="mr-1 h-3 w-3" aria-hidden="true" /> irreversível
-                  </span>
-                )}
-                <span className={juntar(texto.auxiliar, "min-w-0")}>
-                  pedido por <strong className="font-medium text-foreground/90">{a.origin === "central" ? "Central do cliente" : nomesDeAgentes.get(a.operator_id) || "agente"}</strong>
-                  {" · "}{quando(a.created_at)}
-                </span>
-              </div>
-
-              {a.client && <p className="mt-2 text-[12px] font-medium text-primary">{a.client.company_name || a.client.full_name}</p>}
-              <p className="mt-2 text-[14px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{a.o_que}</p>
-              {a.por_que && <p className={juntar(texto.corpo, "mt-1 text-foreground/85")}>{a.por_que}</p>}
-
-              <div className={juntar(superficie.poco, "mt-2.5 space-y-1 p-3")}>
-                <Campo rotulo="Tarefa">{a.kanban_task_id ? titulosDeTarefas.get(a.kanban_task_id) : null}</Campo>
-                <Campo rotulo="Dados usados">{a.dados_usados}</Campo>
-                <Campo rotulo="Para onde vai">{a.destino}</Campo>
-                <Campo rotulo="Impacto">{a.impacto}</Campo>
-                <Campo rotulo="Como medir">{typeof a.payload?.como_medir === "string" ? a.payload.como_medir : typeof a.payload?.measurement_plan === "string" ? a.payload.measurement_plan : "Critério de medição não informado nesta proposta."}</Campo>
-                <Campo rotulo="Risco">{a.risco}</Campo>
-                <Campo rotulo="Evidência">
-                  {a.evidencia
-                    ? (/^https?:\/\//.test(a.evidencia)
-                      ? <a className="break-all text-primary underline" href={a.evidencia} target="_blank" rel="noopener noreferrer">{a.evidencia}</a>
-                      : a.evidencia)
-                    : null}
-                </Campo>
-                {(typeof a.custo_previsto === "number" || a.prazo || a.valid_until) && (
-                  <div className="-mx-2 flex flex-wrap pt-0.5 [&>*]:mx-2">
-                    {typeof a.custo_previsto === "number" && (
-                      <span className="inline-flex items-center text-[12px] font-semibold tabular-nums text-foreground">
-                        <HandCoins className="mr-1 h-3 w-3 text-warning" aria-hidden="true" />
-                        {a.custo_previsto.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                      </span>
-                    )}
-                    {a.prazo && (
-                      <span className="inline-flex items-center text-[12px] text-muted-foreground">
-                        <Clock className="mr-1 h-3 w-3" aria-hidden="true" /> prazo {a.prazo}
-                      </span>
-                    )}
-                    {a.valid_until && (
-                      <span className="inline-flex items-center text-[12px] text-muted-foreground">
-                        <Timer className="mr-1 h-3 w-3" aria-hidden="true" /> válida até {quando(a.valid_until)}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {relatorio && (
-                <section className="mt-3 space-y-3 rounded-lg border border-border bg-background p-4" aria-label="Conteúdo para aprovação">
-                  <h4 className="text-sm font-semibold">{String(relatorio.title || "Mensagem para o cliente")}</h4>
-                  <Campo rotulo="Canal">{destino?.channel === "whatsapp" ? "WhatsApp" : destino?.channel === "portal" ? "Portal do cliente" : a.destino}</Campo>
-                  <Campo rotulo="Destinatário">{typeof destino?.recipient === "string" ? destino.recipient : null}</Campo>
-                  {[["Mensagem", relatorio.summary], ["Destaques", relatorio.highlights], ["Próximos passos", relatorio.next_steps]].map(([nome, valor]) => typeof valor === "string" && valor.trim() ? (
-                    <div key={nome}><p className="text-xs font-medium text-muted-foreground">{nome}</p><p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">{valor}</p></div>
-                  ) : null)}
-                  {!relatorio.summary && <p className="text-sm text-warning">A mensagem ainda não foi preparada. Peça alterações antes de aprovar.</p>}
-                </section>
-              )}
-              {temPayload && (
-                <div className="mt-2">
-                  <button
-                    type="button"
-                    onClick={() => setPayloadAberto((s) => ({ ...s, [a.id]: !s[a.id] }))}
-                    aria-expanded={Boolean(payloadAberto[a.id])}
-                    className={juntar("inline-flex items-center rounded text-[12px] font-medium text-muted-foreground hover:text-foreground", foco)}
-                  >
-                    <ChevronDown className={juntar("mr-1 h-3 w-3 transition-transform", payloadAberto[a.id] && "rotate-180")} aria-hidden="true" />
-                    Detalhes técnicos da versão
-                  </button>
-                  {payloadAberto[a.id] && (
-                    <pre className={juntar(superficie.poco, "mt-1 overflow-x-auto p-2 text-[11px] leading-relaxed text-foreground/90")}>
-                      {JSON.stringify(a.payload, null, 2)}
-                    </pre>
-                  )}
-                </div>
-              )}
-
-              <label className="mt-3 block">
-                <span className="sr-only">Nota da decisão</span>
-                <input
-                  value={notaPor[a.id] || ""}
-                  onChange={(e) => setNotaPor((s) => ({ ...s, [a.id]: e.target.value }))}
-                  placeholder="Nota da decisão (opcional; obrigatória em pedido de alterações)"
-                  className={campo}
-                />
-              </label>
-
-              <div className="mt-2.5">
-                <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
-                  <button
-                    type="button"
-                    disabled={decidir.isPending}
-                    onClick={() => decidir.mutate({ id: a.id, decisao: "aprovado" })}
-                    className={principal ? botao.primario : juntar(botao.secundario, "text-success")}
-                  >
-                    {decidir.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
-                    {decidir.isPending && decidir.variables?.id === a.id ? "Confirmando decisão…" : "Aprovar"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={decidir.isPending}
-                    onClick={() => decidir.mutate({ id: a.id, decisao: "rejeitado" })}
-                    className={botao.perigo}
-                  >
-                    <Ban className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Rejeitar
-                  </button>
-                  <button
-                    type="button"
-                    disabled={decidir.isPending}
-                    onClick={() => {
-                      if (!notaPor[a.id]?.trim()) {
-                        toast.error("Diga O QUE alterar na nota. Pedido de alterações sem direção só devolve o problema.");
-                        return;
-                      }
-                      decidir.mutate({ id: a.id, decisao: "alteracoes_pedidas" });
-                    }}
-                    className={botao.secundario}
-                  >
-                    <PencilLine className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Pedir alterações
-                  </button>
-                  {a.status !== "adiado" && a.origin !== "central" && !a.report_id && (
-                    <button
-                      type="button"
-                      disabled={decidir.isPending}
-                      onClick={() => decidir.mutate({ id: a.id, decisao: "adiado" })}
-                      className={botao.discreto}
-                    >
-                      Adiar
-                    </button>
-                  )}
-                  {a.task_link_id && (
-                    <button
-                      type="button"
-                      onClick={() => aoAbrirDiario(a.task_link_id!)}
-                      className={juntar(botao.discreto, "sm:ml-auto")}
-                    >
-                      <UserCheck className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Responder no diário
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    disabled={retirar.isPending}
-                    onClick={() => retirar.mutate([a.id])}
-                    className={juntar(botao.icone, !a.task_link_id && "sm:ml-auto")}
-                    aria-label={`Tirar da lista: ${a.o_que}`}
-                    title="Tirar da lista (fica no histórico como expirado)"
-                  >
-                    <Archive className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>}
+      {ativas.length > 0 && <MesaDeDecisao
+        rotulo="Pedidos de aprovação"
+        itens={itens}
+        inicialId={destaqueId && ativas.some((a) => a.id === destaqueId) ? destaqueId : null}
+        onDecidir={async (item, decisao, nota) => {
+          try { await decidir.mutateAsync({ id: item.id, decisao: mapa[decisao], nota }); return true; }
+          catch { return false; }
+        }}
+      />}
 
       {vencidas.length > 0 && (
         <div className="mt-4" aria-label="Pedidos vencidos">

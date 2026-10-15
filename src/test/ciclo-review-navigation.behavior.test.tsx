@@ -56,6 +56,8 @@ describe("Entrada da revisão no Ciclo", () => {
   it("abre a fila compartilhada pelo Ciclo sem gerar mensagens", async () => {
     mount("/ciclo"); fireEvent.click(await screen.findByRole("link", { name: "Revisão por cliente" }));
     expect(await screen.findByRole("heading", { name: "Revisão" })).toBeInTheDocument();
+    // A mesa de decisão fica no topo; a fila completa começa recolhida embaixo (15/10/2026).
+    fireEvent.click(screen.getByRole("button", { name: /Fila completa/ }));
     expect(screen.getByTestId("location")).toHaveTextContent("/ciclo/revisao");
     expect(screen.getByRole("region", { name: "Fila compartilhada" })).toHaveTextContent("Ritual Cliente A");
     expect(screen.getByRole("region", { name: "Fila compartilhada" })).toHaveTextContent("Ritual Cliente B");
@@ -66,9 +68,12 @@ describe("Entrada da revisão no Ciclo", () => {
     const link = await screen.findByRole("link", { name: "Revisar rituais deste cliente" });
     expect(link).toHaveAttribute("href", "/ciclo/revisao?client=a"); fireEvent.click(link);
     expect(await screen.findByRole("heading", { name: "Revisão" })).toBeInTheDocument();
+    // A mesa de decisão fica no topo; a fila completa começa recolhida embaixo (15/10/2026).
+    fireEvent.click(screen.getByRole("button", { name: /Fila completa/ }));
     expect(screen.getByRole("region", { name: "Fila compartilhada" })).toHaveTextContent("Ritual Cliente A");
     expect(screen.getByRole("region", { name: "Fila compartilhada" })).not.toHaveTextContent("Ritual Cliente B");
     fireEvent.click(screen.getByRole("link", { name: "Ver todos os clientes" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Fila completa/ }));
     await waitFor(() => expect(screen.getByRole("region", { name: "Fila compartilhada" })).toHaveTextContent("Ritual Cliente B"));
   });
   it("mantém o retorno de login no destino exato da revisão", async () => {

@@ -108,7 +108,9 @@ describe("a Central encurta o caminho e o Hermes fica com a revisão formal", ()
   });
 
   it("a revisão formal só aparece na Central por link de pedido; a área do Hermes é Ciclo › Revisão", () => {
-    expect(central).toContain('(cycleReview || new URLSearchParams(location.search).has("review")) && (');
+    // 15/10/2026: na Revisão a fila fica sob a mesa de decisão; na Central, só pelo link do pedido.
+    expect(central).toContain('{!cycleReview && new URLSearchParams(location.search).has("review") && (');
+    expect(central).toContain("{cycleReview && <MesaDaRevisao");
   });
 
   it("a IA fala com a pessoa pelo nome, em linguagem simples, e sempre mostra o avanço", () => {

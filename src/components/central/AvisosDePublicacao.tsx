@@ -1,8 +1,8 @@
 import { useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { chamarAviso as chamar, useAvisosDePublicacao } from "@/hooks/useAvisosDePublicacao";
 import { ChevronDown } from "lucide-react";
 import { AjudaRecolhida, EstadoDeErro, Secao, botao, campo, campoTexto, foco as focoDeTeclado, juntar, texto } from "@/components/sistema";
 import { erroDoAviso, faseDoAviso, quando, vencido, type AvisoDePublicacao } from "@/lib/avisoDePublicacao";
@@ -14,33 +14,8 @@ import { erroDoAviso, faseDoAviso, quando, vencido, type AvisoDePublicacao } fro
  * Aprovar não envia. Tabela própria (aviso_publicacao), só administrador lê.
  */
 
-type Reply<T> = { data: T | null; error: { message: string } | null };
-const banco = supabase as unknown as {
-  from: (t: "aviso_publicacao") => { select: (c: string) => { order: (c: string, o: { ascending: boolean }) => { limit: (n: number) => PromiseLike<Reply<AvisoDePublicacao[]>> } } };
-  rpc: (nome: string, args: Record<string, unknown>) => PromiseLike<Reply<unknown>>;
-};
-
-function useAvisosDePublicacao(ativo: boolean) {
-  return useQuery({
-    queryKey: ["avisos-de-publicacao"], enabled: ativo, refetchInterval: 20_000,
-    queryFn: async () => {
-      const { data, error } = await banco.from("aviso_publicacao")
-        .select("*, client:profiles!aviso_publicacao_client_id_fkey(company_name,full_name)")
-        .order("created_at", { ascending: false }).limit(100);
-      if (error) throw new Error(error.message);
-      return data ?? [];
-    },
-  });
-}
-
-async function chamar(nome: string, args: Record<string, unknown>) {
-  const { data, error } = await banco.rpc(nome, args);
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("O servidor não confirmou a operação. Atualize antes de tentar de novo.");
-  return data;
-}
-
-export default function AvisosDePublicacao({ isAdmin, clientId = "" }: { isAdmin: boolean; clientId?: string }) {
+/** semDecidir: a decisão fica na mesa de decisão; aqui só o envio do que foi aprovado e o histórico. */
+export default function AvisosDePublicacao({ isAdmin, clientId = "", semDecidir = false }: { isAdmin: boolean; clientId?: string; semDecidir?: boolean }) {
   const [params] = useSearchParams();
   const foco = params.get("aviso");
   const queryClient = useQueryClient();
@@ -68,15 +43,15 @@ export default function AvisosDePublicacao({ isAdmin, clientId = "" }: { isAdmin
   if (query.error && /PGRST205|42P01|does not exist|schema cache/i.test(query.error.message)) return null;
   const agora = Date.now();
   const doCliente = (query.data ?? []).filter(a => !clientId || a.client_id === clientId);
-  const decidirLista = doCliente.filter(a => faseDoAviso(a, agora) === "decidir" || a.id === foco && a.status === "pendente");
+  const decidirLista = semDecidir ? [] : doCliente.filter(a => faseDoAviso(a, agora) === "decidir" || a.id === foco && a.status === "pendente");
   const enviarLista = doCliente.filter(a => faseDoAviso(a, agora) === "enviar");
-  const historico = doCliente.filter(a => faseDoAviso(a, agora) === "historico" && !decidirLista.includes(a));
+  const historico = doCliente.filter(a => faseDoAviso(a, agora) === "historico" && !decidirLista.includes(a) && !(semDecidir && a.status === "pendente" && !vencido(a, agora)));
   if (!query.error && decidirLista.length + enviarLista.length + historico.length === 0) return null;
 
   return <section aria-label="Avisos de post no ar" className="min-w-0">
     <Secao
       titulo="Avisos de post no ar"
-      descricao={`${decidirLista.length} esperando decisão · ${enviarLista.length} aprovado${enviarLista.length === 1 ? "" : "s"} a enviar`}
+      descricao={semDecidir ? `${enviarLista.length} aprovado${enviarLista.length === 1 ? "" : "s"} a enviar` : `${decidirLista.length} esperando decisão · ${enviarLista.length} aprovado${enviarLista.length === 1 ? "" : "s"} a enviar`}
       ajuda={<>Quando um post vai ao ar, a equipe ou o Hermes prepara uma mensagem curta para o cliente com o link. Aqui você confere o post, o texto e o destino e aprova ou rejeita. Aprovar não envia: quem enviar registra o envio com a evidência. O Hermes vê e faz o mesmo pelo MCP.</>}
     >
       {query.error && <EstadoDeErro titulo="Não foi possível carregar os avisos." descricao={query.error.message} className="mb-3" />}
