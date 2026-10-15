@@ -48,7 +48,7 @@ describe("provedor Browserbase (fetch falso)", () => {
     expect(await p.criarContexto("x")).toBe("ctx-1");
     expect(await p.criarSessao("ctx-1")).toBe("ses-1");
     const corpo = JSON.parse(String(chamadas[1].init.body));
-    expect(corpo).toMatchObject({ projectId: "proj-1", keepAlive: true, timeout: 3600, region: "us-east-1", browserSettings: { context: { id: "ctx-1", persist: true }, viewport: { width: 1280, height: 720 } } });
+    expect(corpo).toMatchObject({ projectId: "proj-1", keepAlive: true, timeout: 14400, region: "us-east-1", browserSettings: { context: { id: "ctx-1", persist: true }, viewport: { width: 1280, height: 720 } } });
     // Só os domínios da Meta saem pelo IP residencial do Brasil; o resto vai direto.
     expect(corpo.proxies).toEqual([{ type: "browserbase", geolocation: { country: "BR" }, domainPattern: DOMINIOS_DA_META }]);
     expect((chamadas[0].init.headers as Record<string, string>)["X-BB-API-Key"]).toBe("chave-teste");
@@ -76,7 +76,7 @@ describe("provedor Browserbase (fetch falso)", () => {
       return b.keepAlive ? resposta(400, { message: "keepAlive requires a paid plan" }) : resposta(201, { id: "ses-2" });
     }) as unknown as typeof fetch;
     expect(await provedorBrowserbase("k", "p", f).criarSessao("ctx")).toBe("ses-2");
-    expect(corpos.map((c) => [c.keepAlive, c.timeout, "proxies" in c])).toEqual([[true, 3600, true], [true, 3600, false], [false, 900, false]]);
+    expect(corpos.map((c) => [c.keepAlive, c.timeout, "proxies" in c])).toEqual([[true, 14400, true], [true, 14400, false], [false, 900, false]]);
   });
 
   it("plano sem proxy: abre com keepAlive e sem o proxy, na tela pedida", async () => {
@@ -88,7 +88,7 @@ describe("provedor Browserbase (fetch falso)", () => {
     }) as unknown as typeof fetch;
     expect(await provedorBrowserbase("k", "p", f).criarSessao("ctx", { tela: { largura: 1504, altura: 591 } })).toBe("ses-3");
     expect(corpos).toHaveLength(2);
-    expect(corpos[1]).toMatchObject({ keepAlive: true, timeout: 3600, browserSettings: { viewport: { width: 1504, height: 600 } } });
+    expect(corpos[1]).toMatchObject({ keepAlive: true, timeout: 14400, browserSettings: { viewport: { width: 1504, height: 600 } } });
     expect(corpos[1]).not.toHaveProperty("proxies");
   });
 
@@ -283,6 +283,34 @@ describe("tela do navegador remoto (função falsa)", () => {
     expect(screen.getByTitle("Navegador remoto de Casa dos Assados")).toBe(quadro);
     expect(quadro.getAttribute("src")).toBe(src);
     expect(api.chamar.mock.calls.some((c) => (c[1] as PedidoFalso).acao_do_navegador === "ativar_aba")).toBe(false);
+  });
+
+  it("pop-up de login (aba que nasce sozinha) vira a tela exibida e, quando fecha, volta a aba de antes", async () => {
+    let fase: "antes" | "popup" | "fechou" = "antes";
+    usarSessaoFalsa(() => {
+      const sessao = sessaoFalsa();
+      if (fase === "popup") sessao.paginas.push({ id: "target-popup", titulo: "Facebook login", url: "https://www.facebook.com/login/?next=x", ao_vivo: "https://www.browserbase.com/devtools-fullscreen/sessao-1/target-popup?token=0" });
+      return sessao;
+    });
+    const { qc } = montar({ id: "cliente-popup", nome: "Casa dos Assados" });
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir o navegador de Casa dos Assados" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Instagram" }));
+    await waitFor(() => expect(screen.getByTitle("Navegador remoto de Casa dos Assados").getAttribute("src")).toContain("target-2"));
+    fase = "popup";
+    await act(async () => { await qc.invalidateQueries({ queryKey: ["navegador-remoto", "sessao"] }); });
+    await waitFor(() => expect(screen.getByTitle("Navegador remoto de Casa dos Assados").getAttribute("src")).toContain("target-popup"));
+    expect(screen.getByRole("tab", { name: "Facebook login" }).getAttribute("aria-selected")).toBe("true");
+    fase = "fechou";
+    await act(async () => { await qc.invalidateQueries({ queryKey: ["navegador-remoto", "sessao"] }); });
+    await waitFor(() => expect(screen.getByTitle("Navegador remoto de Casa dos Assados").getAttribute("src")).toContain("target-2"));
+  });
+
+  it("fecha uma aba sobrando pelo x, com o id dela", async () => {
+    usarSessaoFalsa(() => sessaoFalsa());
+    montar({ id: "cliente-fechar", nome: "Casa dos Assados" });
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir o navegador de Casa dos Assados" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Fechar a aba Instagram" }));
+    await waitFor(() => expect(api.chamar).toHaveBeenCalledWith("navegador-remoto", expect.objectContaining({ acao: "agir", acao_do_navegador: "fechar_aba", sessao_id: "sessao-1", aba_id: "target-2" })));
   });
 
   it("ampliado fica acima do cabeçalho do painel e o seletor de cliente some", async () => {
