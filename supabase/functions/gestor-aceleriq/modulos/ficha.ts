@@ -113,27 +113,59 @@ const PALAVRAS_GENERICAS = new Set([
   "comercio", "servicos", "consultoria", "academia", "advocacia", "associacao", "conselho", "centro", "casa", "rede",
 ]);
 
-/** Cliente citado pelo nome (palavra inteira, sem acento). Dois nomes diferentes: pergunta de volta. */
-export function clienteDaPergunta(pergunta: string, clientes: ClienteBase[]): ClienteEscolhido {
+type AcertoDoNome = { c: ClienteBase; tam: number; inteiro: boolean; trecho: string };
+
+/** Cada cliente cujo nome (inteiro ou o começo) aparece na pergunta, com o trecho que bateu. */
+function acertosDosNomes(pergunta: string, clientes: ClienteBase[]): AcertoDoNome[] {
   const t = ` ${semAcento(pergunta).replace(/[^a-z0-9]+/g, " ")} `;
-  const achados: Array<{ c: ClienteBase; tam: number; inteiro: boolean }> = [];
+  const achados: AcertoDoNome[] = [];
   for (const c of clientes) {
     const nomes = [c.nome, ...(c.apelidos || [])].map((x) => semAcento(x).replace(/[^a-z0-9]+/g, " ").trim()).filter((x) => x.length >= 3 && !PALAVRAS_GENERICAS.has(x));
     let melhor = 0;
     let inteiro = false;
+    let trecho = "";
     for (const nome of nomes) {
-      if (t.includes(` ${nome} `)) { melhor = Math.max(melhor, nome.length); inteiro = true; }
+      if (t.includes(` ${nome} `)) { if (nome.length > melhor) { melhor = nome.length; trecho = nome; } inteiro = true; }
       else {
         // "Para Si Ótica" citado só como "Para Si": vale o primeiro trecho com 2+ palavras ou 5+ letras.
         const partes = nome.split(" ");
         for (let k = partes.length - 1; k >= 1; k--) {
           const pedaco = partes.slice(0, k).join(" ");
-          if ((k >= 2 || pedaco.length >= 5) && !PALAVRAS_GENERICAS.has(pedaco) && t.includes(` ${pedaco} `)) { melhor = Math.max(melhor, pedaco.length); break; }
+          if ((k >= 2 || pedaco.length >= 5) && !PALAVRAS_GENERICAS.has(pedaco) && t.includes(` ${pedaco} `)) { if (pedaco.length > melhor) { melhor = pedaco.length; trecho = pedaco; } break; }
         }
       }
     }
-    if (melhor) achados.push({ c, tam: melhor, inteiro });
+    if (melhor) achados.push({ c, tam: melhor, inteiro, trecho });
   }
+  return achados;
+}
+
+/**
+ * Dois ou mais clientes nomeados na mesma pergunta ("como está a base da
+ * Acerbi e da Mirante Luz?"). Antes, nome inteiro vencia pedaço de nome e a
+ * Mirante sumia do recorte. Trecho que serve a dois clientes diferentes é
+ * ambíguo: devolve [] e vale o "Qual deles?" de sempre. Marca do mesmo cliente
+ * ("Acerbi e CME") conta como um só.
+ */
+export function clientesDaPergunta(pergunta: string, clientes: ClienteBase[]): ClienteBase[] {
+  const achados = acertosDosNomes(pergunta, clientes);
+  const porTrecho = new Map<string, AcertoDoNome[]>();
+  for (const a of achados) porTrecho.set(a.trecho, [...(porTrecho.get(a.trecho) || []), a]);
+  const chaves = [...porTrecho.keys()];
+  const trechos = chaves.filter((t) => !chaves.some((o) => o !== t && ` ${o} `.includes(` ${t} `)));
+  const saida: ClienteBase[] = [];
+  for (const t of trechos) {
+    const g = porTrecho.get(t)!;
+    if (new Set(g.map((a) => a.c.id)).size > 1) return [];
+    const c = g.find((a) => a.c.projetoId)?.c || g[0].c;
+    if (!saida.some((x) => x.id === c.id)) saida.push(c);
+  }
+  return saida.length >= 2 ? saida : [];
+}
+
+/** Cliente citado pelo nome (palavra inteira, sem acento). Dois nomes diferentes: pergunta de volta. */
+export function clienteDaPergunta(pergunta: string, clientes: ClienteBase[]): ClienteEscolhido {
+  const achados = acertosDosNomes(pergunta, clientes);
   if (!achados.length) return { tipo: "nenhum" };
   // Nome inteiro vence pedaço de nome; entre iguais, o mais longo.
   achados.sort((a, b) => Number(b.inteiro) - Number(a.inteiro) || b.tam - a.tam);
@@ -406,7 +438,7 @@ export const ROTULO_DA_SECAO: Record<SecaoDaResposta, string> = {
 /** Seções aceitas na resposta do modelo: as do relatório + "conversa" (frase sem fato do OS, conferida à parte). */
 export const SECOES_DA_RESPOSTA: SecaoDaResposta[] = ["conversa", ...ORDEM_DAS_SECOES];
 
-export type ItemDaResposta = { secao: SecaoDaResposta; texto: string; fontes: string[]; conferido?: "fonte" | "jev" | "motor" | "conversa" };
+export type ItemDaResposta = { secao: SecaoDaResposta; texto: string; fontes: string[]; conferido?: "fonte" | "jev" | "motor" | "conversa" | "a_conferir" };
 
 /** Em que seção cada estado pode aparecer. É isto que impede "revisão" de virar "feito". */
 const SECOES_DO_ESTADO: Record<EstadoDaFonte, SecaoDaResposta[]> = {

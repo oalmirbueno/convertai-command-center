@@ -38,6 +38,7 @@ import { type AcaoDoAgente, acaoDoAnexo, type AcaoGuardada, confirmarAcaoGuardad
 import { entregasDaAcao, executarItem, reverterItem } from "./modulos/executor.ts";
 import { ACOES_DO_HERMES, ErroDoHermes, hermesAcao } from "./modulos/hermes.ts";
 import { type ArquivoDoDono, MAX_IMAGENS } from "./modulos/ficha.ts";
+import { somarConsumo, type UsoDaConversa } from "./modulos/consumo.ts";
 import { ErroDaTranscricao, MAX_BYTES_DO_AUDIO_DO_GESTOR, transcreverAudio } from "./modulos/transcricao.ts";
 
 const corsHeaders = {
@@ -293,6 +294,32 @@ async function gravar(userId: string, conversa: Conversa, pergunta: string, resp
   return (((data || []) as { id: string; papel: string }[]).find((m) => m.papel === "gestor") || { id: null }).id;
 }
 
+// ------------------------------------------------------------------ gasto da conversa (15/10)
+
+/** Quanto a conversa já gastou: modelo e Jev marcados com ela em ia_usos, mais as respostas de antes da marca. */
+async function consumo(ch: { userId: string }, corpo: Record<string, unknown>): Promise<Response> {
+  const c = await conversaDoDono(ch.userId, corpo.conversa_id);
+  try {
+    const usos: UsoDaConversa[] = [];
+    for (let de = 0; ; de += 1000) {
+      const { data, error } = await servico().from("ia_usos").select("id, agente, modelo_id, tokens_entrada, tokens_saida, tokens_cache, custo_usd")
+        .eq("referencia_tipo", "gestor_conversa").eq("referencia_id", c.id).order("criado_em").range(de, de + 999);
+      if (error) throw error;
+      usos.push(...((data || []) as UsoDaConversa[]));
+      if ((data || []).length < 1000) break;
+    }
+    const { data: respostas, error: e2 } = await servico().from("gestor_mensagens").select("uso_id, custo_usd").eq("conversa_id", c.id).eq("papel", "gestor").limit(2000);
+    if (e2) throw e2;
+    const ids = [...new Set(usos.map((u) => u.modelo_id).filter((m) => m && !m.startsWith("typesafe:")))];
+    const { data: modelos } = ids.length ? await servico().from("ia_modelos").select("id, rotulo").in("id", ids) : { data: [] };
+    const rotulos = Object.fromEntries(((modelos || []) as Array<{ id: string; rotulo: string | null }>).map((m) => [m.id, String(m.rotulo || m.id).replace(/^[^:]+:\s*/, "")]));
+    return json(somarConsumo(usos, (respostas || []) as Array<{ uso_id: string | null; custo_usd: number | string | null }>, rotulos));
+  } catch (e) {
+    registrarFalha("gestor-aceleriq: consumo da conversa", e);
+    throw new ErroHttp(503, "consumo_indisponivel", "Não consegui somar o gasto desta conversa agora.");
+  }
+}
+
 // ------------------------------------------------------------------ ações propostas: Confirmar e Desfazer
 
 /** A proposta guardada na mensagem do Gestor (dados.acoes), só do próprio dono. */
@@ -355,6 +382,7 @@ const ACOES: Record<string, (ch: { userId: string; token: string }, corpo: Recor
   opcoes_de_contexto: opcoesDeContexto,
   executar_acao: executarAcao,
   desfazer_acao: desfazerAcao,
+  consumo,
   // Hermes real (pela ponte do painel no servidor do Hermes; sem ela, configurada: false).
   ...Object.fromEntries(ACOES_DO_HERMES.map((a) => [a, async (_ch: { userId: string }, corpo: Record<string, unknown>) => json(await hermesAcao(a, corpo, servico()))])),
   // Compatível com a tela anterior: a conversa mais recente do dono.

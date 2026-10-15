@@ -31,6 +31,7 @@ export function linhaDoGestor(m: Record<string, unknown>): string {
   for (const b of (Array.isArray(d.bloqueadas) ? d.bloqueadas : []) as Array<{ pedido?: string }>) partes.push(`[Precisa da decisão do dono fora daqui: ${String(b.pedido || "").slice(0, 120)}]`);
   if (d.abrir && typeof d.abrir === "object") partes.push(`[Abriu na lateral: ${String((d.abrir as { titulo?: string }).titulo || "objeto")}]`);
   if (d.cliente && typeof d.cliente === "object") partes.push(`[Recorte: ${String((d.cliente as { nome?: string }).nome || "")}]`);
+  else if (Array.isArray(d.clientes) && d.clientes.length) partes.push(`[Recorte: ${(d.clientes as Array<{ nome?: string }>).map((c) => String(c.nome || "")).filter(Boolean).join(" e ")}]`);
   return partes.filter(Boolean).join(" ");
 }
 

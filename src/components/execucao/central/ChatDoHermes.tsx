@@ -33,7 +33,13 @@ import { ROLAGEM_OPERACAO } from "@/components/execucao/CarteiraDaOperacao";
  *   aqui" cria uma cópia; a original fica intacta.
  */
 
-export type ContextoDoHermes = { cliente: { id: string; nome: string } | null; projeto: { id: string; nome: string } | null };
+export type ContextoDoHermes = {
+  cliente: { id: string; nome: string } | null;
+  projeto: { id: string; nome: string } | null;
+  /** Conversa aberta pelo Diário: a tarefa e a execução vão junto, e o Hermes registra no diário dela. */
+  tarefa?: { id: string; titulo: string } | null;
+  vinculo?: { id: string; titulo: string } | null;
+};
 
 export type OrigemDaSessao = "desktop" | "api_server" | "cron" | "cli" | "kanban" | "subagent" | "tool" | "oneshot";
 
@@ -340,9 +346,15 @@ async function arquivosDoPainel(bruto: string): Promise<File[]> {
 
 // ------------------------------------------------------------------ o chat
 
-export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario, aoAbrirObjeto }: {
+export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario, aoAbrirObjeto, chaveDaSessao = CHAVE_DA_SESSAO, tituloDaSessao, aoEnviado }: {
   /** Entrega citada pelo Hermes abre na lateral nativa da Central. */
   aoAbrirObjeto?: (o: ObjetoAberto) => void;
+  /** Onde lembrar a sessão aberta. O Diário usa uma por execução (e não pega a conversa mais recente da Central). */
+  chaveDaSessao?: string;
+  /** Título da sessão nova (padrão: o cliente). */
+  tituloDaSessao?: string;
+  /** Depois que o Hermes aceitou a mensagem (o Diário registra a fala do dono). */
+  aoEnviado?: (texto: string) => void;
   contexto: ContextoDoHermes;
   /** Botões do cabeçalho vindos de quem contém o chat (recolher, ampliar). */
   acoes?: ReactNode;
@@ -350,7 +362,8 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
   aoAbrirDiario?: () => void;
 }) {
   const qc = useQueryClient();
-  const [sessaoId, setSessaoId] = useEstadoDaTela<string>(CHAVE_DA_SESSAO, "", { esperaMs: 0, validar: (v) => typeof v === "string" });
+  const [sessaoId, setSessaoId] = useEstadoDaTela<string>(chaveDaSessao, "", { esperaMs: 0, validar: (v) => typeof v === "string" });
+  const daCentral = chaveDaSessao === CHAVE_DA_SESSAO;
   const [rascunho, setRascunho] = useState("");
   const [levar, setLevar] = useState(true);
   const [imagens, setImagens] = useState<ImagemAnexada[]>([]);
@@ -371,13 +384,15 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
     queryFn: () => chamarFuncao<{ configurada: boolean; ok?: boolean; erro?: string }>("gestor-aceleriq", { acao: "hermes_estado" }),
     staleTime: 60_000,
     retry: false,
+    // 15/10: com a ponte fora, confere de novo a cada 30 s; a tela volta sozinha quando ela religa.
+    refetchInterval: (q) => (q.state.data?.ok ? false : 30_000),
   });
   const ponte = !!estado.data?.configurada && !!estado.data?.ok;
 
   // Primeira vez (nada lembrado): a conversa mais recente que aceita mensagem.
   const conversas = useQuery({
     queryKey: ["hermes", "sessoes", "conversas", ""],
-    enabled: ponte && !sessaoId,
+    enabled: ponte && !sessaoId && daCentral,
     staleTime: 15_000,
     queryFn: async () => (await chamarFuncao<{ sessoes: SessaoDoHermes[] }>("gestor-aceleriq", { acao: "hermes_sessoes", origem: "conversas" })).sessoes || [],
   });
@@ -444,7 +459,7 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
   };
 
   const criar = useMutation({
-    mutationFn: () => chamarFuncao<{ sessao: SessaoDoHermes }>("gestor-aceleriq", { acao: "hermes_criar", titulo: contexto.cliente?.nome || "Central" }),
+    mutationFn: () => chamarFuncao<{ sessao: SessaoDoHermes }>("gestor-aceleriq", { acao: "hermes_criar", titulo: tituloDaSessao || contexto.cliente?.nome || "Central" }),
     onSuccess: (r) => {
       if (r?.sessao?.id) {
         qc.setQueryData(["hermes", "sessao", r.sessao.id], { sessao: r.sessao, mensagens: [] });
@@ -479,7 +494,7 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
         acao: "hermes_enviar",
         sessao_id: sessaoId,
         texto,
-        ...(levar && contexto.cliente ? { contexto: { cliente: contexto.cliente, projeto: contexto.projeto } } : {}),
+        ...(contexto.vinculo ? { contexto: { cliente: contexto.cliente, projeto: contexto.projeto, tarefa: contexto.tarefa || null, vinculo: contexto.vinculo } } : levar && contexto.cliente ? { contexto: { cliente: contexto.cliente, projeto: contexto.projeto } } : {}),
         ...(x.imagens.length ? { imagens: x.imagens.map((i) => i.dataUrl) } : {}),
       });
     },
@@ -492,9 +507,10 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
       setImagens([]);
       setTextos([]);
     },
-    onSuccess: (r) => {
+    onSuccess: (r, x) => {
       setTurno((t) => (t ? { ...t, desde: r?.desde ?? null } : t));
       void qc.invalidateQueries({ queryKey: ["hermes", "turno", sessaoId] });
+      if (x.texto) aoEnviado?.(x.texto);
     },
     onError: (e, x) => {
       setTurno(null);
@@ -602,7 +618,8 @@ export default function ChatDoHermes({ contexto, acoes, className, aoAbrirDiario
     ) : (
       <div className="flex flex-col items-center py-10 text-center">
         <span className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary"><Bot className="h-5 w-5" /></span>
-        <p className="mt-3 text-[15px] font-semibold">Nenhuma conversa com o Hermes ainda.</p>
+        <p className="mt-3 text-[15px] font-semibold">{daCentral ? "Nenhuma conversa com o Hermes ainda." : "Converse com o Hermes sobre esta execução."}</p>
+        {!daCentral && <p className="mt-1 max-w-xs text-[12px] text-muted-foreground">Fale do seu jeito. O que vocês combinarem ele registra no diário, com a assinatura dele.</p>}
         <button type="button" onClick={() => criar.mutate()} disabled={criar.isPending} className={juntar(botao.primario, "mt-4 h-8 rounded-full text-[12px]")}>
           {criar.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1.5 h-3.5 w-3.5" />}Nova conversa
         </button>

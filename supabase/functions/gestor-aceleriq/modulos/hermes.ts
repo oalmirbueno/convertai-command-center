@@ -56,6 +56,8 @@ async function ponte(caminho: string, opcoes: { method?: string; body?: unknown;
   if (r.status === 403) throw new ErroDoHermes(403, "sessao_privada", "Essa sessão é privada e não abre no painel.");
   if (r.status === 404) throw new ErroDoHermes(404, "nao_encontrado", "Sessão não encontrada no Hermes.");
   if (r.status === 409) throw new ErroDoHermes(409, String(json?.error || "conflito"), String(json?.mensagem || "O Hermes não aceitou agora."));
+  // 15/10: 5xx é o Hermes (ou a ponte) fora do ar no servidor, não um "erro" da conversa.
+  if (r.status >= 500) throw new ErroDoHermes(502, String(json?.error || "hermes_parado"), `O Hermes está fora do ar no servidor (a ponte respondeu ${r.status}). Tente de novo em instantes.`);
   if (r.status >= 400) throw new ErroDoHermes(502, String(json?.error || "hermes_erro"), "O Hermes respondeu com erro.");
   return { status: r.status, json };
 }
@@ -67,12 +69,13 @@ const idDa = (v: unknown) => {
 };
 
 /** Linha de referência do contexto do painel (só nomes e ids do OS). */
-export function linhaDeContexto(c: { cliente?: { id: string; nome: string } | null; projeto?: { id: string; nome: string } | null; tarefa?: { id: string; titulo: string } | null } | null | undefined): string {
+export function linhaDeContexto(c: { cliente?: { id: string; nome: string } | null; projeto?: { id: string; nome: string } | null; tarefa?: { id: string; titulo: string } | null; vinculo?: { id: string; titulo: string } | null } | null | undefined): string {
   if (!c) return "";
   const partes = [
     c.cliente ? `cliente ${c.cliente.nome} (${c.cliente.id})` : "",
     c.projeto ? `projeto ${c.projeto.nome} (${c.projeto.id})` : "",
     c.tarefa ? `tarefa ${c.tarefa.titulo} (${c.tarefa.id})` : "",
+    c.vinculo ? `execução ${c.vinculo.titulo} (vínculo ${c.vinculo.id})` : "",
   ].filter(Boolean);
   return partes.length ? `[Contexto do painel Aceleriq: ${partes.join(" · ")}. Confira no MCP antes de agir.]` : "";
 }
@@ -177,9 +180,14 @@ export async function hermesAcao(acao: string, corpo: Record<string, unknown>, d
   if (acao === "hermes_enviar") {
     const texto = String(corpo.texto ?? "").trim().slice(0, MAX_TEXTO_AO_HERMES);
     if (!texto) throw new ErroDoHermes(400, "texto_vazio", "Escreva a mensagem para o Hermes.");
-    const ctx = linhaDeContexto(corpo.contexto as Parameters<typeof linhaDeContexto>[0]);
+    const contexto = corpo.contexto as Parameters<typeof linhaDeContexto>[0];
+    const ctx = linhaDeContexto(contexto);
+    // Conversa aberta pelo Diário da execução (15/10): o que for combinado vai para o diário, assinado pelo Hermes.
+    const doDiario = contexto?.vinculo?.id && ID_UUID.test(String(contexto.vinculo.id))
+      ? `\n[Conversa aberta pelo dono no diário desta execução (link_id ${contexto.vinculo.id}). Responda em linguagem natural. Quando combinarem algo (instrução, decisão, ajuste ou próximo passo), registre no diário desta execução pela ferramenta do diário (operatorDiary) com o seu operador, sem esperar outro pedido, e diga em uma frase o que registrou. Não diga que fez algo que ainda não foi feito.]`
+      : "";
     const imagens = imagensParaOHermes(corpo.imagens);
-    return (await ponte(`/sessoes/${idDa(corpo.sessao_id)}/enviar`, { method: "POST", body: { texto: ctx ? `${ctx}\n\n${texto}` : texto, imagens, instrucoes: INSTRUCAO_DE_APRESENTACAO }, tempo: 40_000 })).json || {};
+    return (await ponte(`/sessoes/${idDa(corpo.sessao_id)}/enviar`, { method: "POST", body: { texto: ctx ? `${ctx}${doDiario}\n\n${texto}` : texto, imagens, instrucoes: INSTRUCAO_DE_APRESENTACAO }, tempo: 40_000 })).json || {};
   }
   throw new ErroDoHermes(400, "acao_desconhecida", "Ação do Hermes desconhecida.");
 }

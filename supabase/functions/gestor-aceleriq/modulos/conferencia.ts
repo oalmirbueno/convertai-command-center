@@ -34,44 +34,87 @@ export function perguntasDeConferencia(itens: ItemDaResposta[], fontes: Fonte[])
   const afirmacoes = alvo.map((i) => ({
     afirmacao: i.texto,
     secao: i.secao,
-    fontes: i.fontes.map((a) => porApelido.get(a)).filter((f): f is Fonte => !!f).map((f) => ({ apelido: f.apelido, estado: f.estado, texto: f.texto.slice(0, f.tipo === "anexo" ? 6000 : 1500) })),
+    fontes: i.fontes.map((a) => porApelido.get(a)).filter((f): f is Fonte => !!f).map((f) => ({ apelido: f.apelido, estado: f.estado, texto: f.texto.slice(0, f.tipo === "anexo" || f.tipo === "leitura" ? 6000 : 1500) })),
   }));
   const questions: Record<string, PerguntaDeConferencia> = {};
   afirmacoes.forEach((_, k) => {
     questions[`a${k}`] = {
       type: "choice",
-      instructions: `Compare \`afirmacoes[${k}].afirmacao\` (escrita na seção \`afirmacoes[${k}].secao\` de um relatório ao dono da agência) com o texto das fontes em \`afirmacoes[${k}].fontes\`. As fontes contêm tudo o que pode ser afirmado. Afirmar que algo foi publicado, concluído ou entregue exige que a fonte diga isso; "em revisão", "em edição" ou "agendado" não é publicado nem concluído. Fonte com estado "lido_no_os" é a leitura COMPLETA de um registro (briefing, contexto da Mesa, arquivo, agenda): uma afirmação de AUSÊNCIA ("falta X", "não tem X", "X não foi informado") é sustentada quando esse texto não traz X.`,
+      instructions: `Compare \`afirmacoes[${k}].afirmacao\` (uma mensagem de conversa do assistente com o dono da agência; a etiqueta interna é \`afirmacoes[${k}].secao\`) com o texto das fontes em \`afirmacoes[${k}].fontes\`. As fontes contêm tudo o que pode ser afirmado. Resumir, agrupar ou tirar conclusão direta do que as fontes dizem é sustentar; uma avaliação marcada como opinião ("o risco é", "eu ajustaria") não é fato: julgue só o fato que ela usa. Afirmar que algo foi publicado, concluído ou entregue exige que a fonte diga isso; "em revisão", "em edição" ou "agendado" não é publicado nem concluído. Fonte com estado "lido_no_os" é a leitura COMPLETA de um registro (briefing, contexto da Mesa, arquivo, agenda): uma afirmação de AUSÊNCIA ("falta X", "não tem X", "X não foi informado") é sustentada quando esse texto não traz X.`,
       criteria: {
-        sustenta: "as fontes dizem a afirmação ou a implicam diretamente, inclusive estados, datas, números e nomes",
+        sustenta: "as fontes dizem a afirmação, a implicam diretamente ou a afirmação só resume com outras palavras o que elas dizem, inclusive estados, datas, números e nomes",
         contradiz: "as fontes dizem o contrário ou um estado diferente (ex.: a afirmação diz publicado/concluído e a fonte diz revisão, edição, bloqueio ou agendado)",
-        nao_diz: "as fontes não tratam do que a afirmação diz, ou a afirmação acrescenta fato que não está nelas",
+        nao_diz: "as fontes não tratam do que a afirmação diz, ou a afirmação acrescenta estado, número, data, nome ou valor que não está nelas",
       },
     };
   });
   return { state: { afirmacoes }, questions };
 }
 
-export type RespostaChoice = { choice?: string; probabilities?: Record<string, number>; confidence?: number };
+export type RespostaChoice = { choice?: string; probabilities?: Record<string, number>; confidence?: number; noul?: number };
+
+/**
+ * 15/10 (dono: "não foi natural, parece uma resposta pronta"): a conferência
+ * apagava a frase que o Jev não achava escrita na fonte, e sobrava um balão
+ * solto começando com "Mas". Agora, para frase que só lê TEXTO (briefing,
+ * contexto, cérebro, dossiê, arquivo, anexo), sem número e que não afirma
+ * conclusão, "não diz" vira a etiqueta "a conferir" em vez de corte (padrão
+ * citation check da TypeSafe: "não diz" vai para revisão, não some).
+ * "Contradiz" sai sempre; F, K, agenda e métricas continuam com corte duro.
+ */
+export const LIMIAR_PERIGO = 0.5;
+type PerguntaNoul = { type: "noul"; instructions: string; criteria: { true: string; false: string } };
+export function perguntasDePerigo(ks: number[]): Record<string, PerguntaNoul> {
+  const q: Record<string, PerguntaNoul> = {};
+  for (const k of ks.filter((k) => k < MAX_CONFERIDAS)) {
+    q[`p${k}`] = {
+      type: "noul",
+      instructions: `\`afirmacoes[${k}].afirmacao\` diz que algo da operação já foi feito, concluído, entregue, publicado, aprovado, enviado ou resolvido?`,
+      criteria: { true: "afirma resultado, conclusão ou aprovação", false: "descreve o que um registro contém, o que falta, uma pendência, um plano, uma opinião ou uma pergunta" },
+    };
+  }
+  return q;
+}
+
+/** O balão que sobrou depois de um corte não começa com "Mas", "E", "Também"... */
+const CONECTIVO_SOLTO = /^(mas|porém|porem|contudo|entretanto|no entanto|só que|so que|e|também|tambem|além disso|alem disso|então|entao|inclusive)[,:]?\s+/i;
+export function semConectivoSolto(t: string): string {
+  const s = t.replace(CONECTIVO_SOLTO, "");
+  return s && s !== t ? s[0].toUpperCase() + s.slice(1) : t;
+}
 
 export function aplicarConferencia(
   itens: ItemDaResposta[],
   respostas: Record<string, RespostaChoice> | null,
-): { ficam: ItemDaResposta[]; sairam: Array<{ item: ItemDaResposta; veredito: string }>; fracos: number } {
-  if (!respostas) return { ficam: itens, sairam: [], fracos: 0 };
+  o: { podeMarcar?: (i: ItemDaResposta) => boolean } = {},
+): { ficam: ItemDaResposta[]; sairam: Array<{ item: ItemDaResposta; veredito: string }>; fracos: number; marcados: number } {
+  if (!respostas) return { ficam: itens, sairam: [], fracos: 0, marcados: 0 };
   const ficam: ItemDaResposta[] = [];
   const sairam: Array<{ item: ItemDaResposta; veredito: string }> = [];
   let fracos = 0;
+  let marcados = 0;
   itens.forEach((item, k) => {
     if (k >= MAX_CONFERIDAS) { ficam.push(item); return; }
     const r = respostas[`a${k}`];
     if (!r || !r.choice) { ficam.push(item); return; }
     const ps = r.probabilities || {};
     const pSustenta = typeof ps.sustenta === "number" ? ps.sustenta : r.choice === "sustenta" ? Number(r.confidence ?? 0) : 0;
-    if (r.choice !== "sustenta") { sairam.push({ item, veredito: r.choice }); return; }
+    if (r.choice !== "sustenta") {
+      // Sem a resposta do Noul vale o corte de antes (perigo = 1).
+      const pp = respostas[`p${k}`];
+      const perigo = pp && typeof pp.noul === "number" ? pp.noul : 1;
+      if (r.choice === "nao_diz" && o.podeMarcar?.(item) && !/\d/.test(item.texto) && perigo < LIMIAR_PERIGO) {
+        marcados++;
+        ficam.push({ ...item, conferido: "a_conferir" });
+        return;
+      }
+      sairam.push({ item, veredito: r.choice });
+      return;
+    }
     if (pSustenta >= LIMIAR_SUSTENTA) ficam.push({ ...item, conferido: "jev" });
     else { fracos++; ficam.push(item); }
   });
-  return { ficam, sairam, fracos };
+  return { ficam, sairam, fracos, marcados };
 }
 
 /**

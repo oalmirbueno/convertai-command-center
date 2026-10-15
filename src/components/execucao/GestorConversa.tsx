@@ -11,8 +11,21 @@ import { duracaoDoAudio, ehAudio, ehImagem, MAX_IMAGENS_DO_GESTOR, prepararImage
 import { useGravadorDeVoz, type ResultadoDaVoz } from "@/lib/voz/useGravadorDeVoz";
 import { transcreverNoServidor } from "@/lib/voz/transcreverNoServidor";
 import { BotaoDeVoz, EstadoDaVoz, PilulaDeGravacao, vozEmCurso } from "@/components/agentes/BotaoDeVoz";
-import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
+import { chamarFuncao, textoDoErro, usd } from "@/lib/mesa/api";
 import { Carregando, EstadoDeErro, botao, juntar, useEstadoDaTela } from "@/components/sistema";
+
+/** Gasto da conversa (ação "consumo" do gestor-aceleriq). */
+type ConsumoDaConversa = {
+  total_usd: number;
+  tokens: number;
+  modelos: Array<{ id: string; rotulo: string; chamadas: number; entrada: number; saida: number; cache: number; usd: number }>;
+  conferencia: { chamadas: number; tokens: number; usd: number };
+  antes_usd: number;
+};
+const inteiro = (n: number) => Math.round(n).toLocaleString("pt-BR");
+const chamadas = (n: number) => `${n} ${n === 1 ? "chamada" : "chamadas"}`;
+// "mil" escrito à mão: o formato compacto do Intl não existe no Safari 11.
+const tokensCurtos = (n: number) => (n < 1000 ? `${inteiro(n)} tokens` : n < 1_000_000 ? `${Math.round(n / 1000)} mil tokens` : `${(n / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mi de tokens`);
 import { ROLAGEM_OPERACAO } from "@/components/execucao/CarteiraDaOperacao";
 import { ROTULO_DO_ESTADO, type Fonte, type ItemDaResposta, type SecaoDaResposta } from "../../../supabase/functions/gestor-aceleriq/modulos/ficha";
 import { objetoDaFonte, objetoValido, ROTULO_DO_TIPO, type ObjetoAberto } from "@/lib/centralObjetos";
@@ -248,6 +261,7 @@ function Resposta({ d, nova, aoAbrirDiario, aoEncaminhar, aoPerguntar, mensagemI
             <div className={BALAO_GESTOR} data-secao={item.secao}>
               {item.texto}
               <span className="ml-1.5 inline-flex flex-wrap gap-1 align-middle">
+                {(item as { conferido?: string }).conferido === "a_conferir" && <span className="text-[11px] font-medium text-warning" title="O Jev não achou isto escrito na fonte. Abra a fonte para conferir.">a conferir</span>}
                 {item.fontes.map((a) => fontes.get(a) ? (
                   <button key={a} type="button" aria-expanded={aberta === a} onClick={() => setAberta(aberta === a ? null : a)} className={juntar("rounded-full px-1.5 py-px text-[10px] font-semibold transition-colors", aberta === a ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary hover:bg-primary/20")}>{a}</button>
                 ) : null)}
@@ -417,6 +431,16 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
     setLocais([]);
   }, [conversaId]);
   const atualizarConversa = () => void queryClient.invalidateQueries({ queryKey: ["gestor-aceleriq", "conversa", conversaId] });
+  // 15/10 (dono: "quanto estou gastando por conversa e quantos tokens"): modelo + conferência, somados no servidor.
+  const [verGasto, setVerGasto] = useState(false);
+  const gasto = useQuery({
+    queryKey: ["gestor-aceleriq", "consumo", conversaId],
+    enabled: !!conversaId,
+    staleTime: 30_000,
+    retry: false,
+    queryFn: async () => (await chamarFuncao<ConsumoDaConversa>("gestor-aceleriq", { acao: "consumo", conversa_id: conversaId })) ?? null,
+  });
+  const consumo = gasto.data && typeof gasto.data.total_usd === "number" ? gasto.data : null;
 
   type Envio = { pergunta: string; cliente_id?: string; audio?: { segundos: number } | null; docs?: AnexoDoc[]; naoLidos?: AnexoNaoLido[]; imagens?: ImagemDoGestor[] };
   const perguntar = useMutation({
@@ -448,6 +472,7 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
     onSuccess: (d) => {
       setLocais((ls) => ls.map((m) => (m.pendente ? { ...m, pendente: false, nova: true, conteudo: d.texto || "", dados: d } : m)));
       void queryClient.invalidateQueries({ queryKey: ["gestor-aceleriq", "conversas"] });
+      void queryClient.invalidateQueries({ queryKey: ["gestor-aceleriq", "consumo"] });
       if (!conversaId && d.conversa_id) { criadaAgora.current = d.conversa_id; aoConversaCriada?.(d.conversa_id); }
       else void queryClient.invalidateQueries({ queryKey: ["gestor-aceleriq", "conversa", conversaId] });
     },
@@ -591,8 +616,30 @@ export default function GestorConversa({ periodoDaTela, aoAbrirDiario, aoEncamin
             {contexto ? (contexto.cliente ? `${contexto.cliente.nome}${contexto.projeto ? ` · ${contexto.projeto.nome}` : ""}` : "Visão geral da Aceleriq") : "Conversa com a sua operação"} · tudo com prova no OS
           </p>
         </div>
+        {consumo && (
+          <button
+            type="button"
+            onClick={() => setVerGasto((v) => !v)}
+            aria-expanded={verGasto}
+            aria-label={`Gasto desta conversa: ${usd(consumo.total_usd)}, ${tokensCurtos(consumo.tokens)}`}
+            title="Ver o gasto desta conversa"
+            className="shrink-0 whitespace-nowrap rounded-full bg-muted/60 px-2 py-0.5 text-[11px] tabular-nums text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {usd(consumo.total_usd)}<span className="hidden sm:inline"> · {tokensCurtos(consumo.tokens)}</span>
+          </button>
+        )}
         {acoes && <div className="flex shrink-0 items-center gap-1">{acoes}</div>}
       </div>
+      {consumo && verGasto && (
+        <div className="shrink-0 space-y-0.5 border-b border-border/70 px-4 py-2 text-[12px] tabular-nums text-muted-foreground sm:px-5" data-gasto-da-conversa="">
+          {consumo.modelos.map((m) => (
+            <p key={m.id}><span className="text-foreground">{m.rotulo}</span>: {chamadas(m.chamadas)} · {inteiro(m.entrada)} tokens de entrada{m.cache ? ` (${inteiro(m.cache)} do cache)` : ""} · {inteiro(m.saida)} de saída · {usd(m.usd)}</p>
+          ))}
+          {consumo.conferencia.chamadas > 0 && <p><span className="text-foreground">Conferência (Jev)</span>: {chamadas(consumo.conferencia.chamadas)} · {inteiro(consumo.conferencia.tokens)} tokens · {usd(consumo.conferencia.usd)}</p>}
+          {consumo.antes_usd > 0 && <p>Antes da medição completa: {usd(consumo.antes_usd)}, só o modelo, sem tokens.</p>}
+          <p>Fora da conta: áudio, navegador e a checagem de ordem clara (fração de centavo).</p>
+        </div>
+      )}
 
       <div className={juntar(ROLAGEM_OPERACAO, "min-h-0 flex-1")} aria-live="polite">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-5 sm:px-6">

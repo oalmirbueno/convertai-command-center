@@ -6,6 +6,7 @@ import remarkGfm from "remark-gfm";
 import { prepararEntrada, tituloDoCaderno } from "@/lib/cadernoExecucao";
 import { anexarNoCaderno } from "@/lib/arquivosDoCaderno";
 import TarefaDoCaderno from "./TarefaDoCaderno";
+import ChatDoHermes from "./central/ChatDoHermes";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -116,7 +117,7 @@ export default function DiarioDaExecucao({
       if (l.error) throw l.error;
       const id = l.data.kanban_task_id || l.data.painel_task_id;
       if (!id) return null;
-      const t = await supabase.from('tasks').select('title,project:projects!tasks_project_id_fkey(name,client:profiles!projects_client_id_fkey(company_name,full_name))').eq('id', id).single();
+      const t = await supabase.from('tasks').select('id,title,project:projects!tasks_project_id_fkey(id,name,client:profiles!projects_client_id_fkey(id,company_name,full_name))').eq('id', id).single();
       if (t.error) throw t.error;
       return t.data;
     },
@@ -169,6 +170,17 @@ export default function DiarioDaExecucao({
     }
   };
 
+  /** A fala do dono para o Hermes fica no diário, assinada por ele (o Hermes registra o que for combinado com a assinatura dele). */
+  const registrarFalaComHermes = async (fala: string) => {
+    if (!linkId || !user) return;
+    const { error } = await (supabase as any).from("operator_participations").insert({
+      task_link_id: linkId, author_kind: "humano", author_id: user.id, entry_type: "comentario",
+      title: "Conversa com o Hermes", body: fala.slice(0, 8000), attachments: [],
+    });
+    if (error) toast.error(`A conversa seguiu, mas a sua fala não ficou no diário: ${error.message}`);
+    else void queryClient.invalidateQueries({ queryKey: ["diario", linkId] });
+  };
+
   const enviar = useMutation({
     mutationFn: async () => {
       if (!texto.trim() && !anexos.length) throw new Error("Escreva ou anexe um arquivo.");
@@ -204,11 +216,29 @@ export default function DiarioDaExecucao({
           {!contextoInicial && contexto.data && <span className="truncate text-xs text-primary">{contexto.data.project?.client?.company_name || contexto.data.project?.client?.full_name || 'Cliente não informado'} · {contexto.data.project?.name || contexto.data.title}</span>}
           {!contextoInicial && contexto.isError && <button className="text-xs text-warning" onClick={() => void contexto.refetch()}>Conferir cliente e projeto</button>}
           <nav aria-label="Conteúdo da tarefa" className="ml-auto flex shrink-0 gap-0.5">
-            {[["diario", "Diário"], ["tarefa", "Tarefa e checklist"], ["arquivos", "Arquivos"]].map(([id, label]) => <button key={id} type="button" aria-pressed={aba === id} className={juntar("h-7 rounded-md px-2.5 text-[12px] transition-colors", aba === id ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground")} onClick={() => setAba(id)}>{label}</button>)}
+            {[["diario", "Diário"], ...(linkId ? [["hermes", "Conversar com o Hermes"]] : []), ["tarefa", "Tarefa e checklist"], ["arquivos", "Arquivos"]].map(([id, label]) => <button key={id} type="button" aria-pressed={aba === id} className={juntar("h-7 rounded-md px-2.5 text-[12px] transition-colors", aba === id ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground")} onClick={() => setAba(id)}>{label}</button>)}
           </nav>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background px-5 py-5">
-          {aba === "tarefa" && linkId ? <TarefaDoCaderno key={linkId} linkId={linkId} /> : aba === "arquivos" && isLoading ? <Carregando linhas={3} rotulo="Carregando arquivos" /> : aba === "arquivos" && isError ? <div role="alert"><p>Não foi possível ler os arquivos da tarefa.</p><button className={botao.secundario} onClick={() => void refetch()}>Tentar de novo</button></div> : aba === "arquivos" ? <div className="mx-auto grid max-w-4xl gap-4 sm:grid-cols-2">
+          {aba === "hermes" && linkId ? (
+            // 15/10 (dono: "conversar em linguagem natural; pode ser o Hermes aqui; já registra tudo automaticamente"):
+            // o Hermes de verdade, numa sessão desta execução; o que for combinado ele registra no diário, assinado por ele.
+            <div className="-mx-5 -my-5 flex h-[calc(100%+2.5rem)] min-h-0 flex-col">
+              <ChatDoHermes
+                key={linkId}
+                chaveDaSessao={`execucao:diario:hermes:${linkId}`}
+                tituloDaSessao={`Diário · ${String((contexto.data as { title?: string } | null)?.title || titulo || "execução").slice(0, 80)}`}
+                contexto={{
+                  cliente: (() => { const c = (contexto.data as any)?.project?.client; return c?.id ? { id: String(c.id), nome: String(c.company_name || c.full_name || "Cliente") } : null; })(),
+                  projeto: (() => { const p = (contexto.data as any)?.project; return p?.id ? { id: String(p.id), nome: String(p.name || "Projeto") } : null; })(),
+                  tarefa: (contexto.data as any)?.id ? { id: String((contexto.data as any).id), titulo: String((contexto.data as any).title || "") } : null,
+                  vinculo: { id: linkId, titulo: String((contexto.data as { title?: string } | null)?.title || titulo || "execução") },
+                }}
+                aoEnviado={(t) => { void registrarFalaComHermes(t); }}
+                className="h-full min-h-0"
+              />
+            </div>
+          ) : aba === "tarefa" && linkId ? <TarefaDoCaderno key={linkId} linkId={linkId} /> : aba === "arquivos" && isLoading ? <Carregando linhas={3} rotulo="Carregando arquivos" /> : aba === "arquivos" && isError ? <div role="alert"><p>Não foi possível ler os arquivos da tarefa.</p><button className={botao.secundario} onClick={() => void refetch()}>Tentar de novo</button></div> : aba === "arquivos" ? <div className="mx-auto grid max-w-4xl gap-4 sm:grid-cols-2">
             {[...new Map(entradas.flatMap(e => prepararEntrada(e.body, e.attachments || []).anexos).map(a => [a.url, a])).values()].map(a => <EvidenciaVisual key={a.url} url={a.url!} nome={a.name || "Arquivo da tarefa"} />)}
             {!entradas.some(e => prepararEntrada(e.body, e.attachments || []).anexos.length) && <p className="text-sm text-muted-foreground">Anexe os materiais na conversa abaixo. Eles ficam no Workspace, organizados por agente e tarefa.</p>}
             {entradas.length >= limite && <button className={botao.secundario} onClick={() => setLimite(n => n + 80)}>Buscar arquivos anteriores</button>}
@@ -278,7 +308,7 @@ export default function DiarioDaExecucao({
         {/* O compositor. Tipo primeiro: uma INSTRUÇÃO manda, um COMENTÁRIO
             conversa, e o agente trata diferente, então a escolha não pode
             ser um detalhe escondido. O rascunho fica guardado por vínculo. */}
-        <div className="shrink-0 space-y-2 border-t border-border px-5 py-3">
+        <div className={juntar("shrink-0 space-y-2 border-t border-border px-5 py-3", aba === "hermes" && "hidden")}>
           {tituloEntrada && (
             <p className="flex min-w-0 items-center text-[12px] text-muted-foreground">
               <span className="min-w-0 truncate">{tituloEntrada}</span>
