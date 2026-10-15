@@ -135,4 +135,31 @@ describe("tela do navegador remoto (função falsa)", () => {
     const abrir = api.chamar.mock.calls.find((c) => (c[1] as { acao: string }).acao === "abrir");
     expect(abrir && abrir[1]).toEqual({ acao: "abrir", cliente_id: "22222222-2222-4222-8222-222222222222", origem: "central" });
   });
+  it("mantém as abas visíveis e usa o mesmo perfil para ativar e criar outra", async () => {
+    const clienteId = "22222222-2222-4222-8222-222222222222";
+    const sessaoId = "11111111-1111-4111-8111-111111111111";
+    api.chamar.mockImplementation(async (_fn: string, b: { acao: string; acao_do_navegador?: string }) => {
+      if (b.acao === "estado") return { configurado: true };
+      if (b.acao === "abrir" || b.acao === "ver") return { sessao: {
+        id: sessaoId, rodando: true, ao_vivo: "https://www.browserbase.com/devtools-fullscreen/main",
+        paginas: [
+          { titulo: "Facebook", url: "https://facebook.com", ao_vivo: "https://www.browserbase.com/devtools-fullscreen/tab-1" },
+          { titulo: "Instagram", url: "https://instagram.com", ao_vivo: "https://www.browserbase.com/devtools-fullscreen/tab-2" },
+        ],
+      } };
+      if (b.acao === "agir") return { resultado: { ok: true } };
+      return {};
+    });
+    montar({ id: clienteId, nome: "Casa dos Assados" });
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir o navegador de Casa dos Assados" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Instagram" }));
+    expect(api.chamar.mock.calls.some((call) => (call[1] as { acao?: string; acao_do_navegador?: string; aba?: number }).acao_do_navegador === "ativar_aba"
+      && (call[1] as { aba?: number }).aba === 1)).toBe(true);
+    fireEvent.click(await screen.findByRole("button", { name: "Nova aba" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Endereço da nova aba" }), { target: { value: "https://business.facebook.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Abrir" }));
+    expect(api.chamar.mock.calls.some((call) => (call[1] as { acao?: string; acao_do_navegador?: string; url?: string }).acao_do_navegador === "nova_aba"
+      && (call[1] as { url?: string }).url === "https://business.facebook.com")).toBe(true);
+  });
+
 });
