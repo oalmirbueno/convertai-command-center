@@ -122,10 +122,11 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
     mutationFn: (url: string) => chamarFuncao("navegador-remoto", { acao: "agir", cliente_id: cliente!.id, acao_do_navegador: "nova_aba", url, pedido: "Abrir outra aba no mesmo perfil persistente do cliente" }),
     onSuccess: async () => {
       setNovaAbaAberta(false);
+      const urlCriada = enderecoNovaAba.trim();
       setEnderecoNovaAba("");
       const { data } = await sessao.refetch();
       if (data?.paginas?.length) {
-        const indice = data.paginas.findIndex((p) => p.url === enderecoNovaAba || p.url.replace(/\/$/, "") === enderecoNovaAba.replace(/\/$/, ""));
+        const indice = data.paginas.findIndex((p) => p.url === urlCriada || p.url.replace(/\/$/, "") === urlCriada.replace(/\/$/, ""));
         setAba(indice >= 0 ? indice : data.paginas.length - 1);
         setAbaUrl(data.paginas[indice >= 0 ? indice : data.paginas.length - 1]?.url || null);
       }
