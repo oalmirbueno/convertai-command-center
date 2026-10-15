@@ -70,6 +70,7 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
   ) : null;
   const [sessaoId, setSessaoId] = useEstadoDaTela<string>(`execucao:central:navegador:${cliente?.id || "sem"}`, "");
   const [aba, setAba] = useState(0);
+  const [abaUrl, setAbaUrl] = useState<string | null>(null);
   const [novaAbaAberta, setNovaAbaAberta] = useState(false);
   const [enderecoNovaAba, setEnderecoNovaAba] = useState("");
   const [telaFixada, setTelaFixada] = useState<{ chave: string; url: string } | null>(null);
@@ -102,7 +103,8 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
   // (polling a cada 15s). A URL do iframe deve permanecer fixada enquanto
   // estivermos na mesma sessão/aba, senão o navegador parece reiniciar.
   const paginas = sessao.data?.rodando ? sessao.data.paginas || [] : [];
-  const abaValida = aba < paginas.length ? aba : 0;
+  const indiceDaUrl = abaUrl ? paginas.findIndex((p) => p.url === abaUrl) : -1;
+  const abaValida = indiceDaUrl >= 0 ? indiceDaUrl : (aba < paginas.length ? aba : 0);
   const chaveDoQuadro = `${cliente?.id || "sem"}:${sessaoId}:${abaValida}`;
   const candidatoAoVivo = paginas[abaValida]?.ao_vivo || sessao.data?.ao_vivo || null;
   useEffect(() => {
@@ -112,8 +114,8 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
   const telaAoVivo = telaFixada?.chave === chaveDoQuadro ? telaFixada.url : null;
 
   const ativarAba = useMutation({
-    mutationFn: (indice: number) => chamarFuncao("navegador-remoto", { acao: "agir", cliente_id: cliente!.id, acao_do_navegador: "ativar_aba", aba: indice, pedido: "Selecionar aba existente no navegador remoto" }),
-    onSuccess: (_r, indice) => { setAba(indice); void sessao.refetch(); },
+    mutationFn: (indice: number) => chamarFuncao("navegador-remoto", { acao: "agir", cliente_id: cliente!.id, acao_do_navegador: "ativar_aba", aba: indice, url: paginas[indice]?.url, pedido: "Selecionar aba existente no navegador remoto" }),
+    onSuccess: (_r, indice) => { setAba(indice); setAbaUrl(paginas[indice]?.url || null); void sessao.refetch(); },
     onError: (e) => toast.error(textoDoErro(e)),
   });
   const criarAba = useMutation({
@@ -122,7 +124,11 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
       setNovaAbaAberta(false);
       setEnderecoNovaAba("");
       const { data } = await sessao.refetch();
-      if (data?.paginas?.length) setAba(data.paginas.length - 1);
+      if (data?.paginas?.length) {
+        const indice = data.paginas.findIndex((p) => p.url === enderecoNovaAba || p.url.replace(/\/$/, "") === enderecoNovaAba.replace(/\/$/, ""));
+        setAba(indice >= 0 ? indice : data.paginas.length - 1);
+        setAbaUrl(data.paginas[indice >= 0 ? indice : data.paginas.length - 1]?.url || null);
+      }
     },
     onError: (e) => toast.error(textoDoErro(e)),
   });
@@ -223,7 +229,7 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
           src={telaAoVivo}
           title={`Navegador remoto de ${cliente.nome}`}
           className="block min-h-0 w-full flex-1 border-0 bg-background"
-          sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+          sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
           allow="clipboard-read; clipboard-write"
           referrerPolicy="no-referrer"
         />
