@@ -61,7 +61,10 @@ async function acao(nome: string, corpo: Record<string, unknown>, userId: string
     const clientId = String(corpo.cliente_id || "");
     if (!UUID.test(clientId)) throw new ErroHttp(400, "cliente_invalido", "Escolha o cliente do navegador.");
     const origem = ["central", "gestor", "hermes"].includes(String(corpo.origem)) ? (String(corpo.origem) as "central" | "gestor" | "hermes") : "central";
-    const { sessao, nova } = await sessaoDoCliente(servico(), p, { clientId, origem, pedido: corpo.pedido ? String(corpo.pedido) : null, userId });
+    // A tela remota do tamanho do quadro ampliado de quem abriu (letra legível); o provedor limita.
+    const t = corpo.tela && typeof corpo.tela === "object" ? corpo.tela as Record<string, unknown> : null;
+    const tela = t ? { largura: Number(t.largura), altura: Number(t.altura) } : null;
+    const { sessao, nova } = await sessaoDoCliente(servico(), p, { clientId, origem, pedido: corpo.pedido ? String(corpo.pedido) : null, userId, tela });
     // Sessão nova sem conexão o provedor encerra em 5 min: um toque mantém viva (keepAlive) para a tela ao vivo.
     if (nova) await tocar(p, sessao.sessao_externa);
     const viva = await p.verSessao(sessao.sessao_externa);

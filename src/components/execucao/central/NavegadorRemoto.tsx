@@ -22,6 +22,11 @@ type ResultadoDaAcao = { resultado: { sessao_id: string; aba_id?: string } };
 type AcaoRegistrada = { id: string; agente: string; acao: string; alvo: string | null; ok: boolean; url: string | null; titulo: string | null; erro: string | null; evidencia_url: string | null; criado_em: string };
 type Conta = { projetos: Array<{ simultaneas: number; minutos_usados: number | null }>; abertas_agora: number };
 const QUEM: Record<string, string> = { hermes: "Hermes", gestor: "Gestor", equipe: "equipe" };
+/**
+ * 15/10 (dono: "as letras estão muito pequenas"): a tela remota nasce do tamanho do quadro ampliado
+ * (a janela menos a margem e as barras de cima e de baixo), para a letra ficar perto do tamanho real.
+ */
+const telaDoQuadroAmpliado = () => typeof window === "undefined" ? null : { largura: Math.round(window.innerWidth - 32), altura: Math.round(window.innerHeight - 32 - 104) };
 const hora = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
 // Reutiliza o cofre já autorizado do OS. A senha é vista/copiada somente pela
@@ -36,7 +41,7 @@ function CofreRapido({ cliente }: { cliente: { id: string; nome: string } }) {
           <KeyRound className="h-3.5 w-3.5" /> Cofre
         </button>
       </DialogTrigger>
-      <DialogContent className="flex max-h-[86vh] w-[min(96vw,36rem)] flex-col gap-0 p-0">
+      <DialogContent className="z-[70] flex max-h-[86vh] w-[min(96vw,36rem)] flex-col gap-0 p-0">
         <DialogHeader className="shrink-0 border-b border-border px-4 py-3 text-left">
           <DialogTitle>Acessos de {cliente.nome}</DialogTitle>
           <DialogDescription>Cadastre ou copie o acesso para preencher diretamente na sessão remota. Nunca compartilhe senhas no chat do agente.</DialogDescription>
@@ -65,7 +70,8 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
   const clientes = useQuery({ queryKey: ["navegador-remoto", "clientes"], enabled: !daConversa, staleTime: 10 * 60_000, queryFn: lerClientes });
   const doSeletor = !daConversa && escolhido ? (clientes.data || []).find((c) => c.id === escolhido) || null : null;
   const cliente = daConversa || (doSeletor ? { id: doSeletor.id, nome: nomeDoCliente(doSeletor) } : null);
-  const seletor = !daConversa ? (
+  const [ampliado, setAmpliado] = useState(false);
+  const seletor = !daConversa && !ampliado ? (
     // 15/10 (dono: "seletor de cliente bem minimalista, que não polui"): uma linha só, sem caixa.
     <div className="flex shrink-0 items-center gap-1.5 px-3 pt-2 text-[12px] text-muted-foreground">
       <Users className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -85,7 +91,6 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
   const [novaAbaAberta, setNovaAbaAberta] = useState(false);
   const [enderecoNovaAba, setEnderecoNovaAba] = useState("");
   const [telaFixada, setTelaFixada] = useState<{ chave: string; url: string } | null>(null);
-  const [ampliado, setAmpliado] = useState(false);
   const raiz = useRef<HTMLDivElement>(null);
   const quadroAtual = useRef("");
   const contextoAtual = useRef({ clienteId: cliente?.id, sessaoId });
@@ -157,6 +162,12 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
   const paginaSelecionada = paginas[abaValida];
   const chaveDoQuadro = `${cliente?.id || "sem"}:${sessaoId}:${paginaSelecionada?.id || "sessao"}`;
   quadroAtual.current = chaveDoQuadro;
+  // 15/10 (dono: "não entra e reinicia"): sem aba escolhida, a tela seguia a primeira da lista, e a
+  // ordem muda quando o site abre ou foca outra aba; a tela trocava sozinha no meio do login. A aba
+  // exibida fica fixada até o dono escolher outra (ou ela fechar).
+  useEffect(() => {
+    if (paginaSelecionada?.id && paginaSelecionada.id !== abaId) setAbaId(paginaSelecionada.id);
+  }, [paginaSelecionada?.id, abaId, setAbaId]);
   const candidatoAoVivo = paginas[abaValida]?.ao_vivo || sessao.data?.ao_vivo || null;
   useEffect(() => {
     if (!sessao.data?.rodando || !candidatoAoVivo) return;
@@ -187,7 +198,7 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
     onError: (e) => toast.error(textoDoErro(e)),
   });
   const registro = (acoes.data || []).length ? (
-    <details className="shrink-0 border-t border-border/60 px-2 py-1.5 text-[12px]" data-registro-do-navegador="">
+    <details className="shrink-0 border-t border-border/60 px-2 py-1.5 text-[13px]" data-registro-do-navegador="">
       <summary className="cursor-pointer text-muted-foreground">Ações registradas ({(acoes.data || []).length}){uso ? ` · ${uso}` : ""}</summary>
       <ul className="mt-1 max-h-40 space-y-1 overflow-y-auto">
         {(acoes.data || []).map((a) => (
@@ -203,7 +214,7 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
     </details>
   ) : null;
   const abrir = useMutation({
-    mutationFn: (clienteId: string) => chamarFuncao<{ sessao: SessaoViva; reaproveitada: boolean }>("navegador-remoto", { acao: "abrir", cliente_id: clienteId, origem: "central" }),
+    mutationFn: (clienteId: string) => chamarFuncao<{ sessao: SessaoViva; reaproveitada: boolean }>("navegador-remoto", { acao: "abrir", cliente_id: clienteId, origem: "central", tela: telaDoQuadroAmpliado() }),
     onSuccess: (r, clienteId) => {
       if (contextoAtual.current.clienteId !== clienteId) return;
       qc.setQueryData(["navegador-remoto", "sessao", clienteId, r.sessao.id], r.sessao);
@@ -253,7 +264,7 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
   return (
     <div
       ref={raiz}
-      className={juntar("flex min-h-0 flex-col bg-background", ampliado ? "fixed inset-2 z-40 rounded-lg border border-border shadow-2xl sm:inset-4" : "h-full")}
+      className={juntar("flex min-h-0 flex-col bg-background", ampliado ? "fixed inset-2 z-[60] rounded-lg border border-border shadow-2xl sm:inset-4" : "h-full")}
       role={ampliado ? "dialog" : undefined}
       aria-modal={ampliado || undefined}
       aria-label={ampliado ? `Navegador de ${cliente.nome} ampliado` : undefined}
@@ -270,11 +281,12 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
       }}
     >
       {seletor}
-      <div className="flex shrink-0 items-center gap-1 px-2 py-1.5 text-[12px] text-muted-foreground">
+      <div className="flex shrink-0 items-center gap-1 px-2 py-1.5 text-[13px] text-muted-foreground">
         <span className="h-2 w-2 shrink-0 rounded-full bg-success" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate">{paginaAtual?.titulo || paginaAtual?.url || "Navegador ao vivo"} · {cliente.nome}{viva.comandada_por ? ` · comandado por ${QUEM[viva.comandada_por] || viva.comandada_por}` : ""}</span>
         {podeGerirCofre && <CofreRapido key={cliente.id} cliente={cliente} />}
-        <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => setAmpliado((v) => !v)} aria-label={ampliado ? "Reduzir navegador remoto" : "Ampliar navegador remoto"} title={ampliado ? "Reduzir" : "Ampliar"}>{ampliado ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}</button>
+        {/* 15/10 (dono: "fica ruim de voltar"): o botão diz o que faz; Esc também volta. */}
+        <button type="button" className={juntar(botao.secundario, "h-7 shrink-0 gap-1 px-2 text-[12px]")} onClick={() => setAmpliado((v) => !v)} aria-label={ampliado ? "Reduzir navegador remoto" : "Ampliar navegador remoto"} title={ampliado ? "Voltar ao tamanho normal (Esc)" : "Ampliar para ler e usar"}>{ampliado ? <><Minimize2 className="h-3.5 w-3.5" /> Voltar</> : <><Maximize2 className="h-3.5 w-3.5" /> Ampliar</>}</button>
         <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => void sessao.refetch().then((r) => {
           if (contextoAtual.current.clienteId !== cliente.id || contextoAtual.current.sessaoId !== sessaoId || quadroAtual.current !== chaveDoQuadro) return;
           const pagina = paginaSelecionada?.id ? r.data?.paginas?.find((p) => p.id === paginaSelecionada.id) : r.data?.paginas?.[0];
@@ -294,7 +306,7 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
               onClick={() => p.id && ativarAba.mutate({ clienteId: cliente.id, sessaoId, abaId: p.id })}
               disabled={!p.id || ativarAba.isPending || criarAba.isPending}
               title={p.url}
-              className={juntar("max-w-[11rem] shrink-0 truncate rounded-md px-2 py-1 text-[11px]", i === abaValida ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50")}
+              className={juntar("max-w-[13rem] shrink-0 truncate rounded-md px-2 py-1 text-[12px]", i === abaValida ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50")}
             >
               {p.titulo || p.url || `Aba ${i + 1}`}
             </button>
@@ -304,8 +316,8 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
       )}
       {novaAbaAberta && (
         <form className="flex shrink-0 gap-2 px-2 pb-2" onSubmit={(e) => { e.preventDefault(); if (enderecoNovaAba.trim()) criarAba.mutate({ clienteId: cliente.id, sessaoId, url: enderecoNovaAba.trim() }); }}>
-          <input type="url" required value={enderecoNovaAba} onChange={(e) => setEnderecoNovaAba(e.target.value)} placeholder="https://..." aria-label="Endereço da nova aba" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs" />
-          <button type="submit" disabled={criarAba.isPending} className={juntar(botao.primario, "h-8 shrink-0 px-3 text-xs")}>{criarAba.isPending ? "Abrindo" : "Abrir"}</button>
+          <input type="url" required value={enderecoNovaAba} onChange={(e) => setEnderecoNovaAba(e.target.value)} placeholder="https://..." aria-label="Endereço da nova aba" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-[13px]" />
+          <button type="submit" disabled={criarAba.isPending} className={juntar(botao.primario, "h-8 shrink-0 px-3 text-[13px]")}>{criarAba.isPending ? "Abrindo" : "Abrir"}</button>
         </form>
       )}
       {telaAoVivo ? (

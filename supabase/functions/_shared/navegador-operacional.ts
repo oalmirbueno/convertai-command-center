@@ -16,7 +16,7 @@
  *   aprovada (operator_approvals) e digitar senha nunca: login é sempre da pessoa.
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { ErroDoProvedor, type Provedor } from "../navegador-remoto/provedor.ts";
+import { ErroDoProvedor, type Provedor, type Tela } from "../navegador-remoto/provedor.ts";
 
 export type AgenteDoNavegador = "hermes" | "gestor" | "equipe";
 export const ACOES_DO_NAVEGADOR = ["navegar", "ler", "pesquisar", "capturar", "clicar", "digitar", "abas", "nova_aba", "ativar_aba"] as const;
@@ -193,7 +193,7 @@ type LinhaDaSessao = { id: string; client_id: string; contexto_id: string; sessa
 
 /** O navegador do cliente: reaproveita a sessão viva; senão abre uma nova no perfil dele. */
 export async function sessaoDoCliente(
-  db: SupabaseClient, p: Provedor, o: { clientId: string; origem: "central" | "gestor" | "hermes"; pedido?: string | null; userId?: string | null; sessaoId?: string | null },
+  db: SupabaseClient, p: Provedor, o: { clientId: string; origem: "central" | "gestor" | "hermes"; pedido?: string | null; userId?: string | null; sessaoId?: string | null; tela?: Tela | null },
 ): Promise<{ sessao: LinhaDaSessao; nova: boolean }> {
   const { data: aberta } = await db.from("navegador_sessoes").select("id, client_id, contexto_id, sessao_externa, estado, comandada_por, trava_ate").eq("client_id", o.clientId).eq("estado", "aberta").order("aberta_em", { ascending: false }).limit(1).maybeSingle();
   // A tela com uma sessão aberta nunca age numa sessão substituta nem abre outra em silêncio.
@@ -217,7 +217,7 @@ export async function sessaoDoCliente(
     ctx = novo;
   }
   const c = ctx as { id: string; contexto_externo: string };
-  const externa = await p.criarSessao(c.contexto_externo);
+  const externa = await p.criarSessao(c.contexto_externo, { tela: o.tela ?? null });
   const { data: reg, error } = await db.from("navegador_sessoes").insert({ client_id: o.clientId, contexto_id: c.id, sessao_externa: externa, origem: o.origem, pedido: o.pedido ? String(o.pedido).slice(0, 500) : null, aberta_por: o.userId || null, ultima_atividade: new Date().toISOString() }).select("id, client_id, contexto_id, sessao_externa, estado, comandada_por, trava_ate").single();
   if (error || !reg) {
     await p.encerrar(externa).catch(() => undefined);
