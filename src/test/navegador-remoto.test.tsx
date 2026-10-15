@@ -26,7 +26,7 @@ vi.mock("@/integrations/supabase/client", () => {
   return { supabase: { from: (t: string) => consulta(t === "user_roles" ? [{ user_id: "22222222-2222-4222-8222-222222222222" }] : [{ id: "22222222-2222-4222-8222-222222222222", company_name: "AcelerIQ", full_name: null, email: null }]) } };
 });
 
-import { ErroDoProvedor, provedorBrowserbase } from "../../supabase/functions/navegador-remoto/provedor";
+import { DOMINIOS_DA_META, ErroDoProvedor, provedorBrowserbase, telaDaSessao } from "../../supabase/functions/navegador-remoto/provedor";
 import NavegadorRemoto from "@/components/execucao/central/NavegadorRemoto";
 
 // O jsdom não tem AbortSignal.timeout (o Deno da função tem).
@@ -48,7 +48,9 @@ describe("provedor Browserbase (fetch falso)", () => {
     expect(await p.criarContexto("x")).toBe("ctx-1");
     expect(await p.criarSessao("ctx-1")).toBe("ses-1");
     const corpo = JSON.parse(String(chamadas[1].init.body));
-    expect(corpo).toMatchObject({ projectId: "proj-1", keepAlive: true, timeout: 3600, region: "us-east-1", browserSettings: { context: { id: "ctx-1", persist: true } } });
+    expect(corpo).toMatchObject({ projectId: "proj-1", keepAlive: true, timeout: 3600, region: "us-east-1", browserSettings: { context: { id: "ctx-1", persist: true }, viewport: { width: 1280, height: 720 } } });
+    // Só os domínios da Meta saem pelo IP residencial do Brasil; o resto vai direto.
+    expect(corpo.proxies).toEqual([{ type: "browserbase", geolocation: { country: "BR" }, domainPattern: DOMINIOS_DA_META }]);
     expect((chamadas[0].init.headers as Record<string, string>)["X-BB-API-Key"]).toBe("chave-teste");
   });
 
@@ -66,7 +68,7 @@ describe("provedor Browserbase (fetch falso)", () => {
     expect(corpos[2].corpo).toEqual({ status: "REQUEST_RELEASE" });
   });
 
-  it("plano gratuito recusa keepAlive: abre de novo sem ele e com 15 minutos", async () => {
+  it("plano gratuito recusa keepAlive (e o proxy): abre de novo sem eles e com 15 minutos", async () => {
     const corpos: Record<string, unknown>[] = [];
     const f = vi.fn(async (_url: string, init: RequestInit) => {
       const b = JSON.parse(String(init.body));
@@ -74,7 +76,33 @@ describe("provedor Browserbase (fetch falso)", () => {
       return b.keepAlive ? resposta(400, { message: "keepAlive requires a paid plan" }) : resposta(201, { id: "ses-2" });
     }) as unknown as typeof fetch;
     expect(await provedorBrowserbase("k", "p", f).criarSessao("ctx")).toBe("ses-2");
-    expect(corpos.map((c) => [c.keepAlive, c.timeout])).toEqual([[true, 3600], [false, 900]]);
+    expect(corpos.map((c) => [c.keepAlive, c.timeout, "proxies" in c])).toEqual([[true, 3600, true], [true, 3600, false], [false, 900, false]]);
+  });
+
+  it("plano sem proxy: abre com keepAlive e sem o proxy, na tela pedida", async () => {
+    const corpos: Record<string, unknown>[] = [];
+    const f = vi.fn(async (_url: string, init: RequestInit) => {
+      const b = JSON.parse(String(init.body));
+      corpos.push(b);
+      return b.proxies ? resposta(400, { message: "Proxies are not available on your plan" }) : resposta(201, { id: "ses-3" });
+    }) as unknown as typeof fetch;
+    expect(await provedorBrowserbase("k", "p", f).criarSessao("ctx", { tela: { largura: 1504, altura: 591 } })).toBe("ses-3");
+    expect(corpos).toHaveLength(2);
+    expect(corpos[1]).toMatchObject({ keepAlive: true, timeout: 3600, browserSettings: { viewport: { width: 1504, height: 600 } } });
+    expect(corpos[1]).not.toHaveProperty("proxies");
+  });
+
+  it("a tela remota fica entre o tamanho de notebook e o de monitor (sem virar versão de celular)", () => {
+    expect(telaDaSessao(null)).toEqual({ largura: 1280, altura: 720 });
+    expect(telaDaSessao({ largura: 360, altura: 300 })).toEqual({ largura: 1024, altura: 600 });
+    expect(telaDaSessao({ largura: 3840, altura: 2000 })).toEqual({ largura: 1600, altura: 1000 });
+    expect(telaDaSessao({ largura: Number.NaN, altura: 800.4 })).toEqual({ largura: 1280, altura: 800 });
+  });
+
+  it("o padrão da Meta pega os subdomínios do Facebook e do Instagram e deixa o resto direto", () => {
+    const re = new RegExp(DOMINIOS_DA_META);
+    for (const d of ["www.facebook.com", "business.facebook.com", "static.xx.fbcdn.net", "www.instagram.com", "facebook.com"]) expect(re.test(d)).toBe(true);
+    for (const d of ["www.google.com", "casadosassados.saipos.com", "notfacebook.com", "facebook.com.evil.io"]) expect(re.test(d)).toBe(false);
   });
 
   it("chave recusada e limite do plano viram erro claro (sem tentar de novo)", async () => {
@@ -164,7 +192,8 @@ describe("tela do navegador remoto (função falsa)", () => {
     expect(quadro.getAttribute("src")).toBe("https://www.browserbase.com/devtools-fullscreen/x");
     expect(quadro.getAttribute("referrerpolicy")).toBe("no-referrer");
     const abrir = api.chamar.mock.calls.find((c) => (c[1] as { acao: string }).acao === "abrir");
-    expect(abrir && abrir[1]).toEqual({ acao: "abrir", cliente_id: "22222222-2222-4222-8222-222222222222", origem: "central" });
+    // A tela remota vai do tamanho do quadro ampliado (jsdom: janela 1024x768).
+    expect(abrir && abrir[1]).toEqual({ acao: "abrir", cliente_id: "22222222-2222-4222-8222-222222222222", origem: "central", tela: { largura: 992, altura: 632 } });
   });
   it("mantém o mesmo iframe e src após consultas equivalentes a mais de 30 segundos de polling", async () => {
     let versao = 0;
@@ -233,6 +262,39 @@ describe("tela do navegador remoto (função falsa)", () => {
     expect(screen.getAllByRole("tab")[1].getAttribute("aria-selected")).toBe("false");
     expect(screen.getByTitle("Navegador remoto de Casa dos Assados")).toBe(quadro);
     expect(quadro.getAttribute("src")).toBe(src);
+  });
+
+  it("sem aba escolhida, a tela fica na aba que já mostrava quando a ordem muda (o login não reinicia)", async () => {
+    let invertidas = false;
+    usarSessaoFalsa(() => {
+      const sessao = sessaoFalsa();
+      if (invertidas) sessao.paginas.reverse();
+      return sessao;
+    });
+    const { qc } = montar({ id: "cliente-ordem", nome: "Casa dos Assados" });
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir o navegador de Casa dos Assados" }));
+    const quadro = await screen.findByTitle("Navegador remoto de Casa dos Assados");
+    const src = quadro.getAttribute("src");
+    expect(src).toContain("target-1");
+    invertidas = true;
+    await act(async () => { await qc.invalidateQueries({ queryKey: ["navegador-remoto", "sessao"] }); });
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Facebook" }).getAttribute("aria-selected")).toBe("true"));
+    expect(screen.getAllByRole("tab")[0].textContent).toBe("Instagram");
+    expect(screen.getByTitle("Navegador remoto de Casa dos Assados")).toBe(quadro);
+    expect(quadro.getAttribute("src")).toBe(src);
+    expect(api.chamar.mock.calls.some((c) => (c[1] as PedidoFalso).acao_do_navegador === "ativar_aba")).toBe(false);
+  });
+
+  it("ampliado fica acima do cabeçalho do painel e o seletor de cliente some", async () => {
+    usarSessaoFalsa(() => sessaoFalsa());
+    montar({ id: "cliente-camada", nome: "Casa dos Assados" });
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir o navegador de Casa dos Assados" }));
+    await screen.findByTitle("Navegador remoto de Casa dos Assados");
+    fireEvent.click(screen.getByRole("button", { name: "Ampliar navegador remoto" }));
+    const dialogo = screen.getByRole("dialog", { name: "Navegador de Casa dos Assados ampliado" });
+    // O cabeçalho do painel é z-50: a ampliação precisa ficar por cima dele.
+    expect(dialogo.className).toContain("z-[60]");
+    expect(screen.getByRole("button", { name: "Reduzir navegador remoto" }).textContent).toContain("Voltar");
   });
 
   it.each(["cliente", "sessão"])("ignora a criação atrasada de aba quando muda o contexto de %s", async (mudanca) => {

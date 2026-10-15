@@ -13,7 +13,7 @@ export type SessaoViva = { rodando: boolean; ao_vivo: string | null; paginas: Ar
 
 export type Provedor = {
   criarContexto(nome: string): Promise<string>;
-  criarSessao(contexto: string): Promise<string>;
+  criarSessao(contexto: string, o?: OpcoesDaSessao): Promise<string>;
   verSessao(sessao: string): Promise<SessaoViva>;
   encerrar(sessao: string): Promise<void>;
   /** Endereço de conexão CDP da sessão, pedido na hora (nunca gravado nem registrado). */
@@ -31,6 +31,29 @@ const TEMPO_DA_SESSAO_S = 3600;
 const TEMPO_SEM_PLANO_PAGO_S = 900;
 /** A região mais perto do Brasil entre as do provedor (us-west-2, us-east-1, eu-central-1, ap-southeast-1). */
 const REGIAO = "us-east-1";
+
+/** Tamanho da tela do navegador remoto (a página "de verdade" que a Live View mostra encolhida ou não). */
+export type Tela = { largura: number; altura: number };
+export type OpcoesDaSessao = { tela?: Tela | null };
+/**
+ * 15/10 (dono: "as letras estão muito pequenas"): a Live View encaixa a tela remota no quadro,
+ * então tela remota grande = letra miúda. A tela nasce do tamanho do quadro ampliado de quem abriu
+ * (letra quase 1:1); agente sem tela (Hermes, Gestor) usa a padrão. Limites para o site não virar
+ * versão de celular nem passar do monitor.
+ */
+export const TELA_PADRAO: Tela = { largura: 1280, altura: 720 };
+export function telaDaSessao(t?: Partial<Tela> | null): Tela {
+  const n = (v: unknown, min: number, max: number, padrao: number) => Number.isFinite(Number(v)) && Number(v) > 0 ? Math.round(Math.min(max, Math.max(min, Number(v)))) : padrao;
+  return { largura: n(t?.largura, 1024, 1600, TELA_PADRAO.largura), altura: n(t?.altura, 600, 1000, TELA_PADRAO.altura) };
+}
+/**
+ * 15/10 (dono: "conecto o Facebook da Casa dos Assados e ele não entra e reinicia"): Facebook,
+ * Instagram e a Meta barram login vindo de IP de datacenter fora do país e devolvem para o início.
+ * Só esses domínios saem por IP residencial do Brasil (proxy do provedor, plano Developer ou
+ * acima); o resto vai direto, para não gastar banda do proxy à toa.
+ */
+export const DOMINIOS_DA_META = "^([a-zA-Z0-9-]+\\.)*(facebook\\.com|facebook\\.net|fbcdn\\.net|fbsbx\\.com|instagram\\.com|cdninstagram\\.com|meta\\.com|messenger\\.com|whatsapp\\.com|whatsapp\\.net)$";
+const PROXY_DA_META = [{ type: "browserbase", geolocation: { country: "BR" }, domainPattern: DOMINIOS_DA_META }];
 
 /**
  * `projeto` é opcional (docs, 09/10): sem ele, o Browserbase infere o projeto pela API key.
@@ -63,18 +86,28 @@ export function provedorBrowserbase(chave: string, projeto: string | null, f: ty
       if (!id) throw new ErroDoProvedor("contexto_sem_id", "O provedor não devolveu o contexto.");
       return id;
     },
-    async criarSessao(contexto: string) {
-      const pedir = (manterViva: boolean, tempo: number) => chamar("/sessions", {
+    async criarSessao(contexto: string, o: OpcoesDaSessao = {}) {
+      const tela = telaDaSessao(o.tela);
+      const pedir = (manterViva: boolean, tempo: number, comProxy: boolean) => chamar("/sessions", {
         method: "POST",
-        body: JSON.stringify({ ...doProjeto, keepAlive: manterViva, timeout: tempo, region: REGIAO, browserSettings: { context: { id: contexto, persist: true } } }),
+        body: JSON.stringify({
+          ...doProjeto, keepAlive: manterViva, timeout: tempo, region: REGIAO,
+          ...(comProxy ? { proxies: PROXY_DA_META } : {}),
+          browserSettings: { context: { id: contexto, persist: true }, viewport: { width: tela.largura, height: tela.altura } },
+        }),
       });
-      let s: Record<string, unknown>;
-      try {
-        s = await pedir(true, TEMPO_DA_SESSAO_S);
-      } catch (e) {
-        // keepAlive só existe do plano Hobby para cima (docs, 09/10): no gratuito, abre sem ele e com 15 min.
-        if (!(e instanceof ErroDoProvedor) || e.codigo !== "provedor_erro") throw e;
-        s = await pedir(false, TEMPO_SEM_PLANO_PAGO_S);
+      // Do melhor para o mínimo: proxy do Brasil para a Meta (Developer+), depois sem ele, e por fim
+      // sem keepAlive (só do plano Hobby para cima, docs 09/10), com 15 min. Chave recusada e limite não repetem.
+      const tentativas: Array<[boolean, number, boolean]> = [[true, TEMPO_DA_SESSAO_S, true], [true, TEMPO_DA_SESSAO_S, false], [false, TEMPO_SEM_PLANO_PAGO_S, false]];
+      let s: Record<string, unknown> = {};
+      for (const [i, [manterViva, tempo, comProxy]] of tentativas.entries()) {
+        try {
+          s = await pedir(manterViva, tempo, comProxy);
+          break;
+        } catch (e) {
+          if (!(e instanceof ErroDoProvedor) || e.codigo !== "provedor_erro" || i === tentativas.length - 1) throw e;
+          console.warn(`navegador-remoto: o provedor recusou a sessão (${comProxy ? "com proxy do Brasil" : "com keepAlive"}); tentando sem: ${e.message}`);
+        }
       }
       const id = String(s.id || "");
       if (!id) throw new ErroDoProvedor("sessao_sem_id", "O provedor não devolveu a sessão.");
