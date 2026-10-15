@@ -1,5 +1,5 @@
 import { createElement as h } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -153,13 +153,13 @@ describe("tela do navegador remoto (função falsa)", () => {
     montar({ id: clienteId, nome: "Casa dos Assados" });
     fireEvent.click(await screen.findByRole("button", { name: "Abrir o navegador de Casa dos Assados" }));
     fireEvent.click(await screen.findByRole("tab", { name: "Instagram" }));
-    expect(api.chamar.mock.calls.some((call) => (call[1] as { acao?: string; acao_do_navegador?: string; aba?: number }).acao_do_navegador === "ativar_aba"
-      && (call[1] as { aba?: number }).aba === 1)).toBe(true);
+    await waitFor(() => expect(api.chamar.mock.calls.some((call) => (call[1] as { acao?: string; acao_do_navegador?: string; aba?: number }).acao_do_navegador === "ativar_aba"
+      && (call[1] as { aba?: number }).aba === 1)).toBe(true));
     fireEvent.click(await screen.findByRole("button", { name: "Nova aba" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Endereço da nova aba" }), { target: { value: "https://business.facebook.com" } });
     fireEvent.click(screen.getByRole("button", { name: "Abrir" }));
-    expect(api.chamar.mock.calls.some((call) => (call[1] as { acao?: string; acao_do_navegador?: string; url?: string }).acao_do_navegador === "nova_aba"
-      && (call[1] as { url?: string }).url === "https://business.facebook.com")).toBe(true);
+    await waitFor(() => expect(api.chamar.mock.calls.some((call) => (call[1] as { acao?: string; acao_do_navegador?: string; url?: string }).acao_do_navegador === "nova_aba"
+      && (call[1] as { url?: string }).url === "https://business.facebook.com")).toBe(true));
   });
 
 });
