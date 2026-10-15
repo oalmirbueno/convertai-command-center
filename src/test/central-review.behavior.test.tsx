@@ -107,6 +107,7 @@ describe("Revisão compartilhada", () => {
   });
   it("um rascunho incompleto pode ser editado mas não preparado", () => {
     mock.rows = []; mount("/central", { reports: [{ ...report, next_steps: "" }] });
+    fireEvent.click(screen.getByRole("button", { name: /Ritual de segunda/ }));
     expect(screen.getByRole("button", { name: "Preparar pedido desta versão" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Editar rascunho atual" })).toBeEnabled();
   });

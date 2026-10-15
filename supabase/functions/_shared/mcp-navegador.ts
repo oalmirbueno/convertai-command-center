@@ -67,7 +67,7 @@ export const browserSessionTool: ToolDefinition = {
       const s = data as { id: string; sessao_externa: string; comandada_por: string | null; trava_ate: string | null; ultima_url: string | null; ultima_atividade: string | null };
       const viva = await prov.verSessao(s.sessao_externa).catch(() => null);
       const comandando = s.trava_ate && new Date(s.trava_ate).getTime() > Date.now() ? s.comandada_por : null;
-      return { aberta: !!viva?.rodando, sessao_id: s.id, comandada_por: comandando, ultima_url: s.ultima_url, ultima_atividade: s.ultima_atividade, abas: (viva?.paginas ?? []).map((x, i) => ({ indice: i, titulo: x.titulo, url: x.url })) };
+      return { aberta: !!viva?.rodando, sessao_id: s.id, comandada_por: comandando, ultima_url: s.ultima_url, ultima_atividade: s.ultima_atividade, abas: (viva?.paginas ?? []).map((x, i) => ({ id: x.id, indice: i, titulo: x.titulo, url: x.url })) };
     }
     if (acao === 'encerrar') {
       const { data } = await db().from('navegador_sessoes').select('id, sessao_externa').eq('client_id', client_id).eq('estado', 'aberta');
@@ -80,7 +80,7 @@ export const browserSessionTool: ToolDefinition = {
     const { sessao, nova } = await sessaoDoCliente(db() as never, prov, { clientId: client_id, origem: 'hermes', pedido: pedido ?? null });
     if (nova) await tocar(prov, sessao.sessao_externa);
     const viva = await prov.verSessao(sessao.sessao_externa).catch(() => null);
-    return { sessao_id: sessao.id, nova, rodando: !!viva?.rodando, abas: (viva?.paginas ?? []).map((x, i) => ({ indice: i, titulo: x.titulo, url: x.url })), ao_vivo_na_central: 'Execução > Central > Ferramentas > Navegador > Remoto do cliente' };
+    return { sessao_id: sessao.id, nova, rodando: !!viva?.rodando, abas: (viva?.paginas ?? []).map((x, i) => ({ id: x.id, indice: i, titulo: x.titulo, url: x.url })), ao_vivo_na_central: 'Execução > Central > Ferramentas > Navegador > Remoto do cliente' };
   },
 };
 
@@ -96,7 +96,7 @@ export const browserActTool: ToolDefinition = {
     type: 'object',
     properties: {
       client_id: { type: 'string', description: 'UUID do cliente.' },
-      acao: { type: 'string', enum: [...ACOES_DO_NAVEGADOR], description: 'A ação.' },
+      acao: { type: 'string', enum: [...ACOES_DO_NAVEGADOR], description: 'A ação. ativar_aba exige sessao_id e aba_id.' },
       url: { type: 'string', description: 'Para navegar ou nova_aba (http ou https).' },
       termos: { type: 'string', description: 'Para pesquisar.' },
       texto: { type: 'string', description: 'Para clicar: o texto visível do botão ou link.' },
@@ -104,6 +104,8 @@ export const browserActTool: ToolDefinition = {
       campo: { type: 'string', description: 'Para digitar: rótulo, placeholder ou nome do campo.' },
       valor: { type: 'string', description: 'Para digitar: o texto.' },
       aba: { type: 'number', description: 'Índice da aba (0 = primeira).' },
+      sessao_id: { type: 'string', description: 'UUID da sessão esperada; quando informado, não abre uma sessão substituta.' },
+      aba_id: { type: 'string', description: 'ID estável da aba retornado pela sessão. Obrigatório junto de sessao_id para ativar_aba.' },
       pedido: { type: 'string', description: 'Para que serve esta ação (fica no registro).' },
       aprovacao_id: { type: 'string', description: 'UUID da aprovação aprovada, para clique sensível.' },
     },
@@ -116,6 +118,7 @@ export const browserActTool: ToolDefinition = {
       client_id: UUID, acao: z.enum(ACOES_DO_NAVEGADOR), url: z.string().max(2000).optional(), termos: z.string().max(300).optional(),
       texto: z.string().max(160).optional(), seletor: z.string().max(300).optional(), campo: z.string().max(120).optional(), valor: z.string().max(2000).optional(),
       aba: z.number().int().min(0).max(30).optional(), pedido: z.string().max(500).optional(), aprovacao_id: UUID.optional(),
+      sessao_id: UUID.optional(), aba_id: z.string().trim().min(1).max(256).optional(),
     }).strict().safeParse(input ?? {});
     if (!p.success) throw erroDeEntrada(p.error);
     const d = p.data;
@@ -123,6 +126,7 @@ export const browserActTool: ToolDefinition = {
       const r = await usarNavegador(db() as never, provedorOuErro(), {
         clientId: d.client_id, agente: 'hermes', acao: d.acao, url: d.url ?? null, termos: d.termos ?? null, texto: d.texto ?? null, seletor: d.seletor ?? null,
         campo: d.campo ?? null, valor: d.valor ?? null, aba: d.aba ?? null, pedido: d.pedido ?? null, aprovacaoId: d.aprovacao_id ?? null,
+        sessaoId: d.sessao_id ?? null, abaId: d.aba_id ?? null,
       });
       return { ...r, texto: r.texto ? r.texto.slice(0, 8000) : null };
     } catch (e) {

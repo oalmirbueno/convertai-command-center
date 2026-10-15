@@ -1,7 +1,7 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Globe, KeyRound, Loader2, Plus, Power, RefreshCw } from "lucide-react";
+import { Globe, KeyRound, Loader2, Maximize2, Minimize2, Plus, Power, RefreshCw } from "lucide-react";
 import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
 import { AjudaRecolhida, useEstadoDaTela, Carregando, botao, juntar } from "@/components/sistema";
 import { SeletorDeCliente, nomeDoCliente, type ClienteDoAgente } from "@/components/admin/agente/SeletoresDoAgente";
@@ -16,7 +16,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
  * Sem a conta do provedor ligada, a tela diz isso e não finge sessão.
  */
 
-type SessaoViva = { id: string; rodando: boolean; ao_vivo?: string | null; comandada_por?: string | null; paginas?: Array<{ titulo: string; url: string; ao_vivo?: string | null }> };
+type Pagina = { id?: string; titulo: string; url: string; ao_vivo?: string | null };
+type SessaoViva = { id: string; rodando: boolean; ao_vivo?: string | null; comandada_por?: string | null; paginas?: Pagina[] };
+type ResultadoDaAcao = { resultado: { sessao_id: string; aba_id?: string } };
 type AcaoRegistrada = { id: string; agente: string; acao: string; alvo: string | null; ok: boolean; url: string | null; titulo: string | null; erro: string | null; evidencia_url: string | null; criado_em: string };
 type Conta = { projetos: Array<{ simultaneas: number; minutos_usados: number | null }>; abertas_agora: number };
 const QUEM: Record<string, string> = { hermes: "Hermes", gestor: "Gestor", equipe: "equipe" };
@@ -69,22 +71,59 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
     </div>
   ) : null;
   const [sessaoId, setSessaoId] = useEstadoDaTela<string>(`execucao:central:navegador:${cliente?.id || "sem"}`, "");
-  const [aba, setAba] = useState(0);
-  const [abaUrl, setAbaUrl] = useState<string | null>(null);
+  const [abaId, setAbaId] = useEstadoDaTela<string>(`execucao:central:navegador:aba:${cliente?.id || "sem"}:${sessaoId}`, "");
   const [novaAbaAberta, setNovaAbaAberta] = useState(false);
   const [enderecoNovaAba, setEnderecoNovaAba] = useState("");
   const [telaFixada, setTelaFixada] = useState<{ chave: string; url: string } | null>(null);
+  const [ampliado, setAmpliado] = useState(false);
+  const raiz = useRef<HTMLDivElement>(null);
+  const quadroAtual = useRef("");
+  const contextoAtual = useRef({ clienteId: cliente?.id, sessaoId });
+  contextoAtual.current = { clienteId: cliente?.id, sessaoId };
+  useEffect(() => {
+    if (!ampliado) return;
+    const anterior = document.activeElement as HTMLElement | null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const inertes: Array<{ el: HTMLElement; antes: boolean }> = [];
+    for (let no: HTMLElement | null = raiz.current; no?.parentElement; no = no.parentElement) {
+      for (const irmao of no.parentElement.children) {
+        if (irmao !== no && irmao instanceof HTMLElement) {
+          inertes.push({ el: irmao, antes: irmao.inert });
+          irmao.inert = true;
+        }
+      }
+    }
+    raiz.current?.focus();
+    const manterFoco = (e: FocusEvent) => {
+      // O Cofre usa seu próprio Dialog em portal; ele assume o foco enquanto aberto.
+      if (!raiz.current?.contains(e.target as Node) && !document.querySelector('[role="dialog"][data-state="open"]')) raiz.current?.focus();
+    };
+    document.addEventListener("focusin", manterFoco);
+    return () => {
+      document.removeEventListener("focusin", manterFoco);
+      document.body.style.overflow = overflow;
+      for (const { el, antes } of inertes) el.inert = antes;
+      anterior?.focus();
+    };
+  }, [ampliado, cliente?.id]);
   const estado = useQuery({
     queryKey: ["navegador-remoto", "estado"],
     queryFn: () => chamarFuncao<{ configurado: boolean }>("navegador-remoto", { acao: "estado" }),
     staleTime: 5 * 60_000,
   });
   const sessao = useQuery({
-    queryKey: ["navegador-remoto", "sessao", sessaoId],
+    queryKey: ["navegador-remoto", "sessao", cliente?.id, sessaoId],
     enabled: !!sessaoId && !!estado.data?.configurado,
     refetchInterval: 15_000,
     queryFn: async () => (await chamarFuncao<{ sessao: SessaoViva }>("navegador-remoto", { acao: "ver", sessao_id: sessaoId })).sessao,
   });
+  useEffect(() => {
+    setAmpliado(false);
+    setNovaAbaAberta(false);
+    setEnderecoNovaAba("");
+  }, [cliente?.id]);
+  useEffect(() => { if (!sessao.data?.rodando) setAmpliado(false); }, [sessao.data?.rodando]);
   // O que Hermes, Gestor e a equipe fizeram neste navegador (com a captura de tela de cada ação).
   const acoes = useQuery({
     queryKey: ["navegador-remoto", "acoes", cliente?.id || ""],
@@ -103,9 +142,11 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
   // (polling a cada 15s). A URL do iframe deve permanecer fixada enquanto
   // estivermos na mesma sessão/aba, senão o navegador parece reiniciar.
   const paginas = sessao.data?.rodando ? sessao.data.paginas || [] : [];
-  const indiceDaUrl = abaUrl ? paginas.findIndex((p) => p.url === abaUrl) : -1;
-  const abaValida = indiceDaUrl >= 0 ? indiceDaUrl : (aba < paginas.length ? aba : 0);
-  const chaveDoQuadro = `${cliente?.id || "sem"}:${sessaoId}:${abaValida}`;
+  const indiceDoId = paginas.findIndex((p) => p.id === abaId);
+  const abaValida = indiceDoId >= 0 ? indiceDoId : 0;
+  const paginaSelecionada = paginas[abaValida];
+  const chaveDoQuadro = `${cliente?.id || "sem"}:${sessaoId}:${paginaSelecionada?.id || "sessao"}`;
+  quadroAtual.current = chaveDoQuadro;
   const candidatoAoVivo = paginas[abaValida]?.ao_vivo || sessao.data?.ao_vivo || null;
   useEffect(() => {
     if (!sessao.data?.rodando || !candidatoAoVivo) return;
@@ -114,22 +155,24 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
   const telaAoVivo = telaFixada?.chave === chaveDoQuadro ? telaFixada.url : null;
 
   const ativarAba = useMutation({
-    mutationFn: (indice: number) => chamarFuncao("navegador-remoto", { acao: "agir", cliente_id: cliente!.id, acao_do_navegador: "ativar_aba", aba: indice, url: paginas[indice]?.url, pedido: "Selecionar aba existente no navegador remoto" }),
-    onSuccess: (_r, indice) => { setAba(indice); setAbaUrl(paginas[indice]?.url || null); void sessao.refetch(); },
+    mutationFn: (alvo: { clienteId: string; sessaoId: string; abaId: string }) => chamarFuncao<ResultadoDaAcao>("navegador-remoto", { acao: "agir", cliente_id: alvo.clienteId, sessao_id: alvo.sessaoId, acao_do_navegador: "ativar_aba", aba_id: alvo.abaId, pedido: "Selecionar aba existente no navegador remoto" }),
+    onSuccess: (r, alvo) => {
+      if (contextoAtual.current.clienteId !== alvo.clienteId || contextoAtual.current.sessaoId !== alvo.sessaoId) return;
+      if (r.resultado.sessao_id !== alvo.sessaoId) { toast.error("A sessão mudou. Reabra o navegador do cliente."); return; }
+      setAbaId(alvo.abaId);
+      void sessao.refetch();
+    },
     onError: (e) => toast.error(textoDoErro(e)),
   });
   const criarAba = useMutation({
-    mutationFn: (url: string) => chamarFuncao("navegador-remoto", { acao: "agir", cliente_id: cliente!.id, acao_do_navegador: "nova_aba", url, pedido: "Abrir outra aba no mesmo perfil persistente do cliente" }),
-    onSuccess: async () => {
+    mutationFn: (alvo: { clienteId: string; sessaoId: string; url: string }) => chamarFuncao<ResultadoDaAcao>("navegador-remoto", { acao: "agir", cliente_id: alvo.clienteId, sessao_id: alvo.sessaoId, acao_do_navegador: "nova_aba", url: alvo.url, pedido: "Abrir outra aba no mesmo perfil persistente do cliente" }),
+    onSuccess: (r, alvo) => {
+      if (contextoAtual.current.clienteId !== alvo.clienteId || contextoAtual.current.sessaoId !== alvo.sessaoId) return;
+      if (r.resultado.sessao_id !== alvo.sessaoId) { toast.error("A sessão mudou. Reabra o navegador do cliente."); return; }
       setNovaAbaAberta(false);
-      const urlCriada = enderecoNovaAba.trim();
       setEnderecoNovaAba("");
-      const { data } = await sessao.refetch();
-      if (data?.paginas?.length) {
-        const indice = data.paginas.findIndex((p) => p.url === urlCriada || p.url.replace(/\/$/, "") === urlCriada.replace(/\/$/, ""));
-        setAba(indice >= 0 ? indice : data.paginas.length - 1);
-        setAbaUrl(data.paginas[indice >= 0 ? indice : data.paginas.length - 1]?.url || null);
-      }
+      if (r.resultado.aba_id) setAbaId(r.resultado.aba_id);
+      void sessao.refetch();
     },
     onError: (e) => toast.error(textoDoErro(e)),
   });
@@ -150,13 +193,21 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
     </details>
   ) : null;
   const abrir = useMutation({
-    mutationFn: () => chamarFuncao<{ sessao: SessaoViva; reaproveitada: boolean }>("navegador-remoto", { acao: "abrir", cliente_id: cliente!.id, origem: "central" }),
-    onSuccess: (r) => { setSessaoId(r.sessao.id); qc.setQueryData(["navegador-remoto", "sessao", r.sessao.id], r.sessao); },
+    mutationFn: (clienteId: string) => chamarFuncao<{ sessao: SessaoViva; reaproveitada: boolean }>("navegador-remoto", { acao: "abrir", cliente_id: clienteId, origem: "central" }),
+    onSuccess: (r, clienteId) => {
+      if (contextoAtual.current.clienteId !== clienteId) return;
+      qc.setQueryData(["navegador-remoto", "sessao", clienteId, r.sessao.id], r.sessao);
+      setSessaoId(r.sessao.id);
+    },
     onError: (e) => toast.error(textoDoErro(e)),
   });
   const encerrar = useMutation({
-    mutationFn: () => chamarFuncao("navegador-remoto", { acao: "encerrar", sessao_id: sessaoId }),
-    onSuccess: () => { setSessaoId(""); toast.success("Navegador fechado. O login do cliente fica guardado para a próxima vez."); },
+    mutationFn: (alvo: { clienteId: string; sessaoId: string }) => chamarFuncao("navegador-remoto", { acao: "encerrar", sessao_id: alvo.sessaoId }),
+    onSuccess: (_r, alvo) => {
+      if (contextoAtual.current.clienteId !== alvo.clienteId || contextoAtual.current.sessaoId !== alvo.sessaoId) return;
+      setSessaoId(""); setAmpliado(false);
+      toast.success("Navegador fechado. O login do cliente fica guardado para a próxima vez.");
+    },
     onError: (e) => toast.error(textoDoErro(e)),
   });
 
@@ -179,9 +230,9 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
       <div className="flex flex-col">
       {seletor}
       <div className="flex flex-col items-start gap-2 p-3 text-[13px]">
-        {podeGerirCofre && <CofreRapido cliente={cliente} />}
+        {podeGerirCofre && <CofreRapido key={cliente.id} cliente={cliente} />}
         {sessaoId && sessao.data && !sessao.data.rodando && <p className="text-muted-foreground">A sessão anterior terminou. O login continua guardado.</p>}
-        <button type="button" disabled={abrir.isPending} onClick={() => abrir.mutate()} className={juntar(botao.primario, "h-9 px-4 text-[13px]")}>
+        <button type="button" disabled={abrir.isPending} onClick={() => abrir.mutate(cliente.id)} className={juntar(botao.primario, "h-9 px-4 text-[13px]")}>
           {abrir.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Globe className="mr-1.5 h-4 w-4" />}Abrir o navegador de {cliente.nome}
         </button>
       </div>
@@ -190,25 +241,48 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
     );
   }
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div
+      ref={raiz}
+      className={juntar("flex min-h-0 flex-col bg-background", ampliado ? "fixed inset-2 z-40 rounded-lg border border-border shadow-2xl sm:inset-4" : "h-full")}
+      role={ampliado ? "dialog" : undefined}
+      aria-modal={ampliado || undefined}
+      aria-label={ampliado ? `Navegador de ${cliente.nome} ampliado` : undefined}
+      tabIndex={ampliado ? -1 : undefined}
+      onKeyDown={(e) => {
+        if (!ampliado || e.defaultPrevented || !raiz.current?.contains(e.target as Node)) return;
+        if (e.key === "Escape") { e.preventDefault(); setAmpliado(false); }
+        if (e.key === "Tab") {
+          const itens = [...raiz.current.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), a[href], iframe, [tabindex="0"]')];
+          const primeiro = itens[0], ultimo = itens[itens.length - 1];
+          if (e.shiftKey && (document.activeElement === primeiro || document.activeElement === raiz.current)) { e.preventDefault(); ultimo?.focus(); }
+          else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primeiro?.focus(); }
+        }
+      }}
+    >
       {seletor}
       <div className="flex shrink-0 items-center gap-1 px-2 py-1.5 text-[12px] text-muted-foreground">
         <span className="h-2 w-2 shrink-0 rounded-full bg-success" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate">{paginaAtual?.titulo || paginaAtual?.url || "Navegador ao vivo"} · {cliente.nome}{viva.comandada_por ? ` · comandado por ${QUEM[viva.comandada_por] || viva.comandada_por}` : ""}</span>
-        {podeGerirCofre && <CofreRapido cliente={cliente} />}
-        <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => void sessao.refetch().then((r) => { const url = r.data?.paginas?.[abaValida]?.ao_vivo || r.data?.ao_vivo; if (url) setTelaFixada({ chave: chaveDoQuadro, url }); })} aria-label="Atualizar visualização" title="Atualizar visualização"><RefreshCw className="h-3.5 w-3.5" /></button>
-        <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => encerrar.mutate()} aria-label="Fechar o navegador" title="Fechar o navegador"><Power className="h-3.5 w-3.5" /></button>
+        {podeGerirCofre && <CofreRapido key={cliente.id} cliente={cliente} />}
+        <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => setAmpliado((v) => !v)} aria-label={ampliado ? "Reduzir navegador remoto" : "Ampliar navegador remoto"} title={ampliado ? "Reduzir" : "Ampliar"}>{ampliado ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}</button>
+        <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => void sessao.refetch().then((r) => {
+          if (contextoAtual.current.clienteId !== cliente.id || contextoAtual.current.sessaoId !== sessaoId || quadroAtual.current !== chaveDoQuadro) return;
+          const pagina = paginaSelecionada?.id ? r.data?.paginas?.find((p) => p.id === paginaSelecionada.id) : r.data?.paginas?.[0];
+          const url = pagina?.ao_vivo || r.data?.ao_vivo;
+          if (url) setTelaFixada({ chave: chaveDoQuadro, url });
+        })} aria-label="Atualizar visualização" title="Atualizar visualização"><RefreshCw className="h-3.5 w-3.5" /></button>
+        <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => encerrar.mutate({ clienteId: cliente.id, sessaoId })} aria-label="Fechar o navegador" title="Fechar o navegador"><Power className="h-3.5 w-3.5" /></button>
       </div>
       {paginas.length > 0 && (
         <div className="flex shrink-0 gap-1 overflow-x-auto px-2 pb-1.5" role="tablist" aria-label={`Abas do navegador de ${cliente.nome}`}>
           {paginas.map((p, i) => (
             <button
-              key={`${i}-${p.url}`}
+              key={p.id || `legado-${i}`}
               type="button"
               role="tab"
               aria-selected={i === abaValida}
-              onClick={() => ativarAba.mutate(i)}
-              disabled={ativarAba.isPending}
+              onClick={() => p.id && ativarAba.mutate({ clienteId: cliente.id, sessaoId, abaId: p.id })}
+              disabled={!p.id || ativarAba.isPending || criarAba.isPending}
               title={p.url}
               className={juntar("max-w-[11rem] shrink-0 truncate rounded-md px-2 py-1 text-[11px]", i === abaValida ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50")}
             >
@@ -219,7 +293,7 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
         </div>
       )}
       {novaAbaAberta && (
-        <form className="flex shrink-0 gap-2 px-2 pb-2" onSubmit={(e) => { e.preventDefault(); if (enderecoNovaAba.trim()) criarAba.mutate(enderecoNovaAba.trim()); }}>
+        <form className="flex shrink-0 gap-2 px-2 pb-2" onSubmit={(e) => { e.preventDefault(); if (enderecoNovaAba.trim()) criarAba.mutate({ clienteId: cliente.id, sessaoId, url: enderecoNovaAba.trim() }); }}>
           <input type="url" required value={enderecoNovaAba} onChange={(e) => setEnderecoNovaAba(e.target.value)} placeholder="https://..." aria-label="Endereço da nova aba" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs" />
           <button type="submit" disabled={criarAba.isPending} className={juntar(botao.primario, "h-8 shrink-0 px-3 text-xs")}>{criarAba.isPending ? "Abrindo" : "Abrir"}</button>
         </form>

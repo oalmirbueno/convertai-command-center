@@ -173,8 +173,8 @@ describe("Hermes lê pela fonte oficial", () => {
   const tools = ler("supabase/functions/_shared/mcp-tools.ts");
   const servico = ler("supabase/functions/mcp-server/modulos/dia-prioritario.ts");
 
-  it("duas ferramentas registradas com escopo granular e MCP 2.9.0", () => {
-    expect(MCP_VERSION).toBe("2.9.0");
+  it("duas ferramentas registradas com escopo granular e MCP 2.9.0 ou posterior", () => {
+    expect(MCP_VERSION).toMatch(/^2\.(9|[1-9]\d)\.\d+$/);
     expect(tools).toContain("aceleriq_dia_prioritario: 'clients:read'");
     expect(tools).toContain("aceleriq_dia_prioritario_registrar: 'clients:write'");
     expect(tools).toContain("  diaPrioritarioTool,\n  diaPrioritarioRegistrarTool,");

@@ -13,7 +13,7 @@
  *
  * Ações: estado · conta · abrir { cliente_id, origem?, pedido? } · ver { sessao_id } ·
  * listar { cliente_id? } · encerrar { sessao_id } · agir { cliente_id, acao, url?, termos?,
- * texto?, seletor?, campo?, valor?, aba?, pedido?, aprovacao_id? } · acoes { cliente_id, limite? } · zelar
+ * texto?, seletor?, campo?, valor?, aba?, sessao_id?, aba_id?, pedido?, aprovacao_id? } · acoes { cliente_id, limite? } · zelar
  */
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
@@ -79,8 +79,9 @@ async function acao(nome: string, corpo: Record<string, unknown>, userId: string
       await servico().from("navegador_sessoes").update({ estado: "encerrada", encerrada_em: new Date().toISOString(), comandada_por: null, trava_ate: null }).eq("id", s.id);
       return { encerrada: true };
     }
-    const viva = await p.verSessao(s.sessao_externa).catch(() => null);
-    if (!viva || !viva.rodando) {
+    // Uma consulta que falhou não encerra a sessão nem desmonta a tela ao vivo.
+    const viva = await p.verSessao(s.sessao_externa);
+    if (!viva.rodando) {
       if (s.estado === "aberta") await servico().from("navegador_sessoes").update({ estado: "encerrada", encerrada_em: new Date().toISOString(), comandada_por: null, trava_ate: null }).eq("id", s.id);
       return { sessao: { id: s.id, rodando: false } };
     }
@@ -96,8 +97,12 @@ async function acao(nome: string, corpo: Record<string, unknown>, userId: string
     if (!UUID.test(clientId)) throw new ErroHttp(400, "cliente_invalido", "Escolha o cliente do navegador.");
     const a = String(corpo.acao_do_navegador || corpo.navegador_acao || "") as AcaoDoNavegador;
     if (!(ACOES_DO_NAVEGADOR as readonly string[]).includes(a)) throw new ErroHttp(400, "acao_invalida", "Ação do navegador desconhecida.");
+    if (corpo.sessao_id != null && (typeof corpo.sessao_id !== "string" || !UUID.test(corpo.sessao_id))) throw new ErroHttp(400, "sessao_invalida", "Sessão inválida.");
+    if (corpo.aba_id != null && (typeof corpo.aba_id !== "string" || !corpo.aba_id.trim() || corpo.aba_id.length > 256)) throw new ErroHttp(400, "aba_invalida", "Identificador de aba inválido.");
     const r = await usarNavegador(servico(), p, {
       clientId, agente: "equipe", acao: a, userId,
+      sessaoId: corpo.sessao_id != null ? String(corpo.sessao_id) : null,
+      abaId: corpo.aba_id != null ? String(corpo.aba_id) : null,
       url: corpo.url ? String(corpo.url) : null, termos: corpo.termos ? String(corpo.termos) : null,
       texto: corpo.texto ? String(corpo.texto) : null, seletor: corpo.seletor ? String(corpo.seletor) : null,
       campo: corpo.campo ? String(corpo.campo) : null, valor: corpo.valor != null ? String(corpo.valor) : null,

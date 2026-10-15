@@ -55,7 +55,7 @@ beforeEach(() => {
 describe("Entrada da revisão no Ciclo", () => {
   it("abre a fila compartilhada pelo Ciclo sem gerar mensagens", async () => {
     mount("/ciclo"); fireEvent.click(await screen.findByRole("link", { name: "Revisão por cliente" }));
-    expect(await screen.findByRole("heading", { name: "Ciclo · Revisão por cliente" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Revisão" })).toBeInTheDocument();
     expect(screen.getByTestId("location")).toHaveTextContent("/ciclo/revisao");
     expect(screen.getByRole("region", { name: "Fila compartilhada" })).toHaveTextContent("Ritual Cliente A");
     expect(screen.getByRole("region", { name: "Fila compartilhada" })).toHaveTextContent("Ritual Cliente B");
@@ -65,7 +65,7 @@ describe("Entrada da revisão no Ciclo", () => {
     mount("/ciclo"); fireEvent.click(await screen.findByRole("button", { name: /Cliente A/ }));
     const link = await screen.findByRole("link", { name: "Revisar rituais deste cliente" });
     expect(link).toHaveAttribute("href", "/ciclo/revisao?client=a"); fireEvent.click(link);
-    expect(await screen.findByRole("heading", { name: "Ciclo · Revisão por cliente" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Revisão" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Fila compartilhada" })).toHaveTextContent("Ritual Cliente A");
     expect(screen.getByRole("region", { name: "Fila compartilhada" })).not.toHaveTextContent("Ritual Cliente B");
     fireEvent.click(screen.getByRole("link", { name: "Ver todos os clientes" }));
@@ -80,6 +80,6 @@ describe("Entrada da revisão no Ciclo", () => {
     state.role = "manager"; mount("/ciclo/revisao");
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/ciclo$/));
     expect(screen.queryByRole("link", { name: "Revisão por cliente" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Ciclo · Revisão por cliente" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Revisão" })).not.toBeInTheDocument();
   });
 });

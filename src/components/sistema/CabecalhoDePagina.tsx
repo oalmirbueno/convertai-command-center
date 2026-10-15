@@ -18,6 +18,7 @@ export default function CabecalhoDePagina({
   ajuda,
   voltar,
   nivel = 1,
+  aoLado,
   className = "",
 }: {
   titulo: ReactNode;
@@ -30,13 +31,15 @@ export default function CabecalhoDePagina({
   voltar?: { para: string; rotulo: string };
   /** h1 na página; h2 quando a página já tem h1 (dentro de uma mesa). */
   nivel?: 1 | 2;
+  /** Na mesma linha do título, depois do "?" (ex.: abas em ícone). Encolhe e rola antes do título. */
+  aoLado?: ReactNode;
   className?: string;
 }) {
   const Titulo = nivel === 2 ? "h2" : "h1";
   avisarSeForExplicacao("CabecalhoDePagina", descricao);
   return (
-    <div className={juntar("flex min-w-0 items-end justify-between", className)}>
-      <div className={juntar("mb-1 min-w-[120px] flex-auto", acoes && "mr-4")}>
+    <div className={juntar("flex min-w-0 justify-between", aoLado && !descricao ? "items-center" : "items-end", className)}>
+      <div className={juntar("min-w-[120px] flex-auto", aoLado && !descricao ? "" : "mb-1", acoes && "mr-4")}>
         {voltar && (
           <Link to={voltar.para} className={juntar("mb-1 inline-flex items-center rounded text-[12px] text-muted-foreground hover:text-foreground", foco)}>
             <ArrowLeft className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
@@ -44,8 +47,9 @@ export default function CabecalhoDePagina({
           </Link>
         )}
         <div className="flex min-w-0 items-center">
-          <Titulo className={juntar(texto.tituloPagina, "min-w-0 truncate")}>{titulo}</Titulo>
+          <Titulo className={juntar(texto.tituloPagina, "min-w-0 truncate", aoLado && "shrink-0")}>{titulo}</Titulo>
           {ajuda && <AjudaRecolhida className="ml-2">{ajuda}</AjudaRecolhida>}
+          {aoLado && <div className="ml-4 flex min-w-0 flex-1 items-center">{aoLado}</div>}
         </div>
         {descricao && <p className={juntar(texto.auxiliar, "mt-1 truncate")}>{descricao}</p>}
       </div>

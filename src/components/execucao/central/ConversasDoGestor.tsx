@@ -63,8 +63,8 @@ export function NovaConversa({ aoCriar, compacto = false }: { aoCriar: (c: Conve
   });
   if (!aberto) {
     return (
-      <button type="button" onClick={() => setAberto(true)} className={juntar(botao.primario, compacto ? "h-8 px-3 text-[12px]" : "h-9 w-full")}>
-        <Plus className="mr-1.5 h-3.5 w-3.5" />Nova conversa
+      <button type="button" onClick={() => setAberto(true)} className={compacto ? juntar(botao.primario, "h-8 px-3 text-[12px]") : juntar(botao.discreto, "h-8 w-full justify-start px-2.5 text-[13px] text-foreground")}>
+        <Plus className={juntar("mr-1.5 h-4 w-4", !compacto && "text-primary")} />Nova conversa
       </button>
     );
   }
@@ -122,9 +122,9 @@ export default function ConversasDoGestor({ ativa, aoEscolher }: { ativa: string
       <NovaConversa aoCriar={(c) => aoEscolher(c)} />
       <label className="relative block">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar no histórico" aria-label="Buscar nas conversas" className={juntar(campo, "h-8 pl-8 text-[12px]")} />
+        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar no histórico" aria-label="Buscar nas conversas" className={juntar(campo, "h-8 border-transparent bg-muted/50 pl-8 text-[12px] focus:border-border")} />
       </label>
-      <select value={filtro} onChange={(e) => setFiltro(e.target.value)} aria-label="Filtrar conversas" className={juntar(campo, "h-8 text-[12px]")}>
+      <select value={filtro} onChange={(e) => setFiltro(e.target.value)} aria-label="Filtrar conversas" className={juntar(campo, "h-8 border-transparent bg-transparent px-2 text-[12px] text-muted-foreground hover:text-foreground focus:border-border")}>
         <option value="todas">Todas as conversas</option>
         <option value="geral">Visão geral da Aceleriq</option>
         {clientes.map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}

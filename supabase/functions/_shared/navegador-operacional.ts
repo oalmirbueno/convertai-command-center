@@ -193,13 +193,19 @@ type LinhaDaSessao = { id: string; client_id: string; contexto_id: string; sessa
 
 /** O navegador do cliente: reaproveita a sessão viva; senão abre uma nova no perfil dele. */
 export async function sessaoDoCliente(
-  db: SupabaseClient, p: Provedor, o: { clientId: string; origem: "central" | "gestor" | "hermes"; pedido?: string | null; userId?: string | null },
+  db: SupabaseClient, p: Provedor, o: { clientId: string; origem: "central" | "gestor" | "hermes"; pedido?: string | null; userId?: string | null; sessaoId?: string | null },
 ): Promise<{ sessao: LinhaDaSessao; nova: boolean }> {
   const { data: aberta } = await db.from("navegador_sessoes").select("id, client_id, contexto_id, sessao_externa, estado, comandada_por, trava_ate").eq("client_id", o.clientId).eq("estado", "aberta").order("aberta_em", { ascending: false }).limit(1).maybeSingle();
+  // A tela com uma sessão aberta nunca age numa sessão substituta nem abre outra em silêncio.
+  if (o.sessaoId != null && (!aberta || (aberta as LinhaDaSessao).id !== o.sessaoId)) {
+    throw new ErroDoNavegador("sessao_mudou", "A sessão do navegador mudou ou terminou. Atualize a visualização antes de continuar.", 409);
+  }
   if (aberta) {
-    const viva = await p.verSessao((aberta as LinhaDaSessao).sessao_externa).catch(() => null);
-    if (viva && viva.rodando) return { sessao: aberta as LinhaDaSessao, nova: false };
+    // Erro de rede não comprova encerramento: não apague a sessão por um timeout.
+    const viva = await p.verSessao((aberta as LinhaDaSessao).sessao_externa);
+    if (viva.rodando) return { sessao: aberta as LinhaDaSessao, nova: false };
     await db.from("navegador_sessoes").update({ estado: "encerrada", encerrada_em: new Date().toISOString(), comandada_por: null, trava_ate: null }).eq("id", (aberta as LinhaDaSessao).id);
+    if (o.sessaoId != null) throw new ErroDoNavegador("sessao_encerrada", "A sessão do navegador terminou. Abra o navegador novamente para continuar.", 409);
   }
   const { data: cli } = await db.from("profiles").select("id").eq("id", o.clientId).maybeSingle();
   if (!cli) throw new ErroDoNavegador("cliente_invalido", "Esse cliente não existe no cadastro.");
@@ -260,6 +266,9 @@ export type PedidoAoNavegador = {
   campo?: string | null;
   valor?: string | null;
   aba?: number | null;
+  /** Contrato novo: fixa a sessão e o target exibidos pela tela, sem criar substitutos. */
+  sessaoId?: string | null;
+  abaId?: string | null;
   pedido?: string | null;
   aprovacaoId?: string | null;
   userId?: string | null;
@@ -269,12 +278,13 @@ export type ResultadoDoNavegador = {
   ok: boolean;
   acao: AcaoDoNavegador;
   sessao_id: string;
+  aba_id: string;
   url: string | null;
   titulo: string | null;
   texto: string | null;
   links?: Array<{ texto: string; href: string }>;
   resultados?: Array<{ titulo: string; link: string; trecho: string }>;
-  abas?: Array<{ indice: number; titulo: string; url: string }>;
+  abas?: Array<{ id: string; indice: number; titulo: string; url: string }>;
   evidencia: string | null;
   acao_id: string | null;
   aviso?: string;
@@ -287,8 +297,14 @@ export type ResultadoDoNavegador = {
  */
 export async function usarNavegador(db: SupabaseClient, p: Provedor, pedido: PedidoAoNavegador): Promise<ResultadoDoNavegador> {
   if (!(ACOES_DO_NAVEGADOR as readonly string[]).includes(pedido.acao)) throw new ErroDoNavegador("acao_invalida", "Ação do navegador desconhecida.");
+  if (pedido.acao === "ativar_aba" && (!pedido.sessaoId || !pedido.abaId)) {
+    throw new ErroDoNavegador("aba_invalida", "Para selecionar uma aba, informe a sessão e o identificador da aba exibida.");
+  }
+  if (pedido.abaId != null && !pedido.sessaoId) {
+    throw new ErroDoNavegador("sessao_invalida", "Informe a sessão à qual essa aba pertence.");
+  }
   const origem = pedido.agente === "equipe" ? "central" : pedido.agente;
-  const { sessao } = await sessaoDoCliente(db, p, { clientId: pedido.clientId, origem, pedido: pedido.pedido, userId: pedido.userId });
+  const { sessao } = await sessaoDoCliente(db, p, { clientId: pedido.clientId, origem, pedido: pedido.pedido, userId: pedido.userId, sessaoId: pedido.sessaoId });
   await travar(db, sessao.id, pedido.agente);
   const inicio = Date.now();
   let c: Cdp | null = null;
@@ -303,6 +319,9 @@ export async function usarNavegador(db: SupabaseClient, p: Provedor, pedido: Ped
       const r = await c.enviar("Target.createTarget", { url });
       lista = await abas(c);
       alvo = lista.find((a) => a.id === String(r.targetId)) || null;
+    } else if (pedido.abaId != null) {
+      alvo = lista.find((a) => a.id === pedido.abaId) || null;
+      if (!alvo) throw new ErroDoNavegador("aba_inexistente", "Essa aba foi fechada ou mudou. Atualize a visualização e selecione uma aba aberta.", 409);
     } else {
       const i = typeof pedido.aba === "number" && pedido.aba >= 0 ? pedido.aba : 0;
       alvo = lista[i] || lista[0] || null;
@@ -315,12 +334,12 @@ export async function usarNavegador(db: SupabaseClient, p: Provedor, pedido: Ped
     if (!alvo) throw new ErroDoNavegador("sem_aba", "O navegador não tem aba aberta.");
     if (pedido.acao === "ativar_aba") {
       await c.enviar("Target.activateTarget", { targetId: alvo.id });
-      const res: ResultadoDoNavegador = { ok: true, acao: "ativar_aba", sessao_id: sessao.id, url: alvo.url, titulo: alvo.titulo, texto: null, abas: lista.map((a, i) => ({ indice: i, titulo: a.titulo, url: a.url })), evidencia: null, acao_id: null };
+      const res: ResultadoDoNavegador = { ok: true, acao: "ativar_aba", sessao_id: sessao.id, aba_id: alvo.id, url: alvo.url, titulo: alvo.titulo, texto: null, abas: lista.map((a, i) => ({ id: a.id, indice: i, titulo: a.titulo, url: a.url })), evidencia: null, acao_id: null };
       res.acao_id = await registrar(db, { ...reg, ok: true, alvo: alvo.url, url: alvo.url, titulo: alvo.titulo, resultado: "Aba ativada no navegador existente", duracao_ms: Date.now() - inicio });
       return res;
     }
     if (pedido.acao === "abas") {
-      const res: ResultadoDoNavegador = { ok: true, acao: "abas", sessao_id: sessao.id, url: alvo.url, titulo: alvo.titulo, texto: null, abas: lista.map((a, i) => ({ indice: i, titulo: a.titulo, url: a.url })), evidencia: null, acao_id: null };
+      const res: ResultadoDoNavegador = { ok: true, acao: "abas", sessao_id: sessao.id, aba_id: alvo.id, url: alvo.url, titulo: alvo.titulo, texto: null, abas: lista.map((a, i) => ({ id: a.id, indice: i, titulo: a.titulo, url: a.url })), evidencia: null, acao_id: null };
       res.acao_id = await registrar(db, { ...reg, ok: true, url: alvo.url, titulo: alvo.titulo, resultado: lista.map((a, i) => `${i}: ${a.titulo || a.url}`).join("\n").slice(0, 2000), duracao_ms: Date.now() - inicio });
       return res;
     }
@@ -375,7 +394,7 @@ export async function usarNavegador(db: SupabaseClient, p: Provedor, pedido: Ped
       ? resultados.map((x, i) => `${i + 1}. ${x.titulo} | ${x.link}\n${x.trecho}`).join("\n").slice(0, 4000)
       : (pagina.texto || "").slice(0, 4000);
     const res: ResultadoDoNavegador = {
-      ok: true, acao: pedido.acao, sessao_id: sessao.id, url: pagina.url, titulo: pagina.titulo, texto: pagina.texto,
+      ok: true, acao: pedido.acao, sessao_id: sessao.id, aba_id: alvo.id, url: pagina.url, titulo: pagina.titulo, texto: pagina.texto,
       links: pagina.links, resultados, evidencia, acao_id: null, aviso,
     };
     res.acao_id = await registrar(db, { ...reg, ok: true, url: pagina.url, titulo: pagina.titulo, resultado: resumo, evidencia_caminho: evidencia, duracao_ms: Date.now() - inicio });

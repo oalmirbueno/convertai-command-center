@@ -1,5 +1,6 @@
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { Check } from "lucide-react";
+import AjudaRecolhida from "./AjudaRecolhida";
 import { foco, juntar } from "./estilos";
 
 /**
@@ -36,6 +37,8 @@ export interface ItemDeEtapa {
    * ainda na navegação por setas.
    */
   fechada?: boolean;
+  /** Explicação da etapa: vira o "?" ao lado dela quando aberta (só no modo `soIcone`). */
+  ajuda?: ReactNode;
 }
 
 export default function Etapas({
@@ -46,6 +49,7 @@ export default function Etapas({
   numerar = false,
   className = "",
   depois,
+  soIcone = false,
 }: {
   itens: ItemDeEtapa[];
   /** A etapa aberta; null quando nenhuma (ex.: um painel lateral aberto). */
@@ -58,6 +62,11 @@ export default function Etapas({
   className?: string;
   /** Conteúdo depois das etapas, na mesma linha (ferramentas de apoio). */
   depois?: ReactNode;
+  /**
+   * Só o ícone nas fechadas (o nome fica no title e no leitor de tela); a
+   * aberta se abre com o nome e o "?" da ajuda. Pede `icone` em todos os itens.
+   */
+  soIcone?: boolean;
 }) {
   const trilho = useRef<HTMLDivElement>(null);
 
@@ -90,7 +99,45 @@ export default function Etapas({
   return (
     <nav aria-label={rotulo} className={juntar("min-w-0", className)}>
       <div ref={trilho} onKeyDown={teclas} className="scrollbar-hidden flex min-w-0 items-center overflow-x-auto overscroll-x-contain">
-        {itens.map((item, i) => {
+        {soIcone && itens.map((item) => {
+          const aberta = valor === item.valor;
+          const contador = typeof item.contador === "number" && item.contador > 0 ? item.contador : null;
+          return (
+            <span key={item.valor} className="inline-flex shrink-0 items-center">
+              <button
+                type="button"
+                data-etapa={item.valor}
+                onClick={() => onEscolher(item.valor)}
+                aria-current={aberta ? "page" : undefined}
+                aria-disabled={item.fechada && !aberta ? "true" : undefined}
+                title={aberta ? item.dica : item.dica || item.rotulo}
+                {...(item.dados || {})}
+                className={juntar(
+                  "toque-compacto relative inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-full px-2 text-[13px] font-medium transition-all duration-200",
+                  foco,
+                  aberta ? "bg-muted pr-3 text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                )}
+              >
+                <span className={juntar("inline-flex shrink-0", aberta && "text-primary")} aria-hidden="true">{item.icone}</span>
+                <span
+                  className={juntar(
+                    "overflow-hidden transition-all duration-200",
+                    aberta ? "ml-1.5 max-w-[14rem] opacity-100" : "ml-0 max-w-0 opacity-0",
+                  )}
+                >
+                  {item.rotulo}
+                </span>
+                {contador !== null && (aberta ? (
+                  <span className="ml-1.5 rounded bg-background/70 px-1 text-[10.5px] font-semibold leading-4 tabular-nums text-foreground">{contador}</span>
+                ) : (
+                  <span className="absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-muted px-1 text-center text-[9.5px] font-semibold leading-4 tabular-nums text-foreground"><span className="sr-only">, </span>{contador}</span>
+                ))}
+              </button>
+              {aberta && item.ajuda && <AjudaRecolhida className="ml-0.5" rotulo={`O que é ${item.rotulo}?`}>{item.ajuda}</AjudaRecolhida>}
+            </span>
+          );
+        })}
+        {!soIcone && itens.map((item, i) => {
           const aberta = valor === item.valor;
           return (
             <button

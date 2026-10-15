@@ -8,7 +8,8 @@
 
 export class ErroDoProvedor extends Error { constructor(public codigo: string, m: string) { super(m); } }
 
-export type SessaoViva = { rodando: boolean; ao_vivo: string | null; paginas: Array<{ titulo: string; url: string; ao_vivo: string | null }> };
+// `id` é sempre retornado pelo Browserbase; opcional no tipo para provedores/callers legados.
+export type SessaoViva = { rodando: boolean; ao_vivo: string | null; paginas: Array<{ id?: string; titulo: string; url: string; ao_vivo: string | null }> };
 
 export type Provedor = {
   criarContexto(nome: string): Promise<string>;
@@ -89,7 +90,8 @@ export function provedorBrowserbase(chave: string, projeto: string | null, f: ty
         rodando: true,
         // Com a barra de endereço do próprio navegador: o dono digita o site ali (nada é aberto por inferência).
         ao_vivo: d.debuggerFullscreenUrl ? String(d.debuggerFullscreenUrl) : null,
-        paginas: paginas.map((p) => ({ titulo: String(p.title || ""), url: String(p.url || ""), ao_vivo: p.debuggerFullscreenUrl ? String(p.debuggerFullscreenUrl) : null })),
+        // A identidade do target não depende da URL, da ordem ou do token do Live View.
+        paginas: paginas.map((p) => ({ id: String(p.id || ""), titulo: String(p.title || ""), url: String(p.url || ""), ao_vivo: p.debuggerFullscreenUrl ? String(p.debuggerFullscreenUrl) : null })),
       };
     },
     async encerrar(sessao: string) {

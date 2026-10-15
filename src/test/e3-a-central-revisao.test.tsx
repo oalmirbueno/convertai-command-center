@@ -20,12 +20,12 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const report: ReviewReport = { id: "r1", client_id: "c1", title: "Ritual sintético", summary: "Mensagem", next_steps: "Passo", created_at: "2026-09-22T12:00:00Z", review_version: 1, status: "draft", metrics: { ritual_type: "rota_semana" } };
 
-function montar(memoria: string | null) {
+function montar(memoria: string | null, relatorio: ReviewReport = report) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <MemoryRouter initialEntries={["/ciclo/revisao"]}>
       <QueryClientProvider client={qc}>
-        <CentralReviewQueue reports={[report]} clients={[{ id: "c1", company_name: "Cliente sintético" }]} isAdmin onRefresh={vi.fn()} memoria={memoria} />
+        <CentralReviewQueue reports={[relatorio]} clients={[{ id: "c1", company_name: "Cliente sintético" }]} isAdmin onRefresh={vi.fn()} memoria={memoria} />
       </QueryClientProvider>
     </MemoryRouter>,
   );
@@ -57,10 +57,20 @@ describe("fila de revisão com o sistema de design", () => {
     expect(Object.keys(window.localStorage).filter((k) => k.indexOf("tela:v1:") === 0)).toEqual([]);
   });
 
-  it("título curto, explicação no \"?\" e o pedido do Hermes na linha do título", () => {
+  it("uma linha de controles, sem título repetido; o pedido do Hermes fica no \"...\" (15/10/2026)", () => {
     montar(null);
-    expect(screen.getByRole("heading", { name: "Revisão por cliente e ritual" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "O que é isto?" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Pedido do Hermes|Copiar pedido para o Hermes/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Revisão por cliente e ritual" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mais ações da revisão" })).toBeInTheDocument();
+  });
+
+  it("cada pedido é uma linha fechada que abre ao tocar", () => {
+    const fonte = { dossier_id: "d1", dossier_version: 1, dossier_updated_at: "2026-09-22T12:00:00Z", scope_hash: "a".repeat(64) };
+    montar(null, { ...report, next_steps: "", metrics: { ...report.metrics, central_review_source: fonte } });
+    const linha = screen.getByRole("button", { name: /Ritual sintético/ });
+    expect(linha).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: "Editar rascunho atual" })).not.toBeInTheDocument();
+    fireEvent.click(linha);
+    expect(linha).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Editar rascunho atual" })).toBeInTheDocument();
   });
 });
