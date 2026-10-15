@@ -325,6 +325,8 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   // MCP 2.9 (12/10/2026): Dia Prioritário do cliente.
   aceleriq_dia_prioritario: 'clients:read',
   aceleriq_dia_prioritario_registrar: 'clients:write',
+  // MCP 2.10 (14/10/2026): texto do ritual por automação (gasta modelo; não grava nada).
+  aceleriq_ritual_redigir: 'reports:write',
   // MCP 2.3: cérebro do cliente e ações nas mesas
   aceleriq_cerebro_do_cliente: 'clients:read',
   aceleriq_cerebro_registrar: 'clients:write',
@@ -2221,6 +2223,37 @@ const diaPrioritarioRegistrarTool: ToolDefinition = {
   },
 };
 
+// MCP 2.10 (14/10/2026): texto do ritual por automação, com o mesmo escritor da Central e sem efeito colateral.
+import { RITUAIS_DA_AUTOMACAO, ritualRedigirPorAutomacao as _ritualRedigir } from '../mcp-server/modulos/ritual-automatico.ts';
+
+const ritualRedigirTool: ToolDefinition = {
+  name: 'aceleriq_ritual_redigir',
+  title: 'Ritual: redigir o texto (automação)',
+  description:
+    'Escreve o texto do ritual de relacionamento (rota_semana, meio_semana ou prova_movimento) com o MESMO escritor da Central de experiência: lê o dossiê de contexto (ou os fatos enviados), a continuidade dos rituais anteriores, o estado real do cliente e confere as promessas do último ritual. Devolve título, texto, próximo passo, alertas, tarefas sugeridas e a conferência de repetição, marcados como proposta automática (origem=automacao, confirmado_pelo_dono=false). NÃO grava relatório, NÃO cria nem altera tarefa e NÃO envia nada. Para guardar use aceleriq_create_report_draft; para aprovar e enviar, a Revisão do Ciclo. Gasta modelo pago a cada chamada: chame uma vez por ritual.',
+  scopes: ['reports:write'] as const,
+  annotations: { ...WRITE_ANNOTATIONS, idempotentHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      ritual: { type: 'string', enum: [...RITUAIS_DA_AUTOMACAO] },
+      fatos: { type: 'string', maxLength: 60000, description: 'Fatos para o texto. Padrão: o dossiê de contexto atual do cliente.' },
+    },
+    required: ['client_id', 'ritual'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = z.object({
+      client_id: UUID,
+      ritual: z.enum(RITUAIS_DA_AUTOMACAO),
+      fatos: z.string().max(60000).optional(),
+    }).strict().safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    return await _ritualRedigir(parsed.data as Parameters<typeof _ritualRedigir>[0], ctx);
+  },
+};
+
 const mesaFotoContextoTool: ToolDefinition = {
   name: 'aceleriq_mesa_foto_contexto',
   title: 'Mesa Foto: kits, ensaios e fotos aprovadas',
@@ -3520,7 +3553,7 @@ const MAPA_DO_PAINEL = [
   { area: 'Ciclo legado', rota: '/ciclo-antigo', para: 'Checklist historico de seis etapas; preservado para consulta.', pelo_mcp: 'aceleriq_get_weekly_cycle' },
   { area: 'Execucao da equipe', rota: '/execucao', para: 'Quadro dos operadores, hierarquia, runs e trilha.', pelo_mcp: 'aceleriq_operator_queue, aceleriq_operator_report, aceleriq_operator_board, aceleriq_operator_diary, aceleriq_operator_request_approval, aceleriq_operator_propose_assignee' },
   { area: 'Central de experiencia', rota: '/central', para: 'Saude do cliente, rituais de relacionamento e o Dia Prioritario de cada cliente (clientes do dia, semana, pendencias e registros).', pelo_mcp: 'aceleriq_get_client_context, aceleriq_dia_prioritario (leitura), aceleriq_dia_prioritario_registrar (acao)' },
-  { area: 'Revisao do Ciclo', rota: '/ciclo/revisao', para: 'Area de trabalho do Hermes: rascunhos de ritual viram pedido, o dono decide (no painel ou no WhatsApp), quem envia registra o envio. Esta area E a aprovacao; nao existe outra fila.', pelo_mcp: 'aceleriq_central_review_fila, aceleriq_central_review_preparar, aceleriq_central_review_decidir, aceleriq_central_review_marcar_enviado' },
+  { area: 'Revisao do Ciclo', rota: '/ciclo/revisao', para: 'Area de trabalho do Hermes: rascunhos de ritual viram pedido, o dono decide (no painel ou no WhatsApp), quem envia registra o envio. Esta area E a aprovacao; nao existe outra fila.', pelo_mcp: 'aceleriq_central_review_fila, aceleriq_central_review_preparar, aceleriq_central_review_decidir, aceleriq_central_review_marcar_enviado; avisos de post no ar: aceleriq_aviso_publicacao_fila, aceleriq_aviso_publicacao_preparar, aceleriq_aviso_publicacao_decidir, aceleriq_aviso_publicacao_marcar_enviado' },
   { area: 'Dossie do cliente', rota: '/clientes', para: 'O retrato inteiro de um cliente.', pelo_mcp: 'aceleriq_get_client_dossier' },
   { area: 'Kanban', rota: '/kanban', para: 'Tarefas da producao.', pelo_mcp: 'aceleriq_list_tasks, aceleriq_create_task, aceleriq_update_task, aceleriq_operator_assign' },
   { area: 'Workspace', rota: '/workspace', para: 'Quadro livre, notas, imagens e o Estudio.', pelo_mcp: 'aceleriq_list_workspace_nodes, aceleriq_studio_read, aceleriq_studio_draft' },
@@ -3871,6 +3904,127 @@ const centralReviewMarcarEnviadoTool: ToolDefinition = {
   },
 };
 
+// MCP 2.10 (14/10/2026): aviso de post no ar na Revisão do Ciclo (tabela própria aviso_publicacao).
+import { avisoPublicacaoDecidir, avisoPublicacaoFila, avisoPublicacaoMarcarEnviado, avisoPublicacaoPreparar } from '../mcp-server/modulos/aviso-publicacao.ts';
+
+const avisoPublicacaoFilaTool: ToolDefinition = {
+  name: 'aceleriq_aviso_publicacao_fila',
+  title: 'Avisos de post no ar (Revisão do Ciclo)',
+  description:
+    'Os avisos ao cliente de que um post foi ao ar, na Revisão do Ciclo: posts_no_ar_sem_aviso (publicados nas últimas 72 horas sem aviso), esperando_decisao (mensagem e destino congelados, para levar ao dono), aprovados_para_enviar e enviados_recentes. O campo como_agir diz o próximo passo. Fila vazia não é erro. Só leitura.',
+  scopes: READ,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: { operator: { type: 'string', description: 'Slug do operador que lê (ex.: default).' } },
+    required: ['operator'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = z.object({ operator: z.string().min(2).max(40) }).strict().safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    return await avisoPublicacaoFila(parsed.data, ctx);
+  },
+};
+
+const avisoPublicacaoPrepararTool: ToolDefinition = {
+  name: 'aceleriq_aviso_publicacao_preparar',
+  title: 'Preparar o aviso de post no ar',
+  description:
+    'Prepara na Revisão do Ciclo a mensagem que avisa o cliente de que um post foi ao ar, congelando o post (título, plataforma, link), o texto e o destino. Só post publicado; um aviso vivo por post (rejeitado ou vencido libera outro). Vale 3 dias. NÃO envia e NÃO aprova: o dono decide no painel ou pelo Hermes no WhatsApp. No WhatsApp, recipient é o nome exato do grupo ou contato; no portal o destinatário é o próprio cliente. Idempotente pela idempotency_key.',
+  scopes: WRITE,
+  annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      operator: { type: 'string', description: 'Slug do operador.' },
+      publication_id: { type: 'string', description: 'UUID da publicação (posts_no_ar_sem_aviso na fila).' },
+      mensagem: { type: 'string', description: 'Texto ao cliente, de 1 a 2000 caracteres, com o link do post.' },
+      channel: { type: 'string', enum: ['portal', 'whatsapp'] },
+      recipient: { type: 'string', description: 'No WhatsApp: nome exato do grupo ou contato. No portal pode ficar vazio.' },
+      idempotency_key: { type: 'string', description: 'Chave estável desta preparação (8 a 128 caracteres).' },
+    },
+    required: ['operator', 'publication_id', 'mensagem', 'channel', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = z.object({
+      operator: z.string().min(2).max(40),
+      publication_id: UUID,
+      mensagem: z.string().min(1).max(2000),
+      channel: z.enum(['portal', 'whatsapp']),
+      recipient: z.string().max(250).optional(),
+      idempotency_key: z.string().min(8).max(128),
+    }).strict().safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    return await avisoPublicacaoPreparar(parsed.data as Parameters<typeof avisoPublicacaoPreparar>[0], ctx);
+  },
+};
+
+const avisoPublicacaoDecidirTool: ToolDefinition = {
+  name: 'aceleriq_aviso_publicacao_decidir',
+  title: 'Registrar a decisão do dono sobre o aviso de post',
+  description:
+    'Registra a decisão que o dono deu ao Hermes sobre um aviso de post no ar: aprovado ou rejeitado (rejeitado exige comment). A evidência é obrigatória e deve citar a mensagem do dono (data, hora e texto); a trilha mostra "[via Hermes <slug>] ... | evidência: ...". O agente NÃO decide por conta própria. Aprovar não envia. Idempotente pela idempotency_key.',
+  scopes: WRITE,
+  annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      operator: { type: 'string', description: 'Slug do operador.' },
+      aviso_id: { type: 'string', description: 'UUID do aviso (esperando_decisao na fila).' },
+      decision: { type: 'string', enum: ['aprovado', 'rejeitado'] },
+      evidence: { type: 'string', description: 'A mensagem do dono que autorizou, com data e hora. Obrigatória.' },
+      comment: { type: 'string', description: 'Motivo (obrigatório ao rejeitar).' },
+      idempotency_key: { type: 'string', description: 'Chave estável desta decisão (8 a 128 caracteres).' },
+    },
+    required: ['operator', 'aviso_id', 'decision', 'evidence', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = z.object({
+      operator: z.string().min(2).max(40),
+      aviso_id: UUID,
+      decision: z.enum(['aprovado', 'rejeitado']),
+      evidence: z.string().min(3).max(2000),
+      comment: z.string().max(4000).optional(),
+      idempotency_key: z.string().min(8).max(128),
+    }).strict().safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    return await avisoPublicacaoDecidir(parsed.data as Parameters<typeof avisoPublicacaoDecidir>[0], ctx);
+  },
+};
+
+const avisoPublicacaoMarcarEnviadoTool: ToolDefinition = {
+  name: 'aceleriq_aviso_publicacao_marcar_enviado',
+  title: 'Registrar que o aviso de post foi enviado',
+  description:
+    'Depois de enviar o aviso aprovado ao destino congelado, registra o envio com a evidência (quando, onde, o quê). Só aviso aprovado e ainda não enviado aceita. Sem este registro o painel considera o aviso NÃO enviado. Não envia nada por si. Idempotente pela idempotency_key.',
+  scopes: WRITE,
+  annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      operator: { type: 'string', description: 'Slug do operador que enviou.' },
+      aviso_id: { type: 'string', description: 'UUID do aviso aprovado (aprovados_para_enviar na fila).' },
+      evidence: { type: 'string', description: 'Prova do envio: grupo, data, hora e, se houver, id da mensagem.' },
+      idempotency_key: { type: 'string', description: 'Chave estável deste envio (8 a 128 caracteres).' },
+    },
+    required: ['operator', 'aviso_id', 'evidence', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = z.object({
+      operator: z.string().min(2).max(40),
+      aviso_id: UUID,
+      evidence: z.string().min(3).max(2000),
+      idempotency_key: z.string().min(8).max(128),
+    }).strict().safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    return await avisoPublicacaoMarcarEnviado(parsed.data, ctx);
+  },
+};
+
 /*
  * CRM da casa com acesso completo (v1.44.0).
  *
@@ -4135,6 +4289,11 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   centralReviewPrepararTool,
   centralReviewDecidirTool,
   centralReviewMarcarEnviadoTool,
+  // MCP 2.10: aviso de post no ar na Revisão do Ciclo.
+  avisoPublicacaoFilaTool,
+  avisoPublicacaoPrepararTool,
+  avisoPublicacaoDecidirTool,
+  avisoPublicacaoMarcarEnviadoTool,
   // CRM da casa com acesso completo (v1.44.0)
   getOpportunityTool,
   createOpportunityTool,
@@ -4207,6 +4366,8 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   // MCP 2.9: Dia Prioritário (ler a semana e a preparação; registrar o que aconteceu).
   diaPrioritarioTool,
   diaPrioritarioRegistrarTool,
+  // MCP 2.10: texto do ritual por automação (sem gravar nada).
+  ritualRedigirTool,
   // MCP 2.3: o agente age nas mesas e o cérebro do cliente aprende.
   cerebroDoClienteTool,
   cerebroRegistrarTool,

@@ -2137,6 +2137,22 @@
       "remote_name": "dia_prioritario",
       "remote_statements_sha256": "03db716548f8fc528150e4fd0f13a470a90e0ca30b2860e1f078e4f6931a1334",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261014200000",
+      "path": "supabase/migrations/20261014200000_dossie_secao_automatica_com_teto.sql",
+      "local_sha256": "5723092a81ab0e70fa581fb6427012c0b1ebeb995ca6dbff9ff7bf0714311f57",
+      "remote_name": "dossie_secao_automatica_com_teto",
+      "remote_statements_sha256": "c3ee83986805c91e464a01cc19fb3c1c37fc87bd684f5b112b64c05734e960f6",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261014210000",
+      "path": "supabase/migrations/20261014210000_aviso_de_post_no_ar_na_revisao.sql",
+      "local_sha256": "6bf897eebfc4848408c99f5f7d9912830d2116b385a6e16f5eec7f7e919f2b06",
+      "remote_name": "aviso_de_post_no_ar_na_revisao",
+      "remote_statements_sha256": "374343a6d43290c399438bf65e64236872b97eb70472a28f35884f8fad8ff967",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

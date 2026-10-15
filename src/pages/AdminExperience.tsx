@@ -23,6 +23,7 @@ import { buildGroupMessageText, type GroupMessageContext } from "@/lib/groupMess
 import DossieDoCliente from "@/components/admin/DossieDoCliente";
 import DiaPrioritarioNaCentral from "@/components/dia-prioritario/DiaPrioritarioNaCentral";
 import CentralReviewQueue from "@/components/central/CentralReviewQueue";
+import AvisosDePublicacao from "@/components/central/AvisosDePublicacao";
 import AgenteDaCentral from "@/components/central/AgenteDaCentral";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { useEstadoDaTela, useRolagemDaTela } from "@/components/central/useEstadoDaTela";
@@ -3051,6 +3052,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                     await queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
                   }} />
                 )}
+                {cycleReview && <AvisosDePublicacao isAdmin={isAdmin} clientId={reviewClientId || ""} />}
                 <Secao
                   divisoria={comPedido}
                   recolher={comPedido ? (cycleReview ? `ciclo:revisao:rascunhos:${reviewClientId || "todos"}` : "central:fila:rascunhos") : undefined}
