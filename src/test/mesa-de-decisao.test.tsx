@@ -67,4 +67,15 @@ describe("mesa de decisão", () => {
     expect(screen.getByText("Título b")).toBeTruthy();
     expect(screen.getByText("2 de 2")).toBeTruthy();
   });
+  it("sem o que aprovar, o botão principal faz a ação (Responder) e não decide nada", () => {
+    const responder = vi.fn();
+    const onDecidir = vi.fn();
+    render(<MesaDeDecisao rotulo="Mesa" itens={[item("a", { podeAjuste: false, podeRejeitar: false, acaoPrincipal: { rotulo: "Responder", aoClicar: responder } })]} onDecidir={onDecidir} />);
+    expect(screen.queryByRole("button", { name: /Aprovar/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Rejeitar/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Responder/ }));
+    fireEvent.keyDown(window, { key: "a" });
+    expect(responder).toHaveBeenCalledTimes(2);
+    expect(onDecidir).not.toHaveBeenCalled();
+  });
 });

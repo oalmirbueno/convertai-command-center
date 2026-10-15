@@ -43,6 +43,16 @@ export interface ItemDaMesa {
   rejeitarPedeMotivo?: boolean;
   /** Ações pequenas extras no rodapé (ex.: "Responder no diário"). */
   extras?: ReactNode;
+  /** Nome do pedido de ajuste ("Pedir esclarecimento"); o padrão é "Pedir ajuste". */
+  rotuloAjuste?: string;
+  /** Sugestões de um toque para o ajuste/esclarecimento deste tipo de item. */
+  sugestoesAjuste?: string[];
+  /**
+   * Quando não há o que aprovar (agente esperando resposta, tarefa travada): o botão
+   * principal faz esta ação (ex.: "Responder" abre o diário) e o item não sai da mesa
+   * por isso; ele sai quando o estado muda.
+   */
+  acaoPrincipal?: { rotulo: string; icone?: ReactNode; aoClicar: () => void };
 }
 
 const SUGESTOES: Record<"ajuste" | "rejeitado", string[]> = {
@@ -117,9 +127,10 @@ export default function MesaDeDecisao({ itens, onDecidir, rotulo, inicialId = nu
         return;
       }
       const k = e.key.toLowerCase();
-      if (k === "a" && podeAprovar && !modo) { e.preventDefault(); void decidir("aprovado"); }
-      else if (k === "e" && item.podeAjuste !== false) { e.preventDefault(); setModo("ajuste"); }
-      else if (k === "r" && item.podeRejeitar !== false) { e.preventDefault(); setModo("rejeitado"); }
+      if (k === "a" && !modo && item.acaoPrincipal) { e.preventDefault(); item.acaoPrincipal.aoClicar(); }
+      else if (k === "a" && podeAprovar && !modo) { e.preventDefault(); void decidir("aprovado"); }
+      else if (k === "e" && item.podeAjuste !== false && !item.acaoPrincipal) { e.preventDefault(); setModo("ajuste"); }
+      else if (k === "r" && item.podeRejeitar !== false && !item.acaoPrincipal) { e.preventDefault(); setModo("rejeitado"); }
       else if (e.key === "ArrowRight") { e.preventDefault(); ir(1); }
       else if (e.key === "ArrowLeft") { e.preventDefault(); ir(-1); }
     };
@@ -188,29 +199,31 @@ export default function MesaDeDecisao({ itens, onDecidir, rotulo, inicialId = nu
       {/* Rodapé: decidir. Ajuste e rejeição pedem uma frase curta antes de enviar. */}
       <footer className="border-t border-border bg-muted/20 p-3 sm:p-4">
         {modo ? <div className="space-y-2">
-          <label className={juntar(texto.rotulo, "block")}>{modo === "ajuste" ? "O que ajustar" : "Por que rejeitar"}{!notaObrigatoria && " (opcional)"}
+          <label className={juntar(texto.rotulo, "block")}>{modo === "ajuste" ? (item.rotuloAjuste ? "O que precisa ficar claro" : "O que ajustar") : "Por que rejeitar"}{!notaObrigatoria && " (opcional)"}
             <textarea ref={campoRef} value={nota} onChange={(e) => setNota(e.target.value)} rows={2} maxLength={2000} className={juntar(campoTexto, "mt-1.5 min-h-[56px]")} />
           </label>
           <div className="-m-0.5 flex flex-wrap">
-            {SUGESTOES[modo].map((s) => <button key={s} type="button" onClick={() => setNota((n) => n.trim() ? `${n.trim()}. ${s}` : s)} className={juntar("m-0.5 rounded-full border border-border px-2.5 py-1 text-[12px] text-muted-foreground hover:border-primary/50 hover:text-foreground", foco)}>{s}</button>)}
+            {((modo === "ajuste" && item.sugestoesAjuste) || SUGESTOES[modo]).map((s) => <button key={s} type="button" onClick={() => setNota((n) => n.trim() ? `${n.trim()}. ${s}` : s)} className={juntar("m-0.5 rounded-full border border-border px-2.5 py-1 text-[12px] text-muted-foreground hover:border-primary/50 hover:text-foreground", foco)}>{s}</button>)}
           </div>
           <div className="flex items-center justify-end [&>*+*]:ml-2">
             <button type="button" onClick={() => setModo(null)} className={botao.discreto}>Voltar</button>
             <button type="button" disabled={ocupado || (notaObrigatoria && !nota.trim())} onClick={() => void decidir(modo)} className={modo === "rejeitado" ? botao.perigo : botao.primario}>
-              {ocupado ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : null}{modo === "ajuste" ? "Pedir ajuste" : "Rejeitar"}
+              {ocupado ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : null}{modo === "ajuste" ? (item.rotuloAjuste || "Pedir ajuste") : "Rejeitar"}
             </button>
           </div>
         </div> : <div className="flex min-w-0 flex-wrap items-center">
           <div className="flex items-center [&>*+*]:ml-2">
-            {item.podeRejeitar !== false && <button type="button" disabled={ocupado} onClick={() => setModo("rejeitado")} title="Rejeitar (R)" className={juntar(botao.secundario, "h-11 px-3 text-destructive")}><X className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Rejeitar</span></button>}
-            {item.podeAjuste !== false && <button type="button" disabled={ocupado} onClick={() => setModo("ajuste")} title="Pedir ajuste (E)" className={juntar(botao.secundario, "h-11 px-3")}><PencilLine className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Ajuste</span></button>}
+            {item.podeRejeitar !== false && !item.acaoPrincipal && <button type="button" disabled={ocupado} onClick={() => setModo("rejeitado")} title="Rejeitar (R)" className={juntar(botao.secundario, "h-11 px-3 text-destructive")}><X className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Rejeitar</span></button>}
+            {item.podeAjuste !== false && !item.acaoPrincipal && <button type="button" disabled={ocupado} onClick={() => setModo("ajuste")} title={`${item.rotuloAjuste || "Pedir ajuste"} (E)`} className={juntar(botao.secundario, "h-11 px-3")}><PencilLine className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">{item.rotuloAjuste ? "Esclarecer" : "Ajuste"}</span></button>}
             {item.podeAdiar && <button type="button" disabled={ocupado} onClick={() => void decidir("adiado", "")} title="Adiar" className={juntar(botao.discreto, "h-11 px-3")}><Clock3 className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Adiar</span></button>}
           </div>
           <div className="ml-auto flex min-w-0 items-center pl-2">
             {item.extras && <span className="flex items-center [&>*+*]:ml-1">{item.extras}</span>}
-            <button type="button" disabled={ocupado || !podeAprovar} onClick={() => void decidir("aprovado")} title={item.bloqueioDeAprovar || "Aprovar (A)"} className={juntar(botao.primario, "ml-2 h-11 px-5 text-[15px]")}>
+            {item.acaoPrincipal
+              ? <button type="button" onClick={item.acaoPrincipal.aoClicar} title={`${item.acaoPrincipal.rotulo} (A)`} className={juntar(botao.primario, "ml-2 h-11 px-5 text-[15px]")}>{item.acaoPrincipal.icone && <span className="mr-1.5 inline-flex" aria-hidden="true">{item.acaoPrincipal.icone}</span>}{item.acaoPrincipal.rotulo}</button>
+              : <button type="button" disabled={ocupado || !podeAprovar} onClick={() => void decidir("aprovado")} title={item.bloqueioDeAprovar || "Aprovar (A)"} className={juntar(botao.primario, "ml-2 h-11 px-5 text-[15px]")}>
               {ocupado ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="mr-1.5 h-4 w-4" aria-hidden="true" />}Aprovar
-            </button>
+            </button>}
           </div>
           {item.bloqueioDeAprovar && <p className="mt-2 w-full text-right text-[12px] text-warning">{item.bloqueioDeAprovar}</p>}
         </div>}

@@ -2,8 +2,10 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Ban, CheckCircle2, ChevronDown, HelpCircle, Loader2, UserPlus } from "lucide-react";
-import { EstadoDeErro, Secao, botao, campo, etiqueta, foco, juntar, superficie, texto } from "@/components/sistema";
+import { Ban, Bot, CheckCircle2, Clock, Loader2, UserPlus } from "lucide-react";
+import { EstadoDeErro, Secao, botao, juntar } from "@/components/sistema";
+import MesaDeDecisao, { type DecisaoDaMesa, type ItemDaMesa } from "@/components/decisao/MesaDeDecisao";
+import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import { buscarTodas } from "@/lib/buscaCompleta";
 
 /**
@@ -43,7 +45,6 @@ export default function PropostasDeResponsavel({
   destaqueId: string | null;
 }) {
   const queryClient = useQueryClient();
-  const [notaPor, setNotaPor] = useState<Record<string, string>>({});
 
   const { data: propostas = [], error, refetch } = useQuery({
     queryKey: ["propostas-responsavel"],
@@ -111,7 +112,6 @@ export default function PropostasDeResponsavel({
     for (const p of propostas) m.set(p.suggested_assignee, [...(m.get(p.suggested_assignee) ?? []), p]);
     return [...m.entries()].sort((a, b) => b[1].length - a[1].length);
   }, [propostas]);
-  const [abertos, setAbertos] = useState<Record<string, boolean>>({});
   const [lote, setLote] = useState<string | null>(null);
 
   const decidirLote = async (ids: string[], decisao: "aprovada" | "rejeitada", rotulo: string) => {
@@ -134,11 +134,11 @@ export default function PropostasDeResponsavel({
   };
 
   const decidir = useMutation({
-    mutationFn: async ({ id, decisao }: { id: string; decisao: string }) => {
+    mutationFn: async ({ id, decisao, nota }: { id: string; decisao: string; nota: string }) => {
       const { error } = await (supabase as any).rpc("assignment_proposal_decidir", {
         _proposal_id: id,
         _decisao: decisao,
-        _nota: notaPor[id]?.trim() || null,
+        _nota: nota.trim() || null,
       });
       if (error) throw new Error(error.message);
     },
@@ -168,6 +168,37 @@ export default function PropostasDeResponsavel({
   }
   if (propostas.length === 0) return null;
 
+  // Mesa de decisão (15/10/2026): uma proposta por vez; o lote por pessoa fica recolhido em cima.
+  const mapa: Record<DecisaoDaMesa, string> = { aprovado: "aprovada", rejeitado: "rejeitada", ajuste: "esclarecimento", adiado: "esclarecimento" };
+  const itens: ItemDaMesa[] = propostas.map((p) => {
+    const tarefa = tarefasDasPropostas.get(p.kanban_task_id);
+    const pessoa = nomesDePessoas.get(p.suggested_assignee) || "pessoa";
+    return {
+      id: p.id,
+      tipo: "Responsável sugerido",
+      tomDoTipo: "primario",
+      cliente: tarefa?.cliente || "Operação interna",
+      avatar: <FotoDoCliente nome={pessoa} foto={null} tamanho="sm" />,
+      titulo: `${pessoa} para ${tituloDe(p.kanban_task_id)}`,
+      mensagem: p.justificativa,
+      passo: p.impacto ? `Se ninguém assumir: ${p.impacto}` : null,
+      sinais: [
+        { icone: <Bot className="h-3 w-3" />, texto: nomesDeAgentes.get(p.operator_id) || "operador" },
+        ...(typeof p.confianca === "number" ? [{ texto: `confiança ${(p.confianca * 100).toFixed(0)}%`, tom: (p.confianca >= 0.7 ? "primario" : "aviso") as "primario" | "aviso" }] : []),
+        { icone: <UserPlus className="h-3 w-3" />, texto: p.current_assignee ? `hoje com ${nomesDePessoas.get(p.current_assignee) || "outra pessoa"}` : "hoje sem responsável", tom: p.current_assignee ? "neutro" : "aviso" },
+        ...(tarefa?.prazo ? [{ icone: <Clock className="h-3 w-3" />, texto: `prazo ${tarefa.prazo.slice(8, 10)}/${tarefa.prazo.slice(5, 7)}` }] : []),
+      ],
+      detalhes: <div className="space-y-1">
+        {p.prazo && <p>Prazo relevante: {p.prazo}</p>}
+        <p>Sugerido em {quando(p.created_at)}</p>
+      </div>,
+      podeAjuste: true,
+      podeRejeitar: true,
+      rotuloAjuste: "Pedir esclarecimento",
+      sugestoesAjuste: ["Por que essa pessoa?", "Tem outra pessoa livre?", "Qual o prazo real?"],
+    };
+  });
+
   return (
     <Secao
       nivel={3}
@@ -175,128 +206,38 @@ export default function PropostasDeResponsavel({
       descricao={`${propostas.length} ${propostas.length === 1 ? "proposta" : "propostas"}`}
       ajuda="O agente sugere quem deveria responder por uma tarefa; quem decide é você. Aprovar grava o responsável e avisa a pessoa; nada muda sem o seu clique."
     >
-      <ul className={juntar(superficie.painel, "divide-y divide-border overflow-hidden")} aria-label="Responsáveis sugeridos">
-        {grupos.map(([pessoaId, lista]) => {
-          const nomePessoa = nomesDePessoas.get(pessoaId) || "pessoa";
-          const aberto = abertos[pessoaId] ?? (grupos.length === 1 || lista.some((p) => p.id === destaqueId));
-          const visiveis = aberto ? lista : [];
-          return (
-            <li key={pessoaId} className="min-w-0">
-              <div className="flex min-w-0 flex-wrap items-center px-4 py-2.5">
-                <button
-                  type="button"
-                  onClick={() => setAbertos((s) => ({ ...s, [pessoaId]: !aberto }))}
-                  aria-expanded={aberto}
-                  className={juntar("mr-2 inline-flex min-w-0 flex-1 items-center rounded text-left text-[13px] font-semibold text-foreground", foco)}
-                >
-                  <ChevronDown className={juntar("mr-1.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform", aberto ? "rotate-180" : "")} aria-hidden="true" />
-                  <span className="min-w-0 truncate">{nomePessoa} · {lista.length} proposta{lista.length === 1 ? "" : "s"}</span>
-                </button>
-                <span className="-m-0.5 flex shrink-0 flex-wrap [&>*]:m-0.5">
-                  <button type="button" disabled={lote !== null} onClick={() => void decidirLote(lista.map((p) => p.id), "rejeitada", nomePessoa)} className={juntar(botao.perigo, "h-8 px-2.5 text-[12px]")}>
-                    <Ban className="mr-1 h-3 w-3" aria-hidden="true" /> Rejeitar todas
-                  </button>
-                  <button type="button" disabled={lote !== null} onClick={() => void decidirLote(lista.map((p) => p.id), "aprovada", nomePessoa)} className={juntar(botao.secundario, "h-8 px-2.5 text-[12px] text-success")}>
-                    {lote === nomePessoa ? <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="mr-1 h-3 w-3" aria-hidden="true" />} Aprovar todas
-                  </button>
-                </span>
-              </div>
-              {!aberto && (
-                <p className={juntar(texto.auxiliar, "-mt-1 truncate px-4 pb-2.5 pl-10")}>
-                  {lista.slice(0, 3).map((p) => tituloDe(p.kanban_task_id)).join(" · ")}{lista.length > 3 ? ` · +${lista.length - 3}` : ""}
-                </p>
-              )}
-              {visiveis.length > 0 && (
-                <ul className="divide-y divide-border border-t border-border">
-                  {visiveis.map((p, i) => {
-                    const destacada = p.id === destaqueId;
-                    // Um primário por área (SISTEMA.md seção 6): a proposta em
-                    // destaque (ou a primeira aberta, sem destaque) leva o verde.
-                    const principal = destacada || (!propostas.some((x) => x.id === destaqueId) && i === 0 && grupos.length === 1);
-                    const tarefa = tarefasDasPropostas.get(p.kanban_task_id);
-                    return (
-                      <li
-                        key={p.id}
-                        className={juntar("min-w-0 py-3 pl-10 pr-4", destacada && "bg-primary/10 ring-2 ring-inset ring-primary/50")}
-                      >
-                        <div className="-m-0.5 flex min-w-0 flex-wrap items-center [&>*]:m-0.5">
-                          <span className={juntar(etiqueta, "bg-info/15 text-info")}>
-                            <UserPlus className="mr-1 h-3 w-3" aria-hidden="true" /> responsável sugerido
-                          </span>
-                          <span className={texto.auxiliar}>
-                            por <strong className="font-medium text-foreground/90">{nomesDeAgentes.get(p.operator_id) || "operador"}</strong>
-                            {" · "}{quando(p.created_at)}
-                          </span>
-                          {typeof p.confianca === "number" && (
-                            <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>
-                              confiança {(p.confianca * 100).toFixed(0)}%
-                            </span>
-                          )}
-                        </div>
-
-                        <p className={juntar(texto.corpo, "mt-2 [overflow-wrap:anywhere]")}>
-                          <strong className="font-semibold">{nomesDePessoas.get(p.suggested_assignee) || "pessoa"}</strong>
-                          {" para "}
-                          <strong className="font-semibold">{tituloDe(p.kanban_task_id)}</strong>
-                          {tarefa?.cliente ? <span className="text-muted-foreground"> · {tarefa.cliente}</span> : null}
-                          {tarefa?.prazo ? <span className="text-muted-foreground"> · prazo {tarefa.prazo.slice(8, 10)}/{tarefa.prazo.slice(5, 7)}</span> : null}
-                          {p.current_assignee
-                            ? <span className="text-muted-foreground"> (hoje com {nomesDePessoas.get(p.current_assignee) || "outra pessoa"})</span>
-                            : <span className="text-muted-foreground"> (hoje sem responsável)</span>}
-                        </p>
-                        <p className={juntar(texto.corpo, "mt-1 whitespace-pre-wrap text-foreground/85")}>{p.justificativa}</p>
-                        {p.impacto && (
-                          <p className={juntar(texto.auxiliar, "mt-1 leading-5")}>se ninguém assumir: {p.impacto}</p>
-                        )}
-                        {p.prazo && <p className={juntar(texto.auxiliar, "mt-0.5 leading-5")}>prazo relevante: {p.prazo}</p>}
-
-                        <label className="mt-2.5 block">
-                          <span className="sr-only">Nota</span>
-                          <input
-                            value={notaPor[p.id] || ""}
-                            onChange={(e) => setNotaPor((s) => ({ ...s, [p.id]: e.target.value }))}
-                            placeholder="Nota (opcional)"
-                            className={campo}
-                          />
-                        </label>
-                        <div className="mt-2.5">
-                          <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
-                            <button
-                              type="button"
-                              disabled={decidir.isPending}
-                              onClick={() => decidir.mutate({ id: p.id, decisao: "aprovada" })}
-                              className={principal ? botao.primario : juntar(botao.secundario, "text-success")}
-                            >
-                              {decidir.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
-                              Aprovar e designar
-                            </button>
-                            <button
-                              type="button"
-                              disabled={decidir.isPending}
-                              onClick={() => decidir.mutate({ id: p.id, decisao: "rejeitada" })}
-                              className={botao.perigo}
-                            >
-                              <Ban className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Rejeitar
-                            </button>
-                            <button
-                              type="button"
-                              disabled={decidir.isPending}
-                              onClick={() => decidir.mutate({ id: p.id, decisao: "esclarecimento" })}
-                              className={botao.discreto}
-                            >
-                              <HelpCircle className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Pedir esclarecimento
-                            </button>
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      {grupos.length > 0 && propostas.length > 1 && (
+        <details className="mb-3 text-[13px]">
+          <summary className="cursor-pointer font-medium text-muted-foreground hover:text-foreground">Decidir em lote por pessoa</summary>
+          <ul className="mt-2 divide-y divide-border">
+            {grupos.map(([pessoaId, lista]) => {
+              const nomePessoa = nomesDePessoas.get(pessoaId) || "pessoa";
+              return (
+                <li key={pessoaId} className="flex min-w-0 flex-wrap items-center py-2">
+                  <span className="mr-2 min-w-0 flex-1 truncate">{nomePessoa} · {lista.length} proposta{lista.length === 1 ? "" : "s"}</span>
+                  <span className="-m-0.5 flex shrink-0 flex-wrap [&>*]:m-0.5">
+                    <button type="button" disabled={lote !== null} onClick={() => void decidirLote(lista.map((p) => p.id), "rejeitada", nomePessoa)} className={juntar(botao.perigo, "h-8 px-2.5 text-[12px]")}>
+                      <Ban className="mr-1 h-3 w-3" aria-hidden="true" /> Rejeitar todas
+                    </button>
+                    <button type="button" disabled={lote !== null} onClick={() => void decidirLote(lista.map((p) => p.id), "aprovada", nomePessoa)} className={juntar(botao.secundario, "h-8 px-2.5 text-[12px] text-success")}>
+                      {lote === nomePessoa ? <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="mr-1 h-3 w-3" aria-hidden="true" />} Aprovar todas
+                    </button>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </details>
+      )}
+      <MesaDeDecisao
+        rotulo="Responsáveis sugeridos"
+        itens={itens}
+        inicialId={destaqueId && propostas.some((p) => p.id === destaqueId) ? destaqueId : null}
+        onDecidir={async (item, decisao, nota) => {
+          try { await decidir.mutateAsync({ id: item.id, decisao: mapa[decisao], nota }); return true; }
+          catch { return false; }
+        }}
+      />
     </Secao>
   );
 }
