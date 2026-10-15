@@ -19,7 +19,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { ErroDoProvedor, type Provedor, type Tela } from "../navegador-remoto/provedor.ts";
 
 export type AgenteDoNavegador = "hermes" | "gestor" | "equipe";
-export const ACOES_DO_NAVEGADOR = ["navegar", "ler", "pesquisar", "capturar", "clicar", "digitar", "abas", "nova_aba", "ativar_aba"] as const;
+export const ACOES_DO_NAVEGADOR = ["navegar", "ler", "pesquisar", "capturar", "clicar", "digitar", "abas", "nova_aba", "ativar_aba", "fechar_aba"] as const;
 export type AcaoDoNavegador = (typeof ACOES_DO_NAVEGADOR)[number];
 
 export class ErroDoNavegador extends Error {
@@ -297,8 +297,8 @@ export type ResultadoDoNavegador = {
  */
 export async function usarNavegador(db: SupabaseClient, p: Provedor, pedido: PedidoAoNavegador): Promise<ResultadoDoNavegador> {
   if (!(ACOES_DO_NAVEGADOR as readonly string[]).includes(pedido.acao)) throw new ErroDoNavegador("acao_invalida", "Ação do navegador desconhecida.");
-  if (pedido.acao === "ativar_aba" && (!pedido.sessaoId || !pedido.abaId)) {
-    throw new ErroDoNavegador("aba_invalida", "Para selecionar uma aba, informe a sessão e o identificador da aba exibida.");
+  if ((pedido.acao === "ativar_aba" || pedido.acao === "fechar_aba") && (!pedido.sessaoId || !pedido.abaId)) {
+    throw new ErroDoNavegador("aba_invalida", "Para selecionar ou fechar uma aba, informe a sessão e o identificador da aba.");
   }
   if (pedido.abaId != null && !pedido.sessaoId) {
     throw new ErroDoNavegador("sessao_invalida", "Informe a sessão à qual essa aba pertence.");
@@ -336,6 +336,15 @@ export async function usarNavegador(db: SupabaseClient, p: Provedor, pedido: Ped
       await c.enviar("Target.activateTarget", { targetId: alvo.id });
       const res: ResultadoDoNavegador = { ok: true, acao: "ativar_aba", sessao_id: sessao.id, aba_id: alvo.id, url: alvo.url, titulo: alvo.titulo, texto: null, abas: lista.map((a, i) => ({ id: a.id, indice: i, titulo: a.titulo, url: a.url })), evidencia: null, acao_id: null };
       res.acao_id = await registrar(db, { ...reg, ok: true, alvo: alvo.url, url: alvo.url, titulo: alvo.titulo, resultado: "Aba ativada no navegador existente", duracao_ms: Date.now() - inicio });
+      return res;
+    }
+    if (pedido.acao === "fechar_aba") {
+      // Sobra de pop-up de login (15/10: 11 abas "Facebook" abertas pelo "Continuar com Facebook").
+      if (lista.length <= 1) throw new ErroDoNavegador("ultima_aba", "Essa é a única aba aberta. Para sair, feche o navegador.", 409);
+      await c.enviar("Target.closeTarget", { targetId: alvo.id });
+      const restantes = lista.filter((a) => a.id !== alvo!.id);
+      const res: ResultadoDoNavegador = { ok: true, acao: "fechar_aba", sessao_id: sessao.id, aba_id: alvo.id, url: alvo.url, titulo: alvo.titulo, texto: null, abas: restantes.map((a, i) => ({ id: a.id, indice: i, titulo: a.titulo, url: a.url })), evidencia: null, acao_id: null };
+      res.acao_id = await registrar(db, { ...reg, ok: true, alvo: alvo.url, url: alvo.url, titulo: alvo.titulo, resultado: "Aba fechada", duracao_ms: Date.now() - inicio });
       return res;
     }
     if (pedido.acao === "abas") {

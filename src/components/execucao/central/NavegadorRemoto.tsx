@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Globe, KeyRound, Loader2, Maximize2, Minimize2, Plus, Power, RefreshCw, Users } from "lucide-react";
+import { Globe, KeyRound, Loader2, Maximize2, Minimize2, Plus, Power, RefreshCw, Users, X } from "lucide-react";
 import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
 import { AjudaRecolhida, useEstadoDaTela, Carregando, botao, juntar } from "@/components/sistema";
 import { nomeDoCliente, type ClienteDoAgente } from "@/components/admin/agente/SeletoresDoAgente";
@@ -130,7 +130,9 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
   const sessao = useQuery({
     queryKey: ["navegador-remoto", "sessao", cliente?.id, sessaoId],
     enabled: !!sessaoId && !!estado.data?.configurado,
-    refetchInterval: 15_000,
+    // 15/10: a cada 3 s, para o pop-up de login ("Continuar com Facebook") aparecer logo. A consulta
+    // também diz ao zelador que alguém está usando a sessão (senão ele fecha no meio do login).
+    refetchInterval: (q) => (q.state.data && !q.state.data.rodando ? false : 3_000),
     queryFn: async () => (await chamarFuncao<{ sessao: SessaoViva }>("navegador-remoto", { acao: "ver", sessao_id: sessaoId })).sessao,
   });
   useEffect(() => {
@@ -164,10 +166,30 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
   quadroAtual.current = chaveDoQuadro;
   // 15/10 (dono: "não entra e reinicia"): sem aba escolhida, a tela seguia a primeira da lista, e a
   // ordem muda quando o site abre ou foca outra aba; a tela trocava sozinha no meio do login. A aba
-  // exibida fica fixada até o dono escolher outra (ou ela fechar).
+  // exibida fica fixada até o dono escolher outra. 15/10, depois ("tem que abrir o pop-up"): aba que
+  // nasce sozinha (pop-up de login) passa a ser a exibida; quando ela fecha, volta a de antes.
+  const vistas = useRef<{ sessao: string; ids: Set<string>; pilha: string[] } | null>(null);
+  const idsDasPaginas = paginas.map((p) => p.id).filter((x): x is string => !!x);
+  const chaveDosIds = idsDasPaginas.join(",");
   useEffect(() => {
-    if (paginaSelecionada?.id && paginaSelecionada.id !== abaId) setAbaId(paginaSelecionada.id);
-  }, [paginaSelecionada?.id, abaId, setAbaId]);
+    if (!sessaoId || !idsDasPaginas.length) return;
+    let v = vistas.current;
+    if (!v || v.sessao !== sessaoId) v = vistas.current = { sessao: sessaoId, ids: new Set(idsDasPaginas), pilha: [] };
+    const novas = idsDasPaginas.filter((id) => !v!.ids.has(id));
+    idsDasPaginas.forEach((id) => v!.ids.add(id));
+    if (novas.length) {
+      if (abaId && idsDasPaginas.includes(abaId)) v.pilha.push(abaId);
+      setAbaId(novas[novas.length - 1]);
+      return;
+    }
+    if (abaId && idsDasPaginas.includes(abaId)) return;
+    while (v.pilha.length) {
+      const anterior = v.pilha.pop()!;
+      if (idsDasPaginas.includes(anterior)) { setAbaId(anterior); return; }
+    }
+    if (paginaSelecionada?.id) setAbaId(paginaSelecionada.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessaoId, chaveDosIds, abaId]);
   const candidatoAoVivo = paginas[abaValida]?.ao_vivo || sessao.data?.ao_vivo || null;
   useEffect(() => {
     if (!sessao.data?.rodando || !candidatoAoVivo) return;
@@ -193,6 +215,14 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
       setNovaAbaAberta(false);
       setEnderecoNovaAba("");
       if (r.resultado.aba_id) setAbaId(r.resultado.aba_id);
+      void sessao.refetch();
+    },
+    onError: (e) => toast.error(textoDoErro(e)),
+  });
+  const fecharAba = useMutation({
+    mutationFn: (alvo: { clienteId: string; sessaoId: string; abaId: string }) => chamarFuncao<ResultadoDaAcao>("navegador-remoto", { acao: "agir", cliente_id: alvo.clienteId, sessao_id: alvo.sessaoId, acao_do_navegador: "fechar_aba", aba_id: alvo.abaId, pedido: "Fechar aba sobrando no navegador remoto" }),
+    onSuccess: (_r, alvo) => {
+      if (contextoAtual.current.clienteId !== alvo.clienteId || contextoAtual.current.sessaoId !== alvo.sessaoId) return;
       void sessao.refetch();
     },
     onError: (e) => toast.error(textoDoErro(e)),
@@ -298,18 +328,24 @@ export default function NavegadorRemoto({ cliente: daConversa, podeGerirCofre = 
       {paginas.length > 0 && (
         <div className="flex shrink-0 gap-1 overflow-x-auto px-2 pb-1.5" role="tablist" aria-label={`Abas do navegador de ${cliente.nome}`}>
           {paginas.map((p, i) => (
-            <button
-              key={p.id || `legado-${i}`}
-              type="button"
-              role="tab"
-              aria-selected={i === abaValida}
-              onClick={() => p.id && ativarAba.mutate({ clienteId: cliente.id, sessaoId, abaId: p.id })}
-              disabled={!p.id || ativarAba.isPending || criarAba.isPending}
-              title={p.url}
-              className={juntar("max-w-[13rem] shrink-0 truncate rounded-md px-2 py-1 text-[12px]", i === abaValida ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50")}
-            >
-              {p.titulo || p.url || `Aba ${i + 1}`}
-            </button>
+            <div key={p.id || `legado-${i}`} className={juntar("flex max-w-[14rem] shrink-0 items-center rounded-md", i === abaValida ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50")}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={i === abaValida}
+                onClick={() => p.id && ativarAba.mutate({ clienteId: cliente.id, sessaoId, abaId: p.id })}
+                disabled={!p.id || ativarAba.isPending || criarAba.isPending}
+                title={p.url}
+                className="min-w-0 truncate px-2 py-1 text-[12px]"
+              >
+                {p.titulo || p.url || `Aba ${i + 1}`}
+              </button>
+              {paginas.length > 1 && p.id && (
+                <button type="button" className="mr-1 shrink-0 rounded p-0.5 opacity-60 hover:bg-background/60 hover:opacity-100" aria-label={`Fechar a aba ${p.titulo || p.url || i + 1}`} title="Fechar esta aba" disabled={fecharAba.isPending} onClick={() => fecharAba.mutate({ clienteId: cliente.id, sessaoId, abaId: p.id! })}>
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
           ))}
           <button type="button" className={juntar(botao.icone, "h-7 w-7 shrink-0")} aria-label="Nova aba" title="Nova aba" onClick={() => setNovaAbaAberta((v) => !v)}><Plus className="h-4 w-4" /></button>
         </div>

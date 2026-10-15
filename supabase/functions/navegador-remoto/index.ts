@@ -89,8 +89,10 @@ async function acao(nome: string, corpo: Record<string, unknown>, userId: string
       return { sessao: { id: s.id, rodando: false } };
     }
     // Histórico: a página aberta fica anotada na sessão (contexto para a equipe e os agentes).
+    // 15/10 (dono: "deslogou"): quem usa pela tela ao vivo não passa pelas ações, e o zelador fechou a
+    // sessão no meio do login (20 min "parada"). A tela do painel aberta consulta aqui: isso é uso.
     const atual = viva.paginas.find((x) => x.url && x.url !== "about:blank");
-    if (atual) await servico().from("navegador_sessoes").update({ ultima_url: atual.url.slice(0, 1000) }).eq("id", s.id);
+    await servico().from("navegador_sessoes").update({ ...(atual ? { ultima_url: atual.url.slice(0, 1000) } : {}), ...(userId ? { ultima_atividade: new Date().toISOString() } : {}) }).eq("id", s.id);
     const comandando = s.trava_ate && new Date(s.trava_ate).getTime() > Date.now() ? s.comandada_por : null;
     return { sessao: { id: s.id, ...viva, comandada_por: comandando } };
   }

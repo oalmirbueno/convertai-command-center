@@ -25,8 +25,11 @@ export type Provedor = {
 export type ContaDoProvedor = { projetos: Array<{ id: string; nome: string; simultaneas: number; tempo_padrao_s: number; minutos_usados: number | null }> };
 
 const API = "https://api.browserbase.com/v1";
-/** Uma hora por sessão (o dono reabre; o contexto guarda o login). */
-const TEMPO_DA_SESSAO_S = 3600;
+/**
+ * Teto de uma sessão. Era 1 h e derrubava login demorado (Meta com verificação em duas etapas,
+ * 15/10); sessão esquecida quem fecha é o zelador (20 min sem ninguém usando nem olhando).
+ */
+const TEMPO_DA_SESSAO_S = 4 * 3600;
 /** Sem keepAlive (plano gratuito): sessão curta, para não gastar a hora do mês num navegador esquecido. */
 const TEMPO_SEM_PLANO_PAGO_S = 900;
 /** A região mais perto do Brasil entre as do provedor (us-west-2, us-east-1, eu-central-1, ap-southeast-1). */
