@@ -147,7 +147,9 @@ describe("contratos com o resto do painel", () => {
 
   it("a Central monta o agente numa linha e manda client_id ao escritor", () => {
     const central = ler("src/pages/AdminExperience.tsx");
-    expect(central).toContain("{!cycleReview && <AgenteDaCentral />}");
+    // Na Revisão (Ciclo) o cabeçalho da Central inteiro, com o agente, não aparece (15/10/2026).
+    expect(central).toContain("{!cycleReview && <CabecalhoDePagina");
+    expect(central).toContain("<AgenteDaCentral />");
     expect(central.match(/client_id: (report\.client_id|client\.id|c\.id), /g)?.length).toBeGreaterThanOrEqual(3);
     expect(central).toContain('action: "memorizar"');
   });

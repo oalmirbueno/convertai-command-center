@@ -68,7 +68,7 @@ describe("a seção na Revisão do Ciclo", () => {
     estado.avisos = [aviso({ valid_until: "2099-01-01T00:00:00Z" })];
     estado.chamadas = [];
     montar();
-    await screen.findByText("Reel do mirante");
+    fireEvent.click(await screen.findByRole("button", { name: /Reel do mirante/ }));
     expect(screen.getByText(/Mirante \| Aceleriq/)).toBeTruthy();
     const aprovar = screen.getByRole("button", { name: "Aprovar aviso" }) as HTMLButtonElement;
     expect(aprovar.disabled).toBe(true);
@@ -83,7 +83,8 @@ describe("a seção na Revisão do Ciclo", () => {
     estado.avisos = [aviso({ status: "aprovado", decided_at: new Date().toISOString() })];
     estado.chamadas = [];
     montar();
-    const marcar = await screen.findByRole("button", { name: "Marcar como enviado" }) as HTMLButtonElement;
+    fireEvent.click(await screen.findByRole("button", { name: /Reel do mirante/ }));
+    const marcar = screen.getByRole("button", { name: "Marcar como enviado" }) as HTMLButtonElement;
     expect(marcar.disabled).toBe(true);
     fireEvent.change(screen.getByPlaceholderText(/enviado no grupo/), { target: { value: "grupo Mirante 10h15" } });
     fireEvent.click(marcar);

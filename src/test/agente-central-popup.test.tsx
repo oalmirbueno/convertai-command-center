@@ -160,7 +160,8 @@ describe("Central enxuta (contrato do código)", () => {
 
   it("o agente fica no cabeçalho, ao lado do gerador, e não como bloco grande", () => {
     const cabecalho = central.slice(central.indexOf("Cabeçalho enxuto"), central.indexOf("Hoje, numa faixa só"));
-    expect(cabecalho).toContain("{!cycleReview && <AgenteDaCentral />}");
+    expect(cabecalho).toContain("{!cycleReview && <CabecalhoDePagina");
+    expect(cabecalho).toContain("<AgenteDaCentral />");
     expect(cabecalho).toContain('data-tour="central-gerador"');
   });
 

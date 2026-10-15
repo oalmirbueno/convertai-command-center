@@ -84,6 +84,7 @@ import {
   etiqueta,
   foco,
   juntar,
+  larguraDaMesa,
   superficie,
   texto,
   type ItemDeEtapa,
@@ -2311,38 +2312,53 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   const grupoDeBotoes = "-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1";
 
   return (
-    <div ref={raizDaCentral} className={cycleReview ? "mx-auto min-h-dvh max-w-6xl space-y-5 bg-background px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-0 lg:pb-0 text-foreground central-celular" : "space-y-5 central-celular"}>
-      {/* Mesmo cabecalho do Ciclo: respiro da safe area + 12px, Voltar com
-          seta a esquerda. Antes era um link solto a 20px do topo. */}
+    <div ref={raizDaCentral} className={cycleReview ? juntar(larguraDaMesa, "min-h-dvh space-y-4 bg-background px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-0 text-foreground central-celular md:px-6 lg:pb-0") : "space-y-5 central-celular"}>
+      {/* Revisão no molde do Ciclo (15/10/2026, "não está padrão, muito poluída"):
+          um topo só, igual ao da Esteira. Voltar, título e "?", e à direita
+          atualizar e o "..." (gerar mensagens, mensagens da Central). A segunda
+          linha é o estado em uma frase. */}
       {cycleReview && (
-        <header className="sticky top-0 z-30 -mx-4 border-b border-border bg-background/95 px-4 pb-2 pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur">
-          <nav aria-label="Navegação da revisão do Ciclo" className="flex min-w-0 items-center text-[13px]">
-            <Link to="/ciclo" aria-label="Voltar ao Ciclo" className={juntar(botao.discreto, "-ml-2.5")}><ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" /> Voltar ao Ciclo</Link>
-            {reviewClientId && (
-              <span className="ml-auto flex min-w-0 items-center">
-                <span className={juntar(texto.auxiliar, "mr-3 min-w-0 truncate")}>{clients?.find(client => client.id === reviewClientId)?.company_name || clients?.find(client => client.id === reviewClientId)?.full_name || "não encontrado nesta carteira"}</span>
-                <Link to="/ciclo/revisao" className={juntar("shrink-0 rounded text-[12px] text-primary hover:underline", foco)}>Ver todos os clientes</Link>
-              </span>
-            )}
-          </nav>
-          <div className="mt-1 flex min-w-0 items-center">
-            <p className={`min-w-0 truncate text-[12px] ${revisoes.total > 0 ? "font-medium text-warning" : "text-muted-foreground"}`}>
+        <header className="sticky top-0 z-30 -mx-4 border-b border-border bg-background/95 px-4 pt-[calc(env(safe-area-inset-top)+0.625rem)] backdrop-blur md:-mx-6 md:px-6">
+          <div className="flex h-10 min-w-0 items-center">
+            <Link to="/ciclo" aria-label="Voltar ao Ciclo" title="Voltar ao Ciclo" className={juntar(botao.icone, "mr-1")}><ArrowLeft className="h-4 w-4" aria-hidden="true" /></Link>
+            <h1 className={juntar(texto.tituloPagina, "shrink-0")}>Revisão</h1>
+            <AjudaRecolhida className="ml-1.5" titulo="Revisão do Ciclo">
+              Esta área é a aprovação. O rascunho vira pedido, você decide (aqui ou pelo Hermes no WhatsApp) e quem envia registra o envio com a prova. O Hermes lê e escreve nesta mesma fila pelo MCP, e cada pedido novo ou decisão chega no sino.
+            </AjudaRecolhida>
+            <div className="ml-auto flex shrink-0 items-center pl-2 [&>*+*]:ml-1">
+              <button type="button" onClick={() => void refreshCentral()} aria-label="Atualizar" title={`Atualizar · dados de ${lastSyncLabel}`} className={botao.icone}>
+                <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
+              </button>
+              <MenuMais
+                rotulo="Mais ações"
+                itens={[
+                  { rotulo: "Gerar mensagens de hoje", icone: <Sparkles className="h-3.5 w-3.5" />, aoEscolher: () => { setGenClientId(reviewClientId || "__all__"); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); } },
+                  { rotulo: "Mensagens geradas na Central", icone: <ArrowUpRight className="h-3.5 w-3.5" />, aoEscolher: () => navigate("/central") },
+                ]}
+              />
+            </div>
+          </div>
+          <div className="flex min-h-[32px] min-w-0 items-center pb-1.5">
+            <p className={juntar("min-w-0 truncate text-[12px]", revisoes.total > 0 ? "font-medium text-warning" : "text-muted-foreground")} aria-live="polite">
               {revisoes.total > 0
                 ? `${revisoes.total} ${revisoes.total === 1 ? "pedido espera" : "pedidos esperam"} a sua decisão${reviewClientId && revisoes.porCliente.get(reviewClientId) ? ` (${revisoes.porCliente.get(reviewClientId)} deste cliente)` : ""}`
                 : "Nada esperando decisão agora"}
             </p>
-            <AjudaRecolhida className="ml-1.5" rotulo="Como chegam os pedidos">
-              Você recebe um aviso no sino a cada pedido novo e a cada decisão. Quando um pedido de revisão for preparado, ele aparece aqui e no sino.
-            </AjudaRecolhida>
+            {reviewClientId && (
+              <span className="ml-auto flex min-w-0 items-center pl-3 text-[12px]">
+                <span className={juntar(texto.auxiliar, "mr-2 min-w-0 truncate")}>{clients?.find(client => client.id === reviewClientId)?.company_name || clients?.find(client => client.id === reviewClientId)?.full_name || "não encontrado nesta carteira"}</span>
+                <Link to="/ciclo/revisao" aria-label="Ver todos os clientes" className={juntar("shrink-0 rounded text-primary hover:underline", foco)}>Ver todos</Link>
+              </span>
+            )}
           </div>
         </header>
       )}
       {/* Cabeçalho enxuto (dono, 26/09): título, "?" com o que a tela faz, a
           hora dos dados e as duas ações. A explicação longa mora no "?". */}
-      <CabecalhoDePagina
+      {!cycleReview && <CabecalhoDePagina
         // Título numa linha (28/09): se faltar espaço, reticências do próprio cabeçalho.
-        titulo={cycleReview ? "Ciclo · Revisão por cliente" : "Central"}
-        ajuda={cycleReview ? "Esta área é a aprovação: o rascunho vira pedido, você decide (aqui ou pelo Hermes no WhatsApp) e quem envia registra o envio. O Hermes lê e escreve nesta mesma fila pelo MCP." : "Aqui você cuida da relação com cada cliente: gera as mensagens, revisa, publica e age nos alertas. Nada desta tela aparece ao cliente."}
+        titulo="Central"
+        ajuda="Aqui você cuida da relação com cada cliente: gera as mensagens, revisa, publica e age nos alertas. Nada desta tela aparece ao cliente."
         descricao={
           // Sinal de vida: quando os números foram lidos por último, e ler de novo.
           <button
@@ -2357,7 +2373,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         }
         acoes={
           <>
-            {!cycleReview && <AgenteDaCentral />}
+            <AgenteDaCentral />
             <button
               type="button"
               data-tour="central-gerador"
@@ -2370,7 +2386,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
             </button>
           </>
         }
-      />
+      />}
       {/* Leitura sem teto que corte (frente CE, 28/09): a Central lê tudo em
           páginas. O aviso só aparece quando uma leitura FALHOU agora (o
           painel tenta de novo sozinho e mantém o que já tinha) ou quando a
@@ -3053,7 +3069,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                   }} />
                 )}
                 {cycleReview && <AvisosDePublicacao isAdmin={isAdmin} clientId={reviewClientId || ""} />}
-                <Secao
+                {/* Na Revisão (Ciclo) os rascunhos já aparecem nas faixas; a lista
+                    curta de mensagens geradas fica só na Central. */}
+                {!cycleReview && <Secao
                   divisoria={comPedido}
                   recolher={comPedido ? (cycleReview ? `ciclo:revisao:rascunhos:${reviewClientId || "todos"}` : "central:fila:rascunhos") : undefined}
                   resumo={`${rascunhosVisiveis.length} ${rascunhosVisiveis.length === 1 ? "rascunho" : "rascunhos"}`}
@@ -3173,7 +3191,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                       })}
                     </ul>
                   )}
-                </Secao>
+                </Secao>}
               </div>
             </RegiaoRolavel>
           );

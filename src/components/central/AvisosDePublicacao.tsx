@@ -3,7 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { AjudaRecolhida, EstadoDeErro, Secao, botao, campo, campoTexto, juntar, texto } from "@/components/sistema";
+import { ChevronDown } from "lucide-react";
+import { AjudaRecolhida, EstadoDeErro, Secao, botao, campo, campoTexto, foco as focoDeTeclado, juntar, texto } from "@/components/sistema";
 import { erroDoAviso, faseDoAviso, quando, vencido, type AvisoDePublicacao } from "@/lib/avisoDePublicacao";
 
 /*
@@ -102,21 +103,26 @@ function LinhaDoAviso({ aviso: a, focado, ocupado, travado, agora, onDecidir, on
   const post = a.payload.publication ?? {};
   const cliente = a.client?.company_name || a.client?.full_name || "Cliente";
   const fase = faseDoAviso(a, agora);
+  const [aberto, setAberto] = useState(focado);
   const copiar = async () => {
     try { await navigator.clipboard.writeText(a.mensagem); toast.success("Mensagem aprovada copiada."); }
     catch { toast.error("Não foi possível copiar a mensagem."); }
   };
-  return <article className={juntar("min-w-0 space-y-3 py-4", focado && "rounded-md bg-primary/5 px-3")} aria-label={`Aviso de post de ${cliente}`}>
-    <header className="min-w-0">
-      <p className={juntar(texto.auxiliar, "truncate")}>{cliente} · {post.platform || "rede"} · no ar desde {quando(post.published_at)}{a.preparado_via !== "painel" ? ` · preparado por ${a.preparado_via.replace(/^agente:/, "")}` : ""}</p>
-      <h3 className={juntar(texto.tituloSecao, "mt-1 min-w-0 truncate")} title={post.title}>{post.title || "Publicação"}</h3>
-      <p className={juntar("mt-0.5 text-[12px] font-medium", fase === "enviar" ? "text-primary" : vencido(a, agora) ? "text-destructive" : "text-warning")}>
-        {fase === "enviar" ? "Aprovado · envio não registrado" : vencido(a, agora) ? "Venceu · prepare outro aviso" : `Esperando decisão · vale até ${quando(a.valid_until)}`}
-      </p>
-    </header>
+  const situacao = fase === "enviar" ? "Aprovado · envio não registrado" : vencido(a, agora) ? "Venceu · prepare outro aviso" : `Esperando decisão · vale até ${quando(a.valid_until)}`;
+  // Linha fechada como os pedidos da revisão: título, cliente e situação; abre ao tocar.
+  return <article className="min-w-0" aria-label={`Aviso de post de ${cliente}`}>
+    <button type="button" aria-expanded={aberto} onClick={() => setAberto(!aberto)} className={juntar("flex w-full min-w-0 items-center px-1 py-3 text-left transition-colors hover:bg-muted/40", focoDeTeclado)}>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[14px] font-medium text-foreground" title={post.title}>{post.title || "Publicação"}</span>
+        <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>{cliente} · {post.platform || "rede"} · <span className={fase === "enviar" ? "text-primary" : vencido(a, agora) ? "text-destructive" : "text-warning"}>{situacao}</span></span>
+      </span>
+      <ChevronDown className={juntar("ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform", aberto && "rotate-180")} aria-hidden="true" />
+    </button>
+    {aberto && <div className="min-w-0 space-y-3 pb-5 pl-1 pr-1 pt-1">
+    <p className={texto.auxiliar}>No ar desde {quando(post.published_at)}{a.preparado_via !== "painel" ? ` · preparado por ${a.preparado_via.replace(/^agente:/, "")}` : ""}</p>
     {post.permalink && <a href={post.permalink} target="_blank" rel="noopener noreferrer" className={juntar(texto.corpo, "block truncate text-primary underline-offset-2 hover:underline")}>{post.permalink}</a>}
-    <p className={juntar(texto.corpo, "whitespace-pre-wrap")}>{a.mensagem}</p>
-    <p className={texto.corpo}><strong className="font-medium">Destino congelado:</strong> {a.destino.channel === "portal" ? "Portal do cliente" : "WhatsApp"}{a.destino.channel === "whatsapp" ? ` · ${a.destino.recipient}` : ""}</p>
+    <p className={juntar(texto.corpo, "max-w-[72ch] whitespace-pre-wrap")}>{a.mensagem}</p>
+    <p className={texto.auxiliar}>Destino: {a.destino.channel === "portal" ? "Portal do cliente" : "WhatsApp"}{a.destino.channel === "whatsapp" ? ` · ${a.destino.recipient}` : ""}</p>
     {fase === "decidir" && <div className="space-y-2">
       <label className="flex items-start text-[13px]"><input type="checkbox" checked={conferido} onChange={e => setConferido(e.target.checked)} className="mr-2 mt-0.5 h-4 w-4 shrink-0 accent-primary" />Conferi o post, o link, o texto e o destino.</label>
       <label className={juntar(texto.rotulo, "block")}>Motivo (para rejeitar)<textarea value={comentario} onChange={e => setComentario(e.target.value)} rows={2} maxLength={4000} className={juntar(campoTexto, "mt-1.5 min-h-[60px]")} /></label>
@@ -135,6 +141,7 @@ function LinhaDoAviso({ aviso: a, focado, ocupado, travado, agora, onDecidir, on
         <label className={juntar(texto.rotulo, "block min-w-0 flex-1")}>Evidência do envio<input value={evidencia} onChange={e => setEvidencia(e.target.value)} placeholder="Ex.: enviado no grupo do cliente hoje às 10h15" className={juntar(campo, "mt-1.5")} /></label>
         <button type="button" disabled={travado || evidencia.trim().length < 3} onClick={() => void onEnviado(a, evidencia)} className={juntar(botao.primario, "mt-2 sm:ml-2 sm:mt-0")}>{ocupado ? "Registrando…" : "Marcar como enviado"}</button>
       </div>
+    </div>}
     </div>}
   </article>;
 }
