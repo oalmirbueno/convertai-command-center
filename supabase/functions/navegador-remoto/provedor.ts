@@ -96,7 +96,11 @@ export function provedorBrowserbase(chave: string, projeto: string | null, f: ty
         body: JSON.stringify({
           ...doProjeto, keepAlive: manterViva, timeout: tempo, region: REGIAO,
           ...(comProxy ? { proxies: PROXY_DA_META } : {}),
-          browserSettings: { context: { id: contexto, persist: true }, viewport: { width: tela.largura, height: tela.altura } },
+          // 15/10 (dono: "vai até o captcha e volta para logar"): o resolvedor automático de captcha do
+          // provedor (ligado por padrão) mexia no desafio do Facebook junto com a pessoa, e a Meta
+          // descartava a tentativa. Captcha é da pessoa na tela ao vivo; a doc do provedor também pede
+          // usar o resolvedor só onde o site autoriza.
+          browserSettings: { context: { id: contexto, persist: true }, viewport: { width: tela.largura, height: tela.altura }, solveCaptchas: false },
         }),
       });
       // Do melhor para o mínimo: proxy do Brasil para a Meta (Developer+), depois sem ele, e por fim

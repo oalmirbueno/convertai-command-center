@@ -49,6 +49,8 @@ describe("provedor Browserbase (fetch falso)", () => {
     expect(await p.criarSessao("ctx-1")).toBe("ses-1");
     const corpo = JSON.parse(String(chamadas[1].init.body));
     expect(corpo).toMatchObject({ projectId: "proj-1", keepAlive: true, timeout: 14400, region: "us-east-1", browserSettings: { context: { id: "ctx-1", persist: true }, viewport: { width: 1280, height: 720 } } });
+    // O captcha fica com a pessoa: o resolvedor automático do provedor desligado (15/10).
+    expect((corpo.browserSettings as Record<string, unknown>).solveCaptchas).toBe(false);
     // Proxy desligado por padrão (15/10: IP que troca derrubava a sessão da Meta).
     expect(corpo).not.toHaveProperty("proxies");
     expect((chamadas[0].init.headers as Record<string, string>)["X-BB-API-Key"]).toBe("chave-teste");
