@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Activity, AlertTriangle, Bot, Building2, CheckCircle2, ClipboardCopy, Clock,
-  FileCheck2, FileText, Inbox, ListChecks, PauseCircle, Radar, RefreshCw, ShieldAlert, TrendingUp, Users, Wrench, X, XCircle,
+  FileCheck2, FileText, Inbox, ListChecks, MessageSquareReply, PauseCircle, Radar, RefreshCw, ShieldAlert, SquareArrowOutUpRight, TrendingUp, Users, Wrench, X, XCircle,
 } from "lucide-react";
 import OrganogramaAgentes, { type NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
 import ExecucoesRecentes from "@/components/execucao/ExecucoesRecentes";
@@ -30,6 +30,8 @@ import TaskDetailDrawer from "@/components/admin/TaskDetailDrawer";
 import { useProjects, useTeamMembers } from "@/hooks/useSupabaseData";
 import AprovacoesExplicadas from "@/components/execucao/AprovacoesExplicadas";
 import PropostasDeResponsavel from "@/components/execucao/PropostasDeResponsavel";
+import MesaDeDecisao, { type ItemDaMesa } from "@/components/decisao/MesaDeDecisao";
+import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import {
   ROTULO_CATEGORIA, ROTULO_ORIGEM, categoriaDaTarefa, origemDaExecucao, passaNoFiltro,
 } from "@/lib/execucaoBadges";
@@ -1187,6 +1189,49 @@ export default function AdminExecucao() {
   };
 
   /** Lista de vínculos: cartões separados (grade nas listas, pilha nas colunas do quadro). */
+  /* "Precisa de você" na mesa de decisão (15/10/2026, pedido do dono): um vínculo por vez, em
+     cartão grande. Não há o que aprovar aqui (só nos selos de decisão): o botão principal é
+     Responder (abre o diário do agente) ou Decidir; o item sai da mesa quando o estado muda. */
+  const itensDosVinculos = (lista: Vinculo[]): ItemDaMesa[] => lista.map((v) => {
+    const t = tarefaDoVinculo(v, tarefas);
+    const cliente = t?.project?.client;
+    const nomeCliente = cliente ? (cliente.company_name || cliente.full_name) : "Operação interna";
+    const op = opDe(v.operator_id);
+    const decidir = precisaDecisao(v);
+    const titulo = t?.title || v.last_action || "(sem tarefa vinculada)";
+    const prazoVencido = t?.due_date && String(t.due_date) <= hoje && v.status !== "done";
+    const fala = v.block_reason ? falarComoGente(v.block_reason).humano : v.last_action ? falarComoGente(v.last_action).humano : null;
+    const idTarefa = v.kanban_task_id ?? (v as any).painel_task_id;
+    return {
+      id: v.id,
+      tipo: decidir ? "Precisa da sua decisão" : v.status === "blocked" ? "Travada" : v.status === "awaiting_input" ? "Esperando resposta sua" : STATUS_ROTULO[v.status] || v.status,
+      tomDoTipo: v.status === "blocked" ? "perigo" : "aviso",
+      cliente: nomeCliente,
+      avatar: <FotoDoCliente nome={nomeCliente} foto={null} tamanho="sm" />,
+      titulo,
+      mensagem: fala,
+      passo: v.next_step ? falarComoGente(v.next_step).humano : null,
+      sinais: [
+        { icone: <Bot className="h-3 w-3" />, texto: op?.display_name || "agente" },
+        ...(diasParado(v) >= 1 ? [{ icone: <PauseCircle className="h-3 w-3" />, texto: `parado há ${diasParado(v)} ${diasParado(v) === 1 ? "dia" : "dias"}`, tom: (diasParado(v) >= 3 ? "aviso" : "neutro") as "aviso" | "neutro" }] : []),
+        ...(t?.due_date ? [{ icone: <Clock className="h-3 w-3" />, texto: `prazo ${String(t.due_date).split("-").reverse().slice(0, 2).join("/")}`, tom: (prazoVencido ? "perigo" : "neutro") as "perigo" | "neutro" }] : []),
+        ...(t?.project?.name ? [{ texto: t.project.name }] : []),
+      ],
+      detalhes: <div className="space-y-1">
+        <p>Responsável humano: {t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}</p>
+        {v.last_evidence && <p className="break-all">Última prova: {falarComoGente(v.last_evidence).humano}</p>}
+        <p>Atualizado em {dataCurta(v.updated_at)}</p>
+      </div>,
+      podeAjuste: false,
+      podeRejeitar: false,
+      acaoPrincipal: decidir
+        ? { rotulo: "Decidir", icone: <ShieldAlert className="h-4 w-4" />, aoClicar: () => void abrirDecisaoDoVinculo(v.id) }
+        : { rotulo: "Responder", icone: <MessageSquareReply className="h-4 w-4" />, aoClicar: () => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined }) },
+      extras: idTarefa ? <button type="button" onClick={() => setTarefaAberta(tarefas.get(String(idTarefa)) ?? { id: idTarefa })} title="Abrir a tarefa" className={juntar(botao.discreto, "h-11 px-3")}><SquareArrowOutUpRight className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Tarefa</span></button> : null,
+    };
+  });
+  const MESA_SEM_DECISAO = async () => false;
+
   const ListaDeCartoes = ({ lista, rotulo, pilha = false }: { lista: Vinculo[]; rotulo: string; pilha?: boolean }) => (
     <ul className={pilha ? "space-y-2" : "grid gap-2.5 sm:grid-cols-2 2xl:grid-cols-3"} aria-label={rotulo}>
       {lista.map((v) => (
@@ -1562,7 +1607,7 @@ export default function AdminExecucao() {
       />
       {filtrados.length > 0 && (
         <Secao nivel={3} titulo="Vínculos marcados com o selo" descricao={`${filtrados.length}`}>
-          <ListaDeCartoes lista={filtrados} rotulo="Vínculos marcados com o selo" />
+          <MesaDeDecisao rotulo="Vínculos marcados com o selo" itens={itensDosVinculos(filtrados)} onDecidir={MESA_SEM_DECISAO} />
         </Secao>
       )}
     </div>
@@ -1576,7 +1621,9 @@ export default function AdminExecucao() {
     />
   ) : (
     <div className="space-y-3">
-      <ListaDeCartoes lista={filtrados} rotulo={VISOES.find((x) => x.id === visao)?.rotulo || "Vínculos"} />
+      {aba === "decisoes" && (visao === "awaiting_input" || visao === "blocked")
+        ? <MesaDeDecisao rotulo={VISOES.find((x) => x.id === visao)?.rotulo || "Vínculos"} itens={itensDosVinculos(filtrados)} onDecidir={MESA_SEM_DECISAO} />
+        : <ListaDeCartoes lista={filtrados} rotulo={VISOES.find((x) => x.id === visao)?.rotulo || "Vínculos"} />}
       {visao === "done" && filtrados.some((v) => !v.last_evidence) && (
         <div className="flex items-center text-[12px] text-warning">
           <XCircle className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
