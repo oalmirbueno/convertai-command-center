@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, CalendarRange, ChevronDown, ChevronLeft, ChevronRight, Clock, List, Loader2, Palette, Sparkles, X } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { CalendarDays, CalendarPlus, CalendarRange, ChevronDown, ChevronLeft, ChevronRight, Clock, Eraser, List, Loader2, Palette, WandSparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ArteDoEstudioNaAgenda } from "@/hooks/useEditorialCalendar";
 import {
@@ -16,12 +18,13 @@ import {
 import { BotaoDeApagar, useApagarConteudo, type ResultadoDoApagar } from "./ApagarConteudo";
 import { AvisoDeErro, BotaoComCusto, avisarCustoReal } from "./Custo";
 import { useMesa } from "./MesaContexto";
+import { JanelaDaAprovada, type AprovadaSemData } from "./AprovadasSemData";
 import { FORMATOS_DE_VIDEO_NO_ESTUDIO } from "./modoDaPauta";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import Painel from "@/components/sistema/Painel";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { juntar, superficie } from "@/components/sistema/estilos";
+import { botao, juntar, superficie } from "@/components/sistema/estilos";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { useArtesDoMes, SEM_ARTES } from "./MesArtes";
 import {
@@ -187,25 +190,129 @@ function RoteiroResumido({ roteiro }: { roteiro: RoteiroDoItem }) {
   );
 }
 
+/** Colunas do trabalho que a janela de agendar precisa (as mesmas das aprovadas sem data). */
+const COLUNAS_PARA_AGENDAR = "id, task_id, tipo, status, file_ids, post_id, aprovado_em, publicar_em, entrega_aviso";
+
+/**
+ * Agendar pelo Mês (dono, 16/10: "se eu clicar no mês, poderia agendar por
+ * aqui também, se não tiver agendado"). Só aparece no conteúdo que ainda não
+ * tem post no mês. Reaproveita a janela das aprovadas sem data
+ * (JanelaDaAprovada, a mesma do "Agendar" do Estúdio): data e hora sugeridas,
+ * vai postar ou não e os perfis; o publicacao_confirmar grava. A regra é a de
+ * sempre: aprovada, agenda na hora; sem aprovação, fica marcada e o banco
+ * agenda quando o cliente aprovar. Sem arte entregue, o ícone fica apagado e
+ * explica o porquê. Só quem agenda (admin e gestor) vê.
+ */
+export function AgendarNoMes({
+  item,
+  trabalho,
+  agendado,
+  onAgendou,
+  className = "",
+}: {
+  item: ItemDaAgenda;
+  trabalho: TrabalhoDaAgenda | undefined;
+  /** Já tem post no mês (programado ou publicado). */
+  agendado: boolean;
+  onAgendou?: () => void;
+  className?: string;
+}) {
+  const { podeRecarregar } = useMesa();
+  const [aberta, setAberta] = useState(false);
+  const entregue = !!trabalho && trabalho.status === "entregue";
+  const linha = useQuery({
+    queryKey: ["mesa", "agendar-no-mes", trabalho ? trabalho.id : ""],
+    enabled: podeRecarregar && !agendado && entregue,
+    staleTime: 30_000,
+    retry: false,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("estudio_trabalhos").select(COLUNAS_PARA_AGENDAR).eq("id", trabalho!.id).maybeSingle();
+      if (error) throw error;
+      return (data || null) as { id: string; task_id: string | null; tipo?: string | null; file_ids?: string[] | null; post_id?: string | null; aprovado_em?: string | null; publicar_em?: string | null; entrega_aviso?: string | null } | null;
+    },
+  });
+  if (!podeRecarregar || agendado || !abreNoEstudio(item.delivery_type)) return null;
+  const t = linha.data;
+  const pronta = !!t && t.tipo !== "ads" && !!(t.file_ids && t.file_ids.length);
+  const porque = !entregue
+    ? "Agendar: entregue a arte no Estúdio primeiro"
+    : linha.isLoading
+      ? "Agendar: lendo a arte..."
+      : pronta
+        ? "Agendar"
+        : "Agendar: a entrega ainda não tem arquivo";
+  const peca: AprovadaSemData | null =
+    pronta && t
+      ? {
+          id: t.id,
+          task_id: item.id,
+          file_ids: t.file_ids || [],
+          post_id: t.post_id || null,
+          aprovado_em: t.aprovado_em || null,
+          publicar_em: t.publicar_em || null,
+          entrega_aviso: t.entrega_aviso || null,
+          titulo: item.title,
+          dia: item.due_date || null,
+          project_id: item.project_id || null,
+        }
+      : null;
+  return (
+    <>
+      <button
+        type="button"
+        className={juntar(botao.icone, !pronta && "opacity-50", className)}
+        aria-label="Agendar"
+        aria-disabled={pronta ? undefined : "true"}
+        title={porque}
+        data-agendar-no-mes=""
+        onClick={() => {
+          if (pronta) setAberta(true);
+          else toast.info(porque.replace("Agendar: ", ""));
+        }}
+      >
+        <CalendarPlus className="h-4 w-4" />
+      </button>
+      {aberta && peca && (
+        <JanelaDaAprovada
+          peca={peca}
+          posicao={1}
+          total={1}
+          titulo="Agendar"
+          onFechar={() => setAberta(false)}
+          onFeita={() => {
+            setAberta(false);
+            onAgendou?.();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
 function ItemSelecionado({
   item,
   selo,
   arte,
   roteiro,
   posts,
+  trabalho,
   abertoDeInicio,
   onTirar,
   onAbrir,
   onApagar,
+  onAgendou,
 }: {
   item: ItemDaAgenda;
   selo: Selo;
   arte: ArteDoEstudioNaAgenda | null;
   roteiro: RoteiroDoItem | undefined;
   posts: PostDaAgenda[];
+  /** Trabalho do Estúdio do item (para agendar daqui quando ainda não tem post). */
+  trabalho?: TrabalhoDaAgenda;
   abertoDeInicio: boolean;
   onTirar: () => void;
   onAbrir: (() => void) | null;
+  onAgendou?: () => void;
   /** Apaga da agenda (com desfazer); o servidor recusa o aprovado, agendado ou publicado. */
   onApagar?: (confirmarArte: boolean) => Promise<ResultadoDoApagar>;
 }) {
@@ -224,9 +331,18 @@ function ItemSelecionado({
             {arte ? <SeloDaArte arte={arte} className="mt-1" /> : <SeloDiscreto selo={selo} className="mt-1" />}
           </span>
         </button>
-        <Button type="button" variant="ghost" size="icon" className="ml-1 h-7 w-7 shrink-0" onClick={onTirar} aria-label="Tirar da seleção">
-          <X className="h-3.5 w-3.5" />
-        </Button>
+        {/* Ações só em ícone, sempre à vista (sem abrir o item). */}
+        <span className="ml-1 flex shrink-0 items-center">
+          <AgendarNoMes item={item} trabalho={trabalho} agendado={posts.length > 0} onAgendou={onAgendou} />
+          {doEstudio && onAbrir && (
+            <button type="button" className={botao.icone} onClick={onAbrir} aria-label="Abrir no Estúdio" title="Abrir no Estúdio">
+              <Palette className="h-4 w-4" />
+            </button>
+          )}
+          <button type="button" className={botao.icone} onClick={onTirar} aria-label="Tirar da seleção" title="Tirar da seleção">
+            <X className="h-4 w-4" />
+          </button>
+        </span>
       </div>
       {aberto && (
         <div className="space-y-2.5 px-3 pb-3 pl-9">
@@ -244,19 +360,10 @@ function ItemSelecionado({
               {posts.map((p) => `${rotuloDaPublicacao(p.status)} em ${dataCurta(p.dia)} às ${horaCurta(p.scheduled_at)}`).join(" · ")}
             </p>
           )}
-          <div className="flex min-w-0 flex-wrap items-center">
-            {doEstudio ? (
-              onAbrir && (
-                <Button type="button" size="sm" variant="outline" className="mb-1 mr-2 h-8 text-[12px]" onClick={onAbrir}>
-                  <Palette className="mr-1.5 h-3.5 w-3.5" /> Abrir no Estúdio
-                </Button>
-              )
-            ) : (
-              <p className="mb-1 mr-2 text-[11px] text-muted-foreground">Formato fora do estúdio.</p>
-            )}
+          <div className="flex min-w-0 items-center">
+            {!doEstudio && <p className="mr-2 min-w-0 text-[11px] text-muted-foreground">Formato fora do estúdio.</p>}
             {onApagar && (
-              <span className="mb-1 ml-auto inline-flex min-w-0 items-center">
-                <span className="mr-1 text-[12px] text-muted-foreground">Apagar da agenda</span>
+              <span className="ml-auto inline-flex min-w-0 items-center">
                 <BotaoDeApagar onApagar={onApagar} pergunta="Apagar este conteúdo da agenda?" rotulo="Apagar da agenda" />
               </span>
             )}
@@ -689,6 +796,22 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
               `${itensDaMesa.length} ${itensDaMesa.length === 1 ? "peça" : "peças"} · ${dados.posts.length} ${dados.posts.length === 1 ? "post" : "posts"}`
             ) : null}
           </span>
+          {/* Um conteúdo marcado: agendar (se ainda não tem post) e abrir no Estúdio direto daqui. */}
+          {escolhidos.length === 1 && (
+            <span className="mr-1 flex shrink-0 items-center" data-acoes-do-marcado="">
+              <AgendarNoMes
+                item={escolhidos[0]}
+                trabalho={dados ? (doItem(dados.trabalhos, escolhidos[0].id) as TrabalhoDaAgenda | undefined) : undefined}
+                agendado={(postsPorItem.get(escolhidos[0].id) || []).length > 0}
+                onAgendou={atualizarAgenda}
+              />
+              {unicoDoEstudio && (
+                <button type="button" className={botao.icone} onClick={() => abrirNoEstudio(unicoDoEstudio)} aria-label={`Abrir no Estúdio: ${unicoDoEstudio.title}`} title="Abrir no Estúdio">
+                  <Palette className="h-4 w-4" />
+                </button>
+              )}
+            </span>
+          )}
           {escolhidos.length > 0 && (
             <Button type="button" size="sm" variant="secondary" className="mr-1 h-7 px-2.5 text-[12px]" onClick={irParaSelecao}>
               {escolhidos.length} {escolhidos.length === 1 ? "selecionado" : "selecionados"}
@@ -752,15 +875,16 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
               <BotaoComCusto
                 rotulo={
                   <>
-                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                    Completar e melhorar com o agente ({Math.min(idsParaCompletar.length, MAX_COMPLETAR)})
+                    <WandSparkles className="h-4 w-4" aria-hidden="true" />
+                    <span className="sr-only">Completar e melhorar com o agente ({Math.min(idsParaCompletar.length, MAX_COMPLETAR)})</span>
                   </>
                 }
+                variant="ghost"
                 titulo="Completar e melhorar com o agente"
                 descricao="O estrategista escreve e melhora o roteiro de cada item (gancho, copy e o texto de cada card) sem trocar o tema, a data nem o formato, e deixa a direção pronta no Estúdio."
                 disabled={idsParaCompletar.length === 0 || demais}
                 fecharAoConfirmar
-                className="my-0.5 mr-1.5 h-8 text-[12px]"
+                className="my-0.5 mr-0.5 h-8 px-2 text-[12px]"
                 partes={() => [
                   {
                     modeloId: modeloEstrategista?.id,
@@ -777,14 +901,9 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
                   avisarCustoReal(`${n} roteiro(s) pronto(s), ${m} direção(ões) pronta(s) no Estúdio`, data, mesa.atualizarCusto);
                 }}
               />
-              {unicoDoEstudio && (
-                <Button type="button" size="sm" variant="outline" className="my-0.5 mr-1.5 h-8 text-[12px]" onClick={() => abrirNoEstudio(unicoDoEstudio)}>
-                  <Palette className="mr-1.5 h-3.5 w-3.5" /> Abrir no Estúdio
-                </Button>
-              )}
-              <Button type="button" size="sm" variant="ghost" className="my-0.5 h-8 px-2 text-[12px]" onClick={limpar}>
-                Limpar
-              </Button>
+              <button type="button" className={juntar(botao.icone, "my-0.5")} onClick={limpar} aria-label="Limpar a seleção" title="Limpar a seleção">
+                <Eraser className="h-4 w-4" />
+              </button>
             </div>
           )}
         </div>
@@ -821,6 +940,8 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
                   arte={arteDoItem(i.id)}
                   roteiro={dados ? doItem(dados.roteiros, i.id) : undefined}
                   posts={postsPorItem.get(i.id) || []}
+                  trabalho={dados ? (doItem(dados.trabalhos, i.id) as TrabalhoDaAgenda | undefined) : undefined}
+                  onAgendou={atualizarAgenda}
                   abertoDeInicio={escolhidos.length === 1}
                   onTirar={() => alternar(i.id)}
                   onAbrir={abreNoEstudio(i.delivery_type) ? () => abrirNoEstudio(i) : null}

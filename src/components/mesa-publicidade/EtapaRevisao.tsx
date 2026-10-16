@@ -8,7 +8,7 @@ import { conferirVersao, guardarEnsaio, invalidarFotos, partesDaConferencia, use
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campo, etiqueta, juntar, superficie, texto } from "@/components/sistema/estilos";
-import { AvisoDoRascunho, CabecalhoDaEtapa, FontesDoProduto, MolduraDaFoto, RotuloLargo, SemCampanha, useMesaPublicidade } from "./Comuns";
+import { AvisoDoRascunho, CabecalhoDaEtapa, FontesDoProduto, MolduraDaFoto, SemCampanha, useMesaPublicidade } from "./Comuns";
 import {
   avaliarRevisoes,
   decidirRevisao,
@@ -207,20 +207,18 @@ export default function EtapaRevisao() {
         acoes={
           <>
             {mudaram > 0 && (
-              <button type="button" className={botao.secundario} onClick={() => pedirAoAgente("Reprove as fotos que mudaram o produto.")} aria-label={`Reprovar as ${mudaram} que mudaram o produto`}>
-                <X className="h-3.5 w-3.5" />
-                <span className="ml-1.5 sm:hidden">Reprovar {mudaram}</span>
-                <RotuloLargo>Reprovar as {mudaram} que mudaram o produto</RotuloLargo>
+              // 16/10/2026: ações só em ícone; o número fica num selo no canto do X.
+              <button type="button" className={juntar(botao.icone, "relative")} onClick={() => pedirAoAgente("Reprove as fotos que mudaram o produto.")} aria-label={`Reprovar as ${mudaram} que mudaram o produto`} title={`Reprovar as ${mudaram} que mudaram o produto`}>
+                <X className="h-4 w-4" />
+                <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-destructive px-1 text-center text-[9.5px] font-semibold leading-4 text-destructive-foreground">{mudaram}</span>
               </button>
             )}
-            <button type="button" className={botao.secundario} disabled={atualizando || !revisaveis} onClick={() => void atualizar()} aria-label="Atualizar a revisão">
-              {atualizando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              <RotuloLargo>Atualizar a revisão</RotuloLargo>
+            <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} disabled={atualizando || !revisaveis} onClick={() => void atualizar()} aria-label="Atualizar a revisão" title="Atualizar a revisão">
+              {atualizando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             </button>
             {aprovadas > 0 && (
-              <button type="button" className={botao.primario} onClick={() => irPara("envio")} aria-label="Seguir para o envio">
-                <ArrowRight className="h-3.5 w-3.5" />
-                <RotuloLargo>Seguir para o envio</RotuloLargo>
+              <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => irPara("envio")} aria-label="Seguir para o envio" title="Seguir para o envio">
+                <ArrowRight className="h-4 w-4" />
               </button>
             )}
           </>

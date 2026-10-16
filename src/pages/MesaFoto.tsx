@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Aperture, BookOpen, Camera, Library, MoreHorizontal, Shapes, UserRound, UsersRound } from "lucide-react";
+import { Aperture, Camera, MoreHorizontal } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -33,6 +33,7 @@ import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarc
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
 import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import CascaDaMesa from "@/components/sistema/CascaDaMesa";
+import { iconeDaEtapaDaMesa } from "@/components/mesa-foto/IconesDasEtapas";
 import AreaDeTrabalho, { abrirLateralDaArea } from "@/components/sistema/AreaDeTrabalho";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
@@ -181,12 +182,18 @@ function quandoOcioso(fn: () => void): () => void {
 }
 
 /** Ícone e uma linha de cada ferramenta de apoio no seletor. */
+// 16/10/2026: os ícones vêm do mapa único das mesas (IconesDasEtapas.tsx), o mesmo dos 5 passos.
+const iconeDaFerramenta = (etapa: string) => {
+  const Icone = iconeDaEtapaDaMesa("foto", etapa);
+  return <Icone className="h-4 w-4" />;
+};
 const FERRAMENTAS: Record<string, { icone: ReactNode; descricao: string }> = {
-  biblioteca: { icone: <Library className="h-4 w-4" />, descricao: "Prompts e referências" },
-  modelos: { icone: <UserRound className="h-4 w-4" />, descricao: "Pessoas sintéticas" },
-  clones: { icone: <UsersRound className="h-4 w-4" />, descricao: "Pessoa real, com autorização" },
-  book: { icone: <BookOpen className="h-4 w-4" />, descricao: "Book do produto ou da pessoa" },
-  canvas: { icone: <Shapes className="h-4 w-4" />, descricao: "Quadro livre" },
+  kits: { icone: iconeDaFerramenta("kits"), descricao: "Pastas e fichas dos produtos" },
+  biblioteca: { icone: iconeDaFerramenta("biblioteca"), descricao: "Prompts e referências" },
+  modelos: { icone: iconeDaFerramenta("modelos"), descricao: "Pessoas sintéticas" },
+  clones: { icone: iconeDaFerramenta("clones"), descricao: "Pessoa real, com autorização" },
+  book: { icone: iconeDaFerramenta("book"), descricao: "Book do produto ou da pessoa" },
+  canvas: { icone: iconeDaFerramenta("canvas"), descricao: "Quadro livre" },
 };
 
 /** Etapas que organizam a própria coluna (a região principal não rola; a lista longa rola por dentro). */
@@ -533,14 +540,16 @@ export default function MesaFoto() {
       etapas={
         clientId ? (
           <nav aria-label="Etapas da Mesa Foto" className="flex w-full min-w-0 items-center py-1">
-            {/* Linha de produção (frente FTL, 30/09): 5 passos. No celular só o passo aberto mostra o
-                nome; os outros ficam no número (o nome vai no leitor de tela e na dica). */}
+            {/* Linha de produção (frente FTL, 30/09): 5 passos. 16/10/2026 (dono: "deixa só o ícone"):
+                em toda largura só o passo aberto mostra o nome; os outros ficam no ícone (o número e o
+                nome vão no leitor de tela e na dica). */}
             <div className="flex min-w-0 flex-1 rounded-lg bg-muted p-0.5" data-caminho-principal="" data-linha-de-producao="">
               {PASSOS_PRINCIPAIS.map((p, i) => {
                 const ativo = !!passoAtual && passoAtual.passo === p.passo;
                 const recomendado = !ativo && !!passoRecomendado && passoRecomendado.passo === p.passo;
                 const pula = p.passo === 3 && !!objetivoAberto && objetivoAberto.valor === "post";
-                const dica = p.passo === 3 && objetivoAberto ? (pula ? "O post usa fotos prontas: não precisa gerar" : `${p.dica}. Agora: ${objetivoAberto.titulo}`) : p.dica;
+                const dica = `${p.passo}. ${p.rotulo}: ${p.passo === 3 && objetivoAberto ? (pula ? "O post usa fotos prontas: não precisa gerar" : `${p.dica}. Agora: ${objetivoAberto.titulo}`) : p.dica}`;
+                const IconeDoPasso = iconeDaEtapaDaMesa("foto", p.etapa);
                 return (
                   <button
                     key={p.passo}
@@ -560,10 +569,10 @@ export default function MesaFoto() {
                       !ativo && (recomendado ? "text-primary hover:bg-card/60" : pula ? "text-muted-foreground/60 hover:text-foreground" : "text-muted-foreground hover:text-foreground"),
                     )}
                   >
-                    <span className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${ativo || recomendado ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"}`}>
-                      {p.passo}
+                    <span className={juntar("inline-flex shrink-0", (ativo || recomendado) && "text-primary")} aria-hidden="true">
+                      <IconeDoPasso className="h-4 w-4" />
                     </span>
-                    <span className={juntar("ml-1.5 min-w-0 truncate", !ativo && "hidden sm:block")}>{p.rotulo}</span>
+                    <span className={juntar("ml-1.5 min-w-0 truncate", !ativo && "hidden")}>{p.rotulo}</span>
                   </button>
                 );
               })}

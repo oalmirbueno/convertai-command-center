@@ -233,16 +233,24 @@ describe("/anuncios", () => {
     mock.tabelas.ads_campaign_daily = DIAS_DE_ADS;
   });
 
-  it("clientes primeiro com os quatro números; aviso de conta no topo; configuração recolhida no pé", async () => {
+  it("abas em ícone na linha do título; clientes primeiro com os quatro números; Ver contas abre e fecha o detalhe", async () => {
     const { container } = montar(h(AdminAds), "/anuncios");
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Clientes" })).toBeTruthy());
-    await waitFor(() => expect(container.textContent).toContain("No ar agora"));
-    const texto = container.textContent || "";
-    // Ordem (16/10): números por cliente, o que está no ar e, no pé, a configuração.
-    expect(texto.indexOf("Clientes")).toBeLessThan(texto.indexOf("No ar agora"));
-    expect(texto.indexOf("No ar agora")).toBeLessThan(texto.indexOf("Contas e conexão"));
+    const abas = await screen.findByRole("navigation", { name: "Partes dos anúncios" });
+    // 16/10: Clientes | No ar agora | Contas e conexão, uma por vez, na mesma linha do título.
+    const valores = Array.prototype.slice.call(abas.querySelectorAll("button[data-etapa]")).map((b: Element) => b.getAttribute("data-etapa"));
+    expect(valores).toEqual(["clientes", "agora", "contas"]);
+    expect(abas.querySelector('[aria-current="page"]')!.getAttribute("data-etapa")).toBe("clientes");
+    expect(screen.getByRole("heading", { name: "Anúncios" }).parentElement!.contains(abas)).toBe(true);
+    // Só a aba aberta na tela: a configuração das contas não aparece.
+    expect(screen.queryByRole("button", { name: /Mais opções/ })).toBeNull();
+    // Ações só em ícone, sem texto, com o nome no title; um "Atualizar" só.
+    const atualizar = screen.getByRole("button", { name: "Atualizar agora" });
+    expect(atualizar.getAttribute("title")).toBe("Atualizar agora");
+    expect(atualizar.textContent).toBe("");
+    expect(screen.getAllByRole("button", { name: /Atualizar/ })).toHaveLength(1);
     // Os quatro números com ícone, por cliente.
-    const linha = screen.getByRole("list", { name: "Clientes com anúncios" });
+    const linha = await screen.findByRole("list", { name: "Clientes com anúncios" });
+    const texto = container.textContent || "";
     expect(linha.querySelectorAll("[data-metrica]")).toHaveLength(4);
     expect(linha.textContent).toContain("investido");
     expect(linha.textContent).toContain("conversas iniciadas");
@@ -250,23 +258,41 @@ describe("/anuncios", () => {
     expect(linha.textContent).toContain("saldo");
     // Resultado pelo objetivo; o outro objetivo vai na dica, sem somar.
     expect(linha.querySelector('[title="Também: 3 contatos"]')).toBeTruthy();
-    // Token vencido: o aviso do topo traz o Reconectar, sem abrir a configuração.
-    expect(texto).toContain("2 contas pedem atenção");
-    expect(screen.getByRole("button", { name: /Reconectar com a Meta/ })).toBeTruthy();
+    // Conta pedindo atenção: só o ícone "Ver contas" na linha do título, com a contagem no title.
+    const ver = await screen.findByRole("button", { name: "Ver contas" });
+    expect(ver.getAttribute("title")).toContain("2 contas pedem atenção");
+    expect(ver.getAttribute("aria-expanded")).toBe("false");
     expect(texto).not.toContain("A Meta recusou a leitura:");
-    // "Ver contas" abre a seção do pé, problema primeiro.
-    fireEvent.click(screen.getByRole("button", { name: "Ver contas" }));
+    expect(screen.queryByRole("button", { name: /Reconectar com a Meta/ })).toBeNull();
+    // Tocar abre o detalhe (problema primeiro, com o Reconectar); tocar de novo fecha.
+    fireEvent.click(ver);
     await waitFor(() => expect(container.textContent).toContain("A Meta recusou a leitura:"));
     const aberto = container.textContent || "";
     expect(aberto.indexOf("Conta Antiga")).toBeLessThan(aberto.indexOf("Conta Padaria"));
     expect(aberto).toContain("Saldo baixo");
+    expect(screen.getByRole("button", { name: /Reconectar com a Meta/ })).toBeTruthy();
+    expect(ver.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(ver);
+    expect(container.textContent).not.toContain("A Meta recusou a leitura:");
+    expect(screen.queryByRole("region", { name: "Contas que pedem atenção" })).toBeNull();
   });
 
-  it("token e ligar pelo número ficam recolhidos em Mais opções, dentro das contas", async () => {
+  it("No ar agora e Contas e conexão abrem pela aba, uma por vez", async () => {
+    const { container } = montar(h(AdminAds), "/anuncios");
+    await screen.findByRole("list", { name: "Clientes com anúncios" });
+    fireEvent.click(screen.getByRole("button", { name: /No ar agora/ }));
+    await waitFor(() => expect(container.textContent).toContain("Nada pede ação agora."));
+    expect(screen.queryByRole("list", { name: "Clientes com anúncios" })).toBeNull();
+  });
+
+  it("token e ligar pelo número ficam recolhidos em Mais opções, na aba Contas e conexão", async () => {
     const { container } = montar(h(AdminAds), "/anuncios");
     await waitFor(() => expect(screen.getByRole("button", { name: /Contas e conexão/ })).toBeTruthy());
     expect(screen.queryByRole("button", { name: /Mais opções/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Contas e conexão/ }));
+    expect(container.querySelector('button[data-etapa="contas"]')!.getAttribute("aria-current")).toBe("page");
+    // Conectar com a Meta também é só ícone, com o nome no title.
+    expect(screen.getByRole("button", { name: "Reconectar com a Meta" }).getAttribute("title")).toBe("Reconectar com a Meta");
     expect(container.querySelector('input[type="password"]')).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Mais opções/ }));
     expect(container.querySelector('input[type="password"]')).toBeTruthy();
@@ -274,17 +300,38 @@ describe("/anuncios", () => {
     expect(container.textContent).toContain("Ou cole um token");
   });
 
-  it("o cliente aberto mostra os números grandes, as campanhas que abrem nas duas leituras e as contas recolhidas", async () => {
+  it("o cliente aberto mostra os números grandes, as partes em abas de ícone e as ações só em ícone", async () => {
     const { container } = montar(h(AdminAds), `/anuncios?cliente=${CLIENTE}`);
     await waitFor(() => expect(screen.getByRole("button", { name: /Conversas/ })).toBeTruthy());
     expect(screen.getByRole("group", { name: "Resumo dos últimos 30 dias" }).querySelectorAll("[data-metrica]")).toHaveLength(4);
     expect(container.textContent).toContain("Também: 3 contatos");
-    expect(container.textContent).toContain("Gerar relatório");
+    // Ações: só ícone, nome no title, sem "Copiar resumo" e sem dois "Atualizar".
+    for (const nome of ["Gerar relatório", "Atualizar agora", "Abrir na Mesa Ads", "Ver contas"]) {
+      const acao = screen.getByRole(nome === "Abrir na Mesa Ads" ? "link" : "button", { name: nome });
+      expect(acao.getAttribute("title"), nome).toContain(nome);
+    }
+    expect(screen.getByRole("button", { name: "Gerar relatório" }).textContent).toBe("");
+    expect(screen.getAllByRole("button", { name: /Atualizar/ })).toHaveLength(1);
+    expect(container.textContent).not.toContain("Copiar resumo");
+    // As partes: uma aba por vez, Campanhas aberta de início.
+    const abas = screen.getByRole("navigation", { name: "Partes de Padaria Sintética" });
+    const valores = Array.prototype.slice.call(abas.querySelectorAll("button[data-etapa]")).map((b: Element) => b.getAttribute("data-etapa"));
+    expect(valores).toEqual(["campanhas", "agora", "criativos", "contas"]);
+    expect(abas.querySelector('[aria-current="page"]')!.getAttribute("data-etapa")).toBe("campanhas");
+    expect(screen.queryByRole("button", { name: /Mais opções/ })).toBeNull();
+    // A campanha abre nas duas leituras.
     expect(container.textContent).not.toContain("Como o cliente lê");
     fireEvent.click(screen.getByRole("button", { name: /Conversas/ }));
     expect(container.textContent).toContain("Como o cliente lê");
     expect(container.textContent).toContain("Para a equipe");
-    expect(screen.getByRole("button", { name: /Contas deste cliente/ }).getAttribute("aria-expanded")).toBe("false");
+    // Criativos e contas pela aba, e a campanha sai da tela.
+    fireEvent.click(screen.getByRole("button", { name: /Criativos/ }));
+    await waitFor(() => expect(container.textContent).toContain("Nenhum criativo lido ainda."));
+    expect(container.textContent).not.toContain("Como o cliente lê");
+    fireEvent.click(screen.getByRole("button", { name: /Contas deste cliente/ }));
+    expect(screen.getByRole("button", { name: /Mais opções/ })).toBeTruthy();
+    // Os números continuam à vista em qualquer aba.
+    expect(screen.getByRole("group", { name: "Resumo dos últimos 30 dias" })).toBeTruthy();
   });
 
   it("sem conta ligada, o primeiro passo aparece no lugar dos números", async () => {
@@ -346,25 +393,67 @@ describe("/metricas", () => {
     expect(container.textContent).toContain("10 conversas iniciadas");
   });
 
-  it("o dossiê traz conselho com a Mesa, perfil completo, anúncios e posts com miniatura", async () => {
+  it("contas e saúde das contas em abas de ícone na linha do título, um Atualizar só e em ícone", async () => {
+    // 16/10/2026 (dono): "Métricas, Saúde da conta, tá tudo um abaixo do outro; colocar do ladinho, com abas".
+    const { container } = montar(h(AdminMetricas), "/metricas");
+    await waitFor(() => expect(container.textContent).toContain("Padaria Sintética"));
+    const abas = screen.getByRole("navigation", { name: "Partes das métricas" });
+    const valores = Array.prototype.slice.call(abas.querySelectorAll("button[data-etapa]")).map((b: Element) => b.getAttribute("data-etapa"));
+    expect(valores).toEqual(["contas", "saude"]);
+    expect(abas.querySelector('[aria-current="page"]')!.getAttribute("data-etapa")).toBe("contas");
+    expect(screen.getByRole("heading", { name: "Métricas" }).parentElement!.contains(abas)).toBe(true);
+    const atualizar = screen.getByRole("button", { name: "Atualizar agora" });
+    expect(atualizar.getAttribute("title")).toBe("Atualizar agora");
+    expect(atualizar.textContent).toBe("");
+    expect(screen.getAllByRole("button", { name: /Atualizar/ })).toHaveLength(1);
+    // Saúde das contas pela aba: a lista de contas sai da tela.
+    fireEvent.click(abas.querySelector('button[data-etapa="saude"]') as HTMLElement);
+    await waitFor(() => expect(container.textContent).toContain("Nenhuma conta de Instagram cadastrada."));
+    expect(container.textContent).not.toContain("Padaria Sintética");
+  });
+
+  it("o dossiê traz as partes em abas de ícone: conselho com a Mesa, perfil completo, anúncios e posts com miniatura", async () => {
+    // 16/10/2026 (dono): as seções empilhadas viraram abas de ícone, uma por vez; ações só em ícone.
     const { container } = montar(h(AdminMetricas), `/metricas?client=${CLIENTE}&account=ig-1`);
     await waitFor(() => expect(container.textContent).toContain("Mesa: Carrossel de bastidor rende o dobro de salvamentos."));
-    const texto = container.textContent || "";
+    const abas = screen.getByRole("navigation", { name: "Partes de Padaria Sintética" });
+    const valores = Array.prototype.slice.call(abas.querySelectorAll("button[data-etapa]")).map((b: Element) => b.getAttribute("data-etapa"));
+    expect(valores).toEqual(["conselho", "organico", "anuncios", "posts", "identidade"]);
+    expect(abas.querySelector('[aria-current="page"]')!.getAttribute("data-etapa")).toBe("conselho");
+    const aba = (v: string) => abas.querySelector(`button[data-etapa="${v}"]`) as HTMLElement;
+    let texto = container.textContent || "";
     expect(texto).toContain("Próximo teste sugerido pela Mesa: Testar Reels de 15 segundos");
     expect(texto).toContain("Alcance caiu 10%");
-    for (const rotulo of ["Seguidores", "Alcance", "Interações", "Salvamentos", "Compartilhamentos", "Visitas ao perfil"]) {
+    // Ações só em ícone, nome no title; sem "Copiar resumo"; um "Atualizar" só; ícones sem repetir.
+    for (const nome of ["Atualizar agora", "Pedir leitura da Mesa", "Abrir a Mesa"]) {
+      const acao = screen.getByRole(nome === "Abrir a Mesa" ? "link" : "button", { name: nome });
+      expect(acao.getAttribute("title"), nome).toBe(nome);
+      expect(acao.textContent, nome).toBe("");
+    }
+    expect(screen.getAllByRole("button", { name: /Atualizar/ })).toHaveLength(1);
+    expect(texto).not.toContain("Copiar resumo");
+    const iconeDe = (el: Element) => (el.querySelector("svg") as SVGElement).getAttribute("class");
+    expect(iconeDe(screen.getByRole("button", { name: "Atualizar agora" }))).not.toBe(iconeDe(screen.getByRole("button", { name: "Pedir leitura da Mesa" })));
+    // Perfil orgânico: só ele na tela.
+    fireEvent.click(aba("organico"));
+    texto = container.textContent || "";
+    for (const rotulo of ["Seguidores", "Interações", "Salvamentos", "Compartilhamentos", "Visitas ao perfil"]) {
       expect(texto).toContain(rotulo);
     }
-    // Ordem dos blocos: conselho, perfil, anúncios, posts.
-    const ordem = ["Conselho", "Perfil orgânico", "Anúncios do cliente", "Posts que mais performaram"].map((t) => texto.indexOf(t));
-    expect(ordem.slice().sort((a, b) => a - b)).toEqual(ordem);
-    expect(texto).toContain("Também: 3 contatos");
+    expect(texto).not.toContain("Alcance caiu 10%");
+    // Anúncios.
+    fireEvent.click(aba("anuncios"));
+    expect(container.textContent).toContain("Também: 3 contatos");
     await waitFor(() => expect(container.textContent).toContain("Somado pela Mesa"));
-    // O post com mais salvos e compartilhamentos vem primeiro, com a miniatura sem referrer.
+    expect(screen.getByRole("link", { name: "Abrir em Anúncios" }).getAttribute("title")).toBe("Abrir em Anúncios");
+    // Posts: o com mais salvos e compartilhamentos vem primeiro, com a miniatura sem referrer.
+    fireEvent.click(aba("posts"));
     const primeira = container.querySelector('img[src="https://cdn.test/b.jpg"]') as HTMLImageElement;
     expect(primeira).toBeTruthy();
     expect(primeira.getAttribute("referrerpolicy")).toBe("no-referrer");
+    texto = container.textContent || "";
     expect(texto.indexOf("Legenda do post b")).toBeLessThan(texto.indexOf("Legenda do post a"));
+    expect(texto).not.toContain("Somado pela Mesa");
   });
 
   it("Pedir leitura da Mesa chama evolucao sem gravar memória e sem IA", async () => {

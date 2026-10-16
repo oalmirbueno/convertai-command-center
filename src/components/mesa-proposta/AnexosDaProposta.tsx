@@ -7,7 +7,6 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
-import { RotuloLargo } from "@/components/sistema/BotaoComIcone";
 import { botao, campo, juntar, lista, texto } from "@/components/sistema/estilos";
 import { nomeSeguroDeArquivo, normalizarAnexos, tiraOLink, type AnexoDaProposta } from "../../../supabase/functions/_shared/proposta-comercial";
 import { aplicarNaLista, chamarProposta, type Proposta } from "./propostaApi";
@@ -125,9 +124,9 @@ export default function AnexosDaProposta({ proposta, bloqueio = null }: { propos
       acao={
         <>
           <input ref={entrada} type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg,.webp" onChange={(e) => void subir(e.target.files)} />
-          <button type="button" className={botao.secundario} onClick={() => entrada.current && entrada.current.click()} disabled={desligado} aria-label="Anexar PDF ou imagem" title={motivo}>
+          {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+          <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} onClick={() => entrada.current && entrada.current.click()} disabled={desligado} aria-label="Anexar PDF ou imagem" title={motivo || "Anexar PDF ou imagem"}>
             {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
-            <RotuloLargo>PDF</RotuloLargo>
           </button>
         </>
       }

@@ -171,6 +171,8 @@ const campanha: Campanha = {
 };
 
 beforeEach(() => {
+  // 16/10/2026: a campanha aberta mostra uma parte por vez (abas em ícone); a aba lembrada não passa de um teste para outro.
+  window.localStorage.removeItem("mesa:campanha:aba");
   vi.clearAllMocks();
   mock.tabelas = { cliente_imagens: acervo };
   mock.upload.mockResolvedValue({ data: {}, error: null });
@@ -277,25 +279,36 @@ describe("campanha nova", () => {
   });
 });
 
+/** 16/10/2026: a campanha aberta mostra uma parte por vez (abas em ícone no topo); abre a parte pelo nome. */
+const abrirParte = (nome: string) =>
+  fireEvent.click(within(screen.getByRole("navigation", { name: "Partes da campanha" })).getByRole("button", { name: new RegExp(nome) }));
+
 describe("campanha aberta", () => {
   it("mostra briefing, imagens e o plano com o porquê de cada lâmina, a escolha do Jev e o aviso", async () => {
     mock.tabelas.calendario_propostas = [proposta];
     montar(h(CampanhaDetalhe, { campanha }));
+    const partes = screen.getByRole("navigation", { name: "Partes da campanha" });
     for (const secao of ["Briefing", "Imagens da campanha", "Plano de imagens"]) {
-      expect(screen.getByRole("button", { name: new RegExp(secao) })).toHaveAttribute("aria-expanded", "true");
+      expect(within(partes).getByRole("button", { name: new RegExp(secao) })).toBeTruthy();
     }
+    abrirParte("Briefing");
     expect(screen.getByText("20% nos kits até 20/10")).toBeTruthy();
     expect(screen.getByText("Presente que fala por você")).toBeTruthy();
+    abrirParte("Imagens da campanha");
+    expect(await screen.findByRole("list", { name: "Imagens da campanha" })).toBeTruthy();
+    abrirParte("Plano de imagens");
     expect(await screen.findByText("A capa precisa do produto herói inteiro.")).toBeTruthy();
     expect(screen.getByText(/Escolha do Jev \(82%\) entre 2 candidatas/)).toBeTruthy();
     expect(screen.getByText(/nenhuma das fotos serve bem/)).toBeTruthy();
     expect(screen.getByText("Kit em uso por um casal real")).toBeTruthy();
-    expect(screen.queryByText(/mudaram depois deste plano/)).toBeNull();
+    // 16/10/2026: o aviso de plano velho ficou curto ("Desatualizado: refaça o plano.").
+    expect(screen.queryByText(/Desatualizado: refaça o plano/)).toBeNull();
   });
 
   it("trocar o papel de uma imagem salva a lista inteira pela campanha_salvar (sem custo)", async () => {
     mock.tabelas.calendario_propostas = [proposta];
     montar(h(CampanhaDetalhe, { campanha }));
+    abrirParte("Imagens da campanha");
     const lista = await screen.findByRole("list", { name: "Imagens da campanha" });
     const papeis = within(lista).getAllByRole("group", { name: "Papel da imagem" });
     fireEvent.click(within(papeis[1]).getByRole("button", { name: "Apoio" }));
@@ -310,6 +323,7 @@ describe("campanha aberta", () => {
   it("editar o briefing salva pela campanha_salvar", async () => {
     mock.tabelas.calendario_propostas = [proposta];
     montar(h(CampanhaDetalhe, { campanha }));
+    abrirParte("Briefing");
     fireEvent.click(screen.getByRole("button", { name: /Editar briefing/ }));
     fireEvent.change(screen.getByLabelText("Oferta"), { target: { value: "25% nos kits" } });
     fireEvent.click(screen.getByRole("button", { name: /Salvar briefing/ }));
@@ -322,6 +336,7 @@ describe("campanha aberta", () => {
   it("Refazer o plano chama campanha_plano_imagens com o id da campanha", async () => {
     mock.tabelas.calendario_propostas = [proposta];
     montar(h(CampanhaDetalhe, { campanha }));
+    abrirParte("Plano de imagens");
     await screen.findByText("A capa precisa do produto herói inteiro.");
     fireEvent.click(screen.getByRole("button", { name: /Refazer o plano/ }));
     await waitFor(() => expect(chamadasDe("campanha_plano_imagens").length).toBe(1));
@@ -331,6 +346,7 @@ describe("campanha aberta", () => {
   it("plano feito sobre outras imagens avisa que ficou velho", async () => {
     mock.tabelas.calendario_propostas = [proposta];
     montar(h(CampanhaDetalhe, { campanha: { ...campanha, imagens: [imagens[0]] } }));
-    expect(await screen.findByText(/mudaram depois deste plano/)).toBeTruthy();
+    abrirParte("Plano de imagens");
+    expect(await screen.findByText(/Desatualizado: refaça o plano/)).toBeTruthy();
   });
 });

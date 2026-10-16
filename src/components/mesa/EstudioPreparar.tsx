@@ -229,7 +229,7 @@ export default function EstudioPreparar({
         )}
         {modo === "roteiro" && longas > 0 && partesEnxugar ? (
           <BotaoComCusto
-            rotulo={<><Sparkles className="mr-1 h-4 w-4" /> Montar do roteiro</>}
+            rotulo={<><Sparkles className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Montar do roteiro</span></>}
             titulo="Montar a direção do roteiro"
             descricao={`${longas} lâmina${plural} passa${longas === 1 ? "" : "m"} do limite de texto. Uma chamada curta enxuga antes de chegar ao Estúdio; a capa não muda. Nenhuma imagem é gerada ainda.`}
             className="h-10"
@@ -245,7 +245,7 @@ export default function EstudioPreparar({
           </Button>
         ) : (
           <BotaoComCusto
-            rotulo={<><Wand2 className="mr-1 h-4 w-4" /> Preparar direção</>}
+            rotulo={<><Wand2 className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Preparar direção</span></>}
             titulo="Preparar a direção de arte"
             descricao="Uma chamada ao diretor de arte. Nenhuma imagem é gerada ainda."
             className="h-10"

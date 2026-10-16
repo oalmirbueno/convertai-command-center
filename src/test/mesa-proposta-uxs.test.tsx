@@ -324,7 +324,14 @@ describe("Envio, casca e navegação", () => {
   it("envio preparado de A não passa para B ao trocar pelo seletor da casca", async () => {
     mock.tabelas.propostas = [linha(), linha({ id: OUTRA, numero: "2026-005", titulo: "Site" })];
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=envio&proposta=${PROPOSTA}`);
-    fireEvent.click(await screen.findByRole("button", { name: /^Enviar$/ }));
+    // 16/10/2026: a etapa "Enviar" do cabeçalho (só ícone) tem o mesmo nome; o botão da ação é o outro.
+    fireEvent.click(
+      await waitFor(() => {
+        const b = screen.getAllByRole("button", { name: /^Enviar$/ }).filter((x) => !x.hasAttribute("data-etapa"))[0];
+        if (!b) throw new Error("sem o botão Enviar da etapa");
+        return b;
+      }),
+    );
     fireEvent.click(await screen.findByRole("button", { name: "Confirmar envio" }));
     expect(await screen.findByDisplayValue("Oi. Segue a proposta A.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /^Proposta: Nº 2026-004 · Enviada$/ }));

@@ -15,6 +15,7 @@ import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
 import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import CascaDaMesa from "@/components/sistema/CascaDaMesa";
+import { etapasEmIcone } from "@/components/mesa-foto/IconesDasEtapas";
 import BotaoDoConselho from "@/components/conselho/BotaoDoConselho";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 import Etapas from "@/components/sistema/Etapas";
@@ -314,16 +315,18 @@ export default function MesaIdentidade() {
       cliente={<SeletorDeClientesDaMesa mesa="identidade" clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />}
       etapas={
         clientId ? (
+          // 16/10/2026: etapas só em ícone (padrão das mesas, IconesDasEtapas.tsx); o nome aparece na aberta.
           <Etapas
             rotulo="Etapas da Mesa Identidade"
-            numerar
-            itens={(projeto ? etapasDoProj : ETAPAS_DA_IDENTIDADE.map((e) => e.valor).filter((e) => e !== "naming")).map((v) => {
+            soIcone
+            itens={etapasEmIcone("identidade", (projeto ? etapasDoProj : ETAPAS_DA_IDENTIDADE.map((e) => e.valor).filter((e) => e !== "naming")).map((v) => {
               const e = ETAPAS_DA_IDENTIDADE.filter((x) => x.valor === v)[0];
               const aberta = !projeto ? v === "inicio" : podeAbrir(projeto, v).pode;
               // UXS 30/09 (IDV-07): feita pela mesma regra do andamento (projeto antigo conta a etapa nova atrás de uma fechada).
               const feita = !!projeto && etapaFeita(projeto, v);
-              return { valor: v, rotulo: e.rotulo, dica: aberta ? (feita ? "Concluída" : undefined) : "Abre quando a etapa de antes fechar", destaque: !!projeto && v === etapaAtual(projeto) && !feita, feita, fechada: !aberta, dados: { "data-etapa-aberta": aberta ? "sim" : "nao" } };
-            })}
+              // 16/10/2026: "concluída" e "ainda fechada" o etapasEmIcone já põe no title.
+              return { valor: v, rotulo: e.rotulo, dica: aberta ? undefined : "Abre quando a etapa de antes fechar", destaque: !!projeto && v === etapaAtual(projeto) && !feita, feita, fechada: !aberta, dados: { "data-etapa-aberta": aberta ? "sim" : "nao" } };
+            }))}
             valor={etapa}
             onEscolher={escolherEtapa}
           />

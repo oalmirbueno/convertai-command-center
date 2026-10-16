@@ -193,9 +193,12 @@ describe("hubs recolhíveis", () => {
     expect(screen.getByText("conteúdo do hub")).toBeTruthy();
   });
 
-  it("a aba começa com a Marca aberta e o consolidado recolhido", () => {
+  it("a aba começa na Marca (abas em ícone, uma parte por vez) e cada parte mantém o id da antiga seção", () => {
     const tela = ler("src/components/mesa/ContextoAutomatico.tsx");
-    expect(tela).toContain('const HUBS_ABERTOS_DE_INICIO: Record<string, boolean> = { "ctx-marca": true };');
+    // 16/10: as partes viraram abas; a primeira visita abre na Marca.
+    expect(ler("src/components/mesa/AbaContexto.tsx")).toContain('useEstadoDaTela<AbaDoContexto>(`mesa:contexto:aba:${clientId}`, "ctx-marca"');
+    expect(tela).toContain("<Etapas");
+    expect(tela).toContain("soIcone");
     for (const id of ["ctx-marca", "ctx-consolidado", "ctx-referencias", "ctx-fotos", "ctx-documentos"]) {
       expect(tela).toContain(`id="${id}"`);
     }
@@ -372,8 +375,10 @@ const valorDaMesa = (): MesaValor => ({
   abrirModelos: vi.fn(),
 });
 
+let qcDoTeste: QueryClient | null = null;
 function comMesa(filho: ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  qcDoTeste = qc;
   return render(
     <QueryClientProvider client={qc}>
       <TooltipProvider>
@@ -410,14 +415,14 @@ describe("microfone no agente de contexto", () => {
     act(() => {
       ultimoReconhecedor!.onresult!({ resultIndex: 0, results: { length: 1, 0: { isFinal: false, 0: { transcript: "a cor principal é verde" } } } });
     });
-    const campo = screen.getByPlaceholderText(/O que o agente precisa saber/) as HTMLTextAreaElement;
+    const campo = screen.getByPlaceholderText(/Conte o que sabe da marca/) as HTMLTextAreaElement;
     expect(campo.value).toBe("A cor principal é verde");
     expect(screen.getByRole("button", { name: "Parar ditado" })).toBeTruthy();
   });
 
   it("Ctrl+Enter continua enviando (Enter sozinho não envia)", async () => {
     comMesa(<AgenteDeContexto preencher />);
-    const campo = screen.getByPlaceholderText(/O que o agente precisa saber/);
+    const campo = screen.getByPlaceholderText(/Conte o que sabe da marca/);
     fireEvent.change(campo, { target: { value: "nunca usar fundo preto" } });
     fireEvent.keyDown(campo, { key: "Enter" });
     expect(mock.invoke).not.toHaveBeenCalledWith("agente-contexto", expect.objectContaining({ body: expect.objectContaining({ acao: "conversar" }) }));
@@ -479,22 +484,37 @@ describe("aba Contexto em hubs", () => {
     });
   });
 
-  it("abre com a Marca à vista (paleta em amostra) e o consolidado recolhido com score e resumo", async () => {
+  it("abre com a Marca à vista (paleta em amostra); as outras partes são abas em ícone com o nome no title", async () => {
     const { default: ContextoAutomatico } = await import("@/components/mesa/ContextoAutomatico");
-    comMesa(<ContextoAutomatico onIrPara={vi.fn()} />);
+    const trocar = vi.fn();
+    const { rerender } = comMesa(<ContextoAutomatico onIrPara={vi.fn()} aba="ctx-marca" onAba={trocar} />);
     expect(await screen.findByLabelText("Copiar #00C853, Verde folha")).toBeTruthy();
-    const consolidado = screen.getAllByRole("button", { name: /Contexto consolidado/ }).filter((b) => b.hasAttribute("aria-controls"))[0];
-    expect(consolidado.getAttribute("aria-expanded")).toBe("false");
-    expect(consolidado.textContent).toMatch(/de 9 campos completos/);
+    const nav = screen.getByRole("navigation", { name: "Partes do contexto" });
+    const consolidado = nav.querySelector('[data-etapa="ctx-consolidado"]') as HTMLButtonElement;
+    expect(consolidado.getAttribute("aria-current")).toBeNull();
+    expect(consolidado.getAttribute("title")).toMatch(/de 9 campos completos/);
     expect(screen.queryByText("Para subir o score")).toBeNull();
     fireEvent.click(consolidado);
-    expect(screen.getByText("Para subir o score")).toBeTruthy();
-    for (const titulo of [/Referências/, /Fotos reais/, /Documentos e pendências/]) {
-      // O chip do checklist tem o mesmo nome; o hub é o botão que abre e fecha.
-      const hub = screen.getAllByRole("button", { name: titulo }).filter((b) => b.hasAttribute("aria-controls"));
-      expect(hub).toHaveLength(1);
-      expect(hub[0].getAttribute("aria-expanded")).toBe("false");
+    expect(trocar).toHaveBeenCalledWith("ctx-consolidado");
+    for (const aba of ["ctx-referencias", "ctx-fotos", "ctx-documentos"]) {
+      const botao = nav.querySelector(`[data-etapa="${aba}"]`) as HTMLButtonElement;
+      expect(botao).toBeTruthy();
+      expect(botao.getAttribute("aria-current")).toBeNull();
     }
+    // Aberta no consolidado: só ele na tela (uma parte por vez).
+    rerender(
+      <QueryClientProvider client={qcDoTeste!}>
+        <TooltipProvider>
+          <MemoryRouter>
+            <MesaProvider valor={valorDaMesa()}>
+              <ContextoAutomatico onIrPara={vi.fn()} aba="ctx-consolidado" onAba={trocar} />
+            </MesaProvider>
+          </MemoryRouter>
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText("Para subir o score")).toBeTruthy();
+    expect(screen.queryByLabelText("Copiar #00C853, Verde folha")).toBeNull();
   });
 });
 

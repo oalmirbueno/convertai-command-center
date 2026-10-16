@@ -96,10 +96,14 @@ describe("request task frontend consistency contract", () => {
   it("serializes manual drops and disables unsafe filtered reordering", () => {
     expect(kanban).toContain("dropInFlightRef");
     expect(kanban).toContain("setDropSaving(true)");
+    // 16/10/2026: o cartão inteiro arrasta mesmo com filtro, mas com filtro
+    // ou outra ordem o arrasto só troca de coluna (sem reordenar a lista filtrada).
     expect(kanban).toContain(
-      "draggable={!isClient && !dragBlockedByFilters && !dropSaving}",
+      "draggable={!isClient && !dropSaving}",
     );
     expect(kanban).toContain("const dragBlockedByFilters");
+    expect(kanban).toContain("const soMudaColuna = dragBlockedByFilters;");
+    expect(kanban).toContain("(soMudaColuna && !movedAcrossColumns)");
     expect(kanban).toContain('.eq("status", task.status)');
   });
 

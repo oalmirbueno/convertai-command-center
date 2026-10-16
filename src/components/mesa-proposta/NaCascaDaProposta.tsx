@@ -1,5 +1,6 @@
 import { FileText, Plus } from "lucide-react";
 import Etapas from "@/components/sistema/Etapas";
+import { etapasEmIcone } from "@/components/mesa-foto/IconesDasEtapas";
 import SeletorCompacto, { type OpcaoCompacta } from "@/components/sistema/SeletorCompacto";
 import { hojeEmSaoPaulo, ROTULO_DO_STATUS, textoDoTotal } from "../../../supabase/functions/_shared/proposta-modelo";
 import { followupDaProposta } from "../../../supabase/functions/_shared/proposta-comercial";
@@ -88,17 +89,18 @@ export function EtapasDaMesaProposta({
   const followup = p && !p.arquivada_em ? followupDaProposta(p, hojeEmSaoPaulo()) : null;
   const feitas = etapasFeitas(p);
   return (
+    // 16/10/2026: etapas só em ícone (padrão das mesas, mesa-foto/IconesDasEtapas.tsx).
     <Etapas
       rotulo="Etapas da Mesa Proposta"
-      numerar
-      itens={itens.map((e) => ({
+      soIcone
+      itens={etapasEmIcone("proposta", itens.map((e) => ({
         valor: e.valor,
         rotulo: e.rotulo,
         contador: e.valor === "revisao" && bloqueios ? bloqueios : null,
         destaque: e.valor === "acompanhar" && !!followup,
         feita: !!p && feitas[e.valor as EtapaDaProposta] === true && e.valor !== valor,
         dica: e.valor === "revisao" && bloqueios ? `${bloqueios} pendência(s) bloqueiam o envio` : e.valor === "acompanhar" && followup ? "Follow-up pronto no Acompanhar" : undefined,
-      }))}
+      })))}
       valor={valor}
       onEscolher={onEscolher}
     />

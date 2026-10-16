@@ -362,8 +362,10 @@ export function CabecalhoDaEtapa({
             {acoes}
             {etapa !== "inicio" &&
               (feita ? (
-                <button type="button" className={juntar(botao.discreto, "m-1 h-8")} disabled={ocupado} onClick={() => void rodar(() => reabrir(etapa))}>
-                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reabrir
+                // 16/10/2026: Reabrir só em ícone; o Concluir (a ação principal, com "Salvar e" quando há
+                // mudança) continua com texto, porque o ícone sozinho não diz qual dos dois é.
+                <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} disabled={ocupado} onClick={() => void rodar(() => reabrir(etapa))} aria-label="Reabrir a etapa" title="Reabrir a etapa">
+                  <RotateCcw className="h-4 w-4" />
                 </button>
               ) : (
                 <button

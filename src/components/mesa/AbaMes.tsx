@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarCheck2, CalendarRange, Check, Loader2, MessageSquare, MessagesSquare, Plus, Send, Sparkles, X, Zap } from "lucide-react";
+import { CalendarCheck2, CalendarRange, Check, FilePlus2, Loader2, MessageSquare, MessagesSquare, Plus, Send, Sparkles, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
@@ -59,7 +59,7 @@ import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import Painel from "@/components/sistema/Painel";
-import { conversa, juntar, superficie, texto as estiloDeTexto } from "@/components/sistema/estilos";
+import { botao, conversa, juntar, superficie, texto as estiloDeTexto } from "@/components/sistema/estilos";
 import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
 // Frente AP (27/09): selo da memória editorial, "Trocar ângulo" e a linha de evolução por pilar.
 import LinhaDeEvolucaoDoMes, { chaveDaLinhaDeEvolucao, SeloDaPauta, useTrocarAngulo } from "./MemoriaEditorialNoMes";
@@ -275,9 +275,8 @@ function ConversaDoMes({ proposta, modeloId, onAtualizou }: { proposta: Proposta
       <div className="flex items-center justify-between">
         <EstimativaInline partes={partes} />
         <Ditado valor={texto} onChange={setTexto} disabled={enviando} className="ml-auto" />
-        <Button type="button" size="sm" className="ml-2" onClick={() => void enviar()} disabled={enviando || !texto.trim()}>
-          {enviando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
-          Enviar
+        <Button type="button" size="sm" className="ml-2 h-8 w-8 p-0" onClick={() => void enviar()} disabled={enviando || !texto.trim()} aria-label="Enviar" title="Enviar">
+          {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </Button>
       </div>
       </div>
@@ -575,12 +574,20 @@ function PlanejarComEstrategista({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (tas
             </SelectContent>
           </Select>
         )}
-        <Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => setConversaAberta((v) => !v)}>
-          {conversaAberta ? <X className="mr-1 h-3.5 w-3.5" /> : <MessageSquare className="mr-1 h-3.5 w-3.5" />}
-          Conversa
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-8 w-8 p-0"
+          onClick={() => setConversaAberta((v) => !v)}
+          aria-expanded={conversaAberta}
+          aria-label={conversaAberta ? "Fechar a conversa" : "Conversa"}
+          title={conversaAberta ? "Fechar a conversa" : "Conversa com o estrategista"}
+        >
+          {conversaAberta ? <X className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
         </Button>
-        <Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => setNova(true)}>
-          <Plus className="mr-1 h-3.5 w-3.5" /> Nova proposta
+        <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setNova(true)} aria-label="Nova proposta" title="Nova proposta">
+          <Plus className="h-4 w-4" />
         </Button>
           </>
         }
@@ -699,9 +706,8 @@ function PlanejarComEstrategista({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (tas
                   </SelectContent>
                 </Select>
               </Campo>
-              <Button type="button" onClick={() => void gravar()} disabled={!projetoId || gravando}>
-                {gravando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CalendarCheck2 className="mr-1.5 h-4 w-4" />}
-                Gravar na agenda
+              <Button type="button" className="h-9 w-9 p-0" onClick={() => void gravar()} disabled={!projetoId || gravando} aria-label="Gravar na agenda" title="Gravar na agenda">
+                {gravando ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck2 className="h-4 w-4" />}
               </Button>
             </section>
           )}
@@ -743,6 +749,11 @@ const MES_VALIDO = /^\d{4}-\d{2}-01$/;
  * Faixa do alto da aba: o plano combinado do mês que está na agenda e os dois
  * caminhos com o agente (planejar conversando ou criar conteúdos), mais o
  * estado dos próximos meses. Poucos cliques, sem poluir.
+ *
+ * 16/10 (dono: "tem muito texto; só conteúdo rápido, só ícone"): as ações
+ * ficaram só no ícone (o nome no title e no leitor de tela), na mesma linha
+ * do título, o plano mostra duas linhas e os próximos meses viram fichas sem
+ * rótulo. Sem borda: o espaço separa.
  */
 function PlanoDoMesEmDestaque({
   mes,
@@ -764,53 +775,55 @@ function PlanoDoMesEmDestaque({
 
   return (
     // Sem caixa (docs/design/SISTEMA.md): o plano é o topo da aba, separado do resto por espaço e uma linha fina.
-    <section className="min-w-0 border-b border-border pb-5" aria-label={`Plano de ${nome}`}>
-      <div className="flex min-w-0 flex-col sm:flex-row sm:items-start">
-        <div className="min-w-0 flex-1 sm:mr-4">
-          <p className={juntar(estiloDeTexto.rotulo, "flex items-center")}>
-            <CalendarRange className="mr-1.5 h-3.5 w-3.5" />
-            Plano de <span className="ml-1">{nome}</span>
-          </p>
+    <section className="min-w-0" aria-label={`Plano de ${nome}`}>
+      <div className="flex min-w-0 items-start">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center">
+            <p className={juntar(estiloDeTexto.rotulo, "flex min-w-0 items-center")}>
+              <CalendarRange className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span className="truncate">Plano de {nome}</span>
+            </p>
+            {!doMes && (
+              <AjudaRecolhida className="ml-1" rotulo="O que é o plano do mês">
+                Converse com o agente sobre estratégia, datas, campanhas, frequência e formatos. O que ficar combinado entra no gerador de meses.
+              </AjudaRecolhida>
+            )}
+          </div>
           {doMes ? (
             <>
-              <p className={`mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere] ${aberto ? "" : "line-clamp-3"}`}>{corpo}</p>
-              {corpo.length > 180 && (
-                <button type="button" onClick={() => setAberto((v) => !v)} className="mt-1 text-[12px] font-medium text-primary hover:underline">
+              <p className={`mt-1 whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere] ${aberto ? "" : "line-clamp-2"}`}>{corpo}</p>
+              {corpo.length > 140 && (
+                <button type="button" onClick={() => setAberto((v) => !v)} className="mt-0.5 text-[12px] font-medium text-primary hover:underline" aria-expanded={aberto}>
                   {aberto ? "Mostrar menos" : "Ver o plano inteiro"}
                 </button>
               )}
             </>
           ) : (
-            <>
-              <div className="mt-1.5 flex min-w-0 items-center">
-                <p className="min-w-0 text-[20px] font-semibold leading-7 tracking-[-0.01em]">Nada combinado para {nome} ainda</p>
-                <AjudaRecolhida className="ml-2" rotulo="O que é o plano do mês">
-                  Converse com o agente sobre estratégia, datas, campanhas, frequência e formatos. O que ficar combinado entra no gerador de meses.
-                </AjudaRecolhida>
-              </div>
-            </>
+            <p className={juntar(estiloDeTexto.tituloSecao, "mt-1 min-w-0")}>Nada combinado para {nome} ainda</p>
           )}
         </div>
-        <div className="mt-3 flex shrink-0 flex-wrap items-center sm:mt-0 sm:justify-end">
-          {/* Um primário por área (28/09): o da aba é o "Agente do mês" que flutua; aqui tudo é secundário. */}
+        {/* Ações só em ícone, na linha do título. Um primário por área (28/09): o da aba é o "Agente do mês" que flutua. */}
+        <div className="ml-2 flex shrink-0 items-center">
           {onRapido && (
-            <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-9" onClick={onRapido} aria-label="Conteúdo rápido">
-              <Zap className="mr-1.5 h-4 w-4" />
-              Conteúdo rápido
-            </Button>
+            <button type="button" className={botao.icone} onClick={onRapido} aria-label="Conteúdo rápido" title="Conteúdo rápido">
+              <Zap className="h-4 w-4" />
+            </button>
           )}
-          <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-9" onClick={() => onConversar("planejar", mes)}>
-            <MessagesSquare className="mr-1.5 h-4 w-4" />
-            {doMes ? "Conversar sobre o plano" : "Planejar com o agente"}
-          </Button>
-          <Button type="button" size="sm" variant="outline" className="mb-1 h-9" onClick={() => onConversar("criar", mes)}>
-            <Sparkles className="mr-1.5 h-4 w-4" />
-            Criar conteúdos
-          </Button>
+          <button
+            type="button"
+            className={botao.icone}
+            onClick={() => onConversar("planejar", mes)}
+            aria-label={doMes ? "Conversar sobre o plano" : "Planejar com o agente"}
+            title={doMes ? "Conversar sobre o plano" : "Planejar com o agente"}
+          >
+            <MessagesSquare className="h-4 w-4" />
+          </button>
+          <button type="button" className={botao.icone} onClick={() => onConversar("criar", mes)} aria-label="Criar conteúdos" title="Criar conteúdos">
+            <FilePlus2 className="h-4 w-4" />
+          </button>
         </div>
       </div>
-      <div className="mt-3 flex min-w-0 flex-wrap items-center">
-        <span className="mr-2 text-[12px] text-muted-foreground">Próximos meses</span>
+      <div className="mt-2 flex min-w-0 flex-wrap items-center" role="group" aria-label="Próximos meses">
         {proximos.map((m) => {
           const tem = lista.some((p) => p.mes === m.slice(0, 7));
           return (
@@ -969,11 +982,11 @@ export default function AbaMes({
           <button
             type="button"
             onClick={() => abrirAgente()}
-            className="pointer-events-auto inline-flex h-12 max-w-full items-center rounded-full bg-primary px-5 text-[13px] font-semibold text-primary-foreground shadow-xl ring-4 ring-background transition-transform hover:scale-[1.02]"
+            className="pointer-events-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl ring-4 ring-background transition-transform hover:scale-[1.04]"
             aria-label="Abrir o Agente do mês"
+            title="Agente do mês"
           >
-            {pendente ? <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4 shrink-0" />}
-            <span className="truncate">Agente do mês</span>
+            {pendente ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
           </button>
         </div>
       )}

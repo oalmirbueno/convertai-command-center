@@ -1,17 +1,23 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import {
   Award,
+  Check,
   ChevronLeft,
   ChevronRight,
+  Clapperboard,
   Clock,
   Gem,
   Heart,
   Lightbulb,
   Loader2,
   Lock,
+  Maximize2,
   MessagesSquare,
+  Minimize2,
+  Plus,
   Radar,
   Send,
+  Shuffle,
   Sparkles,
   Target,
   TrendingUp,
@@ -23,6 +29,7 @@ import { supabase } from "@/integrations/supabase/client";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import type { FotoDoCliente as Foto } from "@/lib/fotoDoCliente";
 import { RADAR_LENSES, type RadarIdea, type RadarLens } from "@/lib/radarIdeas";
+import { useModoFoco } from "@/lib/modoFoco";
 import {
   AjudaRecolhida,
   BalaoDaConversa,
@@ -53,6 +60,13 @@ import {
  * conversa para evoluir a ideia abre numa janela central e chama a edge
  * function radar-ideas com action "evoluir".
  *
+ * 16/10/2026, rodada 2 (dono: "um ícone de tela cheia, para focar melhor... quando quiser,
+ * voltar" e "se eu clicar numa ideia, abrir ela, ter mais ideias e evoluir com a gente. Dá
+ * para trazer mais Reels aqui também"): o botão de tela cheia liga o modo foco do painel
+ * (some o topo e o que flutua; volta pelo botão, pelo Esc ou ao sair da aba). Tocar no
+ * cartão abre a ideia grande na janela central, com a conversa ao lado e os atalhos "Mais
+ * ideias como esta" (variações que entram no radar por onNovasIdeias) e "Ideias de Reels".
+ *
  * Compatibilidade (Safari 11 / Chrome 64): sem gap em flex (margens), sem
  * aspect-ratio, scrollTo só quando existe. O carrossel rola por dentro dele;
  * a página nunca rola de lado (min-w-0 em toda a cadeia).
@@ -75,6 +89,8 @@ export interface PropsDoRadarDeIdeias {
   onAbrirPerfil: (clientId: string) => void;
   /** A conversa aplicou uma versão nova: troque a antiga pela nova no estado. */
   onIdeiaEvoluida: (ideiaAntiga: RadarIdea, ideiaNova: RadarIdea) => void;
+  /** "Mais ideias como esta": a equipe tocou no + de uma variação. Ponha as ideias no estado do radar. */
+  onNovasIdeias?: (clienteId: string, ideias: RadarIdea[]) => void;
   className?: string;
 }
 
@@ -91,9 +107,22 @@ export interface IdeiaDoServidor {
   interno_esforco: "baixo" | "medio" | "alto";
 }
 
+/** Atalhos da ideia aberta: o "evoluir" com `pedido` devolve variações ou Reels. */
+export type PedidoDaIdeia = "variacoes" | "reels";
+
+/** Um Reel sugerido para executar a ideia. */
+export interface ReelDaIdeia {
+  gancho: string;
+  cena: string;
+  legenda: string;
+}
+
 export interface MensagemDaIdeia {
   papel: "usuario" | "agente";
   texto: string;
+  /** Só na tela (não vão ao servidor): o que o agente trouxe nos atalhos. */
+  variacoes?: RadarIdea[];
+  reels?: ReelDaIdeia[];
 }
 
 const ICONE_DA_LENTE: Record<RadarLens, LucideIcon> = {
@@ -181,6 +210,38 @@ export function ideiaDoServidor(bruta: unknown, base: RadarIdea, nomeDoCliente?:
   };
 }
 
+/**
+ * Variações do servidor → RadarIdea novas (até 3), do mesmo cliente e da mesma lente, com id
+ * próprio ("<cliente>:var-<momento>-<n>") para entrarem no radar sem trocar a ideia de origem.
+ */
+export function variacoesDoServidor(brutas: unknown, base: RadarIdea, nomeDoCliente?: string | null, momento: number = Date.now()): RadarIdea[] {
+  if (!Array.isArray(brutas)) return [];
+  const clientId = clienteDaIdeia(base);
+  const saida: RadarIdea[] = [];
+  for (const bruta of brutas) {
+    if (saida.length >= 3) break;
+    const r = bruta && typeof bruta === "object" ? (bruta as Record<string, unknown>) : null;
+    if (!r || typeof r.titulo !== "string" || !r.titulo.trim()) continue;
+    const n = saida.length;
+    const nova = ideiaDoServidor(r, { ...base, id: `${clientId}:var-${momento}-${n}`, moment: "", score: base.score - 1 - n }, nomeDoCliente);
+    if (nova) saida.push(nova);
+  }
+  return saida;
+}
+
+/** Reels do servidor (até 4), com gancho e cena obrigatórios. */
+export function reelsDoServidor(brutos: unknown): ReelDaIdeia[] {
+  if (!Array.isArray(brutos)) return [];
+  const txt = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
+  return brutos
+    .map((b) => {
+      const r = (b && typeof b === "object" ? b : {}) as Record<string, unknown>;
+      return { gancho: txt(r.gancho, 200), cena: txt(r.cena, 500), legenda: txt(r.legenda, 300) };
+    })
+    .filter((r) => r.gancho && r.cena)
+    .slice(0, 4);
+}
+
 // ───────────────────────── Cartão de uma ideia ─────────────────────────
 
 function CapaDaIdeia({ ideia, imagem, cliente }: { ideia: RadarIdea; imagem?: string; cliente?: ClienteDoRadar }) {
@@ -220,7 +281,7 @@ function CartaoDaIdeia({
   cliente,
   imagem,
   onLevar,
-  onEvoluir,
+  onAbrir,
   onPerfil,
 }: {
   ideia: RadarIdea;
@@ -229,7 +290,8 @@ function CartaoDaIdeia({
   cliente?: ClienteDoRadar;
   imagem?: string;
   onLevar: () => void;
-  onEvoluir: () => void;
+  /** Abre a ideia grande (com a conversa). */
+  onAbrir: () => void;
   onPerfil: () => void;
 }) {
   const [aberto, setAberto] = useState<"agora" | "sinal" | null>(null);
@@ -241,11 +303,21 @@ function CartaoDaIdeia({
       aria-roledescription="ideia"
       aria-label={`${posicao} de ${total}: ${titulo}`}
       data-ideia={ideia.id}
-      className={juntar(superficie.painel, "mr-3 flex w-[85%] min-w-0 shrink-0 snap-start flex-col overflow-hidden last:mr-0 sm:mr-4 sm:w-[360px] lg:w-[400px]")}
+      onClick={(e) => {
+        // Tocar no cartão abre a ideia; os controles de dentro fazem só o deles.
+        const alvo = e.target as HTMLElement | null;
+        if (alvo && typeof alvo.closest === "function" && alvo.closest("button, a, summary, details, input, textarea, select")) return;
+        onAbrir();
+      }}
+      className={juntar(superficie.painel, "mr-3 flex w-[85%] min-w-0 shrink-0 cursor-pointer snap-start flex-col overflow-hidden transition-colors last:mr-0 hover:border-primary/40 sm:mr-4 sm:w-[360px] lg:w-[400px]")}
     >
       <CapaDaIdeia ideia={ideia} imagem={imagem} cliente={cliente} />
       <div className="flex min-w-0 flex-1 flex-col p-4">
-        <h3 className={juntar(texto.tituloSecao, "line-clamp-2")} title={titulo}>{titulo}</h3>
+        <h3 className={juntar(texto.tituloSecao, "line-clamp-2")} title={titulo}>
+          <button type="button" onClick={onAbrir} className={juntar("rounded text-left hover:text-primary", foco)}>
+            {titulo}
+          </button>
+        </h3>
         <p className={juntar(texto.corpo, "mt-1.5 line-clamp-2 text-foreground/85")} title={ideia.pitch}>{ideia.pitch}</p>
 
         {ideia.moves.length > 0 && (
@@ -304,7 +376,7 @@ function CartaoDaIdeia({
             <Send className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
             Levar ao cliente
           </button>
-          <button type="button" onClick={onEvoluir} className={botao.discreto} aria-label="Evoluir com o agente">
+          <button type="button" onClick={onAbrir} className={botao.discreto} aria-label="Evoluir com o agente">
             <MessagesSquare className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
             <span className="sm:hidden">Evoluir</span>
             <span className="hidden sm:inline">Evoluir com o agente</span>
@@ -318,20 +390,100 @@ function CartaoDaIdeia({
   );
 }
 
-// ───────────────────────── Conversa para evoluir ─────────────────────────
+// ───────────────────────── A ideia aberta (com a conversa) ─────────────────────────
 
 const ATALHOS = ["Mais ousada", "Mais barata de executar", "Em formato de vídeo", "Passos mais concretos"];
 
-function ConversaDaIdeia({
+const TEXTO_DO_PEDIDO: Record<PedidoDaIdeia, string> = {
+  variacoes: "Mais ideias como esta",
+  reels: "Ideias de Reels",
+};
+
+function NumeroDoPasso({ n }: { n: number }) {
+  return (
+    <span className="mr-2 mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold tabular-nums text-primary" aria-hidden="true">
+      {n}
+    </span>
+  );
+}
+
+/** Variações que o agente trouxe, dentro do balão dele: tocar no + põe a ideia no radar. */
+function VariacoesNaConversa({ variacoes, nome, onAdicionar }: { variacoes: RadarIdea[]; nome?: string; onAdicionar?: (ideia: RadarIdea) => void }) {
+  const [adicionadas, setAdicionadas] = useState<Record<string, true>>({});
+  return (
+    <ul className="mt-2 space-y-2" aria-label="Variações da ideia" data-variacoes="">
+      {variacoes.map((v) => {
+        const titulo = tituloSemCliente(v.title, nome);
+        const feita = !!adicionadas[v.id];
+        return (
+          <li key={v.id} className="flex min-w-0 items-start border-t border-border/60 pt-2 first:border-t-0 first:pt-0" data-variacao={v.id}>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-foreground">{titulo}</p>
+              <p className="mt-0.5 line-clamp-3 text-[13px] text-muted-foreground" title={v.pitch}>
+                {v.pitch}
+              </p>
+            </div>
+            {onAdicionar && (
+              <button
+                type="button"
+                disabled={feita}
+                onClick={() => {
+                  onAdicionar(v);
+                  setAdicionadas((a) => ({ ...a, [v.id]: true }));
+                }}
+                aria-label={feita ? `${titulo} já está no radar` : `Adicionar ao radar: ${titulo}`}
+                title={feita ? "Já está no radar" : "Adicionar ao radar"}
+                className={juntar(botao.icone, "ml-2 disabled:text-primary disabled:opacity-100")}
+              >
+                {feita ? <Check className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
+              </button>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Reels sugeridos, dentro do balão do agente: gancho, o que mostrar e a legenda curta. */
+function ReelsNaConversa({ reels }: { reels: ReelDaIdeia[] }) {
+  return (
+    <ol className="mt-2 space-y-2" aria-label="Ideias de Reels" data-reels="">
+      {reels.map((r, i) => (
+        <li key={`${i}-${r.gancho}`} className="flex min-w-0 items-start border-t border-border/60 pt-2 first:border-t-0 first:pt-0">
+          <Clapperboard className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-foreground">{r.gancho}</p>
+            <p className="mt-0.5 text-[13px] text-muted-foreground">{r.cena}</p>
+            {r.legenda && <p className="mt-0.5 text-[13px] italic text-foreground/70">{r.legenda}</p>}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/**
+ * A ideia aberta em tela grande (16/10/2026, dono: "se eu clicar numa ideia, abrir ela, ter
+ * mais ideias e evoluir com a gente. Dá para trazer mais Reels aqui também"). À esquerda (em
+ * cima, no celular) a ideia inteira com os dois atalhos; à direita (embaixo) a conversa com o
+ * agente. "Mais ideias como esta" e "Ideias de Reels" chamam o mesmo "evoluir" com `pedido`, e
+ * a resposta chega na conversa (as variações com o + para entrar no radar).
+ */
+function IdeiaAberta({
   ideia,
   cliente,
+  imagem,
   onFechar,
   onAplicar,
+  onNovasIdeias,
 }: {
   ideia: RadarIdea;
   cliente?: ClienteDoRadar;
+  imagem?: string;
   onFechar: () => void;
   onAplicar: (nova: RadarIdea) => void;
+  onNovasIdeias?: (clienteId: string, ideias: RadarIdea[]) => void;
 }) {
   const [mensagens, setMensagens] = useState<MensagemDaIdeia[]>([]);
   const [rascunho, setRascunho] = useState("");
@@ -342,30 +494,43 @@ function ConversaDaIdeia({
   const vista = proposta || ideia;
   const nome = cliente?.nome;
   const clientId = clienteDaIdeia(ideia);
+  const [low, high] = vista.internal.range;
 
   useEffect(() => {
     const el = fimDaConversa.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [mensagens, carregando]);
 
-  const enviar = async (textoDoPedido: string) => {
-    const pedido = textoDoPedido.trim();
-    if (!pedido || carregando) return;
-    const historico: MensagemDaIdeia[] = [...mensagens, { papel: "usuario", texto: pedido }];
+  const enviar = async (textoDoPedido: string, pedido?: PedidoDaIdeia) => {
+    const fala = textoDoPedido.trim();
+    if (!fala || carregando) return;
+    const historico: MensagemDaIdeia[] = [...mensagens, { papel: "usuario", texto: fala }];
     setMensagens(historico);
-    setRascunho("");
+    if (!pedido) setRascunho("");
     setErro("");
     setCarregando(true);
     try {
       const { data, error } = await supabase.functions.invoke("radar-ideas", {
-        body: { action: "evoluir", client_id: clientId, ideia: ideiaParaServidor(vista, nome), mensagens: historico },
+        body: {
+          action: "evoluir",
+          client_id: clientId,
+          ideia: ideiaParaServidor(vista, nome),
+          // Só a fala vai ao servidor (as listas que o agente trouxe ficam aqui).
+          mensagens: historico.map((m) => ({ papel: m.papel, texto: m.texto })),
+          ...(pedido ? { pedido } : {}),
+        },
       });
       if (error) throw new Error(error.message || "O agente não respondeu.");
       if (data?.error) throw new Error(String(data.error));
-      const nova = ideiaDoServidor(data?.ideia, vista, nome);
-      const resposta = typeof data?.resposta === "string" && data.resposta.trim() ? data.resposta.trim() : "Ajustei a ideia.";
-      setMensagens((m) => [...m, { papel: "agente", texto: resposta }]);
-      if (nova) setProposta(nova);
+      const resposta = typeof data?.resposta === "string" && data.resposta.trim() ? data.resposta.trim() : pedido ? "Aqui estão." : "Ajustei a ideia.";
+      const variacoes = pedido === "variacoes" ? variacoesDoServidor(data?.variacoes, vista, nome) : [];
+      const reels = pedido === "reels" ? reelsDoServidor(data?.reels) : [];
+      setMensagens((m) => [...m, { papel: "agente", texto: resposta, ...(variacoes.length ? { variacoes } : {}), ...(reels.length ? { reels } : {}) }]);
+      // Com pedido a ideia não muda; sem pedido, a versão nova fica pronta para aplicar.
+      if (!pedido) {
+        const nova = ideiaDoServidor(data?.ideia, vista, nome);
+        if (nova) setProposta(nova);
+      }
     } catch (e) {
       setErro(e instanceof Error && e.message ? e.message : "Não foi possível falar com o agente agora.");
     } finally {
@@ -385,112 +550,146 @@ function ConversaDaIdeia({
     <JanelaCentral
       aberta
       onFechar={onFechar}
-      titulo="Evoluir a ideia"
-      icone={<MessagesSquare className="h-4 w-4" />}
-      descricao={nome}
-      ajuda="Converse com o agente do Radar sobre esta ideia. Ele relê o contexto real do cliente (dossiê, entregas, Instagram) e devolve a ideia reescrita. Nada muda até você tocar em Aplicar."
-      rotuloDaAjuda="Como funciona a conversa"
-      largura="lg"
+      titulo={nome || "Ideia do radar"}
+      icone={<Radar className="h-4 w-4" />}
+      ajuda="A ideia inteira e a conversa com o agente do Radar. Ele relê o contexto real do cliente (dossiê, entregas, Instagram). Mais ideias como esta traz variações (o + põe a variação no radar); Ideias de Reels traz Reels para executar a ideia. Nada muda na ideia até você tocar em Aplicar."
+      rotuloDaAjuda="Como funciona"
+      largura="tela"
       corpo="fixo"
       semEspaco
+      classeDoCorpo="lg:flex-row"
+      data-ideia-aberta=""
       data-conversa-da-ideia=""
       rodape={
         <>
           <button type="button" onClick={onFechar} className={botao.discreto}>
             Fechar
           </button>
-          <button
-            type="button"
-            disabled={!proposta || carregando}
-            onClick={() => proposta && onAplicar(proposta)}
-            className={botao.primario}
-          >
+          <button type="button" disabled={!proposta || carregando} onClick={() => proposta && onAplicar(proposta)} className={botao.primario}>
             <Sparkles className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
             Aplicar esta versão
           </button>
         </>
       }
     >
-      <div className="max-h-[42%] min-w-0 shrink-0 overflow-y-auto border-b border-border px-4 py-3 sm:px-5" data-ideia-atual="">
-        <span className={juntar(etiqueta, proposta ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{proposta ? "Nova versão" : "Ideia atual"}</span>
-        <p className={juntar(texto.tituloSecao, "mt-1.5")}>{titulo}</p>
-        <p className={juntar(texto.corpo, "mt-1 text-foreground/85")}>{vista.pitch}</p>
-        {vista.moves.length > 0 && (
-          <ol className="mt-2 space-y-1">
-            {vista.moves.map((passo, i) => (
-              <li key={`${i}-${passo}`} className="flex min-w-0 items-start">
-                <span className="mr-2 mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold tabular-nums text-primary" aria-hidden="true">
-                  {i + 1}
-                </span>
-                <span className={juntar(texto.auxiliar, "min-w-0 leading-5")}>{passo}</span>
-              </li>
-            ))}
-          </ol>
-        )}
-        <p className={juntar(texto.auxiliar, "mt-2 leading-5")}>
-          <Clock className="mr-1 inline h-3 w-3 align-[-2px]" aria-hidden="true" />
-          {vista.whyNow}
-        </p>
-        <p className={juntar(texto.auxiliar, "mt-1 leading-5")}>
-          <Target className="mr-1 inline h-3 w-3 align-[-2px]" aria-hidden="true" />
-          {vista.signal}
-        </p>
+      {/* A ideia: em cima no celular (até 45% da altura, rola por dentro); à esquerda no computador. */}
+      <div
+        className="max-h-[45%] min-w-0 shrink-0 overflow-y-auto overscroll-contain border-b border-border lg:max-h-none lg:w-[55%] lg:shrink-0 lg:border-b-0 lg:border-r"
+        data-ideia-atual=""
+      >
+        <div className="hidden lg:block">
+          <CapaDaIdeia ideia={vista} imagem={imagem} />
+        </div>
+        <div className="px-4 py-3 sm:px-5 lg:py-4">
+          <span className={juntar(etiqueta, proposta ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{proposta ? "Nova versão" : "Ideia atual"}</span>
+          <p className={juntar(texto.tituloSecao, "mt-1.5 lg:text-[18px] lg:leading-7")}>{titulo}</p>
+          <p className={juntar(texto.corpo, "mt-1 text-foreground/85")}>{vista.pitch}</p>
+
+          <div className="-m-1 mt-3 flex min-w-0 flex-wrap items-center [&>*]:m-1">
+            <button type="button" disabled={carregando} onClick={() => void enviar(TEXTO_DO_PEDIDO.variacoes, "variacoes")} className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}>
+              <Shuffle className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+              {TEXTO_DO_PEDIDO.variacoes}
+            </button>
+            <button type="button" disabled={carregando} onClick={() => void enviar(TEXTO_DO_PEDIDO.reels, "reels")} className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}>
+              <Clapperboard className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+              {TEXTO_DO_PEDIDO.reels}
+            </button>
+          </div>
+
+          {vista.moves.length > 0 && (
+            <ol className="mt-3 space-y-1.5" aria-label="Passos">
+              {vista.moves.map((passo, i) => (
+                <li key={`${i}-${passo}`} className="flex min-w-0 items-start">
+                  <NumeroDoPasso n={i + 1} />
+                  <span className={juntar(texto.auxiliar, "min-w-0 leading-5")}>{passo}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+          <p className={juntar(texto.auxiliar, "mt-3 leading-5")}>
+            <Clock className="mr-1 inline h-3 w-3 align-[-2px]" aria-hidden="true" />
+            <span className="sr-only">Por que agora: </span>
+            <span>{vista.moment ? `${vista.moment} ${vista.whyNow}` : vista.whyNow}</span>
+          </p>
+          <p className={juntar(texto.auxiliar, "mt-1 leading-5")}>
+            <Target className="mr-1 inline h-3 w-3 align-[-2px]" aria-hidden="true" />
+            <span className="sr-only">Sinal: </span>
+            <span>{vista.signal}</span>
+          </p>
+          <details className="mt-2 min-w-0">
+            <summary className={juntar("inline-flex cursor-pointer list-none items-center rounded-md px-1 text-[12px] text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden", foco)}>
+              <Lock className="mr-1 h-3 w-3" aria-hidden="true" />
+              Só a equipe
+            </summary>
+            <p className="mt-1.5 rounded-md bg-warning/[0.07] px-3 py-2 text-[12px] leading-5 text-muted-foreground">
+              Pode virar: <span className="text-foreground/80">{vista.internal.offer}</span>
+              {high > 0 && ` · ${reais(low)} a ${reais(high)}`} · esforço {ESFORCO[vista.internal.effort] || vista.internal.effort}
+            </p>
+          </details>
+        </div>
       </div>
 
-      <MensagensDoAgente ref={fimDaConversa} rotulo="Conversa sobre a ideia">
-        {mensagens.length === 0 && !carregando && <p className={conversa.apoio}>Diga o que mudar. O agente devolve a ideia reescrita.</p>}
-        {mensagens.map((m, i) => (
-          <BalaoDaConversa key={i} de={m.papel === "usuario" ? "usuario" : "agente"}>
-            <p className="whitespace-pre-wrap">{m.texto}</p>
-          </BalaoDaConversa>
-        ))}
-        {carregando && (
-          <BalaoDaConversa de="agente">
-            <span className="inline-flex items-center text-muted-foreground">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-              Relendo o cliente...
-            </span>
-          </BalaoDaConversa>
-        )}
-      </MensagensDoAgente>
+      {/* A conversa: embaixo no celular, à direita no computador. */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <MensagensDoAgente ref={fimDaConversa} rotulo="Conversa sobre a ideia">
+          {mensagens.length === 0 && !carregando && <p className={conversa.apoio}>Diga o que mudar. O agente devolve a ideia reescrita.</p>}
+          {mensagens.map((m, i) => (
+            <BalaoDaConversa key={i} de={m.papel === "usuario" ? "usuario" : "agente"}>
+              <p className="whitespace-pre-wrap">{m.texto}</p>
+              {m.variacoes && m.variacoes.length > 0 && (
+                <VariacoesNaConversa variacoes={m.variacoes} nome={nome} onAdicionar={onNovasIdeias ? (v) => onNovasIdeias(clientId, [v]) : undefined} />
+              )}
+              {m.reels && m.reels.length > 0 && <ReelsNaConversa reels={m.reels} />}
+            </BalaoDaConversa>
+          ))}
+          {carregando && (
+            <BalaoDaConversa de="agente">
+              <span className="inline-flex items-center text-muted-foreground">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                Relendo o cliente...
+              </span>
+            </BalaoDaConversa>
+          )}
+        </MensagensDoAgente>
 
-      <CompositorDoAgente>
-        {erro && (
-          <p role="alert" className="text-[12px] text-destructive">
-            {erro}
-          </p>
-        )}
-        {mensagens.length === 0 && (
-          <div className="-m-1 flex min-w-0 flex-wrap [&>*]:m-1">
-            {ATALHOS.map((a) => (
-              <button key={a} type="button" disabled={carregando} onClick={() => void enviar(a)} className={juntar(botao.barra, "border border-border")}>
-                {a}
-              </button>
-            ))}
+        <CompositorDoAgente>
+          {erro && (
+            <p role="alert" className="text-[12px] text-destructive">
+              {erro}
+            </p>
+          )}
+          {mensagens.length === 0 && (
+            <div className="-m-1 flex min-w-0 flex-wrap [&>*]:m-1">
+              {ATALHOS.map((a) => (
+                <button key={a} type="button" disabled={carregando} onClick={() => void enviar(a)} className={juntar(botao.barra, "border border-border")}>
+                  {a}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="flex min-w-0 items-end">
+            <textarea
+              value={rascunho}
+              onChange={(e) => setRascunho(e.target.value)}
+              onKeyDown={aoTeclar}
+              rows={2}
+              placeholder="Ex.: deixa mais simples, com foco no Instagram"
+              aria-label="Mensagem para o agente"
+              className={juntar(campoTexto, "min-h-[44px] flex-1 resize-none")}
+            />
+            <button
+              type="button"
+              onClick={() => void enviar(rascunho)}
+              disabled={!rascunho.trim() || carregando}
+              aria-label="Enviar"
+              title="Enviar"
+              className={juntar(botao.primario, "ml-2 w-9 px-0")}
+            >
+              {carregando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
+            </button>
           </div>
-        )}
-        <div className="flex min-w-0 items-end">
-          <textarea
-            value={rascunho}
-            onChange={(e) => setRascunho(e.target.value)}
-            onKeyDown={aoTeclar}
-            rows={2}
-            placeholder="Ex.: deixa mais simples, com foco no Instagram"
-            aria-label="Mensagem para o agente"
-            className={juntar(campoTexto, "min-h-[44px] flex-1 resize-none")}
-          />
-          <button
-            type="button"
-            onClick={() => void enviar(rascunho)}
-            disabled={!rascunho.trim() || carregando}
-            aria-label="Enviar"
-            title="Enviar"
-            className={juntar(botao.primario, "ml-2 w-9 px-0")}
-          >
-            {carregando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
-          </button>
-        </div>
-      </CompositorDoAgente>
+        </CompositorDoAgente>
+      </div>
     </JanelaCentral>
   );
 }
@@ -505,12 +704,28 @@ export default function RadarDeIdeias({
   onLevarAoCliente,
   onAbrirPerfil,
   onIdeiaEvoluida,
+  onNovasIdeias,
   className = "",
 }: PropsDoRadarDeIdeias) {
   const [filtro, setFiltro] = useState<string | null>(null);
   const [atual, setAtual] = useState(0);
-  const [conversando, setConversando] = useState<RadarIdea | null>(null);
+  const [aberta, setAberta] = useState<RadarIdea | null>(null);
+  const [focoLigado, setFocoLigado] = useState(false);
   const trilho = useRef<HTMLDivElement | null>(null);
+
+  // Tela cheia = modo foco do painel (some o topo e o que flutua). Desliga ao sair da aba (desmontar).
+  useModoFoco("radar-de-ideias", focoLigado);
+  useEffect(() => {
+    if (!focoLigado) return;
+    const tecla = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== "Escape" && e.key !== "Esc") return;
+      // Esc com a ideia aberta fecha só a janela.
+      if (e.defaultPrevented || document.querySelector("[data-janela-central]")) return;
+      setFocoLigado(false);
+    };
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  }, [focoLigado]);
 
   const clientePorId = useMemo(() => {
     const m: Record<string, ClienteDoRadar> = {};
@@ -608,7 +823,7 @@ export default function RadarDeIdeias({
     }
   };
 
-  const clienteDaConversa = conversando ? clientePorId[clienteDaIdeia(conversando)] : undefined;
+  const clienteDaAberta = aberta ? clientePorId[clienteDaIdeia(aberta)] : undefined;
   const chip = (ativo: boolean) =>
     juntar(
       "toque-compacto mr-2 inline-flex h-11 shrink-0 items-center rounded-full border py-1 pl-1 pr-3 text-[12px] font-medium transition-colors last:mr-0",
@@ -620,8 +835,23 @@ export default function RadarDeIdeias({
     <Secao
       titulo="Radar de ideias"
       descricao={ideias.length > 0 ? `${ideias.length} ${ideias.length === 1 ? "ideia" : "ideias"}` : undefined}
-      ajuda="O Radar é o ritual de antecipação da carteira recorrente: uma vez por mês a Aceleriq chega com uma ideia de diferenciação que o cliente até já pensou em fazer e nunca executou. Cada ideia nasce do momento real dele. A faixa de valor fica em Só a equipe e nunca entra na mensagem do cliente. Em Evoluir com o agente você conversa sobre a ideia e aplica a versão nova."
-      acao={controles}
+      ajuda="O Radar é o ritual de antecipação da carteira recorrente: uma vez por mês a Aceleriq chega com uma ideia de diferenciação que o cliente até já pensou em fazer e nunca executou. Cada ideia nasce do momento real dele. A faixa de valor fica em Só a equipe e nunca entra na mensagem do cliente. Toque numa ideia para abrir: dá para conversar com o agente, pedir mais ideias como ela e ideias de Reels. O ícone de tela cheia esconde o topo do painel; volta pelo mesmo ícone ou Esc."
+      acao={
+        <>
+          {controles}
+          <button
+            type="button"
+            onClick={() => setFocoLigado((f) => !f)}
+            aria-pressed={focoLigado}
+            aria-label={focoLigado ? "Sair da tela cheia" : "Tela cheia"}
+            title={focoLigado ? "Sair da tela cheia (Esc)" : "Tela cheia"}
+            className={botao.icone}
+            data-tela-cheia-do-radar=""
+          >
+            {focoLigado ? <Minimize2 className="h-4 w-4" aria-hidden="true" /> : <Maximize2 className="h-4 w-4" aria-hidden="true" />}
+          </button>
+        </>
+      }
       className={juntar("min-w-0", className)}
       corpoClassName="min-w-0"
       data-radar-de-ideias=""
@@ -686,7 +916,7 @@ export default function RadarDeIdeias({
                   cliente={clientePorId[id]}
                   imagem={capas[ideia.id]}
                   onLevar={() => onLevarAoCliente(ideia)}
-                  onEvoluir={() => setConversando(ideia)}
+                  onAbrir={() => setAberta(ideia)}
                   onPerfil={() => onAbrirPerfil(id)}
                 />
               );
@@ -718,17 +948,26 @@ export default function RadarDeIdeias({
         </div>
       )}
 
-      {conversando && (
-        <ConversaDaIdeia
-          key={conversando.id}
-          ideia={conversando}
-          cliente={clienteDaConversa}
-          onFechar={() => setConversando(null)}
+      {aberta && (
+        <IdeiaAberta
+          key={aberta.id}
+          ideia={aberta}
+          cliente={clienteDaAberta}
+          imagem={capas[aberta.id]}
+          onFechar={() => setAberta(null)}
           onAplicar={(nova) => {
-            onIdeiaEvoluida(conversando, nova);
-            setConversando(null);
+            onIdeiaEvoluida(aberta, nova);
+            setAberta(null);
             toast.success("Ideia atualizada.");
           }}
+          onNovasIdeias={
+            onNovasIdeias
+              ? (clienteId, novas) => {
+                  onNovasIdeias(clienteId, novas);
+                  toast.success(novas.length === 1 ? "Ideia adicionada ao radar." : "Ideias adicionadas ao radar.");
+                }
+              : undefined
+          }
         />
       )}
     </Secao>

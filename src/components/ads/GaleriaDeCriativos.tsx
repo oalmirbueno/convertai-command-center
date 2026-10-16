@@ -117,11 +117,17 @@ export default function GaleriaDeCriativos({
   criativos,
   periodoDias,
   chave = "geral",
+  embutido = false,
 }: {
   criativos: CriativoDeAnuncio[];
   periodoDias: number;
   /** Onde guardar filtros e ordem (o cliente): sair e voltar mantém o recorte. */
   chave?: string;
+  /**
+   * Dentro de uma aba (16/10): sem título nem "?" próprios, porque a aba já
+   * diz o nome e a explicação mora no "?" dela. Fica a linha de estado.
+   */
+  embutido?: boolean;
 }) {
   const [aberto, setAberto] = useState<CriativoDeAnuncio | null>(null);
   const [ordem, setOrdem] = useEstadoDaTela<Ordem>(`criativos:${chave}:ordem`, "gasto", {
@@ -217,9 +223,11 @@ export default function GaleriaDeCriativos({
   const ajuda =
     "Qual arte fez o trabalho: gasto, cliques no link e custo de cada peça. O padrão mostra as que rodaram; as paradas ficam a um clique. Imagem que a Meta expirou aparece com o nome da peça. Toque numa peça para ver grande.";
 
+  const cabeca = embutido ? {} : { divisoria: true, titulo: "Criativos", ajuda };
+
   if (criativos.length === 0) {
     return (
-      <Secao divisoria titulo="Criativos" descricao={`Últimos ${periodoDias} dias`} ajuda={ajuda}>
+      <Secao {...cabeca} descricao={`Últimos ${periodoDias} dias`}>
         <EstadoVazio
           compacto
           titulo="Nenhum criativo lido ainda."
@@ -233,8 +241,7 @@ export default function GaleriaDeCriativos({
 
   return (
     <Secao
-      divisoria
-      titulo="Criativos"
+      {...cabeca}
       descricao={
         // Uma linha de estado: contagem e o resumo das peças (antes era uma linha a mais embaixo).
         <span className="block truncate tabular-nums">
@@ -254,7 +261,6 @@ export default function GaleriaDeCriativos({
           {resumo.pecas_sem_numero > 0 && ` · ${resumo.pecas_sem_numero} sem número no período`}
         </span>
       }
-      ajuda={ajuda}
       acao={
         <SeletorCompacto
           rotulo="Ordenar criativos"

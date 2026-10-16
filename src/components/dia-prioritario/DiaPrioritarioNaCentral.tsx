@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ArrowRight, CalendarClock, CalendarHeart, CalendarX, Camera, ListTodo, Loader2, MessageSquare, MessageSquareDashed, PenLine, SquareKanban } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { JanelaCentral, Secao, SeletorCompacto, botao, campoTexto, etiqueta, foco, juntar, superficie, texto } from "@/components/sistema";
+import { AjudaRecolhida, JanelaCentral, Secao, SeletorCompacto, botao, campoTexto, etiqueta, foco, juntar, superficie, texto } from "@/components/sistema";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import type { FotoDoCliente as Foto } from "@/lib/fotoDoCliente";
 import {
@@ -32,6 +32,12 @@ import { registrarNoDia, tarefasAbertasDosClientes, textoDoErroDoDia, useDiasPri
  * na largura toda (no celular, 5 botões com a contagem), cada uma com a foto e o nome curto dos
  * clientes; o dia escolhido abre embaixo em cartões (um por cliente) com as contagens em números
  * pequenos com ícone. O que antes era frase mora no title/leitor de tela e no "?".
+ *
+ * 16/10/2026, rodada 2 (dono: "ter um score interno dentro dele, para cada cliente, sem ficar
+ * poluído... pode tirar essa linha de cima"): a nota de saúde (0 a 100, a mesma que a Central já
+ * calcula) aparece pequena ao lado de cada cliente na coluna e no cartão do dia, e a média do dia
+ * no cabeçalho da coluna. A linha de resumo ("N na semana · M hoje") saiu. Com `semCabecalho`
+ * (a Central mostra o bloco numa aba), nem o título aparece; o "?" fica no canto do zoom do dia.
  */
 
 type ClienteDaCentral = { id: string; nome: string; foto?: Foto | null };
@@ -67,6 +73,36 @@ function nomeCurto(nome: string): string {
 }
 
 const maiuscula = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
+/** Cor da nota de saúde: verde de 70 para cima, amarela de 40 a 69, vermelha abaixo de 40. */
+export function tomDaNota(nota: number): "bom" | "atencao" | "perigo" {
+  return nota >= 70 ? "bom" : nota >= 40 ? "atencao" : "perigo";
+}
+
+const COR_DA_NOTA = {
+  bom: "bg-success/15 text-success",
+  atencao: "bg-warning/15 text-warning",
+  perigo: "bg-destructive/10 text-destructive",
+} as const;
+
+/** Nota pequena (0 a 100) com a cor da faixa; o rótulo inteiro fica no title e no leitor de tela. */
+function NotaDeSaude({ nota, rotulo, className = "" }: { nota: number; rotulo: string; className?: string }) {
+  const n = Math.max(0, Math.min(100, Math.round(nota)));
+  return (
+    <span
+      className={juntar("inline-flex h-4 shrink-0 items-center rounded px-1 text-[11px] font-semibold tabular-nums leading-4", COR_DA_NOTA[tomDaNota(n)], className)}
+      title={`${rotulo}: ${n} de 100`}
+      data-nota-de-saude={n}
+      data-tom={tomDaNota(n)}
+    >
+      <span aria-hidden="true">{n}</span>
+      <span className="sr-only">{`${rotulo}: ${n} de 100`}</span>
+    </span>
+  );
+}
+
+const AJUDA =
+  "O dia fixo de atenção estratégica de cada cliente recorrente: conversa quando fizer sentido, resultados, pendências, próximos passos e captações combinadas. Não substitui os rituais de segunda, quarta e sexta nem o atendimento da semana. As pendências são as tarefas reais do Kanban. Toque num dia para ver os clientes dele; toque no cliente para abrir o perfil. Número colorido: a nota de saúde do cliente (verde 70 ou mais, amarela 40 a 69, vermelha abaixo de 40); no cabeçalho do dia, a média. Ponto amarelo na foto: dia provisório. Ponto vermelho: tarefas atrasadas. Câmera: próxima captação (verde no Dia Prioritário, amarela fora dele).";
 
 const TOM = {
   neutro: "bg-muted text-muted-foreground",
@@ -104,7 +140,21 @@ function RostoDoCliente({ cliente, tamanho }: { cliente: ClienteDoDia; tamanho: 
   );
 }
 
-export default function DiaPrioritarioNaCentral({ clientes, onAbrirPerfil, agora }: { clientes: ClienteDaCentral[]; onAbrirPerfil: (clientId: string) => void; agora?: Date }) {
+export default function DiaPrioritarioNaCentral({
+  clientes,
+  onAbrirPerfil,
+  agora,
+  notas,
+  semCabecalho = false,
+}: {
+  clientes: ClienteDaCentral[];
+  onAbrirPerfil: (clientId: string) => void;
+  agora?: Date;
+  /** Nota de saúde (0 a 100) por id de cliente, a que a Central já calcula. Sem ela, nada de nota. */
+  notas?: Record<string, number>;
+  /** A Central mostra o bloco numa aba: sem título de seção; o "?" fica no canto do zoom do dia. */
+  semCabecalho?: boolean;
+}) {
   const navigate = useNavigate();
   const momento = agora ?? new Date();
   const hojeISO = diaDaSemanaEmSP(momento);
@@ -179,19 +229,20 @@ export default function DiaPrioritarioNaCentral({ clientes, onAbrirPerfil, agora
   const doDia = porDia.get(dia) || [];
   const data = proximaData(dia, momento);
   const rotuloDoDia = dia === hojeISO ? `Hoje, ${nomeDoDia(dia)}` : maiuscula(dataPorExtenso(data));
-  const naSemana = DIAS_UTEIS.reduce((s, d) => s + (porDia.get(d.dia) || []).length, 0);
-  const hojeNaLista = hojeISO >= 1 && hojeISO <= 5 ? (porDia.get(hojeISO) || []).length : 0;
+  const notaDe = (clientId: string): number | null => {
+    const n = notas ? notas[clientId] : undefined;
+    return typeof n === "number" && Number.isFinite(n) ? n : null;
+  };
+  const mediaDoDia = (lista: ClienteDoDia[]): number | null => {
+    const valores = lista.map((c) => notaDe(c.id)).filter((n): n is number => n !== null);
+    return valores.length ? valores.reduce((s, n) => s + n, 0) / valores.length : null;
+  };
   // Poucos clientes no dia: menos colunas, para os cartões ocuparem a largura sem ficar no canto.
   const colunasDoZoom =
     doDia.length <= 1 ? "mx-auto w-full max-w-[640px]" : doDia.length === 2 ? "sm:grid-cols-2" : doDia.length === 3 ? "sm:grid-cols-2 lg:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4";
 
   return (
-    <Secao
-      titulo="Dia Prioritário"
-      divisoria
-      descricao={`${naSemana} na semana${hojeISO >= 1 && hojeISO <= 5 ? ` · ${hojeNaLista} hoje` : ""}`}
-      ajuda="O dia fixo de atenção estratégica de cada cliente recorrente: conversa quando fizer sentido, resultados, pendências, próximos passos e captações combinadas. Não substitui os rituais de segunda, quarta e sexta nem o atendimento da semana. As pendências são as tarefas reais do Kanban. Toque num dia para ver os clientes dele; toque no cliente para abrir o perfil. Ponto amarelo na foto: dia provisório. Número vermelho: tarefas atrasadas. Câmera: próxima captação (verde no Dia Prioritário, amarela fora dele)."
-    >
+    <Moldura semCabecalho={semCabecalho}>
       <div className="min-w-0" data-dia-prioritario-central="">
         {/* A semana: 5 colunas iguais na largura toda. No celular, só o dia e a contagem (os clientes aparecem no zoom). */}
         <div className="grid min-w-0 grid-cols-5 gap-1.5 md:gap-3" role="group" aria-label="Dias da semana">
@@ -200,6 +251,7 @@ export default function DiaPrioritarioNaCentral({ clientes, onAbrirPerfil, agora
             const ativo = d.dia === dia;
             const ehHoje = d.dia === hojeISO;
             const atrasadosNoDia = lista.reduce((s, c) => s + (resumir(c.id, d.dia).atrasadas.length ? 1 : 0), 0);
+            const media = mediaDoDia(lista);
             return (
               <div
                 key={d.dia}
@@ -221,12 +273,14 @@ export default function DiaPrioritarioNaCentral({ clientes, onAbrirPerfil, agora
                   </span>
                   <span className="flex items-center leading-4">
                     {atrasadosNoDia > 0 && <span className="mr-1 hidden h-1.5 w-1.5 rounded-full bg-destructive md:inline-block" aria-hidden="true" />}
+                    {media !== null && <NotaDeSaude nota={media} rotulo="Saúde média do dia" className="mr-1.5 hidden opacity-80 md:inline-flex" />}
                     <span className={juntar("text-[12px] tabular-nums", ativo || ehHoje ? "text-foreground" : "text-muted-foreground")}>{lista.length}</span>
                   </span>
                 </button>
                 <ul className="mt-1 hidden min-w-0 md:block" aria-label={`Clientes de ${d.nome}`}>
                   {lista.map((c) => {
                     const atrasadas = resumir(c.id, d.dia).atrasadas.length;
+                    const nota = notaDe(c.id);
                     return (
                       <li key={c.id} className="min-w-0">
                         <button
@@ -238,11 +292,11 @@ export default function DiaPrioritarioNaCentral({ clientes, onAbrirPerfil, agora
                           <RostoDoCliente cliente={c} tamanho="sm" />
                           <span className="ml-2 min-w-0 flex-1 truncate text-[13px] text-foreground">{nomeCurto(c.nome)}</span>
                           {atrasadas > 0 && (
-                            <span className="ml-1 shrink-0 text-[11px] font-medium tabular-nums text-destructive">
-                              {atrasadas}
-                              <span className="sr-only"> {atrasadas === 1 ? "atrasada" : "atrasadas"}</span>
+                            <span className="ml-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-destructive" title={`${atrasadas} ${atrasadas === 1 ? "atrasada" : "atrasadas"}`}>
+                              <span className="sr-only">{`${atrasadas} ${atrasadas === 1 ? "atrasada" : "atrasadas"}`}</span>
                             </span>
                           )}
+                          {nota !== null && <NotaDeSaude nota={nota} rotulo="Saúde" className="ml-1" />}
                         </button>
                       </li>
                     );
@@ -265,11 +319,17 @@ export default function DiaPrioritarioNaCentral({ clientes, onAbrirPerfil, agora
             <CalendarHeart className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
             <h3 className="min-w-0 truncate text-[13px] font-semibold leading-5 text-foreground">{rotuloDoDia}</h3>
             <span className="ml-2 text-[12px] tabular-nums text-muted-foreground">{doDia.length}</span>
+            {semCabecalho && (
+              <AjudaRecolhida className="ml-auto" rotulo="O que é o Dia Prioritário?" lado="left">
+                {AJUDA}
+              </AjudaRecolhida>
+            )}
           </div>
           {doDia.length ? (
             <ul className={juntar("grid min-w-0 gap-3", colunasDoZoom)} aria-label={`Clientes de ${nomeDoDia(dia)} em detalhe`}>
               {doDia.map((c) => {
                 const r = resumir(c.id, dia);
+                const nota = notaDe(c.id);
                 return (
                   <li key={c.id} className={juntar(superficie.painel, "min-w-0 p-3")} data-cliente-do-dia={c.id}>
                     <div className="flex min-w-0 items-center">
@@ -283,6 +343,7 @@ export default function DiaPrioritarioNaCentral({ clientes, onAbrirPerfil, agora
                         <span className="ml-3 min-w-0 flex-1">
                           <span className="flex min-w-0 items-center">
                             <span className="min-w-0 truncate text-[15px] font-semibold leading-5 text-foreground">{c.nome}</span>
+                            {nota !== null && <NotaDeSaude nota={nota} rotulo="Saúde" className="ml-2" />}
                             {c.provisorio && <span className={juntar(etiqueta, "ml-2 bg-warning/15 text-warning")}>Provisório</span>}
                           </span>
                           <span
@@ -363,6 +424,22 @@ export default function DiaPrioritarioNaCentral({ clientes, onAbrirPerfil, agora
         </div>
       </div>
       {registrando && <RegistrarNoDia cliente={registrando} onFechar={() => setRegistrando(null)} />}
+    </Moldura>
+  );
+}
+
+/** Com cabeçalho: a seção de sempre (título e "?", sem a linha de resumo). Sem: só o bloco. */
+function Moldura({ semCabecalho, children }: { semCabecalho: boolean; children: ReactNode }) {
+  if (semCabecalho) {
+    return (
+      <section className="min-w-0" aria-label="Dia Prioritário" data-dia-prioritario-sem-cabecalho="">
+        {children}
+      </section>
+    );
+  }
+  return (
+    <Secao titulo="Dia Prioritário" divisoria ajuda={AJUDA}>
+      {children}
     </Secao>
   );
 }

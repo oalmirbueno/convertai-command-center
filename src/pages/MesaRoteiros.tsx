@@ -13,6 +13,7 @@ import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
 import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import CascaDaMesa from "@/components/sistema/CascaDaMesa";
+import { etapasEmIcone } from "@/components/mesa-foto/IconesDasEtapas";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 import Etapas from "@/components/sistema/Etapas";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
@@ -240,10 +241,11 @@ export default function MesaRoteiros() {
       cliente={<SeletorDeClientesDaMesa mesa="roteiros" clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />}
       etapas={
         clientId ? (
+          // 16/10/2026: etapas só em ícone (padrão das mesas, IconesDasEtapas.tsx); o nome aparece na aberta.
           <Etapas
             rotulo="Etapas da Mesa Roteiros"
-            numerar
-            itens={ETAPAS_DA_MESA_ROTEIROS.map((e) => ({ valor: e.valor, rotulo: e.rotulo }))}
+            soIcone
+            itens={etapasEmIcone("roteiros", ETAPAS_DA_MESA_ROTEIROS.map((e) => ({ valor: e.valor, rotulo: e.rotulo })))}
             valor={etapa}
             onEscolher={(v) => mudar({ etapa: v })}
           />

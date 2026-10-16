@@ -1,19 +1,26 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { cloneElement, isValidElement, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
-  ChevronDown,
   ChevronRight,
   Coins,
+  EyeOff,
   FileText,
+  Image as ImageIcon,
+  Layers,
   Link2,
   Megaphone,
   PiggyBank,
+  Plug,
+  Plus,
+  Radio,
   RefreshCw,
+  SlidersHorizontal,
   Target,
+  Users,
   Wallet,
 } from "lucide-react";
 import {
@@ -40,6 +47,7 @@ import {
   Carregando,
   EstadoDeErro,
   EstadoVazio,
+  Etapas,
   GrupoDeCampos,
   Secao,
   SeletorCompacto,
@@ -47,7 +55,6 @@ import {
   campo,
   etiqueta,
   foco,
-  gravarEstadoDaTela,
   juntar,
   lista,
   superficie,
@@ -97,18 +104,27 @@ import { tendenciaDoCliente, type Direcao, type TendenciaDoCliente } from "@/lib
  * ("desorganizada, confusa, poluída") e 16/10 ("mais intuitivo, mais claro,
  * mais simplificado").
  *
- * Lista (sem cliente aberto), de cima para baixo:
- * 1. Aviso de uma linha, só quando uma conta pede atenção (com Reconectar).
- * 2. Clientes: uma linha por cliente com os quatro números que importam
- *    (investido, resultado, custo por resultado, saldo), cada um com ícone
- *    e seta de tendência. Tocar abre o cliente.
- * 3. No ar agora: o que está rodando e o que fazer a respeito.
- * 4. Contas e conexão, recolhida: situação das contas, conectar com a Meta,
- *    ligar pelo número, token da agência e gestão pelo agente.
+ * 16/10 (dono, segundo pedido): "menos texto, mais ícones; passo em cima do
+ * ícone e ele fala o que é". As partes viraram abas em ícone (uma por vez,
+ * nada de rolar para baixo infinito) e as ações viraram ícones sem borda,
+ * com o nome no title e no aria-label. Cada ícone, uma ação só.
  *
- * Cliente aberto (?cliente=): os mesmos quatro números grandes, as campanhas
- * (tocar abre as duas leituras), o que está no ar, os criativos e as contas
- * dele, recolhidas no pé.
+ * Lista (sem cliente aberto): na linha do título "Anúncios", as abas
+ * Clientes | No ar agora | Contas e conexão e, à direita, "Ver contas" (só
+ * quando uma conta pede atenção; abre e fecha o detalhe com Reconectar) e
+ * "Atualizar agora".
+ * - Clientes: uma linha por cliente com os quatro números que importam
+ *   (investido, resultado, custo por resultado, saldo), cada um com ícone
+ *   e seta de tendência. Tocar abre o cliente.
+ * - No ar agora: o que está rodando e o que fazer a respeito.
+ * - Contas e conexão: situação das contas, conectar com a Meta, ligar pelo
+ *   número, token da agência e gestão pelo agente.
+ *
+ * Cliente aberto (?cliente=): ações em ícone no cabeçalho, as abas em ícone
+ * logo embaixo (Campanhas | No ar agora | Criativos | Contas), os mesmos
+ * quatro números grandes sempre à vista e a aba escolhida.
+ *
+ * A aba escolhida fica guardada (useEstadoDaTela): sair e voltar mantém.
  *
  * De 1024 px para cima só o conteúdo abaixo do cabeçalho rola (AreaDeTrabalho,
  * com a posição guardada); no celular a página rola normal.
@@ -150,29 +166,56 @@ const temProblema = (c: Conta) => {
   return tom === "erro" || tom === "atencao";
 };
 
-/** Botão de ação da página: no celular só o ícone (com aria-label), do tablet para cima o texto. */
-function BotaoDaPagina({
+/**
+ * Ação da página (16/10): só o ícone, sem borda; o nome no title (o mouse
+ * fala o que é) e no aria-label (o leitor de tela também).
+ */
+function BotaoDeIcone({
   icone,
   rotulo,
-  classe,
+  dica,
   onClick,
   disabled,
-  ariaLabel,
+  className,
 }: {
   icone: ReactNode;
   rotulo: string;
-  classe: string;
+  /** Title quando difere do nome (ex.: "Pedindo leitura..."). */
+  dica?: string;
   onClick: () => void;
   disabled?: boolean;
-  ariaLabel?: string;
+  className?: string;
 }) {
   return (
-    <button type="button" onClick={onClick} disabled={disabled} className={classe} aria-label={ariaLabel || rotulo}>
+    <button type="button" onClick={onClick} disabled={disabled} className={juntar(botao.icone, "disabled:opacity-50", className)} aria-label={rotulo} title={dica || rotulo}>
       {icone}
-      <span className="ml-1.5 hidden sm:inline">{rotulo}</span>
     </button>
   );
 }
+
+/* ─────────────────────────────── as abas ─────────────────────────────── */
+
+type AbaDaLista = "clientes" | "agora" | "contas";
+type AbaDoCliente = "campanhas" | "agora" | "criativos" | "contas";
+
+const ABAS_DA_LISTA: AbaDaLista[] = ["clientes", "agora", "contas"];
+const ABAS_DO_CLIENTE: AbaDoCliente[] = ["campanhas", "agora", "criativos", "contas"];
+
+/** O que cada aba faz: mora no "?" ao lado da aba aberta. */
+const AJUDA_DAS_ABAS = {
+  clientes:
+    "Por cliente, nos últimos 30 dias: investido, resultado pelo objetivo de cada campanha (conversa não soma com venda), custo por resultado e saldo. A seta compara os últimos 15 dias com os 15 anteriores. Toque num cliente para abrir.",
+  agora:
+    "O que está rodando agora e o que fazer a respeito. Cada aviso traz o número que o gerou, e os avisos só aparecem com volume suficiente para não confundir ruído com sinal. Atualiza sozinho a cada minuto.",
+  contas:
+    "Conecte com a Meta, escolha as contas e o cliente de cada uma. Daí em diante o painel lê campanhas, saldo e criativos sozinho, de hora em hora. Em Mais opções: ligar pelo número e o token da agência.",
+  campanhas:
+    "Toque numa campanha para ver as duas leituras: como o cliente lê no relatório e os números que a equipe usa para decidir.",
+  criativos:
+    "Qual arte fez o trabalho: gasto, cliques no link e custo de cada peça. O padrão mostra as que rodaram; as paradas ficam a um clique. Toque numa peça para ver grande.",
+} as const;
+
+const ICONE_DA_ABA = "h-4 w-4";
 
 /* ─────────────────────────────── os quatro números ─────────────────────────────── */
 
@@ -294,58 +337,113 @@ function NumerosDoCliente({ dados, grande = false }: { dados: NumerosDoClienteDa
 
 /* ─────────────────────────────── aviso das contas ─────────────────────────────── */
 
+/** As contas ativas que pedem atenção, problema primeiro. */
+const contasComProblema = (contas: Conta[]) =>
+  ordenarPorSituacao(contas.filter((c) => c.status === "active" && temProblema(c)));
+
+const frasePedemAtencao = (n: number) => (n === 1 ? "1 conta pede atenção" : `${n} contas pedem atenção`);
+
+/** Âncora do detalhe que o "Ver contas" abre. */
+const ID_DO_DETALHE = "anuncios-contas-com-atencao";
+
 /**
- * Uma linha, só quando alguma conta pede atenção: o que é, "Ver contas" e,
- * quando o acesso venceu, "Reconectar com a Meta" ali mesmo. O resto da
- * configuração fica recolhido no pé da página.
+ * "Ver contas" (16/10): antes uma linha inteira de aviso; agora só o ícone de
+ * alerta na linha do título, com a contagem, e só quando alguma conta pede
+ * atenção. Tocar abre o detalhe embaixo do cabeçalho; tocar de novo fecha.
  */
-function AvisoDasContas({
+function BotaoVerContas({ contas, aberto, aoAlternar }: { contas: Conta[]; aberto: boolean; aoAlternar: () => void }) {
+  const comProblema = contasComProblema(contas);
+  if (comProblema.length === 0) return null;
+  const grave = comProblema.some((c) => situacaoDaConta(c).tom === "erro");
+  return (
+    <button
+      type="button"
+      onClick={aoAlternar}
+      aria-expanded={aberto}
+      aria-controls={aberto ? ID_DO_DETALHE : undefined}
+      aria-label="Ver contas"
+      title={`Ver contas · ${frasePedemAtencao(comProblema.length)}`}
+      data-ver-contas=""
+      className={juntar(
+        botao.icone,
+        "relative",
+        grave ? "text-destructive hover:text-destructive" : "text-warning hover:text-warning",
+        aberto && "bg-muted",
+      )}
+    >
+      <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+      <span
+        aria-hidden="true"
+        className="absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-muted px-1 text-center text-[9.5px] font-semibold leading-4 tabular-nums text-foreground"
+      >
+        {comProblema.length}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * O detalhe do "Ver contas": cada conta que pede atenção, o que a Meta disse
+ * e o que fazer; quando o acesso venceu, "Reconectar com a Meta" ali mesmo.
+ */
+function DetalheDasContas({
   contas,
   nomes,
   abrindo,
   aoReconectar,
-  aoVerContas,
 }: {
   contas: Conta[];
   nomes?: Map<string, string>;
   abrindo: boolean;
   aoReconectar: () => void;
-  aoVerContas: () => void;
 }) {
-  const comProblema = ordenarPorSituacao(contas.filter((c) => c.status === "active" && temProblema(c)));
+  const comProblema = contasComProblema(contas);
   if (comProblema.length === 0) return null;
   const situacoes = comProblema.map((c) => situacaoDaConta(c));
   const grave = situacoes.some((s) => s.tom === "erro");
   const reconectar = situacoes.some((s) => s.reconectar);
-  const quais = comProblema
-    .slice(0, 2)
-    .map((c, i) => {
-      const dono = nomes && nomes.get(c.client_id);
-      return `${dono || c.display_name}: ${situacoes[i].rotulo}`;
-    })
-    .join(" · ");
   return (
     <div
-      role="status"
-      className={juntar("flex min-w-0 flex-wrap items-center rounded-lg px-3 py-2", grave ? "bg-destructive/10" : "bg-warning/10")}
+      id={ID_DO_DETALHE}
+      role="region"
+      aria-label="Contas que pedem atenção"
       data-aviso-das-contas=""
+      className={juntar("min-w-0 rounded-lg px-3 py-2", grave ? "bg-destructive/10" : "bg-warning/10")}
     >
-      <AlertTriangle className={juntar("mr-2 h-4 w-4 shrink-0", grave ? "text-destructive" : "text-warning")} aria-hidden="true" />
-      <p className="mr-3 min-w-0 flex-1 truncate text-[13px] leading-5 text-foreground" title={quais}>
-        <span className="font-medium">{comProblema.length === 1 ? "1 conta pede atenção" : `${comProblema.length} contas pedem atenção`}</span>
-        <span className="text-muted-foreground"> · {quais}</span>
-      </p>
-      <div className="-m-1 flex shrink-0 flex-wrap items-center [&>*]:m-1">
-        <button type="button" className={botao.discreto} onClick={aoVerContas}>
-          Ver contas
-        </button>
+      <div className="flex min-w-0 items-center">
+        <p className="min-w-0 flex-1 truncate text-[13px] font-medium leading-5 text-foreground">{frasePedemAtencao(comProblema.length)}</p>
         {reconectar && (
-          <button type="button" className={botao.primario} onClick={aoReconectar} disabled={abrindo}>
+          <button type="button" className={juntar(botao.primario, "ml-3")} onClick={aoReconectar} disabled={abrindo}>
             <Link2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
             {abrindo ? "Abrindo a Meta..." : "Reconectar com a Meta"}
           </button>
         )}
       </div>
+      <ul className="mt-1 min-w-0 divide-y divide-border/60" aria-label="Contas com atenção">
+        {comProblema.map((conta, i) => {
+          const sit = situacoes[i];
+          const tom = CLASSE_DO_TOM_DA_CONTA[sit.tom];
+          const dono = nomes && nomes.get(conta.client_id);
+          return (
+            <li key={conta.id} className="flex min-w-0 items-start py-1.5">
+              <span className={juntar("mr-2 mt-1.5 h-2 w-2 shrink-0 rounded-full", tom.ponto)} aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] leading-5 text-foreground">
+                  {conta.display_name}
+                  {dono && <span className="text-muted-foreground"> · {dono}</span>}
+                </p>
+                {conta.erro && (
+                  <p className="truncate text-[12px] leading-4 text-destructive" title={conta.erro}>
+                    A Meta recusou a leitura: {conta.erro}
+                  </p>
+                )}
+                {sit.acao && <p className={juntar(texto.auxiliar, "truncate")} title={sit.acao}>{sit.acao}</p>}
+              </div>
+              <p className={juntar("ml-3 shrink-0 text-[12px] font-medium leading-5", tom.texto)}>{sit.rotulo}</p>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -422,13 +520,16 @@ function ClientAdsDetail({
   campaigns,
   contas,
   carregando,
-  aviso,
+  verContas,
+  detalheDasContas,
   agora,
   contasDoCliente,
   seletorDeCliente,
   atualizar,
   erro,
   podeAbrirMesaAds,
+  aba,
+  aoEscolherAba,
 }: {
   clientId: string;
   clientName: string;
@@ -437,16 +538,20 @@ function ClientAdsDetail({
   campaigns: AdsCampaign[];
   contas: Conta[];
   carregando: boolean;
-  /** Aviso de conta com problema (só quando há). */
-  aviso: ReactNode;
+  /** "Ver contas" em ícone (só quando uma conta deste cliente pede atenção). */
+  verContas: ReactNode;
+  /** O detalhe que o "Ver contas" abre (null fechado). */
+  detalheDasContas: ReactNode;
   /** O que está no ar agora deste cliente, montado pela página. */
   agora: ReactNode;
-  /** As contas de anúncio só deste cliente (ContasEConexao filtrada), recolhidas. */
+  /** As contas de anúncio só deste cliente (ContasEConexao filtrada). */
   contasDoCliente: ReactNode;
   seletorDeCliente: ReactNode;
   atualizar: ReactNode;
   erro: ReactNode;
   podeAbrirMesaAds: boolean;
+  aba: AbaDoCliente;
+  aoEscolherAba: (aba: AbaDoCliente) => void;
 }) {
   const navigate = useNavigate();
   const porCampanha = useMemo(() => {
@@ -511,6 +616,14 @@ function ClientAdsDetail({
     dados.outros ? `Também: ${dados.outros}` : "",
   ].filter(Boolean).join(" · ");
 
+  // As partes do cliente, uma por vez (16/10): só o ícone; a aberta mostra o nome e o "?".
+  const abas = [
+    { valor: "campanhas", rotulo: "Campanhas", icone: <Layers className={ICONE_DA_ABA} />, contador: porCampanha.length, ajuda: AJUDA_DAS_ABAS.campanhas },
+    { valor: "agora", rotulo: "No ar agora", icone: <Radio className={ICONE_DA_ABA} />, ajuda: AJUDA_DAS_ABAS.agora },
+    { valor: "criativos", rotulo: "Criativos", icone: <ImageIcon className={ICONE_DA_ABA} />, contador: (criativos || []).length, ajuda: AJUDA_DAS_ABAS.criativos },
+    { valor: "contas", rotulo: "Contas deste cliente", icone: <Plug className={ICONE_DA_ABA} />, ajuda: AJUDA_DAS_ABAS.contas },
+  ];
+
   return (
     <div className="min-w-0 space-y-4">
       <CabecalhoDePagina
@@ -531,54 +644,81 @@ function ClientAdsDetail({
         acoes={
           <>
             {seletorDeCliente}
+            {verContas}
             {podeAbrirMesaAds && (
-              <Link to={`/mesa-ads?client=${encodeURIComponent(clientId)}`} className={juntar(botao.discreto, "hidden sm:inline-flex")} aria-label="Abrir na Mesa Ads">
+              <Link
+                to={`/mesa-ads?client=${encodeURIComponent(clientId)}`}
+                className={botao.icone}
+                aria-label="Abrir na Mesa Ads"
+                title="Abrir na Mesa Ads"
+              >
                 <Megaphone className="h-4 w-4" aria-hidden="true" />
-                <span className="ml-1.5 hidden lg:inline">Mesa Ads</span>
               </Link>
             )}
             {atualizar}
             {/* O relatório nasce aqui, onde o dado está: os números já vêm preenchidos. */}
-            <BotaoDaPagina
+            <BotaoDeIcone
               icone={<FileText className="h-4 w-4" aria-hidden="true" />}
               rotulo="Gerar relatório"
-              classe={botao.primario}
               onClick={gerarRelatorio}
             />
           </>
         }
       />
 
-      <AreaDeTrabalho key={clientId} memoriaDaRolagem={`anuncios:cliente:${clientId}`} rotuloDoPrincipal={`Anúncios de ${clientName}`}>
+      {detalheDasContas}
+
+      <div className="-mx-1 flex min-w-0 items-center border-b border-border pb-1">
+        <Etapas
+          soIcone
+          rotulo={`Partes de ${clientName}`}
+          itens={abas}
+          valor={aba}
+          onEscolher={(v) => aoEscolherAba(v as AbaDoCliente)}
+          className="min-w-0 flex-1"
+        />
+      </div>
+
+      <AreaDeTrabalho key={`${clientId}:${aba}`} memoriaDaRolagem={`anuncios:cliente:${clientId}:${aba}`} rotuloDoPrincipal={`Anúncios de ${clientName}`}>
         <div className="min-w-0 space-y-6">
           {erro}
-          {aviso}
 
           <div className="min-w-0" role="group" aria-label="Resumo dos últimos 30 dias">
             <NumerosDoCliente dados={dados} grande />
             {apoio && <p className={juntar(texto.auxiliar, "mt-3 truncate")}>{apoio}</p>}
           </div>
 
-          <Secao divisoria titulo="Campanhas" descricao={plural(porCampanha.length, "campanha", "campanhas")} ajuda="Toque numa campanha para ver as duas leituras: como o cliente lê no relatório e os números que a equipe usa para decidir.">
-            {carregando && porCampanha.length === 0 ? (
-              <Carregando rotulo="Carregando campanhas" linhas={3} />
-            ) : porCampanha.length === 0 ? (
-              <EstadoVazio compacto titulo="Nenhuma campanha com movimento nos últimos 30 dias." />
-            ) : (
-              <ul className={juntar(lista.aberta, lista.divisoria)}>
-                {porCampanha.map(({ resumo, ficha }) => (
-                  <LinhaDaCampanha key={resumo.campaignId} resumo={resumo} ficha={ficha} />
-                ))}
-              </ul>
-            )}
-          </Secao>
+          {aba === "campanhas" && (
+            <div className="min-w-0 border-t border-border pt-4">
+              {carregando && porCampanha.length === 0 ? (
+                <Carregando rotulo="Carregando campanhas" linhas={3} />
+              ) : porCampanha.length === 0 ? (
+                <EstadoVazio compacto titulo="Nenhuma campanha com movimento nos últimos 30 dias." />
+              ) : (
+                <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Campanhas">
+                  {porCampanha.map(({ resumo, ficha }) => (
+                    <LinhaDaCampanha key={resumo.campaignId} resumo={resumo} ficha={ficha} />
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
-          {agora}
+          {/* Na aba, sem o título próprio: o nome e o "?" já estão na aba. */}
+          {aba === "agora" && (
+            <div className="min-w-0 border-t border-border pt-4">
+              {isValidElement<{ embutido?: boolean }>(agora) ? cloneElement(agora, { embutido: true }) : agora}
+            </div>
+          )}
 
           {/* As peças: "qual anúncio funcionou" é a pergunta seguinte. */}
-          <GaleriaDeCriativos criativos={criativos || []} periodoDias={30} chave={clientId} />
+          {aba === "criativos" && (
+            <div className="min-w-0 border-t border-border pt-4">
+              <GaleriaDeCriativos criativos={criativos || []} periodoDias={30} chave={clientId} embutido />
+            </div>
+          )}
 
-          {contasDoCliente}
+          {aba === "contas" && <div className="min-w-0 border-t border-border pt-4">{contasDoCliente}</div>}
         </div>
       </AreaDeTrabalho>
     </div>
@@ -628,11 +768,8 @@ const MENSAGEM_DA_LIGACAO = {
 
 /** Onde a lista de contas devolvida pela Meta descansa entre recarregamentos. */
 const CONTAS_DA_META = "aceleriq-contas-da-meta";
-/** Âncoras das seções de configuração (o aviso e o login levam até elas). */
-const ID_DAS_CONTAS = "anuncios-contas";
+/** Âncora da escolha das contas que a Meta devolveu (o login leva até ela). */
 const ID_DA_ESCOLHA = "anuncios-escolher-contas";
-/** Chave do recolher da seção de contas (por cliente, quando há um aberto). */
-const chaveDasContas = (clienteId?: string) => (clienteId ? `anuncios:contas:${clienteId}` : "anuncios:contas");
 
 const ehTexto = (v: unknown) => typeof v === "string";
 
@@ -648,7 +785,7 @@ const rolarAte = (id: string) => {
  * resultado e guardar as contas que a Meta devolveu. Fica na página porque
  * o aviso do topo e a seção de contas do pé usam o mesmo login.
  */
-function useConexaoComAMeta(onDone: () => void) {
+function useConexaoComAMeta(onDone: () => void, aoTrazerContas?: () => void) {
   const [abrindo, setAbrindo] = useState(false);
   /**
    * As contas que a Meta devolveu na conexão. Fica em localStorage porque
@@ -717,12 +854,16 @@ function useConexaoComAMeta(onDone: () => void) {
           ? `Conectado. Escolha abaixo quais das ${msg.contas.length} contas quer monitorar.`
           : "Conectado, mas a Meta não devolveu nenhuma conta de anúncio nesse acesso.",
       );
-      if (msg.contas.length > 0) rolarAte(ID_DA_ESCOLHA);
+      if (msg.contas.length > 0) {
+        // A escolha mora na aba de contas: abre a aba e leva até ela.
+        if (aoTrazerContas) aoTrazerContas();
+        rolarAte(ID_DA_ESCOLHA);
+      }
       onDone();
     };
     window.addEventListener("message", aoReceber);
     return () => window.removeEventListener("message", aoReceber);
-  }, [onDone]);
+  }, [onDone, aoTrazerContas]);
 
   const esconderContasDaMeta = () => {
     setContasDaMeta([]);
@@ -737,11 +878,11 @@ function useConexaoComAMeta(onDone: () => void) {
 type ConexaoComAMeta = ReturnType<typeof useConexaoComAMeta>;
 
 /**
- * Configuração das contas, no pé da página e recolhida de início: a situação
- * de cada conta e, no mesmo lugar, conectar, reconectar, ligar pelo número,
- * o token da agência e a gestão pelo agente. Com um cliente aberto, só as
- * contas dele. As contas que a Meta acabou de devolver ficam à vista (é um
- * passo pendente, não configuração).
+ * Configuração das contas, na aba "Contas e conexão" (16/10; antes no pé da
+ * página, recolhida): a situação de cada conta e, no mesmo lugar, conectar,
+ * reconectar, ligar pelo número, o token da agência e a gestão pelo agente.
+ * Com um cliente aberto, só as contas dele. As contas que a Meta acabou de
+ * devolver vêm primeiro (é um passo pendente, não configuração).
  */
 function ContasEConexao({
   clienteId,
@@ -749,7 +890,6 @@ function ContasEConexao({
   podeConectar,
   onDone,
   meta,
-  versao,
 }: {
   clienteId?: string;
   nomes: Map<string, string>;
@@ -757,8 +897,6 @@ function ContasEConexao({
   podeConectar: boolean;
   onDone: () => void;
   meta: ConexaoComAMeta;
-  /** Muda quando o aviso pede para abrir a seção (remonta já aberta). */
-  versao: number;
 }) {
   const { data: conexao, isLoading, error, refetch } = useAdsConnection();
   const { data: clients } = useClients();
@@ -861,14 +999,15 @@ function ContasEConexao({
       {meta.contasDaMeta.length > 0 && (
         <Secao
           id={ID_DA_ESCOLHA}
-          divisoria
           recolher={false}
           titulo="Contas que a Meta devolveu"
           descricao="Escolha o cliente de cada uma"
           acao={
-            <button type="button" onClick={meta.esconderContasDaMeta} className={botao.discreto}>
-              Esconder
-            </button>
+            <BotaoDeIcone
+              icone={<EyeOff className="h-4 w-4" aria-hidden="true" />}
+              rotulo="Esconder as contas que a Meta devolveu"
+              onClick={meta.esconderContasDaMeta}
+            />
           }
         >
           {/* Vinte contas não empurram o resto: no computador a lista rola por dentro. */}
@@ -945,32 +1084,25 @@ function ContasEConexao({
         </Secao>
       )}
 
+      {/* Sem título nem "?": a aba já diz o nome e a explicação mora no "?" dela. */}
       <Secao
-        key={versao}
-        id={ID_DAS_CONTAS}
-        divisoria
-        titulo={clienteId ? "Contas deste cliente" : "Contas e conexão"}
-        recolher={chaveDasContas(clienteId)}
-        recolhidaDeInicio
+        divisoria={meta.contasDaMeta.length > 0}
         descricao={<span className={juntar("block truncate", comProblema ? "text-warning" : "")}>{resumo}</span>}
-        resumo={<span className={comProblema ? "text-warning" : ""}>{resumo}</span>}
-        ajuda="Conecte com a Meta, escolha as contas e o cliente de cada uma. Daí em diante o painel lê campanhas, saldo e criativos sozinho, de hora em hora. Em Mais opções: ligar pelo número e o token da agência."
         acao={
           <>
             <button
               type="button"
-              className={botao.discreto}
+              className={juntar(botao.icone, maisOpcoes && "bg-muted text-foreground")}
               onClick={() => setMaisOpcoes((v) => !v)}
               aria-expanded={maisOpcoes}
               aria-label="Mais opções"
+              title="Mais opções: ligar pelo número e token da agência"
             >
-              <ChevronDown className={juntar("h-4 w-4 transition-transform", maisOpcoes ? "rotate-180" : "")} aria-hidden="true" />
-              <span className="ml-1 hidden sm:inline">Mais opções</span>
+              <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
             </button>
-            <BotaoDaPagina
+            <BotaoDeIcone
               icone={<Link2 className="h-4 w-4" aria-hidden="true" />}
               rotulo={rotuloConectar}
-              classe={botao.secundario}
               onClick={meta.conectarPelaMeta}
               disabled={meta.abrindo}
             />
@@ -1063,7 +1195,7 @@ function ContasEConexao({
               </GrupoDeCampos>
               <div className="mt-3 flex justify-end">
                 <button type="button" className={botao.primario} onClick={ligarConta} disabled={salvando || !clientId || !actId.trim()}>
-                  <Link2 className="mr-1.5 h-4 w-4" aria-hidden="true" /> Ligar conta ao cliente
+                  <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" /> Ligar conta ao cliente
                 </button>
               </div>
             </div>
@@ -1126,8 +1258,15 @@ export default function AdminAds() {
   const [params, setParams] = useSearchParams();
   const [busca, setBusca] = useEstadoDaTela("anuncios:busca", "", { validar: ehTexto });
   const [coletando, setColetando] = useState(false);
-  // Sobe quando o aviso pede "Ver contas": a seção de contas remonta já aberta.
-  const [versaoDasContas, setVersaoDasContas] = useState(0);
+  // "Ver contas": o detalhe abre e fecha no mesmo ícone (não é guardado: é uma olhada).
+  const [contasAbertas, setContasAbertas] = useState(false);
+  // As abas (16/10): uma parte por vez, lembrada ao sair e voltar.
+  const [aba, setAba] = useEstadoDaTela<AbaDaLista>("anuncios:aba", "clientes", {
+    validar: (v) => ABAS_DA_LISTA.indexOf(v as AbaDaLista) >= 0,
+  });
+  const [abaDoCliente, setAbaDoCliente] = useEstadoDaTela<AbaDoCliente>("anuncios:aba-do-cliente", "campanhas", {
+    validar: (v) => ABAS_DO_CLIENTE.indexOf(v as AbaDoCliente) >= 0,
+  });
 
   const clienteAberto = params.get("cliente") || "";
   const { data: rows, isLoading, error: erroDosDias, refetch: releDias } = useAdsDaily(undefined, 30);
@@ -1140,7 +1279,12 @@ export default function AdminAds() {
   const aoMudarConexao = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["ads-connection"] });
   }, [queryClient]);
-  const meta = useConexaoComAMeta(aoMudarConexao);
+  // A Meta devolveu contas: a escolha do cliente de cada uma mora na aba de contas.
+  const levarAContas = useCallback(() => {
+    setAba("contas");
+    setAbaDoCliente("contas");
+  }, [setAba, setAbaDoCliente]);
+  const meta = useConexaoComAMeta(aoMudarConexao, levarAContas);
 
   const nomes = useMemo(() => {
     const mapa = new Map<string, string>();
@@ -1181,13 +1325,6 @@ export default function AdminAds() {
     setParams(proximo, { replace: true });
   };
 
-  /** "Ver contas" do aviso: abre a seção de contas (lembrando a escolha) e rola até ela. */
-  const verContas = () => {
-    gravarEstadoDaTela(chaveDasContas(clienteAberto || undefined), false);
-    setVersaoDasContas((v) => v + 1);
-    rolarAte(ID_DAS_CONTAS);
-  };
-
   const atualizarAgora = async () => {
     setColetando(true);
     try {
@@ -1222,12 +1359,12 @@ export default function AdminAds() {
 
   const semConta = (conexao?.contas || []).length === 0;
 
+  // Um "Atualizar" só, em ícone, na linha do título.
   const botaoAtualizar = (
-    <BotaoDaPagina
+    <BotaoDeIcone
       icone={<RefreshCw className={juntar("h-4 w-4", coletando ? "animate-spin" : "")} aria-hidden="true" />}
-      rotulo={coletando ? "Pedindo leitura..." : "Atualizar agora"}
-      ariaLabel="Atualizar agora"
-      classe={botao.secundario}
+      rotulo="Atualizar agora"
+      dica={coletando ? "Pedindo leitura..." : "Atualizar agora"}
       onClick={atualizarAgora}
       disabled={coletando}
     />
@@ -1252,15 +1389,23 @@ export default function AdminAds() {
       podeConectar={papel === "admin"}
       onDone={aoMudarConexao}
       meta={meta}
-      versao={versaoDasContas}
     />
   );
+
+  /** "Ver contas" em ícone e o detalhe que ele abre, das contas que a tela mostra. */
+  const verContasDe = (contas: Conta[], comNomes?: Map<string, string>) => ({
+    botao: <BotaoVerContas contas={contas} aberto={contasAbertas} aoAlternar={() => setContasAbertas((v) => !v)} />,
+    detalhe: contasAbertas ? (
+      <DetalheDasContas contas={contas} nomes={comNomes} abrindo={meta.abrindo} aoReconectar={meta.conectarPelaMeta} />
+    ) : null,
+  });
 
   if (clienteAberto) {
     const opcoesDeCliente = porCliente.map(([id]) => ({ valor: id, rotulo: nomes.get(id) || "Cliente" }));
     if (!opcoesDeCliente.some((o) => o.valor === clienteAberto)) {
       opcoesDeCliente.unshift({ valor: clienteAberto, rotulo: nomes.get(clienteAberto) || "Cliente" });
     }
+    const contasDele = verContasDe(contasDoCliente(clienteAberto));
     return (
       <ClientAdsDetail
         clientId={clienteAberto}
@@ -1270,14 +1415,8 @@ export default function AdminAds() {
         campaigns={(campaigns || []).filter((row) => row.client_id === clienteAberto)}
         contas={contasDoCliente(clienteAberto)}
         carregando={isLoading}
-        aviso={
-          <AvisoDasContas
-            contas={contasDoCliente(clienteAberto)}
-            abrindo={meta.abrindo}
-            aoReconectar={meta.conectarPelaMeta}
-            aoVerContas={verContas}
-          />
-        }
+        verContas={contasDele.botao}
+        detalheDasContas={contasDele.detalhe}
         // Dentro do cliente, o AGORA dele: entrar no detalhe não faz as campanhas ativas sumirem.
         agora={<CampanhasAtivas clientId={clienteAberto} />}
         contasDoCliente={secaoDasContas(clienteAberto)}
@@ -1292,6 +1431,8 @@ export default function AdminAds() {
         atualizar={botaoAtualizar}
         erro={erroNaLeitura}
         podeAbrirMesaAds={["admin", "manager", "design"].includes(papel)}
+        aba={abaDoCliente}
+        aoEscolherAba={setAbaDoCliente}
       />
     );
   }
@@ -1307,121 +1448,147 @@ export default function AdminAds() {
     ultimaLeitura ? `lido ${haQuanto(ultimaLeitura)}` : "",
   ].filter(Boolean).join(" · ");
 
+  const todas = verContasDe(conexao?.contas || [], nomes);
+
+  // Clientes | No ar agora | Contas e conexão: só o ícone; a aberta mostra o nome e o "?".
+  const abas = [
+    { valor: "clientes", rotulo: "Clientes", icone: <Users className={ICONE_DA_ABA} />, contador: porCliente.length, ajuda: AJUDA_DAS_ABAS.clientes },
+    { valor: "agora", rotulo: "No ar agora", icone: <Radio className={ICONE_DA_ABA} />, ajuda: AJUDA_DAS_ABAS.agora },
+    { valor: "contas", rotulo: "Contas e conexão", icone: <Plug className={ICONE_DA_ABA} />, ajuda: AJUDA_DAS_ABAS.contas },
+  ];
+
+  // Sem conta ligada, o primeiro passo aparece no lugar dos números.
+  const primeiroPasso = (
+    <EstadoVazio
+      titulo="Nenhuma conta ligada ainda."
+      descricao="Conecte com a Meta, escolha as contas e o cliente de cada uma."
+      acao={
+        <button type="button" className={botao.primario} onClick={meta.conectarPelaMeta} disabled={meta.abrindo}>
+          <Link2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          {meta.abrindo ? "Abrindo a Meta..." : "Conectar com a Meta"}
+        </button>
+      }
+    />
+  );
+  const primeiraLeitura = <EstadoVazio compacto titulo="Primeira leitura a caminho." descricao="O ícone de atualizar apressa." />;
+
   return (
     <div className="min-w-0 space-y-4">
       <CabecalhoDePagina
         titulo="Anúncios"
         descricao={descricao.charAt(0).toUpperCase() + descricao.slice(1)}
-        ajuda="Meta Ads lido direto da conta, de hora em hora, com os números dos últimos 30 dias. A seta compara os últimos 15 dias com os 15 anteriores. Toque num cliente para ver campanhas, criativos e gerar o relatório. A configuração das contas fica no pé da página."
-        acoes={botaoAtualizar}
+        ajuda="Meta Ads lido direto da conta, de hora em hora, com os números dos últimos 30 dias. As abas ao lado do título trocam entre os clientes, o que está no ar e as contas."
+        aoLado={
+          <Etapas
+            soIcone
+            rotulo="Partes dos anúncios"
+            itens={abas}
+            valor={aba}
+            onEscolher={(v) => setAba(v as AbaDaLista)}
+            className="min-w-0 flex-1"
+          />
+        }
+        acoes={
+          <>
+            {todas.botao}
+            {botaoAtualizar}
+          </>
+        }
       />
 
-      <AreaDeTrabalho key="lista" memoriaDaRolagem="anuncios:lista" rotuloDoPrincipal="Anúncios por cliente">
+      {todas.detalhe}
+
+      <AreaDeTrabalho key={`lista:${aba}`} memoriaDaRolagem={`anuncios:lista:${aba}`} rotuloDoPrincipal="Anúncios por cliente">
         <div className="min-w-0 space-y-6">
           {erroNaLeitura}
 
-          {semConta ? (
-            <EstadoVazio
-              titulo="Nenhuma conta ligada ainda."
-              descricao="Conecte com a Meta, escolha as contas e o cliente de cada uma."
-              acao={
-                <button type="button" className={botao.primario} onClick={meta.conectarPelaMeta} disabled={meta.abrindo}>
-                  <Link2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                  {meta.abrindo ? "Abrindo a Meta..." : "Conectar com a Meta"}
-                </button>
-              }
-            />
-          ) : (
-            <AvisoDasContas
-              contas={conexao?.contas || []}
-              nomes={nomes}
-              abrindo={meta.abrindo}
-              aoReconectar={meta.conectarPelaMeta}
-              aoVerContas={verContas}
-            />
-          )}
-
-          {semConta ? null : (
-            <Secao
-              titulo="Clientes"
-              descricao={busca.trim() ? `${filtrados.length} de ${porCliente.length}` : plural(porCliente.length, "cliente", "clientes")}
-              ajuda="Por cliente, nos últimos 30 dias: investido, resultado pelo objetivo de cada campanha (conversa não soma com venda), custo por resultado e saldo. Toque num cliente para abrir."
-              acao={
-                porCliente.length > 6 ? (
-                  <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar cliente" rotulo="Buscar cliente" className="w-40 sm:w-64" />
-                ) : undefined
-              }
-            >
-              {isLoading && !rows ? (
-                <Carregando rotulo="Carregando campanhas" linhas={3} />
-              ) : porCliente.length === 0 ? (
-                <EstadoVazio
-                  compacto
-                  titulo="Primeira leitura a caminho."
-                  descricao='"Atualizar agora" apressa.'
-                />
-              ) : filtrados.length === 0 ? (
-                <EstadoVazio
-                  compacto
-                  titulo="Nenhum cliente com esse nome."
-                  acao={
-                    <button type="button" onClick={() => setBusca("")} className={botao.discreto}>
-                      Limpar busca
-                    </button>
-                  }
-                />
-              ) : (
-                <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Clientes com anúncios">
-                  {filtrados.map(([clientId, linhas]) => {
-                    const dados = numerosDoCliente(linhas, contasDoCliente(clientId));
-                    const problemas = contasDoCliente(clientId).filter(temProblema).length;
-                    return (
-                      <li key={clientId} className="min-w-0">
-                        <button
-                          type="button"
-                          onClick={() => abrirCliente(clientId)}
-                          className={juntar(lista.linha, "group w-full flex-wrap py-3 text-left md:flex-nowrap", foco)}
-                        >
-                          <span className="flex min-w-0 flex-1 basis-full items-center md:mr-4 md:basis-0">
-                            {/* Mesma marca da grade de Métricas: reconhecer o cliente não pode depender da tela. */}
-                            <LogoDoCliente
-                              url={identidades?.get(clientId)?.profile_picture_url}
-                              nome={nomes.get(clientId)}
-                              tamanho={36}
-                              className="mr-2.5"
-                            />
-                            <span className="block min-w-0 flex-1">
-                              <span className="block truncate text-[13px] font-semibold text-foreground">{nomes.get(clientId) || "Cliente"}</span>
-                              <span className={juntar(texto.auxiliar, "block truncate")}>
-                                {linhas.length === 0
-                                  ? "Conta ligada · sem gasto nos últimos 30 dias"
-                                  : plural(dados.campanhas, "campanha", "campanhas")}
-                                {problemas > 0 && (
-                                  <span className="text-warning"> · {problemas === 1 ? "conta pede atenção" : `${problemas} contas pedem atenção`}</span>
-                                )}
+          {aba === "clientes" && (
+            semConta ? (
+              primeiroPasso
+            ) : (
+              <div className="min-w-0">
+                {porCliente.length > 6 && (
+                  <div className="mb-2 flex min-w-0 items-center justify-end">
+                    {busca.trim() && (
+                      <span className={juntar(texto.auxiliar, "mr-3 min-w-0 truncate tabular-nums")}>{`${filtrados.length} de ${porCliente.length}`}</span>
+                    )}
+                    <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar cliente" rotulo="Buscar cliente" className="w-40 sm:w-64" />
+                  </div>
+                )}
+                {isLoading && !rows ? (
+                  <Carregando rotulo="Carregando campanhas" linhas={3} />
+                ) : porCliente.length === 0 ? (
+                  primeiraLeitura
+                ) : filtrados.length === 0 ? (
+                  <EstadoVazio
+                    compacto
+                    titulo="Nenhum cliente com esse nome."
+                    acao={
+                      <button type="button" onClick={() => setBusca("")} className={botao.discreto}>
+                        Limpar busca
+                      </button>
+                    }
+                  />
+                ) : (
+                  <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Clientes com anúncios">
+                    {filtrados.map(([clientId, linhas]) => {
+                      const dados = numerosDoCliente(linhas, contasDoCliente(clientId));
+                      const problemas = contasDoCliente(clientId).filter(temProblema).length;
+                      return (
+                        <li key={clientId} className="min-w-0">
+                          <button
+                            type="button"
+                            onClick={() => abrirCliente(clientId)}
+                            className={juntar(lista.linha, "group w-full flex-wrap py-3 text-left md:flex-nowrap", foco)}
+                          >
+                            <span className="flex min-w-0 flex-1 basis-full items-center md:mr-4 md:basis-0">
+                              {/* Mesma marca da grade de Métricas: reconhecer o cliente não pode depender da tela. */}
+                              <LogoDoCliente
+                                url={identidades?.get(clientId)?.profile_picture_url}
+                                nome={nomes.get(clientId)}
+                                tamanho={36}
+                                className="mr-2.5"
+                              />
+                              <span className="block min-w-0 flex-1">
+                                <span className="block truncate text-[13px] font-semibold text-foreground">{nomes.get(clientId) || "Cliente"}</span>
+                                <span className={juntar(texto.auxiliar, "block truncate")}>
+                                  {linhas.length === 0
+                                    ? "Conta ligada · sem gasto nos últimos 30 dias"
+                                    : plural(dados.campanhas, "campanha", "campanhas")}
+                                  {problemas > 0 && (
+                                    <span className="text-warning"> · {problemas === 1 ? "conta pede atenção" : `${problemas} contas pedem atenção`}</span>
+                                  )}
+                                </span>
                               </span>
+                              <ChevronRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground md:hidden" aria-hidden="true" />
                             </span>
-                            <ChevronRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground md:hidden" aria-hidden="true" />
-                          </span>
-                          <span className="mt-2.5 block min-w-0 basis-full pl-[46px] md:mt-0 md:w-3/5 md:shrink-0 md:basis-auto md:pl-0">
-                            <NumerosDoCliente dados={dados} />
-                          </span>
-                          <ChevronRight className="ml-3 hidden h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary md:block" aria-hidden="true" />
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </Secao>
+                            <span className="mt-2.5 block min-w-0 basis-full pl-[46px] md:mt-0 md:w-3/5 md:shrink-0 md:basis-auto md:pl-0">
+                              <NumerosDoCliente dados={dados} />
+                            </span>
+                            <ChevronRight className="ml-3 hidden h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary md:block" aria-hidden="true" />
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )
           )}
 
-          {/* O que está no ar AGORA vem DEPOIS dos clientes: a lista é a porta
-              de entrada, e cada campanha diz de qual cliente é. */}
-          {!semConta && porCliente.length > 0 && <CampanhasAtivas nomesDeClientes={nomes} aoAbrirCliente={abrirCliente} />}
+          {/* O que está no ar AGORA, cada campanha dizendo de qual cliente é. */}
+          {aba === "agora" && (
+            semConta ? (
+              primeiroPasso
+            ) : porCliente.length === 0 ? (
+              primeiraLeitura
+            ) : (
+              <CampanhasAtivas nomesDeClientes={nomes} aoAbrirCliente={abrirCliente} embutido />
+            )
+          )}
 
-          {/* Configuração no pé, recolhida: não disputa espaço com os números. */}
-          {secaoDasContas()}
+          {/* A configuração das contas, na aba dela: não disputa espaço com os números. */}
+          {aba === "contas" && secaoDasContas()}
         </div>
       </AreaDeTrabalho>
     </div>

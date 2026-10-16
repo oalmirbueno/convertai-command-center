@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useInRouterContext, useNavigate } from "react-router-dom";
-import { Camera, Check, Megaphone, PenTool, Zap, CalendarDays } from "lucide-react";
+import { Camera, Check, Megaphone, PenTool, Pin, Zap, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import MenuMais from "@/components/sistema/MenuMais";
+import { juntar } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import { useCampanhaEmUso } from "@/lib/mesa/campanhaAtiva";
 import { useMarcaDaMesa, useMesa } from "./MesaContexto";
@@ -74,31 +75,41 @@ function CampanhaNasMesasCom({ campanha, ir }: { campanha: Campanha; ir: (destin
     }
   };
 
-  const botao = "mb-1.5 mr-1.5 h-9 px-3 text-[12px]";
+  const botao = "mb-1.5 mr-1 h-8 w-8 p-0";
+  // A base que as mesas puxam: antes uma linha de texto embaixo; desde 16/10/2026 (dono: "tem muito
+  // texto, poderia eliminar esses textos") vai no title da linha, e na tela ficam só as cores.
+  const base = [
+    tipo ? DEFINICAO_DO_TIPO[tipo].rotulo : "Sem tipo",
+    briefing.oferta ? `Oferta: ${briefing.oferta}` : "",
+    briefing.produtos.length ? `Produto: ${briefing.produtos.map((p) => p.nome).join(", ")}` : "",
+    briefing.cta ? `CTA: ${briefing.cta}` : "",
+    campanha.selo_path ? "com selo" : "sem selo ainda",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   // 28/09 (dono: "menos poluído"): sem caixa, uma linha só. Tipo, Usar nas mesas
   // e o "Levar para" num menu (as cinco mesas eram cinco botões numa fileira).
+  // 16/10/2026: Usar nas mesas virou ícone (alfinete) e os rótulos saíram (ficam no title).
   return (
     <section className="min-w-0" aria-label="Campanha nas mesas" data-campanha-nas-mesas={campanha.id}>
-      <div className="flex min-w-0 flex-wrap items-center">
-        <label className="mb-1.5 mr-2 inline-flex min-w-0 items-center text-[12px] text-muted-foreground">
-          Tipo
-          <select
-            value={tipo || ""}
-            onChange={(e) => void trocarTipo(e.target.value)}
-            disabled={salvandoTipo}
-            aria-label="Tipo da campanha"
-            className="ml-1.5 h-9 min-w-0 rounded-md border border-border bg-background px-2 text-[13px] text-foreground"
-          >
-            <option value="">Sem tipo</option>
-            {TIPOS_DE_CAMPANHA.map((t) => (
-              <option key={t} value={t}>{DEFINICAO_DO_TIPO[t].rotulo}</option>
-            ))}
-          </select>
-        </label>
+      <div className="flex min-w-0 flex-wrap items-center" title={`Base que as mesas usam: ${base}`} data-base-da-campanha="">
+        <select
+          value={tipo || ""}
+          onChange={(e) => void trocarTipo(e.target.value)}
+          disabled={salvandoTipo}
+          aria-label="Tipo da campanha"
+          title="Tipo da campanha"
+          className="mb-1.5 mr-1.5 h-8 min-w-0 max-w-[60vw] rounded-md bg-muted/60 px-2 text-[12px] text-foreground"
+        >
+          <option value="">Sem tipo</option>
+          {TIPOS_DE_CAMPANHA.map((t) => (
+            <option key={t} value={t}>{DEFINICAO_DO_TIPO[t].rotulo}</option>
+          ))}
+        </select>
         <Button
           type="button"
-          variant={ativa ? "secondary" : "outline"}
-          className={botao}
+          variant={ativa ? "secondary" : "ghost"}
+          className={juntar(botao, ativa && "text-primary")}
           onClick={() => {
             setEmUso(ativa ? null : campanha.id);
             toast.success(ativa ? "Campanha fora de uso nas mesas" : `Em uso nas mesas: ${campanha.nome}`, {
@@ -106,13 +117,12 @@ function CampanhaNasMesasCom({ campanha, ir }: { campanha: Campanha; ir: (destin
             });
           }}
           aria-pressed={ativa}
-          title="A campanha em uso vem marcada na arte rápida do Estúdio e na Mesa Foto"
+          aria-label={ativa ? "Em uso nas mesas" : "Usar nas mesas"}
+          title={ativa ? "Em uso nas mesas (tocar tira)" : "Usar nas mesas: vem marcada na arte rápida do Estúdio e na Mesa Foto"}
         >
-          {ativa ? <Check className="mr-1.5 h-4 w-4" /> : null}
-          {ativa ? "Em uso nas mesas" : "Usar nas mesas"}
+          {ativa ? <Check className="h-4 w-4" aria-hidden="true" /> : <Pin className="h-4 w-4" aria-hidden="true" />}
         </Button>
         <span className="mb-1.5 inline-flex items-center">
-          <span className="mr-0.5 text-[12px] text-muted-foreground">Levar para</span>
           <MenuMais
             rotulo="Levar para"
             itens={[
@@ -124,27 +134,14 @@ function CampanhaNasMesasCom({ campanha, ir }: { campanha: Campanha; ir: (destin
             ]}
           />
         </span>
-      </div>
-
-      {/* A base que as mesas puxam, em uma linha. */}
-      <p className="mt-1 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-base-da-campanha="">
-        {[
-          tipo ? DEFINICAO_DO_TIPO[tipo].rotulo : "Sem tipo",
-          briefing.oferta ? `Oferta: ${briefing.oferta}` : "",
-          briefing.produtos.length ? `Produto: ${briefing.produtos.map((p) => p.nome).join(", ")}` : "",
-          briefing.cta ? `CTA: ${briefing.cta}` : "",
-          campanha.selo_path ? "com selo" : "sem selo ainda",
-        ]
-          .filter(Boolean)
-          .join(" · ")}
         {paleta.length > 0 && (
-          <span className="ml-1.5 inline-flex translate-y-0.5 items-center">
+          <span className="mb-1.5 ml-1.5 inline-flex items-center" aria-label="Cores da campanha">
             {paleta.map((c, i) => (
-              <span key={`${c.hex}-${i}`} className="mr-1 inline-block h-3 w-3 rounded-full border border-border" style={{ backgroundColor: c.hex }} title={c.nome || c.hex} />
+              <span key={`${c.hex}-${i}`} className="mr-1 inline-block h-3 w-3 rounded-full" style={{ backgroundColor: c.hex }} title={c.nome || c.hex} />
             ))}
           </span>
         )}
-      </p>
+      </div>
     </section>
   );
 }

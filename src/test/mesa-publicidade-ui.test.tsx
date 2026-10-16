@@ -173,8 +173,11 @@ describe("rota e casca da Mesa Publicidade", () => {
     montar(`/mesa-publicidade?client=${CLIENTE}&etapa=direcao&campanha=${CAMPANHA}`);
     expect(screen.getByRole("heading", { name: "Mesa Publicidade" }).className).toContain("sr-only");
     const nav = screen.getByRole("navigation", { name: "Etapas da Mesa Publicidade" });
-    expect(within(nav).getAllByRole("button").map((b) => b.textContent)).toEqual(["1Campanha", "2Direção", "3Tomadas", "4Revisão", "5Envio"]);
-    for (const b of within(nav).getAllByRole("button")) expect(b.className).toContain("whitespace-nowrap");
+    // 16/10/2026: etapas só em ícone (Etapas soIcone): sem o número, o nome continua no botão (visível só na aberta)
+    // e a aberta ganha o "?" da explicação ao lado (por isso só os botões das etapas).
+    const etapas = Array.prototype.slice.call(nav.querySelectorAll("button[data-etapa]")) as HTMLElement[];
+    expect(etapas.map((b) => b.textContent)).toEqual(["Campanha", "Direção", "Tomadas", "Revisão", "Envio"]);
+    for (const b of etapas) expect(b.className).toContain("whitespace-nowrap");
     expect(screen.getByRole("combobox", { name: /Cliente: Ótica Sintética/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Mesa aberta: Publicidade/ }));
     const troca = await screen.findByRole("navigation", { name: "Trocar de mesa" });

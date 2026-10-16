@@ -19,7 +19,7 @@ import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campo, juntar, superficie, texto } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
-import { AvisoDoRascunho, CabecalhoDaEtapa, RotuloLargo, SemCampanha, useMesaPublicidade } from "./Comuns";
+import { AvisoDoRascunho, CabecalhoDaEtapa, SemCampanha, useMesaPublicidade } from "./Comuns";
 import { FORMATOS_DA_CAMPANHA, FUNCOES_DAS_TOMADAS, pedirTomadas, salvarTomadas, type CampanhaDePublicidade, type TomadaDePublicidade } from "./publicidadeApi";
 
 /**
@@ -101,9 +101,9 @@ function TomadasNaMesaFoto({ ensaio, campanha }: { ensaio: Ensaio; campanha: Cam
         recolher={{ recolhido, onAlternar: () => setRecolhido(!recolhido), resumo: `${ensaio.tomadas.length} ${ensaio.tomadas.length === 1 ? "tomada" : "tomadas"}${pendentes.length ? ` · ${pendentes.length} sem foto` : ""}` }}
         acoes={
           <>
-            <Link to={`/mesa-foto?client=${clientId}&etapa=campanha&ensaio=${ensaio.id}`} className={botao.discreto} aria-label="Abrir o ensaio na Mesa Foto">
-              <ExternalLink className="h-3.5 w-3.5" />
-              <RotuloLargo>Abrir o ensaio na Mesa Foto</RotuloLargo>
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+            <Link to={`/mesa-foto?client=${clientId}&etapa=campanha&ensaio=${ensaio.id}`} className={botao.icone} aria-label="Abrir o ensaio na Mesa Foto" title="Abrir o ensaio na Mesa Foto">
+              <ExternalLink className="h-4 w-4" />
             </Link>
             {pendentes.length > 0 && (
               <BotaoComCusto
@@ -233,15 +233,14 @@ export default function EtapaTomadas() {
         estado={`Território aprovado: ${territorio.nome}`}
         acoes={
           campanha.ensaio_id ? (
-            <button type="button" className={faltaFoto ? botao.secundario : botao.primario} onClick={() => irPara("revisao")} aria-label="Seguir para a revisão">
-              <ArrowRight className="h-3.5 w-3.5" />
-              <RotuloLargo>Seguir para a revisão</RotuloLargo>
+            // 16/10/2026: só ícone; verde quando é o próximo passo.
+            <button type="button" className={faltaFoto ? botao.icone : juntar(botao.primario, "w-9 px-0")} onClick={() => irPara("revisao")} aria-label="Seguir para a revisão" title="Seguir para a revisão">
+              <ArrowRight className="h-4 w-4" />
             </button>
           ) : (
             <>
-              <button type="button" className={botao.secundario} disabled={!mudou || salvando} onClick={() => void salvar()} aria-label="Salvar o plano">
-                {salvando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                <RotuloLargo>Salvar o plano</RotuloLargo>
+              <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} disabled={!mudou || salvando} onClick={() => void salvar()} aria-label="Salvar o plano" title="Salvar o plano">
+                {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               </button>
               <span className="inline-flex" data-pedir-tomadas="">
                 <BotaoComCusto

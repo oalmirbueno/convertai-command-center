@@ -15,7 +15,14 @@ import {
   ChevronRight,
   MoreHorizontal,
   Users,
+  Repeat,
+  Zap,
+  Blend,
+  SlidersHorizontal,
+  X,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useCelular } from "@/hooks/useCelular";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   AjudaRecolhida,
@@ -25,11 +32,12 @@ import {
   Carregando,
   EstadoDeErro,
   EstadoVazio,
+  Etapas,
   FaixaDeNumeros,
   Painel,
   Secao,
-  SeletorCompacto,
   botao,
+  campo,
   etiqueta,
   juntar,
   texto,
@@ -92,6 +100,14 @@ const TYPE_TABS = [
   { value: "one_off", label: "Avulsos" },
   { value: "hybrid", label: "Híbridos" },
 ];
+
+// 16/10/2026 (dono): os tipos viram abas em ícone na linha do título (o nome no title).
+const TYPE_ICONS: Record<string, ReactNode> = {
+  all: <Users className="h-4 w-4" />,
+  recurring: <Repeat className="h-4 w-4" />,
+  one_off: <Zap className="h-4 w-4" />,
+  hybrid: <Blend className="h-4 w-4" />,
+};
 
 // Filtro por serviço contratado (services_config do cadastro). Rótulos curtos
 // para o filtro caber em uma linha sem virar bagunça.
@@ -525,6 +541,7 @@ function formatPercent(value: number | null) {
 export default function Clients() {
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const isMobile = useCelular();
   const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = profile?.role === "admin";
   // Frente PRO3 (30/09): a proposta mora em Clientes (só admin e gestor, a régua da Mesa Proposta).
@@ -1313,80 +1330,130 @@ export default function Clients() {
       ? `${filtered.length} de ${clientRows.length} na lista`
       : `${activeClientCount} ${activeClientCount === 1 ? "ativo" : "ativos"} · ${clientRows.length} no total`;
 
+  const limparFiltros = () => {
+    setServiceFilter("all");
+    setTypeFilter("all");
+    setTab("all");
+  };
+  const filtrosNoMenu = (tab !== "all" ? 1 : 0) + (serviceFilter !== "all" ? 1 : 0);
+
+  // 16/10/2026 (dono): "Todos, recorrentes, avulsos... tudo aqui em cima, com
+  // ícone"; ações só no ícone, sem borda (o nome no title). Status e serviço
+  // moram no "Filtros" (ícone), como no Kanban e na Agenda.
+  const abasDoTipo = (
+    <Etapas
+      soIcone
+      rotulo="Filtrar clientes por tipo"
+      itens={TYPE_TABS.map((t) => ({ valor: t.value, rotulo: t.label, icone: TYPE_ICONS[t.value] }))}
+      valor={typeFilter}
+      onEscolher={setTypeFilter}
+      className="min-w-0"
+    />
+  );
+  const busca = (
+    <div className={isMobile ? "min-w-0 flex-1" : "w-[240px] min-w-0 xl:w-[280px]"} data-tour="clients-search">
+      <CampoDeBusca
+        valor={search}
+        onMudar={setSearch}
+        placeholder="Buscar por empresa, contato, e-mail ou telefone"
+        rotulo="Buscar cliente existente"
+      />
+    </div>
+  );
+  const maisFiltros = (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={juntar(botao.icone, "relative", filtrosNoMenu > 0 && "text-foreground")}
+          aria-label={`Filtros de status e serviço, ${filtrosNoMenu} ${filtrosNoMenu === 1 ? "ativo" : "ativos"}`}
+          title="Filtros"
+        >
+          <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+          {filtrosNoMenu > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold tabular-nums text-primary-foreground" aria-hidden="true">
+              {filtrosNoMenu}
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[calc(100vw-24px)] max-w-[300px] p-3">
+        <p className={juntar(texto.tituloSecao, "mb-3")}>Filtros</p>
+        <label className="mb-3 block min-w-0">
+          <span className={juntar(texto.rotulo, "mb-1 block")}>Status</span>
+          <select value={tab} onChange={(e) => setTab(e.target.value)} className={campo}>
+            {STATUS_TABS.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="block min-w-0">
+          <span className={juntar(texto.rotulo, "mb-1 block")}>Serviço</span>
+          <select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} className={campo}>
+            {SERVICE_FILTERS.map((f) => (
+              <option key={f.value} value={f.value}>{f.label}</option>
+            ))}
+          </select>
+        </label>
+      </PopoverContent>
+    </Popover>
+  );
+  const limpar = filtrosAtivos ? (
+    <button type="button" onClick={limparFiltros} className={botao.icone} aria-label="Limpar filtros" title="Limpar filtros">
+      <X className="h-4 w-4" />
+    </button>
+  ) : null;
+  const acoesDoAdmin = isAdmin ? (
+    <>
+      <button type="button" onClick={() => navigate("/ver-como-cliente")} className={botao.icone} aria-label="Ver como cliente" title="Ver como cliente">
+        <Eye className="h-4 w-4" aria-hidden="true" />
+      </button>
+      <button type="button" onClick={() => setBriefingOpen(true)} data-tour="clients-briefing-btn" className={botao.icone} aria-label="Link do briefing" title="Link do briefing">
+        <Link2 className="h-4 w-4" aria-hidden="true" />
+      </button>
+      <button type="button" onClick={() => setCreateOpen(true)} data-tour="clients-create-btn" className={juntar(botao.icone, "text-primary hover:text-primary")} aria-label="Novo cliente" title="Novo cliente">
+        <UserPlus className="h-4 w-4" aria-hidden="true" />
+      </button>
+    </>
+  ) : null;
+
   return (
     <div className="min-w-0 space-y-4">
       <CabecalhoDePagina
         titulo="Clientes"
         descricao={cabecalhoDescricao}
-        ajuda="Cadastro, plano e cobrança de cada cliente. Toque na linha para abrir a ficha; botão direito ou ... para copiar contatos e outras ações."
+        ajuda="Cadastro, plano e cobrança de cada cliente. Toque na linha para abrir a ficha; botão direito ou ... para copiar contatos e outras ações. As abas em ícone filtram por tipo (Todos, Recorrentes, Avulsos e Híbridos); status e serviço ficam no Filtros."
+        aoLado={isMobile ? undefined : abasDoTipo}
         acoes={
-          isAdmin ? (
+          isMobile ? (
+            acoesDoAdmin || undefined
+          ) : (
             <>
-              <button type="button" onClick={() => navigate("/ver-como-cliente")} className={botao.discreto} aria-label="Ver como cliente">
-                <Eye className="h-4 w-4" aria-hidden="true" />
-                <span className="ml-1.5 hidden md:inline">Ver como cliente</span>
-              </button>
-              <button type="button" onClick={() => setBriefingOpen(true)} data-tour="clients-briefing-btn" className={botao.secundario} aria-label="Link do briefing">
-                <Link2 className="h-4 w-4" aria-hidden="true" />
-                <span className="ml-1.5 hidden sm:inline">Link do briefing</span>
-              </button>
-              <button type="button" onClick={() => setCreateOpen(true)} data-tour="clients-create-btn" className={botao.primario} aria-label="Novo cliente">
-                <UserPlus className="h-4 w-4" aria-hidden="true" />
-                <span className="ml-1.5 hidden sm:inline">Novo cliente</span>
-              </button>
+              {busca}
+              {maisFiltros}
+              {limpar}
+              {acoesDoAdmin}
             </>
-          ) : undefined
+          )
         }
       />
 
-
-      {/* Filtros: status, tipo e serviço contratado, e a busca na mesma linha */}
-      <div className="-m-1 flex flex-wrap items-center [&>*]:m-1">
-        <div className="min-w-0 flex-1 basis-full sm:basis-[240px]" data-tour="clients-search">
-          <CampoDeBusca
-            valor={search}
-            onMudar={setSearch}
-            placeholder="Buscar por empresa, contato, e-mail ou telefone"
-            rotulo="Buscar cliente existente"
-          />
+      {/* Celular: as abas, os filtros e a busca logo abaixo do título. */}
+      {isMobile && (
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center">
+            <div className="min-w-0 flex-1">{abasDoTipo}</div>
+            <div className="ml-2 flex shrink-0 items-center">
+              {maisFiltros}
+              {limpar}
+            </div>
+          </div>
+          <div className="mt-2 flex min-w-0">{busca}</div>
         </div>
-        <SeletorCompacto
-          rotulo="Status"
-          opcoes={STATUS_TABS.map((t) => ({ valor: t.value, rotulo: t.label }))}
-          valor={tab}
-          onEscolher={setTab}
-          modo="lista"
-        />
-        <SeletorCompacto
-          rotulo="Serviço"
-          opcoes={SERVICE_FILTERS.map((s) => ({ valor: s.value, rotulo: s.label }))}
-          valor={serviceFilter}
-          onEscolher={setServiceFilter}
-          modo="lista"
-        />
-        <SeletorCompacto
-          rotulo="Filtrar clientes por tipo"
-          opcoes={TYPE_TABS.map((t) => ({ valor: t.value, rotulo: t.label }))}
-          valor={typeFilter}
-          onEscolher={setTypeFilter}
-        />
-        {filtrosAtivos && (
-          <button
-            type="button"
-            onClick={() => {
-              setServiceFilter("all");
-              setTypeFilter("all");
-              setTab("all");
-            }}
-            className={botao.discreto}
-          >
-            Limpar filtros
-          </button>
-        )}
-        <p aria-live="polite" className="sr-only">
-          {searching ? (filtered.length === 1 ? "1 cliente encontrado." : `${filtered.length} clientes encontrados.`) : ""}
-        </p>
-      </div>
+      )}
+      <p aria-live="polite" className="sr-only">
+        {searching ? (filtered.length === 1 ? "1 cliente encontrado." : `${filtered.length} clientes encontrados.`) : ""}
+      </p>
 
       <AreaDeTrabalho memoriaDaRolagem="clientes:lista" rotuloDoPrincipal="Lista de clientes">
         {/* Resumo financeiro rola junto com a lista: o cabeçalho e os filtros ficam parados. */}
@@ -1449,11 +1516,7 @@ export default function Clients() {
               ) : filtrosAtivos ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    setServiceFilter("all");
-                    setTypeFilter("all");
-                    setTab("all");
-                  }}
+                  onClick={limparFiltros}
                   className={botao.secundario}
                 >
                   Limpar filtros

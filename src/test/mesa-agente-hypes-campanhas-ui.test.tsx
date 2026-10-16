@@ -139,6 +139,8 @@ const campanha: Campanha = {
 };
 
 beforeEach(() => {
+  // 16/10/2026: a campanha aberta mostra uma parte por vez (abas em ícone); a aba lembrada não passa de um teste para outro.
+  window.localStorage.removeItem("mesa:campanha:aba");
   vi.clearAllMocks();
   mock.tabelas = {};
   mock.updates = [];
@@ -262,15 +264,16 @@ describe("campanhas", () => {
     mock.tabelas.calendario_propostas = [proposta];
     montar(h(CampanhaDetalhe, { campanha }));
     await screen.findByText("Teaser do amor");
-    // Frente SEL (30/09): o selo tem seção própria (4 caminhos); abrir não gasta nada.
-    expect(screen.getByRole("button", { name: /Escolher o selo/ })).toBeTruthy();
-    await waitFor(() => expect(chamadasDe("selo_estado").length).toBe(1));
-    expect(chamadasDe("selo_estado")[0]).toEqual({ acao: "selo_estado", campanha_id: campanha.id });
-    expect(chamadasDe("campanha_selo").length).toBe(0);
     // 25/09: a equipe escolhe (todos os que faltam vêm marcados) e manda só os escolhidos.
     fireEvent.click(screen.getByRole("button", { name: /Mandar para a agenda \(1\)/ }));
     await waitFor(() => expect(chamadasDe("gravar").length).toBe(1));
     expect(chamadasDe("gravar")[0]).toEqual({ acao: "gravar", proposta_id: proposta.id, tema_ids: ["c1"], project_id: proposta.project_id });
+    // Frente SEL (30/09): o selo tem parte própria (16/10/2026: aba em ícone); abrir não gasta nada.
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Partes da campanha" })).getByRole("button", { name: /Selo/ }));
+    expect(await screen.findByRole("button", { name: /Escolher o selo/ })).toBeTruthy();
+    await waitFor(() => expect(chamadasDe("selo_estado").length).toBe(1));
+    expect(chamadasDe("selo_estado")[0]).toEqual({ acao: "selo_estado", campanha_id: campanha.id });
+    expect(chamadasDe("campanha_selo").length).toBe(0);
   });
 
   it("a aba Campanhas lista as campanhas do cliente", async () => {

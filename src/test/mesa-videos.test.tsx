@@ -763,9 +763,9 @@ describe("tela da Mesa Vídeos (geração)", () => {
     const nav = await screen.findByRole("navigation", { name: "Etapas da Mesa Vídeos" });
     expect(nav.textContent).toContain("Criar vídeo");
     expect(await screen.findByRole("textbox", { name: "Descreva seu vídeo" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Planejamento: escolher" }));
-    for (const nome of ["Materiais", "Modelos prontos", "Identidade do vídeo", "Roteiro"]) expect(screen.getByRole("option", { name: new RegExp(nome) })).toBeTruthy();
-    fireEvent.click(screen.getByRole("option", { name: /Materiais/ }));
+    // 16/10/2026: o seletor "Planejamento" virou etapas em ícone na mesma linha (Etapas soIcone).
+    for (const nome of ["Materiais", "Modelos prontos", "Identidade do vídeo", "Roteiro"]) expect(nav.querySelector(`button[title^="${nome}"]`)).toBeTruthy();
+    fireEvent.click(nav.querySelector('button[data-etapa="base"]') as HTMLElement);
     expect(await screen.findByRole("tab", { name: /Cenas/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Abrir agente de vídeo" }));
     expect(await screen.findByRole("textbox", { name: "Pedido para o agente" })).toBeTruthy();
@@ -810,7 +810,8 @@ describe("tela da Mesa Edição", () => {
   it("abre com as três etapas e o agente de edição, sem chamar a função", async () => {
     montar(h(MesaEdicao), `/mesa-edicao?client=${CLIENTE}`);
     expect(await screen.findByRole("navigation", { name: "Etapas da Mesa Edição" })).toBeTruthy();
-    for (const e of ETAPAS_DA_MESA_EDICAO) expect(screen.getByRole("button", { name: new RegExp(e.rotulo) })).toBeTruthy();
+    // 16/10/2026: etapas só em ícone; a aberta tem o "?" ("O que é Entrada?"), então o nome exato.
+    for (const e of ETAPAS_DA_MESA_EDICAO) expect(screen.getByRole("button", { name: e.rotulo })).toBeTruthy();
     expect(await screen.findByText("IMG_1.MOV")).toBeTruthy();
     // A lateral da Mesa Edição (frente Q) baixa o agente de edição e o agente editor juntos: no jsdom frio demora mais.
     expect(await screen.findByText("Agente de edição", undefined, { timeout: 10000 })).toBeTruthy();

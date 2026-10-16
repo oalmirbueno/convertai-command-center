@@ -154,7 +154,8 @@ describe("a aba de identidade", () => {
   it("está montada como aba nas métricas", () => {
     const pagina = ler("src/pages/AdminMetricas.tsx");
     expect(pagina).toContain("<IdentidadeDoCliente clientId={clientId}");
-    expect(pagina).toContain('abaDoCliente === "desempenho"');
+    // 16/10/2026: "desempenho" virou quatro abas de ícone (conselho, orgânico, anúncios, posts).
+    expect(pagina).toContain('abaDoCliente === "posts"');
   });
 
   it("o detalhe deixou de limitar os posts em 25", () => {

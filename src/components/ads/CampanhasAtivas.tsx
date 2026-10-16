@@ -44,11 +44,17 @@ export default function CampanhasAtivas({
   clientId,
   nomesDeClientes,
   aoAbrirCliente,
+  embutido = false,
 }: {
   clientId?: string;
   /** client_id -> nome. Sem isto a lista mistura campanhas de todo mundo. */
   nomesDeClientes?: Map<string, string>;
   aoAbrirCliente?: (clientId: string) => void;
+  /**
+   * Dentro de uma aba (16/10): sem título nem "?" próprios, porque a aba já
+   * diz o nome e a explicação mora no "?" dela. Fica a linha de estado.
+   */
+  embutido?: boolean;
 }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const { data: identidades } = useIdentidadesDosClientes();
@@ -146,10 +152,11 @@ export default function CampanhasAtivas({
 
   const ajuda =
     "O que está rodando agora e o que fazer a respeito. Cada aviso traz o número que o gerou, e os avisos só aparecem com volume suficiente para não confundir ruído com sinal. Atualiza sozinho a cada minuto.";
+  const cabeca = embutido ? {} : { divisoria: true, titulo: "No ar agora", ajuda };
 
   if (error && !data) {
     return (
-      <Secao divisoria titulo="No ar agora" ajuda={ajuda}>
+      <Secao {...cabeca}>
         <EstadoDeErro
           titulo="Não consegui ler as campanhas."
           descricao={`${error instanceof Error ? error.message : String(error)}. Nenhuma campanha está sendo dada como parada: a leitura falhou.`}
@@ -164,7 +171,7 @@ export default function CampanhasAtivas({
   }
   if (isLoading) {
     return (
-      <Secao divisoria titulo="No ar agora" ajuda={ajuda}>
+      <Secao {...cabeca}>
         <Carregando rotulo="Lendo as campanhas" linhas={2} />
       </Secao>
     );
@@ -179,9 +186,7 @@ export default function CampanhasAtivas({
 
   return (
     <Secao
-      divisoria
-      titulo="No ar agora"
-      ajuda={ajuda}
+      {...cabeca}
       descricao={
         <span className="block truncate">
           {escopo} · {ativas.length} {ativas.length === 1 ? "campanha ativa" : "campanhas ativas"} · hoje{" "}

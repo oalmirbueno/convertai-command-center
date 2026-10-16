@@ -202,7 +202,8 @@ describe("rota e casca", () => {
     expect(screen.getByRole("heading", { name: "Mesa Ads" }).className).toContain("sr-only");
     const nav = screen.getByRole("navigation", { name: "Etapas da Mesa Ads" });
     const botoes = within(nav).getAllByRole("button");
-    expect(botoes.map((b) => b.textContent)).toEqual(["1Oferta", "2Referências", "3Plano de teste", "4Estúdio Ads", "5Conta", "6Auditoria", "7Resultados"]);
+    // 16/10/2026: etapas só em ícone (Etapas soIcone): sem o número; o nome segue no botão (visível só na aberta).
+    expect(botoes.map((b) => b.textContent)).toEqual(["Oferta", "Referências", "Plano de teste", "Estúdio Ads", "Conta", "Auditoria", "Resultados"]);
     expect(ETAPAS_DA_MESA_ADS.map((e) => e.valor)).toEqual(["oferta", "referencias", "plano", "estudio", "conta", "auditoria", "resultados"]);
     // Etapas do sistema (src/components/sistema/Etapas.tsx): o texto nunca é cortado;
     // no celular a linha rola para o lado por dentro, sem empurrar a página.

@@ -17,6 +17,7 @@ import {
   GripVertical,
   RefreshCw,
   Send,
+  SquareKanban,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ancorasPorDia, idsAncorados } from "@/lib/agendaPermanencia";
@@ -1636,8 +1637,13 @@ export default function EditorialCalendar() {
                   <span className="font-medium text-violet-500">{productionTasks.length}</span>{" "}
                   {productionTasks.length === 1 ? "entrega editorial do Kanban" : "entregas editoriais do Kanban"}
                 </span>
-                <Link to={kanbanHref} className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}>
-                  Abrir Kanban central
+                <Link
+                  to={kanbanHref}
+                  className={botao.icone}
+                  aria-label="Abrir Kanban central"
+                  title="Abrir Kanban central"
+                >
+                  <SquareKanban className="h-4 w-4" aria-hidden="true" />
                 </Link>
               </div>
             ) : null

@@ -3,7 +3,6 @@ import { AlertTriangle, AudioWaveform, Clapperboard, Download, Film, FolderOpen,
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import BotaoComIcone from "@/components/sistema/BotaoComIcone";
 import MenuMais from "@/components/sistema/MenuMais";
 import { botao, foco, juntar } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
@@ -271,16 +270,18 @@ export default function Renderizar({
           </Popover>
         </span>
       )}
-      <BotaoComIcone
-        variante="primario"
-        className="h-8 px-2.5 text-[12px]"
-        icone={pedindo === "render_final" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Film className="h-3.5 w-3.5" />}
-        rotulo="Renderizar"
+      {/* 16/10/2026: a ação principal do editor fica verde, só ícone (nome no aria-label e no title). */}
+      <button
+        type="button"
+        className={juntar(botao.primario, "h-8 w-8 px-0")}
+        aria-label="Renderizar"
         onClick={() => void pedir("render_final")}
         disabled={!!pedindo || bloqueado || !!(ativo && ativo.tipo === "render_final")}
-        title={motivoDoBloqueio || "Renderiza o vídeo inteiro na máquina da agência (sem custo). O MP4 volta para a Mídia."}
+        title={motivoDoBloqueio || "Renderizar: o vídeo inteiro na máquina da agência (sem custo). O MP4 volta para a Mídia."}
         data-botao-renderizar=""
-      />
+      >
+        {pedindo === "render_final" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Film className="h-3.5 w-3.5" />}
+      </button>
       <MenuMais
         rotulo="Mais do render"
         itens={[

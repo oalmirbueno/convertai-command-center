@@ -192,8 +192,8 @@ function NovoBook({ onCriado, onCancelar }: { onCriado: (b: Book) => void; onCan
               </button>
             </div>
           ) : (
-            <button type="button" className={juntar(botao.secundario, "h-8 text-[12px]")} onClick={() => setEscolhendoFoto(true)}>
-              <Images className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Escolher a foto do acervo
+            <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} onClick={() => setEscolhendoFoto(true)} aria-label="Escolher a foto do acervo" title="Escolher a foto do acervo">
+              <Images className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
           {escolhendoFoto && (
@@ -743,11 +743,11 @@ function ReferenciasDoBook({ aberto }: { aberto: BookAberto }) {
       ajuda="Solte, cole (Ctrl+V) ou escolha. A referência dá luz, cenário, paleta e clima; o assunto sai sempre das fotos de identidade."
       acao={
         <>
-          <button type="button" className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")} aria-pressed={modo === "acervo"} onClick={() => setModo(modo === "acervo" ? "nenhum" : "acervo")}>
-            <Images className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Do acervo
+          <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} aria-pressed={modo === "acervo"} onClick={() => setModo(modo === "acervo" ? "nenhum" : "acervo")} aria-label="Do acervo" title="Do acervo">
+            <Images className="h-4 w-4" aria-hidden="true" />
           </button>
-          <button type="button" className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")} aria-pressed={modo === "biblioteca"} onClick={() => setModo(modo === "biblioteca" ? "nenhum" : "biblioteca")}>
-            <Library className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Da biblioteca
+          <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} aria-pressed={modo === "biblioteca"} onClick={() => setModo(modo === "biblioteca" ? "nenhum" : "biblioteca")} aria-label="Da biblioteca" title="Da biblioteca">
+            <Library className="h-4 w-4" aria-hidden="true" />
           </button>
         </>
       }
@@ -1083,8 +1083,8 @@ function DiretorDoPlano({ onCriado }: { onCriado: (b: Book) => void }) {
         className="text-[13px]"
       />
       <div className="mt-2 flex min-w-0 flex-wrap items-center">
-        <button type="button" className={juntar(botao.secundario, "mb-1.5 mr-2 h-9 text-[13px]")} disabled={!pedido.trim() && !opcoesDoAssunto.length} onClick={() => montar({ assuntoFixo: null })}>
-          <Sparkles className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Montar o plano
+        <button type="button" className={juntar(botao.icone, "mb-1.5 mr-2 disabled:opacity-50")} disabled={!pedido.trim() && !opcoesDoAssunto.length} onClick={() => montar({ assuntoFixo: null })} aria-label="Montar o plano" title="Montar o plano">
+          <Sparkles className="h-4 w-4" aria-hidden="true" />
         </button>
         <span className={juntar(texto.auxiliar, "mb-1.5")}>Montar não gasta.</span>
       </div>

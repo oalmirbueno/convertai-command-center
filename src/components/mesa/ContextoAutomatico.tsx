@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, Circle, CircleDashed, FileText, Loader2, RefreshCw } from "lucide-react";
+import { Bookmark, Camera, Circle, FileText, Lightbulb, Loader2, Palette, RefreshCw, RotateCcw, ScrollText, WandSparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { chamarFuncao, dataEHora, padraoDoContexto, TAMANHOS, textoDoErro } from "@/lib/mesa/api";
@@ -8,7 +8,7 @@ import { AvisoDeErro, BotaoComCusto, avisarCustoReal } from "./Custo";
 import CartaoMarca, { ChipsDaPaleta } from "./ContextoCartaoMarca";
 import FotosDoCliente from "./ContextoFotos";
 import GaleriaDeReferencias from "./ContextoGaleriaDeReferencias";
-import { BarraDoScore, Hub, useHubsAbertos } from "./ContextoHub";
+import { BarraDoScore } from "./ContextoHub";
 // Frente AP (27/09): o que o painel aprendeu com as entregas, os ajustes, as reprovações e os números reais.
 import ContextoAprendizados, { SeletorDaOrigem, useAprendizadosDoCliente, type FiltroDosAprendizados } from "./ContextoAprendizados";
 import { aprendizadosDoPainel, resumoDosAprendizados } from "./aprendizadosDoPainel";
@@ -20,8 +20,9 @@ import SugestaoDoKitDaMarca from "./ContextoSugestaoDaMarca";
 import { fotoDaMarcaAberta, linhaDaMarca } from "../../../supabase/functions/_shared/heranca-da-marca";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import CabecalhoDePagina from "@/components/sistema/CabecalhoDePagina";
+import Etapas from "@/components/sistema/Etapas";
 import Painel from "@/components/sistema/Painel";
-import { juntar, lista, superficie, texto } from "@/components/sistema/estilos";
+import { botao, juntar, lista, superficie, texto } from "@/components/sistema/estilos";
 import {
   chaveDasReferencias,
   chaveDoAcervo,
@@ -153,64 +154,6 @@ export function completude(itens: ItemDoChecklist[]): number {
   if (!itens.length) return 0;
   const pontos = itens.reduce((t, i) => t + (i.situacao === "feito" ? 1 : i.situacao === "parcial" ? 0.5 : 0), 0);
   return Math.round((pontos / itens.length) * 100);
-}
-
-function IconeDaSituacao({ situacao }: { situacao: SituacaoDoItem }) {
-  if (situacao === "carregando") return <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />;
-  if (situacao === "feito") {
-    return (
-      <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-success text-white">
-        <Check className="h-2.5 w-2.5" />
-      </span>
-    );
-  }
-  if (situacao === "parcial") return <CircleDashed className="h-3.5 w-3.5 text-primary" />;
-  return <Circle className="h-3.5 w-3.5 text-muted-foreground" />;
-}
-
-const NOME_DA_SITUACAO: Record<SituacaoDoItem, string> = { feito: "completo", parcial: "em parte", falta: "falta", carregando: "lendo" };
-
-function Completude({ itens, onIr }: { itens: ItemDoChecklist[]; onIr: (secao: SecaoDoContexto) => void }) {
-  const pct = completude(itens);
-  const feitos = itens.filter((i) => i.situacao === "feito").length;
-  return (
-    <section aria-label="Completude do contexto" className="min-w-0">
-      <div className="flex min-w-0 items-center">
-        <p className="shrink-0 text-[12px] font-medium text-foreground">Completude</p>
-        <div
-          className="mx-3 h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={pct}
-          aria-label={`${feitos} de ${itens.length} itens completos`}
-        >
-          <div className={`h-full rounded-full transition-all ${pct >= 100 ? "bg-success" : "bg-primary"}`} style={{ width: `${pct}%` }} />
-        </div>
-        <p className="shrink-0 text-[12px] font-semibold tabular-nums text-foreground">{pct}%</p>
-      </div>
-      <ul className="mt-2 flex min-w-0 flex-wrap">
-        {itens.map((i) => (
-          <li key={i.chave} className="mb-1 mr-1 min-w-0">
-            <button
-              type="button"
-              onClick={() => onIr(i.secao)}
-              title={i.detalhe}
-              aria-label={`${i.rotulo}: ${NOME_DA_SITUACAO[i.situacao]}. ${i.detalhe}`}
-              className={`inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[12px] transition-colors hover:border-primary/60 ${
-                i.situacao === "feito" ? "border-border bg-muted text-muted-foreground" : "border-border bg-card text-foreground"
-              }`}
-            >
-              <span className="mr-1.5 flex shrink-0 items-center">
-                <IconeDaSituacao situacao={i.situacao} />
-              </span>
-              <span className="truncate">{i.rotulo}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
 }
 
 // ------------------------------------------------------------------ hubs
@@ -493,9 +436,6 @@ const RESUMO_DA_LOGO: Record<SituacaoDoItem, string> = {
   carregando: "",
 };
 
-/** Hubs abertos na primeira visita: só a Marca; o resto começa recolhido. */
-const HUBS_ABERTOS_DE_INICIO: Record<string, boolean> = { "ctx-marca": true };
-
 const ROTULO_DO_CAMPO_DO_SCORE: Record<string, string> = {
   negocio: "negócio",
   publico: "público",
@@ -508,15 +448,119 @@ const ROTULO_DO_CAMPO_DO_SCORE: Record<string, string> = {
   regras: "regras",
 };
 
+// ------------------------------------------------------------------ abas
+
 /**
- * Coluna principal da aba Contexto: topo compacto (completude e checklist em
- * chips) e hubs recolhíveis, um embaixo do outro, cada um com resumo e score
- * (Marca, Contexto consolidado, Referências, Fotos reais, Documentos e
- * pendências). Pedido do dono em 23/09: organizado em caixinhas, sem poluir. Cada cartão lê o que precisa
+ * Abas do Contexto (dono, 16/10: "está um embaixo do outro; poderia ter abas
+ * aqui em cima"). Uma parte por vez, em ícone (o nome fica no title e no
+ * leitor de tela; a aberta mostra o nome e o "?"). As seis primeiras são
+ * desta coluna; as outras (segundo cérebro, plano, perfis, MCP, editar em
+ * detalhe) chegam da AbaContexto em `abasDeFora` e o conteúdo vem em
+ * `children`. O valor de cada aba é o id da antiga seção (ctx-...), então o
+ * checklist e quem guardava a seção continuam valendo.
+ */
+export type AbaDoContexto =
+  | "ctx-marca"
+  | "ctx-consolidado"
+  | "ctx-referencias"
+  | "ctx-fotos"
+  | "ctx-aprendizados"
+  | "ctx-documentos"
+  | "ctx-cerebro"
+  | "ctx-plano"
+  | "ctx-perfis"
+  | "ctx-mcp"
+  | "ctx-detalhes";
+
+const TODAS_AS_ABAS: AbaDoContexto[] = [
+  "ctx-marca",
+  "ctx-consolidado",
+  "ctx-referencias",
+  "ctx-fotos",
+  "ctx-aprendizados",
+  "ctx-documentos",
+  "ctx-cerebro",
+  "ctx-plano",
+  "ctx-perfis",
+  "ctx-mcp",
+  "ctx-detalhes",
+];
+
+export const ehAbaDoContexto = (v: unknown): v is AbaDoContexto => typeof v === "string" && TODAS_AS_ABAS.indexOf(v as AbaDoContexto) >= 0;
+
+/** Aba vinda de fora (AbaContexto): nome, ícone e a explicação do "?". */
+export interface AbaDeFora {
+  valor: AbaDoContexto;
+  rotulo: string;
+  icone: ReactNode;
+  ajuda: string;
+}
+
+/** Itens do checklist que cada aba desta coluna resume (o número na aba é o que falta). */
+const ITENS_DA_ABA: Partial<Record<AbaDoContexto, string[]>> = {
+  "ctx-marca": ["logo", "paleta", "fontes"],
+  "ctx-consolidado": ["estilo", "regras"],
+  "ctx-referencias": ["referencias"],
+  "ctx-fotos": ["imagens"],
+  "ctx-documentos": ["documentos"],
+};
+
+/** Quantos itens da aba ainda faltam (falta ou em parte); null enquanto lê. */
+export function faltasDaAba(itens: ItemDoChecklist[], chaves: string[]): number | null {
+  const daAba = itens.filter((i) => chaves.indexOf(i.chave) >= 0);
+  if (!daAba.length || daAba.some((i) => i.situacao === "carregando")) return null;
+  return daAba.filter((i) => i.situacao !== "feito").length;
+}
+
+/** Barra fina de completude na linha do título (o detalhe de cada item fica no "?" de cada aba). */
+function BarraDeCompletude({ itens }: { itens: ItemDoChecklist[] }) {
+  const pct = completude(itens);
+  const feitos = itens.filter((i) => i.situacao === "feito").length;
+  return (
+    <div className="flex min-w-0 flex-1 items-center" title={`Completude do contexto: ${feitos} de ${itens.length} itens completos`}>
+      <div
+        className="h-1.5 min-w-[32px] max-w-[160px] flex-1 overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+        aria-label={`Completude do contexto: ${feitos} de ${itens.length} itens completos`}
+      >
+        <div className={`h-full rounded-full transition-all ${pct >= 100 ? "bg-success" : "bg-primary"}`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="ml-2 shrink-0 text-[12px] font-semibold tabular-nums text-muted-foreground">{pct}%</span>
+    </div>
+  );
+}
+
+/**
+ * Coluna principal da aba Contexto: título com a completude e as ações, as
+ * abas em ícone logo abaixo e UMA parte por vez (Marca, Contexto
+ * consolidado, Referências, Fotos reais, Aprendizados, Documentos e as que
+ * vêm de fora). Sem rolar até a seção: trocar de aba troca o conteúdo, e cada
+ * aba guarda a própria rolagem (AbaContexto). Cada parte lê o que precisa
  * direto do banco; o "ler" do agente (documentos, candidatos a logo,
  * pendências) chega em até ~1,5 s e nunca esconde a tela inteira.
  */
-export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: ParteDoContexto) => void } = {}) {
+export default function ContextoAutomatico({
+  onIrPara,
+  aba = "ctx-marca",
+  onAba,
+  abasDeFora = [],
+  acaoDaAba,
+  children,
+}: {
+  onIrPara?: (parte: ParteDoContexto) => void;
+  /** A aba aberta. */
+  aba?: AbaDoContexto;
+  onAba?: (aba: AbaDoContexto) => void;
+  /** Abas cujo conteúdo vem em `children` (AbaContexto). */
+  abasDeFora?: AbaDeFora[];
+  /** Controle da aba aberta (ex.: a parte do "Editar em detalhe"), na linha das abas. */
+  acaoDaAba?: ReactNode;
+  /** Conteúdo das abas de fora. */
+  children?: ReactNode;
+} = {}) {
   const { clientId, clientName, catalogo, atualizarCusto, userId } = useMesa();
   const queryClient = useQueryClient();
   const kitQuery = useKitDaMesa();
@@ -538,7 +582,6 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
   const [erroDoMontar, setErroDoMontar] = useState<{ clientId: string; erro: unknown } | null>(null);
   const [sugestoesPorCliente, setSugestoesPorCliente] = useState<Record<string, SugestoesDoContexto>>({});
   const [aplicando, setAplicando] = useState<string | null>(null);
-  const hubs = useHubsAbertos(HUBS_ABERTOS_DE_INICIO, clientId);
   const aprendizados = useAprendizadosDoCliente(clientId);
   const [filtroDosAprendizados, setFiltroDosAprendizados] = useState<FiltroDosAprendizados>("todos");
 
@@ -647,14 +690,6 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
     return () => window.clearTimeout(t);
   }, [dados, clientId, queryClient]);
 
-  const irParaSecao = (secao: SecaoDoContexto) => {
-    hubs.definir(secao, true);
-    window.setTimeout(() => {
-      const el = document.getElementById(secao);
-      if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 30);
-  };
-
   const tirarSugestao = (alvo: string, campo: keyof SugestoesDoContexto) =>
     setSugestoesPorCliente((p) => {
       const atual = { ...(p[alvo] || {}) };
@@ -686,64 +721,165 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
   const paletaDoKit = kit && Array.isArray(kit.paleta) ? kit.paleta : [];
   const fontesDoResumo = item("fontes");
 
+  // O que cada aba diz no "?" (o antigo resumo do hub) e o score dela.
+  const comScore = (score: number | null | undefined, resumo: string) => (typeof score === "number" ? `Score ${score} de 100. ${resumo}` : resumo);
+  const resumoDaMarca = carregandoKit
+    ? "Lendo a marca..."
+    : [
+        paletaDoKit.length ? `${paletaDoKit.length} ${paletaDoKit.length === 1 ? "cor" : "cores"}` : "sem paleta",
+        RESUMO_DA_LOGO[(item("logo") || { situacao: "falta" }).situacao],
+        fontesDoResumo && fontesDoResumo.situacao !== "carregando" ? fontesDoResumo.detalhe.replace(/\.$/, "") : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+  const resumoDoConsolidado =
+    carregandoKit && !kit
+      ? "Lendo..."
+      : `${consolidado.completos} de ${consolidado.campos.length} campos completos${
+          consolidado.faltas.length ? ` · falta: ${consolidado.faltas.slice(0, 3).map((f) => ROTULO_DO_CAMPO_DO_SCORE[f.chave] || f.chave).join(", ")}` : ""
+        }`;
+  const resumoDasReferencias = refsAtivas
+    ? refsAtivas.length
+      ? `${refsAtivas.length} em uso pelo diretor de arte · ${(item("referencias") || { detalhe: "" }).detalhe.replace(/\.$/, "")}`
+      : "Nenhuma em uso"
+    : "Lendo...";
+  const resumoDosDocumentos = documentos
+    ? `${documentos.length ? `${documentos.length} lido(s), ${docsDeIdentidade} de identidade` : "Nenhum documento em Arquivos"} · ${
+        lacunas.length ? `${lacunas.length} ${lacunas.length === 1 ? "pendência" : "pendências"}` : "nada pendente"
+      }`
+    : leitura.isError
+      ? "Não foi possível ler agora"
+      : "Lendo...";
+
+  const proprias: { valor: AbaDoContexto; rotulo: string; icone: ReactNode; ajuda: string; contador: number | null }[] = [
+    {
+      valor: "ctx-marca",
+      rotulo: "Marca",
+      icone: <Palette className="h-4 w-4" />,
+      ajuda: comScore(scoreDoGrupo(itens, ["logo", "paleta", "fontes"]), resumoDaMarca),
+      contador: faltasDaAba(itens, ITENS_DA_ABA["ctx-marca"] || []),
+    },
+    {
+      valor: "ctx-consolidado",
+      rotulo: "Contexto consolidado",
+      icone: <ScrollText className="h-4 w-4" />,
+      ajuda: comScore(carregandoKit && !kit ? null : consolidado.score, resumoDoConsolidado),
+      contador: faltasDaAba(itens, ITENS_DA_ABA["ctx-consolidado"] || []),
+    },
+    {
+      valor: "ctx-referencias",
+      rotulo: "Referências",
+      icone: <Bookmark className="h-4 w-4" />,
+      ajuda: comScore(scoreDoItem(item("referencias")), resumoDasReferencias),
+      contador: faltasDaAba(itens, ITENS_DA_ABA["ctx-referencias"] || []),
+    },
+    {
+      valor: "ctx-fotos",
+      rotulo: "Fotos reais",
+      icone: <Camera className="h-4 w-4" />,
+      ajuda: comScore(scoreDoItem(item("imagens")), (item("imagens") || { detalhe: "" }).detalhe),
+      contador: faltasDaAba(itens, ITENS_DA_ABA["ctx-fotos"] || []),
+    },
+    {
+      valor: "ctx-aprendizados",
+      rotulo: "O que o painel aprendeu",
+      icone: <Lightbulb className="h-4 w-4" />,
+      ajuda: aprendizados.data ? resumoDosAprendizados(aprendizadosDoPainel(aprendizados.data)) : aprendizados.isError ? "Não foi possível ler agora" : "Lendo...",
+      contador: null,
+    },
+    {
+      valor: "ctx-documentos",
+      rotulo: "Documentos e pendências",
+      icone: <FileText className="h-4 w-4" />,
+      ajuda: `${comScore(scoreDoItem(item("documentos")), resumoDosDocumentos)} Envie o manual de marca, o posicionamento ou a apresentação em Arquivos: o agente lê sozinho e aponta o que falta.`,
+      contador: dados || kit ? lacunas.length : null,
+    },
+  ];
+  const abas = proprias
+    .map((a) => ({ valor: a.valor, rotulo: a.rotulo, icone: a.icone, ajuda: a.ajuda, dica: `${a.rotulo}: ${a.ajuda}`, contador: a.contador }))
+    .concat(abasDeFora.map((a) => ({ valor: a.valor, rotulo: a.rotulo, icone: a.icone, ajuda: a.ajuda, dica: a.rotulo, contador: null })));
+  const aberta: AbaDoContexto = abas.some((a) => a.valor === aba) ? aba : "ctx-marca";
+  const daColuna = proprias.some((a) => a.valor === aberta);
+
   return (
     <div className="min-w-0 space-y-4">
-      {/* Título curto e ações na mesma linha, também no celular (o cliente já está na barra da mesa). A explicação fica no "?". */}
+      {/* Título, completude e ações numa linha; a explicação e o estado da montagem ficam no "?". */}
       <CabecalhoDePagina
         nivel={2}
         titulo="Contexto"
-        ajuda={`O que a Mesa já sabe ${clientName ? `de ${clientName}` : "do cliente"}: montado sozinho com documentos, dossiê, artes aprovadas e referências. Complete e corrija conversando com o agente ao lado.`}
-        descricao={
-          <span className="flex min-w-0 items-center">
-            {leitura.isFetching && <Loader2 className="mr-1.5 h-3 w-3 shrink-0 animate-spin" />}
-            {leitura.isLoading
-              ? "Lendo o que o painel já tem..."
-              : contextoMontado
-                ? `Montado ${dataEHora(kit!.contexto_atualizado_em!)}`
-                : "Contexto ainda não montado"}
-          </span>
-        }
+        ajuda={`O que a Mesa já sabe ${clientName ? `de ${clientName}` : "do cliente"}: montado sozinho com documentos, dossiê, artes aprovadas e referências. Complete e corrija conversando com o agente ao lado. ${
+          leitura.isLoading ? "Lendo o que o painel já tem." : contextoMontado ? `Montado ${dataEHora(kit!.contexto_atualizado_em!)}.` : "Contexto ainda não montado."
+        }`}
+        aoLado={<BarraDeCompletude itens={itens} />}
         acoes={
           <>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-8 w-8 p-0"
-            onClick={() => {
-              void leitura.refetch();
-              void kitQuery.refetch();
-              void referencias.refetch();
-            }}
-            disabled={leitura.isFetching}
-            aria-label="Ler de novo"
-            title="Ler de novo (sem custo)"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${leitura.isFetching ? "animate-spin" : ""}`} />
-          </Button>
-          <BotaoComCusto
-            rotulo={daMarca && marca ? `Montar contexto da ${marca.nome}` : contextoMontado ? "Atualizar contexto" : "Montar contexto"}
-            titulo={daMarca && marca ? `Montar o contexto da ${marca.nome}` : contextoMontado ? "Atualizar o contexto" : "Montar o contexto"}
-            descricao={
-              daMarca && marca
-                ? `O agente lê só os documentos, as artes e o dossiê do projeto da ${marca.nome} e devolve contexto, cores, estilo, regras e tom como sugestão. Nada é gravado sem o seu Confirmar.`
-                : "A montagem automática roda só na primeira vez. Aqui o agente lê de novo os documentos, o dossiê, as artes aprovadas e as referências sem leitura. O que a equipe já preencheu não é trocado: vira sugestão."
-            }
-            variant="outline"
-            className="h-8 text-[12px]"
-            disabled={!dados || montando}
-            partes={() => [
-              { modeloId: modeloDoContexto?.id, tipo: "texto", tokensEntrada: TAMANHOS.montarContexto.entrada, tokensSaida: TAMANHOS.montarContexto.saida },
-            ]}
-            // Frente LR: "Atualizar" refaz a montagem de verdade (sem o atualizar, o servidor só lia as pendentes quando não havia fonte nova).
-            executar={() => chamarFuncao<RespostaDoMontar>("agente-contexto", { acao: "montar", client_id: clientId, ...(contextoMontado ? { atualizar: true } : {}) })}
-            aoConcluir={(data) => depoisDeMontar(clientId, data)}
-          />
+            <button
+              type="button"
+              className={botao.icone}
+              onClick={() => {
+                void leitura.refetch();
+                void kitQuery.refetch();
+                void referencias.refetch();
+              }}
+              disabled={leitura.isFetching}
+              aria-label="Ler de novo"
+              title={`Ler de novo (sem custo)${contextoMontado ? `. Montado ${dataEHora(kit!.contexto_atualizado_em!)}` : ""}`}
+            >
+              <RefreshCw className={`h-4 w-4 ${leitura.isFetching ? "animate-spin" : ""}`} />
+            </button>
+            <BotaoComCusto
+              rotulo={
+                <>
+                  <WandSparkles className="h-4 w-4" aria-hidden="true" />
+                  <span className="sr-only">{daMarca && marca ? `Montar contexto da ${marca.nome}` : contextoMontado ? "Atualizar contexto" : "Montar contexto"}</span>
+                </>
+              }
+              titulo={daMarca && marca ? `Montar o contexto da ${marca.nome}` : contextoMontado ? "Atualizar o contexto" : "Montar o contexto"}
+              descricao={
+                daMarca && marca
+                  ? `O agente lê só os documentos, as artes e o dossiê do projeto da ${marca.nome} e devolve contexto, cores, estilo, regras e tom como sugestão. Nada é gravado sem o seu Confirmar.`
+                  : "A montagem automática roda só na primeira vez. Aqui o agente lê de novo os documentos, o dossiê, as artes aprovadas e as referências sem leitura. O que a equipe já preencheu não é trocado: vira sugestão."
+              }
+              variant="ghost"
+              className="h-8 px-2 text-[12px]"
+              disabled={!dados || montando}
+              partes={() => [
+                { modeloId: modeloDoContexto?.id, tipo: "texto", tokensEntrada: TAMANHOS.montarContexto.entrada, tokensSaida: TAMANHOS.montarContexto.saida },
+              ]}
+              // Frente LR: "Atualizar" refaz a montagem de verdade (sem o atualizar, o servidor só lia as pendentes quando não havia fonte nova).
+              executar={() => chamarFuncao<RespostaDoMontar>("agente-contexto", { acao: "montar", client_id: clientId, ...(contextoMontado ? { atualizar: true } : {}) })}
+              aoConcluir={(data) => depoisDeMontar(clientId, data)}
+            />
           </>
         }
       />
 
-      <Completude itens={itens} onIr={irParaSecao} />
+      {/* As partes em ícone, uma por vez; o número é o que ainda falta naquela parte. */}
+      <div className="flex min-w-0 items-center">
+        <Etapas
+          soIcone
+          rotulo="Partes do contexto"
+          className="min-w-0 flex-1"
+          itens={abas.map((a) => ({
+            valor: a.valor,
+            rotulo: a.rotulo,
+            dica: a.dica,
+            icone: a.icone,
+            ajuda: a.ajuda,
+            contador: a.contador,
+            dados: { "data-aba-do-contexto": a.valor },
+          }))}
+          valor={aberta}
+          onEscolher={(v) => onAba?.(v as AbaDoContexto)}
+        />
+        {aberta === "ctx-aprendizados" ? (
+          <div className="ml-2 flex shrink-0 items-center">
+            <SeletorDaOrigem valor={filtroDosAprendizados} onEscolher={setFiltroDosAprendizados} />
+          </div>
+        ) : acaoDaAba ? (
+          <div className="ml-2 flex min-w-0 shrink-0 items-center">{acaoDaAba}</div>
+        ) : null}
+      </div>
 
       {daMarca && marca && (
         <SugestaoDoKitDaMarca
@@ -769,13 +905,13 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
       )}
       {erroDoMontar && erroDoMontar.clientId === clientId && <AvisoDeErro erro={erroDoMontar.erro} />}
       {leitura.isError && (
-        <div className={juntar(superficie.poco, "flex min-w-0 flex-col p-3 sm:flex-row sm:items-center")}>
+        <div className={juntar(superficie.poco, "flex min-w-0 items-center p-3")}>
           <div className="min-w-0 flex-1">
             <AvisoDeErro erro={leitura.error} />
           </div>
-          <Button type="button" size="sm" variant="outline" className="mt-2 h-8 shrink-0 text-[12px] sm:ml-3 sm:mt-0" onClick={() => void leitura.refetch()}>
-            Tentar de novo
-          </Button>
+          <button type="button" className={juntar(botao.icone, "ml-2")} onClick={() => void leitura.refetch()} aria-label="Tentar de novo" title="Tentar de novo">
+            <RotateCcw className="h-4 w-4" />
+          </button>
         </div>
       )}
       {dados && !temMaterial && !contextoMontado && (
@@ -795,117 +931,48 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
         onIgnorar={(campo) => tirarSugestao(clientId, campo)}
       />
 
-      <Hub
-        id="ctx-marca"
-        titulo="Marca"
-        score={scoreDoGrupo(itens, ["logo", "paleta", "fontes"])}
-        resumo={
-          carregandoKit
-            ? "Lendo a marca..."
-            : [
-                paletaDoKit.length ? `${paletaDoKit.length} ${paletaDoKit.length === 1 ? "cor" : "cores"}` : "sem paleta",
-                RESUMO_DA_LOGO[(item("logo") || { situacao: "falta" }).situacao],
-                fontesDoResumo && fontesDoResumo.situacao !== "carregando" ? fontesDoResumo.detalhe.replace(/\.$/, "") : "",
-              ]
-                .filter(Boolean)
-                .join(" · ")
-        }
-        aberto={hubs.aberto("ctx-marca")}
-        onAlternar={() => hubs.alternar("ctx-marca")}
-        acao={
-          onIrPara ? (
-            <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[12px]" onClick={() => onIrPara("marca")}>
-              Editar
-            </Button>
-          ) : undefined
-        }
-      >
-        <CartaoMarca
-          kit={kit}
-          candidatos={dados ? dados.candidatos_a_logo : []}
-          carregando={carregandoKit}
-          onEditar={onIrPara ? () => onIrPara("marca") : undefined}
-        />
-      </Hub>
+      {/* A parte aberta. Cada uma mantém o id da antiga seção (âncora e testes). */}
+      {aberta === "ctx-marca" && (
+        <section id="ctx-marca" aria-label="Marca" className="min-w-0">
+          <CartaoMarca
+            kit={kit}
+            candidatos={dados ? dados.candidatos_a_logo : []}
+            carregando={carregandoKit}
+            onEditar={onIrPara ? () => onIrPara("marca") : undefined}
+          />
+        </section>
+      )}
 
-      <Hub
-        id="ctx-consolidado"
-        titulo="Contexto consolidado"
-        score={carregandoKit && !kit ? null : consolidado.score}
-        resumo={
-          carregandoKit && !kit
-            ? "Lendo..."
-            : `${consolidado.completos} de ${consolidado.campos.length} campos completos${
-                consolidado.faltas.length ? ` · falta: ${consolidado.faltas.slice(0, 3).map((f) => ROTULO_DO_CAMPO_DO_SCORE[f.chave] || f.chave).join(", ")}` : ""
-              }`
-        }
-        aberto={hubs.aberto("ctx-consolidado")}
-        onAlternar={() => hubs.alternar("ctx-consolidado")}
-      >
-        <CorpoDoConsolidado kit={kit} carregando={carregandoKit} onEditar={onIrPara ? () => onIrPara("marca") : undefined} />
-      </Hub>
+      {aberta === "ctx-consolidado" && (
+        <section id="ctx-consolidado" aria-label="Contexto consolidado" className="min-w-0">
+          <CorpoDoConsolidado kit={kit} carregando={carregandoKit} onEditar={onIrPara ? () => onIrPara("marca") : undefined} />
+        </section>
+      )}
 
-      <Hub
-        id="ctx-referencias"
-        titulo="Referências"
-        score={scoreDoItem(item("referencias"))}
-        resumo={
-          refsAtivas
-            ? refsAtivas.length
-              ? `${refsAtivas.length} em uso pelo diretor de arte · ${(item("referencias") || { detalhe: "" }).detalhe.replace(/\.$/, "")}`
-              : "Nenhuma em uso"
-            : "Lendo..."
-        }
-        aberto={hubs.aberto("ctx-referencias")}
-        onAlternar={() => hubs.alternar("ctx-referencias")}
-      >
-        <GaleriaDeReferencias
-          contextoMontado={contextoMontado}
-          onGerenciar={onIrPara ? () => onIrPara("referencias") : undefined}
-          aoLer={(data) => depoisDeMontar(clientId, data)}
-        />
-      </Hub>
+      {aberta === "ctx-referencias" && (
+        <section id="ctx-referencias" aria-label="Referências" className="min-w-0">
+          <GaleriaDeReferencias
+            contextoMontado={contextoMontado}
+            onGerenciar={onIrPara ? () => onIrPara("referencias") : undefined}
+            aoLer={(data) => depoisDeMontar(clientId, data)}
+          />
+        </section>
+      )}
 
-      <Hub
-        id="ctx-fotos"
-        titulo="Fotos reais"
-        score={scoreDoItem(item("imagens"))}
-        resumo={(item("imagens") || { detalhe: "" }).detalhe}
-        aberto={hubs.aberto("ctx-fotos")}
-        onAlternar={() => hubs.alternar("ctx-fotos")}
-      >
-        <FotosDoCliente onOrganizar={onIrPara ? () => onIrPara("imagens") : undefined} />
-      </Hub>
+      {aberta === "ctx-fotos" && (
+        <section id="ctx-fotos" aria-label="Fotos reais" className="min-w-0">
+          <FotosDoCliente onOrganizar={onIrPara ? () => onIrPara("imagens") : undefined} />
+        </section>
+      )}
 
-      <Hub
-        id="ctx-aprendizados"
-        titulo="O que o painel aprendeu"
-        resumo={aprendizados.data ? resumoDosAprendizados(aprendizadosDoPainel(aprendizados.data)) : aprendizados.isError ? "Não foi possível ler agora" : "Lendo..."}
-        aberto={hubs.aberto("ctx-aprendizados")}
-        onAlternar={() => hubs.alternar("ctx-aprendizados")}
-        acao={hubs.aberto("ctx-aprendizados") ? <SeletorDaOrigem valor={filtroDosAprendizados} onEscolher={setFiltroDosAprendizados} /> : undefined}
-      >
-        <ContextoAprendizados clientId={clientId} filtro={filtroDosAprendizados} onFiltro={setFiltroDosAprendizados} />
-      </Hub>
+      {aberta === "ctx-aprendizados" && (
+        <section id="ctx-aprendizados" aria-label="O que o painel aprendeu" className="min-w-0">
+          <ContextoAprendizados clientId={clientId} filtro={filtroDosAprendizados} onFiltro={setFiltroDosAprendizados} />
+        </section>
+      )}
 
-      <Hub
-        id="ctx-documentos"
-        titulo="Documentos e pendências"
-        score={scoreDoItem(item("documentos"))}
-        resumo={
-          documentos
-            ? `${documentos.length ? `${documentos.length} lido(s), ${docsDeIdentidade} de identidade` : "Nenhum documento em Arquivos"} · ${
-                lacunas.length ? `${lacunas.length} ${lacunas.length === 1 ? "pendência" : "pendências"}` : "nada pendente"
-              }`
-            : leitura.isError
-              ? "Não foi possível ler agora"
-              : "Lendo..."
-        }
-        aberto={hubs.aberto("ctx-documentos")}
-        onAlternar={() => hubs.alternar("ctx-documentos")}
-        ajuda="Envie o manual de marca, o posicionamento ou a apresentação em Arquivos: o agente lê sozinho e aponta o que falta."
-      >
-        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+      {aberta === "ctx-documentos" && (
+        <section id="ctx-documentos" aria-label="Documentos e pendências" className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
           <div className="min-w-0">
             <p className={juntar(texto.rotulo, "mb-1.5")}>Documentos</p>
             {dados && (
@@ -946,8 +1013,10 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
               </ul>
             )}
           </div>
-        </div>
-      </Hub>
+        </section>
+      )}
+
+      {!daColuna && <div className="min-w-0">{children}</div>}
     </div>
   );
 }

@@ -5,7 +5,6 @@ import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { PreencherComIA } from "@/components/sistema";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
-import BotaoComIcone from "@/components/sistema/BotaoComIcone";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { botao, campo, campoTexto, espaco, juntar, lista, texto } from "@/components/sistema/estilos";
 import { chamarIdentidade, type ProjetoDeIdentidade } from "./identidadeApi";
@@ -188,15 +187,10 @@ export default function EtapaPesquisa() {
         ajuda="Junte concorrentes e referências (de qualquer segmento) e escreva o resumo do que a pesquisa mostrou. A pesquisa com IA busca na web e mostra o custo antes; link que a busca não trouxe não aparece. Tudo grava sozinho."
         acoes={
           <>
-            <BotaoComIcone
-              variante="secundario"
-              className="m-1 h-8"
-              icone={trazendo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-              rotulo="Do contexto"
-              aria-label="Trazer as referências do contexto do cliente"
-              onClick={() => void trazerDoContexto()}
-              disabled={trazendo}
-            />
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+            <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} aria-label="Trazer as referências do contexto do cliente" title="Trazer as referências do contexto do cliente" onClick={() => void trazerDoContexto()} disabled={trazendo}>
+              {trazendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            </button>
             <SeletorDoModelo papel="identidade" valor={modeloId} onEscolher={setModeloId} className="max-w-[180px]" />
             <BotaoComCusto
               rotulo="Pesquisar com IA"

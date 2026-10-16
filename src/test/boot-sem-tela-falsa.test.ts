@@ -36,10 +36,10 @@ describe("abertura do painel sem tela falsa", () => {
     expect(v.isMissingFile("Load failed")).toBe(false);
   });
 
-  it("versão nova não recarrega no meio do trabalho: só na abertura ou na próxima troca de tela", () => {
-    expect(refresh).toMatch(/if \(reloadNow && Date\.now\(\) - abertoEm < 8_000\) updateReload\(\);/);
+  it("versão nova não recarrega no meio do trabalho: só na abertura; trocar de tela nunca recarrega (16/10)", () => {
+    expect(refresh).toMatch(/void check\(\(\) => Date\.now\(\) - abertoEm < 8_000\);/);
     expect(refresh).not.toMatch(/if \(updatePending\) updateReload\(\);\s*else void check\(true\);/);
-    expect(refresh).toMatch(/export function atualizarNaTrocaDeTela\(\): boolean/);
-    expect(app).toMatch(/atualizarNaTrocaDeTela\(\);/);
+    expect(refresh).not.toMatch(/atualizarNaTrocaDeTela/);
+    expect(app).not.toMatch(/atualizarNaTrocaDeTela|updateReload|hardRefresh/);
   });
 });

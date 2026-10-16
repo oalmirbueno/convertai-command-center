@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, X } from "lucide-react";
+import { MessageSquare, Pencil, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,9 +92,11 @@ export function FormularioDoBriefing({
             type="button"
             onClick={() => mudar({ produtos: produtos.concat([{ nome: "", por_que: "" }]) })}
             disabled={desabilitado}
-            className="mt-1 inline-flex items-center text-[12px] text-primary hover:underline"
+            className="toque-compacto mt-1 inline-flex h-7 w-7 items-center justify-center rounded-md text-primary hover:bg-muted"
+            aria-label="Outro produto"
+            title="Outro produto"
           >
-            <Plus className="mr-0.5 h-3.5 w-3.5" /> Outro produto
+            <Plus className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
       </div>
@@ -244,12 +246,12 @@ export default function CampanhaBriefing({ campanha, onPedirAoAgente }: { campan
         </dl>
       )}
       <div className="mt-3 flex flex-wrap items-center">
-        <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8" onClick={abrirEdicao}>
-          <Pencil className="mr-1.5 h-3.5 w-3.5" /> {vazio ? "Preencher briefing" : "Editar briefing"}
+        <Button type="button" size="sm" variant="ghost" className="mb-1 mr-1 h-8 w-8 p-0" onClick={abrirEdicao} aria-label={vazio ? "Preencher briefing" : "Editar briefing"} title={vazio ? "Preencher briefing" : "Editar briefing"}>
+          <Pencil className="h-4 w-4" aria-hidden="true" />
         </Button>
         {onPedirAoAgente && (
-          <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 text-primary" onClick={() => onPedirAoAgente("No briefing da campanha, ")}>
-            Pedir ao agente
+          <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 w-8 p-0 text-primary" onClick={() => onPedirAoAgente("No briefing da campanha, ")} aria-label="Pedir ao agente" title="Pedir ao agente">
+            <MessageSquare className="h-4 w-4" aria-hidden="true" />
           </Button>
         )}
       </div>

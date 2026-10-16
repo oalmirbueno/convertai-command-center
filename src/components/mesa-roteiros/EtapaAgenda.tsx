@@ -8,7 +8,7 @@ import { botao, juntar } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { ROTULO_DO_FORMATO, ROTULO_DO_STATUS, modoDoTipo, type LinhaDoRoteiro } from "../../../supabase/functions/_shared/roteiro-modelo";
 import { roteiroDaPeca, usePecasDeVideo, useRoteiros } from "./roteirosApi";
-import { AvisoDoBanco, BlocoRecolhivel, RotuloLargo, SeloDoStatus } from "./Comuns";
+import { AvisoDoBanco, BlocoRecolhivel, SeloDoStatus } from "./Comuns";
 
 /**
  * Etapa 1: a agenda. Lista as peças de vídeo da agenda do cliente (Reels,
@@ -62,13 +62,12 @@ export default function EtapaAgenda({
         acoes={
           <>
             {/* 02/10: sem tema? O roteiro avulso abre com as Ideias com o agente em cima. */}
-            <button type="button" className={juntar(botao.secundario, "mr-1.5")} onClick={onAvulso} aria-label="Ideias de tema com o agente">
-              <Lightbulb className="h-3.5 w-3.5" />
-              <RotuloLargo>Ideias de tema</RotuloLargo>
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+            <button type="button" className={juntar(botao.icone, "mr-0.5")} onClick={onAvulso} aria-label="Ideias de tema com o agente" title="Ideias de tema com o agente">
+              <Lightbulb className="h-4 w-4" />
             </button>
-            <button type="button" className={botao.secundario} onClick={onAvulso} aria-label="Roteiro avulso">
-              <Plus className="h-3.5 w-3.5" />
-              <RotuloLargo>Roteiro avulso</RotuloLargo>
+            <button type="button" className={botao.icone} onClick={onAvulso} aria-label="Roteiro avulso" title="Roteiro avulso">
+              <Plus className="h-4 w-4" />
             </button>
           </>
         }
@@ -103,12 +102,12 @@ export default function EtapaAgenda({
                   <div className="mt-1.5 flex w-full items-center justify-end sm:ml-2 sm:mt-0 sm:w-auto">
                     {r ? <SeloDoStatus status={r.status} /> : <span className="text-[12px] text-muted-foreground">Sem roteiro</span>}
                     {r ? (
-                      <button type="button" className={juntar(botao.secundario, "ml-2 h-8 px-3 text-[12px]")} onClick={() => onAbrirRoteiro(r.id)}>
-                        <FileText className="mr-1 h-3.5 w-3.5" /> Abrir
+                      <button type="button" className={juntar(botao.icone, "ml-2 disabled:opacity-50")} onClick={() => onAbrirRoteiro(r.id)} aria-label="Abrir" title="Abrir">
+                        <FileText className="h-4 w-4" aria-hidden="true" />
                       </button>
                     ) : (
-                      <button type="button" className={juntar(botao.secundario, "ml-2 h-8 px-3 text-[12px] text-primary")} onClick={() => onNovoDaPeca(p.id)}>
-                        <Sparkles className="mr-1 h-3.5 w-3.5" /> Escrever roteiro
+                      <button type="button" className={juntar(botao.icone, "ml-2 text-primary disabled:opacity-50")} onClick={() => onNovoDaPeca(p.id)} aria-label="Escrever roteiro" title="Escrever roteiro">
+                        <Sparkles className="h-4 w-4" aria-hidden="true" />
                       </button>
                     )}
                   </div>

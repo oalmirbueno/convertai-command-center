@@ -692,7 +692,7 @@ function PedidoDaArteRapida({
         {geraJunto ? "Direção e arte em seguida." : "Direção pronta para você conferir e gerar."} Foto real entra como está.
       </p>
       <BotaoComCusto
-        rotulo={<><Wand2 className="mr-1.5 h-4 w-4" />Criar arte</>}
+        rotulo={<><Wand2 className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Criar arte</span></>}
         titulo={aviso("Arte rápida criada")}
         descricao="O diretor de arte lê o pedido, as imagens e os arquivos, com a marca e a campanha, e escreve a direção."
         partes={partes}
@@ -1025,7 +1025,7 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
             </p>
           )}
           <BotaoComCusto
-            rotulo={<><CalendarPlus className="mr-1.5 h-4 w-4" />Entregar de novo</>}
+            rotulo={<><CalendarPlus className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Entregar de novo</span></>}
             titulo={aviso("Entregar de novo")}
             descricao={semLegenda ? "Escreve a legenda (a única parte que usa IA) e entrega pelo fluxo da Agenda, no mesmo item." : "Entrega pelo fluxo da Agenda, no mesmo item. Sem custo de IA."}
             partes={() => (semLegenda ? [{ modeloId: diretor ? diretor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida }] : [])}
@@ -1089,7 +1089,7 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
             </p>
           )}
           <BotaoComCusto
-            rotulo={<><CalendarPlus className="mr-1.5 h-4 w-4" />Confirmar e levar para {data ? dataCurta(data) : "a Agenda"}</>}
+            rotulo={<><CalendarPlus className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Confirmar e levar para {data ? dataCurta(data) : "a Agenda"}</span></>}
             titulo={aviso("Arte na Agenda")}
             descricao={semLegenda ? "Escreve a legenda (a única parte que usa IA), cria o item na data e entrega pelo fluxo da Agenda." : "Cria o item na data e entrega pelo fluxo da Agenda. Sem custo de IA."}
             partes={() => (semLegenda ? [{ modeloId: diretor ? diretor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida }] : [])}

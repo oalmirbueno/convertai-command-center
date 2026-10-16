@@ -70,7 +70,8 @@ describe("nada vaza para o lado nem prende o toque", () => {
     // 16/10/2026: os três momentos saem de um mesmo botão (seletor segunda/quarta/sexta).
     const momentos = central.split('data-botao-do-momento=""').slice(1);
     expect(momentos.length).toBeGreaterThanOrEqual(1);
-    expect(central).toContain('{ moment: "fechamento" as const, curto: "Fechamento"');
+    // 16/10/2026 (rodada 4): pílulas curtas Seg/Qua/Sex, nome completo no title.
+    expect(central).toContain('{ moment: "fechamento" as const, curto: "Sex", label: "Fechamento (sexta)" }');
     for (const trecho of momentos) expect(trecho.slice(0, 700)).toMatch(/className=\{(juntar\()?botao\.discreto/);
   });
 

@@ -18,7 +18,7 @@ import {
   type StatusDoRoteiro,
 } from "../../../supabase/functions/_shared/roteiro-modelo";
 import { atualizarNoCache, chamarRoteiros, mudarStatus, useRoteiros } from "./roteirosApi";
-import { AvisoDoBanco, AvisoDoJevCartao, BlocoRecolhivel, Cabecalho, RotuloLargo, SeloDoStatus } from "./Comuns";
+import { AvisoDoBanco, AvisoDoJevCartao, BlocoRecolhivel, Cabecalho, SeloDoStatus } from "./Comuns";
 
 /**
  * Etapa 3: revisão salva. Versões (cada uma com origem, nota, custo e código),
@@ -144,17 +144,16 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
             )}
             <button
               type="button"
-              className={botao.discreto}
+              className={juntar(botao.icone, "disabled:opacity-50")}
               disabled={!!ocupado}
               aria-label={arquivado ? "Desarquivar" : "Arquivar"}
+              title={arquivado ? "Desarquivar" : "Arquivar"}
               onClick={() => void rodar("arquivar", () => chamarRoteiros("arquivar", { roteiro_id: linha.id, arquivar: !arquivado }), arquivado ? "Roteiro desarquivado" : "Roteiro arquivado")}
             >
-              {arquivado ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
-              <RotuloLargo>{arquivado ? "Desarquivar" : "Arquivar"}</RotuloLargo>
+              {arquivado ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
             </button>
-            <button type="button" className={botao.secundario} onClick={() => onAbrirRoteiro(linha.id, "roteiro")} aria-label="Editar roteiro">
-              <Pencil className="h-3.5 w-3.5" />
-              <RotuloLargo>Editar roteiro</RotuloLargo>
+            <button type="button" className={botao.icone} onClick={() => onAbrirRoteiro(linha.id, "roteiro")} aria-label="Editar roteiro" title="Editar roteiro">
+              <Pencil className="h-4 w-4" />
             </button>
           </div>
         </section>
@@ -170,17 +169,17 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
               versao.numero !== linha.versao_atual && !arquivado && linha.status !== "gravado" ? (
                 <button
                   type="button"
-                  className={botao.secundario}
+                  className={juntar(botao.icone, "disabled:opacity-50")}
                   disabled={!!ocupado}
                   aria-label="Restaurar esta versão"
+                  title="Restaurar esta versão"
                   onClick={() =>
                     void rodar("restaurar", () => chamarRoteiros("versao_restaurar", { roteiro_id: linha.id, versao: versao.numero }), `Versão ${versao.numero} restaurada como nova versão`).then(
                       (r) => r && r.versao && setVendo(r.versao.numero),
                     )
                   }
                 >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  <RotuloLargo>Restaurar esta versão</RotuloLargo>
+                  <RotateCcw className="h-4 w-4" />
                 </button>
               ) : null
             }

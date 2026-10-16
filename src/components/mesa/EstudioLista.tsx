@@ -1,6 +1,25 @@
 import { modoDaPauta } from "./modoDaPauta";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Archive, Camera, Film, Check, ChevronDown, Copy, ImageOff, ListChecks, Loader2, PanelTopClose, PanelTopOpen, Send, Star } from "lucide-react";
+import {
+  Archive,
+  Camera,
+  Check,
+  CheckCircle2,
+  Circle,
+  CircleDashed,
+  CircleDot,
+  Copy,
+  Film,
+  ImageOff,
+  Loader2,
+  PanelTopClose,
+  PanelTopOpen,
+  Send,
+  SquareCheckBig,
+  Star,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DropdownMenu,
@@ -14,6 +33,7 @@ import {
 import { opcoesDaEntrega, type ModoDeEntrega } from "@/lib/mesa/entregaComOpcoes";
 import { TASK_DELIVERY_TYPE_LABELS, type TaskDeliveryType } from "@/lib/taskDeliveryTypes";
 import { dataCurta, rotuloDoMes, textoDoErro } from "@/lib/mesa/api";
+import { botao, juntar } from "@/components/sistema/estilos";
 import { ImagemDaMesa } from "./MesaContexto";
 import { FILTROS_DO_ESTUDIO, passaNoFiltro, situacaoDoItem, type FiltroDoEstudio, type TomDoSelo } from "./EstudioSituacao";
 import { dataLocal, fonteDoArquivo, PROXIMOS_DIAS, ultimasVersoes, type ArteNaAgenda, type ItemDoMes, type Trabalho } from "./useItensDoMes";
@@ -38,10 +58,35 @@ const COR_DO_SELO: Record<TomDoSelo, string> = {
   erro: "bg-destructive/10 text-destructive",
 };
 
-export function SeloDoItem({ tom, children, className = "" }: { tom: TomDoSelo; children: string; className?: string }) {
+const ICONE_DO_SELO: Record<TomDoSelo, typeof Circle> = {
+  neutro: Circle,
+  primario: CircleDot,
+  ok: CheckCircle2,
+  alerta: CircleDashed,
+  erro: TriangleAlert,
+};
+
+/**
+ * Situação do item. 16/10/2026 (dono: "menos texto, só o ícone"): o padrão é
+ * o ícone na cor da situação, sem pílula; o nome fica no title e no leitor de
+ * tela, e a conta "2 de 4" continua à vista como "2/4". `comTexto` volta a
+ * pílula escrita (onde há espaço e o texto é o conteúdo).
+ */
+export function SeloDoItem({ tom, children, className = "", comTexto = false }: { tom: TomDoSelo; children: string; className?: string; comTexto?: boolean }) {
+  if (comTexto) {
+    return (
+      <span className={`inline-flex h-5 max-w-full items-center truncate whitespace-nowrap rounded-full px-2 text-[11px] font-medium ${COR_DO_SELO[tom]} ${className}`}>
+        {children}
+      </span>
+    );
+  }
+  const Icone = ICONE_DO_SELO[tom];
+  const conta = /^(\d+) de (\d+)/.exec(children);
+  const cor = COR_DO_SELO[tom].split(" ").filter((c) => c.indexOf("text-") === 0).join(" ");
   return (
-    <span className={`inline-flex h-5 max-w-full items-center truncate whitespace-nowrap rounded-full px-2 text-[10.5px] font-medium ${COR_DO_SELO[tom]} ${className}`}>
-      {children}
+    <span role="img" aria-label={children} title={children} className={`inline-flex h-4 shrink-0 items-center whitespace-nowrap text-[11px] font-medium ${cor} ${className}`} data-situacao={tom}>
+      <Icone className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      {conta && <span className="ml-0.5 tabular-nums" aria-hidden="true">{conta[1]}/{conta[2]}</span>}
     </span>
   );
 }
@@ -133,13 +178,13 @@ function MenuDeEntregaDaFaixa({ entregar, marcados, aoEntregar }: { entregar: En
         <button
           type="button"
           disabled={!prontas || entregar.ocupado}
-          className="mr-1 flex h-8 items-center rounded-md bg-primary px-2.5 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
+          className="toque-compacto mr-1 flex h-8 min-w-8 items-center justify-center rounded-md bg-primary px-2 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
           title={marcados.length && !prontas ? "Nenhuma das marcadas tem todas as lâminas com arte" : "Entregar as marcadas"}
+          aria-label={`Entregar ${prontas ? `(${prontas})` : ""}`.trim()}
           data-entregar-da-faixa={prontas}
         >
-          {entregar.ocupado ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1 h-3.5 w-3.5" />}
-          Entregar {prontas ? `(${prontas})` : ""}
-          <ChevronDown className="ml-1 h-3.5 w-3.5" />
+          {entregar.ocupado ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
+          {prontas > 0 && <span className="ml-1 tabular-nums" aria-hidden="true">{prontas}</span>}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
@@ -273,7 +318,7 @@ function CartaoDoItem({
         onClick={() => onArquivar(item.id)}
         aria-label={`Arquivar ${item.title}`}
         title="Arquivar: sai da faixa, do mês e da fila (dá para desfazer)"
-        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-md border border-border bg-background/95 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-destructive focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-md bg-background/90 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
         data-arquivar-pauta={item.id}
       >
         <Archive className="h-3.5 w-3.5" />
@@ -437,13 +482,16 @@ export default function EstudioLista({
       {/* À direita, alinhadas: selecionar para arquivar, Arquivados e recolher (quebra para a 2ª linha só se não couber). */}
       <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end">
       {arquivar && !recolhida && !selecionando && itens.length > 0 && (
+        // 16/10/2026 (dono: "Selecionar: só o ícone"): o nome fica no title e no leitor de tela.
         <button
           type="button"
           onClick={() => setSelecionando(true)}
-          className="flex h-8 shrink-0 items-center rounded-md px-2 text-[11.5px] text-muted-foreground hover:bg-secondary hover:text-foreground"
-          title={entregar ? "Marcar várias pautas para entregar ou arquivar de uma vez" : "Marcar várias pautas para arquivar de uma vez"}
+          className={juntar(botao.icone, "h-8 w-8")}
+          aria-label="Selecionar"
+          title={entregar ? "Selecionar: marcar várias pautas para entregar ou arquivar de uma vez" : "Selecionar: marcar várias pautas para arquivar de uma vez"}
+          data-selecionar-pautas=""
         >
-          <ListChecks className="mr-1 h-4 w-4" /> Selecionar
+          <SquareCheckBig className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
       {arquivar && selecionando && (
@@ -457,13 +505,15 @@ export default function EstudioLista({
               sairDaSelecao();
             }}
             disabled={!marcados.length}
-            className="flex h-8 items-center rounded-md bg-destructive px-2.5 text-[11.5px] font-medium text-destructive-foreground disabled:opacity-50"
+            aria-label={`Arquivar ${marcados.length ? `(${marcados.length})` : ""}`.trim()}
+            title="Arquivar as marcadas"
+            className="toque-compacto flex h-8 min-w-8 items-center justify-center rounded-md bg-destructive px-2 text-[12px] font-medium text-destructive-foreground disabled:opacity-50"
           >
-            <Archive className="mr-1 h-3.5 w-3.5" />
-            Arquivar {marcados.length ? `(${marcados.length})` : ""}
+            <Archive className="h-4 w-4" aria-hidden="true" />
+            {marcados.length > 0 && <span className="ml-1 tabular-nums" aria-hidden="true">{marcados.length}</span>}
           </button>
-          <button type="button" onClick={sairDaSelecao} className="ml-1 h-8 rounded-md px-2 text-[11.5px] text-muted-foreground hover:bg-secondary hover:text-foreground">
-            Cancelar
+          <button type="button" onClick={sairDaSelecao} className={juntar(botao.icone, "ml-1")} aria-label="Cancelar a seleção" title="Cancelar a seleção">
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </span>
       )}
@@ -472,7 +522,7 @@ export default function EstudioLista({
         <button
           type="button"
           onClick={() => onRecolher(!recolhida)}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+          className={botao.icone}
           aria-expanded={!recolhida}
           aria-label={recolhida ? "Mostrar pautas" : "Recolher pautas"}
           title={recolhida ? "Mostrar as pautas" : "Recolher as pautas e dar mais altura ao estúdio"}
@@ -487,16 +537,21 @@ export default function EstudioLista({
 
   const avisos = (
     <>
-      {carregando && <p className="pb-2 text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo a agenda…</p>}
-      {!!erro && <p className="mb-2 rounded-lg bg-destructive/10 p-3 text-[12.5px] [overflow-wrap:anywhere]">{textoDoErro(erro)}</p>}
+      {carregando && <p className="pb-2 text-[12px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo a agenda…</p>}
+      {!!erro && (
+        <p className="mb-2 flex min-w-0 items-start text-[12px] text-foreground [overflow-wrap:anywhere]" role="alert">
+          <TriangleAlert className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" aria-hidden="true" />
+          <span className="min-w-0 flex-1">{textoDoErro(erro)}</span>
+        </p>
+      )}
       {!carregando && !erro && itens.length === 0 && !itemFora && (
-        <p className="pb-2 text-[12.5px] leading-relaxed text-muted-foreground">
-          {proximos ? "Nenhum carrossel ou post estático na agenda dos próximos 60 dias." : "Nenhum carrossel ou post estático na agenda deste mês."}{" "}
-          Complete a agenda pela aba Mês.
+        // 16/10/2026 (dono: "menos texto"): uma frase curta; o caminho (aba Mês) fica no title.
+        <p className="pb-2 text-[12px] text-muted-foreground" title="Complete a agenda pela aba Mês">
+          {proximos ? "Nada na agenda dos próximos 60 dias." : "Nada na agenda deste mês."}
         </p>
       )}
       {!carregando && itens.length > 0 && filtrados.length === 0 && !itemFora && (
-        <p className="pb-2 text-[12.5px] leading-relaxed text-muted-foreground">Nada neste filtro.</p>
+        <p className="pb-2 text-[12px] text-muted-foreground">Nada neste filtro.</p>
       )}
     </>
   );

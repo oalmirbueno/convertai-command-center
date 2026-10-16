@@ -400,7 +400,7 @@ describe("tela dos perfis", () => {
   it("a seção Perfis do Instagram mora no Contexto da Mesa, com carga sob demanda", () => {
     const aba = ler("src/components/mesa/AbaContexto.tsx");
     expect(aba).toContain('id="ctx-perfis"');
-    expect(aba).toContain('titulo="Perfis do Instagram"');
+    expect(aba).toContain('rotulo: "Perfis do Instagram"');
     expect(aba).toContain('lazy(() => import("@/components/perfis/PerfisDoInstagram"))');
     for (const p of ["src/components/perfis/PerfisDoInstagram.tsx", "src/components/perfis/PerfilAberto.tsx", "src/components/perfis/AgenteDoPerfil.tsx", "supabase/functions/perfis-instagram/modulos/perfis-instagram.ts"]) {
       const f = ler(p);

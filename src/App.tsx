@@ -1,7 +1,9 @@
 import Mesas from "./pages/Mesas";
 import { Toaster as Sonner } from "@/components/ui/sonner";
-import { lazy, Suspense, useEffect, useRef, type ReactNode } from "react";
-import { atualizarNaTrocaDeTela } from "@/lib/appRefresh";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
+import { agendarPreCargaEmSegundoPlano } from "@/lib/appRefresh";
+import { preCarregarModulo } from "@/lib/lazyComPreCarga";
+import { chaveDaEtapa, MESAS_DO_PAINEL } from "@/lib/mesa/preCarga";
 import DownloadProgressOverlay from "@/components/shared/DownloadProgressOverlay";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
@@ -26,64 +28,80 @@ import { rotaPublicaPorToken } from "@/lib/preCargaDoBoot";
 import { CronometroProvider } from "@/components/cronometro/CronometroProvider";
 import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
 
-const Login = lazy(() => import("@/pages/Login"));
-const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
-const AdminDashboard = lazy(() => import("@/pages/AdminDashboard"));
-const ClientDashboard = lazy(() => import("@/pages/ClientDashboard"));
-const Kanban = lazy(() => import("@/pages/Kanban"));
-const Clients = lazy(() => import("@/pages/Clients"));
-const AdminFiles = lazy(() => import("@/pages/AdminFiles"));
-const AdminApprovals = lazy(() => import("@/pages/AdminApprovals"));
-const ClientDocuments = lazy(() => import("@/pages/ClientDocuments"));
-const ClientApprovals = lazy(() => import("@/pages/ClientApprovals"));
-const AdminRequests = lazy(() => import("@/pages/AdminRequests"));
-const ClientRequests = lazy(() => import("@/pages/ClientRequests"));
-const Team = lazy(() => import("@/pages/Team"));
-const BriefingPublic = lazy(() => import("@/pages/BriefingPublic"));
-const QuizPublicPage = lazy(() => import("@/pages/QuizPublicPage"));
-const AdminBriefings = lazy(() => import("@/pages/AdminBriefings"));
-const Projects = lazy(() => import("@/pages/Projects"));
-const AdminFinanceiro = lazy(() => import("@/pages/AdminFinanceiro"));
+type CarregarModulo = () => Promise<unknown>;
+
+/**
+ * Telas sob demanda com o import() guardado (16/10). O mesmo import() serve o
+ * lazy da rota e a pré-carga em segundo plano (preCargaDaEquipe): depois de
+ * uma publicação os pedaços antigos somem da hospedagem, e a tela que já
+ * estava na memória abre sem depender deles.
+ */
+const IMPORTS_DAS_ROTAS: CarregarModulo[] = [];
+const rotas = {
+  lazy: ((carregar: Parameters<typeof lazy>[0]) => {
+    IMPORTS_DAS_ROTAS.push(carregar);
+    return lazy(carregar);
+  }) as typeof lazy,
+};
+
+const Login = rotas.lazy(() => import("@/pages/Login"));
+const ResetPassword = rotas.lazy(() => import("@/pages/ResetPassword"));
+const AdminDashboard = rotas.lazy(() => import("@/pages/AdminDashboard"));
+const ClientDashboard = rotas.lazy(() => import("@/pages/ClientDashboard"));
+const Kanban = rotas.lazy(() => import("@/pages/Kanban"));
+const Clients = rotas.lazy(() => import("@/pages/Clients"));
+const AdminFiles = rotas.lazy(() => import("@/pages/AdminFiles"));
+const AdminApprovals = rotas.lazy(() => import("@/pages/AdminApprovals"));
+const ClientDocuments = rotas.lazy(() => import("@/pages/ClientDocuments"));
+const ClientApprovals = rotas.lazy(() => import("@/pages/ClientApprovals"));
+const AdminRequests = rotas.lazy(() => import("@/pages/AdminRequests"));
+const ClientRequests = rotas.lazy(() => import("@/pages/ClientRequests"));
+const Team = rotas.lazy(() => import("@/pages/Team"));
+const BriefingPublic = rotas.lazy(() => import("@/pages/BriefingPublic"));
+const QuizPublicPage = rotas.lazy(() => import("@/pages/QuizPublicPage"));
+const AdminBriefings = rotas.lazy(() => import("@/pages/AdminBriefings"));
+const Projects = rotas.lazy(() => import("@/pages/Projects"));
+const AdminFinanceiro = rotas.lazy(() => import("@/pages/AdminFinanceiro"));
 // Frente CFO (30/09): o campo próprio do agente financeiro. Só admin.
-const FinanceiroCFO = lazy(() => import("@/pages/FinanceiroCFO"));
-const AdminComercial = lazy(() => import("@/pages/AdminComercial"));
-const AdminProjection = lazy(() => import("@/pages/AdminProjection"));
-const AdminExecucao = lazy(() => import("@/pages/AdminExecucao"));
-const AdminMetricas = lazy(() => import("@/pages/AdminMetricas"));
-const AdminAds = lazy(() => import("@/pages/AdminAds"));
-const AdminCiclo = lazy(() => import("@/pages/AdminCiclo"));
-const AdminEsteira = lazy(() => import("@/pages/AdminEsteira"));
-const ClientFinanceiro = lazy(() => import("@/pages/ClientFinanceiro"));
-const AdminReports = lazy(() => import("@/pages/AdminReports"));
-const ClientReports = lazy(() => import("@/pages/ClientReports"));
-const TimelinePage = lazy(() => import("@/pages/TimelinePage"));
-const AdminReportCreate = lazy(() => import("@/pages/AdminReportCreate"));
-const ReportDetail = lazy(() => import("@/pages/ReportDetail"));
-const ProfilePage = lazy(() => import("@/pages/ProfilePage"));
-const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
-const AdminViewAsClient = lazy(() => import("@/pages/AdminViewAsClient"));
-const ApiDocs = lazy(() => import("@/pages/ApiDocs"));
-const AdminQuizSubmissions = lazy(() => import("@/pages/AdminQuizSubmissions"));
-const AdminBackfillPage = lazy(() => import("@/pages/AdminBackfillPage"));
-const ClientVaultPage = lazy(() => import("@/pages/ClientVaultPage"));
-const Workspace = lazy(() => import("@/pages/Workspace"));
-const AdminExperience = lazy(() => import("@/pages/AdminExperience"));
-const ClientJourneyUpdates = lazy(() => import("@/pages/ClientJourneyUpdates"));
-const UnsubscribePage = lazy(() => import("@/pages/UnsubscribePage"));
-const FirstAccess = lazy(() => import("@/pages/FirstAccess"));
-const AdminContracts = lazy(() => import("@/pages/AdminContracts"));
-const EditorialCalendar = lazy(() => import("@/pages/EditorialCalendar"));
-const ContractPublic = lazy(() => import("@/pages/ContractPublic"));
+const FinanceiroCFO = rotas.lazy(() => import("@/pages/FinanceiroCFO"));
+const AdminComercial = rotas.lazy(() => import("@/pages/AdminComercial"));
+const AdminProjection = rotas.lazy(() => import("@/pages/AdminProjection"));
+const AdminExecucao = rotas.lazy(() => import("@/pages/AdminExecucao"));
+const AdminMetricas = rotas.lazy(() => import("@/pages/AdminMetricas"));
+const AdminAds = rotas.lazy(() => import("@/pages/AdminAds"));
+const AdminCiclo = rotas.lazy(() => import("@/pages/AdminCiclo"));
+const AdminEsteira = rotas.lazy(() => import("@/pages/AdminEsteira"));
+const ClientFinanceiro = rotas.lazy(() => import("@/pages/ClientFinanceiro"));
+const AdminReports = rotas.lazy(() => import("@/pages/AdminReports"));
+const ClientReports = rotas.lazy(() => import("@/pages/ClientReports"));
+const TimelinePage = rotas.lazy(() => import("@/pages/TimelinePage"));
+const AdminReportCreate = rotas.lazy(() => import("@/pages/AdminReportCreate"));
+const ReportDetail = rotas.lazy(() => import("@/pages/ReportDetail"));
+const ProfilePage = rotas.lazy(() => import("@/pages/ProfilePage"));
+const SettingsPage = rotas.lazy(() => import("@/pages/SettingsPage"));
+const AdminViewAsClient = rotas.lazy(() => import("@/pages/AdminViewAsClient"));
+const ApiDocs = rotas.lazy(() => import("@/pages/ApiDocs"));
+const AdminQuizSubmissions = rotas.lazy(() => import("@/pages/AdminQuizSubmissions"));
+const AdminBackfillPage = rotas.lazy(() => import("@/pages/AdminBackfillPage"));
+const ClientVaultPage = rotas.lazy(() => import("@/pages/ClientVaultPage"));
+const Workspace = rotas.lazy(() => import("@/pages/Workspace"));
+const AdminExperience = rotas.lazy(() => import("@/pages/AdminExperience"));
+const ClientJourneyUpdates = rotas.lazy(() => import("@/pages/ClientJourneyUpdates"));
+const UnsubscribePage = rotas.lazy(() => import("@/pages/UnsubscribePage"));
+const FirstAccess = rotas.lazy(() => import("@/pages/FirstAccess"));
+const AdminContracts = rotas.lazy(() => import("@/pages/AdminContracts"));
+const EditorialCalendar = rotas.lazy(() => import("@/pages/EditorialCalendar"));
+const ContractPublic = rotas.lazy(() => import("@/pages/ContractPublic"));
 // Frente IDV (30/09): página pública do brandbook por link (retrato publicado pela equipe, revogável).
-const BrandbookPublico = lazy(() => import("@/pages/BrandbookPublico"));
-const VotacaoDeNomes = lazy(() => import("@/pages/VotacaoDeNomes"));
-const PropostaPublica = lazy(() => import("@/pages/PropostaPublica"));
-const WorkspaceInboxPublic = lazy(() => import("@/pages/WorkspaceInboxPublic"));
-const OAuthConsent = lazy(() => import("@/pages/OAuthConsent"));
-const MetaOAuthCallback = lazy(() => import("@/pages/MetaOAuthCallback"));
-const MCPConnect = lazy(() => import("@/pages/MCPConnect"));
-const Novidades = lazy(() => import("@/pages/Novidades"));
-const AdminHoras = lazy(() => import("@/pages/AdminHoras"));
+const BrandbookPublico = rotas.lazy(() => import("@/pages/BrandbookPublico"));
+const VotacaoDeNomes = rotas.lazy(() => import("@/pages/VotacaoDeNomes"));
+const PropostaPublica = rotas.lazy(() => import("@/pages/PropostaPublica"));
+const WorkspaceInboxPublic = rotas.lazy(() => import("@/pages/WorkspaceInboxPublic"));
+const OAuthConsent = rotas.lazy(() => import("@/pages/OAuthConsent"));
+const MetaOAuthCallback = rotas.lazy(() => import("@/pages/MetaOAuthCallback"));
+const MCPConnect = rotas.lazy(() => import("@/pages/MCPConnect"));
+const Novidades = rotas.lazy(() => import("@/pages/Novidades"));
+const AdminHoras = rotas.lazy(() => import("@/pages/AdminHoras"));
 // As três mesas baixam antes do clique (painel ocioso, mouse no link) e a
 // etapa que vai abrir baixa junto com a página: src/lib/mesa/preCarga.ts.
 const MesaDoCliente = PaginaMesaDoCliente;
@@ -97,6 +115,33 @@ const MesaIdentidade = PaginaMesaIdentidade;
 const MesaProposta = PaginaMesaProposta;
 const MesaSite = PaginaMesaSite;
 const MesaMotion = PaginaMesaMotion;
+
+const PAGINAS_DAS_MESAS = [
+  PaginaMesaDoCliente, PaginaMesaAds, PaginaMesaFoto, PaginaMesaVideos, PaginaMesaEdicao, PaginaMesaPublicidade,
+  PaginaMesaRoteiros, PaginaMesaIdentidade, PaginaMesaProposta, PaginaMesaSite, PaginaMesaMotion,
+];
+
+/**
+ * O que a equipe baixa em segundo plano depois que o painel abre: todas as
+ * telas das rotas e, para quem usa as mesas, as páginas e as etapas delas
+ * (pelas mesmas chaves do lazyComPreCarga, então a etapa abre sem esqueleto).
+ */
+function preCargaDaEquipe(usaMesas: boolean): CarregarModulo[] {
+  const lista: CarregarModulo[] = IMPORTS_DAS_ROTAS.slice();
+  if (!usaMesas) return lista;
+  for (const pagina of PAGINAS_DAS_MESAS) lista.push(pagina.preCarregar);
+  for (const caminho of Object.keys(MESAS_DO_PAINEL) as Array<keyof typeof MESAS_DO_PAINEL>) {
+    const mesa = MESAS_DO_PAINEL[caminho];
+    for (const etapa of Object.keys(mesa.etapas)) {
+      lista.push(() => preCarregarModulo(chaveDaEtapa(caminho, etapa), mesa.etapas[etapa]));
+    }
+    const pecas = { ...(mesa.sempre || {}), ...(mesa.semCliente || {}) };
+    for (const nome of Object.keys(pecas)) {
+      lista.push(() => preCarregarModulo(`${mesa.prefixo}/${nome}`, pecas[nome]));
+    }
+  }
+  return lista;
+}
 
 // Padrões do painel e o cache da Mesa guardado no navegador: ver
 // src/lib/mesa/cachePersistido.ts (o que vai, por quanto tempo e para quem).
@@ -248,15 +293,17 @@ function ProfileErrorScreen() {
 export function AppRoutes() {
   const { user, profile, loading, profileError } = useAuth();
   const { pathname } = useLocation();
-  // 02/10: versão nova publicada enquanto o painel estava aberto entra na próxima troca de tela, nunca no meio do trabalho.
-  const primeiraTela = useRef(true);
+  // 16/10: trocar de tela NUNCA recarrega o painel ("cliquei no cliente e ele reiniciou"). Versão nova
+  // no meio do uso só acende o ícone do topo (AppLayout); a recarga sai quando a pessoa clica nele.
+  // Equipe logada: com o painel aberto e o navegador ocioso, as telas baixam em segundo plano, para a
+  // navegação não depender dos pedaços desta versão que a próxima publicação apaga (src/lib/appRefresh.ts).
+  const papel = profile?.role || "";
+  const daEquipe = !!user && ["admin", "manager", "design", "traffic"].includes(papel);
+  const usaMesas = ["admin", "manager", "design"].includes(papel);
   useEffect(() => {
-    if (primeiraTela.current) {
-      primeiraTela.current = false;
-      return;
-    }
-    atualizarNaTrocaDeTela();
-  }, [pathname]);
+    if (!daEquipe) return;
+    return agendarPreCargaEmSegundoPlano(() => preCargaDaEquipe(usaMesas));
+  }, [daEquipe, usaMesas]);
   // Link público por token (contrato, briefing, proposta...) não precisa de
   // login: abre sem esperar a sessão, que com o token vencido podia segurar a
   // logo até 8 s. A árvore abaixo é a MESMA com loading verdadeiro ou falso,

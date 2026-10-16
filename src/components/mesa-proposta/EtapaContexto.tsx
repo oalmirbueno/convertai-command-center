@@ -12,7 +12,6 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import Secao from "@/components/sistema/Secao";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
 import { EstadoVazio } from "@/components/sistema/Estados";
-import { RotuloLargo } from "@/components/sistema/BotaoComIcone";
 import { useChaveDeRecolher } from "@/components/sistema/TituloRecolhivel";
 import { botao, campo, campoTexto, foco, juntar, lista, rolagem, texto } from "@/components/sistema/estilos";
 import { gravarEstadoDaTela, useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
@@ -158,9 +157,9 @@ function Reuniao({ proposta, modeloId }: { proposta: Proposta; modeloId: string 
         <>
           <input ref={entrada} type="file" multiple className="hidden" onChange={(e) => void anexar(e.target.files)} accept=".txt,.md,.csv,.tsv,.json,.srt,.vtt,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rtf,.html" />
           {/* Anexar grava uma versão: com nota não salva, salve antes (nada se perde). */}
-          <button type="button" className={botao.secundario} onClick={() => entrada.current && entrada.current.click()} disabled={anexando || mudou} aria-label="Anexar arquivos" title={mudou ? "Salve antes de anexar" : "Anexar arquivos"}>
+          {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+          <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} onClick={() => entrada.current && entrada.current.click()} disabled={anexando || mudou} aria-label="Anexar arquivos" title={mudou ? "Salve antes de anexar" : "Anexar arquivos"}>
             {anexando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
-            <RotuloLargo>Anexar</RotuloLargo>
           </button>
           <BotaoComCusto
             rotulo={
@@ -274,10 +273,8 @@ function AdicionarItem({
   return (
     <Popover open={aberto} onOpenChange={setAberto}>
       <PopoverTrigger asChild>
-        <button type="button" className={botao.secundario} aria-label="Adicionar item" aria-expanded={aberto} data-adicionar-item="">
+        <button type="button" className={juntar(botao.icone, aberto && "bg-muted text-foreground")} aria-label="Adicionar item" title="Adicionar item" aria-expanded={aberto} data-adicionar-item="">
           <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <RotuloLargo>Adicionar</RotuloLargo>
-          <ChevronDown className="ml-1 hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:inline" aria-hidden="true" />
         </button>
       </PopoverTrigger>
       <PopoverContent

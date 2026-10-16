@@ -3,7 +3,6 @@ import { Check, CircleDashed, Loader2, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { useEstimativa } from "@/components/mesa/Custo";
-import BotaoComIcone from "@/components/sistema/BotaoComIcone";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { botao, juntar, lista, texto } from "@/components/sistema/estilos";
 import { textoDoErro, usd } from "@/lib/mesa/api";
@@ -158,7 +157,10 @@ export default function PoucosCliques({ filme }: { filme: Filme }) {
 
   return (
     <>
-      <BotaoComIcone icone={<Wand2 className="h-3.5 w-3.5" />} rotulo="Poucos cliques" className="mb-2 mr-1" onClick={() => setAberta(true)} data-poucos-cliques="" />
+      {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+      <button type="button" className={juntar(botao.icone, "mb-2 mr-1")} aria-label="Poucos cliques" title="Filme em poucos cliques" onClick={() => setAberta(true)} data-poucos-cliques="">
+        <Wand2 className="h-4 w-4" />
+      </button>
       <JanelaCentral
         aberta={aberta}
         onMudar={(v) => !v && !rodando && setAberta(false)}

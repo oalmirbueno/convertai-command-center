@@ -171,18 +171,21 @@ export default function IdentidadeDoCliente({
             <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-5 text-foreground/85">{ident.biography}</p>
           )}
         </div>
-        <div className="ml-3 flex shrink-0 flex-col [&>*+*]:mt-1.5">
+        {/* 16/10/2026 (dono: "ícones, menos texto; passo em cima e ele fala o que é"). */}
+        <div className="ml-3 flex shrink-0 items-center">
           {logo && (
-            <button type="button" onClick={baixarLogo} className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}>
-              <Download className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Logo
+            <button type="button" onClick={baixarLogo} className={botao.icone} aria-label="Baixar a logo" title="Baixar a logo">
+              <Download className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
           <button
             type="button"
             onClick={() => void copiar(textoCompleto, "Identidade")}
-            className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}
+            className={botao.icone}
+            aria-label="Copiar tudo"
+            title="Copiar tudo"
           >
-            <ClipboardCopy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Copiar tudo
+            <ClipboardCopy className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       </div>

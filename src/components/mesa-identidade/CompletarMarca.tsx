@@ -143,8 +143,8 @@ export default function CompletarMarca({ abrirJa = false, onAberto }: { abrirJa?
                 <span className={juntar(texto.auxiliar, "block truncate")}>{i.detalhe}</span>
               </span>
               {!i.tem && i.passo && (
-                <button type="button" className={juntar(botao.discreto, "ml-2 h-8 shrink-0")} onClick={() => setJanela({ passos: [i.passo as PassoId] })} data-completar-item={i.passo}>
-                  <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Completar
+                <button type="button" className={juntar(botao.icone, "ml-2 shrink-0 disabled:opacity-50")} onClick={() => setJanela({ passos: [i.passo as PassoId] })} data-completar-item={i.passo} aria-label="Completar" title="Completar">
+                  <Sparkles className="h-4 w-4" aria-hidden="true" />
                 </button>
               )}
             </li>

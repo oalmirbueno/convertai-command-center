@@ -1,9 +1,8 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, Save } from "lucide-react";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import BarraDeAcoes from "@/components/sistema/BarraDeAcoes";
-import { RotuloLargo } from "@/components/sistema/BotaoComIcone";
-import { botao } from "@/components/sistema/estilos";
+import { botao, juntar } from "@/components/sistema/estilos";
 import { ETAPAS_DO_SITE } from "../../../supabase/functions/_shared/site-metodo";
 
 /**
@@ -11,6 +10,9 @@ import { ETAPAS_DO_SITE } from "../../../supabase/functions/_shared/site-metodo"
  * lugar, no pé da região da etapa, e nunca some por recolher uma seção.
  * À esquerda o estado da etapa (ou o motivo do Seguir desligado); à direita
  * "Voltar" discreto, o "Salvar" da etapa (quando ela tem) e "Seguir: <próxima>".
+ * 16/10/2026 (dono: "deixa só o ícone"): os três são só ícone, sem borda
+ * (seta para trás, disquete, seta para a frente); o nome vai no aria-label e
+ * no title. O Seguir continua verde quando é o próximo passo.
  *
  * Leve: o estado da barra fica aqui, não no MesaSite (nada redesenha a casca,
  * as Etapas nem o diretor a cada tecla), e a etapa entra como `children`, que
@@ -111,31 +113,34 @@ export default function EtapaComBarra({ etapa, onIrPara, children }: { etapa: st
       {children}
       <BarraDeAcoes className="shrink-0 border-t border-border pt-3" inicio={linha ? <span className="block truncate" data-estado-da-etapa="">{linha}</span> : null}>
         {anterior && (
-          <button type="button" className={botao.discreto} onClick={() => onIrPara(anterior.valor)} aria-label={`Voltar: ${anterior.rotulo}`} title={`Voltar: ${anterior.rotulo}`} data-voltar-etapa={anterior.valor}>
-            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
-            <RotuloLargo>Voltar</RotuloLargo>
+          <button type="button" className={botao.icone} onClick={() => onIrPara(anterior.valor)} aria-label={`Voltar: ${anterior.rotulo}`} title={`Voltar: ${anterior.rotulo}`} data-voltar-etapa={anterior.valor}>
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
         {estado.salvar && (
-          <button type="button" className={botao.secundario} disabled={ocupado || !!estado.nadaASalvar} onClick={() => void salvar()} data-salvar-etapa="">
-            {indo === "salvar" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-            Salvar
+          <button
+            type="button"
+            className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")}
+            disabled={ocupado || !!estado.nadaASalvar}
+            onClick={() => void salvar()}
+            aria-label="Salvar"
+            title={estado.nadaASalvar ? "Nada a salvar" : "Salvar a etapa"}
+            data-salvar-etapa=""
+          >
+            {indo === "salvar" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />}
           </button>
         )}
         {proxima && (
           <button
             type="button"
-            className={estado.pendente ? botao.secundario : botao.primario}
+            className={juntar(estado.pendente ? botao.icone : juntar(botao.primario, "w-9 px-0"), "disabled:pointer-events-none disabled:opacity-50")}
             disabled={ocupado || !!estado.motivo}
             onClick={() => void seguir()}
             aria-label={`Seguir: ${proxima.rotulo}`}
-            title={estado.motivo || undefined}
+            title={estado.motivo || `Seguir: ${proxima.rotulo}`}
             data-seguir-etapa={proxima.valor}
           >
-            {indo === "seguir" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-            Seguir
-            <RotuloLargo className="ml-0">: {proxima.rotulo}</RotuloLargo>
-            <ArrowRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
+            {indo === "seguir" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ArrowRight className="h-4 w-4" aria-hidden="true" />}
           </button>
         )}
       </BarraDeAcoes>

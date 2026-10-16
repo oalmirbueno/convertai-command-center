@@ -16,6 +16,7 @@ import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarc
 import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import CascaDaMesa from "@/components/sistema/CascaDaMesa";
 import Etapas from "@/components/sistema/Etapas";
+import { etapasEmIcone } from "@/components/mesa-foto/IconesDasEtapas";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 
@@ -271,7 +272,8 @@ export default function MesaDeVideo({
       marca={clientId && marca ? <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id, filme: null }, true)} /> : null}
       etapas={
         clientId ? (
-          mesa === "videos" ? <NavegacaoVideo etapa={etapa} onEscolher={(v) => mudar({ etapa: v })} /> : <Etapas rotulo={`Etapas da ${titulo}`} numerar itens={etapas.map((e) => ({ valor: e.valor, rotulo: e.rotulo, dica: e.dica }))} valor={etapa} onEscolher={(v) => mudar({ etapa: v })} />
+          // 16/10/2026: etapas só em ícone (padrão das mesas, mesa-foto/IconesDasEtapas.tsx).
+          mesa === "videos" ? <NavegacaoVideo etapa={etapa} onEscolher={(v) => mudar({ etapa: v })} /> : <Etapas rotulo={`Etapas da ${titulo}`} soIcone itens={etapasEmIcone(mesa, etapas.map((e) => ({ valor: e.valor, rotulo: e.rotulo, dica: e.dica })))} valor={etapa} onEscolher={(v) => mudar({ etapa: v })} />
         ) : null
       }
       acoes={

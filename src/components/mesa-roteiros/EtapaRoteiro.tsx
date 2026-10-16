@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, ClipboardCheck, Download, FileText, Loader2, Plus, Save, Trash2, Wand2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Download, FileDown, FileText, Loader2, Plus, Save, SearchCheck, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -29,7 +29,7 @@ import {
   type TipoDeRoteiro,
 } from "../../../supabase/functions/_shared/roteiro-modelo";
 import { atualizarNoCache, chamarRoteiros, gerarRoteiro, roteiroDaPeca, salvarVersao, useBiblioteca, useModelos, usePecasDeVideo, useRoteiros } from "./roteirosApi";
-import { AvisoDoBanco, AvisoDoJevCartao, BlocoRecolhivel, RotuloLargo, SeloDoStatus } from "./Comuns";
+import { AvisoDoBanco, AvisoDoJevCartao, BlocoRecolhivel, SeloDoStatus } from "./Comuns";
 // Frente ROT (30/09): a base "Roteiros validados" (objetivo e modelo) no formulário e no editor.
 import {
   candidatosPorObjetivo,
@@ -635,13 +635,12 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
                 Descartar mudanças
               </button>
             )}
-            <button type="button" className={botao.secundario} onClick={() => onIrPara("revisao", linha.id)} aria-label="Revisão e aprovação">
-              <ClipboardCheck className="h-3.5 w-3.5" />
-              <RotuloLargo>Revisão e aprovação</RotuloLargo>
+            {/* 16/10/2026: só ícone, o mesmo da etapa no cabeçalho (IconesDasEtapas.tsx). */}
+            <button type="button" className={botao.icone} onClick={() => onIrPara("revisao", linha.id)} aria-label="Revisão e aprovação" title="Revisão e aprovação">
+              <SearchCheck className="h-4 w-4" />
             </button>
-            <button type="button" className={botao.secundario} onClick={() => onIrPara("pdf", linha.id)} aria-label="PDF">
-              <FileText className="h-3.5 w-3.5" />
-              <RotuloLargo>PDF</RotuloLargo>
+            <button type="button" className={botao.icone} onClick={() => onIrPara("pdf", linha.id)} aria-label="PDF" title="PDF">
+              <FileDown className="h-4 w-4" />
             </button>
             <button
               type="button"
