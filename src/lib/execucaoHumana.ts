@@ -17,7 +17,8 @@ const PELO_TITULO: Array<[RegExp, string]> = [
   [/\breels?\b/i, "reels"],
   [/v[íi]deo|aftermovie|filmagem|edi[çc][ãa]o/i, "vídeo"],
   [/\bstor(y|ies)\b/i, "stories"],
-  [/\barte|criativo|pe[çc]a/i, "arte"],
+  // "criativos" sozinho não é arte (16/10: "Contratar time de tráfego... criativos" virava arte).
+  [/\barte\b|\bpe[çc]a gr[áa]fica/i, "arte"],
   [/\bpost\b/i, "post"],
   [/landing|p[áa]gina de/i, "página"],
   [/\bsite\b/i, "site"],

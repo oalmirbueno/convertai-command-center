@@ -31,12 +31,18 @@ export default function EvidenciaVisual({ url, nome = "Comprovação", compacto 
     queryFn: async () => {
       if (tipo === "arquivo") {
         const { data: arquivo, error } = await supabase.from("files")
-          .select("file_name,file_url,storage_bucket,storage_path,status,archived_at")
+          .select("file_name,file_url,storage_bucket,storage_path,status,archived_at,mime_type")
           .eq("id", url.slice("aceleriq-file://".length)).single();
         if (error || !arquivo || arquivo.status !== "ready" || arquivo.archived_at) throw new Error("Arquivo indisponível com seu acesso atual");
-        return { href: await resolveFileUrl({ fileUrl: arquivo.file_url, storageBucket: arquivo.storage_bucket, storagePath: arquivo.storage_path, expiresIn: 600 }), nome: arquivo.file_name };
+        // 16/10: nome sem extensão ("Antes de levar o computador…") escondia que era PNG e a
+        // imagem virava ícone de documento; o tipo vem do mime ou do caminho guardado.
+        const temExtensao = /\.[a-z0-9]{2,5}$/i.test(String(arquivo.file_name || ""));
+        const doCaminho = String(arquivo.storage_path || "").match(/\.[a-z0-9]{2,5}$/i)?.[0] || "";
+        const doMime = String((arquivo as { mime_type?: string }).mime_type || "").split("/")[1]?.replace("jpeg", "jpg") || "";
+        const formato = temExtensao ? arquivo.file_name : `${arquivo.file_name}${doCaminho || (doMime ? `.${doMime}` : "")}`;
+        return { href: await resolveFileUrl({ fileUrl: arquivo.file_url, storageBucket: arquivo.storage_bucket, storagePath: arquivo.storage_path, expiresIn: 600 }), nome: arquivo.file_name, formato };
       }
-      return { href: await resolveFileUrl({ fileUrl: url, expiresIn: 600 }), nome: url };
+      return { href: await resolveFileUrl({ fileUrl: url, expiresIn: 600 }), nome: url, formato: url };
     },
   });
   // Miniatura de galeria: prova só em texto (sem arquivo nem link) não vira aviso no meio da lista.
@@ -44,7 +50,7 @@ export default function EvidenciaVisual({ url, nome = "Comprovação", compacto 
   if (isError) return <button onClick={() => void refetch()} className="text-xs text-warning">Não foi possível abrir com seu acesso atual. Tentar novamente</button>;
   const href = tipo === "web" ? url : assinado?.href;
   if (!href) return compacto ? <div className="aspect-square w-full animate-pulse rounded-lg bg-muted/50" aria-label="Carregando comprovação" /> : <p className="text-xs text-muted-foreground">Carregando comprovação…</p>;
-  const formato = assinado?.nome || url;
+  const formato = assinado?.formato || assinado?.nome || url;
   const imagem = /\.(png|jpe?g|webp|gif)(?:[?#]|$)/i.test(formato);
   const arquivo = tipo !== "web" || /\.(png|jpe?g|webp|gif|pdf|mp4|webm|mp3|wav|docx?|xlsx?|pptx?)(?:[?#]|$)/i.test(formato);
   const titulo = nome === "Arquivo da execução" && assinado?.nome ? assinado.nome : nome;
