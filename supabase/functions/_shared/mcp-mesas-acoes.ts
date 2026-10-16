@@ -349,8 +349,11 @@ type FeitoNaMesa = { ref: string | null; resultado: Record<string, unknown> };
  * andamento" e segue em segundo plano (EdgeRuntime.waitUntil). O fim, com o
  * resultado ou o erro, fica na trilha do MCP como `<ferramenta>:concluida` e
  * aparece em aceleriq_mesa_ads_contexto (andamento).
+ *
+ * 3 s e não mais: a entrega da Stop (16/10) levou 7,8 s no handler com 6 s de
+ * espera, e com a entrada do MCP e o gateway passou dos 10 s do Paperclip.
  */
-export const ESPERA_ANTES_DE_SEGUIR_MS = 6_000;
+export const ESPERA_ANTES_DE_SEGUIR_MS = 3_000;
 
 export async function esperarOuSeguir(
   ferramenta: string,

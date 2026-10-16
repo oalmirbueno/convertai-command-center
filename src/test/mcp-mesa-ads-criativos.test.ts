@@ -100,7 +100,7 @@ describe("Mesa Ads pelo MCP: plano, criativos, arte e gestor", () => {
 
   it("o Paperclip desiste em 10 s: o que demora responde em andamento e segue em segundo plano", () => {
     // Plano e criativos levam minutos; o gateway do Paperclip 2026.1012 corta a ferramenta em 10 s.
-    expect(acoes).toContain("export const ESPERA_ANTES_DE_SEGUIR_MS = 6_000;");
+    expect(acoes).toContain("export const ESPERA_ANTES_DE_SEGUIR_MS = 3_000;");
     expect(acoes).toContain("EdgeRuntime");
     expect(acoes).toContain("`${ferramenta}:concluida`");
     for (const nome of ["aceleriq_mesa_ads_plano_gerar", "aceleriq_mesa_ads_criativos_produzir", "aceleriq_mesa_ads_entregar_ao_gestor"]) {
