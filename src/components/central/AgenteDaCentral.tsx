@@ -881,17 +881,16 @@ export default function AgenteDaCentral() {
         type="button"
         onClick={() => void abrir()}
         data-agente-central-botao=""
+        aria-label={selo ? `Atualizar todos: ${selo.texto}` : "Atualizar todos"}
         title={selo ? `Atualizar todos: ${selo.texto}` : "Atualizar o dossiê de todos os clientes ativos"}
-        // Sistema de design (E3, 26/09): mesmo botão do cabeçalho da página; no
-        // celular fica só o ícone (o nome segue para leitor de tela e no title).
-        className={juntar(botao.secundario, "px-2.5 sm:px-3.5")}
+        // 16/10/2026 (dono: "só ícone, sem borda, com o número em cima como notificação").
+        className={juntar(botao.icone, "relative")}
       >
-        {carregandoLista || rodando ? <Loader2 className="h-4 w-4 animate-spin sm:mr-1.5" /> : <Bot className="h-4 w-4 text-primary sm:mr-1.5" />}
-        <span className="sr-only sm:not-sr-only">Atualizar todos</span>
+        {carregandoLista || rodando ? <Loader2 className="h-[18px] w-[18px] animate-spin text-primary" aria-hidden="true" /> : <Bot className="h-[18px] w-[18px] text-primary" aria-hidden="true" />}
         {selo && (
-          <span className={juntar(etiqueta, "ml-2 rounded-full", TOM_DO_SELO[selo.tom])} data-selo-da-rodada="">
-            <span className="sm:hidden">{selo.curto}</span>
-            <span className="hidden sm:inline">{selo.texto}</span>
+          <span className={juntar("absolute -right-1 -top-1 min-w-[16px] rounded-full px-1 text-center text-[9.5px] font-semibold leading-4 tabular-nums", TOM_DO_SELO[selo.tom])} data-selo-da-rodada="">
+            <span aria-hidden="true">{/^\d/.test(selo.curto) ? selo.curto.split(" ")[0] : "•"}</span>
+            <span className="sr-only">{selo.texto}</span>
           </span>
         )}
       </button>

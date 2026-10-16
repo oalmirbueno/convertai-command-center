@@ -159,8 +159,10 @@ describe("Central enxuta (contrato do código)", () => {
   const central = readFileSync(resolve(__dirname, "../..", "src/pages/AdminExperience.tsx"), "utf8");
 
   it("o agente fica no cabeçalho, ao lado do gerador, e não como bloco grande", () => {
-    const cabecalho = central.slice(central.indexOf("Cabeçalho enxuto"), central.indexOf("Hoje, numa faixa só"));
-    expect(cabecalho).toContain("{!cycleReview && <CabecalhoDePagina");
+    // 16/10/2026: cabeçalho com a saudação na linha de estado e ações só com ícone (fora da Revisão).
+    const cabecalho = central.slice(central.indexOf("Cabeçalho enxuto"), central.indexOf("Leitura sem teto"));
+    expect(cabecalho).toContain("{!cycleReview && (() => {");
+    expect(cabecalho).toContain("<CabecalhoDePagina");
     expect(cabecalho).toContain("<AgenteDaCentral />");
     expect(cabecalho).toContain('data-tour="central-gerador"');
   });

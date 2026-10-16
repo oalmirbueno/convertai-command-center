@@ -34,6 +34,8 @@ export interface ItemDaMesa {
   sinais?: SinalDaMesa[];
   /** O resto (base, dados, risco, versão) fica recolhido. */
   detalhes?: ReactNode;
+  /** Nome do recolhido ("Editar texto"); o padrão é "Detalhes". */
+  rotuloDetalhes?: string;
   /** Motivo que impede aprovar agora (o botão fica desligado com o motivo). */
   bloqueioDeAprovar?: string | null;
   podeAjuste?: boolean;
@@ -189,7 +191,7 @@ export default function MesaDeDecisao({ itens, onDecidir, rotulo, inicialId = nu
           </ul>}
           {item.detalhes && <div className="mt-3">
             <button type="button" aria-expanded={abertoDetalhe} onClick={() => setAbertoDetalhe(!abertoDetalhe)} className={juntar("inline-flex items-center rounded text-[12px] font-medium text-muted-foreground hover:text-foreground", foco)}>
-              <ChevronDown className={juntar("mr-1 h-3.5 w-3.5 transition-transform", abertoDetalhe && "rotate-180")} aria-hidden="true" />Detalhes
+              <ChevronDown className={juntar("mr-1 h-3.5 w-3.5 transition-transform", abertoDetalhe && "rotate-180")} aria-hidden="true" />{item.rotuloDetalhes || "Detalhes"}
             </button>
             {abertoDetalhe && <div className="mt-2 text-[12px] text-muted-foreground">{item.detalhes}</div>}
           </div>}

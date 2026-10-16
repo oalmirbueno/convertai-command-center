@@ -25,6 +25,7 @@ import DiaPrioritarioNaCentral from "@/components/dia-prioritario/DiaPrioritario
 import CentralReviewQueue from "@/components/central/CentralReviewQueue";
 import AvisosDePublicacao from "@/components/central/AvisosDePublicacao";
 import MesaDaRevisao from "@/components/central/MesaDaRevisao";
+import MesaDeDecisao, { type ItemDaMesa } from "@/components/decisao/MesaDeDecisao";
 import AgenteDaCentral from "@/components/central/AgenteDaCentral";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { useEstadoDaTela, useRolagemDaTela } from "@/components/central/useEstadoDaTela";
@@ -63,7 +64,7 @@ import {
 } from "@/lib/radarIdeas";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, ArrowUpRight, BadgeDollarSign, BookOpen, CheckCircle2, ChevronDown, HeartPulse, Loader2, Radar, RefreshCw, Send, SlidersHorizontal, Sparkles, Trash2, UserCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowUpRight, BadgeDollarSign, BookOpen, Briefcase, CheckCircle2, ChevronDown, Clock, FileText, Flame, HeartPulse, History as Historico, Inbox, Lightbulb, Loader2, Package, Radar, RefreshCw, Send, SlidersHorizontal, Sparkles, Trash2, UserCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -2268,13 +2269,14 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
 
   // Sistema de design (E3, 26/09; docs/design/SISTEMA.md): as seis abas são
   // Etapas com o número no item, e o que a aba faz mora no "?" ao lado.
+  // 16/10/2026 (dono): abas só com ícone; a aberta mostra o nome, como na Execução.
   const abasDaCentral: ItemDeEtapa[] = [
-    { valor: "carteira", rotulo: "Carteira", contador: healthRows.length },
-    { valor: "perfis", rotulo: "Perfis" },
-    { valor: "avulsos", rotulo: "Avulsos", contador: oneOffClients.length },
-    { valor: "radar", rotulo: "Radar de ideias", contador: allRadarIdeas.length },
-    { valor: "fila", rotulo: "Fila de revisão", contador: draftReports.length },
-    { valor: "historico", rotulo: "Histórico", contador: publishedReports.length },
+    { valor: "carteira", rotulo: "Carteira", icone: <Briefcase className="h-4 w-4" />, contador: healthRows.length },
+    { valor: "perfis", rotulo: "Perfis", icone: <UserCircle className="h-4 w-4" /> },
+    { valor: "avulsos", rotulo: "Avulsos", icone: <Package className="h-4 w-4" />, contador: oneOffClients.length },
+    { valor: "radar", rotulo: "Radar de ideias", icone: <Radar className="h-4 w-4" />, contador: allRadarIdeas.length },
+    { valor: "fila", rotulo: "Fila de revisão", icone: <Inbox className="h-4 w-4" />, contador: draftReports.length },
+    { valor: "historico", rotulo: "Histórico", icone: <Historico className="h-4 w-4" />, contador: publishedReports.length },
   ];
   const ajudaDaAba: Record<string, string> = {
     carteira: "A saúde de cada cliente recorrente e o porquê da nota. Toque em um cliente para agir.",
@@ -2356,38 +2358,38 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       )}
       {/* Cabeçalho enxuto (dono, 26/09): título, "?" com o que a tela faz, a
           hora dos dados e as duas ações. A explicação longa mora no "?". */}
-      {!cycleReview && <CabecalhoDePagina
-        // Título numa linha (28/09): se faltar espaço, reticências do próprio cabeçalho.
-        titulo="Central"
-        ajuda="Aqui você cuida da relação com cada cliente: gera as mensagens, revisa, publica e age nos alertas. Nada desta tela aparece ao cliente."
-        descricao={
-          // Sinal de vida: quando os números foram lidos por último, e ler de novo.
-          <button
-            type="button"
-            onClick={() => void refreshCentral()}
-            title="Ler os dados de novo"
-            className={juntar("inline-flex items-center rounded text-[12px] text-muted-foreground transition-colors hover:text-foreground", foco)}
-          >
-            <RefreshCw className={`mr-1 h-3 w-3 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
-            {refreshing ? "Atualizando..." : `Dados de ${lastSyncLabel}`}
-          </button>
-        }
-        acoes={
-          <>
-            <AgenteDaCentral />
-            <button
-              type="button"
-              data-tour="central-gerador"
-              aria-label="Gerar mensagens de hoje"
-              title="Gerar mensagens de hoje"
-              onClick={() => { setGenClientId(reviewClientId || "__all__"); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); }}
-              className={botao.primario}
-            >
-              <Sparkles className="mr-1.5 h-4 w-4" aria-hidden="true" /><span className="sm:hidden">Gerar</span><span className="hidden sm:inline">Gerar mensagens de hoje</span>
-            </button>
-          </>
-        }
-      />}
+      {!cycleReview && (() => {
+        const todayRitual = ritualMeta(ritualForToday())!;
+        const greeting = new Date().getHours() < 12 ? "Bom dia" : new Date().getHours() < 18 ? "Boa tarde" : "Boa noite";
+        const weekday = new Date().toLocaleDateString("pt-BR", { weekday: "long" });
+        return (
+          <CabecalhoDePagina
+            // 16/10/2026 (dono: "muito poluído, ocupando muita linha"): a saudação vira a linha de
+            // estado do título e as ações viram ícones sem borda; o porquê do ritual fica no "?".
+            titulo="Central"
+            ajuda={<>Aqui você cuida da relação com cada cliente: gera as mensagens, revisa, publica e age nos alertas. Nada desta tela aparece ao cliente. Hoje: {todayRitual.why}.</>}
+            descricao={<span data-faixa-da-central="">{greeting}, {(profile?.full_name || "").split(" ")[0] || "time"} · {weekday}, dia de <span className="font-medium text-primary">{todayRitual.label}</span></span>}
+            acoes={
+              <>
+                <button type="button" onClick={() => void refreshCentral()} aria-label="Atualizar os dados" title={refreshing ? "Atualizando..." : `Dados de ${lastSyncLabel}. Toque para ler de novo`} className={botao.icone}>
+                  <RefreshCw className={`h-[18px] w-[18px] ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
+                </button>
+                <AgenteDaCentral />
+                <button
+                  type="button"
+                  data-tour="central-gerador"
+                  aria-label="Gerar mensagens de hoje"
+                  title="Gerar mensagens de hoje"
+                  onClick={() => { setGenClientId(reviewClientId || "__all__"); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); }}
+                  className={juntar(botao.icone, "text-primary")}
+                >
+                  <Sparkles className="h-[18px] w-[18px]" aria-hidden="true" />
+                </button>
+              </>
+            }
+          />
+        );
+      })()}
       {/* Leitura sem teto que corte (frente CE, 28/09): a Central lê tudo em
           páginas. O aviso só aparece quando uma leitura FALHOU agora (o
           painel tenta de novo sozinho e mantém o que já tinha) ou quando a
@@ -2407,67 +2409,49 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         );
       })()}
 
-      {/* Hoje, numa faixa só (dono, 26/09: "muito texto, muita coisa"): a
-          saudação com o ritual do dia, o porquê no "?", e os números da
-          carteira numa linha, sem caixa por número. Cada número leva à aba
-          onde se age. */}
+      {/* As abas, e o que a aba aberta faz num "?" ao lado (antes era uma
+          linha de texto fixa embaixo). */}
       {!cycleReview && (() => {
-        const todayRitual = ritualMeta(ritualForToday())!;
+        // Os números que pedem ação, como ícone + número na linha das abas (o nome no toque/mouse).
         const stuckApprovals = healthRows.filter((r) => r.alerts.some((a) => a.kind === "aprovacao")).length;
         const financialAlerts = healthRows.filter((r) => r.alerts.some((a) => a.kind === "financeiro")).length;
-        const greeting = new Date().getHours() < 12 ? "Bom dia" : new Date().getHours() < 18 ? "Boa tarde" : "Boa noite";
-        const weekday = new Date().toLocaleDateString("pt-BR", { weekday: "long" });
-        const numeros: { chave: string; valor: number; rotulo: string; dica: string; cor: string; tab: string }[] = [
-          ...(stuckApprovals > 0 ? [{ chave: "aprovacoes", valor: stuckApprovals, rotulo: stuckApprovals === 1 ? "aprovação parada" : "aprovações paradas", dica: "Toque para ver quem cobrar", cor: "text-warning", tab: "carteira" }] : []),
-          ...(financialAlerts > 0 ? [{ chave: "pagamentos", valor: financialAlerts, rotulo: financialAlerts === 1 ? "pagamento vencido" : "pagamentos vencidos", dica: "Toque para ver", cor: "text-destructive", tab: "carteira" }] : []),
-          ...(opportunities.length > 0 ? [{ chave: "oportunidades", valor: opportunities.length, rotulo: opportunities.length === 1 ? "oportunidade" : "oportunidades", dica: "Ideias para vender mais: toque para abrir o Radar", cor: "text-info", tab: "radar" }] : []),
-          { chave: "saudaveis", valor: healthy, rotulo: "saudáveis", dica: "Clientes com nota boa", cor: "text-success", tab: "carteira" },
-          { chave: "atencao", valor: attention, rotulo: "em atenção", dica: "Clientes que pedem cuidado", cor: "text-warning", tab: "carteira" },
-          { chave: "risco", valor: risk, rotulo: "risco alto", dica: "Clientes em risco", cor: "text-destructive", tab: "carteira" },
-          { chave: "rascunhos", valor: draftReports.length, rotulo: draftReports.length === 1 ? "rascunho na fila" : "rascunhos na fila", dica: "Esperando a sua revisão", cor: "text-primary", tab: "fila" },
-          { chave: "pulsos", valor: pulseAnswers, rotulo: "pulsos", dica: "Pulsos respondidos pelos clientes", cor: "text-info", tab: "radar" },
-        ];
+        const numeros = [
+          { chave: "risco", valor: risk, rotulo: "clientes em risco alto", icone: <Flame className="h-3.5 w-3.5" />, cor: "text-destructive", tab: "carteira" },
+          { chave: "atencao", valor: attention, rotulo: "clientes em atenção", icone: <AlertTriangle className="h-3.5 w-3.5" />, cor: "text-warning", tab: "carteira" },
+          { chave: "aprovacoes", valor: stuckApprovals, rotulo: stuckApprovals === 1 ? "aprovação parada" : "aprovações paradas", icone: <Clock className="h-3.5 w-3.5" />, cor: "text-warning", tab: "carteira" },
+          { chave: "pagamentos", valor: financialAlerts, rotulo: financialAlerts === 1 ? "pagamento vencido" : "pagamentos vencidos", icone: <BadgeDollarSign className="h-3.5 w-3.5" />, cor: "text-destructive", tab: "carteira" },
+          { chave: "rascunhos", valor: draftReports.length, rotulo: draftReports.length === 1 ? "rascunho na fila" : "rascunhos na fila", icone: <FileText className="h-3.5 w-3.5" />, cor: "text-primary", tab: "fila" },
+          { chave: "oportunidades", valor: opportunities.length, rotulo: opportunities.length === 1 ? "oportunidade" : "oportunidades", icone: <Lightbulb className="h-3.5 w-3.5" />, cor: "text-info", tab: "radar" },
+        ].filter((n) => n.valor > 0);
         return (
-          <div className="flex min-w-0 flex-col xl:flex-row xl:items-center xl:justify-between" data-faixa-da-central="">
-            <div className="flex min-w-0 items-center xl:mr-6">
-              <p className={juntar(texto.corpo, "min-w-0")}>
-                {greeting}, {(profile?.full_name || "").split(" ")[0] || "time"}. Hoje é {weekday}: dia de <span className="font-medium text-primary">{todayRitual.label}</span>.
-              </p>
-              <AjudaRecolhida className="ml-1.5" rotulo="Por que este ritual hoje">
-                {todayRitual.why}. Use &quot;Gerar mensagens de hoje&quot;, revise cliente por cliente e publique. Os números ao lado levam direto à aba onde se age.
-              </AjudaRecolhida>
-            </div>
-            {/* No celular os números ficam numa linha que corre para o lado (sem ocupar duas linhas de toque). */}
-            <div className="scrollbar-hidden -mx-1.5 mt-1.5 flex min-w-0 items-center overflow-x-auto overscroll-x-contain sm:flex-wrap sm:overflow-visible xl:mt-0 xl:justify-end" data-fichas-da-central="">
-              {numeros.map((f) => (
-                <button
-                  key={f.chave}
-                  type="button"
-                  title={f.dica}
-                  onClick={() => setActiveTab(f.tab)}
-                  className={juntar("inline-flex h-7 shrink-0 items-center whitespace-nowrap rounded px-1.5 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", foco)}
-                >
-                  <span className={`mr-1 font-semibold tabular-nums ${f.cor}`}>{f.valor}</span>
-                  {f.rotulo}
-                </button>
-              ))}
-            </div>
+          <div className="-mx-1 flex min-w-0 items-center border-b border-border pb-1">
+            <Etapas
+              soIcone
+              rotulo="Abas da Central"
+              itens={abasDaCentral.map((a) => ({ ...a, ajuda: ajudaDaAba[a.valor] }))}
+              valor={activeTab}
+              onEscolher={setActiveTab}
+              className="min-w-0 flex-1"
+            />
+            {numeros.length > 0 && (
+              <div className="ml-2 flex shrink-0 items-center" data-fichas-da-central="">
+                {numeros.map((f) => (
+                  <button
+                    key={f.chave}
+                    type="button"
+                    title={`${f.valor} ${f.rotulo}`}
+                    aria-label={`${f.valor} ${f.rotulo}`}
+                    onClick={() => setActiveTab(f.tab)}
+                    className={juntar("inline-flex h-8 shrink-0 items-center rounded-full px-2 text-[12px] font-semibold tabular-nums transition-colors hover:bg-muted", f.cor, foco)}
+                  >
+                    <span className="mr-1 inline-flex" aria-hidden="true">{f.icone}</span>{f.valor}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         );
       })()}
-
-      {/* As abas, e o que a aba aberta faz num "?" ao lado (antes era uma
-          linha de texto fixa embaixo). */}
-      {!cycleReview && (
-        <Etapas
-          rotulo="Abas da Central"
-          itens={abasDaCentral}
-          valor={activeTab}
-          onEscolher={setActiveTab}
-          className="-mx-1 border-b border-border"
-          depois={<AjudaRecolhida className="ml-1 mr-1" rotulo="O que esta aba faz" lado="bottom">{ajudaDaAba[activeTab]}</AjudaRecolhida>}
-        />
-      )}
 
       {/* Do notebook para cima a aba ocupa a altura da janela e rola por
           dentro (a posição fica guardada por aba); no celular a página rola. */}
@@ -2672,20 +2656,21 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                               className={`relative flex min-w-0 flex-wrap items-center rounded-lg px-2 py-2.5 transition-colors ${quando.destaque ? "bg-primary/[0.07]" : "hover:bg-muted/50"}`}
                             >
                               <div className="w-full min-w-0 sm:mr-3 sm:w-auto sm:flex-1">
-                                <div className="flex min-w-0 flex-wrap items-center">
+                                <div className="flex min-w-0 flex-wrap items-center" title={`${r.cadence} · ${r.why}`}>
                                   <p className="text-[13px] font-medium leading-tight text-foreground">{r.label}</p>
                                   {quando.etiqueta && <span className={juntar(etiqueta, "ml-2", quando.cls)}>{quando.etiqueta}</span>}
                                 </div>
-                                <p className={juntar(texto.auxiliar, "mt-0.5 truncate")} title={`${r.cadence} · ${r.why}`}>{r.cadence} · {r.why}</p>
                               </div>
                               <div className="mt-2 flex w-full min-w-0 items-center justify-between sm:mt-0 sm:w-auto sm:justify-end">
                                 <span className={juntar(etiqueta, "mr-2", status.cls)}>{status.label}</span>
                                 <button
                                   type="button"
                                   onClick={() => { setGenClientId(client.id); setGenRitual(r.value); setGenPreviews(null); setGeneratorOpen(true); }}
-                                  className={quando.destaque ? botao.primario : botao.secundario}
+                                  aria-label={`Gerar agora: ${r.label}`}
+                                  title={`Gerar ${r.label} agora`}
+                                  className={juntar("inline-flex h-7 items-center rounded-md px-2 text-[12px] font-medium transition-colors", quando.destaque ? "text-primary hover:bg-primary/10" : "text-muted-foreground hover:bg-muted hover:text-foreground", foco)}
                                 >
-                                  Gerar agora
+                                  <Sparkles className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Gerar
                                 </button>
                               </div>
                             </li>
@@ -3098,110 +3083,69 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                   ) : rascunhosVisiveis.length === 0 ? (
                     <EstadoVazio compacto titulo="Fila vazia." descricao={`Use "Gerar mensagens de hoje" para criar os rituais do dia com os dados de cada cliente.`} />
                   ) : (
-                    <ul className="divide-y divide-border border-y border-border">
-                      {rascunhosVisiveis.map((r: any) => {
+                    // 16/10/2026 (dono): a fila de mensagens no mesmo formato da mesa de decisão.
+                    <MesaDeDecisao
+                      rotulo="Mensagens geradas"
+                      onDecidir={async () => false}
+                      vazio="Use o ícone de gerar mensagens para criar os rituais do dia."
+                      itens={rascunhosVisiveis.map((r: any) => {
                         const meta = ritualMeta(r.metrics?.ritual_type);
-                        const open = expandedDraft === r.id;
                         const edits = draftEdits[r.id] || { summary: r.summary || "", next_steps: r.next_steps || "" };
                         const modelo = (r.metrics as any)?.model;
-                        return (
-                          <li key={r.id} className="min-w-0">
-                            <button type="button" aria-expanded={open} onClick={() => setExpandedDraft(open ? null : r.id)} className={linhaDeLista}>
-                              <span className="mr-3 min-w-0 flex-1">
-                                <span className="flex min-w-0 items-center">
-                                  <span className="min-w-0 truncate text-[13px] text-foreground">{r.title}</span>
-                                  {meta && <span className={juntar(etiqueta, "ml-2 hidden bg-primary/10 text-primary sm:inline-flex")}>{meta.label}</span>}
-                                </span>
-                                <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
-                                  {r.client?.company_name || r.client?.full_name} · {new Date(r.created_at).toLocaleDateString("pt-BR")}
-                                </span>
-                              </span>
-                              <span className="shrink-0 text-[12px] text-muted-foreground">{open ? "Fechar" : "Revisar"}</span>
-                              <ChevronDown className={`ml-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
-                            </button>
-                            {open && (
-                              <div className="space-y-3 pb-4 pl-1 pr-1 pt-1">
-                                {meta && (
-                                  <div className="flex min-w-0 items-center">
-                                    <p className={juntar(texto.auxiliar, "min-w-0 truncate")}>{meta.label} · {meta.cadence}{modelo ? ` · IA (${rotuloDoModelo(modelo)})` : ""}</p>
-                                    <AjudaRecolhida className="ml-1.5" rotulo="Por que este rascunho existe">
-                                      Por que este rascunho existe: {meta.why}. Cadência: {meta.cadence}. Gerado com os dados reais do painel deste cliente{modelo ? ` pela IA (${rotuloDoModelo(modelo)})` : ""}.
-                                    </AjudaRecolhida>
-                                  </div>
-                                )}
-                                {Array.isArray((r.metrics as any)?.alertas) && (r.metrics as any).alertas.length > 0 && (
-                                  <div className="rounded-md bg-warning/10 px-3 py-2">
-                                    <p className="flex items-center text-[12px] font-medium text-warning">
-                                      Avisos para a equipe
-                                      <AjudaRecolhida className="ml-1" rotulo="Sobre os avisos">O que faltou no painel, reforços e modelo. Nada disso vai ao cliente.</AjudaRecolhida>
-                                    </p>
-                                    <ul className="mt-0.5 space-y-0.5">{(r.metrics as any).alertas.map((a: string, i: number) => <li key={i} className="text-[12px] leading-snug text-foreground/85">• {a}</li>)}</ul>
-                                  </div>
-                                )}
-                                <PromessasDoRascunho metricas={r.metrics} />
-                                <CampoDeFormulario rotulo="Mensagem ao cliente (resultado explicado)">
-                                  <textarea
-                                    value={edits.summary}
-                                    onChange={(e) => setDraftEdits((prev) => ({ ...prev, [r.id]: { ...edits, summary: e.target.value } }))}
-                                    rows={4}
-                                    className={juntar(campoTexto, "resize-y")}
-                                  />
-                                </CampoDeFormulario>
-                                <CampoDeFormulario rotulo="Próxima etapa">
-                                  <textarea
-                                    value={edits.next_steps}
-                                    onChange={(e) => setDraftEdits((prev) => ({ ...prev, [r.id]: { ...edits, next_steps: e.target.value } }))}
-                                    rows={2}
-                                    className={juntar(campoTexto, "min-h-[60px] resize-y")}
-                                  />
-                                </CampoDeFormulario>
-                                <div className={grupoDeBotoes}>
-                                  {isAdmin && (
-                                    <button
-                                      type="button"
-                                      onClick={() => publishDraft(r, "grupo")}
-                                      disabled={rascunhoEmVoo !== null}
-                                      className={botao.primario}
-                                      title="Registra que a mensagem foi enviada no grupo: entra no histórico, no dossiê e marca o ritual no Ciclo"
-                                    >
-                                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /> Enviei no grupo
-                                    </button>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() => copyText(edits.summary || r.summary || "", "Mensagem copiada. É só colar no grupo.")}
-                                    className={botao.secundario}
-                                  >
-                                    <Send className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /> Copiar para o grupo
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => void aprimorarRascunho(r)}
-                                    disabled={aprimorando !== null}
-                                    className={botao.secundario}
-                                    title="A IA relê os fatos de agora, mantém o que está certo, completa o que falta e separa o próximo passo"
-                                  >
-                                    <Sparkles className={`mr-1.5 h-3.5 w-3.5 shrink-0 ${aprimorando === r.id ? "animate-pulse" : ""}`} aria-hidden="true" /> {aprimorando === r.id ? "Aprimorando…" : "Aprimorar com IA"}
-                                  </button>
-                                  <button type="button" onClick={() => saveDraftEdits(r)} className={botao.discreto}>
-                                    Salvar edição
-                                  </button>
-                                  {/* O que é raro fica no "..." (28/09: barra de no máximo duas linhas). */}
-                                  <MenuMais
-                                    rotulo="Mais ações do rascunho"
-                                    itens={[
-                                      isAdmin && { rotulo: "Publicar no portal", icone: <ArrowUpRight className="h-3.5 w-3.5" />, aoEscolher: () => publishDraft(r), desativado: rascunhoEmVoo !== null },
-                                      { rotulo: "Abrir completo", aoEscolher: () => navigate(`/relatorios/${r.id}`) },
-                                      isAdmin && { rotulo: "Descartar", icone: <Trash2 className="h-3.5 w-3.5" />, aoEscolher: () => deleteDraft(r), perigo: true, desativado: rascunhoEmVoo !== null },
-                                    ]}
-                                  />
-                                </div>
-                              </div>
-                            )}
-                          </li>
-                        );
+                        const alertas: string[] = Array.isArray((r.metrics as any)?.alertas) ? (r.metrics as any).alertas : [];
+                        const nome = r.client?.company_name || r.client?.full_name || "Cliente";
+                        const item: ItemDaMesa = {
+                          id: r.id,
+                          tipo: meta ? meta.label : "Mensagem",
+                          cliente: nome,
+                          avatar: <FotoDoCliente nome={nome} foto={null} tamanho="sm" />,
+                          titulo: r.title,
+                          mensagem: edits.summary || r.summary || "",
+                          passo: edits.next_steps || r.next_steps || null,
+                          sinais: [
+                            { icone: <Clock className="h-3 w-3" />, texto: new Date(r.created_at).toLocaleDateString("pt-BR") },
+                            ...(modelo ? [{ icone: <Sparkles className="h-3 w-3" />, texto: rotuloDoModelo(modelo) }] : []),
+                            ...(alertas.length ? [{ icone: <AlertTriangle className="h-3 w-3" />, texto: `${alertas.length} ${alertas.length === 1 ? "aviso para a equipe" : "avisos para a equipe"}`, tom: "aviso" as const }] : []),
+                          ],
+                          rotuloDetalhes: "Editar texto",
+                          detalhes: (
+                            <div className="space-y-3 text-foreground">
+                              {alertas.length > 0 && <ul className="space-y-0.5 text-[12px] text-warning">{alertas.map((a, i) => <li key={i}>• {a}</li>)}</ul>}
+                              <PromessasDoRascunho metricas={r.metrics} />
+                              <CampoDeFormulario rotulo="Mensagem ao cliente">
+                                <textarea value={edits.summary} onChange={(e) => setDraftEdits((prev) => ({ ...prev, [r.id]: { ...edits, summary: e.target.value } }))} rows={5} className={juntar(campoTexto, "resize-y")} />
+                              </CampoDeFormulario>
+                              <CampoDeFormulario rotulo="Próxima etapa">
+                                <textarea value={edits.next_steps} onChange={(e) => setDraftEdits((prev) => ({ ...prev, [r.id]: { ...edits, next_steps: e.target.value } }))} rows={2} className={juntar(campoTexto, "min-h-[60px] resize-y")} />
+                              </CampoDeFormulario>
+                              <div className="flex justify-end"><button type="button" onClick={() => saveDraftEdits(r)} className={botao.secundario}>Salvar edição</button></div>
+                            </div>
+                          ),
+                          podeAjuste: false,
+                          podeRejeitar: false,
+                          acaoPrincipal: isAdmin
+                            ? { rotulo: "Enviei no grupo", icone: <CheckCircle2 className="h-4 w-4" />, aoClicar: () => { if (rascunhoEmVoo === null) void publishDraft(r, "grupo"); } }
+                            : { rotulo: "Copiar", icone: <Send className="h-4 w-4" />, aoClicar: () => copyText(edits.summary || r.summary || "", "Mensagem copiada. É só colar no grupo.") },
+                          extras: (
+                            <>
+                              {isAdmin && <button type="button" onClick={() => copyText(edits.summary || r.summary || "", "Mensagem copiada. É só colar no grupo.")} aria-label="Copiar para o grupo" title="Copiar para o grupo" className={juntar(botao.icone, "h-11 w-11")}><Send className="h-4 w-4" aria-hidden="true" /></button>}
+                              <button type="button" onClick={() => void aprimorarRascunho(r)} disabled={aprimorando !== null} aria-label="Aprimorar com IA" title="Aprimorar com IA: relê os fatos de agora e completa o que falta" className={juntar(botao.icone, "h-11 w-11")}>
+                                <Sparkles className={`h-4 w-4 ${aprimorando === r.id ? "animate-pulse text-primary" : ""}`} aria-hidden="true" />
+                              </button>
+                              <MenuMais
+                                rotulo="Mais ações do rascunho"
+                                itens={[
+                                  isAdmin && { rotulo: "Publicar no portal", icone: <ArrowUpRight className="h-3.5 w-3.5" />, aoEscolher: () => publishDraft(r), desativado: rascunhoEmVoo !== null },
+                                  { rotulo: "Abrir completo", aoEscolher: () => navigate(`/relatorios/${r.id}`) },
+                                  isAdmin && { rotulo: "Descartar", icone: <Trash2 className="h-3.5 w-3.5" />, aoEscolher: () => deleteDraft(r), perigo: true, desativado: rascunhoEmVoo !== null },
+                                ]}
+                              />
+                            </>
+                          ),
+                        };
+                        return item;
                       })}
-                    </ul>
+                    />
                   )}
                 </Secao>}
               </div>
