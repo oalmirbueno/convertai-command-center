@@ -22,6 +22,7 @@ import { listInWords, readableFileName, readableProjectName } from "@/lib/client
 import { buildGroupMessageText, type GroupMessageContext } from "@/lib/groupMessage";
 import DossieDoCliente from "@/components/admin/DossieDoCliente";
 import DiaPrioritarioNaCentral from "@/components/dia-prioritario/DiaPrioritarioNaCentral";
+import RadarDeIdeias from "@/components/central/RadarDeIdeias";
 import CentralReviewQueue from "@/components/central/CentralReviewQueue";
 import AvisosDePublicacao from "@/components/central/AvisosDePublicacao";
 import MesaDaRevisao from "@/components/central/MesaDaRevisao";
@@ -39,6 +40,7 @@ import { lerDossiesDaCarteira, rotuloDoDossie, type DossieDoCliente as DossieGer
 import { lerMovimentos, movimentosComoFatos } from "@/lib/movimentos";
 import { ehEntregue } from "@/lib/contextoDaCentral";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
+import { resolveFileUrl } from "@/lib/fileUrls";
 import { useFotosDosClientes } from "@/hooks/useFotosDosClientes";
 import { useCentralReviewPendentes } from "@/hooks/useCentralReviewPendentes";
 import { buscarTodas } from "@/lib/buscaCompleta";
@@ -226,6 +228,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   useRolagemDaTela(guardar("rolagem"), raizDaCentral);
   /** Ideias geradas com IA e busca na web, por cliente. */
   const [aiIdeas, setAiIdeas] = useEstadoDaTela<Record<string, RadarIdea[]>>(guardar("ideias-ia"), {}, ehObjeto);
+  // 16/10/2026: versões aplicadas na conversa com o agente, por id, por cima da ideia original.
+  const [ideiasEvoluidas, setIdeiasEvoluidas] = useEstadoDaTela<Record<string, RadarIdea>>(guardar("ideias-evoluidas"), {}, ehObjeto);
   const [aiClientId, setAiClientId] = useEstadoDaTela<string>(guardar("radar-cliente"), "", ehTexto);
   const [aiLoading, setAiLoading] = useState(false);
   /** Prévia aberta da mensagem do grupo (ver antes de copiar). */
@@ -993,9 +997,40 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
 
   // IA na frente, playbook depois. É esta lista que a tela e as mensagens usam.
   const allRadarIdeas = useMemo<RadarIdea[]>(
-    () => [...Object.values(aiIdeas).flat(), ...opportunities],
-    [aiIdeas, opportunities],
+    () => [...Object.values(aiIdeas).flat(), ...opportunities].map((idea) => ideiasEvoluidas[idea.id] || idea),
+    [aiIdeas, opportunities, ideiasEvoluidas],
   );
+
+  // 16/10/2026 (dono: "radar com imagens"): até 4 imagens reais recentes de cada cliente
+  // que tem ideia, em miniatura assinada. Só lê com a aba do Radar aberta.
+  const clientesDoRadar = useMemo(() => Array.from(new Set(allRadarIdeas.map((i) => i.id.split(":")[0]))).sort(), [allRadarIdeas]);
+  const { data: imagensDoRadar = {} } = useQuery({
+    queryKey: ["exp-radar-imagens", clientesDoRadar.join(",")],
+    enabled: activeTab === "radar" && clientesDoRadar.length > 0,
+    staleTime: 10 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("files")
+        .select("client_id, file_url, storage_bucket, storage_path, mime_type, created_at")
+        .in("client_id", clientesDoRadar)
+        .like("mime_type", "image/%")
+        .eq("status", "ready")
+        .is("archived_at", null)
+        .order("created_at", { ascending: false })
+        .limit(clientesDoRadar.length * 12);
+      if (error) throw error;
+      const porCliente: Record<string, any[]> = {};
+      for (const f of data || []) {
+        const lista = (porCliente[f.client_id] ||= []);
+        if (lista.length < 4) lista.push(f);
+      }
+      const saida: Record<string, string[]> = {};
+      await Promise.all(Object.entries(porCliente).map(async ([id, arquivos]) => {
+        const urls = await Promise.all(arquivos.map((f) => resolveFileUrl({ fileUrl: f.file_url, storageBucket: f.storage_bucket, storagePath: f.storage_path, miniatura: true }).catch(() => "")));
+        saida[id] = urls.filter(Boolean);
+      }));
+      return saida;
+    },
+  });
 
   /**
    * Gera as ideias do mês com IA e busca na web, a partir do contexto real do
@@ -2947,102 +2982,23 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         {/* ── Radar do mês ── */}
         {activeTab === "radar" && (
           <RegiaoRolavel modo="lg" rotulo="Radar de ideias" memoria="central:radar" className="lg:pb-4 lg:pr-1">
-            <Secao
-              titulo="Radar de ideias"
-              descricao={opportunities.length > 0 ? `${allRadarIdeas.length} ${allRadarIdeas.length === 1 ? "ideia" : "ideias"}` : undefined}
-              ajuda="O Radar é o ritual de antecipação da carteira recorrente: uma vez por mês a Aceleriq chega com uma ideia de diferenciação que o cliente até já pensou em fazer e nunca executou. Cada ideia carrega o momento real dele (frentes, materiais recentes, publicações, Pulso, crescimento medido). A faixa de valor e o serviço avulso aparecem só para a equipe e nunca entram na mensagem que o cliente recebe: para ele é ideia, não proposta comercial. A IA lê o contexto real do cliente e busca tendências do nicho antes de propor."
-              // Gerador com IA (ideias do nicho, com busca na web) na linha do
-              // título em toda largura (28/09: nada de linha própria para seletor).
-              acao={opportunities.length > 0 ? controlesDoRadar("max-w-[180px] sm:max-w-[240px]") : undefined}
-            >
-              {opportunities.length === 0 ? (
-                <EstadoVazio
-                  icone={<Radar className="h-5 w-5" />}
-                  titulo="Nenhuma ideia no radar agora."
-                  descricao="As ideias do mês aparecem aqui por cliente."
-                />
-              ) : (
-                <ul className="lista-longa divide-y divide-border border-y border-border">
-                  {allRadarIdeas.map((idea) => {
-                    const lens = RADAR_LENSES[idea.lens];
-                    const [low, high] = idea.internal.range;
-                    return (
-                      <li key={idea.id} className="flex min-w-0 py-4 pl-1 pr-1">
-                        <span className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-info/10 text-info" aria-hidden="true">
-                          <Radar className="h-4 w-4" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex min-w-0 flex-wrap items-center">
-                            <span className={juntar(etiqueta, "mr-2 bg-primary/10 text-primary")}>
-                              {idea.source === "ia" ? "IA + busca na web" : lens.label}
-                            </span>
-                            <p className="min-w-0 text-[13px] font-medium text-foreground">{idea.title}</p>
-                          </div>
-
-                          {/* A IDEIA, descrita por completo. */}
-                          <p className="mt-1.5 text-[13px] leading-relaxed text-foreground/85">{idea.pitch}</p>
-
-                          {/* O retrato real do cliente: é ele que faz a ideia deixar
-                              de parecer genérica. A IA já embute o contexto no motivo. */}
-                          {idea.moment && (
-                            <p className={juntar(superficie.poco, "mt-2 px-2.5 py-1.5 text-[12px] leading-relaxed text-muted-foreground")}>{idea.moment}</p>
-                          )}
-
-                          <p className="mt-2 text-[12px] text-muted-foreground">
-                            <span className="text-foreground/70">Por que agora: </span>
-                            {idea.whyNow}
-                          </p>
-
-                          <ul className="mt-1.5 space-y-0.5">
-                            {idea.moves.map((move) => (
-                              <li key={move} className="text-[12px] text-muted-foreground">· {move}</li>
-                            ))}
-                          </ul>
-
-                          <p className="mt-1.5 text-[12px] text-muted-foreground">
-                            <span className="text-foreground/70">Sinal que vamos olhar: </span>
-                            {idea.signal}
-                          </p>
-
-                          {/* Leitura da equipe. Nunca vai para o cliente. */}
-                          <div className="mt-2.5 rounded-md bg-warning/[0.07] px-3 py-2">
-                            <p className="flex items-center text-[12px] font-medium text-warning">
-                              Só a equipe vê · sugestão
-                              <AjudaRecolhida className="ml-1" rotulo="Sobre a faixa de valor">
-                                Você decide se cobra, quanto cobra ou se entrega como cortesia. A faixa é só um ponto de partida e nada disso vai para o cliente.
-                              </AjudaRecolhida>
-                            </p>
-                            <p className="mt-0.5 text-[12px] text-muted-foreground">
-                              Se aprovada, pode virar: <span className="text-foreground/80">{idea.internal.offer}</span>
-                              {high > 0 && ` · referência ${fmt(low)} a ${fmt(high)}`} · esforço {idea.internal.effort}
-                            </p>
-                          </div>
-
-                          <div className={juntar(grupoDeBotoes, "mt-2.5")}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setGenClientId(idea.id.split(":")[0]);
-                                setGenRitual("radar_aceleriq");
-                                setGenIdeaId(idea.id);
-                                setGenPreviews(null);
-                                setGeneratorOpen(true);
-                              }}
-                              className={botao.secundario}
-                            >
-                              Levar esta ideia ao cliente
-                            </button>
-                            <button type="button" onClick={() => { setProfileClientId(idea.id.split(":")[0]); setActiveTab("perfis"); }} className={botao.discreto}>
-                              Ver perfil do cliente
-                            </button>
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </Secao>
+            {/* 16/10/2026 (dono: "radar mais visual, carrossel, imagens e conversar com o
+                agente para evoluir as ideias"): o componente desenha a seção inteira. */}
+            <RadarDeIdeias
+              ideias={allRadarIdeas}
+              clientes={(clients || []).map((c: any) => ({ id: String(c.id), nome: nomeDoCliente(c), foto: fotoDe({ id: String(c.id), nome: nomeDoCliente(c), avatar_url: c.avatar_url }) }))}
+              imagensPorCliente={imagensDoRadar}
+              controles={opportunities.length > 0 ? controlesDoRadar("max-w-[180px] sm:max-w-[240px]") : undefined}
+              onLevarAoCliente={(idea) => {
+                setGenClientId(idea.id.split(":")[0]);
+                setGenRitual("radar_aceleriq");
+                setGenIdeaId(idea.id);
+                setGenPreviews(null);
+                setGeneratorOpen(true);
+              }}
+              onAbrirPerfil={(id) => { setProfileClientId(id); setActiveTab("perfis"); }}
+              onIdeiaEvoluida={(antiga, nova) => setIdeiasEvoluidas((prev) => ({ ...prev, [antiga.id]: { ...nova, id: antiga.id } }))}
+            />
           </RegiaoRolavel>
         )}
 

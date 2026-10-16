@@ -50,6 +50,87 @@ REGRAS ABSOLUTAS:
 Responda SOMENTE com JSON válido, sem markdown, neste formato exato:
 {"ideas":[{"titulo":"...","descricao":"...","por_que_agora":"...","passos":["...","...","..."],"sinal":"...","interno_oferta":"...","interno_faixa_min":0,"interno_faixa_max":0,"interno_esforco":"baixo|medio|alto"}]}`;
 
+// Evoluir uma ideia (16/10/2026, dono: "conversar ali com o agente para a gente
+// conseguir trabalhar em cima daquelas ideias e evoluir"). A equipe conversa
+// sobre UMA ideia; o agente relê o mesmo contexto real do cliente, responde
+// curto e devolve a ideia inteira reescrita no mesmo formato da geração.
+const EVOLUIR_PROMPT = `Você é o estrategista-chefe de crescimento da Aceleriq, uma agência de growth marketing brasileira, especialista em marketing de diferenciação (a escola do Fator X, de Pedro Superti). Agora você conversa com a EQUIPE da Aceleriq sobre UMA ideia do Radar de um cliente, para evoluí-la junto com eles.
+
+REGRAS ABSOLUTAS:
+1. Leia o contexto real do cliente e a ideia atual. Responda ao pedido da equipe em 1 a 4 frases curtas, direto, como um colega de trabalho.
+2. Sempre devolva a ideia INTEIRA já reescrita com o que foi pedido. Mantenha o que estava bom; mude o que a equipe pediu.
+3. As regras das ideias continuam: nada genérico (cite o negócio, o nicho e o que o cliente já tem), descrição completa em 2 a 4 frases, "por que agora" com fatos reais do contexto, passos que a AGÊNCIA executa em 1 a 2 semanas.
+4. Se o contexto mostrar que o pedido já foi feito ou não cabe neste cliente, diga isso na resposta e proponha o ajuste.
+5. Nunca invente número que não está no contexto. Nunca sugira migração de plano, reajuste ou cobrança fora dos campos internos.
+6. Português claro do Brasil, sem jargão de marketing e SEM TRAVESSÃO (use vírgula ou ponto).
+
+Responda SOMENTE com JSON válido, sem markdown, neste formato exato:
+{"resposta":"...","ideia":{"titulo":"...","descricao":"...","por_que_agora":"...","passos":["...","...","..."],"sinal":"...","interno_oferta":"...","interno_faixa_min":0,"interno_faixa_max":0,"interno_esforco":"baixo|medio|alto"}}`;
+
+interface IdeiaDoRadar {
+  titulo: string;
+  descricao: string;
+  por_que_agora: string;
+  passos: string[];
+  sinal: string;
+  interno_oferta: string;
+  interno_faixa_min: number;
+  interno_faixa_max: number;
+  interno_esforco: "baixo" | "medio" | "alto";
+}
+
+interface MensagemDaConversa {
+  papel: "usuario" | "agente";
+  texto: string;
+}
+
+/** A ideia no formato da geração, com limites de tamanho; `base` cobre o que faltar. */
+function normalizarIdeia(bruta: unknown, base?: IdeiaDoRadar): IdeiaDoRadar | null {
+  if (!bruta || typeof bruta !== "object") return base || null;
+  const r = bruta as Record<string, unknown>;
+  const txt = (v: unknown, max: number, reserva = "") => {
+    const s = typeof v === "string" ? v.replace(/\s+/g, " ").trim() : "";
+    return (s || reserva).slice(0, max);
+  };
+  const num = (v: unknown, reserva = 0) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? Math.round(n) : reserva;
+  };
+  const passos = Array.isArray(r.passos)
+    ? r.passos.map((p) => txt(p, 300)).filter(Boolean).slice(0, 6)
+    : [];
+  const esforco = r.interno_esforco === "baixo" || r.interno_esforco === "alto" || r.interno_esforco === "medio"
+    ? r.interno_esforco
+    : base?.interno_esforco || "medio";
+  const ideia: IdeiaDoRadar = {
+    titulo: txt(r.titulo, 160, base?.titulo),
+    descricao: txt(r.descricao, 1200, base?.descricao),
+    por_que_agora: txt(r.por_que_agora, 900, base?.por_que_agora),
+    passos: passos.length ? passos : base?.passos || [],
+    sinal: txt(r.sinal, 400, base?.sinal),
+    interno_oferta: txt(r.interno_oferta, 200, base?.interno_oferta),
+    interno_faixa_min: num(r.interno_faixa_min, base?.interno_faixa_min ?? 0),
+    interno_faixa_max: num(r.interno_faixa_max, base?.interno_faixa_max ?? 0),
+    interno_esforco: esforco,
+  };
+  if (!ideia.titulo || !ideia.descricao) return null;
+  return ideia;
+}
+
+/** Histórico vindo do painel: só usuário/agente, texto limitado, as últimas 12 falas. */
+function normalizarMensagens(brutas: unknown): MensagemDaConversa[] {
+  if (!Array.isArray(brutas)) return [];
+  return brutas
+    .map((m) => {
+      const r = (m && typeof m === "object" ? m : {}) as Record<string, unknown>;
+      const papel = r.papel === "agente" ? "agente" : r.papel === "usuario" ? "usuario" : null;
+      const texto = typeof r.texto === "string" ? r.texto.trim().slice(0, 2000) : "";
+      return papel && texto ? { papel, texto } : null;
+    })
+    .filter((m): m is MensagemDaConversa => m !== null)
+    .slice(-12);
+}
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -98,6 +179,17 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const clientId = String(body?.client_id || "").trim();
     if (!clientId) return jsonResponse({ error: "client_id é obrigatório." }, 400);
+
+    // action "evoluir": conversa sobre uma ideia. Sem action, nada muda (gera as 3 ideias).
+    const evoluir = body?.action === "evoluir";
+    const ideiaAtual = evoluir ? normalizarIdeia(body?.ideia) : null;
+    const mensagens = evoluir ? normalizarMensagens(body?.mensagens) : [];
+    if (evoluir) {
+      if (!ideiaAtual) return jsonResponse({ error: "A ideia atual (titulo e descricao) é obrigatória." }, 400);
+      if (mensagens.length === 0 || mensagens[mensagens.length - 1].papel !== "usuario") {
+        return jsonResponse({ error: "Mande o que mudar na ideia." }, 400);
+      }
+    }
 
     // ── Contexto real do cliente, lido com RLS do chamador ──
     const [profileRes, projectsRes, filesRes, pubsRes, reportsRes] = await Promise.all([
@@ -335,6 +427,66 @@ Deno.serve(async (req) => {
     });
 
     const metodoDoRadar = await superpoderesPara(db, { agente: "rituais.radar" });
+
+    if (evoluir && ideiaAtual) {
+      // Mesmo contexto, mesma cadeia de modelos e o mesmo método; só o pedido muda.
+      const historico = mensagens.map((m, i) => ({
+        role: m.papel === "usuario" ? "user" : "assistant",
+        content: i === mensagens.length - 1
+          ? `${m.texto}\n\n(Devolva só o JSON, com "resposta" e a "ideia" completa.)`
+          : m.texto,
+      }));
+      const conversa = await requestAiChatCompletion(
+        providers,
+        (candidate: AiProvider) => ({
+          messages: [
+            { role: "system", content: EVOLUIR_PROMPT },
+            {
+              role: "user",
+              content: `CONTEXTO REAL DO CLIENTE (dados do painel, hoje):\n${context}\n\nIDEIA ATUAL DO RADAR (JSON):\n${JSON.stringify(ideiaAtual)}\n\n${
+                temDossie
+                  ? "Parta do DOSSIÊ/BRIEFING acima e não proponha o que os registros mostram que já foi feito."
+                  : "Não há dossiê registrado: trate o nicho como hipótese a validar."
+              } Específica para ${clientName}.`,
+            },
+            ...historico,
+          ],
+          ...(candidate.model.includes("search-preview")
+            ? { web_search_options: {} }
+            : { temperature: 0.6 }),
+        }),
+        fetch,
+        metodoDoRadar,
+      );
+      if (!conversa.response.ok) {
+        const detail = await conversa.response.text().catch(() => "");
+        return jsonResponse(
+          { error: `O agente do Radar não respondeu (${conversa.response.status}).`, detail: detail.slice(0, 300) },
+          502,
+        );
+      }
+      void registrarMetodoSemUso(db, { metodo: metodoDoRadar, clientId });
+      const completion = await conversa.response.json();
+      const content = completion?.choices?.[0]?.message?.content || "";
+      let parsed: { resposta?: unknown; ideia?: unknown } = {};
+      try {
+        parsed = extractJson(content) as { resposta?: unknown; ideia?: unknown };
+      } catch {
+        return jsonResponse({ error: "O agente não devolveu uma ideia válida. Tente de novo." }, 502);
+      }
+      const nova = normalizarIdeia(parsed?.ideia, ideiaAtual);
+      const resposta = typeof parsed?.resposta === "string" ? parsed.resposta.trim().slice(0, 2000) : "";
+      if (!nova) return jsonResponse({ error: "O agente não devolveu uma ideia válida. Tente de novo." }, 502);
+      return jsonResponse({
+        client_id: clientId,
+        client_name: clientName,
+        provider: conversa.provider.label,
+        web_search: conversa.provider.model.includes("search-preview"),
+        resposta: resposta || "Ajustei a ideia com o que você pediu.",
+        ideia: nova,
+      });
+    }
+
     const { response, provider } = await requestAiChatCompletion(
       providers,
       (candidate: AiProvider) => ({

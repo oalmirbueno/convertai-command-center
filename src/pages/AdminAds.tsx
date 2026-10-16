@@ -1,6 +1,21 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { AlertTriangle, ChevronDown, ChevronRight, FileText, Link2, Megaphone, RefreshCw } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowRight,
+  ArrowUpRight,
+  ChevronDown,
+  ChevronRight,
+  Coins,
+  FileText,
+  Link2,
+  Megaphone,
+  PiggyBank,
+  RefreshCw,
+  Target,
+  Wallet,
+} from "lucide-react";
 import {
   META_OAUTH_MESSAGE_TYPE,
   startAdsOAuth,
@@ -20,23 +35,25 @@ import {
   AjudaRecolhida,
   AreaDeTrabalho,
   CabecalhoDePagina,
+  CampoDeBusca,
   CampoDeFormulario,
   Carregando,
   EstadoDeErro,
   EstadoVazio,
   GrupoDeCampos,
-  Painel,
   Secao,
   SeletorCompacto,
   botao,
   campo,
   etiqueta,
+  foco,
+  gravarEstadoDaTela,
   juntar,
+  lista,
   superficie,
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
-import { CampoDeBusca, FaixaDeNumeros } from "@/components/sistema";
 import {
   collectAdsMetricsNow,
   useAdsCreatives,
@@ -61,10 +78,11 @@ import {
   teamAlert,
   teamCampaignLine,
   EXPLICACOES,
+  type CampaignSummary,
 } from "@/lib/adsLanguage";
 import {
   CLASSE_DO_TOM_DA_CONTA,
-  custoDoResultado,
+  SALDO_BAIXO,
   haQuanto,
   ordenarPorSituacao,
   resultadosPorObjetivo,
@@ -72,21 +90,25 @@ import {
   situacaoDaConta,
   type ResultadoDoObjetivo,
 } from "@/lib/adsResumo";
+import { tendenciaDoCliente, type Direcao, type TendenciaDoCliente } from "@/lib/adsTendencia";
 
 /**
- * A área de anúncios (docs/design/SISTEMA.md; pedido do dono em 26/09:
- * "desorganizada, confusa, poluída; mais fácil de usar, simplificada").
+ * A área de anúncios (docs/design/SISTEMA.md). Pedidos do dono: 26/09
+ * ("desorganizada, confusa, poluída") e 16/10 ("mais intuitivo, mais claro,
+ * mais simplificado").
  *
- * Lista (sem cliente aberto), três seções separadas por linha fina:
- * 1. Contas de anúncio: situação de cada conta e TODAS as ações de conectar,
- *    reconectar e ligar num painel só (e a gestão pelo agente no pé dele).
- * 2. Desempenho por cliente: uma linha por cliente, com o resultado certo
- *    para o objetivo de cada campanha (conversa não soma com venda).
+ * Lista (sem cliente aberto), de cima para baixo:
+ * 1. Aviso de uma linha, só quando uma conta pede atenção (com Reconectar).
+ * 2. Clientes: uma linha por cliente com os quatro números que importam
+ *    (investido, resultado, custo por resultado, saldo), cada um com ícone
+ *    e seta de tendência. Tocar abre o cliente.
  * 3. No ar agora: o que está rodando e o que fazer a respeito.
+ * 4. Contas e conexão, recolhida: situação das contas, conectar com a Meta,
+ *    ligar pelo número, token da agência e gestão pelo agente.
  *
- * Cliente aberto (?cliente=): números em uma faixa, as contas dele, o que
- * está no ar, as campanhas nas duas leituras (como o cliente lê e os números
- * da equipe), os criativos e o relatório já preenchido.
+ * Cliente aberto (?cliente=): os mesmos quatro números grandes, as campanhas
+ * (tocar abre as duas leituras), o que está no ar, os criativos e as contas
+ * dele, recolhidas no pé.
  *
  * De 1024 px para cima só o conteúdo abaixo do cabeçalho rola (AreaDeTrabalho,
  * com a posição guardada); no celular a página rola normal.
@@ -103,7 +125,7 @@ const TOM: Record<string, string> = {
 
 function StatusChip({ campaign }: { campaign?: AdsCampaign }) {
   const { label, tone } = statusLabel(campaign?.status, campaign?.effective_status);
-  return <span className={juntar(etiqueta, "ml-2", TOM[tone])}>{label}</span>;
+  return <span className={juntar(etiqueta, "ml-2 shrink-0", TOM[tone])}>{label}</span>;
 }
 
 /** O resultado principal (o objetivo com mais dinheiro) e, em uma linha, os outros. */
@@ -112,8 +134,6 @@ function resumoDosResultados(lista: ResultadoDoObjetivo[]) {
   const outros = lista.filter((r) => r !== principal && r.kind !== "alcance" && r.resultados > 0);
   return {
     principal,
-    valor: principal ? rotuloDoResultado(principal) : "sem resultado medido",
-    custo: principal ? custoDoResultado(principal) : null,
     outros: outros.map((r) => rotuloDoResultado(r)).join(" · "),
   };
 }
@@ -124,6 +144,11 @@ const saldoDas = (contas: Conta[]): number | null => {
 };
 
 const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
+
+const temProblema = (c: Conta) => {
+  const tom = situacaoDaConta(c).tom;
+  return tom === "erro" || tom === "atencao";
+};
 
 /** Botão de ação da página: no celular só o ícone (com aria-label), do tablet para cima o texto. */
 function BotaoDaPagina({
@@ -149,7 +174,245 @@ function BotaoDaPagina({
   );
 }
 
+/* ─────────────────────────────── os quatro números ─────────────────────────────── */
+
+/** Seta de tendência: verde quando melhorou, vermelha quando piorou, cinza quando ficou igual. */
+function Seta({ direcao, subirEhBom }: { direcao: Direcao | null; subirEhBom: boolean }) {
+  if (!direcao) return null;
+  const Icone = direcao === "subiu" ? ArrowUpRight : direcao === "caiu" ? ArrowDownRight : ArrowRight;
+  const bom = direcao === "igual" ? null : (direcao === "subiu") === subirEhBom;
+  const dica = direcao === "igual" ? "Estável nos últimos 15 dias" : `${direcao === "subiu" ? "Subiu" : "Caiu"} nos últimos 15 dias`;
+  return (
+    <span
+      role="img"
+      aria-label={dica}
+      title={dica}
+      data-tendencia={direcao}
+      className={juntar("ml-1 inline-flex shrink-0", bom == null ? "text-muted-foreground" : bom ? "text-success" : "text-destructive")}
+    >
+      <Icone className="h-3.5 w-3.5" aria-hidden="true" />
+    </span>
+  );
+}
+
+/** Um número com ícone: o valor grande, a unidade miúda embaixo. */
+function Metrica({
+  icone,
+  valor,
+  unidade,
+  seta,
+  dica,
+  corDoValor,
+  grande = false,
+}: {
+  icone: ReactNode;
+  valor: string;
+  unidade: string;
+  seta?: ReactNode;
+  dica?: string;
+  corDoValor?: string;
+  grande?: boolean;
+}) {
+  return (
+    <div className="flex min-w-0 items-center" title={dica} data-metrica="">
+      <span
+        className={juntar("mr-2 inline-flex shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground", grande ? "h-9 w-9" : "h-7 w-7")}
+        aria-hidden="true"
+      >
+        {icone}
+      </span>
+      <div className="min-w-0">
+        <p className={juntar("flex min-w-0 items-center font-semibold tabular-nums", grande ? "text-[20px] leading-7" : "text-[15px] leading-5", corDoValor || "text-foreground")}>
+          <span className="min-w-0 truncate">{valor}</span>
+          {seta}
+        </p>
+        <p className={juntar(texto.etiqueta, "truncate font-normal text-muted-foreground")}>{unidade}</p>
+      </div>
+    </div>
+  );
+}
+
+interface NumerosDoClienteDados {
+  investido: number;
+  campanhas: number;
+  alcance: number;
+  principal: ResultadoDoObjetivo | null;
+  outros: string;
+  saldo: number | null;
+  tendencia: TendenciaDoCliente;
+}
+
+function numerosDoCliente(rows: AdsDaily[], contas: Conta[]): NumerosDoClienteDados {
+  const carteira = summarizeAccount(rows);
+  const res = resumoDosResultados(resultadosPorObjetivo(rows));
+  return {
+    investido: carteira.investido,
+    campanhas: carteira.campanhas,
+    alcance: carteira.alcance,
+    principal: res.principal,
+    outros: res.outros,
+    saldo: saldoDas(contas),
+    tendencia: tendenciaDoCliente(rows, res.principal ? res.principal.kind : null),
+  };
+}
+
+/** Investido, resultado, custo por resultado e saldo, cada um com ícone (e seta quando há tendência). */
+function NumerosDoCliente({ dados, grande = false }: { dados: NumerosDoClienteDados; grande?: boolean }) {
+  const p = dados.principal;
+  const custo = p && p.custoPorResultado != null && p.custoPorResultado > 0 ? p.custoPorResultado : null;
+  const icone = grande ? "h-[18px] w-[18px]" : "h-4 w-4";
+  return (
+    <div className={juntar("grid min-w-0 grid-cols-2 gap-x-4 gap-y-3", grande ? "md:grid-cols-4" : "lg:grid-cols-4")}>
+      <Metrica grande={grande} icone={<Wallet className={icone} />} valor={dinheiro(dados.investido)} unidade="investido" dica={EXPLICACOES.investido} />
+      <Metrica
+        grande={grande}
+        icone={<Target className={icone} />}
+        valor={p ? numero(p.resultados) : "-"}
+        unidade={p ? (p.resultados === 1 ? p.singular : p.plural) : "sem resultado"}
+        seta={<Seta direcao={dados.tendencia.resultados} subirEhBom />}
+        dica={dados.outros ? `Também: ${dados.outros}` : EXPLICACOES.resultados}
+      />
+      <Metrica
+        grande={grande}
+        icone={<Coins className={icone} />}
+        valor={custo != null ? dinheiro(custo) : "-"}
+        unidade={p ? `por ${p.singular}` : "por resultado"}
+        seta={<Seta direcao={dados.tendencia.custo} subirEhBom={false} />}
+        dica={EXPLICACOES.custoPorResultado}
+      />
+      <Metrica
+        grande={grande}
+        icone={<PiggyBank className={icone} />}
+        valor={dados.saldo != null ? dinheiro(dados.saldo) : "-"}
+        unidade={dados.saldo != null ? "saldo" : "pós-paga ou sem leitura"}
+        corDoValor={dados.saldo != null && dados.saldo < SALDO_BAIXO ? "text-warning" : undefined}
+        dica={dados.saldo != null && dados.saldo < SALDO_BAIXO ? "Saldo baixo: avise o cliente para recarregar." : undefined}
+      />
+    </div>
+  );
+}
+
+/* ─────────────────────────────── aviso das contas ─────────────────────────────── */
+
+/**
+ * Uma linha, só quando alguma conta pede atenção: o que é, "Ver contas" e,
+ * quando o acesso venceu, "Reconectar com a Meta" ali mesmo. O resto da
+ * configuração fica recolhido no pé da página.
+ */
+function AvisoDasContas({
+  contas,
+  nomes,
+  abrindo,
+  aoReconectar,
+  aoVerContas,
+}: {
+  contas: Conta[];
+  nomes?: Map<string, string>;
+  abrindo: boolean;
+  aoReconectar: () => void;
+  aoVerContas: () => void;
+}) {
+  const comProblema = ordenarPorSituacao(contas.filter((c) => c.status === "active" && temProblema(c)));
+  if (comProblema.length === 0) return null;
+  const situacoes = comProblema.map((c) => situacaoDaConta(c));
+  const grave = situacoes.some((s) => s.tom === "erro");
+  const reconectar = situacoes.some((s) => s.reconectar);
+  const quais = comProblema
+    .slice(0, 2)
+    .map((c, i) => {
+      const dono = nomes && nomes.get(c.client_id);
+      return `${dono || c.display_name}: ${situacoes[i].rotulo}`;
+    })
+    .join(" · ");
+  return (
+    <div
+      role="status"
+      className={juntar("flex min-w-0 flex-wrap items-center rounded-lg px-3 py-2", grave ? "bg-destructive/10" : "bg-warning/10")}
+      data-aviso-das-contas=""
+    >
+      <AlertTriangle className={juntar("mr-2 h-4 w-4 shrink-0", grave ? "text-destructive" : "text-warning")} aria-hidden="true" />
+      <p className="mr-3 min-w-0 flex-1 truncate text-[13px] leading-5 text-foreground" title={quais}>
+        <span className="font-medium">{comProblema.length === 1 ? "1 conta pede atenção" : `${comProblema.length} contas pedem atenção`}</span>
+        <span className="text-muted-foreground"> · {quais}</span>
+      </p>
+      <div className="-m-1 flex shrink-0 flex-wrap items-center [&>*]:m-1">
+        <button type="button" className={botao.discreto} onClick={aoVerContas}>
+          Ver contas
+        </button>
+        {reconectar && (
+          <button type="button" className={botao.primario} onClick={aoReconectar} disabled={abrindo}>
+            <Link2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            {abrindo ? "Abrindo a Meta..." : "Reconectar com a Meta"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─────────────────────────────── dossiê do cliente ─────────────────────────────── */
+
+/** Uma campanha: a linha curta e, ao tocar, as duas leituras (cliente e equipe). */
+function LinhaDaCampanha({ resumo, ficha }: { resumo: CampaignSummary; ficha?: AdsCampaign }) {
+  const [aberta, setAberta] = useState(false);
+  const alerta = teamAlert(resumo);
+  const resultado =
+    resumo.resultados != null && resumo.resultados > 0
+      ? [
+          `${numero(resumo.resultados)} ${resumo.resultados === 1 ? resumo.goal.resultSingular : resumo.goal.resultPlural}`,
+          resumo.custoPorResultado != null && resumo.custoPorResultado > 0 ? `${dinheiro(resumo.custoPorResultado)} cada` : "",
+        ].filter(Boolean).join(" · ")
+      : "sem resultado medido";
+  return (
+    <li className="min-w-0">
+      <button
+        type="button"
+        onClick={() => setAberta((v) => !v)}
+        aria-expanded={aberta}
+        className={juntar(lista.linha, "w-full text-left", foco)}
+      >
+        <ChevronRight className={juntar("mr-1.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform", aberta ? "rotate-90" : "")} aria-hidden="true" />
+        <span className="block min-w-0 flex-1">
+          <span className="flex min-w-0 items-center">
+            <span className="min-w-0 truncate text-[13px] font-semibold text-foreground">{resumo.name}</span>
+            <StatusChip campaign={ficha} />
+          </span>
+          <span className={juntar(texto.auxiliar, "block truncate tabular-nums")}>{resultado}</span>
+        </span>
+        {alerta && (
+          <span role="img" aria-label="Pede atenção" title={alerta} className="ml-2 inline-flex shrink-0 text-destructive">
+            <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+          </span>
+        )}
+        <span className="ml-3 shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{dinheiro(resumo.investido)}</span>
+      </button>
+      {aberta && (
+        <div className="min-w-0 pb-3 pl-8 pr-2">
+          {alerta && (
+            <p className="mb-2 flex items-start text-[12px] leading-5 text-destructive">
+              <AlertTriangle className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /> {alerta}
+            </p>
+          )}
+          <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+            {/* A leitura do cliente, exatamente como sai no relatório dele. */}
+            <div className={juntar(superficie.poco, "min-w-0 px-3 py-2")}>
+              <p className={texto.rotulo}>Como o cliente lê</p>
+              <p className="mt-0.5 text-[13px] leading-5 text-foreground">{clientCampaignSentence(resumo)}</p>
+            </div>
+            {/* E os números de operar. */}
+            <div className="min-w-0 px-1 py-2 md:px-0">
+              <p className={texto.rotulo}>Para a equipe</p>
+              <p className="mt-0.5 text-[12px] leading-5 tabular-nums text-foreground [overflow-wrap:anywhere]">{teamCampaignLine(resumo)}</p>
+              {ficha?.daily_budget != null && (
+                <p className={texto.auxiliar}>Verba diária: {dinheiro(Number(ficha.daily_budget))}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
 
 function ClientAdsDetail({
   clientId,
@@ -159,6 +422,7 @@ function ClientAdsDetail({
   campaigns,
   contas,
   carregando,
+  aviso,
   agora,
   contasDoCliente,
   seletorDeCliente,
@@ -173,9 +437,11 @@ function ClientAdsDetail({
   campaigns: AdsCampaign[];
   contas: Conta[];
   carregando: boolean;
+  /** Aviso de conta com problema (só quando há). */
+  aviso: ReactNode;
   /** O que está no ar agora deste cliente, montado pela página. */
   agora: ReactNode;
-  /** As contas de anúncio só deste cliente (ContasEConexao filtrada). */
+  /** As contas de anúncio só deste cliente (ContasEConexao filtrada), recolhidas. */
   contasDoCliente: ReactNode;
   seletorDeCliente: ReactNode;
   atualizar: ReactNode;
@@ -200,8 +466,7 @@ function ClientAdsDetail({
   }, [rows, campaigns]);
 
   const carteira = useMemo(() => summarizeAccount(rows), [rows]);
-  const resultados = useMemo(() => resumoDosResultados(resultadosPorObjetivo(rows)), [rows]);
-  const saldo = saldoDas(contas);
+  const dados = useMemo(() => numerosDoCliente(rows, contas), [rows, contas]);
   const { data: criativos } = useAdsCreatives(clientId, 30);
 
   /**
@@ -241,6 +506,11 @@ function ClientAdsDetail({
     navigate(`/relatorios/novo?${parametros.toString()}`);
   };
 
+  const apoio = [
+    carteira.alcance > 0 ? `${numero(carteira.alcance)} pessoas alcançadas` : "",
+    dados.outros ? `Também: ${dados.outros}` : "",
+  ].filter(Boolean).join(" · ");
+
   return (
     <div className="min-w-0 space-y-4">
       <CabecalhoDePagina
@@ -251,11 +521,11 @@ function ClientAdsDetail({
             <span className="min-w-0 truncate">{clientName}</span>
           </span>
         }
-        descricao={`Últimos 30 dias · ${plural(carteira.campanhas, "campanha", "campanhas")}`}
+        descricao={`30 dias · ${plural(carteira.campanhas, "campanha", "campanhas")}`}
         ajuda={
           <>
-            Investido: {EXPLICACOES.investido} Resultado: {EXPLICACOES.resultados} Alcance: {EXPLICACOES.alcance} O relatório
-            já sai preenchido com estes números e os criativos.
+            Investido: {EXPLICACOES.investido} Resultado: {EXPLICACOES.resultados} A seta compara os últimos 15 dias com os
+            15 anteriores. O relatório já sai preenchido com estes números e os criativos.
           </>
         }
         acoes={
@@ -280,78 +550,35 @@ function ClientAdsDetail({
       />
 
       <AreaDeTrabalho key={clientId} memoriaDaRolagem={`anuncios:cliente:${clientId}`} rotuloDoPrincipal={`Anúncios de ${clientName}`}>
-        <div className="min-w-0 space-y-5">
+        <div className="min-w-0 space-y-6">
           {erro}
-          <div className="min-w-0">
-            <FaixaDeNumeros
-              tamanho="compacto"
-              apoioAoLado
-              rotulo="Resumo dos últimos 30 dias"
-              itens={[
-                { rotulo: "Investido", valor: dinheiro(carteira.investido) },
-                { rotulo: "Resultado", valor: resultados.valor, apoio: resultados.custo },
-                { rotulo: "Pessoas alcançadas", valor: numero(carteira.alcance) },
-                {
-                  rotulo: "Saldo na conta",
-                  valor: saldo != null ? dinheiro(saldo) : "não lido",
-                  apoio: saldo == null ? "pós-paga ou sem leitura" : null,
-                },
-              ]}
-            />
-            {resultados.outros && <p className={juntar(texto.auxiliar, "mt-2 truncate")}>Também: {resultados.outros}</p>}
+          {aviso}
+
+          <div className="min-w-0" role="group" aria-label="Resumo dos últimos 30 dias">
+            <NumerosDoCliente dados={dados} grande />
+            {apoio && <p className={juntar(texto.auxiliar, "mt-3 truncate")}>{apoio}</p>}
           </div>
 
-          {contasDoCliente}
-
-          {agora}
-
-          <Secao divisoria titulo="Campanhas" descricao={`Últimos 30 dias · ${porCampanha.length}`} ajuda="Cada campanha nas duas leituras: como o cliente lê no relatório e os números que a equipe usa para decidir.">
+          <Secao divisoria titulo="Campanhas" descricao={plural(porCampanha.length, "campanha", "campanhas")} ajuda="Toque numa campanha para ver as duas leituras: como o cliente lê no relatório e os números que a equipe usa para decidir.">
             {carregando && porCampanha.length === 0 ? (
               <Carregando rotulo="Carregando campanhas" linhas={3} />
             ) : porCampanha.length === 0 ? (
-              <EstadoVazio compacto titulo="Nenhuma campanha com movimento nos últimos 30 dias nesta conta." />
+              <EstadoVazio compacto titulo="Nenhuma campanha com movimento nos últimos 30 dias." />
             ) : (
-              <Painel semEspaco>
-                <ul className="min-w-0 divide-y divide-border">
-                  {porCampanha.map(({ resumo, ficha }) => {
-                    const alerta = teamAlert(resumo);
-                    return (
-                      <li key={resumo.campaignId} className="min-w-0 px-4 py-3">
-                        <div className="flex min-w-0 items-center">
-                          <p className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{resumo.name}</p>
-                          <StatusChip campaign={ficha} />
-                          <span className="ml-3 shrink-0 text-[13px] font-medium tabular-nums text-foreground">{dinheiro(resumo.investido)}</span>
-                        </div>
-                        <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
-                          {/* A leitura do cliente, exatamente como sai no relatório dele. */}
-                          <div className={juntar(superficie.poco, "min-w-0 px-3 py-2")}>
-                            <p className={texto.rotulo}>Como o cliente lê</p>
-                            <p className="mt-0.5 text-[13px] leading-5 text-foreground">{clientCampaignSentence(resumo)}</p>
-                          </div>
-                          {/* E os números de operar. */}
-                          <div className="min-w-0 px-1 py-2 md:px-0">
-                            <p className={texto.rotulo}>Para a equipe</p>
-                            <p className="mt-0.5 text-[12px] leading-5 tabular-nums text-foreground [overflow-wrap:anywhere]">{teamCampaignLine(resumo)}</p>
-                            {ficha?.daily_budget != null && (
-                              <p className={texto.auxiliar}>Verba diária: {dinheiro(Number(ficha.daily_budget))}</p>
-                            )}
-                          </div>
-                        </div>
-                        {alerta && (
-                          <p className="mt-2 flex items-start text-[12px] leading-5 text-destructive">
-                            <AlertTriangle className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /> {alerta}
-                          </p>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </Painel>
+              <ul className={juntar(lista.aberta, lista.divisoria)}>
+                {porCampanha.map(({ resumo, ficha }) => (
+                  <LinhaDaCampanha key={resumo.campaignId} resumo={resumo} ficha={ficha} />
+                ))}
+              </ul>
             )}
           </Secao>
 
+          {agora}
+
           {/* As peças: "qual anúncio funcionou" é a pergunta seguinte. */}
           <GaleriaDeCriativos criativos={criativos || []} periodoDias={30} chave={clientId} />
+
+          {contasDoCliente}
         </div>
       </AreaDeTrabalho>
     </div>
@@ -401,32 +628,28 @@ const MENSAGEM_DA_LIGACAO = {
 
 /** Onde a lista de contas devolvida pela Meta descansa entre recarregamentos. */
 const CONTAS_DA_META = "aceleriq-contas-da-meta";
+/** Âncoras das seções de configuração (o aviso e o login levam até elas). */
+const ID_DAS_CONTAS = "anuncios-contas";
+const ID_DA_ESCOLHA = "anuncios-escolher-contas";
+/** Chave do recolher da seção de contas (por cliente, quando há um aberto). */
+const chaveDasContas = (clienteId?: string) => (clienteId ? `anuncios:contas:${clienteId}` : "anuncios:contas");
 
 const ehTexto = (v: unknown) => typeof v === "string";
 
+const rolarAte = (id: string) => {
+  window.setTimeout(() => {
+    const alvo = document.getElementById(id);
+    if (alvo && typeof alvo.scrollIntoView === "function") alvo.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 60);
+};
+
 /**
- * As contas de anúncio e a conexão com a Meta, num painel só: a situação de
- * cada conta e, no mesmo lugar, conectar, reconectar, escolher as contas que
- * a Meta devolveu, ligar pelo número, o token da agência e a gestão pelo
- * agente. Com um cliente aberto, mostra só as contas dele.
+ * A conexão com a Meta, uma por página: abrir o login (popup), ouvir o
+ * resultado e guardar as contas que a Meta devolveu. Fica na página porque
+ * o aviso do topo e a seção de contas do pé usam o mesmo login.
  */
-function ContasEConexao({
-  clienteId,
-  nomes,
-  podeConectar,
-  onDone,
-}: {
-  clienteId?: string;
-  nomes: Map<string, string>;
-  /** Só admin inicia o login de gestão (AtivarGestao). */
-  podeConectar: boolean;
-  onDone: () => void;
-}) {
-  const { data: conexao, isLoading, error, refetch } = useAdsConnection();
-  const { data: clients } = useClients();
-  // O token NUNCA vai para o navegador: fica só na memória da tela até ir para o cofre.
-  const [token, setToken] = useState("");
-  const [maisOpcoes, setMaisOpcoes] = useEstadoDaTela("anuncios:mais-opcoes", false, { validar: (v) => typeof v === "boolean" });
+function useConexaoComAMeta(onDone: () => void) {
+  const [abrindo, setAbrindo] = useState(false);
   /**
    * As contas que a Meta devolveu na conexão. Fica em localStorage porque
    * perder a lista num recarregar obrigaria a refazer o login só para ver de
@@ -442,27 +665,6 @@ function ContasEConexao({
       return [];
     }
   });
-  const [ligandoNumero, setLigandoNumero] = useState<string | null>(null);
-  const [donoEscolhido, setDonoEscolhido] = useState<Record<string, string>>({});
-  const [salvando, setSalvando] = useState(false);
-  // Rascunho de "ligar pelo número": não se perde ao sair e voltar.
-  const [clientId, setClientId] = useEstadoDaTela(`anuncios:ligar:cliente:${clienteId || "todos"}`, clienteId || "", { validar: ehTexto });
-  const [actId, setActId] = useEstadoDaTela("anuncios:ligar:numero", "", { validar: ehTexto });
-  const [nome, setNome] = useEstadoDaTela("anuncios:ligar:nome", "", { validar: ehTexto });
-
-  const comTrafego = (clients || []).filter((client: any) => hasService(client, "trafego"));
-
-  const todas = (conexao?.contas || []).filter((c) => !clienteId || c.client_id === clienteId);
-  const ativas = ordenarPorSituacao(todas.filter((c) => c.status === "active"));
-  const desligadas = todas.length - ativas.length;
-  const situacoes = ativas.map((c) => situacaoDaConta(c));
-  const emDia = situacoes.filter((s) => s.tom === "ok").length;
-  const comProblema = situacoes.filter((s) => s.tom === "erro" || s.tom === "atencao").length;
-  const precisaReconectar = situacoes.some((s) => s.reconectar);
-  const ultimaLeitura = ativas.reduce<string | null>(
-    (m, c) => (c.ultima_coleta && (!m || c.ultima_coleta > m) ? c.ultima_coleta : m),
-    null,
-  );
 
   /**
    * Conectar anúncios pelo login da Meta, e SÓ os anúncios. Porta separada
@@ -470,14 +672,14 @@ function ContasEConexao({
    * perder as duas coisas em vez de nenhuma.
    */
   const conectarPelaMeta = async () => {
-    setSalvando(true);
+    setAbrindo(true);
     const janela = window.open(
       "about:blank",
       "aceleriq-meta-ads",
       "popup=yes,width=620,height=760,resizable=yes,scrollbars=yes",
     );
     if (!janela) {
-      setSalvando(false);
+      setAbrindo(false);
       toast.error("Autorize pop-ups para conectar com a Meta.");
       return;
     }
@@ -487,7 +689,7 @@ function ContasEConexao({
       janela.focus();
     } catch (error: unknown) {
       janela.close();
-      setSalvando(false);
+      setAbrindo(false);
       toast.error((error as { message?: string })?.message || "Não foi possível abrir a Meta.");
     }
   };
@@ -498,7 +700,7 @@ function ContasEConexao({
       if (evento.origin !== window.location.origin) return;
       const msg = evento.data as MetaOAuthPopupMessage | undefined;
       if (!msg || msg.type !== META_OAUTH_MESSAGE_TYPE) return;
-      setSalvando(false);
+      setAbrindo(false);
       if (msg.ok === false) {
         toast.error(msg.error);
         return;
@@ -515,11 +717,74 @@ function ContasEConexao({
           ? `Conectado. Escolha abaixo quais das ${msg.contas.length} contas quer monitorar.`
           : "Conectado, mas a Meta não devolveu nenhuma conta de anúncio nesse acesso.",
       );
+      if (msg.contas.length > 0) rolarAte(ID_DA_ESCOLHA);
       onDone();
     };
     window.addEventListener("message", aoReceber);
     return () => window.removeEventListener("message", aoReceber);
   }, [onDone]);
+
+  const esconderContasDaMeta = () => {
+    setContasDaMeta([]);
+    try {
+      localStorage.removeItem(CONTAS_DA_META);
+    } catch { /* nada a fazer */ }
+  };
+
+  return { abrindo, conectarPelaMeta, contasDaMeta, esconderContasDaMeta };
+}
+
+type ConexaoComAMeta = ReturnType<typeof useConexaoComAMeta>;
+
+/**
+ * Configuração das contas, no pé da página e recolhida de início: a situação
+ * de cada conta e, no mesmo lugar, conectar, reconectar, ligar pelo número,
+ * o token da agência e a gestão pelo agente. Com um cliente aberto, só as
+ * contas dele. As contas que a Meta acabou de devolver ficam à vista (é um
+ * passo pendente, não configuração).
+ */
+function ContasEConexao({
+  clienteId,
+  nomes,
+  podeConectar,
+  onDone,
+  meta,
+  versao,
+}: {
+  clienteId?: string;
+  nomes: Map<string, string>;
+  /** Só admin inicia o login de gestão (AtivarGestao). */
+  podeConectar: boolean;
+  onDone: () => void;
+  meta: ConexaoComAMeta;
+  /** Muda quando o aviso pede para abrir a seção (remonta já aberta). */
+  versao: number;
+}) {
+  const { data: conexao, isLoading, error, refetch } = useAdsConnection();
+  const { data: clients } = useClients();
+  // O token NUNCA vai para o navegador: fica só na memória da tela até ir para o cofre.
+  const [token, setToken] = useState("");
+  const [maisOpcoes, setMaisOpcoes] = useEstadoDaTela("anuncios:mais-opcoes", false, { validar: (v) => typeof v === "boolean" });
+  const [ligandoNumero, setLigandoNumero] = useState<string | null>(null);
+  const [donoEscolhido, setDonoEscolhido] = useState<Record<string, string>>({});
+  const [salvando, setSalvando] = useState(false);
+  // Rascunho de "ligar pelo número": não se perde ao sair e voltar.
+  const [clientId, setClientId] = useEstadoDaTela(`anuncios:ligar:cliente:${clienteId || "todos"}`, clienteId || "", { validar: ehTexto });
+  const [actId, setActId] = useEstadoDaTela("anuncios:ligar:numero", "", { validar: ehTexto });
+  const [nome, setNome] = useEstadoDaTela("anuncios:ligar:nome", "", { validar: ehTexto });
+
+  const comTrafego = (clients || []).filter((client: any) => hasService(client, "trafego"));
+
+  const todas = (conexao?.contas || []).filter((c) => !clienteId || c.client_id === clienteId);
+  const ativas = ordenarPorSituacao(todas.filter((c) => c.status === "active"));
+  const desligadas = todas.length - ativas.length;
+  const situacoes = ativas.map((c) => situacaoDaConta(c));
+  const comProblema = situacoes.filter((s) => s.tom === "erro" || s.tom === "atencao").length;
+  const precisaReconectar = situacoes.some((s) => s.reconectar);
+  const ultimaLeitura = ativas.reduce<string | null>(
+    (m, c) => (c.ultima_coleta && (!m || c.ultima_coleta > m) ? c.ultima_coleta : m),
+    null,
+  );
 
   const salvarToken = async () => {
     setSalvando(true);
@@ -576,54 +841,145 @@ function ContasEConexao({
   };
 
   const resumo = isLoading
-    ? "Lendo a situação das contas"
+    ? "Lendo as contas"
     : ativas.length === 0
       ? clienteId
-        ? "Este cliente não tem conta de anúncio ligada."
-        : "Nenhuma conta ligada ainda."
+        ? "Sem conta ligada"
+        : "Nenhuma conta ligada"
       : [
           plural(ativas.length, "conta", "contas"),
-          `${emDia} lendo normalmente`,
-          comProblema ? `${comProblema} ${comProblema === 1 ? "precisa" : "precisam"} de atenção` : "",
+          comProblema ? `${comProblema} com atenção` : "todas em dia",
           desligadas ? plural(desligadas, "desligada", "desligadas") : "",
-          ultimaLeitura ? `última leitura ${haQuanto(ultimaLeitura)}` : "",
+          ultimaLeitura ? `lida ${haQuanto(ultimaLeitura)}` : "",
         ].filter(Boolean).join(" · ");
 
-  const rotuloConectar = salvando ? "Abrindo a Meta..." : precisaReconectar ? "Reconectar com a Meta" : "Conectar com a Meta";
+  const rotuloConectar = meta.abrindo ? "Abrindo a Meta..." : precisaReconectar ? "Reconectar com a Meta" : "Conectar com a Meta";
 
   return (
-    <Secao
-      divisoria={!!clienteId}
-      titulo="Contas de anúncio"
-      descricao={<span className={juntar("block truncate", comProblema ? "text-foreground" : "")}>{resumo}</span>}
-      ajuda="Conecte com a Meta, escolha as contas e o cliente de cada uma. Daí em diante o painel lê campanhas, saldo e criativos sozinho, de hora em hora. Em Mais opções: ligar pelo número e o token da agência."
-      acao={
-        <>
-          <button
-            type="button"
-            className={botao.discreto}
-            onClick={() => setMaisOpcoes((v) => !v)}
-            aria-expanded={maisOpcoes}
-            aria-label="Mais opções"
-          >
-            <ChevronDown className={juntar("h-4 w-4 transition-transform", maisOpcoes ? "rotate-180" : "")} aria-hidden="true" />
-            <span className="ml-1 hidden sm:inline">Mais opções</span>
-          </button>
-          <BotaoDaPagina
-            icone={<Link2 className="h-4 w-4" aria-hidden="true" />}
-            rotulo={rotuloConectar}
-            // Na ficha do cliente o primário é "Gerar relatório" (um primário por área).
-            classe={!clienteId && (precisaReconectar || (!isLoading && ativas.length === 0)) ? botao.primario : botao.secundario}
-            onClick={conectarPelaMeta}
-            disabled={salvando}
-          />
-        </>
-      }
-    >
-      <Painel semEspaco className="overflow-hidden">
+    <>
+      {/* Depois do login: escolher o cliente de cada conta devolvida. Passo pendente, fica à vista. */}
+      {meta.contasDaMeta.length > 0 && (
+        <Secao
+          id={ID_DA_ESCOLHA}
+          divisoria
+          recolher={false}
+          titulo="Contas que a Meta devolveu"
+          descricao="Escolha o cliente de cada uma"
+          acao={
+            <button type="button" onClick={meta.esconderContasDaMeta} className={botao.discreto}>
+              Esconder
+            </button>
+          }
+        >
+          {/* Vinte contas não empurram o resto: no computador a lista rola por dentro. */}
+          <ul className="-mx-2 min-w-0 divide-y divide-border/50 lg:max-h-[22rem] lg:overflow-y-auto lg:overscroll-contain" aria-label="Contas que a Meta devolveu">
+            {meta.contasDaMeta.map((conta) => {
+              const jaLigada = (conexao?.contas || []).find(
+                (c) => c.external_id === conta.numero,
+              );
+              return (
+                <li key={conta.numero} className="flex min-w-0 flex-wrap items-center px-1 py-1.5 [&>*]:m-1">
+                  <div className="min-w-0 flex-1 basis-full sm:basis-auto">
+                    <p className="truncate text-[13px] font-medium text-foreground">{conta.nome || `Conta ${conta.numero}`}</p>
+                    <p className={juntar(texto.auxiliar, "truncate")}>
+                      {[
+                        `act_${conta.numero}`,
+                        conta.empresa,
+                        conta.status_rotulo,
+                        conta.gasto_total != null ? `gasto total ${dinheiro(conta.gasto_total)}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                    {conta.utilizavel === false && (
+                      <p className="truncate text-[12px] leading-4 text-warning" title="Ligar não traz números enquanto a Meta não reativar a conta.">
+                        Na Meta: {conta.status_rotulo || "inativa"}
+                      </p>
+                    )}
+                  </div>
+
+                  {jaLigada ? (
+                    <span className="text-[12px] font-medium text-success">já monitorada</span>
+                  ) : (
+                    <>
+                      <select
+                        value={donoEscolhido[conta.numero] || ""}
+                        onChange={(e) =>
+                          setDonoEscolhido((antes) => ({
+                            ...antes,
+                            [conta.numero]: e.target.value,
+                          }))}
+                        aria-label={`Cliente da conta ${conta.nome || conta.numero}`}
+                        className={juntar(campo, "flex-1 sm:w-48 sm:flex-none")}
+                      >
+                        <option value="">Cliente...</option>
+                        {comTrafego.map((cliente: any) => (
+                          <option key={cliente.id} value={cliente.id}>
+                            {cliente.company_name || cliente.full_name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className={botao.secundario}
+                        onClick={() => void ligarDaLista(conta)}
+                        disabled={ligandoNumero === conta.numero || !donoEscolhido[conta.numero]}
+                      >
+                        {ligandoNumero === conta.numero ? "Ligando..." : "Monitorar"}
+                      </button>
+                    </>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+
+          {comTrafego.length === 0 && (
+            <p className="mt-2 flex min-w-0 items-center text-[12px] leading-4 text-warning">
+              <span className="min-w-0 truncate">Nenhum cliente do painel está marcado com o serviço de tráfego</span>
+              <AjudaRecolhida className="ml-1.5" rotulo="Como marcar o serviço de tráfego">
+                Marque o serviço de tráfego no cadastro do cliente para ele aparecer aqui.
+              </AjudaRecolhida>
+            </p>
+          )}
+        </Secao>
+      )}
+
+      <Secao
+        key={versao}
+        id={ID_DAS_CONTAS}
+        divisoria
+        titulo={clienteId ? "Contas deste cliente" : "Contas e conexão"}
+        recolher={chaveDasContas(clienteId)}
+        recolhidaDeInicio
+        descricao={<span className={juntar("block truncate", comProblema ? "text-warning" : "")}>{resumo}</span>}
+        resumo={<span className={comProblema ? "text-warning" : ""}>{resumo}</span>}
+        ajuda="Conecte com a Meta, escolha as contas e o cliente de cada uma. Daí em diante o painel lê campanhas, saldo e criativos sozinho, de hora em hora. Em Mais opções: ligar pelo número e o token da agência."
+        acao={
+          <>
+            <button
+              type="button"
+              className={botao.discreto}
+              onClick={() => setMaisOpcoes((v) => !v)}
+              aria-expanded={maisOpcoes}
+              aria-label="Mais opções"
+            >
+              <ChevronDown className={juntar("h-4 w-4 transition-transform", maisOpcoes ? "rotate-180" : "")} aria-hidden="true" />
+              <span className="ml-1 hidden sm:inline">Mais opções</span>
+            </button>
+            <BotaoDaPagina
+              icone={<Link2 className="h-4 w-4" aria-hidden="true" />}
+              rotulo={rotuloConectar}
+              classe={botao.secundario}
+              onClick={meta.conectarPelaMeta}
+              disabled={meta.abrindo}
+            />
+          </>
+        }
+      >
         {error && (
           <EstadoDeErro
-            className="m-3"
+            className="mb-3"
             titulo="Não consegui ler a situação das contas."
             descricao={(error as { message?: string })?.message || "Erro desconhecido."}
             acao={
@@ -634,20 +990,19 @@ function ContasEConexao({
           />
         )}
 
-        {isLoading && !conexao && <Carregando rotulo="Lendo as contas" linhas={2} className="p-3" />}
+        {isLoading && !conexao && <Carregando rotulo="Lendo as contas" linhas={2} />}
 
         {!isLoading && !error && ativas.length === 0 && (
           <EstadoVazio
             compacto
-            className="m-3"
-            titulo={clienteId ? "Sem conta ligada." : "Conecte com a Meta, escolha as contas e o cliente de cada uma."}
-            descricao={clienteId ? "Ligue pela Meta ou pelo número em Mais opções." : "Daí em diante o painel lê sozinho."}
+            titulo={clienteId ? "Sem conta ligada." : "Nenhuma conta ligada."}
+            descricao="Conecte com a Meta ou ligue pelo número em Mais opções."
           />
         )}
 
         {/* A situação de cada conta, problemas primeiro. No computador rola por dentro; no celular a página rola. */}
         {ativas.length > 0 && (
-          <ul className="min-w-0 divide-y divide-border lg:max-h-64 lg:overflow-y-auto lg:overscroll-contain" aria-label="Situação das contas">
+          <ul className="-mx-2 min-w-0 divide-y divide-border lg:max-h-64 lg:overflow-y-auto lg:overscroll-contain" aria-label="Situação das contas">
             {ativas.map((conta) => {
               const sit = situacaoDaConta(conta);
               const tom = CLASSE_DO_TOM_DA_CONTA[sit.tom];
@@ -657,7 +1012,7 @@ function ContasEConexao({
                 conta.gasto_total != null ? `gasto total ${dinheiro(Number(conta.gasto_total))}` : null,
               ].filter(Boolean).join(" · ");
               return (
-                <li key={conta.id} className="flex min-w-0 items-start px-4 py-2.5">
+                <li key={conta.id} className="flex min-w-0 items-start px-2 py-2.5">
                   <span className={juntar("mr-2.5 mt-1.5 h-2 w-2 shrink-0 rounded-full", tom.ponto)} aria-hidden="true" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-medium text-foreground">
@@ -668,7 +1023,7 @@ function ContasEConexao({
                     </p>
                     <p className={juntar(texto.auxiliar, "truncate tabular-nums")}>{numeros}</p>
                     {conta.erro && (
-                      <p className="line-clamp-2 text-[12px] leading-4 text-destructive [overflow-wrap:anywhere]" title={conta.erro}>
+                      <p className="truncate text-[12px] leading-4 text-destructive" title={conta.erro}>
                         A Meta recusou a leitura: {conta.erro}
                       </p>
                     )}
@@ -684,106 +1039,10 @@ function ContasEConexao({
           </ul>
         )}
 
-        {/* Depois do login: escolher o cliente de cada conta devolvida. */}
-        {contasDaMeta.length > 0 && (
-          <div className="min-w-0 border-t border-border">
-            <div className="flex min-w-0 items-center px-4 pb-2 pt-3">
-              <div className="mr-3 min-w-0 flex-1">
-                <h3 className="truncate text-[13px] font-semibold text-foreground">Contas que a Meta devolveu</h3>
-                <p className={juntar(texto.auxiliar, "truncate")}>Escolha o cliente de cada conta que quer monitorar.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setContasDaMeta([]);
-                  try {
-                    localStorage.removeItem(CONTAS_DA_META);
-                  } catch { /* nada a fazer */ }
-                }}
-                className={botao.discreto}
-              >
-                Esconder
-              </button>
-            </div>
-
-            {/* Vinte contas não empurram o resto: no computador a lista rola por dentro. */}
-            <ul className="min-w-0 divide-y divide-border border-t border-border lg:max-h-[22rem] lg:overflow-y-auto lg:overscroll-contain" aria-label="Contas que a Meta devolveu">
-              {contasDaMeta.map((conta) => {
-                const jaLigada = (conexao?.contas || []).find(
-                  (c) => c.external_id === conta.numero,
-                );
-                return (
-                  <li key={conta.numero} className="-m-1 flex min-w-0 flex-wrap items-center px-4 py-2 [&>*]:m-1">
-                    <div className="min-w-0 flex-1 basis-full sm:basis-auto">
-                      <p className="truncate text-[13px] font-medium text-foreground">{conta.nome || `Conta ${conta.numero}`}</p>
-                      <p className={juntar(texto.auxiliar, "truncate")}>
-                        {[
-                          `act_${conta.numero}`,
-                          conta.empresa,
-                          conta.status_rotulo,
-                          conta.gasto_total != null ? `gasto total ${dinheiro(conta.gasto_total)}` : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </p>
-                      {conta.utilizavel === false && (
-                        <p className="truncate text-[12px] leading-4 text-warning">
-                          A Meta diz que esta conta está {conta.status_rotulo || "inativa"}: ligar não traz números.
-                        </p>
-                      )}
-                    </div>
-
-                    {jaLigada ? (
-                      <span className="text-[12px] font-medium text-success">já monitorada</span>
-                    ) : (
-                      <>
-                        <select
-                          value={donoEscolhido[conta.numero] || ""}
-                          onChange={(e) =>
-                            setDonoEscolhido((antes) => ({
-                              ...antes,
-                              [conta.numero]: e.target.value,
-                            }))}
-                          aria-label={`Cliente da conta ${conta.nome || conta.numero}`}
-                          className={juntar(campo, "flex-1 sm:w-48 sm:flex-none")}
-                        >
-                          <option value="">Cliente...</option>
-                          {comTrafego.map((cliente: any) => (
-                            <option key={cliente.id} value={cliente.id}>
-                              {cliente.company_name || cliente.full_name}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          className={botao.secundario}
-                          onClick={() => void ligarDaLista(conta)}
-                          disabled={ligandoNumero === conta.numero || !donoEscolhido[conta.numero]}
-                        >
-                          {ligandoNumero === conta.numero ? "Ligando..." : "Monitorar"}
-                        </button>
-                      </>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-
-            {comTrafego.length === 0 && (
-              <p className="flex min-w-0 items-center border-t border-border px-4 py-2 text-[12px] leading-4 text-warning">
-                <span className="min-w-0 truncate">Nenhum cliente do painel está marcado com o serviço de tráfego</span>
-                <AjudaRecolhida className="ml-1.5" rotulo="Como marcar o serviço de tráfego">
-                  Marque o serviço de tráfego no cadastro do cliente para ele aparecer aqui.
-                </AjudaRecolhida>
-              </p>
-            )}
-          </div>
-        )}
-
         {/* Os caminhos alternativos, recolhidos: ligar pelo número e o token da agência. */}
         {maisOpcoes && (
-          <div className="grid min-w-0 grid-cols-1 border-t border-border lg:grid-cols-2">
-            <div className="min-w-0 p-4">
+          <div className="mt-4 grid min-w-0 grid-cols-1 gap-x-8 gap-y-6 border-t border-border pt-4 lg:grid-cols-2">
+            <div className="min-w-0">
               <GrupoDeCampos titulo="Ligar conta pelo número">
                 <CampoDeFormulario rotulo="Cliente">
                   <select value={clientId} onChange={(event) => setClientId(event.target.value)} className={campo}>
@@ -795,7 +1054,7 @@ function ContasEConexao({
                     ))}
                   </select>
                 </CampoDeFormulario>
-                <CampoDeFormulario rotulo="Número da conta" apoio='Está no Gerenciador; com ou sem o "act_".'>
+                <CampoDeFormulario rotulo="Número da conta" ajuda='Está no Gerenciador de Anúncios; com ou sem o "act_".'>
                   <input value={actId} onChange={(event) => setActId(event.target.value)} placeholder="act_123456789" className={campo} />
                 </CampoDeFormulario>
                 <CampoDeFormulario rotulo="Nome da conta" largo>
@@ -809,15 +1068,15 @@ function ContasEConexao({
               </div>
             </div>
 
-            <div className="min-w-0 border-t border-border p-4 lg:border-l lg:border-t-0">
+            <div className="min-w-0">
               <GrupoDeCampos titulo="Ou cole um token" colunas={1}>
                 <CampoDeFormulario
                   rotulo="Token do Business Manager"
-                  ajuda="Token do Business Manager da agência. Vai para o cofre do banco e nunca mais aparece."
+                  ajuda="Token do Business Manager da agência. Vai para o cofre do banco e nunca mais aparece. Salvar outro substitui."
                   apoio={
                     conexao?.agencia
-                      ? `Guardado em ${new Date(conexao.agencia.saved_at).toLocaleDateString("pt-BR")}; salvar outro substitui.`
-                      : "Nenhum guardado ainda."
+                      ? `Guardado em ${new Date(conexao.agencia.saved_at).toLocaleDateString("pt-BR")}`
+                      : "Nenhum guardado ainda"
                   }
                 >
                   <input
@@ -833,7 +1092,7 @@ function ContasEConexao({
               <div className="mt-3 flex min-w-0 items-center justify-end">
                 {(conexao?.perfis || []).length > 0 && (
                   <p className={juntar(texto.auxiliar, "mr-3 min-w-0 flex-1 truncate")}>
-                    Perfis conectados:{" "}
+                    Perfis:{" "}
                     {(conexao?.perfis || [])
                       .map((p) => `${p.label} (${plural(p.contas, "conta", "contas")})`)
                       .join(" · ")}
@@ -847,18 +1106,16 @@ function ContasEConexao({
           </div>
         )}
 
-        {/* 26/09: gestão de campanhas pelo agente da Mesa Ads (token da carteira), no pé do mesmo painel. */}
-        <div className="border-t border-border">
+        {/* 26/09: gestão de campanhas pelo agente da Mesa Ads (token da carteira), no pé da mesma seção. */}
+        <div className="mt-4 border-t border-border">
           <AtivarGestao clientId={null} podeConectar={podeConectar} compacto className="!rounded-none !border-0 !bg-transparent" />
         </div>
-      </Painel>
-    </Secao>
+      </Secao>
+    </>
   );
 }
 
 /* ─────────────────────────────── a página ─────────────────────────────── */
-
-const COLUNAS = "md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_16px]";
 
 export default function AdminAds() {
   const { profile } = useAuth();
@@ -869,6 +1126,8 @@ export default function AdminAds() {
   const [params, setParams] = useSearchParams();
   const [busca, setBusca] = useEstadoDaTela("anuncios:busca", "", { validar: ehTexto });
   const [coletando, setColetando] = useState(false);
+  // Sobe quando o aviso pede "Ver contas": a seção de contas remonta já aberta.
+  const [versaoDasContas, setVersaoDasContas] = useState(0);
 
   const clienteAberto = params.get("cliente") || "";
   const { data: rows, isLoading, error: erroDosDias, refetch: releDias } = useAdsDaily(undefined, 30);
@@ -877,6 +1136,11 @@ export default function AdminAds() {
   const { data: conexao } = useAdsConnection();
   const contasDoCliente = (clientId: string) =>
     (conexao?.contas || []).filter((c) => c.client_id === clientId && c.status === "active");
+
+  const aoMudarConexao = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["ads-connection"] });
+  }, [queryClient]);
+  const meta = useConexaoComAMeta(aoMudarConexao);
 
   const nomes = useMemo(() => {
     const mapa = new Map<string, string>();
@@ -917,6 +1181,13 @@ export default function AdminAds() {
     setParams(proximo, { replace: true });
   };
 
+  /** "Ver contas" do aviso: abre a seção de contas (lembrando a escolha) e rola até ela. */
+  const verContas = () => {
+    gravarEstadoDaTela(chaveDasContas(clienteAberto || undefined), false);
+    setVersaoDasContas((v) => v + 1);
+    rolarAte(ID_DAS_CONTAS);
+  };
+
   const atualizarAgora = async () => {
     setColetando(true);
     try {
@@ -950,9 +1221,6 @@ export default function AdminAds() {
   }
 
   const semConta = (conexao?.contas || []).length === 0;
-  const aoMudarConexao = () => {
-    queryClient.invalidateQueries({ queryKey: ["ads-connection"] });
-  };
 
   const botaoAtualizar = (
     <BotaoDaPagina
@@ -977,6 +1245,17 @@ export default function AdminAds() {
     />
   ) : null;
 
+  const secaoDasContas = (clienteId?: string) => (
+    <ContasEConexao
+      clienteId={clienteId}
+      nomes={nomes}
+      podeConectar={papel === "admin"}
+      onDone={aoMudarConexao}
+      meta={meta}
+      versao={versaoDasContas}
+    />
+  );
+
   if (clienteAberto) {
     const opcoesDeCliente = porCliente.map(([id]) => ({ valor: id, rotulo: nomes.get(id) || "Cliente" }));
     if (!opcoesDeCliente.some((o) => o.valor === clienteAberto)) {
@@ -991,9 +1270,17 @@ export default function AdminAds() {
         campaigns={(campaigns || []).filter((row) => row.client_id === clienteAberto)}
         contas={contasDoCliente(clienteAberto)}
         carregando={isLoading}
+        aviso={
+          <AvisoDasContas
+            contas={contasDoCliente(clienteAberto)}
+            abrindo={meta.abrindo}
+            aoReconectar={meta.conectarPelaMeta}
+            aoVerContas={verContas}
+          />
+        }
         // Dentro do cliente, o AGORA dele: entrar no detalhe não faz as campanhas ativas sumirem.
         agora={<CampanhasAtivas clientId={clienteAberto} />}
-        contasDoCliente={<ContasEConexao clienteId={clienteAberto} nomes={nomes} podeConectar={papel === "admin"} onDone={aoMudarConexao} />}
+        contasDoCliente={secaoDasContas(clienteAberto)}
         seletorDeCliente={
           opcoesDeCliente.length > 1 ? (
             // No celular a linha de ações tem de caber ao lado do nome: o seletor aparece de 1024 px para cima.
@@ -1013,9 +1300,10 @@ export default function AdminAds() {
     (m, c) => (c.status === "active" && c.ultima_coleta && (!m || c.ultima_coleta > m) ? c.ultima_coleta : m),
     null,
   );
+  const investidoTotal = porCliente.reduce((t, [, lista]) => t + summarizeAccount(lista).investido, 0);
   const descricao = [
     porCliente.length ? plural(porCliente.length, "cliente", "clientes") : "",
-    "últimos 30 dias",
+    investidoTotal > 0 ? `${dinheiro(investidoTotal)} em 30 dias` : "30 dias",
     ultimaLeitura ? `lido ${haQuanto(ultimaLeitura)}` : "",
   ].filter(Boolean).join(" · ");
 
@@ -1024,22 +1312,40 @@ export default function AdminAds() {
       <CabecalhoDePagina
         titulo="Anúncios"
         descricao={descricao.charAt(0).toUpperCase() + descricao.slice(1)}
-        ajuda="Meta Ads lido direto da conta, de hora em hora, com os números dos últimos 30 dias. Toque num cliente para ver campanhas, criativos e gerar o relatório."
+        ajuda="Meta Ads lido direto da conta, de hora em hora, com os números dos últimos 30 dias. A seta compara os últimos 15 dias com os 15 anteriores. Toque num cliente para ver campanhas, criativos e gerar o relatório. A configuração das contas fica no pé da página."
         acoes={botaoAtualizar}
       />
 
       <AreaDeTrabalho key="lista" memoriaDaRolagem="anuncios:lista" rotuloDoPrincipal="Anúncios por cliente">
-        <div className="min-w-0 space-y-5">
+        <div className="min-w-0 space-y-6">
           {erroNaLeitura}
 
-          <ContasEConexao nomes={nomes} podeConectar={papel === "admin"} onDone={aoMudarConexao} />
+          {semConta ? (
+            <EstadoVazio
+              titulo="Nenhuma conta ligada ainda."
+              descricao="Conecte com a Meta, escolha as contas e o cliente de cada uma."
+              acao={
+                <button type="button" className={botao.primario} onClick={meta.conectarPelaMeta} disabled={meta.abrindo}>
+                  <Link2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                  {meta.abrindo ? "Abrindo a Meta..." : "Conectar com a Meta"}
+                </button>
+              }
+            />
+          ) : (
+            <AvisoDasContas
+              contas={conexao?.contas || []}
+              nomes={nomes}
+              abrindo={meta.abrindo}
+              aoReconectar={meta.conectarPelaMeta}
+              aoVerContas={verContas}
+            />
+          )}
 
           {semConta ? null : (
             <Secao
-              divisoria
-              titulo="Desempenho por cliente"
+              titulo="Clientes"
               descricao={busca.trim() ? `${filtrados.length} de ${porCliente.length}` : plural(porCliente.length, "cliente", "clientes")}
-              ajuda="Resultado pelo objetivo de cada campanha: conversa não soma com venda. Toque num cliente para abrir."
+              ajuda="Por cliente, nos últimos 30 dias: investido, resultado pelo objetivo de cada campanha (conversa não soma com venda), custo por resultado e saldo. Toque num cliente para abrir."
               acao={
                 porCliente.length > 6 ? (
                   <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar cliente" rotulo="Buscar cliente" className="w-40 sm:w-64" />
@@ -1052,7 +1358,7 @@ export default function AdminAds() {
                 <EstadoVazio
                   compacto
                   titulo="Primeira leitura a caminho."
-                  descricao='"Atualizar agora" apressa; os números aparecem aqui em alguns minutos.'
+                  descricao='"Atualizar agora" apressa.'
                 />
               ) : filtrados.length === 0 ? (
                 <EstadoVazio
@@ -1065,79 +1371,47 @@ export default function AdminAds() {
                   }
                 />
               ) : (
-                <Painel semEspaco>
-                  <div className={juntar("hidden gap-x-5 border-b border-border px-4 py-2 md:grid", COLUNAS)} aria-hidden="true">
-                    <p className={texto.rotulo}>Cliente</p>
-                    <p className={juntar(texto.rotulo, "text-right")}>Investido</p>
-                    <p className={texto.rotulo}>Resultado</p>
-                    <p className={juntar(texto.rotulo, "text-right")}>Alcance</p>
-                    <p className={juntar(texto.rotulo, "text-right")}>Saldo</p>
-                    <span />
-                  </div>
-                  <ul className="min-w-0 divide-y divide-border">
-                    {filtrados.map(([clientId, lista]) => {
-                      const carteira = summarizeAccount(lista);
-                      const res = resumoDosResultados(resultadosPorObjetivo(lista));
-                      const contas = contasDoCliente(clientId);
-                      const saldo = saldoDas(contas);
-                      const problemas = contas.filter((c) => {
-                        const tom = situacaoDaConta(c).tom;
-                        return tom === "erro" || tom === "atencao";
-                      }).length;
-                      return (
-                        <li key={clientId} className="min-w-0">
-                          <button
-                            type="button"
-                            onClick={() => abrirCliente(clientId)}
-                            className={juntar(
-                              "group flex w-full min-w-0 items-center px-4 py-3 text-left transition-colors hover:bg-muted/50 md:grid md:gap-x-5",
-                              COLUNAS,
-                              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                            )}
-                          >
-                            <div className="flex min-w-0 flex-1 items-center">
-                              {/* Mesma marca da grade de Métricas: reconhecer o cliente não pode depender da tela. */}
-                              <LogoDoCliente
-                                url={identidades?.get(clientId)?.profile_picture_url}
-                                nome={nomes.get(clientId)}
-                                tamanho={32}
-                                className="mr-2.5"
-                              />
-                              <div className="min-w-0">
-                                <p className="truncate text-[13px] font-semibold text-foreground">{nomes.get(clientId) || "Cliente"}</p>
-                                <p className={juntar(texto.auxiliar, "truncate")}>
-                                  {lista.length === 0
-                                    ? "Conta ligada · sem gasto nos últimos 30 dias"
-                                    : plural(carteira.campanhas, "campanha", "campanhas")}
-                                  {problemas > 0 && (
-                                    <span className="text-warning"> · {problemas} {problemas === 1 ? "conta pede" : "contas pedem"} atenção</span>
-                                  )}
-                                </p>
-                              </div>
-                            </div>
-                            {/* Celular: o essencial à direita da linha. */}
-                            <div className="ml-3 max-w-[45%] shrink-0 text-right md:hidden">
-                              <p className="truncate text-[13px] font-semibold tabular-nums text-foreground">{dinheiro(carteira.investido)}</p>
-                              <p className={juntar(texto.auxiliar, "truncate")}>{res.valor}</p>
-                            </div>
-                            <p className="hidden truncate text-right text-[13px] font-semibold tabular-nums text-foreground md:block">{dinheiro(carteira.investido)}</p>
-                            <div className="hidden min-w-0 md:block">
-                              <p className={juntar("truncate text-[13px]", res.principal ? "font-medium text-foreground" : "text-muted-foreground")}>{res.valor}</p>
-                              {(res.custo || res.outros) && (
-                                <p className={juntar(texto.auxiliar, "truncate")}>
-                                  {[res.custo, res.outros ? `+ ${res.outros}` : ""].filter(Boolean).join(" · ")}
-                                </p>
-                              )}
-                            </div>
-                            <p className="hidden truncate text-right text-[13px] tabular-nums text-foreground md:block">{numero(carteira.alcance)}</p>
-                            <p className="hidden truncate text-right text-[13px] tabular-nums text-foreground md:block">{saldo != null ? dinheiro(saldo) : "-"}</p>
-                            <ChevronRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary md:ml-0" aria-hidden="true" />
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </Painel>
+                <ul className={juntar(lista.aberta, lista.divisoria)} aria-label="Clientes com anúncios">
+                  {filtrados.map(([clientId, linhas]) => {
+                    const dados = numerosDoCliente(linhas, contasDoCliente(clientId));
+                    const problemas = contasDoCliente(clientId).filter(temProblema).length;
+                    return (
+                      <li key={clientId} className="min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => abrirCliente(clientId)}
+                          className={juntar(lista.linha, "group w-full flex-wrap py-3 text-left md:flex-nowrap", foco)}
+                        >
+                          <span className="flex min-w-0 flex-1 basis-full items-center md:mr-4 md:basis-0">
+                            {/* Mesma marca da grade de Métricas: reconhecer o cliente não pode depender da tela. */}
+                            <LogoDoCliente
+                              url={identidades?.get(clientId)?.profile_picture_url}
+                              nome={nomes.get(clientId)}
+                              tamanho={36}
+                              className="mr-2.5"
+                            />
+                            <span className="block min-w-0 flex-1">
+                              <span className="block truncate text-[13px] font-semibold text-foreground">{nomes.get(clientId) || "Cliente"}</span>
+                              <span className={juntar(texto.auxiliar, "block truncate")}>
+                                {linhas.length === 0
+                                  ? "Conta ligada · sem gasto nos últimos 30 dias"
+                                  : plural(dados.campanhas, "campanha", "campanhas")}
+                                {problemas > 0 && (
+                                  <span className="text-warning"> · {problemas === 1 ? "conta pede atenção" : `${problemas} contas pedem atenção`}</span>
+                                )}
+                              </span>
+                            </span>
+                            <ChevronRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground md:hidden" aria-hidden="true" />
+                          </span>
+                          <span className="mt-2.5 block min-w-0 basis-full pl-[46px] md:mt-0 md:w-3/5 md:shrink-0 md:basis-auto md:pl-0">
+                            <NumerosDoCliente dados={dados} />
+                          </span>
+                          <ChevronRight className="ml-3 hidden h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary md:block" aria-hidden="true" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </Secao>
           )}
@@ -1145,6 +1419,9 @@ export default function AdminAds() {
           {/* O que está no ar AGORA vem DEPOIS dos clientes: a lista é a porta
               de entrada, e cada campanha diz de qual cliente é. */}
           {!semConta && porCliente.length > 0 && <CampanhasAtivas nomesDeClientes={nomes} aoAbrirCliente={abrirCliente} />}
+
+          {/* Configuração no pé, recolhida: não disputa espaço com os números. */}
+          {secaoDasContas()}
         </div>
       </AreaDeTrabalho>
     </div>
