@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronLeft, ChevronRight, Clock, Plus, Trash2, User } from "lucide-react";
+import { CalendarPlus, Check, ChevronLeft, ChevronRight, Clock, Trash2, User } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -159,6 +159,7 @@ export default function AgendaComercial({
         onClick={() => setMesAberto(new Date(mesAberto.getFullYear(), mesAberto.getMonth() - 1, 1))}
         className={botao.icone}
         aria-label="Mês anterior"
+        title="Mês anterior"
       >
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
       </button>
@@ -177,6 +178,7 @@ export default function AgendaComercial({
         onClick={() => setMesAberto(new Date(mesAberto.getFullYear(), mesAberto.getMonth() + 1, 1))}
         className={botao.icone}
         aria-label="Próximo mês"
+        title="Próximo mês"
       >
         <ChevronRight className="h-4 w-4" aria-hidden="true" />
       </button>
@@ -259,9 +261,8 @@ export default function AgendaComercial({
             titulo={tituloDoDia}
             descricao={doDia.length > 0 ? `${doDia.length} ${doDia.length === 1 ? "compromisso" : "compromissos"}` : undefined}
             acao={
-              <button type="button" onClick={() => setNovoEm(diaEscolhido)} className={botao.primario} aria-label={`Marcar compromisso em ${tituloDoDia}`}>
-                <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
-                <span className="hidden sm:inline">Marcar</span>
+              <button type="button" onClick={() => setNovoEm(diaEscolhido)} className={juntar(botao.icone, "text-primary hover:text-primary")} aria-label={`Marcar compromisso em ${tituloDoDia}`} title="Marcar compromisso neste dia">
+                <CalendarPlus className="h-4 w-4" aria-hidden="true" />
               </button>
             }
           >

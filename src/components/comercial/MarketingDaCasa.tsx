@@ -135,9 +135,8 @@ export default function MarketingDaCasa({ leads, campanhas, periodo }: Props) {
           }
           ajuda="O conteúdo da casa vive na Agenda editorial, junto com o dos clientes. Aqui fica só o retrato, para não existirem dois lugares com a mesma resposta. A empresa entra aqui quando está marcada como interna no cadastro."
           acao={
-            <Link to="/calendario" className={botao.secundario} aria-label="Abrir a Agenda editorial">
-              <span className="hidden sm:inline">Abrir agenda</span>
-              <ArrowUpRight className="h-3.5 w-3.5 sm:ml-1.5" aria-hidden="true" />
+            <Link to="/calendario" className={botao.icone} aria-label="Abrir a Agenda editorial" title="Abrir a Agenda editorial">
+              <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           }
         />

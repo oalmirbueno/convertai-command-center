@@ -8,12 +8,19 @@ import {
   CalendarClock,
   ChevronLeft,
   ChevronRight,
+  Contact,
   Download,
+  Handshake,
+  History,
   KanbanSquare,
+  LayoutDashboard,
+  ListChecks,
   Megaphone,
   Pencil,
   Plus,
+  Route,
   Sparkles,
+  StickyNote,
   Target,
   X,
 } from "lucide-react";
@@ -125,14 +132,18 @@ const TITULO_DA_ABA: Record<Aba, string> = {
   marketing: "A presença da própria casa: o que está no ar, o que vem por aí e de onde as pessoas chegam.",
 };
 
-/** As áreas do departamento, na ordem do menu lateral. */
-const AREAS: Array<{ valor: Aba; rotulo: string }> = [
-  { valor: "visao", rotulo: "Visão geral" },
-  { valor: "crm", rotulo: "CRM" },
-  { valor: "agenda", rotulo: "Agenda" },
-  { valor: "metas", rotulo: "Metas" },
-  { valor: "campanhas", rotulo: "Campanhas" },
-  { valor: "marketing", rotulo: "Marketing" },
+/**
+ * As áreas do departamento, na ordem do menu lateral. 16/10/2026 (dono): abas
+ * em ícone na linha do título, como no resto do painel; o nome fica no title
+ * e no leitor de tela, e a aberta mostra o nome ao lado do ícone.
+ */
+const AREAS: Array<{ valor: Aba; rotulo: string; icone: ReactNode }> = [
+  { valor: "visao", rotulo: "Visão geral", icone: <LayoutDashboard className="h-4 w-4" /> },
+  { valor: "crm", rotulo: "CRM", icone: <KanbanSquare className="h-4 w-4" /> },
+  { valor: "agenda", rotulo: "Agenda", icone: <CalendarClock className="h-4 w-4" /> },
+  { valor: "metas", rotulo: "Metas", icone: <Target className="h-4 w-4" /> },
+  { valor: "campanhas", rotulo: "Campanhas", icone: <Megaphone className="h-4 w-4" /> },
+  { valor: "marketing", rotulo: "Marketing", icone: <Sparkles className="h-4 w-4" /> },
 ];
 
 /** "Setembro de 2026" (só a primeira letra maiúscula; `capitalize` faria "De"). */
@@ -179,7 +190,10 @@ function useLarguraMinima(px: number): boolean {
 
 const ABAS_VALIDAS: Aba[] = ["visao", "crm", "agenda", "metas", "campanhas", "marketing"];
 
-/** Botão do cabeçalho: no celular só o ícone (com aria-label), do sm para cima ícone e texto. */
+/**
+ * Botão do cabeçalho: só o ícone, sem borda, com o nome no aria-label e no
+ * title (16/10/2026, padrão do painel). O de criar ganha a cor primária.
+ */
 function BotaoDoCabecalho({
   icone,
   texto: rotulo,
@@ -194,9 +208,15 @@ function BotaoDoCabecalho({
   desativado?: boolean;
 }) {
   return (
-    <button type="button" onClick={onClick} disabled={desativado} aria-label={rotulo} className={primario ? botao.primario : botao.secundario}>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={desativado}
+      aria-label={rotulo}
+      title={rotulo}
+      className={juntar(botao.icone, "disabled:opacity-50", primario && "text-primary hover:text-primary")}
+    >
       {icone}
-      <span className="ml-1.5 hidden sm:inline">{rotulo}</span>
     </button>
   );
 }
@@ -226,9 +246,12 @@ export default function AdminComercial() {
   const [novoLead, setNovoLead] = useState(false);
   const [campanhaAberta, setCampanhaAberta] = useState<Campanha | "nova" | null>(null);
   const [pedidoDeEmpresa, setPedidoDeEmpresa] = useState(0);
-  // De 1280 px para cima os filtros do CRM sobem para a linha das áreas: a
-  // tela de 720 px de altura ganha espaço para o quadro inteiro.
-  const filtrosNaLinha = useLarguraMinima(1280);
+  // Os filtros do CRM sobem para a linha do título quando cabem (16/10/2026:
+  // as áreas viraram ícones nessa mesma linha, então o limite subiu de 1280
+  // para 1440 px). Abaixo disso ficam numa fileira só, logo embaixo.
+  const filtrosNaLinha = useLarguraMinima(1440);
+  // Do sm para cima as áreas moram na linha do título; no celular, logo abaixo.
+  const abasNoTitulo = useLarguraMinima(640);
   const [linhaDosFiltros, setLinhaDosFiltros] = useState<HTMLDivElement | null>(null);
   const destinoDosFiltros = aba === "crm" && filtrosNaLinha ? linhaDosFiltros : null;
   /**
@@ -377,15 +400,15 @@ export default function AdminComercial() {
 
   /* ── As ações da área, na linha do título. ── */
   const seletorDeMes = (
-    <div className="flex h-9 items-center rounded-md border border-border" role="group" aria-label="Mês">
-      <button type="button" onClick={() => setPeriodo(somarMeses(periodo, -1))} className={juntar(botao.icone, "h-[34px]")} aria-label="Mês anterior">
+    <div className="flex h-9 items-center" role="group" aria-label="Mês">
+      <button type="button" onClick={() => setPeriodo(somarMeses(periodo, -1))} className={botao.icone} aria-label="Mês anterior" title="Mês anterior">
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
       </button>
       <span className="min-w-[72px] px-1 text-center text-[13px] font-medium tabular-nums text-foreground sm:min-w-[124px]" aria-live="polite">
         <span className="sm:hidden">{mesCurto(periodo)}</span>
         <span className="hidden sm:inline">{mesLegivel(periodo)}</span>
       </span>
-      <button type="button" onClick={() => setPeriodo(somarMeses(periodo, 1))} className={juntar(botao.icone, "h-[34px]")} aria-label="Próximo mês">
+      <button type="button" onClick={() => setPeriodo(somarMeses(periodo, 1))} className={botao.icone} aria-label="Próximo mês" title="Próximo mês">
         <ChevronRight className="h-4 w-4" aria-hidden="true" />
       </button>
     </div>
@@ -398,9 +421,12 @@ export default function AdminComercial() {
       {(aba === "visao" || aba === "metas" || aba === "campanhas" || aba === "marketing") && (
         seletorDeMes
       )}
+      {/* Os filtros do CRM (Negócios | Empresas, classe e busca) entram aqui
+          quando cabem na linha do título. */}
+      {aba === "crm" && filtrosNaLinha && <div ref={setLinhaDosFiltros} className="flex min-w-0 items-center" />}
       {aba === "crm" && visaoDoCrm === "negocios" && (
         <BotaoDoCabecalho
-          icone={<Download className="h-3.5 w-3.5" aria-hidden="true" />}
+          icone={<Download className="h-4 w-4" aria-hidden="true" />}
           texto="Trazer do diagnóstico"
           onClick={() => importar.mutate()}
           desativado={importar.isPending}
@@ -423,11 +449,24 @@ export default function AdminComercial() {
     <SeletorCompacto
       rotulo="Leitura do CRM"
       opcoes={[
-        { valor: "negocios", rotulo: "Negócios", icone: <KanbanSquare className="h-3.5 w-3.5" /> },
-        { valor: "empresas", rotulo: "Empresas", icone: <Building2 className="h-3.5 w-3.5" /> },
+        { valor: "negocios", rotulo: "Negócios", icone: <KanbanSquare className="h-3.5 w-3.5" />, contador: carregandoLeads ? null : resumo.abertos },
+        { valor: "empresas", rotulo: "Empresas", icone: <Building2 className="h-3.5 w-3.5" />, contador: empresas.length },
       ]}
       valor={visaoDoCrm}
       onEscolher={(v) => setVisaoDoCrm(v as "negocios" | "empresas")}
+    />
+  );
+
+  /* As áreas do departamento (as mesmas do menu lateral), em ícone. A aba
+     continua no endereço: voltar do navegador e link mandado funcionam igual. */
+  const abasDasAreas = (
+    <Etapas
+      soIcone
+      rotulo="Áreas do Comercial"
+      itens={AREAS}
+      valor={aba}
+      onEscolher={(v) => setAba(v as Aba)}
+      className="min-w-0 flex-1"
     />
   );
 
@@ -438,18 +477,15 @@ export default function AdminComercial() {
              cartoes iguais no topo de quatro telas diferentes obrigam a ler
              tudo para achar o que importa naquela. ── */}
       <header className="min-w-0">
-        <CabecalhoDePagina titulo="Comercial" descricao={descricao} ajuda={TITULO_DA_ABA[aba]} acoes={acoes} />
-        {/* As áreas do departamento (as mesmas do menu lateral). A aba
-            continua no endereço: voltar do navegador e link mandado
-            funcionam igual. */}
-        <Etapas
-          className="mt-2 border-b border-border"
-          rotulo="Áreas do Comercial"
-          itens={AREAS}
-          valor={aba}
-          onEscolher={(v) => setAba(v as Aba)}
-          depois={aba === "crm" && filtrosNaLinha ? <div ref={setLinhaDosFiltros} className="ml-auto flex shrink-0 items-center py-1 pl-4" /> : undefined}
+        <CabecalhoDePagina
+          titulo="Comercial"
+          descricao={descricao}
+          ajuda={TITULO_DA_ABA[aba]}
+          aoLado={abasNoTitulo ? abasDasAreas : undefined}
+          acoes={acoes}
         />
+        {/* Celular: as áreas logo abaixo do título, numa linha que rola. */}
+        {!abasNoTitulo && <div className="mt-2 min-w-0 border-b border-border pb-1">{abasDasAreas}</div>}
       </header>
 
       {leituraFalhou && (
@@ -903,10 +939,10 @@ function Metas({
                           setValor(alvo > 0 ? String(alvo) : "");
                         }}
                         aria-label={alvo > 0 ? `Alterar meta de ${metrica.label}` : `Definir meta de ${metrica.label}`}
-                        className={juntar(botao.discreto, "ml-2 h-8")}
+                        title={alvo > 0 ? `Alterar meta de ${metrica.label}` : `Definir meta de ${metrica.label}`}
+                        className={juntar(botao.icone, "ml-2")}
                       >
-                        <Pencil className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
-                        <span className="hidden sm:inline">{alvo > 0 ? "Alterar" : "Definir"}</span>
+                        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
                     )}
                   </div>
@@ -935,7 +971,7 @@ function Metas({
                       <button type="submit" className={botao.primario}>
                         Salvar
                       </button>
-                      <button type="button" onClick={() => setEditando(null)} className={juntar(botao.icone, "ml-1")} aria-label="Cancelar">
+                      <button type="button" onClick={() => setEditando(null)} className={juntar(botao.icone, "ml-1")} aria-label="Cancelar" title="Cancelar">
                         <X className="h-4 w-4" aria-hidden="true" />
                       </button>
                     </form>
@@ -1031,9 +1067,8 @@ function Marketing({
                     </span>
                   ))}
                   <span className="flex justify-end md:order-none">
-                    <button type="button" onClick={() => onArquivar(campanha.id)} className={juntar(botao.discreto, "h-8")} aria-label={`Arquivar campanha ${campanha.name}`}>
-                      <Archive className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" />
-                      <span className="hidden sm:inline">Arquivar</span>
+                    <button type="button" onClick={() => onArquivar(campanha.id)} className={botao.icone} aria-label={`Arquivar campanha ${campanha.name}`} title={`Arquivar campanha ${campanha.name}`}>
+                      <Archive className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   </span>
                   {/* Celular: os quatro números numa grade embaixo do nome. */}
@@ -1056,6 +1091,18 @@ function Marketing({
 }
 
 /* ───────────────────────────── Editor de lead ───────────────────────────── */
+
+type ParteDoLead = "contato" | "negocio" | "qualificacao" | "notas" | "andamento" | "historia";
+
+/** As abas do editor de lead; andamento e história só existem com o lead salvo. */
+const PARTES_DO_LEAD: Array<{ valor: ParteDoLead; rotulo: string; icone: ReactNode; soComLead?: boolean }> = [
+  { valor: "contato", rotulo: "Contato e empresa", icone: <Contact className="h-4 w-4" /> },
+  { valor: "negocio", rotulo: "Negócio", icone: <Handshake className="h-4 w-4" /> },
+  { valor: "qualificacao", rotulo: "Qualificação", icone: <ListChecks className="h-4 w-4" /> },
+  { valor: "notas", rotulo: "Notas", icone: <StickyNote className="h-4 w-4" /> },
+  { valor: "andamento", rotulo: "Proposta, etapa e atividades", icone: <Route className="h-4 w-4" />, soComLead: true },
+  { valor: "historia", rotulo: "História", icone: <History className="h-4 w-4" />, soComLead: true },
+];
 
 type FormDoLead = {
   name: string;
@@ -1214,6 +1261,13 @@ function EditorDeLead({
   };
 
   const temDadosDaEmpresa = Object.values(form.org).some(Boolean);
+  /**
+   * 16/10/2026 (dono): as partes do lead em abas de ícone, uma por vez, no
+   * lugar da janela comprida com tudo empilhado. O formulário é um só: trocar
+   * de aba não perde nada, e salvar continua mandando só o que mudou.
+   */
+  const [parte, setParte] = useState<ParteDoLead>("contato");
+  const partes = PARTES_DO_LEAD.filter((p) => lead || !p.soComLead);
 
   return (
     <Dialog open onOpenChange={(aberto) => { if (!aberto) void fechar(); }}>
@@ -1223,8 +1277,18 @@ function EditorDeLead({
           <DialogTitle className="truncate pr-6 text-[15px]">{lead ? lead.name : "Novo lead"}</DialogTitle>
           {lead && <p className={texto.auxiliar}>{rotuloDoEstagio(lead.stage)}{lead.company ? ` · ${lead.company}` : ""}</p>}
         </DialogHeader>
+        <Etapas
+          soIcone
+          rotulo="Partes do lead"
+          itens={partes.map((p) => ({ valor: p.valor, rotulo: p.rotulo, icone: p.icone }))}
+          valor={parte}
+          onEscolher={(v) => setParte(v as ParteDoLead)}
+          className="-mt-1 min-w-0 border-b border-border pb-1"
+        />
 
         <div className="min-w-0 space-y-5">
+          {parte === "contato" && (
+          <>
           <GrupoDeCampos>
             <CampoDeFormulario rotulo="Nome" obrigatorio>
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={campo} />
@@ -1265,8 +1329,11 @@ function EditorDeLead({
               </GrupoDeCampos>
             </details>
           )}
+          </>
+          )}
 
-          <GrupoDeCampos titulo="Negócio" className="border-t border-border pt-4">
+          {parte === "negocio" && (
+          <GrupoDeCampos titulo="Negócio">
             {/* A classe é a primeira pergunta: com quem estamos falando. O
                 vazio é "não confirmado" de propósito, nunca preenchido por
                 padrão: classe chutada mente melhor que campo em branco. */}
@@ -1336,8 +1403,10 @@ function EditorDeLead({
               </select>
             </CampoDeFormulario>
           </GrupoDeCampos>
+          )}
 
-          <GrupoDeCampos titulo="Qualificação" descricao="vazio significa não confirmado" className="border-t border-border pt-4">
+          {parte === "qualificacao" && (
+          <GrupoDeCampos titulo="Qualificação" descricao="vazio significa não confirmado">
             {CAMPOS_DE_QUALIFICACAO.map((campoDeQualificacao) => (
               <CampoDeFormulario key={campoDeQualificacao.id} rotulo={campoDeQualificacao.label}>
                 {/* Area de texto: qualificacao boa e frase inteira, nao palavra. */}
@@ -1359,8 +1428,10 @@ function EditorDeLead({
               </CampoDeFormulario>
             ))}
           </GrupoDeCampos>
+          )}
 
-          <GrupoDeCampos colunas={1} className="border-t border-border pt-4">
+          {parte === "notas" && (
+          <GrupoDeCampos colunas={1}>
             <CampoDeFormulario rotulo="Notas">
               <textarea
                 value={form.notes}
@@ -1371,11 +1442,12 @@ function EditorDeLead({
               />
             </CampoDeFormulario>
           </GrupoDeCampos>
+          )}
 
-          {lead && (
+          {lead && parte === "andamento" && (
             <>
               {/* Frente PRO: a proposta deste lead na Mesa Proposta (com o cliente quando o lead já tem ficha). */}
-              <section className="flex min-w-0 items-center justify-between border-t border-border pt-4" aria-label="Proposta">
+              <section className="flex min-w-0 items-center justify-between" aria-label="Proposta">
                 <h3 className={juntar(texto.tituloSecao, "min-w-0 truncate")}>Proposta</h3>
                 <Link
                   to={`/mesa-proposta?lead=${encodeURIComponent(lead.id)}${lead.won_client_id ? `&client=${encodeURIComponent(lead.won_client_id)}` : ""}&etapa=contexto`}
@@ -1423,8 +1495,12 @@ function EditorDeLead({
                 donoPadrao={lead.owner_id}
                 onMudou={() => void onSalvo()}
               />
+            </>
+          )}
 
-              <section className="border-t border-border pt-4" aria-label="História do lead">
+          {lead && parte === "historia" && (
+            <>
+              <section aria-label="História do lead">
                 <h3 className={juntar(texto.tituloSecao, "mb-2")}>História</h3>
                 <form
                   className="flex min-w-0 items-center"

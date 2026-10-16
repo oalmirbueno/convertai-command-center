@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useClienteEmFoco } from "@/components/cronometro/CronometroProvider";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ChevronLeft, ChevronRight, ClipboardCheck, Compass, Megaphone, Package, RefreshCw, Share2, Users } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Building2, CalendarCheck, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, Compass, DoorOpen, Flame, ListChecks, Megaphone, Package, RefreshCw, Share2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNow } from "@/hooks/useNow";
@@ -48,10 +48,10 @@ function abaAntiga(): Aba {
   }
 }
 
-const ABAS: Array<{ k: Aba; rotulo: string; Icone: typeof Share2 }> = [
-  { k: "social", rotulo: "Social", Icone: Share2 },
-  { k: "trafego", rotulo: "Tráfego", Icone: Megaphone },
-  { k: "avulso", rotulo: "Avulso", Icone: Package },
+const ABAS: Array<{ k: Aba; rotulo: string; Icone: typeof Share2; ajuda: string }> = [
+  { k: "social", rotulo: "Social", Icone: Share2, ajuda: "Clientes com Social: posts, agenda, números do Instagram e metas de seguidores." },
+  { k: "trafego", rotulo: "Tráfego", Icone: Megaphone, ajuda: "Clientes com tráfego pago: campanhas por plataforma, números e vendas." },
+  { k: "avulso", rotulo: "Avulso", Icone: Package, ajuda: "Clientes de projeto avulso, fora do ciclo recorrente." },
 ];
 
 const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
@@ -182,75 +182,90 @@ export default function AdminEsteira() {
     : `${Math.abs(semanaOffset)} ${Math.abs(semanaOffset) === 1 ? "semana" : "semanas"} ${semanaOffset < 0 ? "atrás" : "à frente"}`;
   const bloqueado = Boolean(erro) || carregando;
 
+  // Números do topo (16/10/2026, padrão do painel): ícone + número pequeno, o
+  // nome no title e no leitor de tela. Em erro ou carregando, a frase curta.
+  const fichas: Array<{ k: string; valor: string; rotulo: string; Icone: typeof Flame; cor: string; classe?: string }> = [
+    { k: "clientes", valor: String(visiveis.length), rotulo: plural(visiveis.length, "cliente", "clientes"), Icone: Building2, cor: "text-muted-foreground", classe: "hidden sm:inline-flex lg:hidden xl:inline-flex" },
+    { k: "urgentes", valor: String(resumo.urgentes), rotulo: plural(resumo.urgentes, "urgente", "urgentes"), Icone: Flame, cor: resumo.urgentes ? "text-destructive" : "text-muted-foreground" },
+    { k: "atencao", valor: String(resumo.atencao), rotulo: `${resumo.atencao} de atenção`, Icone: AlertTriangle, cor: resumo.atencao ? "text-warning" : "text-muted-foreground" },
+    { k: "emdia", valor: String(resumo.emDia), rotulo: `${resumo.emDia} em dia`, Icone: CheckCircle2, cor: "text-primary" },
+    ...(resumo.entrada > 0 ? [{ k: "entrada", valor: String(resumo.entrada), rotulo: `${resumo.entrada} em entrada`, Icone: DoorOpen, cor: "text-muted-foreground", classe: "hidden md:inline-flex lg:hidden xl:inline-flex" }] : []),
+    { k: "rituais", valor: `${resumo.rituaisFeitos}/${visiveis.length * 3}`, rotulo: `rituais ${resumo.rituaisFeitos} de ${visiveis.length * 3}`, Icone: CalendarCheck, cor: "text-muted-foreground", classe: "hidden sm:inline-flex" },
+    { k: "feitos", valor: String(resumo.feitos), rotulo: `${plural(resumo.feitos, "feito", "feitos")} na semana`, Icone: ListChecks, cor: "text-muted-foreground", classe: "hidden md:inline-flex lg:hidden xl:inline-flex" },
+  ];
+  const estadoDoTopo = (classe: string) => (
+    <p className={juntar("min-w-0 items-center justify-end overflow-hidden text-[12px]", classe)} aria-live="polite">
+      {erro ? (
+        <span className="truncate text-destructive">Leitura indisponível</span>
+      ) : carregando && clientes.length === 0 ? (
+        <span className="truncate text-muted-foreground">Lendo a operação…</span>
+      ) : (
+        fichas.map((f) => (
+          <span key={f.k} title={f.rotulo} className={juntar("ml-2 shrink-0 items-center font-semibold tabular-nums", f.classe || "inline-flex", f.cor)}>
+            <f.Icone className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+            <span aria-hidden="true">{f.valor}</span>
+            <span className="sr-only">{f.rotulo}</span>
+          </span>
+        ))
+      )}
+    </p>
+  );
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Topo FIXO (não sticky): no celular, a rolagem nunca leva a semana
           junto. O espaço reservado abaixo tem a mesma altura, medida. */}
       <header ref={headerRef} className="fixed inset-x-0 top-0 z-30 border-b border-border bg-background/95 pt-[calc(env(safe-area-inset-top)+0.625rem)] backdrop-blur">
         <div className={juntar(larguraDaMesa, "px-3 sm:px-4 md:px-6")}>
-          {/* Linha 1: voltar, título, semana (do tablet para cima) e ações */}
-          <div className="flex h-10 min-w-0 items-center">
-            <Link to="/dashboard" aria-label="Voltar ao painel" className={juntar(botao.icone, "mr-1")}><ArrowLeft className="h-4 w-4" /></Link>
+          {/* 16/10/2026 (dono): padrão do painel. Linha 1: voltar, título, "?",
+              frentes em ícone (tablet para cima), semana e números (notebook
+              para cima) e as ações só em ícone, nome no title. Linha 2 só
+              abaixo do notebook: semana e números. */}
+          <div className="flex min-h-[44px] min-w-0 items-center">
+            <Link to="/dashboard" aria-label="Voltar ao painel" title="Voltar ao painel" className={juntar(botao.icone, "mr-1")}><ArrowLeft className="h-4 w-4" /></Link>
             <h1 className={juntar(texto.tituloPagina, "shrink-0")}>Ciclo</h1>
             <AjudaRecolhida className="ml-1.5 min-h-0" titulo="Ciclo da semana">
-              Cada bloco é um cliente e cada linha é algo que existe de verdade: post no seu elo, campanha, tarefa, passo de entrada. Toque no cliente para ver o dossiê, os números, os rituais e marcar o que foi feito. As frentes Social, Tráfego e Avulso ficam nas abas.
+              Cada bloco é um cliente e cada linha é algo que existe de verdade: post no seu elo, campanha, tarefa, passo de entrada. Toque no cliente para ver o dossiê, os números, os rituais e marcar o que foi feito. As frentes Social, Tráfego e Avulso ficam nas abas em ícone. Os números do topo são, em ordem: clientes, urgentes, de atenção, em dia, em entrada, rituais feitos e feitos na semana (passe o mouse para ver o nome). As ações do canto: revisão por cliente, quem entra, atualizar e por onde começar.
             </AjudaRecolhida>
+            <Etapas
+              soIcone
+              className="ml-2 hidden min-w-0 shrink-0 md:block"
+              rotulo="Frentes do ciclo"
+              valor={aba}
+              onEscolher={(v) => { if (ehAba(v)) setAba(v); }}
+              itens={ABAS.map(({ k, rotulo, Icone, ajuda }) => ({ valor: k, rotulo, icone: <Icone className="h-4 w-4" />, contador: contagemDasAbas[k], ajuda }))}
+            />
 
-            <div className="ml-3 hidden min-w-0 items-center md:flex">
+            <div className="ml-3 hidden min-w-0 items-center lg:flex">
               <SemanaNav segunda={segunda} quando={quandoESemana} offset={semanaOffset} onMudar={irParaSemana} onHoje={() => setSemanaEscolhida("")} />
             </div>
+            {estadoDoTopo("ml-auto hidden pl-3 lg:flex")}
 
-            <div className="ml-auto flex shrink-0 items-center pl-2 [&>*+*]:ml-1 sm:[&>*+*]:ml-2">
+            <div className="ml-auto flex shrink-0 items-center pl-2 lg:ml-2 [&>*+*]:ml-1">
               {profile?.role === "admin" && (
-                <Link to="/ciclo/revisao" aria-label="Revisão por cliente" title="Revisão por cliente" className={juntar(botao.secundario, "relative h-8 px-2 sm:px-3")}>
-                  <ClipboardCheck className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
-                  <span className="hidden sm:inline">Revisão</span>
-                  {revisoesPendentes > 0 && <span className={juntar(etiqueta, "ml-1.5 bg-primary text-primary-foreground")} aria-label={`${revisoesPendentes} esperando decisão`}>{revisoesPendentes}</span>}
+                <Link to="/ciclo/revisao" aria-label="Revisão por cliente" title={revisoesPendentes > 0 ? `Revisão por cliente (${revisoesPendentes} esperando decisão)` : "Revisão por cliente"} className={juntar(botao.icone, "relative")}>
+                  <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+                  {revisoesPendentes > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-primary px-1 text-center text-[11px] font-semibold leading-4 tabular-nums text-primary-foreground" aria-hidden="true">{revisoesPendentes}</span>}
                 </Link>
               )}
-              <button type="button" onClick={() => setQuemEntraAberto(true)} aria-label="Quem entra" title="Quem entra" className={juntar(botao.discreto, "h-8 px-2")}>
-                <Users className="h-4 w-4 lg:mr-1.5" aria-hidden="true" />
-                <span className="hidden lg:inline">Quem entra</span>
+              <button type="button" onClick={() => setQuemEntraAberto(true)} aria-label="Quem entra" title="Quem entra" className={botao.icone}>
+                <Users className="h-4 w-4" aria-hidden="true" />
               </button>
               <button type="button" aria-label="Atualizar" title="Atualizar" disabled={atualizando} onClick={() => void atualizar()} className={botao.icone}>
                 <RefreshCw className={`h-4 w-4 ${atualizando ? "animate-spin" : ""}`} aria-hidden="true" />
               </button>
-              <button type="button" aria-label="Por onde começar" title="Por onde começar" disabled={bloqueado} onClick={() => setComecarAberto(true)} className={juntar(botao.primario, "h-8 px-2.5 sm:px-3")}>
-                <Compass className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
-                <span className="hidden sm:inline">Por onde começar</span>
+              <button type="button" aria-label="Por onde começar" title="Por onde começar" disabled={bloqueado} onClick={() => setComecarAberto(true)} className={juntar(botao.icone, "text-primary hover:text-primary")}>
+                <Compass className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
           </div>
 
-          {/* Linha 2: semana (celular) ou frentes (tablet para cima), e o estado em uma linha */}
-          <div className="flex min-h-[40px] min-w-0 items-center pb-1.5">
-            <div className="shrink-0 md:hidden">
+          {/* Linha 2 (abaixo do notebook): semana e os números. */}
+          <div className="flex min-h-[40px] min-w-0 items-center pb-1.5 lg:hidden">
+            <div className="shrink-0">
               <SemanaNav segunda={segunda} quando={quandoESemana} offset={semanaOffset} onMudar={irParaSemana} onHoje={() => setSemanaEscolhida("")} />
             </div>
-            <Etapas
-              className="hidden md:block"
-              rotulo="Frentes do ciclo"
-              valor={aba}
-              onEscolher={(v) => { if (ehAba(v)) setAba(v); }}
-              itens={ABAS.map(({ k, rotulo, Icone }) => ({ valor: k, rotulo, icone: <Icone className="h-3.5 w-3.5" />, contador: contagemDasAbas[k] }))}
-            />
-            <p className={juntar(texto.auxiliar, "ml-auto min-w-0 truncate pl-3 text-right")} aria-live="polite">
-              {erro ? (
-                <span className="text-destructive">Leitura indisponível</span>
-              ) : carregando && clientes.length === 0 ? (
-                "Lendo a operação…"
-              ) : (
-                <>
-                  <span className="hidden sm:inline">{plural(visiveis.length, "cliente", "clientes")}{" · "}</span>
-                  <span className={resumo.urgentes ? "font-medium text-destructive" : ""}>{plural(resumo.urgentes, "urgente", "urgentes")}</span>
-                  {" · "}<span className={resumo.atencao ? "font-medium text-warning" : ""}>{resumo.atencao} atenção</span>
-                  <span className="hidden sm:inline">{" · "}<span className="text-primary">{resumo.emDia} em dia</span></span>
-                  {resumo.entrada > 0 && <span className="hidden lg:inline">{" · "}{resumo.entrada} em entrada</span>}
-                  <span className="hidden lg:inline">{" · "}rituais {resumo.rituaisFeitos}/{visiveis.length * 3}</span>
-                  <span className="hidden xl:inline">{" · "}{plural(resumo.feitos, "feito", "feitos")} na semana</span>
-                </>
-              )}
-            </p>
+            {estadoDoTopo("ml-auto flex pl-3")}
           </div>
         </div>
       </header>
@@ -339,9 +354,9 @@ export default function AdminEsteira() {
                         <span className="min-w-0 flex-1">
                           <span className="flex min-w-0 items-center">
                             <span className="mr-1.5 min-w-0 truncate text-[13px] font-semibold">{x.c.nome}</span>
-                            {x.urg.length > 0 && <span className={juntar(etiqueta, "mr-1 bg-destructive/15 text-destructive")}>{x.urg.length}</span>}
-                            {x.att.length > 0 && <span className={juntar(etiqueta, "mr-1 bg-warning/15 text-warning")}>{x.att.length}</span>}
-                            {x.rituaisFaltando > 0 && <span className="shrink-0 text-[11px] text-muted-foreground">rituais {3 - x.rituaisFaltando}/3</span>}
+                            {x.urg.length > 0 && <span className="mr-1.5 inline-flex shrink-0 items-center text-[12px] font-semibold tabular-nums text-destructive" title={plural(x.urg.length, "urgente", "urgentes")}><Flame className="mr-0.5 h-3.5 w-3.5" aria-hidden="true" />{x.urg.length}</span>}
+                            {x.att.length > 0 && <span className="mr-1.5 inline-flex shrink-0 items-center text-[12px] font-semibold tabular-nums text-warning" title={`${x.att.length} de atenção`}><AlertTriangle className="mr-0.5 h-3.5 w-3.5" aria-hidden="true" />{x.att.length}</span>}
+                            {x.rituaisFaltando > 0 && <span className="inline-flex shrink-0 items-center text-[11px] tabular-nums text-muted-foreground" title={`Rituais ${3 - x.rituaisFaltando} de 3`}><CalendarCheck className="mr-0.5 h-3.5 w-3.5" aria-hidden="true" />{3 - x.rituaisFaltando}/3</span>}
                           </span>
                           {x.primeiros.map((it) => (
                             <span key={it.key} className="block truncate text-[12px] text-muted-foreground">{it.titulo}: {it.passo}</span>
@@ -387,12 +402,12 @@ export default function AdminEsteira() {
 function SemanaNav({ segunda, quando, offset, onMudar, onHoje }: { segunda: Date; quando: string; offset: number; onMudar: (delta: number) => void; onHoje: () => void }) {
   return (
     <div className="flex min-w-0 items-center">
-      <button type="button" aria-label="Semana anterior" onClick={() => onMudar(-1)} className={botao.icone}><ChevronLeft className="h-4 w-4" /></button>
+      <button type="button" aria-label="Semana anterior" title="Semana anterior" onClick={() => onMudar(-1)} className={botao.icone}><ChevronLeft className="h-4 w-4" /></button>
       <button type="button" onClick={onHoje} disabled={offset === 0} title={offset === 0 ? undefined : "Voltar para a semana atual"} className={juntar("mx-0.5 min-w-0 rounded-md px-1 text-center disabled:cursor-default", foco)}>
         <span className="block truncate text-[13px] font-semibold leading-5">{weekLabel(segunda)}</span>
         <span className={juntar("block truncate text-[11px] leading-4", offset === 0 ? "text-muted-foreground" : "text-primary")}>{quando}</span>
       </button>
-      <button type="button" aria-label="Próxima semana" onClick={() => onMudar(1)} className={botao.icone}><ChevronRight className="h-4 w-4" /></button>
+      <button type="button" aria-label="Próxima semana" title="Próxima semana" onClick={() => onMudar(1)} className={botao.icone}><ChevronRight className="h-4 w-4" /></button>
     </div>
   );
 }
@@ -422,8 +437,8 @@ function CartaoDoCliente({ cliente: c, frente, weekStart, foto, onAbrir, onMudou
           <span className={juntar(texto.auxiliar, "block truncate")}>{c.esteira.onboardingCompleto ? "Em operação" : "Entrada em andamento"}</span>
         </span>
         <span className="flex shrink-0 items-center [&>*+*]:ml-1">
-          {urgentes > 0 && <span className={juntar(etiqueta, "bg-destructive/15 text-destructive")} title="Urgentes">{urgentes}</span>}
-          {atencao > 0 && <span className={juntar(etiqueta, "bg-warning/15 text-warning")} title="Atenção">{atencao}</span>}
+          {urgentes > 0 && <span className="inline-flex items-center text-[12px] font-semibold tabular-nums text-destructive" title={plural(urgentes, "urgente", "urgentes")}><Flame className="mr-0.5 h-3.5 w-3.5" aria-hidden="true" /><span aria-hidden="true">{urgentes}</span><span className="sr-only">{plural(urgentes, "urgente", "urgentes")}</span></span>}
+          {atencao > 0 && <span className="inline-flex items-center text-[12px] font-semibold tabular-nums text-warning" title={`${atencao} de atenção`}><AlertTriangle className="mr-0.5 h-3.5 w-3.5" aria-hidden="true" /><span aria-hidden="true">{atencao}</span><span className="sr-only">{`${atencao} de atenção`}</span></span>}
           {itens.length === 0 && <span className={juntar(etiqueta, "bg-primary/15 text-primary")}>em dia</span>}
           <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
         </span>
@@ -440,7 +455,7 @@ function CartaoDoCliente({ cliente: c, frente, weekStart, foto, onAbrir, onMudou
             {x.key === "segunda" ? "S" : x.key === "quarta" ? "Q" : "S"}
           </span>
         ))}
-        <span className={juntar(texto.auxiliar, "ml-1 shrink-0")}>rituais {r.filter((x) => x.feito).length}/3</span>
+        <span className={juntar(texto.auxiliar, "ml-1 inline-flex shrink-0 items-center tabular-nums")} title={`Rituais ${r.filter((x) => x.feito).length} de 3`}><CalendarCheck className="mr-1 h-3.5 w-3.5" aria-hidden="true" />{r.filter((x) => x.feito).length}/3</span>
         {insight && (
           <span className={juntar(texto.auxiliar, "ml-auto min-w-0 truncate pl-3")}>{insight.titulo}: {insight.atual ?? "–"}{insight.variacao !== null ? ` (${(insight.variacao as number) > 0 ? "+" : ""}${insight.variacao}%)` : ""}</span>
         )}

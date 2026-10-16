@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { BadgeDollarSign, Plus, Trash2, X } from "lucide-react";
+import { BadgeDollarSign, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { CanalVenda, FatosDoCliente, PlataformaAds } from "@/lib/esteira/esteiraTipos";
 import { resumoDeVendas } from "@/lib/esteira/esteiraMontar";
@@ -86,8 +86,8 @@ export default function TrafegoVendas({ fatos, plataforma, hoje, canWrite, onMud
       titulo={<span className="inline-flex items-center"><BadgeDollarSign className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />Vendas</span>}
       ajuda="O número que fecha o funil. Registre a venda que o cliente fechou (WhatsApp, Instagram, loja) ou veja as rastreadas pela plataforma. Cada venda vai para o diário e o dossiê lê ao otimizar a campanha."
       acao={canWrite ? (
-        <button type="button" onClick={() => setAberto((v) => !v)} className={juntar(aberto ? botao.discreto : botao.secundario, "h-8 text-[12px]")}>
-          {aberto ? <><X className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Fechar</> : <><Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Registrar venda</>}
+        <button type="button" onClick={() => setAberto((v) => !v)} aria-label="Registrar venda" aria-expanded={aberto} title={aberto ? "Fechar o registro de venda" : "Registrar venda"} className={juntar(botao.icone, aberto && "bg-muted text-foreground")}>
+          <Plus className={juntar("h-4 w-4 transition-transform", aberto && "rotate-45")} aria-hidden="true" />
         </button>
       ) : undefined}
     >
@@ -156,7 +156,7 @@ export default function TrafegoVendas({ fatos, plataforma, hoje, canWrite, onMud
                 <span className="text-muted-foreground"> · {rotuloDoCanal(v.canal)}{v.campanhaNome ? ` · ${v.campanhaNome}` : ""}{v.origem !== "manual" ? " · rastreada" : ""}</span>
               </span>
               {canWrite && v.origem === "manual" && (
-                <button type="button" onClick={() => void apagar(v.id)} aria-label="Apagar venda" className={juntar(botao.icone, "hover:text-destructive")}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" /></button>
+                <button type="button" onClick={() => void apagar(v.id)} aria-label="Apagar venda" title="Apagar venda" className={juntar(botao.icone, "hover:text-destructive")}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" /></button>
               )}
             </li>
           ))}

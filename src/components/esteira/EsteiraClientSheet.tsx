@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Minus, RefreshCw, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
+import { BarChart3, CheckCheck, ClipboardCheck, Eye, EyeOff, History, ListPlus, ListTodo, Minus, PackageCheck, ScanSearch, Sparkles, TrendingDown, TrendingUp, UserMinus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,7 +16,7 @@ import EsteiraItemRow from "./EsteiraItemRow";
 import MetasDeSeguidores from "./MetasDeSeguidores";
 import TrafegoPlataformas, { PlataformaNaoConfigurada } from "./TrafegoPlataformas";
 import TrafegoVendas from "./TrafegoVendas";
-import { Carregando, EstadoVazio, JanelaCentral, RegiaoRolavel, Secao as SecaoDoSistema, botao, campoTexto, juntar, superficie, texto } from "@/components/sistema";
+import { Carregando, EstadoVazio, Etapas, JanelaCentral, MenuMais, RegiaoRolavel, Secao as SecaoDoSistema, botao, campoTexto, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 
 const GRUPOS: Array<{ fontes: Fonte[]; titulo: string }> = [
   { fontes: ["onboarding"], titulo: "Entrada do cliente" },
@@ -92,6 +92,11 @@ function Numeros({ leitura, recolher }: { leitura: Leitura; recolher: string }) 
   );
 }
 
+/** Abas da folha (16/10/2026, padrão do painel): uma parte visível por vez. */
+type AbaDaFolha = "semana" | "dossie" | "numeros" | "lista" | "feitos" | "historia" | "ja-tem";
+const ABAS_DA_FOLHA: readonly AbaDaFolha[] = ["semana", "dossie", "numeros", "lista", "feitos", "historia", "ja-tem"];
+const ehAbaDaFolha = (v: unknown): v is AbaDaFolha => typeof v === "string" && (ABAS_DA_FOLHA as readonly string[]).includes(v);
+
 interface Props {
   cliente: ClienteDaEsteira | null;
   frente: "social" | "trafego";
@@ -111,6 +116,8 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
   const [lendoPlano, setLendoPlano] = useState(false);
   const [plataformaEscolhida, setPlataformaEscolhida] = useState<PlataformaAds | null>(null);
   const hoje = useMemo(() => new Date(), []);
+  // A aba aberta da folha fica lembrada (sair e voltar mantém).
+  const [abaGuardada, setAba] = useEstadoDaTela<AbaDaFolha>("ciclo:folha:aba", "semana", { validar: ehAbaDaFolha });
 
   const clienteId = cliente?.id ?? null;
 
@@ -208,10 +215,42 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
   // Recolher (dono, 28/09): cada bloco da folha lembra se está aberto, por cliente.
   const chave = (bloco: string) => `ciclo:folha:${bloco}:${cliente.id}`;
 
+  const itensPendentes = grupos.reduce((n, g) => n + g.itens.length, 0);
+  const temNumeros = frente === "social" || Boolean(plataformaAtual);
+  const abas = [
+    { valor: "semana", rotulo: "O que a semana pede", icone: <ListTodo className="h-4 w-4" />, contador: itensPendentes, ajuda: "Os rituais da semana e o que está pendente nesta frente: entrada, publicações, anúncios, tarefas e checklists." },
+    { valor: "dossie", rotulo: "Pelo dossiê", icone: <Sparkles className="h-4 w-4" />, contador: planoAbertos.length, ajuda: "Foco da semana, o que foi feito e os próximos passos, lidos do dossiê e da história dos últimos 14 dias. Reler força uma nova leitura." },
+    temNumeros && { valor: "numeros", rotulo: "Números", icone: <BarChart3 className="h-4 w-4" />, ajuda: frente === "social" ? "Números do Instagram, metas de seguidores e o que mudou." : "Números de cada plataforma de anúncio, uma por vez, e as vendas." },
+    { valor: "lista", rotulo: "Lista rápida", icone: <ListPlus className="h-4 w-4" />, ajuda: "Escreva o que precisa ser feito para este cliente: vira itens da esteira." },
+    feitosNaSemana > 0 && { valor: "feitos", rotulo: "Feitos nesta semana", icone: <CheckCheck className="h-4 w-4" />, contador: feitosNaSemana },
+    { valor: "historia", rotulo: "História deste cliente", icone: <History className="h-4 w-4" />, contador: historiaVisivel.length },
+    !e.onboardingCompleto && { valor: "ja-tem", rotulo: "O que este cliente já tem", icone: <PackageCheck className="h-4 w-4" />, ajuda: "Os passos de entrada que o cliente já tem. Os marcados como detectados o painel achou sozinho." },
+  ].filter(Boolean) as Array<{ valor: AbaDaFolha; rotulo: string; icone: ReactNode; contador?: number; ajuda?: string }>;
+  // Aba guardada que não existe para este cliente (ex.: sem feitos) cai na semana.
+  const aba: AbaDaFolha = abas.some((a) => a.valor === abaGuardada) ? abaGuardada : "semana";
+  const descricaoDoDossie = plano ? `${plano.source === "ai" ? `Lido pela IA${plano.modelo ? ` (${plano.modelo})` : ""}` : "Sem IA agora, só o que o painel prova"}${plano.cached ? " · desta semana" : ""}${plano.removidos_por_ja_feito ? ` · ${plano.removidos_por_ja_feito} já feito(s) fora do plano` : ""}${plano.reserva ? ` · ${plano.reserva}` : ""}` : null;
+
+  const ocultarSemana = async () => {
+    const fim = new Date(`${weekStart}T00:00:00Z`);
+    fim.setUTCDate(fim.getUTCDate() + 6);
+    const ok = await ocultarCliente({ clientId: cliente.id, area: frente, ocultar: true, ateQuando: fim.toISOString().slice(0, 10) });
+    if (ok) { onMudou(); onFechar(); }
+  };
+  const tirarDaFrente = async () => {
+    const ok = await ocultarCliente({ clientId: cliente.id, area: frente, ocultar: true, ateQuando: null });
+    if (ok) { onMudou(); onFechar(); }
+  };
+  const voltarAMostrar = async () => {
+    const ok = await ocultarCliente({ clientId: cliente.id, area: frente, ocultar: false });
+    if (ok) onMudou();
+  };
+
   // Sistema de design: a folha é uma janela central (30/09, dono: "qualquer
-  // pop-up abrir no centro"). Cabeçalho parado, corpo rolando por dentro
-  // (RegiaoRolavel "sempre", com a posição lembrada por cliente), seções
-  // separadas por divisória, sem caixa dentro de caixa.
+  // pop-up abrir no centro"). 16/10/2026 (dono): as partes, que vinham uma
+  // embaixo da outra, viram abas em ícone no topo (uma visível por vez); as
+  // ações vão para o cabeçalho, só em ícone, e o ocultar para o menu "...".
+  // Corpo rolando por dentro (RegiaoRolavel "sempre", posição lembrada por
+  // cliente e aba), sem caixa dentro de caixa.
   return (
     <JanelaCentral
       aberta={aberta}
@@ -221,206 +260,204 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
       semEspaco
       titulo={cliente.nome}
       descricao={`${e.onboardingCompleto ? "Em operação" : "Entrada em andamento"} · ${e.resumo.urgentes} urgente${e.resumo.urgentes === 1 ? "" : "s"} · ${e.resumo.atencao} de atenção · ${feitosNaSemana} feito${feitosNaSemana === 1 ? "" : "s"}`}
+      acoes={(canReview || canWrite) ? (
+        <>
+          {canReview && (
+            <Link to={`/ciclo/revisao?client=${encodeURIComponent(cliente.id)}`} aria-label="Revisar rituais deste cliente" title="Revisar rituais deste cliente" className={botao.icone}>
+              <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          )}
+          {canWrite && (
+            <MenuMais
+              rotulo="Mais ações deste cliente"
+              itens={oculto ? [
+                { rotulo: "Voltar a mostrar nesta frente", icone: <Eye className="h-4 w-4" />, aoEscolher: () => void voltarAMostrar() },
+              ] : [
+                { rotulo: "Ocultar esta semana", icone: <EyeOff className="h-4 w-4" />, aoEscolher: () => void ocultarSemana() },
+                { rotulo: "Tirar desta frente", icone: <UserMinus className="h-4 w-4" />, aoEscolher: () => void tirarDaFrente(), perigo: true },
+              ]}
+            />
+          )}
+        </>
+      ) : undefined}
     >
-        <RegiaoRolavel modo="sempre" sobre="cartao" memoria={`ciclo:folha:${cliente.id}:${frente}`} className="px-4 pb-5 pt-4 sm:px-5">
+        <div className="flex min-w-0 shrink-0 items-center border-b border-border px-3 py-1 sm:px-4">
+          <Etapas
+            soIcone
+            rotulo="Partes da folha do cliente"
+            className="min-w-0 flex-1"
+            valor={aba}
+            onEscolher={(v) => { if (ehAbaDaFolha(v)) setAba(v); }}
+            itens={abas}
+          />
+          {aba === "dossie" && (
+            <button type="button" onClick={() => void relerDossie()} disabled={lendoPlano} aria-label="Reler o dossiê" title="Reler o dossiê" className={juntar(botao.icone, "ml-1")}>
+              <ScanSearch className={`h-4 w-4 ${lendoPlano ? "animate-pulse" : ""}`} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+        <RegiaoRolavel modo="sempre" sobre="cartao" memoria={`ciclo:folha:${cliente.id}:${frente}:${aba}`} className="px-4 pb-5 pt-4 sm:px-5">
           <div className="space-y-5">
-            {/* Pelo dossiê: foco, o que foi feito, o que vem */}
-            <SecaoDoSistema
-              nivel={3}
-              recolher={chave("dossie")}
-              resumo={plano?.foco || (planoAbertos.length ? `${planoAbertos.length} ${planoAbertos.length === 1 ? "próximo passo" : "próximos passos"}` : undefined)}
-              titulo={<span className="inline-flex items-center"><Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" aria-hidden="true" />Pelo dossiê</span>}
-              ajuda="Foco da semana, o que foi feito e os próximos passos, lidos do dossiê e da história dos últimos 14 dias. Reler força uma nova leitura."
-              descricao={plano ? `${plano.source === "ai" ? `Lido pela IA${plano.modelo ? ` (${plano.modelo})` : ""}` : "Sem IA agora, só o que o painel prova"}${plano.cached ? " · desta semana" : ""}${plano.removidos_por_ja_feito ? ` · ${plano.removidos_por_ja_feito} já feito(s) fora do plano` : ""}${plano.reserva ? ` · ${plano.reserva}` : ""}` : undefined}
-              acao={
-                <button type="button" onClick={() => void relerDossie()} disabled={lendoPlano} className={juntar(botao.discreto, "h-8 text-[12px]")}>
-                  <RefreshCw className={`mr-1 h-3.5 w-3.5 ${lendoPlano ? "animate-spin" : ""}`} aria-hidden="true" />Reler
-                </button>
-              }
-            >
-              {lendoPlano && !plano && <Carregando linhas={2} rotulo="Lendo o dossiê" />}
-              {plano && (
-                <div className={juntar(superficie.poco, "space-y-3 px-3 py-2.5")}>
-                  {plano.foco && <p className="text-[13px] font-medium leading-5 text-foreground">{plano.foco}</p>}
-                  {plano.feito.length > 0 && (
-                    <div>
-                      <p className={texto.rotulo}>Feito nesta semana</p>
-                      <ul className="mt-1 space-y-0.5">
-                        {plano.feito.map((f, i) => <li key={i} className="text-[13px] leading-5 text-foreground/90">• {f}</li>)}
-                      </ul>
-                    </div>
-                  )}
-                  {planoAbertos.length > 0 && (
-                    <div>
-                      <p className={texto.rotulo}>Próximos passos</p>
-                      <div className="divide-y divide-border">
-                        {planoAbertos.map((it) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={canWrite} onMudou={onMudou} />)}
-                      </div>
-                    </div>
-                  )}
-                  {plano.lacunas.length > 0 && (
-                    <div>
-                      <p className="text-[12px] font-medium text-warning">O que a esteira não encontrou</p>
-                      <ul className="mt-1 space-y-0.5">
-                        {plano.lacunas.map((l, i) => <li key={i} className="text-[12px] leading-5 text-foreground/85">• {l}</li>)}
-                      </ul>
-                    </div>
-                  )}
-                  {plano.proximos.length === 0 && plano.feito.length === 0 && !plano.foco && (
-                    <p className={texto.auxiliar}>O dossiê ainda não dá base para propor passos. Escreva o dossiê na Central e clique em Reler.</p>
-                  )}
-                </div>
-              )}
-              {!lendoPlano && !plano && <p className={texto.auxiliar}>Não consegui ler o dossiê agora. Tente Reler.</p>}
-            </SecaoDoSistema>
-
-            {frente === "trafego" && plataformaAtual && (
+            {aba === "semana" && (
               <>
-                <TrafegoPlataformas plataformas={plataformas} selecionada={plataforma} onSelecionar={setPlataformaEscolhida} />
-                {leitura ? <Numeros leitura={leitura} recolher={chave("numeros")} /> : <PlataformaNaoConfigurada plataforma={plataformaAtual} />}
-                {plataformaAtual.estado !== "nao-configurada" && (
-                  <TrafegoVendas fatos={cliente.fatos} plataforma={plataforma} hoje={hoje} canWrite={canWrite} onMudou={onMudou} />
+                <div className="min-w-0">
+                  <p className={juntar(texto.rotulo, "mb-1")}>Rituais da semana · {ritualFeitos} de {e.rituais.length}</p>
+                  <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
+                    {e.rituais.map((r) => (
+                      <label key={r.key} className={juntar("flex min-w-0 cursor-pointer items-center rounded-md px-2 py-2 text-[13px] hover:bg-muted/60", r.feito ? "text-foreground" : "text-muted-foreground")}>
+                        <Checkbox checked={r.feito} onCheckedChange={(v) => void alternarRitual(r.key, v === true)} disabled={!canWrite} className="mr-2 min-h-0 shrink-0" />
+                        <span className="min-w-0 leading-tight">{r.rotulo}{r.fonte === "central" ? " · Central" : ""}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {grupos.length === 0 && planoAbertos.length === 0 && (
+                  <EstadoVazio compacto titulo="Em dia." descricao="Nada pendente nesta frente." />
+                )}
+                {grupos.length === 0 && planoAbertos.length > 0 && (
+                  <p className={texto.auxiliar}>Nada pendente nos itens da frente. O dossiê propõe {planoAbertos.length} {planoAbertos.length === 1 ? "próximo passo" : "próximos passos"}: veja em Pelo dossiê.</p>
+                )}
+                {grupos.map((g) => (
+                  <SecaoDoSistema
+                    key={g.titulo}
+                    nivel={3}
+                    divisoria
+                    recolher={chave(`grupo:${g.fontes[0]}`)}
+                    resumo={`${g.itens.length} ${g.itens.length === 1 ? "item" : "itens"}`}
+                    titulo={g.titulo}
+                    descricao={`${g.itens.length} ${g.itens.length === 1 ? "item" : "itens"}`}
+                  >
+                    <div className="divide-y divide-border">
+                      {g.itens.map((it: EsteiraItem) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={canWrite} onMudou={onMudou} />)}
+                    </div>
+                  </SecaoDoSistema>
+                ))}
+              </>
+            )}
+
+            {/* Pelo dossiê: foco, o que foi feito, o que vem */}
+            {aba === "dossie" && (
+              <div className="min-w-0">
+                {descricaoDoDossie && <p className={juntar(texto.auxiliar, "mb-2")}>{descricaoDoDossie}</p>}
+                {lendoPlano && !plano && <Carregando linhas={2} rotulo="Lendo o dossiê" />}
+                {plano && (
+                  <div className="space-y-3">
+                    {plano.foco && <p className="text-[13px] font-medium leading-5 text-foreground">{plano.foco}</p>}
+                    {plano.feito.length > 0 && (
+                      <div>
+                        <p className={texto.rotulo}>Feito nesta semana</p>
+                        <ul className="mt-1 space-y-0.5">
+                          {plano.feito.map((f, i) => <li key={i} className="text-[13px] leading-5 text-foreground/90">• {f}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {planoAbertos.length > 0 && (
+                      <div>
+                        <p className={texto.rotulo}>Próximos passos</p>
+                        <div className="divide-y divide-border">
+                          {planoAbertos.map((it) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={canWrite} onMudou={onMudou} />)}
+                        </div>
+                      </div>
+                    )}
+                    {plano.lacunas.length > 0 && (
+                      <div>
+                        <p className="text-[12px] font-medium text-warning">O que a esteira não encontrou</p>
+                        <ul className="mt-1 space-y-0.5">
+                          {plano.lacunas.map((l, i) => <li key={i} className="text-[12px] leading-5 text-foreground/85">• {l}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {plano.proximos.length === 0 && plano.feito.length === 0 && !plano.foco && (
+                      <p className={texto.auxiliar}>O dossiê ainda não dá base para propor passos. Escreva o dossiê na Central e clique em Reler.</p>
+                    )}
+                  </div>
+                )}
+                {!lendoPlano && !plano && <p className={texto.auxiliar}>Não consegui ler o dossiê agora. Tente Reler.</p>}
+              </div>
+            )}
+
+            {aba === "numeros" && (
+              <>
+                {frente === "trafego" && plataformaAtual && (
+                  <>
+                    <TrafegoPlataformas plataformas={plataformas} selecionada={plataforma} onSelecionar={setPlataformaEscolhida} />
+                    {leitura ? <Numeros leitura={leitura} recolher={chave("numeros")} /> : <PlataformaNaoConfigurada plataforma={plataformaAtual} />}
+                    {plataformaAtual.estado !== "nao-configurada" && (
+                      <TrafegoVendas fatos={cliente.fatos} plataforma={plataforma} hoje={hoje} canWrite={canWrite} onMudou={onMudou} />
+                    )}
+                  </>
+                )}
+                {frente === "social" && leitura && <Numeros leitura={leitura} recolher={chave("numeros")} />}
+                {frente === "social" && <MetasDeSeguidores clientId={cliente.id} metricas={cliente.fatos.metricas} canWrite={canWrite} />}
+
+                {insights.length > 0 && (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {insights.map((i) => (
+                      <div key={i.key} className={juntar(superficie.poco, "min-w-0 px-3 py-2")}>
+                        <p className={juntar(texto.rotulo, "flex items-center")}><span className="mr-1.5 inline-flex"><IconeTendencia t={i.tendencia} /></span>{i.titulo}</p>
+                        <p className="text-[13px] leading-5 text-foreground">{i.texto}</p>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </>
             )}
-            {frente === "social" && leitura && <Numeros leitura={leitura} recolher={chave("numeros")} />}
-            {frente === "social" && <MetasDeSeguidores clientId={cliente.id} metricas={cliente.fatos.metricas} canWrite={canWrite} />}
 
-            {insights.length > 0 && (
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {insights.map((i) => (
-                  <div key={i.key} className={juntar(superficie.poco, "min-w-0 px-3 py-2")}>
-                    <p className={juntar(texto.rotulo, "flex items-center")}><span className="mr-1.5 inline-flex"><IconeTendencia t={i.tendencia} /></span>{i.titulo}</p>
-                    <p className="text-[13px] leading-5 text-foreground">{i.texto}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <SecaoDoSistema
-              nivel={3}
-              divisoria
-              recolher={chave("rituais")}
-              resumo={`${ritualFeitos} de ${e.rituais.length}`}
-              titulo="Rituais da semana"
-              descricao={`${ritualFeitos} de ${e.rituais.length}`}
-              acao={canReview ? (
-                <Link to={`/ciclo/revisao?client=${encodeURIComponent(cliente.id)}`} className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}>Revisar rituais deste cliente</Link>
-              ) : undefined}
-            >
-              <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
-                {e.rituais.map((r) => (
-                  <label key={r.key} className={juntar("flex min-w-0 cursor-pointer items-center rounded-md px-2 py-2 text-[13px] hover:bg-muted/60", r.feito ? "text-foreground" : "text-muted-foreground")}>
-                    <Checkbox checked={r.feito} onCheckedChange={(v) => void alternarRitual(r.key, v === true)} disabled={!canWrite} className="mr-2 min-h-0 shrink-0" />
-                    <span className="min-w-0 leading-tight">{r.rotulo}{r.fonte === "central" ? " · Central" : ""}</span>
-                  </label>
-                ))}
-              </div>
-            </SecaoDoSistema>
-
-            {grupos.length === 0 && planoAbertos.length === 0 && (
-              <EstadoVazio compacto titulo="Em dia." descricao="Nada pendente nesta frente." />
-            )}
-            {grupos.map((g) => (
-              <SecaoDoSistema
-                key={g.titulo}
-                nivel={3}
-                divisoria
-                recolher={chave(`grupo:${g.fontes[0]}`)}
-                resumo={`${g.itens.length} ${g.itens.length === 1 ? "item" : "itens"}`}
-                titulo={g.titulo}
-                descricao={`${g.itens.length} ${g.itens.length === 1 ? "item" : "itens"}`}
-              >
-                <div className="divide-y divide-border">
-                  {g.itens.map((it: EsteiraItem) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={canWrite} onMudou={onMudou} />)}
-                </div>
-              </SecaoDoSistema>
-            ))}
-
-            {/* Apoio da folha: começa recolhido e cada bloco lembra a escolha. */}
-            <div className="divide-y divide-border border-y border-border">
-              <SecaoDoSistema nivel={3} className="py-3" recolher={chave("lista")} recolhidaDeInicio titulo="Lista rápida">
+            {aba === "lista" && (
+              <div className="min-w-0">
                 <textarea
                   value={pedido}
                   onChange={(ev) => setPedido(ev.target.value)}
                   placeholder="O que precisa ser feito para este cliente. Ex.: gravar depoimento na loja, refazer a arte do cardápio."
-                  rows={2}
+                  rows={3}
                   aria-label="Pedido da lista rápida"
-                  className={juntar(campoTexto, "min-h-[64px] resize-none")}
+                  className={juntar(campoTexto, "min-h-[80px] resize-none")}
                 />
-                <div className="mt-2 flex min-w-0 items-center">
-                  <p className={juntar(texto.auxiliar, "mr-3 min-w-0 flex-1 truncate")}>Vira itens da esteira.</p>
+                <div className="mt-2 flex min-w-0 items-center justify-end">
                   <button type="button" onClick={() => void montarLista()} disabled={pedido.trim().length < 3 || montando || !canWrite} className={botao.primario}>
                     <Sparkles className={`mr-1.5 h-3.5 w-3.5 ${montando ? "animate-pulse" : ""}`} aria-hidden="true" />{montando ? "Montando…" : "Montar checklist"}
                   </button>
                 </div>
-              </SecaoDoSistema>
+              </div>
+            )}
 
-              {feitosNaSemana > 0 && (
-                <SecaoDoSistema nivel={3} className="py-3" recolher={chave("feitos")} recolhidaDeInicio resumo={String(feitosNaSemana)} titulo="Feitos nesta semana">
-                  <div className="divide-y divide-border">
-                    {[...e.feitos, ...planoFeitos].map((it) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={canWrite} onMudou={onMudou} />)}
-                  </div>
-                </SecaoDoSistema>
-              )}
+            {aba === "feitos" && (
+              <div className="divide-y divide-border">
+                {[...e.feitos, ...planoFeitos].map((it) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={canWrite} onMudou={onMudou} />)}
+              </div>
+            )}
 
-              <SecaoDoSistema
-                nivel={3}
-                className="py-3"
-                recolher={chave("historia")}
-                recolhidaDeInicio
-                resumo={historiaVisivel.length ? `${historiaVisivel.length} ${historiaVisivel.length === 1 ? "registro" : "registros"}` : "nada ainda"}
-                titulo="História deste cliente"
-              >
-                {historiaVisivel.length === 0 ? (
-                  <p className={texto.auxiliar}>Nada registrado ainda.</p>
-                ) : (
-                  <ul className="divide-y divide-border">
-                    {historiaVisivel.map((h: MemoryEntry) => (
-                      <li key={h.id} className="min-w-0 py-2">
-                        <p className={texto.auxiliar}>{new Date(h.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} · {MEMORY_LABELS[h.kind] || h.kind}</p>
-                        <p className="text-[13px] font-medium leading-5 text-foreground">{h.title || ""}</p>
-                        <p className="text-[12px] leading-5 text-muted-foreground line-clamp-3">{h.content}</p>
+            {aba === "historia" && (
+              historiaVisivel.length === 0 ? (
+                <p className={texto.auxiliar}>Nada registrado ainda.</p>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {historiaVisivel.map((h: MemoryEntry) => (
+                    <li key={h.id} className="min-w-0 py-2">
+                      <p className={texto.auxiliar}>{new Date(h.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} · {MEMORY_LABELS[h.kind] || h.kind}</p>
+                      <p className="text-[13px] font-medium leading-5 text-foreground">{h.title || ""}</p>
+                      <p className="text-[12px] leading-5 text-muted-foreground line-clamp-3">{h.content}</p>
+                    </li>
+                  ))}
+                </ul>
+              )
+            )}
+
+            {aba === "ja-tem" && (
+              <div className="min-w-0">
+                <p className={juntar(texto.rotulo, "mb-1")}>{passosDeEntrada.filter((p) => temPasso(p)).length} de {passosDeEntrada.length}</p>
+                <ul className="divide-y divide-border">
+                  {passosDeEntrada.map((p) => {
+                    const tem = temPasso(p);
+                    return (
+                      <li key={p.key} className="flex min-w-0 items-center justify-between py-2">
+                        <span className="mr-3 min-w-0 text-[13px] text-foreground">{p.rotulo}{p.auto ? <span className="ml-1 text-[12px] text-muted-foreground">(detectado)</span> : null}</span>
+                        <Switch checked={Boolean(tem)} disabled={!canWrite} aria-label={p.rotulo} className="min-h-0 shrink-0" onCheckedChange={async (v) => { const ok = await marcarJaTem(cliente.id, p.key, v); if (ok) { onMudou(); void queryClient.invalidateQueries({ queryKey: ["esteira-historia", cliente.id] }); } else toast.error("Não foi possível gravar."); }} />
                       </li>
-                    ))}
-                  </ul>
-                )}
-              </SecaoDoSistema>
-
-              {!e.onboardingCompleto && (
-                <SecaoDoSistema
-                  nivel={3}
-                  className="py-3"
-                  recolher={chave("ja-tem")}
-                  recolhidaDeInicio
-                  resumo={`${passosDeEntrada.filter((p) => temPasso(p)).length} de ${passosDeEntrada.length}`}
-                  titulo="O que este cliente já tem"
-                >
-                  <ul className="divide-y divide-border">
-                    {passosDeEntrada.map((p) => {
-                      const tem = temPasso(p);
-                      return (
-                        <li key={p.key} className="flex min-w-0 items-center justify-between py-2">
-                          <span className="mr-3 min-w-0 text-[13px] text-foreground">{p.rotulo}{p.auto ? <span className="ml-1 text-[12px] text-muted-foreground">(detectado)</span> : null}</span>
-                          <Switch checked={Boolean(tem)} disabled={!canWrite} aria-label={p.rotulo} className="min-h-0 shrink-0" onCheckedChange={async (v) => { const ok = await marcarJaTem(cliente.id, p.key, v); if (ok) { onMudou(); void queryClient.invalidateQueries({ queryKey: ["esteira-historia", cliente.id] }); } else toast.error("Não foi possível gravar."); }} />
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </SecaoDoSistema>
-              )}
-            </div>
-
-            {canWrite && (
-              <div className="-m-1 flex flex-wrap items-center justify-end [&>*]:m-1">
-                {!oculto ? (
-                  <>
-                    <button type="button" onClick={async () => { const fim = new Date(`${weekStart}T00:00:00Z`); fim.setUTCDate(fim.getUTCDate() + 6); const ok = await ocultarCliente({ clientId: cliente.id, area: frente, ocultar: true, ateQuando: fim.toISOString().slice(0, 10) }); if (ok) { onMudou(); onFechar(); } }} className={juntar(botao.secundario, "h-8 text-[12px]")}>Ocultar esta semana</button>
-                    <button type="button" onClick={async () => { const ok = await ocultarCliente({ clientId: cliente.id, area: frente, ocultar: true, ateQuando: null }); if (ok) { onMudou(); onFechar(); } }} className={juntar(botao.perigo, "h-8 text-[12px]")}>Tirar desta frente</button>
-                  </>
-                ) : (
-                  <button type="button" onClick={async () => { const ok = await ocultarCliente({ clientId: cliente.id, area: frente, ocultar: false }); if (ok) onMudou(); }} className={juntar(botao.secundario, "h-8 text-[12px]")}>Voltar a mostrar nesta frente</button>
-                )}
+                    );
+                  })}
+                </ul>
               </div>
             )}
           </div>

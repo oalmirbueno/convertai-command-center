@@ -287,14 +287,13 @@ export default function FunilKanban({
             titulo="O funil está vazio"
             descricao="Cadastre quem já está em conversa ou traga quem preencheu o diagnóstico."
             acao={
+              // 16/10/2026: só o ícone (os mesmos do título), nome no title.
               <div className="flex flex-wrap items-center justify-center [&>*]:m-1">
-                <button type="button" onClick={onImportar} disabled={importando} className={botao.secundario}>
-                  <Download className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                  Trazer do diagnóstico
+                <button type="button" onClick={onImportar} disabled={importando} className={juntar(botao.icone, "disabled:opacity-50")} aria-label="Trazer do diagnóstico" title="Trazer do diagnóstico">
+                  <Download className="h-4 w-4" aria-hidden="true" />
                 </button>
-                <button type="button" onClick={onNovo} className={botao.secundario}>
-                  <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                  Novo lead
+                <button type="button" onClick={onNovo} className={juntar(botao.icone, "text-primary hover:text-primary")} aria-label="Novo lead" title="Novo lead">
+                  <Plus className="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>
             }
