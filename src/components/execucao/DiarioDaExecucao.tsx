@@ -6,6 +6,8 @@ import { anexarNoCaderno } from "@/lib/arquivosDoCaderno";
 import { chamarFuncao } from "@/lib/mesa/api";
 import TarefaDoCaderno from "./TarefaDoCaderno";
 import DefinirResponsavel from "./DefinirResponsavel";
+import ProvaDaEntrega from "./ProvaDaEntrega";
+import { oQueFoiFeito, tipoDaEntrega } from "@/lib/execucaoHumana";
 import ChatDoHermes from "./central/ChatDoHermes";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -229,7 +231,7 @@ export default function DiarioDaExecucao({
       if (l.error) throw l.error;
       const id = l.data.kanban_task_id || l.data.painel_task_id;
       if (!id) return null;
-      const t = await supabase.from('tasks').select('id,title,assigned_to,project:projects!tasks_project_id_fkey(id,name,client:profiles!projects_client_id_fkey(id,company_name,full_name))').eq('id', id).single();
+      const t = await supabase.from('tasks').select('id,title,assigned_to,delivery_type,project:projects!tasks_project_id_fkey(id,name,client:profiles!projects_client_id_fkey(id,company_name,full_name))').eq('id', id).single();
       if (t.error) throw t.error;
       return t.data as any;
     },
@@ -504,6 +506,14 @@ export default function DiarioDaExecucao({
           ) : (
             <div className="mx-auto max-w-4xl space-y-3">
               {contextoInicial && <p className="text-xs text-muted-foreground">Histórico da coordenação · pode incluir outros clientes</p>}
+              {/* 16/10 (dono: "já trazer o print, a imagem correta, o PDF, para eu aprovar com contexto"):
+                  em revisão, a entrega vem primeiro, grande, com o que é e a prova que abre aqui mesmo. */}
+              {linkId && esperaRevisao && (
+                <section aria-label="Entrega para aprovar" className="overflow-hidden rounded-2xl border border-warning/40 bg-card">
+                  <p className="border-b border-border px-4 py-2.5 text-[13px] font-medium">{oQueFoiFeito({ status: "review", tipo: tipoDaEntrega(contexto.data?.delivery_type, contexto.data?.title || titulo), temProva: Boolean(vinculo.data?.last_evidence) })}</p>
+                  <div className="mx-auto max-w-2xl"><ProvaDaEntrega linkId={linkId} ultimaProva={vinculo.data?.last_evidence} /></div>
+                </section>
+              )}
               {entradas.map((e) => (
                 <EntradaDoDiario key={e.id} e={e} autor={nomeDoAutor(e)} doHumano={e.author_kind === "humano"} aoResponder={(x) => {
                   setTituloEntrada(`Sobre: ${tituloDoCaderno(x.title)}`);

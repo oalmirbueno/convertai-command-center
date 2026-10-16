@@ -32,6 +32,9 @@ import AprovacoesExplicadas from "@/components/execucao/AprovacoesExplicadas";
 import PropostasDeResponsavel from "@/components/execucao/PropostasDeResponsavel";
 import MesaDeDecisao, { type DecisaoDaMesa, type ItemDaMesa } from "@/components/decisao/MesaDeDecisao";
 import CaminhoDaTarefa, { motivoParaGente } from "@/components/execucao/CaminhoDaTarefa";
+import ProvaDaEntrega from "@/components/execucao/ProvaDaEntrega";
+import { oQueFoiFeito, tipoDaEntrega } from "@/lib/execucaoHumana";
+import { destinoDaEvidencia } from "@/lib/execucaoApresentacao";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import {
   ROTULO_CATEGORIA, ROTULO_ORIGEM, categoriaDaTarefa, origemDaExecucao, passaNoFiltro,
@@ -241,6 +244,7 @@ export default function AdminExecucao() {
   const [agenteAberto, setAgenteAberto] = useState<Operador | null>(null);
   // Ida e volta (16/10): o diário aberto pelo perfil do agente devolve para o perfil ao fechar.
   const [voltarAoAgente, setVoltarAoAgente] = useState<Operador | null>(null);
+  const [abaDoAgente, setAbaDoAgente] = useState<string | null>(null);
   const [menuCartao, setMenuCartao] = useState<{ x: number; y: number; v: Vinculo } | null>(null);
   const [menuEncaminhar, setMenuEncaminhar] = useState<{ x: number; y: number; tarefaId: string; titulo: string } | null>(null);
   const [atualizando, setAtualizando] = useState(false);
@@ -369,7 +373,7 @@ export default function AdminExecucao() {
       // created_by, e sem escolher o caminho a consulta inteira e recusada.
       const { data, error } = await (supabase as any)
         .from("tasks")
-        .select("id, title, status, deleted_at, due_date, assigned_to, project_id, source, ops_node_id, project:projects!tasks_project_id_fkey(name, client:profiles!projects_client_id_fkey(full_name, company_name))")
+        .select("id, title, status, deleted_at, due_date, assigned_to, project_id, source, ops_node_id, delivery_type, project:projects!tasks_project_id_fkey(name, client:profiles!projects_client_id_fkey(full_name, company_name))")
         .in("id", taskIds);
       // Erro nao vira mapa vazio: um mapa vazio faz a tela desenhar tarefa
       // sem projeto nem cliente, como se o dado nao existisse.
@@ -1239,15 +1243,22 @@ export default function AdminExecucao() {
     const motivo = travada ? motivoParaGente(v.block_reason) : null;
     const fala = motivo ? motivo.texto : v.block_reason ? falarComoGente(v.block_reason).humano : v.last_action ? falarComoGente(v.last_action).humano : null;
     const idTarefa = v.kanban_task_id ?? (v as any).painel_task_id;
-    const feito = v.last_evidence ? falarComoGente(v.last_evidence).humano : v.last_action ? falarComoGente(v.last_action).humano : null;
+    // 16/10 (dono: "o que foi feito de fato? quando é arte, quando são lâminas"): o tipo da entrega
+    // e a prova, em vez do texto técnico do agente.
+    const tipoDaTarefa = tipoDaEntrega((t as any)?.delivery_type, t?.title);
+    const provaVisual = Boolean(v.last_evidence && destinoDaEvidencia(String(v.last_evidence)));
+    const feito = oQueFoiFeito({ status: v.status, tipo: tipoDaTarefa, temImagem: provaVisual && /\.(png|jpe?g|webp|gif)/i.test(String(v.last_evidence)), temProva: Boolean(v.last_evidence) });
+    const fechada = encerrado(v);
     return {
       id: v.id,
-      tipo: decidir ? "Precisa da sua decisão" : v.status === "blocked" ? "Travada" : v.status === "awaiting_input" ? "Esperando resposta sua" : STATUS_ROTULO[v.status] || v.status,
-      tomDoTipo: v.status === "blocked" ? "perigo" : "aviso",
+      tipo: fechada ? "Cancelada ou encerrada" : decidir ? "Precisa da sua decisão" : v.status === "blocked" ? "Travada" : v.status === "awaiting_input" ? "Esperando resposta sua" : `${tipoDaTarefa ? `${tipoDaTarefa.charAt(0).toUpperCase()}${tipoDaTarefa.slice(1)} · ` : ""}${STATUS_ROTULO[v.status] || v.status}`,
+      tomDoTipo: fechada ? undefined : v.status === "blocked" ? "perigo" : "aviso",
+      // A prova em destaque (imagem, print, PDF), que abre ali mesmo para aprovar com contexto.
+      midia: (emRevisao || travada) && !fechada ? <ProvaDaEntrega linkId={v.id} ultimaProva={v.last_evidence} /> : undefined,
       cliente: nomeCliente,
       avatar: <FotoDoCliente nome={nomeCliente} foto={null} tamanho="sm" />,
       titulo,
-      mensagem: fala,
+      mensagem: fechada ? "A tarefa foi cancelada, arquivada ou excluída no Kanban. Esta execução ficou sobrando e pode sair da lista." : fala,
       passo: travada || emRevisao ? null : v.next_step ? falarComoGente(v.next_step).humano : null,
       diagrama: travada || emRevisao
         ? <CaminhoDaTarefa feito={feito} parou={travada ? fala : null} destrava={v.next_step ? falarComoGente(v.next_step).humano : null} esperaRevisao={emRevisao} />
@@ -1522,6 +1533,7 @@ export default function AdminExecucao() {
       nomesDeAgentes={nomesDeAgentes}
       titulosDeTarefas={titulosDeTarefas}
       aoAbrirDiario={(id, titulo) => setDiarioAberto({ linkId: id, titulo })}
+      aoAbrirAgente={(id) => { const op = opDe(id); if (op) { setAbaDoAgente("conversar"); setAgenteAberto(op); } }}
       aoEncaminhar={encaminharAoHermes}
       barraNoTopo={barraDaCentral}
     />
@@ -1967,10 +1979,11 @@ export default function AdminExecucao() {
 
       <PerfilDoAgente
         operador={agenteAberto}
+        abaInicial={abaDoAgente}
         vinculos={vinculos}
         tarefas={tarefas}
         aoAbrirDiario={(id, titulo) => { setVoltarAoAgente(agenteAberto); setAgenteAberto(null); setDiarioAberto({ linkId: id, titulo }); }}
-        aoFechar={() => setAgenteAberto(null)}
+        aoFechar={() => { setAgenteAberto(null); setAbaDoAgente(null); }}
       />
 
       {/* O card do Kanban, aqui dentro: contexto, entrega e histórico sem

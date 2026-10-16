@@ -1,4 +1,6 @@
 import { limparTecnico } from "@/lib/cadernoExecucao";
+import { fraseDoAgente, tipoDaEntrega } from "@/lib/execucaoHumana";
+import QuemEstaTrabalhando, { type PessoaTrabalhando } from "@/components/execucao/QuemEstaTrabalhando";
 import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -103,11 +105,11 @@ function useDadosDaCentral(chave: PeriodoDaCentral) {
       if (erro) throw new Error(erro.error.message);
       const links = (vinculos.data || []) as Array<VinculoContado & { last_action: string | null; next_step: string | null; block_reason: string | null }>;
       const idsDeTarefa = [...new Set(links.map((v) => v.kanban_task_id || v.painel_task_id).filter(Boolean))] as string[];
-      const tarefas = new Map<string, { id: string; title: string; status: string; cliente: string | null }>();
+      const tarefas = new Map<string, { id: string; title: string; status: string; cliente: string | null; tipo: string | null }>();
       for (let i = 0; i < idsDeTarefa.length; i += 150) {
-        const q = await s.from("tasks").select("id,title,status,project:projects!tasks_project_id_fkey(client:profiles!projects_client_id_fkey(company_name,full_name))").in("id", idsDeTarefa.slice(i, i + 150));
+        const q = await s.from("tasks").select("id,title,status,delivery_type,project:projects!tasks_project_id_fkey(client:profiles!projects_client_id_fkey(company_name,full_name))").in("id", idsDeTarefa.slice(i, i + 150));
         if (q.error) throw new Error(q.error.message);
-        for (const t of q.data || []) tarefas.set(t.id, { id: t.id, title: t.title, status: t.status, cliente: t.project?.client?.company_name || t.project?.client?.full_name || null });
+        for (const t of q.data || []) tarefas.set(t.id, { id: t.id, title: t.title, status: t.status, cliente: t.project?.client?.company_name || t.project?.client?.full_name || null, tipo: tipoDaEntrega(t.delivery_type, t.title) });
       }
       return { periodo: p, abertas: abertas.data || [], feitas: feitas.count || 0, feitasAntes: feitasAntes.count || 0, runs: (runs.data || []) as LinhaDoHistorico[], links, tarefas, aprovacoes: aprov.count || 0, agentes: agentes.data || [] };
     },
@@ -120,7 +122,8 @@ function useDadosDaCentral(chave: PeriodoDaCentral) {
  * por situação, quem trabalha neste momento (execução com sinal nos últimos 20 min ou vínculo
  * mexido na última hora) e o atalho para as decisões.
  */
-function AgoraNaCentral({ d, aoVerDecisoes, aoAbrirDiario }: { d: NonNullable<ReturnType<typeof useDadosDaCentral>["data"]>; aoVerDecisoes: () => void; aoAbrirDiario: (linkId: string, titulo?: string) => void }) {
+function AgoraNaCentral({ d, aoVerDecisoes, aoAbrirDiario, aoAbrirAgente }: { d: NonNullable<ReturnType<typeof useDadosDaCentral>["data"]>; aoVerDecisoes: () => void; aoAbrirDiario: (linkId: string, titulo?: string) => void; aoAbrirAgente?: (operatorId: string) => void }) {
+  const [verTodos, setVerTodos] = useState(false);
   const agora = Date.now();
   const vivos = d.links.filter((l) => !["done"].includes(String(l.status)));
   const conta = (...st: string[]) => vivos.filter((l) => st.includes(String(l.status))).length;
@@ -148,6 +151,16 @@ function AgoraNaCentral({ d, aoVerDecisoes, aoAbrirDiario }: { d: NonNullable<Re
     trabalhando.set(String(v.operator_id), { agente: nome.get(String(v.operator_id)) || "Agente", titulo: t?.title || limparTecnico(String(v.last_action || "trabalhando")), cliente: t?.cliente || null, desde: mexido, linkId: v.id });
   }
   const pessoas = [...trabalhando.values()].sort((a, b) => b.desde - a.desde).slice(0, 6);
+  // Todos com trabalho aberto, cada um pela tarefa que mais pede atenção, falando como gente.
+  const ORDEM = ["in_progress", "review", "awaiting_input", "blocked", "queued"];
+  const porAgente = new Map<string, typeof d.links>();
+  for (const v of d.links) { if (!ORDEM.includes(String(v.status))) continue; const k = String(v.operator_id); porAgente.set(k, [...(porAgente.get(k) || []), v]); }
+  const comTrabalho: PessoaTrabalhando[] = [...porAgente.entries()].map(([op, lista]) => {
+    const v = [...lista].sort((a, b) => ORDEM.indexOf(String(a.status)) - ORDEM.indexOf(String(b.status)))[0];
+    const t = d.tarefas.get(v.kanban_task_id || v.painel_task_id || "");
+    const titulo = t?.title || limparTecnico(String(v.last_action || ""));
+    return { operatorId: op, agente: nome.get(op) || "Agente", frase: fraseDoAgente({ status: String(v.status), titulo, cliente: t?.cliente, tipo: t?.tipo, motivo: v.block_reason ? limparTecnico(v.block_reason) : null }), cliente: t?.cliente, linkId: v.id, titulo, agora: trabalhando.has(op), status: String(v.status), outras: lista.length - 1 };
+  }).sort((a, b) => Number(b.agora) - Number(a.agora) || ORDEM.indexOf(a.status) - ORDEM.indexOf(b.status));
   const ha = (ms: number) => { const m = Math.max(1, Math.round((agora - ms) / 60_000)); return m < 60 ? `há ${m} min` : `há ${Math.round(m / 60)} h`; };
   return (
     <section aria-label="Agora" className="space-y-3 rounded-xl bg-muted/30 p-3">
@@ -167,12 +180,15 @@ function AgoraNaCentral({ d, aoVerDecisoes, aoAbrirDiario }: { d: NonNullable<Re
         </p>
       </div>
       <div>
-        <p className={juntar(texto.rotulo, "mb-1.5")}>Trabalhando agora</p>
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <p className={texto.rotulo}>Trabalhando agora</p>
+          {comTrabalho.length > 0 && <button type="button" onClick={() => setVerTodos(true)} className="text-[12px] font-medium text-primary hover:underline">Ver todos e conversar ({comTrabalho.length})</button>}
+        </div>
         {pessoas.length ? (
           <ul className="space-y-1">
             {pessoas.map((p) => (
               <li key={p.agente}>
-                <button type="button" disabled={!p.linkId} onClick={() => p.linkId && aoAbrirDiario(p.linkId, p.titulo)} className="flex w-full min-w-0 items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left enabled:hover:bg-muted/60">
+                <button type="button" onClick={() => setVerTodos(true)} className="flex w-full min-w-0 items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left hover:bg-muted/60">
                   <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[12px] font-semibold text-primary" aria-hidden="true">{p.agente.trim()[0]?.toUpperCase()}<span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 animate-pulse rounded-full border-2 border-background bg-success" /></span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-medium">{p.agente}</span>
@@ -183,13 +199,20 @@ function AgoraNaCentral({ d, aoVerDecisoes, aoAbrirDiario }: { d: NonNullable<Re
               </li>
             ))}
           </ul>
-        ) : <p className="text-[12.5px] text-muted-foreground">Ninguém trabalhando neste momento.</p>}
+        ) : <button type="button" onClick={() => setVerTodos(true)} className="text-left text-[12.5px] text-muted-foreground hover:text-foreground">Ninguém trabalhando neste momento.{comTrabalho.length > 0 ? ` ${comTrabalho.length} ${comTrabalho.length === 1 ? "agente tem" : "agentes têm"} trabalho aberto: ver e conversar.` : ""}</button>}
       </div>
+      <QuemEstaTrabalhando
+        aberto={verTodos}
+        aoFechar={() => setVerTodos(false)}
+        pessoas={comTrabalho}
+        aoConversar={(op) => { setVerTodos(false); aoAbrirAgente?.(op); }}
+        aoVerTrabalho={(id, titulo) => { setVerTodos(false); aoAbrirDiario(id, titulo); }}
+      />
     </section>
   );
 }
 
-function Indicadores({ q, aoVerDecisoes, aoAbrirDiario }: { q: ReturnType<typeof useDadosDaCentral>; aoVerDecisoes: () => void; aoAbrirDiario: (linkId: string, titulo?: string) => void }) {
+function Indicadores({ q, aoVerDecisoes, aoAbrirDiario, aoAbrirAgente }: { q: ReturnType<typeof useDadosDaCentral>; aoVerDecisoes: () => void; aoAbrirDiario: (linkId: string, titulo?: string) => void; aoAbrirAgente?: (operatorId: string) => void }) {
   if (q.isLoading) return <Carregando linhas={4} rotulo="Calculando os indicadores" />;
   if (q.isError || !q.data) return <EstadoDeErro titulo="Não foi possível calcular os indicadores." descricao="Nenhum número foi estimado." acao={<button type="button" className={botao.secundario} onClick={() => void q.refetch()}>Tentar de novo</button>} />;
   const d = q.data;
@@ -200,7 +223,7 @@ function Indicadores({ q, aoVerDecisoes, aoAbrirDiario }: { q: ReturnType<typeof
   });
   return (
     <div aria-label="Indicadores de autonomia" className="space-y-4">
-      <AgoraNaCentral d={d} aoVerDecisoes={aoVerDecisoes} aoAbrirDiario={aoAbrirDiario} />
+      <AgoraNaCentral d={d} aoVerDecisoes={aoVerDecisoes} aoAbrirDiario={aoAbrirDiario} aoAbrirAgente={aoAbrirAgente} />
       <p className="px-1 text-[12px] text-muted-foreground">{d.periodo.rotulo} · comparado a {d.periodo.anterior.rotulo}</p>
       <div>
         <p className={juntar(texto.rotulo, "mb-1.5 px-1")}>Tarefas (Kanban)</p>
@@ -442,7 +465,9 @@ function Tirinha({ rotulo, icone, onAbrir }: { rotulo: string; icone: ReactNode;
   );
 }
 
-export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, aoAbrirDiario, aoEncaminhar, barraNoTopo = null }: {
+export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, aoAbrirDiario, aoEncaminhar, aoAbrirAgente, barraNoTopo = null }: {
+  /** Abre o perfil do agente já na conversa (16/10: "quer conversar comigo?"). */
+  aoAbrirAgente?: (operatorId: string) => void;
   nomesDeAgentes: Map<string, string>;
   titulosDeTarefas: Map<string, string>;
   aoAbrirDiario: (linkId: string, titulo?: string) => void;
@@ -631,7 +656,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
             {largo && botoesDoPainel("area")}
           </div>
           <div className={juntar("flex min-h-0 flex-1 flex-col p-3", aba === "arquivos" ? "" : ROLAGEM_OPERACAO)}>
-            {aba === "resumo" && <Indicadores q={dados} aoVerDecisoes={() => setAba("decisoes")} aoAbrirDiario={aoAbrirDiario} />}
+            {aba === "resumo" && <Indicadores q={dados} aoVerDecisoes={() => setAba("decisoes")} aoAbrirDiario={aoAbrirDiario} aoAbrirAgente={aoAbrirAgente} />}
             {aba === "historico" && <Historico q={dados} aoAbrirDiario={aoAbrirDiario} />}
             {aba === "decisoes" && <AprovacoesExplicadas nomesDeAgentes={nomesDeAgentes} titulosDeTarefas={titulosDeTarefas} destaqueId={null} aoAbrirDiario={(id) => aoAbrirDiario(id)} />}
             {aba === "arquivos" && (

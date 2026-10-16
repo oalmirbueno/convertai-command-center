@@ -1,5 +1,5 @@
 import { contextoDasExecucoes } from "@/lib/execucaoHistorico";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -84,7 +84,10 @@ export default function PerfilDoAgente({
   tarefas,
   aoFechar,
   aoAbrirDiario,
+  abaInicial = null,
 }: {
+  /** Abrir já numa aba (ex.: "conversar", vindo de "Quer conversar comigo?"). */
+  abaInicial?: string | null;
   operador: Operador | null;
   vinculos: Array<Record<string, any>>;
   tarefas: Map<string, any>;
@@ -134,6 +137,7 @@ export default function PerfilDoAgente({
 
   const [limiteTrilha, setLimiteTrilha] = useState(40);
   const [aba, setAba] = useEstadoDaTela<string>(`execucao:agente:aba:${operador?.id || ""}`, "agora", { validar: (v) => ["agora", "conversar", "historico", "melhorar"].includes(String(v)) });
+  useEffect(() => { if (operador?.id && abaInicial) setAba(abaInicial); }, [operador?.id, abaInicial]); // eslint-disable-line react-hooks/exhaustive-deps
   const { data: trilha = [], isError: trilhaFalhou } = useQuery({
     queryKey: ["agente-trilha", operador?.id, limiteTrilha],
     queryFn: async () => {
