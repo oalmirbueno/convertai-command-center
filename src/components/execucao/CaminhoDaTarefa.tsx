@@ -71,18 +71,20 @@ export default function CaminhoDaTarefa({ feito, parou, destrava, depois = "O ag
     { rotulo: esperaRevisao ? "Você decide" : "O que destrava", texto: destrava ? simples(destrava, "O agente anotou o próximo passo; abra o diário para ver o que ele pede.") : esperaRevisao ? "Aprovar e concluir, pedir ajuste ou reprovar." : "Responder ao agente (texto, link ou arquivo).", tom: "voce" },
     { rotulo: "Depois", texto: depois, tom: "depois" },
   ];
+  // 16/10 (dono: "o texto está um por cima do outro, espremido"): em pé, um passo por linha, com
+  // espaço para ler; o ícone e a linha que liga os passos ficam à esquerda.
   return (
-    <ol className="grid gap-3 sm:grid-cols-4 sm:gap-0" aria-label="Caminho da tarefa">
+    <ol className="space-y-0" aria-label="Caminho da tarefa">
       {passos.map((p, i) => {
         const e = ESTILO[p.tom];
         const Icone = esperaRevisao && i === 1 ? Clock3 : e.Icone;
         return (
-          <li key={p.rotulo} className="relative flex gap-3 sm:flex-col sm:items-center sm:px-2 sm:text-center">
-            {i < passos.length - 1 && <span className="absolute left-4 top-9 h-[calc(100%-1.5rem)] w-px bg-border sm:left-[calc(50%+1.25rem)] sm:top-4 sm:h-px sm:w-[calc(100%-2.5rem)]" aria-hidden="true" />}
+          <li key={p.rotulo} className="relative flex gap-3 pb-3 last:pb-0">
+            {i < passos.length - 1 && <span className="absolute left-4 top-8 h-[calc(100%-2rem)] w-px bg-border" aria-hidden="true" />}
             <span className={juntar("relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full", e.circulo)}><Icone className="h-4 w-4" aria-hidden="true" /></span>
-            <span className="min-w-0 sm:mt-2">
+            <span className="min-w-0 flex-1 pt-0.5">
               <span className={juntar("block text-[11.5px] font-semibold uppercase tracking-wide", e.texto)}>{p.rotulo}</span>
-              {p.texto && <span className="mt-0.5 line-clamp-3 text-[12.5px] leading-5 text-foreground/85" title={p.texto}>{p.texto}</span>}
+              {p.texto && <span className="mt-0.5 line-clamp-3 text-[13.5px] leading-6 text-foreground/90" title={p.texto}>{p.texto}</span>}
             </span>
           </li>
         );

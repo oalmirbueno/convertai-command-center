@@ -1,4 +1,4 @@
-import { incluirConcluidas } from "@/lib/cadernoExecucao";
+import { incluirConcluidas, leituraSimples } from "@/lib/cadernoExecucao";
 import { contextoDasExecucoes } from "@/lib/execucaoHistorico";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Activity, AlertTriangle, Bot, Building2, CheckCircle2, ClipboardCopy, Clock,
-  FileCheck2, FileText, Inbox, ListChecks, MessageSquareReply, PauseCircle, Radar, RefreshCw, RotateCcw, ShieldAlert, SquareArrowOutUpRight, TrendingUp, Users, Wrench, X, XCircle,
+  FileCheck2, FileText, ImagePlus, Inbox, ListChecks, MessageSquareReply, PauseCircle, Play, Radar, RefreshCw, RotateCcw, ShieldAlert, SquareArrowOutUpRight, TrendingUp, Users, Wrench, X, XCircle,
 } from "lucide-react";
 import OrganogramaAgentes, { type NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
 import ExecucoesRecentes from "@/components/execucao/ExecucoesRecentes";
@@ -33,6 +33,7 @@ import PropostasDeResponsavel from "@/components/execucao/PropostasDeResponsavel
 import MesaDeDecisao, { type DecisaoDaMesa, type ItemDaMesa } from "@/components/decisao/MesaDeDecisao";
 import CaminhoDaTarefa, { motivoParaGente } from "@/components/execucao/CaminhoDaTarefa";
 import ProvaDaEntrega from "@/components/execucao/ProvaDaEntrega";
+import EvidenciaVisual from "@/components/execucao/EvidenciaVisual";
 import { oQueFoiFeito, tipoDaEntrega } from "@/lib/execucaoHumana";
 import { destinoDaEvidencia } from "@/lib/execucaoApresentacao";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
@@ -249,7 +250,7 @@ export default function AdminExecucao() {
   const [menuEncaminhar, setMenuEncaminhar] = useState<{ x: number; y: number; tarefaId: string; titulo: string } | null>(null);
   const [atualizando, setAtualizando] = useState(false);
   const [reconciliando, setReconciliando] = useState(false);
-  const [diarioAberto, setDiarioAberto] = useState<{ linkId: string; titulo?: string; contextoInicial?: { cliente: { id: string; nome: string }; pedido: string }; textoInicial?: string } | null>(null);
+  const [diarioAberto, setDiarioAberto] = useState<{ linkId: string; titulo?: string; contextoInicial?: { cliente: { id: string; nome: string }; pedido: string }; textoInicial?: string; aba?: string } | null>(null);
   const [responsavelAberto, setResponsavelAberto] = useState<
     { taskId: string; titulo?: string; atual?: string | null } | null>(null);
   // Os filtros do centro de comando: 606 tarefas abertas nao cabem numa
@@ -373,7 +374,7 @@ export default function AdminExecucao() {
       // created_by, e sem escolher o caminho a consulta inteira e recusada.
       const { data, error } = await (supabase as any)
         .from("tasks")
-        .select("id, title, status, deleted_at, due_date, assigned_to, project_id, source, ops_node_id, delivery_type, project:projects!tasks_project_id_fkey(name, client:profiles!projects_client_id_fkey(full_name, company_name))")
+        .select("id, title, status, deleted_at, due_date, assigned_to, project_id, source, ops_node_id, delivery_type, description, project:projects!tasks_project_id_fkey(name, client:profiles!projects_client_id_fkey(full_name, company_name))")
         .in("id", taskIds);
       // Erro nao vira mapa vazio: um mapa vazio faz a tela desenhar tarefa
       // sem projeto nem cliente, como se o dado nao existisse.
@@ -1223,6 +1224,30 @@ export default function AdminExecucao() {
     void queryClient.invalidateQueries({ queryKey: ["execucao-pedidos"] });
     return true;
   };
+  /* 16/10 (dono: "configurar controle, mas controle do quê? o quê, por quê, onde afeta, o resultado";
+     "o agente ainda não anexa a imagem, por quê?"; "se eu aprovar, ele já tem que começar a fazer"):
+     pedidos de um toque que vão para o diário como instrução, e Aprovar e seguir, que devolve a
+     tarefa para a fila do agente com a autorização (ele executa e volta com o resultado pronto). */
+  const PEDIDOS_AO_AGENTE: Record<string, { titulo: string; corpo: string }> = {
+    prova: { titulo: "Traga a prova", corpo: "Anexe aqui a entrega pronta: todas as imagens finais em alta qualidade (todas as peças, na ordem), ou o PDF/documento, ou o print do que foi feito. Sem a prova eu não consigo aprovar." },
+    explicacao: { titulo: "Explique a tarefa", corpo: "Me explique em português simples, numa mensagem curta: o que é esta tarefa, por que ela existe, onde ela afeta (cliente, conta, site, campanha) e qual resultado ela vai trazer. Depois siga o trabalho." },
+  };
+  const pedirAoAgente = async (v: Vinculo, qual: keyof typeof PEDIDOS_AO_AGENTE) => {
+    if (!profile?.id) return;
+    const p = PEDIDOS_AO_AGENTE[qual];
+    const r = await (supabase as any).from("operator_participations").insert({ task_link_id: v.id, author_kind: "humano", author_id: profile.id, entry_type: "instrucao", title: p.titulo, body: p.corpo, attachments: [] });
+    if (r.error) { toast.error(r.error.message); return; }
+    toast.success(qual === "prova" ? "Pedido enviado: o agente vai anexar a entrega aqui." : "Pedido enviado: o agente vai explicar o quê, o porquê e o resultado.");
+  };
+  const aprovarESeguir = async (v: Vinculo) => {
+    const quem = profile?.full_name || "a equipe";
+    const { error } = await (supabase as any).rpc("operator_human_action", { _link_id: v.id, _new_status: "queued", _note: `Aprovado por ${quem}: pode executar agora e trazer o resultado pronto para eu aprovar.`, _resolve_approval: true });
+    if (error) { toast.error(error.message || "Não foi possível aprovar."); return; }
+    if (profile?.id) await (supabase as any).from("operator_participations").insert({ task_link_id: v.id, author_kind: "humano", author_id: profile.id, entry_type: "instrucao", title: "Aprovado: pode seguir", body: "Aprovado. Pode executar agora: faça o trabalho, use o navegador do cliente ou pesquise na internet se precisar, e volte com o resultado pronto (com a prova) para eu aprovar.", attachments: [] });
+    toast.success("Aprovado: voltou para a fila do agente executar e trazer pronto.");
+    void queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
+  };
+
   const retomarVinculo = async (v: Vinculo) => {
     const { error } = await (supabase as any).rpc("operator_human_action", { _link_id: v.id, _new_status: "queued", _note: "Retomar do ponto em que parou.", _resolve_approval: false });
     if (error) { toast.error(error.message || "Não foi possível retomar."); return; }
@@ -1254,14 +1279,23 @@ export default function AdminExecucao() {
       tipo: fechada ? "Cancelada ou encerrada" : decidir ? "Precisa da sua decisão" : v.status === "blocked" ? "Travada" : v.status === "awaiting_input" ? "Esperando resposta sua" : `${tipoDaTarefa ? `${tipoDaTarefa.charAt(0).toUpperCase()}${tipoDaTarefa.slice(1)} · ` : ""}${STATUS_ROTULO[v.status] || v.status}`,
       tomDoTipo: fechada ? undefined : v.status === "blocked" ? "perigo" : "aviso",
       // A prova em destaque (imagem, print, PDF), que abre ali mesmo para aprovar com contexto.
-      midia: (emRevisao || travada) && !fechada ? <ProvaDaEntrega linkId={v.id} ultimaProva={v.last_evidence} /> : undefined,
+      midia: (emRevisao || travada) && !fechada ? <ProvaDaEntrega linkId={v.id} ultimaProva={v.last_evidence} aoConversar={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined, aba: "hermes" })} /> : undefined,
       cliente: nomeCliente,
       avatar: <FotoDoCliente nome={nomeCliente} foto={null} tamanho="sm" />,
       titulo,
       mensagem: fechada ? "A tarefa foi cancelada, arquivada ou excluída no Kanban. Esta execução ficou sobrando e pode sair da lista." : fala,
       passo: travada || emRevisao ? null : v.next_step ? falarComoGente(v.next_step).humano : null,
       diagrama: travada || emRevisao
-        ? <CaminhoDaTarefa feito={feito} parou={travada ? fala : null} destrava={v.next_step ? falarComoGente(v.next_step).humano : null} esperaRevisao={emRevisao} />
+        ? <div className="space-y-4">
+          {/* Para que serve: o quê, por quê e o resultado, da descrição da tarefa. */}
+          <div>
+            <p className="text-[11.5px] font-semibold uppercase tracking-wide text-primary">Sobre esta tarefa</p>
+            {(t as any)?.description
+              ? <p className="mt-1 line-clamp-4 whitespace-pre-line text-[13.5px] leading-6 text-foreground/90" title={leituraSimples(String((t as any).description)).resumo}>{leituraSimples(String((t as any).description)).resumo}</p>
+              : <p className="mt-1 text-[13px] text-muted-foreground">O agente não explicou o quê, o porquê e o resultado esperado. <button type="button" className="text-primary underline-offset-2 hover:underline" onClick={() => void pedirAoAgente(v, "explicacao")}>Pedir explicação</button></p>}
+          </div>
+          <CaminhoDaTarefa feito={feito} parou={travada ? fala : null} destrava={v.next_step ? falarComoGente(v.next_step).humano : null} esperaRevisao={emRevisao} />
+        </div>
         : undefined,
       sinais: [
         { icone: <Bot className="h-3 w-3" />, texto: op?.display_name || "agente" },
@@ -1269,10 +1303,13 @@ export default function AdminExecucao() {
         ...(t?.due_date ? [{ icone: <Clock className="h-3 w-3" />, texto: `prazo ${String(t.due_date).split("-").reverse().slice(0, 2).join("/")}`, tom: (prazoVencido ? "perigo" : "neutro") as "perigo" | "neutro" }] : []),
         ...(t?.project?.name ? [{ texto: t.project.name }] : []),
       ],
-      detalhes: <div className="space-y-1">
-        <p>Responsável humano: {t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}</p>
-        {v.last_evidence && <p className="break-all">Última prova: {falarComoGente(v.last_evidence).humano}</p>}
-        <p>Atualizado em {dataCurta(v.updated_at)}</p>
+      detalhes: <div className="space-y-2 text-[12.5px]">
+        <p>Responsável humano: <span className="text-foreground">{t?.assigned_to ? humanos.get(String(t.assigned_to)) || "?" : "sem responsável"}</span> · agente <span className="text-foreground">{op?.display_name || "?"}</span> · atualizado em {dataCurta(v.updated_at)}</p>
+        {v.last_action && <p>O que o agente disse por último: <span className="text-foreground">{leituraSimples(String(v.last_action)).resumo}</span></p>}
+        {v.next_step && <p>Próximo passo: <span className="text-foreground">{leituraSimples(String(v.next_step)).resumo}</span></p>}
+        {/* A prova abre ali mesmo (imagem, documento, site ou tela do painel), sem trocar de tela. */}
+        {v.last_evidence && (destinoDaEvidencia(String(v.last_evidence)) ? <div className="max-w-sm"><EvidenciaVisual url={String(v.last_evidence)} nome="Abrir a prova" /></div> : <p>Prova: <span className="text-foreground">{leituraSimples(String(v.last_evidence)).resumo}</span></p>)}
+        <button type="button" className="text-primary underline-offset-2 hover:underline" onClick={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined })}>Ver o diário completo</button>
       </div>,
       podeAjuste: emRevisao,
       podeRejeitar: emRevisao,
@@ -1282,6 +1319,8 @@ export default function AdminExecucao() {
         : emRevisao ? undefined
           : { rotulo: travada ? "Responder e destravar" : "Responder", icone: <MessageSquareReply className="h-4 w-4" />, aoClicar: () => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined }) },
       extras: <>
+        {emRevisao && <button type="button" onClick={() => void aprovarESeguir(v)} title="Aprova e devolve para o agente executar e trazer pronto" className={juntar(botao.secundario, "h-11 px-3 text-success")}><Play className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Aprovar e seguir</span></button>}
+        {(emRevisao || travada) && !v.last_evidence && <button type="button" onClick={() => void pedirAoAgente(v, "prova")} title="Pede ao agente para anexar a entrega pronta" className={juntar(botao.discreto, "h-11 px-3")}><ImagePlus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Pedir a prova</span></button>}
         {motivo?.retomavel && <button type="button" onClick={() => void retomarVinculo(v)} title="Volta para a fila e o agente retoma de onde parou" className={juntar(botao.secundario, "h-11 px-3")}><RotateCcw className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Retomar</span></button>}
         {emRevisao && <button type="button" onClick={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined })} title="Abrir o diário" className={juntar(botao.discreto, "h-11 px-3")}><MessageSquareReply className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Diário</span></button>}
         {idTarefa ? <button type="button" onClick={() => setTarefaAberta(tarefas.get(String(idTarefa)) ?? { id: idTarefa })} title="Abrir a tarefa" className={juntar(botao.discreto, "h-11 px-3")}><SquareArrowOutUpRight className="h-4 w-4 sm:mr-1.5" aria-hidden="true" /><span className="hidden sm:inline">Tarefa</span></button> : null}
@@ -2018,6 +2057,7 @@ export default function AdminExecucao() {
         contextoInicial={diarioAberto?.contextoInicial}
         textoInicial={diarioAberto?.textoInicial}
         substituirRascunho={Boolean(diarioAberto?.contextoInicial || diarioAberto?.textoInicial)}
+        abaInicial={diarioAberto?.aba}
       />
     </div>
   );

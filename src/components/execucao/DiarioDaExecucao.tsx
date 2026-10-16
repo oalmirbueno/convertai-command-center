@@ -178,7 +178,10 @@ export default function DiarioDaExecucao({
   contextoInicial,
   textoInicial,
   substituirRascunho = false,
+  abaInicial,
 }: {
+  /** Abrir já numa aba (ex.: "hermes", vindo da galeria da entrega). */
+  abaInicial?: string;
   linkId: string | null;
   titulo?: string;
   /** operator_id -> display_name, resolvido pela página que já tem os operadores. */
@@ -208,7 +211,7 @@ export default function DiarioDaExecucao({
   const [entendi, setEntendi] = useState<string | null>(null);
   const [trocarResponsavel, setTrocarResponsavel] = useState(false);
   const campo = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { setAnexos([]); setAba("diario"); setLimite(40); setModo(null); setEntendi(null); }, [linkId, contextoInicial?.cliente.id]);
+  useEffect(() => { setAnexos([]); setAba(abaInicial || "diario"); setLimite(40); setModo(null); setEntendi(null); }, [linkId, contextoInicial?.cliente.id, abaInicial]);
   useEffect(() => {
     if (!aberto || !substituirRascunho) return;
     const pronto = contextoInicial?.pedido || textoInicial || "";
@@ -511,7 +514,7 @@ export default function DiarioDaExecucao({
               {linkId && esperaRevisao && (
                 <section aria-label="Entrega para aprovar" className="overflow-hidden rounded-2xl border border-warning/40 bg-card">
                   <p className="border-b border-border px-4 py-2.5 text-[13px] font-medium">{oQueFoiFeito({ status: "review", tipo: tipoDaEntrega(contexto.data?.delivery_type, contexto.data?.title || titulo), temProva: Boolean(vinculo.data?.last_evidence) })}</p>
-                  <div className="mx-auto max-w-2xl"><ProvaDaEntrega linkId={linkId} ultimaProva={vinculo.data?.last_evidence} /></div>
+                  <div className="mx-auto max-w-2xl"><ProvaDaEntrega linkId={linkId} ultimaProva={vinculo.data?.last_evidence} aoConversar={() => setAba("hermes")} /></div>
                 </section>
               )}
               {entradas.map((e) => (
