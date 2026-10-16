@@ -233,27 +233,40 @@ describe("/anuncios", () => {
     mock.tabelas.ads_campaign_daily = DIAS_DE_ADS;
   });
 
-  it("contas no topo (problema primeiro, reconectar no mesmo lugar) e depois o desempenho por cliente", async () => {
+  it("clientes primeiro com os quatro números; aviso de conta no topo; configuração recolhida no pé", async () => {
     const { container } = montar(h(AdminAds), "/anuncios");
-    await waitFor(() => expect(screen.getByText("Desempenho por cliente")).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Clientes" })).toBeTruthy());
     await waitFor(() => expect(container.textContent).toContain("No ar agora"));
     const texto = container.textContent || "";
-    expect(texto.indexOf("Contas de anúncio")).toBeLessThan(texto.indexOf("Desempenho por cliente"));
-    expect(texto.indexOf("Desempenho por cliente")).toBeLessThan(texto.indexOf("No ar agora"));
-    // Token vencido: o botão principal vira Reconectar, e a conta com erro vem primeiro.
-    expect(screen.getByRole("button", { name: /Reconectar com a Meta/ })).toBeTruthy();
-    expect(texto.indexOf("Conta Antiga")).toBeLessThan(texto.indexOf("Conta Padaria"));
-    expect(texto).toContain("A Meta recusou a leitura:");
-    expect(texto).toContain("Saldo baixo");
-    // Resultado pelo objetivo, e o outro objetivo ao lado, sem somar.
-    expect(texto).toContain("10 conversas iniciadas");
-    expect(texto).toContain("+ 3 contatos");
+    // Ordem (16/10): números por cliente, o que está no ar e, no pé, a configuração.
+    expect(texto.indexOf("Clientes")).toBeLessThan(texto.indexOf("No ar agora"));
+    expect(texto.indexOf("No ar agora")).toBeLessThan(texto.indexOf("Contas e conexão"));
+    // Os quatro números com ícone, por cliente.
+    const linha = screen.getByRole("list", { name: "Clientes com anúncios" });
+    expect(linha.querySelectorAll("[data-metrica]")).toHaveLength(4);
+    expect(linha.textContent).toContain("investido");
+    expect(linha.textContent).toContain("conversas iniciadas");
+    expect(linha.textContent).toContain("por conversa iniciada");
+    expect(linha.textContent).toContain("saldo");
+    // Resultado pelo objetivo; o outro objetivo vai na dica, sem somar.
+    expect(linha.querySelector('[title="Também: 3 contatos"]')).toBeTruthy();
+    // Token vencido: o aviso do topo traz o Reconectar, sem abrir a configuração.
     expect(texto).toContain("2 contas pedem atenção");
+    expect(screen.getByRole("button", { name: /Reconectar com a Meta/ })).toBeTruthy();
+    expect(texto).not.toContain("A Meta recusou a leitura:");
+    // "Ver contas" abre a seção do pé, problema primeiro.
+    fireEvent.click(screen.getByRole("button", { name: "Ver contas" }));
+    await waitFor(() => expect(container.textContent).toContain("A Meta recusou a leitura:"));
+    const aberto = container.textContent || "";
+    expect(aberto.indexOf("Conta Antiga")).toBeLessThan(aberto.indexOf("Conta Padaria"));
+    expect(aberto).toContain("Saldo baixo");
   });
 
-  it("token e ligar pelo número ficam recolhidos em Mais opções", async () => {
+  it("token e ligar pelo número ficam recolhidos em Mais opções, dentro das contas", async () => {
     const { container } = montar(h(AdminAds), "/anuncios");
-    await waitFor(() => expect(screen.getByText("Contas de anúncio")).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("button", { name: /Contas e conexão/ })).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /Mais opções/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Contas e conexão/ }));
     expect(container.querySelector('input[type="password"]')).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Mais opções/ }));
     expect(container.querySelector('input[type="password"]')).toBeTruthy();
@@ -261,23 +274,38 @@ describe("/anuncios", () => {
     expect(container.textContent).toContain("Ou cole um token");
   });
 
-  it("o cliente aberto mostra o resumo, as campanhas nas duas leituras e só as contas dele", async () => {
+  it("o cliente aberto mostra os números grandes, as campanhas que abrem nas duas leituras e as contas recolhidas", async () => {
     const { container } = montar(h(AdminAds), `/anuncios?cliente=${CLIENTE}`);
-    await waitFor(() => expect(container.textContent).toContain("Como o cliente lê"));
-    const texto = container.textContent || "";
-    expect(texto).toContain("Como o cliente lê");
-    expect(texto).toContain("Para a equipe");
-    expect(texto).toContain("Gerar relatório");
-    expect(texto).toContain("Também: 3 contatos");
+    await waitFor(() => expect(screen.getByRole("button", { name: /Conversas/ })).toBeTruthy());
+    expect(screen.getByRole("group", { name: "Resumo dos últimos 30 dias" }).querySelectorAll("[data-metrica]")).toHaveLength(4);
+    expect(container.textContent).toContain("Também: 3 contatos");
+    expect(container.textContent).toContain("Gerar relatório");
+    expect(container.textContent).not.toContain("Como o cliente lê");
+    fireEvent.click(screen.getByRole("button", { name: /Conversas/ }));
+    expect(container.textContent).toContain("Como o cliente lê");
+    expect(container.textContent).toContain("Para a equipe");
+    expect(screen.getByRole("button", { name: /Contas deste cliente/ }).getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("sem conta ligada, o próprio cartão das contas explica o primeiro passo", async () => {
+  it("sem conta ligada, o primeiro passo aparece no lugar dos números", async () => {
     mock.rpc.mockImplementation(() => Promise.resolve({ data: { agencia: null, contas: [] }, error: null }));
     mock.tabelas.ads_campaign_daily = [];
     const { container } = montar(h(AdminAds), "/anuncios");
     await waitFor(() => expect(container.textContent).toContain("Nenhuma conta ligada ainda."));
     expect(container.textContent).toContain("Conecte com a Meta, escolha as contas e o cliente de cada uma.");
     expect(screen.getByRole("button", { name: /Conectar com a Meta/ })).toBeTruthy();
+  });
+
+  it("a seta compara os últimos 15 dias com os 15 anteriores", async () => {
+    mock.tabelas.ads_campaign_daily = [
+      linha({ day: dia(20), spend: "100", actions: [{ action_type: "onsite_conversion.messaging_conversation_started_7d", value: "4" }] }),
+      linha({ day: dia(3), spend: "100", actions: [{ action_type: "onsite_conversion.messaging_conversation_started_7d", value: "10" }] }),
+    ];
+    const { container } = montar(h(AdminAds), "/anuncios");
+    await waitFor(() => expect(container.querySelector('[data-tendencia="subiu"]')).toBeTruthy());
+    // Mais conversas (verde) e custo por conversa menor (seta para baixo, verde).
+    expect(container.querySelector('[data-tendencia="subiu"]')!.className).toContain("text-success");
+    expect(container.querySelector('[data-tendencia="caiu"]')!.className).toContain("text-success");
   });
 });
 

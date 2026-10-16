@@ -22,6 +22,7 @@ import { listInWords, readableFileName, readableProjectName } from "@/lib/client
 import { buildGroupMessageText, type GroupMessageContext } from "@/lib/groupMessage";
 import DossieDoCliente from "@/components/admin/DossieDoCliente";
 import DiaPrioritarioNaCentral from "@/components/dia-prioritario/DiaPrioritarioNaCentral";
+import RadarDeIdeias from "@/components/central/RadarDeIdeias";
 import CentralReviewQueue from "@/components/central/CentralReviewQueue";
 import AvisosDePublicacao from "@/components/central/AvisosDePublicacao";
 import MesaDaRevisao from "@/components/central/MesaDaRevisao";
@@ -39,6 +40,7 @@ import { lerDossiesDaCarteira, rotuloDoDossie, type DossieDoCliente as DossieGer
 import { lerMovimentos, movimentosComoFatos } from "@/lib/movimentos";
 import { ehEntregue } from "@/lib/contextoDaCentral";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
+import { resolveFileUrl } from "@/lib/fileUrls";
 import { useFotosDosClientes } from "@/hooks/useFotosDosClientes";
 import { useCentralReviewPendentes } from "@/hooks/useCentralReviewPendentes";
 import { buscarTodas } from "@/lib/buscaCompleta";
@@ -64,7 +66,7 @@ import {
 } from "@/lib/radarIdeas";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, ArrowUpRight, BadgeDollarSign, BookOpen, Briefcase, CheckCircle2, ChevronDown, Clock, FileText, Flame, HeartPulse, History as Historico, Inbox, Lightbulb, Loader2, Package, Radar, RefreshCw, Send, SlidersHorizontal, Sparkles, Trash2, UserCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowUpRight, BadgeDollarSign, BookOpen, Briefcase, Camera, CheckCircle2, ChevronDown, Clock, FileText, Flame, HeartPulse, History as Historico, Inbox, LayoutGrid, Lightbulb, Loader2, Megaphone, Package, Radar, RefreshCw, Send, SlidersHorizontal, Sparkles, Trash2, UserCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -226,6 +228,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   useRolagemDaTela(guardar("rolagem"), raizDaCentral);
   /** Ideias geradas com IA e busca na web, por cliente. */
   const [aiIdeas, setAiIdeas] = useEstadoDaTela<Record<string, RadarIdea[]>>(guardar("ideias-ia"), {}, ehObjeto);
+  // 16/10/2026: versões aplicadas na conversa com o agente, por id, por cima da ideia original.
+  const [ideiasEvoluidas, setIdeiasEvoluidas] = useEstadoDaTela<Record<string, RadarIdea>>(guardar("ideias-evoluidas"), {}, ehObjeto);
   const [aiClientId, setAiClientId] = useEstadoDaTela<string>(guardar("radar-cliente"), "", ehTexto);
   const [aiLoading, setAiLoading] = useState(false);
   /** Prévia aberta da mensagem do grupo (ver antes de copiar). */
@@ -252,6 +256,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   }, [location.search, cycleReview, setActiveTab]);
   /** Historico: um cliente so, ou a carteira inteira. */
   const [historicoClientId, setHistoricoClientId] = useEstadoDaTela<string>(guardar("historico-cliente"), "__all__", ehTexto);
+  // 16/10/2026: filtro por tipo na linha do tempo (ícones) — "todos" mostra tudo.
+  const [historicoTipo, setHistoricoTipo] = useEstadoDaTela<string>(guardar("historico-tipo"), "todos", ehTexto);
   const [expandedDraft, setExpandedDraft] = useEstadoDaTela<string | null>(guardar("fila-aberto"), null, (v) => v === null || ehTexto(v));
   /** Rascunhos de mensagem em edição: guardados até publicar, descartar ou ficarem iguais ao salvo. */
   const [draftEdits, setDraftEdits] = useEstadoDaTela<Record<string, { summary: string; next_steps: string }>>(guardar("rascunhos"), {}, ehObjeto);
@@ -991,9 +997,40 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
 
   // IA na frente, playbook depois. É esta lista que a tela e as mensagens usam.
   const allRadarIdeas = useMemo<RadarIdea[]>(
-    () => [...Object.values(aiIdeas).flat(), ...opportunities],
-    [aiIdeas, opportunities],
+    () => [...Object.values(aiIdeas).flat(), ...opportunities].map((idea) => ideiasEvoluidas[idea.id] || idea),
+    [aiIdeas, opportunities, ideiasEvoluidas],
   );
+
+  // 16/10/2026 (dono: "radar com imagens"): até 4 imagens reais recentes de cada cliente
+  // que tem ideia, em miniatura assinada. Só lê com a aba do Radar aberta.
+  const clientesDoRadar = useMemo(() => Array.from(new Set(allRadarIdeas.map((i) => i.id.split(":")[0]))).sort(), [allRadarIdeas]);
+  const { data: imagensDoRadar = {} } = useQuery({
+    queryKey: ["exp-radar-imagens", clientesDoRadar.join(",")],
+    enabled: activeTab === "radar" && clientesDoRadar.length > 0,
+    staleTime: 10 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("files")
+        .select("client_id, file_url, storage_bucket, storage_path, mime_type, created_at")
+        .in("client_id", clientesDoRadar)
+        .like("mime_type", "image/%")
+        .eq("status", "ready")
+        .is("archived_at", null)
+        .order("created_at", { ascending: false })
+        .limit(clientesDoRadar.length * 12);
+      if (error) throw error;
+      const porCliente: Record<string, any[]> = {};
+      for (const f of data || []) {
+        const lista = (porCliente[f.client_id] ||= []);
+        if (lista.length < 4) lista.push(f);
+      }
+      const saida: Record<string, string[]> = {};
+      await Promise.all(Object.entries(porCliente).map(async ([id, arquivos]) => {
+        const urls = await Promise.all(arquivos.map((f) => resolveFileUrl({ fileUrl: f.file_url, storageBucket: f.storage_bucket, storagePath: f.storage_path, miniatura: true }).catch(() => "")));
+        saida[id] = urls.filter(Boolean);
+      }));
+      return saida;
+    },
+  });
 
   /**
    * Gera as ideias do mês com IA e busca na web, a partir do contexto real do
@@ -2462,7 +2499,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           <RegiaoRolavel modo="lg" rotulo="Carteira" memoria="central:carteira" className="lg:pb-4 lg:pr-1">
             {/* 12/10/2026: Dia Prioritário (quem merece atenção estratégica hoje e na semana) */}
             <DiaPrioritarioNaCentral
-              clientes={(clients || []).map((c: any) => ({ id: String(c.id), nome: nomeDoCliente(c) }))}
+              clientes={(clients || []).map((c: any) => ({ id: String(c.id), nome: nomeDoCliente(c), foto: fotoDe({ id: String(c.id), nome: nomeDoCliente(c), avatar_url: c.avatar_url }) }))}
               onAbrirPerfil={(id) => { setProfileClientId(id); setActiveTab("perfis"); }}
             />
             <Secao
@@ -2581,40 +2618,44 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           return (
             <RegiaoRolavel modo="lg" rotulo="Perfil do cliente" memoria={`central:perfis:${client.id}`} className="lg:pb-4 lg:pr-1">
               <div className="space-y-4">
-                {/* Quem é o cliente, sem caixa: foto, o seletor com o nome, o
-                    estado numa linha e os atalhos à direita ("..." no celular). */}
-                <div className="flex min-w-0 items-start">
+                {/* Quem é o cliente (16/10/2026, dono: "risco, nota... muita informação poluindo"):
+                    foto, nome, a nota como um ponto de cor e os sinais como ícones curtos; os
+                    atalhos viram ícones (o nome no toque/mouse). */}
+                <div className="flex min-w-0 items-center">
                   <FotoDoCliente nome={nomeDoCliente(client)} foto={fotoDe({ id: String(client.id), nome: nomeDoCliente(client), avatar_url: client.avatar_url })} tamanho="xl" className="!h-12 !w-12 sm:!h-14 sm:!w-14" />
                   <div className="ml-3 min-w-0 flex-1">
-                    <SeletorCompacto
-                      modo="lista"
-                      rotulo="Cliente do perfil"
-                      opcoes={healthRows.map((r) => ({ valor: String(r.client.id), rotulo: nomeDoCliente(r.client) }))}
-                      valor={String(client.id)}
-                      onEscolher={setProfileClientId}
-                      className="-ml-2.5 border-transparent text-[15px] font-semibold"
-                    />
-                    <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
-                      {[servicos.length ? servicos.join(" + ") : "sem frente marcada", client.plan_name || null, dias !== null ? `${dias} dias na casa` : null].filter(Boolean).join(" · ")}
-                    </p>
-                    <div className="-m-0.5 mt-1.5 flex min-w-0 flex-wrap [&>*]:m-0.5">
-                      <span className={juntar(etiqueta, "bg-muted", meta.cls)}>{meta.label} · nota {selected.score ?? "s/ dado"}</span>
-                      {selected.pulse && <span className={juntar(etiqueta, "bg-info/10 text-info")}>Pulso {selected.pulse.score}/5</span>}
-                      <span className={juntar(etiqueta, "bg-primary/10 text-primary")}><BookOpen className="mr-1 h-3 w-3" aria-hidden="true" />{rotuloDoDossie(d, nowTick)}</span>
-                      <span className={juntar(etiqueta, v30.total > 0 ? "bg-success/10 text-success" : "bg-muted text-muted-foreground")}><BadgeDollarSign className="mr-1 h-3 w-3" aria-hidden="true" />{v30.total > 0 ? `${v30.total} venda${v30.total === 1 ? "" : "s"} em 30 dias${v30.receita > 0 ? ` · R$ ${Math.round(v30.receita).toLocaleString("pt-BR")}` : ""}` : "sem venda registrada em 30 dias"}</span>
-                      {clientProjs.length > 0 && <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>{clientProjs.length} frente{clientProjs.length === 1 ? "" : "s"} ativa{clientProjs.length === 1 ? "" : "s"}</span>}
+                    <div className="flex min-w-0 items-center">
+                      <SeletorCompacto
+                        modo="lista"
+                        rotulo="Cliente do perfil"
+                        opcoes={healthRows.map((r) => ({ valor: String(r.client.id), rotulo: nomeDoCliente(r.client) }))}
+                        valor={String(client.id)}
+                        onEscolher={setProfileClientId}
+                        className="-ml-2.5 min-w-0 border-transparent text-[15px] font-semibold"
+                      />
+                      <span className={juntar("ml-1 inline-flex shrink-0 items-center text-[12px] font-semibold tabular-nums", meta.cls)} title={`${meta.label} · nota ${selected.score ?? "sem dado"}`}>
+                        <span className={juntar("mr-1 h-2 w-2 rounded-full", meta.dot)} aria-hidden="true" />{selected.score ?? "–"}
+                      </span>
+                    </div>
+                    <div className={juntar(texto.auxiliar, "mt-0.5 flex min-w-0 items-center")}>
+                      <span className="min-w-0 truncate">{[servicos.length ? servicos.join(" + ") : "sem frente marcada", client.plan_name || null].filter(Boolean).join(" · ")}</span>
+                      <span className="ml-2 flex shrink-0 items-center [&>*+*]:ml-2">
+                        {selected.pulse && <span className="inline-flex items-center text-info" title={`Pulso ${selected.pulse.score}/5`}><HeartPulse className="mr-0.5 h-3.5 w-3.5" aria-hidden="true" />{selected.pulse.score}</span>}
+                        <span className="inline-flex items-center text-primary" title={rotuloDoDossie(d, nowTick)}><BookOpen className="h-3.5 w-3.5" aria-hidden="true" /><span className="sr-only">{rotuloDoDossie(d, nowTick)}</span></span>
+                        {v30.total > 0 && <span className="inline-flex items-center text-success" title={`${v30.total} venda${v30.total === 1 ? "" : "s"} em 30 dias${v30.receita > 0 ? ` · R$ ${Math.round(v30.receita).toLocaleString("pt-BR")}` : ""}`}><BadgeDollarSign className="mr-0.5 h-3.5 w-3.5" aria-hidden="true" />{v30.total}</span>}
+                        {dias !== null && <span title={`${dias} dias na casa`} className="tabular-nums">{dias}d</span>}
+                      </span>
                     </div>
                   </div>
-                  {/* Mesa do cliente: calendário e arte com IA (admin, gestor e design). */}
-                  <div className="ml-2 hidden shrink-0 items-center md:flex [&>*+*]:ml-1">
-                    {["admin", "manager", "design"].includes(profile?.role || "") && (
+                  <div className="ml-2 hidden shrink-0 items-center md:flex [&>*+*]:ml-0.5">
+                    {podeAbrirMesas && (
                       <>
-                        <button type="button" onClick={() => navigate(`/mesa?client=${client.id}&aba=estudio`)} className={botao.discreto}>Mesa</button>
-                        <button type="button" onClick={() => navigate(`/mesa-ads?client=${client.id}`)} className={botao.discreto}>Mesa Ads</button>
-                        <button type="button" onClick={() => navigate(`/mesa-foto?client=${client.id}`)} className={botao.discreto}>Mesa Foto</button>
+                        <button type="button" onClick={() => navigate(`/mesa?client=${client.id}&aba=estudio`)} aria-label="Mesa" title="Mesa do cliente" className={botao.icone}><LayoutGrid className="h-4 w-4" aria-hidden="true" /></button>
+                        <button type="button" onClick={() => navigate(`/mesa-ads?client=${client.id}`)} aria-label="Mesa Ads" title="Mesa Ads" className={botao.icone}><Megaphone className="h-4 w-4" aria-hidden="true" /></button>
+                        <button type="button" onClick={() => navigate(`/mesa-foto?client=${client.id}`)} aria-label="Mesa Foto" title="Mesa Foto" className={botao.icone}><Camera className="h-4 w-4" aria-hidden="true" /></button>
                       </>
                     )}
-                    <button type="button" onClick={() => openClientProfile(client.id)} className={botao.secundario}>Abrir cadastro</button>
+                    <button type="button" onClick={() => openClientProfile(client.id)} aria-label="Abrir cadastro" title="Abrir cadastro" className={botao.icone}><UserCircle className="h-4 w-4" aria-hidden="true" /></button>
                   </div>
                   <MenuMais
                     rotulo="Atalhos do cliente"
@@ -2632,9 +2673,12 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                     caixa (28/09, dono: cartões deixaram tudo "encaixotado, antigo";
                     o pedido era organizar). Ritmo: 32 px entre colunas, 28 px entre
                     seções, divisória fina só entre seções da mesma coluna. */}
-                <div data-tour="central-carteira" className="grid items-start gap-y-7 lg:grid-cols-2 lg:gap-x-8">
-                  {/* Plano de mensagens do período */}
+                <div data-tour="central-carteira" className="grid items-start gap-y-7 lg:grid-cols-2 lg:gap-x-10">
+                  {/* 16/10/2026 (dono: "só está de um lado e o outro vazio"): à esquerda o que se faz
+                      (rituais, mensagem do grupo, onde estamos, contexto); à direita o caderno do
+                      dossiê e o diário. */}
                   <div className="min-w-0" data-coluna="rituais">
+                    <div className="space-y-6">
                     <Secao
                       recolher={`central:perfis:rituais:${client.id}`}
                       resumo={(() => {
@@ -2678,32 +2722,21 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         })}
                       </ul>
                     </Secao>
-                  </div>
 
-                  {/* Mensagens do grupo por momento + contexto */}
-                  <div className="min-w-0 space-y-6" data-coluna="mensagens">
-                    {/* A mensagem é montada da leitura ao vivo do painel. Se
-                        alguém acabou de liberar material, marcar etapa ou
-                        registrar decisão, "Atualizar" traz o texto já com isso,
-                        sem recarregar a página inteira. */}
                     <Secao
                       recolher={`central:perfis:mensagem:${client.id}`}
-                      resumo="abertura, meio e fechamento"
+                      resumo="segunda, quarta e sexta"
                       titulo="Mensagem do grupo"
-                      ajuda="Escolha o momento da semana. A mensagem é montada na hora com entregas, frentes e pendências reais, seguindo a linha da semana (abertura, meio e fechamento). O texto varia a cada semana para nunca soar repetido."
+                      ajuda={<>A mensagem é montada na hora com entregas, frentes e pendências reais, seguindo a linha da semana (abertura, meio e fechamento) e variando a cada semana. {rotuloDoDossie(d, nowTick)}{p?.foco ? `. Foco da semana: ${p.foco}` : ". Sem plano da semana ainda"}.{d && d.mudancas.length > 0 ? ` Mudou desde a última: ${d.mudancas.slice(0, 4).join("; ")}.` : ""}</>}
                       acao={
                         <>
-                          <button type="button" onClick={() => void atualizarMensagens()} disabled={atualizandoMensagens} className={botao.discreto} title="Ler de novo o que a mensagem usa">
-                            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${atualizandoMensagens ? "animate-spin" : ""}`} aria-hidden="true" />
-                            {atualizandoMensagens ? "Atualizando..." : "Atualizar"}
+                          <button type="button" onClick={() => void atualizarMensagens()} disabled={atualizandoMensagens} className={botao.icone} aria-label="Atualizar a mensagem" title="Ler de novo o que a mensagem usa">
+                            <RefreshCw className={`h-4 w-4 ${atualizandoMensagens ? "animate-spin" : ""}`} aria-hidden="true" />
                           </button>
-                          {/* O modelo que escreve (28/09): seletor pequeno não ganha linha
-                              própria; abre de um botão na linha do título. */}
                           <Popover>
                             <PopoverTrigger asChild>
-                              <button type="button" className={botao.discreto} aria-label={`Modelo que escreve: ${rotuloDoModelo(escolhaDoModelo.modelo) || "padrão"}`} title="Modelo que escreve">
-                                <SlidersHorizontal className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
-                                <span className="hidden max-w-[140px] truncate sm:inline">{rotuloDoModelo(escolhaDoModelo.modelo) || "Modelo"}</span>
+                              <button type="button" className={botao.icone} aria-label={`Modelo que escreve: ${rotuloDoModelo(escolhaDoModelo.modelo) || "padrão"}`} title={`Modelo que escreve: ${rotuloDoModelo(escolhaDoModelo.modelo) || "padrão"}`}>
+                                <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
                               </button>
                             </PopoverTrigger>
                             <PopoverContent align="end" className="w-[320px] max-w-[calc(100vw-24px)] p-3">
@@ -2713,106 +2746,74 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         </>
                       }
                     >
-                      <div className={juntar(superficie.poco, "px-3 py-2")}>
-                        <p className="text-[12px] text-primary">{rotuloDoDossie(d, nowTick)}{p?.foco ? ` · plano da semana lido` : " · sem plano da semana ainda"}</p>
-                        {d?.substituto && (
-                          <p className="mt-0.5 flex items-center text-[12px] text-warning">
-                            Sem dossiê geral: a leitura usa o de projeto.
-                            <AjudaRecolhida className="ml-1" rotulo="Sobre o dossiê geral">Escreva o dossiê geral deste cliente para a mensagem ficar certa.</AjudaRecolhida>
-                          </p>
-                        )}
-                        {d && d.mudancas.length > 0 && (
-                          <ul className="mt-1 space-y-0.5">
-                            {d.mudancas.slice(0, 4).map((m, i) => <li key={i} className="text-[12px] leading-snug text-foreground/90">• {m}</li>)}
-                          </ul>
-                        )}
-                        {p?.foco && <p className="mt-1 text-[12px] text-foreground/90"><span className="text-muted-foreground">Foco: </span>{p.foco}</p>}
-                      </div>
-                      <ul className="mt-3 divide-y divide-border border-t border-border">
-                        {[
-                          { moment: "abertura" as const, label: "Abertura da semana (segunda)" },
-                          { moment: "meio" as const, label: "Meio da semana (quarta)" },
-                          { moment: "fechamento" as const, label: "Fechamento (sexta)" },
-                        ].map((m) => {
-                          const isPreviewOpen = groupMsgPreview === m.moment;
-                          const chaveIA = `${client.id}:${m.moment}`;
-                          const escrita = aiMoment[chaveIA] ?? null;
-                          const textoParaCopiar = escrita ? escrita.body : buildGroupMessage(client, m.moment);
-                          return (
-                            <li key={m.moment} className="min-w-0">
-                              <div className="flex min-w-0 flex-wrap items-center py-1.5 pl-1">
-                                <span className="w-full min-w-0 text-[13px] text-foreground sm:mr-3 sm:w-auto sm:flex-1">{m.label}</span>
-                                <span className="-ml-2.5 flex shrink-0 items-center sm:ml-0">
+                      {d?.substituto && (
+                        <p className="mb-2 flex items-center text-[12px] text-warning">
+                          Sem dossiê geral: a leitura usa o de projeto.
+                          <AjudaRecolhida className="ml-1" rotulo="Sobre o dossiê geral">Escreva o dossiê geral deste cliente para a mensagem ficar certa.</AjudaRecolhida>
+                        </p>
+                      )}
+                      {(() => {
+                        // 16/10/2026 (dono: "mensagem do grupo muito poluída"): três momentos num
+                        // seletor (abre no de hoje), a mensagem num balão e as ações como links.
+                        const MOMENTOS = [
+                          { moment: "abertura" as const, curto: "Abertura", dia: "seg", label: "Abertura da semana (segunda)" },
+                          { moment: "meio" as const, curto: "Meio", dia: "qua", label: "Meio da semana (quarta)" },
+                          { moment: "fechamento" as const, curto: "Fechamento", dia: "sex", label: "Fechamento (sexta)" },
+                        ];
+                        const diaDaSemana = new Date().getDay();
+                        const deHoje = diaDaSemana >= 1 && diaDaSemana <= 2 ? "abertura" : diaDaSemana >= 3 && diaDaSemana <= 4 ? "meio" : "fechamento";
+                        const aberto = MOMENTOS.find((m) => m.moment === groupMsgPreview) ?? MOMENTOS.find((m) => m.moment === deHoje)!;
+                        const chaveIA = `${client.id}:${aberto.moment}`;
+                        const escrita = aiMoment[chaveIA] ?? null;
+                        const textoDoPainel = buildGroupMessage(client, aberto.moment);
+                        const textoParaCopiar = escrita ? escrita.body : textoDoPainel;
+                        return (
+                          <div className="min-w-0">
+                            <div role="tablist" aria-label="Momento da semana" className="inline-flex max-w-full rounded-full bg-muted p-0.5">
+                              {MOMENTOS.map((m) => {
+                                const sel = m.moment === aberto.moment;
+                                return (
                                   <button
+                                    key={m.moment}
                                     type="button"
+                                    role="tab"
+                                    aria-selected={sel}
                                     data-botao-do-momento=""
-                                    aria-expanded={isPreviewOpen}
-                                    onClick={() => setGroupMsgPreview(isPreviewOpen ? null : m.moment)}
-                                    className={botao.discreto}
+                                    title={m.label}
+                                    onClick={() => setGroupMsgPreview(m.moment)}
+                                    className={juntar(botao.discreto, "h-8 rounded-full px-3 text-[12px]", sel ? "bg-background text-foreground shadow-sm hover:bg-background" : "text-muted-foreground")}
                                   >
-                                    {isPreviewOpen ? "Fechar" : "Ver"}
+                                    {m.curto}<span className="ml-1 hidden text-muted-foreground sm:inline">{m.dia}</span>
                                   </button>
-                                  <button
-                                    type="button"
-                                    data-botao-do-momento=""
-                                    onClick={() => void escreverMomentoComIA(client, m.moment)}
-                                    disabled={aiMomentLoading !== null}
-                                    className={juntar(botao.discreto, "text-primary")}
-                                    title="Escreve esta mensagem com a IA a partir do dossiê, da esteira, dos números e das vendas de agora"
-                                  >
-                                    <Sparkles className={`mr-1 h-3.5 w-3.5 ${aiMomentLoading === chaveIA ? "animate-pulse" : ""}`} aria-hidden="true" /> {aiMomentLoading === chaveIA ? "Escrevendo…" : escrita ? "Reescrever com IA" : "Escrever com IA"}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    data-botao-do-momento=""
-                                    onClick={() => (escrita || contextoPronto ? copyText(textoParaCopiar, `Mensagem de ${m.label.toLowerCase()} copiada.`) : avisarContextoCarregando())}
-                                    className={juntar(botao.discreto, "text-primary")}
-                                  >
-                                    <Send className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Copiar{escrita ? " (IA)" : ""}
-                                  </button>
-                                </span>
-                              </div>
-                              {/* Ver antes de enviar: o texto completo, gerado na
-                                  hora com os dados reais e a lógica da semana. */}
-                              {isPreviewOpen && (
-                                <div className={juntar(superficie.poco, "mb-3 px-3 py-3")}>
-                                  {escrita && (
-                                    <p className="mb-1.5 flex items-center text-[12px] text-primary">
-                                      Escrita pela IA{escrita.model ? ` (${escrita.model})` : ""}
-                                      <AjudaRecolhida className="ml-1" rotulo="Como a IA escreveu">Com o dossiê, a esteira, os números e as vendas de agora. O texto do painel fica abaixo como reserva.</AjudaRecolhida>
-                                    </p>
-                                  )}
-                                  {escrita && escrita.alertas.length > 0 && (
-                                    <div className="mb-2">
-                                      <p className="flex items-center text-[12px] font-medium text-warning">
-                                        Avisos para a equipe
-                                        <AjudaRecolhida className="ml-1" rotulo="Sobre os avisos">Nada destes avisos vai ao cliente.</AjudaRecolhida>
-                                      </p>
-                                      <ul className="mt-0.5 space-y-0.5">{escrita.alertas.map((a, i) => <li key={i} className="text-[12px] leading-snug text-foreground/85">• {a}</li>)}</ul>
-                                    </div>
-                                  )}
-                                  <p className="whitespace-pre-line text-[13px] leading-relaxed text-foreground">
-                                    {escrita ? escrita.body : buildGroupMessage(client, m.moment)}
-                                  </p>
-                                  {escrita && (
-                                    <details className="mt-2">
-                                      <summary className="cursor-pointer text-[12px] text-muted-foreground">Ver o texto do painel (reserva)</summary>
-                                      <p className="mt-1 whitespace-pre-line text-[12px] leading-relaxed text-muted-foreground">{buildGroupMessage(client, m.moment)}</p>
-                                    </details>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() => (contextoPronto ? copyText(buildGroupMessage(client, m.moment), "Mensagem copiada. É só colar no WhatsApp.") : avisarContextoCarregando())}
-                                    className={juntar(botao.secundario, "mt-2")}
-                                  >
-                                    <Send className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Copiar esta mensagem
-                                  </button>
-                                </div>
+                                );
+                              })}
+                            </div>
+                            <div className="mt-3 max-w-[62ch] rounded-2xl rounded-tl-md bg-primary/[0.07] px-4 py-3">
+                              {escrita && <p className="mb-1 flex items-center text-[11px] font-medium text-primary"><Sparkles className="mr-1 h-3 w-3" aria-hidden="true" />Escrita pela IA{escrita.model ? ` (${escrita.model})` : ""}</p>}
+                              <p className="whitespace-pre-line text-[13.5px] leading-relaxed text-foreground">{textoParaCopiar}</p>
+                            </div>
+                            {escrita && escrita.alertas.length > 0 && (
+                              <p className="mt-2 flex items-center text-[12px] text-warning">
+                                {escrita.alertas.length} {escrita.alertas.length === 1 ? "aviso para a equipe" : "avisos para a equipe"}
+                                <AjudaRecolhida className="ml-1" rotulo="Avisos para a equipe">{escrita.alertas.join(" · ")} (nada disso vai ao cliente)</AjudaRecolhida>
+                              </p>
+                            )}
+                            <div className="mt-2 flex min-w-0 flex-wrap items-center text-[12.5px] [&>*+*]:ml-4">
+                              <button type="button" onClick={() => (escrita || contextoPronto ? copyText(textoParaCopiar, `Mensagem de ${aberto.label.toLowerCase()} copiada.`) : avisarContextoCarregando())} className={juntar("inline-flex items-center rounded font-medium text-primary hover:underline", foco)}>
+                                <Send className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Copiar{escrita ? " (IA)" : ""}
+                              </button>
+                              <button type="button" onClick={() => void escreverMomentoComIA(client, aberto.moment)} disabled={aiMomentLoading !== null} title="Escreve esta mensagem com a IA a partir do dossiê, da esteira, dos números e das vendas de agora" className={juntar("inline-flex items-center rounded font-medium text-primary hover:underline disabled:opacity-50", foco)}>
+                                <Sparkles className={`mr-1 h-3.5 w-3.5 ${aiMomentLoading === chaveIA ? "animate-pulse" : ""}`} aria-hidden="true" />{aiMomentLoading === chaveIA ? "Escrevendo…" : escrita ? "Reescrever com IA" : "Escrever com IA"}
+                              </button>
+                              {escrita && (
+                                <button type="button" onClick={() => (contextoPronto ? copyText(textoDoPainel, "Mensagem do painel copiada.") : avisarContextoCarregando())} className={juntar("inline-flex items-center rounded text-muted-foreground hover:text-foreground hover:underline", foco)} title={textoDoPainel}>
+                                  Copiar a do painel
+                                </button>
                               )}
-                            </li>
-                          );
-                        })}
-                      </ul>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </Secao>
 
                     <Secao
@@ -2836,6 +2837,31 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                       )}
                     </Secao>
 
+                    <Secao
+                      divisoria
+                      recolher={`central:perfis:contexto:${client.id}`}
+                      resumo={[client.plan_name || "Sem plano", `${clientProjs.length} ${clientProjs.length === 1 ? "frente ativa" : "frentes ativas"}`].join(" · ")}
+                      titulo="Contexto agora"
+                    >
+                      <dl className="grid gap-x-6 gap-y-3 text-[13px] sm:grid-cols-2">
+                        <div className="min-w-0"><dt className="text-[11px] text-muted-foreground">Plano</dt><dd className="min-w-0 text-foreground">{client.plan_name || "Sem plano"}{client.plan_value ? ` · ${fmt(Number(client.plan_value))}/mês` : ""}</dd></div>
+                        <div className="min-w-0"><dt className="text-[11px] text-muted-foreground">Frentes ativas</dt><dd className="min-w-0 text-foreground">{clientProjs.length > 0 ? clientProjs.map((p: any) => p.name).join(", ") : "nenhuma"}</dd></div>
+                      </dl>
+                      {selected.factors.length > 0 && (
+                        <details className="mt-3 text-[12px]">
+                          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Por que a nota {selected.score ?? "–"}</summary>
+                          <dl className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                            {selected.factors.map((f) => (
+                              <div key={f.label} className="min-w-0"><dt className="text-[11px] text-muted-foreground">{f.label}</dt><dd className="min-w-0 text-foreground/90">{f.note}</dd></div>
+                            ))}
+                          </dl>
+                        </details>
+                      )}
+                    </Secao>
+                    </div>
+                  </div>
+
+                  <div className="min-w-0 space-y-6" data-coluna="mensagens">
                     {/* key por cliente: trocar de cliente no seletor zera o que
                         estava aberto ou digitado. Sem ela, uma nota escrita no
                         diário de um cliente podia ser salva no seguinte. */}
@@ -2847,20 +2873,6 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
 
                     <ProjectJournal key={`diario-${client.id}`} clientId={client.id} canWrite divisoria recolher={`central:perfis:diario:${client.id}`} />
 
-                    <Secao
-                      divisoria
-                      recolher={`central:perfis:contexto:${client.id}`}
-                      resumo={[client.plan_name || "Sem plano", `${clientProjs.length} ${clientProjs.length === 1 ? "frente ativa" : "frentes ativas"}`].join(" · ")}
-                      titulo="Contexto agora"
-                    >
-                      <dl className="space-y-1 text-[13px]">
-                        <div className="flex min-w-0"><dt className="mr-1.5 shrink-0 text-muted-foreground">Plano:</dt><dd className="min-w-0 text-foreground">{client.plan_name || "Sem plano"}{client.plan_value ? ` · ${fmt(Number(client.plan_value))}/mês` : ""}</dd></div>
-                        <div className="flex min-w-0"><dt className="mr-1.5 shrink-0 text-muted-foreground">Frentes ativas:</dt><dd className="min-w-0 text-foreground">{clientProjs.length > 0 ? clientProjs.map((p: any) => p.name).join(", ") : "nenhuma"}</dd></div>
-                        {selected.factors.map((f) => (
-                          <div key={f.label} className="flex min-w-0"><dt className="mr-1.5 shrink-0 text-muted-foreground">{f.label}:</dt><dd className="min-w-0 text-foreground">{f.note}</dd></div>
-                        ))}
-                      </dl>
-                    </Secao>
                   </div>
                 </div>
               </div>
@@ -2881,56 +2893,87 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
               ) : oneOffClients.length === 0 ? (
                 <EstadoVazio compacto titulo="Nenhum cliente avulso cadastrado." />
               ) : (
-                <ul className="divide-y divide-border border-y border-border">
-                  {oneOffClients.map((client: any) => {
+                // 16/10/2026 (dono: "os avulsos não dão para entender nada"): três colunas pelo
+                // que fazer com cada um (reativar, acompanhar, aguardar), cada cliente com foto,
+                // uma linha curta e as ações em ícone. A explicação fica no "?".
+                (() => {
+                  const linhas = oneOffClients.map((client: any) => {
                     const clientProjects = (projects || []).filter((p: any) => p.client_id === client.id && !p.deleted_at);
-                    const activeCount = clientProjects.filter((p: any) => p.status !== "done").length;
-                    const doneCount = clientProjects.filter((p: any) => p.status === "done").length;
-                    const lastActivity = clientProjects
-                      .map((p: any) => p.updated_at || p.created_at)
-                      .sort()
-                      .reverse()[0];
-                    const age = daysSince(lastActivity);
-                    const idle = activeCount === 0 && doneCount > 0 && age !== null && age >= 21;
-                    return (
-                      <li key={client.id} className="flex min-w-0 flex-wrap items-center px-1 py-2.5">
-                        <div className="w-full min-w-0 sm:mr-3 sm:w-auto sm:flex-1">
-                          <p className="truncate text-[13px] text-foreground">{nomeDoCliente(client)}</p>
-                          <p className={juntar(texto.auxiliar, "truncate")}>
-                            {activeCount > 0
-                              ? `${activeCount} projeto(s) em andamento`
-                              : doneCount > 0
-                                ? `${doneCount} projeto(s) entregues · última movimentação há ${age ?? "?"}d`
-                                : "Sem projetos registrados"}
-                          </p>
-                        </div>
-                        <div className="mt-1.5 flex min-w-0 items-center sm:mt-0 [&>*+*]:ml-2">
-                          {idle && <span className={juntar(etiqueta, "bg-warning/10 text-warning")}>Pronto para reativação</span>}
-                          {activeCount > 0 && <span className={juntar(etiqueta, "bg-success/10 text-success")}>Em atendimento</span>}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              copyText(
-                                `Oi, ${client.full_name?.split(" ")[0] || "tudo bem"}! Aqui é da Aceleriq. 😊\n\n${
-                                  doneCount > 0
-                                    ? `Faz ${age ?? "algum tempo"} dia(s) que entregamos ${doneCount === 1 ? "o seu projeto" : `os seus ${doneCount} projetos`} e queremos saber: como estão os resultados por aí?`
-                                    : "Queremos saber como estão as coisas por aí."
-                                }\n\nSe fizer sentido, a gente conversa sobre o próximo passo — pode ser um acompanhamento contínuo ou um trabalho pontual, o que fizer mais sentido para o momento de vocês.\n\nTopa conversar esta semana?`,
-                                "Mensagem de reativação copiada."
-                              )
-                            }
-                            className={botao.secundario}
-                          >
-                            Copiar mensagem
-                          </button>
-                          <button type="button" onClick={() => openClientProfile(client.id)} aria-label="Abrir cadastro" title="Abrir cadastro" className={botao.icone}>
-                            <UserCircle className="h-4 w-4" aria-hidden="true" />
-                          </button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                    const ativos = clientProjects.filter((p: any) => p.status !== "done").length;
+                    const entregues = clientProjects.filter((p: any) => p.status === "done").length;
+                    const ultima = clientProjects.map((p: any) => p.updated_at || p.created_at).sort().reverse()[0];
+                    const dias = daysSince(ultima);
+                    const grupo: "reativar" | "atendimento" | "aguardar" =
+                      ativos > 0 ? "atendimento" : entregues > 0 && dias !== null && dias >= 21 ? "reativar" : "aguardar";
+                    return { client, ativos, entregues, dias, grupo };
+                  });
+                  const colunas = [
+                    { chave: "reativar", rotulo: "Pronto para reativar", Icone: Flame, cor: "text-warning", vazio: "Ninguém parado há 3 semanas." },
+                    { chave: "atendimento", rotulo: "Em atendimento", Icone: Briefcase, cor: "text-success", vazio: "Nenhum projeto em andamento." },
+                    { chave: "aguardar", rotulo: "Entregue há pouco ou sem projeto", Icone: Clock, cor: "text-muted-foreground", vazio: "Nada aqui." },
+                  ] as const;
+                  const mensagemDeReativacao = (client: any, entregues: number, dias: number | null) =>
+                    `Oi, ${client.full_name?.split(" ")[0] || "tudo bem"}! Aqui é da Aceleriq. 😊\n\n${
+                      entregues > 0
+                        ? `Faz ${dias ?? "algum tempo"} dia(s) que entregamos ${entregues === 1 ? "o seu projeto" : `os seus ${entregues} projetos`} e queremos saber: como estão os resultados por aí?`
+                        : "Queremos saber como estão as coisas por aí."
+                    }\n\nSe fizer sentido, a gente conversa sobre o próximo passo — pode ser um acompanhamento contínuo ou um trabalho pontual, o que fizer mais sentido para o momento de vocês.\n\nTopa conversar esta semana?`;
+                  return (
+                    <div className="grid min-w-0 items-start gap-y-6 lg:grid-cols-3 lg:gap-x-8" data-avulsos-colunas>
+                      {colunas.map(({ chave, rotulo, Icone, cor, vazio }) => {
+                        const daColuna = linhas.filter((l) => l.grupo === chave);
+                        return (
+                          <section key={chave} aria-label={rotulo} className="min-w-0" data-coluna-avulsos={chave}>
+                            <h3 className="mb-2 flex min-w-0 items-center text-[12px] font-semibold text-foreground">
+                              <Icone className={juntar("mr-1.5 h-4 w-4 shrink-0", cor)} aria-hidden="true" />
+                              <span className="min-w-0 truncate">{rotulo}</span>
+                              <span className="ml-1.5 tabular-nums text-muted-foreground">{daColuna.length}</span>
+                            </h3>
+                            {daColuna.length === 0 ? (
+                              <p className={texto.auxiliar}>{vazio}</p>
+                            ) : (
+                              <ul className="space-y-1">
+                                {daColuna.map(({ client, ativos, entregues, dias }) => {
+                                  const nome = nomeDoCliente(client);
+                                  return (
+                                    <li key={client.id} className="group flex min-w-0 items-center rounded-lg px-1.5 py-1.5 transition-colors hover:bg-muted/40">
+                                      <button type="button" onClick={() => openClientProfile(client.id)} title={`Abrir o cadastro de ${nome}`} className={juntar("flex min-w-0 flex-1 items-center text-left", foco)}>
+                                        <FotoDoCliente nome={nome} foto={fotoDe({ id: String(client.id), nome, avatar_url: client.avatar_url })} tamanho="sm" />
+                                        <span className="ml-2.5 min-w-0 flex-1">
+                                          <span className="block truncate text-[13px] text-foreground">{nome}</span>
+                                          <span className={juntar(texto.auxiliar, "flex min-w-0 items-center tabular-nums")}>
+                                            {ativos > 0 ? (
+                                              <><Briefcase className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />{ativos} em andamento</>
+                                            ) : entregues > 0 ? (
+                                              <><CheckCircle2 className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />{entregues} {entregues === 1 ? "entregue" : "entregues"}{dias !== null && <><Clock className="ml-2 mr-1 h-3 w-3 shrink-0" aria-hidden="true" />{dias}d</>}</>
+                                            ) : (
+                                              "Sem projeto"
+                                            )}
+                                          </span>
+                                        </span>
+                                      </button>
+                                      {ativos === 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => copyText(mensagemDeReativacao(client, entregues, dias), "Mensagem de reativação copiada.")}
+                                          aria-label={`Copiar mensagem de reativação para ${nome}`}
+                                          title="Copiar mensagem de reativação"
+                                          className={juntar(botao.icone, "ml-1 shrink-0")}
+                                        >
+                                          <Send className="h-4 w-4" aria-hidden="true" />
+                                        </button>
+                                      )}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            )}
+                          </section>
+                        );
+                      })}
+                    </div>
+                  );
+                })()
               )}
             </Secao>
           </RegiaoRolavel>
@@ -2939,102 +2982,23 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         {/* ── Radar do mês ── */}
         {activeTab === "radar" && (
           <RegiaoRolavel modo="lg" rotulo="Radar de ideias" memoria="central:radar" className="lg:pb-4 lg:pr-1">
-            <Secao
-              titulo="Radar de ideias"
-              descricao={opportunities.length > 0 ? `${allRadarIdeas.length} ${allRadarIdeas.length === 1 ? "ideia" : "ideias"}` : undefined}
-              ajuda="O Radar é o ritual de antecipação da carteira recorrente: uma vez por mês a Aceleriq chega com uma ideia de diferenciação que o cliente até já pensou em fazer e nunca executou. Cada ideia carrega o momento real dele (frentes, materiais recentes, publicações, Pulso, crescimento medido). A faixa de valor e o serviço avulso aparecem só para a equipe e nunca entram na mensagem que o cliente recebe: para ele é ideia, não proposta comercial. A IA lê o contexto real do cliente e busca tendências do nicho antes de propor."
-              // Gerador com IA (ideias do nicho, com busca na web) na linha do
-              // título em toda largura (28/09: nada de linha própria para seletor).
-              acao={opportunities.length > 0 ? controlesDoRadar("max-w-[180px] sm:max-w-[240px]") : undefined}
-            >
-              {opportunities.length === 0 ? (
-                <EstadoVazio
-                  icone={<Radar className="h-5 w-5" />}
-                  titulo="Nenhuma ideia no radar agora."
-                  descricao="As ideias do mês aparecem aqui por cliente."
-                />
-              ) : (
-                <ul className="lista-longa divide-y divide-border border-y border-border">
-                  {allRadarIdeas.map((idea) => {
-                    const lens = RADAR_LENSES[idea.lens];
-                    const [low, high] = idea.internal.range;
-                    return (
-                      <li key={idea.id} className="flex min-w-0 py-4 pl-1 pr-1">
-                        <span className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-info/10 text-info" aria-hidden="true">
-                          <Radar className="h-4 w-4" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex min-w-0 flex-wrap items-center">
-                            <span className={juntar(etiqueta, "mr-2 bg-primary/10 text-primary")}>
-                              {idea.source === "ia" ? "IA + busca na web" : lens.label}
-                            </span>
-                            <p className="min-w-0 text-[13px] font-medium text-foreground">{idea.title}</p>
-                          </div>
-
-                          {/* A IDEIA, descrita por completo. */}
-                          <p className="mt-1.5 text-[13px] leading-relaxed text-foreground/85">{idea.pitch}</p>
-
-                          {/* O retrato real do cliente: é ele que faz a ideia deixar
-                              de parecer genérica. A IA já embute o contexto no motivo. */}
-                          {idea.moment && (
-                            <p className={juntar(superficie.poco, "mt-2 px-2.5 py-1.5 text-[12px] leading-relaxed text-muted-foreground")}>{idea.moment}</p>
-                          )}
-
-                          <p className="mt-2 text-[12px] text-muted-foreground">
-                            <span className="text-foreground/70">Por que agora: </span>
-                            {idea.whyNow}
-                          </p>
-
-                          <ul className="mt-1.5 space-y-0.5">
-                            {idea.moves.map((move) => (
-                              <li key={move} className="text-[12px] text-muted-foreground">· {move}</li>
-                            ))}
-                          </ul>
-
-                          <p className="mt-1.5 text-[12px] text-muted-foreground">
-                            <span className="text-foreground/70">Sinal que vamos olhar: </span>
-                            {idea.signal}
-                          </p>
-
-                          {/* Leitura da equipe. Nunca vai para o cliente. */}
-                          <div className="mt-2.5 rounded-md bg-warning/[0.07] px-3 py-2">
-                            <p className="flex items-center text-[12px] font-medium text-warning">
-                              Só a equipe vê · sugestão
-                              <AjudaRecolhida className="ml-1" rotulo="Sobre a faixa de valor">
-                                Você decide se cobra, quanto cobra ou se entrega como cortesia. A faixa é só um ponto de partida e nada disso vai para o cliente.
-                              </AjudaRecolhida>
-                            </p>
-                            <p className="mt-0.5 text-[12px] text-muted-foreground">
-                              Se aprovada, pode virar: <span className="text-foreground/80">{idea.internal.offer}</span>
-                              {high > 0 && ` · referência ${fmt(low)} a ${fmt(high)}`} · esforço {idea.internal.effort}
-                            </p>
-                          </div>
-
-                          <div className={juntar(grupoDeBotoes, "mt-2.5")}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setGenClientId(idea.id.split(":")[0]);
-                                setGenRitual("radar_aceleriq");
-                                setGenIdeaId(idea.id);
-                                setGenPreviews(null);
-                                setGeneratorOpen(true);
-                              }}
-                              className={botao.secundario}
-                            >
-                              Levar esta ideia ao cliente
-                            </button>
-                            <button type="button" onClick={() => { setProfileClientId(idea.id.split(":")[0]); setActiveTab("perfis"); }} className={botao.discreto}>
-                              Ver perfil do cliente
-                            </button>
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </Secao>
+            {/* 16/10/2026 (dono: "radar mais visual, carrossel, imagens e conversar com o
+                agente para evoluir as ideias"): o componente desenha a seção inteira. */}
+            <RadarDeIdeias
+              ideias={allRadarIdeas}
+              clientes={(clients || []).map((c: any) => ({ id: String(c.id), nome: nomeDoCliente(c), foto: fotoDe({ id: String(c.id), nome: nomeDoCliente(c), avatar_url: c.avatar_url }) }))}
+              imagensPorCliente={imagensDoRadar}
+              controles={opportunities.length > 0 ? controlesDoRadar("max-w-[180px] sm:max-w-[240px]") : undefined}
+              onLevarAoCliente={(idea) => {
+                setGenClientId(idea.id.split(":")[0]);
+                setGenRitual("radar_aceleriq");
+                setGenIdeaId(idea.id);
+                setGenPreviews(null);
+                setGeneratorOpen(true);
+              }}
+              onAbrirPerfil={(id) => { setProfileClientId(id); setActiveTab("perfis"); }}
+              onIdeiaEvoluida={(antiga, nova) => setIdeiasEvoluidas((prev) => ({ ...prev, [antiga.id]: { ...nova, id: antiga.id } }))}
+            />
           </RegiaoRolavel>
         )}
 
@@ -3098,7 +3062,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                           id: r.id,
                           tipo: meta ? meta.label : "Mensagem",
                           cliente: nome,
-                          avatar: <FotoDoCliente nome={nome} foto={null} tamanho="sm" />,
+                          avatar: <FotoDoCliente nome={nome} foto={r.client_id ? fotoDe({ id: String(r.client_id), nome, avatar_url: r.client?.avatar_url }) : null} tamanho="sm" />,
                           titulo: r.title,
                           mensagem: edits.summary || r.summary || "",
                           passo: edits.next_steps || r.next_steps || null,
@@ -3159,7 +3123,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
             const client = portfolioClients.find((c: any) => c.id === clientId);
             return client ? (client.company_name || client.full_name) : "Cliente";
           };
-          type TimelineEvent = { at: string; icon: "report" | "publication" | "approval" | "file" | "dossie" | "plano" | "venda"; text: string; clientId: string };
+          type TimelineEvent = { at: string; icon: "report" | "publication" | "approval" | "file" | "dossie" | "plano" | "venda"; text: string; clientId: string; link?: string | null };
           const timeline: TimelineEvent[] = [
             // O dossie reescrito e o evento mais importante da semana: e
             // onde a leitura do cliente muda. Cada versao entra com o motivo.
@@ -3186,6 +3150,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
               icon: "report" as const,
               text: `Atualização publicada: ${r.title}`,
               clientId: r.client_id,
+              link: `/relatorios/${r.id}`,
             })),
             ...allPublications
               .filter((p: any) => p.status === "published" && p.published_at)
@@ -3194,6 +3159,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                 icon: "publication" as const,
                 text: `Publicação no ar (${p.platform === "instagram" ? "Instagram" : p.platform})`,
                 clientId: p.client_id,
+                link: p.permalink || null,
               })),
             ...allPublications
               .filter((p: any) => p.status === "scheduled" && p.scheduled_at)
@@ -3218,6 +3184,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           ]
             .filter((event) => event.at)
             .filter((event) => historicoClientId === "__all__" || event.clientId === historicoClientId)
+            .filter((event) => historicoTipo === "todos" || event.icon === historicoTipo)
             .sort((a, b) => (a.at < b.at ? 1 : -1))
             .slice(0, 160);
           const iconMap = { report: CheckCircle2, publication: ArrowUpRight, approval: HeartPulse, file: CheckCircle2, dossie: BookOpen, plano: Sparkles, venda: BadgeDollarSign } as const;
@@ -3243,26 +3210,86 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                     />
                   }
                 >
+                  {/* 16/10/2026 (dono: "histórico mais bonito, organizado e clicável"): filtro por
+                      tipo em ícones, dias agrupados, trilho com o ícone de cada movimento e a
+                      foto do cliente; tocar abre o que existe (relatório, post) ou o perfil. */}
+                  <div className="-mx-1 mb-3 flex min-w-0 items-center overflow-x-auto scrollbar-hidden" role="tablist" aria-label="Tipo de movimento">
+                    {([
+                      ["todos", "Tudo", null],
+                      ["dossie", "Dossiê", BookOpen],
+                      ["plano", "Plano da semana", Sparkles],
+                      ["venda", "Vendas", BadgeDollarSign],
+                      ["report", "Mensagens enviadas", CheckCircle2],
+                      ["publication", "Publicações", ArrowUpRight],
+                      ["approval", "Aprovações", HeartPulse],
+                      ["file", "Materiais", Package],
+                    ] as const).map(([valor, rotulo, Icone]) => {
+                      const sel = historicoTipo === valor;
+                      return (
+                        <button key={valor} type="button" role="tab" aria-selected={sel} title={rotulo} aria-label={rotulo} onClick={() => setHistoricoTipo(valor)}
+                          className={juntar("inline-flex h-8 shrink-0 items-center rounded-full px-2.5 text-[12px] font-medium transition-colors", sel ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground", foco)}>
+                          {Icone ? <Icone className={juntar("h-3.5 w-3.5", sel && valor !== "todos" && corDoEvento[valor as keyof typeof corDoEvento])} aria-hidden="true" /> : null}
+                          {(!Icone || sel) && <span className={Icone ? "ml-1.5" : ""}>{rotulo}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
                   {timeline.length === 0 ? (
-                    carregandoRelatorios ? <Carregando rotulo="Carregando a linha do tempo" linhas={4} /> : <EstadoVazio compacto titulo="Nenhum movimento registrado ainda." />
-                  ) : (
-                    <ul className="divide-y divide-border border-y border-border">
-                      {timeline.map((event, index) => {
-                        const EventIcon = iconMap[event.icon];
-                        return (
-                          <li key={`${event.at}-${index}`} className="flex min-w-0 items-center px-1 py-2">
-                            <EventIcon className={`mr-3 h-3.5 w-3.5 shrink-0 ${corDoEvento[event.icon]}`} aria-hidden="true" />
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-[13px] text-foreground">{event.text}</p>
-                              <p className={juntar(texto.auxiliar, "truncate")}>
-                                {nameOf(event.clientId)} · {new Date(event.at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
-                              </p>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
+                    carregandoRelatorios ? <Carregando rotulo="Carregando a linha do tempo" linhas={4} /> : <EstadoVazio compacto titulo="Nenhum movimento neste filtro." />
+                  ) : (() => {
+                    const hojeISO = new Date().toDateString();
+                    const ontemISO = new Date(Date.now() - 86_400_000).toDateString();
+                    const rotuloDoDia = (iso: string) => {
+                      const d = new Date(iso);
+                      if (d.toDateString() === hojeISO) return "Hoje";
+                      if (d.toDateString() === ontemISO) return "Ontem";
+                      return d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" });
+                    };
+                    const dias: { dia: string; eventos: TimelineEvent[] }[] = [];
+                    for (const ev of timeline) {
+                      const dia = rotuloDoDia(ev.at);
+                      const ultimo = dias[dias.length - 1];
+                      if (ultimo && ultimo.dia === dia) ultimo.eventos.push(ev); else dias.push({ dia, eventos: [ev] });
+                    }
+                    const abrir = (ev: TimelineEvent) => {
+                      if (ev.link && /^https?:/.test(ev.link)) { window.open(ev.link, "_blank", "noopener,noreferrer"); return; }
+                      if (ev.link) { navigate(ev.link); return; }
+                      setProfileClientId(ev.clientId); setActiveTab("perfis");
+                    };
+                    return (
+                      <div className="space-y-5">
+                        {dias.map(({ dia, eventos }) => (
+                          <section key={dia} aria-label={dia} className="min-w-0">
+                            <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{dia}</h4>
+                            <ol className="relative ml-3 border-l border-border">
+                              {eventos.map((event, index) => {
+                                const EventIcon = iconMap[event.icon];
+                                const nome = nameOf(event.clientId);
+                                return (
+                                  <li key={`${event.at}-${index}`} className="min-w-0">
+                                    <button type="button" onClick={() => abrir(event)} title={event.link ? "Abrir" : `Abrir o perfil de ${nome}`}
+                                      className={juntar("group -ml-3 flex w-full min-w-0 items-center rounded-lg py-1.5 pr-2 text-left transition-colors hover:bg-muted/40", foco)}>
+                                      <span className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-background ring-1 ring-border">
+                                        <EventIcon className={`h-3.5 w-3.5 ${corDoEvento[event.icon]}`} aria-hidden="true" />
+                                      </span>
+                                      <span className="ml-2.5 min-w-0 flex-1">
+                                        <span className="block truncate text-[13px] text-foreground">{event.text}</span>
+                                        <span className={juntar(texto.auxiliar, "flex min-w-0 items-center")}>
+                                          <span className="min-w-0 truncate">{nome}</span>
+                                          <span className="ml-1.5 shrink-0 tabular-nums">· {new Date(event.at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+                                        </span>
+                                      </span>
+                                      <ArrowUpRight className="ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
+                                    </button>
+                                  </li>
+                                );
+                              })}
+                            </ol>
+                          </section>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </Secao>
 
                 <Secao

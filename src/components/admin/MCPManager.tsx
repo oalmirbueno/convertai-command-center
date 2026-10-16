@@ -716,7 +716,17 @@ export default function MCPManager() {
             </div>
             <div className="min-w-0">
               <div className="mb-1.5 flex min-w-0 items-center">
-                <p className={juntar(texto.rotulo, "min-w-0 flex-1")}>Token completo</p>
+                <p className={juntar(texto.rotulo, "min-w-0 flex-1")}>1. Endereço do servidor</p>
+                <button type="button" className={botao.discreto} onClick={() => copyText(MCP_URL, "Endereço copiado")}>
+                  <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Copiar endereço
+                </button>
+              </div>
+              <div className={juntar(superficie.poco, "break-all px-3 py-2 font-mono text-[12px] leading-5")}>{MCP_URL}</div>
+              <p className="mt-1 text-[12px] leading-5 text-muted-foreground">Cole no campo de URL do app (no Paperclip, "Connect your own MCP server").</p>
+            </div>
+            <div className="min-w-0">
+              <div className="mb-1.5 flex min-w-0 items-center">
+                <p className={juntar(texto.rotulo, "min-w-0 flex-1")}>2. Token completo</p>
                 <button type="button" className={botao.discreto} onClick={() => setTokenRevealed(v => !v)}>
                   {tokenRevealed ? <><EyeOff className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Ocultar</> : <><Eye className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Revelar</>}
                 </button>
@@ -724,6 +734,7 @@ export default function MCPManager() {
               <div className={juntar(superficie.poco, "break-all px-3 py-2 font-mono text-[12px] leading-5")}>
                 {tokenRevealed ? issuedToken : "•".repeat(48)}
               </div>
+              <p className="mt-1 text-[12px] leading-5 text-muted-foreground">Cole no campo "App key" (ou "Bearer token"), sem escrever "Bearer". Na conexão, escolha a opção para toda a organização, nunca "sem login".</p>
             </div>
             <p className="flex items-start text-[12px] leading-5 text-muted-foreground">
               <AlertTriangle className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
