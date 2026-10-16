@@ -4,7 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, X, Loader2, MessageSquarePlus } from "lucide-react";
+import { Plus, X, Loader2, MessageSquarePlus, ChevronRight } from "lucide-react";
+import { useTelaPequena } from "@/components/client/useTelaPequena";
 import { toast } from "sonner";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
 import {
@@ -18,6 +19,7 @@ import {
   campo,
   campoTexto,
   etiqueta,
+  foco,
   juntar,
   lista,
   texto,
@@ -55,6 +57,10 @@ export default function ClientRequests() {
   const [description, setDescription] = useEstadoDaTela<string>(`pedido:rascunho:descricao:${clientId || ""}`, "");
   const [priority, setPriority] = useState("normal");
   const [filtro, setFiltro] = useEstadoDaTela<string>("pedidos:filtro", "todos", { validar: (v) => typeof v === "string" && FILTROS.indexOf(v) >= 0 });
+  // Celular (16/10/2026): lista de app (título e uma linha de apoio); o pedido
+  // abre numa folha que sobe de baixo, e o "Novo pedido" fica fixo no pé.
+  const pequena = useTelaPequena();
+  const [pedidoAberto, setPedidoAberto] = useState<any>(null);
 
   const { data: requests, isLoading, isError, refetch } = useQuery({
     queryKey: ["client-requests", clientId],
@@ -153,7 +159,7 @@ export default function ClientRequests() {
                   ]}
                 />
               )}
-              {!isImpersonating && (
+              {!isImpersonating && !(pequena && todos.length > 0) && (
                 <button type="button" onClick={() => setCreateOpen(true)} className={botao.primario} aria-label="Novo pedido">
                   <Plus className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
                   <span className="hidden sm:inline">Novo pedido</span>
@@ -189,6 +195,28 @@ export default function ClientRequests() {
           {visiveis.map((r: any) => {
             const status = statusBadge[r.status] || statusBadge.new;
             const prio = priorityBadge[r.priority] || priorityBadge.normal;
+            if (pequena) {
+              return (
+                <li key={r.id} className="min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => setPedidoAberto(r)}
+                    className={juntar("flex min-h-[56px] w-full min-w-0 items-center rounded-lg px-2 py-3 text-left transition-colors active:bg-muted/40", foco)}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center">
+                        <span className="mr-2 min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-foreground">{r.title}</span>
+                        <span className={juntar(etiqueta, status.cls)}>{status.label}</span>
+                      </span>
+                      <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
+                        {formatDate(r.created_at)} · Prioridade {prio.label.toLowerCase()}
+                      </span>
+                    </span>
+                    <ChevronRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  </button>
+                </li>
+              );
+            }
             return (
               <li key={r.id} className="min-w-0 px-2 py-3.5">
                 <div className="flex min-w-0 items-start justify-between">
@@ -206,6 +234,37 @@ export default function ClientRequests() {
           })}
         </ul>
       )}
+
+      {/* Celular: "Novo pedido" fixo no pé, ao alcance do polegar. */}
+      {pequena && !isImpersonating && todos.length > 0 && (
+        <div className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background/95 px-4 py-3">
+          <button type="button" onClick={() => setCreateOpen(true)} className={juntar(botao.primario, "h-12 w-full text-[14px]")}>
+            <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            Novo pedido
+          </button>
+        </div>
+      )}
+
+      {/* Pedido aberto (celular): a folha com o texto inteiro. */}
+      <JanelaDoCelular
+        aberta={pequena && !!pedidoAberto}
+        titulo={pedidoAberto?.title || "Pedido"}
+        onFechar={() => setPedidoAberto(null)}
+        classeDoCorpo="space-y-3 px-4 py-4 break-words"
+      >
+        {pedidoAberto && (
+          <>
+            <div className="flex min-w-0 flex-wrap items-center [&>*]:mb-1 [&>*]:mr-2">
+              <span className={juntar(etiqueta, (statusBadge[pedidoAberto.status] || statusBadge.new).cls)}>{(statusBadge[pedidoAberto.status] || statusBadge.new).label}</span>
+              <span className={texto.auxiliar}>
+                {formatDate(pedidoAberto.created_at)} · Prioridade {(priorityBadge[pedidoAberto.priority] || priorityBadge.normal).label.toLowerCase()}
+              </span>
+            </div>
+            <p className="text-[15px] font-semibold leading-6 text-foreground">{pedidoAberto.title}</p>
+            {pedidoAberto.description && <p className={juntar(texto.corpo, "whitespace-pre-line text-muted-foreground")}>{pedidoAberto.description}</p>}
+          </>
+        )}
+      </JanelaDoCelular>
 
       {/* Novo pedido: janela do sistema (nasce no body, por cima da barra de baixo). */}
       <JanelaDoCelular

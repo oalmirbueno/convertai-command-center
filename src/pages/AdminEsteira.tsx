@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useClienteEmFoco } from "@/components/cronometro/CronometroProvider";
 import { Link } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Building2, CalendarCheck, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, Compass, DoorOpen, Flame, ListChecks, Megaphone, Package, RefreshCw, Share2, Users } from "lucide-react";
@@ -111,9 +111,11 @@ export default function AdminEsteira() {
 
   // Altura real do topo fixo, medida: o espaço reservado nunca fica menor
   // nem maior que ele. Sem ResizeObserver (Safari 11), mede ao redimensionar.
+  // 16/10/2026 (dono, "sem tela se mexendo"): mede antes de pintar
+  // (useLayoutEffect), para a lista não pular quando a altura real chega.
   const headerRef = useRef<HTMLElement | null>(null);
   const [headerH, setHeaderH] = useState(112);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = headerRef.current;
     if (!el) return;
     const medir = () => {
@@ -188,7 +190,8 @@ export default function AdminEsteira() {
     { k: "clientes", valor: String(visiveis.length), rotulo: plural(visiveis.length, "cliente", "clientes"), Icone: Building2, cor: "text-muted-foreground", classe: "hidden sm:inline-flex lg:hidden xl:inline-flex" },
     { k: "urgentes", valor: String(resumo.urgentes), rotulo: plural(resumo.urgentes, "urgente", "urgentes"), Icone: Flame, cor: resumo.urgentes ? "text-destructive" : "text-muted-foreground" },
     { k: "atencao", valor: String(resumo.atencao), rotulo: `${resumo.atencao} de atenção`, Icone: AlertTriangle, cor: resumo.atencao ? "text-warning" : "text-muted-foreground" },
-    { k: "emdia", valor: String(resumo.emDia), rotulo: `${resumo.emDia} em dia`, Icone: CheckCircle2, cor: "text-primary" },
+    // 16/10/2026: no celular só urgentes e de atenção (menos números no topo).
+    { k: "emdia", valor: String(resumo.emDia), rotulo: `${resumo.emDia} em dia`, Icone: CheckCircle2, cor: "text-primary", classe: "hidden sm:inline-flex" },
     ...(resumo.entrada > 0 ? [{ k: "entrada", valor: String(resumo.entrada), rotulo: `${resumo.entrada} em entrada`, Icone: DoorOpen, cor: "text-muted-foreground", classe: "hidden md:inline-flex lg:hidden xl:inline-flex" }] : []),
     { k: "rituais", valor: `${resumo.rituaisFeitos}/${visiveis.length * 3}`, rotulo: `rituais ${resumo.rituaisFeitos} de ${visiveis.length * 3}`, Icone: CalendarCheck, cor: "text-muted-foreground", classe: "hidden sm:inline-flex" },
     { k: "feitos", valor: String(resumo.feitos), rotulo: `${plural(resumo.feitos, "feito", "feitos")} na semana`, Icone: ListChecks, cor: "text-muted-foreground", classe: "hidden md:inline-flex lg:hidden xl:inline-flex" },
@@ -405,7 +408,8 @@ function SemanaNav({ segunda, quando, offset, onMudar, onHoje }: { segunda: Date
       <button type="button" aria-label="Semana anterior" title="Semana anterior" onClick={() => onMudar(-1)} className={botao.icone}><ChevronLeft className="h-4 w-4" /></button>
       <button type="button" onClick={onHoje} disabled={offset === 0} title={offset === 0 ? undefined : "Voltar para a semana atual"} className={juntar("mx-0.5 min-w-0 rounded-md px-1 text-center disabled:cursor-default", foco)}>
         <span className="block truncate text-[13px] font-semibold leading-5">{weekLabel(segunda)}</span>
-        <span className={juntar("block truncate text-[11px] leading-4", offset === 0 ? "text-muted-foreground" : "text-primary")}>{quando}</span>
+        {/* 16/10/2026: no celular a legenda só aparece fora da semana atual. */}
+        <span className={juntar("block truncate text-[11px] leading-4", offset === 0 ? "text-muted-foreground max-sm:hidden" : "text-primary")}>{quando}</span>
       </button>
       <button type="button" aria-label="Próxima semana" title="Próxima semana" onClick={() => onMudar(1)} className={botao.icone}><ChevronRight className="h-4 w-4" /></button>
     </div>
@@ -434,7 +438,14 @@ function CartaoDoCliente({ cliente: c, frente, weekStart, foto, onAbrir, onMudou
         <span className="mr-2.5 shrink-0"><FotoDoCliente nome={c.nome} foto={foto} tamanho="md" /></span>
         <span className="mr-2 min-w-0 flex-1">
           <span className="block truncate text-[14px] font-semibold leading-5">{c.nome}</span>
-          <span className={juntar(texto.auxiliar, "block truncate")}>{c.esteira.onboardingCompleto ? "Em operação" : "Entrada em andamento"}</span>
+          {/* 16/10/2026 (dono, celular mais limpo): abaixo de 640 px o cartão é
+              uma linha de app (foto, nome, uma linha de apoio, indicadores);
+              a linha de apoio é o que mais pede, e a lista e os rituais
+              ficam na janela do cliente. */}
+          <span className={juntar(texto.auxiliar, "block truncate", topo.length > 0 && "max-sm:hidden")}>{c.esteira.onboardingCompleto ? "Em operação" : "Entrada em andamento"}</span>
+          {topo.length > 0 && (
+            <span className={juntar(texto.auxiliar, "block truncate sm:hidden")}>{topo[0].titulo}{itens.length > 1 ? ` · +${itens.length - 1}` : ""}</span>
+          )}
         </span>
         <span className="flex shrink-0 items-center [&>*+*]:ml-1">
           {urgentes > 0 && <span className="inline-flex items-center text-[12px] font-semibold tabular-nums text-destructive" title={plural(urgentes, "urgente", "urgentes")}><Flame className="mr-0.5 h-3.5 w-3.5" aria-hidden="true" /><span aria-hidden="true">{urgentes}</span><span className="sr-only">{plural(urgentes, "urgente", "urgentes")}</span></span>}
@@ -444,12 +455,12 @@ function CartaoDoCliente({ cliente: c, frente, weekStart, foto, onAbrir, onMudou
         </span>
       </span>
       {topo.length > 0 && (
-        <span className="mt-1.5 block pl-[46px]">
+        <span className="mt-1.5 block pl-[46px] max-sm:hidden">
           {topo.map((it) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={false} onMudou={onMudou} compacto />)}
           {resto > 0 && <span className={juntar(texto.auxiliar, "block pl-[18px]")}>+ {resto} {resto === 1 ? "item" : "itens"}</span>}
         </span>
       )}
-      <span className="mt-2 flex min-w-0 items-center pl-[46px]">
+      <span className="mt-2 flex min-w-0 items-center pl-[46px] max-sm:hidden">
         {r.map((x) => (
           <span key={x.key} title={x.rotulo} className={`mr-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${x.feito ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`}>
             {x.key === "segunda" ? "S" : x.key === "quarta" ? "Q" : "S"}

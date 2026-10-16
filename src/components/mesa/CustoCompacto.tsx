@@ -65,11 +65,13 @@ export function CustoCompacto({
             aria-label="Saldo e gasto do mês"
             className="inline-flex h-8 min-w-0 items-center rounded-lg px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            <Wallet className={`mr-1.5 h-3.5 w-3.5 shrink-0 ${alerta ? "text-destructive" : ""}`} />
-            <strong className={`font-semibold tabular-nums ${negativo ? "text-destructive" : "text-foreground"}`}>
+            {/* 16/10/2026 (dono: "cara de aplicativo" no celular): abaixo de 640 px o saldo vira só o ícone da
+                carteira (com o ponto vermelho do alerta); o valor e o gasto aparecem ao tocar. */}
+            <Wallet className={`h-4 w-4 shrink-0 sm:mr-1.5 sm:h-3.5 sm:w-3.5 ${alerta ? "text-destructive" : ""}`} />
+            <strong className={`hidden font-semibold tabular-nums sm:inline ${negativo ? "text-destructive" : "text-foreground"}`}>
               {carregando && saldoUsd === null ? <Loader2 className="inline h-3 w-3 animate-spin" /> : saldoUsd === null ? "?" : usd(saldoUsd)}
             </strong>
-            {alerta && <span className="ml-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-destructive" aria-label={negativo ? "saldo negativo" : "saldo baixo"} />}
+            {alerta && <span className="ml-1 h-1.5 w-1.5 shrink-0 rounded-full bg-destructive sm:ml-1.5" aria-label={negativo ? "saldo negativo" : "saldo baixo"} />}
             <span className="ml-2 hidden whitespace-nowrap sm:inline">
               mês <span className="font-medium tabular-nums text-foreground">{usd((consumo && consumo.total_usd) || 0)}</span>
             </span>
@@ -129,10 +131,30 @@ export function CustoCompacto({
             </>
           )}
           {!!(consumo && consumo.recargas_usd) && <p className="mt-3 text-[11.5px] text-muted-foreground">Recargas no mês: {usd(consumo!.recargas_usd)}</p>}
+          {/* No celular os atalhos ao lado do saldo saem do topo e moram aqui (16/10/2026). */}
+          {(podeRecarregar || isAdmin) && (
+            <div className="mt-3 flex flex-wrap border-t border-border pt-2 sm:hidden [&>*]:mr-1.5 [&>*]:mt-1" data-atalhos-do-saldo="">
+              {podeRecarregar && (
+                <button type="button" onClick={onRecarregar} className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-[12.5px] font-medium text-primary-foreground">
+                  <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" /> Recarregar
+                </button>
+              )}
+              {isAdmin && (
+                <button type="button" onClick={onModelos} className="inline-flex h-9 items-center rounded-lg bg-muted px-3 text-[12.5px]">
+                  <Sparkles className="mr-1.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /> Modelos de IA
+                </button>
+              )}
+              {isAdmin && (
+                <button type="button" onClick={onChaves} className="inline-flex h-9 items-center rounded-lg bg-muted px-3 text-[12.5px]">
+                  <KeyRound className="mr-1.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /> Chaves e cotas
+                </button>
+              )}
+            </div>
+          )}
         </PopoverContent>
       </Popover>
       {podeRecarregar && (
-        <button type="button" onClick={onRecarregar} className={botaoPequeno} aria-label="Recarregar carteira" title="Recarregar carteira">
+        <button type="button" onClick={onRecarregar} className={`${botaoPequeno} hidden sm:inline-flex`} aria-label="Recarregar carteira" title="Recarregar carteira">
           {/* 16/10/2026 (dono: "saldo: só o ícone"): o nome fica no title e no leitor de tela. */}
           <Plus className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -140,7 +162,7 @@ export function CustoCompacto({
       {isAdmin && (
         <Popover>
           <PopoverTrigger asChild>
-            <button type="button" className={botaoPequeno} aria-label="Modelos de IA e chaves" title="Modelos de IA e chaves">
+            <button type="button" className={`${botaoPequeno} hidden sm:inline-flex`} aria-label="Modelos de IA e chaves" title="Modelos de IA e chaves">
               <Settings2 className="h-3.5 w-3.5" />
             </button>
           </PopoverTrigger>

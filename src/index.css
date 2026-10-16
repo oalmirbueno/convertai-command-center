@@ -535,3 +535,72 @@ body[data-gaveta-aberta] [data-casca="rodape"],
 body[data-gaveta-aberta] [data-casca="flutuante"] {
   display: none !important;
 }
+
+/* ── Celular com cara de aplicativo (16/10/2026) ──
+   Dono: "otimizar o mobile, cara de aplicativo, mais clean, sem tela se
+   mexendo". A casca do celular (AppLayout + MobileBottomNav) é topo enxuto
+   colado no alto, conteúdo numa camada com rolagem própria e barra de baixo
+   com 4 destinos + "Mais". Aqui ficam só as regras que não cabem em classe:
+   - a página não estica nem puxa a casca (sem elástico no documento);
+   - toque sem o clarão azul do navegador (o estado ativo é do próprio botão);
+   - folhas e janelas sobem de baixo no celular (no computador, nada muda);
+   - o pé dos diálogos (DialogFooter) gruda embaixo da folha.
+   Já valiam antes (src/styles/responsive.css): campo com 16 px no celular
+   (o iPhone não dá zoom ao focar), touch-action: manipulation (sem zoom de
+   duplo toque nem atraso) e 44 px de área de toque. */
+@media (max-width: 767px) {
+  html {
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* A logo oficial é feita para fundo escuro; no topo do celular claro, inverte
+   o preto e o branco e mantém o verde da marca. */
+.light .logo-do-topo {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+@keyframes subir-da-base {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes descer-para-base {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+
+/* Folha "Mais" da barra de baixo (MobileBottomNav). */
+@media (max-width: 767px) {
+  [data-folha-de-baixo][data-state="open"] {
+    animation: subir-da-base 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  [data-folha-de-baixo][data-state="closed"] {
+    animation: descer-para-base 0.18s ease-in;
+  }
+}
+
+/* Janelas e diálogos abaixo de 640 px (a faixa em que JanelaCentral e
+   ui/dialog viram folha): sobem de baixo em vez de crescer no meio. */
+@media (max-width: 639px) {
+  [data-janela-central][data-state="open"],
+  [data-dialogo-do-painel][data-state="open"],
+  [data-janela-do-celular] {
+    animation: subir-da-base 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  [data-dialogo-do-painel][data-state="closed"] {
+    animation: descer-para-base 0.18s ease-in;
+  }
+  /* Ações no pé, sempre à mão: o pé gruda na base da folha enquanto o resto
+     rola, com o fundo da própria janela por trás. */
+  [data-dialogo-do-painel] [data-pe-do-dialogo] {
+    position: -webkit-sticky;
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    background-color: hsl(var(--background));
+  }
+  [data-dialogo-do-painel].bg-card [data-pe-do-dialogo] {
+    background-color: hsl(var(--card));
+  }
+}

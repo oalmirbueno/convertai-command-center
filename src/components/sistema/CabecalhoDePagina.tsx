@@ -10,6 +10,11 @@ import { foco, juntar, texto } from "./estilos";
  * Quando falta largura (celular), as ações encolhem primeiro e quebram por
  * dentro até a largura da maior delas; só então o título encolhe (com
  * reticências, nunca abaixo de 120 px). Nada passa da borda.
+ *
+ * Celular (< 640 px, 16/10/2026, dono: "muita informação, mais clean"): a
+ * linha de apoio (`descricao`) some, as ações ficam numa linha só (rolam por
+ * dentro se não couberem, nunca empurram a tela) e o bloco fica mais baixo.
+ * Ações com texto usam BotaoComIcone, que vira só ícone no celular.
  */
 export default function CabecalhoDePagina({
   titulo,
@@ -39,7 +44,8 @@ export default function CabecalhoDePagina({
   avisarSeForExplicacao("CabecalhoDePagina", descricao);
   return (
     <div className={juntar("flex min-w-0 justify-between", aoLado && !descricao ? "items-center" : "items-end", className)}>
-      <div className={juntar("min-w-[120px] flex-auto", aoLado && !descricao ? "" : "mb-1", acoes && "mr-4")}>
+      {/* Celular com ações: o título fica inteiro até 65% da linha (depois, reticências) e as ações rolam no resto. */}
+      <div className={juntar("min-w-[120px] flex-auto", aoLado && !descricao ? "" : "sm:mb-1", acoes && "mr-3 sm:mr-4", acoes && !aoLado && "max-sm:max-w-[65%] max-sm:shrink-0")}>
         {voltar && (
           <Link to={voltar.para} className={juntar("mb-1 inline-flex items-center rounded text-[12px] text-muted-foreground hover:text-foreground", foco)}>
             <ArrowLeft className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
@@ -51,9 +57,16 @@ export default function CabecalhoDePagina({
           {ajuda && <AjudaRecolhida className="ml-2">{ajuda}</AjudaRecolhida>}
           {aoLado && <div className="ml-4 flex min-w-0 flex-1 items-center">{aoLado}</div>}
         </div>
-        {descricao && <p className={juntar(texto.auxiliar, "mt-1 truncate")}>{descricao}</p>}
+        {descricao && <p className={juntar(texto.auxiliar, "mt-1 hidden truncate sm:block")}>{descricao}</p>}
       </div>
-      {acoes && <div className="-m-1 mb-0 flex flex-initial shrink-[5] flex-wrap items-center justify-end [&>*]:m-1">{acoes}</div>}
+      {acoes && (
+        <div
+          className="scrollbar-hidden -m-1 mb-0 flex min-w-0 flex-1 flex-nowrap items-center justify-start overflow-x-auto overflow-y-hidden overscroll-x-contain sm:min-w-[auto] sm:flex-initial sm:shrink-[5] sm:flex-wrap sm:justify-end sm:overflow-visible [&>*]:m-1 [&>*]:shrink-0 sm:[&>*]:shrink max-sm:[&>*:first-child]:ml-auto"
+          data-acoes-do-cabecalho=""
+        >
+          {acoes}
+        </div>
+      )}
     </div>
   );
 }

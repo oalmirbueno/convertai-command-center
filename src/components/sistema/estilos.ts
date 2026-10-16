@@ -113,10 +113,10 @@ export const superficie = {
  * que separa, não caixa. Escala de 4/8 (SISTEMA.md seção 3).
  */
 export const espaco = {
-  /** Entre os blocos grandes da página (cabeçalho, barra, seções): 24 px. */
-  pagina: "min-w-0 space-y-6",
-  /** Seções abertas lado a lado: 32 px entre colunas, 28 px entre linhas. */
-  colunas: "grid min-w-0 items-start gap-x-8 gap-y-7",
+  /** Entre os blocos grandes da página (cabeçalho, barra, seções): 24 px (20 px no celular, 16/10/2026). */
+  pagina: "min-w-0 space-y-5 sm:space-y-6",
+  /** Seções abertas lado a lado: 32 px entre colunas, 28 px entre linhas (24 px no celular). */
+  colunas: "grid min-w-0 items-start gap-x-8 gap-y-6 sm:gap-y-7",
   /** Itens de uma grade (mídia, item que é uma coisa): 16 px. */
   grade: "grid min-w-0 gap-4",
   /** Grupos de funções (GrupoDeFuncoes): 24 px entre colunas, 20 px entre linhas. */

@@ -48,8 +48,9 @@ export default function EsteiraItemRow({ item, weekStart, canWrite, onMudou, com
     <div className={juntar("flex min-w-0 items-start", compacto ? "py-1.5" : "py-2.5", feito && "opacity-60", bloqueado && "opacity-70")}>
       <span className={`mr-2.5 mt-1.5 h-2 w-2 shrink-0 rounded-full ${feito ? "bg-primary" : COR[item.gravidade]}`} aria-hidden />
       <div className="mr-2 min-w-0 flex-1">
-        <p className={juntar("text-[13px] font-medium leading-5 text-foreground", compacto && "truncate", feito && "line-through")}>{item.titulo}</p>
-        <p className={juntar("text-[12px] leading-4 text-muted-foreground", compacto && "truncate")}>
+        {/* 16/10/2026: texto longo sem espaço (link, id) quebra em vez de empurrar a tela. */}
+        <p className={juntar("text-[13px] font-medium leading-5 text-foreground", compacto ? "truncate" : "break-words", feito && "line-through")}>{item.titulo}</p>
+        <p className={juntar("text-[12px] leading-4 text-muted-foreground", compacto ? "truncate" : "break-words")}>
           {item.passo}
           {auto ? <span className={juntar(etiqueta, "ml-1.5 bg-primary/15 text-primary")}>pelo painel</span> : null}
         </p>

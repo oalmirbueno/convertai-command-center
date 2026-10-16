@@ -159,7 +159,8 @@ const CARTAO = "rounded-xl border border-border bg-card px-4 py-3.5 shadow-sm sm
  * desliga. Recolhida, fica o título e, embaixo, o `resumo` (ou a `descricao`).
  * Seções vizinhas se separam por espaço (e, com `divisoria`, por uma linha
  * fina em cima). Ajuda longa vai em `ajuda` (vira o "?" ao lado do título).
- * No celular as ações quebram por dentro (ver CabecalhoDeSecao).
+ * No celular as ações quebram por dentro (ver CabecalhoDeSecao) e o espaço
+ * em pé é menor (título a 8 px do conteúdo, divisória a 16 px; 16/10/2026).
  */
 export default function Secao({
   titulo,
@@ -236,8 +237,8 @@ export default function Secao({
   }
   const temCabecalho = !!(titulo || descricao || acao);
   return (
-    <section id={id} className={juntar("min-w-0", cartao ? CARTAO : divisoria && "border-t border-border pt-5", className)} {...resto}>
-      {temCabecalho && <CabecalhoDeSecao className="mb-3" titulo={titulo} descricao={descricao} acao={acao} ajuda={titulo ? ajuda : undefined} nivel={nivel} />}
+    <section id={id} className={juntar("min-w-0", cartao ? CARTAO : divisoria && "border-t border-border pt-4 sm:pt-5", className)} {...resto}>
+      {temCabecalho && <CabecalhoDeSecao className="mb-2 sm:mb-3" titulo={titulo} descricao={descricao} acao={acao} ajuda={titulo ? ajuda : undefined} nivel={nivel} />}
       <div className={juntar("min-w-0", corpoClassName)}>{children}</div>
     </section>
   );
@@ -280,9 +281,9 @@ function SecaoRecolhivel({
 }) {
   const [recolhido, setRecolhido] = useRecolhido(chave, inicial);
   return (
-    <section id={id} className={juntar("min-w-0", cartao ? CARTAO : divisoria && "border-t border-border pt-5", className)} data-recolhido={recolhido ? "sim" : "nao"} {...resto}>
+    <section id={id} className={juntar("min-w-0", cartao ? CARTAO : divisoria && "border-t border-border pt-4 sm:pt-5", className)} data-recolhido={recolhido ? "sim" : "nao"} {...resto}>
       <CabecalhoDeSecao
-        className={recolhido ? "" : "mb-3"}
+        className={recolhido ? "" : "mb-2 sm:mb-3"}
         titulo={titulo}
         descricao={descricao}
         acao={recolhido ? undefined : acao}

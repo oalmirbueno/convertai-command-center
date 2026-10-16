@@ -36,7 +36,12 @@ function gravar(lista: Lugar[]) {
 const BOTAO =
   "toque-compacto inline-flex h-8 min-w-0 items-center rounded-lg px-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-export default function VoltarParaOndeEstava() {
+/**
+ * `compacto` (topo do celular, 16/10/2026): só a seta de voltar, sem a lista
+ * dos últimos lugares (o topo do celular fica com 1 ou 2 ícones). A lista
+ * continua de 768 px para cima.
+ */
+export default function VoltarParaOndeEstava({ compacto = false }: { compacto?: boolean } = {}) {
   const location = useLocation();
   const navigate = useNavigate();
   const clienteEmFoco = useClienteDoCronometro();
@@ -89,7 +94,7 @@ export default function VoltarParaOndeEstava() {
         <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
         <span className="ml-1.5 hidden min-w-0 truncate lg:inline">{rotuloCompleto(anterior)}</span>
       </button>
-      {outros.length > 0 && (
+      {!compacto && outros.length > 0 && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button type="button" aria-label="Últimos lugares" title="Últimos lugares" className={`${BOTAO} w-6 justify-center px-0`}>

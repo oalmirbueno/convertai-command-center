@@ -221,7 +221,7 @@ export default function HypesDaSemana({
               />
             ) : (
               <BotaoComCusto
-                rotulo={<><Flame className="mr-1.5 h-3.5 w-3.5" />Buscar hypes</>}
+                rotulo={<><Flame className="h-3.5 w-3.5 sm:mr-1.5" /><span className="max-sm:sr-only">Buscar hypes</span></>}
                 titulo="Hypes da semana"
                 descricao="Pesquisa na web o que está em alta para o público deste cliente, com a nota do Jev. Leva de 60 a 90 segundos."
                 partes={() => partesDosHypes(catalogo)}

@@ -51,7 +51,15 @@ describe("o conteúdo permanece no dia, e quem decide é o post", () => {
   it("as quatro células da grade desenham o ancorado", () => {
     // Mês (visível e dentro do "+N"), semana e mobile. Faltar uma deixaria o
     // conteúdo invisível justamente para quem usa o celular.
-    expect((views.match(/<AnchoredPostPill/g) || []).length).toBe(4);
+    // 16/10/2026: no celular o ancorado virou linha de app (LinhaDeApp) na
+    // lista do dia escolhido; a pílula fica nas três células do computador.
+    expect((views.match(/<AnchoredPostPill/g) || []).length).toBe(3);
+    const celular = views.slice(
+      views.indexOf("function MobileAgenda("),
+      views.indexOf("function MonthView("),
+    );
+    expect(celular).toContain("dayAnchored.map((bundle)");
+    expect(celular).toContain("<LinhaDeApp");
   });
 
   it("o ancorado entra na contagem do dia e no corte do +N", () => {

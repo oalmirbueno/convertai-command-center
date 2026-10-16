@@ -309,7 +309,7 @@ export default function MesaPublicidade() {
             onUsar={(t) => setRascunhoDoAgente(t)}
             rotuloDoUsar="Levar para o agente da campanha"
           />
-          <span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-border" />
+          <span aria-hidden="true" className="mx-1.5 hidden h-4 w-px shrink-0 bg-border sm:block" />
           <CustoCompacto
             saldoUsd={saldoUsd}
             consumo={consumo.data || null}

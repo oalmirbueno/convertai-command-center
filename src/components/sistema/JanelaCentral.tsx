@@ -8,8 +8,8 @@ import { botao, juntar, texto } from "./estilos";
  * Janela central (docs/design/SISTEMA.md, seção 4.4). Pedido do dono (30/09):
  * "biblioteca abrir no padrão central e não na lateral, e qualquer pop-up
  * assim abrir tudo no centro e não na lateral". Todo pop-up do painel abre
- * aqui: no meio da tela a partir de 640 px e ocupando a tela inteira no
- * celular. Nunca gaveta lateral (Sheet, Drawer do vaul, painel `fixed right-0`).
+ * aqui: no meio da tela a partir de 640 px e, no celular, uma folha quase
+ * cheia que sobe de baixo, com alça (16/10/2026). Nunca gaveta lateral (Sheet, Drawer do vaul, painel `fixed right-0`).
  *
  * - Cabeçalho fixo: ícone, título numa linha, "?" (a explicação), ações e Fechar.
  * - Corpo com UMA rolagem. `corpo="fixo"`: o corpo não rola e quem está dentro
@@ -23,7 +23,7 @@ import { botao, juntar, texto } from "./estilos";
  * Compatibilidade (Safari 11, Chrome 64): centraliza por flex (nada de
  * translate, que briga com a animação de entrada), sem `gap` em flex e com
  * `vh` antes de `dvh` (`supports-[height:1dvh]`). No celular a altura vem de
- * `fixed inset-0` (`max-sm:h-full`), sem `vh` nenhum.
+ * `fixed inset-0` menos o respiro de cima do fundo (`max-sm:h-full`), sem `vh` nenhum.
  */
 
 export type LarguraDaJanela = "sm" | "md" | "lg" | "xl" | "tela";
@@ -138,7 +138,7 @@ export default function JanelaCentral({
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay
           data-fundo-da-janela=""
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 sm:p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 max-sm:items-end max-sm:pt-[calc(env(safe-area-inset-top)+12px)] sm:p-4"
         >
           <DialogPrimitive.Content
             {...dados}
@@ -156,7 +156,10 @@ export default function JanelaCentral({
             }}
             className={juntar(
               "relative flex w-full min-w-0 flex-col overflow-hidden bg-card text-foreground outline-none max-sm:h-full",
-              "pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] sm:pb-0 sm:pt-0",
+              // Celular (16/10/2026): folha quase cheia que sobe de baixo (o fundo deixa 12 px
+              // abaixo da área segura de cima), canto só em cima e alça; a animação de subir
+              // mora no index.css ([data-janela-central]).
+              "pb-[env(safe-area-inset-bottom)] sm:pb-0 max-sm:rounded-t-xl max-sm:border-t max-sm:border-border",
               "sm:rounded-lg sm:border sm:border-border",
               "data-[state=open]:animate-in data-[state=open]:fade-in-0 sm:data-[state=open]:zoom-in-95",
               LARGURAS_DA_JANELA[largura],
@@ -166,7 +169,8 @@ export default function JanelaCentral({
           >
             {/* Com a janela aberta o resto da página não recebe clique; os avisos (Desfazer) precisam receber. */}
             <style>{"[data-sonner-toaster]{pointer-events:auto}"}</style>
-            <div className="shrink-0 border-b border-border px-4 py-3 sm:px-5" data-cabecalho-da-janela="">
+            <div className="shrink-0 border-b border-border px-4 py-3 max-sm:pt-2 sm:px-5" data-cabecalho-da-janela="">
+              <div aria-hidden="true" data-alca="" className="mx-auto mb-2 h-1 w-9 rounded-full bg-muted-foreground/30 sm:hidden" />
               <div className="flex min-w-0 items-center">
                 {icone ? (
                   <span className="mr-2 flex shrink-0 items-center text-muted-foreground" aria-hidden="true">

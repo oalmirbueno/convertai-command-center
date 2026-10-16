@@ -180,8 +180,10 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
                             </>
                           )}
                         </span>
+                        {/* Celular (16/10/2026): lista de app, título e uma linha de apoio; os
+                            números e o resumo ficam no relatório aberto. */}
                         {visibleMetrics.length > 0 && (
-                          <span className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-4">
+                          <span className="mt-2 hidden grid-cols-2 gap-x-4 gap-y-1.5 sm:grid sm:grid-cols-4">
                             {visibleMetrics.slice(0, 8).map(metric => {
                               const Icon = metric.icon;
                               return (
@@ -194,7 +196,7 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
                             })}
                           </span>
                         )}
-                        {r.summary && <span className={juntar(texto.auxiliar, "mt-2 line-clamp-2 block leading-5")}>{r.summary}</span>}
+                        {r.summary && <span className={juntar(texto.auxiliar, "mt-2 line-clamp-2 hidden leading-5 sm:block")}>{r.summary}</span>}
                       </span>
                       {sparklineData && (
                         <span className="ml-3 hidden h-8 w-20 shrink-0 sm:block" aria-hidden="true">

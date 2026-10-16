@@ -299,9 +299,11 @@ export default function CadernoDoDossie({ caderno }: { caderno: EstadoDoCaderno 
   return (
     <article className="min-w-0" data-caderno-do-dossie="">
       {/* Sumário (17/10, dono: "meio desorganizado, ainda poluído"): pílulas
-          numeradas em linha, que quebram no celular; sem rótulo repetido. */}
+          numeradas em linha, que quebram no celular; sem rótulo repetido.
+          16/10/2026 (celular, "menos informação"): abaixo de 640 px o sumário
+          some; as seções numeradas logo abaixo já fazem o papel dele. */}
       {secoes.length >= 2 && (
-        <nav aria-label="Sumário do dossiê" className="mb-6">
+        <nav aria-label="Sumário do dossiê" className="mb-6 max-sm:hidden">
           <ol className="-m-1 flex min-w-0 flex-wrap">
             {secoes.map((s, i) => (
               <li key={i} className="m-1 min-w-0 max-w-full">

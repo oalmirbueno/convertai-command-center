@@ -20,6 +20,7 @@ import CascaDaMesa from "@/components/sistema/CascaDaMesa";
 import Etapas from "@/components/sistema/Etapas";
 import { Carregando } from "@/components/sistema/Estados";
 import SeletorDeClientesDaMesa from "@/components/mesa/SeletorDeClientesDaMesa";
+import MenuMais from "@/components/sistema/MenuMais";
 import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
 
 /**
@@ -550,13 +551,29 @@ export default function MesaDoCliente() {
       }
       acoes={
         <>
+          {/* 16/10/2026 (dono: "cara de aplicativo" no celular): abaixo de 640 px Prioridades e Custos saem do
+              topo e moram no "..." (com o ponto vermelho quando há algo para agora); o saldo vira só a carteira. */}
+          <span className="relative inline-flex shrink-0 sm:hidden" data-mais-do-topo="">
+            <MenuMais
+              rotulo="Mais do topo da Mesa"
+              itens={[
+                {
+                  rotulo: urgentes > 0 ? `Prioridades (${urgentes} para agora)` : "Prioridades",
+                  icone: <ListOrdered className="h-4 w-4" />,
+                  aoEscolher: () => alternarPainel("prioridades"),
+                },
+                podeVerCustos && { rotulo: "Custos de produção", icone: <Calculator className="h-4 w-4" />, aoEscolher: () => alternarPainel("custos") },
+              ]}
+            />
+            {urgentes > 0 && <span aria-hidden="true" className="pointer-events-none absolute right-1 top-1 h-2 w-2 rounded-full bg-destructive" />}
+          </span>
           <button
             type="button"
             onClick={() => alternarPainel("prioridades")}
             aria-pressed={mostrarFila}
             aria-label={urgentes > 0 ? `Prioridades: ${urgentes} para agora` : "Prioridades"}
             title="Prioridades"
-            className={`${botaoPequeno} ${mostrarFila ? "bg-muted text-foreground" : ""}`}
+            className={`${botaoPequeno} hidden sm:inline-flex ${mostrarFila ? "bg-muted text-foreground" : ""}`}
           >
             <ListOrdered className="h-4 w-4" aria-hidden="true" />
             {urgentes > 0 && (
@@ -570,7 +587,7 @@ export default function MesaDoCliente() {
               aria-pressed={painel === "custos"}
               aria-label="Custos de produção"
               title="Custos de produção"
-              className={`${botaoPequeno} ${painel === "custos" ? "bg-muted text-foreground" : ""}`}
+              className={`${botaoPequeno} hidden sm:inline-flex ${painel === "custos" ? "bg-muted text-foreground" : ""}`}
             >
               <Calculator className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -586,7 +603,7 @@ export default function MesaDoCliente() {
           )}
           {clientId && (
             <>
-              <span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-border" />
+              <span aria-hidden="true" className="mx-1.5 hidden h-4 w-px shrink-0 bg-border sm:block" />
               <CustoCompacto
                 saldoUsd={saldoUsd}
                 consumo={consumo.data || null}

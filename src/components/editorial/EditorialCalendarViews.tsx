@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   addDays,
   eachDayOfInterval,
@@ -66,6 +66,7 @@ import {
 import { editorialStageForTaskStatus } from "@/lib/taskWorkstreams";
 import { mediaKindFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
 import { corDaEtapa } from "@/lib/editorialCores";
+import { useCelular } from "@/hooks/useCelular";
 
 interface EditorialCalendarViewsProps {
   view: EditorialView;
@@ -998,11 +999,14 @@ function DroppableDay({
   dateKey,
   className,
   canDrop,
+  semGrade = false,
   children,
 }: {
   dateKey: string;
   className?: string;
   canDrop: boolean;
+  /** Faixa de dias do celular (16/10/2026): solta igual, mas não é célula de grade. */
+  semGrade?: boolean;
   children: React.ReactNode;
 }) {
   const { active } = useDndContext();
@@ -1018,8 +1022,8 @@ function DroppableDay({
   return (
     <div
       ref={setNodeRef}
-      role="gridcell"
-      aria-label={`Dia ${dateKey}`}
+      role={semGrade ? undefined : "gridcell"}
+      aria-label={semGrade ? undefined : `Dia ${dateKey}`}
       className={cn(
         "transition-colors",
         className,
@@ -1033,11 +1037,164 @@ function DroppableDay({
   );
 }
 
+/**
+ * Linha de lista de aplicativo (16/10/2026, celular): miniatura ou ícone,
+ * título, uma linha de apoio e a etapa como ponto à direita. Tocar abre.
+ * Sem `gap` em flex (Safari 11): o espaço vem de margem.
+ */
+function LinhaDeApp({
+  miniatura,
+  titulo,
+  apoio,
+  ponto,
+  rotuloDoPonto,
+  ariaLabel,
+  onClick,
+}: {
+  miniatura: React.ReactNode;
+  titulo: string;
+  apoio: string;
+  ponto: string;
+  rotuloDoPonto: string;
+  ariaLabel?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      className="flex min-h-[60px] w-full min-w-0 items-center rounded-lg px-1 py-2 text-left transition-colors active:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
+    >
+      <span className="mr-3 inline-flex h-11 w-11 shrink-0">{miniatura}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[14px] font-medium leading-5 text-foreground">
+          {titulo}
+        </span>
+        <span className="block truncate text-[12px] leading-4 text-muted-foreground">
+          {apoio}
+        </span>
+      </span>
+      <span
+        className={cn("ml-3 h-2.5 w-2.5 shrink-0 rounded-full", ponto)}
+        title={rotuloDoPonto}
+        aria-hidden="true"
+      />
+      {!ariaLabel && <span className="sr-only">, {rotuloDoPonto}</span>}
+    </button>
+  );
+}
+
+/** Ícone redondo no lugar da miniatura quando o item não tem arte. */
+function IconeDaLinha({
+  icon: Icone,
+  className,
+}: {
+  icon: typeof Palette;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "flex h-11 w-11 items-center justify-center rounded-lg",
+        className,
+      )}
+      aria-hidden="true"
+    >
+      <Icone className="h-[18px] w-[18px]" />
+    </span>
+  );
+}
+
+/**
+ * Publicação na lista do dia (celular). Continua arrastável: segurar a
+ * linha e soltar num dia da faixa remarca, como o cartão do computador.
+ */
+function LinhaDePublicacao({
+  item,
+  clientName,
+  canEdit,
+  canPublish,
+  moving,
+  onClick,
+}: {
+  item: ScheduledEditorialItem;
+  clientName?: string;
+  canEdit: boolean;
+  canPublish: boolean;
+  moving: boolean;
+  onClick: () => void;
+}) {
+  const publication = item.publication.publication;
+  const time = publication.scheduled_at
+    ? timeFormatter.format(new Date(publication.scheduled_at))
+    : "Sem horário";
+  const platform =
+    platformLabels[publication.platform] || publication.platform;
+  const stage = editorialVisualStage(
+    item.post.post.production_status,
+    publication.status,
+    publication.scheduled_at,
+  );
+  const status = EDITORIAL_VISUAL_STAGE_LABELS[stage] || publication.status;
+  const draggable = isEditorialPublicationDraggable(
+    item.post,
+    item.publication,
+    { canEdit, canPublish },
+  );
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: `publication:${publication.id}`,
+      disabled: !draggable || moving,
+      data: {
+        kind: "publication",
+        item,
+        label: `${item.post.post.title} · ${platform}`,
+      },
+    });
+  return (
+    <div
+      ref={setNodeRef}
+      style={
+        transform
+          ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+          : undefined
+      }
+      {...(draggable && !moving ? { ...listeners, ...attributes } : {})}
+      className={cn("min-w-0", isDragging && "opacity-30")}
+    >
+      <LinhaDeApp
+        miniatura={
+          <EditorialFileThumbnail
+            post={item.post}
+            publication={item.publication}
+            className="h-11 w-11"
+          />
+        }
+        titulo={item.post.post.title}
+        apoio={[time, clientName, platform].filter(Boolean).join(" · ")}
+        ponto={corDaEtapa(stage).ponto}
+        rotuloDoPonto={status}
+        ariaLabel={`${item.post.post.title}. ${platform}, ${time}, ${status}${draggable && !moving ? ". Segure e solte num dia para remarcar" : ""}`}
+        onClick={onClick}
+      />
+    </div>
+  );
+}
+
+/**
+ * Agenda do celular (16/10/2026, dono: "cara de aplicativo"): os dias numa
+ * faixa que rola por dentro na horizontal (a página não vaza), o dia
+ * escolhido em destaque e, embaixo, só os itens desse dia como lista de app.
+ * Cada dia da faixa continua sendo lugar de soltar (arrastar remarca).
+ */
 function MobileAgenda({
   days,
+  anchorDate,
   itemsByDate,
   tasksByDate,
   ancorasPorDia,
+  clientNames,
   projectScopeNames,
   canCreate,
   canEdit,
@@ -1048,9 +1205,11 @@ function MobileAgenda({
   onCreateFromTask,
 }: {
   days: Date[];
+  anchorDate: Date;
   itemsByDate: Map<string, ScheduledEditorialItem[]>;
   tasksByDate: Map<string, EditorialInboxTask[]>;
   ancorasPorDia: Map<string, EditorialPostBundle[]>;
+  clientNames?: Map<string, string>;
   projectScopeNames: Map<string, string>;
   canCreate: boolean;
   canEdit: boolean;
@@ -1063,80 +1222,219 @@ function MobileAgenda({
     targetDateKey?: string,
   ) => void;
 }) {
+  const artesDoEstudio = useContext(ArtesDoEstudioContexto);
+  const todayKey = dateKeyInTimeZone(new Date());
+  const anchorKey = localDateKey(anchorDate);
+  const keys = days.map(localDateKey);
+  // O dia escolhido vale enquanto o período (a âncora) for o mesmo; trocou de
+  // semana ou de mês, volta para o dia da âncora. Sem efeito: nada pisca.
+  const [escolha, setEscolha] = useState<{ ancora: string; dia: string } | null>(null);
+  const diaInicial = keys.includes(anchorKey)
+    ? anchorKey
+    : keys.includes(todayKey)
+      ? todayKey
+      : keys[0];
+  const selectedKey =
+    escolha && escolha.ancora === anchorKey && keys.includes(escolha.dia)
+      ? escolha.dia
+      : diaInicial;
+  const faixaRef = useRef<HTMLDivElement | null>(null);
+
+  // Centraliza o dia escolhido na faixa antes de pintar, só na horizontal e
+  // só dentro da faixa (scrollIntoView rolaria a página junto).
+  useLayoutEffect(() => {
+    const faixa = faixaRef.current;
+    if (!faixa) return;
+    const chip = faixa.querySelector<HTMLElement>(`[data-dia="${selectedKey}"]`);
+    if (!chip) return;
+    const alvo = chip.offsetLeft - (faixa.clientWidth - chip.offsetWidth) / 2;
+    faixa.scrollLeft = Math.max(0, alvo);
+  }, [selectedKey, keys.length]);
+
+  const poucosDias = days.length <= 7;
+  const selectedDay = days[Math.max(0, keys.indexOf(selectedKey))];
+  const dayItems = itemsByDate.get(selectedKey) || [];
+  const dayTasks = tasksByDate.get(selectedKey) || [];
+  // Conteúdo sem agendamento que herdou este dia do prazo da tarefa: é o
+  // que some da grade quando ganha arte.
+  const dayAnchored = ancorasPorDia.get(selectedKey) || [];
+  const vazio =
+    dayItems.length === 0 && dayTasks.length === 0 && dayAnchored.length === 0;
+
   return (
-    <div className="-mx-2 divide-y divide-border/50 md:hidden">
-      {days.map((day) => {
-        const key = localDateKey(day);
-        const dayItems = itemsByDate.get(key) || [];
-        const dayTasks = tasksByDate.get(key) || [];
-              // Conteúdo sem agendamento que herdou este dia do prazo da
-              // tarefa: é o que some da grade quando ganha arte.
-              const dayAnchored = ancorasPorDia.get(key) || [];
-        return (
-          <DroppableDay
-            key={key}
-            dateKey={key}
-            canDrop={canCreate || canEdit || canPublish}
-            className="rounded-lg px-2 py-3"
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-medium text-muted-foreground first-letter:uppercase">
-                  {format(day, "EEEE", { locale: ptBR })}
-                </p>
-                <p className="mt-0.5 text-[13px] font-semibold text-foreground">
-                  {format(day, "dd 'de' MMMM", { locale: ptBR })}
-                </p>
-              </div>
-              {canCreate && (
-                <Button
+    <div className="min-w-0 md:hidden">
+      {/* Faixa de dias presa no topo da área enquanto a lista rola. */}
+      <div className="sticky top-0 z-10 -mt-1 bg-background pb-2 pt-1">
+        <div
+          ref={faixaRef}
+          className="scrollbar-hidden flex min-w-0 overflow-x-auto overscroll-x-contain"
+          role="group"
+          aria-label="Dias"
+        >
+          {days.map((day, index) => {
+            const key = keys[index];
+            const total =
+              (itemsByDate.get(key) || []).length +
+              (tasksByDate.get(key) || []).length +
+              (ancorasPorDia.get(key) || []).length;
+            const escolhido = key === selectedKey;
+            return (
+              <DroppableDay
+                key={key}
+                dateKey={key}
+                semGrade
+                canDrop={canCreate || canEdit || canPublish}
+                className={cn(
+                  "rounded-xl",
+                  poucosDias ? "min-w-[44px] flex-1" : "w-12 shrink-0",
+                  index > 0 && "ml-1",
+                )}
+              >
+                <button
                   type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8"
-                  onClick={() => onCreateOnDate(key)}
-                  aria-label={`Criar conteúdo em ${key}`}
+                  data-dia={key}
+                  onClick={() => setEscolha({ ancora: anchorKey, dia: key })}
+                  aria-pressed={escolhido}
+                  aria-label={`${format(day, "EEEE, dd 'de' MMMM", { locale: ptBR })}${total > 0 ? `, ${total} ${total === 1 ? "item" : "itens"}` : ""}`}
+                  className={cn(
+                    "flex h-16 w-full flex-col items-center justify-center rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+                    escolhido
+                      ? "bg-primary text-primary-foreground"
+                      : key === todayKey
+                        ? "text-primary"
+                        : "text-foreground active:bg-muted",
+                  )}
                 >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-            <div className="space-y-2">
-              {dayAnchored.map((bundle) => (
-                <AnchoredPostPill
-                  key={bundle.post.id}
-                  post={bundle}
-                  onClick={() => onSelectPost(bundle)}
-                />
-              ))}
-              {dayTasks.map((task) => (
-                <TaskSchedulePill
-                  key={task.id}
-                  task={task}
-                  dateKey={key}
-                  projectScopeName={projectScopeNames.get(task.project_id)}
-                  onClick={() => onCreateFromTask(task, key)}
-                />
-              ))}
-              {dayItems.map((item) => (
-                <PublicationPill
-                  key={item.publication.publication.id}
-                  item={item}
-                  canEdit={canEdit}
-                  canPublish={canPublish}
-                  moving={moving}
-                  onClick={() => onSelectPost(item.post)}
-                />
-              ))}
-              {dayItems.length === 0 && dayTasks.length === 0 && (
-                <p className="rounded-lg border border-dashed border-border/75 py-3 text-center text-[11px] text-muted-foreground/65">
-                  Solte uma tarefa ou publicação aqui
-                </p>
-              )}
-            </div>
-          </DroppableDay>
-        );
-      })}
+                  <span
+                    className={cn(
+                      "text-[10px] font-medium uppercase",
+                      escolhido ? "opacity-85" : "text-muted-foreground",
+                    )}
+                  >
+                    {format(day, "EEEEEE", { locale: ptBR })}
+                  </span>
+                  <span className="mt-0.5 text-[17px] font-semibold leading-6 tabular-nums">
+                    {format(day, "d")}
+                  </span>
+                  <span
+                    className={cn(
+                      "mt-0.5 h-1 w-1 rounded-full",
+                      total === 0
+                        ? "bg-transparent"
+                        : escolhido
+                          ? "bg-primary-foreground"
+                          : "bg-primary",
+                    )}
+                    aria-hidden="true"
+                  />
+                </button>
+              </DroppableDay>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mb-1 flex min-h-11 min-w-0 items-center">
+        <p className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground first-letter:uppercase">
+          {selectedDay
+            ? format(selectedDay, "EEEE, dd 'de' MMMM", { locale: ptBR })
+            : ""}
+        </p>
+        {canCreate && (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-11 w-11 shrink-0"
+            onClick={() => onCreateOnDate(selectedKey)}
+            aria-label={`Criar conteúdo em ${selectedKey}`}
+          >
+            <Plus className="h-5 w-5" />
+          </Button>
+        )}
+      </div>
+
+      {vazio ? (
+        <p className="py-8 text-center text-[13px] text-muted-foreground">
+          Nada marcado neste dia
+        </p>
+      ) : (
+        <div className="min-w-0 divide-y divide-border/60">
+          {dayAnchored.map((bundle) => {
+            const agregado = aggregateEditorialStatus(
+              bundle.publications.map(({ publication }) => publication),
+            );
+            const comData = bundle.publications.find(
+              ({ publication }) => publication.scheduled_at,
+            );
+            const etapa = editorialVisualStage(
+              bundle.post.production_status,
+              agregado,
+              comData?.publication.scheduled_at ?? null,
+            );
+            return (
+              <LinhaDeApp
+                key={bundle.post.id}
+                miniatura={<EditorialFileThumbnail post={bundle} className="h-11 w-11" />}
+                titulo={bundle.post.title}
+                apoio={[
+                  clientNames?.get(bundle.post.client_id),
+                  "Sem horário",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                ponto={corDaEtapa(etapa).ponto}
+                rotuloDoPonto={EDITORIAL_VISUAL_STAGE_LABELS[etapa] || etapa}
+                onClick={() => onSelectPost(bundle)}
+              />
+            );
+          })}
+          {dayTasks.map((task) => {
+            const arte =
+              artesDoEstudio[task.id] && artesDoEstudio[task.id].capa
+                ? artesDoEstudio[task.id]
+                : null;
+            return (
+              <LinhaDeApp
+                key={task.id}
+                miniatura={
+                  arte ? (
+                    <MiniaturaDaArteDoEstudio arte={arte} className="h-11 w-11" />
+                  ) : (
+                    <IconeDaLinha
+                      icon={Palette}
+                      className="bg-violet-500/10 text-violet-500"
+                    />
+                  )
+                }
+                titulo={task.title}
+                apoio={[
+                  "Prazo do Kanban",
+                  taskDeliveryTypeLabel(task),
+                  projectScopeNames.get(task.project_id),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                ponto="bg-violet-500"
+                rotuloDoPonto="Prazo do Kanban"
+                ariaLabel={`Abrir ou preparar conteúdo da tarefa do Kanban. Tema: ${task.title}. ${taskDeliveryTypeLabel(task)}.${descricaoDaArteDoEstudio(arte)}`}
+                onClick={() => onCreateFromTask(task, selectedKey)}
+              />
+            );
+          })}
+          {dayItems.map((item) => (
+            <LinhaDePublicacao
+              key={item.publication.publication.id}
+              item={item}
+              clientName={clientNames?.get(item.post.post.client_id)}
+              canEdit={canEdit}
+              canPublish={canPublish}
+              moving={moving}
+              onClick={() => onSelectPost(item.post)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1146,6 +1444,7 @@ function MonthView({
   itemsByDate,
   tasksByDate,
   ancorasPorDia,
+  clientNames,
   projectScopeNames,
   canCreate,
   canEdit,
@@ -1159,6 +1458,7 @@ function MonthView({
   itemsByDate: Map<string, ScheduledEditorialItem[]>;
   tasksByDate: Map<string, EditorialInboxTask[]>;
   ancorasPorDia: Map<string, EditorialPostBundle[]>;
+  clientNames?: Map<string, string>;
   projectScopeNames: Map<string, string>;
   canCreate: boolean;
   canEdit: boolean;
@@ -1175,11 +1475,16 @@ function MonthView({
   const end = endOfWeek(endOfMonth(anchorDate), { weekStartsOn: 1 });
   const days = eachDayOfInterval({ start, end });
   const todayKey = dateKeyInTimeZone(new Date());
+  // 16/10/2026: abaixo de 768 px só a agenda do celular é montada; de 768
+  // para cima só a grade (antes as duas existiam e uma ficava escondida).
+  const celular = useCelular();
 
-  return (
-    <>
+  if (celular) {
+    return (
       <MobileAgenda
         days={days.filter((day) => isSameMonth(day, anchorDate))}
+        anchorDate={anchorDate}
+        clientNames={clientNames}
         itemsByDate={itemsByDate}
         tasksByDate={tasksByDate}
         ancorasPorDia={ancorasPorDia}
@@ -1192,6 +1497,11 @@ function MonthView({
         onSelectPost={onSelectPost}
         onCreateFromTask={onCreateFromTask}
       />
+    );
+  }
+
+  return (
+    <>
       <div className={juntar(superficie.painel, "hidden overflow-x-auto md:block")}>
         <div className="min-w-[840px]">
           <div
@@ -1376,6 +1686,7 @@ function WeekView({
   itemsByDate,
   tasksByDate,
   ancorasPorDia,
+  clientNames,
   projectScopeNames,
   canCreate,
   canEdit,
@@ -1389,6 +1700,7 @@ function WeekView({
   itemsByDate: Map<string, ScheduledEditorialItem[]>;
   tasksByDate: Map<string, EditorialInboxTask[]>;
   ancorasPorDia: Map<string, EditorialPostBundle[]>;
+  clientNames?: Map<string, string>;
   projectScopeNames: Map<string, string>;
   canCreate: boolean;
   canEdit: boolean;
@@ -1404,11 +1716,15 @@ function WeekView({
   const start = startOfWeek(anchorDate, { weekStartsOn: 1 });
   const days = Array.from({ length: 7 }, (_, index) => addDays(start, index));
   const todayKey = dateKeyInTimeZone(new Date());
+  // 16/10/2026: abaixo de 768 px só a agenda do celular é montada.
+  const celular = useCelular();
 
-  return (
-    <>
+  if (celular) {
+    return (
       <MobileAgenda
         days={days}
+        anchorDate={anchorDate}
+        clientNames={clientNames}
         itemsByDate={itemsByDate}
         tasksByDate={tasksByDate}
         ancorasPorDia={ancorasPorDia}
@@ -1421,6 +1737,11 @@ function WeekView({
         onSelectPost={onSelectPost}
         onCreateFromTask={onCreateFromTask}
       />
+    );
+  }
+
+  return (
+    <>
       <div className={juntar(superficie.painel, "hidden overflow-x-auto md:block")}>
         <div className="grid min-w-[920px] grid-cols-7">
           {days.map((day) => {
@@ -1789,6 +2110,56 @@ function BoardTaskCard({
   );
 }
 
+/**
+ * Aba de etapa do quadro no celular (16/10/2026): mostra uma etapa por vez e
+ * continua sendo lugar de soltar, então arrastar entre etapas segue possível.
+ */
+function AbaDaEtapa({
+  column,
+  total,
+  escolhida,
+  canEdit,
+  onEscolher,
+}: {
+  column: (typeof boardColumns)[number];
+  total: number;
+  escolhida: boolean;
+  canEdit: boolean;
+  onEscolher: () => void;
+}) {
+  const { active } = useDndContext();
+  const activeKind = active?.data.current?.kind;
+  const acceptsActive = activeKind === "task" || activeKind === "post";
+  const isWritable = column.id !== "scheduled" && canEdit;
+  const { isOver, setNodeRef } = useDroppable({
+    id: `stage-aba:${column.id}`,
+    disabled: !isWritable,
+    data: {
+      kind: "stage",
+      stage: column.id,
+      productionStatus:
+        column.id === "delivery" || column.id === "scheduled" ? null : column.id,
+    },
+  });
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      onClick={onEscolher}
+      aria-pressed={escolhida}
+      className={cn(
+        "inline-flex h-11 shrink-0 items-center whitespace-nowrap rounded-full px-3 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+        escolhida ? "bg-muted text-foreground" : "text-muted-foreground active:bg-muted/60",
+        isOver && acceptsActive && "ring-2 ring-primary/60",
+      )}
+    >
+      <span className={cn("mr-1.5 h-2 w-2 shrink-0 rounded-full", column.dot)} aria-hidden="true" />
+      {column.label}
+      <span className="ml-1.5 text-[11px] tabular-nums opacity-70">{total}</span>
+    </button>
+  );
+}
+
 function BoardColumn({
   column,
   posts,
@@ -1801,7 +2172,9 @@ function BoardColumn({
   moving,
   onSelectPost,
   onCreateFromTask,
+  celular = false,
 }: {
+  celular?: boolean;
   column: (typeof boardColumns)[number];
   posts: EditorialPostBundle[];
   tasks: EditorialInboxTask[];
@@ -1842,6 +2215,8 @@ function BoardColumn({
           "bg-primary/[0.06] ring-1 ring-primary/40",
       )}
     >
+      {/* 16/10/2026: no celular o nome e a contagem já estão na aba. */}
+      {!celular && (
       <header className="mb-2 px-1 pt-0.5" title={column.description}>
         <div className="flex items-center gap-2">
           <span className={cn("h-2 w-2 rounded-full", column.dot)} />
@@ -1856,6 +2231,7 @@ function BoardColumn({
           </Badge>
         </div>
       </header>
+      )}
       <div className="space-y-2.5 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:overscroll-contain xl:pr-0.5 xl:[scrollbar-gutter:stable]">
         {tasks.map((task) => (
           <BoardTaskCard
@@ -1891,7 +2267,9 @@ function BoardColumn({
         {posts.length === 0 && tasks.length === 0 && (
           <div className="flex min-h-28 items-center justify-center rounded-lg border border-dashed border-border/80 px-4 text-center">
             <p className="text-[11px] leading-4 text-muted-foreground/70">
-              {isWritable
+              {celular
+                ? "Nada nesta etapa"
+                : isWritable
                 ? "Arraste uma tarefa ou conteúdo para cá"
                 : "Nenhum conteúdo finalizado"}
             </p>
@@ -1950,6 +2328,59 @@ function BoardView({
     }
     return initial;
   }, [tasks]);
+  // 16/10/2026 (celular, "um assunto por vez"): abas das etapas presas no
+  // topo e só a etapa escolhida embaixo. Sem escolha, abre na primeira
+  // etapa com algo; cada aba aceita soltar, como a coluna do computador.
+  const celular = useCelular();
+  const [etapaEscolhida, setEtapaEscolhida] = useState<BoardStage | null>(null);
+
+  if (celular) {
+    const primeiraComItens =
+      boardColumns.find(
+        (column) =>
+          groupedPosts[column.id].length + groupedTasks[column.id].length > 0,
+      )?.id || "draft";
+    const etapa = etapaEscolhida || primeiraComItens;
+    const coluna =
+      boardColumns.find((column) => column.id === etapa) || boardColumns[0];
+    return (
+      <div className="min-w-0 pb-2">
+        <div className="sticky top-0 z-10 -mt-1 bg-background pb-2 pt-1">
+          <div
+            className="scrollbar-hidden flex min-w-0 overflow-x-auto overscroll-x-contain [&>*+*]:ml-1"
+            role="group"
+            aria-label="Etapas do conteúdo"
+          >
+            {boardColumns.map((column) => (
+              <AbaDaEtapa
+                key={column.id}
+                column={column}
+                total={groupedPosts[column.id].length + groupedTasks[column.id].length}
+                escolhida={column.id === coluna.id}
+                canEdit={canEdit}
+                onEscolher={() => setEtapaEscolhida(column.id)}
+              />
+            ))}
+          </div>
+        </div>
+        <BoardColumn
+          key={coluna.id}
+          celular
+          column={coluna}
+          posts={groupedPosts[coluna.id]}
+          tasks={groupedTasks[coluna.id]}
+          clientNames={clientNames}
+          projectNames={projectNames}
+          projectScopeNames={projectScopeNames}
+          responsibleNames={responsibleNames}
+          canEdit={canEdit}
+          moving={moving}
+          onSelectPost={onSelectPost}
+          onCreateFromTask={onCreateFromTask}
+        />
+      </div>
+    );
+  }
 
   return (
     // A principal não rola na visão Conteúdos (EditorialCalendar): de 1024 a
@@ -2026,6 +2457,9 @@ function ListView({
   ) => void;
 }) {
   const artesDoEstudio = useContext(ArtesDoEstudioContexto);
+  // 16/10/2026: abaixo de 768 px cada item vira linha de app (miniatura,
+  // título, uma linha de apoio e o ponto da etapa); a folha abre no toque.
+  const celular = useCelular();
   const backlogItems = flattenBacklog(posts, idsNaGrade);
   const monthStartKey = localDateKey(startOfMonth(anchorDate));
   const monthEndKey = localDateKey(endOfMonth(anchorDate));
@@ -2073,13 +2507,33 @@ function ListView({
         <Secao
           titulo="Agenda cronológica"
           nivel={3}
-          descricao={`${timelineItems.length} ${timelineItems.length === 1 ? "item" : "itens"}`}
+          descricao={celular ? undefined : `${timelineItems.length} ${timelineItems.length === 1 ? "item" : "itens"}`}
           corpoClassName={juntar(lista.aberta, lista.divisoria)}
         >
           {timelineItems.map((timelineItem) => {
             if (timelineItem.kind === "task") {
               const { task, dateKey } = timelineItem;
               const arte = artesDoEstudio[task.id] && artesDoEstudio[task.id].capa ? artesDoEstudio[task.id] : null;
+              if (celular) {
+                return (
+                  <LinhaDeApp
+                    key={`task:${task.id}`}
+                    miniatura={
+                      arte ? (
+                        <MiniaturaDaArteDoEstudio arte={arte} className="h-11 w-11" />
+                      ) : (
+                        <IconeDaLinha icon={Palette} className="bg-violet-500/10 text-violet-500" />
+                      )
+                    }
+                    titulo={task.title}
+                    apoio={`${format(new Date(`${dateKey}T12:00:00`), "dd MMM", { locale: ptBR })} · Prazo editorial · ${taskDeliveryTypeLabel(task)}`}
+                    ponto="bg-violet-500"
+                    rotuloDoPonto="Prazo do Kanban"
+                    ariaLabel={`Abrir ou preparar conteúdo da tarefa do Kanban. Tema: ${task.title}. ${taskDeliveryTypeLabel(task)}.${descricaoDaArteDoEstudio(arte)}`}
+                    onClick={() => onCreateFromTask(task, dateKey)}
+                  />
+                );
+              }
               return (
                 <button
                   key={`task:${task.id}`}
@@ -2132,6 +2586,35 @@ function ListView({
 
             const item = timelineItem.item;
             const publication = item.publication.publication;
+            if (celular) {
+              const etapaDaLinha = editorialVisualStage(
+                item.post.post.production_status,
+                publication.status,
+                publication.scheduled_at,
+              );
+              return (
+                <LinhaDeApp
+                  key={`publication:${publication.id}`}
+                  miniatura={
+                    <EditorialFileThumbnail
+                      post={item.post}
+                      publication={item.publication}
+                      className="h-11 w-11"
+                    />
+                  }
+                  titulo={item.post.post.title}
+                  apoio={[
+                    `${format(new Date(`${timelineItem.dateKey}T12:00:00`), "dd MMM", { locale: ptBR })} ${timeFormatter.format(new Date(publication.scheduled_at!))}`,
+                    clientNames.get(item.post.post.client_id),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  ponto={corDaEtapa(etapaDaLinha).ponto}
+                  rotuloDoPonto={EDITORIAL_VISUAL_STAGE_LABELS[etapaDaLinha] || publication.status}
+                  onClick={() => onSelectPost(item.post)}
+                />
+              );
+            }
             const draggable = isEditorialPublicationDraggable(
               item.post,
               item.publication,
@@ -2249,8 +2732,65 @@ function ListView({
         <Secao
           titulo="Sem prazo ou agendamento"
           nivel={3}
-          descricao={`${backlogItems.length + undatedTasks.length} ${backlogItems.length + undatedTasks.length === 1 ? "item" : "itens"}`}
+          descricao={celular ? undefined : `${backlogItems.length + undatedTasks.length} ${backlogItems.length + undatedTasks.length === 1 ? "item" : "itens"}`}
         >
+          {celular ? (
+            // 16/10/2026: no celular a mesma lista de app, sem cartões.
+            <div className="min-w-0 divide-y divide-border/60">
+              {undatedTasks.map((task) => {
+                const arte = artesDoEstudio[task.id] && artesDoEstudio[task.id].capa ? artesDoEstudio[task.id] : null;
+                return (
+                  <LinhaDeApp
+                    key={task.id}
+                    miniatura={
+                      arte ? (
+                        <MiniaturaDaArteDoEstudio arte={arte} className="h-11 w-11" />
+                      ) : (
+                        <IconeDaLinha icon={Palette} className="bg-violet-500/10 text-violet-500" />
+                      )
+                    }
+                    titulo={task.title}
+                    apoio={`Sem prazo · ${taskDeliveryTypeLabel(task)}`}
+                    ponto="bg-violet-500"
+                    rotuloDoPonto="Tarefa do Kanban"
+                    ariaLabel={`Abrir ou preparar conteúdo da tarefa do Kanban sem prazo. Tema: ${task.title}. ${taskDeliveryTypeLabel(task)}.${descricaoDaArteDoEstudio(arte)}`}
+                    onClick={() => onCreateFromTask(task)}
+                  />
+                );
+              })}
+              {backlogItems.map(({ post, publication }) => {
+                const etapa = editorialVisualStage(
+                  post.post.production_status,
+                  publication?.publication.status,
+                  publication?.publication.scheduled_at,
+                );
+                return (
+                  <LinhaDeApp
+                    key={publication ? publication.publication.id : post.post.id}
+                    miniatura={
+                      <EditorialFileThumbnail
+                        post={post}
+                        publication={publication}
+                        className="h-11 w-11"
+                      />
+                    }
+                    titulo={post.post.title}
+                    apoio={[
+                      clientNames.get(post.post.client_id),
+                      publication
+                        ? platformLabels[publication.publication.platform] || publication.publication.platform
+                        : "Sem agendamento",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    ponto={corDaEtapa(etapa).ponto}
+                    rotuloDoPonto={EDITORIAL_VISUAL_STAGE_LABELS[etapa] || etapa}
+                    onClick={() => onSelectPost(post)}
+                  />
+                );
+              })}
+            </div>
+          ) : (
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {undatedTasks.map((task) => {
               const arte = artesDoEstudio[task.id] && artesDoEstudio[task.id].capa ? artesDoEstudio[task.id] : null;
@@ -2339,6 +2879,7 @@ function ListView({
               );
             })}
           </div>
+          )}
         </Secao>
       )}
     </div>
@@ -2381,6 +2922,7 @@ function VistasDoCalendario({
   onShowBacklog,
 }: EditorialCalendarViewsProps) {
   const items = useMemo(() => flattenScheduled(posts), [posts]);
+  const celular = useCelular();
   const itemsByDate = useMemo(
     () => groupScheduledByDate(items),
     [items],
@@ -2433,8 +2975,9 @@ function VistasDoCalendario({
         onClick={onShowBacklog}
         className="mb-3 flex min-h-11 w-full items-center justify-between rounded-lg border border-violet-500/20 bg-violet-500/5 px-4 py-2.5 text-left text-[12px] text-foreground transition-colors hover:border-violet-500/40"
       >
-        <span>
-          {[
+        <span className={celular ? "min-w-0 truncate" : undefined}>
+          {/* 16/10/2026: no celular, só a contagem (um assunto por vez). */}
+          {celular ? `${backlogCount} sem data` : [
             backlogSummary.publicationCount > 0
               ? `${backlogSummary.publicationCount} ${
                   backlogSummary.publicationCount === 1
@@ -2453,7 +2996,7 @@ function VistasDoCalendario({
             .filter(Boolean)
             .join(" · ")}
         </span>
-        <span className="inline-flex items-center gap-1 font-medium text-violet-500">
+        <span className={cn("inline-flex items-center gap-1 font-medium text-violet-500", celular && "ml-2 shrink-0")}>
           Ver na lista
           <Send className="h-3 w-3" />
         </span>
@@ -2469,6 +3012,7 @@ function VistasDoCalendario({
           itemsByDate={itemsByDate}
           tasksByDate={tasksByDate}
         ancorasPorDia={ancorasPorDia}
+          clientNames={clientNames}
           projectScopeNames={projectScopeNames}
           canCreate={canCreate}
           canEdit={canEdit}
@@ -2490,6 +3034,7 @@ function VistasDoCalendario({
           itemsByDate={itemsByDate}
           tasksByDate={tasksByDate}
         ancorasPorDia={ancorasPorDia}
+          clientNames={clientNames}
           projectScopeNames={projectScopeNames}
           canCreate={canCreate}
           canEdit={canEdit}

@@ -71,7 +71,9 @@ import DiretorDoEstudio from "./DiretorDoEstudio";
 import { desfazerVersaoDaLamina } from "./diretorDoEstudioApi";
 import type { ExecutorDoPasso } from "./PlanoDoDiretor";
 import { BotaoComCusto, useAvisarErro } from "./Custo";
-import { emColunas, encaixarNaJanela, rolarAte, useFaixa } from "./EstudioAltura";
+import { ACAO_NO_PE_DO_CELULAR, emColunas, encaixarNaJanela, rolarAte, useCelularEstreito, useFaixa } from "./EstudioAltura";
+import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
+import JanelaDoCelular from "@/components/sistema/JanelaDoCelular";
 import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import EstudioArteDaAgenda, { InspetorDaArte } from "./EstudioArteDaAgenda";
 import EstudioBaseDaLamina from "./EstudioBaseDaLamina";
@@ -426,6 +428,11 @@ function DetalheDoItem({
   const avisarErro = useAvisarErro();
   const chave = `mesa:estudio:${item.id}`;
   const colunas = modo === "colunas";
+  const celularEstreito = useCelularEstreito();
+  // 16/10/2026 (dono: "uma coisa por vez" no celular): abaixo de 640 px a ferramenta abre numa folha que sobe de
+  // baixo, só quando a pessoa toca no ícone (nunca sozinha ao abrir o item), em vez de ficar embaixo da página.
+  const folhaNoCelular = !colunas && celularEstreito;
+  const [folhaAberta, setFolhaAberta] = useState(false);
   const ehDesign = !mesa.podeRecarregar;
   const [modeloImagem, setModeloImagem] = useState("");
   const [qualidade, setQualidade] = useState<Qualidade>("media");
@@ -1175,8 +1182,12 @@ function DetalheDoItem({
 
   /** Abre a ferramenta (o mesmo ícone fecha). No celular, o painel fica embaixo e a tela desce até ele. */
   const abrirFerramenta = (f: Ferramenta, alternar = true) => {
-    const fechar = alternar && ferramenta === f;
+    const fechar = alternar && ferramenta === f && (!folhaNoCelular || folhaAberta);
     setFerramenta(fechar ? "" : f);
+    if (folhaNoCelular) {
+      setFolhaAberta(!fechar);
+      return;
+    }
     if (!colunas && !fechar) window.setTimeout(() => rolarAte(painelRef.current, "start"), 60);
   };
 
@@ -1335,8 +1346,12 @@ function DetalheDoItem({
     </Button>
   );
 
+  // 16/10/2026 (dono: "cara de aplicativo"): no celular estreito (pilha, < 640 px) o Gerar/Parar/Entregar gruda
+  // no pé da tela, ao alcance do polegar e acima da barra de baixo; o fim da página reserva o espaço dele.
+  const acaoNoPe = !colunas && celularEstreito && estado === "producao";
+  useReservaFlutuante(acaoNoPe, 72);
   const acaoPrincipal = (
-    <div className="flex shrink-0 items-center">
+    <div className={colunas ? "flex shrink-0 items-center" : `flex shrink-0 items-center ${ACAO_NO_PE_DO_CELULAR}`} data-acao-no-pe={acaoNoPe ? "" : undefined}>
       {emLote || fila.ativos.length > 0 ? (
         <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0" aria-label="Parar" onClick={() => { parar.current = true; if (fila.ativos.length) void fila.cancelar().catch((e) => avisarErro(e, "Não foi possível parar")); }} title="Parar: para depois das lâminas que já estão gerando">
           <Square className="h-4 w-4" aria-hidden="true" />
@@ -1366,7 +1381,7 @@ function DetalheDoItem({
               : "Até 3 lâminas ao mesmo tempo. A conferência de ortografia e identidade roda logo depois de cada uma."}
           fecharAoConfirmar
           variant={semImagem.length ? "default" : "ghost"}
-          className="h-8 gap-1 px-2 text-[12px]"
+          className={colunas ? "h-8 gap-1 px-2 text-[12px]" : "h-8 gap-1 px-2 text-[12px] max-sm:h-11 max-sm:min-w-[120px] max-sm:px-4 max-sm:text-[13px]"}
           disabled={ocupado || entregue || semTipografia}
           partes={() => partesGerarDas(ordensDaFila).concat(partesDoFundo(ordensDaFila))}
           executar={() => gerarVarias(filaDeGeracao.map((c) => c.ordem))}
@@ -2244,7 +2259,7 @@ function DetalheDoItem({
   ) : null;
 
   const barraDeFerramentas = (
-    <BarraDeFerramentas ferramentas={ferramentas} ativa={ferramenta} onAbrir={(f) => abrirFerramenta(f)} marca={marcaNaFerramenta} vertical={colunas} />
+    <BarraDeFerramentas ferramentas={ferramentas} ativa={folhaNoCelular && !folhaAberta ? null : ferramenta} onAbrir={(f) => abrirFerramenta(f)} marca={marcaNaFerramenta} vertical={colunas} />
   );
 
   const ampliar = <Ampliar imagens={paraAmpliar.map((a) => a.imagem)} indice={ampliada} onFechar={() => setAmpliada(null)} />;
@@ -2284,7 +2299,19 @@ function DetalheDoItem({
       {barraDoItem}
       {centro}
       {barraDeFerramentas}
-      {ferramenta && (
+      {folhaNoCelular && ferramenta && (
+        <JanelaDoCelular
+          aberta={folhaAberta}
+          titulo={FERRAMENTAS[ferramenta].rotulo}
+          onFechar={() => setFolhaAberta(false)}
+          classeDoCorpo={ferramenta === "diretor" ? "p-0" : "px-4 py-4"}
+        >
+          <div ref={painelRef} role="region" aria-label={FERRAMENTAS[ferramenta].rotulo} className={ferramenta === "diretor" ? "flex h-[70vh] min-h-0 flex-col" : "min-w-0"}>
+            {conteudoDaFerramenta(ferramenta)}
+          </div>
+        </JanelaDoCelular>
+      )}
+      {!folhaNoCelular && ferramenta && (
         <div ref={painelRef} className="border-t border-border" role="region" aria-label={FERRAMENTAS[ferramenta].rotulo}>
           {cabecalhoDoPainel}
           {ferramenta === "diretor" ? (

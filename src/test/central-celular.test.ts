@@ -43,7 +43,10 @@ describe("o perfil do cliente desenha inteiro no celular", () => {
 
 describe("nada vaza para o lado nem prende o toque", () => {
   it("a Central inteira tem a regra de celular: corta vazamento, deixa filho encolher e quebra palavra sem espaço", () => {
-    expect(central).toContain('"space-y-5 central-celular"');
+    // 16/10/2026 (celular "cara de aplicativo"): a raiz vai até a borda abaixo de 640 px para a
+    // linha das abas grudada no topo cobrir a largura toda.
+    expect(central).toContain('"space-y-5 central-celular max-sm:-mx-4 max-sm:max-w-none max-sm:px-4"');
+    expect(central).toContain("max-sm:sticky max-sm:top-0");
     expect(central).toContain("text-foreground central-celular");
     const regra = css.slice(css.indexOf("@media (max-width: 639px) {\n    .central-celular"));
     expect(regra).toContain("overflow-x: clip;");

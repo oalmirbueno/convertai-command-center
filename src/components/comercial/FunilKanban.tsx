@@ -14,7 +14,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, GripVertical, KanbanSquare, ListFilter, Plus, ThumbsDown, Trophy } from "lucide-react";
+import { ChevronRight, Clock, Download, GripVertical, KanbanSquare, ListFilter, Plus, ThumbsDown, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -322,9 +322,11 @@ export default function FunilKanban({
                 </div>
               )}
 
-              {/* Celular: uma etapa por vez, com a contagem de cada uma. */}
+              {/* Celular: uma etapa por vez, com a contagem de cada uma.
+                  16/10/2026: a faixa gruda no topo enquanto a lista rola, de
+                  ponta a ponta (-mx-4 = respiro da página) e com toque de 44 px. */}
               <Etapas
-                className="mb-2 border-b border-border sm:hidden"
+                className="sticky top-0 z-10 -mx-4 mb-2 border-b border-border bg-background px-4 sm:hidden [&_button]:h-11"
                 rotulo="Etapas do funil"
                 itens={ESTAGIOS_ABERTOS.map((estagio) => ({
                   valor: estagio,
@@ -434,6 +436,8 @@ function Coluna({
       className={juntar(
         visivelNoCelular ? "flex" : "hidden",
         "min-h-[12rem] w-full min-w-0 flex-col rounded-lg border p-1.5 transition-colors sm:flex sm:w-[260px] sm:shrink-0 lg:min-h-0 lg:w-auto lg:min-w-[232px] lg:flex-1",
+        // 16/10/2026: no celular a coluna é só a lista (sem moldura nem altura mínima).
+        "max-sm:min-h-0 max-sm:p-0",
         isOver ? "border-primary bg-primary/[0.06]" : arrastandoAlgo ? "border-dashed border-border" : "border-transparent",
       )}
     >
@@ -444,15 +448,19 @@ function Coluna({
         </h3>
         <span className="ml-2 shrink-0 text-[11px] tabular-nums text-muted-foreground">{leads.length}</span>
       </div>
-      <p className={juntar(texto.auxiliar, "shrink-0 truncate px-1 tabular-nums")}>
+      {/* 16/10/2026: no celular o placar da etapa sai (menos número na tela). */}
+      <p className={juntar(texto.auxiliar, "shrink-0 truncate px-1 tabular-nums max-sm:hidden")}>
         {emJogo > 0 ? `${dinheiro(emJogo)} em jogo` : "vazio"}
         {leads.length > 0 && ` · ${qualificadas}/${leads.length} qualificadas`}
       </p>
+      {leads.length === 0 && (
+        <p className={juntar(texto.auxiliar, "py-8 text-center sm:hidden")}>Nenhum lead nesta etapa.</p>
+      )}
 
       <RegiaoRolavel
         rotulo={`Leads em ${rotulo}`}
         memoria={`comercial:funil:${estagio}`}
-        className="mt-2 space-y-1.5 lg:pr-1"
+        className="mt-2 space-y-1.5 lg:pr-1 max-sm:mt-0 max-sm:space-y-2"
       >
         {leads.map((lead) => (
           <Cartao
@@ -463,8 +471,10 @@ function Coluna({
           />
         ))}
       </RegiaoRolavel>
-      {/* O alvo de soltar fica fora da rolagem: sempre visivel no pe da coluna. */}
-      <div className="mt-1.5 shrink-0">
+      {/* O alvo de soltar fica fora da rolagem: sempre visivel no pe da coluna.
+          16/10/2026: no celular sai (lá se move pela faixa de ganho/perda ou
+          pelo "Mover para" dentro do lead). */}
+      <div className="mt-1.5 shrink-0 max-sm:hidden">
         <div
           className={juntar(
             "rounded-md border border-dashed px-2 py-2 text-center text-[11px] transition-colors",
@@ -508,25 +518,37 @@ function Cartao({
         if (evento.key === "Enter") onAbrir(lead);
       }}
       className={juntar(
-        "w-full cursor-grab rounded-md border bg-card p-2.5 text-left transition-colors active:cursor-grabbing",
+        "w-full cursor-grab rounded-md border bg-card p-2.5 text-left transition-colors active:cursor-grabbing max-sm:rounded-lg max-sm:px-3",
         foco,
         isDragging && "opacity-40",
         atrasado ? "border-warning/50" : "border-border hover:border-muted-foreground/30",
       )}
     >
-      <div className="flex items-start">
-        <GripVertical className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/50" aria-hidden="true" />
+      {/* 16/10/2026: no celular o cartão vira item de lista de app: inicial
+          num círculo, nome, uma linha de apoio (empresa ou valor) e o sinal à
+          direita. Classe e próximo passo ficam para dentro do lead. */}
+      <div className="flex items-start max-sm:items-center">
+        <GripVertical className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/50 max-sm:hidden" aria-hidden="true" />
+        <span
+          aria-hidden="true"
+          className={juntar(
+            "mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[14px] font-semibold sm:hidden",
+            atrasado ? "bg-warning/15 text-warning" : "bg-primary/10 text-primary",
+          )}
+        >
+          {(lead.name.trim().charAt(0) || "?").toUpperCase()}
+        </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-medium leading-5 text-foreground">
+          <p className="truncate text-[13px] font-medium leading-5 text-foreground max-sm:text-[14px]">
             {lead.name}
           </p>
           {lead.company && (
             <p className={juntar(texto.auxiliar, "truncate")}>{lead.company}</p>
           )}
-          <p className={juntar("mt-0.5 truncate text-[11px] leading-4", lead.classe ? "text-muted-foreground" : "italic text-muted-foreground/70")}>
+          <p className={juntar("mt-0.5 truncate text-[11px] leading-4 max-sm:hidden", lead.classe ? "text-muted-foreground" : "italic text-muted-foreground/70")}>
             {rotuloDaClasse(lead.classe)}
           </p>
-          <p className="mt-1 truncate text-[12px] font-medium tabular-nums text-primary">
+          <p className={juntar("mt-1 truncate text-[12px] font-medium tabular-nums text-primary", lead.company ? "max-sm:hidden" : "max-sm:mt-0")}>
             {lead.monthly_value > 0 && `${dinheiro(lead.monthly_value)}/mês`}
             {lead.monthly_value > 0 && lead.one_off_value > 0 && " + "}
             {lead.one_off_value > 0 && `${dinheiro(lead.one_off_value)} entrada`}
@@ -537,7 +559,7 @@ function Cartao({
           {agenda.proxima ? (
             <p
               className={juntar(
-                "mt-1 truncate text-[11px] leading-4",
+                "mt-1 truncate text-[11px] leading-4 max-sm:hidden",
                 atrasado ? "font-medium text-warning" : "text-muted-foreground",
               )}
             >
@@ -545,11 +567,19 @@ function Cartao({
               {agenda.proxima.title}
             </p>
           ) : (
-            <p className="mt-1 text-[11px] italic leading-4 text-muted-foreground/70">
+            <p className="mt-1 text-[11px] italic leading-4 text-muted-foreground/70 max-sm:hidden">
               sem próximo passo
             </p>
           )}
         </div>
+        {/* O sinal do celular: relógio âmbar quando atrasado, seta quando em dia. */}
+        <span className="ml-2 inline-flex shrink-0 sm:hidden" aria-hidden="true">
+          {atrasado ? (
+            <Clock className="h-4 w-4 text-warning" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-muted-foreground/60" />
+          )}
+        </span>
       </div>
     </div>
   );

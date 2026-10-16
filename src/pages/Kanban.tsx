@@ -165,6 +165,7 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
   editorial,
   acoes,
   diaPrioritario = null,
+  compacto = false,
 }: {
   task: any;
   colId: string;
@@ -178,10 +179,85 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
   acoes: AcoesDoCartao;
   /** 12/10/2026: o Dia Prioritário do cliente da tarefa (só para a equipe), para a captação mostrar se cai nele. */
   diaPrioritario?: number | null;
+  /** 16/10/2026: celular (< 768 px) — título, uma linha de apoio e no máximo um selo. */
+  compacto?: boolean;
 }) {
   // Captação ou gravação com data: diz se cai no Dia Prioritário (preferência, nunca trava).
   const noDia = !isClient && task.due_date && ehCaptacao(task) ? coincideComODia(task.due_date, diaPrioritario) : null;
   const podeArrastar = draggable;
+  // 16/10/2026: o menu de três pontos é o mesmo nos dois desenhos do cartão.
+  const menuDeAcoes = !isClient ? (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+          className={juntar(botao.icone, "ml-1 h-7 w-7")}
+          aria-label={`Ações da tarefa ${task.title}`}
+          title="Ações da tarefa"
+        >
+          <MoreVertical className="h-4 w-4" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className="w-48 p-1"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className={juntar(texto.rotulo, "px-2 py-1.5")}>Mover para</p>
+        {columns
+          .filter(
+            (column) =>
+              column.id !== canonicalTaskStatus(task.status),
+          )
+          .map((column) => (
+            <button
+              key={column.id}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                acoes.mover(task, column.id);
+              }}
+              className={juntar("flex w-full items-center rounded px-2 py-2 text-left text-[13px] text-foreground hover:bg-muted", foco)}
+            >
+              <span className={`mr-2 h-1.5 w-1.5 rounded-full ${column.dotColor}`} aria-hidden="true" />
+              {column.title}
+              <ArrowRight className="ml-auto h-3 w-3 text-muted-foreground" aria-hidden="true" />
+            </button>
+          ))}
+        {!requestIdFromTaskSource(task.source) && (
+          <>
+            <div className="my-1 border-t border-border" />
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                acoes.excluir(task);
+              }}
+              className={juntar("flex w-full items-center rounded px-2 py-2 text-left text-[13px] text-destructive hover:bg-destructive/10", foco)}
+            >
+              <Trash2 className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+              Excluir
+            </button>
+          </>
+        )}
+      </PopoverContent>
+    </Popover>
+  ) : null;
+  // 16/10/2026 (celular): um selo só — bloqueada vence o tipo de entrega. Etapa,
+  // Dia Prioritário, anexos e responsável ficam no detalhe (toque no cartão).
+  const tipoDeEntrega = compacto ? taskDeliveryTypeLabel(task) || (editorial ? "Design e conteúdo" : null) : null;
+  const seloDoCelular = !compacto
+    ? null
+    : task.status === "blocked"
+      ? { rotulo: "Bloqueada", cor: "bg-warning/10 text-warning" }
+      : tipoDeEntrega
+        ? { rotulo: tipoDeEntrega, cor: "bg-violet-500/10 text-violet-500" }
+        : null;
+  const apoioDoCelular = compacto
+    ? [task.project?.name, task.due_date ? formatDate(task.due_date) : ""].filter(Boolean).join(" · ")
+    : "";
   return (
       <div className="relative" data-cartao-da-tarefa={task.id}>
         {linhaEmCima && <div className="mb-1 h-0.5 rounded-full bg-primary" />}
@@ -229,6 +305,21 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
             foco,
           )}
         >
+          {compacto ? (
+            // 16/10/2026 (celular): cartão enxuto, texto quebra em vez de vazar.
+            <div className="flex min-w-0 items-start p-3">
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-[14px] font-medium leading-snug text-foreground">{task.title}</p>
+                {apoioDoCelular && <p className={juntar(texto.auxiliar, "mt-1 truncate tabular-nums")}>{apoioDoCelular}</p>}
+                {seloDoCelular && (
+                  <span className={juntar(etiqueta, "mt-1.5 max-w-full", seloDoCelular.cor)}>
+                    <span className="truncate">{seloDoCelular.rotulo}</span>
+                  </span>
+                )}
+              </div>
+              {menuDeAcoes && <div className="-mr-1 -mt-1 flex shrink-0 items-center">{menuDeAcoes}</div>}
+            </div>
+          ) : (
           <div className="p-3">
             <p className="text-[13px] font-medium leading-snug text-foreground">{task.title}</p>
             {task.project?.name && <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>{task.project.name}</p>}
@@ -285,68 +376,11 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
                     {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
                   </AvatarFallback>
                 </Avatar>
-                {!isClient && (
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={(event) => event.stopPropagation()}
-                        onKeyDown={(event) => event.stopPropagation()}
-                        className={juntar(botao.icone, "ml-1 h-7 w-7")}
-                        aria-label={`Ações da tarefa ${task.title}`}
-                        title="Ações da tarefa"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      align="end"
-                      className="w-48 p-1"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <p className={juntar(texto.rotulo, "px-2 py-1.5")}>Mover para</p>
-                      {columns
-                        .filter(
-                          (column) =>
-                            column.id !== canonicalTaskStatus(task.status),
-                        )
-                        .map((column) => (
-                          <button
-                            key={column.id}
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              acoes.mover(task, column.id);
-                            }}
-                            className={juntar("flex w-full items-center rounded px-2 py-2 text-left text-[13px] text-foreground hover:bg-muted", foco)}
-                          >
-                            <span className={`mr-2 h-1.5 w-1.5 rounded-full ${column.dotColor}`} aria-hidden="true" />
-                            {column.title}
-                            <ArrowRight className="ml-auto h-3 w-3 text-muted-foreground" aria-hidden="true" />
-                          </button>
-                        ))}
-                      {!requestIdFromTaskSource(task.source) && (
-                        <>
-                          <div className="my-1 border-t border-border" />
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              acoes.excluir(task);
-                            }}
-                            className={juntar("flex w-full items-center rounded px-2 py-2 text-left text-[13px] text-destructive hover:bg-destructive/10", foco)}
-                          >
-                            <Trash2 className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-                            Excluir
-                          </button>
-                        </>
-                      )}
-                    </PopoverContent>
-                  </Popover>
-                )}
+                {menuDeAcoes}
               </div>
             </div>
           </div>
+          )}
         </div>
         {linhaEmBaixo && <div className="mt-1 h-0.5 rounded-full bg-primary" />}
       </div>
@@ -1081,6 +1115,23 @@ export default function Kanban() {
   // deslize para o lado troca de coluna, como no carrossel antigo, sem caixa
   // com rolagem própria prendendo o dedo.
   const toqueInicial = useRef<{ x: number; y: number } | null>(null);
+  // 16/10/2026: trocar de aba com a página rolada volta ao começo da coluna
+  // nova (logo abaixo das abas grudadas), em vez de cair no meio dela.
+  const abasDoCelular = useRef<HTMLDivElement>(null);
+  const colunaDoCelular = useRef<HTMLDivElement>(null);
+  const abaAnterior = useRef(mobileTab);
+  useEffect(() => {
+    if (abaAnterior.current === mobileTab) return;
+    abaAnterior.current = mobileTab;
+    const abas = abasDoCelular.current;
+    const coluna = colunaDoCelular.current;
+    if (!abas || !coluna) return;
+    const fimDasAbas = abas.getBoundingClientRect().bottom;
+    const inicioDaColuna = coluna.getBoundingClientRect().top;
+    if (inicioDaColuna >= fimDasAbas) return;
+    const rolagem = (abas.closest('[data-casca="conteudo"]') as HTMLElement | null) || (document.scrollingElement as HTMLElement | null);
+    if (rolagem) rolagem.scrollTop -= fimDasAbas - inicioDaColuna + 12;
+  }, [mobileTab]);
   const stepMobileColumn = (dir: -1 | 1) => {
     const idx = Math.max(0, columns.findIndex(c => c.id === mobileTab));
     const next = columns[Math.min(columns.length - 1, Math.max(0, idx + dir))];
@@ -1141,8 +1192,10 @@ export default function Kanban() {
   const campoDoFiltro = juntar(campo, "h-9 pr-8");
 
   // Filtros: cliente e projeto à vista; o resto num seletor "Filtros" (mais de 4 opções vira seletor).
-  const FiltersBar = (
-    <div className="flex min-w-0 items-center" role="group" aria-label="Filtros do Kanban">
+  // 16/10/2026 (celular): cliente e projeto entram no seletor "Filtros" e o
+  // cabeçalho fica numa linha só (título, filtros e nova tarefa).
+  const filtrosNoBotao = filtrosExtras + (isMobile ? [filterClient, filterProject].filter(Boolean).length : 0);
+  const seletorCliente = (classe: string) => (
       <select
         aria-label="Cliente"
         value={filterClient}
@@ -1156,7 +1209,7 @@ export default function Kanban() {
             setFilterProject("");
           }
         }}
-        className={juntar(campoDoFiltro, "mr-2 min-w-0 flex-1 sm:w-[200px] sm:flex-none")}
+        className={classe}
       >
         <option value="">Clientes</option>
         {clientOptions.map((client) => (
@@ -1165,11 +1218,13 @@ export default function Kanban() {
           </option>
         ))}
       </select>
+  );
+  const seletorProjeto = (classe: string) => (
       <select
         aria-label="Projeto"
         value={filterProject}
         onChange={(e) => setFilterProject(e.target.value)}
-        className={juntar(campoDoFiltro, "mr-2 min-w-0 flex-1 sm:w-[200px] sm:flex-none")}
+        className={classe}
       >
         <option value="">Projetos</option>
         {visibleProjectOptions.map((project) => (
@@ -1178,23 +1233,32 @@ export default function Kanban() {
           </option>
         ))}
       </select>
+  );
+  const FiltersBar = (
+    <div className="flex min-w-0 items-center" role="group" aria-label="Filtros do Kanban">
+      {!isMobile && seletorCliente(juntar(campoDoFiltro, "mr-2 min-w-0 flex-1 sm:w-[200px] sm:flex-none"))}
+      {!isMobile && seletorProjeto(juntar(campoDoFiltro, "mr-2 min-w-0 flex-1 sm:w-[200px] sm:flex-none"))}
       <Popover>
         <PopoverTrigger asChild>
           <button
             type="button"
             className={juntar(botao.secundario, "px-2.5")}
-            aria-label={`Mais filtros, ${filtrosExtras} ${filtrosExtras === 1 ? "ativo" : "ativos"}`}
+            aria-label={`Mais filtros, ${filtrosNoBotao} ${filtrosNoBotao === 1 ? "ativo" : "ativos"}`}
           >
             <SlidersHorizontal className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
             <span className="hidden sm:inline">Filtros</span>
-            {filtrosExtras > 0 && (
+            {filtrosNoBotao > 0 && (
               <span className="ml-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold tabular-nums text-primary-foreground">
-                {filtrosExtras}
+                {filtrosNoBotao}
               </span>
             )}
           </button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-[calc(100vw-24px)] max-w-[360px] p-3">
+        <PopoverContent
+          align="end"
+          // 16/10/2026: no celular a lista é maior (cliente e projeto entram aqui) e rola dentro da janela.
+          className={juntar("w-[calc(100vw-24px)] max-w-[360px] p-3", isMobile && "max-h-[var(--radix-popover-content-available-height)] overflow-y-auto overscroll-contain")}
+        >
           <div className="mb-3 flex items-center justify-between">
             <p className={texto.tituloSecao}>Filtros</p>
             <button type="button" onClick={limparFiltros} disabled={!hasFilters} className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}>
@@ -1202,6 +1266,18 @@ export default function Kanban() {
             </button>
           </div>
           <div className="grid grid-cols-2 gap-3">
+            {isMobile && (
+              <label className="col-span-2 block min-w-0">
+                <span className={juntar(texto.rotulo, "mb-1 block")}>Cliente</span>
+                {seletorCliente(campoDoFiltro)}
+              </label>
+            )}
+            {isMobile && (
+              <label className="col-span-2 block min-w-0">
+                <span className={juntar(texto.rotulo, "mb-1 block")}>Projeto</span>
+                {seletorProjeto(campoDoFiltro)}
+              </label>
+            )}
             {!isClient && (
               <label className="col-span-2 block min-w-0 sm:col-span-1">
                 <span className={juntar(texto.rotulo, "mb-1 block")}>Área</span>
@@ -1299,7 +1375,8 @@ export default function Kanban() {
           </div>
         </PopoverContent>
       </Popover>
-      {hasFilters && (
+      {/* 16/10/2026: no celular o "Limpar" fica dentro do seletor de filtros. */}
+      {hasFilters && !isMobile && (
         <button type="button" onClick={limparFiltros} className={juntar(botao.icone, "ml-1")} aria-label="Limpar filtros" title="Limpar filtros">
           <X className="h-4 w-4" />
         </button>
@@ -1322,6 +1399,7 @@ export default function Kanban() {
       editorial={isEditorialTask(task, designMemberIds)}
       acoes={acoesDoCartao}
       diaPrioritario={diaDoClientePorId.get(projectClientById.get(task.project_id) || "") ?? null}
+      compacto={isMobile}
     />
   );
 
@@ -1428,27 +1506,28 @@ export default function Kanban() {
     <CabecalhoDePagina
       titulo="Kanban"
       ajuda="Todas as tarefas da equipe por etapa. Clique no cartão para abrir; segure e arraste o cartão para mudar de coluna (com os filtros limpos e a ordem manual, também muda a ordem). No celular e no tablet, segure o dedo no cartão um instante e arraste; no celular, solte numa aba de coluna para mandar para ela. Botão direito ou o menu do cartão também movem."
-      descricao={isLoading ? undefined : `${filteredTasks.length} ${filteredTasks.length === 1 ? "tarefa" : "tarefas"}${hasFilters ? " com filtros" : ""}${dropSaving ? " · salvando" : ""}`}
+      descricao={
+        // 16/10/2026: no celular a contagem já está nas abas das colunas (sem linha a mais).
+        isLoading || isMobile ? undefined : `${filteredTasks.length} ${filteredTasks.length === 1 ? "tarefa" : "tarefas"}${hasFilters ? " com filtros" : ""}${dropSaving ? " · salvando" : ""}`
+      }
       acoes={
-        // No computador os filtros sobem para a linha do título (uma linha a
-        // menos); no celular ficam na linha de baixo, que é a largura toda.
-        !isClient || !isMobile ? (
-          <>
-            {!isMobile && FiltersBar}
-            {!isClient && (
-              <button
-                type="button"
-                data-tour="kanban-create-btn"
-                onClick={() => setCreateStatus(isMobile ? mobileTab : "backlog")}
-                className={botao.primario}
-                aria-label="Nova tarefa"
-              >
-                <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
-                <span className="hidden sm:inline">Nova tarefa</span>
-              </button>
-            )}
-          </>
-        ) : undefined
+        // Os filtros ficam na linha do título. 16/10/2026: no celular também,
+        // só o botão "Filtros" (cliente e projeto dentro dele).
+        <>
+          {FiltersBar}
+          {!isClient && (
+            <button
+              type="button"
+              data-tour="kanban-create-btn"
+              onClick={() => setCreateStatus(isMobile ? mobileTab : "backlog")}
+              className={botao.primario}
+              aria-label="Nova tarefa"
+            >
+              <Plus className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+              <span className="hidden sm:inline">Nova tarefa</span>
+            </button>
+          )}
+        </>
       }
     />
   );
@@ -1460,21 +1539,25 @@ export default function Kanban() {
     return (
       <div className="min-w-0" ref={toque.ligarQuadro}>
         {cabecalho}
-        <div className="mt-3">{FiltersBar}</div>
-        <Etapas
-          className="mt-3 border-b border-border [&_[data-alvo-do-toque]]:bg-primary/15 [&_[data-alvo-do-toque]]:text-foreground"
-          rotulo="Colunas do Kanban"
-          itens={columns.map((c) => ({
-            valor: c.id,
-            rotulo: c.title,
-            contador: isLoading ? null : tarefasDaColuna(c.id).length,
-            // Arrastando com o dedo: soltar na aba manda o cartão para o fim daquela coluna.
-            dados: colunaDoToque === c.id ? { "data-coluna-kanban": c.id, "data-alvo-do-toque": "" } : { "data-coluna-kanban": c.id },
-          }))}
-          valor={col.id}
-          onEscolher={setMobileTab}
-        />
+        {/* 16/10/2026: abas grudadas no topo da área ao rolar; a faixa rola para o lado por dentro e cada aba tem 44 px de altura. */}
+        <div ref={abasDoCelular} className="sticky top-0 z-20 -mx-4 mt-2 bg-background px-4">
+          <Etapas
+            className="border-b border-border [&_[data-etapa]]:h-11 [&_[data-alvo-do-toque]]:bg-primary/15 [&_[data-alvo-do-toque]]:text-foreground"
+            rotulo="Colunas do Kanban"
+            itens={columns.map((c) => ({
+              valor: c.id,
+              rotulo: c.title,
+              contador: isLoading ? null : tarefasDaColuna(c.id).length,
+              // Arrastando com o dedo: soltar na aba manda o cartão para o fim daquela coluna.
+              dados: colunaDoToque === c.id ? { "data-coluna-kanban": c.id, "data-alvo-do-toque": "" } : { "data-coluna-kanban": c.id },
+            }))}
+            valor={col.id}
+            onEscolher={setMobileTab}
+            depois={dropSaving ? <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">Salvando…</span> : undefined}
+          />
+        </div>
         <div
+          ref={colunaDoCelular}
           data-coluna-kanban={col.id}
           className={juntar("mt-3 min-h-[50vh] space-y-2 rounded-md pb-4", colunaDoToque === col.id && "bg-primary/5")}
           onTouchStart={(e) => {

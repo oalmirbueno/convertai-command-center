@@ -351,10 +351,10 @@ export default function ClientFinanceiro() {
                     <span className="block truncate text-[13px] font-medium text-foreground">Recarga {platformLabels[r.platform] || r.platform}</span>
                     <span className={juntar(texto.auxiliar, "block truncate")}>
                       Pedido em {formatDate(r.created_at)}
-                      {r.reason ? ` · ${r.reason}` : ""}
+                      {r.reason ? <span className="hidden sm:inline">{` · ${r.reason}`}</span> : ""}
                     </span>
                   </span>
-                  <span className="ml-3 text-[15px] font-semibold tabular-nums text-foreground">{formatCurrency(Number(r.amount))}</span>
+                  <span className="ml-3 shrink-0 whitespace-nowrap text-[15px] font-semibold tabular-nums text-foreground">{formatCurrency(Number(r.amount))}</span>
                   <ArrowRight className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                 </button>
               </li>
@@ -405,7 +405,7 @@ export default function ClientFinanceiro() {
                             <p className="text-[13px] text-foreground">
                               {inst.installment_number === 0 ? "Entrada" : `Parcela ${inst.installment_number}`}
                             </p>
-                            <p className={texto.auxiliar}>{formatDate(inst.due_date)}</p>
+                            <p className={texto.auxiliar}>{formatDate(inst.due_date)}<span className="sm:hidden"> · {st.label}</span></p>
                           </div>
                           <div className="ml-2 whitespace-nowrap text-right tabular-nums">
                             <p className={`text-[13px] ${inst.status === "partial" ? "text-info" : "text-foreground"}`}>
@@ -413,7 +413,7 @@ export default function ClientFinanceiro() {
                             </p>
                             {inst.status === "partial" && <p className="text-[11px] text-muted-foreground">de {formatCurrency(Number(inst.amount))}</p>}
                           </div>
-                          <span className={juntar(etiqueta, "ml-2", st.badge)}>{st.label}</span>
+                          <span className={juntar(etiqueta, "ml-2 hidden sm:inline-flex", st.badge)}>{st.label}</span>
                         </li>
                       );
                     })}
@@ -438,7 +438,8 @@ export default function ClientFinanceiro() {
                   <span className={`mr-3 h-2 w-2 shrink-0 rounded-full ${st.dot}`} aria-hidden="true" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] text-foreground">{b.description || typeLabels[b.type] || b.type}</p>
-                    <p className={texto.auxiliar}>{formatDate(b.due_date)}</p>
+                    {/* Celular (16/10/2026): a situação vai na linha de apoio; a etiqueta à direita só de 640 px para cima. */}
+                    <p className={texto.auxiliar}>{formatDate(b.due_date)}<span className="sm:hidden"> · {st.label}</span></p>
                   </div>
                   <div className="ml-2 whitespace-nowrap text-right tabular-nums">
                     <p className={`text-[13px] ${b.status === "partial" ? "text-info" : "text-foreground"}`}>
@@ -446,7 +447,7 @@ export default function ClientFinanceiro() {
                     </p>
                     {b.status === "partial" && <p className="text-[11px] text-muted-foreground">de {formatCurrency(Number(b.amount))}</p>}
                   </div>
-                  <span className={juntar(etiqueta, "ml-2", st.badge)}>{st.label}</span>
+                  <span className={juntar(etiqueta, "ml-2 hidden sm:inline-flex", st.badge)}>{st.label}</span>
                 </li>
               );
             })}

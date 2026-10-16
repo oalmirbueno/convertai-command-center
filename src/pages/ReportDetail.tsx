@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import ClientPlainSummary from "@/components/reports/ClientPlainSummary";
 import RichText from "@/components/shared/RichText";
 import RitualEstruturado from "@/components/client/RitualEstruturado";
+import { useTelaPequena } from "@/components/client/useTelaPequena";
 import { estruturaDoRitual } from "@/lib/ritualTexto";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -149,6 +150,8 @@ export default function ReportDetail() {
   const { profile } = useAuth();
   // O cliente lê a versão em linguagem simples; a técnica fica para a equipe.
   const isClientView = profile?.role === "client";
+  // Celular (16/10/2026): a tabela por período vira lista (nada rola para o lado) e nasce recolhida.
+  const pequena = useTelaPequena();
 
   const { data: report, isLoading, isError, refetch } = useQuery({
     queryKey: ["report-detail", id],
@@ -1098,9 +1101,39 @@ export default function ReportDetail() {
 
       {/* Tabela de dados por período */}
       {temGraficos && (
-        <Secao titulo="Dados por período" descricao={`${chartData.length} períodos`} divisoria>
+        <Secao titulo="Dados por período" descricao={`${chartData.length} períodos`} divisoria recolhidaDeInicio={pequena}>
           <Painel semEspaco>
-            <div className="overflow-x-auto">
+            {/* Celular: um período por linha, cada métrica com o valor à direita. */}
+            <ul className="divide-y divide-border sm:hidden" aria-label="Dados por período">
+              {chartData.map((row, i) => (
+                <li key={i} className="min-w-0 px-4 py-3">
+                  <p className="break-words text-[13px] font-medium leading-5 text-foreground">{row.label}</p>
+                  <ul className="mt-1 space-y-0.5">
+                    {chartColumns.map((col, ci) => (
+                      <li key={col} className="flex min-w-0 items-center text-[13px] leading-5">
+                        <span className="mr-2 h-2 w-2 shrink-0 rounded-full" style={{ background: CHART_COLORS[ci % CHART_COLORS.length] }} aria-hidden="true" />
+                        <span className="mr-3 min-w-0 flex-1 truncate text-muted-foreground">{col}</span>
+                        <span className="shrink-0 tabular-nums text-foreground">{(Number(row[col]) || 0).toLocaleString("pt-BR")}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+              <li className="min-w-0 px-4 py-3">
+                <p className="text-[13px] font-semibold leading-5 text-foreground">Total</p>
+                <ul className="mt-1 space-y-0.5">
+                  {chartColumns.map((col) => (
+                    <li key={col} className="flex min-w-0 items-center text-[13px] leading-5">
+                      <span className="mr-3 min-w-0 flex-1 truncate text-muted-foreground">{col}</span>
+                      <span className="shrink-0 font-semibold tabular-nums text-primary">
+                        {chartData.reduce((s, r) => s + (Number(r[col]) || 0), 0).toLocaleString("pt-BR")}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            </ul>
+            <div className="hidden overflow-x-auto sm:block">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-border">

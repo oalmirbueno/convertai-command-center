@@ -11,6 +11,11 @@ import { AjudaRecolhida, botao, campoTexto, foco, juntar, texto } from "@/compon
  * Decidiu, o cartão sai e entra o próximo. Teclado: A aprova, E pede ajuste,
  * R rejeita, setas passam. Quem decide de verdade é a tela que usa a mesa
  * (o RPC de cada fila); aqui só a apresentação e o ritmo.
+ *
+ * 16/10/2026, celular (dono: "cara de aplicativo, fácil de mexer"): abaixo de
+ * 640 px o cartão ocupa a largura, a mensagem não rola por dentro (a página
+ * rola), os botões de decidir ficam grudados no pé da tela, ao alcance do
+ * polegar, e deslizar o cartão para o lado passa para o próximo ou volta.
  */
 
 export type DecisaoDaMesa = "aprovado" | "ajuste" | "rejeitado" | "adiado";
@@ -90,6 +95,7 @@ export default function MesaDeDecisao({ itens, onDecidir, rotulo, inicialId = nu
   const [ocupado, setOcupado] = useState(false);
   const [abertoDetalhe, setAbertoDetalhe] = useState(false);
   const campoRef = useRef<HTMLTextAreaElement>(null);
+  const toque = useRef<{ x: number; y: number } | null>(null);
 
   // Item novo na frente: limpa o que era do anterior.
   useEffect(() => { setModo(null); setNota(""); setAbertoDetalhe(false); }, [item?.id]);
@@ -158,7 +164,7 @@ export default function MesaDeDecisao({ itens, onDecidir, rotulo, inicialId = nu
         {fila.length > 12 && <span className={juntar(texto.auxiliar, "ml-1")}>+{fila.length - 12}</span>}
       </div>
       <span className={juntar(texto.auxiliar, "ml-2 tabular-nums")} aria-live="polite">{indice + 1} de {fila.length}</span>
-      <AjudaRecolhida className="ml-1.5" rotulo="Atalhos da mesa">Teclas: A aprova, E pede ajuste, R rejeita, setas passam para o próximo ou voltam. Decidiu, o próximo entra sozinho.</AjudaRecolhida>
+      <AjudaRecolhida className="ml-1.5 hidden sm:inline-flex" rotulo="Atalhos da mesa">Teclas: A aprova, E pede ajuste, R rejeita, setas passam para o próximo ou voltam. Decidiu, o próximo entra sozinho.</AjudaRecolhida>
       <div className="ml-auto flex items-center [&>*+*]:ml-1">
         <button type="button" onClick={() => ir(-1)} disabled={fila.length < 2} aria-label="Anterior" title="Anterior (←)" className={botao.icone}><ChevronLeft className="h-4 w-4" aria-hidden="true" /></button>
         <button type="button" onClick={() => ir(1)} disabled={fila.length < 2} aria-label="Pular" title="Pular (→)" className={botao.icone}><ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
@@ -168,15 +174,32 @@ export default function MesaDeDecisao({ itens, onDecidir, rotulo, inicialId = nu
     <article
       key={item.id}
       aria-label={`${item.tipo}: ${item.titulo}`}
+      onTouchStart={(e) => {
+        const t = e.touches[0];
+        toque.current = t ? { x: t.clientX, y: t.clientY } : null;
+      }}
+      onTouchEnd={(e) => {
+        // Deslizar de lado (bem mais de lado que para cima) passa o item; campo, vídeo e controles de arrastar ficam fora.
+        const inicio = toque.current;
+        toque.current = null;
+        const t = e.changedTouches[0];
+        if (!inicio || !t || modo || fila.length < 2) return;
+        const alvo = e.target as HTMLElement | null;
+        if (alvo && typeof alvo.closest === "function" && alvo.closest("textarea, input, select, video, [data-sem-deslize]")) return;
+        const dx = t.clientX - inicio.x;
+        const dy = t.clientY - inicio.y;
+        if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 2) return;
+        ir(dx < 0 ? 1 : -1);
+      }}
       className={juntar(
-        "overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-all duration-200",
+        "rounded-2xl border border-border bg-card shadow-sm transition-all duration-200 sm:overflow-hidden",
         !saindo && "animate-in fade-in-0 slide-in-from-right-4",
         saindo === "aprovado" && "translate-x-8 opacity-0",
         saindo === "outro" && "-translate-x-8 opacity-0",
       )}
     >
       <div className={juntar("grid min-w-0", item.midia && "md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]")}>
-        {item.midia && <div className="min-w-0 bg-muted/40 md:border-r md:border-border">{item.midia}</div>}
+        {item.midia && <div className="min-w-0 bg-muted/40 max-sm:overflow-hidden max-sm:rounded-t-2xl md:border-r md:border-border">{item.midia}</div>}
         <div className="min-w-0 p-4 sm:p-5">
           <header className="flex min-w-0 items-center">
             {item.avatar && <span className="mr-2.5 shrink-0">{item.avatar}</span>}
@@ -186,7 +209,7 @@ export default function MesaDeDecisao({ itens, onDecidir, rotulo, inicialId = nu
             </span>
           </header>
           <h3 className="mt-3 text-[17px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{item.titulo}</h3>
-          {item.mensagem && <p className="mt-2 max-h-72 overflow-y-auto whitespace-pre-wrap text-[14px] leading-relaxed text-foreground/90 [overflow-wrap:anywhere]">{item.mensagem}</p>}
+          {item.mensagem && <p className="mt-2 whitespace-pre-wrap sm:max-h-72 sm:overflow-y-auto text-[14px] leading-relaxed text-foreground/90 [overflow-wrap:anywhere]">{item.mensagem}</p>}
           {item.diagrama && <div className="mt-4 rounded-xl bg-muted/30 p-3 sm:p-4">{item.diagrama}</div>}
           {item.passo && <p className="mt-2 flex items-start text-[13px] text-muted-foreground"><ChevronRight className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" /><span className="min-w-0 [overflow-wrap:anywhere]">{item.passo}</span></p>}
           {!!item.sinais?.length && <ul className="-m-0.5 mt-3 flex flex-wrap" aria-label="Sinais">
@@ -202,7 +225,7 @@ export default function MesaDeDecisao({ itens, onDecidir, rotulo, inicialId = nu
       </div>
 
       {/* Rodapé: decidir. Ajuste e rejeição pedem uma frase curta antes de enviar. */}
-      <footer className="border-t border-border bg-muted/20 p-3 sm:p-4">
+      <footer className="border-t border-border bg-muted/20 p-3 max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:rounded-b-2xl max-sm:bg-card/95 max-sm:shadow-[0_-8px_16px_-12px_rgba(0,0,0,0.35)] max-sm:backdrop-blur sm:p-4" data-decidir-no-pe="">
         {modo ? <div className="space-y-2">
           <label className={juntar(texto.rotulo, "block")}>{modo === "ajuste" ? (item.rotuloAjuste ? "O que precisa ficar claro" : "O que ajustar") : "Por que rejeitar"}{!notaObrigatoria && " (opcional)"}
             <textarea ref={campoRef} value={nota} onChange={(e) => setNota(e.target.value)} rows={2} maxLength={2000} className={juntar(campoTexto, "mt-1.5 min-h-[56px]")} />

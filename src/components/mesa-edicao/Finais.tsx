@@ -196,7 +196,7 @@ export function LinhaDoFinal({ arquivo, variantes, antes }: { arquivo: ArquivoDe
       )}
       {legenda && !legenda.precisa_transcrever && legenda.linhas.length > 0 && (
         <div className="mt-2 space-y-2" data-legenda-gerada={legenda.linhas.length}>
-          <ol className="max-h-40 overflow-y-auto rounded-md bg-muted/40 px-2.5 py-1.5 text-[12px]">
+          <ol className="rounded-md sm:max-h-40 sm:overflow-y-auto bg-muted/40 px-2.5 py-1.5 text-[12px]">
             {legenda.linhas.slice(0, 200).map((l, k) => (
               <li key={k} className="flex min-w-0">
                 <span className="mr-2 shrink-0 tabular-nums text-muted-foreground">{duracaoCurta(l.i) || "0:00"}</span>

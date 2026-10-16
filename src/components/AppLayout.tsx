@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useRef, useEffect, useCallback, useSyncExternalStore } from "react";
+import { lazy, Suspense, useState, useRef, useEffect, useLayoutEffect, useCallback, useSyncExternalStore } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,7 +13,7 @@ import IndicadorDeGeracoes from "@/components/geracao/IndicadorDeGeracoes";
 import { EVENTO_ABRIR_AGENTE, type PedidoParaAbrirAgente } from "@/lib/lancador";
 import { adminTourSteps, clientTourSteps, teamTourSteps, getPageTour, pageTours } from "@/components/onboarding/tourConfigs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Bell, LogOut, Menu, X, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles, Bot, RefreshCw } from "lucide-react";
+import { Bell, LogOut, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles, Bot, RefreshCw } from "lucide-react";
 import { assinarVersaoNova, atualizarAgora, versaoNovaPendente } from "@/lib/appRefresh";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
@@ -24,7 +24,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
-import MobileBottomNav from "@/components/MobileBottomNav";
+import MobileBottomNav, { destinosDaBarra, type DestinoDoCelular } from "@/components/MobileBottomNav";
+import { rotuloDoLugar } from "@/lib/navegacao/lugares";
 import BuscaDoPainel, { type PaginaDaBusca } from "@/components/casca/BuscaDoPainel";
 import { usePreCargaOciosaDasMesas } from "@/lib/mesa/preCarga";
 import { quandoOcioso } from "@/lib/lazyComPreCarga";
@@ -55,6 +56,51 @@ export function BotaoVersaoNova() {
       <span aria-hidden="true" className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" />
     </button>
   );
+}
+
+/**
+ * Celular (< 768 px, a mesma faixa do `md:` da casca). A casca do celular
+ * (topo enxuto, barra de baixo e folha "Mais") e a do computador (barra
+ * flutuante) não ficam as duas montadas: o que tem estado (gerações,
+ * cronômetro, "voltar para onde estava") monta uma vez só. Sem matchMedia
+ * (teste, navegador antigo) vale o computador. Safari 11 não tem
+ * addEventListener na MediaQueryList: usa addListener.
+ */
+const CONSULTA_DO_CELULAR = "(max-width: 767px)";
+function ehCelularAgora(): boolean {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(CONSULTA_DO_CELULAR).matches;
+}
+export function useEhCelular(): boolean {
+  const [celular, setCelular] = useState(ehCelularAgora);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia(CONSULTA_DO_CELULAR);
+    const mudou = () => setCelular(mq.matches);
+    mudou();
+    if (typeof mq.addEventListener === "function") mq.addEventListener("change", mudou);
+    else if (typeof mq.addListener === "function") mq.addListener(mudou);
+    return () => {
+      if (typeof mq.removeEventListener === "function") mq.removeEventListener("change", mudou);
+      else if (typeof mq.removeListener === "function") mq.removeListener(mudou);
+    };
+  }, []);
+  return celular;
+}
+
+/**
+ * Nome curto da tela para o topo do celular: o item do menu que melhor casa
+ * com a rota (o mais longo), senão o nome do lugar, senão "Aceleriq".
+ */
+export function tituloDaTela(pathname: string, paginas: Array<{ title: string; url: string }>): string {
+  const rota = (pathname || "/").replace(/\/+$/, "") || "/";
+  let melhor: { title: string; url: string } | null = null;
+  for (const p of paginas) {
+    if (rota === p.url || rota.indexOf(`${p.url}/`) === 0) {
+      if (!melhor || p.url.length > melhor.url.length) melhor = p;
+    }
+  }
+  if (melhor) return melhor.url === "/comercial" ? "Comercial" : melhor.title;
+  return rotuloDoLugar(rota, "") || "Aceleriq";
 }
 
 interface NavItem {
@@ -190,7 +236,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [notifOpen, setNotifOpen] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // Celular (16/10/2026): a folha "Mais" da barra de baixo substitui o menu em gaveta do topo.
+  const celular = useEhCelular();
+  const [maisAberto, setMaisAberto] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
@@ -218,7 +266,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Alt+A ou pelo evento EVENTO_ABRIR_AGENTE (qualquer tela, com contexto).
   const [agenteAberto, setAgenteAberto] = useState(false);
   const [pedidoDoAgente, setPedidoDoAgente] = useState<(PedidoParaAbrirAgente & { vez: number }) | null>(null);
-  const abrirAgente = useCallback(() => { setVozNaTela(true); setAgenteAberto(true); }, []);
+  const abrirAgente = useCallback(() => { setVozNaTela(true); setAgenteAberto(true); setMaisAberto(false); }, []);
   useEffect(() => {
     if (!isAdmin) return;
     const ouvir = (e: Event) => {
@@ -323,14 +371,73 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     onAbrirAgente: abrirAgente,
     passosDaTela: pageSteps,
     rotuloDaTela: pageTourConfig?.label,
-    onTourDaTela: pageSteps ? () => { setTourMode("page"); setTourOpen(true); } : null,
-    onTourCompleto: () => { setTourMode("full"); setTourOpen(true); },
+    // O tour sai da folha "Mais" do celular: a folha fecha para o tour aparecer.
+    onTourDaTela: pageSteps ? () => { setMaisAberto(false); setTourMode("page"); setTourOpen(true); } : null,
+    onTourCompleto: () => { setMaisAberto(false); setTourMode("full"); setTourOpen(true); },
   };
+
+  // Studio (equipe): abre no Workspace. No celular o atalho mora na folha "Mais".
+  const abrirStudio = () => {
+    setMaisAberto(false);
+    // Flag persistente: se o StudioPanel ainda não montou, ele lê a flag no mount.
+    (window as any).__studioOpenPending = true;
+    const fire = () => window.dispatchEvent(new Event("studio:open"));
+    if (location.pathname !== "/workspace") {
+      navigate("/workspace");
+      // Retry curto para cobrir o tempo de mount do painel.
+      window.setTimeout(fire, 60);
+      window.setTimeout(fire, 220);
+      window.setTimeout(fire, 500);
+    } else {
+      fire();
+    }
+  };
+
+  // ── Casca do celular (16/10/2026) ──
+  // Barra de baixo: 4 destinos por papel + "Mais". A folha "Mais" leva o resto
+  // do menu (sem repetir o que já está na barra), a busca, o tema, o Studio e
+  // o lançador. O topo do celular fica só com a logo (ou o nome da tela, ao
+  // rolar), o voltar, a busca e o sino.
+  const naBarra = destinosDaBarra(role).map((d) => d.url);
+  // Cliente: o Perfil já tem o atalho no pé da folha; não repete na lista.
+  const foraDaBarra = (item: NavItem) => naBarra.indexOf(item.url) < 0 && (isAdminOrTeam || item.url !== "/perfil");
+  const gruposDoCelular: Array<{ label: string; items: DestinoDoCelular[] }> = (isAdminOrTeam
+    ? [{ label: "Principal", items: mainNav }, ...gruposDoMenu]
+    : [{ label: "Principal", items: mainNav }, { label: "Mais", items: clientMoreNav }]
+  )
+    .map((grupo) => ({ label: grupo.label, items: grupo.items.filter(foraDaBarra) }))
+    .filter((grupo) => grupo.items.length > 0);
+  const tituloDoTopo = tituloDaTela(location.pathname, paginasDaBusca);
+  const iniciais = (profile?.full_name || "").split(" ").map((n) => n[0]).join("").slice(0, 2);
+  const papelLegivel = isAdmin ? "Administrador" : role === "manager" ? "Gestor" : role === "design" ? "Design" : role === "traffic" ? "Tráfego" : profile?.company_name || "Cliente";
+
+  // A área de conteúdo é quem rola no celular: trocar de tela começa no topo
+  // (antes a tela nova abria no meio, na altura em que a anterior estava).
+  // Antes da pintura; quem guarda a própria rolagem devolve depois (timers).
+  const conteudoRef = useRef<HTMLElement>(null);
+  const [rolou, setRolou] = useState(false);
+  useLayoutEffect(() => {
+    const el = conteudoRef.current;
+    if (el && el.scrollTop > 0) el.scrollTop = 0;
+    setRolou(false);
+  }, [location.pathname]);
+  const aoRolarConteudo = useCallback((e: React.UIEvent<HTMLElement>) => {
+    const passou = e.currentTarget.scrollTop > 56;
+    setRolou((antes) => (antes === passou ? antes : passou));
+  }, []);
+  // Voltou para o computador com a folha aberta: fecha (ela só existe no celular).
+  useEffect(() => {
+    if (!celular) setMaisAberto(false);
+  }, [celular]);
+
+  const ferramentaDoMais = "toque-compacto flex h-16 min-w-0 flex-col items-center justify-center text-[11px] font-medium leading-4 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+  const linhaDoMais = "flex h-11 w-full min-w-0 items-center rounded-md px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
   return (
     <div className="min-h-screen bg-background tech-grid-bg" data-tour="welcome">
       {/* Floating TopNav. data-casca: o modo foco (src/lib/modoFoco.ts + index.css) esconde a barra, o que flutua e tira o recuo do conteúdo. */}
-      <nav data-casca="topo" className="dark fixed left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] md:w-[calc(100%-3rem)] max-w-[1792px] z-50 h-[52px] rounded-xl flex items-center px-3 gap-2 lg:px-4 lg:gap-4 text-foreground"
+      {/* Só de 768 px para cima (16/10/2026): o celular tem o topo enxuto logo abaixo. */}
+      {!celular && <nav data-casca="topo" className="dark fixed left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] md:w-[calc(100%-3rem)] max-w-[1792px] z-50 h-[52px] rounded-xl flex items-center px-3 gap-2 lg:px-4 lg:gap-4 text-foreground"
         style={{
           top: 'calc(env(safe-area-inset-top) + 12px)',
           background: 'rgba(17, 17, 19, 0.85)',
@@ -453,34 +560,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Mobile: centered Studio launcher (staff only) */}
-        <div className="flex-1 md:hidden flex items-center justify-center">
-          {isAdminOrTeam && (
-            <button
-              type="button"
-              onClick={() => {
-                // Flag persistente: se o StudioPanel ainda não montou, ele lê a flag no mount.
-                (window as any).__studioOpenPending = true;
-                const fire = () => window.dispatchEvent(new Event("studio:open"));
-                if (location.pathname !== "/workspace") {
-                  navigate("/workspace");
-                  // Retry curto para cobrir o tempo de mount do painel.
-                  window.setTimeout(fire, 60);
-                  window.setTimeout(fire, 220);
-                  window.setTimeout(fire, 500);
-                } else {
-                  fire();
-                }
-              }}
-              className="h-8 px-3 rounded-full bg-primary/15 hover:bg-primary/25 text-primary text-[12px] font-medium inline-flex items-center gap-1.5 border border-primary/30"
-              aria-label="Abrir Studio"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              Studio
-            </button>
-          )}
-        </div>
-
         {/* Right: Icons */}
         <div className="flex items-center gap-1 shrink-0">
           {/* Voltar para onde eu estava (29/09): o lugar anterior num toque, com a lista dos últimos. */}
@@ -578,64 +657,76 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             )}
           </div>
 
-          {/* Mobile menu button */}
-          <button
-            type="button"
-            aria-label={mobileMenuOpen ? "Fechar menu" : "Abrir menu"}
-            aria-expanded={mobileMenuOpen}
-            className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-          </button>
+          {/* Fim da direita. O menu do celular mora na folha "Mais" da barra de baixo (16/10/2026). */}
         </div>
-      </nav>
+      </nav>}
 
-      {/* Mobile overlay menu */}
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
-          <div className="absolute inset-0 bg-background/90 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />
-          <div
-            className="absolute inset-x-0 mx-3 rounded-xl bg-popover border border-border shadow-lg animate-fade-in flex flex-col"
-            style={{
-              top: 'calc(env(safe-area-inset-top) + 72px)',
-              bottom: 'calc(env(safe-area-inset-bottom) + 72px)',
-              maxHeight: 'calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 144px)',
-            }}
-          >
-            <div className="overflow-y-auto p-3" style={{ WebkitOverflowScrolling: 'touch' }}>
-              {[...mainNav, ...moreNav].map((item) => (
-                <NavLink
-                  key={item.url}
-                  to={item.url}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={({ isActive }) => cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] transition-colors",
-                    isActive ? "text-foreground bg-secondary" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <item.icon className="w-4 h-4" />
-                  {item.title}
-                </NavLink>
-              ))}
-              <div className="border-t border-border mt-2 pt-2">
-                <button
-                  onClick={() => { setMobileMenuOpen(false); logout(); }}
-                  className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-[13px] text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Sair
-                </button>
+      {/* Topo do celular (16/10/2026, dono: "cara de aplicativo, mais clean"): barra
+          cheia, colada no alto, na cor do tema. Esquerda: voltar (quando há para onde)
+          e a logo, que vira o nome da tela quando o título da página sai de vista ao
+          rolar. Direita: só o que é de agora (gerações, versão nova), a busca e o sino.
+          Menu, perfil, tema, Studio e ajuda ficam na folha "Mais" (barra de baixo). */}
+      {celular && (
+        <header
+          data-casca="topo"
+          data-topo-do-celular=""
+          className="fixed inset-x-0 top-0 z-40 border-b border-border bg-background md:hidden"
+          style={{ paddingTop: "env(safe-area-inset-top)" }}
+        >
+          <div className="flex h-[52px] min-w-0 items-center px-2">
+            {isAdminOrTeam && <VoltarParaOndeEstava compacto />}
+            <div className="relative ml-2 h-full min-w-0 flex-1">
+              <div
+                aria-hidden={rolou ? "true" : undefined}
+                className={cn("absolute inset-0 flex items-center overflow-hidden transition-opacity duration-200", rolou ? "opacity-0" : "opacity-100")}
+              >
+                <img src={aceleriqLogo} alt="Aceleriq" className="logo-do-topo -ml-2 h-24 w-auto max-w-none" />
               </div>
+              <p
+                aria-hidden={rolou ? undefined : "true"}
+                className={cn("absolute inset-0 flex min-w-0 items-center transition-opacity duration-200", rolou ? "opacity-100" : "opacity-0")}
+                data-titulo-do-topo=""
+              >
+                <span className="min-w-0 truncate text-[15px] font-semibold leading-[22px] text-foreground">{tituloDoTopo}</span>
+              </p>
+            </div>
+            <div className="ml-1 flex shrink-0 items-center">
+              {isAdminOrTeam && <IndicadorDeGeracoes userId={user?.id} />}
+              <BotaoVersaoNova />
+              <button
+                type="button"
+                onClick={() => setBuscaAberta(true)}
+                aria-label="Buscar página"
+                className="toque-compacto flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Search className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setNotifOpen(true)}
+                aria-label={unreadCount > 0 ? `Notificações, ${unreadCount} não lidas` : "Notificações"}
+                className="toque-compacto relative flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Bell className="h-5 w-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold tabular-nums text-primary-foreground">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
-        </div>
+        </header>
       )}
 
       {/* Content */}
+      {/* Celular: camada fixa entre o topo (52 px) e a barra de baixo (56 px), com
+          rolagem própria e sem elástico puxando a casca (overscroll contido). */}
       <main
+        ref={conteudoRef}
+        onScroll={celular ? aoRolarConteudo : undefined}
         className={cn(
-          "fixed inset-x-0 top-[calc(env(safe-area-inset-top)+80px)] bottom-[calc(env(safe-area-inset-bottom)+72px)] z-0 mx-auto w-full overflow-y-auto overflow-x-hidden px-4 md:static md:px-6 md:pt-[calc(env(safe-area-inset-top)+80px)] md:pb-[calc(env(safe-area-inset-bottom)+96px)] md:overflow-visible",
+          "fixed inset-x-0 top-[calc(env(safe-area-inset-top)+52px)] bottom-[calc(env(safe-area-inset-bottom)+56px)] z-0 mx-auto w-full overflow-y-auto overflow-x-hidden px-4 pb-6 pt-4 md:static md:px-6 md:pt-[calc(env(safe-area-inset-top)+80px)] md:pb-[calc(env(safe-area-inset-bottom)+96px)] md:overflow-visible",
           // Tela larga em todas as páginas, igual às mesas: com 1280/1400 px o painel
           // ficava espremido com espaço vazio dos lados (dono, 23/09 e 26/09).
           "max-w-[1840px]",
@@ -652,6 +743,59 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           unreadCount={unreadCount}
           onOpenNotifications={() => setNotifOpen(true)}
           lancador={<Lancador variante="barra" {...propsDoLancador} />}
+          maisAberto={maisAberto}
+          onMaisAberto={setMaisAberto}
+          grupos={gruposDoCelular}
+          perfil={
+            <div className="flex min-w-0 items-center">
+              <Avatar className="h-9 w-9 shrink-0">
+                <AvatarFallback className="bg-primary/15 text-[12px] font-semibold text-primary">{iniciais}</AvatarFallback>
+              </Avatar>
+              <div className="ml-3 min-w-0 flex-1">
+                <p className="truncate text-[13px] font-medium leading-5 text-foreground">{profile?.full_name}</p>
+                <p className="truncate text-[12px] leading-4 text-muted-foreground">{papelLegivel}</p>
+              </div>
+              {/* Cronômetro por cliente (frente CR): no celular mora aqui, fora do topo. */}
+              {isAdminOrTeam && celular && maisAberto && <div className="ml-2 flex shrink-0 items-center"><CronometroDoTopo podeAbrirCentral={podeGestao} /></div>}
+            </div>
+          }
+          ferramentas={
+            <>
+              <button type="button" className={ferramentaDoMais} onClick={() => { setMaisAberto(false); setBuscaAberta(true); }}>
+                <Search className="mb-0.5 h-5 w-5" aria-hidden="true" />
+                Buscar
+              </button>
+              <button type="button" className={ferramentaDoMais} onClick={toggleTheme} aria-label={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"}>
+                {theme === "dark" ? <Sun className="mb-0.5 h-5 w-5" aria-hidden="true" /> : <Moon className="mb-0.5 h-5 w-5" aria-hidden="true" />}
+                {theme === "dark" ? "Claro" : "Escuro"}
+              </button>
+              {isAdminOrTeam ? (
+                <button type="button" className={ferramentaDoMais} onClick={abrirStudio} aria-label="Abrir Studio">
+                  <Sparkles className="mb-0.5 h-5 w-5" aria-hidden="true" />
+                  Studio
+                </button>
+              ) : (
+                <button type="button" className={ferramentaDoMais} onClick={() => { setMaisAberto(false); navigate("/perfil"); }}>
+                  <UserCircle className="mb-0.5 h-5 w-5" aria-hidden="true" />
+                  Perfil
+                </button>
+              )}
+            </>
+          }
+          fim={
+            <>
+              {isAdminOrTeam && (
+                <button type="button" className={linhaDoMais} onClick={() => { setMaisAberto(false); navigate("/perfil"); }}>
+                  <UserCircle className="mr-2.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  Meu perfil
+                </button>
+              )}
+              <button type="button" className={linhaDoMais} onClick={() => { setMaisAberto(false); logout(); }}>
+                <LogOut className="mr-2.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                Sair
+              </button>
+            </>
+          }
         />
       </div>
 

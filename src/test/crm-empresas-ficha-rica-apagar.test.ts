@@ -97,7 +97,8 @@ describe("o funil no celular", () => {
     // A etapa escolhida fica guardada (sair e voltar mantém).
     expect(kanban).toContain('useEstadoDoComercial<EstagioId>("funil:etapa-no-celular", ESTAGIOS_ABERTOS[0]');
     expect(kanban).toContain('rotulo="Etapas do funil"');
-    expect(kanban).toContain('className="mb-2 border-b border-border sm:hidden"');
+    // 16/10/2026: a faixa das etapas gruda no topo e tem toque de 44 px.
+    expect(kanban).toContain('className="sticky top-0 z-10 -mx-4 mb-2 border-b border-border bg-background px-4 sm:hidden [&_button]:h-11"');
     expect(kanban).toContain('visivelNoCelular ? "flex" : "hidden"');
     expect(kanban).toContain("sm:flex sm:w-[260px] sm:shrink-0");
   });

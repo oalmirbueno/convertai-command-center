@@ -309,7 +309,9 @@ export default function AgendaComercial({
                               tabIndex={0}
                               onClick={() => onAbrirLead(lead)}
                               onKeyDown={(e) => e.key === "Enter" && onAbrirLead(lead)}
-                              className="min-w-0 cursor-pointer truncate font-medium text-primary hover:underline"
+                              // 16/10/2026: max-sm:!min-h-0 tira os 44 px que o celular põe em
+                              // todo role="button" (a linha de apoio ficava alta e saltada).
+                              className="min-w-0 cursor-pointer truncate font-medium text-primary hover:underline max-sm:!min-h-0"
                             >
                               {lead.name}
                             </span>

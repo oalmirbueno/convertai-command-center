@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Etapas, botao, campo, juntar, texto } from "@/components/sistema";
+import { useCelular } from "@/hooks/useCelular";
 
 export type EditorialView = "board" | "month" | "week" | "list";
 
@@ -39,6 +40,10 @@ interface EditorialToolbarProps {
   /** No quadro de conteúdos (sem período), o que vai no começo da segunda linha. */
   inicioDaLinha?: ReactNode;
   title: string;
+  /** Período curto para o celular (16/10/2026), ex.: "13–19 out". */
+  tituloCurto?: string;
+  /** Celular: o "Hoje" só aparece quando o período na tela não contém hoje. */
+  mostrarHoje?: boolean;
   view: EditorialView;
   search: string;
   clientId: string;
@@ -150,6 +155,8 @@ export default function EditorialToolbar({
   cabecalho,
   inicioDaLinha,
   title,
+  tituloCurto,
+  mostrarHoje = true,
   view,
   search,
   clientId,
@@ -209,6 +216,200 @@ export default function EditorialToolbar({
       approvalStatus,
       responsibleId,
     ].some(isActiveFilter);
+  const celular = useCelular();
+
+  // O corpo do "Filtros" é o mesmo no computador e no celular (16/10/2026).
+  const cabecalhoDosFiltros = (
+    <div className="mb-3 flex items-center justify-between">
+      <p className={texto.tituloSecao}>Filtros</p>
+      <button
+        type="button"
+        className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}
+        onClick={onClearFilters}
+        disabled={!hasAnyActiveFilter}
+      >
+        <X className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+        Limpar
+      </button>
+    </div>
+  );
+  const gradeDosFiltros = (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* Cliente e projeto moram aqui quando a linha não comporta. */}
+      {clients.length > 0 && (
+        <div className="md:hidden">
+          <CampoDoFiltro rotulo="Cliente">
+            <FilterSelect value={clientId} label="Todos os clientes" options={clients} onChange={onClientChange} />
+          </CampoDoFiltro>
+        </div>
+      )}
+      <div className="xl:hidden">
+        <CampoDoFiltro rotulo="Projeto">
+          <FilterSelect value={projectId} label="Todos os projetos" options={projects} onChange={onProjectChange} />
+        </CampoDoFiltro>
+      </div>
+      <CampoDoFiltro rotulo="Formato">
+        <FilterSelect value={format} label="Todos os formatos" options={formats} onChange={onFormatChange} />
+      </CampoDoFiltro>
+      <CampoDoFiltro rotulo="Plataforma">
+        <FilterSelect value={platform} label="Todas as plataformas" options={platforms} onChange={onPlatformChange} />
+      </CampoDoFiltro>
+      <CampoDoFiltro rotulo="Publicação">
+        <FilterSelect value={status} label="Todas as publicações" options={statuses} onChange={onStatusChange} />
+      </CampoDoFiltro>
+      <CampoDoFiltro rotulo="Etapa de produção">
+        <FilterSelect value={productionStatus} label="Todas as etapas" options={productionStatuses} onChange={onProductionStatusChange} />
+      </CampoDoFiltro>
+      <CampoDoFiltro rotulo="Aprovação">
+        <FilterSelect value={approvalStatus} label="Toda aprovação" options={approvalStatuses} onChange={onApprovalStatusChange} />
+      </CampoDoFiltro>
+      {responsibles.length > 0 && (
+        <CampoDoFiltro rotulo="Responsável">
+          <FilterSelect value={responsibleId} label="Todos os responsáveis" options={responsibles} onChange={onResponsibleChange} />
+        </CampoDoFiltro>
+      )}
+    </div>
+  );
+
+  if (celular) {
+    // 16/10/2026 (dono: "cara de aplicativo, menos poluído"). Abaixo de
+    // 768 px a barra vira duas linhas: título com "Buscar e filtrar" e a ação
+    // principal; depois as visões em ícone e o período. A busca, o cliente e
+    // o projeto moram dentro do "Buscar e filtrar": nada some, só recolhe.
+    const filtrosAtivos = [
+      search.trim() ? "q" : "",
+      clientId,
+      projectId,
+      format,
+      platform,
+      status,
+      productionStatus,
+      approvalStatus,
+      responsibleId,
+    ].filter(isActiveFilter).length;
+    return (
+      <div className="min-w-0">
+        <div className="mb-2 flex min-w-0 items-center">
+          <div className="min-w-0 flex-1">{cabecalho}</div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className={juntar(botao.icone, "relative ml-1 h-11 w-11", filtrosAtivos > 0 && "text-foreground")}
+                aria-label={`Buscar e filtrar, ${filtrosAtivos} ${filtrosAtivos === 1 ? "ativo" : "ativos"}`}
+                title="Buscar e filtrar"
+              >
+                <Search className="h-[18px] w-[18px]" aria-hidden="true" />
+                {filtrosAtivos > 0 && (
+                  <span
+                    className="absolute right-1 top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold tabular-nums text-primary-foreground"
+                    aria-hidden="true"
+                  >
+                    {filtrosAtivos}
+                  </span>
+                )}
+              </button>
+            </PopoverTrigger>
+            {/* Janela por cima (como diálogo): pode rolar por dentro quando os
+                filtros passam da altura do celular. */}
+            <PopoverContent
+              align="end"
+              className="max-h-[70vh] w-[calc(100vw-24px)] max-w-[380px] overflow-y-auto overscroll-contain p-3"
+            >
+              {cabecalhoDosFiltros}
+              <div className="relative mb-3 min-w-0">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(event) => onSearchChange(event.target.value)}
+                  placeholder="Buscar conteúdo"
+                  aria-label="Buscar conteúdo, legenda ou conta"
+                  className={juntar(campo, "h-11 pl-9")}
+                />
+              </div>
+              {gradeDosFiltros}
+            </PopoverContent>
+          </Popover>
+          {view === "board" && canCreate && (
+            <button
+              type="button"
+              className={juntar(botao.icone, "h-11 w-11 text-primary hover:text-primary")}
+              onClick={onCreate}
+              aria-label="Criar conteúdo"
+              title="Criar conteúdo"
+            >
+              <FilePlus2 className="h-5 w-5" aria-hidden="true" />
+            </button>
+          )}
+          {view !== "board" && canSchedule && (
+            <button
+              type="button"
+              className={juntar(botao.icone, "h-11 w-11 text-primary hover:text-primary")}
+              onClick={onSchedule}
+              aria-label="Agendar publicação"
+              title="Agendar publicação"
+            >
+              <CalendarPlus2 className="h-5 w-5" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+
+        <div className="mb-2 flex min-w-0 items-center">
+          <Etapas
+            soIcone
+            rotulo="Área editorial e visualização da agenda"
+            itens={visoes.map((option) => ({
+              valor: option.value,
+              rotulo: option.label,
+              icone: <option.icon className="h-4 w-4" />,
+            }))}
+            valor={view}
+            onEscolher={(v) => onViewChange(v as EditorialView)}
+            className="shrink-0"
+          />
+          {view !== "board" ? (
+            <div className="ml-auto flex min-w-0 items-center pl-1">
+              <button
+                type="button"
+                className={juntar(botao.icone, "h-11 w-9")}
+                onClick={onPrevious}
+                aria-label="Período anterior"
+                title="Período anterior"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <h2 className={juntar(texto.tituloSecao, "min-w-0 truncate text-center")} title={title}>
+                <span className="sr-only">{title}</span>
+                <span aria-hidden="true">{tituloCurto || title}</span>
+              </h2>
+              <button
+                type="button"
+                className={juntar(botao.icone, "h-11 w-9")}
+                onClick={onNext}
+                aria-label="Próximo período"
+                title="Próximo período"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+              {mostrarHoje && (
+                <button
+                  type="button"
+                  className={juntar(botao.discreto, "h-11 shrink-0 px-2 text-foreground")}
+                  onClick={onToday}
+                  title="Voltar para hoje"
+                >
+                  Hoje
+                </button>
+              )}
+            </div>
+          ) : (
+            inicioDaLinha ? <div className="ml-auto flex min-w-0 items-center pl-2">{inicioDaLinha}</div> : null
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-w-0 flex-wrap items-center">
@@ -323,54 +524,8 @@ export default function EditorialToolbar({
             align="end"
             className="w-[calc(100vw-24px)] max-w-[380px] p-3"
           >
-            <div className="mb-3 flex items-center justify-between">
-              <p className={texto.tituloSecao}>Filtros</p>
-              <button
-                type="button"
-                className={juntar(botao.discreto, "h-8 px-2 text-[12px]")}
-                onClick={onClearFilters}
-                disabled={!hasAnyActiveFilter}
-              >
-                <X className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                Limpar
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {/* Cliente e projeto moram aqui quando a linha não comporta. */}
-              {clients.length > 0 && (
-                <div className="md:hidden">
-                  <CampoDoFiltro rotulo="Cliente">
-                    <FilterSelect value={clientId} label="Todos os clientes" options={clients} onChange={onClientChange} />
-                  </CampoDoFiltro>
-                </div>
-              )}
-              <div className="xl:hidden">
-                <CampoDoFiltro rotulo="Projeto">
-                  <FilterSelect value={projectId} label="Todos os projetos" options={projects} onChange={onProjectChange} />
-                </CampoDoFiltro>
-              </div>
-              <CampoDoFiltro rotulo="Formato">
-                <FilterSelect value={format} label="Todos os formatos" options={formats} onChange={onFormatChange} />
-              </CampoDoFiltro>
-              <CampoDoFiltro rotulo="Plataforma">
-                <FilterSelect value={platform} label="Todas as plataformas" options={platforms} onChange={onPlatformChange} />
-              </CampoDoFiltro>
-              <CampoDoFiltro rotulo="Publicação">
-                <FilterSelect value={status} label="Todas as publicações" options={statuses} onChange={onStatusChange} />
-              </CampoDoFiltro>
-              <CampoDoFiltro rotulo="Etapa de produção">
-                <FilterSelect value={productionStatus} label="Todas as etapas" options={productionStatuses} onChange={onProductionStatusChange} />
-              </CampoDoFiltro>
-              <CampoDoFiltro rotulo="Aprovação">
-                <FilterSelect value={approvalStatus} label="Toda aprovação" options={approvalStatuses} onChange={onApprovalStatusChange} />
-              </CampoDoFiltro>
-              {responsibles.length > 0 && (
-                <CampoDoFiltro rotulo="Responsável">
-                  <FilterSelect value={responsibleId} label="Todos os responsáveis" options={responsibles} onChange={onResponsibleChange} />
-                </CampoDoFiltro>
-              )}
-            </div>
+            {cabecalhoDosFiltros}
+            {gradeDosFiltros}
           </PopoverContent>
         </Popover>
         {hasAnyActiveFilter && (

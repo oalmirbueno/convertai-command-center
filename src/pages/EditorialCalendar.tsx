@@ -109,6 +109,7 @@ import {
   type TaskDeliveryType,
 } from "@/lib/taskDeliveryTypes";
 import { cn } from "@/lib/utils";
+import { useCelular } from "@/hooks/useCelular";
 import { supabase } from "@/integrations/supabase/client";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 
@@ -209,6 +210,37 @@ function periodTitle(dateKey: string, view: EditorialView) {
   }).format(date);
 }
 
+/**
+ * Período curto para a barra do celular (16/10/2026): "out 2026" no mês e na
+ * lista, "13–19 out" na semana. O título longo não cabia ao lado das visões.
+ */
+const MESES_CURTOS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+function periodTitleCurto(dateKey: string, view: EditorialView) {
+  if (view === "board") return "";
+  const date = new Date(`${dateKey}T12:00:00`);
+  if (view === "week") {
+    const days = getEditorialWeekDays(dateKey);
+    if (days.length === 7) {
+      const first = new Date(`${days[0].dateKey}T12:00:00`);
+      const last = new Date(`${days[6].dateKey}T12:00:00`);
+      return first.getMonth() === last.getMonth()
+        ? `${first.getDate()}–${last.getDate()} ${MESES_CURTOS[last.getMonth()]}`
+        : `${first.getDate()} ${MESES_CURTOS[first.getMonth()]}–${last.getDate()} ${MESES_CURTOS[last.getMonth()]}`;
+    }
+  }
+  return `${MESES_CURTOS[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+/** O período na tela contém hoje? (o "Hoje" do celular só aparece fora dele) */
+function periodoTemHoje(dateKey: string, view: EditorialView, todayKey: string) {
+  if (view === "board") return true;
+  if (view === "week") {
+    return getEditorialWeekDays(dateKey).some((day) => day.dateKey === todayKey);
+  }
+  return dateKey.slice(0, 7) === todayKey.slice(0, 7);
+}
+
 /** Visão e filtros que a Agenda lembra ao sair e voltar (a data não entra). */
 const CHAVES_LEMBRADAS = [
   "view",
@@ -271,11 +303,16 @@ export default function EditorialCalendar() {
   const effectiveRole = isImpersonating ? "client" : profile?.role;
   const todayKey = dateKeyInTimeZone(new Date()) || "2026-01-01";
   const requestedView = searchParams.get("view") as EditorialView | null;
-  // Cliente no mobile abre direto em lista: nada de calendário mensal espremido.
-  const defaultView: EditorialView =
-    effectiveRole === "client" && typeof window !== "undefined" && window.innerWidth < 768
+  // 16/10/2026: no celular (< 768 px) ninguém abre no mês espremido. Cliente
+  // abre na lista e a equipe na semana (faixa de dias + lista do dia). O
+  // useCelular já nasce com a resposta, então a tela não troca depois de
+  // pintar; a visão escolhida pela pessoa (endereço ou lembrada) vale sempre.
+  const celular = useCelular();
+  const defaultView: EditorialView = celular
+    ? effectiveRole === "client"
       ? "list"
-      : "month";
+      : "week"
+    : "month";
   const view = validViews.includes(requestedView || ("" as EditorialView))
     ? (requestedView as EditorialView)
     : defaultView;
@@ -1620,6 +1657,8 @@ export default function EditorialCalendar() {
                     : "Conteúdo no dia certo, na conta certa. Prazos do Kanban aparecem em roxo. Conteúdo aprovado e agendado no Instagram publica sozinho pelo painel na data marcada."
               }
               descricao={
+                // 16/10/2026: no celular sai a linha de números (menos informação).
+                celular ? undefined : (
                 <>
                   {resumoDoCalendario(
                     filteredPosts,
@@ -1627,16 +1666,20 @@ export default function EditorialCalendar() {
                   )}
                   {canUseTeamData && taskDataLoading && !taskDataError ? " · lendo tarefas do Kanban" : ""}
                 </>
+                )
               }
             />
           }
           inicioDaLinha={
             canUseTeamData ? (
               <div className="flex min-w-0 items-center">
+                {/* 16/10/2026: no celular fica só o atalho do Kanban (sem a contagem). */}
+                {!celular && (
                 <span className={juntar(texto.auxiliar, "mr-2 truncate")}>
                   <span className="font-medium text-violet-500">{productionTasks.length}</span>{" "}
                   {productionTasks.length === 1 ? "entrega editorial do Kanban" : "entregas editoriais do Kanban"}
                 </span>
+                )}
                 <Link
                   to={kanbanHref}
                   className={botao.icone}
@@ -1649,6 +1692,8 @@ export default function EditorialCalendar() {
             ) : null
           }
           title={pageTitle}
+          tituloCurto={periodTitleCurto(dateKey, view)}
+          mostrarHoje={!periodoTemHoje(dateKey, view, todayKey)}
           view={view}
           search={search}
           clientId={requestedClientId}
@@ -1713,7 +1758,10 @@ export default function EditorialCalendar() {
           <div className="mb-2 flex min-w-0 items-center rounded-md border border-success/30 bg-success/5 px-3 py-2">
             <Send className="mr-2 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
             <p className={juntar(texto.corpo, "mr-1.5 min-w-0 truncate")}>
-              {approvedReadyToSchedule.length === 1
+              {/* 16/10/2026: frase curta no celular para caber numa linha. */}
+              {celular
+                ? `${approvedReadyToSchedule.length} ${approvedReadyToSchedule.length === 1 ? "aprovado" : "aprovados"} para agendar`
+                : approvedReadyToSchedule.length === 1
                 ? "1 conteúdo aprovado pelo cliente pronto para agendar"
                 : `${approvedReadyToSchedule.length} conteúdos aprovados pelo cliente prontos para agendar`}
             </p>
@@ -1724,9 +1772,9 @@ export default function EditorialCalendar() {
               type="button"
               onClick={() => void scheduleApprovedNow()}
               disabled={batchScheduling}
-              className={juntar(botao.primario, "ml-auto h-8 bg-success text-success-foreground hover:bg-success/90")}
+              className={juntar(botao.primario, "ml-auto bg-success text-success-foreground hover:bg-success/90", celular ? "h-11 shrink-0" : "h-8")}
             >
-              {batchScheduling ? "Agendando…" : "Agendar aprovados"}
+              {batchScheduling ? "Agendando…" : celular ? "Agendar" : "Agendar aprovados"}
             </button>
           </div>
         )}

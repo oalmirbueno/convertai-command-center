@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/dialog";
 import { FileImage, FileText, Film, Archive, Download, FolderOpen, ExternalLink } from "lucide-react";
 import CarouselSlider from "@/components/shared/CarouselSlider";
+import JanelaDoCelular from "@/components/sistema/JanelaDoCelular";
+import { useTelaPequena } from "@/components/client/useTelaPequena";
 import { openFile, downloadFile } from "@/lib/fileActions";
 import { mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 import {
@@ -105,6 +107,8 @@ export default function ClientDocuments() {
   const [feedbackFileId, setFeedbackFileId] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState("");
   const [previewFile, setPreviewFile] = useState<any>(null);
+  // Celular (16/10/2026): lista de app e o item abre numa folha que sobe de baixo.
+  const pequena = useTelaPequena();
 
   // Build children map for carousel grouping
   const childrenMap = new Map<string, any[]>();
@@ -204,6 +208,57 @@ export default function ClientDocuments() {
       setPreviewFile(f);
     }
   };
+
+  // O miolo da prévia, igual na folha do celular e na janela do computador.
+  const corpoDaPrevia = (previewFile: any) => (
+    <>
+              <CarouselSlider parent={previewFile} initialChildren={childrenMap.get(previewFile.id) || []} />
+              
+              {/* Action buttons */}
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
+                  const url = await resolveFileUrl({ fileUrl: previewFile.file_url, storageBucket: previewFile.storage_bucket, storagePath: previewFile.storage_path });
+                  openFile(url);
+                }}>
+                  <ExternalLink className="w-3.5 h-3.5" /> Abrir
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
+                  const url = await resolveFileUrl({ fileUrl: previewFile.file_url, storageBucket: previewFile.storage_bucket, storagePath: previewFile.storage_path });
+                  downloadFile(url, previewFile.file_name);
+                }}>
+                  <Download className="w-3.5 h-3.5" /> Baixar
+                </Button>
+              </div>
+
+              <p className="text-[12px] text-muted-foreground">
+                Enviado por {previewFile.uploader?.full_name || "-"} • {formatDate(previewFile.created_at)}
+              </p>
+              {previewFile.caption && (
+                <div className="space-y-0.5">
+                  <p className={texto.rotulo}>Legenda</p>
+                  <p className="text-[13px] text-foreground">{previewFile.caption}</p>
+                </div>
+              )}
+              {previewFile.carousel_text && (
+                <div className="space-y-0.5">
+                  <p className={texto.rotulo}>Texto do carrossel</p>
+                  <p className="whitespace-pre-wrap text-[13px] text-foreground">{previewFile.carousel_text}</p>
+                </div>
+              )}
+              {previewFile.description && (
+                <div className="space-y-0.5">
+                  <p className={texto.rotulo}>Descrição</p>
+                  <p className="text-[13px] text-foreground">{previewFile.description}</p>
+                </div>
+              )}
+              {previewFile.approval_status === "rejected" && previewFile.feedback && (
+                <div className="rounded-md bg-destructive/5 px-3 py-2">
+                  <p className={juntar(texto.auxiliar, "mb-0.5")}>Pedido de ajuste anterior</p>
+                  <p className="text-[12px] text-foreground">{previewFile.feedback}</p>
+                </div>
+              )}
+    </>
+  );
 
   return (
     <div className="min-w-0 space-y-5">
@@ -327,20 +382,20 @@ export default function ClientDocuments() {
                       {f.version > 1 && <span className="ml-1 text-[11px] text-muted-foreground">v{f.version}</span>}
                     </p>
                     <p className={juntar(texto.auxiliar, "truncate")}>
-                      {fileLocationLabel(f)} · {f.project?.name || "Sem projeto"} · {formatDate(f.created_at)}
+                      {/* Celular: uma linha de apoio só (data e projeto); a pasta fica nos filtros. */}
+                      <span className="hidden sm:inline">{fileLocationLabel(f)} · </span>
+                      {f.project?.name || "Sem projeto"} · {formatDate(f.created_at)}
                     </p>
-                    {f.approval_status !== "none" && (
-                      <span className={juntar(etiqueta, "mt-1 sm:hidden", badge.cls)}>{badge.label}</span>
-                    )}
                   </div>
                   {f.approval_status !== "none" && (
-                    <span className={juntar(etiqueta, "ml-2 hidden sm:inline-flex", badge.cls)}>{badge.label}</span>
+                    <span className={juntar(etiqueta, "ml-2", badge.cls)}>{badge.label}</span>
                   )}
+                  {/* No celular o Baixar fica na folha do item (um toque por linha). */}
                   <button
                     type="button"
                     title="Baixar"
                     aria-label={`Baixar ${f.file_name}`}
-                    className={juntar(botao.icone, "ml-1")}
+                    className={juntar(botao.icone, "ml-1 hidden sm:inline-flex")}
                     onClick={async (e) => {
                       e.stopPropagation();
                       const url = await resolveFileUrl({ fileUrl: f.file_url, storageBucket: f.storage_bucket, storagePath: f.storage_path });
@@ -351,7 +406,7 @@ export default function ClientDocuments() {
                 </div>
 
                 {f.approval_status === "rejected" && f.feedback && (
-                  <div className={juntar(superficie.poco, "ml-[68px] mt-2 px-3 py-2")}>
+                  <div className={juntar(superficie.poco, "ml-[68px] mt-2 hidden px-3 py-2 sm:block")}>
                     <p className={texto.auxiliar}>Seu pedido de ajuste</p>
                     <p className="text-[12px] text-foreground">{f.feedback}</p>
                   </div>
@@ -362,7 +417,40 @@ export default function ClientDocuments() {
         </ul>
       )}
 
-      {/* Preview Modal */}
+      {/* Preview: folha que sobe de baixo no celular; janela do meio no computador (igual a antes). */}
+      {pequena ? (
+        <JanelaDoCelular
+          aberta={!!previewFile}
+          titulo={previewFile?.file_name}
+          onFechar={() => setPreviewFile(null)}
+          larga
+          classeDoCorpo="space-y-4 px-4 py-4 break-words"
+          rodape={
+            previewFile?.approval_status === "pending" ? (
+              <div className="flex border-t border-border px-4 py-3 [&>*+*]:ml-2">
+                <button
+                  type="button"
+                  disabled={isReadOnly}
+                  className={juntar(botao.perigo, "h-12 w-full flex-1 text-[14px]")}
+                  onClick={() => { if (!isReadOnly) { setFeedbackFileId(previewFile.id); setFeedbackText(""); setPreviewFile(null); } }}
+                >
+                  Pedir ajuste
+                </button>
+                <button
+                  type="button"
+                  disabled={isReadOnly}
+                  className={juntar(botao.primario, "h-12 w-full flex-1 bg-success text-[14px] text-white hover:bg-success/90")}
+                  onClick={() => { if (!isReadOnly) { setConfirmApprove(previewFile.id); setPreviewFile(null); } }}
+                >
+                  Aprovar
+                </button>
+              </div>
+            ) : undefined
+          }
+        >
+          {previewFile && corpoDaPrevia(previewFile)}
+        </JanelaDoCelular>
+      ) : (
       <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
         <DialogContent className="max-w-2xl p-0 gap-0 flex flex-col max-h-[90vh]">
           <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b border-border">
@@ -370,51 +458,7 @@ export default function ClientDocuments() {
           </DialogHeader>
           {previewFile && (
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              <CarouselSlider parent={previewFile} initialChildren={childrenMap.get(previewFile.id) || []} />
-              
-              {/* Action buttons */}
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
-                  const url = await resolveFileUrl({ fileUrl: previewFile.file_url, storageBucket: previewFile.storage_bucket, storagePath: previewFile.storage_path });
-                  openFile(url);
-                }}>
-                  <ExternalLink className="w-3.5 h-3.5" /> Abrir
-                </Button>
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
-                  const url = await resolveFileUrl({ fileUrl: previewFile.file_url, storageBucket: previewFile.storage_bucket, storagePath: previewFile.storage_path });
-                  downloadFile(url, previewFile.file_name);
-                }}>
-                  <Download className="w-3.5 h-3.5" /> Baixar
-                </Button>
-              </div>
-
-              <p className="text-[12px] text-muted-foreground">
-                Enviado por {previewFile.uploader?.full_name || "-"} • {formatDate(previewFile.created_at)}
-              </p>
-              {previewFile.caption && (
-                <div className="space-y-0.5">
-                  <p className={texto.rotulo}>Legenda</p>
-                  <p className="text-[13px] text-foreground">{previewFile.caption}</p>
-                </div>
-              )}
-              {previewFile.carousel_text && (
-                <div className="space-y-0.5">
-                  <p className={texto.rotulo}>Texto do carrossel</p>
-                  <p className="whitespace-pre-wrap text-[13px] text-foreground">{previewFile.carousel_text}</p>
-                </div>
-              )}
-              {previewFile.description && (
-                <div className="space-y-0.5">
-                  <p className={texto.rotulo}>Descrição</p>
-                  <p className="text-[13px] text-foreground">{previewFile.description}</p>
-                </div>
-              )}
-              {previewFile.approval_status === "rejected" && previewFile.feedback && (
-                <div className="rounded-md bg-destructive/5 px-3 py-2">
-                  <p className={juntar(texto.auxiliar, "mb-0.5")}>Pedido de ajuste anterior</p>
-                  <p className="text-[12px] text-foreground">{previewFile.feedback}</p>
-                </div>
-              )}
+              {corpoDaPrevia(previewFile)}
             </div>
           )}
           {previewFile?.approval_status === "pending" && (
@@ -433,6 +477,7 @@ export default function ClientDocuments() {
           )}
         </DialogContent>
       </Dialog>
+      )}
 
       {/* Approve dialog */}
       <Dialog open={!!confirmApprove} onOpenChange={() => setConfirmApprove(null)}>

@@ -309,7 +309,9 @@ function CartaoDaIdeia({
         if (alvo && typeof alvo.closest === "function" && alvo.closest("button, a, summary, details, input, textarea, select")) return;
         onAbrir();
       }}
-      className={juntar(superficie.painel, "mr-3 flex w-[85%] min-w-0 shrink-0 cursor-pointer snap-start flex-col overflow-hidden transition-colors last:mr-0 hover:border-primary/40 sm:mr-4 sm:w-[360px] lg:w-[400px]")}
+      // 16/10/2026 (dono, celular: "carrossel, um cartão por tela"): abaixo de 640 px o cartão ocupa o
+      // trilho inteiro e o deslize para em cada um (snap-always); só os 2 primeiros passos à vista.
+      className={juntar(superficie.painel, "mr-3 flex w-full min-w-0 shrink-0 cursor-pointer snap-start snap-always flex-col overflow-hidden transition-colors last:mr-0 hover:border-primary/40 sm:mr-4 sm:w-[360px] sm:snap-normal lg:w-[400px]")}
     >
       <CapaDaIdeia ideia={ideia} imagem={imagem} cliente={cliente} />
       <div className="flex min-w-0 flex-1 flex-col p-4">
@@ -323,7 +325,7 @@ function CartaoDaIdeia({
         {ideia.moves.length > 0 && (
           <ol className="mt-3 min-w-0 space-y-1.5" aria-label="Passos">
             {ideia.moves.slice(0, 4).map((passo, i) => (
-              <li key={`${i}-${passo}`} className="flex min-w-0 items-start">
+              <li key={`${i}-${passo}`} className={juntar("flex min-w-0 items-start", i >= 2 && "max-sm:hidden")}>
                 <span className="mr-2 mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold tabular-nums text-primary" aria-hidden="true">
                   {i + 1}
                 </span>

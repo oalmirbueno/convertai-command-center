@@ -582,7 +582,8 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
               <>
                 <Andamento desde={desde} rotulo="Lendo o contexto" />
                 <BotaoComCusto
-                  rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> Sugerir pelo contexto</>}
+                  // 16/10/2026 (celular "mais clean"): abaixo de 640 px só o ícone e o preço; o nome fica para o leitor de tela.
+                  rotulo={<><Sparkles className="h-3.5 w-3.5 sm:mr-1" /> <span className="max-sm:sr-only">Sugerir pelo contexto</span></>}
                   titulo="Sugerir o briefing"
                   descricao="Lê o kit, o contexto, o dossiê e as métricas de anúncios do cliente e propõe o briefing. O que não tiver dado fica como lacuna. Nada é gravado sem você salvar."
                   variant="outline"
@@ -597,8 +598,8 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
                   }}
                 />
                 <Button type="button" size="sm" variant="outline" className="h-9" disabled={!mudou || salvando} onClick={() => void salvar()}>
-                  {salvando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
-                  Salvar briefing
+                  {salvando ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1" /> : <Check className="h-3.5 w-3.5 sm:mr-1" />}
+                  <span className="max-sm:sr-only">Salvar briefing</span>
                 </Button>
               </>
             }

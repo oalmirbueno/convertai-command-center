@@ -186,7 +186,7 @@ export default function SeletorDeClientesDaMesa({
           className={
             soIcone
               ? `toque-compacto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${aberto ? "bg-muted" : ""}`
-              : `flex h-9 min-w-0 max-w-full items-center rounded-md px-2 text-left text-[13px] font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-[320px] ${aberto ? "bg-muted" : ""}`
+              : `flex h-9 min-w-0 max-w-full items-center rounded-md px-2 text-left text-[13px] font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-[320px] ${valor && nome ? "max-sm:h-8 max-sm:w-8 max-sm:justify-center max-sm:rounded-full max-sm:px-0" : ""} ${aberto ? "bg-muted" : ""}`
           }
         >
           {soIcone ? (
@@ -201,10 +201,17 @@ export default function SeletorDeClientesDaMesa({
             )
           ) : (
             <>
+              {/* 16/10/2026 (dono: "cara de aplicativo"): abaixo de 640 px o cliente aberto vira o avatar com as
+                  iniciais, como na Mesa do cliente; o nome continua no leitor de tela e volta a partir de 640 px. */}
+              {valor && nome && (
+                <span aria-hidden="true" className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-[11px] font-semibold uppercase text-primary sm:hidden">
+                  {iniciais(nome)}
+                </span>
+              )}
               {/* Visual da casca das mesas (docs/design/SISTEMA.md): sem caixa, ao lado do seletor de mesa. */}
-              <Building2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span className={`min-w-0 flex-1 truncate ${valor ? "" : "font-normal text-muted-foreground"}`}>{rotulo}</span>
-              <ChevronsUpDown className="ml-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <Building2 className={`mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground ${valor && nome ? "hidden sm:block" : ""}`} />
+              <span className={`min-w-0 flex-1 truncate ${valor && nome ? "hidden sm:block" : ""} ${valor ? "" : "font-normal text-muted-foreground"}`}>{rotulo}</span>
+              <ChevronsUpDown className={`ml-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground ${valor && nome ? "hidden sm:block" : ""}`} />
             </>
           )}
         </button>

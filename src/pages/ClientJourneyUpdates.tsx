@@ -24,6 +24,7 @@ import {
   type SocialMetricsWeek,
 } from "@/hooks/useSocialMetrics";
 import { useIdentidadesPorConta } from "@/components/admin/LogoDoCliente";
+import { useTelaPequena } from "@/components/client/useTelaPequena";
 import {
   CabecalhoDePagina,
   Carregando,
@@ -45,7 +46,7 @@ import {
  * Sem movimento no mês ou com o narrador indisponível, o bloco simplesmente
  * não aparece: nunca um erro na cara do cliente.
  */
-function MonthNarrative({ clientId }: { clientId: string }) {
+function MonthNarrative({ clientId, recolhida = false }: { clientId: string; recolhida?: boolean }) {
   const monthKey = new Date().toISOString().slice(0, 7);
   const cacheKey = `aceleriq-narrative-${clientId}-${monthKey}`;
 
@@ -83,6 +84,7 @@ function MonthNarrative({ clientId }: { clientId: string }) {
     <Secao
       divisoria
       titulo={`O seu mês${data.month ? ` de ${data.month}` : ""}`}
+      recolhidaDeInicio={recolhida}
       ajuda="Contado pela Aceleriq a partir do que aconteceu de verdade no seu painel neste mês."
     >
       <p className={juntar(texto.corpo, "max-w-3xl leading-6 text-foreground/90")}>{data.narrative}</p>
@@ -96,7 +98,7 @@ function MonthNarrative({ clientId }: { clientId: string }) {
  * linguagem do cliente. Sem movimento na semana, o bloco não aparece: o
  * cliente nunca vê uma caixa vazia dizendo que nada foi feito.
  */
-function WeekBackstage({ clientId }: { clientId: string }) {
+function WeekBackstage({ clientId, recolhida = false }: { clientId: string; recolhida?: boolean }) {
   const { data } = useQuery({
     queryKey: ["cycle-client-pulse", clientId],
     queryFn: async () => {
@@ -120,6 +122,7 @@ function WeekBackstage({ clientId }: { clientId: string }) {
       divisoria
       data-tour="cliente-bastidores"
       titulo="Bastidores da semana"
+      recolhidaDeInicio={recolhida}
       descricao={`${data.total} ${data.total === 1 ? "etapa concluída" : "etapas concluídas"}`}
       ajuda="Este é o trabalho de bastidor da semana, atualizado conforme a equipe avança. O que chega até você, como conteúdo e publicações, nasce daqui."
     >
@@ -159,7 +162,7 @@ function WeekBackstage({ clientId }: { clientId: string }) {
  * escritos para ele, então a relação tem memória e ele consegue ver de onde
  * veio o que está acontecendo hoje.
  */
-function ClientHistory({ clientId }: { clientId: string }) {
+function ClientHistory({ clientId, recolhida = false }: { clientId: string; recolhida?: boolean }) {
   const { data: entries } = useQuery({
     queryKey: ["client-memory-timeline", clientId],
     queryFn: () => readMemory(clientId, { limit: 8, onlyClientVisible: true }),
@@ -174,6 +177,7 @@ function ClientHistory({ clientId }: { clientId: string }) {
       divisoria
       data-tour="cliente-historia"
       titulo="A nossa história até aqui"
+      recolhidaDeInicio={recolhida}
       descricao={`${entries.length} ${entries.length === 1 ? "capítulo" : "capítulos"}`}
       ajuda="Cada capítulo fica guardado aqui: o que foi combinado, o que foi feito e o porquê. Assim nada se perde entre uma conversa e outra."
     >
@@ -243,7 +247,7 @@ const SIGNAL_TONE: Record<string, string> = {
  * variação contra a semana anterior e o histórico de alcance. Sem dados (conta
  * ainda não conectada ou primeira coleta pendente), o bloco não aparece.
  */
-function InstagramRealBlock({ clientId }: { clientId: string }) {
+function InstagramRealBlock({ clientId, recolhida = false }: { clientId: string; recolhida?: boolean }) {
   // 12 semanas POR CONTA: quem tem duas contas precisa de linhas para as duas.
   const { data: todas } = useSocialMetricsWeekly(clientId, 40);
   const { data: identidades } = useIdentidadesPorConta();
@@ -258,6 +262,7 @@ function InstagramRealBlock({ clientId }: { clientId: string }) {
           key={accountId}
           rows={rows.slice(0, 12)}
           username={identidades?.get(accountId)?.username ?? null}
+          recolhida={recolhida}
         />
       ))}
     </>
@@ -267,9 +272,11 @@ function InstagramRealBlock({ clientId }: { clientId: string }) {
 function InstagramContaBlock({
   rows,
   username,
+  recolhida = false,
 }: {
   rows: SocialMetricsWeek[];
   username: string | null;
+  recolhida?: boolean;
 }) {
   const latest = rows[0];
   const weekLabel = (value: string) => {
@@ -288,6 +295,7 @@ function InstagramContaBlock({
     <Secao
       divisoria
       titulo={username ? `Instagram @${username}` : "Instagram"}
+      recolhidaDeInicio={recolhida}
       descricao={
         <span className="block truncate">
           Semana de {weekLabel(latest.week_start)} a {weekLabel(latest.week_end)}
@@ -355,6 +363,10 @@ export default function ClientJourneyUpdates() {
     validar: (v) => v === null || (typeof v === "string" && /^\d{4}-\d{2}$/.test(v)),
   });
   const { profile } = useAuth();
+  // Celular (16/10/2026, dono: "muito poluído"): o retrato de agora e as
+  // atualizações da Aceleriq ficam abertos; os demais blocos nascem recolhidos
+  // (só o título e uma linha), até a pessoa abrir. Do computador, nada muda.
+  const pequena = useTelaPequena();
   // Staff sem "Ver como Cliente" nao tem jornada propria: sem esta trava, o
   // admin via os dados do proprio cadastro achando que eram de um cliente.
   const isStaff =
@@ -535,7 +547,7 @@ export default function ClientJourneyUpdates() {
               };
             })}
           />
-          <div className="max-w-3xl space-y-2">
+          <div className="hidden max-w-3xl space-y-2 sm:block">
             {narrative.paragraphs.map((paragraph) => (
               <p key={paragraph} className={juntar(texto.corpo, "leading-6")}>
                 {paragraph}
@@ -552,12 +564,12 @@ export default function ClientJourneyUpdates() {
       )}
 
       {/* ── O narrador do mês: a IA conta o mês com os fatos reais ── */}
-      {clientId && <MonthNarrative clientId={clientId} />}
-      {clientId && <WeekBackstage clientId={clientId} />}
+      {clientId && <MonthNarrative clientId={clientId} recolhida={pequena} />}
+      {clientId && <WeekBackstage clientId={clientId} recolhida={pequena} />}
 
       {/* ── Frentes ativas ── */}
       {activeProjects.length > 0 && (
-        <Secao divisoria titulo="Suas frentes" descricao={`${activeProjects.length} ${activeProjects.length === 1 ? "ativa" : "ativas"}`}>
+        <Secao divisoria recolhidaDeInicio={pequena} titulo="Suas frentes" descricao={`${activeProjects.length} ${activeProjects.length === 1 ? "ativa" : "ativas"}`}>
           <ul className={juntar(lista.aberta, lista.divisoria)}>
             {activeProjects.map((project: any) => {
               const view = buildProgressView(project, (snapshot?.tasks || []) as any[]);
@@ -610,7 +622,7 @@ export default function ClientJourneyUpdates() {
 
       {/* ── O que já foi ao ar ── */}
       {published.length > 0 && (
-        <Secao divisoria titulo="Já publicado" descricao={`${published.length} mais recentes`}>
+        <Secao divisoria recolhidaDeInicio={pequena} titulo="Já publicado" descricao={`${published.length} mais recentes`}>
           <ul className={juntar(lista.aberta, lista.divisoria)}>
             {published.map((publication: any, index: number) => (
               <li key={`${publication.published_at}-${index}`} className="flex min-w-0 items-center px-2 py-2.5">
@@ -639,7 +651,7 @@ export default function ClientJourneyUpdates() {
       )}
 
       {/* ── Instagram em números REAIS, coletados da Meta toda semana ── */}
-      {clientId && <InstagramRealBlock clientId={clientId} />}
+      {clientId && <InstagramRealBlock clientId={clientId} recolhida={pequena} />}
 
       {/* ── O case vivo: de onde saímos para onde chegamos ── */}
       {(() => {
@@ -671,6 +683,7 @@ export default function ClientJourneyUpdates() {
           <Secao
             divisoria
             titulo="A sua história com a Aceleriq"
+            recolhidaDeInicio={pequena}
             descricao={`${monthsTogether === 1 ? "No primeiro mês" : `Em ${monthsTogether} meses`} de trabalho, isto foi construído`}
           >
             <div className="grid grid-cols-1 sm:grid-cols-2">
@@ -721,6 +734,7 @@ export default function ClientJourneyUpdates() {
           <Secao
             divisoria
             titulo="Crescimento do seu negócio"
+            recolhidaDeInicio={pequena}
             descricao={
               <span className="block truncate">
                 {totalContacts > 0
@@ -789,6 +803,7 @@ export default function ClientJourneyUpdates() {
           <Secao
             divisoria
             titulo="Sua evolução desde o início"
+            recolhidaDeInicio={pequena}
             descricao={`${rows[rows.length - 1].running} movimento(s) de trabalho registrados`}
             ajuda="Do ponto de partida até hoje, mês a mês. Toque num mês para ver o que foi feito nele."
             acao={
@@ -893,7 +908,7 @@ export default function ClientJourneyUpdates() {
       })()}
 
       {/* ── A história da parceria, capítulo a capítulo ── */}
-      {clientId && <ClientHistory clientId={clientId} />}
+      {clientId && <ClientHistory clientId={clientId} recolhida={pequena} />}
 
       {/* ── Diário do trabalho: cada movimento, na hora ── */}
       {clientId && (

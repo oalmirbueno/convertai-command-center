@@ -194,7 +194,8 @@ describe("nada flutua sobre o conteúdo", () => {
   it("barra do topo de 768 a 1023: ordem e prioridade (avatar sempre; tema e links extras vão para os menus)", () => {
     const layout = ler("src/components/AppLayout.tsx");
     const inicio = layout.indexOf("{/* Right: Icons */}");
-    const direita = layout.slice(inicio, layout.indexOf("{/* Mobile menu button */}", inicio));
+    // 16/10/2026: o botão de menu do celular saiu (a folha "Mais" da barra de baixo o substitui); o fim da direita tem marcador próprio.
+    const direita = layout.slice(inicio, layout.indexOf("{/* Fim da direita.", inicio));
     // Ordem da direita: indicador de gerações, busca (ícone), lançador, tema, sino, avatar.
     const ordem = ["<IndicadorDeGeracoes", 'aria-label="Buscar página', '<Lancador variante="topo"', 'data-prioridade-no-topo="tema"', 'data-tour="nav-notifications"', 'aria-label="Menu do perfil"'];
     const posicoes = ordem.map((t) => direita.indexOf(t));

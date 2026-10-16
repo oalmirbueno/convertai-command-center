@@ -14,8 +14,8 @@ import { juntar, larguraDaMesa } from "./estilos";
  * e o corpo na largura toda da tela (até 1760 px), sem coluna estreita.
  *
  * Larguras:
- * - celular (< 640): mesa e cliente na 1ª linha, ações na 2ª, etapas na 3ª
- *   (as etapas rolam para o lado, sem cortar o texto);
+ * - celular (< 640): mesa, cliente e ações (ícones) na 1ª linha, etapas na
+ *   2ª (as etapas rolam para o lado, sem cortar o texto; 16/10/2026);
  * - tablet e notebook (640 a 1279): mesa, cliente e ações na 1ª linha,
  *   etapas na 2ª;
  * - de 1280 (ou de 1536 com `etapasEmLinhaPropriaAte="2xl"`): tudo numa
@@ -77,7 +77,7 @@ export default function CascaDaMesa({
         <h1 className="sr-only">{titulo}</h1>
         <div className={juntar(larguraDaMesa, "flex flex-wrap items-center", ate2xl ? "2xl:flex-nowrap" : "xl:flex-nowrap", etapas ? "" : "pb-2")}>
           {/* Onde estou: mesa / cliente / marca. */}
-          <div className={juntar("flex w-full min-w-0 items-center sm:w-auto sm:flex-1", ate2xl ? "2xl:flex-none" : "xl:flex-none")} data-casca-identidade="">
+          <div className={juntar("flex min-w-0 flex-1 items-center sm:w-auto", ate2xl ? "2xl:flex-none" : "xl:flex-none")} data-casca-identidade="">
             {caminho || <SeletorDeMesa atual={mesa} clientId={clientId} marcaId={marcaId} />}
             <span aria-hidden="true" className="mx-1 shrink-0 text-[15px] font-light text-muted-foreground/50">
               /
@@ -85,10 +85,10 @@ export default function CascaDaMesa({
             <div className="min-w-0 flex-1 sm:flex-initial">{cliente}</div>
             {marca && <div className="ml-2 min-w-0 shrink-0">{marca}</div>}
           </div>
-          {/* Ações: à direita; no celular, linha própria. */}
+          {/* Ações: à direita, na mesma linha de mesa e cliente também no celular (16/10/2026: uma linha a menos). */}
           <div
             className={juntar(
-              "mt-1 flex w-full min-w-0 shrink-0 items-center justify-end sm:ml-3 sm:mt-0 sm:w-auto",
+              "ml-2 flex min-w-0 shrink-0 items-center justify-end sm:ml-3 sm:w-auto",
               ate2xl ? "2xl:order-3" : "xl:order-3",
             )}
             data-casca-acoes=""

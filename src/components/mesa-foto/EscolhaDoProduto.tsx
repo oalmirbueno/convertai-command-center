@@ -108,7 +108,7 @@ export default function EscolhaDoProduto({ rotulo = "Produto", className = "" }:
       {listaAberta && <label className="mt-3 block text-[12px]">Produtos do cliente · {kits.length}<input className={juntar(campo, "mt-1")} ref={buscaRef} aria-label="Buscar produto do cliente" placeholder="Buscar pelo nome ou variante" value={busca} onChange={(e) => setBusca(e.target.value)} /></label>}
       {listaAberta && <select aria-label="Filtrar produtos por pasta" className={juntar(campo, "mt-2 h-8 text-[12px]")} value={pasta} onChange={(e) => setPasta(e.target.value)}><option value="">Todas as pastas</option><option value="__sem">Sem pasta</option>{Array.from(new Set(kits.map(pastaDoProduto))).filter(Boolean).sort().map((p) => <option key={p} value={p}>{p}</option>)}</select>}
       {listaAberta && (
-        <ul className="mt-2 min-w-0 rounded-lg scrollbar-hidden max-h-64 overflow-y-auto lg:overscroll-contain border border-border p-1" role="listbox" aria-label="Escolher o produto" data-lista-de-produtos="">
+        <ul className="mt-2 min-w-0 rounded-lg scrollbar-hidden sm:max-h-64 sm:overflow-y-auto lg:overscroll-contain border border-border p-1" role="listbox" aria-label="Escolher o produto" data-lista-de-produtos="">
           {!visiveis.length && <li className="p-2 text-[12px] text-muted-foreground">Nenhum produto neste filtro.</li>}
           {visiveis.map((k) => {
             const capa = capaDoKit(k, fotos);

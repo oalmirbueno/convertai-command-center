@@ -160,9 +160,19 @@ export default function EmpresasCRM({
                       aria-expanded={expandida}
                       className={juntar("flex w-full min-w-0 items-center px-4 py-3 text-left transition-colors hover:bg-muted/40", foco)}
                     >
-                      <Building2 className="mr-3 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      <Building2 className="mr-3 h-4 w-4 shrink-0 text-muted-foreground max-sm:hidden" aria-hidden="true" />
+                      {/* 16/10/2026: no celular, item de lista de app (inicial num círculo). */}
+                      <span
+                        aria-hidden="true"
+                        className={juntar(
+                          "mr-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[14px] font-semibold sm:hidden",
+                          ficha.abertos > 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {(ficha.empresa.name.trim().charAt(0) || "?").toUpperCase()}
+                      </span>
                       <span className="mr-3 min-w-0 flex-1">
-                        <span className={juntar(texto.corpo, "block truncate font-medium")}>{ficha.empresa.name}</span>
+                        <span className={juntar(texto.corpo, "block truncate font-medium max-sm:text-[14px]")}>{ficha.empresa.name}</span>
                         <span className={juntar(texto.auxiliar, "block truncate")}>
                           {[
                             ficha.empresa.segment,
@@ -182,7 +192,7 @@ export default function EmpresasCRM({
                               : "sem negócio"}
                         </span>
                         {ficha.mrrGanho > 0 && (
-                          <span className="block text-[11px] tabular-nums text-success">
+                          <span className="block text-[11px] tabular-nums text-success max-sm:hidden">
                             {dinheiro(ficha.mrrGanho)}/mês fechado
                           </span>
                         )}

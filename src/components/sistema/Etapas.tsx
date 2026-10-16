@@ -6,7 +6,8 @@ import { foco, juntar } from "./estilos";
 /**
  * Etapas (ou abas) padronizadas: uma linha de botões com sublinhado verde na
  * aberta. Nunca corta o texto: se não couber (celular, mesa com muitas
- * etapas), a linha rola para o lado e a aberta fica sempre à vista.
+ * etapas), a linha rola para o lado por dentro (com encaixe suave em cada
+ * etapa, sem arrastar a página) e a aberta fica sempre à vista.
  *
  * É um `<nav>` com aria-label (as mesas medem o cabeçalho por ele) e cada
  * etapa é um botão com aria-current="page" na aberta. Setas esquerda e
@@ -71,6 +72,9 @@ export default function Etapas({
   const trilho = useRef<HTMLDivElement>(null);
 
   // A aberta sempre à vista quando a linha rola (sem mexer na rolagem da página).
+  // Fora de vista (ou cortada), ela vem para o MEIO da linha (16/10/2026): no
+  // celular dá para ver a vizinha dos dois lados e saber que a linha rola.
+  // offsetLeft é medido a partir do trilho (ele é o `relative` mais próximo).
   useEffect(() => {
     const el = trilho.current;
     if (!el) return;
@@ -78,8 +82,9 @@ export default function Etapas({
     if (!ativo) return;
     const esquerda = ativo.offsetLeft;
     const direita = esquerda + ativo.offsetWidth;
-    if (esquerda < el.scrollLeft) el.scrollLeft = Math.max(0, esquerda - 16);
-    else if (direita > el.scrollLeft + el.clientWidth) el.scrollLeft = direita - el.clientWidth + 16;
+    if (esquerda >= el.scrollLeft && direita <= el.scrollLeft + el.clientWidth) return;
+    const meio = esquerda - (el.clientWidth - ativo.offsetWidth) / 2;
+    el.scrollLeft = Math.max(0, Math.min(meio, el.scrollWidth - el.clientWidth));
   }, [valor]);
 
   const teclas = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -98,7 +103,7 @@ export default function Etapas({
 
   return (
     <nav aria-label={rotulo} className={juntar("min-w-0", className)}>
-      <div ref={trilho} onKeyDown={teclas} className="scrollbar-hidden flex min-w-0 items-center overflow-x-auto overscroll-x-contain">
+      <div ref={trilho} onKeyDown={teclas} className="scrollbar-hidden relative flex min-w-0 snap-x snap-proximity scroll-px-4 items-center overflow-x-auto overscroll-x-contain [&>*]:snap-start">
         {soIcone && itens.map((item) => {
           const aberta = valor === item.valor;
           const contador = typeof item.contador === "number" && item.contador > 0 ? item.contador : null;

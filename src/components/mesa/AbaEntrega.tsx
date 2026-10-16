@@ -35,6 +35,8 @@ import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { juntar, superficie } from "@/components/sistema/estilos";
+import { ACAO_NO_PE_DO_CELULAR, useCelularEstreito } from "./EstudioAltura";
+import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
 import { dataEHoraCurta, JanelaDaPublicacao, TOM_DO_ESTADO, useEstadoDaPeca } from "./PublicacaoDaPeca";
 
 /**
@@ -138,6 +140,9 @@ export function linkDaAgenda(clientId: string, t: Pick<Trabalho, "post_id" | "ag
 
 export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes: (m: string) => void; onAbrir: (taskId: string) => void }) {
   const { clientId, clientName, podeRecarregar, atualizarCusto } = useMesa();
+  // 16/10/2026 (dono: "cara de aplicativo"): no celular estreito o Enviar gruda no pé da tela (polegar).
+  const celularEstreito = useCelularEstreito();
+  useReservaFlutuante(celularEstreito, 72);
   const { marca } = useMarcaDaMesa();
   const pedidoDoDocumento: PedidoDoDocumento | null = clientId
     ? { clientId, marcaId: marca ? marca.id : null, tipo: "mes_de_pautas", referencia: referenciaDoMes(mes) }
@@ -267,10 +272,10 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
             {resumo || `${itens.length} ${itens.length === 1 ? "item" : "itens"} com arte`}
           </span>
         </div>
-        <div className="mt-2 flex w-full flex-col items-stretch sm:ml-3 sm:mt-0 sm:w-auto sm:items-end">
-          <div className="flex min-w-0 flex-col-reverse items-stretch sm:flex-row sm:items-center [&>*+*]:mb-2 sm:[&>*+*]:mb-0 sm:[&>*+*]:ml-2">
+        <div className={juntar("flex w-full flex-col items-stretch sm:ml-3 sm:w-auto sm:items-end", ACAO_NO_PE_DO_CELULAR)} data-acao-no-pe="">
+          <div className="flex min-w-0 flex-row items-center justify-end [&>*+*]:ml-2">
             <BotaoDocumentoDaEntrega pedido={pedidoDoDocumento} variante="discreto" />
-            <Button type="button" className="gap-0 px-3" onClick={() => void enviarTudo()} disabled={!total || !!progresso} title={total ? `Enviar ${total} para aprovação` : "Nada para enviar"}>
+            <Button type="button" className="gap-0 px-3 max-sm:h-11 max-sm:min-w-[120px] max-sm:px-4" onClick={() => void enviarTudo()} disabled={!total || !!progresso} title={total ? `Enviar ${total} para aprovação` : "Nada para enviar"}>
               {progresso ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
               {total > 0 && <span className="ml-1.5 tabular-nums" aria-hidden="true">{total}</span>}
               <span className="sr-only">{total ? `Enviar ${total} para aprovação` : "Nada para enviar"}</span>
@@ -576,7 +581,11 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
       {recolhido && !editando ? null : !editando ? (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div className="min-w-0 space-y-1.5">
-            <p className="leading-relaxed">
+            {/* 16/10/2026 (dono: "menos texto" no celular): abaixo de 640 px só a regra em uma linha; a explicação inteira volta a partir de 640 px. */}
+            <p className="leading-relaxed sm:hidden">
+              {horarioAutomatico ? `Melhor horário de cada tipo, reserva ${p?.hora_publicacao || "09:00"}` : `Horário fixo ${p?.hora_publicacao || "09:00"}`}, seg. a sex.
+            </p>
+            <p className="hidden leading-relaxed sm:block">
               {horarioAutomatico
                 ? `Cada post sai no melhor horário do seu tipo, de segunda a sexta. Horário fixo de reserva: ${p?.hora_publicacao || "09:00"}.`
                 : `Horário fixo: ${p?.hora_publicacao || "09:00"}, de segunda a sexta.`}{" "}

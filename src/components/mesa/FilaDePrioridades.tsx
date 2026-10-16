@@ -243,10 +243,10 @@ export default function FilaDePrioridades({
           {fila && (
             <ul className="mr-2 flex items-center text-[12px]" aria-label="Resumo">
               {(["agora", "semana", "depois"] as Nivel[]).map((n) => (
-                <li key={n} className="mr-3 inline-flex items-center last:mr-0">
+                <li key={n} className="mr-3 inline-flex items-center last:mr-0 max-sm:mr-2" title={`${fila.resumo[n]} ${NIVEL[n].rotulo.toLowerCase()}`}>
                   <span className={`mr-1.5 h-2 w-2 rounded-full ${NIVEL[n].ponto}`} />
                   <strong className="mr-1 font-semibold tabular-nums">{fila.resumo[n]}</strong>
-                  <span className="text-muted-foreground">{NIVEL[n].rotulo.toLowerCase()}</span>
+                  <span className="text-muted-foreground max-sm:sr-only">{NIVEL[n].rotulo.toLowerCase()}</span>
                 </li>
               ))}
             </ul>
@@ -265,7 +265,7 @@ export default function FilaDePrioridades({
       />
       <div className="flex flex-wrap items-center gap-2">
         <Input aria-label="Buscar cliente nas prioridades" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar cliente" className="h-9 max-w-xs" />
-        {consulta.dataUpdatedAt > 0 && <span className="ml-auto text-[11px] text-muted-foreground">Conferido às {new Date(consulta.dataUpdatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>}
+        {consulta.dataUpdatedAt > 0 && <span className="ml-auto text-[11px] text-muted-foreground max-sm:hidden">Conferido às {new Date(consulta.dataUpdatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>}
       </div>
       {primeiro && !consulta.isError && <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4" aria-label="Próxima ação recomendada">
         <div className="min-w-0 flex-1"><p className="text-xs font-medium text-primary">Comece por aqui · {primeiro.nome}</p><p className="mt-1 text-sm font-semibold">{tituloComMes(primeiro.acoes[0])}</p><p className="mt-1 text-xs text-muted-foreground">{primeiro.acoes[0].motivo}</p></div>

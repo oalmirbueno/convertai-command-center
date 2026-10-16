@@ -11,11 +11,13 @@ import {
   Briefcase,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   FileCheck,
   FileText,
   FolderOpen,
   Inbox,
+  Newspaper,
   PackageCheck,
   Repeat,
   Send,
@@ -43,6 +45,7 @@ import {
 import CircularProgress from "./CircularProgress";
 import FaixaDeNumeros from "@/components/sistema/FaixaDeNumeros";
 import { FadeUp, StaggerContainer } from "./motion";
+import { useTelaPequena } from "./useTelaPequena";
 import ProjectJournal from "@/components/shared/ProjectJournal";
 import { estruturaDoRitual, resumoDoRitual } from "@/lib/ritualTexto";
 import { primeiraFrase } from "@/lib/frases";
@@ -124,6 +127,14 @@ export default function ClientJourneyDashboard({
   });
   const [pulseComment, setPulseComment] = useEstadoDaTela<string>(`inicio:pulso:comentario:${clientId}`, "");
   const [pulseSending, setPulseSending] = useState(false);
+  // 16/10/2026 (dono: "cara de aplicativo, menos informação"): abaixo de 640 px o
+  // Início mostra só o que importa agora (avisos, aprovar, novidade, próximo
+  // passo) e o resto fica recolhido em "Mais detalhes", lembrado por cliente.
+  const pequena = useTelaPequena();
+  const [maisDetalhes, setMaisDetalhes] = useEstadoDaTela<boolean>(`inicio:mais-detalhes:${clientId}`, false, {
+    validar: (v) => typeof v === "boolean",
+  });
+  const recolhidoNoCelular = pequena && !maisDetalhes;
   const { loadingProjects, errorProjects, refetchProjects, data } = useClientDashboardData(clientId);
   const {
     activeProjects,
@@ -238,6 +249,63 @@ export default function ClientJourneyDashboard({
   const hojeTexto = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
   const hoje = hojeTexto.charAt(0).toUpperCase() + hojeTexto.slice(1);
 
+  // Cartões do celular (16/10/2026): a novidade da semana e o próximo passo.
+  type CartaoDoCelular = { chave: string; rotulo: string; titulo: string; apoio?: string; para: string; icone: typeof FileText; tomDoIcone: string };
+  const semAsterisco = (valor: unknown) => primeiraFrase(String(valor).replace(/\*/g, ""));
+  const cartaoNovidade: CartaoDoCelular =
+    latestReport && reportIsFresh
+      ? {
+          chave: "novidade",
+          rotulo: "Novidade",
+          titulo: latestReport.title || "Nova atualização do seu trabalho",
+          apoio: latestReport.highlights ? semAsterisco(latestReport.highlights) : undefined,
+          para: "/onde-estamos",
+          icone: Newspaper,
+          tomDoIcone: "bg-primary/15 text-primary",
+        }
+      : {
+          chave: "novidade",
+          rotulo: "Onde estamos",
+          titulo: deliveredFiles.length > 0
+            ? `Trabalho em movimento: ${deliveredFiles.length} entrega(s) liberada(s)`
+            : "Estamos organizando o seu ciclo de trabalho",
+          apoio: "Ver o retrato completo",
+          para: "/onde-estamos",
+          icone: Newspaper,
+          tomDoIcone: "bg-primary/15 text-primary",
+        };
+  const proximaEtapa = upcomingMilestones[0] || null;
+  const cartaoProximo: CartaoDoCelular | null = nextPublication
+    ? {
+        chave: "proximo",
+        rotulo: "Próximo passo",
+        titulo: `Publicação ${dataEHora(nextPublication.scheduled_at)}`,
+        apoio: nextPublication.platform ? platformLabel[nextPublication.platform] || nextPublication.platform : undefined,
+        para: "/calendario",
+        icone: Send,
+        tomDoIcone: "bg-sky-500/15 text-sky-500",
+      }
+    : proximaEtapa
+      ? {
+          chave: "proximo",
+          rotulo: "Próximo passo",
+          titulo: proximaEtapa.title,
+          apoio: `${proximaEtapa.project?.name || "Projeto"} · previsão ${formatDateShort(proximaEtapa.target_date)}`,
+          para: "/onde-estamos",
+          icone: CalendarDays,
+          tomDoIcone: "bg-sky-500/15 text-sky-500",
+        }
+      : latestReport?.next_steps
+        ? {
+            chave: "proximo",
+            rotulo: "Próximo passo",
+            titulo: semAsterisco(latestReport.next_steps),
+            para: "/onde-estamos",
+            icone: CalendarDays,
+            tomDoIcone: "bg-sky-500/15 text-sky-500",
+          }
+        : null;
+
   if (loadingProjects) {
     return <Carregando forma="aba" rotulo="Carregando o seu painel" />;
   }
@@ -262,7 +330,7 @@ export default function ClientJourneyDashboard({
       {/* 1 · Boas-vindas: título curto, data como estado, explicação no "?" */}
       <FadeUp>
         <CabecalhoDePagina
-          titulo={`Bem-vindo de volta, ${firstName}`}
+          titulo={pequena ? `Olá, ${firstName}` : `Bem-vindo de volta, ${firstName}`}
           descricao={`${hoje}${isImpersonation ? " · somente leitura" : ""}`}
           ajuda="Acompanhe suas frentes, entregas e publicações liberadas pela Aceleriq. Os números se atualizam sozinhos."
           acoes={
@@ -281,7 +349,7 @@ export default function ClientJourneyDashboard({
               type="button"
               onClick={() => navigate(atalho.to)}
               className={juntar(
-                "flex h-10 min-w-0 touch-manipulation items-center justify-center rounded-md px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:justify-start",
+                "flex h-11 min-w-0 touch-manipulation items-center justify-center rounded-md px-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:h-10 sm:justify-start",
                 foco,
               )}
             >
@@ -293,7 +361,10 @@ export default function ClientJourneyDashboard({
       </FadeUp>
 
       {/* 1b · Dia Prioritário (12/10/2026): o dia fixo de atenção estratégica; sem dia confirmado, estado neutro */}
-      <CartaoDoDiaPrioritario clientId={clientId} recorrente={!!clientProfile && ehRecorrenteParaODia({ id: String(clientId), ...clientProfile })} />
+      {/* No celular (16/10/2026) ele fica em "Mais detalhes": a tela abre no que é para agora. */}
+      {!recolhidoNoCelular && (
+        <CartaoDoDiaPrioritario clientId={clientId} recorrente={!!clientProfile && ehRecorrenteParaODia({ id: String(clientId), ...clientProfile })} />
+      )}
 
       {/* 2 · Avisos importantes: atraso e renovação chegando */}
       {overdueBills.length > 0 && (
@@ -308,7 +379,7 @@ export default function ClientJourneyDashboard({
               <span className="block text-[14px] font-semibold leading-5 text-foreground">
                 Pagamento em atraso: {dinheiro(overdueAmount)}
               </span>
-              <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
+              <span className={juntar(texto.auxiliar, "mt-0.5 hidden truncate sm:block")}>
                 Regularize para manter as entregas sem pausa. Toque para ver os detalhes.
               </span>
             </span>
@@ -332,7 +403,7 @@ export default function ClientJourneyDashboard({
                   : `Sua renovação vence em ${renewalDays} dia${renewalDays === 1 ? "" : "s"}`}
                 {clientProfile?.plan_value ? ` · ${dinheiro(Number(clientProfile.plan_value))}` : ""}
               </span>
-              <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
+              <span className={juntar(texto.auxiliar, "mt-0.5 hidden truncate sm:block")}>
                 Garanta a continuidade dos resultados. Toque para ver os detalhes.
               </span>
             </span>
@@ -345,9 +416,10 @@ export default function ClientJourneyDashboard({
       {pendingFiles.length > 0 && (
         <FadeUp>
           <section aria-label="Aprovações pendentes" className="min-w-0 rounded-lg border border-amber-500/40 bg-amber-500/[0.04]">
-            <div className="flex min-w-0 items-center px-4 py-3">
+            {/* No celular (16/10/2026): cartão grande, botão na largura toda e sem a lista. */}
+            <div className="flex min-w-0 flex-wrap items-center px-4 py-4 sm:flex-nowrap sm:py-3">
               <FileCheck className="mr-3 h-5 w-5 shrink-0 text-amber-500" aria-hidden="true" />
-              <div className="mr-3 flex min-w-0 flex-1 items-center">
+              <div className="flex min-w-0 flex-1 items-center sm:mr-3">
                 <h2 className={juntar(texto.tituloSecao, "min-w-0 text-[14px]")}>
                   {pendingFiles.length === 1
                     ? "1 entrega aguarda a sua aprovação"
@@ -360,12 +432,12 @@ export default function ClientJourneyDashboard({
               <button
                 type="button"
                 onClick={() => navigate("/aprovacoes")}
-                className={juntar(botao.primario, "bg-amber-500 text-white hover:bg-amber-500/90")}
+                className={juntar(botao.primario, "mt-3 h-11 w-full bg-amber-500 text-[14px] text-white hover:bg-amber-500/90 sm:mt-0 sm:h-9 sm:w-auto sm:text-[13px]")}
               >
-                Aprovar<span className="hidden sm:inline">&nbsp;agora</span>
+                Aprovar agora
               </button>
             </div>
-            <ul className="divide-y divide-amber-500/15 border-t border-amber-500/20">
+            <ul className="hidden divide-y divide-amber-500/15 border-t border-amber-500/20 sm:block">
               {pendingFiles.slice(0, 3).map((file: any) => (
                 <li key={file.id} className={juntar(texto.auxiliar, "truncate px-4 py-2 leading-5")}>
                   <span className="font-medium text-foreground">{file.file_name}</span>
@@ -380,7 +452,44 @@ export default function ClientJourneyDashboard({
         </FadeUp>
       )}
 
+      {/* 3b · Só no celular (16/10/2026): a novidade e o próximo passo em cartões
+          grandes de toque, e o resto da tela recolhido em "Mais detalhes". */}
+      {pequena && (
+        <FadeUp className="min-w-0 space-y-3">
+          {[cartaoNovidade, cartaoProximo].map((cartao) =>
+            cartao ? (
+              <button
+                key={cartao.chave}
+                type="button"
+                onClick={() => navigate(cartao.para)}
+                className={juntar("flex w-full min-w-0 items-center rounded-xl border border-border bg-card px-4 py-4 text-left transition-colors active:bg-muted/40", foco)}
+              >
+                <span className={juntar("mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", cartao.tomDoIcone)}>
+                  <cartao.icone className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className={juntar(texto.rotulo, "block")}>{cartao.rotulo}</span>
+                  <span className="mt-0.5 line-clamp-2 text-[15px] font-semibold leading-5 text-foreground break-words">{cartao.titulo}</span>
+                  {cartao.apoio && <span className="mt-0.5 block truncate text-[13px] leading-5 text-muted-foreground">{cartao.apoio}</span>}
+                </span>
+                <ChevronRight className="ml-2 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+              </button>
+            ) : null,
+          )}
+          <button
+            type="button"
+            onClick={() => setMaisDetalhes(!maisDetalhes)}
+            aria-expanded={maisDetalhes}
+            className={juntar("flex h-11 w-full min-w-0 items-center justify-center rounded-lg text-[13px] font-medium text-muted-foreground transition-colors active:bg-muted", foco)}
+          >
+            {maisDetalhes ? "Menos detalhes" : "Mais detalhes"}
+            <ChevronDown className={juntar("ml-1.5 h-4 w-4 transition-transform", maisDetalhes && "rotate-180")} aria-hidden="true" />
+          </button>
+        </FadeUp>
+      )}
+
       {/* 4 · Números gerais: uma faixa só, sem um cartão por número */}
+      {!recolhidoNoCelular && (
       <FadeUp>
         <FaixaDeNumeros
           rotulo="Resumo"
@@ -408,9 +517,10 @@ export default function ClientJourneyDashboard({
           ]}
         />
       </FadeUp>
+      )}
 
       {/* 5 · Conteúdos deste ciclo (só para quem tem frente de conteúdo) */}
-      {hasContentFront && (
+      {hasContentFront && !recolhidoNoCelular && (
         <FadeUp>
           <Secao
             divisoria
@@ -448,6 +558,7 @@ export default function ClientJourneyDashboard({
       )}
 
       {/* 6 · Em que ponto do processo o trabalho está agora */}
+      {!recolhidoNoCelular && (
       <FadeUp>
         <Secao
           divisoria
@@ -493,8 +604,11 @@ export default function ClientJourneyDashboard({
           </ol>
         </Secao>
       </FadeUp>
+      )}
 
-      {/* 7 · O que estamos fazendo, onde estamos e o próximo passo */}
+      {/* 7 · O que estamos fazendo, onde estamos e o próximo passo
+          (no celular os cartões 3b já fazem esse papel: fica em "Mais detalhes") */}
+      {!recolhidoNoCelular && (
       <FadeUp>
         <Secao
           divisoria
@@ -571,10 +685,12 @@ export default function ClientJourneyDashboard({
           )}
         </Secao>
       </FadeUp>
+      )}
 
       {/* 8 · Projetos com prazo e Entregas recentes lado a lado. Sem projetos
           com prazo, as Entregas ocupam a linha inteira (sem buraco ao lado).
           Listas curtas (até 6): a página rola, nada de caixa com rolagem própria. */}
+      {!recolhidoNoCelular && (
       <FadeUp>
         <div className={juntar("grid min-w-0 grid-cols-1 gap-6 border-t border-border pt-5", projetosComPrazo.length > 0 && "lg:grid-cols-2")}>
           {projetosComPrazo.length > 0 && (
@@ -650,8 +766,10 @@ export default function ClientJourneyDashboard({
           </Secao>
         </div>
       </FadeUp>
+      )}
 
       {/* 9 · Frentes recorrentes + diário à esquerda; agenda e próximas entregas à direita */}
+      {!recolhidoNoCelular && (
       <FadeUp>
         <div className="grid min-w-0 grid-cols-1 gap-6 border-t border-border pt-5 lg:grid-cols-3">
           <div className="min-w-0 space-y-6 lg:col-span-2">
@@ -775,6 +893,7 @@ export default function ClientJourneyDashboard({
           </div>
         </div>
       </FadeUp>
+      )}
 
       {/* 10 · Pulso Aceleriq: avaliação rápida da experiência (formulário em destaque) */}
       {showPulse && (
@@ -831,6 +950,7 @@ export default function ClientJourneyDashboard({
       )}
 
       {/* 11 · Evolução acumulada: uma linha de estado, sem caixa */}
+      {!recolhidoNoCelular && (
       <FadeUp>
         <div className={juntar(superficie.divisoria, "flex min-w-0 flex-wrap items-center pt-4 text-[12px] text-muted-foreground [&>*]:mr-5 [&>*]:mb-1")}>
           <span className="flex items-center font-medium text-foreground">
@@ -847,6 +967,7 @@ export default function ClientJourneyDashboard({
           )}
         </div>
       </FadeUp>
+      )}
     </StaggerContainer>
   );
 }

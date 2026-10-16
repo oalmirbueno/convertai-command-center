@@ -479,7 +479,8 @@ export default function AdminComercial() {
       <header className="min-w-0">
         <CabecalhoDePagina
           titulo="Comercial"
-          descricao={descricao}
+          // 16/10/2026: no celular o cabeçalho fica só com título, "?" e ações.
+          descricao={abasNoTitulo ? descricao : undefined}
           ajuda={TITULO_DA_ABA[aba]}
           aoLado={abasNoTitulo ? abasDasAreas : undefined}
           acoes={acoes}
@@ -519,6 +520,8 @@ export default function AdminComercial() {
         <FaixaDeNumeros
           tamanho="compacto"
           apoioAoLado
+          // 16/10/2026: no celular o CRM é só o funil (os números estão na Visão geral).
+          className="max-sm:hidden"
           rotulo="Números do CRM"
           itens={[
             {
@@ -749,7 +752,7 @@ function VisaoGeral({
                     {resumo.semProximoPasso > 0 && `${resumo.semProximoPasso} sem próximo passo`}
                   </span>
                 ) : (
-                  <span className={juntar(texto.auxiliar, "block truncate")}>Todo negócio aberto tem um próximo passo marcado.</span>
+                  <span className={juntar(texto.auxiliar, "block truncate max-sm:hidden")}>Todo negócio aberto tem um próximo passo marcado.</span>
                 )}
               </Bloco>
 
@@ -757,8 +760,9 @@ function VisaoGeral({
                 {proximos.length === 0 ? (
                   <span className={juntar(texto.auxiliar, "block truncate")}>Nada marcado daqui para a frente.</span>
                 ) : (
-                  proximos.map((a) => (
-                    <span key={a.id} className="flex min-w-0 items-baseline justify-between">
+                  // 16/10/2026: no celular só os dois primeiros.
+                  proximos.map((a, i) => (
+                    <span key={a.id} className={juntar("flex min-w-0 items-baseline justify-between", i >= 2 && "max-sm:hidden")}>
                       <span className={juntar(texto.corpo, "mr-2 min-w-0 truncate")}>
                         {a.title}
                         {nomeDoLead(a.lead_id) ? <span className="text-muted-foreground"> · {nomeDoLead(a.lead_id)}</span> : null}
@@ -771,8 +775,12 @@ function VisaoGeral({
 
               <Bloco titulo="Metas" icone={Target} onClick={() => onIr("metas")}>
                 <span className="grid min-w-0 gap-x-6 gap-y-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {/* 16/10/2026: no celular só as metas definidas. */}
+                  {linhasDeMeta.every((linha) => linha.alvo <= 0) && (
+                    <span className={juntar(texto.auxiliar, "block truncate sm:hidden")}>Nenhuma meta definida no mês.</span>
+                  )}
                   {linhasDeMeta.map((linha) => (
-                    <span key={linha.id} className="block min-w-0">
+                    <span key={linha.id} className={juntar("block min-w-0", linha.alvo <= 0 && "max-sm:hidden")}>
                       <span className="flex min-w-0 items-baseline justify-between text-[12px] leading-4">
                         <span className="mr-2 min-w-0 truncate text-muted-foreground">{linha.label}</span>
                         <span className="shrink-0 tabular-nums text-foreground">
@@ -802,7 +810,7 @@ function VisaoGeral({
               </Bloco>
 
               <Bloco titulo="Marketing" icone={Sparkles} onClick={() => onIr("marketing")}>
-                <span className={juntar(texto.auxiliar, "block truncate")}>No ar, próximos e origem dos leads</span>
+                <span className={juntar(texto.auxiliar, "block truncate max-sm:hidden")}>No ar, próximos e origem dos leads</span>
               </Bloco>
             </ul>
           </Painel>
@@ -925,7 +933,7 @@ function Metas({
                       <p className={juntar(texto.corpo, "truncate font-medium")}>{metrica.label}</p>
                       {/* De onde vem o número: sem isto, "por que está assim?"
                           não tem resposta na própria tela. */}
-                      <p className={juntar(texto.auxiliar, "truncate")}>{metrica.fonte}</p>
+                      <p className={juntar(texto.auxiliar, "truncate max-sm:hidden")}>{metrica.fonte}</p>
                     </div>
                     <p className="shrink-0 text-right">
                       <span className="text-[15px] font-semibold tabular-nums text-foreground">{mostrar(feito)}</span>
@@ -1071,10 +1079,11 @@ function Marketing({
                       <Archive className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   </span>
-                  {/* Celular: os quatro números numa grade embaixo do nome. */}
+                  {/* Celular: os quatro números numa grade embaixo do nome.
+                      16/10/2026: abaixo de 640 px só investido e leads. */}
                   <dl className="col-span-2 mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 md:hidden">
-                    {numeros.map((n) => (
-                      <div key={n.rotulo} className="min-w-0">
+                    {numeros.map((n, i) => (
+                      <div key={n.rotulo} className={juntar("min-w-0", i >= 2 && "max-sm:hidden")}>
                         <dt className={texto.rotulo}>{n.rotulo}</dt>
                         <dd className="truncate text-[13px] tabular-nums text-foreground">{n.valor}</dd>
                       </div>

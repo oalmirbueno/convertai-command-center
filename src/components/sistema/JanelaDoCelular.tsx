@@ -49,19 +49,25 @@ export default function JanelaDoCelular({
 
   if (!aberta || typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-labelledby={idDoTitulo}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center pt-[calc(env(safe-area-inset-top)+12px)] sm:items-center sm:pt-0" role="dialog" aria-modal="true" aria-labelledby={idDoTitulo}>
       {rotuloDoFundo ? (
         <button type="button" aria-label={rotuloDoFundo} className="absolute inset-0 bg-black/60" onClick={onFechar} />
       ) : (
         <div aria-hidden="true" className="absolute inset-0 bg-black/60" onClick={onFechar} />
       )}
       <div
+        data-janela-do-celular=""
         className={juntar(
-          "relative flex max-h-[95vh] w-full flex-col overflow-hidden rounded-t-2xl border border-border bg-card sm:mx-4 sm:rounded-lg",
+          // Celular (16/10/2026): folha com alça, canto do token (xl) e no máximo a
+          // altura que sobra abaixo da área segura; sobe de baixo (index.css).
+          "relative flex max-h-full w-full flex-col overflow-hidden rounded-t-xl border border-border bg-card sm:mx-4 sm:max-h-[95vh] sm:rounded-lg",
           larga ? "max-w-[520px]" : "max-w-[440px]",
+          // Sem rodapé, o corpo não encosta na barra do aparelho.
+          rodape ? "" : "pb-[env(safe-area-inset-bottom)] sm:pb-0",
         )}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3 sm:px-5">
+        <div aria-hidden="true" data-alca="" className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-muted-foreground/30 sm:hidden" />
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-4 pb-3 pt-2 sm:px-5 sm:pt-3">
           <h2 id={idDoTitulo} className={juntar(texto.tituloSecao, "min-w-0 truncate")}>
             {titulo}
           </h2>

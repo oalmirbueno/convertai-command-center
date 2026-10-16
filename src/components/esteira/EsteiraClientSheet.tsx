@@ -60,7 +60,8 @@ function Numeros({ leitura, recolher }: { leitura: Leitura; recolher: string }) 
         {leitura.numeros.map((n) => (
           <div key={n.rotulo} className={juntar(superficie.poco, "min-w-0 px-3 py-2")}>
             <p className={juntar(texto.rotulo, "truncate")}>{n.rotulo}</p>
-            <p className="text-[20px] font-semibold leading-7 tabular-nums text-foreground">{fmtNumero(n)}</p>
+            {/* 16/10/2026: no celular o número encolhe um pouco e quebra em vez de vazar. */}
+            <p className="break-words text-[17px] font-semibold leading-7 tabular-nums text-foreground sm:text-[20px]">{fmtNumero(n)}</p>
             <p className={`flex items-center text-[12px] tabular-nums ${cor(n.tendencia)}`}>
               <span className="mr-1 inline-flex"><IconeTendencia t={n.tendencia} /></span>
               {n.variacao !== null ? `${n.variacao > 0 ? "+" : ""}${n.variacao}%` : n.anterior !== null ? "igual" : "sem base"}
@@ -259,7 +260,9 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
       corpo="fixo"
       semEspaco
       titulo={cliente.nome}
-      descricao={`${e.onboardingCompleto ? "Em operação" : "Entrada em andamento"} · ${e.resumo.urgentes} urgente${e.resumo.urgentes === 1 ? "" : "s"} · ${e.resumo.atencao} de atenção · ${feitosNaSemana} feito${feitosNaSemana === 1 ? "" : "s"}`}
+      // 16/10/2026 (celular mais limpo): abaixo de 640 px a linha de estado
+      // mostra só os urgentes; o resto continua a partir do tablet.
+      descricao={<><span className="max-sm:hidden">{`${e.onboardingCompleto ? "Em operação" : "Entrada em andamento"} · `}</span>{`${e.resumo.urgentes} urgente${e.resumo.urgentes === 1 ? "" : "s"}`}<span className="max-sm:hidden">{` · ${e.resumo.atencao} de atenção · ${feitosNaSemana} feito${feitosNaSemana === 1 ? "" : "s"}`}</span></>}
       acoes={(canReview || canWrite) ? (
         <>
           {canReview && (
@@ -304,7 +307,7 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
                   <p className={juntar(texto.rotulo, "mb-1")}>Rituais da semana · {ritualFeitos} de {e.rituais.length}</p>
                   <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
                     {e.rituais.map((r) => (
-                      <label key={r.key} className={juntar("flex min-w-0 cursor-pointer items-center rounded-md px-2 py-2 text-[13px] hover:bg-muted/60", r.feito ? "text-foreground" : "text-muted-foreground")}>
+                      <label key={r.key} className={juntar("flex min-w-0 cursor-pointer items-center rounded-md px-2 py-2 text-[13px] hover:bg-muted/60 max-sm:min-h-[44px]", r.feito ? "text-foreground" : "text-muted-foreground")}>
                         <Checkbox checked={r.feito} onCheckedChange={(v) => void alternarRitual(r.key, v === true)} disabled={!canWrite} className="mr-2 min-h-0 shrink-0" />
                         <span className="min-w-0 leading-tight">{r.rotulo}{r.fonte === "central" ? " · Central" : ""}</span>
                       </label>

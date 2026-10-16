@@ -42,6 +42,29 @@ export function useFaixa(): Faixa {
   return faixa;
 }
 
+/**
+ * Celular estreito (< 640 px, o `sm` do Tailwind). 16/10/2026 (dono: "cara de
+ * aplicativo"): aqui a ação principal da etapa gruda no pé da tela, acima da
+ * barra de baixo do painel, e o conteúdo reserva o espaço dela.
+ */
+export function useCelularEstreito(): boolean {
+  const [estreito, setEstreito] = useState(() => larguraDaJanela() < 640);
+  useEffect(() => {
+    const medir = () => setEstreito(larguraDaJanela() < 640);
+    window.addEventListener("resize", medir);
+    window.addEventListener("orientationchange", medir);
+    return () => {
+      window.removeEventListener("resize", medir);
+      window.removeEventListener("orientationchange", medir);
+    };
+  }, []);
+  return estreito;
+}
+
+/** Classes da faixa fixa no pé do celular (abaixo de 640 px), acima da barra de baixo do painel. */
+export const ACAO_NO_PE_DO_CELULAR =
+  "max-sm:fixed max-sm:inset-x-0 max-sm:bottom-[calc(env(safe-area-inset-bottom)+72px)] max-sm:z-30 max-sm:justify-end max-sm:border-t max-sm:border-border max-sm:bg-background/95 max-sm:px-4 max-sm:py-2";
+
 /** Espaço entre o cabeçalho fixo da Mesa e o conteúdo da aba (space-y-5 da página). */
 const ESPACO_ABAIXO_DO_CABECALHO = 20;
 const MARGEM_DE_BAIXO = 12;

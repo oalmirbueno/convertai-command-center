@@ -256,7 +256,8 @@ describe("agente do mês não espreme o calendário", () => {
     expect(aba).not.toContain("TELA_DO_AGENTE_AO_LADO");
     expect(aba).not.toContain("<SheetContent");
     expect(aba).not.toContain("xl:grid-cols-[minmax(0,1fr)_380px]");
-    expect(aba).toContain("fixed inset-x-0 bottom-[72px] z-40 flex justify-center");
+    // 16/10/2026: o botão sobe acima da barra de baixo contando a área segura do iPhone.
+    expect(aba).toContain("fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+84px)] z-40 flex justify-center");
     expect(aba).toContain("<DialogContent");
     expect(aba).toContain("Agente do mês");
     // Espaço no fim para o botão nunca cobrir o último conteúdo.

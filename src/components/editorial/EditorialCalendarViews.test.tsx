@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { DndContext } from "@dnd-kit/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import EditorialCalendarViews from "@/components/editorial/EditorialCalendarViews";
@@ -289,5 +289,53 @@ describe("editorial calendar content direction", () => {
     expect(
       screen.queryByTitle(`Contexto: ${task.description}`),
     ).not.toBeInTheDocument();
+  });
+});
+
+// 16/10/2026: no celular (< 768 px) a agenda vira faixa de dias + lista do
+// dia (cara de aplicativo) e o quadro mostra uma etapa por vez.
+describe("editorial calendar on the phone", () => {
+  const larguraOriginal = window.innerWidth;
+  afterEach(() => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: larguraOriginal });
+  });
+  const noCelular = () =>
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 375 });
+
+  it("shows a day strip and only the chosen day's items as app rows", () => {
+    noCelular();
+    const { container } = renderView({ view: "week", posts: [scheduledPost] });
+
+    // Só a agenda do celular é montada: nada da grade escondida.
+    expect(container.querySelector('[role="grid"]')).toBeNull();
+    const faixa = screen.getByRole("group", { name: "Dias" });
+    const dias = within(faixa).getAllByRole("button");
+    expect(dias).toHaveLength(7);
+    const escolhido = within(faixa).getByRole("button", { pressed: true });
+    expect(escolhido.getAttribute("data-dia")).toBe("2026-07-15");
+
+    expect(screen.getByText(scheduledPost.post.title)).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /Abrir ou preparar conteúdo da tarefa do Kanban/ }),
+    ).toBeVisible();
+    // Menos informação: o "Contexto:" do cartão do computador não aparece.
+    expect(screen.queryByTitle(`Contexto: ${task.description}`)).toBeNull();
+
+    // Outro dia: a lista troca e o dia novo fica destacado.
+    fireEvent.click(dias[0]);
+    expect(within(faixa).getByRole("button", { pressed: true }).getAttribute("data-dia")).toBe("2026-07-13");
+    expect(screen.getByText("Nada marcado neste dia")).toBeVisible();
+  });
+
+  it("shows one board stage at a time with every stage still reachable", () => {
+    noCelular();
+    renderView({ view: "board" });
+
+    const abas = screen.getByRole("group", { name: "Etapas do conteúdo" });
+    expect(within(abas).getAllByRole("button")).toHaveLength(5);
+    expect(screen.getByText(task.title)).toBeVisible();
+    fireEvent.click(within(abas).getByRole("button", { name: /Programado/ }));
+    expect(screen.queryByText(task.title)).toBeNull();
+    expect(screen.getByText("Nada nesta etapa")).toBeVisible();
   });
 });

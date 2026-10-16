@@ -802,15 +802,17 @@ export default function EditClientDrawer({
             <div className={painelDaAba("resumo")}>
               {isAdmin && (
                 <dl className={juntar(superficie.poco, "grid grid-cols-3 gap-y-3 px-2 py-3 sm:grid-cols-6")} aria-label="Resumo executivo">
+                  {/* 16/10/2026 (celular, menos números): abaixo de 640 px ficam Projetos, Tarefas e
+                      Atrasados numa linha; Aprovações já é o contador da aba Resumo. */}
                   {[
                     { label: "Projetos", value: execActiveProjects, color: "text-foreground" },
                     { label: "Tarefas", value: execOpenTasks, color: "text-foreground", alert: execUrgentTasks > 0 ? `${execUrgentTasks} urgentes` : "" },
-                    { label: "Aprovações", value: execPendingFiles, color: execPendingFiles > 0 ? "text-warning" : "text-foreground" },
-                    { label: "Relatórios", value: execPublishedReports, color: "text-foreground" },
-                    { label: "Pendências", value: execPendingBills, color: execPendingBills > 0 ? "text-warning" : "text-foreground" },
+                    { label: "Aprovações", value: execPendingFiles, color: execPendingFiles > 0 ? "text-warning" : "text-foreground", secundario: true },
+                    { label: "Relatórios", value: execPublishedReports, color: "text-foreground", secundario: true },
+                    { label: "Pendências", value: execPendingBills, color: execPendingBills > 0 ? "text-warning" : "text-foreground", secundario: true },
                     { label: "Atrasados", value: execOverdueBills, color: execOverdueBills > 0 ? "text-destructive" : "text-foreground" },
                   ].map((m) => (
-                    <div key={m.label} className="min-w-0 px-2 text-center">
+                    <div key={m.label} className={juntar("min-w-0 px-2 text-center", "secundario" in m && m.secundario && "max-sm:hidden")}>
                       <dd className={juntar("text-[15px] font-semibold leading-6 tabular-nums", m.color)}>{m.value}</dd>
                       <dt className={juntar(texto.auxiliar, "truncate")}>{m.label}</dt>
                       {"alert" in m && m.alert && <p className="truncate text-[11px] text-destructive">{m.alert}</p>}
@@ -1266,7 +1268,7 @@ export default function EditClientDrawer({
                 <Secao
                   titulo="Convite de primeiro acesso"
                   ajuda="Cliente não recebeu o e-mail para criar a senha? Reenvie o convite: um novo link seguro é gerado e enviado para o e-mail cadastrado."
-                  descricao={client.email || "Sem e-mail cadastrado"}
+                  descricao={client.email ? <span className="break-words">{client.email}</span> : "Sem e-mail cadastrado"}
                   acao={
                     <button type="button" disabled={resendingInvite} onClick={reenviarConvite} className={botao.secundario}>
                       {resendingInvite ? "Reenviando…" : "Reenviar convite"}
@@ -1291,7 +1293,7 @@ export default function EditClientDrawer({
                           aria-label="Link de primeiro acesso"
                           value={firstAccessLink}
                           onFocus={(e) => e.currentTarget.select()}
-                          className={juntar(campo, "flex-1 font-mono text-[12px]")}
+                          className={juntar(campo, "min-w-0 flex-1 font-mono text-[12px]")}
                         />
                         <button
                           type="button"

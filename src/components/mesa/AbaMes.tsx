@@ -977,7 +977,8 @@ export default function AbaMes({
 
       {/* Botão do agente: centro da base da tela, acima da barra do celular. */}
       {!agenteAberto && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[72px] z-40 flex justify-center px-4 md:bottom-6">
+        // 16/10/2026: acima da barra de baixo do celular contando a área segura do iPhone (antes encostava nela).
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+84px)] z-40 flex justify-center px-4 md:bottom-6">
           {/* 28/09: o "Rápido" que flutuava repetia o "Conteúdo rápido" do topo; ficou um só (o do topo). */}
           <button
             type="button"

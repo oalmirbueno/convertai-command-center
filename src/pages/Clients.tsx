@@ -20,6 +20,7 @@ import {
   Blend,
   SlidersHorizontal,
   X,
+  Plus,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useCelular } from "@/hooks/useCelular";
@@ -39,9 +40,11 @@ import {
   botao,
   campo,
   etiqueta,
+  foco,
   juntar,
   texto,
   useEstadoDaTela,
+  useReservaFlutuante,
 } from "@/components/sistema";
 import CreateClientModal from "@/components/admin/CreateClientModal";
 import EditClientDrawer from "@/components/admin/EditClientDrawer";
@@ -544,6 +547,9 @@ export default function Clients() {
   const isMobile = useCelular();
   const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = profile?.role === "admin";
+  // 16/10/2026 (dono, celular com cara de app): o "+" de Novo cliente flutua acima da barra de baixo;
+  // a faixa reservada no fim deixa a última linha rolar para cima dele.
+  useReservaFlutuante(isMobile && isAdmin, 72);
   // Frente PRO3 (30/09): a proposta mora em Clientes (só admin e gestor, a régua da Mesa Proposta).
   const podeProposta = profile?.role === "admin" || profile?.role === "manager";
   // PRS: o "..." da linha abre a mesma janela "Nova proposta" de Clientes, da ficha e da Mesa (com o cliente fixo).
@@ -1159,6 +1165,11 @@ export default function Clients() {
             : priceSource === "plan"
               ? "Preço de tabela do plano. Ajuste no cadastro se este cliente paga diferente."
               : "Sem valor definido ainda. Defina o plano no cadastro ou crie a cobrança no Financeiro.";
+    // 16/10/2026 (dono): no celular a linha é de app: foto, nome e UMA linha de apoio (plano e situação).
+    const apoioNoCelular = internal
+      ? planName
+      : [planName, isAdmin ? statusMeta.label : statusLabel[c.plan_status || "active"]].filter(Boolean).join(" · ");
+    const financeiroNaLinha = isAdmin && !isMobile;
 
     return (
       <li
@@ -1175,8 +1186,8 @@ export default function Clients() {
             type="button"
             onClick={() => setEditClient(c)}
             aria-label={`Abrir cadastro do cliente ${nome}`}
-            aria-describedby={isAdmin ? `client-finance-${c.id}` : undefined}
-            className="flex min-w-0 flex-1 items-center rounded-md bg-transparent text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-describedby={financeiroNaLinha ? `client-finance-${c.id}` : undefined}
+            className={juntar("flex min-w-0 flex-1 items-center rounded-md bg-transparent text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", isMobile && "min-h-[44px]")}
           >
             <FotoDoCliente nome={nome || ""} foto={fotoDe({ id: String(c.id), nome, avatar_url: c.avatar_url })} tamanho="md" />
             <span className="ml-3 block min-w-0 flex-1">
@@ -1187,7 +1198,7 @@ export default function Clients() {
                     {statusLabel[c.plan_status || "active"] || "Sem status"}
                   </span>
                 )}
-                {tipo && <span className={juntar(etiqueta, "ml-1.5", tipo.cls)}>{tipo.label}</span>}
+                {tipo && !isMobile && <span className={juntar(etiqueta, "ml-1.5", tipo.cls)}>{tipo.label}</span>}
                 {c.brand && (
                   <span className={juntar(etiqueta, "ml-1.5 hidden bg-muted text-muted-foreground md:inline-flex")}>
                     {c.brand === "aceleriq" ? "AcelerIQ" : "SiteBolt"}
@@ -1195,8 +1206,14 @@ export default function Clients() {
                 )}
               </span>
               <span className={juntar(texto.auxiliar, "mt-0.5 block truncate")}>
-                {c.company_name && c.full_name ? `${c.full_name} · ` : ""}
-                {[c.email, c.phone].filter(Boolean).join(" · ")}
+                {isMobile ? (
+                  apoioNoCelular
+                ) : (
+                  <>
+                    {c.company_name && c.full_name ? `${c.full_name} · ` : ""}
+                    {[c.email, c.phone].filter(Boolean).join(" · ")}
+                  </>
+                )}
               </span>
             </span>
           </button>
@@ -1230,7 +1247,8 @@ export default function Clients() {
             aria-label={`Status: ${statusLabel[c.plan_status || "active"] || "sem status"}`}
             className={`ml-3 h-2 w-2 shrink-0 rounded-full ${statusDot[c.plan_status || "active"] || "bg-muted-foreground"}`}
           />
-          {extra?.acao && <span className="ml-2 shrink-0">{extra.acao}</span>}
+          {/* No celular, Concluir/Retomar ficam no "..." da linha (o menu já tem as duas). */}
+          {extra?.acao && !isMobile && <span className="ml-2 shrink-0">{extra.acao}</span>}
           {/* PRO3: conselho de agentes direto na linha do cliente (PRS: nova proposta e upsell ficam no "..." da linha). */}
           {podeProposta && !internal && (
             <span className="ml-2 hidden shrink-0 items-center sm:flex">
@@ -1249,7 +1267,8 @@ export default function Clients() {
           <ChevronRight className="ml-0.5 hidden h-4 w-4 shrink-0 text-muted-foreground sm:block" aria-hidden="true" />
         </div>
 
-        {isAdmin && (
+        {/* O financeiro da linha (plano, valores, margem, cobrança) fica na ficha no celular. */}
+        {financeiroNaLinha && (
           <dl
             id={`client-finance-${c.id}`}
             className="mt-2.5 grid min-w-0 grid-cols-2 gap-x-4 gap-y-2 sm:ml-[52px] sm:grid-cols-3 xl:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,1fr))_minmax(0,1.7fr)]"
@@ -1355,7 +1374,7 @@ export default function Clients() {
       <CampoDeBusca
         valor={search}
         onMudar={setSearch}
-        placeholder="Buscar por empresa, contato, e-mail ou telefone"
+        placeholder={isMobile ? "Buscar cliente" : "Buscar por empresa, contato, e-mail ou telefone"}
         rotulo="Buscar cliente existente"
       />
     </div>
@@ -1411,9 +1430,12 @@ export default function Clients() {
       <button type="button" onClick={() => setBriefingOpen(true)} data-tour="clients-briefing-btn" className={botao.icone} aria-label="Link do briefing" title="Link do briefing">
         <Link2 className="h-4 w-4" aria-hidden="true" />
       </button>
-      <button type="button" onClick={() => setCreateOpen(true)} data-tour="clients-create-btn" className={juntar(botao.icone, "text-primary hover:text-primary")} aria-label="Novo cliente" title="Novo cliente">
-        <UserPlus className="h-4 w-4" aria-hidden="true" />
-      </button>
+      {/* No celular o Novo cliente é o "+" flutuante (16/10/2026). */}
+      {!isMobile && (
+        <button type="button" onClick={() => setCreateOpen(true)} data-tour="clients-create-btn" className={juntar(botao.icone, "text-primary hover:text-primary")} aria-label="Novo cliente" title="Novo cliente">
+          <UserPlus className="h-4 w-4" aria-hidden="true" />
+        </button>
+      )}
     </>
   ) : null;
 
@@ -1421,7 +1443,7 @@ export default function Clients() {
     <div className="min-w-0 space-y-4">
       <CabecalhoDePagina
         titulo="Clientes"
-        descricao={cabecalhoDescricao}
+        descricao={isMobile ? undefined : cabecalhoDescricao}
         ajuda="Cadastro, plano e cobrança de cada cliente. Toque na linha para abrir a ficha; botão direito ou ... para copiar contatos e outras ações. As abas em ícone filtram por tipo (Todos, Recorrentes, Avulsos e Híbridos); status e serviço ficam no Filtros."
         aoLado={isMobile ? undefined : abasDoTipo}
         acoes={
@@ -1438,17 +1460,18 @@ export default function Clients() {
         }
       />
 
-      {/* Celular: as abas, os filtros e a busca logo abaixo do título. */}
+      {/* Celular (16/10/2026, cara de app): busca e filtros presos no topo da área ao rolar;
+          embaixo, as abas de tipo em ícone, que rolam para o lado por dentro. */}
       {isMobile && (
-        <div className="min-w-0">
+        <div className="sticky top-0 z-20 -mx-4 min-w-0 border-b border-border bg-background px-4 pb-2 pt-1" data-barra-da-lista="">
           <div className="flex min-w-0 items-center">
-            <div className="min-w-0 flex-1">{abasDoTipo}</div>
+            {busca}
             <div className="ml-2 flex shrink-0 items-center">
               {maisFiltros}
               {limpar}
             </div>
           </div>
-          <div className="mt-2 flex min-w-0">{busca}</div>
+          <div className="mt-1.5 min-w-0">{abasDoTipo}</div>
         </div>
       )}
       <p aria-live="polite" className="sr-only">
@@ -1456,8 +1479,9 @@ export default function Clients() {
       </p>
 
       <AreaDeTrabalho memoriaDaRolagem="clientes:lista" rotuloDoPrincipal="Lista de clientes">
-        {/* Resumo financeiro rola junto com a lista: o cabeçalho e os filtros ficam parados. */}
-        {isAdmin && (
+        {/* Resumo financeiro rola junto com a lista: o cabeçalho e os filtros ficam parados.
+            No celular a faixa de números sai (16/10/2026): os números moram no Financeiro. */}
+        {isAdmin && !isMobile && (
           <section aria-label="Resumo financeiro dos clientes" className="mb-5">
             <FaixaDeNumeros
               tamanho="compacto"
@@ -1539,7 +1563,7 @@ export default function Clients() {
             {avulsosList.length > 0 && (
               <Secao
                 titulo="Avulsos"
-                descricao={`${avulsosList.length} em andamento · ${principais.length + avulsosList.length} clientes no total`}
+                descricao={isMobile ? `${avulsosList.length} em andamento` : `${avulsosList.length} em andamento · ${principais.length + avulsosList.length} clientes no total`}
               >
                 <Painel semEspaco>
                   <ul className="divide-y divide-border">
@@ -1603,6 +1627,22 @@ export default function Clients() {
         )}
       </AreaDeTrabalho>
 
+      {/* 16/10/2026: "+" flutuante do Novo cliente no celular, acima da barra de baixo (a faixa vem do useReservaFlutuante). */}
+      {isAdmin && isMobile && (
+        <button
+          type="button"
+          onClick={() => setCreateOpen(true)}
+          data-tour="clients-create-btn"
+          aria-label="Novo cliente"
+          title="Novo cliente"
+          className={juntar(
+            "fixed bottom-[calc(env(safe-area-inset-bottom)+84px)] right-4 z-30 inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl ring-4 ring-background active:scale-[0.97]",
+            foco,
+          )}
+        >
+          <Plus className="h-5 w-5" aria-hidden="true" />
+        </button>
+      )}
       {isAdmin && <CreateClientModal open={createOpen} onClose={() => setCreateOpen(false)} />}
       <EditClientDrawer
         open={!!editClient}

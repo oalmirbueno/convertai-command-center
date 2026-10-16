@@ -212,7 +212,7 @@ export default function SeletorDoAcervo({
           renderizarItens={(itens) => <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">{itens.map(cartao)}</ul>}
         />
       )}
-      <div className={`space-y-4 overflow-y-auto pr-1 ${buscando || lista.length === 0 ? "max-h-[420px]" : "hidden"}`}>
+      <div className={`space-y-4 pr-1 sm:overflow-y-auto ${buscando || lista.length === 0 ? "sm:max-h-[420px]" : "hidden"}`}>
         {acervo.isLoading && (
           <p className="text-[12px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" />Lendo o acervo…</p>
         )}

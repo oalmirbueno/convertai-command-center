@@ -42,7 +42,8 @@ describe("editorial calendar integration contract", () => {
     expect(layout).toContain(
       '{ title: "Agenda", url: "/calendario"',
     );
-    expect(mobileNav).toContain('to="/calendario"');
+    // 16/10/2026: a barra de baixo do celular virou lista de destinos por papel (destinosDaBarra).
+    expect(mobileNav).toContain('url: "/calendario"');
   });
 
   it("keeps filters and the selected content in shareable URL state", () => {

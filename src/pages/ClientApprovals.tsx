@@ -4,7 +4,7 @@ import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
 import { useEditorialApprovalPreview } from "@/hooks/useEditorialCalendar";
 import { useToast } from "@/hooks/use-toast";
-import { CabecalhoDePagina, Carregando, EstadoVazio, SeletorCompacto, campo, etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
+import { CabecalhoDePagina, Carregando, EstadoVazio, SeletorCompacto, botao, campo, etiqueta, foco, juntar, superficie, texto, useEstadoDaTela } from "@/components/sistema";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -16,6 +16,7 @@ import { openFile, downloadFile } from "@/lib/fileActions";
 import { orderEditorialCarouselFiles } from "@/lib/editorialMedia";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 import { PLATFORM_LABELS, type EditorialPlatform } from "@/lib/editorial";
+import { useTelaPequena } from "@/components/client/useTelaPequena";
 
 const approvalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "Pendente" },
@@ -44,24 +45,26 @@ const isImage = (name: string, url?: string) => {
 
 const isPdf = (name: string) => name?.toLowerCase().endsWith(".pdf");
 
-function ApprovalFileThumb({ file, className = "w-full h-full" }: { file: any; className?: string }) {
+function ApprovalFileThumb({ file, className = "w-full h-full", grande = false }: { file: any; className?: string; grande?: boolean }) {
   const kind = mediaKindFromFile(file.file_name, file.file_url, file.mime_type || file.file_type, file.extension);
   const Icon = fileIcon(file.file_name);
   const { url } = useResolvedFileUrl({
     fileUrl: file.file_url,
     storageBucket: file.storage_bucket,
     storagePath: file.storage_path,
-    miniatura: kind === "image",
+    // Grande (celular, um item por vez): a imagem inteira, sem cortar, na resolução original.
+    miniatura: kind === "image" && !grande,
     expiresIn: 3600,
   });
+  const ajuste = grande ? "object-contain" : "object-cover";
 
   return (
     <div className={`${className} bg-secondary flex items-center justify-center overflow-hidden relative`}>
       {url && kind === "image" ? (
-        <img src={url} alt={file.file_name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+        <img src={url} alt={file.file_name} loading="lazy" decoding="async" className={`w-full h-full max-w-full ${ajuste}`} />
       ) : url && kind === "video" ? (
         <>
-          <video src={`${url}#t=0.1`} muted playsInline preload="none" className="w-full h-full object-cover" />
+          <video src={`${url}#t=0.1`} muted playsInline preload="none" className={`w-full h-full max-w-full ${ajuste}`} />
           <div className="absolute inset-0 flex items-center justify-center bg-background/25">
             <Film className="w-5 h-5 text-foreground" />
           </div>
@@ -99,7 +102,7 @@ function useSwipe(onPrev: () => void, onNext: () => void) {
   };
 }
 
-function CarouselPreview({ images, small }: { images: any[]; small?: boolean }) {
+function CarouselPreview({ images, small, grande }: { images: any[]; small?: boolean; grande?: boolean }) {
   const [idx, setIdx] = useState(0);
   const prev = () => setIdx((i) => (i - 1 + images.length) % images.length);
   const next = () => setIdx((i) => (i + 1) % images.length);
@@ -110,9 +113,20 @@ function CarouselPreview({ images, small }: { images: any[]; small?: boolean }) 
 
   return (
     <div className="relative group" {...(images.length > 1 ? swipe : {})}>
-      <div className={`${maxH} bg-secondary flex items-center justify-center overflow-hidden`}>
-        <ApprovalFileThumb file={current} />
-      </div>
+      {grande ? (
+        // Celular (16/10/2026): caixa 4:5 reservada antes da imagem chegar (nada
+        // pula). Proporção pelo padding (125%), não por aspect-ratio: o piso
+        // é Safari 11 / Chrome 64, que não conhecem aspect-ratio.
+        <div className="relative w-full overflow-hidden bg-secondary pt-[125%]">
+          <div className="absolute inset-0">
+            <ApprovalFileThumb file={current} grande />
+          </div>
+        </div>
+      ) : (
+        <div className={`${maxH} bg-secondary flex items-center justify-center overflow-hidden`}>
+          <ApprovalFileThumb file={current} />
+        </div>
+      )}
       {images.length > 1 && (
         <>
           <button
@@ -279,6 +293,26 @@ export default function ClientApprovals() {
     if (f.approval_status in contagem) contagem[f.approval_status] += 1;
   });
   const visiveis = filtro === "todos" ? approvalFiles : approvalFiles.filter((f: any) => f.approval_status === filtro);
+
+  // Celular (16/10/2026, dono: "cara de aplicativo"): um item por vez, imagem
+  // grande e Aprovar / Pedir ajuste fixos no pé, ao alcance do polegar. Os que
+  // esperam você vêm primeiro; deslizar para o lado passa para o próximo. A
+  // trava da prévia editorial vale aqui igual à da janela de detalhes.
+  const pequena = useTelaPequena();
+  const filaDoCelular = visiveis
+    .filter((f: any) => f.approval_status === "pending")
+    .concat(visiveis.filter((f: any) => f.approval_status !== "pending"));
+  const [posicaoNaFila, setPosicaoNaFila] = useState(0);
+  const posicao = filaDoCelular.length ? Math.min(posicaoNaFila, filaDoCelular.length - 1) : 0;
+  const atualNaFila: any = pequena ? filaDoCelular[posicao] || null : null;
+  const atualPendente = !!atualNaFila && atualNaFila.approval_status === "pending";
+  const previaDoAtual = useEditorialApprovalPreview(atualPendente ? atualNaFila.id : null, atualPendente && !previewFile);
+  const irPara = (i: number) => {
+    if (!filaDoCelular.length) return;
+    setPosicaoNaFila((i + filaDoCelular.length) % filaDoCelular.length);
+  };
+  const deslizarNaFila = useSwipe(() => irPara(posicao - 1), () => irPara(posicao + 1));
+  const decisaoTravadaNoCelular = isReadOnly || previaDoAtual.isFetching || previaDoAtual.isError;
   const abrirComTeclado = (e: { key: string; preventDefault: () => void }, f: any) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -331,6 +365,95 @@ export default function ClientApprovals() {
         />
       ) : visiveis.length === 0 ? (
         <EstadoVazio compacto titulo="Nada neste filtro." />
+      ) : atualNaFila ? (
+        (() => {
+          const f = atualNaFila;
+          const badge = approvalBadge[f.approval_status] || approvalBadge.pending;
+          const images = getCarouselImages(f);
+          return (
+            <section aria-label="Aprovação" className="min-w-0" {...deslizarNaFila}>
+              {filaDoCelular.length > 1 && (
+                <div className="mb-2 flex min-w-0 items-center justify-between">
+                  <button type="button" onClick={() => irPara(posicao - 1)} aria-label="Item anterior" className={juntar(botao.icone, "h-11 w-11")}>
+                    <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+                  </button>
+                  <span className={juntar(texto.auxiliar, "tabular-nums")} aria-live="polite">
+                    {posicao + 1} de {filaDoCelular.length}
+                  </span>
+                  <button type="button" onClick={() => irPara(posicao + 1)} aria-label="Próximo item" className={juntar(botao.icone, "h-11 w-11")}>
+                    <ChevronRight className="h-5 w-5" aria-hidden="true" />
+                  </button>
+                </div>
+              )}
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label={`Ver detalhes de ${f.file_name}`}
+                className={juntar("min-w-0 overflow-hidden rounded-xl border border-border bg-card", foco)}
+                onClick={() => setPreviewFile(f)}
+                onKeyDown={(e) => abrirComTeclado(e, f)}
+              >
+                <CarouselPreview key={f.id} images={images} grande />
+              </div>
+              <div className="mt-3 min-w-0">
+                <div className="flex min-w-0 items-start">
+                  <p className="mr-2 min-w-0 flex-1 text-[15px] font-semibold leading-5 text-foreground break-words">{f.file_name}</p>
+                  <span className={juntar(etiqueta, "border", badge.cls)}>{badge.label}</span>
+                </div>
+                <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>
+                  {images.length > 1 ? `Carrossel com ${images.length} cards · ` : ""}{f.project?.name || "-"}
+                </p>
+                <button type="button" onClick={() => setPreviewFile(f)} className={juntar(botao.discreto, "-ml-3.5 mt-1 h-11 text-primary")}>
+                  Ver legenda e detalhes
+                </button>
+                {f.approval_status === "rejected" && f.feedback && (
+                  <div className={juntar(superficie.poco, "mt-2 px-3 py-2")}>
+                    <p className={texto.auxiliar}>Seu pedido de ajuste</p>
+                    <p className="line-clamp-3 text-xs text-foreground break-words">{f.feedback}</p>
+                  </div>
+                )}
+                {atualPendente && previaDoAtual.isError && (
+                  <div role="alert" className="mt-2 flex min-w-0 items-center rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2">
+                    <AlertTriangle className="mr-2 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+                    <p className="min-w-0 flex-1 text-xs text-destructive">Não foi possível conferir o conteúdo. A decisão fica bloqueada até a prévia ser validada.</p>
+                    <button type="button" onClick={() => previaDoAtual.refetch()} className={juntar(botao.discreto, "ml-1 h-11 px-2 text-primary")}>
+                      Tentar
+                    </button>
+                  </div>
+                )}
+              </div>
+              {/* Pé fixo: gruda no fim da área que rola, logo acima da barra de baixo. */}
+              {atualPendente ? (
+                <div className="sticky bottom-0 z-10 -mx-4 mt-4 flex border-t border-border bg-background/95 px-4 py-3 [&>*+*]:ml-2">
+                  <button
+                    type="button"
+                    disabled={decisaoTravadaNoCelular}
+                    onClick={() => { if (!isReadOnly) { setFeedbackFileId(f.id); setFeedbackText(""); setFeedbackLamina(0); } }}
+                    className={juntar(botao.perigo, "h-12 w-full flex-1 text-[14px]")}
+                  >
+                    Pedir ajuste
+                  </button>
+                  <button
+                    type="button"
+                    disabled={decisaoTravadaNoCelular}
+                    onClick={() => { if (!isReadOnly) setConfirmApprove(f.id); }}
+                    className={juntar(botao.primario, "h-12 w-full flex-1 bg-success text-[14px] text-white hover:bg-success/90")}
+                  >
+                    {previaDoAtual.isFetching && !previaDoAtual.data ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" aria-hidden="true" />}
+                    Aprovar
+                  </button>
+                </div>
+              ) : filaDoCelular.length > 1 ? (
+                <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-border bg-background/95 px-4 py-3">
+                  <button type="button" onClick={() => irPara(posicao + 1)} className={juntar(botao.secundario, "h-12 w-full flex-1 text-[14px]")}>
+                    Próximo
+                    <ChevronRight className="ml-1.5 h-4 w-4" aria-hidden="true" />
+                  </button>
+                </div>
+              ) : null}
+            </section>
+          );
+        })()
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {visiveis.map((f: any) => {

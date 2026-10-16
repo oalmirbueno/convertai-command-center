@@ -38,6 +38,11 @@ import { registrarNoDia, tarefasAbertasDosClientes, textoDoErroDoDia, useDiasPri
  * calcula) aparece pequena ao lado de cada cliente na coluna e no cartão do dia, e a média do dia
  * no cabeçalho da coluna. A linha de resumo ("N na semana · M hoje") saiu. Com `semCabecalho`
  * (a Central mostra o bloco numa aba), nem o título aparece; o "?" fica no canto do zoom do dia.
+ *
+ * 16/10/2026, celular (dono: "cara de aplicativo, sem grade apertada, sem tela se mexendo"): abaixo
+ * de 768 px os 5 dias viram um seletor de segmentos (o dia escolhido em destaque, 44 px de toque) e
+ * o dia abre em cartões grandes, um por linha. Enquanto lê, um esqueleto com a mesma altura segura
+ * o lugar para nada saltar. Do notebook para cima, nada muda.
  */
 
 type ClienteDaCentral = { id: string; nome: string; foto?: Foto | null };
@@ -201,7 +206,7 @@ export default function DiaPrioritarioNaCentral({
     return m;
   }, [tarefas]);
 
-  if (isLoading) return null;
+  if (isLoading) return <EsqueletoDoDia />;
   if (!(dias || []).length) return null;
 
   /** As contas de cada cliente (iguais às de antes): atrasadas, desta semana, próxima captação, último registro. */
@@ -245,7 +250,7 @@ export default function DiaPrioritarioNaCentral({
     <Moldura semCabecalho={semCabecalho}>
       <div className="min-w-0" data-dia-prioritario-central="">
         {/* A semana: 5 colunas iguais na largura toda. No celular, só o dia e a contagem (os clientes aparecem no zoom). */}
-        <div className="grid min-w-0 grid-cols-5 gap-1.5 md:gap-3" role="group" aria-label="Dias da semana">
+        <div className="grid min-w-0 grid-cols-5 gap-1 rounded-xl bg-muted/60 p-1 md:gap-3 md:rounded-none md:bg-transparent md:p-0" role="group" aria-label="Dias da semana">
           {DIAS_UTEIS.map((d) => {
             const lista = porDia.get(d.dia) || [];
             const ativo = d.dia === dia;
@@ -255,7 +260,12 @@ export default function DiaPrioritarioNaCentral({
             return (
               <div
                 key={d.dia}
-                className={juntar("min-w-0 rounded-lg p-1 transition-colors md:p-2", ehHoje && "bg-primary/[0.07]", ativo ? "ring-1 ring-primary/50" : "")}
+                className={juntar(
+                  "min-w-0 rounded-lg transition-colors md:p-2",
+                  ehHoje && "md:bg-primary/[0.07]",
+                  ativo ? "bg-background shadow-sm md:shadow-none md:ring-1 md:ring-primary/50" : "",
+                  ativo && !ehHoje && "md:bg-transparent",
+                )}
                 data-dia-da-semana={d.dia}
                 data-hoje={ehHoje ? "sim" : undefined}
               >
@@ -265,7 +275,7 @@ export default function DiaPrioritarioNaCentral({
                   aria-label={`${maiuscula(d.nome)}${ehHoje ? " (hoje)" : ""}: ${lista.length} ${lista.length === 1 ? "cliente" : "clientes"}`}
                   onClick={() => setDia(d.dia)}
                   title={lista.map((c) => c.nome).join(", ") || "Nenhum cliente"}
-                  className={juntar("toque-compacto flex h-9 w-full min-w-0 flex-col items-center justify-center rounded-md px-1 transition-colors hover:bg-muted/60 md:flex-row md:justify-between md:px-1.5", foco)}
+                  className={juntar("toque-compacto flex h-11 w-full min-w-0 flex-col items-center justify-center rounded-md px-1 transition-colors hover:bg-muted/60 md:h-9 md:flex-row md:justify-between md:px-1.5", foco)}
                 >
                   <span className="flex min-w-0 items-center">
                     <span className={juntar("text-[13px] font-semibold leading-4", ehHoje ? "text-primary" : ativo ? "text-foreground" : "text-muted-foreground")}>{d.curto}</span>
@@ -331,7 +341,7 @@ export default function DiaPrioritarioNaCentral({
                 const r = resumir(c.id, dia);
                 const nota = notaDe(c.id);
                 return (
-                  <li key={c.id} className={juntar(superficie.painel, "min-w-0 p-3")} data-cliente-do-dia={c.id}>
+                  <li key={c.id} className={juntar(superficie.painel, "min-w-0 p-4 md:p-3")} data-cliente-do-dia={c.id}>
                     <div className="flex min-w-0 items-center">
                       <button
                         type="button"
@@ -359,9 +369,9 @@ export default function DiaPrioritarioNaCentral({
                         <button type="button" className={botao.icone} aria-label="Tarefas no Kanban" title="Tarefas no Kanban" onClick={() => navigate(`/kanban?client=${c.id}`)}>
                           <SquareKanban className="h-4 w-4" aria-hidden="true" />
                         </button>
-                        <button type="button" className={juntar(botao.secundario, "ml-1 h-8 px-2.5")} onClick={() => setRegistrando({ id: c.id, nome: c.nome })}>
-                          <PenLine className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                          Registrar
+                        <button type="button" className={juntar(botao.secundario, "ml-1 h-8 px-2.5")} aria-label="Registrar" title="Registrar" onClick={() => setRegistrando({ id: c.id, nome: c.nome })}>
+                          <PenLine className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
+                          <span className="hidden sm:inline">Registrar</span>
                         </button>
                       </span>
                     </div>
@@ -425,6 +435,17 @@ export default function DiaPrioritarioNaCentral({
       </div>
       {registrando && <RegistrarNoDia cliente={registrando} onFechar={() => setRegistrando(null)} />}
     </Moldura>
+  );
+}
+
+/** Lugar guardado enquanto os dias carregam (16/10/2026): a mesma altura da semana e de um cartão. */
+function EsqueletoDoDia() {
+  return (
+    <div className="min-w-0 animate-pulse" aria-busy="true" aria-label="Carregando o Dia Prioritário" data-dia-prioritario-carregando="">
+      <div className="h-[52px] rounded-xl bg-muted/60 md:h-[120px]" />
+      <div className="mt-5 h-5 w-40 rounded bg-muted/50" />
+      <div className="mt-3 h-[128px] rounded-xl bg-muted/40" />
+    </div>
   );
 }
 

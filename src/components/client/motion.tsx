@@ -1,5 +1,6 @@
 import { LazyMotion, MotionConfig, domAnimation, m, type Variants } from "framer-motion";
 import { type ReactNode } from "react";
+import { useTelaPequena } from "./useTelaPequena";
 
 /* ─── Shared animation variants ───
  * Só a entrada, uma vez, ao abrir a tela (docs/design/SISTEMA.md, "nada
@@ -64,12 +65,15 @@ export function StaggerContainer({
   children: ReactNode;
   className?: string;
 }) {
+  // 16/10/2026 (dono: "sem tela se mexendo"): no celular os blocos já nascem
+  // no lugar, sem o deslize de entrada que fazia a tela pular ao abrir.
+  const pequena = useTelaPequena();
   return (
     <LazyMotion features={domAnimation}>
       <MotionConfig reducedMotion="user">
         <m.div
           variants={staggerContainer}
-          initial="hidden"
+          initial={pequena ? false : "hidden"}
           animate="show"
           className={className}
         >
