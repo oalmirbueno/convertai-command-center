@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MCP_VERSION } from "../../supabase/functions/_shared/mcp-release";
 import { acaoPermitida, laminasDoTrabalho, prazoDaAcao } from "../../supabase/functions/_shared/mcp-mesas-ponte";
+import { arteDoTrabalho, criativoParaLer } from "../../supabase/functions/_shared/mcp-mesas-formato";
 
 /**
  * MCP 2.12 (pedido do dono em 16/10/2026): os agentes do Paperclip gravavam
@@ -111,6 +112,13 @@ describe("Mesa Ads pelo MCP: plano, criativos, arte e gestor", () => {
     const servicos = ler("supabase/functions/_shared/mcp-mesas-services.ts");
     expect(servicos).toContain("andamento");
     expect(servicos).toContain(":concluida");
+  });
+
+  it("a leitura da Mesa Ads dá o trabalho_id de cada criativo (é o que aceleriq_mesa_ads_arte_gerar pede)", () => {
+    // 16/10: o Desenvolvedor produziu os criativos da Stop e travou sem o id do trabalho de arte.
+    const c = criativoParaLer({ id: "k", trabalho_id: "t-1", formato: "feed_4x5", copy: {} }, null, arteDoTrabalho(null));
+    expect(c.trabalho_id).toBe("t-1");
+    expect(criativoParaLer({ id: "k", copy: {} }, null, arteDoTrabalho(null)).trabalho_id).toBeNull();
   });
 
   it("arte só de criativo de anúncio, e o gestor só recebe criativo com toda a arte pronta", () => {

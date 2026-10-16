@@ -242,6 +242,8 @@ export function criativoParaLer(bruto: unknown, angulo: Linha | null, arte: Arte
     status: texto(c.status),
     evidencia: texto(c.evidencia),
     ad_id_na_meta: texto(c.ad_id),
+    // MCP 2.12: o id do trabalho de arte no Estúdio, que aceleriq_mesa_ads_arte_gerar pede.
+    trabalho_id: texto(c.trabalho_id),
     copy_escolhida: {
       texto_principal: texto(copy.texto_principal),
       texto_principal_longo: texto(copy.texto_principal_longo),
