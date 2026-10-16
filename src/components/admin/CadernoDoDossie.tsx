@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import TextoFormatado from "@/components/agentes/respostas/TextoFormatado";
-import { foco, juntar, texto } from "@/components/sistema";
+import { foco, juntar } from "@/components/sistema";
 
 /**
  * O dossiê lido como um caderno (16/10, dono: "abrindo como se fosse um
@@ -256,8 +256,29 @@ export function useCaderno(texto: string): EstadoDoCaderno {
   };
 }
 
-/** Texto do caderno: um pouco mais de ar que a conversa, marcador na cor da marca. */
-const CORPO = "space-y-3 leading-[1.7] text-foreground/90 [&_li]:marker:text-primary/70 [&_strong]:font-semibold [&_strong]:text-foreground";
+/**
+ * Cores do caderno (17/10, dono: "isso que está muito preto dá para mudar a
+ * cor, dá uma diversificada"). Só tokens do tema, para o claro e o escuro:
+ * o corpo num tom mais suave que o preto cheio, os títulos de dentro do texto
+ * na cor da marca e cada seção com um tom de destaque (marca, informação,
+ * aviso), que pinta o número, o marcador da lista e o negrito.
+ */
+const CORPO = "space-y-3 leading-[1.7] text-foreground/75 [&_[role=heading]]:text-primary [&_strong]:font-semibold [&_strong]:text-foreground/90";
+
+interface Acento {
+  /** Número da seção (pílula). */
+  numero: string;
+  /** Marcador de lista dentro do corpo. */
+  marcador: string;
+}
+
+const ACENTOS: Acento[] = [
+  { numero: "bg-primary/10 text-primary", marcador: "[&_li]:marker:text-primary/70" },
+  { numero: "bg-info/10 text-info", marcador: "[&_li]:marker:text-info/70" },
+  { numero: "bg-warning/10 text-warning", marcador: "[&_li]:marker:text-warning/80" },
+];
+
+const acento = (i: number) => ACENTOS[i % ACENTOS.length];
 
 const numero = (i: number) => String(i + 1).padStart(2, "0");
 
@@ -277,20 +298,24 @@ export default function CadernoDoDossie({ caderno }: { caderno: EstadoDoCaderno 
   const aberturaAberta = estaAberta(-1);
   return (
     <article className="min-w-0" data-caderno-do-dossie="">
-      {/* Sumário: os títulos viram atalhos para a parte que interessa. */}
+      {/* Sumário (17/10, dono: "meio desorganizado, ainda poluído"): pílulas
+          numeradas em linha, que quebram no celular; sem rótulo repetido. */}
       {secoes.length >= 2 && (
         <nav aria-label="Sumário do dossiê" className="mb-6">
-          <p className={texto.rotulo}>Sumário</p>
-          <ol className={juntar("-mx-1.5 mt-1.5 grid gap-x-6", secoes.length > 6 && "xl:grid-cols-2")}>
+          <ol className="-m-1 flex min-w-0 flex-wrap">
             {secoes.map((s, i) => (
-              <li key={i} className="min-w-0">
+              <li key={i} className="m-1 min-w-0 max-w-full">
                 <button
                   type="button"
                   onClick={() => irPara(i)}
-                  className={juntar("flex w-full min-w-0 items-baseline rounded-md px-1.5 py-1 text-left text-[13px] leading-5 text-foreground/85 transition-colors hover:bg-muted hover:text-foreground", foco)}
+                  title={s.titulo}
+                  className={juntar(
+                    "inline-flex h-7 max-w-full min-w-0 items-center rounded-full bg-muted/50 pl-1 pr-3 text-[12.5px] text-foreground/75 transition-colors hover:bg-primary/10 hover:text-primary",
+                    foco,
+                  )}
                   data-atalho-do-sumario=""
                 >
-                  <span className="mr-2.5 shrink-0 font-semibold tabular-nums text-primary">{numero(i)}</span>
+                  <span className={juntar("mr-1.5 inline-flex h-5 min-w-[1.5rem] shrink-0 items-center justify-center rounded-full px-1 text-[11px] font-semibold tabular-nums", acento(i).numero)}>{numero(i)}</span>
                   <span className="min-w-0 truncate">{s.titulo}</span>
                 </button>
               </li>
@@ -302,12 +327,12 @@ export default function CadernoDoDossie({ caderno }: { caderno: EstadoDoCaderno 
       {partes.abertura && (
         <div className={secoes.length ? "mb-6" : ""}>
           {aberturaAberta ? (
-            <TextoFormatado texto={preservarQuebras(partes.abertura)} className={CORPO} />
+            <TextoFormatado texto={preservarQuebras(partes.abertura)} className={juntar(CORPO, ACENTOS[0].marcador)} />
           ) : (
             <>
-              <p className="line-clamp-4 text-[14px] leading-[1.7] text-foreground/90">{textoLimpo(partes.abertura)}</p>
+              <p className="line-clamp-4 text-[14px] leading-[1.7] text-foreground/75">{textoLimpo(partes.abertura)}</p>
               <button type="button" onClick={() => abrir(-1)} className={juntar("mt-1 rounded text-[12px] font-medium text-primary hover:opacity-80", foco)}>
-                Continuar lendo
+                Continuar
               </button>
             </>
           )}
@@ -316,13 +341,14 @@ export default function CadernoDoDossie({ caderno }: { caderno: EstadoDoCaderno 
 
       {secoes.map((s, i) => {
         const aberta = estaAberta(i);
+        const cor = acento(i);
         return (
           <section
             key={i}
             ref={(el) => {
               ancoras.current[i] = el;
             }}
-            className={juntar("min-w-0 scroll-mt-4", i > 0 && "mt-6 border-t border-border/60 pt-5")}
+            className={juntar("min-w-0 scroll-mt-4", i > 0 && "mt-5 border-t border-border/40 pt-4")}
             data-secao-do-caderno={aberta ? "aberta" : "recolhida"}
           >
             <h3 className="min-w-0">
@@ -331,26 +357,26 @@ export default function CadernoDoDossie({ caderno }: { caderno: EstadoDoCaderno 
                 onClick={() => alternar(i)}
                 aria-expanded={aberta}
                 title={aberta ? "Recolher" : "Abrir"}
-                className={juntar("group flex w-full min-w-0 items-baseline rounded-md text-left", foco)}
+                className={juntar("group flex w-full min-w-0 items-center rounded-md text-left", foco)}
               >
-                <span className="mr-3 w-6 shrink-0 text-[13px] font-semibold tabular-nums text-primary">{numero(i)}</span>
-                <span className={juntar(texto.tituloSecao, "min-w-0 flex-1 truncate transition-colors group-hover:text-primary")}>{s.titulo}</span>
+                <span className={juntar("mr-3 inline-flex h-6 w-7 shrink-0 items-center justify-center rounded-md text-[12px] font-semibold tabular-nums", cor.numero)}>{numero(i)}</span>
+                <span className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-[22px] text-foreground/85 transition-colors group-hover:text-primary">{s.titulo}</span>
                 <ChevronDown
-                  className={juntar("ml-2 h-4 w-4 shrink-0 self-center text-muted-foreground transition-transform", aberta ? "" : "-rotate-90")}
+                  className={juntar("ml-2 h-4 w-4 shrink-0 text-muted-foreground/70 transition-transform", aberta ? "" : "-rotate-90")}
                   aria-hidden="true"
                 />
               </button>
             </h3>
             {aberta ? (
-              <div className="mt-2.5 min-w-0 sm:pl-9">
+              <div className="mt-2.5 min-w-0 sm:pl-10">
                 {s.corpo ? (
-                  <TextoFormatado texto={preservarQuebras(s.corpo)} className={CORPO} />
+                  <TextoFormatado texto={preservarQuebras(s.corpo)} className={juntar(CORPO, cor.marcador)} />
                 ) : (
                   <p className="text-[13px] text-muted-foreground">Sem texto nesta parte.</p>
                 )}
               </div>
             ) : s.resumo ? (
-              <p className="mt-1 min-w-0 truncate text-[13px] leading-5 text-muted-foreground sm:pl-9">{s.resumo}</p>
+              <p className="mt-1 min-w-0 truncate text-[13px] leading-5 text-muted-foreground/80 sm:pl-10">{s.resumo}</p>
             ) : null}
           </section>
         );

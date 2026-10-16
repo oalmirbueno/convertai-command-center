@@ -283,12 +283,21 @@ export default function ContextoImagens() {
           ajuda="Traga as imagens de todas as pastas do Workspace e de Arquivos (fora os materiais entregues). Organizar com IA preenche descrição, categoria e tags das que ainda não têm."
           acao={
             <>
-              <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={() => void sincronizar()} disabled={sincronizando}>
-                {sincronizando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FolderSync className="mr-1.5 h-3.5 w-3.5" />}
-                Buscar imagens do workspace e de Arquivos
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-8 w-8 p-0"
+                onClick={() => void sincronizar()}
+                disabled={sincronizando}
+                aria-label="Buscar imagens do workspace e de Arquivos"
+                title="Buscar imagens do workspace e de Arquivos"
+              >
+                {sincronizando ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderSync className="h-4 w-4" />}
               </Button>
               <BotaoComCusto
-                rotulo={<><Sparkles className="mr-1.5 h-3.5 w-3.5" />Organizar com IA{semDescricao.length ? ` (${semDescricao.length})` : ""}</>}
+                rotulo={<><Sparkles className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Organizar com IA{semDescricao.length ? ` (${semDescricao.length})` : ""}</span>{semDescricao.length ? <span className="ml-1 tabular-nums" aria-hidden="true">{semDescricao.length}</span> : null}</>}
+                variant="ghost"
                 titulo="Organizar o acervo com IA"
                 descricao="O modelo de leitura olha cada imagem sem descrição e preenche descrição, categoria e tags. A equipe pode corrigir depois."
                 className="h-8 text-[12px]"

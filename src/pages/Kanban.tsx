@@ -185,7 +185,15 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
           tabIndex={0}
           aria-label={`Abrir tarefa ${task.title}`}
           draggable={draggable}
-          onDragStart={podeArrastar ? (e) => { e.stopPropagation(); acoes.comecarArrasto(task.id); } : undefined}
+          onDragStart={podeArrastar ? (e) => {
+            e.stopPropagation();
+            // O Firefox só começa o arrasto com algum dado no dataTransfer.
+            if (e.dataTransfer) {
+              e.dataTransfer.effectAllowed = "move";
+              try { e.dataTransfer.setData("text/plain", task.id); } catch { /* navegador sem setData */ }
+            }
+            acoes.comecarArrasto(task.id);
+          } : undefined}
           onDragEnd={isClient ? undefined : acoes.terminarArrasto}
           onDragOver={isClient ? undefined : (e) => acoes.passarPorCima(e, task.id)}
           onDragLeave={isClient ? undefined : (e) => {
@@ -694,10 +702,6 @@ export default function Kanban() {
       toast.info("Aguarde a movimentação anterior terminar.");
       return;
     }
-    if (dragBlockedByFilters) {
-      toast.info("Limpe os filtros e use a ordem manual para arrastar tarefas.");
-      return;
-    }
     draggedTaskRef.current = taskId;
     setDraggedTask(taskId);
   };
@@ -707,16 +711,26 @@ export default function Kanban() {
     if (isClient || !activeDragId) return;
     const task = (tasks || []).find((t: any) => t.id === activeDragId);
     if (!task) return;
-    if (dropInFlightRef.current || dragBlockedByFilters) {
+    const previousStatus = task.status;
+    const previousColumn = canonicalTaskStatus(previousStatus);
+    const movedAcrossColumns = previousColumn !== column;
+    // 16/10/2026 (dono): "clicar no card e arrastar, igual no Notion". Com
+    // filtro ou outra ordem o arrasto continua valendo para TROCAR DE COLUNA
+    // (a tarefa entra no fim da coluna inteira); só a ordem dentro da coluna
+    // pede os filtros limpos e a ordem manual (a lista filtrada não enxerga
+    // as tarefas escondidas).
+    const soMudaColuna = dragBlockedByFilters;
+    if (dropInFlightRef.current || (soMudaColuna && !movedAcrossColumns)) {
+      if (soMudaColuna && !movedAcrossColumns && !dropInFlightRef.current) {
+        toast.info("Para mudar a ordem dentro da coluna, limpe os filtros e use a ordem manual.");
+      }
+      setDragOver(null);
       setDraggedTask(null);
       draggedTaskRef.current = null;
       return;
     }
     dropInFlightRef.current = true;
     setDropSaving(true);
-    const previousStatus = task.status;
-    const previousColumn = canonicalTaskStatus(previousStatus);
-    const movedAcrossColumns = previousColumn !== column;
     const originalSourceIds = filteredTasks
       .filter(
         (candidate: any) =>
@@ -752,7 +766,17 @@ export default function Kanban() {
           t.id !== activeDragId,
       )
       .map((t: any) => t.id);
+    // Com filtro: a tarefa vai para o fim da coluna de destino inteira (não só da parte visível).
+    const ordemNoFimDaColuna =
+      (tasks || []).reduce((maior: number, t: any) => {
+        if (t.id === activeDragId || canonicalTaskStatus(t.status) !== column) return maior;
+        return typeof t.task_order === "number" && t.task_order > maior ? t.task_order : maior;
+      }, 0) + 10;
     const restoreOriginalColumnOrders = async () => {
+      if (soMudaColuna) {
+        await persistTaskStatus(activeDragId, column, previousStatus, task.task_order);
+        return;
+      }
       if (movedAcrossColumns) {
         await persistTaskStatus(
           activeDragId,
@@ -773,9 +797,13 @@ export default function Kanban() {
 
     // ── Optimistic update: reorder the cache immediately so UI is instant ──
     const destOrder: Record<string, number> = {};
-    newDestIds.forEach((id, i) => { destOrder[id] = (i + 1) * 10; });
     const srcOrder: Record<string, number> = {};
-    srcIds.forEach((id, i) => { srcOrder[id] = (i + 1) * 10; });
+    if (soMudaColuna) {
+      destOrder[activeDragId] = ordemNoFimDaColuna;
+    } else {
+      newDestIds.forEach((id, i) => { destOrder[id] = (i + 1) * 10; });
+      srcIds.forEach((id, i) => { srcOrder[id] = (i + 1) * 10; });
+    }
 
     queryClient.setQueriesData({ queryKey: ["tasks"] }, (old: any) => {
       if (!Array.isArray(old)) return old;
@@ -799,7 +827,15 @@ export default function Kanban() {
       try {
         let rollbackNeeded = !movedAcrossColumns;
         try {
-          if (!movedAcrossColumns) {
+          if (soMudaColuna) {
+            await persistTaskStatus(
+              activeDragId,
+              previousStatus,
+              column,
+              ordemNoFimDaColuna,
+            );
+            rollbackNeeded = true;
+          } else if (!movedAcrossColumns) {
             await persistColumnOrder(column, newDestIds);
           } else {
             await persistTaskStatus(
@@ -1264,7 +1300,7 @@ export default function Kanban() {
       task={task}
       colId={col.id}
       isClient={isClient}
-      draggable={!isClient && !dragBlockedByFilters && !dropSaving}
+      draggable={!isClient && !dropSaving}
       arrastado={draggedTask === task.id}
       linhaEmCima={dragOver?.id === task.id && dragOver.position === "top"}
       linhaEmBaixo={dragOver?.id === task.id && dragOver.position === "bottom"}
@@ -1284,6 +1320,8 @@ export default function Kanban() {
       e.preventDefault();
       const active = draggedTaskRef.current || draggedTask;
       if (!active || active === taskId) return;
+      // Com filtro só muda de coluna: sem linha de posição (a ordem não muda).
+      if (dragBlockedByFilters) return;
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
       const position = e.clientY < rect.top + rect.height / 2 ? "top" : "bottom";
       setDragOver((prev) => (prev?.id === taskId && prev.position === position ? prev : { id: taskId, position }));
@@ -1306,7 +1344,7 @@ export default function Kanban() {
   const cabecalho = (
     <CabecalhoDePagina
       titulo="Kanban"
-      ajuda="Todas as tarefas da equipe por etapa. Arraste o cartão para mudar de coluna ou de ordem (com os filtros limpos e a ordem manual). Botão direito no cartão abre o menu."
+      ajuda="Todas as tarefas da equipe por etapa. Clique no cartão para abrir; segure e arraste o cartão para mudar de coluna (com os filtros limpos e a ordem manual, também muda a ordem). Botão direito ou o menu do cartão também movem."
       descricao={isLoading ? undefined : `${filteredTasks.length} ${filteredTasks.length === 1 ? "tarefa" : "tarefas"}${hasFilters ? " com filtros" : ""}${dropSaving ? " · salvando" : ""}`}
       acoes={
         // No computador os filtros sobem para a linha do título (uma linha a

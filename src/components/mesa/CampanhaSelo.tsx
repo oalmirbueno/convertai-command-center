@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BadgeCheck, Check, ChevronDown, ImagePlus, Link2, Loader2, RotateCcw, Sparkles, Undo2, Upload, Wand2, X } from "lucide-react";
+import { BadgeCheck, Check, ChevronDown, ImagePlus, Link2, Loader2, RotateCcw, RotateCw, Sparkles, Stamp, Undo2, Upload, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -175,7 +175,9 @@ function ArtesDaCampanha({ impacto, onRefeito }: { impacto: ImpactoNaTela; onRef
         <BotaoComCusto
           rotulo={
             <>
-              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Refazer {n} {plural(n, "lâmina", "lâminas")}
+              <RotateCw className="h-4 w-4" aria-hidden="true" />
+              <span className="tabular-nums" aria-hidden="true">{n}</span>
+              <span className="sr-only">Refazer {n} {plural(n, "lâmina", "lâminas")}</span>
             </>
           }
           titulo="Refazer com o selo novo"
@@ -472,12 +474,13 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
                 <Button
                   type="button"
                   size="sm"
-                  variant={painel === "melhorar" ? "secondary" : "outline"}
+                  variant={painel === "melhorar" ? "secondary" : "ghost"}
                   className="mb-1 mr-1.5 h-8"
                   onClick={() => setPainel((p) => (p === "melhorar" ? null : "melhorar"))}
                   aria-expanded={painel === "melhorar"}
                 >
-                  <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Melhorar este selo
+                  <Wand2 className="h-4 w-4" aria-hidden="true" />
+                  <span className="sr-only">Melhorar este selo</span>
                 </Button>
               )}
               <Button
@@ -488,11 +491,12 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
                 onClick={() => setPainel((p) => (p === "trocar" ? null : "trocar"))}
                 aria-expanded={painel === "trocar"}
               >
-                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> {caminhoAtual ? "Trocar o selo" : "Escolher o selo"}
+                <Stamp className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">{caminhoAtual ? "Trocar o selo" : "Escolher o selo"}</span>
               </Button>
               {ultimaTroca && (
-                <Button type="button" size="sm" variant="ghost" className="mb-1 h-8" onClick={() => void desfazer()} disabled={trocando}>
-                  <Undo2 className="mr-1.5 h-3.5 w-3.5" /> Desfazer
+                <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 w-8 p-0" aria-label="Desfazer" title="Desfazer" onClick={() => void desfazer()} disabled={trocando}>
+                  <Undo2 className="h-4 w-4" aria-hidden="true" />
                 </Button>
               )}
               {trocando && <Loader2 className="mb-1 h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Trocando o selo" />}
@@ -505,8 +509,8 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
       {estado.isError && (
         <div className="min-w-0 space-y-1.5">
           <AvisoDeErro erro={estado.error} />
-          <Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => void estado.refetch()} disabled={estado.isFetching}>
-            {estado.isFetching ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="mr-1.5 h-3.5 w-3.5" />} Tentar de novo
+          <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0" aria-label="Tentar de novo" title="Tentar de novo" onClick={() => void estado.refetch()} disabled={estado.isFetching}>
+            {estado.isFetching ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RotateCcw className="h-4 w-4" aria-hidden="true" />}
           </Button>
         </div>
       )}
@@ -529,8 +533,8 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
             </div>
             <div className="flex min-w-0 flex-wrap items-center">
               <input ref={melhoraRef} type="file" accept={TIPOS_DO_SELO_ENVIADO} className="hidden" data-testid="referencia-do-melhorar" onChange={(e) => void subirReferencia(e.target.files && e.target.files[0], "melhora")} />
-              <Button type="button" size="sm" variant="ghost" className="mr-1 h-8" onClick={() => melhoraRef.current && melhoraRef.current.click()} disabled={subindo || refsDeMelhora.length >= 3}>
-                <ImagePlus className="mr-1.5 h-3.5 w-3.5" /> Referência
+              <Button type="button" size="sm" variant="ghost" className="mr-1 h-8 w-8 p-0" aria-label="Referência" title="Enviar uma imagem de referência" onClick={() => melhoraRef.current && melhoraRef.current.click()} disabled={subindo || refsDeMelhora.length >= 3}>
+                <ImagePlus className="h-4 w-4" aria-hidden="true" />
               </Button>
               {refsDeMelhora.map((c) => (
                 <span key={c} className="mr-1 inline-flex items-center">
@@ -601,10 +605,11 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
                     if (r) setComparar(null);
                   }}
                 >
-                  <Check className="mr-1.5 h-3.5 w-3.5" /> Escolher a nova
+                  <Check className="h-4 w-4" aria-hidden="true" />
+                  <span className="sr-only">Escolher a nova</span>
                 </Button>
-                <Button type="button" size="sm" variant="ghost" className="mb-1 h-8" onClick={() => void ficarComADeAntes()} disabled={trocando}>
-                  <X className="mr-1.5 h-3.5 w-3.5" /> Ficar com a de antes
+                <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 w-8 p-0" aria-label="Ficar com a de antes" title="Ficar com a de antes" onClick={() => void ficarComADeAntes()} disabled={trocando}>
+                  <X className="h-4 w-4" aria-hidden="true" />
                 </Button>
               </div>
             </div>
@@ -633,7 +638,7 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
               {/* O caminho mais comum primeiro: gerar com os ajustes de costume; ajustar é um clique na linha-resumo. */}
               <div className="flex min-w-0 flex-wrap items-center">
                 <BotaoComCusto
-                  rotulo={<><Sparkles className="mr-1.5 h-3.5 w-3.5" />{quantidade === 1 ? "Gerar 1 opção" : `Gerar ${quantidade} opções`}</>}
+                  rotulo={<><Sparkles className="h-4 w-4" aria-hidden="true" /><span className="sr-only">{quantidade === 1 ? "Gerar 1 opção" : `Gerar ${quantidade} opções`}</span></>}
                   titulo="Opções de selo"
                   descricao="O gerador desenha as opções com a campanha, a marca, o estilo, as referências e o que o dono já ensinou. Você escolhe uma; nada é aplicado sozinho."
                   partes={() => partesDaGeracao(catalogo, modeloId, qualidade, quantidade)}
@@ -726,8 +731,8 @@ export default function CampanhaSelo({ campanha }: { campanha: Campanha }) {
                 {referencias.length < MAX_REFERENCIAS_DO_SELO && (
                   <div className="flex min-w-0 flex-wrap items-center">
                     <input ref={referenciaRef} type="file" accept={TIPOS_DO_SELO_ENVIADO} className="hidden" data-testid="referencia-do-selo" onChange={(e) => void subirReferencia(e.target.files && e.target.files[0], "direcao")} />
-                    <Button type="button" size="sm" variant="ghost" className="mb-1 mr-1 h-8" disabled={subindo} onClick={() => referenciaRef.current && referenciaRef.current.click()}>
-                      <ImagePlus className="mr-1.5 h-3.5 w-3.5" /> Enviar referência
+                    <Button type="button" size="sm" variant="ghost" className="mb-1 mr-1 h-8 w-8 p-0" aria-label="Enviar referência" title="Enviar referência" disabled={subindo} onClick={() => referenciaRef.current && referenciaRef.current.click()}>
+                      <ImagePlus className="h-4 w-4" aria-hidden="true" />
                     </Button>
                     <span className="mb-1 mr-2">
                       <EstimativaInline partes={partesDasReferencias(catalogo, 1)} />

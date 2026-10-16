@@ -43,8 +43,9 @@ export default function AgendarDoEstudio({
   };
   return (
     <>
-      <button type="button" className={juntar(botao.secundario, "h-8", className)} onClick={() => setAberta(true)} data-agendar-do-estudio="">
-        <CalendarCheck className="mr-1.5 h-4 w-4" /> Agendar
+      {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
+      <button type="button" className={juntar(botao.icone, className)} onClick={() => setAberta(true)} aria-label="Agendar" title="Agendar" data-agendar-do-estudio="">
+        <CalendarCheck className="h-4 w-4" aria-hidden="true" />
       </button>
       {aberta && (
         <JanelaDaAprovada peca={peca} posicao={1} total={1} titulo="Agendar" onFechar={() => setAberta(false)} onFeita={() => setAberta(false)} />

@@ -5,7 +5,6 @@ import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
-import BotaoComIcone from "@/components/sistema/BotaoComIcone";
 import { PreencherComIA, type CampoParaPreencher } from "@/components/sistema";
 import { botao, campo, campoTexto, espaco, foco, juntar, lista, texto } from "@/components/sistema/estilos";
 import {
@@ -209,12 +208,12 @@ export default function EtapaEstrategia() {
               }}
               className="m-1 h-8"
             />
-            <BotaoComIcone
-              variante="discreto"
-              className="m-1 h-8"
-              icone={salvando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-              rotulo="Salvar agora"
-              title="A estratégia grava sozinha; isto grava já"
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+            <button
+              type="button"
+              className={juntar(botao.icone, "m-1 disabled:opacity-50")}
+              aria-label="Salvar agora"
+              title="Salvar agora: a estratégia grava sozinha; isto grava já"
               disabled={!mudou || salvando}
               onClick={() => {
                 setSalvando(true);
@@ -224,7 +223,9 @@ export default function EtapaEstrategia() {
                   .then(() => setSalvando(false));
               }}
               data-salvar-estrategia=""
-            />
+            >
+              {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            </button>
           </>
         }
       />

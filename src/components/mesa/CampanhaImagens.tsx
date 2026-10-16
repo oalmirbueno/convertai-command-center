@@ -238,16 +238,18 @@ export default function CampanhaImagens({
         <Button
           type="button"
           size="sm"
-          variant="outline"
-          className="mb-1 mr-1.5 h-8"
+          variant="ghost"
+          className="mb-1 mr-1 h-8 w-8 p-0"
+          title={acervoAberto ? "Fechar o acervo" : "Escolher no acervo"}
           aria-expanded={acervoAberto}
           disabled={ocupado && !acervoAberto}
           onClick={() => setAcervoAberto((v) => !v)}
         >
-          <Images className="mr-1.5 h-3.5 w-3.5" /> {acervoAberto ? "Fechar o acervo" : "Escolher no acervo"}
+          {acervoAberto ? <X className="h-4 w-4" aria-hidden="true" /> : <Images className="h-4 w-4" aria-hidden="true" />}
+          <span className="sr-only">{acervoAberto ? "Fechar o acervo" : "Escolher no acervo"}</span>
         </Button>
-        <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8" disabled={ocupado || cheia} onClick={() => entrada.current && entrada.current.click()}>
-          <Upload className="mr-1.5 h-3.5 w-3.5" /> Enviar do computador
+        <Button type="button" size="sm" variant="ghost" className="mb-1 mr-1 h-8 w-8 p-0" aria-label="Enviar do computador" title="Enviar do computador" disabled={ocupado || cheia} onClick={() => entrada.current && entrada.current.click()}>
+          <Upload className="h-4 w-4" aria-hidden="true" />
         </Button>
         <input
           ref={entrada}

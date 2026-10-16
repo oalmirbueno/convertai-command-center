@@ -13,7 +13,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: { functions: { invoke: (...args: unknown[]) => invoke(...args) } },
 }));
 
-import RadarDeIdeias, { ideiaDoServidor, ideiaParaServidor } from "@/components/central/RadarDeIdeias";
+import RadarDeIdeias, { ideiaDoServidor, ideiaParaServidor, reelsDoServidor, variacoesDoServidor } from "@/components/central/RadarDeIdeias";
 
 function ideia(id: string, titulo: string, extra: Partial<RadarIdea> = {}): RadarIdea {
   return {
@@ -51,6 +51,7 @@ function montar(extra: Partial<Parameters<typeof RadarDeIdeias>[0]> = {}) {
     onLevarAoCliente: vi.fn(),
     onAbrirPerfil: vi.fn(),
     onIdeiaEvoluida: vi.fn(),
+    onNovasIdeias: vi.fn(),
     ...extra,
   };
   const tela = render(<RadarDeIdeias {...props} />);
@@ -193,6 +194,125 @@ describe("Radar de ideias", () => {
     fireEvent.click(within(janela).getByRole("button", { name: "Mais ousada" }));
     expect(await within(janela).findByRole("alert")).toHaveTextContent("O agente do Radar não respondeu (502).");
     expect(within(janela).getByRole("button", { name: /Aplicar esta versão/ })).toBeDisabled();
+  });
+
+  it("tela cheia liga e desliga o modo foco do painel (botão, Esc e ao sair da aba)", () => {
+    const { unmount } = montar();
+    expect(document.body.hasAttribute("data-modo-foco")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Tela cheia" }));
+    expect(document.body.getAttribute("data-modo-foco")).toBe("radar-de-ideias");
+    const sair = screen.getByRole("button", { name: "Sair da tela cheia" });
+    expect(sair).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(sair);
+    expect(document.body.hasAttribute("data-modo-foco")).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Tela cheia" }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(document.body.hasAttribute("data-modo-foco")).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Tela cheia" }));
+    expect(document.body.getAttribute("data-modo-foco")).toBe("radar-de-ideias");
+    unmount();
+    expect(document.body.hasAttribute("data-modo-foco")).toBe(false);
+  });
+
+  it("tocar no cartão abre a ideia grande com tudo dela e os dois atalhos", async () => {
+    montar();
+    fireEvent.click(cartoes()[0]);
+    const janela = await screen.findByRole("dialog");
+    expect(janela).toHaveAttribute("data-ideia-aberta");
+    expect(within(janela).getByText("Ideia atual")).toBeInTheDocument();
+    expect(within(janela).getByText("mostrar o processo")).toBeInTheDocument();
+    expect(within(janela).getByText("Descrição de Alfa Peças: mostrar o processo")).toBeInTheDocument();
+    expect(within(janela).getByText("Sinal de Alfa Peças: mostrar o processo")).toBeInTheDocument();
+    expect(within(janela).getByRole("button", { name: /Mais ideias como esta/ })).toBeInTheDocument();
+    expect(within(janela).getByRole("button", { name: /Ideias de Reels/ })).toBeInTheDocument();
+    expect(within(janela).getByLabelText("Mensagem para o agente")).toBeInTheDocument();
+    // Os controles do cartão continuam fazendo só o deles.
+    fireEvent.click(within(janela).getAllByRole("button", { name: "Fechar" })[0]);
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    fireEvent.click(within(cartoes()[1]).getByRole("button", { name: /Sinal/ }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("Mais ideias como esta pede variações e o + põe a variação no radar", async () => {
+    invoke.mockResolvedValue({
+      data: {
+        resposta: "Três ângulos diferentes.",
+        ideia: ideiaParaServidor(IDEIAS[0], "Alfa Peças"),
+        variacoes: [
+          { titulo: "bastidor ao vivo", descricao: "Live curta na oficina.", passos: ["Marcar a live"], interno_esforco: "baixo" },
+          { titulo: "antes e depois", descricao: "Carrossel de antes e depois." },
+          { titulo: "", descricao: "sem título, fica de fora" },
+        ],
+      },
+      error: null,
+    });
+    const { props } = montar();
+    fireEvent.click(cartoes()[0]);
+    const janela = await screen.findByRole("dialog");
+    fireEvent.click(within(janela).getByRole("button", { name: /Mais ideias como esta/ }));
+
+    expect(await within(janela).findByText("Três ângulos diferentes.")).toBeInTheDocument();
+    const [, opcoes] = invoke.mock.calls[0] as [string, { body: Record<string, unknown> }];
+    expect(opcoes.body.action).toBe("evoluir");
+    expect(opcoes.body.pedido).toBe("variacoes");
+    expect(opcoes.body.mensagens).toEqual([{ papel: "usuario", texto: "Mais ideias como esta" }]);
+    expect(within(janela).getByText("bastidor ao vivo")).toBeInTheDocument();
+    expect(within(janela).getByText("antes e depois")).toBeInTheDocument();
+    expect(within(janela).queryByText("sem título, fica de fora")).not.toBeInTheDocument();
+    // Pedido não reescreve a ideia: nada para aplicar.
+    expect(within(janela).getByText("Ideia atual")).toBeInTheDocument();
+    expect(within(janela).getByRole("button", { name: /Aplicar esta versão/ })).toBeDisabled();
+
+    fireEvent.click(within(janela).getByRole("button", { name: "Adicionar ao radar: bastidor ao vivo" }));
+    expect(props.onNovasIdeias).toHaveBeenCalledTimes(1);
+    const [clienteId, novas] = props.onNovasIdeias.mock.calls[0] as [string, RadarIdea[]];
+    expect(clienteId).toBe("a");
+    expect(novas).toHaveLength(1);
+    expect(novas[0].id).toMatch(/^a:var-\d+-0$/);
+    expect(novas[0].title).toBe("Alfa Peças: bastidor ao vivo");
+    expect(novas[0].pitch).toBe("Live curta na oficina.");
+    expect(novas[0].internal.effort).toBe("baixo");
+    expect(novas[0].lens).toBe("essencia");
+    expect(within(janela).getByRole("button", { name: "bastidor ao vivo já está no radar" })).toBeDisabled();
+  });
+
+  it("Ideias de Reels pede Reels e mostra gancho, cena e legenda na conversa", async () => {
+    invoke.mockResolvedValue({
+      data: {
+        resposta: "Reels curtos na oficina.",
+        ideia: ideiaParaServidor(IDEIAS[1], "Beta Loja"),
+        reels: [
+          { gancho: "Você sabia que...", cena: "Mão abrindo a peça", legenda: "O detalhe que ninguém vê." },
+          { gancho: "Sem cena", cena: "" },
+        ],
+      },
+      error: null,
+    });
+    montar();
+    fireEvent.click(cartoes()[1]);
+    const janela = await screen.findByRole("dialog");
+    fireEvent.click(within(janela).getByRole("button", { name: /Ideias de Reels/ }));
+    expect(await within(janela).findByText("Reels curtos na oficina.")).toBeInTheDocument();
+    const [, opcoes] = invoke.mock.calls[0] as [string, { body: Record<string, unknown> }];
+    expect(opcoes.body.pedido).toBe("reels");
+    expect(opcoes.body.client_id).toBe("b");
+    const lista = within(janela).getByRole("list", { name: "Ideias de Reels" });
+    expect(within(lista).getByText("Você sabia que...")).toBeInTheDocument();
+    expect(within(lista).getByText("Mão abrindo a peça")).toBeInTheDocument();
+    expect(within(lista).getByText("O detalhe que ninguém vê.")).toBeInTheDocument();
+    expect(within(lista).queryByText("Sem cena")).not.toBeInTheDocument();
+  });
+
+  it("variacoesDoServidor e reelsDoServidor limitam a 3 e 4", () => {
+    const brutas = Array.from({ length: 5 }, (_, i) => ({ titulo: `v${i}`, descricao: `d${i}` }));
+    const v = variacoesDoServidor(brutas, IDEIAS[0], "Alfa Peças", 7);
+    expect(v.map((x) => x.id)).toEqual(["a:var-7-0", "a:var-7-1", "a:var-7-2"]);
+    expect(variacoesDoServidor("x", IDEIAS[0])).toEqual([]);
+    const r = reelsDoServidor(Array.from({ length: 6 }, (_, i) => ({ gancho: `g${i}`, cena: `c${i}` })));
+    expect(r).toHaveLength(4);
+    expect(r[0]).toEqual({ gancho: "g0", cena: "c0", legenda: "" });
   });
 
   it("sem ideias, o estado vazio com os controles", () => {

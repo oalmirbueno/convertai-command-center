@@ -101,8 +101,8 @@ export default function ParesDaBase({ tipos, onUsar }: { tipos: TipoDoSistema[];
                     {propondo === p.no ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Wand2 className="mr-1.5 h-3.5 w-3.5" />}
                     Proposta
                   </button>
-                  <button type="button" className={juntar(botao.discreto, "ml-1 h-8 shrink-0")} onClick={() => usar(p)} title={p.melhor_para}>
-                    <Check className="mr-1.5 h-3.5 w-3.5" /> Usar
+                  <button type="button" className={juntar(botao.icone, "ml-1 shrink-0 disabled:opacity-50")} onClick={() => usar(p)} title={p.melhor_para} aria-label="Usar">
+                    <Check className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </li>
               ))}

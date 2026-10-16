@@ -20,7 +20,6 @@ import {
   CabecalhoDaEtapa,
   FontesDoProduto,
   MolduraDaFoto,
-  RotuloLargo,
   StatusDaCampanhaPilula,
   useMesaPublicidade,
 } from "./Comuns";
@@ -379,14 +378,13 @@ export default function EtapaCampanha() {
                 />
               </div>
             )}
-            <button type="button" className={botao.secundario} onClick={() => setNova((v) => !v)} aria-pressed={nova} aria-label="Nova campanha">
-              <Plus className="h-3.5 w-3.5" />
-              <RotuloLargo>Nova campanha</RotuloLargo>
+            {/* 16/10/2026: ações só em ícone (nome no aria-label e no title). */}
+            <button type="button" className={juntar(botao.icone, nova && "bg-muted text-foreground")} onClick={() => setNova((v) => !v)} aria-pressed={nova} aria-label="Nova campanha" title="Nova campanha">
+              <Plus className="h-4 w-4" />
             </button>
             {campanha && !nova && (
-              <button type="button" className={botao.secundario} onClick={() => irPara("direcao")} aria-label="Seguir para a direção">
-                <ArrowRight className="h-3.5 w-3.5" />
-                <RotuloLargo>Seguir para a direção</RotuloLargo>
+              <button type="button" className={botao.icone} onClick={() => irPara("direcao")} aria-label="Seguir para a direção" title="Seguir para a direção">
+                <ArrowRight className="h-4 w-4" />
               </button>
             )}
           </>

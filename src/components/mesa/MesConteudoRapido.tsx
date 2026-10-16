@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarCheck2, ExternalLink, Plus, Zap } from "lucide-react";
+import { CalendarCheck2, CalendarSearch, ExternalLink, Plus, Zap } from "lucide-react";
+import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { botao, juntar } from "@/components/sistema/estilos";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -126,10 +128,16 @@ export default function MesConteudoRapido({
   return (
     <Dialog open={aberto} onOpenChange={(v) => { if (!rodando) onAbertoChange(v); }}>
       <DialogContent className="max-h-[92vh] w-[calc(100vw-16px)] max-w-xl overflow-y-auto p-4 sm:p-5">
-        <DialogTitle className="flex items-center text-[15px]">
-          <Zap className="mr-1.5 h-4 w-4 text-primary" /> Conteúdo rápido
-        </DialogTitle>
-        <DialogDescription className="-mt-1 text-[12px]">
+        {/* 16/10 (dono: "tem muito texto; só conteúdo rápido, só ícone"): a explicação foi para o "?" e as ações ficaram só no ícone. */}
+        <div className="flex min-w-0 items-center pr-6">
+          <DialogTitle className="flex items-center text-[15px]">
+            <Zap className="mr-1.5 h-4 w-4 text-primary" aria-hidden="true" /> Conteúdo rápido
+          </DialogTitle>
+          <AjudaRecolhida className="ml-1" rotulo="Como funciona o conteúdo rápido">
+            Escreva ou dite o pedido. O agente prepara o roteiro, grava no dia e deixa a direção pronta no Estúdio.
+          </AjudaRecolhida>
+        </div>
+        <DialogDescription className="sr-only">
           Escreva ou dite o pedido. O agente prepara o roteiro, grava no dia e deixa a direção pronta no Estúdio.
         </DialogDescription>
 
@@ -155,25 +163,31 @@ export default function MesConteudoRapido({
                 No calendário em {diaCurto(resultado.data)}, com a direção pronta no Estúdio.
               </p>
             )}
-            <div className="flex flex-wrap items-center">
+            <div className="flex items-center">
               {resultado.task_id && onAbrirNoEstudio && (
-                <Button type="button" size="sm" className="mb-1 mr-1.5 h-9" onClick={abrirNoEstudio}>
-                  Abrir no Estúdio <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                <Button type="button" size="sm" className="mr-1.5 h-9 w-9 p-0" onClick={abrirNoEstudio} aria-label="Abrir no Estúdio" title="Abrir no Estúdio">
+                  <ExternalLink className="h-4 w-4" />
                 </Button>
               )}
               {resultado.mes && onVerNoMes && (
-                <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-9" onClick={() => { onAbertoChange(false); onVerNoMes(resultado.mes); }}>
-                  Ver no mês
-                </Button>
+                <button
+                  type="button"
+                  className={juntar(botao.icone, "mr-1")}
+                  onClick={() => { onAbertoChange(false); onVerNoMes(resultado.mes); }}
+                  aria-label="Ver no mês"
+                  title="Ver no mês"
+                >
+                  <CalendarSearch className="h-4 w-4" />
+                </button>
               )}
-              <Button type="button" size="sm" variant="ghost" className="mb-1 h-9" onClick={recomecar}>
-                <Plus className="mr-1 h-3.5 w-3.5" /> Outro conteúdo
-              </Button>
+              <button type="button" className={botao.icone} onClick={recomecar} aria-label="Outro conteúdo" title="Outro conteúdo">
+                <Plus className="h-4 w-4" />
+              </button>
             </div>
           </div>
         ) : (
           <div className="min-w-0 space-y-3">
-            <div className="rounded-xl border border-border bg-background p-2 focus-within:border-primary/60">
+            <div className="rounded-xl bg-muted/50 p-2 focus-within:ring-1 focus-within:ring-primary/40">
               <Textarea
                 value={pedido}
                 onChange={(e) => setPedido(e.target.value)}
@@ -252,14 +266,14 @@ export default function MesConteudoRapido({
               </Select>
             </div>
 
-            <div className="flex min-w-0 items-center justify-end border-t border-border pt-3">
+            <div className="flex min-w-0 items-center justify-end pt-1">
               {rodando && (
                 <span className="mr-auto min-w-0">
                   <Cronometro desde={desde} rotulo="Preparando o conteúdo" previsao="~30s" />
                 </span>
               )}
               <BotaoComCusto
-                rotulo={<><Zap className="mr-1.5 h-3.5 w-3.5" />Preparar e pôr no dia</>}
+                rotulo={<><Zap className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Preparar e pôr no dia</span></>}
                 titulo="Conteúdo rápido"
                 descricao="Uma chamada rápida do estrategista (raciocínio baixo) escreve o roteiro e grava no dia do calendário."
                 partes={() => partesDoConteudoRapido(catalogo)}

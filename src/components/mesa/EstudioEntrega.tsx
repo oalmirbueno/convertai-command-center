@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { CalendarCheck, Check, FileCheck2, FolderCheck, FolderOpen, Loader2, RotateCcw, Send } from "lucide-react";
+import { CalendarCheck, Check, FileCheck2, FolderCheck, FolderOpen, Loader2, RotateCcw, Send, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { juntar } from "@/components/sistema/estilos";
+import { botao, juntar } from "@/components/sistema/estilos";
+import { erroEmPartes } from "./erroSimples";
 import { opcoesDaEntrega, rotuloDaOpcao, type ModoDeEntrega } from "@/lib/mesa/entregaComOpcoes";
 import { faltaEnviar, textoDaEntrega } from "./EstudioSituacao";
 import { useEstadoGuardado } from "./estudioUtil";
@@ -201,33 +202,43 @@ export default function EstudioEntrega({
             </Button>
           )}
           {erroDoEnvio && (
-            <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-[12px] leading-snug [overflow-wrap:anywhere]">
-              {erroDoEnvio}
-            </p>
-          )}
-          <Button asChild variant="outline" className="h-10 w-full">
-            <Link to={linkArquivos}>
-              <FolderOpen className="mr-1.5 h-4 w-4" /> Abrir em Arquivos
-            </Link>
-          </Button>
-          {onReabrir && (
-            <div className="rounded-lg border border-border bg-background p-3">
-              <Button type="button" variant={trabalho.entrega_status === "reprovado" ? "default" : "outline"} className="h-10 w-full" onClick={onReabrir} disabled={reabrindo || ocupado}>
-                {reabrindo ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-1.5 h-4 w-4" />}
-                Reabrir para corrigir
-              </Button>
-              <p className="mt-1.5 text-[11.5px] leading-snug text-muted-foreground">
-                As lâminas voltam para edição com todas as versões. A entrega de agora fica em Arquivos e no histórico; a próxima vira arquivo novo e passa de novo pela aprovação.
-              </p>
+            // 16/10/2026 (dono: "a parte de erros parece poluída"): frase curta com o ícone; o técnico fica recolhido.
+            <div role="alert" className="flex min-w-0 items-start text-[12px] leading-snug">
+              <TriangleAlert className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" aria-hidden="true" />
+              <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                <p>{erroEmPartes(erroDoEnvio).resumo}</p>
+                {erroEmPartes(erroDoEnvio).detalhe && (
+                  <details className="mt-1 text-[11px] text-muted-foreground">
+                    <summary className="cursor-pointer select-none">Detalhe técnico</summary>
+                    <p className="mt-1 whitespace-pre-wrap">{erroDoEnvio}</p>
+                  </details>
+                )}
+              </div>
             </div>
           )}
-          {linkAgenda && (
-            <Button asChild variant="ghost" className="h-10 w-full">
-              <Link to={linkAgenda}>
-                <CalendarCheck className="mr-1.5 h-4 w-4" /> Abrir na Agenda
+          {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): os atalhos numa linha de ícones; a explicação do Reabrir no title. */}
+          <div className="flex items-center justify-center">
+            <Link to={linkArquivos} className={botao.icone} aria-label="Abrir em Arquivos" title="Abrir em Arquivos">
+              <FolderOpen className="h-4 w-4" aria-hidden="true" />
+            </Link>
+            {linkAgenda && (
+              <Link to={linkAgenda} className={juntar(botao.icone, "ml-1")} aria-label="Abrir na Agenda" title="Abrir na Agenda">
+                <CalendarCheck className="h-4 w-4" aria-hidden="true" />
               </Link>
-            </Button>
-          )}
+            )}
+            {onReabrir && (
+              <button
+                type="button"
+                className={juntar(botao.icone, "ml-1", trabalho.entrega_status === "reprovado" && "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground")}
+                onClick={onReabrir}
+                disabled={reabrindo || ocupado}
+                aria-label="Reabrir para corrigir"
+                title="Reabrir para corrigir: as lâminas voltam para edição com todas as versões. A entrega de agora fica em Arquivos e no histórico; a próxima vira arquivo novo e passa de novo pela aprovação."
+              >
+                {reabrindo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RotateCcw className="h-4 w-4" aria-hidden="true" />}
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

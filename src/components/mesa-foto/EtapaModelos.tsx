@@ -291,11 +291,11 @@ function BotoesDeUso({ persona, className = "" }: { persona: Persona; className?
   const usar = useUsarPersona();
   return (
     <div className={juntar("-m-0.5 flex min-w-0 flex-wrap items-center [&>*]:m-0.5", className)} data-uso-da-persona={persona.id}>
-      <button type="button" className={juntar(botao.secundario, "h-7 px-2 text-[12px]")} onClick={() => usar(persona, false)}>
-        <UserCheck className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Usar como modelo
+      <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} onClick={() => usar(persona, false)} aria-label="Usar como modelo" title="Usar como modelo">
+        <UserCheck className="h-4 w-4" aria-hidden="true" />
       </button>
-      <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} onClick={() => usar(persona, true)}>
-        <Package className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Combinar com produto
+      <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} onClick={() => usar(persona, true)} aria-label="Combinar com produto" title="Combinar com produto">
+        <Package className="h-4 w-4" aria-hidden="true" />
       </button>
     </div>
   );
@@ -442,8 +442,8 @@ function ReferenciasDeEstilo({ refs, onMudar }: { refs: RascunhoDaPersona["refer
       <div className="mb-1.5 flex min-w-0 items-center">
         <span className={texto.rotulo}>Referências (opcional)</span>
         <AjudaRecolhida className="ml-1">Só estilo, pose, luz ou roupa. Nunca o rosto de alguém. Até {MAX_REFERENCIAS}.</AjudaRecolhida>
-        <button type="button" className={juntar(botao.discreto, "ml-auto h-7 px-2 text-[12px]")} disabled={cheio} onClick={() => setDoAcervo(true)}>
-          <Images className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Do acervo
+        <button type="button" className={juntar(botao.icone, "ml-auto disabled:opacity-50")} disabled={cheio} onClick={() => setDoAcervo(true)} aria-label="Do acervo" title="Do acervo">
+          <Images className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
       {refs.length > 0 && (

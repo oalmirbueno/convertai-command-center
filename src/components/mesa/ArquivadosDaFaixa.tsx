@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, Loader2, RotateCcw, Trash2 } from "lucide-react";
+import { ArchiveRestore, FolderArchive, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/shared/confirmDialog";
-import { botao, juntar } from "@/components/sistema/estilos";
+import { botao, juntar, lista as estiloDeLista } from "@/components/sistema/estilos";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
 import { supabase } from "@/integrations/supabase/client";
@@ -134,11 +134,12 @@ export default function ArquivadosDaFaixa({ onMudou }: { onMudou: () => void }) 
       <button
         type="button"
         onClick={() => setAberto(true)}
-        className={juntar(botao.barra, "mb-1 mt-1")}
-        title="Pautas arquivadas: restaurar ou apagar de vez"
+        className={juntar(botao.icone, "my-1")}
+        aria-label="Arquivados"
+        title="Arquivados: restaurar ou apagar de vez"
         data-abrir-arquivados=""
       >
-        <Archive className="mr-1 h-3.5 w-3.5" /> Arquivados
+        <FolderArchive className="h-4 w-4" aria-hidden="true" />
       </button>
       <JanelaCentral
         aberta={aberto}
@@ -146,7 +147,7 @@ export default function ArquivadosDaFaixa({ onMudou }: { onMudou: () => void }) 
         largura="md"
         corpo="fixo"
         semEspaco
-        icone={<Archive className="h-4 w-4" />}
+        icone={<FolderArchive className="h-4 w-4" />}
         titulo="Pautas arquivadas"
         ajuda="Restaurar volta a pauta para a faixa e o mês. Apagar de vez não dá para desfazer."
       >
@@ -154,21 +155,22 @@ export default function ArquivadosDaFaixa({ onMudou }: { onMudou: () => void }) 
             {lista.isLoading && <p className="flex items-center text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Lendo os arquivados…</p>}
             {lista.isError && <p className="rounded-md bg-destructive/10 p-2.5 text-[12.5px]">{textoDoErro(lista.error)}</p>}
             {lista.isSuccess && !itens.length && <p className="py-8 text-center text-[12.5px] text-muted-foreground">Nenhuma pauta arquivada.</p>}
-            <ul className="space-y-2" aria-label="Pautas arquivadas">
+            {/* 16/10/2026 (dono: "só o ícone, sem bordas"): uma linha por pauta, ações em ícone à direita. */}
+            <ul className={juntar(estiloDeLista.aberta, estiloDeLista.divisoria)} aria-label="Pautas arquivadas">
               {itens.map((t) => (
-                <li key={t.id} className="rounded-lg border border-border bg-background px-3 py-2.5" data-arquivada={t.id}>
-                  <p className="text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{t.title}</p>
-                  <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-                    {dataCurta(t.due_date)} · {formatoDoItem(t)} · arquivada em {dataCurta(t.deleted_at)}
-                  </p>
-                  <div className="mt-2 flex items-center">
-                    <button type="button" className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")} onClick={() => void restaurar(t)} disabled={ocupado !== null}>
-                      {ocupado === t.id ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="mr-1 h-3.5 w-3.5" />} Restaurar
-                    </button>
-                    <button type="button" className={juntar(botao.perigo, "ml-2 h-8 px-2.5 text-[12px]")} onClick={() => void apagar(t)} disabled={ocupado !== null}>
-                      <Trash2 className="mr-1 h-3.5 w-3.5" /> Apagar de vez
-                    </button>
+                <li key={t.id} className={estiloDeLista.linha} data-arquivada={t.id}>
+                  <div className="mr-2 min-w-0 flex-1">
+                    <p className="text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{t.title}</p>
+                    <p className="mt-0.5 text-[12px] text-muted-foreground">
+                      {dataCurta(t.due_date)} · {formatoDoItem(t)} · arquivada em {dataCurta(t.deleted_at)}
+                    </p>
                   </div>
+                  <button type="button" className={botao.icone} aria-label="Restaurar" title="Restaurar: volta para a faixa e o mês" onClick={() => void restaurar(t)} disabled={ocupado !== null}>
+                    {ocupado === t.id ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ArchiveRestore className="h-4 w-4" aria-hidden="true" />}
+                  </button>
+                  <button type="button" className={juntar(botao.icone, "ml-0.5 hover:text-destructive")} aria-label="Apagar de vez" title="Apagar de vez (não dá para desfazer)" onClick={() => void apagar(t)} disabled={ocupado !== null}>
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  </button>
                 </li>
               ))}
             </ul>

@@ -14,6 +14,7 @@ import {
   type ParteDaEstimativa,
 } from "@/lib/mesa/api";
 import { useMesa } from "./MesaContexto";
+import { erroEmPartes } from "./erroSimples";
 
 /**
  * Regra da Mesa: toda ação que gasta mostra o preço estimado ANTES e o custo
@@ -78,6 +79,19 @@ export function AcaoDoErro({ erro, onDepois }: { erro: unknown; onDepois?: () =>
   );
 }
 
+// Erro em linguagem simples (16/10/2026): a regra mora em ./erroSimples.ts.
+export { erroEmPartes };
+
+/** O detalhe técnico recolhido (abre com um toque), igual no toast e na tela. */
+function DetalheTecnico({ texto }: { texto: string }) {
+  return (
+    <details className="mt-1 min-w-0 text-[11px] text-muted-foreground" data-detalhe-tecnico="">
+      <summary className="cursor-pointer select-none">Detalhe técnico</summary>
+      <p className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap [overflow-wrap:anywhere]">{texto}</p>
+    </details>
+  );
+}
+
 export function AvisoDeErro({ erro, className = "" }: { erro: unknown; className?: string }) {
   const mesa = useMesa();
   const versao = mesa.versaoCarteira || 0;
@@ -87,13 +101,18 @@ export function AvisoDeErro({ erro, className = "" }: { erro: unknown; className
   if (!visto.current || visto.current.erro !== erro) visto.current = { erro, versao };
   if (!erro) return null;
   if (erro instanceof ErroDaMesa && erro.codigo === "saldo_insuficiente" && versao > visto.current.versao) return null;
+  const { resumo, detalhe } = erroEmPartes(textoDoErro(erro));
+  // Sem caixa nem borda (padrão de 16/10/2026): o ícone, a frase curta, o detalhe recolhido e o próximo passo.
   return (
-    <div className={`flex flex-col gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 ${className}`}>
-      <p className="flex items-start gap-2 text-[12.5px] leading-relaxed text-foreground">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-        <span className="min-w-0 [overflow-wrap:anywhere]">{textoDoErro(erro)}</span>
-      </p>
-      <AcaoDoErro erro={erro} />
+    <div className={`flex min-w-0 items-start ${className}`} role="alert" data-aviso-de-erro="">
+      <AlertTriangle className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[12px] leading-5 text-foreground [overflow-wrap:anywhere]">{resumo}</p>
+        {detalhe && <DetalheTecnico texto={detalhe} />}
+        <div className="mt-1.5 empty:hidden">
+          <AcaoDoErro erro={erro} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -103,13 +122,26 @@ export function useAvisarErro() {
   const mesa = useMesa();
   return (erro: unknown, titulo?: string) => {
     const texto = textoDoErro(erro);
+    const { resumo, detalhe } = erroEmPartes(texto);
     let action: { label: string; onClick: () => void } | undefined;
     if (erro instanceof ErroDaMesa && erro.acao) {
       if (erro.acao === "recarregar" && mesa.podeRecarregar) action = { label: erro.rotuloAcao || "Recarregar", onClick: mesa.abrirRecarga };
       if ((erro.acao === "cota" || erro.acao === "chave") && mesa.isAdmin) action = { label: erro.rotuloAcao || "Chaves e cotas", onClick: mesa.abrirChaves };
       if (erro.acao === "modelo" && mesa.isAdmin) action = { label: erro.rotuloAcao || "Modelos", onClick: mesa.abrirModelos };
     }
-    toast.error(titulo || "Não foi possível concluir", { description: texto, action, duration: 9000 });
+    // O mesmo erro repetido (várias lâminas pelo mesmo motivo) troca o aviso que já está na tela em vez de empilhar.
+    const tituloFinal = titulo || "Não foi possível concluir";
+    toast.error(tituloFinal, {
+      id: `erro:${tituloFinal}:${resumo}`,
+      description: detalhe ? (
+        <div className="min-w-0">
+          <p className="[overflow-wrap:anywhere]">{resumo}</p>
+          <DetalheTecnico texto={detalhe} />
+        </div>
+      ) : resumo,
+      action,
+      duration: 9000,
+    });
   };
 }
 

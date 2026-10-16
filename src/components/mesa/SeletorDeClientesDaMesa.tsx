@@ -6,6 +6,17 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ehMesaDeCriacao, filtrarPorBusca, NOME_DA_MESA, REGRA_DA_MESA, type ClienteBruto, type ClienteDaMesa, type MesaDeClientes } from "./clientesDaMesa";
 import { useClientesDaMesa } from "./useClientesDaMesa";
 
+/** Até duas iniciais do nome ("Ótica Visão" -> "ÓV"), para o avatar do cliente no modo só ícone. */
+export function iniciais(nome: string): string {
+  const partes = nome
+    .trim()
+    .split(/\s+/)
+    .filter((p) => p && /[A-Za-zÀ-ÿ0-9]/.test(p.charAt(0)));
+  if (!partes.length) return "?";
+  if (partes.length === 1) return partes[0].slice(0, 2);
+  return partes[0].charAt(0) + partes[partes.length - 1].charAt(0);
+}
+
 // PRO3: a janela do cliente avulso só baixa no primeiro clique (nada pesado na abertura da mesa).
 const NovoClienteRapido = lazy(() => import("@/components/clientes/NovoClienteRapido"));
 
@@ -33,6 +44,7 @@ export default function SeletorDeClientesDaMesa({
   nome,
   carregando,
   onEscolher,
+  soIcone = false,
 }: {
   mesa: MesaDeClientes;
   clientesBrutos: ClienteBruto[] | null | undefined;
@@ -40,6 +52,12 @@ export default function SeletorDeClientesDaMesa({
   nome: string;
   carregando: boolean;
   onEscolher: (id: string) => void;
+  /**
+   * 16/10/2026 (dono: "Escolher cliente: só o ícone"): o gatilho vira um
+   * círculo com as iniciais do cliente (ou o ícone, sem cliente); o nome fica
+   * no title e no leitor de tela. A lista que abre é a mesma.
+   */
+  soIcone?: boolean;
 }) {
   const { profile } = useAuth();
   const role = (profile && profile.role) || "";
@@ -144,8 +162,8 @@ export default function SeletorDeClientesDaMesa({
         aria-label={`${c.naMesa ? "Retirar" : "Incluir"} ${c.nome}`}
         disabled={gravando === c.id}
         onClick={() => void alternar(c, !c.naMesa)}
-        className={`ml-1 inline-flex h-7 shrink-0 items-center rounded-md border px-2 text-[11.5px] transition-colors disabled:opacity-50 ${
-          c.naMesa ? "border-border text-muted-foreground hover:border-destructive/50 hover:text-foreground" : "border-primary/40 text-primary hover:bg-primary/5"
+        className={`ml-1 inline-flex h-7 shrink-0 items-center rounded-md px-2 text-[12px] transition-colors disabled:opacity-50 ${
+          c.naMesa ? "text-muted-foreground hover:bg-muted hover:text-destructive" : "text-primary hover:bg-primary/10"
         }`}
       >
         {gravando === c.id && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
@@ -163,12 +181,32 @@ export default function SeletorDeClientesDaMesa({
           aria-expanded={aberto}
           aria-haspopup="listbox"
           aria-label={valor ? `Cliente: ${rotulo}. Trocar de cliente` : "Escolher o cliente"}
-          className={`flex h-9 min-w-0 max-w-full items-center rounded-md px-2 text-left text-[13px] font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-[320px] ${aberto ? "bg-muted" : ""}`}
+          title={soIcone ? (valor ? `${rotulo} (trocar de cliente)` : "Escolher o cliente") : undefined}
+          data-cliente-so-icone={soIcone ? "" : undefined}
+          className={
+            soIcone
+              ? `toque-compacto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${aberto ? "bg-muted" : ""}`
+              : `flex h-9 min-w-0 max-w-full items-center rounded-md px-2 text-left text-[13px] font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-[320px] ${aberto ? "bg-muted" : ""}`
+          }
         >
-          {/* Visual da casca das mesas (docs/design/SISTEMA.md): sem caixa, ao lado do seletor de mesa. */}
-          <Building2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span className={`min-w-0 flex-1 truncate ${valor ? "" : "font-normal text-muted-foreground"}`}>{rotulo}</span>
-          <ChevronsUpDown className="ml-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          {soIcone ? (
+            valor && nome ? (
+              <span aria-hidden="true" className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-[11px] font-semibold uppercase text-primary">
+                {iniciais(nome)}
+              </span>
+            ) : carregando ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+            ) : (
+              <Building2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            )
+          ) : (
+            <>
+              {/* Visual da casca das mesas (docs/design/SISTEMA.md): sem caixa, ao lado do seletor de mesa. */}
+              <Building2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className={`min-w-0 flex-1 truncate ${valor ? "" : "font-normal text-muted-foreground"}`}>{rotulo}</span>
+              <ChevronsUpDown className="ml-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            </>
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" sideOffset={6} className="w-[calc(100vw-24px)] max-w-[340px] p-0">
@@ -289,9 +327,11 @@ export default function SeletorDeClientesDaMesa({
                       setGerenciando(true);
                       setBusca("");
                     }}
-                    className="ml-2 inline-flex h-7 shrink-0 items-center rounded-md px-1.5 text-[11.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="Gerenciar clientes"
+                    title="Gerenciar clientes"
+                    className="ml-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
                   >
-                    <Settings2 className="mr-1 h-3.5 w-3.5" /> Gerenciar clientes
+                    <Settings2 className="h-4 w-4" aria-hidden="true" />
                   </button>
                 )}
               </div>

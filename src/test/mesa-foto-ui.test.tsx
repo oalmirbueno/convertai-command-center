@@ -391,7 +391,8 @@ describe("rota, casca e troca entre mesas", () => {
     // Frente FTL (30/09; dono: "a linha de produção das fotos está muito confusa e difícil, facilite"):
     // 1 O que fazer, 2 Fotos, 3 Gerar, 4 Aprovar, 5 Usar; as ferramentas avançadas num seletor só ("Mais").
     // Mudança de propósito: antes eram 3 passos (Fotos, Criar, Usar) e o seletor "Ferramentas".
-    expect(botoes.map((b) => b.textContent)).toEqual(["1O que fazer", "2Fotos", "3Gerar", "4Aprovar", "5Usar", "Mais"]);
+    // 16/10/2026 (dono: "deixa só o ícone"): o número virou ícone (o número segue no aria-label e na dica).
+    expect(botoes.map((b) => b.textContent)).toEqual(["O que fazer", "Fotos", "Gerar", "Aprovar", "Usar", "Mais"]);
     expect(botoes.slice(0, 5).map((b) => b.getAttribute("aria-label"))).toEqual(["1. O que fazer", "2. Fotos", "3. Gerar", "4. Aprovar", "5. Usar"]);
     const apoio = nav.querySelector("[data-etapas-de-apoio]") as HTMLElement;
     expect(apoio.querySelector('[data-seletor-compacto="lista"]')).toBeTruthy();
@@ -412,7 +413,9 @@ describe("rota, casca e troca entre mesas", () => {
     const caminho = nav.querySelector("[data-caminho-principal]") as HTMLElement;
     expect(caminho.className).toContain("flex");
     expect(caminho.className).toContain("min-w-0");
-    expect((botoes[1].querySelector("span + span") as HTMLElement).className).toContain("hidden sm:block");
+    // 16/10/2026: o nome do passo fechado some em toda largura (só o ícone), não só no celular.
+    expect((botoes[1].querySelector("span + span") as HTMLElement).className).toContain("hidden");
+    expect((botoes[1].querySelector("span + span") as HTMLElement).className).not.toContain("sm:block");
     expect(nav.className).toContain("min-w-0");
     expect(apoio.className).toContain("max-w-[42%]");
     // Sem etapa no endereço, a mesa abre no passo 1 (O que fazer).
@@ -437,7 +440,8 @@ describe("rota, casca e troca entre mesas", () => {
     await waitFor(() => expect(barra.textContent).toContain("Catálogo fiel"));
     expect(barra.textContent).toContain("0/3 aprovadas");
     // O próximo passo fica sempre em destaque: aqui há 1 versão esperando decisão, no passo 4 (Aprovar).
-    const proximo = await screen.findByText(/Próximo: Aprovar 1 foto/);
+    // 16/10/2026: o "Próximo" virou só a seta (o passo vai no aria-label e no title).
+    const proximo = await screen.findByRole("button", { name: /Próximo: Aprovar 1 foto/ });
     expect(proximo.closest("[data-proximo-passo]")).toBeTruthy();
     expect(botoes[3].hasAttribute("data-proximo")).toBe(true);
     // O diretor de fotografia fica fixo na lateral da área de trabalho, com o campo à vista (26/09).

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AlertTriangle, CheckCircle2, Link2Off } from "lucide-react";
-import { EstadoDeErro, Painel, Secao, botao, etiqueta, juntar, texto } from "@/components/sistema";
+import { Carregando, EstadoDeErro, EstadoVazio, Painel, botao, etiqueta, juntar, texto } from "@/components/sistema";
 
 /**
  * Quais contas estão realmente medindo, e quais só parecem estar.
@@ -15,7 +15,14 @@ import { EstadoDeErro, Painel, Secao, botao, etiqueta, juntar, texto } from "@/c
  * Aqui a diferença é dita em voz alta, com o motivo e o que fazer.
  * Sistema de design (26/09): uma seção sem caixa em volta, a lista com
  * divisória (nada de um cartão por conta) e a explicação no "?".
+ *
+ * 16/10/2026 (dono: "tá tudo embaixo, um abaixo do outro"): virou a aba
+ * "Saúde das contas" das Métricas, na linha do título. O nome e o "?" moram
+ * na aba (AJUDA_DA_SAUDE); aqui fica a contagem e a lista.
  */
+
+export const AJUDA_DA_SAUDE =
+  "Quais contas de Instagram estão medindo de verdade. Conta não conectada aparece aqui porque o cadastro dela existe, mas o painel não consegue buscar nada: um perfil sem dados por falta de conexão é diferente de um perfil parado. Posts anteriores a 29/06 não têm insights: a coleta começou depois deles, e o histórico não foi preenchido para trás.";
 
 type Linha = {
   id: string;
@@ -87,44 +94,35 @@ export default function SaudeDasContas() {
     refetchInterval: 120_000,
   });
 
-  const ajuda =
-    "Quais contas de Instagram estão medindo de verdade. Conta não conectada aparece aqui porque o cadastro dela existe, mas o painel não consegue buscar nada: um perfil sem dados por falta de conexão é diferente de um perfil parado. Posts anteriores a 29/06 não têm insights: a coleta começou depois deles, e o histórico não foi preenchido para trás.";
-
   if (error && linhas.length === 0) {
     return (
-      <Secao divisoria titulo="Saúde das contas" ajuda={ajuda}>
-        <EstadoDeErro
-          titulo="Não consegui ler a saúde das contas."
-          descricao={`${error instanceof Error ? error.message : String(error)}. Nenhuma conta está marcada como boa ou ruim: a leitura falhou.`}
-          acao={
-            <button type="button" onClick={() => refetch()} className={botao.secundario}>
-              Tentar de novo
-            </button>
-          }
-        />
-      </Secao>
+      <EstadoDeErro
+        titulo="Não consegui ler a saúde das contas."
+        descricao={`${error instanceof Error ? error.message : String(error)}. Nenhuma conta está marcada como boa ou ruim: a leitura falhou.`}
+        acao={
+          <button type="button" onClick={() => refetch()} className={botao.secundario}>
+            Tentar de novo
+          </button>
+        }
+      />
     );
   }
-  if (isLoading || linhas.length === 0) return null;
+  // Agora é uma aba: carregando e vazio dizem o que é, em vez de sumir.
+  if (isLoading) return <Carregando rotulo="Carregando a saúde das contas" linhas={3} />;
+  if (linhas.length === 0) return <EstadoVazio compacto titulo="Nenhuma conta de Instagram cadastrada." />;
 
   const quebradas = linhas.filter((l) => !l.conectada || l.vencida || l.posts === 0);
 
   return (
-    <Secao
-      divisoria
-      titulo="Saúde das contas"
-      ajuda={ajuda}
-      descricao={
-        <span className="flex min-w-0 items-center">
-          <span className="truncate">{linhas.length} {linhas.length === 1 ? "conta" : "contas"} de Instagram</span>
-          {quebradas.length > 0 ? (
-            <span className={juntar(etiqueta, "ml-2 bg-warning/15 text-warning")}>{quebradas.length} não está medindo</span>
-          ) : (
-            <span className={juntar(etiqueta, "ml-2 bg-success/15 text-success")}>todas medindo</span>
-          )}
-        </span>
-      }
-    >
+    <section className="min-w-0" aria-label="Saúde das contas">
+      <p className={juntar(texto.auxiliar, "mb-3 flex min-w-0 items-center")}>
+        <span className="truncate">{linhas.length} {linhas.length === 1 ? "conta" : "contas"} de Instagram</span>
+        {quebradas.length > 0 ? (
+          <span className={juntar(etiqueta, "ml-2 shrink-0 bg-warning/15 text-warning")}>{quebradas.length} não está medindo</span>
+        ) : (
+          <span className={juntar(etiqueta, "ml-2 shrink-0 bg-success/15 text-success")}>todas medindo</span>
+        )}
+      </p>
       <Painel semEspaco className="overflow-hidden">
         {/* No computador a lista rola por dentro; no celular a página rola. */}
         <ul className="min-w-0 divide-y divide-border lg:max-h-64 lg:overflow-y-auto lg:overscroll-contain" aria-label="Saúde das contas">
@@ -164,6 +162,6 @@ export default function SaudeDasContas() {
           })}
         </ul>
       </Painel>
-    </Secao>
+    </section>
   );
 }

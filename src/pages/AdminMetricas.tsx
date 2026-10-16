@@ -1,25 +1,33 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
+  ArrowUpRight,
+  BarChart3,
   Bookmark,
   ChevronRight,
-  Copy,
   ExternalLink,
+  Fingerprint,
   Globe,
   Heart,
+  HeartPulse,
+  Images,
   LayoutGrid,
+  Lightbulb,
+  List,
   Megaphone,
   MessageCircle,
   RefreshCw,
   Send,
+  Sparkles,
   TrendingDown,
   TrendingUp,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
-import SaudeDasContas from "@/components/admin/SaudeDasContas";
+import SaudeDasContas, { AJUDA_DA_SAUDE } from "@/components/admin/SaudeDasContas";
 import LogoDoCliente, { useIdentidadesPorConta } from "@/components/admin/LogoDoCliente";
 import IdentidadeDoCliente from "@/components/admin/IdentidadeDoCliente";
 import {
@@ -30,7 +38,6 @@ import {
   EstadoVazio,
   Etapas,
   Painel,
-  Secao,
   botao,
   etiqueta,
   juntar,
@@ -38,7 +45,7 @@ import {
   texto,
   useEstadoDaTela,
 } from "@/components/sistema";
-import { BotaoComIcone, CampoDeBusca, FaixaDeNumeros } from "@/components/sistema";
+import { CampoDeBusca, FaixaDeNumeros } from "@/components/sistema";
 import {
   agruparPorConta,
   collectSocialMetricsNow,
@@ -71,13 +78,20 @@ import { type MultiploDoPost, textoDoMultiplo } from "../../supabase/functions/_
  * aconselha junto"; sistema de design de 26/09).
  *
  * Lista: uma linha por conta de Instagram (a marca, seguidores, alcance,
- * interações e os anúncios somados do cliente), a saúde das contas depois.
+ * interações e os anúncios somados do cliente). A saúde das contas é a outra
+ * aba, na mesma linha do título.
  *
- * Dossiê de uma conta, em seções sem caixa e nesta ordem: o conselho curto
+ * Dossiê de uma conta, uma parte por vez em abas de ícone: o conselho curto
  * (números da semana + leitura de evolução da Mesa + anúncios), o perfil
  * orgânico (alcance, seguidores, interações, salvamentos, compartilhamentos),
- * os anúncios somados do cliente e os posts que mais performaram, com
- * miniatura. A aba Identidade mostra como a marca é.
+ * os anúncios somados do cliente, os posts que mais performaram, com
+ * miniatura, e a identidade (como a marca é).
+ *
+ * 16/10/2026 (dono): "tá tudo embaixo, um abaixo do outro; colocar do ladinho,
+ * com abas, sem texto, com ícones; passo em cima e ele fala o que é". As
+ * seções empilhadas viraram abas de ícone (uma visível por vez, lembrada), as
+ * ações viraram só ícone com o nome no title, um "Atualizar" só por tela,
+ * nenhum ícone repetido para ações diferentes e o "Copiar resumo" saiu.
  */
 
 const fmtWeek = (row: SocialMetricsWeek) => {
@@ -202,7 +216,34 @@ function CartaoDoPost({ post, posicao, multiplo }: { post: SocialPostMetric; pos
   );
 }
 
-type AbaDoCliente = "desempenho" | "identidade";
+/** Ação só em ícone, sem borda: o nome mora no title e no leitor de tela. */
+function BotaoDeIcone({
+  icone,
+  rotulo,
+  dica,
+  onClick,
+  disabled,
+}: {
+  icone: ReactNode;
+  rotulo: string;
+  /** Title quando difere do nome (ex.: "A Mesa está lendo..."). */
+  dica?: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} className={juntar(botao.icone, "disabled:opacity-50")} aria-label={rotulo} title={dica || rotulo}>
+      {icone}
+    </button>
+  );
+}
+
+const ICONE = "h-4 w-4";
+
+type AbaDoCliente = "conselho" | "organico" | "anuncios" | "posts" | "identidade";
+const ABAS_DO_CLIENTE: AbaDoCliente[] = ["conselho", "organico", "anuncios", "posts", "identidade"];
+
+type AbaDaLista = "contas" | "saude";
 
 /**
  * Dossiê de UMA conta de Instagram do cliente, com os anúncios do cliente e
@@ -226,10 +267,10 @@ function ClientMetricsDetail({
 }) {
   // 200 e não 25: a coleta pagina, e limitar aqui esconderia posts reais.
   const { data: posts, isLoading: lendoPosts } = useSocialPostMetrics(clientId, 200, accountId);
-  // Duas leituras diferentes, e por isso duas abas: desempenho responde
-  // "como foi", identidade responde "como a marca é". A aba fica lembrada.
-  const [abaDoCliente, setAbaDoCliente] = useEstadoDaTela<AbaDoCliente>(`metricas:aba:${clientId}`, "desempenho", {
-    validar: (v) => v === "desempenho" || v === "identidade",
+  // Uma parte por vez (16/10/2026): conselho, orgânico, anúncios, posts e
+  // identidade em abas de ícone. A aba fica lembrada por cliente.
+  const [abaDoCliente, setAbaDoCliente] = useEstadoDaTela<AbaDoCliente>(`metricas:aba:${clientId}`, "conselho", {
+    validar: (v) => ABAS_DO_CLIENTE.indexOf(v as AbaDoCliente) >= 0,
   });
   const [todosOsPosts, setTodosOsPosts] = useEstadoDaTela(`metricas:todos-os-posts:${accountId}`, false, {
     validar: (v) => typeof v === "boolean",
@@ -290,35 +331,8 @@ function ClientMetricsDetail({
     }
   };
 
-  const copiarResumo = () => {
-    const d = (value: string) => {
-      const [, month, day] = value.split("-");
-      return `${day}/${month}`;
-    };
-    const pct = (value: number | null) =>
-      value == null ? "" : ` (${value >= 0 ? "+" : ""}${value.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%)`;
-    const top = rankedPosts[0];
-    const parts = [
-      `📊 ${clientName} · Instagram · semana ${latest ? `${d(latest.week_start)} a ${d(latest.week_end)}` : ""}`,
-      latest?.followers != null ? `Seguidores: ${formatMetricNumber(latest.followers)}${pct(deltaSeguidores)}` : "",
-      latest?.reach != null ? `Alcance: ${formatMetricNumber(latest.reach)}${pct(deltaAlcance)}` : "",
-      latest?.total_interactions != null
-        ? `Interações: ${formatMetricNumber(latest.total_interactions)}${pct(weekDeltaPct(rows, "total_interactions"))}`
-        : "",
-      top
-        ? `Post destaque: "${(top.caption || "").slice(0, 70)}" · ${formatMetricNumber(interacoesDoPost(top))} interações`
-        : "",
-      anuncios.carteira.investido > 0 && anuncios.resultado
-        ? `Anúncios (30 dias): ${anuncios.resultado}${anuncios.custo ? `, ${anuncios.custo}` : ""}`
-        : "",
-      conselho[0] ? `Leitura: ${conselho[0]}` : "",
-      "Acompanhamento contínuo pela Aceleriq 🚀",
-    ].filter(Boolean);
-    navigator.clipboard
-      .writeText(parts.join("\n"))
-      .then(() => toast.success("Resumo copiado. É só colar no grupo do cliente."))
-      .catch(() => toast.error("Não foi possível copiar. Selecione e copie manualmente."));
-  };
+  // "Copiar resumo" saiu em 16/10/2026 (dono: "não precisa; um abrir mesmo"):
+  // o que abre é a Mesa, na aba Conselho.
 
   const destaques = rankedPosts.slice(0, 6);
 
@@ -336,6 +350,71 @@ function ClientMetricsDetail({
     <LogoDoCliente url={null} nome={clientName} tamanho={32} className="mr-2.5" />
   );
 
+  const site = identity?.website ? identity.website.replace(/^https?:\/\//, "") : "";
+
+  // As partes, uma por vez (16/10/2026): só o ícone; a aberta mostra o nome e o "?".
+  const abas = [
+    {
+      valor: "conselho",
+      rotulo: "Conselho",
+      icone: <Lightbulb className={ICONE} />,
+      contador: conselho.length,
+      ajuda: "Os números da semana, a leitura de evolução da Mesa e os anúncios, cada linha com o número que a gerou. Com duas semanas coletadas ou uma leitura da Mesa, o conselho aparece.",
+    },
+    {
+      valor: "organico",
+      rotulo: "Perfil orgânico",
+      icone: <Users className={ICONE} />,
+      ajuda: "Seguidores, alcance, interações e visitas ao perfil da última semana coletada, com a variação contra a semana anterior. Salvamentos e compartilhamentos somam os posts dos últimos 30 dias.",
+    },
+    {
+      valor: "anuncios",
+      rotulo: "Anúncios do cliente",
+      icone: <Megaphone className={ICONE} />,
+      ajuda: "Os anúncios do cliente nos últimos 30 dias, somados, e a soma com o orgânico que a Mesa faz.",
+    },
+    {
+      valor: "posts",
+      rotulo: "Posts que mais performaram",
+      icone: <Images className={ICONE} />,
+      contador: rankedPosts.length,
+      ajuda: "Pelo múltiplo: quantas vezes o post rendeu acima do normal deste perfil (views, ou alcance, ou interações, contra a mediana dos últimos 90 dias). Em verde, 1,5x ou mais. Toque num post para abrir no Instagram.",
+    },
+    {
+      valor: "identidade",
+      rotulo: "Identidade",
+      icone: <Fingerprint className={ICONE} />,
+      ajuda: "Como a marca é: logo, bio, site e as cores da logo.",
+    },
+  ];
+
+  // As ações da parte aberta, só em ícone, na linha das abas.
+  const acoesDaAba =
+    abaDoCliente === "conselho" ? (
+      <>
+        <Link to={`/mesa?client=${clientId}`} className={botao.icone} aria-label="Abrir a Mesa" title="Abrir a Mesa">
+          <LayoutGrid className={ICONE} aria-hidden="true" />
+        </Link>
+        <BotaoDeIcone
+          icone={<Sparkles className={juntar(ICONE, pedindoLeitura ? "animate-pulse" : "")} aria-hidden="true" />}
+          rotulo="Pedir leitura da Mesa"
+          dica={pedindoLeitura ? "A Mesa está lendo..." : undefined}
+          onClick={pedirLeitura}
+          disabled={pedindoLeitura}
+        />
+      </>
+    ) : abaDoCliente === "anuncios" ? (
+      <Link to={`/anuncios?cliente=${encodeURIComponent(clientId)}`} className={botao.icone} aria-label="Abrir em Anúncios" title="Abrir em Anúncios">
+        <ArrowUpRight className={ICONE} aria-hidden="true" />
+      </Link>
+    ) : abaDoCliente === "posts" && rankedPosts.length > destaques.length ? (
+      <BotaoDeIcone
+        icone={<List className={juntar(ICONE, todosOsPosts ? "text-primary" : "")} aria-hidden="true" />}
+        rotulo={todosOsPosts ? "Esconder a lista" : `Ver todas as ${rankedPosts.length} publicações`}
+        onClick={() => setTodosOsPosts((v) => !v)}
+      />
+    ) : null;
+
   return (
     <div className="min-w-0 space-y-4">
       <CabecalhoDePagina
@@ -349,7 +428,7 @@ function ClientMetricsDetail({
           </span>
         }
         descricao={`${identity?.username ? `@${identity.username} · ` : ""}${latest ? `semana ${fmtWeek(latest)}` : "sem coleta ainda"}`}
-        ajuda="O Instagram desta conta, os anúncios somados do cliente e o conselho da Mesa. O nome abre a ficha do cliente."
+        ajuda="O Instagram desta conta, os anúncios somados do cliente e o conselho da Mesa, uma parte por vez nas abas de ícone abaixo. O nome abre a ficha do cliente."
         acoes={
           <>
             {identity?.website && (
@@ -357,12 +436,11 @@ function ClientMetricsDetail({
                 href={identity.website}
                 target="_blank"
                 rel="noreferrer"
-                className={botao.discreto}
-                aria-label={`Abrir o site ${identity.website.replace(/^https?:\/\//, "")}`}
-                title={identity.website.replace(/^https?:\/\//, "")}
+                className={botao.icone}
+                aria-label={`Abrir o site ${site}`}
+                title={site}
               >
-                <Globe className="h-4 w-4" aria-hidden="true" />
-                <span className="ml-1.5 hidden max-w-[180px] truncate xl:inline">{identity.website.replace(/^https?:\/\//, "")}</span>
+                <Globe className={ICONE} aria-hidden="true" />
               </a>
             )}
             {atualizar}
@@ -370,233 +448,183 @@ function ClientMetricsDetail({
         }
       />
 
-      <Etapas
-        rotulo="Partes do dossiê"
-        itens={[
-          { valor: "desempenho", rotulo: "Desempenho" },
-          { valor: "identidade", rotulo: "Identidade" },
-        ]}
-        valor={abaDoCliente}
-        onEscolher={(v) => setAbaDoCliente(v as AbaDoCliente)}
-        className="border-b border-border"
-      />
+      <div className="-mx-1 flex min-w-0 items-center border-b border-border pb-1">
+        <Etapas
+          soIcone
+          rotulo={`Partes de ${clientName}`}
+          itens={abas}
+          valor={abaDoCliente}
+          onEscolher={(v) => setAbaDoCliente(v as AbaDoCliente)}
+          className="min-w-0 flex-1"
+        />
+        {acoesDaAba && <div className="ml-2 flex shrink-0 items-center">{acoesDaAba}</div>}
+      </div>
 
       <AreaDeTrabalho key={`${accountId}:${abaDoCliente}`} memoriaDaRolagem={`metricas:${accountId}:${abaDoCliente}`} rotuloDoPrincipal={`Métricas de ${clientName}`}>
         {abaDoCliente === "identidade" && <IdentidadeDoCliente clientId={clientId} clientName={clientName} />}
 
-        {abaDoCliente === "desempenho" && (
-          <div className="min-w-0 space-y-5">
-            {/* 1. O conselho, curto e com o número que o gerou. */}
-            <Secao
-              titulo="Conselho"
-              descricao={
-                <span className="block truncate">
-                  {evolucao
-                    ? `Leitura da Mesa de ${new Date(evolucao.criadoEm).toLocaleDateString("pt-BR")}`
-                    : "A Mesa ainda não leu este cliente"}
-                </span>
-              }
-              ajuda="Os números da semana, a leitura de evolução da Mesa e os anúncios, cada linha com o número que a gerou. Com duas semanas coletadas ou uma leitura da Mesa, o conselho aparece."
-              acao={
-                <>
-                  <Link to={`/mesa?client=${clientId}`} className={botao.discreto} aria-label="Abrir a Mesa">
-                    <LayoutGrid className="h-4 w-4" aria-hidden="true" />
-                    <span className="ml-1.5 hidden md:inline">Abrir a Mesa</span>
-                  </Link>
-                  <BotaoComIcone
-                    icone={<Copy className="h-4 w-4" aria-hidden="true" />}
-                    rotulo="Copiar resumo"
-                    aria-label="Copiar resumo para o grupo"
-                    variante="discreto"
-                    onClick={copiarResumo}
-                  />
-                  <BotaoComIcone
-                    icone={<RefreshCw className={juntar("h-4 w-4", pedindoLeitura ? "animate-spin" : "")} aria-hidden="true" />}
-                    rotulo={pedindoLeitura ? "A Mesa está lendo..." : "Pedir leitura da Mesa"}
-                    aria-label="Pedir leitura da Mesa"
-                    variante="secundario"
-                    onClick={pedirLeitura}
-                    disabled={pedindoLeitura}
-                  />
-                </>
-              }
-            >
-              {conselho.length === 0 ? (
-                <EstadoVazio compacto titulo="Sem conselho ainda." descricao="Com duas semanas coletadas ou uma leitura da Mesa, ele aparece aqui." />
-              ) : (
-                <Painel>
-                  <ul className="space-y-1.5">
-                    {conselho.map((linha) => (
-                      <li key={linha} className="flex min-w-0 items-start text-[13px] leading-5 text-foreground">
-                        <span className="mr-2 mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
-                        <span className="min-w-0 [overflow-wrap:anywhere]">{linha}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </Painel>
-              )}
-            </Secao>
+        {/* 1. O conselho, curto e com o número que o gerou. */}
+        {abaDoCliente === "conselho" && (
+          <div className="min-w-0">
+            <p className={juntar(texto.auxiliar, "mb-3 truncate")}>
+              {evolucao
+                ? `Leitura da Mesa de ${new Date(evolucao.criadoEm).toLocaleDateString("pt-BR")}`
+                : "A Mesa ainda não leu este cliente"}
+            </p>
+            {conselho.length === 0 ? (
+              <EstadoVazio compacto titulo="Sem conselho ainda." descricao="Com duas semanas coletadas ou uma leitura da Mesa, ele aparece aqui." />
+            ) : (
+              <ul className="space-y-1.5" aria-label="Conselho">
+                {conselho.map((linha) => (
+                  <li key={linha} className="flex min-w-0 items-start text-[13px] leading-5 text-foreground">
+                    <span className="mr-2 mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+                    <span className="min-w-0 [overflow-wrap:anywhere]">{linha}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
-            {/* 2. O perfil orgânico. */}
-            <Secao divisoria titulo="Perfil orgânico" descricao={latest ? `Semana ${fmtWeek(latest)}` : undefined}>
-              {!latest ? (
-                <EstadoVazio compacto titulo="Sem semana coletada ainda." descricao='"Atualizar agora" pede a coleta; os números chegam em alguns minutos.' />
-              ) : (
-                <>
-                  <FaixaDeIndicadores
-                    rotulo="Perfil orgânico"
-                    colunas="grid-cols-2 sm:grid-cols-3 xl:grid-cols-6"
-                    itens={[
-                      { rotulo: "Seguidores", valor: formatMetricNumber(latest.followers), delta: deltaSeguidores },
-                      { rotulo: "Alcance", valor: formatMetricNumber(latest.reach), delta: deltaAlcance, nota: "na semana" },
-                      { rotulo: "Interações", valor: formatMetricNumber(latest.total_interactions), delta: weekDeltaPct(rows, "total_interactions"), nota: "na semana" },
-                      { rotulo: "Salvamentos", valor: formatMetricNumber(totais.salvos), nota: "posts de 30 dias" },
-                      { rotulo: "Compartilhamentos", valor: formatMetricNumber(totais.compartilhamentos), nota: "posts de 30 dias" },
-                      { rotulo: "Visitas ao perfil", valor: formatMetricNumber(latest.profile_views), delta: weekDeltaPct(rows, "profile_views"), nota: "na semana" },
-                    ]}
-                  />
-                  {ultimasSemanas.length > 1 && (
-                    <div className="mt-4 min-w-0">
-                      <p className={texto.rotulo}>Alcance semana a semana</p>
-                      <div className="mt-2 space-y-1.5">
-                        {ultimasSemanas.map((row) => (
-                          <div key={row.id} className="flex min-w-0 items-center">
-                            <span className={juntar(texto.auxiliar, "w-32 shrink-0 truncate tabular-nums")}>{fmtWeek(row)}</span>
-                            <div className="mx-2 h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
-                              <div
-                                className="h-full rounded-full bg-primary/70"
-                                style={{ width: `${Math.max(((row.reach || 0) / maxReach) * 100, 2)}%` }}
-                              />
-                            </div>
-                            <span className="w-16 shrink-0 text-right text-[12px] tabular-nums text-foreground">{formatMetricNumber(row.reach)}</span>
+        {/* 2. O perfil orgânico. */}
+        {abaDoCliente === "organico" && (
+          <div className="min-w-0">
+            {!latest ? (
+              <EstadoVazio compacto titulo="Sem semana coletada ainda." descricao="O ícone de atualizar pede a coleta; os números chegam em alguns minutos." />
+            ) : (
+              <>
+                <FaixaDeIndicadores
+                  rotulo="Perfil orgânico"
+                  colunas="grid-cols-2 sm:grid-cols-3 xl:grid-cols-6"
+                  itens={[
+                    { rotulo: "Seguidores", valor: formatMetricNumber(latest.followers), delta: deltaSeguidores },
+                    { rotulo: "Alcance", valor: formatMetricNumber(latest.reach), delta: deltaAlcance, nota: "na semana" },
+                    { rotulo: "Interações", valor: formatMetricNumber(latest.total_interactions), delta: weekDeltaPct(rows, "total_interactions"), nota: "na semana" },
+                    { rotulo: "Salvamentos", valor: formatMetricNumber(totais.salvos), nota: "posts de 30 dias" },
+                    { rotulo: "Compartilhamentos", valor: formatMetricNumber(totais.compartilhamentos), nota: "posts de 30 dias" },
+                    { rotulo: "Visitas ao perfil", valor: formatMetricNumber(latest.profile_views), delta: weekDeltaPct(rows, "profile_views"), nota: "na semana" },
+                  ]}
+                />
+                {ultimasSemanas.length > 1 && (
+                  <div className="mt-4 min-w-0">
+                    <p className={texto.rotulo}>Alcance semana a semana</p>
+                    <div className="mt-2 space-y-1.5">
+                      {ultimasSemanas.map((row) => (
+                        <div key={row.id} className="flex min-w-0 items-center">
+                          <span className={juntar(texto.auxiliar, "w-32 shrink-0 truncate tabular-nums")}>{fmtWeek(row)}</span>
+                          <div className="mx-2 h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+                            <div
+                              className="h-full rounded-full bg-primary/70"
+                              style={{ width: `${Math.max(((row.reach || 0) / maxReach) * 100, 2)}%` }}
+                            />
                           </div>
-                        ))}
-                      </div>
+                          <span className="w-16 shrink-0 text-right text-[12px] tabular-nums text-foreground">{formatMetricNumber(row.reach)}</span>
+                        </div>
+                      ))}
                     </div>
-                  )}
-                </>
-              )}
-            </Secao>
-
-            {/* 3. Os anúncios do cliente, somados, e a soma com o orgânico que a Mesa faz. */}
-            <Secao
-              divisoria
-              titulo="Anúncios do cliente"
-              descricao="Últimos 30 dias"
-              acao={
-                <Link to={`/anuncios?cliente=${encodeURIComponent(clientId)}`} className={botao.discreto} aria-label="Abrir em Anúncios">
-                  <Megaphone className="h-4 w-4" aria-hidden="true" />
-                  <span className="ml-1.5 hidden sm:inline">Abrir em Anúncios</span>
-                </Link>
-              }
-            >
-              {adsRows.length === 0 && contasDeAds.length === 0 ? (
-                <EstadoVazio compacto titulo="Sem conta de anúncio ligada." descricao="Ligue em Anúncios para os números entrarem aqui." />
-              ) : (
-                <>
-                  <FaixaDeIndicadores
-                    rotulo="Anúncios dos últimos 30 dias"
-                    colunas="grid-cols-2 lg:grid-cols-4"
-                    itens={[
-                      { rotulo: "Investido", valor: dinheiro(anuncios.carteira.investido) },
-                      { rotulo: "Resultado", valor: anuncios.resultado || "sem resultado", nota: anuncios.custo },
-                      { rotulo: "Alcance pago", valor: numero(anuncios.carteira.alcance) },
-                      { rotulo: "Saldo na conta", valor: saldo != null ? dinheiro(saldo) : "não lido" },
-                    ]}
-                  />
-                  {anuncios.outros && <p className={juntar(texto.auxiliar, "mt-2 truncate")}>Também: {anuncios.outros}</p>}
-                </>
-              )}
-              {daMesa && daMesa.somado.explicacao && (
-                <p className={juntar(superficie.poco, "mt-3 px-3 py-2 text-[13px] leading-5 text-foreground")}>
-                  <span className="font-semibold">Somado pela Mesa: </span>
-                  {daMesa.somado.alcance_aprox != null ? `alcance aproximado ${formatMetricNumber(daMesa.somado.alcance_aprox)} · ` : ""}
-                  {`${formatMetricNumber(daMesa.somado.interacoes)} interações · ${dinheiro(daMesa.somado.investimento)} investidos. `}
-                  <span className="text-muted-foreground">{daMesa.somado.explicacao}</span>
-                </p>
-              )}
-            </Secao>
-
-            {/* 4. Os posts que mais performaram, com a miniatura. */}
-            <Secao
-              divisoria
-              titulo="Posts que mais performaram"
-              descricao={rankedPosts.length ? plural(rankedPosts.length, "publicação", "publicações") : undefined}
-              ajuda="Pelo múltiplo: quantas vezes o post rendeu acima do normal deste perfil (views, ou alcance, ou interações, contra a mediana dos últimos 90 dias). Em verde, 1,5x ou mais. Toque num post para abrir no Instagram."
-              acao={
-                rankedPosts.length > destaques.length ? (
-                  <button
-                    type="button"
-                    onClick={() => setTodosOsPosts((v) => !v)}
-                    aria-expanded={todosOsPosts}
-                    className={botao.discreto}
-                  >
-                    {todosOsPosts ? "Esconder a lista" : `Ver todas as ${rankedPosts.length} publicações`}
-                  </button>
-                ) : undefined
-              }
-            >
-              {lendoPosts && !posts ? (
-                <Carregando forma="grade" linhas={6} rotulo="Carregando posts" />
-              ) : rankedPosts.length === 0 ? (
-                <EstadoVazio compacto titulo="Ainda sem publicações coletadas." descricao='"Atualizar agora" pede a coleta; os posts chegam em alguns minutos.' />
-              ) : (
-                <>
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-4 md:grid-cols-3 xl:grid-cols-6">
-                    {destaques.map((post, i) => (
-                      <CartaoDoPost key={post.id} post={post} posicao={i + 1} multiplo={multiplos.get(post.id)} />
-                    ))}
                   </div>
-                  {todosOsPosts && (
-                    <Painel semEspaco className="mt-4 overflow-hidden">
-                      {/* Duzentas publicações não empurram o resto: no computador a lista rola por dentro; no celular a página rola. */}
-                      <ul className="min-w-0 divide-y divide-border lg:max-h-[520px] lg:overflow-y-auto lg:overscroll-contain" aria-label="Todas as publicações">
-                        {rankedPosts.map((post, index) => (
-                          <li key={post.id} className="flex min-w-0 items-center px-3 py-2">
-                            <span className="mr-3 w-6 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">{index + 1}</span>
-                            {(post.thumbnail_url || post.media_url) && (
-                              <img
-                                src={post.thumbnail_url || post.media_url || ""}
-                                alt=""
-                                loading="lazy"
-                                referrerPolicy="no-referrer"
-                                className="mr-3 h-10 w-10 shrink-0 rounded-md object-cover"
-                                onError={(event) => {
-                                  (event.target as HTMLImageElement).style.display = "none";
-                                }}
-                              />
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-[13px] text-foreground">{post.caption?.trim() || "(sem legenda)"}</p>
-                              <p className={juntar(texto.auxiliar, "truncate")}>
-                                {formatoDoPost(post.media_type)}
-                                {post.posted_at ? ` · ${new Date(post.posted_at).toLocaleDateString("pt-BR")}` : ""}
-                                {multiplos.get(post.id)?.multiplo != null ? ` · ${textoDoMultiplo(multiplos.get(post.id) as MultiploDoPost)}` : ""}
-                                {post.reach != null ? ` · alcance ${formatMetricNumber(post.reach)}` : ""}
-                                {post.saved != null ? ` · ${formatMetricNumber(post.saved)} salvos` : ""}
-                                {post.shares != null ? ` · ${formatMetricNumber(post.shares)} compart.` : ""}
-                              </p>
-                            </div>
-                            <span className="ml-3 shrink-0 text-[12px] tabular-nums text-foreground">{formatMetricNumber(interacoesDoPost(post))}</span>
-                            {post.permalink && (
-                              <a
-                                href={post.permalink}
-                                target="_blank"
-                                rel="noreferrer"
-                                className={juntar(botao.icone, "ml-1")}
-                                aria-label="Abrir no Instagram"
-                              >
-                                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                              </a>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </Painel>
-                  )}
-                </>
-              )}
-            </Secao>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* 3. Os anúncios do cliente, somados, e a soma com o orgânico que a Mesa faz. */}
+        {abaDoCliente === "anuncios" && (
+          <div className="min-w-0">
+            <p className={juntar(texto.auxiliar, "mb-3 truncate")}>Últimos 30 dias</p>
+            {adsRows.length === 0 && contasDeAds.length === 0 ? (
+              <EstadoVazio compacto titulo="Sem conta de anúncio ligada." descricao="Ligue em Anúncios para os números entrarem aqui." />
+            ) : (
+              <>
+                <FaixaDeIndicadores
+                  rotulo="Anúncios dos últimos 30 dias"
+                  colunas="grid-cols-2 lg:grid-cols-4"
+                  itens={[
+                    { rotulo: "Investido", valor: dinheiro(anuncios.carteira.investido) },
+                    { rotulo: "Resultado", valor: anuncios.resultado || "sem resultado", nota: anuncios.custo },
+                    { rotulo: "Alcance pago", valor: numero(anuncios.carteira.alcance) },
+                    { rotulo: "Saldo na conta", valor: saldo != null ? dinheiro(saldo) : "não lido" },
+                  ]}
+                />
+                {anuncios.outros && <p className={juntar(texto.auxiliar, "mt-2 truncate")}>Também: {anuncios.outros}</p>}
+              </>
+            )}
+            {daMesa && daMesa.somado.explicacao && (
+              <p className={juntar(superficie.poco, "mt-3 px-3 py-2 text-[13px] leading-5 text-foreground")}>
+                <span className="font-semibold">Somado pela Mesa: </span>
+                {daMesa.somado.alcance_aprox != null ? `alcance aproximado ${formatMetricNumber(daMesa.somado.alcance_aprox)} · ` : ""}
+                {`${formatMetricNumber(daMesa.somado.interacoes)} interações · ${dinheiro(daMesa.somado.investimento)} investidos. `}
+                <span className="text-muted-foreground">{daMesa.somado.explicacao}</span>
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* 4. Os posts que mais performaram, com a miniatura. */}
+        {abaDoCliente === "posts" && (
+          <div className="min-w-0">
+            {lendoPosts && !posts ? (
+              <Carregando forma="grade" linhas={6} rotulo="Carregando posts" />
+            ) : rankedPosts.length === 0 ? (
+              <EstadoVazio compacto titulo="Ainda sem publicações coletadas." descricao="O ícone de atualizar pede a coleta; os posts chegam em alguns minutos." />
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-4 md:grid-cols-3 xl:grid-cols-6">
+                  {destaques.map((post, i) => (
+                    <CartaoDoPost key={post.id} post={post} posicao={i + 1} multiplo={multiplos.get(post.id)} />
+                  ))}
+                </div>
+                {todosOsPosts && (
+                  <Painel semEspaco className="mt-4 overflow-hidden">
+                    {/* Duzentas publicações não empurram o resto: no computador a lista rola por dentro; no celular a página rola. */}
+                    <ul className="min-w-0 divide-y divide-border lg:max-h-[520px] lg:overflow-y-auto lg:overscroll-contain" aria-label="Todas as publicações">
+                      {rankedPosts.map((post, index) => (
+                        <li key={post.id} className="flex min-w-0 items-center px-3 py-2">
+                          <span className="mr-3 w-6 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">{index + 1}</span>
+                          {(post.thumbnail_url || post.media_url) && (
+                            <img
+                              src={post.thumbnail_url || post.media_url || ""}
+                              alt=""
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                              className="mr-3 h-10 w-10 shrink-0 rounded-md object-cover"
+                              onError={(event) => {
+                                (event.target as HTMLImageElement).style.display = "none";
+                              }}
+                            />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[13px] text-foreground">{post.caption?.trim() || "(sem legenda)"}</p>
+                            <p className={juntar(texto.auxiliar, "truncate")}>
+                              {formatoDoPost(post.media_type)}
+                              {post.posted_at ? ` · ${new Date(post.posted_at).toLocaleDateString("pt-BR")}` : ""}
+                              {multiplos.get(post.id)?.multiplo != null ? ` · ${textoDoMultiplo(multiplos.get(post.id) as MultiploDoPost)}` : ""}
+                              {post.reach != null ? ` · alcance ${formatMetricNumber(post.reach)}` : ""}
+                              {post.saved != null ? ` · ${formatMetricNumber(post.saved)} salvos` : ""}
+                              {post.shares != null ? ` · ${formatMetricNumber(post.shares)} compart.` : ""}
+                            </p>
+                          </div>
+                          <span className="ml-3 shrink-0 text-[12px] tabular-nums text-foreground">{formatMetricNumber(interacoesDoPost(post))}</span>
+                          {post.permalink && (
+                            <a
+                              href={post.permalink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className={juntar(botao.icone, "ml-1")}
+                              aria-label="Abrir no Instagram"
+                              title="Abrir no Instagram"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                            </a>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </Painel>
+                )}
+              </>
+            )}
           </div>
         )}
       </AreaDeTrabalho>
@@ -617,6 +645,10 @@ export default function AdminMetricas() {
   const { data: identidades } = useIdentidadesPorConta();
   const [collecting, setCollecting] = useState(false);
   const [search, setSearch] = useEstadoDaTela("metricas:busca", "", { validar: (v) => typeof v === "string" });
+  // 16/10/2026: as contas e a saúde delas em abas na linha do título, uma por vez.
+  const [abaDaLista, setAbaDaLista] = useEstadoDaTela<AbaDaLista>("metricas:aba-da-lista", "contas", {
+    validar: (v) => v === "contas" || v === "saude",
+  });
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedClientId = searchParams.get("client") || "";
   const selectedAccountId = searchParams.get("account") || "";
@@ -698,12 +730,12 @@ export default function AdminMetricas() {
     );
   }
 
+  // O único "Atualizar" da tela (16/10/2026): só o ícone, o nome no title.
   const botaoAtualizar = (
-    <BotaoComIcone
-      icone={<RefreshCw className={juntar("h-4 w-4", collecting ? "animate-spin" : "")} aria-hidden="true" />}
-      rotulo={collecting ? "Pedindo coleta..." : "Atualizar agora"}
-      aria-label="Atualizar agora"
-      variante="secundario"
+    <BotaoDeIcone
+      icone={<RefreshCw className={juntar(ICONE, collecting ? "animate-spin" : "")} aria-hidden="true" />}
+      rotulo="Atualizar agora"
+      dica={collecting ? "Pedindo coleta..." : undefined}
       onClick={refreshNow}
       disabled={collecting}
     />
@@ -752,30 +784,48 @@ export default function AdminMetricas() {
               ? `${filteredHubs.length} de ${byAccount.length} contas`
               : `${plural(byAccount.length, "conta", "contas")} de Instagram · coleta semanal`
         }
-        ajuda="O Instagram de cada cliente, os anúncios somados e o conselho da Mesa. Toque numa conta para abrir o dossiê. O robô coleta sozinho toda semana; Atualizar agora apressa."
-        acoes={
-          <>
-            {/* A busca mora na linha do título (nada de linha própria). */}
-            {byAccount.length > 6 && (
-              <CampoDeBusca valor={search} onMudar={setSearch} placeholder="Buscar cliente ou @perfil" rotulo="Buscar cliente" className="w-40 sm:w-60" />
-            )}
-            {botaoAtualizar}
-          </>
+        ajuda="O Instagram de cada cliente, os anúncios somados e o conselho da Mesa. As abas ao lado do título trocam entre as contas e a saúde delas. O robô coleta sozinho toda semana; o ícone de atualizar apressa."
+        aoLado={
+          <Etapas
+            soIcone
+            rotulo="Partes das métricas"
+            itens={[
+              {
+                valor: "contas",
+                rotulo: "Contas de Instagram",
+                icone: <BarChart3 className={ICONE} />,
+                contador: byAccount.length,
+                ajuda: "Uma linha por conta de Instagram: seguidores, alcance, interações e os anúncios somados do cliente nos últimos 30 dias. Toque numa conta para abrir o dossiê.",
+              },
+              { valor: "saude", rotulo: "Saúde das contas", icone: <HeartPulse className={ICONE} />, ajuda: AJUDA_DA_SAUDE },
+            ]}
+            valor={abaDaLista}
+            onEscolher={(v) => setAbaDaLista(v as AbaDaLista)}
+            className="min-w-0 flex-1"
+          />
         }
+        acoes={botaoAtualizar}
       />
 
-      <AreaDeTrabalho key="lista" memoriaDaRolagem="metricas:lista" rotuloDoPrincipal="Métricas por conta">
+      <AreaDeTrabalho key={`lista:${abaDaLista}`} memoriaDaRolagem={`metricas:lista:${abaDaLista}`} rotuloDoPrincipal="Métricas por conta">
         <div className="min-w-0 space-y-5">
-          {erroNaLeitura}
+          {abaDaLista === "contas" && erroNaLeitura}
 
-          {isLoading && !rows ? (
+          {/* A busca abre a lista (a linha do título é das abas). */}
+          {abaDaLista === "contas" && byAccount.length > 6 && (
+            <div className="flex min-w-0 items-center justify-end">
+              <CampoDeBusca valor={search} onMudar={setSearch} placeholder="Buscar cliente ou @perfil" rotulo="Buscar cliente" className="w-40 sm:w-60" />
+            </div>
+          )}
+
+          {abaDaLista !== "contas" ? null : isLoading && !rows ? (
             <Carregando rotulo="Carregando métricas" linhas={4} />
           ) : byAccount.length === 0 ? (
             error ? null : (
               <EstadoVazio
                 icone={<TrendingUp className="h-5 w-5" />}
                 titulo="Nenhuma métrica coletada ainda."
-                descricao="Atualizar agora pede a coleta; depois o robô coleta toda semana."
+                descricao="O ícone de atualizar pede a coleta; depois o robô coleta toda semana."
               />
             )
           ) : (
@@ -864,11 +914,11 @@ export default function AdminMetricas() {
                   </ul>
                 </Painel>
               )}
-
-              {/* A saúde das contas vem DEPOIS da lista: diagnóstico é consulta, não abertura. */}
-              <SaudeDasContas />
             </>
           )}
+
+          {/* A saúde das contas é a outra aba, DEPOIS da lista: diagnóstico é consulta, não abertura. */}
+          {abaDaLista === "saude" && <SaudeDasContas />}
         </div>
       </AreaDeTrabalho>
     </div>

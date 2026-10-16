@@ -270,9 +270,10 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
         <div className="mt-2 flex w-full flex-col items-stretch sm:ml-3 sm:mt-0 sm:w-auto sm:items-end">
           <div className="flex min-w-0 flex-col-reverse items-stretch sm:flex-row sm:items-center [&>*+*]:mb-2 sm:[&>*+*]:mb-0 sm:[&>*+*]:ml-2">
             <BotaoDocumentoDaEntrega pedido={pedidoDoDocumento} variante="discreto" />
-            <Button type="button" onClick={() => void enviarTudo()} disabled={!total || !!progresso}>
-              {progresso ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
-              {total ? `Enviar ${total} para aprovação` : "Nada para enviar"}
+            <Button type="button" className="gap-0 px-3" onClick={() => void enviarTudo()} disabled={!total || !!progresso} title={total ? `Enviar ${total} para aprovação` : "Nada para enviar"}>
+              {progresso ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
+              {total > 0 && <span className="ml-1.5 tabular-nums" aria-hidden="true">{total}</span>}
+              <span className="sr-only">{total ? `Enviar ${total} para aprovação` : "Nada para enviar"}</span>
             </Button>
           </div>
           {progresso && <span className="mt-1 text-center text-[11px] text-muted-foreground sm:text-right">{progresso}</span>}
@@ -411,8 +412,8 @@ function LinhaDaArte({
           </a>
         )}
         {agenda && (
-          <Link to={agenda} className="mt-1 inline-flex items-center text-[11px] text-primary underline-offset-2 hover:underline">
-            <CalendarCheck className="mr-1 h-3 w-3" /> Agenda
+          <Link to={agenda} className="toque-compacto mt-1 inline-flex h-6 w-6 items-center justify-center rounded-md text-primary hover:bg-muted" aria-label="Agenda" title="Abrir na Agenda">
+            <CalendarCheck className="h-3.5 w-3.5" aria-hidden="true" />
           </Link>
         )}
       </span>
@@ -566,8 +567,8 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
         recolher={editando ? undefined : { recolhido, onAlternar: () => setRecolhido(!recolhido), resumo: resumoDosAjustes }}
         acao={
           podeEditar && !editando && !recolhido ? (
-            <Button type="button" size="sm" variant="ghost" className="-my-1 h-8 text-[12px]" onClick={() => setEditando(true)}>
-              <Pencil className="mr-1 h-3.5 w-3.5" /> Ajustar
+            <Button type="button" size="sm" variant="ghost" className="-my-1 h-8 w-8 p-0" aria-label="Ajustar" title="Ajustar a publicação e o plano" onClick={() => setEditando(true)}>
+              <Pencil className="h-4 w-4" aria-hidden="true" />
             </Button>
           ) : undefined
         }

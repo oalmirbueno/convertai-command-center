@@ -53,7 +53,7 @@ vi.mock("@/integrations/supabase/client", () => {
 
 import DiaPrioritarioNaCentral from "@/components/dia-prioritario/DiaPrioritarioNaCentral";
 
-function montar(onAbrirPerfil = vi.fn()) {
+function montar(onAbrirPerfil = vi.fn(), extra: { notas?: Record<string, number>; semCabecalho?: boolean } = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const tela = render(
     <MemoryRouter>
@@ -61,6 +61,8 @@ function montar(onAbrirPerfil = vi.fn()) {
         <DiaPrioritarioNaCentral
           agora={TERCA}
           onAbrirPerfil={onAbrirPerfil}
+          notas={extra.notas}
+          semCabecalho={extra.semCabecalho}
           clientes={[
             { id: "a", nome: "Alfa Comércio de Peças" },
             { id: "b", nome: "Beta Loja" },
@@ -113,6 +115,38 @@ describe("Dia Prioritário na Central", () => {
 
     fireEvent.click(within(zoom()).getByTitle("Abrir o perfil de Alfa Comércio de Peças"));
     expect(onAbrirPerfil).toHaveBeenCalledTimes(2);
+  });
+
+  it("nota de saúde pequena na coluna e no cartão, com a cor da faixa, e a média do dia no cabeçalho", async () => {
+    montar(vi.fn(), { notas: { a: 82, b: 35, c: 55.4 } });
+    const colunaDaTerca = screen.getByRole("list", { name: "Clientes de terça-feira" });
+    const notaBeta = within(colunaDaTerca).getByText("Saúde: 35 de 100").parentElement as HTMLElement;
+    expect(notaBeta.getAttribute("data-tom")).toBe("perigo");
+    const notaGama = within(colunaDaTerca).getByText("Saúde: 55 de 100").parentElement as HTMLElement;
+    expect(notaGama.getAttribute("data-tom")).toBe("atencao");
+    const colunaDaSegunda = screen.getByRole("list", { name: "Clientes de segunda-feira" });
+    expect((within(colunaDaSegunda).getByText("Saúde: 82 de 100").parentElement as HTMLElement).getAttribute("data-tom")).toBe("bom");
+    // Média do dia no cabeçalho da coluna: (35 + 55,4) / 2 = 45.
+    const cabecalhoDaTerca = document.querySelector('[data-dia-da-semana="2"]') as HTMLElement;
+    expect(within(cabecalhoDaTerca).getByText("Saúde média do dia: 45 de 100")).toBeTruthy();
+    // No cartão do dia, a nota junto do nome.
+    const beta = zoom().querySelector('[data-cliente-do-dia="b"]') as HTMLElement;
+    expect(within(beta).getByText("Saúde: 35 de 100")).toBeTruthy();
+  });
+
+  it("sem notas, nada de nota; a linha de resumo de cima saiu e o título continua", () => {
+    montar();
+    expect(document.querySelector("[data-nota-de-saude]")).toBeNull();
+    expect(screen.queryByText(/na semana/)).toBeNull();
+    expect(screen.getByRole("heading", { name: /Dia Prioritário/ })).toBeTruthy();
+  });
+
+  it("semCabecalho: sem título nem resumo, com o ? discreto no canto do dia", () => {
+    montar(vi.fn(), { semCabecalho: true });
+    expect(screen.queryByRole("heading", { name: /Dia Prioritário/ })).toBeNull();
+    expect(screen.queryByText(/na semana/)).toBeNull();
+    expect(within(zoom()).getByRole("button", { name: "O que é o Dia Prioritário?" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Dias da semana" })).toBeTruthy();
   });
 
   it("Registrar abre a janela do registro do cliente", async () => {

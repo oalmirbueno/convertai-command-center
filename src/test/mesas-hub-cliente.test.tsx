@@ -12,7 +12,9 @@ describe("Hub Mesas com perfil real", () => {
   it("exibe o nome comercial e mantém o cliente nos links", () => {
     render(<MemoryRouter initialEntries={["/mesas?client=cliente"]}><Mesas /></MemoryRouter>);
     expect(screen.getByText("Para Si Ótica")).toBeVisible();
-    expect(screen.getAllByText("Abrir para Para Si Ótica").length).toBeGreaterThan(5);
+    // 16/10/2026 (dono: "deixa só o ícone"): o "Abrir para <cliente>" saiu da tela e foi para o aria-label do cartão.
+    expect(screen.getAllByRole("link", { name: / para Para Si Ótica$/ }).length).toBeGreaterThan(5);
+    expect(screen.queryByText("Abrir para Para Si Ótica")).not.toBeInTheDocument();
     expect(screen.queryByText(/undefined/)).not.toBeInTheDocument();
     for (const link of screen.getAllByRole("link")) expect(link.getAttribute("href")).toContain("client=cliente");
   });

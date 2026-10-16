@@ -145,6 +145,8 @@ function telaLarga() {
 }
 
 beforeEach(() => {
+  // 16/10/2026: a campanha aberta mostra uma parte por vez (abas em ícone); a aba lembrada não passa de um teste para outro.
+  window.localStorage.removeItem("mesa:campanha:aba");
   vi.clearAllMocks();
   mock.tabelas = {};
   mock.upload.mockResolvedValue({ data: {}, error: null });
@@ -230,9 +232,12 @@ describe("aba Campanhas, mesa de trabalho", () => {
     const lista = await screen.findByRole("navigation", { name: "Campanhas do cliente" });
     expect(await within(lista).findByText("Promoção do amor")).toBeTruthy();
     expect(await screen.findByRole("heading", { name: "Promoção do amor" })).toBeTruthy();
+    // 16/10/2026 (dono: "seções empilhadas viram abas em ícone no topo"): as partes são abas; abre em Conteúdos.
+    const partes = screen.getByRole("navigation", { name: "Partes da campanha" });
     for (const secao of ["Visão geral", "Identidade do tema", "Referências", "Conteúdos"]) {
-      expect(screen.getByRole("button", { name: new RegExp(secao) })).toHaveAttribute("aria-expanded", "true");
+      expect(within(partes).getByRole("button", { name: new RegExp(secao) })).toBeTruthy();
     }
+    expect(within(partes).getByRole("button", { name: /Conteúdos/ })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByText("Teaser do amor")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Mandar para a agenda \(1\)/ })).toBeTruthy();
 
@@ -246,20 +251,24 @@ describe("aba Campanhas, mesa de trabalho", () => {
     expect(chamadasDe("campanha_conversar")[0]).toEqual({ acao: "campanha_conversar", campanha_id: campanha.id, mensagem: "Mude o nome e acrescente um depoimento" });
     expect(await screen.findByRole("heading", { name: "Amor em dobro" })).toBeTruthy();
     expect(await screen.findByText("Depoimento de casal")).toBeTruthy();
+    // 16/10/2026: o tom mora na aba Identidade do tema.
+    fireEvent.click(screen.getByRole("button", { name: /Identidade do tema/ }));
     expect(screen.getByText("Divertido")).toBeTruthy();
   });
 
-  it("recolher uma seção esconde o conteúdo dela", async () => {
+  it("trocar de aba mostra só a parte escolhida (16/10/2026: antes, recolher uma seção)", async () => {
     telaLarga();
-    window.localStorage.removeItem("mesa:campanha:secoes-fechadas");
     mock.tabelas.mesa_campanhas = [campanha];
     mock.tabelas.calendario_propostas = [proposta];
     montar(h(AbaCampanhas, { campanhaId: campanha.id }));
-    expect(await screen.findByText("Luz quente", { selector: "dd" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /Identidade do tema/ }));
+    expect(await screen.findByText("Teaser do amor")).toBeTruthy();
     expect(screen.queryByText("Serifa")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Identidade do tema/ }));
+    expect(await screen.findByText("Luz quente", { selector: "dd" })).toBeTruthy();
     expect(screen.getByText("Serifa")).toBeTruthy();
+    expect(screen.queryByText("Teaser do amor")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Conteúdos/ }));
+    expect(screen.queryByText("Serifa")).toBeNull();
   });
 
   it("sem campanha aberta: estado vazio com Nova campanha e as recentes; sem agente", async () => {

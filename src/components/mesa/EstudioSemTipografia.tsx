@@ -166,7 +166,7 @@ export default function EstudioSemTipografia({ clientId }: { clientId: string })
         )}
         {!sugestao && (
           <BotaoComCusto
-            rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" />Sugerir da biblioteca</>}
+            rotulo={<><Sparkles className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Sugerir da biblioteca</span></>}
             titulo="Sugerir a tipografia da biblioteca"
             descricao="O Jev escolhe um par de título e texto da biblioteca da agência pelo contexto da marca. Você vê o par e confirma antes de gravar."
             variant="outline"

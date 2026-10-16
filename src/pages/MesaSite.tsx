@@ -14,6 +14,7 @@ import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
 import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import CascaDaMesa from "@/components/sistema/CascaDaMesa";
+import { etapasEmIcone } from "@/components/mesa-foto/IconesDasEtapas";
 import BotaoDoConselho from "@/components/conselho/BotaoDoConselho";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 import Etapas from "@/components/sistema/Etapas";
@@ -235,16 +236,17 @@ export default function MesaSite() {
       cliente={<SeletorDeClientesDaMesa mesa="site" clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />}
       etapas={
         clientId && site ? (
+          // 16/10/2026: etapas só em ícone (padrão das mesas, IconesDasEtapas.tsx); o nome aparece na aberta.
           <Etapas
             rotulo="Etapas da Mesa Site"
-            numerar
-            itens={ETAPAS_DO_SITE.map((e) => ({
+            soIcone
+            itens={etapasEmIcone("site", ETAPAS_DO_SITE.map((e) => ({
               valor: e.valor,
               rotulo: e.rotulo,
               contador: pendencias && pendencias.contador[e.valor] ? pendencias.contador[e.valor] : null,
               destaque: !!pendencias && pendencias.destaque === e.valor,
               dica: e.valor === "referencias" ? "Opcional" : pendencias ? pendencias.dica[e.valor] : undefined,
-            }))}
+            })))}
             valor={etapa}
             onEscolher={irPara}
             depois={

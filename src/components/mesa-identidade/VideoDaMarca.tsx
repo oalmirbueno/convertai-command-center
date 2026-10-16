@@ -124,8 +124,8 @@ export default function VideoDaMarca({ titulo = "Vídeo da marca" }: { titulo?: 
       recolher={`mesa-identidade:${projeto.id}:video`}
       ajuda="O filme nasce na Mesa Motion já com a logo, as versões, a paleta, a tipografia, os grafismos, a estratégia, o tom, a tagline e as peças do projeto. A entrevista é pulada (as respostas vêm da estratégia). A apresentação em motion não usa IA: os slides viram cenas do kit. O render é da fila; o vídeo pronto entra no pacote, no brandbook web e vai para aprovação."
       acao={
-        <button type="button" className={juntar(botao.secundario, "m-1 h-8")} onClick={() => setAberta(true)} data-criar-video-da-marca="" data-campo="criar-video">
-          <Clapperboard className="mr-1.5 h-3.5 w-3.5" /> Criar vídeo
+        <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} onClick={() => setAberta(true)} data-criar-video-da-marca="" data-campo="criar-video" aria-label="Criar vídeo" title="Criar vídeo">
+          <Clapperboard className="h-4 w-4" aria-hidden="true" />
         </button>
       }
     >
@@ -168,8 +168,8 @@ export default function VideoDaMarca({ titulo = "Vídeo da marca" }: { titulo?: 
                     {ocupado === `aprovar-${f.id}` ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />} Para aprovação
                   </button>
                 )}
-                <Link className={juntar(botao.discreto, "m-1 h-8")} to={enderecoDoFilme(v.filme_id)}>
-                  <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Mesa Motion
+                <Link className={juntar(botao.icone, "m-1 disabled:opacity-50")} to={enderecoDoFilme(v.filme_id)} aria-label="Mesa Motion" title="Mesa Motion">
+                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
                 </Link>
               </li>
             );

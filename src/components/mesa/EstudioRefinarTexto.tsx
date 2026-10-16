@@ -138,7 +138,7 @@ export default function EstudioRefinarTexto({
           />
           <div className="flex justify-end">
             <BotaoComCusto
-              rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> {opcoes.length ? "Gerar outras 3" : "Gerar 3 opções"}</>}
+              rotulo={<><Sparkles className="h-4 w-4" aria-hidden="true" /><span className="sr-only">{opcoes.length ? "Gerar outras 3" : "Gerar 3 opções"}</span></>}
               titulo="Refinar texto"
               descricao="O redator usa a base de copy da agência, o framework escolhido, o contexto da marca e o que o cliente já ensinou. Nada muda até você escolher."
               variant="outline"

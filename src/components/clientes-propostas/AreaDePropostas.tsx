@@ -125,9 +125,9 @@ export default function AreaDePropostas({
             {!recolhido && (
               <SeletorCompacto rotulo="Filtrar propostas" modo="lista" opcoes={FILTROS_DA_CARTEIRA.map((f) => ({ valor: f.valor, rotulo: f.rotulo }))} valor={filtro} onEscolher={(v) => setFiltro(v as FiltroDaCarteira)} />
             )}
-            <button type="button" className={botao.primario} onClick={() => setJanela({ aberta: true, tipo: "nova" })} aria-label="Nova proposta">
+            {/* 16/10/2026 (dono): "Nova proposta: um +zinho" (o nome no title). */}
+            <button type="button" className={juntar(botao.icone, "text-primary hover:text-primary")} onClick={() => setJanela({ aberta: true, tipo: "nova" })} aria-label="Nova proposta" title="Nova proposta">
               <Plus className="h-4 w-4" aria-hidden="true" />
-              <span className="ml-1.5 hidden sm:inline">Nova proposta</span>
             </button>
           </>
         }

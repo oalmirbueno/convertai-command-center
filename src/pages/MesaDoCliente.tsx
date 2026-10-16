@@ -1,7 +1,7 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, Calculator, Check, ChevronsUpDown, ListOrdered, Loader2, Search } from "lucide-react";
+import { Brain, Building2, Calculator, CalendarDays, Check, ChevronsUpDown, Instagram, ListOrdered, Loader2, Megaphone, PackageCheck, Palette, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -79,6 +79,21 @@ const ABAS = [
 ] as const;
 
 type Aba = (typeof ABAS)[number]["valor"];
+
+/**
+ * 16/10/2026 (dono: "em tudo que tem texto e ícone, deixa só o ícone"): as
+ * etapas da Mesa usam o `Etapas soIcone`, como as outras mesas. Fechada mostra
+ * só o ícone (o nome fica no title e no leitor de tela); a aberta mostra o nome.
+ * Um ícone por etapa, sem repetir.
+ */
+const ICONES_DAS_ABAS: Record<Aba, ReactNode> = {
+  contexto: <Brain className="h-4 w-4" />,
+  instagram: <Instagram className="h-4 w-4" />,
+  mes: <CalendarDays className="h-4 w-4" />,
+  campanhas: <Megaphone className="h-4 w-4" />,
+  estudio: <Palette className="h-4 w-4" />,
+  entrega: <PackageCheck className="h-4 w-4" />,
+};
 
 const MES_VALIDO = /^\d{4}-\d{2}-01$/;
 const UUID_VALIDO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -504,8 +519,10 @@ export default function MesaDoCliente() {
       marcaId={marca ? marca.id : null}
       telaCheia={telaCheia}
       cliente={
+        // 16/10/2026 (dono: "Escolher cliente: só o ícone"): o cliente aparece como avatar com as iniciais; o nome fica no title.
         <SeletorDeClientesDaMesa
           mesa="organica"
+          soIcone
           clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined}
           valor={clientId}
           nome={nomeDoCliente}
@@ -524,8 +541,8 @@ export default function MesaDoCliente() {
         clientId ? (
           <Etapas
             rotulo="Etapas da Mesa"
-            numerar
-            itens={ABAS.map((a) => ({ valor: a.valor, rotulo: a.rotulo }))}
+            soIcone
+            itens={ABAS.map((a) => ({ valor: a.valor, rotulo: a.rotulo, icone: ICONES_DAS_ABAS[a.valor] }))}
             valor={painel ? null : aba}
             onEscolher={(v) => mudar({ aba: v, hype: null, painel: null })}
           />
@@ -541,8 +558,7 @@ export default function MesaDoCliente() {
             title="Prioridades"
             className={`${botaoPequeno} ${mostrarFila ? "bg-muted text-foreground" : ""}`}
           >
-            <ListOrdered className="h-3.5 w-3.5" />
-            <span className="ml-1 hidden 2xl:inline">Prioridades</span>
+            <ListOrdered className="h-4 w-4" aria-hidden="true" />
             {urgentes > 0 && (
               <span className="ml-1 rounded-full bg-destructive px-1.5 text-[10.5px] font-semibold leading-4 text-destructive-foreground tabular-nums">{urgentes}</span>
             )}
@@ -556,8 +572,7 @@ export default function MesaDoCliente() {
               title="Custos de produção"
               className={`${botaoPequeno} ${painel === "custos" ? "bg-muted text-foreground" : ""}`}
             >
-              <Calculator className="h-3.5 w-3.5" />
-              <span className="ml-1 hidden 2xl:inline">Custos</span>
+              <Calculator className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
           {clientId && !painel && (aba === "contexto" || aba === "mes") && (

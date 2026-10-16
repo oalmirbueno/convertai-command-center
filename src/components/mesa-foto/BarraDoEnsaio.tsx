@@ -141,11 +141,13 @@ export default function BarraDoEnsaio({ inicio }: { inicio?: ReactNode }) {
             const comFoto = (proximo.etapa === "estudio" || proximo.etapa === "preparar") && marcadas.length ? { ...(proximo.extras || {}), imagem: marcadas[0] } : proximo.extras;
             irPara(proximo.etapa as EtapaDaMesaFoto, comFoto);
           }}
-          className="ml-auto inline-flex min-w-0 max-w-full items-center rounded-md border border-primary/50 px-2.5 py-1 text-[12px] font-semibold text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          // 16/10/2026 (dono: "só o ícone", sem bordinha): a seta verde; o próximo passo vai no aria-label e no title.
+          className="ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`Próximo: ${proximo.rotulo}`}
+          title={`Próximo: ${proximo.rotulo}`}
           data-proximo-passo=""
         >
-          <span className="truncate">Próximo: {proximo.rotulo}</span>
-          <ArrowRight className="ml-1 h-3.5 w-3.5 shrink-0" />
+          <ArrowRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         </button>
       )}
     </div>

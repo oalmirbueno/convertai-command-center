@@ -70,6 +70,13 @@ function montar(endereco: string) {
 }
 
 const chamadasDe = (acao: string) => mock.invoke.mock.calls.filter((c) => c[1] && c[1].body && c[1].body.acao === acao);
+// 16/10/2026: o botão "Enviar" da etapa Envio (a etapa do cabeçalho, só ícone, também se chama "Enviar").
+const botaoEnviar = () =>
+  waitFor(() => {
+    const b = screen.getAllByRole("button", { name: /^Enviar$/ }).filter((x) => !x.hasAttribute("data-etapa"))[0];
+    if (!b) throw new Error("sem o botão Enviar da etapa");
+    return b as HTMLButtonElement;
+  });
 
 beforeEach(() => {
   mock.invoke.mockReset();
@@ -150,12 +157,13 @@ describe("Mesa Proposta", () => {
     mock.tabelas.propostas = [linha({ itens: [] })];
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=envio&proposta=${PROPOSTA}`);
     expect(await screen.findByText("Faltam os itens e os valores do investimento.")).toBeTruthy();
-    expect((screen.getByRole("button", { name: /^Enviar$/ }) as HTMLButtonElement).disabled).toBe(true);
+    // 16/10/2026: a etapa "Enviar" do cabeçalho (só ícone) tem o mesmo nome; o botão da ação é o outro.
+    expect((await botaoEnviar()).disabled).toBe(true);
   });
 
   it("Envio: Confirmar antes; depois o link e o WhatsApp prontos (nada sai sozinho)", async () => {
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=envio&proposta=${PROPOSTA}`);
-    fireEvent.click(await screen.findByRole("button", { name: /^Enviar$/ }));
+    fireEvent.click(await botaoEnviar());
     expect(chamadasDe("enviar").length).toBe(0);
     fireEvent.click(await screen.findByRole("button", { name: "Confirmar envio" }));
     await waitFor(() => expect(chamadasDe("enviar").length).toBe(1));

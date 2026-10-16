@@ -122,8 +122,8 @@ export function TipografiaDaMarca({ tipos, onUsar, geradorRecolhido = false }: {
                 </span>
                 {!p.conferida && <Pastilha tom="alerta">fora do catálogo: confira no Google Fonts</Pastilha>}
               </span>
-              <button type="button" className={juntar(botao.discreto, "ml-2 h-8 shrink-0")} onClick={() => usar(p.titulo, p.texto, "sugestão do diretor")}>
-                <Check className="mr-1.5 h-3.5 w-3.5" /> Usar
+              <button type="button" className={juntar(botao.icone, "ml-2 shrink-0 disabled:opacity-50")} onClick={() => usar(p.titulo, p.texto, "sugestão do diretor")} aria-label="Usar" title="Usar">
+                <Check className="h-4 w-4" aria-hidden="true" />
               </button>
             </li>
           ))}
@@ -144,8 +144,8 @@ export function TipografiaDaMarca({ tipos, onUsar, geradorRecolhido = false }: {
                 </a>
               </span>
             </span>
-            <button type="button" className={juntar(botao.discreto, "ml-2 h-8 shrink-0")} onClick={() => usar(p.titulo, p.texto, p.nome)} title={p.porque}>
-              <Check className="mr-1.5 h-3.5 w-3.5" /> Usar
+            <button type="button" className={juntar(botao.icone, "ml-2 shrink-0 disabled:opacity-50")} onClick={() => usar(p.titulo, p.texto, p.nome)} title={p.porque} aria-label="Usar">
+              <Check className="h-4 w-4" aria-hidden="true" />
             </button>
           </li>
         ))}

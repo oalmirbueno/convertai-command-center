@@ -68,9 +68,9 @@ function passarPorCima(el: HTMLElement, clientY: number) {
   fireEvent(el, ev);
 }
 
-function montar() {
+function montar(endereco = "/kanban") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(h(QueryClientProvider, { client: qc }, h(MemoryRouter, null, h(Kanban))));
+  return render(h(QueryClientProvider, { client: qc }, h(MemoryRouter, { initialEntries: [endereco] }, h(Kanban))));
 }
 
 describe("Kanban: arrastar não redesenha a tela inteira", () => {
@@ -121,5 +121,56 @@ describe("Kanban: arrastar não redesenha a tela inteira", () => {
     expect(ids.slice(0, 4)).toEqual(["t-004", "t-000", "t-008", "t-012"]);
     const ordens = gravados.chamadas.filter(([m]) => m === "update").map(([, a]) => (a[0] as { task_order: number }).task_order);
     expect(ordens.slice(0, 4)).toEqual([10, 20, 30, 40]);
+  });
+});
+
+/**
+ * 16/10/2026 (dono): "não consigo clicar no card e arrastar; tenho que ir no
+ * pontinho". O link "Abrir Kanban central" da Agenda chega com ?area= e os
+ * filtros ficam lembrados: o arrasto ficava desligado sem aviso e só o menu
+ * de três pontos movia. Agora o cartão inteiro arrasta também com filtro
+ * (troca de coluna, entrando no fim da coluna inteira); só a ordem dentro da
+ * coluna pede os filtros limpos.
+ */
+describe("Kanban: o cartão inteiro arrasta também com filtro", () => {
+  it("com filtro de área, arrastar para outra coluna muda a coluna e põe no fim dela", async () => {
+    const { container } = montar("/kanban?area=general");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const cartao = container.querySelector('[data-cartao-da-tarefa="t-000"] > [role="button"]') as HTMLElement;
+    expect(cartao.getAttribute("draggable")).toBe("true");
+    const setData = vi.fn();
+    fireEvent.dragStart(cartao, { dataTransfer: { setData, effectAllowed: "" } });
+    expect(setData).toHaveBeenCalledWith("text/plain", "t-000");
+    gravados.chamadas.length = 0;
+    const coluna = container.querySelector('section[aria-label="Em Andamento"]') as HTMLElement;
+    await act(async () => {
+      fireEvent.drop(coluna);
+      await Promise.resolve();
+    });
+    const updates = gravados.chamadas.filter(([m]) => m === "update").map(([, a]) => a[0]);
+    // A maior ordem da coluna "Em Andamento" é 600: a tarefa entra com 610, sem renumerar as outras.
+    expect(updates[0]).toEqual({ status: "doing", task_order: 610 });
+    expect(updates.length).toBe(1);
+    const status = gravados.chamadas.filter(([m, a]) => m === "eq" && a[0] === "status").map(([, a]) => a[1]);
+    expect(status[0]).toBe("backlog");
+  });
+
+  it("com filtro, soltar na mesma coluna não reordena (avisa para limpar os filtros)", async () => {
+    const { toast } = await import("sonner");
+    const { container } = montar("/kanban?area=general");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const cartao = (id: string) => container.querySelector(`[data-cartao-da-tarefa="${id}"] > [role="button"]`) as HTMLElement;
+    fireEvent.dragStart(cartao("t-000"));
+    gravados.chamadas.length = 0;
+    await act(async () => {
+      fireEvent.drop(cartao("t-008"));
+      await Promise.resolve();
+    });
+    expect(gravados.chamadas.filter(([m]) => m === "update").length).toBe(0);
+    expect(toast.info).toHaveBeenCalled();
   });
 });

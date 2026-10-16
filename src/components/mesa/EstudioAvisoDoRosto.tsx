@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { TriangleAlert } from "lucide-react";
+import { ChevronDown, TriangleAlert } from "lucide-react";
 import { chamarFuncao } from "@/lib/mesa/api";
+import { erroEmPartes } from "./erroSimples";
 
 /**
  * Conferência do rosto depois de gerar (frente R2): SÓ AVISO, discreto, sem
@@ -68,17 +70,37 @@ export function avisosDaVersao(v: { avisos_da_geracao?: unknown } | null | undef
   return a.filter((x): x is string => typeof x === "string" && !!x.trim()).slice(0, 6);
 }
 
+/**
+ * 16/10/2026 (dono: "a parte de erros parece poluída"): uma linha só, com o
+ * ícone e o primeiro aviso em frase curta; o resto e o texto técnico ficam
+ * recolhidos (abre com um toque).
+ */
 export function EstudioAvisosDaGeracao({ versao }: { versao: { avisos_da_geracao?: unknown } | null | undefined }) {
+  const [aberto, setAberto] = useState(false);
   const avisos = avisosDaVersao(versao);
   if (!avisos.length) return null;
+  const primeiro = erroEmPartes(avisos[0]).resumo;
   return (
-    <ul className="mt-1 space-y-0.5" data-aviso="geracao">
-      {avisos.map((a, i) => (
-        <li key={i} className="flex min-w-0 items-start text-[12px] leading-snug text-warning">
-          <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 flex-1">{a}</span>
-        </li>
-      ))}
-    </ul>
+    <div className="mt-1 min-w-0" data-aviso="geracao">
+      <button
+        type="button"
+        onClick={() => setAberto((a) => !a)}
+        aria-expanded={aberto}
+        title={aberto ? "Esconder os avisos" : "Ver os avisos da geração"}
+        className="flex min-h-7 w-full min-w-0 items-center rounded-md text-left text-[12px] leading-snug text-warning hover:bg-muted/60"
+      >
+        <TriangleAlert className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate">{primeiro}</span>
+        {avisos.length > 1 && <span className="ml-1 shrink-0 tabular-nums text-muted-foreground">+{avisos.length - 1}</span>}
+        <ChevronDown className={`ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`} aria-hidden="true" />
+      </button>
+      {aberto && (
+        <ul className="mb-1 ml-5 mt-0.5 space-y-1 text-[11.5px] leading-snug text-muted-foreground">
+          {avisos.map((a, i) => (
+            <li key={i} className="[overflow-wrap:anywhere]">{a}</li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

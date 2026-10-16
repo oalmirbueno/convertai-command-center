@@ -133,8 +133,8 @@ export function CustoCompacto({
       </Popover>
       {podeRecarregar && (
         <button type="button" onClick={onRecarregar} className={botaoPequeno} aria-label="Recarregar carteira" title="Recarregar carteira">
-          <Plus className="h-3.5 w-3.5" />
-          <span className="ml-1 hidden 2xl:inline">Recarregar</span>
+          {/* 16/10/2026 (dono: "saldo: só o ícone"): o nome fica no title e no leitor de tela. */}
+          <Plus className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
       {isAdmin && (

@@ -539,7 +539,7 @@ describe("área MCP do cliente", () => {
     await waitFor(() => expect(mock.invoke.mock.calls.some((c) => c[1].body.acao === "ativar_item_mcp")).toBe(true));
     const corpo = mock.invoke.mock.calls.find((c) => c[1].body.acao === "ativar_item_mcp")![1].body;
     expect(corpo).toMatchObject({ acao: "ativar_item_mcp", client_id: "11111111-1111-1111-1111-111111111111", fonte: "memoria", item_id: U(2), ativo: true });
-    expect(ler("src/components/mesa/AbaContexto.tsx")).toContain('titulo="MCP"');
+    expect(ler("src/components/mesa/AbaContexto.tsx")).toContain('rotulo: "MCP"');
   });
 
   it("MCP 2.4: aceleriq_client_instruction grava orientação com o público, na fronteira do cliente", () => {

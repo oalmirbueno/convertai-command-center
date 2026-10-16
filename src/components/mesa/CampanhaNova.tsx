@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Flame, Sparkles, X } from "lucide-react";
+import { BookmarkPlus, ChevronDown, Flame, Rocket, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -156,8 +156,8 @@ export default function CampanhaNova({
           {onCancelar && (
             // Criando: a chamada já foi paga e segue no servidor; cancelar aqui
             // não a pararia e, ao voltar, puxaria a tela para a campanha nova.
-            <Button type="button" size="sm" variant="ghost" className="ml-2 h-8 shrink-0" onClick={onCancelar} disabled={desde !== null}>
-              Cancelar
+            <Button type="button" size="sm" variant="ghost" className="ml-2 h-8 w-8 shrink-0 p-0" aria-label="Cancelar" title="Cancelar" onClick={onCancelar} disabled={desde !== null}>
+              <X className="h-4 w-4" aria-hidden="true" />
             </Button>
           )}
         </div>
@@ -259,8 +259,8 @@ export default function CampanhaNova({
                 <p className="min-w-0 flex-1 text-[12px] font-medium text-muted-foreground">
                   Referências <span className="font-normal">({referencias.length} de {MAX_REFERENCIAS})</span>
                 </p>
-                <Button type="button" size="sm" variant="ghost" className="h-8 shrink-0 text-primary" aria-expanded={galeria} onClick={() => setGaleria((v) => !v)}>
-                  {galeria ? "Fechar" : "Escolher"}
+                <Button type="button" size="sm" variant="ghost" className="h-8 w-8 shrink-0 p-0 text-primary" aria-expanded={galeria} aria-label={galeria ? "Fechar a galeria de referências" : "Escolher referências"} title={galeria ? "Fechar a galeria" : "Escolher referências"} onClick={() => setGaleria((v) => !v)}>
+                  {galeria ? <X className="h-4 w-4" aria-hidden="true" /> : <BookmarkPlus className="h-4 w-4" aria-hidden="true" />}
                 </Button>
               </div>
               {galeria ? (
@@ -275,14 +275,14 @@ export default function CampanhaNova({
         <div className="mt-4 flex flex-wrap items-center justify-end">
           {desde !== null && <span className="mb-1 mr-3 min-w-0"><Cronometro desde={desde} rotulo="Criando a campanha" previsao="~1min" /></span>}
           <BotaoComCusto
-            rotulo={<><Sparkles className="mr-1.5 h-3.5 w-3.5" />Criar campanha</>}
+            rotulo={<><Rocket className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Criar campanha</span></>}
             titulo="Campanha criada"
             descricao="O estrategista cria o tema, a identidade com o selo e os conteúdos do período, pelo contexto do cliente."
             partes={() => partesDaCampanha(catalogo, qtd, anexos.caminhos.length + imagens.length)}
             executar={criar}
             aoConcluir={concluir}
             disabled={!pedido.trim() || !!erroDoPeriodo || anexos.subindo || desde !== null}
-            className="mb-1 h-9"
+            className="mb-1 h-9 gap-0 px-3"
           />
         </div>
       </section>

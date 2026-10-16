@@ -14,6 +14,7 @@ import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarc
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
 import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import CascaDaMesa from "@/components/sistema/CascaDaMesa";
+import { etapasEmIcone } from "@/components/mesa-foto/IconesDasEtapas";
 import BotaoDoConselho from "@/components/conselho/BotaoDoConselho";
 import Etapas from "@/components/sistema/Etapas";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
@@ -287,10 +288,11 @@ export default function MesaPublicidade() {
       marca={clientId && marca ? <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id }, true)} /> : null}
       etapas={
         clientId ? (
+          // 16/10/2026: etapas só em ícone (padrão das mesas, IconesDasEtapas.tsx); o nome aparece na aberta.
           <Etapas
             rotulo="Etapas da Mesa Publicidade"
-            numerar
-            itens={ETAPAS_DA_PUBLICIDADE.map((p) => ({ valor: p.valor, rotulo: p.rotulo, dica: p.dica }))}
+            soIcone
+            itens={etapasEmIcone("publicidade", ETAPAS_DA_PUBLICIDADE.map((p) => ({ valor: p.valor, rotulo: p.rotulo, dica: p.dica })))}
             valor={etapa}
             onEscolher={(v) => mudar({ etapa: v })}
           />

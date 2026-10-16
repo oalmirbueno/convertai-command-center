@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ExternalLink, Loader2, MessageSquare } from "lucide-react";
+import { Bookmark, BookmarkPlus, ChevronLeft, ClipboardList, ExternalLink, Images, Info, LayoutList, ListTree, Loader2, MessageSquare, Stamp, SwatchBook, X } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { textoDoErro, usd } from "@/lib/mesa/api";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import CampanhaConteudos from "./CampanhaConteudos";
 import CampanhaReferencias, { MAX_REFERENCIAS, ReferenciasEscolhidas } from "./CampanhaReferencias";
-import { CabecalhoDeSecao } from "@/components/sistema/Secao";
-import { juntar, texto } from "@/components/sistema/estilos";
+import Etapas from "@/components/sistema/Etapas";
+import { botao, juntar, texto } from "@/components/sistema/estilos";
 import {
   chaves,
   lerProposta,
@@ -52,48 +51,52 @@ export function SeloDoEstado({ estado }: { estado: string }) {
 
 type IdDaSecao = "visao" | "briefing" | "imagens" | "plano" | "selo" | "identidade" | "referencias" | "conteudos";
 
-const CHAVE_DAS_SECOES = "mesa:campanha:secoes-fechadas";
+/**
+ * As partes da campanha, na ordem das abas (16/10/2026: as seções empilhadas
+ * viraram abas em ícone no topo). Um ícone por parte, sem repetir.
+ */
+const ORDEM_DAS_SECOES: IdDaSecao[] = ["conteudos", "visao", "briefing", "imagens", "plano", "selo", "identidade", "referencias"];
 
-function lerFechadas(): IdDaSecao[] {
+export const NOMES_DAS_SECOES: Record<IdDaSecao, string> = {
+  visao: "Visão geral",
+  conteudos: "Conteúdos",
+  briefing: "Briefing",
+  imagens: "Imagens da campanha",
+  plano: "Plano de imagens",
+  selo: "Selo",
+  identidade: "Identidade do tema",
+  referencias: "Referências",
+};
+
+const ICONES_DAS_SECOES: Record<IdDaSecao, ReactNode> = {
+  visao: <Info className="h-4 w-4" />,
+  conteudos: <LayoutList className="h-4 w-4" />,
+  briefing: <ClipboardList className="h-4 w-4" />,
+  imagens: <Images className="h-4 w-4" />,
+  plano: <ListTree className="h-4 w-4" />,
+  selo: <Stamp className="h-4 w-4" />,
+  identidade: <SwatchBook className="h-4 w-4" />,
+  referencias: <Bookmark className="h-4 w-4" />,
+};
+
+/** A aba aberta fica lembrada no navegador (vale para todas as campanhas). */
+const CHAVE_DA_ABA = "mesa:campanha:aba";
+
+function lerAba(): IdDaSecao {
   try {
-    const v = JSON.parse(window.localStorage.getItem(CHAVE_DAS_SECOES) || "[]");
-    return Array.isArray(v) ? (v.map(String) as IdDaSecao[]) : [];
+    const v = window.localStorage.getItem(CHAVE_DA_ABA) || "";
+    return ORDEM_DAS_SECOES.indexOf(v as IdDaSecao) >= 0 ? (v as IdDaSecao) : "conteudos";
   } catch {
-    return [];
+    return "conteudos";
   }
 }
 
-function gravarFechadas(lista: IdDaSecao[]) {
+function gravarAba(aba: IdDaSecao) {
   try {
-    window.localStorage.setItem(CHAVE_DAS_SECOES, JSON.stringify(lista));
+    window.localStorage.setItem(CHAVE_DA_ABA, aba);
   } catch {
     /* sem armazenamento: vale só nesta visita */
   }
-}
-
-function Secao({
-  titulo,
-  resumo,
-  aberta,
-  onAlternar,
-  acao,
-  children,
-}: {
-  titulo: string;
-  resumo?: ReactNode;
-  aberta: boolean;
-  onAlternar: () => void;
-  acao?: ReactNode;
-  children: ReactNode;
-}) {
-  // Seção ABERTA (28/09, dono: "não encaixotar"): título que recolhe, divisória fina em cima, sem caixa.
-  // O estado continua o daqui (lembrado por navegador, o mesmo de antes).
-  return (
-    <section className="min-w-0 border-t border-border pt-4" data-recolhido={aberta ? "nao" : "sim"}>
-      <CabecalhoDeSecao titulo={titulo} acao={acao} recolher={{ recolhido: !aberta, onAlternar, resumo }} />
-      {aberta && <div className="mt-3 min-w-0">{children}</div>}
-    </section>
-  );
 }
 
 function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
@@ -128,7 +131,7 @@ export default function CampanhaDetalhe({
   const { clientId } = useMesa();
   const queryClient = useQueryClient();
   const [galeria, setGaleria] = useState(false);
-  const [fechadas, setFechadas] = useState<IdDaSecao[]>(lerFechadas);
+  const [aba, setAba] = useState<IdDaSecao>(lerAba);
   const [referencias, setReferencias] = useState<string[]>(campanha.referencias_ids || []);
   const [salvandoRefs, setSalvandoRefs] = useState(0);
   const [salvandoImagens, setSalvandoImagens] = useState(0);
@@ -150,11 +153,9 @@ export default function CampanhaDetalhe({
     queryFn: () => lerProposta(campanha.proposta_id as string),
   });
 
-  const aberta = (s: IdDaSecao) => fechadas.indexOf(s) < 0;
-  const alternar = (s: IdDaSecao) => {
-    const nova = aberta(s) ? fechadas.concat([s]) : fechadas.filter((x) => x !== s);
-    setFechadas(nova);
-    gravarFechadas(nova);
+  const escolher = (s: IdDaSecao) => {
+    setAba(s);
+    gravarAba(s);
   };
 
   const id = campanha.identidade || {};
@@ -213,63 +214,78 @@ export default function CampanhaDetalhe({
       ? `${itens.length} conteúdo(s)${naAgenda ? `, ${naAgenda} na agenda` : ""}`
       : "nenhum ainda";
 
+  // O resumo de cada parte (antes ao lado do título da seção) vai para a dica da aba.
+  const resumos: Record<IdDaSecao, string> = {
+    visao: campanha.objetivo || "",
+    conteudos: conteudosResumo,
+    briefing: produtosEmFoco || briefing.oferta || "",
+    imagens: `${imagensDaCampanha.length} de ${MAX_IMAGENS_CAMPANHA}`,
+    plano: planoResumo,
+    selo: campanha.selo_path ? "com selo" : "sem selo ainda",
+    identidade: id.tema_visual || "",
+    referencias: `${referencias.length} de ${MAX_REFERENCIAS}`,
+  };
+  const abas = ORDEM_DAS_SECOES.map((s) => ({
+    valor: s,
+    rotulo: NOMES_DAS_SECOES[s],
+    icone: ICONES_DAS_SECOES[s],
+    dica: resumos[s] ? `${NOMES_DAS_SECOES[s]} · ${resumos[s]}` : NOMES_DAS_SECOES[s],
+  }));
+
   return (
     <div className="min-w-0 space-y-3">
       {onVoltar && (
-        <button type="button" onClick={onVoltar} className="inline-flex items-center text-[12px] text-muted-foreground hover:text-foreground">
-          <ChevronLeft className="mr-0.5 h-4 w-4" /> Campanhas
+        <button type="button" onClick={onVoltar} className={botao.icone} aria-label="Voltar às campanhas" title="Voltar às campanhas">
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
 
-      {/* Cabeçalho: selo pequeno, nome, período, estado e o próximo passo. */}
-      {/* Cabeçalho aberto (sem caixa): o espaço e a divisória da primeira seção separam. */}
-      <header className="flex min-w-0 flex-col pb-1 sm:flex-row sm:items-center">
-        <div className="mb-3 flex min-w-0 flex-1 items-center sm:mb-0">
-          <span
-            className="mr-3 flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background text-[15px] font-semibold"
-            style={!campanha.selo_path && corDoSelo ? { color: corDoSelo } : undefined}
-          >
-            {campanha.selo_path ? (
-              <ImagemDaMesa caminho={campanha.selo_path} alt="" className="h-full w-full !object-contain p-0.5" />
-            ) : (
-              (campanha.nome || "C").charAt(0).toUpperCase()
+      {/* Cabeçalho aberto (sem caixa): selo pequeno, nome, período, estado e o próximo passo. */}
+      <header className="flex min-w-0 items-center pb-1">
+        <span
+          className="mr-3 flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted/60 text-[15px] font-semibold"
+          style={!campanha.selo_path && corDoSelo ? { color: corDoSelo } : undefined}
+        >
+          {campanha.selo_path ? (
+            <ImagemDaMesa caminho={campanha.selo_path} alt="" className="h-full w-full !object-contain p-0.5" />
+          ) : (
+            (campanha.nome || "C").charAt(0).toUpperCase()
+          )}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center">
+            {/* Título numa linha (28/09); inteiro no title. */}
+            <h2 className={juntar(texto.tituloPagina, "mr-2 min-w-0 truncate")} title={campanha.nome}>{campanha.nome}</h2>
+            {tipoDaCampanha(campanha.identidade) && (
+              <span className="mr-1.5 shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium" data-tipo={tipoDaCampanha(campanha.identidade) || ""}>
+                {rotuloDoTipo(tipoDaCampanha(campanha.identidade))}
+              </span>
             )}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 flex-wrap items-center">
-              {/* Título numa linha (28/09); inteiro no title. */}
-              <h2 className={juntar(texto.tituloPagina, "mr-2 min-w-0 truncate")} title={campanha.nome}>{campanha.nome}</h2>
-              {tipoDaCampanha(campanha.identidade) && (
-                <span className="mr-1.5 shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium" data-tipo={tipoDaCampanha(campanha.identidade) || ""}>
-                  {rotuloDoTipo(tipoDaCampanha(campanha.identidade))}
-                </span>
-              )}
-              <SeloDoEstado estado={campanha.status} />
-            </div>
-            <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
-              {periodoCurto(campanha.periodo_inicio, campanha.periodo_fim)}
-              {itens.length ? ` · ${itens.length} conteúdo(s)` : ""}
-              {campanha.custo_usd ? ` · ${usd(Number(campanha.custo_usd))}` : ""}
-            </p>
+            <SeloDoEstado estado={campanha.status} />
           </div>
+          <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
+            {periodoCurto(campanha.periodo_inicio, campanha.periodo_fim)}
+            {itens.length ? ` · ${itens.length} conteúdo(s)` : ""}
+            {campanha.custo_usd ? ` · ${usd(Number(campanha.custo_usd))}` : ""}
+          </p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center sm:ml-3">
+        <div className="ml-2 flex shrink-0 items-center">
           {onAbrirAgente && (
-            <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8 sm:mb-0" onClick={onAbrirAgente}>
-              <MessageSquare className="mr-1.5 h-3.5 w-3.5" /> Conversar com o agente
-            </Button>
+            <button type="button" className={botao.icone} onClick={onAbrirAgente} aria-label="Conversar com o agente" title="Conversar com o agente da campanha">
+              <MessageSquare className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
           {/* Com os conteúdos abertos, a barra deles já tem "Abrir no Estúdio". */}
-          {gravada && primeiraTarefa && onAbrirNoEstudio && !aberta("conteudos") && (
-            <Button
+          {gravada && primeiraTarefa && onAbrirNoEstudio && aba !== "conteudos" && (
+            <button
               type="button"
-              size="sm"
-              variant="ghost"
-              className="mb-1 h-8 text-primary sm:mb-0"
+              className={juntar(botao.icone, "ml-0.5 text-primary hover:text-primary")}
+              aria-label="Abrir no Estúdio"
+              title="Abrir no Estúdio"
               onClick={() => onAbrirNoEstudio(primeiraTarefa.task_id as string, mesDaData(primeiraTarefa.data))}
             >
-              Abrir no Estúdio <ExternalLink className="ml-1 h-3.5 w-3.5" />
-            </Button>
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
         </div>
       </header>
@@ -277,82 +293,66 @@ export default function CampanhaDetalhe({
       {/* Frente AE: a campanha ligada às mesas (usar nas mesas, levar para, tipo e a base). */}
       <CampanhaNasMesas campanha={campanha} />
 
-      {/* Visão geral. */}
-      <Secao titulo="Visão geral" resumo={campanha.objetivo || undefined} aberta={aberta("visao")} onAlternar={() => alternar("visao")}>
-        <dl className="grid min-w-0 grid-cols-1 gap-3.5 sm:grid-cols-2">
-          <Linha rotulo="Nome">{campanha.nome}</Linha>
-          <Linha rotulo="Período">{periodoCurto(campanha.periodo_inicio, campanha.periodo_fim)}</Linha>
-          {campanha.objetivo && (
-            <div className="sm:col-span-2">
-              <Linha rotulo="Objetivo">{campanha.objetivo}</Linha>
-            </div>
-          )}
-          {campanha.conceito && (
-            <div className="sm:col-span-2">
-              <Linha rotulo="Conceito">{campanha.conceito}</Linha>
-            </div>
-          )}
-          {campanha.pedido && (
-            <div className="sm:col-span-2">
-              <Linha rotulo="Pedido original"><span className="text-muted-foreground">{campanha.pedido}</span></Linha>
-            </div>
-          )}
-        </dl>
-      </Secao>
+      {/* 16/10/2026 (dono: "tem muito texto" e "seções empilhadas viram abas em ícone no topo"):
+          as oito seções viraram abas em ícone; a aberta mostra o nome e o resumo curto vai no title. */}
+      <Etapas soIcone rotulo="Partes da campanha" itens={abas} valor={aba} onEscolher={(v) => escolher(v as IdDaSecao)} className="-mx-1 border-b border-border pb-1" />
 
-      {/* Conteúdos logo depois da visão geral: gerar na hora, editar, escolher e mandar para a agenda. */}
-      <Secao titulo="Conteúdos" resumo={conteudosResumo} aberta={aberta("conteudos")} onAlternar={() => alternar("conteudos")}>
-        <CampanhaConteudos
-          campanha={campanha}
-          proposta={proposta.data || null}
-          carregando={!!campanha.proposta_id && proposta.isLoading}
-          erro={proposta.isError ? proposta.error : null}
-          projetoSugerido={projetoSugerido || null}
-          onAbrirNoEstudio={onAbrirNoEstudio}
-          onPedirAoAgente={onPedirAoAgente ? pedir : undefined}
-        />
-      </Secao>
+      <div className="min-w-0 pt-1" role="region" aria-label={NOMES_DAS_SECOES[aba]}>
+        {aba === "visao" && (
+          <dl className="grid min-w-0 grid-cols-1 gap-3.5 sm:grid-cols-2">
+            <Linha rotulo="Nome">{campanha.nome}</Linha>
+            <Linha rotulo="Período">{periodoCurto(campanha.periodo_inicio, campanha.periodo_fim)}</Linha>
+            {campanha.objetivo && (
+              <div className="sm:col-span-2">
+                <Linha rotulo="Objetivo">{campanha.objetivo}</Linha>
+              </div>
+            )}
+            {campanha.conceito && (
+              <div className="sm:col-span-2">
+                <Linha rotulo="Conceito">{campanha.conceito}</Linha>
+              </div>
+            )}
+            {campanha.pedido && (
+              <div className="sm:col-span-2">
+                <Linha rotulo="Pedido original"><span className="text-muted-foreground">{campanha.pedido}</span></Linha>
+              </div>
+            )}
+          </dl>
+        )}
 
-      {/* Briefing: produto em foco, oferta, mensagem, público, provas, tom e CTA. */}
-      <Secao titulo="Briefing" resumo={produtosEmFoco || briefing.oferta || undefined} aberta={aberta("briefing")} onAlternar={() => alternar("briefing")}>
-        <CampanhaBriefing campanha={campanha} onPedirAoAgente={onPedirAoAgente ? pedir : undefined} />
-      </Secao>
+        {/* Conteúdos: gerar na hora, editar, escolher e mandar para a agenda. */}
+        {aba === "conteudos" && (
+          <CampanhaConteudos
+            campanha={campanha}
+            proposta={proposta.data || null}
+            carregando={!!campanha.proposta_id && proposta.isLoading}
+            erro={proposta.isError ? proposta.error : null}
+            projetoSugerido={projetoSugerido || null}
+            onAbrirNoEstudio={onAbrirNoEstudio}
+            onPedirAoAgente={onPedirAoAgente ? pedir : undefined}
+          />
+        )}
 
-      {/* Imagens da campanha: do acervo (inclusive Mesa Foto) ou enviadas, com papel e porquê. */}
-      <Secao
-        titulo="Imagens da campanha"
-        resumo={`${imagensDaCampanha.length} de ${MAX_IMAGENS_CAMPANHA}`}
-        aberta={aberta("imagens")}
-        onAlternar={() => alternar("imagens")}
-        acao={salvandoImagens > 0 ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Salvando as imagens" /> : undefined}
-      >
-        <ImagensDaCampanhaSalvas campanha={campanha} onSalvando={setSalvandoImagens} />
-      </Secao>
+        {/* Briefing: produto em foco, oferta, mensagem, público, provas, tom e CTA. */}
+        {aba === "briefing" && <CampanhaBriefing campanha={campanha} onPedirAoAgente={onPedirAoAgente ? pedir : undefined} />}
 
-      {/* Plano de imagens: qual imagem vai em qual lâmina e por quê (estrategista + Jev). */}
-      <Secao titulo="Plano de imagens" resumo={planoResumo} aberta={aberta("plano")} onAlternar={() => alternar("plano")}>
-        <CampanhaPlanoDeImagens campanha={campanha} itens={proposta.data ? itens : campanha.proposta_id ? null : []} />
-      </Secao>
+        {/* Imagens da campanha: do acervo (inclusive Mesa Foto) ou enviadas, com papel e porquê. */}
+        {aba === "imagens" && (
+          <>
+            {salvandoImagens > 0 && <Loader2 className="mb-2 h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Salvando as imagens" />}
+            <ImagensDaCampanhaSalvas campanha={campanha} onSalvando={setSalvandoImagens} />
+          </>
+        )}
 
-      {/* Frente SEL (30/09): o selo em seção própria, com os 4 caminhos, Melhorar, referências e versões. */}
-      <Secao
-        titulo="Selo"
-        resumo={campanha.selo_path ? "com selo" : "sem selo ainda"}
-        aberta={aberta("selo")}
-        onAlternar={() => alternar("selo")}
-      >
-        <CampanhaSelo campanha={campanha} />
-      </Secao>
+        {/* Plano de imagens: qual imagem vai em qual lâmina e por quê (estrategista + Jev). */}
+        {aba === "plano" && <CampanhaPlanoDeImagens campanha={campanha} itens={proposta.data ? itens : campanha.proposta_id ? null : []} />}
 
-      {/* Identidade do tema. */}
-      <Secao
-        titulo="Identidade do tema"
-        resumo={id.tema_visual || undefined}
-        aberta={aberta("identidade")}
-        onAlternar={() => alternar("identidade")}
-      >
-        <div className="min-w-0">
-          <dl className="min-w-0 flex-1 space-y-3.5">
+        {/* Frente SEL (30/09): o selo, com os 4 caminhos, Melhorar, referências e versões. */}
+        {aba === "selo" && <CampanhaSelo campanha={campanha} />}
+
+        {/* Identidade do tema. */}
+        {aba === "identidade" && (
+          <dl className="min-w-0 space-y-3.5">
             {id.tema_visual && <Linha rotulo="Tema visual">{id.tema_visual}</Linha>}
             {paleta.length > 0 && (
               <div className="min-w-0">
@@ -360,7 +360,7 @@ export default function CampanhaDetalhe({
                 <dd className="mt-1.5 flex flex-wrap">
                   {paleta.map((c, i) => (
                     <span key={`${c.hex}-${i}`} className="mb-2 mr-3 inline-flex min-w-0 items-center">
-                      <span className="mr-2 inline-block h-9 w-9 shrink-0 rounded-lg border border-border shadow-sm" style={{ backgroundColor: c.hex }} />
+                      <span className="mr-2 inline-block h-9 w-9 shrink-0 rounded-lg shadow-sm" style={{ backgroundColor: c.hex }} />
                       <span className="min-w-0">
                         {c.nome && <span className="block text-[12px] font-medium [overflow-wrap:anywhere]">{c.nome}</span>}
                         <span className="block font-mono text-[11px] uppercase text-muted-foreground">{c.hex}</span>
@@ -381,49 +381,40 @@ export default function CampanhaDetalhe({
               </Linha>
             )}
             {!id.tema_visual && !paleta.length && !id.tipografia && !id.elementos && !id.tom && (
-              <p className="text-[12.5px] text-muted-foreground">Sem identidade ainda. Peça ao agente da campanha.</p>
+              <p className="text-[12px] text-muted-foreground">Sem identidade ainda.</p>
             )}
           </dl>
-        </div>
-      </Secao>
-
-      {/* Referências (o interior é do CampanhaReferencias). */}
-      <Secao
-        titulo="Referências"
-        resumo={`${referencias.length} de ${MAX_REFERENCIAS}`}
-        aberta={aberta("referencias")}
-        onAlternar={() => alternar("referencias")}
-        acao={
-          <>
-            {salvandoRefs > 0 && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Salvando" />}
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-8 text-primary"
-              aria-expanded={galeria}
-              onClick={() => {
-                if (!aberta("referencias")) alternar("referencias");
-                setGaleria((v) => !v);
-              }}
-            >
-              {galeria ? "Fechar" : "Escolher"}
-            </Button>
-          </>
-        }
-      >
-        {galeria ? (
-          <CampanhaReferencias valor={referencias} onChange={gravarReferencias} />
-        ) : (
-          <ReferenciasEscolhidas
-            ids={referencias}
-            onTirar={(rid) => gravarReferencias(referencias.filter((x) => x !== rid))}
-            vazio="Nenhuma escolhida: os conteúdos seguem a identidade e as referências do cliente."
-          />
         )}
-      </Secao>
 
-
+        {/* Referências (o interior é do CampanhaReferencias). */}
+        {aba === "referencias" && (
+          <>
+            <div className="mb-2 flex min-w-0 items-center">
+              <span className="mr-auto text-[12px] tabular-nums text-muted-foreground">{referencias.length} de {MAX_REFERENCIAS}</span>
+              {salvandoRefs > 0 && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Salvando" />}
+              <button
+                type="button"
+                className={juntar(botao.icone, galeria && "bg-muted text-foreground")}
+                aria-expanded={galeria}
+                aria-label={galeria ? "Fechar a galeria de referências" : "Escolher referências"}
+                title={galeria ? "Fechar a galeria" : "Escolher referências"}
+                onClick={() => setGaleria((v) => !v)}
+              >
+                {galeria ? <X className="h-4 w-4" aria-hidden="true" /> : <BookmarkPlus className="h-4 w-4" aria-hidden="true" />}
+              </button>
+            </div>
+            {galeria ? (
+              <CampanhaReferencias valor={referencias} onChange={gravarReferencias} />
+            ) : (
+              <ReferenciasEscolhidas
+                ids={referencias}
+                onTirar={(rid) => gravarReferencias(referencias.filter((x) => x !== rid))}
+                vazio="Nenhuma escolhida."
+              />
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -67,6 +67,25 @@ REGRAS ABSOLUTAS:
 Responda SOMENTE com JSON válido, sem markdown, neste formato exato:
 {"resposta":"...","ideia":{"titulo":"...","descricao":"...","por_que_agora":"...","passos":["...","...","..."],"sinal":"...","interno_oferta":"...","interno_faixa_min":0,"interno_faixa_max":0,"interno_esforco":"baixo|medio|alto"}}`;
 
+// Pedidos de atalho dentro do "evoluir" (16/10/2026, dono: "se eu clicar numa ideia, abrir
+// ela, ter mais ideias e evoluir com a gente. Dá para trazer mais Reels aqui também"). Sem
+// `pedido`, o "evoluir" segue igual. Com ele, a ideia atual volta sem mudança e vem junto a
+// lista pedida, no mesmo JSON.
+type PedidoDoEvoluir = "variacoes" | "reels";
+
+const INSTRUCAO_DO_PEDIDO: Record<PedidoDoEvoluir, string> = {
+  variacoes: `PEDIDO ESPECIAL: a equipe quer MAIS IDEIAS COMO ESTA. Devolva a "ideia" atual SEM mudanças e, no campo "variacoes", até 3 ideias novas para o mesmo cliente, no MESMO formato da ideia, seguindo as mesmas regras. Cada variação muda o ângulo (outro formato, outro público, outra prova), nunca só as palavras. A "resposta" diz em 1 frase o que diferencia as variações.
+Formato exato: {"resposta":"...","ideia":{...a ideia atual...},"variacoes":[{"titulo":"...","descricao":"...","por_que_agora":"...","passos":["..."],"sinal":"...","interno_oferta":"...","interno_faixa_min":0,"interno_faixa_max":0,"interno_esforco":"baixo|medio|alto"}]}`,
+  reels: `PEDIDO ESPECIAL: a equipe quer IDEIAS DE REELS para executar esta ideia. Devolva a "ideia" atual SEM mudanças e, no campo "reels", até 4 Reels concretos para este cliente: "gancho" (a frase dos 2 primeiros segundos), "cena" (o que mostrar, gravável pela equipe com o que o cliente já tem) e "legenda" (curta, 1 ou 2 frases, sem hashtag). A "resposta" diz em 1 frase a linha dos Reels.
+Formato exato: {"resposta":"...","ideia":{...a ideia atual...},"reels":[{"gancho":"...","cena":"...","legenda":"..."}]}`,
+};
+
+interface ReelDaIdeia {
+  gancho: string;
+  cena: string;
+  legenda: string;
+}
+
 interface IdeiaDoRadar {
   titulo: string;
   descricao: string;
@@ -131,6 +150,28 @@ function normalizarMensagens(brutas: unknown): MensagemDaConversa[] {
     .slice(-12);
 }
 
+/** Variações pedidas: até 3, no formato da geração, com os mesmos limites. */
+function normalizarVariacoes(brutas: unknown): IdeiaDoRadar[] {
+  if (!Array.isArray(brutas)) return [];
+  return brutas
+    .map((v) => normalizarIdeia(v))
+    .filter((v): v is IdeiaDoRadar => v !== null)
+    .slice(0, 3);
+}
+
+/** Reels pedidos: até 4, com gancho e cena obrigatórios e texto limitado. */
+function normalizarReels(brutos: unknown): ReelDaIdeia[] {
+  if (!Array.isArray(brutos)) return [];
+  const txt = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
+  return brutos
+    .map((b) => {
+      const r = (b && typeof b === "object" ? b : {}) as Record<string, unknown>;
+      return { gancho: txt(r.gancho, 200), cena: txt(r.cena, 500), legenda: txt(r.legenda, 300) };
+    })
+    .filter((r) => r.gancho && r.cena)
+    .slice(0, 4);
+}
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -184,6 +225,8 @@ Deno.serve(async (req) => {
     const evoluir = body?.action === "evoluir";
     const ideiaAtual = evoluir ? normalizarIdeia(body?.ideia) : null;
     const mensagens = evoluir ? normalizarMensagens(body?.mensagens) : [];
+    // Atalhos do "evoluir": "variacoes" (mais ideias como esta) ou "reels". Outro valor é ignorado.
+    const pedido: PedidoDoEvoluir | null = evoluir && (body?.pedido === "variacoes" || body?.pedido === "reels") ? body.pedido : null;
     if (evoluir) {
       if (!ideiaAtual) return jsonResponse({ error: "A ideia atual (titulo e descricao) é obrigatória." }, 400);
       if (mensagens.length === 0 || mensagens[mensagens.length - 1].papel !== "usuario") {
@@ -433,14 +476,17 @@ Deno.serve(async (req) => {
       const historico = mensagens.map((m, i) => ({
         role: m.papel === "usuario" ? "user" : "assistant",
         content: i === mensagens.length - 1
-          ? `${m.texto}\n\n(Devolva só o JSON, com "resposta" e a "ideia" completa.)`
+          ? `${m.texto}\n\n(Devolva só o JSON, com "resposta" e a "ideia" completa${
+            pedido === "variacoes" ? ' e as "variacoes"' : pedido === "reels" ? ' e os "reels"' : ""
+          }.)`
           : m.texto,
       }));
+      const sistema = pedido ? `${EVOLUIR_PROMPT}\n\n${INSTRUCAO_DO_PEDIDO[pedido]}` : EVOLUIR_PROMPT;
       const conversa = await requestAiChatCompletion(
         providers,
         (candidate: AiProvider) => ({
           messages: [
-            { role: "system", content: EVOLUIR_PROMPT },
+            { role: "system", content: sistema },
             {
               role: "user",
               content: `CONTEXTO REAL DO CLIENTE (dados do painel, hoje):\n${context}\n\nIDEIA ATUAL DO RADAR (JSON):\n${JSON.stringify(ideiaAtual)}\n\n${
@@ -468,22 +514,37 @@ Deno.serve(async (req) => {
       void registrarMetodoSemUso(db, { metodo: metodoDoRadar, clientId });
       const completion = await conversa.response.json();
       const content = completion?.choices?.[0]?.message?.content || "";
-      let parsed: { resposta?: unknown; ideia?: unknown } = {};
+      let parsed: { resposta?: unknown; ideia?: unknown; variacoes?: unknown; reels?: unknown } = {};
       try {
-        parsed = extractJson(content) as { resposta?: unknown; ideia?: unknown };
+        parsed = extractJson(content) as { resposta?: unknown; ideia?: unknown; variacoes?: unknown; reels?: unknown };
       } catch {
         return jsonResponse({ error: "O agente não devolveu uma ideia válida. Tente de novo." }, 502);
       }
-      const nova = normalizarIdeia(parsed?.ideia, ideiaAtual);
+      // Com pedido, a ideia atual fica como estava (o pedido é a lista, não reescrever).
+      const nova = pedido ? ideiaAtual : normalizarIdeia(parsed?.ideia, ideiaAtual);
       const resposta = typeof parsed?.resposta === "string" ? parsed.resposta.trim().slice(0, 2000) : "";
       if (!nova) return jsonResponse({ error: "O agente não devolveu uma ideia válida. Tente de novo." }, 502);
+      const variacoes = pedido === "variacoes" ? normalizarVariacoes(parsed?.variacoes) : [];
+      const reels = pedido === "reels" ? normalizarReels(parsed?.reels) : [];
+      if (pedido === "variacoes" && variacoes.length === 0) {
+        return jsonResponse({ error: "O agente não devolveu variações válidas. Tente de novo." }, 502);
+      }
+      if (pedido === "reels" && reels.length === 0) {
+        return jsonResponse({ error: "O agente não devolveu Reels válidos. Tente de novo." }, 502);
+      }
       return jsonResponse({
         client_id: clientId,
         client_name: clientName,
         provider: conversa.provider.label,
         web_search: conversa.provider.model.includes("search-preview"),
-        resposta: resposta || "Ajustei a ideia com o que você pediu.",
+        resposta: resposta || (pedido === "variacoes"
+          ? "Trouxe variações desta ideia."
+          : pedido === "reels"
+          ? "Trouxe Reels para executar esta ideia."
+          : "Ajustei a ideia com o que você pediu."),
         ideia: nova,
+        ...(pedido === "variacoes" ? { variacoes } : {}),
+        ...(pedido === "reels" ? { reels } : {}),
       });
     }
 

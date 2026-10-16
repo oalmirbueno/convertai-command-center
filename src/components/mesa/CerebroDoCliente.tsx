@@ -1,19 +1,27 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Brain, Plus, RefreshCw, Search, Archive, RotateCcw, BookOpen } from "lucide-react";
+import { Brain, Plus, RefreshCw, Search, Archive, RotateCcw, BookOpen, MessageSquarePlus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { botao, juntar } from "@/components/sistema/estilos";
 import { AREA, CATEGORIA, areaDoRegistro, categoriaDoRegistro, estadoDoRegistro, filtrarConhecimento, secoesDoDossie, type RegistroDeConhecimento } from "@/lib/mesa/conhecimentoDoCliente";
 import { AGENTE_DA_AREA, chaveDoAprendizado, lerCerebro, type AreaDoCerebro } from "../../../supabase/functions/_shared/cerebro-do-cliente";
 import { textoDoErro } from "@/lib/mesa/api";
 
-const selectClass = "h-9 min-w-0 rounded-lg border border-border bg-background px-2 text-xs";
+const selectClass = "h-8 min-w-0 rounded-md bg-muted/60 px-2 text-[12px]";
 const dataCurta = (v?: string | null) => v ? new Date(v).toLocaleDateString("pt-BR") : "Sem data";
+const NOMES_DAS_ABAS: Record<string, string> = { visao: "Visão atual", uso: "Em uso", revisar: "A revisar", historico: "Histórico", resultados: "Sinais" };
+/**
+ * Segundo cérebro do cliente (16/10, dono: "está ocupando muito e tem que
+ * melhorar"): virou uma aba do Contexto e ficou enxuto. Sem caixas nem
+ * bordas, ações só em ícone (o nome no title e no leitor de tela), os
+ * metadados de cada registro em uma linha e o dossiê em seções recolhidas.
+ */
 export default function CerebroDoCliente({ clientId, userId, somenteMemoria = false, onRevisar }: { clientId: string; userId?: string | null; somenteMemoria?: boolean; onRevisar?: (texto: string) => void }) {
   const qc = useQueryClient();
   const [aba, setAba] = useState(somenteMemoria ? "uso" : "visao");
@@ -83,62 +91,66 @@ export default function CerebroDoCliente({ clientId, userId, somenteMemoria = fa
     } catch (e) { toast.error("Conhecimento não salvo", { description: textoDoErro(e) }); }
     finally { setGravando(false); }
   };
-  return <section aria-label="Segundo cérebro do cliente" className="min-w-0 space-y-3 border-b border-border pb-4">
-    <div className="flex flex-wrap items-center gap-2">
-      <Brain className="h-4 w-4 text-primary" /><h2 className="text-sm font-semibold">Segundo cérebro</h2>
-      <AjudaRecolhida rotulo="Como o segundo cérebro funciona">Dossiê e memória do cliente, com origem e validade. Em uso significa registro ativo, não fato verificado. Os agentes leem as áreas relevantes e as regras gerais. Arquivar preserva o histórico. A validade vencida não apaga o registro.</AjudaRecolhida>
-      <div className="ml-auto flex items-center gap-1">
-        <Button size="sm" variant="ghost" onClick={() => setNovo(!novo)} aria-expanded={novo}><Plus className="mr-1 h-3.5 w-3.5" />Registrar</Button>
-        <Button size="icon" variant="ghost" aria-label="Atualizar segundo cérebro" disabled={consulta.isFetching} onClick={() => { void consulta.refetch(); if (aba === "resultados") void sinais.refetch(); }}><RefreshCw className={`h-3.5 w-3.5 ${consulta.isFetching ? "animate-spin" : ""}`} /></Button>
+  return <section aria-label="Segundo cérebro do cliente" className="min-w-0 space-y-3">
+    <div className="flex min-w-0 items-center">
+      <Brain className="mr-1.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" /><h2 className="shrink-0 text-[13px] font-semibold">Segundo cérebro</h2>
+      <AjudaRecolhida className="ml-1" rotulo="Como o segundo cérebro funciona">Dossiê e memória do cliente, com origem e validade. Em uso significa registro ativo, não fato verificado. Os agentes leem as áreas relevantes e as regras gerais. Arquivar preserva o histórico. A validade vencida não apaga o registro.</AjudaRecolhida>
+      {/* Abas do cérebro na mesma linha do título (rolam de lado no celular). */}
+      <div role="tablist" aria-label="Conhecimento do cliente" className="scrollbar-hidden ml-2 flex min-w-0 flex-1 overflow-x-auto overscroll-x-contain">
+        {(somenteMemoria ? ["uso","revisar","historico","resultados"] : ["visao","uso","revisar","historico","resultados"]).map(v => <button key={v} type="button" role="tab" aria-selected={aba === v} title={v === "resultados" ? "Resultados e sinais" : undefined} onClick={() => { setAba(v); setLimite(15); }} className={`toque-compacto h-8 shrink-0 whitespace-nowrap rounded-full px-2.5 text-[12px] transition-colors ${aba === v ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60"}`}>{NOMES_DAS_ABAS[v]}{["uso","revisar","historico"].includes(v) && <span className="ml-1 tabular-nums opacity-70">{contagem(v)}</span>}</button>)}
       </div>
+      <button type="button" className={juntar(botao.icone, "ml-1")} onClick={() => setNovo(!novo)} aria-expanded={novo} aria-label="Registrar" title="Registrar conhecimento"><Plus className="h-4 w-4" /></button>
+      <button type="button" className={botao.icone} aria-label="Atualizar segundo cérebro" title="Atualizar segundo cérebro" disabled={consulta.isFetching} onClick={() => { void consulta.refetch(); if (aba === "resultados") void sinais.refetch(); }}><RefreshCw className={`h-4 w-4 ${consulta.isFetching ? "animate-spin" : ""}`} /></button>
     </div>
-    {novo && <form className="space-y-3 rounded-xl border border-border p-3" onSubmit={e => { e.preventDefault(); void salvar(); }}>
+    {novo && <form className="space-y-3 rounded-lg bg-muted/40 p-3" onSubmit={e => { e.preventDefault(); void salvar(); }}>
       <div className="grid gap-2 sm:grid-cols-3">
-        <label className="grid gap-1 text-xs">Área<select aria-label="Área do conhecimento" value={novaArea} onChange={e => setNovaArea(e.target.value as AreaDoCerebro)} className={selectClass}>{Object.entries(AREA).map(([v,n]) => <option key={v} value={v}>{n}</option>)}</select></label>
-        <label className="grid gap-1 text-xs">Tipo<select aria-label="Tipo de conhecimento" value={categoria} onChange={e => setCategoria(e.target.value)} className={selectClass}>{["aprendizado","preferencia","evitar"].map(v => <option key={v} value={v}>{CATEGORIA[v]}</option>)}</select></label>
-        <label className="grid gap-1 text-xs">Validade<select aria-label="Validade do conhecimento" value={validade} onChange={e => setValidade(e.target.value)} className={selectClass}><option value="7">7 dias</option><option value="30">30 dias</option><option value="90">90 dias</option><option value="">Sem prazo</option></select></label>
+        <label className="grid gap-1 text-[12px]">Área<select aria-label="Área do conhecimento" value={novaArea} onChange={e => setNovaArea(e.target.value as AreaDoCerebro)} className={selectClass}>{Object.entries(AREA).map(([v,n]) => <option key={v} value={v}>{n}</option>)}</select></label>
+        <label className="grid gap-1 text-[12px]">Tipo<select aria-label="Tipo de conhecimento" value={categoria} onChange={e => setCategoria(e.target.value)} className={selectClass}>{["aprendizado","preferencia","evitar"].map(v => <option key={v} value={v}>{CATEGORIA[v]}</option>)}</select></label>
+        <label className="grid gap-1 text-[12px]">Validade<select aria-label="Validade do conhecimento" value={validade} onChange={e => setValidade(e.target.value)} className={selectClass}><option value="7">7 dias</option><option value="30">30 dias</option><option value="90">90 dias</option><option value="">Sem prazo</option></select></label>
       </div>
       <Textarea aria-label="Conhecimento do cliente" value={texto} onChange={e => setTexto(e.target.value)} maxLength={1600} rows={3} placeholder="Uma decisão, preferência ou informação que os agentes precisam lembrar." />
       <Input aria-label="Fonte do conhecimento" value={evidencia} onChange={e => setEvidencia(e.target.value)} maxLength={400} placeholder="Fonte ou evidência: reunião, documento, pedido do cliente…" />
       <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setNovo(false)}>Cancelar</Button><Button type="submit" disabled={gravando || texto.trim().length < 3}>Salvar conhecimento</Button></div>
     </form>}
-    <div role="tablist" aria-label="Conhecimento do cliente" className="flex flex-wrap gap-1">
-      {(somenteMemoria ? ["uso","revisar","historico","resultados"] : ["visao","uso","revisar","historico","resultados"]).map(v => <button key={v} role="tab" aria-selected={aba === v} onClick={() => { setAba(v); setLimite(15); }} className={`rounded-lg px-3 py-2 text-xs ${aba === v ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted"}`}>{({visao:"Visão atual",uso:"Em uso",revisar:"A revisar",historico:"Histórico",resultados:"Resultados e sinais"} as Record<string,string>)[v]}{["uso","revisar","historico"].includes(v) && <span className="ml-1 opacity-70">{contagem(v)}</span>}</button>)}
-    </div>
-    {consulta.isLoading && <p className="text-xs text-muted-foreground">Reunindo o conhecimento do cliente…</p>}
-    {consulta.isError && <p role="alert" className="text-xs text-destructive">Não foi possível consultar o conhecimento. Use Atualizar para tentar novamente.</p>}
+    {consulta.isLoading && <p className="text-[12px] text-muted-foreground">Reunindo o conhecimento do cliente…</p>}
+    {consulta.isError && <p role="alert" className="text-[12px] text-destructive">Não foi possível consultar o conhecimento. Use Atualizar para tentar novamente.</p>}
     {dados && aba === "visao" && <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><BookOpen className="h-3.5 w-3.5" />{atual ? `Dossiê v${atual.version} · ${dataCurta(atual.updated_at)} · ${atual.source || "Origem não informada"}` : "Dossiê ainda não registrado"}{onRevisar && <button className="ml-auto text-primary" onClick={() => onRevisar("Revise o dossiê e o conhecimento deste cliente com base nas fontes disponíveis. Separe fatos, decisões, pendências e dúvidas. Preserve o histórico e não apresente hipótese como fato confirmado.")}>Revisar com o agente</button>}</div>
-      {atual?.summary && <p className="text-sm leading-relaxed">{atual.summary}</p>}
-      {contagem("revisar") > 0 && <button className="text-left text-xs text-amber-500" onClick={() => setAba("revisar")}>{contagem("revisar")} registros precisam de revisão de validade ou período</button>}
-      {atual && <Input aria-label="Buscar no dossiê" placeholder="Encontrar no dossiê: público, decisões, oferta…" value={buscaDossie} onChange={e => { setBuscaDossie(e.target.value); setLimiteDossie(6); }} />}
-      {secoes.slice(0,limiteDossie).map((s,i) => <details key={`${s.titulo}-${i}`} className="rounded-lg border border-border p-3"><summary className="cursor-pointer text-sm font-medium">{s.titulo}</summary><div className="prose prose-sm dark:prose-invert mt-2 max-w-none break-words text-muted-foreground"><ReactMarkdown skipHtml components={{ img: ({ alt }) => <span>{alt}</span> }}>{s.texto}</ReactMarkdown></div></details>)}
-      {secoes.length > limiteDossie && <Button size="sm" variant="ghost" onClick={() => setLimiteDossie(v => v + 6)}>Mais seções ({secoes.length - limiteDossie})</Button>}
-      {atual && !secoes.length && <p className="text-xs text-muted-foreground">Nenhuma seção encontrada com essa busca.</p>}
-      {!atual && <p className="text-xs text-muted-foreground">Registre informações confirmadas ou peça ao agente para organizar as fontes existentes.</p>}
+      <div className="flex min-w-0 items-center text-[12px] text-muted-foreground"><BookOpen className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span className="min-w-0 flex-1 truncate">{atual ? `Dossiê v${atual.version} · ${dataCurta(atual.updated_at)} · ${atual.source || "Origem não informada"}` : "Dossiê ainda não registrado"}</span>{atual && <Input aria-label="Buscar no dossiê" placeholder="Buscar no dossiê" value={buscaDossie} onChange={e => { setBuscaDossie(e.target.value); setLimiteDossie(6); }} className="ml-2 h-8 w-32 shrink-0 border-0 bg-muted/60 text-[12px] sm:w-48" />}{onRevisar && <button type="button" className={juntar(botao.icone, "ml-1")} aria-label="Revisar com o agente" title="Revisar com o agente" onClick={() => onRevisar("Revise o dossiê e o conhecimento deste cliente com base nas fontes disponíveis. Separe fatos, decisões, pendências e dúvidas. Preserve o histórico e não apresente hipótese como fato confirmado.")}><MessageSquarePlus className="h-4 w-4" /></button>}</div>
+      {atual?.summary && <p className="line-clamp-3 text-[13px] leading-relaxed" title={atual.summary}>{atual.summary}</p>}
+      {contagem("revisar") > 0 && <button type="button" className="text-left text-[12px] text-amber-500" onClick={() => setAba("revisar")}>{contagem("revisar")} registros precisam de revisão de validade ou período</button>}
+      <div className="-mx-2 min-w-0">
+        {secoes.slice(0,limiteDossie).map((s,i) => <details key={`${s.titulo}-${i}`} className="rounded-lg px-2 py-1.5 hover:bg-muted/40"><summary className="cursor-pointer text-[13px] font-medium">{s.titulo}</summary><div className="prose prose-sm dark:prose-invert mt-1.5 max-w-none break-words text-muted-foreground"><ReactMarkdown skipHtml components={{ img: ({ alt }) => <span>{alt}</span> }}>{s.texto}</ReactMarkdown></div></details>)}
+      </div>
+      {secoes.length > limiteDossie && <Button size="sm" variant="ghost" className="h-8 text-[12px]" onClick={() => setLimiteDossie(v => v + 6)}>Mais seções ({secoes.length - limiteDossie})</Button>}
+      {atual && !secoes.length && <p className="text-[12px] text-muted-foreground">Nenhuma seção encontrada com essa busca.</p>}
+      {!atual && <p className="text-[12px] text-muted-foreground">Registre informações confirmadas ou peça ao agente para organizar as fontes existentes.</p>}
     </div>}
     {dados && ["uso","revisar","historico"].includes(aba) && <>
-      <div className="flex flex-wrap gap-2"><div className="relative min-w-[160px] flex-1"><Search className="absolute left-3 top-3 h-3.5 w-3.5 text-muted-foreground" /><Input className="pl-8" aria-label="Buscar no conhecimento" placeholder="Buscar informação ou fonte" value={busca} onChange={e => { setBusca(e.target.value); setLimite(15); }} /></div><select aria-label="Filtrar área" className={selectClass} value={area} onChange={e => { setArea(e.target.value); setLimite(15); }}><option value="todas">Todas as áreas</option>{Object.entries(AREA).map(([v,n]) => <option value={v} key={v}>{n}</option>)}</select><select aria-label="Filtrar tipo de conhecimento" className={selectClass} value={tipoFiltro} onChange={e => { setTipoFiltro(e.target.value); setLimite(15); }}><option value="todos">Todos os tipos</option>{Object.entries(CATEGORIA).map(([v,n]) => <option value={v} key={v}>{n}</option>)}</select></div>
-      {lista.slice(0,limite).map(r => <article key={r.id} className="space-y-2 rounded-lg border border-border p-3">
-        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground"><span className="font-medium text-primary">{CATEGORIA[categoriaDoRegistro(r)]}</span><span>{AREA[areaDoRegistro(r)]}</span><span>{dataCurta(r.criado_em)}</span>{r.reforcos && r.reforcos > 1 ? <span>{r.reforcos} registros semelhantes</span> : null}</div>
-        {r.texto.length > 500 ? <details><summary className="cursor-pointer text-sm leading-relaxed">{r.texto.slice(0,180)}… <span className="text-primary">Ler registro</span></summary><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed">{r.texto}</p></details> : <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{r.texto}</p>}
-        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground"><span>Origem: {r.fonte || r.origem || "não informada"}</span><span>{r.valido_ate ? `Validade: ${dataCurta(r.valido_ate)}` : "Sem prazo de validade"}</span></div>
-        {r.evidencia ? <p className="break-words text-xs text-muted-foreground">Fonte: {r.evidencia}</p> : <p className="text-[11px] text-muted-foreground">Sem evidência vinculada</p>}
-        {r.motivo && <details><summary className="cursor-pointer text-xs text-muted-foreground">Motivo</summary><p className="mt-1 text-xs">{r.motivo}</p></details>}
-        <div className="flex justify-end">{!r.substituida_por && <Button size="sm" variant="ghost" disabled={gravando} onClick={() => void alternar(r,!r.ativa)}>{r.ativa ? <Archive className="mr-1 h-3 w-3" /> : <RotateCcw className="mr-1 h-3 w-3" />}{r.ativa ? "Arquivar" : "Reativar"}</Button>}{r.substituida_por && <span className="text-xs text-muted-foreground">Substituído por conhecimento mais recente</span>}</div>
+      <div className="flex flex-wrap gap-2"><div className="relative min-w-[160px] flex-1"><Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" /><Input className="h-8 border-0 bg-muted/60 pl-8 text-[12px]" aria-label="Buscar no conhecimento" placeholder="Buscar informação ou fonte" value={busca} onChange={e => { setBusca(e.target.value); setLimite(15); }} /></div><select aria-label="Filtrar área" className={selectClass} value={area} onChange={e => { setArea(e.target.value); setLimite(15); }}><option value="todas">Todas as áreas</option>{Object.entries(AREA).map(([v,n]) => <option value={v} key={v}>{n}</option>)}</select><select aria-label="Filtrar tipo de conhecimento" className={selectClass} value={tipoFiltro} onChange={e => { setTipoFiltro(e.target.value); setLimite(15); }}><option value="todos">Todos os tipos</option>{Object.entries(CATEGORIA).map(([v,n]) => <option value={v} key={v}>{n}</option>)}</select></div>
+      <div className="-mx-2 min-w-0 divide-y divide-border/50">
+      {lista.slice(0,limite).map(r => <article key={r.id} className="min-w-0 space-y-1 rounded-lg px-2 py-2 hover:bg-muted/30">
+        <div className="flex min-w-0 items-center text-[11px] text-muted-foreground">
+          <span className="min-w-0 flex-1 truncate"><span className="font-medium text-primary">{CATEGORIA[categoriaDoRegistro(r)]}</span> · {AREA[areaDoRegistro(r)]} · {dataCurta(r.criado_em)}{r.reforcos && r.reforcos > 1 ? ` · ${r.reforcos} registros semelhantes` : ""} · {r.valido_ate ? `Validade: ${dataCurta(r.valido_ate)}` : "Sem prazo de validade"}</span>
+          {!r.substituida_por && <button type="button" className={juntar(botao.icone, "-my-1 ml-1 h-7 w-7")} disabled={gravando} aria-label={r.ativa ? "Arquivar" : "Reativar"} title={r.ativa ? "Arquivar (guarda no histórico)" : "Reativar"} onClick={() => void alternar(r,!r.ativa)}>{r.ativa ? <Archive className="h-3.5 w-3.5" /> : <RotateCcw className="h-3.5 w-3.5" />}</button>}
+          {r.substituida_por && <span className="ml-1 shrink-0" title="Substituído por conhecimento mais recente">substituído</span>}
+        </div>
+        {r.texto.length > 500 ? <details><summary className="cursor-pointer text-[13px] leading-relaxed">{r.texto.slice(0,180)}… <span className="text-primary">Ler registro</span></summary><p className="mt-1.5 whitespace-pre-wrap break-words text-[13px] leading-relaxed">{r.texto}</p></details> : <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed">{r.texto}</p>}
+        <p className="truncate text-[11px] text-muted-foreground" title={r.evidencia || undefined}>Origem: {r.fonte || r.origem || "não informada"} · {r.evidencia ? `Fonte: ${r.evidencia}` : "Sem evidência vinculada"}</p>
+        {r.motivo && <details><summary className="cursor-pointer text-[11px] text-muted-foreground">Motivo</summary><p className="mt-1 text-[12px]">{r.motivo}</p></details>}
       </article>)}
-      {!lista.length && <p className="py-3 text-xs text-muted-foreground">Nenhum registro com esses filtros.</p>}
-      {lista.length > limite && <Button variant="outline" size="sm" onClick={() => setLimite(v => v + 15)}>Ver mais ({lista.length - limite})</Button>}
-      {aba === "historico" && dados.dossies.length > 1 && <details><summary className="cursor-pointer text-xs">Versões anteriores do dossiê</summary>{dados.dossies.filter(d => !d.is_current).map(d => <details key={d.id} className="mt-2 border-l border-border pl-3"><summary className="cursor-pointer text-xs">v{d.version} · {dataCurta(d.updated_at)} · {d.change_reason || "Atualização do contexto"}</summary><p className="mt-2 whitespace-pre-wrap text-xs text-muted-foreground">{d.content}</p></details>)}</details>}
-      {registros.length >= 500 && <p className="text-xs text-muted-foreground">Exibindo os 500 registros mais recentes.</p>}
+      </div>
+      {!lista.length && <p className="py-3 text-[12px] text-muted-foreground">Nenhum registro com esses filtros.</p>}
+      {lista.length > limite && <Button variant="ghost" size="sm" className="h-8 text-[12px]" onClick={() => setLimite(v => v + 15)}>Ver mais ({lista.length - limite})</Button>}
+      {aba === "historico" && dados.dossies.length > 1 && <details><summary className="cursor-pointer text-[12px]">Versões anteriores do dossiê</summary>{dados.dossies.filter(d => !d.is_current).map(d => <details key={d.id} className="mt-2 pl-3"><summary className="cursor-pointer text-[12px]">v{d.version} · {dataCurta(d.updated_at)} · {d.change_reason || "Atualização do contexto"}</summary><p className="mt-2 whitespace-pre-wrap text-[12px] text-muted-foreground">{d.content}</p></details>)}</details>}
+      {registros.length >= 500 && <p className="text-[12px] text-muted-foreground">Exibindo os 500 registros mais recentes.</p>}
     </>}
     {dados && aba === "resultados" && <div className="space-y-2">
-      {sinais.isLoading && <p className="text-xs text-muted-foreground">Consultando os sinais…</p>}
-      {sinais.isError && <p role="alert" className="text-xs text-destructive">Não foi possível consultar os sinais. Tente atualizar.</p>}
-      <p className="text-xs text-muted-foreground">Sinais registrados de campanhas, aprovações e redes. Uma observação isolada não comprova uma regra para o cliente.</p>
-      {sinais.data && sinais.data.avisos.length > 0 && <p role="status" className="text-xs text-amber-500">Algumas fontes não responderam. Os resultados abaixo podem estar incompletos.</p>}
-      {sinais.data?.fatos.filter(f => f.fonte !== "memoria").map(f => <article key={`${f.fonte}-${f.id}`} className="rounded-lg border border-border p-3"><p className="text-sm">{f.texto}</p><p className="mt-1 text-xs text-muted-foreground">{f.fonte} · {dataCurta(f.criado_em)}</p>{f.evidencia && <p className="mt-1 text-xs text-muted-foreground">{f.evidencia}</p>}</article>)}
-      {sinais.data && !sinais.data.fatos.some(f => f.fonte !== "memoria") && <p className="text-xs text-muted-foreground">Ainda não há sinais nessas fontes para este cliente.</p>}
+      {sinais.isLoading && <p className="text-[12px] text-muted-foreground">Consultando os sinais…</p>}
+      {sinais.isError && <p role="alert" className="text-[12px] text-destructive">Não foi possível consultar os sinais. Tente atualizar.</p>}
+      <p className="text-[12px] text-muted-foreground">Sinais registrados de campanhas, aprovações e redes. Uma observação isolada não comprova uma regra para o cliente.</p>
+      {sinais.data && sinais.data.avisos.length > 0 && <p role="status" className="text-[12px] text-amber-500">Algumas fontes não responderam. Os resultados abaixo podem estar incompletos.</p>}
+      {sinais.data?.fatos.filter(f => f.fonte !== "memoria").map(f => <article key={`${f.fonte}-${f.id}`} className="rounded-lg px-2 py-1.5 hover:bg-muted/30"><p className="text-[13px]">{f.texto}</p><p className="mt-1 text-[12px] text-muted-foreground">{f.fonte} · {dataCurta(f.criado_em)}</p>{f.evidencia && <p className="mt-1 text-[12px] text-muted-foreground">{f.evidencia}</p>}</article>)}
+      {sinais.data && !sinais.data.fatos.some(f => f.fonte !== "memoria") && <p className="text-[12px] text-muted-foreground">Ainda não há sinais nessas fontes para este cliente.</p>}
     </div>}
   </section>;
 }

@@ -15,6 +15,7 @@ import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarc
 import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
 import { useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 import CascaDaMesa from "@/components/sistema/CascaDaMesa";
+import { etapasEmIcone } from "@/components/mesa-foto/IconesDasEtapas";
 import Etapas from "@/components/sistema/Etapas";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
 
@@ -266,10 +267,11 @@ export default function MesaAds() {
       }
       etapas={
         clientId ? (
+          // 16/10/2026: etapas só em ícone (padrão das mesas, IconesDasEtapas.tsx); o nome aparece na aberta.
           <Etapas
             rotulo="Etapas da Mesa Ads"
-            numerar
-            itens={ETAPAS_DA_MESA_ADS.map((e) => ({ valor: e.valor, rotulo: e.rotulo }))}
+            soIcone
+            itens={etapasEmIcone("ads", ETAPAS_DA_MESA_ADS.map((e) => ({ valor: e.valor, rotulo: e.rotulo })))}
             valor={etapa}
             onEscolher={(v) => mudar({ etapa: v })}
           />

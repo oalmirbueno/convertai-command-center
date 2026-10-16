@@ -106,8 +106,8 @@ function EstadoVazio({
             Uma campanha junta o tema, a identidade com o selo e os conteúdos do período. O agente cria tudo a partir de uma frase e ajusta pela conversa.
           </AjudaRecolhida>
         </div>
-        <Button type="button" className="mt-5 h-10" onClick={onNova}>
-          <Plus className="mr-1.5 h-4 w-4" /> Nova campanha
+        <Button type="button" className="mt-5 h-10 w-10 rounded-full p-0" onClick={onNova} aria-label="Nova campanha" title="Nova campanha">
+          <Plus className="h-5 w-5" aria-hidden="true" />
         </Button>
       </div>
       {carregando && (
@@ -127,7 +127,7 @@ function EstadoVazio({
                   <button
                     type="button"
                     onClick={() => onAbrir(c.id)}
-                    className={juntar(superficie.painel, "flex w-full min-w-0 items-center p-3 text-left transition-colors hover:border-primary/50")}
+                    className="flex w-full min-w-0 items-center rounded-lg p-2.5 text-left transition-colors hover:bg-muted"
                   >
                     <SeloPequeno campanha={c} tamanho="h-11 w-11" />
                     <span className="ml-3 min-w-0 flex-1">
@@ -242,11 +242,11 @@ export default function AbaCampanhas({
   // Secundário: o primário da área é o do estado vazio ou o da campanha aberta (28/09, um primário por área).
   const botaoNova = (
     <>
-      <Button type="button" size="sm" variant="ghost" className="mr-1 h-8 shrink-0" onClick={() => setNomes(true)} title="Criar nome de campanha" aria-label="Criar nome de campanha">
-        <Type className="h-3.5 w-3.5" />
+      <Button type="button" size="sm" variant="ghost" className="mr-0.5 h-8 w-8 shrink-0 p-0" onClick={() => setNomes(true)} title="Criar nome de campanha" aria-label="Criar nome de campanha">
+        <Type className="h-4 w-4" aria-hidden="true" />
       </Button>
-      <Button type="button" size="sm" variant="outline" className="h-8 shrink-0" onClick={comecarNova} disabled={nova}>
-        <Plus className="mr-1 h-3.5 w-3.5" /> Nova campanha
+      <Button type="button" size="sm" variant="ghost" className="h-8 w-8 shrink-0 p-0" onClick={comecarNova} disabled={nova} aria-label="Nova campanha" title="Nova campanha">
+        <Plus className="h-4 w-4" aria-hidden="true" />
       </Button>
     </>
   );
@@ -387,10 +387,11 @@ export default function AbaCampanhas({
           <button
             type="button"
             onClick={() => setGaveta(true)}
-            className="fixed bottom-[72px] right-4 z-30 inline-flex h-11 max-w-[calc(100vw-32px)] items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground shadow-lg md:bottom-6 md:right-6"
+            className="fixed bottom-[72px] right-4 z-30 inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg md:bottom-6 md:right-6"
+            aria-label="Agente da campanha"
+            title="Agente da campanha"
           >
-            {andando ? <Loader2 className="mr-1.5 h-4 w-4 shrink-0 animate-spin" /> : <Sparkles className="mr-1.5 h-4 w-4 shrink-0" />}
-            <span className="truncate">Agente da campanha</span>
+            {andando ? <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden="true" /> : <Sparkles className="h-5 w-5 shrink-0" aria-hidden="true" />}
           </button>
           <JanelaCentral
             aberta={gaveta}

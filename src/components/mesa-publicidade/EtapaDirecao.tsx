@@ -8,7 +8,7 @@ import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campoTexto, etiqueta, juntar, superficie, texto } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { AvisoDoRascunho, CabecalhoDaEtapa, RotuloLargo, SemCampanha, useMesaPublicidade } from "./Comuns";
+import { AvisoDoRascunho, CabecalhoDaEtapa, SemCampanha, useMesaPublicidade } from "./Comuns";
 import { aprovarTerritorio, lacunasDoBriefing, proporTerritorios, type Territorio } from "./publicidadeApi";
 
 /**
@@ -140,9 +140,9 @@ export default function EtapaDirecao() {
               />
             )}
             {campanha.territorio_id && (
-              <button type="button" className={botao.primario} onClick={() => irPara("tomadas")} aria-label="Seguir para as tomadas">
-                <ArrowRight className="h-3.5 w-3.5" />
-                <RotuloLargo>Seguir para as tomadas</RotuloLargo>
+              // 16/10/2026: o próximo passo é a seta verde, só ícone (nome no aria-label e no title).
+              <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => irPara("tomadas")} aria-label="Seguir para as tomadas" title="Seguir para as tomadas">
+                <ArrowRight className="h-4 w-4" />
               </button>
             )}
           </>

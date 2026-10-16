@@ -201,7 +201,8 @@ describe("agenda", () => {
   it("lista as peças de vídeo com o estado do roteiro e o roteiro do calendário como base", async () => {
     const onde = montar(`/mesa-roteiros?client=${CLIENTE}&etapa=agenda`);
     const nav = await screen.findByRole("navigation", { name: "Etapas da Mesa Roteiros" });
-    expect(within(nav).getAllByRole("button").map((b) => b.textContent)).toEqual(["1Agenda", "2Roteiro", "3Revisão", "4PDF", "5Modelos"]);
+    // 16/10/2026: etapas só em ícone (Etapas soIcone): sem o número; o nome segue no botão (visível só na aberta).
+    expect((Array.prototype.slice.call(nav.querySelectorAll("button[data-etapa]")) as HTMLElement[]).map((b) => b.textContent)).toEqual(["Agenda", "Roteiro", "Revisão", "PDF", "Modelos"]);
     const pecas = await waitFor(() => {
       const l = onde.container.querySelector("[data-pecas-de-video]");
       if (!l) throw new Error("sem lista");

@@ -6,7 +6,6 @@ import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
 import { SeletorDeModelo } from "@/components/mesa/Seletores";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
-import BotaoComIcone from "@/components/sistema/BotaoComIcone";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
 import MenuMais from "@/components/sistema/MenuMais";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
@@ -253,7 +252,10 @@ export function ComFilme({ children, irPara }: { children: (filme: Filme, links:
             </option>
           ))}
         </select>
-        <BotaoComIcone icone={<Plus className="h-3.5 w-3.5" />} rotulo="Novo filme" className="mb-2 mr-1" onClick={() => abrirNovo()} disabled={indisponivel} data-novo-filme="" />
+        {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+        <button type="button" className={juntar(botao.icone, "mb-2 mr-1 disabled:opacity-50")} aria-label="Novo filme" title="Novo filme" onClick={() => abrirNovo()} disabled={indisponivel} data-novo-filme="">
+          <Plus className="h-4 w-4" />
+        </button>
         {doDono && !doDono.arquivado_em && <PoucosCliques filme={doDono} />}
         {doDono && (
           <MenuMais

@@ -9,8 +9,7 @@ import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { Carregando } from "@/components/sistema/Estados";
-import BotaoComIcone from "@/components/sistema/BotaoComIcone";
-import { campo, campoTexto, espaco, juntar, texto } from "@/components/sistema/estilos";
+import { botao, campo, campoTexto, espaco, juntar, texto } from "@/components/sistema/estilos";
 import { CAMPOS_DO_BRIEFING, type BriefingDaIdentidade, type CampoDoBriefing } from "../../../supabase/functions/mesa-identidade/modulos/briefing-da-identidade";
 import { CRITERIOS_PADRAO } from "../../../supabase/functions/mesa-identidade/modulos/naming";
 import { faltaNaEtapa } from "../../../supabase/functions/mesa-identidade/modulos/identidade-etapas";
@@ -241,15 +240,10 @@ export default function EtapaBriefing() {
           await gravacao.agora(true);
         }}
         acoes={
-          <BotaoComIcone
-            variante="secundario"
-            className="m-1 h-8"
-            icone={salvando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            rotulo="Salvar"
-            aria-label="Salvar o briefing"
-            onClick={() => void salvar().catch(() => undefined)}
-            disabled={salvando}
-          />
+          // 16/10/2026: só ícone (nome no aria-label e no title).
+          <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} aria-label="Salvar o briefing" title="Salvar o briefing" onClick={() => void salvar().catch(() => undefined)} disabled={salvando}>
+            {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          </button>
         }
       />
       {montado.isLoading && <Carregando forma="lista" linhas={4} rotulo="Lendo o briefing" />}

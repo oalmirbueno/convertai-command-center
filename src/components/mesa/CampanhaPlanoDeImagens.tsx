@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Sparkles } from "lucide-react";
+import { AlertTriangle, ListTree } from "lucide-react";
 import { BotaoComCusto } from "./Custo";
 import { Cronometro } from "./Cronometro";
 import { useMesa } from "./MesaContexto";
@@ -92,21 +92,21 @@ export default function CampanhaPlanoDeImagens({ campanha, itens }: { campanha: 
 
   const botao = (
     <BotaoComCusto
-      rotulo={<><Sparkles className="mr-1.5 h-3.5 w-3.5" />{plano && plano.pecas.length ? "Refazer o plano" : "Montar o plano de imagens"}</>}
+      rotulo={<><ListTree className="h-4 w-4" aria-hidden="true" /><span className="sr-only">{plano && plano.pecas.length ? "Refazer o plano" : "Montar o plano de imagens"}</span></>}
       titulo="Plano de imagens"
       descricao="O estrategista olha as imagens, o briefing e os conteúdos e diz qual imagem vai em cada lâmina e por quê; o Jev decide onde há mais de uma candidata."
       partes={() => partesDoPlanoDeImagens(catalogo, imagens.length || 10, lista.length)}
       executar={gerar}
       aoConcluir={(data) => aplicarRespostaDaCampanha(queryClient, clientId, data)}
-      variant={plano && plano.pecas.length && !velho ? "outline" : "default"}
+      variant={plano && plano.pecas.length && !velho ? "ghost" : "default"}
       disabled={emCurso !== null || semConteudos}
-      className="h-8"
+      className="h-8 gap-0 px-2"
     />
   );
 
   return (
     <div className="min-w-0 space-y-3">
-      {semConteudos && <p className="text-[13px] text-muted-foreground">O plano precisa dos conteúdos da campanha. Peça os conteúdos ao agente primeiro.</p>}
+      {semConteudos && <p className="text-[12px] text-muted-foreground" title="Peça os conteúdos ao agente primeiro">Sem conteúdos ainda.</p>}
       {!semConteudos && !imagens.length && (
         <p className="flex items-center text-[13px] text-muted-foreground">
           Sem imagens escolhidas: usa as do acervo
@@ -116,9 +116,9 @@ export default function CampanhaPlanoDeImagens({ campanha, itens }: { campanha: 
         </p>
       )}
       {velho && (
-        <p className="flex items-start rounded-lg bg-warning/10 px-3 py-2 text-[12px]">
-          <AlertTriangle className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
-          <span className="min-w-0">As imagens ou os conteúdos mudaram depois deste plano. Refaça para a escolha valer para o que está na campanha agora.</span>
+        <p className="flex min-w-0 items-start text-[12px] text-warning" title="Refaça para a escolha valer para o que está na campanha agora.">
+          <AlertTriangle className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span className="min-w-0">Desatualizado: refaça o plano.</span>
         </p>
       )}
 
@@ -142,7 +142,7 @@ export default function CampanhaPlanoDeImagens({ campanha, itens }: { campanha: 
               </AjudaRecolhida>
             </p>
           )}
-          {plano.jev_erro && <p className="text-[12px] text-muted-foreground">O Jev não respondeu desta vez: ficou a ordem do estrategista.</p>}
+          {plano.jev_erro && <p className="text-[12px] text-muted-foreground" title="O Jev não respondeu desta vez: ficou a ordem do estrategista.">Sem a escolha do Jev desta vez.</p>}
 
           {ordenados.map((it) => {
             const pecas = plano.pecas.filter((p) => p.tema_id === it.tema_id).sort((a, b) => a.ordem - b.ordem);

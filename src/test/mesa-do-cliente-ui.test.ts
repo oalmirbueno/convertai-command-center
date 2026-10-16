@@ -256,7 +256,8 @@ describe("estimativa antes de toda ação que gasta", () => {
     }
     expect(mesAba).toContain("<EstimativaInline partes={partes} />");
     // Estúdio (o preparo mudou para o cartão EstudioPreparar em 23/09)
-    const preparar = prepararDoEstudio.indexOf("Preparar direção</>}");
+    // 16/10/2026 (dono: "texto + ícone vira só o ícone"): o nome do botão ficou para o leitor de tela (sr-only).
+    const preparar = prepararDoEstudio.indexOf("Preparar direção</span></>}");
     expect(preparar).toBeGreaterThan(0);
     const botaoDoDiretor = prepararDoEstudio.slice(prepararDoEstudio.lastIndexOf("<BotaoComCusto", preparar), prepararDoEstudio.indexOf("executar={preparar}", preparar) + 20);
     expect(botaoDoDiretor).toContain("partes={partesDiretor}");

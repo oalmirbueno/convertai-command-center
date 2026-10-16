@@ -18,7 +18,7 @@ import {
   MessageSquare,
   Minimize2,
   PenLine,
-  RefreshCw,
+  RotateCw,
   RotateCcw,
   Send,
   ShieldCheck,
@@ -26,6 +26,7 @@ import {
   Sparkles,
   Square,
   Star,
+  TriangleAlert,
   Type,
   Wand2,
   X,
@@ -1323,32 +1324,38 @@ function DetalheDoItem({
       type="button"
       size="sm"
       variant={ferramenta === "diretor" ? "secondary" : "ghost"}
-      className="h-8 shrink-0 gap-1 px-2 text-[12px]"
+      className="h-8 w-8 shrink-0 p-0"
       onClick={() => abrirFerramenta("diretor")}
       aria-pressed={ferramenta === "diretor"}
       aria-label="Conversar com o diretor"
-      title="Converse com o diretor de arte para mudar o estilo, o cenário, a luz ou as cores. Ele lê o conteúdo e propõe mudanças que você aplica com um clique."
+      title="Diretor: converse com o diretor de arte para mudar o estilo, o cenário, a luz ou as cores. Ele lê o conteúdo e propõe mudanças que você aplica com um clique."
     >
-      <MessageSquare className="h-3.5 w-3.5" /> Diretor
+      {/* 16/10/2026 (dono: "texto + ícone vira só o ícone"). */}
+      <MessageSquare className="h-4 w-4" aria-hidden="true" />
     </Button>
   );
 
   const acaoPrincipal = (
     <div className="flex shrink-0 items-center">
       {emLote || fila.ativos.length > 0 ? (
-        <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => { parar.current = true; if (fila.ativos.length) void fila.cancelar().catch((e) => avisarErro(e, "Não foi possível parar")); }} title="Para depois das lâminas que já estão gerando">
-          <Square className="mr-1 h-3.5 w-3.5" /> Parar
+        <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0" aria-label="Parar" onClick={() => { parar.current = true; if (fila.ativos.length) void fila.cancelar().catch((e) => avisarErro(e, "Não foi possível parar")); }} title="Parar: para depois das lâminas que já estão gerando">
+          <Square className="h-4 w-4" aria-hidden="true" />
         </Button>
       ) : (
         <BotaoComCusto
           rotulo={
+            // 16/10/2026 (dono: "Refazer: só o ícone, sem as bordinhas"): o nome fica para o leitor de tela;
+            // Gerar mostra a contagem ao lado do ícone e o preço continua.
             <>
-              {semImagem.length ? <Wand2 className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              {semImagem.length
-                ? semImagem.length === cardsDaDirecao.length
-                  ? `Gerar todas (${semImagem.length})`
-                  : `Gerar ${semImagem.length}`
-                : "Refazer todas"}
+              {semImagem.length ? <Wand2 className="h-4 w-4" aria-hidden="true" /> : <RotateCw className="h-4 w-4" aria-hidden="true" />}
+              {semImagem.length > 0 && <span className="tabular-nums" aria-hidden="true">{semImagem.length}</span>}
+              <span className="sr-only">
+                {semImagem.length
+                  ? semImagem.length === cardsDaDirecao.length
+                    ? `Gerar todas (${semImagem.length})`
+                    : `Gerar ${semImagem.length}`
+                  : "Refazer todas"}
+              </span>
             </>
           }
           titulo={semImagem.length && semImagem.length < cardsDaDirecao.length ? `Gerar as ${semImagem.length} lâmina(s) que faltam` : `Gerar ${filaDeGeracao.length} lâmina(s)`}
@@ -1358,8 +1365,8 @@ function DetalheDoItem({
               ? "Até 3 lâminas ao mesmo tempo. A conferência de ortografia e identidade roda logo depois de cada uma e, se achar erro, o estúdio corrige sozinho (até 2 vezes) antes de mostrar. Cada correção custa um ajuste a mais."
               : "Até 3 lâminas ao mesmo tempo. A conferência de ortografia e identidade roda logo depois de cada uma."}
           fecharAoConfirmar
-          variant={semImagem.length ? "default" : "outline"}
-          className="h-8 gap-1 px-3 text-[12.5px]"
+          variant={semImagem.length ? "default" : "ghost"}
+          className="h-8 gap-1 px-2 text-[12px]"
           disabled={ocupado || entregue || semTipografia}
           partes={() => partesGerarDas(ordensDaFila).concat(partesDoFundo(ordensDaFila))}
           executar={() => gerarVarias(filaDeGeracao.map((c) => c.ordem))}
@@ -1375,8 +1382,8 @@ function DetalheDoItem({
         />
       )}
       {prontoParaEntregar && !emLote && (
-        <Button type="button" size="sm" className="ml-2 h-8 gap-1 px-3 text-[12.5px]" onClick={() => abrirFerramenta("entrega", false)} title="Abre a ferramenta Entrega">
-          <Send className="h-3.5 w-3.5" /> Entregar
+        <Button type="button" size="sm" className="ml-1.5 h-8 w-8 p-0" aria-label="Entregar" onClick={() => abrirFerramenta("entrega", false)} title="Entregar: abre a ferramenta Entrega">
+          <Send className="h-4 w-4" aria-hidden="true" />
         </Button>
       )}
     </div>
@@ -1427,7 +1434,7 @@ function DetalheDoItem({
         {controlesDaPauta}
         {estado === "producao" && acaoPrincipal}
         {/* Frente AP: arte entregue → Agendar (data do conteúdo, perfil e se vai postar), só admin e gestor. */}
-        {trabalho && <AgendarDoEstudio trabalho={trabalho} item={item} className="shrink-0 px-2.5" />}
+        {trabalho && <AgendarDoEstudio trabalho={trabalho} item={item} className="shrink-0" />}
         {trabalho && agendarDoPlano && (
           <JanelaDaAprovada
             peca={{
@@ -1511,28 +1518,43 @@ function DetalheDoItem({
   ) : null;
 
   const avisoDeEntregue = entregue && trabalho ? (
-    <div className="mb-2 flex min-w-0 flex-wrap items-center rounded-lg border border-warning/50 bg-warning/10 px-3 py-2 text-[12px] leading-snug" role="status" data-aviso="trabalho-entregue">
-      <Lock className="mr-2 h-3.5 w-3.5 shrink-0 text-warning" />
-      <span className="mr-2 min-w-0 flex-1">
-        {trabalho.entrega_status === "reprovado" ? "Pediram ajuste nesta arte. " : "Entregue em Arquivos. "}
-        Para corrigir, reabra: as lâminas voltam para edição e a entrega de agora fica no histórico.
-      </span>
-      <Button type="button" size="sm" className="h-8 shrink-0 gap-1 px-2.5 text-[12px]" onClick={() => void reabrir()} disabled={reabrindo || algoGerando}>
-        {reabrindo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Reabrir para corrigir
+    // 16/10/2026 (dono: "menos texto, sem bordas"): uma linha com o cadeado e o Reabrir em ícone; a explicação fica no title.
+    <div
+      className="mb-2 flex min-w-0 items-center text-[12px] leading-snug"
+      role="status"
+      data-aviso="trabalho-entregue"
+      title="Para corrigir, reabra: as lâminas voltam para edição e a entrega de agora fica no histórico."
+    >
+      <Lock className="mr-1.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+      <span className="mr-1 min-w-0 flex-1 truncate">{trabalho.entrega_status === "reprovado" ? "Pediram ajuste nesta arte." : "Entregue em Arquivos."}</span>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-8 w-8 shrink-0 p-0"
+        aria-label="Reabrir para corrigir"
+        title="Reabrir para corrigir: as lâminas voltam para edição e a entrega de agora fica no histórico"
+        onClick={() => void reabrir()}
+        disabled={reabrindo || algoGerando}
+      >
+        {reabrindo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RotateCcw className="h-4 w-4" aria-hidden="true" />}
       </Button>
     </div>
   ) : foraDoFormato.length && !algoGerando ? (
-    <p className="mb-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-[11.5px] leading-snug text-warning" data-aviso="fora-do-formato">
-      {foraDoFormato.length === 1 ? `A lâmina ${foraDoFormato[0]} foi gerada` : `As lâminas ${foraDoFormato.join(", ")} foram geradas`} em outro formato. Gere de novo para entregar em {formato === "feed_4x5" ? "4:5" : formato === "retrato_3x4" ? "3:4" : formato === "quadrado_1x1" ? "1:1" : "9:16"}.
+    <p className="mb-2 flex min-w-0 items-start text-[12px] leading-snug text-warning" data-aviso="fora-do-formato">
+      <TriangleAlert className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        {foraDoFormato.length === 1 ? `Lâmina ${foraDoFormato[0]}` : `Lâminas ${foraDoFormato.join(", ")}`} em outro formato: gere de novo em {formato === "feed_4x5" ? "4:5" : formato === "retrato_3x4" ? "3:4" : formato === "quadrado_1x1" ? "1:1" : "9:16"}.
+      </span>
     </p>
   ) : null;
 
   const acoesDaPrancheta = (c: { ordem: number }, v: unknown) => (
     <BotaoComCusto
-      rotulo={<><Wand2 className="h-3.5 w-3.5" /><span className="sr-only">{v ? "Refazer" : "Gerar"} a lâmina {c.ordem}</span></>}
+      rotulo={<>{v ? <RotateCw className="h-3.5 w-3.5" aria-hidden="true" /> : <Wand2 className="h-3.5 w-3.5" aria-hidden="true" />}<span className="sr-only">{v ? "Refazer" : "Gerar"} a lâmina {c.ordem}</span></>}
       titulo={`${v ? "Refazer" : "Gerar"} a lâmina ${c.ordem}`}
       descricao={comNotaDoFundo(`${v ? "Refazer" : "Gerar"} a lâmina ${c.ordem}. A conferência roda logo depois.`, [c.ordem])}
-      variant={v ? "outline" : "default"}
+      variant={v ? "ghost" : "default"}
       className="h-8 w-full gap-1 px-2 text-[11px]"
       disabled={laminaOcupada(c.ordem) || entregue || semTipografia}
       partes={() => partesGerarDas([c.ordem]).concat(partesDoFundo([c.ordem]))}
@@ -2023,7 +2045,7 @@ function DetalheDoItem({
         />
         <div className="flex justify-end">
           <BotaoComCusto
-            rotulo={<><MessageSquare className="mr-1 h-3.5 w-3.5" /> {pedidoAoDiretor.trim() ? "Pedir ao diretor" : "Refazer a direção"}</>}
+            rotulo={<><MessageSquare className="h-4 w-4" aria-hidden="true" /><span className="sr-only">{pedidoAoDiretor.trim() ? "Pedir ao diretor" : "Refazer a direção"}</span></>}
             titulo="Pedir ao diretor"
             descricao="O diretor relê a marca, as referências e o seu pedido e escreve a direção de novo, no mesmo trabalho."
             variant={pedidoAoDiretor.trim() ? "default" : "outline"}
@@ -2059,7 +2081,7 @@ function DetalheDoItem({
       <div className="flex min-w-0 items-center">
         <p className="flex-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Legenda</p>
         <BotaoComCusto
-          rotulo={<><Sparkles className="mr-1 h-3.5 w-3.5" /> {legenda ? "Reescrever" : "Escrever"}</>}
+          rotulo={<><Sparkles className="h-4 w-4" aria-hidden="true" /><span className="sr-only">{legenda ? "Reescrever" : "Escrever"}</span></>}
           titulo="Escrever a legenda"
           descricao="A legenda final sai do item da agenda e da arte pronta, com 4 ou 5 hashtags escolhidas entre as candidatas."
           variant="outline"
@@ -2117,12 +2139,13 @@ function DetalheDoItem({
           </div>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-2 border-t border-border pt-3">
-        <Button type="button" size="sm" variant="outline" className="h-9 min-w-0" onClick={() => void copiar(legendaParaCopiar(legenda, hashtags), "Legenda copiada com as hashtags")}>
-          <Copy className="mr-1.5 h-3.5 w-3.5" /> <span className="truncate">Copiar legenda</span>
+      {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): os dois copiar em ícone, com o nome no title. */}
+      <div className="flex items-center justify-end">
+        <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0" aria-label="Copiar legenda" title="Copiar legenda (com as hashtags)" onClick={() => void copiar(legendaParaCopiar(legenda, hashtags), "Legenda copiada com as hashtags")}>
+          <Copy className="h-4 w-4" aria-hidden="true" />
         </Button>
-        <Button type="button" size="sm" variant="outline" className="h-9 min-w-0" onClick={() => void copiar(hashtags.join(" "), "Hashtags copiadas")}>
-          <Hash className="mr-1.5 h-3.5 w-3.5" /> <span className="truncate">Copiar hashtags</span>
+        <Button type="button" size="sm" variant="ghost" className="ml-0.5 h-8 w-8 p-0" aria-label="Copiar hashtags" title="Copiar hashtags" onClick={() => void copiar(hashtags.join(" "), "Hashtags copiadas")}>
+          <Hash className="h-4 w-4" aria-hidden="true" />
         </Button>
       </div>
       <div className="flex min-h-9 items-center justify-end">

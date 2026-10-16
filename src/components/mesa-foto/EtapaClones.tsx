@@ -422,8 +422,8 @@ function FaixaDeClones({
         {!recolhido && (
           <AjudaRecolhida className="ml-1">De 1 a 4 fotos reais da mesma pessoa do cliente, com a autorização de uso de imagem registrada. Depois vêm a folha de identidade e as variações com o mesmo rosto.</AjudaRecolhida>
         )}
-        <button type="button" className={juntar(botao.secundario, "ml-auto h-8 px-2.5 text-[12px]")} onClick={onNovo} disabled={novoAberto}>
-          <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Novo clone
+        <button type="button" className={juntar(botao.icone, "ml-auto disabled:opacity-50")} onClick={onNovo} disabled={novoAberto} aria-label="Novo clone" title="Novo clone">
+          <Plus className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
       {recolhido ? null : carregando ? (
@@ -650,8 +650,8 @@ function EditorDeFotosDeOrigem({
         </span>
         <AjudaRecolhida className="ml-1">De preferência uma de frente com luz uniforme, uma de 3/4 e uma de corpo inteiro, sem filtro e sem óculos escuros. A estrela marca a principal. Dá para mudar depois.</AjudaRecolhida>
         {!escolhendo && (
-          <button type="button" className={juntar(botao.discreto, "ml-auto h-7 px-2 text-[12px]")} disabled={cheio} onClick={() => setEscolhendo({ trocar: null })}>
-            <Images className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Escolher do acervo
+          <button type="button" className={juntar(botao.icone, "ml-auto disabled:opacity-50")} disabled={cheio} onClick={() => setEscolhendo({ trocar: null })} aria-label="Escolher do acervo" title="Escolher do acervo">
+            <Images className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
       </div>

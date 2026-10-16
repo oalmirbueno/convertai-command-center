@@ -1,11 +1,45 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createElement as h } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { describe, expect, it, vi } from "vitest";
 import CadernoDoDossie, {
   preservarQuebras, secoesDoDossie, tituloLegivel, useCaderno,
 } from "@/components/admin/CadernoDoDossie";
+import DossieDoCliente from "@/components/admin/DossieDoCliente";
+
+/** Banco simulado: o dossiê atual, o histórico e um dossiê de projeto mais novo. */
+vi.mock("@/integrations/supabase/client", () => {
+  const atual = {
+    content: "Abertura.\n\n## Quem é\nCliente.\n\n## Próximo passo\nAtivar mídia.",
+    summary: null, version: 3, change_reason: "entrou a frente de tráfego", source: "mcp",
+    updated_at: "2026-10-15T10:00:00Z", effective_at: null,
+  };
+  const irmao = {
+    id: "d2", dossier_type: "contexto", project_id: "p1", version: 2, summary: "site novo",
+    updated_at: "2026-10-16T10:00:00Z", project: { name: "Site" },
+  };
+  const versoes = [
+    { id: "v3", version: 3, summary: null, change_reason: "entrou a frente de tráfego", source: "mcp", created_at: "2026-10-15T10:00:00Z", is_current: true, content: "a\nb" },
+    { id: "v2", version: 2, summary: null, change_reason: null, source: "mcp", created_at: "2026-10-10T10:00:00Z", is_current: false, content: "a" },
+  ];
+  const from = (tabela: string) => {
+    let colunas = "";
+    const responder = () => {
+      if (tabela !== "client_dossiers") return { data: [], error: null };
+      if (colunas.includes("dossier_type")) return { data: [irmao], error: null };
+      return { data: versoes, error: null };
+    };
+    const b: Record<string, unknown> = {};
+    for (const m of ["eq", "is", "in", "order", "limit"]) b[m] = () => b;
+    b.select = (c: string) => { colunas = c; return b; };
+    b.maybeSingle = () => Promise.resolve({ data: atual, error: null });
+    b.then = (ok: (v: unknown) => unknown, erro: (e: unknown) => unknown) => Promise.resolve(responder()).then(ok, erro);
+    return b;
+  };
+  return { supabase: { from } };
+});
 
 /**
  * O dossiê lido como caderno (16/10, dono: "abrindo como se fosse um caderno
@@ -128,6 +162,34 @@ describe("o caderno na tela", () => {
   });
 });
 
+describe("o dossiê em abas (17/10)", () => {
+  it("abre no caderno e troca para versões e outros dossiês, uma parte por vez", async () => {
+    const cliente = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(h(QueryClientProvider, { client: cliente }, h(DossieDoCliente, { clientId: "c1", clientName: "Vifut" })));
+
+    const abas = screen.getByRole("navigation", { name: "Partes do dossiê" });
+    await screen.findByRole("navigation", { name: "Sumário do dossiê" });
+    expect(abas.querySelector('[aria-current="page"]')?.getAttribute("data-etapa")).toBe("caderno");
+    // Rótulo curto da data; a última mudança aparece sem o prefixo longo.
+    expect(screen.getByText(/^atualizado /)).toBeTruthy();
+    expect(screen.getByTitle("Última mudança: entrou a frente de tráfego")).toBeTruthy();
+    // Ações em ícone, com o nome só no aria-label.
+    expect(screen.getByRole("button", { name: "Atualizar dossiê" }).textContent).toBe("");
+    // Seções curtas nascem abertas: o botão de tudo começa em "recolher".
+    expect(screen.getByRole("button", { name: "Recolher seções" }).textContent).toBe("");
+
+    await waitFor(() => expect(abas.querySelector('[data-etapa="outros"]')).not.toBeNull());
+    fireEvent.click(abas.querySelector('[data-etapa="versoes"]') as HTMLElement);
+    const historico = await screen.findByRole("list", { name: "Histórico de versões" });
+    await waitFor(() => expect(historico.textContent).toContain("v2"));
+    expect(screen.queryByRole("navigation", { name: "Sumário do dossiê" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ver" }));
+    expect(screen.getByRole("list", { name: "Outros dossiês atuais" }).textContent).toContain("Projeto: Site");
+    expect(screen.queryByRole("list", { name: "Histórico de versões" })).toBeNull();
+  });
+});
+
 describe("regras do painel no código do caderno", () => {
   it("compatível com navegador antigo: sem lookbehind, \\p{} nem grupo nomeado", () => {
     for (const arquivo of [fonte, painel]) {
@@ -149,5 +211,34 @@ describe("regras do painel no código do caderno", () => {
     for (const funcao of ["Ler o dossiê inteiro", "Ver histórico", "Outros dossiês atuais", "<EntregasNoDossie clientId={clientId} />", "Abrir memória e aprendizados", 'aria-label="Atualizar dossiê"']) {
       expect(painel).toContain(funcao);
     }
+  });
+
+  it("as partes viram abas em ícone no topo, com o caderno primeiro (17/10)", () => {
+    // Dono: "o scroll está muito longo... tabs aqui em cima".
+    expect(painel).toContain("<Etapas");
+    expect(painel).toContain("soIcone");
+    expect(painel).toContain('{ clientId, aba: "caderno" }');
+    for (const parte of ['valor: "caderno"', 'valor: "versoes"', 'valor: "memoria"', 'valor: "entregas"', 'valor: "outros"']) {
+      expect(painel).toContain(parte);
+    }
+    // Uma parte por vez: nada mais empilhado embaixo do texto.
+    expect(painel).toContain('{aba === "memoria" && <CerebroDoCliente');
+    expect(painel).toContain('{aba === "entregas" && (');
+  });
+
+  it("ações só em ícone, cada uma com o próprio ícone e o nome no title", () => {
+    expect(painel).toContain("ChevronsUpDown");
+    expect(painel).toContain("ChevronsDownUp");
+    expect(painel).toContain("RefreshCw");
+    // Os textos longos de antes saíram da tela.
+    for (const longo of ["Atualizado em {new Date", "Última mudança: {", "Fechar histórico", "Recolher segundo cérebro"]) {
+      expect(painel).not.toContain(longo);
+    }
+  });
+
+  it("menos preto cheio: corpo em tom suave e número da seção em cor", () => {
+    expect(fonte).toContain("text-foreground/75");
+    expect(fonte).toContain("bg-info/10 text-info");
+    expect(fonte).not.toContain("texto.tituloSecao");
   });
 });

@@ -143,8 +143,8 @@ export default function GeradorDePaleta({ cores, onUsar }: { cores: Cor[]; onUsa
                   <Faixa cores={p.cores} altura={36} />
                   {p.avisos.length > 0 && <span className={juntar(texto.auxiliar, "mt-1 block text-warning")}>{p.avisos[0]}</span>}
                 </span>
-                <button type="button" className={juntar(botao.discreto, "ml-2 h-8 shrink-0")} onClick={() => onUsar(p.cores.map((c) => ({ nome: c.nome, papel: c.papel, hex: c.hex })), `proposta ${p.nome}`)}>
-                  <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Usar
+                <button type="button" className={juntar(botao.icone, "ml-2 shrink-0 disabled:opacity-50")} onClick={() => onUsar(p.cores.map((c) => ({ nome: c.nome, papel: c.papel, hex: c.hex })), `proposta ${p.nome}`)} aria-label="Usar" title="Usar">
+                  <Wand2 className="h-4 w-4" aria-hidden="true" />
                 </button>
               </li>
             ))}

@@ -10,13 +10,17 @@
  * Três camadas de defesa:
  * 1. Vigia de versão: o build carimba um id e publica /version.json; o app
  *    compara ao abrir, ao voltar para a tela e a cada minutos. Versão nova?
- *    Recarrega sozinho ANTES de qualquer coisa quebrar.
+ *    Recarrega sozinho só na abertura (ou na volta depois de muito tempo
+ *    longe); no meio do uso, acende o ícone de versão nova no topo e a pessoa
+ *    recarrega quando quiser (16/10: trocar de tela NUNCA recarrega).
  * 2. Recuperação de chunk: cobre também Safari/iOS ("Load failed") e promises
  *    rejeitadas, que o detector antigo não via.
  * 3. Recarga forçada: URL com parâmetro novo (fura o cache do documento),
  *    limpando service workers e Cache Storage antes. Com trava de tentativas
  *    para nunca entrar em loop.
  */
+
+import { quandoOcioso, redeEconomica } from "@/lib/lazyComPreCarga";
 
 declare const __APP_BUILD_ID__: string | undefined;
 
@@ -263,10 +267,41 @@ async function fetchLatestBuildId(): Promise<string | null> {
 }
 
 /**
- * O vigia já sabe que saiu versão nova (e espera a pessoa voltar à aba para
- * recarregar). Mora no módulo para a recuperação de pedaço usar também.
+ * O vigia já sabe que saiu versão nova. Mora no módulo para a recuperação de
+ * pedaço e o ícone do topo (AppLayout) usarem também.
  */
 let updatePending = false;
+const ouvintesDaVersao = new Set<() => void>();
+
+function marcarVersaoNova() {
+  if (updatePending) return;
+  updatePending = true;
+  ouvintesDaVersao.forEach((avisar) => {
+    try {
+      avisar();
+    } catch {
+      /* um ouvinte quebrado não impede os outros */
+    }
+  });
+}
+
+/** Há versão nova publicada esperando a pessoa clicar no ícone do topo? */
+export function versaoNovaPendente(): boolean {
+  return updatePending;
+}
+
+/** Avisa quando a versão nova for descoberta (useSyncExternalStore no AppLayout). */
+export function assinarVersaoNova(avisar: () => void): () => void {
+  ouvintesDaVersao.add(avisar);
+  return () => {
+    ouvintesDaVersao.delete(avisar);
+  };
+}
+
+/** Clique no ícone de versão nova: a pessoa pediu, então recarrega mesmo que a trava automática já tenha esgotado. */
+export function atualizarAgora(): boolean {
+  return updateReload() || hardRefresh(true);
+}
 
 /**
  * Um pedaço da versão anterior não baixou e a recarga para a versão nova já
@@ -276,44 +311,145 @@ let updatePending = false;
  */
 let atualizandoVersao = false;
 
-/** Troca de tela com versão nova pendente: a recarga sai aqui, junto com a navegação que a pessoa já pediu. */
-export function atualizarNaTrocaDeTela(): boolean {
-  if (!updatePending) return false;
-  return updateReload();
-}
-
 export function atualizandoPorVersao(): boolean {
   return atualizandoVersao;
 }
 
+/** Confere o version.json e, se mudou, marca a versão nova (sem recarregar). */
+async function conferirVersaoPublicada(): Promise<boolean> {
+  if (BUILD_ID === "dev") return false;
+  const latest = await fetchLatestBuildId();
+  if (!latest || latest === BUILD_ID) return false;
+  marcarVersaoNova();
+  return true;
+}
+
+/** Aba escondida por mais que isto e versão nova: recarrega na volta (a pessoa não estava usando). */
+const LONGE_DEMAIS_MS = 30 * 60_000;
+
 /**
  * Vigia de versão: compara o carimbo do app carregado com o publicado.
- * Atualiza na abertura e sempre que a pessoa volta para o painel (o momento
- * clássico do PWA que ficou dias em segundo plano).
+ *
+ * 16/10: o dono clicava num cliente, em Mesas ou no estúdio e o painel
+ * reiniciava (a versão pendente recarregava na troca de tela). Agora recarrega
+ * sozinho só nos primeiros segundos da abertura (antes de qualquer trabalho) ou
+ * quando a aba volta depois de mais de 30 minutos escondida. No resto do
+ * tempo a versão nova só acende o ícone do topo (AppLayout), e a recarga sai
+ * quando a pessoa clica nele. Devolve a função que desliga o vigia (testes).
  */
-export function startVersionWatch() {
-  if (BUILD_ID === "dev") return;
+export function startVersionWatch(): () => void {
+  if (BUILD_ID === "dev") return () => undefined;
 
-  // 02/10: o dono via a tela "reiniciar" ao voltar para a aba ou logo depois de abrir. Agora só recarrega
-  // nos primeiros segundos da abertura (antes de qualquer trabalho); depois disso a versão nova fica
-  // pendente e entra na próxima troca de tela (atualizarNaTrocaDeTela), sem interromper o que está aberto.
   const abertoEm = Date.now();
-  const check = async (reloadNow: boolean) => {
-    const latest = await fetchLatestBuildId();
-    if (!latest || latest === BUILD_ID) return;
-    updatePending = true;
-    if (reloadNow && Date.now() - abertoEm < 8_000) updateReload();
+  const check = async (recarregarSe: () => boolean) => {
+    if (!(await conferirVersaoPublicada())) return;
+    if (recarregarSe()) updateReload();
   };
+  const nunca = () => false;
 
-  void check(true);
+  void check(() => Date.now() - abertoEm < 8_000);
 
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState !== "visible") return;
-    if (!updatePending) void check(false);
-  });
+  let escondidaDesde: number | null = document.visibilityState === "hidden" ? Date.now() : null;
+  const aoTrocarDeAba = () => {
+    if (document.visibilityState !== "visible") {
+      if (escondidaDesde === null) escondidaDesde = Date.now();
+      return;
+    }
+    const voltouEm = Date.now();
+    const longeDemais = escondidaDesde !== null && voltouEm - escondidaDesde > LONGE_DEMAIS_MS;
+    escondidaDesde = null;
+    if (longeDemais) {
+      // Só se a resposta chegar logo: depois disso a pessoa já voltou a usar.
+      if (updatePending) updateReload();
+      else void check(() => Date.now() - voltouEm < 8_000 && document.visibilityState === "visible");
+      return;
+    }
+    if (!updatePending) void check(nunca);
+  };
+  document.addEventListener("visibilitychange", aoTrocarDeAba);
 
-  // Pega quem deixa o painel aberto na frente o dia todo.
-  window.setInterval(() => void check(false), 4 * 60_000);
+  // Pega quem deixa o painel aberto na frente o dia todo (só acende o ícone).
+  const vigia = window.setInterval(() => {
+    if (!updatePending) void check(nunca);
+  }, 4 * 60_000);
+
+  return () => {
+    document.removeEventListener("visibilitychange", aoTrocarDeAba);
+    window.clearInterval(vigia);
+  };
+}
+
+/**
+ * Pré-carga em segundo plano rodando agora. Pedaço que falha AQUI não
+ * recarrega o painel (a pessoa não pediu aquela tela): a falha é ignorada e só
+ * serve de pista de versão nova (ícone do topo).
+ */
+let preCargasEmFundo = 0;
+
+type Carregar = () => Promise<unknown>;
+
+/**
+ * Baixa em segundo plano os módulos das telas, poucos por vez. Depois disso,
+ * navegar não depende mais de a hospedagem ainda ter os pedaços desta versão
+ * (que somem a cada publicação). Erros são ignorados. Devolve quantos falharam.
+ */
+export async function preCarregarEmSegundoPlano(
+  carregadores: ReadonlyArray<Carregar>,
+  simultaneos = 3,
+): Promise<number> {
+  preCargasEmFundo += 1;
+  let proximo = 0;
+  let falhas = 0;
+  const trabalhar = async (): Promise<void> => {
+    while (proximo < carregadores.length) {
+      const carregar = carregadores[proximo++];
+      try {
+        await carregar();
+      } catch {
+        falhas += 1;
+      }
+    }
+  };
+  const fila: Array<Promise<void>> = [];
+  for (let i = 0; i < Math.min(simultaneos, carregadores.length); i++) fila.push(trabalhar());
+  try {
+    await Promise.all(fila);
+  } finally {
+    preCargasEmFundo -= 1;
+  }
+  return falhas;
+}
+
+/**
+ * Agenda a pré-carga para depois que o painel abrir e o navegador ficar
+ * ocioso (requestIdleCallback, ou setTimeout onde não há). Em rede econômica
+ * não baixa nada, nem no servidor de desenvolvimento (lá os pedaços não somem
+ * e baixar tudo só compilaria o painel inteiro). Devolve o cancelamento.
+ */
+export function agendarPreCargaEmSegundoPlano(
+  carregadores: () => ReadonlyArray<Carregar>,
+  esperaMs = 4_000,
+): () => void {
+  if (BUILD_ID === "dev" || redeEconomica()) return () => undefined;
+  let cancelado = false;
+  let cancelarOcioso: () => void = () => undefined;
+  const espera = window.setTimeout(() => {
+    cancelarOcioso = quandoOcioso(() => {
+      if (cancelado) return;
+      let lista: ReadonlyArray<Carregar> = [];
+      try {
+        lista = carregadores();
+      } catch {
+        return;
+      }
+      void preCarregarEmSegundoPlano(lista).catch(() => undefined);
+    }, 8_000);
+  }, esperaMs);
+  return () => {
+    cancelado = true;
+    window.clearTimeout(espera);
+    cancelarOcioso();
+  };
 }
 
 /**
@@ -328,6 +464,15 @@ export function installChunkErrorRecovery(): () => void {
   // Se o vigia já sabia da versão nova, a recarga é a de ATUALIZAÇÃO, que não
   // gasta as tentativas de emergência.
   const aoFalharPreCarga = (event: Event) => {
+    // Falha na pré-carga em segundo plano: ninguém pediu a tela, então nada
+    // de recarregar no meio do uso. Sem preventDefault o import rejeita e a
+    // pré-carga ignora; se a pessoa abriu uma tela nesse mesmo instante, o
+    // erro de pedaço dela sobe para o AppErrorBoundary, que recarrega com o
+    // aviso "Atualizando o painel".
+    if (preCargasEmFundo > 0) {
+      void conferirVersaoPublicada();
+      return;
+    }
     event.preventDefault();
     atualizandoVersao = true;
     const recarregou = (updatePending && updateReload()) || hardRefresh();

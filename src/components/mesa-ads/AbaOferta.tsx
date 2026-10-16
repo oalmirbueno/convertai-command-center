@@ -206,8 +206,8 @@ function Ideias({ ideias, onLevar }: { ideias: Ideia[]; onLevar: (i: Ideia) => v
                 <p className={juntar(texto.auxiliar, "mt-0.5 truncate")}>{[i.estilo_visual ? humanizar(i.estilo_visual) : "", i.formato ? humanizar(i.formato) : ""].filter(Boolean).join(" · ")}</p>
               )}
             </div>
-            <button type="button" onClick={() => onLevar(i)} className={juntar(botao.discreto, "h-8 text-primary")}>
-              <Rocket className="mr-1 h-3.5 w-3.5" /> Levar ao plano
+            <button type="button" onClick={() => onLevar(i)} className={juntar(botao.icone, "text-primary disabled:opacity-50")} aria-label="Levar ao plano" title="Levar ao plano">
+              <Rocket className="h-4 w-4" aria-hidden="true" />
             </button>
           </li>
         ))}
@@ -480,8 +480,8 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
                 tom="destaque"
                 rotulo="Oferta do contexto"
                 acao={
-                  <button type="button" className={juntar(botao.discreto, "h-8")} disabled={montando} onClick={() => void montarDoContexto(true)} title="Lê o contexto de novo e remonta a oferta do contexto (sem custo)">
-                    <RefreshCw className="mr-1 h-3.5 w-3.5" /> Remontar do contexto
+                  <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} disabled={montando} onClick={() => void montarDoContexto(true)} title="Lê o contexto de novo e remonta a oferta do contexto (sem custo)" aria-label="Remontar do contexto">
+                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
                   </button>
                 }
               >

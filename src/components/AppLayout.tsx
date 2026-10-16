@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useRef, useEffect, useCallback } from "react";
+import { lazy, Suspense, useState, useRef, useEffect, useCallback, useSyncExternalStore } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,7 +13,8 @@ import IndicadorDeGeracoes from "@/components/geracao/IndicadorDeGeracoes";
 import { EVENTO_ABRIR_AGENTE, type PedidoParaAbrirAgente } from "@/lib/lancador";
 import { adminTourSteps, clientTourSteps, teamTourSteps, getPageTour, pageTours } from "@/components/onboarding/tourConfigs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Bell, LogOut, Menu, X, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles, Bot } from "lucide-react";
+import { Bell, LogOut, Menu, X, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles, Bot, RefreshCw } from "lucide-react";
+import { assinarVersaoNova, atualizarAgora, versaoNovaPendente } from "@/lib/appRefresh";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutGrid, LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
@@ -34,6 +35,27 @@ import VoltarParaOndeEstava from "@/components/navegacao/VoltarParaOndeEstava";
 // código): fora da abertura do painel, baixa logo depois, sem segurar a tela.
 const VoiceAssistant = lazy(() => import("@/components/admin/VoiceAssistant"));
 
+
+/**
+ * Ícone discreto de versão nova no topo. Trocar de tela nunca recarrega o
+ * painel (src/lib/appRefresh.ts); a versão nova entra quando a pessoa clica.
+ */
+export function BotaoVersaoNova() {
+  const versaoNova = useSyncExternalStore(assinarVersaoNova, versaoNovaPendente, versaoNovaPendente);
+  if (!versaoNova) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => { atualizarAgora(); }}
+      aria-label="Nova versão do painel: clique para atualizar"
+      title="Nova versão do painel: clique para atualizar"
+      className="relative w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <RefreshCw className="w-4 h-4" />
+      <span aria-hidden="true" className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" />
+    </button>
+  );
+}
 
 interface NavItem {
   title: string;
@@ -467,6 +489,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {isAdminOrTeam && <CronometroDoTopo podeAbrirCentral={podeGestao} />}
           {/* "Gerando em N clientes": só aparece com geração na fila do servidor (frente G). */}
           {isAdminOrTeam && <IndicadorDeGeracoes userId={user?.id} />}
+          {/* Versão nova publicada com o painel aberto (16/10): só este ícone avisa; recarrega quando a pessoa clicar. */}
+          <BotaoVersaoNova />
           <button
             type="button"
             onClick={() => setBuscaAberta(true)}

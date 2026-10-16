@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState, useRef } from "react";
 import { useClienteEmFoco } from "@/components/cronometro/CronometroProvider";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -40,7 +40,8 @@ import { lerDossiesDaCarteira, rotuloDoDossie, type DossieDoCliente as DossieGer
 import { lerMovimentos, movimentosComoFatos } from "@/lib/movimentos";
 import { ehEntregue } from "@/lib/contextoDaCentral";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
-import { resolveFileUrl } from "@/lib/fileUrls";
+import { resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
+import { useModoFoco } from "@/lib/modoFoco";
 import { useFotosDosClientes } from "@/hooks/useFotosDosClientes";
 import { useCentralReviewPendentes } from "@/hooks/useCentralReviewPendentes";
 import { buscarTodas } from "@/lib/buscaCompleta";
@@ -66,7 +67,7 @@ import {
 } from "@/lib/radarIdeas";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, ArrowUpRight, BadgeDollarSign, BookOpen, Briefcase, Camera, CheckCircle2, ChevronDown, Clock, FileText, Flame, HeartPulse, History as Historico, Inbox, LayoutGrid, Lightbulb, Loader2, Megaphone, Package, Radar, RefreshCw, Send, SlidersHorizontal, Sparkles, Trash2, UserCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowUpRight, BadgeDollarSign, BookOpen, Briefcase, CalendarDays, Camera, CheckCircle2, ChevronDown, Clock, FileText, Flame, HeartPulse, History as Historico, Inbox, LayoutGrid, Lightbulb, Loader2, Maximize2, Megaphone, Minimize2, NotebookPen, Package, Play, Radar, RefreshCw, Send, SlidersHorizontal, Sparkles, Trash2, UserCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -93,6 +94,8 @@ import {
   texto,
   type ItemDeEtapa,
 } from "@/components/sistema";
+// A ficha do cliente só baixa quando alguém abre um cadastro pela Central (16/10/2026).
+const EditClientDrawer = lazy(() => import("@/components/admin/EditClientDrawer"));
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 
@@ -256,6 +259,15 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   }, [location.search, cycleReview, setActiveTab]);
   /** Historico: um cliente so, ou a carteira inteira. */
   const [historicoClientId, setHistoricoClientId] = useEstadoDaTela<string>(guardar("historico-cliente"), "__all__", ehTexto);
+  // 16/10/2026 (dono): Dia Prioritário e Saúde da carteira viram abas lado a lado, sem rolagem longa.
+  const [abaCarteira, setAbaCarteira] = useEstadoDaTela<string>(guardar("carteira-aba"), "dia", ehTexto);
+  // 16/10/2026 (dono: "clico no cliente e ele atualiza o painel; tem que abrir ali mesmo"): o cadastro
+  // abre por cima da Central, sem trocar de tela.
+  const [cadastroAbertoId, setCadastroAbertoId] = useState<string | null>(null);
+  const [colunaDoPerfil, setColunaDoPerfil] = useEstadoDaTela<string>(guardar("perfil-coluna"), "dossie", ehTexto);
+  // 16/10/2026 (dono: "tela cheia para focar melhor; quando quiser, voltar"): esconde a barra do painel.
+  const [telaCheia, setTelaCheia] = useState(false);
+  useModoFoco("central", telaCheia);
   // 16/10/2026: filtro por tipo na linha do tempo (ícones) — "todos" mostra tudo.
   const [historicoTipo, setHistoricoTipo] = useEstadoDaTela<string>(guardar("historico-tipo"), "todos", ehTexto);
   const [expandedDraft, setExpandedDraft] = useEstadoDaTela<string | null>(guardar("fila-aberto"), null, (v) => v === null || ehTexto(v));
@@ -314,7 +326,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     queryFn: async () => {
       const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
         supabase.from("files")
-          .select("id, client_id, project_id, file_name, created_at")
+          .select("id, client_id, project_id, file_name, created_at, file_url, storage_bucket, storage_path, mime_type")
           .eq("visibility", "approval")
           .eq("requires_approval", true)
           .eq("approval_status", "pending")
@@ -342,7 +354,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       const desde = new Date(Date.now() - JANELA_DE_ENTREGAS_DIAS * 86_400_000).toISOString();
       const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
         supabase.from("files")
-          .select("id, client_id, file_name, created_at, visibility, approval_status")
+          .select("id, client_id, file_name, created_at, visibility, approval_status, file_url, storage_bucket, storage_path, mime_type")
           .in("visibility", ["client_shared", "approval"])
           .eq("status", "ready")
           .is("archived_at", null)
@@ -667,7 +679,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         supabase.from("editorial_publications")
           // O título vem junto: "a publicação do dia 12/09" não diz nada ao
           // cliente; "o reel da vitrine, dia 12/09" diz.
-          .select("id, client_id, status, platform, scheduled_at, published_at, post:editorial_posts(title)")
+          .select("id, client_id, status, platform, scheduled_at, published_at, permalink, post:editorial_posts(title), arquivo:files!editorial_publications_file_id_fkey(file_url, storage_bucket, storage_path, mime_type)")
           .in("status", ["scheduled", "published"])
           .order("scheduled_at", { ascending: true })
           .range(de, ate),
@@ -2294,7 +2306,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     risk: { label: "Risco", cls: "text-destructive", dot: "bg-destructive" },
   };
 
-  const openClientProfile = (clientId: string) => navigate(`/clientes?client=${clientId}`);
+  const openClientProfile = (clientId: string) => setCadastroAbertoId(clientId);
   // Cronômetro por cliente (frente CR): perfil aberto ou linha aberta na carteira conta no tempo do cliente.
   useClienteEmFoco(
     activeTab === "perfis"
@@ -2411,6 +2423,11 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                 <button type="button" onClick={() => void refreshCentral()} aria-label="Atualizar os dados" title={refreshing ? "Atualizando..." : `Dados de ${lastSyncLabel}. Toque para ler de novo`} className={botao.icone}>
                   <RefreshCw className={`h-[18px] w-[18px] ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
                 </button>
+                {activeTab !== "radar" && (
+                  <button type="button" onClick={() => setTelaCheia((v) => !v)} aria-pressed={telaCheia} aria-label={telaCheia ? "Sair da tela cheia" : "Tela cheia"} title={telaCheia ? "Sair da tela cheia" : "Tela cheia"} className={botao.icone}>
+                    {telaCheia ? <Minimize2 className="h-[18px] w-[18px]" aria-hidden="true" /> : <Maximize2 className="h-[18px] w-[18px]" aria-hidden="true" />}
+                  </button>
+                )}
                 <AgenteDaCentral />
                 <button
                   type="button"
@@ -2497,16 +2514,30 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         {/* ── Carteira recorrente ── */}
         {activeTab === "carteira" && (
           <RegiaoRolavel modo="lg" rotulo="Carteira" memoria="central:carteira" className="lg:pb-4 lg:pr-1">
-            {/* 12/10/2026: Dia Prioritário (quem merece atenção estratégica hoje e na semana) */}
-            <DiaPrioritarioNaCentral
-              clientes={(clients || []).map((c: any) => ({ id: String(c.id), nome: nomeDoCliente(c), foto: fotoDe({ id: String(c.id), nome: nomeDoCliente(c), avatar_url: c.avatar_url }) }))}
-              onAbrirPerfil={(id) => { setProfileClientId(id); setActiveTab("perfis"); }}
-            />
-            <Secao
-              titulo="Saúde da carteira"
-              descricao={`${healthRows.length} ${healthRows.length === 1 ? "cliente recorrente" : "clientes recorrentes"}`}
-              ajuda="Cada cliente recebe uma nota de 0 a 100 calculada dos dados reais (financeiro, aprovações, entregas, Pulso). Toque em um cliente para ver o porquê da nota e as ações prontas: mensagem do grupo, ritual e cadastro."
-            >
+            {/* 16/10/2026 (dono): "colocar abas onde a gente muda do Dia Prioritário para a Saúde da
+                carteira, do lado, para não ficar muito extenso". */}
+            <div className="mb-4 flex min-w-0 items-center" data-abas-da-carteira="">
+              <Etapas
+                soIcone
+                rotulo="Partes da carteira"
+                itens={[
+                  { valor: "dia", rotulo: "Dia Prioritário", icone: <CalendarDays className="h-4 w-4" />, ajuda: "Quem merece atenção estratégica hoje e em cada dia da semana. A nota de cada cliente é a da Saúde da carteira." },
+                  { valor: "saude", rotulo: "Saúde da carteira", icone: <HeartPulse className="h-4 w-4" />, contador: healthRows.length, ajuda: "Cada cliente recebe uma nota de 0 a 100 calculada dos dados reais (financeiro, aprovações, entregas, Pulso). Toque em um cliente para ver o porquê da nota e as ações." },
+                ]}
+                valor={abaCarteira === "saude" ? "saude" : "dia"}
+                onEscolher={(v: string) => setAbaCarteira(v)}
+                className="min-w-0 flex-1"
+              />
+            </div>
+            {abaCarteira !== "saude" ? (
+              <DiaPrioritarioNaCentral
+                clientes={(clients || []).map((c: any) => ({ id: String(c.id), nome: nomeDoCliente(c), foto: fotoDe({ id: String(c.id), nome: nomeDoCliente(c), avatar_url: c.avatar_url }) }))}
+                onAbrirPerfil={(id) => { setProfileClientId(id); setActiveTab("perfis"); }}
+                notas={Object.fromEntries(healthRows.filter((r) => r.score !== null).map((r) => [String(r.client.id), r.score as number]))}
+                semCabecalho
+              />
+            ) : (
+              <div className="min-w-0" data-saude-da-carteira="">
               {carregandoClientes && healthRows.length === 0 ? (
                 <Carregando rotulo="Carregando a carteira" linhas={4} />
               ) : healthRows.length === 0 ? (
@@ -2554,19 +2585,18 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                                 ))}
                               </div>
                             )}
-                            <div className={grupoDeBotoes}>
-                              <button
-                                type="button"
-                                onClick={() => (contextoPronto ? copyText(buildGroupMessage(row.client), "Mensagem do grupo copiada. É só colar no WhatsApp.") : avisarContextoCarregando())}
-                                className={botao.secundario}
-                              >
-                                <Send className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /> Copiar mensagem do grupo
+                            <div className="-ml-1.5 flex items-center">
+                              <button type="button" onClick={() => (contextoPronto ? copyText(buildGroupMessage(row.client), "Mensagem do grupo copiada. É só colar no WhatsApp.") : avisarContextoCarregando())} aria-label="Copiar mensagem do grupo" title="Copiar mensagem do grupo" className={botao.icone}>
+                                <Send className="h-4 w-4" aria-hidden="true" />
                               </button>
-                              <button type="button" onClick={() => { setProfileClientId(row.client.id); setActiveTab("perfis"); }} className={botao.discreto}>
-                                <UserCircle className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /> Ver perfil completo
+                              <button type="button" onClick={() => { setGenClientId(row.client.id); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); }} aria-label="Gerar ritual deste cliente" title="Gerar ritual deste cliente" className={botao.icone}>
+                                <Sparkles className="h-4 w-4" aria-hidden="true" />
                               </button>
-                              <button type="button" onClick={() => { setGenClientId(row.client.id); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); }} className={botao.discreto}>
-                                <Sparkles className="mr-1.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" /> Gerar ritual deste cliente
+                              <button type="button" onClick={() => { setProfileClientId(row.client.id); setActiveTab("perfis"); }} aria-label="Ver perfil" title="Ver perfil" className={botao.icone}>
+                                <LayoutGrid className="h-4 w-4" aria-hidden="true" />
+                              </button>
+                              <button type="button" onClick={() => openClientProfile(row.client.id)} aria-label="Abrir cadastro" title="Abrir cadastro" className={botao.icone}>
+                                <UserCircle className="h-4 w-4" aria-hidden="true" />
                               </button>
                             </div>
                           </div>
@@ -2576,7 +2606,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                   })}
                 </ul>
               )}
-            </Secao>
+              </div>
+            )}
           </RegiaoRolavel>
         )}
 
@@ -2601,11 +2632,11 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
             // Marcado a mao no Ciclo nesta semana: vale como feito.
             const chaveCiclo = RITUAL_DA_CENTRAL[ritual];
             const noCiclo = chaveCiclo ? rituaisDoCiclo.find((r) => r.client_id === client.id && r.ritual_key === chaveCiclo) : undefined;
-            if (!latest && noCiclo) return { label: `Feito no Ciclo (${noCiclo.source === "central" ? "daqui" : "à mão"})`, cls: "bg-success/10 text-success" };
-            if (!latest) return { label: "Ainda não gerado", cls: "bg-muted text-muted-foreground" };
+            if (!latest && noCiclo) return { label: `Feito no Ciclo (${noCiclo.source === "central" ? "daqui" : "à mão"})`, cls: "bg-success/10 text-success", curto: "✓", selo: "bg-success text-background" };
+            if (!latest) return { label: "Ainda não gerado", cls: "bg-muted text-muted-foreground", curto: "", selo: "" };
             const age = daysSince(latest.created_at) ?? 0;
-            if (latest.status !== "published") return { label: `Rascunho na fila (${age}d)`, cls: "bg-warning/10 text-warning" };
-            return { label: `Publicado há ${age}d`, cls: "bg-success/10 text-success" };
+            if (latest.status !== "published") return { label: `Rascunho na fila (${age}d)`, cls: "bg-warning/10 text-warning", curto: `${age}d`, selo: "bg-warning text-background" };
+            return { label: `Publicado há ${age}d`, cls: "bg-success/10 text-success", curto: `${age}d`, selo: age > 10 ? "bg-muted-foreground/80 text-background" : "bg-success text-background" };
           };
           const d = dossieDe(client.id);
           const p = planoDe(client.id);
@@ -2688,35 +2719,37 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                       titulo="O que enviar e quando"
                       ajuda="Cada geração usa a movimentação real deste cliente e varia o texto semana a semana. Você revisa e edita antes de qualquer coisa chegar nele."
                     >
-                      {/* Lista aberta: linha com canto e fundo suave ao passar o mouse; a
-                          de hoje com fundo verde leve. Sem caixa e sem traço entre linhas. */}
-                      <ul className="-mx-2">
+                      {/* 16/10/2026 (dono: "publicado há 11 dias como notificação em cima da rota da
+                          semana; gerar só o ícone"): cada ritual vira um bloco; o tempo desde a última
+                          vez é um selo no canto, como notificação; tocar no bloco gera. */}
+                      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3" data-rituais-em-blocos="">
                         {RITUALS.map((r) => {
                           const status = ritualStatus(r.value);
                           const quando = ritualQuando(r);
                           return (
-                            <li
-                              key={r.value}
-                              className={`relative flex min-w-0 flex-wrap items-center rounded-lg px-2 py-2.5 transition-colors ${quando.destaque ? "bg-primary/[0.07]" : "hover:bg-muted/50"}`}
-                            >
-                              <div className="w-full min-w-0 sm:mr-3 sm:w-auto sm:flex-1">
-                                <div className="flex min-w-0 flex-wrap items-center" title={`${r.cadence} · ${r.why}`}>
-                                  <p className="text-[13px] font-medium leading-tight text-foreground">{r.label}</p>
-                                  {quando.etiqueta && <span className={juntar(etiqueta, "ml-2", quando.cls)}>{quando.etiqueta}</span>}
-                                </div>
-                              </div>
-                              <div className="mt-2 flex w-full min-w-0 items-center justify-between sm:mt-0 sm:w-auto sm:justify-end">
-                                <span className={juntar(etiqueta, "mr-2", status.cls)}>{status.label}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => { setGenClientId(client.id); setGenRitual(r.value); setGenPreviews(null); setGeneratorOpen(true); }}
-                                  aria-label={`Gerar agora: ${r.label}`}
-                                  title={`Gerar ${r.label} agora`}
-                                  className={juntar("inline-flex h-7 items-center rounded-md px-2 text-[12px] font-medium transition-colors", quando.destaque ? "text-primary hover:bg-primary/10" : "text-muted-foreground hover:bg-muted hover:text-foreground", foco)}
-                                >
-                                  <Sparkles className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Gerar
-                                </button>
-                              </div>
+                            <li key={r.value} className="relative min-w-0">
+                              <button
+                                type="button"
+                                onClick={() => { setGenClientId(client.id); setGenRitual(r.value); setGenPreviews(null); setGeneratorOpen(true); }}
+                                aria-label={`Gerar ${r.label} (${status.label})`}
+                                title={`Gerar ${r.label} · ${status.label} · ${r.cadence}`}
+                                className={juntar(
+                                  "group flex h-full w-full min-w-0 flex-col items-start rounded-xl px-3 py-2.5 text-left transition-colors",
+                                  quando.destaque ? "bg-primary/[0.08] hover:bg-primary/[0.12]" : "bg-muted/40 hover:bg-muted/70",
+                                  foco,
+                                )}
+                              >
+                                <span className="line-clamp-2 text-[13px] font-medium leading-snug text-foreground">{r.label}</span>
+                                <span className="mt-1.5 flex w-full min-w-0 items-center">
+                                  {quando.etiqueta ? <span className={juntar("min-w-0 truncate text-[11px]", quando.destaque ? "font-medium text-primary" : "text-muted-foreground")}>{quando.etiqueta}</span> : <span />}
+                                  <Sparkles className={juntar("ml-auto h-3.5 w-3.5 shrink-0 transition-colors", quando.destaque ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} aria-hidden="true" />
+                                </span>
+                              </button>
+                              {status.curto && (
+                                <span className={juntar("pointer-events-none absolute -right-1 -top-1.5 rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums shadow-sm", status.selo)} aria-hidden="true">
+                                  {status.curto}
+                                </span>
+                              )}
                             </li>
                           );
                         })}
@@ -2746,19 +2779,14 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         </>
                       }
                     >
-                      {d?.substituto && (
-                        <p className="mb-2 flex items-center text-[12px] text-warning">
-                          Sem dossiê geral: a leitura usa o de projeto.
-                          <AjudaRecolhida className="ml-1" rotulo="Sobre o dossiê geral">Escreva o dossiê geral deste cliente para a mensagem ficar certa.</AjudaRecolhida>
-                        </p>
-                      )}
                       {(() => {
-                        // 16/10/2026 (dono: "mensagem do grupo muito poluída"): três momentos num
-                        // seletor (abre no de hoje), a mensagem num balão e as ações como links.
+                        // 16/10/2026 (dono: "mensagem do grupo ainda poluída; mais intuitiva e bonita"):
+                        // os três momentos em pílulas curtas, a mensagem num balão de conversa e as ações
+                        // como ícones no pé do balão (nome no title). Avisos viram um ícone com "?".
                         const MOMENTOS = [
-                          { moment: "abertura" as const, curto: "Abertura", dia: "seg", label: "Abertura da semana (segunda)" },
-                          { moment: "meio" as const, curto: "Meio", dia: "qua", label: "Meio da semana (quarta)" },
-                          { moment: "fechamento" as const, curto: "Fechamento", dia: "sex", label: "Fechamento (sexta)" },
+                          { moment: "abertura" as const, curto: "Seg", label: "Abertura da semana (segunda)" },
+                          { moment: "meio" as const, curto: "Qua", label: "Meio da semana (quarta)" },
+                          { moment: "fechamento" as const, curto: "Sex", label: "Fechamento (sexta)" },
                         ];
                         const diaDaSemana = new Date().getDay();
                         const deHoje = diaDaSemana >= 1 && diaDaSemana <= 2 ? "abertura" : diaDaSemana >= 3 && diaDaSemana <= 4 ? "meio" : "fechamento";
@@ -2767,49 +2795,59 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         const escrita = aiMoment[chaveIA] ?? null;
                         const textoDoPainel = buildGroupMessage(client, aberto.moment);
                         const textoParaCopiar = escrita ? escrita.body : textoDoPainel;
+                        const avisos = [
+                          ...(d?.substituto ? ["Sem dossiê geral: a leitura usa o de projeto. Escreva o dossiê geral deste cliente para a mensagem ficar certa."] : []),
+                          ...(escrita ? escrita.alertas : []),
+                        ];
                         return (
                           <div className="min-w-0">
-                            <div role="tablist" aria-label="Momento da semana" className="inline-flex max-w-full rounded-full bg-muted p-0.5">
-                              {MOMENTOS.map((m) => {
-                                const sel = m.moment === aberto.moment;
-                                return (
-                                  <button
-                                    key={m.moment}
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={sel}
-                                    data-botao-do-momento=""
-                                    title={m.label}
-                                    onClick={() => setGroupMsgPreview(m.moment)}
-                                    className={juntar(botao.discreto, "h-8 rounded-full px-3 text-[12px]", sel ? "bg-background text-foreground shadow-sm hover:bg-background" : "text-muted-foreground")}
-                                  >
-                                    {m.curto}<span className="ml-1 hidden text-muted-foreground sm:inline">{m.dia}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                            <div className="mt-3 max-w-[62ch] rounded-2xl rounded-tl-md bg-primary/[0.07] px-4 py-3">
-                              {escrita && <p className="mb-1 flex items-center text-[11px] font-medium text-primary"><Sparkles className="mr-1 h-3 w-3" aria-hidden="true" />Escrita pela IA{escrita.model ? ` (${escrita.model})` : ""}</p>}
-                              <p className="whitespace-pre-line text-[13.5px] leading-relaxed text-foreground">{textoParaCopiar}</p>
-                            </div>
-                            {escrita && escrita.alertas.length > 0 && (
-                              <p className="mt-2 flex items-center text-[12px] text-warning">
-                                {escrita.alertas.length} {escrita.alertas.length === 1 ? "aviso para a equipe" : "avisos para a equipe"}
-                                <AjudaRecolhida className="ml-1" rotulo="Avisos para a equipe">{escrita.alertas.join(" · ")} (nada disso vai ao cliente)</AjudaRecolhida>
-                              </p>
-                            )}
-                            <div className="mt-2 flex min-w-0 flex-wrap items-center text-[12.5px] [&>*+*]:ml-4">
-                              <button type="button" onClick={() => (escrita || contextoPronto ? copyText(textoParaCopiar, `Mensagem de ${aberto.label.toLowerCase()} copiada.`) : avisarContextoCarregando())} className={juntar("inline-flex items-center rounded font-medium text-primary hover:underline", foco)}>
-                                <Send className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Copiar{escrita ? " (IA)" : ""}
-                              </button>
-                              <button type="button" onClick={() => void escreverMomentoComIA(client, aberto.moment)} disabled={aiMomentLoading !== null} title="Escreve esta mensagem com a IA a partir do dossiê, da esteira, dos números e das vendas de agora" className={juntar("inline-flex items-center rounded font-medium text-primary hover:underline disabled:opacity-50", foco)}>
-                                <Sparkles className={`mr-1 h-3.5 w-3.5 ${aiMomentLoading === chaveIA ? "animate-pulse" : ""}`} aria-hidden="true" />{aiMomentLoading === chaveIA ? "Escrevendo…" : escrita ? "Reescrever com IA" : "Escrever com IA"}
-                              </button>
-                              {escrita && (
-                                <button type="button" onClick={() => (contextoPronto ? copyText(textoDoPainel, "Mensagem do painel copiada.") : avisarContextoCarregando())} className={juntar("inline-flex items-center rounded text-muted-foreground hover:text-foreground hover:underline", foco)} title={textoDoPainel}>
-                                  Copiar a do painel
-                                </button>
+                            <div className="flex min-w-0 items-center">
+                              <div role="tablist" aria-label="Momento da semana" className="inline-flex rounded-full bg-muted p-0.5">
+                                {MOMENTOS.map((m) => {
+                                  const sel = m.moment === aberto.moment;
+                                  return (
+                                    <button
+                                      key={m.moment}
+                                      type="button"
+                                      role="tab"
+                                      aria-selected={sel}
+                                      data-botao-do-momento=""
+                                      title={m.label}
+                                      aria-label={m.label}
+                                      onClick={() => setGroupMsgPreview(m.moment)}
+                                      className={juntar(botao.discreto, "h-8 rounded-full px-3 text-[12px]", sel ? "bg-background text-foreground shadow-sm hover:bg-background" : "text-muted-foreground")}
+                                    >
+                                      {m.curto}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              {avisos.length > 0 && (
+                                <span className="ml-2 flex items-center text-warning" title={avisos.join(" · ")}>
+                                  <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                                  <span className="ml-0.5 text-[11px] tabular-nums">{avisos.length}</span>
+                                  <AjudaRecolhida className="ml-0.5" rotulo="Avisos para a equipe">{avisos.join(" · ")} (nada disso vai ao cliente)</AjudaRecolhida>
+                                </span>
                               )}
+                            </div>
+                            <div className="mt-3 max-w-[62ch] min-w-0">
+                              <div className="rounded-2xl rounded-tl-md bg-primary/[0.07] px-4 pb-1.5 pt-3">
+                                <p className="whitespace-pre-line text-[13.5px] leading-relaxed text-foreground">{textoParaCopiar}</p>
+                                <div className="-mr-2 mt-1 flex items-center justify-end">
+                                  {escrita && <span className="mr-auto flex items-center text-[11px] text-primary" title={`Escrita pela IA${escrita.model ? ` (${escrita.model})` : ""}`}><Sparkles className="mr-1 h-3 w-3" aria-hidden="true" />IA</span>}
+                                  <button type="button" onClick={() => void escreverMomentoComIA(client, aberto.moment)} disabled={aiMomentLoading !== null} aria-label={escrita ? "Reescrever com IA" : "Escrever com IA"} title={escrita ? "Reescrever com IA" : "Escrever com IA a partir do dossiê, da esteira, dos números e das vendas de agora"} className={juntar(botao.icone, "h-8 w-8 text-primary disabled:opacity-50")}>
+                                    <Sparkles className={`h-4 w-4 ${aiMomentLoading === chaveIA ? "animate-pulse" : ""}`} aria-hidden="true" />
+                                  </button>
+                                  {escrita && (
+                                    <button type="button" onClick={() => (contextoPronto ? copyText(textoDoPainel, "Mensagem do painel copiada.") : avisarContextoCarregando())} aria-label="Copiar a versão do painel" title="Copiar a versão do painel (sem IA)" className={juntar(botao.icone, "h-8 w-8")}>
+                                      <FileText className="h-4 w-4" aria-hidden="true" />
+                                    </button>
+                                  )}
+                                  <button type="button" onClick={() => (escrita || contextoPronto ? copyText(textoParaCopiar, `Mensagem de ${aberto.label.toLowerCase()} copiada.`) : avisarContextoCarregando())} aria-label="Copiar para o grupo" title="Copiar para o grupo" className={juntar(botao.icone, "h-8 w-8 text-primary")}>
+                                    <Send className="h-4 w-4" aria-hidden="true" />
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         );
@@ -2865,13 +2903,27 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                     {/* key por cliente: trocar de cliente no seletor zera o que
                         estava aberto ou digitado. Sem ela, uma nota escrita no
                         diário de um cliente podia ser salva no seguinte. */}
-                    <DossieDoCliente
-                      key={`dossie-${client.id}`}
-                      clientId={client.id}
-                      clientName={nomeDoCliente(client)}
+                    {/* 16/10/2026 (dono: "scroll muito longo; o diário podia ter abas em cima"): dossiê
+                        e diário em abas de ícone, um por vez. */}
+                    <Etapas
+                      soIcone
+                      rotulo="Dossiê ou diário"
+                      itens={[
+                        { valor: "dossie", rotulo: "Dossiê", icone: <BookOpen className="h-4 w-4" />, ajuda: "O caderno do cliente: quem é, onde está, o que já foi feito." },
+                        { valor: "diario", rotulo: "Diário do trabalho", icone: <NotebookPen className="h-4 w-4" />, ajuda: "Notas do dia a dia da equipe com este cliente." },
+                      ]}
+                      valor={colunaDoPerfil === "diario" ? "diario" : "dossie"}
+                      onEscolher={(v: string) => setColunaDoPerfil(v)}
                     />
-
-                    <ProjectJournal key={`diario-${client.id}`} clientId={client.id} canWrite divisoria recolher={`central:perfis:diario:${client.id}`} />
+                    {colunaDoPerfil === "diario" ? (
+                      <ProjectJournal key={`diario-${client.id}`} clientId={client.id} canWrite />
+                    ) : (
+                      <DossieDoCliente
+                        key={`dossie-${client.id}`}
+                        clientId={client.id}
+                        clientName={nomeDoCliente(client)}
+                      />
+                    )}
 
                   </div>
                 </div>
@@ -2998,6 +3050,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
               }}
               onAbrirPerfil={(id) => { setProfileClientId(id); setActiveTab("perfis"); }}
               onIdeiaEvoluida={(antiga, nova) => setIdeiasEvoluidas((prev) => ({ ...prev, [antiga.id]: { ...nova, id: antiga.id } }))}
+              onNovasIdeias={(clienteId, novas) => setAiIdeas((prev) => ({ ...prev, [clienteId]: [...(prev[clienteId] || []), ...novas] }))}
             />
           </RegiaoRolavel>
         )}
@@ -3055,7 +3108,6 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                       itens={rascunhosVisiveis.map((r: any) => {
                         const meta = ritualMeta(r.metrics?.ritual_type);
                         const edits = draftEdits[r.id] || { summary: r.summary || "", next_steps: r.next_steps || "" };
-                        const modelo = (r.metrics as any)?.model;
                         const alertas: string[] = Array.isArray((r.metrics as any)?.alertas) ? (r.metrics as any).alertas : [];
                         const nome = r.client?.company_name || r.client?.full_name || "Cliente";
                         const item: ItemDaMesa = {
@@ -3063,12 +3115,12 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                           tipo: meta ? meta.label : "Mensagem",
                           cliente: nome,
                           avatar: <FotoDoCliente nome={nome} foto={r.client_id ? fotoDe({ id: String(r.client_id), nome, avatar_url: r.client?.avatar_url }) : null} tamanho="sm" />,
-                          titulo: r.title,
-                          mensagem: edits.summary || r.summary || "",
+                          titulo: tituloSimples(r.title, nome),
+                          mensagem: textoSimples(edits.summary || r.summary || ""),
                           passo: edits.next_steps || r.next_steps || null,
                           sinais: [
                             { icone: <Clock className="h-3 w-3" />, texto: new Date(r.created_at).toLocaleDateString("pt-BR") },
-                            ...(modelo ? [{ icone: <Sparkles className="h-3 w-3" />, texto: rotuloDoModelo(modelo) }] : []),
+                            ...(ehNotaInterna(r.summary, r.next_steps) ? [{ icone: <FileText className="h-3 w-3" />, texto: "Nota interna, não vai ao cliente", tom: "aviso" as const }] : []),
                             ...(alertas.length ? [{ icone: <AlertTriangle className="h-3 w-3" />, texto: `${alertas.length} ${alertas.length === 1 ? "aviso para a equipe" : "avisos para a equipe"}`, tom: "aviso" as const }] : []),
                           ],
                           rotuloDetalhes: "Editar texto",
@@ -3123,7 +3175,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
             const client = portfolioClients.find((c: any) => c.id === clientId);
             return client ? (client.company_name || client.full_name) : "Cliente";
           };
-          type TimelineEvent = { at: string; icon: "report" | "publication" | "approval" | "file" | "dossie" | "plano" | "venda"; text: string; clientId: string; link?: string | null };
+          type TimelineEvent = { at: string; icon: "report" | "publication" | "approval" | "file" | "dossie" | "plano" | "venda"; text: string; clientId: string; link?: string | null; midia?: MidiaDoEvento | null };
+          const midiaDe = (f: any): MidiaDoEvento | null => (f && (f.file_url || f.storage_path) ? { fileUrl: f.file_url ?? null, storageBucket: f.storage_bucket ?? null, storagePath: f.storage_path ?? null, mime: f.mime_type ?? null, nome: f.file_name ?? null } : null);
           const timeline: TimelineEvent[] = [
             // O dossie reescrito e o evento mais importante da semana: e
             // onde a leitura do cliente muda. Cada versao entra com o motivo.
@@ -3157,29 +3210,33 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
               .map((p: any) => ({
                 at: p.published_at,
                 icon: "publication" as const,
-                text: `Publicação no ar (${p.platform === "instagram" ? "Instagram" : p.platform})`,
+                text: `${p.post?.title ? `${p.post.title} · ` : ""}no ar (${p.platform === "instagram" ? "Instagram" : p.platform})`,
                 clientId: p.client_id,
                 link: p.permalink || null,
+                midia: midiaDe(p.arquivo),
               })),
             ...allPublications
               .filter((p: any) => p.status === "scheduled" && p.scheduled_at)
               .map((p: any) => ({
                 at: p.scheduled_at,
                 icon: "publication" as const,
-                text: `Publicação programada (${p.platform === "instagram" ? "Instagram" : p.platform})`,
+                text: `${p.post?.title ? `${p.post.title} · ` : ""}programada (${p.platform === "instagram" ? "Instagram" : p.platform})`,
                 clientId: p.client_id,
+                midia: midiaDe(p.arquivo),
               })),
             ...pendingApprovalFiles.map((f: any) => ({
               at: f.created_at,
               icon: "approval" as const,
               text: `Enviado para aprovação: ${f.file_name}`,
               clientId: f.client_id,
+              midia: midiaDe(f),
             })),
             ...entreguesFiles.map((f: any) => ({
               at: f.created_at,
               icon: "file" as const,
               text: `Material liberado: ${f.file_name}`,
               clientId: f.client_id,
+              midia: midiaDe(f),
             })),
           ]
             .filter((event) => event.at)
@@ -3213,7 +3270,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                   {/* 16/10/2026 (dono: "histórico mais bonito, organizado e clicável"): filtro por
                       tipo em ícones, dias agrupados, trilho com o ícone de cada movimento e a
                       foto do cliente; tocar abre o que existe (relatório, post) ou o perfil. */}
-                  <div className="-mx-1 mb-3 flex min-w-0 items-center overflow-x-auto scrollbar-hidden" role="tablist" aria-label="Tipo de movimento">
+                  <div className="-mx-1 mb-4 flex min-w-0 items-center overflow-x-auto scrollbar-hidden sm:justify-center" role="tablist" aria-label="Tipo de movimento">
                     {([
                       ["todos", "Tudo", null],
                       ["dossie", "Dossiê", BookOpen],
@@ -3254,32 +3311,42 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                     const abrir = (ev: TimelineEvent) => {
                       if (ev.link && /^https?:/.test(ev.link)) { window.open(ev.link, "_blank", "noopener,noreferrer"); return; }
                       if (ev.link) { navigate(ev.link); return; }
-                      setProfileClientId(ev.clientId); setActiveTab("perfis");
+                      // Plano, venda, dossiê, aprovação e material: volta para o perfil do cliente.
+                      setProfileClientId(ev.clientId);
+                      if (ev.icon === "dossie") setColunaDoPerfil("dossie");
+                      setActiveTab("perfis");
                     };
+                    // 16/10/2026 (dono: "linha do tempo mais centralizada, como uma linha do tempo
+                    // mesmo; publicações, aprovações e materiais com a arte/capa, não só texto"):
+                    // trilho no meio no computador, eventos alternando dos dois lados; no celular,
+                    // trilho à esquerda.
+                    let lado = 0;
                     return (
-                      <div className="space-y-5">
+                      <div className="relative mx-auto max-w-4xl" data-linha-do-tempo-central="">
+                        <span className="absolute bottom-0 left-3 top-0 w-px bg-border md:left-1/2" aria-hidden="true" />
                         {dias.map(({ dia, eventos }) => (
-                          <section key={dia} aria-label={dia} className="min-w-0">
-                            <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{dia}</h4>
-                            <ol className="relative ml-3 border-l border-border">
+                          <section key={dia} aria-label={dia} className="relative min-w-0 pb-4">
+                            <h4 className="relative z-10 mb-3 ml-7 inline-flex rounded-full bg-muted px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground md:ml-0 md:flex md:w-fit md:mx-auto">{dia}</h4>
+                            <ol className="space-y-3">
                               {eventos.map((event, index) => {
                                 const EventIcon = iconMap[event.icon];
                                 const nome = nameOf(event.clientId);
+                                const esquerda = lado++ % 2 === 0;
                                 return (
-                                  <li key={`${event.at}-${index}`} className="min-w-0">
+                                  <li key={`${event.at}-${index}`} className={juntar("relative min-w-0 pl-9 md:w-1/2 md:pl-0", esquerda ? "md:pr-8" : "md:ml-auto md:pl-8")}>
+                                    <span className={juntar("absolute top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-background ring-1 ring-border left-0", esquerda ? "md:left-auto md:-right-3" : "md:-left-3")} aria-hidden="true">
+                                      <EventIcon className={`h-3.5 w-3.5 ${corDoEvento[event.icon]}`} />
+                                    </span>
                                     <button type="button" onClick={() => abrir(event)} title={event.link ? "Abrir" : `Abrir o perfil de ${nome}`}
-                                      className={juntar("group -ml-3 flex w-full min-w-0 items-center rounded-lg py-1.5 pr-2 text-left transition-colors hover:bg-muted/40", foco)}>
-                                      <span className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-background ring-1 ring-border">
-                                        <EventIcon className={`h-3.5 w-3.5 ${corDoEvento[event.icon]}`} aria-hidden="true" />
-                                      </span>
-                                      <span className="ml-2.5 min-w-0 flex-1">
-                                        <span className="block truncate text-[13px] text-foreground">{event.text}</span>
-                                        <span className={juntar(texto.auxiliar, "flex min-w-0 items-center")}>
+                                      className={juntar("group flex w-full min-w-0 items-center rounded-xl p-2 text-left transition-colors hover:bg-muted/50", esquerda && "md:flex-row-reverse md:text-right", foco)}>
+                                      {event.midia ? <MiniaturaDoEvento midia={event.midia} /> : null}
+                                      <span className={juntar("min-w-0 flex-1", event.midia ? (esquerda ? "ml-3 md:ml-0 md:mr-3" : "ml-3") : "")}>
+                                        <span className="line-clamp-2 text-[13px] leading-snug text-foreground">{event.text}</span>
+                                        <span className={juntar(texto.auxiliar, "mt-0.5 flex min-w-0 items-center", esquerda && "md:justify-end")}>
                                           <span className="min-w-0 truncate">{nome}</span>
                                           <span className="ml-1.5 shrink-0 tabular-nums">· {new Date(event.at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
                                         </span>
                                       </span>
-                                      <ArrowUpRight className="ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
                                     </button>
                                   </li>
                                 );
@@ -3474,6 +3541,68 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           )}
         </DialogContent>
       </Dialog>
+
+      {/* 16/10/2026: cadastro aberto por cima da Central (antes ia para /clientes e trocava de tela). */}
+      {(() => {
+        const aberto = cadastroAbertoId ? (clients || []).find((c: any) => c.id === cadastroAbertoId) || null : null;
+        if (!aberto) return null;
+        return (
+          <Suspense fallback={null}>
+          <EditClientDrawer
+            open={!!aberto}
+            onClose={() => setCadastroAbertoId(null)}
+            client={aberto}
+            fotoFallback={aberto ? fotoDe({ id: String(aberto.id), nome: nomeDoCliente(aberto), avatar_url: aberto.avatar_url }) : null}
+          />
+          </Suspense>
+        );
+      })()}
     </div>
   );
+}
+
+/** Arquivo de um movimento do histórico (publicação, aprovação, material). */
+type MidiaDoEvento = { fileUrl: string | null; storageBucket: string | null; storagePath: string | null; mime: string | null; nome: string | null };
+
+/** 16/10/2026: a capa do material na linha do tempo: imagem em miniatura; vídeo e documento com ícone. */
+function MiniaturaDoEvento({ midia }: { midia: MidiaDoEvento }) {
+  const mime = midia.mime || "";
+  const ehImagem = mime.startsWith("image/") || /\.(png|jpe?g|webp|gif|avif)$/i.test(midia.nome || midia.storagePath || "");
+  const ehVideo = mime.startsWith("video/");
+  const { url } = useResolvedFileUrl({ fileUrl: ehImagem ? midia.fileUrl : null, storageBucket: ehImagem ? midia.storageBucket : null, storagePath: ehImagem ? midia.storagePath : null, miniatura: true });
+  if (ehImagem && url) {
+    return <img src={url} alt="" loading="lazy" decoding="async" className="h-14 w-14 shrink-0 rounded-lg bg-muted object-cover" />;
+  }
+  const Icone = ehVideo ? Play : FileText;
+  const ext = (midia.nome || midia.storagePath || "").split(".").pop();
+  return (
+    <span className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-lg bg-muted text-muted-foreground" aria-hidden="true">
+      <Icone className="h-4 w-4" />
+      {ext && ext.length <= 5 && <span className="mt-0.5 text-[9px] font-semibold uppercase">{ext}</span>}
+    </span>
+  );
+}
+
+/**
+ * 16/10/2026 (dono: "fila de revisão com muito texto técnico, não dá para entender"):
+ * o título perde o nome do cliente (já está no avatar) e os pedaços de controle
+ * ("corte 09/10"); a mensagem vira tópicos curtos, uma frase por linha.
+ */
+function tituloSimples(titulo: string | null | undefined, cliente: string): string {
+  const partes = String(titulo || "").split(" | ").map((t) => t.trim()).filter(Boolean);
+  const nome = cliente.trim().toLowerCase();
+  const uteis = partes.filter((t, i) => !(i === 0 && nome && (nome.indexOf(t.toLowerCase()) === 0 || t.toLowerCase().indexOf(nome.split(" ")[0]) === 0)) && !/^corte\b/i.test(t));
+  return (uteis.length ? uteis : partes).join(" · ") || "Mensagem";
+}
+
+function textoSimples(texto: string): string {
+  const limpo = String(texto || "").trim();
+  if (!limpo || limpo.indexOf("\n") >= 0) return limpo;
+  // Texto corrido de nota interna: uma frase por linha, com marcador.
+  const frases = limpo.split(/(?:\.|;)\s+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ0-9])/).map((f) => f.trim().replace(/[.;]$/, "")).filter(Boolean);
+  return frases.length >= 3 ? frases.map((f) => `• ${f}`).join("\n") : limpo;
+}
+
+function ehNotaInterna(resumo?: string | null, proximo?: string | null): boolean {
+  return /prepara[cç][aã]o interna|sem envio\/publica[cç][aã]o|n[aã]o vai ao cliente/i.test(`${resumo || ""} ${proximo || ""}`);
 }

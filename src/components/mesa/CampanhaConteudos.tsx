@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarCheck2, Check, ChevronDown, ExternalLink, Layers, Loader2, Pencil, Sparkles } from "lucide-react";
+import { CalendarCheck2, Check, ChevronDown, ExternalLink, Layers, ListPlus, Loader2, MessageSquare, Pencil, ScrollText, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -126,9 +126,9 @@ function EditorDoConteudo({
         <Textarea value={copy} rows={3} onChange={(e) => setCopy(e.target.value)} className="mt-1 min-h-[60px] text-[12.5px]" />
       </label>
       <div className="flex items-center justify-end">
-        <Button type="button" size="sm" variant="ghost" className="mr-1.5 h-8" onClick={onCancelar} disabled={salvando}>Cancelar</Button>
-        <Button type="button" size="sm" className="h-8" onClick={salvar} disabled={salvando}>
-          {salvando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
+        <Button type="button" size="sm" variant="ghost" className="mr-1 h-8 w-8 p-0" onClick={onCancelar} disabled={salvando} aria-label="Cancelar" title="Cancelar"><X className="h-4 w-4" aria-hidden="true" /></Button>
+        <Button type="button" size="sm" className="h-8 w-8 p-0" onClick={salvar} disabled={salvando} aria-label="Salvar" title="Salvar">
+          {salvando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
           Salvar
         </Button>
       </div>
@@ -213,20 +213,27 @@ function LinhaDoConteudo({
                     <SelectItem value="carrossel">Carrossel</SelectItem>
                   </SelectContent>
                 </Select>
-                <button type="button" onClick={() => setEditando((v) => !v)} className="mb-1 mr-3 inline-flex items-center text-[11.5px] font-medium text-primary hover:underline">
-                  <Pencil className="mr-1 h-3 w-3" /> {editando ? "Fechar edição" : "Editar"}
+                <button type="button" onClick={() => setEditando((v) => !v)} aria-pressed={editando} aria-label={editando ? "Fechar edição" : "Editar"} title={editando ? "Fechar edição" : "Editar"} className="toque-compacto mb-1 mr-2 inline-flex h-7 w-7 items-center justify-center rounded-md text-primary hover:bg-muted">
+                  {editando ? <X className="h-3.5 w-3.5" aria-hidden="true" /> : <Pencil className="h-3.5 w-3.5" aria-hidden="true" />}
                 </button>
               </>
             )}
             {!editando && (
-              <button type="button" onClick={() => setAberto((v) => !v)} aria-expanded={aberto} className="mb-1 mr-3 inline-flex items-center text-[11.5px] text-muted-foreground hover:text-foreground">
-                {aberto ? "Fechar roteiro" : "Ver roteiro"}
-                <ChevronDown className={`ml-0.5 h-3.5 w-3.5 transition-transform ${aberto ? "rotate-180" : ""}`} />
+              <button
+                type="button"
+                onClick={() => setAberto((v) => !v)}
+                aria-expanded={aberto}
+                aria-label={aberto ? "Fechar roteiro" : "Ver roteiro"}
+                title={aberto ? "Fechar roteiro" : "Ver roteiro"}
+                className="toque-compacto mb-1 mr-2 inline-flex h-7 items-center rounded-md px-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <ScrollText className="h-3.5 w-3.5" aria-hidden="true" />
+                <ChevronDown className={`ml-0.5 h-3.5 w-3.5 transition-transform ${aberto ? "rotate-180" : ""}`} aria-hidden="true" />
               </button>
             )}
             {naAgenda && onAbrir && (
-              <button type="button" onClick={() => onAbrir(item.task_id as string, mesDaData(item.data))} className="mb-1 inline-flex items-center text-[11.5px] font-medium text-primary hover:underline">
-                Abrir no Estúdio <ExternalLink className="ml-1 h-3 w-3" />
+              <button type="button" onClick={() => onAbrir(item.task_id as string, mesDaData(item.data))} className="toque-compacto mb-1 inline-flex h-7 w-7 items-center justify-center rounded-md text-primary hover:bg-muted" aria-label="Abrir no Estúdio" title="Abrir no Estúdio">
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             )}
           </div>
@@ -391,15 +398,15 @@ export default function CampanhaConteudos({
             </SelectContent>
           </Select>
           <BotaoComCusto
-            rotulo={<><Sparkles className="mr-1.5 h-3.5 w-3.5" />{itens.length ? "Gerar mais conteúdos" : "Gerar os conteúdos da campanha"}</>}
+            rotulo={<><ListPlus className="h-4 w-4" aria-hidden="true" /><span className="sr-only">{itens.length ? "Gerar mais conteúdos" : "Gerar os conteúdos da campanha"}</span></>}
             titulo="Conteúdos da campanha"
             descricao="O estrategista escreve os conteúdos pelo arco da campanha (aquecimento, lançamento, prova, objeção, último chamado), em paralelo, com o briefing e as imagens. Eles aparecem conforme ficam prontos."
             partes={() => partesDosConteudosDaCampanha(catalogo, Number(quantidade) || 5)}
             executar={gerar}
             aoConcluir={(d) => aplicarRespostaDaCampanha(queryClient, clientId, d)}
             disabled={gerandoDesde !== null}
-            variant={itens.length ? "outline" : "default"}
-            className="mb-1 h-8"
+            variant={itens.length ? "ghost" : "default"}
+            className="mb-1 h-8 gap-0 px-2"
           />
         </div>
         <MesEscolhaEditorial valor={escolha} onChange={setEscolha} disabled={gerandoDesde !== null} />
@@ -407,7 +414,7 @@ export default function CampanhaConteudos({
       </div>
 
       {proposta && itens.length === 0 && gerandoDesde === null && (
-        <p className="text-[12.5px] text-muted-foreground">Nenhum conteúdo ainda. Gere acima ou peça ao agente da campanha.</p>
+        <p className="text-[12px] text-muted-foreground">Nenhum conteúdo ainda.</p>
       )}
 
       {itens.length > 0 && (
@@ -444,27 +451,30 @@ export default function CampanhaConteudos({
                 </Select>
               )}
               <Button type="button" size="sm" className="mb-1 mr-1.5 h-8" onClick={() => void mandar()} disabled={!selecao.length || !projeto || enviando}>
-                {enviando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CalendarCheck2 className="mr-1.5 h-3.5 w-3.5" />}
-                Mandar para a agenda ({selecao.length})
+                {enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CalendarCheck2 className="h-4 w-4" aria-hidden="true" />}
+                <span className="ml-1 tabular-nums" aria-hidden="true">{selecao.length}</span>
+                <span className="sr-only">Mandar para a agenda ({selecao.length})</span>
               </Button>
             </>
           ) : (
-            <span className="mb-1 mr-2 inline-flex items-center text-[12px]">
-              <CalendarCheck2 className="mr-1.5 h-3.5 w-3.5 text-success" /> Tudo na agenda
+            <span className="mb-1 mr-2 inline-flex h-8 items-center" role="img" aria-label="Tudo na agenda" title="Tudo na agenda">
+              <CalendarCheck2 className="h-4 w-4 text-success" aria-hidden="true" />
             </span>
           )}
           {onPedirAoAgente && (
-            <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8" onClick={() => onPedirAoAgente("Nos conteúdos, ")}>
-              <Pencil className="mr-1.5 h-3.5 w-3.5" /> Ajustar com o agente
+            <Button type="button" size="sm" variant="ghost" className="mb-1 mr-1.5 h-8 w-8 p-0" onClick={() => onPedirAoAgente("Nos conteúdos, ")} aria-label="Ajustar com o agente" title="Ajustar com o agente">
+              <MessageSquare className="h-4 w-4" aria-hidden="true" />
             </Button>
           )}
           {primeiroNaAgenda && onAbrirNoEstudio && (
             <button
               type="button"
               onClick={() => onAbrirNoEstudio(primeiroNaAgenda.task_id as string, mesDaData(primeiroNaAgenda.data))}
-              className="mb-1 ml-auto inline-flex items-center text-[12px] font-medium text-primary hover:underline"
+              className="toque-compacto mb-1 ml-auto inline-flex h-8 w-8 items-center justify-center rounded-md text-primary hover:bg-background"
+              aria-label="Abrir no Estúdio"
+              title="Abrir no Estúdio"
             >
-              Abrir no Estúdio <ExternalLink className="ml-1 h-3 w-3" />
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
         </div>

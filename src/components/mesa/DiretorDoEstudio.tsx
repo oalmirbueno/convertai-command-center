@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, MessageSquare, RefreshCw, Wand2 } from "lucide-react";
+import { Check, CheckCheck, Loader2, MessageSquare, RotateCw, Type, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -332,16 +332,16 @@ export default function DiretorDoEstudio({
         )}
         {aplicada ? (
           <div className="mt-2 flex min-w-0 flex-wrap items-center">
-            <span className="mb-1 mr-2 inline-flex items-center text-[11.5px] font-medium text-success">
-              <Check className="mr-1 h-3.5 w-3.5" /> Aplicada
+            <span className="mb-1 mr-2 inline-flex h-8 items-center text-success" title="Aplicada">
+              <Check className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Aplicada</span>
             </span>
             {ordens.length > 0 && !bloqueado && (
               <span className="mb-1">
                 <BotaoComCusto
-                  rotulo={<><RefreshCw className="mr-1 h-3.5 w-3.5" />{rotuloDeRefazer(ordens, "Refazer")}</>}
+                  rotulo={<><RotateCw className="h-4 w-4" aria-hidden="true" /><span className="sr-only">{rotuloDeRefazer(ordens, "Refazer")}</span></>}
                   titulo={rotuloDeRefazer(ordens, "Refazer")}
                   descricao="Refaz pelo fluxo normal do estúdio: gera, confere e corrige sozinho quando a chave estiver ligada."
-                  variant="outline"
+                  variant="ghost"
                   className="h-8 px-2.5 text-[11.5px]"
                   disabled={travado}
                   partes={() => partesRefazer(ordens, false)}
@@ -355,19 +355,19 @@ export default function DiretorDoEstudio({
             <Button
               type="button"
               size="sm"
-              variant="outline"
+              variant="ghost"
               className="mb-1 mr-1.5 h-8 px-2.5 text-[11.5px]"
               disabled={travado}
               onClick={() => void aplicarSo(m, [mud], chaveDoBotao)}
               title="Grava a mudança na direção, sem custo. A arte muda quando a lâmina for refeita."
             >
-              {aplicando === chaveDoBotao ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
-              Aplicar
+              {aplicando === chaveDoBotao ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
+              <span className="sr-only">Aplicar</span>
             </Button>
             {soTexto && (
               <span className="mb-1 mr-1.5">
                 <BotaoComCusto
-                  rotulo={<><Wand2 className="mr-1 h-3.5 w-3.5" />Aplicar e ajustar o texto</>}
+                  rotulo={<><Type className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Aplicar e ajustar o texto</span></>}
                   titulo="Aplicar e ajustar só o texto"
                   descricao="Grava a mudança e edita só a área do texto da lâmina: a foto, a cena e a logo ficam como estão. É uma edição de imagem (não há camada de texto), mais barata que refazer a lâmina."
                   className="h-8 px-2.5 text-[11.5px]"
@@ -381,7 +381,7 @@ export default function DiretorDoEstudio({
               <span className="mb-1">
                 <BotaoComCusto
                   variant={soTexto ? "outline" : undefined}
-                  rotulo={<><Wand2 className="mr-1 h-3.5 w-3.5" />{rotuloDeRefazer(ordens)}</>}
+                  rotulo={<><Wand2 className="h-4 w-4" aria-hidden="true" /><span className="sr-only">{rotuloDeRefazer(ordens)}</span></>}
                   titulo={rotuloDeRefazer(ordens)}
                   descricao={
                     refazFundoContinuo([mud], continuo)
@@ -442,23 +442,24 @@ export default function DiretorDoEstudio({
           <div className="mr-4 space-y-2">
             {m.mudancas.map((mud) => cartao(m, mud))}
             {pendentes.length > 1 && (
-              <div className="flex min-w-0 flex-wrap items-center rounded-lg border border-dashed border-border px-2.5 py-2">
+              <div className="flex min-w-0 flex-wrap items-center rounded-lg bg-muted/50 px-2.5 py-2">
                 <span className="mb-1 mr-2 text-[11.5px] text-muted-foreground">Todas as {pendentes.length} sugestões:</span>
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
                   className="mb-1 mr-1.5 h-8 px-2.5 text-[11.5px]"
                   disabled={travado}
                   onClick={() => void aplicarSo(m, pendentes, chaveDaMensagem)}
+                  title="Aplicar todas: grava as mudanças na direção, sem custo"
                 >
-                  {aplicando === chaveDaMensagem ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
-                  Aplicar todas
+                  {aplicando === chaveDaMensagem ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCheck className="h-4 w-4" aria-hidden="true" />}
+                  <span className="sr-only">Aplicar todas</span>
                 </Button>
                 {ordensDeTodas.length > 0 && (
                   <span className="mb-1">
                     <BotaoComCusto
-                      rotulo={<><Wand2 className="mr-1 h-3.5 w-3.5" />{rotuloDeRefazer(ordensDeTodas, "Aplicar todas e refazer")}</>}
+                      rotulo={<><Wand2 className="h-4 w-4" aria-hidden="true" /><span className="sr-only">{rotuloDeRefazer(ordensDeTodas, "Aplicar todas e refazer")}</span></>}
                       titulo={rotuloDeRefazer(ordensDeTodas, "Aplicar todas e refazer")}
                       descricao="Grava todas as sugestões e refaz as lâminas pelo fluxo normal do estúdio."
                       className="h-8 px-2.5 text-[11.5px]"

@@ -339,8 +339,8 @@ export default function EtapaApresentacao() {
               <button type="button" className={botao.icone} aria-label="Próximo slide" disabled={atual >= incluidos.length - 1} onClick={() => setAtual(Math.min(incluidos.length - 1, atual + 1))}>
                 <ChevronRight className="h-4 w-4" />
               </button>
-              <button ref={botaoApresentar} type="button" className={juntar(botao.discreto, "m-1 h-8")} onClick={() => setApresentando(true)} data-apresentar="">
-                <Maximize2 className="mr-1.5 h-3.5 w-3.5" /> Apresentar
+              <button ref={botaoApresentar} type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} onClick={() => setApresentando(true)} data-apresentar="" aria-label="Apresentar" title="Apresentar">
+                <Maximize2 className="h-4 w-4" aria-hidden="true" />
               </button>
             </>
           }

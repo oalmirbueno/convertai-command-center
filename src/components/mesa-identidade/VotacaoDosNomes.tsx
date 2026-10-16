@@ -113,8 +113,8 @@ export default function VotacaoDosNomes({ rodada }: { rodada: RodadaDeNomes }) {
             </button>
           ) : (
             <>
-              <button type="button" className={juntar(botao.discreto, "m-1 h-8")} onClick={() => link && void copiarTexto(link).then((ok) => (ok ? toast.success("Link copiado") : toast.error("Não deu para copiar")))}>
-                <Copy className="mr-1.5 h-3.5 w-3.5" /> Copiar link
+              <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} onClick={() => link && void copiarTexto(link).then((ok) => (ok ? toast.success("Link copiado") : toast.error("Não deu para copiar")))} aria-label="Copiar link" title="Copiar link">
+                <Copy className="h-4 w-4" aria-hidden="true" />
               </button>
               <button type="button" className={juntar(botao.discreto, "m-1 h-8")} disabled={!!ocupado} onClick={() => void rodar("fechar", async () => {
                 await chamarIdentidade("naming_votacao_fechar", { rodada_id: rodada.id });
