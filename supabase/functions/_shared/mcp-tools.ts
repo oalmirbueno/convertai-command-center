@@ -2628,7 +2628,7 @@ const ID_DO_ANGULO = z.string().regex(/^[A-Za-z0-9_-]{1,40}$/, 'angulo_id comes 
 const adsPlanoGerarTool = ferramentaDeMesa(
   'aceleriq_mesa_ads_plano_gerar',
   'Mesa Ads: gerar plano de teste com ângulos',
-  'Gera o plano de teste da Mesa Ads como o botão da tela: o estrategista lê o briefing de anúncios salvo, a oferta, o nicho e o que já rodou, escreve ângulos a mais e o Jev escolhe os melhores (de 3 a 6), cada um com situação, mecanismo, prova, gancho, estilo visual, formatos e hipótese. Precisa do briefing salvo (aceleriq_mesa_ads_briefing_salvar). Gasta crédito de IA: exige confirmar_custo=true. Pode levar alguns minutos. Depois: aceleriq_mesa_ads_criativos_produzir, um ângulo por vez.',
+  'Gera o plano de teste da Mesa Ads como o botão da tela: o estrategista lê o briefing de anúncios salvo, a oferta, o nicho e o que já rodou, escreve ângulos a mais e o Jev escolhe os melhores (de 3 a 6), cada um com situação, mecanismo, prova, gancho, estilo visual, formatos e hipótese. Precisa do briefing salvo (aceleriq_mesa_ads_briefing_salvar). Gasta crédito de IA: exige confirmar_custo=true. Leva alguns minutos. Se não terminar em poucos segundos, responde em_andamento e termina sozinha: não repita, acompanhe o campo andamento de aceleriq_mesa_ads_contexto. Depois: aceleriq_mesa_ads_criativos_produzir, um ângulo por vez.',
   z.object({
     client_id: UUID,
     pedido: z.string().max(2000).optional(),
@@ -2655,13 +2655,13 @@ const adsPlanoGerarTool = ferramentaDeMesa(
     additionalProperties: false,
   },
   ({ confirmar_custo: _c, ...input }, ctx) => _adsPlanoGerar(input, ctx),
-  { longa: true, idempotente: false },
+  { idempotente: false },
 );
 
 const adsCriativosProduzirTool = ferramentaDeMesa(
   'aceleriq_mesa_ads_criativos_produzir',
   'Mesa Ads: produzir os criativos de um ângulo',
-  'Produz os criativos de UM ângulo do plano, como a tela: escreve a copy de cada variação (com copies a mais e o Jev escolhendo as melhores) e deixa a arte de cada formato dirigida no Estúdio (um trabalho por criativo). Não gera a imagem: a imagem vem com aceleriq_mesa_ads_arte_gerar. Um ângulo por chamada, porque cada um leva minutos. Gasta crédito de IA: exige confirmar_custo=true.',
+  'Produz os criativos de UM ângulo do plano, como a tela: escreve a copy de cada variação (com copies a mais e o Jev escolhendo as melhores) e deixa a arte de cada formato dirigida no Estúdio (um trabalho por criativo). Não gera a imagem: a imagem vem com aceleriq_mesa_ads_arte_gerar. Um ângulo por chamada, porque cada um leva minutos. Se não terminar em poucos segundos, responde em_andamento e termina sozinha: não repita, acompanhe o campo andamento de aceleriq_mesa_ads_contexto. Gasta crédito de IA: exige confirmar_custo=true.',
   z.object({
     plano_id: UUID,
     angulo_id: ID_DO_ANGULO,
@@ -2686,7 +2686,7 @@ const adsCriativosProduzirTool = ferramentaDeMesa(
     additionalProperties: false,
   },
   ({ confirmar_custo: _c, ...input }, ctx) => _adsCriativosProduzir(input, ctx),
-  { longa: true, idempotente: false },
+  { idempotente: false },
 );
 
 const adsArteGerarTool = ferramentaDeMesa(
@@ -2719,7 +2719,7 @@ const adsArteGerarTool = ferramentaDeMesa(
 const adsEntregarAoGestorTool = ferramentaDeMesa(
   'aceleriq_mesa_ads_entregar_ao_gestor',
   'Mesa Ads: entregar os criativos ao gestor de tráfego',
-  'Entrega os criativos prontos ao gestor de tráfego pelo caminho da tela: a arte vai para Arquivos > Criativos de anúncio, o pacote do gestor (copy, ângulos, hipóteses, objetivo e verba do briefing) vai para Arquivos e a tarefa do gestor abre no Kanban. Só entrega criativo com todas as lâminas geradas; se faltar arte, recusa e diz quais. Sem IA e sem custo. Não sobe nada na Meta.',
+  'Entrega os criativos prontos ao gestor de tráfego pelo caminho da tela: a arte vai para Arquivos > Criativos de anúncio, o pacote do gestor (copy, ângulos, hipóteses, objetivo e verba do briefing) vai para Arquivos e a tarefa do gestor abre no Kanban. Só entrega criativo com todas as lâminas geradas; se faltar arte, recusa e diz quais. Sem IA e sem custo. Se não terminar em poucos segundos, responde em_andamento e termina sozinha: não repita, acompanhe o campo andamento de aceleriq_mesa_ads_contexto. Não sobe nada na Meta.',
   z.object({
     client_id: UUID,
     plano_id: UUID.optional(),
@@ -2739,7 +2739,7 @@ const adsEntregarAoGestorTool = ferramentaDeMesa(
     additionalProperties: false,
   },
   (input, ctx) => _adsEntregarAoGestor(input, ctx),
-  { longa: true, idempotente: false },
+  { idempotente: false },
 );
 
 const AREA_JSON = { type: 'string', enum: [...AREAS_DO_CEREBRO], description: 'geral (vale para todos), calendario, campanha, copy (estrategista do mês), arte, foto (diretor de arte e Mesa Foto), ads, conta (estrategista de anúncios).' };

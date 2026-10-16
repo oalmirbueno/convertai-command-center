@@ -1072,7 +1072,7 @@ Deno.test('mesas: foto sem tabela vira aviso; kit não expõe dados da autoriza�
 
 // ─── MCP 2.3: agir nas mesas e o cérebro do cliente ──────────
 import { folegoResponse } from '../_shared/mcp-response.ts';
-import { chamarMesa } from '../_shared/mcp-mesas-acoes.ts';
+import { chamarMesa, esperarOuSeguir } from '../_shared/mcp-mesas-acoes.ts';
 
 const ACOES_2_3 = [
   'aceleriq_mesa_calendario_pedido',
@@ -1162,9 +1162,27 @@ Deno.test('2.12: Mesa Ads até o gestor exige mesas:write, OAuth, idempotência 
   await assertRejects(() => TOOL_MAP.get('aceleriq_mesa_ads_arte_gerar')!.handler({ trabalho_id: cliente, idempotency_key: 'teste-2-12-0003' }, adminCtx), Error, 'Invalid input');
   // Entregar ao gestor pede o plano ou os criativos.
   await assertRejects(() => TOOL_MAP.get('aceleriq_mesa_ads_entregar_ao_gestor')!.handler({ client_id: cliente, idempotency_key: 'teste-2-12-0004' }, adminCtx), Error, 'Invalid input');
-  assertEquals(TOOL_MAP.get('aceleriq_mesa_ads_plano_gerar')!.longRunning, true);
-  assertEquals(TOOL_MAP.get('aceleriq_mesa_ads_criativos_produzir')!.longRunning, true);
-  assertEquals(TOOL_MAP.get('aceleriq_mesa_ads_arte_gerar')!.longRunning, false);
+  // Respondem em até ~6 s (o Paperclip corta em 10 s): JSON direto, sem fôlego.
+  for (const nome of ACOES_ADS_2_12) assertEquals(TOOL_MAP.get(nome)!.longRunning, false, `${nome} answers fast`);
+});
+
+Deno.test('2.12: ação longa responde em andamento e segue; a rápida devolve o resultado e o erro', async () => {
+  const ctx: AuthContext = { ...adminCtx, correlationId: 'teste-2-12-segundo-plano' };
+  const rapida = await esperarOuSeguir('aceleriq_mesa_ads_plano_gerar', ctx, 'cliente', 'chave-0001',
+    Promise.resolve({ ref: 'ads_plano:p1', resultado: { plano_id: 'p1' } }), 50);
+  assertEquals(rapida, { ref: 'ads_plano:p1', resultado: { plano_id: 'p1' } });
+  await assertRejects(
+    () => esperarOuSeguir('aceleriq_mesa_ads_plano_gerar', ctx, 'cliente', 'chave-0002', Promise.reject(new Error('mesa:sem_briefing Salve o briefing')), 50),
+    Error, 'mesa:sem_briefing',
+  );
+  let terminar: (v: { ref: string | null; resultado: Record<string, unknown> }) => void = () => {};
+  const lenta = new Promise<{ ref: string | null; resultado: Record<string, unknown> }>((ok) => { terminar = ok; });
+  const resposta = await esperarOuSeguir('aceleriq_mesa_ads_criativos_produzir', ctx, 'cliente', 'chave-0003', lenta, 20);
+  assertEquals(resposta.resultado.em_andamento, true);
+  assertEquals(resposta.ref, 'em_andamento:aceleriq_mesa_ads_criativos_produzir');
+  assert(String(resposta.resultado.como_acompanhar).includes('aceleriq_mesa_ads_contexto'));
+  terminar({ ref: 'ads_plano:p1:a1', resultado: {} });
+  await lenta;
 });
 
 Deno.test('2.3: cérebro lê com clients:read e escreve com clients:write', () => {

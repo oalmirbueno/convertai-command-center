@@ -20,6 +20,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { db, isUuid } from './aceleriq-read-services.ts';
+import { auditLog } from './mcp-audit.ts';
 import { assertClientAccess, type AuthContext } from './mcp-auth.ts';
 import { exigirClienteExistente } from './mcp-client-id-guard.ts';
 import { getMcpRuntimeConfig } from './mcp-runtime.ts';
@@ -338,13 +339,76 @@ export async function adsOfertaDoContexto(
 // na Meta por aqui: subir é do gestor, com o ok do dono.
 
 type TrabalhoDoEstudio = { id: string; client_id: string; tipo: string | null; status: string | null; direcao: unknown; cards: unknown };
+type FeitoNaMesa = { ref: string | null; resultado: Record<string, unknown> };
+
+/**
+ * O Paperclip 2026.1012 corta a ferramenta em 10 s (teto de 60 s, fixo no
+ * gateway dele), e o plano, a produção e a entrega levam de um a vários
+ * minutos. A mesa termina do mesmo jeito, mas o agente ficava sem saber.
+ * Então a ação longa espera um pouco; se não terminou, responde "em
+ * andamento" e segue em segundo plano (EdgeRuntime.waitUntil). O fim, com o
+ * resultado ou o erro, fica na trilha do MCP como `<ferramenta>:concluida` e
+ * aparece em aceleriq_mesa_ads_contexto (andamento).
+ */
+export const ESPERA_ANTES_DE_SEGUIR_MS = 6_000;
+
+export async function esperarOuSeguir(
+  ferramenta: string,
+  ctx: AuthContext,
+  clientId: string,
+  idempotencyKey: string,
+  trabalho: Promise<FeitoNaMesa>,
+  esperaMs = ESPERA_ANTES_DE_SEGUIR_MS,
+): Promise<FeitoNaMesa> {
+  const inicio = Date.now();
+  let relogio: ReturnType<typeof setTimeout> | undefined;
+  const corrida = await Promise.race([
+    trabalho.then((r) => ({ fim: true as const, r }), (e: unknown) => ({ fim: true as const, e })),
+    new Promise<{ fim: false }>((ok) => { relogio = setTimeout(() => ok({ fim: false }), esperaMs); }),
+  ]);
+  clearTimeout(relogio);
+  if (corrida.fim) {
+    if ('e' in corrida) throw corrida.e;
+    return corrida.r;
+  }
+  const registrar = trabalho
+    .then(
+      (r) => ({ ok: true, ref: r.ref, erro: null as string | null }),
+      (e: unknown) => ({ ok: false, ref: null, erro: e instanceof Error ? e.message : String(e) }),
+    )
+    .then((f) => auditLog({
+      correlationId: crypto.randomUUID(),
+      toolName: `${ferramenta}:concluida`,
+      origin: ctx.origin,
+      keyId: ctx.keyId,
+      scopes: ctx.scopes ?? null,
+      input: { client_id: clientId, idempotency_key: idempotencyKey, pedido: ctx.correlationId ?? null },
+      success: f.ok,
+      statusCode: f.ok ? 200 : 500,
+      durationMs: Date.now() - inicio,
+      errorCode: f.ok ? null : (f.erro?.match(/^mesa:([a-z_]+)/)?.[1] ?? 'falhou'),
+      errorMessage: f.erro,
+      resultRef: f.ref,
+    }));
+  const er = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+  if (er && typeof er.waitUntil === 'function') er.waitUntil(registrar.catch(() => null));
+  return {
+    ref: `em_andamento:${ferramenta}`,
+    resultado: {
+      em_andamento: true,
+      client_id: clientId,
+      aviso: 'A mesa ainda está trabalhando (leva alguns minutos) e termina sozinha. NÃO repita a chamada: ela gastaria de novo.',
+      como_acompanhar: 'Em 1 a 3 minutos leia aceleriq_mesa_ads_contexto deste cliente: o campo andamento diz se terminou ou o erro, e planos e criativos trazem o que foi feito.',
+    },
+  };
+}
 
 export async function adsPlanoGerar(
   input: { client_id: string; pedido?: string; quantidade_angulos?: number; oferta_id?: string; objetivo?: string; tom?: string; idempotency_key: string },
   ctx: AuthContext,
 ) {
   await conferirCliente(input.client_id, ctx);
-  return await umaVez('aceleriq_mesa_ads_plano_gerar', ctx, input.idempotency_key, async () => {
+  return await umaVez('aceleriq_mesa_ads_plano_gerar', ctx, input.idempotency_key, () => esperarOuSeguir('aceleriq_mesa_ads_plano_gerar', ctx, input.client_id, input.idempotency_key, (async () => {
     const { idempotency_key: _k, ...corpo } = input;
     const dados = await chamarMesa('mesa-ads', 'plano_gerar', corpo as Record<string, unknown>, ctx);
     const plano = (dados.plano ?? {}) as Record<string, unknown>;
@@ -362,7 +426,7 @@ export async function adsPlanoGerar(
         resultado_da_mesa: dados,
       },
     };
-  });
+  })()));
 }
 
 export async function adsCriativosProduzir(
@@ -371,7 +435,7 @@ export async function adsCriativosProduzir(
 ) {
   const clientId = await clienteDaLinha('ads_planos', input.plano_id, 'plano_id');
   await conferirCliente(clientId, ctx);
-  return await umaVez('aceleriq_mesa_ads_criativos_produzir', ctx, input.idempotency_key, async () => {
+  return await umaVez('aceleriq_mesa_ads_criativos_produzir', ctx, input.idempotency_key, () => esperarOuSeguir('aceleriq_mesa_ads_criativos_produzir', ctx, clientId, input.idempotency_key, (async () => {
     const dados = await chamarMesa('mesa-ads', 'criativos_produzir', {
       plano_id: input.plano_id,
       angulo_ids: [input.angulo_id],
@@ -394,7 +458,7 @@ export async function adsCriativosProduzir(
         resultado_da_mesa: dados,
       },
     };
-  });
+  })()));
 }
 
 async function trabalhosDoEstudio(ids: string[]): Promise<TrabalhoDoEstudio[]> {
@@ -477,7 +541,7 @@ export async function adsEntregarAoGestor(
     throw falha('criativos_sem_arte', `Gere a arte antes de entregar ao gestor (aceleriq_mesa_ads_arte_gerar), ou mande só os criativo_ids prontos. Faltando: ${JSON.stringify(semArte).slice(0, 1500)}`);
   }
 
-  return await umaVez('aceleriq_mesa_ads_entregar_ao_gestor', ctx, input.idempotency_key, async () => {
+  return await umaVez('aceleriq_mesa_ads_entregar_ao_gestor', ctx, input.idempotency_key, () => esperarOuSeguir('aceleriq_mesa_ads_entregar_ao_gestor', ctx, input.client_id, input.idempotency_key, (async () => {
     // 1) A arte vai para Arquivos > Criativos de anúncio (a mesa é idempotente por trabalho).
     const entregas: Array<{ trabalho_id: string; ja_entregue: boolean }> = [];
     for (const t of trabalhos.values()) {
@@ -504,7 +568,7 @@ export async function adsEntregarAoGestor(
         resultado_da_mesa: semTexto,
       },
     };
-  });
+  })()));
 }
 
 // ─── Aprovação (Estúdio + RPC da entrega) ────────────────────

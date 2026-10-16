@@ -74,6 +74,13 @@ async function conferirCliente(clientId: string, ctx: AuthContext) {
 
 // ─── Mesa Ads ─────────────────────────────────────────────────
 
+/** Ações da Mesa Ads que podem terminar em segundo plano: o fim fica na trilha como `<ferramenta>:concluida`. */
+const ANDAMENTO_DAS_ACOES = [
+  'aceleriq_mesa_ads_plano_gerar:concluida',
+  'aceleriq_mesa_ads_criativos_produzir:concluida',
+  'aceleriq_mesa_ads_entregar_ao_gestor:concluida',
+];
+
 export async function mesaAdsContexto(
   input: { client_id: string; plano_id?: string; limite_planos?: number; limite_criativos?: number; incluir_urls?: boolean },
   ctx: AuthContext,
@@ -100,7 +107,7 @@ export async function mesaAdsContexto(
     .limit(limiteCriativos);
   if (input.plano_id) criativosQ = criativosQ.eq('plano_id', input.plano_id);
 
-  const [cliente, briefingR, ofertasR, planosR, criativosR, analisesR, aprendizadosR] = await Promise.all([
+  const [cliente, briefingR, ofertasR, planosR, criativosR, analisesR, aprendizadosR, andamentoR] = await Promise.all([
     nomeDoCliente(clientId),
     comPrazo(
       db()
@@ -137,6 +144,17 @@ export async function mesaAdsContexto(
         .eq('client_id', clientId)
         .order('criado_em', { ascending: false })
         .limit(30),
+    ),
+    // MCP 2.12: o fim das ações que seguiram em segundo plano (mcp-mesas-acoes.ts, esperarOuSeguir).
+    comPrazo(
+      db()
+        .from('mcp_audit_log')
+        .select('created_at, tool_name, success, error_message, sanitized_input')
+        .in('tool_name', ANDAMENTO_DAS_ACOES)
+        .contains('sanitized_input', { client_id: clientId })
+        .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString())
+        .order('created_at', { ascending: false })
+        .limit(20),
     ),
   ]);
 
@@ -233,6 +251,17 @@ export async function mesaAdsContexto(
     criativos,
     analises_da_conta: opcional(analisesR, 'ads_analises'),
     aprendizados: opcional(aprendizadosR, 'ads_aprendizados'),
+    andamento: opcional(andamentoR, 'mcp_audit_log').map((a) => {
+      const entrada = (a.sanitized_input ?? {}) as Linha;
+      return {
+        acao: String(a.tool_name).replace('aceleriq_mesa_ads_', '').replace(':concluida', ''),
+        terminou_em: a.created_at,
+        deu_certo: a.success === true,
+        resultado: entrada.__result_ref ?? null,
+        erro: a.success === true ? null : a.error_message ?? 'falhou sem mensagem',
+        idempotency_key: entrada.idempotency_key ?? null,
+      };
+    }),
     urls_valem_segundos: input.incluir_urls === false ? null : URL_ASSINADA_S,
     totais: { planos: planos.length, criativos: criativos.length, ofertas: ofertas.length },
     avisos,

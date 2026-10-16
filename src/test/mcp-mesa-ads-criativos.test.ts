@@ -97,6 +97,22 @@ describe("Mesa Ads pelo MCP: plano, criativos, arte e gestor", () => {
     expect(laminasDoTrabalho({ direcao: null, cards: null })).toEqual({ ordens: [], com_arte: [], sem_arte: [] });
   });
 
+  it("o Paperclip desiste em 10 s: o que demora responde em andamento e segue em segundo plano", () => {
+    // Plano e criativos levam minutos; o gateway do Paperclip 2026.1012 corta a ferramenta em 10 s.
+    expect(acoes).toContain("export const ESPERA_ANTES_DE_SEGUIR_MS = 6_000;");
+    expect(acoes).toContain("EdgeRuntime");
+    expect(acoes).toContain("`${ferramenta}:concluida`");
+    for (const nome of ["aceleriq_mesa_ads_plano_gerar", "aceleriq_mesa_ads_criativos_produzir", "aceleriq_mesa_ads_entregar_ao_gestor"]) {
+      expect(acoes).toMatch(new RegExp(`esperarOuSeguir\\('${nome}'`));
+      // Resposta curta: JSON direto, sem a resposta com fôlego.
+      expect(definicao(nome)).not.toContain("longa: true");
+    }
+    // O fim aparece na leitura da Mesa Ads.
+    const servicos = ler("supabase/functions/_shared/mcp-mesas-services.ts");
+    expect(servicos).toContain("andamento");
+    expect(servicos).toContain(":concluida");
+  });
+
   it("arte só de criativo de anúncio, e o gestor só recebe criativo com toda a arte pronta", () => {
     expect(acoes).toContain("falha('nao_e_anuncio'");
     expect(acoes).toContain("falha('criativos_sem_arte'");
