@@ -64,3 +64,19 @@ describe("o que o dono quis dizer (Jev)", () => {
     expect(palpiteDaFala("aprovado, pode concluir").acao).toBeNull();
   });
 });
+
+describe("caminho da tarefa travada (16/10)", () => {
+  it("expirou sem heartbeat vira frase de gente e pode retomar", async () => {
+    const { motivoParaGente } = await import("@/components/execucao/CaminhoDaTarefa");
+    expect(motivoParaGente("Execucao expirou sem heartbeat")).toEqual({ texto: "O agente parou de dar sinal no meio do trabalho. Nada se perdeu: é só mandar retomar.", retomavel: true });
+    expect(motivoParaGente("")).toBeNull();
+  });
+  it("log de máquina não aparece cru no passo; texto normal aparece", async () => {
+    const { pareceTecnico, textoParaGente } = await import("@/components/execucao/CaminhoDaTarefa");
+    const log = "Dispatchdeleg_f58f9570/2 novostrabalhos; Core JSONSDKRD coleta 18:43 BRT; Fetch Mirantetasksc21ce597-494b-8c70-b397-215389ec1222/conferidos; Meta Login→. VZPNG6a51f7e3-211a-4bb5-93ad-51c7dba8399c";
+    const limpo = textoParaGente(log);
+    expect(limpo).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
+    expect(pareceTecnico(limpo)).toBe(true);
+    expect(pareceTecnico("Post de sexta publicado no Instagram com a arte aprovada.")).toBe(false);
+  });
+});

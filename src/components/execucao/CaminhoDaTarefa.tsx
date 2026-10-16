@@ -19,17 +19,36 @@ export function descolar(t: string): string {
   return t.replace(/([a-zà-ú])([A-ZÀ-Ú])/g, "$1 $2").replace(/([a-zà-ú]{3,})(\d)/g, "$1 $2").replace(/(\d)([a-zà-ú]{3,})/gi, "$1 $2");
 }
 
+/** Primeiro tira ids e códigos, depois descola: descolar antes quebrava o id e ele escapava. */
+export function textoParaGente(t: string): string {
+  return limparTecnico(descolar(limparTecnico(t)));
+}
+
+/**
+ * Sobrou log de máquina (muitos pedaços com barra, sublinhado, número longo ou palavras coladas
+ * gigantes)? Aí o passo mostra uma frase simples e o original fica no "?" do passo e no diário.
+ */
+export function pareceTecnico(t: string): boolean {
+  const pedacos = t.split(/\s+/).filter(Boolean);
+  if (pedacos.length < 4) return false;
+  const tecnicos = pedacos.filter((p) => /[_/=]|\d{3,}|[a-f0-9]{6,}-|^[A-Z0-9]{5,}$/.test(p) || p.replace(/[^A-Za-zÀ-ú]/g, "").length > 18).length;
+  return tecnicos / pedacos.length > 0.25;
+}
+
 /** O motivo técnico do travamento, dito para gente, e se basta mandar o agente retomar. */
 export function motivoParaGente(bruto?: string | null): MotivoParaGente | null {
   const t = String(bruto || "").trim();
   if (!t) return null;
   if (/heartbeat|expir|lease|timeout|sem sinal|stale|sem atualiza/i.test(t)) return { texto: "O agente parou de dar sinal no meio do trabalho. Nada se perdeu: é só mandar retomar.", retomavel: true };
   if (/encerrad|arquivad|exclu[ií]d/i.test(t)) return { texto: "A tarefa foi encerrada ou excluída, e esta execução ficou sobrando.", retomavel: false };
-  if (/acesso|senha|login|credencial|permiss|token/i.test(t)) return { texto: `Falta um acesso para continuar. ${limparTecnico(descolar(t))}`.trim(), retomavel: false };
-  return { texto: limparTecnico(descolar(t)), retomavel: false };
+  if (/acesso|senha|login|credencial|permiss|token/i.test(t)) return { texto: "Falta um acesso (login ou permissão) para continuar.", retomavel: false };
+  const limpo = textoParaGente(t);
+  return { texto: pareceTecnico(limpo) ? "O agente parou e anotou o motivo em linguagem técnica. Abra o diário para ver e responder." : limpo, retomavel: false };
 }
 
 type Passo = { rotulo: string; texto: string | null; tom: "feito" | "parou" | "voce" | "depois" };
+
+const simples = (t: string, seTecnico: string) => { const l = textoParaGente(t); return pareceTecnico(l) ? seTecnico : l; };
 
 const ESTILO: Record<Passo["tom"], { Icone: typeof CheckCircle2; circulo: string; texto: string }> = {
   feito: { Icone: CheckCircle2, circulo: "bg-success/15 text-success", texto: "text-success" },
@@ -47,9 +66,9 @@ export default function CaminhoDaTarefa({ feito, parou, destrava, depois = "O ag
   esperaRevisao?: boolean;
 }) {
   const passos: Passo[] = [
-    { rotulo: "Já foi feito", texto: feito ? limparTecnico(descolar(feito)) : "Ainda sem comprovação registrada.", tom: "feito" },
+    { rotulo: "Já foi feito", texto: feito ? simples(feito, "O agente registrou o trabalho feito (detalhe técnico no diário).") : "Ainda sem comprovação registrada.", tom: "feito" },
     { rotulo: esperaRevisao ? "Espera a sua revisão" : "Parou aqui", texto: parou || (esperaRevisao ? "A entrega está pronta para você olhar." : null), tom: esperaRevisao ? "voce" : "parou" },
-    { rotulo: esperaRevisao ? "Você decide" : "O que destrava", texto: destrava ? limparTecnico(descolar(destrava)) : esperaRevisao ? "Aprovar e concluir, pedir ajuste ou reprovar." : "Responder ao agente (texto, link ou arquivo).", tom: "voce" },
+    { rotulo: esperaRevisao ? "Você decide" : "O que destrava", texto: destrava ? simples(destrava, "O agente anotou o próximo passo; abra o diário para ver o que ele pede.") : esperaRevisao ? "Aprovar e concluir, pedir ajuste ou reprovar." : "Responder ao agente (texto, link ou arquivo).", tom: "voce" },
     { rotulo: "Depois", texto: depois, tom: "depois" },
   ];
   return (
@@ -63,7 +82,7 @@ export default function CaminhoDaTarefa({ feito, parou, destrava, depois = "O ag
             <span className={juntar("relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full", e.circulo)}><Icone className="h-4 w-4" aria-hidden="true" /></span>
             <span className="min-w-0 sm:mt-2">
               <span className={juntar("block text-[11.5px] font-semibold uppercase tracking-wide", e.texto)}>{p.rotulo}</span>
-              {p.texto && <span className="mt-0.5 line-clamp-3 block text-[12.5px] leading-5 text-foreground/85">{p.texto}</span>}
+              {p.texto && <span className="mt-0.5 line-clamp-3 text-[12.5px] leading-5 text-foreground/85" title={p.texto}>{p.texto}</span>}
             </span>
           </li>
         );
