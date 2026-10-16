@@ -125,7 +125,7 @@ export default function MetasDeSeguidores({ clientId, metricas, canWrite }: { cl
               </span>
               <span className={juntar("mr-2 shrink-0 text-[12px]", batidas.has(m.id) ? "text-primary" : "text-muted-foreground")}>{batidas.has(m.id) ? "batida" : "aberta"}</span>
               {canWrite && (
-                <button type="button" onClick={() => void arquivar(m)} className={botao.icone} aria-label={`Arquivar a meta de ${milhar(Number(m.meta))}`}>
+                <button type="button" onClick={() => void arquivar(m)} className={botao.icone} aria-label={`Arquivar a meta de ${milhar(Number(m.meta))}`} title={`Arquivar a meta de ${milhar(Number(m.meta))}`}>
                   <Archive className="h-4 w-4" />
                 </button>
               )}

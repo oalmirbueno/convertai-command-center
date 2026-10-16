@@ -200,9 +200,8 @@ export default function EmpresasCRM({
                         <div className="min-w-0">
                           <Subtitulo
                             acao={
-                              <button type="button" onClick={() => setEditando(ficha.empresa)} className={juntar(botao.discreto, "h-7")} aria-label={`Editar dados de ${ficha.empresa.name}`}>
-                                <Pencil className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                                Editar
+                              <button type="button" onClick={() => setEditando(ficha.empresa)} className={juntar(botao.icone, "h-7 w-7")} aria-label={`Editar dados de ${ficha.empresa.name}`} title="Editar dados da empresa">
+                                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                               </button>
                             }
                           >
@@ -238,9 +237,8 @@ export default function EmpresasCRM({
                         <div className="min-w-0">
                           <Subtitulo
                             acao={
-                              <button type="button" onClick={() => setNovoContatoEm(ficha.empresa.id)} className={juntar(botao.discreto, "h-7")} aria-label={`Adicionar contato em ${ficha.empresa.name}`}>
-                                <UserPlus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                                Adicionar
+                              <button type="button" onClick={() => setNovoContatoEm(ficha.empresa.id)} className={juntar(botao.icone, "h-7 w-7")} aria-label={`Adicionar contato em ${ficha.empresa.name}`} title="Adicionar pessoa">
+                                <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
                               </button>
                             }
                           >

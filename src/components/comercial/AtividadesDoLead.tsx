@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Clock, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { CalendarPlus, Check, Clock, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { EstadoVazio, botao, campo, foco, juntar, texto } from "@/components/sistema";
 import {
@@ -153,9 +153,8 @@ export default function AtividadesDoLead({ leadId, donoPadrao, onMudou }: Props)
             aria-label="O que precisa ser feito"
             className={juntar(campo, "mr-2")}
           />
-          <button type="button" onClick={() => void criar()} disabled={salvando} className={botao.secundario} aria-label="Agendar atividade">
-            <Plus className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
-            <span className="hidden sm:inline">Agendar</span>
+          <button type="button" onClick={() => void criar()} disabled={salvando} className={juntar(botao.icone, "text-primary hover:text-primary disabled:opacity-50")} aria-label="Agendar atividade" title="Agendar atividade">
+            <CalendarPlus className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       </div>

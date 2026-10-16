@@ -83,16 +83,17 @@ export default function EsteiraItemRow({ item, weekStart, canWrite, onMudou, com
           type="button"
           disabled={ocupado}
           onClick={() => void agir(() => marcarItem({ item, weekStart, status: "done" }), item.fonte === "tarefa" ? `Feito: ${item.titulo}. Concluída também no Kanban.` : item.fonte === "marco" ? `Feito: ${item.titulo}. Concluído também na Timeline.` : `Feito: ${item.titulo}`)}
-          title={item.fonte === "tarefa" ? "Conclui a tarefa também no Kanban: ela não volta na semana que vem" : item.fonte === "marco" ? "Conclui o marco também na Timeline" : undefined}
-          className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}
+          aria-label="Marcar como feito"
+          title={item.fonte === "tarefa" ? "Marcar como feito: conclui a tarefa também no Kanban, ela não volta na semana que vem" : item.fonte === "marco" ? "Marcar como feito: conclui o marco também na Timeline" : "Marcar como feito"}
+          className={juntar(botao.icone, "hover:text-primary")}
         >
-          <Check className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Feito
+          <Check className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
       {!compacto && !auto && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button type="button" aria-label="Mais ações" className={juntar(botao.icone, "ml-1")}>
+            <button type="button" aria-label="Mais ações" title="Mais ações" className={juntar(botao.icone, "ml-1")}>
               <MoreHorizontal className="h-4 w-4" />
             </button>
           </DropdownMenuTrigger>

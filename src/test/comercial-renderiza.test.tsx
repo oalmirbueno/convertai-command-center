@@ -161,7 +161,8 @@ describe("a agenda abre sem quebrar", () => {
     // Sete cabecalhos de dia da semana provam que a grade montou.
     expect(screen.getByText("seg")).toBeTruthy();
     expect(screen.getByText("dom")).toBeTruthy();
-    expect(screen.getByText("Marcar")).toBeTruthy();
+    // 16/10/2026: "Marcar" virou só ícone (padrão do painel); o nome mora no title.
+    expect(screen.getByTitle("Marcar compromisso neste dia")).toBeTruthy();
   });
 
   it("sem nada marcado", () => {
