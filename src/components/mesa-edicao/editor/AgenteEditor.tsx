@@ -1120,17 +1120,18 @@ export default function AgenteEditor({
                   {ehExportar(a) && (
                     <button
                       type="button"
-                      className={juntar(botao.discreto, "h-8 text-[12px]")}
+                      className={juntar(botao.icone, "ml-1")}
+                      aria-label="Baixar ZIP"
                       onClick={() => {
                         const p = projetoRef.current;
                         if (!p) return toast.info("Abra o vídeo no editor para baixar.");
                         baixarExportacao(p, urls, new Date().toISOString()).catch((e) => toast.error("O ZIP não saiu", { description: textoDoErro(e) }));
                       }}
                       data-baixar-zip=""
-                      title="Projeto, edl.json e o passo a passo para renderizar à mão na máquina da agência."
+                      title="Baixar ZIP: projeto, edl.json e o passo a passo para renderizar à mão na máquina da agência."
                     >
-                      <Download className="mr-1.5 h-3.5 w-3.5" />
-                      Baixar ZIP
+                      {/* 16/10/2026: só ícone; "Renderizar" e "Gerar por" do cartão ficam com texto (confirmação principal). */}
+                      <Download className="h-4 w-4" />
                     </button>
                   )}
                   {ehGeracao(a) && a.itens[0] && a.itens[0].operacao === "gerar_broll" && (

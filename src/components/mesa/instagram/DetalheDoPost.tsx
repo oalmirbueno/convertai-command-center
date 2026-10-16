@@ -56,20 +56,18 @@ export default function DetalheDoPost({ item, plano, onFechar, podePublicar, onM
         rodape={
           <div className="flex w-full flex-wrap items-center justify-end [&>*]:mb-1 [&>*]:ml-2">
             {item.origem === "simulado" ? (
-              <button type="button" className={botao.perigo} onClick={() => { plano.removerSimulado(item.id); onFechar(); }}>
-                <Trash2 className="mr-1.5 h-4 w-4" />
-                Tirar da simulação
+              // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
+              <button type="button" className={juntar(botao.icone, "text-destructive hover:text-destructive")} onClick={() => { plano.removerSimulado(item.id); onFechar(); }} aria-label="Tirar da simulação" title="Tirar da simulação">
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
               </button>
             ) : (
-              <button type="button" className={botao.discreto} onClick={() => plano.naSimulacaoOuNao(item.id, !dentro)}>
-                {dentro ? <EyeOff className="mr-1.5 h-4 w-4" /> : <Eye className="mr-1.5 h-4 w-4" />}
-                {dentro ? "Tirar da simulação" : "Pôr na simulação"}
+              <button type="button" className={botao.icone} onClick={() => plano.naSimulacaoOuNao(item.id, !dentro)} aria-label={dentro ? "Tirar da simulação" : "Pôr na simulação"} title={dentro ? "Tirar da simulação" : "Pôr na simulação"}>
+                {dentro ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
               </button>
             )}
             {item.peca && !trava && (
-              <button type="button" className={botao.secundario} onClick={() => setPublicar(true)}>
-                <CalendarClock className="mr-1.5 h-4 w-4" />
-                Publicar em
+              <button type="button" className={botao.icone} onClick={() => setPublicar(true)} aria-label="Publicar em" title="Publicar em">
+                <CalendarClock className="h-4 w-4" aria-hidden="true" />
               </button>
             )}
           </div>

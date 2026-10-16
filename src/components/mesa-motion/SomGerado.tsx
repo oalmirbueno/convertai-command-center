@@ -79,9 +79,9 @@ export function GerarTrilha({ filme, temChave }: { filme: Filme; temChave: boole
 
   return (
     <>
-      <button type="button" className={botao.secundario} onClick={abrir} disabled={!temChave} title={temChave ? "Compor uma trilha instrumental no tamanho do filme" : "Precisa da chave da ElevenLabs no servidor"} data-gerar-trilha="">
-        <Music className="mr-1 h-3.5 w-3.5" />
-        Gerar trilha
+      {/* 16/10/2026: só ícone, sem borda; o "Gerar · US$" da janela fica com texto (confirma o custo). */}
+      <button type="button" className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} onClick={abrir} disabled={!temChave} aria-label="Gerar trilha" title={temChave ? "Gerar trilha: compõe uma trilha instrumental no tamanho do filme" : "Gerar trilha (precisa da chave da ElevenLabs no servidor)"} data-gerar-trilha="">
+        <Music className="h-4 w-4" />
       </button>
       <JanelaCentral
         aberta={aberta}
@@ -165,9 +165,8 @@ export function EfeitosSobMedida({ filme, links, temChave }: { filme: Filme; lin
     <div className="min-w-0" data-efeitos-sob-medida="">
       <div className="flex min-w-0 items-center justify-between">
         <span className={texto.rotulo}>Efeitos sob medida ({efeitos.length})</span>
-        <button type="button" className={juntar(botao.discreto, "h-8")} onClick={() => setAberta(true)} disabled={!temChave || !filme.cenas.length} data-novo-efeito="">
-          <Waves className="mr-1 h-3.5 w-3.5" />
-          Gerar efeito
+        <button type="button" className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} onClick={() => setAberta(true)} disabled={!temChave || !filme.cenas.length} aria-label="Gerar efeito" title="Gerar efeito sob medida" data-novo-efeito="">
+          <Waves className="h-4 w-4" />
         </button>
       </div>
       {efeitos.length > 0 && (

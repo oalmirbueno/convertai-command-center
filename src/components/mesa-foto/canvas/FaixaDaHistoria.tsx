@@ -1,5 +1,5 @@
 import { useState, type DragEvent } from "react";
-import { ChevronLeft, ChevronRight, Clapperboard, Copy, CopyPlus, Film, Layers, Sparkles, UserRoundCheck, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clapperboard, Copy, CopyPlus, Film, Layers, ListVideo, Sparkles, UserRoundCheck, X } from "lucide-react";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
 import { BotaoComCusto } from "@/components/mesa/Custo";
 import { videosDoResultado } from "./videoNoCanvas";
@@ -11,9 +11,10 @@ import {
   type Canvas,
   type ResultadoDoCanvas,
 } from "../canvasApi";
-import { BOTAO, CAMPO, FLUTUANTE, PAINEL, useRodaPresa, type Fontes } from "./comum";
+import { BOTAO_ICONE, CAMPO, FLUTUANTE, PAINEL, useRodaPresa, type Fontes } from "./comum";
 import { cenasDaHistoria, fotoDaCena, moverCena, mudarCena, pacoteDaHistoria } from "./historia";
 import { lerVariacoes } from "../../../../supabase/functions/mesa-foto/modulos/opcoes-do-resultado";
+import { juntar } from "@/components/sistema";
 
 /**
  * Área "História" do Canvas (storyboard): as cenas em ordem, com a foto, a
@@ -101,8 +102,8 @@ export function HistoriaDoCanvas({
           aria-label="Sinopse da história"
           className={`${CAMPO} my-1 h-8 min-w-0 flex-1 py-0 sm:mr-2`}
         />
-        <button type="button" className={`${BOTAO} my-1 mr-1`} onClick={acoes.onNovaCena} title="Marca o Resultado aberto como cena">
-          <Clapperboard className="mr-1 h-3.5 w-3.5" /> Nova cena
+        <button className={juntar(BOTAO_ICONE, "my-1 mr-1 disabled:opacity-50")} type="button" onClick={acoes.onNovaCena} title="Marca o Resultado aberto como cena" aria-label="Nova cena">
+          <Clapperboard className="h-4 w-4" aria-hidden="true" />
         </button>
         {onFechar && (
           <button type="button" onClick={onFechar} aria-label="Fechar a história" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-zinc-400 hover:bg-white/10 hover:text-white">
@@ -174,23 +175,28 @@ export function HistoriaDoCanvas({
                     className={`${CAMPO} mt-1.5 text-[11.5px]`}
                   />
                   <div className="mt-1.5 flex min-w-0 flex-wrap items-center">
-                    <button type="button" className={`${BOTAO} mb-1 mr-1 px-1.5`} disabled={i === 0} onClick={() => onMudarCanvas((c) => moverCena(c, h.no.id, h.numero - 1))} aria-label={`Trazer a cena ${h.numero} para antes`}>
-                      <ChevronLeft className="h-3.5 w-3.5" />
+                    <button type="button" className={juntar(BOTAO_ICONE, "mb-1 mr-1")} disabled={i === 0} onClick={() => onMudarCanvas((c) => moverCena(c, h.no.id, h.numero - 1))} aria-label={`Trazer a cena ${h.numero} para antes`} title="Trazer a cena para antes">
+                      <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                     </button>
-                    <button type="button" className={`${BOTAO} mb-1 mr-1 px-1.5`} disabled={i === cenas.length - 1} onClick={() => onMudarCanvas((c) => moverCena(c, h.no.id, h.numero + 1))} aria-label={`Levar a cena ${h.numero} para depois`}>
-                      <ChevronRight className="h-3.5 w-3.5" />
+                    <button type="button" className={juntar(BOTAO_ICONE, "mb-1 mr-1")} disabled={i === cenas.length - 1} onClick={() => onMudarCanvas((c) => moverCena(c, h.no.id, h.numero + 1))} aria-label={`Levar a cena ${h.numero} para depois`} title="Levar a cena para depois">
+                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
                     </button>
-                    <button type="button" className={`${BOTAO} mb-1 mr-1 px-1.5`} onClick={() => acoes.onDuplicar(h.no.id)} title="Duplicar a cena para mudar o contexto (mesmas entradas, sem as fotos)" aria-label={`Duplicar a cena ${h.numero}`}>
-                      <CopyPlus className="h-3.5 w-3.5" />
+                    <button type="button" className={juntar(BOTAO_ICONE, "mb-1 mr-1")} onClick={() => acoes.onDuplicar(h.no.id)} title="Duplicar a cena para mudar o contexto (mesmas entradas, sem as fotos)" aria-label={`Duplicar a cena ${h.numero}`}>
+                      <CopyPlus className="h-4 w-4" aria-hidden="true" />
                     </button>
-                    <button type="button" className={`${BOTAO} mb-1 mr-1 px-1.5`} disabled={!foto} onClick={() => acoes.onProxima(h.no.id)} title="Próxima cena com a pessoa desta foto" aria-label={`Próxima cena depois da ${h.numero}`}>
-                      <UserRoundCheck className="mr-0.5 h-3.5 w-3.5" /> Próxima
+                    <button className={juntar(BOTAO_ICONE, "mb-1 mr-1 disabled:opacity-50")} type="button" disabled={!foto} onClick={() => acoes.onProxima(h.no.id)} title="Próxima cena com a pessoa desta foto" aria-label={`Próxima cena depois da ${h.numero}`}>
+                      <UserRoundCheck className="h-4 w-4" aria-hidden="true" />
                     </button>
                     {acoes.onAnimar && (
-                      <button type="button" className={`${BOTAO} mb-1 mr-1 px-1.5`} disabled={!foto} onClick={() => acoes.onAnimar && acoes.onAnimar(h.no.id)} title="Vídeo desta cena (a foto no 1º quadro)" aria-label={`Animar a cena ${h.numero}`} data-animar-da-historia={h.no.id}>
-                        <Film className="mr-0.5 h-3.5 w-3.5" /> {(() => {
+                      <button type="button" className={juntar(BOTAO_ICONE, "mb-1 mr-1 w-auto min-w-7 px-1")} disabled={!foto} onClick={() => acoes.onAnimar && acoes.onAnimar(h.no.id)} title={(() => {
+                        const v = videosDoResultado(canvas, h.no.id);
+                        return `${v.prontos ? `${v.prontos} ${v.prontos === 1 ? "vídeo" : "vídeos"}` : v.cartoes ? "Vídeo" : "Animar"}: vídeo desta cena (a foto no 1º quadro)`;
+                      })()} aria-label={`Animar a cena ${h.numero}`} data-animar-da-historia={h.no.id}>
+                        {/* 16/10/2026: só o ícone; a contagem de vídeos prontos fica em número pequeno ao lado. */}
+                        <Film className="h-4 w-4" aria-hidden="true" />
+                        {(() => {
                           const v = videosDoResultado(canvas, h.no.id);
-                          return v.prontos ? `${v.prontos} ${v.prontos === 1 ? "vídeo" : "vídeos"}` : v.cartoes ? "Vídeo" : "Animar";
+                          return v.prontos ? <span className="ml-0.5 text-[11px] tabular-nums">{v.prontos}</span> : null;
                         })()}
                       </button>
                     )}
@@ -233,8 +239,8 @@ export function HistoriaDoCanvas({
         <Film className="mr-1 h-3 w-3" />
         <span className="mr-2 min-w-0 flex-1">Cada cena vira vídeo pelo cartão Vídeo (a foto é o 1º quadro). A Mesa Vídeos e a Edição leem esta mesma história.</span>
         {acoes.onAnimarTodas && cenas.length > 0 && (
-          <button type="button" className={`${BOTAO} my-0.5`} onClick={acoes.onAnimarTodas} data-animar-todas="">
-            <Film className="mr-1 h-3.5 w-3.5" /> Animar as que faltam
+          <button className={juntar(BOTAO_ICONE, "my-0.5 disabled:opacity-50")} type="button" onClick={acoes.onAnimarTodas} data-animar-todas="" aria-label="Animar as que faltam" title="Animar as que faltam">
+            <ListVideo className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
       </div>

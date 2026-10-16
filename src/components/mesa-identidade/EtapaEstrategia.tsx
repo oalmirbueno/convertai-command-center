@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Check, Loader2, Plus, Save, Trash2, Undo2, X } from "lucide-react";
+import { Check, Loader2, Plus, Save, Trash2, Undo2, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -190,15 +190,16 @@ export default function EtapaEstrategia() {
               <input type="checkbox" className="mr-1.5 h-4 w-4 accent-primary" checked={comWeb} onChange={(ev) => setComWeb(ev.target.checked)} />
               Web
             </label>
+            {/* 16/10/2026: só ícone; o nome vai no sr-only e no title (descricao). */}
             <BotaoComCusto
               rotulo={
                 <>
-                  <span className="sm:hidden">Estratégia inteira</span>
-                  <span className="hidden sm:inline">Preencher a estratégia inteira</span>
+                  <Wand2 className="h-4 w-4" aria-hidden="true" />
+                  <span className="sr-only">Preencher a estratégia inteira</span>
                 </>
               }
               titulo="Estratégia de marca"
-              descricao="Proposta completa; você vê a prévia antes de aplicar"
+              descricao="Preencher a estratégia inteira: proposta completa; você vê a prévia antes de aplicar"
               partes={() => partesDoCusto(mesa.catalogo, "estrategia", modeloId, comWeb)}
               executar={() => chamarIdentidade<Proposta>("estrategia_propor", { projeto_id: projeto.id, modelo_id: modeloId || undefined, usar_web: comWeb || undefined })}
               aoConcluir={(d) => {
@@ -206,7 +207,7 @@ export default function EtapaEstrategia() {
                 if (d.projeto) guardar(d.projeto);
                 setProposta({ ...d, proposta: normalizarEstrategia(d.proposta) });
               }}
-              className="m-1 h-8"
+              className="m-1 h-8 gap-1 px-2"
             />
             {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
             <button
@@ -439,14 +440,15 @@ export default function EtapaEstrategia() {
                 <input className={campo} value={x.situacao} placeholder="Situação" aria-label="Situação" onChange={(ev) => mexer((y) => ({ ...y, tom: { ...y.tom, exemplos: y.tom.exemplos.map((z, k) => (k === i ? { ...z, situacao: ev.target.value } : z)) } }))} />
                 <input className={campo} value={x.certo} placeholder="Fala assim" aria-label="Fala assim" onChange={(ev) => mexer((y) => ({ ...y, tom: { ...y.tom, exemplos: y.tom.exemplos.map((z, k) => (k === i ? { ...z, certo: ev.target.value } : z)) } }))} />
                 <input className={campo} value={x.errado} placeholder="Não fala assim" aria-label="Não fala assim" onChange={(ev) => mexer((y) => ({ ...y, tom: { ...y.tom, exemplos: y.tom.exemplos.map((z, k) => (k === i ? { ...z, errado: ev.target.value } : z)) } }))} />
-                <button type="button" className={botao.icone} aria-label="Tirar o exemplo" onClick={() => tirarExemplo(i)}>
+                <button type="button" className={botao.icone} aria-label="Tirar o exemplo" title="Tirar o exemplo" onClick={() => tirarExemplo(i)}>
                   <Trash2 className="h-4 w-4" />
                 </button>
               </li>
             ))}
           </ul>
-          <button type="button" className={juntar(botao.discreto, "mt-2")} disabled={e.tom.exemplos.length >= 6} onClick={() => mexer((x) => ({ ...x, tom: { ...x.tom, exemplos: x.tom.exemplos.concat([{ situacao: "", certo: "", errado: "" }]) } }))}>
-            <Plus className="mr-1.5 h-4 w-4" /> Exemplo
+          {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+          <button type="button" className={juntar(botao.icone, "mt-2 disabled:opacity-50")} aria-label="Adicionar exemplo" title="Adicionar exemplo" disabled={e.tom.exemplos.length >= 6} onClick={() => mexer((x) => ({ ...x, tom: { ...x.tom, exemplos: x.tom.exemplos.concat([{ situacao: "", certo: "", errado: "" }]) } }))}>
+            <Plus className="h-4 w-4" />
           </button>
         </div>
       </Secao>
@@ -486,11 +488,13 @@ function PreviaDaEstrategia({ atual, proposta, onAplicar, onDescartar }: { atual
       ajuda="Os campos vazios já vêm marcados. Marcar um campo que já tem texto troca esse texto. Nada muda sem Aplicar."
       acao={
         <>
-          <button type="button" className={juntar(botao.primario, "m-1 h-8")} disabled={aplicando || !marcadas.length} onClick={() => void rodar(marcadas)} data-aplicar-proposta="">
-            {aplicando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />} Aplicar ({marcadas.length})
+          {/* 16/10/2026: só ícone; a contagem fica pequena ao lado e o nome vai no aria-label e no title. */}
+          <button type="button" className={juntar(botao.primario, "m-1 h-8 px-2")} aria-label={`Aplicar (${marcadas.length})`} title={`Aplicar os ${marcadas.length} campos marcados`} disabled={aplicando || !marcadas.length} onClick={() => void rodar(marcadas)} data-aplicar-proposta="">
+            {aplicando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+            <span className="ml-1 text-[11px] tabular-nums" aria-hidden="true">{marcadas.length}</span>
           </button>
-          <button type="button" className={juntar(botao.discreto, "m-1 h-8")} onClick={onDescartar}>
-            <X className="mr-1.5 h-3.5 w-3.5" /> Descartar
+          <button type="button" className={juntar(botao.icone, "m-1")} aria-label="Descartar" title="Descartar a proposta" onClick={onDescartar}>
+            <X className="h-4 w-4" />
           </button>
         </>
       }

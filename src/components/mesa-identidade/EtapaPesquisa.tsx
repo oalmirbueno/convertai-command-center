@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, ExternalLink, Loader2, Plus, Trash2 } from "lucide-react";
+import { Check, ExternalLink, Import, Loader2, Plus, ScanSearch, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { PreencherComIA } from "@/components/sistema";
@@ -161,15 +161,10 @@ export default function EtapaPesquisa() {
 
   const botaoGuardar = (r: Referencia, i: string) => {
     const ja = jaGuardada(refs, r);
+    // 16/10/2026: só ícone (nome no aria-label e no title).
     return (
-      <button key={i} type="button" className={juntar(botao.discreto, "h-8")} disabled={ja} onClick={() => acrescentar(r)} data-guardar-achado={ja ? "guardada" : "guardar"}>
-        {ja ? (
-          <>
-            <Check className="mr-1.5 h-3.5 w-3.5" /> Guardada
-          </>
-        ) : (
-          "Guardar"
-        )}
+      <button key={i} type="button" className={juntar(botao.icone, "disabled:opacity-60")} disabled={ja} onClick={() => acrescentar(r)} data-guardar-achado={ja ? "guardada" : "guardar"} aria-label={ja ? `${r.titulo}: guardada` : `Guardar ${r.titulo}`} title={ja ? "Guardada" : "Guardar"}>
+        {ja ? <Check className="h-4 w-4 text-primary" /> : <Plus className="h-4 w-4" />}
       </button>
     );
   };
@@ -189,17 +184,24 @@ export default function EtapaPesquisa() {
           <>
             {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
             <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} aria-label="Trazer as referências do contexto do cliente" title="Trazer as referências do contexto do cliente" onClick={() => void trazerDoContexto()} disabled={trazendo}>
-              {trazendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {trazendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Import className="h-4 w-4" />}
             </button>
             <SeletorDoModelo papel="identidade" valor={modeloId} onEscolher={setModeloId} className="max-w-[180px]" />
+            {/* 16/10/2026: só ícone, sem borda; o preço continua ao lado. */}
             <BotaoComCusto
-              rotulo="Pesquisar com IA"
+              rotulo={
+                <>
+                  <ScanSearch className="h-4 w-4" aria-hidden="true" />
+                  <span className="sr-only">Pesquisar com IA</span>
+                </>
+              }
               titulo="Pesquisa de mercado"
+              descricao="Pesquisar com IA (concorrentes e referências na web)"
               partes={() => partesDoCusto(mesa.catalogo, "pesquisa", modeloId)}
               executar={() => chamarIdentidade<{ projeto: ProjetoDeIdentidade }>("pesquisa_ia", { projeto_id: projeto.id, modelo_id: modeloId || undefined })}
               aoConcluir={(d) => guardar(d && d.projeto)}
-              variant="outline"
-              className="m-1 h-8"
+              variant="ghost"
+              className="m-1 h-8 gap-1 px-2"
             />
           </>
         }
@@ -246,16 +248,19 @@ export default function EtapaPesquisa() {
               <option value="concorrente">Concorrente</option>
             </select>
           </CampoDeFormulario>
+          {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
           <button
             type="button"
-            className={botao.secundario}
+            className={juntar(botao.icone, "mb-0.5 disabled:opacity-50")}
+            aria-label="Guardar a referência"
+            title="Guardar a referência"
             disabled={!nova.titulo.trim()}
             onClick={() => {
               acrescentar(nova);
               setNova({ titulo: "", link: "", nota: "", tipo: nova.tipo });
             }}
           >
-            <Plus className="mr-1.5 h-4 w-4" /> Guardar
+            <Plus className="h-4 w-4" />
           </button>
         </div>
       </Secao>
@@ -323,6 +328,7 @@ export default function EtapaPesquisa() {
             campos={[{ chave: "resumo", rotulo: "Resumo da pesquisa", tipo: "texto_longo", valorAtual: resumo, dica: "Como as marcas do segmento se apresentam e onde está o espaço para a marca. Só com o que as fontes mostram.", maximo: 3000 }]}
             contexto={contextoParaPreencher(projeto, refs.length ? `Referências guardadas: ${refs.slice(0, 12).map((r) => `${r.titulo} (${r.tipo}): ${r.nota}`).join("; ")}` : undefined)}
             fontes={["contexto", "briefing", "dossie", "web"]}
+            compacto
             onAplicar={(v) => pResumo.trocarESalvar(String(v.resumo || ""))}
             onDesfazer={(a) => pResumo.trocarESalvar(String(a.resumo || ""))}
           />

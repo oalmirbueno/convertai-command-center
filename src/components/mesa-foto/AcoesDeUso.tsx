@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { acrescentarFotos, baixarUmaAUma, baixarZip, classeDaFoto, decidirFoto, ehReferenciaWeb, enviarFotos, invalidarFotos, type Destino, type FotoDoAcervo } from "./fotoApi";
+import { botao, juntar } from "@/components/sistema";
 
 /**
  * Ações de uso de um grupo de fotos, iguais no Acervo e no Usar: baixar
@@ -143,17 +144,15 @@ export function AprovarFoto({ foto, onMudou }: { foto: FotoDoAcervo; onMudou?: (
   }
   return (
     // 28/09 (um primário por área): aprovar é secundário, com a cor do "aprovada".
-    <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 border-success/50 text-[12px] text-success hover:bg-success/10 hover:text-success" disabled={decidindo} onClick={() => void decidir("aprovar")} data-aprovar-foto="">
-      {decidindo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-      Aprovar para o acervo
-    </Button>
+    <button className={juntar(botao.icone, "mb-1.5 mr-1.5 text-success hover:bg-success/10 hover:text-success disabled:opacity-50")} type="button" disabled={decidindo} onClick={() => void decidir("aprovar")} data-aprovar-foto="" aria-label="Aprovar para o acervo" title="Aprovar para o acervo">
+      {decidindo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
+    </button>
   );
 }
 
 export function BotoesDeUso({ fotos, compacto = false, icones = false }: { fotos: FotoDoAcervo[]; compacto?: boolean; icones?: boolean }) {
   const { baixar, baixarEmZip, enviar, baixando, enviando } = useAcoesDeUso();
   const vazio = fotos.length === 0;
-  const tamanho = "mb-1.5 mr-1.5 h-8 text-[12px]";
   // 28/09 (barra da seleção numa linha só): só o ícone, com o nome no leitor de tela e na dica.
   if (icones) {
     const icone = "h-8 w-8 shrink-0 p-0";
@@ -174,24 +173,22 @@ export function BotoesDeUso({ fotos, compacto = false, icones = false }: { fotos
       </div>
     );
   }
+  // 16/10/2026 (dono: "deixa só o ícone"): fora da barra também só ícones, com o nome no title e no aria-label.
+  const icone2 = juntar(botao.icone, "mb-1.5 mr-1.5");
   return (
-    <div className="flex min-w-0 flex-wrap items-center">
-      <Button type="button" size="sm" variant="outline" className={tamanho} disabled={vazio || !!baixando} onClick={() => void baixar(fotos)} title="Uma a uma, sem ZIP, no tamanho original">
-        {baixando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}
-        {baixando ? `Baixando ${baixando.feitos} de ${baixando.total}` : compacto ? "Baixar" : "Baixar (sem ZIP)"}
-      </Button>
-      <Button type="button" size="sm" variant="ghost" className={tamanho} disabled={vazio || !!baixando} onClick={() => void baixarEmZip(fotos)} title="Tudo num ZIP, com LEIA-ME">
-        <Archive className="mr-1.5 h-3.5 w-3.5" />
-        {compacto ? "ZIP" : "Baixar em ZIP"}
-      </Button>
-      <Button type="button" size="sm" variant="outline" className={tamanho} disabled={vazio || !!enviando} onClick={() => void enviar(fotos, "arquivos")}>
-        {enviando === "arquivos" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FolderInput className="mr-1.5 h-3.5 w-3.5" />}
-        {compacto ? "Arquivos" : "Enviar para Arquivos"}
-      </Button>
-      <Button type="button" size="sm" variant="outline" className={tamanho} disabled={vazio || !!enviando} onClick={() => void enviar(fotos, "aprovacao")}>
-        {enviando === "aprovacao" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
-        {compacto ? "Aprovação" : "Enviar para aprovação"}
-      </Button>
+    <div className="flex min-w-0 flex-wrap items-center" data-botoes-de-uso={compacto ? "compacto" : "inteiro"}>
+      <button type="button" className={icone2} disabled={vazio || !!baixando} onClick={() => void baixar(fotos)} aria-label={baixando ? `Baixando ${baixando.feitos} de ${baixando.total}` : "Baixar (sem ZIP)"} title={baixando ? `Baixando ${baixando.feitos} de ${baixando.total}` : "Baixar uma a uma, sem ZIP, no tamanho original"}>
+        {baixando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
+      </button>
+      <button type="button" className={icone2} disabled={vazio || !!baixando} onClick={() => void baixarEmZip(fotos)} aria-label="Baixar em ZIP" title="Baixar em ZIP: tudo num ZIP, com LEIA-ME">
+        <Archive className="h-4 w-4" aria-hidden="true" />
+      </button>
+      <button type="button" className={icone2} disabled={vazio || !!enviando} onClick={() => void enviar(fotos, "arquivos")} aria-label="Enviar para Arquivos" title="Enviar para Arquivos (pasta de fotos do cliente)">
+        {enviando === "arquivos" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FolderInput className="h-4 w-4" aria-hidden="true" />}
+      </button>
+      <button type="button" className={icone2} disabled={vazio || !!enviando} onClick={() => void enviar(fotos, "aprovacao")} aria-label="Enviar para aprovação" title="Enviar para a aprovação do cliente">
+        {enviando === "aprovacao" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
+      </button>
     </div>
   );
 }

@@ -89,8 +89,8 @@ function Cenas({ irPara, fotosDeCena }: { irPara: IrPara; fotosDeCena: FotoDoAce
           titulo="Nenhuma história ainda"
           descricao="Marque os Resultados como cenas no Canvas da Mesa Foto."
           acao={
-            <Link to={linkDoCanvas} className={botao.secundario}>
-              Abrir o Canvas <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+            <Link to={linkDoCanvas} className={botao.icone} aria-label="Abrir o Canvas" title="Abrir o Canvas">
+              <ExternalLink className="h-4 w-4" />
             </Link>
           }
         />
@@ -284,9 +284,9 @@ function Roteiros({ irPara }: { irPara: IrPara }) {
                     </div>
                   )}
                 </div>
-                <button type="button" className={juntar(botao.secundario, "h-8 justify-self-start px-2.5 text-[12.5px]")} onClick={() => irPara("gerar", { origem: `roteiro:${roteiro.id}:${c.ref}` })}>
-                  <Film className="mr-1.5 h-3.5 w-3.5" />
-                  Gerar
+                {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+                <button type="button" className={juntar(botao.icone, "justify-self-start")} onClick={() => irPara("gerar", { origem: `roteiro:${roteiro.id}:${c.ref}` })} aria-label="Gerar esta cena" title="Gerar esta cena">
+                  <Film className="h-4 w-4" />
                 </button>
               </li>
             );
@@ -325,9 +325,8 @@ export default function EtapaBase({ irPara }: { irPara: IrPara }) {
           ]}
         />
         {parte === "cenas" && (
-          <Link to={`/mesa-foto?client=${clientId}&etapa=canvas`} className={juntar(botao.discreto, "ml-2")} aria-label="Abrir no Canvas">
-            <ExternalLink className="h-3.5 w-3.5 sm:mr-1.5" />
-            <span className="hidden sm:inline">Canvas</span>
+          <Link to={`/mesa-foto?client=${clientId}&etapa=canvas`} className={juntar(botao.icone, "ml-2")} aria-label="Abrir no Canvas" title="Abrir no Canvas">
+            <ExternalLink className="h-4 w-4" />
           </Link>
         )}
       </div>

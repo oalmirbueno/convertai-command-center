@@ -143,30 +143,33 @@ function LinhaDaAcao({
           <button
             type="button"
             onClick={() => void cobrar()}
-            className={juntar(botao.secundario, "mr-1.5 h-8 px-2.5 text-[12px]")}
+            // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
+            className={juntar(botao.icone, "mr-1.5")}
             aria-label={`Copiar mensagem de cobrança para ${grupo.nome}`}
+            title="Copiar mensagem"
           >
-            <Copy className="mr-1.5 h-3.5 w-3.5" /> Copiar mensagem
+            <Copy className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
         <button
           type="button"
           disabled={gravando}
           onClick={() => onFeito(grupo, acao)}
-          className={juntar(botao.discreto, "mr-1.5 h-8 px-2.5 text-[12px]")}
+          className={juntar(botao.icone, "mr-1.5")}
           aria-label={`Marcar como feito: ${acao.titulo} de ${grupo.nome}`}
-          title="Já fiz: some da fila até chegar coisa nova"
+          title="Feito: some da fila até chegar coisa nova"
         >
-          {gravando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />} Feito
+          {gravando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
         </button>
         <button
           type="button"
           onClick={() => onAbrir(grupo.client_id, acao.aba, acao.mes)}
           // Um primário por área (28/09): cada linha tem o seu Abrir, então ele é secundário.
-          className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}
+          className={botao.icone}
           aria-label={`${acao.titulo}: abrir ${grupo.nome}`}
+          title="Abrir"
         >
-          Abrir <ArrowRight className="ml-1 h-3.5 w-3.5" />
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
     </li>
@@ -413,10 +416,11 @@ export default function FilaDePrioridades({
                     type="button"
                     disabled={gravando === m.feito.id}
                     onClick={() => void desfazerFeito(m.client_id, m.nome, m.acao.titulo, m.feito)}
-                    className="ml-3 inline-flex h-7 shrink-0 items-center rounded-lg px-2 text-[12px] font-medium text-foreground hover:bg-muted disabled:opacity-60"
+                    className={juntar(botao.icone, "ml-3 disabled:opacity-60")}
                     aria-label={`Desfazer feito: ${m.acao.titulo} de ${m.nome}`}
+                    title="Desfazer"
                   >
-                    <RotateCcw className="mr-1 h-3.5 w-3.5" /> Desfazer
+                    <RotateCcw className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </li>
               ))}

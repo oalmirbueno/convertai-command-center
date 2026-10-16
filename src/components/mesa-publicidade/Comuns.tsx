@@ -93,9 +93,6 @@ export function CabecalhoDaEtapa({
   );
 }
 
-/** Rótulo de botão que vira só ícone no celular (o botão leva o aria-label com o texto todo). Mora no sistema. */
-export { RotuloLargo } from "@/components/sistema/BotaoComIcone";
-
 export function AvisoDoRascunho() {
   return (
     <div className="flex min-w-0 items-center rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-[12px] leading-4" data-rascunho-da-publicidade="">

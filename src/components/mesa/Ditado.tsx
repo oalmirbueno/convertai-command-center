@@ -148,7 +148,7 @@ export function Ditado({
           <Button
             type="button"
             size="icon"
-            variant={ouvindo ? "destructive" : "outline"}
+            variant={ouvindo ? "destructive" : "ghost"}
             className="h-8 w-8 shrink-0"
             onClick={ouvindo ? parar : comecar}
             disabled={disabled && !ouvindo}

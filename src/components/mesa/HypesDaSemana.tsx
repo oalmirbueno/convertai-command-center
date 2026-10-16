@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ExternalLink, Flame, Megaphone, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
-import { superficie } from "@/components/sistema/estilos";
+import { botao, juntar, superficie } from "@/components/sistema/estilos";
 import { AvisoDeErro, BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { Cronometro } from "./Cronometro";
@@ -134,10 +133,10 @@ function CartaoDoHype({
           variant="outline"
           className="mb-1 mr-1.5 h-8"
         />
-        <Button type="button" size="sm" variant="ghost" className="mb-1 h-8" onClick={onCriarCampanha}>
-          <Megaphone className="mr-1.5 h-3.5 w-3.5" />
-          Criar campanha
-        </Button>
+        {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
+        <button type="button" className={juntar(botao.icone, "mb-1")} onClick={onCriarCampanha} aria-label="Criar campanha" title="Criar campanha">
+          <Megaphone className="h-4 w-4" aria-hidden="true" />
+        </button>
       </div>
     </article>
   );
@@ -210,7 +209,8 @@ export default function HypesDaSemana({
             {buscandoDesde !== null && <span className="hidden sm:inline-flex"><Cronometro desde={buscandoDesde} rotulo="Pesquisando" previsao="~90s" /></span>}
             {daSemana ? (
               <BotaoComCusto
-                rotulo={<><RefreshCw className="mr-1.5 h-3.5 w-3.5" />Buscar de novo</>}
+                // 16/10/2026: só o ícone (o preço continua visível); o nome vai para o leitor de tela e a descrição para o title.
+                rotulo={<><RefreshCw className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Buscar de novo</span></>}
                 titulo="Hypes da semana"
                 descricao="Refaz a pesquisa na web com o contexto do cliente e a nota do Jev."
                 partes={() => partesDosHypes(catalogo)}

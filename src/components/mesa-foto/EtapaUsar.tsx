@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, CalendarPlus, ClipboardCheck, Filter, Megaphone, PenTool } from "lucide-react";
+import { CalendarPlus, ClipboardCheck, Filter, Megaphone, PenTool } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Ampliar } from "@/components/mesa/Ampliar";
 import { AvisoDeErro } from "@/components/mesa/Custo";
@@ -8,7 +8,7 @@ import { BotoesDeUso } from "./AcoesDeUso";
 import { Cartao, MiniaturaDaFoto, SeloCurto, useMesaFoto, Vazio } from "./Comuns";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import BarraDeAcoes from "@/components/sistema/BarraDeAcoes";
-import { juntar, superficie } from "@/components/sistema/estilos";
+import { botao, juntar, superficie } from "@/components/sistema/estilos";
 import { Carregando } from "@/components/sistema/Estados";
 import { MenuDeUso, precisaAprovar, useLevarParaAsMesas } from "./UsoDaFoto";
 import { classeDaFoto, fotosParaRevisar, useEnsaios, useFotos, type FotoDoAcervo } from "./fotoApi";
@@ -113,9 +113,9 @@ export default function EtapaUsar() {
           <>
             {/* 28/09: o atalho para os posts de fotos sai da linha própria e vem para a linha do título. */}
             {prepararNaAgenda && (
-              <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" onClick={() => irPara("agenda")} title="Posts de fotos: legenda, data e aprovação do cliente" data-atalho-da-agenda="">
-                <CalendarPlus className="mr-1.5 h-3.5 w-3.5" /> Post na Agenda
-              </Button>
+              <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => irPara("agenda")} title="Posts de fotos: legenda, data e aprovação do cliente" data-atalho-da-agenda="" aria-label="Post na Agenda">
+                <CalendarPlus className="h-4 w-4" aria-hidden="true" />
+              </button>
             )}
             <SeletorCompacto modo="lista" rotulo="Quais fotos" icone={<Filter className="h-4 w-4" />} opcoes={opcoes} valor={origem} onEscolher={(v) => setOrigem(v as Origem)} />
           </>
@@ -189,16 +189,16 @@ export default function EtapaUsar() {
         >
           {/* Frente MF (27/09): o post na Agenda (foto única ou carrossel, com legenda, data e aprovação) vem primeiro. */}
           {prepararNaAgenda && (
-            <Button type="button" size="sm" className="h-8 text-[12px]" disabled={!escolhidas.length} onClick={() => prepararNaAgenda(escolhidas.map((f) => f.id))}>
-              <CalendarPlus className="mr-1.5 h-3.5 w-3.5" /> Preparar na Agenda
-            </Button>
+            <button className={juntar(botao.icone, "text-primary disabled:opacity-50")} type="button" disabled={!escolhidas.length} onClick={() => prepararNaAgenda(escolhidas.map((f) => f.id))} aria-label="Preparar na Agenda" title="Preparar na Agenda">
+              <CalendarPlus className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
-          <Button type="button" size="sm" variant={prepararNaAgenda ? "outline" : "default"} className="h-8 text-[12px]" disabled={!escolhidas.length} onClick={() => levar("mesa", escolhidas)}>
-            <PenTool className="mr-1.5 h-3.5 w-3.5" /> Usar na Mesa <ArrowUpRight className="ml-1 h-3 w-3" />
-          </Button>
-          <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" disabled={!escolhidas.length} onClick={() => levar("ads", escolhidas)}>
-            <Megaphone className="mr-1.5 h-3.5 w-3.5" /> Usar na Mesa Ads <ArrowUpRight className="ml-1 h-3 w-3" />
-          </Button>
+          <button className={juntar(botao.icone, "disabled:opacity-50", !(prepararNaAgenda) && "text-primary")} type="button" disabled={!escolhidas.length} onClick={() => levar("mesa", escolhidas)} aria-label="Usar na Mesa" title="Usar na Mesa">
+            <PenTool className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={!escolhidas.length} onClick={() => levar("ads", escolhidas)} aria-label="Usar na Mesa Ads" title="Usar na Mesa Ads">
+            <Megaphone className="h-4 w-4" aria-hidden="true" />
+          </button>
           <div className="flex min-w-0 flex-wrap items-center" data-levar-para-fora="">
             <BotoesDeUso fotos={escolhidas} />
           </div>

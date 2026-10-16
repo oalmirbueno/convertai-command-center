@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { CalendarCheck, Copy, Loader2, RotateCcw, ZoomIn } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { botao, juntar } from "@/components/sistema/estilos";
 import { dataEHora, textoDoErro } from "@/lib/mesa/api";
 import { Ampliar } from "./Ampliar";
 import { QuadroQueCabe } from "./EstudioLaminaGrande";
@@ -68,15 +69,14 @@ export default function EstudioArteDaAgenda({
           </span>
         </p>
         <div className="mb-2 flex shrink-0 items-center">
-          <Button asChild size="sm" variant="outline" className="mr-2 h-9">
-            <Link to={linkAgenda}>
-              <CalendarCheck className="mr-1.5 h-3.5 w-3.5" /> Abrir na Agenda
-            </Link>
-          </Button>
+          {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
+          <Link to={linkAgenda} className={juntar(botao.icone, "mr-1")} aria-label="Abrir na Agenda" title="Abrir na Agenda">
+            <CalendarCheck className="h-4 w-4" aria-hidden="true" />
+          </Link>
           {!confirmando && (
-            <Button type="button" size="sm" variant="ghost" className="h-9" onClick={() => setConfirmando(true)}>
-              <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Refazer no Estúdio
-            </Button>
+            <button type="button" className={botao.icone} onClick={() => setConfirmando(true)} aria-label="Refazer no Estúdio" title="Refazer no Estúdio">
+              <RotateCcw className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
         </div>
       </div>
@@ -134,9 +134,9 @@ export default function EstudioArteDaAgenda({
             <p className="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground">
               Lâmina {Math.min(selecionada, lista.length - 1) + 1} de {lista.length}
             </p>
-            <Button type="button" size="sm" variant="ghost" className="h-8 px-2 text-[12px]" onClick={() => setAmpliada(Math.min(selecionada, lista.length - 1))}>
-              <ZoomIn className="mr-1 h-3.5 w-3.5" /> Ver grande
-            </Button>
+            <button type="button" className={botao.icone} onClick={() => setAmpliada(Math.min(selecionada, lista.length - 1))} aria-label="Ver grande" title="Ver grande">
+              <ZoomIn className="h-4 w-4" aria-hidden="true" />
+            </button>
           </div>
           <QuadroQueCabe soPelaLargura={soPelaLargura}>
             {() => {
@@ -183,20 +183,18 @@ export function InspetorDaArte({ arte, publicacao, linkAgenda }: { arte: ArteNaA
         <div className="mb-1.5 flex min-h-7 items-center">
           <p className="flex-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Legenda do post</p>
           {arte.legenda && (
-            <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[11.5px]" onClick={() => void copiar()}>
-              <Copy className="mr-1 h-3 w-3" /> Copiar
-            </Button>
+            <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => void copiar()} aria-label="Copiar a legenda" title="Copiar a legenda">
+              <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
           )}
         </div>
         <p className="whitespace-pre-wrap rounded-lg border border-border bg-background px-3 py-2.5 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">
           {arte.legenda || "Sem legenda no post."}
         </p>
       </div>
-      <Button asChild variant="outline" className="h-10 w-full">
-        <Link to={linkAgenda}>
-          <CalendarCheck className="mr-1.5 h-4 w-4" /> Abrir na Agenda
-        </Link>
-      </Button>
+      <Link to={linkAgenda} className={botao.icone} aria-label="Abrir na Agenda" title="Abrir na Agenda">
+        <CalendarCheck className="h-4 w-4" aria-hidden="true" />
+      </Link>
     </div>
   );
 }

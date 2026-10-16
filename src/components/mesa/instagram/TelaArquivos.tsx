@@ -98,9 +98,9 @@ function CartaoDeArquivo({
           {!imagem && <ExternalLink className="ml-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
         </button>
         {onSimular && (
-          <button type="button" className={juntar(botao.discreto, "ml-1 h-7 px-2 text-[11.5px]")} onClick={onSimular}>
-            <Send className="mr-1 h-3 w-3" aria-hidden="true" />
-            Simular
+          // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
+          <button type="button" className={juntar(botao.icone, "ml-1 h-7 w-7")} onClick={onSimular} aria-label="Simular na grade" title="Simular na grade">
+            <Send className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         )}
       </li>
@@ -284,10 +284,10 @@ export default function TelaArquivos({ onSimular }: { onSimular: (s: { bucket: s
         />
         <span className="flex items-center">
           {movendo && <Loader2 className="mr-2 h-4 w-4 animate-spin text-muted-foreground" aria-label="Movendo" />}
-          <button type="button" className={juntar(botao.icone, modo === "grade" ? "bg-muted text-foreground" : "")} onClick={() => setModo("grade")} aria-label="Ver em grade" aria-pressed={modo === "grade"}>
+          <button type="button" className={juntar(botao.icone, modo === "grade" ? "bg-muted text-foreground" : "")} onClick={() => setModo("grade")} aria-label="Ver em grade" title="Ver em grade" aria-pressed={modo === "grade"}>
             <LayoutGrid className="h-4 w-4" />
           </button>
-          <button type="button" className={juntar(botao.icone, modo === "lista" ? "bg-muted text-foreground" : "")} onClick={() => setModo("lista")} aria-label="Ver em lista" aria-pressed={modo === "lista"}>
+          <button type="button" className={juntar(botao.icone, modo === "lista" ? "bg-muted text-foreground" : "")} onClick={() => setModo("lista")} aria-label="Ver em lista" title="Ver em lista" aria-pressed={modo === "lista"}>
             <List className="h-4 w-4" />
           </button>
         </span>

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Eye, EyeOff, Palette, RefreshCw, Sparkles, Trash2, Wand2 } from "lucide-react";
+import { Eye, EyeOff, Palette, PenLine, RefreshCw, RotateCw, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -382,14 +382,17 @@ function TresHeadlines({ proposta, modeloId, desligado, onEscolher }: { proposta
   const [notas, setNotas] = useState<Record<string, OpcaoDaCopy>>({});
   return (
     <div className="min-w-0" data-tres-headlines="">
+      {/* 16/10/2026: só ícone (o nome vai no sr-only e no title; o preço segue ao lado). */}
       <BotaoComCusto
         rotulo={
           <>
-            <Wand2 className="mr-1.5 h-4 w-4" />3 headlines
+            <Wand2 className="h-4 w-4" aria-hidden="true" />
+            <span className="sr-only">Gerar 3 headlines</span>
           </>
         }
         titulo="Gerar 3 headlines"
-        variant="outline"
+        variant="ghost"
+        className="h-8 gap-1 px-2"
         disabled={desligado || !modeloId}
         partes={() => [{ modeloId, tipo: "texto", tokensEntrada: 6000, tokensSaida: 400 }, parteDaConferenciaDoJev()]}
         executar={() => chamarProposta("headlines", { proposta_id: proposta.id, modelo_id: modeloId || undefined })}
@@ -430,15 +433,17 @@ function TomDaMarca({ proposta, b, modeloId, desligado, conteudo, onAplicar }: {
   return (
     <div className="min-w-0" data-tom-da-marca={b.tipo}>
       {!valores && (
+        // 16/10/2026: só ícone (o nome vai no sr-only e no title; o preço segue ao lado).
         <BotaoComCusto
           rotulo={
             <>
-              <Sparkles className="mr-1.5 h-4 w-4" />
-              Tom da marca
+              <PenLine className="h-4 w-4" aria-hidden="true" />
+              <span className="sr-only">Tom da marca</span>
             </>
           }
           titulo={`Reescrever ${b.titulo} no tom da marca`}
-          variant="outline"
+          variant="ghost"
+          className="h-8 gap-1 px-2"
           disabled={desligado || !modeloId}
           partes={() => [{ modeloId, tipo: "texto", tokensEntrada: 6000, tokensSaida: 1500 }]}
           executar={() => chamarProposta("tom_da_marca", { proposta_id: proposta.id, bloco: b.tipo, dados: b.dados, modelo_id: modeloId || undefined })}
@@ -501,9 +506,9 @@ function RelerORetrato({ proposta, onRelido }: { proposta: Proposta; onRelido: (
     }
   };
   return (
-    <button type="button" className={botao.secundario} onClick={() => void reler()} disabled={ocupado} data-reler-retrato="">
-      <RefreshCw className="mr-1.5 h-4 w-4" aria-hidden="true" />
-      {ocupado ? "Lendo..." : "Reler os dados de hoje"}
+    // 16/10/2026: só ícone (nome no aria-label e no title).
+    <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} onClick={() => void reler()} disabled={ocupado} data-reler-retrato="" aria-label="Reler os dados de hoje" title={ocupado ? "Lendo..." : "Reler os dados de hoje"}>
+      <RefreshCw className={juntar("h-4 w-4", ocupado && "animate-spin")} aria-hidden="true" />
     </button>
   );
 }
@@ -786,16 +791,18 @@ export default function EtapaRascunho({ proposta, modeloId, onModelo }: { propos
   const pedidoDeGerar = () => ({ proposta_id: proposta.id, modelo_id: modeloId || undefined, ...ajustes.pedido() });
   // Gerar de novo: sempre com a prévia (nada é gravado sem a pessoa ver).
   const gerarComPrevia = (
+    // 16/10/2026: só ícone (o nome vai no sr-only e no title; o preço segue ao lado).
     <BotaoComCusto
       rotulo={
         <>
-          <Sparkles className="mr-1.5 h-4 w-4" />
-          Gerar de novo
+          <RotateCw className="h-4 w-4" aria-hidden="true" />
+          <span className="sr-only">Gerar de novo</span>
         </>
       }
       titulo="Gerar de novo (prévia)"
-      descricao="Mostra o que vai mudar, campo a campo, antes de gravar"
-      variant="outline"
+      descricao="Gerar de novo: mostra o que vai mudar, campo a campo, antes de gravar"
+      variant="ghost"
+      className="h-8 gap-1 px-2"
       disabled={aceita || mudou || !modeloId || !ajustes.pronto}
       partes={() => [{ modeloId, tipo: "texto", tokensEntrada: 14000, tokensSaida: 6000, buscasWeb: ajustes.buscasWeb }]}
       executar={() => chamarProposta("gerar", { ...pedidoDeGerar(), previa: true })}

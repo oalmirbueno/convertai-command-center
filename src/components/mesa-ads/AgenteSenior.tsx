@@ -6,7 +6,7 @@ import { esquecerRegraAprendida, guardarRegraAprendida } from "@/lib/agentes/apr
 import TextoDoAgente from "@/components/agentes/TextoDoAgente";
 import HistoricoDoAgente from "@/components/agentes/HistoricoDoAgente";
 import { Ditado } from "@/components/mesa/Ditado";
-import { Briefcase, Check, ChevronDown, Cpu, ExternalLink, FlaskConical, Sparkles } from "lucide-react";
+import { Briefcase, Check, ChevronDown, Cpu, ExternalLink, FlaskConical, History, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto } from "@/components/mesa/Custo";
@@ -714,9 +714,10 @@ export default function AgenteSenior({
       )}
       {antigas.length > 0 && (
         <div className="min-w-0">
-          <button type="button" className={juntar("flex items-center rounded text-[11.5px] font-medium text-muted-foreground hover:text-foreground", foco)} onClick={() => setHistoricoAberto(!historicoAberto)} aria-expanded={historicoAberto}>
-            <ChevronDown className={`mr-1 h-3.5 w-3.5 transition-transform ${historicoAberto ? "rotate-180" : ""}`} />
-            {historicoAberto ? "Esconder conversas anteriores" : `Conversas anteriores (${antigas.filter((m) => m.papel === "usuario").length || antigas.length})`}
+          <button type="button" className={juntar("toque-compacto inline-flex h-8 items-center rounded-md px-1.5 text-muted-foreground hover:bg-muted hover:text-foreground", historicoAberto && "bg-muted text-foreground", foco)} onClick={() => setHistoricoAberto(!historicoAberto)} aria-expanded={historicoAberto} aria-label={historicoAberto ? "Esconder conversas anteriores" : `Conversas anteriores (${antigas.filter((m) => m.papel === "usuario").length || antigas.length})`} title={historicoAberto ? "Esconder conversas anteriores" : "Conversas anteriores"}>
+            {/* 16/10/2026: só o ícone, com a contagem pequena. */}
+            <History className="h-4 w-4" aria-hidden="true" />
+            <span className="ml-0.5 text-[11px] tabular-nums">{antigas.filter((m) => m.papel === "usuario").length || antigas.length}</span>
           </button>
           {historicoAberto && <div className="mt-3 min-w-0 space-y-4 opacity-90">{antigas.map(mostrar)}</div>}
         </div>

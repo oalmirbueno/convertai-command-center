@@ -15,8 +15,8 @@ import {
   type Canvas,
   type NoDoCanvas,
 } from "../canvasApi";
-import { BOTAO, CAMPO, ROTULO, type Fontes } from "./comum";
-import { AjudaRecolhida, CompositorDoAgente, MensagensDoAgente } from "@/components/sistema";
+import { BOTAO_ICONE, CAMPO, ROTULO, type Fontes } from "./comum";
+import { AjudaRecolhida, CompositorDoAgente, MensagensDoAgente, juntar } from "@/components/sistema";
 // Frente SPP (revisão 30/09): a linha "Método:" embaixo da resposta do agente do Canvas.
 import MetodoDoAgente from "@/components/agentes/MetodoDoAgente";
 
@@ -101,15 +101,11 @@ export function ChatDoAgente({
         <AjudaRecolhida className="ml-1">Lê o contexto do cliente, o que está ligado e a última foto, e escreve o pedido do Resultado. Cada mensagem tem o custo à vista ao lado do Enviar.</AjudaRecolhida>
       </div>
       {!resultado && (
-        <button
-          type="button"
-          className={BOTAO}
-          onClick={() => {
+        <button className={juntar(BOTAO_ICONE, "disabled:opacity-50")} type="button" onClick={() => {
             const alvo = resultadoAlvo(canvas, null);
             if (alvo) onMudarCanvas((c) => ligar(c, no.id, alvo));
-          }}
-        >
-          <Link2 className="mr-1 h-3.5 w-3.5" /> Ligar ao Resultado
+          }} aria-label="Ligar ao Resultado" title="Ligar ao Resultado">
+          <Link2 className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
       {/* Casca do sistema (PainelDoAgente em peças): a conversa rola por dentro, numa caixa de altura fixa; o campo fica logo abaixo, sempre à vista. */}
@@ -160,8 +156,8 @@ export function ChatDoAgente({
         <div className="mt-1.5 flex items-center">
           <EstimativaInline partes={partesDaConversa(catalogo)} />
           <span className="flex-1" />
-          <button type="button" className={`${BOTAO} h-8 border-violet-400/40 bg-violet-500/20`} disabled={enviando || !texto.trim()} onClick={() => void enviar(texto)}>
-            {enviando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1 h-3.5 w-3.5" />} Enviar
+          <button className={juntar(BOTAO_ICONE, "disabled:opacity-50")} type="button" disabled={enviando || !texto.trim()} onClick={() => void enviar(texto)} aria-label="Enviar" title="Enviar">
+            {enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
           </button>
         </div>
       </div>

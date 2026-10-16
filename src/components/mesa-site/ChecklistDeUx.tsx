@@ -173,9 +173,9 @@ export default function ChecklistDeUx({ site, itens, onIrPara }: { site: LinhaDo
                             </button>
                           )}
                           {i.estado === "falhou" && (
-                            <button type="button" className={juntar(botao.secundario, "shrink-0")} onClick={() => void abrirPedido(i)} data-pedir-ao-motor={i.no}>
-                              <Wrench className="mr-1 h-3.5 w-3.5" />
-                              Pedir ao motor
+                            // 16/10/2026: só ícone (nome no aria-label e no title).
+                            <button type="button" className={botao.icone} aria-label="Pedir ao motor" title="Pedir ao motor" onClick={() => void abrirPedido(i)} data-pedir-ao-motor={i.no}>
+                              <Wrench className="h-4 w-4" />
                             </button>
                           )}
                         </div>

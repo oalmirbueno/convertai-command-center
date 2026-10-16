@@ -92,8 +92,10 @@ export default function FioDaMarca() {
 
   return (
     <div className="mb-3 flex min-w-0 flex-wrap items-center border-b border-border/60 pb-2" data-fio-da-marca="" data-coerencia={coerencia.nota === null ? "" : String(coerencia.nota)}>
-      <span className={juntar(texto.rotulo, "mr-2 inline-flex shrink-0 items-center")}>
-        <Link2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Fio da marca
+      {/* 16/10/2026: só o ícone; o nome fica no title e no leitor de tela. */}
+      <span className={juntar(texto.rotulo, "mr-2 inline-flex shrink-0 items-center")} title="Fio da marca">
+        <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
+        <span className="sr-only">Fio da marca</span>
       </span>
       <span className={juntar(texto.corpo, "mr-3 min-w-0 max-w-[220px] truncate font-medium")} title={f.nome || "Sem nome"}>
         {f.nome || "Sem nome"}
@@ -150,15 +152,18 @@ export default function FioDaMarca() {
                 ))}
               </span>
               {i.situacao !== "ok" && podeIrPara(projeto, i.etapa) && (
+                // 16/10/2026: só ícone (a etapa vai no aria-label e no title).
                 <button
                   type="button"
-                  className={juntar(botao.discreto, "ml-2 h-8 shrink-0")}
+                  className={juntar(botao.icone, "ml-2")}
+                  aria-label={`Ajustar em ${rotuloDaEtapa(i.etapa)}`}
+                  title={`Ajustar em ${rotuloDaEtapa(i.etapa)}`}
                   onClick={() => {
                     setAberta(false);
                     irPara(i.etapa);
                   }}
                 >
-                  {rotuloDaEtapa(i.etapa)} <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                  <ArrowRight className="h-4 w-4" />
                 </button>
               )}
             </li>

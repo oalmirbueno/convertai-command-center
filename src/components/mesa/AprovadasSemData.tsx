@@ -224,12 +224,14 @@ export default function AprovadasSemData() {
           setIndice(0);
           setAberta(true);
         }}
+        // 16/10/2026 (dono: "texto + ícone vira só o ícone"): a contagem fica como número pequeno; o nome no title e no leitor de tela.
         className={juntar(botao.barra, "mb-1 mt-1 text-foreground")}
-        title="Aprovadas pelo cliente que ainda esperam a data"
+        aria-label={`${pecas.length} sem data`}
+        title={`${pecas.length} sem data: aprovadas pelo cliente que ainda esperam a data`}
         data-aprovadas-sem-data={pecas.length}
       >
-        <CalendarClock className="mr-1 h-3.5 w-3.5 text-warning" />
-        {pecas.length} sem data
+        <CalendarClock className="h-4 w-4 text-warning" aria-hidden="true" />
+        <span className="ml-1 text-[11px] tabular-nums" aria-hidden="true">{pecas.length}</span>
       </button>
       {aberta && atual && (
         <JanelaDaAprovada

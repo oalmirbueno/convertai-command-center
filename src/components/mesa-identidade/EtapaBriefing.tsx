@@ -217,8 +217,9 @@ export default function EtapaBriefing() {
     setCriterios(criteriosRef.current);
     await gravacao.agora(true);
   };
-  const preencher = (campos: CampoParaPreencher[], rotulo?: string, compacto = false) => (
-    <PreencherComIA papel="identidade" clientId={clientId} marcaId={marcaId} campos={campos} contexto={contextoParaPreencher(projeto)} rotulo={rotulo} compacto={compacto} revelar={compacto} onAplicar={(v) => aplicarIa(v)} onDesfazer={(a) => aplicarIa(a)} />
+  // 16/10/2026: o da seção também é só ícone (compacto sem revelar: sempre à vista; o nome no title).
+  const preencher = (campos: CampoParaPreencher[], rotulo?: string, compacto = false, revelar = compacto) => (
+    <PreencherComIA papel="identidade" clientId={clientId} marcaId={marcaId} campos={campos} contexto={contextoParaPreencher(projeto)} rotulo={rotulo} compacto={compacto} revelar={revelar} onAplicar={(v) => aplicarIa(v)} onDesfazer={(a) => aplicarIa(a)} />
   );
 
   return (
@@ -257,7 +258,7 @@ export default function EtapaBriefing() {
           Sem briefing respondido. <Link className="text-primary underline-offset-2 hover:underline" to={`/briefings?client=${clientId}`}>Enviar o link do briefing</Link>
         </p>
       )}
-      <Secao titulo="A marca" descricao={faltando.length ? `${faltando.length} em aberto` : "Completo"} recolher={`mesa-identidade:${projeto.id}:briefing:marca`} acao={preencher(CAMPOS_DO_BRIEFING.map(campoDaIa), "Preencher tudo")} data-bloco-da-etapa="marca">
+      <Secao titulo="A marca" descricao={faltando.length ? `${faltando.length} em aberto` : "Completo"} recolher={`mesa-identidade:${projeto.id}:briefing:marca`} acao={preencher(CAMPOS_DO_BRIEFING.map(campoDaIa), "Preencher tudo", true, false)} data-bloco-da-etapa="marca">
         <div className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
           {CAMPOS_DO_BRIEFING.map((c) => {
             const fonte = fonteDe(c.campo);
@@ -293,7 +294,7 @@ export default function EtapaBriefing() {
           descricao="Um por linha"
           divisoria
           recolher={`mesa-identidade:${projeto.id}:briefing:criterios`}
-          acao={preencher([{ chave: CRITERIOS, rotulo: "Critérios do nome", tipo: "lista", valorAtual: paraLista(criterios), dica: "Critérios para julgar os nomes (som, sentido, diferença, idioma).", maximo: 6 }], "Preencher com IA")}
+          acao={preencher([{ chave: CRITERIOS, rotulo: "Critérios do nome", tipo: "lista", valorAtual: paraLista(criterios), dica: "Critérios para julgar os nomes (som, sentido, diferença, idioma).", maximo: 6 }], "Preencher com IA", true, false)}
           data-bloco-da-etapa="criterios"
         >
           <textarea className={juntar(campoTexto, "min-h-[96px]")} value={criterios} maxLength={1200} placeholder={CRITERIOS_PADRAO.join("\n")} onChange={(e) => mexer(CRITERIOS, e.target.value)} aria-label="Critérios do nome" data-campo="criterios" />

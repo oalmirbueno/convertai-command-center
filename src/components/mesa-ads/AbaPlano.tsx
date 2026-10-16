@@ -13,7 +13,7 @@ import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
-import { campo, foco, juntar, superficie, texto } from "@/components/sistema/estilos";
+import { botao, campo, foco, juntar, superficie, texto } from "@/components/sistema/estilos";
 import {
   alertaDoJev,
   anguloAprovado,
@@ -643,11 +643,12 @@ export default function AbaPlano({
               <button
                 type="button"
                 onClick={() => setAgenteAberto(true)}
-                className={juntar("flex w-full min-w-0 items-center rounded-lg border border-dashed border-border px-4 py-2.5 text-left text-[12.5px] transition-colors hover:border-primary/50", foco)}
-                title="Ele lê este plano junto com a conta ao vivo, a evolução e o nicho, e diz o que ajustar."
+                className={juntar(botao.icone, "text-primary")}
+                aria-label="Revisar com o agente sênior de tráfego"
+                title="Revisar com o agente sênior de tráfego: ele lê este plano junto com a conta ao vivo, a evolução e o nicho, e diz o que ajustar."
               >
-                <Briefcase className="mr-2 h-4 w-4 shrink-0 text-primary" />
-                <span className="min-w-0 flex-1 truncate font-medium">Revisar com o agente sênior de tráfego</span>
+                {/* 16/10/2026 (dono: "deixa só o ícone"): o nome no title e no aria-label. */}
+                <Briefcase className="h-4 w-4" aria-hidden="true" />
               </button>
             )}
 

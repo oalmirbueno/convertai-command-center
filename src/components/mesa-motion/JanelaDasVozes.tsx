@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Archive, Check, Loader2, Mic, Search, Sparkles, Star, Upload, Wand2 } from "lucide-react";
+import { Archive, Check, Loader2, Mic, Save, Search, Sparkles, Star, Upload, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -205,9 +205,9 @@ export default function JanelaDasVozes({ aberta, onFechar, filme, temChave, onUs
                   <span className={texto.auxiliar}>{v.origem === "clonada" ? "Clonada (com autorização)" : v.origem === "desenhada" ? "Desenhada" : "Biblioteca"}</span>
                 </span>
                 {previaDaVoz(v) && <audio controls preload="none" className="mr-2 h-8 w-[200px] max-w-full" src={previaDaVoz(v) || undefined} aria-label={`Prévia de ${v.nome}`} />}
-                <button type="button" className={juntar(botao.secundario, "mr-1 h-8")} onClick={() => { onUsar(v); onFechar(); }}>
-                  <Check className="mr-1 h-3.5 w-3.5" />
-                  Usar
+                {/* 16/10/2026: só ícone, sem borda (nome no aria-label e no title). */}
+                <button type="button" className={juntar(botao.icone, "mr-1")} onClick={() => { onUsar(v); onFechar(); }} aria-label={`Usar ${v.nome}`} title="Usar esta voz">
+                  <Check className="h-4 w-4" />
                 </button>
                 {!v.padrao && (
                   <button type="button" className={juntar(botao.discreto, "mr-1 h-8")} onClick={() => void padrao(v)} disabled={!!indo}>
@@ -234,13 +234,12 @@ export default function JanelaDasVozes({ aberta, onFechar, filme, temChave, onUs
             }}
           >
             <CampoDeBusca valor={busca} onMudar={setBusca} placeholder="Buscar: narrador, feminina, calma, brasileira..." rotulo="Buscar voz" className="mr-2 flex-1" />
-            <button type="submit" className={juntar(botao.secundario, "mr-2")} disabled={!temChave}>
-              <Search className="mr-1 h-3.5 w-3.5" />
-              Buscar
+            {/* 16/10/2026: só ícones, sem borda (nome no aria-label e no title). */}
+            <button type="submit" className={juntar(botao.icone, "mr-1 disabled:pointer-events-none disabled:opacity-50")} disabled={!temChave} aria-label="Buscar" title="Buscar">
+              <Search className="h-4 w-4" />
             </button>
-            <button type="button" className={botao.secundario} onClick={() => void sugerir()} disabled={!temChave || listaDaBiblioteca.length < 2 || indo === "sugerir"} title="O Jev compara as vozes da lista com a marca" data-sugerir-voz="">
-              {indo === "sugerir" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
-              Sugerir
+            <button type="button" className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} onClick={() => void sugerir()} disabled={!temChave || listaDaBiblioteca.length < 2 || indo === "sugerir"} aria-label="Sugerir" title="Sugerir: o Jev compara as vozes da lista com a marca" data-sugerir-voz="">
+              {indo === "sugerir" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             </button>
           </form>
           <div className="flex min-w-0 flex-wrap items-center" data-fonte-da-biblioteca={fonte}>
@@ -288,9 +287,8 @@ export default function JanelaDasVozes({ aberta, onFechar, filme, temChave, onUs
                   <span className={juntar(texto.auxiliar, "block truncate")}>{v.descricao || Object.keys(v.rotulos).map((k) => v.rotulos[k]).join(", ")}</span>
                 </span>
                 {(v.previa_pt || v.previa_url) && <audio controls preload="none" className="mr-2 h-8 w-[200px] max-w-full" src={v.previa_pt || v.previa_url || undefined} aria-label={`Prévia de ${v.nome}`} />}
-                <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => void usarDaBiblioteca(v)} disabled={!!indo}>
-                  {indo === `usar:${v.voice_id}` ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
-                  Usar
+                <button type="button" className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} onClick={() => void usarDaBiblioteca(v)} disabled={!!indo} aria-label={`Usar ${v.nome}`} title="Usar esta voz">
+                  {indo === `usar:${v.voice_id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                 </button>
               </li>
             ))}
@@ -336,9 +334,8 @@ export default function JanelaDasVozes({ aberta, onFechar, filme, temChave, onUs
                   <span className={texto.rotulo}>Nome da voz</span>
                   <input className={campo} value={nome} maxLength={80} onChange={(e) => setNome(e.target.value)} />
                 </label>
-                <button type="button" className={botao.primario} onClick={() => void salvarDesenhada()} disabled={!escolhida || !nome.trim() || indo === "salvar"} data-salvar-voz-desenhada="">
-                  {indo === "salvar" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
-                  Salvar como voz da marca
+                <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => void salvarDesenhada()} disabled={!escolhida || !nome.trim() || indo === "salvar"} aria-label="Salvar como voz da marca" title="Salvar como voz da marca" data-salvar-voz-desenhada="">
+                  {indo === "salvar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 </button>
               </div>
             </div>
@@ -349,9 +346,9 @@ export default function JanelaDasVozes({ aberta, onFechar, filme, temChave, onUs
       {aba === "clonar" && (
         <div className="min-w-0 space-y-3">
           <p className={texto.auxiliar}>Grave de 1 a 3 minutos da pessoa falando, sem música e sem eco. Até 5 arquivos.</p>
-          <label className={juntar(botao.secundario, "cursor-pointer")}>
-            {indo === "subir" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1 h-3.5 w-3.5" />}
-            Enviar gravações
+          {/* 16/10/2026: só ícone, sem borda; "Clonar a voz" fica com texto (ação principal da aba). */}
+          <label className={juntar(botao.icone, "flex cursor-pointer")} aria-label="Enviar gravações" title="Enviar gravações">
+            {indo === "subir" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             <input type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm,.aac,.flac" multiple className="hidden" onChange={(e) => void subir(e.target.files)} />
           </label>
           {arquivos.length > 0 && (

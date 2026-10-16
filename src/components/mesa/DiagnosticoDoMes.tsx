@@ -346,9 +346,10 @@ export default function DiagnosticoDoMes({ proposta }: { proposta: PropostaDoDia
             </span>
           )}
         </span>
-        <span className="ml-3 mt-1 flex shrink-0 items-center text-[12px] text-muted-foreground">
-          <span className="mr-1 hidden sm:inline">{aberto ? "Recolher" : "Ver tudo"}</span>
-          <ChevronDown className={`h-4 w-4 transition-transform ${aberto ? "rotate-180" : ""}`} />
+        {/* 16/10/2026 (dono: "texto + ícone vira só o ícone"): "Ver tudo"/"Recolher" fica no title e no leitor de tela. */}
+        <span className="ml-3 mt-1 flex shrink-0 items-center text-muted-foreground" title={aberto ? "Recolher" : "Ver tudo"}>
+          <span className="sr-only">{aberto ? "Recolher" : "Ver tudo"}</span>
+          <ChevronDown className={`h-4 w-4 transition-transform ${aberto ? "rotate-180" : ""}`} aria-hidden="true" />
         </span>
       </button>
 

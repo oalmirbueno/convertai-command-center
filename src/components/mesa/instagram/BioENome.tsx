@@ -40,16 +40,17 @@ function BotaoCopiar({ valor, rotulo }: { valor: string; rotulo: string }) {
   return (
     <button
       type="button"
-      className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")}
+      className={botao.icone}
       onClick={async () => {
         const ok = await copiarTexto(valor);
         if (ok) toast.success(`${rotulo} copiado`, { description: "Cole no app: Editar perfil." });
         else toast.error("Não deu para copiar. Selecione o texto e copie à mão.");
       }}
       aria-label={`Copiar ${rotulo.toLowerCase()}`}
+      title={`Copiar ${rotulo.toLowerCase()}`}
     >
-      <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-      Copiar
+      {/* 16/10/2026: só o ícone; o nome fica no title e no leitor de tela. */}
+      <Copy className="h-4 w-4" aria-hidden="true" />
     </button>
   );
 }

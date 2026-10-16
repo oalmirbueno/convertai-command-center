@@ -415,9 +415,9 @@ export default function PreviaEditavel({
       ajuda="A prévia mostra o site enquanto ele é construído. O site do motor só aceita edição depois do próximo trabalho do motor (a ponte de edição chega com ele); até lá, edite na prévia rápida. A prévia rápida é montada aqui com o mapa, a copy, as imagens e a marca, seção a seção com o selo da construção (pronta, construindo, na fila), e funciona mesmo com o motor desligado. O site do motor é o código de verdade, ao vivo pelo túnel do worker. Com Editar ligado, clique num texto para escrever (Enter salva, Esc desiste), numa imagem para trocar, ou passe o mouse numa seção para subir, descer, esconder ou pedir ajuste. Contorno verde: texto da copy, vale na hora e sem custo. Contorno amarelo: texto escrito no código, vira ajuste do motor com o custo antes. Cores e fontes da lateral valem só para este site. Tudo tem Desfazer; o Ctrl+Z, com a prévia em foco e Editar ligado, desfaz a última edição de conteúdo (o ajuste do motor volta só pelo botão). Shift+Enter quebra linha nos textos longos (texto da seção, resposta, subtítulo)."
       acao={
         <>
-          <button type="button" className={juntar(editando ? botao.primario : botao.secundario, "h-8")} aria-pressed={editando} onClick={() => setEditando(!editando)} data-editar-previa={editando ? "ligado" : "desligado"}>
-            <MousePointerClick className="mr-1 h-3.5 w-3.5" />
-            {editando ? "Editando" : "Editar"}
+          {/* 16/10/2026: só ícone (nome no aria-label e no title); ligado fica verde. */}
+          <button type="button" className={editando ? juntar(botao.primario, "h-8 w-8 px-0") : botao.icone} aria-pressed={editando} aria-label={editando ? "Editando" : "Editar"} title={editando ? "Editando: clique de novo para parar" : "Editar a prévia"} onClick={() => setEditando(!editando)} data-editar-previa={editando ? "ligado" : "desligado"}>
+            <MousePointerClick className="h-4 w-4" />
           </button>
           <button type="button" className={juntar(botao.icone, "ml-1")} aria-label={ultimaAberta ? `Desfazer: ${ultimaAberta.resumo}` : "Nada para desfazer"} title={ultimaAberta ? `Desfazer: ${ultimaAberta.resumo}` : "Nada para desfazer"} disabled={!ultimaAberta || ocupado} onClick={() => ultimaAberta && void desfazerEdicao(ultimaAberta.id)} data-desfazer-ultima="">
             <RotateCcw className="h-4 w-4" />

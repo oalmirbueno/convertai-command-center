@@ -285,9 +285,9 @@ export default function TelaDoCliente({
   return (
     <section className={juntar(superficie.painel, "flex min-w-0 flex-col lg:min-h-0 lg:flex-1")} aria-label={atual.rotulo} data-tela-do-cliente={vista}>
       <div className="flex min-w-0 shrink-0 flex-wrap items-center border-b border-border px-3 py-2">
-        <button type="button" className={juntar(botao.secundario, "mb-1 mr-3 h-8 px-2.5 text-[12.5px]")} onClick={onVoltar}>
-          <ArrowLeft className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-          Voltar à prévia
+        {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
+        <button type="button" className={juntar(botao.icone, "mb-1 mr-2")} onClick={onVoltar} aria-label="Voltar à prévia" title="Voltar à prévia">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         </button>
         <div role="tablist" aria-label="Telas do cliente" className="mb-1 mr-3 flex min-w-0 rounded-lg bg-muted p-1">
           {PARTES_DO_PAINEL.map((p) => (
@@ -303,9 +303,8 @@ export default function TelaDoCliente({
             </button>
           ))}
         </div>
-        <Link to={link.rota(q)} className="mb-1 ml-auto inline-flex items-center text-[12px] text-muted-foreground hover:text-foreground">
-          {link.rotulo}
-          <ArrowUpRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
+        <Link to={link.rota(q)} className={juntar(botao.icone, "mb-1 ml-auto")} aria-label={link.rotulo} title={link.rotulo}>
+          <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
         </Link>
       </div>
       <RegiaoRolavel rotulo={atual.rotulo} memoria={`mesa:instagram:vista:${clientId}:${vista}`} sobre="cartao" className="px-3 py-3 sm:px-4">

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { CalendarPlus, Check, Copy, HandCoins, Loader2, MessageCircle, ShieldAlert, Undo2, X } from "lucide-react";
+import { CalendarPlus, Check, ClipboardList, Copy, HandCoins, Loader2, MessageCircle, ShieldAlert, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ import {
   tirarKitDaAgenda,
   type KitDeRecepcao as Kit,
 } from "./acoesDoAgenteApi";
+import { botao, juntar } from "@/components/sistema";
 
 /**
  * Kit de recepção do ângulo (pedido do dono em 25/09: "o post é o que a gente
@@ -106,18 +107,17 @@ function PostNaAgenda({ plano, angulo, kit, onPlano }: { plano: PlanoAds; angulo
         <span className="mb-1 mr-2 inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[11.5px]">
           <Check className="mr-1 h-3 w-3" /> Na agenda em {dataCurta(kit.agenda.data)}
         </span>
-        <Button type="button" size="sm" variant="ghost" className="mb-1 h-7 text-[11.5px]" disabled={fazendo} onClick={() => void desfazer()}>
-          {fazendo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Undo2 className="mr-1 h-3.5 w-3.5" />}
-          Desfazer
-        </Button>
+        <button className={juntar(botao.icone, "mb-1 disabled:opacity-50")} type="button" disabled={fazendo} onClick={() => void desfazer()} aria-label="Desfazer" title="Desfazer">
+          {fazendo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Undo2 className="h-4 w-4" aria-hidden="true" />}
+        </button>
       </span>
     );
   }
   if (!armado) {
     return (
-      <Button type="button" size="sm" variant="outline" className="h-7 text-[11.5px]" onClick={() => setArmado(true)}>
-        <CalendarPlus className="mr-1 h-3.5 w-3.5" /> Mandar para a agenda
-      </Button>
+      <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => setArmado(true)} aria-label="Mandar para a agenda" title="Mandar para a agenda">
+        <CalendarPlus className="h-4 w-4" aria-hidden="true" />
+      </button>
     );
   }
   return (
@@ -187,8 +187,8 @@ function KitNaTela({ plano, angulo, kit, onPlano }: { plano: PlanoAds; angulo: A
         {legenda && (
           <div className="mt-1.5 rounded-md bg-muted/60 p-2 text-[12px] leading-snug">
             <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{legenda}</p>
-            <button type="button" className="mt-1 inline-flex items-center text-[11.5px] font-medium text-primary hover:underline" onClick={() => void copiar(legenda, "Legenda")}>
-              <Copy className="mr-1 h-3 w-3" /> Copiar legenda
+            <button className={juntar(botao.icone, "mt-1 text-primary disabled:opacity-50")} type="button" onClick={() => void copiar(legenda, "Legenda")} aria-label="Copiar legenda" title="Copiar legenda">
+              <Copy className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
         )}
@@ -205,8 +205,8 @@ function KitNaTela({ plano, angulo, kit, onPlano }: { plano: PlanoAds; angulo: A
         titulo={`Atendimento e vendas (${c.canal})`}
         icone={<MessageCircle className="mr-1 h-3.5 w-3.5 text-primary" />}
         acao={
-          <button type="button" className="inline-flex items-center text-[11.5px] font-medium text-primary hover:underline" onClick={() => void copiar(roteiroComercialEmTexto(kit), "Roteiro de atendimento")}>
-            <Copy className="mr-1 h-3 w-3" /> Copiar roteiro
+          <button className={juntar(botao.icone, "text-primary disabled:opacity-50")} type="button" onClick={() => void copiar(roteiroComercialEmTexto(kit), "Roteiro de atendimento")} aria-label="Copiar roteiro" title="Copiar roteiro">
+            <ClipboardList className="h-4 w-4" aria-hidden="true" />
           </button>
         }
       >
@@ -309,8 +309,8 @@ export default function KitDeRecepcao({ plano, angulo, compacto = false }: { pla
         <div className="mt-2 min-w-0">
           <KitNaTela plano={plano} angulo={angulo} kit={kit} onPlano={atualizarPlano} />
           {compacto && (
-            <button type="button" className="mt-1 inline-flex items-center text-[11.5px] text-muted-foreground hover:text-foreground" onClick={() => setAberto(false)}>
-              <X className="mr-1 h-3 w-3" /> Fechar
+            <button className={juntar(botao.icone, "mt-1 disabled:opacity-50")} type="button" onClick={() => setAberto(false)} aria-label="Fechar" title="Fechar">
+              <X className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
         </div>

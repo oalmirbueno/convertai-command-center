@@ -188,9 +188,6 @@ export default function EtapaConstrucao({ site, onIrPara, onPedirAoDiretor }: { 
   const resumoDoMais = [`${feitas.filter((s) => secoesDoSite.indexOf(s) >= 0).length} de ${secoesDoSite.length} prontas`, modeloEscolhido ? nomeDoModelo(modeloEscolhido) : modelo ? "modelo escolhido" : "", tetoManual ? "teto manual" : ""].filter(Boolean).join(" · ");
 
   const rotuloDoBotao = rotuloDoConstruir(escolhidas, faltando, tetoUsd);
-  const corte = rotuloDoBotao.indexOf(" · teto");
-  const rotuloPrincipal = corte >= 0 ? rotuloDoBotao.slice(0, corte) : rotuloDoBotao;
-  const rotuloDoTeto = corte >= 0 ? rotuloDoBotao.slice(corte) : "";
 
   useBarraDaEtapa({ estado: rodando ? "Construindo" : `${secoesDoSite.length - faltando.length} de ${secoesDoSite.length} seções prontas`, pendente: faltando.length > 0 });
 
@@ -201,11 +198,9 @@ export default function EtapaConstrucao({ site, onIrPara, onPedirAoDiretor }: { 
         descricao={<EstadoDoMotor estado={estadoDoMotor} compacto />}
         ajuda="Uma seção por vez, pela fórmula de 6 blocos, com o método da casa (AGENTS.md do projeto) e as regras de licença do kit de motion. O teto fica reservado na carteira enquanto o trabalho roda; o custo real vem do provedor e só ele sai da carteira. O motor roda no worker da agência (workers/motor-codigo). As seções, o modelo e o teto ficam em Mais opções."
         acao={
-          <button ref={botaoConstruir} type="button" aria-label={rotuloDoBotao} className={faltando.length ? botao.primario : botao.secundario} disabled={enviando || !escolhidas.length || !(tetoUsd > 0) || !!estimativa.isError} onClick={() => void construir()} title={!escolhidas.length && !faltando.length ? "Para reconstruir, marque as seções em Mais opções" : undefined} data-construir="">
-            {enviando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Hammer className="mr-1 h-3.5 w-3.5" />}
-            {rotuloPrincipal}
-            {/* No celular o teto fica só na linha do custo (o botão não passa da borda). */}
-            {rotuloDoTeto && <span className="hidden sm:inline">{rotuloDoTeto}</span>}
+          // 16/10/2026: só ícone (rótulo inteiro, com o teto, no aria-label e no title); a contagem e o teto seguem na linha do custo logo abaixo.
+          <button ref={botaoConstruir} type="button" aria-label={rotuloDoBotao} className={faltando.length ? juntar(botao.primario, "w-9 px-0") : botao.icone} disabled={enviando || !escolhidas.length || !(tetoUsd > 0) || !!estimativa.isError} onClick={() => void construir()} title={!escolhidas.length && !faltando.length ? "Para reconstruir, marque as seções em Mais opções" : rotuloDoBotao} data-construir="">
+            {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Hammer className="h-4 w-4" />}
           </button>
         }
       >

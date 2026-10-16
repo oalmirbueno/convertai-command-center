@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowRight, CheckCircle2, Copy, ExternalLink, Mail, MessageCircle, Send } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, ClipboardCopy, ClipboardType, Copy, ExternalLink, Loader2, Mail, MessageCircle, Send } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
@@ -127,9 +127,9 @@ export default function EtapaEnvio({ proposta }: { proposta: Proposta | null }) 
         ajuda="Enviar gera o link público (com Confirmar antes) e congela o texto enviado. Nada vai ao cliente sozinho: você manda o link pelo WhatsApp ou pelo e-mail daqui. Mudar a proposta depois volta para rascunho: o link antigo para de aceitar e é preciso enviar de novo. Duplicar, Salvar como modelo e Arquivar ficam no ... ao lado do seletor da proposta."
         acao={
           proposta.status === "aceita" ? (
-            <button type="button" className={botao.secundario} onClick={() => irPara("acompanhar")}>
-              Ver o aceite
-              <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden="true" />
+            // 16/10/2026: só ícone (nome no aria-label e no title). "Enviar" segue com texto (ação principal, pedido do dono).
+            <button type="button" className={botao.icone} onClick={() => irPara("acompanhar")} aria-label="Ver o aceite" title="Ver o aceite">
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </button>
           ) : (
             <button type="button" className={botao.primario} onClick={() => void enviar()} disabled={enviando || bloqueios.length > 0 || !!proposta.arquivada_em}>
@@ -164,7 +164,7 @@ export default function EtapaEnvio({ proposta }: { proposta: Proposta | null }) 
           <div className="min-w-0 space-y-4">
             <div className="flex min-w-0 items-center">
               <input readOnly value={link} className={juntar(campo, "mr-2")} aria-label="Link da proposta" onFocus={(e) => e.currentTarget.select()} />
-              <button type="button" className={botao.icone} aria-label="Copiar o link" onClick={() => void copiar(link, "Link")}>
+              <button type="button" className={botao.icone} aria-label="Copiar o link" title="Copiar o link" onClick={() => void copiar(link, "Link")}>
                 <Copy className="h-4 w-4" />
               </button>
               <a href={link} target="_blank" rel="noopener noreferrer" className={botao.icone} aria-label="Abrir a página da proposta (dá para baixar o PDF lá)">
@@ -183,17 +183,18 @@ export default function EtapaEnvio({ proposta }: { proposta: Proposta | null }) 
               </div>
             </div>
             <div className="flex min-w-0 flex-wrap [&>*]:mb-2 [&>*]:mr-2">
-              <button type="button" className={botao.secundario} onClick={() => void copiar(mensagem, "Mensagem")}>
-                <Copy className="mr-1.5 h-4 w-4" /> Copiar mensagem
+              {/* 16/10/2026: só ícone (nome no aria-label e no title); um ícone por ação. */}
+              <button type="button" className={botao.icone} onClick={() => void copiar(mensagem, "Mensagem")} aria-label="Copiar mensagem" title="Copiar mensagem">
+                <ClipboardCopy className="h-4 w-4" />
               </button>
-              <a className={botao.secundario} href={`https://wa.me/${numeroDoWhats}?text=${encodeURIComponent(mensagem)}`} target="_blank" rel="noopener noreferrer">
-                <MessageCircle className="mr-1.5 h-4 w-4" /> Abrir no WhatsApp
+              <a className={botao.icone} href={`https://wa.me/${numeroDoWhats}?text=${encodeURIComponent(mensagem)}`} target="_blank" rel="noopener noreferrer" aria-label="Abrir no WhatsApp" title="Abrir no WhatsApp">
+                <MessageCircle className="h-4 w-4" />
               </a>
-              <button type="button" className={botao.secundario} onClick={() => void copiar(textoDoEmailPronto, "Texto do e-mail")}>
-                <Copy className="mr-1.5 h-4 w-4" /> Copiar e-mail
+              <button type="button" className={botao.icone} onClick={() => void copiar(textoDoEmailPronto, "Texto do e-mail")} aria-label="Copiar e-mail" title="Copiar e-mail">
+                <ClipboardType className="h-4 w-4" />
               </button>
-              <button type="button" className={botao.secundario} onClick={() => void mandarEmail()} disabled={mandandoEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailPara)}>
-                <Mail className="mr-1.5 h-4 w-4" /> {mandandoEmail ? "Mandando..." : "Mandar e-mail"}
+              <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} onClick={() => void mandarEmail()} disabled={mandandoEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailPara)} aria-label="Mandar e-mail" title="Mandar e-mail">
+                {mandandoEmail ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
               </button>
             </div>
           </div>

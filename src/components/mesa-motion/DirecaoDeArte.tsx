@@ -134,9 +134,9 @@ export default function DirecaoDeArte({ filme }: { filme: Filme }) {
       recolher="mesa-motion:direcao"
       ajuda="O acabamento é uma camada nossa em volta de cada cena em código: textura de película, grade técnica, manchas de luz nas cores da marca ou faixas de cinema. O Jev lê o estilo, o tom e o público da marca e sugere acabamento, transição, ritmo e o estilo da voz; você aplica num clique e desfaz se não gostar."
       acao={
-        <button type="button" className={botao.secundario} onClick={() => void sugerir()} disabled={!!indo} data-sugerir-direcao="">
-          {indo === "sugerir" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
-          Sugerir pela marca
+        // 16/10/2026: só ícone, sem borda (nome no aria-label e no title).
+        <button type="button" className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} onClick={() => void sugerir()} disabled={!!indo} aria-label="Sugerir pela marca" title="Sugerir pela marca" data-sugerir-direcao="">
+          {indo === "sugerir" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
         </button>
       }
       data-direcao-de-arte=""
@@ -152,9 +152,8 @@ export default function DirecaoDeArte({ filme }: { filme: Filme }) {
             ))}
           </select>
         </label>
-        <button type="button" className={juntar(botao.secundario, "mb-2")} onClick={() => void aplicar(escolhido)} disabled={!!indo || !hf.length || (iguais && escolhido === atual)} data-aplicar-acabamento="">
-          {indo === "aplicar" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Palette className="mr-1 h-3.5 w-3.5" />}
-          Aplicar em todas as cenas
+        <button type="button" className={juntar(botao.icone, "mb-2 h-9 w-9 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void aplicar(escolhido)} disabled={!!indo || !hf.length || (iguais && escolhido === atual)} aria-label="Aplicar em todas as cenas" title="Aplicar em todas as cenas" data-aplicar-acabamento="">
+          {indo === "aplicar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Palette className="h-4 w-4" />}
         </button>
       </div>
       {sugestao && (

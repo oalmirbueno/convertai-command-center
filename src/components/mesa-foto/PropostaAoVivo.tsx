@@ -10,6 +10,7 @@ import { useClones } from "./clonesApi";
 import { opcoesDeModelo } from "./EscolhaDoModeloDaFoto";
 import { gravarModeloEscolhido, gravarPreenchimento } from "./escolhasDaLinha";
 import { chipsDaIntencao, lerIntencaoDoDiretor, preenchimentoDaIntencao } from "./intencaoDoDiretor";
+import { botao, juntar } from "@/components/sistema";
 
 /**
  * A proposta do diretor enquanto a pessoa escreve (02/10): "8 fotos do
@@ -60,9 +61,9 @@ export default function PropostaAoVivo({ texto, onConfirmado }: { texto: string;
         <Button type="button" size="sm" className="mr-1.5 h-7 px-2.5 text-[12px]" onClick={confirmar} data-confirmar-proposta="">
           <Check className="mr-1 h-3.5 w-3.5" /> Confirmar
         </Button>
-        <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[12px]" onClick={() => setDispensado(texto)} aria-label="Dispensar a proposta">
-          <X className="mr-1 h-3.5 w-3.5" /> Dispensar
-        </Button>
+        <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => setDispensado(texto)} aria-label="Dispensar a proposta" title="Dispensar">
+          <X className="h-4 w-4" aria-hidden="true" />
+        </button>
       </div>
     </div>
   );

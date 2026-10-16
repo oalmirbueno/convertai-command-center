@@ -159,9 +159,10 @@ export default function EtapaImagens({ site }: { site: LinhaDoSite; onIrPara?: (
                 <EstimativaInline partes={estimativaDoLote} />
               </span>
             )}
-            <button type="button" className={nestaVez > 0 ? botao.primario : botao.secundario} disabled={!!ocupado || !nestaVez || !modelo} onClick={() => void gerarOsQueFaltam()} data-gerar-slots="">
-              {ocupado === "As imagens dos slots não saíram" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Images className="mr-1 h-3.5 w-3.5" />}
-              Gerar {nestaVez || ""} que faltam
+            {/* 16/10/2026: só ícone, com a contagem pequena ao lado (nome inteiro no aria-label e no title). */}
+            <button type="button" className={nestaVez > 0 ? juntar(botao.primario, "px-2.5") : botao.icone} aria-label={nestaVez ? `Gerar ${nestaVez} que faltam` : "Gerar os que faltam"} title={nestaVez ? `Gerar ${nestaVez} que faltam` : "Gerar os que faltam"} disabled={!!ocupado || !nestaVez || !modelo} onClick={() => void gerarOsQueFaltam()} data-gerar-slots="">
+              {ocupado === "As imagens dos slots não saíram" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Images className="h-4 w-4" />}
+              {nestaVez > 0 && <span className="ml-1 text-[11px] tabular-nums" aria-hidden="true">{nestaVez}</span>}
             </button>
           </>
         }
@@ -215,14 +216,14 @@ export default function EtapaImagens({ site }: { site: LinhaDoSite; onIrPara?: (
                     )}
                     <div className="flex min-w-0 flex-wrap items-center">
                       {!x.so_real && (
-                        <button type="button" className={juntar(nestaVez > 0 ? botao.secundario : botao.primario, "mb-2 mr-2")} disabled={!!ocupado || sujeito.trim().length < 4 || !modelo} onClick={() => void gerarNaSecao(x)} data-gerar-imagem-secao={x.uid}>
-                          {ocupado === "A imagem não foi gerada" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="mr-1 h-3.5 w-3.5" />}
-                          Gerar
+                        // 16/10/2026: só ícone (nome no aria-label e no title).
+                        <button type="button" className={juntar(nestaVez > 0 ? botao.icone : juntar(botao.primario, "w-9 px-0"), "mb-2 mr-2")} aria-label="Gerar" title={`Gerar a imagem de ${x.rotulo}`} disabled={!!ocupado || sujeito.trim().length < 4 || !modelo} onClick={() => void gerarNaSecao(x)} data-gerar-imagem-secao={x.uid}>
+                          {ocupado === "A imagem não foi gerada" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
                         </button>
                       )}
-                      <button type="button" className={juntar(x.so_real && !nestaVez ? botao.primario : botao.secundario, "mb-2 mr-2")} onClick={() => setFotosDaLinha(!fotosDaLinha)} aria-expanded={fotosDaLinha} data-usar-foto-real={x.uid}>
-                        <Camera className="mr-1 h-3.5 w-3.5" />
-                        Usar foto real
+                      {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+                      <button type="button" className={juntar(x.so_real && !nestaVez ? juntar(botao.primario, "w-9 px-0") : botao.icone, "mb-2 mr-2")} aria-label="Usar foto real" title="Usar foto real" onClick={() => setFotosDaLinha(!fotosDaLinha)} aria-expanded={fotosDaLinha} data-usar-foto-real={x.uid}>
+                        <Camera className="h-4 w-4" />
                       </button>
                       {!x.so_real && estimativaDeUma && (
                         <span className="mb-2 min-w-0">
@@ -263,9 +264,9 @@ export default function EtapaImagens({ site }: { site: LinhaDoSite; onIrPara?: (
             </label>
           </div>
           <div className="flex min-w-0 flex-wrap items-center">
-            <button type="button" className={juntar(botao.secundario, "mb-2 mr-2")} disabled={!!ocupado || avulsa.sujeito.trim().length < 4 || !modelo} onClick={() => void gerarAvulsa()} data-gerar-imagem="">
-              {ocupado === "A imagem avulsa não foi gerada" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="mr-1 h-3.5 w-3.5" />}
-              Gerar
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+            <button type="button" className={juntar(botao.icone, "mb-2 mr-2")} aria-label="Gerar" title="Gerar a imagem avulsa" disabled={!!ocupado || avulsa.sujeito.trim().length < 4 || !modelo} onClick={() => void gerarAvulsa()} data-gerar-imagem="">
+              {ocupado === "A imagem avulsa não foi gerada" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
             </button>
             {estimativaDeUma && (
               <span className="mb-2 min-w-0">

@@ -593,8 +593,8 @@ export default function AbaEstudioAds({
             valor={vista}
             onEscolher={(v) => setVista(v === "acervo" ? "acervo" : "criativos")}
           />
-          {vista === "criativos" && <div className="mb-1 mr-2 inline-flex rounded-lg border bg-secondary/40 p-1" role="group" aria-label="Formato do estúdio">
-            {([['arte', 'Arte', ImageIcon], ['video', 'Vídeo', Clapperboard]] as const).map(([id, nome, Icone]) => <button key={id} type="button" aria-pressed={midia === id} title={nome} onClick={() => setMidia(id)} className={`inline-flex items-center rounded-md px-3 py-1.5 text-xs ${midia === id ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground'}`}><Icone className="mr-1.5 h-3.5 w-3.5" />{nome}</button>)}
+          {vista === "criativos" && <div className="mb-1 mr-2 inline-flex rounded-lg bg-secondary/40 p-0.5" role="group" aria-label="Formato do estúdio">
+            {([['arte', 'Arte', ImageIcon], ['video', 'Vídeo', Clapperboard]] as const).map(([id, nome, Icone]) => <button key={id} type="button" aria-pressed={midia === id} title={nome} aria-label={nome} onClick={() => setMidia(id)} className={`toque-compacto inline-flex h-7 w-8 items-center justify-center rounded-md ${midia === id ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground'}`}><Icone className="h-4 w-4" aria-hidden="true" /></button>)}
           </div>}
           {vista === "criativos" && midia === "arte" && !unica && (
             <SeletorCompacto
@@ -871,9 +871,9 @@ export default function AbaEstudioAds({
                     </select>
                   </label>
                   {aberto.status === "pronto" && (
-                    <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 text-muted-foreground" disabled={naConta.indexOf(aberto.id) >= 0} onClick={() => void tirarDaConta([aberto])}>
-                      <Undo2 className="mr-1 h-3.5 w-3.5" /> Tirar da conta
-                    </Button>
+                    <button className={juntar(botao.icone, "mb-1 disabled:opacity-50")} type="button" disabled={naConta.indexOf(aberto.id) >= 0} onClick={() => void tirarDaConta([aberto])} aria-label="Tirar da conta" title="Tirar da conta">
+                      <Undo2 className="h-4 w-4" aria-hidden="true" />
+                    </button>
                   )}
                 </div>
               )}

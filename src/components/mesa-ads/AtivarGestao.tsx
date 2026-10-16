@@ -4,7 +4,7 @@ import { CheckCircle2, ChevronDown, KeyRound, Loader2, RefreshCw } from "lucide-
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { juntar, superficie } from "@/components/sistema/estilos";
+import { botao, juntar, superficie } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
 import { META_OAUTH_MESSAGE_TYPE, startAdsOAuth, type MetaOAuthPopupMessage } from "@/lib/socialMetaOAuth";
 import { tempoDesde } from "./adsApi";
@@ -141,10 +141,9 @@ export default function AtivarGestao({
           </span>
           {!ativa && <ChevronDown className={`ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`} />}
         </button>
-        <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 text-[12px]" disabled={conferindo} onClick={() => void conferir()} title="Pergunta à Meta agora quais permissões o acesso tem">
-          {conferindo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
-          Conferir agora
-        </Button>
+        <button className={juntar(botao.icone, "mb-1 disabled:opacity-50")} type="button" disabled={conferindo} onClick={() => void conferir()} title="Pergunta à Meta agora quais permissões o acesso tem" aria-label="Conferir agora">
+          {conferindo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
+        </button>
       </div>
 
       {!ativa && aberto && (

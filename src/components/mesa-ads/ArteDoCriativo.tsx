@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Bookmark, ChevronLeft, ChevronRight, Copy, ImagePlus, Maximize2, MessageSquare, PenLine, RefreshCw, ScanLine, ShieldCheck, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
@@ -43,6 +42,7 @@ import { formatoDe, instrucaoComTom, ZONA_SEGURA, type CriativoAds } from "./ads
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import ReferenciasDoCriativo from "./ReferenciasDoCriativo";
+import { botao, juntar } from "@/components/sistema";
 
 /** Formato irmão (mesmo ângulo e variação, outro formato) com o trabalho de arte dele. */
 export interface IrmaoDoCriativo {
@@ -190,9 +190,9 @@ function PreviaNoFormato({
           </div>
         )}
         {vista && !desenhandoAreas && (
-          <Button type="button" size="sm" variant="ghost" className="ml-1 h-8 shrink-0 px-2 text-[12px]" onClick={onAmpliar}>
-            <Maximize2 className="mr-1 h-3.5 w-3.5" /> Ver grande
-          </Button>
+          <button className={juntar(botao.icone, "ml-1 shrink-0 disabled:opacity-50")} type="button" onClick={onAmpliar} aria-label="Ver grande" title="Ver grande">
+            <Maximize2 className="h-4 w-4" aria-hidden="true" />
+          </button>
         )}
       </div>
       <div className="mx-auto w-full" style={{ maxWidth: larguraMaxima }}>
@@ -608,10 +608,11 @@ export default function ArteDoCriativo({
                 type="button"
                 aria-pressed={zonaSegura}
                 onClick={() => setZonaSegura((z) => !z)}
-                className={`mb-1 mr-2 mt-1 inline-flex h-9 items-center rounded-lg border px-2.5 text-[12px] ${zonaSegura ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}
-                title="Guia: nada importante nos 14% de cima e nos 20% de baixo"
+                className={juntar(botao.icone, "mb-1 mr-2 mt-1", zonaSegura && "bg-primary/10 text-primary")}
+                aria-label="Zona segura"
+                title="Zona segura: nada importante nos 14% de cima e nos 20% de baixo"
               >
-                <ScanLine className="mr-1 h-3.5 w-3.5" /> Zona segura
+                <ScanLine className="h-4 w-4" aria-hidden="true" />
               </button>
             )}
             {irmaos.length > 0 && (
@@ -636,10 +637,11 @@ export default function ArteDoCriativo({
               role="switch"
               aria-checked={corrigirSozinho}
               onClick={() => setCorrigirSozinho((c) => !c)}
-              className={`mb-1 mr-2 mt-1 inline-flex h-9 items-center rounded-lg border px-2.5 text-[12px] ${corrigirSozinho ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}
-              title="Depois de gerar ou ajustar, se a conferência achar erro de texto, logo, identidade, política ou clareza, o estúdio corrige sozinho (até 2 vezes) antes de mostrar a arte."
+              className={juntar(botao.icone, "mb-1 mr-2 mt-1", corrigirSozinho && "bg-primary/10 text-primary")}
+              aria-label={`Corrigir sozinho${corrigirSozinho ? "" : " (desligado)"}`}
+              title={`Corrigir sozinho${corrigirSozinho ? "" : " (desligado)"}: depois de gerar ou ajustar, se a conferência achar erro de texto, logo, identidade, política ou clareza, o estúdio corrige sozinho (até 2 vezes) antes de mostrar a arte.`}
             >
-              <ShieldCheck className="mr-1 h-3.5 w-3.5" /> Corrigir sozinho{corrigirSozinho ? "" : " (desligado)"}
+              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
         )}

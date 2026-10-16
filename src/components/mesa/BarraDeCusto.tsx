@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { textoDoErro, usd, type PrevisaoDoPlano } from "@/lib/mesa/api";
+import { botao } from "@/components/sistema/estilos";
 
 export interface ConsumoDoMes {
   saldo_usd?: number;
@@ -130,17 +131,18 @@ export default function BarraDeCusto({
       )}
       <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
         {podeRecarregar && (
-          <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={onRecarregar}>
-            <Plus className="mr-1 h-3.5 w-3.5" /> Recarregar
-          </Button>
+          // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
+          <button type="button" className={botao.icone} onClick={onRecarregar} aria-label="Recarregar" title="Recarregar">
+            <Plus className="h-4 w-4" aria-hidden="true" />
+          </button>
         )}
         {isAdmin && (
           <>
-            <button type="button" onClick={onModelos} className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[12px] text-muted-foreground hover:bg-secondary hover:text-foreground">
-              <Sparkles className="h-3.5 w-3.5" /> Modelos de IA
+            <button type="button" onClick={onModelos} className={botao.icone} aria-label="Modelos de IA" title="Modelos de IA">
+              <Sparkles className="h-4 w-4" aria-hidden="true" />
             </button>
-            <button type="button" onClick={onChaves} className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[12px] text-muted-foreground hover:bg-secondary hover:text-foreground">
-              <KeyRound className="h-3.5 w-3.5" /> Chaves e cotas
+            <button type="button" onClick={onChaves} className={botao.icone} aria-label="Chaves e cotas" title="Chaves e cotas">
+              <KeyRound className="h-4 w-4" aria-hidden="true" />
             </button>
           </>
         )}

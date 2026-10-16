@@ -166,9 +166,9 @@ export default function PresetsDeEstilo({ site, preset, onPreset, mudou = false,
       ajuda={`Duas fontes de estilo: os 11 presets da casa (DNA, movimento e nível, com prévia na cor de destaque da marca) e os 50 estilos da base UI UX Pro Max. O estilo da base aplica o preset da casa mais próximo; a paleta, as fontes e a logo são sempre as da marca. Sugerir pede ao Jev tipo de produto, estilo, padrão de página, par de fontes e preset numa ida só. O Ajuste fino mostra e muda o DNA, o movimento (os presets de movimento usam só o kit livre e respeitam o movimento reduzido; até 3) e a referência de nível. O preset da casa grava no Salvar ou no Seguir do pé da etapa; o que vem da base grava na hora, com Desfazer. ${CREDITO_DA_BASE}`}
       recolher="mesa-site:direcao:estilo"
       acao={
-        <button type="button" className={botao.secundario} disabled={!!ocupado} onClick={() => void sugerir()} title={`Custo do Jev: ~${usd(CUSTO_DA_BASE)}`} data-sugerir-base="">
-          {ocupado === "jev" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
-          Sugerir
+        // 16/10/2026: só ícone (nome no aria-label e no title).
+        <button type="button" className={botao.icone} disabled={!!ocupado} onClick={() => void sugerir()} aria-label="Sugerir" title={`Sugerir o estilo · custo do Jev ~${usd(CUSTO_DA_BASE)}`} data-sugerir-base="">
+          {ocupado === "jev" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
         </button>
       }
     >

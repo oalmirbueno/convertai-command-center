@@ -353,9 +353,9 @@ export default function EtapaOrganizar({ irPara }: { irPara: IrPara }) {
                 Arquivar {ruido} {ruido === 1 ? "sobra" : "sobras"}
               </label>
             )}
-            <button type="button" className={botao.primario} onClick={() => void propor()} disabled={propondo || degradado || !arquivos.length} aria-label="Organizar tudo">
-              {propondo ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <FolderTree className="h-3.5 w-3.5 sm:mr-1.5" />}
-              <span className="hidden sm:inline">Organizar tudo</span>
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+            <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => void propor()} disabled={propondo || degradado || !arquivos.length} aria-label="Organizar tudo" title="Organizar tudo">
+              {propondo ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderTree className="h-4 w-4" />}
             </button>
             {arquivos.length > 0 && (
               <button type="button" className={botao.secundario} onClick={() => irPara("editar")}>

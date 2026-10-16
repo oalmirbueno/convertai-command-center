@@ -358,9 +358,17 @@ export default function EstudioEscolherFotoDoRosto({
             <span className="min-w-0 flex-1 truncate">
               {semLeitura.length} {semLeitura.length === 1 ? "foto sem leitura" : "fotos sem leitura"} de pessoa aqui.
             </span>
-            <button type="button" onClick={() => void marcarPessoas()} disabled={marcando} className={juntar(botao.discreto, "h-7 px-2 text-[11.5px]")}>
-              {marcando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <ScanFace className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
-              Marcar pessoas{semLeitura.length > MAX_POR_LEITURA ? ` (${MAX_POR_LEITURA})` : ""}
+            {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela; o limite vira número junto do ícone. */}
+            <button
+              type="button"
+              onClick={() => void marcarPessoas()}
+              disabled={marcando}
+              className={juntar(botao.icone, semLeitura.length > MAX_POR_LEITURA ? "w-auto px-1.5" : "", "disabled:opacity-50")}
+              aria-label={`Marcar pessoas${semLeitura.length > MAX_POR_LEITURA ? ` (${MAX_POR_LEITURA})` : ""}`}
+              title={`Marcar pessoas${semLeitura.length > MAX_POR_LEITURA ? ` (${MAX_POR_LEITURA} por vez)` : ""}`}
+            >
+              {marcando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ScanFace className="h-4 w-4" aria-hidden="true" />}
+              {semLeitura.length > MAX_POR_LEITURA ? <span className="ml-1 text-[11px] tabular-nums" aria-hidden="true">{MAX_POR_LEITURA}</span> : null}
             </button>
           </div>
         )}

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Archive, ArchiveRestore, Globe, Loader2 } from "lucide-react";
+import { Archive, ArchiveRestore, Globe, Loader2, Plus } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
@@ -122,9 +122,9 @@ export default function ListaDeSites({ marcaId, marcaNome, onAbrir, icone }: { m
               className={juntar(campo, "mr-2 min-w-0 flex-1")}
               aria-label="Nome do novo site"
             />
-            <button type="submit" className={juntar(botao.primario, "shrink-0")} disabled={!nome.trim() || criando}>
-              {criando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : icone ? <span className="mr-1 inline-flex">{icone}</span> : null}
-              Novo site
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+            <button type="submit" className={juntar(botao.primario, "w-9 shrink-0 px-0")} aria-label="Novo site" title="Novo site" disabled={!nome.trim() || criando}>
+              {criando ? <Loader2 className="h-4 w-4 animate-spin" /> : icone ? <span className="inline-flex">{icone}</span> : <Plus className="h-4 w-4" />}
             </button>
           </div>
         </form>

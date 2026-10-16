@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { textoDoErro } from "@/lib/mesa/api";
 import { chamarAds, chavesAds, formatoDe, rotuloDoAnguloDeVenda, type PropostaDeReescrita } from "./adsApi";
+import { botao, juntar } from "@/components/sistema";
 
 /**
  * "Muda todo o conteúdo" (pedido do dono em 02/10/2026: "pedi para mudar
@@ -123,9 +124,9 @@ export default function TrocaDeConteudo({ troca, onFechar }: { troca: TrocaParaA
           </>
         )}
         {estado === "feita" && (
-          <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" disabled={!!rodando} onClick={() => void agir("desfazer")}>
-            {girando("desfazer") || <Undo2 className="mr-1 h-3.5 w-3.5" />} Desfazer
-          </Button>
+          <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={!!rodando} onClick={() => void agir("desfazer")} aria-label="Desfazer" title="Desfazer">
+            {girando("desfazer") || <Undo2 className="h-4 w-4" aria-hidden="true" />}
+          </button>
         )}
       </div>
     </section>

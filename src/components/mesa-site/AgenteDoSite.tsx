@@ -361,9 +361,9 @@ export default function AgenteDoSite({ site, rascunho, onRascunho, onIrPara }: {
                       {t.custo_usd ? ` · ${usd(t.custo_usd)}` : ""}
                     </span>
                     {ehAberto(t.estado) && t.estado !== "parando" && (
-                      <button type="button" className={juntar(botao.barra, "h-7")} onClick={() => void parar(t.id)}>
-                        <Square className="mr-1 h-3 w-3" />
-                        Parar
+                      // 16/10/2026: só ícone (nome no aria-label e no title).
+                      <button type="button" className={juntar(botao.icone, "h-7 w-7")} aria-label="Parar" title="Parar o motor" onClick={() => void parar(t.id)}>
+                        <Square className="h-4 w-4" />
                       </button>
                     )}
                   </div>

@@ -244,9 +244,9 @@ export default function DiretorDoVideo({ irPara, topo }: { irPara: IrPara; topo:
           <div className="flex min-w-0 items-center justify-end">
             <span className={juntar(texto.auxiliar, "mr-2 min-w-0 flex-1 truncate")}>Centavos por resposta</span>
             <Ditado valor={textoDoCampo} onChange={setTexto} disabled={pensando} className="mr-1.5 min-w-0" />
-            <button type="button" className={botao.primario} onClick={() => void pedir()} disabled={pensando || !textoDoCampo.trim()}>
-              {pensando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
-              Enviar
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+            <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => void pedir()} disabled={pensando || !textoDoCampo.trim()} aria-label="Enviar" title="Enviar">
+              {pensando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
           </div>
         </>

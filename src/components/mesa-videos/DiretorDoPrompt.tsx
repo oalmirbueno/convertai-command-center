@@ -122,9 +122,9 @@ export default function DiretorDoPrompt({
 
   return (
     <>
-      <button type="button" className={juntar(botao.discreto, "h-8 px-2 text-[12px]")} onClick={abrir} disabled={!motor} title={motor ? `O diretor escreve o prompt no jeito do ${motor.rotulo}, com a marca` : "Escolha o motor antes"} data-diretor-do-prompt="">
-        <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-        Diretor escreve o prompt
+      {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+      <button type="button" className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} onClick={abrir} disabled={!motor} aria-label="Diretor escreve o prompt" title={motor ? `Diretor escreve o prompt (no jeito do ${motor.rotulo}, com a marca)` : "Diretor escreve o prompt (escolha o motor antes)"} data-diretor-do-prompt="">
+        <Sparkles className="h-4 w-4" />
       </button>
       <JanelaCentral
         aberta={aberta}
@@ -145,15 +145,13 @@ export default function DiretorDoPrompt({
                   {escrevendo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
                   Escrever de novo
                 </button>
-                <button type="button" className={botao.primario} onClick={aplicar} disabled={escrevendo} data-aplicar-prompt="">
-                  <Check className="mr-1.5 h-3.5 w-3.5" />
-                  Aplicar
+                <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={aplicar} disabled={escrevendo} aria-label="Aplicar o prompt" title="Aplicar o prompt" data-aplicar-prompt="">
+                  <Check className="h-4 w-4" />
                 </button>
               </>
             ) : (
-              <button type="button" className={botao.primario} onClick={() => void escrever()} disabled={escrevendo || !pedido.trim() || !motor} data-escrever-prompt="">
-                {escrevendo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
-                Escrever
+              <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => void escrever()} disabled={escrevendo || !pedido.trim() || !motor} aria-label="Escrever o prompt" title="Escrever o prompt" data-escrever-prompt="">
+                {escrevendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               </button>
             )}
           </div>

@@ -3,7 +3,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Loader2, Search, Stamp } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
 import { BotaoComCusto } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { padraoPara, textoDoErro } from "@/lib/mesa/api";
@@ -18,6 +17,7 @@ import {
   type CriativoAds,
   type LogoRealAds,
 } from "./adsApi";
+import { botao, juntar } from "@/components/sistema";
 
 /**
  * Mundo real do criativo (pedido do dono em 02/10/2026: "quando falar de
@@ -117,9 +117,9 @@ export default function LogosReais({ criativo, caminhoDaArte }: { criativo: Cria
     <section className="space-y-2 rounded-lg border border-border bg-card p-4" aria-label="Mundo real">
       <div className="flex min-w-0 items-center">
         <h3 className="min-w-0 flex-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Marcas reais e fontes</h3>
-        <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[12px]" disabled={buscando} onClick={() => void achar()}>
-          {buscando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Search className="mr-1 h-3.5 w-3.5" />} Achar logos
-        </Button>
+        <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={buscando} onClick={() => void achar()} aria-label="Achar logos" title="Achar logos">
+          {buscando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Search className="h-4 w-4" aria-hidden="true" />}
+        </button>
         <BotaoComCusto
           rotulo="Pesquisar na web"
           titulo="Pesquisar na web"
@@ -161,9 +161,9 @@ export default function LogosReais({ criativo, caminhoDaArte }: { criativo: Cria
             <select aria-label="Canto do logo" value={canto} onChange={(e) => setCanto(e.target.value as CantoDoLogo)} className="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-[12px]">
               {CANTOS_DO_LOGO.map((c) => <option key={c.valor} value={c.valor}>{c.rotulo}</option>)}
             </select>
-            <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" disabled={!caminhoDaArte || compondo || !logos[escolhido]} onClick={() => void porNaArte(logos[escolhido])}>
-              {compondo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Stamp className="mr-1 h-3.5 w-3.5" />} Pôr na arte
-            </Button>
+            <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={!caminhoDaArte || compondo || !logos[escolhido]} onClick={() => void porNaArte(logos[escolhido])} aria-label="Pôr na arte" title="Pôr na arte">
+              {compondo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Stamp className="h-4 w-4" aria-hidden="true" />}
+            </button>
           </div>
           {!caminhoDaArte && <p className="text-[11px] text-muted-foreground">Gere a arte primeiro.</p>}
         </div>

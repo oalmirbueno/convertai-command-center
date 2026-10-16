@@ -13,14 +13,13 @@ export default function PainelDeMudancas({ plano, podePublicar, compacto = false
   return (
     <div className="min-w-0 space-y-2" data-painel-de-mudancas="">
       <div className="flex min-w-0 flex-wrap items-center [&>*]:mb-1 [&>*]:mr-2">
-        <button type="button" className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")} onClick={plano.automatico} title={`Ordem intercalada e o melhor horário do cliente${plano.fonteDoHorario === "historico" ? " (pelo histórico de alcance)" : ""}`}>
-          <Wand2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-          Trocar datas automaticamente
+        {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
+        <button type="button" className={botao.icone} onClick={plano.automatico} aria-label="Trocar datas automaticamente" title={`Trocar datas automaticamente: ordem intercalada e o melhor horário do cliente${plano.fonteDoHorario === "historico" ? " (pelo histórico de alcance)" : ""}`}>
+          <Wand2 className="h-4 w-4" aria-hidden="true" />
         </button>
         {mudancas.length > 0 && (
-          <button type="button" className={juntar(botao.discreto, "h-8 px-2.5 text-[12px]")} onClick={plano.descartar}>
-            <X className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-            Descartar
+          <button type="button" className={botao.icone} onClick={plano.descartar} aria-label="Descartar as mudanças" title="Descartar as mudanças">
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
       </div>
@@ -49,7 +48,7 @@ export default function PainelDeMudancas({ plano, podePublicar, compacto = false
                 <span className="mx-1 shrink-0 text-muted-foreground">para</span>
                 <strong className="shrink-0 tabular-nums text-foreground">{dataCurtaOuSem(m.para)}</strong>
                 {!m.agenda && <Lock className="ml-1.5 h-3 w-3 shrink-0 text-muted-foreground" aria-label={m.motivo || "Não agenda por aqui"} />}
-                <button type="button" className={juntar(botao.icone, "ml-1 h-6 w-6")} onClick={() => plano.desfazerUm(m.id)} aria-label={`Desfazer a mudança de ${m.titulo}`}>
+                <button type="button" className={juntar(botao.icone, "ml-1 h-6 w-6")} onClick={() => plano.desfazerUm(m.id)} aria-label={`Desfazer a mudança de ${m.titulo}`} title={`Desfazer a mudança de ${m.titulo}`}>
                   <Undo2 className="h-3 w-3" />
                 </button>
               </li>
@@ -64,9 +63,16 @@ export default function PainelDeMudancas({ plano, podePublicar, compacto = false
           </ul>
           <div className="mt-2 flex min-w-0 flex-wrap items-center">
             {podePublicar ? (
-              <button type="button" className={juntar(botao.primario, "mr-2 h-8 px-3 text-[12px]")} onClick={() => void plano.aplicar()} disabled={!!aplicando || !aplicaveis}>
-                {aplicando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CalendarCheck className="mr-1.5 h-3.5 w-3.5" />}
-                {aplicando ? `Confirmando ${aplicando.feitos + 1} de ${aplicando.total}` : `Confirmar ${aplicaveis} ${aplicaveis === 1 ? "data" : "datas"}`}
+              <button
+                type="button"
+                className={juntar(botao.primario, "mr-2 h-8 gap-0 px-3 text-[12px]")}
+                onClick={() => void plano.aplicar()}
+                disabled={!!aplicando || !aplicaveis}
+                title={aplicando ? `Confirmando ${aplicando.feitos + 1} de ${aplicando.total}` : `Confirmar ${aplicaveis} ${aplicaveis === 1 ? "data" : "datas"}`}
+              >
+                {aplicando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CalendarCheck className="h-4 w-4" aria-hidden="true" />}
+                <span className="ml-1.5 tabular-nums" aria-hidden="true">{aplicando ? `${aplicando.feitos + 1}/${aplicando.total}` : aplicaveis}</span>
+                <span className="sr-only">{aplicando ? `Confirmando ${aplicando.feitos + 1} de ${aplicando.total}` : `Confirmar ${aplicaveis} ${aplicaveis === 1 ? "data" : "datas"}`}</span>
               </button>
             ) : (
               <p className={juntar(texto.auxiliar, "mr-2")}>Só admin ou gestor confirma as datas.</p>

@@ -514,9 +514,9 @@ export default function LinhaDoTempo({
             contagem={achados ? `${achados.length} ${achados.length === 1 ? "clipe achado" : "clipes achados"}${achados.length ? `: ${achados.slice(0, 8).map((id) => apelidos.porId[id]).join(", ")}${achados.length > 8 ? "..." : ""}` : ""}` : null}
             extra={
               achados && achados.length > 0 ? (
-                <button type="button" className={juntar(botao.barra, "gap-1")} onClick={() => onSelecionar(achados)} title="Escolher os achados (Delete tira)" data-escolher-achados="">
-                  <MousePointerClick className="h-3.5 w-3.5" />
-                  Escolher
+                // 16/10/2026: só ícone (nome no aria-label e no title).
+                <button type="button" className={botao.icone} onClick={() => onSelecionar(achados)} aria-label="Escolher" title="Escolher os achados (Delete tira)" data-escolher-achados="">
+                  <MousePointerClick className="h-4 w-4" />
                 </button>
               ) : null
             }

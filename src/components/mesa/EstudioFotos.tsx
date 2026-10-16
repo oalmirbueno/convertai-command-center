@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
-import { Check, ClipboardPaste, ImagePlus, Images, Loader2, Lock, Maximize2, RefreshCw, Scissors, Sparkles, TriangleAlert, Upload, X } from "lucide-react";
+import { Check, ClipboardPaste, FolderOpen, ImagePlus, Images, Loader2, Lock, Maximize2, RefreshCw, Scissors, Sparkles, TriangleAlert, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { botao, juntar } from "@/components/sistema/estilos";
 import { chamarFuncao, ErroDaMesa, textoDoErro } from "@/lib/mesa/api";
 import { FerramentasDaImagem } from "@/components/ferramentas/FerramentasDaImagem";
 import { ehSemChave, tirarFundoPro, type ResultadoDaFerramenta } from "@/components/ferramentas/ferramentasApi";
@@ -323,9 +324,10 @@ function AbaMesaFoto({ usadas, onUsar, onTirar }: { usadas: string[]; onUsar: (f
         <p className="min-w-0 flex-1 text-[11.5px] leading-relaxed text-muted-foreground">
           Fotos feitas na Mesa Foto deste cliente (ensaios, Canvas, detalhe 4K, preparadas). Clique para usar nesta lâmina.
         </p>
-        <Button type="button" size="sm" variant="ghost" className="ml-1 h-7 shrink-0 px-2 text-[11.5px]" onClick={() => void fotos.refetch()} disabled={fotos.isFetching} title="Reler as fotos da Mesa Foto">
-          <RefreshCw className={`mr-1 h-3 w-3 ${fotos.isFetching ? "animate-spin" : ""}`} /> Recarregar
-        </Button>
+        {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
+        <button type="button" className={juntar(botao.icone, "ml-1 h-7 w-7")} onClick={() => void fotos.refetch()} disabled={fotos.isFetching} aria-label="Recarregar as fotos da Mesa Foto" title="Recarregar as fotos da Mesa Foto">
+          <RefreshCw className={`h-3.5 w-3.5 ${fotos.isFetching ? "animate-spin" : ""}`} aria-hidden="true" />
+        </button>
       </div>
       <div role="group" aria-label="Filtrar as fotos da Mesa Foto" className="flex flex-wrap">
         {FILTROS_DA_MESA_FOTO.map((f) => (
@@ -825,9 +827,9 @@ export default function EstudioFotos({
                   Usar o recorte do gerador
                 </Button>
               )}
-              <Button type="button" size="sm" variant="outline" className="mb-1 mr-2 h-8 text-[12px]" disabled={tirandoFundo > 0} onClick={() => void tirarFundo(falhaDoFundo.imagem, falhaDoFundo.trocar, { metodo: falhaDoFundo.metodo })}>
-                {tirandoFundo > 0 ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />} Tentar de novo
-              </Button>
+              <button type="button" className={juntar(botao.icone, "mb-1 mr-2")} disabled={tirandoFundo > 0} onClick={() => void tirarFundo(falhaDoFundo.imagem, falhaDoFundo.trocar, { metodo: falhaDoFundo.metodo })} aria-label="Tentar de novo" title="Tentar de novo">
+                {tirandoFundo > 0 ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
+              </button>
               <button type="button" className="mb-1 text-[11.5px] text-muted-foreground hover:text-foreground" onClick={() => setFalhaDoFundo(null)}>
                 Fechar
               </button>
@@ -875,9 +877,9 @@ export default function EstudioFotos({
                           disabled={!doAcervo || tirandoFundo > 0}
                           title={doAcervo ? "Tirar o fundo desta foto (custo de 1 imagem): ela vira elemento sem fundo" : "Tirar fundo: escolha a foto pelo Acervo ou pela Mesa Foto"}
                           aria-label={`Tirar o fundo da foto ${i + 1}`}
-                          className="ml-1.5 flex h-7 shrink-0 items-center rounded-md px-1.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-40"
+                          className={juntar(botao.icone, "ml-1.5 h-7 w-7 disabled:opacity-40")}
                         >
-                          <Scissors className="mr-1 h-3.5 w-3.5" /> Tirar fundo
+                          <Scissors className="h-3.5 w-3.5" aria-hidden="true" />
                         </button>
                       );
                     })()}
@@ -915,10 +917,11 @@ export default function EstudioFotos({
                           onClick={() => setAmpliando(aberta ? null : f.caminho)}
                           aria-expanded={aberta}
                           disabled={ocupado || entregue}
-                          className="flex h-7 items-center rounded-md px-1.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-40"
-                          title="Ampliar esta foto com as ferramentas profissionais (custo à vista antes de confirmar)"
+                          className={juntar(botao.icone, "h-7 w-7 disabled:opacity-40", aberta && "bg-muted text-foreground")}
+                          aria-label={aberta ? "Fechar ampliar" : "Ampliar a foto"}
+                          title={aberta ? "Fechar ampliar" : "Ampliar esta foto com as ferramentas profissionais (custo à vista antes de confirmar)"}
                         >
-                          <Maximize2 className="mr-1 h-3.5 w-3.5" /> {aberta ? "Fechar ampliar" : "Ampliar a foto"}
+                          <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
                         </button>
                         {aberta && (
                           <FerramentasDaImagem
@@ -985,9 +988,12 @@ export default function EstudioFotos({
                 role="tab"
                 aria-selected={aba === a.valor}
                 onClick={() => setAba(a.valor)}
-                className={`flex h-8 min-w-0 items-center justify-center truncate rounded-md px-1 text-[12px] transition-colors ${aba === a.valor ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                // 16/10/2026: aba só com o ícone; o nome vai no title e no leitor de tela.
+                aria-label={a.rotulo}
+                title={a.rotulo}
+                className={`flex h-8 min-w-0 items-center justify-center rounded-md px-1 transition-colors ${aba === a.valor ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
               >
-                <Icone className="mr-1 h-3.5 w-3.5 shrink-0" /> {a.rotulo}
+                <Icone className="h-4 w-4 shrink-0" aria-hidden="true" />
               </button>
             );
           })}
@@ -1036,9 +1042,9 @@ export default function EstudioFotos({
                 <p className="mt-0.5 text-[11px] text-muted-foreground">JPG, PNG ou WEBP · até 1 fundo e 2 elementos</p>
               </>
             )}
-            <Button type="button" size="sm" variant="outline" className="mt-3 h-8 text-[12px]" disabled={bloqueado} onClick={() => entrada.current && entrada.current.click()}>
-              <Upload className="mr-1.5 h-3.5 w-3.5" /> Escolher arquivo
-            </Button>
+            <button type="button" className={juntar(botao.icone, "mt-3")} disabled={bloqueado} onClick={() => entrada.current && entrada.current.click()} aria-label="Escolher arquivo" title="Escolher arquivo">
+              <FolderOpen className="h-4 w-4" aria-hidden="true" />
+            </button>
           </div>
         )}
         <input

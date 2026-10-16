@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Loader2, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Wand2 } from "lucide-react";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
@@ -179,9 +179,9 @@ export default function CopyPorSecao({ site, modeloId }: { site: LinhaDoSite; mo
                     <span className="mb-2 mr-2 inline-flex">
                       <PreencherComIA papel="site" clientId={clientId} marcaId={marca ? marca.id : null} campos={camposDaSecao(uid)} rotulo="Preencher a seção" onAplicar={aplicarNaSecao(uid)} onDesfazer={aplicarNaSecao(uid)} />
                     </span>
-                    <button type="button" className={juntar(botao.secundario, "mb-2 mr-2")} disabled={!!ocupado} onClick={() => void gerar3(uid)} data-gerar-3-secao={uid}>
-                      {ocupado === "As opções da seção não saíram" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
-                      Gerar 3 para a seção
+                    {/* 16/10/2026: só ícone (nome no aria-label e no title); Wand2 para não repetir o Sparkles do "Gerar 3 opções" da etapa. */}
+                    <button type="button" className={juntar(botao.icone, "mb-2 mr-2")} aria-label="Gerar 3 para a seção" title="Gerar 3 para a seção" disabled={!!ocupado} onClick={() => void gerar3(uid)} data-gerar-3-secao={uid}>
+                      {ocupado === "As opções da seção não saíram" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
                     </button>
                     <span className="mb-2 mr-2">{modelo && <EstimativaInline partes={[{ modeloId: modelo.id, tipo: "texto", tokensEntrada: 4500, tokensSaida: 2200 }]} />}</span>
                     <button type="button" className={juntar(botao.primario, "mb-2")} disabled={!!ocupado} onClick={() => void rodar("A seção não foi salva", () => salvarSecao(uid, { titulo: rascunho.titulo, texto: rascunho.texto, itens: rascunho.itens.split("\n") }))}>

@@ -96,14 +96,13 @@ export default function EtapaAcompanhar({ proposta, onAbrir }: { proposta: Propo
         {gerandoContrato ? "Gerando..." : "Gerar contrato"}
       </button>
     ) : status === "rascunho" ? (
-      <button type="button" className={botao.primario} onClick={() => irPara("envio")}>
-        Ir para Enviar
-        <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden="true" />
+      // 16/10/2026: só ícone (nome no aria-label e no title).
+      <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => irPara("envio")} aria-label="Ir para Enviar" title="Ir para Enviar">
+        <ArrowRight className="h-4 w-4" aria-hidden="true" />
       </button>
     ) : status === "recusada" ? (
-      <button type="button" className={botao.secundario} onClick={() => setDuplicando(true)}>
-        <CopyPlus className="mr-1.5 h-4 w-4" />
-        Duplicar para refazer
+      <button type="button" className={botao.icone} onClick={() => setDuplicando(true)} aria-label="Duplicar para refazer" title="Duplicar para refazer">
+        <CopyPlus className="h-4 w-4" />
       </button>
     ) : status === "expirada" ? (
       <button type="button" className={botao.secundario} onClick={() => irPara("contexto", "investimento")}>

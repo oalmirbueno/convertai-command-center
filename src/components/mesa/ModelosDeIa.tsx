@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { Switch } from "@/components/ui/switch";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
+import { botao, juntar } from "@/components/sistema/estilos";
 import { dolar, lerUsoDaSemana } from "@/lib/config/chavesECustos";
 import { custoSemanalCom, usoDoPapel } from "@/lib/config/custoDaSemana";
 import {
@@ -322,14 +323,13 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
       descricaoOculta="O catálogo chega sozinho dos provedores. Ligue o que a equipe pode usar e escolha o padrão de cada papel."
     >
         <div className="flex flex-wrap items-center">
-          <Button type="button" size="sm" variant="outline" className="mb-1 mr-2" onClick={() => void sincronizar()} disabled={sincronizando}>
-            {sincronizando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
-            Buscar modelos novos agora
-          </Button>
-          <Button type="button" size="sm" variant="outline" className="mb-1 mr-2" onClick={reverRecomendacao} disabled={!modelos.length || salvando === "recomendacao"}>
-            <Wand2 className="mr-1.5 h-3.5 w-3.5" />
-            Aplicar a recomendação
-          </Button>
+          {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
+          <button type="button" className={juntar(botao.icone, "mb-1 mr-1")} onClick={() => void sincronizar()} disabled={sincronizando} aria-label="Buscar modelos novos agora" title="Buscar modelos novos agora">
+            {sincronizando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
+          </button>
+          <button type="button" className={juntar(botao.icone, "mb-1 mr-2")} onClick={reverRecomendacao} disabled={!modelos.length || salvando === "recomendacao"} aria-label="Aplicar a recomendação" title="Aplicar a recomendação">
+            <Wand2 className="h-4 w-4" aria-hidden="true" />
+          </button>
           <span className="mb-1 text-[12px] text-muted-foreground">{modelos.filter((m) => m.ativo).length} ativos de {modelos.length}</span>
         </div>
 

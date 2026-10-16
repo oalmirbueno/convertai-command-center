@@ -137,14 +137,15 @@ export default function AjustesDoMockup({
       rodape={
         mockup ? (
           <span className="flex min-w-0 flex-wrap items-center justify-end">
-            <button type="button" className={juntar(botao.discreto, "mb-1 mr-2")} onClick={() => setRascunho(geral)}>
-              <RotateCcw className="mr-1.5 h-4 w-4" aria-hidden /> Voltar ao geral
+            {/* 16/10/2026: só ícone (nome no aria-label e no title); "Usar em todos" e o Salvar (a ação da janela) ficam com texto. */}
+            <button type="button" className={juntar(botao.icone, "mb-1 mr-2")} aria-label="Voltar ao geral" title="Voltar ao geral" onClick={() => setRascunho(geral)}>
+              <RotateCcw className="h-4 w-4" aria-hidden />
             </button>
             <button type="button" className={juntar(botao.secundario, "mb-1 mr-2")} onClick={() => onUsarEmTodos(rascunho)}>
               Usar em todos
             </button>
-            <button type="button" className={juntar(botao.secundario, "mb-1 mr-2")} onClick={() => onBaixar(rascunho)}>
-              <Download className="mr-1.5 h-4 w-4" aria-hidden /> PNG em alta
+            <button type="button" className={juntar(botao.icone, "mb-1 mr-2")} aria-label="Baixar PNG em alta" title="Baixar PNG em alta" onClick={() => onBaixar(rascunho)}>
+              <Download className="h-4 w-4" aria-hidden />
             </button>
             <button
               type="button"
@@ -177,9 +178,9 @@ export default function AjustesDoMockup({
               <div className="mt-4 min-w-0">
                 <div className="mb-2 flex min-w-0 items-center">
                   <span className={juntar(texto.rotulo, "min-w-0 flex-1")}>Variações de cor</span>
-                  <button type="button" className={botao.secundario} disabled={gerandoVariacoes} onClick={() => void verVariacoes()}>
-                    {gerandoVariacoes ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> : <Palette className="mr-1.5 h-4 w-4" aria-hidden />}
-                    {variacoes ? "Montar de novo" : "Ver variações"}
+                  {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+                  <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} aria-label={variacoes ? "Montar as variações de novo" : "Ver variações"} title={variacoes ? "Montar as variações de novo" : "Ver variações"} disabled={gerandoVariacoes} onClick={() => void verVariacoes()}>
+                    {gerandoVariacoes ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Palette className="h-4 w-4" aria-hidden />}
                   </button>
                 </div>
                 {variacoes ? (

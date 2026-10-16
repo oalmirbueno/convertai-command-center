@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowRightLeft, Camera, Columns2, Scissors, Trash2, Wand2 } from "lucide-react";
+import { ArrowRightLeft, Camera, Columns2, FastForward, Scissors, Trash2 } from "lucide-react";
 import { EstadoVazio } from "@/components/sistema/Estados";
 import { botao, campo, juntar, texto } from "@/components/sistema/estilos";
 import {
@@ -78,14 +78,13 @@ export default function Inspector({
     return (
       <div className="space-y-2">
         <p className={texto.corpo}>{selecao.length} clipes: {selecao.map((id) => a.porId[id]).join(", ")}</p>
+        {/* 16/10/2026: só ícones, sem borda (nome no aria-label e no title). */}
         <div className="flex flex-wrap">
-          <button type="button" className={juntar(botao.secundario, "mb-1 mr-1 h-8")} onClick={abrirComparar} disabled={selecao.length !== 2}>
-            <Columns2 className="mr-1.5 h-3.5 w-3.5" />
-            Comparar
+          <button type="button" className={juntar(botao.icone, "mb-1 mr-1 disabled:pointer-events-none disabled:opacity-50")} onClick={abrirComparar} disabled={selecao.length !== 2} aria-label="Comparar" title="Comparar">
+            <Columns2 className="h-4 w-4" />
           </button>
-          <button type="button" className={juntar(botao.discreto, "mb-1 h-8")} onClick={() => onRemover(false)}>
-            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-            Tirar
+          <button type="button" className={juntar(botao.icone, "mb-1")} onClick={() => onRemover(false)} aria-label="Tirar" title="Tirar">
+            <Trash2 className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -116,14 +115,13 @@ export default function Inspector({
           {c.origem && c.origem.tipo !== "manual" ? ` · veio de ${c.origem.tipo}` : ""}
         </p>
       </div>
+      {/* 16/10/2026: só ícones, sem borda (nome no aria-label e no title, com o atalho). */}
       <div className="flex flex-wrap">
-        <button type="button" className={juntar(botao.secundario, "mb-1 mr-1 h-8")} onClick={onDividir} disabled={!dentro} title="S">
-          <Scissors className="mr-1.5 h-3.5 w-3.5" />
-          Dividir
+        <button type="button" className={juntar(botao.icone, "mb-1 mr-1 disabled:pointer-events-none disabled:opacity-50")} onClick={onDividir} disabled={!dentro} aria-label="Dividir" title="Dividir (S)">
+          <Scissors className="h-4 w-4" />
         </button>
-        <button type="button" className={juntar(botao.discreto, "mb-1 mr-1 h-8")} onClick={() => onRemover(false)} title="Delete (Shift + Delete puxa o resto)">
-          <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-          Tirar
+        <button type="button" className={juntar(botao.icone, "mb-1 mr-1")} onClick={() => onRemover(false)} aria-label="Tirar" title="Tirar (Delete; Shift + Delete puxa o resto)">
+          <Trash2 className="h-4 w-4" />
         </button>
       </div>
       <Linha>
@@ -248,20 +246,18 @@ export default function Inspector({
         <div className="border-t border-border pt-3">
           <p className={juntar(texto.rotulo, "mb-1.5")}>Gerar a partir deste clipe</p>
           <div className="flex flex-wrap">
-            <button type="button" className={juntar(botao.secundario, "mb-1 mr-1 h-8")} onClick={abrirCamera}>
-              <Camera className="mr-1.5 h-3.5 w-3.5" />
-              Trocar câmera
+            {/* 16/10/2026: só ícones, sem borda (nome no aria-label e no title). */}
+            <button type="button" className={juntar(botao.icone, "mb-1 mr-1")} onClick={abrirCamera} aria-label="Trocar câmera" title="Trocar câmera">
+              <Camera className="h-4 w-4" />
             </button>
             {fonte.midia === "video" && (
-              <button type="button" className={juntar(botao.secundario, "mb-1 mr-1 h-8")} onClick={() => gerarContinuacao(c.id)}>
-                <Wand2 className="mr-1.5 h-3.5 w-3.5" />
-                Continuar a partir daqui
+              <button type="button" className={juntar(botao.icone, "mb-1 mr-1")} onClick={() => gerarContinuacao(c.id)} aria-label="Continuar a partir daqui" title="Continuar a partir daqui">
+                <FastForward className="h-4 w-4" />
               </button>
             )}
             {proximo && proximo.fonte && (
-              <button type="button" className={juntar(botao.secundario, "mb-1 h-8")} onClick={() => gerarTransicao(c.id, proximo.id)}>
-                <ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" />
-                Transição para {a.porId[proximo.id]}
+              <button type="button" className={juntar(botao.icone, "mb-1")} onClick={() => gerarTransicao(c.id, proximo.id)} aria-label={`Transição para ${a.porId[proximo.id]}`} title={`Transição para ${a.porId[proximo.id]}`}>
+                <ArrowRightLeft className="h-4 w-4" />
               </button>
             )}
           </div>

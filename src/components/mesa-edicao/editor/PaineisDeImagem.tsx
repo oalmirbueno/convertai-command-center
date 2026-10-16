@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Crosshair, Loader2, ScanFace, Sparkles, Upload, Zap } from "lucide-react";
+import { Crosshair, Loader2, ScanFace, Upload, Zap, ZoomIn } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { botao, campo, etiqueta, juntar, texto } from "@/components/sistema/estilos";
@@ -120,9 +120,10 @@ export function PainelDeFormato({ ctx }: { ctx: ContextoDoPainel }) {
             </select>
           </label>
           <div className="flex items-center">
-            <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => void rastrear()} disabled={!!andamento || !modelo} data-rastrear-rosto="">
-              {andamento ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ScanFace className="mr-1.5 h-3.5 w-3.5" />}
-              Rastrear {sem.length === 1 ? "o rosto" : `${sem.length} vídeos`} · até {usd(custo)}
+            {/* 16/10/2026: só ícone; o custo continua visível ao lado. */}
+            <button type="button" className={juntar(botao.primario, "h-8 px-2")} onClick={() => void rastrear()} disabled={!!andamento || !modelo} aria-label={`Rastrear ${sem.length === 1 ? "o rosto" : `${sem.length} vídeos`} · até ${usd(custo)}`} title={`Rastrear ${sem.length === 1 ? "o rosto" : `${sem.length} vídeos`}`} data-rastrear-rosto="">
+              {andamento ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanFace className="h-4 w-4" />}
+              <span className="ml-1 text-[11px] tabular-nums">até {usd(custo)}</span>
             </button>
             {andamento && (
               <button type="button" className={juntar(botao.discreto, "ml-1 h-8")} onClick={() => (parar.current = true)}>
@@ -208,9 +209,9 @@ export function PainelDeCor({ ctx }: { ctx: ContextoDoPainel }) {
           </button>
         </div>
       ) : (
-        <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => arquivo.current && arquivo.current.click()} data-subir-lut="">
-          <Upload className="mr-1.5 h-3.5 w-3.5" />
-          Subir LUT (.cube)
+        // 16/10/2026: só ícone, sem borda.
+        <button type="button" className={botao.icone} onClick={() => arquivo.current && arquivo.current.click()} aria-label="Subir LUT (.cube)" title="Subir LUT (.cube)" data-subir-lut="">
+          <Upload className="h-4 w-4" />
         </button>
       )}
       <input ref={arquivo} type="file" accept=".cube" className="hidden" onChange={(e) => {
@@ -290,9 +291,9 @@ export function PainelDeZoom({ ctx }: { ctx: ContextoDoPainel }) {
           <option value="forte">Forte (1,25x)</option>
         </select>
       </label>
-      <button type="button" className={juntar(botao.primario, "mt-2 h-8")} onClick={() => void momentosFortes()} disabled={julgando || !frases.length} data-zoom-momentos="">
-        {julgando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
-        Zoom nos momentos fortes (IA)
+      {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+      <button type="button" className={juntar(botao.primario, "mt-2 h-8 w-8 px-0")} onClick={() => void momentosFortes()} disabled={julgando || !frases.length} aria-label="Zoom nos momentos fortes (IA)" title="Zoom nos momentos fortes (IA)" data-zoom-momentos="">
+        {julgando ? <Loader2 className="h-4 w-4 animate-spin" /> : <ZoomIn className="h-4 w-4" />}
       </button>
       {!frases.length && <p className={juntar(texto.auxiliar, "mt-1")}>Precisa da fala marcada (Timestamp).</p>}
       <Subtitulo ajuda="Põe o efeito no cursor, na camada Câmera e cor.">Efeito no cursor</Subtitulo>
@@ -324,9 +325,8 @@ export function PainelDeZoom({ ctx }: { ctx: ContextoDoPainel }) {
           </select>
         </label>
       )}
-      <button type="button" className={juntar(botao.secundario, "mt-2 h-8")} onClick={porNoCursor}>
-        {efeito === "zoom" ? <Crosshair className="mr-1.5 h-3.5 w-3.5" /> : <Zap className="mr-1.5 h-3.5 w-3.5" />}
-        Pôr no cursor
+      <button type="button" className={juntar(botao.icone, "mt-2 flex")} onClick={porNoCursor} aria-label="Pôr no cursor" title="Pôr o efeito no cursor">
+        {efeito === "zoom" ? <Crosshair className="h-4 w-4" /> : <Zap className="h-4 w-4" />}
       </button>
       <Subtitulo>Skills de ritmo</Subtitulo>
       <PainelDeSkills projeto={p} contexto={{ agora: new Date().toISOString(), selecionados: ctx.selecao }} controle={ctx.controle} ids={["punch_in", "zoom_nos_momentos", "transicoes_suaves"]} />

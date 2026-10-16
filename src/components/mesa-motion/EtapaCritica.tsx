@@ -56,9 +56,9 @@ function Conteudo({ filme, links, irPara }: { filme: Filme; links: Record<string
         descricao={filme.critica.em ? `Feita em ${new Date(String(filme.critica.em)).toLocaleString("pt-BR")}` : "Ainda não feita"}
         ajuda="Nota por critério: legível no celular, hierarquia, ritmo, fiel à marca e só fatos reais. Abaixo de 6 vira aviso. A equipe decide o que mudar."
         acao={
-          <button type="button" className={botao.primario} onClick={() => void criticar()} disabled={indo || !filme.cenas.length} data-criticar="">
-            {indo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Scale className="mr-1 h-3.5 w-3.5" />}
-            {filme.critica.em ? "Criticar de novo" : "Criticar as cenas"}
+          // 16/10/2026: só ícone (nome no aria-label e no title).
+          <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => void criticar()} disabled={indo || !filme.cenas.length} aria-label={filme.critica.em ? "Criticar de novo" : "Criticar as cenas"} title={filme.critica.em ? "Criticar de novo" : "Criticar as cenas"} data-criticar="">
+            {indo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scale className="h-4 w-4" />}
           </button>
         }
       >
@@ -92,9 +92,9 @@ function Conteudo({ filme, links, irPara }: { filme: Filme; links: Record<string
             </Painel>
           );
         })}
-      <button type="button" className={botao.primario} onClick={() => irPara("som")}>
-        Seguir para o som
-        <ArrowRight className="ml-1 h-3.5 w-3.5" />
+      {/* 16/10/2026: só ícone; o destino vai no aria-label e no title. */}
+      <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => irPara("som")} aria-label="Seguir para o som" title="Seguir para o som">
+        <ArrowRight className="h-4 w-4" />
       </button>
     </div>
   );

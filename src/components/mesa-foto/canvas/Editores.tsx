@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowUpRight, CalendarPlus, Check, CheckCheck, Clapperboard, Copy, Eye, ImagePlus, Layers, Loader2, ScanSearch, SlidersHorizontal, Sparkles, UserRoundPlus, Wand2, X } from "lucide-react";
+import { CalendarPlus, Check, CheckCheck, Clapperboard, Copy, Eye, ImagePlus, Layers, Loader2, Megaphone, PenTool, ScanSearch, SlidersHorizontal, Sparkles, UserRoundPlus, Wand2, X } from "lucide-react";
 import { Ampliar } from "@/components/mesa/Ampliar";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
 import { BotaoComCusto, useAvisarErro, useEstimativa } from "@/components/mesa/Custo";
@@ -52,7 +52,8 @@ import {
 import { AjustesDaCena } from "./Cena";
 import { andamentoDoResultado } from "./geracao";
 import { VirarPersonagem } from "./Personagem";
-import { BOTAO, CAMPO, descrever, Escolha, MiniaturaGrande, pilula, ROTULO, type Fontes } from "./comum";
+import { BOTAO_ICONE, BOTAO, CAMPO, descrever, Escolha, MiniaturaGrande, pilula, ROTULO, type Fontes } from "./comum";
+import { juntar } from "@/components/sistema";
 
 /**
  * Editores do Canvas v3 (painel lateral preto e modo lista): cartão (com os
@@ -228,9 +229,8 @@ export function EditorDoCartao({
       )}
       <div className="flex min-w-0 flex-wrap items-center">
         {!(no.tipo === "ambiente" && d.modo !== "foto" && !temImagem) && (
-          <button type="button" className={`${BOTAO} mb-1 mr-1.5`} onClick={onEscolher} data-trocar-cartao={no.id}>
-            <ImagePlus className="mr-1 h-3.5 w-3.5" />
-            {(no.tipo === "produto" && d.kit_id) || (no.tipo === "modelo" && (d.modelo_id || d.imagem_id)) || temImagem ? `Trocar ${tipo.rotulo.toLowerCase()}` : `Escolher ${tipo.rotulo.toLowerCase()}`}
+          <button className={juntar(BOTAO_ICONE, "mb-1 mr-1.5 disabled:opacity-50")} type="button" onClick={onEscolher} data-trocar-cartao={no.id} aria-label={(no.tipo === "produto" && d.kit_id) || (no.tipo === "modelo" && (d.modelo_id || d.imagem_id)) || temImagem ? `Trocar ${tipo.rotulo.toLowerCase()}` : `Escolher ${tipo.rotulo.toLowerCase()}`} title={(no.tipo === "produto" && d.kit_id) || (no.tipo === "modelo" && (d.modelo_id || d.imagem_id)) || temImagem ? `Trocar ${tipo.rotulo.toLowerCase()}` : `Escolher ${tipo.rotulo.toLowerCase()}`}>
+            <ImagePlus className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
         {(no.tipo === "ambiente" || no.tipo === "estilo") && temImagem && (
@@ -376,32 +376,32 @@ export function FotoDoResultado({
           {r.imagem_id && (
             <div className="flex min-w-0 flex-wrap items-center">
               {uso.temEstudio && (
-                <button type="button" className={`${BOTAO} mb-1.5 mr-1.5`} onClick={() => uso.abrirNoEstudio(r)} title="Abre esta foto no Estúdio de fotos: luz, cor, fundo, cenário, ângulo, ampliar">
-                  <SlidersHorizontal className="mr-1 h-3 w-3" /> Estúdio
+                <button className={juntar(BOTAO_ICONE, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" onClick={() => uso.abrirNoEstudio(r)} title="Abre esta foto no Estúdio de fotos: luz, cor, fundo, cenário, ângulo, ampliar" aria-label="Estúdio">
+                  <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
                 </button>
               )}
               {uso.temAgenda && (
-                <button type="button" className={`${BOTAO} mb-1.5 mr-1.5`} onClick={() => uso.naAgenda(r)} title="Post na Agenda com esta foto: legenda, data e aprovação do cliente">
-                  <CalendarPlus className="mr-1 h-3 w-3" /> Agenda
+                <button className={juntar(BOTAO_ICONE, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" onClick={() => uso.naAgenda(r)} title="Post na Agenda com esta foto: legenda, data e aprovação do cliente" aria-label="Agenda">
+                  <CalendarPlus className="h-4 w-4" aria-hidden="true" />
                 </button>
               )}
-              <button type="button" className={`${BOTAO} mb-1.5 mr-1.5`} disabled={!!uso.ocupado} onClick={() => void uso.usarNaMesa(r)} title="Aprova (se precisar) e abre o Estúdio da Mesa com esta foto">
-                {uso.ocupado === "usar" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <ArrowUpRight className="mr-1 h-3 w-3" />} Usar na Mesa
+              <button className={juntar(BOTAO_ICONE, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" disabled={!!uso.ocupado} onClick={() => void uso.usarNaMesa(r)} title="Aprova (se precisar) e abre o Estúdio da Mesa com esta foto" aria-label="Usar na Mesa">
+                {uso.ocupado === "usar" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <PenTool className="h-4 w-4" aria-hidden="true" />}
               </button>
-              <button type="button" className={`${BOTAO} mb-1.5 mr-1.5`} disabled={!!uso.ocupado} onClick={() => void uso.usarNaMesaAds(r)} title="Aprova (se precisar) e abre o Estúdio da Mesa Ads com esta foto">
-                <ArrowUpRight className="mr-1 h-3 w-3" /> Mesa Ads
+              <button className={juntar(BOTAO_ICONE, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" disabled={!!uso.ocupado} onClick={() => void uso.usarNaMesaAds(r)} title="Aprova (se precisar) e abre o Estúdio da Mesa Ads com esta foto" aria-label="Mesa Ads">
+                <Megaphone className="h-4 w-4" aria-hidden="true" />
               </button>
-              <button type="button" className={`${BOTAO} mb-1.5 mr-1.5`} disabled={!!uso.ocupado} onClick={() => void uso.finalizar(r)} title="Aprova (se precisar) e abre o Usar">
-                {uso.ocupado === "finalizar" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCheck className="mr-1 h-3 w-3" />} Finalizar
+              <button className={juntar(BOTAO_ICONE, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" disabled={!!uso.ocupado} onClick={() => void uso.finalizar(r)} title="Aprova (se precisar) e abre o Usar" aria-label="Finalizar">
+                {uso.ocupado === "finalizar" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCheck className="h-4 w-4" aria-hidden="true" />}
               </button>
               {cena && (
-                <button type="button" className={`${BOTAO} mb-1.5 mr-1.5 ${cena.escolhida ? "border-emerald-400/60 text-emerald-200" : ""}`} disabled={cena.escolhida} onClick={cena.onEscolher} title="Esta foto representa a cena na história (e é o 1º quadro na Mesa Vídeos)">
-                  <Clapperboard className="mr-1 h-3 w-3" /> {cena.escolhida ? "Foto da cena" : "Usar na cena"}
+                <button type="button" className={juntar(BOTAO_ICONE, "mb-1.5 mr-1.5", cena.escolhida && "text-emerald-300 disabled:opacity-100")} disabled={cena.escolhida} onClick={cena.onEscolher} aria-pressed={cena.escolhida} aria-label={cena.escolhida ? "Foto da cena" : "Usar na cena"} title={cena.escolhida ? "Foto da cena: representa a cena na história (e é o 1º quadro na Mesa Vídeos)" : "Usar na cena: esta foto representa a cena na história (e é o 1º quadro na Mesa Vídeos)"}>
+                  <Clapperboard className="h-4 w-4" aria-hidden="true" />
                 </button>
               )}
               {onPersonagemCriada && podeVirarPersonagem(foto) && (
-                <button type="button" className={`${BOTAO} mb-1.5`} aria-pressed={personagem} onClick={() => setPersonagem(!personagem)} title="A pessoa desta foto vira personagem fixa, para outras cenas e para a Mesa Vídeos">
-                  <UserRoundPlus className="mr-1 h-3 w-3" /> Virar personagem
+                <button className={juntar(BOTAO_ICONE, "mb-1.5 disabled:opacity-50", personagem && "bg-white/10 text-white")} type="button" aria-pressed={personagem} onClick={() => setPersonagem(!personagem)} title="A pessoa desta foto vira personagem fixa, para outras cenas e para a Mesa Vídeos" aria-label="Virar personagem">
+                  <UserRoundPlus className="h-4 w-4" aria-hidden="true" />
                 </button>
               )}
             </div>
@@ -673,8 +673,8 @@ export function AjustesDoResultado({
         </p>
       ))}
       <div className="flex min-w-0 flex-wrap items-center">
-        <button type="button" className={`${BOTAO} mb-1.5 mr-1.5 h-8`} disabled={montando || !motores.length || entradas.length === 0} onClick={() => void montar()}>
-          {montando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Eye className="mr-1.5 h-3.5 w-3.5" />} Ver o que vai ao gerador
+        <button className={juntar(BOTAO_ICONE, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" disabled={montando || !motores.length || entradas.length === 0} onClick={() => void montar()} aria-label="Ver o que vai ao gerador" title="Ver o que vai ao gerador">
+          {montando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
         </button>
         {comGerar && (
           <BotaoComCusto

@@ -318,8 +318,9 @@ export default function EtapaApresentacao() {
                 await salvarFalas(falas);
               }}
             />
-            <button type="button" className={juntar(botao.secundario, "m-1 h-8")} onClick={() => void exportar()} disabled={exportando || !incluidos.length}>
-              {exportando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />} Baixar página web
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+            <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} aria-label="Baixar página web" title="Baixar página web" onClick={() => void exportar()} disabled={exportando || !incluidos.length}>
+              {exportando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             </button>
           </>
         }
@@ -333,10 +334,10 @@ export default function EtapaApresentacao() {
           recolher={false}
           acao={
             <>
-              <button type="button" className={botao.icone} aria-label="Slide anterior" disabled={atual <= 0} onClick={() => setAtual(Math.max(0, atual - 1))}>
+              <button type="button" className={botao.icone} aria-label="Slide anterior" title="Slide anterior" disabled={atual <= 0} onClick={() => setAtual(Math.max(0, atual - 1))}>
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <button type="button" className={botao.icone} aria-label="Próximo slide" disabled={atual >= incluidos.length - 1} onClick={() => setAtual(Math.min(incluidos.length - 1, atual + 1))}>
+              <button type="button" className={botao.icone} aria-label="Próximo slide" title="Próximo slide" disabled={atual >= incluidos.length - 1} onClick={() => setAtual(Math.min(incluidos.length - 1, atual + 1))}>
                 <ChevronRight className="h-4 w-4" />
               </button>
               <button ref={botaoApresentar} type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} onClick={() => setApresentando(true)} data-apresentar="" aria-label="Apresentar" title="Apresentar">
@@ -385,7 +386,7 @@ export default function EtapaApresentacao() {
                   />
                 )}
               </span>
-              <button type="button" className={botao.icone} aria-label={s.incluido ? `Tirar ${s.titulo} da apresentação` : `Voltar ${s.titulo} à apresentação`} onClick={() => void alternar(s.id, !s.incluido)}>
+              <button type="button" className={botao.icone} aria-label={s.incluido ? `Tirar ${s.titulo} da apresentação` : `Voltar ${s.titulo} à apresentação`} title={s.incluido ? "Tirar da apresentação" : "Voltar à apresentação"} onClick={() => void alternar(s.id, !s.incluido)}>
                 {s.incluido ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </li>

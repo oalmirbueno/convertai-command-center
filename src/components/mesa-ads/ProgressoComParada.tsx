@@ -41,8 +41,8 @@ export default function ProgressoComParada({
           {atual ? <span className="text-muted-foreground">{` · ${atual}`}</span> : null}
           {custo && custo > 0 ? <span className="tabular-nums text-muted-foreground">{` · ${usd(custo)} até agora`}</span> : null}
         </p>
-        <button type="button" onClick={onParar} disabled={parando} className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")} aria-label={parando ? "Parando o lote" : "Parar o lote"}>
-          <Square className="mr-1 h-3 w-3" /> {parando ? "Parando" : "Parar"}
+        <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={onParar} disabled={parando} aria-label={parando ? "Parando o lote" : "Parar o lote"} title={parando ? "Parando" : "Parar"}>
+          <Square className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
       <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-secondary">

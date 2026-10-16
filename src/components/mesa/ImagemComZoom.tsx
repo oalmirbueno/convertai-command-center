@@ -42,10 +42,11 @@ export default function ImagemComZoom({ src, alt, largura, altura, onProporcao }
   }, [ajustar]);
   return <div>
     <div role="toolbar" aria-label="Zoom da imagem" className="mb-2 flex items-center space-x-1 pr-6">
-      <button type="button" className={botao.icone} aria-label="Diminuir zoom" disabled={vista.escala <= 1 || erro} onClick={() => ajustar(vista.escala / 1.25)}><Minus className="h-4 w-4" /></button>
+      <button type="button" className={botao.icone} aria-label="Diminuir zoom" title="Diminuir zoom" disabled={vista.escala <= 1 || erro} onClick={() => ajustar(vista.escala / 1.25)}><Minus className="h-4 w-4" aria-hidden="true" /></button>
       <output aria-label="Nível de zoom" className={juntar(texto.etiqueta, "w-12 text-center tabular-nums")}>{Math.round(vista.escala * 100)}%</output>
-      <button type="button" className={botao.icone} aria-label="Aumentar zoom" disabled={vista.escala >= 8 || erro} onClick={() => ajustar(vista.escala * 1.25)}><Plus className="h-4 w-4" /></button>
-      <button type="button" className={botao.barra} onClick={() => setVista(INICIAL)} aria-label="Ajustar imagem à janela"><Scan className="mr-1 h-4 w-4" />Ajustar</button>
+      <button type="button" className={botao.icone} aria-label="Aumentar zoom" title="Aumentar zoom" disabled={vista.escala >= 8 || erro} onClick={() => ajustar(vista.escala * 1.25)}><Plus className="h-4 w-4" aria-hidden="true" /></button>
+      {/* 16/10/2026 (dono: "texto + ícone vira só o ícone"): o nome fica no title e no leitor de tela. */}
+      <button type="button" className={botao.icone} onClick={() => setVista(INICIAL)} aria-label="Ajustar imagem à janela" title="Ajustar imagem à janela"><Scan className="h-4 w-4" aria-hidden="true" /></button>
       <button type="button" className={botao.barra} disabled={!natural || erro} onClick={() => ajustar(natural / largura)} title="Um pixel da imagem por pixel da tela, até 8x">1:1</button>
     </div>
     <div ref={quadro} role="region" aria-label="Imagem com zoom; arraste para explorar" tabIndex={0}

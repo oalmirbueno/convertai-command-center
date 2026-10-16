@@ -9,7 +9,7 @@ import { useMesa } from "@/components/mesa/MesaContexto";
 import { Campo } from "@/components/mesa/Seletores";
 import { dataEHora, usd } from "@/lib/mesa/api";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { campo, foco, juntar } from "@/components/sistema/estilos";
+import { botao, campo, foco, juntar } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { brl, inteiro, porcento } from "./adsApi";
 import {
@@ -155,10 +155,9 @@ function ItemFeito({ a, fazendo, onDesfazer, onLevar, onDescartar }: { a: AcaoFe
       <div className="mt-1 flex min-w-0 flex-wrap items-center">
         {a.estado === "feita" && a.prova && a.prova.caminho && <CaminhoPronto caminho={a.prova.caminho} className="h-7 text-[11.5px]" />}
         {a.pode_desfazer && (
-          <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-7 text-[11.5px]" disabled={!!fazendo} onClick={onDesfazer} aria-label={`Desfazer: ${a.resumo}`}>
-            {fazendo === `desfazer:${a.id}` ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Undo2 className="mr-1 h-3.5 w-3.5" />}
-            Desfazer
-          </Button>
+          <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50")} type="button" disabled={!!fazendo} onClick={onDesfazer} aria-label={`Desfazer: ${a.resumo}`} title="Desfazer">
+            {fazendo === `desfazer:${a.id}` ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Undo2 className="h-4 w-4" aria-hidden="true" />}
+          </button>
         )}
         {a.estado === "proposta" && (
           <>

@@ -256,9 +256,9 @@ function ConversaDeContexto({
               <BotaoDeAnexarArquivos arquivos={arquivos} anexos={anexos} className="mr-1.5" />
               {/* Microfone grátis: o navegador transcreve enquanto a pessoa fala. */}
               <Ditado valor={texto} onChange={setTexto} disabled={!!pendente} className="mr-1.5 min-w-0" />
-              <Button type="button" size="sm" className="shrink-0" onClick={() => void enviar()} disabled={!!enviando || preparando || (!texto.trim() && !temMaterial)}>
-                {pendente ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
-                Enviar
+              {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
+              <Button type="button" size="sm" className="h-8 w-8 shrink-0 p-0" onClick={() => void enviar()} disabled={!!enviando || preparando || (!texto.trim() && !temMaterial)} aria-label="Enviar" title="Enviar">
+                {pendente ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
               </Button>
             </div>
           </div>

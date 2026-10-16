@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, ExternalLink, Loader2, Save } from "lucide-react";
+import { CaseSensitive, Check, ExternalLink, Loader2, Save } from "lucide-react";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
@@ -98,14 +98,23 @@ export function TipografiaDaMarca({ tipos, onUsar, geradorRecolhido = false }: {
       >
       <div className="mb-2 flex min-w-0 flex-wrap items-center">
         <span className={juntar(texto.rotulo, "m-1 min-w-0 flex-1")}>Combinações para esta personalidade{estilos.length ? `: ${estilos.slice(0, 4).join(", ")}` : ""}</span>
+        {/* 16/10/2026: só ícone, sem borda; o nome (e o modelo) vão para o leitor de tela e o title; o preço fica ao lado. */}
         <BotaoComCusto
-          rotulo={<RotuloComModelo rotulo="Sugerir pares com IA" papel="identidade" modeloId={modeloId} />}
+          rotulo={
+            <>
+              <CaseSensitive className="h-4 w-4" aria-hidden="true" />
+              <span className="sr-only">
+                <RotuloComModelo rotulo="Sugerir pares com IA" papel="identidade" modeloId={modeloId} />
+              </span>
+            </>
+          }
           titulo="Pares de fonte"
+          descricao="Sugerir pares de fonte com IA"
           partes={() => partesDoCusto(mesa.catalogo, "fontes", modeloId)}
           executar={() => chamarIdentidade<{ projeto: ProjetoDeIdentidade }>("fontes_propor", { projeto_id: projeto.id, modelo_id: modeloId || undefined })}
           aoConcluir={(d) => guardar(d && d.projeto)}
-          variant="outline"
-          className="m-1 h-8"
+          variant="ghost"
+          className="m-1 h-8 gap-1 px-2"
         />
       </div>
       {propostas.length > 0 && (
@@ -139,8 +148,9 @@ export function TipografiaDaMarca({ tipos, onUsar, geradorRecolhido = false }: {
                   {p.nome}: {p.titulo} + {p.texto}
                 </span>
                 {p.encaixe > 0 && <Pastilha tom="bom">combina</Pastilha>}
-                <a className={juntar(texto.etiqueta, "ml-2 inline-flex items-center text-muted-foreground hover:text-foreground")} href={linkDaFamilia(p.titulo)} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="mr-0.5 h-3 w-3" /> Google Fonts
+                {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+                <a className={juntar(botao.icone, "ml-1 h-7 w-7")} href={linkDaFamilia(p.titulo)} target="_blank" rel="noopener noreferrer" aria-label={`Abrir ${p.titulo} no Google Fonts`} title="Abrir no Google Fonts">
+                  <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               </span>
             </span>
@@ -233,8 +243,9 @@ export function GrafismosGerados({ cores, familia, nome, onGuardar }: { cores: s
             <span className={juntar(texto.rotulo, "mb-1.5")}>Giro</span>
             <input type="range" min={0} max={180} step={15} value={giro} onChange={(e) => setGiro(Number(e.target.value))} />
           </label>
-          <button type="button" className={juntar(botao.secundario, "m-1")} disabled={guardando} onClick={() => void guardar()}>
-            {guardando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />} Guardar nos ativos
+          {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+          <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} disabled={guardando} onClick={() => void guardar()} aria-label="Guardar nos ativos" title="Guardar nos ativos">
+            {guardando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           </button>
         </div>
         <span className="relative block w-full overflow-hidden rounded-md border border-border" style={{ paddingBottom: "56.25%" }}>

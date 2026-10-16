@@ -32,7 +32,7 @@ import { repetirEntregaEmPartes } from "@/lib/mesa/entregaEmPartes";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
-import { campo, foco, juntar, lista as linhaDeLista } from "@/components/sistema/estilos";
+import { botao, campo, foco, juntar, lista as linhaDeLista } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import { Cartao, Moldura, useMesaFoto, Vazio } from "./Comuns";
@@ -276,8 +276,8 @@ export function MontarOPost({
             ))}
             {ids.length < MAX_FOTOS_NO_POST && (
               <li className="mb-2 mr-2 w-24">
-                <button type="button" onClick={() => setEscolhendo(true)} className={juntar("flex w-full flex-col items-center justify-center rounded-lg border border-dashed border-border py-6 text-[12px] text-muted-foreground hover:border-primary/50 hover:text-foreground", foco)}>
-                  <ImagePlus className="mb-1 h-4 w-4" /> Escolher
+                <button type="button" onClick={() => setEscolhendo(true)} aria-label="Escolher fotos" title="Escolher fotos" className={juntar("flex w-full items-center justify-center rounded-lg border border-dashed border-border py-6 text-muted-foreground hover:border-primary/50 hover:text-foreground", foco)}>
+                  <ImagePlus className="h-5 w-5" aria-hidden="true" />
                 </button>
               </li>
             )}
@@ -440,9 +440,9 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
           <div className="mb-1.5 flex min-w-0 items-center">
             <p className="flex-1 text-[12px] font-semibold">1. Fotos</p>
             {trocaFotos && (
-              <Button type="button" size="sm" variant="ghost" className="h-7 text-[12px]" onClick={onTrocarFotos}>
-                <PenLine className="mr-1 h-3.5 w-3.5" /> {semFotos ? "Escolher fotos" : "Trocar fotos"}
-              </Button>
+              <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={onTrocarFotos} aria-label={semFotos ? "Escolher fotos" : "Trocar fotos"} title={semFotos ? "Escolher fotos" : "Trocar fotos"}>
+                <PenLine className="h-4 w-4" aria-hidden="true" />
+              </button>
             )}
           </div>
           {semFotos ? (
@@ -530,8 +530,8 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
               </span>
             )}
             {legenda && (
-              <button type="button" className="mb-1 inline-flex items-center text-[12px] text-primary hover:underline" onClick={() => void copiarTexto(legendaParaCopiar(legenda, hashtags)).then((ok) => (ok ? toast.success("Legenda copiada") : toast.error("Não foi possível copiar")))}>
-                <Hash className="mr-1 h-3.5 w-3.5" /> Copiar com as hashtags
+              <button className={juntar(botao.icone, "mb-1 text-primary disabled:opacity-50")} type="button" onClick={() => void copiarTexto(legendaParaCopiar(legenda, hashtags)).then((ok) => (ok ? toast.success("Legenda copiada") : toast.error("Não foi possível copiar")))} aria-label="Copiar com as hashtags" title="Copiar com as hashtags">
+                <Hash className="h-4 w-4" aria-hidden="true" />
               </button>
             )}
           </div>
@@ -575,11 +575,11 @@ export function PostAberto({ post, onTrocarFotos, estudio }: { post: PostDeFotos
               : "A agência revisa, o cliente aprova no portal e o post publica sozinho na data confirmada. Pedido de ajuste do cliente volta para cá."}
           </p>
           <div className="mt-2 flex min-w-0 flex-wrap items-center text-[12px]">
-            <Link to={`/mesa?client=${clientId}&aba=entrega`} className="mb-1 mr-3 inline-flex items-center font-medium text-primary hover:underline">
-              <CalendarCheck className="mr-1 h-3.5 w-3.5" /> Ver na Entrega da Mesa
+            <Link className={juntar(botao.icone, "mb-1 mr-3 text-primary disabled:opacity-50")} to={`/mesa?client=${clientId}&aba=entrega`} aria-label="Ver na Entrega da Mesa" title="Ver na Entrega da Mesa">
+              <CalendarCheck className="h-4 w-4" aria-hidden="true" />
             </Link>
-            <Link to="/calendario" className="mb-1 mr-3 inline-flex items-center font-medium text-primary hover:underline">
-              <ExternalLink className="mr-1 h-3.5 w-3.5" /> Ver na Agenda
+            <Link className={juntar(botao.icone, "mb-1 mr-3 text-primary disabled:opacity-50")} to="/calendario" aria-label="Ver na Agenda" title="Ver na Agenda">
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
         </section>
@@ -682,9 +682,9 @@ export default function EtapaAgenda() {
               </Button>
             )}
             {!montando && (
-              <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={() => setMontando({ fotos: [], postId: null, task: null })}>
-                <CalendarPlus className="mr-1.5 h-3.5 w-3.5" /> Post novo com fotos
-              </Button>
+              <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => setMontando({ fotos: [], postId: null, task: null })} aria-label="Post novo com fotos" title="Post novo com fotos">
+                <CalendarPlus className="h-4 w-4" aria-hidden="true" />
+              </button>
             )}
           </>
         }

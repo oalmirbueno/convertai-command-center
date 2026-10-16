@@ -233,8 +233,9 @@ export default function EstudioReferenciaNaHora({
         disabled={bloqueado}
       />
       {link.trim() && (
-        <Button type="submit" size="sm" variant="outline" className={`${compacto ? "h-7" : "h-9"} ml-1.5 shrink-0 px-2 text-[11.5px]`} disabled={ocupado > 0}>
-          <Link2 className="mr-1 h-3.5 w-3.5" /> Usar
+        // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
+        <Button type="submit" size="icon" variant="ghost" className={`${compacto ? "h-7 w-7" : "h-9 w-9"} ml-1.5 shrink-0`} disabled={ocupado > 0} aria-label="Usar o link" title="Usar o link">
+          <Link2 className="h-4 w-4" aria-hidden="true" />
         </Button>
       )}
     </form>
@@ -243,13 +244,15 @@ export default function EstudioReferenciaNaHora({
   const botaoArquivo = (
     <Button
       type="button"
-      size="sm"
-      variant="outline"
-      className={`${compacto ? "h-7 px-2 text-[11.5px]" : "h-9 text-[12px]"} ml-1.5 shrink-0`}
+      size="icon"
+      variant="ghost"
+      className={`${compacto ? "h-7 w-7" : "h-9 w-9"} ml-1.5 shrink-0`}
       disabled={bloqueado || ocupado > 0}
       onClick={() => arquivo.current && arquivo.current.click()}
+      aria-label="Enviar arquivo de referência"
+      title="Enviar arquivo de referência"
     >
-      {ocupado > 0 ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1 h-3.5 w-3.5" />} Arquivo
+      {ocupado > 0 ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Upload className="h-4 w-4" aria-hidden="true" />}
     </Button>
   );
 

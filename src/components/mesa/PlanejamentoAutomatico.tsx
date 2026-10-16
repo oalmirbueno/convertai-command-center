@@ -33,6 +33,7 @@ import { Campo, SeletorDeModelo, SeletorDeRaciocinio } from "./Seletores";
 // 02/10: a cadência pedida (por semana, mistura e dias) vira a grade de datas e formatos do mês.
 import { gradeDoMes, type CadenciaDoMes } from "../../../supabase/functions/agente-calendario/modulos/cadencia-do-mes";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
+import { botao, juntar } from "@/components/sistema/estilos";
 
 /**
  * Planejamento automático: a pessoa escolhe o período (de um mês até 12), a
@@ -773,21 +774,21 @@ export default function PlanejamentoAutomatico() {
           </p>
           <div className="mt-2 flex flex-wrap items-center sm:mt-0 sm:justify-end">
             {rodando && (
-              <Button
+              // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
+              <button
                 type="button"
-                size="sm"
-                variant="outline"
-                className="mb-1 mr-2"
+                className={juntar(botao.icone, "mb-1 mr-2")}
                 disabled={!!execucao && execucao.parar}
+                aria-label={execucao && execucao.parar ? "Vai parar depois dos meses em andamento" : "Parar depois dos meses em andamento"}
+                title={execucao && execucao.parar ? "Vai parar depois dos meses em andamento" : "Parar depois dos meses em andamento"}
                 onClick={() => {
                   if (!execucao) return;
                   execucao.parar = true;
                   avisar(clientId);
                 }}
               >
-                <Square className="mr-1.5 h-3.5 w-3.5" />
-                {execucao && execucao.parar ? "Vai parar depois dos meses em andamento" : "Parar depois dos meses em andamento"}
-              </Button>
+                <Square className="h-4 w-4" aria-hidden="true" />
+              </button>
             )}
             <BotaoComCusto
               rotulo={rodando ? "Planejando..." : `Planejar e preencher ${meses.length} ${meses.length === 1 ? "mês" : "meses"}`}

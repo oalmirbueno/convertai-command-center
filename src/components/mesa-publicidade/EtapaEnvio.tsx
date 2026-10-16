@@ -112,9 +112,21 @@ export default function EtapaEnvio() {
                       </AjudaRecolhida>
                     )}
                   </div>
-                  <button type="button" className={juntar(principal ? botao.primario : botao.secundario, "max-w-[55%]")} disabled={!!enviando} onClick={() => void enviar(d.id)}>
-                    {enviando === d.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 shrink-0 animate-spin" /> : faltam ? <Send className="mr-1.5 h-3.5 w-3.5 shrink-0" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5 shrink-0" />}
-                    <span className="min-w-0 truncate">{faltam ? `Mandar ${faltam} ${faltam === 1 ? "foto" : "fotos"}` : "Abrir com as fotos enviadas"}</span>
+                  {/* 16/10/2026: só ícone, com a contagem pequena ao lado (nome no aria-label e no title). */}
+                  <button
+                    type="button"
+                    className={juntar(principal ? botao.primario : botao.icone, faltam ? "w-auto gap-1 px-2" : principal ? "w-9 px-0" : "", "disabled:opacity-50")}
+                    disabled={!!enviando}
+                    onClick={() => void enviar(d.id)}
+                    aria-label={faltam ? `Mandar ${faltam} ${faltam === 1 ? "foto" : "fotos"} para ${d.rotulo}` : `Abrir ${d.rotulo} com as fotos enviadas`}
+                    title={faltam ? `Mandar ${faltam} ${faltam === 1 ? "foto" : "fotos"} para ${d.rotulo}` : `Abrir ${d.rotulo} com as fotos enviadas`}
+                  >
+                    {enviando === d.id ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : faltam ? <Send className="h-4 w-4 shrink-0" /> : <ArrowRight className="h-4 w-4 shrink-0" />}
+                    {faltam > 0 && (
+                      <span className="text-[11px] tabular-nums" aria-hidden="true">
+                        {faltam}
+                      </span>
+                    )}
                   </button>
                 </li>
               );

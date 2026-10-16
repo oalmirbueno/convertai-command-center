@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Archive, Check, ExternalLink, Loader2, Plus, X } from "lucide-react";
+import { Archive, BookOpen, Check, Loader2, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { botao, campo, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import { textoDoErro } from "@/lib/mesa/api";
@@ -114,9 +114,9 @@ export default function OutrasRedes({ rede, painel, onMudou }: { rede: ChaveDaRe
           </ul>
         </div>
       </div>
-      <a href={info.fonte} target="_blank" rel="noreferrer" className="inline-flex items-center text-[12px] text-muted-foreground hover:text-foreground">
-        <ExternalLink className="mr-1 h-3 w-3" aria-hidden="true" />
-        Documentação oficial
+      {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
+      <a href={info.fonte} target="_blank" rel="noreferrer" className={botao.icone} aria-label="Documentação oficial" title="Documentação oficial">
+        <BookOpen className="h-4 w-4" aria-hidden="true" />
       </a>
 
       <div className="min-w-0">
@@ -133,7 +133,7 @@ export default function OutrasRedes({ rede, painel, onMudou }: { rede: ChaveDaRe
             <li key={c.id} className="flex min-w-0 items-center text-[12.5px]">
               <span className="min-w-0 truncate">{c.endereco}</span>
               <span className={juntar(etiqueta, "ml-2 bg-secondary text-muted-foreground")}>guardada à mão</span>
-              <button type="button" className={juntar(botao.icone, "ml-1 h-7 w-7")} onClick={() => void arquivar(c.id)} aria-label={`Arquivar ${c.endereco}`}>
+              <button type="button" className={juntar(botao.icone, "ml-1 h-7 w-7")} onClick={() => void arquivar(c.id)} aria-label={`Arquivar ${c.endereco}`} title={`Arquivar ${c.endereco}`}>
                 <Archive className="h-3.5 w-3.5" />
               </button>
             </li>
@@ -150,9 +150,8 @@ export default function OutrasRedes({ rede, painel, onMudou }: { rede: ChaveDaRe
             placeholder={rede === "google" || rede === "linkedin" || rede === "youtube" ? "Link da conta" : "@ da conta"}
             aria-label={`@ ou link da conta de ${info.rotulo}`}
           />
-          <button type="button" className={juntar(botao.secundario, "ml-1.5 h-8 px-2.5 text-[12px]")} onClick={() => void adicionar()} disabled={!endereco.trim() || gravando}>
-            {gravando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
-            Adicionar
+          <button type="button" className={juntar(botao.icone, "ml-1.5")} onClick={() => void adicionar()} disabled={!endereco.trim() || gravando} aria-label="Adicionar a conta" title="Adicionar a conta">
+            {gravando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
           </button>
         </div>
         {info.conectaHoje && (

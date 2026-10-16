@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { juntar, superficie, texto as tipo } from "@/components/sistema/estilos";
+import { botao, juntar, superficie, texto as tipo } from "@/components/sistema/estilos";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { custoDaResposta, estimarLocal, textoDoErro, usd } from "@/lib/mesa/api";
 import {
@@ -452,16 +452,8 @@ export default function JanelaDaReferencia({
               </DialogDescription>
             </div>
             {r && !daAgencia && (
-              <button
-                type="button"
-                onClick={() => void alternarDestaque()}
-                aria-pressed={r.destaque}
-                aria-label={r.destaque ? "Tirar o destaque" : "Destacar para o plano"}
-                title={r.destaque ? "Em destaque: o estrategista usa no plano" : "Destacar para o plano"}
-                className="ml-2 flex h-8 shrink-0 items-center rounded-lg border border-border px-2.5 text-[12px] hover:bg-secondary"
-              >
-                <Star className={`mr-1 h-3.5 w-3.5 ${r.destaque ? "fill-warning text-warning" : "text-muted-foreground"}`} />
-                {r.destaque ? "Em destaque" : "Destacar"}
+              <button className={juntar(botao.icone, "ml-2 shrink-0 disabled:opacity-50")} type="button" onClick={() => void alternarDestaque()} aria-pressed={r.destaque} aria-label={r.destaque ? "Tirar o destaque" : "Destacar para o plano"} title={r.destaque ? "Em destaque: o estrategista usa no plano" : "Destacar para o plano"}>
+                <Star className={` h-4 w-4 ${r.destaque ?"fill-warning text-warning":"text-muted-foreground"}`} aria-hidden="true" />
               </button>
             )}
           </div>
@@ -673,8 +665,8 @@ export default function JanelaDaReferencia({
                 <Linha rotulo="Anúncio no Meta" valor={r.ad_id || (anuncio ? anuncio.ad_id : "")} />
               </section>
               {r.url ? (
-                <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-[13px] font-medium hover:bg-secondary">
-                  Abrir o original em outra aba <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                <a className={juntar(botao.icone, "disabled:opacity-50")} href={r.url} target="_blank" rel="noopener noreferrer" aria-label="Abrir o original em outra aba" title="Abrir o original em outra aba">
+                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
                 </a>
               ) : (
                 <p className="text-[12px] text-muted-foreground">Esta referência não tem link externo.</p>

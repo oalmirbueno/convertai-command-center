@@ -604,11 +604,12 @@ function EditorDeFotosDeOrigem({
             type="button"
             onClick={() => setEscolhendo({ trocar: null })}
             aria-label="Adicionar foto de origem"
+            title="Adicionar foto de origem"
             className="relative block w-full rounded-lg border border-dashed border-primary/50 bg-card text-primary hover:bg-primary/5"
             style={{ paddingBottom: "100%" }}
           >
-            <span className="absolute inset-0 flex flex-col items-center justify-center text-[11px]">
-              <Plus className="mb-0.5 h-4 w-4" /> foto
+            <span className="absolute inset-0 flex items-center justify-center">
+              <Plus className="h-5 w-5" aria-hidden="true" />
             </span>
           </button>
         </li>
@@ -1014,9 +1015,9 @@ function FolhaDeIdentidade({ aberto, visto, onVer }: { aberto: CloneAberto; vist
                 </div>
               )}
               {img && img.aprovada !== true && (
-                <Button type="button" size="sm" variant="outline" className="mb-1 h-7 w-full px-1.5 text-[11px]" onClick={() => void decidir(img, "aprovar")}>
-                  <Check className="h-3 w-3" /> <span className="ml-0.5">Aprovar</span>
-                </Button>
+                <button className={juntar(botao.icone, "mb-1 disabled:opacity-50")} type="button" onClick={() => void decidir(img, "aprovar")} aria-label="Aprovar" title="Aprovar">
+                  <Check className="h-4 w-4" aria-hidden="true" />
+                </button>
               )}
               {img && <BotaoConferirClone cloneId={c.id} imagemId={img.id} origem="folha" onConferencia={(x) => setConferencias({ ...conferencias, [img.id]: x })} />}
               {conf && <NotasDaSemelhanca c={conf} />}
@@ -1062,9 +1063,9 @@ function FolhaDeIdentidade({ aberto, visto, onVer }: { aberto: CloneAberto; vist
                     <ImagemDaFolhaNaTela imagem={img} alt={`${c.nome}, ${rotulo} (apagada)`} />
                   </Moldura>
                   <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground">{rotulo}</p>
-                  <Button type="button" size="sm" variant="ghost" className="h-7 w-full px-1 text-[11px]" onClick={() => void restaurar(img)}>
-                    <RotateCcw className="mr-1 h-3 w-3" /> Restaurar
-                  </Button>
+                  <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => void restaurar(img)} aria-label="Restaurar" title="Restaurar">
+                    <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                  </button>
                 </li>
               );
             })}
@@ -1217,27 +1218,20 @@ function AcoesDaVariacao({
       </p>
       <div className="flex min-w-0 flex-wrap items-center">
         <AprovarFoto foto={foto} onMudou={onMudou} />
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="mb-1.5 mr-1.5 h-8 text-[12px]"
-          onClick={() => void baixarUmaAUma(clientId, [foto]).catch(() => toast.error("Não foi possível baixar agora"))}
-          title="O arquivo original, sem ZIP"
-        >
-          <Download className="mr-1.5 h-3.5 w-3.5" /> Baixar original
-        </Button>
+        <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" onClick={() => void baixarUmaAUma(clientId, [foto]).catch(() => toast.error("Não foi possível baixar agora"))} title="O arquivo original, sem ZIP" aria-label="Baixar original">
+          <Download className="h-4 w-4" aria-hidden="true" />
+        </button>
         <MenuDeUso foto={foto} rotulo="Usar" variante="outline" className="mb-1.5 mr-1.5" />
         <AtalhosDaFoto foto={foto} />
         <BotaoConferirClone cloneId={clone.id} imagemId={foto.id} origem="acervo" onConferencia={setConferencia} />
         {onRefazer && (
-          <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={onRefazer} title="O mesmo pedido de novo; dá para escolher as fotos de origem">
-            <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Gerar de novo
-          </Button>
+          <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" onClick={onRefazer} title="O mesmo pedido de novo; dá para escolher as fotos de origem" aria-label="Gerar de novo">
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          </button>
         )}
-        <Button type="button" size="sm" variant="ghost" className="mb-1.5 h-8 text-[12px] text-muted-foreground" onClick={onApagar} title="Sai do acervo e fica em Apagadas (dá para restaurar)">
-          <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Apagar
-        </Button>
+        <button className={juntar(botao.icone, "mb-1.5 disabled:opacity-50")} type="button" onClick={onApagar} title="Sai do acervo e fica em Apagadas (dá para restaurar)" aria-label="Apagar">
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
+        </button>
       </div>
       {conferencia && <NotasDaSemelhanca c={conferencia} />}
       {foto.tags.indexOf("uniforme_da_marca") >= 0 && <p className="text-[11px] text-warning">Uniforme com a logo oficial: confira letras, cores e proporção da logo antes de aprovar.</p>}
@@ -1276,20 +1270,13 @@ function AcoesDaVistaGrande({ img, aberto }: { img: VistaDoClone; aberto: CloneA
             </button>
           </span>
         ) : (
-          <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => void decidir(img, "aprovar")}>
-            <Check className="mr-1.5 h-3.5 w-3.5" /> Aprovar vista
-          </Button>
+          <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" onClick={() => void decidir(img, "aprovar")} aria-label="Aprovar vista" title="Aprovar vista">
+            <Check className="h-4 w-4" aria-hidden="true" />
+          </button>
         )}
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="mb-1.5 mr-1.5 h-8 text-[12px]"
-          onClick={() => void baixarDoStorage(img.storage_bucket || "mesa", img.storage_path, `${c.nome} ${rotulo} gerada`).catch(() => toast.error("Não foi possível baixar agora"))}
-          title="O arquivo original, sem ZIP"
-        >
-          <Download className="mr-1.5 h-3.5 w-3.5" /> Baixar original
-        </Button>
+        <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" onClick={() => void baixarDoStorage(img.storage_bucket || "mesa", img.storage_path, `${c.nome} ${rotulo} gerada`).catch(() => toast.error("Não foi possível baixar agora"))} title="O arquivo original, sem ZIP" aria-label="Baixar original">
+          <Download className="h-4 w-4" aria-hidden="true" />
+        </button>
         <BotaoConferirClone cloneId={c.id} imagemId={img.id} origem="folha" onConferencia={setConferencia} />
       </div>
       {conferencia && <NotasDaSemelhanca c={conferencia} />}
@@ -1408,12 +1395,13 @@ function FotoDaExpressao({
                 type="button"
                 onClick={() => setEscolhendo((v) => !v)}
                 aria-label="Adicionar foto da expressão"
+                title="Adicionar foto da expressão"
                 aria-expanded={escolhendo}
                 className="relative block w-full rounded-lg border border-dashed border-primary/50 bg-card text-primary hover:bg-primary/5"
                 style={{ paddingBottom: "100%" }}
               >
-                <span className="absolute inset-0 flex flex-col items-center justify-center text-[10.5px]">
-                  <Plus className="mb-0.5 h-4 w-4" /> foto
+                <span className="absolute inset-0 flex items-center justify-center">
+                  <Plus className="h-5 w-5" aria-hidden="true" />
                 </span>
               </button>
             </li>
@@ -1783,10 +1771,9 @@ function ResultadosDoClone({ aberto, visto, onVer, qualidade }: { aberto: CloneA
               </button>
             )}
             {selecionadas.length > 0 && (
-              <Button type="button" size="sm" variant="outline" className="ml-auto h-7 px-2 text-[12px]" disabled={!!baixando} onClick={() => void baixar(selecionadas)} title="Uma a uma, sem ZIP, no tamanho original">
-                {baixando ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Download className="mr-1 h-3 w-3" />}
-                {baixando ? `${baixando.feitos} de ${baixando.total}` : `Baixar ${selecionadas.length}`}
-              </Button>
+              <button className={juntar(botao.icone, "ml-auto disabled:opacity-50")} type="button" disabled={!!baixando} onClick={() => void baixar(selecionadas)} title="Uma a uma, sem ZIP, no tamanho original" aria-label={baixando ? `${baixando.feitos} de ${baixando.total}` : `Baixar ${selecionadas.length}`}>
+                {baixando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
+              </button>
             )}
           </div>
           {variacoes.length === 0 && gerando === 0 ? (
@@ -1863,9 +1850,9 @@ function ResultadosDoClone({ aberto, visto, onVer, qualidade }: { aberto: CloneA
               {aberto.variacoes_arquivadas.map((f) => (
                 <li key={f.id} className="min-w-0" data-variacao-apagada={f.id}>
                   <MiniaturaDaFoto foto={f} />
-                  <Button type="button" size="sm" variant="ghost" className="h-7 w-full px-1 text-[11px]" onClick={() => void restaurarVariacao(f)} aria-label={`Restaurar ${f.nome}`}>
-                    <RotateCcw className="mr-1 h-3 w-3" /> Restaurar
-                  </Button>
+                  <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => void restaurarVariacao(f)} aria-label={`Restaurar ${f.nome}`} title="Restaurar">
+                    <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                  </button>
                 </li>
               ))}
             </ul>
@@ -2210,27 +2197,11 @@ function CabecalhoDoClone({ aberto, onAbrir, onApagado }: { aberto: CloneAberto;
           {!c.autorizacao_valida.ok && <p className="mt-0.5 text-[12px] font-medium text-warning [overflow-wrap:anywhere]">{c.autorizacao_valida.motivo || "Autorização inválida: nada novo pode ser gerado."}</p>}
         </div>
         <div className="flex shrink-0 items-center [&>*+*]:ml-1.5">
-          <button
-            type="button"
-            className={juntar(botao.secundario, "h-8 px-2 text-[12px] sm:px-3")}
-            disabled={ocupado || !c.autorizacao_valida.ok}
-            onClick={() => setDialogo("duplicar")}
-            title="Outro clone da mesma pessoa (outro visual), com as mesmas fotos e a mesma autorização"
-            aria-label="Duplicar"
-          >
-            <CopyPlus className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
-            <span className="hidden sm:inline">Duplicar</span>
+          <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={ocupado || !c.autorizacao_valida.ok} onClick={() => setDialogo("duplicar")} title="Outro clone da mesma pessoa (outro visual), com as mesmas fotos e a mesma autorização" aria-label="Duplicar">
+            <CopyPlus className="h-4 w-4" aria-hidden="true" />
           </button>
-          <button
-            type="button"
-            className={juntar(botao.secundario, "h-8 px-2 text-[12px] sm:px-3")}
-            disabled={ocupado}
-            onClick={() => setDialogo("transferir")}
-            title="Mover o clone, a folha e as fotos para o cliente certo"
-            aria-label="Transferir para outro cliente"
-          >
-            <ArrowRightLeft className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
-            <span className="hidden sm:inline">Transferir</span>
+          <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={ocupado} onClick={() => setDialogo("transferir")} title="Mover o clone, a folha e as fotos para o cliente certo" aria-label="Transferir para outro cliente">
+            <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
           </button>
           <MenuDoItem
             rotulo={`Mais opções do clone ${c.nome}`}
@@ -2348,9 +2319,9 @@ function ClonesArquivados({ onRestaurado }: { onRestaurado: (c: Clone) => void }
                   <span className="block truncate text-[13px] font-medium">{c.nome}</span>
                   {!c.autorizacao_valida.ok && <span className="block truncate text-[11px] text-warning">{c.autorizacao_valida.motivo || "autorização inválida"}</span>}
                 </span>
-                <Button type="button" size="sm" variant="ghost" className="h-8 shrink-0 px-2 text-[12px]" disabled={restaurando === c.id} onClick={() => void restaurar(c)} aria-label={`Restaurar ${c.nome}`}>
-                  {restaurando === c.id ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RotateCcw className="mr-1 h-3 w-3" />} Restaurar
-                </Button>
+                <button className={juntar(botao.icone, "shrink-0 disabled:opacity-50")} type="button" disabled={restaurando === c.id} onClick={() => void restaurar(c)} aria-label={`Restaurar ${c.nome}`} title="Restaurar">
+                  {restaurando === c.id ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RotateCcw className="h-4 w-4" aria-hidden="true" />}
+                </button>
               </li>
             ))}
           </ul>

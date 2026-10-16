@@ -247,8 +247,9 @@ export default function EtapaGuideline() {
                     ))}
                   </select>
                 )}
-                <button type="button" className={juntar(botao.secundario, "m-1 h-8")} disabled={!mudou || ocupado === "salvar"} onClick={() => void salvarVersao()}>
-                  {ocupado === "salvar" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />} Salvar versão
+                {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+                <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} aria-label="Salvar versão" title="Salvar versão" disabled={!mudou || ocupado === "salvar"} onClick={() => void salvarVersao()}>
+                  {ocupado === "salvar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 </button>
                 <MenuMais
                   className="m-1"
@@ -274,9 +275,10 @@ export default function EtapaGuideline() {
             <div className="-m-1 flex min-w-0 flex-wrap items-center">
               <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild disabled={!!ocupado}>
-                  <button type="button" className={juntar(botao.secundario, "m-1")} data-baixar-brandbook="">
-                    {ocupado === "pdf" || ocupado === "web" || ocupado === "pacote" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Download className="mr-1.5 h-4 w-4" />} Baixar
-                    <ChevronDown className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
+                  {/* 16/10/2026: só ícone (nome no aria-label e no title); os itens do menu ficam com texto. */}
+                  <button type="button" className={juntar(botao.icone, "m-1 w-auto px-1.5")} aria-label="Baixar" title="Baixar (PDF, página web ou pacote)" data-baixar-brandbook="">
+                    {ocupado === "pdf" || ocupado === "web" || ocupado === "pacote" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    <ChevronDown className="ml-0.5 h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" sideOffset={6} className="min-w-[180px] max-w-[calc(100vw-24px)] p-1">
@@ -322,12 +324,13 @@ export default function EtapaGuideline() {
               <button type="button" className={juntar(botao.primario, "m-1")} disabled={!!ocupado || !dados.logos.principal} title={!dados.logos.principal ? "Falta a logo principal" : undefined} onClick={enviarParaAprovacao} data-campo="enviar" data-enviar-brandbook="">
                 {ocupado === "aprovar" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />} {mudou ? "Salvar versão e enviar" : "Enviar para aprovação"}
               </button>
-              <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!!ocupado} onClick={publicar} data-publicar-brandbook="">
-                {ocupado === "publicar" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Globe2 className="mr-1.5 h-4 w-4" />} {mudou ? "Salvar e publicar" : publicado ? "Atualizar página" : "Publicar página"}
+              {/* 16/10/2026: só ícone (nome no aria-label e no title); o Enviar para aprovação (a ação principal) fica com texto. */}
+              <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} aria-label={mudou ? "Salvar e publicar" : publicado ? "Atualizar página" : "Publicar página"} title={mudou ? "Salvar e publicar" : publicado ? "Atualizar página" : "Publicar página"} disabled={!!ocupado} onClick={publicar} data-publicar-brandbook="">
+                {ocupado === "publicar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe2 className="h-4 w-4" />}
               </button>
               {publicado && (
-                <button type="button" className={juntar(botao.discreto, "m-1")} onClick={() => void copiarTexto(publicado).then((ok) => (ok ? toast.success("Link copiado") : toast.error("Não deu para copiar")))}>
-                  <Copy className="mr-1.5 h-4 w-4" /> Copiar link
+                <button type="button" className={juntar(botao.icone, "m-1")} aria-label="Copiar link" title="Copiar link" onClick={() => void copiarTexto(publicado).then((ok) => (ok ? toast.success("Link copiado") : toast.error("Não deu para copiar")))}>
+                  <Copy className="h-4 w-4" />
                 </button>
               )}
             </div>

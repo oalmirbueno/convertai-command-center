@@ -169,7 +169,8 @@ export default function EstudioSemTipografia({ clientId }: { clientId: string })
             rotulo={<><Sparkles className="h-4 w-4" aria-hidden="true" /><span className="sr-only">Sugerir da biblioteca</span></>}
             titulo="Sugerir a tipografia da biblioteca"
             descricao="O Jev escolhe um par de título e texto da biblioteca da agência pelo contexto da marca. Você vê o par e confirma antes de gravar."
-            variant="outline"
+            // 16/10/2026 (dono: "só o ícone, sem as bordinhas"): já era só o ícone; sai a borda.
+            variant="ghost"
             className="my-0.5 ml-2 h-8 shrink-0 text-[12px]"
             fecharAoConfirmar
             partes={(): ParteDaEstimativa[] => [{ modeloId: modelo ? modelo.id : undefined, tipo: "texto", tokensEntrada: TOKENS_DA_SUGESTAO.entrada, tokensSaida: TOKENS_DA_SUGESTAO.saida }]}

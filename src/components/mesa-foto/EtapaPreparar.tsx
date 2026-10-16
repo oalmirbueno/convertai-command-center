@@ -2,7 +2,7 @@ import "./espacoDaFoto.css";
 import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Crop, Images, Maximize2, Wand2 } from "lucide-react";
+import { Check, Crop, Images, Maximize2, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Ampliar } from "@/components/mesa/Ampliar";
 import { BotaoComCusto } from "@/components/mesa/Custo";
@@ -16,7 +16,7 @@ import { Cartao, MiniaturaDaFoto, SeloDaFoto, useMesaFoto, Vazio } from "./Comun
 import SeletorDeFotos from "./SeletorDeFotos";
 import SeletorDeGuia from "./SeletorDeGuia";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
-import { campo, campoTexto, foco, juntar } from "@/components/sistema/estilos";
+import { botao, campo, campoTexto, foco, juntar } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { BotaoTirarFundo } from "./EtapaAcervo";
@@ -190,9 +190,9 @@ export default function EtapaPreparar() {
                   </button>
                 ))}
               </div>
-              <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 px-2 text-[12px]" onClick={() => setEscolhendo(true)}>
-                <Images className="mr-1 h-3.5 w-3.5" /> Trocar
-              </Button>
+              <button className={juntar(botao.icone, "mb-1 disabled:opacity-50")} type="button" onClick={() => setEscolhendo(true)} aria-label="Trocar" title="Trocar">
+                <Images className="h-4 w-4" aria-hidden="true" />
+              </button>
               <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 px-2 text-[12px]" onClick={() => setAmpliada(0)} aria-label="Ver grande">
                 <Maximize2 className="h-3.5 w-3.5" />
               </Button>
@@ -204,19 +204,19 @@ export default function EtapaPreparar() {
             {(vista === "lado" || vista === "depois") && Depois}
           </div>
           <div className="mt-3 flex min-w-0 flex-wrap items-center">
-            <Button
+            <button
               type="button"
-              size="sm"
-              variant="outline"
-              className={juntar("mb-1.5 mr-2 h-8 text-[12px]", marcando && "border-primary bg-primary/10")}
+              className={juntar(botao.icone, "mb-1.5 mr-2", marcando && "bg-primary/10 text-primary")}
               onClick={() => {
                 setMarcando(!marcando);
                 if (!marcando && vista === "depois") setVista("lado");
               }}
               aria-pressed={marcando}
+              aria-label={marcando ? "Pronto" : "Marcar áreas protegidas"}
+              title={marcando ? "Pronto: parar de marcar" : "Marcar áreas protegidas"}
             >
-              <Crop className="mr-1.5 h-3.5 w-3.5" /> {marcando ? "Pronto" : "Marcar áreas protegidas"}
-            </Button>
+              {marcando ? <Check className="h-4 w-4" aria-hidden="true" /> : <Crop className="h-4 w-4" aria-hidden="true" />}
+            </button>
             <span className="mb-1.5 min-w-0 text-[12px] text-muted-foreground">
               {areas.length
                 ? `${areas.length} ${areas.length === 1 ? "área protegida" : "áreas protegidas"}: voltam com os pixels originais.`

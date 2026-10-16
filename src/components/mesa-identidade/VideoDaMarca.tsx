@@ -164,8 +164,9 @@ export default function VideoDaMarca({ titulo = "Vídeo da marca" }: { titulo?: 
                   </button>
                 )}
                 {f && prontos > 0 && (
-                  <button type="button" className={juntar(botao.discreto, "m-1 h-8")} disabled={ocupado === `aprovar-${f.id}`} onClick={() => void aprovar(f, links)}>
-                    {ocupado === `aprovar-${f.id}` ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />} Para aprovação
+                  // 16/10/2026: só ícone (nome no aria-label e no title).
+                  <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} disabled={ocupado === `aprovar-${f.id}`} onClick={() => void aprovar(f, links)} aria-label="Para aprovação" title="Mandar para aprovação">
+                    {ocupado === `aprovar-${f.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   </button>
                 )}
                 <Link className={juntar(botao.icone, "m-1 disabled:opacity-50")} to={enderecoDoFilme(v.filme_id)} aria-label="Mesa Motion" title="Mesa Motion">

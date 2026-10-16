@@ -21,7 +21,7 @@ export default function EstudioDaPauta({ item, trabalho, roteiro, arte, foco, on
       <div role="group" aria-label="Formato do estúdio" className="flex rounded-lg bg-muted p-1">
         {MODOS.map(({ id, nome, Icone }) => <button key={id} type="button" aria-label={nome} aria-pressed={modo === id} disabled={protegido && id !== automatico} title={protegido && id !== automatico ? 'Esta pauta já tem um trabalho. Crie outra pauta para mudar o tipo sem substituir o conteúdo.' : nome} onClick={() => { setAjuste(id); setEscolha(id); }} className={`flex h-8 w-8 items-center justify-center rounded-md text-[12px] disabled:opacity-40 ${modo === id ? 'bg-card shadow-sm' : ''}`}><Icone className="h-3.5 w-3.5" /></button>)}
       </div>
-      {modo !== "arte" && <button type="button" className="rounded-md border p-2" aria-label={foco ? 'Sair da tela cheia' : 'Tela cheia'} onClick={() => onFoco(!foco)}>{foco ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>}
+      {modo !== "arte" && <button type="button" className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={foco ? 'Sair da tela cheia' : 'Tela cheia'} title={foco ? 'Sair da tela cheia' : 'Tela cheia'} onClick={() => onFoco(!foco)}>{foco ? <Minimize2 className="h-4 w-4" aria-hidden="true" /> : <Maximize2 className="h-4 w-4" aria-hidden="true" />}</button>}
     </div>;
   return <ControlesDaPauta.Provider value={controles}><section className="flex min-h-0 min-w-0 flex-1 flex-col" data-modo-da-pauta={modo}>
     <Suspense fallback={<p role="status">Abrindo ferramentas…</p>}>

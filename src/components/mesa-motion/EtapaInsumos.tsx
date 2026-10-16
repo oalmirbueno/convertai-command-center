@@ -144,9 +144,9 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
             </span>
           ))}
         </div>
-        <label className={juntar(botao.secundario, "mt-2 cursor-pointer")}>
-          {subindo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="mr-1 h-3.5 w-3.5" />}
-          Subir prints
+        {/* 16/10/2026: só ícone, sem borda. */}
+        <label className={juntar(botao.icone, "mt-2 flex cursor-pointer")} aria-label="Subir prints" title="Subir prints">
+          {subindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
           <input type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden" onChange={(e) => void subir(e.target.files)} />
         </label>
         {q.data && q.data.imagens.length > 0 && (
@@ -213,9 +213,9 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
         <textarea className={campoTexto} value={notas} maxLength={1500} onChange={(e) => setNotas(e.target.value)} onBlur={() => void salvar({ insumos: { notas } })} placeholder="Despejo de ideias: o que o filme precisa mostrar, referências, o que evitar" aria-label="Ideias para o filme" />
       </Secao>
 
-      <button type="button" className={botao.primario} onClick={() => void salvar({ etapa: "entrevista" }).then(() => irPara("entrevista"))}>
-        Seguir para a entrevista
-        <ArrowRight className="ml-1 h-3.5 w-3.5" />
+      {/* 16/10/2026: só ícone; o destino vai no aria-label e no title. */}
+      <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => void salvar({ etapa: "entrevista" }).then(() => irPara("entrevista"))} aria-label="Seguir para a entrevista" title="Seguir para a entrevista">
+        <ArrowRight className="h-4 w-4" />
       </button>
     </div>
   );

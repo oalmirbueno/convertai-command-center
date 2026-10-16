@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Copy, Eraser, Film, Loader2, Music, Play, Sparkles, Star, Subtitles, Upload } from "lucide-react";
+import { ChevronDown, Copy, Eraser, FileText, Film, Loader2, Music, Play, Sparkles, Star, Subtitles, Upload } from "lucide-react";
 import MenuMais from "@/components/sistema/MenuMais";
 import JanelaDeTratamento from "./JanelaDeTratamento";
 import { agruparVariantes, categoriaDoArquivo, modoDaEntrada, rotuloDaVariante, type GrupoDeVariantes } from "../../../supabase/functions/mesa-videos/modulos/organizador-da-entrada";
@@ -227,23 +227,23 @@ function Transcricao({ videos }: { videos: ArquivoDeVideo[] }) {
                   ) : fala ? (
                     <>
                       <span className={juntar(etiqueta, "mr-1 bg-primary/10 text-primary")}>{fala.length} palavras</span>
-                      <button type="button" className={juntar(botao.discreto, "h-8 px-2 text-[12px]")} onClick={() => copiarTexto(tipo === "legendar" ? srtDasLinhas(linhas) : linhas.map((l) => l.texto).join("\n"))} aria-label={`Copiar ${tipo === "legendar" ? "legenda SRT" : "texto"} de ${t.nome}`}>
-                        <Copy className="h-3.5 w-3.5 sm:mr-1.5" />
-                        <span className="hidden sm:inline">{tipo === "legendar" ? "SRT" : "Texto"}</span>
+                      {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+                      <button type="button" className={botao.icone} onClick={() => copiarTexto(tipo === "legendar" ? srtDasLinhas(linhas) : linhas.map((l) => l.texto).join("\n"))} aria-label={`Copiar ${tipo === "legendar" ? "legenda SRT" : "texto"} de ${t.nome}`} title={tipo === "legendar" ? "Copiar a legenda (SRT)" : "Copiar o texto"}>
+                        <Copy className="h-4 w-4" />
                       </button>
                     </>
                   ) : (
                     <button
                       type="button"
-                      className={juntar(botao.secundario, "h-8 px-2.5 text-[12.5px]")}
+                      className={juntar(botao.icone, "w-auto px-1.5 disabled:pointer-events-none disabled:opacity-50")}
                       onClick={() => setConfirmando(t.id)}
                       disabled={!!rodando || !t.duracao_s}
                       aria-label={`${tipo === "legendar" ? "Legendar" : "Transcrever"} ${t.nome}`}
-                      title={t.duracao_s ? undefined : "Sem duração lida: abra o vídeo uma vez para ler."}
+                      title={t.duracao_s ? (tipo === "legendar" ? "Legendar" : "Transcrever") : "Sem duração lida: abra o vídeo uma vez para ler."}
                     >
-                      <Subtitles className="h-3.5 w-3.5 sm:mr-1.5" />
-                      <span className="hidden sm:inline">{tipo === "legendar" ? "Legendar" : "Transcrever"}</span>
-                      <span className="ml-1.5 hidden text-[11px] text-muted-foreground md:inline">{usd(custo)}</span>
+                      {/* 16/10/2026: só ícone; o preço continua visível ao lado. */}
+                      {tipo === "legendar" ? <Subtitles className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+                      <span className="ml-1 text-[11px] tabular-nums">{usd(custo)}</span>
                     </button>
                   )}
                 </div>
@@ -366,9 +366,10 @@ export default function EtapaEntrada({ irPara }: { irPara: IrPara }) {
             onChange={(e) => void enviar(e.target.files)}
           />
           {/* Um primário por área: na Transcrição o primário é o "Marcar por US$" de cada take. */}
-          <button type="button" className={parte === "videos" ? botao.primario : botao.secundario} disabled={!!subindo} onClick={() => entrada.current && entrada.current.click()} aria-label={subindo ? `Subindo ${subindo.feitos} de ${subindo.total}` : "Subir vídeos"}>
-            {subindo ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <Upload className="h-3.5 w-3.5 sm:mr-1.5" />}
-            <span className="hidden sm:inline">{subindo ? `Subindo ${subindo.feitos} de ${subindo.total}` : "Subir vídeos"}</span>
+          {/* 16/10/2026: só ícone; a contagem da subida vira número pequeno junto do ícone. */}
+          <button type="button" className={juntar(parte === "videos" ? botao.primario : botao.icone, parte === "videos" ? "h-8 px-2" : "w-auto px-1.5")} disabled={!!subindo} onClick={() => entrada.current && entrada.current.click()} aria-label={subindo ? `Subindo ${subindo.feitos} de ${subindo.total}` : "Subir vídeos"} title={subindo ? `Subindo ${subindo.feitos} de ${subindo.total}` : "Subir vídeos"}>
+            {subindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            {subindo && <span className="ml-1 text-[11px] tabular-nums">{subindo.feitos}/{subindo.total}</span>}
           </button>
         </div>
       </div>

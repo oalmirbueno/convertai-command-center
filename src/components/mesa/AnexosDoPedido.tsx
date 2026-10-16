@@ -164,10 +164,11 @@ export function BotaoDeAnexar({ anexos, className = "" }: { anexos: ControleDeAn
         disabled={anexos.cheio}
         aria-label="Anexar imagens"
         title={anexos.cheio ? `Até ${anexos.max} imagens` : "Anexar imagens ou prints (JPG, PNG, WEBP)"}
-        className={`inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-border bg-background px-2 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50 ${className}`}
+        // 16/10/2026 (dono: "só o ícone, sem as bordinhas"): sai a borda; o nome segue no aria-label e o detalhe no title.
+        className={`inline-flex h-8 shrink-0 items-center justify-center rounded-md px-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50 ${className}`}
       >
-        <ImagePlus className="h-4 w-4" />
-        {anexos.lista.length > 0 && <span className="ml-1 text-[11px]">{anexos.lista.length}/{anexos.max}</span>}
+        <ImagePlus className="h-4 w-4" aria-hidden="true" />
+        {anexos.lista.length > 0 && <span className="ml-1 text-[11px] tabular-nums" aria-hidden="true">{anexos.lista.length}/{anexos.max}</span>}
       </button>
       <input
         ref={entrada}

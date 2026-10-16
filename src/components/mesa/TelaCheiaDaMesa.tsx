@@ -189,8 +189,8 @@ export function BotaoDeTelaCheia({ tela, className = "" }: { tela: TelaCheiaDaMe
         tela.cheia ? "bg-muted text-foreground" : ""
       } ${className}`}
     >
-      {tela.cheia ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-      <span className="ml-1 hidden 2xl:inline">{tela.cheia ? "Sair" : "Tela cheia"}</span>
+      {/* 16/10/2026 (dono: "texto + ícone vira só o ícone"): o nome fica no title e no leitor de tela. */}
+      {tela.cheia ? <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" /> : <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />}
     </button>
   );
 }

@@ -199,7 +199,7 @@ export default function AgenteDaPublicidade({ rascunho, onRascunho }: { rascunho
               <p className="mr-2 hidden min-w-0 truncate text-[11px] text-muted-foreground sm:block">Enter envia; Shift+Enter quebra a linha</p>
               <div className="ml-auto flex min-w-0 items-center">
                 <Ditado valor={rascunho} onChange={onRascunho} disabled={enviando} className="mr-1.5 min-w-0" />
-                <button type="button" className={juntar(botao.primario, "h-9")} onClick={() => void enviar()} disabled={enviando || !rascunho.trim()} aria-label="Enviar ao agente">
+                <button type="button" className={juntar(botao.primario, "h-9")} onClick={() => void enviar()} disabled={enviando || !rascunho.trim()} aria-label="Enviar ao agente" title="Enviar ao agente">
                   {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </button>
               </div>

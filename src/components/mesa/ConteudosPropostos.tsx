@@ -25,6 +25,7 @@ import {
 import { avisoDaPauta, chaveDaLinhaDeEvolucao, SeloDaPauta, useTrocarAngulo } from "./MemoriaEditorialNoMes";
 // Frente CPY: os avisos do texto (motor de copy e lâminas) à vista no cartão, recolhidos.
 import { AvisosDoTexto } from "@/components/sistema/OpcoesDaCopy";
+import { botao, juntar } from "@/components/sistema/estilos";
 // 02/10: o mês por semana (uma linha por conteúdo, formato que troca, Mesa Foto ou Estúdio).
 import SemanasDoMes from "./SemanasDoMes";
 
@@ -87,9 +88,12 @@ export function CartaoDoConteudo({
             <button
               type="button"
               onClick={() => onAbrir(item.task_id as string, mesDaData(item.data))}
-              className="inline-flex items-center text-[11.5px] text-muted-foreground hover:text-foreground"
+              // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
+              className={botao.icone}
+              aria-label="Abrir no Estúdio"
+              title="Abrir no Estúdio"
             >
-              Abrir no Estúdio <ExternalLink className="ml-1 h-3 w-3" />
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
         </div>
@@ -270,9 +274,12 @@ export function BlocoDaProposta({
             <button
               type="button"
               onClick={() => onAbrirNoEstudio(primeiraTarefa.task_id as string, mesDaData(primeiraTarefa.data))}
-              className="inline-flex items-center font-medium text-primary hover:underline"
+              // 16/10/2026: só o ícone; o nome fica no title e no leitor de tela.
+              className={botao.icone}
+              aria-label="Abrir no Estúdio"
+              title="Abrir no Estúdio"
             >
-              Abrir no Estúdio <ExternalLink className="ml-1 h-3 w-3" />
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
         </div>
@@ -293,16 +300,15 @@ export function BlocoDaProposta({
             {rotuloGravar}
           </Button>
           {onAjustar && (
-            <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8" onClick={onAjustar}>
-              <Pencil className="mr-1.5 h-3.5 w-3.5" />
-              {rotuloAjustar}
-            </Button>
+            // 16/10/2026: Ajustar e Descartar viram só o ícone (o nome no title e no leitor de tela); Gravar segue com texto (ação principal).
+            <button type="button" className={juntar(botao.icone, "mb-1.5 mr-1.5")} onClick={onAjustar} aria-label={rotuloAjustar} title={rotuloAjustar}>
+              <Pencil className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
           {onDescartar && (
-            <Button type="button" size="sm" variant="ghost" className="mb-1.5 h-8 text-muted-foreground" onClick={onDescartar}>
-              <X className="mr-1 h-3.5 w-3.5" />
-              Descartar
-            </Button>
+            <button type="button" className={juntar(botao.icone, "mb-1.5")} onClick={onDescartar} aria-label="Descartar" title="Descartar">
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
         </div>
       )}

@@ -290,9 +290,12 @@ export default function PainelDeCustos({
             type="button"
             onClick={exportar}
             disabled={!linhas.length}
-            className={juntar(botao.secundario, "mb-1 h-8 px-2.5 text-[12px]")}
+            // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
+            className={juntar(botao.icone, "mb-1")}
+            aria-label="Exportar CSV"
+            title="Exportar CSV"
           >
-            <Download className="mr-1.5 h-3.5 w-3.5" /> Exportar CSV
+            <Download className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
         }
@@ -315,8 +318,8 @@ export default function PainelDeCustos({
       </div>
 
       {filtro && (
-        <button type="button" onClick={() => setFiltro("")} className="inline-flex items-center text-[13px] text-primary hover:underline">
-          <ArrowLeft className="mr-1 h-3.5 w-3.5" /> Ver todos os clientes
+        <button type="button" onClick={() => setFiltro("")} className={juntar(botao.icone, "text-primary")} aria-label="Ver todos os clientes" title="Ver todos os clientes">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
 

@@ -76,8 +76,8 @@ export default function SeletorLateral({
         )}
         <span className={juntar(texto.auxiliar, "ml-1.5 shrink-0 tabular-nums")}>{itens.length}</span>
         {ajuda && !recolhido && <AjudaRecolhida className="ml-1">{ajuda}</AjudaRecolhida>}
-        <button type="button" className={juntar(botao.secundario, "ml-auto h-8 px-2.5 text-[12px]")} onClick={onNovo} disabled={novoAberto}>
-          <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> {novoRotulo}
+        <button className={juntar(botao.icone, "ml-auto disabled:opacity-50")} type="button" onClick={onNovo} disabled={novoAberto} aria-label={novoRotulo} title={novoRotulo}>
+          <Plus className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
       {recolhido ? null : filtro && <div className="mb-2 min-w-0">{filtro}</div>}

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, Wand2 } from "lucide-react";
+import { Check, Palette } from "lucide-react";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoComCusto } from "@/components/mesa/Custo";
 import { botao, campo, juntar, lista, texto } from "@/components/sistema/estilos";
@@ -96,8 +96,9 @@ export default function GeradorDePaleta({ cores, onUsar }: { cores: Cor[]; onUsa
             ))}
           </select>
         </label>
-        <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!gerada.length} onClick={() => onUsar(gerada.map((c) => ({ nome: c.nome, papel: c.papel, hex: c.hex })), `harmonia ${explica ? explica.rotulo.toLowerCase() : ""}`)}>
-          <Check className="mr-1.5 h-4 w-4" /> Usar esta paleta
+        {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+        <button type="button" className={juntar(botao.icone, "m-1 mb-1.5 disabled:opacity-50")} disabled={!gerada.length} onClick={() => onUsar(gerada.map((c) => ({ nome: c.nome, papel: c.papel, hex: c.hex })), `harmonia ${explica ? explica.rotulo.toLowerCase() : ""}`)} aria-label="Usar esta paleta" title="Usar esta paleta">
+          <Check className="h-4 w-4" />
         </button>
       </div>
       {explica && <p className={juntar(texto.auxiliar, "mb-2")}>{explica.explica}</p>}
@@ -120,14 +121,23 @@ export default function GeradorDePaleta({ cores, onUsar }: { cores: Cor[]; onUsa
         <div className="mb-2 flex min-w-0 flex-wrap items-center">
           <span className={juntar(texto.rotulo, "m-1 min-w-0 flex-1")}>Três paletas do diretor de marca</span>
           <input className={juntar(campo, "m-1 h-8 w-56 text-[12px]")} value={pedido} maxLength={400} placeholder="Pedido (opcional)" onChange={(e) => setPedido(e.target.value)} aria-label="Pedido para as paletas" />
+          {/* 16/10/2026: só ícone, sem borda; o nome (e o modelo) vão para o leitor de tela e o title; o preço fica ao lado. */}
           <BotaoComCusto
-            rotulo={<RotuloComModelo rotulo={propostas.length ? "Propor de novo" : "Propor 3 paletas"} papel="identidade" modeloId={modeloId} />}
+            rotulo={
+              <>
+                <Palette className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">
+                  <RotuloComModelo rotulo={propostas.length ? "Propor de novo" : "Propor 3 paletas"} papel="identidade" modeloId={modeloId} />
+                </span>
+              </>
+            }
             titulo="Paletas da marca"
+            descricao={propostas.length ? "Propor de novo as 3 paletas do diretor" : "Propor 3 paletas do diretor"}
             partes={() => partesDoCusto(mesa.catalogo, "paletas", modeloId)}
             executar={() => chamarIdentidade<{ projeto: ProjetoDeIdentidade }>("paletas_propor", { projeto_id: projeto.id, modelo_id: modeloId || undefined, pedido: pedido.trim() || undefined })}
             aoConcluir={(d) => guardar(d && d.projeto)}
-            variant="outline"
-            className="m-1 h-8"
+            variant="ghost"
+            className="m-1 h-8 gap-1 px-2"
           />
         </div>
         {propostas.length > 0 && (
@@ -143,8 +153,9 @@ export default function GeradorDePaleta({ cores, onUsar }: { cores: Cor[]; onUsa
                   <Faixa cores={p.cores} altura={36} />
                   {p.avisos.length > 0 && <span className={juntar(texto.auxiliar, "mt-1 block text-warning")}>{p.avisos[0]}</span>}
                 </span>
-                <button type="button" className={juntar(botao.icone, "ml-2 shrink-0 disabled:opacity-50")} onClick={() => onUsar(p.cores.map((c) => ({ nome: c.nome, papel: c.papel, hex: c.hex })), `proposta ${p.nome}`)} aria-label="Usar" title="Usar">
-                  <Wand2 className="h-4 w-4" aria-hidden="true" />
+                {/* 16/10/2026: o mesmo Check do "Usar esta paleta" (mesma ação); a varinha não diz "usar". */}
+                <button type="button" className={juntar(botao.icone, "ml-2 shrink-0 disabled:opacity-50")} onClick={() => onUsar(p.cores.map((c) => ({ nome: c.nome, papel: c.papel, hex: c.hex })), `proposta ${p.nome}`)} aria-label="Usar" title="Usar esta paleta">
+                  <Check className="h-4 w-4" aria-hidden="true" />
                 </button>
               </li>
             ))}

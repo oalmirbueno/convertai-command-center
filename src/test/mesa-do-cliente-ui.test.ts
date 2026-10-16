@@ -154,7 +154,8 @@ describe("Gerar todas: até 3 ao mesmo tempo, uma por vez no carrossel contínuo
     expect(roteiro.instrucao).toBeUndefined();
     expect(estudio).toContain("corpoDoPreparar(item.id, escolhas, { postUnico, modeloImagemId: modeloImagem || undefined, qualidade })");
     expect(estudio).toContain('modo: "diretor"');
-    const gratis = prepararDoEstudio.slice(prepararDoEstudio.indexOf('modo === "roteiro" ? ('), prepararDoEstudio.indexOf("Montar do roteiro · grátis"));
+    // 16/10/2026: o botão grátis virou só o ícone; o nome fica no aria-label/title "Montar do roteiro (grátis)".
+    const gratis = prepararDoEstudio.slice(prepararDoEstudio.indexOf('modo === "roteiro" ? ('), prepararDoEstudio.indexOf("Montar do roteiro (grátis)"));
     expect(gratis).toContain("<Button");
     expect(gratis).not.toContain("BotaoComCusto");
     // Frente R3: com lâmina acima do limite de texto, o roteiro mostra o custo da chamada curta que enxuga.

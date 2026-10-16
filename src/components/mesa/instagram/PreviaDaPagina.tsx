@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { ExternalLink } from "lucide-react";
-import { juntar, texto } from "@/components/sistema/estilos";
+import { ExternalLink, Facebook } from "lucide-react";
+import { botao, juntar, texto } from "@/components/sistema/estilos";
 import { FotoDoPerfil } from "./PreviaDoPerfil";
 import { numeroDoPerfil, type PaginaNaPrevia } from "./instagramApi";
 import { dataEHoraCurta } from "../PublicacaoDaPeca";
@@ -46,9 +46,9 @@ export default function PreviaDaPagina({ pagina, carregando }: { pagina: PaginaN
             </a>
           )}
           {pagina.link && (
-            <a href={pagina.link} target="_blank" rel="noreferrer" className="inline-flex items-center text-[12.5px] text-muted-foreground hover:text-foreground">
-              <ExternalLink className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-              Abrir no Facebook
+            // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
+            <a href={pagina.link} target="_blank" rel="noreferrer" className={botao.icone} aria-label="Abrir no Facebook" title="Abrir no Facebook">
+              <Facebook className="h-4 w-4" aria-hidden="true" />
             </a>
           )}
         </div>

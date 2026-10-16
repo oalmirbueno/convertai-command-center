@@ -5,7 +5,7 @@ import { ImagemDaMesa } from "@/components/mesa/MesaContexto";
 import type { Trabalho } from "@/components/mesa/useItensDoMes";
 import { CabecalhoDeSecao } from "@/components/sistema/Secao";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { juntar } from "@/components/sistema/estilos";
+import { botao, juntar } from "@/components/sistema/estilos";
 import { ehOMelhor, formatoDe, notaCurta, type CriativoAds, type PlanoAds } from "./adsApi";
 import { capaDoTrabalho } from "./ArteDoCriativo";
 import KitDeRecepcao from "./KitDeRecepcao";
@@ -138,9 +138,9 @@ export default function AcervoDoEstudio({
                     </Button>
                   )}
                   {tiraveis.length > 0 && doGrupo.length === 0 && (
-                    <Button type="button" size="sm" variant="ghost" className="h-8 text-muted-foreground" disabled={enviando(tiraveis)} onClick={() => void onTirar(tiraveis)} title="Volta a rascunho: o agente da conta deixa de usar como candidato. Nada é apagado.">
-                      <Undo2 className="mr-1 h-3.5 w-3.5" /> Tirar da conta
-                    </Button>
+                    <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={enviando(tiraveis)} onClick={() => void onTirar(tiraveis)} title="Volta a rascunho: o agente da conta deixa de usar como candidato. Nada é apagado." aria-label="Tirar da conta">
+                      <Undo2 className="h-4 w-4" aria-hidden="true" />
+                    </button>
                   )}
                 </>
               }
@@ -174,8 +174,8 @@ export default function AcervoDoEstudio({
                           {c.copy.texto_principal && <span className="line-clamp-2 block text-muted-foreground [overflow-wrap:anywhere]">{c.copy.texto_principal}</span>}
                         </span>
                       )}
-                      <button type="button" className="mt-1 inline-flex items-center text-[11.5px] font-medium text-primary hover:underline" onClick={() => onAbrir(c.id)}>
-                        Abrir <ArrowUpRight className="ml-0.5 h-3 w-3" />
+                      <button className={juntar(botao.icone, "mt-1 text-primary disabled:opacity-50")} type="button" onClick={() => onAbrir(c.id)} aria-label="Abrir" title="Abrir">
+                        <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
                       </button>
                     </span>
                   </li>

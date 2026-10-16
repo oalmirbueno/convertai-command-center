@@ -149,9 +149,9 @@ export default function LateralDaPrevia({
               <li key={s.uid} className={juntar(lista.linha, "py-1.5 opacity-70")} data-secao-oculta={s.uid}>
                 <span aria-hidden="true" className="mr-2 inline-block h-2 w-2 shrink-0 rounded-full bg-border" />
                 <span className="mr-1 min-w-0 flex-1 truncate text-[13px] line-through">{s.rotulo}</span>
-                <button type="button" className={juntar(botao.discreto, "h-7 px-1.5 text-[12px]")} disabled={ocupado} onClick={() => onEditar({ tipo: "secao_visivel", secao: s.uid, visivel: true })}>
-                  <Eye className="mr-1 h-3.5 w-3.5" />
-                  Mostrar
+                {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+                <button type="button" className={juntar(botao.icone, "h-7 w-7")} aria-label={`Mostrar ${s.rotulo}`} title="Mostrar no site" disabled={ocupado} onClick={() => onEditar({ tipo: "secao_visivel", secao: s.uid, visivel: true })}>
+                  <Eye className="h-3.5 w-3.5" />
                 </button>
               </li>
             ))}

@@ -26,6 +26,7 @@ import {
   type Tomada,
   type VersaoDaTomada,
 } from "./fotoApi";
+import { botao, juntar } from "@/components/sistema";
 
 /**
  * Usar de verdade (pedido do dono, 25/09: "eu tenho que usar o gerado e ele
@@ -296,28 +297,29 @@ export function AtalhosDaFoto({ foto, className = "" }: { foto: FotoDoAcervo; cl
       setOcupado("");
     }
   };
-  const botao = `mb-1.5 mr-1.5 h-8 px-2.5 text-[12px] ${className}`;
+  // 16/10/2026 (dono: "deixa só o ícone"): atalhos só com ícone; o nome no title e no aria-label.
+  const atalho = juntar(botao.icone, "mb-1.5 mr-1.5", className);
   return (
     <span className="inline-flex min-w-0 flex-wrap items-center" data-atalhos-da-foto={foto.id}>
       {abrirNoEstudio && (
-        <Button type="button" size="sm" variant="outline" className={botao} onClick={() => abrirNoEstudio(foto.id)} title="Abre no Estúdio de fotos: luz, cor, fundo, cenário, ângulo, ampliar">
-          <SlidersHorizontal className="mr-1 h-3.5 w-3.5" /> Estúdio
-        </Button>
+        <button type="button" className={atalho} onClick={() => abrirNoEstudio(foto.id)} title="Abre no Estúdio de fotos: luz, cor, fundo, cenário, ângulo, ampliar" aria-label="Estúdio">
+          <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+        </button>
       )}
       {prepararNaAgenda && (
-        <Button type="button" size="sm" variant="outline" className={botao} onClick={() => prepararNaAgenda([foto.id])} title="Post na Agenda: legenda, data e aprovação do cliente">
-          <CalendarPlus className="mr-1 h-3.5 w-3.5" /> Agenda
-        </Button>
+        <button type="button" className={atalho} onClick={() => prepararNaAgenda([foto.id])} title="Post na Agenda: legenda, data e aprovação do cliente" aria-label="Agenda">
+          <CalendarPlus className="h-4 w-4" aria-hidden="true" />
+        </button>
       )}
-      <Button type="button" size="sm" variant="outline" className={botao} disabled={!!ocupado} onClick={() => void nasMesas("arte")} title={precisaAprovar(foto) ? "Aprova e abre a arte rápida da Mesa com esta foto e a campanha em uso" : "Abre a arte rápida da Mesa com esta foto e a campanha em uso: preço, campanha, data"}>
-        {ocupado === "arte" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Zap className="mr-1 h-3.5 w-3.5" />} Arte
-      </Button>
-      <Button type="button" size="sm" variant="outline" className={botao} disabled={!!ocupado} onClick={() => void nasMesas("mesa")} title={precisaAprovar(foto) ? "Aprova e abre o Estúdio da Mesa com esta foto" : "Abre o Estúdio da Mesa com esta foto"}>
-        {ocupado === "mesa" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <PenTool className="mr-1 h-3.5 w-3.5" />} Mesa
-      </Button>
-      <Button type="button" size="sm" variant="outline" className={botao} disabled={!!ocupado} onClick={() => void nasMesas("ads")} title={precisaAprovar(foto) ? "Aprova e abre o Estúdio da Mesa Ads com esta foto" : "Abre o Estúdio da Mesa Ads com esta foto"}>
-        {ocupado === "ads" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Megaphone className="mr-1 h-3.5 w-3.5" />} Mesa Ads
-      </Button>
+      <button type="button" className={atalho} disabled={!!ocupado} onClick={() => void nasMesas("arte")} title={precisaAprovar(foto) ? "Aprova e abre a arte rápida da Mesa com esta foto e a campanha em uso" : "Abre a arte rápida da Mesa com esta foto e a campanha em uso: preço, campanha, data"} aria-label="Arte">
+        {ocupado === "arte" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Zap className="h-4 w-4" aria-hidden="true" />}
+      </button>
+      <button type="button" className={atalho} disabled={!!ocupado} onClick={() => void nasMesas("mesa")} title={precisaAprovar(foto) ? "Aprova e abre o Estúdio da Mesa com esta foto" : "Abre o Estúdio da Mesa com esta foto"} aria-label="Mesa">
+        {ocupado === "mesa" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <PenTool className="h-4 w-4" aria-hidden="true" />}
+      </button>
+      <button type="button" className={atalho} disabled={!!ocupado} onClick={() => void nasMesas("ads")} title={precisaAprovar(foto) ? "Aprova e abre o Estúdio da Mesa Ads com esta foto" : "Abre o Estúdio da Mesa Ads com esta foto"} aria-label="Mesa Ads">
+        {ocupado === "ads" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Megaphone className="h-4 w-4" aria-hidden="true" />}
+      </button>
     </span>
   );
 }
@@ -395,20 +397,12 @@ export function DecisaoRapida({
   }
   return (
     <span className="inline-flex min-w-0 flex-wrap items-center" data-decisao-rapida="">
-      <Button type="button" size="sm" variant="outline" className={`mb-1 mr-1 h-8 border-success/50 text-[12px] text-success hover:bg-success/10 hover:text-success ${compacta ? "px-2" : "px-2.5"}`} disabled={decidindo} onClick={() => void decidir("aprovar")}>
-        {decidindo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />} Aprovar
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        className="mb-1 mr-1 h-8 px-2 text-[12px] text-destructive hover:text-destructive"
-        disabled={decidindo}
-        onClick={() => setRejeitando(true)}
-        aria-label={`Rejeitar ${tomada.nome}`}
-      >
-        <X className="mr-0.5 h-3.5 w-3.5" /> {compacta ? "" : "Rejeitar"}
-      </Button>
+      <button type="button" className={juntar(botao.icone, "mb-1 mr-1 text-success hover:bg-success/10 hover:text-success")} disabled={decidindo} onClick={() => void decidir("aprovar")} aria-label="Aprovar" title="Aprovar">
+        {decidindo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
+      </button>
+      <button className={juntar(botao.icone, "mb-1 mr-1 text-destructive hover:text-destructive disabled:opacity-50")} type="button" disabled={decidindo} onClick={() => setRejeitando(true)} aria-label={`Rejeitar ${tomada.nome}`} title="Rejeitar">
+        <X className="h-4 w-4" aria-hidden="true" />
+      </button>
     </span>
   );
 }

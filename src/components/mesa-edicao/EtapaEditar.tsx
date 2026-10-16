@@ -91,9 +91,9 @@ function ComputadorDoAgente() {
       resumo="Desligado"
       ajuda="Um agente que opera um programa de computador (organizar o projeto no Premiere, por exemplo). Nenhuma tarefa roda sem aprovação do dono, nada com senha de cliente passa pelo painel e cada passo deixa um print como prova."
       acao={
-        <button type="button" className={botao.discreto} disabled title="Desligado. Desenho em docs/motores/COMPUTADOR-DO-AGENTE.md" aria-label="Pedir tarefa">
-          <Monitor className="h-3.5 w-3.5 sm:mr-1.5" />
-          <span className="hidden sm:inline">Pedir tarefa</span>
+        // 16/10/2026: só ícone (nome no aria-label e no title).
+        <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} disabled title="Pedir tarefa (desligado; desenho em docs/motores/COMPUTADOR-DO-AGENTE.md)" aria-label="Pedir tarefa">
+          <Monitor className="h-4 w-4" />
         </button>
       }
       data-computador-do-agente="desligado"
@@ -303,13 +303,12 @@ export default function EtapaEditar({ irPara }: { irPara: IrPara }) {
           acao={
             <>
               {trocaDeParte}
-              <button type="button" className={botao.secundario} onClick={() => void salvarVersao()} disabled={salvando || !pacote.resumo.takes} aria-label="Salvar como versão">
-                {salvando ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <Save className="h-3.5 w-3.5 sm:mr-1.5" />}
-                <span className="hidden sm:inline">Salvar versão</span>
+              {/* 16/10/2026: só ícones, sem borda (nome no aria-label e no title). */}
+              <button type="button" className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} onClick={() => void salvarVersao()} disabled={salvando || !pacote.resumo.takes} aria-label="Salvar como versão" title="Salvar como versão">
+                {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               </button>
-              <button type="button" className={botao.primario} onClick={() => void baixar()} disabled={baixando || !pacote.resumo.takes} aria-label="Baixar pacote">
-                {baixando ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <Download className="h-3.5 w-3.5 sm:mr-1.5" />}
-                <span className="hidden sm:inline">Baixar pacote</span>
+              <button type="button" className={juntar(botao.primario, "ml-1 w-9 px-0")} onClick={() => void baixar()} disabled={baixando || !pacote.resumo.takes} aria-label="Baixar pacote" title="Baixar pacote (ZIP)">
+                {baixando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               </button>
             </>
           }

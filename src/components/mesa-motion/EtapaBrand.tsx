@@ -190,9 +190,9 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
             </li>
           ))}
         </ol>
-        <button type="button" className={juntar(botao.discreto, "mt-2")} onClick={() => setB({ ...b, beats: b.beats.concat([{ momento: "gancho", texto: "", duracao_s: 4 }]) })}>
-          <Plus className="mr-1 h-3.5 w-3.5" />
-          Momento
+        {/* 16/10/2026: só ícone; "Gerar BRAND.md" fica com texto (ação principal da etapa). */}
+        <button type="button" className={juntar(botao.icone, "mt-2 flex")} onClick={() => setB({ ...b, beats: b.beats.concat([{ momento: "gancho", texto: "", duracao_s: 4 }]) })} aria-label="Novo momento" title="Novo momento">
+          <Plus className="h-4 w-4" />
         </button>
       </Secao>
 
@@ -200,9 +200,9 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
         <pre className={juntar(texto.corpo, "whitespace-pre-wrap [overflow-wrap:anywhere]")}>{md}</pre>
       </Secao>
 
-      <button type="button" className={botao.primario} disabled={!b.essencia} onClick={() => void chamarMotion<{ filme: Filme }>("filme_salvar", { filme_id: filme.id, etapa: "storyboards" }).then((d) => (guardar(d.filme), irPara("storyboards"))).catch((e) => avisarErro(e, "Não foi salvo"))}>
-        Seguir para os storyboards
-        <ArrowRight className="ml-1 h-3.5 w-3.5" />
+      {/* 16/10/2026: só ícone; o destino vai no aria-label e no title. */}
+      <button type="button" className={juntar(botao.primario, "w-9 px-0")} disabled={!b.essencia} onClick={() => void chamarMotion<{ filme: Filme }>("filme_salvar", { filme_id: filme.id, etapa: "storyboards" }).then((d) => (guardar(d.filme), irPara("storyboards"))).catch((e) => avisarErro(e, "Não foi salvo"))} aria-label="Seguir para os storyboards" title="Seguir para os storyboards">
+        <ArrowRight className="h-4 w-4" />
       </button>
     </div>
   );

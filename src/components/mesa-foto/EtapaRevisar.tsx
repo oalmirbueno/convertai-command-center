@@ -11,7 +11,7 @@ import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { padraoPara, usd } from "@/lib/mesa/api";
 import { Cartao, FotoInteira, MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto, Vazio } from "./Comuns";
 import { Carregando } from "@/components/sistema/Estados";
-import { juntar, superficie } from "@/components/sistema/estilos";
+import { botao, juntar, superficie } from "@/components/sistema/estilos";
 import { MenuDeUso, MOTIVOS_RAPIDOS } from "./UsoDaFoto";
 import {
   chaveDosEnsaios,
@@ -95,9 +95,9 @@ function Rejeitar({ onRejeitar, ocupado }: { onRejeitar: (motivo: string) => voi
   const [motivo, setMotivo] = useState("");
   if (!aberto) {
     return (
-      <Button type="button" size="sm" variant="ghost" className="mb-1 mr-1 h-8 px-2 text-[12px] text-destructive hover:text-destructive" onClick={() => setAberto(true)} disabled={ocupado}>
-        <X className="mr-1 h-3.5 w-3.5" /> Rejeitar
-      </Button>
+      <button className={juntar(botao.icone, "mb-1 mr-1 text-destructive hover:text-destructive disabled:opacity-50")} type="button" onClick={() => setAberto(true)} disabled={ocupado} aria-label="Rejeitar" title="Rejeitar">
+        <X className="h-4 w-4" aria-hidden="true" />
+      </button>
     );
   }
   return (
@@ -188,9 +188,9 @@ function CartaoDaVersao({
         </div>
       )}
       <div className="mt-1.5 flex min-w-0 flex-wrap items-center">
-        <Button type="button" size="sm" variant="ghost" className="mb-1 mr-1 h-8 px-2 text-[12px]" onClick={onComparar}>
-          <Columns2 className="mr-1 h-3.5 w-3.5" /> Comparar
-        </Button>
+        <button className={juntar(botao.icone, "mb-1 mr-1 disabled:opacity-50")} type="button" onClick={onComparar} aria-label="Comparar" title="Comparar">
+          <Columns2 className="h-4 w-4" aria-hidden="true" />
+        </button>
         {!conferencia && !versao.rejeitada && (
           <BotaoComCusto
             rotulo={
@@ -216,9 +216,9 @@ function CartaoDaVersao({
         {fotoAprovada && <MenuDeUso foto={fotoAprovada} className="mb-1 mr-1" />}
         {!travada && !versao.rejeitada && (
           <>
-            <Button type="button" size="sm" variant="outline" className="mb-1 mr-1 h-8 border-success/50 px-2.5 text-[12px] text-success hover:bg-success/10 hover:text-success" disabled={decidindo} onClick={() => void decidir("aprovar")}>
-              {decidindo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />} Aprovar
-            </Button>
+            <button className={juntar(botao.icone, "mb-1 mr-1 text-success hover:bg-success/10 hover:text-success disabled:opacity-50")} type="button" disabled={decidindo} onClick={() => void decidir("aprovar")} aria-label="Aprovar" title="Aprovar">
+              {decidindo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
+            </button>
             <Rejeitar ocupado={decidindo} onRejeitar={(m) => void decidir("rejeitar", m)} />
           </>
         )}

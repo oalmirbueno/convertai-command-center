@@ -1,8 +1,7 @@
 import { CalendarPlus, Megaphone, PackagePlus, PenTool, Shuffle, SlidersHorizontal, type LucideIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { juntar } from "@/components/sistema/estilos";
+import { botao, juntar } from "@/components/sistema/estilos";
 import { useMesaFoto } from "./Comuns";
 import { gravarNaSessao } from "./sessao";
 import { useLevarParaAsMesas } from "./UsoDaFoto";
@@ -76,18 +75,9 @@ export default function DepoisDeAprovar({ fotos, onFeito, className = "" }: { fo
       {opcoes.map((o, i) => {
         const Icone = o.icone;
         return (
-          <Button
-            key={o.acao}
-            type="button"
-            size="sm"
-            variant={i === 0 ? "default" : "outline"}
-            className="mb-1 mr-1.5 h-8 px-2.5 text-[12px]"
-            title={o.dica}
-            onClick={() => executar(o.acao)}
-            data-proxima-acao={o.acao}
-          >
-            <Icone className="mr-1.5 h-3.5 w-3.5" /> {o.rotulo}
-          </Button>
+          <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50", (i === 0) && "bg-primary/10 text-primary")} key={o.acao} type="button" title={o.dica} onClick={() => executar(o.acao)} data-proxima-acao={o.acao} aria-label={o.rotulo}>
+            <Icone className="h-4 w-4" aria-hidden="true" />
+          </button>
         );
       })}
       <AjudaRecolhida className="mb-1" rotulo="O que cada saída faz">

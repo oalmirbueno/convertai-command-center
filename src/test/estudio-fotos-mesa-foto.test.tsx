@@ -132,7 +132,9 @@ describe("ferramenta Fotos: Acervo | Mesa Foto | Subir", () => {
   it("aba Mesa Foto lê só origem mesa_foto, abre nas aprovadas e grava a escolha na hora, sem upload", async () => {
     const onSalvar = vi.fn().mockResolvedValue(undefined);
     montar(h(EstudioFotos, { card: { ordem: 3, fotos_livres: [] }, ocupado: false, temArte: false, onSalvar }));
-    expect(screen.getAllByRole("tab").map((t) => t.textContent && t.textContent.trim())).toEqual(["Acervo", "Mesa Foto", "Subir"]);
+    // 16/10/2026 (dono: "texto + ícone vira só o ícone"): a aba é só o ícone; o nome fica no aria-label e no title.
+    expect(screen.getAllByRole("tab").map((t) => t.getAttribute("aria-label"))).toEqual(["Acervo", "Mesa Foto", "Subir"]);
+    expect(screen.getAllByRole("tab").map((t) => t.getAttribute("title"))).toEqual(["Acervo", "Mesa Foto", "Subir"]);
     fireEvent.click(screen.getByRole("tab", { name: /Mesa Foto/ }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Usar nesta lâmina: Foto a1" })).toBeTruthy());
     expect(mock.filtros).toContain("cliente_imagens.origem=mesa_foto");

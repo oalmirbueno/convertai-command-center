@@ -149,16 +149,16 @@ export default function SugestaoDeDestaques({ sugestao, lista, onUsar }: { suges
                 {usada ? "Em uso na lista" : "Usar esta sugestão"}
               </button>
             )}
-            <button type="button" className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")} onClick={() => void pedir(false, false)} disabled={rodando}>
-              <RefreshCw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-              Estrutura base
+            {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
+            <button type="button" className={botao.icone} onClick={() => void pedir(false, false)} disabled={rodando} aria-label="Estrutura base" title="Estrutura base (sem IA)">
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
             </button>
             <BotaoComCusto
               rotulo={
-                <span className="inline-flex items-center">
-                  <Sparkles className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                  Criar os da marca
-                </span>
+                <>
+                  <Sparkles className="h-4 w-4" aria-hidden="true" />
+                  <span className="sr-only">Criar os da marca</span>
+                </>
               }
               titulo="Destaques com IA"
               descricao="O modelo cria 8 destaques com nome e conceito da marca; o Jev escolhe (os típicos só completam)."

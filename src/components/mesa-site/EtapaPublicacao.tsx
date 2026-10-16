@@ -195,9 +195,9 @@ export default function EtapaPublicacao({ site }: { site: LinhaDoSite }) {
         ajuda="Publicar leva o site para a Vercel (a conta da agência) e liga o domínio do cliente. Só funciona com a chave VERCEL_TOKEN no cofre do servidor e no worker. Enquanto isso, baixe o site em zip: é um projeto Vite completo, pronto para qualquer hospedagem."
         acao={
           <>
-            <button type="button" className={juntar(botao.secundario, "mr-2")} disabled={!!ocupado || !!zipAberto} onClick={() => void baixar()} data-baixar-zip="">
-              {ocupado === "O zip não saiu" || zipAberto ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1 h-3.5 w-3.5" />}
-              {zipAberto ? "Guardando o código" : pediuZip && zipPronto ? "Baixar agora" : "Baixar o site (zip)"}
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). O Publicar ao lado mantém o texto: é a ação principal única da etapa. */}
+            <button type="button" className={juntar(botao.icone, "mr-2")} aria-label={zipAberto ? "Guardando o código" : pediuZip && zipPronto ? "Baixar agora" : "Baixar o site (zip)"} title={zipAberto ? "Guardando o código" : pediuZip && zipPronto ? "Baixar agora" : "Baixar o site (zip)"} disabled={!!ocupado || !!zipAberto} onClick={() => void baixar()} data-baixar-zip="">
+              {ocupado === "O zip não saiu" || zipAberto ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             </button>
             <button type="button" className={botao.primario} disabled={!podePublicar || !!ocupado} onClick={() => setConfirmando(true)} title={faltas.length ? `Falta: ${faltas.join("; ")}` : undefined} data-publicar="">
               <Rocket className="mr-1 h-3.5 w-3.5" />
@@ -251,9 +251,9 @@ export default function EtapaPublicacao({ site }: { site: LinhaDoSite }) {
           ajuda="Crie estes registros no painel do registrador. Os valores vêm da Vercel quando o site é publicado; a propagação leva de minutos a algumas horas. Verificar consulta a Vercel de novo."
           acao={
             e.vercel_ligada ? (
-              <button type="button" className={botao.secundario} disabled={!!ocupado} onClick={() => void verificar()}>
-                <RefreshCw className="mr-1 h-3.5 w-3.5" />
-                Verificar
+              // 16/10/2026: só ícone (nome no aria-label e no title).
+              <button type="button" className={botao.icone} aria-label="Verificar" title="Verificar o DNS" disabled={!!ocupado} onClick={() => void verificar()}>
+                <RefreshCw className="h-4 w-4" />
               </button>
             ) : null
           }

@@ -8,6 +8,7 @@ import { usd } from "@/lib/mesa/api";
 import { chamarAcaoDoAgente, type AcaoDoAgente, type RespostaDaAcao } from "@/lib/agentes/acoesDoAgente";
 import { atualizarTelasDepoisDoDiretor, confirmarGeracaoItemAItem, custoDaProposta, executarItemDoDiretor, type RespostaDoItem } from "./diretorApi";
 import ProvaDoDiretor from "./ProvaDoDiretor";
+import { botao, juntar } from "@/components/sistema";
 
 /**
  * Cartão das fotos que o diretor vai gerar (proposta paga, agente
@@ -105,9 +106,9 @@ export default function CartaoDaGeracao({
               Gerar {faltam} {faltam === 1 ? "foto" : "fotos"}{jaFeitas ? ` que ${faltam === 1 ? "falta" : "faltam"}` : ""} · {textoDoCusto}
             </Button>
             {ocupado && andamento && (
-              <Button type="button" size="sm" variant="outline" className="mb-1 h-8" onClick={() => (parar.current = true)} data-parar-geracao="">
-                <Square className="mr-1.5 h-3.5 w-3.5" /> Parar
-              </Button>
+              <button className={juntar(botao.icone, "mb-1 disabled:opacity-50")} type="button" onClick={() => (parar.current = true)} data-parar-geracao="" aria-label="Parar" title="Parar">
+                <Square className="h-4 w-4" aria-hidden="true" />
+              </button>
             )}
           </>
         )}

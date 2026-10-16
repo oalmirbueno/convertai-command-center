@@ -1,5 +1,5 @@
 import { lazy, Suspense, useRef, useState } from "react";
-import { Eraser, ImagePlus, Loader2, Pipette, Plus, RefreshCcw, Trash2, Upload } from "lucide-react";
+import { Eraser, ImagePlus, ListPlus, Loader2, Pipette, Plus, RefreshCcw, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { PreencherComIA } from "@/components/sistema";
@@ -275,8 +275,9 @@ export default function EtapaSistema() {
         data-bloco-da-etapa="paleta"
         acao={
           <>
-            <button type="button" className={juntar(botao.discreto, "m-1 h-8")} onClick={() => void tirarPaleta()} disabled={ocupado === "paleta-logo"}>
-              {ocupado === "paleta-logo" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Pipette className="mr-1.5 h-3.5 w-3.5" />} Da logo
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+            <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} aria-label="Tirar a paleta da logo" title="Tirar a paleta da logo" onClick={() => void tirarPaleta()} disabled={ocupado === "paleta-logo"}>
+              {ocupado === "paleta-logo" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pipette className="h-4 w-4" />}
             </button>
             {caminho && caminho.paleta && caminho.paleta.length > 0 && (
               <button
@@ -336,6 +337,7 @@ export default function EtapaSistema() {
                   type="button"
                   className={botao.icone}
                   aria-label={`Tirar a cor ${c.nome}`}
+                  title="Tirar a cor"
                   onClick={() => {
                     const novas = cores.filter((_, k) => k !== i);
                     if (normalizarHex(c.hex)) void trocarComDesfazer(pCores, novas, cores, "Cor tirada");
@@ -348,8 +350,9 @@ export default function EtapaSistema() {
             );
           })}
         </ul>
-        <button type="button" className={juntar(botao.discreto, "mt-2")} disabled={cores.length >= 8} onClick={() => pCores.mudar(cores.concat([{ nome: "", papel: cores.length ? "secundaria" : "primaria", hex: "#" }]))}>
-          <Plus className="mr-1.5 h-4 w-4" /> Cor
+        {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+        <button type="button" className={juntar(botao.icone, "mt-2 disabled:opacity-50")} aria-label="Adicionar cor" title="Adicionar cor" disabled={cores.length >= 8} onClick={() => pCores.mudar(cores.concat([{ nome: "", papel: cores.length ? "secundaria" : "primaria", hex: "#" }]))}>
+          <Plus className="h-4 w-4" />
         </button>
         <ContrasteDaPaleta cores={cores} />
         <Secao
@@ -412,6 +415,7 @@ export default function EtapaSistema() {
               type="button"
               className={botao.icone}
               aria-label="Tirar a família"
+              title="Tirar a família"
               onClick={() => {
                 const novos = tipos.filter((_, k) => k !== i);
                 if (t.familia.trim()) void trocarComDesfazer(pTipos, novos, tipos, "Família tirada");
@@ -422,8 +426,9 @@ export default function EtapaSistema() {
             </button>
           </div>
         ))}
-        <button type="button" className={botao.discreto} disabled={tipos.length >= 4} onClick={() => pTipos.mudar(tipos.concat([{ familia: "", uso: tipos.length ? "texto" : "titulo", pesos: "", licenca: "", alternativa: "" }]))}>
-          <Plus className="mr-1.5 h-4 w-4" /> Família
+        {/* 16/10/2026: só ícone (nome no aria-label e no title); ícone diferente do "Adicionar cor". */}
+        <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} aria-label="Adicionar família" title="Adicionar família" disabled={tipos.length >= 4} onClick={() => pTipos.mudar(tipos.concat([{ familia: "", uso: tipos.length ? "texto" : "titulo", pesos: "", licenca: "", alternativa: "" }]))}>
+          <ListPlus className="h-4 w-4" />
         </button>
         <TipografiaDaMarca tipos={tipos} geradorRecolhido={familiasSalvas.length > 0} onUsar={usarTipos} />
         <ParesDaBase tipos={tipos} onUsar={usarTipos} />
@@ -469,7 +474,7 @@ export default function EtapaSistema() {
                   ))}
                 </select>
                 <input className={campo} value={g.descricao} maxLength={300} placeholder="Como usar" aria-label="Descrição do ativo" onChange={(e) => pGrafismos.mudar(grafismos.map((x, k) => (k === i ? { ...x, descricao: e.target.value } : x)))} />
-                <button type="button" className={botao.icone} aria-label="Tirar o ativo" onClick={() => void trocarComDesfazer(pGrafismos, grafismos.filter((_, k) => k !== i), grafismos, "Ativo tirado")}>
+                <button type="button" className={botao.icone} aria-label="Tirar o ativo" title="Tirar o ativo" onClick={() => void trocarComDesfazer(pGrafismos, grafismos.filter((_, k) => k !== i), grafismos, "Ativo tirado")}>
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -592,8 +597,9 @@ function SlotDaLogo({ slot, rotulo, varios, itens, ocupado, onArquivo, onTirar, 
           )
         ) : (
           itens.length > 0 && (
-            <button type="button" className={juntar(botao.discreto, "m-1 h-8")} aria-label={`Trocar ${nome}`} disabled={ocupado} onClick={abrir} data-trocar-logo={slot}>
-              {ocupado ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="mr-1.5 h-3.5 w-3.5" />} Trocar
+            // 16/10/2026: só ícone (nome no aria-label e no title).
+            <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} aria-label={`Trocar ${nome}`} title={`Trocar ${nome}`} disabled={ocupado} onClick={abrir} data-trocar-logo={slot}>
+              {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
             </button>
           )
         )}
@@ -647,7 +653,7 @@ function SlotDaLogo({ slot, rotulo, varios, itens, ocupado, onArquivo, onTirar, 
                 <Eraser className="h-4 w-4" />
               </button>
             )}
-            <button type="button" className={botao.icone} aria-label={`Tirar ${nome}`} disabled={ocupado} onClick={() => onTirar(i)}>
+            <button type="button" className={botao.icone} aria-label={`Tirar ${nome}`} title={`Tirar ${nome}`} disabled={ocupado} onClick={() => onTirar(i)}>
               <Trash2 className="h-4 w-4" />
             </button>
           </div>

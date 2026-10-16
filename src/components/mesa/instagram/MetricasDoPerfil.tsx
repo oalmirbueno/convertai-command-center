@@ -4,7 +4,7 @@ import { ArrowUpRight } from "lucide-react";
 import FaixaDeNumeros from "@/components/sistema/FaixaDeNumeros";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
-import { juntar, texto } from "@/components/sistema/estilos";
+import { botao, juntar, texto } from "@/components/sistema/estilos";
 import {
   agruparPorConta,
   contaPrincipal,
@@ -193,9 +193,9 @@ export default function MetricasDoPerfil({ clientId, contaId }: { clientId: stri
           Semana de {ultima.week_start.split("-").reverse().join("/")}
           {semanaEmAndamento(ultima) ? " (em andamento)" : ""}. Coleta do robô semanal.
         </p>
-        <Link to={`/metricas?client=${encodeURIComponent(clientId)}`} className="inline-flex items-center text-[12px] text-muted-foreground hover:text-foreground">
-          Métricas completas
-          <ArrowUpRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
+        {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
+        <Link to={`/metricas?client=${encodeURIComponent(clientId)}`} className={juntar(botao.icone, "shrink-0")} aria-label="Métricas completas" title="Métricas completas">
+          <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
         </Link>
       </div>
     </div>

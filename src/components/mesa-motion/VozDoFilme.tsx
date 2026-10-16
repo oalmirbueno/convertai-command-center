@@ -226,9 +226,9 @@ export default function VozDoFilme({ filme, links }: { filme: Filme; links: Reco
                     </option>
                   ))}
                 </select>
-                <button type="button" className={juntar(botao.secundario, "shrink-0")} onClick={() => setJanelaVozes(true)} disabled={!!semChave && !vozes.length} data-abrir-vozes="">
-                  <Mic className="mr-1 h-3.5 w-3.5" />
-                  Vozes
+                {/* 16/10/2026: só ícone, sem borda (nome no aria-label e no title). */}
+                <button type="button" className={juntar(botao.icone, "h-9 w-9 disabled:pointer-events-none disabled:opacity-50")} onClick={() => setJanelaVozes(true)} disabled={!!semChave && !vozes.length} aria-label="Vozes" title="Vozes" data-abrir-vozes="">
+                  <Mic className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -272,9 +272,8 @@ export default function VozDoFilme({ filme, links }: { filme: Filme; links: Reco
                   <input type="checkbox" className="mr-1.5 h-4 w-4 accent-primary" checked={substituir} onChange={(e) => setSubstituir(e.target.checked)} />
                   Substituir as que já têm
                 </label>
-                <button type="button" className={juntar(botao.secundario, "m-1 mb-2")} onClick={() => void escreverFalas()} disabled={indo === "falas" || !filme.cenas.length} data-escrever-falas="">
-                  {indo === "falas" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
-                  Escrever as falas com IA
+                <button type="button" className={juntar(botao.icone, "m-1 mb-2 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void escreverFalas()} disabled={indo === "falas" || !filme.cenas.length} aria-label="Escrever as falas com IA" title="Escrever as falas com IA" data-escrever-falas="">
+                  {indo === "falas" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 </button>
               </div>
             </div>
@@ -337,9 +336,10 @@ export default function VozDoFilme({ filme, links }: { filme: Filme; links: Reco
                       </div>
                     )}
                     {fala && temChave && n.voz && (!nc || nc.desatualizada) && (
-                      <button type="button" className={juntar(botao.discreto, "mt-1 h-8")} onClick={() => setConfirmar({ modo: "cena", cenaId: c.id })} disabled={!!indo} data-gerar-voz-da-cena={c.id}>
-                        {indo === `cena:${c.id}` ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <AudioLines className="mr-1 h-3.5 w-3.5" />}
-                        Gerar a voz desta cena · {usd(estimativa("cena", c.id).custo_usd)}
+                      // 16/10/2026: só ícone; o preço continua visível ao lado.
+                      <button type="button" className={juntar(botao.icone, "mt-1 flex w-auto px-1.5 disabled:pointer-events-none disabled:opacity-50")} onClick={() => setConfirmar({ modo: "cena", cenaId: c.id })} disabled={!!indo} aria-label={`Gerar a voz desta cena · ${usd(estimativa("cena", c.id).custo_usd)}`} title="Gerar a voz desta cena" data-gerar-voz-da-cena={c.id}>
+                        {indo === `cena:${c.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <AudioLines className="h-4 w-4" />}
+                        <span className="ml-1 text-[11px] tabular-nums">{usd(estimativa("cena", c.id).custo_usd)}</span>
                       </button>
                     )}
                   </li>
@@ -364,9 +364,9 @@ export default function VozDoFilme({ filme, links }: { filme: Filme; links: Reco
               {indo === "narracao" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Wand2 className="mr-1 h-3.5 w-3.5" />}
               Gerar a narração · {usd(estimativa(modo).custo_usd)}
             </button>
-            <button type="button" className={juntar(botao.secundario, "m-1")} onClick={() => void casar()} disabled={!n.audios.length || !!indo} data-encaixar-na-voz="">
-              {indo === "casar" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Timer className="mr-1 h-3.5 w-3.5" />}
-              Encaixar as cenas na voz
+            {/* 16/10/2026: só ícone; "Gerar a narração · US$" fica com texto (ação principal com custo). */}
+            <button type="button" className={juntar(botao.icone, "m-1 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void casar()} disabled={!n.audios.length || !!indo} aria-label="Encaixar as cenas na voz" title="Encaixar as cenas na voz" data-encaixar-na-voz="">
+              {indo === "casar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Timer className="h-4 w-4" />}
             </button>
           </div>
           {!temChave && situacao.data && <p className={texto.auxiliar}>Sem a chave: escolha o modelo e escreva as falas; a voz sai depois.</p>}

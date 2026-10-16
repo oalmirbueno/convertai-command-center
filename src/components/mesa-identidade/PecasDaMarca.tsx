@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BookmarkPlus, Copy, Download, Loader2 } from "lucide-react";
+import { BookmarkPlus, Copy, Download, FileDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
@@ -195,6 +195,7 @@ export default function PecasDaMarca() {
               marcaId={marcaId}
               campos={CAMPOS_DA_ASSINATURA.filter((c) => c.chave !== "pessoa" && c.chave !== "cargo" && c.chave !== "logo_url").map((c) => ({ chave: c.chave, rotulo: c.rotulo, tipo: "texto" as const, valorAtual: ass[c.chave], dica: "Só o que está nas fontes do cliente; nunca inventar telefone, e-mail ou endereço.", maximo: 120 }))}
               contexto={contextoParaPreencher(projeto)}
+              compacto
               onAplicar={async (v) => {
                 const nova = { ...ass };
                 for (const k of Object.keys(v)) if ((nova as Record<string, string>)[k] !== undefined) (nova as Record<string, string>)[k] = String(v[k] || "");
@@ -222,11 +223,12 @@ export default function PecasDaMarca() {
             {/* HTML montado aqui com todo texto escapado e link só http(s), mailto e tel (aplicacoes-da-marca.ts). */}
             <div className="min-w-0 overflow-x-auto rounded-md bg-white p-4" data-assinatura-html="" dangerouslySetInnerHTML={{ __html: html }} />
             <div className="-m-1 mt-2 flex flex-wrap">
-              <button type="button" className={juntar(botao.discreto, "m-1")} onClick={() => void copiarTexto(html).then((ok) => (ok ? toast.success("HTML copiado") : toast.error("Não deu para copiar")))}>
-                <Copy className="mr-1.5 h-4 w-4" /> Copiar HTML
+              {/* 16/10/2026: só ícone (nome no aria-label e no title); o .html tem ícone próprio (o Download é o PNG das peças). */}
+              <button type="button" className={juntar(botao.icone, "m-1")} aria-label="Copiar HTML" title="Copiar HTML" onClick={() => void copiarTexto(html).then((ok) => (ok ? toast.success("HTML copiado") : toast.error("Não deu para copiar")))}>
+                <Copy className="h-4 w-4" />
               </button>
-              <button type="button" className={juntar(botao.discreto, "m-1")} onClick={() => salvarArquivo(new Blob([`<!doctype html><html><head><meta charset="utf-8"><title>Assinatura</title></head><body>${html}</body></html>`], { type: "text/html" }), "assinatura-de-email.html", "text/html")}>
-                <Download className="mr-1.5 h-4 w-4" /> Baixar .html
+              <button type="button" className={juntar(botao.icone, "m-1")} aria-label="Baixar .html" title="Baixar .html" onClick={() => salvarArquivo(new Blob([`<!doctype html><html><head><meta charset="utf-8"><title>Assinatura</title></head><body>${html}</body></html>`], { type: "text/html" }), "assinatura-de-email.html", "text/html")}>
+                <FileDown className="h-4 w-4" />
               </button>
             </div>
           </div>

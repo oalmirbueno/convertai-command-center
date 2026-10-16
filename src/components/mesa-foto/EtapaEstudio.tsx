@@ -29,7 +29,7 @@ import { padraoPara } from "@/lib/mesa/api";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
-import { campo, foco, juntar, superficie } from "@/components/sistema/estilos";
+import { botao, campo, foco, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import { AprovarFoto } from "./AcoesDeUso";
@@ -420,12 +420,12 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
                 ))}
               </div>
             )}
-            <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 px-2 text-[12px]" onClick={() => setEscolhendo(true)}>
-              <Images className="mr-1 h-3.5 w-3.5" /> Trocar foto
-            </Button>
-            <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 px-2 text-[12px]" onClick={() => setAmpliada(vista === "antes" ? 0 : imagensDoAmpliar.length - 1)}>
-              <Maximize2 className="mr-1 h-3.5 w-3.5" /> Ver grande
-            </Button>
+            <button className={juntar(botao.icone, "mb-1 disabled:opacity-50")} type="button" onClick={() => setEscolhendo(true)} aria-label="Trocar foto" title="Trocar foto">
+              <Images className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button className={juntar(botao.icone, "mb-1 disabled:opacity-50")} type="button" onClick={() => setAmpliada(vista === "antes" ? 0 : imagensDoAmpliar.length - 1)} aria-label="Ver grande" title="Ver grande">
+              <Maximize2 className="h-4 w-4" aria-hidden="true" />
+            </button>
           </div>
           {daInternet && (
             <p className="mx-3 mt-2 shrink-0 rounded-md border border-warning/40 px-3 py-2 text-[12px]">Referência da internet: uso interno, fora das ferramentas e fora do ar.</p>
@@ -461,30 +461,16 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
           <Grupo id="usar" titulo="Usar esta foto" icone={<CalendarPlus className="h-4 w-4" />} ajuda="Post na Agenda (foto única ou carrossel, com legenda, data e aprovação do cliente), Mesa, Mesa Ads, baixar ou Arquivos.">
             <div className="flex min-w-0 flex-wrap items-center">
               {prepararNaAgenda && (
-                <Button type="button" size="sm" className="mb-1.5 mr-1.5 h-8 text-[12px]" disabled={daInternet} onClick={() => prepararNaAgenda([atual.id])}>
-                  <CalendarPlus className="mr-1.5 h-3.5 w-3.5" /> Preparar na Agenda
-                </Button>
+                <button className={juntar(botao.icone, "mb-1.5 mr-1.5 text-primary disabled:opacity-50")} type="button" disabled={daInternet} onClick={() => prepararNaAgenda([atual.id])} aria-label="Preparar na Agenda" title="Preparar na Agenda">
+                  <CalendarPlus className="h-4 w-4" aria-hidden="true" />
+                </button>
               )}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="mb-1.5 mr-1.5 h-8 text-[12px]"
-                disabled={daInternet}
-                onClick={() => (precisaAprovar(atual) ? toast.info("Aprove primeiro", { description: "Foto gerada vai para as mesas depois da aprovação da equipe." }) : levar("mesa", [atual]))}
-              >
-                <PenTool className="mr-1.5 h-3.5 w-3.5" /> Mesa
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="mb-1.5 mr-1.5 h-8 text-[12px]"
-                disabled={daInternet}
-                onClick={() => (precisaAprovar(atual) ? toast.info("Aprove primeiro", { description: "Foto gerada vai para as mesas depois da aprovação da equipe." }) : levar("ads", [atual]))}
-              >
-                <Megaphone className="mr-1.5 h-3.5 w-3.5" /> Mesa Ads
-              </Button>
+              <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" disabled={daInternet} onClick={() => (precisaAprovar(atual) ? toast.info("Aprove primeiro", { description: "Foto gerada vai para as mesas depois da aprovação da equipe." }) : levar("mesa", [atual]))} aria-label="Mesa" title="Mesa">
+                <PenTool className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" disabled={daInternet} onClick={() => (precisaAprovar(atual) ? toast.info("Aprove primeiro", { description: "Foto gerada vai para as mesas depois da aprovação da equipe." }) : levar("ads", [atual]))} aria-label="Mesa Ads" title="Mesa Ads">
+                <Megaphone className="h-4 w-4" aria-hidden="true" />
+              </button>
               {!daInternet && <AprovarFoto foto={atual} />}
               <MenuDeUso foto={atual} rotulo="Mais" variante="ghost" className="mb-1.5" />
             </div>
@@ -524,26 +510,12 @@ export default function EtapaEstudio({ escopo }: { escopo?: string } = {}) {
 
           <Grupo id="angulo" titulo="Ângulo e variações" icone={<RotateCw className="h-4 w-4" />} destaque={destaque === "angulo"} ajuda="O diretor monta com o custo à vista antes de gerar. Ângulo novo gera partes que não aparecem nas fotos: sem garantia de fidelidade, sai marcado como gerado.">
             <div className="flex min-w-0 flex-wrap items-center">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="mb-1.5 mr-1.5 h-8 text-[12px]"
-                disabled={bloqueado || !pedirAoDiretor}
-                onClick={() => pedir(`Quero esta foto em outros ângulos (três quartos, lateral, de cima e um detalhe). ${atual.kit_id || kitId ? "Use o produto desta foto." : "Se precisar, identifique o produto antes."} Mostre o custo antes.`)}
-              >
-                <RotateCw className="mr-1.5 h-3.5 w-3.5" /> Trocar ângulo
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="mb-1.5 mr-1.5 h-8 text-[12px]"
-                disabled={bloqueado || !pedirAoDiretor}
-                onClick={() => pedir("Faça 4 variações desta foto marcada, com cenários e luz diferentes, na pegada da marca. Mostre o custo antes.")}
-              >
-                <Aperture className="mr-1.5 h-3.5 w-3.5" /> 4 variações desta
-              </Button>
+              <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" disabled={bloqueado || !pedirAoDiretor} onClick={() => pedir(`Quero esta foto em outros ângulos (três quartos, lateral, de cima e um detalhe). ${atual.kit_id || kitId ? "Use o produto desta foto." : "Se precisar, identifique o produto antes."} Mostre o custo antes.`)} aria-label="Trocar ângulo" title="Trocar ângulo">
+                <RotateCw className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" disabled={bloqueado || !pedirAoDiretor} onClick={() => pedir("Faça 4 variações desta foto marcada, com cenários e luz diferentes, na pegada da marca. Mostre o custo antes.")} aria-label="4 variações desta" title="4 variações desta">
+                <Aperture className="h-4 w-4" aria-hidden="true" />
+              </button>
             </div>
           </Grupo>
 

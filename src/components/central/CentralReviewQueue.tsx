@@ -142,7 +142,7 @@ export default function CentralReviewQueue({ reports, clients, isAdmin, onRefres
   if (!isAdmin) return null;
   return <section aria-label="Revisão por cliente" className="min-w-0">
     {focusId
-      ? <div className="mb-3"><button type="button" onClick={() => { const next = new URLSearchParams(params); next.delete("review"); setParams(next); }} className={botao.discreto}><ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" />Voltar à fila</button></div>
+      ? <div className="mb-3"><button type="button" onClick={() => { const next = new URLSearchParams(params); next.delete("review"); setParams(next); }} aria-label="Voltar à fila" title="Voltar à fila" className={botao.icone}><ArrowLeft className="h-4 w-4" aria-hidden="true" /></button></div>
       : <div className="mb-3 flex min-w-0 items-center">
         {/* Uma linha: faixas (segmentado no computador, lista no celular), cliente e o "...". */}
         <SeletorCompacto opcoes={opcoesDeFaixa} valor={lane} onEscolher={(v) => { setLane(v as ReviewLane); setAberto(null); }} rotulo="Faixa da revisão" modo="segmentado" className="hidden md:inline-flex" />
@@ -298,7 +298,7 @@ function ReviewCard({ report, currentReport, historical, approval, client, busy,
         {extras.map(([label, value]) => <div key={label}><dt className="font-medium">{label}</dt><dd className="whitespace-pre-wrap text-muted-foreground">{value}</dd></div>)}
         {approval?.decision_note && <div><dt className="font-medium">Último comentário da decisão</dt><dd className="whitespace-pre-wrap text-muted-foreground">{approval.decision_note}</dd></div>}
         {!!approval?.events?.length && <div><dt className="font-medium">Comentários registrados</dt><dd><ul className="space-y-2">{approval.events.map(event => <li key={event.id}><time dateTime={event.created_at} className="text-muted-foreground">{quando(event.created_at)}</time><p className="whitespace-pre-wrap">{event.comment}</p></li>)}</ul></dd></div>}
-        {approval && <div><button type="button" onClick={() => void copyLink()} className={juntar(botao.discreto, "relative -left-1 h-7 px-1 text-[12px]")}><Link2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" />Copiar link do pedido</button></div>}
+        {approval && <div><button type="button" onClick={() => void copyLink()} aria-label="Copiar link do pedido" title="Copiar link do pedido" className={juntar(botao.icone, "relative -left-2")}><Link2 className="h-4 w-4" aria-hidden="true" /></button></div>}
       </dl>
     </details>
   </article>;

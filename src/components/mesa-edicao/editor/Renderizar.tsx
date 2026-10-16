@@ -212,7 +212,7 @@ export default function Renderizar({
         </span>
       ) : ultimoPronto ? (
         <a
-          className={juntar(botao.barra, "mr-1")}
+          className={juntar(botao.icone, "mr-1")}
           href={ultimoPronto.url || undefined}
           target="_blank"
           rel="noreferrer"
@@ -220,8 +220,8 @@ export default function Renderizar({
           title={`${ROTULO_DO_TIPO[ultimoPronto.tipo]} pronto: abrir o MP4`}
           aria-label={`${ROTULO_DO_TIPO[ultimoPronto.tipo]} pronto: abrir o MP4`}
         >
-          <Download className="mr-1 h-3.5 w-3.5" />
-          <span className="hidden lg:inline">{ultimoPronto.tipo === "amostra" ? "Amostra" : "MP4"}</span>
+          {/* 16/10/2026: só ícone (o tipo vai no aria-label e no title). */}
+          <Download className="h-4 w-4" />
         </a>
       ) : null}
       {mostrarProblema && problema && (

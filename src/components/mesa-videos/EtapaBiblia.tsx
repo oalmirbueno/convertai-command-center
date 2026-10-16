@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ExternalLink, Loader2, Plus, Rotate3d, Save, Trash2, Undo2 } from "lucide-react";
+import { ExternalLink, Loader2, MapPinPlus, Rotate3d, Save, Trash2, Undo2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import Secao from "@/components/sistema/Secao";
@@ -69,9 +69,9 @@ export default function EtapaBiblia({ irPara }: { irPara: IrPara }) {
                 <Undo2 className="h-3.5 w-3.5" />
               </button>
             )}
-            <button type="button" className={juntar(botao.secundario, "ml-1")} onClick={() => void salvar()} disabled={salvando} aria-label="Salvar no banco">
-              {salvando ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <Save className="h-3.5 w-3.5 sm:mr-1.5" />}
-              <span className="hidden sm:inline">Salvar</span>
+            {/* 16/10/2026: só ícone, sem borda (nome no aria-label e no title). */}
+            <button type="button" className={juntar(botao.icone, "ml-1 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void salvar()} disabled={salvando} aria-label="Salvar no banco" title="Salvar">
+              {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             </button>
             <button type="button" className={juntar(botao.primario, "ml-1")} onClick={() => irPara("roteiro")}>
               Roteiro
@@ -124,13 +124,12 @@ export default function EtapaBiblia({ irPara }: { irPara: IrPara }) {
         ajuda="Folha de referência: a mesma pessoa de frente, 3/4 e perfil. Gere os ângulos a partir de uma foto na ferramenta de ângulo e escolha a melhor como folha."
         acao={
           <>
-            <button type="button" className={botao.discreto} onClick={() => irPara("gerar", { modo: "angulo" })} aria-label="Gerar ângulos para a folha">
-              <Rotate3d className="h-3.5 w-3.5 sm:mr-1.5" />
-              <span className="hidden sm:inline">Ângulos</span>
+            <button type="button" className={botao.icone} onClick={() => irPara("gerar", { modo: "angulo" })} aria-label="Gerar ângulos para a folha" title="Gerar ângulos para a folha">
+              <Rotate3d className="h-4 w-4" />
             </button>
-            <button type="button" className={juntar(botao.secundario, "ml-1")} onClick={() => mudarBiblia({ personagens: b.personagens.concat([{ id: proximoId("pe", b.personagens.map((x) => x.id)), nome: "Personagem", aparencia: "", roupa: "", folha_path: null, pessoa_real: false, autorizado: false }]) })} aria-label="Novo personagem">
-              <Plus className="h-3.5 w-3.5 sm:mr-1.5" />
-              <span className="hidden sm:inline">Novo</span>
+            {/* 16/10/2026: ícone próprio (Novo cenário usa outro). */}
+            <button type="button" className={juntar(botao.icone, "ml-1")} onClick={() => mudarBiblia({ personagens: b.personagens.concat([{ id: proximoId("pe", b.personagens.map((x) => x.id)), nome: "Personagem", aparencia: "", roupa: "", folha_path: null, pessoa_real: false, autorizado: false }]) })} aria-label="Novo personagem" title="Novo personagem">
+              <UserPlus className="h-4 w-4" />
             </button>
           </>
         }
@@ -184,9 +183,8 @@ export default function EtapaBiblia({ irPara }: { irPara: IrPara }) {
         resumo={`${b.cenarios.length} ${b.cenarios.length === 1 ? "cenário" : "cenários"}`}
         ajuda="Quadro âncora: a imagem do lugar de onde os planos partem (foto real do cliente ou gerada). Mesma hora do dia em todos os planos do cenário."
         acao={
-          <button type="button" className={botao.secundario} onClick={() => mudarBiblia({ cenarios: b.cenarios.concat([{ id: proximoId("ce", b.cenarios.map((x) => x.id)), nome: "Cenário", descricao: "", ancora_path: null, hora: "" }]) })} aria-label="Novo cenário">
-            <Plus className="h-3.5 w-3.5 sm:mr-1.5" />
-            <span className="hidden sm:inline">Novo</span>
+          <button type="button" className={botao.icone} onClick={() => mudarBiblia({ cenarios: b.cenarios.concat([{ id: proximoId("ce", b.cenarios.map((x) => x.id)), nome: "Cenário", descricao: "", ancora_path: null, hora: "" }]) })} aria-label="Novo cenário" title="Novo cenário">
+            <MapPinPlus className="h-4 w-4" />
           </button>
         }
       >

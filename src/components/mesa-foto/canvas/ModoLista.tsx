@@ -1,12 +1,12 @@
 import { useState, type ReactNode } from "react";
-import { Film, LayoutTemplate, Pencil, Plus, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Film, LayoutTemplate, Pencil, Sparkles, Trash2 } from "lucide-react";
 import { Cartao, Pilulas } from "../Comuns";
 import { desligar, entradasDoGerar, mudarDados, mudarLigacao, nomeDoResultado, removerNo, resumoDoResultado, rotuloDoPapel, TIPOS_DE_NO, type Canvas, type NoDoCanvas, type PersonagemCriada, type ResultadoDoCanvas, type TipoDeNo } from "../canvasApi";
 import { EditorDaLigacaoDeResultado } from "./Cena";
 import { ChatDoAgente } from "./Agente";
 import { descrever, ICONES, type Fontes } from "./comum";
 import { AjustesDoResultado, CustoDoResultado, EditorDoCartao } from "./Editores";
+import { botao, juntar } from "@/components/sistema";
 
 /** Modo lista (celular, abaixo de 768 px): o mesmo grafo em formulário. */
 
@@ -56,9 +56,9 @@ export function ModoLista({
     return (
       <Cartao titulo="Modo lista">
         <p className="mb-2 text-[12px] text-muted-foreground">O canvas não tem Resultado. Ele junta os cartões e gera a foto.</p>
-        <Button type="button" size="sm" className="h-8 text-[12px]" onClick={() => onPor("gerar", null)}>
-          <Plus className="mr-1 h-3.5 w-3.5" /> Pôr um Resultado
-        </Button>
+        <button className={juntar(botao.icone, "text-primary disabled:opacity-50")} type="button" onClick={() => onPor("gerar", null)} aria-label="Pôr um Resultado" title="Pôr um Resultado">
+          <Sparkles className="h-4 w-4" aria-hidden="true" />
+        </button>
       </Cartao>
     );
   }
@@ -106,9 +106,9 @@ export function ModoLista({
           {TIPOS_DE_ENTRADA.map((t) => {
             const Icone = ICONES[t];
             return (
-              <Button key={t} type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-9 text-[12px]" onClick={() => (t === "texto" || t === "agente" ? onPor(t, resultado.id) : onEscolher(t, null, resultado.id))}>
-                <Icone className={`mr-1 h-3.5 w-3.5 ${TIPOS_DE_NO[t].texto}`} /> {TIPOS_DE_NO[t].rotulo}
-              </Button>
+              <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} key={t} type="button" onClick={() => (t === "texto" || t === "agente" ? onPor(t, resultado.id) : onEscolher(t, null, resultado.id))} aria-label={TIPOS_DE_NO[t].rotulo} title={TIPOS_DE_NO[t].rotulo}>
+                <Icone className={` h-4 w-4 ${TIPOS_DE_NO[t].texto}`} aria-hidden="true" />
+              </button>
             );
           })}
         </div>
@@ -148,16 +148,16 @@ export function ModoLista({
               <li key={q.id} className="flex min-w-0 items-center py-1.5" data-quadro-da-lista={q.id}>
                 <LayoutTemplate className="mr-2 h-3.5 w-3.5 shrink-0 text-teal-300" />
                 <span className="min-w-0 flex-1 truncate text-[13px]">{(q.dados.titulo || "").trim() || "Quadro animado"}</span>
-                <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={() => onEditarQuadro(q.id)}>
-                  <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
-                </Button>
+                <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => onEditarQuadro(q.id)} aria-label="Editar" title="Editar">
+                  <Pencil className="h-4 w-4" aria-hidden="true" />
+                </button>
               </li>
             ))}
           </ul>
           {onPorQuadro && (
-            <Button type="button" size="sm" variant="outline" className="mt-2 h-9 text-[12px]" onClick={onPorQuadro}>
-              <Plus className="mr-1 h-3.5 w-3.5" /> Novo quadro animado
-            </Button>
+            <button className={juntar(botao.icone, "mt-2 disabled:opacity-50")} type="button" onClick={onPorQuadro} aria-label="Novo quadro animado" title="Novo quadro animado">
+              <LayoutTemplate className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
         </Cartao>
       )}

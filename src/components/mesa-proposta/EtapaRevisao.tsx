@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, ExternalLink, History, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ExternalLink, History, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
@@ -166,9 +166,9 @@ export default function EtapaRevisao({ proposta }: { proposta: Proposta | null }
         descricao={resumoDaConferencia}
         ajuda="Três conferências, todas só aviso (a decisão é da equipe). Números sem origem: frases com número que não está nas notas, na transcrição, nos arquivos nem nos itens; confirme com o cliente, ponha a fonte ou tire o número. Fontes do mercado: cada dado conferido contra o trecho da fonte. Revisão da IA: clareza para quem lê no celular, promessa de resultado e se o desafio usa as palavras do cliente."
         acao={
-          <button type="button" className={botao.secundario} onClick={() => void revisar()} disabled={revisando}>
-            <ShieldCheck className="mr-1.5 h-4 w-4" />
-            {revisando ? "Revisando..." : "Revisar com IA"}
+          // 16/10/2026: só ícone (nome no aria-label e no title).
+          <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} onClick={() => void revisar()} disabled={revisando} aria-label="Revisar com IA" title={revisando ? "Revisando..." : "Revisar com IA"}>
+            {revisando ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
           </button>
         }
       >

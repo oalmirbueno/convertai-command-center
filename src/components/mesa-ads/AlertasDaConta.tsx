@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowRight, OctagonAlert } from "lucide-react";
+import { AlertTriangle, Bot, OctagonAlert } from "lucide-react";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { foco, juntar } from "@/components/sistema/estilos";
+import { botao, juntar } from "@/components/sistema/estilos";
 import { chavesAuditoria, lerAlertas, type AlertaNaTela } from "./auditoriaApi";
 
 /**
@@ -45,8 +45,8 @@ export default function AlertasDaConta({ onPedirAoAgente }: { onPedirAoAgente?: 
               <p className="min-w-0 break-words text-muted-foreground">{a.texto}</p>
             </div>
             {onPedirAoAgente && (
-              <button type="button" onClick={() => onPedirAoAgente(pedido(a))} className={juntar("inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[12px] text-primary hover:underline", foco)}>
-                Resolver com o agente <ArrowRight className="h-3 w-3" />
+              <button type="button" onClick={() => onPedirAoAgente(pedido(a))} className={juntar(botao.icone, "text-primary")} aria-label="Resolver com o agente" title="Resolver com o agente">
+                <Bot className="h-4 w-4" aria-hidden="true" />
               </button>
             )}
           </li>

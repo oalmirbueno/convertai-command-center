@@ -99,7 +99,7 @@ export default function EtapaModelos({ onUsarModelo, onUsarBase }: { onUsarModel
         Usar
         <span className="ml-1 hidden sm:inline">num roteiro novo</span>
       </button>
-      <button type="button" className={juntar(botao.icone, "ml-1 hover:text-destructive")} disabled={ocupado === m.id} onClick={() => void revogar(m)} aria-label={`Retirar o modelo ${m.nome}`}>
+      <button type="button" className={juntar(botao.icone, "ml-1 hover:text-destructive")} disabled={ocupado === m.id} onClick={() => void revogar(m)} aria-label={`Retirar o modelo ${m.nome}`} title={`Retirar o modelo ${m.nome}`}>
         {ocupado === m.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
       </button>
     </li>

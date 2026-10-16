@@ -237,17 +237,16 @@ export function JanelaDaPublicacao({
   const rodape = podePublicar && !publicado ? (
     <div className="flex w-full flex-wrap items-center justify-end [&>*]:mb-1 [&>*]:ml-2">
       {temData && (
-        <button type="button" className={botao.discreto} onClick={() => void desfazer()} disabled={ocupado}>
-          {fazendo === "desfazer" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Undo2 className="mr-1.5 h-4 w-4" />}
-          Desfazer
+        <button type="button" className={botao.icone} onClick={() => void desfazer()} disabled={ocupado} aria-label="Desfazer o agendamento" title="Desfazer o agendamento">
+          {fazendo === "desfazer" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Undo2 className="h-4 w-4" aria-hidden="true" />}
         </button>
       )}
       {aprovado && !falhou && (
-        <button type="button" className={botao.secundario} onClick={() => void agoraMesmo()} disabled={ocupado}>
-          {fazendo === "agora" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
-          Publicar agora
+        <button type="button" className={botao.icone} onClick={() => void agoraMesmo()} disabled={ocupado} aria-label="Publicar agora" title="Publicar agora">
+          {fazendo === "agora" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
         </button>
       )}
+      {/* 16/10/2026: a ação principal da janela mantém o texto (Agendar/Reagendar/Confirmar data). */}
       {!falhou && (
         <button type="button" className={botao.primario} onClick={confirmarData} disabled={ocupado || !iso || !!problema}>
           {fazendo === "confirmar" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CalendarCheck className="mr-1.5 h-4 w-4" />}
@@ -269,8 +268,8 @@ export function JanelaDaPublicacao({
             </p>
           )}
           {estado?.link && (
-            <a href={estado.link} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center text-[12px] text-primary underline-offset-2 hover:underline">
-              <ExternalLink className="mr-1 h-3.5 w-3.5" /> Ver no Instagram
+            <a href={estado.link} target="_blank" rel="noreferrer" className={juntar(botao.icone, "mt-1 text-primary")} aria-label="Ver no Instagram" title="Ver no Instagram">
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
             </a>
           )}
         </div>
@@ -278,9 +277,8 @@ export function JanelaDaPublicacao({
         {!naAgenda && (
           <div className="flex items-center justify-between rounded-md bg-muted px-3 py-2">
             <span className="min-w-0 text-[12px] text-muted-foreground">{peca.agenda_aviso || "A peça ainda não está na Agenda."}</span>
-            <button type="button" className={juntar(botao.secundario, "ml-2 h-8")} onClick={levar} disabled={ocupado}>
-              {fazendo === "levar" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Upload className="mr-1.5 h-4 w-4" />}
-              Levar para a Agenda
+            <button type="button" className={juntar(botao.icone, "ml-2")} onClick={levar} disabled={ocupado} aria-label="Levar para a Agenda" title="Levar para a Agenda">
+              {fazendo === "levar" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Upload className="h-4 w-4" aria-hidden="true" />}
             </button>
           </div>
         )}
@@ -288,9 +286,8 @@ export function JanelaDaPublicacao({
         {falhou && podePublicar && (
           <div className="flex items-center justify-between rounded-md bg-destructive/10 px-3 py-2">
             <span className="min-w-0 text-[12px] text-destructive [overflow-wrap:anywhere]">{estado?.detalhe || "Falhou."}</span>
-            <button type="button" className={juntar(botao.secundario, "ml-2 h-8")} onClick={tentarDeNovo} disabled={ocupado || !publicacao?.id}>
-              {fazendo === "tentar" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1.5 h-4 w-4" />}
-              Tentar de novo
+            <button type="button" className={juntar(botao.icone, "ml-2")} onClick={tentarDeNovo} disabled={ocupado || !publicacao?.id} aria-label="Tentar de novo" title="Tentar de novo">
+              {fazendo === "tentar" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
             </button>
           </div>
         )}
@@ -391,26 +388,23 @@ export function PublicacaoDaMesaNaAgenda({
         </p>
       </div>
       {linkDoEstudio && (
-        <Link to={linkDoEstudio} className={juntar(botao.primario, "ml-3 h-8")} aria-label={soFotos ? "Abrir na Mesa Foto" : "Abrir no Estúdio"}>
-          <Wand2 className="h-4 w-4 sm:mr-1.5" />
-          <span className="hidden sm:inline">{soFotos ? "Abrir na Mesa Foto" : "Abrir no Estúdio"}</span>
+        <Link to={linkDoEstudio} className={juntar(botao.icone, "ml-3 text-primary")} aria-label={soFotos ? "Abrir na Mesa Foto" : "Abrir no Estúdio"} title={soFotos ? "Abrir na Mesa Foto" : "Abrir no Estúdio"}>
+          <Wand2 className="h-4 w-4" aria-hidden="true" />
         </Link>
       )}
       {linkDaMesaFoto && (
-        <Link to={linkDaMesaFoto} className={juntar(botao.discreto, "ml-3 h-8")} aria-label="Abrir na Mesa Foto">
-          <Wand2 className="h-4 w-4 sm:mr-1.5" />
-          <span className="hidden sm:inline">Mesa Foto</span>
+        <Link to={linkDaMesaFoto} className={juntar(botao.icone, "ml-3")} aria-label="Abrir na Mesa Foto" title="Abrir na Mesa Foto">
+          <Wand2 className="h-4 w-4" aria-hidden="true" />
         </Link>
       )}
       {estado.codigo !== "publicado" && estado.codigo !== "ajuste_pedido" && (
-        <button type="button" className={juntar(botao.secundario, "ml-3 h-8")} onClick={() => setAberta(true)} aria-label="Publicar em">
-          <CalendarClock className="h-4 w-4 sm:mr-1.5" />
-          <span className="hidden sm:inline">{pub?.scheduled_at ? "Reagendar" : "Publicar em"}</span>
+        <button type="button" className={juntar(botao.icone, "ml-3")} onClick={() => setAberta(true)} aria-label={pub?.scheduled_at ? "Reagendar" : "Publicar em"} title={pub?.scheduled_at ? "Reagendar" : "Publicar em"}>
+          <CalendarClock className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
       {estado.link && (
-        <a href={estado.link} target="_blank" rel="noreferrer" className={juntar(botao.discreto, "ml-2 h-8")}>
-          <ExternalLink className="mr-1.5 h-4 w-4" /> Ver post
+        <a href={estado.link} target="_blank" rel="noreferrer" className={juntar(botao.icone, "ml-2")} aria-label="Ver post no Instagram" title="Ver post no Instagram">
+          <ExternalLink className="h-4 w-4" aria-hidden="true" />
         </a>
       )}
       {/* Frente MOD (30/09): o navegador do agente confere se o post está no ar, com print como prova. */}

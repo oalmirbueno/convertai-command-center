@@ -223,9 +223,9 @@ export default function EtapaIntegracoes({ site }: { site: LinhaDoSite; onIrPara
         ajuda="O WhatsApp flutuante e o formulário são os jeitos de falar com o cliente. O formulário manda o contato para o Comercial do painel (origem site), com armadilha para robô, tempo mínimo e limite por visitante. Pixel da Meta e GA4 só carregam depois do Aceitar do aviso de cookies (LGPD), que liga sozinho quando há rastreio. O mapa do Google só carrega com o clique. Aplicar no site monta de novo com o que está salvo, sem gastar modelo. O que o painel já sabe (telefone celular, endereço) entra como rascunho marcado não salvo."
         acao={
           <>
-            <button type="button" className={juntar(botao.secundario, "mr-2")} disabled={!!ocupado || rodando} onClick={() => void aplicarNoSite()} data-aplicar-no-site="">
-              {ocupado === "A montagem não entrou na fila" || (rodando && !parado) ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
-              Aplicar no site
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+            <button type="button" className={juntar(botao.icone, "mr-2")} aria-label="Aplicar no site" title="Aplicar no site" disabled={!!ocupado || rodando} onClick={() => void aplicarNoSite()} data-aplicar-no-site="">
+              {ocupado === "A montagem não entrou na fila" || (rodando && !parado) ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             </button>
             <button type="button" className={mudouInt ? botao.primario : botao.secundario} disabled={!!ocupado} onClick={() => void salvarIntegracoes()} data-salvar-integracoes="">
               {ocupado === "As integrações não foram salvas" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}

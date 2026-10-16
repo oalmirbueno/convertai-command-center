@@ -332,9 +332,8 @@ export default function MetricasDaMeta({ clientId, periodo, rotuloDoPeriodo }: {
           <>
             <SeletorCompacto rotulo="Objetivo" icone={<Target className="h-3.5 w-3.5" />} modo="lista" opcoes={opcoesDeObjetivo} valor={objetivo} onEscolher={(v) => setObjetivo(v as IdDoObjetivo | "")} />
             <SeletorCompacto rotulo="Nível" icone={<Layers className="h-3.5 w-3.5" />} modo="lista" opcoes={NIVEIS_DA_METRICA.map((n) => ({ valor: n.valor, rotulo: n.rotulo }))} valor={nivel} onEscolher={(v) => setNivel(v as NivelDaMetrica)} />
-            <button type="button" className={juntar(botao.secundario, "h-9")} disabled={!d} onClick={() => setEscolhendo(true)}>
-              <Columns3 className="mr-1 h-3.5 w-3.5" />
-              O que ver
+            <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={!d} onClick={() => setEscolhendo(true)} aria-label="O que ver" title="O que ver">
+              <Columns3 className="h-4 w-4" aria-hidden="true" />
             </button>
             <button type="button" className={juntar(botao.icone, "h-9 w-9")} disabled={relendo} onClick={() => void releer()} aria-label="Ler na Meta de novo" title="Ler na Meta de novo">
               <RefreshCw className={juntar("h-3.5 w-3.5", relendo ? "animate-spin" : "")} />

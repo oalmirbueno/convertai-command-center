@@ -253,9 +253,9 @@ export function EscolherImagem({ rotulo, valor, onEscolher, opcional = false }: 
           </DialogHeader>
           <div className="flex min-w-0 items-center">
             <SeletorCompacto rotulo="De onde" opcoes={GRUPOS.map((g) => ({ valor: g.valor, rotulo: g.rotulo, contador: opcoes.filter((o) => o.grupo === g.valor).length }))} valor={grupo} onEscolher={(v) => setGrupo(v as OpcaoDeImagem["grupo"])} />
-            <label className={juntar(botao.secundario, "ml-auto cursor-pointer")} aria-label="Subir imagem nova">
-              {subindo ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <Upload className="h-3.5 w-3.5 sm:mr-1.5" />}
-              <span className="hidden sm:inline">Subir</span>
+            {/* 16/10/2026: só ícone, sem borda. */}
+            <label className={juntar(botao.icone, "ml-auto cursor-pointer")} aria-label="Subir imagem nova" title="Subir imagem nova">
+              {subindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => void subir(e.target.files ? e.target.files[0] : undefined)} />
             </label>
           </div>

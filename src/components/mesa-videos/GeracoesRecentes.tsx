@@ -200,9 +200,9 @@ export default function GeracoesRecentes({ arquivos, taskId, criativoId, pedidos
       resumo={`${pedidos.length} ${pedidos.length === 1 ? "pedido" : "pedidos"} · ${emAndamento.length} em andamento`}
       ajuda="Cada pedido mostra as variações. Com esta etapa aberta, o painel confere sozinho enquanto algo está gerando; com ela fechada, o servidor confere a cada minuto e guarda o vídeo pronto no acervo. Passou do prazo, segue sendo conferido por até 24 h. Erro do provedor não é tentado de novo e não é cobrado. O que parou aqui e ainda está no provedor tem Recuperar (Conferir de novo): o painel pergunta de novo ao provedor, sem gerar outra vez."
       acao={
-        <button type="button" className={botao.secundario} disabled={!!conferindo || !emAndamento.length} onClick={() => void conferir(null)} aria-label="Conferir as gerações em andamento">
-          {conferindo === "todos" ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 sm:mr-1.5" />}
-          <span className="hidden sm:inline">Conferir</span>
+        // 16/10/2026: só ícone, sem borda.
+        <button type="button" className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} disabled={!!conferindo || !emAndamento.length} onClick={() => void conferir(null)} aria-label="Conferir as gerações em andamento" title="Conferir as gerações em andamento">
+          {conferindo === "todos" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
         </button>
       }
       data-geracoes=""
@@ -243,9 +243,8 @@ export default function GeracoesRecentes({ arquivos, taskId, criativoId, pedidos
                 </button>
               )}
               {recuperavel && (
-                <button type="button" className={juntar(botao.discreto, "h-7 px-1.5 text-[12px]")} disabled={!!conferindo} onClick={() => void recuperar(p.id)} aria-label={`Conferir de novo e recuperar ${alvo.titulo || "pedido"}`} title="Conferir de novo no provedor e recuperar (não gera outra vez)">
-                  {conferindo === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1" /> : <History className="h-3.5 w-3.5 sm:mr-1" />}
-                  <span className="hidden sm:inline">Recuperar</span>
+                <button type="button" className={botao.icone} disabled={!!conferindo} onClick={() => void recuperar(p.id)} aria-label={`Conferir de novo e recuperar ${alvo.titulo || "pedido"}`} title="Recuperar: conferir de novo no provedor (não gera outra vez)">
+                  {conferindo === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <History className="h-3.5 w-3.5" />}
                 </button>
               )}
               {podeCancelar && (

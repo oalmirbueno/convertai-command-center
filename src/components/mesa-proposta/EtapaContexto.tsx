@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Calculator, ChevronDown, FilePlus2, Layers, Loader2, Paperclip, Plus, Sparkles, Trash2 } from "lucide-react";
+import { BookOpen, Calculator, ChevronDown, FilePlus2, Layers, Loader2, Paperclip, Plus, ScrollText, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -161,16 +161,18 @@ function Reuniao({ proposta, modeloId }: { proposta: Proposta; modeloId: string 
           <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} onClick={() => entrada.current && entrada.current.click()} disabled={anexando || mudou} aria-label="Anexar arquivos" title={mudou ? "Salve antes de anexar" : "Anexar arquivos"}>
             {anexando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
           </button>
+          {/* 16/10/2026: só ícone (o nome vai no sr-only e no title; o preço segue ao lado). */}
           <BotaoComCusto
             rotulo={
               <>
-                <Sparkles className="mr-1.5 h-4 w-4" />
-                {mudou ? "Salvar e resumir" : "Resumir"}
+                <ScrollText className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">{mudou ? "Salvar e resumir" : "Resumir"}</span>
               </>
             }
             titulo="Resumir a reunião"
-            descricao={mudou ? "Grava as notas e resume: objetivo, dores, pedidos, prazos e o que falta, sem número inventado" : "Objetivo, dores, pedidos, prazos, falas do cliente e o que falta, sem número inventado"}
-            variant="outline"
+            descricao={mudou ? "Salvar e resumir: grava as notas e resume objetivo, dores, pedidos, prazos e o que falta, sem número inventado" : "Resumir a reunião: objetivo, dores, pedidos, prazos, falas do cliente e o que falta, sem número inventado"}
+            variant="ghost"
+            className="h-8 gap-1 px-2"
             disabled={!temMaterial || !modeloId}
             partes={() => [{ modeloId, tipo: "texto", tokensEntrada: 14000, tokensSaida: 1500 }]}
             executar={async () => {
@@ -742,9 +744,9 @@ export default function EtapaContexto({
           descricao="Venda nova ou upsell, sem custo."
           acao={
             onNova ? (
-              <button type="button" className={botao.primario} onClick={onNova}>
-                <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                Nova proposta
+              // 16/10/2026: só ícone (nome no aria-label e no title).
+              <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={onNova} aria-label="Nova proposta" title="Nova proposta">
+                <Plus className="h-4 w-4" aria-hidden="true" />
               </button>
             ) : undefined
           }

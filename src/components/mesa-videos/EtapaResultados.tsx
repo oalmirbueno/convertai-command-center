@@ -82,15 +82,16 @@ function Resultado({ arquivo }: { arquivo: ArquivoDeVideo }) {
           </>
         ) : (
           <>
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
             <button
               type="button"
-              className={juntar(botao.secundario, "h-8 px-2.5 text-[12.5px]")}
+              className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")}
               disabled={ocupado || !!arquivo.so_no_storage}
               onClick={() => void editar({ na_edicao: true }, "Aprovado e na Edição", { na_edicao: false })}
               aria-label={`Aprovar ${arquivo.nome} e mandar para a Edição`}
+              title="Aprovar e mandar para a Edição"
             >
-              {ocupado ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-              Aprovar
+              {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
             </button>
             <button
               type="button"
@@ -145,14 +146,14 @@ export default function EtapaResultados({ irPara }: { irPara: IrPara }) {
         acao={
           <>
             <input ref={entrada} type="file" multiple accept="video/*,.mov,.mp4,.webm" className="hidden" aria-label="Escolher vídeos gerados" onChange={(e) => void enviar(e.target.files)} />
-            <button type="button" className={botao.secundario} disabled={!!subindo} onClick={() => entrada.current && entrada.current.click()} aria-label="Subir vídeo gerado">
-              {subindo ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <Upload className="h-3.5 w-3.5 sm:mr-1.5" />}
-              <span className="hidden sm:inline">{subindo ? `${subindo.feitos} de ${subindo.total}` : "Subir"}</span>
+            {/* 16/10/2026: só ícones; a contagem da subida vira número pequeno junto do ícone. */}
+            <button type="button" className={juntar(botao.icone, subindo && "w-auto px-1.5", "disabled:pointer-events-none disabled:opacity-60")} disabled={!!subindo} onClick={() => entrada.current && entrada.current.click()} aria-label="Subir vídeo gerado" title={subindo ? `Subindo ${subindo.feitos} de ${subindo.total}` : "Subir vídeo gerado"}>
+              {subindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {subindo && <span className="ml-1 text-[11px] tabular-nums">{subindo.feitos}/{subindo.total}</span>}
             </button>
             {naEdicao > 0 && (
-              <Link to={`/mesa-edicao?client=${clientId}&etapa=entrada`} className={botao.primario} aria-label="Abrir na Mesa Edição">
-                <Scissors className="h-3.5 w-3.5 sm:mr-1.5" />
-                <span className="hidden sm:inline">Editar</span>
+              <Link to={`/mesa-edicao?client=${clientId}&etapa=entrada`} className={juntar(botao.icone, "ml-1")} aria-label="Abrir na Mesa Edição" title="Abrir na Mesa Edição">
+                <Scissors className="h-4 w-4" />
               </Link>
             )}
           </>

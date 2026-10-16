@@ -2295,7 +2295,8 @@ describe("26/09: Book", () => {
       if (!el) throw new Error("sem resultado");
       return el;
     })) as HTMLElement;
-    fireEvent.click(within(resultado).getByRole("button", { name: /pôr no book/ }));
+    // 16/10/2026: o "pôr no book" virou só ícone; o nome vai no aria-label ("Pôr no book").
+    fireEvent.click(within(resultado).getByRole("button", { name: /pôr no book/i }));
     await waitFor(() => expect(chamadasDe("book_salvar").some((c) => Array.isArray(c.selecao) && c.selecao[0] === F3)).toBe(true));
     expect((await screen.findAllByText(/Book final · 1/)).length).toBeGreaterThan(0);
   });

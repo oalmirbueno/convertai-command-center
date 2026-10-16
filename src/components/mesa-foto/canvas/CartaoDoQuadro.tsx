@@ -3,10 +3,11 @@ import { toast } from "sonner";
 import { lerDadosDoVideo } from "../../../../supabase/functions/mesa-foto/modulos/video-do-canvas";
 import { LISTA_DE_FORMATOS_DO_QUADRO, modeloPorId, normalizarQuadro, quadroNoFormato, type FormatoDoQuadro, type MarcaDoQuadro, type QuadroAnimado } from "../../../../supabase/functions/mesa-foto/modulos/quadro-animado";
 import type { Canvas, NoDoCanvas } from "../canvasApi";
-import { BOTAO, CAMPO, Escolha, ROTULO, type Fontes } from "./comum";
+import { BOTAO_ICONE, CAMPO, Escolha, ROTULO, type Fontes } from "./comum";
 import { midiasLigadasAoQuadro } from "./videoNoCanvas";
 import { useUrlsDasMidias } from "./quadro/apoio";
 import PalcoDoQuadro from "./quadro/PalcoDoQuadro";
+import { juntar } from "@/components/sistema";
 
 /**
  * Cartão Quadro do Canvas (frente CNV, 30/09): a miniatura viva do quadro
@@ -46,11 +47,11 @@ export function CorpoDoQuadro({ canvas, no, fontes, onEditar }: { canvas: Canvas
       </p>
       <p className="truncate text-[11px] text-zinc-400">{ligadas.length ? `${ligadas.length} ${ligadas.length === 1 ? "mídia ligada" : "mídias ligadas"}` : "Ligue fotos ou vídeos na alça da esquerda"}</p>
       <div className="mt-auto flex min-w-0 items-center pt-1.5">
-        <button type="button" className="nodrag mr-1 inline-flex h-8 flex-1 items-center justify-center rounded-lg bg-teal-300 px-2 text-[12px] font-semibold text-black hover:bg-teal-200" onClick={() => onEditar(q.camadas.length ? "camadas" : "modelos")} data-editar-quadro={no.id}>
-          <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
+        <button type="button" className="nodrag toque-compacto mr-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-300 text-black hover:bg-teal-200" onClick={() => onEditar(q.camadas.length ? "camadas" : "modelos")} data-editar-quadro={no.id} aria-label="Editar" title="Editar o quadro">
+          <Pencil className="h-4 w-4" aria-hidden="true" />
         </button>
-        <button type="button" className={`${BOTAO} nodrag h-8`} onClick={() => onEditar("ia")} aria-label="Montar com IA" title="Montar com IA pelo pedido">
-          <Sparkles className="h-3.5 w-3.5" />
+        <button type="button" className={juntar(BOTAO_ICONE, "h-8 w-8")} onClick={() => onEditar("ia")} aria-label="Montar com IA" title="Montar com IA pelo pedido">
+          <Sparkles className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
     </div>
@@ -100,14 +101,14 @@ export function AjustesDoQuadro({
         {semVideoPronto ? ` · ${semVideoPronto} vídeo ainda sem arquivo pronto` : ""}
       </p>
       <div className="flex min-w-0 flex-wrap items-center">
-        <button type="button" className={`${BOTAO} mb-1 mr-1.5`} onClick={() => onEditar(q.camadas.length ? "camadas" : "modelos")}>
-          <Pencil className="mr-1 h-3.5 w-3.5" /> Abrir o editor
+        <button className={juntar(BOTAO_ICONE, "mb-1 mr-1.5 disabled:opacity-50")} type="button" onClick={() => onEditar(q.camadas.length ? "camadas" : "modelos")} aria-label="Abrir o editor" title="Abrir o editor">
+          <Pencil className="h-4 w-4" aria-hidden="true" />
         </button>
-        <button type="button" className={`${BOTAO} mb-1 mr-1.5`} onClick={() => onEditar("modelos")}>
-          <LayoutTemplate className="mr-1 h-3.5 w-3.5" /> Modelos da marca
+        <button className={juntar(BOTAO_ICONE, "mb-1 mr-1.5 disabled:opacity-50")} type="button" onClick={() => onEditar("modelos")} aria-label="Modelos da marca" title="Modelos da marca">
+          <LayoutTemplate className="h-4 w-4" aria-hidden="true" />
         </button>
-        <button type="button" className={`${BOTAO} mb-1`} onClick={() => onEditar("ia")}>
-          <Sparkles className="mr-1 h-3.5 w-3.5" /> Montar com IA
+        <button className={juntar(BOTAO_ICONE, "mb-1 disabled:opacity-50")} type="button" onClick={() => onEditar("ia")} aria-label="Montar com IA" title="Montar com IA">
+          <Sparkles className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
       <p className="text-[11px] text-zinc-500">No editor: camadas, guias, animação, exportar PNG e mandar para o render.</p>

@@ -14,8 +14,9 @@ import {
   type NoDoCanvas,
   type PapelDaLigacao,
 } from "../canvasApi";
-import { BOTAO, CAMPO, Escolha, ROTULO, type Fontes } from "./comum";
+import { BOTAO_ICONE, CAMPO, Escolha, ROTULO, type Fontes } from "./comum";
 import { cenaNova, cenasDaHistoria } from "./historia";
+import { juntar } from "@/components/sistema";
 
 /**
  * Peças da cena no painel (sem React Flow): os campos da cena no Resultado e
@@ -66,8 +67,8 @@ export function AjustesDaCena({ canvas, no, onMudar, onAnimar }: { canvas: Canva
         <Film className="mr-1 h-3 w-3" /> Vídeo {no.dados.cena ? "da cena" : "desta foto"}
       </p>
       <div className="flex min-w-0 flex-wrap items-center">
-        <button type="button" className={`${BOTAO} mb-1 mr-1.5`} onClick={onAnimar} disabled={!temFoto} title={temFoto ? "Cartão Vídeo com esta foto no 1º quadro" : "Gere a foto antes: ela é o 1º quadro"}>
-          <Film className="mr-1 h-3.5 w-3.5" /> {videos.cartoes ? "Abrir o Vídeo" : "Animar"}
+        <button className={juntar(BOTAO_ICONE, "mb-1 mr-1.5 disabled:opacity-50")} type="button" onClick={onAnimar} disabled={!temFoto} title={temFoto ? "Cartão Vídeo com esta foto no 1º quadro" : "Gere a foto antes: ela é o 1º quadro"} aria-label={videos.cartoes ? "Abrir o Vídeo" : "Animar"}>
+          <Film className="h-4 w-4" aria-hidden="true" />
         </button>
         <span className="mb-1 text-[11px] text-zinc-400">{videos.cartoes ? `${videos.prontos} ${videos.prontos === 1 ? "vídeo pronto" : "vídeos prontos"}${videos.andamento ? ` · ${videos.andamento} gerando` : ""}` : temFoto ? "a foto vira o 1º quadro" : "sem foto ainda"}</span>
       </div>
@@ -84,8 +85,8 @@ export function AjustesDaCena({ canvas, no, onMudar, onAnimar }: { canvas: Canva
           <Clapperboard className="mr-1.5 h-3.5 w-3.5 text-emerald-300" /> Cena da história
         </p>
         <p className="mb-2 text-[11px] leading-snug text-zinc-400">Marque para este Resultado entrar na História do quadro, com ação, enquadramento e narrativa. A mesma pessoa segue nas outras cenas.</p>
-        <button type="button" className={BOTAO} onClick={() => onMudar({ cena: cenaNova(historia.length + 1) })} data-marcar-cena={no.id}>
-          <Clapperboard className="mr-1 h-3.5 w-3.5" /> Esta é uma cena
+        <button className={juntar(BOTAO_ICONE, "disabled:opacity-50")} type="button" onClick={() => onMudar({ cena: cenaNova(historia.length + 1) })} data-marcar-cena={no.id} aria-label="Esta é uma cena" title="Esta é uma cena">
+          <Clapperboard className="h-4 w-4" aria-hidden="true" />
         </button>
         {animar && <div className="mt-2">{animar}</div>}
       </div>

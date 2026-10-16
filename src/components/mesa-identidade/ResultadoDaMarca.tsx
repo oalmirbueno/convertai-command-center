@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, Package, PackageCheck, Send } from "lucide-react";
+import { Download, Loader2, PackageCheck, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
@@ -156,15 +156,16 @@ export default function ResultadoDaMarca() {
       ajuda="O pacote leva as logos em todas as versões, as cores em HEX, RGB e CMYK, as fontes, os grafismos, as peças, os mockups, os vídeos prontos, o brandbook em PDF e a página web (abre sem o painel), com o LEIA-PRIMEIRO. Para aprovação vão o PDF e os vídeos, para Arquivos, com a revisão da agência. O kit da marca só muda depois da aprovação do cliente, com Confirmar e Desfazer."
     >
       <div className="-m-1 flex min-w-0 flex-wrap items-center" data-resultado-da-marca="">
-        <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!bb || !!ocupado} onClick={() => void baixarPacote()} data-baixar-pacote="">
-          {ocupado === "pacote" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Package className="mr-1.5 h-4 w-4" />} Baixar o pacote
+        {/* 16/10/2026: só ícone, sem borda (nome no aria-label e no title). */}
+        <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} disabled={!bb || !!ocupado} onClick={() => void baixarPacote()} data-baixar-pacote="" aria-label="Baixar o pacote" title="Baixar o pacote">
+          {ocupado === "pacote" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
         </button>
-        <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!bb || !!ocupado} onClick={() => void enviar()} data-enviar-aprovacao="">
-          {ocupado === "enviar" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />} Enviar para aprovação
+        <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} disabled={!bb || !!ocupado} onClick={() => void enviar()} data-enviar-aprovacao="" aria-label="Enviar para aprovação" title="Enviar para aprovação">
+          {ocupado === "enviar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </button>
         {!sugestao && (
-          <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!aprovado || !!ocupado} title={aprovado ? undefined : "Depois da aprovação do cliente"} onClick={() => void sugerirKit()} data-levar-ao-kit="">
-            {ocupado === "kit" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <PackageCheck className="mr-1.5 h-4 w-4" />} Levar ao kit
+          <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} disabled={!aprovado || !!ocupado} aria-label="Levar ao kit" title={aprovado ? "Levar ao kit" : "Levar ao kit (depois da aprovação do cliente)"} onClick={() => void sugerirKit()} data-levar-ao-kit="">
+            {ocupado === "kit" ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackageCheck className="h-4 w-4" />}
           </button>
         )}
         <BotaoDocumentoDaEntrega pedido={pedidoDoDocumento} variante="discreto" className="m-1" />

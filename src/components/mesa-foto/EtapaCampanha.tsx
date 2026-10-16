@@ -23,7 +23,7 @@ import { ZonaDeEnvio } from "./EtapaAcervo";
 import { GuiaDeEstiloNaTela } from "./GuiaDeEstilo";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { EstadoVazio } from "@/components/sistema/Estados";
-import { campo, campoTexto, juntar, superficie } from "@/components/sistema/estilos";
+import { botao, campo, campoTexto, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import SeletorDeFotos from "./SeletorDeFotos";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
@@ -163,12 +163,12 @@ function BlocoDoEstilo({ refs, onMudar }: { refs: RefDeEstilo[]; onMudar: (r: Re
       )}
       {!cheio && <ZonaDeEnvio compacta onArquivos={(a) => void subir(a)} andamento={andamento} />}
       <div className="mt-2 flex min-w-0 flex-wrap items-center">
-        <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8 text-[12px]" disabled={cheio} onClick={() => setDoAcervo(true)}>
-          <Images className="mr-1.5 h-3.5 w-3.5" /> Do acervo
-        </Button>
-        <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8 text-[12px]" disabled={cheio} onClick={() => setDaBiblioteca(!daBiblioteca)} aria-expanded={daBiblioteca}>
-          <BookImage className="mr-1.5 h-3.5 w-3.5" /> Da biblioteca
-        </Button>
+        <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50")} type="button" disabled={cheio} onClick={() => setDoAcervo(true)} aria-label="Do acervo" title="Do acervo">
+          <Images className="h-4 w-4" aria-hidden="true" />
+        </button>
+        <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50")} type="button" disabled={cheio} onClick={() => setDaBiblioteca(!daBiblioteca)} aria-expanded={daBiblioteca} aria-label="Da biblioteca" title="Da biblioteca">
+          <BookImage className="h-4 w-4" aria-hidden="true" />
+        </button>
         <span className="mb-1 text-[12px] tabular-nums text-muted-foreground">
           {refs.length} de {MAX_REFERENCIAS_DA_CAMPANHA}
         </span>
@@ -327,9 +327,9 @@ function CampanhaAberta({ ensaio }: { ensaio: Ensaio }) {
         dica="Aprove, refaça ou use cada foto aqui mesmo: Mesa, Mesa Ads, baixar ou aprovação."
         acao={
           r.versoes > 0 ? (
-            <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" onClick={() => irPara("revisar", { ensaio: ensaio.id })}>
-              <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> Comparar com as fontes
-            </Button>
+            <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => irPara("revisar", { ensaio: ensaio.id })} aria-label="Comparar com as fontes" title="Comparar com as fontes">
+              <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+            </button>
           ) : undefined
         }
       >
@@ -460,18 +460,12 @@ export default function EtapaCampanha() {
             />
           )}
           {aberta && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="mb-1.5 h-8 text-[12px]"
-              onClick={() => {
+            <button className={juntar(botao.icone, "mb-1.5 disabled:opacity-50")} type="button" onClick={() => {
                 setNova(true);
                 escolherEnsaio(null);
-              }}
-            >
-              <Plus className="mr-1 h-3.5 w-3.5" /> Nova foto com modelo
-            </Button>
+              }} aria-label="Nova foto com modelo" title="Nova foto com modelo">
+              <Plus className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
         </div>
       )}
@@ -499,9 +493,9 @@ export default function EtapaCampanha() {
               recolher={false}
               dica="O diretor monta as fotos (cena, luz, ação). Planejar não gera imagem: depois de planejar, Gerar todas mostra o total antes. Cada foto se aprova, refaz ou usa no próprio resultado."
               acao={
-                <Button type="button" size="sm" variant={arsenal ? "default" : "ghost"} className="h-8 text-[12px]" onClick={() => setArsenal(!arsenal)} aria-expanded={arsenal} data-abrir-arsenal="">
-                  <BookImage className="mr-1.5 h-3.5 w-3.5" /> Arsenal
-                </Button>
+                <button className={juntar(botao.icone, "disabled:opacity-50", (arsenal) && "bg-primary/10 text-primary")} type="button" onClick={() => setArsenal(!arsenal)} aria-expanded={arsenal} data-abrir-arsenal="" aria-label="Arsenal" title="Arsenal">
+                  <BookImage className="h-4 w-4" aria-hidden="true" />
+                </button>
               }
             >
               <Pilulas rotulo="Quantas fotos da campanha" opcoes={QUANTIDADES} valor={quantidade} onEscolher={(n) => setQuantidade(limitarQuantidade(n))} />

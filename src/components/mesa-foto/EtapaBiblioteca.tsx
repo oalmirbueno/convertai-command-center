@@ -11,7 +11,7 @@ import { Cartao, Moldura, Vazio, useMesaFoto } from "./Comuns";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
-import { campo, juntar, superficie, texto as textoDoSistema } from "@/components/sistema/estilos";
+import { botao, campo, juntar, superficie, texto as textoDoSistema } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
 import {
@@ -164,12 +164,12 @@ function ExemploDoPrompt({ item, onAmpliar }: { item: ItemDaBiblioteca; onAmplia
   const queryClient = useQueryClient();
   if (temImagem(item)) {
     return (
-      <button type="button" onClick={onAmpliar} className="relative block w-full shrink-0 cursor-zoom-in sm:w-40" aria-label={`Ver grande o exemplo de ${item.titulo}`} data-exemplo={item.exemplo_gerado ? "gerado" : "publico"}>
+      <button type="button" onClick={onAmpliar} className="relative block w-full shrink-0 cursor-zoom-in sm:w-40" aria-label={`Ver grande o exemplo de ${item.titulo}`} title="Ver grande" data-exemplo={item.exemplo_gerado ? "gerado" : "publico"}>
         <Moldura proporcao={4 / 3}>
           <ImagemDaBiblioteca item={item} />
         </Moldura>
-        <span className="pointer-events-none absolute right-1 top-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[11px] text-muted-foreground" aria-hidden="true">
-          <ZoomIn className="mr-0.5 h-3 w-3" /> ver grande
+        <span className="pointer-events-none absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-card/90 text-muted-foreground" aria-hidden="true">
+          <ZoomIn className="h-3.5 w-3.5" />
         </span>
         {item.exemplo_gerado && (
           <span className="pointer-events-none absolute bottom-1 left-1 rounded-full border border-primary/30 bg-card px-1 text-[11px] font-semibold text-primary" data-selo="exemplo-gerado">
@@ -271,20 +271,13 @@ function CartaoDoPrompt({
           <BotaoCopiarTexto texto={pt || en} rotulo="Copiar" />
           {item.prompt_en && item.prompt_pt && <BotaoCopiarTexto texto={en} rotulo="Copiar em inglês" />}
           {item.negativo && <BotaoCopiarTexto texto={item.negativo} rotulo="Copiar o evitar" />}
-          <button
-            type="button"
-            disabled={!(pt || en)}
-            onClick={() => onUsar(ingles ? en : pt || en)}
-            aria-label={`Usar ${item.titulo}`}
-            className="toque-compacto mr-1 inline-flex h-7 shrink-0 items-center rounded-md px-2 text-[12px] font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
-          >
-            <CornerDownLeft className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Usar
+          <button className={juntar(botao.icone, "mr-1 shrink-0 text-primary hover:bg-primary/10 disabled:opacity-50")} type="button" disabled={!(pt || en)} onClick={() => onUsar(ingles ? en : pt || en)} aria-label={`Usar ${item.titulo}`} title="Usar">
+            <CornerDownLeft className="h-4 w-4" aria-hidden="true" />
           </button>
           {!item.client_id && (
-            <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[12px]" disabled={salvando} onClick={onSalvar}>
-              {salvando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <BookmarkPlus className="mr-1 h-3.5 w-3.5" />}
-              Salvar como meu
-            </Button>
+            <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={salvando} onClick={onSalvar} aria-label="Salvar como meu" title="Salvar como meu">
+              {salvando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <BookmarkPlus className="h-4 w-4" aria-hidden="true" />}
+            </button>
           )}
         </div>
       </div>
@@ -314,10 +307,9 @@ function CartaoDaReferencia({ item, onSalvar, salvando, onAmpliar }: { item: Ite
         {item.uso && <p className="truncate text-[11px] text-muted-foreground" title={item.uso}>Quando usar: {item.uso}</p>}
         <LicencaEAutor item={item} />
         {!item.client_id && (
-          <Button type="button" size="sm" variant="ghost" className="h-7 px-1.5 text-[12px]" disabled={salvando} onClick={onSalvar}>
-            {salvando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <BookmarkPlus className="mr-1 h-3.5 w-3.5" />}
-            Salvar como meu
-          </Button>
+          <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={salvando} onClick={onSalvar} aria-label="Salvar como meu" title="Salvar como meu">
+            {salvando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <BookmarkPlus className="h-4 w-4" aria-hidden="true" />}
+          </button>
         )}
       </div>
     </li>
@@ -396,10 +388,9 @@ function ReferenciasLivres({ area, produtos }: { area: AreaDoArsenal | "todas"; 
         }}
       >
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ex.: portrait natural light, wood table, flat lay" aria-label="O que buscar" className={campo} />
-        <Button type="submit" size="sm" className="h-9 text-[13px]" disabled={!q.trim() || buscando}>
-          {buscando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Search className="mr-1.5 h-3.5 w-3.5" />}
-          Buscar referências
-        </Button>
+        <button className={juntar(botao.icone, "text-primary disabled:opacity-50")} type="submit" disabled={!q.trim() || buscando} aria-label="Buscar referências" title="Buscar referências">
+          {buscando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Search className="h-4 w-4" aria-hidden="true" />}
+        </button>
       </form>
       {resultados && resultados.length === 0 && <p className="mt-3 text-[12px] text-muted-foreground">Nada encontrado. Tente em inglês ou com menos palavras.</p>}
       {resultados && resultados.length > 0 && (
@@ -417,10 +408,9 @@ function ReferenciasLivres({ area, produtos }: { area: AreaDoArsenal | "todas"; 
                 <div className="px-0.5">
                   <LicencaEAutor item={r} />
                 </div>
-                <Button type="button" size="sm" variant={ja ? "ghost" : "outline"} className="mt-1 h-7 w-full text-[12px]" disabled={ja || importando === r.chave} onClick={() => void importar(r)}>
-                  {importando === r.chave ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : ja ? <Check className="mr-1 h-3.5 w-3.5" /> : <Download className="mr-1 h-3.5 w-3.5" />}
-                  {ja ? "Importada" : "Importar"}
-                </Button>
+                <button className={juntar(botao.icone, "mt-1 disabled:opacity-50")} type="button" disabled={ja || importando === r.chave} onClick={() => void importar(r)} aria-label={ja ? "Importada" : "Importar"} title={ja ? "Importada" : "Importar"}>
+                  {importando === r.chave ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : ja ? <Check className="h-4 w-4" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
+                </button>
               </li>
             );
           })}
@@ -772,20 +762,12 @@ export function ExemplosDaBiblioteca() {
         <div className="min-w-0 space-y-2" data-limpar-openverse="">
           <p className="text-[12px] font-medium">1. Limpar os exemplos do Openverse</p>
           <div className="flex min-w-0 flex-wrap items-center">
-            <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" disabled={!!ocupado} onClick={() => void verPrevia("openverse")}>
-              {ocupado === "previa" && modo === "openverse" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Search className="mr-1.5 h-3.5 w-3.5" />} Ver quantos são
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="mb-1.5 mr-1.5 h-8 text-[12px]"
-              disabled={!!ocupado}
-              onClick={() => void verPrevia("nao_batem")}
-              title="O Jev compara o título e a busca da foto com o prompt. Cobra centavos no cliente aberto."
-            >
-              {ocupado === "previa" && modo === "nao_batem" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />} Conferir quais não batem
-            </Button>
+            <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" disabled={!!ocupado} onClick={() => void verPrevia("openverse")} aria-label="Ver quantos são" title="Ver quantos são">
+              {ocupado === "previa" && modo === "openverse" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Search className="h-4 w-4" aria-hidden="true" />}
+            </button>
+            <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" disabled={!!ocupado} onClick={() => void verPrevia("nao_batem")} title="O Jev compara o título e a busca da foto com o prompt. Cobra centavos no cliente aberto." aria-label="Conferir quais não batem">
+              {ocupado === "previa" && modo === "nao_batem" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
+            </button>
           </div>
           {previa && (
             <div className="rounded-md bg-muted/50 p-2 text-[12px]" data-previa-da-limpeza="">

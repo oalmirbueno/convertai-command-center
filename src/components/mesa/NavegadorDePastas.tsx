@@ -242,9 +242,12 @@ export function ExploradorDePastas<T>({
           type="button"
           onClick={() => irPara(pai)}
           disabled={atual === RAIZ}
-          className="mr-2 inline-flex h-7 shrink-0 items-center rounded-md border border-border bg-card px-2 text-[11.5px] font-medium text-foreground transition-colors hover:border-primary/50 disabled:opacity-40"
+          // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
+          className="mr-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-foreground transition-colors hover:bg-muted disabled:opacity-40"
+          aria-label="Voltar"
+          title="Voltar"
         >
-          <ChevronLeft className="mr-0.5 h-3.5 w-3.5" /> Voltar
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </button>
         <nav aria-label="Trilha das pastas" className="flex min-w-0 flex-1 flex-wrap items-center text-[12px]">
           <button

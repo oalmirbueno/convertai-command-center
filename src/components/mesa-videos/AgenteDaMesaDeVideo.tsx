@@ -493,9 +493,9 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
           />
           <div className="flex min-w-0 items-center justify-end">
             <Ditado valor={texto} onChange={setTexto} disabled={pensando} className="mr-1.5 min-w-0" />
-            <button type="button" className={botao.primario} onClick={() => void pedir(texto)} disabled={pensando || !texto.trim()}>
-              {pensando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
-              Enviar
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+            <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => void pedir(texto)} disabled={pensando || !texto.trim()} aria-label="Enviar" title="Enviar">
+              {pensando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
           </div>
         </>

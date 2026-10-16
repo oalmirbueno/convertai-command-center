@@ -372,8 +372,8 @@ function GradeDePersonas({ personas, escolhida, onEscolher, onNova }: { personas
       resumo={`${ativas} ${ativas === 1 ? "persona" : "personas"}`}
       ajuda="Pessoas sintéticas do cliente e da agência. Abra uma para a rodada, a âncora e a folha das 6 vistas. Com âncora, ela já serve para a Foto com modelo."
       acao={
-        <button type="button" className={juntar(botao.primario, "h-8 px-2.5 text-[13px]")} onClick={onNova}>
-          <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Nova persona
+        <button className={juntar(botao.icone, "text-primary disabled:opacity-50")} type="button" onClick={onNova} aria-label="Nova persona" title="Nova persona">
+          <Plus className="h-4 w-4" aria-hidden="true" />
         </button>
       }
       data-grade-de-personas=""
@@ -869,9 +869,9 @@ function ColunaDoMotor({
               </div>
               <div className="mt-1 flex min-w-0 flex-wrap items-center">
                 {!ehAncora && (
-                  <Button type="button" size="sm" variant="outline" className="mb-1 mr-1 h-7 px-2 text-[11px]" disabled={!!escolhendo} onClick={() => void escolher(img)}>
-                    {escolhendo === img.id ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Crown className="mr-1 h-3 w-3" />} Âncora
-                  </Button>
+                  <button className={juntar(botao.icone, "mb-1 mr-1 disabled:opacity-50")} type="button" disabled={!!escolhendo} onClick={() => void escolher(img)} aria-label="Âncora" title="Âncora">
+                    {escolhendo === img.id ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Crown className="h-4 w-4" aria-hidden="true" />}
+                  </button>
                 )}
                 <BotaoConferir persona={persona} imagem={img} onConferencia={(c) => setConferencias({ ...conferencias, [img.id]: c })} />
               </div>
@@ -987,12 +987,13 @@ function Rodada({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerso
             </label>
             <button
               type="button"
-              className={juntar(lupa ? botao.primario : botao.secundario, "mb-1.5 h-8 px-2.5 text-[12px]")}
+              className={juntar(botao.icone, "mb-1.5", lupa && "bg-primary/10 text-primary")}
               aria-pressed={!!lupa}
               onClick={() => setLupa(lupa ? null : { x: 50, y: 35 })}
-              title="Toque num ponto do rosto: o mesmo recorte aparece ampliado em todas as candidatas"
+              aria-label="Lupa"
+              title="Lupa: toque num ponto do rosto e o mesmo recorte aparece ampliado em todas as candidatas"
             >
-              <ZoomIn className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Lupa
+              <ZoomIn className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
           <ul className="mt-1 grid min-w-0 grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Candidatas por motor">
@@ -1057,9 +1058,9 @@ function AprovarVista({ persona, imagem }: { persona: Persona; imagem: ImagemDaP
     }
   };
   return (
-    <Button type="button" size="sm" variant="outline" className="h-7 w-full px-1 text-[11px]" disabled={salvando} onClick={() => void aprovar()}>
-      {salvando ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />} Aprovar
-    </Button>
+    <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={salvando} onClick={() => void aprovar()} aria-label="Aprovar" title="Aprovar">
+      {salvando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
+    </button>
   );
 }
 
@@ -1196,9 +1197,9 @@ function AntesEDepoisComZoom({ antes, depois, proporcao }: { antes: ImagemDaPers
         <AntesEDepois antes={antes} depois={depois} proporcao={proporcao} />
       </div>
       <div className="mt-1 flex justify-center">
-        <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" onClick={() => setGrande(true)}>
-          <Maximize2 className="mr-1.5 h-3.5 w-3.5" /> Ver grande
-        </Button>
+        <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => setGrande(true)} aria-label="Ver grande" title="Ver grande">
+          <Maximize2 className="h-4 w-4" aria-hidden="true" />
+        </button>
       </div>
       <Dialog open={grande} onOpenChange={setGrande}>
         <DialogContent className="w-auto max-w-[96vw] p-3 sm:p-4">
@@ -1284,9 +1285,9 @@ export function AmpliarEUsarDaPersona({ persona, imagem }: { persona: Persona; i
       </p>
       {!noAcervo ? (
         <div className="flex min-w-0 flex-wrap items-center">
-          <Button type="button" size="sm" className="mb-1.5 mr-1.5 h-8 text-[12px]" disabled={levando} onClick={() => void garantir()}>
-            {levando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ZoomIn className="mr-1.5 h-3.5 w-3.5" />} Ampliar fiel (pro)
-          </Button>
+          <button className={juntar(botao.icone, "mb-1.5 mr-1.5 text-primary disabled:opacity-50")} type="button" disabled={levando} onClick={() => void garantir()} aria-label="Ampliar fiel (pro)" title="Ampliar fiel (pro)">
+            {levando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ZoomIn className="h-4 w-4" aria-hidden="true" />}
+          </button>
           {abrirNoEstudio && (
             <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" disabled={levando} onClick={() => void garantir().then((f) => f && abrirNoEstudio(f.id))}>
               Abrir no Estúdio
@@ -1476,15 +1477,11 @@ function PersonaLateral({ persona }: { persona: Persona }) {
           {personaUsavelNaTela(persona) && <BotoesDeUso persona={persona} className="mt-2.5" />}
           <div className="-m-0.5 mt-1 flex min-w-0 flex-wrap items-center [&>*]:m-0.5">
             {resumo.ancora && persona.status !== "arquivada" && (
-              <button
-                type="button"
-                className={juntar(botao.discreto, "h-7 px-2 text-[12px]")}
-                onClick={() => {
+              <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => {
                   pedirAoCanvas(clientId, persona.id);
                   irPara("canvas");
-                }}
-              >
-                <Workflow className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Usar no Canvas
+                }} aria-label="Usar no Canvas" title="Usar no Canvas">
+                <Workflow className="h-4 w-4" aria-hidden="true" />
               </button>
             )}
             <ExcluirModelo persona={persona} />

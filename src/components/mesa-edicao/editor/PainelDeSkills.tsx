@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Search, Sparkles, Undo2, X } from "lucide-react";
+import { Check, ChevronDown, List, Search, Sparkles, Undo2, X } from "lucide-react";
 import { botao, campo, etiqueta, juntar, texto } from "@/components/sistema/estilos";
 import type { ProjetoDeEdicao } from "../../../../supabase/functions/_shared/projeto-de-edicao";
 import { parametrosComPadrao, proporSkill, SKILLS_DO_EDITOR, type ContextoDaSkill, type IdDaSkill, type PropostaDaSkill, type Skill, type ValorDoParametro } from "@/lib/editor/skills";
@@ -141,16 +141,15 @@ function PropostaEmLinha({ x, confirmar, cancelar, desfazer }: { x: PropostaNaTe
               <Check className="mr-1 h-3 w-3" />
               Feito
             </span>
-            <button type="button" className={juntar(botao.secundario, "h-8 px-2.5")} onClick={desfazer}>
-              <Undo2 className="mr-1 h-3.5 w-3.5" />
-              Desfazer
+            {/* 16/10/2026: só ícone, sem borda; "Confirmar" fica com texto (confirmação principal do cartão). */}
+            <button type="button" className={botao.icone} onClick={desfazer} aria-label="Desfazer" title="Desfazer">
+              <Undo2 className="h-4 w-4" />
             </button>
           </>
         )}
         {x.estado === "desfeita" && <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>Desfeito: voltou como estava</span>}
-        <button type="button" className={juntar(botao.discreto, "h-8 px-2 text-[12px]")} onClick={() => setVerLista((v) => !v)} aria-expanded={verLista}>
-          {verLista ? "Esconder a lista" : "Ver a lista"}
-          <ChevronDown className={juntar("ml-1 h-3.5 w-3.5 transition-transform", verLista && "rotate-180")} />
+        <button type="button" className={juntar(botao.icone, verLista && "text-foreground")} onClick={() => setVerLista((v) => !v)} aria-expanded={verLista} aria-label={verLista ? "Esconder a lista" : "Ver a lista"} title={verLista ? "Esconder a lista" : "Ver a lista"}>
+          <List className="h-4 w-4" />
         </button>
         {x.estado !== "aberta" && (
           <button type="button" className={botao.icone} onClick={cancelar} aria-label="Fechar">

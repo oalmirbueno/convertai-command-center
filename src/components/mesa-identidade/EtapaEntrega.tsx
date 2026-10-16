@@ -143,8 +143,9 @@ export default function EtapaEntrega() {
 
       <Secao titulo="Kit da marca" divisoria recolher={false}>
         {!sugestao && (
-          <button type="button" className={botao.secundario} onClick={() => void sugerirKit()} disabled={pedindo} data-sugerir-kit="">
-            {pedindo ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <PackageCheck className="mr-1.5 h-4 w-4" />} Levar ao kit da marca
+          // 16/10/2026: só ícone (nome no aria-label e no title).
+          <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} onClick={() => void sugerirKit()} disabled={pedindo} data-sugerir-kit="" aria-label="Levar ao kit da marca" title="Levar ao kit da marca">
+            {pedindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackageCheck className="h-4 w-4" />}
           </button>
         )}
         {sugestao && (

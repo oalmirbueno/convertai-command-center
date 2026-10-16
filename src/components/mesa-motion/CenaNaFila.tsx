@@ -57,9 +57,9 @@ export default function CenaNaFila({
                 : "Na fila"
               : `${ativo.etapa ? ROTULO_DA_ETAPA[ativo.etapa as EtapaDoRender] || ativo.etapa : "Renderizando"} ${Math.round((Number(ativo.progresso) || 0) * 100)}%`}
           </span>
-          <button type="button" className={juntar(botao.barra, "h-7")} onClick={() => onCancelar(ativo.id)}>
-            <Square className="mr-1 h-3 w-3" />
-            Cancelar
+          {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+          <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => onCancelar(ativo.id)} aria-label="Cancelar o render" title="Cancelar o render">
+            <Square className="h-3.5 w-3.5" />
           </button>
         </p>
       )}

@@ -160,9 +160,9 @@ export default function EtapaConteudo({ site }: { site: LinhaDoSite; onIrPara?: 
                 <EstimativaInline partes={[{ modeloId: modelo.id, tipo: "texto", tokensEntrada: 7000, tokensSaida: 7500 }, parteDaConferenciaDoJev()]} />
               </span>
             )}
-            <button type="button" className={escolhida !== null ? botao.secundario : botao.primario} disabled={gerando} onClick={() => void gerar()} data-gerar-conteudo="">
-              {gerando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
-              {opcoes.length ? "Gerar outras 3" : "Gerar 3 opções"}
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+            <button type="button" className={escolhida !== null ? botao.icone : juntar(botao.primario, "w-9 px-0")} aria-label={opcoes.length ? "Gerar outras 3" : "Gerar 3 opções"} title={opcoes.length ? "Gerar outras 3" : "Gerar 3 opções"} disabled={gerando} onClick={() => void gerar()} data-gerar-conteudo="">
+              {gerando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             </button>
           </>
         }

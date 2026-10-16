@@ -43,9 +43,9 @@ function CartaoDoTerritorio({ t, podeAprovar, onAprovar, aprovando }: { t: Terri
             <Check className="mr-1 h-3 w-3" aria-hidden="true" /> Aprovado
           </span>
         ) : (
-          <button type="button" className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")} disabled={!podeAprovar || aprovando} onClick={onAprovar} aria-label="Aprovar este território">
-            {aprovando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-            Aprovar
+          // 16/10/2026: só ícone (nome no aria-label e no title).
+          <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} disabled={!podeAprovar || aprovando} onClick={onAprovar} aria-label="Aprovar este território" title="Aprovar este território">
+            {aprovando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
           </button>
         )}
       </div>
@@ -118,16 +118,18 @@ export default function EtapaDirecao() {
         acoes={
           <>
             {!travado && (
+              // 16/10/2026: só ícone (o nome fica no sr-only e no title pela descricao); o preço continua ao lado.
               <BotaoComCusto
                 rotulo={
                   <>
-                    <Wand2 className="mr-1.5 h-3.5 w-3.5" />
-                    {campanha.territorios.length ? "Propor 3 novos" : "Propor 3 territórios"}
+                    <Wand2 className="h-4 w-4" aria-hidden="true" />
+                    <span className="sr-only">{campanha.territorios.length ? "Propor 3 novos territórios" : "Propor 3 territórios"}</span>
                   </>
                 }
                 titulo="Territórios propostos"
-                variant={campanha.territorio_id ? "outline" : "default"}
-                className="h-9"
+                descricao={campanha.territorios.length ? "Propor 3 novos territórios" : "Propor 3 territórios"}
+                variant={campanha.territorio_id ? "ghost" : "default"}
+                className="h-8 gap-1 px-2"
                 partes={() => partesDoPlanejamento(catalogo)}
                 disabled={!campanha.kit_id}
                 executar={async () => {

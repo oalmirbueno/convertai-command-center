@@ -1,7 +1,7 @@
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Captions, Download, Film, Loader2, Play } from "lucide-react";
+import { Captions, Download, FileText, Film, Loader2, Play } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import Secao from "@/components/sistema/Secao";
@@ -136,14 +136,14 @@ export function LinhaDoFinal({ arquivo, variantes, antes }: { arquivo: ArquivoDe
     );
   } else if (!legenda || legenda.precisa_transcrever) {
     acoes = legenda && legenda.precisa_transcrever ? (
-      <button type="button" className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")} disabled={!!ocupado} onClick={() => void transcrever()} title="Sem fala marcada na edição: transcreve o vídeo pronto (Whisper).">
-        {ocupado === "transcrever" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Captions className="mr-1.5 h-3.5 w-3.5" />}
-        Transcrever por {usd(legenda.custo_transcricao_usd || 0)}
+      // 16/10/2026: só ícone; o preço continua visível ao lado.
+      <button type="button" className={juntar(botao.icone, "w-auto px-1.5 disabled:pointer-events-none disabled:opacity-50")} disabled={!!ocupado} onClick={() => void transcrever()} aria-label={`Transcrever por ${usd(legenda.custo_transcricao_usd || 0)}`} title="Transcrever: sem fala marcada na edição, transcreve o vídeo pronto (Whisper).">
+        {ocupado === "transcrever" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+        <span className="ml-1 text-[11px] tabular-nums">{usd(legenda.custo_transcricao_usd || 0)}</span>
       </button>
     ) : (
-      <button type="button" className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")} disabled={!!ocupado} onClick={() => void gerar()} aria-label={`Gerar legenda de ${arquivo.nome}`}>
-        {ocupado === "gerar" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Captions className="mr-1.5 h-3.5 w-3.5" />}
-        {jaTem ? "Gerar de novo" : "Gerar legenda"}
+      <button type="button" className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} disabled={!!ocupado} onClick={() => void gerar()} aria-label={`Gerar legenda de ${arquivo.nome}`} title={jaTem ? "Gerar a legenda de novo" : "Gerar legenda"}>
+        {ocupado === "gerar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Captions className="h-4 w-4" />}
       </button>
     );
   }
@@ -151,7 +151,7 @@ export function LinhaDoFinal({ arquivo, variantes, antes }: { arquivo: ArquivoDe
   return (
     <li className="min-w-0 py-2" data-final={arquivo.id}>
       <div className="flex min-w-0 items-center">
-        <button type="button" className={juntar(botao.icone, "mr-2 border border-border")} onClick={() => setAberto(aberto === "ver" ? null : "ver")} aria-label={`${aberto === "ver" ? "Fechar" : "Ver"} ${arquivo.nome}`}>
+        <button type="button" className={juntar(botao.icone, "mr-2")} onClick={() => setAberto(aberto === "ver" ? null : "ver")} aria-label={`${aberto === "ver" ? "Fechar" : "Ver"} ${arquivo.nome}`} title={aberto === "ver" ? "Fechar" : "Ver"}>
           {aberto === "ver" ? <Film className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
         </button>
         <div className="min-w-0 flex-1">
@@ -177,18 +177,19 @@ export function LinhaDoFinal({ arquivo, variantes, antes }: { arquivo: ArquivoDe
       )}
       {fila.erro && <p role="alert" className="text-[12px]">{fila.erro}</p>}
       {fila.pedidos.map((p) => <p key={p.id} role="status" className="text-[12px]">Legenda: {rotuloDoPedido(p, Date.now(), fila.worker)}{p.erro_mensagem ? ` · ${p.erro_mensagem}` : ""}</p>)}
+      {/* 16/10/2026: baixar em ícone; o formato (SRT/VTT) fica pequeno ao lado para os dois não parecerem a mesma ação. */}
       {!legenda && jaTem && (jaTem.srt_path || jaTem.vtt_path) && (
         <div className="mt-1 flex min-w-0 flex-wrap items-center" data-legenda-guardada="">
           {jaTem.srt_path && (
-            <button type="button" className={juntar(botao.discreto, "mr-1 h-8 px-2 text-[12px]")} onClick={() => void baixarLegenda(arquivo, "srt", jaTem.srt_path || null, null)} aria-label="Baixar SRT">
-              <Download className="mr-1.5 h-3.5 w-3.5" />
-              SRT
+            <button type="button" className={juntar(botao.icone, "mr-1 w-auto px-1.5 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void baixarLegenda(arquivo, "srt", jaTem.srt_path || null, null)} aria-label="Baixar SRT" title="Baixar SRT">
+              <Download className="h-4 w-4" />
+              <span className="ml-0.5 text-[10px] font-medium">SRT</span>
             </button>
           )}
           {jaTem.vtt_path && (
-            <button type="button" className={juntar(botao.discreto, "h-8 px-2 text-[12px]")} onClick={() => void baixarLegenda(arquivo, "vtt", jaTem.vtt_path || null, null)} aria-label="Baixar VTT">
-              <Download className="mr-1.5 h-3.5 w-3.5" />
-              VTT
+            <button type="button" className={juntar(botao.icone, "w-auto px-1.5 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void baixarLegenda(arquivo, "vtt", jaTem.vtt_path || null, null)} aria-label="Baixar VTT" title="Baixar VTT">
+              <Download className="h-4 w-4" />
+              <span className="ml-0.5 text-[10px] font-medium">VTT</span>
             </button>
           )}
         </div>
@@ -204,13 +205,13 @@ export function LinhaDoFinal({ arquivo, variantes, antes }: { arquivo: ArquivoDe
             ))}
           </ol>
           <div className="flex min-w-0 flex-wrap items-center">
-            <button type="button" className={juntar(botao.discreto, "mb-1 mr-1 h-8 px-2 text-[12px]")} onClick={() => void baixarLegenda(arquivo, "srt", caminhoDaLegenda("srt"), urlDaLegenda("srt"))} disabled={!caminhoDaLegenda("srt") && !urlDaLegenda("srt")} aria-label="Baixar SRT">
-              <Download className="mr-1.5 h-3.5 w-3.5" />
-              SRT
+            <button type="button" className={juntar(botao.icone, "mb-1 mr-1 w-auto px-1.5 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void baixarLegenda(arquivo, "srt", caminhoDaLegenda("srt"), urlDaLegenda("srt"))} disabled={!caminhoDaLegenda("srt") && !urlDaLegenda("srt")} aria-label="Baixar SRT" title="Baixar SRT">
+              <Download className="h-4 w-4" />
+              <span className="ml-0.5 text-[10px] font-medium">SRT</span>
             </button>
-            <button type="button" className={juntar(botao.discreto, "mb-1 mr-3 h-8 px-2 text-[12px]")} onClick={() => void baixarLegenda(arquivo, "vtt", caminhoDaLegenda("vtt"), urlDaLegenda("vtt"))} disabled={!caminhoDaLegenda("vtt") && !urlDaLegenda("vtt")} aria-label="Baixar VTT">
-              <Download className="mr-1.5 h-3.5 w-3.5" />
-              VTT
+            <button type="button" className={juntar(botao.icone, "mb-1 mr-3 w-auto px-1.5 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void baixarLegenda(arquivo, "vtt", caminhoDaLegenda("vtt"), urlDaLegenda("vtt"))} disabled={!caminhoDaLegenda("vtt") && !urlDaLegenda("vtt")} aria-label="Baixar VTT" title="Baixar VTT">
+              <Download className="h-4 w-4" />
+              <span className="ml-0.5 text-[10px] font-medium">VTT</span>
             </button>
             {doEditor && !amostra && (
               <>

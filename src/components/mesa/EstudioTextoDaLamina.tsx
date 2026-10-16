@@ -104,16 +104,18 @@ export default function EstudioTextoDaLamina({
       {enxuto && (
         <p className="flex min-w-0 items-center text-[11.5px] leading-snug text-muted-foreground">
           <span className="min-w-0 flex-1">{enxuto}</span>
+          {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
           <Button
             type="button"
-            size="sm"
+            size="icon"
             variant="ghost"
-            className="ml-1 h-7 shrink-0 px-2 text-[11.5px]"
+            className="ml-1 h-8 w-8 shrink-0"
             disabled={bloqueado || !!ocupado}
             onClick={() => void voltar()}
+            aria-label="Voltar ao original"
+            title="Voltar ao original"
           >
-            {ocupado === "voltar" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Undo2 className="mr-1 h-3 w-3" />}
-            Voltar ao original
+            {ocupado === "voltar" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Undo2 className="h-4 w-4" aria-hidden="true" />}
           </Button>
         </p>
       )}
@@ -123,13 +125,15 @@ export default function EstudioTextoDaLamina({
           <span className="min-w-0 flex-1">Não cabe numa lâmina só.</span>
           <Button
             type="button"
-            size="sm"
+            size="icon"
             variant="ghost"
-            className="ml-1 h-7 shrink-0 px-2 text-[11.5px]"
+            className="ml-1 h-8 w-8 shrink-0"
             disabled={bloqueado || !!ocupado}
             onClick={() => setConfirmando(true)}
+            aria-label="Dividir em 2 lâminas"
+            title="Dividir em 2 lâminas"
           >
-            <Scissors className="mr-1 h-3 w-3" /> Dividir em 2 lâminas
+            <Scissors className="h-4 w-4" aria-hidden="true" />
           </Button>
         </p>
       )}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Copy, Download, Film, Flame, Loader2, Scissors, Sparkles, Trash2 } from "lucide-react";
+import { BookOpen, Copy, Download, Film, Flame, Loader2, Scissors, Timer, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { copiarTexto } from "@/components/mesa/estudioUtil";
@@ -121,13 +121,12 @@ export function PainelDeCapitulos({ ctx }: { ctx: ContextoDoPainel }) {
       <TituloDoPainel titulo="Capítulos e virais" ajuda="Capítulos para vídeo longo (YouTube, aula, podcast) e os trechos que valem um corte curto. A IA (Jev) julga o assunto e o potencial; o título do capítulo é sempre um trecho dito, nada inventado. Sem custo para o cliente." />
       {!frases.length && <p className={texto.auxiliar}>Precisa da fala marcada (Timestamp).</p>}
       <div className="flex flex-wrap">
-        <button type="button" className={juntar(botao.primario, "mb-1 mr-1 h-8")} onClick={() => void acharCapitulos()} disabled={!!ocupado || frases.length < 3}>
-          {ocupado === "capitulos" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <BookOpen className="mr-1.5 h-3.5 w-3.5" />}
-          Achar capítulos
+        {/* 16/10/2026: só ícones (nome no aria-label e no title). */}
+        <button type="button" className={juntar(botao.primario, "mb-1 mr-1 h-8 w-8 px-0")} onClick={() => void acharCapitulos()} disabled={!!ocupado || frases.length < 3} aria-label="Achar capítulos" title="Achar capítulos">
+          {ocupado === "capitulos" ? <Loader2 className="h-4 w-4 animate-spin" /> : <BookOpen className="h-4 w-4" />}
         </button>
-        <button type="button" className={juntar(botao.secundario, "mb-1 h-8")} onClick={() => void acharVirais()} disabled={!!ocupado || !frases.length}>
-          {ocupado === "virais" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Flame className="mr-1.5 h-3.5 w-3.5" />}
-          Achar momentos virais
+        <button type="button" className={juntar(botao.icone, "mb-1 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void acharVirais()} disabled={!!ocupado || !frases.length} aria-label="Achar momentos virais" title="Achar momentos virais">
+          {ocupado === "virais" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Flame className="h-4 w-4" />}
         </button>
       </div>
       {andamento && (
@@ -151,9 +150,8 @@ export function PainelDeCapitulos({ ctx }: { ctx: ContextoDoPainel }) {
               </li>
             ))}
           </ul>
-          <button type="button" className={juntar(botao.discreto, "mt-1 h-8")} onClick={() => void copiarTexto(youtube).then((ok) => (ok ? toast.success("Capítulos copiados", { description: "Cole na descrição do YouTube." }) : toast.error("Não deu para copiar aqui", { description: "Baixe pelo botão Capítulos, em Exportar." })))}>
-            <Copy className="mr-1.5 h-3.5 w-3.5" />
-            Copiar para o YouTube
+          <button type="button" className={juntar(botao.icone, "mt-1 flex")} onClick={() => void copiarTexto(youtube).then((ok) => (ok ? toast.success("Capítulos copiados", { description: "Cole na descrição do YouTube." }) : toast.error("Não deu para copiar aqui", { description: "Baixe pelo botão Capítulos, em Exportar." })))} aria-label="Copiar para o YouTube" title="Copiar para o YouTube">
+            <Copy className="h-4 w-4" />
           </button>
           {validade.motivo && <p className={juntar("mt-1 text-[12px] leading-4", validade.valem ? "text-muted-foreground" : "text-warning")}>{validade.motivo}</p>}
         </>
@@ -173,9 +171,8 @@ export function PainelDeCapitulos({ ctx }: { ctx: ContextoDoPainel }) {
                 </div>
                 <div className="mt-1 flex items-center">
                   <span className={juntar(texto.auxiliar, "mr-auto")}>{v.fim_s ? `${Math.round(v.fim_s - v.tempo_s)} s` : ""}</span>
-                  <button type="button" className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} onClick={() => v.fim_s && void criarCorte(v.tempo_s, v.fim_s, v.rotulo)} disabled={!!ocupado || !v.fim_s}>
-                    {ocupado === `corte:${v.tempo_s}` ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Scissors className="mr-1 h-3 w-3" />}
-                    Criar corte 9:16
+                  <button type="button" className={juntar(botao.icone, "h-7 w-7 disabled:pointer-events-none disabled:opacity-50")} onClick={() => v.fim_s && void criarCorte(v.tempo_s, v.fim_s, v.rotulo)} disabled={!!ocupado || !v.fim_s} aria-label="Criar corte 9:16" title="Criar corte 9:16">
+                    {ocupado === `corte:${v.tempo_s}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Scissors className="h-3.5 w-3.5" />}
                   </button>
                   <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => ctx.onOps([{ op: "remover_marcador", id: v.id }], "Tirar momento viral")} aria-label="Tirar este momento">
                     <Trash2 className="h-3.5 w-3.5" />
@@ -249,9 +246,9 @@ export function PainelDeExportar({ ctx }: { ctx: ContextoDoPainel }) {
           {pedindo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Film className="mr-1.5 h-3.5 w-3.5" />}
           Renderizar {formatos.length > 1 ? `${formatos.length} formatos` : formatos[0] || ""}
         </button>
-        <button type="button" className={juntar(botao.secundario, "mb-1 h-8")} onClick={() => void pedir("amostra")} disabled={pedindo || p.duracao_s <= 0}>
-          <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-          Amostra de 12 s no cursor
+        {/* 16/10/2026: só ícone; "Renderizar" fica com texto (ação principal, diz quantos formatos). */}
+        <button type="button" className={juntar(botao.icone, "mb-1 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void pedir("amostra")} disabled={pedindo || p.duracao_s <= 0} aria-label="Amostra de 12 s no cursor" title="Amostra de 12 s no cursor">
+          <Timer className="h-4 w-4" />
         </button>
       </div>
       {fila.pedidos.length > 0 && (
@@ -262,9 +259,8 @@ export function PainelDeExportar({ ctx }: { ctx: ContextoDoPainel }) {
                 {ROTULO_DO_TIPO[x.tipo]} {formatoDoPedido(x) || ""}: {rotuloDoPedido(x, Date.now(), fila.worker)}
               </span>
               {x.url && (
-                <a className={juntar(botao.discreto, "h-7 px-2 text-[12px]")} href={x.url} target="_blank" rel="noreferrer">
-                  <Download className="mr-1 h-3 w-3" />
-                  MP4
+                <a className={juntar(botao.icone, "h-7 w-7")} href={x.url} target="_blank" rel="noreferrer" aria-label="Baixar MP4" title="Baixar MP4">
+                  <Download className="h-3.5 w-3.5" />
                 </a>
               )}
             </li>
@@ -273,13 +269,14 @@ export function PainelDeExportar({ ctx }: { ctx: ContextoDoPainel }) {
       )}
       <Subtitulo>Textos do vídeo</Subtitulo>
       <div className="flex flex-wrap">
-        <button type="button" className={juntar(botao.secundario, "mb-1 mr-1 h-8")} disabled={!legendas.length} onClick={() => baixarTexto(srtDasLinhas(legendas), `${nomeDoArquivo(p.titulo)}.srt`, "application/x-subrip")}>
-          <Download className="mr-1.5 h-3.5 w-3.5" />
-          Legenda .srt
+        {/* 16/10/2026: baixar em ícone; o formato fica pequeno ao lado para os dois não parecerem a mesma ação. */}
+        <button type="button" className={juntar(botao.icone, "mb-1 mr-1 w-auto px-1.5 disabled:pointer-events-none disabled:opacity-50")} disabled={!legendas.length} onClick={() => baixarTexto(srtDasLinhas(legendas), `${nomeDoArquivo(p.titulo)}.srt`, "application/x-subrip")} aria-label="Legenda .srt" title="Baixar a legenda (.srt)">
+          <Download className="h-4 w-4" />
+          <span className="ml-0.5 text-[10px] font-medium">SRT</span>
         </button>
-        <button type="button" className={juntar(botao.secundario, "mb-1 h-8")} disabled={!youtube} onClick={() => baixarTexto(youtube, `${nomeDoArquivo(p.titulo)}-capitulos.txt`)}>
-          <Download className="mr-1.5 h-3.5 w-3.5" />
-          Capítulos
+        <button type="button" className={juntar(botao.icone, "mb-1 w-auto px-1.5 disabled:pointer-events-none disabled:opacity-50")} disabled={!youtube} onClick={() => baixarTexto(youtube, `${nomeDoArquivo(p.titulo)}-capitulos.txt`)} aria-label="Capítulos" title="Baixar os capítulos (.txt)">
+          <Download className="h-4 w-4" />
+          <span className="ml-0.5 text-[10px] font-medium">TXT</span>
         </button>
       </div>
       {!legendas.length && <p className={texto.auxiliar}>Sem legenda na linha do tempo (gere em Legendas e textos).</p>}

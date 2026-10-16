@@ -112,8 +112,9 @@ function Servicos() {
     <div className="space-y-4" data-biblioteca="servicos">
       <div className="flex items-center justify-between">
         <p className={texto.auxiliar}>{semLista ? "" : `${vivos.length} serviço(s)`}</p>
-        <button type="button" className={botao.secundario} onClick={() => setEdicao({ ...servicoVazio })}>
-          <Plus className="mr-1.5 h-4 w-4" /> Serviço
+        {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+        <button type="button" className={botao.icone} onClick={() => setEdicao({ ...servicoVazio })} aria-label="Novo serviço" title="Novo serviço">
+          <Plus className="h-4 w-4" />
         </button>
       </div>
       {edicao && (
@@ -246,8 +247,9 @@ function Provas() {
     <div className="space-y-4" data-biblioteca="provas">
       <div className="flex items-center justify-between">
         <p className={texto.auxiliar}>{semLista ? "" : `${vivas.filter((p) => provaPodeEntrar(p)).length} autorizado(s) de ${vivas.length}`}</p>
-        <button type="button" className={botao.secundario} onClick={() => setEdicao({ ...provaVazia })}>
-          <Plus className="mr-1.5 h-4 w-4" /> Novo
+        {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+        <button type="button" className={botao.icone} onClick={() => setEdicao({ ...provaVazia })} aria-label="Novo case ou depoimento" title="Novo case ou depoimento">
+          <Plus className="h-4 w-4" />
         </button>
       </div>
       {edicao && (

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronUp, Eye, GripVertical, ImagePlus, Lock } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, GripVertical, ImagePlus, Lock, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import TituloRecolhivel, { useRecolhido } from "@/components/sistema/TituloRecolhivel";
@@ -80,13 +80,12 @@ export default function PlanoDaGrade({
           {dentro.length} de {lista.length} na simulação. A ordem é a das datas: o 1º sai primeiro.
         </p>
         <span className="flex items-center [&>*]:ml-1.5">
-          <button type="button" className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")} onClick={() => setEscolhendo(true)}>
-            <ImagePlus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-            Pôr arte
+          {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
+          <button type="button" className={botao.icone} onClick={() => setEscolhendo(true)} aria-label="Pôr arte" title="Pôr arte">
+            <ImagePlus className="h-4 w-4" aria-hidden="true" />
           </button>
-          <button type="button" className={juntar(botao.primario, "h-8 px-2.5 text-[12px]")} onClick={onVerNaPrevia}>
-            <Eye className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-            Ver na prévia
+          <button type="button" className={juntar(botao.icone, "text-primary")} onClick={onVerNaPrevia} aria-label="Ver na prévia" title="Ver na prévia">
+            <Smartphone className="h-4 w-4" aria-hidden="true" />
           </button>
         </span>
       </div>
@@ -149,10 +148,10 @@ export default function PlanoDaGrade({
                 </span>
               </button>
               <span className="ml-1 flex shrink-0 items-center">
-                <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => i > 0 && plano.moverPorId(item.id, lista[i - 1].id)} disabled={!!trava || i === 0} aria-label={`Pôr ${item.titulo} antes`}>
+                <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => i > 0 && plano.moverPorId(item.id, lista[i - 1].id)} disabled={!!trava || i === 0} aria-label={`Pôr ${item.titulo} antes`} title={`Pôr ${item.titulo} antes`}>
                   <ChevronUp className="h-3.5 w-3.5" />
                 </button>
-                <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => i < lista.length - 1 && plano.moverPorId(item.id, lista[i + 1].id)} disabled={!!trava || i >= lista.length - 1} aria-label={`Pôr ${item.titulo} depois`}>
+                <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => i < lista.length - 1 && plano.moverPorId(item.id, lista[i + 1].id)} disabled={!!trava || i >= lista.length - 1} aria-label={`Pôr ${item.titulo} depois`} title={`Pôr ${item.titulo} depois`}>
                   <ChevronDown className="h-3.5 w-3.5" />
                 </button>
               </span>

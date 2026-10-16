@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, Loader2, RefreshCw, ScanSearch, X } from "lucide-react";
+import { ArrowRight, Check, ListX, Loader2, RefreshCw, ScanSearch, X } from "lucide-react";
 import { toast } from "sonner";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
@@ -120,14 +120,13 @@ function CartaoDaRevisao({ r }: { r: RevisaoDePublicidade }) {
           )}
           <div className="flex min-w-0 items-center">
             {/* Um primário por área (28/09): o "Aprovar" se repete em cada foto, então é secundário; o primário da etapa é seguir para o envio. */}
-            <button type="button" className={juntar(botao.secundario, "mr-2 h-8 px-3")} disabled={!pode.pode || !!fazendo} onClick={() => void decidir("aprovar")} title={pode.motivo || "Aprovar esta versão"}>
-              {fazendo === "aprovar" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-              Aprovar
+            {/* 16/10/2026: Aprovar e Reprovar só em ícone (nome no aria-label e no title). */}
+            <button type="button" className={juntar(botao.icone, "mr-2 disabled:opacity-50")} disabled={!pode.pode || !!fazendo} onClick={() => void decidir("aprovar")} aria-label="Aprovar esta versão" title={pode.motivo || "Aprovar esta versão"}>
+              {fazendo === "aprovar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
             </button>
             <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo (opcional)" maxLength={800} aria-label="Motivo da reprovação" className={juntar(campo, "mr-2 h-8 min-w-0 flex-1")} />
-            <button type="button" className={juntar(botao.secundario, "h-8 px-3")} disabled={!!fazendo} onClick={() => void decidir("reprovar")}>
-              {fazendo === "reprovar" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <X className="mr-1.5 h-3.5 w-3.5" />}
-              Reprovar
+            <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} disabled={!!fazendo} onClick={() => void decidir("reprovar")} aria-label="Reprovar esta versão" title="Reprovar esta versão">
+              {fazendo === "reprovar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
             </button>
           </div>
           {!pode.pode && pode.motivo && <p className={juntar(texto.auxiliar, "mt-1.5 leading-5")}>{pode.motivo}</p>}
@@ -207,9 +206,9 @@ export default function EtapaRevisao() {
         acoes={
           <>
             {mudaram > 0 && (
-              // 16/10/2026: ações só em ícone; o número fica num selo no canto do X.
+              // 16/10/2026: ações só em ícone; o número fica num selo no canto. ListX (não o X do Reprovar de cada foto): o pedido vai ao agente.
               <button type="button" className={juntar(botao.icone, "relative")} onClick={() => pedirAoAgente("Reprove as fotos que mudaram o produto.")} aria-label={`Reprovar as ${mudaram} que mudaram o produto`} title={`Reprovar as ${mudaram} que mudaram o produto`}>
-                <X className="h-4 w-4" />
+                <ListX className="h-4 w-4" />
                 <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-destructive px-1 text-center text-[9.5px] font-semibold leading-4 text-destructive-foreground">{mudaram}</span>
               </button>
             )}
@@ -233,15 +232,17 @@ export default function EtapaRevisao() {
           <AjudaRecolhida className="mr-2" rotulo="Sobre a conferência">
             A conferência é da Mesa Foto (leitura das imagens lado a lado). Sem ela, não dá para aprovar.
           </AjudaRecolhida>
+          {/* 16/10/2026: só ícone (nome no sr-only e no title pela descricao); o preço continua ao lado. */}
           <BotaoComCusto
             rotulo={
               <>
-                <ScanSearch className="mr-1.5 h-3.5 w-3.5" />
-                Conferir com as fontes
+                <ScanSearch className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">Conferir com as fontes</span>
               </>
             }
             titulo="Fotos conferidas"
-            className="h-8"
+            descricao="Conferir com as fontes"
+            className="h-8 gap-1 px-2"
             partes={() => partesDaConferencia(catalogo).map((p) => ({ ...p, vezes: semConferencia.length }))}
             executar={async () => {
               let custo = 0;

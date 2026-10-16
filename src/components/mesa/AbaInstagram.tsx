@@ -205,8 +205,8 @@ function Contas({
     <Popover>
       <PopoverTrigger asChild>
         <button type="button" className={juntar(botao.barra, "ml-1 h-8 shrink-0 px-2")} aria-label="Todas as contas e redes" title="Todas as contas e redes">
+          {/* 16/10/2026 (dono: "texto + ícone vira só o ícone"): "Todas" fica no title e no leitor de tela. */}
           <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-          <span className="ml-1 hidden desk:inline">Todas</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[280px] p-2">
@@ -266,10 +266,8 @@ function AtalhosDoCliente({ painel, vista, onAbrir }: { painel: PainelDoInstagra
           aria-label={a.rotulo}
           aria-pressed={vista === a.parte}
         >
+          {/* 16/10/2026 (dono: "texto + ícone vira só o ícone"): o rótulo fica no title e no leitor de tela. */}
           <span aria-hidden="true">{a.icone}</span>
-          <span className="ml-1 hidden whitespace-nowrap xl:inline" aria-hidden="true">
-            {a.rotulo}
-          </span>
           {a.parte === "proximos" && proximos > 0 && (
             <span className="ml-1 rounded-full bg-primary/15 px-1.5 text-[10.5px] font-semibold tabular-nums text-primary" aria-hidden="true">
               {proximos}

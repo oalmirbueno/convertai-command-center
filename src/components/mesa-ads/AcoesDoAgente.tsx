@@ -26,7 +26,7 @@ import {
   type NumerosVistos,
 } from "./acoesDoAgenteApi";
 import { chavesRotina } from "./rotinaApi";
-import { juntar } from "@/components/sistema/estilos";
+import { botao, juntar } from "@/components/sistema/estilos";
 
 /**
  * Agente sênior que age (pedido do dono em 25/09 à noite): o que ele viu
@@ -328,10 +328,9 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
                   {r && r.desfeito && <span className="mt-0.5 block text-[11.5px] text-muted-foreground">Desfeito.</span>}
                 </span>
                 {estado === "aberta" && !i.indisponivel && (
-                  <Button type="button" size="sm" className="mt-0.5 h-8" disabled={!!fazendo} onClick={() => void escolherUm(i.id)} aria-label={`É esta: ${i.detalhe || i.id}`}>
-                    {fazendo === `escolher:${i.id}` ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
-                    É esta
-                  </Button>
+                  <button className={juntar(botao.icone, "mt-0.5 text-primary disabled:opacity-50")} type="button" disabled={!!fazendo} onClick={() => void escolherUm(i.id)} aria-label={`É esta: ${i.detalhe || i.id}`} title="É esta">
+                    {fazendo === `escolher:${i.id}` ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
+                  </button>
                 )}
               </li>
             );
@@ -350,10 +349,9 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
             </Button>
           )}
           {estado === "feita" && temDesfazer(atual) && (
-            <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8" disabled={!!fazendo} onClick={() => void agir("desfazer")}>
-              {fazendo === "desfazer" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Undo2 className="mr-1.5 h-3.5 w-3.5" />}
-              Desfazer
-            </Button>
+            <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50")} type="button" disabled={!!fazendo} onClick={() => void agir("desfazer")} aria-label="Desfazer" title="Desfazer">
+              {fazendo === "desfazer" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Undo2 className="h-4 w-4" aria-hidden="true" />}
+            </button>
           )}
           {estado === "descartada" && <span className="text-[11.5px] text-muted-foreground">Nenhuma escolhida: nada mudou.</span>}
           {estado === "desfeita" && <span className="text-[11.5px] text-muted-foreground">Desfeito: voltou como estava.</span>}
@@ -444,10 +442,9 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
                   </span>
                 )}
                 {sozinho && itemTemDesfazer(i) && (
-                  <Button type="button" size="sm" variant="outline" className="mt-1 h-7 text-[11.5px]" disabled={!!fazendo} onClick={() => void desfazerItem(i)} aria-label={`Desfazer este item: ${ROTULO_DA_ACAO[i.tipo]}${i.alvo ? ` ${i.alvo.nome}` : ""}`}>
-                    {fazendo === `desfazer:${i.id}` ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Undo2 className="mr-1 h-3.5 w-3.5" />}
-                    Voltar este
-                  </Button>
+                  <button className={juntar(botao.icone, "mt-1 disabled:opacity-50")} type="button" disabled={!!fazendo} onClick={() => void desfazerItem(i)} aria-label={`Desfazer este item: ${ROTULO_DA_ACAO[i.tipo]}${i.alvo ? ` ${i.alvo.nome}` : ""}`} title="Voltar este">
+                    {fazendo === `desfazer:${i.id}` ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Undo2 className="h-4 w-4" aria-hidden="true" />}
+                  </button>
                 )}
               </span>
             </li>
@@ -495,10 +492,9 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
               Feito
             </span>
             {temDesfazer(atual) && (
-              <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8" disabled={!!fazendo} onClick={() => void agir("desfazer")}>
-                {fazendo === "desfazer" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Undo2 className="mr-1.5 h-3.5 w-3.5" />}
-                Desfazer
-              </Button>
+              <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50")} type="button" disabled={!!fazendo} onClick={() => void agir("desfazer")} aria-label="Desfazer" title="Desfazer">
+                {fazendo === "desfazer" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Undo2 className="h-4 w-4" aria-hidden="true" />}
+              </button>
             )}
           </>
         )}
@@ -579,9 +575,8 @@ export function BotaoDoPlanoDoAgente({ mensagemId, onPlanoPronto, className = ""
     }
   };
   return (
-    <Button type="button" size="sm" variant="outline" className={`h-7 text-[11.5px] ${className}`} disabled={fazendo} onClick={() => void criar()} title="Cria o plano já preenchido com esta análise. Sem custo de IA.">
-      {fazendo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <FlaskConical className="mr-1 h-3.5 w-3.5" />}
-      Levar ao Plano de teste (já preenchido)
-    </Button>
+    <button className={juntar(botao.icone, "disabled:opacity-50", className)} type="button" disabled={fazendo} onClick={() => void criar()} title="Cria o plano já preenchido com esta análise. Sem custo de IA." aria-label="Levar ao Plano de teste (já preenchido)">
+      {fazendo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FlaskConical className="h-4 w-4" aria-hidden="true" />}
+    </button>
   );
 }

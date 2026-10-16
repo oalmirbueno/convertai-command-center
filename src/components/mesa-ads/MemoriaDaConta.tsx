@@ -9,7 +9,7 @@ import { Campo } from "@/components/mesa/Seletores";
 import { dataEHora } from "@/lib/mesa/api";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { Carregando, EstadoDeErro } from "@/components/sistema/Estados";
-import { campo, foco, juntar } from "@/components/sistema/estilos";
+import { botao, campo, foco, juntar } from "@/components/sistema/estilos";
 import { brl } from "./adsApi";
 import { chavesMemoria, lerMemoria, PREENCHIDAS_VAZIAS, salvarMemoria, type Preenchidas, type Situacao } from "./memoriaApi";
 
@@ -114,9 +114,9 @@ export default function MemoriaDaConta() {
           O agente de tráfego lê estas 8 camadas em toda conversa e cita a camada quando decide. O custo máximo sai das finanças (ticket x margem) e vira o custo-alvo da rotina quando o resultado da conta é do mesmo tipo (compra com compra, lead com lead). As camadas marcadas como "conta" o painel monta sozinho.
         </AjudaRecolhida>
         {!editando && (
-          <Button type="button" size="sm" variant="outline" className="ml-auto h-8" onClick={() => setEditando(true)} disabled={!m.disponivel}>
-            <Pencil className="mr-1 h-3.5 w-3.5" /> Preencher
-          </Button>
+          <button className={juntar(botao.icone, "ml-auto disabled:opacity-50")} type="button" onClick={() => setEditando(true)} disabled={!m.disponivel} aria-label="Preencher" title="Preencher">
+            <Pencil className="h-4 w-4" aria-hidden="true" />
+          </button>
         )}
       </div>
 

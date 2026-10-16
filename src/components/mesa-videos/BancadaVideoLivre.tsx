@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Clapperboard, ImagePlus, ChevronDown, X } from "lucide-react";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
-import { botao, campo, campoTexto } from "@/components/sistema/estilos";
+import { botao, campo, campoTexto, juntar } from "@/components/sistema/estilos";
 import { EscolherImagem, SeletorDeCamera } from "./PecasDoGerador";
 import type { MotorDeVideo } from "../../../supabase/functions/mesa-videos/modulos/modelos-de-video";
 import type { RascunhoLivre } from "./GeradorLivre";
@@ -24,7 +24,7 @@ export default function BancadaVideoLivre({ r, mudar, motor, duracao, duracoes, 
   return <div className="video-livre" data-video-simples="">
     <div className="video-livre-grade">
       <section className="video-livre-base rounded-xl border bg-card p-4" aria-label="Base visual do vídeo">
-        <header className="mb-3 flex items-center justify-between gap-2"><h3 className="text-sm font-medium">Imagem de partida</h3><button type="button" disabled={copiando} className={botao.discreto} onClick={aoBuscar}><ImagePlus className="mr-1.5 h-4 w-4" />Fotos e pastas</button></header>
+        <header className="mb-3 flex items-center justify-between gap-2"><h3 className="text-sm font-medium">Imagem de partida</h3><button type="button" disabled={copiando} className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} onClick={aoBuscar} aria-label="Fotos e pastas" title="Fotos e pastas"><ImagePlus className="h-4 w-4" /></button></header>
         {buscando ? <div className="video-livre-selecao">{seletorFotos}</div> : <>
           <div className="video-livre-previa rounded-lg bg-muted/30">
             {r.inicial ? <MiniaturaDoStorage bucket="mesa" caminho={r.inicial} alt="Imagem de partida do vídeo" ajuste="contain" className="h-full w-full object-contain" /> : <div className="flex h-full flex-col items-center justify-center gap-3 p-5 text-center"><Clapperboard className="h-10 w-10 text-primary" /><p className="text-sm font-medium">Uma foto ou uma ideia</p><p className="max-w-xs text-xs text-muted-foreground">Escolha uma imagem ou descreva o vídeo ao lado.</p><button type="button" className={botao.secundario} onClick={aoBuscar}>Escolher foto do cliente</button></div>}

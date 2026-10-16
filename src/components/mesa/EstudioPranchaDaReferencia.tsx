@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LayoutGrid, Loader2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
+import { botao, juntar } from "@/components/sistema";
 import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
 import {
   corpoDaPrancha,
@@ -128,16 +129,17 @@ export default function EstudioPranchaDaReferencia({
   if (!r.prancha) {
     if (r.lida) return null;
     return (
+      // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
       <button
         type="button"
         onClick={() => void lerAgora()}
         disabled={lendo || bloqueado}
-        className="inline-flex items-center text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50"
-        title="Para print de perfil ou de carrossel: o estúdio acha cada arte e usa a capa e a sequência"
+        className={juntar(botao.icone, "disabled:opacity-50")}
+        aria-label={`A ${rotulo} tem várias artes? Ler os quadros`}
+        title={`A ${rotulo} tem várias artes? Ler os quadros (print de perfil ou de carrossel: o estúdio acha cada arte e usa a capa e a sequência)`}
         data-prancha="ler"
       >
-        {lendo ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <LayoutGrid className="mr-1 h-3 w-3" />}
-        A {rotulo} tem várias artes? Ler os quadros
+        {lendo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <LayoutGrid className="h-4 w-4" aria-hidden="true" />}
       </button>
     );
   }

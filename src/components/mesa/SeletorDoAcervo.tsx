@@ -172,7 +172,7 @@ export default function SeletorDoAcervo({
       <div className="flex items-center justify-between">
         <p className="text-[12.5px] font-semibold">{titulo}</p>
         {onFechar && (
-          <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={onFechar} aria-label="Fechar o acervo">
+          <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={onFechar} aria-label="Fechar o acervo" title="Fechar o acervo">
             <X className="h-4 w-4" />
           </Button>
         )}

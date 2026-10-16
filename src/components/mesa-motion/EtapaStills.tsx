@@ -149,9 +149,9 @@ function Conteudo({ filme, links, irPara }: { filme: Filme; links: Record<string
           </Painel>
         ))}
       </div>
-      <button type="button" className={botao.primario} onClick={() => irPara("construcao")}>
-        Seguir para a construção
-        <ArrowRight className="ml-1 h-3.5 w-3.5" />
+      {/* 16/10/2026: só ícone; o destino vai no aria-label e no title. */}
+      <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => irPara("construcao")} aria-label="Seguir para a construção" title="Seguir para a construção">
+        <ArrowRight className="h-4 w-4" />
       </button>
     </div>
   );

@@ -94,10 +94,12 @@ export default function AnexosComPapel({
           onClick={() => setAcervoAberto((a) => !a)}
           disabled={desabilitado || cheio}
           aria-expanded={acervoAberto}
-          className="mb-1 mr-1.5 inline-flex h-8 items-center rounded-md px-2 text-[12px] text-muted-foreground hover:text-foreground disabled:opacity-50"
-          title="Escolher do acervo do cliente"
+          // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
+          className="mb-1 mr-1.5 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+          aria-label="Do acervo"
+          title="Do acervo: escolher do acervo do cliente"
         >
-          <Images className="mr-1 h-4 w-4" /> Do acervo
+          <Images className="h-4 w-4" aria-hidden="true" />
         </button>
         <AjudaRecolhida className="mb-1" rotulo="O papel de cada imagem" titulo="Imagens no pedido">
           {AJUDA_DOS_PAPEIS}

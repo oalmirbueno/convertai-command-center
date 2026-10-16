@@ -103,25 +103,26 @@ export default function VotacaoDosNomes({ rodada }: { rodada: RodadaDeNomes }) {
       acao={
         <>
           {!aberta ? (
-            <button type="button" className={juntar(botao.secundario, "m-1 h-8")} disabled={!!ocupado} onClick={() => void rodar("abrir", async () => {
+            // 16/10/2026: só ícone, sem borda (nome no aria-label e no title).
+            <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} disabled={!!ocupado} aria-label={v && v.votacao ? "Reabrir a votação do cliente" : "Abrir votação do cliente"} title={v && v.votacao ? "Reabrir a votação do cliente (copia o link)" : "Abrir votação do cliente (copia o link)"} onClick={() => void rodar("abrir", async () => {
               const r = await chamarIdentidade<{ caminho: string }>("naming_votacao_abrir", { rodada_id: rodada.id });
               await copiarTexto(`${window.location.origin}${r.caminho}`);
               toast.success("Votação aberta e link copiado", { description: "Mande o link no grupo do cliente." });
               void qc.invalidateQueries({ queryKey: chave });
             })}>
-              {ocupado === "abrir" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Link2 className="mr-1.5 h-3.5 w-3.5" />} {v && v.votacao ? "Reabrir a votação do cliente" : "Abrir votação do cliente"}
+              {ocupado === "abrir" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
             </button>
           ) : (
             <>
               <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} onClick={() => link && void copiarTexto(link).then((ok) => (ok ? toast.success("Link copiado") : toast.error("Não deu para copiar")))} aria-label="Copiar link" title="Copiar link">
                 <Copy className="h-4 w-4" aria-hidden="true" />
               </button>
-              <button type="button" className={juntar(botao.discreto, "m-1 h-8")} disabled={!!ocupado} onClick={() => void rodar("fechar", async () => {
+              <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} disabled={!!ocupado} aria-label="Fechar a votação" title="Fechar a votação" onClick={() => void rodar("fechar", async () => {
                 await chamarIdentidade("naming_votacao_fechar", { rodada_id: rodada.id });
                 toast.success("Votação fechada");
                 void qc.invalidateQueries({ queryKey: chave });
               })}>
-                <Link2Off className="mr-1.5 h-3.5 w-3.5" /> Fechar
+                <Link2Off className="h-4 w-4" />
               </button>
             </>
           )}

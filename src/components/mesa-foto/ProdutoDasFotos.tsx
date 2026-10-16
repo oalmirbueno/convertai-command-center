@@ -25,6 +25,7 @@ import {
   type IdentificacaoDoProduto,
   type KitDeFoto,
 } from "./fotoApi";
+import { botao, juntar } from "@/components/sistema";
 
 /**
  * O produto dentro do passo 1 (pedido do dono, 25/09: "a gente gera foto,
@@ -197,32 +198,18 @@ export default function ProdutoDasFotos({ fotos, recolhidoDeInicio = false, colu
           {/* 02/10 (dono: "fica em laço"): daqui só para frente, direto na ferramenta, já com este produto. */}
           {!(objetivo && objetivo.requisito === "produto") && (
             <>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="mb-1 mr-1.5 h-8 text-[12px]"
-                onClick={() => {
+              <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50")} type="button" onClick={() => {
                   if (escolherObjetivo) escolherObjetivo("variacoes");
                   irPara("ensaio");
-                }}
-                data-criar-deste-produto="variacoes"
-              >
-                <Images className="mr-1.5 h-3.5 w-3.5" /> Fotos do produto
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="mb-1 mr-2 h-8 text-[12px]"
-                onClick={() => {
+                }} data-criar-deste-produto="variacoes" aria-label="Fotos do produto" title="Fotos do produto">
+                <Images className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button className={juntar(botao.icone, "mb-1 mr-2 disabled:opacity-50")} type="button" onClick={() => {
                   if (escolherObjetivo) escolherObjetivo("modelo");
                   irPara("campanha");
-                }}
-                data-criar-deste-produto="modelo"
-              >
-                <Megaphone className="mr-1.5 h-3.5 w-3.5" /> Foto com modelo
-              </Button>
+                }} data-criar-deste-produto="modelo" aria-label="Foto com modelo" title="Foto com modelo">
+                <Megaphone className="h-4 w-4" aria-hidden="true" />
+              </button>
             </>
           )}
           <button type="button" className="mb-1 text-[12px] text-muted-foreground hover:text-foreground" onClick={() => irPara("kits", { kit: kit.id })}>

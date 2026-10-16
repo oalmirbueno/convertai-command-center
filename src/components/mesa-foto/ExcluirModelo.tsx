@@ -7,6 +7,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { arquivarPersona, guardarPersona, chaveDasPersonas, type Persona } from "./modelosApi";
+import { botao, juntar } from "@/components/sistema";
 
 export default function ExcluirModelo({ persona }: { persona: Persona }) {
   const { clientId, isAdmin } = useMesa();
@@ -31,9 +32,9 @@ export default function ExcluirModelo({ persona }: { persona: Persona }) {
     finally { setOcupado(false); }
   };
   return <>
-    <Button size="sm" variant="ghost" className="h-8 shrink-0 text-[12px]" aria-label={`${excluido ? "Restaurar" : "Excluir"} modelo ${persona.nome}`} disabled={ocupado} onClick={() => excluido ? void executar() : setConfirmar(true)}>
-      {excluido ? <ArchiveRestore className="mr-1 h-3.5 w-3.5" /> : <Trash2 className="mr-1 h-3.5 w-3.5" />}{excluido ? "Restaurar" : "Excluir"}
-    </Button>
+    <button className={juntar(botao.icone, "shrink-0 disabled:opacity-50")} type="button" aria-label={`${excluido ? "Restaurar" : "Excluir"} modelo ${persona.nome}`} disabled={ocupado} onClick={() => excluido ? void executar() : setConfirmar(true)} title={excluido ? "Restaurar" : "Excluir"}>
+      {excluido ? <ArchiveRestore className="h-4 w-4" aria-hidden="true" /> : <Trash2 className="h-4 w-4" aria-hidden="true" />}
+    </button>
     <AlertDialog open={confirmar} onOpenChange={(v) => !ocupado && setConfirmar(v)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir {persona.nome} da seleção?</AlertDialogTitle><AlertDialogDescription>O modelo sai dos seletores e fica em Arquivadas, onde pode ser restaurado. As fotos e gerações feitas com ele são preservadas.{!persona.client_id ? " Este modelo pertence à agência: a mudança vale para todos os clientes." : ""}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={ocupado}>Cancelar</AlertDialogCancel><Button disabled={ocupado} onClick={() => void executar()}>{ocupado ? "Excluindo…" : "Excluir modelo"}</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </>;
 }

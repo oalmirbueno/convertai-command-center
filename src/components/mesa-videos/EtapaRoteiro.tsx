@@ -251,17 +251,16 @@ export default function EtapaRoteiro({ irPara }: { irPara: IrPara }) {
               </button>
             )}
             <SeletorCompacto rotulo="Variações por plano" opcoes={[1, 2, 3, 4].map((n) => ({ valor: String(n), rotulo: `${n}x` }))} valor={String(variacoes)} onEscolher={(v) => setVariacoes(Number(v))} className="ml-1" />
-            <button type="button" className={juntar(botao.secundario, "ml-1")} onClick={novoPlano} aria-label="Novo plano">
-              <Plus className="h-3.5 w-3.5 sm:mr-1.5" />
-              <span className="hidden sm:inline">Plano</span>
+            {/* 16/10/2026: só ícones, sem borda; a contagem dos marcados vira número pequeno junto do ícone. */}
+            <button type="button" className={juntar(botao.icone, "ml-1")} onClick={novoPlano} aria-label="Novo plano" title="Novo plano">
+              <Plus className="h-4 w-4" />
             </button>
-            <button type="button" className={juntar(botao.secundario, "ml-1")} onClick={() => void mandarAoEditor()} disabled={!!ocupado || !planos.some((p) => p.escolhido)} aria-label="Mandar ao editor">
-              {ocupado === "editor" ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <Scissors className="h-3.5 w-3.5 sm:mr-1.5" />}
-              <span className="hidden sm:inline">Editor</span>
+            <button type="button" className={juntar(botao.icone, "ml-1 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void mandarAoEditor()} disabled={!!ocupado || !planos.some((p) => p.escolhido)} aria-label="Mandar ao editor" title="Mandar ao editor">
+              {ocupado === "editor" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scissors className="h-4 w-4" />}
             </button>
-            <button type="button" className={juntar(botao.primario, "ml-1")} onClick={() => void proporGerar()} disabled={!!ocupado || !marcados.length} aria-label="Gerar os planos marcados">
-              {ocupado === "gerar" ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <Wand2 className="h-3.5 w-3.5 sm:mr-1.5" />}
-              <span className="hidden sm:inline">Gerar {marcados.length || ""}</span>
+            <button type="button" className={juntar(botao.primario, "ml-1 h-8 px-2")} onClick={() => void proporGerar()} disabled={!!ocupado || !marcados.length} aria-label="Gerar os planos marcados" title="Gerar os planos marcados">
+              {ocupado === "gerar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+              {marcados.length > 0 && <span className="ml-1 text-[11px] tabular-nums">{marcados.length}</span>}
             </button>
           </>
         }
@@ -404,9 +403,8 @@ export default function EtapaRoteiro({ irPara }: { irPara: IrPara }) {
                           <div>
                             <div className="mb-2 flex min-w-0 items-center">
                               <p className={juntar(texto.rotulo, "flex-1")}>Resultados ({res.length})</p>
-                              <button type="button" className={botao.discreto} disabled={!!ocupado} onClick={() => void avaliar(p)} aria-label={`Avaliar os resultados de ${p.ref}`}>
-                                {ocupado === `avaliar-${p.ref}` ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <ScanEye className="h-3.5 w-3.5 sm:mr-1.5" />}
-                                <span className="hidden sm:inline">Avaliar</span>
+                              <button type="button" className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} disabled={!!ocupado} onClick={() => void avaliar(p)} aria-label={`Avaliar os resultados de ${p.ref}`} title="Avaliar com o Jev">
+                                {ocupado === `avaliar-${p.ref}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanEye className="h-4 w-4" />}
                               </button>
                               {p.escolhido && planos[i + 1] && (
                                 <button type="button" className={botao.discreto} disabled={!!ocupado} onClick={() => void usarUltimoQuadro(i)}>

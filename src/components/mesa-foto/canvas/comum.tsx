@@ -21,6 +21,12 @@ export const ICONE_DO_VIDEO = Film;
 export const PAINEL = "border border-white/10 bg-zinc-950/95 text-zinc-100 shadow-2xl";
 /** Botão pequeno sobre fundo preto. */
 export const BOTAO = "inline-flex h-7 shrink-0 items-center rounded-lg border border-white/10 bg-white/5 px-2 text-[11.5px] text-zinc-100 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50";
+/**
+ * Botão só ícone sobre fundo preto, sem borda (dono, 16/10/2026: "deixa só o
+ * ícone, sem as bordinhas; passo em cima e ele fala o que é"). Sempre com
+ * aria-label e title.
+ */
+export const BOTAO_ICONE = "nodrag toque-compacto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-zinc-300 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50";
 /** Pílula de escolha sobre fundo preto (ligada ou não). */
 export const pilula = (ligada: boolean) =>
   `mb-1 mr-1 inline-flex h-7 max-w-full items-center truncate rounded-full border px-2.5 text-[11.5px] transition-colors ${ligada ? "border-emerald-400/70 bg-emerald-400/15 text-white" : "border-white/10 bg-white/5 text-zinc-400 hover:text-white"}`;

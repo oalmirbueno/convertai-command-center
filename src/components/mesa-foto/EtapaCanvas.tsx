@@ -20,7 +20,6 @@ import "@xyflow/react/dist/style.css";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  ArrowUpRight,
   Check,
   CheckCheck,
   ChevronRight,
@@ -30,11 +29,13 @@ import {
   Download,
   Eye,
   EyeOff,
+  FilePlus2,
   HelpCircle,
   ImagePlus,
   Layers,
   LayoutList,
   Loader2,
+  PenTool,
   Plus,
   Save,
   SlidersHorizontal,
@@ -117,7 +118,7 @@ import { ChatDoAgente } from "./canvas/Agente";
 import { EditorDaLigacaoDeResultado } from "./canvas/Cena";
 import { HistoriaDoCanvas, type AcoesDaHistoria } from "./canvas/FaixaDaHistoria";
 import { cenaNova, cenasDaHistoria, duplicarCena, marcarComoCena, proximaCena } from "./canvas/historia";
-import { BOTAO, descrever, FLUTUANTE, Gaveta, ICONES, kitsUsaveis, MiniaturaGrande, PAINEL, useRodaPresa, type Descricao, type Fontes } from "./canvas/comum";
+import { BOTAO_ICONE, BOTAO, descrever, FLUTUANTE, Gaveta, ICONES, kitsUsaveis, MiniaturaGrande, PAINEL, useRodaPresa, type Descricao, type Fontes } from "./canvas/comum";
 import { AjustesDoResultado, CustoDoResultado, EditorDoCartao, useUsoDoResultado } from "./canvas/Editores";
 import { EscolherCartao, type AbaDaEscolha, type PedidoDeEscolha } from "./canvas/Escolher";
 import { EsteiraDeProdutos, TIPO_ARRASTADO_DA_ESTEIRA } from "./canvas/Esteira";
@@ -248,11 +249,11 @@ function FerramentasDoNo({ noId, tipo }: { noId: string; tipo: TipoDeNo }) {
   if (!ctx) return null;
   return (
     <div className="nodrag absolute -top-9 right-0 flex items-center rounded-lg border border-white/10 bg-zinc-950 p-0.5 shadow-xl" data-ferramentas-do-no={noId}>
-      <button type="button" className="flex h-7 items-center rounded-md px-1.5 text-[11px] text-zinc-200 hover:bg-white/10" onClick={() => ctx.abrir(noId)} aria-label="Ajustar o cartão">
-        <SlidersHorizontal className="mr-1 h-3 w-3" /> Ajustar
+      <button className={juntar(BOTAO_ICONE, "disabled:opacity-50")} type="button" onClick={() => ctx.abrir(noId)} aria-label="Ajustar o cartão" title="Ajustar">
+        <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
       </button>
-      <button type="button" className="flex h-7 items-center rounded-md px-1.5 text-[11px] text-red-300 hover:bg-red-500/15" onClick={() => ctx.tirar(noId)} aria-label={tipo === "gerar" ? "Apagar o Resultado" : "Apagar o cartão"}>
-        <Trash2 className="mr-1 h-3 w-3" /> Apagar
+      <button className={juntar(BOTAO_ICONE, "text-red-300 hover:bg-red-500/15 disabled:opacity-50")} type="button" onClick={() => ctx.tirar(noId)} aria-label={tipo === "gerar" ? "Apagar o Resultado" : "Apagar o cartão"} title="Apagar">
+        <Trash2 className="h-4 w-4" aria-hidden="true" />
       </button>
     </div>
   );
@@ -357,8 +358,6 @@ function useSegundos(ativo: boolean) {
   return s;
 }
 
-const ICONE = "nodrag inline-flex h-7 items-center justify-center rounded-lg border border-white/10 bg-white/5 px-1.5 text-[11px] text-zinc-100 transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50";
-
 function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
   const ctx = useContext(ContextoDoQuadro);
   const { no, junta, bloqueios, entradas, cena } = data;
@@ -424,15 +423,8 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
           <span className="flex-1 text-[11px] font-semibold uppercase tracking-wider">Resultado</span>
         )}
         {ctx && atual && gerando.length === 0 && (
-          <button
-            type="button"
-            className="nodrag mr-1.5 inline-flex h-6 items-center rounded-md border border-orange-400/40 bg-orange-400/10 px-1.5 text-[11px] font-semibold text-orange-200 hover:bg-orange-400/20"
-            onClick={() => ctx.animar(no.id)}
-            aria-label="Animar esta foto"
-            title="Vira vídeo: cartão Vídeo com esta foto no 1º quadro"
-            data-animar-resultado={no.id}
-          >
-            <Film className="mr-1 h-3 w-3" /> Animar
+          <button className={juntar(BOTAO_ICONE, "nodrag mr-1.5 text-orange-200 hover:bg-orange-400/20 disabled:opacity-50")} type="button" onClick={() => ctx.animar(no.id)} aria-label="Animar esta foto" title="Vira vídeo: cartão Vídeo com esta foto no 1º quadro" data-animar-resultado={no.id}>
+            <Film className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
         {gerando.length > 0 ? (
@@ -534,38 +526,31 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
         {atual ? (
           <>
             {uso.temEstudio && (
-              <button type="button" className={`${ICONE} mr-1`} disabled={!atual.imagem_id} onClick={() => uso.abrirNoEstudio(atual)} aria-label="Abrir no Estúdio de fotos" title="Abre esta foto no Estúdio de fotos">
-                Estúdio
+              <button type="button" className={juntar(BOTAO_ICONE, "mr-1")} disabled={!atual.imagem_id} onClick={() => uso.abrirNoEstudio(atual)} aria-label="Abrir no Estúdio de fotos" title="Abre esta foto no Estúdio de fotos">
+                <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
               </button>
             )}
-            <button
-              type="button"
-              className={`${ICONE} mr-1`}
-              disabled={!!uso.ocupado || !atual.imagem_id}
-              onClick={() => void uso.usarNaMesa(atual)}
-              aria-label="Usar na Mesa"
-              title="Aprova (se precisar) e abre o Estúdio da Mesa com esta foto"
-            >
-              {uso.ocupado === "usar" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <ArrowUpRight className="mr-1 h-3 w-3" />} Mesa
+            <button className={juntar(BOTAO_ICONE, "mr-1 disabled:opacity-50")} type="button" disabled={!!uso.ocupado || !atual.imagem_id} onClick={() => void uso.usarNaMesa(atual)} aria-label="Usar na Mesa" title="Aprova (se precisar) e abre o Estúdio da Mesa com esta foto">
+              {uso.ocupado === "usar" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <PenTool className="h-4 w-4" aria-hidden="true" />}
             </button>
-            <button type="button" className={`${ICONE} mr-1`} disabled={!!uso.ocupado || !atual.imagem_id} onClick={() => void uso.finalizar(atual)} aria-label="Finalizar" title="Aprova (se precisar) e abre o Usar da Mesa Foto">
-              {uso.ocupado === "finalizar" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCheck className="mr-1 h-3 w-3" />} Finalizar
+            <button className={juntar(BOTAO_ICONE, "mr-1 disabled:opacity-50")} type="button" disabled={!!uso.ocupado || !atual.imagem_id} onClick={() => void uso.finalizar(atual)} aria-label="Finalizar" title="Aprova (se precisar) e abre o Usar da Mesa Foto">
+              {uso.ocupado === "finalizar" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCheck className="h-4 w-4" aria-hidden="true" />}
             </button>
             {ctx && atual.imagem_id && (
               <BotaoComCusto
-                rotulo={<Copy className="h-3 w-3" />}
+                rotulo={<Copy className="h-4 w-4" aria-hidden="true" />}
                 titulo="Variações desta foto"
                 descricao={`Variações desta: ${vezes} ${vezes === 1 ? "foto" : "fotos"} com a mesma pessoa, o mesmo produto e o mesmo estilo, em ângulos diferentes.`}
                 variant="outline"
-                className="nodrag mr-1 h-7 border-white/10 bg-white/5 px-1.5 text-[11px] text-zinc-100 hover:bg-white/15"
+                className="nodrag mr-1 h-7 w-7 border-transparent bg-transparent p-0 text-zinc-300 hover:bg-white/10 hover:text-white"
                 fecharAoConfirmar
                 disabled={gerando.length > 0}
                 partes={() => partesDaSerie(atual.motor_id, no.dados.qualidade || "alta", entradas, vezes, true)}
                 executar={() => ctx.variacoes(no.id, atual)}
               />
             )}
-            <button type="button" className={ICONE} disabled={baixando} onClick={() => void baixar()} aria-label="Baixar" title="Baixar a foto (com gerada no nome)">
-              {baixando ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+            <button type="button" className={BOTAO_ICONE} disabled={baixando} onClick={() => void baixar()} aria-label="Baixar" title="Baixar a foto (com gerada no nome)">
+              {baixando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
             </button>
           </>
         ) : (
@@ -727,23 +712,23 @@ function Paleta({ onTipo, onAdicionar }: { onTipo: (t: TipoDeNo) => void; onAdic
               }
             }}
             onClick={() => onTipo(t)}
-            title={`${tipo.dica} Toque para pôr no quadro (ou arraste).`}
+            aria-label={tipo.rotulo}
+            title={`${tipo.rotulo}: ${tipo.dica} Toque para pôr no quadro (ou arraste).`}
             data-paleta={t}
             className="mb-0.5 flex w-full flex-col items-center rounded-xl px-0.5 py-1 text-center transition-colors hover:bg-white/10"
           >
-            <span className={`flex h-7 w-7 items-center justify-center ${t === "agente" ? "rounded-full" : "rounded-lg"} border ${tipo.borda} ${tipo.fundo}`}>
-              <Icone className={`h-3.5 w-3.5 ${tipo.texto}`} />
+            {/* 16/10/2026 (dono: "deixa só o ícone, sem as bordinhas"): o nome vai no title e no aria-label. */}
+            <span className={`flex h-8 w-8 items-center justify-center ${t === "agente" ? "rounded-full" : "rounded-lg"} ${tipo.fundo}`}>
+              <Icone className={`h-4 w-4 ${tipo.texto}`} aria-hidden="true" />
             </span>
-            <span className="mt-0.5 text-[11px] font-medium leading-none text-zinc-200">{tipo.rotulo}</span>
           </button>
         );
       })}
       <span className="mx-1 my-1 block h-px bg-white/10" />
-      <button type="button" onClick={onAdicionar} data-paleta="adicionar" className="mb-0.5 flex w-full flex-col items-center rounded-xl px-0.5 py-1 text-center hover:bg-white/10" title="Escolher do acervo, dos produtos ou das pessoas, pela foto">
-        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-400 text-black">
-          <Plus className="h-4 w-4" />
+      <button type="button" onClick={onAdicionar} data-paleta="adicionar" className="mb-0.5 flex w-full flex-col items-center rounded-xl px-0.5 py-1 text-center hover:bg-white/10" aria-label="Adicionar" title="Adicionar: escolher do acervo, dos produtos ou das pessoas, pela foto">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400 text-black">
+          <Plus className="h-4 w-4" aria-hidden="true" />
         </span>
-        <span className="mt-0.5 text-[11px] font-medium leading-none text-zinc-200">Adicionar</span>
       </button>
     </nav>
   );
@@ -1825,8 +1810,8 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     conteudoDoPainel = (
       <div className="min-w-0 space-y-2">
         <p className="text-[11.5px] text-zinc-400">{ROTULOS_DAS_ENTRADAS[ligacaoAberta.entrada]} ligado ao Resultado. Arraste a ponta da linha para outro Resultado; solte no vazio para desligar.</p>
-        <button type="button" className={BOTAO} onClick={() => { mudar((c) => desligar(c, ligacaoAberta.id)); setSelecionado(null); }}>
-          <X className="mr-1 h-3.5 w-3.5" /> Desligar
+        <button className={juntar(BOTAO_ICONE, "disabled:opacity-50")} type="button" onClick={() => { mudar((c) => desligar(c, ligacaoAberta.id)); setSelecionado(null); }} aria-label="Desligar" title="Desligar">
+          <X className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
     );
@@ -1839,8 +1824,8 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
           <button type="button" className={`${BOTAO} mb-1 mr-1.5`} onClick={() => setSelecionado(null)}>
             Voltar aos ajustes
           </button>
-          <button type="button" className={`${BOTAO} mb-1 text-red-300`} onClick={() => tirar(cartaoDoPainel.id)} aria-label="Tirar o cartão do quadro">
-            <Trash2 className="mr-1 h-3 w-3" /> Apagar
+          <button className={juntar(BOTAO_ICONE, "mb-1 text-red-300 disabled:opacity-50")} type="button" onClick={() => tirar(cartaoDoPainel.id)} aria-label="Tirar o cartão do quadro" title="Apagar">
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -1875,8 +1860,8 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
           <button type="button" className={`${BOTAO} mb-1 mr-1.5`} onClick={() => setSelecionado(null)}>
             Voltar aos ajustes
           </button>
-          <button type="button" className={`${BOTAO} mb-1 text-red-300`} onClick={() => tirar(cartaoDoPainel.id)} aria-label="Tirar o cartão do quadro">
-            <Trash2 className="mr-1 h-3 w-3" /> Apagar
+          <button className={juntar(BOTAO_ICONE, "mb-1 text-red-300 disabled:opacity-50")} type="button" onClick={() => tirar(cartaoDoPainel.id)} aria-label="Tirar o cartão do quadro" title="Apagar">
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -1897,8 +1882,8 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
           <button type="button" className={`${BOTAO} mb-1 mr-1.5`} onClick={() => setSelecionado(null)}>
             Voltar aos ajustes
           </button>
-          <button type="button" className={`${BOTAO} mb-1 text-red-300`} onClick={() => tirar(cartaoDoPainel.id)} aria-label="Tirar o cartão do quadro">
-            <Trash2 className="mr-1 h-3 w-3" /> Apagar
+          <button className={juntar(BOTAO_ICONE, "mb-1 text-red-300 disabled:opacity-50")} type="button" onClick={() => tirar(cartaoDoPainel.id)} aria-label="Tirar o cartão do quadro" title="Apagar">
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -1917,23 +1902,19 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
           onAgente={cartaoDoPainel.tipo === "ambiente" ? () => ambienteComAgente(cartaoDoPainel.id) : undefined}
         />
         {!ligado && ehEntrada(cartaoDoPainel.tipo) && (
-          <button
-            type="button"
-            className={BOTAO}
-            onClick={() => {
+          <button className={juntar(BOTAO_ICONE, "disabled:opacity-50")} type="button" onClick={() => {
               const alvo = resultadoAlvo(atual.current, resultadoAtivo);
               if (alvo) mudar((c) => ligar(c, cartaoDoPainel.id, alvo));
-            }}
-          >
-            <Workflow className="mr-1.5 h-3.5 w-3.5" /> Ligar ao Resultado
+            }} aria-label="Ligar ao Resultado" title="Ligar ao Resultado">
+            <Workflow className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
         <div className="flex min-w-0 flex-wrap items-center border-t border-white/10 pt-2.5">
           <button type="button" className={`${BOTAO} mb-1 mr-1.5`} onClick={() => setSelecionado(null)}>
             Voltar aos ajustes
           </button>
-          <button type="button" className={`${BOTAO} mb-1 text-red-300`} onClick={() => tirar(cartaoDoPainel.id)} aria-label="Tirar o cartão do quadro">
-            <Trash2 className="mr-1 h-3 w-3" /> Apagar
+          <button className={juntar(BOTAO_ICONE, "mb-1 text-red-300 disabled:opacity-50")} type="button" onClick={() => tirar(cartaoDoPainel.id)} aria-label="Tirar o cartão do quadro" title="Apagar">
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -1956,8 +1937,8 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
           onAnimar={() => animar(resultadoDoPainel.id)}
         />
         {resultados.length > 1 && (
-          <button type="button" className={`${BOTAO} text-red-300`} onClick={() => tirar(resultadoDoPainel.id)}>
-            <Trash2 className="mr-1 h-3 w-3" /> Apagar este Resultado
+          <button className={juntar(BOTAO_ICONE, "text-red-300 disabled:opacity-50")} type="button" onClick={() => tirar(resultadoDoPainel.id)} aria-label="Apagar este Resultado" title="Apagar este Resultado">
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
       </div>
@@ -1966,8 +1947,8 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     conteudoDoPainel = (
       <div className="min-w-0 space-y-2">
         <p className="text-[11.5px] text-zinc-400">O quadro está sem Resultado. Ele junta os cartões e gera a foto.</p>
-        <button type="button" className={BOTAO} onClick={() => porNoQuadro("gerar")}>
-          <Plus className="mr-1 h-3.5 w-3.5" /> Pôr um Resultado
+        <button className={juntar(BOTAO_ICONE, "disabled:opacity-50")} type="button" onClick={() => porNoQuadro("gerar")} aria-label="Pôr um Resultado" title="Pôr um Resultado">
+          <Sparkles className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
     );
@@ -2258,8 +2239,8 @@ export default function EtapaCanvas() {
           ))}
         </SelectContent>
       </Select>
-      <button type="button" className={juntar(botao.secundario, "mb-1.5 mr-2 h-8 px-2 text-[12px] sm:px-2.5")} onClick={() => trocar(canvasVazio(clientId))} aria-label="Novo canvas">
-        <Plus className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" /> <span className="hidden sm:inline">Novo canvas</span>
+      <button className={juntar(botao.icone, "mb-1.5 mr-2 disabled:opacity-50")} type="button" onClick={() => trocar(canvasVazio(clientId))} aria-label="Novo canvas" title="Novo canvas">
+        <FilePlus2 className="h-4 w-4" aria-hidden="true" />
       </button>
 
     </>

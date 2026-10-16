@@ -44,9 +44,9 @@ export default function ListaDeProvas({ provas, maximo, onMudar }: { provas: Pro
       <form className="mt-2 flex min-w-0 flex-wrap items-center" onSubmit={(e) => void por(e)}>
         <input className={juntar(campo, "mb-2 mr-2 min-w-[200px] flex-1")} placeholder="O fato (ex.: 120 lojas atendidas)" value={nova.texto} maxLength={240} disabled={cheia} onChange={(e) => setNova({ ...nova, texto: e.target.value })} aria-label="Prova" />
         <input className={juntar(campo, "mb-2 mr-2 min-w-[160px] flex-1")} placeholder="Fonte (relatório, print, contrato)" value={nova.fonte} maxLength={160} disabled={cheia} onChange={(e) => setNova({ ...nova, fonte: e.target.value })} aria-label="Fonte da prova" />
-        <button type="submit" className={juntar(botao.secundario, "mb-2")} disabled={!pode} title={cheia ? `Até ${maximo} provas` : undefined}>
-          {indo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1 h-3.5 w-3.5" />}
-          Pôr a prova
+        {/* 16/10/2026: só ícone, sem borda (nome no aria-label e no title). */}
+        <button type="submit" className={juntar(botao.icone, "mb-2 h-9 w-9 disabled:pointer-events-none disabled:opacity-50")} disabled={!pode} aria-label="Pôr a prova" title={cheia ? `Pôr a prova (até ${maximo} provas)` : "Pôr a prova"}>
+          {indo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         </button>
       </form>
       {repetida && <p className={juntar(texto.auxiliar, "text-warning")}>Esta prova já está na lista.</p>}

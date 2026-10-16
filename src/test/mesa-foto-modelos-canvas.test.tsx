@@ -851,7 +851,8 @@ describe("aba Canvas", () => {
       expect(d).toBeTruthy();
       return d;
     });
-    expect(within(adicionar).getAllByRole("tab").map((t) => t.textContent!.trim())).toEqual(["Produto", "Pessoa", "Ambiente", "Estilo"]);
+    // 16/10/2026: as abas viraram só ícone; o nome fica no aria-label.
+    expect(within(adicionar).getAllByRole("tab").map((t) => t.getAttribute("aria-label"))).toEqual(["Produto", "Pessoa", "Ambiente", "Estilo"]);
     fireEvent.click(within(adicionar).getByRole("tab", { name: /Pessoa/ }));
     await waitFor(() => expect(document.querySelector(`[data-escolher-cartao="modelo"] [data-opcao-da-escolha="${P1}"]`)).toBeTruthy());
     fireEvent.click(document.querySelector(`[data-escolher-cartao="modelo"] [data-opcao-da-escolha="${P1}"]`) as HTMLElement);

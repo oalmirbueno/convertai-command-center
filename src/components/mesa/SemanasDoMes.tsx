@@ -4,7 +4,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Camera, Film, Check, ChevronDown, ExternalLink, GalleryHorizontal, Loader2, Pencil, RefreshCw, Square, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { juntar, lista as estiloDeLista } from "@/components/sistema/estilos";
+import { botao, juntar, lista as estiloDeLista } from "@/components/sistema/estilos";
 import { BotaoDeApagar, type ResultadoDoApagar } from "./ApagarConteudo";
 import { diaCurto, mesDaData, rotuloDoFormato, type CamposDoItem, type ItemProposto } from "./mesaV4Api";
 import { linhasDaDirecaoDeFoto, linkDaPecaNaMesaFoto, normalizarDirecaoDeFoto } from "../../../supabase/functions/agente-calendario/modulos/peca-de-foto";
@@ -256,17 +256,19 @@ function LinhaDoConteudo({
             </button>
           )}
           {linkDaFoto ? (
-            <Link to={linkDaFoto} className="inline-flex items-center rounded-md px-1.5 py-1 text-[11.5px] font-medium text-primary hover:bg-muted" aria-label={item.task_id ? "Abrir no Estúdio" : "Abrir na Mesa Foto"}>
-              {item.task_id ? "Estúdio" : "Mesa Foto"} <ExternalLink className="ml-1 h-3 w-3" />
+            // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
+            <Link to={linkDaFoto} className={juntar(botao.icone, "h-7 w-7 text-primary")} aria-label={item.task_id ? "Abrir no Estúdio" : "Abrir na Mesa Foto"} title={item.task_id ? "Abrir no Estúdio" : "Abrir na Mesa Foto"}>
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
             </Link>
           ) : item.task_id && acoes.onAbrirNoEstudio ? (
             <button
               type="button"
               onClick={() => acoes.onAbrirNoEstudio!(item.task_id as string, mesDaData(item.data))}
-              className="inline-flex items-center rounded-md px-1.5 py-1 text-[11.5px] font-medium text-primary hover:bg-muted"
+              className={juntar(botao.icone, "h-7 w-7 text-primary")}
               aria-label="Abrir no Estúdio"
+              title="Abrir no Estúdio"
             >
-              Estúdio <ExternalLink className="ml-1 h-3 w-3" />
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           ) : null}
           {apagar && <BotaoDeApagar onApagar={apagar} className="ml-0.5" />}

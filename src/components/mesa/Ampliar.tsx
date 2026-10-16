@@ -141,7 +141,7 @@ export function Ampliar({
                 <button
                   type="button"
                   onClick={() => ir(-1)}
-                  aria-label="Imagem anterior"
+                  aria-label="Imagem anterior" title="Imagem anterior"
                   className="absolute left-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-background/90 text-foreground shadow"
                 >
                   <ChevronLeft className="h-5 w-5" />
@@ -149,7 +149,7 @@ export function Ampliar({
                 <button
                   type="button"
                   onClick={() => ir(1)}
-                  aria-label="Próxima imagem"
+                  aria-label="Próxima imagem" title="Próxima imagem"
                   className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-background/90 text-foreground shadow"
                 >
                   <ChevronRight className="h-5 w-5" />

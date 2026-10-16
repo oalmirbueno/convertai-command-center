@@ -52,7 +52,10 @@ export function BotaoDeTrocarAngulo({ evolucao, onTrocarAngulo, className = "" }
   return (
     <button
       type="button"
-      className={juntar(botao.barra, "h-6 px-1.5 text-[11px] text-primary", className)}
+      // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
+      className={juntar(botao.icone, "h-6 w-6 text-primary", className)}
+      aria-label="Trocar ângulo"
+      title="Trocar ângulo"
       disabled={trocando}
       onClick={async () => {
         setTrocando(true);
@@ -63,8 +66,7 @@ export function BotaoDeTrocarAngulo({ evolucao, onTrocarAngulo, className = "" }
         }
       }}
     >
-      {trocando ? <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden="true" /> : <RefreshCw className="mr-1 h-3 w-3" aria-hidden="true" />}
-      Trocar ângulo
+      {trocando ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />}
     </button>
   );
 }

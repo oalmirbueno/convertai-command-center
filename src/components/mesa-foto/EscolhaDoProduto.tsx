@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { campo, foco, juntar } from "@/components/sistema/estilos";
+import { botao, campo, foco, juntar } from "@/components/sistema/estilos";
 import { MiniaturaDaFoto, useMesaFoto } from "./Comuns";
 import { rotuloDoTipo, salvarKit, useFotos, useKits, type FotoDoAcervo, type KitDeFoto } from "./fotoApi";
 
@@ -99,9 +99,9 @@ export default function EscolhaDoProduto({ rotulo = "Produto", className = "" }:
               {kit.variante ? ` · ${kit.variante}` : ""} · {kit.refs.length} {kit.refs.length === 1 ? "foto" : "fotos"}
             </p>
           </div>
-          <Button type="button" size="sm" variant="outline" className="ml-2 h-8 shrink-0 text-[12px]" onClick={() => { setAberta(!aberta); buscaRef.current?.focus(); }} aria-expanded={listaAberta} data-trocar-produto="">
-            Trocar <ChevronDown className="ml-1 h-3.5 w-3.5" />
-          </Button>
+          <button className={juntar(botao.icone, "ml-2 shrink-0 disabled:opacity-50")} type="button" onClick={() => { setAberta(!aberta); buscaRef.current?.focus(); }} aria-expanded={listaAberta} data-trocar-produto="" aria-label="Trocar" title="Trocar">
+            <ChevronDown className="h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
       ) : null}
       {kit && <PublicoDoProduto key={kit.id} kit={kit} />}
@@ -141,9 +141,13 @@ export default function EscolhaDoProduto({ rotulo = "Produto", className = "" }:
           })}
         </ul>
       )}
-      <button type="button" className="mt-3 mr-3 text-[12px] text-primary" onClick={() => setOrganizando(true)}><FolderOpen className="mr-1 inline h-3.5 w-3.5" />Organizar produtos</button>
+      <button className={juntar(botao.icone, "mt-3 mr-3 text-primary disabled:opacity-50")} type="button" onClick={() => setOrganizando(true)} aria-label="Organizar produtos" title="Organizar produtos">
+        <FolderOpen className="inline h-4 w-4" aria-hidden="true" />
+      </button>
       <JanelaCentral aberta={organizando} onFechar={() => setOrganizando(false)} titulo="Produtos do cliente" largura="tela" corpo="fixo"><Suspense fallback={<p role="status">Abrindo organizador…</p>}><OrganizadorDeProdutos key={clientId} onEscolher={() => setOrganizando(false)} /></Suspense></JanelaCentral>
-      <button type="button" className="mt-2 text-[12px] text-primary" disabled={salvandoProduto} onClick={() => setMarcandoProduto(true)}><PackagePlus className="mr-1 inline h-3.5 w-3.5" />Marcar foto como produto</button>
+      <button className={juntar(botao.icone, "mt-2 text-primary disabled:opacity-50")} type="button" disabled={salvandoProduto} onClick={() => setMarcandoProduto(true)} aria-label="Marcar foto como produto" title="Marcar foto como produto">
+        <PackagePlus className="inline h-4 w-4" aria-hidden="true" />
+      </button>
       <JanelaCentral aberta={marcandoProduto} onFechar={() => !salvandoProduto && setMarcandoProduto(false)} titulo="Marcar foto como produto" largura="xl">
         {marcandoProduto && <MarcarProdutos fotos={fotos} kits={kits} onOcupado={setSalvandoProduto} onSalvo={(salvo) => { escolherKit(salvo.id); setAberta(true); setPasta(""); setBusca(""); }} onFechar={() => setMarcandoProduto(false)} />}
       </JanelaCentral>

@@ -205,8 +205,9 @@ export default function PedidoDoCliente({
           </button>
         )}
         {tipo === "aprovado" && (
-          <button type="button" className={juntar(botao.discreto, "mb-1 mr-2 h-8")} onClick={() => void visto()} disabled={marcando}>
-            {marcando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />} Visto
+          // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
+          <button type="button" className={juntar(botao.icone, "mb-1 mr-2")} onClick={() => void visto()} disabled={marcando} aria-label="Visto" title="Visto">
+            {marcando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
           </button>
         )}
       </div>

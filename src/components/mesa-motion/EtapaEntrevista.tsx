@@ -108,9 +108,9 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
         ajuda="Cada ingrediente tem opções nomeadas. O que você escolher aqui manda no BRAND.md e nos storyboards."
         acao={
           <>
-            <button type="button" className={botao.secundario} onClick={() => void usarPadrao()} disabled={!vazios.length} title={vazios.length ? "Duração, logo, gancho, transição, ritmo e fundo" : "A forma do filme já está escolhida"} data-usar-padrao="">
-              <Wand2 className="mr-1 h-3.5 w-3.5" />
-              Usar o padrão
+            {/* 16/10/2026: só ícone, sem borda (nome no aria-label e no title). */}
+            <button type="button" className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} onClick={() => void usarPadrao()} disabled={!vazios.length} aria-label="Usar o padrão" title={vazios.length ? "Usar o padrão: duração, logo, gancho, transição, ritmo e fundo" : "Usar o padrão: a forma do filme já está escolhida"} data-usar-padrao="">
+              <Wand2 className="h-4 w-4" />
             </button>
             <PreencherComIA
               papel="motion"
@@ -156,9 +156,9 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
           </label>
         </div>
       </Secao>
-      <button type="button" className={botao.primario} onClick={() => void chamarMotion<{ filme: Filme }>("filme_salvar", { filme_id: filme.id, etapa: "brand" }).then((d) => (guardar(d.filme), irPara("brand"))).catch((x) => avisarErro(x, "Não foi salvo"))}>
-        Seguir para o BRAND.md
-        <ArrowRight className="ml-1 h-3.5 w-3.5" />
+      {/* 16/10/2026: só ícone; o destino vai no aria-label e no title. */}
+      <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => void chamarMotion<{ filme: Filme }>("filme_salvar", { filme_id: filme.id, etapa: "brand" }).then((d) => (guardar(d.filme), irPara("brand"))).catch((x) => avisarErro(x, "Não foi salvo"))} aria-label="Seguir para o BRAND.md" title="Seguir para o BRAND.md">
+        <ArrowRight className="h-4 w-4" />
       </button>
     </div>
   );

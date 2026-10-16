@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Archive, ArchiveRestore, Check, CheckCircle2, ClipboardCheck, Loader2, MessageSquare, Pencil, RotateCcw, Video } from "lucide-react";
+import { Archive, ArchiveRestore, Check, CheckCircle2, ClipboardCheck, Loader2, MessageSquare, Pencil, RotateCcw, Undo2, Video } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { useAvisarErro } from "@/components/mesa/Custo";
@@ -119,27 +119,27 @@ function Revisao({ linha, onAbrirRoteiro }: { linha: LinhaDoRoteiro; onAbrirRote
           />
           <div className="-m-1 flex min-w-0 flex-wrap items-center [&>*]:m-1" data-acoes-de-status="">
             {podeIr("aprovado") && (
+              // 16/10/2026: só ícone (nome no aria-label e no title; o aviso da trava segue no title).
               <button
                 type="button"
-                className={botao.primario}
+                className={juntar(botao.primario, "w-9 px-0")}
                 disabled={!!ocupado}
-                title={linha.status === "rascunho" ? `Aprovar trava a versão ${linha.versao_atual}: corrigir depois cria outra versão.` : undefined}
+                aria-label={linha.status === "gravado" ? "Voltar para aprovado" : "Aprovar"}
+                title={linha.status === "rascunho" ? `Aprovar: trava a versão ${linha.versao_atual}, corrigir depois cria outra versão.` : linha.status === "gravado" ? "Voltar para aprovado" : "Aprovar"}
                 onClick={() => void status("aprovado", linha.status === "gravado" ? "Voltou para aprovado" : `Versão ${linha.versao_atual} aprovada`)}
               >
-                {ocupado === "status:aprovado" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1 h-3.5 w-3.5" />}
-                {linha.status === "gravado" ? "Voltar para aprovado" : "Aprovar"}
+                {ocupado === "status:aprovado" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               </button>
             )}
             {podeIr("gravado") && (
-              <button type="button" className={botao.secundario} disabled={!!ocupado} onClick={() => void status("gravado", "Marcado como gravado")}>
-                <Video className="mr-1 h-3.5 w-3.5" />
-                Marcar como gravado
+              <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} disabled={!!ocupado} onClick={() => void status("gravado", "Marcado como gravado")} aria-label="Marcar como gravado" title="Marcar como gravado">
+                <Video className="h-4 w-4" />
               </button>
             )}
             {podeIr("rascunho") && (
-              <button type="button" className={botao.discreto} disabled={!!ocupado} onClick={() => void status("rascunho", "Voltou para rascunho")}>
-                <RotateCcw className="mr-1 h-3.5 w-3.5" />
-                Voltar para rascunho
+              // 16/10/2026: Undo2 (e não RotateCcw, que é o "Restaurar esta versão" na mesma tela).
+              <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} disabled={!!ocupado} onClick={() => void status("rascunho", "Voltou para rascunho")} aria-label="Voltar para rascunho" title="Voltar para rascunho">
+                <Undo2 className="h-4 w-4" />
               </button>
             )}
             <button

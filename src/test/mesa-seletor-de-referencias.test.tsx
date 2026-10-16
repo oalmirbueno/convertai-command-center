@@ -211,7 +211,8 @@ describe("pastas espelhando o Workspace", () => {
     expect(screen.getByText("Referências")).toBeTruthy();
     expect(screen.queryByText("Contratos")).toBeNull();
     expect(screen.getByText("2 imagens")).toBeTruthy();
-    expect((screen.getByText("Voltar").closest("button") as HTMLButtonElement).disabled).toBe(true);
+    // 16/10/2026: o Voltar virou só o ícone (o nome fica no aria-label e no title).
+    expect((screen.getByRole("button", { name: "Voltar" }) as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.click(screen.getByText("Referências"));
     expect(screen.getByText("capa.jpg")).toBeTruthy();
@@ -222,9 +223,9 @@ describe("pastas espelhando o Workspace", () => {
     expect(within(trilha).getByText("Referências")).toBeTruthy();
     expect(within(trilha).getByText("Feed aprovado")).toBeTruthy();
 
-    fireEvent.click(screen.getByText("Voltar"));
+    fireEvent.click(screen.getByRole("button", { name: "Voltar" }));
     expect(screen.getByText("capa.jpg")).toBeTruthy();
-    fireEvent.click(screen.getByText("Voltar"));
+    fireEvent.click(screen.getByRole("button", { name: "Voltar" }));
     expect(screen.getByText("2 imagens")).toBeTruthy();
     expect(screen.queryByText("capa.jpg")).toBeNull();
   });
@@ -235,12 +236,14 @@ describe("pastas espelhando o Workspace", () => {
 describe("seletor de referências", () => {
   it("abas: quatro para escolher (com o contador) e sem o banco da agência no modo gerenciar", async () => {
     const { unmount } = montar(h(SeletorDeReferencias, { selecionados: [], onChange: vi.fn(), max: 8 }));
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Do cliente", "Pastas do workspace", "Banco da agência", "Pinterest"]);
+    // 16/10/2026 (dono: "texto + ícone vira só o ícone"): a aba mostra só o ícone; o nome fica no aria-label e no title, a contagem como número.
+    expect(screen.getAllByRole("tab").map((t) => t.getAttribute("aria-label"))).toEqual(["Do cliente", "Pastas do workspace", "Banco da agência", "Pinterest"]);
+    expect(screen.getAllByRole("tab").map((t) => t.getAttribute("title"))).toEqual(["Do cliente", "Pastas do workspace", "Banco da agência", "Pinterest"]);
     expect(screen.getByText("0 de 8")).toBeTruthy();
-    await waitFor(() => expect(screen.getByRole("tab", { name: /Do cliente/ }).textContent).toContain("(2)"), { timeout: 5000 });
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Do cliente/ }).textContent).toBe("2"), { timeout: 5000 });
     unmount();
     montar(h(SeletorDeReferencias, { modo: "gerenciar" }));
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Do cliente", "Pastas do workspace", "Pinterest"]);
+    expect(screen.getAllByRole("tab").map((t) => t.getAttribute("aria-label"))).toEqual(["Do cliente", "Pastas do workspace", "Pinterest"]);
     expect(screen.queryByText(/de 8/)).toBeNull();
   });
 
@@ -271,7 +274,8 @@ describe("seletor de referências", () => {
     const onChange = vi.fn();
     montar(h(SeletorDeReferencias, { selecionados: [], onChange, max: 8 }));
     fireEvent.click(screen.getByRole("tab", { name: /Pinterest/ }));
-    const abrir = screen.getByText("Abrir o Pinterest").closest("a") as HTMLAnchorElement;
+    // 16/10/2026: o link é só o ícone; o nome fica no aria-label.
+    const abrir = screen.getByRole("link", { name: "Abrir o Pinterest" }) as HTMLAnchorElement;
     expect(abrir.getAttribute("href")).toBe(PINTEREST_URL);
     expect(abrir.getAttribute("target")).toBe("_blank");
     expect(abrir.getAttribute("rel")).toContain("noopener");

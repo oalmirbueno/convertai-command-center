@@ -70,9 +70,8 @@ export default function SeletorDePeriodo({ valor, onMudar }: { valor: EscolhaDoP
             aria-label="Até"
             placeholder="AAAA-MM-DD"
           />
-          <button type="submit" className={juntar(botao.secundario, "h-9")} disabled={!valido} title={`Até ${MAXIMO_DE_DIAS} dias`}>
-            <Check className="mr-1 h-3.5 w-3.5" />
-            Aplicar
+          <button className={juntar(botao.icone, "disabled:opacity-50")} type="submit" disabled={!valido} title={`Até ${MAXIMO_DE_DIAS} dias`} aria-label="Aplicar">
+            <Check className="h-4 w-4" aria-hidden="true" />
           </button>
         </form>
       )}

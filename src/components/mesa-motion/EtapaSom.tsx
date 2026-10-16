@@ -174,14 +174,14 @@ function Conteudo({ filme, links, irPara }: { filme: Filme; links: Record<string
         ajuda="Medidas no worker (energia e autocorrelação). O corte de cada cena vai para a batida mais perto (o compasso quando dá), sem cena abaixo de 2 s."
         acao={
           <>
-            <button type="button" className={botao.secundario} onClick={() => void medir()} disabled={!som.trilha || indo === "medir" || medindo}>
-              {indo === "medir" || (medindo && workerLigado) ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <AudioLines className="mr-1 h-3.5 w-3.5" />}
-              {medindo && workerLigado ? "Medindo" : "Medir as batidas"}
+            {/* 16/10/2026: só ícones, sem borda; a contagem vira número pequeno junto do ícone. "Casar os cortes" fica com texto (ação principal). */}
+            <button type="button" className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} onClick={() => void medir()} disabled={!som.trilha || indo === "medir" || medindo} aria-label={medindo && workerLigado ? "Medindo" : "Medir as batidas"} title={medindo && workerLigado ? "Medindo" : "Medir as batidas"}>
+              {indo === "medir" || (medindo && workerLigado) ? <Loader2 className="h-4 w-4 animate-spin" /> : <AudioLines className="h-4 w-4" />}
             </button>
             {desatualizadas.length > 0 && (
-              <button type="button" className={botao.secundario} onClick={refazer} disabled={!!acoes.lote} data-refazer-finais="">
-                {acoes.lote === "refazer" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Film className="mr-1 h-3.5 w-3.5" />}
-                Refazer as finais que mudaram ({desatualizadas.length})
+              <button type="button" className={juntar(botao.icone, "ml-1 w-auto px-1.5 disabled:pointer-events-none disabled:opacity-50")} onClick={refazer} disabled={!!acoes.lote} aria-label={`Refazer as finais que mudaram (${desatualizadas.length})`} title="Refazer as finais que mudaram" data-refazer-finais="">
+                {acoes.lote === "refazer" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Film className="h-4 w-4" />}
+                <span className="ml-0.5 text-[11px] tabular-nums">{desatualizadas.length}</span>
               </button>
             )}
             <button type="button" className={botao.primario} onClick={() => void casar()} disabled={!som.batidas || indo === "casar"}>
@@ -230,9 +230,9 @@ function Conteudo({ filme, links, irPara }: { filme: Filme; links: Record<string
           <EfeitosSobMedida filme={filme} links={links} temChave={temChave} />
         </div>
       </Secao>
-      <button type="button" className={botao.primario} onClick={() => irPara("render")}>
-        Seguir para o render
-        <ArrowRight className="ml-1 h-3.5 w-3.5" />
+      {/* 16/10/2026: só ícone; o destino vai no aria-label e no title. */}
+      <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => irPara("render")} aria-label="Seguir para o render" title="Seguir para o render">
+        <ArrowRight className="h-4 w-4" />
       </button>
     </div>
   );

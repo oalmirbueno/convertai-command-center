@@ -124,12 +124,15 @@ export default function CompletarMarca({ abrirJa = false, onAberto }: { abrirJa?
         acao={
           <>
             {pendentes.length > 0 && (
-              <button type="button" className={juntar(botao.discreto, "m-1 h-8")} onClick={() => setJanela({ passos: pendentes })} data-retomar-completar="">
-                <Play className="mr-1.5 h-3.5 w-3.5" /> Retomar ({pendentes.length})
+              // 16/10/2026: só ícone; a contagem fica pequena ao lado e o nome vai no aria-label e no title.
+              <button type="button" className={juntar(botao.icone, "m-1 w-auto px-2")} aria-label={`Retomar (${pendentes.length})`} title={`Retomar os ${pendentes.length} passos que faltam`} onClick={() => setJanela({ passos: pendentes })} data-retomar-completar="">
+                <Play className="h-4 w-4" />
+                <span className="ml-1 text-[11px] tabular-nums" aria-hidden="true">{pendentes.length}</span>
               </button>
             )}
-            <button type="button" className={juntar(botao.primario, "m-1 h-8")} onClick={() => setJanela({ passos: null })} data-completar-tudo="">
-              <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Completar tudo
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+            <button type="button" className={juntar(botao.primario, "m-1 h-8 w-9 px-0")} aria-label="Completar tudo" title="Completar tudo" onClick={() => setJanela({ passos: null })} data-completar-tudo="">
+              <Wand2 className="h-4 w-4" />
             </button>
           </>
         }
@@ -489,9 +492,12 @@ function JanelaDoCompletar({ passosIniciais, onFechar }: { passosIniciais: Passo
             </>
           )}
           {fase === "rodando" && (
+            // 16/10/2026: só ícone (nome no aria-label e no title).
             <button
               type="button"
-              className={botao.secundario}
+              className={juntar(botao.icone, "disabled:opacity-50")}
+              aria-label={parando ? "Parando depois deste passo" : "Parar"}
+              title={parando ? "Parando depois deste passo" : "Parar"}
               disabled={parando}
               onClick={() => {
                 pararRef.current = true;
@@ -499,13 +505,14 @@ function JanelaDoCompletar({ passosIniciais, onFechar }: { passosIniciais: Passo
               }}
               data-parar-completar=""
             >
-              <Square className="mr-1.5 h-4 w-4" /> {parando ? "Parando depois deste passo" : "Parar"}
+              <Square className="h-4 w-4" />
             </button>
           )}
           {fase === "fim" && (
             <>
-              <button type="button" className={botao.discreto} disabled={concluindo} onClick={() => void concluirProntas()} data-concluir-prontas="">
-                {concluindo ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />} Concluir as etapas prontas
+              {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+              <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} aria-label="Concluir as etapas prontas" title="Concluir as etapas prontas" disabled={concluindo} onClick={() => void concluirProntas()} data-concluir-prontas="">
+                {concluindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               </button>
               <button type="button" className={botao.discreto} onClick={() => { onFechar(); irPara(projeto.modo === "completar" ? "sistema" : "guideline"); }}>
                 Revisar {rotuloDaEtapa(projeto.modo === "completar" ? "sistema" : "guideline")}

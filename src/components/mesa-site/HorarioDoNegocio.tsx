@@ -120,9 +120,9 @@ export default function HorarioDoNegocio({ linhas, onMudar }: { linhas: LinhaDaT
         })}
       </ul>
       {linhas.length < MAX_LINHAS_DE_HORARIO && (
-        <button type="button" className={botao.discreto} onClick={somar} data-somar-horario="">
-          <Plus className="mr-1 h-3.5 w-3.5" />
-          horário
+        // 16/10/2026: só ícone (nome no aria-label e no title).
+        <button type="button" className={botao.icone} aria-label="Somar horário" title="Somar horário" onClick={somar} data-somar-horario="">
+          <Plus className="h-4 w-4" />
         </button>
       )}
     </div>

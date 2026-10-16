@@ -48,8 +48,8 @@ export function AntesEDepois({ antes, depois, podeArquivar, motivo, onFicar, onM
         <button type="button" className={juntar(botao.primario, "mb-1 mr-2")} onClick={onFicar} disabled={!podeArquivar || ocupado} title={motivo || "Arquiva o antes (Desfazer volta)"} data-ficar-com-o-depois="">
           {ocupado ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="mr-1.5 h-4 w-4" aria-hidden="true" />} Ficar com o depois
         </button>
-        <button type="button" className={juntar(botao.secundario, "mb-1")} onClick={onManter} disabled={ocupado} data-manter-os-dois="">
-          <Copy className="mr-1.5 h-4 w-4" aria-hidden="true" /> Manter os dois
+        <button className={juntar(botao.icone, "mb-1 disabled:opacity-50")} type="button" onClick={onManter} disabled={ocupado} data-manter-os-dois="" aria-label="Manter os dois" title="Manter os dois">
+          <Copy className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
       {!podeArquivar && motivo && <p className={juntar(texto.auxiliar, "mt-1 text-center")}>{motivo}</p>}
@@ -154,8 +154,8 @@ export default function EdicaoDeImagens({ ids, onIds, onVoltar }: { ids: string[
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row" data-edicao-de-imagens="">
       <div className="mb-3 flex min-w-0 shrink-0 items-start lg:mb-0 lg:mr-4 lg:w-[92px] lg:flex-col">
-        <button type="button" className={juntar(botao.discreto, "mb-2 mr-2 h-8 px-2 text-[12px]")} onClick={onVoltar}>
-          <ArrowLeft className="mr-1 h-4 w-4" aria-hidden="true" /> Voltar
+        <button className={juntar(botao.icone, "mb-2 mr-2 disabled:opacity-50")} type="button" onClick={onVoltar} aria-label="Voltar" title="Voltar">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         </button>
         <ul className="flex min-w-0 overflow-x-auto scrollbar-hidden lg:flex-col lg:overflow-y-auto" aria-label="Imagens em edição">
           {ids.map((id) => {

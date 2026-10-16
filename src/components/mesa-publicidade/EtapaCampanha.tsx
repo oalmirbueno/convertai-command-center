@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Check, Loader2, Package, Plus, Save } from "lucide-react";
+import { ArrowRight, Check, Loader2, Package, PackageCheck, Plus, Save } from "lucide-react";
 import { toast } from "sonner";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
@@ -130,9 +130,9 @@ function EscolherProduto({ kits, onCriado }: { kits: KitDeFoto[]; onCriado: () =
               ))}
             </select>
           </CampoDeFormulario>
-          <button type="button" className={juntar(botao.primario, "mb-2 max-w-full")} onClick={() => void criar()} disabled={criando}>
-            {criando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1.5 h-3.5 w-3.5" />}
-            <span className="min-w-0 truncate">Abrir a campanha deste produto</span>
+          {/* 16/10/2026: só ícone, verde (nome no aria-label e no title); PackageCheck para não repetir o "+" da Nova campanha. */}
+          <button type="button" className={juntar(botao.primario, "mb-2 w-9 px-0")} onClick={() => void criar()} disabled={criando} aria-label="Abrir a campanha deste produto" title="Abrir a campanha deste produto">
+            {criando ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackageCheck className="h-4 w-4" />}
           </button>
         </div>
       )}
@@ -201,9 +201,9 @@ function FormularioDoBriefing() {
         </>
       }
       acao={
-        <button type="button" className={botao.primario} onClick={() => void salvar()} disabled={salvando || !mudou} data-salvar-briefing="">
-          {salvando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : mudou ? <Save className="mr-1.5 h-3.5 w-3.5" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-          {mudou ? "Salvar briefing" : "Briefing salvo"}
+        // 16/10/2026: só ícone (nome no aria-label e no title).
+        <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => void salvar()} disabled={salvando || !mudou} data-salvar-briefing="" aria-label={mudou ? "Salvar briefing" : "Briefing salvo"} title={mudou ? "Salvar briefing" : "Briefing salvo"}>
+          {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : mudou ? <Save className="h-4 w-4" /> : <Check className="h-4 w-4" />}
         </button>
       }
     >

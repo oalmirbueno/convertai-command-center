@@ -24,7 +24,7 @@ import { Cronometro } from "./Cronometro";
 import { Ditado } from "./Ditado";
 import { CompositorDoAgente, MensagensDoAgente } from "@/components/sistema/PainelDoAgente";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
-import { conversa as estiloDaConversa, juntar, lista as estiloDeLista, superficie } from "@/components/sistema/estilos";
+import { botao, conversa as estiloDaConversa, juntar, lista as estiloDeLista, superficie } from "@/components/sistema/estilos";
 import {
   ajustarProposta,
   atualizarAgenda,
@@ -546,10 +546,10 @@ export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string;
               <Check className="mr-1 h-3 w-3" />
               {falhas ? "Não concluído integralmente" : "Feito"}{falhas ? ` · ${falhas} não ${falhas === 1 ? "pôde" : "puderam"}` : ""}
             </span>
-            <Button type="button" size="sm" variant="outline" className="mb-1 h-8" onClick={() => void agir("desfazer")} disabled={!!fazendo}>
-              {fazendo === "desfazer" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Undo2 className="mr-1.5 h-3.5 w-3.5" />}
-              Desfazer
-            </Button>
+            {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
+            <button type="button" className={juntar(botao.icone, "mb-1")} onClick={() => void agir("desfazer")} disabled={!!fazendo} aria-label="Desfazer" title="Desfazer">
+              {fazendo === "desfazer" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Undo2 className="h-4 w-4" aria-hidden="true" />}
+            </button>
           </>
         )}
         {(estado === "descartada" || estado === "desfeita") && (
@@ -1211,8 +1211,9 @@ export default function AgenteDoMes({
                     if (p.status === "descartada") return null;
                     if (escondidas.indexOf(id) >= 0) {
                       return (
-                        <button key={id} type="button" onClick={() => mostrar(id)} className="inline-flex items-center text-[11.5px] text-muted-foreground hover:text-foreground">
-                          <Eye className="mr-1 h-3 w-3" /> Proposta escondida · mostrar
+                        // 16/10/2026: só o ícone; o nome fica no title e no leitor de tela.
+                        <button key={id} type="button" onClick={() => mostrar(id)} className={botao.icone} aria-label="Mostrar proposta escondida" title="Mostrar proposta escondida">
+                          <Eye className="h-4 w-4" aria-hidden="true" />
                         </button>
                       );
                     }

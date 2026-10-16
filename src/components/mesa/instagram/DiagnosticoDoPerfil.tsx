@@ -93,7 +93,7 @@ export default function DiagnosticoDoPerfil({ perfil, diagnostico, onDiagnostico
                       <li key={i} className="flex min-w-0 items-center text-[12px] leading-4">
                         <span className="min-w-0 truncate text-muted-foreground">{p.legenda || "Post"} ({p.multiplo})</span>
                         {p.link && (
-                          <a href={p.link} target="_blank" rel="noopener noreferrer" className="ml-1.5 shrink-0 text-primary" aria-label="Abrir o post no Instagram">
+                          <a href={p.link} target="_blank" rel="noopener noreferrer" className="ml-1.5 shrink-0 text-primary" aria-label="Abrir o post no Instagram" title="Abrir o post no Instagram">
                             <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                           </a>
                         )}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Download, ImageOff, Loader2, Send, SlidersHorizontal, Sparkles, Wand2 } from "lucide-react";
+import { Check, Download, FolderDown, ImageOff, Loader2, Send, Settings2, SlidersHorizontal, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { botao, CampoDeBusca, Carregando, EstadoDeErro, EstadoVazio, Etapas, juntar, Secao, texto, useEstadoDaTela } from "@/components/sistema";
 import { type KitDoContexto } from "@/components/mesa/contextoDoCliente";
@@ -550,8 +550,9 @@ export default function EstudioDeMockups({
               <button type="button" className={juntar(botao.discreto, "mr-2")} onClick={() => { setAplicar(candidatosDaSugestao(itens, categorias, 12, fonte).map((m) => m.id)); setEtapa("aplicar"); }}>
                 Escolher à mão
               </button>
-              <button type="button" className={botao.primario} disabled={!categorias.length || sugerindo} onClick={() => void sugerir()}>
-                <Sparkles className="mr-1.5 h-4 w-4" aria-hidden /> Sugerir mockups
+              {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+              <button type="button" className={juntar(botao.primario, "w-9 px-0")} aria-label="Sugerir mockups" title="Sugerir mockups" disabled={!categorias.length || sugerindo} onClick={() => void sugerir()}>
+                <Sparkles className="h-4 w-4" aria-hidden />
               </button>
             </span>
           }
@@ -576,8 +577,10 @@ export default function EstudioDeMockups({
             <div className="mb-6 min-w-0">
               <div className="mb-2 flex min-w-0 items-center">
                 <span className={juntar(texto.rotulo, "min-w-0 flex-1")}>{achados.length ? `${achados.length} encontrados` : "Nada encontrado"}</span>
-                <button type="button" className={botao.primario} disabled={!aplicar.length} onClick={() => setEtapa("aplicar")}>
-                  <Wand2 className="mr-1.5 h-4 w-4" aria-hidden /> Aplicar a marca em {aplicar.length}
+                {/* 16/10/2026: só ícone; a contagem fica pequena ao lado e o nome vai no aria-label e no title. */}
+                <button type="button" className={juntar(botao.primario, "px-2")} aria-label={`Aplicar a marca em ${aplicar.length}`} title={`Aplicar a marca em ${aplicar.length}`} disabled={!aplicar.length} onClick={() => setEtapa("aplicar")}>
+                  <Wand2 className="h-4 w-4" aria-hidden />
+                  <span className="ml-1 text-[11px] tabular-nums" aria-hidden="true">{aplicar.length}</span>
                 </button>
               </div>
               <GradeDeMockups itens={achados} notas={{}} marcados={aplicar} onAlternar={(id) => setAplicar((atual) => (atual.indexOf(id) >= 0 ? atual.filter((x) => x !== id) : atual.concat([id])))} />
@@ -620,8 +623,10 @@ export default function EstudioDeMockups({
           recolher={false}
           ajuda="Nota do Jev (Score): quanto cada mockup combina com o negócio e o público do cliente. Os mais altos já vêm marcados; marque ou desmarque à vontade."
           acao={
-            <button type="button" className={botao.primario} disabled={!aplicar.length || sugerindo} onClick={() => setEtapa("aplicar")}>
-              <Wand2 className="mr-1.5 h-4 w-4" aria-hidden /> Aplicar a marca em {aplicar.length}
+            // 16/10/2026: só ícone; a contagem fica pequena ao lado e o nome vai no aria-label e no title.
+            <button type="button" className={juntar(botao.primario, "px-2")} aria-label={`Aplicar a marca em ${aplicar.length}`} title={`Aplicar a marca em ${aplicar.length}`} disabled={!aplicar.length || sugerindo} onClick={() => setEtapa("aplicar")}>
+              <Wand2 className="h-4 w-4" aria-hidden />
+              <span className="ml-1 text-[11px] tabular-nums" aria-hidden="true">{aplicar.length}</span>
             </button>
           }
         >
@@ -649,9 +654,9 @@ export default function EstudioDeMockups({
           ajuda="Toque no mockup para escolher. A cor, a textura, o tamanho, a luz e o fundo valem para todos; o botão Ajustar muda só um (cor, variações, posição, giro, versão da logo, padrão, luz e fundo). A versão da logo sai pelo contraste com a superfície, se você não escolher outra."
           acao={
             <span className="inline-flex items-center">
-              <button type="button" className={juntar(botao.secundario, "mr-2")} disabled={!listaParaAplicar.length || !!baixando} onClick={() => void baixarTodos(escolhidosDoCatalogo.length ? escolhidosDoCatalogo : listaParaAplicar, escolhidosDoCatalogo.length ? cenasEscolhidas : [])}>
-                {baixando === "zip" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> : <Download className="mr-1.5 h-4 w-4" aria-hidden />}
-                {escolhidosDoCatalogo.length ? "Baixar escolhidos (ZIP)" : "Baixar todos (ZIP)"}
+              {/* 16/10/2026: só ícone (nome no aria-label e no title); o ZIP usa um ícone diferente do PNG de cada mockup. */}
+              <button type="button" className={juntar(botao.icone, "mr-2 disabled:opacity-50")} aria-label={escolhidosDoCatalogo.length ? "Baixar escolhidos (ZIP)" : "Baixar todos (ZIP)"} title={escolhidosDoCatalogo.length ? "Baixar escolhidos (ZIP)" : "Baixar todos (ZIP)"} disabled={!listaParaAplicar.length || !!baixando} onClick={() => void baixarTodos(escolhidosDoCatalogo.length ? escolhidosDoCatalogo : listaParaAplicar, escolhidosDoCatalogo.length ? cenasEscolhidas : [])}>
+                {baixando === "zip" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <FolderDown className="h-4 w-4" aria-hidden />}
               </button>
               <button type="button" className={botao.primario} disabled={!escolhidos.length} onClick={() => setEtapa("enviar")}>
                 Revisar e enviar
@@ -697,8 +702,9 @@ export default function EstudioDeMockups({
               </>
             ) : null}
           </div>
-          <button type="button" aria-expanded={maisAjustes} className={juntar(botao.discreto, "mb-3 h-8 px-2 text-[12px]")} onClick={() => setMaisAjustes((v) => !v)}>
-            <SlidersHorizontal className="mr-1.5 h-4 w-4" aria-hidden /> {maisAjustes ? "Menos ajustes" : "Luz, versão da logo e fundo"}
+          {/* 16/10/2026: só ícone (nome no aria-label e no title); ícone diferente do "Ajustar" de cada mockup. */}
+          <button type="button" aria-expanded={maisAjustes} className={juntar(botao.icone, "mb-3", maisAjustes && "bg-muted text-foreground")} aria-label={maisAjustes ? "Menos ajustes" : "Luz, versão da logo e fundo"} title={maisAjustes ? "Menos ajustes" : "Luz, versão da logo e fundo"} onClick={() => setMaisAjustes((v) => !v)}>
+            <Settings2 className="h-4 w-4" aria-hidden />
           </button>
           {maisAjustes ? (
             <div className="mb-5 grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -778,10 +784,10 @@ export default function EstudioDeMockups({
                           {ajustado ? " · ajustado" : ""}
                         </span>
                       </span>
-                      <button type="button" className={botao.icone} aria-label={`Ajustar ${m.nome}`} onClick={() => setAberto(m)}>
+                      <button type="button" className={botao.icone} aria-label={`Ajustar ${m.nome}`} title="Ajustar só este mockup" onClick={() => setAberto(m)}>
                         <SlidersHorizontal className="h-4 w-4" aria-hidden />
                       </button>
-                      <button type="button" className={botao.icone} aria-label={`Baixar ${m.nome} em PNG`} disabled={baixando === m.id} onClick={() => void baixar(m)}>
+                      <button type="button" className={botao.icone} aria-label={`Baixar ${m.nome} em PNG`} title="Baixar em PNG" disabled={baixando === m.id} onClick={() => void baixar(m)}>
                         {baixando === m.id ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Download className="h-4 w-4" aria-hidden />}
                       </button>
                     </figcaption>
@@ -820,13 +826,12 @@ export default function EstudioDeMockups({
           ajuda="Cada mockup vai em alta resolução para Arquivos > Identidade visual e entra na revisão da agência. Marcados com Apresentação entram na apresentação da Identidade e no brandbook. Marcados com Acervo entram no acervo de imagens do cliente, para as outras mesas. Nada vai para o cliente sem a aprovação."
           acao={
             <span className="inline-flex items-center">
-              <button type="button" className={juntar(botao.secundario, "mr-2")} disabled={!escolhidos.length || !!baixando} onClick={() => void baixarTodos(escolhidosDoCatalogo, cenasEscolhidas)}>
-                {baixando === "zip" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> : <Download className="mr-1.5 h-4 w-4" aria-hidden />}
-                Baixar (ZIP)
+              {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+              <button type="button" className={juntar(botao.icone, "mr-2 disabled:opacity-50")} aria-label="Baixar (ZIP)" title="Baixar (ZIP)" disabled={!escolhidos.length || !!baixando} onClick={() => void baixarTodos(escolhidosDoCatalogo, cenasEscolhidas)}>
+                {baixando === "zip" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <FolderDown className="h-4 w-4" aria-hidden />}
               </button>
-              <button type="button" className={botao.primario} disabled={enviando || !escolhidos.some((e) => !e.enviado)} onClick={() => void enviar()}>
-                {enviando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> : <Send className="mr-1.5 h-4 w-4" aria-hidden />}
-                Enviar
+              <button type="button" className={juntar(botao.primario, "w-9 px-0")} aria-label="Enviar" title="Enviar para Arquivos" disabled={enviando || !escolhidos.some((e) => !e.enviado)} onClick={() => void enviar()}>
+                {enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />}
               </button>
             </span>
           }

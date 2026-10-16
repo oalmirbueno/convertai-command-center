@@ -135,7 +135,8 @@ describe("Mesa Proposta, PRO2 na tela", () => {
     mock.tabelas.propostas = [linha({ status: "vista", token: "d".repeat(64), enviada_em: diasAtras(5), vista_em: diasAtras(3) })];
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=acompanhar&proposta=${PROPOSTA}`);
     // findByText na primeira espera: varre a árvore ~9x mais rápido que findByRole (a etapa abre sob carga).
-    fireEvent.click(await screen.findByText("Preparar mensagem", {}, { timeout: 30000 }));
+    // 16/10/2026: só ícone; o nome vai no aria-label.
+    fireEvent.click(await screen.findByLabelText("Preparar mensagem", {}, { timeout: 30000 }));
     expect(await screen.findByDisplayValue("Oi, Joana. Ficou alguma dúvida?")).toBeTruthy();
     expect(screen.getAllByRole("link", { name: /Abrir no WhatsApp/ }).some((a) => (a.getAttribute("href") || "").indexOf("5541999999999") >= 0)).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Já mandei" }));

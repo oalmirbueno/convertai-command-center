@@ -1,4 +1,4 @@
-import { memo, useState, useEffect, useMemo, useRef, type DragEvent, type MouseEvent as EventoDeMouse } from "react";
+import { memo, useState, useEffect, useMemo, useRef, type DragEvent, type MouseEvent as EventoDeMouse, type PointerEvent as EventoDePonteiro } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTasks, useTeamMembers, useProjects } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,6 +19,7 @@ import TaskDetailDrawer from "@/components/admin/TaskDetailDrawer";
 import { toast } from "sonner";
 import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-contexto";
 import { useCelular } from "@/hooks/useCelular";
+import { useArrastoPorToque } from "@/hooks/useArrastoPorToque";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
@@ -132,6 +133,10 @@ type AcoesDoCartao = {
   menu: (e: EventoDeMouse<HTMLElement>, task: any) => void;
   mover: (task: any, colId: string) => void;
   excluir: (task: any) => void;
+  /** Toque/caneta: segurar ~300 ms pega o cartão (useArrastoPorToque). */
+  tocar: (e: EventoDePonteiro<HTMLElement>, taskId: string) => void;
+  /** Um toque está esperando ou arrastando: o arrasto nativo fica de fora. */
+  toqueEmAndamento: () => boolean;
 };
 
 function formatDate(d: string) {
@@ -185,8 +190,15 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
           tabIndex={0}
           aria-label={`Abrir tarefa ${task.title}`}
           draggable={draggable}
+          onPointerDown={podeArrastar ? (e) => acoes.tocar(e, task.id) : undefined}
           onDragStart={podeArrastar ? (e) => {
             e.stopPropagation();
+            // No toque quem arrasta é o Pointer Events (o arrasto nativo do
+            // iPad/Android brigaria com ele).
+            if (acoes.toqueEmAndamento()) {
+              e.preventDefault();
+              return;
+            }
             // O Firefox só começa o arrasto com algum dado no dataTransfer.
             if (e.dataTransfer) {
               e.dataTransfer.effectAllowed = "move";
@@ -212,7 +224,7 @@ const CartaoDaTarefa = memo(function CartaoDaTarefa({
           className={cn(
             "rounded-md border border-border border-l-[3px] bg-card transition-colors hover:border-muted-foreground/30",
             priorityBorderColors[task.priority] || "border-l-border",
-            podeArrastar ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
+            podeArrastar ? "cursor-grab select-none [-webkit-touch-callout:none] active:cursor-grabbing" : "cursor-pointer",
             arrastado && "opacity-40",
             foco,
           )}
@@ -606,6 +618,8 @@ export default function Kanban() {
       menu: (e, task) => acoesRef.current?.menu(e, task),
       mover: (task, colId) => acoesRef.current?.mover(task, colId),
       excluir: (task) => acoesRef.current?.excluir(task),
+      tocar: (e, taskId) => acoesRef.current?.tocar(e, taskId),
+      toqueEmAndamento: () => Boolean(acoesRef.current?.toqueEmAndamento()),
     }),
     [],
   );
@@ -1311,40 +1325,109 @@ export default function Kanban() {
     />
   );
 
+  // Arrasto nativo (mouse) e por toque usam as MESMAS duas funções: a linha
+  // de posição sobre um cartão e o soltar sobre um cartão. Soltar na coluna
+  // (fora de cartão) é handleDrop(coluna), nos dois.
+  const terminarArrasto = () => { setDraggedTask(null); draggedTaskRef.current = null; setDragOver(null); };
+  const marcarPosicao = (taskId: string, el: HTMLElement, clientY: number) => {
+    const active = draggedTaskRef.current || draggedTask;
+    if (!active || active === taskId) return;
+    // Com filtro só muda de coluna: sem linha de posição (a ordem não muda).
+    if (dragBlockedByFilters) return;
+    const rect = el.getBoundingClientRect();
+    const position = clientY < rect.top + rect.height / 2 ? "top" : "bottom";
+    setDragOver((prev) => (prev?.id === taskId && prev.position === position ? prev : { id: taskId, position }));
+  };
+  const soltarNoCartao = (taskId: string, colId: string, position: "top" | "bottom") => {
+    const others = tarefasDaColuna(colId).filter((t: any) => t.id !== (draggedTaskRef.current || draggedTask));
+    const targetIdx = others.findIndex((t: any) => t.id === taskId);
+    const insertAt = position === "top" ? targetIdx : targetIdx + 1;
+    handleDrop(colId, insertAt);
+  };
+
+  // Toque (celular e tablet): o que está sob o dedo, pelos mesmos data-atributos
+  // do soltar nativo (data-cartao-da-tarefa e a coluna em data-coluna-kanban).
+  const [colunaDoToque, setColunaDoToque] = useState<string | null>(null);
+  const alvoSobODedo = (x: number, y: number) => {
+    if (typeof document.elementFromPoint !== "function") return null;
+    const sob = document.elementFromPoint(x, y);
+    const coluna = sob ? sob.closest("[data-coluna-kanban]") : null;
+    const colId = coluna ? coluna.getAttribute("data-coluna-kanban") : null;
+    if (!sob || !coluna || !colId) return null;
+    const cartao = sob.closest("[data-cartao-da-tarefa]");
+    if (!cartao || !coluna.contains(cartao)) return { colId, taskId: null, el: null };
+    const el = (cartao.querySelector('[role="button"]') || cartao) as HTMLElement;
+    return { colId, taskId: cartao.getAttribute("data-cartao-da-tarefa"), el };
+  };
+  const toque = useArrastoPorToque({
+    podeComecar: () => !isClient && !dropInFlightRef.current,
+    aoPegar: (taskId) => {
+      handleDragStart(taskId);
+      return draggedTaskRef.current === taskId;
+    },
+    aoMover: (x, y) => {
+      const alvo = alvoSobODedo(x, y);
+      const proxima = alvo ? alvo.colId : null;
+      setColunaDoToque((atual) => (atual === proxima ? atual : proxima));
+      if (alvo && alvo.taskId && alvo.el) marcarPosicao(alvo.taskId, alvo.el, y);
+      else setDragOver((prev) => (prev === null ? prev : null));
+    },
+    aoSoltar: (x, y) => {
+      setColunaDoToque(null);
+      const alvo = alvoSobODedo(x, y);
+      const active = draggedTaskRef.current;
+      // Fora do quadro ou de volta no próprio cartão: não muda nada.
+      if (!alvo || !active || alvo.taskId === active) {
+        terminarArrasto();
+        return;
+      }
+      if (alvo.taskId && alvo.el) {
+        const rect = alvo.el.getBoundingClientRect();
+        soltarNoCartao(alvo.taskId, alvo.colId, y < rect.top + rect.height / 2 ? "top" : "bottom");
+      } else {
+        handleDrop(alvo.colId);
+      }
+    },
+    aoCancelar: () => {
+      setColunaDoToque(null);
+      terminarArrasto();
+    },
+  });
+
   // Refeitas a cada desenho (enxergam o estado atual); o cartão chama por
   // acoesDoCartao, que não muda, e por isso não redesenha à toa.
   acoesRef.current = {
     comecarArrasto: (taskId) => handleDragStart(taskId),
-    terminarArrasto: () => { setDraggedTask(null); draggedTaskRef.current = null; setDragOver(null); },
+    terminarArrasto,
     passarPorCima: (e, taskId) => {
       e.preventDefault();
-      const active = draggedTaskRef.current || draggedTask;
-      if (!active || active === taskId) return;
-      // Com filtro só muda de coluna: sem linha de posição (a ordem não muda).
-      if (dragBlockedByFilters) return;
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      const position = e.clientY < rect.top + rect.height / 2 ? "top" : "bottom";
-      setDragOver((prev) => (prev?.id === taskId && prev.position === position ? prev : { id: taskId, position }));
+      marcarPosicao(taskId, e.currentTarget as HTMLElement, e.clientY);
     },
     soltar: (e, taskId, colId) => {
       e.preventDefault();
       e.stopPropagation();
-      const position = dragOver?.id === taskId ? dragOver.position : "bottom";
-      const others = tarefasDaColuna(colId).filter((t: any) => t.id !== (draggedTaskRef.current || draggedTask));
-      const targetIdx = others.findIndex((t: any) => t.id === taskId);
-      const insertAt = position === "top" ? targetIdx : targetIdx + 1;
-      handleDrop(colId, insertAt);
+      soltarNoCartao(taskId, colId, dragOver?.id === taskId ? dragOver.position : "bottom");
     },
-    abrir: (task) => handleCardClick(task),
-    menu: (e, task) => { e.preventDefault(); setMenuTarefa({ x: e.clientX, y: e.clientY, task }); },
+    abrir: (task) => {
+      if (toque.ignorarClique()) return;
+      handleCardClick(task);
+    },
+    menu: (e, task) => {
+      e.preventDefault();
+      // Toque longo no Android também dispara o menu: no toque, segurar é arrastar.
+      if (toque.emAndamento() || toque.ignorarClique()) return;
+      setMenuTarefa({ x: e.clientX, y: e.clientY, task });
+    },
     mover: (task, colId) => void changeStatus(task, colId),
     excluir: (task) => setDeleteTask(task),
+    tocar: (e, taskId) => toque.tocar(e, taskId),
+    toqueEmAndamento: () => toque.emAndamento(),
   };
 
   const cabecalho = (
     <CabecalhoDePagina
       titulo="Kanban"
-      ajuda="Todas as tarefas da equipe por etapa. Clique no cartão para abrir; segure e arraste o cartão para mudar de coluna (com os filtros limpos e a ordem manual, também muda a ordem). Botão direito ou o menu do cartão também movem."
+      ajuda="Todas as tarefas da equipe por etapa. Clique no cartão para abrir; segure e arraste o cartão para mudar de coluna (com os filtros limpos e a ordem manual, também muda a ordem). No celular e no tablet, segure o dedo no cartão um instante e arraste; no celular, solte numa aba de coluna para mandar para ela. Botão direito ou o menu do cartão também movem."
       descricao={isLoading ? undefined : `${filteredTasks.length} ${filteredTasks.length === 1 ? "tarefa" : "tarefas"}${hasFilters ? " com filtros" : ""}${dropSaving ? " · salvando" : ""}`}
       acoes={
         // No computador os filtros sobem para a linha do título (uma linha a
@@ -1375,18 +1458,25 @@ export default function Kanban() {
     const col = columns.find((c) => c.id === mobileTab) || columns[0];
     const colTasks = tarefasDaColuna(col.id);
     return (
-      <div className="min-w-0">
+      <div className="min-w-0" ref={toque.ligarQuadro}>
         {cabecalho}
         <div className="mt-3">{FiltersBar}</div>
         <Etapas
-          className="mt-3 border-b border-border"
+          className="mt-3 border-b border-border [&_[data-alvo-do-toque]]:bg-primary/15 [&_[data-alvo-do-toque]]:text-foreground"
           rotulo="Colunas do Kanban"
-          itens={columns.map((c) => ({ valor: c.id, rotulo: c.title, contador: isLoading ? null : tarefasDaColuna(c.id).length }))}
+          itens={columns.map((c) => ({
+            valor: c.id,
+            rotulo: c.title,
+            contador: isLoading ? null : tarefasDaColuna(c.id).length,
+            // Arrastando com o dedo: soltar na aba manda o cartão para o fim daquela coluna.
+            dados: colunaDoToque === c.id ? { "data-coluna-kanban": c.id, "data-alvo-do-toque": "" } : { "data-coluna-kanban": c.id },
+          }))}
           valor={col.id}
           onEscolher={setMobileTab}
         />
         <div
-          className="mt-3 min-h-[50vh] space-y-2 pb-4"
+          data-coluna-kanban={col.id}
+          className={juntar("mt-3 min-h-[50vh] space-y-2 rounded-md pb-4", colunaDoToque === col.id && "bg-primary/5")}
           onTouchStart={(e) => {
             const t = e.touches[0];
             toqueInicial.current = t ? { x: t.clientX, y: t.clientY } : null;
@@ -1395,7 +1485,8 @@ export default function Kanban() {
             const inicio = toqueInicial.current;
             const t = e.changedTouches[0];
             toqueInicial.current = null;
-            if (!inicio || !t) return;
+            // Arrastou o cartão com o dedo: não é o deslize de trocar de coluna.
+            if (!inicio || !t || toque.gestoArrastou()) return;
             const dx = t.clientX - inicio.x;
             const dy = t.clientY - inicio.y;
             if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) stepMobileColumn(dx < 0 ? 1 : -1);
@@ -1426,7 +1517,7 @@ export default function Kanban() {
 
   // ═══ COMPUTADOR: quatro colunas; cada uma rola sozinha de 1024 px para cima ═══
   return (
-    <div className="min-w-0">
+    <div className="min-w-0" ref={toque.ligarQuadro}>
       {cabecalho}
 
       <AreaDeTrabalho principalRolavel={false} className="mt-4">
@@ -1448,7 +1539,8 @@ export default function Kanban() {
                 <section
                   key={col.id}
                   aria-label={col.title}
-                  className="flex min-w-0 flex-col lg:min-h-0"
+                  data-coluna-kanban={col.id}
+                  className={juntar("flex min-w-0 flex-col rounded-md lg:min-h-0", colunaDoToque === col.id && "bg-primary/5 ring-2 ring-primary/30")}
                   onDragOver={isClient ? undefined : (e) => e.preventDefault()}
                   onDrop={isClient ? undefined : () => handleDrop(col.id)}
                 >

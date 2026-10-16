@@ -171,9 +171,9 @@ export default function AntesEDepois() {
         <AjudaRecolhida rotulo="Custo da imagem" className="mr-2">
           Modelo de imagem do painel, cobrado na carteira do cliente.
         </AjudaRecolhida>
-        <button type="button" className={botao.secundario} disabled={!r.foto || !r.descricao.trim() || gerandoImagem} onClick={() => void gerarImagem()}>
-          {gerandoImagem ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <SplitSquareHorizontal className="mr-1.5 h-3.5 w-3.5" />}
-          Gerar o {r.direcao}
+        {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+        <button type="button" className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} disabled={!r.foto || !r.descricao.trim() || gerandoImagem} onClick={() => void gerarImagem()} aria-label={`Gerar o ${r.direcao}`} title={`Gerar o ${r.direcao}`}>
+          {gerandoImagem ? <Loader2 className="h-4 w-4 animate-spin" /> : <SplitSquareHorizontal className="h-4 w-4" />}
         </button>
       </div>
       {antes && depois && <ParDeImagens antes={antes} depois={depois} />}
@@ -199,9 +199,8 @@ export default function AntesEDepois() {
         titulo="Montar no editor"
         acao={
           <>
-            <Link to={`/mesa-edicao?client=${clientId}&etapa=editar`} className={botao.discreto}>
-              <Scissors className="mr-1.5 h-3.5 w-3.5" />
-              Mesa Edição
+            <Link to={`/mesa-edicao?client=${clientId}&etapa=editar`} className={botao.icone} aria-label="Abrir na Mesa Edição" title="Abrir na Mesa Edição">
+              <Scissors className="h-4 w-4" />
             </Link>
             <button type="button" className={botao.secundario} disabled={!r.videoAntes || !r.videoDepois || r.videoAntes === r.videoDepois || montando} onClick={() => void montar()}>
               {montando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}

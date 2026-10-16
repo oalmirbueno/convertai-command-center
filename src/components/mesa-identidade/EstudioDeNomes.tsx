@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AtSign, Check, Copy, Download, ExternalLink, Globe2, Languages, Loader2, MessageCircle, RefreshCcw, Search, Send } from "lucide-react";
+import { AtSign, Check, Copy, Download, ExternalLink, Globe2, Languages, Loader2, MessageCircle, RefreshCcw, Search, Send, Wand2 } from "lucide-react";
 import { PreencherComIA } from "@/components/sistema";
 import { toast } from "sonner";
 import { useMesa, useMarcaDaMesa } from "@/components/mesa/MesaContexto";
@@ -13,7 +13,7 @@ import { Carregando } from "@/components/sistema/Estados";
 import { botao, campo, campoTexto, espaco, etiqueta, foco, juntar, lista, texto, toqueCompacto } from "@/components/sistema/estilos";
 import { CRITERIOS_PADRAO, IDIOMAS_DO_TESTE, LIMITES_DO_NAMING, linksDoArroba, ROTULO_DO_RISCO, rotuloDaTecnica, TECNICAS_DE_NAMING, textoDoDominio, type AlvoDoNaming, type CandidatoDeNome, type SituacaoDoDominio } from "../../../supabase/functions/mesa-identidade/modulos/naming";
 import { chamarIdentidade, CHAVES, normalizarRodada, useRodadas, useSituacaoDoArquivo, textoDaAprovacao, type RodadaDeNomes } from "./identidadeApi";
-import { contextoParaPreencher, Pastilha, partesDoCusto, RotuloComModelo, SeletorDoModelo, useModeloDaAcao, useProjetoOpcional } from "./Comuns";
+import { contextoParaPreencher, nomeCurtoDoModelo, Pastilha, partesDoCusto, SeletorDoModelo, useModeloDaAcao, useProjetoOpcional } from "./Comuns";
 import VotacaoDosNomes from "./VotacaoDosNomes";
 import { salvarArquivo } from "./exportarNoNavegador";
 
@@ -246,7 +246,9 @@ export default function EstudioDeNomes({
 
   const motivoParado = aguardandoGravar ? "Salvando finalistas" : faltamFinalistas ? `Marque mais ${faltamFinalistas}` : null;
   const comSeletor = !projetoDaMesa;
-  const rotuloDoModelo = (r: string) => (comSeletor ? r : <RotuloComModelo rotulo={r} papel="naming" modeloId={modeloId} />);
+  // 16/10/2026: botões de IA só em ícone; o modelo (longe do seletor) vai no title do hover.
+  const modeloCurto = comSeletor ? "" : nomeCurtoDoModelo(mesa.catalogo, "naming", modeloId);
+  const comModelo = (r: string) => (modeloCurto ? `${r} · ${modeloCurto}` : r);
 
   const itensDoMenu = rodada
     ? [
@@ -323,9 +325,17 @@ export default function EstudioDeNomes({
         )}
         <div className="mt-3 flex flex-wrap items-center justify-end">
           {comSeletor && <SeletorDoModelo papel="naming" valor={modeloId} onEscolher={setModeloId} />}
+          {/* 16/10/2026: só ícone; o nome vai no sr-only e no title (descricao). */}
           <BotaoComCusto
-            rotulo={rotuloDoModelo("Gerar nomes")}
+            rotulo={
+              <>
+                <Wand2 className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">Gerar nomes</span>
+              </>
+            }
             titulo="Gerar nomes"
+            descricao={comModelo("Gerar nomes")}
+            className="h-8 gap-1 px-2"
             disabled={!tecnicas.length}
             partes={() => partesDoCusto(mesa.catalogo, "naming", modeloId)}
             executar={() =>
@@ -370,10 +380,16 @@ export default function EstudioDeNomes({
                   ))}
                 </select>
               )}
+              {/* 16/10/2026: só ícone; o nome vai no sr-only e no title (descricao). */}
               <BotaoComCusto
-                rotulo={aguardandoGravar ? "Salvando finalistas" : rotuloDoModelo("Testar idiomas")}
+                rotulo={
+                  <>
+                    <Languages className="h-4 w-4" aria-hidden="true" />
+                    <span className="sr-only">{aguardandoGravar ? "Salvando finalistas" : "Testar idiomas"}</span>
+                  </>
+                }
                 titulo="Pronúncia e significado em outros idiomas"
-                descricao={`Finalistas em ${IDIOMAS_DO_TESTE.map((i) => i.rotulo.toLowerCase()).join(", ")}; o risco é aviso do Jev`}
+                descricao={`${aguardandoGravar ? "Salvando finalistas" : comModelo("Testar idiomas")}: finalistas em ${IDIOMAS_DO_TESTE.map((i) => i.rotulo.toLowerCase()).join(", ")}; o risco é aviso do Jev`}
                 disabled={mudouFinalistas || salvos.length < LIMITES_DO_NAMING.finalistasMin}
                 partes={() => partesDoCusto(mesa.catalogo, "idiomas", modeloId)}
                 executar={() => chamarIdentidade<{ rodada: RodadaDeNomes; aviso_jev: string | null }>("naming_idiomas", { rodada_id: rodada.id, modelo_id: modeloId || undefined })}
@@ -382,7 +398,7 @@ export default function EstudioDeNomes({
                   if (d && d.aviso_jev) toast.warning(d.aviso_jev);
                 }}
                 variant="ghost"
-                className="m-1 h-8"
+                className="m-1 h-8 gap-1 px-2"
               />
               <MenuMais itens={itensDoMenu} rotulo="Mais ações da rodada" className="m-1" />
             </>
@@ -418,20 +434,21 @@ export default function EstudioDeNomes({
       {rodada && (
         <Secao titulo="Aprovação" divisoria descricao={rodada.arquivo_pdf_id ? textoDaAprovacao(situacao.data) : rodada.enviado_grupo_em ? "Enviado no grupo" : "Ainda não enviado"} recolher={`mesa-identidade:nomes:${rodada.id}:aprovacao`}>
           <div className="-m-1 flex min-w-0 flex-wrap items-center">
-            <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!!ocupado || mudouFinalistas || salvos.length < LIMITES_DO_NAMING.finalistasMin} onClick={() => void rodar("aprovar", async () => {
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+            <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} aria-label="Enviar para aprovação" title="Enviar para aprovação" disabled={!!ocupado || mudouFinalistas || salvos.length < LIMITES_DO_NAMING.finalistasMin} onClick={() => void rodar("aprovar", async () => {
               const r = await chamarIdentidade<{ rodada: RodadaDeNomes; revisao_solicitada: boolean; aviso: string | null }>("naming_pdf_compartilhar", { rodada_id: rodada.id });
               guardarRodada(r.rodada);
               void situacao.refetch();
               toast.success("PDF dos finalistas em Arquivos", { description: r.revisao_solicitada ? "Revisão da agência pedida." : r.aviso || undefined });
             })}>
-              {ocupado === "aprovar" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />} Enviar para aprovação
+              {ocupado === "aprovar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
-            <button type="button" className={juntar(botao.secundario, "m-1")} disabled={!!ocupado || mudouFinalistas || salvos.length < LIMITES_DO_NAMING.finalistasMin} onClick={() => void rodar("mensagem", async () => {
+            <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} aria-label="Mensagem do grupo" title="Mensagem do grupo" disabled={!!ocupado || mudouFinalistas || salvos.length < LIMITES_DO_NAMING.finalistasMin} onClick={() => void rodar("mensagem", async () => {
               const r = await chamarIdentidade<{ rodada: RodadaDeNomes; mensagem: string; link_whatsapp: string }>("naming_mensagem", { rodada_id: rodada.id });
               guardarRodada(r.rodada);
               setMensagem({ texto: r.mensagem, link: r.link_whatsapp });
             })}>
-              <MessageCircle className="mr-1.5 h-4 w-4" /> Mensagem do grupo
+              <MessageCircle className="h-4 w-4" />
             </button>
             {motivoParado && <span className={juntar(texto.auxiliar, "m-1")} data-motivo-parado="">{motivoParado}</span>}
             {rodada.enviado_grupo_em && <Pastilha tom="bom">Enviado no grupo em {new Date(rodada.enviado_grupo_em).toLocaleDateString("pt-BR")}</Pastilha>}
@@ -440,17 +457,18 @@ export default function EstudioDeNomes({
             <div className="mt-3 min-w-0">
               <textarea className={juntar(campoTexto, "min-h-[160px]")} readOnly value={mensagem.texto} aria-label="Mensagem para o grupo" />
               <div className="-m-1 mt-1 flex min-w-0 flex-wrap items-center">
-                <button type="button" className={juntar(botao.discreto, "m-1")} onClick={() => void copiarTexto(mensagem.texto).then((ok) => (ok ? toast.success("Mensagem copiada") : toast.error("Não deu para copiar")))}>
-                  <Copy className="mr-1.5 h-4 w-4" /> Copiar
+                {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+                <button type="button" className={juntar(botao.icone, "m-1")} aria-label="Copiar a mensagem" title="Copiar a mensagem" onClick={() => void copiarTexto(mensagem.texto).then((ok) => (ok ? toast.success("Mensagem copiada") : toast.error("Não deu para copiar")))}>
+                  <Copy className="h-4 w-4" />
                 </button>
-                <a className={juntar(botao.discreto, "m-1")} href={mensagem.link} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="mr-1.5 h-4 w-4" /> Abrir no WhatsApp
+                <a className={juntar(botao.icone, "m-1")} href={mensagem.link} target="_blank" rel="noopener noreferrer" aria-label="Abrir no WhatsApp" title="Abrir no WhatsApp">
+                  <ExternalLink className="h-4 w-4" />
                 </a>
-                <button type="button" className={juntar(botao.secundario, "m-1")} disabled={ocupado === "grupo"} onClick={() => void rodar("grupo", async () => {
+                <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} aria-label="Registrar que foi enviado" title="Registrar que foi enviado" disabled={ocupado === "grupo"} onClick={() => void rodar("grupo", async () => {
                   guardarRodada((await chamarIdentidade<{ rodada: RodadaDeNomes }>("naming_registrar_grupo", { rodada_id: rodada.id })).rodada);
                   toast.success("Envio no grupo registrado");
                 })}>
-                  <Check className="mr-1.5 h-4 w-4" /> Registrar que foi enviado
+                  <Check className="h-4 w-4" />
                 </button>
               </div>
             </div>

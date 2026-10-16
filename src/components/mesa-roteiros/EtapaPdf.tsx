@@ -135,19 +135,17 @@ export default function EtapaPdf({ roteiroId }: { roteiroId: string | null }) {
           <span className="min-w-0">Usar a versão aprovada quando houver</span>
         </label>
         <BarraDeAcoes inicio={pdf ? <span className="block truncate">{paginasDoPdf(pdf.bytes)} páginas · {Math.max(1, Math.round(pdf.bytes.length / 1024))} KB</span> : null}>
-          <button type="button" className={botao.primario} disabled={!pdf} onClick={() => pdf && baixarBytes(pdf.bytes, pdf.nome)}>
-            <Download className="mr-1 h-3.5 w-3.5" />
-            Baixar
+          {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+          <button type="button" className={juntar(botao.primario, "w-9 px-0")} disabled={!pdf} onClick={() => pdf && baixarBytes(pdf.bytes, pdf.nome)} aria-label="Baixar o PDF" title="Baixar o PDF">
+            <Download className="h-4 w-4" />
           </button>
           {url && (
-            <a href={url} target="_blank" rel="noopener noreferrer" className={juntar(botao.secundario, foco)}>
-              <ExternalLink className="mr-1 h-3.5 w-3.5" />
-              Abrir
+            <a href={url} target="_blank" rel="noopener noreferrer" className={juntar(botao.icone, foco)} aria-label="Abrir o PDF numa aba nova" title="Abrir o PDF numa aba nova">
+              <ExternalLink className="h-4 w-4" />
             </a>
           )}
-          <button type="button" className={botao.secundario} disabled={!podeCompartilhar || enviando} onClick={() => void compartilhar()}>
-            {enviando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1 h-3.5 w-3.5" />}
-            Compartilhar com o cliente
+          <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} disabled={!podeCompartilhar || enviando} onClick={() => void compartilhar()} aria-label="Compartilhar com o cliente" title="Compartilhar com o cliente">
+            {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </button>
         </BarraDeAcoes>
         {!podeCompartilhar && linhas.length > 0 && (

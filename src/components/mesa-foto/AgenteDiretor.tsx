@@ -1059,13 +1059,12 @@ export default function AgenteDiretor({
                     type="button"
                     disabled={!!pendente}
                     onClick={() => void mandar(a.mensagem)}
-                    className={juntar(
-                      "mb-1 mr-1 inline-flex h-7 max-w-full items-center rounded-md border border-border bg-background px-2 text-[11px] font-medium transition-colors hover:border-primary/50 disabled:opacity-60",
-                      foco,
-                    )}
+                    aria-label={a.rotulo}
+                    title={a.rotulo}
+                    className={juntar(botao.icone, "mb-1 mr-1 text-primary disabled:opacity-60")}
                   >
-                    <Icone className="mr-1 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
-                    <span className="truncate">{a.rotulo}</span>
+                    {/* 16/10/2026 (dono: "deixa só o ícone"): o nome do atalho vai no title e no aria-label. */}
+                    <Icone className="h-4 w-4 shrink-0" aria-hidden="true" />
                   </button>
                 );
               })}
@@ -1129,10 +1128,9 @@ export default function AgenteDiretor({
                     {subindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
                   </button>
                   <Ditado valor={texto} onChange={setTexto} disabled={!!pendente} className="mr-1" />
-                  <Button type="submit" size="sm" className="h-8 px-3 text-[13px]" disabled={!texto.trim() || !!pendente} aria-label="Mandar">
-                    {pendente ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1 h-3.5 w-3.5" />}
-                    Mandar
-                  </Button>
+                  <button className={juntar(botao.icone, "text-primary disabled:opacity-50")} type="submit" disabled={!texto.trim() || !!pendente} aria-label="Mandar" title="Mandar">
+                    {pendente ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
+                  </button>
                 </div>
               </div>
               <input

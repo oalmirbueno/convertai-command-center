@@ -16,7 +16,7 @@ import { Cartao, FotoInteira, ListaCurta, MiniaturaDaFoto, SeloCurto, SeloDaFoto
 import RegiaoRolavel from "@/components/sistema/RegiaoRolavel";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
-import { campo, foco, juntar, superficie } from "@/components/sistema/estilos";
+import { botao, campo, foco, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { useReservaFlutuante } from "@/components/sistema/useReservaFlutuante";
 import ProdutoDasFotos from "./ProdutoDasFotos";
@@ -149,15 +149,15 @@ export function ZonaDeEnvio({
           {!compacta && (
             <p className="mt-1 text-[12px] text-muted-foreground">JPG, PNG ou WEBP, até 25 MB cada</p>
           )}
-          <Button
+          <button
             type="button"
-            size="sm"
-            variant={compacta ? "outline" : "default"}
-            className={`${compacta ? "" : "mt-3"} h-8 text-[12px]`}
+            className={juntar(botao.icone, !compacta && "mt-3", !compacta && "text-primary")}
             onClick={() => entrada.current && entrada.current.click()}
+            aria-label={destaque ? "Subir fotos em lote" : "Escolher fotos"}
+            title={destaque ? "Subir fotos em lote" : "Escolher fotos"}
           >
-            <Upload className="mr-1.5 h-3.5 w-3.5" /> {destaque ? "Subir fotos em lote" : "Escolher fotos"}
-          </Button>
+            <Upload className="h-4 w-4" aria-hidden="true" />
+          </button>
         </div>
       )}
       <input
@@ -311,20 +311,20 @@ function DetalheDaFoto({
       {/* Principal: editar no Estúdio, post na Agenda, aprovar, usar (Mesa, Mesa Ads, baixar, aprovação) e ver grande. */}
       <div className="flex min-w-0 flex-wrap items-center" data-acoes-principais="">
         {abrirNoEstudio && !foto.referencia_web && (
-          <Button type="button" size="sm" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => abrirNoEstudio(foto.id)} title="A foto grande e as ferramentas ao lado: luz, cor, fundo, cenário, ângulo, ampliar">
-            <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" /> Abrir no Estúdio
-          </Button>
+          <button className={juntar(botao.icone, "mb-1.5 mr-1.5 text-primary disabled:opacity-50")} type="button" onClick={() => abrirNoEstudio(foto.id)} title="A foto grande e as ferramentas ao lado: luz, cor, fundo, cenário, ângulo, ampliar" aria-label="Abrir no Estúdio">
+            <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+          </button>
         )}
         {prepararNaAgenda && !foto.referencia_web && (
-          <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => prepararNaAgenda([foto.id])} title="Post na Agenda com esta foto: legenda, data e aprovação do cliente">
-            <CalendarPlus className="mr-1.5 h-3.5 w-3.5" /> Agenda
-          </Button>
+          <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" onClick={() => prepararNaAgenda([foto.id])} title="Post na Agenda com esta foto: legenda, data e aprovação do cliente" aria-label="Agenda">
+            <CalendarPlus className="h-4 w-4" aria-hidden="true" />
+          </button>
         )}
         <AprovarFoto foto={foto} />
         <MenuDeUso foto={foto} rotulo="Usar" variante="outline" className="mb-1.5 mr-1.5" />
-        <Button type="button" size="sm" variant="ghost" className="mb-1.5 h-8 text-[12px]" onClick={onAmpliar}>
-          <Maximize2 className="mr-1.5 h-3.5 w-3.5" /> Ver grande
-        </Button>
+        <button className={juntar(botao.icone, "mb-1.5 disabled:opacity-50")} type="button" onClick={onAmpliar} aria-label="Ver grande" title="Ver grande">
+          <Maximize2 className="h-4 w-4" aria-hidden="true" />
+        </button>
       </div>
       <SecaoDoDetalhe titulo="Ampliar e tirar fundo (pro)">
         <AcoesProDaFoto foto={foto} onPronta={(nova) => onAbrir(nova.id)} />
@@ -350,29 +350,21 @@ function DetalheDaFoto({
             }}
           />
           {!foto.referencia_web && (
-            <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => irPara("preparar", { imagem: foto.id })}>
-              <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Preparar
-            </Button>
+            <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" onClick={() => irPara("preparar", { imagem: foto.id })} aria-label="Preparar" title="Preparar">
+              <Wand2 className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
           {podeVirarClone(foto) && (
-            <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => irPara("clones", { imagem: foto.id })} title="Mesmo rosto em outras roupas, cenários e poses (pessoa real, com autorização)">
-              <UsersRound className="mr-1.5 h-3.5 w-3.5" /> Variações desta pessoa
-            </Button>
+            <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" onClick={() => irPara("clones", { imagem: foto.id })} title="Mesmo rosto em outras roupas, cenários e poses (pessoa real, com autorização)" aria-label="Variações desta pessoa">
+              <UsersRound className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
           {!foto.referencia_web && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="mb-1.5 mr-1.5 h-8 text-[12px]"
-              data-mover-de-lado={lado === "produto" ? "modelo" : "produto"}
-              onClick={() => {
+            <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" data-mover-de-lado={lado === "produto" ? "modelo" : "produto"} onClick={() => {
                 moverParaLado(queryClient, clientId, [foto.id], lado === "produto" ? "modelo" : "produto").catch((e) => avisarErroDoLado(e, "Foto não movida"));
-              }}
-            >
-              {lado === "produto" ? <UserRound className="mr-1.5 h-3.5 w-3.5" /> : <Package className="mr-1.5 h-3.5 w-3.5" />}
-              {lado === "produto" ? "É foto de modelo" : "É foto de produto"}
-            </Button>
+              }} aria-label={lado === "produto" ? "É foto de modelo" : "É foto de produto"} title={lado === "produto" ? "É foto de modelo" : "É foto de produto"}>
+              {lado === "produto" ? <UserRound className="h-4 w-4" aria-hidden="true" /> : <Package className="h-4 w-4" aria-hidden="true" />}
+            </button>
           )}
           {/* Alternativa ao "Tirar fundo (pro)": o recorte pelo gerador da casa (preparar, fundo transparente). */}
           {podeTirarFundo(foto) && <BotaoTirarFundo foto={foto} onPronta={onAbrir} rotulo="Tirar fundo (alternativa)" />}
@@ -550,15 +542,15 @@ function EntradaDeFotos({ lado, onArquivos, andamento, onLink }: { lado: LadoDaF
   return (
     <div className="min-w-0" data-entrada-de-fotos={lado}>
       <div className="flex min-w-0 flex-wrap items-center">
-        <Button type="button" size="sm" className="mb-1 mr-1.5 h-8 text-[12px]" disabled={!!andamento} onClick={() => entrada.current && entrada.current.click()}>
-          <Upload className="mr-1.5 h-3.5 w-3.5" /> Subir fotos em lote
-        </Button>
-        <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8 text-[12px]" disabled={!!andamento} onClick={() => void colar()} title="Ou aperte Ctrl+V em qualquer lugar da tela">
-          <ClipboardPaste className="mr-1.5 h-3.5 w-3.5" /> Colar
-        </Button>
-        <Button type="button" size="sm" variant={comLink ? "default" : "outline"} className="mb-1 mr-1.5 h-8 text-[12px]" aria-expanded={comLink} onClick={() => setComLink(!comLink)}>
-          <Link2 className="mr-1.5 h-3.5 w-3.5" /> Link
-        </Button>
+        <button className={juntar(botao.icone, "mb-1 mr-1.5 text-primary disabled:opacity-50")} type="button" disabled={!!andamento} onClick={() => entrada.current && entrada.current.click()} aria-label="Subir fotos em lote" title="Subir fotos em lote">
+          <Upload className="h-4 w-4" aria-hidden="true" />
+        </button>
+        <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50")} type="button" disabled={!!andamento} onClick={() => void colar()} title="Ou aperte Ctrl+V em qualquer lugar da tela" aria-label="Colar">
+          <ClipboardPaste className="h-4 w-4" aria-hidden="true" />
+        </button>
+        <button className={juntar(botao.icone, "mb-1 mr-1.5 disabled:opacity-50", (comLink) && "bg-primary/10 text-primary")} type="button" aria-expanded={comLink} onClick={() => setComLink(!comLink)} aria-label="Link" title="Link">
+          <Link2 className="h-4 w-4" aria-hidden="true" />
+        </button>
         <AjudaRecolhida className="mb-1" rotulo="Como subir fotos">
           {`Entram como fotos de ${lado === "modelo" ? "modelo" : "produto"} (a aba aberta). JPG, PNG ou WEBP, até 25 MB cada; o original fica guardado como veio. Para produto, 4 a 8 fotos: frente, três quartos, laterais, verso, detalhes e a embalagem. Para pessoa, 6 a 12 fotos recentes e autorizadas.`}
         </AjudaRecolhida>
@@ -860,14 +852,15 @@ export default function EtapaAcervo() {
                         type="button"
                         role="tab"
                         aria-selected={ativo}
-                        title={l.dica}
+                        aria-label={`${l.rotulo} ${n}`}
+                        title={`${l.rotulo}: ${l.dica}`}
                         onClick={() => setLado(l.valor)}
-                        className={juntar("inline-flex h-8 items-center rounded-md px-3 text-[13px] font-medium", ativo ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground", foco)}
+                        className={juntar("toque-compacto inline-flex h-8 items-center rounded-md px-2 text-[13px] font-medium", ativo ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground", foco)}
                         data-lado={l.valor}
                       >
-                        {l.valor === "modelo" ? <UserRound className="mr-1.5 h-3.5 w-3.5" /> : <Package className="mr-1.5 h-3.5 w-3.5" />}
-                        {l.rotulo}
-                        <span className="ml-1.5 tabular-nums text-muted-foreground">{n}</span>
+                        {/* 16/10/2026: aba só com o ícone e a contagem pequena (o nome no title). */}
+                        {l.valor === "modelo" ? <UserRound className="h-4 w-4" aria-hidden="true" /> : <Package className="h-4 w-4" aria-hidden="true" />}
+                        <span className="ml-1 text-[11px] tabular-nums text-muted-foreground">{n}</span>
                       </button>
                     );
                   })}
@@ -920,9 +913,9 @@ export default function EtapaAcervo() {
                   </button>
                 )}
                 {separadas.aSeparar.length > 0 && (
-                  <button type="button" className={juntar("mr-3 inline-flex items-center rounded font-medium text-primary hover:underline disabled:opacity-60", foco)} onClick={() => void separarComIA()} disabled={separando} data-separar-com-ia={separadas.aSeparar.length} title="O Jev olha nome, pasta e leitura das fotos sem sinal e separa produto, modelo e arte">
-                    {separando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
-                    Separar com IA ({Math.min(20, separadas.aSeparar.length)})
+                  <button type="button" className={juntar(botao.icone, "mr-2 w-auto px-1.5 text-primary disabled:opacity-60")} onClick={() => void separarComIA()} disabled={separando} data-separar-com-ia={separadas.aSeparar.length} aria-label={`Separar com IA (${Math.min(20, separadas.aSeparar.length)})`} title="Separar com IA: o Jev olha nome, pasta e leitura das fotos sem sinal e separa produto, modelo e arte">
+                    {separando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
+                    <span className="ml-0.5 text-[11px] tabular-nums">{Math.min(20, separadas.aSeparar.length)}</span>
                   </button>
                 )}
                 {separadas.fora > 0 && (
@@ -971,46 +964,29 @@ export default function EtapaAcervo() {
                     {escolhidas.length} {escolhidas.length === 1 ? "marcada" : "marcadas"}
                   </span>
                   {prepararNaAgenda && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 shrink-0 px-2.5 text-[12px]"
-                      onClick={() => prepararNaAgenda(escolhidas.filter((f) => !f.referencia_web).map((f) => f.id))}
-                      aria-label="Preparar na Agenda"
-                      title="Preparar na Agenda: foto única ou carrossel, com legenda, data e aprovação do cliente"
-                    >
-                      <CalendarPlus className="mr-1.5 h-3.5 w-3.5" /> Agenda
-                    </Button>
+                    <button className={juntar(botao.icone, "shrink-0 text-primary disabled:opacity-50")} type="button" onClick={() => prepararNaAgenda(escolhidas.filter((f) => !f.referencia_web).map((f) => f.id))} aria-label="Preparar na Agenda" title="Preparar na Agenda: foto única ou carrossel, com legenda, data e aprovação do cliente">
+                      <CalendarPlus className="h-4 w-4" aria-hidden="true" />
+                    </button>
                   )}
                   {abrirNoEstudio && (
-                    <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 px-2.5 text-[12px]" onClick={() => abrirNoEstudio(escolhidas[0].id)} aria-label="Estúdio" title="Abre a primeira marcada no Estúdio de fotos">
-                      <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" /> Estúdio
-                    </Button>
+                    <button className={juntar(botao.icone, "shrink-0 disabled:opacity-50")} type="button" onClick={() => abrirNoEstudio(escolhidas[0].id)} aria-label="Estúdio" title="Abre a primeira marcada no Estúdio de fotos">
+                      <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+                    </button>
                   )}
-                  <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 px-2.5 text-[12px]" onClick={() => usarNasMesas("mesa")} aria-label="Usar na Mesa" title="Usar na Mesa: abre o Estúdio da Mesa com estas fotos, sem subir de novo">
-                    <PenTool className="mr-1.5 h-3.5 w-3.5" /> Mesa
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 px-2.5 text-[12px]" onClick={() => usarNasMesas("ads")} aria-label="Mesa Ads" title="Usar na Mesa Ads: abre o Estúdio da Mesa Ads com estas fotos">
-                    <Megaphone className="mr-1.5 h-3.5 w-3.5" /> Ads
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" className="h-8 shrink-0 px-2.5 text-[12px]" onClick={montarKit} aria-label="Montar kit" title="Montar kit: abre um kit novo em Produto com estas fotos, sem gastar IA">
-                    <PackagePlus className="mr-1.5 h-3.5 w-3.5" /> Kit
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-8 shrink-0 px-2.5 text-[12px]"
-                    aria-label={lado === "produto" ? "Mover para Modelo" : "Mover para Produto"}
-                    title={lado === "produto" ? "As marcadas são fotos de modelo" : "As marcadas são fotos de produto"}
-                    onClick={() => {
+                  <button className={juntar(botao.icone, "shrink-0 disabled:opacity-50")} type="button" onClick={() => usarNasMesas("mesa")} aria-label="Usar na Mesa" title="Usar na Mesa: abre o Estúdio da Mesa com estas fotos, sem subir de novo">
+                    <PenTool className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <button className={juntar(botao.icone, "shrink-0 disabled:opacity-50")} type="button" onClick={() => usarNasMesas("ads")} aria-label="Mesa Ads" title="Usar na Mesa Ads: abre o Estúdio da Mesa Ads com estas fotos">
+                    <Megaphone className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <button className={juntar(botao.icone, "shrink-0 disabled:opacity-50")} type="button" onClick={montarKit} aria-label="Montar kit" title="Montar kit: abre um kit novo em Produto com estas fotos, sem gastar IA">
+                    <PackagePlus className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <button className={juntar(botao.icone, "shrink-0 disabled:opacity-50")} type="button" aria-label={lado === "produto" ? "Mover para Modelo" : "Mover para Produto"} title={lado === "produto" ? "As marcadas são fotos de modelo" : "As marcadas são fotos de produto"} onClick={() => {
                       moverParaLado(queryClient, clientId, escolhidas.map((f) => f.id), lado === "produto" ? "modelo" : "produto").catch((e) => avisarErro(e, "Fotos não movidas"));
-                    }}
-                    data-mover-marcadas=""
-                  >
-                    {lado === "produto" ? <UserRound className="mr-1.5 h-3.5 w-3.5" /> : <Package className="mr-1.5 h-3.5 w-3.5" />}
-                    {lado === "produto" ? "Modelo" : "Produto"}
-                  </Button>
+                    }} data-mover-marcadas="">
+                    {lado === "produto" ? <UserRound className="h-4 w-4" aria-hidden="true" /> : <Package className="h-4 w-4" aria-hidden="true" />}
+                  </button>
                   <span className="mx-1 h-5 w-px shrink-0 bg-border" aria-hidden="true" />
                   <Button
                     type="button"

@@ -112,7 +112,8 @@ describe("estúdio de mockups na tela", () => {
     await waitFor(() => expect(sugerir).toHaveBeenCalledTimes(1));
     const pedido = sugerir.mock.calls[0][0] as { candidatos: Array<{ id: string }> };
     expect(pedido.candidatos.map((c) => c.id)).toEqual(["cartao-colorido"]);
-    expect(await screen.findByText(/Aplicar a marca em 1/)).toBeTruthy();
+    // 16/10/2026: só ícone; o nome vai no aria-label.
+    expect(await screen.findByRole("button", { name: /Aplicar a marca em 1/ })).toBeTruthy();
     expect(await screen.findByText(/nota 3.6 de 4/)).toBeTruthy();
   });
 

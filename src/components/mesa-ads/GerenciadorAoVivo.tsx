@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, ChevronRight, ExternalLink, FileSearch, Loader2, MoreHorizontal, Pause, Play, PlayCircle, RefreshCw, Sparkles, Undo2, Wand2, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, ExternalLink, Eye, FileSearch, Instagram, Loader2, MoreHorizontal, Pause, Play, PlayCircle, RefreshCw, Sparkles, Undo2, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
@@ -135,9 +135,8 @@ function MarcaDaAcao({ n, fazendo, onDesfazer }: { n: NoNoGerenciador; fazendo: 
         {hora ? ` às ${hora}` : ""}
       </span>
       {m.pode_desfazer && (
-        <button type="button" className={juntar("inline-flex shrink-0 items-center rounded font-medium underline-offset-2 hover:underline", foco)} disabled={fazendo} onClick={onDesfazer} aria-label={`Desfazer: ${m.resumo}`}>
-          {fazendo ? <Loader2 className="mr-0.5 h-3 w-3 animate-spin" /> : <Undo2 className="mr-0.5 h-3 w-3" />}
-          Desfazer
+        <button type="button" className={juntar(botao.icone, "h-6 w-6 text-primary")} disabled={fazendo} onClick={onDesfazer} aria-label={`Desfazer: ${m.resumo}`} title="Desfazer">
+          {fazendo ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />}
         </button>
       )}
     </p>
@@ -251,9 +250,8 @@ function PainelDaAcao({
         {temVerba && escolha("orcamento", "Mudar verba diária", null)}
         {escolha("renomear", "Renomear", null)}
         {n.link_meta && (
-          <a href={n.link_meta} target="_blank" rel="noopener noreferrer" className={juntar(botao.discreto, "mb-1.5 mr-1.5 h-8 text-[12px]")}>
-            <ExternalLink className="mr-1 h-3.5 w-3.5" />
-            Abrir na Meta
+          <a className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} href={n.link_meta} target="_blank" rel="noopener noreferrer" aria-label="Abrir na Meta" title="Abrir na Meta">
+            <ExternalLink className="h-4 w-4" aria-hidden="true" />
           </a>
         )}
         <button type="button" className={juntar(botao.icone, "mb-1.5 ml-auto")} onClick={onFechar} aria-label="Fechar as ações">
@@ -440,21 +438,18 @@ function Linha(p: LinhaProps) {
               <div className="-ml-1.5 mt-0.5 flex min-w-0 items-center">
                 {!encerrado(n) && (
                   ehAtivo(n) ? (
-                    <button type="button" className={linkPequeno} disabled={semGestao} title={semGestao ? (p.gestao && p.gestao.motivo) || "Só leitura agora" : undefined} onClick={() => p.onAcoes({ id: n.id, tipo: "pausar" })} aria-label={`Pausar ${n.nome}`}>
-                      <Pause className="mr-1 h-3 w-3" />
-                      Pausar
+                    <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={semGestao} title={semGestao ? (p.gestao && p.gestao.motivo) || "Só leitura agora" : undefined} onClick={() => p.onAcoes({ id: n.id, tipo: "pausar" })} aria-label={`Pausar ${n.nome}`}>
+                      <Pause className="h-4 w-4" aria-hidden="true" />
                     </button>
                   ) : (
-                    <button type="button" className={linkPequeno} disabled={semGestao} title={semGestao ? (p.gestao && p.gestao.motivo) || "Só leitura agora" : undefined} onClick={() => p.onAcoes({ id: n.id, tipo: "ativar" })} aria-label={`Retomar ${n.nome}`}>
-                      <Play className="mr-1 h-3 w-3" />
-                      Retomar
+                    <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={semGestao} title={semGestao ? (p.gestao && p.gestao.motivo) || "Só leitura agora" : undefined} onClick={() => p.onAcoes({ id: n.id, tipo: "ativar" })} aria-label={`Retomar ${n.nome}`}>
+                      <Play className="h-4 w-4" aria-hidden="true" />
                     </button>
                   )
                 )}
                 {p.onOtimizar && n.nivel !== "anuncio" && (
-                  <button type="button" className={linkPequeno} onClick={() => p.onOtimizar && p.onOtimizar(n)} aria-label={`Otimizar ${n.nome}`} title="Leva ao agente sênior com a base deste item: reforçar e experimentar, sem criar do zero">
-                    <Sparkles className="mr-1 h-3 w-3" />
-                    Otimizar
+                  <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => p.onOtimizar && p.onOtimizar(n)} aria-label={`Otimizar ${n.nome}`} title="Leva ao agente sênior com a base deste item: reforçar e experimentar, sem criar do zero">
+                    <Sparkles className="h-4 w-4" aria-hidden="true" />
                   </button>
                 )}
                 <button type="button" className={juntar(linkPequeno, "w-6 justify-center px-0")} onClick={() => p.onAcoes(acoesAqui ? null : { id: n.id, tipo: null })} aria-expanded={!!acoesAqui} aria-label={`Ações: ${n.nome}`}>
@@ -617,21 +612,18 @@ function PainelDoAnuncio({
             )}
             <div className="-ml-1.5 mt-1.5 flex min-w-0 flex-wrap items-center">
               {links && links.previa && (
-                <a href={links.previa} target="_blank" rel="noopener noreferrer" className={juntar(botao.barra, "text-primary")}>
-                  <ExternalLink className="mr-1 h-3.5 w-3.5" />
-                  Prévia na Meta
+                <a className={juntar(botao.icone, "text-primary disabled:opacity-50")} href={links.previa} target="_blank" rel="noopener noreferrer" aria-label="Prévia na Meta" title="Prévia na Meta">
+                  <Eye className="h-4 w-4" aria-hidden="true" />
                 </a>
               )}
               {links && links.instagram && (
-                <a href={links.instagram} target="_blank" rel="noopener noreferrer" className={botao.barra}>
-                  <ExternalLink className="mr-1 h-3.5 w-3.5" />
-                  No Instagram
+                <a href={links.instagram} target="_blank" rel="noopener noreferrer" className={botao.icone} aria-label="No Instagram" title="No Instagram">
+                  <Instagram className="h-4 w-4" aria-hidden="true" />
                 </a>
               )}
               {n.link_meta && (
-                <a href={n.link_meta} target="_blank" rel="noopener noreferrer" className={botao.barra}>
-                  <ExternalLink className="mr-1 h-3.5 w-3.5" />
-                  No Gerenciador da Meta
+                <a href={n.link_meta} target="_blank" rel="noopener noreferrer" className={botao.icone} aria-label="No Gerenciador da Meta" title="No Gerenciador da Meta">
+                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
                 </a>
               )}
             </div>
@@ -700,27 +692,23 @@ function PainelDoAnuncio({
             <MarcaDaAcao n={n} fazendo={!!n.marca && desfazendo === n.marca.acao_id} onDesfazer={() => n.marca && onDesfazer(n.marca.acao_id)} />
             <div className="-m-0.5 mt-1 flex min-w-0 flex-wrap items-center [&>*]:m-0.5">
               {!encerrado(n) && (
-                <button type="button" className={juntar(botao.secundario, "h-8 text-[12px]")} onClick={() => setAcao({ tipo: ehAtivo(n) ? "pausar" : "ativar" })}>
-                  {ehAtivo(n) ? <Pause className="mr-1 h-3.5 w-3.5" /> : <Play className="mr-1 h-3.5 w-3.5" />}
-                  {ehAtivo(n) ? "Pausar" : "Retomar"}
+                <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => setAcao({ tipo: ehAtivo(n) ? "pausar" : "ativar" })} aria-label={ehAtivo(n) ? "Pausar" : "Retomar"} title={ehAtivo(n) ? "Pausar" : "Retomar"}>
+                  {ehAtivo(n) ? <Pause className="h-4 w-4" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
                 </button>
               )}
               {onOtimizar && (
-                <button type="button" className={juntar(botao.primario, "h-8 text-[12px]")} onClick={() => onOtimizar(n)} title="Leva ao agente sênior com a base deste anúncio">
-                  <Sparkles className="mr-1 h-3.5 w-3.5" />
-                  Otimizar
+                <button className={juntar(botao.icone, "text-primary disabled:opacity-50")} type="button" onClick={() => onOtimizar(n)} title="Leva ao agente sênior com a base deste anúncio" aria-label="Otimizar">
+                  <Sparkles className="h-4 w-4" aria-hidden="true" />
                 </button>
               )}
               {onVariar && (
-                <button type="button" className={juntar(botao.secundario, "h-8 text-[12px]")} onClick={() => onVariar(n.id)}>
-                  <Wand2 className="mr-1 h-3.5 w-3.5" />
-                  Criar variações
+                <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => onVariar(n.id)} aria-label="Criar variações" title="Criar variações">
+                  <Wand2 className="h-4 w-4" aria-hidden="true" />
                 </button>
               )}
               {onFicha && (
-                <button type="button" className={juntar(botao.discreto, "h-8 text-[12px]")} onClick={() => onFicha(n.id)}>
-                  <FileSearch className="mr-1 h-3.5 w-3.5" />
-                  Abrir ficha
+                <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => onFicha(n.id)} aria-label="Abrir ficha" title="Abrir ficha">
+                  <FileSearch className="h-4 w-4" aria-hidden="true" />
                 </button>
               )}
               <button type="button" className={juntar(botao.discreto, "h-8 w-8 px-0")} onClick={() => setAcao(acao ? null : { tipo: null })} aria-label={`Ações: ${n.nome}`} aria-expanded={!!acao}>
@@ -768,9 +756,8 @@ export function useAtualizarGerenciador(clientId: string, periodo: PeriodoDaCons
 
 export function BotaoAtualizarAgora({ atualizando, onAtualizar }: { atualizando: boolean; onAtualizar: () => void }) {
   return (
-    <button type="button" className={juntar(botao.secundario, "h-9")} disabled={atualizando} onClick={onAtualizar} title="Lê a Meta agora: status, entrega, verba e gasto de hoje (grátis)">
-      {atualizando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
-      Atualizar agora
+    <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={atualizando} onClick={onAtualizar} title="Lê a Meta agora: status, entrega, verba e gasto de hoje (grátis)" aria-label="Atualizar agora">
+      {atualizando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
     </button>
   );
 }

@@ -1,7 +1,7 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { Film, Loader2, Pencil, Plus, Sparkles } from "lucide-react";
+import { CopyPlus, FilePlus2, Film, Loader2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa, useUrlDaMesa } from "@/components/mesa/MesaContexto";
 import { EstadoVazio } from "@/components/sistema/Estados";
@@ -234,9 +234,9 @@ export default function AreaDoEditor({ projeto, cenas, roteiroId, agenteNaLatera
             )
           )}
           {!lendo && navegador.ok && (
-            <button type="button" className={juntar(botao.secundario, "mb-1 ml-1 h-8")} onClick={() => void comecar(true)} disabled={criando} data-comecar-do-zero="">
-              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-              Começar do zero
+            // 16/10/2026: só ícone, sem borda; "Abrir o editor" fica com texto (ação principal da etapa).
+            <button type="button" className={juntar(botao.icone, "mb-1 ml-1 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void comecar(true)} disabled={criando} aria-label="Começar do zero" title="Começar do zero" data-comecar-do-zero="">
+              <FilePlus2 className="h-4 w-4" />
             </button>
           )}
           {!navegador.ok && <span className={juntar(texto.auxiliar, "mb-1")}>O editor pede um navegador atualizado (Chrome, Edge ou Safari 14+).</span>}
@@ -267,13 +267,12 @@ export default function AreaDoEditor({ projeto, cenas, roteiroId, agenteNaLatera
         )}
         {migrado.de < 2 && <span className={juntar(etiqueta, "mr-2 bg-muted text-muted-foreground")}>formato antigo, abriu convertido</span>}
         {migrado.aviso && <span className="mr-2 text-[12px] text-amber-500">{migrado.aviso}</span>}
-        <button type="button" className={juntar(botao.discreto, "ml-auto h-8 shrink-0")} onClick={() => void comecar()} disabled={criando || !temClipe} title="Cria outra versão com a montagem de agora (takes e ordem de Organizar)" aria-label="Nova versão" data-nova-versao="">
-          {criando ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <Plus className="h-3.5 w-3.5 sm:mr-1.5" />}
-          <span className="hidden sm:inline">Nova versão</span>
+        {/* 16/10/2026: só ícones, sem borda (nome no aria-label e no title). */}
+        <button type="button" className={juntar(botao.icone, "ml-auto disabled:pointer-events-none disabled:opacity-50")} onClick={() => void comecar()} disabled={criando || !temClipe} title="Nova versão: cria outra versão com a montagem de agora (takes e ordem de Organizar)" aria-label="Nova versão" data-nova-versao="">
+          {criando ? <Loader2 className="h-4 w-4 animate-spin" /> : <CopyPlus className="h-4 w-4" />}
         </button>
-        <button type="button" className={juntar(botao.discreto, "ml-1 h-8 shrink-0")} onClick={() => void comecar(true)} disabled={criando} title="Cria uma versão vazia para montar do zero (cenas, textos, motion, mídia e música)" aria-label="Do zero" data-comecar-do-zero="">
-          <Sparkles className="h-3.5 w-3.5 sm:mr-1.5" />
-          <span className="hidden sm:inline">Do zero</span>
+        <button type="button" className={juntar(botao.icone, "ml-1 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void comecar(true)} disabled={criando} title="Do zero: cria uma versão vazia para montar (cenas, textos, motion, mídia e música)" aria-label="Do zero" data-comecar-do-zero="">
+          <FilePlus2 className="h-4 w-4" />
         </button>
       </div>
       <LimiteDoEditor

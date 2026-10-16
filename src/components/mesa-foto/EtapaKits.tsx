@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowRight, ArrowUp, Camera, Globe, Images, Loader2, PackageSearch, Plus, ShieldCheck, Sparkles, Star, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, ArrowUp, Camera, Globe, Images, ListPlus, Loader2, PackageSearch, Plus, ShieldCheck, Sparkles, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { Cartao, ListaCurta, MiniaturaDaFoto, SeloDaFoto, useMesaFoto, Vazio } f
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
-import { campo, campoTexto } from "@/components/sistema/estilos";
+import { botao, campo, campoTexto, juntar as juntarClasses } from "@/components/sistema/estilos";
 import CartaoDaIdentificacao, { AcoesDaIdentificacao } from "./Identificacao";
 import { gravarNaSessao, lerDaSessao } from "./sessao";
 import SeletorDeFotos from "./SeletorDeFotos";
@@ -229,18 +229,19 @@ function FonteDoKit({
             type="button"
             onClick={onFrente}
             aria-pressed={frente}
-            className={`mr-1 inline-flex h-7 items-center rounded-md px-1.5 text-[11.5px] ${frente ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-muted"}`}
-            title="A frente comercial do assunto: os ângulos contam a partir dela"
+            className={juntarClasses(botao.icone, "mr-1", frente && "bg-primary/10 text-primary")}
+            aria-label={frente ? "Frente do assunto" : "Marcar como frente"}
+            title={`${frente ? "Frente do assunto" : "Marcar como frente"}: a frente comercial do assunto; os ângulos contam a partir dela`}
           >
-            <Star className="mr-1 h-3 w-3" /> {frente ? "Frente do assunto" : "Marcar como frente"}
+            <Star className={juntarClasses("h-4 w-4", frente && "fill-primary")} aria-hidden="true" />
           </button>
           {indice > 0 && (
-            <button type="button" onClick={onSubir} className="mr-1 inline-flex h-7 items-center rounded-md px-1.5 text-[11.5px] text-muted-foreground hover:bg-muted" aria-label={`Subir a foto ${indice + 1}`}>
-              <ArrowUp className="mr-1 h-3 w-3" /> Prioridade
+            <button className={juntarClasses(botao.icone, "mr-1 disabled:opacity-50")} type="button" onClick={onSubir} aria-label={`Subir a foto ${indice + 1}`} title="Prioridade">
+              <ArrowUp className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
-          <button type="button" onClick={onTirar} className="inline-flex h-7 items-center rounded-md px-1.5 text-[11.5px] text-muted-foreground hover:bg-muted hover:text-destructive" aria-label={`Tirar a foto ${indice + 1} do kit`}>
-            <Trash2 className="mr-1 h-3 w-3" /> Tirar
+          <button className={juntarClasses(botao.icone, "hover:text-destructive disabled:opacity-50")} type="button" onClick={onTirar} aria-label={`Tirar a foto ${indice + 1} do kit`} title="Tirar">
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -442,9 +443,9 @@ export default function EtapaKits() {
             recolher={`mesa-foto:kits:lista:${clientId}`}
             resumo={kitSalvo ? `${lista.length} · aberto: ${kitSalvo.nome}` : `${lista.length} ${lista.length === 1 ? "kit" : "kits"}`}
             acao={
-              <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={() => abrirNovo()}>
-                <Plus className="mr-1 h-3.5 w-3.5" /> Novo
-              </Button>
+              <button className={juntarClasses(botao.icone, "disabled:opacity-50")} type="button" onClick={() => abrirNovo()} aria-label="Novo" title="Novo">
+                <Plus className="h-4 w-4" aria-hidden="true" />
+              </button>
             }
           >
             {kits.isLoading && <Carregando linhas={3} rotulo="Lendo os kits" />}
@@ -566,9 +567,9 @@ export default function EtapaKits() {
                   ? `${fotosParaLer.length} ${fotosParaLer.length === 1 ? "foto" : "fotos"} ${selecionadas.length ? "marcadas" : "do kit aberto"}${selecionadas.length > MAX_FOTOS_NA_IDENTIFICACAO ? ` (lê as ${MAX_FOTOS_NA_IDENTIFICACAO} primeiras)` : ""}`
                   : "Escolha as fotos da embalagem ou do produto."}
               </span>
-              <Button type="button" size="sm" variant="ghost" className="mb-1.5 h-8 text-[12px]" onClick={() => setEscolhendoParaLer(true)}>
-                <Images className="mr-1.5 h-3.5 w-3.5" /> Escolher fotos
-              </Button>
+              <button className={juntarClasses(botao.icone, "mb-1.5 disabled:opacity-50")} type="button" onClick={() => setEscolhendoParaLer(true)} aria-label="Escolher fotos" title="Escolher fotos">
+                <Images className="h-4 w-4" aria-hidden="true" />
+              </button>
             </div>
             {escolhendoParaLer && (
               <div className="mt-2">
@@ -593,10 +594,9 @@ export default function EtapaKits() {
                     <>
                       <AcoesDaIdentificacao identificacao={identificacao} onKits={abrirSalvos} onPropostas={setPropostas} />
                       {editando && editando.id && editando.id !== (identificacao.kit && identificacao.kit.id) && identificacao.referencias_web.length > 0 && (
-                        <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" disabled={pondoNoKit} onClick={() => void porNoKitAberto()}>
-                          {pondoNoKit ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5" />}
-                          Pôr as referências em {editando.nome || "no kit aberto"}
-                        </Button>
+                        <button className={juntarClasses(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" disabled={pondoNoKit} onClick={() => void porNoKitAberto()} aria-label={`Pôr as referências em ${editando.nome || "no kit aberto"}`} title={`Pôr as referências em ${editando.nome || "no kit aberto"}`}>
+                          {pondoNoKit ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ArrowRight className="h-4 w-4" aria-hidden="true" />}
+                        </button>
                       )}
                       <button type="button" className="mb-1.5 h-8 px-1.5 text-[12px] text-muted-foreground hover:text-foreground" onClick={() => setIdentificacao(null)}>
                         Dispensar
@@ -640,9 +640,9 @@ export default function EtapaKits() {
             <Vazio
               titulo="Escolha um kit ou crie um novo"
               acao={
-                <Button type="button" size="sm" className="h-8 text-[12px]" onClick={() => abrirNovo()}>
-                  <Plus className="mr-1 h-3.5 w-3.5" /> Novo kit
-                </Button>
+                <button className={juntarClasses(botao.icone, "text-primary disabled:opacity-50")} type="button" onClick={() => abrirNovo()} aria-label="Novo kit" title="Novo kit">
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                </button>
               }
             >
               O kit guarda como o assunto é, o que não muda e o que falta fotografar.
@@ -652,9 +652,9 @@ export default function EtapaKits() {
               titulo={editando.id ? "Editar kit" : "Novo kit"}
               acao={
                 editando.id ? (
-                  <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={() => irPara("criar", { kit: editando.id })}>
-                    <Camera className="mr-1.5 h-3.5 w-3.5" /> Criar fotos
-                  </Button>
+                  <button className={juntarClasses(botao.icone, "disabled:opacity-50")} type="button" onClick={() => irPara("criar", { kit: editando.id })} aria-label="Criar fotos" title="Criar fotos">
+                    <Camera className="h-4 w-4" aria-hidden="true" />
+                  </button>
                 ) : undefined
               }
             >
@@ -686,22 +686,24 @@ export default function EtapaKits() {
                       Fotos do produto <span className="font-normal tabular-nums text-muted-foreground">{editando.refs.length}</span>
                     </p>
                     {selecionadasFora.length > 0 && (
-                      <Button
+                      <button
                         type="button"
-                        size="sm"
-                        variant="outline"
-                        className="mb-1 mr-1.5 h-8 text-[12px]"
+                        className={juntarClasses(botao.icone, "mb-1 mr-1.5 w-auto px-1.5")}
                         onClick={() => {
                           comFotos(selecionadasFora);
                           setSelecionadas([]);
                         }}
+                        aria-label={`As ${selecionadasFora.length} marcadas no Acervo`}
+                        title={`Pôr as ${selecionadasFora.length} marcadas no Acervo`}
                       >
-                        <Plus className="mr-1 h-3.5 w-3.5" /> As {selecionadasFora.length} marcadas no Acervo
-                      </Button>
+                        {/* 16/10/2026: só o ícone, com a contagem pequena. */}
+                        <ListPlus className="h-4 w-4" aria-hidden="true" />
+                        <span className="ml-0.5 text-[11px] tabular-nums">{selecionadasFora.length}</span>
+                      </button>
                     )}
-                    <Button type="button" size="sm" variant="outline" className="mb-1 h-8 text-[12px]" onClick={() => setEscolhendo(true)}>
-                      <Images className="mr-1.5 h-3.5 w-3.5" /> Do acervo
-                    </Button>
+                    <button className={juntarClasses(botao.icone, "mb-1 disabled:opacity-50")} type="button" onClick={() => setEscolhendo(true)} aria-label="Do acervo" title="Do acervo">
+                      <Images className="h-4 w-4" aria-hidden="true" />
+                    </button>
                   </div>
                   {escolhendo && (
                     <SeletorDeFotos

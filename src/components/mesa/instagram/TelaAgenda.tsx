@@ -128,11 +128,11 @@ export default function TelaAgenda({ plano, perfil, podePublicar, onAbrir }: { p
       <div className="min-w-0">
         <div className="mb-2 flex min-w-0 flex-wrap items-center justify-between">
           <div className="flex items-center">
-            <button type="button" className={botao.icone} onClick={() => andar(-1)} aria-label={modo === "mes" ? "Mês anterior" : "Semana anterior"}>
+            <button type="button" className={botao.icone} onClick={() => andar(-1)} aria-label={modo === "mes" ? "Mês anterior" : "Semana anterior"} title={modo === "mes" ? "Mês anterior" : "Semana anterior"}>
               <ChevronLeft className="h-4 w-4" />
             </button>
             <p className="mx-2 min-w-[150px] text-center text-[15px] font-semibold text-foreground">{titulo}</p>
-            <button type="button" className={botao.icone} onClick={() => andar(1)} aria-label={modo === "mes" ? "Próximo mês" : "Próxima semana"}>
+            <button type="button" className={botao.icone} onClick={() => andar(1)} aria-label={modo === "mes" ? "Próximo mês" : "Próxima semana"} title={modo === "mes" ? "Próximo mês" : "Próxima semana"}>
               <ChevronRight className="h-4 w-4" />
             </button>
             <button type="button" className={juntar(botao.discreto, "ml-1 h-8 px-2 text-[12px]")} onClick={() => setAncora(hoje)}>

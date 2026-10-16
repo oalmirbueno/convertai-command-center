@@ -2,12 +2,11 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { BookmarkPlus, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { chamarFuncao } from "@/lib/mesa/api";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { campo, campoTexto, juntar } from "@/components/sistema/estilos";
+import { botao, campo, campoTexto, juntar } from "@/components/sistema/estilos";
 import { MiniaturaDaFoto } from "./Comuns";
 import { chaveDaBiblioteca, useFotos } from "./fotoApi";
 import { gravarNaSessao, lerDaSessao } from "./sessao";
@@ -79,9 +78,9 @@ export default function EntradaDoArsenal() {
         <div className="min-w-0 flex-1 space-y-1.5">
           <input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Nome do prompt" aria-label="Nome do prompt" className={juntar(campo, "h-8 text-[12.5px]")} />
           <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={3} placeholder="O prompt que gerou a foto" aria-label="Prompt para o Arsenal" className={campoTexto} />
-          <Button type="button" size="sm" className="h-8 text-[12px]" disabled={!prompt.trim() || salvando || !vindas.length} onClick={() => void salvar()}>
-            {salvando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <BookmarkPlus className="mr-1.5 h-3.5 w-3.5" />} Guardar
-          </Button>
+          <button className={juntar(botao.icone, "text-primary disabled:opacity-50")} type="button" disabled={!prompt.trim() || salvando || !vindas.length} onClick={() => void salvar()} aria-label="Guardar" title="Guardar">
+            {salvando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <BookmarkPlus className="h-4 w-4" aria-hidden="true" />}
+          </button>
         </div>
       </div>
     </section>

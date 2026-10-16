@@ -3,7 +3,7 @@ import { Camera, Check, Copy, CornerDownLeft, Layers, LayoutGrid, Mountain, Pack
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
-import { campo, juntar, rolagem, texto as textoDoSistema } from "@/components/sistema/estilos";
+import { botao, campo, juntar, rolagem, texto as textoDoSistema } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   AREAS_DO_ARSENAL,
@@ -140,21 +140,14 @@ export function SeletorDaArea({
 export function BotaoCopiarTexto({ texto, rotulo = "Copiar", nome }: { texto: string; rotulo?: string; nome?: string }) {
   const [copiado, setCopiado] = useState(false);
   return (
-    <button
-      type="button"
-      disabled={!texto}
-      aria-label={nome || rotulo}
-      onClick={async () => {
+    <button className={juntar(botao.icone, "mr-1 shrink-0 disabled:opacity-50")} type="button" disabled={!texto} aria-label={nome || rotulo} onClick={async () => {
         const ok = await copiarParaAreaDeTransferencia(texto);
         if (ok) {
           setCopiado(true);
           window.setTimeout(() => setCopiado(false), 1800);
         } else toast.error("Não foi possível copiar", { description: "Selecione o texto e copie com Ctrl+C." });
-      }}
-      className="toque-compacto mr-1 inline-flex h-7 shrink-0 items-center rounded-md border border-input px-2 text-[12px] font-medium hover:bg-muted disabled:opacity-50"
-    >
-      {copiado ? <Check className="mr-1 h-3.5 w-3.5 text-success" aria-hidden="true" /> : <Copy className="mr-1 h-3.5 w-3.5" aria-hidden="true" />}
-      {copiado ? "Copiado" : rotulo}
+      }} title={copiado ? "Copiado" : rotulo}>
+      {copiado ? <Check className="h-4 w-4 text-success" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
     </button>
   );
 }
@@ -198,13 +191,8 @@ export function ListaDoArsenal({
             <div className="mt-1.5 flex min-w-0 flex-wrap items-center">
               <BotaoCopiarTexto texto={p.texto} nome={`Copiar o prompt ${p.titulo}`} />
               {onUsar && (
-                <button
-                  type="button"
-                  onClick={() => onUsar(p.texto)}
-                  aria-label={`Usar o prompt ${p.titulo}`}
-                  className="toque-compacto mr-1 inline-flex h-7 shrink-0 items-center rounded-md px-2 text-[12px] font-medium text-primary hover:bg-primary/10"
-                >
-                  <CornerDownLeft className="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Usar
+                <button className={juntar(botao.icone, "mr-1 shrink-0 text-primary hover:bg-primary/10 disabled:opacity-50")} type="button" onClick={() => onUsar(p.texto)} aria-label={`Usar o prompt ${p.titulo}`} title="Usar">
+                  <CornerDownLeft className="h-4 w-4" aria-hidden="true" />
                 </button>
               )}
               {p.negativo && <BotaoCopiarTexto texto={p.negativo} rotulo="Evitar" nome={`Copiar o evitar de ${p.titulo}`} />}

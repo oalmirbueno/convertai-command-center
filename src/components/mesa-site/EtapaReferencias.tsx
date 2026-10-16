@@ -158,9 +158,9 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
               onDesfazer={() => desfazerSugestoes()}
             />
           </span>
-          <button type="button" className={naoLidas > 0 ? botao.primario : botao.secundario} disabled={!refs.length || !!ocupado} onClick={() => void ler()} data-ler-referencias="">
-            {ocupado === "As referências não foram lidas" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <ScanEye className="mr-1 h-3.5 w-3.5" />}
-            Ler as referências
+          {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+          <button type="button" className={naoLidas > 0 ? juntar(botao.primario, "w-9 px-0") : botao.icone} aria-label="Ler as referências" title="Ler as referências" disabled={!refs.length || !!ocupado} onClick={() => void ler()} data-ler-referencias="">
+            {ocupado === "As referências não foram lidas" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanEye className="h-4 w-4" />}
           </button>
           </>
         }
@@ -174,19 +174,19 @@ export default function EtapaReferencias({ site, onIrPara }: { site: LinhaDoSite
             }}
           >
             <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://site-que-o-cliente-admira.com" className={juntar(campo, "mr-2 min-w-[200px] flex-1")} aria-label="Endereço da referência" />
-            <button type="submit" className={botao.secundario} disabled={!url.trim() || !!ocupado}>
-              <Link2 className="mr-1 h-3.5 w-3.5" />
-              Adicionar
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+            <button type="submit" className={botao.icone} aria-label="Adicionar" title="Adicionar o endereço" disabled={!url.trim() || !!ocupado}>
+              <Link2 className="h-4 w-4" />
             </button>
           </form>
           <input ref={arquivo} type="file" accept="image/*" multiple className="hidden" onChange={(e) => enviarPrints(e.target.files)} />
-          <button type="button" className={juntar(botao.secundario, "mb-2 mr-2")} disabled={!!ocupado} onClick={() => arquivo.current && arquivo.current.click()}>
-            <Upload className="mr-1 h-3.5 w-3.5" />
-            Prints
+          {/* 16/10/2026: só ícone (nome no aria-label e no title); a contagem do acervo aberto fica pequena ao lado. */}
+          <button type="button" className={juntar(botao.icone, "mb-2 mr-2")} aria-label="Prints" title="Enviar prints" disabled={!!ocupado} onClick={() => arquivo.current && arquivo.current.click()}>
+            <Upload className="h-4 w-4" />
           </button>
-          <button type="button" className={juntar(botao.discreto, "mb-2")} onClick={() => setVerAcervo(!verAcervo)} aria-expanded={verAcervo} data-acervo-das-referencias="">
-            <ImagemIcone className="mr-1 h-3.5 w-3.5" />
-            Acervo{verAcervo && fotos.data ? ` · ${fotos.data.fotos.length} fotos` : ""}
+          <button type="button" className={juntar(botao.icone, "mb-2", verAcervo && fotos.data ? "w-auto px-2" : null)} aria-label={`Acervo${verAcervo && fotos.data ? ` · ${fotos.data.fotos.length} fotos` : ""}`} title={`Acervo${verAcervo && fotos.data ? ` · ${fotos.data.fotos.length} fotos` : ""}`} onClick={() => setVerAcervo(!verAcervo)} aria-expanded={verAcervo} data-acervo-das-referencias="">
+            <ImagemIcone className="h-4 w-4" />
+            {verAcervo && fotos.data ? <span className="ml-1 text-[11px] tabular-nums" aria-hidden="true">{fotos.data.fotos.length}</span> : null}
           </button>
         </div>
         {/* UXS 30/09: o acervo abre logo abaixo dos botões, dentro da seção (antes abria lá embaixo, depois da lista). */}

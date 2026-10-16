@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Download, FileDown, FileText, Loader2, Plus, Save, SearchCheck, Trash2, Wand2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Download, FileDown, FileText, Loader2, Plus, RotateCw, Save, SearchCheck, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -507,15 +507,18 @@ function RoteiroSolto({ roteiro, onDescartar }: { roteiro: Roteiro; onDescartar:
             <button type="button" className={botao.discreto} onClick={onDescartar}>
               Fechar
             </button>
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
             <button
               type="button"
-              className={botao.primario}
+              className={juntar(botao.primario, "w-9 px-0")}
+              aria-label="Baixar PDF"
+              title="Baixar PDF"
               onClick={() => {
                 const p = montarPdf(mesa.clientName || "Cliente", [itemSolto(roteiro)]);
                 baixarBytes(p.bytes, p.nome);
               }}
             >
-              <Download className="mr-1 h-3.5 w-3.5" /> Baixar PDF
+              <Download className="h-4 w-4" />
             </button>
           </>
         }
@@ -644,12 +647,13 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
             </button>
             <button
               type="button"
-              className={botao.primario}
+              className={juntar(botao.primario, "w-9 px-0")}
               onClick={() => void salvar()}
               disabled={travado || !alterado || salvando}
-              title={linha.status === "aprovado" ? `Salvar cria a versão ${linha.versao_atual + 1} em rascunho. A aprovada continua guardada.` : undefined}
+              aria-label="Salvar versão"
+              title={linha.status === "aprovado" ? `Salvar versão: cria a versão ${linha.versao_atual + 1} em rascunho. A aprovada continua guardada.` : "Salvar versão"}
             >
-              {salvando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}Salvar versão
+              {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             </button>
           </div>
         </div>
@@ -723,9 +727,9 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
         data-blocos=""
         acoes={
           !travado ? (
-            <button type="button" className={botao.discreto} onClick={novoBloco} aria-label="Novo bloco">
-              <Plus className="mr-1 h-3.5 w-3.5" />
-              Bloco
+            // 16/10/2026: só ícone (nome no aria-label e no title).
+            <button type="button" className={botao.icone} onClick={novoBloco} aria-label="Novo bloco" title="Novo bloco">
+              <Plus className="h-4 w-4" />
             </button>
           ) : null
         }
@@ -842,16 +846,17 @@ function EditorDoRoteiro({ linha, onIrPara }: { linha: LinhaDoRoteiro; onIrPara:
           estado={alterado ? "Salve as mudanças antes" : undefined}
           data-refazer=""
           acoes={
+            // 16/10/2026: só ícone (RotateCw: gerar de novo); o que faz vai no title (descricao).
             <BotaoComCusto
               rotulo={
                 <>
-                  <Wand2 className="mr-1 h-3.5 w-3.5" />
-                  Gerar de novo
+                  <RotateCw className="h-4 w-4" aria-hidden="true" />
+                  <span className="sr-only">Gerar de novo</span>
                 </>
               }
               titulo="Roteiro gerado de novo"
-              variant="outline"
-              className="h-9"
+              variant="ghost"
+              className="h-8 gap-1 px-2"
               disabled={alterado || !modeloIa}
               descricao="Escreve o roteiro de novo, com os comentários abertos da Revisão."
               partes={() => [{ modeloId: modeloIa, tipo: "texto", tokensEntrada: TAMANHO_DA_GERACAO.entrada, tokensSaida: TAMANHO_DA_GERACAO.saida }]}

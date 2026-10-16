@@ -260,9 +260,9 @@ export default function Versoes({ troca }: { troca?: ReactNode } = {}) {
       acao={
         <>
           {troca}
-          <button type="button" className={botao.secundario} onClick={() => setNova(true)} disabled={!disponivel || nova} aria-label="Registrar versão">
-            <Plus className="h-3.5 w-3.5 sm:mr-1.5" />
-            <span className="hidden sm:inline">Registrar versão</span>
+          {/* 16/10/2026: só ícone, sem borda. */}
+          <button type="button" className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} onClick={() => setNova(true)} disabled={!disponivel || nova} aria-label="Registrar versão" title="Registrar versão">
+            <Plus className="h-4 w-4" />
           </button>
         </>
       }

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ImagePlus, Loader2, Plus, RefreshCcw, Sparkles, Stamp } from "lucide-react";
+import { ArrowRight, ImagePlus, Loader2, Plus, RefreshCcw, Sparkles, Stamp } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useKitDaMarca } from "@/components/mesa/kitDaMesa";
@@ -148,8 +148,9 @@ export default function EtapaInicio({ projetoAberto, contexto, onAbrir }: { proj
                 e.target.value = "";
               }}
             />
-            <button type="button" className={juntar(botao.secundario, "w-full")} onClick={() => entrada.current && entrada.current.click()} data-enviar-logo-existente="">
-              <ImagePlus className="mr-1.5 h-4 w-4" /> {arquivo ? "Trocar o arquivo" : logoDoKit ? "Usar outro arquivo" : "Enviar a logo"}
+            {/* 16/10/2026: só ícone (nome no aria-label e no title; o arquivo escolhido aparece no apoio). */}
+            <button type="button" className={botao.icone} onClick={() => entrada.current && entrada.current.click()} data-enviar-logo-existente="" aria-label={arquivo ? "Trocar o arquivo" : logoDoKit ? "Usar outro arquivo" : "Enviar a logo"} title={arquivo ? "Trocar o arquivo" : logoDoKit ? "Usar outro arquivo" : "Enviar a logo"}>
+              <ImagePlus className="h-4 w-4" />
             </button>
           </CampoDeFormulario>
         </div>
@@ -166,8 +167,9 @@ export default function EtapaInicio({ projetoAberto, contexto, onAbrir }: { proj
                 O nome também muda
               </label>
             )}
-            <button type="button" className={botao.primario} onClick={() => void criar()} disabled={criando} data-criar-projeto="">
-              {criando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Plus className="mr-1.5 h-4 w-4" />} Começar
+            {/* 16/10/2026: só ícone, verde do próximo passo (nome no aria-label e no title). */}
+            <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => void criar()} disabled={criando} data-criar-projeto="" aria-label="Começar o projeto" title="Começar o projeto">
+              {criando ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
             </button>
           </div>
         </div>
@@ -239,9 +241,12 @@ export default function EtapaInicio({ projetoAberto, contexto, onAbrir }: { proj
             ajuda={AJUDA_DOS_MODOS}
             recolher={{ recolhido: listaRecolhida, onAlternar: () => setListaRecolhida(!listaRecolhida), resumo: projetos.isSuccess ? contagem || undefined : undefined, modo: "icone" }}
             acao={
+              // 16/10/2026: só ícone (nome no aria-label e no title).
               <button
                 type="button"
-                className={juntar(botao.secundario, "m-1 h-8")}
+                className={juntar(botao.icone, "m-1")}
+                aria-label="Novo projeto"
+                title="Novo projeto"
                 aria-expanded={novoAberto}
                 onClick={() => {
                   if (!novoAberto && listaRecolhida) setListaRecolhida(false);
@@ -249,7 +254,7 @@ export default function EtapaInicio({ projetoAberto, contexto, onAbrir }: { proj
                 }}
                 data-novo-projeto=""
               >
-                <Plus className="mr-1.5 h-3.5 w-3.5" /> Novo projeto
+                <Plus className="h-4 w-4" />
               </button>
             }
           />

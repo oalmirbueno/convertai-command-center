@@ -268,11 +268,12 @@ describe("Enviar só envia; Acompanhar mostra o depois", () => {
     const { unmount } = montar(`/mesa-proposta?client=${CLIENTE}&etapa=envio&proposta=${PROPOSTA}`);
     await screen.findByLabelText("Link da proposta");
     expect(screen.queryByText("Rastreio")).toBeNull();
-    expect(screen.queryByText("Preparar mensagem")).toBeNull();
+    // 16/10/2026: só ícone; o nome vai no aria-label.
+    expect(screen.queryByLabelText("Preparar mensagem")).toBeNull();
     unmount();
     montar(`/mesa-proposta?client=${CLIENTE}&etapa=acompanhar&proposta=${PROPOSTA}`);
     expect(await screen.findByText("Aberturas")).toBeTruthy();
-    expect(screen.getByText("Preparar mensagem")).toBeTruthy();
+    expect(screen.getByLabelText("Preparar mensagem")).toBeTruthy();
     expect(screen.getByText("Linha do tempo", { selector: "h2" })).toBeTruthy();
   });
 

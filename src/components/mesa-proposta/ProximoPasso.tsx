@@ -18,10 +18,10 @@ export default function ProximoPasso({ etapa, estado, acao, destaque = true }: {
     <div className="flex min-w-0 flex-wrap items-center justify-end border-t border-border pt-4 [&>*]:mb-2 [&>*]:ml-2" data-proximo-passo={etapa}>
       {estado ? <span className={juntar(texto.auxiliar, "mr-auto min-w-0")}>{estado}</span> : null}
       {acao}
+      {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
       {proxima && (
-        <button type="button" className={destaque && !acao ? botao.primario : botao.secundario} onClick={() => irPara(proxima)} data-seguir-para={proxima}>
-          Seguir para {rotuloDaEtapa(proxima)}
-          <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden="true" />
+        <button type="button" className={destaque && !acao ? juntar(botao.primario, "w-9 px-0") : botao.icone} onClick={() => irPara(proxima)} data-seguir-para={proxima} aria-label={`Seguir para ${rotuloDaEtapa(proxima)}`} title={`Seguir para ${rotuloDaEtapa(proxima)}`}>
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </button>
       )}
     </div>

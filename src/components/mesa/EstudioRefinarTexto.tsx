@@ -141,7 +141,8 @@ export default function EstudioRefinarTexto({
               rotulo={<><Sparkles className="h-4 w-4" aria-hidden="true" /><span className="sr-only">{opcoes.length ? "Gerar outras 3" : "Gerar 3 opções"}</span></>}
               titulo="Refinar texto"
               descricao="O redator usa a base de copy da agência, o framework escolhido, o contexto da marca e o que o cliente já ensinou. Nada muda até você escolher."
-              variant="outline"
+              // 16/10/2026 (dono: "só o ícone, sem as bordinhas"): já era só o ícone; sai a borda.
+              variant="ghost"
               className="h-8 gap-1 px-2.5 text-[12px]"
               disabled={bloqueado || vazio || !objetivos.length}
               partes={partes}

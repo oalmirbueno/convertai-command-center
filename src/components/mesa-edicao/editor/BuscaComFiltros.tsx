@@ -79,14 +79,16 @@ function BuscaComFiltros({
           {escolha("Origem", filtro.origem, OPCOES_DA_ORIGEM, "origem")}
           {comUso && escolha("Uso", filtro.uso, OPCOES_DO_USO, "uso")}
           {escolha("Duração", filtro.duracao, OPCOES_DA_DURACAO, "duracao")}
+          {/* 16/10/2026: só ícone, sem borda (nome no aria-label e no title). */}
           <button
             type="button"
-            className={juntar(botao.barra, "col-span-2 justify-start gap-1.5 border border-border", filtro.duplicados && "border-primary/50 bg-primary/10 text-primary")}
+            className={juntar(botao.icone, "col-span-2 justify-self-start", filtro.duplicados && "bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary")}
             onClick={() => mudar({ duplicados: !filtro.duplicados })}
             aria-pressed={filtro.duplicados}
+            aria-label="Só repetidos"
+            title="Só repetidos"
           >
-            <Copy className="h-3.5 w-3.5" />
-            Só repetidos
+            <Copy className="h-4 w-4" />
           </button>
         </div>
       )}

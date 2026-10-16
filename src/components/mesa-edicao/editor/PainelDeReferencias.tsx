@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Columns2, Eye, Film, Link2, Loader2, Ruler, Save, Trash2, Upload } from "lucide-react";
+import { Columns2, ExternalLink, Eye, Film, Link2, Loader2, Ruler, Save, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useMesa, useUrlDaMesa } from "@/components/mesa/MesaContexto";
@@ -185,9 +185,9 @@ function Referencia({
         </button>
       </div>
       {r.url && r.rede && (
-        <a href={r.url} target="_blank" rel="noreferrer noopener" className="mt-1 inline-flex items-center text-[12px] text-primary hover:underline">
-          <Link2 className="mr-1 h-3 w-3" />
-          Abrir no {r.rede}
+        // 16/10/2026: só ícone (nome no aria-label e no title).
+        <a href={r.url} target="_blank" rel="noreferrer noopener" className={juntar(botao.icone, "mt-1 h-7 w-7")} aria-label={`Abrir no ${r.rede}`} title={`Abrir no ${r.rede}`}>
+          <ExternalLink className="h-3.5 w-3.5" />
         </a>
       )}
       <div className="mt-2 grid grid-cols-4 gap-0.5 rounded-md border border-border p-0.5" role="radiogroup" aria-label={`Fidelidade à referência ${r.nome}`}>
@@ -219,15 +219,14 @@ function Referencia({
       ) : (
         <div className="mt-2 flex flex-wrap">
           {r.storage_path && (
-            <button type="button" className={juntar(botao.secundario, "mb-1 mr-1 h-8")} onClick={() => void medir()} disabled={!url.data}>
-              <Ruler className="mr-1.5 h-3.5 w-3.5" />
-              {receita ? "Medir de novo" : "Medir"}
+            // 16/10/2026: só ícones, sem borda; "Aplicar no vídeo" fica com texto (ação principal).
+            <button type="button" className={juntar(botao.icone, "mb-1 mr-1 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void medir()} disabled={!url.data} aria-label={receita ? "Medir de novo" : "Medir"} title={receita ? "Medir de novo" : "Medir"}>
+              <Ruler className="h-4 w-4" />
             </button>
           )}
           {receita && r.storage_path && (
-            <button type="button" className={juntar(botao.secundario, "mb-1 mr-1 h-8")} onClick={() => setConfirmarLeitura(true)} disabled={!modelo}>
-              <Eye className="mr-1.5 h-3.5 w-3.5" />
-              Ler a edição
+            <button type="button" className={juntar(botao.icone, "mb-1 mr-1 disabled:pointer-events-none disabled:opacity-50")} onClick={() => setConfirmarLeitura(true)} disabled={!modelo} aria-label="Ler a edição" title="Ler a edição">
+              <Eye className="h-4 w-4" />
             </button>
           )}
           {receita && (
@@ -236,16 +235,14 @@ function Referencia({
             </button>
           )}
           {receita && url.data && urlDoProjeto && (
-            <button type="button" className={juntar(botao.discreto, "mb-1 mr-1 h-8")} onClick={() => setComparando(true)}>
-              <Columns2 className="mr-1.5 h-3.5 w-3.5" />
-              Lado a lado
+            <button type="button" className={juntar(botao.icone, "mb-1 mr-1")} onClick={() => setComparando(true)} aria-label="Lado a lado" title="Lado a lado">
+              <Columns2 className="h-4 w-4" />
             </button>
           )}
           {receita && (
             <>
-              <button type="button" className={juntar(botao.discreto, "mb-1 mr-1 h-8")} onClick={() => void salvarTemplate(false)}>
-                <Save className="mr-1.5 h-3.5 w-3.5" />
-                Template do cliente
+              <button type="button" className={juntar(botao.icone, "mb-1 mr-1")} onClick={() => void salvarTemplate(false)} aria-label="Template do cliente" title="Salvar como template do cliente">
+                <Save className="h-4 w-4" />
               </button>
               <button type="button" className={juntar(botao.discreto, "mb-1 h-8")} onClick={() => void salvarTemplate(true)}>
                 Da agência
@@ -379,9 +376,9 @@ export default function PainelDeReferencias({ projeto, controle, urlsDoProjeto }
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-1">
         <input className={juntar(campo, "h-8")} value={link} onChange={(e) => setLink(e.target.value)} placeholder="Link (Instagram, TikTok, YouTube ou do painel)" aria-label="Link da referência" onKeyDown={(e) => e.key === "Enter" && porLink()} />
-        <button type="button" className={juntar(botao.secundario, "h-8")} onClick={porLink} disabled={!link.trim()}>
-          <Link2 className="mr-1 h-3.5 w-3.5" />
-          Pôr
+        {/* 16/10/2026: só ícone, sem borda. */}
+        <button type="button" className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} onClick={porLink} disabled={!link.trim()} aria-label="Pôr o link" title="Pôr o link">
+          <Link2 className="h-4 w-4" />
         </button>
       </div>
       {aviso && <p className={texto.auxiliar}>{aviso}</p>}
@@ -402,9 +399,8 @@ export default function PainelDeReferencias({ projeto, controle, urlsDoProjeto }
             </option>
           ))}
         </select>
-        <button type="button" className={juntar(botao.secundario, "h-8")} onClick={() => arquivoRef.current && arquivoRef.current.click()} disabled={subindo}>
-          {subindo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1 h-3.5 w-3.5" />}
-          Subir
+        <button type="button" className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} onClick={() => arquivoRef.current && arquivoRef.current.click()} disabled={subindo} aria-label="Subir referência" title="Subir referência">
+          {subindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
         </button>
         <input ref={arquivoRef} type="file" accept="video/*" className="hidden" onChange={(e) => void porUpload(e.target.files && e.target.files[0])} />
       </div>

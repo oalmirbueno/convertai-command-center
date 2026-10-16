@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
-import { AjudaRecolhida, campo, juntar } from "@/components/sistema";
+import { AjudaRecolhida, botao, campo, juntar } from "@/components/sistema";
 import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
 import { gravarCopiasSemEsperar, urlLeve } from "@/lib/miniaturas";
 import { novoId } from "./estudioUtil";
@@ -218,7 +218,6 @@ export default function EstudioRostoDaReferencia({
   };
 
   const disponiveis = fonte === "cliente" ? (lista.data ? lista.data.cliente : []) : fonte === "equipe" ? (lista.data ? lista.data.equipe : []) : [];
-  const botaoPequeno = "inline-flex h-7 items-center rounded-md border border-border px-2 text-[11.5px] text-foreground hover:bg-secondary disabled:opacity-50";
 
   return (
     <div className="min-w-0" data-controle="rosto-da-referencia">
@@ -321,19 +320,26 @@ export default function EstudioRostoDaReferencia({
             onChange={(e) => void subir(e.target.files)}
           />
           <div className="flex min-w-0 flex-wrap">
-            <button type="button" disabled={bloqueado || salvando} onClick={() => setNavegador(true)} className={juntar(botaoPequeno, "mb-1 mr-1.5")}>
-              <FolderOpen className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-              {itensEscolhidos.length ? "Trocar foto" : "Escolher foto"}
+            {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
+            <button
+              type="button"
+              disabled={bloqueado || salvando}
+              onClick={() => setNavegador(true)}
+              className={juntar(botao.icone, "mb-1 mr-1 disabled:opacity-50")}
+              aria-label={itensEscolhidos.length ? "Trocar foto (das pastas)" : "Escolher foto (das pastas)"}
+              title={itensEscolhidos.length ? "Trocar foto (das pastas)" : "Escolher foto (das pastas)"}
+            >
+              <FolderOpen className="h-4 w-4" aria-hidden="true" />
             </button>
             <button
               type="button"
               disabled={bloqueado || salvando || !autorizado}
               onClick={() => entrada.current && entrada.current.click()}
-              className={juntar(botaoPequeno, "mb-1")}
-              title="Enviar até 2 fotos do computador"
+              className={juntar(botao.icone, "mb-1 disabled:opacity-50")}
+              aria-label={salvo && salvo.fonte === "fotos" ? "Trocar fotos (enviar até 2 do computador)" : "Enviar até 2 fotos do computador"}
+              title={salvo && salvo.fonte === "fotos" ? "Trocar fotos (enviar até 2 do computador)" : "Enviar até 2 fotos do computador"}
             >
-              <Upload className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-              {salvo && salvo.fonte === "fotos" ? "Trocar fotos" : "Enviar"}
+              <Upload className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
           <EstudioEscolherFotoDoRosto

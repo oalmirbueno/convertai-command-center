@@ -9,7 +9,7 @@ import { partesDoPlanoV2, ROTULOS_DAS_FONTES, type Oferta, type StatusDaOferta }
 import { BarraDeNota, BarraDePolitica } from "./Comuns";
 import { CampoDeFormulario, GrupoDeCampos } from "@/components/sistema/Formulario";
 import MenuMais from "@/components/sistema/MenuMais";
-import { juntar, superficie, texto } from "@/components/sistema/estilos";
+import { botao, juntar, superficie, texto } from "@/components/sistema/estilos";
 
 /**
  * Uma oferta proposta pelo agente (ou editada pela equipe): promessa em
@@ -284,22 +284,22 @@ export default function CartaoDaOferta({
             </span>
           )}
           {onLapidar && !arquivada && (
-            <Button type="button" size="sm" variant={doContexto ? "default" : "outline"} className="mb-1.5 mr-1.5 h-8" disabled={ocupada} onClick={onLapidar} title="Leva esta oferta ao agente ao lado com o pedido pronto. O custo aparece antes de enviar.">
-              <Sparkles className="mr-1 h-3.5 w-3.5" /> Lapidar com o agente
-            </Button>
+            <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50", (doContexto) && "bg-primary/10 text-primary")} type="button" disabled={ocupada} onClick={onLapidar} title="Leva esta oferta ao agente ao lado com o pedido pronto. O custo aparece antes de enviar." aria-label="Lapidar com o agente">
+              <Sparkles className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
           {o.status !== "escolhida" && !arquivada && (
-            <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8" disabled={ocupada} onClick={() => onStatus("escolhida")}>
-              <Check className="mr-1 h-3.5 w-3.5" /> Escolher
-            </Button>
+            <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" disabled={ocupada} onClick={() => onStatus("escolhida")} aria-label="Escolher" title="Escolher">
+              <Check className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
-          <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8" disabled={ocupada} onClick={onAplicar} title="Preenche o briefing com esta oferta para você revisar e salvar">
-            <ClipboardList className="mr-1 h-3.5 w-3.5" /> Aplicar no briefing
-          </Button>
+          <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" disabled={ocupada} onClick={onAplicar} title="Preenche o briefing com esta oferta para você revisar e salvar" aria-label="Aplicar no briefing">
+            <ClipboardList className="h-4 w-4" aria-hidden="true" />
+          </button>
           {arquivada && (
-            <Button type="button" size="sm" variant="ghost" className="mb-1.5 h-8" disabled={ocupada} onClick={() => onStatus("rascunho")}>
-              <ArchiveRestore className="mr-1 h-3.5 w-3.5" /> Restaurar
-            </Button>
+            <button className={juntar(botao.icone, "mb-1.5 disabled:opacity-50")} type="button" disabled={ocupada} onClick={() => onStatus("rascunho")} aria-label="Restaurar" title="Restaurar">
+              <ArchiveRestore className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
         </div>
         <MenuMais

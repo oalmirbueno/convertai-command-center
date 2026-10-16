@@ -31,6 +31,7 @@ import {
 import { Andamento, BotaoCopiar, useAndamento } from "./Comuns";
 import { useModeloDaCopy, type EstadoDoModeloDaCopy } from "./ModeloDaCopy";
 import { carregarDadosDoZip, gerarZipDoGestor, salvarBlob, type ProgressoDoZip } from "./zipDoGestor";
+import { botao, juntar } from "@/components/sistema";
 
 /**
  * Pacote completo de copy de um criativo (copy_pacote): textos principais por
@@ -151,10 +152,9 @@ export function BaixarZipDoGestor({ corpo, className = "" }: { corpo: () => Reco
   };
   return (
     <span className={`inline-flex min-w-0 flex-wrap items-center ${className}`}>
-      <Button type="button" size="sm" variant="outline" className="mb-1 mr-2 h-8" disabled={ocupado} onClick={() => void baixar()} title="Montado no seu navegador, sem custo de IA">
-        {ocupado ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <FileArchive className="mr-1 h-3.5 w-3.5" />}
-        Baixar pacote completo (.zip)
-      </Button>
+      <button className={juntar(botao.icone, "mb-1 mr-2 disabled:opacity-50")} type="button" disabled={ocupado} onClick={() => void baixar()} title="Montado no seu navegador, sem custo de IA" aria-label="Baixar pacote completo (.zip)">
+        {ocupado ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileArchive className="h-4 w-4" aria-hidden="true" />}
+      </button>
       <span className="mb-1 mr-2 text-[11.5px] text-muted-foreground" aria-live="polite">
         {ocupado ? textoDoProgresso(progresso) : "sem custo"}
       </span>
@@ -185,10 +185,9 @@ export function EnvioAoGestor({ corpo, rotulo = "Enviar ao gestor de tráfego", 
   };
   return (
     <span className={`inline-flex min-w-0 flex-wrap items-center ${className}`}>
-      <Button type="button" size="sm" variant="outline" className="mb-1 mr-2 h-8" disabled={enviando} onClick={() => void enviar()}>
-        {enviando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1 h-3.5 w-3.5" />}
-        {rotulo}
-      </Button>
+      <button className={juntar(botao.icone, "mb-1 mr-2 disabled:opacity-50")} type="button" disabled={enviando} onClick={() => void enviar()} aria-label={rotulo} title={rotulo}>
+        {enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
+      </button>
       <label className="mb-1 inline-flex items-center text-[11.5px] text-muted-foreground">
         <input type="checkbox" checked={criarTarefa} onChange={(e) => setCriarTarefa(e.target.checked)} className="mr-1.5 h-3.5 w-3.5 accent-primary" />
         criar tarefa para o gestor
@@ -291,9 +290,9 @@ export default function PacoteDaCopy({
             >
               Copiar tudo
             </Button>
-            <Button type="button" size="sm" variant="ghost" className="mb-1 mr-2 h-8" onClick={() => baixarTexto(`${nomeDeArquivo(nome)}.md`, markdown)}>
-              <Download className="mr-1 h-3.5 w-3.5" /> Baixar .md
-            </Button>
+            <button className={juntar(botao.icone, "mb-1 mr-2 disabled:opacity-50")} type="button" onClick={() => baixarTexto(`${nomeDeArquivo(nome)}.md`, markdown)} aria-label="Baixar .md" title="Baixar .md">
+              <Download className="h-4 w-4" aria-hidden="true" />
+            </button>
             <EnvioAoGestor corpo={() => ({ criativo_ids: [criativo.id] })} />
             <Button
               type="button"

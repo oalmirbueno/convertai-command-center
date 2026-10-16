@@ -111,16 +111,11 @@ export default function EsteiraDoMes({ mostrarFaixa = true, pedido = null, onPed
             <AjudaRecolhida className="ml-1.5" rotulo="O que é a esteira?">
               As peças de foto do planejamento deste mês e do próximo, com a direção de foto de cada uma. Toque numa peça para gerar com o diretor ou montar no Canvas. Peça marcada como não gravado ainda não foi gravada na agenda. Preparar imagens junta produtos, modelos e clones e edita imagens com antes e depois.
             </AjudaRecolhida>
-            <button
-              type="button"
-              className={juntar(botao.secundario, "ml-auto h-8 px-2.5 text-[12px]")}
-              onClick={() => {
+            <button className={juntar(botao.icone, "ml-auto disabled:opacity-50")} type="button" onClick={() => {
                 setPreparoUsado(true);
                 setPreparando(true);
-              }}
-              data-abrir-preparar-imagens=""
-            >
-              <ImagePlus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Preparar imagens
+              }} data-abrir-preparar-imagens="" aria-label="Preparar imagens" title="Preparar imagens">
+              <ImagePlus className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
           {aberta && semPecas && <p className={juntar(texto.auxiliar, "mt-1.5")}>Nenhuma peça de foto no planejamento deste mês e do próximo.</p>}
@@ -214,11 +209,11 @@ export function JanelaDaPeca({
       rodape={
         peca ? (
           <div className="flex min-w-0 flex-wrap items-center justify-end">
-            <button type="button" className={juntar(botao.discreto, "mb-1 mr-auto")} onClick={() => onFeita(peca)} aria-pressed={feita}>
-              <Check className="mr-1.5 h-4 w-4" aria-hidden="true" /> {feita ? "Desmarcar feita" : "Marcar como feita"}
+            <button className={juntar(botao.icone, "mb-1 mr-auto disabled:opacity-50")} type="button" onClick={() => onFeita(peca)} aria-pressed={feita} aria-label={feita ? "Desmarcar feita" : "Marcar como feita"} title={feita ? "Desmarcar feita" : "Marcar como feita"}>
+              <Check className="h-4 w-4" aria-hidden="true" />
             </button>
-            <button type="button" className={juntar(botao.secundario, "mb-1 ml-2")} onClick={() => onCanvas(peca, modelo)} data-peca-no-canvas="">
-              <Shapes className="mr-1.5 h-4 w-4" aria-hidden="true" /> Montar no Canvas
+            <button className={juntar(botao.icone, "mb-1 ml-2 disabled:opacity-50")} type="button" onClick={() => onCanvas(peca, modelo)} data-peca-no-canvas="" aria-label="Montar no Canvas" title="Montar no Canvas">
+              <Shapes className="h-4 w-4" aria-hidden="true" />
             </button>
             <button type="button" className={juntar(botao.primario, "mb-1 ml-2")} onClick={() => onDiretor(peca, modelo)} data-peca-no-diretor="">
               <Sparkles className="mr-1.5 h-4 w-4" aria-hidden="true" /> Gerar com o diretor

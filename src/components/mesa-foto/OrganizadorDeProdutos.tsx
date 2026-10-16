@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
-import { campo, foco, juntar } from "@/components/sistema/estilos";
+import { botao, campo, foco, juntar } from "@/components/sistema/estilos";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { useAlturaQueCabe } from "@/components/sistema/AreaDeTrabalho";
 import { MiniaturaDaFoto, useMesaFoto } from "./Comuns";
@@ -122,11 +122,15 @@ export default function OrganizadorDeProdutos({ onEscolher }: { onEscolher?: (id
   };
   const abrirFoto = (f: FotoDoAcervo) => { mesa.abrirNoEstudio?.(f.id); if (onEscolher) onEscolher(mesa.kitId || ""); };
 
-  if (detalhes) return <div className="space-y-4"><Button variant="outline" onClick={() => setDetalhes(false)}><ArrowLeft className="mr-2 h-4 w-4" />Voltar aos produtos</Button><Suspense fallback={<p role="status">Abrindo produto…</p>}><EditorDoProduto /></Suspense></div>;
+  if (detalhes) return <div className="space-y-4"><button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => setDetalhes(false)} aria-label="Voltar aos produtos" title="Voltar aos produtos">
+    <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+  </button><Suspense fallback={<p role="status">Abrindo produto…</p>}><EditorDoProduto /></Suspense></div>;
   return <section className="organizador-produtos min-w-0" aria-label="Organizador de produtos">
     <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-2">
       <div className="flex items-center gap-2"><h2 className="text-[15px] font-semibold">Produtos e gerações</h2><AjudaRecolhida rotulo="Como organizar produtos">Marque apenas as fotos do mesmo produto, com ou sem embalagem. As pastas são salvas por cliente. Gerações ficam separadas pelo produto e pelo modelo ou clone usado; os arquivos originais e as versões continuam preservados.</AjudaRecolhida></div>
-      <Button size="sm" onClick={() => iniciarCadastro()}><PackagePlus className="mr-2 h-4 w-4" />Marcar fotos como produto</Button>
+      <button className={juntar(botao.icone, "text-primary disabled:opacity-50")} type="button" onClick={() => iniciarCadastro()} aria-label="Marcar fotos como produto" title="Marcar fotos como produto">
+        <PackagePlus className="h-4 w-4" aria-hidden="true" />
+      </button>
     </div>
     <div className="mb-4 flex min-w-0 flex-wrap items-center gap-3">
       <div className="flex rounded-lg bg-muted p-1" aria-label="Organizar"><Button size="sm" aria-pressed={aba === "produtos"} variant={aba === "produtos" ? "default" : "ghost"} onClick={() => { setAba("produtos"); setAberto(null); setCadastrar(false); }}>Produtos · {kits.length}</Button><Button size="sm" aria-pressed={aba === "geracoes"} variant={aba === "geracoes" ? "default" : "ghost"} onClick={() => { setAba("geracoes"); setCadastrar(false); setGrupo(null); }}>Gerações</Button></div>
@@ -157,7 +161,9 @@ export default function OrganizadorDeProdutos({ onEscolher }: { onEscolher?: (id
         <div className="produtos-conteudo">
           {produto ? <>
             <div className="mb-4 flex flex-wrap items-center gap-2"><Button size="icon" variant="ghost" aria-label="Voltar à lista de produtos" onClick={() => setAberto(null)}><ArrowLeft className="h-4 w-4" /></Button><h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold">{nomeDoKit(produto)}</h3><Button onClick={() => usar(produto.id!)}>Usar este produto</Button></div>
-            <div className="mb-5 flex flex-wrap gap-2"><Button variant="outline" onClick={() => iniciarCadastro(produto)}>Adicionar fotos</Button><Button variant="outline" onClick={() => { mesa.escolherKit(produto.id); setDetalhes(true); }}>Editar produto</Button><Button variant="outline" onClick={() => { setProdutoFiltro(produto.id!); setAba("geracoes"); setGrupo(null); }}>Ver gerações</Button><Button variant="outline" onClick={() => { setMarcados([produto.id!]); setDestino(produto.atributos.organizacao?.pasta || ""); setAberto(null); }}><FolderInput className="mr-2 h-4 w-4" />Mudar pasta</Button></div>
+            <div className="mb-5 flex flex-wrap gap-2"><Button variant="outline" onClick={() => iniciarCadastro(produto)}>Adicionar fotos</Button><Button variant="outline" onClick={() => { mesa.escolherKit(produto.id); setDetalhes(true); }}>Editar produto</Button><Button variant="outline" onClick={() => { setProdutoFiltro(produto.id!); setAba("geracoes"); setGrupo(null); }}>Ver gerações</Button><button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => { setMarcados([produto.id!]); setDestino(produto.atributos.organizacao?.pasta || ""); setAberto(null); }} aria-label="Mudar pasta" title="Mudar pasta">
+              <FolderInput className="h-4 w-4" aria-hidden="true" />
+            </button></div>
             <div className="mb-4 max-w-lg"><PublicoDoProduto key={produto.id} kit={produto} /></div>
             {!!produto.lacunas.length && <div className="mb-4 flex items-center gap-2 text-[12px] text-muted-foreground">{produto.status === "rascunho" ? "Identificação para conferir" : "Observações do produto"}<AjudaRecolhida rotulo="O que conferir no produto">{produto.lacunas.join(" · ")}</AjudaRecolhida></div>}
             <div className="produtos-grade">{produto.refs.map((r) => { const f = fotos.find((x) => x.id === r.imagem_id); return f ? <button key={`${r.imagem_id}:${r.papel}`} className={juntar("min-w-0 text-left", foco)} onClick={() => abrirFoto(f)}><MiniaturaDaFoto foto={f} selo={false} /><span className="mt-2 block truncate text-[12px]">{r.papel === "embalagem" ? "Embalagem" : f.id === produto.frente_imagem_id ? "Foto principal" : "Referência"}{f.aprovada ? " · aprovada" : ""}</span></button> : null; })}</div>
@@ -172,7 +178,9 @@ export default function OrganizadorDeProdutos({ onEscolher }: { onEscolher?: (id
       </> : <div className="produtos-conteudo">
         <div className="mb-4 flex flex-wrap gap-3"><select aria-label="Gerações por produto" className={juntar(campo, "min-w-[180px] flex-1")} value={produtoFiltro} onChange={(e) => { setProdutoFiltro(e.target.value); setGrupo(null); }}><option value="">Todos os produtos</option>{kits.map((k) => <option key={k.id} value={k.id!}>{nomeDoKit(k)}</option>)}</select><select aria-label="Gerações por modelo ou clone" className={juntar(campo, "min-w-[180px] flex-1")} value={pessoa} onChange={(e) => { setPessoa(e.target.value); setGrupo(null); }}><option value="">Todos os modelos e clones</option>{org.pessoas.map((p) => <option key={`${p.tipo}:${p.id}`} value={`${p.tipo}:${p.id}`}>{p.tipo === "clone" ? "Clone" : "Modelo"} · {p.nome}</option>)}</select></div>
         {org.carregando ? <p role="status">Organizando as gerações…</p> : grupo ? <>
-          <Button variant="ghost" className="mb-4" onClick={() => setGrupo(null)}><ArrowLeft className="mr-2 h-4 w-4" />Voltar às pastas</Button><p className="mb-4 text-[13px] font-medium">{grupos.find(([id]) => id === grupo)?.[1][0].pasta}</p>
+          <button className={juntar(botao.icone, "mb-4 disabled:opacity-50")} type="button" onClick={() => setGrupo(null)} aria-label="Voltar às pastas" title="Voltar às pastas">
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          </button><p className="mb-4 text-[13px] font-medium">{grupos.find(([id]) => id === grupo)?.[1][0].pasta}</p>
           <div className="produtos-grade">{geracoes.filter((g) => g.chave === grupo).map(({ foto: f }) => <button key={f.id} className={juntar("min-w-0 text-left", foco)} onClick={() => abrirFoto(f)} aria-label={`Abrir foto ${f.nome}`}><MiniaturaDaFoto foto={f} /><span className="mt-2 block truncate text-[12px]">{f.nome}</span></button>)}</div>
         </> : grupos.length ? <div className="produtos-grade">{grupos.map(([id, lista]) => <button key={id} className={juntar("min-w-0 text-left", foco)} onClick={() => setGrupo(id)}><MiniaturaDaFoto foto={lista[0].foto} selo={false} /><span className="mt-2 flex items-start gap-2 text-[13px] font-medium"><Folder className="mt-0.5 h-4 w-4 shrink-0 text-primary" />{lista[0].pasta.replace("Gerações / ", "")}</span><span className="mt-1 block text-[12px] text-muted-foreground">{lista.length} {lista.length === 1 ? "foto" : "fotos"} · {lista.filter((g) => g.foto.aprovada).length} aprovadas</span></button>)}</div> : <div className="py-12 text-center"><Images className="mx-auto mb-3 h-7 w-7 text-muted-foreground" /><p className="text-[13px]">Nenhuma geração neste filtro.</p></div>}
       </div>}

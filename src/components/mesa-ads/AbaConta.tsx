@@ -254,10 +254,9 @@ function CartaoDoAnuncio({
                 }}
               />
             </span>
-            <Button type="button" size="sm" variant="ghost" className="mb-1 h-8" onClick={onFicha} disabled={abrindo}>
-              {abrindo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <FileSearch className="mr-1 h-3.5 w-3.5" />}
-              Abrir ficha
-            </Button>
+            <button className={juntar(botao.icone, "mb-1 disabled:opacity-50")} type="button" onClick={onFicha} disabled={abrindo} aria-label="Abrir ficha" title="Abrir ficha">
+              {abrindo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileSearch className="h-4 w-4" aria-hidden="true" />}
+            </button>
             {a.cta && <span className="mb-1 ml-auto text-[11px] text-muted-foreground">{rotuloDoCta(a.cta)}</span>}
           </div>
         </div>
@@ -597,21 +596,13 @@ export default function AbaConta({
             acoes={
               <>
                 <SeletorDePeriodo valor={escolhaDoPeriodo} onMudar={setEscolhaDoPeriodo} />
-                <button
-                  type="button"
-                  className={juntar(botao.secundario, "h-9")}
-                  disabled={gerandoRelatorio || !dados || !dados.conta.conectada}
-                  onClick={() => void gerarRelatorio()}
-                  title="Monta o relatório de anúncios do período (números da conta e a análise) e grava em Relatórios como rascunho"
-                >
-                  {gerandoRelatorio ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <FileText className="mr-1 h-3.5 w-3.5" />}
-                  Relatório
+                <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={gerandoRelatorio || !dados || !dados.conta.conectada} onClick={() => void gerarRelatorio()} title="Monta o relatório de anúncios do período (números da conta e a análise) e grava em Relatórios como rascunho" aria-label="Relatório">
+                  {gerandoRelatorio ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileText className="h-4 w-4" aria-hidden="true" />}
                 </button>
                 <BotaoAtualizarAgora atualizando={sincronizando || atualizando} onAtualizar={() => void sincronizar()} />
                 {gerenciador.data && gerenciador.data.contas[0] && gerenciador.data.contas[0].link_meta && (
-                  <a href={gerenciador.data.contas[0].link_meta} target="_blank" rel="noopener noreferrer" className={juntar(botao.discreto, "h-9")}>
-                    <ExternalLink className="mr-1 h-3.5 w-3.5" />
-                    Gerenciador da Meta
+                  <a className={juntar(botao.icone, "disabled:opacity-50")} href={gerenciador.data.contas[0].link_meta} target="_blank" rel="noopener noreferrer" aria-label="Gerenciador da Meta" title="Gerenciador da Meta">
+                    <ExternalLink className="h-4 w-4" aria-hidden="true" />
                   </a>
                 )}
               </>

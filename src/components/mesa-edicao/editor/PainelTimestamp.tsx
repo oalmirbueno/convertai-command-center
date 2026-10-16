@@ -197,9 +197,9 @@ export default function PainelTimestamp({ projeto, urls, onAplicarProjeto }: { p
         </div>
       ) : (
         <div className="flex flex-wrap items-center">
-          <button type="button" className={juntar(botao.secundario, "mb-1 mr-2 h-8")} onClick={() => setConfirmando(true)} disabled={!duracao}>
-            <Timer className="mr-1.5 h-3.5 w-3.5" />
-            {modo === "alinhar" ? "Alinhar texto" : "Transcrever"}
+          {/* 16/10/2026: só ícone, sem borda; o custo continua visível ao lado. */}
+          <button type="button" className={juntar(botao.icone, "mb-1 mr-2 disabled:pointer-events-none disabled:opacity-50")} onClick={() => setConfirmando(true)} disabled={!duracao} aria-label={modo === "alinhar" ? "Alinhar texto" : "Transcrever"} title={modo === "alinhar" ? "Alinhar texto" : "Transcrever"}>
+            <Timer className="h-4 w-4" />
           </button>
           <span className={juntar(texto.auxiliar, "mb-1 truncate")}>{duracao ? `${provedor.split(" (")[0]} · ${usd(custo)}` : "Mídia sem duração lida."}</span>
           {falaDaEntrada && falaDaEntrada.length > 0 && (
@@ -224,13 +224,14 @@ export default function PainelTimestamp({ projeto, urls, onAplicarProjeto }: { p
             <button type="button" className={juntar(botao.secundario, "mb-1 mr-1 h-8")} onClick={() => mandar(false)}>
               Só mandar a fala
             </button>
-            <button type="button" className={juntar(botao.discreto, "mb-1 mr-1 h-8")} onClick={() => copiar(linhas.map((l) => l.texto).join("\n"))}>
-              <Copy className="mr-1.5 h-3.5 w-3.5" />
-              Texto
+            {/* 16/10/2026: copiar em ícone; o formato fica pequeno ao lado para os dois não parecerem a mesma ação. */}
+            <button type="button" className={juntar(botao.icone, "mb-1 mr-1 w-auto px-1.5")} onClick={() => copiar(linhas.map((l) => l.texto).join("\n"))} aria-label="Copiar o texto" title="Copiar o texto">
+              <Copy className="h-4 w-4" />
+              <span className="ml-0.5 text-[10px] font-medium">TXT</span>
             </button>
-            <button type="button" className={juntar(botao.discreto, "mb-1 h-8")} onClick={() => copiar(srtDasLinhas(linhas))}>
-              <Copy className="mr-1.5 h-3.5 w-3.5" />
-              SRT
+            <button type="button" className={juntar(botao.icone, "mb-1 w-auto px-1.5")} onClick={() => copiar(srtDasLinhas(linhas))} aria-label="Copiar a legenda (SRT)" title="Copiar a legenda (SRT)">
+              <Copy className="h-4 w-4" />
+              <span className="ml-0.5 text-[10px] font-medium">SRT</span>
             </button>
           </div>
           <ol className="divide-y divide-border">

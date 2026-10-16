@@ -103,10 +103,11 @@ export function BotaoDeAnexarArquivos({ arquivos, anexos, className = "" }: { ar
         onClick={() => entrada.current && entrada.current.click()}
         aria-label="Anexar arquivos"
         title={`Imagens, PDF, Word, planilha, apresentação, texto ou ZIP (até ${tamanhoLegivel(MAX_BYTES_DO_ZIP)} e ${MAX_ARQUIVOS_NO_ZIP} arquivos)`}
-        className={`inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-border bg-background px-2 text-muted-foreground transition-colors hover:text-foreground ${className}`}
+        // 16/10/2026 (dono: "só o ícone, sem as bordinhas"): sai a borda; o nome segue no aria-label e o detalhe no title.
+        className={`inline-flex h-8 shrink-0 items-center justify-center rounded-md px-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground ${className}`}
       >
-        {arquivos.lendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
-        {total > 0 && <span className="ml-1 text-[11px] tabular-nums">{total}</span>}
+        {arquivos.lendo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Paperclip className="h-4 w-4" aria-hidden="true" />}
+        {total > 0 && <span className="ml-1 text-[11px] tabular-nums" aria-hidden="true">{total}</span>}
       </button>
       <input
         ref={entrada}

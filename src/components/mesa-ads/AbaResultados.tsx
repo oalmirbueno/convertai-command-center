@@ -9,7 +9,7 @@ import { dataCurta, padraoPara, textoDoErro } from "@/lib/mesa/api";
 import AreaDeTrabalho from "@/components/sistema/AreaDeTrabalho";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
-import { foco, juntar, superficie } from "@/components/sistema/estilos";
+import { botao, foco, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { chamarAds, chavesAds, lerAprendizados } from "./adsApi";
 import { CabecalhoDaParte, Diagnostico, useParteRecolhida } from "./Comuns";
@@ -77,9 +77,9 @@ export default function AbaResultados() {
           a={a}
           acao={
             criativoId ? (
-              <Button type="button" size="sm" variant={aberto ? "secondary" : "ghost"} className="h-7 text-[12px]" onClick={() => { setRegistrando(aberto ? null : a.ad_id); setTextoDoAprendizado(""); }}>
-                <BookmarkCheck className="mr-1 h-3.5 w-3.5" /> Aprendizado
-              </Button>
+              <button className={juntar(botao.icone, "disabled:opacity-50", (aberto) && "bg-primary/10 text-primary")} type="button" onClick={() => { setRegistrando(aberto ? null : a.ad_id); setTextoDoAprendizado(""); }} aria-label="Aprendizado do criativo" title="Aprendizado do criativo">
+                <BookmarkCheck className="h-4 w-4" aria-hidden="true" />
+              </button>
             ) : undefined
           }
         />
@@ -131,10 +131,9 @@ export default function AbaResultados() {
                 valor={String(dias)}
                 onEscolher={(v) => setDias(Number(v) as PeriodoDaConta)}
               />
-              <Button type="button" size="sm" variant="outline" className="h-9" disabled={conta.isFetching} onClick={() => void conta.refetch()} title="Relê as métricas (sem custo de IA)">
-                {conta.isFetching ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
-                Atualizar
-              </Button>
+              <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={conta.isFetching} onClick={() => void conta.refetch()} title="Relê as métricas (sem custo de IA)" aria-label="Atualizar">
+                {conta.isFetching ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
+              </button>
             </>
           }
         />

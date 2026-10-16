@@ -25,7 +25,7 @@ import { geraNoLote, useLote } from "./lote";
 import SeletorDeGuia from "./SeletorDeGuia";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { Carregando, EstadoVazio } from "@/components/sistema/Estados";
-import { campoTexto, juntar, superficie } from "@/components/sistema/estilos";
+import { botao, campoTexto, juntar, superficie } from "@/components/sistema/estilos";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import {
   AZIMUTES,
@@ -311,9 +311,9 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
             titulo="Montar"
             dica="O diretor monta as fotos com o produto e a marca. Nenhuma imagem é gerada agora: o total para gerar aparece antes."
             acao={
-              <Button type="button" size="sm" variant={arsenal ? "default" : "ghost"} className="h-8 text-[12px]" onClick={() => setArsenal(!arsenal)} aria-expanded={arsenal} data-abrir-arsenal="">
-                <BookImage className="mr-1.5 h-3.5 w-3.5" /> Arsenal
-              </Button>
+              <button className={juntar(botao.icone, "disabled:opacity-50", (arsenal) && "bg-primary/10 text-primary")} type="button" onClick={() => setArsenal(!arsenal)} aria-expanded={arsenal} data-abrir-arsenal="" aria-label="Arsenal" title="Arsenal">
+                <BookImage className="h-4 w-4" aria-hidden="true" />
+              </button>
             }
           >
             <div className="relative min-w-0">
@@ -723,9 +723,9 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
             {campanhaMesa ? ` · campanha ${campanhaMesa.nome}` : ""}
           </p>
           {resumo.versoes > 0 && (
-            <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 text-[12px]" onClick={() => irPara("revisar", { ensaio: ensaio.id })}>
-              <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> Comparar com as fontes
-            </Button>
+            <button className={juntar(botao.icone, "mb-1 disabled:opacity-50")} type="button" onClick={() => irPara("revisar", { ensaio: ensaio.id })} aria-label="Comparar com as fontes" title="Comparar com as fontes">
+              <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
           {/* Linha de produção (frente FTL, 30/09): o passo seguinte é Aprovar (4) e depois Usar (5). */}
           {resumo.paraRevisar > 0 && (
@@ -865,18 +865,12 @@ export default function EtapaEnsaio() {
           </SelectContent>
         </Select>
         {(ensaio || lista.length > 0) && (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="mb-1.5 h-9 text-[13px]"
-            onClick={() => {
+          <button className={juntar(botao.icone, "mb-1.5 disabled:opacity-50")} type="button" onClick={() => {
               setNovo(true);
               escolherEnsaio(null);
-            }}
-          >
-            <Plus className="mr-1 h-3.5 w-3.5" /> Novo lote
-          </Button>
+            }} aria-label="Novo lote" title="Novo lote">
+            <Plus className="h-4 w-4" aria-hidden="true" />
+          </button>
         )}
       </div>
       {(kits.isError || ensaios.isError) && <AvisoDeErro erro={kits.error || ensaios.error} />}

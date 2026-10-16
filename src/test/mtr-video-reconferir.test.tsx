@@ -45,7 +45,8 @@ describe("Gerações: Conferir de novo (rodada 2)", () => {
     const botoes = Array.from(document.querySelectorAll("button[aria-label^='Conferir de novo']"));
     // Unificado com o Recuperar da frente VGN (01/10): um botão só, com o texto "Recuperar" no nome acessível.
     expect(botoes.map((b) => b.getAttribute("aria-label"))).toEqual(["Conferir de novo e recuperar vencido"]);
-    expect(botoes[0].textContent).toContain("Recuperar");
+    // 16/10/2026: o botão virou só ícone; o "Recuperar" foi para o title (dica ao passar o mouse).
+    expect(botoes[0].getAttribute("title")).toContain("Recuperar");
     expect(document.querySelectorAll("button[aria-label^='Recuperar']").length).toBe(0);
     fireEvent.click(botoes[0]);
     await waitFor(() => expect(chamar).toHaveBeenCalledWith({ acao: "gerar_reconferir", pedido_id: "vencido" }));

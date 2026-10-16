@@ -480,7 +480,7 @@ function PedidoDaArteRapida({
                 <li key={f.id} className="min-w-0">
                   <div className="relative overflow-hidden rounded-lg border border-border bg-muted" style={{ paddingBottom: "100%" }}>
                     <ImagemDaMesa caminho={f.caminho} bucket={f.bucket} alt={f.nome} className="absolute inset-0 h-full w-full object-cover" />
-                    <button type="button" onClick={() => setFotosDoAcervo((l) => l.filter((x) => x.id !== f.id))} aria-label={`Tirar ${f.nome}`} className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow">
+                    <button type="button" onClick={() => setFotosDoAcervo((l) => l.filter((x) => x.id !== f.id))} aria-label={`Tirar ${f.nome}`} title={`Tirar ${f.nome}`} className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow">
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -494,7 +494,7 @@ function PedidoDaArteRapida({
                     {a.estado === "subindo" && (
                       <span className="absolute inset-0 flex items-center justify-center bg-background/60"><Loader2 className="h-4 w-4 animate-spin" /></span>
                     )}
-                    <button type="button" onClick={() => anexos.remover(a.id)} aria-label={`Tirar ${a.nome}`} className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow">
+                    <button type="button" onClick={() => anexos.remover(a.id)} aria-label={`Tirar ${a.nome}`} title={`Tirar ${a.nome}`} className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-background/90 text-foreground shadow">
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -510,7 +510,7 @@ function PedidoDaArteRapida({
                   <FileText className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <span className="min-w-0 flex-1 truncate">{d.nome}</span>
                   <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">{d.texto.length.toLocaleString("pt-BR")} caracteres</span>
-                  <button type="button" onClick={() => setDocumentos((l) => l.filter((_, j) => j !== i))} aria-label={`Tirar ${d.nome}`} className="ml-1.5 shrink-0 text-muted-foreground hover:text-foreground">
+                  <button type="button" onClick={() => setDocumentos((l) => l.filter((_, j) => j !== i))} aria-label={`Tirar ${d.nome}`} title={`Tirar ${d.nome}`} className="ml-1.5 shrink-0 text-muted-foreground hover:text-foreground">
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </li>
@@ -523,9 +523,12 @@ function PedidoDaArteRapida({
               type="button"
               onClick={() => entrada.current && entrada.current.click()}
               disabled={cheio && documentos.length >= MAX_DOCUMENTOS_DA_ARTE_RAPIDA}
-              className={juntar(botao.primario, "my-0.5 mr-2 h-9 bg-secondary px-3 text-[12.5px] text-foreground hover:bg-secondary/80")}
+              // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
+              aria-label="Fotos e arquivos"
+              title="Fotos e arquivos"
+              className={juntar(botao.icone, "my-0.5 mr-2 h-9 w-9 bg-secondary text-foreground hover:bg-secondary/80")}
             >
-              {lendo ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ImagePlus className="mr-1.5 h-4 w-4" />} Fotos e arquivos
+              {lendo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ImagePlus className="h-4 w-4" aria-hidden="true" />}
             </button>
             <input
               ref={entrada}
@@ -577,9 +580,9 @@ function PedidoDaArteRapida({
             className="h-9 min-w-0 flex-1 text-[13px]"
             aria-label="Link do post do Instagram"
           />
-          <Button type="button" size="sm" variant="secondary" className="ml-2 h-9 shrink-0 px-3 text-[12.5px]" disabled={!codigoDoLink || lendoPost} onClick={() => void lerPost()}>
-            {lendoPost ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Link2 className="mr-1.5 h-3.5 w-3.5" />} {postLido ? "Ler de novo" : "Ler o post"}
-          </Button>
+          <button type="button" className={juntar(botao.icone, "ml-2 h-9 w-9 bg-secondary text-foreground hover:bg-secondary/80")} disabled={!codigoDoLink || lendoPost} onClick={() => void lerPost()} aria-label={postLido ? "Ler de novo" : "Ler o post"} title={postLido ? "Ler de novo" : "Ler o post"}>
+            {lendoPost ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Link2 className="h-4 w-4" aria-hidden="true" />}
+          </button>
         </div>
         {linkDoPost.trim() && !codigoDoLink && <p className="mt-1 text-[11.5px] text-destructive">Use o link de um post ou reel (instagram.com/p/... ou /reel/...).</p>}
         {postLido && (
@@ -1118,9 +1121,9 @@ export function LevarParaAgenda({ trabalho, onAbrirItem }: { trabalho: Trabalho;
       )}
 
       <div className="border-t border-border pt-3">
-        <Button type="button" variant="ghost" size="sm" className="h-8 px-2 text-[12px] text-muted-foreground" onClick={() => void arquivar()} disabled={arquivando}>
-          {arquivando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Archive className="mr-1.5 h-3.5 w-3.5" />} Arquivar esta arte
-        </Button>
+        <button type="button" className={botao.icone} onClick={() => void arquivar()} disabled={arquivando} aria-label="Arquivar esta arte" title="Arquivar esta arte">
+          {arquivando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Archive className="h-4 w-4" aria-hidden="true" />}
+        </button>
       </div>
     </div>
   );
@@ -1214,8 +1217,8 @@ export default function EstudioArteRapida({
     <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center rounded-xl border border-warning/50 bg-warning/5 p-6 text-center" role="status" data-arte-de-outra-marca="">
       <p className="text-[14px] font-semibold">Esta arte é de outra marca</p>
       <p className="mt-1 max-w-sm text-[12.5px] text-muted-foreground">Troque a marca no topo da Mesa para abrir. Aqui o Estúdio mostra e gera só a marca {marca ? marca.nome : "aberta"}.</p>
-      <Button type="button" className="mt-4 h-10" onClick={() => onAlvo(NOVA_ARTE_RAPIDA)}>
-        <Plus className="mr-1.5 h-4 w-4" /> Nova arte
+      <Button type="button" className="mt-4 h-10 w-10 p-0" onClick={() => onAlvo(NOVA_ARTE_RAPIDA)} aria-label="Nova arte" title="Nova arte">
+        <Plus className="h-4 w-4" aria-hidden="true" />
       </Button>
     </div>
   ) : carregandoPeca ? (
@@ -1226,8 +1229,8 @@ export default function EstudioArteRapida({
     <div className={juntar(superficie.painel, "flex min-h-[280px] flex-1 flex-col items-center justify-center p-6 text-center")}>
       <p className="text-[14px] font-semibold">Esta arte rápida não está mais aqui</p>
       <p className="mt-1 text-[12.5px] text-muted-foreground">Ela pode ter sido arquivada. Comece outra ou escolha no histórico.</p>
-      <Button type="button" className="mt-4 h-10" onClick={() => onAlvo(NOVA_ARTE_RAPIDA)}>
-        <Plus className="mr-1.5 h-4 w-4" /> Nova arte
+      <Button type="button" className="mt-4 h-10 w-10 p-0" onClick={() => onAlvo(NOVA_ARTE_RAPIDA)} aria-label="Nova arte" title="Nova arte">
+        <Plus className="h-4 w-4" aria-hidden="true" />
       </Button>
     </div>
   );
@@ -1265,12 +1268,13 @@ export default function EstudioArteRapida({
   const botaoNova = (
     <button
       type="button"
-      className={juntar(nova ? botao.secundario : botao.primario, "h-8 px-2.5 text-[12.5px]")}
+      className={juntar(botao.icone, nova ? "bg-muted text-foreground" : "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground")}
       onClick={() => !nova && onAlvo(NOVA_ARTE_RAPIDA)}
       aria-current={nova ? "page" : undefined}
+      aria-label="Nova arte"
       title={nova ? "Você está numa arte nova" : "Começar uma arte nova"}
     >
-      <Plus className="mr-1 h-3.5 w-3.5" /> Nova arte
+      <Plus className="h-4 w-4" aria-hidden="true" />
     </button>
   );
 

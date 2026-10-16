@@ -154,11 +154,11 @@ export function VirarPersonagem({ r, qualidade, onCriada, onFechar }: { r: Resul
                       <span className={`block text-[11px] ${decididas[v.id] === "aprovar" ? "text-emerald-300" : "text-zinc-500"}`}>{decididas[v.id] === "aprovar" ? "aprovada" : "rejeitada"}</span>
                     ) : (
                       <span className="flex">
-                        <button type="button" className="mr-1 flex h-6 w-7 items-center justify-center rounded-md border border-white/10 text-emerald-300 hover:bg-white/10" onClick={() => void decidir(v, "aprovar")} aria-label={`Aprovar ${rotuloDaVista(v.vista)}`}>
-                          <Check className="h-3 w-3" />
+                        <button type="button" className="toque-compacto mr-1 flex h-7 w-7 items-center justify-center rounded-md text-emerald-300 hover:bg-white/10" onClick={() => void decidir(v, "aprovar")} aria-label={`Aprovar ${rotuloDaVista(v.vista)}`} title="Aprovar">
+                          <Check className="h-4 w-4" aria-hidden="true" />
                         </button>
-                        <button type="button" className="flex h-6 w-7 items-center justify-center rounded-md border border-white/10 text-zinc-400 hover:bg-white/10" onClick={() => void decidir(v, "rejeitar")} aria-label={`Rejeitar ${rotuloDaVista(v.vista)}`}>
-                          <X className="h-3 w-3" />
+                        <button type="button" className="toque-compacto flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-white/10" onClick={() => void decidir(v, "rejeitar")} aria-label={`Rejeitar ${rotuloDaVista(v.vista)}`} title="Rejeitar">
+                          <X className="h-4 w-4" aria-hidden="true" />
                         </button>
                       </span>
                     )}

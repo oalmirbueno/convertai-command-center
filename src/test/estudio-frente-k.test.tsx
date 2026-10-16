@@ -366,7 +366,8 @@ describe("3. referência na hora: arrastar, arquivo, colar imagem ou link", () =
     fireEvent.paste(campo, {});
     expect(mock.invoke).not.toHaveBeenCalled();
     expect(onGravar).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: /Arquivo/ })).toBeTruthy();
+    // 16/10/2026: o botão Arquivo virou só o ícone; o nome fica no aria-label "Enviar arquivo de referência".
+    expect(screen.getByRole("button", { name: /arquivo/i })).toBeTruthy();
   });
 
   it("servidor: importar_link aceita Pinterest, Behance, imagem e página com og:image, só https público", () => {

@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { botao as estiloDoBotao } from "@/components/sistema/estilos";
 import { resolveFileUrl } from "@/lib/fileUrls";
 import { urlLeve } from "@/lib/miniaturas";
 import { textoDoErro } from "@/lib/mesa/api";
@@ -188,6 +189,9 @@ function Retrato({ children, marcada, className = "" }: { children: ReactNode; m
   );
 }
 
+/** Botão só com ícone, sem borda (16/10/2026). */
+const botaoIcone = estiloDoBotao.icone;
+
 function BotaoUsar({ marcada, bloqueada, ocupada, onClick, rotulo = "Usar" }: { marcada: boolean; bloqueada: boolean; ocupada?: boolean; onClick: () => void; rotulo?: string }) {
   return (
     <button
@@ -195,20 +199,19 @@ function BotaoUsar({ marcada, bloqueada, ocupada, onClick, rotulo = "Usar" }: { 
       onClick={onClick}
       aria-pressed={marcada}
       disabled={ocupada || (!marcada && bloqueada)}
-      className={`mt-1 flex h-7 w-full items-center justify-center rounded-md border text-[11px] font-medium transition-colors disabled:opacity-40 ${
-        marcada ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground"
+      // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
+      aria-label={marcada ? "Escolhida" : rotulo}
+      title={marcada ? "Escolhida (clique para tirar)" : rotulo}
+      className={`toque-compacto mt-1 flex h-7 w-full items-center justify-center rounded-md transition-colors disabled:opacity-40 ${
+        marcada ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
       }`}
     >
       {ocupada ? (
-        <Loader2 className="h-3 w-3 animate-spin" />
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
       ) : marcada ? (
-        <>
-          <Check className="mr-1 h-3 w-3" /> Escolhida
-        </>
+        <Check className="h-4 w-4" aria-hidden="true" />
       ) : (
-        <>
-          <Plus className="mr-1 h-3 w-3" /> {rotulo}
-        </>
+        <Plus className="h-4 w-4" aria-hidden="true" />
       )}
     </button>
   );
@@ -440,13 +443,15 @@ export default function SeletorDeReferencias({
                 role="tab"
                 aria-selected={aba === a.valor}
                 onClick={() => irPara(a.valor)}
-                className={`mr-3 flex h-9 shrink-0 items-center whitespace-nowrap border-b-2 text-[12.5px] transition-colors ${
+                // 16/10/2026: aba só com o ícone; o nome vai no title e no leitor de tela, a contagem fica como número pequeno.
+                aria-label={a.rotulo}
+                title={a.rotulo}
+                className={`mr-1 flex h-9 min-w-9 shrink-0 items-center justify-center whitespace-nowrap border-b-2 px-1.5 text-[12.5px] transition-colors ${
                   aba === a.valor ? "border-primary font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
               >
-                <Icone className="mr-1.5 h-3.5 w-3.5 shrink-0" />
-                {a.rotulo}
-                {n !== null && refs.data ? <span className="ml-1 text-muted-foreground">({n})</span> : null}
+                <Icone className="h-4 w-4 shrink-0" aria-hidden="true" />
+                {n !== null && refs.data ? <span className="ml-1 text-[11px] tabular-nums text-muted-foreground">{n}</span> : null}
               </button>
             );
           })}
@@ -906,13 +911,13 @@ function AbaDoBanco({
       </div>
       {total > porPagina && (
         <div className="flex items-center justify-between">
-          <Button type="button" size="sm" variant="outline" className="h-8 px-2" disabled={pagina === 0} onClick={() => setPagina((p) => Math.max(0, p - 1))} aria-label="Página anterior">
+          <Button type="button" size="sm" variant="ghost" className="h-8 px-2" title="Página anterior" disabled={pagina === 0} onClick={() => setPagina((p) => Math.max(0, p - 1))} aria-label="Página anterior">
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <span className="text-[12px] tabular-nums text-muted-foreground">
             Página {pagina + 1} de {paginas} · {total.toLocaleString("pt-BR")}
           </span>
-          <Button type="button" size="sm" variant="outline" className="h-8 px-2" disabled={pagina + 1 >= paginas} onClick={() => setPagina((p) => p + 1)} aria-label="Próxima página">
+          <Button type="button" size="sm" variant="ghost" className="h-8 px-2" title="Próxima página" disabled={pagina + 1 >= paginas} onClick={() => setPagina((p) => p + 1)} aria-label="Próxima página">
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -1006,23 +1011,23 @@ function AbaDoPinterest({
             href={PINTEREST_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="mb-2 mr-2 inline-flex h-9 shrink-0 items-center rounded-md border border-border bg-background px-3 text-[12.5px] font-medium text-foreground transition-colors hover:border-primary/50"
+            className={`${botaoIcone} mb-2 mr-2`}
+            aria-label="Abrir o Pinterest"
+            title="Abrir o Pinterest"
           >
-            Abrir o Pinterest <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+            <ExternalLink className="h-4 w-4" aria-hidden="true" />
           </a>
           <form onSubmit={(e) => void adicionar(e)} className="mb-2 flex min-w-0 flex-1 basis-64">
             <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="Colar link de pin" aria-label="Link do pin" className="h-9 min-w-0 flex-1 text-[12.5px]" />
-            <Button type="submit" size="sm" className="ml-2 h-9 shrink-0" disabled={!link.trim() || enviando}>
-              {enviando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1 h-3.5 w-3.5" />}
-              Adicionar
+            <Button type="submit" size="sm" className="ml-2 h-9 w-9 shrink-0 p-0" disabled={!link.trim() || enviando} aria-label="Adicionar o pin" title="Adicionar o pin">
+              {enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
             </Button>
           </form>
         </div>
         <div className="mt-1 flex min-w-0 flex-wrap items-center border-t border-border pt-2.5">
-          <Button type="button" size="sm" variant="outline" className="mb-1 mr-2 h-9 shrink-0" disabled={subindo} onClick={() => arquivo.current && arquivo.current.click()}>
-            {subindo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
-            Subir imagem
-          </Button>
+          <button type="button" className={`${botaoIcone} mb-1 mr-2`} disabled={subindo} onClick={() => arquivo.current && arquivo.current.click()} aria-label="Subir imagem" title="Subir imagem">
+            {subindo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Upload className="h-4 w-4" aria-hidden="true" />}
+          </button>
           <span className="mb-1 min-w-0 text-[11.5px] text-muted-foreground">Print ou arquivo do computador (JPG, PNG ou WEBP).</span>
           <input
             ref={arquivo}

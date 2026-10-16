@@ -174,9 +174,9 @@ export default function EtapaKit({ irPara }: { irPara: IrPara }) {
           </AjudaRecolhida>
           <span className="flex-1" />
           {kit.id === "ugc" && (
-            <button type="button" className={juntar(botao.secundario, "mr-2")} onClick={usarComAvatar} aria-label="Fazer o UGC com avatar falando">
-              <Mic className="h-3.5 w-3.5 sm:mr-1.5" />
-              <span className="hidden sm:inline">Avatar falando</span>
+            /* 16/10/2026: só ícone, sem borda; "Usar o kit" fica com texto (ação principal da etapa). */
+            <button type="button" className={juntar(botao.icone, "mr-2")} onClick={usarComAvatar} aria-label="Fazer o UGC com avatar falando" title="Fazer o UGC com avatar falando">
+              <Mic className="h-4 w-4" />
             </button>
           )}
           <button type="button" className={botao.primario} onClick={usarKit} title="Usar não gera nem cobra">
@@ -195,9 +195,8 @@ export default function EtapaKit({ irPara }: { irPara: IrPara }) {
           resumo={`${templates.length} salvos`}
           acao={
             <>
-              <button type="button" className={botao.secundario} disabled={salvando || !projeto.roteiro.planos.length} onClick={() => void salvarTemplate(false)} aria-label="Salvar o projeto atual como template do cliente">
-                {salvando ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <BookmarkPlus className="h-3.5 w-3.5 sm:mr-1.5" />}
-                <span className="hidden sm:inline">Salvar</span>
+              <button type="button" className={juntar(botao.icone, "disabled:pointer-events-none disabled:opacity-50")} disabled={salvando || !projeto.roteiro.planos.length} onClick={() => void salvarTemplate(false)} aria-label="Salvar o projeto atual como template do cliente" title="Salvar como template do cliente">
+                {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <BookmarkPlus className="h-4 w-4" />}
               </button>
               {isAdmin && (
                 <button type="button" className={juntar(botao.discreto, "ml-1")} disabled={salvando || !projeto.roteiro.planos.length} onClick={() => void salvarTemplate(true)}>

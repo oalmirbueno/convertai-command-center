@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, ChevronRight, ExternalLink, Loader2, Wand2 } from "lucide-react";
+import { BookmarkPlus, Check, ChevronDown, ChevronRight, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { EstadoDeErro, Carregando } from "@/components/sistema/Estados";
@@ -92,14 +92,15 @@ export default function ParesDaBase({ tipos, onUsar }: { tipos: TipoDoSistema[];
                       </span>
                       {p.encaixe > 0 && <Pastilha tom="bom">combina</Pastilha>}
                       {p.da_casa && <Pastilha>também no catálogo da casa</Pastilha>}
-                      <a className={juntar(texto.etiqueta, "ml-2 inline-flex items-center text-muted-foreground hover:text-foreground")} href={linkDaFamilia(p.titulo)} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="mr-0.5 h-3 w-3" /> Google Fonts
+                      {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+                      <a className={juntar(botao.icone, "ml-1 h-7 w-7")} href={linkDaFamilia(p.titulo)} target="_blank" rel="noopener noreferrer" aria-label={`Abrir ${p.titulo} no Google Fonts`} title="Abrir no Google Fonts">
+                        <ExternalLink className="h-3.5 w-3.5" />
                       </a>
                     </span>
                   </span>
-                  <button type="button" className={juntar(botao.discreto, "ml-2 h-8 shrink-0")} disabled={propondo === p.no} onClick={() => void propor(p)} title="Guardar nas propostas de fonte">
-                    {propondo === p.no ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Wand2 className="mr-1.5 h-3.5 w-3.5" />}
-                    Proposta
+                  {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+                  <button type="button" className={juntar(botao.icone, "ml-2 disabled:opacity-50")} disabled={propondo === p.no} onClick={() => void propor(p)} aria-label="Guardar nas propostas de fonte" title="Guardar nas propostas de fonte">
+                    {propondo === p.no ? <Loader2 className="h-4 w-4 animate-spin" /> : <BookmarkPlus className="h-4 w-4" />}
                   </button>
                   <button type="button" className={juntar(botao.icone, "ml-1 shrink-0 disabled:opacity-50")} onClick={() => usar(p)} title={p.melhor_para} aria-label="Usar">
                     <Check className="h-4 w-4" aria-hidden="true" />

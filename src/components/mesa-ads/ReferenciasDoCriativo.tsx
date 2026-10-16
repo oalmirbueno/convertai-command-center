@@ -4,7 +4,6 @@ import { Check, Library, Link2, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import ReferenciasDoEstudio, { type AlvoDasReferencias } from "@/components/mesa/ReferenciasDoEstudio";
@@ -26,6 +25,7 @@ import {
   type ReferenciaAds,
 } from "./adsApi";
 import { Foto, pilula } from "./Comuns";
+import { botao, juntar } from "@/components/sistema";
 
 /** Id do estilo visual gravado na direção do criativo (mesa-ads grava { id, nome }). */
 export function estiloDoTrabalho(t: Trabalho | null | undefined): string | null {
@@ -195,17 +195,15 @@ export default function ReferenciasDoCriativo({
         </p>
         <div className="flex min-w-0 flex-wrap items-center">
           <input ref={entrada} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden" onChange={(e) => void enviarArquivos(e.target.files)} aria-label="Enviar imagem de referência" />
-          <Button type="button" size="sm" variant="outline" className="mb-1 mr-2 h-8 text-[12px]" disabled={ocupado !== null} onClick={() => entrada.current && entrada.current.click()}>
-            {ocupado === "upload" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1 h-3.5 w-3.5" />}
-            Enviar imagem
-          </Button>
+          <button className={juntar(botao.icone, "mb-1 mr-2 disabled:opacity-50")} type="button" disabled={ocupado !== null} onClick={() => entrada.current && entrada.current.click()} aria-label="Enviar imagem" title="Enviar imagem">
+            {ocupado === "upload" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Upload className="h-4 w-4" aria-hidden="true" />}
+          </button>
         </div>
         <form onSubmit={(e) => void colarLink(e)} className="flex min-w-0 items-center">
           <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="Cole o link da referência" aria-label="Link da referência" className="mr-2 h-8 min-w-0 flex-1 text-[12px]" />
-          <Button type="submit" size="sm" className="h-8 shrink-0 text-[12px]" disabled={ocupado !== null || !link.trim()}>
-            {ocupado === "link" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Link2 className="mr-1 h-3.5 w-3.5" />}
-            Usar
-          </Button>
+          <button className={juntar(botao.icone, "shrink-0 text-primary disabled:opacity-50")} type="submit" disabled={ocupado !== null || !link.trim()} aria-label="Usar" title="Usar">
+            {ocupado === "link" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Link2 className="h-4 w-4" aria-hidden="true" />}
+          </button>
         </form>
       </section>
 
@@ -250,10 +248,9 @@ export default function ReferenciasDoCriativo({
                         {estilo ? ` · ${estilo}` : ""}
                         {estiloDoCriativo && estilo === estiloDoCriativo ? " · mesmo estilo" : ""}
                       </p>
-                      <Button type="button" size="sm" variant="outline" className="mt-1 h-7 w-full px-1 text-[11px]" disabled={ocupado !== null} onClick={() => void usarDoBanco(r)}>
-                        {ocupado === r.id ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
-                        Usar neste criativo
-                      </Button>
+                      <button className={juntar(botao.icone, "mt-1 disabled:opacity-50")} type="button" disabled={ocupado !== null} onClick={() => void usarDoBanco(r)} aria-label="Usar neste criativo" title="Usar neste criativo">
+                        {ocupado === r.id ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
+                      </button>
                     </div>
                   </li>
                 );

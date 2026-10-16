@@ -11,6 +11,7 @@ import { usd } from "@/lib/mesa/api";
 import { chamarAds, chavesAds, formatoDe, rotuloDoObjetivo } from "./adsApi";
 import { carregarDadosDoPacote, extrairRetorno, gerarPacoteDeOtimizacao, textoDoArquivoDeRetorno } from "./pacoteOtimizacao";
 import { salvarBlob } from "./zipDoGestor";
+import { botao, juntar } from "@/components/sistema";
 
 /**
  * Pacote do agente externo (pedido do dono em 26/09/2026):
@@ -43,10 +44,9 @@ export function BaixarPacoteDeOtimizacao({ dias, className = "" }: { dias: numbe
   };
   return (
     <span className={`inline-flex min-w-0 flex-wrap items-center ${className}`}>
-      <Button type="button" size="sm" variant="outline" className="h-9" disabled={progresso !== null} onClick={() => void baixar()} title="Prompt completo, dados em CSV, miniaturas e artes num .zip para o agente externo. Grátis.">
-        {progresso !== null ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1 h-3.5 w-3.5" />}
-        Baixar pacote de otimização (.zip)
-      </Button>
+      <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={progresso !== null} onClick={() => void baixar()} title="Prompt completo, dados em CSV, miniaturas e artes num .zip para o agente externo. Grátis." aria-label="Baixar pacote de otimização (.zip)">
+        {progresso !== null ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
+      </button>
       {progresso && <span className="ml-2 text-[11.5px] text-muted-foreground" role="status">{progresso}</span>}
     </span>
   );
@@ -135,10 +135,9 @@ export function ImportarPacote({ onImportado, className = "" }: { onImportado?: 
 
   return (
     <>
-      <Button type="button" size="sm" variant="outline" className={`h-9 ${className}`} onClick={() => setAberto(true)} title="Sobe o retorno do agente externo e cria os criativos no Estúdio Ads">
-        <Upload className="mr-1 h-3.5 w-3.5" />
-        Importar pacote no Estúdio Ads
-      </Button>
+      <button className={juntar(botao.icone, "disabled:opacity-50", className)} type="button" onClick={() => setAberto(true)} title="Sobe o retorno do agente externo e cria os criativos no Estúdio Ads" aria-label="Importar pacote no Estúdio Ads">
+        <Upload className="h-4 w-4" aria-hidden="true" />
+      </button>
       <Dialog open={aberto} onOpenChange={(v) => { setAberto(v); if (!v) limpar(); }}>
         <DialogContent className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-2xl overflow-y-auto overscroll-contain">
           <DialogHeader>
@@ -148,9 +147,9 @@ export function ImportarPacote({ onImportado, className = "" }: { onImportado?: 
           <div className="min-w-0 space-y-3">
             <div className="flex min-w-0 flex-wrap items-center">
               <input ref={arquivoRef} type="file" accept=".zip,.json,.md,.txt,application/zip,application/json,text/plain,text/markdown" className="hidden" onChange={(e) => void escolherArquivo(e.target.files && e.target.files[0] ? e.target.files[0] : null)} aria-label="Arquivo do retorno" />
-              <Button type="button" size="sm" variant="outline" className="mb-1 mr-2 h-8" onClick={() => arquivoRef.current && arquivoRef.current.click()} disabled={lendo}>
-                <FileUp className="mr-1 h-3.5 w-3.5" /> Escolher arquivo (.zip ou .json)
-              </Button>
+              <button className={juntar(botao.icone, "mb-1 mr-2 disabled:opacity-50")} type="button" onClick={() => arquivoRef.current && arquivoRef.current.click()} disabled={lendo} aria-label="Escolher arquivo (.zip ou .json)" title="Escolher arquivo (.zip ou .json)">
+                <FileUp className="h-4 w-4" aria-hidden="true" />
+              </button>
               <span className="mb-1 text-[11.5px] text-muted-foreground">ou cole o texto abaixo</span>
             </div>
             <Textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={6} aria-label="Resposta do agente externo" placeholder='Cole a resposta com o bloco ```json { "formato": "mesa-ads-retorno", "criativos": [...] } ```' className="text-[12px]" />

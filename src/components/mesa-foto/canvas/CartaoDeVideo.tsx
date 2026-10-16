@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Clapperboard, Film, LayoutTemplate, Loader2, Play, RefreshCw, Wand2 } from "lucide-react";
+import { Clapperboard, Film, LayoutTemplate, Loader2, Play, RefreshCw, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import JanelaCentral from "@/components/sistema/JanelaCentral";
@@ -21,8 +21,9 @@ import {
   type PedidoDoVideoNoCanvas,
 } from "../../../../supabase/functions/mesa-foto/modulos/video-do-canvas";
 import { nomeDoResultado, type Canvas, type NoDoCanvas } from "../canvasApi";
-import { BOTAO, CAMPO, Escolha, ROTULO, type Fontes } from "./comum";
+import { BOTAO_ICONE, CAMPO, Escolha, ROTULO, type Fontes } from "./comum";
 import { bloqueiosDoVideo, comPedidos, dadosComMotor, duracoesNaTela, entradasDoVideo, gerarVideoDoCartao, pedidoPadraoDoVideo, requisitoDoVideo } from "./videoNoCanvas";
+import { juntar } from "@/components/sistema";
 
 /**
  * Cartão Vídeo do Canvas (frente CNV, 30/09): o corpo do cartão no quadro,
@@ -126,8 +127,8 @@ function LinhaDoPedido({ p, onVer, onConferir, conferindo }: { p: PedidoDoVideoN
         </span>
         {p.custo_usd !== null && <span className="ml-1 shrink-0 text-[11px] tabular-nums text-zinc-400">US$ {p.custo_usd.toFixed(2)}</span>}
         {andando && (
-          <button type="button" className={`${BOTAO} ml-1.5 px-1.5`} onClick={onConferir} disabled={conferindo} aria-label="Conferir o andamento">
-            {conferindo ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+          <button type="button" className={juntar(BOTAO_ICONE, "ml-1.5")} onClick={onConferir} disabled={conferindo} aria-label="Conferir o andamento" title="Conferir o andamento">
+            {conferindo ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
           </button>
         )}
       </div>
@@ -135,8 +136,10 @@ function LinhaDoPedido({ p, onVer, onConferir, conferindo }: { p: PedidoDoVideoN
       {p.videos.length > 0 && (
         <div className="mt-1.5 flex min-w-0 flex-wrap">
           {p.videos.map((v) => (
-            <button key={v.storage_path} type="button" className={`${BOTAO} mb-1 mr-1`} onClick={() => onVer(v.storage_path)} data-video-pronto={v.storage_path}>
-              <Play className="mr-1 h-3 w-3" /> Vídeo {v.n}
+            <button key={v.storage_path} type="button" className={juntar(BOTAO_ICONE, "mb-1 mr-1 w-auto px-1")} onClick={() => onVer(v.storage_path)} data-video-pronto={v.storage_path} aria-label={`Vídeo ${v.n}`} title={`Ver o vídeo ${v.n}`}>
+              {/* 16/10/2026: só o ícone, com o número do vídeo pequeno ao lado. */}
+              <Play className="h-4 w-4" aria-hidden="true" />
+              <span className="ml-0.5 text-[11px] tabular-nums">{v.n}</span>
             </button>
           ))}
         </div>
@@ -274,8 +277,8 @@ export function AjustesDoVideo({
       <div className="min-w-0">
         <div className="mb-1.5 flex items-center">
           <p className={`${ROTULO} mb-0 flex-1`}>Pedido ao motor</p>
-          <button type="button" className="text-[11px] text-zinc-400 hover:text-white" onClick={() => mudar({ prompt: padrao })} title="Escreve pelo que está na cena (ação, lugar, câmera, fala)">
-            <Wand2 className="mr-1 inline h-3 w-3" /> Pela cena
+          <button className={juntar(BOTAO_ICONE, "disabled:opacity-50")} type="button" onClick={() => mudar({ prompt: padrao })} title="Escreve pelo que está na cena (ação, lugar, câmera, fala)" aria-label="Pela cena">
+            <Wand2 className="inline h-4 w-4" aria-hidden="true" />
           </button>
         </div>
         <textarea className={CAMPO} rows={4} value={d.prompt} onChange={(x) => mudar({ prompt: x.target.value.slice(0, 2000) })} placeholder={padrao} aria-label="Pedido ao motor de vídeo" />
@@ -305,12 +308,12 @@ export function AjustesDoVideo({
       )}
       <div className="flex min-w-0 flex-wrap items-center border-t border-white/10 pt-2.5">
         {pronto && onPorNoQuadro && (
-          <button type="button" className={`${BOTAO} mb-1 mr-1.5`} onClick={() => onPorNoQuadro(no.id)} title="Cria um Quadro animado com este vídeo de fundo">
-            <LayoutTemplate className="mr-1 h-3.5 w-3.5" /> Pôr num Quadro
+          <button className={juntar(BOTAO_ICONE, "mb-1 mr-1.5 disabled:opacity-50")} type="button" onClick={() => onPorNoQuadro(no.id)} title="Cria um Quadro animado com este vídeo de fundo" aria-label="Pôr num Quadro">
+            <LayoutTemplate className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
-        <Link to={`/mesa-videos?client=${clientId}&etapa=resultados`} className={`${BOTAO} mb-1`} title="Aprovar o vídeo e mandar para a Mesa Edição">
-          <Clapperboard className="mr-1 h-3.5 w-3.5" /> Aprovar na Mesa Vídeos <ArrowUpRight className="ml-0.5 h-3 w-3" />
+        <Link className={juntar(BOTAO_ICONE, "mb-1 disabled:opacity-50")} to={`/mesa-videos?client=${clientId}&etapa=resultados`} title="Aprovar o vídeo e mandar para a Mesa Edição" aria-label="Aprovar na Mesa Vídeos">
+          <Clapperboard className="h-4 w-4" aria-hidden="true" />
         </Link>
       </div>
       {vendo && <JanelaDoVideo caminho={vendo} titulo={titulo} onFechar={() => setVendo(null)} />}

@@ -2,7 +2,7 @@ import { createElement as h } from "react";
 import { act, cleanup, createEvent, fireEvent, render } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * EX-09 (30/09): arrastar no Kanban só redesenha os cartões afetados.
@@ -36,7 +36,11 @@ vi.mock("@/hooks/useSupabaseData", () => ({
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ profile: { role: "admin", full_name: "Admin" }, user: { id: "u-1" } }) }));
 vi.mock("@/hooks/useCelular", () => ({ useCelular: () => false }));
 vi.mock("@/components/admin/CreateTaskModal", () => ({ default: () => null }));
-vi.mock("@/components/admin/TaskDetailDrawer", () => ({ default: () => null }));
+// O detalhe aberto aparece com o título (o toque curto tem que abrir o cartão).
+vi.mock("@/components/admin/TaskDetailDrawer", async () => {
+  const { createElement } = await import("react");
+  return { default: ({ task }: { task: { title: string } }) => createElement("div", { "data-testid": "detalhe-da-tarefa" }, task.title) };
+});
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() } }));
 const gravados = vi.hoisted(() => ({ chamadas: [] as Array<[string, unknown[]]> }));
 vi.mock("@/integrations/supabase/client", () => {
@@ -55,10 +59,12 @@ vi.mock("@/integrations/supabase/client", () => {
 vi.mock("@/lib/opsTaskSync", () => ({ notifyOpsTaskUpdated: vi.fn() }));
 
 import Kanban from "@/pages/Kanban";
+import { ESPERA_DO_TOQUE_LONGO } from "@/hooks/useArrastoPorToque";
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  delete (document as unknown as { elementFromPoint?: unknown }).elementFromPoint;
 });
 
 /** jsdom não passa clientY para o evento de arrasto: põe na mão. */
@@ -172,5 +178,146 @@ describe("Kanban: o cartão inteiro arrasta também com filtro", () => {
     });
     expect(gravados.chamadas.filter(([m]) => m === "update").length).toBe(0);
     expect(toast.info).toHaveBeenCalled();
+  });
+});
+
+/**
+ * 16/10/2026: arrastar com o dedo (celular e tablet). O arrasto nativo não
+ * funciona com toque; o cartão usa Pointer Events com toque longo. jsdom não
+ * tem PointerEvent nem elementFromPoint: o evento leva os campos na mão e o
+ * ponto sob o dedo é simulado.
+ */
+function ponteiro(tipo: "pointerDown" | "pointerMove" | "pointerUp", el: Element, x: number, y: number) {
+  const ev = createEvent[tipo](el);
+  const campos: Record<string, unknown> = { pointerType: "touch", pointerId: 7, isPrimary: true, button: 0, clientX: x, clientY: y };
+  Object.keys(campos).forEach((k) => Object.defineProperty(ev, k, { value: campos[k] }));
+  act(() => {
+    fireEvent(el, ev);
+  });
+}
+const esperar = (ms: number) => act(() => new Promise<void>((ok) => setTimeout(ok, ms)));
+async function assentar() {
+  await act(async () => {
+    for (let i = 0; i < 30; i++) await new Promise((ok) => setTimeout(ok, 0));
+  });
+}
+function dedoSobre(el: Element | null) {
+  (document as unknown as { elementFromPoint: () => Element | null }).elementFromPoint = () => el;
+}
+const cartaoEm = (container: HTMLElement, id: string) => container.querySelector(`[data-cartao-da-tarefa="${id}"] > [role="button"]`) as HTMLElement;
+const colunaEm = (container: HTMLElement, titulo: string) => container.querySelector(`section[aria-label="${titulo}"]`) as HTMLElement;
+const fantasma = () => document.querySelector("[data-fantasma-do-arrasto]");
+
+describe("Kanban: arrastar com o dedo (toque longo)", { timeout: 60000 }, () => {
+  // Os filtros ficam lembrados entre montagens: cada caso começa sem eles.
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it("toque longo pega o cartão e soltar em outra coluna grava igual ao arrasto nativo", async () => {
+    // Referência: o arrasto nativo do computador para "Em Andamento".
+    let r = montar();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fireEvent.dragStart(cartaoEm(r.container, "t-000"));
+    gravados.chamadas.length = 0;
+    await act(async () => {
+      fireEvent.drop(colunaEm(r.container, "Em Andamento"));
+    });
+    await assentar();
+    const nativo = gravados.chamadas.slice();
+    expect(nativo.filter(([m]) => m === "update").length).toBeGreaterThan(1);
+    cleanup();
+
+    // O mesmo movimento com o dedo.
+    const vibrar = vi.fn();
+    Object.defineProperty(navigator, "vibrate", { value: vibrar, configurable: true });
+    r = montar();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    dedoSobre(null);
+    const cartao = cartaoEm(r.container, "t-000");
+    ponteiro("pointerDown", cartao, 100, 300);
+    expect(fantasma()).toBeNull();
+    await esperar(ESPERA_DO_TOQUE_LONGO + 60);
+    expect(fantasma()).toBeTruthy();
+    expect(vibrar).toHaveBeenCalled();
+    expect(cartao.className).toContain("opacity-40");
+    // O dedo vai até a coluna "Em Andamento": ela fica destacada.
+    const destino = colunaEm(r.container, "Em Andamento");
+    dedoSobre(destino.querySelector('[role="region"]'));
+    gravados.chamadas.length = 0;
+    ponteiro("pointerMove", cartao, 400, 320);
+    expect(destino.className).toContain("ring-2");
+    // Relógio parado: o clique que o navegador manda logo depois de soltar
+    // chega dentro da janela de 500 ms mesmo com a máquina lenta.
+    const relogio = vi.spyOn(Date, "now").mockReturnValue(Date.now());
+    ponteiro("pointerUp", cartao, 400, 320);
+    // Esse clique não abre o cartão.
+    fireEvent.click(cartao);
+    expect(document.querySelector('[data-testid="detalhe-da-tarefa"]')).toBeNull();
+    relogio.mockRestore();
+    await assentar();
+    expect(gravados.chamadas).toEqual(nativo);
+    expect(fantasma()).toBeNull();
+    expect(destino.className).not.toContain("ring-2");
+    delete (navigator as unknown as { vibrate?: unknown }).vibrate;
+  });
+
+  it("com filtro, soltar com o dedo em outra coluna põe no fim dela (mesma regra do nativo)", async () => {
+    const { container } = montar("/kanban?area=general");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    dedoSobre(null);
+    const cartao = cartaoEm(container, "t-000");
+    ponteiro("pointerDown", cartao, 100, 300);
+    await esperar(ESPERA_DO_TOQUE_LONGO + 60);
+    dedoSobre(colunaEm(container, "Em Andamento").querySelector('[role="region"]'));
+    gravados.chamadas.length = 0;
+    ponteiro("pointerMove", cartao, 400, 320);
+    ponteiro("pointerUp", cartao, 400, 320);
+    await assentar();
+    const updates = gravados.chamadas.filter(([m]) => m === "update").map(([, a]) => a[0]);
+    expect(updates).toEqual([{ status: "doing", task_order: 610 }]);
+  });
+
+  it("toque curto abre o cartão e não pega nada", async () => {
+    const { container } = montar();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    dedoSobre(null);
+    const cartao = cartaoEm(container, "t-004");
+    ponteiro("pointerDown", cartao, 100, 300);
+    ponteiro("pointerUp", cartao, 100, 300);
+    fireEvent.click(cartao);
+    expect(document.querySelector('[data-testid="detalhe-da-tarefa"]')?.textContent).toBe("Tarefa 4");
+    await esperar(ESPERA_DO_TOQUE_LONGO + 60);
+    expect(fantasma()).toBeNull();
+    expect(cartao.className).not.toContain("opacity-40");
+  });
+
+  it("mexer o dedo antes do tempo é rolagem: cancela o arrasto e não grava nada", async () => {
+    const { container } = montar();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    dedoSobre(null);
+    const cartao = cartaoEm(container, "t-000");
+    ponteiro("pointerDown", cartao, 100, 300);
+    ponteiro("pointerMove", cartao, 100, 340);
+    await esperar(ESPERA_DO_TOQUE_LONGO + 60);
+    expect(fantasma()).toBeNull();
+    expect(cartao.className).not.toContain("opacity-40");
+    dedoSobre(colunaEm(container, "Em Andamento").querySelector('[role="region"]'));
+    gravados.chamadas.length = 0;
+    ponteiro("pointerMove", cartao, 400, 320);
+    ponteiro("pointerUp", cartao, 400, 320);
+    await assentar();
+    expect(gravados.chamadas.filter(([m]) => m === "update").length).toBe(0);
   });
 });

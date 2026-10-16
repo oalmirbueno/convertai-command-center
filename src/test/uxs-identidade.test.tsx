@@ -371,7 +371,8 @@ describe("UXS: gravação automática com fila (IDV-02)", () => {
     rerender(arvore(h(EtapaSistema), contexto(p2, { salvarParte })));
     expect((screen.getAllByLabelText("Nome da cor")[0] as HTMLInputElement).value).toBe("Verde mata");
     // Linha nova vazia (+ Cor) e HEX incompleto ficam na tela: só o que vai ao servidor é normalizado.
-    fireEvent.click(screen.getByRole("button", { name: /Cor$/ }));
+    // 16/10/2026: só ícone; o nome vai no aria-label.
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar cor" }));
     expect(screen.getAllByLabelText("HEX").length).toBe(3);
   });
 });
@@ -479,12 +480,14 @@ describe("UXS: prévia da estratégia com um botão só (IDV-09)", () => {
       return b as HTMLButtonElement;
     });
     // Só o vazio (missão) vem marcado; a caixa "Substituir o que já tem" e o "Aplicar marcados" saíram.
-    expect(aplicar.textContent).toContain("Aplicar (1)");
+    // 16/10/2026: só ícone; o nome vai no aria-label.
+    expect(aplicar.getAttribute("aria-label")).toContain("Aplicar (1)");
     expect(screen.queryByText("Substituir o que já tem")).toBeNull();
     expect(screen.queryByRole("button", { name: /Aplicar marcados/ })).toBeNull();
     fireEvent.click(screen.getByRole("checkbox", { name: "Aplicar Propósito" }));
     expect(document.querySelector('[data-campo-proposto="proposito"] [data-troca-o-atual]')).toBeTruthy();
-    expect(aplicar.textContent).toContain("Aplicar (2)");
+    // 16/10/2026: só ícone; o nome vai no aria-label.
+    expect(aplicar.getAttribute("aria-label")).toContain("Aplicar (2)");
     fireEvent.click(aplicar);
     await waitFor(() => expect(salvarParte).toHaveBeenCalled());
     const [, valor] = salvarParte.mock.calls[0] as unknown as [string, any];

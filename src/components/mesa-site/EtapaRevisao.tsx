@@ -84,9 +84,9 @@ export default function EtapaRevisao({ site, onIrPara, onPedirAoDiretor }: { sit
         descricao={ultimo ? `${qa.length} aviso(s) · ${dataEHora(ultimo.terminado_em || ultimo.criado_em)}` : "Ainda não revisado"}
         ajuda="Regras fixas no HTML pronto: idioma, viewport, título e descrição no tamanho, og para compartilhar, um h1, texto alternativo, largura e altura das imagens, botões e links com nome e o conteúdo pré-renderizado. É aviso: para corrigir, Pedir ajuste leva os avisos para o diretor de site (você revisa e envia)."
         acao={
-          <button type="button" className={botao.secundario} disabled={pedindo || revisando} onClick={() => void revisar()} data-revisar="">
-            {pedindo || (revisando && !naFilaParada) ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <ScanSearch className="mr-1 h-3.5 w-3.5" />}
-            {naFilaParada ? "Na fila: motor desligado" : revisando ? "Revisando" : "Revisar de novo"}
+          // 16/10/2026: só ícone (nome e estado no aria-label e no title).
+          <button type="button" className={botao.icone} aria-label={naFilaParada ? "Na fila: motor desligado" : revisando ? "Revisando" : "Revisar de novo"} title={naFilaParada ? "Na fila: motor desligado" : revisando ? "Revisando" : "Revisar de novo"} disabled={pedindo || revisando} onClick={() => void revisar()} data-revisar="">
+            {pedindo || (revisando && !naFilaParada) ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}
           </button>
         }
       >
@@ -105,9 +105,9 @@ export default function EtapaRevisao({ site, onIrPara, onPedirAoDiretor }: { sit
           <div className="flex min-w-0 flex-wrap items-start" data-build-com-erro="">
             <p className={juntar(texto.auxiliar, "mb-1 mr-2 min-w-0 flex-1 whitespace-normal text-destructive")}>O build falhou. {String(build.log || "").slice(-300)}</p>
             {onPedirAoDiretor && (
-              <button type="button" className={juntar(botao.discreto, "shrink-0")} onClick={() => onPedirAoDiretor(pedidoDoBuild(String(build.log || "")))} data-pedir-correcao="">
-                <MessageSquarePlus className="mr-1 h-3.5 w-3.5" />
-                Pedir correção ao diretor
+              // 16/10/2026: só ícone (nome no aria-label e no title).
+              <button type="button" className={botao.icone} aria-label="Pedir correção ao diretor" title="Pedir correção ao diretor" onClick={() => onPedirAoDiretor(pedidoDoBuild(String(build.log || "")))} data-pedir-correcao="">
+                <MessageSquarePlus className="h-4 w-4" />
               </button>
             )}
           </div>

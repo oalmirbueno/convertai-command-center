@@ -229,7 +229,7 @@ export default function BibliotecaValidada({ onUsarBase }: { onUsarBase: (id: st
               >
                 Editar
               </button>
-              <button type="button" className={juntar(botao.icone, "ml-1 hover:text-destructive")} disabled={ocupado === m.id} onClick={() => void arquivar(m)} aria-label={`Retirar ${m.nome}`}>
+              <button type="button" className={juntar(botao.icone, "ml-1 hover:text-destructive")} disabled={ocupado === m.id} onClick={() => void arquivar(m)} aria-label={`Retirar ${m.nome}`} title={`Retirar ${m.nome}`}>
                 {ocupado === m.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
               </button>
             </>
@@ -301,16 +301,17 @@ export default function BibliotecaValidada({ onUsarBase }: { onUsarBase: (id: st
             <input value={nicho} onChange={(e) => setNicho(e.target.value)} maxLength={200} placeholder="Ex.: advocacia previdenciária" className={campo} />
           </CampoDeFormulario>
           <div className="flex min-w-0 items-end">
+            {/* 16/10/2026: só ícone; o nome fica no sr-only e o que faz no title (descricao). */}
             <BotaoComCusto
               rotulo={
                 <>
-                  <Sparkles className="mr-1 h-3.5 w-3.5" />
-                  Preencher com IA
+                  <Sparkles className="h-4 w-4" aria-hidden="true" />
+                  <span className="sr-only">Preencher com IA</span>
                 </>
               }
               titulo="Ficha montada"
-              variant="outline"
-              className="h-9"
+              variant="ghost"
+              className="h-8 gap-1 px-2"
               disabled={exemplo.trim().length < 80 || !padrao}
               descricao="Lê o exemplo e monta a ficha (blocos, gatilhos, quando usar). Nada é salvo antes de você conferir."
               partes={() => [{ modeloId: padrao ? padrao.id : "", tipo: "texto", tokensEntrada: 5_000, tokensSaida: 1_800 }]}
@@ -375,9 +376,16 @@ export default function BibliotecaValidada({ onUsarBase }: { onUsarBase: (id: st
               Limpar
             </button>
           )}
-          <button type="button" className={botao.primario} disabled={!ficha || ocupado === "salvar"} onClick={() => void salvar()}>
-            {ocupado === "salvar" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}
-            {editando ? "Salvar mudanças" : "Salvar na biblioteca"}
+          {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+          <button
+            type="button"
+            className={juntar(botao.primario, "w-9 px-0")}
+            disabled={!ficha || ocupado === "salvar"}
+            onClick={() => void salvar()}
+            aria-label={editando ? "Salvar mudanças" : "Salvar na biblioteca"}
+            title={editando ? "Salvar mudanças" : "Salvar na biblioteca"}
+          >
+            {ocupado === "salvar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           </button>
         </div>
       </BlocoRecolhivel>

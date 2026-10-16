@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Clapperboard, Code2, Film, Loader2, Play, RotateCcw, Sparkles, Square } from "lucide-react";
+import { ArrowRight, Calculator, Clapperboard, Code2, Film, Loader2, Play, RotateCcw, Square } from "lucide-react";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { EstimativaInline, useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
@@ -82,14 +82,13 @@ function EscreverCena({ filme, cena, fila }: { filme: Filme; cena: CenaDaLinha; 
           <span className={juntar(texto.rotulo, "mr-2")}>Teto US$</span>
           <input className={juntar(campo, "w-20")} type="number" min={0.05} max={2} step={0.05} value={teto} onChange={(e) => setTeto(Number(e.target.value))} aria-label="Teto de gasto da cena" />
         </label>
-        <button type="button" className={juntar(botao.secundario, "mb-2")} onClick={() => void escrever()} disabled={indo}>
-          {indo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Code2 className="mr-1 h-3.5 w-3.5" />}
-          Escrever sob medida
+        {/* 16/10/2026: só ícones, sem borda (nome no aria-label e no title). */}
+        <button type="button" className={juntar(botao.icone, "mb-2 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void escrever()} disabled={indo} aria-label="Escrever sob medida" title="Escrever sob medida">
+          {indo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Code2 className="h-4 w-4" />}
         </button>
         {causas && (
-          <button type="button" className={juntar(botao.secundario, "mb-2 ml-2")} onClick={() => void escrever(causas)} disabled={indo} title="Manda ao modelo a causa da falha e a escrita que falhou, para corrigir sem refazer do zero" data-reescrever-com-causa={cena.id}>
-            <RotateCcw className="mr-1 h-3.5 w-3.5" />
-            Reescrever com a causa
+          <button type="button" className={juntar(botao.icone, "mb-2 ml-1 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void escrever(causas)} disabled={indo} aria-label="Reescrever com a causa" title="Reescrever com a causa: manda ao modelo a causa da falha e a escrita que falhou, para corrigir sem refazer do zero" data-reescrever-com-causa={cena.id}>
+            <RotateCcw className="h-4 w-4" />
           </button>
         )}
         {causas && modelo && (
@@ -156,14 +155,14 @@ function PlanoDeVideo({ filme, cena, videos }: { filme: Filme; cena: CenaDaLinha
       {cena.tipo_plano === "gerado" && (
         <div className="flex min-w-0 flex-wrap items-center">
           {!custo ? (
-            <button type="button" className={juntar(botao.secundario, "mb-2 mr-2")} onClick={() => void estimar()} disabled={indo || !cena.prompt}>
-              {indo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
-              Ver o custo do plano
+            // 16/10/2026: só ícone; depois de ver o custo, o preço continua visível ao lado do ícone.
+            <button type="button" className={juntar(botao.icone, "mb-2 mr-2 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void estimar()} disabled={indo || !cena.prompt} aria-label="Ver o custo do plano" title="Ver o custo do plano">
+              {indo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Calculator className="h-4 w-4" />}
             </button>
           ) : (
-            <button type="button" className={juntar(botao.primario, "mb-2 mr-2")} onClick={() => void gerar()} disabled={indo} data-gerar-plano="">
-              {indo ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Film className="mr-1 h-3.5 w-3.5" />}
-              Gerar por {usd(custo.custo)}
+            <button type="button" className={juntar(botao.primario, "mb-2 mr-2 h-8 px-2")} onClick={() => void gerar()} disabled={indo} aria-label={`Gerar por ${usd(custo.custo)}`} title="Gerar o plano" data-gerar-plano="">
+              {indo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clapperboard className="h-4 w-4" />}
+              <span className="ml-1 text-[11px] tabular-nums">{usd(custo.custo)}</span>
             </button>
           )}
           <span className={texto.auxiliar}>O vídeo gerado chega ao acervo; escolha abaixo quando aparecer.</span>
@@ -238,9 +237,8 @@ function FinalDaCena({ filme, links, fila, cena, onCancelar }: { filme: Filme; l
                 {f}: {ativo ? andamento(ativo) : erro!.erro_mensagem || "Não saiu."}
               </span>
               {ativo && (
-                <button type="button" className={juntar(botao.barra, "h-7")} onClick={() => onCancelar(ativo.id)}>
-                  <Square className="mr-1 h-3 w-3" />
-                  Cancelar
+                <button type="button" className={juntar(botao.icone, "h-7 w-7")} onClick={() => onCancelar(ativo.id)} aria-label="Cancelar o render" title="Cancelar o render">
+                  <Square className="h-3.5 w-3.5" />
                 </button>
               )}
             </p>
@@ -313,13 +311,13 @@ function Conteudo({ filme, links, irPara }: { filme: Filme; links: Record<string
           ) : (
             <div className="min-w-0 space-y-4">
               <div className="flex min-w-0 flex-wrap">
-                <button type="button" className={juntar(botao.secundario, "mb-2 mr-2")} onClick={() => void a.pedir(c.id, "amostra")} disabled={a.ocupado === `${c.id}:amostra`}>
-                  <Play className="mr-1 h-3.5 w-3.5" />
-                  Amostra de 5 s
+                {/* 16/10/2026: só ícones; o número de formatos fica pequeno junto do ícone. "Cenas finais que faltam" (cabeçalho) fica com texto: é a ação principal e pede confirmação. */}
+                <button type="button" className={juntar(botao.icone, "mb-2 mr-1 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void a.pedir(c.id, "amostra")} disabled={a.ocupado === `${c.id}:amostra`} aria-label="Amostra de 5 s" title="Amostra de 5 s">
+                  <Play className="h-4 w-4" />
                 </button>
-                <button type="button" className={juntar(botao.secundario, "mb-2")} onClick={() => void a.pedir(c.id, "final")} disabled={a.ocupado === `${c.id}:final`}>
-                  <Film className="mr-1 h-3.5 w-3.5" />
-                  Cena final ({filme.formatos.length} formato{filme.formatos.length > 1 ? "s" : ""})
+                <button type="button" className={juntar(botao.icone, "mb-2 w-auto px-1.5 disabled:pointer-events-none disabled:opacity-50")} onClick={() => void a.pedir(c.id, "final")} disabled={a.ocupado === `${c.id}:final`} aria-label={`Cena final (${filme.formatos.length} formato${filme.formatos.length > 1 ? "s" : ""})`} title={`Cena final (${filme.formatos.length} formato${filme.formatos.length > 1 ? "s" : ""})`}>
+                  <Film className="h-4 w-4" />
+                  <span className="ml-0.5 text-[11px] tabular-nums">{filme.formatos.length}</span>
                 </button>
               </div>
               <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
@@ -339,9 +337,9 @@ function Conteudo({ filme, links, irPara }: { filme: Filme; links: Record<string
           )}
         </Painel>
       ))}
-      <button type="button" className={botao.primario} onClick={() => irPara("critica")}>
-        Seguir para a crítica
-        <ArrowRight className="ml-1 h-3.5 w-3.5" />
+      {/* 16/10/2026: só ícone; o destino vai no aria-label e no title. */}
+      <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => irPara("critica")} aria-label="Seguir para a crítica" title="Seguir para a crítica">
+        <ArrowRight className="h-4 w-4" />
       </button>
     </div>
   );

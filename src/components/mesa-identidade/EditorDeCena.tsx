@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Loader2, Sparkles, Wand2 } from "lucide-react";
+import { Check, ImagePlus, Loader2, ScanSearch, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { botao, juntar, texto } from "@/components/sistema";
 import { modelosAtivos, textoDoErro, usd } from "@/lib/mesa/api";
@@ -220,9 +220,10 @@ export default function EditorDeCena({
             </button>
           </span>
         ) : (
-          <button type="button" className={juntar(botao.primario, "mb-2")} disabled={gerando || !estimativa} onClick={() => setConfirmar(true)}>
-            {gerando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> : <Sparkles className="mr-1.5 h-4 w-4" aria-hidden />}
-            {gerando ? "Gerando a cena" : `Gerar cena${estimativa ? ` · ${usd(estimativa.valor)}` : ""}`}
+          // 16/10/2026: só ícone (nome no aria-label e no title); o preço continua visível ao lado, pequeno.
+          <button type="button" className={juntar(botao.primario, "mb-2 px-2")} aria-label={gerando ? "Gerando a cena" : "Gerar cena"} title={gerando ? "Gerando a cena" : `Gerar cena${estimativa ? ` · ${usd(estimativa.valor)}` : ""}`} disabled={gerando || !estimativa} onClick={() => setConfirmar(true)}>
+            {gerando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Sparkles className="h-4 w-4" aria-hidden />}
+            {!gerando && estimativa ? <span className="ml-1 text-[11px] tabular-nums" aria-hidden="true">{usd(estimativa.valor)}</span> : null}
           </button>
         )}
       </div>
@@ -253,12 +254,12 @@ export default function EditorDeCena({
               <span className="mr-2">Luz da cena</span>
               <input type="range" min={0} max={1} step={0.05} value={luz} onChange={(e) => setLuz(Number(e.target.value))} aria-label="Luz da cena sobre a marca" />
             </label>
-            <button type="button" className={juntar(botao.secundario, "mb-2 mr-2")} onClick={() => setCena({ ...cena })}>
-              <Wand2 className="mr-1.5 h-4 w-4" aria-hidden /> Achar a área de novo
+            {/* 16/10/2026: só ícone (nome no aria-label e no title); o Usar tem ícone diferente do Confirmar da geração. */}
+            <button type="button" className={juntar(botao.icone, "mb-2 mr-2")} aria-label="Achar a área de novo" title="Achar a área de novo" onClick={() => setCena({ ...cena })}>
+              <ScanSearch className="h-4 w-4" aria-hidden />
             </button>
-            <button type="button" className={juntar(botao.primario, "mb-2")} disabled={salvando} onClick={() => void usar()}>
-              {salvando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> : <Check className="mr-1.5 h-4 w-4" aria-hidden />}
-              Usar esta cena
+            <button type="button" className={juntar(botao.primario, "mb-2 w-9 px-0")} aria-label="Usar esta cena" title="Usar esta cena" disabled={salvando} onClick={() => void usar()}>
+              {salvando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <ImagePlus className="h-4 w-4" aria-hidden />}
             </button>
           </div>
         </div>

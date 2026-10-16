@@ -55,9 +55,9 @@ function DestaquesDoAnexo({ anexos, onUsar }: { anexos: unknown; onUsar: (l: Des
           </li>
         ))}
       </ol>
-      <button type="button" className={juntar(botao.primario, "mt-2 h-8 px-3 text-[12.5px]")} onClick={() => onUsar(itens)}>
-        <Wand2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-        Usar no gerador
+      {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
+      <button type="button" className={juntar(botao.icone, "mt-2 text-primary")} onClick={() => onUsar(itens)} aria-label="Usar no gerador" title="Usar no gerador">
+        <Wand2 className="h-4 w-4" aria-hidden="true" />
       </button>
     </div>
   );
@@ -166,7 +166,7 @@ export default function AgenteDoInstagram({
               aria-label="Mensagem para o agente das redes"
             />
             <Ditado valor={rascunho} onChange={setRascunho} disabled={trabalhando} className="ml-1.5 min-w-0" />
-            <button type="button" className={juntar(botao.primario, "ml-2 h-10 w-10 px-0")} onClick={() => void enviar(rascunho)} disabled={trabalhando || !rascunho.trim()} aria-label="Enviar">
+            <button type="button" className={juntar(botao.primario, "ml-2 h-10 w-10 px-0")} onClick={() => void enviar(rascunho)} disabled={trabalhando || !rascunho.trim()} aria-label="Enviar" title="Enviar">
               {trabalhando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
             </button>
           </div>

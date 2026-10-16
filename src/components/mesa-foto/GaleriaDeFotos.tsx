@@ -49,7 +49,7 @@ export default function GaleriaDeFotos({ titulo, fotos, atualId, onSelecionar, o
     <div className={juntar("flex flex-wrap items-center justify-between gap-2", !recolhida && "mb-2")}>
       <h3 className={texto.rotulo}>{recolhivel ? <button type="button" className="flex items-center gap-2 py-2 text-foreground" aria-expanded={!recolhida} onClick={() => setRecolhida(!recolhida)}><ChevronDown className={juntar("h-4 w-4 transition-transform", recolhida && "-rotate-90")} />{titulo} · {fotos.length}</button> : <>{titulo} · {fotos.length}</>}</h3>
       <div className="flex items-center space-x-1">
-        <button type="button" className={botao.barra} onClick={() => { setAberta(true); setLimite(POR_GRADE); }}><Images className="mr-1 h-3.5 w-3.5" />Organizar fotos</button>
+        <button type="button" className={botao.icone} aria-label="Organizar fotos" title="Organizar fotos" onClick={() => { setAberta(true); setLimite(POR_GRADE); }}><Images className="h-4 w-4" aria-hidden="true" /></button>
         {!recolhida && <><button type="button" className={botao.icone} aria-label="Fotos anteriores" disabled={!paginaVisivel} onClick={() => setPagina(paginaVisivel - 1)}><ChevronLeft className="h-4 w-4" /></button>
         <span className={texto.etiqueta}>{paginaVisivel + 1}/{ultima + 1}</span>
         <button type="button" className={botao.icone} aria-label="Próximas fotos" disabled={paginaVisivel === ultima} onClick={() => setPagina(paginaVisivel + 1)}><ChevronRight className="h-4 w-4" /></button></>}

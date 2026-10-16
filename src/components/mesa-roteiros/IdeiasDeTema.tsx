@@ -352,7 +352,7 @@ export default function IdeiasDeTema({
             <EstimativaInline partes={modelo ? [{ modeloId: modelo.id, tipo: "texto", tokensEntrada: TAMANHO_DAS_IDEIAS.entrada, tokensSaida: TAMANHO_DAS_IDEIAS.saida, buscasWeb: web ? BUSCAS_NAS_IDEIAS : 0 }] : null} />
           </div>
           <Ditado valor={rascunho} onChange={setRascunho} disabled={enviando} className="mr-1.5 min-w-0" />
-          <button type="button" className={juntar(botao.primario, "h-9")} onClick={() => void enviar()} disabled={enviando} aria-label="Pedir ideias ao agente">
+          <button type="button" className={juntar(botao.primario, "h-9")} onClick={() => void enviar()} disabled={enviando} aria-label="Pedir ideias ao agente" title="Pedir ideias ao agente">
             {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </button>
         </div>
@@ -443,16 +443,22 @@ function LinhaDaIdeia({
             </ol>
           )}
           <div className="-m-1 mt-1.5 flex min-w-0 flex-wrap items-center [&>*]:m-1">
-            <button type="button" className={juntar(noFormulario ? botao.secundario : botao.primario, "h-8 text-[12px]")} onClick={onUsar} disabled={desativado || noFormulario} aria-label={`Usar o tema ${numeroDa(ideia.apelido)}`}>
-              {noFormulario ? <Check className="mr-1 h-3.5 w-3.5" /> : <Wand2 className="mr-1 h-3.5 w-3.5" />}
-              {noFormulario ? "No formulário" : "Usar este tema"}
+            {/* 16/10/2026: só ícone (nome no aria-label; o estado "no formulário" vai no title). */}
+            <button
+              type="button"
+              className={juntar(noFormulario ? botao.icone : botao.primario, "h-8 w-8 px-0 disabled:opacity-50")}
+              onClick={onUsar}
+              disabled={desativado || noFormulario}
+              aria-label={`Usar o tema ${numeroDa(ideia.apelido)}`}
+              title={noFormulario ? "No formulário" : "Usar este tema"}
+            >
+              {noFormulario ? <Check className="h-4 w-4" /> : <Wand2 className="h-4 w-4" />}
             </button>
             <button type="button" className={juntar(botao.discreto, "h-8 text-[12px]")} onClick={onMaisAssim} disabled={desativado}>
               Mais assim
             </button>
-            <button type="button" className={juntar(botao.discreto, "h-8 text-[12px]")} onClick={onMisturar} disabled={desativado}>
-              <Shuffle className="mr-1 h-3.5 w-3.5" />
-              Misturar
+            <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} onClick={onMisturar} disabled={desativado} aria-label="Misturar" title="Misturar">
+              <Shuffle className="h-4 w-4" />
             </button>
             {ideia.esqueleto.length > 0 && (
               <button type="button" className={juntar(botao.discreto, "h-8 text-[12px]")} onClick={() => setAberta(!aberta)} aria-expanded={aberta}>
@@ -494,9 +500,9 @@ function CartaoDePreencher({
       )}
       <div className="-m-1 mt-2 flex min-w-0 flex-wrap items-center [&>*]:m-1">
         {feito ? (
-          <button type="button" className={juntar(botao.secundario, "h-8 text-[12px]")} onClick={onDesfazer}>
-            <Undo2 className="mr-1 h-3.5 w-3.5" />
-            Desfazer
+          // 16/10/2026: só ícone (nome no aria-label e no title).
+          <button type="button" className={botao.icone} onClick={onDesfazer} aria-label="Desfazer" title="Desfazer">
+            <Undo2 className="h-4 w-4" />
           </button>
         ) : (
           <>

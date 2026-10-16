@@ -2351,12 +2351,11 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         type="button"
         disabled={!aiClientId || aiLoading}
         onClick={() => void generateAiIdeas()}
-        aria-label="Gerar ideias com IA + busca na web"
-        title="Gerar ideias com IA + busca na web"
-        className={botao.primario}
+        aria-label={aiLoading ? "Pesquisando ideias…" : "Gerar ideias com IA + busca na web"}
+        title={aiLoading ? "Pesquisando ideias…" : "Gerar ideias com IA + busca na web"}
+        className={juntar(botao.icone, "text-primary")}
       >
-        {aiLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />}
-        {aiLoading ? "Pesquisando..." : <><span className="sm:hidden">Gerar ideias</span><span className="hidden sm:inline">Gerar ideias com IA</span></>}
+        {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Lightbulb className="h-4 w-4" aria-hidden="true" />}
       </button>
     </>
   );

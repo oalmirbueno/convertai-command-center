@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, Quote } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -51,16 +51,26 @@ export default function SlogansDaMarca() {
       ajuda="As frases saem da estratégia (posicionamento, tom e arquétipo). O ranking é do Jev, só como aviso: quem escolhe é a equipe. A escolhida entra no brandbook e na apresentação."
       acao={
         <>
+          {/* 16/10/2026: só ícone; o nome (e o modelo) vão para o leitor de tela e o title; o preço fica ao lado. */}
           <BotaoComCusto
-            rotulo={<RotuloComModelo rotulo={slogans.length ? "Gerar de novo" : "Gerar frases"} papel="naming" modeloId={modeloId} />}
+            rotulo={
+              <>
+                {/* Aspas, não a varinha: a varinha é o "Gerar nomes" do estúdio logo acima. */}
+                <Quote className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">
+                  <RotuloComModelo rotulo={slogans.length ? "Gerar de novo" : "Gerar frases"} papel="naming" modeloId={modeloId} />
+                </span>
+              </>
+            }
             titulo="Slogans e taglines"
+            descricao={slogans.length ? "Gerar de novo as frases" : "Gerar frases (slogan e tagline)"}
             partes={() => partesDoCusto(mesa.catalogo, "slogans", modeloId)}
             executar={() => chamarIdentidade<{ projeto: ProjetoDeIdentidade; aviso_jev: string | null }>("slogans_gerar", { projeto_id: projeto.id, modelo_id: modeloId || undefined, pedido: pedido.trim() || undefined })}
             aoConcluir={(d) => {
               if (d) guardar(d.projeto);
               if (d && d.aviso_jev) toast.warning(d.aviso_jev);
             }}
-            className="m-1 h-8"
+            className="m-1 h-8 gap-1 px-2"
           />
         </>
       }
@@ -83,9 +93,9 @@ export default function SlogansDaMarca() {
                   </span>
                   {s.por_que && <span className={juntar(texto.auxiliar, "mt-0.5 block")}>{s.por_que}</span>}
                 </span>
-                <button type="button" className={juntar(escolhido ? botao.primario : botao.discreto, "ml-2 h-8 shrink-0")} disabled={!!escolhendo || escolhido} onClick={() => void escolher({ slogan_id: s.id }, s.id)}>
-                  {escolhendo === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-                  {escolhido ? "Escolhido" : "Escolher"}
+                {/* 16/10/2026: só ícone (nome no aria-label e no title); o escolhido fica verde. */}
+                <button type="button" className={juntar(escolhido ? juntar(botao.primario, "h-8 w-8 px-0") : botao.icone, "ml-2 shrink-0")} disabled={!!escolhendo || escolhido} onClick={() => void escolher({ slogan_id: s.id }, s.id)} aria-label={escolhido ? "Escolhido" : "Escolher"} title={escolhido ? "Escolhido" : "Escolher"}>
+                  {escolhendo === s.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                 </button>
               </li>
             );

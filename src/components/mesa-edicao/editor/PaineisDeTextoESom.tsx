@@ -102,10 +102,13 @@ export function PainelDeTextos({ ctx }: { ctx: ContextoDoPainel }) {
         </select>
         <input type="number" className={juntar(campo, "h-8")} min={0.5} max={20} step={0.5} value={dur} onChange={(e) => setDur(Number(e.target.value) || 3)} aria-label="Duração em segundos" />
       </div>
+      {/* 16/10/2026: só ícone, sem borda (nome no aria-label e no title). */}
       <button
         type="button"
-        className={juntar(botao.secundario, "mt-2 h-8")}
+        className={juntar(botao.icone, "mt-2 flex disabled:pointer-events-none disabled:opacity-50")}
         disabled={!txt.trim()}
+        aria-label="Pôr no cursor"
+        title="Pôr o texto no cursor"
         onClick={() =>
           aplicarMontando(ctx, "Texto", (m) => {
             textoEm(m, txt, ctx.cursor(), dur, preset);
@@ -114,8 +117,7 @@ export function PainelDeTextos({ ctx }: { ctx: ContextoDoPainel }) {
           })
         }
       >
-        <Type className="mr-1.5 h-3.5 w-3.5" />
-        Pôr no cursor
+        <Type className="h-4 w-4" />
       </button>
     </div>
   );
@@ -323,9 +325,9 @@ export function PainelDeMotion({ ctx }: { ctx: ContextoDoPainel }) {
           <option value="medias">No ritmo</option>
           <option value="poucas">Poucas</option>
         </select>
-        <button type="button" className={juntar(botao.primario, "h-8")} onClick={() => void sugerir()} disabled={sugerindo}>
-          {sugerindo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
-          Sugerir na fala (IA)
+        {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+        <button type="button" className={juntar(botao.primario, "h-8 w-8 px-0")} onClick={() => void sugerir()} disabled={sugerindo} aria-label="Sugerir na fala (IA)" title="Sugerir na fala (IA)">
+          {sugerindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
         </button>
       </div>
       <Subtitulo>Logo da marca</Subtitulo>
@@ -368,9 +370,8 @@ export function PainelDeMotion({ ctx }: { ctx: ContextoDoPainel }) {
                     </select>
                   </label>
                 )}
-                <button type="button" className={juntar(botao.secundario, "mt-2 h-8")} onClick={() => por(d)} disabled={d.id === "polaroide" && !fotos.length}>
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Pôr no cursor
+                <button type="button" className={juntar(botao.icone, "mt-2 flex disabled:pointer-events-none disabled:opacity-50")} onClick={() => por(d)} disabled={d.id === "polaroide" && !fotos.length} aria-label="Pôr no cursor" title="Pôr a peça no cursor">
+                  <Plus className="h-4 w-4" />
                 </button>
               </>
             )}

@@ -28,6 +28,7 @@ import {
   Save,
   Sparkles,
   Square,
+  Stamp,
   Trash2,
   Type,
   Undo2,
@@ -117,7 +118,7 @@ const ICONE_DO_TIPO: Record<TipoDeCamada, ReactNode> = {
   imagem: <ImageIcon className="h-3.5 w-3.5" />,
   video: <Film className="h-3.5 w-3.5" />,
   forma: <Square className="h-3.5 w-3.5" />,
-  logo: <Sparkles className="h-3.5 w-3.5" />,
+  logo: <Stamp className="h-3.5 w-3.5" />,
 };
 const ROTULO_DA_FORMA: Record<FormaDaCamada, string> = { retangulo: "Retângulo", pilula: "Pílula", circulo: "Círculo", linha: "Linha" };
 const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -481,14 +482,8 @@ function Inspetor({
       </Linha>
       <div className="mb-1 flex min-w-0 items-center">
         <span className={juntar(texto.rotulo, "flex-1")}>Chaves ({c.chaves.length})</span>
-        <button
-          type="button"
-          className={juntar(botao.secundario, "h-7 px-2")}
-          onClick={() => onMudar((x) => porChave(x, t, { x: r3(estado.x), y: r3(estado.y), escala: r3(estado.escala / 1), opacidade: r3(x.opacidade), rotacao: r3(estado.rotacao) }))}
-          title="Grava a posição, a escala, a opacidade e o giro de agora neste tempo"
-          data-marcar-chave=""
-        >
-          <Diamond className="mr-1 h-3 w-3" /> {chaveAqui ? "Atualizar chave" : `Chave em ${t.toFixed(1)} s`}
+        <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => onMudar((x) => porChave(x, t, { x: r3(estado.x), y: r3(estado.y), escala: r3(estado.escala / 1), opacidade: r3(x.opacidade), rotacao: r3(estado.rotacao) }))} title="Grava a posição, a escala, a opacidade e o giro de agora neste tempo" data-marcar-chave="" aria-label={chaveAqui ? "Atualizar chave" : `Chave em ${t.toFixed(1)} s`}>
+          <Diamond className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
       {c.chaves.length > 0 && (
@@ -885,13 +880,15 @@ export default function EditorDeQuadro({
             <p className={juntar(texto.rotulo, "flex-1")}>Sugestões com o seu conteúdo</p>
             <button
               type="button"
-              className={juntar(botao.barra, "h-7")}
+              className={juntar(botao.icone, "w-auto px-1.5")}
               disabled={ocupado === "ordenar"}
               onClick={() => void ordenarPeloJev()}
-              title={`O Jev ordena as sugestões pelo pedido escrito na aba IA. Custo estimado ~${usd(custoDoOrdenar)}, cobrado da carteira do cliente.`}
+              aria-label="Ordenar"
+              title={`Ordenar: o Jev ordena as sugestões pelo pedido escrito na aba IA. Custo estimado ~${usd(custoDoOrdenar)}, cobrado da carteira do cliente.`}
               data-ordenar-pelo-jev=""
             >
-              {ocupado === "ordenar" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Wand2 className="mr-1 h-3.5 w-3.5" />} Ordenar
+              {/* 16/10/2026: só o ícone; o custo continua visível ao lado. */}
+              {ocupado === "ordenar" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Wand2 className="h-4 w-4" aria-hidden="true" />}
               <span className="ml-1 text-[11px] font-normal opacity-80" data-custo-do-ordenar="">~{usd(custoDoOrdenar)}</span>
             </button>
           </div>
@@ -965,13 +962,13 @@ export default function EditorDeQuadro({
           </>
         )}
         {selecionadas.length >= 2 && (
-          <button type="button" className={juntar(botao.barra, "mb-1 mr-1")} onClick={() => mudarCamadas((l) => agrupar(l, selecionadas, novoIdDaCamada("g")))} title="Ctrl+G" data-agrupar="">
-            <Group className="mr-1 h-3.5 w-3.5" /> Agrupar
+          <button className={juntar(botao.icone, "mb-1 mr-1 disabled:opacity-50")} type="button" onClick={() => mudarCamadas((l) => agrupar(l, selecionadas, novoIdDaCamada("g")))} title="Ctrl+G" data-agrupar="" aria-label="Agrupar">
+            <Group className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
         {quadro.camadas.some((c) => selecionadas.indexOf(c.id) >= 0 && !!c.grupo) && (
-          <button type="button" className={juntar(botao.barra, "mb-1 mr-1")} onClick={() => mudarCamadas((l) => desagrupar(l, selecionadas))} title="Ctrl+Shift+G">
-            <Ungroup className="mr-1 h-3.5 w-3.5" /> Desagrupar
+          <button className={juntar(botao.icone, "mb-1 mr-1 disabled:opacity-50")} type="button" onClick={() => mudarCamadas((l) => desagrupar(l, selecionadas))} title="Ctrl+Shift+G" aria-label="Desagrupar">
+            <Ungroup className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
         {unica && (
@@ -996,23 +993,23 @@ export default function EditorDeQuadro({
 
   const barraDeFerramentas = (
     <div className="flex min-w-0 flex-wrap items-center" data-barra-do-quadro="">
-      <button type="button" className={juntar(botao.barra, "mr-0.5")} onClick={porTexto} data-por-camada="texto">
-        <Type className="mr-1 h-3.5 w-3.5" /> Texto
+      <button className={juntar(botao.icone, "mr-0.5 disabled:opacity-50")} type="button" onClick={porTexto} data-por-camada="texto" aria-label="Texto" title="Texto">
+        <Type className="h-4 w-4" aria-hidden="true" />
       </button>
-      <button type="button" className={juntar(botao.barra, "mr-0.5")} onClick={() => setMidia({ para: "nova", tipo: "imagem" })} data-por-camada="imagem">
-        <ImageIcon className="mr-1 h-3.5 w-3.5" /> Imagem
+      <button className={juntar(botao.icone, "mr-0.5 disabled:opacity-50")} type="button" onClick={() => setMidia({ para: "nova", tipo: "imagem" })} data-por-camada="imagem" aria-label="Imagem" title="Imagem">
+        <ImageIcon className="h-4 w-4" aria-hidden="true" />
       </button>
-      <button type="button" className={juntar(botao.barra, "mr-0.5")} onClick={() => setMidia({ para: "nova", tipo: "video" })} data-por-camada="video">
-        <Film className="mr-1 h-3.5 w-3.5" /> Vídeo
+      <button className={juntar(botao.icone, "mr-0.5 disabled:opacity-50")} type="button" onClick={() => setMidia({ para: "nova", tipo: "video" })} data-por-camada="video" aria-label="Vídeo" title="Vídeo">
+        <Film className="h-4 w-4" aria-hidden="true" />
       </button>
-      <button type="button" className={juntar(botao.barra, "mr-0.5")} onClick={() => porForma("retangulo")} data-por-camada="forma">
-        <Square className="mr-1 h-3.5 w-3.5" /> Forma
+      <button className={juntar(botao.icone, "mr-0.5 disabled:opacity-50")} type="button" onClick={() => porForma("retangulo")} data-por-camada="forma" aria-label="Forma" title="Forma">
+        <Square className="h-4 w-4" aria-hidden="true" />
       </button>
       <button type="button" className={juntar(botao.icone, "mr-0.5")} onClick={() => porForma("circulo")} aria-label="Círculo" title="Círculo">
         <Circle className="h-3.5 w-3.5" />
       </button>
-      <button type="button" className={juntar(botao.barra, "mr-2")} onClick={porLogo} data-por-camada="logo">
-        <Sparkles className="mr-1 h-3.5 w-3.5" /> Logo
+      <button className={juntar(botao.icone, "mr-2 disabled:opacity-50")} type="button" onClick={porLogo} data-por-camada="logo" aria-label="Logo" title="Logo">
+        <Stamp className="h-4 w-4" aria-hidden="true" />
       </button>
       <span className="mr-2 h-5 w-px bg-border" />
       <button type="button" className={juntar(botao.icone, "mr-0.5")} onClick={desfazer} disabled={!podeDesfazer} aria-label="Desfazer" title="Desfazer (Ctrl+Z)" data-desfazer="">
@@ -1056,11 +1053,11 @@ export default function EditorDeQuadro({
         abaixoDoTitulo={barraDeFerramentas}
         acoes={
           <>
-            <button type="button" className={juntar(botao.barra, "mr-0.5")} onClick={() => void exportar(false)} disabled={!!ocupado} title="Baixa o quadro deste tempo em PNG (1080 px)" data-exportar-png="">
-              {ocupado === "png" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1 h-3.5 w-3.5" />} PNG
+            <button className={juntar(botao.icone, "mr-0.5 disabled:opacity-50")} type="button" onClick={() => void exportar(false)} disabled={!!ocupado} title="Baixa o quadro deste tempo em PNG (1080 px)" data-exportar-png="" aria-label="PNG">
+              {ocupado === "png" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
             </button>
-            <button type="button" className={juntar(botao.barra, "mr-0.5")} onClick={() => void exportar(true)} disabled={!!ocupado} title="Guarda este quadro no acervo de vídeo (serve de 1º quadro para gerar)">
-              {ocupado === "acervo" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />} Acervo
+            <button className={juntar(botao.icone, "mr-0.5 disabled:opacity-50")} type="button" onClick={() => void exportar(true)} disabled={!!ocupado} title="Guarda este quadro no acervo de vídeo (serve de 1º quadro para gerar)" aria-label="Acervo">
+              {ocupado === "acervo" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />}
             </button>
             <button type="button" className={juntar(botao.primario, "mr-1 h-8 px-2.5")} onClick={() => void mandarParaORender()} disabled={!!ocupado} title="Cria a versão na Mesa Edição e pede o MP4 à fila do render" data-mandar-para-o-render="">
               {ocupado === "render" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Clapperboard className="mr-1 h-3.5 w-3.5" />} Render

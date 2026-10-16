@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ImagePlus, Loader2, Upload } from "lucide-react";
+import { BookOpen, Check, ImagePlus, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { textoDoErro } from "@/lib/mesa/api";
@@ -10,7 +10,8 @@ import { STATUS_DA_PERSONA } from "../modelosApi";
 import { useClones } from "../clonesApi";
 import { dadosDaPessoa, modelosParaEscolher } from "../seletores/seletores";
 import { TIPOS_DE_NO, type DadosDoNo, type ModoDoAmbiente } from "../canvasApi";
-import { BOTAO, CAMPO, capaDoKit, daFoto, Escolha, Gaveta, ICONES, kitsUsaveis, MiniaturaGrande, personaSemAncora, ROTULO, rostoDaPersona, type Fontes, type LugarDaGaveta, type Miniatura } from "./comum";
+import { BOTAO_ICONE, BOTAO, CAMPO, capaDoKit, daFoto, Escolha, Gaveta, ICONES, kitsUsaveis, MiniaturaGrande, personaSemAncora, ROTULO, rostoDaPersona, type Fontes, type LugarDaGaveta, type Miniatura } from "./comum";
+import { juntar } from "@/components/sistema";
 
 /**
  * Escolha com miniatura do que vai num cartão. Dono, 26/09: "a parte de
@@ -80,8 +81,8 @@ function MandarFoto({ onPronta, rotulo }: { onPronta: (imagemId: string) => void
   return (
     <>
       <input ref={entrada} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => void enviar(e.target.files)} aria-label={rotulo} />
-      <button type="button" className={BOTAO} disabled={enviando} onClick={() => entrada.current && entrada.current.click()}>
-        {enviando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1 h-3.5 w-3.5" />} {rotulo}
+      <button className={juntar(BOTAO_ICONE, "disabled:opacity-50")} type="button" disabled={enviando} onClick={() => entrada.current && entrada.current.click()} aria-label={rotulo} title={rotulo}>
+        {enviando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Upload className="h-4 w-4" aria-hidden="true" />}
       </button>
     </>
   );
@@ -185,9 +186,12 @@ export function EscolherCartao({
                   role="tab"
                   aria-selected={aba === a}
                   onClick={() => setAba(a)}
-                  className={`mb-1 mr-1 inline-flex h-7 items-center rounded-full border px-2 text-[11.5px] ${aba === a ? `${t.borda} ${t.fundo} text-white` : "border-white/10 text-zinc-400 hover:text-white"}`}
+                  aria-label={t.rotulo}
+                  title={t.rotulo}
+                  className={juntar(BOTAO_ICONE, "mb-1 mr-1 h-8 w-8", aba === a && `${t.fundo} text-white`)}
                 >
-                  <Icone className={`mr-1.5 h-3.5 w-3.5 ${t.texto}`} /> {t.rotulo}
+                  {/* 16/10/2026: aba só com o ícone; o nome no title e no aria-label. */}
+                  <Icone className={`h-4 w-4 ${t.texto}`} aria-hidden="true" />
                 </button>
               );
             })}
@@ -324,16 +328,16 @@ export function EscolherCartao({
             {modo === "descrever" && (
               <div className="min-w-0">
                 <textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={2} placeholder="Ex.: praia no fim de tarde, loja com balcão de madeira clara" aria-label="Descrição do ambiente" className={CAMPO} />
-                <button type="button" className={`${BOTAO} mt-2`} disabled={!texto.trim()} onClick={() => escolher({ modo: "descrever", texto: texto.trim(), imagem_id: null, biblioteca_id: null })}>
-                  <Check className="mr-1 h-3.5 w-3.5" /> {trocando ? "Usar esta descrição" : "Pôr no quadro"}
+                <button className={juntar(BOTAO_ICONE, "mt-2 disabled:opacity-50")} type="button" disabled={!texto.trim()} onClick={() => escolher({ modo: "descrever", texto: texto.trim(), imagem_id: null, biblioteca_id: null })} aria-label={trocando ? "Usar esta descrição" : "Pôr no quadro"} title={trocando ? "Usar esta descrição" : "Pôr no quadro"}>
+                  <Check className="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>
             )}
             {modo === "contexto" && (
               <div className="min-w-0 rounded-lg border border-white/10 p-3">
                 <p className="text-[12px] leading-snug text-zinc-300">O lugar sai da marca (estilo e paleta), do nicho e da campanha do cliente, sem custo. Para uma descrição escrita pelo agente, use o botão do cartão depois.</p>
-                <button type="button" className={`${BOTAO} mt-2`} onClick={() => escolher({ modo: "contexto", texto: "", imagem_id: null, biblioteca_id: null })}>
-                  <Check className="mr-1 h-3.5 w-3.5" /> Usar o contexto do cliente
+                <button className={juntar(BOTAO_ICONE, "mt-2 disabled:opacity-50")} type="button" onClick={() => escolher({ modo: "contexto", texto: "", imagem_id: null, biblioteca_id: null })} aria-label="Usar o contexto do cliente" title="Usar o contexto do cliente">
+                  <BookOpen className="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>
             )}
@@ -344,8 +348,8 @@ export function EscolherCartao({
           <div className="min-w-0 space-y-3">
             <div className="min-w-0">
               <textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={2} placeholder="Ex.: luz de estúdio fria, céu azul limpo, cores quentes" aria-label="Descrição do estilo" className={CAMPO} />
-              <button type="button" className={`${BOTAO} mt-2`} disabled={!texto.trim()} onClick={() => escolher({ texto: texto.trim() })}>
-                <Check className="mr-1 h-3.5 w-3.5" /> {trocando ? "Usar esta descrição" : "Pôr no quadro"}
+              <button className={juntar(BOTAO_ICONE, "mt-2 disabled:opacity-50")} type="button" disabled={!texto.trim()} onClick={() => escolher({ texto: texto.trim() })} aria-label={trocando ? "Usar esta descrição" : "Pôr no quadro"} title={trocando ? "Usar esta descrição" : "Pôr no quadro"}>
+                <Check className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
             {referencias.length > 0 && (

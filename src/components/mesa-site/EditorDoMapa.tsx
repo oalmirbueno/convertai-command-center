@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type SetStateAction } from "react";
-import { ArrowDown, ArrowUp, Loader2, Plus, Sparkles, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Loader2, Plus, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import Secao from "@/components/sistema/Secao";
@@ -203,9 +203,9 @@ export default function EditorDoMapa({ site, mapa, onMapa }: { site: LinhaDoSite
       ajuda="O tipo de site dá o mapa padrão (páginas e seções). A biblioteca usa os nomes do mercado: hero cinematográfico, bento, prova social, pricing, FAQ, CTA final, galeria antes e depois, contato com mapa. Montar com o Jev lê o briefing e o contexto e acrescenta as seções que o negócio pede (as de prova só com dado real). É prévia até salvar: o Salvar e o Seguir no pé da etapa gravam o mapa, o estilo e a direção juntos, e salvar guarda a versão anterior."
       recolher="mesa-site:direcao:mapa"
       acao={
-        <button type="button" className={botao.secundario} disabled={!!ocupado} onClick={() => void montarComJev()} title={`Custo do Jev: ~${usd(CUSTO_DO_JEV)}`} data-montar-mapa="">
-          {ocupado === "jev" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
-          Montar com o Jev
+        // 16/10/2026: só ícone (nome no aria-label e no title); Wand2 para não repetir o Sparkles do "Sugerir" do estilo.
+        <button type="button" className={botao.icone} disabled={!!ocupado} onClick={() => void montarComJev()} aria-label="Montar com o Jev" title={`Montar com o Jev · custo ~${usd(CUSTO_DO_JEV)}`} data-montar-mapa="">
+          {ocupado === "jev" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
         </button>
       }
     >
@@ -312,9 +312,9 @@ export default function EditorDoMapa({ site, mapa, onMapa }: { site: LinhaDoSite
         </div>
       ))}
       {mapa.paginas.length < MAX_PAGINAS && mapa.tipo !== "bio" && mapa.tipo !== "landing" && (
-        <button type="button" className={botao.discreto} onClick={novaPagina}>
-          <Plus className="mr-1 h-3.5 w-3.5" />
-          Nova página
+        // 16/10/2026: só ícone (nome no aria-label e no title).
+        <button type="button" className={botao.icone} aria-label="Nova página" title="Nova página" onClick={novaPagina}>
+          <Plus className="h-4 w-4" />
         </button>
       )}
     </Secao>

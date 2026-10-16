@@ -127,11 +127,11 @@ export default function EstudioLaminaGrande({
         {ordenadas.length > 1 && !desenhandoAreas && (
           // Frente AE-3: versões compactas, sem caixa (setas finas e "v3/3").
           <div className="ml-2 flex shrink-0 items-center" title={`Versão ${vista?.versao} de ${ordenadas.length}`}>
-            <button type="button" className="flex h-7 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40" onClick={() => irPara(-1)} disabled={posicao <= 0} aria-label="Versão anterior">
+            <button type="button" className="flex h-7 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40" onClick={() => irPara(-1)} disabled={posicao <= 0} aria-label="Versão anterior" title="Versão anterior">
               <ChevronLeft className="h-3.5 w-3.5" />
             </button>
             <span className="px-0.5 text-[11.5px] tabular-nums text-muted-foreground" data-versao-na-tela="">v{vista?.versao}/{ordenadas.length}</span>
-            <button type="button" className="flex h-7 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40" onClick={() => irPara(1)} disabled={posicao >= ordenadas.length - 1} aria-label="Próxima versão">
+            <button type="button" className="flex h-7 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40" onClick={() => irPara(1)} disabled={posicao >= ordenadas.length - 1} aria-label="Próxima versão" title="Próxima versão">
               <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>

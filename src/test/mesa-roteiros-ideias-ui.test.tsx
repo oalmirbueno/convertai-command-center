@@ -156,7 +156,8 @@ describe("ideias com o agente no roteiro avulso", () => {
     expect(pedido.value).toContain("Gancho combinado");
     expect((screen.getByRole("combobox", { name: "Modelo da base" }) as HTMLSelectElement).value).toBe("casa-advogado-duvida-juridica");
     expect(screen.getByRole("radio", { name: "Autoridade" }).getAttribute("aria-checked")).toBe("true");
-    expect(within(bloco).getByRole("button", { name: "Usar o tema 2" }).textContent).toContain("No formulário");
+    // 16/10/2026: só ícone; o nome vai no aria-label e o estado "No formulário" no title.
+    expect(within(bloco).getByRole("button", { name: "Usar o tema 2" }).getAttribute("title")).toBe("No formulário");
 
     fireEvent.click(await screen.findByRole("button", { name: /Gerar roteiro/ }));
     await waitFor(() => expect(chamadasDe("gerar")).toHaveLength(1));

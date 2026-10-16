@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ExternalLink, ImagePlus, Library, Link2, Loader2, Search, Trash2, X } from "lucide-react";
+import { Earth, ExternalLink, ImagePlus, Library, Link2, Loader2, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useMarcaDaMesa, useMesa, useUrlDaMesa } from "@/components/mesa/MesaContexto";
@@ -204,18 +204,19 @@ export default function Moodboard() {
       ajuda="Junte imagens que mostram o clima da marca: do acervo do cliente, da web (com fonte e licença) ou enviadas. A imagem da web fica como link; a nota diz o que cada uma ensina. O moodboard entra na estratégia, no conceito e na apresentação."
       acao={
         <>
-          <button type="button" className={juntar(aberto === "acervo" ? botao.secundario : botao.discreto, "m-1 h-8")} onClick={() => setAberto(aberto === "acervo" ? null : "acervo")}>
-            <Library className="mr-1.5 h-3.5 w-3.5" /> Do acervo
+          {/* 16/10/2026: só ícone, sem borda; o aberto fica com o fundo (aria-pressed) e o nome no title. */}
+          <button type="button" className={juntar(botao.icone, "m-1", aberto === "acervo" && "bg-muted text-foreground")} aria-pressed={aberto === "acervo"} aria-label="Do acervo" title="Do acervo" onClick={() => setAberto(aberto === "acervo" ? null : "acervo")}>
+            <Library className="h-4 w-4" />
           </button>
-          <button type="button" className={juntar(aberto === "web" ? botao.secundario : botao.discreto, "m-1 h-8")} onClick={() => setAberto(aberto === "web" ? null : "web")}>
-            <Search className="mr-1.5 h-3.5 w-3.5" /> Da web
+          <button type="button" className={juntar(botao.icone, "m-1", aberto === "web" && "bg-muted text-foreground")} aria-pressed={aberto === "web"} aria-label="Da web" title="Da web (Openverse)" onClick={() => setAberto(aberto === "web" ? null : "web")}>
+            <Earth className="h-4 w-4" />
           </button>
-          <button type="button" className={juntar(aberto === "link" ? botao.secundario : botao.discreto, "m-1 h-8")} onClick={() => setAberto(aberto === "link" ? null : "link")}>
-            <Link2 className="mr-1.5 h-3.5 w-3.5" /> Link
+          <button type="button" className={juntar(botao.icone, "m-1", aberto === "link" && "bg-muted text-foreground")} aria-pressed={aberto === "link"} aria-label="Imagem por link" title="Imagem por link" onClick={() => setAberto(aberto === "link" ? null : "link")}>
+            <Link2 className="h-4 w-4" />
           </button>
           <input ref={entrada} type="file" accept=".png,.jpg,.jpeg,.webp" className="hidden" onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) void enviar(f); e.target.value = ""; }} />
-          <button type="button" className={juntar(botao.discreto, "m-1 h-8")} disabled={enviando} onClick={() => entrada.current && entrada.current.click()} aria-label="Enviar imagem para o moodboard">
-            {enviando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
+          <button type="button" className={juntar(botao.icone, "m-1 disabled:opacity-50")} disabled={enviando} onClick={() => entrada.current && entrada.current.click()} aria-label="Enviar imagem para o moodboard" title="Enviar imagem para o moodboard">
+            {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
           </button>
         </>
       }
@@ -231,8 +232,9 @@ export default function Moodboard() {
           {aberto === "web" && (
             <div className="mb-3 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2">
               <input className={campo} value={busca} maxLength={200} placeholder="Ex.: rustic bakery texture, warm light" onChange={(e) => setBusca(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void buscar(); }} aria-label="Palavras da busca" />
-              <button type="button" className={botao.secundario} disabled={buscando || busca.trim().length < 2} onClick={() => void buscar()}>
-                {buscando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Search className="mr-1.5 h-4 w-4" />} Buscar
+              {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+              <button type="button" className={juntar(botao.icone, "h-9 w-9 disabled:opacity-50")} disabled={buscando || busca.trim().length < 2} onClick={() => void buscar()} aria-label="Buscar" title="Buscar">
+                {buscando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
               </button>
             </div>
           )}

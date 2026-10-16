@@ -3,6 +3,7 @@ import { Check, Circle, Loader2, Pause, TriangleAlert, Undo2 } from "lucide-reac
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
+import { botao, juntar } from "@/components/sistema/estilos";
 import { custoDaResposta, textoDoErro, type ParteDaEstimativa } from "@/lib/mesa/api";
 import { BotaoComCusto } from "./Custo";
 import { ImagemDaMesa } from "./MesaContexto";
@@ -179,8 +180,16 @@ export default function PlanoDoDiretor({
                     </span>
                   )}
                   {ultima && eAtual && antes && !bloqueado && (
-                    <button type="button" onClick={() => void desfazer(p, ultima.versao)} className="inline-flex h-7 items-center text-[11px] text-muted-foreground hover:text-foreground" data-desfazer-versao={ultima.versao}>
-                      <Undo2 className="mr-1 h-3 w-3" /> Desfazer
+                    // 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela.
+                    <button
+                      type="button"
+                      onClick={() => void desfazer(p, ultima.versao)}
+                      className={juntar(botao.icone, "h-7 w-7")}
+                      aria-label="Desfazer"
+                      title={`Desfazer (volta para a v${antes.versao})`}
+                      data-desfazer-versao={ultima.versao}
+                    >
+                      <Undo2 className="h-4 w-4" aria-hidden="true" />
                     </button>
                   )}
                 </div>

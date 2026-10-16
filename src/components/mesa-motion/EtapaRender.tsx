@@ -195,9 +195,9 @@ function Conteudo({ filme, irPara }: { filme: Filme; irPara: IrPara }) {
                 <div className="min-w-0 space-y-2">
                   {url && <video src={url} poster={mini || undefined} controls playsInline className={juntar("block rounded-md border border-border bg-muted", f === "16:9" ? "w-full" : "w-full max-w-[280px]")} />}
                   {p && (p.estado === "fila" || p.estado === "rodando") && (
-                    <button type="button" className={botao.barra} onClick={() => void cancelar(p.id)}>
-                      <Square className="mr-1 h-3 w-3" />
-                      Cancelar
+                    // 16/10/2026: só ícone (nome no aria-label e no title).
+                    <button type="button" className={botao.icone} onClick={() => void cancelar(p.id)} aria-label="Cancelar o render" title="Cancelar o render">
+                      <Square className="h-3.5 w-3.5" />
                     </button>
                   )}
                   <Link to={linkDaEdicao(f, p)} className={juntar(botao.discreto, "px-0")} data-abrir-na-edicao={f}>

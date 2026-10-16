@@ -43,9 +43,9 @@ export default function AngulosGerados({ arquivos, irPara }: { arquivos: Arquivo
       acao={
         <>
           <SeletorCompacto rotulo="Tipo de imagem" opcoes={[{ valor: "angulo", rotulo: "Ângulos" }, { valor: "quadro", rotulo: "Quadros" }]} valor={filtro} onEscolher={(v) => setFiltro(v as "angulo" | "quadro")} />
-          <button type="button" className={juntar(botao.secundario, "ml-2")} onClick={() => irPara("gerar", { modo: "angulo" })} aria-label="Novo ângulo">
-            <Rotate3d className="h-3.5 w-3.5 sm:mr-1.5" />
-            <span className="hidden sm:inline">Novo ângulo</span>
+          {/* 16/10/2026: só ícone, sem borda. */}
+          <button type="button" className={juntar(botao.icone, "ml-2")} onClick={() => irPara("gerar", { modo: "angulo" })} aria-label="Novo ângulo" title="Novo ângulo">
+            <Rotate3d className="h-4 w-4" />
           </button>
         </>
       }

@@ -7,7 +7,7 @@ import { Ampliar } from "@/components/mesa/Ampliar";
 import { AvisoDeErro, useAvisarErro } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { Carregando } from "@/components/sistema/Estados";
-import { juntar, superficie } from "@/components/sistema/estilos";
+import { botao, juntar, superficie } from "@/components/sistema/estilos";
 import { AprovarFoto } from "./AcoesDeUso";
 import { Cartao, MiniaturaDaFoto, Moldura, useMesaFoto, Vazio } from "./Comuns";
 import { acrescentarFotos, classeDaFoto, decidirFoto, decidirVersao, fotosParaRevisar, guardarEnsaio, invalidarFotos, proporcaoDoFormato, useEnsaios, useFotos, type FotoDoAcervo, type FotoParaRevisar } from "./fotoApi";
@@ -66,9 +66,9 @@ function DoLote({ selecao }: { selecao: Selecao }) {
       resumo="fotos do produto e com modelo esperando decisão"
       dica="Fotos geradas em Fotos do produto e Foto com modelo. Aprovar põe a foto no acervo, pronta para usar; rejeitar pede o motivo, que ensina o diretor."
       acao={
-        <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" onClick={() => irPara("revisar", { ensaio: pendentes[0].ensaio.id })}>
-          <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> Comparar com as fontes
-        </Button>
+        <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => irPara("revisar", { ensaio: pendentes[0].ensaio.id })} aria-label="Comparar com as fontes" title="Comparar com as fontes">
+          <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+        </button>
       }
     >
       <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" data-para-revisar="" data-aprovar-do-lote="">

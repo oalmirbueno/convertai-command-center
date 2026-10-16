@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Loader2, Sparkles, Wand2 } from "lucide-react";
+import { BookmarkPlus, ChevronDown, ChevronRight, Lightbulb, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { EstadoDeErro } from "@/components/sistema/Estados";
@@ -79,9 +79,9 @@ export function ProdutoDaMarca() {
       <button type="button" className={botao.discreto} disabled={!!ocupado} onClick={() => setAberta(true)}>
         {base.produto ? "Trocar" : "Escolher"}
       </button>
-      <button type="button" className={botao.discreto} disabled={!!ocupado} onClick={() => void sugerir()} title={`Custo do Jev: ~${usd(CUSTO_DO_JEV_DA_MARCA)}`}>
-        {ocupado === "jev" ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
-        Sugerir com o Jev
+      {/* 16/10/2026: só ícone (nome e custo no title). */}
+      <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} disabled={!!ocupado} onClick={() => void sugerir()} aria-label="Sugerir com o Jev" title={`Sugerir com o Jev (custo: ~${usd(CUSTO_DO_JEV_DA_MARCA)})`}>
+        {ocupado === "jev" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4" />}
       </button>
       <EscolhaDoProduto
         aberta={aberta}
@@ -170,9 +170,9 @@ export default function PaletaDoSetor({ cores }: { cores: Cor[] }) {
             <div className="min-w-0" data-apoio-da-paleta="">
               <div className="mb-1.5 flex min-w-0 items-center">
                 <span className={juntar(texto.rotulo, "min-w-0 flex-1")}>Apoio para a sua marca</span>
-                <button type="button" className={juntar(botao.discreto, "h-8 shrink-0")} disabled={propondo || !cores.length} onClick={() => void propor()} title={cores.length ? undefined : "A marca ainda não tem cores no sistema"}>
-                  {propondo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Wand2 className="mr-1.5 h-3.5 w-3.5" />}
-                  Usar como proposta
+                {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+                <button type="button" className={juntar(botao.icone, "disabled:opacity-50")} disabled={propondo || !cores.length} onClick={() => void propor()} aria-label="Usar como proposta" title={cores.length ? "Usar como proposta" : "A marca ainda não tem cores no sistema"}>
+                  {propondo ? <Loader2 className="h-4 w-4 animate-spin" /> : <BookmarkPlus className="h-4 w-4" />}
                 </button>
               </div>
               <Faixa cores={apoio.papeis.map((p) => ({ hex: p.hex, nome: ROTULO_DO_PAPEL_DO_APOIO[p.papel as PapelDoApoio] || p.papel }))} altura={40} />

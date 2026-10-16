@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Camera, ExternalLink, Loader2, Save } from "lucide-react";
+import { ArrowRight, Camera, ClipboardList, ExternalLink, ImagePlus, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
@@ -106,15 +106,20 @@ function TomadasNaMesaFoto({ ensaio, campanha }: { ensaio: Ensaio; campanha: Cam
               <ExternalLink className="h-4 w-4" />
             </Link>
             {pendentes.length > 0 && (
+              // 16/10/2026: só ícone com a contagem pequena ao lado (nome no sr-only e no title pela descricao).
               <BotaoComCusto
                 rotulo={
                   <>
-                    <Camera className="mr-1.5 h-3.5 w-3.5" />
-                    {progresso ? `Gerando ${progresso.feitos} de ${progresso.total}` : `Gerar ${pendentes.length} ${pendentes.length === 1 ? "foto" : "fotos"}`}
+                    <ImagePlus className="h-4 w-4" aria-hidden="true" />
+                    <span className="text-[11px] tabular-nums" aria-hidden="true">
+                      {progresso ? `${progresso.feitos}/${progresso.total}` : pendentes.length}
+                    </span>
+                    <span className="sr-only">{progresso ? `Gerando ${progresso.feitos} de ${progresso.total}` : `Gerar ${pendentes.length} ${pendentes.length === 1 ? "foto" : "fotos"}`}</span>
                   </>
                 }
                 titulo="Fotos geradas na Mesa Foto"
-                className="h-9"
+                descricao={progresso ? `Gerando ${progresso.feitos} de ${progresso.total}` : `Gerar ${pendentes.length} ${pendentes.length === 1 ? "foto" : "fotos"} na Mesa Foto`}
+                className="h-8 gap-1 px-2"
                 fecharAoConfirmar
                 partes={() => partesDaGeracao(modeloImagem ? modeloImagem.id : null, "media", pendentes.length)}
                 executar={async () => {
@@ -243,15 +248,18 @@ export default function EtapaTomadas() {
                 {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               </button>
               <span className="inline-flex" data-pedir-tomadas="">
+                {/* 16/10/2026: só ícone com o 6 pequeno ao lado (nome no sr-only e no title pela descricao). */}
                 <BotaoComCusto
                   rotulo={
                     <>
-                      <Camera className="mr-1.5 h-3.5 w-3.5" />
-                      Pedir as 6 tomadas
+                      <ClipboardList className="h-4 w-4" aria-hidden="true" />
+                      <span className="text-[11px] tabular-nums" aria-hidden="true">6</span>
+                      <span className="sr-only">Pedir as 6 tomadas</span>
                     </>
                   }
                   titulo="Tomadas pedidas à Mesa Foto"
-                  className="h-9"
+                  descricao="Pedir as 6 tomadas à Mesa Foto"
+                  className="h-8 gap-1 px-2"
                   partes={() => partesDoPlanoDeLote(catalogo, 0)}
                   executar={async () => {
                     const r = await pedirTomadas(campanha);

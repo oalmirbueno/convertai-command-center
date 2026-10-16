@@ -252,7 +252,7 @@ export default function AgenteRoteirista({
               </div>
               <div className="ml-auto flex min-w-0 items-center">
                 <Ditado valor={texto} onChange={onRascunho} disabled={enviando} className="mr-1.5 min-w-0" />
-                <button type="button" className={juntar(botao.primario, "h-9")} onClick={() => void enviar()} disabled={enviando || !texto.trim()} aria-label="Enviar ao agente">
+                <button type="button" className={juntar(botao.primario, "h-9")} onClick={() => void enviar()} disabled={enviando || !texto.trim()} aria-label="Enviar ao agente" title="Enviar ao agente">
                   {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </button>
               </div>

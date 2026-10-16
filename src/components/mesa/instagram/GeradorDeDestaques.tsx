@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Archive, Bot, Download, ImagePlus, Loader2, Plus, Square, X } from "lucide-react";
+import { Archive, Bot, Download, ImagePlus, Loader2, Plus, Sparkles, Square, X } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { botao, campo, etiqueta, juntar, texto } from "@/components/sistema/estilos";
@@ -278,9 +278,9 @@ export default function GeradorDeDestaques({
       <div className="min-w-0">
         <div className="flex min-w-0 items-center justify-between">
           <TituloRecolhivel titulo={`Lista e nomes (${lista.length})`} recolhido={listaRecolhida} onAlternar={() => setListaRecolhida(!listaRecolhida)} resumo={lista.map((d) => d.nome).join(", ")} />
-          <button type="button" className={juntar(botao.discreto, "h-8 shrink-0 px-2 text-[12px]")} onClick={onPedirAoAgente}>
-            <Bot className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-            Pedir ao agente
+          {/* 16/10/2026 (dono: "texto + ícone vira só o ícone, sem bordas"): o nome fica no title e no leitor de tela. */}
+          <button type="button" className={botao.icone} onClick={onPedirAoAgente} aria-label="Pedir ao agente" title="Pedir ao agente">
+            <Bot className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
         {!listaRecolhida && (
@@ -299,13 +299,12 @@ export default function GeradorDeDestaques({
                 </span>
                 <input className={juntar(campo, "ml-1 h-8 min-w-0 flex-1")} value={d.icone} onChange={(e) => mudarItem(i, "icone", e.target.value)} aria-label={`Ícone do destaque ${i + 1}`} placeholder="Objeto do negócio (ex.: armação de óculos)" title={d.conceito || undefined} />
                 {modo === "foto" && (
-                  <button type="button" className={juntar(botao.secundario, "ml-1 h-8 shrink-0 px-2 text-[11.5px]", d.foto ? "border-success/50" : "")} onClick={() => setFotoPara(i)} aria-label={`Escolher a foto de ${d.nome}`}>
-                    <ImagePlus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                    {d.foto ? "Trocar" : "Foto"}
+                  <button type="button" className={juntar(botao.icone, "ml-1", d.foto ? "text-success" : "")} onClick={() => setFotoPara(i)} aria-label={`Escolher a foto de ${d.nome}`} title={d.foto ? `Trocar a foto de ${d.nome}` : `Escolher a foto de ${d.nome}`}>
+                    <ImagePlus className="h-4 w-4" aria-hidden="true" />
                   </button>
                 )}
                 {feita && <span className={juntar(etiqueta, "ml-1.5 bg-success/15 text-success")}>capa</span>}
-                <button type="button" className={juntar(botao.icone, "ml-1")} onClick={() => onLista(lista.filter((_, k) => k !== i))} aria-label={`Tirar ${d.nome}`}>
+                <button type="button" className={juntar(botao.icone, "ml-1")} onClick={() => onLista(lista.filter((_, k) => k !== i))} aria-label={`Tirar ${d.nome}`} title={`Tirar ${d.nome}`}>
                   <X className="h-3.5 w-3.5" />
                 </button>
               </li>
@@ -324,9 +323,8 @@ export default function GeradorDeDestaques({
             placeholder="Novo destaque"
             aria-label="Nome do novo destaque"
           />
-          <button type="button" className={juntar(botao.secundario, "ml-1.5 h-8 px-2.5 text-[12px]")} onClick={() => novo.trim() && adicionar(novo)} disabled={!novo.trim() || lista.length >= LIMITES_DO_PERFIL.destaquesMaximo}>
-            <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-            Pôr
+          <button type="button" className={juntar(botao.icone, "ml-1.5")} onClick={() => novo.trim() && adicionar(novo)} disabled={!novo.trim() || lista.length >= LIMITES_DO_PERFIL.destaquesMaximo} aria-label="Pôr na lista" title="Pôr na lista">
+            <Plus className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
         <div className="mt-2 flex min-w-0 flex-wrap" aria-label="Sugestões típicas">
@@ -412,7 +410,13 @@ export default function GeradorDeDestaques({
         <div className="flex min-w-0 flex-wrap items-center [&>*]:mb-1.5 [&>*]:mr-2">
           {modo === "icone" ? (
             <BotaoComCusto
-              rotulo={pendentes.length ? `Gerar ${pendentes.length} ${pendentes.length === 1 ? "capa" : "capas"}` : "Todas já têm capa"}
+              rotulo={
+                <>
+                  <Sparkles className="h-4 w-4" aria-hidden="true" />
+                  {pendentes.length > 0 && <span className="ml-1 tabular-nums" aria-hidden="true">{pendentes.length}</span>}
+                  <span className="sr-only">{pendentes.length ? `Gerar ${pendentes.length} ${pendentes.length === 1 ? "capa" : "capas"}` : "Todas já têm capa"}</span>
+                </>
+              }
               titulo="Capas de destaque"
               descricao="Gera uma capa por vez; dá para parar no meio."
               partes={() => [{ modeloId: modeloId || null, tipo: "imagem", imagens: pendentes.length, qualidade }]}
@@ -426,12 +430,14 @@ export default function GeradorDeDestaques({
           ) : (
             <button
               type="button"
-              className={botao.primario}
+              className={juntar(botao.primario, "gap-0 px-3")}
               onClick={() => void baixarTodas()}
               disabled={!lista.length || !!baixando || (modo === "logo" && !logo) || (modo === "tipografia" && !fonte.familia) || (modo === "foto" && !lista.some((d) => !!d.foto))}
+              title={`Baixar ${modo === "foto" ? lista.filter((d) => !!d.foto).length : lista.length} capas (${modo === "logo" ? "logo" : modo === "foto" ? "foto" : "tipografia"})`}
             >
-              {baixando === "todas" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Download className="mr-1.5 h-4 w-4" />}
-              Baixar {modo === "foto" ? lista.filter((d) => !!d.foto).length : lista.length} capas ({modo === "logo" ? "logo" : modo === "foto" ? "foto" : "tipografia"})
+              {baixando === "todas" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
+              <span className="ml-1.5 tabular-nums" aria-hidden="true">{modo === "foto" ? lista.filter((d) => !!d.foto).length : lista.length}</span>
+              <span className="sr-only">Baixar {modo === "foto" ? lista.filter((d) => !!d.foto).length : lista.length} capas ({modo === "logo" ? "logo" : modo === "foto" ? "foto" : "tipografia"})</span>
             </button>
           )}
           {andamento && (
@@ -439,16 +445,14 @@ export default function GeradorDeDestaques({
               <span className="text-[12.5px] text-muted-foreground" aria-live="polite">
                 {andamento.feitos + 1} de {andamento.total}: {andamento.atual}
               </span>
-              <button type="button" className={juntar(botao.secundario, "h-8 px-2.5 text-[12px]")} onClick={() => (parar.current = true)}>
-                <Square className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                Parar
+              <button type="button" className={botao.icone} onClick={() => (parar.current = true)} aria-label="Parar" title="Parar">
+                <Square className="h-4 w-4" aria-hidden="true" />
               </button>
             </>
           )}
           {modo === "icone" && capas.length > 0 && !andamento && (
-            <button type="button" className={juntar(botao.secundario, "h-9")} onClick={() => void baixarTodas()} disabled={!!baixando}>
-              {baixando === "todas" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Download className="mr-1.5 h-4 w-4" />}
-              Baixar todas (ZIP)
+            <button type="button" className={botao.icone} onClick={() => void baixarTodas()} disabled={!!baixando} aria-label="Baixar todas (ZIP)" title="Baixar todas (ZIP)">
+              {baixando === "todas" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
             </button>
           )}
         </div>

@@ -73,8 +73,9 @@ export default function FollowupDaProposta({ proposta }: { proposta: Proposta })
       ajuda="Lembrete de quem viu e não respondeu, de quem ainda não abriu e de proposta que vence em até 2 dias. A mensagem sai pronta; o painel não manda nada sozinho."
       acao={
         !pronto ? (
-          <button type="button" className={botao.primario} onClick={() => void preparar()} disabled={ocupado}>
-            <BellRing className="mr-1.5 h-4 w-4" /> Preparar mensagem
+          // 16/10/2026: só ícone (nome no aria-label e no title).
+          <button type="button" className={juntar(botao.primario, "w-9 px-0")} onClick={() => void preparar()} disabled={ocupado} aria-label="Preparar mensagem" title="Preparar mensagem">
+            <BellRing className="h-4 w-4" />
           </button>
         ) : null
       }
@@ -85,11 +86,12 @@ export default function FollowupDaProposta({ proposta }: { proposta: Proposta })
             <textarea value={pronto.mensagem} onChange={(e) => setPronto({ ...pronto, mensagem: e.target.value })} className={juntar(campoTexto, "min-h-[100px]")} />
           </CampoDeFormulario>
           <div className="flex min-w-0 flex-wrap [&>*]:mb-2 [&>*]:mr-2">
-            <a className={botao.secundario} href={`https://wa.me/${pronto.numero}?text=${encodeURIComponent(pronto.mensagem)}`} target="_blank" rel="noopener noreferrer">
-              <MessageCircle className="mr-1.5 h-4 w-4" /> Abrir no WhatsApp
+            {/* 16/10/2026: só ícone (nome no aria-label e no title). */}
+            <a className={botao.icone} href={`https://wa.me/${pronto.numero}?text=${encodeURIComponent(pronto.mensagem)}`} target="_blank" rel="noopener noreferrer" aria-label="Abrir no WhatsApp" title="Abrir no WhatsApp">
+              <MessageCircle className="h-4 w-4" />
             </a>
-            <button type="button" className={botao.secundario} onClick={() => void copiar(pronto.mensagem)}>
-              <Copy className="mr-1.5 h-4 w-4" /> Copiar
+            <button type="button" className={botao.icone} onClick={() => void copiar(pronto.mensagem)} aria-label="Copiar a mensagem" title="Copiar a mensagem">
+              <Copy className="h-4 w-4" />
             </button>
             <button type="button" className={botao.primario} onClick={() => void registrar("whatsapp")} disabled={ocupado}>
               Já mandei

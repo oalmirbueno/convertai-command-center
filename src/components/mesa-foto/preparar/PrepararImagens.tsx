@@ -176,8 +176,10 @@ export default function PrepararImagens({ aberta, onFechar }: { aberta: boolean;
             <button type="button" className={juntar(botao.discreto, "mb-1 mr-auto")} onClick={limpar} disabled={!resumo}>
               Limpar a escolha
             </button>
-            <button type="button" className={juntar(botao.secundario, "mb-1 ml-2")} onClick={() => setEditando(paraEditar)} disabled={!paraEditar.length} data-editar-imagens="">
-              <SlidersHorizontal className="mr-1.5 h-4 w-4" aria-hidden="true" /> Editar imagens{paraEditar.length ? ` (${paraEditar.length})` : ""}
+            <button type="button" className={juntar(botao.icone, "mb-1 ml-2 w-auto px-1.5")} onClick={() => setEditando(paraEditar)} disabled={!paraEditar.length} data-editar-imagens="" aria-label={`Editar imagens${paraEditar.length ? ` (${paraEditar.length})` : ""}`} title="Editar imagens">
+              {/* 16/10/2026: só o ícone, com a contagem pequena. */}
+              <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+              {paraEditar.length > 0 && <span className="ml-0.5 text-[11px] tabular-nums">{paraEditar.length}</span>}
             </button>
             <button type="button" className={juntar(botao.primario, "mb-1 ml-2")} onClick={montarNoCanvas} disabled={!kitIds.length && !modelo} data-montar-no-canvas="">
               <Shapes className="mr-1.5 h-4 w-4" aria-hidden="true" /> Montar no Canvas

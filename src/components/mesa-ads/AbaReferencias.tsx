@@ -422,10 +422,9 @@ export default function AbaReferencias() {
                 }}
               />
               <BotaoDoNavegador caso="perfil_publico" clientId={clientId} origem="mesa_ads" rotulo="Perfil de concorrente" />
-              <Button type="button" size="sm" variant={colarLink ? "outline" : "default"} className="h-9" disabled={importando} onClick={() => void importar()} title="Traz os anúncios do cliente com imagem, copy e métricas. Sem custo de IA.">
-                {importando ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1 h-3.5 w-3.5" />}
-                Importar meus anúncios
-              </Button>
+              <button className={juntar(botao.icone, "disabled:opacity-50", !(colarLink) && "text-primary")} type="button" disabled={importando} onClick={() => void importar()} title="Traz os anúncios do cliente com imagem, copy e métricas. Sem custo de IA." aria-label="Importar meus anúncios">
+                {importando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
+              </button>
             </>
           }
         />
@@ -494,9 +493,8 @@ export default function AbaReferencias() {
                 )}
                 <Popover>
                   <PopoverTrigger asChild>
-                    <button type="button" className={juntar(botao.secundario, "px-3")} title="Bibliotecas de anúncios para buscar referências" aria-label="Bibliotecas">
-                      <Globe className="h-4 w-4 shrink-0 sm:mr-1.5" aria-hidden="true" />
-                      <span className="hidden sm:inline">Bibliotecas</span>
+                    <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" title="Bibliotecas de anúncios para buscar referências" aria-label="Bibliotecas">
+                      <Globe className="h-4 w-4 shrink-0" aria-hidden="true" />
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="end" sideOffset={6} className="w-[calc(100vw-24px)] max-w-[280px] p-1">

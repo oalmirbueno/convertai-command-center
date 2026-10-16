@@ -10,6 +10,7 @@ import { brl, chavesAds } from "./adsApi";
 import AjudaRecolhida from "@/components/sistema/AjudaRecolhida";
 import { CabecalhoDaParte, Foto, useParteRecolhida } from "./Comuns";
 import { chavesVinculo, confirmarVinculo, desfazerVinculo, lerVinculos, rotuloDaConfianca, type ItemDeVinculo } from "./vinculoApi";
+import { botao, juntar } from "@/components/sistema";
 
 /**
  * Vínculo automático (substitui "anúncios sem vínculo", pedido do dono em
@@ -87,12 +88,12 @@ export default function VinculoAutomatico() {
               {Math.round(c.confianca * 100)}% ({rotuloDaConfianca(c.confianca)}){c.sinais.length ? `: ${c.sinais.join(", ")}` : ""}
             </span>
           </span>
-          <Button type="button" size="sm" className="mr-1 h-7 text-[12px]" disabled={!!ocupado} onClick={() => void agir(`${i.peca}:${c.criativo_id}`, () => confirmarVinculo(clientId, c.criativo_id, i.anuncio.ad_id), "Anúncio ligado ao criativo")}>
-            {ocupado === `${i.peca}:${c.criativo_id}` ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}É este
-          </Button>
-          <Button type="button" size="sm" variant="ghost" className="h-7 text-[12px]" disabled={!!ocupado} onClick={() => void agir(`${i.peca}:${c.criativo_id}:n`, () => desfazerVinculo(clientId, c.criativo_id, i.anuncio.ad_id, true), "Guardado: não é este")}>
-            <X className="mr-1 h-3 w-3" />Não é
-          </Button>
+          <button className={juntar(botao.icone, "mr-1 text-primary disabled:opacity-50")} type="button" disabled={!!ocupado} onClick={() => void agir(`${i.peca}:${c.criativo_id}`, () => confirmarVinculo(clientId, c.criativo_id, i.anuncio.ad_id), "Anúncio ligado ao criativo")} aria-label="É este" title="É este">
+            {ocupado === `${i.peca}:${c.criativo_id}` ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
+          </button>
+          <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={!!ocupado} onClick={() => void agir(`${i.peca}:${c.criativo_id}:n`, () => desfazerVinculo(clientId, c.criativo_id, i.anuncio.ad_id, true), "Guardado: não é este")} aria-label="Não é" title="Não é">
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
         </li>
       ))}
     </ul>
@@ -106,10 +107,9 @@ export default function VinculoAutomatico() {
         ajuda="Reconhecidos sozinhos pela imagem, pelo nome, pelo texto, pelo título, pela campanha e pelas datas. O Jev confere os incertos; só o que continua incerto pede a sua confirmação."
         recolher={{ ...parte, resumo: v ? `${v.resumo.ja_ligados} já ligados${v.resumo.confirmar > 0 ? ` · ${v.resumo.confirmar} para confirmar` : ""}` : undefined }}
         acoes={
-          <Button type="button" size="sm" variant="outline" className="h-8" disabled={q.isFetching} onClick={() => void q.refetch()} title="Reconhece de novo">
-            {q.isFetching ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}
-            Reconhecer de novo
-          </Button>
+          <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={q.isFetching} onClick={() => void q.refetch()} title="Reconhece de novo" aria-label="Reconhecer de novo">
+            {q.isFetching ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
+          </button>
         }
       />
       {!parte.recolhido && (

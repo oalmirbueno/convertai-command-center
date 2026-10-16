@@ -168,6 +168,8 @@ describe("etapa Editar: editor completo e agente editor na lateral", () => {
     fireEvent.change(seletor, { target: { value: "openrouter:anthropic/claude-opus-5.5" } });
     await waitFor(() => expect(within(lateral).getByText(/Claude Opus 5.5 · edita a linha do tempo/)).toBeTruthy());
     // Os atalhos das skills estão lá.
+    // 16/10/2026: desde 07/10 as sugestões do agente nascem recolhidas (SugestoesDoAgente); abre antes de conferir.
+    fireEvent.click(within(lateral).getByRole("button", { name: "Sugestões" }));
     expect(lateral.querySelector('[data-atalho-do-editor="brabo"]')).toBeTruthy();
   }, 20000);
 

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Check, Loader2, Sparkles } from "lucide-react";
+import { Check, ImagePlus, Loader2, RotateCw, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMarcaDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { PreencherComIA } from "@/components/sistema";
@@ -103,9 +103,19 @@ export default function EtapaConceito() {
               <option value={3}>3</option>
             </select>
           </CampoDeFormulario>
+          {/* 16/10/2026: só ícone; o nome (e o modelo) vão para o leitor de tela e o title. */}
           <BotaoComCusto
-            rotulo={<RotuloComModelo rotulo={caminhos.length ? `Gerar de novo (substitui os ${caminhos.length})` : "Gerar caminhos"} papel="identidade" modeloId={modeloId} />}
+            rotulo={
+              <>
+                {caminhos.length ? <RotateCw className="h-4 w-4" aria-hidden="true" /> : <Wand2 className="h-4 w-4" aria-hidden="true" />}
+                <span className="sr-only">
+                  <RotuloComModelo rotulo={caminhos.length ? `Gerar de novo (substitui os ${caminhos.length})` : "Gerar caminhos"} papel="identidade" modeloId={modeloId} />
+                </span>
+              </>
+            }
             titulo="Caminhos criativos"
+            descricao={caminhos.length ? `Gerar de novo (substitui os ${caminhos.length})` : "Gerar caminhos"}
+            className="h-8 gap-1 px-2"
             partes={() => partesDoCusto(mesa.catalogo, "conceito", modeloId)}
             executar={() => {
               antesDeGerar.current = caminhos.length ? JSON.parse(JSON.stringify(projeto.dados.conceito || {})) : null;
@@ -152,9 +162,9 @@ export default function EtapaConceito() {
                 data-caminho={c.id}
                 titulo={c.nome}
                 acao={
-                  <button type="button" className={juntar(escolhido ? botao.primario : botao.secundario, "h-8")} onClick={() => void escolher(c.id)} disabled={!!escolhendo || escolhido}>
-                    {escolhendo === c.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-                    {escolhido ? "Escolhido" : "Escolher"}
+                  // 16/10/2026: só ícone (nome no aria-label e no title); o escolhido fica verde.
+                  <button type="button" className={juntar(escolhido ? juntar(botao.primario, "h-8 w-8 px-0") : botao.icone, "disabled:opacity-50")} onClick={() => void escolher(c.id)} disabled={!!escolhendo || escolhido} aria-label={escolhido ? "Escolhido" : "Escolher"} title={escolhido ? "Escolhido" : "Escolher"}>
+                    {escolhendo === c.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   </button>
                 }
               >
@@ -201,10 +211,17 @@ export default function EtapaConceito() {
                     <dd className={juntar(texto.corpo, "text-muted-foreground")}>{c.riscos}</dd>
                   </dl>
                   <div className="flex justify-end">
+                    {/* 16/10/2026: só ícone; o preço continua ao lado. */}
                     <BotaoComCusto
-                      rotulo={c.imagem ? "Outra inspiração" : "Imagem de inspiração"}
+                      rotulo={
+                        <>
+                          <ImagePlus className="h-4 w-4" aria-hidden="true" />
+                          <span className="sr-only">{c.imagem ? "Outra inspiração" : "Imagem de inspiração"}</span>
+                        </>
+                      }
                       titulo="Imagem de inspiração"
-                      descricao="Prancha de clima, sem texto e sem logo"
+                      descricao={`${c.imagem ? "Outra inspiração" : "Imagem de inspiração"}: prancha de clima, sem texto e sem logo`}
+                      className="h-8 gap-1 px-2"
                       partes={() => partesDaImagem(mesa.catalogo)}
                       executar={() => chamarIdentidade<{ projeto: ProjetoDeIdentidade }>("conceito_imagem", { projeto_id: projeto.id, caminho_id: c.id })}
                       aoConcluir={(d) => guardar(d && d.projeto)}

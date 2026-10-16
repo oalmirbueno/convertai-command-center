@@ -168,9 +168,9 @@ function BotaoRemover({ onClick, rotulo }: { onClick: () => void; rotulo: string
 
 function BotaoAdicionar({ onClick, children }: { onClick: () => void; children: string }) {
   return (
-    <Button type="button" size="sm" variant="ghost" className="h-8 px-2 text-[12px] text-muted-foreground" onClick={onClick}>
-      <Plus className="mr-1 h-3.5 w-3.5" /> {children}
-    </Button>
+    <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={onClick} aria-label={children} title={children}>
+      <Plus className="h-4 w-4" aria-hidden="true" />
+    </button>
   );
 }
 

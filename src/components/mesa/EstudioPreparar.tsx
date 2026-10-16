@@ -239,9 +239,10 @@ export default function EstudioPreparar({
             aoConcluir={() => onConcluido()}
           />
         ) : modo === "roteiro" ? (
-          <Button type="button" className="h-10" onClick={() => void montarDoRoteiro()} disabled={desde !== null}>
-            {desde !== null ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1.5 h-4 w-4" />}
-            Montar do roteiro · grátis
+          // 16/10/2026 (dono: "texto + ícone vira só o ícone"): como os vizinhos com custo, o nome vai no title e no leitor de tela; o preço (grátis) fica à vista.
+          <Button type="button" className="h-10" onClick={() => void montarDoRoteiro()} disabled={desde !== null} aria-label="Montar do roteiro (grátis)" title="Montar do roteiro (grátis)">
+            {desde !== null ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
+            <span className="ml-1.5 rounded-full bg-black/10 px-1.5 py-px text-[10.5px] font-normal opacity-80 dark:bg-white/10" aria-hidden="true">grátis</span>
           </Button>
         ) : (
           <BotaoComCusto

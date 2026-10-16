@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, BookImage, Check, Download, Frame, Images, Library, Loader2, Maximize2, MessageSquare, Plus, Search, Send, Sparkles, Trash2, Upload, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Ampliar } from "@/components/mesa/Ampliar";
@@ -518,8 +517,8 @@ function FilaDePedidos({ aberto }: { aberto: BookAberto }) {
           aria-label="Pedido livre do book"
           className="mr-1.5 h-9 min-w-0 flex-1 text-[13px]"
         />
-        <button type="button" className={juntar(botao.secundario, "px-2.5 sm:px-3.5")} onClick={somarLivre} disabled={!livre.trim()} aria-label="Pôr o pedido na fila">
-          <Plus className="h-3.5 w-3.5 sm:mr-1" aria-hidden="true" /> <span className="hidden sm:inline">Pôr na fila</span>
+        <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={somarLivre} disabled={!livre.trim()} aria-label="Pôr o pedido na fila" title="Pôr na fila">
+          <Plus className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
       <div className="mt-3 grid min-w-0 grid-cols-1 items-end gap-3 border-t border-border pt-3 sm:grid-cols-[220px_minmax(0,1fr)]">
@@ -606,19 +605,19 @@ function ResultadosDoBook({ aberto }: { aberto: BookAberto }) {
               </button>
             </div>
             <div className="flex min-w-0 flex-wrap items-center">
-              <Button type="button" size="sm" variant={noBook(fotoAberta.id) ? "default" : "outline"} className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => alternar(fotoAberta.id)}>
-                <BookImage className="mr-1.5 h-3.5 w-3.5" /> {noBook(fotoAberta.id) ? "No book" : "Pôr no book"}
-              </Button>
+              <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50", (noBook(fotoAberta.id)) && "bg-primary/10 text-primary")} type="button" onClick={() => alternar(fotoAberta.id)} aria-label={noBook(fotoAberta.id) ? "No book" : "Pôr no book"} title={noBook(fotoAberta.id) ? "No book" : "Pôr no book"}>
+                <BookImage className="h-4 w-4" aria-hidden="true" />
+              </button>
               <AprovarFoto foto={fotoAberta} onMudou={mudou} />
               <MenuDeUso foto={fotoAberta} rotulo="Usar" variante="outline" className="mb-1.5" />
             </div>
             <div className="flex min-w-0 flex-wrap items-center" data-levar-do-book="">
-              <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => levar("arsenal", fotoAberta)} title="Guarda a foto e o prompt dela no Arsenal de prompts">
-                <Library className="mr-1.5 h-3.5 w-3.5" /> Arsenal
-              </Button>
-              <Button type="button" size="sm" variant="outline" className="mb-1.5 h-8 text-[12px]" onClick={() => levar("canvas", fotoAberta)} title="Abre a foto no Canvas">
-                <Frame className="mr-1.5 h-3.5 w-3.5" /> Canvas
-              </Button>
+              <button className={juntar(botao.icone, "mb-1.5 mr-1.5 disabled:opacity-50")} type="button" onClick={() => levar("arsenal", fotoAberta)} title="Guarda a foto e o prompt dela no Arsenal de prompts" aria-label="Arsenal">
+                <Library className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button className={juntar(botao.icone, "mb-1.5 disabled:opacity-50")} type="button" onClick={() => levar("canvas", fotoAberta)} title="Abre a foto no Canvas" aria-label="Canvas">
+                <Frame className="h-4 w-4" aria-hidden="true" />
+              </button>
             </div>
             <div className="flex min-w-0 flex-wrap items-center">
               <AtalhosDaFoto foto={fotoAberta} />
@@ -660,15 +659,12 @@ function ResultadosDoBook({ aberto }: { aberto: BookAberto }) {
               type="button"
               aria-pressed={noBook(f.id)}
               onClick={() => alternar(f.id)}
-              className={juntar("mt-1 flex h-7 w-full items-center justify-center rounded-md border px-1 text-[11px] font-medium", noBook(f.id) ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground", foco)}
+              aria-label={noBook(f.id) ? "No book" : "Pôr no book"}
+              title={noBook(f.id) ? "No book (toque para tirar)" : "Pôr no book"}
+              className={juntar(botao.icone, "mt-1 w-full", noBook(f.id) && "bg-primary/10 text-primary")}
             >
-              {noBook(f.id) ? (
-                <>
-                  <Check className="mr-0.5 h-3 w-3" /> no book
-                </>
-              ) : (
-                "pôr no book"
-              )}
+              {/* 16/10/2026: só o ícone; ligado fica na cor da marca. */}
+              {noBook(f.id) ? <Check className="h-4 w-4" aria-hidden="true" /> : <BookImage className="h-4 w-4" aria-hidden="true" />}
             </button>
           </li>
         ))}
@@ -834,27 +830,26 @@ function BookFinal({ aberto }: { aberto: BookAberto }) {
         fotos.length > 0 ? (
           <>
             {semAprovar > 0 && <p className={juntar(texto.auxiliar, "mr-auto w-full sm:w-auto")}>{semAprovar} sem a aprovação da equipe.</p>}
-            <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" disabled={!!baixando} onClick={() => void baixar(fotos)} title="Uma a uma, no tamanho original">
-              {baixando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}
-              {baixando ? `Baixando ${baixando.feitos} de ${baixando.total}` : "Baixar o book (sem ZIP)"}
-            </Button>
-            <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" disabled={!!enviando} onClick={() => void enviar(fotos, "aprovacao")}>
-              {enviando === "aprovacao" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />} Mandar para aprovação
-            </Button>
-            <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" disabled={!!enviando} onClick={() => void enviar(fotos, "arquivos")}>
-              <Upload className="mr-1.5 h-3.5 w-3.5" /> Arquivos
-            </Button>
+            <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={!!baixando} onClick={() => void baixar(fotos)} title="Uma a uma, no tamanho original" aria-label={baixando ? `Baixando ${baixando.feitos} de ${baixando.total}` : "Baixar o book (sem ZIP)"}>
+              {baixando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Download className="h-4 w-4" aria-hidden="true" />}
+            </button>
+            <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={!!enviando} onClick={() => void enviar(fotos, "aprovacao")} aria-label="Mandar para aprovação" title="Mandar para aprovação">
+              {enviando === "aprovacao" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
+            </button>
+            <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" disabled={!!enviando} onClick={() => void enviar(fotos, "arquivos")} aria-label="Arquivos" title="Arquivos">
+              <Upload className="h-4 w-4" aria-hidden="true" />
+            </button>
             {aberto.book.status !== "entregue" && (
-              <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" onClick={() => gravar({ status: "entregue" })}>
-                <Check className="mr-1.5 h-3.5 w-3.5" /> Marcar entregue
-              </Button>
+              <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => gravar({ status: "entregue" })} aria-label="Marcar entregue" title="Marcar entregue">
+                <Check className="h-4 w-4" aria-hidden="true" />
+              </button>
             )}
           </>
         ) : undefined
       }
     >
       {fotos.length === 0 ? (
-        <p className={texto.auxiliar}>Marque "pôr no book" nos resultados. A ordem daqui é a do book.</p>
+        <p className={texto.auxiliar}>Marque o ícone do book nos resultados. A ordem daqui é a do book.</p>
       ) : (
         <ol className="min-w-0 divide-y divide-border" aria-label="Fotos do book em ordem">
           {fotos.map((f, i) => (

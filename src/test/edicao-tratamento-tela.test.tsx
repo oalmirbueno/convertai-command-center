@@ -209,6 +209,7 @@ describe("Finais: gerador de legenda do vídeo pronto", () => {
     );
     montar(h(Finais, {}));
     fireEvent.click(await screen.findByRole("button", { name: "Gerar legenda de Depoimento v2 (render 9:16)" }));
-    expect(await screen.findByText(/Transcrever por/)).toBeTruthy();
+    // 16/10/2026: o botão virou só ícone com o preço ao lado; o nome inteiro ficou no aria-label.
+    expect(await screen.findByRole("button", { name: /Transcrever por/ })).toBeTruthy();
   });
 });

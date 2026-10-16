@@ -2,13 +2,13 @@ import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, ClipboardCheck, Loader2, Pause, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { BotaoComCusto } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { usd, type Qualidade } from "@/lib/mesa/api";
 import { useMesaFoto } from "./Comuns";
 import { partesDaGeracao, tomadasParaGerar, type Camera, type Ensaio, type Guia } from "./fotoApi";
 import { esquecerLote, iniciarLote, pararLote, resumoDoLote, useLote, type EstadoNoLote } from "./lote";
+import { botao, juntar } from "@/components/sistema";
 
 /**
  * O botão "Gerar todas (N fotos, ~US$ X)" e o andamento do lote, iguais no
@@ -108,14 +108,14 @@ export function AndamentoDoLote({ ensaioId, className = "" }: { ensaioId: string
           <span className="ml-2 font-normal text-muted-foreground">{usd(lote.custo_usd)}</span>
         </p>
         {lote.ativo && !lote.parar && (
-          <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[11.5px]" onClick={() => pararLote(ensaioId)}>
-            <Pause className="mr-1 h-3.5 w-3.5" /> Parar depois desta
-          </Button>
+          <button className={juntar(botao.icone, "disabled:opacity-50")} type="button" onClick={() => pararLote(ensaioId)} aria-label="Parar depois desta" title="Parar depois desta">
+            <Pause className="h-4 w-4" aria-hidden="true" />
+          </button>
         )}
         {!lote.ativo && r.feitas > 0 && (
-          <Button type="button" size="sm" className="h-7 px-2.5 text-[11.5px]" onClick={() => irPara("revisar", { ensaio: ensaioId })}>
-            <ClipboardCheck className="mr-1 h-3.5 w-3.5" /> Revisar
-          </Button>
+          <button className={juntar(botao.icone, "text-primary disabled:opacity-50")} type="button" onClick={() => irPara("revisar", { ensaio: ensaioId })} aria-label="Revisar" title="Revisar">
+            <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+          </button>
         )}
         {!lote.ativo && (
           <button type="button" className="ml-1 flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted" aria-label="Fechar o andamento" onClick={() => esquecerLote(ensaioId)}>
