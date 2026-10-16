@@ -142,7 +142,8 @@ describe("as ações chamam a mesa, não refazem a regra", () => {
     expect(acaoPermitida("agente-calendario", "pedido_livre")).toBe(true);
     expect(acaoPermitida("mesa-ads", "oferta_salvar")).toBe(true);
     expect(acaoPermitida("estudio-arte", "entregar")).toBe(true);
-    expect(acaoPermitida("mesa-ads", "plano_gerar")).toBe(false);
+    // plano_gerar entrou na ponte no MCP 2.12 (pedido do dono, 16/10); mexer na conta da Meta segue fora.
+    expect(acaoPermitida("mesa-ads", "conta_acao_executar")).toBe(false);
     expect(acaoPermitida("mesa-foto", "tomada_gerar")).toBe(false);
     expect(acaoPermitida("admin-reset-client-access", "x")).toBe(false);
   });

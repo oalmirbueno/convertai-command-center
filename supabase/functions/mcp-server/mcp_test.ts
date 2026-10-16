@@ -281,10 +281,14 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_list_social_posts',
     'aceleriq_list_tasks',
     'aceleriq_list_workspace_nodes',
+    'aceleriq_mesa_ads_arte_gerar',
     'aceleriq_mesa_ads_briefing_salvar',
     'aceleriq_mesa_ads_contexto',
+    'aceleriq_mesa_ads_criativos_produzir',
+    'aceleriq_mesa_ads_entregar_ao_gestor',
     'aceleriq_mesa_ads_oferta_do_contexto',
     'aceleriq_mesa_ads_oferta_salvar',
+    'aceleriq_mesa_ads_plano_gerar',
     'aceleriq_mesa_ads_saude',
     'aceleriq_mesa_calendario_gravar',
     'aceleriq_mesa_calendario_pedido',
@@ -295,6 +299,7 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_move_opportunity',
     'aceleriq_operator_assign',
     'aceleriq_operator_board',
+    'aceleriq_operator_checklist',
     'aceleriq_operator_diary',
     'aceleriq_operator_digest',
     'aceleriq_operator_organize',
@@ -1125,9 +1130,41 @@ Deno.test('2.3: chave de API não age nas mesas e ação fora da lista nem sai (
   // OAuth sem o token da pessoa também não passa (nunca cai na chave de serviço).
   const oauthSemToken: AuthContext = { ...adminCtx, dataScope: { ...adminCtx.dataScope, source: 'oauth' } };
   await assertRejects(() => chamarMesa('mesa-ads', 'oferta_do_contexto', { client_id: 'x' }, oauthSemToken), Error, 'mesa:exige_oauth');
-  // Ação com IA que não está na ponte (plano_gerar) é recusada mesmo com a pessoa conectada.
+  // Ação que não está na ponte (mexer na conta da Meta) é recusada mesmo com a pessoa conectada.
   const comToken: AuthContext = { ...oauthSemToken, userAccessToken: 'token-de-teste' };
-  await assertRejects(() => chamarMesa('mesa-ads', 'plano_gerar', {}, comToken), Error, 'mesa:acao_fora_da_ponte');
+  await assertRejects(() => chamarMesa('mesa-ads', 'conta_acao_executar', {}, comToken), Error, 'mesa:acao_fora_da_ponte');
+  await assertRejects(() => chamarMesa('estudio-arte', 'gerar_card', {}, comToken), Error, 'mesa:acao_fora_da_ponte');
+});
+
+const ACOES_ADS_2_12 = [
+  'aceleriq_mesa_ads_plano_gerar',
+  'aceleriq_mesa_ads_criativos_produzir',
+  'aceleriq_mesa_ads_arte_gerar',
+  'aceleriq_mesa_ads_entregar_ao_gestor',
+];
+
+Deno.test('2.12: Mesa Ads até o gestor exige mesas:write, OAuth, idempotência e confirmação de custo onde há IA', async () => {
+  for (const nome of ACOES_ADS_2_12) {
+    const t = TOOL_MAP.get(nome);
+    assert(t, `missing ${nome}`);
+    assert(t!.scopes.includes('mesas:write'), `${nome} needs mesas:write`);
+    assert(!canInvoke(readCtx, t!), `${nome} must reject aceleriq:read`);
+    assert(canInvoke(soMesas, t!), `${nome} should accept mesas:write`);
+    assertEquals((t!.inputSchema as any).additionalProperties, false);
+    assert(((t!.inputSchema as any).required as string[]).includes('idempotency_key'), `${nome} requires idempotency_key`);
+    assert(/OAuth/.test(t!.description), `${nome} must say it needs OAuth`);
+    assert(!/[–—]/.test(t!.description + (t!.title ?? '')), `${nome} must not use dashes`);
+    assert(!canUseToolWithDataScope(restrictedCtx, t!), `${nome} is not tenant-scoped`);
+  }
+  const cliente = '00000000-0000-0000-0000-0000000000aa';
+  await assertRejects(() => TOOL_MAP.get('aceleriq_mesa_ads_plano_gerar')!.handler({ client_id: cliente, idempotency_key: 'teste-2-12-0001' }, adminCtx), Error, 'Invalid input');
+  await assertRejects(() => TOOL_MAP.get('aceleriq_mesa_ads_criativos_produzir')!.handler({ plano_id: cliente, angulo_id: 'a1', idempotency_key: 'teste-2-12-0002' }, adminCtx), Error, 'Invalid input');
+  await assertRejects(() => TOOL_MAP.get('aceleriq_mesa_ads_arte_gerar')!.handler({ trabalho_id: cliente, idempotency_key: 'teste-2-12-0003' }, adminCtx), Error, 'Invalid input');
+  // Entregar ao gestor pede o plano ou os criativos.
+  await assertRejects(() => TOOL_MAP.get('aceleriq_mesa_ads_entregar_ao_gestor')!.handler({ client_id: cliente, idempotency_key: 'teste-2-12-0004' }, adminCtx), Error, 'Invalid input');
+  assertEquals(TOOL_MAP.get('aceleriq_mesa_ads_plano_gerar')!.longRunning, true);
+  assertEquals(TOOL_MAP.get('aceleriq_mesa_ads_criativos_produzir')!.longRunning, true);
+  assertEquals(TOOL_MAP.get('aceleriq_mesa_ads_arte_gerar')!.longRunning, false);
 });
 
 Deno.test('2.3: cérebro lê com clients:read e escreve com clients:write', () => {
@@ -1149,7 +1186,8 @@ Deno.test('2.3: o mapa do painel aponta as ações e o cérebro', async () => {
   assert(mesa && mesa.pelo_mcp.includes('aceleriq_mesa_calendario_pedido') && mesa.pelo_mcp.includes('aceleriq_mesa_enviar_para_aprovacao'));
   assert(mapa.find((m) => m.area === 'Mesa Ads')!.pelo_mcp.includes('aceleriq_mesa_ads_oferta_salvar'));
   assert(mapa.find((m) => m.area === 'Cerebro do cliente')!.pelo_mcp.includes('aceleriq_cerebro_registrar'));
-  assertEquals((out.counts as Record<string, number>).mesas_write, ACOES_2_3.length);
+  assert(mapa.find((m) => m.area === 'Mesa Ads')!.pelo_mcp.includes('aceleriq_mesa_ads_entregar_ao_gestor'));
+  assertEquals((out.counts as Record<string, number>).mesas_write, ACOES_2_3.length + ACOES_ADS_2_12.length);
 });
 
 Deno.test('2.3: resposta com fôlego respira antes e entrega JSON-RPC válido (JSON e SSE)', async () => {

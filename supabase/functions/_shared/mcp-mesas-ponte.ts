@@ -24,11 +24,19 @@
  * resposta com fôlego (espaços antes do JSON, erro com campo `error`).
  */
 
-/** Funções e ações que a ponte pode chamar. Qualquer outra é recusada antes da rede. */
+/**
+ * Funções e ações que a ponte pode chamar. Qualquer outra é recusada antes da rede.
+ *
+ * MCP 2.12 (16/10/2026): a Mesa Ads abre o caminho da tela até o gestor
+ * (plano_gerar, criativos_produzir, pacote_enviar e a fila do Estúdio,
+ * enfileirar). Mexer na conta da Meta (conta_acao_executar,
+ * conta_montagem_ativar, gerenciador_acao) e gerar fora da fila (gerar_card)
+ * continuam fora.
+ */
 export const ACOES_DA_PONTE = {
   'agente-calendario': ['pedido_livre', 'gravar', 'campanha_criar', 'campanha_salvar'],
-  'mesa-ads': ['briefing_salvar', 'oferta_salvar', 'oferta_do_contexto'],
-  'estudio-arte': ['entregar'],
+  'mesa-ads': ['briefing_salvar', 'oferta_salvar', 'oferta_do_contexto', 'plano_gerar', 'criativos_produzir', 'pacote_enviar'],
+  'estudio-arte': ['entregar', 'enfileirar'],
 } as const;
 
 export type FuncaoDaMesa = keyof typeof ACOES_DA_PONTE;
@@ -39,6 +47,8 @@ export const ACOES_LONGAS_DA_PONTE: ReadonlySet<string> = new Set([
   'agente-calendario:pedido_livre',
   'agente-calendario:campanha_criar',
   'estudio-arte:entregar',
+  'mesa-ads:plano_gerar',
+  'mesa-ads:criativos_produzir',
 ]);
 
 /** RPCs do banco que a ponte pode chamar como a pessoa. */
@@ -92,6 +102,33 @@ export function lerRespostaDaMesa(texto: string, status: number): RespostaDaMesa
   }
   if (!obj) return { ok: false, codigo: 'resposta_vazia', mensagem: 'A mesa não devolveu dados.', status: status || 502, detalhes: null };
   return { ok: true, dados: obj };
+}
+
+/**
+ * Lâminas de um trabalho do Estúdio: as da direção, as que já têm arte (alguma
+ * versão com imagem gravada) e as que faltam gerar. Sem direção, nada.
+ */
+export function laminasDoTrabalho(trabalho: unknown): { ordens: number[]; com_arte: number[]; sem_arte: number[] } {
+  const obj = (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+  const ordemDe = (v: unknown) => {
+    const n = Number(obj(v).ordem);
+    return Number.isInteger(n) ? n : null;
+  };
+  const t = obj(trabalho);
+  const cardsDaDirecao = obj(t.direcao).cards;
+  const ordens = [...new Set((Array.isArray(cardsDaDirecao) ? cardsDaDirecao : []).map(ordemDe).filter((n): n is number => n !== null))]
+    .sort((a, b) => a - b);
+  const geradas = new Set(
+    (Array.isArray(t.cards) ? t.cards : [])
+      .filter((c) => typeof obj(c).storage_path === 'string' && String(obj(c).storage_path).trim() !== '')
+      .map(ordemDe)
+      .filter((n): n is number => n !== null),
+  );
+  return {
+    ordens,
+    com_arte: ordens.filter((o) => geradas.has(o)),
+    sem_arte: ordens.filter((o) => !geradas.has(o)),
+  };
 }
 
 /** Mensagem para quem conecta com chave de API e tenta agir. */

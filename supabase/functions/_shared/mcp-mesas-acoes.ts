@@ -29,6 +29,7 @@ import {
   AVISO_ACAO_SO_COM_PESSOA,
   feitoPor,
   juntarBriefingDeAds,
+  laminasDoTrabalho,
   lerRespostaDaMesa,
   prazoDaAcao,
   type FuncaoDaMesa,
@@ -327,6 +328,181 @@ export async function adsOfertaDoContexto(
     return {
       ref: oferta ? `ads_oferta:${oferta}` : null,
       resultado: { oferta_id: oferta, criada: dados.criada ?? null, resultado_da_mesa: dados },
+    };
+  });
+}
+
+// ─── Mesa Ads até o gestor (MCP 2.12) ────────────────────────
+// O caminho da tela: plano de teste, criativos (copy e direção da arte), a
+// arte pela fila do Estúdio e o pacote do gestor com a tarefa dele. Nada sobe
+// na Meta por aqui: subir é do gestor, com o ok do dono.
+
+type TrabalhoDoEstudio = { id: string; client_id: string; tipo: string | null; status: string | null; direcao: unknown; cards: unknown };
+
+export async function adsPlanoGerar(
+  input: { client_id: string; pedido?: string; quantidade_angulos?: number; oferta_id?: string; objetivo?: string; tom?: string; idempotency_key: string },
+  ctx: AuthContext,
+) {
+  await conferirCliente(input.client_id, ctx);
+  return await umaVez('aceleriq_mesa_ads_plano_gerar', ctx, input.idempotency_key, async () => {
+    const { idempotency_key: _k, ...corpo } = input;
+    const dados = await chamarMesa('mesa-ads', 'plano_gerar', corpo as Record<string, unknown>, ctx);
+    const plano = (dados.plano ?? {}) as Record<string, unknown>;
+    const planoId = typeof plano.id === 'string' ? plano.id : null;
+    const angulos = (Array.isArray(plano.angulos) ? plano.angulos : []) as Record<string, unknown>[];
+    return {
+      ref: planoId ? `ads_plano:${planoId}` : null,
+      resultado: {
+        plano_id: planoId,
+        angulos: angulos.map((a) => ({ id: a.id ?? null, nome: a.nome ?? null, formatos: a.formatos ?? [], variacoes: a.variacoes ?? null, estilo_visual: a.estilo_visual ?? null })),
+        custo_usd: dados.custo_usd ?? null,
+        proximo_passo: planoId
+          ? `Produza os criativos de um ângulo por vez com aceleriq_mesa_ads_criativos_produzir (plano_id ${planoId}, angulo_id de angulos[].id).`
+          : 'A mesa não devolveu plano: leia resultado_da_mesa.',
+        resultado_da_mesa: dados,
+      },
+    };
+  });
+}
+
+export async function adsCriativosProduzir(
+  input: { plano_id: string; angulo_id: string; formatos?: string[]; tom?: string; pedido?: string; idempotency_key: string },
+  ctx: AuthContext,
+) {
+  const clientId = await clienteDaLinha('ads_planos', input.plano_id, 'plano_id');
+  await conferirCliente(clientId, ctx);
+  return await umaVez('aceleriq_mesa_ads_criativos_produzir', ctx, input.idempotency_key, async () => {
+    const dados = await chamarMesa('mesa-ads', 'criativos_produzir', {
+      plano_id: input.plano_id,
+      angulo_ids: [input.angulo_id],
+      ...(input.formatos?.length ? { formatos: input.formatos } : {}),
+      ...(input.tom ? { tom: input.tom } : {}),
+      ...(input.pedido ? { pedido: input.pedido } : {}),
+    }, ctx);
+    const criativos = (Array.isArray(dados.criativos) ? dados.criativos : []) as Record<string, unknown>[];
+    const trabalhoIds = (Array.isArray(dados.trabalho_ids) ? dados.trabalho_ids : []) as string[];
+    return {
+      ref: `ads_plano:${input.plano_id}:${input.angulo_id}`,
+      resultado: {
+        client_id: clientId,
+        criativos: criativos.map((c) => ({ id: c.id ?? null, nome: c.nome ?? null, formato: c.formato ?? null, trabalho_id: c.trabalho_id ?? null })),
+        trabalho_ids: trabalhoIds,
+        custo_usd: dados.custo_usd ?? null,
+        proximo_passo: trabalhoIds.length
+          ? 'Gere a arte de cada trabalho com aceleriq_mesa_ads_arte_gerar (trabalho_id). A arte sai pela fila do Estúdio; acompanhe por aceleriq_mesa_ads_contexto (criativos[].arte).'
+          : 'A mesa não devolveu trabalhos de arte: leia resultado_da_mesa.',
+        resultado_da_mesa: dados,
+      },
+    };
+  });
+}
+
+async function trabalhosDoEstudio(ids: string[]): Promise<TrabalhoDoEstudio[]> {
+  if (!ids.length) return [];
+  const { data, error } = await db().from('estudio_trabalhos').select('id, client_id, tipo, status, direcao, cards').in('id', ids);
+  if (error) throw falha('leitura', `estudio_trabalhos: ${error.message}`);
+  return (data ?? []) as TrabalhoDoEstudio[];
+}
+
+export async function adsArteGerar(
+  input: { trabalho_id: string; ordens?: number[]; corrigir_sozinho?: boolean; idempotency_key: string },
+  ctx: AuthContext,
+) {
+  if (!isUuid(input.trabalho_id)) throw new Error('trabalho_id must be a UUID');
+  const [t] = await trabalhosDoEstudio([input.trabalho_id]);
+  if (!t) throw falha('nao_encontrado', 'trabalho_id não existe.');
+  await conferirCliente(t.client_id, ctx);
+  if (t.tipo !== 'ads') {
+    throw falha('nao_e_anuncio', 'Este trabalho do Estúdio não é criativo de anúncio. Arte de post segue pela Mesa do cliente.');
+  }
+  const laminas = laminasDoTrabalho(t);
+  // Sem ordens: só o que falta gerar (refazer custa; para refazer, mande as ordens).
+  const ordens = input.ordens?.length ? input.ordens.filter((o) => laminas.ordens.includes(o)) : laminas.sem_arte;
+  if (!ordens.length) {
+    return {
+      ok: true,
+      trabalho_id: t.id,
+      nada_a_gerar: true,
+      laminas,
+      aviso: input.ordens?.length
+        ? 'Nenhuma das ordens pedidas existe na direção deste trabalho.'
+        : 'Todas as lâminas já têm arte. Para refazer, mande as ordens.',
+      feito_por: feitoPor(ctx),
+    };
+  }
+  return await umaVez('aceleriq_mesa_ads_arte_gerar', ctx, input.idempotency_key, async () => {
+    const dados = await chamarMesa('estudio-arte', 'enfileirar', {
+      trabalho_id: t.id,
+      ordens,
+      corrigir_sozinho: input.corrigir_sozinho !== false,
+    }, ctx);
+    const lote = typeof dados.lote_id === 'string' ? dados.lote_id : null;
+    return {
+      ref: lote ? `estudio_fila:${lote}` : `estudio_trabalho:${t.id}`,
+      resultado: {
+        trabalho_id: t.id,
+        client_id: t.client_id,
+        ordens_na_fila: ordens,
+        lote_id: lote,
+        ja_na_fila: dados.ja_na_fila ?? [],
+        observacao: 'A arte é gerada, conferida e corrigida na fila do servidor (a mesma da tela). Leva alguns minutos por lâmina; acompanhe por aceleriq_mesa_ads_contexto (criativos[].arte). Quando todas tiverem arte, entregue com aceleriq_mesa_ads_entregar_ao_gestor.',
+        resultado_da_mesa: dados,
+      },
+    };
+  });
+}
+
+export async function adsEntregarAoGestor(
+  input: { client_id: string; plano_id?: string; criativo_ids?: string[]; idempotency_key: string },
+  ctx: AuthContext,
+) {
+  await conferirCliente(input.client_id, ctx);
+  // Os mesmos criativos que o pacote vai juntar (mesmo filtro da mesa).
+  let q = db().from('ads_criativos').select('id, nome, plano_id, trabalho_id').eq('client_id', input.client_id);
+  if (input.plano_id) q = q.eq('plano_id', input.plano_id);
+  if (input.criativo_ids?.length) q = q.in('id', input.criativo_ids);
+  const { data, error } = await q.order('criado_em').limit(200);
+  if (error) throw falha('leitura', `ads_criativos: ${error.message}`);
+  const criativos = (data ?? []) as Array<{ id: string; nome: string | null; plano_id: string | null; trabalho_id: string | null }>;
+  if (!criativos.length) throw falha('nao_encontrado', 'Nenhum criativo deste cliente com esse plano ou esses ids.');
+
+  const trabalhos = new Map((await trabalhosDoEstudio([...new Set(criativos.map((c) => c.trabalho_id).filter((x): x is string => !!x))])).map((t) => [t.id, t]));
+  const semArte = criativos.flatMap((c) => {
+    const t = c.trabalho_id ? trabalhos.get(c.trabalho_id) : undefined;
+    if (!t) return [{ criativo_id: c.id, nome: c.nome, motivo: 'sem trabalho de arte no Estúdio' }];
+    const faltam = laminasDoTrabalho(t).sem_arte;
+    return faltam.length ? [{ criativo_id: c.id, nome: c.nome, motivo: `lâminas sem arte: ${faltam.join(', ')}` }] : [];
+  });
+  if (semArte.length) {
+    throw falha('criativos_sem_arte', `Gere a arte antes de entregar ao gestor (aceleriq_mesa_ads_arte_gerar), ou mande só os criativo_ids prontos. Faltando: ${JSON.stringify(semArte).slice(0, 1500)}`);
+  }
+
+  return await umaVez('aceleriq_mesa_ads_entregar_ao_gestor', ctx, input.idempotency_key, async () => {
+    // 1) A arte vai para Arquivos > Criativos de anúncio (a mesa é idempotente por trabalho).
+    const entregas: Array<{ trabalho_id: string; ja_entregue: boolean }> = [];
+    for (const t of trabalhos.values()) {
+      const dados = await chamarMesa('estudio-arte', 'entregar', { trabalho_id: t.id }, ctx);
+      entregas.push({ trabalho_id: t.id, ja_entregue: dados.ja_entregue === true });
+    }
+    // 2) O pacote do gestor em Arquivos e a tarefa dele no Kanban.
+    const pacote = await chamarMesa('mesa-ads', 'pacote_enviar', {
+      client_id: input.client_id,
+      ...(input.plano_id ? { plano_id: input.plano_id } : {}),
+      ...(input.criativo_ids?.length ? { criativo_ids: input.criativo_ids } : {}),
+      criar_tarefa: true,
+    }, ctx);
+    const { markdown: _md, ...semTexto } = pacote;
+    return {
+      ref: typeof pacote.file_id === 'string' ? `file:${pacote.file_id}` : null,
+      resultado: {
+        client_id: input.client_id,
+        criativos: criativos.length,
+        entregas,
+        pacote_file_id: pacote.file_id ?? null,
+        tarefa_do_gestor_id: pacote.tarefa_id ?? null,
+        observacao: 'As artes estão em Arquivos > Criativos de anúncio e o gestor de tráfego tem a tarefa com o pacote. Nada subiu na Meta: subir é do gestor, com o ok do dono.',
+        resultado_da_mesa: semTexto,
+      },
     };
   });
 }

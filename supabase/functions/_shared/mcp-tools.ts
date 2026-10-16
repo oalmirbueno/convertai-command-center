@@ -340,6 +340,11 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_mesa_ads_oferta_salvar: 'mesas:write',
   aceleriq_mesa_ads_oferta_do_contexto: 'mesas:write',
   aceleriq_mesa_enviar_para_aprovacao: 'mesas:write',
+  // MCP 2.12 (16/10/2026): Mesa Ads até o gestor.
+  aceleriq_mesa_ads_plano_gerar: 'mesas:write',
+  aceleriq_mesa_ads_criativos_produzir: 'mesas:write',
+  aceleriq_mesa_ads_arte_gerar: 'mesas:write',
+  aceleriq_mesa_ads_entregar_ao_gestor: 'mesas:write',
   aceleriq_get_report: 'reports:read',
   aceleriq_create_report_draft: 'reports:write',
   aceleriq_list_briefings: 'briefings:read',
@@ -2292,9 +2297,13 @@ const mesaFotoContextoTool: ToolDefinition = {
 // mesa confere acesso e regra como na tela. A regra de negócio fica na mesa
 // (mcp-mesas-acoes.ts só leva o pedido e devolve o resultado com a prova).
 import {
+  adsArteGerar as _adsArteGerar,
   adsBriefingSalvar as _adsBriefingSalvar,
+  adsCriativosProduzir as _adsCriativosProduzir,
+  adsEntregarAoGestor as _adsEntregarAoGestor,
   adsOfertaDoContexto as _adsOfertaDoContexto,
   adsOfertaSalvar as _adsOfertaSalvar,
+  adsPlanoGerar as _adsPlanoGerar,
   calendarioGravar as _calendarioGravar,
   calendarioPedido as _calendarioPedido,
   campanhaCriar as _campanhaCriar,
@@ -2606,6 +2615,131 @@ const enviarParaAprovacaoTool = ferramentaDeMesa(
   },
   ({ confirmar: _c, motivo: _m, ...input }, ctx) => _enviarParaAprovacao(input, ctx),
   { longa: true },
+);
+
+// ─── MCP 2.12 (16/10/2026): Mesa Ads até o gestor ─────────────
+// Pedido do dono: os agentes gravavam o briefing e travavam no plano e na
+// arte. O caminho é o mesmo da tela; subir na Meta continua com o gestor.
+const TOM_ADS = z.enum(['sobrio', 'direto', 'agressivo']);
+const TOM_ADS_JSON = { type: 'string', enum: ['sobrio', 'direto', 'agressivo'], description: 'Tom das peças. Sem tom, vale o do pedido ou o do plano (direto).' };
+const FORMATO_ADS = z.enum(['feed_4x5', 'quadrado_1x1', 'stories_9x16', 'carrossel']);
+const ID_DO_ANGULO = z.string().regex(/^[A-Za-z0-9_-]{1,40}$/, 'angulo_id comes from the plan (angulos[].id, like a1)');
+
+const adsPlanoGerarTool = ferramentaDeMesa(
+  'aceleriq_mesa_ads_plano_gerar',
+  'Mesa Ads: gerar plano de teste com ângulos',
+  'Gera o plano de teste da Mesa Ads como o botão da tela: o estrategista lê o briefing de anúncios salvo, a oferta, o nicho e o que já rodou, escreve ângulos a mais e o Jev escolhe os melhores (de 3 a 6), cada um com situação, mecanismo, prova, gancho, estilo visual, formatos e hipótese. Precisa do briefing salvo (aceleriq_mesa_ads_briefing_salvar). Gasta crédito de IA: exige confirmar_custo=true. Pode levar alguns minutos. Depois: aceleriq_mesa_ads_criativos_produzir, um ângulo por vez.',
+  z.object({
+    client_id: UUID,
+    pedido: z.string().max(2000).optional(),
+    quantidade_angulos: z.number().int().min(3).max(6).optional(),
+    oferta_id: UUID.optional(),
+    objetivo: z.enum(['vendas', 'mensagens', 'leads', 'seguidores', 'agendamento', 'trafego', 'reconhecimento']).optional(),
+    tom: TOM_ADS.optional(),
+    confirmar_custo: z.literal(true),
+    idempotency_key: CHAVE_IDEMPOTENTE,
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      pedido: { type: 'string', maxLength: 2000, description: 'Pedido da equipe para o plano (o que testar, o que evitar).' },
+      quantidade_angulos: { type: 'integer', minimum: 3, maximum: 6, description: 'Quantos ângulos no plano (padrão 4).' },
+      oferta_id: { type: 'string', format: 'uuid', description: 'Oferta da Mesa Ads (aceleriq_mesa_ads_contexto, ofertas). Sem ela, vale o briefing.' },
+      objetivo: { type: 'string', enum: ['vendas', 'mensagens', 'leads', 'seguidores', 'agendamento', 'trafego', 'reconhecimento'], description: 'Objetivo da campanha. Sem ele, vale o do briefing.' },
+      tom: TOM_ADS_JSON,
+      confirmar_custo: { type: 'boolean', const: true, description: 'Tem que ser true: a ação usa IA paga.' },
+      idempotency_key: CHAVE_IDEMPOTENTE_JSON,
+    },
+    required: ['client_id', 'confirmar_custo', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  ({ confirmar_custo: _c, ...input }, ctx) => _adsPlanoGerar(input, ctx),
+  { longa: true, idempotente: false },
+);
+
+const adsCriativosProduzirTool = ferramentaDeMesa(
+  'aceleriq_mesa_ads_criativos_produzir',
+  'Mesa Ads: produzir os criativos de um ângulo',
+  'Produz os criativos de UM ângulo do plano, como a tela: escreve a copy de cada variação (com copies a mais e o Jev escolhendo as melhores) e deixa a arte de cada formato dirigida no Estúdio (um trabalho por criativo). Não gera a imagem: a imagem vem com aceleriq_mesa_ads_arte_gerar. Um ângulo por chamada, porque cada um leva minutos. Gasta crédito de IA: exige confirmar_custo=true.',
+  z.object({
+    plano_id: UUID,
+    angulo_id: ID_DO_ANGULO,
+    formatos: z.array(FORMATO_ADS).min(1).max(4).optional(),
+    tom: TOM_ADS.optional(),
+    pedido: z.string().max(1000).optional(),
+    confirmar_custo: z.literal(true),
+    idempotency_key: CHAVE_IDEMPOTENTE,
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      plano_id: { type: 'string', format: 'uuid', description: 'Plano da Mesa Ads (aceleriq_mesa_ads_plano_gerar ou aceleriq_mesa_ads_contexto, planos).' },
+      angulo_id: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,40}$', description: 'Id do ângulo no plano (angulos[].id, como a1).' },
+      formatos: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'string', enum: ['feed_4x5', 'quadrado_1x1', 'stories_9x16', 'carrossel'] }, description: 'Sem formatos, valem os do ângulo.' },
+      tom: TOM_ADS_JSON,
+      pedido: { type: 'string', maxLength: 1000, description: 'Pedido da equipe para estas peças.' },
+      confirmar_custo: { type: 'boolean', const: true, description: 'Tem que ser true: a ação usa IA paga.' },
+      idempotency_key: CHAVE_IDEMPOTENTE_JSON,
+    },
+    required: ['plano_id', 'angulo_id', 'confirmar_custo', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  ({ confirmar_custo: _c, ...input }, ctx) => _adsCriativosProduzir(input, ctx),
+  { longa: true, idempotente: false },
+);
+
+const adsArteGerarTool = ferramentaDeMesa(
+  'aceleriq_mesa_ads_arte_gerar',
+  'Mesa Ads: gerar a arte do criativo',
+  'Põe a arte de um criativo de anúncio na fila do Estúdio, a mesma do botão Gerar da tela: gera, confere e corrige sozinha (até 2 vezes) no servidor, sem tela aberta. Responde na hora; a arte fica pronta em alguns minutos por lâmina (acompanhe em aceleriq_mesa_ads_contexto, criativos[].arte). Sem ordens, gera só as lâminas que ainda não têm arte; mandar ordens refaz essas. Só trabalho de anúncio (tipo ads). Gasta crédito de IA (imagem): exige confirmar_custo=true.',
+  z.object({
+    trabalho_id: UUID,
+    ordens: z.array(z.number().int().min(1).max(20)).min(1).max(10).optional(),
+    corrigir_sozinho: z.boolean().optional(),
+    confirmar_custo: z.literal(true),
+    idempotency_key: CHAVE_IDEMPOTENTE,
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      trabalho_id: { type: 'string', format: 'uuid', description: 'Trabalho do Estúdio do criativo (criativos[].trabalho_id).' },
+      ordens: { type: 'array', minItems: 1, maxItems: 10, items: { type: 'integer', minimum: 1, maximum: 20 }, description: 'Lâminas a gerar ou refazer. Sem ordens: só as que faltam.' },
+      corrigir_sozinho: { type: 'boolean', description: 'Conferir e corrigir sozinho antes de mostrar (padrão true).' },
+      confirmar_custo: { type: 'boolean', const: true, description: 'Tem que ser true: a ação usa IA paga.' },
+      idempotency_key: CHAVE_IDEMPOTENTE_JSON,
+    },
+    required: ['trabalho_id', 'confirmar_custo', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  ({ confirmar_custo: _c, ...input }, ctx) => _adsArteGerar(input, ctx),
+  { idempotente: false },
+);
+
+const adsEntregarAoGestorTool = ferramentaDeMesa(
+  'aceleriq_mesa_ads_entregar_ao_gestor',
+  'Mesa Ads: entregar os criativos ao gestor de tráfego',
+  'Entrega os criativos prontos ao gestor de tráfego pelo caminho da tela: a arte vai para Arquivos > Criativos de anúncio, o pacote do gestor (copy, ângulos, hipóteses, objetivo e verba do briefing) vai para Arquivos e a tarefa do gestor abre no Kanban. Só entrega criativo com todas as lâminas geradas; se faltar arte, recusa e diz quais. Sem IA e sem custo. Não sobe nada na Meta.',
+  z.object({
+    client_id: UUID,
+    plano_id: UUID.optional(),
+    criativo_ids: z.array(UUID).min(1).max(24).optional(),
+    idempotency_key: CHAVE_IDEMPOTENTE,
+  }).strict().refine((v) => v.plano_id !== undefined || v.criativo_ids !== undefined, { message: 'send plano_id or criativo_ids' }),
+  {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      plano_id: { type: 'string', format: 'uuid', description: 'Todos os criativos deste plano.' },
+      criativo_ids: { type: 'array', minItems: 1, maxItems: 24, items: { type: 'string', format: 'uuid' }, description: 'Só estes criativos (aceleriq_mesa_ads_contexto, criativos[].id).' },
+      idempotency_key: CHAVE_IDEMPOTENTE_JSON,
+    },
+    required: ['client_id', 'idempotency_key'],
+    anyOf: [{ required: ['plano_id'] }, { required: ['criativo_ids'] }],
+    additionalProperties: false,
+  },
+  (input, ctx) => _adsEntregarAoGestor(input, ctx),
+  { longa: true, idempotente: false },
 );
 
 const AREA_JSON = { type: 'string', enum: [...AREAS_DO_CEREBRO], description: 'geral (vale para todos), calendario, campanha, copy (estrategista do mês), arte, foto (diretor de arte e Mesa Foto), ads, conta (estrategista de anúncios).' };
@@ -3565,7 +3699,7 @@ const MAPA_DO_PAINEL = [
   { area: 'Relatorios', rota: '/relatorios', para: 'Relatorios do cliente.', pelo_mcp: 'aceleriq_list_reports, aceleriq_create_report_draft' },
   { area: 'Calendario editorial', rota: '/calendario', para: 'Pautas e publicacoes.', pelo_mcp: 'aceleriq_list_editorial_calendar, aceleriq_create_editorial_item' },
   { area: 'Anuncios', rota: '/anuncios', para: 'Campanhas, criativos e desempenho de midia.', pelo_mcp: 'aceleriq_get_ads_campaigns, aceleriq_get_ads_performance, aceleriq_get_ads_creatives' },
-  { area: 'Mesa Ads', rota: '/mesa-ads', para: 'Oferta, plano de teste com angulos, porques e notas do Jev, Estudio Ads, pacote de copy e envio ao gestor de trafego (com ZIP completo). Estude aqui antes de subir campanha; aja com as ferramentas de acao (OAuth).', pelo_mcp: 'aceleriq_mesa_ads_contexto e aceleriq_mesa_ads_saude (leitura), aceleriq_mesa_ads_briefing_salvar, aceleriq_mesa_ads_oferta_salvar, aceleriq_mesa_ads_oferta_do_contexto (acao)' },
+  { area: 'Mesa Ads', rota: '/mesa-ads', para: 'Oferta, plano de teste com angulos, porques e notas do Jev, Estudio Ads, pacote de copy e envio ao gestor de trafego (com ZIP completo). Estude aqui antes de subir campanha; aja com as ferramentas de acao (OAuth).', pelo_mcp: 'aceleriq_mesa_ads_contexto e aceleriq_mesa_ads_saude (leitura), aceleriq_mesa_ads_briefing_salvar, aceleriq_mesa_ads_oferta_salvar, aceleriq_mesa_ads_oferta_do_contexto, aceleriq_mesa_ads_plano_gerar, aceleriq_mesa_ads_criativos_produzir, aceleriq_mesa_ads_arte_gerar, aceleriq_mesa_ads_entregar_ao_gestor (acao)' },
   { area: 'Mesa Foto', rota: '/mesa-foto', para: 'Estudio fotografico: acervo, kits (produto, pessoa, alimento), ensaios, versoes e fotos aprovadas. Os ids das fotos aprovadas sao os que se anexam a campanha.', pelo_mcp: 'aceleriq_mesa_foto_contexto (leitura); anexar foto a campanha: aceleriq_mesa_campanha_salvar' },
   { area: 'Mesa do cliente', rota: '/mesa', para: 'Calendario do mes com o estrategista, campanhas (briefing, imagens, conteudos) e o Estudio de arte com entrega e aprovacao.', pelo_mcp: 'aceleriq_mesa_calendario_pedido, aceleriq_mesa_calendario_gravar, aceleriq_mesa_campanha_criar, aceleriq_mesa_campanha_salvar, aceleriq_mesa_enviar_para_aprovacao (acao, OAuth)' },
   { area: 'Cerebro do cliente', rota: '/mesa', para: 'O que o cliente ja ensinou por area (preferencias, o que evitar, ajustes, reprovacoes com motivo, o que performou), com o resumo que entra no prompt de cada agente.', pelo_mcp: 'aceleriq_cerebro_do_cliente (leitura), aceleriq_cerebro_registrar (escrita, sem duplicar)' },
@@ -4416,6 +4550,10 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   adsOfertaSalvarTool,
   adsOfertaDoContextoTool,
   enviarParaAprovacaoTool,
+  adsPlanoGerarTool,
+  adsCriativosProduzirTool,
+  adsArteGerarTool,
+  adsEntregarAoGestorTool,
   // Files v2 (Bloco B — v1.7.0)
   ...(FILE_WRITE_ENABLED ? [
     prepareUploadTool, finalizeUploadTool, inlineUploadTool, uploadFileTool,
