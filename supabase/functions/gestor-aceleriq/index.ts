@@ -40,6 +40,9 @@ import { ACOES_DO_HERMES, ErroDoHermes, hermesAcao } from "./modulos/hermes.ts";
 import { type ArquivoDoDono, MAX_IMAGENS } from "./modulos/ficha.ts";
 import { somarConsumo, type UsoDaConversa } from "./modulos/consumo.ts";
 import { ErroDaTranscricao, MAX_BYTES_DO_AUDIO_DO_GESTOR, transcreverAudio } from "./modulos/transcricao.ts";
+import { leituraDaFala, palpiteDaFala, perguntaDaFala } from "./modulos/fala-do-diario.ts";
+import { jevPerguntar } from "../_shared/jev.ts";
+import { cobrarJev } from "../_shared/ia-motor.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -373,6 +376,27 @@ async function registrarNaConversa(userId: string, g: AcaoGuardada, texto: strin
   if (error) registrarFalha("gestor-aceleriq: trilha não gravada", error);
 }
 
+/**
+ * O tipo da fala do dono no diário da execução (comentário, instrução, decisão...). Só lê:
+ * quem grava é a tela, como a pessoa logada; aprovar/reprovar continua sendo um clique dela.
+ */
+async function entenderFala(ch: { userId: string }, corpo: Record<string, unknown>): Promise<Response> {
+  const fala = String(corpo.texto || "").trim();
+  if (fala.length < 2) return json({ leitura: palpiteDaFala(fala) });
+  const c = (corpo.contexto && typeof corpo.contexto === "object" ? corpo.contexto : {}) as Record<string, unknown>;
+  try {
+    const r = await jevPerguntar(perguntaDaFala(fala, { tarefa: c.tarefa ? String(c.tarefa) : null, situacao: c.situacao ? String(c.situacao) : null, ultimaDoAgente: c.ultima_do_agente ? String(c.ultima_do_agente) : null }), { timeoutMs: 8_000 });
+    usarBanco(servico());
+    const agencia = await carteiraDaAgencia();
+    const vinculo = typeof corpo.vinculo_id === "string" && corpo.vinculo_id ? corpo.vinculo_id : null;
+    if (agencia) void cobrarJev(r, { clientId: agencia, tarefa: "verificacao", criadoPor: ch.userId, ...(vinculo ? { referencia: { tipo: "diario_fala", id: vinculo } } : {}) });
+    return json({ leitura: leituraDaFala(r.answers.tipo) });
+  } catch (err) {
+    registrarFalha("gestor-aceleriq: jev da fala do diário fora (vale o palpite)", err);
+    return json({ leitura: palpiteDaFala(fala) });
+  }
+}
+
 const ACOES: Record<string, (ch: { userId: string; token: string }, corpo: Record<string, unknown>) => Promise<Response>> = {
   perguntar,
   conversas: listarConversas,
@@ -383,6 +407,7 @@ const ACOES: Record<string, (ch: { userId: string; token: string }, corpo: Recor
   executar_acao: executarAcao,
   desfazer_acao: desfazerAcao,
   consumo,
+  entender_fala: entenderFala,
   // Hermes real (pela ponte do painel no servidor do Hermes; sem ela, configurada: false).
   ...Object.fromEntries(ACOES_DO_HERMES.map((a) => [a, async (_ch: { userId: string }, corpo: Record<string, unknown>) => json(await hermesAcao(a, corpo, servico()))])),
   // Compatível com a tela anterior: a conversa mais recente do dono.

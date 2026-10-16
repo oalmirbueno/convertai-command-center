@@ -326,7 +326,7 @@ describe("Central de Autonomia: contratos de fonte", () => {
     const pagina = ler("src/pages/AdminExecucao.tsx");
     expect(pagina).toContain('{ id: "central", rotulo: "Central", visoes: ["central"] }');
     expect(pagina).toContain("substituirRascunho={Boolean(diarioAberto?.contextoInicial || diarioAberto?.textoInicial)}");
-    expect(ler("src/components/execucao/DiarioDaExecucao.tsx")).toContain('setTipo("instrucao")');
+    expect(ler("src/components/execucao/DiarioDaExecucao.tsx")).toContain('setTipoManual("instrucao")');
   });
   it("o Gestor é só admin e confere o papel antes de ler dados", () => {
     const fn = ler("supabase/functions/gestor-aceleriq/index.ts");
