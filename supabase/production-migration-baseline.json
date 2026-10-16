@@ -2161,6 +2161,14 @@
       "remote_name": "tirar_decisao_da_lista",
       "remote_statements_sha256": "1b27a50619904b1ea1dcc84e8b6c2ab26bd107ba522f937b0785941914b4e0d7",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20261016233955",
+      "path": "supabase/migrations/20261016233955_decisao_humana_final.sql",
+      "local_sha256": "2507ecff3b4c7f3629cb05dd203f8c0d3ed6a919993cb4f730474776bc7406c3",
+      "remote_name": "decisao_humana_final",
+      "remote_statements_sha256": "dde42c1741faea969d3b66baacae516be6a054987f5a6279bbab3db19af49e6a",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
