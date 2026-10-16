@@ -39,7 +39,8 @@ export default function EvidenciaVisual({ url, nome = "Comprovação", compacto 
       return { href: await resolveFileUrl({ fileUrl: url, expiresIn: 600 }), nome: url };
     },
   });
-  if (!tipo) return <p className="text-xs text-muted-foreground">A comprovação precisa de um arquivo ou link válido.</p>;
+  // Miniatura de galeria: prova só em texto (sem arquivo nem link) não vira aviso no meio da lista.
+  if (!tipo) return compacto ? null : <p className="text-xs text-muted-foreground">A comprovação precisa de um arquivo ou link válido.</p>;
   if (isError) return <button onClick={() => void refetch()} className="text-xs text-warning">Não foi possível abrir com seu acesso atual. Tentar novamente</button>;
   const href = tipo === "web" ? url : assinado?.href;
   if (!href) return compacto ? <div className="aspect-square w-full animate-pulse rounded-lg bg-muted/50" aria-label="Carregando comprovação" /> : <p className="text-xs text-muted-foreground">Carregando comprovação…</p>;

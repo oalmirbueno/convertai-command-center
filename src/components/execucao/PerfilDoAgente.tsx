@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import ExecucoesRecentes from "./ExecucoesRecentes";
 import { falarComoGente } from "@/lib/falarComoGente";
 import EvidenciaVisual from "./EvidenciaVisual";
-import { estadoDaExecucao, falhaDaExecucao } from "@/lib/execucaoApresentacao";
+import { destinoDaEvidencia, estadoDaExecucao, falhaDaExecucao } from "@/lib/execucaoApresentacao";
 import { precisaDecisao } from "@/lib/precisaDecisao";
 import {
   Dialog,
@@ -303,7 +303,7 @@ export default function PerfilDoAgente({
           <span className="flex shrink-0 items-center text-[12px] text-muted-foreground group-hover:text-foreground">Abrir<ChevronRight className="ml-0.5 h-3.5 w-3.5" aria-hidden="true" /></span>
         </button>
         {/* A prova mais recente, em miniatura (a imagem fala antes do texto). */}
-        {v.last_evidence && <div className="ml-7 mt-0.5 w-32 pb-1.5"><EvidenciaVisual url={String(v.last_evidence)} compacto /></div>}
+        {v.last_evidence && destinoDaEvidencia(String(v.last_evidence)) && <div className="ml-7 mt-0.5 w-32 pb-1.5"><EvidenciaVisual url={String(v.last_evidence)} compacto /></div>}
       </li>
     );
   };
@@ -417,7 +417,7 @@ export default function PerfilDoAgente({
                           <li key={String(a.id)} className="relative pb-3 pl-4">
                             <span className={juntar("absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full", a.evidence ? "bg-success" : "bg-muted-foreground/60")} aria-hidden="true" />
                             {podeAbrir ? <button type="button" className="w-full rounded-md px-1 py-0.5 text-left hover:bg-muted/60" onClick={() => aoAbrirDiario(String(a.task_link_id))}>{conteudo}</button> : <div className="px-1">{conteudo}</div>}
-                            {a.evidence && <div className="mt-1.5 w-40"><EvidenciaVisual url={String(a.evidence)} compacto /></div>}
+                            {a.evidence && destinoDaEvidencia(String(a.evidence)) && <div className="mt-1.5 w-40"><EvidenciaVisual url={String(a.evidence)} compacto /></div>}
                           </li>
                         );
                       })}

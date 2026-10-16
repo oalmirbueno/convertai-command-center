@@ -1,3 +1,4 @@
+import { limparTecnico } from "@/lib/cadernoExecucao";
 import { Fragment, type ReactNode, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -113,7 +114,82 @@ function useDadosDaCentral(chave: PeriodoDaCentral) {
   });
 }
 
-function Indicadores({ q, aoVerDecisoes }: { q: ReturnType<typeof useDadosDaCentral>; aoVerDecisoes: () => void }) {
+/**
+ * O que está acontecendo agora (16/10/2026, dono: "colocar quem está trabalhando, o que está em
+ * andamento, para entender o que está acontecendo; mais bonito"): barra das tarefas dos agentes
+ * por situação, quem trabalha neste momento (execução com sinal nos últimos 20 min ou vínculo
+ * mexido na última hora) e o atalho para as decisões.
+ */
+function AgoraNaCentral({ d, aoVerDecisoes, aoAbrirDiario }: { d: NonNullable<ReturnType<typeof useDadosDaCentral>["data"]>; aoVerDecisoes: () => void; aoAbrirDiario: (linkId: string, titulo?: string) => void }) {
+  const agora = Date.now();
+  const vivos = d.links.filter((l) => !["done"].includes(String(l.status)));
+  const conta = (...st: string[]) => vivos.filter((l) => st.includes(String(l.status))).length;
+  const faixas = [
+    { rotulo: "Andando", n: conta("in_progress", "queued"), cor: "bg-info" },
+    { rotulo: "Em revisão", n: conta("review"), cor: "bg-warning" },
+    { rotulo: "Travadas", n: conta("blocked", "awaiting_input"), cor: "bg-destructive" },
+  ];
+  const feitas = d.feitas;
+  const total = faixas.reduce((t, f) => t + f.n, 0) + feitas;
+  const nome = new Map((d.agentes as Array<{ id: string; display_name: string }>).map((a) => [a.id, a.display_name]));
+  const linkPorId = new Map(d.links.map((l) => [l.id, l]));
+  const trabalhando = new Map<string, { agente: string; titulo: string; cliente: string | null; desde: number; linkId: string | null }>();
+  for (const r of d.runs) {
+    const sinal = new Date(String(r.heartbeat_at || r.started_at || 0)).getTime();
+    if (r.finished_at || !Number.isFinite(sinal) || agora - sinal > 20 * 60_000 || trabalhando.has(r.operator_id)) continue;
+    const v = r.task_link_id ? linkPorId.get(r.task_link_id) : null;
+    const t = v ? d.tarefas.get(v.kanban_task_id || v.painel_task_id || "") : null;
+    trabalhando.set(r.operator_id, { agente: nome.get(r.operator_id) || "Agente", titulo: t?.title || limparTecnico(String(r.detail?.title || v?.last_action || "trabalhando")), cliente: t?.cliente || null, desde: sinal, linkId: v?.id || null });
+  }
+  for (const v of d.links) {
+    const mexido = new Date(String(v.updated_at || 0)).getTime();
+    if (v.status !== "in_progress" || agora - mexido > 60 * 60_000 || trabalhando.has(String(v.operator_id))) continue;
+    const t = d.tarefas.get(v.kanban_task_id || v.painel_task_id || "");
+    trabalhando.set(String(v.operator_id), { agente: nome.get(String(v.operator_id)) || "Agente", titulo: t?.title || limparTecnico(String(v.last_action || "trabalhando")), cliente: t?.cliente || null, desde: mexido, linkId: v.id });
+  }
+  const pessoas = [...trabalhando.values()].sort((a, b) => b.desde - a.desde).slice(0, 6);
+  const ha = (ms: number) => { const m = Math.max(1, Math.round((agora - ms) / 60_000)); return m < 60 ? `há ${m} min` : `há ${Math.round(m / 60)} h`; };
+  return (
+    <section aria-label="Agora" className="space-y-3 rounded-xl bg-muted/30 p-3">
+      {d.aprovacoes > 0 && (
+        <button type="button" onClick={aoVerDecisoes} className="flex w-full items-center gap-2 rounded-lg bg-warning/10 px-3 py-2 text-left text-[13px] hover:bg-warning/15">
+          <Scale className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+          <span className="min-w-0 flex-1"><span className="font-semibold tabular-nums text-warning">{d.aprovacoes}</span> {d.aprovacoes === 1 ? "decisão espera" : "decisões esperam"} você</span>
+          <span className="shrink-0 text-[12px] font-medium text-warning">Decidir</span>
+        </button>
+      )}
+      <div>
+        <div className="flex h-2.5 overflow-hidden rounded-full bg-muted" role="img" aria-label={`${faixas.map((f) => `${f.n} ${f.rotulo.toLowerCase()}`).join(", ")}, ${feitas} feitas no período`}>
+          {total > 0 && [...faixas, { rotulo: "Feitas", n: feitas, cor: "bg-success" }].map((f) => f.n > 0 && <span key={f.rotulo} className={f.cor} style={{ width: `${(f.n / total) * 100}%` }} />)}
+        </div>
+        <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-muted-foreground">
+          {[...faixas, { rotulo: "Feitas no período", n: feitas, cor: "bg-success" }].map((f) => <span key={f.rotulo} className="inline-flex items-center gap-1"><span className={juntar("h-2 w-2 rounded-full", f.cor)} aria-hidden="true" /><span className="font-semibold tabular-nums text-foreground">{f.n}</span> {f.rotulo.toLowerCase()}</span>)}
+        </p>
+      </div>
+      <div>
+        <p className={juntar(texto.rotulo, "mb-1.5")}>Trabalhando agora</p>
+        {pessoas.length ? (
+          <ul className="space-y-1">
+            {pessoas.map((p) => (
+              <li key={p.agente}>
+                <button type="button" disabled={!p.linkId} onClick={() => p.linkId && aoAbrirDiario(p.linkId, p.titulo)} className="flex w-full min-w-0 items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left enabled:hover:bg-muted/60">
+                  <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[12px] font-semibold text-primary" aria-hidden="true">{p.agente.trim()[0]?.toUpperCase()}<span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 animate-pulse rounded-full border-2 border-background bg-success" /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-medium">{p.agente}</span>
+                    <span className="block truncate text-[11.5px] text-muted-foreground">{p.titulo}{p.cliente ? ` · ${p.cliente}` : ""}</span>
+                  </span>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">{ha(p.desde)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="text-[12.5px] text-muted-foreground">Ninguém trabalhando neste momento.</p>}
+      </div>
+    </section>
+  );
+}
+
+function Indicadores({ q, aoVerDecisoes, aoAbrirDiario }: { q: ReturnType<typeof useDadosDaCentral>; aoVerDecisoes: () => void; aoAbrirDiario: (linkId: string, titulo?: string) => void }) {
   if (q.isLoading) return <Carregando linhas={4} rotulo="Calculando os indicadores" />;
   if (q.isError || !q.data) return <EstadoDeErro titulo="Não foi possível calcular os indicadores." descricao="Nenhum número foi estimado." acao={<button type="button" className={botao.secundario} onClick={() => void q.refetch()}>Tentar de novo</button>} />;
   const d = q.data;
@@ -124,6 +200,7 @@ function Indicadores({ q, aoVerDecisoes }: { q: ReturnType<typeof useDadosDaCent
   });
   return (
     <div aria-label="Indicadores de autonomia" className="space-y-4">
+      <AgoraNaCentral d={d} aoVerDecisoes={aoVerDecisoes} aoAbrirDiario={aoAbrirDiario} />
       <p className="px-1 text-[12px] text-muted-foreground">{d.periodo.rotulo} · comparado a {d.periodo.anterior.rotulo}</p>
       <div>
         <p className={juntar(texto.rotulo, "mb-1.5 px-1")}>Tarefas (Kanban)</p>
@@ -196,6 +273,17 @@ function DetalheDaExecucao({ runKey, linkId, nomes }: { runKey: string; linkId: 
   );
 }
 
+/** "Hoje", "Ontem" ou a data: o histórico separado por dia. */
+function diaDoHistorico(iso?: string | null): string {
+  if (!iso) return "Sem data";
+  const d = new Date(iso);
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const dia = new Date(d); dia.setHours(0, 0, 0, 0);
+  const dif = Math.round((hoje.getTime() - dia.getTime()) / 86_400_000);
+  return dif === 0 ? "Hoje" : dif === 1 ? "Ontem" : d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" });
+}
+const horaCurta = (iso?: string | null) => (iso ? new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "");
+
 function Historico({ q, aoAbrirDiario }: { q: ReturnType<typeof useDadosDaCentral>; aoAbrirDiario: (linkId: string, titulo?: string) => void }) {
   const [aberta, setAberta] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<"todas" | "atencao" | "concluidas">("todas");
@@ -217,35 +305,42 @@ function Historico({ q, aoAbrirDiario }: { q: ReturnType<typeof useDadosDaCentra
         <SeletorCompacto rotulo="Mostrar" valor={filtro} onEscolher={(v) => setFiltro(v as typeof filtro)} modo="segmentado" listaQuandoNaoCabe opcoes={[{ valor: "todas", rotulo: "Todas" }, { valor: "atencao", rotulo: "Atenção" }, { valor: "concluidas", rotulo: "Com prova" }]} />
       </div>
       <div className="divide-y divide-border rounded-xl border border-border">
-        {linhas.length === 0 ? <div className="p-4"><EstadoVazio titulo="Nenhuma execução neste recorte." descricao="Execução só aparece aqui quando o agente relata pelo OS." /></div> : linhas.map(({ r, v, t, resultado, divergencia }) => {
-          const titulo = t?.title || String(r.detail?.title || r.detail?.action || r.run_key);
+        {linhas.length === 0 ? <div className="p-4"><EstadoVazio titulo="Nenhuma execução neste recorte." descricao="Execução só aparece aqui quando o agente relata pelo OS." /></div> : linhas.map(({ r, v, t, resultado, divergencia }, i) => {
+          const titulo = t?.title || limparTecnico(String(r.detail?.title || r.detail?.action || r.run_key));
           const aberto = aberta === r.id;
+          const dia = diaDoHistorico(r.started_at);
+          const novoDia = i === 0 || diaDoHistorico(linhas[i - 1].r.started_at) !== dia;
+          const agente = nomeDoAgente.get(r.operator_id) || "Agente";
           return (
-            <div key={r.id} className="px-3 py-3">
-              <button type="button" className="flex w-full min-w-0 items-start gap-3 text-left" aria-expanded={aberto} onClick={() => setAberta(aberto ? null : r.id)}>
-                <ChevronDown className={juntar("mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform", aberto && "rotate-180")} />
+            <div key={r.id}>
+            {novoDia && <p className="sticky top-0 z-10 bg-card/95 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur">{dia}</p>}
+            <div className="px-3 py-3">
+              <button type="button" className="flex w-full min-w-0 items-center gap-3 text-left" aria-expanded={aberto} onClick={() => setAberta(aberto ? null : r.id)}>
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[12px] font-semibold" aria-hidden="true">{agente.trim()[0]?.toUpperCase()}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-medium">{titulo}</span>
                   <span className="block truncate text-[12px] text-muted-foreground">
-                    {nomeDoAgente.get(r.operator_id) || "Agente"}{t?.cliente ? ` · ${t.cliente}` : ""} · início {quando(r.started_at)} · fim {r.finished_at ? quando(r.finished_at) : "—"}
+                    {agente}{t?.cliente ? ` · ${t.cliente}` : ""} · {horaCurta(r.started_at)}{r.finished_at ? ` → ${horaCurta(r.finished_at)}` : ""}
                   </span>
                 </span>
+                <span className={juntar("shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium", COR_DO_RESULTADO[resultado])}>{ROTULO_DO_RESULTADO[resultado]}</span>
+                <ChevronDown className={juntar("h-4 w-4 shrink-0 text-muted-foreground transition-transform", aberto && "rotate-180")} />
               </button>
-              <span className={juntar("ml-7 mt-1.5 inline-block rounded-full border px-2 py-0.5 text-[11px] font-medium", COR_DO_RESULTADO[resultado])}>{ROTULO_DO_RESULTADO[resultado]}</span>
               {aberto && (
                 <div className="mt-3 space-y-3 pl-7 text-[12px]">
                   <dl className="grid gap-x-4 gap-y-1">
                     <div><dt className="text-muted-foreground">Execução</dt><dd>{estadoLegivel(r.status)}{r.error ? ` · ${textoLegivel(r.error)}` : ""}</dd></div>
                     <div><dt className="text-muted-foreground">Tarefa no Kanban</dt><dd>{t ? estadoLegivel(t.status) : "sem tarefa vinculada"}</dd></div>
                     {v?.last_evidence && <div className="sm:col-span-2"><dt className="text-muted-foreground">Prova registrada</dt><dd className="break-words">{textoLegivel(v.last_evidence)}</dd></div>}
-                    {v?.block_reason && <div className="sm:col-span-2"><dt className="text-muted-foreground">Bloqueio</dt><dd className="break-words text-warning">{v.block_reason}</dd></div>}
-                    {v?.next_step && <div className="sm:col-span-2"><dt className="text-muted-foreground">Próximo passo</dt><dd className="break-words">{v.next_step}</dd></div>}
+                    {v?.block_reason && <div className="sm:col-span-2"><dt className="text-muted-foreground">Bloqueio</dt><dd className="break-words text-warning">{limparTecnico(v.block_reason)}</dd></div>}
+                    {v?.next_step && <div className="sm:col-span-2"><dt className="text-muted-foreground">Próximo passo</dt><dd className="break-words">{limparTecnico(v.next_step)}</dd></div>}
                     {divergencia && <div className="sm:col-span-2"><dt className="text-muted-foreground">Divergência</dt><dd className="text-warning">{divergencia}. O card não foi corrigido por inferência.</dd></div>}
                   </dl>
                   <DetalheDaExecucao runKey={r.run_key} linkId={r.task_link_id} nomes={nomeDoAgente} />
                   {v && <button type="button" className={juntar(botao.secundario, "h-8 px-3 text-[12px]")} onClick={() => aoAbrirDiario(v.id, titulo)}><FileCheck2 className="mr-1.5 h-3.5 w-3.5" />Abrir diário</button>}
                 </div>
               )}
+            </div>
             </div>
           );
         })}
@@ -536,7 +631,7 @@ export default function CentralDeAutonomia({ nomesDeAgentes, titulosDeTarefas, a
             {largo && botoesDoPainel("area")}
           </div>
           <div className={juntar("flex min-h-0 flex-1 flex-col p-3", aba === "arquivos" ? "" : ROLAGEM_OPERACAO)}>
-            {aba === "resumo" && <Indicadores q={dados} aoVerDecisoes={() => setAba("decisoes")} />}
+            {aba === "resumo" && <Indicadores q={dados} aoVerDecisoes={() => setAba("decisoes")} aoAbrirDiario={aoAbrirDiario} />}
             {aba === "historico" && <Historico q={dados} aoAbrirDiario={aoAbrirDiario} />}
             {aba === "decisoes" && <AprovacoesExplicadas nomesDeAgentes={nomesDeAgentes} titulosDeTarefas={titulosDeTarefas} destaqueId={null} aoAbrirDiario={(id) => aoAbrirDiario(id)} />}
             {aba === "arquivos" && (
